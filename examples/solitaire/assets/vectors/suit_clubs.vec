@@ -1,0 +1,70 @@
+{
+  "version": "1.0",
+  "name": "suit_clubs",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "top_lobe",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {"x": 2,  "y": 4},
+            {"x": 1,  "y": 6},
+            {"x": -1, "y": 6},
+            {"x": -2, "y": 4},
+            {"x": -1, "y": 2},
+            {"x": 1,  "y": 2}
+          ]
+        },
+        {
+          "name": "left_lobe",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {"x": -1, "y": 1},
+            {"x": -2, "y": 3},
+            {"x": -4, "y": 3},
+            {"x": -5, "y": 1},
+            {"x": -4, "y": -1},
+            {"x": -2, "y": -1}
+          ]
+        },
+        {
+          "name": "right_lobe",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            {"x": 5,  "y": 1},
+            {"x": 4,  "y": 3},
+            {"x": 2,  "y": 3},
+            {"x": 1,  "y": 1},
+            {"x": 2,  "y": -1},
+            {"x": 4,  "y": -1}
+          ]
+        },
+        {
+          "name": "stem",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x": 0, "y": -1},
+            {"x": 0, "y": -5}
+          ]
+        },
+        {
+          "name": "base",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {"x": -2, "y": -5},
+            {"x": 2,  "y": -5}
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -25,7 +25,7 @@ pub fn analyze_module_helpers(module: &Module) -> HashSet<String> {
 
 /// Generate RAM definitions and array data (called BEFORE user functions)
 /// Returns tuple: (ASM string, RamLayout for later use by generate_helpers)
-pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
+pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> Result<String, String> {
     let mut asm = String::new();
     
     // Analyze module to detect which helpers are needed (for RAM allocation)
@@ -82,12 +82,20 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("DRAW_VEC_X_HI", 1, "Vector draw X high byte (16-bit screen_x)");
         ram.allocate("DRAW_VEC_X", 1, "Vector draw X offset");
         ram.allocate("DRAW_VEC_Y", 1, "Vector draw Y offset");
-        
+
         // CRITICAL FIX: Add padding to prevent collision with TEMP_YX (usually allocated at offset 6)
         ram.allocate("MIRROR_PAD", 16, "Safety padding to prevent MIRROR flag corruption");
 
         ram.allocate("MIRROR_X", 1, "X mirror flag (0=normal, 1=flip)");
         ram.allocate("MIRROR_Y", 1, "Y mirror flag (0=normal, 1=flip)");
+        // SLR_DRAW_CLIPPED_PATH state — used by both SHOW_LEVEL and DRAW_VECTOR_BANKED
+        // for 16-bit X clipping. Allocate here too in case SHOW_LEVEL isn't used.
+        if !needed.contains("SHOW_LEVEL_RUNTIME") {
+            ram.allocate("SLR_CUR_X", 1, "DRAW_VECTOR: clamped (visible) beam X for clipping");
+            ram.allocate("SLR_TRUE_X", 2, "DRAW_VECTOR: 16-bit unclamped abs_x for line clipping");
+            ram.allocate("DRAW_T1_SCALED", 1, "DRAW_VECTOR: T1 scale ($7F default for non-SHOW_LEVEL)");
+            ram.allocate("SDCP_ABS_Y", 1, "DRAW_VECTOR: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt SHOW_LEVEL's top_screen between layers)");
+        }
     }
     
     // DRAW_VECTOR_3D rotation scratch variables
@@ -140,6 +148,7 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         || needed.contains("LOAD_LEVEL") || needed.contains("LOAD_LEVEL_RUNTIME")
         || needed.contains("UPDATE_LEVEL_RUNTIME")
         || needed.contains("LEVEL_COLLISION_Y_RUNTIME")
+        || needed.contains("LEVEL_COLLISION_X_RUNTIME")
     {
         ram.allocate("LEVEL_PTR", 2, "Pointer to currently loaded level header");
         ram.allocate("LEVEL_LOADED", 1, "Level loaded flag (0=not loaded, 1=loaded)");
@@ -156,11 +165,22 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("LEVEL_FG_COUNT", 1, "FG object count");
         ram.allocate("CAMERA_X", 2, "Camera X scroll offset (16-bit signed world units)");
         ram.allocate("CAMERA_Y", 2, "Camera Y scroll offset (16-bit signed world units)");
+        ram.allocate("SCROLL_LIMIT_LEFT",   2, "Camera scroll limit: left world X");
+        ram.allocate("SCROLL_LIMIT_RIGHT",  2, "Camera scroll limit: right world X");
+        ram.allocate("SCROLL_LIMIT_TOP",    2, "Camera scroll limit: top world Y");
+        ram.allocate("SCROLL_LIMIT_BOTTOM", 2, "Camera scroll limit: bottom world Y");
         ram.allocate("LEVEL_BG_ROM_PTR", 2, "BG layer ROM pointer");
         ram.allocate("LEVEL_GP_ROM_PTR", 2, "GP layer ROM pointer");
         ram.allocate("LEVEL_FG_ROM_PTR", 2, "FG layer ROM pointer");
         ram.allocate("LEVEL_GP_PTR", 2, "GP active pointer (RAM buffer after LOAD_LEVEL)");
         ram.allocate("LEVEL_BANK", 1, "Bank ID for current level (for multibank)");
+        ram.allocate("LEVEL_ENEMY_COUNT", 1, "Enemy count from current level header");
+        ram.allocate("LEVEL_ENEMY_INSTANCES_PTR", 2, "Ptr to enemy instances table in level bank");
+        // Per-screen object index (SHOW_LEVEL perf): from level header +34..+40
+        ram.allocate("LEVEL_SCREEN_COUNT", 1, "Total Y screens partitioning the level");
+        ram.allocate("LEVEL_BG_SCREENS_PTR", 2, "Per-screen BG index ptr (3 bytes per screen)");
+        ram.allocate("LEVEL_GP_SCREENS_PTR", 2, "Per-screen GP index ptr");
+        ram.allocate("LEVEL_FG_SCREENS_PTR", 2, "Per-screen FG index ptr");
         // SHOW_LEVEL_RUNTIME draw temps (shared with DRAW_VECTOR if not already allocated)
         if !needed.contains("DRAW_VECTOR") && !needed.contains("DRAW_VECTOR_EX") {
             ram.allocate("DRAW_VEC_X_HI", 1, "SHOW_LEVEL: vector draw X high byte (16-bit)");
@@ -171,26 +191,98 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
             ram.allocate("DRAW_VEC_INTENSITY", 1, "SHOW_LEVEL: intensity override");
         }
         // Clipped-path draw loop tracker
-        ram.allocate("SLR_CUR_X", 1, "SHOW_LEVEL: tracked beam X for per-segment clipping");
-        // GP objects RAM buffer (max 32 objects × 15 bytes)
-        ram.allocate("LEVEL_GP_BUFFER", 32 * 15, "GP objects RAM buffer (max 32 objects × 15 bytes)");
+        ram.allocate("SLR_CUR_X", 1, "SHOW_LEVEL: clamped (visible) beam X — actually written to integrator");
+        ram.allocate("SLR_TRUE_X", 2, "SHOW_LEVEL: 16-bit unclamped abs_x for per-segment line clipping");
+        ram.allocate("DRAW_T1_SCALED", 1, "SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale)");
+        ram.allocate("SDCP_ABS_Y", 1, "SHOW_LEVEL: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt top_screen between layers)");
+        ram.allocate("SLR_TOP_SCREEN", 1, "SHOW_LEVEL: top Y screen idx (lives across all 3 layers — must not be in TMPVAL)");
+        ram.allocate("SLR_BOT_SCREEN", 1, "SHOW_LEVEL: bot Y screen idx (lives across all 3 layers)");
+        // GP objects RAM buffer + GP-GP/GP-FG physics scratch — only used by
+        // UPDATE_LEVEL_RUNTIME. Gated so games that don't call UPDATE_LEVEL don't
+        // pay 480+ bytes of RAM (critical on the 1KB M6809 target).
+        if needed.contains("UPDATE_LEVEL_RUNTIME") {
+            ram.allocate("LEVEL_GP_BUFFER", 32 * 15, "GP objects RAM buffer (max 32 objects × 15 bytes)");
+        }
         // LEVEL_COLLISION_Y input/scratch variables
-        ram.allocate("LCOL_PX", 2, "LEVEL_COLLISION_Y player world_x input (16-bit)");
-        ram.allocate("LCOL_BEST_Y", 1, "LEVEL_COLLISION_Y best floor y found (signed byte)");
-        ram.allocate("LCOL_PY", 1, "LEVEL_COLLISION_Y player feet Y (player_y - player_hh)");
-        ram.allocate("LCOL_PHH", 1, "LEVEL_COLLISION_Y player half_height");
-        // Physics / collision temporaries
-        ram.allocate("UGPC_OUTER_IDX", 1, "GP-GP outer loop index");
-        ram.allocate("UGPC_OUTER_MAX", 1, "GP-GP outer loop max (count-1)");
-        ram.allocate("UGPC_INNER_IDX", 1, "GP-GP inner loop index");
-        ram.allocate("UGPC_DX", 2, "GP-GP |dx| (16-bit)");
-        ram.allocate("UGPC_DIST", 2, "GP-GP Manhattan distance (16-bit)");
-        ram.allocate("UGFC_GP_IDX", 1, "GP-FG outer loop GP index");
-        ram.allocate("UGFC_FG_COUNT", 1, "GP-FG inner loop FG count");
-        ram.allocate("UGFC_DX", 1, "GP-FG |dx|");
-        ram.allocate("UGFC_DY", 1, "GP-FG |dy|");
+        ram.allocate("LCOL_PX", 2, "LEVEL_COLLISION player world_x input (16-bit)");
+        ram.allocate("LCOL_BEST_Y", 2, "LEVEL_COLLISION_Y best floor y found (16-bit signed)");
+        ram.allocate("LCOL_PY", 2, "LEVEL_COLLISION player_top (16-bit signed)");
+        ram.allocate("LCOL_PHH", 1, "LEVEL_COLLISION player half_height");
+        ram.allocate("LCOL_PHW", 1, "LEVEL_COLLISION_X player half_width");
+        ram.allocate("LCOL_THW", 1, "LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch)");
+        // LEVEL_COLLISION_Y mesh ray-cast scratch
+        ram.allocate("LCOL_OBJ_Y", 2, "LEVEL_COLLISION_Y current object world_y (16-bit)");
+        ram.allocate("LCOL_LOCAL_PX", 2, "LEVEL_COLLISION_Y player_x in object-local coords (16-bit)");
+        ram.allocate("LCOL_OBJ_CNT", 1, "LEVEL_COLLISION_Y GP objects remaining");
+        ram.allocate("LCOL_SEG_CNT", 1, "LEVEL_COLLISION_Y mesh floor segments remaining");
+        // Physics / collision temporaries (GP-GP and GP-FG) — only used by
+        // UPDATE_LEVEL_RUNTIME, gated to save RAM on the M6809 target.
+        if needed.contains("UPDATE_LEVEL_RUNTIME") {
+            ram.allocate("UGPC_OUTER_IDX", 1, "GP-GP outer loop index");
+            ram.allocate("UGPC_OUTER_MAX", 1, "GP-GP outer loop max (count-1)");
+            ram.allocate("UGPC_INNER_IDX", 1, "GP-GP inner loop index");
+            ram.allocate("UGPC_DX", 2, "GP-GP |dx| (16-bit)");
+            ram.allocate("UGPC_DIST", 2, "GP-GP Manhattan distance (16-bit)");
+            ram.allocate("UGFC_GP_IDX", 1, "GP-FG outer loop GP index");
+            ram.allocate("UGFC_FG_COUNT", 1, "GP-FG inner loop FG count");
+            ram.allocate("UGFC_DX", 1, "GP-FG |dx|");
+            ram.allocate("UGFC_DY", 1, "GP-FG |dy|");
+        }
     }
-    
+
+    // Enemy system variables
+    if needed.contains("ENEMY_SYSTEM") || needed.contains("SPAWN_ENEMIES")
+        || needed.contains("UPDATE_ENEMIES") || needed.contains("DRAW_ENEMIES")
+    {
+        let max_enemies: usize = module.meta.max_enemies.unwrap_or(8) as usize;
+        // M6809 has only 1KB of RAM (mirrored across $C800-$CFFF). The enemy pool
+        // lives high in RAM and must not overflow past the $CBFF mirror boundary,
+        // so the M6809 target caps MAX_ENEMIES at 10 (10 * 17 = 170 bytes).
+        if max_enemies > 10 {
+            return Err(format!(
+                "META MAX_ENEMIES = {max_enemies} exceeds the M6809 limit of 10 \
+                 (1KB RAM constraint). Lower MAX_ENEMIES to 10 or less for the Vectrex/6809 target."
+            ));
+        }
+        const ENEMY_STRIDE: usize = 28;
+        ram.allocate("ENEMY_POOL", max_enemies * ENEMY_STRIDE,
+            "Enemy instances pool (Phase 2 wander: +18 sub_state, +19 cur_area_idx, +20 idle_timer, +21 trans_type, +22..23 target_x, +24..25 vy/from_x, +26 feet_offset × N)");
+        ram.allocate("ENEMY_LOOP_IDX", 1, "Enemy loop counter");
+        ram.allocate("ENEMY_COUNT", 1, "Active enemy count");
+        ram.allocate("ENEMY_SCRATCH_PTR", 2, "Scratch pointer for enemy iteration");
+        ram.allocate("ENEMY_SCRATCH_X", 2, "Enemy scratch X");
+        ram.allocate("ENEMY_SCRATCH_Y", 2, "Enemy scratch Y");
+
+        // Allocate 2-byte animation state RAM for each vanim action across all enemy types.
+        // Named ANIM_ENEMY_{TYPE}_{ACTION}_STATE and referenced by FDB in the action table.
+        for asset in assets.iter().filter(|a| matches!(a.asset_type, crate::AssetType::Enemy)) {
+            if let Ok(resource) = crate::venemy::EnemyResource::load(std::path::Path::new(&asset.path)) {
+                for action in &resource.actions {
+                    let ext = std::path::Path::new(&action.sprite)
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("");
+                    if ext == "vanim" && !action.sprite.is_empty() {
+                        let type_up = asset.name
+                            .to_uppercase()
+                            .replace(' ', "_")
+                            .replace('-', "_");
+                        let action_up = action.name
+                            .to_uppercase()
+                            .replace(' ', "_")
+                            .replace('-', "_");
+                        let var_name = format!("ANIM_ENEMY_{}_{}_STATE", type_up, action_up);
+                        ram.allocate(
+                            &var_name,
+                            2,
+                            &format!("Enemy '{}' action '{}' animation state (frame_idx, ticks_left)", asset.name, action.name),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     // Text scale (2 bytes): written by SET_TEXT_SIZE, read by VECTREX_PRINT_TEXT/NUMBER
     // Vec_Text_Height ($C82A): signed byte, -n (default $F8 = -8 = normal)
     // Vec_Text_Width ($C82B): unsigned byte, n*9 (default 72 = $48 = normal)
@@ -198,39 +290,57 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
         ram.allocate("TEXT_SCALE_H", 1, "Character height for Print_Str_d (default $F8 = -8, normal)");
         ram.allocate("TEXT_SCALE_W", 1, "Character width for Print_Str_d (default $48 = 72, normal)");
     }
-
-// Function argument slots (used by PRINT_TEXT, etc.) - at fixed address in upper RAM
-    // These need to be at a fixed location for cross-bank compatibility
-    // CRITICAL: Must be within Vectrex 1KB RAM ($C800-$CBFF) — $CFxx is unmapped!
-    // Placed at $CB80, well below stack ($CBEA grows down, ~106 bytes headroom)
-    ram.allocate_fixed("VAR_ARG0", 0xCB80, 2, "Function argument 0 (16-bit)");
-    ram.allocate_fixed("VAR_ARG1", 0xCB82, 2, "Function argument 1 (16-bit)");
-    ram.allocate_fixed("VAR_ARG2", 0xCB84, 2, "Function argument 2 (16-bit)");
-    ram.allocate_fixed("VAR_ARG3", 0xCB86, 2, "Function argument 3 (16-bit)");
-    ram.allocate_fixed("VAR_ARG4", 0xCB88, 2, "Function argument 4 (16-bit)");
-
-    // CRITICAL (2026-01-20): Multibank bank tracking variable
-    // Required for cross-bank function calls and bank switching wrappers
-    // Must be at fixed address for all banks to access
-    ram.allocate_fixed("CURRENT_ROM_BANK", 0xCB8A, 1, "Current ROM bank ID (multibank tracking)");
-
-    // Audio system variables at FIXED addresses in upper RAM
-    // These are allocated AFTER VAR_ARG0-4 at $CBEB onwards
-    use crate::m6809::functions::has_audio_calls;
-    if has_audio_calls(module) {
-        ram.allocate_fixed("PSG_MUSIC_PTR", 0xCBEB, 2, "PSG music data pointer");
-        ram.allocate_fixed("PSG_MUSIC_START", 0xCBED, 2, "PSG music start pointer (for loops)");
-        ram.allocate_fixed("PSG_MUSIC_ACTIVE", 0xCBEF, 1, "PSG music active flag");
-        ram.allocate_fixed("PSG_IS_PLAYING", 0xCBF0, 1, "PSG playing flag");
-        ram.allocate_fixed("PSG_DELAY_FRAMES", 0xCBF1, 1, "PSG frame delay counter");
-        ram.allocate_fixed("PSG_MUSIC_BANK", 0xCBF2, 1, "PSG music bank ID (for multibank)");
-        ram.allocate_fixed("SFX_PTR", 0xCBF3, 2, "SFX data pointer");
-        ram.allocate_fixed("SFX_ACTIVE", 0xCBF5, 1, "SFX active flag");
-        ram.allocate_fixed("SFX_BANK", 0xCBF6, 1, "SFX bank ID (for multibank)");
+    // PRINT_NUMBER caching: last-rendered value + flag so repeated calls with
+    // same value skip DIVMOD + Print_Str setup.
+    if needed.contains("PRINT_NUMBER") {
+        ram.allocate("PN_LAST_VAL", 2, "PRINT_NUMBER: last rendered numeric value (cache key)");
+        ram.allocate("PN_LAST_VALID", 1, "PRINT_NUMBER: 1 if PN_LAST_VAL holds a valid render");
+        ram.allocate("PN_LAST_X", 1, "PRINT_NUMBER: last rendered X (cache key)");
+        ram.allocate("PN_LAST_Y", 1, "PRINT_NUMBER: last rendered Y (cache key)");
     }
+
+    // NOTE: VAR_ARG0-4 and CURRENT_ROM_BANK are now allocated AFTER user variables
+    // (see below, after generate_user_variables). This prevents collision when
+    // user variable arrays grow past $CB80 (BUG FIX 2026-05-11).
+
+    // NOTE: Audio system variables are allocated AFTER user variables (see below)
+    // to prevent overlap with mutable array data buffers.
+    use crate::m6809::functions::has_audio_calls;
 
     if needed.contains("BEEP") {
         ram.allocate("BEEP_FRAMES_LEFT", 1, "Beep countdown timer (frames remaining)");
+    }
+
+    // NOTE_STATE: per-channel state for PLAY_NOTE / NOTE_UPDATE_RUNTIME
+    // 10 bytes × 3 channels = 30 bytes
+    if crate::m6809::functions::has_note_calls(module) {
+        ram.allocate("NOTE_STATE", 30, "Pitched note state (10 bytes x 3 channels)");
+        ram.allocate("NOTE_ARG_INSTR", 2, "PLAY_NOTE argument: instrument ROM block address");
+        ram.allocate("NOTE_ARG_CHANNEL", 1, "PLAY_NOTE argument: channel (0/1/2)");
+        ram.allocate("NOTE_ARG_NOTE", 1, "PLAY_NOTE argument: MIDI note (24-107)");
+    }
+
+    // Animation state: 2 bytes per unique animation name used via DRAW_ANIM()
+    // byte 0 = current frame_idx, byte 1 = ticks_remaining
+    for key in needed.iter() {
+        if let Some(anim_sym) = key.strip_prefix("DRAW_ANIM_STATE_") {
+            ram.allocate(
+                &format!("ANIM_{}_STATE", anim_sym),
+                2,
+                &format!("DRAW_ANIM state for {} (frame_idx, ticks_left)", anim_sym),
+            );
+        }
+    }
+
+    if needed.contains("DRAW_ANIM_RUNTIME") {
+        ram.allocate("DRAW_ANIM_MIRROR_X", 1, "DRAW_ANIM mirror X flag (0=normal, 1=flip)");
+        ram.allocate("DRAW_ANIM_SCALE", 1, "DRAW_ANIM T1 scale ($7F=normal)");
+        ram.allocate("DRAW_ANIM_SPEED_MUL", 1, "DRAW_ANIM tick multiplier (1=normal)");
+    }
+    // DRAW_SCALE needed whenever Draw_Sync_List_At_With_Mirrors is used
+    if needed.contains("DRAW_ANIM_RUNTIME") || needed.contains("SHOW_LEVEL_RUNTIME")
+        || needed.contains("DRAW_VECTOR") || needed.contains("DRAW_VECTOR_EX") {
+        ram.allocate("DRAW_SCALE", 1, "Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal)");
     }
 
     if module.meta.interleaved_frames.is_some() {
@@ -238,12 +348,51 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     }
 
     // =========================================================================
+    // FUNCTION ARGUMENT SLOTS — allocated EARLY so they always live inside the
+    // 1KB Vectrex RAM window ($C800-$CBFF). When allocated last in a program
+    // with many globals (e.g. SnowBros), VAR_ARG0-4 fell into $CC00+, which
+    // aliases to $C800+ (BIOS music workspace). Each PLAY_MUSIC would then
+    // corrupt VAR_ARG between every frame, breaking PRINT_NUMBER, function
+    // calls, etc.
+    // CURRENT_ROM_BANK has the same problem in multibank ROMs.
+    // =========================================================================
+    ram.allocate("VAR_ARG0", 2, "Function argument 0 (16-bit)");
+    ram.allocate("VAR_ARG1", 2, "Function argument 1 (16-bit)");
+    ram.allocate("VAR_ARG2", 2, "Function argument 2 (16-bit)");
+    ram.allocate("VAR_ARG3", 2, "Function argument 3 (16-bit)");
+    ram.allocate("VAR_ARG4", 2, "Function argument 4 (16-bit)");
+    ram.allocate("VAR_ARG5", 2, "Function argument 5 (16-bit)");
+    ram.allocate("VAR_ARG6", 2, "Function argument 6 (16-bit)");
+    ram.allocate("VAR_ARG7", 2, "Function argument 7 (16-bit)");
+    ram.allocate("CURRENT_ROM_BANK", 1, "Current ROM bank ID (multibank tracking)");
+
+    // =========================================================================
     // USER VARIABLES (continue allocation after system vars)
     // =========================================================================
 
     // Generate user variables using the same RamLayout instance
     let user_vars_result = crate::m6809::variables::generate_user_variables(module, &mut ram)?;
-    
+
+    // =========================================================================
+    // AUDIO SYSTEM VARIABLES (allocated AFTER all user vars to prevent overlap)
+    // BUG FIX (2026-05-11): Previously hardcoded at $CBEB which overlapped with
+    // mutable array data buffers (e.g. joystick1_state[6] at $CBE4-$CBEF).
+    // Now dynamically allocated after user vars to guarantee no collision.
+    // =========================================================================
+    if has_audio_calls(module) {
+        ram.allocate("PSG_MUSIC_PTR", 2, "PSG music data pointer");
+        ram.allocate("PSG_MUSIC_START", 2, "PSG music start pointer (for loops)");
+        ram.allocate("PSG_MUSIC_ACTIVE", 1, "PSG music active flag");
+        ram.allocate("PSG_IS_PLAYING", 1, "PSG playing flag");
+        ram.allocate("PSG_DELAY_FRAMES", 1, "PSG frame delay counter");
+        ram.allocate("PSG_MUSIC_BANK", 1, "PSG music bank ID (for multibank)");
+        ram.allocate("SFX_PTR", 2, "SFX data pointer");
+        ram.allocate("SFX_ACTIVE", 1, "SFX active flag");
+        ram.allocate("SFX_BANK", 1, "SFX bank ID (for multibank)");
+    }
+
+    // (VAR_ARG0-4 + CURRENT_ROM_BANK already allocated above, before user vars.)
+
     // =========================================================================
     // EMIT EQU DEFINITIONS
     // =========================================================================
@@ -251,8 +400,8 @@ pub fn generate_ram_and_arrays(module: &Module) -> Result<String, String> {
     asm.push_str("; === RAM VARIABLE DEFINITIONS ===\n");
     asm.push_str(";***************************************************************************\n");
     asm.push_str(&ram.emit_equ_definitions());
-    asm.push_str("\n");
-    
+    asm.push_str(&crate::m6809::variables::emit_array_len_equates(module));
+
     // CRITICAL FIX (2026-01-18): Emit array data BEFORE code
     // Arrays must be defined before first use to avoid forward references in single-pass assembler
     asm.push_str(&crate::m6809::variables::emit_array_data(module));
@@ -371,6 +520,15 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
             if name_upper == "LEVEL_COLLISION_Y" {
                 needed.insert("LEVEL_COLLISION_Y_RUNTIME".to_string());
             }
+            if name_upper == "LEVEL_COLLISION_X" {
+                needed.insert("LEVEL_COLLISION_X_RUNTIME".to_string());
+            }
+            if name_upper == "GET_LEVEL_FLOOR_Y" {
+                // Multibank emits a JSR to this helper instead of inlining the
+                // bank-switch (which would self-corrupt PC from switchable banks).
+                // Single-bank inline path doesn't need it. See emit_get_level_floor_y.
+                needed.insert("GET_LEVEL_FLOOR_Y_RUNTIME".to_string());
+            }
             
 // Math helpers: Need runtime if operands contain variables
             if name_upper == "SQRT" && has_variable_args(args) {
@@ -392,6 +550,29 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
             }
             if name_upper == "BEEP" {
                 needed.insert("BEEP".to_string());
+            }
+
+            if name_upper == "DRAW_ANIM" {
+                needed.insert("DRAW_ANIM_RUNTIME".to_string());
+                needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
+                // Record which animation names are used (for state RAM allocation)
+                if let Some(Expr::StringLit(anim_name)) = args.first() {
+                    needed.insert(format!("DRAW_ANIM_STATE_{}", anim_name.to_uppercase().replace('-', "_").replace(' ', "_")));
+                }
+            }
+
+            // Enemy system helpers
+            if name_upper == "SPAWN_ENEMIES" || name_upper == "UPDATE_ENEMIES" || name_upper == "DRAW_ENEMIES" {
+                needed.insert("SPAWN_ENEMIES".to_string());
+                needed.insert("UPDATE_ENEMIES".to_string());
+                needed.insert("DRAW_ENEMIES".to_string());
+                needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
+                // Enemies may have vanim actions → always include DRAW_ANIM_RUNTIME so its
+                // RAM variables (DRAW_ANIM_MIRROR_X, DRAW_ANIM_SCALE, DRAW_SCALE, …) are allocated
+                // and the DRAW_ANIM_RUNTIME subroutine is emitted into the helpers bank.
+                needed.insert("DRAW_ANIM_RUNTIME".to_string());
+                // Wander enemies use RAND_HELPER for randomized idle pauses
+                needed.insert("RAND_HELPER".to_string());
             }
 
             // Recursively analyze arguments
@@ -482,7 +663,7 @@ fn get_bios_address(symbol_name: &str, fallback_address: &str) -> String {
     fallback_address.to_string()
 }
 
-pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, String> {
+pub fn generate_helpers(module: &Module, is_multibank: bool, assets: &[crate::AssetInfo]) -> Result<String, String> {
     let mut asm = String::new();
 
     // Import has_audio_calls for audio helper detection
@@ -502,34 +683,36 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
     asm.push_str("; RUNTIME HELPERS\n");
     asm.push_str(";***************************************************************************\n\n");
     
-    // VECTREX_PRINT_TEXT: Call Print_Str_d with proper setup (CONDITIONAL)
-    // Only emit if PRINT_TEXT is actually used in code
-    if needed.contains("PRINT_TEXT") {
+    // VECTREX_PRINT_TEXT — BIOS Print_Str_d (bitmap scan-line rendering via
+    // VIA shift register; cannot be matched by vector-per-stroke approaches).
+    if needed.contains("PRINT_TEXT") || needed.contains("PRINT_NUMBER") {
         asm.push_str("VECTREX_PRINT_TEXT:\n");
         asm.push_str("    ; VPy signature: PRINT_TEXT(x, y, string)\n");
         asm.push_str("    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)\n");
-        asm.push_str("    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely\n");
-        asm.push_str("    ;       causing integrators to drift toward joystick DAC value.\n");
-        asm.push_str("    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.\n");
         asm.push_str("    LDA #$D0\n");
-        asm.push_str("    TFR A,DP       ; Set Direct Page to $D0 for BIOS\n");
-        asm.push_str("    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)\n");
-        asm.push_str("    JSR Reset0Ref   ; Reset beam to center before positioning text\n");
-        asm.push_str("    LDU VAR_ARG2   ; string pointer\n");
-        asm.push_str("    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)\n");
-        asm.push_str("    STA >$C82A      ; Vec_Text_Height: controls character Y scale\n");
-        asm.push_str("    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)\n");
-        asm.push_str("    STA >$C82B      ; Vec_Text_Width: controls character X spacing\n");
-        asm.push_str("    LDA >VAR_ARG1+1 ; Y coordinate\n");
-        asm.push_str("    LDB >VAR_ARG0+1 ; X coordinate\n");
+        asm.push_str("    TFR A,DP\n");
+        asm.push_str("    JSR Intensity_5F\n");
+        asm.push_str("    JSR Reset0Ref\n");
+        asm.push_str("    LDU >VAR_ARG2\n");
+        asm.push_str("    LDA >TEXT_SCALE_H\n");
+        asm.push_str("    STA >$C82A          ; Vec_Text_Height\n");
+        asm.push_str("    LDA >TEXT_SCALE_W\n");
+        asm.push_str("    STA >$C82B          ; Vec_Text_Width\n");
+        asm.push_str("    LDA >VAR_ARG1+1\n");
+        asm.push_str("    LDB >VAR_ARG0+1\n");
+        asm.push_str("    LDX >$C82C\n");
+        asm.push_str("    PSHS X\n");
         asm.push_str("    JSR Print_Str_d\n");
+        asm.push_str("    PULS X\n");
+        asm.push_str("    STX >$C82C\n");
         asm.push_str("    LDA #$F8\n");
-        asm.push_str("    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)\n");
+        asm.push_str("    STA >$C82A\n");
         asm.push_str("    LDA #$48\n");
-        asm.push_str("    STA >$C82B      ; Restore Vec_Text_Width to normal (72)\n");
-        asm.push_str(&format!("    JSR {}      ; DP_to_C8 - restore DP before return\n", dp_to_c8));
+        asm.push_str("    STA >$C82B\n");
+        asm.push_str(&format!("    JSR {}\n", dp_to_c8));
         asm.push_str("    RTS\n\n");
     }
+
     
     // VECTREX_PRINT_NUMBER: Print number at position (CONDITIONAL)
     // Only emit if PRINT_NUMBER is actually used in code
@@ -537,6 +720,33 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         asm.push_str("VECTREX_PRINT_NUMBER:\n");
         asm.push_str("    ; Print signed decimal number (-9999 to 9999)\n");
         asm.push_str("    ; ARG0=x, ARG1=y, ARG2=value\n");
+        asm.push_str("    ;\n");
+        asm.push_str("    ; CACHE CHECK: if (value,x,y) matches the previous render, skip the\n");
+        asm.push_str("    ; entire DIVMOD pipeline (saves ~200 cycles) and reuse NUM_STR as-is.\n");
+        asm.push_str("    ; Drawing must still happen every frame (phosphor decay) so we go\n");
+        asm.push_str("    ; straight to PN_AFTER_CONVERT with NUM_STR already populated.\n");
+        asm.push_str("    LDA >PN_LAST_VALID\n");
+        asm.push_str("    BEQ .PN_NO_CACHE       ; first call → must convert\n");
+        asm.push_str("    LDD >VAR_ARG2\n");
+        asm.push_str("    CMPD >PN_LAST_VAL\n");
+        asm.push_str("    BNE .PN_NO_CACHE\n");
+        asm.push_str("    LDA >VAR_ARG0+1\n");
+        asm.push_str("    CMPA >PN_LAST_X\n");
+        asm.push_str("    BNE .PN_NO_CACHE\n");
+        asm.push_str("    LDA >VAR_ARG1+1\n");
+        asm.push_str("    CMPA >PN_LAST_Y\n");
+        asm.push_str("    BNE .PN_NO_CACHE\n");
+        asm.push_str("    LBRA .PN_AFTER_CONVERT  ; cache hit — NUM_STR still valid\n");
+        asm.push_str(".PN_NO_CACHE:\n");
+        asm.push_str("    ; Update cache key BEFORE conversion (value/x/y will be needed later)\n");
+        asm.push_str("    LDD >VAR_ARG2\n");
+        asm.push_str("    STD >PN_LAST_VAL\n");
+        asm.push_str("    LDA >VAR_ARG0+1\n");
+        asm.push_str("    STA >PN_LAST_X\n");
+        asm.push_str("    LDA >VAR_ARG1+1\n");
+        asm.push_str("    STA >PN_LAST_Y\n");
+        asm.push_str("    LDA #1\n");
+        asm.push_str("    STA >PN_LAST_VALID\n");
         asm.push_str("    ;\n");
         asm.push_str("    ; STEP 1: Convert number to decimal string (DP=$C8)\n");
         asm.push_str("    LDD >VAR_ARG2   ; Load 16-bit value (safe: DP=$C8)\n");
@@ -604,25 +814,57 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         asm.push_str("    LDA #$80          ; Terminator (same format as FCC/FCB $80 strings)\n");
         asm.push_str("    STA ,X\n");
         asm.push_str("    \n");
+        asm.push_str("    ; --- RIGHT-ALIGN: shift significant digits LEFT, pad right with spaces ---\n");
+        asm.push_str("    ; Keeps the buffer at 4 chars (BIOS Print_Str needs minimum width) but\n");
+        asm.push_str("    ; lets the number start at the call's X coordinate. Examples:\n");
+        asm.push_str("    ;   PRINT_NUMBER(x, y, 6)    → \"6   \"  (6 at x, then 3 trailing spaces)\n");
+        asm.push_str("    ;   PRINT_NUMBER(x, y, 12)   → \"12  \"\n");
+        asm.push_str("    ;   PRINT_NUMBER(x, y, 1234) → \"1234\"\n");
+        asm.push_str("    ;   PRINT_NUMBER(x, y, -5)   → \"-5  \"\n");
+        asm.push_str("    LDX #NUM_STR\n");
+        asm.push_str("    LDA ,X\n");
+        asm.push_str("    CMPA #'-'           ; if negative, '-' stays at [0]; sig digits start at [1]\n");
+        asm.push_str("    BNE .PN_RP_START\n");
+        asm.push_str("    LEAX 1,X\n");
+        asm.push_str(".PN_RP_START:\n");
+        asm.push_str("    TFR X,U             ; U = dest (start of digit area, after optional '-')\n");
+        asm.push_str("    LDB #0              ; B = leading-zero count\n");
+        asm.push_str(".PN_RP_FIND:\n");
+        asm.push_str("    LDA ,X\n");
+        asm.push_str("    CMPA #'0'\n");
+        asm.push_str("    BNE .PN_RP_FOUND    ; first non-'0' → start of sig digits\n");
+        asm.push_str("    LDA 1,X             ; check next byte\n");
+        asm.push_str("    CMPA #$80           ; if terminator, current '0' is the units digit — keep it\n");
+        asm.push_str("    BEQ .PN_RP_FOUND\n");
+        asm.push_str("    INCB\n");
+        asm.push_str("    LEAX 1,X\n");
+        asm.push_str("    BRA .PN_RP_FIND\n");
+        asm.push_str(".PN_RP_FOUND:\n");
+        asm.push_str("    TSTB\n");
+        asm.push_str("    BEQ .PN_RP_DONE     ; no leading zeros → nothing to shift\n");
+        asm.push_str("    ; Copy from X (first sig digit) to U (start), include $80 terminator\n");
+        asm.push_str(".PN_RP_COPY:\n");
+        asm.push_str("    LDA ,X+\n");
+        asm.push_str("    STA ,U+\n");
+        asm.push_str("    CMPA #$80\n");
+        asm.push_str("    BNE .PN_RP_COPY\n");
+        asm.push_str("    ; U is past the copied $80. Back up to that position and overwrite\n");
+        asm.push_str("    ; with B spaces, then place new $80 terminator at end.\n");
+        asm.push_str("    LEAU -1,U           ; U = where the $80 was just written\n");
+        asm.push_str(".PN_RP_PAD:\n");
+        asm.push_str("    LDA #' '\n");
+        asm.push_str("    STA ,U+\n");
+        asm.push_str("    DECB\n");
+        asm.push_str("    BNE .PN_RP_PAD\n");
+        asm.push_str("    LDA #$80\n");
+        asm.push_str("    STA ,U              ; final terminator\n");
+        asm.push_str(".PN_RP_DONE:\n");
         asm.push_str(".PN_AFTER_CONVERT:\n");
-        asm.push_str("    ; STEP 2: Set up BIOS and print (NOW change DP to $D0)\n");
-        asm.push_str("    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely\n");
-        asm.push_str("    LDA #$D0\n");
-        asm.push_str("    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)\n");
-        asm.push_str("    JSR Reset0Ref    ; Reset beam to center before positioning text\n");
-        asm.push_str("    LDU #NUM_STR     ; String pointer\n");
-        asm.push_str("    LDA >TEXT_SCALE_H ; height (signed byte)\n");
-        asm.push_str("    STA >$C82A       ; Vec_Text_Height: character Y scale\n");
-        asm.push_str("    LDA >TEXT_SCALE_W ; width (unsigned byte)\n");
-        asm.push_str("    STA >$C82B       ; Vec_Text_Width: character X spacing\n");
-        asm.push_str("    LDA >VAR_ARG1+1  ; Y coordinate\n");
-        asm.push_str("    LDB >VAR_ARG0+1  ; X coordinate\n");
-        asm.push_str("    JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)\n");
-        asm.push_str("    LDA #$F8\n");
-        asm.push_str("    STA >$C82A       ; Restore Vec_Text_Height to normal (-8)\n");
-        asm.push_str("    LDA #$48\n");
-        asm.push_str("    STA >$C82B       ; Restore Vec_Text_Width to normal (72)\n");
-        asm.push_str(&format!("    JSR {}      ; Restore DP to $C8\n", dp_to_c8));
+        asm.push_str("    ; STEP 2: hand the rendered NUM_STR to VECTREX_PRINT_TEXT, which uses\n");
+        asm.push_str("    ; the custom vector font path (consistent visual with PiTrex/RP2350).\n");
+        asm.push_str("    LDX #NUM_STR\n");
+        asm.push_str("    STX >VAR_ARG2     ; PRINT_TEXT reads string ptr from VAR_ARG2\n");
+        asm.push_str("    JSR VECTREX_PRINT_TEXT\n");
         asm.push_str("    RTS\n\n");
     }
     
@@ -650,9 +892,36 @@ pub fn generate_helpers(module: &Module, is_multibank: bool) -> Result<String, S
         emit_beep_update_runtime(&mut asm);
     }
 
+    // NOTE_UPDATE_RUNTIME + PLAY_NOTE_RUNTIME: Auto-inject if PLAY_NOTE is used
+    if crate::m6809::functions::has_note_calls(module) {
+        emit_note_period_table(&mut asm);
+        emit_play_note_runtime(&mut asm);
+        emit_note_update_runtime(&mut asm);
+    }
+
     // DRAW_VECTOR_3D_RUNTIME: 3D rotation and drawing
     if needed.contains("DRAW_VECTOR_3D") {
         emit_draw_vector_3d_runtime(&mut asm);
+    }
+
+    // DRAW_ANIM_RUNTIME: animation player
+    if needed.contains("DRAW_ANIM_RUNTIME") {
+        emit_draw_anim_runtime(&mut asm);
+    }
+
+    // Enemy system runtime subroutines
+    if needed.contains("SPAWN_ENEMIES") || needed.contains("UPDATE_ENEMIES") || needed.contains("DRAW_ENEMIES") {
+        let max_enemies = module.meta.max_enemies.unwrap_or(8) as usize;
+        // Check if any enemy type uses vanim actions (determines if DRAW_ANIM_BANKED is needed)
+        let has_vanim_enemies = assets.iter()
+            .filter(|a| matches!(a.asset_type, crate::AssetType::Enemy))
+            .any(|a| crate::venemy::EnemyResource::load(std::path::Path::new(&a.path))
+                .map(|r| r.actions.iter().any(|act| {
+                    std::path::Path::new(&act.sprite).extension()
+                        .and_then(|e| e.to_str()).unwrap_or("") == "vanim"
+                }))
+                .unwrap_or(false));
+        emit_enemy_system_runtime(&mut asm, max_enemies, is_multibank, has_vanim_enemies);
     }
 
     Ok(asm)
@@ -795,6 +1064,17 @@ PMr_done:\n\
         \n\
         PSG_music_ended:\n\
         CLR >PSG_IS_PLAYING\n\
+        ; Silence all 3 PSG channels so the last note doesn't keep ringing\n\
+        ; until the next PLAY_MUSIC. DP is already $D0 (set by AUDIO_UPDATE).\n\
+        LDA #8                  ; PSG reg 8 = Volume Channel A\n\
+        LDB #0\n\
+        JSR Sound_Byte\n\
+        LDA #9                  ; PSG reg 9 = Volume Channel B\n\
+        LDB #0\n\
+        JSR Sound_Byte\n\
+        LDA #10                 ; PSG reg 10 = Volume Channel C\n\
+        LDB #0\n\
+        JSR Sound_Byte\n\
         LBRA PSG_update_done\n\
         \n\
         PSG_music_loop:\n\
@@ -924,19 +1204,36 @@ fn emit_audio_update_helper(asm: &mut String, is_multibank: bool) {
         BRA AU_UPDATE_SFX       ; Skip reading data this frame\n\
         \n\
         AU_MUSIC_PROCESS_WRITES:\n\
-        PSHS B                  ; Save count\n\
-        \n\
+        ; Per-event write loop. Inlined PSG protocol instead of JSR Sound_Byte\n\
+        ; (~35 cycles vs ~92 incl JSR/RTS overhead — saves ~57 cycles per\n\
+        ; register write). For theme-style music with 8-10 writes per event,\n\
+        ; saves ~500-600 cycles per event frame → frees enough budget that the\n\
+        ; music event no longer pushes the frame over vsync. Mirrors the BIOS\n\
+        ; Sound_Byte protocol exactly (Vectrex VIA bits: BC1=bit3, BDIR=bit4).\n\
+        PSHS B                  ; save register-write count on stack for in-place DEC\n\
         AU_MUSIC_WRITE_LOOP:\n\
-        LDA ,X+                 ; Load register number\n\
-        LDB ,X+                 ; Load register value\n\
-        PSHS X                  ; Save pointer\n\
-        JSR Sound_Byte          ; Write to PSG using BIOS (DP=$D0)\n\
-        PULS X                  ; Restore pointer\n\
-        PULS B                  ; Get counter\n\
-        DECB                    ; Decrement\n\
-        BEQ AU_MUSIC_DONE       ; Done if count=0\n\
-        PSHS B                  ; Save counter\n\
-        BRA AU_MUSIC_WRITE_LOOP ; Continue\n\
+        LDA ,X+                 ; A = register number\n\
+        LDB ,X+                 ; B = register value\n\
+        STA VIA_port_a          ; data bus = reg num\n\
+        LDA #$19                ; BC1=1, BDIR=1 → LATCH ADDR\n\
+        STA VIA_port_b\n\
+        LDA #$01                ; back to INACTIVE (BC1=0, BDIR=0)\n\
+        STA VIA_port_b\n\
+        LDA VIA_port_a          ; READ STATUS — settling delay so PSG finishes\n\
+                                ; latching the register address before we drive\n\
+                                ; the value. Without this, the PSG occasionally\n\
+                                ; writes the new value into the PREVIOUS register\n\
+                                ; (audible as glitchy pitch / 'noisy' music,\n\
+                                ; especially when other CPU activity perturbs\n\
+                                ; the timing between this loop and adjacent code).\n\
+        STB VIA_port_a          ; data bus = value\n\
+        LDA #$11                ; BC1=0, BDIR=1 → WRITE DATA\n\
+        STA VIA_port_b\n\
+        LDA #$01                ; back to INACTIVE\n\
+        STA VIA_port_b\n\
+        DEC ,S                  ; decrement count on stack (in-place; no PSHS/PULS per iter)\n\
+        BNE AU_MUSIC_WRITE_LOOP\n\
+        LEAS 1,S                ; discard saved count\n\
         \n\
         AU_MUSIC_DONE:\n\
         STX >PSG_MUSIC_PTR      ; Update music pointer\n\
@@ -1009,12 +1306,22 @@ pub fn emit_draw_sync_list_at_with_mirrors(out: &mut String) {
             ; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.\n\
             LDA ,X+                 ; Read per-path intensity from vector data\n\
 DSWM_SET_INTENSITY:\n\
+            TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB value\n\
+            BEQ DSWM_USE_FCB_INT\n\
+            LDA >DRAW_VEC_INTENSITY  ; non-zero override (from SET_INTENSITY)\n\
+DSWM_USE_FCB_INT:\n\
             STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
-            STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)\n\
+            PSHS A                  ; save brightness\n\
+            LDA #$05\n\
+            STA >$D000              ; PB=$05: pre-condition Z-axis (mirrors BIOS Intensity_a)\n\
             LDA #$04\n\
-            STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated\n\
+            STA >$D000              ; PB=$04: select Z-axis channel\n\
+            PULS A                  ; restore brightness\n\
+            STA >$D001              ; PA=brightness while Z-axis selected -> charges S/H\n\
+            LDA #$00\n\
+            STA >$D000              ; PB=$00: deselect all channels\n\
             LDA #$01\n\
-            STA >$D000              ; Port B=$01: restore normal mux\n\
+            STA >$D000              ; PB=$01: restore X-integrator channel\n\
             LDB ,X+                 ; y_start from .vec (already relative to center)\n\
             ; Check if Y mirroring is enabled\n\
             TST >MIRROR_Y\n\
@@ -1054,7 +1361,7 @@ DSWM_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A                  ; Restore X\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; T1 fixed at $7F (constant scale; brightness is set via $C832 above, independently)\n\
+            ; Timing setup (match core: hardcoded $7F)\n\
             LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
@@ -1101,16 +1408,23 @@ DSWM_NO_NEGATE_DX:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W2\n\
-            CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)\n\
+            CLR VIA_port_a          ; PA=0: stop X integrator FIRST (alg_xsh=128=rsh → dx=0)\n\
+            CLR VIA_port_b          ; PB=0: Y mux enabled → ysh=0 (stop Y integrator)\n\
+            INC VIA_port_b          ; PB=1: Y mux hold (lock Y at 0)\n\
+            CLR VIA_shift_reg       ; beam off (rate=0 so no drift during these 3 insns)\n\
             LBRA DSWM_LOOP          ; Long branch\n\
             ; Next path: repeat mirror logic for new path header\n\
             DSWM_NEXT_PATH:\n\
             TFR X,D\n\
             PSHS D\n\
-            ; Read per-path intensity from vector data\n\
-            LDA ,X+                 ; Read intensity from vector data\n\
+            ; Read per-path intensity from vector data (check DRAW_VEC_INTENSITY override)\n\
+            LDA ,X+                 ; Read FCB intensity from vector data\n\
 DSWM_NEXT_SET_INTENSITY:\n\
-            PSHS A\n\
+            TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB\n\
+            BEQ DSWM_NEXT_USE_FCB_INT\n\
+            LDA >DRAW_VEC_INTENSITY  ; non-zero override\n\
+DSWM_NEXT_USE_FCB_INT:\n\
+            PSHS A                  ; save intensity for later\n\
             LDB ,X+                 ; y_start\n\
             TST >MIRROR_Y\n\
             BEQ DSWM_NEXT_NO_NEGATE_Y\n\
@@ -1124,13 +1438,19 @@ DSWM_NEXT_NO_NEGATE_Y:\n\
 DSWM_NEXT_NO_NEGATE_X:\n\
             ADDA >DRAW_VEC_X        ; Add X offset\n\
             STD >TEMP_YX\n\
-            PULS A                  ; Get intensity back\n\
+            PULS A                  ; restore intensity\n\
             STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
-            STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)\n\
+            PSHS A                  ; save brightness for Z-axis write\n\
+            LDA #$05\n\
+            STA >$D000              ; PB=$05: pre-condition (BIOS Intensity_a step 1)\n\
             LDA #$04\n\
-            STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated\n\
+            STA >$D000              ; PB=$04: select Z-axis channel\n\
+            PULS A                  ; restore brightness\n\
+            STA >$D001              ; PA=brightness while Z-axis selected\n\
+            LDA #$00\n\
+            STA >$D000              ; PB=$00: deselect\n\
             LDA #$01\n\
-            STA >$D000              ; Port B=$01: restore normal mux\n\
+            STA >$D000              ; PB=$01: restore X-integrator channel\n\
             PULS D\n\
             ADDD #3\n\
             TFR D,X\n\
@@ -1158,7 +1478,7 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; T1 fixed at $7F (constant scale; brightness set via $C832 above)\n\
+            ; Timing setup (match core: hardcoded $7F)\n\
             LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
@@ -1318,6 +1638,263 @@ BEEP_UPDATE_DONE:\n\
         RTS\n\n"
     );
 }
+
+/// Emit NOTE_PERIOD_TABLE: 84 FDB entries for MIDI notes 24-107 → AY period
+/// Formula (calibrated for JSVecX): period = round(88200 / (440 * 2^((n-69)/12)))
+fn emit_note_period_table(asm: &mut String) {
+    asm.push_str(
+        "; ============================================================================\n\
+        ; NOTE_PERIOD_TABLE — MIDI note 24 (C1) to 107 (B7) → AY-3-8910 period\n\
+        ; Each entry is a 2-byte FDB (big-endian). Index = midi_note - 24.\n\
+        ; Formula: period = round(88200 / (440 * 2^((midi_note - 69) / 12)))\n\
+        ; ============================================================================\n\
+        NOTE_PERIOD_TABLE:\n"
+    );
+    for midi in 24u8..=107u8 {
+        let freq = 440.0_f32 * 2.0_f32.powf((midi as f32 - 69.0) / 12.0);
+        let period = (88200.0_f32 / freq).round() as u16;
+        let period = period.max(1).min(4095);
+        // Emit note name as comment
+        let note_names = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+        let octave = (midi as i32 - 12) / 12;
+        let note_name = note_names[(midi as usize) % 12];
+        asm.push_str(&format!("    FDB {}    ; MIDI {} ({}{}) freq={:.1}Hz\n",
+            period, midi, note_name, octave, freq));
+    }
+    asm.push_str("\n");
+}
+
+/// Emit PSG channel register number lookup tables
+fn emit_note_channel_tables(asm: &mut String) {
+    asm.push_str(
+        "NOTE_CH_TONE_LO_REGS:\n\
+        \tFCB 0,2,4          ; R0(A), R2(B), R4(C) — tone period low\n\
+        NOTE_CH_TONE_HI_REGS:\n\
+        \tFCB 1,3,5          ; R1(A), R3(B), R5(C) — tone period high\n\
+        NOTE_CH_VOL_REGS:\n\
+        \tFCB 8,9,10         ; R8(A), R9(B), R10(C) — volume\n\
+        NOTE_CH_MIX_TONE_BITS:\n\
+        \tFCB 1,2,4          ; mixer bit for tone A, B, C\n\
+        NOTE_CH_MIX_NOISE_BITS:\n\
+        \tFCB 8,16,32        ; mixer bit for noise A, B, C\n\
+        \n"
+    );
+}
+
+/// Emit PLAY_NOTE_RUNTIME
+/// Inputs come via NOTE_ARG_INSTR (2-byte ptr), NOTE_ARG_CHANNEL (1-byte), NOTE_ARG_NOTE (1-byte)
+/// Uses TMPPTR (channel state ptr), TMPVAL+1 (channel_id scratch), TMPPTR2 (unused scratch).
+/// Corrupts A, B, X, U. Preserves Y, S (balanced PSHS/PULS).
+fn emit_play_note_runtime(asm: &mut String) {
+    // Emit the channel register lookup tables first
+    emit_note_channel_tables(asm);
+
+    let lines = vec![
+        "; ============================================================================",
+        "; PLAY_NOTE_RUNTIME",
+        "; Inputs (RAM): NOTE_ARG_INSTR (ptr), NOTE_ARG_CHANNEL (0/1/2), NOTE_ARG_NOTE (24-107)",
+        "; Fills NOTE_STATE slot and writes tone/volume/mixer to PSG via Sound_Byte.",
+        "; ============================================================================",
+        "PLAY_NOTE_RUNTIME:",
+        "    ; X = NOTE_STATE + channel*10",
+        "    LDA >NOTE_ARG_CHANNEL",
+        "    LDB #10",
+        "    MUL",
+        "    ADDD #NOTE_STATE",
+        "    TFR D,X",
+        "    STX >TMPPTR             ; save channel state ptr",
+        "    ; Fill state slot",
+        "    LDA >NOTE_ARG_CHANNEL",
+        "    STA ,X                  ; [+0] channel_id",
+        "    LDA #1",
+        "    STA 1,X                 ; [+1] active=1",
+        "    LDU >NOTE_ARG_INSTR     ; U = instrument block",
+        "    LDA ,U                  ; [instr+0] duration_frames",
+        "    STA 2,X                 ; [+2] frames_left",
+        "    LDA >NOTE_ARG_NOTE",
+        "    STA 3,X                 ; [+3] base_note",
+        "    STU 4,X                 ; [+4,5] instr_ptr",
+        "    CLR 6,X                 ; [+6] arp_pos=0",
+        "    LDA 2,U                 ; [instr+2] arpeggio_count",
+        "    BNE PNR_arp_on",
+        "    LDA #$FF",
+        "    BRA PNR_arp_store",
+        "PNR_arp_on:",
+        "    LDA 3,U                 ; [instr+3] arpeggio_speed_frames",
+        "PNR_arp_store:",
+        "    STA 7,X                 ; [+7] arp_timer",
+        "    ; Compute period for base_note",
+        "    LDA >NOTE_ARG_NOTE",
+        "    JSR pnr_note_to_period  ; D = AY period",
+        "    LDX >TMPPTR",
+        "    STD 8,X                 ; [+8,9] period hi:lo",
+        "    ; Write PSG (DP=$D0 required)",
+        "    LDA ,X",
+        "    STA >TMPVAL+1           ; save channel_id",
+        "    PSHS DP",
+        "    LDA #$D0",
+        "    TFR A,DP",
+        "    ; Tone period low",
+        "    LDB >TMPVAL+1",
+        "    LDU #NOTE_CH_TONE_LO_REGS",
+        "    LDA B,U                 ; A = PSG reg for tone-lo",
+        "    LDB 9,X                 ; B = period low byte",
+        "    JSR Sound_Byte",
+        "    ; Tone period high",
+        "    LDB >TMPVAL+1",
+        "    LDU #NOTE_CH_TONE_HI_REGS",
+        "    LDA B,U",
+        "    LDB 8,X                 ; B = period high (4 bits)",
+        "    ANDB #$0F",
+        "    JSR Sound_Byte",
+        "    ; Volume",
+        "    LDU >NOTE_ARG_INSTR",
+        "    LDB >TMPVAL+1",
+        "    PSHS X",
+        "    LDX #NOTE_CH_VOL_REGS",
+        "    LDA B,X",
+        "    PULS X",
+        "    LDB 1,U                 ; [instr+1] volume",
+        "    ANDB #$0F",
+        "    JSR Sound_Byte",
+        "    ; Mixer R7: clear tone-enable bit (0=enabled)",
+        "    LDB >TMPVAL+1",
+        "    PSHS X",
+        "    LDX #NOTE_CH_MIX_TONE_BITS",
+        "    LDA B,X",
+        "    PULS X",
+        "    COMA                    ; invert: NAND mask to clear tone bit",
+        "    ANDA >$C807             ; clear bit in mixer shadow",
+        "    STA >$C807",
+        "    LDA #7",
+        "    LDB >$C807",
+        "    JSR Sound_Byte",
+        "    PULS DP",
+        "    RTS",
+        "",
+        "; pnr_note_to_period: A = MIDI note (24-107) -> D = AY period",
+        "pnr_note_to_period:",
+        "    SUBA #24",
+        "    LDB A",
+        "    CLRA",
+        "    ASLB                    ; *2 for FDB entries",
+        "    ROLA",
+        "    PSHS D",
+        "    LDU #NOTE_PERIOD_TABLE",
+        "    LDD D,U",
+        "    PULS U                  ; discard offset",
+        "    RTS",
+        "",
+    ];
+    for line in &lines {
+        asm.push_str(line);
+        asm.push('\n');
+    }
+}
+
+/// Emit NOTE_UPDATE_RUNTIME — called once per frame (auto-injected)
+/// Handles: frame countdown + mute, arpeggio cycling and period re-apply.
+fn emit_note_update_runtime(asm: &mut String) {
+    let lines = vec![
+        "; ============================================================================",
+        "; NOTE_UPDATE_RUNTIME — tick note timers and arpeggio (called every frame)",
+        "; ============================================================================",
+        "NOTE_UPDATE_RUNTIME:",
+        "    LDX #NOTE_STATE",
+        "    JSR note_upd_ch",
+        "    LDX #NOTE_STATE+10",
+        "    JSR note_upd_ch",
+        "    LDX #NOTE_STATE+20",
+        "    JSR note_upd_ch",
+        "    RTS",
+        "",
+        "; note_upd_ch: X = ptr to 10-byte channel slot",
+        "note_upd_ch:",
+        "    LDA 1,X                 ; active?",
+        "    BEQ note_upd_done",
+        "    DEC 2,X                 ; frames_left--",
+        "    BNE note_upd_arp",
+        "    ; Duration expired: mute volume register",
+        "    CLR 1,X                 ; active=0",
+        "    LDA ,X                  ; channel_id",
+        "    STA >TMPVAL+1",
+        "    PSHS DP",
+        "    LDA #$D0",
+        "    TFR A,DP",
+        "    LDB >TMPVAL+1",
+        "    LDX #NOTE_CH_VOL_REGS",
+        "    LDA B,X",
+        "    LDB #0",
+        "    JSR Sound_Byte",
+        "    PULS DP",
+        "note_upd_done:",
+        "    RTS",
+        "",
+        "note_upd_arp:",
+        "    LDU 4,X                 ; U = instr_ptr",
+        "    LDA 2,U                 ; [instr+2] arpeggio_count",
+        "    BEQ note_upd_done",
+        "    DEC 7,X                 ; arp_timer--",
+        "    BNE note_upd_done",
+        "    ; Reload timer",
+        "    LDA 3,U",
+        "    STA 7,X",
+        "    ; Advance arp_pos",
+        "    LDA 6,X",
+        "    INCA",
+        "    CMPA 2,U",
+        "    BLO note_upd_arpok",
+        "    CLRA",
+        "note_upd_arpok:",
+        "    STA 6,X",
+        "    ; new_note = base_note + intervals[arp_pos]",
+        "    STX >TMPPTR",
+        "    LEAX 4,U                ; X = &intervals[0]",
+        "    LDB A,X                 ; B = signed semitone offset",
+        "    LDX >TMPPTR",
+        "    LDA 3,X                 ; A = base_note",
+        "    ABA                     ; A = base_note + offset",
+        "    ; Clamp 24-107",
+        "    CMPA #24",
+        "    BHS note_upd_hi",
+        "    LDA #24",
+        "    BRA note_upd_period",
+        "note_upd_hi:",
+        "    CMPA #107",
+        "    BLS note_upd_period",
+        "    LDA #107",
+        "note_upd_period:",
+        "    STX >TMPPTR",
+        "    JSR pnr_note_to_period  ; D = period",
+        "    LDX >TMPPTR",
+        "    STD 8,X",
+        "    ; Write tone period to PSG",
+        "    LDA ,X                  ; channel_id",
+        "    STA >TMPVAL+1",
+        "    PSHS DP",
+        "    LDA #$D0",
+        "    TFR A,DP",
+        "    LDB >TMPVAL+1",
+        "    LDU #NOTE_CH_TONE_LO_REGS",
+        "    LDA B,U",
+        "    LDB 9,X",
+        "    JSR Sound_Byte",
+        "    LDB >TMPVAL+1",
+        "    LDU #NOTE_CH_TONE_HI_REGS",
+        "    LDA B,U",
+        "    LDB 8,X",
+        "    ANDB #$0F",
+        "    JSR Sound_Byte",
+        "    PULS DP",
+        "    RTS",
+        "",
+    ];
+    for line in &lines {
+        asm.push_str(line);
+        asm.push('\n');
+    }
+}
+
 
 /// Generate one inlined SMUL_LUT body with unique labels (index n = 0..9).
 /// Saves 14c JSR/RTS overhead per call vs JSR SMUL_LUT.
@@ -1784,5 +2361,1510 @@ fn emit_smul_prod_table() -> String {
     }
     asm.push_str("\n");
     asm
+}
+
+/// Emit the DRAW_ANIM_RUNTIME subroutine.
+///
+/// Input:
+///   X = pointer to animation ROM header (_ANIM_XXX)
+///   U = pointer to 2-byte RAM state (ANIM_XXX_STATE): frame_idx(u8) + ticks_left(u8)
+///
+/// Header layout (from animres.rs compile_vanim_to_asm):
+///   +0  FCB frame_count
+///   +1  FCB loop_flag  (1=loop, 0=freeze)
+///   +2  FDB frame0_ptr
+///   +4  FDB frame1_ptr  ... (2 bytes per frame)
+///
+/// Frame layout:
+///   +0  FCB duration_ticks
+///   +1  FCB vec_ref_count
+///   +2  FDB vec_ref_ptr[0]  ...  (2 bytes each)
+///   +2+vec_ref_count*2  FCB inline_path_count
+///   followed by inline path binary blocks
+///
+/// Register conventions:
+///   Y = scratch / frame data pointer
+///   Preserves: everything except RESULT via PSHS/PULS D,X,Y,U
+fn emit_draw_anim_runtime(asm: &mut String) {
+    asm.push_str(
+"; ============================================================================\n\
+; DRAW_ANIM_RUNTIME\n\
+; Input: X = animation ROM header (_ANIM_XXX)\n\
+;        U = 2-byte RAM state (byte0=frame_idx, byte1=ticks_left)\n\
+;\n\
+; Header layout:\n\
+;   byte 0: frame_count\n\
+;   byte 1: loop_flag (1=loop, 0=freeze)\n\
+;   byte 2: base_ref_count  (static cel layer — drawn before every frame)\n\
+;   byte 3: frame_table_offset (= 4 + base_ref_count*2)\n\
+;   bytes 4..: FDB ptrs to base_ref _VECNAME_VECTORS\n\
+;   at frame_table_offset: FDB ptrs to per-frame data\n\
+; ============================================================================\n\
+DRAW_ANIM_RUNTIME:\n\
+    ; NOTE: do NOT set ACR here. DRAW_VECTOR works without touching ACR;\n\
+    ; setting ACR=$18 (T1 no PB7) breaks T1 timing inside DSWM and hangs.\n\
+    PSHS D,X,Y,U\n\
+    ; --- Refresh MIRROR_X from saved arg (re-assert before any BIOS call can corrupt A) ---\n\
+    LDA >DRAW_ANIM_MIRROR_X\n\
+    STA >MIRROR_X\n\
+    ; --- Apply scale: copy DRAW_ANIM_SCALE to DRAW_SCALE for DSWM ---\n\
+    LDA >DRAW_ANIM_SCALE\n\
+    STA >DRAW_SCALE\n\
+    ; --- Draw base_refs (static cel layer, drawn before every frame) ---\n\
+    LDB 2,X             ; base_ref_count\n\
+    BEQ DAR_TICK        ; none: skip to tick management\n\
+    LEAY 4,X            ; Y = first base_ref FDB entry\n\
+DAR_BASE_LOOP:\n\
+    PSHS B,X,Y\n\
+    LDX ,Y              ; X = _VECNAME_VECTORS header\n\
+    CLR >MIRROR_Y\n\
+    JSR $F1AA           ; DP_to_D0\n\
+    LDD ,X              ; D = path_count (FDB, 2 bytes)\n\
+    BEQ DAR_BASE_SKIP\n\
+    LEAY 2,X            ; Y = first path FDB in vec table (skip 2-byte count)\n\
+DAR_BASE_PATH_LOOP:\n\
+    PSHS D,Y\n\
+    LDX ,Y\n\
+    JSR Draw_Sync_List_At_With_Mirrors\n\
+    PULS D,Y\n\
+    LEAY 2,Y\n\
+    SUBD #1\n\
+    BNE DAR_BASE_PATH_LOOP\n\
+DAR_BASE_SKIP:\n\
+    JSR $F1AF           ; DP_to_C8\n\
+    PULS B,X,Y\n\
+    LEAY 2,Y            ; next base_ref FDB\n\
+    DECB\n\
+    LBNE DAR_BASE_LOOP\n\
+    ; --- Tick counter management ---\n\
+DAR_TICK:\n\
+    LDU 6,S             ; reload U from stack — BIOS may corrupt live U\n\
+    LDA 1,U             ; ticks_left\n\
+    BEQ DAR_INIT        ; 0 = first call: initialize frame 0\n\
+    DECA\n\
+    BNE DAR_DRAW        ; still on this frame: skip frame advance\n\
+    ; ticks exhausted: advance frame index\n\
+    LDB ,U              ; current frame_idx\n\
+    INCB\n\
+    CMPB ,X             ; frame_count (byte 0)\n\
+    BLT DAR_NO_WRAP\n\
+    LDA 1,X             ; loop flag (byte 1)\n\
+    BEQ DAR_FREEZE      ; loop=0: freeze on last frame\n\
+    CLRB                ; loop=1: back to frame 0\n\
+DAR_NO_WRAP:\n\
+    STB ,U              ; save new frame_idx\n\
+    ; frame_ptr = X + frame_table_offset + frame_idx*2\n\
+    LDB ,U              ; new frame_idx\n\
+    CLRA\n\
+    LSLB\n\
+    ROLA                ; D = frame_idx*2\n\
+    ADDB 3,X            ; D += frame_table_offset (byte 3)\n\
+    ADCA #0\n\
+    LEAY D,X            ; Y = &frame_table[frame_idx]\n\
+    LDY ,Y              ; Y = frame data ptr\n\
+    LDA ,Y              ; A = duration_ticks from vanim\n\
+    LDB >DRAW_ANIM_SPEED_MUL\n\
+    BEQ DAR_SPEED1      ; speed=0: use vanim's duration_ticks as-is\n\
+    TFR B,A             ; speed>0: override with ticks_per_frame directly\n\
+DAR_SPEED1:\n\
+    CMPA #1\n\
+    BHS DAR_SPEED1_OK\n\
+    LDA #1\n\
+DAR_SPEED1_OK:\n\
+    STA 1,U             ; reset ticks_remaining\n\
+    BRA DAR_EMIT\n\
+DAR_FREEZE:\n\
+    LDA #1\n\
+    STA 1,U\n\
+    LDB ,U              ; last frame_idx\n\
+    CLRA\n\
+    LSLB\n\
+    ROLA\n\
+    ADDB 3,X\n\
+    ADCA #0\n\
+    LEAY D,X\n\
+    LDY ,Y\n\
+    BRA DAR_EMIT\n\
+DAR_INIT:\n\
+    ; First call: frame_idx=0, load frame 0 duration and draw it\n\
+    CLRB                ; frame_idx = 0\n\
+    STB ,U\n\
+    CLRA                ; D = 0 (frame_idx*2 = 0)\n\
+    ADDB 3,X            ; B = frame_table_offset (frame 0 offset from header)\n\
+    ADCA #0\n\
+    LEAY D,X            ; Y = frame_table[0] entry\n\
+    LDY ,Y              ; Y = frame 0 data ptr\n\
+    LDA ,Y              ; A = duration_ticks from vanim\n\
+    LDB >DRAW_ANIM_SPEED_MUL\n\
+    BEQ DAR_SPEED2      ; speed=0: use vanim's duration_ticks as-is\n\
+    TFR B,A             ; speed>0: override with ticks_per_frame directly\n\
+DAR_SPEED2:\n\
+    CMPA #1\n\
+    BHS DAR_SPEED2_OK\n\
+    LDA #1\n\
+DAR_SPEED2_OK:\n\
+    STA 1,U             ; ticks_left = ticks_per_frame\n\
+    BRA DAR_EMIT\n\
+DAR_DRAW:\n\
+    STA 1,U             ; save decremented ticks\n\
+    LDB ,U              ; frame_idx\n\
+    CLRA\n\
+    LSLB\n\
+    ROLA\n\
+    ADDB 3,X\n\
+    ADCA #0\n\
+    LEAY D,X\n\
+    LDY ,Y              ; Y = frame data ptr\n\
+DAR_EMIT:\n\
+    ; frame data: byte 0=duration_ticks (skip), byte 1=vec_ref_count\n\
+    LEAY 1,Y\n\
+    LDB ,Y+             ; B = vec_ref_count, Y at first vec ptr\n\
+    BEQ DAR_INLINE\n\
+DAR_VEC_LOOP:\n\
+    PSHS B,Y\n\
+    LDX ,Y\n\
+    JSR $F1AA           ; DP_to_D0\n\
+    LDD ,X              ; D = path_count (FDB, 2 bytes)\n\
+    BEQ DAR_VEC_DONE\n\
+    LEAY 2,X            ; Y = first path FDB (skip 2-byte count)\n\
+DAR_VEC_PATH_LOOP:\n\
+    PSHS D,Y\n\
+    LDX ,Y\n\
+    JSR Draw_Sync_List_At_With_Mirrors\n\
+    PULS D,Y\n\
+    LEAY 2,Y\n\
+    SUBD #1\n\
+    BNE DAR_VEC_PATH_LOOP\n\
+DAR_VEC_DONE:\n\
+    JSR $F1AF           ; DP_to_C8\n\
+    PULS B,Y\n\
+    LEAY 2,Y\n\
+    DECB\n\
+    BNE DAR_VEC_LOOP\n\
+DAR_INLINE:\n\
+    LDB ,Y+             ; B = inline_path_count\n\
+    BEQ DAR_DONE\n\
+DAR_PATH_LOOP:\n\
+    PSHS B\n\
+    TFR Y,X\n\
+    JSR $F1AA           ; DP_to_D0\n\
+    JSR Draw_Sync_List_At_With_Mirrors\n\
+    JSR $F1AF           ; DP_to_C8\n\
+    LEAY 5,Y            ; skip intensity + 4-byte header\n\
+DAR_SCAN:\n\
+    LDA ,Y+\n\
+    CMPA #2\n\
+    BEQ DAR_PATH_DONE\n\
+    CMPA #$FF\n\
+    BNE DAR_SCAN\n\
+    LEAY 2,Y\n\
+    BRA DAR_SCAN\n\
+DAR_PATH_DONE:\n\
+    PULS B\n\
+    DECB\n\
+    BNE DAR_PATH_LOOP\n\
+DAR_DONE:\n\
+    ; Restore DRAW_SCALE to default ($7F) after animation draw\n\
+    LDA #$7F\n\
+    STA >DRAW_SCALE\n\
+    PULS D,X,Y,U\n\
+    RTS\n\n");
+}
+
+/// Emit SPAWN_ENEMIES_RUNTIME, UPDATE_ENEMIES_RUNTIME, DRAW_ENEMIES_RUNTIME.
+///
+/// Enemy pool record layout (ENEMY_POOL_STRIDE = 13 bytes):
+///   +0   active      (1)  0=dead, 1=active
+///   +1,2 x           (2)  signed 16-bit world x (hi, lo)
+///   +3,4 y           (2)  signed 16-bit world y (hi, lo)
+///   +5,6 type_ptr    (2)  pointer to _NAME_ENEMY header
+///   +7   action      (1)  current action index
+///   +8   ai_type     (1)  0=static,1=patrol,2=chase,3=flee
+///   +9   hp          (1)  current HP
+///   +10  wp_idx      (1)  current patrol waypoint index
+///   +11,12 wp_ptr    (2)  pointer to waypoint table (0 = none)
+///
+/// Instance record layout (levelres.rs, 12 bytes):
+///   +0,1  type_ptr (FDB)
+///   +2,3  spawn_x  (FDB)
+///   +4,5  spawn_y  (FDB)
+///   +6    ai_type  (FCB)
+///   +7    wave     (FCB)
+///   +8    respawn  (FCB)
+///   +9    wp_count (FCB)
+///   +10,11 wp_ptr  (FDB)
+fn emit_enemy_system_runtime(asm: &mut String, max_enemies: usize, is_multibank: bool, has_vanim_enemies: bool) {
+    asm.push_str(&format!(
+"; ============================================================================\n\
+; ENEMY SYSTEM RUNTIME  (max {max_enemies} enemies, stride 28 bytes)\n\
+; ============================================================================\n\
+ENEMY_POOL_STRIDE EQU 28\n\
+ENEMY_POOL_MAX    EQU {max_enemies}\n\
+\n\
+; Pool record offsets\n\
+POOL_ACTIVE  EQU 0\n\
+POOL_X_HI    EQU 1\n\
+POOL_X_LO    EQU 2\n\
+POOL_Y_HI    EQU 3\n\
+POOL_Y_LO    EQU 4\n\
+POOL_TYPE_HI EQU 5\n\
+POOL_TYPE_LO EQU 6\n\
+POOL_ACTION  EQU 7\n\
+POOL_AI      EQU 8\n\
+POOL_HP      EQU 9\n\
+POOL_WPIDX   EQU 10\n\
+POOL_WPPTR   EQU 11\n\
+POOL_SM_STATE EQU 13\n\
+POOL_SM_TMR_HI EQU 14\n\
+POOL_SM_TMR_LO EQU 15\n\
+POOL_WPCOUNT   EQU 16\n\
+POOL_DIR        EQU 17\n\
+POOL_SUB_STATE  EQU 18\n\
+POOL_AREA_IDX   EQU 19\n\
+POOL_IDLE_TIMER EQU 20\n\
+POOL_TRANS_TYPE EQU 21\n\
+POOL_TARGET_X_HI EQU 22\n\
+POOL_TARGET_X_LO EQU 23\n\
+POOL_FROMX_OR_VY_HI EQU 24\n\
+POOL_FROMX_OR_VY_LO EQU 25\n\
+POOL_FEET_OFFSET EQU 26\n\
+POOL_VY0_STASH EQU 27\n\
+;   POOL_FROMX_OR_VY (2) — WALK_TO_TAKEOFF: from_x (i16). AIRBORNE: vy (i16, low byte = i8 vy).\n\
+;   POOL_FEET_OFFSET (1) — set at SPAWN to enemy's sprite half-height. Used to snap\n\
+;     world_y = area.y + feet_offset on spawn and on land.\n\
+;   POOL_VY0_STASH (1) — initial vy of the in-progress transition (set at commit,\n\
+;     applied at takeoff). Comes from trans entry's vy0 byte (per-transition tuned).\n\
+;   POOL_DIR (1) — 0=facing right, 1=facing left. Written by UPDATE_ENEMIES when\n\
+;   patrol moves the enemy on X (LBGT path = right, LBLT/SUB path = left). Read by\n\
+;   DRAW_ENEMIES into MIRROR_X so the sprite reflects the current direction.\n\
+;   POOL_SUB_STATE (1) — wander only. 0=WALK, 1=IDLE, 2=AIRBORNE, 3=WALK_TO_TAKEOFF\n\
+;   POOL_AREA_IDX (1) — wander only. Current area index into level's AREAS table.\n\
+;   POOL_IDLE_TIMER (1) — wander only. Frames remaining in idle. Decremented each\n\
+;   frame while sub_state=1; on expire either commits a transition or returns to WALK.\n\
+;   POOL_TRANS_TYPE (1) — wander only. Type of in-progress transition: 1=jump_up, 2=drop, 3=jump_across.\n\
+;   POOL_TARGET_X (2) — wander only. Target X stashed at transition commit (i16).\n\
+;   POOL_VY (2) — wander only. AIRBORNE: signed vertical velocity (i16, only low byte typically used).\n\
+;     WALK_TO_TAKEOFF: stores from_x in same slot since vy isn't used yet.\n\
+; For wander enemies, wp_ptr (pool +11..12) is reused as areas_ptr (points to\n\
+;   _LVL_AREAS_HEADER), and wp_count (pool +16) holds area_count.\n\
+; SM state record layout (SM_STATE_STRIDE = 13 bytes, max 4 events)\n\
+SM_STATE_STRIDE EQU 13\n\
+SM_HDR_INIT   EQU 1\n\
+SM_HDR_STATES EQU 2\n\
+SM_ST_ACTION  EQU 0\n\
+SM_ST_DCY_HI  EQU 1\n\
+SM_ST_DCY_LO  EQU 2\n\
+SM_ST_DCYTO   EQU 3\n\
+SM_ST_NEVT    EQU 4\n\
+SM_ST_EVT0H   EQU 5\n\
+SM_ST_EVT0T   EQU 6\n\
+SM_ST_EVT1H   EQU 7\n\
+SM_ST_EVT1T   EQU 8\n\
+SM_ST_EVT2H   EQU 9\n\
+SM_ST_EVT2T   EQU 10\n\
+SM_ST_EVT3H   EQU 11\n\
+SM_ST_EVT3T   EQU 12\n\
+\n\
+; SPAWN_ENEMIES_RUNTIME\n\
+; Entry: B = instance count, X = ptr to _LEVEL_ENEMY_INSTANCES table\n\
+; Initialises ENEMY_POOL from the ROM instance table.\n\
+SPAWN_ENEMIES_RUNTIME:\n\
+    ; Entry: B = total ROM instance count, X = ptr to instances table.\n\
+    ; Per-screen reuse (mirrors pitrex): only spawn enemies whose world Y is\n\
+    ; within +/-150 of CAMERA_Y, capped at the pool size ({max_enemies}).\n\
+    LBEQ SPAWN_ENE_DONE\n\
+    STB >ENEMY_LOOP_IDX        ; scan counter = total ROM entries to examine\n\
+    ; Zero-clear ALL pool slots so stale enemies from the previous screen vanish\n\
+    LDY #ENEMY_POOL\n\
+    LDB #{max_enemies}\n\
+    CLRA\n\
+SPAWN_CLR_LOOP:\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+\n\
+    STA ,Y+                    ; +17 dir (clears to 0=right)\n\
+    STA ,Y+                    ; +18 sub_state (clears to 0=WALK)\n\
+    STA ,Y+                    ; +19 cur_area_idx (clears to 0)\n\
+    STA ,Y+                    ; +20 idle_timer (clears to 0)\n\
+    STA ,Y+                    ; +21 trans_type (clears to 0)\n\
+    STA ,Y+                    ; +22 target_x hi\n\
+    STA ,Y+                    ; +23 target_x lo\n\
+    STA ,Y+                    ; +24 from_x/vy hi\n\
+    STA ,Y+                    ; +25 from_x/vy lo\n\
+    STA ,Y+                    ; +26 feet_offset (set by SPAWN_FILL for wander)\n\
+    STA ,Y+                    ; +27 pad\n\
+    DECB\n\
+    BNE SPAWN_CLR_LOOP\n\
+    CLR >ENEMY_COUNT           ; spawned (in-range) count = 0\n\
+    LDX >LEVEL_ENEMY_INSTANCES_PTR\n\
+    STX >ENEMY_SCRATCH_PTR\n\
+    LDY #ENEMY_POOL\n\
+SPAWN_SCAN_LOOP:\n\
+    LDX >ENEMY_SCRATCH_PTR\n\
+    LDD 4,X                    ; D = instance world Y (offset +4,+5)\n\
+    SUBD >CAMERA_Y             ; D = spawn_y - camera_y\n\
+    CMPD #150\n\
+    LBGT SPAWN_SKIP            ; off-screen below (signed)\n\
+    CMPD #$FF6A                ; -150: off-screen above (signed)\n\
+    LBLT SPAWN_SKIP\n\
+    LDA #1\n\
+    STA ,Y              ; +0 active=1\n\
+    LDA 2,X\n\
+    STA 1,Y             ; +1 x hi\n\
+    LDA 3,X\n\
+    STA 2,Y             ; +2 x lo\n\
+    LDA 4,X\n\
+    STA 3,Y             ; +3 y hi\n\
+    LDA 5,X\n\
+    STA 4,Y             ; +4 y lo\n\
+    LDA ,X\n\
+    STA 5,Y             ; +5 type_ptr hi\n\
+    LDA 1,X\n\
+    STA 6,Y             ; +6 type_ptr lo\n\
+    CLR 7,Y             ; +7 action=0 (idle)\n\
+    LDA 6,X\n\
+    STA 8,Y             ; +8 ai_type\n\
+    ; hp = first byte of enemy type block\n\
+    LDX >ENEMY_SCRATCH_PTR  ; reload instance ptr (X still valid here)\n\
+    PSHS B,X,Y\n\
+    LDA 5,Y\n\
+    LDB 6,Y\n\
+    TFR D,X             ; X = type_ptr = _NAME_ENEMY header\n\
+    LDA ,X              ; hp byte\n\
+    PULS B,X,Y\n\
+    STA 9,Y             ; +9 hp\n\
+    CLR 10,Y            ; +10 wp_idx=0\n\
+    LDA 9,X\n\
+    STA 16,Y            ; +16 wp_count\n\
+    LDA 10,X\n\
+    STA 11,Y            ; +11 wp_ptr hi\n\
+    LDA 11,X\n\
+    STA 12,Y            ; +12 wp_ptr lo\n\
+    ; Init SM state (+13) from type header [5-6] = SM ptr\n\
+    PSHS B              ; save loop counter (B clobbered by LDB below)\n\
+    LDA 5,Y             ; type_ptr hi (pool)\n\
+    LDB 6,Y             ; type_ptr lo (pool)\n\
+    TFR D,X             ; X = _NAME_ENEMY header\n\
+    LDA 5,X             ; SM ptr hi (header[5])\n\
+    LDB 6,X             ; SM ptr lo (header[6])\n\
+    CMPD #0\n\
+    BEQ SPAWN_SM_NOSM   ; no state machine\n\
+    TFR D,X             ; X = SM table header\n\
+    PSHS X              ; save SM header ptr\n\
+    LDA 1,X             ; initial_state_idx\n\
+    STA 13,Y            ; pool.sm_state = initial\n\
+    ; Look up initial state action\n\
+    TFR A,B             ; B = initial_state_idx\n\
+    PULS X              ; X = SM header\n\
+    LEAX 2,X            ; X = &states[0]\n\
+    LDA #13             ; stride = 13 bytes per state record\n\
+    MUL                 ; D = initial_state_idx * 13\n\
+    LEAX D,X            ; X = &states[initial]\n\
+    LDA ,X              ; action_idx from state[0]\n\
+    STA 7,Y             ; pool.action = initial action\n\
+    BRA SPAWN_SM_DONE\n\
+SPAWN_SM_NOSM:\n\
+    LDA #$FF\n\
+    STA 13,Y            ; pool.sm_state = $FF (no SM)\n\
+SPAWN_SM_DONE:\n\
+    PULS B              ; restore loop counter\n\
+    CLR 14,Y            ; pool.sm_decay_timer hi = 0\n\
+    CLR 15,Y            ; pool.sm_decay_timer lo = 0\n\
+    ; Wander (ai_type=4) starts in walk action and copies feet_offset+area_idx.\n\
+    ; CRITICAL: X is currently type_ptr or SM_state record (clobbered by SM init).\n\
+    ; Must reload X = ENEMY_SCRATCH_PTR (instance ptr) before reading instance bytes.\n\
+    LDA 8,Y             ; ai_type\n\
+    CMPA #4\n\
+    BNE SPAWN_ACT_DONE\n\
+    LDA #1\n\
+    STA 7,Y             ; action=1 (walk)\n\
+    LDX >ENEMY_SCRATCH_PTR  ; X = instance ptr (was clobbered by SM init)\n\
+    LDA 12,X            ; instance.feet_offset (instance +12)\n\
+    STA 26,Y            ; pool.feet_offset\n\
+    LDA 13,X            ; instance.initial_area_idx (instance +13)\n\
+    STA 19,Y            ; pool.cur_area_idx\n\
+SPAWN_ACT_DONE:\n\
+    ; filled a slot: advance pool ptr, bump spawned count, stop if pool full\n\
+    LEAY 28,Y\n\
+    INC >ENEMY_COUNT\n\
+    LDA >ENEMY_COUNT\n\
+    CMPA #{max_enemies}\n\
+    BHS SPAWN_ENE_DONE         ; pool full -> stop scanning\n\
+SPAWN_SKIP:\n\
+    ; advance to next ROM instance (stride 14) and keep scanning\n\
+    LDX >ENEMY_SCRATCH_PTR\n\
+    LEAX 14,X\n\
+    STX >ENEMY_SCRATCH_PTR\n\
+    DEC >ENEMY_LOOP_IDX\n\
+    LBNE SPAWN_SCAN_LOOP\n\
+SPAWN_ENE_DONE:\n\
+    RTS\n\
+\n"
+    ));
+
+    // UPDATE_ENEMIES_RUNTIME — fixes loop-counter bug (B clobbered by LDB 12,Y) and,
+    // in multibank mode, switches to LEVEL_BANK before reading wp_ptr addresses.
+    if is_multibank {
+        asm.push_str(
+"; UPDATE_ENEMIES_RUNTIME (multibank)\n\
+; Patrol (ai_type=1): waypoint loop. Wander (ai_type=4): area-based state machine.\n\
+; Areas table (per level, in level bank) format:\n\
+;   +0  FCB area_count\n\
+;   +1  FCB trans_count\n\
+;   +2  area[0]: FDB y, FDB x_min, FDB x_max, FCB pad, FCB pad (8 bytes)\n\
+;   +2+area_count*8: trans[0]: FCB from, FCB to, FCB type, FCB pad, FDB from_x, FDB to_x\n\
+; Wander pool fields:\n\
+;   +18 sub_state: 0=WALK 1=IDLE 2=AIRBORNE 3=WALK_TO_TAKEOFF\n\
+;   +19 cur_area_idx (set to target at commit)\n\
+;   +20 idle_timer (IDLE)\n\
+;   +21 trans_type (1=jump_up 2=drop 3=jump_across)\n\
+;   +22..23 target_x (to_x stashed at commit)\n\
+;   +24    airborne_timer / pad\n\
+;   +25    vy (i8, AIRBORNE)\n\
+;   +26    feet_offset\n\
+UPDATE_ENEMIES_RUNTIME:\n\
+    LDB >ENEMY_COUNT\n\
+    LBEQ UPD_ENE_DONE\n\
+    LDA CURRENT_ROM_BANK\n\
+    PSHS A              ; save current bank\n\
+    LDA >LEVEL_BANK\n\
+    STA CURRENT_ROM_BANK\n\
+    STA $DF00           ; switch to level bank\n\
+    LDY #ENEMY_POOL\n\
+UPD_ENE_LOOP:\n\
+    PSHS B              ; save loop counter\n\
+    LDA ,Y              ; active?\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
+    ; ── SM auto-decay tick: walks states back through their declared decay_to\n\
+    ; chain at the cadence set by each state's decay_frames in the .venemy.\n\
+    ; Runs BEFORE the frozen-action guard so reaching state 0 (normal) can\n\
+    ; release the enemy in the same frame.\n\
+    JSR UPD_DECAY_CHECK\n\
+    ; ── Frozen-action guard: action 0=idle, 1=walk are 'live'.\n\
+    ; Any action >= 2 (snow1, snow2, ball, ...) means the SM has frozen the\n\
+    ; enemy in place (snowed/captured). Skip all movement so it stays put,\n\
+    ; drawn with its current snowed sprite by DRAW_ENEMIES.\n\
+    LDA 7,Y             ; pool.action\n\
+    CMPA #2\n\
+    LBHS UPD_ENE_NEXT_POP\n\
+    LDA 8,Y             ; ai_type\n\
+    CMPA #1\n\
+    LBEQ UPD_PATROL\n\
+    CMPA #4\n\
+    LBEQ UPD_WANDER\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+; ============ PATROL (waypoint-based) ============\n\
+UPD_PATROL:\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    CMPD #0\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
+    TFR D,X             ; X = wp_ptr base\n\
+    LDA 10,Y            ; wp_idx\n\
+    ASLA\n\
+    ASLA                ; * 4 bytes per waypoint\n\
+    LEAX A,X            ; X = &wp[wp_idx]\n\
+    LDD ,X              ; target_x\n\
+    CMPD 1,Y\n\
+    LBEQ UPD_P_MOVE_Y\n\
+    LBGT UPD_P_INC_X\n\
+    LDD 1,Y\n\
+    SUBD #1\n\
+    STD 1,Y\n\
+    LDA #1\n\
+    STA 17,Y\n\
+    LBRA UPD_P_MOVE_Y\n\
+UPD_P_INC_X:\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    STD 1,Y\n\
+    CLR 17,Y\n\
+UPD_P_MOVE_Y:\n\
+    LDD 2,X             ; target_y\n\
+    CMPD 3,Y\n\
+    LBEQ UPD_P_CHECK_WP\n\
+    LBGT UPD_P_INC_Y\n\
+    LDD 3,Y\n\
+    SUBD #1\n\
+    STD 3,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_P_INC_Y:\n\
+    LDD 3,Y\n\
+    ADDD #1\n\
+    STD 3,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_P_CHECK_WP:\n\
+    LDD ,X\n\
+    CMPD 1,Y\n\
+    LBNE UPD_ENE_NEXT_POP\n\
+    INC 10,Y\n\
+    LDA 10,Y\n\
+    CMPA 16,Y\n\
+    LBLO UPD_ENE_NEXT_POP\n\
+    CLR 10,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+; ============ WANDER (area-based state machine) ============\n\
+UPD_WANDER:\n\
+    LDA 18,Y            ; sub_state\n\
+    LBEQ UPD_W_WALK\n\
+    CMPA #1\n\
+    LBEQ UPD_W_IDLE\n\
+    CMPA #2\n\
+    LBEQ UPD_W_AIR\n\
+    CMPA #3\n\
+    LBEQ UPD_W_TT\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_WALK:\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    CMPD #0\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
+    TFR D,X             ; X = areas_header_ptr\n\
+    LDB 19,Y            ; cur_area_idx\n\
+    LDA #8\n\
+    MUL                 ; D = idx*8\n\
+    ADDD #2             ; +2 to skip header\n\
+    LEAX D,X            ; X = &area[idx]\n\
+    LDA 17,Y            ; POOL_DIR\n\
+    LBNE UPD_W_WALK_L\n\
+    ; dir=0 right: walk +1, clamp to x_max\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    PSHS D              ; save proposed x\n\
+    LDD 4,X             ; x_max\n\
+    CMPD ,S\n\
+    LBLT UPD_W_EDGE_R   ; proposed > x_max → edge\n\
+    PULS D\n\
+    STD 1,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_EDGE_R:\n\
+    LEAS 2,S\n\
+    LDD 4,X             ; clamp to x_max\n\
+    STD 1,Y\n\
+    LBRA UPD_W_EDGE\n\
+UPD_W_WALK_L:\n\
+    LDD 1,Y\n\
+    SUBD #1\n\
+    PSHS D\n\
+    LDD 2,X             ; x_min\n\
+    CMPD ,S\n\
+    LBGT UPD_W_EDGE_L\n\
+    PULS D\n\
+    STD 1,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_EDGE_L:\n\
+    LEAS 2,S\n\
+    LDD 2,X             ; clamp to x_min\n\
+    STD 1,Y\n\
+UPD_W_EDGE:\n\
+    ; Reached an edge: flip dir, enter IDLE\n\
+    LDA 17,Y\n\
+    EORA #1\n\
+    STA 17,Y\n\
+    LDA #1\n\
+    STA 18,Y            ; sub_state = IDLE\n\
+    CLR 7,Y             ; action = idle\n\
+    JSR RAND_HELPER\n\
+    ANDB #$3F\n\
+    ADDB #90\n\
+    STB 20,Y            ; idle_timer\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_IDLE:\n\
+    DEC 20,Y\n\
+    LBNE UPD_ENE_NEXT_POP\n\
+    ; Idle expired: try a transition (25% chance per matching entry)\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    TFR D,X             ; X = areas_header_ptr\n\
+    LDB 1,X             ; trans_count\n\
+    LBEQ UPD_W_TO_WALK\n\
+    PSHS B              ; save trans_count\n\
+    LDA ,X              ; area_count\n\
+    LDB #8\n\
+    MUL                 ; D = area_count*8\n\
+    ADDD #2\n\
+    LEAX D,X            ; X = trans_ptr (start of trans array)\n\
+    PULS B              ; B = trans_count (loop counter)\n\
+UPD_W_TRY_LOOP:\n\
+    LDA 19,Y            ; cur_area_idx\n\
+    CMPA ,X             ; trans.from\n\
+    BNE UPD_W_NEXT_TRY\n\
+    ; Match: roll 25% chance\n\
+    PSHS B,X\n\
+    JSR RAND_HELPER\n\
+    ANDB #3\n\
+    TSTB\n\
+    PULS B,X\n\
+    BNE UPD_W_NEXT_TRY\n\
+    ; Commit transition: X = &trans[matched]\n\
+    LDA 1,X\n\
+    STA 19,Y            ; cur_area_idx = to\n\
+    LDA 2,X\n\
+    STA 21,Y            ; trans_type\n\
+    LDA 3,X\n\
+    STA 27,Y            ; vy0_stash (precomputed by compiler for this transition)\n\
+    LDD 4,X\n\
+    STD 24,Y            ; from_x stashed at pool+24..25\n\
+    LDD 6,X\n\
+    STD 22,Y            ; target_x at pool+22..23\n\
+    LDA #3\n\
+    STA 18,Y            ; sub_state = WALK_TO_TAKEOFF\n\
+    LDA #1\n\
+    STA 7,Y             ; action = walk\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_NEXT_TRY:\n\
+    LEAX 8,X\n\
+    DECB\n\
+    BNE UPD_W_TRY_LOOP\n\
+UPD_W_TO_WALK:\n\
+    CLR 18,Y            ; sub_state = WALK\n\
+    LDA #1\n\
+    STA 7,Y             ; action = walk\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_TT:\n\
+    ; WALK_TO_TAKEOFF: walk X-only toward from_x at pool+24..25\n\
+    LDD 24,Y            ; from_x\n\
+    CMPD 1,Y\n\
+    LBEQ UPD_W_TT_REACHED\n\
+    LBGT UPD_W_TT_RIGHT\n\
+    ; cur_x > from_x: walk left\n\
+    LDD 1,Y\n\
+    SUBD #1\n\
+    STD 1,Y\n\
+    LDA #1\n\
+    STA 17,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_TT_RIGHT:\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    STD 1,Y\n\
+    CLR 17,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_TT_REACHED:\n\
+    ; Arrived at from_x: load precomputed vy0 and enter AIRBORNE.\n\
+    LDA 27,Y            ; vy0_stash (set at commit from trans entry)\n\
+    STA 25,Y            ; vy (i8)\n\
+    LDA #120\n\
+    STA 24,Y            ; airborne timeout (frames)\n\
+    ; Face toward target_x\n\
+    LDD 22,Y\n\
+    CMPD 1,Y\n\
+    LBGT UPD_W_TT_FACE_R\n\
+    LDA #1\n\
+    STA 17,Y\n\
+    LBRA UPD_W_TT_AIR\n\
+UPD_W_TT_FACE_R:\n\
+    CLR 17,Y\n\
+UPD_W_TT_AIR:\n\
+    LDA #2\n\
+    STA 18,Y            ; sub_state = AIRBORNE\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_AIR:\n\
+    ; Check timeout first\n\
+    DEC 24,Y\n\
+    LBEQ UPD_W_AIR_LAND\n\
+    ; X interp toward target_x by 2 px/frame\n\
+    LDD 22,Y\n\
+    CMPD 1,Y\n\
+    LBEQ UPD_W_AIR_Y    ; x at target\n\
+    LBGT UPD_W_AIR_X_R\n\
+    LDD 1,Y\n\
+    SUBD #2\n\
+    CMPD 22,Y\n\
+    LBGT UPD_W_AIR_X_OKL\n\
+    LDD 22,Y\n\
+UPD_W_AIR_X_OKL:\n\
+    STD 1,Y\n\
+    LBRA UPD_W_AIR_Y\n\
+UPD_W_AIR_X_R:\n\
+    LDD 1,Y\n\
+    ADDD #2\n\
+    CMPD 22,Y\n\
+    LBLT UPD_W_AIR_X_OKR\n\
+    LDD 22,Y\n\
+UPD_W_AIR_X_OKR:\n\
+    STD 1,Y\n\
+UPD_W_AIR_Y:\n\
+    ; y += vy (sign-extended), vy -= 1, clamp vy >= -4\n\
+    LDB 25,Y\n\
+    SEX                 ; D = signed vy\n\
+    ADDD 3,Y\n\
+    STD 3,Y\n\
+    LDB 25,Y\n\
+    DECB\n\
+    CMPB #$FC           ; -4\n\
+    BGE UPD_W_AIR_VYOK\n\
+    LDB #$FC\n\
+UPD_W_AIR_VYOK:\n\
+    STB 25,Y\n\
+    ; Check land: compute target_y = areas[cur_area].y + feet_offset and compare\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    TFR D,X\n\
+    LDB 19,Y\n\
+    LDA #8\n\
+    MUL\n\
+    ADDD #2\n\
+    LEAX D,X            ; X = &area[cur_area_idx] (target)\n\
+    LDB 26,Y            ; B = feet_offset (low byte)\n\
+    CLRA                ; A = 0 (high byte)\n\
+    ADDD ,X             ; D = feet_offset + area.y (16-bit at X)\n\
+    ; If trans_type=2 (drop) or vy<=0 (descending): land if cur_y <= target_y\n\
+    ; Else (ascending jump_up): just keep going\n\
+    PSHS D              ; stash target_y (we'll need it twice)\n\
+    LDA 21,Y\n\
+    CMPA #2\n\
+    BEQ UPD_W_AIR_CHK_DOWN\n\
+    LDB 25,Y\n\
+    TSTB\n\
+    BPL UPD_W_AIR_NOLAND\n\
+UPD_W_AIR_CHK_DOWN:\n\
+    LDD ,S              ; reload target_y\n\
+    CMPD 3,Y            ; target_y vs cur_y\n\
+    LBLT UPD_W_AIR_NOLAND  ; target_y < cur_y → still above\n\
+    ; cur_y <= target_y: land — snap and switch to WALK\n\
+    PULS D              ; D = target_y\n\
+    STD 3,Y             ; snap world_y\n\
+    CLR 18,Y            ; sub_state = WALK\n\
+    LDA #1\n\
+    STA 7,Y             ; action = walk\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_AIR_NOLAND:\n\
+    LEAS 2,S            ; discard saved target_y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_AIR_LAND:\n\
+    ; Timeout path: recompute target_y, snap, switch to WALK\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    TFR D,X\n\
+    LDB 19,Y\n\
+    LDA #8\n\
+    MUL\n\
+    ADDD #2\n\
+    LEAX D,X\n\
+    LDB 26,Y\n\
+    CLRA\n\
+    ADDD ,X             ; D = feet_offset + area.y\n\
+    STD 3,Y\n\
+    CLR 18,Y            ; sub_state = WALK\n\
+    LDA #1\n\
+    STA 7,Y             ; action = walk\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_ENE_NEXT_POP:\n\
+    PULS B              ; restore loop counter\n\
+    LEAY 28,Y           ; next pool record\n\
+    DECB\n\
+    LBNE UPD_ENE_LOOP\n\
+    PULS A              ; restore original bank\n\
+    STA CURRENT_ROM_BANK\n\
+    STA $DF00\n\
+UPD_ENE_DONE:\n\
+    RTS\n\n"
+        );
+    } else {
+        asm.push_str(
+"; UPDATE_ENEMIES_RUNTIME (single-bank)\n\
+; Same as multibank version without bank switching.\n\
+UPDATE_ENEMIES_RUNTIME:\n\
+    LDB >ENEMY_COUNT\n\
+    LBEQ UPD_ENE_DONE\n\
+    LDY #ENEMY_POOL\n\
+UPD_ENE_LOOP:\n\
+    PSHS B\n\
+    LDA ,Y\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
+    JSR UPD_DECAY_CHECK   ; SM auto-decay (matches per-state decay_frames)\n\
+    ; Frozen-action guard: action >= 2 = SM-frozen (snow1/snow2/ball) → skip movement\n\
+    LDA 7,Y\n\
+    CMPA #2\n\
+    LBHS UPD_ENE_NEXT_POP\n\
+    LDA 8,Y\n\
+    CMPA #1\n\
+    LBEQ UPD_PATROL\n\
+    CMPA #4\n\
+    LBEQ UPD_WANDER\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_PATROL:\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    CMPD #0\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
+    TFR D,X\n\
+    LDA 10,Y\n\
+    ASLA\n\
+    ASLA\n\
+    LEAX A,X\n\
+    LDD ,X\n\
+    CMPD 1,Y\n\
+    LBEQ UPD_P_MOVE_Y\n\
+    LBGT UPD_P_INC_X\n\
+    LDD 1,Y\n\
+    SUBD #1\n\
+    STD 1,Y\n\
+    LDA #1\n\
+    STA 17,Y\n\
+    LBRA UPD_P_MOVE_Y\n\
+UPD_P_INC_X:\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    STD 1,Y\n\
+    CLR 17,Y\n\
+UPD_P_MOVE_Y:\n\
+    LDD 2,X\n\
+    CMPD 3,Y\n\
+    LBEQ UPD_P_CHECK_WP\n\
+    LBGT UPD_P_INC_Y\n\
+    LDD 3,Y\n\
+    SUBD #1\n\
+    STD 3,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_P_INC_Y:\n\
+    LDD 3,Y\n\
+    ADDD #1\n\
+    STD 3,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_P_CHECK_WP:\n\
+    LDD ,X\n\
+    CMPD 1,Y\n\
+    LBNE UPD_ENE_NEXT_POP\n\
+    INC 10,Y\n\
+    LDA 10,Y\n\
+    CMPA 16,Y\n\
+    LBLO UPD_ENE_NEXT_POP\n\
+    CLR 10,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_WANDER:\n\
+    LDA 18,Y\n\
+    LBEQ UPD_W_WALK\n\
+    CMPA #1\n\
+    LBEQ UPD_W_IDLE\n\
+    CMPA #2\n\
+    LBEQ UPD_W_AIR\n\
+    CMPA #3\n\
+    LBEQ UPD_W_TT\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_WALK:\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    CMPD #0\n\
+    LBEQ UPD_ENE_NEXT_POP\n\
+    TFR D,X\n\
+    LDB 19,Y\n\
+    LDA #8\n\
+    MUL\n\
+    ADDD #2\n\
+    LEAX D,X\n\
+    LDA 17,Y\n\
+    LBNE UPD_W_WALK_L\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    PSHS D\n\
+    LDD 4,X\n\
+    CMPD ,S\n\
+    LBLT UPD_W_EDGE_R\n\
+    PULS D\n\
+    STD 1,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_EDGE_R:\n\
+    LEAS 2,S\n\
+    LDD 4,X\n\
+    STD 1,Y\n\
+    LBRA UPD_W_EDGE\n\
+UPD_W_WALK_L:\n\
+    LDD 1,Y\n\
+    SUBD #1\n\
+    PSHS D\n\
+    LDD 2,X\n\
+    CMPD ,S\n\
+    LBGT UPD_W_EDGE_L\n\
+    PULS D\n\
+    STD 1,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_EDGE_L:\n\
+    LEAS 2,S\n\
+    LDD 2,X\n\
+    STD 1,Y\n\
+UPD_W_EDGE:\n\
+    LDA 17,Y\n\
+    EORA #1\n\
+    STA 17,Y\n\
+    LDA #1\n\
+    STA 18,Y\n\
+    CLR 7,Y\n\
+    JSR RAND_HELPER\n\
+    ANDB #$3F\n\
+    ADDB #90\n\
+    STB 20,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_IDLE:\n\
+    DEC 20,Y\n\
+    LBNE UPD_ENE_NEXT_POP\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    TFR D,X\n\
+    LDB 1,X\n\
+    LBEQ UPD_W_TO_WALK\n\
+    PSHS B\n\
+    LDA ,X\n\
+    LDB #8\n\
+    MUL\n\
+    ADDD #2\n\
+    LEAX D,X\n\
+    PULS B\n\
+UPD_W_TRY_LOOP:\n\
+    LDA 19,Y\n\
+    CMPA ,X\n\
+    BNE UPD_W_NEXT_TRY\n\
+    PSHS B,X\n\
+    JSR RAND_HELPER\n\
+    ANDB #3\n\
+    TSTB\n\
+    PULS B,X\n\
+    BNE UPD_W_NEXT_TRY\n\
+    LDA 1,X\n\
+    STA 19,Y\n\
+    LDA 2,X\n\
+    STA 21,Y\n\
+    LDA 3,X\n\
+    STA 27,Y            ; vy0_stash from trans entry\n\
+    LDD 4,X\n\
+    STD 24,Y\n\
+    LDD 6,X\n\
+    STD 22,Y\n\
+    LDA #3\n\
+    STA 18,Y\n\
+    LDA #1\n\
+    STA 7,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_NEXT_TRY:\n\
+    LEAX 8,X\n\
+    DECB\n\
+    BNE UPD_W_TRY_LOOP\n\
+UPD_W_TO_WALK:\n\
+    CLR 18,Y\n\
+    LDA #1\n\
+    STA 7,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_TT:\n\
+    LDD 24,Y\n\
+    CMPD 1,Y\n\
+    LBEQ UPD_W_TT_REACHED\n\
+    LBGT UPD_W_TT_RIGHT\n\
+    LDD 1,Y\n\
+    SUBD #1\n\
+    STD 1,Y\n\
+    LDA #1\n\
+    STA 17,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_TT_RIGHT:\n\
+    LDD 1,Y\n\
+    ADDD #1\n\
+    STD 1,Y\n\
+    CLR 17,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_TT_REACHED:\n\
+    LDA 27,Y            ; vy0_stash from commit\n\
+    STA 25,Y\n\
+    LDA #120\n\
+    STA 24,Y\n\
+    LDD 22,Y\n\
+    CMPD 1,Y\n\
+    LBGT UPD_W_TT_FACE_R\n\
+    LDA #1\n\
+    STA 17,Y\n\
+    LBRA UPD_W_TT_AIR\n\
+UPD_W_TT_FACE_R:\n\
+    CLR 17,Y\n\
+UPD_W_TT_AIR:\n\
+    LDA #2\n\
+    STA 18,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_W_AIR:\n\
+    DEC 24,Y\n\
+    LBEQ UPD_W_AIR_LAND\n\
+    LDD 22,Y\n\
+    CMPD 1,Y\n\
+    LBEQ UPD_W_AIR_Y\n\
+    LBGT UPD_W_AIR_X_R\n\
+    LDD 1,Y\n\
+    SUBD #2\n\
+    CMPD 22,Y\n\
+    LBGT UPD_W_AIR_X_OKL\n\
+    LDD 22,Y\n\
+UPD_W_AIR_X_OKL:\n\
+    STD 1,Y\n\
+    LBRA UPD_W_AIR_Y\n\
+UPD_W_AIR_X_R:\n\
+    LDD 1,Y\n\
+    ADDD #2\n\
+    CMPD 22,Y\n\
+    LBLT UPD_W_AIR_X_OKR\n\
+    LDD 22,Y\n\
+UPD_W_AIR_X_OKR:\n\
+    STD 1,Y\n\
+UPD_W_AIR_Y:\n\
+    LDB 25,Y\n\
+    SEX\n\
+    ADDD 3,Y\n\
+    STD 3,Y\n\
+    LDB 25,Y\n\
+    DECB\n\
+    CMPB #$FC\n\
+    BGE UPD_W_AIR_VYOK\n\
+    LDB #$FC\n\
+UPD_W_AIR_VYOK:\n\
+    STB 25,Y\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    TFR D,X\n\
+    LDB 19,Y\n\
+    LDA #8\n\
+    MUL\n\
+    ADDD #2\n\
+    LEAX D,X            ; X = &area[cur_area]\n\
+    LDB 26,Y            ; B = feet_offset\n\
+    CLRA\n\
+    ADDD ,X             ; D = feet_offset + area.y\n\
+    PSHS D              ; stash target_y\n\
+    LDA 21,Y\n\
+    CMPA #2\n\
+    BEQ UPD_W_AIR_CHK_DOWN\n\
+    LDB 25,Y\n\
+    TSTB\n\
+    BPL UPD_W_AIR_NOLAND\n\
+UPD_W_AIR_CHK_DOWN:\n\
+    LDD ,S\n\
+    CMPD 3,Y\n\
+    LBLT UPD_W_AIR_NOLAND\n\
+    PULS D\n\
+    STD 3,Y\n\
+    CLR 18,Y\n\
+    LDA #1\n\
+    STA 7,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_AIR_NOLAND:\n\
+    LEAS 2,S\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+UPD_W_AIR_LAND:\n\
+    LDA 11,Y\n\
+    LDB 12,Y\n\
+    TFR D,X\n\
+    LDB 19,Y\n\
+    LDA #8\n\
+    MUL\n\
+    ADDD #2\n\
+    LEAX D,X\n\
+    LDB 26,Y\n\
+    CLRA\n\
+    ADDD ,X             ; D = feet_offset + area.y\n\
+    STD 3,Y\n\
+    CLR 18,Y\n\
+    LDA #1\n\
+    STA 7,Y\n\
+    LBRA UPD_ENE_NEXT_POP\n\
+\n\
+UPD_ENE_NEXT_POP:\n\
+    PULS B\n\
+    LEAY 28,Y\n\
+    DECB\n\
+    LBNE UPD_ENE_LOOP\n\
+UPD_ENE_DONE:\n\
+    RTS\n\n"
+        );
+    }
+
+    asm.push_str(
+"; DRAW_ENEMIES_RUNTIME\n\
+; For each active enemy, draws its current-action sprite.\n\
+; Enemy type header layout: FCB hp, FCB speed, FDB action_dur, FCB action_count\n\
+;   followed by _NAME_ENEMY_ACTIONS table.\n\
+; Multibank action entry (6 bytes):\n\
+;   [0] FCB sprite_idx   — 0-based index into VECTOR_ADDR_TABLE (vec) or ANIM_ADDR_TABLE (vanim); $FF=none\n\
+;   [1] FCB sprite_type  — 0=vec, 1=vanim\n\
+;   [2] FCB loop         — 0=one-shot, 1=loop\n\
+;   [3] FCB pad\n\
+;   [4-5] FDB anim_state — 16-bit RAM address of 2-byte animation state; 0 for vec actions\n\
+; Enemy type data resides in the helpers bank (always accessible).\n\
+DRAW_ENEMIES_RUNTIME:\n\
+    LDB >ENEMY_COUNT\n\
+    LBEQ DRW_ENE_DONE\n\
+    LDY #ENEMY_POOL\n\
+DRW_ENE_LOOP:\n\
+    PSHS B              ; save outer loop counter\n\
+    LDA ,Y              ; active?\n\
+    LBEQ DRW_ENE_NEXT_POP\n\
+    ; Resolve type header and action table entry\n\
+    LDA 5,Y             ; type_ptr hi\n\
+    LDB 6,Y             ; type_ptr lo\n\
+    TFR D,X             ; X = _NAME_ENEMY header\n\
+    LEAX 7,X            ; skip 7-byte header → action table\n\
+    LDA 7,Y             ; action index\n");
+
+    if is_multibank {
+        asm.push_str(
+"    LDB #6              ; 6 bytes per action entry (multibank)\n\
+    MUL                 ; D = action_idx * 6\n\
+    LEAX D,X            ; X = &actions[action]\n\
+; --- Multibank: FCB sprite_idx at action[+0], FCB sprite_type at action[+1] ---\n\
+    LDA ,X              ; sprite_idx (byte [0])\n\
+    CMPA #$FF           ; $FF = no sprite assigned\n\
+    LBEQ DRW_ENE_NEXT_POP\n\
+    STA >ENEMY_SCRATCH_PTR  ; save sprite_idx (hi byte of 2-byte scratch)\n\
+    LDB 1,X             ; sprite_type (byte [1]): 0=vec, 1=vanim\n\
+    STB >ENEMY_SCRATCH_Y    ; save sprite_type (lo byte of 2-byte scratch)\n\
+    ; Read FDB anim_state ptr from bytes [4,5] while X still points to action entry\n\
+    LDA 4,X             ; anim_state addr hi\n\
+    STA >ENEMY_SCRATCH_X    ; save hi\n\
+    LDA 5,X             ; anim_state addr lo\n\
+    STA >ENEMY_SCRATCH_X+1  ; save lo\n\
+    ; screen_x = world_x(16-bit) - camera_x(16-bit), y unchanged\n\
+    LDA 1,Y             ; world_x hi (POOL_X_HI)\n\
+    LDB 2,Y             ; world_x lo (POOL_X_LO)\n\
+    SUBD >CAMERA_X      ; D = world_x - camera_x (16-bit)\n\
+    STA >TMPPTR2        ; save high byte for range check\n\
+    TFR B,A\n\
+    SEX                 ; A = sign-extend of B (0x00 or 0xFF)\n\
+    CMPA >TMPPTR2       ; compare with actual high byte\n\
+    LBNE DRW_ENE_NEXT_POP  ; out of 8-bit range — skip draw\n\
+    STB >DRAW_VEC_X\n\
+    STA >DRAW_VEC_X_HI  ; A holds sign-extension of B (set by SEX above) — needed for 16-bit clipping in SLR_DRAW_CLIPPED_PATH\n\
+    LDB 4,Y             ; world_y lo (POOL_Y_LO)\n\
+    STB >DRAW_VEC_Y\n\
+    ; Mirror: 0 = facing right (no mirror), 1 = facing left (flip X).\n\
+    ; POOL_DIR is set by UPDATE_ENEMIES based on patrol movement.\n\
+    ; Set BOTH MIRROR_X (vec path → DSWM) and DRAW_ANIM_MIRROR_X. DRAW_ANIM_BANKED\n\
+    ; clears MIRROR_X at entry so animated sprites need the persistent ANIM flag\n\
+    ; which DRAW_ANIM_RUNTIME re-applies to MIRROR_X for each frame's path loop.\n\
+    LDA 17,Y            ; POOL_DIR (0=right, 1=left)\n\
+    STA >MIRROR_X\n\
+    STA >DRAW_ANIM_MIRROR_X\n\
+    CLR >MIRROR_Y\n\
+    ; Branch on sprite_type\n\
+    LDB >ENEMY_SCRATCH_Y\n\
+    CMPB #1\n\
+    BEQ DRW_ENE_VANIM\n\
+; --- Vec path: DRAW_VECTOR_BANKED (bank-switches to vector's bank) ---\n\
+    PSHS Y              ; save pool pointer (DRAW_VECTOR_BANKED clobbers Y)\n\
+    CLRA\n\
+    LDB >ENEMY_SCRATCH_PTR  ; B = sprite_idx (vec index)\n\
+    TFR D,X             ; X = sprite_idx (16-bit, A=0)\n\
+    JSR DRAW_VECTOR_BANKED\n\
+    PULS Y              ; restore pool pointer\n\
+    LBRA DRW_ENE_NEXT_POP\n\
+");
+        // Vanim branch: only emitted when enemy types use .vanim sprites
+        if has_vanim_enemies {
+            asm.push_str(
+"; --- Vanim path: DRAW_ANIM_BANKED ---\n\
+DRW_ENE_VANIM:\n\
+    LDA >ENEMY_SCRATCH_X    ; anim_state ptr hi\n\
+    LDB >ENEMY_SCRATCH_X+1  ; anim_state ptr lo\n\
+    CMPD #0\n\
+    LBEQ DRW_ENE_NEXT_POP    ; no state allocated → skip\n\
+    TFR D,U             ; U = anim_state ptr (frame_idx, ticks_left)\n\
+    PSHS Y              ; save pool pointer\n\
+    CLRA\n\
+    LDB >ENEMY_SCRATCH_PTR  ; B = sprite_idx (anim index)\n\
+    TFR D,X             ; X = anim_idx (16-bit, A=0)\n\
+    JSR DRAW_ANIM_BANKED\n\
+    PULS Y              ; restore pool pointer\n\
+");
+        } else {
+            // No vanim enemies — DRW_ENE_VANIM just falls through to DRW_ENE_NEXT_POP
+            asm.push_str("DRW_ENE_VANIM:\n");
+        }
+        asm.push_str(
+"DRW_ENE_NEXT_POP:\n\
+    PULS B              ; restore outer loop counter\n\
+    LEAY 28,Y           ; next pool record\n\
+    DECB\n\
+    LBNE DRW_ENE_LOOP\n\
+DRW_ENE_DONE:\n\
+    RTS\n\n"
+        );
+    } else {
+        // SINGLE-BANK: action table uses compile_to_asm_with_name() format:
+        //   [0-1] FDB sprite_ptr  — direct address of _NAME_VECTORS (0=no sprite)
+        //   [2]   FCB sprite_type — 0=vec, 1=vanim
+        //   [3]   FCB loop
+        // Total: 4 bytes per entry.
+        // Path loop mirrors DRAW_VECTOR_BANKED (no bank switch needed).
+        asm.push_str(
+"    LDB #4              ; 4 bytes per action entry (FDB sprite_ptr+FCB type+FCB loop)\n\
+    MUL                 ; D = action_idx * 4\n\
+    LEAX D,X            ; X = &actions[action]\n\
+    LDD ,X              ; sprite_ptr = FDB at action[0,1] (_NAME_VECTORS address)\n\
+    CMPD #0             ; 0 = no sprite assigned\n\
+    LBEQ DRW_ENE_NEXT_POP\n\
+    TFR D,X             ; X = _NAME_VECTORS header address\n\
+    ; screen_x = world_x(16-bit) - camera_x(16-bit), y unchanged\n\
+    LDA 1,Y             ; world_x hi (POOL_X_HI)\n\
+    LDB 2,Y             ; world_x lo (POOL_X_LO)\n\
+    SUBD CAMERA_X       ; D = world_x - camera_x (16-bit, DP=$C8 relative)\n\
+    STA TMPPTR2         ; save high byte for range check\n\
+    TFR B,A\n\
+    SEX                 ; A = sign-extend of B (0x00 or 0xFF)\n\
+    CMPA TMPPTR2        ; compare with actual high byte\n\
+    LBNE DRW_ENE_NEXT_POP  ; out of 8-bit range — skip draw\n\
+    STB DRAW_VEC_X      ; screen_x lo byte\n\
+    STA DRAW_VEC_X_HI   ; A holds sign-extension of B (set by SEX above)\n\
+    LDB 4,Y             ; world_y lo (POOL_Y_LO)\n\
+    STB DRAW_VEC_Y\n\
+    CLR DRAW_VEC_INTENSITY  ; use vector's own intensity\n\
+    ; Mirror from POOL_DIR (set by UPDATE_ENEMIES patrol move): 0=right, 1=left.\n\
+    ; Set both MIRROR_X (path loop) and DRAW_ANIM_MIRROR_X (DAR re-applies it\n\
+    ; per frame because DRAW_ANIM_BANKED clears MIRROR_X at entry).\n\
+    LDA 17,Y\n\
+    STA MIRROR_X\n\
+    STA DRAW_ANIM_MIRROR_X\n\
+    CLR MIRROR_Y\n\
+    ; Draw paths — mirrors DRAW_VECTOR_BANKED path loop (no bank switch)\n\
+    JSR $F1AA           ; DP_to_D0 (required before DSWM / VIA access)\n\
+    LDD ,X              ; D = path_count (FDB at vector header start)\n\
+    CMPD #0\n\
+    LBEQ DRW_ENE_SB_DONE\n\
+    PSHS Y              ; save pool ptr (Y used as path table ptr below)\n\
+    LEAY 2,X            ; Y = first path FDB entry (skip 2-byte path_count)\n\
+DRW_ENE_SB_PATH:\n\
+    PSHS D              ; save remaining path count\n\
+    LDX ,Y              ; X = path data address (FDB entry)\n\
+    JSR Draw_Sync_List_At_With_Mirrors\n\
+    LEAY 2,Y            ; advance to next FDB entry\n\
+    PULS D              ; restore count\n\
+    SUBD #1\n\
+    BNE DRW_ENE_SB_PATH\n\
+    PULS Y              ; restore pool ptr\n\
+DRW_ENE_SB_DONE:\n\
+    JSR $F1AF           ; DP_to_C8 (restore DP for RAM access)\n\
+DRW_ENE_NEXT_POP:\n\
+    PULS B              ; restore outer loop counter\n\
+    LEAY 28,Y           ; next pool record\n\
+    DECB\n\
+    LBNE DRW_ENE_LOOP\n\
+DRW_ENE_DONE:\n\
+    RTS\n\n"
+        );
+    }
+
+    // KILL_ENEMY_RUNTIME and ENEMY_FIRE_EVENT_RUNTIME subroutines
+    asm.push_str(
+"\n\
+; KILL_ENEMY_RUNTIME\n\
+; Entry: A = enemy index (0-based)\n\
+; Effect: pool[A].active=0, ENEMY_COUNT--\n\
+; Return: RESULT = new ENEMY_COUNT (D)\n\
+KILL_ENEMY_RUNTIME:\n\
+    LDB #28             ; ENEMY_POOL_STRIDE\n\
+    MUL\n\
+    LDX #ENEMY_POOL\n\
+    LEAX D,X\n\
+    CLR ,X              ; active = 0\n\
+    DEC >ENEMY_COUNT\n\
+    CLRA\n\
+    LDB >ENEMY_COUNT\n\
+    STD RESULT\n\
+    RTS\n\
+\n\
+; ENEMY_FIRE_EVENT_RUNTIME\n\
+; Entry: A = enemy index, B = event hash (FNV-1a u8)\n\
+; Looks up the current SM state, scans on_event table, applies transition.\n\
+; Uses ENEMY_SCRATCH_PTR (2 bytes) and ENEMY_SCRATCH_X (1 byte) as temporals.\n\
+ENEMY_FIRE_EVENT_RUNTIME:\n\
+    STB >ENEMY_SCRATCH_X    ; save event hash (1 byte)\n\
+    LDB #28                 ; ENEMY_POOL_STRIDE — was hard-coded 17 which is WRONG (real stride=28); idx>0 wrote to wrong pool entry\n\
+    MUL                     ; D = A * stride\n\
+    LDX #ENEMY_POOL\n\
+    LEAX D,X                ; X = &pool[A]\n\
+    STX >ENEMY_SCRATCH_PTR  ; save pool ptr\n\
+    LDA 13,X     ; sm_state\n\
+    CMPA #$FF\n\
+    BEQ FIRE_EVT_RTS        ; no SM\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
+    TFR D,X                 ; X = type header\n\
+    LDA 5,X                 ; SM hi\n\
+    LDB 6,X                 ; SM lo\n\
+    CMPD #0\n\
+    BEQ FIRE_EVT_RTS\n\
+    TFR D,X                 ; X = SM header\n\
+    LEAX 2,X    ; X = &states[0]\n\
+    PSHS X                  ; save states[0] ptr on stack\n\
+    LDX >ENEMY_SCRATCH_PTR  ; X = pool entry\n\
+    LDA 13,X     ; current state\n\
+    PULS X                  ; X = states[0] again\n\
+    LDB #13\n\
+    MUL\n\
+    LEAX D,X                ; X = &states[current]\n\
+    LDB 4,X        ; event count\n\
+    BEQ FIRE_EVT_RTS\n\
+    LEAX 5,X      ; X = first event pair\n\
+    LDA >ENEMY_SCRATCH_X    ; event hash\n\
+FIRE_EVT_SCAN:\n\
+    CMPA ,X\n\
+    BEQ FIRE_EVT_MATCH\n\
+    LEAX 2,X\n\
+    DECB\n\
+    BNE FIRE_EVT_SCAN\n\
+    BRA FIRE_EVT_RTS\n\
+FIRE_EVT_MATCH:\n\
+    LDB 1,X                 ; to_state_idx\n\
+    STB >ENEMY_SCRATCH_X    ; save to_state_idx\n\
+    LDX >ENEMY_SCRATCH_PTR  ; X = pool entry\n\
+    STB 13,X     ; apply new state\n\
+    ; Look up new state record for action/decay\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
+    TFR D,X                 ; X = type header\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
+    TFR D,X                 ; X = SM header\n\
+    LEAX 2,X    ; X = &states[0]\n\
+    LDA >ENEMY_SCRATCH_X    ; to_state_idx\n\
+    LDB #13\n\
+    MUL\n\
+    LEAX D,X                ; X = &states[to]\n\
+    ; Store action/decay into pool without LDY (VASM LDY extended mode bug workaround)\n\
+    LDA 1,X\n\
+    LDB 2,X\n\
+    STD >ENEMY_SCRATCH_Y    ; save decay hi+lo in 2-byte scratch\n\
+    LDA 0,X      ; action_idx\n\
+    PSHS A                  ; save action on stack\n\
+    LDX >ENEMY_SCRATCH_PTR  ; X = pool entry\n\
+    PULS A\n\
+    STA 7,X       ; update pool action\n\
+    LDA >ENEMY_SCRATCH_Y\n\
+    STA 14,X\n\
+    LDA >ENEMY_SCRATCH_Y+1\n\
+    STA 15,X\n\
+FIRE_EVT_RTS:\n\
+    RTS\n\
+\n\
+; SET_ENEMY_STATE_RUNTIME\n\
+; Entry: A = enemy idx, B = target state_idx\n\
+; Thin wrapper: compute pool ptr from idx, then dispatch to SES_APPLY which\n\
+; does the actual state-record lookup and field writes. SES_APPLY is also\n\
+; called from UPD_DECAY_CHECK (auto-decay) using Y-derived pool ptr.\n\
+SET_ENEMY_STATE_RUNTIME:\n\
+    STB >ENEMY_SCRATCH_X    ; save target state_idx\n\
+    LDB #28                 ; ENEMY_POOL_STRIDE\n\
+    MUL\n\
+    LDX #ENEMY_POOL\n\
+    LEAX D,X                ; X = &pool[idx]\n\
+    STX >ENEMY_SCRATCH_PTR\n\
+    JMP SES_APPLY\n\
+\n\
+; SES_APPLY: apply a state transition to a pool entry.\n\
+; Entry: ENEMY_SCRATCH_PTR = pool entry ptr, ENEMY_SCRATCH_X = target_state_idx\n\
+; Updates pool.sm_state (+13), pool.action (+7) [unless action_idx=$FF=keep],\n\
+; and pool.sm_decay_timer (+14..15) from the type's SM state record.\n\
+; Falls back to plain STB 13,X if no SM exists. Preserves Y.\n\
+SES_APPLY:\n\
+    LDX >ENEMY_SCRATCH_PTR\n\
+    LDA 13,X                ; current sm_state\n\
+    CMPA #$FF\n\
+    BEQ SES_PLAIN           ; no SM → just store the byte\n\
+    LDA 5,X                 ; type_ptr hi\n\
+    LDB 6,X                 ; type_ptr lo\n\
+    TFR D,X                 ; X = type header\n\
+    LDA 5,X                 ; SM ptr hi\n\
+    LDB 6,X                 ; SM ptr lo\n\
+    CMPD #0\n\
+    BEQ SES_PLAIN\n\
+    TFR D,X                 ; X = SM header\n\
+    LEAX 2,X                ; X = &states[0]\n\
+    LDA >ENEMY_SCRATCH_X    ; target state_idx\n\
+    LDB #13\n\
+    MUL                     ; D = target * 13\n\
+    LEAX D,X                ; X = &states[target]\n\
+    LDA 1,X\n\
+    LDB 2,X\n\
+    STD >ENEMY_SCRATCH_Y    ; stash decay hi+lo\n\
+    LDA ,X                  ; action_idx ($FF = keep)\n\
+    PSHS A\n\
+    LDX >ENEMY_SCRATCH_PTR  ; X = pool entry\n\
+    LDB >ENEMY_SCRATCH_X    ; target state_idx\n\
+    STB 13,X                ; pool.sm_state = target\n\
+    PULS A\n\
+    CMPA #$FF\n\
+    BEQ SES_SKIP_ACTION\n\
+    STA 7,X                 ; pool.action = state.action\n\
+SES_SKIP_ACTION:\n\
+    LDA >ENEMY_SCRATCH_Y\n\
+    STA 14,X                ; sm_decay_timer hi\n\
+    LDA >ENEMY_SCRATCH_Y+1\n\
+    STA 15,X                ; sm_decay_timer lo\n\
+    RTS\n\
+SES_PLAIN:\n\
+    LDX >ENEMY_SCRATCH_PTR\n\
+    LDB >ENEMY_SCRATCH_X\n\
+    STB 13,X\n\
+    RTS\n\
+\n\
+; UPD_DECAY_CHECK: auto-decay tick for one pool entry.\n\
+; Entry: Y = &pool[i] (preserved on exit)\n\
+; If pool.sm_decay_timer > 0: decrement. On reaching 0, look up the current\n\
+; state's decay_to_idx (state record offset +3) and apply that transition\n\
+; via SES_APPLY. If decay_to is $FF (none) the state stays put.\n\
+; Honours the per-state decay_frames declared in the .venemy SM, so SnowBros\n\
+; thaw walks ball→snow2→snow1→normal automatically with their own timings.\n\
+UPD_DECAY_CHECK:\n\
+    LDD 14,Y                ; sm_decay_timer\n\
+    LBEQ UDC_DONE           ; not decaying\n\
+    SUBD #1\n\
+    STD 14,Y\n\
+    LBNE UDC_DONE           ; still counting\n\
+    ; Timer hit 0 → resolve current state's decay_to\n\
+    LDA 5,Y\n\
+    LDB 6,Y\n\
+    TFR D,X                 ; X = type header\n\
+    LDA 5,X\n\
+    LDB 6,X\n\
+    CMPD #0\n\
+    BEQ UDC_DONE            ; no SM (defensive)\n\
+    TFR D,X                 ; X = SM header\n\
+    LEAX 2,X                ; X = &states[0]\n\
+    LDA 13,Y                ; current sm_state\n\
+    LDB #13\n\
+    MUL\n\
+    LEAX D,X                ; X = &states[current]\n\
+    LDA 3,X                 ; decay_to_idx\n\
+    CMPA #$FF\n\
+    BEQ UDC_DONE            ; no decay target\n\
+    ; Apply transition via SES_APPLY (preserves Y)\n\
+    STA >ENEMY_SCRATCH_X    ; target = decay_to_idx\n\
+    STY >ENEMY_SCRATCH_PTR  ; pool ptr = current Y\n\
+    JSR SES_APPLY\n\
+UDC_DONE:\n\
+    RTS\n\
+\n\
+"
+    );
 }
 

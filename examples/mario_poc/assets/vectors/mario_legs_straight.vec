@@ -1,0 +1,31 @@
+{
+  "version": "1.0",
+  "name": "mario_legs_straight",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "legs",
+      "visible": true,
+      "paths": [
+        {
+          "name": "left_leg",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            { "x": -7, "y": -3 }, { "x": -7, "y": -13 }, { "x": -2, "y": -13 }
+          ]
+        },
+        {
+          "name": "right_leg",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            { "x": 7, "y": -3 }, { "x": 7, "y": -13 }, { "x": 2, "y": -13 }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

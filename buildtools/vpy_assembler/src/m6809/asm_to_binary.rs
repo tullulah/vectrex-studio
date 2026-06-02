@@ -44,21 +44,41 @@ pub fn set_include_dir(dir: Option<PathBuf>) {
 /// - symbol_table: Defined symbols
 /// - unresolved_refs: Unresolved symbols (only in object_mode)
 pub fn assemble_m6809(
-    asm_source: &str, 
+    asm_source: &str,
     org: u16,
     object_mode: bool,
     use_long_branches: bool,
 ) -> Result<(Vec<u8>, HashMap<usize, usize>, HashMap<String, u16>, Vec<UnresolvedRef>), String> {
+    assemble_m6809_seeded(asm_source, org, object_mode, use_long_branches, &HashMap::new())
+}
+
+/// Like `assemble_m6809` but pre-seeds the equates table with externally-known
+/// symbols (e.g. RAM EQUs and cross-bank labels). Used by debug-gen to assemble a
+/// flattened multibank ASM whose RAM-EQU block was stripped during flattening — the
+/// seed lets operands resolve without an "Invalid address" error, so the line→address
+/// map can be produced.
+pub fn assemble_m6809_seeded(
+    asm_source: &str,
+    org: u16,
+    object_mode: bool,
+    use_long_branches: bool,
+    seed_equates: &HashMap<String, u16>,
+) -> Result<(Vec<u8>, HashMap<usize, usize>, HashMap<String, u16>, Vec<UnresolvedRef>), String> {
     let mut emitter = BinaryEmitter::new(org);
     let mut equates: HashMap<String, u16> = HashMap::new(); // For EQU directives
     let mut unresolved_refs: Vec<UnresolvedRef> = Vec::new(); // Unresolved symbols (object mode)
-    
+
     // Configure emitter for object mode and long branches
     emitter.set_object_mode(object_mode);
     emitter.set_long_branches(use_long_branches);
-    
+
     // Always load Vectrex BIOS symbols at startup
     load_vectrex_symbols(&mut equates);
+
+    // Seed externally-known symbols (overridden by any in-file EQU of the same name).
+    for (k, v) in seed_equates {
+        equates.insert(k.clone(), *v);
+    }
     
     // PRE-PASS: Process entire file collecting EQU and INCLUDE symbols
     // Multiple passes to resolve symbol dependencies
@@ -187,6 +207,10 @@ pub fn assemble_m6809(
             continue;
         }
         
+        // Record this physical ASM line so line_to_offset maps ASM-line -> address.
+        // (The codegen emits no `; VPy line` markers, so without this the map is empty.)
+        emitter.set_source_line(current_line);
+
         // Process instructions and data directives
         if let Err(e) = parse_and_emit_instruction(&mut emitter, trimmed, &equates, &last_global_label) {
             return Err(format!("Error at line {}: {} (code: '{}')", current_line, e, trimmed));
@@ -638,56 +662,109 @@ fn parse_and_emit_instruction(emitter: &mut BinaryEmitter, line: &str, equates: 
 /// Evaluates an arithmetic expression: SYMBOL+10, LABEL-2, etc.
 fn evaluate_expression(expr: &str, equates: &HashMap<String, u16>) -> Result<u16, String> {
     let expr = expr.trim();
-    
+
     // Strip > or < prefix if present (extended/direct mode markers)
-    let expr = expr.trim_start_matches('>').trim_start_matches('<');
-    
-    // Detect + or - operators
-    if let Some(pos) = expr.rfind('+') {
-        let left = expr[..pos].trim();
-        let right = expr[pos+1..].trim();
-        
-        let offset = evaluate_expression(right, equates)?; // Recursivo para right
-        
-        return match evaluate_expression(left, equates) {
-            Ok(base) => {
-                let result = base.wrapping_add(offset);
-                Ok(result)
-            },
-            Err(e) if e.starts_with("SYMBOL:") => {
-                // Preserve addend when the base symbol is not yet resolved (pass 2)
-                if offset > i16::MAX as u16 {
-                    return Err(format!("Addend out of range (>{}): {}", i16::MAX, offset));
-                }
-                let sym = e.trim_start_matches("SYMBOL:");
-                Err(format!("SYMBOL:{}+{}", sym, offset))
-            }
-            Err(e) => Err(e),
-        };
+    let expr = expr.trim_start_matches('>').trim_start_matches('<').trim();
+
+    // Strip outer parentheses if they wrap the entire expression: (A+B) -> A+B
+    if expr.starts_with('(') && expr.ends_with(')') {
+        let inner = &expr[1..expr.len()-1];
+        if expr_parens_balanced(inner) {
+            return evaluate_expression(inner, equates);
+        }
     }
-    
-    if let Some(pos) = expr.rfind('-') {
-        // Be careful with negative numbers like -127
+
+    // Find last + or - outside parens (lowest precedence, left-associative via rfind)
+    if let Some(pos) = expr_find_last_addop(expr) {
         if pos > 0 {
+            let op = expr.as_bytes()[pos] as char; // safe: + and - are ASCII
             let left = expr[..pos].trim();
             let right = expr[pos+1..].trim();
-            let offset = evaluate_expression(right, equates)?; // Recursive for right
+            let offset = evaluate_expression(right, equates)?;
             return match evaluate_expression(left, equates) {
-                Ok(base) => Ok(base.wrapping_sub(offset)),
+                Ok(base) => {
+                    if op == '+' { Ok(base.wrapping_add(offset)) }
+                    else { Ok(base.wrapping_sub(offset)) }
+                },
                 Err(e) if e.starts_with("SYMBOL:") => {
+                    // Preserve addend when the base symbol is not yet resolved (pass 2)
                     if offset > i16::MAX as u16 {
                         return Err(format!("Addend out of range (>{}): {}", i16::MAX, offset));
                     }
                     let sym = e.trim_start_matches("SYMBOL:");
-                    Err(format!("SYMBOL:{}-{}", sym, offset))
+                    if op == '+' { Err(format!("SYMBOL:{}+{}", sym, offset)) }
+                    else { Err(format!("SYMBOL:{}-{}", sym, offset)) }
                 }
                 Err(e) => Err(e),
             };
         }
     }
-    
+
+    // Find last * or / outside parens (higher precedence)
+    if let Some(pos) = expr_find_last_mulop(expr) {
+        let op = expr.as_bytes()[pos] as char; // safe: * and / are ASCII
+        let left = expr[..pos].trim();
+        let right = expr[pos+1..].trim();
+        let lval = evaluate_expression(left, equates)?;
+        let rval = evaluate_expression(right, equates)?;
+        return if op == '*' {
+            Ok(lval.wrapping_mul(rval))
+        } else {
+            if rval == 0 {
+                Err(format!("Division by zero in expression: {}", expr))
+            } else {
+                Ok(((lval as u32) / (rval as u32)) as u16)
+            }
+        };
+    }
+
     // Not an expression, it is a direct value (symbol or number)
     resolve_symbol_value(expr, equates)
+}
+
+/// Returns true if parentheses in `expr` are balanced (no unmatched parens).
+fn expr_parens_balanced(expr: &str) -> bool {
+    let mut depth = 0i32;
+    for c in expr.chars() {
+        match c {
+            '(' => depth += 1,
+            ')' => { depth -= 1; if depth < 0 { return false; } }
+            _ => {}
+        }
+    }
+    depth == 0
+}
+
+/// Finds the byte position of the LAST `+` or `-` that is not inside parentheses.
+/// Returns None if no such operator exists.
+fn expr_find_last_addop(expr: &str) -> Option<usize> {
+    let mut depth = 0i32;
+    let mut last_pos = None;
+    for (i, c) in expr.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            '+' | '-' if depth == 0 => last_pos = Some(i),
+            _ => {}
+        }
+    }
+    last_pos
+}
+
+/// Finds the byte position of the LAST `*` or `/` that is not inside parentheses.
+/// Returns None if no such operator exists.
+fn expr_find_last_mulop(expr: &str) -> Option<usize> {
+    let mut depth = 0i32;
+    let mut last_pos = None;
+    for (i, c) in expr.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            '*' | '/' if depth == 0 => last_pos = Some(i),
+            _ => {}
+        }
+    }
+    last_pos
 }
 
 /// Resolves a symbol to its numeric value (with recursive expression evaluation)
@@ -1619,9 +1696,6 @@ fn emit_adda(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<Strin
         if let Some(off) = offset {
             emitter.emit(off as u8);
         }
-        if let Some(off) = offset {
-            emitter.emit(off as u8);
-        }
         Ok(())
     } else {
         match evaluate_expression(operand, equates) {
@@ -2332,9 +2406,6 @@ fn emit_cmpd(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<Strin
         if let Some(off) = offset {
             emitter.emit(off as u8);
         }
-        if let Some(off) = offset {
-            emitter.emit(off as u8);
-        }
         Ok(())
     } else {
         match evaluate_expression(operand, equates) {
@@ -2753,6 +2824,9 @@ fn emit_fcb(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<String
         // Try to resolve as EQU symbol first
         let upper = part.to_uppercase();
         if let Some(&value) = equates.get(&upper) {
+            emitter.emit_bytes(&[value as u8]);
+        } else if let Ok(value) = evaluate_expression(&upper, equates) {
+            // Expression with arithmetic (e.g. "(_PLAT_HALF_WIDTH * 80) / 100")
             emitter.emit_bytes(&[value as u8]);
         } else {
             let value = parse_immediate(part)?;

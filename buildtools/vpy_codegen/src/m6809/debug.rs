@@ -46,34 +46,39 @@ pub fn emit_debug_print(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     // Evaluate expression
     expressions::emit_simple_expr(&args[0], out, assets);
     
+    // Debug port protocol (must match the write8 interceptor in ide/frontend/index.html):
+    //   $C000 = value low byte     $C002 = value high byte (16-bit signed value)
+    //   $C004 = label ptr high     $C005 = label ptr low   (0,0 = no label)
+    //   $C001 = marker, written LAST ($FE = labeled, $42 = simple) → commits the entry
+    // Marker MUST be written last so the IDE can commit synchronously on that write,
+    // capturing every call (multiple DEBUG_PRINTs per frame no longer race/clobber).
+    // D holds the value from emit_simple_expr (A=high, B=low).
     if let Some(name) = var_name {
-        // Labeled debug output (show variable name)
         out.push_str(&format!("    ; DEBUG_PRINT({})\n", name));
         let label_name = format!("DEBUG_LABEL_{}", name.to_uppercase());
         let skip_label = next_label();
 
-        out.push_str("    STA $C002\n");      // Store high byte (A) to C002
-        out.push_str("    STB $C000\n");      // Store low byte (B) to C000
-        out.push_str("    LDA #$FE\n");       // Marker for LABELED debug output
-        out.push_str("    STA $C001\n");      // Write marker
+        out.push_str("    STB $C000\n");      // value low
+        out.push_str("    STA $C002\n");      // value high
         out.push_str(&format!("    LDX #{}\n", label_name));
-        out.push_str("    STX $C004\n");      // Store label pointer to C004-C005
+        out.push_str("    STX $C004\n");      // label ptr (hi=$C004, lo=$C005)
+        out.push_str("    LDA #$FE\n");       // LABELED marker
+        out.push_str("    STA $C001\n");      // marker LAST → commit
         out.push_str(&format!("    BRA {}\n", skip_label));
-        
-        // Emit label data inline (skipped by BRA)
+
+        // Label string data inline (skipped by BRA)
         out.push_str(&format!("{}:\n", label_name));
         out.push_str(&format!("    FCC \"{}\"\n", name));
         out.push_str("    FCB $00\n");        // Null terminator
         out.push_str(&format!("{}:\n", skip_label));
     } else {
-        // Simple debug output (no label)
         out.push_str("    ; DEBUG_PRINT(expression)\n");
-        out.push_str("    STA $C002\n");      // Store high byte (A) to C002
-        out.push_str("    STB $C000\n");      // Store low byte (B) to C000
-        out.push_str("    LDA #$42\n");       // Marker for simple debug output
-        out.push_str("    STA $C001\n");      // Write marker
-        out.push_str("    CLR $C003\n");      // Clear label pointer
+        out.push_str("    STB $C000\n");      // value low
+        out.push_str("    STA $C002\n");      // value high
+        out.push_str("    CLR $C004\n");      // no label
         out.push_str("    CLR $C005\n");
+        out.push_str("    LDA #$42\n");       // SIMPLE marker
+        out.push_str("    STA $C001\n");      // marker LAST → commit
     }
     
     out.push_str("    LDD #0\n");
@@ -163,15 +168,15 @@ pub fn emit_print_number(args: &[Expr], out: &mut String, assets: &[AssetInfo]) 
     
     // Evaluate x position; D = x after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    STD VAR_ARG0    ; X position\n");
+    out.push_str("    STD >VAR_ARG0    ; X position\n");
 
     // Evaluate y position; D = y after emit
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    STD VAR_ARG1    ; Y position\n");
+    out.push_str("    STD >VAR_ARG1    ; Y position\n");
 
     // Evaluate number; D = num after emit
     expressions::emit_simple_expr(&args[2], out, assets);
-    out.push_str("    STD VAR_ARG2    ; Number value\n");
+    out.push_str("    STD >VAR_ARG2    ; Number value\n");
     
     // Call helper
     out.push_str("    JSR VECTREX_PRINT_NUMBER\n");

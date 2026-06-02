@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "name": "laser",
+  "category": "laser",
+  "duration_ms": 80,
+
+  "oscillator": {
+    "frequency": 1400,
+    "channel": 0,
+    "duty": 50
+  },
+
+  "envelope": {
+    "attack": 0,
+    "decay": 5,
+    "sustain": 8,
+    "release": 60,
+    "peak": 13
+  },
+
+  "pitch": {
+    "enabled": true,
+    "start_mult": 1.4,
+    "end_mult": 0.6,
+    "curve": 1
+  },
+
+  "noise": {
+    "enabled": false,
+    "period": 15,
+    "volume": 0,
+    "decay_ms": 100
+  },
+
+  "modulation": {
+    "arpeggio": false,
+    "arpeggio_notes": [0],
+    "arpeggio_speed": 80,
+    "vibrato": false,
+    "vibrato_depth": 0,
+    "vibrato_speed": 8
+  }
+}

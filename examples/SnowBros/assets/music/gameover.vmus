@@ -1,0 +1,169 @@
+{
+  "version": "1.0",
+  "name": "Imported MIDI",
+  "author": "",
+  "tempo": 120,
+  "ticksPerBeat": 24,
+  "totalTicks": 384,
+  "notes": [
+    {
+      "id": "zj39piavh",
+      "note": 83,
+      "start": 0,
+      "duration": 16,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "inz2p12p4",
+      "note": 80,
+      "start": 0,
+      "duration": 16,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "8srgh53a1",
+      "note": 78,
+      "start": 0,
+      "duration": 16,
+      "velocity": 13,
+      "channel": 2
+    },
+    {
+      "id": "cygzu2gbx",
+      "note": 71,
+      "start": 19,
+      "duration": 8,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "oivjvvqqm",
+      "note": 84,
+      "start": 29,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "h6odfzy4p",
+      "note": 80,
+      "start": 29,
+      "duration": 36,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "nu1nxf55m",
+      "note": 77,
+      "start": 29,
+      "duration": 36,
+      "velocity": 13,
+      "channel": 2
+    },
+    {
+      "id": "za6iai9vg",
+      "note": 82,
+      "start": 39,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "j5y8aj1p3",
+      "note": 80,
+      "start": 49,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "mpgbgkeci",
+      "note": 77,
+      "start": 58,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "vbt557twm",
+      "note": 80,
+      "start": 78,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "te5whgb5n",
+      "note": 74,
+      "start": 78,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "l8akic5cw",
+      "note": 73,
+      "start": 78,
+      "duration": 7,
+      "velocity": 13,
+      "channel": 2
+    },
+    {
+      "id": "u7y1zte0k",
+      "note": 80,
+      "start": 88,
+      "duration": 16,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "4sre07y6u",
+      "note": 74,
+      "start": 88,
+      "duration": 16,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "sy9uyrxhi",
+      "note": 73,
+      "start": 88,
+      "duration": 16,
+      "velocity": 13,
+      "channel": 2
+    },
+    {
+      "id": "s1drh2zv0",
+      "note": 80,
+      "start": 117,
+      "duration": 36,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "5bluiif0t",
+      "note": 72,
+      "start": 117,
+      "duration": 36,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "ppyck4xha",
+      "note": 63,
+      "start": 117,
+      "duration": 36,
+      "velocity": 13,
+      "channel": 2
+    }
+  ],
+  "noise": [],
+  "loopStart": 0,
+  "loopEnd": 384,
+  "channel_instruments": {
+    "1": "piano",
+    "2": "piano"
+  }
+}

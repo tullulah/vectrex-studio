@@ -166,7 +166,7 @@ npc_state = [0, 0, 0, 0]
 exit_room_target = 1
 
 # Music state
-current_music = MUSIC_TITLE
+current_music : i8 = MUSIC_NONE
 
 # Button state (fired = 1 only on rising edge, 0 otherwise)
 btn1_fired = 0
@@ -208,12 +208,18 @@ skippedframes = 0
 
 # ─── Entry point ───────────────────────────────────────────────────────────────
 def main():
-    # LOAD_LEVEL("entrance")
-    PLAY_MUSIC("intro")
+    LOAD_LEVEL("entrance")
+    
     pass
 
 # ─── Main loop ─────────────────────────────────────────────────────────────────
 def loop():
+    #PRINT_NUMBER(-100, 100, current_music)
+    if current_music == MUSIC_NONE: 
+        current_music = MUSIC_TITLE
+        PLAY_MUSIC("intro")
+        
+
     # Skip first 10 frames to let hardware settle; prime prev_btn during skip
     if skippedframes < 10:
         skippedframes += 1
@@ -248,7 +254,7 @@ def loop():
         heartbeat_timer = heartbeat_timer + 1
         if heartbeat_timer >= heartbeat_tempo:
             heartbeat_timer = 0
-            PLAY_SFX("heartbeat")
+            #PLAY_SFX("heartbeat")
 
     # Toggle inventory overlay (only in STATE_ROOM)
     if btn2_fired == 1:
@@ -296,8 +302,8 @@ def loop():
 # TITLE SCREEN
 # ═══════════════════════════════════════════════════════════════════════════════
 def draw_title():
-    SET_INTENSITY(127)
-    DRAW_VECTOR("crypt_logo", 0, 10)
+    #SET_INTENSITY(127)
+    DRAW_VECTOR_EX("crypt_logo",0,10,0,0)
 
     blink_timer = blink_timer + 1
     if blink_timer >= 40:
@@ -309,7 +315,7 @@ def draw_title():
 
     if blink_on == 1:
         SET_TEXT_SIZE(7)
-        PRINT_TEXT(-77, -100, "PRESS B1 TO START")
+        #PRINT_TEXT(-77, -100, "PRESS B1 TO START")
 
     if btn1_fired == 1:
         intro_page = 0
@@ -1114,6 +1120,61 @@ def draw_bottom_hud():
     draw_verb_indicator()
     if msg_timer > 0:
         draw_message()
+    elif near_hs >= 0:
+        draw_hotspot_name()
+
+def draw_hotspot_name():
+    SET_TEXT_SIZE(7)
+    SET_INTENSITY(100)
+    if current_room == ROOM_ENTRANCE:
+        if near_hs == 0:
+            PRINT_TEXT(-35, 114, "PAINTING")
+        elif near_hs == 1:
+            PRINT_TEXT(-56, 114, "WORKSHOP DOOR")
+        elif near_hs == 2:
+            PRINT_TEXT(-42, 114, "CARETAKER")
+        elif near_hs == 3:
+            PRINT_TEXT(-56, 114, "CONSERV. DOOR")
+    elif current_room == ROOM_WORKSHOP:
+        if near_hs == 0:
+            PRINT_TEXT(-49, 114, "SARCOPHAGUS")
+        elif near_hs == 1:
+            PRINT_TEXT(-21, 114, "CLOCK")
+        elif near_hs == 2:
+            PRINT_TEXT(-42, 114, "GEAR PANEL")
+        elif near_hs == 3:
+            PRINT_TEXT(-21, 114, "HANS")
+        elif near_hs == 4:
+            PRINT_TEXT(-35, 114, "OIL CAN")
+        elif near_hs == 5:
+            PRINT_TEXT(-49, 114, "OPTICS DOOR")
+    elif current_room == ROOM_ANTEROOM:
+        if near_hs == 0:
+            PRINT_TEXT(-21, 114, "DIARY")
+        elif near_hs == 1:
+            PRINT_TEXT(-42, 114, "EXIT DOOR")
+        elif near_hs == 2:
+            PRINT_TEXT(-49, 114, "MUSIC SHELF")
+        elif near_hs == 3:
+            PRINT_TEXT(-35, 114, "CABINET")
+    elif current_room == ROOM_WEIGHTS:
+        if near_hs == 0:
+            PRINT_TEXT(-35, 114, "PEDESTAL")
+        elif near_hs == 1:
+            PRINT_TEXT(-42, 114, "EXIT DOOR")
+    elif current_room == ROOM_OPTICS:
+        if near_hs == 0:
+            PRINT_TEXT(-49, 114, "PRISM MOUNT")
+        elif near_hs == 1:
+            PRINT_TEXT(-49, 114, "COMPARTMENT")
+    elif current_room == ROOM_CONSERVATORY:
+        if near_hs == 0:
+            PRINT_TEXT(-21, 114, "ELISA")
+    elif current_room == ROOM_VAULT_CORRIDOR:
+        if near_hs == 0:
+            PRINT_TEXT(-42, 114, "APPRENTICE")
+        elif near_hs == 1:
+            PRINT_TEXT(-42, 114, "VAULT DOOR")
 
 def draw_verb_indicator():
     if current_verb == VERB_EXAMINE:

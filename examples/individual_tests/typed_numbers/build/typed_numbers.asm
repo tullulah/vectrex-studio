@@ -32,6 +32,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -47,44 +49,58 @@ TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
 VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
 VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
 TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
-NUM_STR              EQU $C880+$0C   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$12   ; Circle center X (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$13   ; Circle center Y (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$14   ; Circle diameter (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$15   ; Circle intensity (1 bytes)
-DRAW_CIRCLE_RADIUS   EQU $C880+$16   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$17   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
-DRAW_LINE_ARGS       EQU $C880+$1F   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$29   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$2B   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$2D   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$2E   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$2F   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$31   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_U8_VAL           EQU $C880+$33   ; User variable: U8_VAL (1 bytes)
-VAR_I8_VAL           EQU $C880+$34   ; User variable: I8_VAL (1 bytes)
-VAR_U16_VAL          EQU $C880+$35   ; User variable: U16_VAL (2 bytes)
-VAR_I16_VAL          EQU $C880+$37   ; User variable: I16_VAL (2 bytes)
-VAR_ROW_Y            EQU $C880+$39   ; User variable: ROW_Y (2 bytes)
-VAR_SELECTED         EQU $C880+$3B   ; User variable: SELECTED (1 bytes)
-VAR_COOLDOWN         EQU $C880+$3C   ; User variable: COOLDOWN (1 bytes)
-VAR_ARR_IDX          EQU $C880+$3D   ; User variable: ARR_IDX (1 bytes)
-VAR_ARR_TICK         EQU $C880+$3E   ; User variable: ARR_TICK (1 bytes)
-VAR_JOY_Y            EQU $C880+$3F   ; User variable: JOY_Y (2 bytes)
-VAR_U8_ARR           EQU $C880+$41   ; User variable: U8_ARR (2 bytes)
-VAR_I8_ARR           EQU $C880+$43   ; User variable: I8_ARR (2 bytes)
-VAR_U16_ARR          EQU $C880+$45   ; User variable: U16_ARR (2 bytes)
-VAR_I16_ARR          EQU $C880+$47   ; User variable: I16_ARR (2 bytes)
-VAR_U8_ARR_DATA      EQU $C880+$49   ; Mutable array 'U8_ARR' data (4 elements x 1 bytes) (4 bytes)
-VAR_I8_ARR_DATA      EQU $C880+$4D   ; Mutable array 'I8_ARR' data (4 elements x 1 bytes) (4 bytes)
-VAR_U16_ARR_DATA     EQU $C880+$51   ; Mutable array 'U16_ARR' data (4 elements x 2 bytes) (8 bytes)
-VAR_I16_ARR_DATA     EQU $C880+$59   ; Mutable array 'I16_ARR' data (4 elements x 2 bytes) (8 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
+BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
+BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
+NUM_STR              EQU $C880+$0E   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$14   ; Circle center X (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$15   ; Circle center Y (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$16   ; Circle diameter (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$17   ; Circle intensity (1 bytes)
+DRAW_CIRCLE_RADIUS   EQU $C880+$18   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$19   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$21   ; Vector intensity override (0=use vector data) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$22   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$2C   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$2E   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$30   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$31   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$32   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+TEXT_SCALE_H         EQU $C880+$36   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$37   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+VAR_ARG0             EQU $C880+$38   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$3A   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$3C   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$3E   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$40   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$42   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$44   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$46   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$48   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_U8_VAL           EQU $C880+$49   ; User variable: U8_VAL (1 bytes)
+VAR_I8_VAL           EQU $C880+$4A   ; User variable: I8_VAL (1 bytes)
+VAR_U16_VAL          EQU $C880+$4B   ; User variable: U16_VAL (2 bytes)
+VAR_I16_VAL          EQU $C880+$4D   ; User variable: I16_VAL (2 bytes)
+VAR_ROW_Y            EQU $C880+$4F   ; User variable: ROW_Y (2 bytes)
+VAR_SELECTED         EQU $C880+$51   ; User variable: SELECTED (1 bytes)
+VAR_COOLDOWN         EQU $C880+$52   ; User variable: COOLDOWN (1 bytes)
+VAR_ARR_IDX          EQU $C880+$53   ; User variable: ARR_IDX (1 bytes)
+VAR_ARR_TICK         EQU $C880+$54   ; User variable: ARR_TICK (1 bytes)
+VAR_JOY_Y            EQU $C880+$55   ; User variable: JOY_Y (2 bytes)
+VAR_U8_ARR           EQU $C880+$57   ; User variable: U8_ARR (2 bytes)
+VAR_I8_ARR           EQU $C880+$59   ; User variable: I8_ARR (2 bytes)
+VAR_U16_ARR          EQU $C880+$5B   ; User variable: U16_ARR (2 bytes)
+VAR_I16_ARR          EQU $C880+$5D   ; User variable: I16_ARR (2 bytes)
+VAR_U8_ARR_DATA      EQU $C880+$5F   ; Mutable array 'U8_ARR' data (4 elements x 1 bytes) (4 bytes)
+VAR_I8_ARR_DATA      EQU $C880+$63   ; Mutable array 'I8_ARR' data (4 elements x 1 bytes) (4 bytes)
+VAR_U16_ARR_DATA     EQU $C880+$67   ; Mutable array 'U16_ARR' data (4 elements x 2 bytes) (8 bytes)
+VAR_I16_ARR_DATA     EQU $C880+$6F   ; Mutable array 'I16_ARR' data (4 elements x 2 bytes) (8 bytes)
+; Array length constants
+ARRAY_U8_ARR_LEN         EQU 4   ; 4 elements
+ARRAY_I8_ARR_LEN         EQU 4   ; 4 elements
+ARRAY_U16_ARR_LEN         EQU 4   ; 4 elements
+ARRAY_I16_ARR_LEN         EQU 4   ; 4 elements
+ARRAY_ROW_Y_LEN         EQU 4   ; 4 elements
 
 ;***************************************************************************
 ; ARRAY DATA (ROM literals)
@@ -136,6 +152,10 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    LDA #$F8
+    STA TEXT_SCALE_H      ; Default height = -8 (normal size)
+    LDA #$48
+    STA TEXT_SCALE_W      ; Default width = 72 (normal size)
     LDD #200
     STD VAR_U8_VAL
     LDD #-100
@@ -212,30 +232,24 @@ MAIN:
     STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
     ; Mux configured - J1_X()/J1_Y() can now be called
 
+    ; Prime BIOS button state at startup
+    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
-    STD RESULT
-    LDA RESULT+1    ; Load intensity (8-bit)
-    JSR Intensity_a
+    TFR B,A         ; Intensity (8-bit) — B already holds low byte
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
     LDD #0
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
     STB VAR_SELECTED
     LDD #0
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
     STB VAR_COOLDOWN
     LDD #0
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
     STB VAR_ARR_IDX
     LDD #0
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
     STB VAR_ARR_TICK
+    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
 
 .MAIN_LOOP:
     JSR LOOP_BODY
@@ -243,29 +257,17 @@ MAIN:
 
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
-    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
-    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
+    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDB >VAR_ARR_TICK
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STB VAR_ARR_TICK
     LDD #30
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_ARR_TICK
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBGT .CMP_0_TRUE
     LDD #0
@@ -273,33 +275,19 @@ LOOP_BODY:
 .CMP_0_TRUE:
     LDD #1
 .CMP_0_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_1
     LDD #0
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
     STB VAR_ARR_TICK
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDB >VAR_ARR_IDX
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STB VAR_ARR_IDX
     LDD #3
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_ARR_IDX
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBGT .CMP_1_TRUE
     LDD #0
@@ -307,12 +295,8 @@ LOOP_BODY:
 .CMP_1_TRUE:
     LDD #1
 .CMP_1_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_3
     LDD #0
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
     STB VAR_ARR_IDX
     LBRA IF_END_2
 IF_NEXT_3:
@@ -322,16 +306,11 @@ IF_NEXT_1:
 IF_END_0:
     JSR J1Y_BUILTIN
     STD RESULT
-    LDD RESULT
     STD VAR_JOY_Y
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_COOLDOWN
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBGT .CMP_2_TRUE
     LDD #0
@@ -339,34 +318,20 @@ IF_END_0:
 .CMP_2_TRUE:
     LDD #1
 .CMP_2_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_5
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDB >VAR_COOLDOWN
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STB VAR_COOLDOWN
     LBRA IF_END_4
 IF_NEXT_5:
 IF_END_4:
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_COOLDOWN
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBEQ .CMP_3_TRUE
     LDD #0
@@ -374,16 +339,10 @@ IF_END_4:
 .CMP_3_TRUE:
     LDD #1
 .CMP_3_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_7
     LDD #60
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_JOY_Y
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBGT .CMP_4_TRUE
     LDD #0
@@ -391,17 +350,11 @@ IF_END_4:
 .CMP_4_TRUE:
     LDD #1
 .CMP_4_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_9
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_SELECTED
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBGT .CMP_5_TRUE
     LDD #0
@@ -409,40 +362,24 @@ IF_END_4:
 .CMP_5_TRUE:
     LDD #1
 .CMP_5_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_11
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDB >VAR_SELECTED
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STB VAR_SELECTED
     LBRA IF_END_10
 IF_NEXT_11:
 IF_END_10:
     LDD #15
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
     STB VAR_COOLDOWN
     LBRA IF_END_8
 IF_NEXT_9:
 IF_END_8:
     LDD #-60
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_JOY_Y
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBLT .CMP_6_TRUE
     LDD #0
@@ -450,17 +387,11 @@ IF_END_8:
 .CMP_6_TRUE:
     LDD #1
 .CMP_6_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_13
     LDD #3
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_SELECTED
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBLT .CMP_7_TRUE
     LDD #0
@@ -468,50 +399,35 @@ IF_END_8:
 .CMP_7_TRUE:
     LDD #1
 .CMP_7_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_15
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDB >VAR_SELECTED
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STB VAR_SELECTED
     LBRA IF_END_14
 IF_NEXT_15:
 IF_END_14:
     LDD #15
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
     STB VAR_COOLDOWN
     LBRA IF_END_12
 IF_NEXT_13:
 IF_END_12:
-    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
-    ANDA #$01      ; Test bit 0 (Button 1)
-    LBEQ .J1B1_0_OFF
-    LDD #1
-    LBRA .J1B1_0_END
-.J1B1_0_OFF:
+    LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
+    BITA #$01
+    BNE .J1B1_0_ON
     LDD #0
+    BRA .J1B1_0_END
+.J1B1_0_ON:
+    LDD #1
 .J1B1_0_END:
     STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_17
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_SELECTED
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBEQ .CMP_8_TRUE
     LDD #0
@@ -519,32 +435,20 @@ IF_END_12:
 .CMP_8_TRUE:
     LDD #1
 .CMP_8_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_19
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDB >VAR_U8_VAL
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STB VAR_U8_VAL
     LBRA IF_END_18
 IF_NEXT_19:
 IF_END_18:
     LDD #1
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_SELECTED
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBEQ .CMP_9_TRUE
     LDD #0
@@ -552,32 +456,20 @@ IF_END_18:
 .CMP_9_TRUE:
     LDD #1
 .CMP_9_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_21
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDB >VAR_I8_VAL
     SEX             ; Sign-extend B -> D
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STB VAR_I8_VAL
     LBRA IF_END_20
 IF_NEXT_21:
 IF_END_20:
     LDD #2
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_SELECTED
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBEQ .CMP_10_TRUE
     LDD #0
@@ -585,31 +477,19 @@ IF_END_20:
 .CMP_10_TRUE:
     LDD #1
 .CMP_10_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_23
-    LDD >VAR_U16_VAL
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #100
-    STD RESULT
-    LDD RESULT
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD RESULT
-    LDD RESULT
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_U16_VAL
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_U16_VAL
     LBRA IF_END_22
 IF_NEXT_23:
 IF_END_22:
     LDD #3
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_SELECTED
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBEQ .CMP_11_TRUE
     LDD #0
@@ -617,49 +497,34 @@ IF_END_22:
 .CMP_11_TRUE:
     LDD #1
 .CMP_11_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_25
-    LDD >VAR_I16_VAL
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #100
-    STD RESULT
-    LDD RESULT
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD RESULT
-    LDD RESULT
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_I16_VAL
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_I16_VAL
     LBRA IF_END_24
 IF_NEXT_25:
 IF_END_24:
     LDD #4
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
     STB VAR_COOLDOWN
     LBRA IF_END_16
 IF_NEXT_17:
 IF_END_16:
-    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
-    ANDA #$02      ; Test bit 1 (Button 2)
-    LBEQ .J1B2_1_OFF
-    LDD #1
-    LBRA .J1B2_1_END
-.J1B2_1_OFF:
+    LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
+    BITA #$02
+    BNE .J1B2_1_ON
     LDD #0
+    BRA .J1B2_1_END
+.J1B2_1_ON:
+    LDD #1
 .J1B2_1_END:
     STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_27
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_SELECTED
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBEQ .CMP_12_TRUE
     LDD #0
@@ -667,34 +532,20 @@ IF_END_16:
 .CMP_12_TRUE:
     LDD #1
 .CMP_12_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_29
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDB >VAR_U8_VAL
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STB VAR_U8_VAL
     LBRA IF_END_28
 IF_NEXT_29:
 IF_END_28:
     LDD #1
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_SELECTED
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBEQ .CMP_13_TRUE
     LDD #0
@@ -702,34 +553,20 @@ IF_END_28:
 .CMP_13_TRUE:
     LDD #1
 .CMP_13_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_31
+    LDD #1
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
     LDB >VAR_I8_VAL
     SEX             ; Sign-extend B -> D
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STB VAR_I8_VAL
     LBRA IF_END_30
 IF_NEXT_31:
 IF_END_30:
     LDD #2
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_SELECTED
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBEQ .CMP_14_TRUE
     LDD #0
@@ -737,33 +574,19 @@ IF_END_30:
 .CMP_14_TRUE:
     LDD #1
 .CMP_14_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_33
-    LDD >VAR_U16_VAL
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #100
-    STD RESULT
-    LDD RESULT
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD RESULT
-    LDD RESULT
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_U16_VAL
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_U16_VAL
     LBRA IF_END_32
 IF_NEXT_33:
 IF_END_32:
     LDD #3
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDB >VAR_SELECTED
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBEQ .CMP_15_TRUE
     LDD #0
@@ -771,62 +594,39 @@ IF_END_32:
 .CMP_15_TRUE:
     LDD #1
 .CMP_15_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_35
-    LDD >VAR_I16_VAL
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #100
-    STD RESULT
-    LDD RESULT
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD RESULT
-    LDD RESULT
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_I16_VAL
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_I16_VAL
     LBRA IF_END_34
 IF_NEXT_35:
 IF_END_34:
     LDD #4
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
     STB VAR_COOLDOWN
     LBRA IF_END_26
 IF_NEXT_27:
 IF_END_26:
-    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
-    ANDA #$04      ; Test bit 2 (Button 3)
-    LBEQ .J1B3_2_OFF
-    LDD #1
-    LBRA .J1B3_2_END
-.J1B3_2_OFF:
+    LDA >$C80F   ; Vec_Btns_1: bit2=1 means btn3 pressed
+    BITA #$04
+    BNE .J1B3_2_ON
     LDD #0
+    BRA .J1B3_2_END
+.J1B3_2_ON:
+    LDD #1
 .J1B3_2_END:
     STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_37
     LDD #200
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
     STB VAR_U8_VAL
     LDD #-100
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
     STB VAR_I8_VAL
     LDD #60000
-    STD RESULT
-    LDD RESULT
     STD VAR_U16_VAL
     LDD #-30000
-    STD RESULT
-    LDD RESULT
     STD VAR_I16_VAL
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD TMPPTR      ; Save offset temporarily
     LDD #VAR_U8_ARR_DATA  ; Array data address
     TFR D,X         ; X = array base pointer
@@ -834,13 +634,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #10
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDB RESULT+1    ; Load low byte
     STB ,X          ; Store 8-bit value
     LDD #1
-    STD RESULT
-    LDD RESULT
     STD TMPPTR      ; Save offset temporarily
     LDD #VAR_U8_ARR_DATA  ; Array data address
     TFR D,X         ; X = array base pointer
@@ -848,13 +644,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #50
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDB RESULT+1    ; Load low byte
     STB ,X          ; Store 8-bit value
     LDD #2
-    STD RESULT
-    LDD RESULT
     STD TMPPTR      ; Save offset temporarily
     LDD #VAR_U8_ARR_DATA  ; Array data address
     TFR D,X         ; X = array base pointer
@@ -862,13 +654,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #150
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDB RESULT+1    ; Load low byte
     STB ,X          ; Store 8-bit value
     LDD #3
-    STD RESULT
-    LDD RESULT
     STD TMPPTR      ; Save offset temporarily
     LDD #VAR_U8_ARR_DATA  ; Array data address
     TFR D,X         ; X = array base pointer
@@ -876,13 +664,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #250
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDB RESULT+1    ; Load low byte
     STB ,X          ; Store 8-bit value
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD TMPPTR      ; Save offset temporarily
     LDD #VAR_I8_ARR_DATA  ; Array data address
     TFR D,X         ; X = array base pointer
@@ -890,13 +674,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #-120
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDB RESULT+1    ; Load low byte
     STB ,X          ; Store 8-bit value
     LDD #1
-    STD RESULT
-    LDD RESULT
     STD TMPPTR      ; Save offset temporarily
     LDD #VAR_I8_ARR_DATA  ; Array data address
     TFR D,X         ; X = array base pointer
@@ -904,13 +684,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #-40
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDB RESULT+1    ; Load low byte
     STB ,X          ; Store 8-bit value
     LDD #2
-    STD RESULT
-    LDD RESULT
     STD TMPPTR      ; Save offset temporarily
     LDD #VAR_I8_ARR_DATA  ; Array data address
     TFR D,X         ; X = array base pointer
@@ -918,13 +694,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #40
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDB RESULT+1    ; Load low byte
     STB ,X          ; Store 8-bit value
     LDD #3
-    STD RESULT
-    LDD RESULT
     STD TMPPTR      ; Save offset temporarily
     LDD #VAR_I8_ARR_DATA  ; Array data address
     TFR D,X         ; X = array base pointer
@@ -932,13 +704,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #120
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDB RESULT+1    ; Load low byte
     STB ,X          ; Store 8-bit value
     LDD #0
-    STD RESULT
-    LDD RESULT
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
     STD TMPPTR      ; Save offset temporarily
@@ -948,13 +716,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #0
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
     LDD #1
-    STD RESULT
-    LDD RESULT
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
     STD TMPPTR      ; Save offset temporarily
@@ -964,13 +728,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #1000
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
     LDD #2
-    STD RESULT
-    LDD RESULT
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
     STD TMPPTR      ; Save offset temporarily
@@ -980,13 +740,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #30000
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
     LDD #3
-    STD RESULT
-    LDD RESULT
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
     STD TMPPTR      ; Save offset temporarily
@@ -996,13 +752,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #65535
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
     LDD #0
-    STD RESULT
-    LDD RESULT
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
     STD TMPPTR      ; Save offset temporarily
@@ -1012,13 +764,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #-32000
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
     LDD #1
-    STD RESULT
-    LDD RESULT
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
     STD TMPPTR      ; Save offset temporarily
@@ -1028,13 +776,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #-500
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
     LDD #2
-    STD RESULT
-    LDD RESULT
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
     STD TMPPTR      ; Save offset temporarily
@@ -1044,13 +788,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #500
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
     LDD #3
-    STD RESULT
-    LDD RESULT
     ASLB            ; Multiply index by 2 (16-bit elements)
     ROLA
     STD TMPPTR      ; Save offset temporarily
@@ -1060,13 +800,9 @@ IF_END_26:
     LEAX D,X        ; X = base + offset
     STX TMPPTR2     ; Save computed address
     LDD #32000
-    STD RESULT
     LDX TMPPTR2     ; Load computed address
-    LDD RESULT      ; Load value
     STD ,X          ; Store 16-bit value
     LDD #15
-    STD RESULT
-    LDB RESULT+1    ; Load low byte
     STB VAR_COOLDOWN
     LBRA IF_END_36
 IF_NEXT_37:
@@ -1076,485 +812,349 @@ IF_NEXT_7:
 IF_END_6:
     ; PRINT_TEXT: Print text at position
     LDD #-120
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #0
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2691      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #-55
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #0
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDB >VAR_U8_VAL
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #5
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #0
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2058      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #30
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #0
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDX #VAR_U8_ARR_DATA  ; Array base
     LDB >VAR_ARR_IDX
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index (stride = 1 for 8-bit)
     LEAX D,X    ; X = base + (index * element_size)
     LDB ,X      ; Load 8-bit value
     CLRA        ; Zero-extend to 16-bit (arrays are typically unsigned)
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-120
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #1
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_71921      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #-55
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #1
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDB >VAR_I8_VAL
     SEX             ; Sign-extend B -> D
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #5
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #1
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2058      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #30
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #1
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDX #VAR_I8_ARR_DATA  ; Array base
     LDB >VAR_ARR_IDX
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index (stride = 1 for 8-bit)
     LEAX D,X    ; X = base + (index * element_size)
     LDB ,X      ; Load 8-bit value
     CLRA        ; Zero-extend to 16-bit (arrays are typically unsigned)
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-120
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #2
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_83258      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #-55
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #2
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_U16_VAL
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #5
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #2
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2058      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #30
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #2
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDX #VAR_U16_ARR_DATA  ; Array base
     LDB >VAR_ARR_IDX
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-120
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #3
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_71726      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #-55
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #3
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD >VAR_I16_VAL
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #5
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #3
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2058      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #30
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDD #3
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDX #VAR_I16_ARR_DATA  ; Array base
     LDB >VAR_ARR_IDX
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-40
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #-22
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_72349      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #10
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDD #-22
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDB >VAR_ARR_IDX
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
     LDD #-125
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_XC
     LDX #ARRAY_ROW_Y_DATA  ; Array base
     LDB >VAR_SELECTED
     CLRA            ; Zero-extend: A=0, B=value
-    STD RESULT
-    LDD RESULT  ; Index value
     STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
     LDD TMPPTR  ; Load index
     ASLB        ; Multiply by 2 (16-bit elements)
     ROLA
     LEAX D,X    ; X = base + (index * element_size)
     LDD ,X      ; Load 16-bit value
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_YC
     LDD #10
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_DIAM
-    LDD #100
-    STD RESULT
-    LDA RESULT+1
+    LDD #60
+    TFR B,A
     STA DRAW_CIRCLE_INTENSITY
     JSR DRAW_CIRCLE_RUNTIME
     LDD #0
@@ -1576,11 +1176,21 @@ VECTREX_PRINT_TEXT:
     JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
     JSR Reset0Ref   ; Reset beam to center before positioning text
     LDU VAR_ARG2   ; string pointer
+    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
+    STA >$C82A      ; Vec_Text_Height: controls character Y scale
+    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
+    STA >$C82B      ; Vec_Text_Width: controls character X spacing
     LDA >VAR_ARG1+1 ; Y coordinate
     LDB >VAR_ARG0+1 ; X coordinate
+    LDX >$C82C      ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    PSHS X
     JSR Print_Str_d
-    LDA #$80
-    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    PULS X
+    STX >$C82C      ; Restore Vec_Str_Ptr to safe ROM value
+    LDA #$F8
+    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    LDA #$48
+    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
     JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
 
@@ -1656,16 +1266,26 @@ VECTREX_PRINT_NUMBER:
     
 .PN_AFTER_CONVERT:
     ; STEP 2: Set up BIOS and print (NOW change DP to $D0)
-    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely
     LDA #$D0
-    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)
+    TFR A,DP         ; Set Direct Page to $D0 for BIOS
+    JSR Intensity_5F ; Set text brightness (mirrors PRINT_TEXT)
     JSR Reset0Ref    ; Reset beam to center before positioning text
+    LDU #NUM_STR     ; String pointer
+    LDA >TEXT_SCALE_H ; height (signed byte)
+    STA >$C82A       ; Vec_Text_Height: character Y scale
+    LDA >TEXT_SCALE_W ; width (unsigned byte)
+    STA >$C82B       ; Vec_Text_Width: character X spacing
     LDA >VAR_ARG1+1  ; Y coordinate
     LDB >VAR_ARG0+1  ; X coordinate
-    LDU #NUM_STR     ; String pointer
+    LDX >$C82C       ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    PSHS X
     JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)
-    LDA #$80
-    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    PULS X
+    STX >$C82C       ; Restore Vec_Str_Ptr (NUM_STR is RAM, not ROM)
+    LDA #$F8
+    STA >$C82A       ; Restore Vec_Text_Height to normal (-8)
+    LDA #$48
+    STA >$C82B       ; Restore Vec_Text_Width to normal (72)
     JSR $F1AF      ; Restore DP to $C8
     RTS
 

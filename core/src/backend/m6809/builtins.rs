@@ -1,5 +1,5 @@
 // Builtins - Implementation of built-in functions for M6809 backend
-use crate::ast::{Expr, Stmt};
+use crate::ast::Expr;
 use crate::codegen::CodegenOptions;
 use super::{FuncCtx, emit_expr, fresh_label};
 

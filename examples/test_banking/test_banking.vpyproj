@@ -1,0 +1,11 @@
+[project]
+name = "test_banking"
+version = "1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/test_banking.bin"
+
+[assets]
+vectors = "assets/vectors"
+music = "assets/music"

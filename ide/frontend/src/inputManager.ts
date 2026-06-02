@@ -50,7 +50,8 @@ class InputManager {
     const useGamepad = (Math.abs(gx)>0 || Math.abs(gy)>0);
     const x = useGamepad ? gx : kx;
     const y = useGamepad ? gy : ky;
-    const buttons = (useGamepad ? gButtons : 0) | kbButtons;
+    // Always merge gamepad buttons — face buttons work even when axis is centred
+    const buttons = gButtons | kbButtons;
 
     this.snapshot = { x, y, buttons };
     return this.snapshot;

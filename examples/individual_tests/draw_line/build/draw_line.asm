@@ -32,6 +32,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -47,23 +49,28 @@ TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
 VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
 VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
 TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
-NUM_STR              EQU $C880+$0C   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
-DRAW_LINE_ARGS       EQU $C880+$12   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$1C   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$1E   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$20   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$21   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$22   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$24   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-TEXT_SCALE_H         EQU $C880+$26   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$27   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-
+BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
+BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
+NUM_STR              EQU $C880+$0E   ; Buffer for PRINT_NUMBER decimal output (5 digits + terminator) (6 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$14   ; Vector intensity override (0=use vector data) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$15   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$1F   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$21   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$23   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$24   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$25   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$27   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+TEXT_SCALE_H         EQU $C880+$29   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$2A   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+VAR_ARG0             EQU $C880+$2B   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$2D   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$2F   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$31   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$33   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$35   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$37   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$39   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$3B   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -91,8 +98,11 @@ MAIN:
     STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
     ; Mux configured - J1_X()/J1_Y() can now be called
 
+    ; Prime BIOS button state at startup
+    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
     ; TODO: Statement Pass { source_line: 9 }
+    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
 
 .MAIN_LOOP:
     JSR LOOP_BODY
@@ -100,155 +110,93 @@ MAIN:
 
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
-    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
-    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
+    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
     ; PRINT_TEXT: Print text at position
     LDD #-55
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #20
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2571410      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_NUMBER(x, y, num)
     LDD #-5
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0    ; X position
+    STD >VAR_ARG0    ; X position
     LDD #20
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1    ; Y position
+    STD >VAR_ARG1    ; Y position
     LDD #123
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG2    ; Number value
+    STD >VAR_ARG2    ; Number value
     JSR VECTREX_PRINT_NUMBER
     LDD #0
     STD RESULT
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+0    ; x0
     LDD #60
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+2    ; y0
     LDD #-57
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
     LDD #19
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+6    ; y1
     LDD #80
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+8    ; intensity
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #-57
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+0    ; x0
     LDD #19
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+2    ; y0
     LDD #-35
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
     LDD #-49
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+6    ; y1
     LDD #80
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+8    ; intensity
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #-35
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+0    ; x0
     LDD #-49
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+2    ; y0
     LDD #35
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
     LDD #-49
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+6    ; y1
     LDD #80
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+8    ; intensity
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #35
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+0    ; x0
     LDD #-49
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+2    ; y0
     LDD #57
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
     LDD #19
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+6    ; y1
     LDD #80
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+8    ; intensity
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #57
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+0    ; x0
     LDD #19
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+2    ; y0
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
     LDD #60
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+6    ; y1
     LDD #80
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+8    ; intensity
     JSR DRAW_LINE_WRAPPER
     LDD #0
@@ -276,7 +224,11 @@ VECTREX_PRINT_TEXT:
     STA >$C82B      ; Vec_Text_Width: controls character X spacing
     LDA >VAR_ARG1+1 ; Y coordinate
     LDB >VAR_ARG0+1 ; X coordinate
+    LDX >$C82C      ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    PSHS X
     JSR Print_Str_d
+    PULS X
+    STX >$C82C      ; Restore Vec_Str_Ptr to safe ROM value
     LDA #$F8
     STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
     LDA #$48
@@ -356,9 +308,9 @@ VECTREX_PRINT_NUMBER:
     
 .PN_AFTER_CONVERT:
     ; STEP 2: Set up BIOS and print (NOW change DP to $D0)
-    ; NOTE: Do NOT set VIA_cntl=$98 - would release /ZERO prematurely
     LDA #$D0
-    TFR A,DP         ; Set Direct Page to $D0 for BIOS (inline - JSR $F1AA unreliable in emulator)
+    TFR A,DP         ; Set Direct Page to $D0 for BIOS
+    JSR Intensity_5F ; Set text brightness (mirrors PRINT_TEXT)
     JSR Reset0Ref    ; Reset beam to center before positioning text
     LDU #NUM_STR     ; String pointer
     LDA >TEXT_SCALE_H ; height (signed byte)
@@ -367,7 +319,11 @@ VECTREX_PRINT_NUMBER:
     STA >$C82B       ; Vec_Text_Width: character X spacing
     LDA >VAR_ARG1+1  ; Y coordinate
     LDB >VAR_ARG0+1  ; X coordinate
+    LDX >$C82C       ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    PSHS X
     JSR Print_Str_d  ; Print using BIOS (A=Y, B=X, U=string)
+    PULS X
+    STX >$C82C       ; Restore Vec_Str_Ptr (NUM_STR is RAM, not ROM)
     LDA #$F8
     STA >$C82A       ; Restore Vec_Text_Height to normal (-8)
     LDA #$48

@@ -1,0 +1,12 @@
+[project]
+name = "smooth_curves"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/smooth_curves.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]

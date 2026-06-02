@@ -1,0 +1,48 @@
+; ROM Server PIO program — Phase 2
+; Monitors /CE (GP23) and /OE (GP25) from the 6809.
+; When both are low: reads A0-A14 address bus, sends to CPU via FIFO,
+; receives data byte from CPU via FIFO, drives D0-D7.
+;
+; Pin mapping (configured by Rust before starting state machine):
+;   IN  base: GP0  (reads GP0-GP23 = A0-A14 + others)
+;   OUT base: GP15 (drives GP15-GP22 = D0-D7)
+;   JMP pin:  GP23 (/CE)
+;   WAIT gpio: GP25 (/OE) — used directly by gpio number in WAIT instruction
+;
+; Timing: 6809 at 1.5 MHz needs data within ~200 ns of /OE going low.
+; RP2040 PIO at 133 MHz = 1 cycle per 7.5 ns.
+; This program takes ~8 cycles from /CE+/OE low to data on bus = ~60 ns — safe.
+;
+; Core 1 must service the TX/RX FIFOs within one 6809 bus cycle (667 ns).
+; With SRAM-cached ROM that's ~10 cycles to lookup and respond — easily met.
+
+.program rom_server
+.wrap_target
+
+wait_ce:
+    ; Wait for /CE to go low (6809 selecting cartridge space)
+    wait 0 gpio 23          ; stall until GP23 (/CE) = 0
+
+    ; Wait for /OE to go low (6809 ready to read)
+    wait 0 gpio 25          ; stall until GP25 (/OE) = 0
+
+    ; Capture A0-A14 from the GPIO input (bits 0-14)
+    in pins, 15             ; shift GP0-GP14 into ISR (15 bits)
+    push noblock            ; send address to CPU via RX FIFO immediately
+
+    ; Wait for CPU to provide the data byte (TX FIFO)
+    pull block              ; stall until CPU pushes the byte into TX FIFO
+
+    ; Drive D0-D7 (OUT base = GP15, 8 bits)
+    out pins, 8             ; put byte onto data bus
+
+    ; Hold data until /OE rises (end of read cycle)
+    wait 1 gpio 25          ; stall until /OE = 1
+
+    ; Tri-state data bus: set all data pins to 0 (DIR_CTRL handles actual HiZ)
+    ; The Rust code sets DIR_CTRL low before starting this program,
+    ; so the buffer (U4) tri-states the bus when we're not driving.
+    ; Here we just clear our output register.
+    set pins, 0             ; clear GP15-GP22 output register
+
+.wrap                       ; loop back to wait_ce

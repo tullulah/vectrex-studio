@@ -32,6 +32,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -47,34 +49,41 @@ TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
 VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
 VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
 TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
-RAND_SEED            EQU $C880+$0C   ; Random seed for RAND() (2 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$0E   ; Circle center X (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$0F   ; Circle center Y (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$10   ; Circle diameter (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$11   ; Circle intensity (1 bytes)
-DRAW_CIRCLE_RADIUS   EQU $C880+$12   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$13   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
-DRAW_LINE_ARGS       EQU $C880+$1B   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$25   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$27   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$29   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$2A   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$2B   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$2D   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_RX1              EQU $C880+$2F   ; User variable: RX1 (2 bytes)
-VAR_RY1              EQU $C880+$31   ; User variable: RY1 (2 bytes)
-VAR_RX2              EQU $C880+$33   ; User variable: RX2 (2 bytes)
-VAR_RY2              EQU $C880+$35   ; User variable: RY2 (2 bytes)
-VAR_RX3              EQU $C880+$37   ; User variable: RX3 (2 bytes)
-VAR_RY4              EQU $C880+$39   ; User variable: RY4 (2 bytes)
-VAR_RY3              EQU $C880+$3B   ; User variable: RY3 (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-
+BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
+BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
+RAND_SEED            EQU $C880+$0E   ; Random seed for RAND() (2 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$10   ; Circle center X (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$11   ; Circle center Y (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$12   ; Circle diameter (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$13   ; Circle intensity (1 bytes)
+DRAW_CIRCLE_RADIUS   EQU $C880+$14   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$15   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$1D   ; Vector intensity override (0=use vector data) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$1E   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$28   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$2A   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$2C   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$2D   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$2E   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$30   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+TEXT_SCALE_H         EQU $C880+$32   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$33   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+VAR_ARG0             EQU $C880+$34   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$36   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$38   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$3A   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$3C   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$3E   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$40   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$42   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$44   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_RX1              EQU $C880+$45   ; User variable: RX1 (2 bytes)
+VAR_RY1              EQU $C880+$47   ; User variable: RY1 (2 bytes)
+VAR_RX2              EQU $C880+$49   ; User variable: RX2 (2 bytes)
+VAR_RY2              EQU $C880+$4B   ; User variable: RY2 (2 bytes)
+VAR_RX3              EQU $C880+$4D   ; User variable: RX3 (2 bytes)
+VAR_RY4              EQU $C880+$4F   ; User variable: RY4 (2 bytes)
+VAR_RY3              EQU $C880+$51   ; User variable: RY3 (2 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -84,6 +93,10 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    LDA #$F8
+    STA TEXT_SCALE_H      ; Default height = -8 (normal size)
+    LDA #$48
+    STA TEXT_SCALE_W      ; Default width = 72 (normal size)
     LDD #0
     STD VAR_RX1
     LDD #0
@@ -110,31 +123,22 @@ MAIN:
     STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
     ; Mux configured - J1_X()/J1_Y() can now be called
 
+    ; Prime BIOS button state at startup
+    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD VAR_RX1
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD VAR_RY1
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD VAR_RX2
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD VAR_RY2
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD VAR_RX3
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD VAR_RY4
+    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
 
 .MAIN_LOOP:
     JSR LOOP_BODY
@@ -142,157 +146,109 @@ MAIN:
 
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
-    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
-    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
+    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
     ; PRINT_TEXT: Print text at position
     LDD #-50
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #90
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2410010819      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; RAND_RANGE: Random in range [min, max]
     LDD #-80
-    STD RESULT
-    LDD RESULT
     STD TMPPTR     ; Save min
     LDD #80
-    STD RESULT
-    LDD RESULT
     STD TMPPTR2    ; Save max
     JSR RAND_RANGE_HELPER
     STD RESULT
-    LDD RESULT
     STD VAR_RX1
     ; RAND_RANGE: Random in range [min, max]
     LDD #-60
-    STD RESULT
-    LDD RESULT
     STD TMPPTR     ; Save min
     LDD #60
-    STD RESULT
-    LDD RESULT
     STD TMPPTR2    ; Save max
     JSR RAND_RANGE_HELPER
     STD RESULT
-    LDD RESULT
     STD VAR_RY1
     ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
     LDD >VAR_RX1
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_XC
     LDD >VAR_RY1
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_YC
     LDD #20
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_DIAM
     LDD #100
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_INTENSITY
     JSR DRAW_CIRCLE_RUNTIME
     LDD #0
     STD RESULT
     ; RAND_RANGE: Random in range [min, max]
     LDD #-80
-    STD RESULT
-    LDD RESULT
     STD TMPPTR     ; Save min
     LDD #80
-    STD RESULT
-    LDD RESULT
     STD TMPPTR2    ; Save max
     JSR RAND_RANGE_HELPER
     STD RESULT
-    LDD RESULT
     STD VAR_RX2
     ; RAND_RANGE: Random in range [min, max]
     LDD #-60
-    STD RESULT
-    LDD RESULT
     STD TMPPTR     ; Save min
     LDD #60
-    STD RESULT
-    LDD RESULT
     STD TMPPTR2    ; Save max
     JSR RAND_RANGE_HELPER
     STD RESULT
-    LDD RESULT
     STD VAR_RY2
     ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
     LDD >VAR_RX2
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_XC
     LDD >VAR_RY2
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_YC
     LDD #20
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_DIAM
     LDD #80
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_INTENSITY
     JSR DRAW_CIRCLE_RUNTIME
     LDD #0
     STD RESULT
     ; RAND_RANGE: Random in range [min, max]
     LDD #-80
-    STD RESULT
-    LDD RESULT
     STD TMPPTR     ; Save min
     LDD #80
-    STD RESULT
-    LDD RESULT
     STD TMPPTR2    ; Save max
     JSR RAND_RANGE_HELPER
     STD RESULT
-    LDD RESULT
     STD VAR_RX3
     ; RAND_RANGE: Random in range [min, max]
     LDD #-60
-    STD RESULT
-    LDD RESULT
     STD TMPPTR     ; Save min
     LDD #60
-    STD RESULT
-    LDD RESULT
     STD TMPPTR2    ; Save max
     JSR RAND_RANGE_HELPER
     STD RESULT
-    LDD RESULT
     STD VAR_RY3
     ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
     LDD >VAR_RX3
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_XC
     LDD >VAR_RY3
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_YC
     LDD #20
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_DIAM
     LDD #60
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_INTENSITY
     JSR DRAW_CIRCLE_RUNTIME
     LDD #0
@@ -314,11 +270,21 @@ VECTREX_PRINT_TEXT:
     JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
     JSR Reset0Ref   ; Reset beam to center before positioning text
     LDU VAR_ARG2   ; string pointer
+    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
+    STA >$C82A      ; Vec_Text_Height: controls character Y scale
+    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
+    STA >$C82B      ; Vec_Text_Width: controls character X spacing
     LDA >VAR_ARG1+1 ; Y coordinate
     LDB >VAR_ARG0+1 ; X coordinate
+    LDX >$C82C      ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    PSHS X
     JSR Print_Str_d
-    LDA #$80
-    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    PULS X
+    STX >$C82C      ; Restore Vec_Str_Ptr to safe ROM value
+    LDA #$F8
+    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    LDA #$48
+    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
     JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
 

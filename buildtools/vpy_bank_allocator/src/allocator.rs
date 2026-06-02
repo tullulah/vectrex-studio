@@ -114,6 +114,14 @@ impl BankAllocator {
     pub fn set_asset_sizes(&mut self, sizes: HashMap<String, usize>) {
         self.asset_sizes = sizes;
     }
+
+    /// Return estimated code size (bytes) for each function — used by callers to
+    /// pre-seed asset distribution with already-claimed bank space.
+    pub fn get_function_sizes(&self) -> HashMap<String, usize> {
+        self.graph.nodes.iter()
+            .map(|(name, node)| (name.clone(), node.size_bytes))
+            .collect()
+    }
     
     /// Assign functions to banks using dependency-aware clustering
     /// 
@@ -151,10 +159,11 @@ impl BankAllocator {
         //   - Vectrex cartridge header (~300 bytes)
         //   - MAIN startup + LOOP_BODY generated code (~2000 bytes)
         //   - Injected EQU symbol section (~500 bytes)
-        // Other banks only have the EQU overhead (~500 bytes).
+        //   - Safety margin for estimation inaccuracy (~400 bytes)
+        // Other banks only have the EQU overhead (~500 bytes) + safety margin.
         // Pre-charge each bank with its fixed overhead so fit checks are accurate.
-        const BANK0_FIXED_OVERHEAD: usize = 3000;
-        const BANKN_FIXED_OVERHEAD: usize = 600;
+        const BANK0_FIXED_OVERHEAD: usize = 3200;
+        const BANKN_FIXED_OVERHEAD: usize = 1600;
         let mut banks: Vec<BankInfo> = (0..code_banks_count as usize)
             .map(|i| {
                 let mut b = BankInfo::new(i as u8);
@@ -179,8 +188,11 @@ impl BankAllocator {
             // Try to fit cluster functions in one bank
             for bank in &mut banks {
                 if bank.can_fit(cluster_code_size, bank_size) {
-                    // Add only functions to bank (assets go to their own banks)
-                    for func in &cluster.functions {
+                    // Add only functions to bank (assets go to their own banks).
+                    // Sort for deterministic insertion order.
+                    let mut funcs_sorted: Vec<&String> = cluster.functions.iter().collect();
+                    funcs_sorted.sort();
+                    for func in funcs_sorted {
                         let size = func_sizes.get(func).copied().unwrap_or(100);
                         bank.add_function(func.clone(), size);
                         assignments.insert(func.clone(), bank.id);
@@ -195,7 +207,12 @@ impl BankAllocator {
             // Cross-bank calls will be handled by trampolines in the helpers bank.
             if !assigned {
                 eprintln!("       ⚠ Cluster too large for any single bank ({} bytes), splitting across banks with trampolines", cluster_code_size);
-                for func in &cluster.functions {
+                // Sort functions by name for deterministic assignment — HashSet iteration is
+                // non-deterministic, and different orderings produce different bank splits
+                // (and thus random overflow errors on successive builds).
+                let mut funcs_sorted: Vec<&String> = cluster.functions.iter().collect();
+                funcs_sorted.sort();
+                for func in funcs_sorted {
                     let size = func_sizes.get(func).copied().unwrap_or(100);
                     // Find first bank with space; if none, use bank 0
                     let target_bank = banks.iter()
@@ -262,7 +279,7 @@ impl BankAllocator {
         let first_asset_bank = 1u8;  // Start at Bank #1
         let last_asset_bank = helper_bank_id.saturating_sub(1);  // End at Bank #30
         
-        // Track bank usage for assets
+        // Track bank usage for assets — pre-seeded with function code sizes below.
         let mut asset_bank_usage: HashMap<u8, usize> = HashMap::new();
         
         // Collect all assets from all clusters
@@ -270,7 +287,59 @@ impl BankAllocator {
             .flat_map(|c| c.assets.iter().cloned())
             .collect();
         
-        // Distribute assets across Banks #1-#30 using first-fit
+        // ── PASS 1: assign function code to banks ─────────────────────────────────
+        // Must run BEFORE asset assignment so asset first-fit sees how much space
+        // each bank already has. (Bug: original code ran asset assignment first,
+        // then function assignment — causing both to claim bank_1 independently.)
+        for cluster in &clusters {
+            let mut assigned = false;
+            
+            // Calculate cluster code size (assets tracked separately)
+            let cluster_code_size: usize = cluster.functions.iter()
+                .map(|f| func_sizes.get(f).copied().unwrap_or(100))
+                .sum();
+            
+            // Try to fit functions in one bank
+            for bank in &mut banks {
+                if bank.can_fit(cluster_code_size, bank_size) {
+                    let mut funcs_sorted: Vec<&String> = cluster.functions.iter().collect();
+                    funcs_sorted.sort();
+                    for func in funcs_sorted {
+                        let func_size = func_sizes.get(func).copied().unwrap_or(100);
+                        bank.add_function(func.clone(), func_size);
+                        assignments.insert(func.clone(), bank.id);
+                    }
+                    assigned = true;
+                    break;
+                }
+            }
+            
+            // If functions don't fit together, assign individually
+            if !assigned {
+                let mut funcs_sorted: Vec<&String> = cluster.functions.iter().collect();
+                funcs_sorted.sort();
+                for func_name in funcs_sorted {
+                    let func_size = func_sizes.get(func_name).copied().unwrap_or(100);
+                    for bank in &mut banks {
+                        if bank.can_fit(func_size, bank_size) {
+                            bank.add_function(func_name.clone(), func_size);
+                            assignments.insert(func_name.clone(), bank.id);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Seed asset_bank_usage with function code already assigned to each bank.
+        // This ensures asset first-fit only uses space that functions haven't claimed.
+        for bank in &banks {
+            if bank.used_bytes > 0 {
+                asset_bank_usage.insert(bank.id, bank.used_bytes);
+            }
+        }
+        
+        // ── PASS 2: distribute assets across Banks #1-#N using first-fit ─────────
         for asset in &all_assets {
             let asset_size = self.asset_sizes.get(asset).copied().unwrap_or(200);
             let mut assigned = false;
@@ -288,47 +357,6 @@ impl BankAllocator {
             if !assigned {
                 panic!("FATAL: Cannot fit asset '{}' ({} bytes) - banks #{}-#{} full!", 
                     asset, asset_size, first_asset_bank, last_asset_bank);
-            }
-        }
-        
-        
-        // Re-run the same allocation logic as assign_banks FOR FUNCTIONS ONLY
-        for cluster in &clusters {
-            let mut assigned = false;
-            
-            // Calculate cluster size WITHOUT assets (assets are in Bank #31 now)
-            let cluster_code_size: usize = cluster.functions.iter()
-                .map(|f| func_sizes.get(f).copied().unwrap_or(100))
-                .sum();
-            
-            // Try to fit functions in one bank
-            for bank in &mut banks {
-                if bank.can_fit(cluster_code_size, bank_size) {
-                    // Add only functions to this bank (NOT assets)
-                    for func in &cluster.functions {
-                        let func_size = func_sizes.get(func).copied().unwrap_or(100);
-                        bank.add_function(func.clone(), func_size);
-                        assignments.insert(func.clone(), bank.id);
-                    }
-                    
-                    assigned = true;
-                    break;
-                }
-            }
-            
-            // If functions don't fit together, assign individually
-            if !assigned {
-                for func_name in &cluster.functions {
-                    let func_size = func_sizes.get(func_name).copied().unwrap_or(100);
-                    
-                    for bank in &mut banks {
-                        if bank.can_fit(func_size, bank_size) {
-                            bank.add_function(func_name.clone(), func_size);
-                            assignments.insert(func_name.clone(), bank.id);
-                            break;
-                        }
-                    }
-                }
             }
         }
         

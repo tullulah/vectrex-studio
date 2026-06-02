@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "name": "coin",
+  "category": "coin",
+  "duration_ms": 120,
+  "oscillator": {
+    "frequency": 880,
+    "channel": 0,
+    "duty": 50
+  },
+  "envelope": {
+    "attack": 0,
+    "decay": 10,
+    "sustain": 12,
+    "release": 80,
+    "peak": 15
+  },
+  "pitch": {
+    "enabled": false,
+    "start_mult": 1,
+    "end_mult": 1,
+    "curve": 0
+  },
+  "noise": {
+    "enabled": false,
+    "period": 15,
+    "volume": 12,
+    "decay_ms": 100
+  },
+  "modulation": {
+    "arpeggio": true,
+    "arpeggio_notes": [
+      0,
+      12
+    ],
+    "arpeggio_speed": 60,
+    "vibrato": false,
+    "vibrato_depth": 0,
+    "vibrato_speed": 8
+  }
+}

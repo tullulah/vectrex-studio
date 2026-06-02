@@ -480,15 +480,20 @@ impl SfxResource {
         // Duration in frames (50 FPS for Vectrex)
         let total_frames = (self.duration_ms as u32 * 50 / 1000).max(1) as usize;
         
-        // Envelope timing (0ms = instant, no forced minimum)
+        // Envelope timing: allocate frames proportionally to ms durations.
+        // Clamp each phase to remaining frames so phases never exceed total_frames.
+        let dur = self.duration_ms as f32;
         let attack_frames = if self.envelope.attack == 0 { 0 } else {
-            ((self.envelope.attack as u32 * 50 / 1000).max(1) as f32).min(total_frames as f32 * 0.3) as usize
+            ((self.envelope.attack as f32 / dur * total_frames as f32).round() as usize)
+                .min(total_frames)
         };
         let decay_frames = if self.envelope.decay == 0 { 0 } else {
-            ((self.envelope.decay as u32 * 50 / 1000).max(1) as f32).min(total_frames as f32 * 0.3) as usize
+            ((self.envelope.decay as f32 / dur * total_frames as f32).round() as usize)
+                .min(total_frames.saturating_sub(attack_frames))
         };
         let release_frames = if self.envelope.release == 0 { 0 } else {
-            ((self.envelope.release as u32 * 50 / 1000).max(1) as f32).min(total_frames as f32 * 0.3) as usize
+            ((self.envelope.release as f32 / dur * total_frames as f32).round() as usize)
+                .min(total_frames.saturating_sub(attack_frames + decay_frames))
         };
         let sustain_frames = total_frames.saturating_sub(attack_frames + decay_frames + release_frames);
         
@@ -551,17 +556,23 @@ impl SfxResource {
                 current_period = (1_411_200.0 / (16.0 * frequency)).round() as u16;
                 current_period = current_period.max(1).min(4095);
             } else if self.pitch.enabled && total_frames > 1 {
-                // PITCH SWEEP: smooth frequency change
+                // PITCH SWEEP — same convention as SFX editor:
+                //   start_mult = frequency multiplier at frame 0
+                //   end_mult   = frequency multiplier at last frame
+                //   period = 88200 / (base_freq × mult), mult interpolated linearly.
                 let t = frame as f32 / (total_frames - 1) as f32;
-                // Apply reverse only if start_mult > end_mult (descending sweep)
-                let t_adjusted = if self.pitch.start_mult > self.pitch.end_mult {
-                    1.0 - t  // Reverse for descending sweeps
+                let mult = self.pitch.start_mult + (self.pitch.end_mult - self.pitch.start_mult) * t;
+                let base_freq_f = if self.oscillator.frequency > 0 {
+                    self.oscillator.frequency as f32
                 } else {
-                    t  // Normal for ascending sweeps
+                    440.0
                 };
-                let mult = self.pitch.start_mult + (self.pitch.end_mult - self.pitch.start_mult) * t_adjusted;
-
-                current_period = ((base_period as f32) * mult) as u16;
+                let freq_f = base_freq_f * mult;
+                current_period = if freq_f > 0.0 {
+                    (88200.0 / freq_f).round() as u16
+                } else {
+                    4095
+                };
                 current_period = current_period.max(1).min(4095);
             }
             

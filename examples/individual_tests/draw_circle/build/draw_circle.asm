@@ -32,6 +32,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -47,27 +49,32 @@ TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
 VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
 VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
 TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$0C   ; Circle center X (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$0D   ; Circle center Y (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$0E   ; Circle diameter (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$0F   ; Circle intensity (1 bytes)
-DRAW_CIRCLE_RADIUS   EQU $C880+$10   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$11   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
-DRAW_LINE_ARGS       EQU $C880+$19   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$23   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$25   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$27   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$28   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$29   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$2B   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_RADIUS           EQU $C880+$2D   ; User variable: RADIUS (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-
+BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
+BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$0E   ; Circle center X (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$0F   ; Circle center Y (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$10   ; Circle diameter (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$11   ; Circle intensity (1 bytes)
+DRAW_CIRCLE_RADIUS   EQU $C880+$12   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$13   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$1B   ; Vector intensity override (0=use vector data) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$1C   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$26   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$28   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$2A   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$2B   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$2C   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$2E   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_ARG0             EQU $C880+$30   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$32   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$34   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$36   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$38   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$3A   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$3C   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$3E   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$40   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_RADIUS           EQU $C880+$41   ; User variable: RADIUS (2 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -93,11 +100,12 @@ MAIN:
     STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
     ; Mux configured - J1_X()/J1_Y() can now be called
 
+    ; Prime BIOS button state at startup
+    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
     LDD #20
-    STD RESULT
-    LDD RESULT
     STD VAR_RADIUS
+    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
 
 .MAIN_LOOP:
     JSR LOOP_BODY
@@ -105,9 +113,7 @@ MAIN:
 
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
-    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
-    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
+    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -266,20 +272,16 @@ LOOP_BODY:
     STD RESULT
     ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
     LDD #60
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_XC
     LDD #0
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_YC
     LDD >VAR_RADIUS
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_DIAM
     LDD #80
-    STD RESULT
-    LDA RESULT+1
+    TFR B,A
     STA DRAW_CIRCLE_INTENSITY
     JSR DRAW_CIRCLE_RUNTIME
     LDD #0
@@ -362,24 +364,14 @@ LOOP_BODY:
     TFR A,DP    ; Restore DP=$C8 after circle drawing
     LDD #0
     STD RESULT
-    LDD >VAR_RADIUS
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #1
-    STD RESULT
-    LDD RESULT
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD RESULT
-    LDD RESULT
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_RADIUS
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_RADIUS
     LDD #35
-    STD RESULT
-    LDD RESULT
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_RADIUS
-    STD RESULT
-    LDD RESULT
     CMPD TMPVAL
     LBGT .CMP_0_TRUE
     LDD #0
@@ -387,12 +379,8 @@ LOOP_BODY:
 .CMP_0_TRUE:
     LDD #1
 .CMP_0_END:
-    STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_1
     LDD #15
-    STD RESULT
-    LDD RESULT
     STD VAR_RADIUS
     LBRA IF_END_0
 IF_NEXT_1:

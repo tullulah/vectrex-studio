@@ -1,2289 +1,3394 @@
-; --- Motorola 6809 backend (Vectrex) title='PHYSICS' origin=$0000 ---
-        ORG $0000
-;***************************************************************************
-; DEFINE SECTION
-;***************************************************************************
-    INCLUDE "VECTREX.I"
-
-;***************************************************************************
-; HEADER SECTION
-;***************************************************************************
-    FCC "g GCE 1982"
-    FCB $80
-    FDB music1
-    FCB $F8
-    FCB $50
-    FCB $20
-    FCB $BB
-    FCC "PHYSICS"
-    FCB $80
-    FCB 0
-
-;***************************************************************************
-; CODE SECTION
-;***************************************************************************
-
-; === RAM VARIABLE DEFINITIONS (EQU) ===
-; AUTO-GENERATED - All offsets calculated automatically
-; Total RAM used: 87 bytes
-RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPLEFT              EQU $C880+$02   ; Left operand temp (2 bytes)
-TMPLEFT2             EQU $C880+$04   ; Left operand temp 2 (for nested operations) (2 bytes)
-TMPRIGHT             EQU $C880+$06   ; Right operand temp (2 bytes)
-TMPRIGHT2            EQU $C880+$08   ; Right operand temp 2 (for nested operations) (2 bytes)
-TMPPTR               EQU $C880+$0A   ; Pointer temp (used by DRAW_VECTOR, arrays, structs) (2 bytes)
-TMPPTR2              EQU $C880+$0C   ; Pointer temp 2 (for nested array operations) (2 bytes)
-TEMP_YX              EQU $C880+$0E   ; Temporary y,x storage (2 bytes)
-TEMP_X               EQU $C880+$10   ; Temporary x storage (1 bytes)
-TEMP_Y               EQU $C880+$11   ; Temporary y storage (1 bytes)
-VPY_MOVE_X           EQU $C880+$12   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
-VPY_MOVE_Y           EQU $C880+$13   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$14   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity as i16x5) (10 bytes)
-PSG_MUSIC_PTR        EQU $C880+$1E   ; Current music position pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$20   ; Music start pointer (for loops) (2 bytes)
-PSG_IS_PLAYING       EQU $C880+$22   ; Playing flag ($00=stopped, $01=playing) (1 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$23   ; Set during UPDATE_MUSIC_PSG (1 bytes)
-PSG_FRAME_COUNT      EQU $C880+$24   ; Frame register write count (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$25   ; Frames to wait before next read (1 bytes)
-SFX_PTR              EQU $C880+$26   ; Current SFX data pointer (2 bytes)
-SFX_TICK             EQU $C880+$28   ; Current frame counter (2 bytes)
-SFX_ACTIVE           EQU $C880+$2A   ; Playback state ($00=stopped, $01=playing) (1 bytes)
-SFX_PHASE            EQU $C880+$2B   ; Envelope phase (0=A,1=D,2=S,3=R) (1 bytes)
-SFX_VOL              EQU $C880+$2C   ; Current volume level (0-15) (1 bytes)
-NUM_STR              EQU $C880+$2D   ; String buffer for PRINT_NUMBER (5 digits + terminator) (6 bytes)
-DRAW_VEC_X           EQU $C880+$33   ; X position offset for vector drawing (1 bytes)
-DRAW_VEC_Y           EQU $C880+$34   ; Y position offset for vector drawing (1 bytes)
-MIRROR_X             EQU $C880+$35   ; X-axis mirror flag (0=normal, 1=flip) (1 bytes)
-MIRROR_Y             EQU $C880+$36   ; Y-axis mirror flag (0=normal, 1=flip) (1 bytes)
-DRAW_VEC_INTENSITY   EQU $C880+$37   ; Intensity override (0=use vector's, >0=override) (1 bytes)
-VLINE_DX_16          EQU $C880+$38   ; x1-x0 (16-bit) for line drawing (2 bytes)
-VLINE_DY_16          EQU $C880+$3A   ; y1-y0 (16-bit) for line drawing (2 bytes)
-VLINE_DX             EQU $C880+$3C   ; Clamped dx (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$3D   ; Clamped dy (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$3E   ; Remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$40   ; Remaining dx for segment 2 (16-bit) (2 bytes)
-VLINE_STEPS          EQU $C880+$42   ; Line drawing step counter (1 bytes)
-VLINE_LIST           EQU $C880+$43   ; 2-byte vector list (Y|endbit, X) (2 bytes)
-VAR_BX               EQU $C880+$45   ; User variable (2 bytes)
-VAR_BY               EQU $C880+$47   ; User variable (2 bytes)
-VAR_VX               EQU $C880+$49   ; User variable (2 bytes)
-VAR_VY               EQU $C880+$4B   ; User variable (2 bytes)
-VAR_JX               EQU $C880+$4D   ; User variable (2 bytes)
-VAR_ARG0             EQU $C880+$4F   ; Function argument 0 (2 bytes)
-VAR_ARG1             EQU $C880+$51   ; Function argument 1 (2 bytes)
-VAR_ARG2             EQU $C880+$53   ; Function argument 2 (2 bytes)
-VAR_ARG3             EQU $C880+$55   ; Function argument 3 (2 bytes)
-PSG_MUSIC_PTR_DP   EQU $1E  ; DP-relative
-PSG_MUSIC_START_DP EQU $20  ; DP-relative
-PSG_IS_PLAYING_DP  EQU $22  ; DP-relative
-PSG_MUSIC_ACTIVE_DP EQU $23  ; DP-relative
-PSG_FRAME_COUNT_DP EQU $24  ; DP-relative
-PSG_DELAY_FRAMES_DP EQU $25  ; DP-relative
-SFX_PTR_DP         EQU $26  ; DP-relative
-SFX_TICK_DP        EQU $28  ; DP-relative
-SFX_ACTIVE_DP      EQU $2A  ; DP-relative
-SFX_PHASE_DP       EQU $2B  ; DP-relative
-SFX_VOL_DP         EQU $2C  ; DP-relative
-
-    JMP START
-
-;**** CONST DECLARATIONS (NUMBER-ONLY) ****
-
-; === JOYSTICK BUILTIN SUBROUTINES ===
-; J1_X() - Read Joystick 1 X axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81B after Joy_Analog call
-J1X_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
-    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
-    RTS
-
-; J1_Y() - Read Joystick 1 Y axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81C after Joy_Analog call
-J1Y_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81C from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81C)
-    LDB $C81C    ; Vec_Joy_1_Y (BIOS writes ~$FE at center)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
-    RTS
-
-; === BUTTON SYSTEM - BIOS TRANSITIONS ===
-; J1_BUTTON_1-4() - Read transition bits from $C811
-; Read_Btns (auto-injected) calculates: ~(new) OR Vec_Prev_Btns
-; Result: bit=1 ONLY on rising edge (0→1 transition)
-; Returns: D = 1 (just pressed), 0 (not pressed or still held)
-
-J1B1_BUILTIN:
-    LDA $C811      ; Read transition bits (Vec_Button_1_1)
-    ANDA #$01      ; Test bit 0 (Button 1)
-    BEQ .J1B1_OFF
-    LDD #1         ; Return pressed (rising edge)
-    RTS
-.J1B1_OFF:
-    LDD #0         ; Return not pressed
-    RTS
-
-J1B2_BUILTIN:
-    LDA $C811
-    ANDA #$02      ; Test bit 1 (Button 2)
-    BEQ .J1B2_OFF
-    LDD #1
-    RTS
-.J1B2_OFF:
-    LDD #0
-    RTS
-
-J1B3_BUILTIN:
-    LDA $C811
-    ANDA #$04      ; Test bit 2 (Button 3)
-    BEQ .J1B3_OFF
-    LDD #1
-    RTS
-.J1B3_OFF:
-    LDD #0
-    RTS
-
-J1B4_BUILTIN:
-    LDA $C811
-    ANDA #$08      ; Test bit 3 (Button 4)
-    BEQ .J1B4_OFF
-    LDD #1
-    RTS
-.J1B4_OFF:
-    LDD #0
-    RTS
-
-VECTREX_PRINT_TEXT:
-    ; Print_Str_d requires DP=$D0 and signature is (Y, X, string)
-    ; VPy signature: PRINT_TEXT(x, y, string) -> args (ARG0=x, ARG1=y, ARG2=string)
-    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref  ; Reset beam to center for absolute text positioning
-    LDU VAR_ARG2   ; string pointer (ARG2 = third param)
-    LDA VAR_ARG1+1 ; Y (ARG1 = second param)
-    LDB VAR_ARG0+1 ; X (ARG0 = first param)
-    JSR Print_Str_d
-    LDA #$80
-    STA $D004      ; Restore VIA_t1_cnt_lo=$80 (Moveto_d_7F sets it to $7F)
-    JSR $F1AF      ; DP_to_C8 (restore before return)
-    RTS
-; DRAW_LINE unified wrapper - handles 16-bit signed coordinates
-; Args in DRAW_LINE_ARGS[0..9]: x0,y0,x1,y1,intensity (5x i16, low byte used for coords)
-; Resets beam to center, moves to (x0,y0), draws to (x1,y1)
-DRAW_LINE_WRAPPER:
-    ; Set DP to hardware registers
-    LDA #$D0
-    TFR A,DP
-    JSR Reset0Ref   ; Reset beam to center (0,0) before positioning
-    LDA #$80
-    STA <$04        ; VIA_t1_cnt_lo = $80 (ensure correct scale regardless of prior builtins)
-    ; Set intensity
-    LDA >DRAW_LINE_ARGS+9  ; intensity (low byte)
-    JSR Intensity_a
-    ; Move to start position (y in A, x in B)
-    LDA >DRAW_LINE_ARGS+3  ; Y start (low byte)
-    ADDA >VPY_MOVE_Y       ; Add MOVE Y offset
-    LDB >DRAW_LINE_ARGS+1  ; X start (low byte)
-    ADDB >VPY_MOVE_X       ; Add MOVE X offset
-    JSR Moveto_d
-    ; Compute deltas using 16-bit arithmetic
-    ; dx = x1 - x0 (treating as signed 16-bit)
-    LDD >DRAW_LINE_ARGS+4  ; x1 (16-bit)
-    SUBD >DRAW_LINE_ARGS+0 ; subtract x0 (16-bit)
-    STD VLINE_DX_16        ; Store full 16-bit dx
-    ; dy = y1 - y0 (treating as signed 16-bit)
-    LDD >DRAW_LINE_ARGS+6  ; y1 (16-bit)
-    SUBD >DRAW_LINE_ARGS+2 ; subtract y0 (16-bit)
-    STD VLINE_DY_16        ; Store full 16-bit dy
-    ; SEGMENT 1: Clamp dy to ±127 and draw
-    LDD VLINE_DY_16 ; Load full dy
-    CMPD #127
-    BLE DLW_SEG1_DY_LO
-    LDA #127        ; dy > 127: use 127
-    BRA DLW_SEG1_DY_READY
-DLW_SEG1_DY_LO:
-    CMPD #-128
-    BGE DLW_SEG1_DY_NO_CLAMP  ; -128 <= dy <= 127: use original (sign-extended)
-    LDA #$80        ; dy < -128: use -128
-    BRA DLW_SEG1_DY_READY
-DLW_SEG1_DY_NO_CLAMP:
-    LDA VLINE_DY_16+1  ; Use original low byte (already in valid range)
-DLW_SEG1_DY_READY:
-    STA VLINE_DY    ; Save clamped dy for segment 1
-    ; Clamp dx to ±127
-    LDD VLINE_DX_16
-    CMPD #127
-    BLE DLW_SEG1_DX_LO
-    LDB #127        ; dx > 127: use 127
-    BRA DLW_SEG1_DX_READY
-DLW_SEG1_DX_LO:
-    CMPD #-128
-    BGE DLW_SEG1_DX_NO_CLAMP  ; -128 <= dx <= 127: use original (sign-extended)
-    LDB #$80        ; dx < -128: use -128
-    BRA DLW_SEG1_DX_READY
-DLW_SEG1_DX_NO_CLAMP:
-    LDB VLINE_DX_16+1  ; Use original low byte (already in valid range)
-DLW_SEG1_DX_READY:
-    STB VLINE_DX    ; Save clamped dx for segment 1
-    ; Draw segment 1
-    CLR Vec_Misc_Count
-    LDA VLINE_DY
-    LDB VLINE_DX
-    JSR Draw_Line_d ; Beam moves automatically
-    ; Check if we need SEGMENT 2 (dy OR dx outside ±127 range)
-    LDD VLINE_DY_16 ; Reload original dy
-    CMPD #127
-    BGT DLW_NEED_SEG2  ; dy > 127: needs segment 2
-    CMPD #-128
-    BLT DLW_NEED_SEG2  ; dy < -128: needs segment 2
-    LDD VLINE_DX_16 ; Also check dx
-    CMPD #127
-    BGT DLW_NEED_SEG2  ; dx > 127: needs segment 2
-    CMPD #-128
-    BLT DLW_NEED_SEG2  ; dx < -128: needs segment 2
-    BRA DLW_DONE       ; both dy and dx in range: no segment 2
-DLW_NEED_SEG2:
-    ; SEGMENT 2: Draw remaining dy and dx
-    ; Calculate remaining dy
-    LDD VLINE_DY_16 ; Load original full dy
-    CMPD #127
-    BGT DLW_SEG2_DY_POS  ; dy > 127: remaining = dy - 127
-    CMPD #-128
-    BGE DLW_SEG2_DY_NO_REMAIN  ; -128 <= dy <= 127: no remaining dy
-    ; dy < -128, so we drew -128 in segment 1
-    ; remaining = dy - (-128) = dy + 128
-    ADDD #128       ; Add back the -128 we already drew
-    BRA DLW_SEG2_DY_DONE
-DLW_SEG2_DY_NO_REMAIN:
-    LDD #0          ; dy in range: no remaining
-    BRA DLW_SEG2_DY_DONE
-DLW_SEG2_DY_POS:
-    ; dy > 127, so we drew 127 in segment 1
-    ; remaining = dy - 127
-    SUBD #127       ; Subtract 127 we already drew
-DLW_SEG2_DY_DONE:
-    STD VLINE_DY_REMAINING  ; Store remaining dy (16-bit)
-    ; Calculate remaining dx
-    LDD VLINE_DX_16 ; Load original full dx
-    CMPD #127
-    BLE DLW_SEG2_DX_CHECK_NEG
-    ; dx > 127, so we drew 127 in segment 1
-    ; remaining = dx - 127
-    SUBD #127
-    BRA DLW_SEG2_DX_DONE
-DLW_SEG2_DX_CHECK_NEG:
-    CMPD #-128
-    BGE DLW_SEG2_DX_NO_REMAIN  ; -128 <= dx <= 127: no remaining dx
-    ; dx < -128, so we drew -128 in segment 1
-    ; remaining = dx - (-128) = dx + 128
-    ADDD #128
-    BRA DLW_SEG2_DX_DONE
-DLW_SEG2_DX_NO_REMAIN:
-    LDD #0          ; No remaining dx
-DLW_SEG2_DX_DONE:
-    STD VLINE_DX_REMAINING  ; Store remaining dx (16-bit) in VLINE_DX_REMAINING
-    ; Setup for Draw_Line_d: A=dy, B=dx (CRITICAL: order matters!)
-    ; Load remaining dy from VLINE_DY_REMAINING (already saved)
-    LDA VLINE_DY_REMAINING+1  ; Low byte of remaining dy
-    LDB VLINE_DX_REMAINING+1  ; Low byte of remaining dx
-    CLR Vec_Misc_Count
-    JSR Draw_Line_d ; Beam continues from segment 1 endpoint
-DLW_DONE:
-    LDA #$C8       ; CRITICAL: Restore DP to $C8 for our code
-    TFR A,DP
-    RTS
-; ============================================================================
-; PSG DIRECT MUSIC PLAYER (inspired by Christman2024/malbanGit)
-; ============================================================================
-; Writes directly to PSG chip using WRITE_PSG sequence
-;
-; Music data format (frame-based):
-;   FCB count           ; Number of register writes this frame
-;   FCB reg, val        ; PSG register/value pairs
-;   ...                 ; Repeat for each register
-;   FCB $FF             ; End marker
-;
-; PSG Registers:
-;   0-1: Channel A frequency (12-bit)
-;   2-3: Channel B frequency
-;   4-5: Channel C frequency
-;   6:   Noise period
-;   7:   Mixer control (enable/disable channels)
-;   8-10: Channel A/B/C volume
-;   11-12: Envelope period
-;   13:  Envelope shape
-; ============================================================================
-
-; RAM variables (defined via ram.allocate in mod.rs):
-; PSG_MUSIC_PTR, PSG_MUSIC_START, PSG_IS_PLAYING,
-; PSG_MUSIC_ACTIVE, PSG_DELAY_FRAMES
-
-; PLAY_MUSIC_RUNTIME - Start PSG music playback
-; Input: X = pointer to PSG music data
-PLAY_MUSIC_RUNTIME:
-STX >PSG_MUSIC_PTR     ; Store current music pointer (force extended)
-STX >PSG_MUSIC_START   ; Store start pointer for loops (force extended)
-CLR >PSG_DELAY_FRAMES  ; Clear delay counter
-LDA #$01
-STA >PSG_IS_PLAYING ; Mark as playing (extended - var at 0xC8A0)
-RTS
-
-; ============================================================================
-; UPDATE_MUSIC_PSG - Update PSG (call every frame)
-; ============================================================================
-UPDATE_MUSIC_PSG:
-; CRITICAL: Set VIA to PSG mode BEFORE accessing PSG (don't assume state)
-; DISABLED: Conflicts with SFX which uses Sound_Byte (HANDSHAKE mode)
-; LDA #$00       ; VIA_cntl = $00 (PSG mode)
-; STA >$D00C     ; VIA_cntl
-LDA #$01
-STA >PSG_MUSIC_ACTIVE  ; Mark music system active (for PSG logging)
-LDA >PSG_IS_PLAYING ; Check if playing (extended - var at 0xC8A0)
-BEQ PSG_update_done    ; Not playing, exit
-
-LDX >PSG_MUSIC_PTR     ; Load pointer (force extended - LDX has no DP mode)
-BEQ PSG_update_done    ; No music loaded
-
-; Read frame count byte (number of register writes)
-LDB ,X+
-BEQ PSG_music_ended    ; Count=0 means end (no loop)
-CMPB #$FF              ; Check for loop command
-BEQ PSG_music_loop     ; $FF means loop (never valid as count)
-
-; Process frame - push counter to stack
-PSHS B                 ; Save count on stack
-
-; Write register/value pairs to PSG
-PSG_write_loop:
-LDA ,X+                ; Load register number
-LDB ,X+                ; Load register value
-PSHS X                 ; Save pointer (after reads)
-
-; WRITE_PSG sequence
-STA VIA_port_a         ; Store register number
-LDA #$19               ; BDIR=1, BC1=1 (LATCH)
-STA VIA_port_b
-LDA #$01               ; BDIR=0, BC1=0 (INACTIVE)
-STA VIA_port_b
-LDA VIA_port_a         ; Read status
-STB VIA_port_a         ; Store data
-LDB #$11               ; BDIR=1, BC1=0 (WRITE)
-STB VIA_port_b
-LDB #$01               ; BDIR=0, BC1=0 (INACTIVE)
-STB VIA_port_b
-
-PULS X                 ; Restore pointer
-PULS B                 ; Get counter
-DECB                   ; Decrement
-BEQ PSG_frame_done     ; Done with this frame
-PSHS B                 ; Save counter back
-BRA PSG_write_loop
-
-PSG_frame_done:
-
-; Frame complete - update pointer and done
-STX >PSG_MUSIC_PTR     ; Update pointer (force extended)
-BRA PSG_update_done
-
-PSG_music_ended:
-CLR >PSG_IS_PLAYING ; Stop playback (extended - var at 0xC8A0)
-; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing
-; Music will fade naturally as frame data stops updating
-BRA PSG_update_done
-
-PSG_music_loop:
-; Loop command: $FF followed by 2-byte address (FDB)
-; X points past $FF, read the target address
-LDD ,X                 ; Load 2-byte loop target address
-STD >PSG_MUSIC_PTR     ; Update pointer to loop start
-; Exit - next frame will start from loop target
-BRA PSG_update_done
-
-PSG_update_done:
-CLR >PSG_MUSIC_ACTIVE  ; Clear flag (music system done)
-RTS
-
-; ============================================================================
-; STOP_MUSIC_RUNTIME - Stop music playback
-; ============================================================================
-STOP_MUSIC_RUNTIME:
-CLR >PSG_IS_PLAYING     ; Clear playing flag
-CLR >PSG_MUSIC_PTR      ; Clear pointer high byte
-CLR >PSG_MUSIC_PTR+1    ; Clear pointer low byte
-; Mute all PSG channels so the last note doesn't keep sounding
-PSHS DP
-LDA #$D0
-TFR A,DP                ; Set DP=$D0 for Sound_Byte
-LDA #8                  ; PSG reg 8 = Volume Channel A
-LDB #0
-JSR Sound_Byte
-LDA #9                  ; PSG reg 9 = Volume Channel B
-LDB #0
-JSR Sound_Byte
-LDA #10                 ; PSG reg 10 = Volume Channel C
-LDB #0
-JSR Sound_Byte
-PULS DP
-RTS
-
-; ============================================================================
-; AUDIO_UPDATE - Unified music + SFX update (auto-injected after WAIT_RECAL)
-; ============================================================================
-; Processes both music (channel B) and SFX (channel C) in one pass
-; Uses Sound_Byte (BIOS) for PSG writes - compatible with both systems
-; Sets DP=$D0 once at entry, restores at exit
-; RAM variables: SFX_PTR, SFX_ACTIVE (defined via ram.allocate in mod.rs)
-
-AUDIO_UPDATE:
-PSHS DP                 ; Save current DP
-LDA #$D0                ; Set DP=$D0 (Sound_Byte requirement)
-TFR A,DP
-
-; UPDATE MUSIC (channel B: registers 9, 11-14)
-LDA >PSG_IS_PLAYING     ; Check if music is playing
-BEQ AU_SKIP_MUSIC       ; Skip if not
-
-; Check delay counter first
-LDA >PSG_DELAY_FRAMES   ; Load delay counter
-BEQ AU_MUSIC_READ       ; If zero, read next frame data
-DECA                    ; Decrement delay
-STA >PSG_DELAY_FRAMES   ; Store back
-CMPA #0                 ; Check if it just reached zero
-BNE AU_UPDATE_SFX       ; If not zero yet, skip this frame
-
-; Delay just reached zero, X points to count byte already
-LDX >PSG_MUSIC_PTR      ; Load music pointer (points to count)
-BEQ AU_SKIP_MUSIC       ; Skip if null
-BRA AU_MUSIC_READ_COUNT ; Skip delay read, go straight to count
-
-AU_MUSIC_READ:
-LDX >PSG_MUSIC_PTR      ; Load music pointer
-BEQ AU_SKIP_MUSIC       ; Skip if null
-
-; Check if we need to read delay or we're ready for count
-; PSG_DELAY_FRAMES just reached 0, so we read delay byte first
-LDB ,X+                 ; Read delay counter (X now points to count byte)
-CMPB #$FF               ; Check for loop marker
-BEQ AU_MUSIC_LOOP       ; Handle loop
-CMPB #0                 ; Check if delay is 0
-BNE AU_MUSIC_HAS_DELAY  ; If not 0, process delay
-
-; Delay is 0, read count immediately
-AU_MUSIC_NO_DELAY:
-AU_MUSIC_READ_COUNT:
-LDB ,X+                 ; Read count (number of register writes)
-BEQ AU_MUSIC_ENDED      ; If 0, end of music
-CMPB #$FF               ; Check for loop marker (can appear after delay)
-BEQ AU_MUSIC_LOOP       ; Handle loop
-BRA AU_MUSIC_PROCESS_WRITES
-
-AU_MUSIC_HAS_DELAY:
-; B has delay > 0, store it and skip to next frame
-DECB                    ; Delay-1 (we consume this frame)
-STB >PSG_DELAY_FRAMES   ; Save delay counter
-STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)
-BRA AU_UPDATE_SFX       ; Skip reading data this frame
-
-AU_MUSIC_PROCESS_WRITES:
-PSHS B                  ; Save count
-
-; Mark that next time we should read delay, not count
-; (This is implicit - after processing, X points to next delay byte)
-
-AU_MUSIC_WRITE_LOOP:
-LDA ,X+                 ; Load register number
-LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer
-JSR Sound_Byte          ; Write to PSG using BIOS (DP=$D0)
-PULS X                  ; Restore pointer
-PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ AU_MUSIC_DONE       ; Done if count=0
-PSHS B                  ; Save counter
-BRA AU_MUSIC_WRITE_LOOP ; Continue
-
-AU_MUSIC_DONE:
-STX >PSG_MUSIC_PTR      ; Update music pointer
-BRA AU_UPDATE_SFX       ; Now update SFX
-
-AU_MUSIC_ENDED:
-CLR >PSG_IS_PLAYING     ; Stop music
-BRA AU_UPDATE_SFX       ; Continue to SFX
-
-AU_MUSIC_LOOP:
-LDD ,X                  ; Load loop target
-STD >PSG_MUSIC_PTR      ; Set music pointer to loop
-CLR >PSG_DELAY_FRAMES   ; Clear delay on loop
-BRA AU_UPDATE_SFX       ; Continue to SFX
-
-AU_SKIP_MUSIC:
-BRA AU_UPDATE_SFX       ; Skip music, go to SFX
-
-; UPDATE SFX (channel C: registers 4/5=tone, 6=noise, 10=volume, 7=mixer)
-AU_UPDATE_SFX:
-LDA >SFX_ACTIVE         ; Check if SFX is active
-BEQ AU_DONE             ; Skip if not active
-
-JSR sfx_doframe         ; Process one SFX frame (uses Sound_Byte internally)
-
-AU_DONE:
-PULS DP                 ; Restore original DP
-RTS
-
-; ============================================================================
-; AYFX SOUND EFFECTS PLAYER (Richard Chadd original system)
-; ============================================================================
-; Uses channel C (registers 4/5=tone, 6=noise, 10=volume, 7=mixer bit2/bit5)
-; RAM variables: SFX_PTR (16-bit), SFX_ACTIVE (8-bit)
-; AYFX format: flag byte + optional data per frame, end marker $D0 $20
-; Flag bits: 0-3=volume, 4=disable tone, 5=tone data present,
-;            6=noise data present, 7=disable noise
-; ============================================================================
-; (RAM variables defined in AUDIO_UPDATE section above)
-
-; PLAY_SFX_RUNTIME - Start SFX playback
-; Input: X = pointer to AYFX data
-PLAY_SFX_RUNTIME:
-STX >SFX_PTR           ; Store pointer (force extended)
-LDA #$01
-STA >SFX_ACTIVE        ; Mark as active
-RTS
-
-; SFX_UPDATE - Process one AYFX frame (call once per frame in loop)
-SFX_UPDATE:
-LDA >SFX_ACTIVE        ; Check if active
-BEQ noay               ; Not active, skip
-JSR sfx_doframe        ; Process one frame
-noay:
-RTS
-
-; sfx_doframe - AYFX frame parser
-; Runs with DP=$D0 (inside AUDIO_UPDATE)
-sfx_doframe:
-LDU SFX_PTR            ; Get current frame pointer (LDU has no direct mode)
-LDB ,U                 ; Read flag byte (NO auto-increment)
-CMPB #$D0              ; Check end marker (first byte)
-BNE sfx_checktonefreq  ; Not end, continue
-LDB 1,U                ; Check second byte at offset 1
-CMPB #$20              ; End marker $D0 $20?
-BEQ sfx_endofeffect    ; Yes, stop
-
-sfx_checktonefreq:
-LEAY 1,U               ; Y = pointer to tone/noise data
-LDB ,U                 ; Reload flag byte
-BITB #$20              ; Bit 5: tone data present?
-BEQ sfx_checknoisefreq ; No, skip tone
-; Set tone frequency (channel C = reg 4/5)
-LDB 2,U                ; Get LOW byte (fine tune)
-LDA #$04               ; Register 4
-JSR Sound_Byte         ; Write to PSG
-LDB 1,U                ; Get HIGH byte (coarse tune)
-LDA #$05               ; Register 5
-JSR Sound_Byte         ; Write to PSG
-LEAY 2,Y               ; Skip 2 tone bytes
-
-sfx_checknoisefreq:
-LDB ,U                 ; Reload flag byte
-BITB #$40              ; Bit 6: noise data present?
-BEQ sfx_checkvolume    ; No, skip noise
-LDB ,Y                 ; Get noise period
-LDA #$06               ; Register 6
-JSR Sound_Byte         ; Write to PSG
-LEAY 1,Y               ; Skip 1 noise byte
-
-sfx_checkvolume:
-LDB ,U                 ; Reload flag byte
-ANDB #$0F              ; Get volume from bits 0-3
-LDA #$0A               ; Register 10 (volume C)
-JSR Sound_Byte         ; Write to PSG
-
-; Combined mixer update: read shadow once, apply tone+noise, write once
-sfx_updatemixer:
-LDB $C807              ; Read mixer shadow ONCE
-LDA ,U                 ; Load flag byte into A
-; Handle tone (flag bit 4 -> mixer bit 2)
-BITA #$10              ; Bit 4: disable tone?
-BNE sfx_m_tonedis
-ANDB #$FB              ; Clear bit 2 (enable tone C)
-BRA sfx_m_noise
-sfx_m_tonedis:
-ORB #$04               ; Set bit 2 (disable tone C)
-sfx_m_noise:
-; Handle noise (flag bit 7 -> mixer bit 5)
-BITA #$80              ; Bit 7: disable noise?
-BNE sfx_m_noisedis
-ANDB #$DF              ; Clear bit 5 (enable noise C)
-BRA sfx_m_write
-sfx_m_noisedis:
-ORB #$20               ; Set bit 5 (disable noise C)
-sfx_m_write:
-STB $C807              ; Update mixer shadow
-LDA #$07               ; Register 7 (mixer)
-JSR Sound_Byte         ; Single write to PSG
-
-sfx_nextframe:
-STY SFX_PTR            ; Update pointer (STY has no direct mode)
-RTS
-
-sfx_endofeffect:
-; Stop SFX - silence channel C and restore mixer
-CLR >SFX_ACTIVE        ; Mark as inactive (force extended)
-LDA #$0A               ; Register 10 (volume C)
-LDB #$00               ; Volume = 0
-JSR Sound_Byte
-; Restore mixer: disable tone+noise on channel C
-LDB $C807              ; Read mixer shadow
-ORB #$24               ; Set bits 2+5 (disable tone C + noise C)
-STB $C807              ; Update shadow
-LDA #$07               ; Register 7
-JSR Sound_Byte         ; Write mixer
-LDD #$0000
-STD >SFX_PTR           ; Clear pointer (force extended)
-RTS
-
-; BIOS Wrappers - VIDE compatible (ensure DP=$D0 per call)
-__Intensity_a:
-TFR B,A         ; Move B to A (BIOS expects intensity in A)
-JMP Intensity_a ; JMP (not JSR) - BIOS returns to original caller
-__Reset0Ref:
-JMP Reset0Ref   ; JMP (not JSR) - BIOS returns to original caller
-__Moveto_d:
-LDA 2,S         ; Get Y from stack (after return address)
-JMP Moveto_d    ; JMP (not JSR) - BIOS returns to original caller
-__Draw_Line_d:
-LDA 2,S         ; Get dy from stack (after return address)
-JMP Draw_Line_d ; JMP (not JSR) - BIOS returns to original caller
-; ============================================================================
-; Draw_Sync_List - EXACT port of Malban's draw_synced_list_c
-; Data: FCB intensity, y_start, x_start, next_y, next_x, [flag, dy, dx]*, 2
-; ============================================================================
-Draw_Sync_List:
-; ITERACIÓN 11: Loop completo dentro (bug assembler arreglado, datos embebidos OK)
-LDA ,X+                 ; intensity
-JSR $F2AB               ; BIOS Intensity_a (expects value in A)
-LDB ,X+                 ; y_start
-LDA ,X+                 ; x_start
-STD TEMP_YX             ; Guardar en variable temporal (evita stack)
-; Reset completo
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move sequence
-LDD TEMP_YX             ; Recuperar y,x
-STB VIA_port_a          ; y to DAC
-PSHS A                  ; Save x
-LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A                  ; Restore x
-STA VIA_port_a          ; x to DAC
-; Timing setup
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X                ; Skip next_y, next_x
-; Wait for move to complete
-DSL_W1:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSL_W1
-; Loop de dibujo
-DSL_LOOP:
-LDA ,X+                 ; Read flag
-CMPA #2                 ; Check end marker
-LBEQ DSL_DONE           ; Exit if end (long branch)
-CMPA #1                 ; Check next path marker
-LBEQ DSL_NEXT_PATH      ; Process next path (long branch)
-; Draw line
-CLR Vec_Misc_Count      ; Clear for relative line drawing (CRITICAL for continuity)
-LDB ,X+                 ; dy
-LDA ,X+                 ; dx
-PSHS A                  ; Save dx
-STB VIA_port_a          ; dy to DAC
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A                  ; Restore dx
-STA VIA_port_a          ; dx to DAC
-CLR VIA_t1_cnt_hi
-LDA #$FF
-STA VIA_shift_reg
-; Wait for line draw
-DSL_W2:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSL_W2
-CLR VIA_shift_reg
-LBRA DSL_LOOP            ; Long branch back to loop start
-; Next path: read new intensity and header, then continue drawing
-DSL_NEXT_PATH:
-; Save current X position before reading anything
-TFR X,D                 ; D = X (current position)
-PSHS D                  ; Save X address
-LDA ,X+                 ; Read intensity (X now points to y_start)
-PSHS A                  ; Save intensity
-LDB ,X+                 ; y_start
-LDA ,X+                 ; x_start (X now points to next_y)
-STD TEMP_YX             ; Save y,x
-PULS A                  ; Get intensity back
-PSHS A                  ; Save intensity again
-LDA #$D0
-TFR A,DP                ; Set DP=$D0 (BIOS requirement)
-PULS A                  ; Restore intensity
-JSR $F2AB               ; BIOS Intensity_a (may corrupt X!)
-; Restore X to point to next_y,next_x (after the 3 bytes we read)
-PULS D                  ; Get original X
-ADDD #3                 ; Skip intensity, y_start, x_start
-TFR D,X                 ; X now points to next_y
-; Reset to zero (same as Draw_Sync_List start)
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move to new start position
-LDD TEMP_YX
-STB VIA_port_a          ; y to DAC
-PSHS A
-LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A
-STA VIA_port_a          ; x to DAC
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X                ; Skip next_y, next_x
-; Wait for move
-DSL_W3:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSL_W3
-CLR VIA_shift_reg       ; Clear before continuing
-LBRA DSL_LOOP            ; Continue drawing - LONG BRANCH
-DSL_DONE:
-RTS
-Draw_Sync_List_At_With_Mirrors:
-; Unified mirror support using flags: MIRROR_X and MIRROR_Y
-; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller must ensure DP=$D0 for VIA access
-LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
-BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_SET_INTENSITY
-DSWM_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
-DSWM_SET_INTENSITY:
-JSR $F2AB               ; BIOS Intensity_a
-LDB ,X+                 ; y_start from .vec (already relative to center)
-; Check if Y mirroring is enabled
-TST MIRROR_Y
-BEQ DSWM_NO_NEGATE_Y
-NEGB                    ; ← Negate Y if flag set
-DSWM_NO_NEGATE_Y:
-ADDB DRAW_VEC_Y         ; Add Y offset
-LDA ,X+                 ; x_start from .vec (already relative to center)
-; Check if X mirroring is enabled
-TST MIRROR_X
-BEQ DSWM_NO_NEGATE_X
-NEGA                    ; ← Negate X if flag set
-DSWM_NO_NEGATE_X:
-ADDA DRAW_VEC_X         ; Add X offset
-STD TEMP_YX             ; Save adjusted position
-; Reset completo
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move sequence
-LDD TEMP_YX
-STB VIA_port_a          ; y to DAC
-PSHS A                  ; Save x
-LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A                  ; Restore x
-STA VIA_port_a          ; x to DAC
-; Timing setup
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X                ; Skip next_y, next_x
-; Wait for move to complete
-DSWM_W1:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W1
-; Loop de dibujo (conditional mirrors)
-DSWM_LOOP:
-LDA ,X+                 ; Read flag
-CMPA #2                 ; Check end marker
-LBEQ DSWM_DONE
-CMPA #1                 ; Check next path marker
-LBEQ DSWM_NEXT_PATH
-; Draw line with conditional negations
-LDB ,X+                 ; dy
-; Check if Y mirroring is enabled
-TST MIRROR_Y
-BEQ DSWM_NO_NEGATE_DY
-NEGB                    ; ← Negate dy if flag set
-DSWM_NO_NEGATE_DY:
-LDA ,X+                 ; dx
-; Check if X mirroring is enabled
-TST MIRROR_X
-BEQ DSWM_NO_NEGATE_DX
-NEGA                    ; ← Negate dx if flag set
-DSWM_NO_NEGATE_DX:
-PSHS A                  ; Save final dx
-STB VIA_port_a          ; dy (possibly negated) to DAC
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A                  ; Restore final dx
-STA VIA_port_a          ; dx (possibly negated) to DAC
-CLR VIA_t1_cnt_hi
-LDA #$FF
-STA VIA_shift_reg
-; Wait for line draw
-DSWM_W2:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W2
-CLR VIA_shift_reg
-LBRA DSWM_LOOP          ; Long branch
-; Next path: repeat mirror logic for new path header
-DSWM_NEXT_PATH:
-TFR X,D
-PSHS D
-; Check intensity override (same logic as start)
-LDA DRAW_VEC_INTENSITY  ; Check if intensity override is set
-BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_NEXT_SET_INTENSITY
-DSWM_NEXT_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
-DSWM_NEXT_SET_INTENSITY:
-PSHS A
-LDB ,X+                 ; y_start
-TST MIRROR_Y
-BEQ DSWM_NEXT_NO_NEGATE_Y
-NEGB
-DSWM_NEXT_NO_NEGATE_Y:
-ADDB DRAW_VEC_Y         ; Add Y offset
-LDA ,X+                 ; x_start
-TST MIRROR_X
-BEQ DSWM_NEXT_NO_NEGATE_X
-NEGA
-DSWM_NEXT_NO_NEGATE_X:
-ADDA DRAW_VEC_X         ; Add X offset
-STD TEMP_YX
-PULS A                  ; Get intensity back
-JSR $F2AB
-PULS D
-ADDD #3
-TFR D,X
-; Reset to zero
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$82
-STA VIA_port_b
-NOP
-NOP
-NOP
-NOP
-NOP
-LDA #$83
-STA VIA_port_b
-; Move to new start position
-LDD TEMP_YX
-STB VIA_port_a
-PSHS A
-LDA #$CE
-STA VIA_cntl
-CLR VIA_port_b
-LDA #1
-STA VIA_port_b
-PULS A
-STA VIA_port_a
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X
-; Wait for move
-DSWM_W3:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W3
-CLR VIA_shift_reg
-LBRA DSWM_LOOP          ; Long branch
-DSWM_DONE:
-RTS
-START:
-    LDA #$D0
-    TFR A,DP        ; Set Direct Page for BIOS (CRITICAL - do once at startup)
-    CLR $C80E        ; Initialize Vec_Prev_Btns to 0 for Read_Btns debounce
-    LDA #$80
-    STA VIA_t1_cnt_lo
-    LDX #Vec_Default_Stk
-    TFR X,S
-    JSR $F533       ; Init_Music_Buf - Initialize BIOS music system to silence
-    ; Initialize SFX variables to prevent random noise on startup
-    CLR >SFX_ACTIVE         ; Mark SFX as inactive (0=off)
-    LDD #$0000
-    STD >SFX_PTR            ; Clear SFX pointer
-
-    ; *** DEBUG *** main() function code inline (initialization)
-    ; VPy_LINE:15
-    ; VPy_LINE:9
-    LDD #0
-    STD VAR_BX
-    ; VPy_LINE:10
-    LDD #60
-    STD VAR_BY
-    ; VPy_LINE:11
-    LDD #1
-    STD VAR_VX
-    ; VPy_LINE:12
-    LDD #0
-    STD VAR_VY
-    ; VPy_LINE:13
-    LDD #0
-    STD VAR_JX
-    ; VPy_LINE:16
-; PLAY_MUSIC("music1") - play music asset
-    LDX #_MUSIC1_MUSIC
-    JSR PLAY_MUSIC_RUNTIME
-    LDD #0
-    STD RESULT
-    ; VPy_LINE:17
-    LDD #0
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BX
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:18
-    LDD #60
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BY
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:19
-    LDD #1
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_VX
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:20
-    LDD #0
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_VY
-    STU TMPPTR
-    STX ,U
-
-MAIN:
-    JSR $F1AF    ; DP_to_C8 (required for RAM access)
-    ; === Initialize Joystick (one-time setup) ===
-    CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
-    LDA #$01     ; CRITICAL: Resolution threshold (power of 2: $40=fast, $01=accurate)
-    STA $C81A    ; Vec_Joy_Resltn (loop terminates when B=this value after LSRBs)
-    LDA #$01
-    STA $C81F    ; Vec_Joy_Mux_1_X (enable X axis reading)
-    LDA #$03
-    STA $C820    ; Vec_Joy_Mux_1_Y (enable Y axis reading)
-    LDA #$00
-    STA $C821    ; Vec_Joy_Mux_2_X (disable joystick 2 - CRITICAL!)
-    STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
-    ; Mux configured - J1_X()/J1_Y() can now be called
-
-    ; JSR Wait_Recal is now called at start of LOOP_BODY (see auto-inject)
-    LDA #$80
-    STA VIA_t1_cnt_lo
-    CLR VPY_MOVE_X  ; MOVE offset defaults to 0
-    CLR VPY_MOVE_Y  ; MOVE offset defaults to 0
-    ; *** Call loop() as subroutine (executed every frame)
-    JSR LOOP_BODY
-    BRA MAIN
-
-    ; VPy_LINE:22
-LOOP_BODY:
-    JSR Wait_Recal  ; CRITICAL: Sync with CRT refresh (50Hz frame timing)
-    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
-    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
-    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
-    ; DEBUG: Statement 0 - Discriminant(8)
-    ; VPy_LINE:23
-; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #-50
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
-    LDD #100
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
-    LDX #STR_1
-    STX RESULT
-    LDD RESULT
-    STD VAR_ARG2
-; NATIVE_CALL: VECTREX_PRINT_TEXT at line 23
-    JSR VECTREX_PRINT_TEXT
-    CLRA
-    CLRB
-    STD RESULT
-    ; DEBUG: Statement 1 - Discriminant(8)
-    ; VPy_LINE:24
-; PRINT_TEXT(x, y, text) - uses BIOS defaults
-    LDD #-50
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
-    LDD #85
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
-    LDX #STR_0
-    STX RESULT
-    LDD RESULT
-    STD VAR_ARG2
-; NATIVE_CALL: VECTREX_PRINT_TEXT at line 24
-    JSR VECTREX_PRINT_TEXT
-    CLRA
-    CLRB
-    STD RESULT
-    ; DEBUG: Statement 2 - Discriminant(0)
-    ; VPy_LINE:27
-    LDD VAR_VY
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_VY
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 3 - Discriminant(0)
-    ; VPy_LINE:30
-; NATIVE_CALL: J1_X at line 30
-    JSR J1X_BUILTIN
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_JX
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 4 - Discriminant(9)
-    ; VPy_LINE:31
-    LDD VAR_JX
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #40
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BGT CT_2
-    LDD #0
-    STD RESULT
-    BRA CE_3
-CT_2:
-    LDD #1
-    STD RESULT
-CE_3:
-    LDD RESULT
-    LBEQ IF_NEXT_1
-    ; VPy_LINE:32
-    LDD VAR_VX
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    ADDD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_VX
-    STU TMPPTR
-    STX ,U
-    LBRA IF_END_0
-IF_NEXT_1:
-IF_END_0:
-    ; DEBUG: Statement 5 - Discriminant(9)
-    ; VPy_LINE:33
-    LDD VAR_JX
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #-40
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BLT CT_6
-    LDD #0
-    STD RESULT
-    BRA CE_7
-CT_6:
-    LDD #1
-    STD RESULT
-CE_7:
-    LDD RESULT
-    LBEQ IF_NEXT_5
-    ; VPy_LINE:34
-    LDD VAR_VX
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD #1
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_VX
-    STU TMPPTR
-    STX ,U
-    LBRA IF_END_4
-IF_NEXT_5:
-IF_END_4:
-    ; DEBUG: Statement 6 - Discriminant(9)
-    ; VPy_LINE:37
-; NATIVE_CALL: J1_BUTTON_1 at line 37
-    JSR J1B1_BUILTIN
-    STD RESULT
-    LDD RESULT
-    LBEQ IF_NEXT_9
-    ; VPy_LINE:38
-    LDD #8
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_VY
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:39
-; PLAY_SFX("jump") - play sound effect (one-shot)
-    LDX #_JUMP_SFX
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_8
-IF_NEXT_9:
-IF_END_8:
-    ; DEBUG: Statement 7 - Discriminant(9)
-    ; VPy_LINE:42
-    LDD VAR_VX
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #6
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BGT CT_12
-    LDD #0
-    STD RESULT
-    BRA CE_13
-CT_12:
-    LDD #1
-    STD RESULT
-CE_13:
-    LDD RESULT
-    LBEQ IF_NEXT_11
-    ; VPy_LINE:43
-    LDD #6
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_VX
-    STU TMPPTR
-    STX ,U
-    LBRA IF_END_10
-IF_NEXT_11:
-IF_END_10:
-    ; DEBUG: Statement 8 - Discriminant(9)
-    ; VPy_LINE:44
-    LDD VAR_VX
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #-6
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BLT CT_16
-    LDD #0
-    STD RESULT
-    BRA CE_17
-CT_16:
-    LDD #1
-    STD RESULT
-CE_17:
-    LDD RESULT
-    LBEQ IF_NEXT_15
-    ; VPy_LINE:45
-    LDD #-6
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_VX
-    STU TMPPTR
-    STX ,U
-    LBRA IF_END_14
-IF_NEXT_15:
-IF_END_14:
-    ; DEBUG: Statement 9 - Discriminant(0)
-    ; VPy_LINE:48
-    LDD VAR_BX
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_VX
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    ADDD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BX
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 10 - Discriminant(0)
-    ; VPy_LINE:49
-    LDD VAR_BY
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_VY
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    ADDD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BY
-    STU TMPPTR
-    STX ,U
-    ; DEBUG: Statement 11 - Discriminant(9)
-    ; VPy_LINE:52
-    LDD VAR_BY
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #-90
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BLT CT_20
-    LDD #0
-    STD RESULT
-    BRA CE_21
-CT_20:
-    LDD #1
-    STD RESULT
-CE_21:
-    LDD RESULT
-    LBEQ IF_NEXT_19
-    ; VPy_LINE:53
-    LDD #-90
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BY
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:54
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_VY
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_VY
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:55
-    LDD VAR_VY
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #12
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BGT CT_24
-    LDD #0
-    STD RESULT
-    BRA CE_25
-CT_24:
-    LDD #1
-    STD RESULT
-CE_25:
-    LDD RESULT
-    LBEQ IF_NEXT_23
-    ; VPy_LINE:56
-    LDD #12
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_VY
-    STU TMPPTR
-    STX ,U
-    LBRA IF_END_22
-IF_NEXT_23:
-IF_END_22:
-    ; VPy_LINE:57
-; PLAY_SFX("hit") - play sound effect (one-shot)
-    LDX #_HIT_SFX
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_18
-IF_NEXT_19:
-IF_END_18:
-    ; DEBUG: Statement 12 - Discriminant(9)
-    ; VPy_LINE:60
-    LDD VAR_BY
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #90
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BGT CT_28
-    LDD #0
-    STD RESULT
-    BRA CE_29
-CT_28:
-    LDD #1
-    STD RESULT
-CE_29:
-    LDD RESULT
-    LBEQ IF_NEXT_27
-    ; VPy_LINE:61
-    LDD #90
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BY
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:62
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_VY
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_VY
-    STU TMPPTR
-    STX ,U
-    LBRA IF_END_26
-IF_NEXT_27:
-IF_END_26:
-    ; DEBUG: Statement 13 - Discriminant(9)
-    ; VPy_LINE:65
-    LDD VAR_BX
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #100
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BGT CT_32
-    LDD #0
-    STD RESULT
-    BRA CE_33
-CT_32:
-    LDD #1
-    STD RESULT
-CE_33:
-    LDD RESULT
-    LBEQ IF_NEXT_31
-    ; VPy_LINE:66
-    LDD #100
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BX
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:67
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_VX
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_VX
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:68
-; PLAY_SFX("hit") - play sound effect (one-shot)
-    LDX #_HIT_SFX
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_30
-IF_NEXT_31:
-IF_END_30:
-    ; DEBUG: Statement 14 - Discriminant(9)
-    ; VPy_LINE:70
-    LDD VAR_BX
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    LDD #-100
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    BLT CT_36
-    LDD #0
-    STD RESULT
-    BRA CE_37
-CT_36:
-    LDD #1
-    STD RESULT
-CE_37:
-    LDD RESULT
-    LBEQ IF_NEXT_35
-    ; VPy_LINE:71
-    LDD #-100
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_BX
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:72
-    LDD #0
-    STD RESULT
-    LDD RESULT
-    STD TMPLEFT
-    PSHS D
-    LDD VAR_VX
-    STD RESULT
-    LDD RESULT
-    STD TMPRIGHT
-    PULS D
-    STD TMPLEFT
-    LDD TMPLEFT
-    SUBD TMPRIGHT
-    STD RESULT
-    LDX RESULT
-    LDU #VAR_VX
-    STU TMPPTR
-    STX ,U
-    ; VPy_LINE:73
-; PLAY_SFX("hit") - play sound effect (one-shot)
-    LDX #_HIT_SFX
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_34
-IF_NEXT_35:
-IF_END_34:
-    ; DEBUG: Statement 15 - Discriminant(8)
-    ; VPy_LINE:76
-; DRAW_VECTOR("bubble_medium", x, y) - 1 path(s) at position
-    LDD VAR_BX
-    STD RESULT
-    LDA RESULT+1  ; X position (low byte)
-    STA TMPPTR    ; Save X to temporary storage
-    LDD VAR_BY
-    STD RESULT
-    LDA RESULT+1  ; Y position (low byte)
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    CLR DRAW_VEC_INTENSITY  ; Use intensity from vector data
-    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDX #_BUBBLE_MEDIUM_PATH0  ; Path 0
-    JSR Draw_Sync_List_At_With_Mirrors  ; Uses unified mirror function
-    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    LDD #0
-    STD RESULT
-    ; DEBUG: Statement 16 - Discriminant(8)
-    ; VPy_LINE:79
-    LDD #65436
-    STD >DRAW_LINE_ARGS+0
-    LDD #65426
-    STD >DRAW_LINE_ARGS+2
-    LDD #100
-    STD >DRAW_LINE_ARGS+4
-    LDD #65426
-    STD >DRAW_LINE_ARGS+6
-    LDD #60
-    STD >DRAW_LINE_ARGS+8
-    JSR DRAW_LINE_WRAPPER
-    LDD #0
-    STD RESULT
-    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)
-    RTS
-
-;***************************************************************************
-; DATA SECTION
-;***************************************************************************
-
-; ========================================
-; ASSET DATA SECTION
-; Embedded 4 of 4 assets (unused assets excluded)
-; ========================================
-
-; Vector asset: bubble_medium
-; Generated from bubble_medium.vec (Malban Draw_Sync_List format)
-; Total paths: 1, points: 24
-; X bounds: min=-15, max=15, width=30
-; Center: (0, 0)
-
-_BUBBLE_MEDIUM_WIDTH EQU 30
-_BUBBLE_MEDIUM_CENTER_X EQU 0
-_BUBBLE_MEDIUM_CENTER_Y EQU 0
-
-_BUBBLE_MEDIUM_VECTORS:  ; Main entry (header + 1 path(s))
-    FCB 1               ; path_count (runtime metadata)
-    FDB _BUBBLE_MEDIUM_PATH0        ; pointer to path 0
-
-_BUBBLE_MEDIUM_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $00,$0F,0,0        ; path0: header (y=0, x=15, relative to center)
-    FCB $FF,$04,$FF          ; line 0: flag=-1, dy=4, dx=-1
-    FCB $FF,$04,$FF          ; line 1: flag=-1, dy=4, dx=-1
-    FCB $FF,$03,$FE          ; line 2: flag=-1, dy=3, dx=-2
-    FCB $FF,$02,$FD          ; line 3: flag=-1, dy=2, dx=-3
-    FCB $FF,$01,$FC          ; line 4: flag=-1, dy=1, dx=-4
-    FCB $FF,$01,$FC          ; line 5: flag=-1, dy=1, dx=-4
-    FCB $FF,$FF,$FC          ; line 6: flag=-1, dy=-1, dx=-4
-    FCB $FF,$FF,$FC          ; line 7: flag=-1, dy=-1, dx=-4
-    FCB $FF,$FE,$FD          ; line 8: flag=-1, dy=-2, dx=-3
-    FCB $FF,$FD,$FE          ; line 9: flag=-1, dy=-3, dx=-2
-    FCB $FF,$FC,$FF          ; line 10: flag=-1, dy=-4, dx=-1
-    FCB $FF,$FC,$FF          ; line 11: flag=-1, dy=-4, dx=-1
-    FCB $FF,$FC,$01          ; line 12: flag=-1, dy=-4, dx=1
-    FCB $FF,$FC,$01          ; line 13: flag=-1, dy=-4, dx=1
-    FCB $FF,$FD,$02          ; line 14: flag=-1, dy=-3, dx=2
-    FCB $FF,$FE,$03          ; line 15: flag=-1, dy=-2, dx=3
-    FCB $FF,$FF,$04          ; line 16: flag=-1, dy=-1, dx=4
-    FCB $FF,$FF,$04          ; line 17: flag=-1, dy=-1, dx=4
-    FCB $FF,$01,$04          ; line 18: flag=-1, dy=1, dx=4
-    FCB $FF,$01,$04          ; line 19: flag=-1, dy=1, dx=4
-    FCB $FF,$02,$03          ; line 20: flag=-1, dy=2, dx=3
-    FCB $FF,$03,$02          ; line 21: flag=-1, dy=3, dx=2
-    FCB $FF,$04,$01          ; line 22: flag=-1, dy=4, dx=1
-    FCB $FF,$04,$01          ; closing line: flag=-1, dy=4, dx=1
-    FCB 2                ; End marker (path complete)
-
-; Generated from music1.vmus (internal name: pang_theme)
-; Tempo: 120 BPM, Total events: 34 (PSG Direct format)
-; Format: FCB count, FCB reg, val, ... (per frame), FCB 0 (end)
-
-_MUSIC1_MUSIC:
-    ; Frame-based PSG register writes
-    FCB     0              ; Delay 0 frames (maintain previous state)
-    FCB     11              ; Frame 0 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $0B             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 12 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $0B             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 25 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $0B             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 50 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $E1             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 62 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $E1             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 75 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $54             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $E1             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 100 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $A8             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 112 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $A8             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 124 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $A8             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     26              ; Delay 26 frames (maintain previous state)
-    FCB     11              ; Frame 150 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $0B             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 162 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $0B             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $05             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     38              ; Delay 38 frames (maintain previous state)
-    FCB     11              ; Frame 200 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $FC             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 212 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $FC             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 224 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $7E             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $FC             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 249 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $64             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $C8             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 262 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $64             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $C8             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 275 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $4B             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $C8             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 300 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $64             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $96             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 312 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $64             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $96             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     13              ; Delay 13 frames (maintain previous state)
-    FCB     10              ; Frame 325 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $7E             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $96             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     25              ; Delay 25 frames (maintain previous state)
-    FCB     11              ; Frame 350 - 11 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $FC             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     6               ; Reg 6 number
-    FCB     $0F             ; Reg 6 value
-    FCB     7               ; Reg 7 number
-    FCB     $F0             ; Reg 7 value
-    FCB     12              ; Delay 12 frames (maintain previous state)
-    FCB     10              ; Frame 362 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $FC             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $04             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $08             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $F8             ; Reg 7 value
-    FCB     38              ; Delay 38 frames before loop
-    FCB     $FF             ; Loop command ($FF never valid as count)
-    FDB     _MUSIC1_MUSIC       ; Jump to start (absolute address)
-
-
-; ========================================
-; SFX Asset: jump (from /Users/daniel/projects/vectrex-pseudo-python/examples/individual_tests/physics_ball/assets/sfx/jump.vsfx)
-; ========================================
-_JUMP_SFX:
-    ; SFX: jump (jump)
-    ; Duration: 180ms (9fr), Freq: 330Hz, Channel: 0
-    FCB $A0         ; Frame 0 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $A0  ; Tone period = 160 (big-endian)
-    FCB $AE         ; Frame 1 - flags (vol=14, noisevol=0, tone=Y, noise=N)
-    FCB $00, $BE  ; Tone period = 190 (big-endian)
-    FCB $AD         ; Frame 2 - flags (vol=13, noisevol=0, tone=Y, noise=N)
-    FCB $00, $DC  ; Tone period = 220 (big-endian)
-    FCB $AC         ; Frame 3 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $FA  ; Tone period = 250 (big-endian)
-    FCB $AC         ; Frame 4 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $01, $18  ; Tone period = 280 (big-endian)
-    FCB $AC         ; Frame 5 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $01, $36  ; Tone period = 310 (big-endian)
-    FCB $AC         ; Frame 6 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $01, $54  ; Tone period = 340 (big-endian)
-    FCB $AC         ; Frame 7 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $01, $72  ; Tone period = 370 (big-endian)
-    FCB $A6         ; Frame 8 - flags (vol=6, noisevol=0, tone=Y, noise=N)
-    FCB $01, $90  ; Tone period = 400 (big-endian)
-    FCB $D0, $20    ; End of effect marker
-
-
-; ========================================
-; SFX Asset: hit (from /Users/daniel/projects/vectrex-pseudo-python/examples/individual_tests/physics_ball/assets/sfx/hit.vsfx)
-; ========================================
+@ VPy — PiTrex target (ARM32 / ARMv6 / Pi Zero)
+@ Game: PHYSICS
+@ Generated by vpy_codegen pitrex backend
+@ Assemble: arm-none-eabi-as -march=armv6 -mfpu=vfp -mfloat-abi=hard game.s -o game.o
+@ Link:     arm-none-eabi-gcc -march=armv6 -mfpu=vfp -mfloat-abi=hard -nostartfiles
+@             -L$(PITREX_SDK)/lib game.o -lbaremetal -lvectrexInterface -luspi -o game.elf
+@ Binary:   arm-none-eabi-objcopy -O binary game.elf game.img
+
+.arch armv6
+.fpu vfp
+.syntax unified
+
+@ --- PiTrex SDK externals ---
+.extern vectrexinit
+.extern v_init
+.extern v_setRefresh
+.extern v_WaitRecal
+.extern v_readButtons
+.extern v_readJoystick1Analog
+.extern v_directDraw32
+.extern v_directMove32
+.extern v_setBrightness
+.extern v_setScale
+.extern v_printString
+.extern v_printStringRaster
+.extern v_writePSG
+.extern v_doSound
+.extern currentJoy1X
+.extern currentJoy1Y
+.extern currentButtonState
+.extern currentJoy2X
+.extern currentJoy2Y
+.extern commonHints
+.extern __aeabi_idiv
+.extern __aeabi_idivmod
+.extern RPI_AuxUartInit
+.extern RPI_AuxUartWrite
+.extern bcm2835_st
+
+.section .bss
+.align 2
+.equ VAR_ARG0, 0x0010000C
+.equ VAR_ARG1, 0x00100010
+.equ VAR_ARG2, 0x00100014
+.equ VAR_ARG3, 0x00100018
+.equ VAR_ARG4, 0x0010001C
+.equ VAR_ARG5, 0x00100020
+.equ VAR_ARG6, 0x00100024
+.equ VAR_ARG7, 0x00100028
+.equ RESULT, 0x0010002C
+.equ BEEP_FRAMES_LEFT, 0x00100030
+.equ RAND_SEED, 0x00100034
+.equ CAMERA_X, 0x00100038
+.equ CAMERA_Y, 0x0010003C
+.equ TEXT_SIZE, 0x00100040
+.equ PITREX_TEXT_SIZE, 0x00100040
+.equ PSG_MUSIC_PTR, 0x00100044
+.equ PSG_MUSIC_START, 0x00100048
+.equ PSG_IS_PLAYING, 0x0010004C
+.equ PSG_DELAY_FRAMES, 0x00100050
+.equ PSG_MUSIC_TICK_US, 0x00100054
+.equ PSG_MUSIC_LAST_CLO, 0x00100058
+.equ PSG_SFX_PTR, 0x0010005C
+.equ PSG_SFX_ACTIVE, 0x00100060
+.equ PSG_SFX_DELAY, 0x00100064
+.equ NOTE_STATE, 0x00100068
+.equ PSG_MIXER_SHADOW, 0x001000C8
+.equ LEVEL_DATA_PTR, 0x001000CC
+.equ LEVEL_GP_COUNT, 0x001000D0
+.equ LEVEL_GP_BUF, 0x001000D4
+.equ SCROLL_LIMIT_LEFT, 0x001008CC
+.equ SCROLL_LIMIT_RIGHT, 0x001008D0
+.equ SCROLL_LIMIT_TOP, 0x001008D4
+.equ SCROLL_LIMIT_BOTTOM, 0x001008D8
+.equ PITREX_ENEMY_COUNT, 0x001008DC
+.equ PITREX_ENEMY_POOL, 0x001008E0
+
+.equ VAR_BX, 0x00100CE0
+.equ VAR_BY, 0x00100CE4
+.equ VAR_VX, 0x00100CE8
+.equ VAR_VY, 0x00100CEC
+.equ VAR_JX, 0x00100CF0
+PITREX_CUR_X: .space 4
+PITREX_CUR_Y: .space 4
+PITREX_MOVE_X: .space 4
+PITREX_MOVE_Y: .space 4
+UART_TRACE_FRAMES_LEFT: .space 4
+UART_FRAME_NUM: .space 4
+FRAME_WORK_START: .space 4
+CPU_PRINT_CTR: .space 4
+_DV3D_BUF: .space 256
+
+.section .rodata
+.align 2
+@ Precomputed unit circle table: 16 segments × 2 coords (x,y) × 4 bytes = 136 bytes
+.global PITREX_CIRCLE_TABLE
+PITREX_CIRCLE_TABLE:
+    .word 1024, 0
+    .word 946, 392
+    .word 724, 724
+    .word 392, 946
+    .word 0, 1024
+    .word -392, 946
+    .word -724, 724
+    .word -946, 392
+    .word -1024, 0
+    .word -946, -392
+    .word -724, -724
+    .word -392, -946
+    .word 0, -1024
+    .word 392, -946
+    .word 724, -724
+    .word 946, -392
+    .word 1024, 0
+
+
+.section .text
+.align 2
+
+@ ================================================================
+@ PiTrex ARM32 builtins
+@ ================================================================
+
+@ Shared BSS globals (used by multiple helpers)
+.bss
+.balign 4
+PITREX_BRIGHTNESS_OVERRIDE: .space 1  @ 0=use .vec intensity, >0=override
+.text
+
+@ pitrex_wait_recal() — frame sync + CPU usage measurement via BCM system timer
+.global pitrex_wait_recal
+.type pitrex_wait_recal, %function
+pitrex_wait_recal:
+    push    {r4, r5, r6, lr}
+    ldr     r4, =bcm2835_st
+    ldr     r4, [r4]            @ dereference: r4 = ST base ptr
+    ldr     r5, [r4, #4]        @ r5 = CLO (µs counter, 32-bit)
+    ldr     r4, =FRAME_WORK_START
+    ldr     r6, [r4]            @ r6 = start of last work window
+    cmp     r6, #0
+    beq     .Lwrcal_skip_measure
+    sub     r6, r5, r6          @ r6 = work_us (handles 32-bit wrap)
+    ldr     r4, =20000
+    cmp     r6, r4
+    blt     .Lwrcal_no_ovr
+    ldr     r0, =.Lstr_cpu_ovr
+    bl      vpy_uart_puts        @ "!OVR:W="
+    mov     r0, r6
+    bl      vpy_uart_print_int   @ work µs
+    ldr     r0, =.Lstr_cpu_of
+    bl      vpy_uart_puts        @ "/20000us\r\n"
+.Lwrcal_no_ovr:
+    ldr     r4, =CPU_PRINT_CTR
+    ldr     r0, [r4]
+    subs    r0, r0, #1
+    str     r0, [r4]
+    bgt     .Lwrcal_skip_measure
+    mov     r0, #10
+    str     r0, [r4]            @ reset counter
+    ldr     r0, =.Lstr_cpu_w
+    bl      vpy_uart_puts        @ "W="
+    mov     r0, r6
+    bl      vpy_uart_print_int   @ work µs
+    ldr     r0, =.Lstr_cpu_of
+    bl      vpy_uart_puts        @ "/20000us\r\n"
+.Lwrcal_skip_measure:
+    bl      v_WaitRecal
+    ldr     r4, =bcm2835_st
+    ldr     r4, [r4]
+    ldr     r5, [r4, #4]        @ CLO after recal
+    ldr     r4, =FRAME_WORK_START
+    str     r5, [r4]
+    mov     r0, #80
+    bl      v_setScale
+    ldr     r0, =UART_TRACE_FRAMES_LEFT
+    ldr     r1, [r0]
+    cmp     r1, #0
+    popeq   {r4, r5, r6, pc}
+    sub     r1, r1, #1
+    str     r1, [r0]
+    ldr     r0, =UART_FRAME_NUM
+    ldr     r2, [r0]
+    add     r2, r2, #1
+    str     r2, [r0]
+    ldr     r0, =.Lstr_frame_hdr
+    bl      vpy_uart_puts
+    ldr     r0, =UART_FRAME_NUM
+    ldr     r0, [r0]
+    bl      vpy_uart_print_int
+    ldr     r0, =.Lstr_frame_hdr_end
+    bl      vpy_uart_puts
+    pop     {r4, r5, r6, pc}
+    .ltorg
+
+@ Newlib syscall stubs (_kill, _getpid)
+.global _kill
+.type _kill, %function
+_kill:
+    bx      lr
+
+.global _getpid
+.type _getpid, %function
+_getpid:
+    mov     r0, #1
+    bx      lr
+
+@ pitrex_abs(r0) → |r0|
+.global pitrex_abs
+.type pitrex_abs, %function
+pitrex_abs:
+    cmp     r0, #0
+    it      lt
+    rsblt   r0, r0, #0
+    bx      lr
+
+@ pitrex_min(r0, r1) → min(r0,r1)
+.global pitrex_min
+.type pitrex_min, %function
+pitrex_min:
+    cmp     r0, r1
+    it      gt
+    movgt   r0, r1
+    bx      lr
+
+@ pitrex_max(r0, r1) → max(r0,r1)
+.global pitrex_max
+.type pitrex_max, %function
+pitrex_max:
+    cmp     r0, r1
+    it      lt
+    movlt   r0, r1
+    bx      lr
+
+@ pitrex_clamp(r0=val, r1=min, r2=max) → clamped value
+.global pitrex_clamp
+.type pitrex_clamp, %function
+pitrex_clamp:
+    cmp     r0, r1
+    it      lt
+    movlt   r0, r1
+    cmp     r0, r2
+    it      gt
+    movgt   r0, r2
+    bx      lr
+
+@ pitrex_random() → r0 = pseudo-random i16 in [0, 65535]
+.global pitrex_random
+.type pitrex_random, %function
+pitrex_random:
+    ldr     r1, =RAND_SEED
+    ldr     r0, [r1]
+    ldr     r2, =1664525
+    mul     r0, r0, r2
+    ldr     r2, =1013904223
+    add     r0, r0, r2
+    str     r0, [r1]            @ update seed
+    lsr     r0, r0, #16         @ use high 16 bits
+    uxth    r0, r0
+    bx      lr
+    .ltorg
+
+@ pitrex_msg_def(r0=id, r1=str_ptr) — registers message (compile-time only, NOP at runtime)
+.global pitrex_msg_def
+.type pitrex_msg_def, %function
+pitrex_msg_def:
+    bx      lr
+
+@ pitrex_print_msg(r0=x, r1=y, r2=str_ptr)
+.global pitrex_print_msg
+.type pitrex_print_msg, %function
+pitrex_print_msg:
+    push    {lr}
+    bl      pitrex_print_text
+    pop     {pc}
+
+@ pitrex_debug_print(r0=value)
+.global pitrex_debug_print
+.type pitrex_debug_print, %function
+pitrex_debug_print:
+    push    {lr}
+    bl      vpy_uart_print_int
+    mov     r0, #13
+    bl      RPI_AuxUartWrite
+    mov     r0, #10
+    bl      RPI_AuxUartWrite
+    pop     {pc}
+
+@ pitrex_debug_print_labeled(r0=label_ptr, r1=value) — UART: label=value
+.global pitrex_debug_print_labeled
+.type pitrex_debug_print_labeled, %function
+pitrex_debug_print_labeled:
+    push    {r4, r5, lr}
+    mov     r4, r0          @ save label_ptr
+    mov     r5, r1          @ save value
+    mov     r0, r4
+    bl      vpy_uart_print_int @ print label as int
+    mov     r0, #61         @ '='
+    bl      RPI_AuxUartWrite
+    mov     r0, r5
+    bl      vpy_uart_print_int @ print value
+    mov     r0, #13         @ CR
+    bl      RPI_AuxUartWrite
+    mov     r0, #10         @ LF
+    bl      RPI_AuxUartWrite
+    pop     {r4, r5, pc}
+
+@ pitrex_debug_print_str(r0=str_ptr)
+.global pitrex_debug_print_str
+.type pitrex_debug_print_str, %function
+pitrex_debug_print_str:
+    push    {lr}
+    mov     r1, r0
+    ldr     r0, =-100
+    mov     r2, #100
+    mov     r3, #1
+    mov     r12, #127
+    push    {r12}
+    bl      v_printStringRaster
+    add     sp, sp, #4
+    pop     {pc}
+
+@ pitrex_set_camera_x(r0=x)
+.global pitrex_set_camera_x
+.type pitrex_set_camera_x, %function
+pitrex_set_camera_x:
+    ldr     r1, =CAMERA_X
+    str     r0, [r1]
+    bx      lr
+
+@ pitrex_set_camera_y(r0=y)
+.global pitrex_set_camera_y
+.type pitrex_set_camera_y, %function
+pitrex_set_camera_y:
+    ldr     r1, =CAMERA_Y
+    str     r0, [r1]
+    bx      lr
+
+@ pitrex_get_frame_us() → r0 = µs since last WAIT_RECAL
+.global pitrex_get_frame_us
+.type pitrex_get_frame_us, %function
+pitrex_get_frame_us:
+    push    {r1, r2, lr}
+    ldr     r1, =bcm2835_st
+    ldr     r1, [r1]            @ r1 = ST base ptr
+    ldr     r1, [r1, #4]        @ r1 = CLO (current µs)
+    ldr     r2, =FRAME_WORK_START
+    ldr     r2, [r2]            @ r2 = work window start µs
+    cmp     r2, #0
+    moveq   r0, #0              @ first frame: return 0
+    subne   r0, r1, r2          @ r0 = CLO - FRAME_WORK_START
+    pop     {r1, r2, pc}
+    .ltorg
+
+@ pitrex_set_intensity(r0=brightness 0-127)
+.global pitrex_set_intensity
+.type pitrex_set_intensity, %function
+pitrex_set_intensity:
+    push    {r4, lr}
+    mov     r4, r0              @ save brightness in callee-saved r4
+    ldr     r1, =PITREX_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]
+    ldr     r0, =UART_TRACE_FRAMES_LEFT
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq     .Lsint_no_trace
+    ldr     r0, =.Lstr_sint
+    bl      vpy_uart_puts
+    mov     r0, r4
+    bl      vpy_uart_print_int
+    ldr     r0, =.Lstr_crlf
+    bl      vpy_uart_puts
+.Lsint_no_trace:
+    mov     r0, r4
+    bl      v_setBrightness
+    pop     {r4, pc}
+    .ltorg
+
+@ pitrex_move(r0=x, r1=y) — move beam, no draw
+.global pitrex_move
+.type pitrex_move, %function
+pitrex_move:
+    push    {r4, lr}
+    mov     r4, #127
+    mul     r2, r0, r4          @ r2 = x*127 (Rd≠Rm)
+    ldr     r4, =PITREX_CUR_X
+    str     r2, [r4]            @ PITREX_CUR_X = x*127
+    ldr     r4, =PITREX_MOVE_X
+    str     r2, [r4]            @ PITREX_MOVE_X = x*127
+    mov     r4, #127
+    mul     r2, r1, r4          @ r2 = y*127 (Rd≠Rm)
+    ldr     r4, =PITREX_CUR_Y
+    str     r2, [r4]            @ PITREX_CUR_Y = y*127
+    ldr     r4, =PITREX_MOVE_Y
+    str     r2, [r4]            @ PITREX_MOVE_Y = y*127
+    bl      v_directMove32
+    pop     {r4, pc}
+    .ltorg
+
+@ pitrex_draw_line(r0=x0, r1=y0, r2=x1, r3=y1, [sp+0]=brightness)
+.global pitrex_draw_line
+.type pitrex_draw_line, %function
+pitrex_draw_line:
+    push    {r4, r5, r6, lr}
+    ldr     r4, [sp, #16]       @ brightness
+    mov     r12, #127
+    mul     r0, r0, r12         @ r0 = x0 * 127
+    mul     r1, r1, r12         @ r1 = y0 * 127
+    mul     r2, r2, r12         @ r2 = x1 * 127
+    mul     r3, r3, r12         @ r3 = y1 * 127
+    ldr     r6, =PITREX_MOVE_X
+    ldr     r5, [r6]            @ r5 = PITREX_MOVE_X
+    ldr     r6, [r6, #4]        @ r6 = PITREX_MOVE_Y
+    add     r0, r0, r5          @ abs_x0 = x0*127 + cur_x
+    add     r1, r1, r6          @ abs_y0 = y0*127 + cur_y
+    add     r2, r2, r5          @ abs_x1 = x1*127 + cur_x
+    add     r3, r3, r6          @ abs_y1 = y1*127 + cur_y
+    push    {r4}               @ brightness as 5th arg
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r4, r5, r6, pc}
+    .ltorg
+
+@ pitrex_draw_line_rel(r0=dx, r1=dy, r2=brightness)
+.global pitrex_draw_line_rel
+.type pitrex_draw_line_rel, %function
+pitrex_draw_line_rel:
+    push    {r4, r5, r6, r7, lr}
+    mov     r4, #127
+    mul     r4, r0, r4          @ r4 = dx * 127
+    mov     r5, #127
+    mul     r5, r1, r5          @ r5 = dy * 127
+    mov     r6, r2              @ r6 = brightness
+    ldr     r7, =PITREX_CUR_X
+    ldmia   r7, {r0, r1}        @ r0=cur_x r1=cur_y (burst)
+    add     r2, r0, r4          @ r2 = new_x
+    add     r3, r1, r5          @ r3 = new_y
+    ldr     r12, =UART_TRACE_FRAMES_LEFT
+    ldr     r12, [r12]
+    cmp     r12, #0
+    beq     .Ldlr_no_trace
+    push    {r0, r1, r2, r3}    @ save call args across trace
+    mov     r1, r2              @ trace x = new_x
+    mov     r2, r3              @ trace y = new_y
+    ldr     r0, =.Lstr_dr
+    bl      uart_trace_xy
+    ldr     r0, =.Lstr_br
+    bl      vpy_uart_puts
+    mov     r0, r6              @ brightness
+    bl      vpy_uart_print_int
+    ldr     r0, =.Lstr_crlf
+    bl      vpy_uart_puts
+    pop     {r0, r1, r2, r3}
+.Ldlr_no_trace:
+    push    {r6}               @ brightness as 5th arg
+    bl      v_directDraw32
+    add     sp, sp, #4
+    ldr     r7, =PITREX_CUR_X
+    ldr     r2, [r7]            @ r2=cur_x
+    ldr     r3, [r7, #4]        @ r3=cur_y
+    add     r2, r2, r4          @ new cur_x
+    add     r3, r3, r5          @ new cur_y
+    str     r2, [r7]            @ store new cur_x
+    str     r3, [r7, #4]        @ store new cur_y
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ pitrex_draw_vector(r0=asset_ptr, r1=ox, r2=oy)
+.global pitrex_draw_vector
+.type pitrex_draw_vector, %function
+pitrex_draw_vector:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    push    {r1, r2}            @ [sp+0]=ox [sp+4]=oy (raw VPy units)
+    mov     r4, r0              @ asset header ptr
+    mov     r3, #127
+    mul     r6, r1, r3          @ r6 = ox*127 (Rd=r6 ≠ Rm=r1)
+    mul     r7, r2, r3          @ r7 = oy*127 (Rd=r7 ≠ Rm=r2)
+    ldr     r5, [r4], #4        @ path_count
+    mov     r8, #0
+dv_path_loop:
+    cmp     r8, r5
+    bge     dv_done
+    ldr     r9, [r4], #4        @ r9 = path data ptr
+    ldrb    r10, [r9], #1       @ r10 = path intensity (from .vec)
+    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE
+    ldrb    r0, [r0]
+    cmp     r0, #0
+    movne   r10, r0             @ override from SET_INTENSITY
+    ldrsb   r1, [r9], #1        @ r1 = y_start (i8)
+    ldrsb   r0, [r9], #1        @ r0 = x_start (i8)
+    add     r9, r9, #2          @ skip 2 hdr padding bytes
+    mov     r3, #127
+    mul     r2, r0, r3          @ r2 = x_start*127 (Rd=r2 ≠ Rm=r0)
+    add     r0, r2, r6          @ r0 = (x_start+ox)*127
+    mul     r2, r1, r3          @ r2 = y_start*127 (Rd=r2 ≠ Rm=r1)
+    add     r1, r2, r7          @ r1 = (y_start+oy)*127
+    ldr     r2, =PITREX_CUR_X
+    str     r0, [r2]            @ PITREX_CUR_X = target_x
+    ldr     r2, =PITREX_CUR_Y
+    str     r1, [r2]            @ PITREX_CUR_Y = target_y
+    push    {r0, r1}            @ save call args
+    mov     r2, r1              @ trace y
+    mov     r1, r0              @ trace x
+    ldr     r0, =.Lstr_mv
+    bl      uart_trace_xy
+    pop     {r0, r1}
+    bl      v_directMove32
+    mov     r0, #80
+    bl      v_setScale
+    b       dv_after_pool
+    .ltorg
+dv_after_pool:
+dv_seg_loop:
+    ldrb    r0, [r9], #1        @ marker (0xFE=bezier, 0xFF=line, 0x02=end)
+    cmp     r0, #2
+    beq     dv_seg_done
+    cmp     r0, #0xFE
+    beq     dv_bezier_seg
+    ldrsb   r1, [r9], #1        @ dy
+    ldrsb   r0, [r9], #1        @ dx
+    mov     r2, r10             @ intensity from .vec
+    bl      pitrex_draw_line_rel
+    b       dv_seg_loop
+dv_seg_done:
+    add     r8, r8, #1
+    b       dv_path_loop
+dv_bezier_seg:
+    push    {r4, r5, r6, r7, r8, r9, r10}
+    sub     sp, sp, #24
+    add     r0, sp, #52         @ r0 = &ox (sp after push+sub)
+    ldmia   r0, {r4, r5}        @ r4=ox, r5=oy (2 words loaded at once)
+    ldrsb   r6, [r9], #1
+    add     r0, r6, r4
+    ldrsb   r6, [r9], #1
+    add     r1, r6, r5
+    ldrsb   r6, [r9], #1
+    add     r2, r6, r4
+    ldrsb   r6, [r9], #1
+    add     r3, r6, r5
+    ldrsb   r6, [r9], #1
+    add     r7, r6, r4
+    str     r7, [sp, #0]
+    ldrsb   r6, [r9], #1
+    add     r7, r6, r5
+    str     r7, [sp, #4]
+    ldrsb   r6, [r9], #1
+    add     r7, r6, r4
+    str     r7, [sp, #8]
+    ldrsb   r6, [r9], #1
+    add     r7, r6, r5
+    str     r7, [sp, #12]
+    mov     r6, #16
+    str     r6, [sp, #16]
+    ldr     r6, [sp, #48]
+    uxtb    r6, r6
+    str     r6, [sp, #20]
+    str     r9, [sp, #44]
+    bl      v_drawBezierCubic
+    add     sp, sp, #24
+    pop     {r4, r5, r6, r7, r8, r9, r10}
+    b       dv_seg_loop
+dv_done:
+    add     sp, sp, #8          @ remove saved raw ox, oy
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ pitrex_draw_vector_ex(r0=asset_ptr, r1=ox, r2=oy, r3=mirror, [sp]=intensity_unused)
+.global pitrex_draw_vector_ex
+.type pitrex_draw_vector_ex, %function
+pitrex_draw_vector_ex:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes
+    mov     r4, r0              @ asset header ptr
+    mov     r5, r1              @ ox
+    mov     r6, r2              @ oy
+    mov     r7, r3              @ mirror flag
+    ldr     r11, [r4], #4       @ r11 = path_count
+    mov     r8, #0              @ r8 = path_idx = 0
+dvex_path_loop:
+    cmp     r8, r11
+    bge     dvex_done
+    ldr     r9, [r4], #4        @ r9 = path data ptr
+    ldrb    r10, [r9], #1       @ r10 = path intensity (from .vec)
+    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE
+    ldrb    r0, [r0]
+    cmp     r0, #0
+    movne   r10, r0             @ override from SET_INTENSITY
+    ldrsb   r1, [r9], #1        @ r1 = y_start (i8)
+    ldrsb   r0, [r9], #1        @ r0 = x_start (i8)
+    add     r9, r9, #2          @ skip 2 hdr padding bytes
+    cmp     r7, #1
+    it      eq
+    rsbeq   r0, r0, #0          @ mirror x_start
+    mov     r12, #127
+    mul     r2, r0, r12         @ r2 = x_start*127 (Rd=r2 ≠ Rm=r0)
+    mul     r3, r5, r12         @ r3 = ox*127     (Rd=r3 ≠ Rm=r5)
+    add     r0, r2, r3          @ r0 = (x_start+ox)*127
+    mul     r2, r1, r12         @ r2 = y_start*127 (Rd=r2 ≠ Rm=r1)
+    mul     r3, r6, r12         @ r3 = oy*127     (Rd=r3 ≠ Rm=r6)
+    add     r1, r2, r3          @ r1 = (y_start+oy)*127
+    ldr     r2, =PITREX_CUR_X
+    str     r0, [r2]            @ PITREX_CUR_X = target_x
+    ldr     r2, =PITREX_CUR_Y
+    str     r1, [r2]            @ PITREX_CUR_Y = target_y
+    push    {r0, r1}            @ save call args
+    mov     r2, r1              @ trace y
+    mov     r1, r0              @ trace x
+    ldr     r0, =.Lstr_mv
+    bl      uart_trace_xy
+    pop     {r0, r1}
+    bl      v_directMove32
+    mov     r0, #80
+    bl      v_setScale
+dvex_seg_loop:
+    ldrb    r0, [r9], #1
+    cmp     r0, #2
+    beq     dvex_seg_done
+    cmp     r0, #0xFE
+    beq     dvex_bezier_seg
+    ldrsb   r1, [r9], #1        @ dy
+    ldrsb   r0, [r9], #1        @ dx
+    cmp     r7, #1
+    it      eq
+    rsbeq   r0, r0, #0
+    mov     r2, r10             @ intensity from .vec
+    bl      pitrex_draw_line_rel
+    b       dvex_seg_loop
+dvex_seg_done:
+    add     r8, r8, #1          @ path_idx++
+    b       dvex_path_loop
+dvex_bezier_seg:
+    push    {r4, r5, r6, r7, r9, r10}
+    sub     sp, sp, #24
+    add     r0, sp, #28         @ r0 = &ox
+    ldmia   r0, {r4, r5, r12}   @ r4=ox, r5=oy, r12=mirror (3 loads in 2 inst)
+    ldrsb   r6, [r9], #1
+    add     r0, r6, r4
+    cmp     r12, #1
+    it      eq
+    rsbeq   r0, r0, #0
+    ldrsb   r6, [r9], #1
+    add     r1, r6, r5
+    ldrsb   r6, [r9], #1
+    add     r2, r6, r4
+    cmp     r12, #1
+    it      eq
+    rsbeq   r2, r2, #0
+    ldrsb   r6, [r9], #1
+    add     r3, r6, r5
+    ldrsb   r6, [r9], #1
+    add     r6, r6, r4
+    cmp     r12, #1
+    it      eq
+    rsbeq   r6, r6, #0
+    str     r6, [sp, #0]
+    ldrsb   r6, [r9], #1
+    add     r6, r6, r5
+    str     r6, [sp, #4]
+    ldrsb   r6, [r9], #1
+    add     r6, r6, r4
+    cmp     r12, #1
+    it      eq
+    rsbeq   r6, r6, #0
+    str     r6, [sp, #8]
+    ldrsb   r6, [r9], #1
+    add     r6, r6, r5
+    str     r6, [sp, #12]
+    mov     r6, #16
+    str     r6, [sp, #16]
+    ldr     r6, [sp, #44]
+    uxtb    r6, r6
+    str     r6, [sp, #20]
+    str     r9, [sp, #40]
+    bl      v_drawBezierCubic
+    add     sp, sp, #24
+    pop     {r4, r5, r6, r7, r9, r10}
+    b       dvex_seg_loop
+dvex_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ pitrex_draw_rect(r0=x, r1=y, r2=w, r3=h) 5th=[sp]=brightness
+.global pitrex_draw_rect
+.type pitrex_draw_rect, %function
+pitrex_draw_rect:
+    push    {r4, r5, r6, r7, lr}
+    mov     r4, r0          @ x (left)
+    mov     r5, r1          @ y (bottom)
+    mov     r6, r2          @ w
+    mov     r7, r3          @ h
+    mov     r0, #127
+    mul     r4, r4, r0
+    mul     r5, r5, r0
+    mul     r6, r6, r0
+    mul     r7, r7, r0
+    mov     r0, r4
+    mov     r1, r5
+    add     r2, r4, r6
+    mov     r3, r5
+    ldr     r12, [sp, #20]
+    push    {r12}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    add     r0, r4, r6
+    mov     r1, r5
+    add     r2, r4, r6
+    add     r3, r5, r7
+    ldr     r12, [sp, #20]
+    push    {r12}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    add     r0, r4, r6
+    add     r1, r5, r7
+    mov     r2, r4
+    add     r3, r5, r7
+    ldr     r12, [sp, #20]
+    push    {r12}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    mov     r0, r4
+    add     r1, r5, r7
+    mov     r2, r4
+    mov     r3, r5
+    ldr     r12, [sp, #20]
+    push    {r12}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r4, r5, r6, r7, pc}
+
+@ pitrex_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=brightness)
+.global pitrex_draw_filled_rect
+.type pitrex_draw_filled_rect, %function
+pitrex_draw_filled_rect:
+    push    {r4, r5, r6, r7, r8, r9, lr}
+    mov     r4, r0          @ x (left)
+    mov     r5, r1          @ y (bottom)
+    mov     r6, r2          @ w
+    mov     r7, r3          @ h
+    ldr     r8, [sp, #28]   @ brightness ([sp+7regs*4])
+    push    {r8}            @ brightness as 5th arg
+    bl      pitrex_draw_rect
+    add     sp, sp, #4
+    mov     r9, #127
+    mul     r4, r4, r9      @ x_s
+    mul     r5, r5, r9      @ y_s (bottom)
+    mul     r6, r6, r9      @ w_s
+    mul     r7, r7, r9      @ h_s
+    add     r9, r9, r9, lsl #1   @ scan step = 3 * 127 = 381
+    add     r0, r5, r9      @ scan_y = y + step
+.Lfill_loop:
+    add     r1, r5, r7      @ top = y_s + h_s
+    cmp     r0, r1
+    bge     .Lfill_done     @ exit when scan_y >= top
+    mov     r1, r0          @ y0 = scan_y
+    add     r2, r4, r6      @ x1 = x_s + w_s
+    mov     r3, r0          @ y1 = scan_y
+    push    {r0}            @ save scan_y for after the call
+    mov     r0, r4          @ x0 = x_s
+    push    {r8}            @ brightness as 5th arg ([sp+0])
+    bl      v_directDraw32
+    add     sp, sp, #4      @ pop brightness
+    pop     {r0}            @ restore scan_y
+    add     r0, r0, r9      @ scan_y += step
+    b       .Lfill_loop
+.Lfill_done:
+    pop     {r4, r5, r6, r7, r8, r9, pc}
+    .ltorg
+
+@ pitrex_draw_polygon(r0=n, r1=intensity, r2=x0, r3=y0, stack=x1,y1,x2,y2,...)
+.global pitrex_draw_polygon
+.type pitrex_draw_polygon, %function
+pitrex_draw_polygon:
+    mov     r12, sp
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov     r4, r0          @ n
+    mov     r5, #127        @ scale
+    mov     r6, r1          @ brightness
+    mul     r7, r2, r5      @ x0_s
+    mul     r8, r3, r5      @ y0_s
+    ldr     r0, [r12, #0]   @ x1 raw
+    mul     r9, r0, r5      @ x1_s
+    ldr     r0, [r12, #4]   @ y1 raw
+    mul     r10, r0, r5     @ y1_s
+    push    {r9, r10}       @ save v1 endpoint (cur_x, cur_y)
+    mov     r0, r7
+    mov     r1, r8
+    mov     r2, r9
+    mov     r3, r10
+    push    {r6}            @ brightness ([sp+0])
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r9, r10}       @ r9=cur_x=x1_s, r10=cur_y=y1_s
+    mov     r11, #2
+.Lpoly_loop:
+    cmp     r11, r4
+    bge     .Lpoly_close
+    mov     r0, r11, lsl #1 @ 2k
+    sub     r0, r0, #2      @ 2k-2
+    lsl     r0, r0, #2      @ (2k-2)*4
+    add     r0, r0, #36     @ + callee-save frame (9*4)
+    ldr     r2, [sp, r0]    @ xk raw (sp-relative, avoids clobbered r12)
+    mul     r0, r2, r5      @ xk_s → r0  (Rd=r0 != Rm=r2)
+    mov     r1, r11, lsl #1 @ 2k
+    sub     r1, r1, #1      @ 2k-1
+    lsl     r1, r1, #2      @ (2k-1)*4
+    add     r1, r1, #36     @ + callee-save frame
+    ldr     r2, [sp, r1]    @ yk raw (sp-relative)
+    mul     r1, r2, r5      @ yk_s → r1  (Rd=r1 != Rm=r2)
+    push    {r0, r1}        @ save new xk_s, yk_s
+    mov     r2, r0
+    mov     r3, r1
+    mov     r0, r9
+    mov     r1, r10
+    push    {r6}            @ brightness
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r9, r10}       @ r9=xk_s, r10=yk_s
+    add     r11, r11, #1
+    b       .Lpoly_loop
+.Lpoly_close:
+    mov     r0, r9
+    mov     r1, r10
+    mov     r2, r7
+    mov     r3, r8
+    push    {r6}            @ brightness
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ pitrex_draw_circle(r0=cx, r1=cy, r2=diameter, r3=brightness)
+.global pitrex_draw_circle
+.type pitrex_draw_circle, %function
+pitrex_draw_circle:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov     r4, r0          @ cx
+    mov     r5, r1          @ cy
+    asr     r6, r2, #1      @ radius = diameter/2
+    mov     r7, r3          @ brightness
+    mov     r0, #127
+    mul     r4, r4, r0      @ cx_s
+    mul     r5, r5, r0      @ cy_s
+    mul     r6, r6, r0      @ radius_s
+    ldr     r11, =PITREX_CIRCLE_TABLE
+    mov     r10, #0         @ segment index
+.Lcircle_loop:
+    cmp     r10, #16
+    bge     .Lcircle_done
+    lsl     r0, r10, #3     @ offset = i * 8 (2 words per vertex)
+    add     r0, r11, r0
+    ldmia   r0!, {r8, r9}   @ r8=x0_raw, r9=y0_raw (from table)
+    ldmia   r0, {r0, r1}    @ r0=x1_raw, r1=y1_raw
+    mul     r8, r8, r6
+    asr     r8, r8, #10
+    add     r8, r8, r4      @ x0 = (x0_raw*r)>>10 + cx
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5      @ y0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4      @ x1
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5      @ y1
+    mov     r2, r0          @ x1 → r2
+    mov     r3, r1          @ y1 → r3
+    mov     r0, r8          @ x0 → r0
+    mov     r1, r9          @ y0 → r1
+    push    {r7}            @ brightness as 5th arg
+    bl      v_directDraw32
+    add     sp, sp, #4
+    add     r10, r10, #1    @ i++
+    b       .Lcircle_loop
+.Lcircle_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ pitrex_draw_ellipse(r0=cx, r1=cy, r2=rx, r3=ry, [sp+0]=brightness)
+.global pitrex_draw_ellipse
+.type pitrex_draw_ellipse, %function
+pitrex_draw_ellipse:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov     r4, r0          @ cx
+    mov     r5, r1          @ cy
+    mov     r6, r2          @ rx
+    mov     r7, r3          @ ry
+    ldr     r8, [sp, #36]   @ brightness ([sp+9regs*4])
+    mov     r9, #127
+    mul     r4, r4, r9      @ cx_s
+    mul     r5, r5, r9      @ cy_s
+    mul     r6, r6, r9      @ rx_s
+    mul     r7, r7, r9      @ ry_s
+    ldr     r11, =PITREX_CIRCLE_TABLE
+    mov     r10, #0         @ segment index
+.Lellipse_loop:
+    cmp     r10, #16
+    bge     .Lellipse_done
+    lsl     r0, r10, #3
+    add     r0, r11, r0
+    ldmia   r0!, {r9, r1}   @ r9=x0_raw, r1=y0_raw
+    ldmia   r0, {r2, r3}    @ r2=x1_raw, r3=y1_raw
+    mul     r9, r9, r6      @ x0 = x0_raw * rx
+    asr     r9, r9, #10
+    add     r9, r9, r4      @ x0 += cx
+    mul     r1, r1, r7      @ y0 = y0_raw * ry
+    asr     r1, r1, #10
+    add     r1, r1, r5      @ y0 += cy
+    mul     r2, r2, r6      @ x1
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    mul     r3, r3, r7      @ y1
+    asr     r3, r3, #10
+    add     r3, r3, r5
+    mov     r0, r9
+    push    {r8}            @ brightness
+    bl      v_directDraw32
+    add     sp, sp, #4
+    add     r10, r10, #1
+    b       .Lellipse_loop
+.Lellipse_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ pitrex_draw_arc(r0=segs, r1=cx, r2=cy, r3=r, [sp]=start,[sp+4]=sweep,[sp+8]=bright)
+.global pitrex_draw_arc
+.type pitrex_draw_arc, %function
+pitrex_draw_arc:
+    push    {r4, r5, r6, r7, r8, lr}
+    mov     r4, r1          @ cx
+    mov     r5, r2          @ cy
+    mov     r6, r3          @ radius
+    ldr     r7, [sp, #24]   @ start_deg
+    ldr     r8, [sp, #28]   @ sweep_deg
+    mov     r0, #127
+    mul     r4, r4, r0
+    mul     r5, r5, r0
+    mul     r6, r6, r0
+    ldr     r3, [sp, #32]   @ brightness
+    @ segment 0° 
+    mov     r0, #0
+    cmp     r0, r7
+    blt     .Larc_skip0
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip0
+    ldr     r0, =1024
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    mov     r1, #0
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =946
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =392
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip0:
+    @ segment 22° 
+    mov     r0, #22
+    cmp     r0, r7
+    blt     .Larc_skip1
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip1
+    ldr     r0, =946
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =392
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =724
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =724
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip1:
+    @ segment 45° 
+    mov     r0, #45
+    cmp     r0, r7
+    blt     .Larc_skip2
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip2
+    ldr     r0, =724
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =724
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =392
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =946
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip2:
+    @ segment 67° 
+    mov     r0, #67
+    cmp     r0, r7
+    blt     .Larc_skip3
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip3
+    ldr     r0, =392
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =946
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    mov     r2, #0
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =1024
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip3:
+    @ segment 90° 
+    mov     r0, #90
+    cmp     r0, r7
+    blt     .Larc_skip4
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip4
+    mov     r0, #0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =1024
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =392
+    neg     r2, r2
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =946
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip4:
+    @ segment 112° 
+    mov     r0, #112
+    cmp     r0, r7
+    blt     .Larc_skip5
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip5
+    ldr     r0, =392
+    neg     r0, r0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =946
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =724
+    neg     r2, r2
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =724
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip5:
+    @ segment 135° 
+    mov     r0, #135
+    cmp     r0, r7
+    blt     .Larc_skip6
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip6
+    ldr     r0, =724
+    neg     r0, r0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =724
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =946
+    neg     r2, r2
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =392
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip6:
+    @ segment 157° 
+    mov     r0, #157
+    cmp     r0, r7
+    blt     .Larc_skip7
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip7
+    ldr     r0, =946
+    neg     r0, r0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =392
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =1024
+    neg     r2, r2
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    mov     r9, #0
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip7:
+    @ segment 180° 
+    mov     r0, #180
+    cmp     r0, r7
+    blt     .Larc_skip8
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip8
+    ldr     r0, =1024
+    neg     r0, r0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    mov     r1, #0
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =946
+    neg     r2, r2
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =392
+    neg     r9, r9
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip8:
+    @ segment 202° 
+    mov     r0, #202
+    cmp     r0, r7
+    blt     .Larc_skip9
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip9
+    ldr     r0, =946
+    neg     r0, r0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =392
+    neg     r1, r1
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =724
+    neg     r2, r2
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =724
+    neg     r9, r9
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip9:
+    @ segment 225° 
+    mov     r0, #225
+    cmp     r0, r7
+    blt     .Larc_skip10
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip10
+    ldr     r0, =724
+    neg     r0, r0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =724
+    neg     r1, r1
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =392
+    neg     r2, r2
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =946
+    neg     r9, r9
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip10:
+    @ segment 247° 
+    mov     r0, #247
+    cmp     r0, r7
+    blt     .Larc_skip11
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip11
+    ldr     r0, =392
+    neg     r0, r0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =946
+    neg     r1, r1
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    mov     r2, #0
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =1024
+    neg     r9, r9
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip11:
+    @ segment 270° 
+    ldr     r0, =270
+    cmp     r0, r7
+    blt     .Larc_skip12
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip12
+    mov     r0, #0
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =1024
+    neg     r1, r1
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =392
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =946
+    neg     r9, r9
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip12:
+    @ segment 292° 
+    ldr     r0, =292
+    cmp     r0, r7
+    blt     .Larc_skip13
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip13
+    ldr     r0, =392
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =946
+    neg     r1, r1
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =724
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =724
+    neg     r9, r9
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip13:
+    @ segment 315° 
+    ldr     r0, =315
+    cmp     r0, r7
+    blt     .Larc_skip14
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip14
+    ldr     r0, =724
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =724
+    neg     r1, r1
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =946
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    ldr     r9, =392
+    neg     r9, r9
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip14:
+    @ segment 337° 
+    ldr     r0, =337
+    cmp     r0, r7
+    blt     .Larc_skip15
+    add     r1, r7, r8
+    cmp     r0, r1
+    bge     .Larc_skip15
+    ldr     r0, =946
+    mul     r0, r0, r6
+    asr     r0, r0, #10
+    add     r0, r0, r4
+    ldr     r1, =392
+    neg     r1, r1
+    mul     r1, r1, r6
+    asr     r1, r1, #10
+    add     r1, r1, r5
+    ldr     r2, =1024
+    mul     r2, r2, r6
+    asr     r2, r2, #10
+    add     r2, r2, r4
+    mov     r9, #0
+    mul     r9, r9, r6
+    asr     r9, r9, #10
+    add     r9, r9, r5
+    push    {r3, r9}    @ brightness, y1
+    mov     r3, r9
+    ldr     r9, [sp, #0]
+    push    {r9}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    pop     {r3, r9}
+.Larc_skip15:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ pitrex_update_buttons()
+.global pitrex_update_buttons
+.type pitrex_update_buttons, %function
+pitrex_update_buttons:
+    push    {lr}
+    bl      v_readButtons
+    bl      v_readJoystick1Analog
+    pop     {pc}
+
+@ pitrex_j1_x() → r0 = X axis (-127..127)
+.global pitrex_j1_x
+.type pitrex_j1_x, %function
+pitrex_j1_x:
+    ldr     r1, =currentJoy1X
+    ldrsb   r0, [r1]
+    bx      lr
+    .ltorg
+
+@ pitrex_j1_y() → r0 = Y axis (-127..127)
+.global pitrex_j1_y
+.type pitrex_j1_y, %function
+pitrex_j1_y:
+    ldr     r1, =currentJoy1Y
+    ldrsb   r0, [r1]
+    bx      lr
+    .ltorg
+
+@ pitrex_j1_btn1() → r0=1 if pressed, 0 otherwise (bit 0)
+.global pitrex_j1_btn1
+.type pitrex_j1_btn1, %function
+pitrex_j1_btn1:
+    ldr     r1, =currentButtonState
+    ldr     r0, [r1]
+    lsr     r0, r0, #0
+    and     r0, r0, #1
+    bx      lr
+    .ltorg
+
+@ pitrex_j1_btn2() → r0=1 if pressed, 0 otherwise (bit 1)
+.global pitrex_j1_btn2
+.type pitrex_j1_btn2, %function
+pitrex_j1_btn2:
+    ldr     r1, =currentButtonState
+    ldr     r0, [r1]
+    lsr     r0, r0, #1
+    and     r0, r0, #1
+    bx      lr
+    .ltorg
+
+@ pitrex_j1_btn3() → r0=1 if pressed, 0 otherwise (bit 2)
+.global pitrex_j1_btn3
+.type pitrex_j1_btn3, %function
+pitrex_j1_btn3:
+    ldr     r1, =currentButtonState
+    ldr     r0, [r1]
+    lsr     r0, r0, #2
+    and     r0, r0, #1
+    bx      lr
+    .ltorg
+
+@ pitrex_j1_btn4() → r0=1 if pressed, 0 otherwise (bit 3)
+.global pitrex_j1_btn4
+.type pitrex_j1_btn4, %function
+pitrex_j1_btn4:
+    ldr     r1, =currentButtonState
+    ldr     r0, [r1]
+    lsr     r0, r0, #3
+    and     r0, r0, #1
+    bx      lr
+    .ltorg
+
+.weak v_readJoystick2Analog
+.type v_readJoystick2Analog, %function
+v_readJoystick2Analog:
+    bx      lr
+
+@ pitrex_j2_x() → r0 = X axis (-127..127)
+.global pitrex_j2_x
+.type pitrex_j2_x, %function
+pitrex_j2_x:
+    ldr     r1, =currentJoy2X
+    ldrsb   r0, [r1]
+    bx      lr
+    .ltorg
+
+@ pitrex_j2_y() → r0 = Y axis (-127..127)
+.global pitrex_j2_y
+.type pitrex_j2_y, %function
+pitrex_j2_y:
+    ldr     r1, =currentJoy2Y
+    ldrsb   r0, [r1]
+    bx      lr
+    .ltorg
+
+@ pitrex_j2_btn1() → r0=1 if pressed (bit 4)
+.global pitrex_j2_btn1
+.type pitrex_j2_btn1, %function
+pitrex_j2_btn1:
+    ldr     r1, =currentButtonState
+    ldr     r0, [r1]
+    lsr     r0, r0, #4
+    and     r0, r0, #1
+    bx      lr
+
+@ pitrex_j2_btn2() → r0=1 if pressed (bit 5)
+.global pitrex_j2_btn2
+.type pitrex_j2_btn2, %function
+pitrex_j2_btn2:
+    ldr     r1, =currentButtonState
+    ldr     r0, [r1]
+    lsr     r0, r0, #5
+    and     r0, r0, #1
+    bx      lr
+
+@ pitrex_j2_btn3() → r0=1 if pressed (bit 6)
+.global pitrex_j2_btn3
+.type pitrex_j2_btn3, %function
+pitrex_j2_btn3:
+    ldr     r1, =currentButtonState
+    ldr     r0, [r1]
+    lsr     r0, r0, #6
+    and     r0, r0, #1
+    bx      lr
+
+@ pitrex_j2_btn4() → r0=1 if pressed (bit 7)
+.global pitrex_j2_btn4
+.type pitrex_j2_btn4, %function
+pitrex_j2_btn4:
+    ldr     r1, =currentButtonState
+    ldr     r0, [r1]
+    lsr     r0, r0, #7
+    and     r0, r0, #1
+    bx      lr
+
+@ pitrex_print_text(r0=x, r1=y, r2=str_ptr)
+.global pitrex_print_text
+.type pitrex_print_text, %function
+pitrex_print_text:
+    push    {r4, r5, r6, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    mov     r0, #0
+    mov     r1, #0
+    bl      v_directMove32
+    mov     r0, r4              @ VPy_x
+    mov     r1, r5              @ VPy_y
+    mov     r2, r6              @ str_ptr
+    ldr     r3, =PITREX_TEXT_SIZE
+    ldr     r3, [r3]
+    cmp     r3, #0
+    it eq
+    moveq   r3, #8
+    sub     r1, r1, #8          @ baseline = top - cap_height (VPy units)
+    mov     r12, #127
+    mul     r0, r0, r12          @ r0  = x*127
+    asr     r0, r0, #7           @ r0  = x*127/128 (sign-preserving)
+    mul     r1, r1, r12          @ r1  = y*127
+    asr     r1, r1, #7           @ r1  = y*127/128 (sign-preserving)
+    mov     r12, #0x50
+    push    {r12}
+    bl      v_printString
+    add     sp, sp, #4
+    pop     {r4, r5, r6, pc}
+    .ltorg
+
+@ pitrex_print_number(r0=x, r1=y, r2=value) — print decimal integer
+.global pitrex_print_number
+.type pitrex_print_number, %function
+pitrex_print_number:
+    push    {r4, r5, r6, r7, r8, r9, lr}
+    mov     r4, r0          @ x
+    mov     r5, r1          @ y
+    mov     r6, r2          @ value
+    sub     sp, sp, #8
+    mov     r7, sp          @ buf ptr
+    mov     r9, #0          @ is_negative = false
+    cmp     r6, #0
+    bge     pn_positive
+    mov     r9, #1          @ is_negative = true
+    mov     r0, #45         @ '-' ASCII (font renders as space-advance)
+    strb    r0, [r7]
+    add     r7, r7, #1
+    rsb     r6, r6, #0      @ abs(r6)
+pn_positive:
+    @ digit 0: /1000
+    ldr     r8, =1000
+    mov     r0, r6
+    mov     r1, r8
+    bl      __aeabi_idivmod  @ r0=quot, r1=rem
+    add     r0, r0, #48
+    strb    r0, [r7]
+    add     r7, r7, #1
+    mov     r6, r1
+    @ digit 1: /100
+    ldr     r8, =100
+    mov     r0, r6
+    mov     r1, r8
+    bl      __aeabi_idivmod  @ r0=quot, r1=rem
+    add     r0, r0, #48
+    strb    r0, [r7]
+    add     r7, r7, #1
+    mov     r6, r1
+    @ digit 2: /10
+    ldr     r8, =10
+    mov     r0, r6
+    mov     r1, r8
+    bl      __aeabi_idivmod  @ r0=quot, r1=rem
+    add     r0, r0, #48
+    strb    r0, [r7]
+    add     r7, r7, #1
+    mov     r6, r1
+    @ digit 3: ones
+    add     r0, r6, #48
+    strb    r0, [r7]
+    add     r7, r7, #1
+    mov     r0, #0
+    strb    r0, [r7]
+    mov     r0, #0
+    mov     r1, #0
+    bl      v_directMove32
+    ldr     r3, =PITREX_TEXT_SIZE
+    ldr     r3, [r3]
+    cmp     r3, #0
+    it eq
+    moveq   r3, #8
+    cmp     r9, #0
+    beq     pn_print_str
+    ldr     r12, =127
+    mul     r0, r4, r12         @ x0_px = VPy_x * 127 (Rd≠Rm ✓)
+    sub     r2, r5, #8          @ VPy_y - 8 (cap_height offset)
+    mul     r1, r2, r12         @ y_baseline_px (Rd≠Rm ✓)
+    add     r1, r1, r3, lsl #2  @ + 4*textSize
+    add     r1, r1, r3, lsl #1  @ + 2*textSize → y_mid = baseline+6*ts
+    add     r2, r0, r3, lsl #3  @ x1 = x0 + 8*textSize
+    mov     r3, r1              @ y1 = y0 (horizontal line)
+    mov     r12, #0x50
+    push    {r12}
+    bl      v_directDraw32
+    add     sp, sp, #4
+    ldr     r3, =PITREX_TEXT_SIZE
+    ldr     r3, [r3]
+    cmp     r3, #0
+    it eq
+    moveq   r3, #8
+pn_print_str:
+    mov     r2, sp          @ buf ptr
+pn_lz_scan:
+    ldrb    r12, [r2]       @ current char
+    cmp     r12, #48        @ '0'?
+    bne     pn_lz_done
+    ldrb    r12, [r2, #1]   @ peek next char
+    cmp     r12, #0         @ last digit — always keep
+    beq     pn_lz_done
+    add     r2, r2, #1      @ advance past leading '0'
+    b       pn_lz_scan
+pn_lz_done:
+    mov     r0, r4          @ x
+    mov     r1, r5          @ y
+    sub     r1, r1, #8          @ baseline = top - cap_height (VPy units)
+    mov     r12, #127
+    mul     r0, r0, r12          @ r0  = x*127
+    asr     r0, r0, #7           @ r0  = x*127/128
+    mul     r1, r1, r12          @ r1  = y*127
+    asr     r1, r1, #7           @ r1  = y*127/128
+    mov     r12, #0x50
+    push    {r12}
+    bl      v_printString
+    add     sp, sp, #4
+    add     sp, sp, #8
+    pop     {r4, r5, r6, r7, r8, r9, pc}
+    .ltorg
+
+@ pitrex_play_music(r0=music_base)
+@ Guard: if same music is already playing, do nothing (prevents per-frame restart).
+.global pitrex_play_music
+.type pitrex_play_music, %function
+pitrex_play_music:
+    ldr     r1, =PSG_IS_PLAYING
+    ldr     r2, [r1]
+    cmp     r2, #0
+    beq     .Lppm_start      @ not playing -> always start
+    ldr     r1, =PSG_MUSIC_START
+    ldr     r2, [r1]
+    cmp     r2, r0
+    bxeq    lr               @ same music already playing -> skip
+.Lppm_start:
+    ldr     r1, =PSG_MUSIC_START
+    str     r0, [r1]
+    add     r2, r0, #8          @ first event = base + 8
+    ldr     r1, =PSG_MUSIC_PTR
+    str     r2, [r1]
+    ldr     r1, =PSG_IS_PLAYING
+    mov     r0, #1
+    str     r0, [r1]
+    ldr     r1, =PSG_DELAY_FRAMES
+    mov     r0, #0
+    str     r0, [r1]
+    bx      lr
+    .ltorg
+
+@ pitrex_stop_music()
+.global pitrex_stop_music
+.type pitrex_stop_music, %function
+pitrex_stop_music:
+    push    {lr}
+    ldr     r1, =PSG_IS_PLAYING
+    mov     r0, #0
+    str     r0, [r1]
+    mov     r0, #8
+    mov     r1, #0
+    bl      v_writePSG
+    mov     r0, #9
+    mov     r1, #0
+    bl      v_writePSG
+    mov     r0, #10
+   mov     r1, #0
+    bl      v_writePSG
+    mov     r0, #7
+    mov     r1, #0x3F
+ bl      v_writePSG
+    pop     {pc}
+    .ltorg
+
+@ pitrex_music_update() — BCM-CLO tempo-stable sequencer
+.global pitrex_music_update
+.type pitrex_music_update, %function
+pitrex_music_update:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r0, =PSG_IS_PLAYING
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq     pmu_done
+    ldr     r4, =bcm2835_st
+    ldr     r4, [r4]
+    ldr     r4, [r4, #4]        @ r4 = CLO now
+    ldr     r5, =PSG_MUSIC_LAST_CLO
+    ldr     r6, [r5]            @ r6 = last CLO (0 if not yet init)
+    cmp     r6, #0
+    beq     pmu_init_clo
+    sub     r6, r4, r6          @ delta_us (wraps correctly)
+    ldr     r7, =PSG_MUSIC_TICK_US
+    ldr     r0, [r7]
+    add     r0, r0, r6
+    ldr     r6, =60000
+    cmp     r0, r6
+    movgt   r0, r6              @ cap
+    str     r0, [r7]
+    b       pmu_save_clo
+pmu_init_clo:
+    ldr     r7, =PSG_MUSIC_TICK_US
+    mov     r0, #0
+    str     r0, [r7]
+pmu_save_clo:
+    str     r4, [r5]            @ PSG_MUSIC_LAST_CLO = now
+pmu_tick_loop:
+    ldr     r0, [r7]            @ PSG_MUSIC_TICK_US
+    ldr     r6, =20000
+    cmp     r0, r6
+    blt     pmu_done            @ < 20ms accumulated, nothing to fire
+    sub     r0, r0, r6
+    str     r0, [r7]  @ consume one tick
+    ldr     r4, =PSG_DELAY_FRAMES
+    ldr     r0, [r4]
+    cmp     r0, #0
+    beq     pmu_process
+    sub     r0, r0, #1
+    str     r0, [r4]
+    b       pmu_tick_loop
+pmu_process:
+    ldr     r5, =PSG_MUSIC_PTR
+    ldr     r5, [r5]    @ event ptr
+    ldrb    r6, [r5, #1]        @ num_writes
+    cmp     r6, #0
+    beq     pmu_end
+    cmp     r6, #0xFF
+    beq     pmu_loop
+    add     r7, r5, #2          @ r7 = write pairs (overrides tick_us ptr)
+pmu_wl:
+    cmp     r6, #0
+    beq     pmu_after
+    ldrb    r0, [r7]
+    ldrb    r1, [r7, #1]
+    push    {r6, r7}
+    bl      v_writePSG
+    pop     {r6, r7}
+    add     r7, r7, #2
+    sub     r6, r6, #1
+    b       pmu_wl
+pmu_after:
+    ldr     r0, =PSG_MUSIC_PTR
+    str     r7, [r0]
+    ldr     r4, =PSG_DELAY_FRAMES
+    ldrb    r0, [r7]            @ next event delay
+    str     r0, [r4]
+    ldr     r7, =PSG_MUSIC_TICK_US  @ reload for next tick_loop
+    b       pmu_tick_loop
+pmu_end:
+    bl      pitrex_stop_music
+    b       pmu_done
+pmu_loop:
+    ldr     r0, =PSG_MUSIC_START
+    ldr     r0, [r0]
+    ldr     r1, [r0, #4]        @ loop_event_byte_offset
+    add     r1, r0, r1
+    ldr     r0, =PSG_MUSIC_PTR
+    str     r1, [r0]
+    ldr     r4, =PSG_DELAY_FRAMES
+    ldrb    r0, [r1]
+    str     r0, [r4]
+    ldr     r7, =PSG_MUSIC_TICK_US  @ reload for next tick_loop
+    b       pmu_tick_loop
+pmu_done:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ pitrex_play_sfx(r0=sfx_base)
+.global pitrex_play_sfx
+.type pitrex_play_sfx, %function
+pitrex_play_sfx:
+    add     r0, r0, #4
+    ldr     r1, =PSG_SFX_PTR
+    str     r0, [r1]
+    ldr     r1, =PSG_SFX_ACTIVE
+    mov     r0, #1
+    str     r0, [r1]
+    ldr     r1, =PSG_SFX_DELAY
+    mov     r0, #0
+    str     r0, [r1]
+    bx      lr
+    .ltorg
+
+@ pitrex_load_level(r0=level_ptr) — initialise level runtime state
+.global pitrex_load_level
+.type pitrex_load_level, %function
+pitrex_load_level:
+    push    {r4, r5, r6, r7, lr}
+    mov     r4, r0              @ r4 = level_ptr
+    ldr     r1, =LEVEL_DATA_PTR
+    str     r4, [r1]
+    ldrb    r5, [r4, #9]        @ r5 = gpCount (no cap: 255 max)
+    ldr     r1, =LEVEL_GP_COUNT
+    str     r5, [r1]
+    ldr     r6, [r4, #16]       @ r6 = gpObjectsPtr
+    ldr     r7, =LEVEL_GP_BUF
+    cmp     r5, #0
+    beq     .Lll_done
+.Lll_copy:
+    ldrsh   r0, [r6]            @ x (offset 0)
+    ldrsh   r1, [r6, #2]        @ y (offset 2)
+    ldrsb   r2, [r6, #14]       @ vel_x_init (offset 14)
+    ldrsb   r3, [r6, #15]       @ vel_y_init (offset 15)
+    strh    r0, [r7]            @ buf.x
+    strh    r1, [r7, #2]        @ buf.y
+    strh    r2, [r7, #4]        @ buf.vx
+    strh    r3, [r7, #6]        @ buf.vy
+    add     r6, r6, #20         @ advance ROM obj ptr (20 bytes)
+    add     r7, r7, #8          @ advance buf ptr
+    subs    r5, r5, #1
+    bne     .Lll_copy
+.Lll_done:
+    ldrsh   r0, [r4, #24]       @ scrollLimit left
+    ldr     r1, =SCROLL_LIMIT_LEFT
+    str     r0, [r1]
+    ldrsh   r0, [r4, #26]       @ scrollLimit right
+    ldr     r1, =SCROLL_LIMIT_RIGHT
+    str     r0, [r1]
+    ldrsh   r0, [r4, #28]       @ scrollLimit top
+    ldr     r1, =SCROLL_LIMIT_TOP
+    str     r0, [r1]
+    ldrsh   r0, [r4, #30]       @ scrollLimit bottom
+    ldr     r1, =SCROLL_LIMIT_BOTTOM
+    str     r0, [r1]
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ pitrex_show_level() — draw all level objects (BG+GP+FG)
+.global pitrex_show_level
+.type pitrex_show_level, %function
+pitrex_show_level:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    sub     sp, sp, #4
+    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE
+    ldrb    r1, [r0]
+    str     r1, [sp]            @ save PITREX_BRIGHTNESS_OVERRIDE
+    mov     r1, #0
+    strb    r1, [r0]            @ clear override → use .vec per-path intensities
+    ldr     r9, =LEVEL_DATA_PTR
+    ldr     r9, [r9]            @ r9 = header ptr
+    cmp     r9, #0
+    beq     .Lshl_done
+    ldr     r10, =CAMERA_X
+    ldr     r10, [r10]          @ r10 = cam_x
+    ldr     r11, =CAMERA_Y
+    ldr     r11, [r11]          @ r11 = cam_y
+    @ --- BG layer ---
+    ldrb    r4, [r9, #8]        @ bgCount
+    ldr     r5, [r9, #12]       @ bgObjectsPtr
+    cmp     r4, #0
+    beq     .Lshl_gp
+.Lshl_bg:
+    ldrsh   r0, [r5]            @ obj.x
+    ldrsh   r1, [r5, #2]        @ obj.y
+    ldrb    r8, [r5, #5]        @ intensity
+    ldr     r6, [r5, #8]        @ vector_ptr
+    sub     r0, r0, r10         @ ox = x - cam_x
+    sub     r1, r1, r11         @ oy = y - cam_y
+    @ Cull: skip if |ox| > 180 or |oy| > 140 (off-screen, 13-unit buffer past ±127 screen edge)
+    mov     r12, r0
+    cmp     r12, #0
+    it      lt
+    rsblt   r12, r12, #0        @ r12 = |ox|
+    cmp     r12, #180
+    bgt     .Lshl_bg_skip
+    mov     r12, r1
+    cmp     r12, #0
+    it      lt
+    rsblt   r12, r12, #0        @ r12 = |oy|
+    cmp     r12, #140
+    bgt     .Lshl_bg_skip
+    push    {r4, r5, r10, r11}  @ save loop state
+    push    {r8}                @ 5th arg: intensity
+    mov     r3, #0              @ mirror=0
+    mov     r2, r1              @ oy
+    mov     r1, r0              @ ox
+    mov     r0, r6              @ asset_ptr
+    bl      pitrex_draw_vector_ex
+    add     sp, sp, #4          @ pop intensity
+    pop     {r4, r5, r10, r11}
+.Lshl_bg_skip:
+    add     r5, r5, #20         @ next BG object (20 bytes)
+    subs    r4, r4, #1
+    bne     .Lshl_bg
+.Lshl_gp:
+    @ --- GP layer (mutable positions) ---
+    ldr     r4, =LEVEL_GP_COUNT
+    ldr     r4, [r4]            @ gpCount
+    ldr     r5, [r9, #16]       @ gpObjectsPtr (ROM, for vec_ptr+intensity)
+    ldr     r7, =LEVEL_GP_BUF   @ buf (current x,y)
+    cmp     r4, #0
+    beq     .Lshl_fg
+.Lshl_gp_loop:
+    ldrb    r12, [r5, #7]       @ obj type (1=enemy)
+    cmp     r12, #1
+    beq     .Lshl_gp_skip       @ enemies drawn by DRAW_ENEMIES
+    ldrsh   r0, [r7]            @ buf.x
+    ldrsh   r1, [r7, #2]        @ buf.y
+    ldrb    r8, [r5, #5]        @ intensity (from ROM obj)
+    ldr     r6, [r5, #8]        @ vector_ptr (from ROM obj)
+    sub     r0, r0, r10         @ ox = x - cam_x
+    sub     r1, r1, r11         @ oy = y - cam_y
+    @ Cull: skip if |ox| > 180 or |oy| > 140 (off-screen, 13-unit buffer past ±127 screen edge)
+    mov     r12, r0
+    cmp     r12, #0
+    it      lt
+    rsblt   r12, r12, #0        @ r12 = |ox|
+    cmp     r12, #180
+    bgt     .Lshl_gp_skip
+    mov     r12, r1
+    cmp     r12, #0
+    it      lt
+    rsblt   r12, r12, #0        @ r12 = |oy|
+    cmp     r12, #140
+    bgt     .Lshl_gp_skip
+    push    {r4, r5, r7, r10, r11}  @ save loop state
+    push    {r8}                @ 5th arg: intensity
+    mov     r3, #0              @ mirror=0
+    mov     r2, r1              @ oy
+    mov     r1, r0              @ ox
+    mov     r0, r6              @ asset_ptr
+    bl      pitrex_draw_vector_ex
+    add     sp, sp, #4          @ pop intensity
+    pop     {r4, r5, r7, r10, r11}
+.Lshl_gp_skip:
+    add     r5, r5, #20         @ next ROM GP object (20 bytes)
+    add     r7, r7, #8          @ next buf entry
+    subs    r4, r4, #1
+    bne     .Lshl_gp_loop
+.Lshl_fg:
+    @ --- FG layer ---
+    ldrb    r4, [r9, #10]       @ fgCount
+    ldr     r5, [r9, #20]       @ fgObjectsPtr
+    cmp     r4, #0
+    beq     .Lshl_done
+.Lshl_fg_loop:
+    ldrsh   r0, [r5]            @ obj.x
+    ldrsh   r1, [r5, #2]        @ obj.y
+    ldrb    r8, [r5, #5]        @ intensity
+    ldr     r6, [r5, #8]        @ vector_ptr
+    sub     r0, r0, r10         @ ox = x - cam_x
+    sub     r1, r1, r11         @ oy = y - cam_y
+    @ Cull: skip if |ox| > 180 or |oy| > 140 (off-screen, 13-unit buffer past ±127 screen edge)
+    mov     r12, r0
+    cmp     r12, #0
+    it      lt
+    rsblt   r12, r12, #0        @ r12 = |ox|
+    cmp     r12, #180
+    bgt     .Lshl_fg_skip
+    mov     r12, r1
+    cmp     r12, #0
+    it      lt
+    rsblt   r12, r12, #0        @ r12 = |oy|
+    cmp     r12, #140
+    bgt     .Lshl_fg_skip
+    push    {r4, r5, r10, r11}  @ save loop state
+    push    {r8}                @ 5th arg: intensity
+    mov     r3, #0              @ mirror=0
+    mov     r2, r1              @ oy
+    mov     r1, r0              @ ox
+    mov     r0, r6              @ asset_ptr
+    bl      pitrex_draw_vector_ex
+    add     sp, sp, #4          @ pop intensity
+    pop     {r4, r5, r10, r11}
+.Lshl_fg_skip:
+    add     r5, r5, #20         @ next FG object (20 bytes)
+    subs    r4, r4, #1
+    bne     .Lshl_fg_loop
+.Lshl_done:
+    ldr     r0, [sp]            @ restore saved PITREX_BRIGHTNESS_OVERRIDE
+    ldr     r1, =PITREX_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]
+    add     sp, sp, #4          @ pop saved override word
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ pitrex_sfx_update() — advance SFX sequencer one frame
+.global pitrex_sfx_update
+.type pitrex_sfx_update, %function
+pitrex_sfx_update:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r0, =PSG_SFX_ACTIVE
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq     .Lsfxu_done
+    ldr     r4, =PSG_SFX_DELAY
+    ldr     r0, [r4]
+    cmp     r0, #0
+    beq     .Lsfxu_proc
+    sub     r0, r0, #1
+    str     r0, [r4]
+    b       .Lsfxu_done
+.Lsfxu_proc:
+    ldr     r5, =PSG_SFX_PTR
+    ldr     r5, [r5]
+    ldrb    r6, [r5, #1]                @ num_writes
+    cmp     r6, #0
+    beq     .Lsfxu_stop
+    add     r7, r5, #2
+.Lsfxu_wl:
+    cmp     r6, #0
+    beq     .Lsfxu_after
+    ldrb    r0, [r7]
+    ldrb    r1, [r7, #1]
+    cmp     r0, #7
+    bne     .Lsfxu_do_write
+    push    {r1, r6, r7}                @ save sfx_mixer + loop vars
+    mov     r0, #7
+    bl      v_readPSG  @ r0 = current Regs[7]
+    pop     {r1, r6, r7}                @ r1 = sfx_mixer, r0 = cur_mixer
+    and     r0, r0, #0xDB               @ keep non-C bits from music (~0x24)
+    and     r1, r1, #0x24               @ keep only C bits from SFX
+    orr     r1, r0, r1                  @ merged mixer
+    mov     r0, #7
+.Lsfxu_do_write:
+    push    {r6, r7}
+    bl      v_writePSG
+    pop     {r6, r7}
+    add     r7, r7, #2
+    sub     r6, r6, #1
+    b       .Lsfxu_wl
+.Lsfxu_after:
+    ldr     r0, =PSG_SFX_PTR
+    str     r7, [r0]
+    ldrb    r0, [r7]                    @ next event delay
+    str     r0, [r4]
+    b       .Lsfxu_done
+.Lsfxu_stop:
+    mov     r0, #10
+    mov     r1, #0
+    bl      v_writePSG
+    ldr     r0, =PSG_SFX_ACTIVE
+    mov     r1, #0
+    str     r1, [r0]
+.Lsfxu_done:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+.align 2
+pitrex_sin_lut:
+    .byte 0, 6, 12, 19, 25, 31, 37, 43, 49, 54, 60, 65, 71, 76, 81, 85, 90, 94, 98, 102, 106, 109, 112, 115, 117, 120, 122, 123, 125, 126, 126, 127, 127, 127, 126, 126, 125, 123, 122, 120, 117, 115, 112, 109, 106, 102, 98, 94, 90, 85, 81, 76, 71, 65, 60, 54, 49, 43, 37, 31, 25, 19, 12, 6, 0, -6, -12, -19, -25, -31, -37, -43, -49, -54, -60, -65, -71, -76, -81, -85, -90, -94, -98, -102, -106, -109, -112, -115, -117, -120, -122, -123, -125, -126, -126, -127, -127, -127, -126, -126, -125, -123, -122, -120, -117, -115, -112, -109, -106, -102, -98, -94, -90, -85, -81, -76, -71, -65, -60, -54, -49, -43, -37, -31, -25, -19, -12, -6
+pitrex_cos_lut:
+    .byte 127, 127, 126, 126, 125, 123, 122, 120, 117, 115, 112, 109, 106, 102, 98, 94, 90, 85, 81, 76, 71, 65, 60, 54, 49, 43, 37, 31, 25, 19, 12, 6, 0, -6, -12, -19, -25, -31, -37, -43, -49, -54, -60, -65, -71, -76, -81, -85, -90, -94, -98, -102, -106, -109, -112, -115, -117, -120, -122, -123, -125, -126, -126, -127, -127, -127, -126, -126, -125, -123, -122, -120, -117, -115, -112, -109, -106, -102, -98, -94, -90, -85, -81, -76, -71, -65, -60, -54, -49, -43, -37, -31, -25, -19, -12, -6, 0, 6, 12, 19, 25, 31, 37, 43, 49, 54, 60, 65, 71, 76, 81, 85, 90, 94, 98, 102, 106, 109, 112, 115, 117, 120, 122, 123, 125, 126, 126, 127
+
+@ pitrex_sin(r0=angle 0-127) → r0 = sine -127..127
+.global pitrex_sin
+.type pitrex_sin, %function
+pitrex_sin:
+    and     r0, r0, #127
+    ldr     r1, =pitrex_sin_lut
+    ldrsb   r0, [r1, r0]
+    bx      lr
+    .ltorg
+
+@ pitrex_cos(r0=angle 0-127) → r0 = cosine -127..127
+.global pitrex_cos
+.type pitrex_cos, %function
+pitrex_cos:
+    and     r0, r0, #127
+    ldr     r1, =pitrex_cos_lut
+    ldrsb   r0, [r1, r0]
+    bx      lr
+    .ltorg
+
+@ pitrex_tan(r0=angle) → forward to pitrex_tan_impl
+.global pitrex_tan
+.type pitrex_tan, %function
+pitrex_tan:
+    b       pitrex_tan_impl
+
+@ pitrex_sqrt(r0=value) → r0 = integer square root
+.global pitrex_sqrt
+.type pitrex_sqrt, %function
+pitrex_sqrt:
+    vmov    s0, r0
+    vcvt.f32.s32 s0, s0
+    vsqrt.f32 s0, s0
+    vcvt.s32.f32 s0, s0
+    vmov    r0, s0
+    bx      lr
+
+@ pitrex_atan2(r0=y, r1=x) → r0 = angle 0-127
+.global pitrex_atan2
+.type pitrex_atan2, %function
+pitrex_atan2:
+    push    {r4, r5, r6, r7, lr}
+    mov     r4, r0              @ r4 = y (signed)
+    mov     r5, r1              @ r5 = x (signed)
+    cmp     r4, #0
+    it      lt
+    rsblt   r6, r4, #0
+    it      ge
+    movge   r6, r4
+    cmp     r5, #0
+    it      lt
+    rsblt   r7, r5, #0
+    it      ge
+    movge   r7, r5
+    cmp     r6, #0
+    cmpeq   r7, #0
+    beq     .Latan2_zero
+    cmp     r6, r7
+    bgt     .Latan2_steep
+    mov     r0, r6, asl #5      @ |y| * 32
+    mov     r1, r7
+    bl      __aeabi_idiv        @ r0 = ratio 0-32
+    ldr     r1, =pitrex_atan_lut
+    cmp     r0, #32
+    movgt   r0, #32
+    ldrb    r0, [r1, r0]        @ atan angle
+    b       .Latan2_quad
+.Latan2_steep:
+    mov     r0, r7, asl #5      @ |x| * 32
+    mov     r1, r6
+    bl      __aeabi_idiv        @ r0 = ratio 0-32
+    ldr     r1, =pitrex_atan_lut
+    cmp     r0, #32
+    movgt   r0, #32
+    ldrb    r0, [r1, r0]
+    rsb     r0, r0, #32         @ 32 - angle (complement)
+.Latan2_quad:
+    mov     r6, r0
+    cmp     r5, #0
+    blt     .Latan2_xneg
+    cmp     r4, #0
+    blt     .Latan2_q4
+    mov     r0, r6
+    b       .Latan2_done
+.Latan2_q4:
+    rsb     r0, r6, #128
+    and     r0, r0, #127
+    b       .Latan2_done
+.Latan2_xneg:
+    cmp     r4, #0
+    blt     .Latan2_q3
+    rsb     r0, r6, #64
+    b       .Latan2_done
+.Latan2_q3:
+    add     r0, r6, #64
+    and     r0, r0, #127
+    b       .Latan2_done
+.Latan2_zero:
+    mov     r0, #0
+.Latan2_done:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+pitrex_atan_lut:
+    .byte 0,1,2,3,4,5,6,7,8,8,9,10,11,12,12,13,14,14,15,15,16,17,17,18,18,19,19,20,20,20,21,21,22
+
+@ pitrex_pow(r0=base, r1=exp) → r0 = base^exp (integer)
+.global pitrex_pow
+.type pitrex_pow, %function
+pitrex_pow:
+    push    {r4, r5, lr}
+    mov     r4, r0      @ base
+    mov     r5, r1      @ exp
+    mov     r0, #1
+    cmp     r5, #0
+    beq     .Lpow_done
+.Lpow_loop:
+    mul     r0, r0, r4
+    subs    r5, r5, #1
+    bne     .Lpow_loop
+.Lpow_done:
+    pop     {r4, r5, pc}
+
+@ pitrex_tan_impl(r0=angle 0-127) — correct tan via sin/cos LUT
+.global pitrex_tan_impl
+.type pitrex_tan_impl, %function
+pitrex_tan_impl:
+    push    {r4, r5, lr}
+    and     r4, r0, #127
+    ldr     r1, =pitrex_sin_lut
+    ldrsb   r5, [r1, r4]   @ r5 = sin_val
+    ldr     r1, =pitrex_cos_lut
+    ldrsb   r4, [r1, r4]   @ r4 = cos_val
+    cmp     r4, #0
+    bne     .Ltani_div
+    cmp     r5, #0
+    movge   r0, #127
+    mvnlt   r0, #126
+    pop     {r4, r5, pc}
+.Ltani_div:
+    mov     r0, r5, asl #7
+    mov     r1, r4
+    bl      __aeabi_idiv
+    cmp     r0, #127
+    movgt   r0, #127
+    mvn     r1, #126        @ r1 = -127
+    cmp     r0, r1
+    movlt   r0, r1
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ pitrex_rand() → r0 = pseudo-random 0-32767
+.global pitrex_rand
+.type pitrex_rand, %function
+pitrex_rand:
+    b       pitrex_random
+
+@ pitrex_rand_range(r0=lo, r1=hi) → r0 = random in [lo, hi]
+.global pitrex_rand_range
+.type pitrex_rand_range, %function
+pitrex_rand_range:
+    push    {r4, r5, lr}
+    mov     r4, r0              @ lo
+    sub     r5, r1, r0
+    add     r5, r5, #1          @ r5 = hi-lo+1 (range)
+    bl      pitrex_random        @ r0 = random 0-65535
+    mov     r1, r5
+    bl      __aeabi_idivmod      @ r1 = r0 % r5
+    add     r0, r1, r4          @ + lo
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ pitrex_beep(r0=period, r1=frames) — stub (no SDK PSG access)
+.global pitrex_beep
+.type pitrex_beep, %function
+pitrex_beep:
+    bx      lr
+
+@ pitrex_wait(r0=frames) — wait N frames
+.global pitrex_wait
+.type pitrex_wait, %function
+pitrex_wait:
+    push    {r4, lr}
+    mov     r4, r0
+.Lwait_loop:
+    cmp     r4, #0
+    beq     .Lwait_done
+    bl      v_WaitRecal
+    sub     r4, r4, #1
+    b       .Lwait_loop
+.Lwait_done:
+    pop     {r4, pc}
+
+@ pitrex_peek(r0=addr) → r0 = byte at that ARM address
+.global pitrex_peek
+.type pitrex_peek, %function
+pitrex_peek:
+    ldrb    r0, [r0]
+    bx      lr
+
+@ pitrex_poke(r0=addr, r1=val) — write byte to ARM address
+.global pitrex_poke
+.type pitrex_poke, %function
+pitrex_poke:
+    strb    r1, [r0]
+    bx      lr
+
+@ pitrex_len — stub (array length resolved at compile time via ARRAY_x_LEN)
+.global pitrex_len
+.type pitrex_len, %function
+pitrex_len:
+    mov     r0, #0
+    bx      lr
+
+@ pitrex_draw_anim(r0=anim_ptr, r1=ox, r2=oy, r3=mirror, [sp]=speed_mul)
+.global pitrex_draw_anim
+.type pitrex_draw_anim, %function
+pitrex_draw_anim:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}    @ 36 bytes
+    mov     r4, r0                      @ anim header ptr
+    mov     r10, r1                     @ save ox
+    mov     r11, r2                     @ save oy
+    ldr     r8, =PITREX_ANIM_MIRROR
+    strb    r3, [r8]                    @ save mirror flag
+    ldr     r8, =PITREX_ANIM_SPEED
+    ldr     r9, [sp, #36]               @ speed_mul (after 9 regs = 36 bytes)
+    strb    r9, [r8]                    @ save speed_mul
+    ldr     r5, =PITREX_ANIM_STATE_BUF
+    ldrb    r6, [r5]                    @ frame_idx
+    ldrb    r7, [r5, #1]                @ ticks_left (0=uninitialized)
+    ldrb    r8, [r4, #2]                @ base_ref_count
+    cmp     r8, #0
+    beq     par_tick
+    add     r9, r4, #4                  @ first base_ref word-ptr
+par_base_loop:
+    push    {r8, r9}
+    ldr     r0, [r9]                    @ ARM ptr to vec data
+    mov     r1, r10                     @ ox
+    mov     r2, r11                     @ oy
+    ldr     r3, =PITREX_ANIM_MIRROR
+    ldrb    r3, [r3]                    @ mirror flag
+    mov     r8, #127
+    push    {r8}                        @ intensity=127
+    bl      pitrex_draw_vector_ex
+    add     sp, sp, #4                  @ discard intensity
+    pop     {r8, r9}
+    add     r9, r9, #4                  @ next base_ref ptr
+    subs    r8, r8, #1
+    bne     par_base_loop
+par_tick:
+    cmp     r7, #0
+    beq     par_init_frame              @ first call: init frame 0
+    subs    r7, r7, #1
+    bgt     par_draw                    @ still ticking: draw current frame
+    ldrb    r8, [r4]                    @ frame_count
+    add     r6, r6, #1
+    cmp     r6, r8
+    blt     par_no_wrap
+    ldrb    r9, [r4, #1]                @ loop flag
+    cmp     r9, #0
+    beq     par_freeze
+    mov     r6, #0                      @ loop: wrap to frame 0
+par_no_wrap:
+    strb    r6, [r5]                    @ save new frame_idx
+par_init_frame:
+    ldrb    r8, [r4, #3]                @ frame_table_offset
+    lsl     r9, r6, #2                  @ frame_idx * 4
+    add     r9, r9, r8                  @ offset to frame table entry
+    ldr     r9, [r4, r9]                @ ARM ptr to frame data
+    ldrb    r7, [r9]                    @ duration_ticks
+    ldr     r8, =PITREX_ANIM_SPEED
+    ldrb    r8, [r8]                    @ speed_mul
+    cmp     r8, #1
+    ble     par_speed_done
+    mul     r7, r8, r7                  @ duration_ticks *= speed_mul
+par_speed_done:
+    cmp     r7, #0
+    movle   r7, #1                      @ clamp to min 1
+    strb    r7, [r5, #1]                @ save ticks_left
+    b       par_draw_vecs
+par_freeze:
+    sub     r6, r6, #1                  @ stay on last frame
+    strb    r6, [r5]
+    mov     r7, #1
+    strb    r7, [r5, #1]
+    b       par_draw_frame
+par_draw:
+    strb    r7, [r5, #1]                @ save decremented ticks
+par_draw_frame:
+    ldrb    r8, [r4, #3]                @ frame_table_offset
+    lsl     r9, r6, #2                  @ frame_idx * 4
+    add     r9, r9, r8
+    ldr     r9, [r4, r9]                @ ARM ptr to frame data
+par_draw_vecs:
+    ldrb    r8, [r9, #1]                @ vec_ref_count
+    cmp     r8, #0
+    beq     par_done
+    add     r9, r9, #4                  @ skip duration+count+2-byte pad
+    mov     r6, r8                      @ loop counter
+par_vec_loop:
+    push    {r6, r9}
+    ldr     r0, [r9]                    @ ARM ptr to vec data
+    mov     r1, r10                     @ ox
+    mov     r2, r11                     @ oy
+    ldr     r3, =PITREX_ANIM_MIRROR
+    ldrb    r3, [r3]                    @ mirror flag
+    mov     r8, #127
+    push    {r8}                        @ intensity=127
+    bl      pitrex_draw_vector_ex
+    add     sp, sp, #4                  @ discard intensity
+    pop     {r6, r9}
+    add     r9, r9, #4                  @ next vec ptr
+    subs    r6, r6, #1
+    bne     par_vec_loop
+par_done:
+    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE
+    mov     r1, #0
+    strb    r1, [r0]
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+.bss
+.balign 4
+PITREX_ANIM_STATE_BUF: .space 2    @ [0]=frame_idx [1]=ticks_left
+PITREX_ANIM_MIRROR: .space 1
+PITREX_ANIM_SPEED: .space 1
+.text
+
+@ --- main (PiTrex SDK entry point) ---
+.align 2
+.global main
+.type main, %function
+main:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    @ UART debug init
+    ldr     r0, =921600
+    mov     r1, #8
+    ldr     r2, =250000000
+    bl      RPI_AuxUartInit
+    ldr     r0, =.Lstr_start
+    bl      vpy_uart_puts
+    @ init UART trace counter (N frames)
+    ldr     r0, =UART_TRACE_FRAMES_LEFT
+    ldr     r1, =0
+    str     r1, [r0]
+    ldr     r0, =UART_FRAME_NUM
+    mov     r1, #0
+    str     r1, [r0]
+    @ PiTrex SDK init
+    mov     r0, #1
+    bl      vectrexinit
+    ldr     r0, =.Lstr_vinit
+    bl      vpy_uart_puts
+    bl      v_init
+    mov     r0, #50
+    bl      v_setRefresh
+
+    @ commonHints |= PL_BASE_FORCE_USE_FIX_SIZE (256)
+    ldr     r0, =commonHints
+    ldr     r1, [r0]
+    orr     r1, r1, #256
+    str     r1, [r0]
+
+    b       .Lgp_0
+    .ltorg
+.Lgp_0:
+    @ init PSG_MIXER_SHADOW (all channels disabled)
+    ldr     r1, =PSG_MIXER_SHADOW
+    mov     r0, #0x3F
+    str     r0, [r1]
+    @ initialise globals
+    ldr     r1, =0x00100CE0
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x00100CE4
+    mov     r0, #60
+    str     r0, [r1]
+    ldr     r1, =0x00100CE8
+    mov     r0, #1
+    str     r0, [r1]
+    ldr     r1, =0x00100CEC
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x00100CF0
+    mov     r0, #0
+    str     r0, [r1]
+    b       .Lgp_1
+    .ltorg
+.Lgp_1:
+    @ main() body
+    ldr     r0, =_MUSIC1_MUSIC    @ asset 'music1'
+    push    {r0}
+    pop     {r0}
+    bl      pitrex_play_music
+    mov     r0, #0
+    ldr     r1, =0x00100CE0    @ BX
+    str     r0, [r1]
+    mov     r0, #60
+    ldr     r1, =0x00100CE4    @ BY
+    str     r0, [r1]
+    mov     r0, #1
+    ldr     r1, =0x00100CE8    @ VX
+    str     r0, [r1]
+    mov     r0, #0
+    ldr     r1, =0x00100CEC    @ VY
+    str     r0, [r1]
+    b       .Lgp_2
+    .ltorg
+.Lgp_2:
+
+pitrex_game_loop:
+    bl      pitrex_wait_recal   @ wraps v_WaitRecal + scale fix + UART frame trace
+    mov     r0, #0
+    ldr     r1, =PITREX_CUR_X
+    str     r0, [r1]
+    ldr     r1, =PITREX_CUR_Y
+    str     r0, [r1]
+    bl      v_readButtons
+    bl      v_readJoystick1Analog
+    bl      v_readJoystick2Analog
+    bl      pitrex_music_update
+    bl      pitrex_sfx_update
+    bl      v_doSound          @ flush PSG buffer to hardware
+    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE
+    mov     r1, #0
+    strb    r1, [r0]
+    ldr     r0, =-50
+    push    {r0}
+    mov     r0, #100
+    push    {r0}
+    b       _str_0_after
+_str_0:
+    .asciz  "PHYSICS"
+    .align  2
+_str_0_after:
+    ldr     r0, =_str_0
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      pitrex_print_text
+    ldr     r0, =-50
+    push    {r0}
+    mov     r0, #85
+    push    {r0}
+    b       _str_1_after
+_str_1:
+    .asciz  "B1=JUMP"
+    .align  2
+_str_1_after:
+    ldr     r0, =_str_1
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      pitrex_print_text
+    ldr     r1, =0x00100CEC    @ VY
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x00100CEC    @ VY
+    str     r0, [r1]
+    bl      pitrex_j1_x
+    ldr     r1, =0x00100CF0    @ JX
+    str     r0, [r1]
+    ldr     r1, =0x00100CF0    @ JX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #40
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf0
+    movs    r0, #1
+    b       .Lcf0e
+.Lcf0:
+    movs    r0, #0
+.Lcf0e:
+    cmp     r0, #0
+    beq     if_else_0
+    ldr     r1, =0x00100CE8    @ VX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x00100CE8    @ VX
+    str     r0, [r1]
+    b       if_end_0
+if_else_0:
+if_end_0:
+    ldr     r1, =0x00100CF0    @ JX
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-40
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf1
+    movs    r0, #1
+    b       .Lcf1e
+.Lcf1:
+    movs    r0, #0
+.Lcf1e:
+    cmp     r0, #0
+    beq     if_else_1
+    ldr     r1, =0x00100CE8    @ VX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x00100CE8    @ VX
+    str     r0, [r1]
+    b       if_end_1
+if_else_1:
+if_end_1:
+    bl      pitrex_j1_btn1
+    cmp     r0, #0
+    beq     if_else_2
+    mov     r0, #8
+    ldr     r1, =0x00100CEC    @ VY
+    str     r0, [r1]
+    ldr     r0, =_JUMP_SFX    @ asset 'jump'
+    push    {r0}
+    pop     {r0}
+    bl      pitrex_play_sfx
+    b       if_end_2
+if_else_2:
+if_end_2:
+    ldr     r1, =0x00100CE8    @ VX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #6
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf2
+    movs    r0, #1
+    b       .Lcf2e
+.Lcf2:
+    movs    r0, #0
+.Lcf2e:
+    cmp     r0, #0
+    beq     if_else_3
+    mov     r0, #6
+    ldr     r1, =0x00100CE8    @ VX
+    str     r0, [r1]
+    b       if_end_3
+if_else_3:
+if_end_3:
+    ldr     r1, =0x00100CE8    @ VX
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-6
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf3
+    movs    r0, #1
+    b       .Lcf3e
+.Lcf3:
+    movs    r0, #0
+.Lcf3e:
+    cmp     r0, #0
+    beq     if_else_4
+    ldr     r0, =-6
+    ldr     r1, =0x00100CE8    @ VX
+    str     r0, [r1]
+    b       if_end_4
+if_else_4:
+if_end_4:
+    ldr     r1, =0x00100CE0    @ BX
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x00100CE8    @ VX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x00100CE0    @ BX
+    str     r0, [r1]
+    b       .Lgp_3
+    .ltorg
+.Lgp_3:
+    ldr     r1, =0x00100CE4    @ BY
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x00100CEC    @ VY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x00100CE4    @ BY
+    str     r0, [r1]
+    ldr     r1, =0x00100CE4    @ BY
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-90
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf4
+    movs    r0, #1
+    b       .Lcf4e
+.Lcf4:
+    movs    r0, #0
+.Lcf4e:
+    cmp     r0, #0
+    beq     if_else_5
+    ldr     r0, =-90
+    ldr     r1, =0x00100CE4    @ BY
+    str     r0, [r1]
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x00100CEC    @ VY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x00100CEC    @ VY
+    str     r0, [r1]
+    ldr     r1, =0x00100CEC    @ VY
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #12
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf5
+    movs    r0, #1
+    b       .Lcf5e
+.Lcf5:
+    movs    r0, #0
+.Lcf5e:
+    cmp     r0, #0
+    beq     if_else_6
+    mov     r0, #12
+    ldr     r1, =0x00100CEC    @ VY
+    str     r0, [r1]
+    b       if_end_6
+if_else_6:
+if_end_6:
+    ldr     r0, =_HIT_SFX    @ asset 'hit'
+    push    {r0}
+    pop     {r0}
+    bl      pitrex_play_sfx
+    b       if_end_5
+if_else_5:
+if_end_5:
+    ldr     r1, =0x00100CE4    @ BY
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #90
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf6
+    movs    r0, #1
+    b       .Lcf6e
+.Lcf6:
+    movs    r0, #0
+.Lcf6e:
+    cmp     r0, #0
+    beq     if_else_7
+    mov     r0, #90
+    ldr     r1, =0x00100CE4    @ BY
+    str     r0, [r1]
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x00100CEC    @ VY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x00100CEC    @ VY
+    str     r0, [r1]
+    b       if_end_7
+if_else_7:
+if_end_7:
+    ldr     r1, =0x00100CE0    @ BX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #100
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf7
+    movs    r0, #1
+    b       .Lcf7e
+.Lcf7:
+    movs    r0, #0
+.Lcf7e:
+    cmp     r0, #0
+    beq     if_else_8
+    mov     r0, #100
+    ldr     r1, =0x00100CE0    @ BX
+    str     r0, [r1]
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x00100CE8    @ VX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x00100CE8    @ VX
+    str     r0, [r1]
+    ldr     r0, =_HIT_SFX    @ asset 'hit'
+    push    {r0}
+    pop     {r0}
+    bl      pitrex_play_sfx
+    b       if_end_8
+if_else_8:
+if_end_8:
+    ldr     r1, =0x00100CE0    @ BX
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-100
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf8
+    movs    r0, #1
+    b       .Lcf8e
+.Lcf8:
+    movs    r0, #0
+.Lcf8e:
+    cmp     r0, #0
+    beq     if_else_9
+    ldr     r0, =-100
+    ldr     r1, =0x00100CE0    @ BX
+    str     r0, [r1]
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x00100CE8    @ VX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x00100CE8    @ VX
+    str     r0, [r1]
+    ldr     r0, =_HIT_SFX    @ asset 'hit'
+    push    {r0}
+    pop     {r0}
+    bl      pitrex_play_sfx
+    b       if_end_9
+if_else_9:
+if_end_9:
+    b       .Lgp_4
+    .ltorg
+.Lgp_4:
+    ldr     r0, =_BUBBLE_MEDIUM_VECTORS    @ asset 'bubble_medium'
+    push    {r0}
+    ldr     r1, =0x00100CE0    @ BX
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x00100CE4    @ BY
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      pitrex_draw_vector
+    mov     r0, #60
+    push    {r0}
+    ldr     r0, =-100
+    push    {r0}
+    ldr     r0, =-110
+    push    {r0}
+    mov     r0, #100
+    push    {r0}
+    ldr     r0, =-110
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      pitrex_draw_line
+    add     sp, sp, #4
+    b       pitrex_game_loop
+
+@ vpy_uart_puts(r0=str_ptr) — write null-terminated string via UART
+.type vpy_uart_puts, %function
+vpy_uart_puts:
+    push    {r4, lr}
+    mov     r4, r0
+.Lputs_loop:
+    ldrb    r0, [r4], #1
+    cmp     r0, #0
+    beq     .Lputs_done
+    bl      RPI_AuxUartWrite
+    b       .Lputs_loop
+.Lputs_done:
+    pop     {r4, pc}
+
+@ vpy_uart_print_int(r0=val)
+.type vpy_uart_print_int, %function
+vpy_uart_print_int:
+    push    {r4, r5, r6, lr}
+    mov     r4, r0
+    cmp     r4, #0
+    bge     .Lpint_pos
+    mov     r0, #'-'
+    bl      RPI_AuxUartWrite
+    rsb     r4, r4, #0
+.Lpint_pos:
+    cmp     r4, #0
+    bne     .Lpint_nonzero
+    mov     r0, #'0'
+    bl      RPI_AuxUartWrite
+    b       .Lpint_done
+.Lpint_nonzero:
+    sub     sp, sp, #12
+    mov     r6, sp
+    mov     r5, #0
+.Lpint_extract:
+    cmp     r4, #0
+    beq     .Lpint_print
+    mov     r0, r4
+    mov     r1, #10
+    bl      __aeabi_idivmod
+    add     r1, r1, #'0'
+    strb    r1, [r6, r5]
+    add     r5, r5, #1
+    mov     r4, r0
+    b       .Lpint_extract
+.Lpint_print:
+    sub     r5, r5, #1
+.Lpint_ploop:
+    cmp     r5, #0
+    blt     .Lpint_cleanup
+    ldrb    r0, [r6, r5]
+    bl      RPI_AuxUartWrite
+    sub     r5, r5, #1
+    b       .Lpint_ploop
+.Lpint_cleanup:
+    add     sp, sp, #12
+.Lpint_done:
+    pop     {r4, r5, r6, pc}
+
+@ uart_trace_xy(r0=label, r1=x, r2=y) — gated by UART_TRACE_FRAMES_LEFT
+.global uart_trace_xy
+.type uart_trace_xy, %function
+uart_trace_xy:
+    push    {r4, r5, r6, lr}
+    ldr     r4, =UART_TRACE_FRAMES_LEFT
+    ldr     r4, [r4]
+    cmp     r4, #0
+    popeq   {r4, r5, r6, pc}
+    mov     r5, r1              @ save x
+    mov     r6, r2              @ save y
+    bl      vpy_uart_puts       @ label (r0 already)
+    mov     r0, r5
+    bl      vpy_uart_print_int
+    mov     r0, #','
+    bl      RPI_AuxUartWrite
+    mov     r0, r6
+    bl      vpy_uart_print_int
+    ldr     r0, =.Lstr_crlf
+    bl      vpy_uart_puts
+    pop     {r4, r5, r6, pc}
+
+.Lstr_start:  .asciz "VPy PiTrex starting\r\n"
+.Lstr_vinit:  .asciz "vectrexinit OK\r\n"
+.Lstr_frame_sep: .asciz "---\r\n"
+.Lstr_dv_p:   .asciz "DV p="
+.Lstr_prv:    .asciz " prv="
+.Lstr_tgt:    .asciz " tgt="
+.Lstr_dlt:    .asciz " dlt="
+.Lstr_crlf:   .asciz "\r\n"
+.Lstr_mv:     .asciz "MV "
+.Lstr_dr:     .asciz "DR "
+.Lstr_br:     .asciz "  br="
+.Lstr_frame_hdr:     .asciz ">>> FRAME "
+.Lstr_frame_hdr_end: .asciz " START <<<\r\n"
+.Lstr_sint:          .asciz "SINT="
+.Lstr_cpu_w:         .asciz "W="
+.Lstr_cpu_of:        .asciz "/20000us\r\n"
+.Lstr_cpu_ovr:       .asciz "!OVR:W="
+    .ltorg
+
+@ ============================================================
+@ Asset data
+@ ============================================================
+
+@ --- bubble_medium (1 path(s)) ---
+.global _BUBBLE_MEDIUM_VECTORS
+_BUBBLE_MEDIUM_VECTORS:
+    .word   1               @ path_count
+    .word   _BUBBLE_MEDIUM_PATH0      @ ptr path 0
+
+_BUBBLE_MEDIUM_PATH0:
+    .byte   127               @ intensity
+    .byte   0x00, 0x0F, 0x00, 0x00  @ y=0, x=15, hdr
+    .byte   0xFF, 0x04, 0xFF  @ line dy=4, dx=-1
+    .byte   0xFF, 0x04, 0xFF  @ line dy=4, dx=-1
+    .byte   0xFF, 0x03, 0xFE  @ line dy=3, dx=-2
+    .byte   0xFF, 0x02, 0xFD  @ line dy=2, dx=-3
+    .byte   0xFF, 0x01, 0xFC  @ line dy=1, dx=-4
+    .byte   0xFF, 0x01, 0xFC  @ line dy=1, dx=-4
+    .byte   0xFF, 0xFF, 0xFC  @ line dy=-1, dx=-4
+    .byte   0xFF, 0xFF, 0xFC  @ line dy=-1, dx=-4
+    .byte   0xFF, 0xFE, 0xFD  @ line dy=-2, dx=-3
+    .byte   0xFF, 0xFD, 0xFE  @ line dy=-3, dx=-2
+    .byte   0xFF, 0xFC, 0xFF  @ line dy=-4, dx=-1
+    .byte   0xFF, 0xFC, 0xFF  @ line dy=-4, dx=-1
+    .byte   0xFF, 0xFC, 0x01  @ line dy=-4, dx=1
+    .byte   0xFF, 0xFC, 0x01  @ line dy=-4, dx=1
+    .byte   0xFF, 0xFD, 0x02  @ line dy=-3, dx=2
+    .byte   0xFF, 0xFE, 0x03  @ line dy=-2, dx=3
+    .byte   0xFF, 0xFF, 0x04  @ line dy=-1, dx=4
+    .byte   0xFF, 0xFF, 0x04  @ line dy=-1, dx=4
+    .byte   0xFF, 0x01, 0x04  @ line dy=1, dx=4
+    .byte   0xFF, 0x01, 0x04  @ line dy=1, dx=4
+    .byte   0xFF, 0x02, 0x03  @ line dy=2, dx=3
+    .byte   0xFF, 0x03, 0x02  @ line dy=3, dx=2
+    .byte   0xFF, 0x04, 0x01  @ line dy=4, dx=1
+    .byte   0xFF, 0x04, 0x01  @ line dy=4, dx=1
+    .byte   0x02            @ end marker
+
+@ --- BUBBLE_MEDIUM_3D_DATA (1 path(s)) ---
+.global _BUBBLE_MEDIUM_3D_DATA
+_BUBBLE_MEDIUM_3D_DATA:
+    .word   24               @ vertex_count
+    .byte   0x0F, 0x00, 0x00  @ vert 0: x=15,y=0,z=0
+    .byte   0x0E, 0x04, 0x00  @ vert 1: x=14,y=4,z=0
+    .byte   0x0D, 0x08, 0x00  @ vert 2: x=13,y=8,z=0
+    .byte   0x0B, 0x0B, 0x00  @ vert 3: x=11,y=11,z=0
+    .byte   0x08, 0x0D, 0x00  @ vert 4: x=8,y=13,z=0
+    .byte   0x04, 0x0E, 0x00  @ vert 5: x=4,y=14,z=0
+    .byte   0x00, 0x0F, 0x00  @ vert 6: x=0,y=15,z=0
+    .byte   0xFC, 0x0E, 0x00  @ vert 7: x=-4,y=14,z=0
+    .byte   0xF8, 0x0D, 0x00  @ vert 8: x=-8,y=13,z=0
+    .byte   0xF5, 0x0B, 0x00  @ vert 9: x=-11,y=11,z=0
+    .byte   0xF3, 0x08, 0x00  @ vert 10: x=-13,y=8,z=0
+    .byte   0xF2, 0x04, 0x00  @ vert 11: x=-14,y=4,z=0
+    .byte   0xF1, 0x00, 0x00  @ vert 12: x=-15,y=0,z=0
+    .byte   0xF2, 0xFC, 0x00  @ vert 13: x=-14,y=-4,z=0
+    .byte   0xF3, 0xF8, 0x00  @ vert 14: x=-13,y=-8,z=0
+    .byte   0xF5, 0xF5, 0x00  @ vert 15: x=-11,y=-11,z=0
+    .byte   0xF8, 0xF3, 0x00  @ vert 16: x=-8,y=-13,z=0
+    .byte   0xFC, 0xF2, 0x00  @ vert 17: x=-4,y=-14,z=0
+    .byte   0x00, 0xF1, 0x00  @ vert 18: x=0,y=-15,z=0
+    .byte   0x04, 0xF2, 0x00  @ vert 19: x=4,y=-14,z=0
+    .byte   0x08, 0xF3, 0x00  @ vert 20: x=8,y=-13,z=0
+    .byte   0x0B, 0xF5, 0x00  @ vert 21: x=11,y=-11,z=0
+    .byte   0x0D, 0xF8, 0x00  @ vert 22: x=13,y=-8,z=0
+    .byte   0x0E, 0xFC, 0x00  @ vert 23: x=14,y=-4,z=0
+    .word   1               @ path_count
+    .byte   24               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   10
+    .byte   11
+    .byte   12
+    .byte   13
+    .byte   14
+    .byte   15
+    .byte   16
+    .byte   17
+    .byte   18
+    .byte   19
+    .byte   20
+    .byte   21
+    .byte   22
+    .byte   23
+
+@ --- hit SFX (15 frames, 16 events) ---
+.global _HIT_SFX
 _HIT_SFX:
-    ; SFX: hit (hit)
-    ; Duration: 300ms (15fr), Freq: 200Hz, Channel: 0
-    FCB $6C         ; Frame 0 - flags (vol=12, noisevol=12, tone=Y, noise=Y)
-    FCB $00, $84  ; Tone period = 132 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6F         ; Frame 1 - flags (vol=15, noisevol=11, tone=Y, noise=Y)
-    FCB $00, $A0  ; Tone period = 160 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6F         ; Frame 2 - flags (vol=15, noisevol=10, tone=Y, noise=Y)
-    FCB $00, $BD  ; Tone period = 189 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6E         ; Frame 3 - flags (vol=14, noisevol=8, tone=Y, noise=Y)
-    FCB $00, $D9  ; Tone period = 217 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6D         ; Frame 4 - flags (vol=13, noisevol=7, tone=Y, noise=Y)
-    FCB $00, $F5  ; Tone period = 245 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 5 - flags (vol=12, noisevol=6, tone=Y, noise=Y)
-    FCB $01, $12  ; Tone period = 274 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 6 - flags (vol=12, noisevol=5, tone=Y, noise=Y)
-    FCB $01, $2E  ; Tone period = 302 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 7 - flags (vol=12, noisevol=4, tone=Y, noise=Y)
-    FCB $01, $4A  ; Tone period = 330 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 8 - flags (vol=12, noisevol=2, tone=Y, noise=Y)
-    FCB $01, $67  ; Tone period = 359 (big-endian)
-    FCB $08         ; Noise period
-    FCB $6C         ; Frame 9 - flags (vol=12, noisevol=1, tone=Y, noise=Y)
-    FCB $01, $83  ; Tone period = 387 (big-endian)
-    FCB $08         ; Noise period
-    FCB $AC         ; Frame 10 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $01, $9F  ; Tone period = 415 (big-endian)
-    FCB $AC         ; Frame 11 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $01, $BC  ; Tone period = 444 (big-endian)
-    FCB $A9         ; Frame 12 - flags (vol=9, noisevol=0, tone=Y, noise=N)
-    FCB $01, $D8  ; Tone period = 472 (big-endian)
-    FCB $A6         ; Frame 13 - flags (vol=6, noisevol=0, tone=Y, noise=N)
-    FCB $01, $F4  ; Tone period = 500 (big-endian)
-    FCB $A3         ; Frame 14 - flags (vol=3, noisevol=0, tone=Y, noise=N)
-    FCB $02, $11  ; Tone period = 529 (big-endian)
-    FCB $D0, $20    ; End of effect marker
+    .word   16  @ num_events
+    .byte   0, 5  @ frame=0
+    .byte   6, 8  @ PSG r6
+    .byte   4, 112  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 12  @ PSG r10
+    .byte   7, 27  @ PSG r7
+    .byte   0, 3  @ frame=1
+    .byte   4, 132  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 11  @ PSG r10
+    .byte   0, 3  @ frame=2
+    .byte   4, 156  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 15  @ PSG r10
+    .byte   0, 2  @ frame=3
+    .byte   4, 182  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   0, 3  @ frame=4
+    .byte   4, 212  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   0, 3  @ frame=5
+    .byte   4, 246  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   0, 3  @ frame=6
+    .byte   4, 30  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 12  @ PSG r10
+    .byte   0, 3  @ frame=7
+    .byte   4, 76  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 9  @ PSG r10
+    .byte   0, 3  @ frame=8
+    .byte   4, 131  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 7  @ PSG r10
+    .byte   0, 3  @ frame=9
+    .byte   4, 198  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 4  @ PSG r10
+    .byte   0, 4  @ frame=10
+    .byte   4, 24  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 2  @ PSG r10
+    .byte   7, 59  @ PSG r7
+    .byte   0, 4  @ frame=11
+    .byte   4, 127  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   0, 2  @ frame=12
+    .byte   4, 5  @ PSG r4
+    .byte   5, 4  @ PSG r5
+    .byte   0, 2  @ frame=13
+    .byte   4, 187  @ PSG r4
+    .byte   5, 4  @ PSG r5
+    .byte   0, 2  @ frame=14
+    .byte   4, 190  @ PSG r4
+    .byte   5, 5  @ PSG r5
+    .byte   0, 2  @ frame=15
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   0, 0  @ end
 
+@ --- jump SFX (9 frames, 10 events) ---
+.global _JUMP_SFX
+_JUMP_SFX:
+    .word   10  @ num_events
+    .byte   0, 4  @ frame=0
+    .byte   4, 189  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   0, 4  @ frame=1
+    .byte   4, 119  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 59  @ PSG r7
+    .byte   0, 2  @ frame=2
+    .byte   4, 68  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   0, 3  @ frame=3
+    .byte   4, 29  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   0, 3  @ frame=4
+    .byte   4, 255  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 12  @ PSG r10
+    .byte   0, 3  @ frame=5
+    .byte   4, 230  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 9  @ PSG r10
+    .byte   0, 3  @ frame=6
+    .byte   4, 210  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 7  @ PSG r10
+    .byte   0, 3  @ frame=7
+    .byte   4, 193  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 4  @ PSG r10
+    .byte   0, 3  @ frame=8
+    .byte   4, 178  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 2  @ PSG r10
+    .byte   0, 2  @ frame=9
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   0, 0  @ end
 
-; String literals (classic FCC + $80 terminator)
-STR_0:
-    FCC "B1=JUMP"
-    FCB $80
-STR_1:
-    FCC "PHYSICS"
-    FCB $80
+@ --- music1 MUSIC (23 events, loop@0) ---
+.global _MUSIC1_MUSIC
+_MUSIC1_MUSIC:
+    .word   23           @ num_events
+    .word   8           @ loop_event_byte_offset from base
+    .byte   0, 11  @ frame=0 delay=0 writes=11
+    .byte   6, 15  @ PSG r6
+    .byte   0, 179  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 10  @ PSG r9
+    .byte   4, 153  @ PSG r4
+    .byte   5, 5  @ PSG r5
+    .byte   10, 8  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   12, 1  @ frame=13 delay=12 writes=1
+    .byte   7, 56  @ PSG r7
+    .byte   11, 4  @ frame=25 delay=11 writes=4
+    .byte   0, 142  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   24, 8  @ frame=50 delay=24 writes=8
+    .byte   6, 15  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   2, 239  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 10  @ PSG r9
+    .byte   7, 48  @ PSG r7
+    .byte   12, 1  @ frame=63 delay=12 writes=1
+    .byte   7, 56  @ PSG r7
+    .byte   11, 4  @ frame=75 delay=11 writes=4
+    .byte   0, 90  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   24, 11  @ frame=100 delay=24 writes=11
+    .byte   6, 15  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   2, 179  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 10  @ PSG r9
+    .byte   4, 153  @ PSG r4
+    .byte   5, 5  @ PSG r5
+    .byte   10, 8  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   12, 1  @ frame=113 delay=12 writes=1
+    .byte   7, 56  @ PSG r7
+    .byte   11, 4  @ frame=125 delay=11 writes=4
+    .byte   0, 142  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   24, 8  @ frame=150 delay=24 writes=8
+    .byte   6, 15  @ PSG r6
+    .byte   0, 179  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 10  @ PSG r9
+    .byte   7, 48  @ PSG r7
+    .byte   12, 1  @ frame=163 delay=12 writes=1
+    .byte   7, 56  @ PSG r7
+    .byte   36, 11  @ frame=200 delay=36 writes=11
+    .byte   6, 15  @ PSG r6
+    .byte   0, 160  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   2, 12  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 10  @ PSG r9
+    .byte   4, 253  @ PSG r4
+    .byte   5, 4  @ PSG r5
+    .byte   10, 8  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   12, 1  @ frame=213 delay=12 writes=1
+    .byte   7, 56  @ PSG r7
+    .byte   11, 4  @ frame=225 delay=11 writes=4
+    .byte   0, 134  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   24, 8  @ frame=250 delay=24 writes=8
+    .byte   6, 15  @ PSG r6
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   2, 213  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 10  @ PSG r9
+    .byte   7, 48  @ PSG r7
+    .byte   12, 1  @ frame=263 delay=12 writes=1
+    .byte   7, 56  @ PSG r7
+    .byte   11, 4  @ frame=275 delay=11 writes=4
+    .byte   0, 80  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   24, 11  @ frame=300 delay=24 writes=11
+    .byte   6, 15  @ PSG r6
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   2, 160  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 10  @ PSG r9
+    .byte   4, 253  @ PSG r4
+    .byte   5, 4  @ PSG r5
+    .byte   10, 8  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   12, 1  @ frame=313 delay=12 writes=1
+    .byte   7, 56  @ PSG r7
+    .byte   11, 4  @ frame=325 delay=11 writes=4
+    .byte   0, 134  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   7, 56  @ PSG r7
+    .byte   24, 8  @ frame=350 delay=24 writes=8
+    .byte   6, 15  @ PSG r6
+    .byte   0, 160  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   2, 12  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 10  @ PSG r9
+    .byte   7, 48  @ PSG r7
+    .byte   12, 1  @ frame=363 delay=12 writes=1
+    .byte   7, 56  @ PSG r7
+    .byte   36, 4  @ frame=400 delay=36 writes=4
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   0, 0xFF   @ loop back (fires frame ~400)
+

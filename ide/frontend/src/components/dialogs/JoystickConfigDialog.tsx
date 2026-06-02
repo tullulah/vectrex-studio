@@ -6,6 +6,7 @@ export const JoystickConfigDialog: React.FC = () => {
     isConfigOpen,
     setConfigOpen,
     connectedGamepads,
+    gamepadIndex2, gamepadName2, selectGamepad2,
     updateGamepads,
     gamepadIndex,
     gamepadName,
@@ -195,6 +196,51 @@ export const JoystickConfigDialog: React.FC = () => {
           {gamepadName && (
             <p style={{ fontSize: 12, color: '#888', marginTop: 5 }}>
               Selected: {gamepadName}
+            </p>
+          )}
+        </div>
+
+        {/* Player 2 — second gamepad (optional, for J2_* builtins). Reuses
+            the axis / button mappings configured above (same controller
+            model assumed). Select "None" to disable J2 reads. */}
+        <div style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 14, marginBottom: 10, color: '#ffffff' }}>Select Player 2 Gamepad (optional)</h3>
+          {connectedGamepads.length < 2 ? (
+            <p style={{ color: '#888', fontSize: 12 }}>
+              Connect a second gamepad to enable J2_* reads.
+            </p>
+          ) : (
+            <select
+              value={gamepadIndex2 ?? ''}
+              onChange={(e) => {
+                if (e.target.value === '') {
+                  selectGamepad2(null, null);
+                } else {
+                  const idx = parseInt(e.target.value);
+                  const gp = connectedGamepads[idx];
+                  if (gp) selectGamepad2(idx, gp.id);
+                }
+              }}
+              style={{
+                width: '100%',
+                padding: 8,
+                background: '#252526',
+                border: '1px solid #3c3c3c',
+                color: '#cccccc',
+                borderRadius: 4,
+              }}
+            >
+              <option value="">-- None (J2 disabled) --</option>
+              {connectedGamepads.map((gp, idx) => (
+                <option key={idx} value={idx} disabled={idx === gamepadIndex}>
+                  {gp.id} (Index {idx}){idx === gamepadIndex ? ' — already P1' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          {gamepadName2 && (
+            <p style={{ fontSize: 12, color: '#888', marginTop: 5 }}>
+              Selected: {gamepadName2}
             </p>
           )}
         </div>
@@ -478,7 +524,7 @@ export const JoystickConfigDialog: React.FC = () => {
                           const x = applyDeadzone(rawX, deadzone);
                           const y = applyDeadzone(rawY, deadzone);
                           const left = 50 + (x * 40); // 40% = max range from center
-                          const top = 50 + (y * 40);
+                          const top  = 50 - (y * 40); // negate: screen Y grows down, joystick Y grows up
                           const isInDeadzone = Math.abs(rawX) < deadzone && Math.abs(rawY) < deadzone;
                           
                           return (

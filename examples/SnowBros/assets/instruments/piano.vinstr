@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "name": "piano",
+  "duration_frames": 7,
+  "volume": 14,
+  "arpeggio_count": 2,
+  "arpeggio_speed_frames": 4,
+  "arpeggio_intervals": [
+    -10,
+    6,
+    0,
+    0
+  ],
+  "noise_enabled": false,
+  "noise_period": 0,
+  "pitch_sweep_delta": -24,
+  "pitch_sweep_duration_frames": 31
+}

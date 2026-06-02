@@ -1,0 +1,119 @@
+{
+  "version": "1.0",
+  "name": "snowball",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "path_1780000005001",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 0,
+              "y": 21,
+              "z": 0
+            },
+            {
+              "x": 21,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "x": 0,
+              "y": -19,
+              "z": 0
+            },
+            {
+              "x": -19,
+              "y": 0,
+              "z": 0
+            },
+            {
+              "x": 0,
+              "y": 21,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1780000005002",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {
+              "x": -9,
+              "y": 12,
+              "z": 0
+            },
+            {
+              "x": 12,
+              "y": 12,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1780000005003",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {
+              "x": -15,
+              "y": 5,
+              "z": 0
+            },
+            {
+              "x": 18,
+              "y": 5,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1780000005004",
+          "intensity": 80,
+          "closed": false,
+          "points": [
+            {
+              "x": -13,
+              "y": -6,
+              "z": 0
+            },
+            {
+              "x": 14,
+              "y": -6,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1780000005005",
+          "intensity": 60,
+          "closed": false,
+          "points": [
+            {
+              "x": -6,
+              "y": -13,
+              "z": 0
+            },
+            {
+              "x": 8,
+              "y": -13,
+              "z": 0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 1,
+  "center_y": 1
+}

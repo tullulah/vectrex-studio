@@ -30,13 +30,40 @@ export type CollisionShape = 'circle' | 'rect';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
-export type AIType = 
+export type AIType =
   | 'none'
   | 'static'
   | 'patrol'
+  | 'wander'
   | 'chase'
   | 'flee'
   | 'custom';
+
+/**
+ * A horizontal walkable area: enemy walks X-only within [x_min, x_max] at y.
+ * Wander enemies are confined to one area; transitions move them between areas.
+ */
+export interface WalkableArea {
+  y: number;
+  x_min: number;
+  x_max: number;
+}
+
+export type AreaTransitionType = 'jump_up' | 'drop' | 'jump_across';
+
+/**
+ * A transition between two walkable areas. Enemy in area `from` may roll at
+ * idle-end to enter AIRBORNE state and ballistic-travel to area `to`.
+ */
+export interface AreaTransition {
+  from: number;
+  to: number;
+  type: AreaTransitionType;
+  /** Optional explicit takeoff X on the source area. Defaults to (x_min+x_max)/2. */
+  from_x?: number;
+  /** Optional explicit landing X on the target area. Defaults to (x_min+x_max)/2. */
+  to_x?: number;
+}
 
 export interface VPlayMetadata {
   name: string;
@@ -178,16 +205,30 @@ export interface VPlayHotspot {
   label: string;       // shown in editor and as in-game prompt
 }
 
+export interface VPlayScrollLimits {
+  left?: number;    // world X: camera left edge cannot go below this
+  right?: number;   // world X: camera right edge cannot exceed this
+  top?: number;     // world Y: camera top edge cannot exceed this
+  bottom?: number;  // world Y: camera bottom edge cannot go below this
+}
+
 /**
  * Complete VPlay Level Structure v2.0
  */
 export interface VPlayLevel {
   version: string;         // "2.0"
   type: 'level';           // File type identifier
-  
+
   metadata: VPlayMetadata;
   worldBounds: VPlayWorldBounds;
-  
+
+  /** Level-wide walkable areas. Enemies whose own `walkable_areas` is absent
+   *  (undefined / missing) inherit these. Set on an enemy to override. */
+  walkable_areas?: WalkableArea[];
+  /** Level-wide transitions between walkable areas. Inheritance mirrors
+   *  walkable_areas: absent on enemy → uses these. */
+  transitions?: AreaTransition[];
+
   // New structure: organized by layers
   layers?: VPlayLayers;
   
@@ -202,6 +243,16 @@ export interface VPlayLevel {
 
   // Hotspots (interactive zones queryable at runtime)
   hotspots?: VPlayHotspot[];
+
+  // Scroll limits (camera clamp boundaries for scrolling levels)
+  scrollLimits?: VPlayScrollLimits;
+
+  // Editor-only metadata (not used at runtime)
+  _editorMeta?: {
+    screenBackgrounds?: { screenIndex: number; imagePath: string; offsetY?: number }[];
+    groundBottomOffset?: number;
+    [key: string]: unknown;
+  };
 }
 
 /**
@@ -275,7 +326,7 @@ export class VPlayValidator {
       if (!obj.type) {
         errors.push(`Object ${obj.id || index} missing type`);
       }
-      if (!obj.vectorName) {
+      if (!obj.vectorName && obj.type !== 'enemy') {
         errors.push(`Object ${obj.id || index} missing vectorName`);
       }
       if (obj.x === undefined || obj.y === undefined) {

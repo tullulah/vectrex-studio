@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, session, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, session, dialog, systemPreferences } from 'electron';
 import { spawn } from 'child_process';
 // Legacy TypeScript emulator removed: all references to './emu6809' have been deleted.
 // NOTE: Remaining emulator-related IPC endpoints that depended on globalCpu have been pruned.
@@ -9,6 +9,7 @@ import { join, basename, dirname } from 'path';
 import { existsSync } from 'fs';
 import * as fs from 'fs/promises';
 import { watch } from 'fs';
+import chokidar from 'chokidar';
 import * as crypto from 'crypto';
 import * as net from 'net';
 import { getMCPServer } from './mcp/server.js';
@@ -34,6 +35,51 @@ import {
   getFileBreakpoints,
   clearBreakpoints
 } from './pypilotDb.js';
+
+// macOS GUI apps launched from Finder/installer inherit a minimal PATH from
+// launchd (typically /usr/bin:/bin:/usr/sbin:/sbin) and do NOT pick up the
+// user's shell PATH. That means Homebrew binaries at /opt/homebrew/bin
+// (Apple Silicon) or /usr/local/bin (Intel) are invisible — so the packaged
+// build fails to find tools like arm-none-eabi-as even when the user has
+// them installed. Augment PATH at module load so every subsequent spawn
+// inherits the broadened search list.
+(function augmentPathForGuiLaunch() {
+  if (process.platform === 'win32') return;
+  const extras: string[] = [];
+  if (process.platform === 'darwin') {
+    extras.push(
+      '/opt/homebrew/bin',
+      '/opt/homebrew/sbin',
+      '/usr/local/bin',
+      '/usr/local/sbin',
+    );
+    // Official ARM GNU toolchain .pkg installer puts the toolchain under
+    // /Applications/ArmGNUToolchain/<ver>/arm-none-eabi/bin. Version varies,
+    // so list whatever subdirectories exist.
+    try {
+      const fsSync = require('fs') as typeof import('fs');
+      const root = '/Applications/ArmGNUToolchain';
+      if (fsSync.existsSync(root)) {
+        for (const v of fsSync.readdirSync(root)) {
+          const bin = `${root}/${v}/arm-none-eabi/bin`;
+          if (fsSync.existsSync(bin)) extras.push(bin);
+        }
+      }
+    } catch { /* readdir failures are non-fatal — Homebrew path still works */ }
+  } else if (process.platform === 'linux') {
+    extras.push('/usr/local/bin', '/snap/bin');
+  }
+  if (process.env.HOME) {
+    extras.push(`${process.env.HOME}/.cargo/bin`);
+    extras.push(`${process.env.HOME}/.local/bin`);
+  }
+  const current = (process.env.PATH || '').split(':').filter(Boolean);
+  const merged: string[] = [];
+  for (const p of [...current, ...extras]) {
+    if (p && !merged.includes(p)) merged.push(p);
+  }
+  process.env.PATH = merged.join(':');
+})();
 
 let mainWindow: BrowserWindow | null = null;
 let mcpIpcServer: net.Server | null = null;
@@ -75,6 +121,22 @@ interface LspChild {
 }
 let lsp: LspChild | null = null;
 
+// macOS auto-injects Writing Tools / AutoFill / Dictation / Emoji items into any
+// menu labeled "Edit". Suppress them via NSUserDefaults so AppKit skips the injection
+// when it builds the menu. Must run BEFORE Menu.setApplicationMenu.
+if (process.platform === 'darwin') {
+  try {
+    systemPreferences.setUserDefault('NSDisabledDictationMenuItem', 'boolean', true as any);
+    systemPreferences.setUserDefault('NSDisabledCharacterPaletteMenuItem', 'boolean', true as any);
+    // Writing Tools (macOS 15.x Sequoia)
+    systemPreferences.setUserDefault('NSAllowAIWritingTools', 'boolean', false as any);
+    // AutoFill submenu in Edit menu
+    systemPreferences.setUserDefault('WebAutomaticTextReplacementEnabled', 'boolean', false as any);
+  } catch (e) {
+    console.warn('[macOS] failed to suppress Edit menu auto-items:', e);
+  }
+}
+
 async function createWindow() {
   const verbose = process.env.VPY_IDE_VERBOSE_LSP === '1';
   if (verbose) console.log('[IDE] createWindow() start');
@@ -108,7 +170,10 @@ async function createWindow() {
               { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
               { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
               { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
-              { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') }
+              { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
+              { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
+              { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
+              { label: 'Enemy (.venemy)', click: () => mainWindow?.webContents.send('command', 'file.new.venemy') }
             ]
           },
           {
@@ -493,7 +558,14 @@ function resolveLspPath(): string | null {
   const candidates = [
     // Packaged app: resources directory
     join(process.resourcesPath, exeName),
-    // Ejecución desde root (run-ide.ps1 hace Set-Location root antes de lanzar)
+    // Dev mode: run-ide.sh / .ps1 copies the binary here after `cargo build`,
+    // so this is the source of truth when launching via `npm run dev`.
+    // Without this entry the IDE used to fall back to target/debug/ — which
+    // run-ide.sh no longer touches (it builds with --profile dev-fast).
+    join(cwd, 'ide', 'electron', 'resources', exeName),
+    join(cwd, '..', '..', 'ide', 'electron', 'resources', exeName),
+    // Manual `cargo build` without run-ide.sh
+    join(cwd, 'target', 'dev-fast', exeName),
     join(cwd, 'target', 'debug', exeName),
     join(cwd, 'target', 'release', exeName),
     // Bin copiado manualmente
@@ -556,7 +628,10 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
             { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
             { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
             { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
-            { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') }
+            { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
+            { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
+            { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
+            { label: 'Enemy (.venemy)', click: () => mainWindow?.webContents.send('command', 'file.new.venemy') }
           ]
         },
         {
@@ -928,14 +1003,119 @@ function parseCompilerDiagnostics(output: string, sourceFile: string): Array<{ f
   return diags;
 }
 
+
+async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserWindow | null): Promise<void> {
+  const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
+  const sdBundlePath = join(resourcesDir, 'pitrex-sd');
+
+  // Resolve SD mount: use explicit path if set, otherwise find first non-system volume
+  let sdMount: string = sdPath.trim();
+  if (!sdMount) {
+    try {
+      const volumes = await fs.readdir('/Volumes');
+      const skip = new Set(['Macintosh HD', 'Macintosh HD - Data', 'Recovery']);
+      for (const vol of volumes) {
+        if (skip.has(vol)) continue;
+        sdMount = join('/Volumes', vol);
+        break;
+      }
+    } catch {}
+  }
+
+  if (!sdMount) {
+    win?.webContents.send('run://stderr', '[SD] No SD card found. Set the SD path in Settings > Build Target > PiTrex.\n');
+    win?.webContents.send('run://status', 'Copy to SD failed: no SD card found');
+    return;
+  }
+
+  // Verify the path exists
+  try {
+    await fs.access(sdMount);
+  } catch {
+    win?.webContents.send('run://stderr', `[SD] Path not found: ${sdMount}\n`);
+    win?.webContents.send('run://status', `Copy to SD failed: path not found: ${sdMount}`);
+    return;
+  }
+
+  win?.webContents.send('run://stdout', `[SD] Copying to ${sdMount}...\n`);
+
+  const sdFiles = ['bootcode.bin', 'config.txt', 'fixup.dat', 'start.elf', 'vectrexInterface.ini'];
+  for (const file of sdFiles) {
+    const src = join(sdBundlePath, file);
+    const dst = join(sdMount, file);
+    try {
+      await fs.copyFile(src, dst);
+      win?.webContents.send('run://stdout', `[SD]   + ${file}\n`);
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[SD] Failed to copy ${file}: ${e.message}\n`);
+    }
+  }
+
+  const kernelDst = join(sdMount, 'kernel7l.img');
+  try {
+    await fs.copyFile(imgPath, kernelDst);
+    win?.webContents.send('run://stdout', `[SD]   + kernel7.img\n`);
+    win?.webContents.send('run://status', `Copied to SD: ${sdMount}`);
+    win?.webContents.send('run://stdout', `[SD] Done.\n`);
+  } catch (e: any) {
+    win?.webContents.send('run://stderr', `[SD] Failed to copy kernel7.img: ${e.message}\n`);
+  }
+}
+
+async function copyUvm2ToSDCard(um2Path: string, sdPath: string, win: BrowserWindow | null): Promise<void> {
+  // Resolve SD mount: use explicit path if set, otherwise find first non-system volume
+  let sdMount: string = sdPath.trim();
+  if (!sdMount) {
+    try {
+      const volumes = await fs.readdir('/Volumes');
+      const skip = new Set(['Macintosh HD', 'Macintosh HD - Data', 'Recovery']);
+      for (const vol of volumes) {
+        if (skip.has(vol)) continue;
+        sdMount = join('/Volumes', vol);
+        break;
+      }
+    } catch {}
+  }
+
+  if (!sdMount) {
+    win?.webContents.send('run://stderr', '[SD] No SD card found. Set the SD path in Settings > Build Target > UVM2.\n');
+    win?.webContents.send('run://status', 'Copy to SD failed: no SD card found');
+    return;
+  }
+
+  // Verify the path exists
+  try {
+    await fs.access(sdMount);
+  } catch {
+    win?.webContents.send('run://stderr', `[SD] Path not found: ${sdMount}\n`);
+    win?.webContents.send('run://status', `Copy to SD failed: path not found: ${sdMount}`);
+    return;
+  }
+
+  const um2Name = basename(um2Path);
+  const dst = join(sdMount, um2Name);
+  win?.webContents.send('run://stdout', `[SD] Copying ${um2Name} to ${sdMount}...\n`);
+  try {
+    await fs.copyFile(um2Path, dst);
+    win?.webContents.send('run://stdout', `[SD] ✓ ${um2Name} copied to SD.\n`);
+    win?.webContents.send('run://status', `Copied to SD: ${sdMount}`);
+  } catch (e: any) {
+    win?.webContents.send('run://stderr', `[SD] Failed to copy ${um2Name}: ${e.message}\n`);
+  }
+}
+
 // Exported function for direct invocation (e.g. from MCP server)
-export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core' }) {
+export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string }) {
   // CRITICAL: Log received args to debug compiler selection
   console.log('[RUN] executeCompilation received args:', JSON.stringify({ ...args, saveIfDirty: args?.saveIfDirty ? '...' : undefined }));
   
-  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools' } = args || {} as any;
+  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '' } = args || {} as any;
   
   console.log('[RUN] Extracted compilerBackend:', compilerBackend);
+  // Surface pitrex SD flags to the output panel so they're always visible
+  if (target === 'pitrex') {
+    mainWindow?.webContents.send('run://stdout', `[SD] pitrexCopyToSD=${pitrexCopyToSD} sdPath="${pitrexSdPath}"\n`);
+  }
   
   // Check if we have a project open - if so, compile the project instead of individual file
   const project = getCurrentProject();
@@ -1041,11 +1221,12 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
     // NEW: ['build', fsPath, '--output', binPath, '--rom-size', '32768', '--bank-size', '32768', '--debug']
     
     // If outputPath is provided (from project), use it
-    let finalBinPath = outAsm.replace(/\.asm$/, '.bin');
+    const binExt = (target === 'pitrex') ? '.img' : '.bin';
+    let finalBinPath = outAsm.replace(/\.asm$/, binExt);
     if (finalOutputPath) {
-      // outputPath is the .bin path, derive .asm from it
+      // outputPath is the .bin path, derive .asm from it, then apply correct extension for target
       const outAsmFromProject = finalOutputPath.replace(/\.bin$/, '.asm');
-      finalBinPath = finalOutputPath;
+      finalBinPath = finalOutputPath.replace(/\.bin$/, binExt);
       outAsm = outAsmFromProject; // CRITICAL: Use project ASM path for all checks
       // Ensure output directory exists
       const outputDir = join(finalOutputPath, '..');
@@ -1063,16 +1244,20 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
       argsv = ['build', fsPath, '--target', 'vectrex', '--title', basename(fsPath).replace(/\.[^.]+$/, '').toUpperCase(), '--bin', '--include-dir', workspaceRoot];
     } else {
       // NEW BUILDTOOLS COMPILER (vpy_cli) ARGUMENTS
+      const buildTarget = target ?? 'm6809';
       argsv = ['build', fsPath, '--output', finalBinPath];
-      
+
       // Add ROM size configuration if in project mode (read from .vpyproj if needed)
       // Default: 32KB single-bank
       argsv.push('--rom-size', '32768');
       argsv.push('--bank-size', '32768');
-      
+
+      // Target platform
+      argsv.push('--target', buildTarget);
+
       // Always generate debug symbols
       argsv.push('--debug');
-      
+
       // If verbose mode, add --verbose flag
       if (verbose) {
         argsv.push('--verbose');
@@ -1219,7 +1404,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         mainWindow?.webContents.send('run://diagnostics', []);
         
         // Phase 3: Load .pdb debug symbols if available
-        const pdbPath = binPath.replace(/\.bin$/, '.pdb');
+        const pdbPath = binPath.replace(/\.[^.]+$/, '.pdb');
         let pdbData: any = null;
         
         try {
@@ -1250,8 +1435,48 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           mainWindow?.webContents.send('run://stderr', `⚠ Warning: Failed to load .pdb: ${e.message}`);
         }
         
+        // For rp2350 builds, also load the .elf for symbol extraction in Rp2350System
+        let elfBase64: string | null = null;
+        if (target === 'rp2350') {
+          const elfPath = binPath.replace(/\.[^.]+$/, '.elf');
+          try {
+            const elfBuf = await fs.readFile(elfPath);
+            elfBase64 = Buffer.from(elfBuf).toString('base64');
+          } catch (_e) { /* elf not available */ }
+        }
+
+        // For pitrex builds, also read the .s assembly file for the in-browser ARM32 interpreter
+        let sFileText: string | null = null;
+        if (target === 'pitrex') {
+          // Derive .s path from binary path — handle .img, .bin, .elf, or any extension
+          const sPath = binPath.replace(/\.[^.]+$/, '.s');
+          try {
+            sFileText = await fs.readFile(sPath, 'utf8');
+            mainWindow?.webContents.send('run://status', `✅ pitrex .s file loaded (${sFileText.length} chars)`);
+          } catch (_e) {
+            // .s file not found at derived path — try sibling with project name
+            console.warn('[main] pitrex: could not load .s from', sPath);
+          }
+        }
+
         // Notify renderer to load binary
-        mainWindow?.webContents.send('emu://compiledBin', { base64, size: buf.length, binPath, pdbData });
+        mainWindow?.webContents.send('emu://compiledBin', {
+          base64, size: buf.length, binPath, pdbData,
+          target: target || 'm6809',
+          elfBase64,
+          sFileText,
+        });
+
+        // Copy to SD card if requested (pitrex target only)
+        if (target === 'pitrex' && pitrexCopyToSD) {
+          await copyPitrexToSDCard(binPath, pitrexSdPath, mainWindow ?? null);
+        }
+
+        // Copy to SD card if requested (uvm2 target)
+        if (target === 'uvm2' && uvm2CopyToSD) {
+          await copyUvm2ToSDCard(binPath, uvm2SdPath, mainWindow ?? null);
+        }
+
         resolvePromise({ 
           ok: true, 
           binPath, 
@@ -1638,7 +1863,10 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
             { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
             { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
             { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
-            { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') }
+            { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
+            { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
+            { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
+            { label: 'Enemy (.venemy)', click: () => mainWindow?.webContents.send('command', 'file.new.venemy') }
           ]
         },
         {
@@ -2013,80 +2241,47 @@ const recentChanges = new Map<string, { timestamp: number; type: string }>(); //
 ipcMain.handle('file:watchDirectory', async (_e, dirPath: string) => {
   try {
     if (watchers.has(dirPath)) {
-      // Already watching this directory
       return { ok: true };
     }
 
-    const watcher = watch(dirPath, { recursive: true }, (eventType, filename) => {
-      if (!filename) return;
-      
-      const fullPath = join(dirPath, filename);
-      
-      // Skip temporary files, hidden files, and generated build files
-      if (filename.startsWith('.') || filename.includes('~') || filename.endsWith('.tmp')) {
-        return;
-      }
-      
-      // Skip generated files that trigger recompilation loops
-      if (filename.endsWith('.asm') || filename.endsWith('.bin') || filename.endsWith('.pdb') || 
-          filename.endsWith('.map') || filename.includes('build/')) {
-        console.log(`[FileWatcher] Ignoring generated file: ${filename}`);
-        return;
-      }
-      
-      // Debounce: Skip if same file changed within last 500ms
+    const ignored = [
+      /(^|[/\\])\../, // hidden files
+      /~$/,
+      /\.tmp$/,
+      /\.asm$/,
+      /\.bin$/,
+      /\.pdb$/,
+      /\.map$/,
+      /[/\\]build[/\\]/,
+    ];
+
+    const watcher = chokidar.watch(dirPath, {
+      ignored,
+      persistent: true,
+      ignoreInitial: true,
+      awaitWriteFinish: { stabilityThreshold: 150, pollInterval: 50 },
+      usePolling: false,
+    });
+
+    const sendChange = (type: 'added' | 'removed' | 'changed', fullPath: string) => {
+      // Debounce per file
       const now = Date.now();
       const recent = recentChanges.get(fullPath);
-      if (recent && (now - recent.timestamp) < 500) {
-        console.log(`[FileWatcher] DEBOUNCED (too soon): ${filename}`);
-        return;
-      }
-      
-      // Determine if it's a directory by trying to stat it
-      let isDir = false;
-      try {
-        const stat = require('fs').statSync(fullPath);
-        isDir = stat.isDirectory();
-      } catch {
-        // File might have been deleted, assume it's a file
-        isDir = false;
-      }
-      
-      let changeType: 'added' | 'removed' | 'changed' = 'changed';
-      
-      // Try to determine if file was added or removed
-      try {
-        require('fs').accessSync(fullPath);
-        changeType = eventType === 'rename' ? 'added' : 'changed';
-      } catch {
-        changeType = 'removed';
-      }
-      
-      // Record this change
-      recentChanges.set(fullPath, { timestamp: now, type: changeType });
-      
-      console.log(`[FileWatcher] ${changeType}: ${filename} (dir: ${isDir})`);
-      
-      // Notify renderer
-      mainWindow?.webContents.send('file://changed', {
-        type: changeType,
-        path: filename,
-        isDir
-      });
-      
-      // Cleanup old entries from debounce map (keep only last 100)
-      if (recentChanges.size > 100) {
-        const sorted = Array.from(recentChanges.entries())
-          .sort((a, b) => b[1].timestamp - a[1].timestamp)
-          .slice(100);
-        for (const [key] of sorted) {
-          recentChanges.delete(key);
-        }
-      }
-    });
-    
-    watchers.set(dirPath, watcher);
-    console.log(`[FileWatcher] Started watching: ${dirPath}`);
+      if (recent && (now - recent.timestamp) < 300) return;
+      recentChanges.set(fullPath, { timestamp: now, type });
+
+      // Send the full absolute path so the renderer can match reliably
+      console.log(`[FileWatcher] ${type}: ${fullPath}`);
+      mainWindow?.webContents.send('file://changed', { type, path: fullPath, isDir: false });
+    };
+
+    watcher
+      .on('change', (p) => sendChange('changed', p))
+      .on('add',    (p) => sendChange('added',   p))
+      .on('unlink', (p) => sendChange('removed',  p));
+
+    watchers.set(dirPath, watcher as any);
+    console.log(`[FileWatcher] Started watching (chokidar): ${dirPath}`);
     return { ok: true };
   } catch (error) {
     console.error(`[FileWatcher] Error watching directory ${dirPath}:`, error);
@@ -2097,7 +2292,7 @@ ipcMain.handle('file:watchDirectory', async (_e, dirPath: string) => {
 ipcMain.handle('file:unwatchDirectory', async (_e, dirPath: string) => {
   const watcher = watchers.get(dirPath);
   if (watcher) {
-    watcher.close();
+    (watcher as any).close();
     watchers.delete(dirPath);
     console.log(`[FileWatcher] Stopped watching: ${dirPath}`);
   }
@@ -2586,17 +2781,30 @@ ipcMain.handle('git:log', async (_e, args: { projectDir: string; limit?: number 
 
     const simpleGit = (await import('simple-git')).default;
     const git = simpleGit(projectDir);
-    const log = await git.log({ maxCount: limit });
+    const rawOutput = await git.raw([
+      'log',
+      `--max-count=${limit}`,
+      '--format=%H\x1f%an\x1f%ae\x1f%ai\x1f%s\x1f%b\x1e',
+    ]);
 
-    const commits = log.all.map((commit: any) => ({
-      hash: commit.hash?.substring(0, 7) || '',
-      fullHash: commit.hash || '',
-      message: commit.message || '',
-      author: commit.author_name || 'Unknown',
-      email: commit.author_email || '',
-      date: commit.author_date || '',
-      body: commit.body || '',
-    }));
+    const commits = rawOutput.split('\x1e').flatMap(block => {
+      const line = block.trim();
+      if (!line) return [];
+      const parts = line.split('\x1f');
+      if (parts.length < 5) return [];
+      const [hash, author, email, date, message, body] = parts;
+      if (!hash || hash.length < 7) return [];
+      const parsed = new Date(date.trim());
+      return [{
+        hash: hash.trim().substring(0, 7),
+        fullHash: hash.trim(),
+        message: (message || '').trim(),
+        author: (author || 'Unknown').trim(),
+        email: (email || '').trim(),
+        date: !isNaN(parsed.getTime()) ? parsed.toISOString() : date.trim(),
+        body: (body || '').trim(),
+      }];
+    });
 
     return { ok: true, commits };
   } catch (error: any) {
@@ -2628,9 +2836,20 @@ ipcMain.handle('git:pull', async (_e, args: { projectDir: string; remote?: strin
 
     const simpleGit = (await import('simple-git')).default;
     const git = simpleGit(projectDir);
-    await git.pull(remote, branch);
-
-    return { ok: true };
+    try {
+      await git.pull(remote, branch, ['--no-rebase']);
+      return { ok: true };
+    } catch (error: any) {
+      const msg: string = error.message || '';
+      const hasConflicts =
+        msg.includes('CONFLICT') ||
+        msg.includes('Automatic merge failed') ||
+        msg.includes('fix conflicts');
+      if (hasConflicts) {
+        return { ok: false, hasConflicts: true, error: msg };
+      }
+      throw error;
+    }
   } catch (error: any) {
     console.error('[GIT:pull]', error);
     return { ok: false, error: error.message || 'Failed to pull changes' };
@@ -2739,20 +2958,19 @@ ipcMain.handle('git:searchCommits', async (_e, args: { projectDir: string; query
     const rawOutput = await git.raw([
       'log',
       `--max-count=${limit}`,
-      '--format=%H:%an:%ae:%ai:%s'
+      '--format=%H\x1f%an\x1f%ae\x1f%ai\x1f%s'
     ]);
 
     // Parse output
     const commits: Array<{hash: string; message: string; author: string; date: string; shortHash: string}> = [];
-    
+
     rawOutput.split('\n').forEach(line => {
       if (!line.trim()) return;
-      
-      const parts = line.split(':');
+
+      const parts = line.split('\x1f');
       if (parts.length < 5) return;
-      
-      const [hash, author, email, date, ...msgParts] = parts;
-      const message = msgParts.join(':');
+
+      const [hash, author, email, date, message] = parts;
       
       const searchableText = `${message} ${author} ${email}`.toLowerCase();
       if (searchableText.includes(query.toLowerCase())) {
@@ -2760,7 +2978,7 @@ ipcMain.handle('git:searchCommits', async (_e, args: { projectDir: string; query
           hash: hash.trim(),
           message: message.trim(),
           author: author.trim(),
-          date: date.trim(),
+          date: new Date(date.trim()).toISOString(),
           shortHash: hash.substring(0, 7)
         });
       }
@@ -2819,40 +3037,40 @@ ipcMain.handle('git:fileHistory', async (_e, args: { projectDir: string; filePat
     const rawOutput = await git.raw([
       'log',
       `--max-count=${limit + offset}`,
-      '--format=%H:%an:%ae:%ai:%s:%b',
+      '--format=%H\x1f%an\x1f%ae\x1f%ai\x1f%s',
       '--',
       filePath
     ]);
 
     // Parse output and apply pagination
     const commits: Array<{hash: string; shortHash: string; message: string; author: string; date: string; email: string; body: string}> = [];
-    
+
     const lines = rawOutput.split('\n');
-    let currentCommit: any = null;
     let lineCount = 0;
-    
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (!line.trim()) continue;
-      
-      // Check if this is a commit header (contains multiple colons with hash format)
-      const parts = line.split(':');
-      if (parts[0].length === 40) {  // SHA1 hash is 40 chars
-        lineCount++;
-        if (lineCount <= offset) continue;  // Skip offset entries
-        if (lineCount > offset + limit) break;  // Stop after limit
-        
-        const [hash, author, email, date, message] = parts;
-        commits.push({
-          hash: hash.trim(),
-          shortHash: hash.substring(0, 7),
-          message: (message || '').trim(),
-          author: author.trim(),
-          date: date.trim(),
-          email: email.trim(),
-          body: ''
-        });
-      }
+
+      const parts = line.split('\x1f');
+      if (parts.length < 5) continue;
+
+      const [hash, author, email, date, message] = parts;
+      if (hash.length < 7) continue;
+
+      lineCount++;
+      if (lineCount <= offset) continue;
+      if (lineCount > offset + limit) break;
+
+      commits.push({
+        hash: hash.trim(),
+        shortHash: hash.substring(0, 7),
+        message: (message || '').trim(),
+        author: author.trim(),
+        date: new Date(date.trim()).toISOString(),
+        email: email.trim(),
+        body: ''
+      });
     }
 
     return { ok: true, commits, filePath };
@@ -2916,8 +3134,7 @@ ipcMain.handle('git:stash', async (_e, args: { projectDir: string; message?: str
     const simpleGit = (await import('simple-git')).default;
     const git = simpleGit(projectDir);
 
-    const stashMessage = message ? `stash save "${message}"` : 'stash';
-    await git.stash([stashMessage.split(' ')[0], ...(message ? ['save', message] : [])]);
+    await git.stash(message ? ['push', '-m', message] : ['push']);
 
     return { ok: true };
   } catch (error: any) {

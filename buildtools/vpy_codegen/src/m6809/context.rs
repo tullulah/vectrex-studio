@@ -143,7 +143,8 @@ pub fn set_current_params(params: &[String]) {
     CURRENT_PARAMS.with(|cp| {
         let mut map = cp.borrow_mut();
         map.clear();
-        for (i, p) in params.iter().enumerate().take(5) {
+        // Keep in sync with MAX_USER_ARGS in expressions.rs.
+        for (i, p) in params.iter().enumerate().take(8) {
             map.insert(p.to_lowercase(), i);
         }
     });

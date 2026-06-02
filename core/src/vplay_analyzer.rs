@@ -11,7 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use crate::codegen::BufferRequirements; // Use type from codegen to avoid circular dependency
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -1,0 +1,13 @@
+[project]
+name = "solitaire"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/solitaire.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+vectors = ["assets/vectors/**/*.vec"]

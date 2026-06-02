@@ -3,6 +3,8 @@
 
 META TITLE = "PANG"
 META MUSIC = music1
+META ROM_TOTAL_SIZE = 65536
+META ROM_BANK_SIZE = 16384
 
 # Game states
 const STATE_TITLE = 0
@@ -147,8 +149,8 @@ def loop():
             joy_x = joystick1_state[0]
             joy_y = joystick1_state[1]
         
-        # Navigate locations with joystick (circular navigation)
-        # joy_x/joy_y are now raw values (-127 to +127), use thresholds
+        #Navigate locations with joystick (circular navigation)
+        #joy_x/joy_y are now raw values (-127 to +127), use thresholds
         if joy_x > 40 and prev_joy_x <= 40:  # Right threshold
             current_location = current_location + 1
             if current_location >= num_locations:
@@ -213,7 +215,7 @@ def loop():
             # When countdown finishes, spawn and start game
             if countdown_timer <= 0:
                 countdown_active = 0
-                spawn_enemies()
+                init_bubbles()
         else:
             # Actual game after countdown
             
@@ -419,8 +421,8 @@ def draw_game_level():
         DRAW_VECTOR_EX("player_walk_5", player_x, player_y, mirror_mode, 80)
     
     # Update and draw enemies
-    update_enemies()
-    draw_enemies()
+    update_bubbles()
+    draw_bubbles()
 
     # Draw hook rope and hook if active
     if hook_active == 1:
@@ -442,7 +444,7 @@ def draw_game_level():
 
 # ===== ENEMY SYSTEM - Simple and Clear =====
 
-def spawn_enemies():
+def init_bubbles():
     #"""Spawn enemies for current level - called ONCE when game starts"""
     count = level_enemy_count[current_location]
     speed = level_enemy_speed[current_location]
@@ -465,7 +467,7 @@ def spawn_enemies():
         enemy_vy[i] = 0          # Start stationary (gravity will pull down)
         i = i + 1
 
-def update_enemies():
+def update_bubbles():
     #"""Update all active enemies - called every frame during gameplay"""
     i = 0
     while i < MAX_ENEMIES:
@@ -498,7 +500,7 @@ def update_enemies():
        
 
 
-def draw_enemies():
+def draw_bubbles():
     #"""Draw all active enemies - called every frame during gameplay"""
     i = 0
     while i < MAX_ENEMIES:

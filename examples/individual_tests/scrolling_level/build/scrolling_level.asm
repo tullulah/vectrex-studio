@@ -32,6 +32,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -77,33 +79,49 @@ LEVEL_GP_COUNT       EQU $C880+$42   ; GP object count (1 bytes)
 LEVEL_FG_COUNT       EQU $C880+$43   ; FG object count (1 bytes)
 CAMERA_X             EQU $C880+$44   ; Camera X scroll offset (16-bit signed world units) (2 bytes)
 CAMERA_Y             EQU $C880+$46   ; Camera Y scroll offset (16-bit signed world units) (2 bytes)
-LEVEL_BG_ROM_PTR     EQU $C880+$48   ; BG layer ROM pointer (2 bytes)
-LEVEL_GP_ROM_PTR     EQU $C880+$4A   ; GP layer ROM pointer (2 bytes)
-LEVEL_FG_ROM_PTR     EQU $C880+$4C   ; FG layer ROM pointer (2 bytes)
-LEVEL_GP_PTR         EQU $C880+$4E   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
-LEVEL_BANK           EQU $C880+$50   ; Bank ID for current level (for multibank) (1 bytes)
-SLR_CUR_X            EQU $C880+$51   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
-LEVEL_GP_BUFFER      EQU $C880+$52   ; GP objects RAM buffer (max 8 objects × 15 bytes) (120 bytes)
-UGPC_OUTER_IDX       EQU $C880+$CA   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$CB   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$CC   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$CD   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$CF   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$D1   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$D2   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$D3   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$D4   ; GP-FG |dy| (1 bytes)
-VAR_CAMERA_X         EQU $C880+$D5   ; User variable: CAMERA_X (2 bytes)
-VAR_CAMERA_Y         EQU $C880+$D7   ; User variable: CAMERA_Y (2 bytes)
-VAR_JOY_X            EQU $C880+$D9   ; User variable: JOY_X (2 bytes)
-VAR_JOY_Y            EQU $C880+$DB   ; User variable: JOY_Y (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-
+SCROLL_LIMIT_LEFT    EQU $C880+$48   ; Camera scroll limit: left world X (2 bytes)
+SCROLL_LIMIT_RIGHT   EQU $C880+$4A   ; Camera scroll limit: right world X (2 bytes)
+SCROLL_LIMIT_TOP     EQU $C880+$4C   ; Camera scroll limit: top world Y (2 bytes)
+SCROLL_LIMIT_BOTTOM  EQU $C880+$4E   ; Camera scroll limit: bottom world Y (2 bytes)
+LEVEL_BG_ROM_PTR     EQU $C880+$50   ; BG layer ROM pointer (2 bytes)
+LEVEL_GP_ROM_PTR     EQU $C880+$52   ; GP layer ROM pointer (2 bytes)
+LEVEL_FG_ROM_PTR     EQU $C880+$54   ; FG layer ROM pointer (2 bytes)
+LEVEL_GP_PTR         EQU $C880+$56   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
+LEVEL_BANK           EQU $C880+$58   ; Bank ID for current level (for multibank) (1 bytes)
+LEVEL_ENEMY_COUNT    EQU $C880+$59   ; Enemy count from current level header (1 bytes)
+LEVEL_ENEMY_INSTANCES_PTR EQU $C880+$5A   ; Ptr to enemy instances table in level bank (2 bytes)
+SLR_CUR_X            EQU $C880+$5C   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
+DRAW_T1_SCALED       EQU $C880+$5D   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
+LEVEL_GP_BUFFER      EQU $C880+$5E   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
+LCOL_PX              EQU $C880+$23E   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
+LCOL_BEST_Y          EQU $C880+$240   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
+LCOL_PY              EQU $C880+$242   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
+LCOL_PHH             EQU $C880+$244   ; LEVEL_COLLISION player half_height (1 bytes)
+LCOL_PHW             EQU $C880+$245   ; LEVEL_COLLISION_X player half_width (1 bytes)
+LCOL_THW             EQU $C880+$246   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
+UGPC_OUTER_IDX       EQU $C880+$247   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$248   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$249   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$24A   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$24C   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$24E   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$24F   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$250   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$251   ; GP-FG |dy| (1 bytes)
+DRAW_SCALE           EQU $C880+$252   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_ARG0             EQU $C880+$253   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$255   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$257   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$259   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$25B   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$25D   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$25F   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$261   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$263   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_CAMERA_X         EQU $C880+$264   ; User variable: CAMERA_X (2 bytes)
+VAR_CAMERA_Y         EQU $C880+$266   ; User variable: CAMERA_Y (2 bytes)
+VAR_JOY_X            EQU $C880+$268   ; User variable: JOY_X (2 bytes)
+VAR_JOY_Y            EQU $C880+$26A   ; User variable: JOY_Y (2 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -113,6 +131,8 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    LDA #$7F
+    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
     LDD #0
     STD VAR_CAMERA_X
     LDD #0
@@ -164,10 +184,10 @@ LOOP_BODY:
     LDD #1
 .CMP_0_END:
     LBEQ IF_NEXT_1
-    LDD >VAR_CAMERA_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #3
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_CAMERA_X
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_CAMERA_X
     LBRA IF_END_0
 IF_NEXT_1:
@@ -183,12 +203,10 @@ IF_END_0:
     LDD #1
 .CMP_1_END:
     LBEQ IF_NEXT_3
-    LDD >VAR_CAMERA_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #3
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_CAMERA_X
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_CAMERA_X
     LBRA IF_END_2
 IF_NEXT_3:
@@ -204,10 +222,10 @@ IF_END_2:
     LDD #1
 .CMP_2_END:
     LBEQ IF_NEXT_5
-    LDD >VAR_CAMERA_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #3
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_CAMERA_Y
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_CAMERA_Y
     LBRA IF_END_4
 IF_NEXT_5:
@@ -223,12 +241,10 @@ IF_END_4:
     LDD #1
 .CMP_3_END:
     LBEQ IF_NEXT_7
-    LDD >VAR_CAMERA_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #3
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_CAMERA_Y
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_CAMERA_Y
     LBRA IF_END_6
 IF_NEXT_7:
@@ -311,13 +327,13 @@ IF_END_6:
     STA DRAW_VEC_Y
     CLR MIRROR_X
     CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
     LDX #_MARKER_PATH0  ; Load path 0
     JSR Draw_Sync_List_At_With_Mirrors
     LDX #_MARKER_PATH1  ; Load path 1
     JSR Draw_Sync_List_At_With_Mirrors
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
     LDD #0
     STD RESULT
     RTS
@@ -333,16 +349,18 @@ IF_END_6:
 
 _GROUND_WIDTH EQU 60
 _GROUND_HALF_WIDTH EQU 30
+_GROUND_HEIGHT EQU 0
+_GROUND_HALF_HEIGHT EQU 0
 _GROUND_CENTER_X EQU 0
 _GROUND_CENTER_Y EQU 0
 
 _GROUND_VECTORS:  ; Main entry (header + 1 path(s))
-    FCB 1               ; path_count (runtime metadata)
+    FDB 1               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _GROUND_PATH0        ; pointer to path 0
 
 _GROUND_PATH0:    ; Path 0
     FCB 80              ; path0: intensity
-    FCB $00,$E2,0,0        ; path0: header (y=0, x=-30, relative to center)
+    FCB $00,$E2,0,0        ; path0: header (y=0, x=-30)
     FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
     FCB 2                ; End marker (path complete)
 ; Generated from marker.vec (Malban Draw_Sync_List format)
@@ -352,23 +370,25 @@ _GROUND_PATH0:    ; Path 0
 
 _MARKER_WIDTH EQU 16
 _MARKER_HALF_WIDTH EQU 8
+_MARKER_HEIGHT EQU 16
+_MARKER_HALF_HEIGHT EQU 8
 _MARKER_CENTER_X EQU 0
 _MARKER_CENTER_Y EQU 0
 
 _MARKER_VECTORS:  ; Main entry (header + 2 path(s))
-    FCB 2               ; path_count (runtime metadata)
+    FDB 2               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _MARKER_PATH0        ; pointer to path 0
     FDB _MARKER_PATH1        ; pointer to path 1
 
 _MARKER_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
-    FCB $00,$F8,0,0        ; path0: header (y=0, x=-8, relative to center)
+    FCB $00,$F8,0,0        ; path0: header (y=0, x=-8)
     FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
     FCB 2                ; End marker (path complete)
 
 _MARKER_PATH1:    ; Path 1
     FCB 127              ; path1: intensity
-    FCB $F8,$00,0,0        ; path1: header (y=-8, x=0, relative to center)
+    FCB $F8,$00,0,0        ; path1: header (y=-8, x=0)
     FCB $FF,$10,$00          ; flag=-1, dy=16, dx=0
     FCB 2                ; End marker (path complete)
 ; Generated from tile.vec (Malban Draw_Sync_List format)
@@ -378,16 +398,18 @@ _MARKER_PATH1:    ; Path 1
 
 _TILE_WIDTH EQU 20
 _TILE_HALF_WIDTH EQU 10
+_TILE_HEIGHT EQU 20
+_TILE_HALF_HEIGHT EQU 10
 _TILE_CENTER_X EQU 0
 _TILE_CENTER_Y EQU 0
 
 _TILE_VECTORS:  ; Main entry (header + 1 path(s))
-    FCB 1               ; path_count (runtime metadata)
+    FDB 1               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _TILE_PATH0        ; pointer to path 0
 
 _TILE_PATH0:    ; Path 0
     FCB 100              ; path0: intensity
-    FCB $F6,$F6,0,0        ; path0: header (y=-10, x=-10, relative to center)
+    FCB $F6,$F6,0,0        ; path0: header (y=-10, x=-10)
     FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
     FCB $FF,$14,$00          ; flag=-1, dy=20, dx=0
     FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
@@ -398,245 +420,338 @@ _TILE_PATH0:    ; Path 0
 ; Difficulty: medium
 
 _WORLD_LEVEL:
-    FDB -128  ; World bounds: xMin (16-bit signed)
-    FDB 500  ; xMax (16-bit signed)
-    FDB -300  ; yMin (16-bit signed)
+    FDB -96  ; World bounds: xMin (16-bit signed)
+    FDB 479  ; xMax (16-bit signed)
+    FDB -384  ; yMin (16-bit signed)
     FDB 127  ; yMax (16-bit signed)
     FDB 0  ; Time limit (seconds)
     FDB 0  ; Target score
-    FCB 5  ; Background object count
-    FCB 8  ; Gameplay object count
+    FCB 0  ; Background object count
+    FCB 18  ; Gameplay object count
     FCB 0  ; Foreground object count
     FDB _WORLD_BG_OBJECTS
     FDB _WORLD_GAMEPLAY_OBJECTS
     FDB _WORLD_FG_OBJECTS
+    FDB -96  ; scrollLimit left (camera left cannot go below this)
+    FDB 479  ; scrollLimit right (camera right cannot exceed this)
+    FDB 127  ; scrollLimit top
+    FDB -384  ; scrollLimit bottom
+    FCB 0  ; enemy_count
+    FDB 0  ; enemy_instances_ptr (0 if none)
 
 _WORLD_BG_OBJECTS:
-; Object: obj_1 (enemy)
-    FCB 1  ; type
-    FDB 0  ; x
-    FDB -60  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _GROUND_VECTORS  ; vector_ptr
-    FCB _GROUND_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
-
-; Object: obj_2 (enemy)
-    FCB 1  ; type
-    FDB 200  ; x
-    FDB -60  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _GROUND_VECTORS  ; vector_ptr
-    FCB _GROUND_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
-
-; Object: obj_3 (enemy)
-    FCB 1  ; type
-    FDB 400  ; x
-    FDB -60  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _GROUND_VECTORS  ; vector_ptr
-    FCB _GROUND_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
-
-; Object: obj_4 (enemy)
-    FCB 1  ; type
-    FDB 0  ; x
-    FDB -180  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _GROUND_VECTORS  ; vector_ptr
-    FCB _GROUND_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
-
-; Object: obj_5 (enemy)
-    FCB 1  ; type
-    FDB 200  ; x
-    FDB -180  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _GROUND_VECTORS  ; vector_ptr
-    FCB _GROUND_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
-
 
 _WORLD_GAMEPLAY_OBJECTS:
-; Object: obj_6 (enemy)
-    FCB 1  ; type
+; Object: obj_1779657561201 (background)
+    FCB 4  ; type
+    FDB -1  ; x
+    FDB -65  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _GROUND_VECTORS  ; vector_ptr
+    FCB 30  ; half_width (1.00x, ROM+18)
+    FCB 1  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657565467 (background)
+    FCB 4  ; type
+    FDB 0  ; x
+    FDB 75  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _MARKER_VECTORS  ; vector_ptr
+    FCB 8  ; half_width (1.00x, ROM+18)
+    FCB 8  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657569239 (background)
+    FCB 4  ; type
     FDB 0  ; x
     FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
+    FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
     FCB 0  ; velocity_y
     FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
+    FCB 1  ; collision_flags
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _TILE_VECTORS  ; vector_ptr
-    FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB 10  ; half_width (1.00x, ROM+18)
+    FCB 10  ; half_height (1.00x, ROM+19)
 
-; Object: obj_7 (enemy)
-    FCB 1  ; type
-    FDB 80  ; x
+; Object: obj_1779657580298 (background)
+    FCB 4  ; type
+    FDB 193  ; x
+    FDB -65  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _GROUND_VECTORS  ; vector_ptr
+    FCB 30  ; half_width (1.00x, ROM+18)
+    FCB 1  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657589777 (background)
+    FCB 4  ; type
+    FDB 193  ; x
+    FDB -1  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _TILE_VECTORS  ; vector_ptr
+    FCB 10  ; half_width (1.00x, ROM+18)
+    FCB 10  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657592365 (background)
+    FCB 4  ; type
+    FDB 192  ; x
+    FDB 63  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _MARKER_VECTORS  ; vector_ptr
+    FCB 8  ; half_width (1.00x, ROM+18)
+    FCB 8  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657600377 (background)
+    FCB 4  ; type
+    FDB 193  ; x
+    FDB -224  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _TILE_VECTORS  ; vector_ptr
+    FCB 10  ; half_width (1.00x, ROM+18)
+    FCB 10  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657602346 (background)
+    FCB 4  ; type
+    FDB 0  ; x
+    FDB -217  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _TILE_VECTORS  ; vector_ptr
+    FCB 10  ; half_width (1.00x, ROM+18)
+    FCB 10  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657608661 (background)
+    FCB 4  ; type
+    FDB 0  ; x
+    FDB -322  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _GROUND_VECTORS  ; vector_ptr
+    FCB 30  ; half_width (1.00x, ROM+18)
+    FCB 1  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657614384 (background)
+    FCB 4  ; type
+    FDB 192  ; x
+    FDB -321  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _GROUND_VECTORS  ; vector_ptr
+    FCB 30  ; half_width (1.00x, ROM+18)
+    FCB 1  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657622986 (background)
+    FCB 4  ; type
+    FDB 385  ; x
+    FDB -322  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _GROUND_VECTORS  ; vector_ptr
+    FCB 30  ; half_width (1.00x, ROM+18)
+    FCB 1  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657628445 (background)
+    FCB 4  ; type
+    FDB 385  ; x
+    FDB -226  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _TILE_VECTORS  ; vector_ptr
+    FCB 10  ; half_width (1.00x, ROM+18)
+    FCB 10  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657644983 (background)
+    FCB 4  ; type
+    FDB 192  ; x
+    FDB -156  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _MARKER_VECTORS  ; vector_ptr
+    FCB 8  ; half_width (1.00x, ROM+18)
+    FCB 8  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657649588 (background)
+    FCB 4  ; type
+    FDB 0  ; x
+    FDB -153  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _MARKER_VECTORS  ; vector_ptr
+    FCB 8  ; half_width (1.00x, ROM+18)
+    FCB 8  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657657825 (background)
+    FCB 4  ; type
+    FDB 385  ; x
+    FDB -160  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _MARKER_VECTORS  ; vector_ptr
+    FCB 8  ; half_width (1.00x, ROM+18)
+    FCB 8  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657699691 (background)
+    FCB 4  ; type
+    FDB 384  ; x
+    FDB -66  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
+    FCB 0  ; rotation
+    FCB 0  ; intensity (0=use vec, >0=override)
+    FCB 0  ; velocity_x
+    FCB 0  ; velocity_y
+    FCB 0  ; physics_flags
+    FCB 1  ; collision_flags
+    FCB 10  ; collision_size
+    FDB 0  ; spawn_delay
+    FDB _GROUND_VECTORS  ; vector_ptr
+    FCB 30  ; half_width (1.00x, ROM+18)
+    FCB 1  ; half_height (1.00x, ROM+19)
+
+; Object: obj_1779657705939 (background)
+    FCB 4  ; type
+    FDB 383  ; x
     FDB 0  ; y
-    FDB 256  ; scale (8.8 fixed)
+    FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
     FCB 0  ; velocity_y
     FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
+    FCB 1  ; collision_flags
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
     FDB _TILE_VECTORS  ; vector_ptr
-    FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB 10  ; half_width (1.00x, ROM+18)
+    FCB 10  ; half_height (1.00x, ROM+19)
 
-; Object: obj_8 (enemy)
-    FCB 1  ; type
-    FDB 160  ; x
-    FDB 40  ; y
-    FDB 256  ; scale (8.8 fixed)
+; Object: obj_1779657710619 (background)
+    FCB 4  ; type
+    FDB 383  ; x
+    FDB 63  ; y
+    FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
     FCB 0  ; velocity_y
     FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
+    FCB 1  ; collision_flags
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
-    FDB _TILE_VECTORS  ; vector_ptr
-    FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
-
-; Object: obj_9 (enemy)
-    FCB 1  ; type
-    FDB 240  ; x
-    FDB -20  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _TILE_VECTORS  ; vector_ptr
-    FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
-
-; Object: obj_10 (enemy)
-    FCB 1  ; type
-    FDB 320  ; x
-    FDB 60  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _TILE_VECTORS  ; vector_ptr
-    FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
-
-; Object: obj_11 (enemy)
-    FCB 1  ; type
-    FDB 400  ; x
-    FDB -40  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _TILE_VECTORS  ; vector_ptr
-    FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
-
-; Object: obj_12 (enemy)
-    FCB 1  ; type
-    FDB 100  ; x
-    FDB -100  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _TILE_VECTORS  ; vector_ptr
-    FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
-
-; Object: obj_13 (enemy)
-    FCB 1  ; type
-    FDB 300  ; x
-    FDB -150  ; y
-    FDB 256  ; scale (8.8 fixed)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FDB _TILE_VECTORS  ; vector_ptr
-    FCB _TILE_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FDB _MARKER_VECTORS  ; vector_ptr
+    FCB 8  ; half_width (1.00x, ROM+18)
+    FCB 8  ; half_height (1.00x, ROM+19)
 
 
 _WORLD_FG_OBJECTS:
+
+_WORLD_ENEMY_COUNT EQU 0
 
 ;***************************************************************************
 ; RUNTIME HELPERS
@@ -716,19 +831,15 @@ J1Y_BUILTIN:
 Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller must ensure DP=$D0 for VIA access
-; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates
-; VIA Port B through states $05->$04->$01 which resets the analog hardware
-; (zero-reference sequence) and would disrupt the beam position mid-drawing.
-; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.
-LDA ,X+                 ; Read per-path intensity from vector data
+; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
+BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_SET_INTENSITY
+DSWM_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_SET_INTENSITY:
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
-LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
-LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
 TST >MIRROR_Y
@@ -768,7 +879,7 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore X
 STA VIA_port_a          ; X to DAC
-; T1 fixed at $7F (constant scale; brightness is set via $C832 above, independently)
+; Timing setup (match core: hardcoded $7F)
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
@@ -815,14 +926,20 @@ DSWM_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W2
+CLR VIA_port_a          ; stop X integrator drift between segments
 CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
 LBRA DSWM_LOOP          ; Long branch
 ; Next path: repeat mirror logic for new path header
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
-; Read per-path intensity from vector data
-LDA ,X+                 ; Read intensity from vector data
+; Check intensity override (same logic as start)
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
+BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_NEXT_SET_INTENSITY
+DSWM_NEXT_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_NEXT_SET_INTENSITY:
 PSHS A
 LDB ,X+                 ; y_start
@@ -839,12 +956,7 @@ DSWM_NEXT_NO_NEGATE_X:
 ADDA >DRAW_VEC_X        ; Add X offset
 STD >TEMP_YX
 PULS A                  ; Get intensity back
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
-LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
-LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe)
 PULS D
 ADDD #3
 TFR D,X
@@ -872,7 +984,7 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
 STA VIA_port_a          ; X to DAC
-; T1 fixed at $7F (constant scale; brightness set via $C832 above)
+; Timing setup (match core: hardcoded $7F)
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
@@ -925,29 +1037,29 @@ LOAD_LEVEL_RUNTIME:
     LDD ,X++         ; D = fgObjectsPtr
     STD >LEVEL_FG_ROM_PTR
     
-    ; === Copy GP objects from ROM to RAM buffer ===
+    ; Read scroll limits from ROM header (+21..+28)
+    ; X is now at +21 (right after the 3 FDB layer pointers)
+    LDD ,X++         ; D = scrollLimit left
+    STD >SCROLL_LIMIT_LEFT
+    LDD ,X++         ; D = scrollLimit right
+    STD >SCROLL_LIMIT_RIGHT
+    LDD ,X++         ; D = scrollLimit top
+    STD >SCROLL_LIMIT_TOP
+    LDD ,X++         ; D = scrollLimit bottom
+    STD >SCROLL_LIMIT_BOTTOM
+    
+    ; Read enemy data from header (+29: count, +30,+31: instances_ptr)
+    LDB ,X+         ; B = enemy_count
+    STB >LEVEL_ENEMY_COUNT
+    LDD ,X          ; D = enemy_instances_ptr
+    STD >LEVEL_ENEMY_INSTANCES_PTR
+    
+    ; === Setup GP pointer: point directly to ROM (matches core) ===
+    ; GP objects are read from ROM with stride=20, same as BG/FG
     LDB >LEVEL_GP_COUNT
     BEQ LLR_SKIP_GP  ; Skip if no GP objects
-    
-    ; Clear GP buffer with $FF marker (empty sentinel)
-    LDA #$FF
-    LDU #LEVEL_GP_BUFFER
-    LDB #8           ; Max 8 objects
-LLR_CLR_GP_LOOP:
-    STA ,U           ; Write $FF to first byte of object slot
-    LEAU 15,U        ; Advance by 15 bytes (RAM object stride)
-    DECB
-    BNE LLR_CLR_GP_LOOP
-    
-    ; Copy GP objects: ROM (20 bytes each) → RAM buffer (14 bytes each)
-    LDB >LEVEL_GP_COUNT   ; Reload count after clear loop
-    LDX >LEVEL_GP_ROM_PTR ; X = source (ROM)
-    LDU #LEVEL_GP_BUFFER  ; U = destination (RAM)
-    PSHS U               ; Save buffer start
-    JSR LLR_COPY_OBJECTS  ; Copy B objects from X(ROM) to U(RAM)
-    PULS D               ; Restore buffer start into D
-    STD >LEVEL_GP_PTR    ; LEVEL_GP_PTR → RAM buffer
-    BRA LLR_GP_DONE
+    LDD >LEVEL_GP_ROM_PTR ; Just point to ROM
+    STD >LEVEL_GP_PTR    ; Store ROM pointer
     
 LLR_GP_DONE:
 LLR_SKIP_GP:
@@ -964,11 +1076,11 @@ LLR_SKIP_GP:
 ;   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),
 ;   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,
 ;   +11: physics_flags, +12: collision_flags, +13: collision_size,
-;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: reserved
+;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: half_height
 ; RAM object layout (15 bytes):
 ;   +0-1: world_x(FDB i16), +2: y(i8), +3: scale(low), +4: rotation,
 ;   +5: velocity_x, +6: velocity_y, +7: physics_flags, +8: collision_flags,
-;   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: reserved
+;   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: half_height
 ; Clobbers: A, B, X, U
 LLR_COPY_OBJECTS:
 LLR_COPY_LOOP:
@@ -1075,7 +1187,7 @@ SLR_GP_COUNT:
     LDB >LEVEL_GP_COUNT
     CMPB #0
     BEQ SLR_FOREGROUND
-    LDA #15          ; RAM object stride (15 bytes)
+    LDA #20          ; GP objects read from ROM (20 bytes)
     LDX >LEVEL_GP_PTR
     JSR SLR_DRAW_OBJECTS
     
@@ -1136,11 +1248,10 @@ SLR_INTENSITY_READ:
     LDD 0,X          ; RAM +0-1 = world_x (16-bit)
     SUBD >CAMERA_X   ; screen_x = world_x - camera_x
     STD >TMPVAL      ; save screen_x (overwritten by CMPB below)
-    ; Per-object cull using half_width from RAM+13
-    ; Wider culling: object stays until fully off-screen
-    ; Visible range: [-(128+hw), 127+hw]
-    ; right_limit = 127 + hw  (A=$00, B <= right_limit)
-    ; left_limit  = 128 - hw  (A=$FF, B >= left_limit)
+    ; Per-object cull with half_width expansion. Safe to widen here because
+    ; SLR_DRAW_CLIPPED_PATH handles per-path wrap (skip paths whose abs_x
+    ; falls out of i8 range) and per-segment clipping (beam-off moves when
+    ; cur_x + dx overflows). Visible range: [-(128+hw), 127+hw].
     LDB 13,X         ; B = half_width (RAM+13)
     STB >TMPPTR2     ; save hw
     LDA #127
@@ -1186,10 +1297,18 @@ SLR_RAM_Y_ZERO:
 SLR_RAM_Y_VISIBLE:
     STB >DRAW_VEC_Y
     LDU 11,X         ; vector_ptr at RAM +11
-    BRA SLR_DRAW_VECTOR
+    CMPU #0          ; null vector_ptr? (enemy type objects have no visual)
+    LBEQ SLR_OBJ_NEXT ; skip draw if no vector assigned
+    LDA 3,X          ; scale_t1 from RAM +3 (pre-computed T1 = scale*127)
+    STA >DRAW_T1_SCALED
+    LBRA SLR_DRAW_VECTOR
     
 SLR_ROM_OFFSETS:
     ; === ROM object (stride=20) ===
+    ; Skip enemy spawn markers (type==1): drawn by DRAW_ENEMIES, not SHOW_LEVEL
+    LDA ,X           ; type byte at ROM+0
+    CMPA #1
+    LBEQ SLR_OBJ_NEXT ; enemy marker: skip, handle via DRAW_ENEMIES
     CLR >MIRROR_X    ; DP=$D0, must use extended addressing
     CLR >MIRROR_Y
     LDA 8,X          ; intensity at ROM +8
@@ -1216,8 +1335,9 @@ SLR_ROM_Y_VISIBLE:
     LDD 1,X          ; x FDB at ROM +1
     SUBD >CAMERA_X   ; screen_x = world_x - camera_x
     STD >TMPVAL
-    ; Per-object cull: half_width at ROM+18
-    ; Wider culling: object stays until fully off-screen
+    ; Per-object cull with half_width (ROM+18). SLR_DRAW_CLIPPED_PATH
+    ; handles per-path wrap and per-segment beam-off moves, so widening
+    ; the cull here lets partial objects render at the screen edges.
     LDB 18,X         ; B = half_width (ROM+18)
     STB >TMPPTR2     ; save hw
     LDA #127
@@ -1242,13 +1362,17 @@ SLR_ROM_VISIBLE:
     LDD >TMPVAL      ; reload full 16-bit screen_x (INCA corrupted A)
     STD >DRAW_VEC_X_HI ; store full 16-bit screen_x (A=hi, B=lo)
     LDU 16,X         ; vector_ptr FDB at ROM +16
+    CMPU #0          ; null vector_ptr? (enemy type objects have no visual)
+    LBEQ SLR_OBJ_NEXT ; skip draw if no vector assigned
+    LDA 6,X          ; scale_t1 from ROM +6 (low byte of scale FDB; pre-computed T1 = scale*127)
+    STA >DRAW_T1_SCALED
     
 SLR_DRAW_VECTOR:
     PSHS X           ; Save object pointer
     TFR U,X          ; X = vector data pointer (header)
     
-    ; Read path_count from vector header byte 0
-    LDB ,X+          ; B = path_count, X now at pointer table
+    ; Read path_count from vector header (FDB = 2 bytes, high byte ignored)
+    LDD ,X++         ; D = path_count FDB; B = low byte = actual count, X now at pointer table
     
     ; DP is already $D0 (set by SHOW_LEVEL_RUNTIME at entry)
 SLR_PATH_LOOP:
@@ -1259,7 +1383,7 @@ SLR_PATH_LOOP:
     LDU ,X++         ; U = path pointer, X advances to next entry
     PSHS X           ; Save pointer table position
     TFR U,X          ; X = actual path data
-    JSR SLR_DRAW_CLIPPED_PATH
+    JSR SLR_DRAW_CLIPPED_PATH ; per-path 16-bit X clip (no DSWM wrap)
     PULS X           ; Restore pointer table position
     PULS B           ; Restore count
     BRA SLR_PATH_LOOP
@@ -1350,7 +1474,7 @@ SDCP_ABS_OK:
     INC VIA_port_b          ; PB=1: lock Y direction
     PULS A                  ; restore abs_x
     STA VIA_port_a          ; DX → DAC
-    LDA #$7F
+    LDA >DRAW_T1_SCALED     ; effective T1 for this object (scale * 127)
     STA VIA_t1_cnt_lo       ; load T1 latch
     LEAX 2,X                ; skip next_y, next_x (the 0,0)
     CLR VIA_t1_cnt_hi       ; start T1 → ramp

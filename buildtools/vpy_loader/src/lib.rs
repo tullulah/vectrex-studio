@@ -101,6 +101,8 @@ fn expand_glob_pattern(pattern: &str, root_dir: &Path) -> Result<Vec<PathBuf>, L
         Err(e) => return Err(LoadError::Io(format!("Glob pattern error: {}", e))),
     }
     
+    // Sort for deterministic ordering across platforms/filesystems
+    files.sort();
     Ok(files)
 }
 
@@ -301,8 +303,13 @@ fn discover_vpy_files(dir: &Path, files: &mut Vec<SourceFile>) -> Result<(), Loa
     let entries = std::fs::read_dir(dir)
         .map_err(|e| LoadError::Io(e.to_string()))?;
 
-    for entry in entries {
-        let entry = entry.map_err(|e| LoadError::Io(e.to_string()))?;
+    // Collect and sort entries for deterministic ordering across platforms/filesystems
+    let mut sorted_entries: Vec<_> = entries
+        .filter_map(|e| e.ok())
+        .collect();
+    sorted_entries.sort_by_key(|e| e.path());
+
+    for entry in sorted_entries {
         let path = entry.path();
 
         if path.is_dir() {
@@ -327,13 +334,15 @@ fn discover_vector_assets(dir: &Path, assets: &mut Vec<AssetFile>) -> Result<(),
     let entries = std::fs::read_dir(dir)
         .map_err(|e| LoadError::Io(e.to_string()))?;
 
-    for entry in entries {
-        let entry = entry.map_err(|e| LoadError::Io(e.to_string()))?;
-        let path = entry.path();
+    // Collect and sort for deterministic ordering across platforms/filesystems
+    let mut paths: Vec<_> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().map_or(false, |ext| ext == "vec"))
+        .collect();
+    paths.sort();
 
-        if path.extension().map_or(false, |ext| ext == "vec") {
-            assets.push(AssetFile::Vector(path));
-        }
+    for path in paths {
+        assets.push(AssetFile::Vector(path));
     }
 
     Ok(())
@@ -348,13 +357,15 @@ fn discover_music_assets(dir: &Path, assets: &mut Vec<AssetFile>) -> Result<(), 
     let entries = std::fs::read_dir(dir)
         .map_err(|e| LoadError::Io(e.to_string()))?;
 
-    for entry in entries {
-        let entry = entry.map_err(|e| LoadError::Io(e.to_string()))?;
-        let path = entry.path();
+    // Collect and sort for deterministic ordering across platforms/filesystems
+    let mut paths: Vec<_> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().map_or(false, |ext| ext == "vmus"))
+        .collect();
+    paths.sort();
 
-        if path.extension().map_or(false, |ext| ext == "vmus") {
-            assets.push(AssetFile::Music(path));
-        }
+    for path in paths {
+        assets.push(AssetFile::Music(path));
     }
 
     Ok(())

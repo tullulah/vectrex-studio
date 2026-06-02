@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "name": "mario_walk",
+  "loop": true,
+  "base_refs": ["mario_body"],
+  "frames": [
+    {
+      "index": 0,
+      "duration_ticks": 6,
+      "vec_refs": ["mario_legs_straight"],
+      "paths": []
+    },
+    {
+      "index": 1,
+      "duration_ticks": 6,
+      "vec_refs": ["mario_legs_stride_a"],
+      "paths": []
+    },
+    {
+      "index": 2,
+      "duration_ticks": 6,
+      "vec_refs": ["mario_legs_straight"],
+      "paths": []
+    },
+    {
+      "index": 3,
+      "duration_ticks": 6,
+      "vec_refs": ["mario_legs_stride_b"],
+      "paths": []
+    }
+  ]
+}

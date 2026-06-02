@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 use std::fs;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use crate::{AssetInfo, AssetType};
 use vpy_parser::{Module, Item, Stmt, Expr};
 
@@ -24,9 +24,84 @@ pub fn filter_used_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInf
         }
     }
 
+    // Also scan used .vanim files to include their vec_refs
+    let anim_names: Vec<String> = used_names.iter().cloned().collect();
+    for anim_name in &anim_names {
+        if let Some(anim_asset) = assets.iter().find(|a| {
+            matches!(a.asset_type, AssetType::Animation) && &a.name == anim_name
+        }) {
+            collect_vanim_vec_refs(&anim_asset.path, &mut used_names);
+        }
+    }
+
+    // Collect enemy types referenced in used .vplay files
+    for level_name in &level_names {
+        if let Some(level_asset) = assets.iter().find(|a| {
+            matches!(a.asset_type, AssetType::Level) && &a.name == level_name
+        }) {
+            if let Ok(content) = std::fs::read_to_string(&level_asset.path) {
+                if let Ok(level) = serde_json::from_str::<serde_json::Value>(&content) {
+                    for layer in &["background", "gameplay", "foreground"] {
+                        if let Some(objects) = level
+                            .get("layers")
+                            .and_then(|l| l.get(layer))
+                            .and_then(|l| l.as_array())
+                        {
+                            for obj in objects {
+                                if let Some(et) = obj
+                                    .get("enemyType")
+                                    .and_then(|v| v.as_str())
+                                {
+                                    if !et.is_empty() {
+                                        used_names.insert(et.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Also scan .venemy files for their action sprite names so those sprites are included
+    // in vector_entries and thus get a valid index in vec_idx_map.
+    let enemy_asset_names: Vec<(String, String)> = assets.iter()
+        .filter(|a| matches!(a.asset_type, AssetType::Enemy))
+        .map(|a| (a.name.clone(), a.path.clone()))
+        .collect();
+    for (_, enemy_path) in &enemy_asset_names {
+        if let Ok(resource) = crate::venemy::EnemyResource::load(std::path::Path::new(enemy_path)) {
+            for action in &resource.actions {
+                let stem = std::path::Path::new(&action.sprite)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                if !stem.is_empty() {
+                    used_names.insert(stem);
+                }
+            }
+        }
+    }
+    // Second pass: scan any newly added .vanim files for their vec_refs
+    let new_anim_names: Vec<String> = used_names.iter()
+        .filter(|n| assets.iter().any(|a| matches!(a.asset_type, AssetType::Animation) && &a.name == *n))
+        .cloned()
+        .collect();
+    for anim_name in &new_anim_names {
+        if let Some(anim_asset) = assets.iter().find(|a| matches!(a.asset_type, AssetType::Animation) && &a.name == anim_name) {
+            collect_vanim_vec_refs(&anim_asset.path, &mut used_names);
+        }
+    }
+
     // Filter assets to only those referenced in code (or used by levels)
+    // Enemy assets are always included: they're loaded dynamically via SPAWN_ENEMIES
+    // and referenced through level data at runtime, not by name in VPy source.
     assets.iter()
-        .filter(|asset| used_names.contains(&asset.name))
+        .filter(|asset| {
+            matches!(asset.asset_type, AssetType::Enemy) || used_names.contains(&asset.name)
+        })
         .cloned()
         .collect()
 }
@@ -40,6 +115,32 @@ fn collect_level_vector_names(level_path: &str, used_names: &mut HashSet<String>
         .chain(level.layers.foreground.iter())
     {
         used_names.insert(obj.vector_name.clone());
+    }
+}
+
+/// Collect all vector names referenced by any Animation asset in `assets`.
+/// These vectors are embedded inline in vanim data and are NOT in VECTOR_ADDR_TABLE.
+/// Used by builtins.rs to mirror the exact VECTOR_ADDR_TABLE filter logic.
+pub fn collect_anim_vec_refs(assets: &[crate::AssetInfo]) -> HashSet<String> {
+    let mut refs = HashSet::new();
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, crate::AssetType::Animation)) {
+        collect_vanim_vec_refs(&asset.path, &mut refs);
+    }
+    refs
+}
+
+/// Scan a .vanim JSON file and add all vec_refs (base_refs + per-frame) to used_names.
+fn collect_vanim_vec_refs(vanim_path: &str, used_names: &mut HashSet<String>) {
+    let Ok(resource) = crate::animres::VanimResource::load(Path::new(vanim_path)) else { return };
+    // Static cel layer — referenced on every frame
+    for vec_name in &resource.base_refs {
+        used_names.insert(vec_name.clone());
+    }
+    // Per-frame additional refs
+    for frame in &resource.frames {
+        for vec_name in &frame.vec_refs {
+            used_names.insert(vec_name.clone());
+        }
     }
 }
 
@@ -114,7 +215,8 @@ fn collect_asset_names_from_expr(expr: &Expr, used_names: &mut HashSet<String>) 
             // Check if it's an asset-loading builtin
             let up = name.to_uppercase();
             if up == "DRAW_VECTOR" || up == "DRAW_VECTOR_EX" || up == "DRAW_VECTOR_3D" ||
-               up == "PLAY_MUSIC" || up == "PLAY_SFX" || up == "LOAD_LEVEL" {
+               up == "PLAY_MUSIC" || up == "PLAY_SFX" || up == "LOAD_LEVEL" ||
+               up == "DRAW_ANIM" || up == "PLAY_NOTE" {
                 // First argument should be asset name (string literal)
                 if let Some(Expr::StringLit(asset_name)) = args.first() {
                     used_names.insert(asset_name.clone());
@@ -267,7 +369,62 @@ pub fn discover_assets(source_path: &Path) -> Vec<AssetInfo> {
             }
         }
     }
-    
+
+    // Search for animation assets (assets/animations/*.vanim)
+    let anim_dir = project_root.join("assets").join("animations");
+    if anim_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&anim_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("vanim") {
+                    if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                        assets.push(AssetInfo {
+                            name: name.to_string(),
+                            path: path.display().to_string(),
+                            asset_type: AssetType::Animation,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Search for instrument assets (assets/instruments/*.vinstr)
+    let instr_dir = project_root.join("assets").join("instruments");
+    if instr_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&instr_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("vinstr") {
+                    if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                        assets.push(AssetInfo {
+                            name: name.to_string(),
+                            path: path.display().to_string(),
+                            asset_type: AssetType::Instrument,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Search for enemy assets (assets/enemies/*.venemy)
+    let enemies_dir = project_root.join("assets").join("enemies");
+    if enemies_dir.is_dir() {
+        for entry in fs::read_dir(&enemies_dir).into_iter().flatten().flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("venemy") {
+                if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                    assets.push(AssetInfo {
+                        name: name.to_string(),
+                        path: path.display().to_string(),
+                        asset_type: AssetType::Enemy,
+                    });
+                }
+            }
+        }
+    }
+
     // Sort assets alphabetically by name for consistency
     assets.sort_by(|a, b| a.name.cmp(&b.name));
     assets
@@ -292,6 +449,31 @@ pub struct AssetDistribution {
     pub total_bytes: usize,
 }
 
+/// Build a map of vec asset name → (half_width, half_height) from already-generated vec ASM.
+/// Used to emit literal byte values in level objects instead of cross-bank EQU references.
+fn build_vec_dims(vec_assets: &[SizedAsset]) -> HashMap<String, (u32, u32)> {
+    let mut dims: HashMap<String, (u32, u32)> = HashMap::new();
+    for sa in vec_assets {
+        let name_up = sa.info.name.to_uppercase().replace('-', "_").replace(' ', "_");
+        let hw_marker = format!("_{}_HALF_WIDTH EQU ", name_up);
+        let hh_marker = format!("_{}_HALF_HEIGHT EQU ", name_up);
+        let mut hw = 0u32;
+        let mut hh = 0u32;
+        for line in sa.asm_code.lines() {
+            let t = line.trim();
+            if let Some(rest) = t.strip_prefix(&hw_marker) {
+                hw = rest.trim().parse().unwrap_or(0);
+            } else if let Some(rest) = t.strip_prefix(&hh_marker) {
+                hh = rest.trim().parse().unwrap_or(0);
+            }
+        }
+        if hw > 0 || hh > 0 {
+            dims.insert(sa.info.name.to_lowercase(), (hw, hh));
+        }
+    }
+    dims
+}
+
 /// Calculate sizes and generate ASM for all assets
 pub fn prepare_assets_with_sizes(assets: &[AssetInfo]) -> Vec<SizedAsset> {
     let mut sized_assets = Vec::new();
@@ -299,8 +481,8 @@ pub fn prepare_assets_with_sizes(assets: &[AssetInfo]) -> Vec<SizedAsset> {
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Vector)) {
         match crate::vecres::VecResource::load(Path::new(&asset.path)) {
             Ok(resource) => {
-                let binary_size = resource.estimate_binary_size();
                 let asm_code = resource.compile_to_asm_with_name(Some(&asset.name));
+                let binary_size = estimate_asm_size(&asm_code);
                 sized_assets.push(SizedAsset {
                     info: asset.clone(),
                     binary_size,
@@ -331,10 +513,15 @@ pub fn prepare_assets_with_sizes(assets: &[AssetInfo]) -> Vec<SizedAsset> {
         }
     }
     
+    let vec_dims = build_vec_dims(&sized_assets.iter()
+        .filter(|a| matches!(a.info.asset_type, AssetType::Vector))
+        .cloned()
+        .collect::<Vec<_>>());
+
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Level)) {
         match crate::levelres::VPlayLevel::load(Path::new(&asset.path)) {
             Ok(resource) => {
-                let asm_code = resource.compile_to_asm();
+                let asm_code = resource.compile_to_asm_with_vec_dims(&vec_dims);
                 let binary_size = estimate_asm_size(&asm_code);
                 sized_assets.push(SizedAsset {
                     info: asset.clone(),
@@ -347,7 +534,7 @@ pub fn prepare_assets_with_sizes(assets: &[AssetInfo]) -> Vec<SizedAsset> {
             }
         }
     }
-    
+
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Sfx)) {
         match crate::sfxres::SfxResource::load(Path::new(&asset.path)) {
             Ok(resource) => {
@@ -365,9 +552,60 @@ pub fn prepare_assets_with_sizes(assets: &[AssetInfo]) -> Vec<SizedAsset> {
         }
     }
 
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Animation)) {
+        match crate::animres::VanimResource::load(Path::new(&asset.path)) {
+            Ok(resource) => {
+                let binary_size = resource.estimate_binary_size();
+                let asm_code = crate::animres::compile_vanim_to_asm(&resource, &asset.name);
+                sized_assets.push(SizedAsset {
+                    info: asset.clone(),
+                    binary_size,
+                    asm_code,
+                });
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to load animation asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Instrument)) {
+        match crate::instrres::InstrResource::load(Path::new(&asset.path)) {
+            Ok(resource) => {
+                let asm_code = resource.compile_to_asm_with_name(Some(&asset.name));
+                let binary_size = 16; // Always 16 bytes (fixed-size block)
+                sized_assets.push(SizedAsset {
+                    info: asset.clone(),
+                    binary_size,
+                    asm_code,
+                });
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to load instrument asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Enemy)) {
+        match crate::venemy::EnemyResource::load(Path::new(&asset.path)) {
+            Ok(resource) => {
+                let binary_size = resource.estimate_binary_size();
+                let asm_code = resource.compile_to_asm_with_name(Some(&asset.name));
+                sized_assets.push(SizedAsset {
+                    info: asset.clone(),
+                    binary_size,
+                    asm_code,
+                });
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to load enemy asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
     // Sort by size descending (best for bin-packing)
     sized_assets.sort_by(|a, b| b.binary_size.cmp(&a.binary_size));
-    
+
     sized_assets
 }
 
@@ -414,12 +652,14 @@ pub fn distribute_assets(
     bank_size: usize,
     start_bank: u8,
     max_banks: u8,
+    pre_used_bytes: &HashMap<u8, usize>,
 ) -> AssetDistribution {
     use std::collections::HashMap;
     
     let sized_assets = prepare_assets_with_sizes(assets);
     let mut bank_assignments: HashMap<u8, Vec<SizedAsset>> = HashMap::new();
-    let mut bank_sizes: HashMap<u8, usize> = HashMap::new();
+    // Seed bank_sizes with function code already assigned to each bank.
+    let mut bank_sizes: HashMap<u8, usize> = pre_used_bytes.clone();
     
     // CRITICAL FIX (2026-01-20): Assets go to Banks #1-#30 (switchable window)
     // Bank #0 = main code + LOOP
@@ -438,9 +678,13 @@ pub fn distribute_assets(
     let total_assets = sized_assets.len();
     let total_bytes: usize = sized_assets.iter().map(|a| a.binary_size).sum();
     
-    // First-Fit Decreasing bin packing: larger assets first
+    // First-Fit Decreasing bin packing: larger assets first.
+    // Secondary key: asset name for deterministic ordering when sizes are equal.
     let mut sorted_assets = sized_assets;
-    sorted_assets.sort_by(|a, b| b.binary_size.cmp(&a.binary_size));
+    sorted_assets.sort_by(|a, b| {
+        b.binary_size.cmp(&a.binary_size)
+            .then_with(|| a.info.name.cmp(&b.info.name))
+    });
     
     for asset in sorted_assets {
         // Find a bank with enough space
@@ -478,18 +722,22 @@ pub fn generate_assets_asm(assets: &[AssetInfo]) -> Result<String, String> {
     out.push_str("; EMBEDDED ASSETS (vectors, music, levels, SFX)\n");
     out.push_str(";***************************************************************************\n\n");
     
-    // Generate vector assets
+    // Generate vector assets (also collect dims for level compilation)
+    let mut sg_vec_assets: Vec<SizedAsset> = Vec::new();
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Vector)) {
         match crate::vecres::VecResource::load(Path::new(&asset.path)) {
             Ok(resource) => {
-                out.push_str(&resource.compile_to_asm_with_name(Some(&asset.name)));
+                let asm = resource.compile_to_asm_with_name(Some(&asset.name));
+                out.push_str(&asm);
+                sg_vec_assets.push(SizedAsset { info: asset.clone(), binary_size: 0, asm_code: asm });
             },
             Err(e) => {
                 eprintln!("[WARNING] Failed to load vector asset '{}': {}", asset.name, e);
             }
         }
     }
-    
+    let sg_vec_dims = build_vec_dims(&sg_vec_assets);
+
     // Generate music assets
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Music)) {
         match crate::musres::MusicResource::load(Path::new(&asset.path)) {
@@ -501,12 +749,12 @@ pub fn generate_assets_asm(assets: &[AssetInfo]) -> Result<String, String> {
             }
         }
     }
-    
+
     // Generate level assets
     for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Level)) {
         match crate::levelres::VPlayLevel::load(Path::new(&asset.path)) {
             Ok(resource) => {
-                out.push_str(&resource.compile_to_asm());
+                out.push_str(&resource.compile_to_asm_with_vec_dims(&sg_vec_dims));
             },
             Err(e) => {
                 eprintln!("[WARNING] Failed to load level asset '{}': {}", asset.name, e);
@@ -525,7 +773,43 @@ pub fn generate_assets_asm(assets: &[AssetInfo]) -> Result<String, String> {
             }
         }
     }
-    
+
+    // Generate animation assets
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Animation)) {
+        match crate::animres::VanimResource::load(Path::new(&asset.path)) {
+            Ok(resource) => {
+                out.push_str(&crate::animres::compile_vanim_to_asm(&resource, &asset.name));
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to load animation asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
+    // Generate instrument assets
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Instrument)) {
+        match crate::instrres::InstrResource::load(Path::new(&asset.path)) {
+            Ok(resource) => {
+                out.push_str(&resource.compile_to_asm_with_name(Some(&asset.name)));
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to load instrument asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
+    // Generate enemy assets
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Enemy)) {
+        match crate::venemy::EnemyResource::load(Path::new(&asset.path)) {
+            Ok(resource) => {
+                out.push_str(&resource.compile_to_asm_with_name(Some(&asset.name)));
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to load enemy asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
     Ok(out)
 }
 
@@ -538,31 +822,117 @@ pub fn generate_distributed_assets_asm(
     assets: &[AssetInfo],
     bank_size: usize,
     helpers_bank: u8,
+    pre_used_bytes: &std::collections::HashMap<u8, usize>,
 ) -> Result<(std::collections::HashMap<u8, String>, String), String> {
     use std::collections::HashMap;
     
+    // Collect vec names referenced by animations — these must stay in the helpers bank
+    // so DRAW_ANIM_RUNTIME can follow FDB pointers without bank switching.
+    let mut anim_vec_refs: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Animation)) {
+        collect_vanim_vec_refs(&asset.path, &mut anim_vec_refs);
+    }
+
     // Distribute assets across banks 1..(helpers_bank-1)
     // Bank 0 has main code, helpers_bank has runtime
-    let distribution = distribute_assets(assets, bank_size, 1, helpers_bank.saturating_sub(1));
-    
+    // Exclude animations and animation-referenced vecs from distribution (they go to helpers bank)
+    let distributable: Vec<AssetInfo> = assets.iter()
+        .filter(|a| {
+            !matches!(a.asset_type, AssetType::Enemy | AssetType::Animation)
+                && !anim_vec_refs.contains(&a.name)
+        })
+        .cloned()
+        .collect();
+    let distribution = distribute_assets(&distributable, bank_size, 1, helpers_bank.saturating_sub(1), pre_used_bytes);
+
+    // Build vec_bank_map: lowercase vec name → bank_id, from distribution results.
+    // Used to regenerate level ASM with correct vector_bank bytes (stride-21 format).
+    let mut vec_bank_map: HashMap<String, u8> = HashMap::new();
+    for (bank_id, sized_assets) in &distribution.bank_assignments {
+        for asset in sized_assets {
+            if matches!(asset.info.asset_type, AssetType::Vector) {
+                vec_bank_map.insert(asset.info.name.to_lowercase(), *bank_id);
+            }
+        }
+    }
+
+    // Build vec_dims from distribution: vec name → (half_width, half_height).
+    // Needed to regenerate level ASM with correct AABB bytes.
+    let all_vec_assets: Vec<SizedAsset> = distribution.bank_assignments.values()
+        .flat_map(|assets| assets.iter())
+        .filter(|a| matches!(a.info.asset_type, AssetType::Vector))
+        .cloned()
+        .collect();
+    let vec_dims_for_levels = build_vec_dims(&all_vec_assets);
+
+    // Build vec_meshes: lowercase vec name → collision segments from the .vec file,
+    // for the LEVEL_COLLISION_Y mesh ray-cast (empty → AABB fallback for that object).
+    let mut vec_meshes: HashMap<String, Vec<crate::vecres::VecMeshSegment>> = HashMap::new();
+    // Per-vec walkable areas (vec-local coords). Used by levelres wander-enemy
+    // patrol-bound derivation: each placed platform contributes its own walk
+    // band so titchis end up patrolling the platform they spawn on, not just
+    // the level-wide floor band.
+    let mut vec_walk_areas: HashMap<String, Vec<crate::vecres::VecWalkableArea>> = HashMap::new();
+    for asset in &all_vec_assets {
+        if let Ok(text) = std::fs::read_to_string(&asset.info.path) {
+            if let Ok(res) = serde_json::from_str::<crate::vecres::VecResource>(&text) {
+                if let Some(mesh) = &res.collision_mesh {
+                    if !mesh.segments.is_empty() {
+                        vec_meshes.insert(asset.info.name.to_lowercase(), mesh.segments.clone());
+                    }
+                }
+                if !res.walkable_areas.is_empty() {
+                    vec_walk_areas.insert(asset.info.name.to_lowercase(), res.walkable_areas.clone());
+                }
+            }
+        }
+    }
+
+    // Regenerate level ASM using the now-known vec_bank_map (stride-23 with bank bytes).
+    // This second pass replaces the first-pass level ASM that was generated in
+    // prepare_assets_with_sizes without knowing which bank each vector lives in.
+    let mut level_asm_by_name: HashMap<String, String> = HashMap::new();
+    for (_, sized_assets) in &distribution.bank_assignments {
+        for asset in sized_assets {
+            if matches!(asset.info.asset_type, AssetType::Level) {
+                match crate::levelres::VPlayLevel::load(std::path::Path::new(&asset.info.path)) {
+                    Ok(resource) => {
+                        let asm_code = resource.compile_to_asm_with_bank_map_and_walk(&vec_dims_for_levels, &vec_bank_map, &vec_meshes, &vec_walk_areas);
+                        level_asm_by_name.insert(asset.info.name.clone(), asm_code);
+                    }
+                    Err(e) => {
+                        eprintln!("[WARNING] Failed to reload level asset '{}' for bank-map pass: {}", asset.info.name, e);
+                    }
+                }
+            }
+        }
+    }
+
     let mut bank_asm: HashMap<u8, String> = HashMap::new();
     let _asset_index = 0u16;
-    
+
     // Track asset info for lookup table generation
     let mut asset_entries: Vec<(String, u8, String, AssetType)> = Vec::new(); // (name, bank_id, label, type)
-    
+
     // Generate ASM for each bank
     for (bank_id, sized_assets) in &distribution.bank_assignments {
         let mut asm = String::new();
         asm.push_str(&format!(";***************************************************************************\n"));
         asm.push_str(&format!("; ASSETS IN BANK #{} ({} assets)\n", bank_id, sized_assets.len()));
         asm.push_str(&format!(";***************************************************************************\n\n"));
-        
+
         for asset in sized_assets {
-            // Use pre-generated ASM code
-            asm.push_str(&asset.asm_code);
+            // Use pre-generated ASM code (level ASM replaced with bank-map version)
+            let code = if matches!(asset.info.asset_type, AssetType::Level) {
+                level_asm_by_name.get(&asset.info.name)
+                    .map(|s| s.as_str())
+                    .unwrap_or(&asset.asm_code)
+            } else {
+                &asset.asm_code
+            };
+            asm.push_str(code);
             asm.push_str("\n");
-            
+
             // Track for lookup table with correct label suffix based on type
             let symbol_name = asset.info.name.to_uppercase().replace("-", "_").replace(" ", "_");
             let label = match asset.info.asset_type {
@@ -570,10 +940,13 @@ pub fn generate_distributed_assets_asm(
                 AssetType::Music => format!("_{}_MUSIC", symbol_name),
                 AssetType::Sfx => format!("_{}_SFX", symbol_name),
                 AssetType::Level => format!("_{}_LEVEL", symbol_name),
+                AssetType::Animation => format!("_ANIM_{}", symbol_name),
+                AssetType::Instrument => format!("_{}_INSTR", symbol_name),
+                AssetType::Enemy => format!("_{}_ENEMY", symbol_name),
             };
             asset_entries.push((asset.info.name.clone(), *bank_id, label, asset.info.asset_type.clone()));
         }
-        
+
         bank_asm.insert(*bank_id, asm);
     }
     
@@ -594,23 +967,52 @@ pub fn generate_distributed_assets_asm(
         .filter(|(_, _, _, t)| matches!(t, AssetType::Level))
         .cloned()
         .collect();
+    let anim_entries: Vec<(String, u8, String, AssetType)> = assets.iter()
+        .filter(|a| matches!(a.asset_type, AssetType::Animation))
+        .map(|a| {
+            let sym = a.name.to_uppercase().replace('-', "_").replace(' ', "_");
+            // Animations always reside in the helpers bank (emitted there for DRAW_ANIM_RUNTIME access)
+            (a.name.clone(), helpers_bank, format!("_ANIM_{}", sym), AssetType::Animation)
+        })
+        .collect();
+    let instr_entries: Vec<_> = asset_entries.iter()
+        .filter(|(_, _, _, t)| matches!(t, AssetType::Instrument))
+        .cloned()
+        .collect();
+    // Enemy assets are placed in the helpers bank (always accessible from DRAW_ENEMIES_RUNTIME).
+    // They are NOT in asset_entries (skipped above), so rebuild from the raw AssetInfo list.
+    // bank_id is set to helpers_bank so ENEMY_BANK_TABLE correctly reflects their location.
+    let enemy_entries: Vec<(String, u8, String, AssetType)> = assets.iter()
+        .filter(|a| matches!(a.asset_type, AssetType::Enemy))
+        .map(|a| {
+            let sym = a.name.to_uppercase().replace('-', "_").replace(' ', "_");
+            (a.name.clone(), helpers_bank, format!("_{}_ENEMY", sym), AssetType::Enemy)
+        })
+        .collect();
 
     // Sort each list alphabetically by name for index consistency
     let mut vector_entries = vector_entries;
     let mut music_entries = music_entries;
     let mut sfx_entries = sfx_entries;
     let mut level_entries = level_entries;
+    let mut anim_entries = anim_entries;
+    let mut instr_entries = instr_entries;
+    let mut enemy_entries = enemy_entries;
     vector_entries.sort_by(|a, b| a.0.cmp(&b.0));
     music_entries.sort_by(|a, b| a.0.cmp(&b.0));
     sfx_entries.sort_by(|a, b| a.0.cmp(&b.0));
     level_entries.sort_by(|a, b| a.0.cmp(&b.0));
-    
+    anim_entries.sort_by(|a, b| a.0.cmp(&b.0));
+    instr_entries.sort_by(|a, b| a.0.cmp(&b.0));
+    enemy_entries.sort_by(|a, b| a.0.cmp(&b.0));
+
     // Generate lookup tables for helpers bank
     let mut lookup_asm = String::new();
     lookup_asm.push_str(";***************************************************************************\n");
     lookup_asm.push_str("; ASSET LOOKUP TABLES (for banked asset access)\n");
-    lookup_asm.push_str(&format!("; Total: {} vectors, {} music, {} sfx, {} levels\n", 
-        vector_entries.len(), music_entries.len(), sfx_entries.len(), level_entries.len()));
+    lookup_asm.push_str(&format!("; Total: {} vectors, {} music, {} sfx, {} levels, {} animations, {} instruments, {} enemies\n",
+        vector_entries.len(), music_entries.len(), sfx_entries.len(),
+        level_entries.len(), anim_entries.len(), instr_entries.len(), enemy_entries.len()));
     lookup_asm.push_str(";***************************************************************************\n\n");
     
     // ===== VECTOR TABLES =====
@@ -701,6 +1103,106 @@ pub fn generate_distributed_assets_asm(
         lookup_asm.push_str("\n");
     }
     
+    // ===== ANIMATION TABLES =====
+    if !anim_entries.is_empty() {
+        lookup_asm.push_str("; Animation Asset Index Mapping:\n");
+        for (idx, (name, bank_id, _label, _)) in anim_entries.iter().enumerate() {
+            lookup_asm.push_str(&format!(";   {} = {} (Bank #{})\n", idx, name, bank_id));
+        }
+        lookup_asm.push_str("\n");
+
+        lookup_asm.push_str("ANIM_BANK_TABLE:\n");
+        for (_, bank_id, _, _) in &anim_entries {
+            lookup_asm.push_str(&format!("    FCB {}              ; Bank ID\n", bank_id));
+        }
+        lookup_asm.push_str("\n");
+
+        lookup_asm.push_str("ANIM_ADDR_TABLE:\n");
+        for (name, _, label, _) in &anim_entries {
+            lookup_asm.push_str(&format!("    FDB {}    ; {}\n", label, name));
+        }
+        lookup_asm.push_str("\n");
+    }
+
+    // ===== INSTRUMENT TABLES =====
+    if !instr_entries.is_empty() {
+        lookup_asm.push_str("; Instrument Asset Index Mapping:\n");
+        for (idx, (name, bank_id, _label, _)) in instr_entries.iter().enumerate() {
+            lookup_asm.push_str(&format!(";   {} = {} (Bank #{})\n", idx, name, bank_id));
+        }
+        lookup_asm.push_str("\n");
+
+        lookup_asm.push_str("INSTRUMENT_BANK_TABLE:\n");
+        for (_, bank_id, _, _) in &instr_entries {
+            lookup_asm.push_str(&format!("    FCB {}              ; Bank ID\n", bank_id));
+        }
+        lookup_asm.push_str("\n");
+
+        lookup_asm.push_str("INSTRUMENT_ADDR_TABLE:\n");
+        for (name, _, label, _) in &instr_entries {
+            lookup_asm.push_str(&format!("    FDB {}    ; {}\n", label, name));
+        }
+        lookup_asm.push_str("\n");
+    }
+
+    // ===== ENEMY TABLES =====
+    // Enemy type data is emitted directly into the helpers bank so DRAW_ENEMIES_RUNTIME
+    // can always read type headers and action tables without bank switching.
+    // The action table uses FCB sprite_idx (index into VECTOR_ADDR_TABLE) instead of
+    // FDB sprite_ptr, enabling DRAW_VECTOR_BANKED for cross-bank sprite rendering.
+    if !enemy_entries.is_empty() {
+        // Build vector-name → index map for resolving sprite references in .venemy files
+        let vec_idx_map: std::collections::HashMap<String, u8> = vector_entries.iter()
+            .enumerate()
+            .map(|(i, (name, _, _, _))| (name.clone(), i as u8))
+            .collect();
+
+        // Build anim-name → index map for resolving vanim sprite references in .venemy files
+        let anim_idx_map: std::collections::HashMap<String, u8> = anim_entries.iter()
+            .enumerate()
+            .map(|(i, (name, _, _, _))| (name.clone(), i as u8))
+            .collect();
+
+        lookup_asm.push_str("; Enemy Asset Index Mapping (all in helpers bank for direct access):\n");
+        for (idx, (name, bank_id, _label, _)) in enemy_entries.iter().enumerate() {
+            lookup_asm.push_str(&format!(";   {} = {} (Bank #{})\n", idx, name, bank_id));
+        }
+        lookup_asm.push_str("\n");
+
+        lookup_asm.push_str("ENEMY_BANK_TABLE:\n");
+        for (_, bank_id, _, _) in &enemy_entries {
+            lookup_asm.push_str(&format!("    FCB {}              ; Bank ID (helpers bank — always mapped)\n", bank_id));
+        }
+        lookup_asm.push_str("\n");
+
+        lookup_asm.push_str("ENEMY_ADDR_TABLE:\n");
+        for (name, _, label, _) in &enemy_entries {
+            lookup_asm.push_str(&format!("    FDB {}    ; {}\n", label, name));
+        }
+        lookup_asm.push_str("\n");
+
+        // Emit enemy type data (indexed format) directly into the helpers bank
+        lookup_asm.push_str(";***************************************************************************\n");
+        lookup_asm.push_str("; ENEMY TYPE DEFINITIONS (helpers bank — always accessible)\n");
+        lookup_asm.push_str("; Action table uses FCB sprite_idx for DRAW_VECTOR_BANKED compatibility\n");
+        lookup_asm.push_str(";***************************************************************************\n");
+        for (name, _, _, _) in &enemy_entries {
+            let enemy_asset = assets.iter()
+                .find(|a| &a.name == name && matches!(a.asset_type, AssetType::Enemy));
+            if let Some(sa) = enemy_asset {
+                match crate::venemy::EnemyResource::load(std::path::Path::new(&sa.path)) {
+                    Ok(resource) => {
+                        lookup_asm.push_str(&resource.compile_to_asm_indexed(Some(name), &vec_idx_map, &anim_idx_map));
+                    }
+                    Err(e) => {
+                        eprintln!("[WARNING] Failed to reload enemy '{}' for helpers bank: {}", name, e);
+                    }
+                }
+            }
+        }
+        lookup_asm.push_str("\n");
+    }
+
     // Legacy unified tables (deprecated, keep for compatibility)
     lookup_asm.push_str("; Legacy unified tables (all assets)\n");
     lookup_asm.push_str("ASSET_BANK_TABLE:\n");
@@ -729,7 +1231,60 @@ pub fn generate_distributed_assets_asm(
     if !level_entries.is_empty() {
         lookup_asm.push_str(&generate_load_level_banked_wrapper());
     }
-    
+    if !enemy_entries.is_empty() {
+        lookup_asm.push_str(&generate_spawn_enemies_banked_wrapper());
+    }
+    // Emit DRAW_ANIM_BANKED if there are both animations and enemies (vanim sprite support)
+    if !anim_entries.is_empty() && !enemy_entries.is_empty() {
+        lookup_asm.push_str(&generate_draw_anim_banked_wrapper());
+    }
+
+    // ===== ANIMATION DATA IN HELPERS BANK =====
+    // Animation headers + frame data + their referenced vec files are emitted here so
+    // DRAW_ANIM_RUNTIME can follow FDB pointers without bank switching.
+    // All these labels will be at $4000+ (helpers bank ORG) and always accessible.
+    {
+        // Collect vec assets that are animation-referenced (need to be in helpers bank)
+        let anim_assets: Vec<&AssetInfo> = assets.iter()
+            .filter(|a| matches!(a.asset_type, AssetType::Animation))
+            .collect();
+
+        if !anim_assets.is_empty() {
+            lookup_asm.push_str(";***************************************************************************\n");
+            lookup_asm.push_str("; ANIMATION DATA (helpers bank — always accessible for DRAW_ANIM_RUNTIME)\n");
+            lookup_asm.push_str(";***************************************************************************\n\n");
+
+            // Emit animation headers + frame data
+            for asset in &anim_assets {
+                match crate::animres::VanimResource::load(std::path::Path::new(&asset.path)) {
+                    Ok(resource) => {
+                        lookup_asm.push_str(&crate::animres::compile_vanim_to_asm(&resource, &asset.name));
+                        lookup_asm.push('\n');
+                    }
+                    Err(e) => {
+                        eprintln!("[WARNING] Failed to load animation '{}' for helpers bank: {}", asset.name, e);
+                    }
+                }
+            }
+
+            // Emit vec files referenced by animations (also in helpers bank)
+            lookup_asm.push_str("; Vec files referenced by animations (helpers bank for cross-bank safety)\n\n");
+            for vec_name in &anim_vec_refs {
+                if let Some(vec_asset) = assets.iter().find(|a| matches!(a.asset_type, AssetType::Vector) && &a.name == vec_name) {
+                    match crate::vecres::VecResource::load(std::path::Path::new(&vec_asset.path)) {
+                        Ok(resource) => {
+                            lookup_asm.push_str(&resource.compile_to_asm_with_name(Some(vec_name)));
+                            lookup_asm.push('\n');
+                        }
+                        Err(e) => {
+                            eprintln!("[WARNING] Failed to load vec '{}' for helpers bank (animation ref): {}", vec_name, e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Ok((bank_asm, lookup_asm))
 }
 
@@ -740,8 +1295,10 @@ fn generate_draw_vector_banked_wrapper() -> String {
     asm.push_str(";***************************************************************************\n");
     asm.push_str("; DRAW_VECTOR_BANKED - Draw vector asset with automatic bank switching\n");
     asm.push_str("; Input: X = asset index (0-based), DRAW_VEC_X/Y set for position\n");
-    asm.push_str("; Uses: A, B, X, Y\n");
+    asm.push_str(";        MIRROR_X, MIRROR_Y, DRAW_VEC_INTENSITY must be set by caller\n");
+    asm.push_str("; Uses: A, B, D, X, Y, U\n");
     asm.push_str("; Preserves: CURRENT_ROM_BANK (restored after drawing)\n");
+    asm.push_str("; Note: DSWM handles beam positioning internally via DRAW_VEC_X/Y\n");
     asm.push_str(";***************************************************************************\n");
     asm.push_str("DRAW_VECTOR_BANKED:\n");
     asm.push_str("    ; Save index to U register (avoid stack order issues)\n");
@@ -765,21 +1322,40 @@ fn generate_draw_vector_banked_wrapper() -> String {
     asm.push_str("    LEAX D,X             ; X points to address entry\n");
     asm.push_str("    LDX ,X               ; X = _VEC_VECTORS header address in banked ROM\n");
     asm.push_str("\n");
-    asm.push_str("    ; Set up for drawing\n");
-    asm.push_str("    CLR MIRROR_X\n");
-    asm.push_str("    CLR MIRROR_Y\n");
-    asm.push_str("    CLR DRAW_VEC_INTENSITY\n");
+    asm.push_str("    ; Set DP=$D0 for DSWM / VIA access (caller set MIRROR_X/Y/INTENSITY)\n");
     asm.push_str("    JSR $F1AA            ; DP_to_D0\n");
     asm.push_str("\n");
-    asm.push_str("    ; Loop over all paths (header bytes 0-1 = path_count FDB, +2.. = FDB table)\n");
-    asm.push_str("    LDD ,X               ; D = path_count (16-bit)\n");
+    asm.push_str("    ; Set DRAW_T1_SCALED to BIOS default ($7F) — SLR_DRAW_CLIPPED_PATH reads it\n");
+    asm.push_str("    ; when the fallback path is taken.\n");
+    asm.push_str("    LDA #$7F\n");
+    asm.push_str("    STA >DRAW_T1_SCALED\n");
+    asm.push_str("    ; Loop over all paths (header: FDB path_count, then FDB table)\n");
+    asm.push_str("    LDD ,X               ; D = path_count (16-bit FDB at header start)\n");
     asm.push_str("    CMPD #0\n");
     asm.push_str("    LBEQ DVB_DONE        ; No paths\n");
     asm.push_str("    LEAY 2,X             ; Y = pointer to first FDB entry (after 2-byte header)\n");
     asm.push_str("DVB_PATH_LOOP:\n");
     asm.push_str("    PSHS D               ; Save remaining path count (2 bytes)\n");
     asm.push_str("    LDX ,Y               ; X = path data address (FDB entry)\n");
+    asm.push_str("    ; Hybrid clip decision: fast DSWM if screen_x deep inside, slow SDCP near edges.\n");
+    asm.push_str("    LDA >DRAW_VEC_X_HI\n");
+    asm.push_str("    BEQ DVB_CHECK_POS\n");
+    asm.push_str("    INCA\n");
+    asm.push_str("    BNE DVB_USE_SDCP\n");
+    asm.push_str("    LDA >DRAW_VEC_X\n");
+    asm.push_str("    CMPA #$B0            ; -80\n");
+    asm.push_str("    BHS DVB_USE_DSWM\n");
+    asm.push_str("    BRA DVB_USE_SDCP\n");
+    asm.push_str("DVB_CHECK_POS:\n");
+    asm.push_str("    LDA >DRAW_VEC_X\n");
+    asm.push_str("    CMPA #80\n");
+    asm.push_str("    BLS DVB_USE_DSWM\n");
+    asm.push_str("DVB_USE_SDCP:\n");
+    asm.push_str("    JSR SLR_DRAW_CLIPPED_PATH\n");
+    asm.push_str("    BRA DVB_PATH_AFTER\n");
+    asm.push_str("DVB_USE_DSWM:\n");
     asm.push_str("    JSR Draw_Sync_List_At_With_Mirrors\n");
+    asm.push_str("DVB_PATH_AFTER:\n");
     asm.push_str("    LEAY 2,Y             ; Advance to next FDB entry\n");
     asm.push_str("    PULS D               ; Restore count\n");
     asm.push_str("    SUBD #1\n");
@@ -799,7 +1375,64 @@ fn generate_draw_vector_banked_wrapper() -> String {
     asm
 }
 
-/// Generate the PLAY_MUSIC_BANKED runtime wrapper for helpers bank
+/// Generate the DRAW_ANIM_BANKED runtime wrapper for helpers bank.
+///
+/// Animations live in the helpers bank (always visible at $4000+), so no bank
+/// switching is required.  The wrapper simply looks up the anim header address
+/// from ANIM_ADDR_TABLE, sets up DRAW_ANIM parameters, positions the beam, and
+/// calls DRAW_ANIM_RUNTIME.
+///
+/// Input:  X = animation index (0-based into ANIM_ADDR_TABLE)
+///         U = pointer to 2-byte RAM animation state (frame_idx, ticks_left)
+///             DRAW_VEC_X / DRAW_VEC_Y already set by caller
+/// Clobbers: A, B, X (Y is preserved by DRAW_ANIM_RUNTIME via PSHS/PULS)
+pub(crate) fn generate_draw_anim_banked_wrapper() -> String {
+    let mut asm = String::new();
+
+    asm.push_str(";***************************************************************************\n");
+    asm.push_str("; DRAW_ANIM_BANKED - Draw vanim sprite for enemies\n");
+    asm.push_str("; Animations are always in the helpers bank (fixed $4000+); no bank switch.\n");
+    asm.push_str("; Input: X = anim index (0-based into ANIM_ADDR_TABLE)\n");
+    asm.push_str(";        U = ptr to 2-byte RAM state (byte0=frame_idx, byte1=ticks_left)\n");
+    asm.push_str(";        DRAW_VEC_X / DRAW_VEC_Y set for enemy screen position\n");
+    asm.push_str("; Clobbers: A, B, X  (DRAW_ANIM_RUNTIME preserves D,X,Y,U via PSHS/PULS)\n");
+    asm.push_str(";***************************************************************************\n");
+    asm.push_str("DRAW_ANIM_BANKED:\n");
+    asm.push_str("    ; Set up animation draw parameters (defaults: normal size, vanim timing).\n");
+    asm.push_str("    ; NOTE: do NOT clear DRAW_ANIM_MIRROR_X or MIRROR_X here — DRAW_ENEMIES\n");
+    asm.push_str("    ; sets them from POOL_DIR right before calling us, and clearing would wipe\n");
+    asm.push_str("    ; the patrol-direction mirror. DRAW_ANIM_RUNTIME re-applies DRAW_ANIM_MIRROR_X\n");
+    asm.push_str("    ; to MIRROR_X per frame, so just leave both alone.\n");
+    asm.push_str("    CLR >MIRROR_Y\n");
+    asm.push_str("    LDA #$7F\n");
+    asm.push_str("    STA >DRAW_ANIM_SCALE\n");
+    asm.push_str("    CLR >DRAW_ANIM_SPEED_MUL\n");
+    asm.push_str("\n");
+    asm.push_str("    ; Look up anim header from ANIM_ADDR_TABLE[index * 2]\n");
+    asm.push_str("    TFR X,D              ; D = anim index\n");
+    asm.push_str("    ASLB                 ; *2 for FDB entries\n");
+    asm.push_str("    ROLA\n");
+    asm.push_str("    LDX #ANIM_ADDR_TABLE\n");
+    asm.push_str("    LEAX D,X             ; X points to FDB entry\n");
+    asm.push_str("    LDX ,X               ; X = _ANIM_XXX header ptr\n");
+    asm.push_str("    PSHS X               ; SAVE header ptr — Reset0Ref/Moveto_d may clobber X\n");
+    asm.push_str("\n");
+    asm.push_str("    ; Position beam at enemy screen coordinates (DRAW_VEC_X/Y set by caller)\n");
+    asm.push_str("    JSR $F1AA            ; DP_to_D0 (required before BIOS positioning calls)\n");
+    asm.push_str("    JSR Reset0Ref        ; Reset integrators to centre (0, 0)\n");
+    asm.push_str("    LDA >DRAW_VEC_Y      ; A = Y position\n");
+    asm.push_str("    LDB >DRAW_VEC_X      ; B = X position\n");
+    asm.push_str("    JSR Moveto_d         ; Move beam to (Y, X)\n");
+    asm.push_str("    JSR $F1AF            ; DP_to_C8 (restore DP before DRAW_ANIM_RUNTIME)\n");
+    asm.push_str("    PULS X               ; RESTORE header ptr (Reset0Ref/Moveto_d may have clobbered X)\n");
+    asm.push_str("\n");
+    asm.push_str("    ; Call animation runtime: X=header, U=state ptr\n");
+    asm.push_str("    JSR DRAW_ANIM_RUNTIME\n");
+    asm.push_str("    RTS\n");
+    asm.push_str("\n");
+
+    asm
+}
 fn generate_play_music_banked_wrapper() -> String {
     let mut asm = String::new();
     
@@ -954,6 +1587,36 @@ fn generate_load_level_banked_wrapper() -> String {
     asm
 }
 
+/// Generate the SPAWN_ENEMIES_BANKED runtime wrapper for helpers bank
+fn generate_spawn_enemies_banked_wrapper() -> String {
+    let mut asm = String::new();
+
+    asm.push_str(";***************************************************************************\n");
+    asm.push_str("; SPAWN_ENEMIES_BANKED - Spawn enemies using level data with bank switching\n");
+    asm.push_str("; Reads LEVEL_BANK, LEVEL_ENEMY_COUNT, LEVEL_ENEMY_INSTANCES_PTR from RAM\n");
+    asm.push_str("; (all three set by LOAD_LEVEL_BANKED/LOAD_LEVEL_RUNTIME)\n");
+    asm.push_str("; Uses: A, B, X, Y\n");
+    asm.push_str(";***************************************************************************\n");
+    asm.push_str("SPAWN_ENEMIES_BANKED:\n");
+    asm.push_str("    LDB >LEVEL_ENEMY_COUNT\n");
+    asm.push_str("    BEQ SEB_DONE             ; no enemies in this level\n");
+    asm.push_str("    LDA CURRENT_ROM_BANK\n");
+    asm.push_str("    PSHS A                   ; save current bank\n");
+    asm.push_str("    LDA >LEVEL_BANK\n");
+    asm.push_str("    STA CURRENT_ROM_BANK\n");
+    asm.push_str("    STA $DF00                ; switch to level bank\n");
+    asm.push_str("    LDX >LEVEL_ENEMY_INSTANCES_PTR\n");
+    asm.push_str("    JSR SPAWN_ENEMIES_RUNTIME ; B=count, X=instances ptr\n");
+    asm.push_str("    PULS A\n");
+    asm.push_str("    STA CURRENT_ROM_BANK\n");
+    asm.push_str("    STA $DF00                ; restore bank\n");
+    asm.push_str("SEB_DONE:\n");
+    asm.push_str("    RTS\n");
+    asm.push_str("\n");
+
+    asm
+}
+
 /// Generate compact 3D data tables for all vector assets used by DRAW_VECTOR_3D.
 /// These are emitted in bank_00 so the fixed helpers bank runtime can always read them
 /// (helpers bank runs with the calling bank still mapped at $0000-$3FFF).
@@ -978,4 +1641,47 @@ pub fn generate_3d_data_asm(assets: &[AssetInfo]) -> String {
         }
     }
     out
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::generate_draw_anim_banked_wrapper;
+
+    /// Regression test for Bug 2: DRAW_ANIM_BANKED must save X on the stack
+    /// before the Vectrex BIOS calls (Reset0Ref, Moveto_d) that may clobber it,
+    /// and restore it afterwards so that DRAW_ANIM_RUNTIME receives the correct
+    /// animation header pointer.
+    ///
+    /// Previously, X was loaded with the animation header pointer and then the
+    /// BIOS calls ran *before* X was saved.  If Reset0Ref or Moveto_d corrupted
+    /// X, DRAW_ANIM_RUNTIME received a garbage header — causing it to loop for
+    /// thousands of iterations, hanging the frame and making the level invisible.
+    #[test]
+    fn test_draw_anim_banked_saves_x_around_bios_calls() {
+        let asm = generate_draw_anim_banked_wrapper();
+
+        let pshs_x_pos   = asm.find("PSHS X").expect("PSHS X must be present in DRAW_ANIM_BANKED");
+        let reset0_pos   = asm.find("Reset0Ref").expect("Reset0Ref must be present in DRAW_ANIM_BANKED");
+        let puls_x_pos   = asm.find("PULS X").expect("PULS X must be present in DRAW_ANIM_BANKED");
+        // Use the JSR instruction, not the symbol in comments/docs
+        let dar_pos      = asm.find("JSR DRAW_ANIM_RUNTIME").expect("JSR DRAW_ANIM_RUNTIME must be present in DRAW_ANIM_BANKED");
+
+        assert!(
+            pshs_x_pos < reset0_pos,
+            "Bug 2 regression: PSHS X must come before Reset0Ref (positions: {} vs {})",
+            pshs_x_pos, reset0_pos
+        );
+        assert!(
+            puls_x_pos > reset0_pos,
+            "Bug 2 regression: PULS X must come after Reset0Ref (positions: {} vs {})",
+            puls_x_pos, reset0_pos
+        );
+        assert!(
+            puls_x_pos < dar_pos,
+            "Bug 2 regression: PULS X must come before DRAW_ANIM_RUNTIME (positions: {} vs {})",
+            puls_x_pos, dar_pos
+        );
+    }
 }

@@ -9,5 +9,10 @@ def main():
 
 def loop():
     PRINT_TEXT(-55, 120, "VPLAY TEST")
+
     UPDATE_LEVEL()
     SHOW_LEVEL()
+
+    draw_vector("platform",0,80)
+  
+    

@@ -36,9 +36,18 @@ pub fn generate_user_variables(module: &Module, ram: &mut RamLayout) -> Result<S
                     vars.push((name.clone(), bytes));
                 }
             }
-            Item::Const { name, type_annotation, .. } => {
+            Item::Const { name, value, type_annotation, .. } => {
                 let (bytes, signed) = size_for_annotation(type_annotation);
                 context::set_var_size(name, bytes, signed);
+                // SCALAR const literals (numeric) are inlined as immediates at every use
+                // (see mod.rs:set_const_value + expressions.rs:emit_simple_expr). No RAM
+                // slot needed. Skipping these saves significant RAM in programs with many
+                // tunables — critical for keeping the layout inside the 1KB Vectrex RAM
+                // window ($C800-$CBFF). Array consts still need allocation for the
+                // pointer; we handle those below in mutable_arrays.
+                if !matches!(value, Expr::List(_)) && matches!(value, Expr::Number(_)) {
+                    continue;
+                }
                 vars.push((name.clone(), bytes));
             }
             _ => {}
@@ -60,11 +69,21 @@ pub fn generate_user_variables(module: &Module, ram: &mut RamLayout) -> Result<S
         }
     }
 
-    // Allocate all user variables using RamLayout with correct sizes
-    let mut seen = HashSet::new();  // Track which variables we've already allocated
+    // Allocate all user variables using RamLayout with correct sizes.
+    // Skip vars that are promoted to compile-time constants — every reference
+    // is inlined as an LDD #N immediate (see expressions.rs:emit_simple_expr),
+    // so no RAM slot is needed. This is essential for SnowBros and similar
+    // programs that declare many scalar tunables; without skipping, those vars
+    // would push later allocations past $CBFF into BIOS-aliased RAM.
+    // Dedupe by UPPERCASED name to avoid collisions when both `ex` and `EX`
+    // appear in the same module (both emit `VAR_EX` and the second clobbers).
+    let mut seen = HashSet::new();
     for (var, bytes) in vars.iter() {
-        if seen.insert(var.clone()) {
-            // First time seeing this variable
+        let canonical = var.to_uppercase();
+        if seen.insert(canonical) {
+            if context::get_const_value(var).is_some() {
+                continue;
+            }
             ram.allocate(&format!("VAR_{}", var.to_uppercase()), *bytes, &format!("User variable: {}", var));
         }
     }
@@ -91,6 +110,34 @@ pub fn generate_user_variables(module: &Module, ram: &mut RamLayout) -> Result<S
     // This prevents collisions with scratchpad variables like TEMP_YX
 
     Ok(asm)
+}
+
+/// Emit ARRAY_{NAME}_LEN EQU constants for all arrays.
+/// These are needed by ForIn loops to determine the iteration count at assemble time.
+pub fn emit_array_len_equates(module: &Module) -> String {
+    let mut asm = String::new();
+    let mut has_any = false;
+    for item in &module.items {
+        match item {
+            Item::GlobalLet { name, value, .. } | Item::Const { name, value, .. } => {
+                if let Expr::List(elements) = value {
+                    if !has_any {
+                        asm.push_str("; Array length constants\n");
+                        has_any = true;
+                    }
+                    asm.push_str(&format!(
+                        "ARRAY_{}_LEN         EQU {}   ; {} elements\n",
+                        name.to_uppercase(),
+                        elements.len(),
+                        elements.len()
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+    if has_any { asm.push('\n'); }
+    asm
 }
 
 /// Emit array data sections (must be called AFTER EQU definitions, BEFORE code)
@@ -398,13 +445,32 @@ fn collect_identifiers_from_stmts(stmts: &[Stmt], vars: &mut Vec<(String, usize)
                 }
                 collect_identifiers_from_stmts(body, vars);
             }
-            Stmt::ForIn { var, iterable, body, .. } => {
+            Stmt::ForIn { var, iterable, body, source_line, .. } => {
                 // ForIn loop variables default to 16-bit if not already registered
                 if !vars.iter().any(|(n, _)| n == var) {
                     vars.push((var.clone(), 2));
                 }
+                // Synthetic counter, base ptr, and len variables for array iteration
+                let ctr_name  = format!("_fi_{source_line}");
+                let base_name = format!("_fi_{source_line}_base");
+                let len_name  = format!("_fi_{source_line}_len");
+                for synthetic in [&ctr_name, &base_name, &len_name] {
+                    if !vars.iter().any(|(n, _)| n == synthetic) {
+                        vars.push((synthetic.clone(), 2));
+                    }
+                }
                 collect_identifiers_from_expr(iterable, vars);
                 collect_identifiers_from_stmts(body, vars);
+            }
+            Stmt::Switch { expr, cases, default, .. } => {
+                collect_identifiers_from_expr(expr, vars);
+                for (case_val, case_body) in cases {
+                    collect_identifiers_from_expr(case_val, vars);
+                    collect_identifiers_from_stmts(case_body, vars);
+                }
+                if let Some(def) = default {
+                    collect_identifiers_from_stmts(def, vars);
+                }
             }
             Stmt::Return(value, _) => {
                 if let Some(expr) = value {

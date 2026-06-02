@@ -1,4 +1,6 @@
 import type { MetricsSnapshot, RegistersSnapshot, Segment, IEmulatorCore } from './emulatorCore.js';
+import { VectrexSystem } from './emulator/systems/VectrexSystem.js';
+import { Rp2350System } from './emulator/systems/Rp2350System.js';
 
 export class JsVecxEmulatorCore implements IEmulatorCore {
   private mod: any = null;
@@ -9,6 +11,16 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
   private fcInitCached: number | null = null;
   private memScratch: Uint8Array | null = null;
   private vecxEmuPatched: boolean = false;
+
+  // Phase 2: VectrexSystem — typed emulation backend.
+  // Set useVectrexSystem = true to route runFrame() through VectrexSystem
+  // instead of the legacy vecx_full.js vecx_emu() path.
+  private _vectrexSystem: VectrexSystem | null = null;
+  readonly useVectrexSystem: boolean = true;
+
+  // Phase 4: Rp2350System — ARM emulation backend.
+  private _rp2350System: Rp2350System | null = null;
+  private _activeTarget: 'm6809' | 'rp2350' = 'm6809';
   
   // Debug output system
   private debugMessages: string[] = [];
@@ -47,11 +59,11 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
       console.log('[JsVecxCore] Original write8 function:', typeof this.inst.write8);
       const originalWrite8 = this.inst.write8.bind(this.inst);
       this.inst.write8 = (address: number, data: number) => {
-        // Interceptar escrituras al área de debug C000-C003 (unmapped gap)
-        if (address >= 0xC000 && address <= 0xC003) {
+        // Interceptar escrituras al área de debug C000-C004 (unmapped gap)
+        // Protocol: C000=val_lo C001=val_hi C002=label_hi C003=label_lo C004=marker
+        if (address >= 0xC000 && address <= 0xC004) {
           const debugAddr = address - 0xC000;
           this.debugRam[debugAddr] = data;
-          console.log(`[DEBUG-WRITE] Wrote ${data} to debug address C0${debugAddr.toString(16).padStart(2, '0').toUpperCase()}`);
           // No llamar originalWrite8 - es un gap, no hay RAM real aquí
           return;
         }
@@ -64,12 +76,10 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
         console.log('[JsVecxCore] Original read8 function:', typeof this.inst.read8);
         const originalRead8 = this.inst.read8.bind(this.inst);
         this.inst.read8 = (address: number) => {
-          // Interceptar lecturas del área de debug C000-C003
-          if (address >= 0xC000 && address <= 0xC003) {
+          // Interceptar lecturas del área de debug C000-C004
+          if (address >= 0xC000 && address <= 0xC004) {
             const debugAddr = address - 0xC000;
-            const value = this.debugRam[debugAddr] || 0xFF; // Leer del buffer interno
-            console.log(`[DEBUG-READ] Read ${value} from debug address C0${debugAddr.toString(16).padStart(2, '0').toUpperCase()}`);
-            return value;
+            return this.debugRam[debugAddr] || 0xFF; // Leer del buffer interno
           }
           // Para otras direcciones, usar la función original
           return originalRead8(address);
@@ -140,7 +150,16 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
         console.log('[JsVecxCore] Recreating memory bus functions after initialization...');
         this.recreateMemoryFunctions();
         this.assignMemoryFunctionsToAllContexts();
-        
+
+        // Phase 2: Instantiate VectrexSystem wrapping the e6809 CPU.
+        // This does NOT activate the new path — useVectrexSystem controls that.
+        try {
+          this._vectrexSystem = new VectrexSystem(this.inst.e6809);
+          console.log('[JsVecxCore] VectrexSystem created (Phase 2 backend ready, currently inactive)');
+        } catch (vsErr) {
+          console.warn('[JsVecxCore] VectrexSystem creation failed:', vsErr);
+        }
+
       } catch (jsvecxError) {
         console.warn('[JsVecxCore] jsvecx initialization failed', jsvecxError);
       }
@@ -318,23 +337,15 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     }
     this.biosOk = true;
     console.log(`[JsVecxCore] BIOS loaded: ${maxLen} bytes copied to ROM`);
+
+    // Mirror BIOS into VectrexSystem so its bus can serve ROM reads correctly.
+    if (this._vectrexSystem) {
+      this._vectrexSystem.init(bytes.subarray(0, maxLen));
+    }
     
     // CRITICAL: Start PSG audio system
     if (this.inst.e8910 && typeof this.inst.e8910.start === 'function') {
       this.inst.e8910.start();
-      console.log(`[JsVecxCore] PSG audio system started`);
-      
-      // CRITICAL: Intercept e8910_write for PSG logging
-      const originalWrite = this.inst.e8910.e8910_write;
-      if (originalWrite) {
-        this.inst.e8910.e8910_write = (reg: number, val: number) => {
-          console.log(`[PSG-WRITE] Register ${reg} = 0x${val.toString(16).toUpperCase()}`);
-          return originalWrite.call(this.inst.e8910, reg, val);
-        };
-        console.log(`[JsVecxCore] PSG write interceptor installed`);
-      }
-    } else {
-      console.warn(`[JsVecxCore] PSG audio system not available or already started`);
     }
     
     // AHORA QUE LA BIOS ESTÁ CARGADA, CONFIGURAR PC AL RESET VECTOR
@@ -430,6 +441,13 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
   loadProgram(bytes: Uint8Array, _base?: number){
     if (!this.inst) return;
 
+    // When switching FROM rp2350 back to m6809, stop rp2350 audio so it
+    // doesn't keep synthesising into the background AudioContext.
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      try { this._rp2350System.stopAudio(); } catch {}
+      console.log('[JsVecxCore] rp2350 audio stopped (switching to m6809)');
+    }
+
     const romSize = bytes.length;
 
     // Use the existing 4MB cart from vecx_full.js init; only reallocate if missing or too small
@@ -445,13 +463,86 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     // Tell the emulator how large this ROM is so fixed-bank mapping works correctly
     this.inst.loaded_rom_size = romSize;
 
+    // Mirror cartridge into VectrexSystem.
+    if (this._vectrexSystem) {
+      this._vectrexSystem.loadCartridge(bytes);
+      // Start PSG audio for the 6809 path (loadRom is always triggered by a
+      // user action, so the AudioContext can be created here).
+      this._vectrexSystem.startAudio();
+    }
+
     console.log(`[JsVecxCore] Program loaded: ${romSize} bytes to cartridge (${Math.ceil(romSize / 0x4000)} banks)`);
+    this._activeTarget = 'm6809';
+  }
+
+  /**
+   * Forward joystick axis input to the active emulation target.
+   * x, y are signed values in [-127, 127] (0 = centred).
+   * Only has effect when the active target is rp2350.
+   */
+  setJoyAxis(x: number, y: number): void {
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      this._rp2350System.setJoyAxis(x, y);
+    }
+    if (this._activeTarget === 'm6809' && this._vectrexSystem) {
+      this._vectrexSystem.setJoyAxis(x, y);
+    }
+  }
+
+  /** Player 2 — same shape as setJoyAxis; only rp2350 currently consumes it. */
+  setJoyAxis2(x: number, y: number): void {
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      this._rp2350System.setJoyAxis2(x, y);
+    }
+  }
+
+  /**
+   * Forward joystick button state to the active emulation target.
+   * portBMask: VIA Port B bits 4-7, active-low (0 = pressed, 1 = released).
+   *   bit 4 = Button 1, bit 5 = Button 2, bit 6 = Button 3, bit 7 = Button 4.
+   * Default (no buttons pressed): 0xF0.
+   * Only has effect when the active target is rp2350.
+   */
+  setJoyButtons(portBMask: number): void {
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      this._rp2350System.setJoyButtons(portBMask);
+    }
+  }
+
+  /** Player 2 button state (active-low, bits 0-3 = btn 1-4). */
+  setJoyButtons2(mask: number): void {
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      this._rp2350System.setJoyButtons2(mask);
+    }
+  }
+
+  /** Load an ARM binary (rp2350 target). Switches the active emulation system to Rp2350System. */
+  loadArm(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement): void {
+    console.log(`[loadArm] START bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvas ? `${canvas.width}x${canvas.height}` : 'none'}`);
+    if (!this._rp2350System) {
+      this._rp2350System = new Rp2350System();
+    }
+    this._rp2350System.init(bin, elf);
+    if (canvas) this._rp2350System.setCanvas(canvas);
+    this._activeTarget = 'rp2350';
+    // Start PSG audio synthesis (requires user gesture — loadArm is always
+    // triggered by a user action, so the AudioContext can start here).
+    this._rp2350System.startAudio();
+    console.log(`[loadArm] DONE — activeTarget=${this._activeTarget} traps registered`);
   }
 
   runFrame(_maxInstr?: number){
-    console.log('%c[JsVecxCore] 🎬 runFrame CALLED', 'background: #f0f; color: #fff; font-weight: bold; font-size: 14px');
-    
+    // Phase 4: ARM target routes through Rp2350System (doesn't need this.inst).
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      return this._runFrameRp2350();
+    }
+
     if (!this.inst) return { stepsRun: 0, vectors: [] };
+
+    // Phase 2: Route through VectrexSystem when the flag is set.
+    if (this.useVectrexSystem && this._vectrexSystem) {
+      return this._runFrameVectrexSystem();
+    }
     
     try { 
       // CRITICAL: Ensure PSG audio is started (idempotent call)
@@ -583,6 +674,59 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
       };
     } catch(e){ 
       console.warn('[JsVecxCore] runFrame failed:', e);
+      return { stepsRun: 0, vectors: [] };
+    }
+  }
+
+  // ------------------------------------------------------------------ //
+  // Phase 2: VectrexSystem frame execution path
+  // ------------------------------------------------------------------ //
+
+  /**
+   * Run a single frame through the typed VectrexSystem backend.
+   *
+   * Returns the same shape as the legacy path so callers need no changes.
+   * Debug memory polling still runs (via the legacy inst.ram array, which
+   * the legacy path writes to — VectrexSystem has its own RAM copy that
+   * mirrors it once both paths are fully integrated).
+   */
+  private _runFrameVectrexSystem(): { stepsRun: number; vectors: Segment[] } {
+    if (!this._vectrexSystem) return { stepsRun: 0, vectors: [] };
+
+    try {
+      const segments = this._vectrexSystem.runFrame();
+
+      // Debug memory polling continues to read from the legacy inst.ram
+      // because VPy debug writes go through the vecx_full.js write8 path
+      // (which writes to inst.ram), not through VectrexSystem's RAM.
+      this.pollDebugMemory();
+
+      this.lastFrameSegments = segments;
+      this.frameCounter++;
+
+      return {
+        stepsRun: 50000, // FCYCLES_INIT — matches legacy estimate
+        vectors: segments,
+      };
+    } catch (e) {
+      console.warn('[JsVecxCore] VectrexSystem runFrame failed:', e);
+      return { stepsRun: 0, vectors: [] };
+    }
+  }
+
+  private _runFrameRp2350(): { stepsRun: number; vectors: Segment[] } {
+    if (!this._rp2350System) return { stepsRun: 0, vectors: [] };
+    const fc = this.frameCounter;
+    const log = !!(window as any).RP2350_DEBUG && (fc < 10 || fc % 60 === 0);
+    if (log) console.log(`[rp2350 runFrame] frame=${fc} enter`);
+    try {
+      const segments = this._rp2350System.runFrame();
+      this.lastFrameSegments = segments;
+      this.frameCounter++;
+      if (log) console.log(`[rp2350 runFrame] frame=${fc} done segments=${segments.length}`);
+      return { stepsRun: 2_500_000, vectors: segments };
+    } catch (e) {
+      console.error(`[rp2350 runFrame] frame=${fc} THREW:`, e);
       return { stepsRun: 0, vectors: [] };
     }
   }

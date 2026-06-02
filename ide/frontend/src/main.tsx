@@ -47,49 +47,14 @@ function App() {
   
   // Settings
   const compilerBackend = useSettings(s => s.compiler);
+  const buildTarget = useSettings(s => s.buildTarget);
+  const pitrexCopyToSD = useSettings(s => s.pitrexCopyToSD);
+  const pitrexSdPath = useSettings(s => s.pitrexSdPath);
+  const uvm2CopyToSD = useSettings(s => s.uvm2CopyToSD);
+  const uvm2SdPath = useSettings(s => s.uvm2SdPath);
 
   const initializedRef = useRef(false);
 
-  // Listen for file changes from FileWatcher (reload documents when externally modified)
-  useEffect(() => {
-    const electronAPI = (window as any).electronAPI;
-    if (!electronAPI?.ipcRenderer) return;
-
-    const handler = async (_event: any, payload: { type: string; path: string; isDir: boolean }) => {
-      console.log('[FileWatcher] Event received:', payload);
-      
-      if (payload.type !== 'changed' || payload.isDir) {
-        console.log('[FileWatcher] Ignored (not a file change)');
-        return;
-      }
-
-      const editorState = useEditorStore.getState();
-      console.log('[FileWatcher] Open documents:', editorState.documents.map(d => ({ uri: d.uri, diskPath: d.diskPath, dirty: d.dirty })));
-      
-      const changedDoc = editorState.documents.find(d => d.diskPath?.endsWith(payload.path));
-      console.log('[FileWatcher] Found changed doc:', changedDoc ? changedDoc.uri : 'NOT FOUND');
-      
-      if (changedDoc && !changedDoc.dirty) {
-        logger.info('App', `📄 Reloading externally modified file: ${payload.path}`);
-        try {
-          const result = await electronAPI.readFile(changedDoc.diskPath);
-          console.log('[FileWatcher] Read result:', { hasError: !!result.error, hasContent: result.content !== undefined });
-          
-          if (!result.error && result.content !== undefined) {
-            updateContent(changedDoc.uri, result.content);
-            logger.debug('App', `✓ Reloaded ${changedDoc.uri}`);
-          }
-        } catch (error) {
-          logger.error('App', `Failed to reload ${payload.path}:`, error);
-        }
-      } else if (changedDoc && changedDoc.dirty) {
-        console.log('[FileWatcher] Document is dirty, not reloading');
-      }
-    };
-
-    electronAPI.ipcRenderer.on('file://changed', handler);
-    return () => electronAPI.ipcRenderer.removeListener('file://changed', handler);
-  }, [updateContent]);
 
   // Optional auto-open demo disabled: show Welcome when no docs. Uncomment block below if you want the sample on fresh start.
   /*useEffect(() => {
@@ -225,6 +190,23 @@ function App() {
   const restoreLastWorkspace = useProjectStore(s => s.restoreLastWorkspace);
   const hasWorkspace = useProjectStore(s => s.hasWorkspace);
   const vpyProject = useProjectStore(s => s.vpyProject);
+
+  // Start/stop the filesystem watcher whenever the project changes
+  useEffect(() => {
+    const apiFiles = (window as any).files;
+    if (!apiFiles?.watchDirectory || !apiFiles?.unwatchDirectory) return;
+    if (!vpyProject?.rootDir) return;
+
+    const dir = vpyProject.rootDir;
+    apiFiles.watchDirectory(dir);
+    console.log('[FileWatcher] watchDirectory called for:', dir);
+
+    return () => {
+      apiFiles.unwatchDirectory(dir);
+      logger.debug('App', `[FileWatcher] Unwatching: ${dir}`);
+    };
+  }, [vpyProject?.rootDir]);
+
   const recentWorkspaces = useProjectStore(s => s.recentWorkspaces);
   const openVpyProject = useProjectStore(s => s.openVpyProject);
   const closeVpyProject = useProjectStore(s => s.closeVpyProject);
@@ -324,7 +306,7 @@ function App() {
   const [defaultProjectLocation, setDefaultProjectLocation] = useState('');
   // New File dialog state (for .vec files that need a name)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
-  const [newFileType, setNewFileType] = useState<'vec' | 'c' | 'vpy' | 'vmus' | 'vsfx'>('vec');
+  const [newFileType, setNewFileType] = useState<'vec' | 'c' | 'vpy' | 'vmus' | 'vsfx' | 'vanim' | 'vinstr' | 'venemy'>('vec');
   // EPROM Programmer dialog state
   const [showEpromDialog, setShowEpromDialog] = useState(false);
   const lastCompiledBinary = useEmulatorSettings(s => s.lastCompiledBinary);
@@ -488,9 +470,14 @@ function App() {
       const args: any = {
         path: filePath,
         autoStart: autoRun,
-        compilerBackend // from useSettings
+        compilerBackend, // from useSettings
+        target: buildTarget, // from useSettings
+        pitrexCopyToSD,
+        pitrexSdPath,
+        uvm2CopyToSD,
+        uvm2SdPath,
       };
-      
+
       // If building from project, include output path
       if (projectState.vpyProject) {
         const outputPath = projectState.getOutputPath();
@@ -508,6 +495,22 @@ function App() {
           expectedMTime: activeDoc.mtime
         };
         logger.debug('Build', 'Document is dirty - will save before compiling');
+      }
+
+      // Save ALL other dirty asset documents (.vmus, .vec, .vsfx) before compiling
+      // so that the compiler reads the latest BPM/vectors/SFX from disk.
+      const allDirty = editorState.documents.filter(
+        d => d.dirty && d.diskPath && d.uri !== (activeDoc.uri)
+          && /\.(vmus|vec|vsfx|vplay|vpy)$/.test(d.diskPath)
+      );
+      for (const dirtyDoc of allDirty) {
+        try {
+          await electronAPI.saveFile({ path: dirtyDoc.diskPath!, content: dirtyDoc.content });
+          useEditorStore.getState().markSaved(dirtyDoc.uri);
+          logger.debug('Build', 'Auto-saved dirty asset before build:', dirtyDoc.diskPath);
+        } catch (saveErr) {
+          logger.warn('Build', 'Failed to auto-save dirty asset:', dirtyDoc.diskPath, saveErr);
+        }
       }
 
       // Construct expected binary path and delete it before compiling
@@ -584,7 +587,7 @@ function App() {
       isCompilingRef.current = false;
       logger.debug('Build', 'Build process completed, flag cleared');
     }
-  }, [documents, compilerBackend]);
+  }, [documents, compilerBackend, buildTarget, pitrexCopyToSD, pitrexSdPath, uvm2CopyToSD, uvm2SdPath]);
 
   const commandExec = useCallback(async (id: string, payload?: any) => {
     const apiFiles: any = (window as any).files;
@@ -638,6 +641,18 @@ def loop():
       case 'file.new.vsfx': {
         // Open dialog to ask for filename for SFX
         setNewFileType('vsfx');
+        setShowNewFileDialog(true);
+        break; }
+      case 'file.new.vanim': {
+        setNewFileType('vanim');
+        setShowNewFileDialog(true);
+        break; }
+      case 'file.new.vinstr': {
+        setNewFileType('vinstr');
+        setShowNewFileDialog(true);
+        break; }
+      case 'file.new.venemy': {
+        setNewFileType('venemy');
         setShowNewFileDialog(true);
         break; }
       case 'file.open': {
@@ -784,7 +799,12 @@ def loop():
           const args: any = {
             path: filePath,
             autoStart: false,  // No auto-run, queremos control manual
-            compilerBackend // from useSettings
+            compilerBackend, // from useSettings
+            target: buildTarget, // from useSettings
+            pitrexCopyToSD,
+            pitrexSdPath,
+            uvm2CopyToSD,
+            uvm2SdPath,
           };
 
           // Si el documento está sucio, enviarlo para que se guarde antes de compilar
@@ -1214,8 +1234,84 @@ def loop():
         break;
       }
       
-      default:
+      case 'layout.reset': {
+        resetLayout();
+        break;
+      }
+      case 'project.openPath': {
+        // Same shape as openRecent — path arrives in payload.
+        const projectPath = payload || '';
+        if (!projectPath) { logger.error('Project', 'No path provided for openPath'); break; }
+        await openVpyProject(projectPath);
+        break;
+      }
+      case 'view.hideActivePanel': {
+        const mdl: any = (window as any).__vpyDockModel;
+        let activeComp: string | undefined;
+        try {
+          mdl?.visitNodes?.((n: any) => {
+            if (activeComp) return;
+            if (n.getType && n.getType() === 'tabset') {
+              const sel = n.getSelectedNode?.();
+              if (sel) {
+                const c = typeof sel.getComponent === 'function' ? sel.getComponent() : sel?._attributes?.component;
+                if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','playground','psglog'].includes(c)) activeComp = c;
+              }
+            }
+          });
+        } catch {}
+        if (activeComp) toggleComponent(activeComp as any);
+        break;
+      }
+      case 'view.togglePinActivePanel': {
+        const pnlRef: any = (window as any).__pinnedPanelsRef;
+        const mdl: any = (window as any).__vpyDockModel;
+        let activeComp: string | undefined;
+        try {
+          mdl?.visitNodes?.((n: any) => {
+            if (activeComp) return;
+            if (n.getType && n.getType() === 'tabset') {
+              const sel = n.getSelectedNode?.();
+              if (sel) {
+                const c = typeof sel.getComponent === 'function' ? sel.getComponent() : sel?._attributes?.component;
+                if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','playground','psglog'].includes(c)) activeComp = c;
+              }
+            }
+          });
+        } catch {}
+        if (activeComp && pnlRef?.current) {
+          if (pnlRef.current.has(activeComp)) {
+            pnlRef.current.delete(activeComp);
+            toggleComponent(activeComp as any);
+          } else {
+            pnlRef.current.add(activeComp);
+          }
+          try {
+            const arr = Array.from(pnlRef.current.values());
+            if (arr.length) localStorage.setItem('vpy_pinned_panels_v1', JSON.stringify(arr));
+            else localStorage.removeItem('vpy_pinned_panels_v1');
+          } catch {}
+        }
+        break;
+      }
+      default: {
+        // View panel toggles from Electron native menu: view.toggle.<component>
+        // Maps directly to dockBus toggleComponent. 'dual-emulator' isn't a real
+        // DockComponent yet, so silently ignore until it is implemented.
+        if (id.startsWith('view.toggle.')) {
+          const comp = id.slice('view.toggle.'.length);
+          const valid = ['emulator','debug','errors','output','memory','trace','psglog','ai-assistant','build-output','compiler-output','files','playground','bioscalls'];
+          if (valid.includes(comp)) {
+            toggleComponent(comp as any);
+          } else if (comp === 'dual-emulator') {
+            logger.info('App', 'dual-emulator panel not yet implemented');
+          } else {
+            logger.warn('App', 'unknown view panel:', comp);
+          }
+          break;
+        }
         logger.warn('App', 'unknown command:', id);
+      }
     }
   }, [documents, openDocument, activeBinName, openVpyProject, closeVpyProject, handleBuild]);
 
@@ -1349,6 +1445,9 @@ def loop():
               <MenuItem label={`${t('file.new.vec', 'Vector List (.vec)')}`} onClick={()=>{ commandExec('file.new.vec'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vmus', 'Music File (.vmus)')}`} onClick={()=>{ commandExec('file.new.vmus'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vsfx', 'Sound Effect (.vsfx)')}`} onClick={()=>{ commandExec('file.new.vsfx'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('file.new.vanim', 'Animation (.vanim)')}`} onClick={()=>{ commandExec('file.new.vanim'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('file.new.vinstr', 'Instrument (.vinstr)')}`} onClick={()=>{ commandExec('file.new.vinstr'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('file.new.venemy', 'Enemy (.venemy)')}`} onClick={()=>{ commandExec('file.new.venemy'); setOpenMenu(null); }} />
             </SubMenu>
             <SubMenu label={t('file.open', 'Open')}>
               <MenuItem label={`${t('project.open', 'Project...')}	Ctrl+Shift+O`} onClick={()=>{ commandExec('project.open'); setOpenMenu(null); }} />
@@ -1585,12 +1684,12 @@ def loop():
         }}
       />
       
-      {/* New File Dialog (for .vec and .vmus files) */}
+      {/* New File Dialog */}
       <InputDialog
         isOpen={showNewFileDialog}
-        title={newFileType === 'vec' ? 'New Vector List' : newFileType === 'vmus' ? 'New Music File' : newFileType === 'vsfx' ? 'New Sound Effect' : 'New File'}
-        message={newFileType === 'vec' ? 'Enter a name for the vector list (without extension):' : newFileType === 'vmus' ? 'Enter a name for the music file (without extension):' : newFileType === 'vsfx' ? 'Enter a name for the sound effect (without extension):' : 'Enter filename:'}
-        placeholder={newFileType === 'vec' ? 'my_sprite' : newFileType === 'vmus' ? 'my_music' : newFileType === 'vsfx' ? 'laser' : 'filename'}
+        title={newFileType === 'vec' ? 'New Vector List' : newFileType === 'vmus' ? 'New Music File' : newFileType === 'vsfx' ? 'New Sound Effect' : newFileType === 'vanim' ? 'New Animation' : newFileType === 'vinstr' ? 'New Instrument' : newFileType === 'venemy' ? 'New Enemy Type' : 'New File'}
+        message={newFileType === 'vec' ? 'Enter a name for the vector list (without extension):' : newFileType === 'vmus' ? 'Enter a name for the music file (without extension):' : newFileType === 'vsfx' ? 'Enter a name for the sound effect (without extension):' : newFileType === 'vanim' ? 'Enter a name for the animation (without extension):' : newFileType === 'vinstr' ? 'Enter a name for the instrument (without extension):' : newFileType === 'venemy' ? 'Enter a name for the enemy type (without extension):' : 'Enter filename:'}
+        placeholder={newFileType === 'vec' ? 'my_sprite' : newFileType === 'vmus' ? 'my_music' : newFileType === 'vsfx' ? 'laser' : newFileType === 'vanim' ? 'player_walk' : newFileType === 'vinstr' ? 'pluck' : newFileType === 'venemy' ? 'snowbrother' : 'filename'}
         defaultValue=""
         validateFn={(value) => {
           if (!value.trim()) return 'Name is required';
@@ -1747,6 +1846,142 @@ def loop():
             
             // Fallback: create in-memory
             const uri = `inmemory://${name}.vsfx`;
+            openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
+          } else if (newFileType === 'vanim') {
+            const content = JSON.stringify({
+              version: "1.0",
+              name: name,
+              loop: true,
+              base_refs: [],
+              frames: [{ index: 0, duration_ticks: 4, vec_refs: [], paths: [] }]
+            }, null, 2);
+
+            if (vpyProject?.rootDir && apiFiles?.saveFile) {
+              const filePath = `${vpyProject.rootDir}/assets/animations/${name}.vanim`.replace(/\\/g, '/');
+              try {
+                const result = await apiFiles.saveFile({ path: filePath, content });
+                if (result && !result.error) {
+                  const normPath = filePath.replace(/\\/g, '/');
+                  const uri = normPath.match(/^[A-Za-z]:\//) ? `file:///${normPath}` : `file://${normPath}`;
+                  openDocument({
+                    uri,
+                    language: 'json',
+                    content,
+                    dirty: false,
+                    diagnostics: [],
+                    diskPath: filePath,
+                    mtime: result.mtime,
+                    lastSavedContent: content
+                  });
+                  useProjectStore.getState().refreshWorkspace();
+                  logger.info('File', `Created ${filePath}`);
+                  return;
+                }
+              } catch (e) {
+                logger.warn('File', 'Failed to save to project folder, creating in-memory');
+              }
+            }
+
+            // Fallback: create in-memory
+            const uri = `inmemory://${name}.vanim`;
+            openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
+          } else if (newFileType === 'vinstr') {
+            const content = JSON.stringify({
+              version: "1.0",
+              name: name,
+              duration_frames: 10,
+              volume: 14,
+              arpeggio_count: 0,
+              arpeggio_speed_frames: 2,
+              arpeggio_intervals: [0, 0, 0, 0],
+              noise_enabled: false,
+              noise_period: 15,
+              pitch_sweep_delta: 0,
+              pitch_sweep_duration_frames: 0
+            }, null, 2);
+
+            if (vpyProject?.rootDir && apiFiles?.saveFile) {
+              const filePath = `${vpyProject.rootDir}/assets/instruments/${name}.vinstr`.replace(/\\/g, '/');
+              try {
+                const result = await apiFiles.saveFile({ path: filePath, content });
+                if (result && !result.error) {
+                  const normPath = filePath.replace(/\\/g, '/');
+                  const uri = normPath.match(/^[A-Za-z]:\//) ? `file:///${normPath}` : `file://${normPath}`;
+                  openDocument({
+                    uri,
+                    language: 'json',
+                    content,
+                    dirty: false,
+                    diagnostics: [],
+                    diskPath: filePath,
+                    mtime: result.mtime,
+                    lastSavedContent: content
+                  });
+                  useProjectStore.getState().refreshWorkspace();
+                  logger.info('File', `Created ${filePath}`);
+                  return;
+                }
+              } catch (e) {
+                logger.warn('File', 'Failed to save to project folder, creating in-memory');
+              }
+            }
+
+            // Fallback: create in-memory
+            const uri = `inmemory://${name}.vinstr`;
+            openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
+          } else if (newFileType === 'venemy') {
+            const content = JSON.stringify({
+              version: "1.0",
+              name: name,
+              actions: [
+                { name: "idle", sprite: "", loop: true },
+                { name: "walk", sprite: "", loop: true }
+              ],
+              stats: {
+                hp: 3,
+                speed: 40,
+                action_duration: 180
+              },
+              behavior: {
+                type: "patrol",
+                patrol: {
+                  waypoints: [],
+                  loop: true
+                },
+                chase_range: 80,
+                respawn: false,
+                wave: 0
+              }
+            }, null, 2);
+
+            if (vpyProject?.rootDir && apiFiles?.saveFile) {
+              const filePath = `${vpyProject.rootDir}/assets/enemies/${name}.venemy`.replace(/\\/g, '/');
+              try {
+                const result = await apiFiles.saveFile({ path: filePath, content });
+                if (result && !result.error) {
+                  const normPath = filePath.replace(/\\/g, '/');
+                  const uri = normPath.match(/^[A-Za-z]:\//) ? `file:///${normPath}` : `file://${normPath}`;
+                  openDocument({
+                    uri,
+                    language: 'json',
+                    content,
+                    dirty: false,
+                    diagnostics: [],
+                    diskPath: filePath,
+                    mtime: result.mtime,
+                    lastSavedContent: content
+                  });
+                  useProjectStore.getState().refreshWorkspace();
+                  logger.info('File', `Created ${filePath}`);
+                  return;
+                }
+              } catch (e) {
+                logger.warn('File', 'Failed to save to project folder, creating in-memory');
+              }
+            }
+
+            // Fallback: create in-memory
+            const uri = `inmemory://${name}.venemy`;
             openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
           }
         }}

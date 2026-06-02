@@ -1,5 +1,5 @@
 // Analysis - AST analysis functions for M6809 backend
-use crate::ast::{BinOp, Expr, Function, Item, Module, Stmt};
+use crate::ast::{BinOp, Expr, Item, Module, Stmt};
 
 use super::resolve_function_name;
 
@@ -178,7 +178,6 @@ pub fn scan_expr_args(e: &Expr) -> usize {
     }
 }
 
-use std::collections::HashSet;
 
 pub fn analyze_runtime_usage(module: &Module) -> RuntimeUsage {
     let mut usage = RuntimeUsage::default();

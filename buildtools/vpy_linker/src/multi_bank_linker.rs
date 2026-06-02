@@ -7,7 +7,7 @@
 /// Each bank is assembled with ORG $0000, then concatenated to form final ROM.
 /// No "fixed bank" concept - all banks have same addressing model.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -809,7 +809,7 @@ impl MultiBankLinker {
         &self,
         bank_section: &BankSection,
         temp_dir: &Path,
-        helper_symbols: &HashMap<String, u16>,
+        helper_symbols: &BTreeMap<String, u16>,
     ) -> Result<Vec<u8>, String> {
         // Bank ASM already contains everything
         let mut full_asm = bank_section.asm_code.clone();
@@ -1063,7 +1063,7 @@ impl MultiBankLinker {
         &self,
         asm_path: &Path,
         output_rom_path: &Path,
-    ) -> Result<HashMap<String, u16>, String> {
+    ) -> Result<BTreeMap<String, u16>, String> {
         // Read ASM
         let asm_content = fs::read_to_string(asm_path)
             .map_err(|e| format!("Failed to read ASM from {:?}: {}", asm_path, e))?;
@@ -1092,7 +1092,11 @@ impl MultiBankLinker {
         // **PASS 1**: Iteratively extract global symbol table from all banks
         // This allows cross-bank references (e.g., CUSTOM_RESET referencing START)
         // We do this iteratively because some symbols may depend on others being defined first.
-        let mut all_symbols = HashMap::new();
+        eprintln!("   🔍 DEBUG: Starting PASS 1 with {} banks, helper_bank={}", self.rom_bank_count, self.rom_bank_count - 1);
+        eprintln!("   🔍 DEBUG: sections keys = {:?}", sections.keys().collect::<Vec<_>>());
+        // Use BTreeMap so iteration order is always alphabetical — eliminates HashMap non-determinism
+        // that caused random bank overflows across runs.
+        let mut all_symbols: BTreeMap<String, u16> = BTreeMap::new();
         let helper_bank_id = (self.rom_bank_count - 1) as u8;
         let max_iterations = 5;
         
@@ -1105,7 +1109,7 @@ impl MultiBankLinker {
             set_include_dir(Some(dir.clone()));
         }
         
-        let mut bios_equates = std::collections::HashMap::new();
+        let mut bios_equates: HashMap<String, u16> = HashMap::new();
         load_vectrex_symbols(&mut bios_equates);
         
         // Insert BIOS symbols into all_symbols
@@ -1203,8 +1207,19 @@ impl MultiBankLinker {
                             // For other banks (ORG $0000), addresses are already relative ($0000+offset)
                             // So we DON'T add bank_base - the addresses are already correct!
                             
-                            for (label, addr) in symbol_table {
+                            // Sort symbol_table entries for deterministic insertion order into all_symbols.
+                            // HashMap iteration is non-deterministic; with first-come-first-served rules,
+                            // different orders can produce different all_symbols content across runs.
+                            let mut sorted_symbols: Vec<(String, u16)> = symbol_table.into_iter().collect();
+                            sorted_symbols.sort_by(|a, b| a.0.cmp(&b.0));
+                            
+                            for (label, addr) in sorted_symbols {
                                 let runtime_addr = addr;  // Use address as-is (ORG already included)
+
+                                // DEBUG: track _INIT_SCREEN_VECTORS specifically
+                                if label.contains("INIT_SCREEN_VECTORS") {
+                                    eprintln!("   🔍 DEBUG PASS1 iter={} bank={}: symbol '{}' addr=${:04X}", iteration, bank_id, label, runtime_addr);
+                                }
 
                                 // Symbol merge rules:
                                 // - New symbol (not yet seen): always add
@@ -1230,6 +1245,7 @@ impl MultiBankLinker {
                                     "unknown"
                                 };
                                 let _ = missing_symbol; // suppress unused variable
+                                eprintln!("   ⚠️  DEBUG PASS1 iter={} bank={}: assembly FAILED: {}", iteration, bank_id, e);
                                 // Continue - don't fail yet, more iterations may resolve this
                             } else {
                                 // Final iteration - this is a real error
@@ -1499,7 +1515,8 @@ impl MultiBankLinker {
                 // 2. BIOS range ($E000-$FFFF) - always visible
                 // 3. RAM variables ($C800-$CFFF) - always visible
                 // 4. Asset symbols (_VECTORS, _PATH, _MUSIC) from ANY bank - cross-bank references
-                let external_symbols: HashMap<String, u16> = all_symbols.iter()
+                // Use BTreeMap for deterministic EQU injection order in assemble_bank
+                let external_symbols: BTreeMap<String, u16> = all_symbols.iter()
                     .filter(|(name, addr)| {
                         let a = **addr;
                         let is_fixed_or_bios = (a >= 0x4000 && a < 0x8000) || (a >= 0xE000) || (a >= 0xC800 && a < 0xD000);

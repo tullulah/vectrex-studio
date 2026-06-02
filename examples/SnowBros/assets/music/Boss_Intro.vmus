@@ -1,0 +1,109 @@
+{
+  "version": "1.0",
+  "name": "Imported MIDI",
+  "author": "",
+  "tempo": 120,
+  "ticksPerBeat": 24,
+  "totalTicks": 384,
+  "notes": [
+    {
+      "id": "zhu1n3b8c",
+      "note": 71,
+      "start": 0,
+      "duration": 17,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "supbd9szw",
+      "note": 68,
+      "start": 0,
+      "duration": 17,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "ngfig3bu1",
+      "note": 66,
+      "start": 0,
+      "duration": 17,
+      "velocity": 13,
+      "channel": 2
+    },
+    {
+      "id": "dv73p4yn4",
+      "note": 73,
+      "start": 26,
+      "duration": 17,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "46ya7yqss",
+      "note": 70,
+      "start": 26,
+      "duration": 17,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "2281s7p35",
+      "note": 66,
+      "start": 26,
+      "duration": 17,
+      "velocity": 13,
+      "channel": 2
+    },
+    {
+      "id": "wpcjrdt16",
+      "note": 71,
+      "start": 52,
+      "duration": 9,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "wrj6kgdyo",
+      "note": 68,
+      "start": 52,
+      "duration": 9,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "55acowqyl",
+      "note": 66,
+      "start": 52,
+      "duration": 9,
+      "velocity": 13,
+      "channel": 2
+    },
+    {
+      "id": "ad9bnv9v4",
+      "note": 80,
+      "start": 69,
+      "duration": 78,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "ookxteylp",
+      "note": 73,
+      "start": 69,
+      "duration": 78,
+      "velocity": 13,
+      "channel": 1
+    },
+    {
+      "id": "g7y2ork2w",
+      "note": 68,
+      "start": 69,
+      "duration": 78,
+      "velocity": 13,
+      "channel": 2
+    }
+  ],
+  "noise": [],
+  "loopStart": 0,
+  "loopEnd": 384
+}

@@ -33,6 +33,8 @@ START:
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
     JSR $F533        ; Init_Music_Buf: init BIOS sound work buffer at Vec_Default_Stk
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -41,6 +43,7 @@ START:
     LDD #$0000
     STD >SFX_PTR            ; Clear SFX pointer
     STA >PSG_MUSIC_BANK     ; Bank 0 for music (prevents garbage bank switch in emulator)
+    STA >SFX_BANK           ; Bank 0 for SFX (prevents garbage bank switch in emulator)
     CLR >PSG_IS_PLAYING     ; No music playing at startup
     CLR >PSG_DELAY_FRAMES   ; Clear delay counter
     STD >PSG_MUSIC_PTR      ; Clear music pointer (D is already 0)
@@ -57,34 +60,42 @@ TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
 VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
 VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
 TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$0C   ; Circle center X (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$0D   ; Circle center Y (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$0E   ; Circle diameter (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$0F   ; Circle intensity (1 bytes)
-DRAW_CIRCLE_RADIUS   EQU $C880+$10   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$11   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
-DRAW_LINE_ARGS       EQU $C880+$19   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$23   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$25   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$27   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$28   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$29   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$2B   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-PSG_MUSIC_PTR        EQU $CBEB   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $CBED   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $CBEF   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $CBF0   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $CBF1   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $CBF2   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $CBF3   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $CBF5   ; SFX active flag (1 bytes)
-
+BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
+BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$0E   ; Circle center X (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$0F   ; Circle center Y (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$10   ; Circle diameter (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$11   ; Circle intensity (1 bytes)
+DRAW_CIRCLE_RADIUS   EQU $C880+$12   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$13   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$1B   ; Vector intensity override (0=use vector data) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$1C   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$26   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$28   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$2A   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$2B   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$2C   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$2E   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+TEXT_SCALE_H         EQU $C880+$30   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$31   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+VAR_ARG0             EQU $C880+$32   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$34   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$36   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$38   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$3A   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$3C   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$3E   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$40   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$42   ; Current ROM bank ID (multibank tracking) (1 bytes)
+PSG_MUSIC_PTR        EQU $C880+$43   ; PSG music data pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$45   ; PSG music start pointer (for loops) (2 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$47   ; PSG music active flag (1 bytes)
+PSG_IS_PLAYING       EQU $C880+$48   ; PSG playing flag (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$49   ; PSG frame delay counter (1 bytes)
+PSG_MUSIC_BANK       EQU $C880+$4A   ; PSG music bank ID (for multibank) (1 bytes)
+SFX_PTR              EQU $C880+$4B   ; SFX data pointer (2 bytes)
+SFX_ACTIVE           EQU $C880+$4D   ; SFX active flag (1 bytes)
+SFX_BANK             EQU $C880+$4E   ; SFX bank ID (for multibank) (1 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -94,6 +105,10 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    LDA #$F8
+    STA TEXT_SCALE_H      ; Default height = -8 (normal size)
+    LDA #$48
+    STA TEXT_SCALE_W      ; Default width = 72 (normal size)
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
     CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
@@ -108,8 +123,11 @@ MAIN:
     STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
     ; Mux configured - J1_X()/J1_Y() can now be called
 
+    ; Prime BIOS button state at startup
+    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
     ; TODO: Statement Pass { source_line: 9 }
+    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
 
 .MAIN_LOOP:
     JSR LOOP_BODY
@@ -117,61 +135,46 @@ MAIN:
 
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
-    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
-    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
+    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #80
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2348223718253      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-80
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #50
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_58672554795414      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-80
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #30
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_58672583180530      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
-    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
-    ANDA #$01      ; Test bit 0 (Button 1)
-    LBEQ .J1B1_0_OFF
-    LDD #1
-    LBRA .J1B1_0_END
-.J1B1_0_OFF:
+    LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
+    BITA #$01
+    BNE .J1B1_0_ON
     LDD #0
+    BRA .J1B1_0_END
+.J1B1_0_ON:
+    LDD #1
 .J1B1_0_END:
     STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_1
     ; PLAY_SFX("jump") - play SFX asset (index=1)
     LDX #_JUMP_SFX  ; Load SFX data pointer
@@ -259,16 +262,15 @@ LOOP_BODY:
     LBRA IF_END_0
 IF_NEXT_1:
 IF_END_0:
-    LDA $C811      ; Vec_Button_1_1 (transition bits, rising edge = debounce)
-    ANDA #$02      ; Test bit 1 (Button 2)
-    LBEQ .J1B2_1_OFF
-    LDD #1
-    LBRA .J1B2_1_END
-.J1B2_1_OFF:
+    LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
+    BITA #$02
+    BNE .J1B2_1_ON
     LDD #0
+    BRA .J1B2_1_END
+.J1B2_1_ON:
+    LDD #1
 .J1B2_1_END:
     STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_3
     ; PLAY_SFX("explosion") - play SFX asset (index=0)
     LDX #_EXPLOSION_SFX  ; Load SFX data pointer
@@ -434,7 +436,7 @@ IF_END_2:
     TFR A,DP    ; Restore DP=$C8 after circle drawing
     LDD #0
     STD RESULT
-    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX (after all game logic)
+    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX
     RTS
 
 ;***************************************************************************
@@ -445,55 +447,55 @@ _EXPLOSION_SFX:
     ; SFX: explosion (explosion)
     ; Duration: 350ms (17fr), Freq: 136Hz, Channel: 0
     FCB $6F         ; Frame 0 - flags (vol=15, noisevol=15, tone=Y, noise=Y)
-    FCB $02, $C8  ; Tone period = 712 (big-endian)
+    FCB $02, $4E  ; Tone period = 590 (big-endian)
     FCB $09         ; Noise period
     FCB $6F         ; Frame 1 - flags (vol=15, noisevol=15, tone=Y, noise=Y)
-    FCB $02, $E1  ; Tone period = 737 (big-endian)
+    FCB $02, $3A  ; Tone period = 570 (big-endian)
     FCB $09         ; Noise period
     FCB $6E         ; Frame 2 - flags (vol=14, noisevol=14, tone=Y, noise=Y)
-    FCB $02, $F9  ; Tone period = 761 (big-endian)
+    FCB $02, $28  ; Tone period = 552 (big-endian)
     FCB $09         ; Noise period
     FCB $6E         ; Frame 3 - flags (vol=14, noisevol=14, tone=Y, noise=Y)
-    FCB $03, $11  ; Tone period = 785 (big-endian)
+    FCB $02, $17  ; Tone period = 535 (big-endian)
     FCB $09         ; Noise period
     FCB $6F         ; Frame 4 - flags (vol=15, noisevol=13, tone=Y, noise=Y)
-    FCB $03, $2A  ; Tone period = 810 (big-endian)
+    FCB $02, $07  ; Tone period = 519 (big-endian)
     FCB $09         ; Noise period
     FCB $6D         ; Frame 5 - flags (vol=13, noisevol=13, tone=Y, noise=Y)
-    FCB $03, $42  ; Tone period = 834 (big-endian)
+    FCB $01, $F8  ; Tone period = 504 (big-endian)
     FCB $09         ; Noise period
     FCB $6C         ; Frame 6 - flags (vol=12, noisevol=12, tone=Y, noise=Y)
-    FCB $03, $5A  ; Tone period = 858 (big-endian)
+    FCB $01, $E9  ; Tone period = 489 (big-endian)
     FCB $09         ; Noise period
     FCB $6C         ; Frame 7 - flags (vol=12, noisevol=12, tone=Y, noise=Y)
-    FCB $03, $72  ; Tone period = 882 (big-endian)
+    FCB $01, $DC  ; Tone period = 476 (big-endian)
     FCB $09         ; Noise period
     FCB $6B         ; Frame 8 - flags (vol=11, noisevol=11, tone=Y, noise=Y)
-    FCB $03, $8B  ; Tone period = 907 (big-endian)
+    FCB $01, $CF  ; Tone period = 463 (big-endian)
     FCB $09         ; Noise period
     FCB $6B         ; Frame 9 - flags (vol=11, noisevol=11, tone=Y, noise=Y)
-    FCB $03, $A3  ; Tone period = 931 (big-endian)
+    FCB $01, $C3  ; Tone period = 451 (big-endian)
     FCB $09         ; Noise period
     FCB $6A         ; Frame 10 - flags (vol=10, noisevol=10, tone=Y, noise=Y)
-    FCB $03, $BB  ; Tone period = 955 (big-endian)
+    FCB $01, $B8  ; Tone period = 440 (big-endian)
     FCB $09         ; Noise period
     FCB $6A         ; Frame 11 - flags (vol=10, noisevol=10, tone=Y, noise=Y)
-    FCB $03, $D4  ; Tone period = 980 (big-endian)
+    FCB $01, $AD  ; Tone period = 429 (big-endian)
     FCB $09         ; Noise period
     FCB $69         ; Frame 12 - flags (vol=9, noisevol=9, tone=Y, noise=Y)
-    FCB $03, $EC  ; Tone period = 1004 (big-endian)
+    FCB $01, $A2  ; Tone period = 418 (big-endian)
     FCB $09         ; Noise period
     FCB $69         ; Frame 13 - flags (vol=9, noisevol=9, tone=Y, noise=Y)
-    FCB $04, $04  ; Tone period = 1028 (big-endian)
+    FCB $01, $99  ; Tone period = 409 (big-endian)
     FCB $09         ; Noise period
     FCB $68         ; Frame 14 - flags (vol=8, noisevol=8, tone=Y, noise=Y)
-    FCB $04, $1D  ; Tone period = 1053 (big-endian)
+    FCB $01, $8F  ; Tone period = 399 (big-endian)
     FCB $09         ; Noise period
     FCB $68         ; Frame 15 - flags (vol=8, noisevol=8, tone=Y, noise=Y)
-    FCB $04, $35  ; Tone period = 1077 (big-endian)
+    FCB $01, $86  ; Tone period = 390 (big-endian)
     FCB $09         ; Noise period
     FCB $68         ; Frame 16 - flags (vol=8, noisevol=8, tone=Y, noise=Y)
-    FCB $04, $4D  ; Tone period = 1101 (big-endian)
+    FCB $01, $7D  ; Tone period = 381 (big-endian)
     FCB $09         ; Noise period
     FCB $D0, $20    ; End of effect marker
 
@@ -514,13 +516,13 @@ _JUMP_SFX:
     FCB $00, $86  ; Tone period = 134 (big-endian)
     FCB $AA         ; Frame 6 - flags (vol=10, noisevol=0, tone=Y, noise=N)
     FCB $00, $64  ; Tone period = 100 (big-endian)
-    FCB $AA         ; Frame 7 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $A8         ; Frame 7 - flags (vol=8, noisevol=0, tone=Y, noise=N)
     FCB $00, $64  ; Tone period = 100 (big-endian)
-    FCB $AA         ; Frame 8 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $A6         ; Frame 8 - flags (vol=6, noisevol=0, tone=Y, noise=N)
     FCB $00, $C8  ; Tone period = 200 (big-endian)
-    FCB $A6         ; Frame 9 - flags (vol=6, noisevol=0, tone=Y, noise=N)
+    FCB $A3         ; Frame 9 - flags (vol=3, noisevol=0, tone=Y, noise=N)
     FCB $00, $C8  ; Tone period = 200 (big-endian)
-    FCB $A3         ; Frame 10 - flags (vol=3, noisevol=0, tone=Y, noise=N)
+    FCB $A1         ; Frame 10 - flags (vol=1, noisevol=0, tone=Y, noise=N)
     FCB $00, $9F  ; Tone period = 159 (big-endian)
     FCB $D0, $20    ; End of effect marker
 
@@ -539,11 +541,21 @@ VECTREX_PRINT_TEXT:
     JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
     JSR Reset0Ref   ; Reset beam to center before positioning text
     LDU VAR_ARG2   ; string pointer
+    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
+    STA >$C82A      ; Vec_Text_Height: controls character Y scale
+    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
+    STA >$C82B      ; Vec_Text_Width: controls character X spacing
     LDA >VAR_ARG1+1 ; Y coordinate
     LDB >VAR_ARG0+1 ; X coordinate
+    LDX >$C82C      ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    PSHS X
     JSR Print_Str_d
-    LDA #$80
-    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    PULS X
+    STX >$C82C      ; Restore Vec_Str_Ptr to safe ROM value
+    LDA #$F8
+    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    LDA #$48
+    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
     JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
 
@@ -819,6 +831,23 @@ BNE PMr_start_new       ; If different, start fresh
 LDA >PSG_IS_PLAYING     ; Check if currently playing
 BNE PMr_done            ; If playing same song, ignore
 PMr_start_new:
+; Silence PSG before switching tracks (prevents noise bleed-through)
+PSHS X,DP               ; Save music pointer and DP
+LDA #$D0
+TFR A,DP                ; Set DP=$D0 for Sound_Byte
+LDA #7                  ; PSG reg 7 = Mixer
+LDB #$3F                ; All channels disabled (bits 0-5 only; bits 6-7=0=IOA/IOB input!)
+JSR Sound_Byte
+LDA #8                  ; PSG reg 8 = Volume channel A
+LDB #0
+JSR Sound_Byte
+LDA #9                  ; PSG reg 9 = Volume channel B
+LDB #0
+JSR Sound_Byte
+LDA #10                 ; PSG reg 10 = Volume channel C
+LDB #0
+JSR Sound_Byte
+PULS X,DP               ; Restore music pointer and DP
 STX >PSG_MUSIC_PTR      ; Store current music pointer (force extended)
 STX >PSG_MUSIC_START    ; Store start pointer for loops (force extended)
 CLR >PSG_DELAY_FRAMES   ; Clear delay counter
@@ -829,36 +858,52 @@ RTS
 
 ; ============================================================================
 ; UPDATE_MUSIC_PSG - Update PSG (call every frame)
+; Data format per event: FCB delay, FCB count, (FCB reg, FCB val)*N
+; delay = frames since previous event (0 = apply immediately)
+; End marker: FCB 0 after last event's count
+; Loop marker: delay=$FF is treated as loop; OR count=$FF followed by FDB addr
+; PSG_DELAY_FRAMES counts down to the next event fire point.
+; PSG_MUSIC_PTR always points to delay byte of next pending event.
 ; ============================================================================
 UPDATE_MUSIC_PSG:
-; CRITICAL: Set VIA to PSG mode BEFORE accessing PSG (don't assume state)
-; DISABLED: Conflicts with SFX which uses Sound_Byte (HANDSHAKE mode)
-; LDA #$00       ; VIA_cntl = $00 (PSG mode)
-; STA >$D00C     ; VIA_cntl
 LDA #$01
-STA >PSG_MUSIC_ACTIVE   ; Mark music system active (for PSG logging)
-LDA >PSG_IS_PLAYING     ; Check if playing (extended - var at 0xC8A0)
-BEQ PSG_update_done     ; Not playing, exit
+STA >PSG_MUSIC_ACTIVE   ; Mark music system active
+LDA >PSG_IS_PLAYING
+LBEQ PSG_update_done    ; Not playing
 
-LDX >PSG_MUSIC_PTR      ; Load pointer (force extended - LDX has no DP mode)
-BEQ PSG_update_done     ; No music loaded
+; Check if delay counter is running
+LDA >PSG_DELAY_FRAMES
+BEQ PSG_read_delay      ; Counter=0: time to read next delay byte
+DECA
+STA >PSG_DELAY_FRAMES
+LBNE PSG_update_done    ; Still waiting
+BRA PSG_process_event   ; Counter just hit 0: apply the event
 
-; Read frame count byte (number of register writes)
+PSG_read_delay:
+LDX >PSG_MUSIC_PTR      ; PTR → delay byte of current event
+LDB ,X+                 ; Consume delay byte, X → count byte
+CMPB #$FF
+LBEQ PSG_music_loop_d   ; $FF as delay = loop command
+STB >PSG_DELAY_FRAMES   ; Store delay count
+STX >PSG_MUSIC_PTR      ; Advance PTR past delay byte (now at count byte)
+BEQ PSG_process_event   ; delay=0: apply immediately
+DEC >PSG_DELAY_FRAMES   ; Decrement once (fires after delay-1 more frames)
+LBRA PSG_update_done    ; Wait
+
+PSG_process_event:
+LDX >PSG_MUSIC_PTR      ; PTR is at count byte
 LDB ,X+
-BEQ PSG_music_ended     ; Count=0 means end (no loop)
-CMPB #$FF               ; Check for loop command
-BEQ PSG_music_loop      ; $FF means loop (never valid as count)
+LBEQ PSG_music_ended    ; Count=0 means end
+CMPB #$FF
+LBEQ PSG_music_loop     ; Count=$FF means loop
 
-; Process frame - push counter to stack
 PSHS B                  ; Save count on stack
-
-; Write register/value pairs to PSG
 PSG_write_loop:
 LDA ,X+                 ; Load register number
 LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer (after reads)
+PSHS X                  ; Save pointer
 
-; WRITE_PSG sequence
+; WRITE_PSG sequence (direct VIA access)
 STA VIA_port_a          ; Store register number
 LDA #$19                ; BDIR=1, BC1=1 (LATCH)
 STA VIA_port_b
@@ -873,30 +918,32 @@ STB VIA_port_b
 
 PULS X                  ; Restore pointer
 PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ PSG_frame_done      ; Done with this frame
+DECB
+BEQ PSG_event_done      ; Done with this event
 PSHS B                  ; Save counter back
 BRA PSG_write_loop
 
-PSG_frame_done:
-
-; Frame complete - update pointer and done
-STX >PSG_MUSIC_PTR      ; Update pointer (force extended)
-BRA PSG_update_done
+PSG_event_done:
+STX >PSG_MUSIC_PTR      ; PTR → delay byte of next event
+CLR >PSG_DELAY_FRAMES   ; Trigger PSG_read_delay next frame
+LBRA PSG_update_done
 
 PSG_music_ended:
-CLR >PSG_IS_PLAYING     ; Stop playback (extended - var at 0xC8A0)
-; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing
-; Music will fade naturally as frame data stops updating
-BRA PSG_update_done
+CLR >PSG_IS_PLAYING
+LBRA PSG_update_done
 
 PSG_music_loop:
-; Loop command: $FF followed by 2-byte address (FDB)
-; X points past $FF, read the target address
-LDD ,X                  ; Load 2-byte loop target address
-STD >PSG_MUSIC_PTR      ; Update pointer to loop start
-; Exit - next frame will start from loop target
-BRA PSG_update_done
+; count=$FF: X points after $FF, at FDB loop address
+LDD ,X
+STD >PSG_MUSIC_PTR
+CLR >PSG_DELAY_FRAMES
+LBRA PSG_update_done
+
+PSG_music_loop_d:
+; delay=$FF: X points after $FF, at FDB loop address
+LDD ,X
+STD >PSG_MUSIC_PTR
+CLR >PSG_DELAY_FRAMES
 
 PSG_update_done:
 CLR >PSG_MUSIC_ACTIVE   ; Clear flag (music system done)
@@ -950,12 +997,10 @@ BNE AU_UPDATE_SFX       ; If not zero yet, skip this frame
 
 ; Delay just reached zero, X points to count byte already
 LDX >PSG_MUSIC_PTR      ; Load music pointer (points to count)
-BEQ AU_SKIP_MUSIC       ; Skip if null
 BRA AU_MUSIC_READ_COUNT ; Skip delay read, go straight to count
 
 AU_MUSIC_READ:
 LDX >PSG_MUSIC_PTR      ; Load music pointer
-BEQ AU_SKIP_MUSIC       ; Skip if null
 
 ; Check if we need to read delay or we're ready for count
 ; PSG_DELAY_FRAMES just reached 0, so we read delay byte first
@@ -977,6 +1022,7 @@ BRA AU_MUSIC_PROCESS_WRITES
 AU_MUSIC_HAS_DELAY:
 ; B has delay > 0, store it and skip to next frame
 DECB                    ; Delay-1 (we consume this frame)
+BEQ AU_MUSIC_READ_COUNT ; delay was 1: X already at count byte, process immediately
 STB >PSG_DELAY_FRAMES   ; Save delay counter
 STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)
 BRA AU_UPDATE_SFX       ; Skip reading data this frame
@@ -1018,7 +1064,7 @@ AU_UPDATE_SFX:
 LDA >SFX_ACTIVE         ; Check if SFX is active
 BEQ AU_DONE             ; Skip if not active
 
-JSR sfx_doframe         ; Process one SFX frame (uses Sound_Byte internally)
+        JSR sfx_doframe         ; Process one SFX frame (uses Sound_Byte internally)
 
 AU_DONE:
         PULS DP                 ; Restore original DP

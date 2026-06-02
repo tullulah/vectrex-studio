@@ -1033,3 +1033,60 @@
 .git-branch-option.remote {
   padding-left: 20px;
 }
+
+/* ── Modal overlay (Stashes, Tags, Remotes, Config) ─────────────────── */
+.git-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.git-modal {
+  background: #1e1e1e;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  min-width: 340px;
+  max-width: 520px;
+  width: 90%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: #cccccc;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.git-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid #3e3e42;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.git-modal-close {
+  background: transparent;
+  border: none;
+  color: #6a6a6a;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.git-modal-close:hover {
+  color: #cccccc;
+}
+
+.git-modal > *:last-child {
+  overflow-y: auto;
+  padding: 10px;
+}

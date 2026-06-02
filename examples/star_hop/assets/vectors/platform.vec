@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "name": "platform",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "path_1779827261406",
+          "intensity": 85,
+          "closed": false,
+          "points": [
+            {
+              "x": -40,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 39,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": 39,
+              "y": -4,
+              "z": 0
+            },
+            {
+              "x": -40,
+              "y": -4,
+              "z": 0
+            },
+            {
+              "x": -40,
+              "y": 4,
+              "z": 0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0,
+  "walkableAreas": []
+}

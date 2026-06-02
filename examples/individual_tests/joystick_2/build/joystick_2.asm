@@ -32,6 +32,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -47,28 +49,35 @@ TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
 VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
 VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
 TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
-DRAW_CIRCLE_XC       EQU $C880+$0C   ; Circle center X (1 bytes)
-DRAW_CIRCLE_YC       EQU $C880+$0D   ; Circle center Y (1 bytes)
-DRAW_CIRCLE_DIAM     EQU $C880+$0E   ; Circle diameter (1 bytes)
-DRAW_CIRCLE_INTENSITY EQU $C880+$0F   ; Circle intensity (1 bytes)
-DRAW_CIRCLE_RADIUS   EQU $C880+$10   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
-DRAW_CIRCLE_TEMP     EQU $C880+$11   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
-DRAW_LINE_ARGS       EQU $C880+$19   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$23   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$25   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$27   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$28   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$29   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$2B   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_JX               EQU $C880+$2D   ; User variable: JX (2 bytes)
-VAR_JY               EQU $C880+$2F   ; User variable: JY (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-
+BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
+BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
+DRAW_CIRCLE_XC       EQU $C880+$0E   ; Circle center X (1 bytes)
+DRAW_CIRCLE_YC       EQU $C880+$0F   ; Circle center Y (1 bytes)
+DRAW_CIRCLE_DIAM     EQU $C880+$10   ; Circle diameter (1 bytes)
+DRAW_CIRCLE_INTENSITY EQU $C880+$11   ; Circle intensity (1 bytes)
+DRAW_CIRCLE_RADIUS   EQU $C880+$12   ; Circle radius (diam/2) - used in segment drawing (1 bytes)
+DRAW_CIRCLE_TEMP     EQU $C880+$13   ; Circle temporary buffer (8 bytes: radius16, a, b, c, d, --, --)  a=0.383r b=0.324r c=0.217r d=0.076r (8 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$1B   ; Vector intensity override (0=use vector data) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$1C   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$26   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$28   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$2A   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$2B   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$2C   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$2E   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+TEXT_SCALE_H         EQU $C880+$30   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$31   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+VAR_ARG0             EQU $C880+$32   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$34   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$36   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$38   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$3A   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$3C   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$3E   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$40   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$42   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_JX               EQU $C880+$43   ; User variable: JX (2 bytes)
+VAR_JY               EQU $C880+$45   ; User variable: JY (2 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM
@@ -78,6 +87,10 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    LDA #$F8
+    STA TEXT_SCALE_H      ; Default height = -8 (normal size)
+    LDA #$48
+    STA TEXT_SCALE_W      ; Default width = 72 (normal size)
     LDD #0
     STD VAR_JX
     LDD #0
@@ -96,15 +109,14 @@ MAIN:
     STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
     ; Mux configured - J1_X()/J1_Y() can now be called
 
+    ; Prime BIOS button state at startup
+    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD VAR_JX
     LDD #0
-    STD RESULT
-    LDD RESULT
     STD VAR_JY
+    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
 
 .MAIN_LOOP:
     JSR LOOP_BODY
@@ -112,137 +124,86 @@ MAIN:
 
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR $F1AA  ; DP_to_D0: set direct page to $D0 for PSG access
-    JSR $F1BA  ; Read_Btns: read PSG register 14, update $C80F (Vec_Btn_State)
-    JSR $F1AF  ; DP_to_C8: restore direct page to $C8 for normal RAM access
+    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
     ; PRINT_TEXT: Print text at position
     LDD #-50
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #90
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2194200014      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
     JSR J2X_BUILTIN
     STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    PSHS D              ; save LEFT on stack (nested RIGHT)
     LDD #2
-    STD RESULT
-    LDD RESULT
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
-    STD RESULT
-    LDD RESULT
+    STD TMPVAL          ; RIGHT → TMPVAL
+    PULS D              ; restore LEFT into D
+    TFR D,X             ; X = LEFT (dividend)
+    LDD TMPVAL          ; D = RIGHT (divisor)
+    JSR DIV16           ; D = X / D
     STD VAR_JX
     JSR J2Y_BUILTIN
     STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+    PSHS D              ; save LEFT on stack (nested RIGHT)
     LDD #2
-    STD RESULT
-    LDD RESULT
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
-    STD RESULT
-    LDD RESULT
+    STD TMPVAL          ; RIGHT → TMPVAL
+    PULS D              ; restore LEFT into D
+    TFR D,X             ; X = LEFT (dividend)
+    LDD TMPVAL          ; D = RIGHT (divisor)
+    JSR DIV16           ; D = X / D
     STD VAR_JY
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
-    LDD >VAR_JX
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #8
-    STD RESULT
-    LDD RESULT
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD RESULT
-    LDD RESULT
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_JX
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD DRAW_LINE_ARGS+0    ; x0
     LDD >VAR_JY
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+2    ; y0
-    LDD >VAR_JX
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #8
-    STD RESULT
-    LDD RESULT
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD RESULT
-    LDD RESULT
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_JX
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD DRAW_LINE_ARGS+4    ; x1
     LDD >VAR_JY
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+6    ; y1
     LDD #80
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+8    ; intensity
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD >VAR_JX
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+0    ; x0
-    LDD >VAR_JY
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #8
-    STD RESULT
-    LDD RESULT
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD RESULT
-    LDD RESULT
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_JY
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD DRAW_LINE_ARGS+2    ; y0
     LDD >VAR_JX
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+4    ; x1
-    LDD >VAR_JY
-    STD RESULT
-    LDD RESULT
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #8
-    STD RESULT
-    LDD RESULT
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD RESULT
-    LDD RESULT
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_JY
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD DRAW_LINE_ARGS+6    ; y1
     LDD #80
-    STD RESULT
-    LDD RESULT
     STD DRAW_LINE_ARGS+8    ; intensity
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
-    LDA $C812      ; Vec_Button_1_2 (Player 2 transition bits)
-    ANDA #$01      ; Test bit 0
-    BEQ .J2B1_0_OFF
-    LDD #1
-    BRA .J2B1_0_END
-.J2B1_0_OFF:
+    LDA >$C80F   ; Vec_Btns: bit4=1 means P2 btn1 pressed
+    BITA #$10
+    BNE .J2B1_0_ON
     LDD #0
+    BRA .J2B1_0_END
+.J2B1_0_ON:
+    LDD #1
 .J2B1_0_END:
     STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_1
     LDA #$D0
     TFR A,DP
@@ -403,16 +364,15 @@ IF_END_0:
     TFR A,DP    ; Restore DP=$C8 after circle drawing
     LDD #0
     STD RESULT
-    LDA $C812      ; Vec_Button_1_2 (Player 2 transition bits)
-    ANDA #$02      ; Test bit 1
-    BEQ .J2B2_1_OFF
-    LDD #1
-    BRA .J2B2_1_END
-.J2B2_1_OFF:
+    LDA >$C80F   ; Vec_Btns: bit5=1 means P2 btn2 pressed
+    BITA #$20
+    BNE .J2B2_1_ON
     LDD #0
+    BRA .J2B2_1_END
+.J2B2_1_ON:
+    LDD #1
 .J2B2_1_END:
     STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_3
     LDA #$D0
     TFR A,DP
@@ -573,16 +533,15 @@ IF_END_2:
     TFR A,DP    ; Restore DP=$C8 after circle drawing
     LDD #0
     STD RESULT
-    LDA $C812      ; Vec_Button_1_2 (Player 2 transition bits)
-    ANDA #$04      ; Test bit 2
-    BEQ .J2B3_2_OFF
-    LDD #1
-    BRA .J2B3_2_END
-.J2B3_2_OFF:
+    LDA >$C80F   ; Vec_Btns: bit6=1 means P2 btn3 pressed
+    BITA #$40
+    BNE .J2B3_2_ON
     LDD #0
+    BRA .J2B3_2_END
+.J2B3_2_ON:
+    LDD #1
 .J2B3_2_END:
     STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_5
     LDA #$D0
     TFR A,DP
@@ -743,16 +702,15 @@ IF_END_4:
     TFR A,DP    ; Restore DP=$C8 after circle drawing
     LDD #0
     STD RESULT
-    LDA $C812      ; Vec_Button_1_2 (Player 2 transition bits)
-    ANDA #$08      ; Test bit 3
-    BEQ .J2B4_3_OFF
-    LDD #1
-    BRA .J2B4_3_END
-.J2B4_3_OFF:
+    LDA >$C80F   ; Vec_Btns: bit7=1 means P2 btn4 pressed
+    BITA #$80
+    BNE .J2B4_3_ON
     LDD #0
+    BRA .J2B4_3_END
+.J2B4_3_ON:
+    LDD #1
 .J2B4_3_END:
     STD RESULT
-    LDD RESULT
     LBEQ IF_NEXT_7
     LDA #$D0
     TFR A,DP
@@ -915,15 +873,11 @@ IF_END_6:
     STD RESULT
     ; PRINT_TEXT: Print text at position
     LDD #-52
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #-75
-    STD RESULT
-    LDD RESULT
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_44450992618      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
@@ -944,11 +898,21 @@ VECTREX_PRINT_TEXT:
     JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
     JSR Reset0Ref   ; Reset beam to center before positioning text
     LDU VAR_ARG2   ; string pointer
+    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
+    STA >$C82A      ; Vec_Text_Height: controls character Y scale
+    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
+    STA >$C82B      ; Vec_Text_Width: controls character X spacing
     LDA >VAR_ARG1+1 ; Y coordinate
     LDB >VAR_ARG0+1 ; X coordinate
+    LDX >$C82C      ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    PSHS X
     JSR Print_Str_d
-    LDA #$80
-    STA >$D004      ; Restore VIA_t1_cnt_lo: Moveto_d_7F sets it to $7F, corrupting DRAW_LINE scale
+    PULS X
+    STX >$C82C      ; Restore Vec_Str_Ptr to safe ROM value
+    LDA #$F8
+    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    LDA #$48
+    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
     JSR $F1AF      ; DP_to_C8 - restore DP before return
     RTS
 
@@ -1327,22 +1291,32 @@ DLW_SEG1_DX_READY:
     LDA >VLINE_DY  ; EXTENDED
     LDB >VLINE_DX  ; EXTENDED
     JSR Draw_Line_d ; Beam moves automatically
-    ; Check if we need SEGMENT 2 (dy outside ±127 range)
+    ; Check if we need SEGMENT 2 (dy OR dx outside ±127 range)
     LDD >VLINE_DY_16 ; Reload original dy - EXTENDED
     CMPD #127
     BGT DLW_NEED_SEG2  ; dy > 127: needs segment 2
     CMPD #-128
     BLT DLW_NEED_SEG2  ; dy < -128: needs segment 2
-    BRA DLW_DONE       ; dy in range ±127: no segment 2
+    LDD >VLINE_DX_16 ; Also check dx - EXTENDED
+    CMPD #127
+    BGT DLW_NEED_SEG2  ; dx > 127: needs segment 2
+    CMPD #-128
+    BLT DLW_NEED_SEG2  ; dx < -128: needs segment 2
+    BRA DLW_DONE       ; both dy and dx in range: no segment 2
 DLW_NEED_SEG2:
     ; SEGMENT 2: Draw remaining dy and dx
     ; Calculate remaining dy
     LDD >VLINE_DY_16 ; Load original full dy - EXTENDED
     CMPD #127
-    BGT DLW_SEG2_DY_POS  ; dy > 127
+    BGT DLW_SEG2_DY_POS  ; dy > 127: remaining = dy - 127
+    CMPD #-128
+    BGE DLW_SEG2_DY_NO_REMAIN  ; -128 <= dy <= 127: no remaining dy
     ; dy < -128, so we drew -128 in segment 1
     ; remaining = dy - (-128) = dy + 128
     ADDD #128       ; Add back the -128 we already drew
+    BRA DLW_SEG2_DY_DONE
+DLW_SEG2_DY_NO_REMAIN:
+    LDD #0          ; dy in range: no remaining
     BRA DLW_SEG2_DY_DONE
 DLW_SEG2_DY_POS:
     ; dy > 127, so we drew 127 in segment 1

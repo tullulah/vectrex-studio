@@ -1,0 +1,100 @@
+16 abr 2026, 7:43 pm
+Hi Ralf,
+
+My name is Daniel. I've been building a Vectrex development environment called Vectrex Studio (https://www.vectrexstudio.com/) — it includes a Python-like language (VPy) that compiles to Vectrex machine code, along with an IDE and emulator. It currently supports native MC6809 output, and I'm working on hardware targets — PiTrex and RP2350 are both in progress. I'm also designing my own RP2350-based Vectrex cartridge.
+
+I know you've done great work on the software side for an RP2350 Vectrex cartridge, and I had a few questions. I'd love for Vectrex Studio to be able to target your cartridge directly — so developers could compile and run VPy games on it without any extra tooling.
+
+SDK / toolchain:
+
+Are you building with the standard Pico SDK? Any custom patches needed to get it working with the Vectrex timing?
+Is there a HAL or abstraction layer handling the Vectrex interface (similar to what vectrexInterface.c does in the gtoal/pitrex SDK)?
+What does the startup sequence look like — are you using PIO state machines for any of the timing-critical I/O?
+What are the key GPIO pin assignments for the Vectrex interface (DAC lines, /CART, clock, etc.)?
+Loading binaries:
+5. How do you deploy compiled binaries to the cartridge — .uf2 over USB, SD card, or something else?
+6. If via SD card: what filesystem, filename convention, and loader are you using?
+
+The VPy compiler already generates ARM32 output, so adding your cartridge as a target should be mostly a matter of matching the SDK calls, linker script, and pinout. Any documentation or pointers would be really appreciated.
+
+Thanks in advance!
+www.vectrexstudio.com
+
+---
+
+16 abr 2026, 9:15 pm
+- It's the regular pico sdk
+- There is no HAL and I might never do any. It works more like modern GPU APIs where you record (VIA) commands in a buffer that is than executed. 
+- There are currently 2 modes. One uses PIO and the other one runs just on the second core. The main reason for this is that it is easier to get things up and running on the second core. But as it blocks one core I maybe convert more of this code to PIOs at some point in the future
+- The GPIOs are only connected to the Vectrex bus. So the RP2350 can either get read/write requests from the 6809. Or it can put the 6809 in halt and send read/write requets to the VIA. Technically to RAM and ROM too but there is not much benefit of this. So every drawing needs to be either done by the 6809 or by sending VIA commands like the 6809 would do
+- Again there are two modes. The (or any) firmware itself can be flashed by any way that the pico supports. uf2 is the most common. Our default firmware has also the option to load and execute RAM only code from the sd card. I currently convert these from uf2 files in a more compact binary format with a custom header
+Do you have the pinout of the rp2350? How it’s wired to the cart connector?
+
+As the hardware is done by Jason I really need to check with him first how much he want's to share. Sorry about that
+Or Maybe you have some sample project source code that can run from the sd card
+Oh, ok ok
+I expect I have an answer from him within a day 
+Thanks
+Don’t get me wrong, i’m not trying to copy the cart. I only want to add support to this card, as i’m doing with pitrex
+I understand I just don't want to make such decisions without Jason 
+
+---
+
+Here we go
+IO00 = D0
+IO01 = D1
+IO02 = D2
+IO03 = D3
+IO04 = D4
+IO05 = D5
+IO06 = D6
+IO07 = D7
+IO08 = A01
+IO09 = A02
+IO10 = A03
+IO11 = A04
+IO12 = A05
+IO13 = A06
+IO14 = A07
+IO15 = A08
+IO16 = A09
+IO17 = A10
+IO18 = A11
+IO19 = A12
+IO20 = A13
+IO21 = A14
+IO22 = PB6
+IO23 = IRQ
+IO24 = A14
+IO25 = A15
+IO26 = RW
+IO27 = HALT
+IO29 = NMI
+IO31 = CLK
+17 abr 2026, 8:23 am
+thanks!
+do you have any sample project that can run from the SD card?
+Nothing in a state that would be really understandable right now. And the conversion still need some manual steps. From a pure development point of view it is just fliping the switch in the make file. If it runs from the flash it will run from memory/sd card, too. As long as it can fit in the space
+ok, i'll give it a try with the information i have
+thanks
+You basically need to monitor the clk signal and depending on if you are in ROM or HALT mode read and/or write the address and data bus as defined in the 6809 datasheet
+i'll be on halt mode
+the generated code will be rp2350 native
+That can be either done with the second core or pios. starting with the second core should be easier
+Vectrex32 code runs on the RP2350 and the 6809 at the same time
+The RP2350 generates 6809 code on the fly that does all the drawings
+That's a third way of doing things. But halt mode is IMHO the better way of doing it
+that third way is goint to be my first approach for this
+17 abr 2026, 9:06 am
+To write a VIA register from the RP2350 (6809 halted), what is the correct method?
+
+a) Manually bit-bang GPIO pins (set address lines A1-A14, data lines D0-D7, R/W, then toggle some clock/strobe pin)?
+b) Write to a PIO state machine via its TX FIFO with a packed command word?
+c) Call a function that the firmware exposes to RAM-loaded code?
+
+And if (a) or (b): is there a reference example or header with the exact sequence?
+
+This determines how my compiler generates DRAW_LINE, SET_INTENSITY, WAIT_RECAL, etc. for the UVM2 target.
+17 abr 2026, 9:23 am
+One of the issues with the 6809 is that even in halt mode it still generates the clock signal. So you need to sync with it. So you monitor the clk (either with a core or PIO) and when you detect the edge you need to update the address and data io so the VIA execute your write with the next clk edge
+Beside this you have to write the same values to the same via registers as any 6809 vectrex code would do

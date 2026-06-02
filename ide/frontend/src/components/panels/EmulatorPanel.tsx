@@ -6,10 +6,12 @@ import { useDebugStore } from '../../state/debugStore';
 import type { PdbData } from '../../state/debugStore';
 import { useJoystickStore } from '../../state/joystickStore';
 import { useProjectStore } from '../../state/projectStore';
+import { useSettings } from '../../state/settingsStore';
 import { JoystickConfigDialog } from '../dialogs/JoystickConfigDialog';
 import { psgAudio } from '../../psgAudio';
 import { inputManager } from '../../inputManager';
 import { asmAddressToVpyLine, formatAddress } from '../../utils/debugHelpers';
+import { emuCore } from '../../emulatorCoreSingleton';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -299,6 +301,14 @@ export const EmulatorPanel: React.FC = () => {
   const [availableROMs, setAvailableROMs] = useState<string[]>([]);
   const [selectedROM, setSelectedROM] = useState<string>(lastRomName || '');
   const [currentOverlay, setCurrentOverlay] = useState<string | null>(null);
+  const [showPitrexOverlay, setShowPitrexOverlay] = useState<boolean>(false);
+  const [pitrexImgPath, setPitrexImgPath] = useState<string>('');
+  // Both `pitrex` and `uvm2` are hardware-only targets that share the same
+  // "no in-browser emulation" overlay; this discriminator keeps the text
+  // accurate (PiTrex Pi Zero vs UVM2 Cortex-M33).
+  const [hardwareOverlayKind, setHardwareOverlayKind] = useState<'pitrex' | 'uvm2'>('pitrex');
+  // PiTrex-specific audio enabled state (separate from JSVecX's AY chip state)
+  const [pitrexAudioEnabled, setPitrexAudioEnabled] = useState<boolean>(true);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 300, height: 400 });
@@ -310,6 +320,15 @@ export const EmulatorPanel: React.FC = () => {
   const debugState = useDebugStore(s => s.state);
   const pdbData = useDebugStore(s => s.pdbData);
   const breakpointCheckIntervalRef = useRef<number | null>(null);
+
+  // rp2350 requestAnimationFrame loop handle
+  const rp2350LoopRef = useRef<number | null>(null);
+
+  // PiTrex ARM32 interpreter loop handle and core instance
+  const pitrexLoopRef = useRef<number | null>(null);
+  const pitrexCoreRef = useRef<import('../../pitrex/PitrexCore.js').PitrexCore | null>(null);
+  // Last assembly text loaded into PitrexCore — needed for reset (re-parse + restart loop)
+  const pitrexSFileRef = useRef<string | null>(null);
   
   // Hook editor store para documentos activos
   const editorActive = useEditorStore(s => s.active);
@@ -322,6 +341,10 @@ export const EmulatorPanel: React.FC = () => {
     // console.log('📍 [EmulatorPanel] Mount stack trace:', new Error().stack); // Debug only
     return () => {
       console.log('💀 [EmulatorPanel] COMPONENT UNMOUNTING');
+      if (rp2350LoopRef.current !== null) {
+        cancelAnimationFrame(rp2350LoopRef.current);
+        rp2350LoopRef.current = null;
+      }
     };
   }, []);
 
@@ -590,31 +613,116 @@ export const EmulatorPanel: React.FC = () => {
     // Persistent state for button debouncing (outside setInterval to persist between frames)
     let lastButtonState = 0;
 
+    // Player-2 buttons over keyboard: J/K/L/M → P2 btn 1/2/3/4. The frontend
+    // has no second-controller keyboard config, so this is the quick path
+    // to drive J2_BUTTON_*() without a second physical gamepad. The bits
+    // land in the high nibble of the PSG reg-14 value injected below.
+    // Listener attached on `document` with capture:true so Monaco / IDE
+    // shortcut handlers don't swallow the keys before us.
+    let p2ButtonState = 0;
+    const p2KeyMap: Record<string, number> = {
+      'KeyJ': 0, 'KeyK': 1, 'KeyL': 2, 'KeyM': 3,
+    };
+    const p2KeyDown = (e: KeyboardEvent) => {
+      const bit = p2KeyMap[e.code];
+      if (bit !== undefined) p2ButtonState |= (1 << bit);
+    };
+    const p2KeyUp = (e: KeyboardEvent) => {
+      const bit = p2KeyMap[e.code];
+      if (bit !== undefined) p2ButtonState &= ~(1 << bit);
+    };
+    document.addEventListener('keydown', p2KeyDown, { capture: true });
+    document.addEventListener('keyup',   p2KeyUp,   { capture: true });
+
     const gamepadPollInterval = setInterval(() => {
       const vecx = (window as any).vecx;
-      // Allow gamepad to work even when paused (for testing controls during debugging)
-      if (!vecx) return;
+      // vecx may be null in pitrex mode — do NOT early-return here.
+      // All input processing runs regardless; JSVecX writes are guarded below.
 
       const gamepads = navigator.getGamepads();
       if (!gamepads) return;
 
       // Get joystick configuration from store
       const joystickConfig = useJoystickStore.getState();
-      const { gamepadIndex, axisXIndex, axisYIndex, axisXInverted, axisYInverted, deadzone, buttonMappings, dpadUpButton, dpadDownButton, dpadLeftButton, dpadRightButton } = joystickConfig;
+      const { gamepadIndex, gamepadIndex2, axisXIndex, axisYIndex, axisXInverted, axisYInverted, deadzone, buttonMappings, dpadUpButton, dpadDownButton, dpadLeftButton, dpadRightButton } = joystickConfig;
+
+      // ── Player 2 gamepad poll ──────────────────────────────────────────
+      // Reuses the same axis indices / button mappings as P1 (same model
+      // assumed). Feeds J2_X / J2_Y axes (jsvecx alg_jch2/jch3) and the
+      // high nibble of psgReg14 for J2_BUTTON_1..4.
+      let p2GpButtonState = 0;
+      let p2GpAxisX = 0;
+      let p2GpAxisY = 0;
+      if (gamepadIndex2 !== null && gamepadIndex2 !== gamepadIndex) {
+        const gp2 = gamepads[gamepadIndex2];
+        if (gp2 && gp2.connected) {
+          const raw2X = gp2.axes[axisXIndex] || 0;
+          const raw2Y = gp2.axes[axisYIndex] || 0;
+          const apply = (v: number) => (Math.abs(v) < deadzone ? 0 : v);
+          const x2 = apply(raw2X) * (axisXInverted ? -1 : 1);
+          const y2 = apply(raw2Y) * (axisYInverted ? -1 : 1);
+          // D-pad override for axes (same buttons mapped on P1)
+          const d2L = gp2.buttons[dpadLeftButton]?.pressed || false;
+          const d2R = gp2.buttons[dpadRightButton]?.pressed || false;
+          const d2U = gp2.buttons[dpadUpButton]?.pressed || false;
+          const d2D = gp2.buttons[dpadDownButton]?.pressed || false;
+          const ax2 = d2L ? -127 : d2R ? 127 : Math.round(x2 * 127);
+          const ay2 = d2D ? -127 : d2U ? 127 : Math.round(y2 * 127);
+          p2GpAxisX = ax2;
+          p2GpAxisY = ay2;
+          buttonMappings.forEach((m) => {
+            const b = gp2.buttons[m.gamepadButton];
+            if (b && b.pressed) p2GpButtonState |= (1 << (m.vectrexButton - 1));
+          });
+        }
+      }
+      // OR with keyboard JKLM fallback so both routes light up the same
+      // bits when nothing's wired to P2 gamepad.
+      const p2DownTotal = (p2ButtonState | p2GpButtonState) & 0x0F;
 
       if (gamepadIndex === null) {
         // No gamepad configured — use keyboard input (ArrowLeft/Right/Up/Down or WASD)
         const kb = inputManager.update();
         const kbX = kb.x / 127; // normalize -127..127 → -1..1
         const kbY = kb.y / 127;
-        try {
-          vecx.leftHeld  = kbX < -0.3;
-          vecx.rightHeld = kbX > 0.3;
-          vecx.downHeld  = kbY < -0.3;
-          vecx.upHeld    = kbY > 0.3;
-          vecx.alg_jch0 = Math.round((kbX + 1) * 127.5); // 0=left, 128=center, 255=right
-          vecx.alg_jch1 = Math.round((kbY + 1) * 127.5); // 0=down,  128=center, 255=up
-        } catch {}
+        // rp2350 / pitrex keyboard axis and buttons. P2 axes have no
+        // keyboard fallback yet (JKLM only drives the buttons), so we
+        // pass 0/0 for the P2 stick. P2 buttons come from the JKLM mask.
+        emuCore.setJoyAxis?.(kb.x, kb.y);
+        emuCore.setJoyButtons2?.(0xFF & ~(p2ButtonState & 0x0F));
+        pitrexCoreRef.current?.setInput(
+          kb.x, kb.y, kb.buttons & 0xF,
+          0, 0, p2ButtonState & 0xF,
+        );
+        if (vecx) {
+          try {
+            // Always use analog mode so the gamepad's continuous values reach Joy_Analog.
+            // inputManager already polls the Gamepad API — kb.x/y are analog when a
+            // gamepad is connected, digital (±127/0) when only keyboard is used.
+            // Map kb.x/y (−127..127) → alg_jch0/1 (0..255): +128 shifts center to 0x80.
+            // The emuloop must NOT override these (useAnalogJoy=true).
+            vecx.useAnalogJoy = true;
+            vecx.alg_jch0 = (kb.x + 128) & 0xFF;  // X: left→1, center→128, right→255
+            vecx.alg_jch1 = (kb.y + 128) & 0xFF;  // Y: down→1, center→128, up→255
+            // Keep leftHeld/rightHeld/etc. for compatibility with any other JSVecX code.
+            vecx.leftHeld  = kbX < -0.3;
+            vecx.rightHeld = kbX > 0.3;
+            vecx.downHeld  = kbY < -0.3;
+            vecx.upHeld    = kbY > 0.3;
+            vecx.alg_jch0 = Math.round((kbX + 1) * 127.5); // 0=left, 128=center, 255=right
+            vecx.alg_jch1 = Math.round((kbY + 1) * 127.5); // 0=down,  128=center, 255=up
+            // Same PSG reg 14 injection as the gamepad path so J1_BUTTON_*
+            // and J2_BUTTON_*() work in keyboard-only mode. kb.buttons has
+            // P1 in bits 0-3; the JKLM keyboard fallback (p2ButtonState)
+            // goes into bits 4-7.
+            const combinedDown = (kb.buttons & 0x0F) | ((p2ButtonState & 0x0F) << 4);
+            const psgReg14 = ~combinedDown & 0xFF;
+            (window as any).injectedButtonStatePSG = psgReg14;
+            if (vecx.e8910 && vecx.e8910.e8910_write) {
+              vecx.e8910.e8910_write(14, psgReg14);
+            }
+          } catch {}
+        }
         return;
       }
 
@@ -639,109 +747,116 @@ export const EmulatorPanel: React.FC = () => {
       const dpadUp = gamepad.buttons[dpadUpButton]?.pressed || false;
       const dpadDown = gamepad.buttons[dpadDownButton]?.pressed || false;
 
-      // Set JSVecX input state (directional booleans)
-      // IMPORTANT: JSVecx internally converts these booleans to alg_jch0/1
-      // The booleans activate from EITHER analog stick OR D-Pad buttons
-      try {
-        // Combine analog stick (with threshold) and D-Pad buttons
-        // Analog: threshold of 0.3 to avoid drift
-        // D-Pad: direct button press state
-        vecx.leftHeld = (x < -0.3) || dpadLeft;
-        vecx.rightHeld = (x > 0.3) || dpadRight;
-        vecx.downHeld = (y < -0.3) || dpadDown;
-        vecx.upHeld = (y > 0.3) || dpadUp;
-
-
-        // Write analog joystick values to JSVecX hardware emulation
-        // JSVecx uses UNSIGNED range: 0=left/down, 128=center, 255=right/up
-        // Input x,y are in range -1.0 to +1.0 (0.0 = center)
-        const analogX = Math.round((x + 1) * 127.5); // 0 to 255 (128=center)
-        const analogY = Math.round((y + 1) * 127.5); // 0 to 255 (128=center)
-        
-        // Update JSVecx analog channels (this is what Joy_Analog BIOS reads via alg_compare)
-        vecx.alg_jch0 = analogX; // Channel 0 = X axis (0=left, 128=center, 255=right)
-        vecx.alg_jch1 = analogY; // Channel 1 = Y axis (0=down, 128=center, 255=up)
-        
-        // Read button states and build button state byte
-        // In Vec_Btn_State ($C80F): 1 = pressed, 0 = released
-        let buttonState = 0x00; // Default: all buttons released (all bits 0)
-        
-        buttonMappings.forEach(mapping => {
-          const button = gamepad.buttons[mapping.gamepadButton];
-          if (button && button.pressed) {
-            // Button pressed: set bit (1 = pressed in Vec_Btn_State)
-            const bitPosition = mapping.vectrexButton - 1;
-            buttonState |= (1 << bitPosition);
-          }
-        });
-        
-        // Read previous state for debug logging only
-        const prevState = lastButtonState; // Use persistent variable, not RAM
-        
-        // Calculate transitions manually (rising edge detection)
-        // Formula: new & ~prev (bit is 1 only when new=1 AND prev=0)
-        const transitions = buttonState & ~prevState & 0xFF;
-        
-        // Update persistent state for next frame
-        lastButtonState = buttonState;
-        
-        // NOTE (2026-01-19): DO NOT write to $C80E (Vec_Prev_Btns) here!
-        // Read_Btns in the BIOS manages Vec_Prev_Btns internally.
-        // If we write buttonState to $C80E, then when Read_Btns calculates
-        // transitions (new XOR prev), it sees new==prev and always returns 0.
-        // Let Read_Btns handle the prev/current state tracking autonomously.
-        
-        // DEBUG: Log button state if any button is pressed
-        if (transitions !== 0) {
-          console.log('[GamepadManager] TRANSITION DETECTED:', {
-            buttonState: buttonState.toString(2).padStart(4, '0'),
-            transitions: transitions.toString(2).padStart(4, '0'),
-            c811_written: transitions
-          });
+      // Build button state from configured button mappings
+      let buttonState = 0x00;
+      buttonMappings.forEach(mapping => {
+        const button = gamepad.buttons[mapping.gamepadButton];
+        if (button && button.pressed) {
+          buttonState |= (1 << (mapping.vectrexButton - 1));
         }
+      });
 
-        // WORKAROUND for JSVecx PSG read issue (2026-01-03):
-        // Root Cause: Read_Btns auto-injects at loop start and reads PSG register 14
-        // The PSG read happens AFTER our $C80F write, so Read_Btns overwrites our value
-        //
-        // Solution: Inject button state into window.injectedButtonStatePSG
-        // JSVecx is patched to check this value when reading PSG register 14
-        //
-        // PSG Register 14 format (inverted: 0=pressed, 1=released)
-        const psgReg14 = ~buttonState & 0xFF;
-        
-        // Inject into window for JSVecx to read (patched in vecx.js VIA read case 0xf)
-        (window as any).injectedButtonStatePSG = psgReg14;
-        
-        // Also write to PSG.Regs[14] for hardware compatibility (vecx emulator)
-        if (vecx.e8910 && vecx.e8910.e8910_write) {
-          vecx.e8910.e8910_write(14, psgReg14);
-        }
-        
-        // DEBUG: Monitor button state and RAM values
-        if (transitions !== 0 || buttonState !== 0) {
-          setTimeout(() => {
-            const c811 = vecx.read8(0xC811);
-            const c80f = vecx.read8(0xC80F);
-            const c80e = vecx.read8(0xC80E);
-            
-            console.log('[Button] Frame state:', {
-              'btn': buttonState.toString(2).padStart(4, '0'),
-              'trans': transitions.toString(2).padStart(4, '0'),
-              'C811': c811.toString(2).padStart(4, '0'),
-              'C80F': c80f.toString(2).padStart(4, '0'),
-              'C80E': c80e.toString(2).padStart(4, '0')
+      // Compute final axis values with D-pad override
+      const rp2350X = Math.round(x * 127);
+      const rp2350Y = Math.round(y * 127);
+      const dp2350X = dpadLeft ? -127 : dpadRight ? 127 : rp2350X;
+      const dp2350Y = dpadDown ? -127 : dpadUp   ? 127 : rp2350Y;
+
+      // rp2350: forward axis and buttons (P1 always, P2 only when wired)
+      emuCore.setJoyAxis?.(dp2350X, dp2350Y);
+      emuCore.setJoyButtons?.(0xF0 & ~((buttonState & 0x0F) << 4));
+      if (gamepadIndex2 !== null) {
+        emuCore.setJoyAxis2?.(p2GpAxisX, p2GpAxisY);
+        // BTN_STATE_J2 is active-low; bits 0-3 = btn 1-4.
+        emuCore.setJoyButtons2?.(0xFF & ~(p2DownTotal & 0x0F));
+      } else if (p2ButtonState !== 0) {
+        // P2-keyboard-only: still feed the buttons to rp2350.
+        emuCore.setJoyButtons2?.(0xFF & ~(p2ButtonState & 0x0F));
+      }
+
+      // pitrex: forward axis and buttons for BOTH players. PitrexCore.setInput
+      // already takes the P2 triplet as its last three params.
+      pitrexCoreRef.current?.setInput(
+        dp2350X, dp2350Y, buttonState & 0xF,
+        p2GpAxisX, p2GpAxisY, p2DownTotal & 0xF,
+      );
+
+      // JSVecX-specific: directional booleans, analog channels, PSG buttons
+      if (vecx) {
+        try {
+          // Enable analog joystick mode: alg_jch0/1 are set directly from gamepad
+          // axes below, and vecx_emuloop will NOT override them with digital values.
+          vecx.useAnalogJoy = true;
+          vecx.alg_jch0 = (dp2350X + 128) & 0xFF;  // X: −127→1, 0→128, 127→255
+          vecx.alg_jch1 = (dp2350Y + 128) & 0xFF;  // Y: −127→1, 0→128, 127→255
+          vecx.leftHeld  = (x < -0.3) || dpadLeft;
+          vecx.rightHeld = (x > 0.3)  || dpadRight;
+          vecx.downHeld  = (y < -0.3) || dpadDown;
+          vecx.upHeld    = (y > 0.3)  || dpadUp;
+
+          vecx.alg_jch0 = Math.round((x + 1) * 127.5);
+          vecx.alg_jch1 = Math.round((y + 1) * 127.5);
+
+          // Track transitions for debug logging
+          const prevState = lastButtonState;
+          const transitions = buttonState & ~prevState & 0xFF;
+          lastButtonState = buttonState;
+
+          if (transitions !== 0) {
+            console.log('[GamepadManager] TRANSITION DETECTED:', {
+              buttonState: buttonState.toString(2).padStart(4, '0'),
+              transitions: transitions.toString(2).padStart(4, '0'),
             });
-          }, 5); // Quick check after emulator processes
+          }
+
+          // PSG reg 14 injection for Read_Btns workaround. Bits 0-3 = P1
+          // (from the configured gamepad), bits 4-7 = P2 (from the P2
+          // gamepad if configured, OR'd with the JKLM keyboard fallback).
+          // PSG reg 14 is active-LOW, so we invert the combined press mask
+          // before writing.
+          const combinedDown = (buttonState & 0x0F) | ((p2DownTotal & 0x0F) << 4);
+          const psgReg14 = ~combinedDown & 0xFF;
+          (window as any).injectedButtonStatePSG = psgReg14;
+          if (vecx.e8910 && vecx.e8910.e8910_write) {
+            vecx.e8910.e8910_write(14, psgReg14);
+          }
+          // J2 analog axes. jsvecx's Joy_Analog read path uses jch2/jch3 via
+          // the VIA mux, but in practice the BIOS-cached $C81D/$C81E
+          // (Vec_Joy_2_X/Y) didn't always reflect them — writing both covers
+          // the BIOS-read and the direct-RAM-read code paths.
+          if (gamepadIndex2 !== null) {
+            vecx.alg_jch2 = (p2GpAxisX + 128) & 0xFF;
+            vecx.alg_jch3 = (p2GpAxisY + 128) & 0xFF;
+            if (vecx.write8) {
+              vecx.write8(0xC81D, p2GpAxisX & 0xFF);
+              vecx.write8(0xC81E, p2GpAxisY & 0xFF);
+            }
+          }
+
+          if ((transitions !== 0 || buttonState !== 0) && (window as any).BUTTON_DEBUG) {
+            setTimeout(() => {
+              const c811 = vecx.read8(0xC811);
+              const c80f = vecx.read8(0xC80F);
+              const c80e = vecx.read8(0xC80E);
+              console.log('[Button] Frame state:', {
+                'btn': buttonState.toString(2).padStart(4, '0'),
+                'trans': transitions.toString(2).padStart(4, '0'),
+                'C811': c811.toString(2).padStart(4, '0'),
+                'C80F': c80f.toString(2).padStart(4, '0'),
+                'C80E': c80e.toString(2).padStart(4, '0'),
+              });
+            }, 5);
+          }
+        } catch (error) {
+          console.error('[GamepadManager] Error setting JSVecX input state:', error);
         }
-        
-      } catch (error) {
-        console.error('[GamepadManager] Error setting input state:', error);
       }
     }, 16); // ~60Hz polling
 
     return () => {
       clearInterval(gamepadPollInterval);
+      document.removeEventListener('keydown', p2KeyDown, { capture: true } as any);
+      document.removeEventListener('keyup',   p2KeyUp,   { capture: true } as any);
     };
   }, [status, loadConfig]); // Re-create interval if status changes
 
@@ -820,8 +935,6 @@ export const EmulatorPanel: React.FC = () => {
       return;
     }
     
-    console.log('[EmulatorPanel] 🔍 checkBreakpointHit checking for breakpoint...');
-    
     try {
       const vecx = (window as any).vecx;
       if (!vecx || !vecx.e6809) return;
@@ -847,9 +960,53 @@ export const EmulatorPanel: React.FC = () => {
         const debugStore = useDebugStore.getState();
         debugStore.setState('paused');
         debugStore.setCurrentAsmAddress(formatAddress(currentPC));
-        
-        // Map address → VPy line using helper
-        if (pdbData) {
+
+        // Bank-aware ASM navigation: open the ACTIVE bank's ASM file at the exact line.
+        // asmBankAddr is keyed "bank:ADDR" (multibank PC is bank-relative), asmBankFiles
+        // maps each bank to its ASM file (relative to the build dir / compiled binary).
+        let navigatedToAsm = false;
+        const pdb: any = pdbData;
+        if (pdb?.asmBankAddr && pdb?.asmBankFiles && lastCompiledBinary) {
+          const bank = (vecx.currentBank ?? 0);
+          const pcHex = (currentPC & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+          const asmLine = pdb.asmBankAddr[`${bank}:${pcHex}`];
+          const asmRel = pdb.asmBankFiles[String(bank)];
+          if (asmLine && asmRel) {
+            const binDir = lastCompiledBinary.substring(0, lastCompiledBinary.lastIndexOf('/'));
+            const asmPath = `${binDir}/${asmRel}`;
+            const asmUri = `file://${asmPath}`;
+            const editorStore = useEditorStore.getState();
+            const navigate = () => {
+              (window as any).asmDebuggingMode = true;
+              (window as any).asmDebuggingFile = asmUri;
+              editorStore.setActive(asmUri);
+              debugStore.setCurrentVpyLine(asmLine); // 1-based; highlight effect uses it directly
+              editorStore.gotoLocation(asmUri, asmLine - 1, 0); // vpy.goto adds +1
+              console.log(`[EmulatorPanel] ✓ ASM nav: bank ${bank} PC 0x${pcHex} → ${asmRel}:${asmLine}`);
+            };
+            const existing = editorStore.documents.find(d => d.uri === asmUri);
+            if (existing) {
+              navigate();
+              navigatedToAsm = true;
+            } else if ((window as any).files?.readFile) {
+              navigatedToAsm = true;
+              (window as any).files.readFile(asmPath).then((res: {content?: string; error?: string}) => {
+                if (res && !res.error && res.content) {
+                  editorStore.openDocument({ uri: asmUri, content: res.content, language: 'vpy', dirty: false, mtime: Date.now(), diagnostics: [] });
+                  navigate();
+                } else {
+                  console.warn(`[EmulatorPanel] ⚠️ Could not read ASM file ${asmPath}: ${res?.error}`);
+                }
+              });
+            }
+          } else {
+            console.log(`[EmulatorPanel] ⚠️ No asmBankAddr entry for bank ${bank} PC 0x${pcHex}`);
+          }
+        }
+
+        // Fall back to VPy line mapping only if we didn't navigate to ASM.
+        if (!navigatedToAsm && pdbData) {
+          (window as any).asmDebuggingMode = false;
           const vpyLine = asmAddressToVpyLine(currentPC, pdbData);
           if (vpyLine !== null) {
             debugStore.setCurrentVpyLine(vpyLine);
@@ -858,13 +1015,13 @@ export const EmulatorPanel: React.FC = () => {
             console.log(`[EmulatorPanel] ⚠️  No VPy line mapping for address ${formatAddress(currentPC)}`);
           }
         }
-        
+
         console.log('[EmulatorPanel] 🛑 Execution paused at breakpoint');
       }
     } catch (e) {
       console.error('[EmulatorPanel] Error checking breakpoint:', e);
     }
-  }, [debugState, pdbData]);
+  }, [debugState, pdbData, lastCompiledBinary]);
 
   // Phase 3: Setup breakpoint checking interval
   useEffect(() => {
@@ -949,21 +1106,27 @@ export const EmulatorPanel: React.FC = () => {
           
         case 'debug-continue':
           console.log('[EmulatorPanel] 🟢 Debug: Continue execution');
-          
+
           // Clear current line highlight
           const debugStoreForContinue = useDebugStore.getState();
           debugStoreForContinue.setCurrentVpyLine(null);
           debugStoreForContinue.setState('running');
-          
+
+          if (rp2350LoopRef.current !== null) {
+            // rp2350 mode: RAF loop resumes automatically via state check
+            console.log('[EmulatorPanel] ✓ rp2350 RAF loop will resume (state=running)');
+            break;
+          }
+
           // CRITICAL: Check if paused by breakpoint BEFORE changing state
           const wasPausedByBreakpoint = vecx.isPausedByBreakpoint && vecx.isPausedByBreakpoint();
-          
+
           // Now set debugState to 'running' AFTER checking pause state
           vecx.debugState = 'running';
           vecx.stepMode = null; // Clear any step mode
           vecx.stepTargetAddress = null;
           console.log('[EmulatorPanel] ✓ JSVecx debugState set to running, step mode cleared');
-          
+
           // Resume from breakpoint if it was paused by one
           if (wasPausedByBreakpoint) {
             console.log('[EmulatorPanel] 🔓 Resuming from breakpoint');
@@ -992,17 +1155,24 @@ export const EmulatorPanel: React.FC = () => {
           
         case 'debug-pause':
           console.log('[EmulatorPanel] ⏸️  Debug: Pause execution');
-          if (vecx.running) {
+          if (rp2350LoopRef.current !== null) {
+            // rp2350 mode: RAF loop skips frames automatically via state check
+            console.log('[EmulatorPanel] ✓ rp2350 RAF loop paused (state=paused)');
+          } else if (vecx.running) {
             vecx.stop();
           }
           break;
-          
+
         case 'debug-stop':
           console.log('[EmulatorPanel] 🛑 Debug: Stop execution');
-          if (vecx.running) {
-            vecx.stop();
+          if (rp2350LoopRef.current !== null) {
+            // rp2350 mode: reset ARM system; RAF loop skips frames via state check
+            emuCore.reset();
+            console.log('[EmulatorPanel] ✓ rp2350 system reset');
+          } else {
+            if (vecx.running) vecx.stop();
+            vecx.reset();
           }
-          vecx.reset();
           break;
           
         case 'debug-step-over':
@@ -1033,7 +1203,9 @@ export const EmulatorPanel: React.FC = () => {
             // Calculate target address (next line after current)
             const currentPC = vecx.e6809?.reg_pc;
             const stepOverPdbData = useDebugStore.getState().pdbData;
-            if (currentPC && stepOverPdbData) {
+            // PC === 0 is a valid address (e.g. multibank bank-relative entry of a
+            // function placed at the bank's start), so check for undefined, not truthiness.
+            if (currentPC !== undefined && stepOverPdbData) {
               // Get line address map for both single-bank and multibank formats
               const lineAddressMap = getLineAddressMap(stepOverPdbData);
               
@@ -1089,23 +1261,43 @@ export const EmulatorPanel: React.FC = () => {
           
         case 'debug-step-into':
           console.log('[EmulatorPanel] 🔽 Debug: Step into');
-          
-          const debugStoreForStepInto = useDebugStore.getState();
-          debugStoreForStepInto.setState('running');
-          
-          // FIXED (2026-01-11): Execute using JSVecx's built-in step mechanism
-          // Instead of manually looping, let JSVecx handle stepping properly
-          if (vecx.e6809 && vecx.debugStepInto) {
-            const currentPC = vecx.e6809.reg_pc;
-            const currentVpyLine = getCurrentVpyLineForPC(currentPC, debugStoreForStepInto.pdbData);
-            
-            console.log(`[EmulatorPanel] 📍 Single step from VPy line ${currentVpyLine}, PC ${formatAddress(currentPC)}`);
-            
-            // Execute ONE instruction and let the normal pause mechanism handle line updates
-            vecx.debugStepInto(false);
-            
-            // The emulator will pause after one step, and the 'debugger-paused' handler
-            // will update the current line based on the new PC
+          {
+            const debugStoreForStepInto = useDebugStore.getState();
+            debugStoreForStepInto.setState('running');
+
+            if (!vecx.e6809 || !vecx.debugStepInto) break;
+
+            // Step until PC maps to a *different* VPy source line. One M6809
+            // instruction is rarely enough — a function call may go through a
+            // cross-bank trampoline (JSR TRAMP_FOO → bank switch → JMP FOO) and
+            // a non-call statement may emit several instructions before the
+            // next line's address. We loop synchronously through vecx_emu's
+            // step mechanism (each debugStepInto runs 1 instruction and pauses)
+            // until PC sits on a mapped, different VPy line, with a safety cap.
+            const startPC = vecx.e6809.reg_pc;
+            const pdb = debugStoreForStepInto.pdbData;
+            const startLine = getCurrentVpyLineForPC(startPC, pdb);
+            console.log(`[EmulatorPanel] 📍 Step Into from VPy line ${startLine}, PC ${formatAddress(startPC)}`);
+
+            const MAX_STEP_INTO_INSTRUCTIONS = 10000;
+            let steps = 0;
+            let landed = false;
+            while (steps < MAX_STEP_INTO_INSTRUCTIONS) {
+              vecx.debugStepInto(false); // runs 1 instruction synchronously
+              steps++;
+              const newPC = vecx.e6809.reg_pc;
+              const newLine = getCurrentVpyLineForPC(newPC, pdb);
+              if (newLine !== null && newLine !== startLine) {
+                console.log(`[EmulatorPanel] 🎯 Step Into landed at VPy line ${newLine}, PC ${formatAddress(newPC)} (${steps} instructions)`);
+                landed = true;
+                break;
+              }
+            }
+            if (!landed) {
+              console.warn(`[EmulatorPanel] ⚠️ Step Into hit safety cap (${MAX_STEP_INTO_INSTRUCTIONS} instructions) without reaching a new mapped line`);
+            }
+            // vecx posts 'debugger-paused' from the final debugStepInto;
+            // the handler will pick up the final PC and update the UI.
           }
           break;
           
@@ -1767,18 +1959,16 @@ export const EmulatorPanel: React.FC = () => {
     const win = window as any;
     if (!win.PSG_WRITE_LOG) win.PSG_WRITE_LOG = [];
     win.PSG_WRITE_LOG.length = 0;
-    win.PSG_LOG_ENABLED = true;
+    win.PSG_LOG_ENABLED = false;  // disabled by default — enable via DevTools: window.PSG_LOG_ENABLED=true
     win.PSG_LOG_LIMIT = 10000;
-    console.log('[EmulatorPanel] PSG logging initialized: enabled=true, limit=10000, log length=' + win.PSG_WRITE_LOG.length);
   };
 
-  // Enable PSG logging on mount and keep it enabled
+  // Initialize PSG log array (disabled by default for performance)
   useEffect(() => {
     const win = window as any;
     if (!win.PSG_WRITE_LOG) win.PSG_WRITE_LOG = [];
-    win.PSG_LOG_ENABLED = true;
+    win.PSG_LOG_ENABLED = false;  // disabled by default
     win.PSG_LOG_LIMIT = 10000;
-    console.log('[EmulatorPanel] PSG logging enabled globally on mount');
   }, []);
 
   const onSnapshotROM = () => {
@@ -1865,7 +2055,93 @@ export const EmulatorPanel: React.FC = () => {
     }
   };
 
+  // ── PiTrex RAF loop launcher ────────────────────────────────────────────────
+  // Extracted so it can be called both from handleCompiledBin and from onReset.
+  // Requires pitrexCoreRef.current to be a loaded, ready PitrexCore instance.
+  const startPitrexRafLoop = useCallback(() => {
+    // Cancel any previous RAF loop before starting a new one
+    if (pitrexLoopRef.current !== null) {
+      cancelAnimationFrame(pitrexLoopRef.current);
+      pitrexLoopRef.current = null;
+    }
+
+    const PITREX_MAX_X = 16500;
+    // PITREX_MAX_Y = ALG_MAX_Y/2 = 20500. The Vectrex screen is portrait (9×11 cm),
+    // so the Y range in JSVecX is 41000 (half=20500) while X is 33000 (half=16500).
+    // Both axes share T1 period ≈127 cycles, producing 127×127=16129 units per axis.
+    // Scale: 16129 / 20500 × 205px ≈ 161px from center — same as X (161px), isotropic.
+    const PITREX_MAX_Y = 20500;
+    const TARGET_MS = 1000 / 50; // 50 Hz
+    let lastFrameTs = 0;
+
+    const loop = (ts: number) => {
+      pitrexLoopRef.current = requestAnimationFrame(loop);
+      const elapsed = ts - lastFrameTs;
+      if (elapsed < TARGET_MS) return;
+      lastFrameTs = ts - (elapsed % TARGET_MS);
+
+      if (useDebugStore.getState().state !== 'running') return;
+
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const W = canvas.width;
+      const H = canvas.height;
+      const scaleX = (W / 2) / PITREX_MAX_X;
+      const scaleY = (H / 2) / PITREX_MAX_Y;
+      const cx = W / 2;
+      const cy = H / 2;
+
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, W, H);
+
+      const result = pitrexCoreRef.current?.runFrame() ?? { segments: [], texts: [], timeout: false };
+      const { segments, timeout } = result;
+
+      for (const seg of segments) {
+        if (seg.intensity <= 0) continue;
+        const x0p = cx + seg.x0 * scaleX;
+        const y0p = cy - seg.y0 * scaleY;
+        const x1p = cx + seg.x1 * scaleX;
+        const y1p = cy - seg.y1 * scaleY;
+        const bright = Math.min(seg.intensity, 127);
+        const lum = Math.round(bright * 255 / 127);
+        ctx.strokeStyle = `rgb(${lum},${lum},${lum})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x0p, y0p);
+        ctx.lineTo(x1p, y1p);
+        ctx.stroke();
+      }
+
+      if (timeout) {
+        ctx.fillStyle = 'rgba(255, 80, 80, 0.85)';
+        ctx.font = '11px monospace';
+        ctx.fillText('TIMEOUT — infinite loop?', 8, 16);
+      }
+    };
+
+    pitrexLoopRef.current = requestAnimationFrame(loop);
+    console.log('[EmulatorPanel] pitrex RAF loop started');
+  }, []); // no deps — reads refs directly
+
   const onPlay = () => {
+    // PiTrex mode: the RAF loop already runs; just ungate it via debugStore state
+    if (pitrexCoreRef.current) {
+      useDebugStore.getState().setState('running');
+      setStatus('running');
+      setEmulatorRunning(true);
+      // Ensure the RAF loop is actually running (may have been stopped on reset)
+      if (pitrexLoopRef.current === null) {
+        pitrexCoreRef.current.startAudio();
+        startPitrexRafLoop();
+      }
+      console.log('[EmulatorPanel] PiTrex resumed');
+      return;
+    }
+
     const vecx = (window as any).vecx;
     if (vecx) {
       // Si estaba stopped, reiniciar desde el principio
@@ -1874,12 +2150,12 @@ export const EmulatorPanel: React.FC = () => {
         vecx.stop();
         console.log('🔄 [EmulatorPanel] CALLING vecx.reset() - Reason: Start from stopped state');
         vecx.reset();
-        
+
         // Reinicializar joystick a valores neutros
         vecx.write8(0xC81B, 0); // Vec_Joy_1_X neutral (signed $00 = center)
         vecx.write8(0xC81C, 0); // Vec_Joy_1_Y neutral (signed $00 = center)
       }
-      
+
       initPsgLogging();
       vecx.debugState = 'running';
       vecx.start();
@@ -1889,8 +2165,16 @@ export const EmulatorPanel: React.FC = () => {
       console.log('[EmulatorPanel] JSVecX started, debugStore.state set to running');
     }
   };
-  
+
   const onPause = () => {
+    // PiTrex mode: gate the RAF loop by setting debugStore state to 'paused'
+    if (pitrexCoreRef.current) {
+      useDebugStore.getState().setState('paused');
+      setStatus('paused');
+      console.log('[EmulatorPanel] PiTrex paused (RAF loop gated)');
+      return;
+    }
+
     const vecx = (window as any).vecx;
     if (vecx) {
       vecx.stop();
@@ -1900,22 +2184,91 @@ export const EmulatorPanel: React.FC = () => {
       console.log('[EmulatorPanel] JSVecX paused, debugStore.state set to paused');
     }
   };
-  
+
   const onStop = () => {
+    // PiTrex mode: gate the RAF loop and stop audio
+    if (pitrexCoreRef.current) {
+      useDebugStore.getState().setState('stopped');
+      setStatus('stopped');
+      setEmulatorRunning(false);
+      pitrexCoreRef.current.stopAudio();
+      console.log('[EmulatorPanel] PiTrex stopped');
+      return;
+    }
+
+    // rp2350 mode: cancel RAF loop and silence PSG. Without stopAudio() the
+    // ScriptProcessor keeps reading the last PSG state and the last note
+    // sustains forever after Stop is pressed.
+    const rp2350 = (emuCore as any)?._rp2350System;
+    if (rp2350LoopRef.current !== null || rp2350) {
+      if (rp2350LoopRef.current !== null) {
+        cancelAnimationFrame(rp2350LoopRef.current);
+        rp2350LoopRef.current = null;
+      }
+      useDebugStore.getState().setState('stopped');
+      setStatus('stopped');
+      setEmulatorRunning(false);
+      try { rp2350?.stopAudio?.(); } catch {}
+      console.log('[EmulatorPanel] rp2350 stopped');
+      return;
+    }
+
     const vecx = (window as any).vecx;
     if (vecx) {
       // CRITICAL: Solo parar, NO resetear aquí
       // El reset se hará cuando se presione Play después de Stop
       vecx.stop();
-      
+
       setStatus('stopped');
       useDebugStore.getState().setState('stopped');
       setEmulatorRunning(false); // Persist state
       console.log('[EmulatorPanel] JSVecX stopped (will reset on next Play)');
     }
   };
-  
+
   const onReset = () => {
+    // PiTrex mode: re-parse saved assembly and restart the RAF loop from the beginning
+    if (pitrexCoreRef.current && pitrexSFileRef.current) {
+      console.log('[EmulatorPanel] PiTrex reset — reloading assembly');
+
+      // Stop current loop and audio
+      if (pitrexLoopRef.current !== null) {
+        cancelAnimationFrame(pitrexLoopRef.current);
+        pitrexLoopRef.current = null;
+      }
+      pitrexCoreRef.current.stopAudio();
+
+      // Re-parse assembly into a fresh core
+      import('../../pitrex/PitrexCore.js').then(({ PitrexCore }) => {
+        const core = new PitrexCore();
+        core.loadAssembly(pitrexSFileRef.current!);
+        pitrexCoreRef.current = core;
+
+        if (!core.isReady()) {
+          console.error('[EmulatorPanel] PiTrex reset: failed to reload assembly');
+          return;
+        }
+
+        // Clear canvas
+        if (canvasRef.current) {
+          const ctx = canvasRef.current.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          }
+        }
+
+        useDebugStore.getState().setState('running');
+        setStatus('running');
+        core.startAudio();
+        startPitrexRafLoop();
+        console.log('[EmulatorPanel] PiTrex reset complete — new loop started');
+      }).catch(e => {
+        console.error('[EmulatorPanel] PiTrex reset: import failed', e);
+      });
+      return;
+    }
+
     const vecx = (window as any).vecx;
     if (vecx) {
       // Clear PSG log on reset
@@ -1923,14 +2276,15 @@ export const EmulatorPanel: React.FC = () => {
       if (!win.PSG_WRITE_LOG) win.PSG_WRITE_LOG = [];
       win.PSG_WRITE_LOG.length = 0;
       console.log('[EmulatorPanel] JSVecX reset, PSG log cleared (length=' + win.PSG_WRITE_LOG.length + ')');
-      
+
       // Clear opcode trace on reset
       if (win.clearOpcodeTrace) {
         win.clearOpcodeTrace();
-        win.OPCODE_TRACE_MAX = 5000;
+        // Large trace to capture bank-switch transitions before code-into-data crashes.
+        win.OPCODE_TRACE_MAX = 50000;
         // Only enable full trace if explicitly requested (not by default)
         // win.OPCODE_TRACE_FULL = true;
-        console.log('[EmulatorPanel] 🧹 Opcode trace cleared on reset');
+        console.log('[EmulatorPanel] 🧹 Opcode trace cleared on reset (max=50000)');
       }
 
       // Delete previous .stack on reset (if we know where the .bin is)
@@ -1958,11 +2312,11 @@ export const EmulatorPanel: React.FC = () => {
       } catch (e) {
         // Ignore
       }
-      
+
       console.log('🔄 [EmulatorPanel] CALLING vecx.reset() - Reason: Reset button clicked');
       console.log('📍 [EmulatorPanel] Reset stack trace:', new Error().stack);
       vecx.reset();
-      
+
       // CRITICAL: Initialize debugState to 'running' after reset
       vecx.debugState = 'running';
       vecx.stepMode = null;
@@ -1977,77 +2331,145 @@ export const EmulatorPanel: React.FC = () => {
     }
   };
 
-  const onLoadROM = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.bin,.vec,.rom';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      
-      try {
-        console.log(`[EmulatorPanel] Loading ROM: ${file.name} (${file.size} bytes)`);
-        
-        const arrayBuffer = await file.arrayBuffer();
-        const romData = new Uint8Array(arrayBuffer);
-        
-        const vecx = (window as any).vecx;
-        if (!vecx) {
-          console.error('[EmulatorPanel] vecx instance not available');
-          return;
-        }
-        
-        // Convertir Uint8Array a string para JSVecX
-        let cartDataString = '';
-        for (let i = 0; i < romData.length; i++) {
-          cartDataString += String.fromCharCode(romData[i]);
-        }
-        
-        // Cargar ROM en Globals.cartdata (método correcto para JSVecX)
-        // Globals es una variable global, no está en window
-        const Globals = (window as any).Globals || (globalThis as any).Globals;
-        if (!Globals) {
-          console.error('[EmulatorPanel] Globals not available');
-          return;
-        }
-        
-        Globals.cartdata = cartDataString;
-        console.log(`[EmulatorPanel] ✓ ROM loaded into Globals.cartdata (${romData.length} bytes)`);
-        
-        // Dispatch event para notificar a otros paneles
-        window.dispatchEvent(new Event('programLoaded'));
-        
-        // Actualizar estado del ROM cargado
-        setLoadedROM(`${file.name} (${romData.length} bytes)`);
-        
-        // Save the loaded ROM info for persistence
-        setLastRom(null, file.name); // File object doesn't have path, just name
-        
-        // Resetear combo selector (carga manual no debe seleccionar combo)
-        setSelectedROM('');
-        
-        // Recalcular overlay basado en nombre del archivo
-        await loadOverlay(file.name);
-        
-        // Reset después de cargar - esto copiará cartdata al array cart[]
-        console.log('🔄 [EmulatorPanel] CALLING vecx.reset() - Reason: File upload (insert cartridge)');
-        console.log('📍 [EmulatorPanel] Reset stack trace:', new Error().stack);
-        vecx.reset();
-        console.log('[EmulatorPanel] ✓ Reset after ROM load');
-        
-        // Si estaba corriendo, reiniciar
-        if (status === 'running') {
-          vecx.debugState = 'running';
-          vecx.start();
-          console.log('[EmulatorPanel] ✓ Restarted after ROM load');
-        }
-        
-      } catch (error) {
-        console.error('[EmulatorPanel] Failed to load ROM:', error);
+  const onLoadROM = async () => {
+    // Prefer the Electron native dialog: it gives us the absolute path, which we
+    // need to locate the sibling .elf for rp2350 binaries. Fall back to the
+    // browser <input type="file"> if the IPC bridge isn't available.
+    const filesApi = (window as any).files;
+    let romData: Uint8Array | null = null;
+    let romName = '';
+    let romPath: string | null = null;
+
+    if (filesApi?.openBin) {
+      const picked = await filesApi.openBin();
+      if (!picked || (picked as any).error) {
+        if ((picked as any)?.error) console.error('[EmulatorPanel] openBin error:', (picked as any).error);
+        return;
       }
-    };
-    
-    input.click();
+      romPath = picked.path;
+      romName = picked.path.split(/[/\\]/).pop() || 'rom.bin';
+      romData = Uint8Array.from(atob(picked.base64), c => c.charCodeAt(0));
+    } else {
+      const file = await new Promise<File | null>((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.bin,.vec,.rom';
+        input.onchange = (e) => resolve((e.target as HTMLInputElement).files?.[0] ?? null);
+        input.click();
+      });
+      if (!file) return;
+      romName = file.name;
+      romData = new Uint8Array(await file.arrayBuffer());
+    }
+
+    try {
+      console.log(`[EmulatorPanel] Loading ROM: ${romName} (${romData.length} bytes)${romPath ? ` from ${romPath}` : ''}`);
+
+      const vecx = (window as any).vecx;
+      if (!vecx) {
+        console.error('[EmulatorPanel] vecx instance not available');
+        return;
+      }
+
+      // Auto-detect rp2350 binaries by magic header "VPy2" (0x56 0x50 0x79 0x32)
+      const isRp2350 =
+        romData.length >= 4 &&
+        romData[0] === 0x56 && romData[1] === 0x50 &&
+        romData[2] === 0x79 && romData[3] === 0x32;
+
+      if (isRp2350) {
+        console.log(`[EmulatorPanel] ✓ Detected rp2350 binary (magic "VPy2") — routing to Rp2350System`);
+        if (typeof emuCore.loadArm !== 'function') {
+          console.error('[EmulatorPanel] emuCore.loadArm not available — rp2350 target unsupported in this build');
+          return;
+        }
+
+        // Try to load the sibling .elf (same path, .elf extension) so traps
+        // can be registered from symbol addresses instead of prologue heuristics.
+        let elfData: Uint8Array | undefined;
+        if (romPath && filesApi?.readFileBin) {
+          const elfPath = romPath.replace(/\.bin$/i, '.elf');
+          if (elfPath !== romPath) {
+            try {
+              const elfRes = await filesApi.readFileBin(elfPath);
+              if (elfRes && !(elfRes as any).error && (elfRes as any).base64) {
+                elfData = Uint8Array.from(atob((elfRes as any).base64), c => c.charCodeAt(0));
+                console.log(`[EmulatorPanel] ✓ Sibling ELF loaded: ${elfPath} (${elfData.length} bytes)`);
+              } else {
+                console.log(`[EmulatorPanel] No sibling .elf at ${elfPath} — using VPy2 header entry + prologue scan`);
+              }
+            } catch (e) {
+              console.log(`[EmulatorPanel] No sibling .elf — using VPy2 header entry + prologue scan`);
+            }
+          }
+        }
+
+        emuCore.loadArm(romData, elfData, canvasRef.current ?? undefined);
+        console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
+
+        // Clear the canvas before first rp2350 frame
+        if (canvasRef.current) {
+          const ctx = canvasRef.current.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          }
+        }
+
+        // Start rAF loop capped at 50 fps (Vectrex PAL rate; music compiled at 50 Hz)
+        const TARGET_MS = 1000 / 50;
+        let lastFrameTs = 0;
+        const rp2350Loop = (ts: number) => {
+          rp2350LoopRef.current = requestAnimationFrame(rp2350Loop);
+          const elapsed = ts - lastFrameTs;
+          if (elapsed < TARGET_MS) return;
+          lastFrameTs = ts - (elapsed % TARGET_MS);
+          if (useDebugStore.getState().state !== 'running') return;
+          emuCore.runFrame();
+        };
+        useDebugStore.getState().setState('running');
+        rp2350LoopRef.current = requestAnimationFrame(rp2350Loop);
+
+        setLoadedROM(`${romName} (${romData.length} bytes, rp2350${elfData ? ' + elf' : ''})`);
+        setLastRom(null, romName);
+        setSelectedROM('');
+        window.dispatchEvent(new Event('programLoaded'));
+        return;
+      }
+
+      // ── M6809 cartridge path ────────────────────────────────────────────
+      let cartDataString = '';
+      for (let i = 0; i < romData.length; i++) {
+        cartDataString += String.fromCharCode(romData[i]);
+      }
+
+      const Globals = (window as any).Globals || (globalThis as any).Globals;
+      if (!Globals) {
+        console.error('[EmulatorPanel] Globals not available');
+        return;
+      }
+
+      Globals.cartdata = cartDataString;
+      console.log(`[EmulatorPanel] ✓ ROM loaded into Globals.cartdata (${romData.length} bytes)`);
+
+      window.dispatchEvent(new Event('programLoaded'));
+      setLoadedROM(`${romName} (${romData.length} bytes)`);
+      setLastRom(null, romName);
+      setSelectedROM('');
+      await loadOverlay(romName);
+
+      console.log('🔄 [EmulatorPanel] CALLING vecx.reset() - Reason: File upload (insert cartridge)');
+      vecx.reset();
+      console.log('[EmulatorPanel] ✓ Reset after ROM load');
+
+      if (status === 'running') {
+        vecx.debugState = 'running';
+        vecx.start();
+        console.log('[EmulatorPanel] ✓ Restarted after ROM load');
+      }
+    } catch (error) {
+      console.error('[EmulatorPanel] Failed to load ROM:', error);
+    }
   };
 
 
@@ -2097,14 +2519,18 @@ export const EmulatorPanel: React.FC = () => {
                   // Clear opcode trace and set ROM name for .stack file generation
                   if ((window as any).clearOpcodeTrace) {
                     (window as any).clearOpcodeTrace();
-                    // Bigger trace to capture the real jump into RAM/garbage
-                    (window as any).OPCODE_TRACE_MAX = 5000;
+                    // Large trace to capture bank-switch transitions and the real
+                    // jump into RAM/garbage. e6809.js's default is also 50000;
+                    // we set the window override explicitly so the value is the
+                    // same regardless of whether code reads the global or the
+                    // window property.
+                    (window as any).OPCODE_TRACE_MAX = 50000;
                     // Full trace streaming to disk (.trace next to binary)
                     // Only enable if explicitly set via --enable-tracebin flag
                     // (window as any).OPCODE_TRACE_FULL = true;
                     (window as any).CURRENT_ROM_NAME = romName + '.bin';
                     (window as any).CURRENT_ROM_PATH = lastCompiledBinary;
-                    console.log('[EmulatorPanel] 🧹 Opcode trace cleared for:', romName + '.bin');
+                    console.log('[EmulatorPanel] 🧹 Opcode trace cleared for:', romName + '.bin', 'path:', lastCompiledBinary);
                   }
                   
                   // CRITICAL: Initialize debugState to 'running' when loading binary
@@ -2164,7 +2590,12 @@ export const EmulatorPanel: React.FC = () => {
       END DISABLED AUTO-LOAD */
       
       // Skip loading compiled ROM - go straight to default Minestorm
-      
+      // But only for the M6809 path — rp2350/pitrex have no use for a 6809 ROM.
+      if (useSettings.getState().buildTarget === 'rp2350' || useSettings.getState().buildTarget === 'pitrex' || useSettings.getState().buildTarget === 'uvm2') {
+        defaultOverlayLoaded.current = true;
+        return;
+      }
+
       // Fallback: Cargar Minestorm
       console.log('[EmulatorPanel] Loading default: Minestorm');
       await loadOverlay('minestorm.bin');
@@ -2243,8 +2674,8 @@ export const EmulatorPanel: React.FC = () => {
     const electronAPI: any = (window as any).electronAPI;
     if (!electronAPI?.onCompiledBin) return;
 
-    const handleCompiledBin = (payload: { base64: string; size: number; binPath: string; pdbData?: any }) => {
-      console.log(`[EmulatorPanel] Loading compiled binary: ${payload.binPath} (${payload.size} bytes)`);
+    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null }) => {
+      console.log(`[EmulatorPanel] Loading compiled binary: ${payload.binPath} (${payload.size} bytes) target=${payload.target ?? 'm6809'}`);
       
       // Guardar última ROM compilada con su proyecto
       const projectState = (window as any).__projectStore__?.getState?.();
@@ -2282,9 +2713,154 @@ export const EmulatorPanel: React.FC = () => {
         useDebugStore.getState().clearPdbData();
       }
       
+      // ── uvm2 path: hardware-only target, no in-browser emulation ──
+      if (payload.target === 'uvm2') {
+        console.log('[EmulatorPanel] uvm2 target — hardware only, no browser emulation');
+        setHardwareOverlayKind('uvm2');
+        setPitrexImgPath(payload.binPath);
+        setShowPitrexOverlay(true);
+        const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
+        loadOverlay(romName + '.bin');
+        return;
+      }
+
+      // ── Shared helper: stop ALL three emulators before switching targets ──
+      const stopAllEmulators = () => {
+        // 1. JSVecX (m6809) — stop its internal setInterval/setTimeout loop
+        const _vecx = (window as any).vecx;
+        if (_vecx) { try { _vecx.stop(); } catch {} }
+
+        // 2. PiTrex — cancel RAF loop and stop audio context
+        if (pitrexLoopRef.current !== null) {
+          cancelAnimationFrame(pitrexLoopRef.current);
+          pitrexLoopRef.current = null;
+        }
+        if (pitrexCoreRef.current) {
+          try { pitrexCoreRef.current.stopAudio?.(); } catch {}
+          pitrexCoreRef.current = null;
+        }
+
+        // 3. rp2350 — cancel RAF loop and stop audio context via emuCore
+        if (rp2350LoopRef.current !== null) {
+          cancelAnimationFrame(rp2350LoopRef.current);
+          rp2350LoopRef.current = null;
+        }
+        // stopAudio is called inside emuCore.loadProgram when _activeTarget==='rp2350';
+        // call it explicitly here too so switching pitrex→rp2350 also cleans up.
+        try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
+
+        console.log('[EmulatorPanel] ✓ All emulators stopped');
+      };
+
+      // ── pitrex path: ARM32 interpreter + vector renderer ──
+      if (payload.target === 'pitrex') {
+        setHardwareOverlayKind('pitrex');
+        setShowPitrexOverlay(false);
+        if (!payload.sFileText) {
+          console.warn('[EmulatorPanel] pitrex: no .s file text in payload — cannot start emulator');
+          setPitrexImgPath(payload.binPath);
+          setShowPitrexOverlay(true);
+          return;
+        }
+        try {
+          stopAllEmulators();
+
+          // Dynamically import PitrexCore to avoid bundling it unless needed
+          const { PitrexCore } = await import('../../pitrex/PitrexCore.js');
+          const core = new PitrexCore();
+          core.loadAssembly(payload.sFileText);
+          pitrexCoreRef.current = core;
+          pitrexSFileRef.current = payload.sFileText; // persist for reset
+
+          if (!core.isReady()) {
+            console.error('[EmulatorPanel] PitrexCore failed to load assembly');
+            return;
+          }
+
+          // Clear canvas
+          if (canvasRef.current) {
+            const ctx = canvasRef.current.getContext('2d');
+            if (ctx) {
+              ctx.fillStyle = '#000000';
+              ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            }
+          }
+
+          useDebugStore.getState().setState('running');
+          setPitrexAudioEnabled(true);
+          core.startAudio();
+          startPitrexRafLoop();
+        } catch (e) {
+          console.error('[EmulatorPanel] Failed to start pitrex emulator:', e);
+        }
+        const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
+        loadOverlay(romName + '.bin');
+        return;
+      }
+
+      // ── rp2350 path: route through Rp2350System instead of M6809/JSVecX ──
+      if (payload.target === 'rp2350') {
+        setShowPitrexOverlay(false);
+        try {
+          stopAllEmulators();
+
+          const bin = Uint8Array.from(atob(payload.base64), c => c.charCodeAt(0));
+          const elf = payload.elfBase64
+            ? Uint8Array.from(atob(payload.elfBase64), c => c.charCodeAt(0))
+            : undefined;
+          console.log(`[EmulatorPanel] rp2350: bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvasRef.current ? `${canvasRef.current.width}x${canvasRef.current.height}` : 'null'}`);
+          if (typeof emuCore.loadArm === 'function') {
+            // Pass the shared canvas so Rp2350System renders directly to it
+            emuCore.loadArm(bin, elf, canvasRef.current ?? undefined);
+            console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
+
+            // Clear the canvas before first rp2350 frame (Minestorm may have drawn there)
+            if (canvasRef.current) {
+              const ctx = canvasRef.current.getContext('2d');
+              if (ctx) {
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+              }
+            }
+
+            // Start our own requestAnimationFrame loop capped at 50 fps.
+            // RAF fires at the display refresh rate (120/144 Hz on many monitors).
+            // Without a cap the game logic would run proportionally faster than
+            // the M6809 path, which is driven by the Vectrex 50 Hz VIA timer.
+            const TARGET_MS = 1000 / 50;  // 20 ms per frame (Vectrex PAL; music compiled at 50 Hz)
+            let rp2350FrameCount = 0;
+            let lastFrameTs = 0;
+            const loop = (ts: number) => {
+              rp2350LoopRef.current = requestAnimationFrame(loop);
+              const elapsed = ts - lastFrameTs;
+              if (elapsed < TARGET_MS) return;          // too soon — skip
+              lastFrameTs = ts - (elapsed % TARGET_MS); // align to 50 Hz grid
+              // Honour pause/stop from debug controls
+              if (useDebugStore.getState().state !== 'running') return;
+              rp2350FrameCount++;
+              if ((window as any).RP2350_DEBUG && (rp2350FrameCount <= 5 || rp2350FrameCount % 120 === 0)) {
+                console.log(`[EmulatorPanel] rp2350 rAF loop frame ${rp2350FrameCount}`);
+              }
+              emuCore.runFrame();
+            };
+            // Mark as running so the RAF loop doesn't bail on the first check.
+            useDebugStore.getState().setState('running');
+            rp2350LoopRef.current = requestAnimationFrame(loop);
+            console.log('[EmulatorPanel] ✓ rp2350 rAF loop started');
+          } else {
+            console.error('[EmulatorPanel] loadArm not available on emuCore');
+          }
+        } catch (e) {
+          console.error('[EmulatorPanel] Failed to load ARM binary:', e);
+        }
+        const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
+        loadOverlay(romName + '.bin');
+        return;
+      }
+
       // Verificar si estamos cargando para debug session (no auto-start)
       const loadingForDebug = useDebugStore.getState().loadingForDebug;
-      
+
       try {
         // Convertir base64 a bytes y cargar en JSVecX
         const binaryData = atob(payload.base64);
@@ -2295,10 +2871,8 @@ export const EmulatorPanel: React.FC = () => {
           return;
         }
 
-        // Detener emulador antes de cargar
-        console.log('[EmulatorPanel] Stopping emulator before load...');
-        vecx.stop();
-        console.log('[EmulatorPanel] Emulator stopped');
+        // Stop ALL emulators before loading m6809 ROM
+        stopAllEmulators();
         
         // Cargar el binario en la instancia global Globals.cartdata
         const Globals = (window as any).Globals;
@@ -2309,13 +2883,13 @@ export const EmulatorPanel: React.FC = () => {
           // Dispatch event para notificar a otros paneles
           window.dispatchEvent(new Event('programLoaded'));
         }
-        
+
         // CRITICAL: Verificar que JSVecX esté completamente inicializado antes de reset
         // Check osint.ctx (display) and e6809.vecx (CPU) — NOT vecx.ram which always exists
         console.log('[EmulatorPanel] Checking JSVecX initialization...');
         const isDisplayInitialized = !!vecx.osint?.ctx;
         const isCpuInitialized = !!vecx.e6809?.vecx;
-        
+
         if (!isDisplayInitialized || !isCpuInitialized) {
           console.warn('[EmulatorPanel] JSVecX not fully initialized - running initialization...');
           try {
@@ -2327,7 +2901,7 @@ export const EmulatorPanel: React.FC = () => {
               vecx.e6809.init(vecx);
               console.log('[EmulatorPanel] ✓ e6809.init() successful');
             }
-            
+
             vecx.vecx_reset();
             vecx.osint.osint_clearscreen();
             console.log('[EmulatorPanel] ✓ JSVecX reset successful');
@@ -2391,8 +2965,17 @@ export const EmulatorPanel: React.FC = () => {
         }
         
         // Actualizar ROM cargada y buscar overlay
+        setShowPitrexOverlay(false);
         const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
         setLoadedROM(`Compiled - ${romName}`);
+
+        // Tell the emulator's crash trace where to save .stack files. Without
+        // this, dumpOpcodeTrace() in e6809.js sees CURRENT_ROM_PATH=null and
+        // silently skips the save — the only place this used to be set was a
+        // different load path (file-API reload), not the Build+Run path here.
+        (window as any).CURRENT_ROM_PATH = payload.binPath;
+        (window as any).CURRENT_ROM_NAME = romName + '.bin';
+        console.log('[EmulatorPanel] 📍 CURRENT_ROM_PATH set for crash-trace saves:', payload.binPath);
         
         // Dispatch event para notificar a otros paneles (ej: MemoryPanel recarga PDB)
         // Si tenemos pdbData, pasarlo en el evento
@@ -2421,7 +3004,7 @@ export const EmulatorPanel: React.FC = () => {
     console.log('[EmulatorPanel] ✓ Registered onCompiledBin listener');
     
     // No cleanup function needed - onCompiledBin typically doesn't return one
-  }, [loadOverlay, setLoadedROM]);
+  }, [loadOverlay, setLoadedROM, startPitrexRafLoop]);
 
   // Manejar cambio de ROM en dropdown
   const handleROMChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -2516,6 +3099,45 @@ export const EmulatorPanel: React.FC = () => {
         }}
       >
         <div style={{ position: 'relative', display: 'inline-block' }}>
+          {/* PiTrex hardware-only overlay */}
+          {showPitrexOverlay && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: canvasSize.width,
+              height: canvasSize.height,
+              background: '#0a0a0a',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              zIndex: 10,
+              pointerEvents: 'none',
+              border: '1px solid #333',
+            }}>
+              <span style={{ fontSize: '28px' }}>{hardwareOverlayKind === 'uvm2' ? '🎮' : '🥝'}</span>
+              <span style={{ color: '#ccc', fontFamily: 'monospace', fontSize: '13px', fontWeight: 'bold' }}>
+                {hardwareOverlayKind === 'uvm2'
+                  ? 'UVM2 (Ultimate Vectrex Multicart 2)'
+                  : 'PiTrex (Pi Zero / ARMv6)'}
+              </span>
+              <span style={{ color: '#777', fontFamily: 'monospace', fontSize: '11px' }}>
+                {hardwareOverlayKind === 'uvm2'
+                  ? '.um2 image built — copy to SD card'
+                  : '.img image built — copy to SD card'}
+              </span>
+              {pitrexImgPath && (
+                <span style={{ color: '#555', fontFamily: 'monospace', fontSize: '10px', maxWidth: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pitrexImgPath}</span>
+              )}
+              <span style={{ color: '#444', fontFamily: 'monospace', fontSize: '10px', marginTop: '4px' }}>
+                {hardwareOverlayKind === 'uvm2'
+                  ? 'No in-browser emulation for UVM2'
+                  : 'No in-browser emulation for Pi Zero'}
+              </span>
+            </div>
+          )}
           <canvas 
             ref={canvasRef} 
             id="screen" 
@@ -2657,11 +3279,11 @@ export const EmulatorPanel: React.FC = () => {
         </button>
         
         {/* Botón Audio Mute/Unmute */}
-        <button 
+        <button
           style={{
             ...btn,
-            backgroundColor: getCurrentAudioState() ? '#2a4a2a' : '#4a2a2a',
-            color: getCurrentAudioState() ? '#afa' : '#faa',
+            backgroundColor: (pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? '#2a4a2a' : '#4a2a2a',
+            color: (pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? '#afa' : '#faa',
             fontSize: '20px',
             padding: '10px',
             minWidth: '50px',
@@ -2672,9 +3294,25 @@ export const EmulatorPanel: React.FC = () => {
             justifyContent: 'center'
           }} 
           onClick={() => {
+            // ── PiTrex audio path ────────────────────────────────────────────
+            if (pitrexCoreRef.current) {
+              const newEnabled = !pitrexAudioEnabled;
+              setPitrexAudioEnabled(newEnabled);
+              setAudioEnabled(newEnabled);
+              if (newEnabled) {
+                pitrexCoreRef.current.startAudio();
+                console.log('[EmulatorPanel] PiTrex audio unmuted');
+              } else {
+                pitrexCoreRef.current.stopAudio();
+                console.log('[EmulatorPanel] PiTrex audio muted');
+              }
+              return;
+            }
+
+            // ── JSVecX / PSG audio path ──────────────────────────────────────
             const currentRealState = getCurrentAudioState();
             const newState = !currentRealState;
-            
+
             console.log('[EmulatorPanel] Audio button clicked:', {
               storedState: audioEnabled,
               realCurrentState: currentRealState,
@@ -2682,20 +3320,20 @@ export const EmulatorPanel: React.FC = () => {
               status,
               vecxAvailable: !!(window as any).vecx
             });
-            
-            setAudioEnabled(newState); 
-            
+
+            setAudioEnabled(newState);
+
             const vecx = (window as any).vecx;
             if (vecx && vecx.toggleSoundEnabled) {
               const resultState = vecx.toggleSoundEnabled();
               console.log(`[EmulatorPanel] ✓ Audio toggled: ${currentRealState} → ${resultState}`);
-              
+
               if (resultState !== newState) {
                 console.log('[EmulatorPanel] Correcting stored state to match result:', resultState);
                 setAudioEnabled(resultState);
               }
             }
-            
+
             try {
               const finalState = getCurrentAudioState();
               if (finalState) {
@@ -2709,9 +3347,9 @@ export const EmulatorPanel: React.FC = () => {
               console.warn('[EmulatorPanel] Could not control PSG audio:', e);
             }
           }}
-          title={getCurrentAudioState() ? 'Mute audio' : 'Unmute audio'}
+          title={(pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? 'Mute audio' : 'Unmute audio'}
         >
-          {getCurrentAudioState() ? '🔊' : '🔇'}
+          {(pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? '🔊' : '🔇'}
         </button>
         
         {/* Botón Toggle Overlay - Solo visible si hay overlay disponible */}

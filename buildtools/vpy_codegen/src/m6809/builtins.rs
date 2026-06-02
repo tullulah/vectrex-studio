@@ -14,6 +14,7 @@ use super::math_extended;
 use super::drawing;
 use super::level;
 use super::utilities;
+use super::assets;
 use crate::{AssetInfo, AssetType};
 use crate::vecres::VecResource;
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
@@ -66,6 +67,8 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("PRINT_NUMBER", 3),    // x, y, number
     ("SET_TEXT_SIZE", 1),   // n (1-8, 8=normal): sets Vec_Text_Height/Width
     ("DRAW_LINE", 5),       // x0, y0, x1, y1, intensity
+    ("DRAW_BEZIER", 10),    // x0, y0, cp1x, cp1y, cp2x, cp2y, x1, y1, steps, intensity
+    ("DRAW_BEZIER_QUAD", 8),// x0, y0, cpx, cpy, x1, y1, steps, intensity
     ("DRAW_RECT", 5),       // x, y, width, height, intensity
     ("SET_INTENSITY", 1),   // intensity
     ("RESET0REF", 0),       // no args
@@ -104,12 +107,44 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     // Level camera
     ("SET_CAMERA_X", 1),          // camera_x (16-bit scroll offset)
     ("SET_CAMERA_Y", 1),          // camera_y (16-bit scroll offset)
+    ("GET_SCROLL_LIMIT_LEFT",   0),  // → i16 left scroll boundary
+    ("GET_SCROLL_LIMIT_RIGHT",  0),  // → i16 right scroll boundary
+    ("GET_SCROLL_LIMIT_TOP",    0),  // → i16 top scroll boundary
+    ("GET_SCROLL_LIMIT_BOTTOM", 0),  // → i16 bottom scroll boundary
+    ("GET_LEVEL_FLOOR_Y",       0),  // → i16 floor surface world Y (camera-relative)
+    ("GET_FRAME_US",            0),  // → u32 µs since last WAIT_RECAL (M6809 stub: 0)
     ("LEVEL_COLLISION_Y", 3),     // player_x, player_y, player_half_height → returns tile_top + player_hh
+    ("LEVEL_COLLISION_X", 4),     // player_x, player_y, player_half_width, player_half_height → returns push-out dx
 
     // Message table dispatch
     ("MSG_DEF", 4),       // id, x, y, text  — data declaration, emits no code
     ("PRINT_MSG", 1),     // id_expr          — runtime dispatch via ROM table
+
+    // Animation
+    ("DRAW_ANIM", 1),     // animation_name → draws current frame, advances counter
+
+    // Pitched instrument
+    ("PLAY_NOTE", 3),     // instrument_name, channel, midi_note
+
+    // Enemy access (collision / state machine)
+    ("GET_ENEMY_ACTIVE", 1),  // i → 0 or 1
+    ("GET_ENEMY_X", 1),       // i → i16 x
+    ("GET_ENEMY_Y", 1),       // i → i16 y
+    ("GET_ENEMY_HP", 1),      // i → u8 hp
+    ("GET_ENEMY_STATE", 1),   // i → u8 sm_state ($FF = no SM)
+    ("SET_ENEMY_X", 2),       // i, x → writes pool[i].x
+    ("SET_ENEMY_Y", 2),       // i, y → writes pool[i].y
+    ("SET_ENEMY_STATE", 2),   // i, state → writes pool[i].sm_state byte
+    ("SET_ENEMY_DIR", 2),     // i, dir → writes pool[i].dir (0=left, 1=right)
+    ("GET_ENEMY_AREA_IDX", 1),// i → u8 current_area_idx (255 if inactive) — debug
+    ("KILL_ENEMY", 1),        // i → kills enemy, returns new ENEMY_COUNT
+    ("ENEMY_FIRE_EVENT", 2),  // i, "eventName" → fires event hash
 ];
+
+/// True if `name` resolves to a known builtin / native runtime function.
+pub fn is_builtin(name: &str) -> bool {
+    expected_builtin_arity(name).is_some()
+}
 
 /// Get expected arity for a builtin (None if not a builtin)
 fn expected_builtin_arity(name: &str) -> Option<usize> {
@@ -143,6 +178,18 @@ fn validate_builtin_arity(name: &str, arg_count: usize) -> Result<(), String> {
         "MSG_DEF" => {
             if arg_count != 4 {
                 return Err(format!("MSG_DEF requires 4 arguments (id, x, y, text), got {}", arg_count));
+            }
+            return Ok(());
+        }
+        "DRAW_ANIM" => {
+            if arg_count != 1 && arg_count != 3 && arg_count != 4 && arg_count != 5 && arg_count != 6 {
+                return Err(format!("DRAW_ANIM requires 1, 3, 4, 5, or 6 arguments (name / name+x+y / +mirror / +scale / +speed), got {}", arg_count));
+            }
+            return Ok(());
+        }
+        "DRAW_VECTOR" => {
+            if arg_count != 3 && arg_count != 4 {
+                return Err(format!("DRAW_VECTOR requires 3 or 4 arguments (name, x, y / +mirror), got {}", arg_count));
             }
             return Ok(());
         }
@@ -306,55 +353,60 @@ pub fn emit_builtin(
             out.push_str("    STD RESULT\n");
             true
         }
+        // Player 2 buttons live in the upper nibble of Vec_Btns ($C80F),
+        // the same BIOS variable as Player 1 (P1 = bits 0-3, P2 = bits 4-7).
+        // Active-HIGH after Read_Btns. The old code was looking at $C812
+        // with mask 0x01-0x08 — wrong address and wrong bit positions, so
+        // J2_BUTTON_*() never reported pressed (issue #4).
         "J2_BUTTON_1" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C812      ; Vec_Button_1_2 (Player 2 transition bits)\n");
-            out.push_str("    ANDA #$01      ; Test bit 0\n");
-            out.push_str(&format!("    BEQ .J2B1_{}_OFF\n", label_id));
-            out.push_str("    LDD #1\n");
-            out.push_str(&format!("    BRA .J2B1_{}_END\n", label_id));
-            out.push_str(&format!(".J2B1_{}_OFF:\n", label_id));
+            out.push_str("    LDA >$C80F   ; Vec_Btns: bit4=1 means P2 btn1 pressed\n");
+            out.push_str("    BITA #$10\n");
+            out.push_str(&format!("    BNE .J2B1_{0}_ON\n", label_id));
             out.push_str("    LDD #0\n");
-            out.push_str(&format!(".J2B1_{}_END:\n", label_id));
+            out.push_str(&format!("    BRA .J2B1_{0}_END\n", label_id));
+            out.push_str(&format!(".J2B1_{0}_ON:\n", label_id));
+            out.push_str("    LDD #1\n");
+            out.push_str(&format!(".J2B1_{0}_END:\n", label_id));
             out.push_str("    STD RESULT\n");
             true
         }
         "J2_BUTTON_2" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C812      ; Vec_Button_1_2 (Player 2 transition bits)\n");
-            out.push_str("    ANDA #$02      ; Test bit 1\n");
-            out.push_str(&format!("    BEQ .J2B2_{}_OFF\n", label_id));
-            out.push_str("    LDD #1\n");
-            out.push_str(&format!("    BRA .J2B2_{}_END\n", label_id));
-            out.push_str(&format!(".J2B2_{}_OFF:\n", label_id));
+            out.push_str("    LDA >$C80F   ; Vec_Btns: bit5=1 means P2 btn2 pressed\n");
+            out.push_str("    BITA #$20\n");
+            out.push_str(&format!("    BNE .J2B2_{0}_ON\n", label_id));
             out.push_str("    LDD #0\n");
-            out.push_str(&format!(".J2B2_{}_END:\n", label_id));
+            out.push_str(&format!("    BRA .J2B2_{0}_END\n", label_id));
+            out.push_str(&format!(".J2B2_{0}_ON:\n", label_id));
+            out.push_str("    LDD #1\n");
+            out.push_str(&format!(".J2B2_{0}_END:\n", label_id));
             out.push_str("    STD RESULT\n");
             true
         }
         "J2_BUTTON_3" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C812      ; Vec_Button_1_2 (Player 2 transition bits)\n");
-            out.push_str("    ANDA #$04      ; Test bit 2\n");
-            out.push_str(&format!("    BEQ .J2B3_{}_OFF\n", label_id));
-            out.push_str("    LDD #1\n");
-            out.push_str(&format!("    BRA .J2B3_{}_END\n", label_id));
-            out.push_str(&format!(".J2B3_{}_OFF:\n", label_id));
+            out.push_str("    LDA >$C80F   ; Vec_Btns: bit6=1 means P2 btn3 pressed\n");
+            out.push_str("    BITA #$40\n");
+            out.push_str(&format!("    BNE .J2B3_{0}_ON\n", label_id));
             out.push_str("    LDD #0\n");
-            out.push_str(&format!(".J2B3_{}_END:\n", label_id));
+            out.push_str(&format!("    BRA .J2B3_{0}_END\n", label_id));
+            out.push_str(&format!(".J2B3_{0}_ON:\n", label_id));
+            out.push_str("    LDD #1\n");
+            out.push_str(&format!(".J2B3_{0}_END:\n", label_id));
             out.push_str("    STD RESULT\n");
             true
         }
         "J2_BUTTON_4" => {
             let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            out.push_str("    LDA $C812      ; Vec_Button_1_2 (Player 2 transition bits)\n");
-            out.push_str("    ANDA #$08      ; Test bit 3\n");
-            out.push_str(&format!("    BEQ .J2B4_{}_OFF\n", label_id));
-            out.push_str("    LDD #1\n");
-            out.push_str(&format!("    BRA .J2B4_{}_END\n", label_id));
-            out.push_str(&format!(".J2B4_{}_OFF:\n", label_id));
+            out.push_str("    LDA >$C80F   ; Vec_Btns: bit7=1 means P2 btn4 pressed\n");
+            out.push_str("    BITA #$80\n");
+            out.push_str(&format!("    BNE .J2B4_{0}_ON\n", label_id));
             out.push_str("    LDD #0\n");
-            out.push_str(&format!(".J2B4_{}_END:\n", label_id));
+            out.push_str(&format!("    BRA .J2B4_{0}_END\n", label_id));
+            out.push_str(&format!(".J2B4_{0}_ON:\n", label_id));
+            out.push_str("    LDD #1\n");
+            out.push_str(&format!(".J2B4_{0}_END:\n", label_id));
             out.push_str("    STD RESULT\n");
             true
         }
@@ -594,6 +646,14 @@ pub fn emit_builtin(
             debug::emit_debug_print(args, out, assets);
             true
         }
+        "DEBUG_PRINT_LABELED" => {
+            // (label, value) — discard the label (M6809 has no host UART
+            // channel to surface it on) and just print the value.
+            if args.len() >= 2 {
+                debug::emit_debug_print(&args[1..], out, assets);
+            }
+            true
+        }
         "DEBUG_PRINT_STR" => {
             debug::emit_debug_print_str(args, out, assets);
             true
@@ -641,7 +701,7 @@ pub fn emit_builtin(
             true
         }
         "DRAW_RECT" => {
-            drawing::emit_draw_rect(args, out);
+            emit_draw_rect_full(args, out, assets);
             true
         }
         "DRAW_POLYGON" => {
@@ -662,6 +722,14 @@ pub fn emit_builtin(
         }
         "DRAW_ELLIPSE" => {
             drawing::emit_draw_ellipse(args, out);
+            true
+        }
+        "DRAW_BEZIER" => {
+            drawing::emit_draw_bezier(args, out);
+            true
+        }
+        "DRAW_BEZIER_QUAD" => {
+            drawing::emit_draw_bezier_quad(args, out);
             true
         }
         "DRAW_SPRITE" => {
@@ -702,8 +770,36 @@ pub fn emit_builtin(
             level::emit_set_camera_y(args, out, assets);
             true
         }
+        "GET_SCROLL_LIMIT_LEFT" => {
+            level::emit_get_scroll_limit_left(args, out);
+            true
+        }
+        "GET_SCROLL_LIMIT_RIGHT" => {
+            level::emit_get_scroll_limit_right(args, out);
+            true
+        }
+        "GET_SCROLL_LIMIT_TOP" => {
+            level::emit_get_scroll_limit_top(args, out);
+            true
+        }
+        "GET_SCROLL_LIMIT_BOTTOM" => {
+            level::emit_get_scroll_limit_bottom(args, out);
+            true
+        }
+        "GET_LEVEL_FLOOR_Y" => {
+            level::emit_get_level_floor_y(args, out);
+            true
+        }
+        "GET_FRAME_US" => {
+            level::emit_get_frame_us(args, out);
+            true
+        }
         "LEVEL_COLLISION_Y" => {
             level::emit_level_collision_y(args, out, assets);
+            true
+        }
+        "LEVEL_COLLISION_X" => {
+            level::emit_level_collision_x(args, out, assets);
             true
         }
 
@@ -736,6 +832,37 @@ pub fn emit_builtin(
             utilities::emit_beep(args, out);
             true
         }
+
+        // ===== Pitched Instrument =====
+        // PLAY_NOTE("instrument_name", channel, midi_note)
+        //   instrument_name: string literal matching a .vinstr asset
+        //   channel: 0=A, 1=B, 2=C
+        //   midi_note: MIDI note number 24-107 (C1-B7)
+        "PLAY_NOTE" => {
+            if args.len() != 3 {
+                out.push_str("    ; ERROR: PLAY_NOTE requires 3 arguments (instrument_name, channel, midi_note)\n");
+            } else if let Expr::StringLit(instr_name) = &args[0] {
+                let symbol = format!("_{}_INSTR", instr_name.to_uppercase().replace('-', "_").replace(' ', "_"));
+                out.push_str(&format!("    ; PLAY_NOTE(\"{}\", channel, note)\n", instr_name));
+                // Load instrument ROM block address into NOTE_ARG_INSTR
+                out.push_str(&format!("    LDX #{}\n", symbol));
+                out.push_str("    STX >NOTE_ARG_INSTR\n");
+                // Evaluate channel (0/1/2) → NOTE_ARG_CHANNEL
+                expressions::emit_simple_expr(&args[1], out, assets);
+                out.push_str("    STB >NOTE_ARG_CHANNEL\n");
+                // Evaluate midi_note → NOTE_ARG_NOTE
+                expressions::emit_simple_expr(&args[2], out, assets);
+                out.push_str("    STB >NOTE_ARG_NOTE\n");
+                // Call runtime
+                out.push_str("    JSR PLAY_NOTE_RUNTIME\n");
+            } else {
+                out.push_str("    ; ERROR: PLAY_NOTE first argument must be a string literal (instrument name)\n");
+            }
+            out.push_str("    LDD #0\n");
+            out.push_str("    STD RESULT\n");
+            true
+        }
+
         "OLD_LEN" => {
             out.push_str("    ; LEN: Get array/string length\n");
             expressions::emit_simple_expr(&args[0], out, assets);
@@ -744,9 +871,247 @@ pub fn emit_builtin(
             true
         }
         
+        // ===== Animation =====
+        // DRAW_ANIM("name")                          — draw at DRAW_VEC_X/Y (caller must set)
+        // DRAW_ANIM("name", x, y)                    — draw at screen position (x, y)
+        // DRAW_ANIM("name", x, y, mirror)            — draw with X mirror flag
+        // DRAW_ANIM("name", x, y, mirror, scale)     — T1 scale ($7F=normal, $3F=half, $FF=double)
+        // DRAW_ANIM("name", x, y, mirror, scale, speed) — speed multiplier (1=normal, 2=half speed)
+        "DRAW_ANIM" => {
+            if let Some(Expr::StringLit(anim_name)) = args.first() {
+                let name_upper = anim_name.to_uppercase().replace('-', "_").replace(' ', "_");
+                out.push_str(&format!("    ; DRAW_ANIM: draw animation '{}'\n", anim_name));
+                if args.len() >= 3 {
+                    // Set X position
+                    expressions::emit_simple_expr(&args[1], out, assets);
+                    out.push_str("    TFR B,A\n");
+                    out.push_str("    STA DRAW_VEC_X\n");
+                    // Set Y position
+                    expressions::emit_simple_expr(&args[2], out, assets);
+                    out.push_str("    TFR B,A\n");
+                    out.push_str("    STA DRAW_VEC_Y\n");
+                } else {
+                    out.push_str("    CLR DRAW_VEC_X\n");
+                    out.push_str("    CLR DRAW_VEC_Y\n");
+                }
+                if args.len() >= 4 {
+                    expressions::emit_simple_expr(&args[3], out, assets);
+                    out.push_str("    TFR B,A\n");
+                    out.push_str("    STA >MIRROR_X\n");          // write mirror directly (extended)
+                    out.push_str("    STA >DRAW_ANIM_MIRROR_X\n"); // keep for runtime compatibility
+                } else {
+                    out.push_str("    CLR >MIRROR_X\n");
+                    out.push_str("    CLR >DRAW_ANIM_MIRROR_X\n");
+                }
+                out.push_str("    CLR >MIRROR_Y\n");
+                // Scale (arg[4], default $7F = normal size)
+                if args.len() >= 5 {
+                    expressions::emit_simple_expr(&args[4], out, assets);
+                    out.push_str("    TFR B,A\n");
+                    out.push_str("    STA DRAW_ANIM_SCALE\n");
+                } else {
+                    out.push_str("    LDA #$7F\n");
+                    out.push_str("    STA DRAW_ANIM_SCALE\n");
+                }
+                // Speed: ticks_per_frame (arg[5]). 0 or omitted = use vanim's duration_ticks.
+                // E.g. speed=6 → each animation frame lasts 6 game ticks (~8fps at 50Hz).
+                if args.len() >= 6 {
+                    expressions::emit_simple_expr(&args[5], out, assets);
+                    out.push_str("    TFR B,A\n");
+                    out.push_str("    STA DRAW_ANIM_SPEED_MUL\n");
+                } else {
+                    out.push_str("    CLR DRAW_ANIM_SPEED_MUL\n"); // 0 = use vanim timing
+                }
+                out.push_str(&format!("    LDX #_ANIM_{}\n", name_upper));
+                out.push_str(&format!("    LDU #ANIM_{}_STATE\n", name_upper));
+                out.push_str("    JSR DRAW_ANIM_RUNTIME\n");
+                out.push_str("    LDD #0\n");
+                out.push_str("    STD RESULT\n");
+            } else {
+                out.push_str("    ; ERROR: DRAW_ANIM requires a string literal name\n");
+            }
+            true
+        }
+
+        // ===== Enemy system builtins =====
+        "SPAWN_ENEMIES" => {
+            if args.len() != 1 {
+                out.push_str("    ; ERROR: SPAWN_ENEMIES requires 1 argument (level name)\n");
+            } else if let Expr::StringLit(level_name) = &args[0] {
+                out.push_str(&format!("    ; SPAWN_ENEMIES(\"{level_name}\")\n"));
+                if use_banked_assets() {
+                    // Multibank: LOAD_LEVEL already set LEVEL_BANK/LEVEL_ENEMY_COUNT/LEVEL_ENEMY_INSTANCES_PTR
+                    out.push_str("    JSR SPAWN_ENEMIES_BANKED\n");
+                } else {
+                    // Single-bank: LOAD_LEVEL_RUNTIME already stored count and instances ptr into RAM
+                    out.push_str("    LDB >LEVEL_ENEMY_COUNT        ; count stored by LOAD_LEVEL_RUNTIME\n");
+                    out.push_str("    LDX >LEVEL_ENEMY_INSTANCES_PTR ; instances ptr stored by LOAD_LEVEL_RUNTIME\n");
+                    out.push_str("    JSR SPAWN_ENEMIES_RUNTIME\n");
+                }
+            } else {
+                out.push_str("    ; ERROR: SPAWN_ENEMIES requires a string literal level name\n");
+            }
+            true
+        }
+
+        "UPDATE_ENEMIES" => {
+            out.push_str("    ; UPDATE_ENEMIES: advance enemy AI and movement\n");
+            out.push_str("    JSR UPDATE_ENEMIES_RUNTIME\n");
+            true
+        }
+
+        "DRAW_ENEMIES" => {
+            out.push_str("    ; DRAW_ENEMIES: render all active enemies\n");
+            out.push_str("    JSR DRAW_ENEMIES_RUNTIME\n");
+            true
+        }
+
+        // ===== Enemy read/kill/event builtins =====
+        "GET_ENEMY_ACTIVE" | "GET_ENEMY_X" | "GET_ENEMY_Y" | "GET_ENEMY_HP" | "GET_ENEMY_STATE" => {
+            if args.len() != 1 {
+                out.push_str(&format!("    ; ERROR: {} requires 1 argument\n", name));
+                return true;
+            }
+            expressions::emit_simple_expr(&args[0], out, assets);
+            out.push_str("    TFR B,A             ; A = enemy index (low byte)\n");
+            out.push_str("    LDB #28             ; ENEMY_POOL_STRIDE\n");
+            out.push_str("    MUL                 ; D = A * stride\n");
+            out.push_str("    LDX #ENEMY_POOL\n");
+            out.push_str("    LEAX D,X            ; X = &pool[i]\n");
+            match up.as_str() {
+                "GET_ENEMY_ACTIVE" => {
+                    out.push_str("    CLRA\n");
+                    out.push_str("    LDB ,X              ; active byte\n");
+                }
+                "GET_ENEMY_X" => {
+                    out.push_str("    LDA 1,X             ; x hi\n");
+                    out.push_str("    LDB 2,X             ; x lo\n");
+                }
+                "GET_ENEMY_Y" => {
+                    out.push_str("    LDA 3,X             ; y hi\n");
+                    out.push_str("    LDB 4,X             ; y lo\n");
+                }
+                "GET_ENEMY_HP" => {
+                    out.push_str("    CLRA\n");
+                    out.push_str("    LDB 9,X             ; hp byte\n");
+                }
+                "GET_ENEMY_STATE" => {
+                    out.push_str("    CLRA\n");
+                    out.push_str("    LDB 13,X            ; sm_state byte\n");
+                }
+                _ => {}
+            }
+            out.push_str("    STD RESULT\n");
+            true
+        }
+
+        // ===== Enemy debug/PiTrex-only stubs =====
+        // The M6809 enemy pool has no `dir` field or area-tracking, so these
+        // ARM/PiTrex builtins become no-ops on M6809 to keep cross-target code
+        // (SnowBros etc.) compiling. SET_ENEMY_DIR still consumes its args via
+        // emit_simple_expr so any side effects in expressions still happen.
+        "SET_ENEMY_DIR" => {
+            if args.len() == 2 {
+                expressions::emit_simple_expr(&args[0], out, assets);
+                expressions::emit_simple_expr(&args[1], out, assets);
+            }
+            out.push_str("    ; SET_ENEMY_DIR: NOP on M6809 (no dir field in pool)\n");
+            true
+        }
+        "GET_ENEMY_AREA_IDX" => {
+            if args.len() == 1 {
+                expressions::emit_simple_expr(&args[0], out, assets);
+            }
+            out.push_str("    ; GET_ENEMY_AREA_IDX: stub returns 0 on M6809\n");
+            out.push_str("    LDD #0\n");
+            out.push_str("    STD RESULT\n");
+            true
+        }
+
+        // ===== Enemy write builtins =====
+        "SET_ENEMY_X" | "SET_ENEMY_Y" | "SET_ENEMY_STATE" => {
+            if args.len() != 2 {
+                out.push_str(&format!("    ; ERROR: {} requires 2 arguments (idx, value)\n", name));
+                return true;
+            }
+            // SET_ENEMY_STATE goes through SET_ENEMY_STATE_RUNTIME so pool.action
+            // and sm_decay_timer also get updated from the type's SM state record.
+            // SET_ENEMY_X/Y stay as direct writes.
+            if up == "SET_ENEMY_STATE" {
+                // arg1 (state_idx) evaluated first, low byte stashed
+                expressions::emit_simple_expr(&args[1], out, assets);
+                out.push_str("    STB >TMPVAL         ; stash state_idx\n");
+                expressions::emit_simple_expr(&args[0], out, assets);
+                out.push_str("    TFR B,A             ; A = enemy index\n");
+                out.push_str("    LDB >TMPVAL         ; B = state_idx\n");
+                out.push_str("    JSR SET_ENEMY_STATE_RUNTIME\n");
+                return true;
+            }
+            // Compute pool entry pointer: X = &pool[i]
+            expressions::emit_simple_expr(&args[0], out, assets);
+            out.push_str("    TFR B,A             ; A = enemy index (low byte)\n");
+            out.push_str("    LDB #28             ; ENEMY_POOL_STRIDE\n");
+            out.push_str("    MUL                 ; D = A * stride\n");
+            out.push_str("    LDX #ENEMY_POOL\n");
+            out.push_str("    LEAX D,X            ; X = &pool[i]\n");
+            out.push_str("    PSHS X              ; save pool entry ptr on stack (safe across function calls)\n");
+            // Evaluate value into D
+            expressions::emit_simple_expr(&args[1], out, assets);
+            out.push_str("    PULS X              ; restore pool entry ptr\n");
+            match up.as_str() {
+                "SET_ENEMY_X" => {
+                    out.push_str("    STD 1,X             ; x hi @+1, x lo @+2\n");
+                }
+                "SET_ENEMY_Y" => {
+                    out.push_str("    STD 3,X             ; y hi @+3, y lo @+4\n");
+                }
+                _ => {}
+            }
+            true
+        }
+
+        "KILL_ENEMY" => {
+            if args.len() != 1 {
+                out.push_str("    ; ERROR: KILL_ENEMY requires 1 argument\n");
+                return true;
+            }
+            expressions::emit_simple_expr(&args[0], out, assets);
+            out.push_str("    TFR B,A             ; A = enemy index\n");
+            out.push_str("    JSR KILL_ENEMY_RUNTIME\n");
+            true
+        }
+
+        "ENEMY_FIRE_EVENT" => {
+            if args.len() != 2 {
+                out.push_str("    ; ERROR: ENEMY_FIRE_EVENT requires 2 arguments (i, \"eventName\")\n");
+                return true;
+            }
+            expressions::emit_simple_expr(&args[0], out, assets);
+            out.push_str("    TFR B,A             ; A = enemy index\n");
+            if let Expr::StringLit(event_name) = &args[1] {
+                let hash = fnv1a_u8(event_name.as_str());
+                out.push_str(&format!("    LDB #${:02X}              ; event hash '{}'\n", hash, event_name));
+            } else {
+                out.push_str("    ; ERROR: ENEMY_FIRE_EVENT second arg must be a string literal\n");
+                out.push_str("    LDB #0\n");
+            }
+            out.push_str("    JSR ENEMY_FIRE_EVENT_RUNTIME\n");
+            true
+        }
+
         // ===== Default: Not a builtin =====
         _ => false,
     }
+}
+
+/// FNV-1a 8-bit hash — same algorithm used in venemy.rs for SM event name encoding.
+fn fnv1a_u8(s: &str) -> u8 {
+    let mut h: u32 = 2166136261;
+    for b in s.bytes() {
+        h ^= b as u32;
+        h = h.wrapping_mul(16777619);
+    }
+    (h & 0xFF) as u8
 }
 
 fn emit_set_intensity(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
@@ -760,10 +1125,12 @@ fn emit_set_intensity(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     // Evaluate intensity argument
     expressions::emit_simple_expr(&args[0], out, assets);
     
-    // Load result into A, store in our own var (BIOS-safe), then call BIOS
+    // Store intensity in DRAW_VEC_INTENSITY — DSWM reads this with extended addressing and
+    // uses the correct BIOS Intensity_a sequence (PB=$05->$04, PA=val, PB=$00->$01).
+    // Do NOT call JSR Intensity_a here: SET_INTENSITY runs with DP=$C8 so Intensity_a's
+    // direct-mode VIA writes go to RAM ($C800) instead of the VIA ($D000).
     out.push_str("    TFR B,A         ; Intensity (8-bit) — B already holds low byte\n");
-    out.push_str("    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)\n");
-    out.push_str("    JSR Intensity_a\n");
+    out.push_str("    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn\n");
     out.push_str("    LDD #0\n");
     out.push_str("    STD RESULT\n");
 }
@@ -788,11 +1155,11 @@ fn emit_print_text(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     // Store all 3 arguments in VAR_ARG0, VAR_ARG1, VAR_ARG2 (like core implementation)
     // Arg 0: x coordinate; D = x after emit
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    STD VAR_ARG0\n");
+    out.push_str("    STD >VAR_ARG0\n");
 
     // Arg 1: y coordinate; D = y after emit
     expressions::emit_simple_expr(&args[1], out, assets);
-    out.push_str("    STD VAR_ARG1\n");
+    out.push_str("    STD >VAR_ARG1\n");
     
     // Arg 2: text string
     match &args[2] {
@@ -800,12 +1167,12 @@ fn emit_print_text(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             // Load pointer to string in helpers bank
             let str_label = format!("PRINT_TEXT_STR_{}", hash_string(s));
             out.push_str(&format!("    LDX #{}      ; Pointer to string in helpers bank\n", str_label));
-            out.push_str("    STX VAR_ARG2\n");
+            out.push_str("    STX >VAR_ARG2\n");
         }
         _ => {
             // Variable or expression - evaluate to pointer; D = pointer after emit
             expressions::emit_simple_expr(&args[2], out, assets);
-            out.push_str("    STD VAR_ARG2\n");
+            out.push_str("    STD >VAR_ARG2\n");
         }
     }
     
@@ -823,7 +1190,7 @@ fn emit_print_msg(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     }
     out.push_str("    ; PRINT_MSG: Dispatch via ROM message table\n");
     expressions::emit_simple_expr(&args[0], out, assets);
-    out.push_str("    STD VAR_ARG0\n");
+    out.push_str("    STD >VAR_ARG0\n");
     out.push_str("    JSR PRINT_MSG_DISPATCH\n");
     out.push_str("    LDD #0\n");
     out.push_str("    STD RESULT\n");
@@ -889,10 +1256,17 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     // The asset must exist in the ROM (checked during compilation)
     match &args[0] {
         Expr::StringLit(asset_name) => {
-            // Find asset index in the vector assets list (for multibank lookup tables)
-            let vector_assets: Vec<_> = assets.iter()
-                .filter(|a| matches!(a.asset_type, AssetType::Vector))
+            // Find asset index in the vector assets list (for multibank lookup tables).
+            // IMPORTANT: must exactly mirror the VECTOR_ADDR_TABLE built in assets.rs:
+            //   1. Sort alphabetically (same as vector_entries.sort_by)
+            //   2. Exclude animation-embedded vecs (same as !anim_vec_refs.contains(&a.name))
+            //      because those go inline in vanim data, not in VECTOR_ADDR_TABLE.
+            let anim_vec_refs = assets::collect_anim_vec_refs(assets);
+            let mut vector_assets: Vec<_> = assets.iter()
+                .filter(|a| matches!(a.asset_type, AssetType::Vector)
+                    && !anim_vec_refs.contains(&a.name))
                 .collect();
+            vector_assets.sort_by(|a, b| a.name.cmp(&b.name));
             let asset_index = vector_assets.iter()
                 .position(|a| a.name == *asset_name)
                 .unwrap_or(0);
@@ -900,7 +1274,11 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             // Find path count
             let path_count = if let Some(asset) = assets.iter().find(|a| a.name == *asset_name && matches!(a.asset_type, AssetType::Vector)) {
                  if let Ok(resource) = VecResource::load(std::path::Path::new(&asset.path)) {
-                    resource.visible_paths().len()
+                    // Must match the filter in vecres.rs compile_to_asm — degenerate
+                    // paths (< 2 points) are dropped from the data table, so the
+                    // unrolled DRAW_VECTOR loop here has to drop them too or it
+                    // references _NAME_PATHN labels that were never emitted.
+                    resource.visible_paths().iter().filter(|p| p.points.len() >= 2).count()
                  } else {
                     1
                  }
@@ -910,37 +1288,62 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
 
             let symbol = format!("_{}", asset_name.to_uppercase().replace("-", "_").replace(" ", "_"));
             
+            let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
+            let skip_label = format!("DRVEC_SKIP_{}", label_id);
+
             out.push_str(&format!("    ; Asset: {} (index={}, {} paths)\n", asset_name, asset_index, path_count));
-            
-            // Evaluate x position (arg 1) - save immediately to avoid overwrite
+
+            // Evaluate x position (arg 1) — 16-bit signed result in D
             expressions::emit_simple_expr(&args[1], out, assets);
-            out.push_str("    TFR B,A       ; X position (low byte) — B already holds it\n");
-            out.push_str("    STA TMPPTR    ; Save X to temporary storage\n");
+            // Cull if screen_x is outside signed 8-bit range [-128, 127]
+            out.push_str("    STA TMPPTR2      ; save high byte of 16-bit screen_x\n");
+            out.push_str("    TFR B,A\n");
+            out.push_str("    SEX              ; A = sign-extend of B (0x00 or 0xFF)\n");
+            out.push_str(&format!("    CMPA TMPPTR2     ; vs actual high byte\n"));
+            out.push_str(&format!("    LBNE {}          ; out of 8-bit range — skip draw\n", skip_label));
+            out.push_str("    TFR B,A\n");
+            out.push_str("    STA TMPPTR       ; save 8-bit x\n");
 
             // Evaluate y position (arg 2)
             expressions::emit_simple_expr(&args[2], out, assets);
-            out.push_str("    TFR B,A       ; Y position (low byte) — B already holds it\n");
-            out.push_str("    STA TMPPTR+1  ; Save Y to temporary storage\n");
-            
-            // Restore X and Y from temporary storage and set positions
-            out.push_str("    LDA TMPPTR    ; X position\n");
+            out.push_str("    TFR B,A          ; Y position (8-bit signed in A)\n");
+            out.push_str("    STA TMPPTR+1     ; Save Y to temporary storage\n");
+
+            // Set draw positions
+            out.push_str("    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)\n");
             out.push_str("    STA DRAW_VEC_X\n");
-            out.push_str("    LDA TMPPTR+1  ; Y position\n");
+            // Sign-extend X to DRAW_VEC_X_HI for 16-bit clipping in SLR_DRAW_CLIPPED_PATH.
+            // SHA the high byte: if A is negative ($80-$FF), store $FF, else $00.
+            out.push_str("    LDB #0\n");
+            out.push_str("    TSTA\n");
+            out.push_str(&format!("    BPL .sx_pos_{}\n", label_id));
+            out.push_str("    LDB #$FF\n");
+            out.push_str(&format!(".sx_pos_{}:\n", label_id));
+            out.push_str("    STB DRAW_VEC_X_HI\n");
+            out.push_str("    LDA TMPPTR+1     ; Y position\n");
             out.push_str("    STA DRAW_VEC_Y\n");
             
-            // Clear mirror flags (DRAW_VECTOR uses no mirroring)
-            out.push_str("    CLR MIRROR_X\n");
+            // Mirror X: optional 4th arg (0=normal, 1=flip X)
+            if args.len() >= 4 {
+                expressions::emit_simple_expr(&args[3], out, assets);
+                out.push_str("    TFR B,A\n");
+                out.push_str("    STA MIRROR_X\n");
+            } else {
+                out.push_str("    CLR MIRROR_X\n");
+            }
             out.push_str("    CLR MIRROR_Y\n");
             // DRAW_VEC_INTENSITY was set by SET_INTENSITY() (or 0 = use $7F default in DSWM)
             
             if use_banked_assets() {
                 // MULTIBANK MODE: Use banked access via lookup tables in Bank #31
-                // The DRAW_VECTOR_BANKED helper handles bank switching automatically
+                // DRAW_VECTOR_BANKED expects MIRROR_X/Y and DRAW_VEC_INTENSITY set by caller
+                out.push_str("    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities\n");
                 out.push_str(&format!("    LDX #{}        ; Asset index for lookup\n", asset_index));
                 out.push_str("    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching\n");
             } else {
-                // SINGLE-BANK MODE: Direct access to asset labels
-                // Single DP switch for all paths (CRITICAL PATTERN FROM CORE)
+                // SINGLE-BANK MODE: Direct access to asset labels (match core compiler pattern)
+                // Clear intensity override BEFORE draw so DSWM uses .vec intensities
+                out.push_str("    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)\n");
                 out.push_str("    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)\n");
                 
                 // Loop through all paths
@@ -949,12 +1352,11 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
                     out.push_str("    JSR Draw_Sync_List_At_With_Mirrors\n");
                 }
                 
-                // Restore DP (CRITICAL PATTERN FROM CORE)
+                // Restore DP (match core compiler pattern - no ACR manipulation needed)
                 out.push_str("    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)\n");
             }
-            
-            // Clear intensity override so the next DRAW_VECTOR uses per-path values from .vec
-            out.push_str("    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities\n");
+
+            out.push_str(&format!("{}:\n", skip_label));
             out.push_str("    LDD #0\n    STD RESULT\n");
         }
         _ => {
@@ -973,7 +1375,11 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
              // Find path count
             let path_count = if let Some(asset) = assets.iter().find(|a| a.name == *asset_name && matches!(a.asset_type, AssetType::Vector)) {
                  if let Ok(resource) = VecResource::load(std::path::Path::new(&asset.path)) {
-                    resource.visible_paths().len()
+                    // Must match the filter in vecres.rs compile_to_asm — degenerate
+                    // paths (< 2 points) are dropped from the data table, so the
+                    // unrolled DRAW_VECTOR loop here has to drop them too or it
+                    // references _NAME_PATHN labels that were never emitted.
+                    resource.visible_paths().iter().filter(|p| p.points.len() >= 2).count()
                  } else {
                     1
                  }
@@ -981,9 +1387,21 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
                  1
             };
             
+            // Find asset index for multibank lookup tables
+            // IMPORTANT: must exactly mirror VECTOR_ADDR_TABLE: sort + exclude anim-embedded vecs
+            let anim_vec_refs = assets::collect_anim_vec_refs(assets);
+            let mut vector_assets: Vec<_> = assets.iter()
+                .filter(|a| matches!(a.asset_type, AssetType::Vector)
+                    && !anim_vec_refs.contains(&a.name))
+                .collect();
+            vector_assets.sort_by(|a, b| a.name.cmp(&b.name));
+            let asset_index = vector_assets.iter()
+                .position(|a| a.name == *asset_name)
+                .unwrap_or(0);
+
             let symbol = format!("_{}", asset_name.to_uppercase().replace("-", "_").replace(" ", "_"));
-            
-            out.push_str(&format!("    ; Asset: {} ({} paths) with mirror + intensity\n", asset_name, path_count));
+
+            out.push_str(&format!("    ; Asset: {} (index={}, {} paths) with mirror + intensity\n", asset_name, asset_index, path_count));
             
             // Evaluate x position (arg 1)
             expressions::emit_simple_expr(&args[1], out, assets);
@@ -1026,17 +1444,22 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             out.push_str("    TFR B,A       ; Intensity (0-127) — B already holds it\n");
             out.push_str("    STA DRAW_VEC_INTENSITY  ; Store intensity override\n");
             
-            // Single DP switch for all paths (CRITICAL PATTERN FROM CORE)
-            out.push_str("    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)\n");
-            
-            // Loop through all paths
-            for i in 0..path_count {
-                out.push_str(&format!("    LDX #{}_PATH{}  ; Load path {}\n", symbol, i, i));
-                out.push_str("    JSR Draw_Sync_List_At_With_Mirrors\n");
+            if use_banked_assets() {
+                // MULTIBANK MODE: DRAW_VECTOR_BANKED handles DP setup, bank switch, path loop
+                // MIRROR_X/Y and DRAW_VEC_INTENSITY are already set above
+                out.push_str(&format!("    LDX #{}        ; Asset index for lookup\n", asset_index));
+                out.push_str("    JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching\n");
+            } else {
+                // SINGLE-BANK MODE: Direct path label loop
+                // NOTE: do NOT set ACR here — DRAW_VECTOR works without it and
+                // setting ACR=$18 breaks T1 timing inside DSWM (same fix as DRAW_ANIM).
+                out.push_str("    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)\n");
+                for i in 0..path_count {
+                    out.push_str(&format!("    LDX #{}_PATH{}  ; Load path {}\n", symbol, i, i));
+                    out.push_str("    JSR Draw_Sync_List_At_With_Mirrors\n");
+                }
+                out.push_str("    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)\n");
             }
-            
-            // Restore DP (CRITICAL PATTERN FROM CORE)
-            out.push_str("    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)\n");
             
             out.push_str("    CLR DRAW_VEC_INTENSITY  ; Clear intensity override for next draw\n");
             out.push_str("    LDD #0\n    STD RESULT\n");
@@ -1262,6 +1685,45 @@ fn emit_draw_circle_full(args: &[Expr], out: &mut String, assets: &[AssetInfo]) 
     out.push_str("    STD RESULT\n");
 }
 
+/// DRAW_RECT with full variable support.
+/// All-constant args go through `drawing::emit_draw_rect` (inline 4-line path);
+/// any variable argument falls back to evaluating each operand into the
+/// DRAW_RECT_X/Y/WIDTH/HEIGHT/INTENSITY byte slots and calling
+/// DRAW_RECT_RUNTIME (mirrors `emit_draw_circle_full`).
+fn emit_draw_rect_full(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
+    if args.len() != 4 && args.len() != 5 {
+        out.push_str("    ; ERROR: DRAW_RECT requires 4 or 5 arguments\n");
+        return;
+    }
+
+    if args.iter().all(|a| matches!(a, Expr::Number(_))) {
+        drawing::emit_draw_rect(args, out);
+        return;
+    }
+
+    out.push_str("    ; DRAW_RECT: x, y, width, height[, intensity] (variable args)\n");
+
+    let slots = ["DRAW_RECT_X", "DRAW_RECT_Y", "DRAW_RECT_WIDTH", "DRAW_RECT_HEIGHT"];
+    for (i, slot) in slots.iter().enumerate() {
+        expressions::emit_simple_expr(&args[i], out, assets);
+        out.push_str("    TFR B,A\n");
+        out.push_str(&format!("    STA {}\n", slot));
+    }
+
+    if args.len() == 5 {
+        expressions::emit_simple_expr(&args[4], out, assets);
+        out.push_str("    TFR B,A\n");
+        out.push_str("    STA DRAW_RECT_INTENSITY\n");
+    } else {
+        out.push_str("    LDA #$5F\n");
+        out.push_str("    STA DRAW_RECT_INTENSITY\n");
+    }
+
+    out.push_str("    JSR DRAW_RECT_RUNTIME\n");
+    out.push_str("    LDD #0\n");
+    out.push_str("    STD RESULT\n");
+}
+
 /// Emit all PRINT_TEXT string data in helpers bank
 pub fn emit_print_text_strings(strings: &std::collections::BTreeMap<u64, String>, out: &mut String) {
     if strings.is_empty() {
@@ -1346,7 +1808,7 @@ pub fn emit_msg_table(entries: &[MsgEntry], out: &mut String) {
     out.push_str(";**** PRINT_MSG Dispatch ****\n");
     out.push_str("PRINT_MSG_DISPATCH:\n");
     out.push_str("    ; VAR_ARG0 = msg_id (set by PRINT_MSG caller)\n");
-    out.push_str("    LDB VAR_ARG0+1      ; B = msg_id (low byte)\n");
+    out.push_str("    LDB >VAR_ARG0+1      ; B = msg_id (low byte)\n");
     out.push_str("    BEQ PRINT_MSG_SKIP  ; id=0 → nothing to print\n");
     out.push_str("    DECB                ; 0-based index (id starts at 1)\n");
     out.push_str("    LSLB               ; B = index * 2\n");
@@ -1355,12 +1817,12 @@ pub fn emit_msg_table(entries: &[MsgEntry], out: &mut String) {
     out.push_str("    ABX                ; X = &table[index * 4]\n");
     out.push_str("    LDB ,X+            ; B = x (signed byte)\n");
     out.push_str("    SEX                ; D = sign-extended x\n");
-    out.push_str("    STD VAR_ARG0\n");
+    out.push_str("    STD >VAR_ARG0\n");
     out.push_str("    LDB ,X+            ; B = y (signed byte)\n");
     out.push_str("    SEX                ; D = sign-extended y\n");
-    out.push_str("    STD VAR_ARG1\n");
+    out.push_str("    STD >VAR_ARG1\n");
     out.push_str("    LDX ,X             ; X = string pointer\n");
-    out.push_str("    STX VAR_ARG2\n");
+    out.push_str("    STX >VAR_ARG2\n");
     out.push_str("    JMP VECTREX_PRINT_TEXT  ; tail call (no RTS needed)\n");
     out.push_str("PRINT_MSG_SKIP:\n");
     out.push_str("    RTS\n\n");

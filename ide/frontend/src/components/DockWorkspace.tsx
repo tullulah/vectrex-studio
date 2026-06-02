@@ -293,6 +293,7 @@ export const DockWorkspace: React.FC = () => {
       'compiler-output': 'Compiler Output',
       memory: t('panel.memory', 'Memory'),
       trace: t('panel.trace', 'Trace'),
+      psglog: t('panel.psglog', 'PSG Log'),
       bioscalls: t('panel.bioscalls', 'BIOS Calls'),
       'ai-assistant': t('panel.ai', 'PyPilot'),
       playground: t('panel.playground', 'Playground')

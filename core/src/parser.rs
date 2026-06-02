@@ -9,7 +9,6 @@ fn is_known_builtin(name: &str) -> bool {
         // Core builtins (0 args that look like structs)
         "WAIT_RECAL" | "SET_ORIGIN" | "MUSIC_UPDATE" | "STOP_MUSIC" |
         "SFX_UPDATE" |
-        "SFX_UPDATE" |
         "PLAY_MUSIC1" | "DBG_STATIC_VL" | "VECTOR_PHASE_BEGIN" |
         // Joystick input builtins (0 args, uppercase - MUST be recognized)
         "J1_X" | "J1_Y" | "J1_X_DIGITAL" | "J1_Y_DIGITAL" |

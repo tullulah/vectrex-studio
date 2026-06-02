@@ -1,0 +1,98 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "level1",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Created in Playground - 2026-05-13"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 95,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [],
+    "gameplay": [
+      {
+        "id": "enemy_1778655396869",
+        "type": "enemy",
+        "vectorName": "enemy",
+        "layer": "gameplay",
+        "x": -71,
+        "y": -19,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "enemy",
+        "aiType": "patrol",
+        "patrolWaypoints": [
+          {
+            "x": -72,
+            "y": -18
+          },
+          {
+            "x": -16,
+            "y": 52
+          },
+          {
+            "x": 3,
+            "y": -9
+          },
+          {
+            "x": 27,
+            "y": 46
+          },
+          {
+            "x": 48,
+            "y": 1
+          },
+          {
+            "x": 67,
+            "y": 50
+          },
+          {
+            "x": 76,
+            "y": -16
+          }
+        ],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "obj_1778667250262",
+        "type": "background",
+        "vectorName": "enemy",
+        "layer": "gameplay",
+        "x": -38,
+        "y": 58,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": {
+      "x": 0,
+      "y": -100
+    }
+  },
+  "hotspots": []
+}

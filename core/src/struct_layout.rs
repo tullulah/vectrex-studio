@@ -5,7 +5,7 @@
 /// - Calculating total struct size
 /// - Validating struct definitions
 
-use crate::ast::{StructDef, FieldDef};
+use crate::ast::StructDef;
 use std::collections::HashMap;
 
 /// Layout information for a struct

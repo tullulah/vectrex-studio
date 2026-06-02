@@ -1,3 +1,12 @@
+// See core/src/lib.rs header — same rationale, this bin re-declares the
+// legacy modules so the same allows apply here.
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_assignments)]
+#![allow(unused_mut)]
+#![allow(unused_macros)]
+#![allow(unreachable_patterns)]
+
 mod lexer;    // Lexical analysis
 mod ast;      // AST definitions
 mod parser;   // Parsing logic

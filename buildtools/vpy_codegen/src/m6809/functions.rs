@@ -49,6 +49,84 @@ pub fn has_beep_calls(module: &Module) -> bool {
     })
 }
 
+/// Check if any code path uses analog joystick reads (J1_X / J1_Y / J2_X / J2_Y / J2_ANALOG_X/Y).
+/// When true, we auto-inject ONE Joy_Analog BIOS call per frame at the top of LOOP_BODY
+/// and J1X_BUILTIN/J1Y_BUILTIN/etc. become cheap cached-RAM reads. Saves ~750 cycles per
+/// duplicate call (Joy_Analog is heavy and already populates all 4 axes per BIOS call).
+pub fn has_joystick_analog_calls(module: &Module) -> bool {
+    fn is_joy(name: &str) -> bool {
+        matches!(name, "J1_X" | "J1_Y" | "J2_X" | "J2_Y" | "J2_ANALOG_X" | "J2_ANALOG_Y")
+    }
+    fn check_expr(expr: &Expr) -> bool {
+        match expr {
+            Expr::Call(c) => is_joy(&c.name) || c.args.iter().any(check_expr),
+            Expr::Compare { left, right, .. } => check_expr(left) || check_expr(right),
+            Expr::Binary { left, right, .. } => check_expr(left) || check_expr(right),
+            Expr::Logic { left, right, .. } => check_expr(left) || check_expr(right),
+            Expr::Not(e) | Expr::BitNot(e) => check_expr(e),
+            Expr::Index { target, index } => check_expr(target) || check_expr(index),
+            Expr::MethodCall(info) => check_expr(&info.target) || info.args.iter().any(check_expr),
+            Expr::List(items) => items.iter().any(check_expr),
+            Expr::FieldAccess { target, .. } => check_expr(target),
+            _ => false,
+        }
+    }
+    fn check_stmt(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Expr(expr, _) => check_expr(expr),
+            Stmt::Assign { value, .. } => check_expr(value),
+            Stmt::CompoundAssign { value, .. } => check_expr(value),
+            Stmt::Let { value, .. } => check_expr(value),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                check_expr(cond) ||
+                body.iter().any(check_stmt) ||
+                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
+                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
+            },
+            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
+            Stmt::For { body, .. } => body.iter().any(check_stmt),
+            Stmt::ForIn { body, .. } => body.iter().any(check_stmt),
+            Stmt::Return(Some(e), _) => check_expr(e),
+            _ => false,
+        }
+    }
+    module.items.iter().any(|item| {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().any(check_stmt)
+        } else {
+            false
+        }
+    })
+}
+
+/// Check if module uses PLAY_NOTE (needs NOTE_UPDATE_RUNTIME + PLAY_NOTE_RUNTIME auto-injection)
+pub fn has_note_calls(module: &Module) -> bool {
+    fn check_expr(expr: &Expr) -> bool {
+        matches!(expr, Expr::Call(c) if c.name == "PLAY_NOTE")
+    }
+    fn check_stmt(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Expr(expr, _) => check_expr(expr),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                check_expr(cond) ||
+                body.iter().any(check_stmt) ||
+                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
+                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
+            },
+            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
+            Stmt::For { body, .. } => body.iter().any(check_stmt),
+            _ => false,
+        }
+    }
+    module.items.iter().any(|item| {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().any(check_stmt)
+        } else {
+            false
+        }
+    })
+}
+
 /// Check if module uses PRINT_TEXT or PRINT_NUMBER (needs TEXT_SCALE initialization)
 pub fn has_print_calls(module: &Module) -> bool {
     fn check_expr(expr: &Expr) -> bool {
@@ -75,6 +153,98 @@ pub fn has_print_calls(module: &Module) -> bool {
             false
         }
     })
+}
+
+/// Check if module uses DRAW_VECTOR, DRAW_ANIM, or SHOW_LEVEL (needs DRAW_SCALE initialization)
+pub fn has_draw_scale_calls(module: &Module) -> bool {
+    fn check_expr(expr: &Expr) -> bool {
+        matches!(expr, Expr::Call(c) if matches!(c.name.as_str(), "DRAW_VECTOR" | "DRAW_VECTOR_EX" | "DRAW_ANIM" | "SHOW_LEVEL"))
+    }
+    fn check_stmt(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Expr(expr, _) => check_expr(expr),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                check_expr(cond) ||
+                body.iter().any(check_stmt) ||
+                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
+                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
+            },
+            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
+            Stmt::For { body, .. } => body.iter().any(check_stmt),
+            _ => false,
+        }
+    }
+    module.items.iter().any(|item| {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().any(check_stmt)
+        } else {
+            false
+        }
+    })
+}
+
+/// Check if module uses DRAW_ANIM (needs DRAW_SCALE / DRAW_ANIM_SCALE initialization)
+pub fn has_draw_anim_calls(module: &Module) -> bool {
+    fn check_expr(expr: &Expr) -> bool {
+        matches!(expr, Expr::Call(c) if c.name == "DRAW_ANIM")
+    }
+    fn check_stmt(stmt: &Stmt) -> bool {
+        match stmt {
+            Stmt::Expr(expr, _) => check_expr(expr),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                check_expr(cond) ||
+                body.iter().any(check_stmt) ||
+                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
+                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
+            },
+            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
+            Stmt::For { body, .. } => body.iter().any(check_stmt),
+            _ => false,
+        }
+    }
+    module.items.iter().any(|item| {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().any(check_stmt)
+        } else {
+            false
+        }
+    })
+}
+
+/// Collect every animation name passed to DRAW_ANIM("name", ...) in the module.
+/// Used to emit per-anim state RAM zeroing at MAIN startup.
+pub fn collect_draw_anim_names(module: &Module) -> std::collections::BTreeSet<String> {
+    use std::collections::BTreeSet;
+    fn collect_expr(expr: &Expr, out: &mut BTreeSet<String>) {
+        if let Expr::Call(c) = expr {
+            if c.name == "DRAW_ANIM" {
+                if let Some(Expr::StringLit(name)) = c.args.first() {
+                    out.insert(name.to_uppercase().replace('-', "_").replace(' ', "_"));
+                }
+            }
+        }
+    }
+    fn collect_stmt(stmt: &Stmt, out: &mut BTreeSet<String>) {
+        match stmt {
+            Stmt::Expr(expr, _) => collect_expr(expr, out),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                collect_expr(cond, out);
+                body.iter().for_each(|s| collect_stmt(s, out));
+                elifs.iter().for_each(|(e, b)| { collect_expr(e, out); b.iter().for_each(|s| collect_stmt(s, out)); });
+                if let Some(eb) = else_body { eb.iter().for_each(|s| collect_stmt(s, out)); }
+            },
+            Stmt::While { cond, body, .. } => { collect_expr(cond, out); body.iter().for_each(|s| collect_stmt(s, out)); },
+            Stmt::For { body, .. } => body.iter().for_each(|s| collect_stmt(s, out)),
+            _ => {}
+        }
+    }
+    let mut out = BTreeSet::new();
+    for item in &module.items {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().for_each(|s| collect_stmt(s, &mut out));
+        }
+    }
+    out
 }
 
 /// Check if module uses PLAY_MUSIC or PLAY_SFX (needs AUDIO_UPDATE auto-injection)
@@ -158,11 +328,46 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
     asm.push_str("    ; Initialize global variables\n");
     asm.push_str("    CLR VPY_MOVE_X        ; MOVE offset defaults to 0\n");
     asm.push_str("    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0\n");
+    if crate::m6809::level::needs_level_runtime(module) {
+        asm.push_str("    ; Init camera ONCE at boot (RAM not zero-init); LOAD_LEVEL must NOT reset it.\n");
+        asm.push_str("    LDD #0\n");
+        asm.push_str("    STD >CAMERA_X\n");
+        asm.push_str("    STD >CAMERA_Y\n");
+    }
     if has_print_calls(module) {
         asm.push_str("    LDA #$F8\n");
         asm.push_str("    STA TEXT_SCALE_H      ; Default height = -8 (normal size)\n");
         asm.push_str("    LDA #$48\n");
         asm.push_str("    STA TEXT_SCALE_W      ; Default width = 72 (normal size)\n");
+    }
+    if has_draw_scale_calls(module) {
+        asm.push_str("    LDA #$7F\n");
+        asm.push_str("    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)\n");
+    }
+    if has_draw_anim_calls(module) {
+        asm.push_str("    LDA #$7F\n");
+        asm.push_str("    STA DRAW_ANIM_SCALE   ; Default anim scale = $7F (127 = full BIOS scale)\n");
+        asm.push_str("    CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)\n");
+        // Zero per-animation state RAM (frame_idx, ticks_left). Without this, the
+        // first DRAW_ANIM call sees garbage and computes a frame_ptr way out of bounds,
+        // making DSWM draw random vectors. ticks_left=0 forces DAR_INIT path.
+        for anim_name in collect_draw_anim_names(module) {
+            asm.push_str(&format!("    CLR ANIM_{}_STATE     ; frame_idx = 0\n", anim_name));
+            asm.push_str(&format!("    CLR ANIM_{}_STATE+1   ; ticks_left = 0 (forces DAR_INIT)\n", anim_name));
+        }
+    }
+    if has_note_calls(module) {
+        // Pre-initialize channel_id bytes so each channel slot knows which channel it owns
+        asm.push_str("    ; Initialize NOTE_STATE channel IDs (pre-clear active flags)\n");
+        asm.push_str("    LDA #0\n");
+        asm.push_str("    STA NOTE_STATE        ; channel A: id=0, active=0 (initial)\n");
+        asm.push_str("    CLR NOTE_STATE+1      ; active=0\n");
+        asm.push_str("    LDA #1\n");
+        asm.push_str("    STA NOTE_STATE+10     ; channel B: id=1\n");
+        asm.push_str("    CLR NOTE_STATE+11     ; active=0\n");
+        asm.push_str("    LDA #2\n");
+        asm.push_str("    STA NOTE_STATE+20     ; channel C: id=2\n");
+        asm.push_str("    CLR NOTE_STATE+21     ; active=0\n");
     }
     let mut array_copy_counter = 0;
     for item in &module.items {
@@ -239,9 +444,23 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         // stores current state in $C80F, computes rising-edge in $C811, updates $C80E.
         // More reliable on real hardware than direct PSG reads.
         asm.push_str("    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811\n");
+        // Auto-inject Joy_Analog ONCE per frame if any code uses analog joystick reads.
+        // Without this, every J1_X()/J1_Y() call would do its own ~750-cycle BIOS poll;
+        // here we poll once (populating all 4 axes at $C81B-$C81E) and the per-call
+        // builtins become cheap cached-RAM reads (~10 cycles).
+        if has_joystick_analog_calls(module) {
+            asm.push_str("    JSR $F1AA    ; DP_to_D0 (Joy_Analog requires DP=$D0)\n");
+            asm.push_str("    JSR $F1F5    ; Joy_Analog: poll all 4 axes once → $C81B-$C81E\n");
+            asm.push_str("    JSR Reset0Ref ; Restore beam state after Joy_Analog\n");
+            asm.push_str("    JSR $F1AF    ; DP_to_C8 (restore DP for RAM access)\n");
+        }
         // Auto-inject BEEP_UPDATE before user code so beep timer counts down every frame
         if has_beep_calls(module) {
             asm.push_str("    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer\n");
+        }
+        // Auto-inject NOTE_UPDATE_RUNTIME before user code so note timers/arpeggio run every frame
+        if has_note_calls(module) {
+            asm.push_str("    JSR NOTE_UPDATE_RUNTIME  ; Auto-injected: tick note timers + arpeggio\n");
         }
         // Auto-inject FRAME_PARITY toggle for interleaved rendering
         if let Some(n) = module.meta.interleaved_frames {
@@ -302,9 +521,10 @@ fn generate_function_body(func: &Function, asm: &mut String, assets: &[AssetInfo
     if !func.params.is_empty() {
         context::set_current_params(&func.params);
     }
+    let loop_labels: Vec<(String, String)> = Vec::new();
     // Generate code for each statement
     for stmt in &func.body {
-        generate_statement(stmt, asm, assets)?;
+        generate_statement(stmt, asm, assets, &loop_labels)?;
     }
     // Clear parameter mapping after function body
     if !func.params.is_empty() {
@@ -313,7 +533,35 @@ fn generate_function_body(func: &Function, asm: &mut String, assets: &[AssetInfo
     Ok(())
 }
 
-fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Result<(), String> {
+/// If a statement's primary expression is a direct call to a builtin/native
+/// runtime function, return its name (for the `; NATIVE_CALL` debug annotation).
+fn primary_builtin_call(stmt: &Stmt) -> Option<&str> {
+    let expr = match stmt {
+        Stmt::Expr(e, _) => e,
+        Stmt::Assign { value, .. } => value,
+        Stmt::Let { value, .. } => value,
+        Stmt::CompoundAssign { value, .. } => value,
+        Stmt::Return(Some(e), _) => e,
+        _ => return None,
+    };
+    if let Expr::Call(call) = expr {
+        if crate::m6809::builtins::is_builtin(&call.name) {
+            return Some(&call.name);
+        }
+    }
+    None
+}
+
+fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_labels: &[(String, String)]) -> Result<(), String> {
+    // Debug annotations (Phase 9 PDB): map this statement's first emitted instruction
+    // back to its VPy source line, and flag native/builtin calls for step-into.
+    let src_line = stmt.source_line();
+    if src_line > 0 {
+        asm.push_str(&format!("; VPy_LINE:{}\n", src_line));
+        if let Some(name) = primary_builtin_call(stmt) {
+            asm.push_str(&format!("; NATIVE_CALL: {} at line {}\n", name.to_ascii_uppercase(), src_line));
+        }
+    }
     match stmt {
         Stmt::Assign { target, value, .. } => {
             match target {
@@ -372,13 +620,13 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
                     asm.push_str("    TFR D,X         ; X = array base pointer\n");
                     asm.push_str("    LDD TMPPTR      ; D = offset\n");
                     asm.push_str("    LEAX D,X        ; X = base + offset\n");
-                    asm.push_str("    STX TMPPTR2     ; Save computed address\n");
+                    asm.push_str("    PSHS X          ; Save computed address (stack-safe across function calls)\n");
 
                     // 4. Evaluate value to assign
                     expressions::emit_simple_expr(value, asm, assets);
 
                     // 5. Store value at computed address with correct width dispatch
-                    asm.push_str("    LDX TMPPTR2     ; Load computed address\n");
+                    asm.push_str("    PULS X          ; Restore computed address\n");
                     if element_size == 1 {
                         // 8-bit store: B holds low byte from emit_simple_expr (LDX doesn't modify D/B)
                         asm.push_str("    STB ,X          ; Store 8-bit value\n");
@@ -466,24 +714,24 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             let end = fresh_label("IF_END");
             let mut next = fresh_label("IF_NEXT");
             let simple_if = elifs.is_empty() && else_body.is_none();
-            expressions::emit_simple_expr(cond, asm, assets);
-            // D already holds the condition result from emit_simple_expr; branch directly.
-            asm.push_str(&format!("    LBEQ {}\n", next));
-            for s in body { generate_statement(s, asm, assets)?; }
+            // Peephole: emit direct compare-and-branch for `if x == LIT` / `if x != LIT`
+            // patterns (saves ~15 cycles vs the boolean-materialise+LBEQ path).
+            // Falls back to the generic path for non-Compare conds and for ordered
+            // comparisons (signed/unsigned tricky with mixed i16/u16 globals).
+            expressions::emit_branch_if_false(cond, &next, asm, assets);
+            for s in body { generate_statement(s, asm, assets, loop_labels)?; }
             asm.push_str(&format!("    LBRA {}\n", end));
             for (i, (c, b)) in elifs.iter().enumerate() {
                 asm.push_str(&format!("{}:\n", next));
                 let new_next = if i == elifs.len() - 1 && else_body.is_none() { end.clone() } else { fresh_label("IF_NEXT") };
-                expressions::emit_simple_expr(c, asm, assets);
-                // D already holds the condition result from emit_simple_expr; branch directly.
-                asm.push_str(&format!("    LBEQ {}\n", new_next));
-                for s in b { generate_statement(s, asm, assets)?; }
+                expressions::emit_branch_if_false(c, &new_next, asm, assets);
+                for s in b { generate_statement(s, asm, assets, loop_labels)?; }
                 asm.push_str(&format!("    LBRA {}\n", end));
                 next = new_next;
             }
             if let Some(eb) = else_body {
                 asm.push_str(&format!("{}:\n", next));
-                for s in eb { generate_statement(s, asm, assets)?; }
+                for s in eb { generate_statement(s, asm, assets, loop_labels)?; }
             } else if !elifs.is_empty() || simple_if {
                 if next != end {
                     asm.push_str(&format!("{}:\n", next));
@@ -491,31 +739,166 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo]) -> Re
             }
             asm.push_str(&format!("{}:\n", end));
         }
-        
+
         Stmt::While { cond, body, .. } => {
-            // Copied from core/src/backend/m6809/statements.rs
             let ls = fresh_label("WH");
             let le = fresh_label("WH_END");
+            let mut inner_labels = loop_labels.to_vec();
+            inner_labels.push((le.clone(), ls.clone())); // break→end, continue→top
             asm.push_str(&format!("{}: ; while start\n", ls));
-            expressions::emit_simple_expr(cond, asm, assets);
-            // D already holds the condition result from emit_simple_expr; branch directly.
-            asm.push_str(&format!("    LBEQ {}\n", le));
-            for s in body { generate_statement(s, asm, assets)?; }
+            // Same peephole as Stmt::If — direct compare-and-branch when applicable.
+            expressions::emit_branch_if_false(cond, &le, asm, assets);
+            for s in body { generate_statement(s, asm, assets, &inner_labels)?; }
             asm.push_str(&format!("    LBRA {}\n{}: ; while end\n", ls, le));
         }
-        
+
+        Stmt::Break { .. } => {
+            if let Some((break_lbl, _)) = loop_labels.last() {
+                asm.push_str(&format!("    LBRA {}  ; break\n", break_lbl));
+            } else {
+                return Err("break outside of loop".to_string());
+            }
+        }
+
+        Stmt::Continue { .. } => {
+            if let Some((_, continue_lbl)) = loop_labels.last() {
+                asm.push_str(&format!("    LBRA {}  ; continue\n", continue_lbl));
+            } else {
+                return Err("continue outside of loop".to_string());
+            }
+        }
+
+        Stmt::ForIn { var, iterable, body, source_line, .. } => {
+            let ls = fresh_label("FI");
+            let li = fresh_label("FI_INC");  // continue target
+            let le = fresh_label("FI_END");
+            let mut inner_labels = loop_labels.to_vec();
+            inner_labels.push((le.clone(), li.clone()));
+
+            let var_label  = format!("VAR_{}", var.to_uppercase());
+            let ctr_label  = format!("VAR__FI_{}", source_line);
+            let base_label = format!("VAR__FI_{}_BASE", source_line);
+            let len_label  = format!("VAR__FI_{}_LEN", source_line);
+
+            // Evaluate array base pointer (D = pointer)
+            expressions::emit_simple_expr(iterable, asm, assets);
+            asm.push_str(&format!("    STD >{}\n", base_label));
+
+            // Array length — compile-time constant via ARRAY_NAME_LEN equate if Ident
+            if let Expr::Ident(id_info) = iterable {
+                asm.push_str(&format!("    LDD #ARRAY_{}_LEN\n", id_info.name.to_uppercase()));
+            } else {
+                asm.push_str("    LDD #0              ; unknown array length\n");
+            }
+            asm.push_str(&format!("    STD >{}\n", len_label));
+
+            // Init counter = 0
+            asm.push_str("    LDD #0\n");
+            asm.push_str(&format!("    STD >{}\n", ctr_label));
+
+            asm.push_str(&format!("{}: ; forin start\n", ls));
+            // Condition: ctr < len
+            asm.push_str(&format!("    LDD >{}\n", ctr_label));
+            asm.push_str(&format!("    CMPD >{}\n", len_label));
+            asm.push_str(&format!("    LBGE {}\n", le));
+
+            // Load element: var = base_ptr[ctr * 2]
+            asm.push_str(&format!("    LDD >{}\n", ctr_label));
+            asm.push_str("    ASLB\n");
+            asm.push_str("    ROLA                ; D = ctr * 2\n");
+            asm.push_str(&format!("    ADDD >{}\n", base_label));
+            asm.push_str("    TFR D,X\n");
+            asm.push_str("    LDD ,X              ; D = arr[ctr]\n");
+            asm.push_str(&format!("    STD >{}\n", var_label));
+
+            for s in body { generate_statement(s, asm, assets, &inner_labels)?; }
+
+            // Continue target: increment counter
+            asm.push_str(&format!("{}: ; forin inc\n", li));
+            asm.push_str(&format!("    LDD >{}\n", ctr_label));
+            asm.push_str("    ADDD #1\n");
+            asm.push_str(&format!("    STD >{}\n", ctr_label));
+            asm.push_str(&format!("    LBRA {}\n", ls));
+            asm.push_str(&format!("{}: ; forin end\n", le));
+        }
+
+        Stmt::For { var, start, end, step, body, .. } => {
+            let ls = fresh_label("FR");
+            let li = fresh_label("FR_INC");
+            let le = fresh_label("FR_END");
+            let mut inner_labels = loop_labels.to_vec();
+            inner_labels.push((le.clone(), li.clone()));
+
+            let var_label = format!("VAR_{}", var.to_uppercase());
+
+            // Init loop variable = start
+            expressions::emit_simple_expr(start, asm, assets);
+            asm.push_str(&format!("    STD >{}\n", var_label));
+
+            asm.push_str(&format!("{}: ; for start\n", ls));
+
+            // Condition: var < end
+            expressions::emit_simple_expr(end, asm, assets);
+            asm.push_str("    STD >TMPVAL         ; for limit\n");
+            asm.push_str(&format!("    LDD >{}\n", var_label));
+            asm.push_str("    CMPD >TMPVAL\n");
+            asm.push_str(&format!("    LBGE {}\n", le));
+
+            for s in body { generate_statement(s, asm, assets, &inner_labels)?; }
+
+            asm.push_str(&format!("{}: ; for inc\n", li));
+            asm.push_str(&format!("    LDD >{}\n", var_label));
+            if let Some(step_expr) = step {
+                expressions::emit_simple_expr(step_expr, asm, assets);
+                asm.push_str("    STD >TMPVAL\n");
+                asm.push_str(&format!("    LDD >{}\n", var_label));
+                asm.push_str("    ADDD >TMPVAL\n");
+            } else {
+                asm.push_str("    ADDD #1\n");
+            }
+            asm.push_str(&format!("    STD >{}\n", var_label));
+            asm.push_str(&format!("    LBRA {}\n", ls));
+            asm.push_str(&format!("{}: ; for end\n", le));
+        }
+
+        Stmt::Switch { expr, cases, default, .. } => {
+            let le = fresh_label("SW_END");
+
+            // Evaluate switch expression once, store to TMPVAL
+            expressions::emit_simple_expr(expr, asm, assets);
+            asm.push_str("    STD >TMPVAL         ; switch value\n");
+
+            for (ci, (case_val, case_body)) in cases.iter().enumerate() {
+                let no_match = fresh_label("SW_NXT");
+                expressions::emit_simple_expr(case_val, asm, assets);
+                asm.push_str("    STD >TMPPTR         ; case value\n");
+                asm.push_str("    LDD >TMPVAL\n");
+                asm.push_str("    CMPD >TMPPTR\n");
+                asm.push_str(&format!("    LBNE {}\n", no_match));
+                for s in case_body { generate_statement(s, asm, assets, loop_labels)?; }
+                asm.push_str(&format!("    LBRA {}\n", le));
+                asm.push_str(&format!("{}: ; case {}\n", no_match, ci));
+            }
+
+            if let Some(default_body) = default {
+                for s in default_body { generate_statement(s, asm, assets, loop_labels)?; }
+            }
+
+            asm.push_str(&format!("{}: ; switch end\n", le));
+        }
+
         Stmt::Return(expr, ..) => {
             if let Some(e) = expr {
                 expressions::emit_simple_expr(e, asm, assets);
             }
             asm.push_str("    RTS\n");
         }
-        
+
         _ => {
             asm.push_str(&format!("    ; TODO: Statement {:?}\n", stmt));
         }
     }
-    
+
     Ok(())
 }
 
@@ -563,11 +946,45 @@ pub fn generate_functions_by_bank(
     bank0_asm.push_str("    ; Initialize global variables\n");
     bank0_asm.push_str("    CLR VPY_MOVE_X        ; MOVE offset defaults to 0\n");
     bank0_asm.push_str("    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0\n");
+    if crate::m6809::level::needs_level_runtime(module) {
+        bank0_asm.push_str("    ; Init camera ONCE at boot (RAM not zero-init). LOAD_LEVEL must NOT\n");
+        bank0_asm.push_str("    ; reset it (matches pitrex): the game sets it via SET_CAMERA_Y before\n");
+        bank0_asm.push_str("    ; LOAD_LEVEL/SPAWN, and GET_LEVEL_FLOOR_Y / the spawn Y-filter read it.\n");
+        bank0_asm.push_str("    LDD #0\n");
+        bank0_asm.push_str("    STD >CAMERA_X\n");
+        bank0_asm.push_str("    STD >CAMERA_Y\n");
+    }
     if has_print_calls(module) {
         bank0_asm.push_str("    LDA #$F8\n");
         bank0_asm.push_str("    STA TEXT_SCALE_H      ; Default height = -8 (normal size)\n");
         bank0_asm.push_str("    LDA #$48\n");
         bank0_asm.push_str("    STA TEXT_SCALE_W      ; Default width = 72 (normal size)\n");
+    }
+    if has_draw_scale_calls(module) {
+        bank0_asm.push_str("    LDA #$7F\n");
+        bank0_asm.push_str("    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)\n");
+    }
+    if has_draw_anim_calls(module) {
+        bank0_asm.push_str("    LDA #$7F\n");
+        bank0_asm.push_str("    STA DRAW_ANIM_SCALE   ; Default anim scale = $7F (127 = full BIOS scale)\n");
+        bank0_asm.push_str("    CLR DRAW_ANIM_SPEED_MUL ; Default speed=0 (use vanim timing)\n");
+        // Zero per-animation state RAM (frame_idx, ticks_left) — see single-bank branch above.
+        for anim_name in collect_draw_anim_names(module) {
+            bank0_asm.push_str(&format!("    CLR ANIM_{}_STATE     ; frame_idx = 0\n", anim_name));
+            bank0_asm.push_str(&format!("    CLR ANIM_{}_STATE+1   ; ticks_left = 0 (forces DAR_INIT)\n", anim_name));
+        }
+    }
+    if has_note_calls(module) {
+        bank0_asm.push_str("    ; Initialize NOTE_STATE channel IDs (pre-clear active flags)\n");
+        bank0_asm.push_str("    LDA #0\n");
+        bank0_asm.push_str("    STA NOTE_STATE        ; channel A: id=0\n");
+        bank0_asm.push_str("    CLR NOTE_STATE+1      ; active=0\n");
+        bank0_asm.push_str("    LDA #1\n");
+        bank0_asm.push_str("    STA NOTE_STATE+10     ; channel B: id=1\n");
+        bank0_asm.push_str("    CLR NOTE_STATE+11     ; active=0\n");
+        bank0_asm.push_str("    LDA #2\n");
+        bank0_asm.push_str("    STA NOTE_STATE+20     ; channel C: id=2\n");
+        bank0_asm.push_str("    CLR NOTE_STATE+21     ; active=0\n");
     }
     let mut array_copy_counter = 0;
     for item in &module.items {
@@ -614,8 +1031,18 @@ pub fn generate_functions_by_bank(
         bank0_asm.push_str("    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)\n");
         // NOTE: Reset0Ref NOT called here - drawing primitives handle it internally
         bank0_asm.push_str("    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811\n");
+        // Auto-inject Joy_Analog ONCE per frame (same rationale as single-bank path).
+        if has_joystick_analog_calls(module) {
+            bank0_asm.push_str("    JSR $F1AA    ; DP_to_D0 (Joy_Analog requires DP=$D0)\n");
+            bank0_asm.push_str("    JSR $F1F5    ; Joy_Analog: poll all 4 axes once → $C81B-$C81E\n");
+            bank0_asm.push_str("    JSR Reset0Ref ; Restore beam state after Joy_Analog\n");
+            bank0_asm.push_str("    JSR $F1AF    ; DP_to_C8 (restore DP for RAM access)\n");
+        }
         if has_beep_calls(module) {
             bank0_asm.push_str("    JSR BEEP_UPDATE_RUNTIME  ; Auto-injected: tick beep countdown timer\n");
+        }
+        if has_note_calls(module) {
+            bank0_asm.push_str("    JSR NOTE_UPDATE_RUNTIME  ; Auto-injected: tick note timers + arpeggio\n");
         }
         generate_function_body(loop_fn, &mut bank0_asm, assets)?;
 

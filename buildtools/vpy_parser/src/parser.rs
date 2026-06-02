@@ -296,6 +296,16 @@ impl<'a> Parser<'a> {
                                 meta.interleaved_frames = Some(n as u8);
                             }
                         }
+                    } else if key.eq_ignore_ascii_case("MAX_ENEMIES") {
+                        if let Expr::Number(n) = &value {
+                            meta.max_enemies = Some((*n as u8).max(1));
+                        }
+                    } else if key.eq_ignore_ascii_case("TARGET") {
+                        match &value {
+                            Expr::StringLit(s) => meta.target = Some(s.to_lowercase()),
+                            Expr::Ident(id)    => meta.target = Some(id.name.to_lowercase()),
+                            _ => {}
+                        }
                     }
                     
                     if let Expr::StringLit(s) = &value {
@@ -1212,7 +1222,8 @@ impl<'a> Parser<'a> {
         let mut default_block = None;
 
         while !self.check(TokenKind::Dedent) {
-            if self.match_ident_case("CASE") {
+            // `case` may be lexed as TokenKind::Case (keyword) or as Identifier
+            if self.match_kind(&TokenKind::Case) || self.match_ident_case("CASE") {
                 let case_expr = self.expression()?;
                 self.consume(TokenKind::Colon)?;
                 self.consume(TokenKind::Newline)?;
@@ -1225,7 +1236,7 @@ impl<'a> Parser<'a> {
                 self.consume(TokenKind::Dedent)?;
 
                 cases.push((case_expr, case_body));
-            } else if self.match_ident_case("DEFAULT") {
+            } else if self.match_kind(&TokenKind::Default) || self.match_ident_case("DEFAULT") {
                 self.consume(TokenKind::Colon)?;
                 self.consume(TokenKind::Newline)?;
                 self.consume(TokenKind::Indent)?;

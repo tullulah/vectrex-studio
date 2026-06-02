@@ -1,0 +1,21 @@
+[project]
+name    = "star_hop"
+version = "0.1.0"
+entry   = "src/main.vpy"
+
+[build]
+output        = "build/star_hop.bin"
+target        = "vectrex"
+optimization  = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+vectors    = ["assets/vectors/*.vec"]
+animations = ["assets/animations/*.vanim"]
+enemies    = ["assets/enemies/*.venemy"]
+music      = ["assets/music/*.vmus"]
+sfx        = ["assets/sfx/*.vsfx"]
+playground = ["assets/playground/*.vplay"]

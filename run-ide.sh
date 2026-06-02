@@ -198,28 +198,31 @@ if [ "$NO_RUST_BUILD" = false ]; then
   else
     RESOURCES_DIR="$ROOT/ide/electron/resources"
 
-    # El workspace raíz incluye buildtools/* y core, por lo que ambos
-    # binarios se generan en $ROOT/target/release/
+    # Profile selection: --fast uses dev-fast (codegen-units=16, lto=false →
+    # 3-5× faster compile, binary ~20% bigger and a few % slower at runtime).
+    # Without --fast use full release (smaller/faster binary, slower build).
+    if [ "$FAST" = true ]; then
+      CARGO_PROFILE="dev-fast"
+      CARGO_TARGET_DIR_NAME="dev-fast"
+      echo '[INFO] cargo build --profile dev-fast (vpy_cli) — fast-iter profile'
+    else
+      CARGO_PROFILE="release"
+      CARGO_TARGET_DIR_NAME="release"
+      echo '[INFO] cargo build --release (vpy_cli)'
+    fi
 
-    # 1. Build buildtools compiler (vpy_cli) — compilador principal
-    echo '[INFO] cargo build --release (vpy_cli)'
-    (cd "$ROOT" && cargo build --release --bin vpy_cli)
+    # Build vpy_cli (buildtools compiler) and vpy_lsp (legacy core LSP). The
+    # legacy core compiler binary (vectrexc) is deprecated and the IDE defaults
+    # to buildtools, but the LSP still lives in core/ and powers diagnostics
+    # inside the editor — without it, the IDE silently runs yesterday's LSP.
+    (cd "$ROOT" && cargo build --profile "$CARGO_PROFILE" --bin vpy_cli --bin vpy_lsp)
     if [ $? -ne 0 ]; then
-      echo '[ERR ] cargo build (vpy_cli) falló'
+      echo '[ERR ] cargo build (vpy_cli + vpy_lsp) falló'
       exit 1
     fi
-    cp "$ROOT/target/release/vpy_cli" "$RESOURCES_DIR/vpy_cli"
-    echo "[OK  ] vpy_cli copiado a $RESOURCES_DIR/"
-
-    # 2. Build core compiler (vectrexc) — compilador legacy usado por el IDE
-    echo '[INFO] cargo build --release (vectrexc)'
-    (cd "$ROOT" && cargo build --release --bin vectrexc)
-    if [ $? -ne 0 ]; then
-      echo '[ERR ] cargo build (vectrexc) falló'
-      exit 1
-    fi
-    cp "$ROOT/target/release/vectrexc" "$RESOURCES_DIR/vectrexc"
-    echo "[OK  ] vectrexc copiado a $RESOURCES_DIR/"
+    cp "$ROOT/target/$CARGO_TARGET_DIR_NAME/vpy_cli" "$RESOURCES_DIR/vpy_cli"
+    cp "$ROOT/target/$CARGO_TARGET_DIR_NAME/vpy_lsp" "$RESOURCES_DIR/vpy_lsp"
+    echo "[OK  ] vpy_cli + vpy_lsp copied to $RESOURCES_DIR/"
   fi
 fi
 
@@ -250,38 +253,25 @@ wait_for_port() {
   return 1
 }
 
+# ALWAYS rebuild the frontend dist/ — Electron falls back to dist/index.html
+# whenever VITE_DEV_SERVER_URL isn't set (production mode, npm run start, packaged
+# app, or if the Vite dev server fails to come up). Without this step, every edit
+# to src/ or public/ is invisible to those launch paths and the IDE silently runs
+# yesterday's bundle. `npm run build` already includes the typecheck.
+echo '[INFO] Construyendo frontend (dist/) ...'
+(cd "$ROOT/ide/frontend" && npm run build)
+if [ $? -ne 0 ]; then
+  echo '[ERR ] Frontend build falló (typecheck o vite build)'
+  exit 1
+fi
+echo '[OK  ] dist/ actualizado'
+
 if [ "$PRODUCTION" = true ]; then
   echo '[INFO] Modo producción - sin hot reload'
-  
-  # Verificación de tipos TypeScript
-  echo '[INFO] Verificando tipos TypeScript...'
-  (cd "$ROOT/ide/frontend" && npm run typecheck)
-  if [ $? -ne 0 ]; then
-    echo '[ERR ] TypeScript typecheck falló - el código tiene errores de tipos'
-    exit 1
-  fi
-  echo '[OK  ] TypeScript typecheck exitoso'
-  
-  # Asegurar que el frontend esté construido
-  echo '[INFO] Construyendo frontend...'
-  (cd "$ROOT/ide/frontend" && npm run build)
-  if [ $? -ne 0 ]; then
-    echo '[ERR ] Frontend build falló'
-    exit 1
-  fi
-  # Ejecutar en modo producción
+  # Ejecutar en modo producción (dist/ ya está fresco arriba)
   (cd "$ROOT/ide/electron" && npm run start)
 else
   echo '[INFO] Modo desarrollo - con hot reload'
-  
-  # Verificación de tipos TypeScript
-  echo '[INFO] Verificando tipos TypeScript...'
-  (cd "$ROOT/ide/frontend" && npm run typecheck)
-  if [ $? -ne 0 ]; then
-    echo '[ERR ] TypeScript typecheck falló - el código tiene errores de tipos'
-    exit 1
-  fi
-  echo '[OK  ] TypeScript typecheck exitoso'
   
   if [ "$NO_CLEAR" = true ]; then
     export FORCE_COLOR=1

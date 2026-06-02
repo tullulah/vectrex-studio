@@ -669,7 +669,7 @@ export const SFXEditor: React.FC<SFXEditorProps> = ({
         </div>
 
         {/* Right: Controls */}
-        <div style={{ width: 280, padding: 12, overflowY: 'auto' }}>
+        <div style={{ width: 280, padding: 12 }}>
           {/* Envelope */}
           <div style={{ fontSize: 11, color: '#666', marginBottom: 8 }}>Amplitude Envelope</div>
           <Slider label="Attack" value={sfx.envelope.attack} min={0} max={500} unit="ms" onChange={v => updateEnvelope({ attack: v })} />

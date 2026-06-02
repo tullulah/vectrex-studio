@@ -4,15 +4,15 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::fs;
+use std::sync::Mutex;
 use crate::backend::m6809_binary_emitter::BinaryEmitter;
 
-// Global variable to store include directory (set before assembly)
-static mut INCLUDE_DIR: Option<PathBuf> = None;
+// Global include directory (set before assembly). Mutex (not `static mut`) so
+// we don't trip the Rust 2024 `static_mut_refs` UB warning.
+static INCLUDE_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 pub fn set_include_dir(dir: Option<PathBuf>) {
-    unsafe {
-        INCLUDE_DIR = dir;
-    }
+    *INCLUDE_DIR.lock().unwrap() = dir;
 }
 
 /// Convierte código M6809 assembly a formato binario
@@ -252,9 +252,11 @@ fn parse_include_directive(line: &str) -> Option<String> {
 /// Resuelve path de INCLUDE buscando en directorios estándar
 fn resolve_include_path(include_path: &str) -> Option<PathBuf> {
     // Priorizar el directorio especificado por --include-dir
-    let base_dir = unsafe {
-        INCLUDE_DIR.clone().or_else(|| std::env::current_dir().ok())
-    }?;
+    let base_dir = INCLUDE_DIR
+        .lock()
+        .unwrap()
+        .clone()
+        .or_else(|| std::env::current_dir().ok())?;
     
     // Buscar workspace root (sube hasta encontrar Cargo.toml en root)
     let workspace_root = {

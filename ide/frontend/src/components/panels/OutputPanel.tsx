@@ -7,6 +7,7 @@ interface VecxMetrics {
   frameCount: number;
   running: boolean;
   vectorCount: number;
+  idleCycles: number;   // cycles spent inside Wait_Recal polling (vsync wait)
 }
 
 const PerformanceChart: React.FC<{
@@ -126,8 +127,11 @@ export const OutputPanel: React.FC = () => {
   const [metrics, setMetrics] = useState<VecxMetrics | null>(null);
   const [cyclesData, setCyclesData] = useState<number[]>([]);
   const [vectorData, setVectorData] = useState<number[]>([]);
+  const [instrData, setInstrData] = useState<number[]>([]);
+  const [workData, setWorkData] = useState<number[]>([]);
+  const [fps, setFps] = useState<number>(0);
   const timerRef = useRef<number|null>(null);
-  const prevRef = useRef<{ cycles: number; frames: number } | null>(null);
+  const prevRef = useRef<{ cycles: number; frames: number; instr: number; idle: number; t: number } | null>(null);
 
   // RAM allocated: computed from PDB variables (compile-time info)
   const pdbData = useDebugStore(s => s.pdbData);
@@ -159,25 +163,46 @@ export const OutputPanel: React.FC = () => {
       setMetrics(m || null);
 
       if (m && m.running) {
-        // Cycles per frame: delta cycles / delta frames since last sample
+        // Per-frame deltas (cycles + instructions). Wall-clock FPS from
+        // delta frames over delta real-time; if real FPS < 50 we're below
+        // Vectrex target rate → visible flicker even if cycles/frame fits.
+        const now = performance.now();
         let cyclesPerFrame = 0;
+        let instrPerFrame = 0;
+        let workPct = 0;
+        let realFps = 0;
         const prev = prevRef.current;
         if (prev && m.frameCount > prev.frames) {
           const dCycles = m.totalCycles - prev.cycles;
+          const dInstr = m.instructionCount - prev.instr;
+          const dIdle = m.idleCycles - prev.idle;
           const dFrames = m.frameCount - prev.frames;
+          const dTime = now - prev.t;
           cyclesPerFrame = Math.round(dCycles / dFrames);
+          instrPerFrame = Math.round(dInstr / dFrames);
+          // Work % = (cycles outside Wait_Recal) / total cycles. Higher = closer
+          // to CPU bound. Below ~70 % usually means plenty of headroom; above
+          // ~95 % the game logic is filling the frame and you're near the wall.
+          if (dCycles > 0) workPct = Math.max(0, Math.min(100, ((dCycles - dIdle) / dCycles) * 100));
+          if (dTime > 0) realFps = (dFrames / dTime) * 1000;
         }
-        prevRef.current = { cycles: m.totalCycles, frames: m.frameCount };
+        prevRef.current = { cycles: m.totalCycles, frames: m.frameCount, instr: m.instructionCount, idle: m.idleCycles, t: now };
 
         // Vector count: directly from emulator (last completed frame)
         const vectors = m.vectorCount || 0;
 
         setCyclesData(prev => [...prev.slice(-39), cyclesPerFrame]);
         setVectorData(prev => [...prev.slice(-39), vectors]);
+        setInstrData(prev => [...prev.slice(-39), instrPerFrame]);
+        setWorkData(prev => [...prev.slice(-39), Math.round(workPct)]);
+        setFps(realFps);
       } else {
         prevRef.current = null;
         setCyclesData(prev => [...prev.slice(-39), 0]);
         setVectorData(prev => [...prev.slice(-39), 0]);
+        setInstrData(prev => [...prev.slice(-39), 0]);
+        setWorkData(prev => [...prev.slice(-39), 0]);
+        setFps(0);
       }
     } catch (e) {
       setMetrics(null);
@@ -197,6 +222,14 @@ export const OutputPanel: React.FC = () => {
   return (
     <div style={{display:'flex', flexDirection:'column', height:'100%', fontSize:12}}>
       <div style={{padding:'8px 12px', borderBottom:'1px solid #333', display:'flex', alignItems:'center', gap:12}}>
+        {/* Wall-clock FPS — target is 50 (Vectrex PAL). Below 50 → flicker even if cycles/frame fits budget. */}
+        <span style={{
+          fontFamily:'monospace',
+          color: fps >= 49 ? '#0f0' : fps >= 40 ? '#ff0' : fps > 0 ? '#f44' : '#888',
+          fontWeight:'bold'
+        }} title="Real frames per second (wall clock). Vectrex target = 50 Hz.">
+          FPS: {fps > 0 ? fps.toFixed(1) : '--'} / 50
+        </span>
         <span style={{marginLeft:'auto', opacity:0.7}}>
           Status: {metrics?.running ? '🟢 Running' : '🔴 Stopped'}
         </span>
@@ -303,6 +336,25 @@ export const OutputPanel: React.FC = () => {
             max={200}
             color="#ffaa00"
             dangerZone={150}
+          />
+
+          <PerformanceChart
+            label="Instr/Frame"
+            data={instrData}
+            max={8000}
+            color="#ff66cc"
+            dangerZone={6000}
+          />
+
+          {/* Work % = real game cycles / total cycles. Filters out Wait_Recal
+              padding so you see actual CPU pressure. Above 90 % = near limit. */}
+          <PerformanceChart
+            label="Work %"
+            data={workData}
+            max={100}
+            color="#66ddff"
+            dangerZone={90}
+            unit="%"
           />
         </div>
       </div>

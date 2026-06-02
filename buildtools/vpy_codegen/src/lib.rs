@@ -1,14 +1,38 @@
-//! vpy_codegen: Generate M6809 assembly
+//! vpy_codegen: Generate assembly for multiple targets.
 //!
 //! Phase 5 of the compilation pipeline.
-//! Produces assembly code per bank with metadata.
+//! Targets:
+//!   - M6809 (Vectrex BIOS, cartridge ROM)
+//!   - ARM Thumb2 / RP2350 (bare metal, bus master)
+//!   - ARM32 / PiTrex (Pi Zero bare metal, libvectrexInterface SDK)
 
 pub mod m6809;
+pub mod arm;
+pub mod pitrex;
+pub mod uvm2;
 pub mod vecres;
 pub mod musres;
 pub mod levelres;
 pub mod sfxres;
+pub mod instrres;
+pub mod animres;
+pub mod venemy;
 pub mod stack_validator;
+
+pub use venemy::*;
+
+/// Compilation target selection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Target {
+    /// Vectrex original hardware — MC6809 assembly + BIOS
+    M6809,
+    /// RP2350 debug cartridge — ARM Thumb2 + bus master VIA access
+    Rp2350,
+    /// PiTrex (Pi Zero inside Vectrex) — ARM32 + libvectrexInterface SDK
+    PiTrex,
+    /// UVM2 (Ultimate Vectrex Multicart 2) — ARM Thumb2 / Cortex-M33, Ralf & Jason's PCB
+    Uvm2,
+}
 
 use std::collections::HashMap;
 use thiserror::Error;
@@ -72,10 +96,13 @@ pub struct AssetInfo {
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AssetType {
-    Vector,  // .vec file
-    Music,   // .vmus file (background music, loops)
-    Sfx,     // .vsfx file (sound effect, parametric SFXR-style)
-    Level,   // .vlevel file (level data for games)
+    Vector,     // .vec file
+    Music,      // .vmus file (background music, loops)
+    Sfx,        // .vsfx file (sound effect, parametric SFXR-style)
+    Level,      // .vlevel file (level data for games)
+    Animation,  // .vanim file (frame-by-frame vector animation)
+    Instrument, // .vinstr file (pitched instrument timbre)
+    Enemy,      // .venemy file (enemy type definition)
 }
 
 #[derive(Debug, Clone, Error)]
@@ -116,6 +143,17 @@ impl BankConfig {
             helpers_bank: 0,
         }
     }
+
+    /// PiTrex configuration — ARM bare-metal, no cartridge ROM limit (8MB ceiling)
+    pub fn pitrex() -> Self {
+        const PITREX_MAX: usize = 8 * 1024 * 1024;
+        Self {
+            rom_total_size: PITREX_MAX,
+            rom_bank_size: PITREX_MAX,
+            rom_bank_count: 1,
+            helpers_bank: 0,
+        }
+    }
 }
 
 /// Generated assembly output - UNIFIED format
@@ -149,6 +187,51 @@ pub fn generate_from_module(
     title: &str,
     assets: &[AssetInfo],
 ) -> Result<GeneratedASM, CodegenError> {
+    generate_from_module_with_target(module, bank_config, title, assets, &Target::M6809)
+}
+
+/// Generate assembly for a specific target.
+pub fn generate_from_module_with_target(
+    module: &Module,
+    bank_config: &BankConfig,
+    title: &str,
+    assets: &[AssetInfo],
+    target: &Target,
+) -> Result<GeneratedASM, CodegenError> {
+    match target {
+        Target::Rp2350 => {
+            let asm_source = arm::generate_arm_asm(module, title, assets)
+                .map_err(CodegenError::Error)?;
+            return Ok(GeneratedASM {
+                asm_source,
+                bank_config: bank_config.clone(),
+                symbols: HashMap::new(),
+                external_refs: Vec::new(),
+            });
+        }
+        Target::PiTrex => {
+            let asm_source = pitrex::generate_pitrex_asm(module, title, assets)
+                .map_err(CodegenError::Error)?;
+            return Ok(GeneratedASM {
+                asm_source,
+                bank_config: bank_config.clone(),
+                symbols: HashMap::new(),
+                external_refs: Vec::new(),
+            });
+        }
+        Target::Uvm2 => {
+            let asm_source = uvm2::generate_uvm2_asm(module, title, assets)
+                .map_err(CodegenError::Error)?;
+            return Ok(GeneratedASM {
+                asm_source,
+                bank_config: bank_config.clone(),
+                symbols: HashMap::new(),
+                external_refs: Vec::new(),
+            });
+        }
+        Target::M6809 => {} // fall through to M6809 path
+    }
+
     // Use real M6809 backend
     let asm_source = m6809::generate_m6809_asm(
         module,

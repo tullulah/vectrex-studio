@@ -384,6 +384,7 @@ export const useProjectStore = create<ProjectState>()(
         const { vpyProject } = get();
         if (!vpyProject) return null;
         
+        if (!vpyProject.config.build?.output) return null;
         const output = vpyProject.config.build.output;
         const rootDir = vpyProject.rootDir.replace(/\\/g, '/');
         const outputPath = output.replace(/\\/g, '/');

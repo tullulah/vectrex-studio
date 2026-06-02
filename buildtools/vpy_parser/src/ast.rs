@@ -24,6 +24,10 @@ pub struct ModuleMeta {
     pub music_timer: bool,
     /// Interleaved rendering: split draw calls across N frame groups. None = disabled.
     pub interleaved_frames: Option<u8>,
+    /// Max simultaneous enemies (default: 8 for Vectrex). Overridable with META MAX_ENEMIES = N.
+    pub max_enemies: Option<u8>,
+    /// Build target override (e.g. "pitrex", "rp2350"). None = default m6809.
+    pub target: Option<String>,
 }
 
 impl Default for ModuleMeta {
@@ -37,6 +41,8 @@ impl Default for ModuleMeta {
             rom_bank_size: None,
             music_timer: true,
             interleaved_frames: None,
+            max_enemies: None,
+            target: None,
         }
     }
 }

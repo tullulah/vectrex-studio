@@ -81,18 +81,22 @@ enum Commands {
     Asm {
         /// Entry point VPy file or .vpyproj
         input: PathBuf,
-        
+
         /// ROM total size (e.g. 524288 for 512KB)
         #[arg(long, default_value = "32768")]
         rom_size: usize,
-        
+
         /// ROM bank size (e.g. 16384 for 16KB)
         #[arg(long, default_value = "32768")]
         bank_size: usize,
-        
+
         /// Output ASM file (optional)
         #[arg(short, long)]
         output: Option<PathBuf>,
+
+        /// Compilation target (m6809 or rp2350)
+        #[arg(long, default_value = "m6809")]
+        target: String,
     },
     
     /// Allocate functions to banks
@@ -129,26 +133,30 @@ enum Commands {
     Build {
         /// Entry point VPy file or .vpyproj
         input: PathBuf,
-        
+
         /// Output ROM file
         #[arg(short, long)]
         output: Option<PathBuf>,
-        
+
         /// ROM total size (e.g. 524288 for 512KB multibank)
         #[arg(long, default_value = "32768")]
         rom_size: usize,
-        
+
         /// ROM bank size (e.g. 16384 for 16KB banks)
         #[arg(long, default_value = "32768")]
         bank_size: usize,
-        
+
         /// Generate debug symbols (.pdb)
         #[arg(long)]
         debug: bool,
-        
+
         /// Show intermediate outputs
         #[arg(short, long)]
         verbose: bool,
+
+        /// Compilation target (m6809 or rp2350)
+        #[arg(long, default_value = "m6809")]
+        target: String,
     },
 }
 
@@ -171,9 +179,9 @@ fn main() -> Result<()> {
             cmd_codegen(&input, &format)?;
         }
         
-        Commands::Asm { input, rom_size, bank_size, output } => {
+        Commands::Asm { input, rom_size, bank_size, output, target } => {
             println!("{}", "=== GENERATE UNIFIED ASM ===".bright_cyan().bold());
-            cmd_asm(&input, rom_size, bank_size, output)?;
+            cmd_asm(&input, rom_size, bank_size, output, target)?;
         }
         
         Commands::Allocate { input, graph } => {
@@ -191,9 +199,9 @@ fn main() -> Result<()> {
             cmd_link(&input, output)?;
         }
         
-        Commands::Build { input, output, rom_size, bank_size, debug, verbose } => {
+        Commands::Build { input, output, rom_size, bank_size, debug, verbose, target } => {
             println!("{}", "=== FULL BUILD PIPELINE ===".bright_green().bold());
-            cmd_build(&input, output, rom_size, bank_size, debug, verbose)?;
+            cmd_build(&input, output, rom_size, bank_size, debug, verbose, target)?;
         }
     }
     
@@ -589,7 +597,7 @@ fn cmd_codegen(input: &PathBuf, _format: &str) -> Result<()> {
     Ok(())
 }
 
-fn cmd_asm(input: &PathBuf, rom_size: usize, bank_size: usize, output: Option<PathBuf>) -> Result<()> {
+fn cmd_asm(input: &PathBuf, rom_size: usize, bank_size: usize, output: Option<PathBuf>, target: String) -> Result<()> {
     // Parse project or single file
     let source_path = if input.extension().and_then(|s| s.to_str()) == Some("vpyproj") {
         println!("{}", "Detected .vpyproj - loading project...".bright_cyan());
@@ -647,12 +655,20 @@ fn cmd_asm(input: &PathBuf, rom_size: usize, bank_size: usize, output: Option<Pa
     }
     
     println!("\n{}", "Generating unified ASM...".bright_white());
-    
+
+    let build_target = match target.as_str() {
+        "rp2350"  => vpy_codegen::Target::Rp2350,
+        "pitrex"  => vpy_codegen::Target::PiTrex,
+        "uvm2"    => vpy_codegen::Target::Uvm2,
+        _ => vpy_codegen::Target::M6809,
+    };
+    println!("  Target: {}", target.bright_yellow());
+
     // Discover assets (vectors, music, sfx, levels)
     let assets = discover_assets(&source_path);
-    
-    // Generate unified ASM using real M6809 backend
-    let generated = vpy_codegen::generate_from_module(&module, &bank_config, title, &assets)
+
+    // Generate unified ASM using selected backend
+    let generated = vpy_codegen::generate_from_module_with_target(&module, &bank_config, title, &assets, &build_target)
         .context("Failed to generate ASM")?;
     
     println!("  ASM size: {} bytes", generated.asm_source.len());
@@ -705,7 +721,882 @@ fn cmd_link(_input: &PathBuf, _output: Option<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_size: usize, _debug: bool, verbose: bool) -> Result<()> {
+/// Locate the best arm-none-eabi-gcc available.
+/// Prefers arm-gcc-bin@10 (Homebrew osx-cross, has newlib) over the system one.
+fn find_arm_gcc() -> String {
+    let candidates = [
+        "/opt/arm-toolchain/bin/arm-none-eabi-gcc",   // official ARM GNU 10.3-2021.10
+        "/opt/homebrew/Cellar/arm-gcc-bin@10/10.3-2021.10_1/bin/arm-none-eabi-gcc",
+        "/usr/local/Cellar/arm-gcc-bin@10/10.3-2021.10_1/bin/arm-none-eabi-gcc",
+        "arm-none-eabi-gcc",
+    ];
+    for c in &candidates {
+        if std::path::Path::new(c).exists() || !c.starts_with('/') {
+            return c.to_string();
+        }
+    }
+    "arm-none-eabi-gcc".to_string()
+}
+
+fn find_arm_as() -> String {
+    let gcc = find_arm_gcc();
+    // Replace gcc with as in the same directory
+    let as_path = std::path::Path::new(&gcc)
+        .parent()
+        .map(|d| d.join("arm-none-eabi-as"))
+        .filter(|p| p.exists())
+        .map(|p| p.to_string_lossy().to_string());
+    as_path.unwrap_or_else(|| "arm-none-eabi-as".to_string())
+}
+
+fn find_arm_objcopy() -> String {
+    let gcc = find_arm_gcc();
+    let oc_path = std::path::Path::new(&gcc)
+        .parent()
+        .map(|d| d.join("arm-none-eabi-objcopy"))
+        .filter(|p| p.exists())
+        .map(|p| p.to_string_lossy().to_string());
+    oc_path.unwrap_or_else(|| "arm-none-eabi-objcopy".to_string())
+}
+
+fn cmd_build_pitrex(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Result<()> {
+    use std::process::Command;
+
+    let arm_gcc = find_arm_gcc();
+    println!("{}", "Target: PiTrex (ARM32 / ARMv6 / Pi Zero)".bright_yellow().bold());
+
+    // Phase 1: Load project or single file
+    let (source_path, project_dir) = if input.extension().and_then(|s| s.to_str()) == Some("vpyproj") {
+        let project_info = vpy_loader::load_project(input)
+            .context("Failed to load project")?;
+        let dir = input.parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf();
+        (project_info.entry_point, dir)
+    } else {
+        let dir = {
+            let parent = input.parent().unwrap_or_else(|| std::path::Path::new("."));
+            if parent.file_name().and_then(|n| n.to_str()) == Some("src") {
+                parent.parent().unwrap_or(parent).to_path_buf()
+            } else {
+                find_project_root_from(parent)
+            }
+        };
+        (input.clone(), dir)
+    };
+
+    // Phase 2: Parse
+    println!("\n{}", "Phase 1: Parse".bright_cyan().bold());
+    let source = std::fs::read_to_string(&source_path)
+        .context("Failed to read source file")?;
+    let tokens = vpy_parser::lex(&source)
+        .map_err(|e| anyhow::anyhow!("Lex error: {}", e))?;
+    let module = vpy_parser::parser::parse(tokens, source_path.to_str().unwrap_or("unknown"))
+        .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
+    println!("  {} Parsed {} items", "✓".green(), module.items.len());
+
+    // Phase 3: Unify
+    println!("\n{}", "Phase 2: Unify".bright_cyan().bold());
+    let mut modules_map = std::collections::HashMap::new();
+    let module_name = source_path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("main")
+        .to_string();
+    modules_map.insert(module_name.clone(), module);
+    let unified = vpy_unifier::unify_modules(modules_map, &module_name)
+        .map_err(|e| anyhow::anyhow!("Unification error: {}", e))?;
+    println!("  {} Unified {} items", "✓".green(), unified.items.len());
+
+    // Phase 4: PiTrex ARM32 codegen
+    println!("\n{}", "Phase 3: PiTrex ARM32 Codegen".bright_cyan().bold());
+    let title = unified.meta.title_override.as_deref().unwrap_or("VPY GAME");
+    let bank_config = vpy_codegen::BankConfig::pitrex();
+    let assets = discover_assets(&source_path);
+
+    let generated = vpy_codegen::generate_from_module_with_target(
+        &unified, &bank_config, title, &assets, &vpy_codegen::Target::PiTrex,
+    ).context("PiTrex codegen failed")?;
+    println!("  {} Generated {} bytes of ARM32 assembly", "✓".green(), generated.asm_source.len());
+
+    // Determine output paths
+    let build_dir = project_dir.join("build");
+    std::fs::create_dir_all(&build_dir)?;
+
+    let project_name: String = output.as_ref()
+        .and_then(|p| p.file_stem())
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string())
+        .or_else(|| vpyproj_project_name(input))
+        .unwrap_or_else(|| {
+            project_dir.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("output")
+                .to_string()
+        });
+
+    let s_path   = build_dir.join(format!("{}.s",   project_name));
+    let asm_path = build_dir.join(format!("{}.asm", project_name));
+    let o_path   = build_dir.join(format!("{}.o",   project_name));
+    let elf_path = build_dir.join(format!("{}.elf", project_name));
+    let img_path = output.unwrap_or_else(|| build_dir.join(format!("{}.img", project_name)));
+
+    std::fs::write(&s_path, &generated.asm_source)
+        .with_context(|| format!("Failed to write {}", s_path.display()))?;
+    std::fs::copy(&s_path, &asm_path)
+        .with_context(|| format!("Failed to write {}", asm_path.display()))?;
+    println!("  {} ARM32 ASM written: {}", "✓".green(), s_path.display());
+
+    // Find PiTrex SDK — search order:
+    //   1. PITREX_SDK env var
+    //   2. Bundled alongside this binary: <exe_dir>/pitrex-sdk  (IDE packaging)
+    //   3. ~/pitrex-baremetal
+    //   4. /opt/pitrex-baremetal
+    let exe_dir = std::env::current_exe().ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    let sdk_path = std::env::var("PITREX_SDK").ok()
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            let home = std::env::var("HOME").ok()?;
+            let p = std::path::PathBuf::from(&home).join("projects/pitrex-baremetal");
+            if p.exists() { Some(p) } else { None }
+        })
+        .or_else(|| {
+            let home = std::env::var("HOME").ok()?;
+            let p = std::path::PathBuf::from(&home).join("pitrex-baremetal");
+            if p.exists() { Some(p) } else { None }
+        })
+        .or_else(|| {
+            let p = exe_dir.as_ref()?.join("pitrex-sdk");
+            if p.join("lib").exists() { Some(p) } else { None }
+        })
+        .or_else(|| {
+            let p = std::path::Path::new("/opt/pitrex-baremetal");
+            if p.exists() { Some(p.to_path_buf()) } else { None }
+        })
+        .ok_or_else(|| anyhow::anyhow!(
+            "PiTrex SDK not found.\n\
+             Options:\n\
+             - Bundle it: copy SDK libs to ide/electron/resources/pitrex-sdk/lib/\n\
+             - Set env var: export PITREX_SDK=/path/to/pitrex-baremetal\n\
+             - Install to: ~/pitrex-baremetal or /opt/pitrex-baremetal"
+        ))?;
+    if verbose {
+        println!("  PiTrex SDK: {}", sdk_path.display());
+    }
+
+    // ── Detect SDK layout ────────────────────────────────────────────────────
+    // Malban/gtoal SDK (github.com/malban/pitrex-baremetal) has:
+    //   pitrex/lib7/  (Pi Zero 2 W, ARMv8/Cortex-A53)  ← try first
+    //   pitrex/lib/   (Pi Zero 1,   ARMv6/ARM1176)
+    // Bundled VPy SDK has:
+    //   lib/ obj/standalone/ linker/pitrex_standalone.ld
+    let malban_lib7 = sdk_path.join("pitrex/lib7");
+    let malban_lib1 = sdk_path.join("pitrex/lib");
+
+    if malban_lib7.exists() || malban_lib1.exists() {
+        // ── Malban SDK layout ─────────────────────────────────────────────
+        let (lib_dir, as_arch, gcc_arch_flags, rasppi) = if malban_lib7.exists() {
+            (malban_lib7.clone(),
+             vec!["-march=armv8-a", "-mfpu=neon-fp-armv8", "-mfloat-abi=hard"],
+             vec!["-fuse-ld=bfd", "-Ofast", "-mhard-float", "-mfloat-abi=hard",
+                  "-mfpu=neon-fp-armv8", "-march=armv8-a", "-mtune=cortex-a53",
+                  "-ffreestanding", "-nostartfiles", "-DPITREX_DEBUG",
+                  "-DRASPPI=3", "-DUSE_PL011_UART=1"],
+             "Pi Zero 2 W (ARMv8/Cortex-A53)")
+        } else {
+            (malban_lib1.clone(),
+             vec!["-march=armv6zk", "-mfpu=vfp", "-mfloat-abi=hard"],
+             vec!["-fuse-ld=bfd", "-Ofast", "-mfloat-abi=hard", "-mfpu=vfp",
+                  "-march=armv6zk", "-mtune=arm1176jzf-s",
+                  "-ffreestanding", "-nostartfiles", "-DPITREX_DEBUG",
+                  "-DRASPPI=1", "-DUSE_PL011_UART=1"],
+             "Pi Zero 1 (ARMv6/ARM1176)")
+        };
+        let heap_ld = lib_dir.join("linkerHeapDefBoot.ld");
+        if verbose {
+            println!("  SDK layout: malban  ({rasppi})");
+            println!("  Lib dir: {}", lib_dir.display());
+        }
+
+        // Phase 4: Assemble
+        println!("\n{}", "Phase 4: ARM32 Assemble".bright_cyan().bold());
+        let arm_as = find_arm_as();
+        let mut as_args: Vec<String> = as_arch.iter().map(|s| s.to_string()).collect();
+        as_args.push(s_path.to_str().unwrap().into());
+        as_args.push("-o".into());
+        as_args.push(o_path.to_str().unwrap().into());
+
+        let as_out = Command::new(&arm_as).args(&as_args).output()
+            .map_err(|e| anyhow::anyhow!("arm-none-eabi-as not found: {}\nInstall: https://developer.arm.com/downloads/-/gnu-rm", e))?;
+        if !as_out.status.success() {
+            return Err(anyhow::anyhow!("arm-none-eabi-as failed:\n{}", String::from_utf8_lossy(&as_out.stderr)));
+        }
+        println!("  {} Assembled: {}", "✓".green(), o_path.display());
+
+        // Compile Bézier supplement (provides v_drawBezierCubic / v_drawBezierQuad)
+        // The C source is embedded so the binary is self-contained.
+        const BEZIER_C_SRC: &str = include_str!("pitrex_bezier.c");
+        let bezier_c_path = build_dir.join(format!("{}_bezier.c", project_name));
+        let bezier_o_path = build_dir.join(format!("{}_bezier.o", project_name));
+        std::fs::write(&bezier_c_path, BEZIER_C_SRC)?;
+
+        let sdk_inc      = sdk_path.join("pitrex");
+        let sdk_inc_uspi = sdk_path.join("pitrex/vectrex/uspi/include");
+        let mut cc_args: Vec<String> = gcc_arch_flags.iter().map(|s| s.to_string()).collect();
+        cc_args.push(format!("-I{}", sdk_inc.display()));
+        cc_args.push(format!("-I{}", sdk_inc_uspi.display()));
+        cc_args.push("-c".into());
+        cc_args.push(bezier_c_path.to_str().unwrap().into());
+        cc_args.push("-o".into());
+        cc_args.push(bezier_o_path.to_str().unwrap().into());
+
+        let cc_out = Command::new(&arm_gcc).args(&cc_args).output()
+            .map_err(|e| anyhow::anyhow!("arm-none-eabi-gcc not found: {}", e))?;
+        if !cc_out.status.success() {
+            return Err(anyhow::anyhow!("Bézier compile failed:\n{}", String::from_utf8_lossy(&cc_out.stderr)));
+        }
+        println!("  {} Compiled Bézier supplement: {}", "✓".green(), bezier_o_path.display());
+
+        // Phase 5+6: Link directly against precompiled .a (no need to compile SDK sources)
+        println!("\n{}", "Phase 5+6: ARM32 Link".bright_cyan().bold());
+        let mut link_args: Vec<String> = gcc_arch_flags.iter().map(|s| s.to_string()).collect();
+        link_args.push(format!("-L{}", lib_dir.display()));
+        link_args.push("-Wl,--allow-multiple-definition".into());
+        link_args.push("-o".into());
+        link_args.push(elf_path.to_str().unwrap().into());
+        link_args.push(o_path.to_str().unwrap().into());
+        // Bézier supplement must precede -lvectrexInterface so its symbols win
+        link_args.push(bezier_o_path.to_str().unwrap().into());
+        link_args.extend(["-lvectrexInterface", "-luspi", "-lm", "-lc"].iter().map(|s| s.to_string()));
+        link_args.push(heap_ld.to_str().unwrap().into());
+        link_args.push("-lbaremetal".into());
+
+        let ld_out = Command::new(&arm_gcc).args(&link_args).output()
+            .map_err(|e| anyhow::anyhow!("arm-none-eabi-gcc not found: {}", e))?;
+        if !ld_out.status.success() {
+            return Err(anyhow::anyhow!("Link failed:\n{}", String::from_utf8_lossy(&ld_out.stderr)));
+        }
+        println!("  {} Linked: {}", "✓".green(), elf_path.display());
+
+    } else {
+        // ── Bundled VPy SDK layout (linker/ obj/standalone/ lib/) ────────
+        // Phase 4: Assemble (ARMv6 — Pi Zero 1 mode for bundled SDK)
+        println!("\n{}", "Phase 4: ARM32 Assemble".bright_cyan().bold());
+        let arm_as = find_arm_as();
+        let as_out = Command::new(&arm_as)
+            .args(["-march=armv6", "-mfpu=vfp", "-mfloat-abi=hard",
+                   s_path.to_str().unwrap(), "-o", o_path.to_str().unwrap()])
+            .output()
+            .map_err(|e| anyhow::anyhow!("arm-none-eabi-as not found: {}\nInstall: https://developer.arm.com/downloads/-/gnu-rm", e))?;
+        if !as_out.status.success() {
+            return Err(anyhow::anyhow!("arm-none-eabi-as failed:\n{}", String::from_utf8_lossy(&as_out.stderr)));
+        }
+        println!("  {} Assembled: {}", "✓".green(), o_path.display());
+
+        let ld_script_path = sdk_path.join("linker/pitrex_standalone.ld");
+        if !ld_script_path.exists() {
+            return Err(anyhow::anyhow!(
+                "Linker script not found: {}\n\
+                 Set PITREX_SDK to a pitrex-baremetal checkout, e.g.:\n\
+                   export PITREX_SDK=~/pitrex-baremetal",
+                ld_script_path.display()
+            ));
+        }
+
+        let sdk_lib_dir = sdk_path.join("lib");
+        let sdk_precompiled_dir = sdk_path.join("obj/standalone");
+        let sdk_obj_names = ["baremetalEntry.o","bareMetalMain.o","cstubs.o",
+            "rpi-armtimer.o","rpi-aux.o","rpi-gpio.o","rpi-interrupts.o",
+            "rpi-systimer.o","bcm2835.o","pitrexio-gpio.o","vectrexInterface.o",
+            "osWrapper.o","baremetalUtil.o"];
+
+        let use_precompiled = sdk_precompiled_dir.exists()
+            && sdk_obj_names.iter().all(|n| sdk_precompiled_dir.join(n).exists());
+
+        if !use_precompiled {
+            return Err(anyhow::anyhow!(
+                "Bundled SDK precompiled objects not found at: {}\n\
+                 Point PITREX_SDK to a full pitrex-baremetal checkout instead.",
+                sdk_precompiled_dir.display()
+            ));
+        }
+
+        println!("\n{}", "Phase 5: Using precompiled SDK objects".bright_cyan().bold());
+        println!("  {} {} precompiled objects", "✓".green(), sdk_obj_names.len());
+
+        println!("\n{}", "Phase 6: ARM32 Link".bright_cyan().bold());
+        let mut link_args = vec![
+            "-O2", "-mfloat-abi=hard", "-nostartfiles", "-mfpu=vfp",
+            "-march=armv6zk", "-mtune=arm1176jzf-s",
+            "-DRPI0", "-DFREESTANDING", "-DPITREX_DEBUG", "-DMHZ1000",
+        ].iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        link_args.push(format!("-L{}", sdk_lib_dir.display()));
+        link_args.push("-Wl,--allow-multiple-definition".into());
+        link_args.push("-o".into());
+        link_args.push(elf_path.to_str().unwrap().into());
+        for n in &sdk_obj_names { link_args.push(sdk_precompiled_dir.join(n).to_string_lossy().into_owned()); }
+        link_args.push(o_path.to_str().unwrap().into());
+        link_args.extend(["-lm", "-lff12c", "-ldebug", "-lhal", "-lutils",
+                           "-lconsole", "-lbob", "-li2c", "-lbcm2835", "-larm"]
+            .iter().map(|s| s.to_string()));
+        link_args.push("-T".into());
+        link_args.push(ld_script_path.to_str().unwrap().into());
+
+        let ld_out = Command::new(&arm_gcc).args(&link_args).output()
+            .map_err(|e| anyhow::anyhow!("arm-none-eabi-gcc not found: {}", e))?;
+        if !ld_out.status.success() {
+            return Err(anyhow::anyhow!("Link failed:\n{}", String::from_utf8_lossy(&ld_out.stderr)));
+        }
+        println!("  {} Linked: {}", "✓".green(), elf_path.display());
+    }
+
+    // Phase 7: Extract binary
+    println!("\n{}", "Phase 7: Extract .img".bright_cyan().bold());
+    let objcopy = find_arm_objcopy();
+    let oc_out = Command::new(&objcopy)
+        .args(["-O", "binary", elf_path.to_str().unwrap(), img_path.to_str().unwrap()])
+        .output()
+        .map_err(|e| anyhow::anyhow!("arm-none-eabi-objcopy not found: {}", e))?;
+    if !oc_out.status.success() {
+        return Err(anyhow::anyhow!("objcopy failed:\n{}", String::from_utf8_lossy(&oc_out.stderr)));
+    }
+
+    let img_size = std::fs::metadata(&img_path).map(|m| m.len()).unwrap_or(0);
+    println!("  {} Image written: {} ({} bytes)", "✓".green(), img_path.display(), img_size);
+    println!("\n{}", format!(
+        "✓ BUILD SUCCESS (pitrex): {} bytes → {}\n  Copy to SD card as kernel7l.img",
+        img_size, img_path.display()
+    ).bright_green().bold());
+
+    Ok(())
+}
+
+fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Result<()> {
+    use std::process::Command;
+
+    println!("{}", "Target: RP2350 (ARM Thumb2)".bright_yellow().bold());
+
+    // Phase 1: Load project or single file
+    let (source_path, project_dir) = if input.extension().and_then(|s| s.to_str()) == Some("vpyproj") {
+        let project_info = vpy_loader::load_project(input)
+            .context("Failed to load project")?;
+        let dir = input.parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf();
+        (project_info.entry_point, dir)
+    } else {
+        let dir = {
+            let parent = input.parent().unwrap_or_else(|| std::path::Path::new("."));
+            if parent.file_name().and_then(|n| n.to_str()) == Some("src") {
+                parent.parent().unwrap_or(parent).to_path_buf()
+            } else {
+                find_project_root_from(parent)
+            }
+        };
+        (input.clone(), dir)
+    };
+
+    // Phase 2: Parse
+    println!("\n{}", "Phase 1: Parse".bright_cyan().bold());
+    let source = std::fs::read_to_string(&source_path)
+        .context("Failed to read source file")?;
+    let tokens = vpy_parser::lex(&source)
+        .map_err(|e| anyhow::anyhow!("Lex error: {}", e))?;
+    let module = vpy_parser::parser::parse(tokens, source_path.to_str().unwrap_or("unknown"))
+        .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
+    println!("  {} Parsed {} items", "✓".green(), module.items.len());
+
+    // Phase 3: Unify (single file — wrap in identity unifier)
+    println!("\n{}", "Phase 2: Unify".bright_cyan().bold());
+    let mut modules_map = std::collections::HashMap::new();
+    let module_name = source_path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("main")
+        .to_string();
+    modules_map.insert(module_name.clone(), module);
+    let unified = vpy_unifier::unify_modules(modules_map, &module_name)
+        .map_err(|e| anyhow::anyhow!("Unification error: {}", e))?;
+    println!("  {} Unified {} items", "✓".green(), unified.items.len());
+
+    // Phase 4: ARM codegen — always single-bank for RP2350
+    println!("\n{}", "Phase 3: ARM Codegen".bright_cyan().bold());
+    let title = unified.meta.title_override.as_deref().unwrap_or("VPY GAME");
+    let bank_config = vpy_codegen::BankConfig::single_bank();
+    let assets = discover_assets(&source_path);
+
+    let generated = vpy_codegen::generate_from_module_with_target(
+        &unified, &bank_config, title, &assets, &vpy_codegen::Target::Rp2350,
+    ).context("ARM codegen failed")?;
+    println!("  {} Generated {} bytes of ARM assembly", "✓".green(), generated.asm_source.len());
+
+    // Determine output paths
+    let build_dir = project_dir.join("build");
+    std::fs::create_dir_all(&build_dir)?;
+
+    // Derive project name (priority: --output stem > vpyproj name > directory name).
+    // This avoids spaces when the directory is "3d test" but the project is "3d_test".
+    let project_name: String = output.as_ref()
+        .and_then(|p| p.file_stem())
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string())
+        .or_else(|| vpyproj_project_name(input))
+        .unwrap_or_else(|| {
+            project_dir.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("output")
+                .to_string()
+        });
+
+    let s_path   = build_dir.join(format!("{}.s",   project_name));
+    let asm_path = build_dir.join(format!("{}.asm", project_name)); // alias for IDE STATUS check
+    let o_path   = build_dir.join(format!("{}.o",   project_name));
+    let elf_path = build_dir.join(format!("{}.elf", project_name));
+    let bin_path = output.unwrap_or_else(|| build_dir.join(format!("{}.bin", project_name)));
+
+    // Write .s file and .asm alias (IDE STATUS check expects .asm)
+    std::fs::write(&s_path, &generated.asm_source)
+        .with_context(|| format!("Failed to write {}", s_path.display()))?;
+    std::fs::copy(&s_path, &asm_path)
+        .with_context(|| format!("Failed to write {}", asm_path.display()))?;
+    println!("  {} ARM ASM written: {}", "✓".green(), s_path.display());
+
+    // Find linker script
+    let ld_path = find_rp2350_ld(&project_dir)
+        .ok_or_else(|| anyhow::anyhow!(
+            "Could not find hardware/debug_cart/firmware/rp2350_game.ld — \
+             ensure the hardware/ directory is present in the workspace root"
+        ))?;
+    if verbose {
+        println!("  Linker script: {}", ld_path.display());
+    }
+
+    // Phase 5: Assemble with arm-none-eabi-as
+    println!("\n{}", "Phase 4: ARM Assemble".bright_cyan().bold());
+    let as_result = Command::new("arm-none-eabi-as")
+        .args([
+            "-mthumb",
+            "-mcpu=cortex-m33",
+            "-mfpu=fpv5-sp-d16",
+            s_path.to_str().unwrap(),
+            "-o",
+            o_path.to_str().unwrap(),
+        ])
+        .output();
+
+    match as_result {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(anyhow::anyhow!(
+                "arm-none-eabi-as not found on PATH.\n\
+                 Install the ARM GNU toolchain: https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads\n\
+                 On macOS: brew install --cask gcc-arm-embedded\n\
+                 On Ubuntu: sudo apt install gcc-arm-none-eabi"
+            ));
+        }
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-as: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                return Err(anyhow::anyhow!("arm-none-eabi-as failed:\n{}", stderr));
+            }
+            println!("  {} Assembled: {}", "✓".green(), o_path.display());
+        }
+    }
+
+    // Phase 6: Link with arm-none-eabi-ld
+    println!("\n{}", "Phase 5: ARM Link".bright_cyan().bold());
+    let ld_result = Command::new("arm-none-eabi-ld")
+        .args([
+            "-T",
+            ld_path.to_str().unwrap(),
+            o_path.to_str().unwrap(),
+            "-o",
+            elf_path.to_str().unwrap(),
+        ])
+        .output();
+
+    match ld_result {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(anyhow::anyhow!(
+                "arm-none-eabi-ld not found on PATH.\n\
+                 Install the ARM GNU toolchain (same package as arm-none-eabi-as)."
+            ));
+        }
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-ld: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                return Err(anyhow::anyhow!("arm-none-eabi-ld failed:\n{}", stderr));
+            }
+            println!("  {} Linked: {}", "✓".green(), elf_path.display());
+        }
+    }
+
+    // Phase 7: Extract binary with arm-none-eabi-objcopy
+    println!("\n{}", "Phase 6: Extract Binary".bright_cyan().bold());
+    let objcopy_result = Command::new("arm-none-eabi-objcopy")
+        .args([
+            "-O",
+            "binary",
+            elf_path.to_str().unwrap(),
+            bin_path.to_str().unwrap(),
+        ])
+        .output();
+
+    match objcopy_result {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(anyhow::anyhow!(
+                "arm-none-eabi-objcopy not found on PATH.\n\
+                 Install the ARM GNU toolchain (same package as arm-none-eabi-as)."
+            ));
+        }
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-objcopy: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                return Err(anyhow::anyhow!("arm-none-eabi-objcopy failed:\n{}", stderr));
+            }
+        }
+    }
+
+    let bin_size = std::fs::metadata(&bin_path).map(|m| m.len()).unwrap_or(0);
+    println!("  {} Binary written: {} ({} bytes)", "✓".green(), bin_path.display(), bin_size);
+    println!("\n{}", format!("✓ BUILD SUCCESS (rp2350): {} bytes written to {}",
+        bin_size,
+        bin_path.display()).bright_green().bold());
+
+    Ok(())
+}
+
+/// Build for the UVM2 (Ultimate Vectrex Multicart 2) — Cortex-M33 / Pico SDK toolchain.
+fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Result<()> {
+    use std::process::Command;
+
+    println!("{}", "Target: UVM2 (Ultimate Vectrex Multicart 2 / Cortex-M33)".bright_yellow().bold());
+
+    let (source_path, project_dir) = if input.extension().and_then(|s| s.to_str()) == Some("vpyproj") {
+        let project_info = vpy_loader::load_project(input).context("Failed to load project")?;
+        let dir = input.parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf();
+        (project_info.entry_point, dir)
+    } else {
+        let dir = {
+            let parent = input.parent().unwrap_or_else(|| std::path::Path::new("."));
+            if parent.file_name().and_then(|n| n.to_str()) == Some("src") {
+                parent.parent().unwrap_or(parent).to_path_buf()
+            } else {
+                find_project_root_from(parent)
+            }
+        };
+        (input.clone(), dir)
+    };
+
+    println!("\n{}", "Phase 1: Parse".bright_cyan().bold());
+    let source = std::fs::read_to_string(&source_path).context("Failed to read source file")?;
+    let tokens = vpy_parser::lex(&source).map_err(|e| anyhow::anyhow!("Lex error: {}", e))?;
+    let module = vpy_parser::parser::parse(tokens, source_path.to_str().unwrap_or("unknown"))
+        .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
+    println!("  {} Parsed {} items", "✓".green(), module.items.len());
+
+    println!("\n{}", "Phase 2: Unify".bright_cyan().bold());
+    let mut modules_map = std::collections::HashMap::new();
+    let module_name = source_path.file_stem().and_then(|s| s.to_str()).unwrap_or("main").to_string();
+    modules_map.insert(module_name.clone(), module);
+    let unified = vpy_unifier::unify_modules(modules_map, &module_name)
+        .map_err(|e| anyhow::anyhow!("Unification error: {}", e))?;
+    println!("  {} Unified {} items", "✓".green(), unified.items.len());
+
+    println!("\n{}", "Phase 3: UVM2 ARM Thumb2 Codegen".bright_cyan().bold());
+    let title = project_dir.file_name().and_then(|n| n.to_str()).unwrap_or("UVM2 Game");
+    let bank_config = vpy_codegen::BankConfig::single_bank();
+    let assets = discover_assets(&source_path);
+    let generated = vpy_codegen::generate_from_module_with_target(
+        &unified, &bank_config, title, &assets, &vpy_codegen::Target::Uvm2,
+    ).context("UVM2 codegen failed")?;
+    println!("  {} Generated {} bytes of ARM assembly", "✓".green(), generated.asm_source.len());
+
+    let build_dir = project_dir.join("build");
+    std::fs::create_dir_all(&build_dir)?;
+
+    let project_name: String = output.as_ref()
+        .and_then(|p| p.file_stem()).and_then(|s| s.to_str()).map(|s| s.to_string())
+        .or_else(|| vpyproj_project_name(input))
+        .unwrap_or_else(|| project_dir.file_name().and_then(|n| n.to_str()).unwrap_or("output").to_string());
+
+    let s_path   = build_dir.join(format!("{}.s",   project_name));
+    let asm_path = build_dir.join(format!("{}.asm", project_name));
+    let o_path   = build_dir.join(format!("{}.o",   project_name));
+    let elf_path = build_dir.join(format!("{}.elf", project_name));
+    let bin_path = output.unwrap_or_else(|| build_dir.join(format!("{}.bin", project_name)));
+
+    std::fs::write(&s_path, &generated.asm_source)
+        .with_context(|| format!("Failed to write {}", s_path.display()))?;
+    std::fs::copy(&s_path, &asm_path)
+        .with_context(|| format!("Failed to write {}", asm_path.display()))?;
+    println!("  {} ARM ASM written: {}", "✓".green(), s_path.display());
+
+    // Linker script — prefer a uvm2-specific one, fall back to rp2350_game.ld
+    let ld_path = find_uvm2_ld(&project_dir)
+        .or_else(|| find_rp2350_ld(&project_dir))
+        .ok_or_else(|| anyhow::anyhow!(
+            "Could not find linker script for UVM2.\n\
+             Expected: hardware/debug_cart/firmware/rp2350_game.ld"))?;
+    if verbose { println!("  Linker script: {}", ld_path.display()); }
+
+    println!("\n{}", "Phase 4: ARM Assemble".bright_cyan().bold());
+    let as_out = Command::new("arm-none-eabi-as")
+        .args(["-mthumb", "-mcpu=cortex-m33", "-mfpu=fpv5-sp-d16",
+               s_path.to_str().unwrap(), "-o", o_path.to_str().unwrap()])
+        .output();
+    match as_out {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound =>
+            return Err(anyhow::anyhow!("arm-none-eabi-as not found. Install gcc-arm-embedded.")),
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-as: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                return Err(anyhow::anyhow!("arm-none-eabi-as failed:\n{}",
+                    String::from_utf8_lossy(&out.stderr)));
+            }
+            println!("  {} Assembled: {}", "✓".green(), o_path.display());
+        }
+    }
+
+    println!("\n{}", "Phase 5: ARM Link".bright_cyan().bold());
+    let ld_out = Command::new("arm-none-eabi-ld")
+        .args(["-T", ld_path.to_str().unwrap(),
+               o_path.to_str().unwrap(), "-o", elf_path.to_str().unwrap()])
+        .output();
+    match ld_out {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound =>
+            return Err(anyhow::anyhow!("arm-none-eabi-ld not found.")),
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-ld: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                return Err(anyhow::anyhow!("arm-none-eabi-ld failed:\n{}",
+                    String::from_utf8_lossy(&out.stderr)));
+            }
+            println!("  {} Linked: {}", "✓".green(), elf_path.display());
+        }
+    }
+
+    println!("\n{}", "Phase 6: Extract Binary".bright_cyan().bold());
+    let oc_out = Command::new("arm-none-eabi-objcopy")
+        .args(["-O", "binary", elf_path.to_str().unwrap(), bin_path.to_str().unwrap()])
+        .output();
+    match oc_out {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound =>
+            return Err(anyhow::anyhow!("arm-none-eabi-objcopy not found.")),
+        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-objcopy: {}", e)),
+        Ok(out) => {
+            if !out.status.success() {
+                return Err(anyhow::anyhow!("arm-none-eabi-objcopy failed:\n{}",
+                    String::from_utf8_lossy(&out.stderr)));
+            }
+        }
+    }
+
+    let bin_size = std::fs::metadata(&bin_path).map(|m| m.len()).unwrap_or(0);
+    println!("  {} Binary: {} ({} bytes)", "✓".green(), bin_path.display(), bin_size);
+
+    // Phase 7: Wrap with UM2 header for SD card (UVM2 game format)
+    println!("\n{}", "Phase 7: UM2 Package".bright_cyan().bold());
+    let um2_path = build_dir.join(format!("{}.um2", project_name));
+    let bin_data = std::fs::read(&bin_path)
+        .with_context(|| format!("Failed to read binary for UM2 packaging: {}", bin_path.display()))?;
+    let um2_data = build_um2(&bin_data, 0x20000000u32);
+    std::fs::write(&um2_path, &um2_data)
+        .with_context(|| format!("Failed to write UM2: {}", um2_path.display()))?;
+    println!("  {} UM2: {} ({} bytes) — header(20) + ARM binary",
+        "✓".green(), um2_path.display(), um2_data.len());
+
+    println!("\n{}", format!("✓ BUILD SUCCESS (uvm2): {} bytes  →  {}",
+        um2_data.len(), um2_path.display()).bright_green().bold());
+
+    Ok(())
+}
+
+/// Build a .um2 file for the Ultimate Vectrex Multicart 2.
+///
+/// Header format (20 bytes, all fields little-endian):
+///   [0..4]   Magic:       "2CMU"  (0x554D4332)
+///   [4..8]   Version:     1
+///   [8..12]  GameCount:   1
+///   [12..16] LoadAddr:    load address in SRAM (e.g. 0x20000000)
+///   [16..20] BinarySize:  length of the ARM binary in bytes
+///   [20..]   Binary data  (ARM Thumb2, Cortex-M33)
+#[allow(dead_code)]
+fn build_um2(bin: &[u8], load_addr: u32) -> Vec<u8> {
+    let mut out = Vec::with_capacity(20 + bin.len());
+    // Magic "2CMU"
+    out.extend_from_slice(b"2CMU");
+    // Version = 1
+    out.extend_from_slice(&1u32.to_le_bytes());
+    // GameCount = 1
+    out.extend_from_slice(&1u32.to_le_bytes());
+    // LoadAddr
+    out.extend_from_slice(&load_addr.to_le_bytes());
+    // BinarySize
+    out.extend_from_slice(&(bin.len() as u32).to_le_bytes());
+    // ARM binary payload
+    out.extend_from_slice(bin);
+    out
+}
+
+/// Build a UF2 binary from raw `data` loaded at `base_addr`.
+/// UF2 spec: https://github.com/microsoft/uf2
+/// Each 512-byte block carries 256 bytes of payload.
+/// Family ID 0xE48BFF59 = rp2350-arm-s (RP2350 Cortex-M33)
+#[allow(dead_code)]
+fn build_uf2(data: &[u8], base_addr: u32) -> Vec<u8> {
+    const MAGIC0:      u32 = 0x0A324655; // "UF2\n"
+    const MAGIC1:      u32 = 0x9E5D5157;
+    const MAGIC_END:   u32 = 0x0AB16F30;
+    const FLAG_FAMILY: u32 = 0x00002000;
+    const FAMILY_ID:   u32 = 0xE48BFF59; // rp2350-arm-s
+    const PAYLOAD:     usize = 256;
+    const BLOCK_SIZE:  usize = 512;
+
+    let total_blocks = (data.len() + PAYLOAD - 1) / PAYLOAD;
+    let mut out = Vec::with_capacity(total_blocks * BLOCK_SIZE);
+
+    for (i, chunk) in data.chunks(PAYLOAD).enumerate() {
+        let addr = base_addr + (i * PAYLOAD) as u32;
+        let mut block = [0u8; BLOCK_SIZE];
+        let w = |buf: &mut [u8], off: usize, v: u32| {
+            buf[off..off + 4].copy_from_slice(&v.to_le_bytes());
+        };
+        w(&mut block,   0, MAGIC0);
+        w(&mut block,   4, MAGIC1);
+        w(&mut block,   8, FLAG_FAMILY);
+        w(&mut block,  12, addr);
+        w(&mut block,  16, PAYLOAD as u32);
+        w(&mut block,  20, i as u32);
+        w(&mut block,  24, total_blocks as u32);
+        w(&mut block,  28, FAMILY_ID);
+        block[32..32 + chunk.len()].copy_from_slice(chunk);
+        w(&mut block, 508, MAGIC_END);
+        out.extend_from_slice(&block);
+    }
+    out
+}
+
+fn find_project_root_from(start: &Path) -> PathBuf {
+    let mut current = start;
+    loop {
+        if let Ok(entries) = std::fs::read_dir(current) {
+            let has_vpyproj = entries
+                .flatten()
+                .any(|e| e.path().extension().and_then(|s| s.to_str()) == Some("vpyproj"));
+            if has_vpyproj { return current.to_path_buf(); }
+        }
+        match current.parent() {
+            Some(p) => current = p,
+            None => return start.to_path_buf(),
+        }
+    }
+}
+
+/// Find linker script by walking up from project dir and binary location looking for
+/// hardware/debug_cart/firmware/rp2350_game.ld
+fn find_rp2350_ld(project_dir: &Path) -> Option<PathBuf> {
+    // Helper: walk up from a starting path
+    fn walk_up(start: &Path) -> Option<PathBuf> {
+        let mut current = start;
+        loop {
+            let candidate = current.join("hardware/debug_cart/firmware/rp2350_game.ld");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+            match current.parent() {
+                Some(p) => current = p,
+                None => return None,
+            }
+        }
+    }
+
+    // 1. Walk up from the project directory
+    if let Some(found) = walk_up(project_dir) {
+        return Some(found);
+    }
+
+    // 2. Walk up from the CLI binary location (covers running from buildtools/target/debug/)
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            if let Some(found) = walk_up(exe_dir) {
+                return Some(found);
+            }
+        }
+    }
+
+    // 3. Walk up from the current working directory
+    if let Ok(cwd) = std::env::current_dir() {
+        if let Some(found) = walk_up(&cwd) {
+            return Some(found);
+        }
+    }
+
+    None
+}
+
+/// Find the UVM2 linker script — looks for hardware/uvm2/uvm2_game.ld first,
+/// then falls back to the rp2350_game.ld (same Pico SDK memory map).
+#[allow(dead_code)]
+fn find_uvm2_ld(project_dir: &Path) -> Option<PathBuf> {
+    fn walk_up(start: &Path) -> Option<PathBuf> {
+        let mut current = start;
+        loop {
+            let candidate = current.join("hardware/uvm2/uvm2_game.ld");
+            if candidate.exists() { return Some(candidate); }
+            match current.parent() {
+                Some(p) => current = p,
+                None => return None,
+            }
+        }
+    }
+    walk_up(project_dir)
+        .or_else(|| { std::env::current_exe().ok().and_then(|e| e.parent().and_then(|d| walk_up(d))) })
+        .or_else(|| { std::env::current_dir().ok().and_then(|d| walk_up(&d)) })
+}
+
+/// Extract project name from a .vpyproj file without pulling in the full toml crate.
+/// Tries [build] output stem first, then [project] name, returns None on any failure.
+fn vpyproj_project_name(vpyproj: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(vpyproj).ok()?;
+    // Look for:  output = "build/3d_test.bin"  →  "3d_test"
+    for line in content.lines() {
+        let t = line.trim();
+        if t.starts_with("output") {
+            if let Some(val) = t.splitn(2, '=').nth(1) {
+                let val = val.trim().trim_matches('"');
+                let stem = std::path::Path::new(val)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.to_string());
+                if stem.is_some() { return stem; }
+            }
+        }
+    }
+    // Fallback: [project] name = "3d_test"
+    for line in content.lines() {
+        let t = line.trim();
+        if t.starts_with("name") {
+            if let Some(val) = t.splitn(2, '=').nth(1) {
+                let val = val.trim().trim_matches('"').to_string();
+                if !val.is_empty() { return Some(val); }
+            }
+        }
+    }
+    None
+}
+
+fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_size: usize, _debug: bool, verbose: bool, target: String) -> Result<()> {
+    // PiTrex target: separate path — no banks, ARM32 toolchain invocation
+    if target == "pitrex" {
+        return cmd_build_pitrex(input, output, verbose);
+    }
+    // RP2350 target: separate path — no banks, ARM toolchain invocation
+    if target == "rp2350" {
+        return cmd_build_rp2350(input, output, verbose);
+    }
+    // UVM2 target: Ultimate Vectrex Multicart 2 — same Pico SDK toolchain as rp2350
+    if target == "uvm2" {
+        return cmd_build_uvm2(input, output, verbose);
+    }
+
     // Check if this is a multi-module project
     let is_multimodule = input.extension().and_then(|s| s.to_str()) == Some("vpyproj");
     
@@ -762,7 +1653,17 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
             .map_err(|e| anyhow::anyhow!("Unification error: {}", e))?;
         
         println!("  {} Unified {} items", "✓".green(), unified.items.len());
-        
+
+        // META TARGET override: redirect to pitrex/rp2350 build path
+        if let Some(meta_target) = &unified.meta.target {
+            if meta_target == "pitrex" {
+                return cmd_build_pitrex(input, output, verbose);
+            }
+            if meta_target == "rp2350" {
+                return cmd_build_rp2350(input, output, verbose);
+            }
+        }
+
         // **CRITICAL**: Override rom_size and bank_size from META if specified
         let rom_size = unified.meta.rom_total_size.map(|s| s as usize).unwrap_or(rom_size);
         let bank_size = unified.meta.rom_bank_size.map(|s| s as usize).unwrap_or(bank_size);
@@ -883,7 +1784,7 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
             );
             
             match linker.generate_multibank_rom(&asm_path, &output_path_mb) {
-                Ok(_symbol_table) => {
+                Ok(symbol_table) => {
                     println!("  {} Phase 6.7 SUCCESS: Multi-bank binary written to {}",
                         "✓".green(), output_path_mb.display());
                     println!("     Total size: {} KB ({} banks × {} KB)",
@@ -894,17 +1795,31 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
                     // Phase 9: Generate PDB debug symbols for multibank
                     {
                         println!("\n{}", "Phase 9: Generating debug symbols (multibank)...".bright_cyan());
-                        
-                        // Load VECTREX.I for BIOS symbols
-                        let vectrex_i_path = include_dir.join("VECTREX.I");
-                        let _vectrex_i_content = if vectrex_i_path.exists() {
-                            std::fs::read_to_string(&vectrex_i_path).ok()
-                        } else {
-                            None
-                        };
-                        
-                        // TODO: PDB generation disabled - vpy_debug_gen incomplete
-                        eprintln!("  ⚠ PDB generation skipped (buildtools implementation incomplete)");
+                        // Use bank_00_full.asm which contains all EQU definitions for the project
+                        let flat_asm_path = output_path_mb.parent()
+                            .unwrap_or_else(|| std::path::Path::new("."))
+                            .join("multibank_temp")
+                            .join("bank_00_full.asm");
+                        let pdb_path = output_path_mb.with_extension("pdb");
+                        let func_lines: Vec<(String, usize)> = unified.items.iter().filter_map(|it| {
+                            if let vpy_parser::Item::Function(f) = it {
+                                Some((f.name.to_uppercase(), f.line))
+                            } else { None }
+                        }).collect();
+                        let bank_asms = collect_bank_asms(flat_asm_path.parent()
+                            .unwrap_or_else(|| std::path::Path::new(".")));
+                        // Use the entry .vpy file name (not project name) so the IDE opens the
+                        // correct source tab when a breakpoint hits.
+                        let src_name = format!("{}.vpy", entry_module_name);
+                        match std::fs::read_to_string(&flat_asm_path) {
+                            Ok(flat_asm) => {
+                                match generate_pdb(&flat_asm, &src_name, &pdb_path, &symbol_table, &func_lines, &bank_asms) {
+                                    Ok(()) => println!("  {} PDB written: {}", "✓".green(), pdb_path.display()),
+                                    Err(e) => eprintln!("  ⚠ PDB write failed: {}", e),
+                                }
+                            }
+                            Err(_) => eprintln!("  ⚠ PDB skipped: bank_00_full.asm not found"),
+                        }
                     }
                     
                     println!("\n{}", format!("✓ BUILD SUCCESS (multibank): {} KB written to {}", 
@@ -1138,7 +2053,7 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
         );
         
         match linker.generate_multibank_rom(&asm_path, &output_path_mb) {
-            Ok(_symbol_table) => {
+            Ok(symbol_table) => {
                 println!("  {} Phase 6.7 SUCCESS: Multi-bank binary written to {}",
                     "✓".green(), output_path_mb.display());
                 println!("     Total size: {} KB ({} banks × {} KB)",
@@ -1149,19 +2064,30 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
                 // Phase 9: Generate PDB debug symbols for multibank (single-file path)
                 {
                     println!("\n{}", "Phase 9: Generating debug symbols (multibank)...".bright_cyan());
-                    
-                    let include_dir = resolve_include_dir();
-                    
-                    // Load VECTREX.I for BIOS symbols
-                    let vectrex_i_path = include_dir.join("VECTREX.I");
-                    let _vectrex_i_content = if vectrex_i_path.exists() {
-                        std::fs::read_to_string(&vectrex_i_path).ok()
-                    } else {
-                        None
-                    };
-                    
-                    // TODO: PDB generation disabled - vpy_debug_gen incomplete
-                    eprintln!("  ⚠ PDB generation skipped (buildtools implementation incomplete)");
+                    let flat_asm_path = output_path_mb.parent()
+                        .unwrap_or_else(|| std::path::Path::new("."))
+                        .join("multibank_temp")
+                        .join("bank_00_full.asm");
+                    let pdb_path = output_path_mb.with_extension("pdb");
+                    let func_lines: Vec<(String, usize)> = module.items.iter().filter_map(|it| {
+                        if let vpy_parser::Item::Function(f) = it {
+                            Some((f.name.to_uppercase(), f.line))
+                        } else { None }
+                    }).collect();
+                    let bank_asms = collect_bank_asms(flat_asm_path.parent()
+                        .unwrap_or_else(|| std::path::Path::new(".")));
+                    // Use the entry .vpy file name (not project name) so the IDE opens the
+                    // correct source tab when a breakpoint hits.
+                    let src_name = source_path.file_name().and_then(|n| n.to_str()).unwrap_or("main.vpy");
+                    match std::fs::read_to_string(&flat_asm_path) {
+                        Ok(flat_asm) => {
+                            match generate_pdb(&flat_asm, src_name, &pdb_path, &symbol_table, &func_lines, &bank_asms) {
+                                Ok(()) => println!("  {} PDB written: {}", "✓".green(), pdb_path.display()),
+                                Err(e) => eprintln!("  ⚠ PDB write failed: {}", e),
+                            }
+                        }
+                        Err(_) => eprintln!("  ⚠ PDB skipped: bank_00_full.asm not found"),
+                    }
                 }
                 
                 println!("\n{}", format!("✓ Build SUCCESS (multibank): {} KB written to {}", 
@@ -1236,19 +2162,24 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
         println!("  BIN written: {}", output_path.display());
     }
     
-    // Phase 9: Generate PDB debug symbols (if requested or always for now)
+    // Phase 9: Generate PDB debug symbols
     {
         println!("\n{}", "Phase 9: Generating debug symbols...".bright_cyan());
-        
-        // Load VECTREX.I for BIOS symbols
-        let _vectrex_i_content = if include_dir.join("VECTREX.I").exists() {
-            std::fs::read_to_string(include_dir.join("VECTREX.I")).ok()
-        } else {
-            None
-        };
-        
-        // TODO: PDB generation disabled - vpy_debug_gen incomplete
-        eprintln!("  ⚠ PDB generation skipped (buildtools implementation incomplete)");
+        let pdb_path = output_path.with_extension("pdb");
+        // Real symbol addresses from the linker (single-bank: offset == bank-relative PC).
+        let sb_syms: std::collections::BTreeMap<String, u16> = rom.symbols.iter()
+            .map(|(name, loc)| (name.clone(), loc.offset))
+            .collect();
+        // Function name → VPy definition line, for vpyLineMap breakpoint resolution.
+        let sb_funcs: Vec<(String, usize)> = module.items.iter().filter_map(|it| {
+            if let vpy_parser::Item::Function(f) = it {
+                Some((f.name.to_uppercase(), f.line))
+            } else { None }
+        }).collect();
+        match generate_pdb(&generated.asm_source, source_path.file_name().and_then(|n| n.to_str()).unwrap_or("main.vpy"), &pdb_path, &sb_syms, &sb_funcs, &[]) {
+            Ok(()) => println!("  {} PDB written: {}", "✓".green(), pdb_path.display()),
+            Err(e) => eprintln!("  ⚠ PDB write failed: {}", e),
+        }
     }
     
     println!("\n{}", format!("✓ Build SUCCESS: {} bytes written to {}", 
@@ -1256,4 +2187,306 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
         output_path.display()).green().bold());
     
     Ok(())
+}
+
+/// Generate a minimal .pdb JSON file by parsing the generated ASM source.
+///
+/// Extracts:
+///   - variables: lines matching `VAR_FOO  EQU $BASE+$OFF  ; ... (N bytes)`
+///   - functions: lines matching `FUNC_NAME:` at start of line (not VAR_/EQU/FCB/FDB)
+///   - labels: all other `LABEL:` definitions
+///   - line map: `; VPy_LINE:N` annotations
+/// Collects per-bank full ASM files from a multibank_temp directory: returns
+/// (bank_id, file content, relative path) sorted by bank id, for `bank_NN_full.asm`.
+fn collect_bank_asms(temp_dir: &std::path::Path) -> Vec<(u8, String, String)> {
+    let mut out: Vec<(u8, String, String)> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(temp_dir) {
+        for e in entries.flatten() {
+            let fname = e.file_name().to_string_lossy().to_string();
+            if let Some(rest) = fname.strip_prefix("bank_") {
+                if let Some(num) = rest.strip_suffix("_full.asm") {
+                    if let Ok(bank_id) = num.parse::<u8>() {
+                        if let Ok(content) = std::fs::read_to_string(e.path()) {
+                            out.push((bank_id, content, format!("multibank_temp/{}", fname)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out.sort_by_key(|(b, _, _)| *b);
+    out
+}
+
+fn generate_pdb(
+    asm_source: &str,
+    source_name: &str,
+    output_pdb_path: &std::path::Path,
+    // label name (UPPERCASE) -> bank-relative address (PC). From the linker (Phase 7).
+    symbol_table: &std::collections::BTreeMap<String, u16>,
+    // (UPPERCASE function name, VPy def line). From the parsed module.
+    func_lines: &[(String, usize)],
+    // Per-bank full ASM: (bank_id, file content, relative path). Each is assembled
+    // standalone to build a bank-aware line/address map (asmBankAddr) and the
+    // bank->file table (asmBankFiles) so the IDE opens the active bank's ASM on pause.
+    bank_asms: &[(u8, String, String)],
+) -> std::io::Result<()> {
+    use std::collections::HashMap;
+
+    // ── Output maps (IDE PdbData schema; see ide/frontend/src/state/debugStore.ts) ──
+    let mut variables: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    let mut functions: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // VPy fn -> {startLine,endLine,address,type}
+    let mut symbols: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();   // label -> "0xADDR"
+    let mut labels: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();    // non-VAR equate -> int
+    let mut line_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();  // "vpyLine" -> "0xADDR" (VPy breakpoints)
+    let mut vpy_line_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // "decAddr" -> {file,line,column} (PC→VPy)
+    let mut asm_line_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // "0xADDR" -> {file,address,line} (PC→ASM)
+    let mut native_calls: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // "vpyLine" -> "NAME"
+    let mut asm_functions: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // label -> {name,file,startLine,endLine,type}
+    let mut bios_symbols: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();  // BIOS name -> "0xADDR"
+    let mut asm_address_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    let mut asm_bank_addr: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    let mut asm_bank_files: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    let mut asm_file_field = serde_json::Value::Null;
+
+    // EQU address parser: `NAME  EQU $BASE+$OFF` or `NAME  EQU $ADDR`
+    let parse_equ_address = |line: &str| -> Option<u32> {
+        let code = line.split(';').next()?.trim();
+        let mut it = code.split_whitespace();
+        let _name = it.next()?;
+        let kw = it.next()?.to_uppercase();
+        if kw != "EQU" { return None; }
+        let rhs = it.next()?;
+        if let Some((base, off)) = rhs.split_once('+') {
+            let b = u32::from_str_radix(base.trim_start_matches('$'), 16).ok()?;
+            let o = u32::from_str_radix(off.trim_start_matches('$'), 16).ok()?;
+            Some(b.wrapping_add(o))
+        } else {
+            u32::from_str_radix(rhs.trim_start_matches('$'), 16).ok()
+        }
+    };
+    let parse_comment_size = |line: &str| -> usize {
+        let comment = line.split(';').nth(1).unwrap_or("");
+        if let Some(bp) = comment.rfind(" bytes)") {
+            let before = &comment[..bp];
+            if let Some(pp) = before.rfind('(') {
+                if let Ok(n) = before[pp+1..].trim().parse::<usize>() { return n; }
+            }
+        }
+        2
+    };
+
+    // ── Variables + equate labels (from the unified ASM text) ──
+    for line in asm_source.lines() {
+        let trimmed = line.trim();
+        let code = trimmed.split(';').next().unwrap_or("").trim();
+        if !code.to_uppercase().contains(" EQU ") { continue; }
+        let Some(name) = code.split_whitespace().next() else { continue };
+        let Some(addr) = parse_equ_address(trimmed) else { continue };
+        if name.starts_with("VAR_") {
+            let size = parse_comment_size(trimmed);
+            let clean = name.strip_prefix("VAR_").unwrap_or(name).to_lowercase();
+            let var_type = if line.contains("system") || line.contains("System") { "system" }
+                else if line.contains("array") || name.contains("_DATA") { "array" }
+                else { "unknown" };
+            variables.insert(clean.clone(), serde_json::json!({
+                "name": clean, "address": format!("0x{:04X}", addr),
+                "size": size, "type": var_type, "declLine": null
+            }));
+        } else if !name.starts_with('_') {
+            labels.insert(name.to_string(), serde_json::Value::Number(addr.into()));
+        }
+    }
+
+    // ── Symbols: every linker-resolved label -> "0xADDR" ──
+    for (name, addr) in symbol_table {
+        symbols.insert(name.clone(), serde_json::Value::String(format!("0x{:04X}", addr)));
+    }
+
+    // ── BIOS symbols from VECTREX.I (NAME EQU/SET $XXXX) ──
+    {
+        let inc = resolve_include_dir();
+        if let Ok(content) = std::fs::read_to_string(inc.join("VECTREX.I")) {
+            for l in content.lines() {
+                let code = l.split(';').next().unwrap_or("").split('*').next().unwrap_or("");
+                let mut it = code.split_whitespace();
+                if let (Some(name), Some(kw), Some(val)) = (it.next(), it.next(), it.next()) {
+                    let kw = kw.to_ascii_uppercase();
+                    if kw == "EQU" || kw == "SET" {
+                        let v = val.trim();
+                        let parsed = if let Some(h) = v.strip_prefix('$') {
+                            u32::from_str_radix(h, 16).ok()
+                        } else if let Some(h) = v.strip_prefix("0x").or_else(|| v.strip_prefix("0X")) {
+                            u32::from_str_radix(h, 16).ok()
+                        } else { v.parse::<u32>().ok() };
+                        if let Some(a) = parsed {
+                            bios_symbols.insert(name.to_string(), serde_json::Value::String(format!("0x{:04X}", a)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── VPy functions: name -> {startLine,endLine,address,type} ──
+    {
+        let mut sorted: Vec<(usize, &str)> = func_lines.iter().map(|(n, l)| (*l, n.as_str())).collect();
+        sorted.sort();
+        for (i, (def_line, uname)) in sorted.iter().enumerate() {
+            // VPy `loop()` compiles to the label `LOOP_BODY`, not `LOOP`; fall back to `<NAME>_BODY`.
+            let addr = symbol_table.get(*uname)
+                .or_else(|| symbol_table.get(&format!("{}_BODY", uname)))
+                .copied().unwrap_or(0);
+            let end_line = if i + 1 < sorted.len() { sorted[i + 1].0.saturating_sub(1) } else { def_line + 1 };
+            functions.insert(uname.to_string(), serde_json::json!({
+                "address": format!("0x{:04X}", addr),
+                "startLine": def_line, "endLine": end_line, "type": "vpy"
+            }));
+        }
+    }
+
+    // ── Seed the re-assembler so each unit resolves operands (linker labels + EQUs) ──
+    let mut seed_equates: HashMap<String, u16> = HashMap::new();
+    for (name, addr) in symbol_table { seed_equates.insert(name.clone(), *addr); }
+    for line in asm_source.lines() {
+        let t = line.trim();
+        if t.to_uppercase().contains(" EQU ") {
+            if let Some(name) = t.split_whitespace().next() {
+                if let Some(addr) = parse_equ_address(t) { seed_equates.insert(name.to_string(), addr as u16); }
+            }
+        }
+    }
+
+    // Units to assemble: single-bank = one (asm_source); multibank = each bank file.
+    let asm_name = source_name.replace(".vpy", ".asm");
+    let units: Vec<(&str, u16, Option<u8>, String)> = if bank_asms.is_empty() {
+        asm_file_field = serde_json::Value::String(asm_name.clone());
+        vec![(asm_source, 0x0000u16, None, asm_name.clone())]
+    } else {
+        bank_asms.iter().map(|(b, c, rel)| {
+            let org = if c.contains("ORG $4000") { 0x4000u16 } else { 0x0000u16 };
+            (c.as_str(), org, Some(*b), rel.clone())
+        }).collect()
+    };
+
+    for (text, org, bank_opt, file_rel) in &units {
+        let line_to_addr = match vpy_assembler::m6809::asm_to_binary::assemble_m6809_seeded(text, *org, true, false, &seed_equates) {
+            Ok((_bin, map, _syms, _unresolved)) => map,
+            Err(e) => { eprintln!("  ⚠ PDB asm map skipped for {}: {}", file_rel, e); continue; }
+        };
+
+        // asmAddressMap (single) / asmBankAddr (multi) + asmLineMap (PC→ASM)
+        for (asm_line, addr) in &line_to_addr {
+            let a = *addr as u16;
+            let key = format!("0x{:04X}", a);
+            match bank_opt {
+                Some(b) => { asm_bank_addr.insert(format!("{}:{:04X}", b, a), serde_json::Value::Number((*asm_line as u64).into())); }
+                None => {
+                    asm_address_map.insert(asm_line.to_string(), serde_json::Value::String(format!("{:04X}", a)));
+                    // asmLineMap (PC→ASM) is single-bank only: bank-relative addresses
+                    // collide across banks, so multibank uses asmBankAddr/asmBankFiles instead.
+                    asm_line_map.entry(key.clone()).or_insert_with(|| {
+                        let mut o = serde_json::Map::new();
+                        o.insert("file".into(), serde_json::Value::String(file_rel.clone()));
+                        o.insert("address".into(), serde_json::Value::String(key.clone()));
+                        o.insert("line".into(), serde_json::Value::Number((*asm_line as u64).into()));
+                        serde_json::Value::Object(o)
+                    });
+                }
+            }
+        }
+        if let Some(b) = bank_opt { asm_bank_files.insert(b.to_string(), serde_json::Value::String(file_rel.clone())); }
+
+        // Per-statement VPy↔ASM + native-call scan. Runs for every unit/bank: the
+        // VPy_LINE annotations survive into each bank's full ASM, so multibank gets
+        // statement-granularity breakpoints too. Banks are scanned in ascending order
+        // and first-writer wins, so a bank-relative address that collides across banks
+        // keeps the lower bank's (user code lives in the low banks).
+        // The physical line counter must match the assembler (1-based, every line).
+        {
+            let mut pending_vpy: Option<u32> = None;
+            let mut phys = 0usize;
+            let mut label_lines: Vec<(String, usize)> = Vec::new();
+            for raw in text.lines() {
+                phys += 1;
+                let t = raw.trim();
+                if let Some(rest) = t.strip_prefix("; VPy_LINE:") {
+                    if let Ok(n) = rest.trim().parse::<u32>() { pending_vpy = Some(n); }
+                    continue;
+                }
+                if let Some(rest) = t.strip_prefix("; NATIVE_CALL:") {
+                    if let Some((name, ln)) = rest.trim().split_once(" at line ") {
+                        if let Ok(n) = ln.trim().parse::<u32>() {
+                            native_calls.entry(n.to_string())
+                                .or_insert_with(|| serde_json::Value::String(name.trim().to_string()));
+                        }
+                    }
+                    continue;
+                }
+                // Track label defs for asmFunctions.
+                let code = t.split(';').next().unwrap_or("").trim();
+                if let Some(lbl) = code.strip_suffix(':') {
+                    let lbl = lbl.trim();
+                    if !lbl.is_empty() && !lbl.contains(' ') && !lbl.starts_with('.') {
+                        label_lines.push((lbl.to_string(), phys));
+                    }
+                }
+                // First addressed line after a VPy_LINE marker binds that VPy line.
+                if let Some(n) = pending_vpy {
+                    if let Some(addr) = line_to_addr.get(&phys) {
+                        let a = *addr as u16;
+                        let hex = format!("0x{:04X}", a);
+                        line_map.entry(n.to_string()).or_insert_with(|| serde_json::Value::String(hex.clone()));
+                        vpy_line_map.entry(a.to_string()) // decimal-addr key (IDE PC→VPy lookup)
+                            .or_insert_with(|| serde_json::json!({ "file": source_name, "line": n, "column": 0 }));
+                        pending_vpy = None;
+                    }
+                }
+            }
+            // asmFunctions: single-bank only (multibank PC→ASM uses asmBankAddr).
+            if bank_opt.is_none() {
+                for (i, (name, start)) in label_lines.iter().enumerate() {
+                    let end = if i + 1 < label_lines.len() { label_lines[i + 1].1.saturating_sub(1) } else { *start };
+                    let ty = if bios_symbols.contains_key(name) { "bios" }
+                        else if func_lines.iter().any(|(u, _)| u == &name.to_uppercase()) { "vpy" }
+                        else { "native" };
+                    asm_functions.entry(name.clone()).or_insert_with(|| serde_json::json!({
+                        "name": name, "file": file_rel, "startLine": start, "endLine": end, "type": ty
+                    }));
+                }
+            }
+        }
+    }
+
+    // Multibank: point pdb.asm at bank 0's file as a default.
+    if !bank_asms.is_empty() {
+        if let Some(b0) = asm_bank_files.get("0") { asm_file_field = b0.clone(); }
+    }
+
+    let entry = symbol_table.get("START").or_else(|| symbol_table.get("MAIN")).copied().unwrap_or(0);
+
+    let pdb = serde_json::json!({
+        "version": "2.0",
+        "source": source_name,
+        "asm": asm_file_field,
+        "binary": source_name.replace(".vpy", ".bin"),
+        "entry_point": format!("0x{:04X}", entry),
+        "symbols": symbols,
+        "variables": variables,
+        "functions": functions,
+        "labels": labels,
+        "lineMap": line_map,
+        "vpyLineMap": vpy_line_map,
+        "asmLineMap": asm_line_map,
+        "asmAddressMap": asm_address_map,
+        "asmBankAddr": asm_bank_addr,
+        "asmBankFiles": asm_bank_files,
+        "asmFunctions": asm_functions,
+        "nativeCalls": native_calls,
+        "bios_symbols": bios_symbols
+    });
+
+    let json_str = serde_json::to_string_pretty(&pdb)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    std::fs::write(output_pdb_path, json_str)
 }

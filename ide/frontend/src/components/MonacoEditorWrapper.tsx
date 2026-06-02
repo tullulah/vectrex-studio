@@ -25,7 +25,7 @@ import { lspClient } from '../lspClient';
 // TODO(i18n): Adapt Monaco UI strings (context menu, messages) when supporting dynamic locale changes.
 
 // Simple language placeholder registration for 'vpy'
-function ensureLanguage(monaco: Monaco) {
+export function ensureLanguage(monaco: Monaco) {
   const already = (monaco.languages.getLanguages() || []).some(l => l.id === 'vpy');
   if (!already) {
     monaco.languages.register({ id: 'vpy' });
@@ -797,9 +797,13 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
             address = pdbData.lineMap?.[line.toString()];
             console.log(`[Monaco] 🔍 VPy line ${line} → lineMap result: ${address}`);
           }
-          
+
           if (address) {
-            const addr = parseInt(address, 16);
+            // vpyLineMap keys are DECIMAL address strings (e.g. "776"); lineMap values
+            // are hex ("0x0308"). Parse by form so both paths resolve correctly.
+            const addr = address.toLowerCase().startsWith('0x')
+              ? parseInt(address, 16)
+              : parseInt(address, 10);
             if (!isNaN(addr)) {
               targetAddresses.add(addr);
               console.log(`[Monaco] ✓ Added breakpoint target at 0x${addr.toString(16).toUpperCase()}`);
@@ -811,87 +815,31 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
       }
       
       console.log('[Monaco] Target addresses to sync:', Array.from(targetAddresses).map(a => '0x' + a.toString(16).toUpperCase()));
-    } else {
-      if (!emulatorDebug) console.warn('[Monaco] ⚠️ emulatorDebug not available');
-      if (!pdbData) console.warn('[Monaco] ⚠️ pdbData not available - compile first (Ctrl+F5)');
-    }
-    
-    if (emulatorDebug && pdbData) {
-      // Get current emulator breakpoints
-      const currentEmulatorBps = new Set<number>(emulatorDebug.getBreakpoints() as number[]);
-      
-      // CRITICAL: Detect if current file is ASM or VPy
-      const isAsmFile = doc.uri.toLowerCase().endsWith('.asm');
-      
-      // Convert lines to ASM addresses (using appropriate map)
-      const targetAddresses = new Set<number>();
-      for (const line of bps) {
-        let address: string | undefined;
-        
-        if (isAsmFile) {
-          // ASM file: use asmAddressMap
-          address = pdbData.asmAddressMap?.[line.toString()];
-          logger.debug('Debug', `[Monaco] ASM line ${line} → ASM address ${address}`);
-        } else {
-          // VPy file: use lineMap
-          address = pdbData.lineMap?.[line.toString()];
-          logger.debug('Debug', `[Monaco] VPy line ${line} → ASM address ${address}`);
-        }
-        
-        if (address) {
-          const addr = parseInt(address, 16);
-          if (!isNaN(addr)) {
-            targetAddresses.add(addr);
-            logger.debug('Debug', `[Monaco] ✓ Added breakpoint at 0x${addr.toString(16).toUpperCase()}`);
-          }
-        } else {
-          logger.warn('Debug', `[Monaco] ⚠️ No ASM mapping for line ${line} (file type: ${isAsmFile ? 'ASM' : 'VPy'})`);
-        }
-      }
-      
-      logger.debug('Debug', `[Monaco] Sync: ${targetAddresses.size} target addresses, ${currentEmulatorBps.size} current emulator bps`);
-    } else {
-      if (!emulatorDebug) logger.warn('Debug', '[Monaco] ⚠️ emulatorDebug not available');
-      if (!pdbData) logger.warn('Debug', '[Monaco] ⚠️ pdbData not available');
-    }
-    
-    if (emulatorDebug && pdbData) {
-      const currentEmulatorBps = new Set<number>(emulatorDebug.getBreakpoints() as number[]);
-      const targetAddresses = new Set<number>();
-      for (const line of bps) {
-        const address = pdbData.lineMap?.[line.toString()];
-        if (address) {
-          const addr = parseInt(address, 16);
-          if (!isNaN(addr)) {
-            targetAddresses.add(addr);
-          }
-        }
-      }
-      
-      // Remove breakpoints that are no longer in Monaco
+
+      // Apply the diff to the emulator. (Earlier this used pdbData.lineMap, which is
+      // empty for multibank ROMs, so no breakpoint was ever actually added.)
       for (const addr of currentEmulatorBps) {
         if (!targetAddresses.has(addr)) {
           emulatorDebug.removeBreakpoint(addr);
         }
       }
-      
-      // Add breakpoints that are new in Monaco
       for (const addr of targetAddresses) {
         if (!currentEmulatorBps.has(addr)) {
-          console.log(`[Monaco] 🔧 Calling emulatorDebug.addBreakpoint(${addr}) [type: ${typeof addr}]`);
+          console.log(`[Monaco] 🔧 emulatorDebug.addBreakpoint(0x${addr.toString(16).toUpperCase()})`);
           emulatorDebug.addBreakpoint(addr);
-          console.log(`[Monaco] ✓ addBreakpoint call completed`);
         }
       }
-      
-      // CRITICAL: If emulator is in 'paused' state (waiting for breakpoints), start it now
-      const debugState = useDebugStore.getState().state;
-      if (debugState === 'paused' && targetAddresses.size > 0) {
-        console.log('[Monaco] 🚀 All breakpoints synced - starting emulator in debug mode');
-        emulatorDebug.start?.(); // Start the emulator now that breakpoints are ready
+
+      // If a debug session is paused waiting for breakpoints, resume now that they're set.
+      const dbgState = useDebugStore.getState().state;
+      if (dbgState === 'paused' && targetAddresses.size > 0) {
+        emulatorDebug.start?.();
         useDebugStore.getState().setState('running');
-        console.log('[Monaco] ✓ Emulator started with breakpoints');
+        console.log('[Monaco] 🚀 Breakpoints synced - emulator running in debug mode');
       }
+    } else {
+      if (!emulatorDebug) console.warn('[Monaco] ⚠️ emulatorDebug not available');
+      if (!pdbData) console.warn('[Monaco] ⚠️ pdbData not available - compile first (Ctrl+F5)');
     }
   }, [breakpoints, doc?.uri, pdbData]);
 

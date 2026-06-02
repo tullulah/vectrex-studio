@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "name": "reed",
+  "duration_frames": 18,
+  "volume": 12,
+  "arpeggio_count": 2,
+  "arpeggio_speed_frames": 5,
+  "arpeggio_intervals": [
+    0,
+    2,
+    0,
+    0
+  ],
+  "noise_enabled": false,
+  "noise_period": 15,
+  "pitch_sweep_delta": 0,
+  "pitch_sweep_duration_frames": 0
+}

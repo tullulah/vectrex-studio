@@ -87,6 +87,96 @@
   line-height: 1.5;
 }
 
+/* Wrapper that groups a radio + its sub-options */
+.settings-radio-group {
+  display: flex;
+  flex-direction: column;
+  border-radius: 6px;
+  overflow: visible;
+}
+
+.settings-radio-group .settings-radio {
+  border-radius: 6px;
+}
+
+.settings-radio-group .settings-radio:has(input:checked) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+
+/* Sub-option row shown when the parent target is selected */
+.pitrex-suboption {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 10px 40px;
+  background: #1a3a50;
+  border: 1px solid #007acc;
+  border-top: none;
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+
+.settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #cccccc;
+  user-select: none;
+}
+
+.settings-checkbox input[type="checkbox"] {
+  accent-color: #007acc;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+/* SD path row */
+.pitrex-sd-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pitrex-sd-input {
+  flex: 1;
+  background: #0d2133;
+  border: 1px solid #1e5a85;
+  border-radius: 4px;
+  color: #9dd3f5;
+  font-size: 12px;
+  font-family: monospace;
+  padding: 4px 8px;
+  outline: none;
+}
+
+.pitrex-sd-input:focus {
+  border-color: #007acc;
+}
+
+.pitrex-sd-input::placeholder {
+  color: #3a6a8a;
+}
+
+.pitrex-sd-browse {
+  background: #1e5a85;
+  border: none;
+  border-radius: 4px;
+  color: #cccccc;
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pitrex-sd-browse:hover {
+  background: #2472a4;
+}
+
 .settings-info {
   margin-top: 24px;
   padding: 12px;

@@ -71,11 +71,13 @@ impl BinaryEmitter {
         self.code.len()
     }
 
-    /// Records bidirectional line ↔ offset mapping
+    /// Records line ↔ address mapping. Stores the ORG-aware `current_address`
+    /// (the bank-relative PC), NOT the raw code offset — so a flat multibank ASM
+    /// with per-bank `ORG $0000` yields correct bank-relative addresses per line.
     fn record_line_mapping(&mut self) {
-        let offset = self.current_offset();
-        self.line_to_offset.insert(self.current_line, offset);
-        self.offset_to_line.insert(offset, self.current_line);
+        let addr = self.current_address as usize;
+        self.line_to_offset.insert(self.current_line, addr);
+        self.offset_to_line.insert(addr, self.current_line);
     }
 
     /// Emits a byte and advances the current address
@@ -95,7 +97,7 @@ impl BinaryEmitter {
         // Use current_address for the label, which already accounts for ORG
         // This works correctly for all ORG values including $4000 for Bank 31
         let label_address = self.current_address;
-        
+
         // Store both original and uppercase variants for case-insensitive lookup
         self.symbols.insert(label.to_string(), label_address);
         self.symbols.insert(label.to_uppercase(), label_address);

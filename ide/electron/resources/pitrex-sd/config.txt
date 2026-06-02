@@ -1,0 +1,14 @@
+[pi0]
+kernel=kernel.img
+
+[pi02]
+kernel=kernel7l.img
+
+[all]
+gpu_mem=64
+gpio=0-5,16-24,26-29=ip
+gpio=6-13,25=op
+gpio=24=np
+enable_uart=1
+core_freq=250
+force_turbo=1

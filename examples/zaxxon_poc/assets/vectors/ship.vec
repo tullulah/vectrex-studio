@@ -1,0 +1,76 @@
+{
+  "version": "1.0",
+  "name": "ship",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [
+    {
+      "name": "ship",
+      "visible": true,
+      "paths": [
+        {
+          "name": "fuselage",
+          "intensity": 127,
+          "closed": true,
+          "points": [
+            { "x": -12, "y":  -8 },
+            { "x":  -7, "y": -13 },
+            { "x":   1, "y":  -5 },
+            { "x":  12, "y":   8 },
+            { "x":   7, "y":  13 },
+            { "x":  -1, "y":   5 },
+            { "x": -12, "y":  -8 }
+          ]
+        },
+        {
+          "name": "near_wing",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            { "x":   2, "y":  -5 },
+            { "x":  11, "y":  -8 },
+            { "x":   8, "y": -15 },
+            { "x":  -3, "y": -10 },
+            { "x":   2, "y":  -5 }
+          ]
+        },
+        {
+          "name": "far_wing",
+          "intensity": 85,
+          "closed": true,
+          "points": [
+            { "x":  -2, "y":   5 },
+            { "x": -11, "y":   8 },
+            { "x":  -8, "y":  15 },
+            { "x":   3, "y":  10 },
+            { "x":  -2, "y":   5 }
+          ]
+        },
+        {
+          "name": "cockpit",
+          "intensity": 70,
+          "closed": true,
+          "points": [
+            { "x":  3, "y":  2 },
+            { "x":  7, "y":  5 },
+            { "x":  5, "y":  8 },
+            { "x":  1, "y":  6 },
+            { "x":  3, "y":  2 }
+          ]
+        },
+        {
+          "name": "engine",
+          "intensity": 55,
+          "closed": false,
+          "points": [
+            { "x":  -9, "y":  -9 },
+            { "x": -13, "y": -11 },
+            { "x": -12, "y": -15 },
+            { "x":  -8, "y": -12 }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

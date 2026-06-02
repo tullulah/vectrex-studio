@@ -19,12 +19,14 @@ interface Point {
   x: number;
   y: number;
   z?: number; // Optional Z coordinate for 3D vectors
+  t?: 'a' | 'c'; // Bezier: 'a'=anchor, 'c'=control point
 }
 
 interface VecPath {
   name: string;
   intensity: number;
   closed: boolean;
+  type?: 'polyline' | 'bezier';
   points: Point[];
 }
 
@@ -32,6 +34,13 @@ interface Layer {
   name: string;
   visible: boolean;
   paths: VecPath[];
+}
+
+interface CollisionSegment {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
 }
 
 interface VecResource {
@@ -56,6 +65,15 @@ interface VecResource {
   center_y?: number;
   // Background image stored as base64 data URL
   backgroundImage?: string;
+  // Background image offset in canvas pixels
+  backgroundOffset?: { x: number; y: number };
+  collisionMesh?: {
+    segments: CollisionSegment[];
+  };
+  /** Reusable walkable areas (Phase 2 wander AI). Coordinates are relative
+   *  to the vec's origin; the playground / codegen translate them by each
+   *  placed object's (x, y). Inheritance: .vec → .vplay → .venemy. */
+  walkableAreas?: { y: number; x_min: number; x_max: number }[];
 }
 
 interface VectorEditorProps {
@@ -69,7 +87,7 @@ interface VectorEditorProps {
   height?: number;
 }
 
-type Tool = 'select' | 'pen' | 'line' | 'polygon' | 'circle' | 'arc' | 'pan' | 'background';
+type Tool = 'select' | 'pen' | 'line' | 'bezier' | 'polygon' | 'circle' | 'arc' | 'pan' | 'background' | 'walkarea';
 type ViewMode = 'xy' | 'xz' | 'yz' | '3d';
 
 const defaultResource: VecResource = {
@@ -530,6 +548,43 @@ function detectEdgesFromImage(
 }
 
 // ============================================
+// Collision Mesh Helpers
+// ============================================
+
+function filterTopEdges(segs: CollisionSegment[]): CollisionSegment[] {
+  return segs.filter(seg => {
+    const xa = Math.min(seg.x1, seg.x2);
+    const xb = Math.max(seg.x1, seg.x2);
+    return !segs.some(t =>
+      t !== seg &&
+      t.y1 > seg.y1 &&
+      Math.min(t.x1, t.x2) < xb &&
+      Math.max(t.x1, t.x2) > xa
+    );
+  });
+}
+
+function generateMeshFromPath(path: VecPath): CollisionSegment[] {
+  const pts = path.points;
+  if (pts.length < 2) return [];
+  const horiz: CollisionSegment[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p1 = pts[i], p2 = pts[i + 1];
+    if (!p1 || !p2) continue;
+    if (p1.y === p2.y) {
+      horiz.push({ x1: Math.min(p1.x, p2.x), y1: p1.y, x2: Math.max(p1.x, p2.x), y2: p2.y });
+    }
+  }
+  if (path.closed && pts.length >= 2) {
+    const p1 = pts[pts.length - 1], p2 = pts[0];
+    if (p1 && p2 && p1.y === p2.y) {
+      horiz.push({ x1: Math.min(p1.x, p2.x), y1: p1.y, x2: Math.max(p1.x, p2.x), y2: p2.y });
+    }
+  }
+  return filterTopEdges(horiz);
+}
+
+// ============================================
 // Main VectorEditor Component
 // ============================================
 
@@ -548,6 +603,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const circlePreviewRef = useRef<{ center: { x: number; y: number }; radius: number; tool: string } | null>(null);
   // Nearest vertex to the current mouse position (for hover highlight & pen snapping)
   const hoveredVertexRef = useRef<{ point: Point; canvasX: number; canvasY: number } | null>(null);
+  // Nearest segment to cursor for point insertion (select mode only)
+  const hoveredSegmentRef = useRef<{ pathIdx: number; segIdx: number; canvasX: number; canvasY: number; resPoint: Point } | null>(null);
 
   // Dynamic canvas size — updated by ResizeObserver; all coordinate logic reads these
   const [width, setWidth] = useState(propWidth);
@@ -623,15 +680,29 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [selectedPoints, setSelectedPoints] = useState<Set<string>>(new Set()); // "pathIdx-pointIdx" format
   // Tree panel selection: "layerIdx-pathIdx" key, or null
   const [selectedTreePathKey, setSelectedTreePathKey] = useState<string | null>(null);
+  // Multi-selection of paths in tree: Set of "layerIdx-pathIdx" keys
+  const [selectedTreePathKeys, setSelectedTreePathKeys] = useState<Set<string>>(new Set());
+  // Intensity text input value for "Set Intensity" feature
+  const [setIntensityInput, setSetIntensityInput] = useState<string>('127');
   // Which paths are expanded in the tree to show individual points: "layerIdx-pathIdx" keys
   const [expandedTreePaths, setExpandedTreePaths] = useState<Set<string>>(new Set());
+  // Which layers have their path list collapsed (default: expanded)
+  const [collapsedLayerPaths, setCollapsedLayerPaths] = useState<Set<number>>(new Set());
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [viewMode, setViewMode] = useState<ViewMode>('xy');
   const [rotation3D, setRotation3D] = useState({ pitch: 30, yaw: 45 }); // degrees
   const [isDrawing, setIsDrawing] = useState(false);
   const [tempPoints, setTempPoints] = useState<Point[]>([]);
-  
+  const [showCollisionMesh, setShowCollisionMesh] = useState(false);
+  const [selectedEdge, setSelectedEdge] = useState<{ pathIdx: number; edgeIdx: number } | null>(null);
+  // Walkable-area paint state (active when currentTool === 'walkarea').
+  const walkAreaDrawStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [walkAreaPreview, setWalkAreaPreview] = useState<{ y: number; x_min: number; x_max: number } | null>(null);
+
+  // Tracks the mousedown position for bezier anchor drag detection
+  const bezierMouseDownRef = useRef<{ canvasX: number; canvasY: number; resPoint: Point } | null>(null);
+
   // Circle/Arc/Polygon tool settings
   const [circleSegments, setCircleSegments] = useState(16);
   const [arcStartAngle, setArcStartAngle] = useState(0);
@@ -646,15 +717,86 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
 
   // 3D import dialog state (shared by DXF and OBJ)
   interface RawPath { pts: Point[]; closed: boolean }
+  interface ObjEdge {
+    a: number; b: number; dot: number; border: boolean;
+    n1?: Vec3; n2?: Vec3; // face normals (only for shared edges, used for silhouette mode)
+  }
   interface ImportDialogState {
     source: 'DXF' | 'OBJ';
     rawPaths: RawPath[];
     bbox: { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
     referencePlane: 'xy' | 'xz' | 'yz' | 'manual';
     manualScale: number;
+    // OBJ-only: raw edge data for re-filtering when angle threshold changes
+    objVerts?: [number, number, number][];
+    objEdges?: ObjEdge[];
+    angleThreshold?: number; // degrees, default 25
+    edgeMode?: 'hard' | 'silhouette'; // default 'hard'
   }
   const [dxfImport, setDxfImport] = useState<ImportDialogState | null>(null);
-  
+
+  // Re-chain OBJ hard edges into RawPaths given a set of (a,b) pairs and vertex array
+  const chainObjEdges = (hardEdges: [number, number][], verts: [number, number, number][]): RawPath[] => {
+    const adj = new Map<number, number[]>();
+    const edgeDegree = new Map<number, number>();
+    for (const [a, b] of hardEdges) {
+      edgeDegree.set(a, (edgeDegree.get(a) ?? 0) + 1);
+      edgeDegree.set(b, (edgeDegree.get(b) ?? 0) + 1);
+    }
+    for (const [a, b] of hardEdges) {
+      if (!adj.has(a)) adj.set(a, []);
+      if (!adj.has(b)) adj.set(b, []);
+      adj.get(a)!.push(b);
+      adj.get(b)!.push(a);
+    }
+    const usedEdges = new Set<string>();
+    const edgeKey = (a: number, b: number) => `${Math.min(a,b)},${Math.max(a,b)}`;
+    const result: RawPath[] = [];
+    const walkChain = (start: number, firstNext: number) => {
+      const chain: number[] = [start, firstNext];
+      usedEdges.add(edgeKey(start, firstNext));
+      let cur = firstNext, prev = start;
+      while (true) {
+        const neighbors = adj.get(cur) ?? [];
+        const nextCandidates = neighbors.filter(n => n !== prev && !usedEdges.has(edgeKey(cur, n)));
+        if (nextCandidates.length === 1 && (edgeDegree.get(cur) ?? 0) === 2) {
+          const next = nextCandidates[0];
+          usedEdges.add(edgeKey(cur, next));
+          chain.push(next); prev = cur; cur = next;
+        } else break;
+      }
+      const closed = chain[0] === chain[chain.length - 1];
+      result.push({ pts: chain.map(v => ({ x: verts[v][0], y: verts[v][1], z: verts[v][2] })), closed });
+    };
+    const startVerts = [...edgeDegree.entries()].filter(([, d]) => d !== 2).map(([v]) => v);
+    for (const sv of startVerts)
+      for (const nb of (adj.get(sv) ?? []))
+        if (!usedEdges.has(edgeKey(sv, nb))) walkChain(sv, nb);
+    for (const v of [...edgeDegree.keys()])
+      for (const nb of (adj.get(v) ?? []))
+        if (!usedEdges.has(edgeKey(v, nb))) walkChain(v, nb);
+    return result;
+  };
+
+  // Compute silhouette edges for a given view direction.
+  // A silhouette edge = border (only 1 face) OR the two face normals straddle the view plane
+  // i.e. (n1·viewDir) * (n2·viewDir) <= 0
+  type Vec3 = [number, number, number];
+  const viewDirForPlane = (plane: 'xy' | 'xz' | 'yz' | 'manual'): Vec3 =>
+    plane === 'yz' ? [1, 0, 0] : plane === 'xz' ? [0, 1, 0] : [0, 0, 1];
+
+  const silhouetteEdges = (edges: ObjEdge[], plane: 'xy' | 'xz' | 'yz' | 'manual'): [number, number][] => {
+    const [vx, vy, vz] = viewDirForPlane(plane);
+    return edges
+      .filter(e => {
+        if (e.border || !e.n2) return true; // border always visible
+        const d1 = e.n1![0] * vx + e.n1![1] * vy + e.n1![2] * vz;
+        const d2 = e.n2[0] * vx + e.n2[1] * vy + e.n2[2] * vz;
+        return d1 * d2 <= 0; // sign change → silhouette
+      })
+      .map(e => [e.a, e.b]);
+  };
+
   // Track if we're the source of changes to avoid loops
   const isInternalChange = useRef(false);
   
@@ -766,9 +908,6 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
 
   // Scale all points by a factor
   const handleScale = (factor: number) => {
-    console.log('[VectorEditor] handleScale called with factor:', factor);
-    console.log('[VectorEditor] Current resource:', JSON.stringify(resource, null, 2));
-    
     const scaled = JSON.parse(JSON.stringify(resource)) as VecResource;
     let pointsScaled = 0;
     
@@ -787,8 +926,16 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       }
     }
     
+    // Scale background offset proportionally
+    if (scaled.backgroundOffset) {
+      scaled.backgroundOffset = {
+        x: Math.round(scaled.backgroundOffset.x * factor),
+        y: Math.round(scaled.backgroundOffset.y * factor),
+      };
+      setBackgroundOffset(scaled.backgroundOffset);
+    }
+
     console.log('[VectorEditor] Scaled', pointsScaled, 'points with factor', factor);
-    console.log('[VectorEditor] Scaled resource:', JSON.stringify(scaled, null, 2));
     updateResource(resource, scaled);
   };
   
@@ -807,6 +954,62 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const dragStartPositionsRef = useRef<Map<string, { x: number; y: number }> | null>(null);
   const dragStartResCoordRef = useRef<{ x: number; y: number } | null>(null);
   
+  // Render a bezier path on a canvas context using bezierCurveTo.
+  // Points layout: A0, C0_out, C1_in, A1, C1_out, C2_in, A2, ...
+  const renderBezierPath = (pts: Point[], ctx2: CanvasRenderingContext2D) => {
+    if (pts.length < 4) return;
+    const sp = resourceToCanvas(pts[0]);
+    ctx2.moveTo(sp.x, sp.y);
+    for (let i = 0; i + 3 < pts.length; i += 3) {
+      const cp1 = resourceToCanvas(pts[i + 1]);
+      const cp2 = resourceToCanvas(pts[i + 2]);
+      const ep  = resourceToCanvas(pts[i + 3]);
+      ctx2.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, ep.x, ep.y);
+    }
+  };
+
+  // Draw handle lines + handle dots for a bezier path (shows control tangents).
+  const drawBezierHandles = (pts: Point[], ctx2: CanvasRenderingContext2D) => {
+    ctx2.save();
+    ctx2.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx2.lineWidth = 1;
+    ctx2.setLineDash([3, 3]);
+    // For each anchor at 3k: draw line to pts[3k-1] (cp_in, if exists) and pts[3k+1] (cp_out, if exists)
+    for (let k = 0; k * 3 < pts.length; k++) {
+      const ai = k * 3;
+      const ac = resourceToCanvas(pts[ai]);
+      const cpOutIdx = ai + 1;
+      const cpInIdx  = ai - 1;
+      if (cpOutIdx < pts.length) {
+        const cpOut = resourceToCanvas(pts[cpOutIdx]);
+        ctx2.beginPath();
+        ctx2.moveTo(ac.x, ac.y);
+        ctx2.lineTo(cpOut.x, cpOut.y);
+        ctx2.stroke();
+        ctx2.setLineDash([]);
+        ctx2.fillStyle = '#ffffff';
+        ctx2.beginPath();
+        ctx2.arc(cpOut.x, cpOut.y, 3, 0, Math.PI * 2);
+        ctx2.fill();
+        ctx2.setLineDash([3, 3]);
+      }
+      if (cpInIdx >= 0) {
+        const cpIn = resourceToCanvas(pts[cpInIdx]);
+        ctx2.beginPath();
+        ctx2.moveTo(ac.x, ac.y);
+        ctx2.lineTo(cpIn.x, cpIn.y);
+        ctx2.stroke();
+        ctx2.setLineDash([]);
+        ctx2.fillStyle = '#ffffff';
+        ctx2.beginPath();
+        ctx2.arc(cpIn.x, cpIn.y, 3, 0, Math.PI * 2);
+        ctx2.fill();
+        ctx2.setLineDash([3, 3]);
+      }
+    }
+    ctx2.restore();
+  };
+
   // Helper functions for circle/arc generation
   const generateCirclePoints = (center: Point, radius: number, segments: number, closed: boolean = true): Point[] => {
     const points: Point[] = [];
@@ -1031,14 +1234,28 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     const dy = y2 - y1;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
-    
+
     let t = ((px - x1) * dx + (py - y1) * dy) / (len * len);
     t = Math.max(0, Math.min(1, t));
-    
+
     const closestX = x1 + t * dx;
     const closestY = y1 + t * dy;
-    
+
     return Math.sqrt((px - closestX) ** 2 + (py - closestY) ** 2);
+  };
+
+  // Returns the projected canvas point and t parameter on a segment, or null if beyond endpoints
+  const projectOnSegment = (px: number, py: number, x1: number, y1: number, x2: number, y2: number): { canvasX: number; canvasY: number; t: number; dist: number } | null => {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return null;
+    let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+    t = Math.max(0.01, Math.min(0.99, t)); // exclude endpoints
+    const cx = x1 + t * dx;
+    const cy = y1 + t * dy;
+    const dist = Math.sqrt((px - cx) ** 2 + (py - cy) ** 2);
+    return { canvasX: cx, canvasY: cy, t, dist };
   };
 
   // Draw the canvas
@@ -1068,19 +1285,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       const rectW = screenR.x - screenL.x;
       const rectH = screenB.y - screenT.y;
 
-      // Scale image to fit inside rect while preserving aspect ratio
-      const imgAspect = backgroundImage.naturalWidth / backgroundImage.naturalHeight;
-      const rectAspect = rectW / rectH;
-      let drawWidth: number, drawHeight: number;
-      if (imgAspect > rectAspect) {
-        drawWidth = rectW;
-        drawHeight = rectW / imgAspect;
-      } else {
-        drawHeight = rectH;
-        drawWidth = rectH * imgAspect;
-      }
-      const drawX = rectX + (rectW - drawWidth) / 2;
-      const drawY = rectY + (rectH - drawHeight) / 2;
+      // Stretch image to fill the Vectrex screen rect (same as vplay editor)
+      const drawWidth = rectW;
+      const drawHeight = rectH;
+      const drawX = rectX;
+      const drawY = rectY;
 
       ctx.drawImage(backgroundImage, drawX, drawY, drawWidth, drawHeight);
 
@@ -1184,21 +1393,27 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         ctx.lineWidth = 2;
 
         ctx.beginPath();
-        const startPt = path.points[0];
-        if (!startPt) continue;
-        const start = resourceToCanvas(startPt);
-        ctx.moveTo(start.x, start.y);
-        for (let i = 1; i < path.points.length; i++) {
-          const pt = path.points[i];
-          if (!pt) continue;
-          const ptCanvas = resourceToCanvas(pt);
-          ctx.lineTo(ptCanvas.x, ptCanvas.y);
-        }
-
-        if (path.closed) {
-          ctx.closePath();
+        if (path.type === 'bezier') {
+          renderBezierPath(path.points, ctx);
+        } else {
+          const startPt = path.points[0];
+          if (!startPt) continue;
+          const start = resourceToCanvas(startPt);
+          ctx.moveTo(start.x, start.y);
+          for (let i = 1; i < path.points.length; i++) {
+            const pt = path.points[i];
+            if (!pt) continue;
+            const ptCanvas = resourceToCanvas(pt);
+            ctx.lineTo(ptCanvas.x, ptCanvas.y);
+          }
+          if (path.closed) ctx.closePath();
         }
         ctx.stroke();
+
+        // For selected bezier path: draw handle lines on top
+        if (path.type === 'bezier' && layerIdx === currentLayerIndex && pathIdx === currentPathIndex) {
+          drawBezierHandles(path.points, ctx);
+        }
 
         // Tree-panel selection highlight: cyan stroke override
         const treeKey = `${layerIdx}-${pathIdx}`;
@@ -1207,31 +1422,43 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           ctx.strokeStyle = '#00ffff';
           ctx.lineWidth = 2.5;
           ctx.beginPath();
-          const sp = path.points[0];
-          if (sp) {
-            const sc = resourceToCanvas(sp);
-            ctx.moveTo(sc.x, sc.y);
-            for (let i = 1; i < path.points.length; i++) {
-              const pp = path.points[i];
-              if (!pp) continue;
-              const pc = resourceToCanvas(pp);
-              ctx.lineTo(pc.x, pc.y);
+          if (path.type === 'bezier') {
+            renderBezierPath(path.points, ctx);
+          } else {
+            const sp = path.points[0];
+            if (sp) {
+              const sc = resourceToCanvas(sp);
+              ctx.moveTo(sc.x, sc.y);
+              for (let i = 1; i < path.points.length; i++) {
+                const pp = path.points[i];
+                if (!pp) continue;
+                const pc = resourceToCanvas(pp);
+                ctx.lineTo(pc.x, pc.y);
+              }
+              if (path.closed) ctx.closePath();
             }
-            if (path.closed) ctx.closePath();
           }
           ctx.stroke();
         }
 
         if (layerIdx === currentLayerIndex && pathIdx === currentPathIndex) {
-          ctx.fillStyle = '#ffff00';
           for (let i = 0; i < path.points.length; i++) {
             const pt = path.points[i];
             if (!pt) continue;
             const ptCanvas = resourceToCanvas(pt);
             const isSelected = selectedPoints.has(`${pathIdx}-${i}`);
-            ctx.beginPath();
-            ctx.arc(ptCanvas.x, ptCanvas.y, i === selectedPointIndex || isSelected ? 6 : 4, 0, Math.PI * 2);
-            ctx.fill();
+            const isControl = path.type === 'bezier' && pt.t === 'c';
+            if (isControl) {
+              // Control points: small cyan squares
+              ctx.fillStyle = isSelected ? '#ff6600' : 'rgba(0,200,255,0.7)';
+              const s = 3;
+              ctx.fillRect(ptCanvas.x - s, ptCanvas.y - s, s * 2, s * 2);
+            } else {
+              ctx.fillStyle = isSelected ? '#ff6600' : '#ffff00';
+              ctx.beginPath();
+              ctx.arc(ptCanvas.x, ptCanvas.y, i === selectedPointIndex || isSelected ? 6 : 4, 0, Math.PI * 2);
+              ctx.fill();
+            }
           }
         }
         
@@ -1250,6 +1477,97 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           }
         }
       }
+    }
+
+    // Draw selected edge highlight (for collision mesh edge selection)
+    if (selectedEdge !== null) {
+      const layer = resource.layers[currentLayerIndex];
+      const path = layer?.paths[selectedEdge.pathIdx];
+      if (path) {
+        const p1r = path.points[selectedEdge.edgeIdx];
+        const p2r = path.points[selectedEdge.edgeIdx + 1];
+        if (p1r && p2r) {
+          const p1 = resourceToCanvas(p1r);
+          const p2 = resourceToCanvas(p2r);
+          ctx.save();
+          ctx.strokeStyle = '#ffaa00';
+          ctx.lineWidth = 3;
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+          ctx.fillStyle = '#ffaa00';
+          ctx.beginPath(); ctx.arc(p1.x, p1.y, 4, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(p2.x, p2.y, 4, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+
+    // Draw collision mesh overlay
+    if (showCollisionMesh && resource.collisionMesh?.segments?.length) {
+      ctx.save();
+      ctx.strokeStyle = '#ff44ff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      for (const seg of resource.collisionMesh.segments) {
+        const p1 = resourceToCanvas({ x: seg.x1, y: seg.y1 });
+        const p2 = resourceToCanvas({ x: seg.x2, y: seg.y2 });
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        // Small tick marks at endpoints
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(p1.x, p1.y, 3, 0, Math.PI * 2);
+        ctx.arc(p2.x, p2.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff44ff';
+        ctx.fill();
+        ctx.setLineDash([4, 3]);
+      }
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    // Draw walkable areas baked into the .vec (Phase 2 wander AI). Cyan
+    // dashed bars with their index, plus the live preview while painting.
+    if (resource.walkableAreas?.length || walkAreaPreview) {
+      ctx.save();
+      ctx.strokeStyle = '#44ffcc';
+      ctx.fillStyle = '#44ffcc';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      (resource.walkableAreas ?? []).forEach((a, idx) => {
+        const left  = resourceToCanvas({ x: a.x_min, y: a.y });
+        const right = resourceToCanvas({ x: a.x_max, y: a.y });
+        ctx.beginPath();
+        ctx.moveTo(left.x, left.y);
+        ctx.lineTo(right.x, right.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(left.x,  left.y  - 5); ctx.lineTo(left.x,  left.y  + 5);
+        ctx.moveTo(right.x, right.y - 5); ctx.lineTo(right.x, right.y + 5);
+        ctx.stroke();
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`W${idx}`, (left.x + right.x) / 2, left.y - 6);
+        ctx.setLineDash([4, 3]);
+      });
+      if (walkAreaPreview) {
+        const a = walkAreaPreview;
+        const left  = resourceToCanvas({ x: a.x_min, y: a.y });
+        const right = resourceToCanvas({ x: a.x_max, y: a.y });
+        ctx.strokeStyle = '#00ffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(left.x, left.y);
+        ctx.lineTo(right.x, right.y);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
 
     // Draw temporary points while drawing
@@ -1294,6 +1612,87 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.globalAlpha = 1;
+      }
+    }
+
+    // -- Bezier tool temp-preview --
+    if (currentTool === 'bezier' && tempPoints.length >= 2) {
+      // Draw already-confirmed segments
+      ctx.strokeStyle = '#00ccff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      renderBezierPath(tempPoints, ctx);
+      ctx.stroke();
+
+      // Draw handle lines for confirmed anchors
+      drawBezierHandles(tempPoints, ctx);
+
+      // Rubber-band: preview segment from last confirmed anchor to mouse/pending
+      const lastAnchor = tempPoints[tempPoints.length - 2]; // A_last
+      const lastCpOut  = tempPoints[tempPoints.length - 1]; // C_last_out
+      if (lastAnchor && lastCpOut && mousePenPosRef.current) {
+        const mouseCanvas = mousePenPosRef.current;
+        const mouseRes = canvasToResource(mouseCanvas.x, mouseCanvas.y);
+        const md = bezierMouseDownRef.current;
+
+        let cp2Res: Point;
+        let endRes: Point;
+        if (md) {
+          // Dragging: symmetric handles at pending anchor
+          const ddx = mouseRes.x - md.resPoint.x;
+          const ddy = mouseRes.y - md.resPoint.y;
+          cp2Res = { x: Math.round(md.resPoint.x - ddx), y: Math.round(md.resPoint.y - ddy) };
+          endRes = md.resPoint;
+          // Draw pending anchor's handles
+          const pa = resourceToCanvas(md.resPoint);
+          const hIn  = resourceToCanvas(cp2Res);
+          const hOut = resourceToCanvas({ x: Math.round(md.resPoint.x + ddx), y: Math.round(md.resPoint.y + ddy) });
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(hIn.x, hIn.y); ctx.lineTo(pa.x, pa.y); ctx.lineTo(hOut.x, hOut.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = '#ffffff';
+          for (const h of [hIn, hOut]) {
+            ctx.beginPath(); ctx.arc(h.x, h.y, 3, 0, Math.PI * 2); ctx.fill();
+          }
+          ctx.beginPath(); ctx.arc(pa.x, pa.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = '#00ccff'; ctx.fill();
+          ctx.restore();
+        } else {
+          // Just hovering: sharp-corner preview to mouse
+          cp2Res = mouseRes;
+          endRes = mouseRes;
+        }
+
+        const laC  = resourceToCanvas(lastAnchor);
+        const cp1C = resourceToCanvas(lastCpOut);
+        const cp2C = resourceToCanvas(cp2Res);
+        const epC  = resourceToCanvas(endRes);
+        ctx.beginPath();
+        ctx.moveTo(laC.x, laC.y);
+        ctx.bezierCurveTo(cp1C.x, cp1C.y, cp2C.x, cp2C.y, epC.x, epC.y);
+        ctx.strokeStyle = '#00ccff';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.globalAlpha = 0.7;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+      }
+
+      // Draw anchor markers for already-confirmed points
+      for (let i = 0; i < tempPoints.length; i++) {
+        const pt = tempPoints[i];
+        const pc = resourceToCanvas(pt);
+        if (i % 3 === 0) {
+          ctx.fillStyle = '#00ccff';
+          ctx.beginPath(); ctx.arc(pc.x, pc.y, 5, 0, Math.PI * 2); ctx.fill();
+        }
       }
     }
 
@@ -1449,7 +1848,29 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.stroke();
       ctx.restore();
     }
-  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey]);
+
+    // Draw hovered segment insert indicator (green circle with + — always on top)
+    const hs = hoveredSegmentRef.current;
+    if (hs && currentTool === 'select') {
+      ctx.save();
+      ctx.strokeStyle = '#44ff88';
+      ctx.fillStyle = '#44ff88';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.arc(hs.canvasX, hs.canvasY, 6, 0, Math.PI * 2);
+      ctx.stroke();
+      // Draw + symbol
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(hs.canvasX - 4, hs.canvasY);
+      ctx.lineTo(hs.canvasX + 4, hs.canvasY);
+      ctx.moveTo(hs.canvasX, hs.canvasY - 4);
+      ctx.lineTo(hs.canvasX, hs.canvasY + 4);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge, walkAreaPreview]);
 
   useEffect(() => {
     draw();
@@ -1641,101 +2062,33 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }
 
         // Keep edge if: border (only 1 face) OR dihedral angle > threshold
-        const ANGLE_THRESHOLD_DEG = 25;
-        const cosThreshold = Math.cos((ANGLE_THRESHOLD_DEG * Math.PI) / 180);
-        const hardEdges: [number, number][] = [];
-
+        // Build objEdges list (stores dot product per edge for re-filtering in the dialog)
+        const objEdgeList: ObjEdge[] = [];
         for (const [key, normals] of edgeFaces) {
           const [a, b] = key.split(',').map(Number);
           if (normals.length === 1) {
-            // Border edge — always keep
-            hardEdges.push([a, b]);
+            objEdgeList.push({ a, b, dot: -2, border: true, n1: normals[0] });
           } else {
-            // Check dihedral angle between the two adjacent faces
             const [n1, n2] = normals;
             const dot = n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2];
-            if (dot < cosThreshold) hardEdges.push([a, b]);
+            objEdgeList.push({ a, b, dot, border: false, n1, n2 });
           }
         }
-
-        // Also add any explicit 'l' lines from the OBJ
+        // Add explicit 'l' lines
         for (const [a, b] of linesExplicit) {
-          if (a >= 0 && b >= 0 && a < verts.length && b < verts.length) hardEdges.push([a, b]);
+          if (a >= 0 && b >= 0 && a < verts.length && b < verts.length)
+            objEdgeList.push({ a, b, dot: -2, border: true });
         }
+
+        const ANGLE_THRESHOLD_DEG = 25;
+        const cosThreshold = Math.cos((ANGLE_THRESHOLD_DEG * Math.PI) / 180);
+        const hardEdges: [number, number][] = objEdgeList
+          .filter(e => e.border || e.dot < cosThreshold)
+          .map(e => [e.a, e.b]);
 
         if (hardEdges.length === 0) { alert('No hard edges found. Try lowering the angle threshold or check the OBJ file.'); return; }
 
-        // Chain edges into polylines to minimize path count.
-        // Build adjacency: vertex → list of connected vertices (only for vertices with degree ≤ 2,
-        // which form simple chains; vertices with degree > 2 are junctions and break chains there).
-        const adj = new Map<number, number[]>();
-        const edgeDegree = new Map<number, number>();
-        for (const [a, b] of hardEdges) {
-          edgeDegree.set(a, (edgeDegree.get(a) ?? 0) + 1);
-          edgeDegree.set(b, (edgeDegree.get(b) ?? 0) + 1);
-        }
-        for (const [a, b] of hardEdges) {
-          // Only chain through vertices with exactly degree 2 (pure chain vertices)
-          if (!adj.has(a)) adj.set(a, []);
-          if (!adj.has(b)) adj.set(b, []);
-          adj.get(a)!.push(b);
-          adj.get(b)!.push(a);
-        }
-
-        const usedEdges = new Set<string>();
-        const edgeKey = (a: number, b: number) => `${Math.min(a,b)},${Math.max(a,b)}`;
-        const rawPaths: RawPath[] = [];
-
-        // Walk chains starting from endpoints (degree 1) or junction vertices (degree > 2)
-        const startVerts = [...edgeDegree.entries()]
-          .filter(([, d]) => d !== 2)
-          .map(([v]) => v);
-        // Also include any isolated cycle verts not reachable from startVerts
-        const allVerts = [...edgeDegree.keys()];
-
-        const walkChain = (start: number, firstNext: number) => {
-          const chain: number[] = [start, firstNext];
-          usedEdges.add(edgeKey(start, firstNext));
-          let cur = firstNext;
-          let prev = start;
-          while (true) {
-            const neighbors = adj.get(cur) ?? [];
-            const nextCandidates = neighbors.filter(n => n !== prev && !usedEdges.has(edgeKey(cur, n)));
-            // Only continue if exactly 1 unused neighbor and cur is a chain vertex (degree 2)
-            if (nextCandidates.length === 1 && (edgeDegree.get(cur) ?? 0) === 2) {
-              const next = nextCandidates[0];
-              usedEdges.add(edgeKey(cur, next));
-              chain.push(next);
-              prev = cur;
-              cur = next;
-            } else {
-              break;
-            }
-          }
-          const closed = chain[0] === chain[chain.length - 1];
-          rawPaths.push({
-            pts: chain.map(v => ({ x: verts[v][0], y: verts[v][1], z: verts[v][2] })),
-            closed,
-          });
-        };
-
-        // Process chains from endpoints/junctions first
-        for (const sv of startVerts) {
-          for (const nb of (adj.get(sv) ?? [])) {
-            if (!usedEdges.has(edgeKey(sv, nb))) {
-              walkChain(sv, nb);
-            }
-          }
-        }
-
-        // Process any remaining edges (closed loops with all degree-2 verts)
-        for (const v of allVerts) {
-          for (const nb of (adj.get(v) ?? [])) {
-            if (!usedEdges.has(edgeKey(v, nb))) {
-              walkChain(v, nb);
-            }
-          }
-        }
+        const rawPaths = chainObjEdges(hardEdges, verts);
 
         // Compute 3D bounding box
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -1746,7 +2099,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }
 
         const defaultScale = 254 / Math.max(maxX - minX || 1, maxY - minY || 1, maxZ - minZ || 1);
-        setDxfImport({ source: 'OBJ', rawPaths, bbox: { minX, maxX, minY, maxY, minZ, maxZ }, referencePlane: 'xy', manualScale: parseFloat(defaultScale.toFixed(4)) });
+        setDxfImport({ source: 'OBJ', rawPaths, bbox: { minX, maxX, minY, maxY, minZ, maxZ }, referencePlane: 'xy', manualScale: parseFloat(defaultScale.toFixed(4)), objVerts: verts, objEdges: objEdgeList, angleThreshold: ANGLE_THRESHOLD_DEG, edgeMode: 'hard' });
       } catch (err) {
         alert('Error reading OBJ: ' + (err as Error).message);
       }
@@ -1755,15 +2108,21 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     e.target.value = '';
   };
 
-  // Restore background image from resource on load
+  // Sync background image with the active resource
   useEffect(() => {
-    if (resource.backgroundImage && !backgroundImage) {
+    if (resource.backgroundImage) {
       const img = new Image();
       img.onload = () => {
         setBackgroundImage(img);
         setShowBackground(true);
       };
       img.src = resource.backgroundImage;
+      setBackgroundOffset(resource.backgroundOffset ?? { x: 0, y: 0 });
+    } else {
+      setBackgroundImage(null);
+      setShowBackground(false);
+      setShowEdgeSettings(false);
+      setBackgroundOffset({ x: 0, y: 0 });
     }
   }, [resource.backgroundImage]);
 
@@ -1817,7 +2176,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
 
     // Right-click (button 2) → finalise pen path if drawing, otherwise ignore
     if (e.button === 2) {
-      if (currentTool === 'pen' && tempPoints.length >= 2) {
+      if (currentTool === 'bezier' && tempPoints.length >= 5) {
+        e.preventDefault();
+        finalizeBezierPath();
+      } else if (currentTool === 'pen' && tempPoints.length >= 2) {
         e.preventDefault();
         finalizePenPath();
       }
@@ -1854,7 +2216,16 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       setIsDrawing(true);
       return;
     }
-    
+
+    // Walkable-area paint: click-drag horizontally to define a [x_min,x_max] at y.
+    if (currentTool === 'walkarea') {
+      const p = canvasToResource(canvasX, canvasY);
+      walkAreaDrawStartRef.current = { x: Math.round(p.x), y: Math.round(p.y) };
+      setWalkAreaPreview({ y: Math.round(p.y), x_min: Math.round(p.x), x_max: Math.round(p.x) });
+      setIsDrawing(true);
+      return;
+    }
+
     const point = canvasToResource(canvasX, canvasY);
 
     if (currentTool === 'pen') {
@@ -1862,6 +2233,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       const snapped = hoveredVertexRef.current;
       const penPoint = snapped ? { x: snapped.point.x, y: snapped.point.y, z: snapped.point.z ?? 0 } : point;
       setTempPoints([...tempPoints, penPoint]);
+      setIsDrawing(true);
+    } else if (currentTool === 'bezier') {
+      bezierMouseDownRef.current = { canvasX, canvasY, resPoint: point };
       setIsDrawing(true);
     } else if (currentTool === 'circle' || currentTool === 'arc' || currentTool === 'polygon') {
       // Start drawing circle/arc/polygon - set center
@@ -1954,11 +2328,18 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             if (pt) startPositions.set(k, { x: pt.x, y: pt.y });
           }
           dragStartPositionsRef.current = startPositions;
+          setSelectedEdge(null); // point selected, not an edge
         } else {
-          // Clicked on path line but not a point - just select the path
+          // Clicked on path line but not a point - select the path and remember which edge
           setSelectedPointIndex(-1);
           if (!e.shiftKey) {
             setSelectedPoints(new Set());
+          }
+          const seg = hoveredSegmentRef.current;
+          if (seg && seg.pathIdx === closestPath) {
+            setSelectedEdge({ pathIdx: closestPath, edgeIdx: seg.segIdx });
+          } else {
+            setSelectedEdge(null);
           }
         }
         setIsDrawing(true); // Enable dragging
@@ -2006,13 +2387,65 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     // Track mouse position for rubber-band preview; redraw if pen is mid-path
     mousePenPosRef.current = { x: canvasX, y: canvasY };
 
+    // Live walkable-area preview while click-dragging.
+    if (currentTool === 'walkarea' && isDrawing && walkAreaDrawStartRef.current) {
+      const p = canvasToResource(canvasX, canvasY);
+      const start = walkAreaDrawStartRef.current;
+      const x_min = Math.round(Math.min(start.x, p.x));
+      const x_max = Math.round(Math.max(start.x, p.x));
+      setWalkAreaPreview({ y: start.y, x_min, x_max });
+      draw();
+      return;
+    }
+
     // Update hovered vertex (highlight nearest vertex within snap radius)
     const prev = hoveredVertexRef.current;
     const nearest = findNearestVertex(canvasX, canvasY);
     hoveredVertexRef.current = nearest;
-    if (nearest !== null || prev !== null) {
-      draw(); // redraw to show/hide highlight
-    } else if (currentTool === 'pen' && tempPoints.length > 0) {
+
+    // Update hovered segment for insert-point indicator (select mode only, when no vertex is hovered)
+    const prevSeg = hoveredSegmentRef.current;
+    if (currentTool === 'select' && !nearest) {
+      const layer = resource.layers[currentLayerIndex];
+      let bestSeg: typeof hoveredSegmentRef.current = null;
+      let bestDist = 10; // px threshold for segment hover
+      if (layer && Array.isArray(layer.paths)) {
+        for (let pathIdx = 0; pathIdx < layer.paths.length; pathIdx++) {
+          const path = layer.paths[pathIdx];
+          if (!path || !Array.isArray(path.points) || path.points.length < 2) continue;
+          for (let i = 0; i < path.points.length - 1; i++) {
+            const p1 = resourceToCanvas(path.points[i]!);
+            const p2 = resourceToCanvas(path.points[i + 1]!);
+            const proj = projectOnSegment(canvasX, canvasY, p1.x, p1.y, p2.x, p2.y);
+            if (proj && proj.dist < bestDist) {
+              bestDist = proj.dist;
+              const r1 = path.points[i]!;
+              const r2 = path.points[i + 1]!;
+              bestSeg = {
+                pathIdx,
+                segIdx: i,
+                canvasX: proj.canvasX,
+                canvasY: proj.canvasY,
+                resPoint: {
+                  x: Math.round(r1.x + proj.t * (r2.x - r1.x)),
+                  y: Math.round(r1.y + proj.t * (r2.y - r1.y)),
+                  z: r1.z !== undefined && r2.z !== undefined ? Math.round(r1.z + proj.t * (r2.z - r1.z)) : 0,
+                },
+              };
+            }
+          }
+        }
+      }
+      hoveredSegmentRef.current = bestSeg;
+    } else {
+      hoveredSegmentRef.current = null;
+    }
+
+    if (nearest !== null || prev !== null || hoveredSegmentRef.current !== prevSeg) {
+      draw(); // redraw to show/hide highlights
+    } else if ((currentTool === 'pen' || currentTool === 'bezier') && tempPoints.length > 0) {
+      draw();
+    } else if (currentTool === 'bezier' && bezierMouseDownRef.current) {
       draw();
     }
 
@@ -2106,10 +2539,62 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   };
 
   const handleMouseUp = () => {
+    // Persist background offset if the background was dragged
+    if (currentTool === 'background' && isDrawing && isBackgroundSelected && dragStartRef.current) {
+      const nr = { ...resource, backgroundOffset: backgroundOffset };
+      updateResource(resource, nr);
+    }
+
+    // Finalise walkable-area paint: commit the preview as a new area on the resource.
+    if (currentTool === 'walkarea' && isDrawing && walkAreaPreview && walkAreaDrawStartRef.current) {
+      const a = walkAreaPreview;
+      if (a.x_max - a.x_min >= 2) {
+        const next = [...(resource.walkableAreas ?? []), { y: a.y, x_min: a.x_min, x_max: a.x_max }];
+        updateResource(resource, { ...resource, walkableAreas: next });
+      }
+      walkAreaDrawStartRef.current = null;
+      setWalkAreaPreview(null);
+      setIsDrawing(false);
+    }
+
     // Clear drag state for 3D rotation
     dragStartRef.current = null;
     setIsBackgroundSelected(false);
     
+    // Finalize bezier anchor placement
+    if (currentTool === 'bezier' && isDrawing && bezierMouseDownRef.current) {
+      const md = bezierMouseDownRef.current;
+      bezierMouseDownRef.current = null;
+
+      const rect2 = canvasRef.current?.getBoundingClientRect();
+      // Use the last known mouse position; if unavailable, use the mousedown point
+      const curMouseCanvas = mousePenPosRef.current ?? { x: md.canvasX, y: md.canvasY };
+      const curMouseRes = canvasToResource(curMouseCanvas.x, curMouseCanvas.y);
+
+      const anchor = { ...md.resPoint, t: 'a' as const };
+      const ddx = curMouseRes.x - md.resPoint.x;
+      const ddy = curMouseRes.y - md.resPoint.y;
+      const isDrag = Math.abs(ddx) > 2 || Math.abs(ddy) > 2;
+
+      const cpOut: Point = isDrag
+        ? { x: Math.round(md.resPoint.x + ddx), y: Math.round(md.resPoint.y + ddy), t: 'c' }
+        : { ...md.resPoint, t: 'c' };
+      const cpIn: Point = isDrag
+        ? { x: Math.round(md.resPoint.x - ddx), y: Math.round(md.resPoint.y - ddy), t: 'c' }
+        : { ...md.resPoint, t: 'c' };
+
+      if (tempPoints.length === 0) {
+        // First anchor: [A0, C0_out]
+        setTempPoints([anchor, cpOut]);
+      } else {
+        // Subsequent: append [C_in, A, C_out]
+        setTempPoints(prev => [...prev, cpIn, anchor, cpOut]);
+      }
+      setIsDrawing(false);
+      void rect2; // suppress unused warning
+      return;
+    }
+
     // Finalize circle/arc/polygon
     if ((currentTool === 'circle' || currentTool === 'arc' || currentTool === 'polygon') && isDrawing && circleCenter && circleRadius > 0) {
       const points = currentTool === 'circle'
@@ -2182,7 +2667,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   };
   
   // Handle mouse wheel for zoom (zoom to cursor position)
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
+  // Registered as a native listener (passive: false) so preventDefault() works in Chrome/Electron.
+  const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     
     const canvas = canvasRef.current;
@@ -2203,7 +2689,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     
     // Calculate new zoom
     const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-    const newZoom = Math.max(0.5, Math.min(4, zoom * zoomFactor));
+    const newZoom = Math.max(0.5, Math.min(16, zoom * zoomFactor));
     
     // Calculate new pan to keep world position under cursor
     const newPanX = mouseX - centerX - worldX * scale * newZoom;
@@ -2212,6 +2698,14 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     setZoom(newZoom);
     setPan({ x: newPanX, y: newPanY });
   }, [zoom, pan, width, height, resource.canvas.width]);
+
+  // Register wheel as non-passive so preventDefault() works
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
   
   // Delete selected points
   const handleDeleteSelected = useCallback(() => {
@@ -2256,6 +2750,88 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     setCurrentPathIndex(-1);
   }, [resource, currentLayerIndex, selectedPoints, updateResource]);
 
+  // Delete all tree-selected paths
+  const handleDeleteTreePaths = useCallback((overrideKeys?: Set<string>) => {
+    const keysToDelete = overrideKeys ?? (selectedTreePathKeys.size > 0 ? selectedTreePathKeys
+      : (selectedTreePathKey ? new Set([selectedTreePathKey]) : new Set<string>()));
+    if (keysToDelete.size === 0) return;
+    const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+    const byLayer = new Map<number, number[]>();
+    keysToDelete.forEach(key => {
+      const [li, pi] = key.split('-').map(Number);
+      if (!byLayer.has(li)) byLayer.set(li, []);
+      byLayer.get(li)!.push(pi);
+    });
+    byLayer.forEach((pathIndices, li) => {
+      pathIndices.sort((a, b) => b - a);
+      pathIndices.forEach(pi => newResource.layers[li].paths.splice(pi, 1));
+    });
+    updateResource(resource, newResource);
+    setSelectedTreePathKey(null);
+    setSelectedTreePathKeys(new Set());
+    setCurrentPathIndex(-1);
+    setSelectedPointIndex(-1);
+  }, [resource, selectedTreePathKey, selectedTreePathKeys, updateResource]);
+
+  // Set intensity on all selected paths (from tree selection OR from canvas point selection)
+  const handleSetIntensitySelected = useCallback((intensity: number) => {
+    // Build set of "layerIdx-pathIdx" keys from tree selection
+    const keysFromTree = selectedTreePathKeys.size > 0 ? selectedTreePathKeys
+      : (selectedTreePathKey ? new Set([selectedTreePathKey]) : new Set<string>());
+    // Also derive paths from selected canvas points (format "pathIdx-pointIdx", layer = currentLayerIndex)
+    const keysFromPoints = new Set<string>();
+    if (selectedPoints.size > 0) {
+      selectedPoints.forEach(key => {
+        const pathIdx = key.split('-')[0];
+        keysFromPoints.add(`${currentLayerIndex}-${pathIdx}`);
+      });
+    } else if (selectedPointIndex >= 0 && currentPathIndex >= 0) {
+      keysFromPoints.add(`${currentLayerIndex}-${currentPathIndex}`);
+    }
+    const allKeys = new Set([...keysFromTree, ...keysFromPoints]);
+    if (allKeys.size === 0) return;
+    const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+    allKeys.forEach(key => {
+      const [li, pi] = key.split('-').map(Number);
+      if (newResource.layers[li]?.paths[pi]) {
+        newResource.layers[li].paths[pi].intensity = intensity;
+      }
+    });
+    updateResource(resource, newResource);
+  }, [resource, selectedTreePathKey, selectedTreePathKeys, selectedPoints, selectedPointIndex, currentPathIndex, currentLayerIndex, updateResource]);
+
+  // Clean orphan paths: remove paths with <=1 point and fix incomplete bezier structures
+  const handleCleanOrphans = useCallback(() => {
+    const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+    let changed = false;
+    for (const layer of newResource.layers) {
+      const before = layer.paths.length;
+      layer.paths = layer.paths.filter(p => {
+        if (p.points.length <= 1) { changed = true; return false; }
+        if ((p as VecPath & { type?: string }).type === 'bezier' && p.points.length < 4) { changed = true; return false; }
+        return true;
+      });
+      if (layer.paths.length !== before) changed = true;
+      // Trim trailing orphan bezier control points so (pts-1) % 3 === 0
+      for (const p of layer.paths) {
+        if ((p as VecPath & { type?: string }).type === 'bezier') {
+          const rem = (p.points.length - 1) % 3;
+          if (rem !== 0) {
+            p.points.splice(p.points.length - rem, rem);
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      updateResource(resource, newResource);
+      setSelectedTreePathKey(null);
+      setSelectedTreePathKeys(new Set());
+      setCurrentPathIndex(-1);
+      setSelectedPointIndex(-1);
+    }
+  }, [resource, updateResource]);
+
   // Finalise the in-progress pen path (Enter, right-click, or double-click)
   const finalizePenPath = () => {
     mousePenPosRef.current = null;
@@ -2274,8 +2850,55 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     }
   };
 
+  const finalizeBezierPath = () => {
+    mousePenPosRef.current = null;
+    bezierMouseDownRef.current = null;
+    if (currentTool === 'bezier' && tempPoints.length >= 5) {
+      // Remove trailing C_out (not needed after last anchor)
+      const raw = tempPoints.slice(0, -1);
+      // Tag types by position: i%3===0 → anchor, else → control
+      const tagged = raw.map((p, i) => ({ ...p, t: (i % 3 === 0 ? 'a' : 'c') as 'a' | 'c' }));
+      const newPath: VecPath = {
+        name: `bezier_${Date.now()}`,
+        intensity: 127,
+        closed: false,
+        type: 'bezier',
+        points: tagged,
+      };
+      const newResource = { ...resource };
+      newResource.layers[currentLayerIndex].paths.push(newPath);
+      updateResource(resource, newResource);
+      setTempPoints([]);
+      setCurrentPathIndex(newResource.layers[currentLayerIndex].paths.length - 1);
+    } else {
+      setTempPoints([]);
+    }
+  };
+
   const handleDoubleClick = () => {
     mousePenPosRef.current = null;
+
+    // In select mode: insert a point on the hovered segment
+    if (currentTool === 'select') {
+      const seg = hoveredSegmentRef.current;
+      if (!seg) return;
+      const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+      const path = newResource.layers[currentLayerIndex]?.paths[seg.pathIdx];
+      if (!path) return;
+      path.points.splice(seg.segIdx + 1, 0, seg.resPoint);
+      updateResource(resource, newResource);
+      setCurrentPathIndex(seg.pathIdx);
+      setSelectedPointIndex(seg.segIdx + 1);
+      setSelectedPoints(new Set([`${seg.pathIdx}-${seg.segIdx + 1}`]));
+      hoveredSegmentRef.current = null;
+      return;
+    }
+
+    if (currentTool === 'bezier') {
+      finalizeBezierPath();
+      return;
+    }
+
     if (currentTool === 'pen' && tempPoints.length >= 3) {
       // The second click of the double-click already added a duplicate last point;
       // trim it before materialising the path
@@ -2376,7 +2999,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     
     if (e.key === 'Enter') {
       e.preventDefault();
-      finalizePenPath();
+      if (currentTool === 'bezier') finalizeBezierPath();
+      else finalizePenPath();
       return;
     }
 
@@ -2398,6 +3022,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       e.stopPropagation(); // Prevent FileTreePanel from handling this event
       if (selectedPoints.size > 0) {
         handleDeleteSelected();
+      } else if (selectedTreePathKeys.size > 0 || (selectedTreePathKey && selectedPointIndex < 0)) {
+        handleDeleteTreePaths();
       } else if (selectedPointIndex >= 0 && currentPathIndex >= 0) {
         const newResource = { ...resource };
         const pointsBefore = newResource.layers[currentLayerIndex].paths[currentPathIndex].points.length;
@@ -2447,6 +3073,35 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       });
     });
 
+    updateResource(resource, newResource);
+  }, [resource, updateResource]);
+
+  // Simplify — apply Ramer-Douglas-Peucker to all paths in ALL layers
+  // Removes near-collinear intermediate points (invisible at Vectrex scale).
+  // Supports undo via the standard updateResource history mechanism.
+  const handleSimplify = useCallback((epsilon: number = 2.0) => {
+    const newResource: VecResource = {
+      ...resource,
+      layers: resource.layers.map(layer => ({
+        ...layer,
+        paths: layer.paths.map(path => {
+          const simplified = simplifyPath(path.points, epsilon);
+          // Only update if we actually removed points
+          if (simplified.length === path.points.length) return path;
+          return { ...path, points: simplified };
+        }),
+      })),
+    };
+
+    // Count removed points for feedback
+    const origPts = resource.layers.flatMap(l => l.paths).reduce((s, p) => s + p.points.length, 0);
+    const newPts  = newResource.layers.flatMap(l => l.paths).reduce((s, p) => s + p.points.length, 0);
+    const removed = origPts - newPts;
+    if (removed === 0) {
+      console.log('[VectorEditor] Simplify: nothing to remove at epsilon=' + epsilon);
+      return;
+    }
+    console.log(`[VectorEditor] Simplify ε=${epsilon}: removed ${removed} pts (${origPts}→${newPts}), ~${Math.round(removed/origPts*100)}%`);
     updateResource(resource, newResource);
   }, [resource, updateResource]);
 
@@ -2576,6 +3231,42 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     updateResource(resource, newResource);
   }, [resource, updateResource]);
 
+  // Rotate vector — rotates every point (anchors AND bezier control points,
+  // since they all live in `points[]`) around the design-time origin (0,0)
+  // by `degrees` degrees, CCW positive in the .vec coord system where +Y is up.
+  // Coordinates are rounded back to integers so the output stays Vectrex-safe.
+  const rotateVector = useCallback((degrees: number) => {
+    const rad = (degrees * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const newResource = { ...resource };
+    let rotated = 0;
+    newResource.layers.forEach(layer => {
+      layer.paths.forEach(path => {
+        path.points.forEach(point => {
+          const x = point.x;
+          const y = point.y;
+          point.x = Math.round(x * cos - y * sin);
+          point.y = Math.round(x * sin + y * cos);
+          rotated++;
+        });
+      });
+    });
+    // Rotate the background image offset too, so the reference image stays
+    // aligned to the sprite after the rotation.
+    if (newResource.backgroundOffset) {
+      const bx = newResource.backgroundOffset.x;
+      const by = newResource.backgroundOffset.y;
+      newResource.backgroundOffset = {
+        x: Math.round(bx * cos - by * sin),
+        y: Math.round(bx * sin + by * cos),
+      };
+      setBackgroundOffset(newResource.backgroundOffset);
+    }
+    console.log(`[VectorEditor] Rotated ${rotated} points by ${degrees}°`);
+    updateResource(resource, newResource);
+  }, [resource, updateResource]);
+
   // UI Components
   const Toolbar = () => (
     <div style={{ display: 'flex', gap: '4px', marginBottom: '8px', padding: '4px', background: '#2a2a4e', borderRadius: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -2622,6 +3313,20 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         {viewMode === '3d' ? '🔄 Rotate' : '✋ Pan'}
       </button>
       <button
+        onClick={() => setCurrentTool('walkarea')}
+        style={{
+          padding: '8px 12px',
+          background: currentTool === 'walkarea' ? '#4a8e6a' : '#3a5e4a',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        }}
+        title="Walkable area — click-drag horizontally to paint a [x_min,x_max] at y (Phase 2 wander AI)"
+      >
+        🛣️ WalkArea
+      </button>
+      <button
         onClick={() => setCurrentTool('circle')}
         style={{
           padding: '8px 12px',
@@ -2662,6 +3367,20 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         title="Polygon tool - click center, drag to set radius"
       >
         ⬡ Polygon
+      </button>
+      <button
+        onClick={() => setCurrentTool('bezier')}
+        style={{
+          padding: '8px 12px',
+          background: currentTool === 'bezier' ? '#4a4a8e' : '#3a3a5e',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        }}
+        title="Bezier tool - click to add sharp anchor, click+drag to add smooth anchor. Enter/Right-click to finish."
+      >
+        ∿ Bezier
       </button>
       {backgroundImage && (
         <button
@@ -2722,20 +3441,26 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       
       {/* Delete button */}
       <button
-        onClick={handleDeleteSelected}
-        disabled={selectedPoints.size === 0 && selectedPointIndex < 0}
+        onClick={() => {
+          if (selectedTreePathKeys.size > 0 || (selectedTreePathKey && selectedPoints.size === 0 && selectedPointIndex < 0)) {
+            handleDeleteTreePaths();
+          } else {
+            handleDeleteSelected();
+          }
+        }}
+        disabled={selectedPoints.size === 0 && selectedPointIndex < 0 && selectedTreePathKeys.size === 0 && !selectedTreePathKey}
         style={{ 
           padding: '8px 12px', 
-          background: (selectedPoints.size > 0 || selectedPointIndex >= 0) ? '#8a3a3e' : '#4a4a5e', 
+          background: (selectedPoints.size > 0 || selectedPointIndex >= 0 || selectedTreePathKeys.size > 0 || !!selectedTreePathKey) ? '#8a3a3e' : '#4a4a5e', 
           color: 'white', 
           border: 'none', 
           borderRadius: '4px', 
-          cursor: (selectedPoints.size > 0 || selectedPointIndex >= 0) ? 'pointer' : 'not-allowed',
-          opacity: (selectedPoints.size > 0 || selectedPointIndex >= 0) ? 1 : 0.5,
+          cursor: (selectedPoints.size > 0 || selectedPointIndex >= 0 || selectedTreePathKeys.size > 0 || !!selectedTreePathKey) ? 'pointer' : 'not-allowed',
+          opacity: (selectedPoints.size > 0 || selectedPointIndex >= 0 || selectedTreePathKeys.size > 0 || !!selectedTreePathKey) ? 1 : 0.5,
         }}
-        title="Delete selected points (Delete key)"
+        title="Delete selected points or paths (Delete key)"
       >
-        🗑️ Delete {selectedPoints.size > 0 ? `(${selectedPoints.size})` : ''}
+        🗑️ Delete {selectedTreePathKeys.size > 1 ? `(${selectedTreePathKeys.size} paths)` : selectedPoints.size > 0 ? `(${selectedPoints.size})` : ''}
       </button>
       
       <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
@@ -2820,11 +3545,86 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         ⇅ Mirror Y
       </button>
       <button
+        onClick={() => rotateVector(90)}
+        style={{
+          padding: '8px 12px',
+          background: '#3a5a3e',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        }}
+        title="Rotate 90° counter-clockwise around (0,0)"
+      >
+        ↺ Rotate +90°
+      </button>
+      <button
+        onClick={() => rotateVector(-90)}
+        style={{
+          padding: '8px 12px',
+          background: '#3a5a3e',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        }}
+        title="Rotate 90° clockwise around (0,0)"
+      >
+        ↻ Rotate -90°
+      </button>
+      <input
+        type="number"
+        defaultValue={15}
+        step={1}
+        title="Custom rotation angle (degrees, CCW positive)"
+        style={{
+          width: '48px',
+          padding: '6px 4px',
+          background: '#1a1a2a',
+          color: 'white',
+          border: '1px solid #3a5a3e',
+          borderRadius: '4px',
+          fontSize: '12px',
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            const v = parseFloat((e.target as HTMLInputElement).value);
+            if (!Number.isNaN(v) && v !== 0) rotateVector(v);
+          }
+        }}
+        id="rotate-angle-input"
+      />
+      <button
+        onClick={() => {
+          const inp = document.getElementById('rotate-angle-input') as HTMLInputElement | null;
+          const v = inp ? parseFloat(inp.value) : NaN;
+          if (!Number.isNaN(v) && v !== 0) rotateVector(v);
+        }}
+        style={{
+          padding: '8px 10px',
+          background: '#3a5a3e',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+        }}
+        title="Rotate by the angle in the input (positive = CCW)"
+      >
+        🔁 Rotate
+      </button>
+      <button
         onClick={chainEdges}
         style={{ padding: '8px 12px', background: '#3a5a3e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
         title="Chain edges — merge 2-point paths that share endpoints into polylines, reducing path count"
       >
         🔗 Chain Edges
+      </button>
+      <button
+        onClick={() => handleSimplify(2.0)}
+        style={{ padding: '8px 12px', background: '#5a3a2e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        title="Simplify paths (ε=2) — Ramer-Douglas-Peucker: removes near-collinear points invisible at Vectrex scale. Undoable with Ctrl+Z."
+      >
+        ✂️ Simplify
       </button>
 
       <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
@@ -2919,7 +3719,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       <div style={{ flex: 1 }} />
       
       <button
-        onClick={() => setZoom(z => Math.min(z * 1.2, 4))}
+        onClick={() => setZoom(z => Math.min(z * 1.2, 16))}
         style={{ padding: '8px 12px', background: '#3a3a5e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
       >
         +
@@ -3282,15 +4082,30 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                 </div>
                 <div style={{ color: '#666', fontSize: '10px', marginTop: '2px' }}>
                   {pathCount} path{pathCount !== 1 ? 's' : ''} · {pointCount} pt{pointCount !== 1 ? 's' : ''}
+                  {pathCount > 0 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCollapsedLayerPaths(prev => {
+                          const next = new Set(prev);
+                          if (next.has(layerIdx)) next.delete(layerIdx);
+                          else next.add(layerIdx);
+                          return next;
+                        });
+                      }}
+                      style={{ marginLeft: '6px', background: 'transparent', border: 'none', color: '#556', cursor: 'pointer', fontSize: '9px', padding: '0', lineHeight: 1 }}
+                      title={collapsedLayerPaths.has(layerIdx) ? 'Show paths' : 'Hide paths'}
+                    >{collapsedLayerPaths.has(layerIdx) ? '▶ show' : '▼ hide'}</button>
+                  )}
                 </div>
               </div>
 
-              {/* Path tree — only shown when layer is active */}
-              {isActive && layer.paths.length > 0 && (
+              {/* Path tree — only shown when layer is active and not collapsed */}
+              {isActive && layer.paths.length > 0 && !collapsedLayerPaths.has(layerIdx) && (
                 <div style={{ marginLeft: '12px', marginTop: '2px' }}>
                   {layer.paths.map((p, pathIdx) => {
                     const treeKey = `${layerIdx}-${pathIdx}`;
-                    const isTreeSelected = selectedTreePathKey === treeKey;
+                    const isTreeSelected = selectedTreePathKeys.has(treeKey) || selectedTreePathKey === treeKey;
                     const isExpanded = expandedTreePaths.has(treeKey);
                     return (
                       <div key={pathIdx}>
@@ -3298,8 +4113,19 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                         <div
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedTreePathKey(isTreeSelected ? null : treeKey);
-                            // Also make this the active path for editing
+                            if (e.ctrlKey || e.metaKey) {
+                              // Ctrl/Cmd+Click: toggle in multi-selection
+                              setSelectedTreePathKeys(prev => {
+                                const next = new Set(prev);
+                                if (next.has(treeKey)) next.delete(treeKey);
+                                else next.add(treeKey);
+                                return next;
+                              });
+                              setSelectedTreePathKey(treeKey);
+                            } else {
+                              setSelectedTreePathKey(isTreeSelected && selectedTreePathKeys.size <= 1 ? null : treeKey);
+                              setSelectedTreePathKeys(isTreeSelected && selectedTreePathKeys.size <= 1 ? new Set() : new Set([treeKey]));
+                            }
                             setCurrentLayerIndex(layerIdx);
                             setCurrentPathIndex(pathIdx);
                             setSelectedPointIndex(-1);
@@ -3340,6 +4166,19 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                           <span style={{ color: '#556', fontSize: '9px', flexShrink: 0 }}>
                             {p.points.length}pt
                           </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const nr = JSON.parse(JSON.stringify(resource)) as VecResource;
+                              nr.layers[layerIdx].paths.splice(pathIdx, 1);
+                              updateResource(resource, nr);
+                              setSelectedTreePathKey(prev => prev === treeKey ? null : prev);
+                              setSelectedTreePathKeys(prev => { const next = new Set(prev); next.delete(treeKey); return next; });
+                              if (currentPathIndex === pathIdx && currentLayerIndex === layerIdx) setCurrentPathIndex(-1);
+                            }}
+                            title="Delete this path"
+                            style={{ background: 'transparent', border: 'none', color: '#a55', cursor: 'pointer', fontSize: '10px', padding: '0 2px', flexShrink: 0, lineHeight: 1 }}
+                          >✕</button>
                         </div>
 
                         {/* Point sub-rows */}
@@ -3475,6 +4314,222 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               +10
             </button>
           </div>
+        </div>
+
+        {/* Collision Mesh section */}
+        <div style={{ marginTop: '10px', borderTop: '1px solid #444', paddingTop: '8px' }}>
+          <div style={{ color: '#c8a', marginBottom: '6px', fontSize: '12px', fontWeight: 'bold' }}>
+            Collision Mesh
+          </div>
+          <div style={{ display: 'flex', gap: '4px', marginBottom: '6px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => {
+                const segs = generateMeshFromPath(path);
+                const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+                newResource.collisionMesh = { segments: segs };
+                updateResource(resource, newResource);
+                setShowCollisionMesh(true);
+              }}
+              style={{
+                flex: 1,
+                padding: '5px 4px',
+                background: '#3a3a6a',
+                border: '1px solid #6060aa',
+                color: '#ccf',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontSize: '10px',
+              }}
+              title="Auto-generate collision mesh from horizontal edges of selected path"
+            >
+              Auto-generate
+            </button>
+            <button
+              onClick={() => {
+                if (!selectedEdge) return;
+                const selPath = resource.layers[currentLayerIndex]?.paths[selectedEdge.pathIdx];
+                if (!selPath) return;
+                const p1 = selPath.points[selectedEdge.edgeIdx];
+                const p2 = selPath.points[selectedEdge.edgeIdx + 1];
+                if (!p1 || !p2) return;
+                const newSeg: CollisionSegment = {
+                  x1: Math.round(p1.x), y1: Math.round(p1.y),
+                  x2: Math.round(p2.x), y2: Math.round(p2.y),
+                };
+                const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+                if (!newResource.collisionMesh) newResource.collisionMesh = { segments: [] };
+                newResource.collisionMesh.segments.push(newSeg);
+                updateResource(resource, newResource);
+                setShowCollisionMesh(true);
+              }}
+              disabled={!selectedEdge}
+              style={{
+                flex: 1,
+                padding: '5px 4px',
+                background: selectedEdge ? '#3a5a3a' : '#2a2a2a',
+                border: selectedEdge ? '1px solid #5a9a5a' : '1px solid #444',
+                color: selectedEdge ? '#afa' : '#666',
+                borderRadius: '3px',
+                cursor: selectedEdge ? 'pointer' : 'default',
+                fontSize: '10px',
+              }}
+              title="Add the selected edge (orange) to the collision mesh"
+            >
+              + Edge
+            </button>
+            <button
+              onClick={() => {
+                const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+                newResource.collisionMesh = { segments: [] };
+                updateResource(resource, newResource);
+              }}
+              disabled={!resource.collisionMesh?.segments?.length}
+              style={{
+                padding: '5px 6px',
+                background: '#4a2a2a',
+                border: '1px solid #8a4a4a',
+                color: '#faa',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontSize: '10px',
+                opacity: resource.collisionMesh?.segments?.length ? 1 : 0.4,
+              }}
+              title="Clear collision mesh"
+            >
+              Clear
+            </button>
+            <button
+              onClick={() => setShowCollisionMesh(v => !v)}
+              style={{
+                padding: '5px 6px',
+                background: showCollisionMesh ? '#3a5a3a' : '#2a2a2a',
+                border: showCollisionMesh ? '1px solid #5a9a5a' : '1px solid #555',
+                color: showCollisionMesh ? '#afa' : '#888',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontSize: '10px',
+              }}
+              title="Toggle collision mesh overlay on canvas"
+            >
+              {showCollisionMesh ? '👁 On' : '👁 Off'}
+            </button>
+          </div>
+          {selectedEdge !== null && (() => {
+            const selPath = resource.layers[currentLayerIndex]?.paths[selectedEdge.pathIdx];
+            const p1 = selPath?.points[selectedEdge.edgeIdx];
+            const p2 = selPath?.points[selectedEdge.edgeIdx + 1];
+            return p1 && p2 ? (
+              <div style={{ fontSize: '9px', color: '#ffaa00', fontFamily: 'monospace', marginBottom: '4px' }}>
+                Edge: ({Math.round(p1.x)},{Math.round(p1.y)})→({Math.round(p2.x)},{Math.round(p2.y)})
+              </div>
+            ) : null;
+          })()}
+          <div style={{ fontSize: '10px', color: '#999' }}>
+            {resource.collisionMesh?.segments?.length
+              ? `${resource.collisionMesh.segments.length} segment${resource.collisionMesh.segments.length !== 1 ? 's' : ''}`
+              : 'No mesh — click Auto-generate or select an edge'}
+          </div>
+          {resource.collisionMesh?.segments?.map((seg, idx) => (
+            <div key={idx} style={{
+              fontSize: '9px', color: '#c8a', fontFamily: 'monospace',
+              marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px'
+            }}>
+              <span style={{ flex: 1 }}>
+                ({seg.x1},{seg.y1})→({seg.x2},{seg.y2})
+              </span>
+              <button
+                onClick={() => {
+                  const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+                  newResource.collisionMesh!.segments.splice(idx, 1);
+                  updateResource(resource, newResource);
+                }}
+                style={{
+                  padding: '1px 4px', background: 'transparent',
+                  border: '1px solid #666', color: '#f88', borderRadius: '2px',
+                  cursor: 'pointer', fontSize: '9px',
+                }}
+              >x</button>
+            </div>
+          ))}
+        </div>
+
+        {/* Walkable Areas section: stored on the .vec itself and inherited
+            by every level placement of this asset (.vec → .vplay → .venemy). */}
+        <div style={{ marginTop: '10px', borderTop: '1px solid #444', paddingTop: '8px' }}>
+          <div style={{ color: '#4fc', marginBottom: '6px', fontSize: '12px', fontWeight: 'bold' }}>
+            Walkable Areas
+          </div>
+          <div style={{ fontSize: '10px', color: '#999', marginBottom: '6px' }}>
+            {resource.walkableAreas?.length
+              ? `${resource.walkableAreas.length} area${resource.walkableAreas.length !== 1 ? 's' : ''} — pick 🛣️ WalkArea to add more`
+              : 'No areas — pick 🛣️ WalkArea and drag horizontally to paint'}
+          </div>
+          {(resource.walkableAreas ?? []).map((a, idx) => {
+            const patch = (k: 'y' | 'x_min' | 'x_max', v: number) => {
+              const next = (resource.walkableAreas ?? []).slice();
+              next[idx] = { ...next[idx], [k]: v };
+              updateResource(resource, { ...resource, walkableAreas: next });
+            };
+            const inputStyle = {
+              width: 38, padding: '1px 3px', fontSize: '9px',
+              background: '#222', color: '#4fc', border: '1px solid #4a4',
+              borderRadius: '2px', fontFamily: 'monospace',
+              MozAppearance: 'textfield' as const,
+            } as React.CSSProperties;
+            // Commit on blur / Enter only. Typing fires onChange dozens of
+            // times per second; each one ran updateResource → setHistory +
+            // setResource and the deep re-render reflowed the side panel,
+            // visibly jumping its scroll to the top. defaultValue + a key
+            // bound to the committed value avoids the re-render loop.
+            const commit = (k: 'y' | 'x_min' | 'x_max') => (e: React.FocusEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>) => {
+              const el = e.currentTarget;
+              const v = parseInt(el.value);
+              if (Number.isFinite(v) && v !== a[k]) patch(k, v);
+            };
+            const onKey = (k: 'y' | 'x_min' | 'x_max') => (e: React.KeyboardEvent<HTMLInputElement>) => {
+              if (e.key === 'Enter') { e.currentTarget.blur(); }
+              else if (e.key === 'Escape') { e.currentTarget.value = String(a[k]); e.currentTarget.blur(); }
+            };
+            // Disable mouse-wheel value-change so scrolling the panel doesn't
+            // change the field while it has focus.
+            const onWheel = (e: React.WheelEvent<HTMLInputElement>) => { e.currentTarget.blur(); };
+            return (
+              <div key={idx} style={{
+                fontSize: '9px', color: '#4fc', fontFamily: 'monospace',
+                marginTop: '2px', display: 'flex', alignItems: 'center', gap: '3px'
+              }}>
+                <span style={{ width: 18 }}>W{idx}</span>
+                <span title="Vertical position: usually the platform's top surface; nudge until enemies sit correctly">y</span>
+                <input type="number" key={`y_${a.y}`} defaultValue={a.y} onBlur={commit('y')} onKeyDown={onKey('y')} onWheel={onWheel} style={inputStyle} />
+                <span>x</span>
+                <input type="number" key={`xmin_${a.x_min}`} defaultValue={a.x_min} onBlur={commit('x_min')} onKeyDown={onKey('x_min')} onWheel={onWheel} style={inputStyle} />
+                <span>..</span>
+                <input type="number" key={`xmax_${a.x_max}`} defaultValue={a.x_max} onBlur={commit('x_max')} onKeyDown={onKey('x_max')} onWheel={onWheel} style={inputStyle} />
+                <button
+                  onClick={() => {
+                    const next = (resource.walkableAreas ?? []).slice();
+                    next.splice(idx, 1);
+                    updateResource(resource, { ...resource, walkableAreas: next });
+                  }}
+                  style={{
+                    padding: '1px 4px', background: 'transparent',
+                    border: '1px solid #666', color: '#f88', borderRadius: '2px',
+                    cursor: 'pointer', fontSize: '9px',
+                  }}
+                >x</button>
+              </div>
+            );
+          })}
+          {(resource.walkableAreas?.length ?? 0) > 0 && (
+            <button
+              onClick={() => updateResource(resource, { ...resource, walkableAreas: [] })}
+              style={{
+                marginTop: '6px', padding: '4px 8px', background: '#4a2a2a',
+                border: '1px solid #8a4a4a', color: '#faa', borderRadius: '3px',
+                cursor: 'pointer', fontSize: '10px',
+              }}
+            >Clear all</button>
+          )}
         </div>
 
         <div style={{ fontSize: '11px', color: '#888' }}>
@@ -3666,13 +4721,60 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   };
 
   // Right side panel - fixed width so canvas takes remaining space
-  const RightPanel = () => (
+  const RightPanel = () => {
+    // Paths affected by Apply: tree selection + paths containing selected canvas points
+    const pathsFromPoints = new Set<string>();
+    selectedPoints.forEach(key => pathsFromPoints.add(`${currentLayerIndex}-${key.split('-')[0]}`));
+    if (selectedPointIndex >= 0 && currentPathIndex >= 0) pathsFromPoints.add(`${currentLayerIndex}-${currentPathIndex}`);
+    const keysFromTree = selectedTreePathKeys.size > 0 ? selectedTreePathKeys
+      : (selectedTreePathKey ? new Set([selectedTreePathKey]) : new Set<string>());
+    const allSelKeys = new Set([...keysFromTree, ...pathsFromPoints]);
+    const hasPathSel = allSelKeys.size > 0;
+    const selCount = allSelKeys.size;
+    return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '200px', flexShrink: 0, overflowY: 'auto' }}>
+      {/* Set Intensity + Clean Orphans — always at top */}
+      <div style={{ background: '#1e2230', border: '1px solid #3a3a5e', borderRadius: '4px', padding: '8px' }}>
+        <div style={{ color: '#aaa', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px' }}>Intensity</div>
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          <input
+            type="number" min="0" max="127"
+            value={setIntensityInput}
+            onChange={(e) => setSetIntensityInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const v = parseInt(setIntensityInput);
+                if (!isNaN(v)) handleSetIntensitySelected(Math.max(0, Math.min(127, v)));
+              }
+            }}
+            style={{ width: '52px', padding: '4px 6px', background: '#0e1e2e', color: '#fff', border: '1px solid #4a6a8a', borderRadius: '3px', fontSize: '12px' }}
+          />
+          <button
+            onClick={() => {
+              const v = parseInt(setIntensityInput);
+              if (!isNaN(v)) handleSetIntensitySelected(Math.max(0, Math.min(127, v)));
+            }}
+            disabled={!hasPathSel}
+            style={{ flex: 1, padding: '4px 6px', background: hasPathSel ? '#2a5a7e' : '#2a2a3e', border: '1px solid ' + (hasPathSel ? '#4a8aae' : '#3a3a5e'), color: hasPathSel ? '#7cf' : '#556', borderRadius: '3px', cursor: hasPathSel ? 'pointer' : 'not-allowed', fontSize: '11px', fontWeight: 'bold' }}
+            title={hasPathSel ? `Apply to ${selCount} path${selCount !== 1 ? 's' : ''}` : 'Select paths first'}
+          >
+            Apply{hasPathSel ? ` (${selCount})` : ''}
+          </button>
+        </div>
+        <button
+          onClick={handleCleanOrphans}
+          style={{ width: '100%', marginTop: '5px', padding: '4px 6px', background: '#2e1e1e', border: '1px solid #5a3a3a', color: '#c88', borderRadius: '3px', cursor: 'pointer', fontSize: '10px' }}
+          title="Remove paths with ≤1 point and fix incomplete bezier paths"
+        >
+          🧹 Clean Orphans
+        </button>
+      </div>
       <LayersPanel />
       <PathPropertiesPanel />
       <EdgeSettingsPanel />
     </div>
-  );
+    );
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden', height: '100%' }}>
@@ -3695,7 +4797,6 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             onContextMenu={e => e.preventDefault()}
             onDoubleClick={handleDoubleClick}
             onKeyDown={handleKeyDown}
-            onWheel={handleWheel}
             style={{
               border: '2px solid #4a4a8e',
               borderRadius: '4px',
@@ -3765,6 +4866,48 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
 
         const fmt = (v: number) => (v * scale).toFixed(1);
 
+        // Build SVG preview path string (single <path> for performance)
+        const buildPreviewPath = (): string => {
+          if (rawPaths.length === 0) return '';
+          const project = (pt: { x: number; y: number; z?: number }): [number, number] => {
+            const z = (pt as { z?: number }).z ?? 0;
+            if (referencePlane === 'xz') return [pt.x * scale, z * scale];
+            if (referencePlane === 'yz') return [pt.y * scale, z * scale];
+            return [pt.x * scale, pt.y * scale];
+          };
+          // Compute projected bounds for auto-fit
+          let pMinX = Infinity, pMaxX = -Infinity, pMinY = Infinity, pMaxY = -Infinity;
+          const MAX_PATHS = 3000;
+          const slicedPaths = rawPaths.length > MAX_PATHS ? rawPaths.slice(0, MAX_PATHS) : rawPaths;
+          for (const rp of slicedPaths)
+            for (const pt of rp.pts) {
+              const [px, py] = project(pt);
+              if (px < pMinX) pMinX = px; if (px > pMaxX) pMaxX = px;
+              if (py < pMinY) pMinY = py; if (py > pMaxY) pMaxY = py;
+            }
+          const pRangeX = pMaxX - pMinX || 1, pRangeY = pMaxY - pMinY || 1;
+          const pCX = (pMinX + pMaxX) / 2, pCY = (pMinY + pMaxY) / 2;
+          const PREV = 220, PAD = 12;
+          const fit = (PREV / 2 - PAD) / Math.max(pRangeX, pRangeY) * 2;
+          const tx = (px: number) => ((px - pCX) * fit + PREV / 2);
+          const ty = (py: number) => (-(py - pCY) * fit + PREV / 2);
+          let d = '';
+          for (const rp of slicedPaths) {
+            if (rp.pts.length < 2) continue;
+            const [px0, py0] = project(rp.pts[0]);
+            d += `M${tx(px0).toFixed(1)},${ty(py0).toFixed(1)}`;
+            for (let i = 1; i < rp.pts.length; i++) {
+              const [pxi, pyi] = project(rp.pts[i]);
+              d += `L${tx(pxi).toFixed(1)},${ty(pyi).toFixed(1)}`;
+            }
+            if (rp.closed) d += 'Z';
+          }
+          return d;
+        };
+        const previewD = buildPreviewPath();
+        const PREV = 220;
+        const planeLabel = referencePlane === 'xz' ? 'XZ' : referencePlane === 'yz' ? 'YZ' : 'XY';
+
         return (
           <div style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 2000,
@@ -3772,7 +4915,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           }}>
             <div style={{
               background: '#1e1e3a', border: '2px solid #4a4a8e', borderRadius: '8px',
-              padding: '24px', minWidth: '380px', maxWidth: '480px', color: 'white', fontFamily: 'monospace',
+              padding: '24px', minWidth: '380px', maxWidth: '520px', color: 'white', fontFamily: 'monospace',
               boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
             }}>
               <h3 style={{ margin: '0 0 16px', color: '#aaaaff' }}>{dxfImport.source === 'OBJ' ? '📦' : '📐'} Import {dxfImport.source}</h3>
@@ -3786,12 +4929,108 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                 <div style={{ marginTop: '6px', color: '#888' }}>{rawPaths.length} {dxfImport.source === 'OBJ' ? 'edge(s)' : 'path(s)'} found</div>
               </div>
 
+              {/* OBJ-only: edge mode toggle + angle threshold */}
+              {dxfImport.source === 'OBJ' && dxfImport.objEdges && dxfImport.objVerts && (() => {
+                const mode = dxfImport.edgeMode ?? 'hard';
+                const vectrexBudget = rawPaths.length;
+                const budgetColor = vectrexBudget <= 80 ? '#4f4' : vectrexBudget <= 200 ? '#fa4' : '#f44';
+
+                const applyMode = (newMode: 'hard' | 'silhouette', deg?: number, plane?: typeof dxfImport.referencePlane) => {
+                  const useDeg = deg ?? (dxfImport.angleThreshold ?? 25);
+                  const usePlane = plane ?? dxfImport.referencePlane;
+                  let edgeList: [number, number][];
+                  if (newMode === 'silhouette') {
+                    edgeList = silhouetteEdges(dxfImport.objEdges!, usePlane);
+                  } else {
+                    const cos = Math.cos((useDeg * Math.PI) / 180);
+                    edgeList = (dxfImport.objEdges ?? []).filter(e => e.border || e.dot < cos).map(e => [e.a, e.b]);
+                  }
+                  const rp = edgeList.length > 0 ? chainObjEdges(edgeList, dxfImport.objVerts!) : [];
+                  setDxfImport({ ...dxfImport, edgeMode: newMode, angleThreshold: useDeg, referencePlane: usePlane, rawPaths: rp });
+                };
+
+                return (
+                  <div style={{ marginBottom: '16px' }}>
+                    {/* Mode toggle */}
+                    <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+                      {(['hard', 'silhouette'] as const).map(m => (
+                        <button key={m} onClick={() => applyMode(m)}
+                          style={{ flex: 1, padding: '6px', borderRadius: '4px', border: '1px solid #4a4a8e', cursor: 'pointer', fontSize: '12px',
+                            background: mode === m ? '#4a4a8e' : '#2a2a4e', color: 'white', fontWeight: mode === m ? 'bold' : 'normal' }}>
+                          {m === 'hard' ? '📐 Hard Edges' : '🔆 Silhouette'}
+                        </button>
+                      ))}
+                    </div>
+                    {mode === 'silhouette' && (
+                      <div style={{ fontSize: '11px', color: '#8af', marginBottom: '8px', background: '#1a1a30', borderRadius: '4px', padding: '6px 8px' }}>
+                        Muestra solo los edges donde las normales de las caras adyacentes cruzan el plano de visión — perfecto para cilindros y esferas.
+                      </div>
+                    )}
+                    {/* Angle slider — only for hard mode */}
+                    {mode === 'hard' && (
+                      <>
+                        <div style={{ marginBottom: '6px', fontSize: '13px', display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Hard edge angle: <b>{dxfImport.angleThreshold ?? 25}°</b></span>
+                        </div>
+                        <input type="range" min="1" max="90" step="1"
+                          value={dxfImport.angleThreshold ?? 25}
+                          style={{ width: '100%', accentColor: '#4a4a8e' }}
+                          onChange={(ev) => applyMode('hard', parseInt(ev.target.value))}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666', marginTop: '2px' }}>
+                          <span>1° (all)</span><span>90° (only sharp)</span>
+                        </div>
+                      </>
+                    )}
+                    {/* Path count + Vectrex budget */}
+                    <div style={{ marginTop: '8px', fontSize: '11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: '#888' }}>{rawPaths.length} paths</span>
+                      <span style={{ color: budgetColor, fontWeight: 'bold' }}>
+                        {vectrexBudget <= 80 ? '✓ Vectrex OK' : vectrexBudget <= 200 ? '⚠ Many paths' : '✗ Too many for Vectrex'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* OBJ-only: live SVG preview */}
+              {dxfImport.source === 'OBJ' && (
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Preview — {planeLabel} plane</span>
+                    {rawPaths.length > 3000 && <span style={{ color: '#fa8' }}>⚠ showing first 3000 of {rawPaths.length} paths</span>}
+                  </div>
+                  <svg width={PREV} height={PREV}
+                    style={{ background: '#080818', borderRadius: '4px', border: '1px solid #333', display: 'block', margin: '0 auto' }}>
+                    {/* crosshair */}
+                    <line x1={PREV/2} y1={0} x2={PREV/2} y2={PREV} stroke="#1a1a3a" strokeWidth="1" />
+                    <line x1={0} y1={PREV/2} x2={PREV} y2={PREV/2} stroke="#1a1a3a" strokeWidth="1" />
+                    {/* Vectrex ±127 border */}
+                    <rect x={10} y={10} width={PREV-20} height={PREV-20} fill="none" stroke="#2a2a5a" strokeWidth="1" strokeDasharray="4,4" />
+                    {previewD
+                      ? <path d={previewD} fill="none" stroke="#5af" strokeWidth="0.8" />
+                      : <text x={PREV/2} y={PREV/2} textAnchor="middle" fill="#555" fontSize="12">No edges</text>
+                    }
+                  </svg>
+                </div>
+              )}
+
               {/* Reference plane selector */}
               <div style={{ marginBottom: '16px' }}>
                 <div style={{ marginBottom: '8px', fontSize: '13px' }}>Fit to plane (scaled to ±127):</div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   {(['xy', 'xz', 'yz', 'manual'] as const).map((p) => (
-                    <button key={p} onClick={() => setDxfImport({ ...dxfImport, referencePlane: p })}
+                    <button key={p}
+                      onClick={() => {
+                        // In silhouette mode: recompute paths for new view direction
+                        if (dxfImport.source === 'OBJ' && (dxfImport.edgeMode ?? 'hard') === 'silhouette' && dxfImport.objEdges && dxfImport.objVerts) {
+                          const edgeList = silhouetteEdges(dxfImport.objEdges, p);
+                          const rp = edgeList.length > 0 ? chainObjEdges(edgeList, dxfImport.objVerts) : [];
+                          setDxfImport({ ...dxfImport, referencePlane: p, rawPaths: rp });
+                        } else {
+                          setDxfImport({ ...dxfImport, referencePlane: p });
+                        }
+                      }}
                       style={{
                         padding: '6px 12px', borderRadius: '4px', border: '1px solid #4a4a8e', cursor: 'pointer',
                         background: referencePlane === p ? '#4a4a8e' : '#2a2a4e', color: 'white', fontSize: '12px',

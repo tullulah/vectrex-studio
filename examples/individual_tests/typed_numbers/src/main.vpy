@@ -143,4 +143,4 @@ def loop():
     PRINT_NUMBER(10, -22, arr_idx)
 
     # Selection cursor (circle on the left of the active row)
-    DRAW_CIRCLE(-125, ROW_Y[selected], 10, 100)
+    DRAW_CIRCLE(-125, ROW_Y[selected], 10, 60)

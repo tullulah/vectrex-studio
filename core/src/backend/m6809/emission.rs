@@ -1,7 +1,7 @@
 // Emission - High-level code emission functions for M6809 backend
-use crate::ast::{Function, Stmt, Module, Expr};
+use crate::ast::{Function, Stmt, Module};
 use crate::codegen::CodegenOptions;
-use super::{LoopCtx, FuncCtx, emit_stmt, collect_locals, collect_locals_with_params, RuntimeUsage, LineTracker, DebugInfo};
+use super::{LoopCtx, FuncCtx, emit_stmt, collect_locals_with_params, RuntimeUsage, LineTracker, DebugInfo};
 use super::analyze_var_types; // Import the new function
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -1233,6 +1233,7 @@ DSWM_NO_NEGATE_DX:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W2\n\
+            CLR VIA_port_a          ; stop X integrator drift between segments\n\
             CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)\n\
             LBRA DSWM_LOOP          ; Long branch\n\
             ; Next path: repeat mirror logic for new path header\n\

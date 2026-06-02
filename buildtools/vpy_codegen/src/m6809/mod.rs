@@ -342,14 +342,18 @@ pub fn generate_m6809_asm(
     asm.push_str("    LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)\n");
     asm.push_str("    TFR X,S\n");
 
-    // CRITICAL: Init_Music_Buf ($F533) uses the current S value to initialize
-    // Vec_Music_Work. Must be called after S = Vec_Default_Stk so that
-    // Wait_Recal uses the correct buffer. Wrong S value causes Wait_Recal to
-    // write garbage to PSG registers each frame (random noise on noise channel).
+    // Set stack pointer to top of Vectrex 2KB RAM ($C800-$CFFF).
+    // BUG FIX (2026-05-11): The BIOS sets SP=$CBEA which collides with user
+    // variable arrays that grow up from $C880. Moving SP to $CFFF gives the
+    // full upper half of RAM as stack space, completely clear of user vars.
+    // IMPORTANT: Init_Music_Buf ($F533) must be called FIRST (below) with SP=$CBEA
+    // because it uses SP as the work buffer address. We set the real SP afterwards.
     use crate::m6809::functions::has_audio_calls;
     if has_audio_calls(module) {
         asm.push_str("    JSR $F533        ; Init_Music_Buf: init BIOS sound work buffer at Vec_Default_Stk\n");
     }
+    // Now relocate stack to top of RAM, above all user variables
+    asm.push_str("    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)\n\n");
 
     // CRITICAL: Initialize CURRENT_ROM_BANK always (not just multibank).
     // AUDIO_UPDATE compares CURRENT_ROM_BANK vs PSG_MUSIC_BANK; if both are
@@ -384,7 +388,41 @@ pub fn generate_m6809_asm(
         asm.push_str("    STD >PSG_MUSIC_PTR      ; Clear music pointer (D is already 0)\n");
         asm.push_str("    STD >PSG_MUSIC_START    ; Clear loop pointer\n");
     }
-    
+
+    // Initialize ENEMY_COUNT to 0 at boot if the enemy system is used.
+    // SRAM is not zero-initialized — without this, UPDATE_ENEMIES_RUNTIME called
+    // before the first SPAWN_ENEMIES (e.g. during state_title) would iterate over
+    // garbage count, reading random pool bytes and corrupting nearby BIOS state.
+    {
+        let needed_for_init = crate::m6809::helpers::analyze_module_helpers(module);
+        if needed_for_init.contains("SPAWN_ENEMIES")
+            || needed_for_init.contains("UPDATE_ENEMIES")
+            || needed_for_init.contains("DRAW_ENEMIES")
+            || needed_for_init.contains("ENEMY_SYSTEM")
+        {
+            asm.push_str("    CLR >ENEMY_COUNT        ; No enemies until SPAWN_ENEMIES runs\n");
+            // Zero-init per-enemy vanim state buffers (frame_idx + ticks_left).
+            // Without this, DRAW_ANIM_RUNTIME reads garbage frame_idx > frame_count
+            // → computes a bogus frame_ptr → JSR through it → instant hang.
+            for asset in assets.iter().filter(|a| matches!(a.asset_type, crate::AssetType::Enemy)) {
+                if let Ok(resource) = crate::venemy::EnemyResource::load(std::path::Path::new(&asset.path)) {
+                    for action in &resource.actions {
+                        let ext = std::path::Path::new(&action.sprite)
+                            .extension()
+                            .and_then(|e| e.to_str())
+                            .unwrap_or("");
+                        if ext == "vanim" && !action.sprite.is_empty() {
+                            let type_up = asset.name.to_uppercase().replace(' ', "_").replace('-', "_");
+                            let action_up = action.name.to_uppercase().replace(' ', "_").replace('-', "_");
+                            let var = format!("ANIM_ENEMY_{}_{}_STATE", type_up, action_up);
+                            asm.push_str(&format!("    CLR >{}\n    CLR >{}+1\n", var, var));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // For multibank: Fixed bank is ALWAYS visible at $4000-$7FFF
     // No need to write bank register - cartridge hardware has it configured
     // from factory. Bank 0 is at $0000, fixed bank at $4000.
@@ -396,7 +434,7 @@ pub fn generate_m6809_asm(
     
     // CRITICAL FIX (2026-01-18): Generate RAM definitions and arrays BEFORE user functions
     // This ensures arrays are defined before first use (fixes forward reference errors)
-    let ram_and_arrays_asm = helpers::generate_ram_and_arrays(module)?;
+    let ram_and_arrays_asm = helpers::generate_ram_and_arrays(module, &assets)?;
     asm.push_str(&ram_and_arrays_asm);
     
     // MULTIBANK FUNCTION DISTRIBUTION (2026-01-20)
@@ -404,6 +442,7 @@ pub fn generate_m6809_asm(
     // This prevents "Branch offset OUT OF RANGE" errors from too much code in one bank
     #[allow(unused_assignments)]
     let mut _bank_assignments: std::collections::HashMap<String, u8> = std::collections::HashMap::new();
+    let mut _per_bank_func_bytes: std::collections::HashMap<u8, usize> = std::collections::HashMap::new();
     let functions_by_bank: std::collections::HashMap<u8, String>;
     
     // SIMPLIFIED ASSET DISTRIBUTION (2026-01-20):
@@ -442,6 +481,12 @@ pub fn generate_m6809_asm(
         
         match allocator.assign_banks() {
             Ok(assignments) => {
+                // Compute per-bank function code bytes (for asset distribution coordination)
+                let func_sizes = allocator.get_function_sizes();
+                for (func_name, &bank_id) in &assignments {
+                    let size = func_sizes.get(func_name).copied().unwrap_or(100);
+                    *_per_bank_func_bytes.entry(bank_id).or_insert(0) += size;
+                }
                 // Generate functions distributed by bank
                 functions_by_bank = functions::generate_functions_by_bank(module, &assets, &assignments)?;
                 _bank_assignments = assignments;
@@ -497,6 +542,7 @@ pub fn generate_m6809_asm(
                 &assets,
                 bank_size,
                 helpers_bank as u8,
+                &_per_bank_func_bytes,
             ).map_err(|e| format!("Asset distribution failed: {}", e))?;
             
             // Save lookup tables for later (will be emitted in helpers bank)
@@ -579,13 +625,13 @@ pub fn generate_m6809_asm(
         // NOTE: VAR_ARG0-4 are already defined in SYSTEM RAM VARIABLES section above
         // (before bank split). No need to redefine them here in helpers bank.
 
-        let helpers_asm = helpers::generate_helpers(module, is_multibank)?;
+        let helpers_asm = helpers::generate_helpers(module, is_multibank, &assets)?;
         asm.push_str(&helpers_asm);
     }
 
     // For single-bank: Emit helpers normally
     if !is_multibank {
-        let helpers_asm = helpers::generate_helpers(module, is_multibank)?;
+        let helpers_asm = helpers::generate_helpers(module, is_multibank, &assets)?;
         asm.push_str(&helpers_asm);
     }
     

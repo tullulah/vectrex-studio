@@ -498,6 +498,112 @@ pub fn emit_draw_sprite(
     out.push_str("    LDD #0\n    STD RESULT\n");
 }
 
+/// DRAW_BEZIER(x0,y0,cp1x,cp1y,cp2x,cp2y,x1,y1,steps,intensity)
+/// Cubic Bézier approximated as `steps` line segments (compile-time constant args only).
+pub fn emit_draw_bezier(args: &[Expr], out: &mut String) {
+    if args.len() != 10 {
+        out.push_str("    ; ERROR: DRAW_BEZIER requires 10 arguments\n");
+        return;
+    }
+    if !args.iter().all(|a| matches!(a, Expr::Number(_))) {
+        out.push_str("    ; ERROR: DRAW_BEZIER with variables not yet implemented for m6809\n");
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return;
+    }
+    let nums: Vec<i32> = args.iter().map(|a| if let Expr::Number(n) = a { *n } else { 0 }).collect();
+    let (x0, y0, cx0, cy0, cx1, cy1, x1, y1) = (
+        nums[0] as f64, nums[1] as f64,
+        nums[2] as f64, nums[3] as f64,
+        nums[4] as f64, nums[5] as f64,
+        nums[6] as f64, nums[7] as f64,
+    );
+    let steps = nums[8].max(2).min(32) as usize;
+    let intensity = nums[9];
+
+    // De Casteljau subdivision — generate steps+1 points
+    let mut pts: Vec<(i32, i32)> = Vec::with_capacity(steps + 1);
+    for i in 0..=steps {
+        let t = i as f64 / steps as f64;
+        let u = 1.0 - t;
+        let bx = u*u*u*x0 + 3.0*u*u*t*cx0 + 3.0*u*t*t*cx1 + t*t*t*x1;
+        let by = u*u*u*y0 + 3.0*u*u*t*cy0 + 3.0*u*t*t*cy1 + t*t*t*y1;
+        pts.push((bx.round() as i32, by.round() as i32));
+    }
+
+    out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
+    if intensity == 0x5F {
+        out.push_str("    JSR Intensity_5F\n");
+    } else {
+        out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
+    }
+    let (sx, sy) = pts[0];
+    out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n",
+        (sy & 0xFF), (sx & 0xFF)));
+    for i in 0..steps {
+        let (px, py) = pts[i];
+        let (qx, qy) = pts[i + 1];
+        let dx = (qx - px) & 0xFF;
+        let dy = (qy - py) & 0xFF;
+        out.push_str("    CLR Vec_Misc_Count\n");
+        out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n",
+            dy, dx));
+    }
+    out.push_str("    LDA #$C8\n    TFR A,DP\n");
+    out.push_str("    LDD #0\n    STD RESULT\n");
+}
+
+/// DRAW_BEZIER_QUAD(x0,y0,cpx,cpy,x1,y1,steps,intensity)
+/// Quadratic Bézier approximated as `steps` line segments (compile-time constant args only).
+pub fn emit_draw_bezier_quad(args: &[Expr], out: &mut String) {
+    if args.len() != 8 {
+        out.push_str("    ; ERROR: DRAW_BEZIER_QUAD requires 8 arguments\n");
+        return;
+    }
+    if !args.iter().all(|a| matches!(a, Expr::Number(_))) {
+        out.push_str("    ; ERROR: DRAW_BEZIER_QUAD with variables not yet implemented for m6809\n");
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return;
+    }
+    let nums: Vec<i32> = args.iter().map(|a| if let Expr::Number(n) = a { *n } else { 0 }).collect();
+    let (x0, y0, cpx, cpy, x1, y1) = (
+        nums[0] as f64, nums[1] as f64,
+        nums[2] as f64, nums[3] as f64,
+        nums[4] as f64, nums[5] as f64,
+    );
+    let steps = nums[6].max(2).min(32) as usize;
+    let intensity = nums[7];
+
+    let mut pts: Vec<(i32, i32)> = Vec::with_capacity(steps + 1);
+    for i in 0..=steps {
+        let t = i as f64 / steps as f64;
+        let u = 1.0 - t;
+        let bx = u*u*x0 + 2.0*u*t*cpx + t*t*x1;
+        let by = u*u*y0 + 2.0*u*t*cpy + t*t*y1;
+        pts.push((bx.round() as i32, by.round() as i32));
+    }
+
+    out.push_str("    LDA #$D0\n    TFR A,DP\n    JSR Reset0Ref\n    LDA #$80\n    STA <$04\n");
+    if intensity == 0x5F {
+        out.push_str("    JSR Intensity_5F\n");
+    } else {
+        out.push_str(&format!("    LDA #${:02X}\n    JSR Intensity_a\n", intensity & 0xFF));
+    }
+    let (sx, sy) = pts[0];
+    out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Moveto_d\n",
+        (sy & 0xFF), (sx & 0xFF)));
+    for i in 0..steps {
+        let (px, py) = pts[i];
+        let (qx, qy) = pts[i + 1];
+        let dx = (qx - px) & 0xFF;
+        let dy = (qy - py) & 0xFF;
+        out.push_str("    CLR Vec_Misc_Count\n");
+        out.push_str(&format!("    LDA #${:02X}\n    LDB #${:02X}\n    JSR Draw_Line_d\n",
+            dy, dx));
+    }
+    out.push_str("    LDA #$C8\n    TFR A,DP\n");
+    out.push_str("    LDD #0\n    STD RESULT\n");
+}
+
 /// Emit runtime helpers for drawing builtins
 /// Only emits helpers that are actually used in the code (tree shaking)
 pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
@@ -513,11 +619,11 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         ; Inputs: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY (bytes in RAM)\n\
         ; Uses 16-segment polygon (same as constant path) via MUL scaling of fixed fractions\n\
         ; 4 unique delta fractions of radius r (16-gon, vertices at k*22.5 deg):\n\
-        ;   a = 0.3827*r (sin22.5) via MUL #98 /256, stored at DRAW_CIRCLE_TEMP+2\n\
-        ;   b = 0.3244*r (sin45-sin22.5) via MUL #83 /256, stored at DRAW_CIRCLE_TEMP+3\n\
-        ;   c = 0.2168*r via MUL #56 /256, stored at DRAW_CIRCLE_TEMP+4\n\
-        ;   d = 0.0761*r via MUL #19 /256, stored at DRAW_CIRCLE_TEMP+5\n\
-        ; DRAW_CIRCLE_TEMP layout: [radius16][a][b][c][d][--][--]\n\
+        ;   a = 0.3827*r (sin22.5) via MUL #98 /256, stored at >DRAW_CIRCLE_TEMP+2\n\
+        ;   b = 0.3244*r (sin45-sin22.5) via MUL #83 /256, stored at >DRAW_CIRCLE_TEMP+3\n\
+        ;   c = 0.2168*r via MUL #56 /256, stored at >DRAW_CIRCLE_TEMP+4\n\
+        ;   d = 0.0761*r via MUL #19 /256, stored at >DRAW_CIRCLE_TEMP+5\n\
+        ; >DRAW_CIRCLE_TEMP layout: [radius16][a][b][c][d][--][--]\n\
         DRAW_CIRCLE_RUNTIME:\n\
         ; Read ALL parameters into registers/stack BEFORE changing DP (critical!)\n\
         ; (These are byte variables, use LDB not LDD)\n\
@@ -528,17 +634,17 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         SEX                    ; Sign-extend to 16-bit (diameter is unsigned 0..255)\n\
         LSRA                   ; Divide by 2 to get radius\n\
         RORB\n\
-        STD DRAW_CIRCLE_TEMP   ; DRAW_CIRCLE_TEMP = radius (16-bit, big-endian: +0=hi, +1=lo)\n\
+        STD >DRAW_CIRCLE_TEMP   ; >DRAW_CIRCLE_TEMP = radius (16-bit, big-endian: +0=hi, +1=lo)\n\
         \n\
         LDB DRAW_CIRCLE_XC     ; xc (signed -128..127)\n\
         SEX\n\
-        STD DRAW_CIRCLE_TEMP+2 ; Save xc (16-bit, reused for 'a' after Moveto)\n\
+        STD >DRAW_CIRCLE_TEMP+2 ; Save xc (16-bit, reused for 'a' after Moveto)\n\
         \n\
         LDB DRAW_CIRCLE_YC     ; yc (signed -128..127)\n\
         SEX\n\
-        STD DRAW_CIRCLE_TEMP+4 ; Save yc (16-bit, reused for 'c' after Moveto)\n\
+        STD >DRAW_CIRCLE_TEMP+4 ; Save yc (16-bit, reused for 'c' after Moveto)\n\
         \n\
-        ; NOW safe to setup BIOS (all params are in DRAW_CIRCLE_TEMP+stack)\n\
+        ; NOW safe to setup BIOS (all params are in >DRAW_CIRCLE_TEMP+stack)\n\
         LDA #$D0\n\
         TFR A,DP\n\
         JSR Reset0Ref\n\
@@ -556,36 +662,40 @@ DCR_intensity_5F:\n\
 DCR_after_intensity:\n\
         \n\
         ; Move to start position: (xc + radius, yc)  [vertex 0 of 16-gon = rightmost]\n\
-        ; radius = DRAW_CIRCLE_TEMP, xc = DRAW_CIRCLE_TEMP+2, yc = DRAW_CIRCLE_TEMP+4\n\
-        LDD DRAW_CIRCLE_TEMP   ; D = radius (16-bit)\n\
-        ADDD DRAW_CIRCLE_TEMP+2 ; D = xc + radius\n\
+        ; radius = >DRAW_CIRCLE_TEMP, xc = >DRAW_CIRCLE_TEMP+2, yc = >DRAW_CIRCLE_TEMP+4\n\
+        LDD >DRAW_CIRCLE_TEMP   ; D = radius (16-bit)\n\
+        ADDD >DRAW_CIRCLE_TEMP+2 ; D = xc + radius\n\
         TFR B,B                ; Keep X in B (low byte)\n\
         PSHS B                 ; Save X on stack\n\
-        LDD DRAW_CIRCLE_TEMP+4 ; Load yc\n\
+        LDD >DRAW_CIRCLE_TEMP+4 ; Load yc\n\
         TFR B,A                ; Y to A\n\
         PULS B                 ; X to B\n\
         JSR Moveto_d\n\
         \n\
         ; Precompute 4 delta fractions using MUL (same fractions as constant 16-gon path)\n\
-        ; radius is at DRAW_CIRCLE_TEMP+1 (low byte, 0..127)\n\
-        ; DRAW_CIRCLE_TEMP+2..5 now free to reuse for a,b,c,d\n\
-        ; MUL: A * B -> D (unsigned); A_after = floor(frac * r) when frac byte = round(frac*256)\n\
-        LDB DRAW_CIRCLE_TEMP+1 ; radius\n\
+        ; radius is at >DRAW_CIRCLE_TEMP+1 (low byte, 0..127)\n\
+        ; >DRAW_CIRCLE_TEMP+2..5 now free to reuse for a,b,c,d\n\
+        ; MUL: A * B -> D (unsigned); ADDD #128 then A = round(frac * r) (avoids floor-to-0 for small radii)\n\
+        LDB >DRAW_CIRCLE_TEMP+1 ; radius\n\
         LDA #98                ; 98/256 = 0.3828 ~ sin(22.5 deg) = 0.3827\n\
-        MUL                    ; A = floor(0.3828 * r) = a\n\
-        STA DRAW_CIRCLE_TEMP+2 ; Store a\n\
-        LDB DRAW_CIRCLE_TEMP+1 ; radius\n\
+        MUL                    ; D = 98 * r\n\
+        ADDD #128              ; round before /256\n\
+        STA >DRAW_CIRCLE_TEMP+2 ; Store a = round(0.3828 * r)\n\
+        LDB >DRAW_CIRCLE_TEMP+1 ; radius\n\
         LDA #83                ; 83/256 = 0.3242 ~ 0.3244\n\
-        MUL                    ; A = b\n\
-        STA DRAW_CIRCLE_TEMP+3 ; Store b\n\
-        LDB DRAW_CIRCLE_TEMP+1 ; radius\n\
+        MUL                    ; D = 83 * r\n\
+        ADDD #128              ; round before /256\n\
+        STA >DRAW_CIRCLE_TEMP+3 ; Store b\n\
+        LDB >DRAW_CIRCLE_TEMP+1 ; radius\n\
         LDA #56                ; 56/256 = 0.2188 ~ 0.2168\n\
-        MUL                    ; A = c\n\
-        STA DRAW_CIRCLE_TEMP+4 ; Store c\n\
-        LDB DRAW_CIRCLE_TEMP+1 ; radius\n\
+        MUL                    ; D = 56 * r\n\
+        ADDD #128              ; round before /256\n\
+        STA >DRAW_CIRCLE_TEMP+4 ; Store c\n\
+        LDB >DRAW_CIRCLE_TEMP+1 ; radius\n\
         LDA #19                ; 19/256 = 0.0742 ~ 0.0761\n\
-        MUL                    ; A = d\n\
-        STA DRAW_CIRCLE_TEMP+5 ; Store d\n\
+        MUL                    ; D = 19 * r\n\
+        ADDD #128              ; round before /256\n\
+        STA >DRAW_CIRCLE_TEMP+5 ; Store d\n\
         \n\
         ; Draw 16 unrolled segments - 16-gon counterclockwise from (xc+r, yc)\n\
         ; Draw_Line_d(A=dy, B=dx). Symmetry pattern by quadrant:\n\
@@ -597,105 +707,105 @@ DCR_after_intensity:\n\
         ; --- Q1 ---\n\
         ; Seg 0: dy=+a, dx=-d\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+2  ; a\n\
-        LDB DRAW_CIRCLE_TEMP+5  ; d\n\
+        LDA >DRAW_CIRCLE_TEMP+2  ; a\n\
+        LDB >DRAW_CIRCLE_TEMP+5  ; d\n\
         NEGB\n\
         JSR Draw_Line_d\n\
         ; Seg 1: dy=+b, dx=-c\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+3  ; b\n\
-        LDB DRAW_CIRCLE_TEMP+4  ; c\n\
+        LDA >DRAW_CIRCLE_TEMP+3  ; b\n\
+        LDB >DRAW_CIRCLE_TEMP+4  ; c\n\
         NEGB\n\
         JSR Draw_Line_d\n\
         ; Seg 2: dy=+c, dx=-b\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+4  ; c\n\
-        LDB DRAW_CIRCLE_TEMP+3  ; b\n\
+        LDA >DRAW_CIRCLE_TEMP+4  ; c\n\
+        LDB >DRAW_CIRCLE_TEMP+3  ; b\n\
         NEGB\n\
         JSR Draw_Line_d\n\
         ; Seg 3: dy=+d, dx=-a\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+5  ; d\n\
-        LDB DRAW_CIRCLE_TEMP+2  ; a\n\
+        LDA >DRAW_CIRCLE_TEMP+5  ; d\n\
+        LDB >DRAW_CIRCLE_TEMP+2  ; a\n\
         NEGB\n\
         JSR Draw_Line_d\n\
         \n\
         ; --- Q2 ---\n\
         ; Seg 4: dy=-d, dx=-a\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+5  ; d\n\
+        LDA >DRAW_CIRCLE_TEMP+5  ; d\n\
         NEGA\n\
-        LDB DRAW_CIRCLE_TEMP+2  ; a\n\
+        LDB >DRAW_CIRCLE_TEMP+2  ; a\n\
         NEGB\n\
         JSR Draw_Line_d\n\
         ; Seg 5: dy=-c, dx=-b\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+4  ; c\n\
+        LDA >DRAW_CIRCLE_TEMP+4  ; c\n\
         NEGA\n\
-        LDB DRAW_CIRCLE_TEMP+3  ; b\n\
+        LDB >DRAW_CIRCLE_TEMP+3  ; b\n\
         NEGB\n\
         JSR Draw_Line_d\n\
         ; Seg 6: dy=-b, dx=-c\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+3  ; b\n\
+        LDA >DRAW_CIRCLE_TEMP+3  ; b\n\
         NEGA\n\
-        LDB DRAW_CIRCLE_TEMP+4  ; c\n\
+        LDB >DRAW_CIRCLE_TEMP+4  ; c\n\
         NEGB\n\
         JSR Draw_Line_d\n\
         ; Seg 7: dy=-a, dx=-d\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+2  ; a\n\
+        LDA >DRAW_CIRCLE_TEMP+2  ; a\n\
         NEGA\n\
-        LDB DRAW_CIRCLE_TEMP+5  ; d\n\
+        LDB >DRAW_CIRCLE_TEMP+5  ; d\n\
         NEGB\n\
         JSR Draw_Line_d\n\
         \n\
         ; --- Q3 ---\n\
         ; Seg 8: dy=-a, dx=+d\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+2  ; a\n\
+        LDA >DRAW_CIRCLE_TEMP+2  ; a\n\
         NEGA\n\
-        LDB DRAW_CIRCLE_TEMP+5  ; d (positive)\n\
+        LDB >DRAW_CIRCLE_TEMP+5  ; d (positive)\n\
         JSR Draw_Line_d\n\
         ; Seg 9: dy=-b, dx=+c\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+3  ; b\n\
+        LDA >DRAW_CIRCLE_TEMP+3  ; b\n\
         NEGA\n\
-        LDB DRAW_CIRCLE_TEMP+4  ; c (positive)\n\
+        LDB >DRAW_CIRCLE_TEMP+4  ; c (positive)\n\
         JSR Draw_Line_d\n\
         ; Seg 10: dy=-c, dx=+b\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+4  ; c\n\
+        LDA >DRAW_CIRCLE_TEMP+4  ; c\n\
         NEGA\n\
-        LDB DRAW_CIRCLE_TEMP+3  ; b (positive)\n\
+        LDB >DRAW_CIRCLE_TEMP+3  ; b (positive)\n\
         JSR Draw_Line_d\n\
         ; Seg 11: dy=-d, dx=+a\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+5  ; d\n\
+        LDA >DRAW_CIRCLE_TEMP+5  ; d\n\
         NEGA\n\
-        LDB DRAW_CIRCLE_TEMP+2  ; a (positive)\n\
+        LDB >DRAW_CIRCLE_TEMP+2  ; a (positive)\n\
         JSR Draw_Line_d\n\
         \n\
         ; --- Q4 ---\n\
         ; Seg 12: dy=+d, dx=+a\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+5  ; d (positive)\n\
-        LDB DRAW_CIRCLE_TEMP+2  ; a (positive)\n\
+        LDA >DRAW_CIRCLE_TEMP+5  ; d (positive)\n\
+        LDB >DRAW_CIRCLE_TEMP+2  ; a (positive)\n\
         JSR Draw_Line_d\n\
         ; Seg 13: dy=+c, dx=+b\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+4  ; c (positive)\n\
-        LDB DRAW_CIRCLE_TEMP+3  ; b (positive)\n\
+        LDA >DRAW_CIRCLE_TEMP+4  ; c (positive)\n\
+        LDB >DRAW_CIRCLE_TEMP+3  ; b (positive)\n\
         JSR Draw_Line_d\n\
         ; Seg 14: dy=+b, dx=+c\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+3  ; b (positive)\n\
-        LDB DRAW_CIRCLE_TEMP+4  ; c (positive)\n\
+        LDA >DRAW_CIRCLE_TEMP+3  ; b (positive)\n\
+        LDB >DRAW_CIRCLE_TEMP+4  ; c (positive)\n\
         JSR Draw_Line_d\n\
         ; Seg 15: dy=+a, dx=+d\n\
         CLR Vec_Misc_Count\n\
-        LDA DRAW_CIRCLE_TEMP+2  ; a (positive)\n\
-        LDB DRAW_CIRCLE_TEMP+5  ; d (positive)\n\
+        LDA >DRAW_CIRCLE_TEMP+2  ; a (positive)\n\
+        LDB >DRAW_CIRCLE_TEMP+5  ; d (positive)\n\
         JSR Draw_Line_d\n\
         \n\
         LDA #$C8\n\
@@ -759,10 +869,9 @@ DCR_after_intensity:\n\
         out.push_str("    NEGB                ; -width\n");
         out.push_str("    JSR Draw_Line_d\n");
         out.push_str("    \n");
-        out.push_str("    ; Draw up side\n");
+        out.push_str("    ; Draw up side (close rectangle: +height closes the -height of down side)\n");
         out.push_str("    CLR Vec_Misc_Count\n");
-        out.push_str("    LDA 2,S             ; height\n");
-        out.push_str("    NEGA                ; -height\n");
+        out.push_str("    LDA 3,S             ; +height\n");
         out.push_str("    LDB #0\n");
         out.push_str("    JSR Draw_Line_d\n");
         out.push_str("    \n");
@@ -930,21 +1039,17 @@ DCR_after_intensity:\n\
     if needed.contains("DRAW_VECTOR") || needed.contains("DRAW_VECTOR_EX") {
         out.push_str(
             "Draw_Sync_List_At_With_Mirrors:\n\
-        ; Unified mirror support using flags: MIRROR_X and MIRROR_Y\n\
+; Unified mirror support using flags: MIRROR_X and MIRROR_Y\n\
             ; Conditionally negates X and/or Y coordinates and deltas\n\
-            ; NOTE: Caller must ensure DP=$D0 for VIA access\n\
-            ; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates\n\
-            ; VIA Port B through states $05->$04->$01 which resets the analog hardware\n\
-            ; (zero-reference sequence) and would disrupt the beam position mid-drawing.\n\
-            ; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.\n\
-            LDA ,X+                 ; Read per-path intensity from vector data\n\
+            ; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing\n\
+            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
+            BNE DSWM_USE_OVERRIDE   ; If non-zero, use override\n\
+            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
+            BRA DSWM_SET_INTENSITY\n\
+DSWM_USE_OVERRIDE:\n\
+            LEAX 1,X                ; Skip intensity byte in vector data\n\
 DSWM_SET_INTENSITY:\n\
-            STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
-            STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)\n\
-            LDA #$04\n\
-            STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated\n\
-            LDA #$01\n\
-            STA >$D000              ; Port B=$01: restore normal mux\n\
+            STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)\n\
             LDB ,X+                 ; y_start from .vec (already relative to center)\n\
             ; Check if Y mirroring is enabled\n\
             TST >MIRROR_Y\n\
@@ -984,7 +1089,7 @@ DSWM_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A                  ; Restore X\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; T1 fixed at $7F (constant scale; brightness is set via $C832 above, independently)\n\
+            ; Timing setup (match core: hardcoded $7F)\n\
             LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\
@@ -1031,14 +1136,20 @@ DSWM_NO_NEGATE_DX:\n\
             LDA VIA_int_flags\n\
             ANDA #$40\n\
             BEQ DSWM_W2\n\
+            CLR VIA_port_a          ; stop X integrator drift between segments\n\
             CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)\n\
             LBRA DSWM_LOOP          ; Long branch\n\
             ; Next path: repeat mirror logic for new path header\n\
             DSWM_NEXT_PATH:\n\
             TFR X,D\n\
             PSHS D\n\
-            ; Read per-path intensity from vector data\n\
-            LDA ,X+                 ; Read intensity from vector data\n\
+            ; Check intensity override (same logic as start)\n\
+            LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set\n\
+            BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override\n\
+            LDA ,X+                 ; Otherwise, read intensity from vector data\n\
+            BRA DSWM_NEXT_SET_INTENSITY\n\
+DSWM_NEXT_USE_OVERRIDE:\n\
+            LEAX 1,X                ; Skip intensity byte in vector data\n\
 DSWM_NEXT_SET_INTENSITY:\n\
             PSHS A\n\
             LDB ,X+                 ; y_start\n\
@@ -1055,12 +1166,7 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             ADDA >DRAW_VEC_X        ; Add X offset\n\
             STD >TEMP_YX\n\
             PULS A                  ; Get intensity back\n\
-            STA >$C832              ; Update BIOS variable (Vec_Misc_Count)\n\
-            STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)\n\
-            LDA #$04\n\
-            STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated\n\
-            LDA #$01\n\
-            STA >$D000              ; Port B=$01: restore normal mux\n\
+            STA >$C832              ; Vec_Misc_Count (direct, DP-safe)\n\
             PULS D\n\
             ADDD #3\n\
             TFR D,X\n\
@@ -1088,7 +1194,7 @@ DSWM_NEXT_NO_NEGATE_X:\n\
             INC VIA_port_b          ; PB=1: disable mux, lock direction at Y\n\
             PULS A\n\
             STA VIA_port_a          ; X to DAC\n\
-            ; T1 fixed at $7F (constant scale; brightness set via $C832 above)\n\
+            ; Timing setup (match core: hardcoded $7F)\n\
             LDA #$7F\n\
             STA VIA_t1_cnt_lo\n\
             CLR VIA_t1_cnt_hi\n\

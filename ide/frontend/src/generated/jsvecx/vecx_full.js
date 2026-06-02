@@ -3978,7 +3978,6 @@ function osint()
         for( v = 0; v < vector_draw_cnt; v++ )
         {
             draw = vectors_draw[v];
-            console.log(`[Vector ${v}] Drawing line: (${draw.x0}, ${draw.y0}) -> (${draw.x1}, ${draw.y1}), color: ${draw.color}`);
             this.osint_line(draw.x0, draw.y0, draw.x1, draw.y1, draw.color);
         }
 
@@ -4054,6 +4053,23 @@ function VecX()
     //static unsigned char ram[1024];
     this.ram = new Array(0x400);
     utils.initArray(this.ram, 0);
+
+    // --- Debugger breakpoint support (used by ide EmulatorPanel) ---
+    // Breakpoint addresses are keyed by 16-bit PC (bank-relative; matches across
+    // banks — a known limitation for multibank, but enough to stop at most code).
+    this.breakpoints = {};
+    this.pausedByBreakpoint = false;
+    this._resumeSkipPc = -1;       // PC to execute once without re-triggering its breakpoint
+    this.debugState = 'stopped';
+    this.addBreakpoint = function(addr) { this.breakpoints[addr & 0xFFFF] = true; };
+    this.removeBreakpoint = function(addr) { delete this.breakpoints[addr & 0xFFFF]; };
+    this.clearBreakpoints = function() { this.breakpoints = {}; };
+    this.isPausedByBreakpoint = function() { return this.pausedByBreakpoint; };
+    this.resumeFromBreakpoint = function() {
+        // Allow the instruction AT the current breakpoint to run once, then re-arm.
+        this.pausedByBreakpoint = false;
+        this._resumeSkipPc = this.e6809 ? this.e6809.reg_pc : -1;
+    };
 
     /* the sound chip registers */
 
@@ -4406,11 +4422,6 @@ function VecX()
 
                     /* fall through */
                 case 0xf:
-                    // DEBUG: Log VIA Port A read
-                    if (this.snd_select === 14 && typeof window !== 'undefined' && window.injectedButtonStatePSG !== undefined) {
-                        console.log('[JSVecx VIA Read case 0xf] via_orb:', (this.via_orb & 0x18).toString(16), 'snd_select:', this.snd_select);
-                    }
-                    
                     if( (this.via_orb & 0x18) == 0x08 )
                     {
                         /* the snd chip is driving port a */
@@ -4419,10 +4430,8 @@ function VecX()
                         if (this.snd_select === 14) {
                             if (typeof window !== 'undefined' && window.injectedButtonStatePSG !== undefined) {
                                 data = window.injectedButtonStatePSG;
-                                console.log('[JSVecx VIA Read] ✓ Using injected PSG reg 14:', data.toString(16).padStart(2, '0'));
                             } else {
                                 data = this.snd_regs[this.snd_select];
-                                console.log('[JSVecx VIA Read] ✗ No injected value, using snd_regs[14]:', data.toString(16).padStart(2, '0'));
                             }
                         } else {
                             data = this.snd_regs[this.snd_select];
@@ -4639,6 +4648,13 @@ function VecX()
                         this.via_t1on = 1; /* timer 1 starts running */
                         this.via_t1int = 1;
                         this.via_t1pb7 = 0;
+
+                        // DEBUG: log T1 start
+                        if (!this._t1log_count) this._t1log_count = 0;
+                        if (this._t1log_count < 20) {
+                            console.log(`[T1 START #${this._t1log_count}] t1ll=${this.via_t1ll} t1c=${this.via_t1c} alg_curr=(${this.alg_curr_x},${this.alg_curr_y}) alg_dx=${this.alg_dx} alg_dy=${this.alg_dy} ca2=${this.via_ca2} orb=${this.via_orb}`);
+                            this._t1log_count++;
+                        }
 
                         //this.int_update();
                         // int_update inline begin
@@ -5349,6 +5365,15 @@ function VecX()
 
         while( cycles > 0 )
         {
+            // Debugger: stop before executing the instruction at a breakpoint.
+            // _resumeSkipPc lets "continue" step past the current breakpoint once.
+            var _bpPc = e6809.reg_pc & 0xFFFF;
+            if (this.breakpoints[_bpPc] && _bpPc !== this._resumeSkipPc) {
+                this.pausedByBreakpoint = true;
+                this.debugState = 'paused';
+                break;
+            }
+            this._resumeSkipPc = -1;
             icycles = e6809.e6809_sstep(this.via_ifr & 0x80, 0);
 
             for( c = 0; c < icycles; c++ )
@@ -5364,6 +5389,12 @@ function VecX()
                     if( (this.via_t1c & 0xffff) == 0xffff )
                     {
                         /* counter just rolled over */
+                        // DEBUG: log T1 fire
+                        if (!this._t1fire_count) this._t1fire_count = 0;
+                        if (this._t1fire_count < 20) {
+                            console.log(`[T1 FIRE  #${this._t1fire_count}] alg_curr=(${this.alg_curr_x},${this.alg_curr_y}) ca2=${this.via_ca2}`);
+                            this._t1fire_count++;
+                        }
                         if( this.via_acr & 0x40 )
                         {
                             /* continuous interrupt mode */
@@ -5774,15 +5805,19 @@ function VecX()
         {
             if( !vecx.running ) return;
 
-            vecx.alg_jch0 =
-                 ( vecx.leftHeld ? 0x00 :
-                     ( vecx.rightHeld ? 0xff :
-                        0x80 ) );
+            // When useAnalogJoy=true, alg_jch0/1 are set externally with analog
+            // gamepad values — do not override them with digital boolean states.
+            if ( !vecx.useAnalogJoy ) {
+                vecx.alg_jch0 =
+                     ( vecx.leftHeld ? 0x00 :
+                         ( vecx.rightHeld ? 0xff :
+                            0x80 ) );
 
-            vecx.alg_jch1 =
-                 ( vecx.downHeld ? 0x00 :
-                    ( vecx.upHeld ? 0xff :
-                        0x80 ) );
+                vecx.alg_jch1 =
+                     ( vecx.downHeld ? 0x00 :
+                        ( vecx.upHeld ? 0xff :
+                            0x80 ) );
+            }
 
             vecx.snd_regs[14] = vecx.shadow_snd_regs14;
 

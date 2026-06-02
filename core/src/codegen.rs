@@ -3,7 +3,7 @@ use crate::target::{info, CpuArch, Target};
 use std::collections::{HashSet, HashMap};
 use std::cell::RefCell;
 
-use crate::struct_layout::{StructRegistry, build_struct_registry, StructLayout};
+use crate::struct_layout::{StructRegistry, build_struct_registry};
 
 // ---------------- Diagnostics (S8) ----------------
 // Canal estructurado para warnings (y pronto errores S9).
@@ -609,7 +609,7 @@ pub fn emit_asm_with_debug(module: &Module, target: Target, opts: &CodegenOption
     let struct_registry = match build_struct_registry(&module.items) {
         Ok(registry) => registry,
         Err(e) => {
-            let mut diagnostics = vec![Diagnostic {
+            let diagnostics = vec![Diagnostic {
                 severity: DiagnosticSeverity::Error,
                 code: DiagnosticCode::StructRegistryError,
                 message: e,

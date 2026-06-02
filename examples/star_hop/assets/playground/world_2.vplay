@@ -1,0 +1,175 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "world_2",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Created in Playground - 2026-06-01"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 287,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "walkable_areas": [
+    {
+      "y": -29,
+      "x_min": -42,
+      "x_max": 36
+    },
+    {
+      "y": -58,
+      "x_min": 61,
+      "x_max": 138
+    },
+    {
+      "y": -28,
+      "x_min": 161,
+      "x_max": 238
+    },
+    {
+      "y": -112,
+      "x_min": -95,
+      "x_max": 287
+    }
+  ],
+  "transitionLateralY": 35,
+  "layers": {
+    "background": [],
+    "gameplay": [
+      {
+        "id": "obj_1780306667788",
+        "type": "background",
+        "vectorName": "platform",
+        "layer": "gameplay",
+        "x": -2,
+        "y": -40,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1780306672700",
+        "type": "background",
+        "vectorName": "platform",
+        "layer": "gameplay",
+        "x": 100,
+        "y": -70,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1780306676816",
+        "type": "background",
+        "vectorName": "platform",
+        "layer": "gameplay",
+        "x": 200,
+        "y": -40,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "enemy_1780307615130",
+        "type": "enemy",
+        "vectorName": "enemy",
+        "layer": "gameplay",
+        "x": -25,
+        "y": -29,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "crawler",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1780307657898",
+        "type": "enemy",
+        "vectorName": "enemy",
+        "layer": "gameplay",
+        "x": 100,
+        "y": -51,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "crawler",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1780307659702",
+        "type": "enemy",
+        "vectorName": "enemy",
+        "layer": "gameplay",
+        "x": 200,
+        "y": -22,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "crawler",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": {
+      "x": 0,
+      "y": -100
+    }
+  },
+  "hotspots": [],
+  "scrollLimits": {
+    "left": -96,
+    "right": 287
+  },
+  "_editorMeta": {
+    "groundBottomOffset": 16
+  }
+}
