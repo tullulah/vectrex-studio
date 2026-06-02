@@ -41,11 +41,17 @@ pub const DATA_SHIFT: u8  = 15;                   // D0 starts at GP15
 pub const DATA_MASK:  u32 = 0xFF << DATA_SHIFT;   // GP15–GP22
 
 // --- Control signals from Vectrex (inputs) ---
-// /CE and /OE come through 74LVC245A (already at 3.3V).
-// R/W and /OE also go through a 10k+18k voltage divider (5V→3.21V).
-pub const PIN_NCE: u8 = 23;  // /CE  (U3 B8)
-pub const PIN_RW:  u8 = 24;  // R/W  (divisor 10k+18k)
-pub const PIN_NOE: u8 = 25;  // /OE  (divisor 10k+18k)
+// /CE comes through 74LVC245A U3 (already at 3.3V).
+// /OE goes through a 10k+18k voltage divider (5V→3.21V).
+pub const PIN_NCE: u8 = 23;  // /CE      (U3 B8)
+pub const PIN_NOE: u8 = 25;  // /OE      (divisor 10k+18k)
+
+// --- Address bus buffer direction (U2/U3 DIR) ---
+// GP24 → U2 pin 1 + U3 pin 1 (DIR_A).
+// LOW  = Vectrex→RP2350 (ROM emulation / read mode)
+// HIGH = RP2350→Vectrex (bus master mode, Phase 3+)
+// /OE of U2/U3 is hardwired to GND (always enabled — toggles via direction only).
+pub const PIN_ABUS_DIR: u8 = 24;
 
 // --- Open-drain control outputs (BSS138 FETs) ---
 // GPIO HIGH → FET on → Vectrex line pulled to GND (signal asserted)

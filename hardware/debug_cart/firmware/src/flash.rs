@@ -19,8 +19,11 @@
 ///   Cart:         software reset after "OK"
 
 use rp235x_hal as hal;
-use hal::pac;
 use cortex_m::interrupt;
+use usb_device::{bus::UsbBus, device::UsbDevice};
+use usbd_serial::SerialPort;
+
+use crate::usb_print;
 
 /// Offset of game ROM from flash base (= 4MB - 32KB)
 const GAME_ROM_OFFSET: u32 = 4 * 1024 * 1024 - 32 * 1024; // 0x3F8000
@@ -37,51 +40,59 @@ static mut RX_BUF: [u8; GAME_ROM_SIZE as usize] = [0xFF; GAME_ROM_SIZE as usize]
 /// State machine for receiving and writing the game ROM.
 /// Call this once the 'F' byte has been consumed.
 /// Returns when done (success or error). Caller should reset after OK.
-pub fn receive_and_flash<F>(mut rx: F, mut tx: impl FnMut(&[u8]))
-where
-    F: FnMut(&mut [u8]) -> usize,
-{
-    tx(b"SEND SIZE\r\n");
+pub fn receive_and_flash<B: UsbBus>(
+    usb_dev: &mut UsbDevice<'_, B>,
+    serial: &mut SerialPort<'_, B>,
+) {
+    usb_print(serial, b"SEND SIZE\r\n");
 
     // Receive 4-byte little-endian size
     let mut size_buf = [0u8; 4];
-    receive_exact(&mut rx, &mut size_buf);
+    receive_exact(usb_dev, serial, &mut size_buf);
     let size = u32::from_le_bytes(size_buf);
 
     if size == 0 || size > GAME_ROM_SIZE {
-        tx(b"ERR size out of range\r\n");
+        usb_print(serial, b"ERR size out of range\r\n");
         return;
     }
 
-    tx(b"SEND DATA\r\n");
+    usb_print(serial, b"SEND DATA\r\n");
 
     // Receive binary payload into static buffer
     let buf = unsafe { &mut RX_BUF[..size as usize] };
-    receive_exact(&mut rx, buf);
+    receive_exact(usb_dev, serial, buf);
 
     // Write to flash (interrupts disabled, executed from RAM via ROM functions)
     let result = write_game_rom(buf);
 
     match result {
         Ok(()) => {
-            tx(b"OK\r\n");
+            usb_print(serial, b"OK\r\n");
             // Short delay so the host can read "OK" before we reset
             cortex_m::asm::delay(12_000_000); // ~100ms @ 120MHz
             cortex_m::peripheral::SCB::sys_reset();
         }
         Err(msg) => {
-            tx(b"ERR ");
-            tx(msg);
-            tx(b"\r\n");
+            usb_print(serial, b"ERR ");
+            usb_print(serial, msg.as_bytes());
+            usb_print(serial, b"\r\n");
         }
     }
 }
 
-/// Block until exactly `buf.len()` bytes are received via the rx callback.
-fn receive_exact<F: FnMut(&mut [u8]) -> usize>(rx: &mut F, buf: &mut [u8]) {
+/// Block until exactly `buf.len()` bytes are received from the USB CDC.
+fn receive_exact<B: UsbBus>(
+    usb_dev: &mut UsbDevice<'_, B>,
+    serial: &mut SerialPort<'_, B>,
+    buf: &mut [u8],
+) {
     let mut received = 0;
     while received < buf.len() {
-        received += rx(&mut buf[received..]);
+        if usb_dev.poll(&mut [serial]) {
+            if let Ok(n) = serial.read(&mut buf[received..]) {
+                received += n;
+            }
+        }
     }
 }
 
@@ -107,14 +118,16 @@ fn write_game_rom(data: &[u8]) -> Result<(), &'static str> {
             if chunk.len() == PAGE {
                 hal::rom_data::flash_range_program(
                     GAME_ROM_OFFSET + written as u32,
-                    chunk,
+                    chunk.as_ptr(),
+                    PAGE,
                 );
             } else {
                 let mut page = [0xFF_u8; PAGE];
                 page[..chunk.len()].copy_from_slice(chunk);
                 hal::rom_data::flash_range_program(
                     GAME_ROM_OFFSET + written as u32,
-                    &page,
+                    page.as_ptr(),
+                    PAGE,
                 );
             }
             written += chunk.len();

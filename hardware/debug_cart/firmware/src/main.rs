@@ -41,7 +41,10 @@ pub static IMAGE_DEF: hal::block::ImageDef = hal::block::ImageDef::secure_exe();
 const XTAL_FREQ_HZ: u32 = 12_000_000;
 
 /// Simple write to USB serial, ignores errors (host may not be connected yet)
-fn usb_print(serial: &mut SerialPort<hal::usb::UsbBus>, s: &[u8]) {
+pub(crate) fn usb_print<B: usb_device::bus::UsbBus>(
+    serial: &mut SerialPort<'_, B>,
+    s: &[u8],
+) {
     // USB CDC may need multiple writes if buffer is full
     let mut written = 0;
     while written < s.len() {
@@ -236,20 +239,9 @@ fn main() -> ! {
                             usb_print(&mut serial, b"ROM mode not yet implemented (Phase 2)\r\n> ");
                         }
                         b'F' => {
-                            // Flash game ROM over USB CDC
-                            // rx closure: poll USB and fill buffer, return bytes read
-                            let rx = |buf: &mut [u8]| -> usize {
-                                if usb_dev.poll(&mut [&mut serial]) {
-                                    serial.read(buf).unwrap_or(0)
-                                } else {
-                                    0
-                                }
-                            };
-                            let tx = |data: &[u8]| {
-                                usb_print(&mut serial, data);
-                            };
-                            flash::receive_and_flash(rx, tx);
-                            // receive_and_flash resets on success; if we reach here it errored
+                            // Flash game ROM over USB CDC.
+                            // receive_and_flash resets on success; if we reach here it errored.
+                            flash::receive_and_flash(&mut usb_dev, &mut serial);
                             usb_print(&mut serial, b"> ");
                         }
                         b'\r' | b'\n' => {

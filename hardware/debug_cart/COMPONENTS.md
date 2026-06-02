@@ -70,12 +70,17 @@ PCB: card-edge cartucho directo (sin conector externo), grosor 1.6mm, gold finge
 | GPIO21 | GP21 | D6 |
 | GPIO22 | GP22 | D7 |
 | GPIO23 | GP23 | /CE (CART_nCE, vía U3 B8) |
-| GPIO24 | GP24 | R/W (CART_RW, divisor 10k+18k) |
+| GPIO24 | GP24 | ABUS_DIR (U2 pin 1 + U3 pin 1) |
 | GPIO25 | GP25 | /OE (CART_nOE, divisor 10k+18k) |
 | GPIO26/ADC0 | GP26 | /NMI (open-drain vía Q1) |
 | GPIO27/ADC1 | GP27 | /HALT (open-drain vía Q2) |
 | GPIO28/ADC2 | GP28 | /RST (open-drain vía Q3) |
 | GPIO29/ADC3 | GP29 | DIR_CTRL (U4 pin 1) |
+
+> **ABUS_DIR** controla la dirección de los buffers U2/U3 del bus de direcciones:
+> LOW = Vectrex→RP2350 (modo ROM, default). HIGH = RP2350→Vectrex (bus master).
+> /OE de U2/U3 está cableado a GND (siempre habilitado). R7/R8 (antiguo divisor
+> de CART_RW) están eliminados; CART_RW solo aparece en CON1 (NC en lado MCU).
 
 ### QSPI / power / debug pins
 
@@ -86,15 +91,16 @@ PCB: card-edge cartucho directo (sin conector externo), grosor 1.6mm, gold finge
 | QSPI_SD2 | QSPI_SD2 | |
 | QSPI_SD3 | QSPI_SD3 | |
 | QSPI_SCLK | QSPI_SCK | |
-| ~{QSPI_SS} | QSPI_CSn | CS0 → W25Q32JV |
-| ~{QSPI_SS1} | QSPI_SS1n | CS1 → APS6404L (QMI hardware) |
+| ~{QSPI_SS} | QSPI_CSn | CS único expuesto → W25Q32JV (PSRAM CS por GPIO) |
 | RUN | RUN | Pulled up a +3V3 (100kΩ); TP de reset |
 | IOVDD (×6) | +3V3 | |
 | DVDD (×2) | +3V3 | |
-| USB_VDD | +3V3 | |
+| QSPI_IOVDD | +3V3 | Pin nuevo en RP2350A vs RP2040 |
+| USB_OTP_VDD | +3V3 | Pin nuevo en RP2350A vs RP2040 |
 | ADC_AVDD | +3V3 | |
-| VREG_VIN | +3V3 | |
-| VREG_VOUT | VREG_VOUT | → C_VREG 1µF → GND (core supply ~1.1V) |
+| VREG_AVDD | +3V3 | Reemplaza VREG_VIN del RP2040 |
+| VREG_LX | +3V3 | **Modo bypass/LDO** — tie a +3V3 directamente, sin inductor |
+| VREG_FB | +3V3 | **Modo bypass/LDO** — tie a +3V3 directamente |
 | XIN | XTAL_IN | |
 | XOUT | XTAL_OUT | |
 | USB_DP | USB_DP | |
@@ -244,11 +250,13 @@ Añadir C_LDO_IN (10µF, 0805) entre +5V y GND, y C_LDO_OUT (10µF, 0805) entre 
 | Footprint | `Package_SO:SOIC-8_3.9x4.9mm_P1.27mm` |
 | Value | `APS6404L-3SQR` |
 
-CS# controlado por **QSPI_SS1_N** (QMI hardware CS1 del RP2350 — no requiere GPIO software).
+CS# controlado por GPIO software (net `PSRAM_CS`). El símbolo KiCad del RP2350A
+no expone un pin dedicado `QSPI_SS1` — la PSRAM se selecciona via GPIO con
+secuencia QSPI emitida desde el firmware (`pac::QMI` direct mode).
 
 | Pad | Pin | Net |
 |---|---|---|
-| 1 | CE# | QSPI_SS1n |
+| 1 | CE# | PSRAM_CS |
 | 2 | SIO1 | QSPI_SD1 |
 | 3 | SIO2 | QSPI_SD2 |
 | 4 | VSS | GND |
@@ -432,12 +440,15 @@ Para entrar en modo bootloader USB (unbrick):
 | R4 | 10kΩ | +5V | nNMI | Pullup /NMI |
 | R5 | 10kΩ | +5V | nHALT | Pullup /HALT |
 | R6 | 10kΩ | +5V | nRST | Pullup /RST |
-| R7 | 10kΩ | CART_RW | GP24 | Divisor R/W (top) |
-| R8 | 18kΩ | GP24 | GND | Divisor R/W (bottom) — 5V→3.21V |
 | R9 | 10kΩ | CART_nOE | GP25 | Divisor /OE (top) |
 | R10 | 18kΩ | GP25 | GND | Divisor /OE (bottom) |
 | R11 | 5.1kΩ | GND | CC1 | USB-C CC pull-down |
 | R12 | 5.1kΩ | GND | CC2 | USB-C CC pull-down |
+
+> R7/R8 eliminados (eran el divisor para sensar CART_RW). GP24 ahora drives
+> ABUS_DIR (U2/U3 pin 1). Bus master writes requieren PCB v2 con un inverter
+> 74LVC1G04 entre GP29 (DIR_CTRL) y CART_RW — sin ese inverter, v1 solo soporta
+> reads en modo bus master.
 
 Todas en footprint `Resistor_SMD:R_0402_1005Metric`.
 
@@ -447,12 +458,19 @@ Todas en footprint `Resistor_SMD:R_0402_1005Metric`.
 
 | Ref | Valor | Pad 1 | Pad 2 | Notas |
 |---|---|---|---|---|
-| C1–C8 | 100nF | +3V3 | GND | Decoupling RP2350 (uno por par IOVDD) |
+| C1–C8 | 100nF | +3V3 | GND | Decoupling RP2350 (uno por par IOVDD/DVDD) |
 | C9 | 100nF | +3V3 | GND | Decoupling U6 (PSRAM) |
 | C10 | 100nF | +3V3 | GND | Decoupling U7 (flash) |
-| C_VREG | 1µF | VREG_VOUT | GND | Core supply RP2350 |
+| C11 | 100nF | +3V3 | GND | Decoupling QSPI_IOVDD |
+| C12 | 100nF | +3V3 | GND | Decoupling USB_OTP_VDD |
+| C13 | 100nF | +3V3 | GND | Decoupling VREG_AVDD |
 | C_LDO_IN | 10µF | +5V | GND | LDO input (0805) |
 | C_LDO_OUT | 10µF | +3V3 | GND | LDO output (0805) |
+
+> Modo SMPS interno NO usado en v1: `VREG_LX` y `VREG_FB` van a +3V3 (bypass).
+> Para activar SMPS en v2 hay que añadir inductor 470nH + diodo Schottky en `VREG_LX`
+> según §5.4 fig.18 del datasheet RP2350. En v1 el core consume ~50mA en LDO, OK
+> para alimentación vía AMS1117.
 
 C1–C10 y C_VREG en `Capacitor_SMD:C_0402_1005Metric`.
 

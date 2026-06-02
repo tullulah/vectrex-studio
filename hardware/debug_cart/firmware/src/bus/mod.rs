@@ -1,22 +1,27 @@
-#![allow(dead_code)] // Bus master API — used by Phase 3+ (PCB v2)
+#![allow(dead_code)] // Bus master API — write path needs PCB v2
 
 /// Bus master primitives — Phase 3
 ///
 /// These functions assume:
 ///   - nHALT has been asserted (6809 halted, bus tri-stated)
-///   - Address buffer direction has been switched to RP2040→Vectrex
-///     (requires PCB v2 with controllable U2/U3 DIR pins)
+///   - Address buffer direction has been switched to RP2350→Vectrex
+///     (GP24 = ABUS_DIR = HIGH on PCB v1+)
 ///
-/// On PCB v1 (DIR tied to GND): only ROM emulation mode is available.
-/// Calling bus_write/bus_read on v1 hardware will silently do nothing
-/// (guarded by BUS_MASTER_AVAILABLE).
+/// PCB v1 limitation:
+///   The Vectrex CART_RW line is not driven by the RP2350. When the 6809
+///   HALTs it tri-states R/W; with R7/R8 removed there is no GPIO path
+///   from the RP2350 to CART_RW. Result: only reads are reliable in bus
+///   master mode (you must add a pullup on CART_RW to +5V so R/W floats
+///   HIGH = read). VIA writes from the RP2350 require PCB v2 with a
+///   74LVC1G04 inverter from GP29 (data DIR_CTRL) to CART_RW.
+///
+/// Toggle BUS_MASTER_AVAILABLE to true once the v2 PCB lands.
 
 use rp235x_hal::pac;
 use cortex_m::delay::Delay;
 use crate::pins::*;
 
-/// Set to true once PCB v2 is confirmed and DIR control is wired.
-/// Change to `true` when building for v2 hardware.
+/// Set to true once PCB v2 (with R/W drive) is confirmed.
 pub const BUS_MASTER_AVAILABLE: bool = false;
 
 /// Minimum stable time (µs) for a bus cycle.
@@ -25,20 +30,18 @@ pub const BUS_MASTER_AVAILABLE: bool = false;
 const BUS_CYCLE_US: u32 = 2;
 
 /// Write a single byte to a Vectrex bus address.
-/// Address 0x0000–0x7FFF: cartridge space (no VIA chip select)
-/// Address 0xC800–0xCFFF: Vectrex RAM
-/// Address 0xD000–0xD00F: VIA 6522 registers  ← most useful
-///
-/// Requires bus master mode (PCB v2). No-op on v1.
+/// Requires PCB v2 (R/W drive). No-op on v1.
 pub fn write(delay: &mut Delay, addr: u16, data: u8) {
     if !BUS_MASTER_AVAILABLE { return; }
 
     let sio = unsafe { &*pac::SIO::ptr() };
 
-    // Set address lines as outputs (GP0-GP14)
+    // Address bus: RP2350→Vectrex (GP24 = ABUS_DIR = HIGH; set by caller)
     sio.gpio_oe_set().write(|w| unsafe { w.bits(ADDR_MASK) });
-    // Set data lines as outputs (GP15-GP22), DIR_CTRL already HIGH
+    // Data bus: RP2350→Vectrex (GP29 = DIR_CTRL HIGH; this also drives the
+    // v2 inverter that pulls CART_RW LOW = write cycle)
     sio.gpio_oe_set().write(|w| unsafe { w.bits(DATA_MASK) });
+    sio.gpio_out_set().write(|w| unsafe { w.bits(1 << PIN_DIR_CTRL) });
 
     // Drive address and data
     let gpio_val = addr_to_gpio(addr) | data_to_gpio(data);
@@ -47,18 +50,15 @@ pub fn write(delay: &mut Delay, addr: u16, data: u8) {
         w.bits((!gpio_val) & (ADDR_MASK | DATA_MASK))
     });
 
-    // R/W = write (LOW)
-    sio.gpio_out_clr().write(|w| unsafe { w.bits(1 << PIN_RW) });
-
-    // Hold stable for at least 2 µs — VIA will latch on next E rising edge
     delay.delay_us(BUS_CYCLE_US);
 
-    // Release R/W
-    sio.gpio_out_set().write(|w| unsafe { w.bits(1 << PIN_RW) });
+    // Release: data bus back to inputs, DIR_CTRL LOW (read default)
+    sio.gpio_oe_clr().write(|w| unsafe { w.bits(DATA_MASK) });
+    sio.gpio_out_clr().write(|w| unsafe { w.bits(1 << PIN_DIR_CTRL) });
 }
 
 /// Read a single byte from a Vectrex bus address.
-/// Requires bus master mode (PCB v2). Returns 0xFF on v1.
+/// Requires bus master mode. Returns 0xFF on v1.
 pub fn read(delay: &mut Delay, addr: u16) -> u8 {
     if !BUS_MASTER_AVAILABLE { return 0xFF; }
 
@@ -67,18 +67,14 @@ pub fn read(delay: &mut Delay, addr: u16) -> u8 {
     // Address lines as outputs, data lines as inputs
     sio.gpio_oe_set().write(|w| unsafe { w.bits(ADDR_MASK) });
     sio.gpio_oe_clr().write(|w| unsafe { w.bits(DATA_MASK) });
-    // DIR_CTRL LOW → U4 direction Vectrex→RP2040 (read)
-    sio.gpio_out_clr().write(|w| unsafe { w.bits(1 << PIN_RW) }); // not needed but clean
+    // DIR_CTRL LOW → U4 direction Vectrex→RP2350 (read)
+    sio.gpio_out_clr().write(|w| unsafe { w.bits(1 << PIN_DIR_CTRL) });
 
     // Drive address
     let gpio_val = addr_to_gpio(addr);
     sio.gpio_out_set().write(|w| unsafe { w.bits(gpio_val & ADDR_MASK) });
     sio.gpio_out_clr().write(|w| unsafe { w.bits((!gpio_val) & ADDR_MASK) });
 
-    // R/W = read (HIGH)
-    sio.gpio_out_set().write(|w| unsafe { w.bits(1 << PIN_RW) });
-
-    // Wait for data to be valid
     delay.delay_us(BUS_CYCLE_US);
 
     // Sample data bus
