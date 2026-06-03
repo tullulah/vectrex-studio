@@ -75,6 +75,11 @@ pub const PIN_CART_RW_DRV: u8 = 30;
 /// /OE sense from card edge (5V → 3.21V via R4/R5 divider).
 pub const PIN_NOE_SENSE: u8 = 31;
 
+/// /IRQ drive (gate of Q4 BSS138 → CON1 pin 36).
+/// Last GPIO on side B (corner pin 40 of QFN-80) — close to the BSS138
+/// transistor near the card edge.
+pub const PIN_NIRQ_DRV: u8 = 32;
+
 // ============================================================
 // SIDE C — SD card + UART + vextreme extended signals + IRQ
 // ============================================================
@@ -100,23 +105,24 @@ pub const PIN_PB6_SENSE: u8 = 41;
 pub const PIN_CART_SENSE: u8 = 42;
 
 // ============================================================
-// SIDE D — 6809 input drives (Q1-Q4 BSS138 open-drain)
+// SIDE D — PSRAM CS + 3 of 4 BSS138 drives
+// (side D has only GP0-3 as GPIOs; rest is QSPI/USB/VREG hardware pins)
 // ============================================================
+
+/// PSRAM CS — drives U6 (APS6404L) pin 1.
+/// Not a QSPI hardware CS — uses QMI direct-mode via GPIO bit-bang.
+/// Placed on side D adjacent to the QSPI hardware pins for minimal trace
+/// length to U6 (timing-critical at 50+ MHz).
+pub const PIN_PSRAM_CS: u8 = 0;
 
 /// GPIO HIGH → BSS138 conducts → 6809 line pulled to GND (signal asserted).
 /// GPIO LOW  → BSS138 off → 10kΩ pullup to +5V → signal deasserted.
-pub const PIN_NHALT_DRV: u8 = 0;
-pub const PIN_NNMI_DRV:  u8 = 1;
-pub const PIN_NRST_DRV:  u8 = 2;
-pub const PIN_NIRQ_DRV:  u8 = 3;
-
-// ============================================================
-// PSRAM CS (location TBD — any spare GPIO on side D or C)
-// ============================================================
-
-/// PSRAM CS — drives U6 (APS6404L) pin 1 directly.
-/// Note: not a QSPI hardware CS — uses QMI direct-mode via GPIO bit-bang.
-pub const PIN_PSRAM_CS: u8 = 33;
+/// Side D placement: BSS138 transistor physically near card edge, gate trace
+/// from MCU is a 3.3V CMOS control signal with no timing/EMI concerns.
+pub const PIN_NHALT_DRV: u8 = 1;
+pub const PIN_NNMI_DRV:  u8 = 2;
+pub const PIN_NRST_DRV:  u8 = 3;
+// PIN_NIRQ_DRV is on side B (GP32) — see above
 
 // ============================================================
 // Helpers
