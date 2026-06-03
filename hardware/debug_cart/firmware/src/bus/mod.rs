@@ -37,14 +37,14 @@ pub fn enter_bus_master() {
         w.bits(
             (1 << PIN_ABUS_DIR)
                 | (1 << PIN_DIR_CTRL)
-                | (1 << PIN_CART_RW),
+                | (1 << PIN_CART_RW_DRV),
         )
     });
     // ABUS_DIR HIGH → U2/U3 drive Vectrex from GP0-14
     sio.gpio_out_set().write(|w| unsafe { w.bits(1 << PIN_ABUS_DIR) });
     // Start in READ direction: DIR_CTRL LOW, CART_RW LOW (pullup → HIGH)
     sio.gpio_out_clr().write(|w| unsafe {
-        w.bits((1 << PIN_DIR_CTRL) | (1 << PIN_CART_RW))
+        w.bits((1 << PIN_DIR_CTRL) | (1 << PIN_CART_RW_DRV))
     });
     // Address bus GP0-14 as outputs (RP2350 drives addresses)
     sio.gpio_oe_set().write(|w| unsafe { w.bits(ADDR_MASK) });
@@ -58,7 +58,7 @@ pub fn exit_bus_master() {
     let sio = unsafe { &*pac::SIO::ptr() };
 
     // CART_RW LOW so U8 stays high-Z (6809 can drive R/W)
-    sio.gpio_out_clr().write(|w| unsafe { w.bits(1 << PIN_CART_RW) });
+    sio.gpio_out_clr().write(|w| unsafe { w.bits(1 << PIN_CART_RW_DRV) });
     // DIR_CTRL LOW so U4 faces Vectrex→RP2350 (input)
     sio.gpio_out_clr().write(|w| unsafe { w.bits(1 << PIN_DIR_CTRL) });
     // ABUS_DIR LOW so U2/U3 face Vectrex→RP2350
@@ -84,14 +84,14 @@ pub fn write(delay: &mut Delay, addr: u16, data: u8) {
 
     // DIR_CTRL HIGH → U4 drives Vectrex; CART_RW HIGH → U8 pulls Vectrex R/W LOW
     sio.gpio_out_set().write(|w| unsafe {
-        w.bits((1 << PIN_DIR_CTRL) | (1 << PIN_CART_RW))
+        w.bits((1 << PIN_DIR_CTRL) | (1 << PIN_CART_RW_DRV))
     });
 
     delay.delay_us(BUS_CYCLE_US);
 
     // Release: CART_RW LOW (R/W HIGH via pullup), DIR_CTRL LOW, data back to input
     sio.gpio_out_clr().write(|w| unsafe {
-        w.bits((1 << PIN_DIR_CTRL) | (1 << PIN_CART_RW))
+        w.bits((1 << PIN_DIR_CTRL) | (1 << PIN_CART_RW_DRV))
     });
     sio.gpio_oe_clr().write(|w| unsafe { w.bits(DATA_MASK) });
 }
@@ -104,7 +104,7 @@ pub fn read(delay: &mut Delay, addr: u16) -> u8 {
     // Data bus as inputs; CART_RW LOW (read), DIR_CTRL LOW (U4 Vectrex→RP2350)
     sio.gpio_oe_clr().write(|w| unsafe { w.bits(DATA_MASK) });
     sio.gpio_out_clr().write(|w| unsafe {
-        w.bits((1 << PIN_DIR_CTRL) | (1 << PIN_CART_RW))
+        w.bits((1 << PIN_DIR_CTRL) | (1 << PIN_CART_RW_DRV))
     });
 
     // Drive address
