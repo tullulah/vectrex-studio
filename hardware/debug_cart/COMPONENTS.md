@@ -92,7 +92,8 @@ PCB: card-edge cartucho directo (sin conector externo), grosor 1.6mm, gold finge
 | GPIO38 | GP38 | SD_CD → J_SD pin 9 (card-detect switch) |
 | GPIO39 | GP39 | PB6 sense (CON1 pin 35 via divisor R11/R12) |
 | GPIO40 | GP40 | CART sense (CON1 pin 32 via divisor R13/R14) |
-| GPIO41–47 | — | reservados (libres) |
+| GPIO41 | GP41 | nIRQ drive (open-drain via Q4) |
+| GPIO42–47 | — | reservados (libres) |
 
 > **ABUS_DIR (GP24)** controla la dirección de los buffers U2/U3 del bus de
 > direcciones: LOW = Vectrex→RP2350 (modo ROM, default). HIGH = RP2350→Vectrex
@@ -377,6 +378,22 @@ R3 (10kΩ): +5V → nRST (pullup).
 
 ---
 
+## Q4 — BSS138 (IRQ open-drain)
+
+| Pad | Pin | Net |
+|---|---|---|
+| 1 | Gate | GP41 |
+| 2 | Source | GND |
+| 3 | Drain | nIRQ |
+
+R15 (10kΩ): +5V → nIRQ (pullup).
+
+Inyecta /IRQ al 6809 (interrupción maskeable). Diferencia con /NMI: el 6809
+puede ignorar /IRQ cuando el flag `I` del CC register está set. Útil para
+protocols custom en modo ROM emulation o para debug stepping sincronizado.
+
+---
+
 ## Y1 — Crystal 12MHz
 
 | Field | Value |
@@ -628,6 +645,7 @@ al cabo de 1 segundo. Aparece disco USB `RP2350` para arrastrar el `.uf2`.
 | R12 | 18kΩ | GP39 | GND | Divisor PB6 (bottom) — 5V→3.21V |
 | R13 | 10kΩ | CON1 pin 32 (CART) | GP40 | Divisor CART (top) — vextreme ext |
 | R14 | 18kΩ | GP40 | GND | Divisor CART (bottom) |
+| R15 | 10kΩ | +5V | nIRQ | Pullup /IRQ (open-drain via Q4) |
 
 > Antiguo divisor de R/W sense eliminado. GP24 ahora drives ABUS_DIR (U2/U3
 > pin 1). CART_RW se conduce vía U8 (74LVC1G07 open-drain) con pullup R6 —
@@ -689,14 +707,14 @@ U6 (PSRAM) y U7 (flash) comparten el bus QSPI de 4 bits. Chip select separado:
 | APS6404L SOIC-8 (8MB PSRAM) | 1 | ~1.50€ |
 | 74LVC245A TSSOP-20 | 3 | ~0.90€ |
 | AMS1117-3.3 SOT-223 | 1 | ~0.15€ |
-| BSS138 SOT-23 | 3 | ~0.15€ |
+| BSS138 SOT-23 | 4 | ~0.20€ |
 | 74LVC1G07 SOT-353 | 1 | ~0.15€ |
 | Crystal 12MHz 3225 | 1 | ~0.30€ |
 | USB-C receptáculo | 1 | ~0.40€ |
 | Header 1×4 2.54 mm (J_UART) | 1 | ~0.10€ |
 | Tactile switch SMD (SW1, opcional) | 1 | ~0.10€ |
 | microSD Hirose DM3AT-SF push-push | 1 | ~2.00€ |
-| Resistencias 0402 | 10 | ~0.10€ |
+| Resistencias 0402 | 15 | ~0.15€ |
 | Condensadores 0402/0805 | 14 | ~0.20€ |
 | **Componentes total** | | **~8.15€** |
 | PCB Aisler 3 uds (gold fingers + bisel) | | ~35€ (~12€/ud) |

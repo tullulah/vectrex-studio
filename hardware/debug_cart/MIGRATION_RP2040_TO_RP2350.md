@@ -88,7 +88,8 @@ pin shown:
 | **GP38** | **SD_CD** (J_SD pin 9, card-detect, internal pullup) | new |
 | **GP39** | **PB6 sense** (CON1 pin 35 via R11/R12 divider) | new — vextreme ext |
 | **GP40** | **CART sense** (CON1 pin 32 via R13/R14 divider) | new — vextreme ext |
-| GP41–47 | spare | leave unconnected |
+| **GP41** | **nIRQ drive** (gate of Q4, open-drain to CON1 pin 36) | new |
+| GP42–47 | spare | leave unconnected |
 
 The exact RP2350B QFN-80 pin numbers for each GPIO come from KiCad's symbol
 — let KiCad place them, then route from there.
@@ -159,6 +160,19 @@ The exact RP2350B QFN-80 pin numbers for each GPIO come from KiCad's symbol
 - Footprint: `Capacitor_SMD:C_0805_2012Metric`, value **10µF**
 - Reference: **C14**
 - Connections: `+3V3` → `GND`, placed within 5 mm of J_SD VDD pin.
+
+### Q4 + R15 — /IRQ open-drain control
+
+Mirrors the Q1/Q2/Q3 pattern for HALT/NMI/RST. Allows the RP2350 to inject
+maskable interrupts into the 6809 (useful in ROM emulation mode for custom
+protocols or debug stepping).
+
+- **Q4**: `Transistor_FET:BSS138`, footprint `Package_TO_SOT_SMD:SOT-23`
+  - Pin 1 (Gate) → `GP41`
+  - Pin 2 (Source) → `GND`
+  - Pin 3 (Drain) → `nIRQ` (= CON1 pin 36)
+- **R15**: 10 kΩ pullup, footprint `Resistor_SMD:R_0402_1005Metric`
+  - Pin 1 → `+5V`, pin 2 → `nIRQ`
 
 ### R11, R12, R13, R14 — Vextreme extended cart-edge signal dividers
 

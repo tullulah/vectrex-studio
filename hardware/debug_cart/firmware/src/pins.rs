@@ -94,6 +94,12 @@ pub const PIN_PB6:  u8 = 39;
 /// Status of the address decoder (Vectrex-side derived signal).
 pub const PIN_CART: u8 = 40;
 
+// --- 6809 /IRQ open-drain control (Q4 BSS138 + R15 10k pullup to +5V) ---
+/// GPIO HIGH → Q4 conducts → /IRQ asserted (low to 6809).
+/// GPIO LOW  → Q4 off → R15 pulls /IRQ to +5V (idle).
+/// Maskable interrupt — unlike /NMI, the 6809 can ignore IRQ when CC.I is set.
+pub const PIN_NIRQ: u8 = 41;
+
 // --- PSRAM ---
 // APS6404L CS# is driven by RP2350 QSPI_SS1_N (QMI CS1 hardware pin).
 // No GPIO constant needed — firmware uses pac::QMI direct mode.
