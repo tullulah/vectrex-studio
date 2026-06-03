@@ -62,9 +62,21 @@ pub const PIN_NRST:  u8 = 28;  // /RST  (Q3)
 
 // --- Data bus buffer direction control ---
 // GP29 → U4 pin 1 (DIR).
-// LOW  = Vectrex→RP2350 (ROM emulation / read mode)
-// HIGH = RP2350→Vectrex (bus master / write mode, Phase 3+)
+// LOW  = Vectrex→RP2350 (read)
+// HIGH = RP2350→Vectrex (write)
 pub const PIN_DIR_CTRL: u8 = 29;
+
+// --- CART_RW drive (via U8 74LVC1G07 + R13 10k pullup to +5V) ---
+// LOW  = U8 high-Z → R13 pulls CART_RW HIGH → read cycle (or idle)
+// HIGH = U8 drives LOW → CART_RW LOW → write cycle
+pub const PIN_CART_RW: u8 = 30;
+
+// --- PSRAM CS (GP31 → U6 APS6404L pin 1) ---
+pub const PIN_PSRAM_CS: u8 = 31;
+
+// --- UART0 hardware on J_UART header ---
+pub const PIN_UART_TX: u8 = 32;
+pub const PIN_UART_RX: u8 = 33;
 
 // --- PSRAM ---
 // APS6404L CS# is driven by RP2350 QSPI_SS1_N (QMI CS1 hardware pin).

@@ -33,14 +33,19 @@ PCB: card-edge cartucho directo (sin conector externo), grosor 1.6mm, gold finge
 
 ---
 
-## U1 — RP2350A
+## U1 — RP2350B
 
 | Field | Value |
 |---|---|
-| Symbol | `MCU_RaspberryPi:RP2350A` (KiCad 9) o crear manualmente |
-| Footprint | `Package_DFN_QFN:QFN-60-1EP_7x7mm_P0.4mm_EP3.2x3.2mm` |
-| Value | `RP2350A` |
+| Symbol | `MCU_RaspberryPi:RP2350B` (KiCad 9) |
+| Footprint | `Package_DFN_QFN:QFN-80-1EP_10x10mm_P0.4mm_EP3.4x3.4mm` |
+| Value | `RP2350B` |
 | Datasheet | https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf |
+
+> RP2350B vs RP2350A: mismo silicio (dual M33 + RISC-V, 520 KB SRAM, FPU),
+> mismo pitch 0.4 mm, pero **QFN-80 con 48 GPIOs** vs QFN-60 con 30. Los GPIOs
+> extra (GP30–47) permiten dedicar pines a CART_RW, PSRAM_CS y UART hardware
+> sin hacks de multiplexación. Coste extra: ~0.40 €/ud.
 
 ### GPIO pin connections
 
@@ -75,12 +80,26 @@ PCB: card-edge cartucho directo (sin conector externo), grosor 1.6mm, gold finge
 | GPIO26/ADC0 | GP26 | /NMI (open-drain vía Q1) |
 | GPIO27/ADC1 | GP27 | /HALT (open-drain vía Q2) |
 | GPIO28/ADC2 | GP28 | /RST (open-drain vía Q3) |
-| GPIO29/ADC3 | GP29 | DIR_CTRL (U4 pin 1) |
+| GPIO29/ADC3 | GP29 | DIR_CTRL (U4 pin 1) — solo dirección de datos |
+| GPIO30 | GP30 | CART_RW drive — input de U8 (74LVC1G07) |
+| GPIO31 | GP31 | PSRAM_CS (dedicado a U6 pin 1) |
+| GPIO32 | GP32 | UART0 TX → J_UART pin 3 |
+| GPIO33 | GP33 | UART0 RX → J_UART pin 2 |
+| GPIO34–47 | — | reservados (libres) |
 
-> **ABUS_DIR** controla la dirección de los buffers U2/U3 del bus de direcciones:
-> LOW = Vectrex→RP2350 (modo ROM, default). HIGH = RP2350→Vectrex (bus master).
-> /OE de U2/U3 está cableado a GND (siempre habilitado). R7/R8 (antiguo divisor
-> de CART_RW) están eliminados; CART_RW solo aparece en CON1 (NC en lado MCU).
+> **ABUS_DIR (GP24)** controla la dirección de los buffers U2/U3 del bus de
+> direcciones: LOW = Vectrex→RP2350 (modo ROM, default). HIGH = RP2350→Vectrex
+> (bus master). /OE de U2/U3 está cableado a GND (siempre habilitado).
+>
+> **CART_RW (vía U8 + R13)**: GP30 alimenta la entrada de U8 (74LVC1G07
+> open-drain). GP30 LOW → U8 high-Z → R13 pulla CART_RW a +5V (read cycle).
+> GP30 HIGH → U8 drives → CART_RW=LOW (write cycle). En modo normal (6809
+> corriendo), GP30 se mantiene LOW → U8 high-Z → el 6809 conduce CART_RW
+> sin conflicto. **Los GPIOs del RP2350 no son 5V tolerantes** — U8 hace de
+> level shifter obligatorio.
+>
+> **R7/R8 (antiguo divisor de R/W sense) eliminados.** El RP2350 ya no
+> necesita leer R/W del 6809 porque solo opera en modo bus master.
 
 ### QSPI / power / debug pins
 
@@ -325,15 +344,16 @@ CART_RW en modo bus master sin un GPIO dedicado (señal derivada de GP29).
 
 | Pad | Pin | Net |
 |---|---|---|
-| 1 | A (input) | GP29 (DIR_CTRL) |
+| 1 | A (input) | GP30 (CART_RW drive) |
 | 2 | GND | GND |
 | 3 | Y (output, open-drain) | CART_RW |
 | 4 | VCC | +3V3 |
 
-R13 (10 kΩ) pullup de CART_RW a +5V. Cuando GP29=LOW (lectura), salida high-Z
-→ pullup pone CART_RW=HIGH. Cuando GP29=HIGH (escritura), salida pull-down →
-CART_RW=LOW. Con el 6809 corriendo (sin HALT), GP29 se mantiene LOW → salida
-high-Z → el 6809 conduce CART_RW normalmente sin conflicto.
+R13 (10 kΩ) pullup de CART_RW a +5V. Cuando GP30=LOW (lectura o idle),
+salida high-Z → pullup pone CART_RW=HIGH. Cuando GP30=HIGH (escritura),
+salida open-drain a GND → CART_RW=LOW. Con el 6809 corriendo (sin HALT),
+firmware mantiene GP30=LOW → salida high-Z → el 6809 conduce CART_RW
+normalmente sin conflicto.
 
 ---
 
@@ -458,6 +478,51 @@ Para entrar en modo bootloader USB (unbrick):
 
 ---
 
+## J_UART — Header UART (1×4, 2.54 mm)
+
+Header para consola UART hardware del RP2350. Independiente del USB CDC —
+útil cuando el USB está en modo BOOTSEL (UF2 flashing) o cuando quieres
+loguear desde un Picoprobe / FTDI / Raspberry Pi.
+
+Pinout estilo Picoprobe (mirando desde arriba del header):
+
+| Pin | Net | Función |
+|---|---|---|
+| 1 | GND | Tierra |
+| 2 | UART_RX | RP2350 GP33 recibe — conectar a TX del adaptador |
+| 3 | UART_TX | RP2350 GP32 transmite — conectar a RX del adaptador |
+| 4 | +3V3 | Salida para alimentar adaptador externo si hace falta |
+
+| Field | Value |
+|---|---|
+| Symbol | `Connector_Generic:Conn_01x04` |
+| Footprint | `Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical` |
+
+Configura UART0 en el firmware con 115200-8-N-1.
+
+---
+
+## SW1 — BOOTSEL button (opcional)
+
+Tactile switch SMD 2-pin entre `TP_BOOTSEL` (= `QSPI_CSn`) y `GND`.
+Sustituye al método "puentea TP_BOOTSEL con pinzas" — más cómodo.
+
+| Field | Value |
+|---|---|
+| Symbol | `Switch:SW_Push` |
+| Footprint | `Button_Switch_SMD:SW_SPST_PTS810_SJM_W` |
+| Value | `SW_PUSH` |
+
+| Pad | Net |
+|---|---|
+| 1 | TP_BOOTSEL (= QSPI_CSn) |
+| 2 | GND |
+
+Procedimiento de entrada en BOOTSEL: pulsa SW1 mientras conectas USB, suelta
+al cabo de 1 segundo. Aparece disco USB `RP2350` para arrastrar el `.uf2`.
+
+---
+
 ## Resistencias
 
 | Ref | Valor | Pad 1 | Pad 2 | Función |
@@ -525,7 +590,7 @@ U6 (PSRAM) y U7 (flash) comparten el bus QSPI de 4 bits. Chip select separado:
 
 | Componente | Qty | Precio aprox |
 |---|---|---|
-| RP2350A QFN-60 | 1 | ~1.20€ |
+| RP2350B QFN-80 | 1 | ~1.60€ |
 | W25Q32JV SOIC-8 (4MB flash) | 1 | ~0.50€ |
 | APS6404L SOIC-8 (8MB PSRAM) | 1 | ~1.50€ |
 | 74LVC245A TSSOP-20 | 3 | ~0.90€ |
@@ -534,8 +599,13 @@ U6 (PSRAM) y U7 (flash) comparten el bus QSPI de 4 bits. Chip select separado:
 | 74LVC1G07 SOT-353 | 1 | ~0.15€ |
 | Crystal 12MHz 3225 | 1 | ~0.30€ |
 | USB-C receptáculo | 1 | ~0.40€ |
+| Header 1×4 2.54 mm (J_UART) | 1 | ~0.10€ |
+| Tactile switch SMD (SW1, opcional) | 1 | ~0.10€ |
 | Resistencias 0402 | 9 | ~0.10€ |
 | Condensadores 0402/0805 | 13 | ~0.15€ |
-| **Componentes total** | | **~5.35€** |
-| PCB JLCPCB 5 uds (gold fingers) | | ~15€ (~3€/ud) |
-| **TOTAL por unidad** | | **~8-9€** |
+| **Componentes total** | | **~6.10€** |
+| PCB Aisler 3 uds (gold fingers + bisel) | | ~35€ (~12€/ud) |
+| **TOTAL por unidad** | | **~18€** |
+
+> Cambio de RP2350A → RP2350B suma ~0.40€/ud, añade UART hardware,
+> CART_RW dedicado, PSRAM_CS dedicado y 14 GPIOs libres.
