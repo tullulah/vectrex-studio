@@ -86,6 +86,14 @@ pub const PIN_SD_CS:   u8 = 37;
 /// Card-detect: input with internal pullup. LOW = card present.
 pub const PIN_SD_CD:   u8 = 38;
 
+// --- Vextreme extended cart edge signals (via 10k+18k divider 5V→3.3V) ---
+/// VIA 6522 PB6 from card edge pin 35 — comparator output of DAC X (analog
+/// beam-cross-zero detection). Sampled directly without a bus cycle.
+pub const PIN_PB6:  u8 = 39;
+/// CART signal from card edge pin 32 — Vectrex 74LS32 IC203A OR-gate output.
+/// Status of the address decoder (Vectrex-side derived signal).
+pub const PIN_CART: u8 = 40;
+
 // --- PSRAM ---
 // APS6404L CS# is driven by RP2350 QSPI_SS1_N (QMI CS1 hardware pin).
 // No GPIO constant needed — firmware uses pac::QMI direct mode.

@@ -86,7 +86,9 @@ pin shown:
 | **GP36** | **SD_MISO** (J_SD pin 7, SPI0 RX) | new |
 | **GP37** | **SD_CS** (J_SD pin 2, SPI0 CSn, pullup R14) | new |
 | **GP38** | **SD_CD** (J_SD pin 9, card-detect, internal pullup) | new |
-| GP39–47 | spare | leave unconnected |
+| **GP39** | **PB6 sense** (CON1 pin 35 via R15/R16 divider) | new — vextreme ext |
+| **GP40** | **CART sense** (CON1 pin 32 via R17/R18 divider) | new — vextreme ext |
+| GP41–47 | spare | leave unconnected |
 
 The exact RP2350B QFN-80 pin numbers for each GPIO come from KiCad's symbol
 — let KiCad place them, then route from there.
@@ -157,6 +159,21 @@ The exact RP2350B QFN-80 pin numbers for each GPIO come from KiCad's symbol
 - Footprint: `Capacitor_SMD:C_0805_2012Metric`, value **10µF**
 - Reference: **C14**
 - Connections: `+3V3` → `GND`, placed within 5 mm of J_SD VDD pin.
+
+### R15, R16, R17, R18 — Vextreme extended cart-edge signal dividers
+
+The vextreme card-edge symbol exposes two extra signals (PB6 on pin 35 and
+CART on pin 32) that are 5V on the Vectrex side. Both need a 10k+18k divider
+to land safely on a 3.3V GPIO of the RP2350B.
+
+- Symbol: `Device:R`, footprint `Resistor_SMD:R_0402_1005Metric`
+- **R15** = 10k: CON1 pin 35 (PB6) → GP39 (top of divider)
+- **R16** = 18k: GP39 → GND (bottom of divider)
+- **R17** = 10k: CON1 pin 32 (CART) → GP40 (top of divider)
+- **R18** = 18k: GP40 → GND (bottom of divider)
+
+Resulting voltage at GP39/GP40 when input is 5V: `5 × 18/(10+18) = 3.21V`
+— compatible with 3.3V CMOS input thresholds.
 
 ### SW1 — BOOTSEL button (optional)
 

@@ -90,7 +90,9 @@ PCB: card-edge cartucho directo (sin conector externo), grosor 1.6mm, gold finge
 | GPIO36 | GP36 | SD_MISO → J_SD pin 7 (DAT0) |
 | GPIO37 | GP37 | SD_CS → J_SD pin 2 (DAT3/CS) — con pullup R14 |
 | GPIO38 | GP38 | SD_CD → J_SD pin 9 (card-detect switch) |
-| GPIO39–47 | — | reservados (libres) |
+| GPIO39 | GP39 | PB6 sense (CON1 pin 35 via divisor R15/R16) |
+| GPIO40 | GP40 | CART sense (CON1 pin 32 via divisor R17/R18) |
+| GPIO41–47 | — | reservados (libres) |
 
 > **ABUS_DIR (GP24)** controla la dirección de los buffers U2/U3 del bus de
 > direcciones: LOW = Vectrex→RP2350 (modo ROM, default). HIGH = RP2350→Vectrex
@@ -542,6 +544,50 @@ insertar la tarjeta (puede consumir ~100 mA pico).
 
 ---
 
+## Vextreme extended cart-edge signals (PB6 + CART)
+
+El símbolo `vextreme:vectrex-edge-connector` añade 2 pines extra sobre el
+card edge estándar Vectrex (sobre los antiguos NC pins 32 y 35):
+
+| Pin CON1 | Net | Conexión interna en el Vectrex |
+|---|---|---|
+| 32 | CART | Salida de IC203A pin 3 (74LS32 OR gate) — derivada del address decoder |
+| 35 | PB6 | VIA 6522 pin 16 (PB6) — comparador del DAC X |
+
+**Estos pines requieren modificación del Vectrex** (cables soldados desde el
+VIA / 74LS32 a los pads del card edge previamente NC). Sin esa modificación,
+los signal no estarán presentes.
+
+### PB6 (pin 35)
+
+- Bidireccional según DDR del VIA. En uso típico = input al VIA (comparador
+  del DAC X detecta cruce por cero del eje horizontal).
+- Sample directo desde el card edge → permite al RP2350 saber el estado del
+  comparador analógico sin un ciclo de bus al VIA.
+- Útil para: sincronización fina del beam, debug del DAC analógico, overlays
+  que necesitan timing exacto del haz.
+
+### CART (pin 32)
+
+- Output de la lógica del Vectrex (IC203A pin 3 del 74LS32 OR gate).
+- Estado derivado del address decoder — útil para saber qué zona de memoria
+  está accediendo el bus sin replicar el decoder en firmware.
+
+### Acceso desde el firmware
+
+Ambos signal entran al MCU a través de divisores 10k+18k (5V→3.21V) porque
+los GPIOs del RP2350 no toleran 5V:
+
+| GPIO | Signal | Divisor |
+|---|---|---|
+| GP39 | PB6 | R15 (top) + R16 (bottom) |
+| GP40 | CART | R17 (top) + R18 (bottom) |
+
+Configura ambos GPIOs como input en el firmware. Su lectura es asíncrona;
+si necesitas detectar transiciones rápidas usa interrupción.
+
+---
+
 ## SW1 — BOOTSEL button (opcional)
 
 Tactile switch SMD 2-pin entre `TP_BOOTSEL` (= `QSPI_CSn`) y `GND`.
@@ -576,6 +622,10 @@ al cabo de 1 segundo. Aparece disco USB `RP2350` para arrastrar el `.uf2`.
 | R12 | 5.1kΩ | GND | CC2 | USB-C CC pull-down |
 | R13 | 10kΩ | +5V | CART_RW | Pullup CART_RW (open-drain via U8) |
 | R14 | 10kΩ | +3V3 | SD_CS | Pullup CS de SD (inicio determinístico) |
+| R15 | 10kΩ | CON1 pin 35 (PB6) | GP39 | Divisor PB6 (top) — vextreme extended pin |
+| R16 | 18kΩ | GP39 | GND | Divisor PB6 (bottom) — 5V→3.21V |
+| R17 | 10kΩ | CON1 pin 32 (CART) | GP40 | Divisor CART (top) — vextreme extended pin |
+| R18 | 18kΩ | GP40 | GND | Divisor CART (bottom) |
 
 > R7/R8 eliminados (eran el divisor para sensar CART_RW). GP24 ahora drives
 > ABUS_DIR (U2/U3 pin 1). CART_RW se conduce vía U8 (74LVC1G07 open-drain)
