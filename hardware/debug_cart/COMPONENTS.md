@@ -88,25 +88,26 @@ PCB: card-edge cartucho directo (sin conector externo), grosor 1.6mm, gold finge
 | GPIO34 | GP34 | SD_SCK → J_SD pin 5 (CLK) |
 | GPIO35 | GP35 | SD_MOSI → J_SD pin 3 (CMD) |
 | GPIO36 | GP36 | SD_MISO → J_SD pin 7 (DAT0) |
-| GPIO37 | GP37 | SD_CS → J_SD pin 2 (DAT3/CS) — con pullup R14 |
+| GPIO37 | GP37 | SD_CS → J_SD pin 2 (DAT3/CS) — con pullup R10 |
 | GPIO38 | GP38 | SD_CD → J_SD pin 9 (card-detect switch) |
-| GPIO39 | GP39 | PB6 sense (CON1 pin 35 via divisor R15/R16) |
-| GPIO40 | GP40 | CART sense (CON1 pin 32 via divisor R17/R18) |
+| GPIO39 | GP39 | PB6 sense (CON1 pin 35 via divisor R11/R12) |
+| GPIO40 | GP40 | CART sense (CON1 pin 32 via divisor R13/R14) |
 | GPIO41–47 | — | reservados (libres) |
 
 > **ABUS_DIR (GP24)** controla la dirección de los buffers U2/U3 del bus de
 > direcciones: LOW = Vectrex→RP2350 (modo ROM, default). HIGH = RP2350→Vectrex
 > (bus master). /OE de U2/U3 está cableado a GND (siempre habilitado).
 >
-> **CART_RW (vía U8 + R13)**: GP30 alimenta la entrada de U8 (74LVC1G07
-> open-drain). GP30 LOW → U8 high-Z → R13 pulla CART_RW a +5V (read cycle).
+> **CART_RW (vía U8 + R6)**: GP30 alimenta la entrada de U8 (74LVC1G07
+> open-drain). GP30 LOW → U8 high-Z → R6 pulla CART_RW a +5V (read cycle).
 > GP30 HIGH → U8 drives → CART_RW=LOW (write cycle). En modo normal (6809
 > corriendo), GP30 se mantiene LOW → U8 high-Z → el 6809 conduce CART_RW
 > sin conflicto. **Los GPIOs del RP2350 no son 5V tolerantes** — U8 hace de
 > level shifter obligatorio.
 >
-> **R7/R8 (antiguo divisor de R/W sense) eliminados.** El RP2350 ya no
-> necesita leer R/W del 6809 porque solo opera en modo bus master.
+> **Antiguo divisor de R/W sense eliminado** (ya no aparece en la BOM). El
+> RP2350 ya no necesita leer R/W del 6809 porque solo opera en modo bus
+> master — solo lo conduce vía U8.
 
 ### QSPI / power / debug pins
 
@@ -322,7 +323,7 @@ secuencia QSPI emitida desde el firmware (`pac::QMI` direct mode).
 | 2 | Source | GND |
 | 3 | Drain | nNMI |
 
-R4 (10kΩ): +5V → nNMI (pullup).
+R1 (10kΩ): +5V → nNMI (pullup).
 
 ---
 
@@ -334,7 +335,7 @@ R4 (10kΩ): +5V → nNMI (pullup).
 | 2 | Source | GND |
 | 3 | Drain | nHALT |
 
-R5 (10kΩ): +5V → nHALT (pullup).
+R2 (10kΩ): +5V → nHALT (pullup).
 
 ---
 
@@ -356,7 +357,7 @@ CART_RW en modo bus master sin un GPIO dedicado (señal derivada de GP29).
 | 3 | Y (output, open-drain) | CART_RW |
 | 4 | VCC | +3V3 |
 
-R13 (10 kΩ) pullup de CART_RW a +5V. Cuando GP30=LOW (lectura o idle),
+R6 (10 kΩ) pullup de CART_RW a +5V. Cuando GP30=LOW (lectura o idle),
 salida high-Z → pullup pone CART_RW=HIGH. Cuando GP30=HIGH (escritura),
 salida open-drain a GND → CART_RW=LOW. Con el 6809 corriendo (sin HALT),
 firmware mantiene GP30=LOW → salida high-Z → el 6809 conduce CART_RW
@@ -372,7 +373,7 @@ normalmente sin conflicto.
 | 2 | Source | GND |
 | 3 | Drain | nRST |
 
-R6 (10kΩ): +5V → nRST (pullup).
+R3 (10kΩ): +5V → nRST (pullup).
 
 ---
 
@@ -477,8 +478,8 @@ Para entrar en modo bootloader USB (unbrick):
 | Symbol pin | Net |
 |---|---|
 | VBUS | +5V |
-| CC1 | CC1 → R11 (5.1kΩ) → GND |
-| CC2 | CC2 → R12 (5.1kΩ) → GND |
+| CC1 | CC1 → R7 (5.1kΩ) → GND |
+| CC2 | CC2 → R8 (5.1kΩ) → GND |
 | D− (A7+B7) | USB_DM |
 | D+ (A6+B6) | USB_DP |
 | GND / SHIELD | GND |
@@ -580,8 +581,8 @@ los GPIOs del RP2350 no toleran 5V:
 
 | GPIO | Signal | Divisor |
 |---|---|---|
-| GP39 | PB6 | R15 (top) + R16 (bottom) |
-| GP40 | CART | R17 (top) + R18 (bottom) |
+| GP39 | PB6 | R11 (top) + R12 (bottom) |
+| GP40 | CART | R13 (top) + R14 (bottom) |
 
 Configura ambos GPIOs como input en el firmware. Su lectura es asíncrona;
 si necesitas detectar transiciones rápidas usa interrupción.
@@ -613,24 +614,25 @@ al cabo de 1 segundo. Aparece disco USB `RP2350` para arrastrar el `.uf2`.
 
 | Ref | Valor | Pad 1 | Pad 2 | Función |
 |---|---|---|---|---|
-| R4 | 10kΩ | +5V | nNMI | Pullup /NMI |
-| R5 | 10kΩ | +5V | nHALT | Pullup /HALT |
-| R6 | 10kΩ | +5V | nRST | Pullup /RST |
-| R9 | 10kΩ | CART_nOE | GP25 | Divisor /OE (top) |
-| R10 | 18kΩ | GP25 | GND | Divisor /OE (bottom) |
-| R11 | 5.1kΩ | GND | CC1 | USB-C CC pull-down |
-| R12 | 5.1kΩ | GND | CC2 | USB-C CC pull-down |
-| R13 | 10kΩ | +5V | CART_RW | Pullup CART_RW (open-drain via U8) |
-| R14 | 10kΩ | +3V3 | SD_CS | Pullup CS de SD (inicio determinístico) |
-| R15 | 10kΩ | CON1 pin 35 (PB6) | GP39 | Divisor PB6 (top) — vextreme extended pin |
-| R16 | 18kΩ | GP39 | GND | Divisor PB6 (bottom) — 5V→3.21V |
-| R17 | 10kΩ | CON1 pin 32 (CART) | GP40 | Divisor CART (top) — vextreme extended pin |
-| R18 | 18kΩ | GP40 | GND | Divisor CART (bottom) |
+| R1 | 10kΩ | +5V | nNMI | Pullup /NMI |
+| R2 | 10kΩ | +5V | nHALT | Pullup /HALT |
+| R3 | 10kΩ | +5V | nRST | Pullup /RST |
+| R4 | 10kΩ | CART_nOE | GP25 | Divisor /OE (top) |
+| R5 | 18kΩ | GP25 | GND | Divisor /OE (bottom) |
+| R6 | 10kΩ | +5V | CART_RW | Pullup CART_RW (open-drain via U8) |
+| R7 | 5.1kΩ | GND | CC1 | USB-C CC pull-down |
+| R8 | 5.1kΩ | GND | CC2 | USB-C CC pull-down |
+| R9 | 100kΩ | +3V3 | RUN | Pullup RUN (reset hardware del MCU) |
+| R10 | 10kΩ | +3V3 | SD_CS | Pullup CS de SD (inicio determinístico) |
+| R11 | 10kΩ | CON1 pin 35 (PB6) | GP39 | Divisor PB6 (top) — vextreme ext |
+| R12 | 18kΩ | GP39 | GND | Divisor PB6 (bottom) — 5V→3.21V |
+| R13 | 10kΩ | CON1 pin 32 (CART) | GP40 | Divisor CART (top) — vextreme ext |
+| R14 | 18kΩ | GP40 | GND | Divisor CART (bottom) |
 
-> R7/R8 eliminados (eran el divisor para sensar CART_RW). GP24 ahora drives
-> ABUS_DIR (U2/U3 pin 1). CART_RW se conduce vía U8 (74LVC1G07 open-drain)
-> con pullup R13 — GP29 LOW = CART_RW HIGH (read), GP29 HIGH = CART_RW LOW
-> (write). Esto da capacidad completa de bus master en v1.
+> Antiguo divisor de R/W sense eliminado. GP24 ahora drives ABUS_DIR (U2/U3
+> pin 1). CART_RW se conduce vía U8 (74LVC1G07 open-drain) con pullup R6 —
+> GP30 LOW = CART_RW HIGH (read), GP30 HIGH = CART_RW LOW (write). Esto da
+> capacidad completa de bus master en v1.
 
 Todas en footprint `Resistor_SMD:R_0402_1005Metric`.
 

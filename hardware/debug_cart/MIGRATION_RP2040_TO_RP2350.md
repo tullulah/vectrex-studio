@@ -72,7 +72,7 @@ pin shown:
 | GP15–22 | CART_D0..7 (via U4) | already wired |
 | GP23 | CART_nCE (via U3 B8) | already wired |
 | **GP24** | **ABUS_DIR** (U2 pin 1 + U3 pin 1) | already wired (today's rework) |
-| GP25 | CART_nOE (via R9/R10 divider) | already wired |
+| GP25 | CART_nOE (via R4/R5 divider) | already wired |
 | GP26 | nNMI (via Q1) | already wired |
 | GP27 | nHALT (via Q2) | already wired |
 | GP28 | nRST (via Q3) | already wired |
@@ -84,10 +84,10 @@ pin shown:
 | **GP34** | **SD_SCK** (J_SD pin 5, SPI0 SCK) | new |
 | **GP35** | **SD_MOSI** (J_SD pin 3, SPI0 TX) | new |
 | **GP36** | **SD_MISO** (J_SD pin 7, SPI0 RX) | new |
-| **GP37** | **SD_CS** (J_SD pin 2, SPI0 CSn, pullup R14) | new |
+| **GP37** | **SD_CS** (J_SD pin 2, SPI0 CSn, pullup R10) | new |
 | **GP38** | **SD_CD** (J_SD pin 9, card-detect, internal pullup) | new |
-| **GP39** | **PB6 sense** (CON1 pin 35 via R15/R16 divider) | new — vextreme ext |
-| **GP40** | **CART sense** (CON1 pin 32 via R17/R18 divider) | new — vextreme ext |
+| **GP39** | **PB6 sense** (CON1 pin 35 via R11/R12 divider) | new — vextreme ext |
+| **GP40** | **CART sense** (CON1 pin 32 via R13/R14 divider) | new — vextreme ext |
 | GP41–47 | spare | leave unconnected |
 
 The exact RP2350B QFN-80 pin numbers for each GPIO come from KiCad's symbol
@@ -108,10 +108,10 @@ The exact RP2350B QFN-80 pin numbers for each GPIO come from KiCad's symbol
   - pin 3 (Y open-drain output) → `CART_RW`
   - pin 4 (VCC) → `+3V3`
 
-### R13 — 10 kΩ pullup for CART_RW
+### R6 — 10 kΩ pullup for CART_RW
 
 - Symbol: `Device:R`, footprint `Resistor_SMD:R_0402_1005Metric`
-- Reference: **R13**, value **10k**
+- Reference: **R6**, value **10k**
 - Connections: pin 1 → `+5V`, pin 2 → `CART_RW`
 
 ### J_UART — UART header (1×4, 2.54 mm)
@@ -148,10 +148,10 @@ The exact RP2350B QFN-80 pin numbers for each GPIO come from KiCad's symbol
 | 9 (CD switch) | `SD_CD` | GP38 |
 | 10 (shield) | `GND` | — |
 
-### R14 — 10 kΩ pullup on SD_CS
+### R10 — 10 kΩ pullup on SD_CS
 
 - Symbol: `Device:R`, footprint `Resistor_SMD:R_0402_1005Metric`
-- Reference: **R14**, value **10k**
+- Reference: **R10**, value **10k**
 - Connections: `+3V3` → `SD_CS`
 
 ### C14 — 10 µF bulk near SD slot
@@ -160,17 +160,17 @@ The exact RP2350B QFN-80 pin numbers for each GPIO come from KiCad's symbol
 - Reference: **C14**
 - Connections: `+3V3` → `GND`, placed within 5 mm of J_SD VDD pin.
 
-### R15, R16, R17, R18 — Vextreme extended cart-edge signal dividers
+### R11, R12, R13, R14 — Vextreme extended cart-edge signal dividers
 
 The vextreme card-edge symbol exposes two extra signals (PB6 on pin 35 and
 CART on pin 32) that are 5V on the Vectrex side. Both need a 10k+18k divider
 to land safely on a 3.3V GPIO of the RP2350B.
 
 - Symbol: `Device:R`, footprint `Resistor_SMD:R_0402_1005Metric`
-- **R15** = 10k: CON1 pin 35 (PB6) → GP39 (top of divider)
-- **R16** = 18k: GP39 → GND (bottom of divider)
-- **R17** = 10k: CON1 pin 32 (CART) → GP40 (top of divider)
-- **R18** = 18k: GP40 → GND (bottom of divider)
+- **R11** = 10k: CON1 pin 35 (PB6) → GP39 (top of divider)
+- **R12** = 18k: GP39 → GND (bottom of divider)
+- **R13** = 10k: CON1 pin 32 (CART) → GP40 (top of divider)
+- **R14** = 18k: GP40 → GND (bottom of divider)
 
 Resulting voltage at GP39/GP40 when input is 5V: `5 × 18/(10+18) = 3.21V`
 — compatible with 3.3V CMOS input thresholds.
@@ -197,7 +197,7 @@ Resulting voltage at GP39/GP40 when input is 5V: `5 × 18/(10+18) = 3.21V`
 1. **Tools → Annotate Schematic Symbols** (reuse existing references).
 2. **Tools → Electrical Rules Check** — fix every floating power pin.
 3. **Tools → Update PCB from Schematic** (F8) — accept footprint change for U1
-   and addition of U8, R13, J_UART, SW1, C11–C13.
+   and addition of U8, R6, J_UART, SW1, C11–C13.
 
 ---
 
@@ -207,7 +207,7 @@ Resulting voltage at GP39/GP40 when input is 5V: `5 × 18/(10+18) = 3.21V`
   need to slightly enlarge the U1 placement area on the PCB.
 - 4 vias minimum on the EP to the GND plane (2×2 array; 5×5 ideal).
 - U8 (SOT-353) placed close to U1 GP30 and to the card-edge CART_RW pin.
-- R13 (0402) placed close to U8 output and to the +5V plane.
+- R6 (0402) placed close to U8 output and to the +5V plane.
 - J_UART placed on a free edge of the PCB for cable access. Note that pin
   headers are 2.54 mm pitch — leave clearance for the connector.
 - SW1 (PTS810 tactile switch) placed where you can reach it without removing
@@ -244,7 +244,7 @@ RP2350B @ 150 MHz  |  4 MB flash  |  8 MB PSRAM  |  FPU
 /HALT asserted: 6809 stopped.
 
 PSRAM test... OK (8 MB)
-Bus master: available (CART_RW via U8/R13)
+Bus master: available (CART_RW via U8/R6)
 
 Ready. Commands: [r]om-mode  [H]alt  [U]nhalt  [F]lash  [?]help
 >
