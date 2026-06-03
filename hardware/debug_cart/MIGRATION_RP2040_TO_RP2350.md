@@ -81,7 +81,12 @@ pin shown:
 | **GP31** | **PSRAM_CS (U6 pin 1)** | rename existing PSRAM_CS net to land on GP31 |
 | **GP32** | **UART0 TX → J_UART pin 3** | new |
 | **GP33** | **UART0 RX → J_UART pin 2** | new |
-| GP34–47 | spare | leave unconnected |
+| **GP34** | **SD_SCK** (J_SD pin 5, SPI0 SCK) | new |
+| **GP35** | **SD_MOSI** (J_SD pin 3, SPI0 TX) | new |
+| **GP36** | **SD_MISO** (J_SD pin 7, SPI0 RX) | new |
+| **GP37** | **SD_CS** (J_SD pin 2, SPI0 CSn, pullup R14) | new |
+| **GP38** | **SD_CD** (J_SD pin 9, card-detect, internal pullup) | new |
+| GP39–47 | spare | leave unconnected |
 
 The exact RP2350B QFN-80 pin numbers for each GPIO come from KiCad's symbol
 — let KiCad place them, then route from there.
@@ -121,6 +126,38 @@ The exact RP2350B QFN-80 pin numbers for each GPIO come from KiCad's symbol
 | 3 | `UART_TX` | = GP32 |
 | 4 | `+3V3` | optional power for external probe |
 
+### J_SD — microSD slot (Hirose DM3AT-SF push-push)
+
+- Symbol: `Connector:Micro_SD_Card_Det_Hirose_DM3AT`
+- Footprint: `Connector_Card:microSD_HC_Hirose_DM3AT-SF-PEJM5`
+- Reference: **J_SD**
+- Connections (SPI mode):
+
+| Pad | Net | GPIO |
+|---|---|---|
+| 1 (DAT2) | NC | — |
+| 2 (DAT3/CD) | `SD_CS` | GP37 |
+| 3 (CMD) | `SD_MOSI` | GP35 |
+| 4 (VDD) | `+3V3` | — |
+| 5 (CLK) | `SD_SCK` | GP34 |
+| 6 (VSS) | `GND` | — |
+| 7 (DAT0) | `SD_MISO` | GP36 |
+| 8 (DAT1) | NC | — |
+| 9 (CD switch) | `SD_CD` | GP38 |
+| 10 (shield) | `GND` | — |
+
+### R14 — 10 kΩ pullup on SD_CS
+
+- Symbol: `Device:R`, footprint `Resistor_SMD:R_0402_1005Metric`
+- Reference: **R14**, value **10k**
+- Connections: `+3V3` → `SD_CS`
+
+### C14 — 10 µF bulk near SD slot
+
+- Footprint: `Capacitor_SMD:C_0805_2012Metric`, value **10µF**
+- Reference: **C14**
+- Connections: `+3V3` → `GND`, placed within 5 mm of J_SD VDD pin.
+
 ### SW1 — BOOTSEL button (optional)
 
 - Symbol: `Switch:SW_Push`
@@ -158,6 +195,12 @@ The exact RP2350B QFN-80 pin numbers for each GPIO come from KiCad's symbol
   headers are 2.54 mm pitch — leave clearance for the connector.
 - SW1 (PTS810 tactile switch) placed where you can reach it without removing
   the cart from the Vectrex; near the USB-C is a good spot.
+- J_SD: the microSD slot opening should face the edge of the cart that
+  remains accessible when inserted in the Vectrex (top edge, away from the
+  gold fingers). The slot occupies ~12×15 mm. Place C14 within 5 mm of the
+  VDD pad.
+- Keep SD SCK/MOSI/MISO traces grouped and short (< 50 mm) for clean signals
+  at 25 MHz. No length matching needed at this speed.
 
 ---
 

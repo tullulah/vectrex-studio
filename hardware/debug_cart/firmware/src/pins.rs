@@ -78,6 +78,14 @@ pub const PIN_PSRAM_CS: u8 = 31;
 pub const PIN_UART_TX: u8 = 32;
 pub const PIN_UART_RX: u8 = 33;
 
+// --- microSD on SPI0 (Hirose DM3AT-SF push-push) ---
+pub const PIN_SD_SCK:  u8 = 34;
+pub const PIN_SD_MOSI: u8 = 35;
+pub const PIN_SD_MISO: u8 = 36;
+pub const PIN_SD_CS:   u8 = 37;
+/// Card-detect: input with internal pullup. LOW = card present.
+pub const PIN_SD_CD:   u8 = 38;
+
 // --- PSRAM ---
 // APS6404L CS# is driven by RP2350 QSPI_SS1_N (QMI CS1 hardware pin).
 // No GPIO constant needed — firmware uses pac::QMI direct mode.

@@ -85,7 +85,12 @@ PCB: card-edge cartucho directo (sin conector externo), grosor 1.6mm, gold finge
 | GPIO31 | GP31 | PSRAM_CS (dedicado a U6 pin 1) |
 | GPIO32 | GP32 | UART0 TX → J_UART pin 3 |
 | GPIO33 | GP33 | UART0 RX → J_UART pin 2 |
-| GPIO34–47 | — | reservados (libres) |
+| GPIO34 | GP34 | SD_SCK → J_SD pin 5 (CLK) |
+| GPIO35 | GP35 | SD_MOSI → J_SD pin 3 (CMD) |
+| GPIO36 | GP36 | SD_MISO → J_SD pin 7 (DAT0) |
+| GPIO37 | GP37 | SD_CS → J_SD pin 2 (DAT3/CS) — con pullup R14 |
+| GPIO38 | GP38 | SD_CD → J_SD pin 9 (card-detect switch) |
+| GPIO39–47 | — | reservados (libres) |
 
 > **ABUS_DIR (GP24)** controla la dirección de los buffers U2/U3 del bus de
 > direcciones: LOW = Vectrex→RP2350 (modo ROM, default). HIGH = RP2350→Vectrex
@@ -502,6 +507,41 @@ Configura UART0 en el firmware con 115200-8-N-1.
 
 ---
 
+## J_SD — microSD slot (Hirose DM3AT-SF push-push)
+
+Slot push-push con interruptor de card-detect. Permite multi-juego (ROMs en
+SD), save states persistentes, assets externos al firmware.
+
+| Field | Value |
+|---|---|
+| Symbol | `Connector:Micro_SD_Card_Det_Hirose_DM3AT` |
+| Footprint | `Connector_Card:microSD_HC_Hirose_DM3AT-SF-PEJM5` |
+| Value | `microSD DM3AT-SF` |
+
+Conexión en modo SPI (1-bit):
+
+| Pad | Pin SD | Función SPI | Net |
+|---|---|---|---|
+| 1 | DAT2 | NC en SPI | NC |
+| 2 | DAT3/CD | CS (chip select) | SD_CS (GP37) |
+| 3 | CMD | MOSI | SD_MOSI (GP35) |
+| 4 | VDD | +3V3 | +3V3 (con C14 cerca) |
+| 5 | CLK | SCK | SD_SCK (GP34) |
+| 6 | VSS | GND | GND |
+| 7 | DAT0 | MISO | SD_MISO (GP36) |
+| 8 | DAT1 | NC en SPI | NC |
+| 9 | CD switch | Card detect | SD_CD (GP38, input con pullup interno) |
+| 10 | Shield | Shield | GND |
+
+> El switch del card-detect cierra a GND cuando hay tarjeta insertada.
+> Configurar GP38 como input con pullup interno del RP2350 — leer LOW =
+> tarjeta presente, HIGH = vacío.
+
+C14 (10 µF) cerca del VDD del slot para absorber picos de corriente al
+insertar la tarjeta (puede consumir ~100 mA pico).
+
+---
+
 ## SW1 — BOOTSEL button (opcional)
 
 Tactile switch SMD 2-pin entre `TP_BOOTSEL` (= `QSPI_CSn`) y `GND`.
@@ -535,6 +575,7 @@ al cabo de 1 segundo. Aparece disco USB `RP2350` para arrastrar el `.uf2`.
 | R11 | 5.1kΩ | GND | CC1 | USB-C CC pull-down |
 | R12 | 5.1kΩ | GND | CC2 | USB-C CC pull-down |
 | R13 | 10kΩ | +5V | CART_RW | Pullup CART_RW (open-drain via U8) |
+| R14 | 10kΩ | +3V3 | SD_CS | Pullup CS de SD (inicio determinístico) |
 
 > R7/R8 eliminados (eran el divisor para sensar CART_RW). GP24 ahora drives
 > ABUS_DIR (U2/U3 pin 1). CART_RW se conduce vía U8 (74LVC1G07 open-drain)
@@ -555,6 +596,7 @@ Todas en footprint `Resistor_SMD:R_0402_1005Metric`.
 | C11 | 100nF | +3V3 | GND | Decoupling QSPI_IOVDD |
 | C12 | 100nF | +3V3 | GND | Decoupling USB_OTP_VDD |
 | C13 | 100nF | +3V3 | GND | Decoupling VREG_AVDD |
+| C14 | 10µF | +3V3 | GND | Bulk para microSD (picos al insertar) — 0805 |
 | C_LDO_IN | 10µF | +5V | GND | LDO input (0805) |
 | C_LDO_OUT | 10µF | +3V3 | GND | LDO output (0805) |
 
@@ -601,11 +643,12 @@ U6 (PSRAM) y U7 (flash) comparten el bus QSPI de 4 bits. Chip select separado:
 | USB-C receptáculo | 1 | ~0.40€ |
 | Header 1×4 2.54 mm (J_UART) | 1 | ~0.10€ |
 | Tactile switch SMD (SW1, opcional) | 1 | ~0.10€ |
-| Resistencias 0402 | 9 | ~0.10€ |
-| Condensadores 0402/0805 | 13 | ~0.15€ |
-| **Componentes total** | | **~6.10€** |
+| microSD Hirose DM3AT-SF push-push | 1 | ~2.00€ |
+| Resistencias 0402 | 10 | ~0.10€ |
+| Condensadores 0402/0805 | 14 | ~0.20€ |
+| **Componentes total** | | **~8.15€** |
 | PCB Aisler 3 uds (gold fingers + bisel) | | ~35€ (~12€/ud) |
-| **TOTAL por unidad** | | **~18€** |
+| **TOTAL por unidad** | | **~20€** |
 
 > Cambio de RP2350A → RP2350B suma ~0.40€/ud, añade UART hardware,
 > CART_RW dedicado, PSRAM_CS dedicado y 14 GPIOs libres.
