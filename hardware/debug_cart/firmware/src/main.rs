@@ -166,7 +166,7 @@ fn main() -> ! {
     //
     usb_print(&mut serial, b"\r\n");
     usb_print(&mut serial, b"=== Vectrex Debug Cart v1 ===\r\n");
-    usb_print(&mut serial, b"RP2350 @ 150 MHz  |  4 MB flash  |  8 MB PSRAM  |  FPU\r\n");
+    usb_print(&mut serial, b"RP2350 @ 150 MHz  |  8 MB flash  |  8 MB PSRAM  |  FPU\r\n");
     usb_print(&mut serial, b"/HALT asserted: 6809 stopped.\r\n");
     usb_print(&mut serial, b"\r\n");
 

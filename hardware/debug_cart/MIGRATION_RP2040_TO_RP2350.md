@@ -254,7 +254,7 @@ variant pin map (`pins.rs` v2). Flash via BOOTSEL + UF2 the first time.
 Expected boot output (USB CDC at 115200):
 ```
 === Vectrex Debug Cart v1 ===
-RP2350B @ 150 MHz  |  4 MB flash  |  8 MB PSRAM  |  FPU
+RP2350B @ 150 MHz  |  8 MB flash  |  8 MB PSRAM  |  FPU
 /HALT asserted: 6809 stopped.
 
 PSRAM test... OK (8 MB)

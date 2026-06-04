@@ -25,7 +25,7 @@ PCB: card-edge cartucho directo (sin conector externo), grosor 1.6mm, gold finge
 | DIR_CTRL | Data bus buffer direction (GP29 → U4 DIR) |
 | QSPI_SD0–SD3 | RP2350 QSPI data lines |
 | QSPI_SCK | RP2350 QSPI clock |
-| QSPI_CSn | RP2350 QSPI CS0 → W25Q32JV boot flash |
+| QSPI_CSn | RP2350 QSPI CS0 → W25Q64JV boot flash |
 | QSPI_SS1n | RP2350 QSPI CS1 (hardware QMI) → APS6404L PSRAM |
 | SWD_IO / SWD_CLK | SWDIO / SWDCLK debug lines |
 | XTAL_IN / XTAL_OUT | 12 MHz crystal |
@@ -119,7 +119,7 @@ PCB: card-edge cartucho directo (sin conector externo), grosor 1.6mm, gold finge
 | QSPI_SD2 | QSPI_SD2 | |
 | QSPI_SD3 | QSPI_SD3 | |
 | QSPI_SCLK | QSPI_SCK | |
-| ~{QSPI_SS} | QSPI_CSn | CS único expuesto → W25Q32JV (PSRAM CS por GPIO) |
+| ~{QSPI_SS} | QSPI_CSn | CS único expuesto → W25Q64JV (PSRAM CS por GPIO) |
 | RUN | RUN | Pulled up a +3V3 (100kΩ); TP de reset |
 | IOVDD (×6) | +3V3 | |
 | DVDD (×2) | +3V3 | |
@@ -295,13 +295,20 @@ secuencia QSPI emitida desde el firmware (`pac::QMI` direct mode).
 
 ---
 
-## U7 — W25Q32JV (4MB SPI NOR flash, boot RP2350)
+## U7 — W25Q64JVSSIQ (8MB SPI NOR flash, boot RP2350)
 
 | Field | Value |
 |---|---|
-| Symbol | `Memory_Flash:W25Q32JV` |
+| Symbol | `Memory_Flash:W25Q32JV` (pinout-compatible con W25Q16/32/64/128) |
 | Footprint | `Package_SO:SOIC-8_3.9x4.9mm_P1.27mm` |
-| Value | `W25Q32JV` |
+| Value | `W25Q64JVSSIQ` |
+| LCSC | `C129437` |
+
+> El símbolo de KiCad `W25Q32JV` es pin-compatible con toda la serie W25Q
+> (16, 32, 64, 128 Mbit). Usamos W25Q64 (8 MB) por margen de capacidad —
+> al mismo precio aproximado que W25Q32. La temperatura industrial (`-I-`)
+> y el modo QPI default (`-Q-`) son ventajas pequeñas pero útiles para
+> condiciones reales de uso.
 
 | Pad | Pin | Net |
 |---|---|---|
@@ -703,7 +710,7 @@ U6 (PSRAM) y U7 (flash) comparten el bus QSPI de 4 bits. Chip select separado:
 | Componente | Qty | Precio aprox |
 |---|---|---|
 | RP2350B QFN-80 | 1 | ~1.60€ |
-| W25Q32JV SOIC-8 (4MB flash) | 1 | ~0.50€ |
+| W25Q64JVSSIQ SOIC-8 (8MB flash, industrial) | 1 | ~0.60€ |
 | APS6404L SOIC-8 (8MB PSRAM) | 1 | ~1.50€ |
 | 74LVC245A TSSOP-20 | 3 | ~0.90€ |
 | AMS1117-3.3 SOT-223 | 1 | ~0.15€ |

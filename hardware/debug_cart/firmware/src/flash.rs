@@ -1,8 +1,9 @@
 /// Game ROM self-flash over USB CDC.
 ///
-/// Flash layout (4MB W25Q32JV):
+/// Flash layout (W25Q64JV — 8MB chip, only lower 4MB used by v1 firmware):
 ///   0x10000000 – 0x103F7FFF  firmware (grows upward)
-///   0x103F8000 – 0x103FFFFF  game ROM (last 32KB, fixed)
+///   0x103F8000 – 0x103FFFFF  game ROM (32KB, fixed; offset relative to 4MB)
+///   0x10400000 – 0x107FFFFF  unused 4MB upper half (future asset cache)
 ///
 /// This module only writes the game ROM area — the firmware area is
 /// never touched, so a failed game upload cannot corrupt the firmware.
@@ -29,7 +30,7 @@ use crate::usb_print;
 const GAME_ROM_OFFSET: u32 = 4 * 1024 * 1024 - 32 * 1024; // 0x3F8000
 const GAME_ROM_SIZE:   u32 = 32 * 1024;
 
-/// W25Q32JV erase geometry
+/// W25Q64JV erase geometry (same as W25Q16/32/128 — all 4KB sectors)
 const SECTOR_SIZE: u32 = 4 * 1024;        // 4KB — smallest erasable unit
 const SECTOR_CMD:  u8  = 0x20;            // Sector Erase command
 
