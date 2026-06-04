@@ -34,7 +34,6 @@
       "footprint_text",
       "footprint_anchors",
       "ratsnest",
-      "grid",
       "footprints_front",
       "footprints_back",
       "footprint_values",
@@ -51,7 +50,7 @@
       "conflict_shadows",
       "shapes"
     ],
-    "visible_layers": "ffffffff_ffffffff_fffffff5_ffffffd5",
+    "visible_layers": "ffffffff_ffffffff_ffffd575_ffffffff",
     "zone_display_mode": 0
   },
   "git": {
@@ -75,6 +74,8 @@
       false,
       false,
       false,
+      false,
+      false,
       false
     ],
     "col_order": [
@@ -87,7 +88,9 @@
       6,
       7,
       8,
-      9
+      9,
+      10,
+      11
     ],
     "col_widths": [
       156,
@@ -99,7 +102,9 @@
       103,
       74,
       103,
-      0
+      103,
+      103,
+      103
     ],
     "custom_group_rules": [],
     "expanded_rows": [],
