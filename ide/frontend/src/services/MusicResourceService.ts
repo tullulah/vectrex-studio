@@ -31,6 +31,7 @@ export interface MusicResource {
   noise: NoiseEvent[];
   loopStart: number;
   loopEnd: number;
+  loop?: boolean; // Whether the track loops (true) or plays once (false). Default true for backward compatibility.
   channel_instruments?: Record<string, string>; // e.g. { "0": "pluck", "1": "bell", "2": "bass" }
 }
 
@@ -50,6 +51,7 @@ export class MusicResourceService {
       noise: [],
       loopStart: 0,
       loopEnd: DEFAULT_TICKS,
+      loop: true,
     };
   }
 
@@ -67,6 +69,8 @@ export class MusicResourceService {
       noise: Array.isArray(r.noise) ? r.noise : defaults.noise,
       loopStart: r.loopStart ?? defaults.loopStart,
       loopEnd: r.loopEnd ?? defaults.loopEnd,
+      // Default to true when undefined so old files and new blank tracks stay loopable.
+      loop: r.loop ?? true,
     };
     if (r.channel_instruments) {
       result.channel_instruments = r.channel_instruments;

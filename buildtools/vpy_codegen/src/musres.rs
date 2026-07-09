@@ -46,10 +46,18 @@ pub struct MusicResource {
     #[serde(default)]
     #[serde(rename = "loopEnd")]
     pub loop_end: u32,
+    /// Whether the track loops (true) or plays once (false).
+    /// Defaults to true for backward compatibility with existing tracks.
+    #[serde(default = "default_loop_true")]
+    pub r#loop: bool,
 }
 
 fn default_version() -> String {
     "1.0".to_string()
+}
+
+fn default_loop_true() -> bool {
+    true
 }
 
 fn default_tempo() -> u16 {
@@ -125,6 +133,7 @@ impl MusicResource {
             noise: Vec::new(),
             loop_start: 0,
             loop_end: 384,
+            r#loop: true,
         }
     }
     
@@ -399,7 +408,7 @@ impl MusicResource {
         let loop_start_frame = tick_to_frame(self.loop_start);
         let loop_end_frame = tick_to_frame(self.loop_end);
 
-        if loop_start_frame < loop_end_frame && loop_end_frame > 0 {
+        if self.r#loop && loop_start_frame < loop_end_frame && loop_end_frame > 0 {
             // Force-silence all 3 channels before the loop padding. Without
             // this, the main loop breaks while the last note's volume is
             // still non-zero; the filler-chunk padding then repeats that

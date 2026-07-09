@@ -289,7 +289,13 @@ struct VmusResource {
     loop_start: f64,
     #[serde(rename = "loopEnd")]
     loop_end: Option<f64>,
+    /// Whether the track loops (true) or plays once (false).
+    /// Defaults to true for backward compatibility.
+    #[serde(default = "default_loop_true")]
+    r#loop: bool,
 }
+
+fn default_loop_true() -> bool { true }
 
 #[derive(Deserialize)]
 struct VmusNote {
@@ -920,11 +926,19 @@ fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
         prev_frame = *frame;
     }
 
-    // Loop marker: fires at loopEnd, jumps back to loop_event_byte_offset
-    let last_event_frame = events.last().map(|(f, _)| *f).unwrap_or(0);
-    let loop_marker_delay = loop_end_frame.saturating_sub(last_event_frame).saturating_sub(1).min(255) as u8;
-    s.push_str(&format!("    .byte   {}, 0xFF   @ loop back (fires frame ~{})\n",
-        loop_marker_delay, loop_end_frame));
+    // Terminator: loop marker (0xFF) if the track loops, else end marker (num_writes=0).
+    // The end marker mirrors the SFX terminator (".byte 0, 0"); the runtime stops
+    // playback on num_writes=0, leaving the PSG silent (note-off frames already
+    // wrote volume=0 before the terminator).
+    if vmus.r#loop {
+        // Loop marker: fires at loopEnd, jumps back to loop_event_byte_offset
+        let last_event_frame = events.last().map(|(f, _)| *f).unwrap_or(0);
+        let loop_marker_delay = loop_end_frame.saturating_sub(last_event_frame).saturating_sub(1).min(255) as u8;
+        s.push_str(&format!("    .byte   {}, 0xFF   @ loop back (fires frame ~{})\n",
+            loop_marker_delay, loop_end_frame));
+    } else {
+        s.push_str("    .byte   0, 0   @ end (no loop)\n");
+    }
     s.push('\n');
     s
 }
