@@ -418,6 +418,12 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     if has_note_calls(module) {
         s.push_str("    bl      vpy_note_update\n");
     }
+    // Reset the brightness override each frame so draws without a SET_INTENSITY
+    // fall back to their .vec per-path intensities. SET_INTENSITY re-applies it
+    // and it only persists for the frame it is issued (mirrors PiTrex).
+    s.push_str("    ldr     r0, =VPY_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    mov     r1, #0\n");
+    s.push_str("    strb    r1, [r0]\n");
     if let Some(f) = loop_fn {
         for stmt in &f.body {
             // return_label="game_main_loop": `return` in loop() jumps to next frame

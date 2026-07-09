@@ -259,6 +259,21 @@ pub fn emit_call(
         }
     }
 
+    // SET_INTENSITY(v): record a per-frame brightness override (read by
+    // DRAW_VECTOR / DRAW_VECTOR_3D so brightness animates, mirroring PiTrex) AND
+    // write the DAC. The override is written ONLY here — never inside the draw
+    // routines — so per-path .vec intensities remain intact when SET_INTENSITY
+    // is not used. Reset to 0 once per frame in functions.rs.
+    if info.name == "SET_INTENSITY" && info.args.len() == 1 {
+        let mut s = String::new();
+        s.push_str(&emit_expr(&info.args[0], var_addrs)?); // r0 = intensity
+        s.push_str("    and     r0, r0, #0x7F\n");
+        s.push_str("    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE\n");
+        s.push_str("    strb    r0, [r1]            @ record override for DRAW_VECTOR*\n");
+        s.push_str("    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)\n");
+        return Ok(s);
+    }
+
     let fn_name = match info.name.as_str() {
         "WAIT_RECAL"      => "vpy_wait_recal",
         "SET_INTENSITY"   => "vpy_set_intensity",

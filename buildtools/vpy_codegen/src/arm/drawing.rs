@@ -172,7 +172,13 @@ fn emit_draw_vector() -> String {
     s.push_str("    lsl     r7, r6, #2\n    add     r7, r7, #4\n    ldr     r7, [r4, r7]\n"); // path ptr
     // Reset beam before each path so every path starts from a known centre reference.
     s.push_str("    bl      dv_reset\n");
-    s.push_str("    ldrb    r0, [r7]\n    bl      vpy_set_intensity\n");          // intensity
+    // Per-path .vec intensity in r0; if SET_INTENSITY set an override this frame,
+    // use it instead (r1 scratch, reloaded right after). vpy_set_intensity is DAC-
+    // only and does NOT record the override, so per-path intensities stay intact.
+    s.push_str("    ldrb    r0, [r7]            @ per-path .vec intensity\n");
+    s.push_str("    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r1, [r1]\n");
+    s.push_str("    cmp     r1, #0\n    it      ne\n    movne   r0, r1  @ SET_INTENSITY override wins\n");
+    s.push_str("    bl      vpy_set_intensity\n");
     // Move to (x_start + ox, y_start + oy) — places path relative to object origin.
     s.push_str("    ldrsb   r0, [r7, #2]\n    add     r0, r0, r9\n");  // x = x_start + ox
     s.push_str("    ldrsb   r1, [r7, #1]\n    add     r1, r1, r10\n"); // y = y_start + oy
@@ -295,7 +301,11 @@ fn emit_draw_vector_3d() -> String {
     // (intensity) at zero — the beam would draw invisibly. Restore a sensible
     // default. Per-path intensity is not yet supported for 3D assets (the
     // _3D_DATA format has no per-path intensity byte).
-    s.push_str("    mov     r0, #127\n");
+    // 3D data has no per-path intensity byte → default 127, unless SET_INTENSITY
+    // set an override this frame (this is what makes the logo's brightness animate).
+    s.push_str("    mov     r0, #127            @ default 3D intensity\n");
+    s.push_str("    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r1, [r1]\n");
+    s.push_str("    cmp     r1, #0\n    it      ne\n    movne   r0, r1  @ SET_INTENSITY override wins\n");
     s.push_str("    bl      vpy_set_intensity\n");
     s.push_str("    ldr     r10,[r4]\n    add r4,r4,#4\n"); // path_count
     s.push_str("    ldr     r11,=_dv3d_vbuf\n");           // vbuf base for lookup
