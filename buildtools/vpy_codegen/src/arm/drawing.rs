@@ -73,70 +73,41 @@ fn emit_smul_lut() -> String {
 
 // ─── dv_reset ─────────────────────────────────────────────────────────────
 
+// BIOS-linked emission: the system primitives are SVC stubs into the cartridge
+// BIOS (see docs/RP2350_BIOS.md and the firmware's syscalls.rs — the canonical
+// numbering; append-only). The BIOS owns the real hardware protocol (E-synced
+// CS-gated bus writes, BIOS.ASM-exact VIA sequences). The emulator traps these
+// SYMBOLS before executing their bodies, so it works unchanged (its Thumb2
+// core also treats a reached SVC as NOP).
+
 fn emit_dv_reset() -> String {
-    // Reset integrators (DSWM-style PB sequence); ACR=$18 (SR→CB2 beam ctrl).
     let mut s = String::new();
-    s.push_str("@ dv_reset() — reset Vectrex integrators, set ACR=$18\n");
+    s.push_str("@ dv_reset() — BIOS trap: SYS_RESET0REF\n");
     s.push_str(".global dv_reset\n.type dv_reset, %function\n.thumb_func\ndv_reset:\n");
-    s.push_str("    push    {lr}\n");
-    s.push_str("    mov     r0, #0xD00A\n    mov     r1, #0x00\n    bl      bus_write\n"); // SR=0
-    s.push_str("    mov     r0, #0xD00B\n    mov     r1, #0x18\n    bl      bus_write\n"); // ACR=$18
-    s.push_str("    mov     r0, #0xD00C\n    mov     r1, #0xCC\n    bl      bus_write\n"); // PCR=$CC
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, #0x00\n    bl      bus_write\n"); // PORT_A=0
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x03\n    bl      bus_write\n"); // PB=3
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x02\n    bl      bus_write\n"); // PB=2
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x02\n    bl      bus_write\n"); // PB=2
-    s.push_str("    pop     {pc}\n");
-    s.push_str("    .ltorg\n\n");
+    s.push_str("    svc     #0                      @ SYS_RESET0REF\n");
+    s.push_str("    bx      lr\n\n");
     s
 }
 
 // ─── dv_move_to ───────────────────────────────────────────────────────────
 
 fn emit_dv_move_to() -> String {
-    // r0=dx, r1=dy (signed deltas). Beam off during ramp.
     let mut s = String::new();
-    s.push_str("@ dv_move_to(r0=dx, r1=dy) — position beam, no draw\n");
+    s.push_str("@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (delta after a reset)\n");
     s.push_str(".global dv_move_to\n.type dv_move_to, %function\n.thumb_func\ndv_move_to:\n");
-    s.push_str("    push    {r4, r5, lr}\n");
-    s.push_str("    mov     r4, r0\n    mov     r5, r1\n");       // r4=dx, r5=dy
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r5\n    bl      bus_write\n"); // PORT_A=dy
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x00\n    bl      bus_write\n"); // PB=0 (Y)
-    s.push_str("    mov     r0, #60\ndv_mt_s: subs r0,r0,#1\n    bne dv_mt_s\n");     // settle
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n"); // PB=1 (X)
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r4\n    bl      bus_write\n"); // PORT_A=dx
-    s.push_str("    mov     r0, #0xD00A\n    mov     r1, #0x00\n    bl      bus_write\n"); // SR=0 (off)
-    s.push_str("    mov     r0, #0xD006\n    mov     r1, #0x7F\n    bl      bus_write\n"); // T1L_L=$7F
-    s.push_str("    mov     r0, #0xD005\n    mov     r1, #0x00\n    bl      bus_write\n"); // T1C_H=0 (start)
-    s.push_str("dv_mt_p: mov r0,#0xD00D\n    bl bus_read\n    tst r0,#0x40\n    beq dv_mt_p\n");
-    s.push_str("    mov     r0, #0xD004\n    bl      bus_read\n");  // clear IFR (read T1C_L)
-    s.push_str("    pop     {r4, r5, pc}\n");
-    s.push_str("    .ltorg\n\n");
+    s.push_str("    svc     #3                      @ SYS_MOVE\n");
+    s.push_str("    bx      lr\n\n");
     s
 }
 
 // ─── dv_draw_delta ────────────────────────────────────────────────────────
 
 fn emit_dv_draw_delta() -> String {
-    // r0=dx, r1=dy. Beam on during ramp.
     let mut s = String::new();
-    s.push_str("@ dv_draw_delta(r0=dx, r1=dy) — draw one vector segment\n");
+    s.push_str("@ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA\n");
     s.push_str(".global dv_draw_delta\n.type dv_draw_delta, %function\n.thumb_func\ndv_draw_delta:\n");
-    s.push_str("    push    {r4, r5, lr}\n");
-    s.push_str("    mov     r4, r0\n    mov     r5, r1\n");
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r5\n    bl      bus_write\n"); // PORT_A=dy
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x00\n    bl      bus_write\n"); // PB=0
-    s.push_str("    mov     r0, #60\ndv_dd_s: subs r0,r0,#1\n    bne dv_dd_s\n");
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n"); // PB=1
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r4\n    bl      bus_write\n"); // PORT_A=dx
-    s.push_str("    mov     r0, #0xD00A\n    mov     r1, #0xFF\n    bl      bus_write\n"); // SR=$FF (beam on)
-    s.push_str("    mov     r0, #0xD006\n    mov     r1, #0x7F\n    bl      bus_write\n"); // T1L_L=$7F
-    s.push_str("    mov     r0, #0xD005\n    mov     r1, #0x00\n    bl      bus_write\n"); // T1C_H=0
-    s.push_str("dv_dd_p: mov r0,#0xD00D\n    bl bus_read\n    tst r0,#0x40\n    beq dv_dd_p\n");
-    s.push_str("    mov     r0, #0xD00A\n    mov     r1, #0x00\n    bl      bus_write\n"); // SR=0 (off)
-    s.push_str("    mov     r0, #0xD004\n    bl      bus_read\n");  // clear IFR
-    s.push_str("    pop     {r4, r5, pc}\n");
-    s.push_str("    .ltorg\n\n");
+    s.push_str("    svc     #4                      @ SYS_DRAW_DELTA\n");
+    s.push_str("    bx      lr\n\n");
     s
 }
 

@@ -105,32 +105,26 @@ pub fn emit_builtins(msg_entries: &[MsgEntry]) -> String {
 // ─── WAIT_RECAL ────────────────────────────────────────────────────────────
 
 fn emit_wait_recal() -> String {
+    // BIOS trap — the BIOS paces the frame (absolute 20 ms deadlines from its
+    // hardware timer) and holds the integrator zero during the wait.
     let mut s = String::new();
-    s.push_str("@ vpy_wait_recal() — wait for VIA Timer 1 (frame sync)\n");
+    s.push_str("@ vpy_wait_recal() — BIOS trap: SYS_WAIT_RECAL\n");
     s.push_str(".global vpy_wait_recal\n.type vpy_wait_recal, %function\n.thumb_func\nvpy_wait_recal:\n");
-    s.push_str("    push    {lr}\n");
-    s.push_str("    mov     r0, #0xD006\n    mov     r1, #0x7F\n    bl      bus_write\n"); // T1L_L=$7F
-    s.push_str("    mov     r0, #0xD007\n    mov     r1, #0x00\n    bl      bus_write\n"); // T1L_H=0
-    s.push_str("    mov     r0, #0xD005\n    mov     r1, #0x00\n    bl      bus_write\n"); // T1C_H=0 (start)
-    s.push_str("vpy_wr_poll:\n");
-    s.push_str("    mov     r0, #0xD00D\n    bl      bus_read\n");
-    s.push_str("    tst     r0, #0x40\n    beq     vpy_wr_poll\n");
-    s.push_str("    mov     r0, #0xD004\n    bl      bus_read\n"); // clear T1 flag
-    s.push_str("    pop     {pc}\n    .ltorg\n\n");
+    s.push_str("    svc     #1                      @ SYS_WAIT_RECAL\n");
+    s.push_str("    bx      lr\n\n");
     s
 }
 
 // ─── SET_INTENSITY ─────────────────────────────────────────────────────────
 
 fn emit_set_intensity() -> String {
+    // BIOS trap — the BIOS runs the full Intensity_a sequence (Z mux channel),
+    // not just a DAC write (the old inline body was emulator-only behaviour).
     let mut s = String::new();
-    s.push_str("@ vpy_set_intensity(r0=intensity 0-127)\n");
+    s.push_str("@ vpy_set_intensity(r0=intensity 0-127) — BIOS trap: SYS_SET_INTENSITY\n");
     s.push_str(".global vpy_set_intensity\n.type vpy_set_intensity, %function\n.thumb_func\nvpy_set_intensity:\n");
-    s.push_str("    push    {lr}\n");
-    s.push_str("    and     r1, r0, #0x7F\n");
-    s.push_str("    mov     r0, #0xD001\n");
-    s.push_str("    bl      bus_write\n");
-    s.push_str("    pop     {pc}\n    .ltorg\n\n");
+    s.push_str("    svc     #2                      @ SYS_SET_INTENSITY\n");
+    s.push_str("    bx      lr\n\n");
     s
 }
 
