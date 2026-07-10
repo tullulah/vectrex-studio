@@ -16,6 +16,7 @@ last_jy: i16 = 0        # joystick edge detection (NOT 'prev_y' — VPy names
 flash: i16 = 0          # launch feedback flash counter
 
 GAME_COUNT: i16 = 3
+PREVIEW_DIV: i16 = 3    # menu_fps (~50) / recording_fps (15) — slows preview to real speed
 
 # layout
 LIST_X: i16 = -110      # game list left edge
@@ -23,7 +24,8 @@ LIST_Y0: i16 = 30       # first entry y
 LIST_DY: i16 = -24      # entry spacing (downwards)
 PREV_X: i16 = 55        # preview box centre
 PREV_Y: i16 = 0
-PREV_HALF: i16 = 45     # preview box half-size
+PREV_HW: i16 = 45       # preview box half-WIDTH
+PREV_HH: i16 = 58       # preview box half-HEIGHT (taller than wide)
 
 
 def main():
@@ -56,7 +58,7 @@ def loop():
     # ---------- title ----------
     SET_INTENSITY(110)
     SET_TEXT_SIZE(7)
-    PRINT_TEXT(-60, 85, "VECTREX STUDIO")
+    PRINT_TEXT(-60, 115, "VECTREX STUDIO")
 
     # ---------- game list ----------
     SET_TEXT_SIZE(6)
@@ -82,14 +84,18 @@ def loop():
     box = 70
     if flash > 0:
         box = 127  # launch feedback: box flashes bright
-    DRAW_LINE(PREV_X - PREV_HALF, PREV_Y - PREV_HALF, PREV_X + PREV_HALF, PREV_Y - PREV_HALF, box)
-    DRAW_LINE(PREV_X + PREV_HALF, PREV_Y - PREV_HALF, PREV_X + PREV_HALF, PREV_Y + PREV_HALF, box)
-    DRAW_LINE(PREV_X + PREV_HALF, PREV_Y + PREV_HALF, PREV_X - PREV_HALF, PREV_Y + PREV_HALF, box)
-    DRAW_LINE(PREV_X - PREV_HALF, PREV_Y + PREV_HALF, PREV_X - PREV_HALF, PREV_Y - PREV_HALF, box)
+    DRAW_LINE(PREV_X - PREV_HW, PREV_Y - PREV_HH, PREV_X + PREV_HW, PREV_Y - PREV_HH, box)
+    DRAW_LINE(PREV_X + PREV_HW, PREV_Y - PREV_HH, PREV_X + PREV_HW, PREV_Y + PREV_HH, box)
+    DRAW_LINE(PREV_X + PREV_HW, PREV_Y + PREV_HH, PREV_X - PREV_HW, PREV_Y + PREV_HH, box)
+    DRAW_LINE(PREV_X - PREV_HW, PREV_Y + PREV_HH, PREV_X - PREV_HW, PREV_Y - PREV_HH, box)
 
     # ---------- animated preview of the highlighted game ----------
     # Each entry plays its .vrec recording scaled into the preview box.
     # scale 48/128 = 37% → a ~127-wide frame fits the 90-wide box.
     # (Recordings are captured with the IDE emulator's record button.)
+    # The menu runs at ~50 fps but the recording was captured at 15 fps, so
+    # advance the preview frame only every ~3 menu frames (t / PREVIEW_DIV) or
+    # it plays ~3x too fast. PREVIEW_DIV = round(menu_fps / recording_fps).
+    preview_frame = t / PREVIEW_DIV
     if selected == 0:
-        DRAW_RECORDING("snowbros_preview", PREV_X, PREV_Y, 48, t)
+        DRAW_RECORDING("snowbros_preview", PREV_X, PREV_Y, 48, preview_frame)
