@@ -212,6 +212,90 @@ Firmware skeleton added to the private repo
    intro plays first.
 6. **Emulator SVC support** (optional) so the BIOS-linked build previews too.
 
+## Retained-mode dual-core render engine (DESIGN — next milestone after the intro boots)
+
+Goal: maximize vectors per frame by removing the two mutual stalls of the
+current immediate mode, where the CPU busy-waits ~85-100 µs per segment ramp
+and the beam sits dark while the program computes. Proposed by the user
+(2026-07-11); applies conceptually to PiTrex too (minus the parallelism).
+
+### Architecture
+
+```
+CORE 0 (logic)                        CORE 1 (render engine)
+──────────────                        ──────────────────────
+VPy program runs                      loop:
+  svc SYS_MOVE/DRAW/... ──┐             frame_sync (absolute 20 ms deadline)
+                          │             pop next display list from queue
+  BIOS RECORDS the call   │             draw it (E-synced bus protocol)
+  into the current list ──┘             PSG music tick between segments
+  svc SYS_WAIT_RECAL:
+    seal list → SORT → push to queue
+    (blocks only if queue full)
+```
+
+- **Transparent to programs and the compiler.** The immediate-mode syscalls
+  (SYS_MOVE, SYS_DRAW_DELTA, SYS_SET_INTENSITY, SYS_RESET0REF) stop executing
+  hardware writes and instead *record*: the BIOS tracks the absolute beam
+  position (zero = centre; moves/draws are deltas) and appends absolute
+  segments `(x0, y0, x1, y1, intensity)` to the frame's list. SYS_WAIT_RECAL
+  seals, sorts and enqueues the list, then starts the next. **No new ABI, no
+  compiler change, no VPy recompilation** — the append-only ABI paying off.
+- Reads (SYS_READ_BUTTONS, SYS_BIOS_VERSION) stay immediate. SYS_BUS_WRITE
+  (raw VIA, used by the program-side music engine) is forwarded to core 1 as
+  ordered list items or handled by a core-1 PSG mailbox — decide during
+  implementation; PSG writes must NOT be reordered relative to each other.
+
+### Display list
+
+Per segment: `x0, y0, x1, y1 (i8 each), intensity (u8)` ≈ 5-6 bytes. A maxed
+frame (~145 segments) is under 1 KB. Statically allocate N buffers.
+
+### Sorter (core 0, at seal time)
+
+Physics note: with a FIXED ramp (T1 = 0x7F) a short blanked move costs the
+same ~85 µs as a long one — so plain distance minimization buys nothing by
+itself. The wins, in order:
+
+1. **Chaining** — order segments so one ends where the next begins (greedy
+   nearest-neighbour over endpoints, trying both segment orientations). A
+   chained segment needs NO move at all: the big win.
+2. **Variable move ramps** — the BIOS controls T1CL per operation, so short
+   moves can use a short T1 (the real BIOS varies its waits by distance too).
+   With this, minimizing residual move *distance* pays. Scale T1 ≈
+   max(|dx|, |dy|) with a floor; velocity stays the raw delta.
+3. Re-zero (`Reset0Ref`) only on drift budget (every K segments or when the
+   tracked error bound exceeds a threshold), not per path.
+
+Greedy nearest-neighbour is O(n²) with n ≈ 150 → trivial for core 0.
+
+### Queue depth = 2 (maybe 3) — NOT 5
+
+Every queued frame is +20 ms between game logic and the eye. Depth 5 = 100 ms
+input lag (unplayable feel); depth 2 = classic double buffering (compute N+1
+while drawing N) = 20 ms latency and no stalls unless compute time exceeds a
+frame. Depth 3 only if compute time proves spiky. Overrun policy: if a list
+takes > 20 ms to draw (too many segments), core 1 finishes it and the frame
+rate drops for that frame; core 0 blocks on a full queue (natural
+back-pressure).
+
+### Inter-core protocol (RP2350)
+
+- `hal::multicore::Multicore` to launch core 1 (own stack, ~4 KB).
+- Ring of list buffers + SIO FIFO for ownership handoff (or two atomics:
+  `ready_idx` / `free_idx`). Core 1 owns ALL Vectrex bus access after boot —
+  single writer, keeps the E-sync timing clean.
+- defmt/RTT stays on core 0.
+
+### Phasing
+
+1. Ship the intro on the current immediate mode first (Monday) — baseline.
+2. Core 1 bring-up: move the existing immediate executor to core 1 behind a
+   1-deep mailbox (no sorting) — validates multicore + single-writer bus.
+3. Recording + seal-on-WAIT_RECAL + depth-2 queue.
+4. Sorter (chaining), then variable move ramps, then drift-budget re-zeros.
+5. Measure: segments/frame before vs after on real hardware.
+
 ## Open questions (decide with the user)
 
 - VPy program load model: run-in-place (fixed address) vs copy-to-RAM/PIC.
