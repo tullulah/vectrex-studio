@@ -290,6 +290,7 @@ pub fn emit_call(
         "DRAW_VECTOR"     => "vpy_draw_vector",
         "DRAW_VECTOR_EX"  => "vpy_draw_vector_ex",
         "DRAW_VECTOR_3D"  => "vpy_draw_vector_3d",
+        "DRAW_RECORDING"  => "vpy_draw_recording",
         "PRINT_TEXT"      => "vpy_print_text",
         "PRINT_NUMBER"    => "vpy_print_number",
         "PLAY_MUSIC"      => "vpy_play_music",
@@ -546,6 +547,55 @@ pub fn emit_call(
             s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
             s.push_str("    bl      vpy_draw_vector_ex\n");
             s.push_str("    add     sp, sp, #4\n"); // discard intensity from stack
+            return Ok(s);
+        }
+    }
+
+    // Special case: DRAW_RECORDING("name", x, y, scale, frame) — .vrec playback.
+    // ABI: r0=_NAME_VREC, r1=x, r2=y, r3=scale (0-128, 128=100%), [sp+0]=frame.
+    // frame is a free-running counter — vpy_draw_recording takes frame %
+    // frame_count internally. Same stack-arg pattern as DRAW_VECTOR_EX.
+    if info.name == "DRAW_RECORDING" {
+        if let Some(Expr::StringLit(rec_name)) = args.first() {
+            let sym_base = rec_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_{sym_base}_VREC");
+            let runtime: Vec<&Expr> = args.iter().skip(1).collect();
+            // Push frame first so it sits at [sp] when the routine reads [sp+32]
+            // (after its push of 8 regs = 32 bytes).
+            if let Some(frame) = runtime.get(3) {
+                s.push_str(&emit_arg(frame, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r0 = recording ptr
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ recording '{rec_name}'\n"));
+            s.push_str("    push    {r0}\n");
+            // r1 = x
+            if let Some(x) = runtime.first() {
+                s.push_str(&emit_arg(x, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r2 = y
+            if let Some(y) = runtime.get(1) {
+                s.push_str(&emit_arg(y, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r3 = scale (default 128 = 100%)
+            if let Some(scale) = runtime.get(2) {
+                s.push_str(&emit_arg(scale, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #128\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // pop r3=scale, r2=y, r1=x, r0=recording ptr; frame stays at [sp]
+            s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+            s.push_str("    bl      vpy_draw_recording\n");
+            s.push_str("    add     sp, sp, #4\n"); // discard frame from stack
             return Ok(s);
         }
     }
@@ -808,6 +858,32 @@ mod tests {
         // SPAWN_ENEMIES with no level arg is a no-op.
         let sa_asm = emit_call(&make_call("SPAWN_ENEMIES"), &var_addrs).unwrap();
         assert!(sa_asm.contains("no-op"), "SPAWN_ENEMIES (no arg) should be no-op");
+    }
+
+    /// DRAW_RECORDING("name", x, y, scale, frame) — .vrec playback call site.
+    /// r0=_NAME_VREC, r1=x, r2=y, r3=scale, [sp]=frame (cleaned up after call).
+    #[test]
+    fn test_arm_draw_recording_call() {
+        let var_addrs = std::collections::HashMap::new();
+        let info = CallInfo {
+            name: "DRAW_RECORDING".to_string(),
+            source_line: 0,
+            col: 0,
+            args: vec![
+                vpy_parser::Expr::StringLit("snow-bros preview".to_string()),
+                vpy_parser::Expr::Number(0),
+                vpy_parser::Expr::Number(10),
+                vpy_parser::Expr::Number(45),
+                vpy_parser::Expr::Number(7),
+            ],
+        };
+        let asm = emit_call(&info, &var_addrs).unwrap();
+        assert!(asm.contains("ldr     r0, =_SNOW_BROS_PREVIEW_VREC"),
+            "must resolve recording name to _NAME_VREC symbol (got: {asm:?})");
+        assert!(asm.contains("bl      vpy_draw_recording"),
+            "must call vpy_draw_recording (got: {asm:?})");
+        assert!(asm.contains("add     sp, sp, #4"),
+            "must clean up the frame stack arg (got: {asm:?})");
     }
 
     /// SPAWN_ENEMIES / UPDATE_ENEMIES / DRAW_ENEMIES were already no-ops before

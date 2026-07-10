@@ -57,11 +57,13 @@ pub struct SourceFile {
     pub is_entry: bool, // Is this the main entry point?
 }
 
-/// Asset file (vector or music)
+/// Asset file (vector, music, or recording)
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AssetFile {
     Vector(PathBuf),
     Music(PathBuf),
+    /// .vrec — multi-frame vector recording (game-preview / attract playback)
+    Recording(PathBuf),
 }
 
 /// Complete project information
@@ -253,6 +255,31 @@ pub fn load_project(vpyproj_path: &Path) -> Result<ProjectInfo, LoadError> {
                 }
             }
         }
+        // Read recording assets (.vrec — multi-frame segment captures)
+        if let Some(rec_array) = resources_val.get("recordings").and_then(|v| v.as_array()) {
+            for item in rec_array {
+                if let Some(path_str) = item.as_str() {
+                    // Handle glob patterns
+                    if path_str.contains('*') || path_str.contains('?') {
+                        match expand_glob_pattern(path_str, &root_dir) {
+                            Ok(files) => {
+                                for file_path in files {
+                                    if file_path.extension().map_or(false, |ext| ext == "vrec") {
+                                        asset_files.push(AssetFile::Recording(file_path));
+                                    }
+                                }
+                            }
+                            Err(_) => {}
+                        }
+                    } else {
+                        let full_path = root_dir.join(path_str);
+                        if full_path.exists() && full_path.extension().map_or(false, |ext| ext == "vrec") {
+                            asset_files.push(AssetFile::Recording(full_path));
+                        }
+                    }
+                }
+            }
+        }
         // Read music assets
         if let Some(music_array) = resources_val.get("music").and_then(|v| v.as_array()) {
             for item in music_array {
@@ -286,6 +313,7 @@ pub fn load_project(vpyproj_path: &Path) -> Result<ProjectInfo, LoadError> {
         if assets_dir.exists() {
             discover_vector_assets(&assets_dir.join("vectors"), &mut asset_files)?;
             discover_music_assets(&assets_dir.join("music"), &mut asset_files)?;
+            discover_recording_assets(&assets_dir.join("recordings"), &mut asset_files)?;
         }
     }
 
@@ -371,6 +399,29 @@ fn discover_music_assets(dir: &Path, assets: &mut Vec<AssetFile>) -> Result<(), 
     Ok(())
 }
 
+/// Discover .vrec files in recordings directory
+fn discover_recording_assets(dir: &Path, assets: &mut Vec<AssetFile>) -> Result<(), LoadError> {
+    if !dir.exists() {
+        return Ok(());
+    }
+
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| LoadError::Io(e.to_string()))?;
+
+    // Collect and sort for deterministic ordering across platforms/filesystems
+    let mut paths: Vec<_> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().map_or(false, |ext| ext == "vrec"))
+        .collect();
+    paths.sort();
+
+    for path in paths {
+        assets.push(AssetFile::Recording(path));
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -397,8 +448,10 @@ mod tests {
         // Create assets
         fs::create_dir_all(root.join("assets/vectors")).unwrap();
         fs::create_dir_all(root.join("assets/music")).unwrap();
+        fs::create_dir_all(root.join("assets/recordings")).unwrap();
         fs::write(root.join("assets/vectors/player.vec"), "{}").unwrap();
         fs::write(root.join("assets/music/theme.vmus"), "{}").unwrap();
+        fs::write(root.join("assets/recordings/preview.vrec"), "{}").unwrap();
 
         // Create .vpyproj
         let toml = if multibank {
@@ -424,7 +477,8 @@ mod tests {
         assert_eq!(info.num_banks(), 1);
         assert_eq!(info.source_files.len(), 1);
         assert!(info.source_files[0].is_entry);
-        assert_eq!(info.asset_files.len(), 2);
+        assert_eq!(info.asset_files.len(), 3);
+        assert!(info.asset_files.iter().any(|a| matches!(a, AssetFile::Recording(p) if p.ends_with("preview.vrec"))));
     }
 
     #[test]
@@ -438,7 +492,7 @@ mod tests {
         assert!(info.is_multibank());
         assert_eq!(info.num_banks(), 32);
         assert_eq!(info.source_files.len(), 1);
-        assert_eq!(info.asset_files.len(), 2);
+        assert_eq!(info.asset_files.len(), 3);
     }
 
     #[test]

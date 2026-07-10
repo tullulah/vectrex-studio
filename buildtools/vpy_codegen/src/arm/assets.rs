@@ -10,8 +10,10 @@ use crate::venemy::EnemyResource;
 use crate::vecres::VecMeshSegment;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs;
 use serde::Deserialize;
+use vpy_parser::{Module, Item, Stmt, Expr};
 
 // ============================================================
 // .vmus music format
@@ -137,6 +139,154 @@ struct VsfxNoise {
     volume: u8,
     #[serde(default)]
     decay_ms: f64,
+}
+
+// ============================================================
+// .vrec vector-recording format (multi-frame segment capture)
+// ============================================================
+
+#[derive(Deserialize)]
+struct VrecResource {
+    #[serde(default)]
+    #[allow(dead_code)]
+    version: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    name: String,
+    /// Capture rate — informational only; playback pacing is driven by the
+    /// caller's frame counter (DRAW_RECORDING takes frame % frame_count).
+    #[serde(default)]
+    fps: f64,
+    #[serde(default)]
+    frames: Vec<VrecFrame>,
+}
+
+#[derive(Deserialize)]
+struct VrecFrame {
+    #[serde(default)]
+    segments: Vec<VrecSegment>,
+}
+
+#[derive(Deserialize)]
+struct VrecSegment {
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    /// Intensity 0-127 (recorder only stores visible segments, i > 0)
+    i: i32,
+}
+
+// ============================================================
+// Recording usage filter (ARM targets)
+// ============================================================
+
+/// Drop .vrec assets not referenced by a `DRAW_RECORDING("name", ...)` call.
+/// All other asset types pass through unchanged (the ARM backend emits every
+/// discovered asset of the other kinds; recordings are usage-filtered so an
+/// unreferenced capture never bloats the ROM).
+pub fn filter_recording_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInfo> {
+    if !assets.iter().any(|a| matches!(a.asset_type, AssetType::Recording)) {
+        return assets.to_vec();
+    }
+    let mut used: HashSet<String> = HashSet::new();
+    for item in &module.items {
+        match item {
+            Item::Function(f) => {
+                for st in &f.body {
+                    collect_recording_names_stmt(st, &mut used);
+                }
+            }
+            Item::Const { value, .. } | Item::GlobalLet { value, .. } => {
+                collect_recording_names_expr(value, &mut used);
+            }
+            Item::ExprStatement(e) => collect_recording_names_expr(e, &mut used),
+            _ => {}
+        }
+    }
+    assets
+        .iter()
+        .filter(|a| !matches!(a.asset_type, AssetType::Recording) || used.contains(&a.name))
+        .cloned()
+        .collect()
+}
+
+fn collect_recording_names_stmt(stmt: &Stmt, used: &mut HashSet<String>) {
+    match stmt {
+        Stmt::Expr(e, _) => collect_recording_names_expr(e, used),
+        Stmt::Return(Some(e), _) => collect_recording_names_expr(e, used),
+        Stmt::Let { value, .. } => collect_recording_names_expr(value, used),
+        Stmt::Assign { value, .. } | Stmt::CompoundAssign { value, .. } => {
+            collect_recording_names_expr(value, used);
+        }
+        Stmt::If { cond, body, elifs, else_body, .. } => {
+            collect_recording_names_expr(cond, used);
+            for s in body { collect_recording_names_stmt(s, used); }
+            for (c, b) in elifs {
+                collect_recording_names_expr(c, used);
+                for s in b { collect_recording_names_stmt(s, used); }
+            }
+            if let Some(b) = else_body {
+                for s in b { collect_recording_names_stmt(s, used); }
+            }
+        }
+        Stmt::While { cond, body, .. } => {
+            collect_recording_names_expr(cond, used);
+            for s in body { collect_recording_names_stmt(s, used); }
+        }
+        Stmt::For { start, end, step, body, .. } => {
+            collect_recording_names_expr(start, used);
+            collect_recording_names_expr(end, used);
+            if let Some(st) = step { collect_recording_names_expr(st, used); }
+            for s in body { collect_recording_names_stmt(s, used); }
+        }
+        Stmt::ForIn { iterable, body, .. } => {
+            collect_recording_names_expr(iterable, used);
+            for s in body { collect_recording_names_stmt(s, used); }
+        }
+        Stmt::Switch { expr, cases, default, .. } => {
+            collect_recording_names_expr(expr, used);
+            for (c, b) in cases {
+                collect_recording_names_expr(c, used);
+                for s in b { collect_recording_names_stmt(s, used); }
+            }
+            if let Some(b) = default {
+                for s in b { collect_recording_names_stmt(s, used); }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_recording_names_expr(expr: &Expr, used: &mut HashSet<String>) {
+    match expr {
+        Expr::Call(info) => {
+            if info.name.to_uppercase() == "DRAW_RECORDING" {
+                if let Some(Expr::StringLit(name)) = info.args.first() {
+                    used.insert(name.clone());
+                }
+            }
+            for a in &info.args { collect_recording_names_expr(a, used); }
+        }
+        Expr::MethodCall(info) => {
+            collect_recording_names_expr(&info.target, used);
+            for a in &info.args { collect_recording_names_expr(a, used); }
+        }
+        Expr::Binary { left, right, .. }
+        | Expr::Compare { left, right, .. }
+        | Expr::Logic { left, right, .. } => {
+            collect_recording_names_expr(left, used);
+            collect_recording_names_expr(right, used);
+        }
+        Expr::Not(e) | Expr::BitNot(e) => collect_recording_names_expr(e, used),
+        Expr::Index { target, index } => {
+            collect_recording_names_expr(target, used);
+            collect_recording_names_expr(index, used);
+        }
+        Expr::FieldAccess { target, .. } => collect_recording_names_expr(target, used),
+        Expr::List(items) => for it in items { collect_recording_names_expr(it, used); },
+        _ => {}
+    }
 }
 
 // ============================================================
@@ -309,6 +459,25 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
                     }
                 }
             }
+            AssetType::Recording => {
+                let text = match fs::read_to_string(&asset.path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not read {}: {}\n", asset.path, e));
+                        s.push_str(&format!("    .balign 4\n.global _{sym}_VREC\n_{sym}_VREC:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                let vrec: VrecResource = match serde_json::from_str(&text) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not parse {}: {}\n", asset.path, e));
+                        s.push_str(&format!("    .balign 4\n.global _{sym}_VREC\n_{sym}_VREC:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                s.push_str(&compile_vrec(&vrec, &asset.name));
+            }
             AssetType::Enemy => {
                 let text = match fs::read_to_string(&asset.path) {
                     Ok(t) => t,
@@ -334,6 +503,62 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
         }
     }
 
+    s
+}
+
+// ============================================================
+// Recording compiler (.vrec → frame/segment table)
+// ============================================================
+//
+// Binary layout (read by vpy_draw_recording in drawing.rs):
+//   _<NAME>_VREC:                       (4-byte aligned)
+//     .word  frame_count
+//     .word  offset_frame0, offset_frame1, ...  @ byte offsets from _<NAME>_VREC
+//   frame N:                            (2-byte aligned)
+//     .hword segment_count
+//     per segment (5 bytes): .byte x0, y0, x1, y1, intensity  (i8,i8,i8,i8,u8)
+//
+// Frame offsets are emitted as assembler label-difference expressions
+// (_<NAME>_VREC_Fn - _<NAME>_VREC) so gas computes them — no address math
+// in the codegen, consistent with the "linker owns addresses" rule.
+
+fn compile_vrec(vrec: &VrecResource, override_name: &str) -> String {
+    let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let frame_count = vrec.frames.len();
+
+    let mut s = String::new();
+    s.push_str(&format!(
+        "@ --- {} RECORDING ({} frame(s), fps={}) ---\n",
+        override_name, frame_count, vrec.fps
+    ));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_VREC\n_{sym}_VREC:\n"));
+    s.push_str(&format!("    .word   {}               @ frame_count\n", frame_count));
+    for i in 0..frame_count {
+        s.push_str(&format!(
+            "    .word   _{sym}_VREC_F{i} - _{sym}_VREC  @ offset frame {i}\n"
+        ));
+    }
+    for (i, frame) in vrec.frames.iter().enumerate() {
+        s.push_str("    .balign 2\n");
+        s.push_str(&format!("_{sym}_VREC_F{i}:\n"));
+        s.push_str(&format!(
+            "    .hword  {}               @ segment_count\n",
+            frame.segments.len()
+        ));
+        for seg in &frame.segments {
+            let x0 = seg.x0.clamp(-127, 127) as i8;
+            let y0 = seg.y0.clamp(-127, 127) as i8;
+            let x1 = seg.x1.clamp(-127, 127) as i8;
+            let y1 = seg.y1.clamp(-127, 127) as i8;
+            let inten = seg.i.clamp(0, 127) as u8;
+            s.push_str(&format!(
+                "    .byte   0x{:02X}, 0x{:02X}, 0x{:02X}, 0x{:02X}, 0x{:02X}  @ ({},{})->({},{}) i={}\n",
+                x0 as u8, y0 as u8, x1 as u8, y1 as u8, inten, x0, y0, x1, y1, inten
+            ));
+        }
+    }
+    s.push('\n');
     s
 }
 
@@ -979,4 +1204,110 @@ fn compile_vanim_for_arm(resource: &VanimResource, asset_name: &str) -> String {
     }
     s.push('\n');
     s
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(src: &str) -> Module {
+        let tokens = vpy_parser::lex(src).expect("lex");
+        vpy_parser::parser::parse(tokens, "test").expect("parse")
+    }
+
+    const VREC_JSON: &str = r#"{
+        "version": "1.0",
+        "name": "preview",
+        "fps": 15,
+        "frames": [
+            { "segments": [
+                { "x0": -50, "y0": 10, "x1": 30, "y1": 20, "i": 95 },
+                { "x0": 30, "y0": 20, "x1": 30, "y1": -40, "i": 95 },
+                { "x0": 200, "y0": -200, "x1": 0, "y1": 0, "i": 300 }
+            ] },
+            { "segments": [
+                { "x0": 0, "y0": 0, "x1": 127, "y1": -127, "i": 40 },
+                { "x0": 5, "y0": 5, "x1": -5, "y1": -5, "i": 1 }
+            ] }
+        ]
+    }"#;
+
+    #[test]
+    fn test_compile_vrec_table_layout() {
+        let vrec: VrecResource = serde_json::from_str(VREC_JSON).unwrap();
+        let asm = compile_vrec(&vrec, "preview");
+
+        // Header: aligned symbol + frame_count + label-difference offsets
+        assert!(asm.contains(".global _PREVIEW_VREC"), "missing global symbol:\n{asm}");
+        assert!(asm.contains("_PREVIEW_VREC:\n    .word   2               @ frame_count"),
+            "missing frame_count word:\n{asm}");
+        assert!(asm.contains(".word   _PREVIEW_VREC_F0 - _PREVIEW_VREC"),
+            "missing frame 0 offset:\n{asm}");
+        assert!(asm.contains(".word   _PREVIEW_VREC_F1 - _PREVIEW_VREC"),
+            "missing frame 1 offset:\n{asm}");
+
+        // Frame bodies: .hword segment_count + 5-byte segments
+        assert!(asm.contains("_PREVIEW_VREC_F0:\n    .hword  3"),
+            "frame 0 must have 3 segments:\n{asm}");
+        assert!(asm.contains("_PREVIEW_VREC_F1:\n    .hword  2"),
+            "frame 1 must have 2 segments:\n{asm}");
+        // First segment bytes: x0=-50 (0xCE), y0=10, x1=30, y1=20, i=95 (0x5F)
+        assert!(asm.contains(".byte   0xCE, 0x0A, 0x1E, 0x14, 0x5F"),
+            "first segment bytes wrong:\n{asm}");
+        // Out-of-range values are clamped: 200→127 (0x7F), -200→-127 (0x81), i 300→127
+        assert!(asm.contains(".byte   0x7F, 0x81, 0x00, 0x00, 0x7F"),
+            "clamping to i8/intensity range failed:\n{asm}");
+    }
+
+    #[test]
+    fn test_filter_recording_assets() {
+        let dir = std::env::temp_dir().join(format!("vpy_vrec_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let used_path = dir.join("preview.vrec");
+        let unused_path = dir.join("other.vrec");
+        std::fs::write(&used_path, VREC_JSON).unwrap();
+        std::fs::write(&unused_path, VREC_JSON).unwrap();
+
+        let assets = vec![
+            AssetInfo {
+                name: "preview".into(),
+                path: used_path.display().to_string(),
+                asset_type: AssetType::Recording,
+            },
+            AssetInfo {
+                name: "other".into(),
+                path: unused_path.display().to_string(),
+                asset_type: AssetType::Recording,
+            },
+            AssetInfo {
+                name: "ship".into(),
+                path: dir.join("ship.vec").display().to_string(),
+                asset_type: AssetType::Vector,
+            },
+        ];
+
+        let module = parse(concat!(
+            "def main():\n    pass\n\n",
+            "def loop():\n",
+            "    t = t + 1\n",
+            "    DRAW_RECORDING(\"preview\", 0, 0, 45, t)\n",
+        ));
+        let filtered = filter_recording_assets(&assets, &module);
+
+        assert!(filtered.iter().any(|a| a.name == "preview"),
+            "referenced .vrec must survive the filter");
+        assert!(!filtered.iter().any(|a| a.name == "other"),
+            "unreferenced .vrec must be dropped");
+        assert!(filtered.iter().any(|a| a.name == "ship"),
+            "non-recording assets pass through unchanged");
+
+        // Full emission includes the used recording table only
+        let asm = emit_arm_assets(&filtered);
+        assert!(asm.contains("_PREVIEW_VREC:"), "used recording must be emitted:\n{asm}");
+        assert!(!asm.contains("_OTHER_VREC"), "unused recording must not be emitted");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

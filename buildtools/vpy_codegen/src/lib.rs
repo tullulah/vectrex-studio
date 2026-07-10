@@ -103,6 +103,7 @@ pub enum AssetType {
     Animation,  // .vanim file (frame-by-frame vector animation)
     Instrument, // .vinstr file (pitched instrument timbre)
     Enemy,      // .venemy file (enemy type definition)
+    Recording,  // .vrec file (multi-frame vector recording for attract/preview playback)
 }
 
 #[derive(Debug, Clone, Error)]

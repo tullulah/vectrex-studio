@@ -77,6 +77,12 @@ pub fn generate_arm_asm(
     // dv_reset/dv_move_to/dv_draw_delta) are always emitted.
     let usage = analysis::analyze(module);
 
+    // Recordings (.vrec) are usage-filtered: only those referenced by a
+    // DRAW_RECORDING("name", ...) call are emitted. Other asset types pass
+    // through unchanged.
+    let assets = assets::filter_recording_assets(assets, module);
+    let assets = assets.as_slice();
+
     // Runtime helpers (bus_write / bus_read GPIO bit-bang + enemy runtime)
     asm.push_str(&helpers::emit_helpers(&usage));
 

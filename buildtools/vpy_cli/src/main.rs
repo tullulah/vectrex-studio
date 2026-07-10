@@ -1156,12 +1156,12 @@ fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> 
         .with_context(|| format!("Failed to write {}", asm_path.display()))?;
     println!("  {} ARM ASM written: {}", "✓".green(), s_path.display());
 
-    // Find linker script
-    let ld_path = find_rp2350_ld(&project_dir)
-        .ok_or_else(|| anyhow::anyhow!(
-            "Could not find hardware/debug_cart/firmware/rp2350_game.ld — \
-             ensure the hardware/ directory is present in the workspace root"
-        ))?;
+    // Linker script: prefer an in-tree copy if present, otherwise use the copy
+    // bundled into the compiler (written to the build dir).
+    let ld_path = match find_rp2350_ld(&project_dir) {
+        Some(p) => p,
+        None => write_bundled_rp2350_ld(&build_dir)?,
+    };
     if verbose {
         println!("  Linker script: {}", ld_path.display());
     }
@@ -1329,12 +1329,11 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         .with_context(|| format!("Failed to write {}", asm_path.display()))?;
     println!("  {} ARM ASM written: {}", "✓".green(), s_path.display());
 
-    // Linker script — prefer a uvm2-specific one, fall back to rp2350_game.ld
-    let ld_path = find_uvm2_ld(&project_dir)
-        .or_else(|| find_rp2350_ld(&project_dir))
-        .ok_or_else(|| anyhow::anyhow!(
-            "Could not find linker script for UVM2.\n\
-             Expected: hardware/debug_cart/firmware/rp2350_game.ld"))?;
+    // Linker script — prefer a uvm2-specific one, fall back to the bundled rp2350 script
+    let ld_path = match find_uvm2_ld(&project_dir).or_else(|| find_rp2350_ld(&project_dir)) {
+        Some(p) => p,
+        None => write_bundled_rp2350_ld(&build_dir)?,
+    };
     if verbose { println!("  Linker script: {}", ld_path.display()); }
 
     println!("\n{}", "Phase 4: ARM Assemble".bright_cyan().bold());
@@ -1530,6 +1529,17 @@ fn find_rp2350_ld(project_dir: &Path) -> Option<PathBuf> {
     }
 
     None
+}
+
+/// The rp2350 game linker script is bundled into the compiler binary so builds
+/// don't depend on the (now private) hardware/ directory. Writes it into the
+/// build dir and returns the path for the linker to consume.
+fn write_bundled_rp2350_ld(build_dir: &Path) -> anyhow::Result<PathBuf> {
+    const BUNDLED_LD: &str = include_str!("../resources/rp2350_game.ld");
+    let path = build_dir.join("rp2350_game.ld");
+    std::fs::write(&path, BUNDLED_LD)
+        .with_context(|| format!("Failed to write bundled linker script {}", path.display()))?;
+    Ok(path)
 }
 
 /// Find the UVM2 linker script — looks for hardware/uvm2/uvm2_game.ld first,

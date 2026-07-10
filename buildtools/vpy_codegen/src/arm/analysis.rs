@@ -57,6 +57,9 @@ const GROUPS: &[(&str, &[&str], &[&str])] = &[
     ("DRAW_VECTOR_EX",  &["DRAW_VECTOR_EX"],    &[]),
     // vpy_draw_vector_3d: calls smul_lut (+ core).
     ("DRAW_VECTOR_3D",  &["DRAW_VECTOR_3D"],    &["SIN_TABLE"]),
+    // vpy_draw_recording (.vrec attract/preview playback): core only —
+    // dv_reset/dv_move_to/dv_draw_delta/vpy_set_intensity are always emitted.
+    ("DRAW_RECORDING",  &["DRAW_RECORDING"],    &[]),
     // _SIN_TABLE data + smul_lut (smul_lut reads _SIN_TABLE).
     ("SIN_TABLE",       &[],                    &[]),
     // vpy_sin / vpy_cos: read _SIN_TABLE directly.
@@ -376,6 +379,16 @@ mod tests {
         let m3 = parse("def loop():\n    DRAW_VECTOR(\"s\", 0, 0)\n");
         let u3 = analyze(&m3);
         assert!(!u3.has("DRAW_VECTOR_EX"), "3-arg DRAW_VECTOR does not need _ex");
+    }
+
+    #[test]
+    fn test_draw_recording_gates_group() {
+        let m = parse("def loop():\n    t = t + 1\n    DRAW_RECORDING(\"preview\", 0, 0, 45, t)\n");
+        let u = analyze(&m);
+        assert!(u.has("DRAW_RECORDING"), "DRAW_RECORDING call must enable its group");
+        let m2 = parse("def loop():\n    DRAW_LINE(0, 0, 10)\n");
+        let u2 = analyze(&m2);
+        assert!(!u2.has("DRAW_RECORDING"), "no DRAW_RECORDING call → group off");
     }
 
     #[test]

@@ -408,6 +408,28 @@ pub fn discover_assets(source_path: &Path) -> Vec<AssetInfo> {
         }
     }
 
+    // Search for recording assets (assets/recordings/*.vrec)
+    // Playback is ARM-only (rp2350/uvm2); on m6809/pitrex these are discovered
+    // but never referenced (DRAW_RECORDING is not collected there), so they are
+    // dropped by filter_used_assets.
+    let rec_dir = project_root.join("assets").join("recordings");
+    if rec_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&rec_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("vrec") {
+                    if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                        assets.push(AssetInfo {
+                            name: name.to_string(),
+                            path: path.display().to_string(),
+                            asset_type: AssetType::Recording,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     // Search for enemy assets (assets/enemies/*.venemy)
     let enemies_dir = project_root.join("assets").join("enemies");
     if enemies_dir.is_dir() {
@@ -943,6 +965,10 @@ pub fn generate_distributed_assets_asm(
                 AssetType::Animation => format!("_ANIM_{}", symbol_name),
                 AssetType::Instrument => format!("_{}_INSTR", symbol_name),
                 AssetType::Enemy => format!("_{}_ENEMY", symbol_name),
+                // .vrec playback is ARM-only; recordings never reach the m6809
+                // bank packer (filter_used_assets drops them), but keep the
+                // match exhaustive.
+                AssetType::Recording => format!("_{}_VREC", symbol_name),
             };
             asset_entries.push((asset.info.name.clone(), *bank_id, label, asset.info.asset_type.clone()));
         }

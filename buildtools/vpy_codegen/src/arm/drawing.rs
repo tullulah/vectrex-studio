@@ -42,6 +42,9 @@ pub fn emit_drawing(usage: &Usage) -> String {
     if usage.has("DRAW_VECTOR_3D") {
         s.push_str(&emit_draw_vector_3d());
     }
+    if usage.has("DRAW_RECORDING") {
+        s.push_str(&emit_draw_recording());
+    }
     s
 }
 
@@ -357,6 +360,110 @@ fn emit_draw_vector_3d() -> String {
 
     s.push_str("dv3_pd:\n");
     s.push_str("    pop     {r4,r5,r6,r7,r8,r9,r10,r11,pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+// ─── vpy_draw_recording ───────────────────────────────────────────────────
+//
+// _NAME_VREC format (arm/assets.rs compile_vrec):
+//   .word  frame_count
+//   .word  offset_frame0, offset_frame1, ...   @ byte offsets from _NAME_VREC
+// frame N (2-byte aligned):
+//   .hword segment_count
+//   per segment: .byte x0, y0, x1, y1, intensity   (i8,i8,i8,i8,u8 — 5 bytes)
+//
+// vpy_draw_recording(r0=vrec_ptr, r1=x, r2=y, r3=scale, [sp+32]=frame)
+//   scale: 0..128 where 128 = 100% — scaled = (v * scale) >> 7, sign preserved
+//          (ldrsb sign-extends the i8 before the multiply).
+//   frame: any non-negative counter; frame % frame_count is taken here so the
+//          caller can pass an ever-increasing value.
+//   Per segment: dv_reset → vpy_set_intensity(i) → dv_move_to(x+sx0, y+sy0)
+//                → dv_draw_delta(sx1-sx0, sy1-sy0).
+//   Recorded intensity is used, but a SET_INTENSITY override this frame wins
+//   (same VPY_BRIGHTNESS_OVERRIDE convention as vpy_draw_vector).
+//   Move targets and deltas are clamped to the i8 range [-127, 127] after the
+//   offset addition (a heavily scaled/offset segment saturates instead of
+//   wrapping; the recorder keeps raw coords inside i8 already).
+//
+// Register map: r4=segment ptr, r5=segments remaining, r6=x, r7=y, r8=scale,
+//               r9/r10=scaled (sx0,sy0) then (dx,dy); r0-r2 scratch.
+// dv_reset / vpy_set_intensity / dv_move_to / dv_draw_delta are SVC trap stubs
+// and do NOT modify CPU registers (same assumption as vpy_draw_vector).
+// ---------------------------------------------------------------------------
+fn emit_draw_recording() -> String {
+    // Clamp the value in `reg` to [-127, 127] using r2 as scratch.
+    fn clamp_i8(s: &mut String, reg: &str) {
+        s.push_str(&format!("    cmp     {reg}, #127\n    it      gt\n    movgt   {reg}, #127\n"));
+        s.push_str("    mvn     r2, #126            @ r2 = -127\n");
+        s.push_str(&format!("    cmp     {reg}, r2\n    it      lt\n    movlt   {reg}, r2\n"));
+    }
+    // r0 = (i8 at [r4, #off]) * scale >> 7  (sign preserved: ldrsb sign-extends)
+    fn scale_byte(s: &mut String, off: u8) {
+        s.push_str(&format!("    ldrsb   r0, [r4, #{off}]\n"));
+        s.push_str("    mul     r0, r0, r8\n");
+        s.push_str("    asr     r0, r0, #7\n");
+    }
+
+    let mut s = String::new();
+    s.push_str("@ vpy_draw_recording(r0=vrec_ptr, r1=x, r2=y, r3=scale 0-128, [sp+32]=frame)\n");
+    s.push_str(".global vpy_draw_recording\n.type vpy_draw_recording, %function\n.thumb_func\nvpy_draw_recording:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
+    s.push_str("    mov     r4, r0              @ vrec base\n");
+    s.push_str("    mov     r6, r1              @ x offset\n");
+    s.push_str("    mov     r7, r2              @ y offset\n");
+    s.push_str("    mov     r8, r3              @ scale (0-128, 128 = 100%)\n");
+    // frame_idx = frame % frame_count (sdiv+mul+sub — no mls, emulator-safe)
+    s.push_str("    ldr     r1, [r4]            @ frame_count\n");
+    s.push_str("    cmp     r1, #0\n    beq     dvrec_done          @ empty recording\n");
+    s.push_str("    ldr     r0, [sp, #32]       @ frame counter (stack arg)\n");
+    s.push_str("    sdiv    r2, r0, r1\n");
+    s.push_str("    mul     r2, r2, r1\n");
+    s.push_str("    sub     r0, r0, r2          @ frame % frame_count\n");
+    // frame ptr = base + offset_table[idx]  (table starts at base+4)
+    s.push_str("    add     r0, r0, #1\n");
+    s.push_str("    lsl     r0, r0, #2          @ 4 + idx*4\n");
+    s.push_str("    ldr     r0, [r4, r0]        @ byte offset from base\n");
+    s.push_str("    add     r0, r4, r0          @ frame ptr\n");
+    s.push_str("    ldrh    r5, [r0]            @ segment_count\n");
+    s.push_str("    add     r4, r0, #2          @ r4 = first segment\n");
+
+    s.push_str("dvrec_seg:\n");
+    s.push_str("    cmp     r5, #0\n    beq     dvrec_done\n");
+    // Beam to a known reference before every segment (recorded coords are absolute).
+    s.push_str("    bl      dv_reset\n");
+    // Recorded intensity; SET_INTENSITY override wins (same rule as vpy_draw_vector).
+    s.push_str("    ldrb    r0, [r4, #4]        @ recorded intensity\n");
+    s.push_str("    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r1, [r1]\n");
+    s.push_str("    cmp     r1, #0\n    it      ne\n    movne   r0, r1  @ SET_INTENSITY override wins\n");
+    s.push_str("    bl      vpy_set_intensity\n");
+    // sx0 → r9, sy0 → r10
+    scale_byte(&mut s, 0);
+    s.push_str("    mov     r9, r0              @ sx0\n");
+    scale_byte(&mut s, 1);
+    s.push_str("    mov     r10, r0             @ sy0\n");
+    // dv_move_to(x + sx0, y + sy0), clamped to i8
+    s.push_str("    add     r0, r9, r6          @ x + sx0\n");
+    clamp_i8(&mut s, "r0");
+    s.push_str("    add     r1, r10, r7         @ y + sy0\n");
+    clamp_i8(&mut s, "r1");
+    s.push_str("    bl      dv_move_to\n");
+    // dx = sx1 - sx0 → r9, dy = sy1 - sy0 → r10
+    scale_byte(&mut s, 2);
+    s.push_str("    sub     r9, r0, r9          @ dx = sx1 - sx0\n");
+    scale_byte(&mut s, 3);
+    s.push_str("    sub     r10, r0, r10        @ dy = sy1 - sy0\n");
+    s.push_str("    mov     r0, r9\n");
+    clamp_i8(&mut s, "r0");
+    s.push_str("    mov     r1, r10\n");
+    clamp_i8(&mut s, "r1");
+    s.push_str("    bl      dv_draw_delta\n");
+    // next segment
+    s.push_str("    add     r4, r4, #5\n");
+    s.push_str("    sub     r5, r5, #1\n");
+    s.push_str("    b       dvrec_seg\n");
+
+    s.push_str("dvrec_done:\n    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }

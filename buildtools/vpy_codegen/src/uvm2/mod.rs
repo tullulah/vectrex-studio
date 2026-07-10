@@ -92,6 +92,10 @@ pub fn generate_uvm2_asm(
     // when the program actually uses them. Core stubs are always emitted.
     let usage = crate::arm::analysis::analyze(module);
 
+    // Recordings (.vrec) are usage-filtered (shared with the arm target).
+    let asset_list = assets::filter_recording_assets(asset_list, module);
+    let asset_list = asset_list.as_slice();
+
     // For UVM2, bus_write/bus_read delegate to uvm2_via_write (CLK-synced GPIO),
     // so we skip helpers::emit_bus_helpers() — that uses the debug-cart pinout.
     // The pinout-agnostic runtime (enemy pool) is emitted when used.
