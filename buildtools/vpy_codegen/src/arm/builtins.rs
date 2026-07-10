@@ -21,6 +21,8 @@
 //!   Full implementation requires successive approximation (ZPULSE + IFR comparator).
 //!   Pending until bus master mode (PCB v2, BUS_MASTER_AVAILABLE=true) is available.
 
+use super::analysis::Usage;
+
 /// Size in bytes of a single ARM-format level object in ROM.
 /// Layout: x(2) + y(2) + scale(1) + intensity(1) + flags(1) + type(1)
 ///         + vector_ptr(4) + half_w(1) + half_h(1) + vel_x(1) + vel_y(1)
@@ -72,33 +74,82 @@ fn collect_from_stmts(stmts: &[vpy_parser::Stmt], out: &mut Vec<MsgEntry>) {
     }
 }
 
-pub fn emit_builtins(msg_entries: &[MsgEntry]) -> String {
+pub fn emit_builtins(msg_entries: &[MsgEntry], usage: &Usage) -> String {
     let mut s = String::new();
     s.push_str("@ ============================================================\n");
     s.push_str("@ VPy Builtins — ARM Thumb2 / RP2350\n");
     s.push_str("@ ============================================================\n\n");
 
     // drawing.rs emits: vpy_draw_vector, vpy_draw_vector_3d, smul_lut,
-    // dv_reset, dv_move_to, dv_draw_delta, _SIN_TABLE
-    s.push_str(&emit_font_data());
+    // dv_reset, dv_move_to, dv_draw_delta, _SIN_TABLE (usage-gated there).
+    // Here, each runtime group is emitted only when the program uses it
+    // (see arm/analysis.rs for the group/dependency table).
+    if usage.has("TEXT") {
+        s.push_str(&emit_font_data());
+    }
+    // vpy_wait_recal + vpy_set_intensity: always-emit core (SVC stubs; the
+    // game loop calls wait_recal and every draw routine calls set_intensity).
     s.push_str(&emit_wait_recal());
     s.push_str(&emit_set_intensity());
-    s.push_str(&emit_move());
-    s.push_str(&emit_draw_line());
-    s.push_str(&emit_draw_vector_ex());
-    s.push_str(&emit_draw_shapes());
-    s.push_str(&emit_print_text());
-    s.push_str(&emit_print_number());
-    s.push_str(&emit_joystick());
-    s.push_str(&emit_psg_helpers());
-    s.push_str(&emit_math_builtins());
-    s.push_str(&emit_utility_builtins());
-    s.push_str(&emit_audio_builtins());
-    s.push_str(&emit_note_engine());
-    s.push_str(&emit_state_builtins());
-    s.push_str(&emit_level_builtins());
-    s.push_str(&emit_msg_builtins(msg_entries));
-    s.push_str(&emit_draw_anim());
+    if usage.has("MOVE") {
+        s.push_str(&emit_move());
+    }
+    if usage.has("DRAW_LINE") {
+        s.push_str(&emit_draw_line());
+    }
+    if usage.has("DRAW_VECTOR_EX") {
+        s.push_str(&emit_draw_vector_ex());
+    }
+    // Shapes: each gates its own routine.
+    if usage.has("CIRCLE")      { s.push_str(&emit_draw_circle()); }
+    if usage.has("RECT")        { s.push_str(&emit_draw_rect()); }
+    if usage.has("FILLED_RECT") { s.push_str(&emit_draw_filled_rect()); }
+    if usage.has("POLYGON")     { s.push_str(&emit_draw_polygon()); }
+    if usage.has("ELLIPSE")     { s.push_str(&emit_draw_ellipse()); }
+    if usage.has("ARC")         { s.push_str(&emit_draw_arc()); }
+    if usage.has("BEZIER")      { s.push_str(&emit_draw_bezier_cubic()); }
+    if usage.has("BEZIER_QUAD") { s.push_str(&emit_draw_bezier_quad()); }
+    if usage.has("TEXT") {
+        s.push_str(&emit_print_text());
+    }
+    if usage.has("PRINT_NUMBER") {
+        s.push_str(&emit_print_number());
+    }
+    if usage.has("JOYSTICK") {
+        s.push_str(&emit_joystick());
+        s.push_str(&emit_update_buttons());
+    }
+    if usage.has("PSG") {
+        s.push_str(&emit_psg_helpers());
+    }
+    // Math (each group gated separately).
+    if usage.has("MATH_BASIC") { s.push_str(&emit_math_basic()); }
+    if usage.has("TRIG")       { s.push_str(&emit_trig()); }
+    if usage.has("SQRT")       { s.push_str(&emit_sqrt()); }
+    if usage.has("RAND")       { s.push_str(&emit_rand()); }
+    // Utilities.
+    if usage.has("PEEK_POKE")  { s.push_str(&emit_peek_poke()); }
+    if usage.has("WAIT")       { s.push_str(&emit_wait_builtin()); }
+    if usage.has("BEEP")       { s.push_str(&emit_beep()); }
+    if usage.has("LEN")        { s.push_str(&emit_len()); }
+    // Audio engines.
+    if usage.has("MUSIC")      { s.push_str(&emit_music_engine()); }
+    if usage.has("SFX")        { s.push_str(&emit_sfx_engine()); }
+    if usage.has("NOTE")       { s.push_str(&emit_note_engine()); }
+    // State accessors.
+    if usage.has("CAMERA")     { s.push_str(&emit_camera_builtins()); }
+    if usage.has("FRAME_US")   { s.push_str(&emit_frame_us()); }
+    if usage.has("TEXT")       { s.push_str(&emit_text_state()); }
+    if usage.has("DEBUG")      { s.push_str(&emit_debug_builtins()); }
+    // Level system.
+    if usage.has("LEVEL")           { s.push_str(&emit_level_builtins()); }
+    if usage.has("LEVEL_COLLISION") { s.push_str(&emit_level_collision()); }
+    if usage.has("MSG") {
+        s.push_str(&emit_msg_builtins(msg_entries));
+    }
+    if usage.has("ANIM") {
+        s.push_str(&emit_draw_anim());
+    }
     s
 }
 
@@ -282,8 +333,9 @@ fn emit_draw_vector_ex() -> String {
 }
 
 // ─── DRAW_CIRCLE / DRAW_RECT / DRAW_FILLED_RECT / DRAW_POLYGON ────────────
+// Each shape routine is emitted independently (gated by its own usage group).
 
-fn emit_draw_shapes() -> String {
+fn emit_draw_circle() -> String {
     let mut s = String::new();
 
     // ── vpy_draw_circle(r0=cx, r1=cy, r2=radius, r3=intensity) ──────────────
@@ -334,6 +386,12 @@ fn emit_draw_shapes() -> String {
     s.push_str("    add     sp, sp, #8\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
 
+    s
+}
+
+fn emit_draw_rect() -> String {
+    let mut s = String::new();
+
     // ── vpy_draw_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity) ─────────────
     // Stack: push {r4..r8,lr} = 24 bytes → intensity at sp+24
     s.push_str("@ vpy_draw_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity)\n");
@@ -349,6 +407,12 @@ fn emit_draw_shapes() -> String {
     s.push_str("    neg     r0, r6\n    mov     r1, #0\n    bl      dv_draw_delta\n"); // left
     s.push_str("    mov     r0, #0\n    neg     r1, r7\n    bl      dv_draw_delta\n"); // down
     s.push_str("    pop     {r4, r5, r6, r7, r8, pc}\n    .ltorg\n\n");
+
+    s
+}
+
+fn emit_draw_filled_rect() -> String {
+    let mut s = String::new();
 
     // ── vpy_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+28]=intensity) ──────
     // Draws horizontal scan lines to simulate fill (step 3 units).
@@ -389,6 +453,12 @@ fn emit_draw_shapes() -> String {
     s.push_str("vdfr_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n    .ltorg\n\n");
 
+    s
+}
+
+fn emit_draw_polygon() -> String {
+    let mut s = String::new();
+
     // ── vpy_draw_polygon(r0=n, r1=intensity, r2=x0, r3=y0, [sp+0]=x1,y1,...) ─
     // Closed polygon with n vertices. push {r4..r11,lr} = 36 bytes.
     // Extra vertex pairs at [sp+36], [sp+40], [sp+44], ...
@@ -421,6 +491,12 @@ fn emit_draw_shapes() -> String {
     s.push_str("    sub     r1, r7, r10         @ dy = first_y - prev_y\n");
     s.push_str("    bl      dv_draw_delta\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
+
+    s
+}
+
+fn emit_draw_ellipse() -> String {
+    let mut s = String::new();
 
     // ── vpy_draw_ellipse(r0=cx, r1=cy, r2=rx, r3=ry, [sp+0]=intensity) ──────
     // 16-segment parametric ellipse: x = cx + rx*cos(i*8)/127, y = cy + ry*sin(i*8)/127
@@ -475,6 +551,12 @@ fn emit_draw_shapes() -> String {
     s.push_str("    bl      dv_draw_delta\n");
     s.push_str("    add     sp, sp, #8\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
+
+    s
+}
+
+fn emit_draw_arc() -> String {
+    let mut s = String::new();
 
     // ── vpy_draw_arc(r0=segs, r1=cx, r2=cy, r3=r, [sp+0]=start_deg, [sp+4]=sweep_deg, [sp+8]=intensity) ──
     // Open arc from start_deg, sweeping sweep_deg degrees (CCW), in segs segments.
@@ -536,8 +618,6 @@ fn emit_draw_shapes() -> String {
     s.push_str("vpy_arc_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
 
-    emit_bezier_functions(&mut s);
-
     s
 }
 
@@ -555,7 +635,8 @@ fn emit_draw_shapes() -> String {
 ///
 /// Caller args (6 words) at sp+72:
 ///   [sp+72]=cp2x [sp+76]=cp2y [sp+80]=x1 [sp+84]=y1 [sp+88]=steps [sp+92]=intensity
-fn emit_bezier_functions(s: &mut String) {
+fn emit_draw_bezier_cubic() -> String {
+    let mut s = String::new();
     // ── cubic ──────────────────────────────────────────────────────────────────
     s.push_str("@ vpy_draw_bezier(x0,y0,cp1x,cp1y,[sp+0]=cp2x,cp2y,x1,y1,steps,intensity)\n");
     s.push_str(".global vpy_draw_bezier\n.type vpy_draw_bezier, %function\n.thumb_func\nvpy_draw_bezier:\n");
@@ -626,6 +707,11 @@ fn emit_bezier_functions(s: &mut String) {
     s.push_str("    add     sp, sp, #36\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
 
+    s
+}
+
+fn emit_draw_bezier_quad() -> String {
+    let mut s = String::new();
     // ── quadratic ─────────────────────────────────────────────────────────────
     // vpy_draw_bezier_quad(r0=x0, r1=y0, r2=cpx, r3=cpy,
     //   [sp+0]=x1, [sp+4]=y1, [sp+8]=steps, [sp+12]=intensity)
@@ -677,6 +763,8 @@ fn emit_bezier_functions(s: &mut String) {
     s.push_str("vbezq_done:\n");
     s.push_str("    add     sp, sp, #28\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, pc}\n    .ltorg\n\n");
+
+    s
 }
 
 // ─── PRINT_TEXT ────────────────────────────────────────────────────────────
@@ -1195,6 +1283,13 @@ fn emit_psg_helpers() -> String {
     s.push_str("    pop     {r0}               @ return value\n");
     s.push_str("    pop     {r4, pc}\n    .ltorg\n\n");
 
+    s
+}
+
+/// vpy_update_buttons — part of the JOYSTICK group (calls psg_read → PSG group).
+fn emit_update_buttons() -> String {
+    let mut s = String::new();
+
     // ─── vpy_update_buttons() ────────────────────────────────────────────
     s.push_str("@ vpy_update_buttons() — cache buttons and joystick axes (safe: called in WAIT_RECAL window)\n");
     s.push_str(".global vpy_update_buttons\n.type vpy_update_buttons, %function\n.thumb_func\nvpy_update_buttons:\n");
@@ -1242,7 +1337,8 @@ fn emit_psg_helpers() -> String {
 
 // ─── MATH BUILTINS ─────────────────────────────────────────────────────────
 
-fn emit_math_builtins() -> String {
+/// vpy_abs / vpy_min / vpy_max / vpy_clamp — MATH_BASIC group.
+fn emit_math_basic() -> String {
     let mut s = String::new();
 
     // vpy_abs
@@ -1262,6 +1358,13 @@ fn emit_math_builtins() -> String {
     s.push_str("    cmp     r0, r1\n    it      lt\n    movlt   r0, r1\n");
     s.push_str("    cmp     r0, r2\n    it      gt\n    movgt   r0, r2\n    bx      lr\n\n");
 
+    s
+}
+
+/// vpy_sin / vpy_cos — TRIG group (reads _SIN_TABLE → SIN_TABLE group).
+fn emit_trig() -> String {
+    let mut s = String::new();
+
     // vpy_sin(r0=angle 0-127) → r0 = SIN_TABLE[angle & 0x7F]
     s.push_str("@ vpy_sin(r0=angle) → r0 = sin(angle*2π/128)*127 as signed i8\n");
     s.push_str(".global vpy_sin\n.type vpy_sin, %function\n.thumb_func\nvpy_sin:\n");
@@ -1280,6 +1383,13 @@ fn emit_math_builtins() -> String {
     s.push_str("    ldrb    r0, [r1, r0]\n");
     s.push_str("    sxtb    r0, r0\n");
     s.push_str("    bx      lr\n    .ltorg\n\n");
+
+    s
+}
+
+/// vpy_sqrt — SQRT group.
+fn emit_sqrt() -> String {
+    let mut s = String::new();
 
     // vpy_sqrt(r0=n) — integer square root via binary search
     s.push_str("@ vpy_sqrt(r0=n) → r0 = floor(sqrt(n))\n");
@@ -1304,6 +1414,13 @@ fn emit_math_builtins() -> String {
     s.push_str("    pop     {r4, r5, r6}\n    bx      lr\n");
     s.push_str("vsqrt_exact:\n    pop     {r4, r5, r6}\n    bx      lr\n");
     s.push_str("vsqrt_zero:\n    bx      lr\n    .ltorg\n\n");
+
+    s
+}
+
+/// vpy_rand / vpy_rand_range — RAND group (also a dep of ENEMIES wander AI).
+fn emit_rand() -> String {
+    let mut s = String::new();
 
     // vpy_rand() → LCG: seed = seed*1664525 + 1013904223, return seed>>16 & 0x7FFF
     s.push_str("@ vpy_rand() → r0 = pseudo-random 0-32767 (LCG)\n");
@@ -1333,7 +1450,8 @@ fn emit_math_builtins() -> String {
 
 // ─── UTILITY BUILTINS ──────────────────────────────────────────────────────
 
-fn emit_utility_builtins() -> String {
+/// vpy_peek / vpy_poke — PEEK_POKE group (bus_read/bus_write are core).
+fn emit_peek_poke() -> String {
     let mut s = String::new();
 
     // vpy_peek(r0=addr) → bus_read(addr)
@@ -1346,6 +1464,13 @@ fn emit_utility_builtins() -> String {
     s.push_str(".global vpy_poke\n.type vpy_poke, %function\n.thumb_func\nvpy_poke:\n");
     s.push_str("    push    {lr}\n    bl      bus_write\n    pop     {pc}\n    .ltorg\n\n");
 
+    s
+}
+
+/// vpy_wait — WAIT group (calls vpy_wait_recal, which is core).
+fn emit_wait_builtin() -> String {
+    let mut s = String::new();
+
     // vpy_wait(r0=frames) — call wait_recal r0 times
     s.push_str("@ vpy_wait(r0=frames) — busy-wait N frames via wait_recal\n");
     s.push_str(".global vpy_wait\n.type vpy_wait, %function\n.thumb_func\nvpy_wait:\n");
@@ -1356,6 +1481,14 @@ fn emit_utility_builtins() -> String {
     s.push_str("    bl      vpy_wait_recal\n");
     s.push_str("    sub     r4, r4, #1\n    b       vwt_loop\n");
     s.push_str("vwt_done:\n    pop     {r4, pc}\n    .ltorg\n\n");
+
+    s
+}
+
+/// vpy_beep + vpy_beep_update — BEEP group (calls psg_write → PSG group).
+/// The auto-injected `bl vpy_beep_update` in game_main is gated on this group.
+fn emit_beep() -> String {
+    let mut s = String::new();
 
     // vpy_beep(r0=freq_period, r1=duration_frames) — non-blocking PSG beep
     s.push_str("@ vpy_beep(r0=freq_period, r1=duration_frames) — non-blocking PSG tone on channel A\n");
@@ -1389,6 +1522,13 @@ fn emit_utility_builtins() -> String {
     s.push_str("    mov     r0, #7\n    mov     r1, #0x3F\n    bl      psg_write\n"); // mixer: all off
     s.push_str("vbu_done:\n    pop     {r4, pc}\n    .ltorg\n\n");
 
+    s
+}
+
+/// vpy_len — LEN group (fallback stub for non-static len() arguments).
+fn emit_len() -> String {
+    let mut s = String::new();
+
     // vpy_len — fallback for non-Var len() arguments; emit_call handles len(arr_name) as a
     // compile-time constant (ldr r0, =ARRAY_NAME_LEN) without calling this function.
     s.push_str("@ vpy_len — fallback, returns 0 (len(arr) on static arrays resolved at compile time)\n");
@@ -1409,7 +1549,9 @@ fn emit_utility_builtins() -> String {
 //     .byte  reg0, val0
 //     .byte  reg1, val1, ...
 
-fn emit_audio_builtins() -> String {
+/// vpy_play_music / vpy_stop_music / vpy_music_update — MUSIC group.
+/// The auto-injected `bl vpy_music_update` in game_main is gated on this group.
+fn emit_music_engine() -> String {
     let mut s = String::new();
 
     // ─── vpy_play_music(r0=ptr) ─────────────────────────────────────────
@@ -1485,6 +1627,14 @@ fn emit_audio_builtins() -> String {
     s.push_str("    ldr     r0, =PSG_MUSIC_PTR\n    str     r1, [r0]\n");
     s.push_str("    ldrb    r0, [r1]\n    str     r0, [r4]\n"); // reset delay
     s.push_str("vmu_done:\n    pop     {r4, r5, r6, r7, pc}\n    .ltorg\n\n");
+
+    s
+}
+
+/// vpy_play_sfx / vpy_audio_update — SFX group.
+/// The auto-injected `bl vpy_audio_update` in game_main is gated on this group.
+fn emit_sfx_engine() -> String {
+    let mut s = String::new();
 
     // ─── vpy_play_sfx(r0=ptr) ────────────────────────────────────────────
     s.push_str("@ vpy_play_sfx(r0=sfx_data_ptr)\n");
@@ -1728,30 +1878,34 @@ fn emit_note_engine() -> String {
 
 // ─── STATE BUILTINS ────────────────────────────────────────────────────────
 
-fn emit_state_builtins() -> String {
+/// One-line setter: `NAME(r0)` stores r0 to a RAM symbol.
+fn simple_set(name: &str, sym: &str) -> String {
+    format!(
+        ".global {name}\n.type {name}, %function\n.thumb_func\n{name}:\n\
+         \x20   ldr     r1, ={sym}\n    str     r0, [r1]\n    bx      lr\n\n"
+    )
+}
+
+/// One-line getter: `NAME()` loads a RAM symbol into r0.
+fn simple_get(name: &str, sym: &str) -> String {
+    format!(
+        ".global {name}\n.type {name}, %function\n.thumb_func\n{name}:\n\
+         \x20   ldr     r0, ={sym}\n    ldr     r0, [r0]\n    bx      lr\n\n"
+    )
+}
+
+/// Camera / scroll-limit accessors + vpy_get_level_floor_y — CAMERA group.
+fn emit_camera_builtins() -> String {
     let mut s = String::new();
 
-    macro_rules! simple_set {
-        ($name:expr, $sym:expr) => {{
-            s.push_str(&format!(".global {}\n.type {}, %function\n.thumb_func\n{}:\n", $name, $name, $name));
-            s.push_str(&format!("    ldr     r1, ={}\n    str     r0, [r1]\n    bx      lr\n\n", $sym));
-        }};
-    }
-    macro_rules! simple_get {
-        ($name:expr, $sym:expr) => {{
-            s.push_str(&format!(".global {}\n.type {}, %function\n.thumb_func\n{}:\n", $name, $name, $name));
-            s.push_str(&format!("    ldr     r0, ={}\n    ldr     r0, [r0]\n    bx      lr\n\n", $sym));
-        }};
-    }
-
-    simple_set!("vpy_set_camera_x", "CAMERA_X");
-    simple_set!("vpy_set_camera_y", "CAMERA_Y");
-    simple_get!("vpy_get_camera_x", "CAMERA_X");
-    simple_get!("vpy_get_camera_y", "CAMERA_Y");
-    simple_get!("vpy_get_scroll_limit_left",   "SCROLL_LIMIT_LEFT");
-    simple_get!("vpy_get_scroll_limit_right",  "SCROLL_LIMIT_RIGHT");
-    simple_get!("vpy_get_scroll_limit_top",    "SCROLL_LIMIT_TOP");
-    simple_get!("vpy_get_scroll_limit_bottom", "SCROLL_LIMIT_BOTTOM");
+    s.push_str(&simple_set("vpy_set_camera_x", "CAMERA_X"));
+    s.push_str(&simple_set("vpy_set_camera_y", "CAMERA_Y"));
+    s.push_str(&simple_get("vpy_get_camera_x", "CAMERA_X"));
+    s.push_str(&simple_get("vpy_get_camera_y", "CAMERA_Y"));
+    s.push_str(&simple_get("vpy_get_scroll_limit_left",   "SCROLL_LIMIT_LEFT"));
+    s.push_str(&simple_get("vpy_get_scroll_limit_right",  "SCROLL_LIMIT_RIGHT"));
+    s.push_str(&simple_get("vpy_get_scroll_limit_top",    "SCROLL_LIMIT_TOP"));
+    s.push_str(&simple_get("vpy_get_scroll_limit_bottom", "SCROLL_LIMIT_BOTTOM"));
 
     // vpy_get_level_floor_y() → camera_y - 128 + groundBottomOffset (level header +32).
     // Mirrors pitrex_get_level_floor_y so cross-target code can share spawn-height math.
@@ -1768,12 +1922,27 @@ fn emit_state_builtins() -> String {
     s.push_str("    bx      lr\n");
     s.push_str("vglfy_none:\n    mov     r0, #0\n    bx      lr\n\n");
 
+    s
+}
+
+/// vpy_get_frame_us — FRAME_US group.
+fn emit_frame_us() -> String {
+    let mut s = String::new();
+
     // vpy_get_frame_us() → stub. PiTrex uses the BCM CLO; rp2350 has no equivalent
     // hardware exposed yet, so return 0. Code paths that use this for adaptive
     // timing (e.g. SnowBros frame profiling) just see "no time elapsed" and skip
     // their slow-frame branches, which is harmless.
     s.push_str(".global vpy_get_frame_us\n.type vpy_get_frame_us, %function\n.thumb_func\nvpy_get_frame_us:\n");
     s.push_str("    mov     r0, #0\n    bx      lr\n\n");
+
+    s
+}
+
+/// vpy_set_text_size / vpy_set_text_color — TEXT group (state for print_text).
+fn emit_text_state() -> String {
+    let mut s = String::new();
+
     // vpy_set_text_size: converts M6809 convention (n=1..8, n=8=normal) to ARM scale.
     // ARM TEXT_SIZE=3 ≈ normal Vectrex text (glyph 4×6 box, scale=3 → height=9 units).
     // Mapping: TEXT_SIZE = max(1, (n*3 + 4) >> 3)
@@ -1788,7 +1957,14 @@ fn emit_state_builtins() -> String {
     s.push_str("    mov     r1, #1\n");
     s.push_str("vsts_ok:\n");
     s.push_str("    ldr     r0, =TEXT_SIZE\n    str     r1, [r0]\n    bx      lr\n\n");
-    simple_set!("vpy_set_text_color", "TEXT_COLOR");
+    s.push_str(&simple_set("vpy_set_text_color", "TEXT_COLOR"));
+
+    s
+}
+
+/// vpy_debug_print / vpy_debug_print_labeled / vpy_debug_print_str — DEBUG group.
+fn emit_debug_builtins() -> String {
+    let mut s = String::new();
 
     // debug_print: write value to DBGVAL (readable via debugger / bus_read)
     s.push_str(".global vpy_debug_print\n.type vpy_debug_print, %function\n.thumb_func\nvpy_debug_print:\n");
@@ -1904,6 +2080,10 @@ fn emit_msg_builtins(entries: &[MsgEntry]) -> String {
 //   +0 world_x(i16)  +2 world_y(i16)  +4 vel_x(i8)  +5 vel_y(i8)
 //   +6 alive(u8)     +7 pad
 
+/// Level system: vpy_load_level / vpy_show_level (+ vsl_draw_static) /
+/// vpy_update_level / vpy_get_level_width/height/tile — LEVEL group.
+/// vpy_show_level / vsl_draw_static call vpy_draw_vector_ex (dependency).
+/// Collision routines live in `emit_level_collision` (LEVEL_COLLISION group).
 fn emit_level_builtins() -> String {
     let mut s = String::new();
 
@@ -2297,6 +2477,15 @@ fn emit_level_builtins() -> String {
     s.push_str("vglt_next:\n    add     r0, r0, #8\n    add     r1, r1, #1\n    b       vglt_loop\n");
     s.push_str("vglt_notfound:\n    mvn     r0, #0            @ return -1\n");
     s.push_str("    pop     {r4, r5, r6, pc}\n    .ltorg\n\n");
+
+    s
+}
+
+/// vpy_level_collision_x / vpy_level_collision_y — LEVEL_COLLISION group.
+/// Leaf routines (touch RAM equates only); also a dep of ENEMIES (wander AI
+/// calls vpy_level_collision_x for wall push-out).
+fn emit_level_collision() -> String {
+    let mut s = String::new();
 
     // ── vpy_level_collision_x(r0=px, r1=py, r2=half_w, r3=half_h) → r0 = push-out dx ──
     // Scans collidable GP objects with wall mesh segments. Returns push-out dx (0 if none).

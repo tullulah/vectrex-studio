@@ -28,6 +28,7 @@ pub mod builtins;
 pub mod helpers;
 pub mod assets;
 pub mod drawing;
+pub mod analysis;
 
 use vpy_parser::Module;
 use crate::AssetInfo;
@@ -71,18 +72,23 @@ pub fn generate_arm_asm(
     // RP2350 image definition (replaces Vectrex cartridge header)
     asm.push_str(&header::emit_image_def());
 
-    // Runtime helpers (bus_write / bus_read GPIO bit-bang)
-    asm.push_str(&helpers::emit_helpers());
+    // Usage analysis: emit runtime routines only when the program uses them.
+    // Core stubs (bus_write/bus_read, vpy_wait_recal, vpy_set_intensity,
+    // dv_reset/dv_move_to/dv_draw_delta) are always emitted.
+    let usage = analysis::analyze(module);
+
+    // Runtime helpers (bus_write / bus_read GPIO bit-bang + enemy runtime)
+    asm.push_str(&helpers::emit_helpers(&usage));
 
     // Drawing engine (sin table, smul_lut, dv_move_to, draw_vector, draw_vector_3d)
-    asm.push_str(&drawing::emit_drawing());
+    asm.push_str(&drawing::emit_drawing(&usage));
 
     // Builtin function implementations (DRAW_LINE, WAIT_RECAL, etc.)
     let msg_entries = builtins::collect_msg_entries(module);
-    asm.push_str(&builtins::emit_builtins(&msg_entries));
+    asm.push_str(&builtins::emit_builtins(&msg_entries, &usage));
 
     // User functions + main/loop
-    asm.push_str(&functions::emit_functions(module, assets)?);
+    asm.push_str(&functions::emit_functions(module, assets, &usage)?);
 
     // Asset data (vector draw lists, etc.)
     asm.push_str(&assets::emit_arm_assets(assets));

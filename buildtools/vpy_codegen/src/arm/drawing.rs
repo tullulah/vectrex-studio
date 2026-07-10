@@ -18,18 +18,30 @@
 //!   x2=smul(rx,cY)+smul(z1,sY)
 //!   sx=smul(x2,cZ)-smul(y1,sZ)+ox   sy=smul(x2,sZ)+smul(y1,cZ)+oy
 
-pub fn emit_drawing() -> String {
+use super::analysis::Usage;
+
+pub fn emit_drawing(usage: &Usage) -> String {
     let mut s = String::new();
     s.push_str("@ ============================================================\n");
     s.push_str("@ Drawing engine — ARM Thumb2 / RP2350 bus master\n");
     s.push_str("@ ============================================================\n\n");
-    s.push_str(&emit_sin_table());
-    s.push_str(&emit_smul_lut());
+    // _SIN_TABLE + smul_lut: needed by vpy_sin/vpy_cos (TRIG) and
+    // vpy_draw_vector_3d — both enable the SIN_TABLE group.
+    if usage.has("SIN_TABLE") {
+        s.push_str(&emit_sin_table());
+        s.push_str(&emit_smul_lut());
+    }
+    // Core beam primitives: ALWAYS emitted (tiny SVC stubs; the IDE emulator
+    // traps these symbols and every drawing routine calls them).
     s.push_str(&emit_dv_reset());
     s.push_str(&emit_dv_move_to());
     s.push_str(&emit_dv_draw_delta());
-    s.push_str(&emit_draw_vector());
-    s.push_str(&emit_draw_vector_3d());
+    if usage.has("DRAW_VECTOR") {
+        s.push_str(&emit_draw_vector());
+    }
+    if usage.has("DRAW_VECTOR_3D") {
+        s.push_str(&emit_draw_vector_3d());
+    }
     s
 }
 

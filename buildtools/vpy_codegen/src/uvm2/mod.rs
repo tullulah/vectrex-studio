@@ -87,17 +87,22 @@ pub fn generate_uvm2_asm(
 
     asm.push_str(&header::emit_image_def());
     asm.push_str(&bus::emit_uvm2_bus_helpers());
+
+    // Usage analysis (shared with the arm target): emit runtime routines only
+    // when the program actually uses them. Core stubs are always emitted.
+    let usage = crate::arm::analysis::analyze(module);
+
     // For UVM2, bus_write/bus_read delegate to uvm2_via_write (CLK-synced GPIO),
     // so we skip helpers::emit_bus_helpers() — that uses the debug-cart pinout.
-    // The pinout-agnostic runtime (enemy pool, anim, math) is still needed.
+    // The pinout-agnostic runtime (enemy pool) is emitted when used.
     asm.push_str(&emit_uvm2_bus_shims());
-    asm.push_str(&crate::arm::helpers::emit_runtime_helpers());
-    asm.push_str(&drawing::emit_drawing());
+    asm.push_str(&crate::arm::helpers::emit_runtime_helpers(&usage));
+    asm.push_str(&drawing::emit_drawing(&usage));
 
     let msg_entries = builtins::collect_msg_entries(module);
-    asm.push_str(&builtins::emit_builtins(&msg_entries));
+    asm.push_str(&builtins::emit_builtins(&msg_entries, &usage));
 
-    asm.push_str(&functions::emit_functions(module, asset_list)?);
+    asm.push_str(&functions::emit_functions(module, asset_list, &usage)?);
     asm.push_str(&assets::emit_arm_assets(asset_list));
 
     // Expand cbz, then inject uvm2_bus_init call at start of game_main

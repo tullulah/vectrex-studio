@@ -8,13 +8,15 @@
 //! The only helper we need is bus_write / bus_read — GPIO bit-bang to
 //! drive the Vectrex bus. These are called by every builtin.
 
+use super::analysis::Usage;
+
 /// Full bundle: debug-cart bus helpers + pinout-agnostic runtime helpers.
 /// Called by the standalone `arm` target (which expects the debug-cart pinout).
 /// UVM2 supplies its own bus_write/bus_read shims (see uvm2/mod.rs) and only
 /// needs `emit_runtime_helpers()`.
-pub fn emit_helpers() -> String {
+pub fn emit_helpers(usage: &Usage) -> String {
     let mut s = emit_bus_helpers();
-    s.push_str(&emit_runtime_helpers());
+    s.push_str(&emit_runtime_helpers(usage));
     s
 }
 
@@ -46,7 +48,21 @@ pub fn emit_bus_helpers() -> String {
 /// Pinout-agnostic runtime: enemy pool/state, anim/draw helpers, math, etc.
 /// Used by both the debug-cart `arm` target and `uvm2` (which supplies its
 /// own bus shims). Anything here only touches RAM/ROM symbols, never GPIO.
-pub fn emit_runtime_helpers() -> String {
+///
+/// The whole body is the enemy-system runtime, so it is emitted only when
+/// the program actually uses enemy builtins (usage group "ENEMIES").
+pub fn emit_runtime_helpers(usage: &Usage) -> String {
+    if !usage.has("ENEMIES") {
+        return String::new();
+    }
+    emit_enemy_runtime()
+}
+
+/// Enemy pool/state runtime: vpy_spawn_enemies, vpy_update_enemies (patrol +
+/// wander AI), vpy_draw_enemies, and the pool query/mutate helpers.
+/// Calls into: vpy_level_collision_x, vpy_rand, vpy_draw_vector_ex,
+/// vpy_draw_anim — all pulled in transitively via the ENEMIES group deps.
+fn emit_enemy_runtime() -> String {
     let mut s = String::new();
 
     // ================================================================

@@ -5,42 +5,17 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use super::ram_layout::RamAllocator;
 use super::expressions::emit_expr;
+use super::analysis::Usage;
 use crate::AssetInfo;
 
 static LABEL_CTR: AtomicU32 = AtomicU32::new(0);
 fn next_id() -> u32 { LABEL_CTR.fetch_add(1, Ordering::Relaxed) }
 
-/// Returns true if any function in `module` contains a PLAY_NOTE() call.
-/// Used to gate auto-injection of vpy_note_update in the game loop.
-fn has_note_calls(module: &Module) -> bool {
-    fn scan_stmts(stmts: &[Stmt]) -> bool {
-        for stmt in stmts {
-            match stmt {
-                Stmt::Expr(Expr::Call(c), _) if c.name.to_uppercase() == "PLAY_NOTE" => {
-                    return true;
-                }
-                Stmt::If { body, elifs, else_body, .. } => {
-                    if scan_stmts(body) { return true; }
-                    for (_, b) in elifs { if scan_stmts(b) { return true; } }
-                    if let Some(eb) = else_body { if scan_stmts(eb) { return true; } }
-                }
-                Stmt::While { body, .. } | Stmt::For { body, .. } => {
-                    if scan_stmts(body) { return true; }
-                }
-                _ => {}
-            }
-        }
-        false
-    }
-    for item in &module.items {
-        if let Item::Function(f) = item {
-            if scan_stmts(&f.body) { return true; }
-        }
-    }
-    false
-}
-
-pub fn emit_functions(module: &Module, _assets: &[AssetInfo]) -> Result<String, String> {
+pub fn emit_functions(
+    module: &Module,
+    _assets: &[AssetInfo],
+    usage: &Usage,
+) -> Result<String, String> {
     let mut s = String::new();
 
     let (var_addrs, var_decls) = allocate_globals(module);
@@ -80,7 +55,7 @@ pub fn emit_functions(module: &Module, _assets: &[AssetInfo]) -> Result<String, 
         }
     }
 
-    s.push_str(&emit_game_main(module, &var_addrs)?);
+    s.push_str(&emit_game_main(module, &var_addrs, usage)?);
 
     Ok(s)
 }
@@ -285,7 +260,11 @@ fn emit_function(
     Ok(s)
 }
 
-fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<String, String> {
+fn emit_game_main(
+    module: &Module,
+    var_addrs: &HashMap<String, u32>,
+    usage: &Usage,
+) -> Result<String, String> {
     let mut s = String::new();
 
     // After unification all function names are uppercase.
@@ -408,14 +387,24 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
         }
     }
 
-    // Game loop
+    // Game loop. Per-frame runtime updates are auto-injected ONLY for the
+    // engines the program actually uses (same gating as the routine emission
+    // in builtins.rs — see arm/analysis.rs).
     s.push_str("game_main_loop:\n");
     s.push_str("    bl      vpy_wait_recal\n");
-    s.push_str("    bl      vpy_update_buttons\n");
-    s.push_str("    bl      vpy_beep_update\n");
-    s.push_str("    bl      vpy_music_update\n");
-    s.push_str("    bl      vpy_audio_update\n");
-    if has_note_calls(module) {
+    if usage.has("JOYSTICK") {
+        s.push_str("    bl      vpy_update_buttons\n");
+    }
+    if usage.has("BEEP") {
+        s.push_str("    bl      vpy_beep_update\n");
+    }
+    if usage.has("MUSIC") {
+        s.push_str("    bl      vpy_music_update\n");
+    }
+    if usage.has("SFX") {
+        s.push_str("    bl      vpy_audio_update\n");
+    }
+    if usage.has("NOTE") {
         s.push_str("    bl      vpy_note_update\n");
     }
     // Reset the brightness override each frame so draws without a SET_INTENSITY
