@@ -10,6 +10,7 @@ import { SFXEditor } from './SFXEditor';
 import { AnimationEditor } from './AnimationEditor';
 import { InstrumentEditor } from './InstrumentEditor';
 import { EnemyEditor } from './EnemyEditor';
+import { VrecViewer } from './VrecViewer';
 
 // Basic custom tab bar replacing flexlayout doc:* logic.
 // Phase 1: single group, order = documents array order.
@@ -49,7 +50,8 @@ export const EditorSurface: React.FC = () => {
   const isAnimFile = active?.endsWith('.vanim') || false;
   const isInstrFile = active?.endsWith('.vinstr') || false;
   const isEnemyFile = active?.endsWith('.venemy') || false;
-  
+  const isVrecFile = active?.endsWith('.vrec') || false;
+
   // Parse vector resource from document content
   const vectorResource = useMemo(() => {
     if (!isVectorFile || !activeDoc?.content) return undefined;
@@ -102,6 +104,12 @@ export const EditorSurface: React.FC = () => {
     try { return JSON.parse(activeDoc.content); } catch { return undefined; }
   }, [isEnemyFile, activeDoc?.content]);
 
+  // Parse vector recording (.vrec) from document content — read-only viewer
+  const vrecResource = useMemo(() => {
+    if (!isVrecFile || !activeDoc?.content) return undefined;
+    try { return JSON.parse(activeDoc.content); } catch { return undefined; }
+  }, [isVrecFile, activeDoc?.content]);
+
   // Handle vector editor changes
   const handleVectorChange = useCallback((resource: any) => {
     if (!active) return;
@@ -153,7 +161,8 @@ export const EditorSurface: React.FC = () => {
           const isAnim = doc.uri.endsWith('.vanim');
           const isInstr = doc.uri.endsWith('.vinstr');
           const isEnemy = doc.uri.endsWith('.venemy');
-          const icon = isEnemy ? '👾' : isInstr ? '🎹' : isAnim ? '🎬' : isSfx ? '🔊' : isMus ? '🎵' : isVec ? '🎨' : '📄';
+          const isVrec = doc.uri.endsWith('.vrec');
+          const icon = isVrec ? '📼' : isEnemy ? '👾' : isInstr ? '🎹' : isAnim ? '🎬' : isSfx ? '🔊' : isMus ? '🎵' : isVec ? '🎨' : '📄';
           return (
             <div key={doc.uri}
               className={"vpy-tab" + (doc.uri===active?" active":"") + (doc.dirty?" dirty":"")}
@@ -204,6 +213,10 @@ export const EditorSurface: React.FC = () => {
         ) : isEnemyFile ? (
           <div style={{ background: '#12121e', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <EnemyEditor resource={enemyResource} onChange={handleEnemyChange} />
+          </div>
+        ) : isVrecFile ? (
+          <div style={{ background: '#0d0d14', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <VrecViewer resource={vrecResource} />
           </div>
         ) : (
           <MonacoEditorWrapper uri={active} />

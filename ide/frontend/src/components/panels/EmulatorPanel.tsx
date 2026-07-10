@@ -12,6 +12,7 @@ import { psgAudio } from '../../psgAudio';
 import { inputManager } from '../../inputManager';
 import { asmAddressToVpyLine, formatAddress } from '../../utils/debugHelpers';
 import { emuCore } from '../../emulatorCoreSingleton';
+import { VectorRecorder, serializeVrec, defaultRecordingName, MAX_RECORD_SECONDS, type RawSegment } from '../../emulator/recorder/VectorRecorder';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -324,6 +325,11 @@ export const EmulatorPanel: React.FC = () => {
   // rp2350 requestAnimationFrame loop handle
   const rp2350LoopRef = useRef<number | null>(null);
 
+  // Vector recorder (.vrec capture for game-preview / attract-mode playback)
+  const recorderRef = useRef<VectorRecorder | null>(null);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [recordElapsed, setRecordElapsed] = useState<number>(0);
+
   // PiTrex ARM32 interpreter loop handle and core instance
   const pitrexLoopRef = useRef<number | null>(null);
   const pitrexCoreRef = useRef<import('../../pitrex/PitrexCore.js').PitrexCore | null>(null);
@@ -345,8 +351,103 @@ export const EmulatorPanel: React.FC = () => {
         cancelAnimationFrame(rp2350LoopRef.current);
         rp2350LoopRef.current = null;
       }
+      // Discard any in-progress vector recording
+      recorderRef.current?.discard();
     };
   }, []);
+
+  // ── Vector recorder (.vrec) ─────────────────────────────────────────────
+  // Samples the most recent completed frame's draw list from whichever
+  // emulator backend is active.  All backends produce segments in the same
+  // ALG integrator space (x 0..33000, y 0..41000, Y down); conversion to
+  // Vectrex space (-127..127, Y up) happens inside VectorRecorder.
+  const captureCurrentSegments = useCallback((): RawSegment[] | null => {
+    // rp2350 path (Rp2350System): emuCore.runFrame() stores each completed
+    // frame in lastFrameSegments, exposed via getSegmentsShared().
+    if ((emuCore as any)?._activeTarget === 'rp2350') {
+      return emuCore.getSegmentsShared() ?? null;
+    }
+    // Legacy M6809 JSVecX: after the frame-boundary swap in vecx_emu(), the
+    // just-completed frame's draw list lives in vectors_erse[0..vector_erse_cnt).
+    // Pure read-only tap — entries carry intensity in `color`.
+    const vecx = (window as any).vecx;
+    if (vecx && Array.isArray(vecx.vectors_erse)) {
+      const cnt = Math.min(vecx.vector_erse_cnt | 0, vecx.vectors_erse.length);
+      const out: RawSegment[] = [];
+      for (let i = 0; i < cnt; i++) {
+        const v = vecx.vectors_erse[i];
+        if (v) out.push({ x0: v.x0, y0: v.y0, x1: v.x1, y1: v.y1, intensity: v.color });
+      }
+      return out;
+    }
+    // Fallback: VectrexSystem path (useVectrexSystem flag) also updates
+    // lastFrameSegments through emuCore.runFrame().
+    return emuCore.getSegmentsShared() ?? null;
+  }, []);
+
+  const finishRecording = useCallback(async () => {
+    const rec = recorderRef.current;
+    if (!rec) return;
+    setIsRecording(false);
+
+    const fallbackName = defaultRecordingName();
+    let name: string = fallbackName;
+    try {
+      const answer = window.prompt('Recording name (saved to assets/recordings/):', fallbackName);
+      if (answer === null) {
+        // User cancelled → discard the capture
+        rec.discard();
+        console.log('[EmulatorPanel] Vector recording discarded (cancelled)');
+        return;
+      }
+      name = answer.trim() || fallbackName;
+    } catch {
+      name = fallbackName; // window.prompt unsupported — derive the name
+    }
+    name = name.replace(/\.vrec$/i, '').replace(/[^\w.-]+/g, '_');
+
+    const vrec = rec.stop(name);
+    if (vrec.frames.length === 0) {
+      console.warn('[EmulatorPanel] Vector recording empty — nothing saved');
+      return;
+    }
+
+    const rootDir = useProjectStore.getState().vpyProject?.rootDir?.replace(/\\/g, '/');
+    const api = (window as any).files;
+    if (!rootDir || !api?.saveFile) {
+      console.error('[EmulatorPanel] Cannot save .vrec — no open project or saveFile API unavailable');
+      return;
+    }
+    const path = `${rootDir}/assets/recordings/${name}.vrec`;
+    try {
+      const res = await api.saveFile({ path, content: serializeVrec(vrec) });
+      if (res?.error) {
+        console.error('[EmulatorPanel] Failed to save recording:', res.error);
+      } else {
+        console.log(`[EmulatorPanel] ✓ Vector recording saved: ${path} (${vrec.frames.length} frames @ ${vrec.fps} fps)`);
+      }
+    } catch (e) {
+      console.error('[EmulatorPanel] Failed to save recording:', e);
+    }
+  }, []);
+
+  const onToggleRecording = useCallback(() => {
+    let rec = recorderRef.current;
+    if (!rec) {
+      rec = new VectorRecorder();
+      recorderRef.current = rec;
+    }
+    if (rec.isRecording) {
+      void finishRecording();
+      return;
+    }
+    rec.onTick = (elapsed) => setRecordElapsed(elapsed);
+    rec.onAutoStop = () => { void finishRecording(); }; // 10 s cap reached
+    setRecordElapsed(0);
+    setIsRecording(true);
+    rec.start(captureCurrentSegments);
+    console.log(`[EmulatorPanel] Vector recording started (max ${MAX_RECORD_SECONDS} s)`);
+  }, [captureCurrentSegments, finishRecording]);
 
   useEffect(() => {
     // Lista basada en las ROMs que vimos en la carpeta public/roms/
@@ -3277,7 +3378,53 @@ export const EmulatorPanel: React.FC = () => {
         >
           🔄
         </button>
-        
+
+        {/* Botón Record vectores (.vrec) */}
+        <button
+          style={{
+            ...btn,
+            backgroundColor: isRecording ? '#5a2a2a' : '#3a3a3a',
+            color: isRecording ? '#f66' : '#aaa',
+            fontSize: '20px',
+            padding: '10px',
+            minWidth: '50px',
+            minHeight: '50px',
+            borderRadius: '6px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onClick={onToggleRecording}
+          title={isRecording
+            ? 'Stop vector recording and save .vrec'
+            : `Record vectors to .vrec for game preview (max ${MAX_RECORD_SECONDS} s)`}
+        >
+          {isRecording ? '⏹' : '🔴'}
+        </button>
+
+        {/* Indicador de grabación: punto rojo + segundos transcurridos */}
+        {isRecording && (
+          <span style={{
+            color: '#f44',
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            minWidth: '54px'
+          }}>
+            <span style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: '#f00',
+              display: 'inline-block'
+            }} />
+            REC {recordElapsed.toFixed(1)}s
+          </span>
+        )}
+
         {/* Botón Audio Mute/Unmute */}
         <button
           style={{
