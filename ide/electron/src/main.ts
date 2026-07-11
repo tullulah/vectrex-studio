@@ -1768,6 +1768,11 @@ ipcMain.handle('video:saveMp4', async (_e, args: { webmBytes: ArrayBuffer | Uint
     const ffArgs = [
       '-y',
       '-i', tmpWebm,
+      // Explicit stream mapping: take video + audio (audio optional via '?' so a
+      // video-only input doesn't fail). Guards against default stream selection
+      // silently dropping the audio track.
+      '-map', '0:v:0',
+      '-map', '0:a:0?',
       '-c:v', 'libx264',
       '-pix_fmt', 'yuv420p',
       '-preset', 'veryfast',
@@ -1789,14 +1794,43 @@ ipcMain.handle('video:saveMp4', async (_e, args: { webmBytes: ArrayBuffer | Uint
     // Clean up the temp WebM regardless of outcome.
     await fs.unlink(tmpWebm).catch(() => {});
 
+    // Diagnostic: did the INPUT webm contain an audio stream? ffmpeg prints the
+    // input stream list ("Stream #0:N: Audio: opus ...") to stderr. This tells
+    // us whether the problem is upstream (MediaRecorder didn't encode audio) or
+    // here (ffmpeg dropped it). Extract just the Input section.
+    const inputSection = result.stderr.split(/Output #0|Stream mapping:/)[0];
+    const inputHadAudio = /Stream #\d+:\d+.*Audio:/i.test(inputSection);
+    const streamLines = (result.stderr.match(/Stream #\d+:\d+.*?(Video|Audio):[^\n]*/gi) || []).slice(0, 6);
+    console.log('[video:saveMp4] ffmpeg — inputHadAudio:', inputHadAudio, '| streams:', streamLines);
+
     if (!result.ok) {
       const tail = result.stderr.split('\n').slice(-12).join('\n').trim();
       return { error: `ffmpeg failed: ${tail || 'unknown error'}` };
     }
-    return { path: filePath };
+    return { path: filePath, inputHadAudio, streams: streamLines };
   } catch (e: any) {
     await fs.unlink(tmpWebm).catch(() => {});
     return { error: e?.message || 'video_export_failed' };
+  }
+});
+
+// Raw WebM save (no transcode) — isolates whether MediaRecorder encoded audio.
+ipcMain.handle('video:saveWebm', async (_e, args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!win) return { error: 'no_window' };
+  const rawName = (args?.name || 'gameplay').replace(/\.(mp4|webm)$/i, '').replace(/[^\w.-]+/g, '_') || 'gameplay';
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    defaultPath: join(app.getPath('desktop') || os.homedir(), `${rawName}.webm`),
+    filters: [{ name: 'WebM Video', extensions: ['webm'] }],
+  });
+  if (canceled || !filePath) return { canceled: true };
+  try {
+    const buf = Buffer.isBuffer(args.webmBytes) ? args.webmBytes : Buffer.from(args.webmBytes as ArrayBuffer);
+    await fs.writeFile(filePath, buf);
+    console.log('[video:saveWebm] wrote', buf.length, 'bytes →', filePath);
+    return { path: filePath };
+  } catch (e: any) {
+    return { error: e?.message || 'webm_save_failed' };
   }
 });
 

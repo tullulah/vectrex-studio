@@ -74,6 +74,9 @@ contextBridge.exposeInMainWorld('files', {
 contextBridge.exposeInMainWorld('videoExport', {
   saveMp4: (args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) =>
     ipcRenderer.invoke('video:saveMp4', args) as Promise<{ path: string } | { canceled: true } | { error: string }>,
+  // Raw WebM save (no ffmpeg) — isolates whether MediaRecorder encoded audio.
+  saveWebm: (args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) =>
+    ipcRenderer.invoke('video:saveWebm', args) as Promise<{ path: string } | { canceled: true } | { error: string }>,
 });
 
 contextBridge.exposeInMainWorld('recents', {

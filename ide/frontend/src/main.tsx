@@ -1,3 +1,8 @@
+import { installAudioGraphTracker } from './emulator/recorder/audioGraphTracker.js';
+// Patch AudioContext/AudioNode BEFORE any audio context is created so the video
+// recorder can find whichever context/node actually feeds the speakers.
+installAudioGraphTracker();
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import './i18n.js';

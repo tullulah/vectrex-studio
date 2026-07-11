@@ -14,6 +14,7 @@ import { asmAddressToVpyLine, formatAddress } from '../../utils/debugHelpers';
 import { emuCore } from '../../emulatorCoreSingleton';
 import { VectorRecorder, serializeVrec, defaultRecordingName, MAX_RECORD_SECONDS, type RawSegment } from '../../emulator/recorder/VectorRecorder';
 import { VideoRecorder, defaultVideoName } from '../../emulator/recorder/VideoRecorder';
+import { getRunningAudioTap } from '../../emulator/recorder/audioGraphTracker';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -478,11 +479,19 @@ export const EmulatorPanel: React.FC = () => {
       //   - psgAudio singleton — the LEGACY JSVecX 6809 path's sound lives here
       //     (EmulatorPanel drives psgAudio.init()/start() directly). This was the
       //     one missing → video captured without audio on the 6809 path.
-      const cands: Array<{ ctx: AudioContext; outputNode: AudioNode } | null | undefined> = [
-        (pitrexCoreRef.current as any)?.getAudioContextAndOutputNode?.(),
-        (emuCore as any)?.getAudioContextAndOutputNode?.(),
-        psgAudio.getAudioContextAndOutputNode?.(),
-      ];
+      const pit = (pitrexCoreRef.current as any)?.getAudioContextAndOutputNode?.();
+      const core = (emuCore as any)?.getAudioContextAndOutputNode?.();
+      const legacy = psgAudio.getAudioContextAndOutputNode?.();
+      // The legacy JSVecX (window.vecx from vecx_full.js) has its OWN internal
+      // AudioContext (vecx.ctx) + ScriptProcessor (vecx.node) — that's where the
+      // m6809 sound actually plays (NOT psgAudio, NOT VectrexSystem).
+      const vx = (window as any).vecx;
+      const vecxAudio = (vx?.ctx && vx?.node) ? { ctx: vx.ctx as AudioContext, outputNode: vx.node as AudioNode } : null;
+      // Universal tap: the graph tracker knows every live AudioContext and which
+      // node feeds its speakers — works no matter which subsystem plays sound.
+      // Tracker first (most reliable), then the known subsystem accessors.
+      const tracked = getRunningAudioTap();
+      const cands = [tracked, pit, core, legacy, vecxAudio];
       const valid = cands.filter((c): c is { ctx: AudioContext; outputNode: AudioNode } => !!c?.ctx && !!c?.outputNode);
       return valid.find(c => c.ctx.state === 'running') ?? valid[0] ?? null;
     } catch {
@@ -556,14 +565,15 @@ export const EmulatorPanel: React.FC = () => {
       return;
     }
     rec.onTick = (elapsed) => setVideoElapsed(elapsed);
-    const audio = getActiveAudio();
     setVideoElapsed(0);
     setIsVideoRecording(true);
     setVideoStatus('recording');
+    // Pass getActiveAudio as a CALLBACK: the recorder holds its own audio track
+    // from frame 0 and bridges the emulator's audio in once it appears — so you
+    // can hit Record before the game boots (e.g. the intro) and still get sound.
     // Vectrex/6809 render at ~50 Hz; capture at 60 so no frame is dropped.
-    rec.start(canvas, 60, audio);
-    setVideoMessage(rec.hasAudio ? '' : 'No audio (recording video-only)');
-    console.log(`[EmulatorPanel] Gameplay video recording started (audio=${rec.hasAudio})`);
+    rec.start(canvas, 60, getActiveAudio);
+    console.log('[EmulatorPanel] Gameplay video recording started (audio bridges when it appears)');
   }, [finishVideoRecording, getActiveAudio]);
 
   useEffect(() => {

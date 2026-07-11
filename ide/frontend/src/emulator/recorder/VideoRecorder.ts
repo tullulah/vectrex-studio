@@ -47,6 +47,18 @@ export class VideoRecorder {
   /** Parallel audio sink on the emulator's AudioContext (null = video-only). */
   private audioDest: MediaStreamAudioDestinationNode | null = null;
   private audioSource: AudioNode | null = null;
+  private tapGain: GainNode | null = null;
+  private silentGain: GainNode | null = null;
+  private analyser: AnalyserNode | null = null;
+  private analyserBuf: Uint8Array | null = null;
+  // Recorder-owned audio context: holds the recording's audio track from frame
+  // 0 and receives the emulator's audio once it appears (cross-context bridge).
+  private recCtx: AudioContext | null = null;
+  private recDest: MediaStreamAudioDestinationNode | null = null;
+  private getAudio: (() => { ctx: AudioContext; outputNode: AudioNode } | null) | null = null;
+  private bridged = false;
+  private bridgeEmuDest: MediaStreamAudioDestinationNode | null = null;
+  private bridgeSource: MediaStreamAudioSourceNode | null = null;
   private startedAt = 0;
   private tickTimer: number | null = null;
 
@@ -72,39 +84,39 @@ export class VideoRecorder {
   start(
     canvas: HTMLCanvasElement,
     fps: number,
-    audio: { ctx: AudioContext; outputNode: AudioNode } | null,
+    getAudio: () => { ctx: AudioContext; outputNode: AudioNode } | null,
   ): void {
     if (this.isRecording) return;
 
     this.mimeType = pickMimeType();
     this.chunks = [];
     this.hasAudio = false;
+    this.getAudio = getAudio;
+    this.bridged = false;
 
     // Video track from the canvas.
     const videoStream = canvas.captureStream(fps);
     this.videoTrack = videoStream.getVideoTracks()[0] ?? null;
     const tracks: MediaStreamTrack[] = this.videoTrack ? [this.videoTrack] : [];
 
-    // Parallel audio tap — connect the emulator's output ALSO to a
-    // MediaStreamAudioDestinationNode. The existing connection to
-    // ctx.destination (speakers) is left completely intact.
-    if (audio && audio.ctx && audio.outputNode) {
-      try {
-        // AudioContext may be suspended until a user gesture — recording is
-        // itself triggered by a click, so a resume here is safe.
-        if (audio.ctx.state !== 'running') audio.ctx.resume().catch(() => {});
-        const dest = audio.ctx.createMediaStreamDestination();
-        audio.outputNode.connect(dest);
-        this.audioDest = dest;
-        this.audioSource = audio.outputNode;
-        for (const t of dest.stream.getAudioTracks()) tracks.push(t);
-        this.hasAudio = tracks.length > (this.videoTrack ? 1 : 0);
-      } catch (e) {
-        console.warn('[VideoRecorder] Audio tap failed, recording video-only:', e);
-        this.audioDest = null;
-        this.audioSource = null;
-      }
+    // OWN audio context + a MediaStreamAudioDestinationNode. Its (initially
+    // silent) track is added to the recording FROM FRAME 0, so the recording
+    // always has an audio track even if the emulator's audio doesn't exist yet
+    // (e.g. recording the intro from the start, before the game boots). The
+    // emulator's audio is bridged into this track later, once it appears — see
+    // tryBridgeAudio(). MediaRecorder can't add tracks after start, but the
+    // track's CONTENT can change from silence to real audio.
+    try {
+      this.recCtx = new AudioContext();
+      this.recDest = this.recCtx.createMediaStreamDestination();
+      for (const t of this.recDest.stream.getAudioTracks()) tracks.push(t);
+    } catch (e) {
+      console.warn('[VideoRecorder] own AudioContext failed → video-only:', e);
+      this.recCtx = null;
+      this.recDest = null;
     }
+    // Try to bridge immediately (in case audio is already running).
+    this.tryBridgeAudio();
 
     this.stream = new MediaStream(tracks);
     try {
@@ -128,7 +140,43 @@ export class VideoRecorder {
 
     this.tickTimer = window.setInterval(() => {
       this.onTick?.((performance.now() - this.startedAt) / 1000);
+      // Keep trying to bridge until the emulator's audio appears.
+      if (!this.bridged) this.tryBridgeAudio();
     }, 100);
+  }
+
+  /**
+   * Bridge the emulator's audio into the recording's own audio track, once the
+   * emulator's AudioContext exists. Works across separate AudioContexts via a
+   * MediaStream: emuOutput → emuDest(MediaStream) → recCtx source → recDest.
+   * Idempotent; does nothing until getAudio() returns a live tap.
+   */
+  private tryBridgeAudio(): void {
+    if (this.bridged || !this.recCtx || !this.recDest || !this.getAudio) return;
+    const audio = this.getAudio();
+    if (!audio || !audio.ctx || !audio.outputNode) return;
+    try {
+      if (audio.ctx.state !== 'running') audio.ctx.resume().catch(() => {});
+      // Tap the emulator output into a MediaStream on ITS context (via a unity
+      // gain — direct ScriptProcessor→dest is unreliable in Chromium).
+      const emuDest = audio.ctx.createMediaStreamDestination();
+      const tapGain = audio.ctx.createGain();
+      tapGain.gain.value = 1;
+      audio.outputNode.connect(tapGain);
+      tapGain.connect(emuDest);
+      // Pull that MediaStream into the recorder's own context and route it to
+      // the recording destination.
+      const src = this.recCtx.createMediaStreamSource(emuDest.stream);
+      src.connect(this.recDest);
+      this.bridgeEmuDest = emuDest;
+      this.tapGain = tapGain;
+      this.audioSource = audio.outputNode;
+      this.bridgeSource = src;
+      this.bridged = true;
+      this.hasAudio = true;
+    } catch (e) {
+      console.warn('[VideoRecorder] audio bridge failed:', e);
+    }
   }
 
   /** Elapsed recording time in seconds. */
@@ -182,12 +230,23 @@ export class VideoRecorder {
       this.tickTimer = null;
     }
     // Disconnect ONLY our parallel branch, never the emulator→speakers path.
-    try {
-      if (this.audioSource && this.audioDest) this.audioSource.disconnect(this.audioDest);
-    } catch { /* already gone */ }
+    try { if (this.audioSource && this.tapGain) this.audioSource.disconnect(this.tapGain); } catch { /* gone */ }
+    try { this.tapGain?.disconnect(); } catch { /* gone */ }
+    try { this.bridgeSource?.disconnect(); } catch { /* gone */ }
+    try { this.recCtx?.close(); } catch { /* gone */ }
     try { this.videoTrack?.stop(); } catch { /* noop */ }
     this.audioSource = null;
     this.audioDest = null;
+    this.tapGain = null;
+    this.analyser = null;
+    this.silentGain = null;
+    this.analyserBuf = null;
+    this.recCtx = null;
+    this.recDest = null;
+    this.bridgeEmuDest = null;
+    this.bridgeSource = null;
+    this.getAudio = null;
+    this.bridged = false;
     this.videoTrack = null;
     this.stream = null;
     this.recorder = null;
