@@ -121,4 +121,16 @@ export class PitrexCore {
     this.audioNode = null;
     this.audioCtx  = null;
   }
+
+  /**
+   * Expose the live AudioContext and the output node feeding ctx.destination
+   * so a parallel MediaStreamAudioDestinationNode can be attached for the
+   * video recorder. Returns null when audio hasn't started yet.
+   */
+  getAudioContextAndOutputNode(): { ctx: AudioContext; outputNode: AudioNode } | null {
+    if (this.audioCtx && this.audioNode) {
+      return { ctx: this.audioCtx, outputNode: this.audioNode };
+    }
+    return null;
+  }
 }

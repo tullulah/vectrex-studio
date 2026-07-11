@@ -13,6 +13,7 @@ import { inputManager } from '../../inputManager';
 import { asmAddressToVpyLine, formatAddress } from '../../utils/debugHelpers';
 import { emuCore } from '../../emulatorCoreSingleton';
 import { VectorRecorder, serializeVrec, defaultRecordingName, MAX_RECORD_SECONDS, type RawSegment } from '../../emulator/recorder/VectorRecorder';
+import { VideoRecorder, defaultVideoName } from '../../emulator/recorder/VideoRecorder';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -330,6 +331,15 @@ export const EmulatorPanel: React.FC = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordElapsed, setRecordElapsed] = useState<number>(0);
 
+  // Gameplay video recorder (real pixels + audio → WebM → MP4 via ffmpeg).
+  // Separate from the .vrec vector recorder above.
+  const videoRecorderRef = useRef<VideoRecorder | null>(null);
+  const [isVideoRecording, setIsVideoRecording] = useState<boolean>(false);
+  const [videoElapsed, setVideoElapsed] = useState<number>(0);
+  // idle | recording | transcoding | saved | error
+  const [videoStatus, setVideoStatus] = useState<'idle' | 'recording' | 'transcoding' | 'saved' | 'error'>('idle');
+  const [videoMessage, setVideoMessage] = useState<string>('');
+
   // PiTrex ARM32 interpreter loop handle and core instance
   const pitrexLoopRef = useRef<number | null>(null);
   const pitrexCoreRef = useRef<import('../../pitrex/PitrexCore.js').PitrexCore | null>(null);
@@ -353,6 +363,8 @@ export const EmulatorPanel: React.FC = () => {
       }
       // Discard any in-progress vector recording
       recorderRef.current?.discard();
+      // Discard any in-progress gameplay video recording
+      videoRecorderRef.current?.discard();
     };
   }, []);
 
@@ -448,6 +460,103 @@ export const EmulatorPanel: React.FC = () => {
     rec.start(captureCurrentSegments);
     console.log(`[EmulatorPanel] Vector recording started (max ${MAX_RECORD_SECONDS} s)`);
   }, [captureCurrentSegments, finishRecording]);
+
+  // ── Gameplay video recorder (MP4) ───────────────────────────────────────
+  // Captures the live display canvas + the active target's audio to a WebM
+  // MediaStream, then hands the bytes to the Electron main process which
+  // transcodes to MP4 with the bundled ffmpeg. Independent of the .vrec path.
+
+  // Resolve the active target's live { ctx, outputNode } for the audio tap.
+  // PiTrex has its own core (not part of emuCore); everything else routes
+  // through emuCore's active system (m6809 → VectrexSystem, rp2350 → Rp2350System).
+  const getActiveAudio = useCallback((): { ctx: AudioContext; outputNode: AudioNode } | null => {
+    try {
+      const pit = pitrexCoreRef.current as any;
+      if (pit?.getAudioContextAndOutputNode) {
+        const a = pit.getAudioContextAndOutputNode();
+        if (a) return a;
+      }
+      return (emuCore as any)?.getAudioContextAndOutputNode?.() ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const finishVideoRecording = useCallback(async () => {
+    const rec = videoRecorderRef.current;
+    if (!rec) return;
+    setIsVideoRecording(false);
+
+    const blob = await rec.stop();
+    if (!blob || blob.size === 0) {
+      setVideoStatus('error');
+      setVideoMessage('Nothing captured');
+      setTimeout(() => setVideoStatus('idle'), 4000);
+      return;
+    }
+
+    const api = (window as any).videoExport;
+    if (!api?.saveMp4) {
+      setVideoStatus('error');
+      setVideoMessage('Video export API unavailable');
+      setTimeout(() => setVideoStatus('idle'), 4000);
+      return;
+    }
+
+    setVideoStatus('transcoding');
+    setVideoMessage('Transcoding to MP4…');
+    try {
+      const webmBytes = await blob.arrayBuffer();
+      const res = await api.saveMp4({ webmBytes, name: defaultVideoName() });
+      if (res?.path) {
+        setVideoStatus('saved');
+        setVideoMessage(`Saved to ${res.path}`);
+        console.log(`[EmulatorPanel] ✓ Gameplay MP4 saved: ${res.path}`);
+        setTimeout(() => setVideoStatus('idle'), 6000);
+      } else if (res?.canceled) {
+        setVideoStatus('idle');
+        setVideoMessage('');
+      } else {
+        setVideoStatus('error');
+        setVideoMessage(res?.error || 'Transcode failed');
+        console.error('[EmulatorPanel] Video export failed:', res?.error);
+        setTimeout(() => setVideoStatus('idle'), 8000);
+      }
+    } catch (e: any) {
+      setVideoStatus('error');
+      setVideoMessage(e?.message || 'Video export failed');
+      console.error('[EmulatorPanel] Video export threw:', e);
+      setTimeout(() => setVideoStatus('idle'), 8000);
+    }
+  }, []);
+
+  const onToggleVideoRecording = useCallback(() => {
+    let rec = videoRecorderRef.current;
+    if (!rec) {
+      rec = new VideoRecorder();
+      videoRecorderRef.current = rec;
+    }
+    if (rec.isRecording) {
+      void finishVideoRecording();
+      return;
+    }
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      setVideoStatus('error');
+      setVideoMessage('No display canvas');
+      setTimeout(() => setVideoStatus('idle'), 4000);
+      return;
+    }
+    rec.onTick = (elapsed) => setVideoElapsed(elapsed);
+    const audio = getActiveAudio();
+    setVideoElapsed(0);
+    setIsVideoRecording(true);
+    setVideoStatus('recording');
+    // Vectrex/6809 render at ~50 Hz; capture at 60 so no frame is dropped.
+    rec.start(canvas, 60, audio);
+    setVideoMessage(rec.hasAudio ? '' : 'No audio (recording video-only)');
+    console.log(`[EmulatorPanel] Gameplay video recording started (audio=${rec.hasAudio})`);
+  }, [finishVideoRecording, getActiveAudio]);
 
   useEffect(() => {
     // Lista basada en las ROMs que vimos en la carpeta public/roms/
@@ -3422,6 +3531,69 @@ export const EmulatorPanel: React.FC = () => {
               display: 'inline-block'
             }} />
             REC {recordElapsed.toFixed(1)}s
+          </span>
+        )}
+
+        {/* Botón Record video de gameplay (MP4 con audio) */}
+        <button
+          style={{
+            ...btn,
+            backgroundColor: isVideoRecording ? '#5a2a2a' : '#3a3a3a',
+            color: isVideoRecording ? '#f66' : '#aaa',
+            fontSize: '20px',
+            padding: '10px',
+            minWidth: '50px',
+            minHeight: '50px',
+            borderRadius: '6px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onClick={onToggleVideoRecording}
+          disabled={videoStatus === 'transcoding'}
+          title={isVideoRecording
+            ? 'Stop gameplay recording and export MP4'
+            : 'Record gameplay video + audio to MP4 (for YouTube etc.)'}
+        >
+          {isVideoRecording ? '⏹' : '🎥'}
+        </button>
+
+        {/* Indicador de grabación de video: punto rojo + segundos / estado */}
+        {isVideoRecording && (
+          <span style={{
+            color: '#f44',
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            minWidth: '54px'
+          }}>
+            <span style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: '#f00',
+              display: 'inline-block'
+            }} />
+            VID {videoElapsed.toFixed(1)}s
+          </span>
+        )}
+        {!isVideoRecording && videoStatus !== 'idle' && videoMessage && (
+          <span style={{
+            color: videoStatus === 'error' ? '#f66' : videoStatus === 'saved' ? '#6f6' : '#ccc',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            display: 'flex',
+            alignItems: 'center',
+            maxWidth: '260px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }} title={videoMessage}>
+            {videoStatus === 'transcoding' ? '⏳ ' : videoStatus === 'saved' ? '✅ ' : '⚠️ '}
+            {videoMessage}
           </span>
         )}
 

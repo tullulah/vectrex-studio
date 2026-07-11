@@ -516,6 +516,22 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     }
   }
 
+  /**
+   * Return the active target's live AudioContext + output node so the video
+   * recorder can attach a parallel MediaStream destination (see
+   * VideoRecorder). Returns null when the active target has no audio running.
+   * Read-only tap — never disconnects or alters the path to the speakers.
+   */
+  getAudioContextAndOutputNode(): { ctx: AudioContext; outputNode: AudioNode } | null {
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      return this._rp2350System.getAudioContextAndOutputNode();
+    }
+    if (this._vectrexSystem) {
+      return this._vectrexSystem.getAudioContextAndOutputNode();
+    }
+    return null;
+  }
+
   /** Load an ARM binary (rp2350 target). Switches the active emulation system to Rp2350System. */
   loadArm(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement): void {
     console.log(`[loadArm] START bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvas ? `${canvas.width}x${canvas.height}` : 'none'}`);

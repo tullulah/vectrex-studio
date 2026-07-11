@@ -53,6 +53,10 @@ export interface IEmulatorCore {
   setJoyAxis2?(x: number, y: number): void;
   /** Set joystick J2 button state (active-low, bits 0-3 = btn 1-4). */
   setJoyButtons2?(mask: number): void;
+
+  // Live AudioContext + output node of the active target, for the parallel
+  // MediaStream tap used by the gameplay video recorder. Null when no audio.
+  getAudioContextAndOutputNode?(): { ctx: AudioContext; outputNode: AudioNode } | null;
 }
 
 // Tipo del identificador de backend.

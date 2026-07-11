@@ -69,6 +69,13 @@ contextBridge.exposeInMainWorld('files', {
   },
 });
 
+// Gameplay video export: renderer records the emulator as WebM, main
+// transcodes to MP4 with the bundled ffmpeg and returns the saved path.
+contextBridge.exposeInMainWorld('videoExport', {
+  saveMp4: (args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) =>
+    ipcRenderer.invoke('video:saveMp4', args) as Promise<{ path: string } | { canceled: true } | { error: string }>,
+});
+
 contextBridge.exposeInMainWorld('recents', {
   load: () => ipcRenderer.invoke('recents:load') as Promise<Array<{ path: string; lastOpened: number; kind: 'file' | 'folder' }>>,
   write: (list: Array<{ path: string; lastOpened: number; kind: 'file' | 'folder' }>) => ipcRenderer.invoke('recents:write', list) as Promise<{ ok: boolean }>,

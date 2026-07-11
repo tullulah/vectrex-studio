@@ -68,4 +68,8 @@ interface Window {
     }>;
   };
   pypilot: PyPilotAPI;
+  videoExport?: {
+    saveMp4: (args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) =>
+      Promise<{ path: string } | { canceled: true } | { error: string }>;
+  };
 }

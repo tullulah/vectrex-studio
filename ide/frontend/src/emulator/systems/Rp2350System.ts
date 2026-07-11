@@ -1014,6 +1014,18 @@ export class Rp2350System implements ISystem, IBus {
   }
 
   /**
+   * Expose the live AudioContext and the output node feeding ctx.destination
+   * so a parallel MediaStreamAudioDestinationNode can be attached for the
+   * video recorder. Returns null when audio hasn't started yet.
+   */
+  getAudioContextAndOutputNode(): { ctx: AudioContext; outputNode: AudioNode } | null {
+    if (this.audioCtx && this.audioNode) {
+      return { ctx: this.audioCtx, outputNode: this.audioNode };
+    }
+    return null;
+  }
+
+  /**
    * Manually register a trap at a given code address.
    *
    * Useful for testing or for adding traps for functions other than

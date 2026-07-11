@@ -35,6 +35,10 @@ import {
   getFileBreakpoints,
   clearBreakpoints
 } from './pypilotDb.js';
+import os from 'os';
+// ffmpeg-static exports the absolute path to a per-platform prebuilt ffmpeg
+// binary. Used to transcode the renderer's WebM gameplay capture to MP4.
+import ffmpegStatic from 'ffmpeg-static';
 
 // macOS GUI apps launched from Finder/installer inherit a minimal PATH from
 // launchd (typically /usr/bin:/bin:/usr/sbin:/sbin) and do NOT pick up the
@@ -1716,6 +1720,83 @@ ipcMain.handle('file:saveAs', async (_e, args: { suggestedName?: string; content
     return { path: filePath, mtime: stat.mtimeMs, size: stat.size, name: basename(filePath) };
   } catch (e: any) {
     return { error: e?.message || 'save_failed' };
+  }
+});
+
+// ── Gameplay video export (WebM → MP4 via bundled ffmpeg) ─────────────────
+// The renderer records the emulator canvas + audio as a WebM MediaStream and
+// hands the raw bytes here. We write a temp .webm, transcode with ffmpeg to
+// H.264/AAC .mp4 (yuv420p + faststart = max player/upload compatibility),
+// then return the saved path. Chromium's MediaRecorder can't reliably emit
+// MP4, hence the WebM-in-renderer / transcode-in-main split.
+function resolveFfmpegPath(): string | null {
+  const p = ffmpegStatic as unknown as string | null;
+  if (!p) return null;
+  // In a packaged build the binary lives inside app.asar, which isn't
+  // executable — electron-builder's asarUnpack extracts it to
+  // app.asar.unpacked. Rewrite the path so spawn finds the real file.
+  return p.replace('app.asar', 'app.asar.unpacked');
+}
+
+ipcMain.handle('video:saveMp4', async (_e, args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!win) return { error: 'no_window' };
+
+  const ffmpegPath = resolveFfmpegPath();
+  if (!ffmpegPath || !existsSync(ffmpegPath)) {
+    return { error: 'ffmpeg binary not found (ffmpeg-static missing or not unpacked)' };
+  }
+
+  const rawName = (args?.name || 'gameplay').replace(/\.(mp4|webm)$/i, '').replace(/[^\w.-]+/g, '_') || 'gameplay';
+
+  // Ask the user where to save the final MP4.
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    defaultPath: join(app.getPath('desktop') || os.homedir(), `${rawName}.mp4`),
+    filters: [{ name: 'MP4 Video', extensions: ['mp4'] }],
+  });
+  if (canceled || !filePath) return { canceled: true };
+
+  const stamp = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const tmpWebm = join(os.tmpdir(), `vpy_gameplay_${stamp}.webm`);
+
+  try {
+    const buf = Buffer.isBuffer(args.webmBytes)
+      ? args.webmBytes
+      : Buffer.from(args.webmBytes as ArrayBuffer);
+    await fs.writeFile(tmpWebm, buf);
+
+    const ffArgs = [
+      '-y',
+      '-i', tmpWebm,
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-preset', 'veryfast',
+      '-crf', '20',
+      '-c:a', 'aac',
+      '-b:a', '160k',
+      '-movflags', '+faststart',
+      filePath,
+    ];
+
+    const result = await new Promise<{ ok: boolean; stderr: string }>((resolve) => {
+      let stderr = '';
+      const proc = spawn(ffmpegPath, ffArgs, { windowsHide: true });
+      proc.stderr.on('data', (d) => { stderr += d.toString(); });
+      proc.on('error', (err) => resolve({ ok: false, stderr: String(err?.message || err) }));
+      proc.on('close', (code) => resolve({ ok: code === 0, stderr }));
+    });
+
+    // Clean up the temp WebM regardless of outcome.
+    await fs.unlink(tmpWebm).catch(() => {});
+
+    if (!result.ok) {
+      const tail = result.stderr.split('\n').slice(-12).join('\n').trim();
+      return { error: `ffmpeg failed: ${tail || 'unknown error'}` };
+    }
+    return { path: filePath };
+  } catch (e: any) {
+    await fs.unlink(tmpWebm).catch(() => {});
+    return { error: e?.message || 'video_export_failed' };
   }
 });
 
