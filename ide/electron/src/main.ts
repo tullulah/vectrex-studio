@@ -1834,6 +1834,128 @@ ipcMain.handle('video:saveWebm', async (_e, args: { webmBytes: ArrayBuffer | Uin
   }
 });
 
+// ── Vector Movie converters (video → .vrec, audio → .vsmp) ────────────────
+// The VectorMovieEditor imports media by spawning the on-disk Python tools
+// (tools/video2vrec + tools/audio2vsmp). We resolve the repo root, spawn the
+// tool, stream its stderr progress ("[1/3] …") to the renderer via
+// 'movie://progress', and resolve with the produced file path.
+
+// Locate the repository root that holds the tools/ directory. Tries several
+// candidate roots (env override, dist-relative, cwd-relative) and returns the
+// first that actually contains tools/video2vrec/video2vrec.py.
+function resolveMovieRepoRoot(): string | null {
+  const candidates = [
+    process.env.VPY_REPO_ROOT,
+    // dev: compiled main lives in ide/electron/dist → up 3 = repo root
+    join(__dirname, '..', '..', '..'),
+    join(process.cwd(), '..', '..'),
+    process.cwd(),
+    // packaged: app dir sibling
+    app.isPackaged ? dirname(app.getPath('exe')) : undefined,
+  ].filter(Boolean) as string[];
+  for (const root of candidates) {
+    try {
+      if (existsSync(join(root, 'tools', 'video2vrec', 'video2vrec.py'))) return root;
+    } catch {}
+  }
+  return null;
+}
+
+// movie:convert — spawn a converter tool. args:
+//   kind:  'video' | 'audio'
+//   inputPath: absolute source media path
+//   outPath:   absolute destination (.vrec or .vsmp); parent dir auto-created
+//   opts:      converter flags (see below)
+// video opts: { mode, fps, epsilon, budget, threshold, invert, crop, borderMargin }
+// audio opts: { rate, normalize }
+ipcMain.handle('movie:convert', async (_e, args: {
+  kind: 'video' | 'audio';
+  inputPath: string;
+  outPath: string;
+  opts?: Record<string, any>;
+}) => {
+  const { kind, inputPath, outPath, opts = {} } = args || ({} as any);
+  if (!kind || !inputPath || !outPath) return { error: 'missing_args' };
+
+  const root = resolveMovieRepoRoot();
+  if (!root) {
+    return { error: 'Converter tools not found. Expected tools/video2vrec/video2vrec.py under the repo root (set VPY_REPO_ROOT to override).' };
+  }
+
+  // Ensure the destination directory exists (recordings/ or samples/).
+  try { await fs.mkdir(dirname(outPath), { recursive: true }); } catch {}
+
+  let cmd: string;
+  const cliArgs: string[] = [];
+
+  if (kind === 'video') {
+    // Prefer the tool's dedicated venv python (has opencv); fall back to python3.
+    const isWin = process.platform === 'win32';
+    const venvPy = isWin
+      ? join(root, 'tools', 'video2vrec', '.venv', 'Scripts', 'python.exe')
+      : join(root, 'tools', 'video2vrec', '.venv', 'bin', 'python');
+    cmd = existsSync(venvPy) ? venvPy : (isWin ? 'python' : 'python3');
+    cliArgs.push(join(root, 'tools', 'video2vrec', 'video2vrec.py'), inputPath, outPath);
+    if (opts.mode) cliArgs.push('--mode', String(opts.mode));
+    if (opts.fps) cliArgs.push('--fps', String(opts.fps));
+    if (opts.epsilon != null) cliArgs.push('--epsilon', String(opts.epsilon));
+    if (opts.budget != null) cliArgs.push('--budget', String(opts.budget));
+    if (opts.threshold != null) cliArgs.push('--threshold', String(opts.threshold));
+    if (opts.invert) cliArgs.push('--invert');
+    if (opts.crop != null && Number(opts.crop) > 0) cliArgs.push('--crop', String(opts.crop));
+    if (opts.borderMargin != null) cliArgs.push('--border-margin', String(opts.borderMargin));
+  } else {
+    // audio: system python3 (only needs ffmpeg on PATH).
+    cmd = process.platform === 'win32' ? 'python' : 'python3';
+    cliArgs.push(join(root, 'tools', 'audio2vsmp', 'audio2vsmp.py'), inputPath, outPath);
+    if (opts.rate) cliArgs.push('--rate', String(opts.rate));
+    if (opts.normalize) cliArgs.push('--normalize');
+  }
+
+  return await new Promise((resolve) => {
+    let stderr = '';
+    let stdout = '';
+    let proc;
+    try {
+      proc = spawn(cmd, cliArgs, { cwd: root, windowsHide: true });
+    } catch (err: any) {
+      resolve({ error: `Failed to spawn converter: ${err?.message || err}` });
+      return;
+    }
+    const pushProgress = (chunk: string) => {
+      for (const raw of chunk.split(/\r?\n/)) {
+        const line = raw.trim();
+        if (line) mainWindow?.webContents.send('movie://progress', line);
+      }
+    };
+    proc.stdout?.on('data', (d) => { const s = d.toString(); stdout += s; pushProgress(s); });
+    proc.stderr?.on('data', (d) => { const s = d.toString(); stderr += s; pushProgress(s); });
+    proc.on('error', (err) => {
+      resolve({ error: `Failed to run converter (${cmd}): ${err.message}. Ensure Python and ffmpeg are installed and on PATH.` });
+    });
+    proc.on('close', (code) => {
+      if (code === 0 && existsSync(outPath)) {
+        resolve({ ok: true, outPath, stdout, stderr });
+      } else {
+        const tail = (stderr || stdout).split('\n').slice(-8).join('\n').trim();
+        resolve({ error: `Converter exited with code ${code}: ${tail || 'unknown error'}` });
+      }
+    });
+  });
+});
+
+// movie:pickFile — native open dialog for importing source media.
+ipcMain.handle('movie:pickFile', async (_e, args: { kind: 'video' | 'audio' }) => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!win) return null;
+  const filters = args?.kind === 'audio'
+    ? [{ name: 'Audio / Video', extensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'mov', 'mp4', 'mkv', 'webm', 'avi'] }]
+    : [{ name: 'Video', extensions: ['mp4', 'mov', 'mkv', 'webm', 'avi', 'gif', 'm4v'] }];
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, { properties: ['openFile'], filters });
+  if (canceled || filePaths.length === 0) return null;
+  return { path: filePaths[0], name: basename(filePaths[0]) };
+});
+
 ipcMain.handle('file:openFolder', async () => {
   const win = BrowserWindow.getFocusedWindow() || mainWindow;
   if (!win) return null;

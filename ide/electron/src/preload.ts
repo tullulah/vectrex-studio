@@ -79,6 +79,19 @@ contextBridge.exposeInMainWorld('videoExport', {
     ipcRenderer.invoke('video:saveWebm', args) as Promise<{ path: string } | { canceled: true } | { error: string }>,
 });
 
+// Vector Movie editor: spawn Python converters + progress stream + file picker.
+contextBridge.exposeInMainWorld('movie', {
+  convert: (args: { kind: 'video' | 'audio'; inputPath: string; outPath: string; opts?: Record<string, any> }) =>
+    ipcRenderer.invoke('movie:convert', args) as Promise<{ ok: true; outPath: string; stdout?: string; stderr?: string } | { error: string }>,
+  pickFile: (args: { kind: 'video' | 'audio' }) =>
+    ipcRenderer.invoke('movie:pickFile', args) as Promise<{ path: string; name: string } | null>,
+  onProgress: (cb: (line: string) => void) => {
+    const handler = (_e: IpcRendererEvent, data: string) => cb(data);
+    ipcRenderer.on('movie://progress', handler);
+    return () => ipcRenderer.removeListener('movie://progress', handler);
+  },
+});
+
 contextBridge.exposeInMainWorld('recents', {
   load: () => ipcRenderer.invoke('recents:load') as Promise<Array<{ path: string; lastOpened: number; kind: 'file' | 'folder' }>>,
   write: (list: Array<{ path: string; lastOpened: number; kind: 'file' | 'folder' }>) => ipcRenderer.invoke('recents:write', list) as Promise<{ ok: boolean }>,

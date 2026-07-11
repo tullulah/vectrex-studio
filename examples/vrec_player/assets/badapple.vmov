@@ -1,0 +1,7 @@
+{
+  "version": "1.0",
+  "name": "badapple",
+  "fps": 15,
+  "vrec": "recordings/clip.vrec",
+  "vsmp": "samples/audio.vsmp"
+}

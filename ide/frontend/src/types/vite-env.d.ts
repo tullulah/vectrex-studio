@@ -72,4 +72,11 @@ interface Window {
     saveMp4: (args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) =>
       Promise<{ path: string } | { canceled: true } | { error: string }>;
   };
+  movie?: {
+    convert: (args: { kind: 'video' | 'audio'; inputPath: string; outPath: string; opts?: Record<string, any> }) =>
+      Promise<{ ok: true; outPath: string; stdout?: string; stderr?: string } | { error: string }>;
+    pickFile: (args: { kind: 'video' | 'audio' }) =>
+      Promise<{ path: string; name: string } | null>;
+    onProgress: (cb: (line: string) => void) => () => void;
+  };
 }
