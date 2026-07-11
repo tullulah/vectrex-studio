@@ -311,7 +311,7 @@ function App() {
   const [defaultProjectLocation, setDefaultProjectLocation] = useState('');
   // New File dialog state (for .vec files that need a name)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
-  const [newFileType, setNewFileType] = useState<'vec' | 'c' | 'vpy' | 'vmus' | 'vsfx' | 'vanim' | 'vinstr' | 'venemy'>('vec');
+  const [newFileType, setNewFileType] = useState<'vec' | 'c' | 'vpy' | 'vmus' | 'vsfx' | 'vanim' | 'vinstr' | 'venemy' | 'vmov'>('vec');
   // EPROM Programmer dialog state
   const [showEpromDialog, setShowEpromDialog] = useState(false);
   const lastCompiledBinary = useEmulatorSettings(s => s.lastCompiledBinary);
@@ -641,6 +641,11 @@ def loop():
       case 'file.new.vmus': {
         // Open dialog to ask for filename
         setNewFileType('vmus');
+        setShowNewFileDialog(true);
+        break; }
+      case 'file.new.vmov': {
+        // Open dialog to ask for filename for a vector movie
+        setNewFileType('vmov');
         setShowNewFileDialog(true);
         break; }
       case 'file.new.vsfx': {
@@ -1449,6 +1454,7 @@ def loop():
               <MenuItem label={`${t('file.new.c', 'C/C++ File')}`} onClick={()=>{ commandExec('file.new.c'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vec', 'Vector List (.vec)')}`} onClick={()=>{ commandExec('file.new.vec'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vmus', 'Music File (.vmus)')}`} onClick={()=>{ commandExec('file.new.vmus'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('file.new.vmov', 'Vector Movie (.vmov)')}`} onClick={()=>{ commandExec('file.new.vmov'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vsfx', 'Sound Effect (.vsfx)')}`} onClick={()=>{ commandExec('file.new.vsfx'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vanim', 'Animation (.vanim)')}`} onClick={()=>{ commandExec('file.new.vanim'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vinstr', 'Instrument (.vinstr)')}`} onClick={()=>{ commandExec('file.new.vinstr'); setOpenMenu(null); }} />
@@ -1692,9 +1698,9 @@ def loop():
       {/* New File Dialog */}
       <InputDialog
         isOpen={showNewFileDialog}
-        title={newFileType === 'vec' ? 'New Vector List' : newFileType === 'vmus' ? 'New Music File' : newFileType === 'vsfx' ? 'New Sound Effect' : newFileType === 'vanim' ? 'New Animation' : newFileType === 'vinstr' ? 'New Instrument' : newFileType === 'venemy' ? 'New Enemy Type' : 'New File'}
-        message={newFileType === 'vec' ? 'Enter a name for the vector list (without extension):' : newFileType === 'vmus' ? 'Enter a name for the music file (without extension):' : newFileType === 'vsfx' ? 'Enter a name for the sound effect (without extension):' : newFileType === 'vanim' ? 'Enter a name for the animation (without extension):' : newFileType === 'vinstr' ? 'Enter a name for the instrument (without extension):' : newFileType === 'venemy' ? 'Enter a name for the enemy type (without extension):' : 'Enter filename:'}
-        placeholder={newFileType === 'vec' ? 'my_sprite' : newFileType === 'vmus' ? 'my_music' : newFileType === 'vsfx' ? 'laser' : newFileType === 'vanim' ? 'player_walk' : newFileType === 'vinstr' ? 'pluck' : newFileType === 'venemy' ? 'snowbrother' : 'filename'}
+        title={newFileType === 'vec' ? 'New Vector List' : newFileType === 'vmus' ? 'New Music File' : newFileType === 'vmov' ? 'New Vector Movie' : newFileType === 'vsfx' ? 'New Sound Effect' : newFileType === 'vanim' ? 'New Animation' : newFileType === 'vinstr' ? 'New Instrument' : newFileType === 'venemy' ? 'New Enemy Type' : 'New File'}
+        message={newFileType === 'vec' ? 'Enter a name for the vector list (without extension):' : newFileType === 'vmus' ? 'Enter a name for the music file (without extension):' : newFileType === 'vmov' ? 'Enter a name for the vector movie (without extension):' : newFileType === 'vsfx' ? 'Enter a name for the sound effect (without extension):' : newFileType === 'vanim' ? 'Enter a name for the animation (without extension):' : newFileType === 'vinstr' ? 'Enter a name for the instrument (without extension):' : newFileType === 'venemy' ? 'Enter a name for the enemy type (without extension):' : 'Enter filename:'}
+        placeholder={newFileType === 'vec' ? 'my_sprite' : newFileType === 'vmus' ? 'my_music' : newFileType === 'vmov' ? 'my_movie' : newFileType === 'vsfx' ? 'laser' : newFileType === 'vanim' ? 'player_walk' : newFileType === 'vinstr' ? 'pluck' : newFileType === 'venemy' ? 'snowbrother' : 'filename'}
         defaultValue=""
         validateFn={(value) => {
           if (!value.trim()) return 'Name is required';
@@ -1806,6 +1812,37 @@ def loop():
             
             // Fallback: create in-memory
             const uri = `inmemory://${name}.vmus`;
+            openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
+          } else if (newFileType === 'vmov') {
+            // Vector movie manifest: empty tracks — import video/audio from the editor.
+            const content = JSON.stringify({
+              version: "1.0",
+              name: name,
+              fps: 15,
+              vrec: "",
+              vsmp: ""
+            }, null, 2);
+
+            if (vpyProject?.rootDir && apiFiles?.saveFile) {
+              const filePath = `${vpyProject.rootDir}/assets/${name}.vmov`.replace(/\\/g, '/');
+              try {
+                const result = await apiFiles.saveFile({ path: filePath, content });
+                if (result && !result.error) {
+                  const normPath = filePath.replace(/\\/g, '/');
+                  const uri = normPath.match(/^[A-Za-z]:\//) ? `file:///${normPath}` : `file://${normPath}`;
+                  openDocument({
+                    uri, language: 'json', content, dirty: false, diagnostics: [],
+                    diskPath: filePath, mtime: result.mtime, lastSavedContent: content
+                  });
+                  useProjectStore.getState().refreshWorkspace();
+                  logger.info('File', `Created ${filePath}`);
+                  return;
+                }
+              } catch (e) {
+                logger.warn('File', 'Failed to save to project folder, creating in-memory');
+              }
+            }
+            const uri = `inmemory://${name}.vmov`;
             openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
           } else if (newFileType === 'vsfx') {
             // SFX default content
