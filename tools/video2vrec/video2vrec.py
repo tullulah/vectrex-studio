@@ -78,8 +78,23 @@ def map_point(px, py, w, h):
     return int(max(-127, min(127, round(x)))), int(max(-127, min(127, round(y))))
 
 
+def on_same_border(p0, p1, w, h, margin):
+    """True if BOTH endpoints hug the SAME frame edge (a frame-border artifact:
+    a shape touching the edge makes findContours run along the boundary)."""
+    (x0, y0), (x1, y1) = p0, p1
+    left = x0 <= margin and x1 <= margin
+    right = x0 >= w - 1 - margin and x1 >= w - 1 - margin
+    top = y0 <= margin and y1 <= margin
+    bottom = y0 >= h - 1 - margin and y1 >= h - 1 - margin
+    return left or right or top or bottom
+
+
 def build_frame(gray, args):
     """One frame → list of {x0,y0,x1,y1,i} segments, honouring the budget."""
+    # Optional crop (remove a letterbox / on-screen border) BEFORE tracing.
+    if args.crop > 0:
+        c = args.crop
+        gray = gray[c:gray.shape[0] - c, c:gray.shape[1] - c]
     h, w = gray.shape
     contours = frame_to_contours(gray, args.mode, args.threshold, args.invert)
     # Largest contours first (drop tiny noise / stay within budget on the big shapes).
@@ -91,12 +106,16 @@ def build_frame(gray, args):
         pts = simplify(c, args.epsilon)
         if len(pts) < 2:
             continue
-        vpts = [map_point(px, py, w, h) for px, py in pts]
         # Closed contour: connect each vertex to the next, last back to first.
-        n = len(vpts)
+        n = len(pts)
         for i in range(n):
-            x0, y0 = vpts[i]
-            x1, y1 = vpts[(i + 1) % n]
+            p0 = pts[i]
+            p1 = pts[(i + 1) % n]
+            # Drop segments that run along the frame border (screen-edge artifact).
+            if args.border_margin >= 0 and on_same_border(p0, p1, w, h, args.border_margin):
+                continue
+            x0, y0 = map_point(p0[0], p0[1], w, h)
+            x1, y1 = map_point(p1[0], p1[1], w, h)
             if x0 == x1 and y0 == y1:
                 continue  # skip degenerate
             segs.append({"x0": x0, "y0": y0, "x1": x1, "y1": y1, "i": args.intensity})
@@ -121,6 +140,11 @@ def main():
     ap.add_argument("--min-area", type=float, default=25.0,
                     help="drop contours smaller than this area (px^2)")
     ap.add_argument("--intensity", type=int, default=95, help="beam intensity 0-127")
+    ap.add_argument("--crop", type=int, default=0,
+                    help="crop N px off every side before tracing (kills letterbox / on-screen frame)")
+    ap.add_argument("--border-margin", type=int, default=2,
+                    help="drop contour segments running along the frame edge within N px "
+                         "(removes the screen-border artifact); -1 to disable")
     ap.add_argument("--max-frames", type=int, default=None, help="limit frames (for testing)")
     args = ap.parse_args()
 
