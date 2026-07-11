@@ -1,0 +1,5 @@
+# TDCM is copyrighted (Brian Kendall). Derived media assets are NOT committed.
+# Regenerate locally with tools/fetch/url2vmov.sh <url> examples/tdcm_test/assets tdcm
+assets/recordings/
+assets/samples/
+assets/*.vmov
