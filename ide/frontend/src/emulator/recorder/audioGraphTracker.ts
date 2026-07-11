@@ -83,3 +83,17 @@ export function getRunningAudioTap(): { ctx: AudioContext; outputNode: AudioNode
   const outputNode = Array.from(pick.outputs).pop()!;
   return { ctx: pick.ctx as AudioContext, outputNode };
 }
+
+/**
+ * The running context and ALL nodes feeding its speakers. The video recorder
+ * connects every one to its tap (and re-checks for newly-added nodes each tick),
+ * so it captures the FULL mix — PSG music AND late-arriving BufferSources like a
+ * PLAY_SAMPLE track — not just whichever single node existed first.
+ */
+export function getRunningContextOutputs(): { ctx: AudioContext; outputs: AudioNode[] } | null {
+  const withOutputs = tracked.filter(t => t.outputs.size > 0);
+  const pick =
+    withOutputs.find(t => (t.ctx as any).state === 'running') ?? withOutputs[0];
+  if (!pick) return null;
+  return { ctx: pick.ctx as AudioContext, outputs: Array.from(pick.outputs) };
+}

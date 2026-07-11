@@ -14,7 +14,7 @@ import { asmAddressToVpyLine, formatAddress } from '../../utils/debugHelpers';
 import { emuCore } from '../../emulatorCoreSingleton';
 import { VectorRecorder, serializeVrec, defaultRecordingName, MAX_RECORD_SECONDS, type RawSegment } from '../../emulator/recorder/VectorRecorder';
 import { VideoRecorder, defaultVideoName } from '../../emulator/recorder/VideoRecorder';
-import { getRunningAudioTap } from '../../emulator/recorder/audioGraphTracker';
+import { getRunningContextOutputs } from '../../emulator/recorder/audioGraphTracker';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -470,30 +470,25 @@ export const EmulatorPanel: React.FC = () => {
   // Resolve the active target's live { ctx, outputNode } for the audio tap.
   // PiTrex has its own core (not part of emuCore); everything else routes
   // through emuCore's active system (m6809 → VectrexSystem, rp2350 → Rp2350System).
-  const getActiveAudio = useCallback((): { ctx: AudioContext; outputNode: AudioNode } | null => {
+  const getActiveAudio = useCallback((): { ctx: AudioContext; outputs: AudioNode[] } | null => {
     try {
-      // Collect every candidate audio source, then prefer whichever context is
-      // actually RUNNING (the target that's producing sound). Candidates:
-      //   - PiTrex core
-      //   - emuCore → Rp2350System (rp2350) / VectrexSystem (typed 6809)
-      //   - psgAudio singleton — the LEGACY JSVecX 6809 path's sound lives here
-      //     (EmulatorPanel drives psgAudio.init()/start() directly). This was the
-      //     one missing → video captured without audio on the 6809 path.
+      // Universal tap: the graph tracker knows every live AudioContext and ALL
+      // the nodes feeding its speakers (PSG music AND late sources like a
+      // PLAY_SAMPLE BufferSource). Prefer it — the recorder connects every
+      // output, so it captures the full mix regardless of which subsystem plays.
+      const tracked = getRunningContextOutputs();
+      if (tracked) return tracked;
+      // Fallbacks (wrap a single output node): PiTrex, emuCore systems, legacy
+      // psgAudio, and window.vecx's internal ctx (m6809 sound).
       const pit = (pitrexCoreRef.current as any)?.getAudioContextAndOutputNode?.();
       const core = (emuCore as any)?.getAudioContextAndOutputNode?.();
       const legacy = psgAudio.getAudioContextAndOutputNode?.();
-      // The legacy JSVecX (window.vecx from vecx_full.js) has its OWN internal
-      // AudioContext (vecx.ctx) + ScriptProcessor (vecx.node) — that's where the
-      // m6809 sound actually plays (NOT psgAudio, NOT VectrexSystem).
       const vx = (window as any).vecx;
       const vecxAudio = (vx?.ctx && vx?.node) ? { ctx: vx.ctx as AudioContext, outputNode: vx.node as AudioNode } : null;
-      // Universal tap: the graph tracker knows every live AudioContext and which
-      // node feeds its speakers — works no matter which subsystem plays sound.
-      // Tracker first (most reliable), then the known subsystem accessors.
-      const tracked = getRunningAudioTap();
-      const cands = [tracked, pit, core, legacy, vecxAudio];
-      const valid = cands.filter((c): c is { ctx: AudioContext; outputNode: AudioNode } => !!c?.ctx && !!c?.outputNode);
-      return valid.find(c => c.ctx.state === 'running') ?? valid[0] ?? null;
+      const one = [pit, core, legacy, vecxAudio]
+        .find((c): c is { ctx: AudioContext; outputNode: AudioNode } =>
+          !!c?.ctx && !!c?.outputNode && c.ctx.state === 'running');
+      return one ? { ctx: one.ctx, outputs: [one.outputNode] } : null;
     } catch {
       return null;
     }
