@@ -317,6 +317,56 @@ writes/sec (~666 ns/write) nor change the T1 timer granularity. The RP2350 at
 4. Sorter (chaining), then variable move ramps, then drift-budget re-zeros.
 5. Measure: segments/frame before vs after on real hardware.
 
+## Vector movie: video + voice, synced (DESIGN)
+
+Goal: play a vectorized video (Bad Apple, The Demented Cartoon Movie…) with its
+audio, in sync. Tooling exists: `tools/video2vrec` (video → `.vrec` vectors) and
+`tools/audio2vsmp` (audio → `.vsmp` 4-bit PCM voice, Spike-style PSG-volume DAC).
+
+### Separate tracks, audio is the master clock (like MP4)
+
+Do NOT merge the two into one interleaved blob. Keep `.vrec` (video track) and
+`.vsmp` (audio track) as separate assets — their access patterns are opposite:
+audio streams linearly at a fixed rate (a pointer advancing through PCM), video
+is frame-indexed (jump to frame F). They stay in sync at PLAYBACK via the audio
+clock, exactly as every video player does:
+
+```
+samples_played (counted as core 1 writes PSG volume) == the timeline
+current_video_frame = samples_played * vrec.fps / vsmp.sampleRate
+```
+
+Audio is hard-real-time (a stall glitches audibly); video is soft (a dropped
+frame is invisible). So video FOLLOWS audio. An optional thin `.vmov` container
+could reference both + sync metadata for single-file distribution, but start
+with two loose files.
+
+### The real constraint: streaming rate vs PSG write cost
+
+8 kHz needs a sample every 125 µs, and ≈5 samples per drawn vector
+(8000 samples/s ÷ ~1500 vectors/s) → ~26 µs/sample. The full `psg_write`
+sequence (6 VIA writes with the address-latch protocol) is ~30 µs — too slow.
+Fix: a LEAN streaming write. Since every sample targets the SAME register
+(volume), keep it latched and send only the data byte (~2-3 VIA writes ≈
+10-15 µs), or drop to 6 kHz (166 µs/sample) for headroom. Firmware + HW.
+
+### Playback engines
+
+- **Emulator (testable now):** a combined player that reads `.vrec` + `.vsmp`,
+  drives the emulated PSG volume at sampleRate, and advances the vector frame by
+  the audio clock. The emulator has no VIA-write timing limit, so Bad Apple +
+  sound can be seen/heard here BEFORE hardware — validates the sync model.
+- **Hardware (the hard part):** core 1 owns the bus, streams `.vsmp` to PSG
+  volume via the lean write, and slots those writes into the ramp dead-time
+  between vectors so voice + vectors are concurrent. Built with the retained
+  engine above. Video frame follows the sample count.
+
+### Compiler pieces needed
+
+`.vsmp` asset type + a `PLAY_SAMPLE("name")` builtin (rp2350). A `MOVIE("vrec",
+"vsmp")`-style helper could pair them, or the VPy program advances the frame from
+a sample-count query. Linear→log volume map (PSG steps are logarithmic).
+
 ## Open questions (decide with the user)
 
 - VPy program load model: run-in-place (fixed address) vs copy-to-RAM/PIC.
