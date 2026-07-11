@@ -471,12 +471,20 @@ export const EmulatorPanel: React.FC = () => {
   // through emuCore's active system (m6809 → VectrexSystem, rp2350 → Rp2350System).
   const getActiveAudio = useCallback((): { ctx: AudioContext; outputNode: AudioNode } | null => {
     try {
-      const pit = pitrexCoreRef.current as any;
-      if (pit?.getAudioContextAndOutputNode) {
-        const a = pit.getAudioContextAndOutputNode();
-        if (a) return a;
-      }
-      return (emuCore as any)?.getAudioContextAndOutputNode?.() ?? null;
+      // Collect every candidate audio source, then prefer whichever context is
+      // actually RUNNING (the target that's producing sound). Candidates:
+      //   - PiTrex core
+      //   - emuCore → Rp2350System (rp2350) / VectrexSystem (typed 6809)
+      //   - psgAudio singleton — the LEGACY JSVecX 6809 path's sound lives here
+      //     (EmulatorPanel drives psgAudio.init()/start() directly). This was the
+      //     one missing → video captured without audio on the 6809 path.
+      const cands: Array<{ ctx: AudioContext; outputNode: AudioNode } | null | undefined> = [
+        (pitrexCoreRef.current as any)?.getAudioContextAndOutputNode?.(),
+        (emuCore as any)?.getAudioContextAndOutputNode?.(),
+        psgAudio.getAudioContextAndOutputNode?.(),
+      ];
+      const valid = cands.filter((c): c is { ctx: AudioContext; outputNode: AudioNode } => !!c?.ctx && !!c?.outputNode);
+      return valid.find(c => c.ctx.state === 'running') ?? valid[0] ?? null;
     } catch {
       return null;
     }
