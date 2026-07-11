@@ -40,6 +40,9 @@ def main():
     ap.add_argument("--intensity", type=int, default=95)
     ap.add_argument("--crop", type=int, default=0)
     ap.add_argument("--border-margin", type=int, default=2)
+    ap.add_argument("--emit", choices=["png", "json"], default="png",
+                    help="png = side-by-side comparison image; json = {segments, "
+                         "width, height, originalPng(base64)} for the IDE editor")
     args = ap.parse_args()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -53,6 +56,19 @@ def main():
     segs = v.build_frame(gray, args)  # {x0,y0,x1,y1,i} in Vectrex space (±127, Y up)
 
     h, w = gray.shape
+
+    if args.emit == "json":
+        # Machine-readable for the editor: the traced segments (it renders them in
+        # its own Vectrex canvas) + the original frame as a base64 PNG to show
+        # side by side. Printed to stdout.
+        import base64, json
+        ok, png = cv2.imencode(".png", color)
+        print(json.dumps({
+            "segments": segs,
+            "width": w, "height": h,
+            "originalPng": base64.b64encode(png.tobytes()).decode("ascii") if ok else "",
+        }))
+        return
     # Render the traced result on a black canvas the same size as the frame.
     traced = np.zeros((h, w, 3), np.uint8)
     scale = min(254.0 / w, 254.0 / h)
