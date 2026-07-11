@@ -153,6 +153,9 @@ pub fn emit_builtins(msg_entries: &[MsgEntry], usage: &Usage) -> String {
     if usage.has("PLAY_SAMPLE") {
         s.push_str(&emit_play_sample());
     }
+    if usage.has("SAMPLE_POS") {
+        s.push_str(&emit_sample_pos());
+    }
     s
 }
 
@@ -166,6 +169,20 @@ fn emit_play_sample() -> String {
     s.push_str("@ vpy_play_sample(r0=sample_data_ptr) — BIOS trap: SYS_PLAY_SAMPLE\n");
     s.push_str(".global vpy_play_sample\n.type vpy_play_sample, %function\n.thumb_func\nvpy_play_sample:\n");
     s.push_str("    svc     #9                      @ SYS_PLAY_SAMPLE\n");
+    s.push_str("    bx      lr\n\n");
+    s
+}
+
+// ─── SAMPLE_POS ─────────────────────────────────────────────────────────────
+
+fn emit_sample_pos() -> String {
+    // SAMPLE_POS(fps): returns the current audio-synced FRAME index for the given
+    // fps = floor(samples_played * fps / sampleRate). Lets video follow the audio
+    // master clock (no drift). r0 = fps in → r0 = frame out. SYS_SAMPLE_POS = 10.
+    let mut s = String::new();
+    s.push_str("@ vpy_sample_pos(r0=fps) → r0=current frame — BIOS trap: SYS_SAMPLE_POS\n");
+    s.push_str(".global vpy_sample_pos\n.type vpy_sample_pos, %function\n.thumb_func\nvpy_sample_pos:\n");
+    s.push_str("    svc     #10                     @ SYS_SAMPLE_POS\n");
     s.push_str("    bx      lr\n\n");
     s
 }

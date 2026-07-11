@@ -299,6 +299,7 @@ pub fn emit_call(
         "PLAY_NOTE"       => "vpy_play_note",
         "LOAD_LEVEL"      => "vpy_load_level",
         "SHOW_LEVEL"      => "vpy_show_level",
+        "SAMPLE_POS"      => "vpy_sample_pos",
         "J1_X"            => "vpy_j1_x",
         "J1_Y"            => "vpy_j1_y",
         "J1_BTN1" | "J1_BUTTON_1" => "vpy_j1_btn1",

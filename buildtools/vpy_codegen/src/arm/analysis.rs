@@ -64,6 +64,7 @@ const GROUPS: &[(&str, &[&str], &[&str])] = &[
     // SYS_PLAY_SAMPLE). No dependencies — it just hands the ROM table to the
     // core1 audio streamer.
     ("PLAY_SAMPLE",     &["PLAY_SAMPLE"],       &[]),
+    ("SAMPLE_POS",      &["SAMPLE_POS"],        &[]),
     // _SIN_TABLE data + smul_lut (smul_lut reads _SIN_TABLE).
     ("SIN_TABLE",       &[],                    &[]),
     // vpy_sin / vpy_cos: read _SIN_TABLE directly.

@@ -237,6 +237,9 @@ export class Rp2350System implements ISystem, IBus {
   // Currently-playing .vsmp PCM sample source (PLAY_SAMPLE). Stopped/replaced
   // when PLAY_SAMPLE is re-triggered so re-calling restarts (and loops) cleanly.
   private sampleSource: AudioBufferSourceNode | null = null;
+  private sampleStartTime = 0;   // audioCtx.currentTime when the sample started
+  private sampleRateHz = 0;      // the playing sample's rate
+  private sampleDurationSec = 0; // the playing sample's length (for loop wrap)
   static readonly AUDIO_SAMPLE_RATE = 44100;
   static readonly AUDIO_BUFFER_SIZE = 512;
 
@@ -636,6 +639,17 @@ export class Rp2350System implements ISystem, IBus {
         return 20;
       });
       console.log(`[Rp2350System] vpy_play_sample trap @ 0x${(playSampleAddr & ~1).toString(16)}`);
+    }
+
+    // vpy_sample_pos(r0 = fps) → r0 = current audio-synced frame. Lets the video
+    // follow the audio master clock so it can't drift ahead of the song.
+    const samplePosAddr = symbols.get('vpy_sample_pos');
+    if (samplePosAddr !== undefined) {
+      this.traps.set(samplePosAddr & ~1, (cpu: Thumb2): number => {
+        cpu.setReg(0, this.samplePos(cpu.getReg(0) | 0));
+        return 20;
+      });
+      console.log(`[Rp2350System] vpy_sample_pos trap @ 0x${(samplePosAddr & ~1).toString(16)}`);
     }
 
     // vpy_msg_def: compile-time declaration, pure no-op at runtime.
@@ -1081,6 +1095,25 @@ export class Rp2350System implements ISystem, IBus {
     if (ctx.state !== 'running') ctx.resume().catch(() => {});
     src.start();
     this.sampleSource = src;
+    // Remember the clock origin + rate so SAMPLE_POS can derive the video frame
+    // from how much audio has played (audio is the master clock).
+    this.sampleStartTime = ctx.currentTime;
+    this.sampleRateHz = sampleRate;
+    this.sampleDurationSec = numSamples / sampleRate;
+  }
+
+  /** SAMPLE_POS(fps): current audio-synced frame index (video follows audio).
+   *  frame = floor(elapsed_seconds * fps), wrapping isn't done here (the video
+   *  player wraps via frame % frame_count in DRAW_RECORDING). Returns 0 if no
+   *  sample is playing. */
+  samplePos(fps: number): number {
+    if (!this.audioCtx || !this.sampleSource || this.sampleRateHz <= 0) return 0;
+    let elapsed = this.audioCtx.currentTime - this.sampleStartTime;
+    if (elapsed < 0) elapsed = 0;
+    // Loop the clock with the sample so a re-triggered/looping video re-syncs.
+    if (this.sampleDurationSec > 0) elapsed = elapsed % this.sampleDurationSec;
+    const frame = Math.floor(elapsed * fps);
+    return frame & 0x7fff; // fits the i16 the VPy side reads
   }
 
   /** Stop and destroy the audio context. */

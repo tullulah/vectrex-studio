@@ -64,6 +64,7 @@ pub fn is_known_builtin(name: &str) -> bool {
             | "DRAW_VECTOR_3D"
             | "DRAW_RECORDING"
             | "PLAY_SAMPLE"
+            | "SAMPLE_POS"
             | "DRAW_BEZIER"
             | "DRAW_BEZIER_QUAD"
             | "PLAY_NOTE"
@@ -99,6 +100,7 @@ pub fn builtin_arity(name: &str) -> Option<usize> {
         "DRAW_VECTOR_LIST" | "DRAW_VL" => None,
         "FRAME_BEGIN" => None,
         "SET_INTENSITY" => Some(1),
+        "SAMPLE_POS" => Some(1),   // fps → current audio-synced frame index
         "DRAW_VECTOR_EX" => Some(4),
         "DRAW_VECTOR_3D" => Some(6),
         "DRAW_RECORDING" => Some(5),  // recording_name, x, y, scale (0-128), frame counter
