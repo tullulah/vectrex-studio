@@ -46,6 +46,30 @@ interface VrecData    { version: string; name: string; fps: number; frames: Vrec
 
 interface VsmpAudio { sampleRate: number; buffer: AudioBuffer; numSamples: number }
 
+type TraceMode = 'silhouette' | 'edges' | 'duotone' | 'canny';
+
+interface TraceParams {
+  mode: TraceMode;
+  threshold: number;
+  dark: number;
+  light: number;
+  cannyLo: number;
+  cannyHi: number;
+  epsilon: number;
+  budget: number;
+  minArea: number;
+  invert: boolean;
+  crop: number;
+  borderMargin: number;
+}
+
+interface PreviewResult {
+  segments: VrecSegment[];
+  width: number;
+  height: number;
+  originalPng: string;
+}
+
 // ---------------------------------------------------------------------------
 // Parsing helpers
 // ---------------------------------------------------------------------------
@@ -253,6 +277,28 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
   const [videoOpts, setVideoOpts] = useState({ mode: 'silhouette', fps: manifest.fps || 15, epsilon: 2, budget: 200 });
   const [audioOpts, setAudioOpts] = useState({ rate: 8000, normalize: true });
 
+  // Trace tuning UI --------------------------------------------------------
+  const [tuningOpen, setTuningOpen] = useState(false);
+  const [trace, setTrace] = useState<TraceParams>({
+    mode: 'silhouette',
+    threshold: 128,
+    dark: 60,
+    light: 200,
+    cannyLo: 60,
+    cannyHi: 160,
+    epsilon: 2,
+    budget: 250,
+    minArea: 25,
+    invert: false,
+    crop: 0,
+    borderMargin: 2,
+  });
+  const [preview, setPreview] = useState<PreviewResult | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewErr, setPreviewErr] = useState<string | null>(null);
+  const hasPreviewedRef = useRef(false);
+  const tracedCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
   const fps = vrec?.fps || manifest.fps || 15;
   const frameCount = vrec?.frames.length ?? 0;
 
@@ -426,7 +472,12 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
     return () => { try { off?.(); } catch {} };
   }, []);
 
-  const runImport = useCallback(async (kind: 'video' | 'audio', inputPath: string, sourceName: string) => {
+  const runImport = useCallback(async (
+    kind: 'video' | 'audio',
+    inputPath: string,
+    sourceName: string,
+    videoOverride?: Record<string, any>,
+  ) => {
     const movieApi = (window as any).movie;
     if (!movieApi?.convert || !assetsDir) return;
     setConverting(true);
@@ -437,8 +488,10 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
     const ext = kind === 'video' ? 'vrec' : 'vsmp';
     const outPath = `${assetsDir}/${subdir}/${base}.${ext}`;
 
+    const videoConvertOpts = videoOverride
+      || { mode: videoOpts.mode, fps: videoOpts.fps, epsilon: videoOpts.epsilon, budget: videoOpts.budget };
     const opts = kind === 'video'
-      ? { mode: videoOpts.mode, fps: videoOpts.fps, epsilon: videoOpts.epsilon, budget: videoOpts.budget }
+      ? videoConvertOpts
       : { rate: audioOpts.rate, normalize: audioOpts.normalize };
 
     const res = await movieApi.convert({ kind, inputPath, outPath, opts });
@@ -454,7 +507,7 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
     const next: VmovManifest = { ...manifest };
     next.version = next.version || '1.0';
     next.name = next.name || base;
-    if (kind === 'video') { next.vrec = rel; next.fps = videoOpts.fps; }
+    if (kind === 'video') { next.vrec = rel; next.fps = videoConvertOpts.fps || videoOpts.fps; }
     else { next.vsmp = rel; }
     next.source = inputPath;
     onChange?.(next);
@@ -476,6 +529,75 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
     if (!manifest.source) return;
     await runImport(kind, manifest.source, baseName(manifest.source));
   }, [manifest.source, runImport]);
+
+  // ── Trace tuning: preview single frame + apply to whole movie ────────────
+
+  // Build the shared trace-flag payload from the current tuning params. Only
+  // the params relevant to the selected mode need to be honoured by the tool,
+  // but passing them all is harmless (the tool ignores the irrelevant ones).
+  const buildTraceOpts = useCallback((): Record<string, any> => ({
+    mode: trace.mode,
+    threshold: trace.threshold,
+    dark: trace.dark,
+    light: trace.light,
+    cannyLo: trace.cannyLo,
+    cannyHi: trace.cannyHi,
+    epsilon: trace.epsilon,
+    budget: trace.budget,
+    minArea: trace.minArea,
+    invert: trace.invert,
+    crop: trace.crop,
+    borderMargin: trace.borderMargin,
+  }), [trace]);
+
+  const runPreview = useCallback(async () => {
+    const movieApi = (window as any).movie;
+    if (!movieApi?.previewFrame || !manifest.source) return;
+    const f = Math.min(frameIdx, Math.max(0, frameCount - 1));
+    const time = fps > 0 ? f / fps : 0;
+    setPreviewing(true);
+    setPreviewErr(null);
+    const res = await movieApi.previewFrame({ videoPath: manifest.source, time, opts: buildTraceOpts() });
+    setPreviewing(false);
+    if (!res || (res as any).error) {
+      setPreviewErr((res as any)?.error || 'preview failed');
+      return;
+    }
+    hasPreviewedRef.current = true;
+    const segs: VrecSegment[] = Array.isArray(res.segments)
+      ? res.segments.map((s: any): VrecSegment => ({
+          x0: Number(s.x0) || 0, y0: Number(s.y0) || 0,
+          x1: Number(s.x1) || 0, y1: Number(s.y1) || 0, i: Number(s.i) || 0,
+        }))
+      : [];
+    setPreview({ segments: segs, width: res.width || 0, height: res.height || 0, originalPng: res.originalPng || '' });
+  }, [manifest.source, frameIdx, frameCount, fps, buildTraceOpts]);
+
+  // Debounced auto-refresh: once the user has previewed once (opted in), a
+  // param tweak or frame change re-runs the preview after a short settle so we
+  // don't spawn python on every slider tick.
+  useEffect(() => {
+    if (!tuningOpen || !hasPreviewedRef.current || !manifest.source) return;
+    const t = setTimeout(() => { runPreview(); }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trace, frameIdx, tuningOpen]);
+
+  // Draw the traced preview into its own Vectrex canvas (reuse drawFrame).
+  useEffect(() => {
+    const c = tracedCanvasRef.current;
+    if (!c) return;
+    drawFrame(c, preview ? { segments: preview.segments } : undefined, -1);
+  }, [preview, tuningOpen]);
+
+  const applyTraceToMovie = useCallback(async () => {
+    if (!manifest.source) return;
+    const ok = window.confirm(
+      'Re-trace the ENTIRE movie with these params and overwrite the .vrec?\n\nThis replaces any per-frame edits.',
+    );
+    if (!ok) return;
+    await runImport('video', manifest.source, baseName(manifest.source), { ...buildTraceOpts(), fps });
+  }, [manifest.source, buildTraceOpts, fps, runImport]);
 
   // ── Frame editing (paused) ──────────────────────────────────────────────
 
@@ -579,6 +701,9 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
         {!audio && manifest.vsmp && <span style={{ color: '#c96' }}>audio failed to load</span>}
         {!manifest.vsmp && <span style={{ color: '#777' }}>silent</span>}
         <div style={{ flex: 1 }} />
+        <button style={S.btnSmall} onClick={() => setTuningOpen(o => !o)}>
+          {tuningOpen ? '✕ Close tuning' : '🎛 Trace tuning'}
+        </button>
         <button style={S.btnSmall} onClick={() => setImportKind(importKind ? null : 'video')}>
           {importKind ? '✕ Close import' : '＋ Import…'}
         </button>
@@ -638,6 +763,143 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
           <div style={{ color: '#667', fontSize: 10, marginTop: 6 }}>
             Requires ffmpeg on PATH; video import uses tools/video2vrec/.venv (opencv).
           </div>
+        </div>
+      )}
+
+      {/* Trace tuning panel */}
+      {tuningOpen && (
+        <div style={S.importPanel}>
+          {!manifest.source ? (
+            <div style={{ color: '#c96', fontSize: 12 }}>
+              Import a video first, or set <code style={{ color: '#dd8' }}>"source"</code> in the .vmov to enable trace tuning.
+            </div>
+          ) : (
+            <>
+              {/* Side-by-side: original video frame | traced result */}
+              <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <div style={S.previewCol}>
+                  <div style={S.previewLabel}>Original · frame {idx + 1}/{frameCount}</div>
+                  {preview?.originalPng ? (
+                    <img
+                      src={`data:image/png;base64,${preview.originalPng}`}
+                      style={S.previewMedia}
+                      alt="original frame"
+                    />
+                  ) : (
+                    <div style={S.previewPlaceholder}>
+                      {previewing ? 'Tracing…' : 'Press “Preview frame”'}
+                    </div>
+                  )}
+                </div>
+                <div style={S.previewCol}>
+                  <div style={S.previewLabel}>
+                    Traced&nbsp;
+                    <span style={{ color: '#8fd', fontWeight: 'bold', fontSize: 13 }}>
+                      {preview ? preview.segments.length : 0} segs
+                    </span>
+                  </div>
+                  <canvas
+                    ref={tracedCanvasRef}
+                    width={CANVAS_W}
+                    height={CANVAS_H}
+                    style={S.previewMedia}
+                  />
+                </div>
+              </div>
+
+              {/* Param controls */}
+              <div style={{ ...S.optRow, marginTop: 12 }}>
+                <label style={S.optLabel}>mode
+                  <select
+                    value={trace.mode}
+                    onChange={e => setTrace(t => ({ ...t, mode: e.target.value as TraceMode }))}
+                    style={S.input}
+                  >
+                    <option value="silhouette">silhouette</option>
+                    <option value="edges">edges</option>
+                    <option value="duotone">duotone</option>
+                    <option value="canny">canny</option>
+                  </select>
+                </label>
+
+                {(trace.mode === 'silhouette' || trace.mode === 'edges') && (
+                  <label style={S.optLabel}>threshold ({trace.threshold})
+                    <input type="range" min={0} max={255} step={1} value={trace.threshold}
+                      onChange={e => setTrace(t => ({ ...t, threshold: Number(e.target.value) }))} style={S.slider} />
+                  </label>
+                )}
+
+                {trace.mode === 'duotone' && (
+                  <>
+                    <label style={S.optLabel}>dark ({trace.dark})
+                      <input type="range" min={0} max={255} step={1} value={trace.dark}
+                        onChange={e => setTrace(t => ({ ...t, dark: Number(e.target.value) }))} style={S.slider} />
+                    </label>
+                    <label style={S.optLabel}>light ({trace.light})
+                      <input type="range" min={0} max={255} step={1} value={trace.light}
+                        onChange={e => setTrace(t => ({ ...t, light: Number(e.target.value) }))} style={S.slider} />
+                    </label>
+                  </>
+                )}
+
+                {trace.mode === 'canny' && (
+                  <>
+                    <label style={S.optLabel}>canny-lo ({trace.cannyLo})
+                      <input type="range" min={0} max={255} step={1} value={trace.cannyLo}
+                        onChange={e => setTrace(t => ({ ...t, cannyLo: Number(e.target.value) }))} style={S.slider} />
+                    </label>
+                    <label style={S.optLabel}>canny-hi ({trace.cannyHi})
+                      <input type="range" min={0} max={255} step={1} value={trace.cannyHi}
+                        onChange={e => setTrace(t => ({ ...t, cannyHi: Number(e.target.value) }))} style={S.slider} />
+                    </label>
+                  </>
+                )}
+
+                <label style={S.optLabel}>epsilon
+                  <input type="number" min={0} step={0.5} value={trace.epsilon}
+                    onChange={e => setTrace(t => ({ ...t, epsilon: Number(e.target.value) }))} style={S.input} />
+                </label>
+                <label style={S.optLabel}>budget
+                  <input type="number" min={10} max={2000} step={10} value={trace.budget}
+                    onChange={e => setTrace(t => ({ ...t, budget: Number(e.target.value) }))} style={S.input} />
+                </label>
+                <label style={S.optLabel}>min-area
+                  <input type="number" min={0} step={1} value={trace.minArea}
+                    onChange={e => setTrace(t => ({ ...t, minArea: Number(e.target.value) }))} style={S.input} />
+                </label>
+                <label style={S.optLabel}>crop
+                  <input type="number" min={0} max={100} step={1} value={trace.crop}
+                    onChange={e => setTrace(t => ({ ...t, crop: Number(e.target.value) }))} style={S.input} />
+                </label>
+                <label style={S.optLabel}>border-margin
+                  <input type="number" min={0} max={64} step={1} value={trace.borderMargin}
+                    onChange={e => setTrace(t => ({ ...t, borderMargin: Number(e.target.value) }))} style={S.input} />
+                </label>
+                <label style={{ ...S.optLabel, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <input type="checkbox" checked={trace.invert}
+                    onChange={e => setTrace(t => ({ ...t, invert: e.target.checked }))} />
+                  invert
+                </label>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' }}>
+                <button style={S.btnPrimary} disabled={previewing || converting} onClick={runPreview}>
+                  {previewing ? 'Tracing…' : '👁 Preview frame'}
+                </button>
+                <button style={S.btnSmall} disabled={converting || previewing} onClick={applyTraceToMovie}
+                  title="Re-trace every frame with these params and overwrite the .vrec">
+                  {converting ? 'Applying…' : '✔ Apply to movie'}
+                </button>
+                <span style={{ color: previewErr ? '#f88' : '#9ab', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {previewErr || progress}
+                </span>
+              </div>
+              <div style={{ color: '#667', fontSize: 10, marginTop: 6 }}>
+                Preview traces only the current frame ({fps > 0 ? (idx / fps).toFixed(2) : '0.00'}s). Scrub to a frame that drops content, then tune. “Apply to movie” re-traces all frames.
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -737,6 +999,11 @@ const S: Record<string, React.CSSProperties> = {
   optRow: { display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' },
   optLabel: { display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: '#9ab' },
   input: { background: '#1c1c28', color: '#ddd', border: '1px solid #333', borderRadius: 4, padding: '3px 6px', fontSize: 12, width: 100 },
+  slider: { width: 140 },
+  previewCol: { display: 'flex', flexDirection: 'column', gap: 4 },
+  previewLabel: { fontSize: 11, color: '#9ab' },
+  previewMedia: { width: 280, height: 348, objectFit: 'contain', border: '1px solid #333', background: '#000', display: 'block' },
+  previewPlaceholder: { width: 280, height: 348, border: '1px dashed #333', background: '#0a0a12', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#667', fontSize: 12 },
   btn: { background: '#222', color: '#ddd', border: '1px solid #444', borderRadius: 4, padding: '6px 10px', fontSize: 16, cursor: 'pointer', minWidth: 42 },
   btnSmall: { background: '#222', color: '#cde', border: '1px solid #444', borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer' },
   btnPrimary: { background: '#2a4a2a', color: '#afa', border: '1px solid #3a5a3a', borderRadius: 4, padding: '6px 14px', fontSize: 12, cursor: 'pointer' },

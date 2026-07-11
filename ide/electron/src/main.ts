@@ -1903,6 +1903,11 @@ ipcMain.handle('movie:convert', async (_e, args: {
     if (opts.epsilon != null) cliArgs.push('--epsilon', String(opts.epsilon));
     if (opts.budget != null) cliArgs.push('--budget', String(opts.budget));
     if (opts.threshold != null) cliArgs.push('--threshold', String(opts.threshold));
+    if (opts.dark != null) cliArgs.push('--dark', String(opts.dark));
+    if (opts.light != null) cliArgs.push('--light', String(opts.light));
+    if (opts.cannyLo != null) cliArgs.push('--canny-lo', String(opts.cannyLo));
+    if (opts.cannyHi != null) cliArgs.push('--canny-hi', String(opts.cannyHi));
+    if (opts.minArea != null) cliArgs.push('--min-area', String(opts.minArea));
     if (opts.invert) cliArgs.push('--invert');
     if (opts.crop != null && Number(opts.crop) > 0) cliArgs.push('--crop', String(opts.crop));
     if (opts.borderMargin != null) cliArgs.push('--border-margin', String(opts.borderMargin));
@@ -1941,6 +1946,87 @@ ipcMain.handle('movie:convert', async (_e, args: {
       } else {
         const tail = (stderr || stdout).split('\n').slice(-8).join('\n').trim();
         resolve({ error: `Converter exited with code ${code}: ${tail || 'unknown error'}` });
+      }
+    });
+  });
+});
+
+// movie:previewFrame — trace ONE frame of a video at a timestamp so the editor's
+// "Trace tuning" panel can show original-vs-traced and dial in params before a
+// full convert. Spawns preview_frame.py with --emit json, parses stdout, and
+// returns { segments, width, height, originalPng(base64) } or { error }.
+//   videoPath: absolute source video path
+//   time:      timestamp in seconds (frame / fps)
+//   opts:      same trace flags as movie:convert's video branch
+ipcMain.handle('movie:previewFrame', async (_e, args: {
+  videoPath: string;
+  time: number;
+  opts?: Record<string, any>;
+}) => {
+  const { videoPath, time = 0, opts = {} } = args || ({} as any);
+  if (!videoPath) return { error: 'missing_args' };
+
+  const root = resolveMovieRepoRoot();
+  if (!root) {
+    return { error: 'Converter tools not found. Expected tools/video2vrec/preview_frame.py under the repo root (set VPY_REPO_ROOT to override).' };
+  }
+
+  const isWin = process.platform === 'win32';
+  const venvPy = isWin
+    ? join(root, 'tools', 'video2vrec', '.venv', 'Scripts', 'python.exe')
+    : join(root, 'tools', 'video2vrec', '.venv', 'bin', 'python');
+  const cmd = existsSync(venvPy) ? venvPy : (isWin ? 'python' : 'python3');
+
+  const cliArgs: string[] = [
+    join(root, 'tools', 'video2vrec', 'preview_frame.py'),
+    videoPath, '/dev/stdout',
+    '--time', String(time),
+    '--emit', 'json',
+  ];
+  if (opts.mode) cliArgs.push('--mode', String(opts.mode));
+  if (opts.threshold != null) cliArgs.push('--threshold', String(opts.threshold));
+  if (opts.dark != null) cliArgs.push('--dark', String(opts.dark));
+  if (opts.light != null) cliArgs.push('--light', String(opts.light));
+  if (opts.cannyLo != null) cliArgs.push('--canny-lo', String(opts.cannyLo));
+  if (opts.cannyHi != null) cliArgs.push('--canny-hi', String(opts.cannyHi));
+  if (opts.epsilon != null) cliArgs.push('--epsilon', String(opts.epsilon));
+  if (opts.budget != null) cliArgs.push('--budget', String(opts.budget));
+  if (opts.minArea != null) cliArgs.push('--min-area', String(opts.minArea));
+  if (opts.invert) cliArgs.push('--invert');
+  if (opts.crop != null && Number(opts.crop) > 0) cliArgs.push('--crop', String(opts.crop));
+  if (opts.borderMargin != null) cliArgs.push('--border-margin', String(opts.borderMargin));
+
+  return await new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let proc;
+    try {
+      proc = spawn(cmd, cliArgs, { cwd: root, windowsHide: true });
+    } catch (err: any) {
+      resolve({ error: `Failed to spawn preview: ${err?.message || err}` });
+      return;
+    }
+    proc.stdout?.on('data', (d) => { stdout += d.toString(); });
+    proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+    proc.on('error', (err) => {
+      resolve({ error: `Failed to run preview (${cmd}): ${err.message}. Ensure Python and ffmpeg are installed and on PATH.` });
+    });
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        const tail = (stderr || stdout).split('\n').slice(-8).join('\n').trim();
+        resolve({ error: `Preview exited with code ${code}: ${tail || 'unknown error'}` });
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stdout);
+        resolve({
+          segments: parsed.segments || [],
+          width: parsed.width || 0,
+          height: parsed.height || 0,
+          originalPng: parsed.originalPng || '',
+        });
+      } catch (err: any) {
+        resolve({ error: `Could not parse preview output: ${err?.message || err}` });
       }
     });
   });
