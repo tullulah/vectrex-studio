@@ -41,8 +41,11 @@ python3 "$ROOT/tools/audio2vsmp/audio2vsmp.py" \
   "$OUT/$NAME.mp4" "$OUT/$NAME.vsmp" --rate 8000 --normalize
 
 echo "[4/4] writing $NAME.vmov"
+# Record the trace params in the manifest so the IDE's tuning panel reopens
+# matching how this movie was traced (not the silhouette default).
 cat > "$OUT/$NAME.vmov" <<EOF
-{ "version": "1.0", "name": "$NAME", "fps": $FPS, "vrec": "$NAME.vrec", "vsmp": "$NAME.vsmp", "source": "$OUT/$NAME.mp4" }
+{ "version": "1.0", "name": "$NAME", "fps": $FPS, "vrec": "$NAME.vrec", "vsmp": "$NAME.vsmp", "source": "$OUT/$NAME.mp4",
+  "trace": { "mode": "$MODE", "epsilon": $EPS, "budget": $BUDGET, "borderMargin": 2 } }
 EOF
 
 echo "done → $OUT/$NAME.vmov  (open it in the IDE's Vector Movie editor)"

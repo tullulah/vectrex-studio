@@ -34,11 +34,23 @@ import cv2
 import numpy as np
 
 
-def extract_frames(video_path, fps, tmpdir, max_frames=None):
-    """Use ffmpeg to dump `fps` frames/sec as PNGs into tmpdir; return sorted paths."""
+# ffmpeg binary: env override (Electron passes the bundled ffmpeg-static path)
+FFMPEG = os.environ.get("FFMPEG", "ffmpeg")
+
+def extract_frames(video_path, fps, tmpdir, max_frames=None, start=0.0, duration=None):
+    """Use ffmpeg to dump `fps` frames/sec as PNGs into tmpdir; return sorted paths.
+
+    `start`/`duration` (seconds) trim the source to a [start, start+duration]
+    window so only that segment is traced — input-seek (`-ss` before `-i`) for
+    speed, `-t` to bound the length."""
     pattern = os.path.join(tmpdir, "f_%05d.png")
     vf = f"fps={fps}"
-    cmd = ["ffmpeg", "-y", "-i", video_path, "-vf", vf]
+    cmd = [FFMPEG, "-y"]
+    if start and start > 0:
+        cmd += ["-ss", str(start)]
+    cmd += ["-i", video_path, "-vf", vf]
+    if duration and duration > 0:
+        cmd += ["-t", str(duration)]
     if max_frames:
         cmd += ["-frames:v", str(max_frames)]
     cmd += [pattern]
@@ -49,8 +61,11 @@ def extract_frames(video_path, fps, tmpdir, max_frames=None):
     return files
 
 
-def frame_to_contours(gray, mode, thresh, invert, dark=60, light=200, canny_lo=60, canny_hi=160):
-    """Return a list of contours (each an Nx2 int array) for one grayscale frame.
+def frame_to_mask(gray, mode, thresh, invert, dark=60, light=200, canny_lo=60, canny_hi=160):
+    """Reduce a grayscale frame to a 1-bit black/white MASK (uint8 0/255).
+
+    Colour is already gone (the caller passes grayscale); this is where the
+    grey is cut down to pure black/white — the image the tracer actually sees.
 
     Modes:
       silhouette — one threshold, trace filled shapes (binary / shadow art).
@@ -78,6 +93,12 @@ def frame_to_contours(gray, mode, thresh, invert, dark=60, light=200, canny_lo=6
         _, bw = cv2.threshold(gray, thresh, 255, cv2.THRESH_BINARY_INV)
         if invert:
             bw = cv2.bitwise_not(bw)
+    return bw
+
+
+def frame_to_contours(gray, mode, thresh, invert, dark=60, light=200, canny_lo=60, canny_hi=160):
+    """Return a list of contours (each an Nx2 int array) for one grayscale frame."""
+    bw = frame_to_mask(gray, mode, thresh, invert, dark, light, canny_lo, canny_hi)
     contours, _ = cv2.findContours(bw, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     return contours
 
@@ -168,13 +189,20 @@ def main():
                     help="drop contour segments running along the frame edge within N px "
                          "(removes the screen-border artifact); -1 to disable")
     ap.add_argument("--max-frames", type=int, default=None, help="limit frames (for testing)")
+    ap.add_argument("--start", type=float, default=0.0,
+                    help="trim: start tracing at this timestamp (seconds)")
+    ap.add_argument("--duration", type=float, default=None,
+                    help="trim: only trace this many seconds from --start")
     args = ap.parse_args()
 
     name = args.name or os.path.splitext(os.path.basename(args.output))[0]
 
     with tempfile.TemporaryDirectory() as tmp:
-        print(f"[1/3] extracting frames @ {args.fps} fps…", file=sys.stderr)
-        files = extract_frames(args.input, args.fps, tmp, args.max_frames)
+        span = f" [{args.start:.1f}s +{args.duration:.1f}s]" if args.duration else \
+               (f" [from {args.start:.1f}s]" if args.start else "")
+        print(f"[1/3] extracting frames @ {args.fps} fps{span}…", file=sys.stderr)
+        files = extract_frames(args.input, args.fps, tmp, args.max_frames,
+                               args.start, args.duration)
         if not files:
             print("ERROR: ffmpeg produced no frames", file=sys.stderr)
             sys.exit(1)

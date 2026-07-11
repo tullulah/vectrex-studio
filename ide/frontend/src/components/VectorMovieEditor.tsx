@@ -38,6 +38,10 @@ interface VmovManifest {
   vsmp?: string;
   /** Optional: last source media path, enables "Re-convert". */
   source?: string;
+  /** Trace params used to generate the .vrec, so the tuning panel reopens
+   *  matching how the movie was actually made (instead of the silhouette
+   *  default, which produces a different-looking preview). */
+  trace?: Partial<TraceParams>;
 }
 
 interface VrecSegment { x0: number; y0: number; x1: number; y1: number; i: number }
@@ -68,6 +72,29 @@ interface PreviewResult {
   width: number;
   height: number;
   originalPng: string;
+  /** The 1-bit black/white mask the tracer sees (after threshold/mode). */
+  maskPng: string;
+}
+
+const DEFAULT_TRACE: TraceParams = {
+  mode: 'silhouette',
+  threshold: 128,
+  dark: 60,
+  light: 200,
+  cannyLo: 60,
+  cannyHi: 160,
+  epsilon: 2,
+  budget: 250,
+  minArea: 25,
+  invert: false,
+  crop: 0,
+  borderMargin: 2,
+};
+
+/** Merge persisted trace params (from the .vmov manifest) over the defaults so
+ *  the tuning panel opens reflecting how the movie was actually traced. */
+function resolveTrace(saved?: Partial<TraceParams>): TraceParams {
+  return { ...DEFAULT_TRACE, ...(saved || {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -274,28 +301,30 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
   const [importKind, setImportKind] = useState<ImportKind>(null);
   const [converting, setConverting] = useState(false);
   const [progress, setProgress] = useState('');
-  const [videoOpts, setVideoOpts] = useState({ mode: 'silhouette', fps: manifest.fps || 15, epsilon: 2, budget: 200 });
+  const [videoOpts, setVideoOpts] = useState({
+    mode: manifest.trace?.mode || 'silhouette',
+    fps: manifest.fps || 15,
+    epsilon: manifest.trace?.epsilon ?? 2,
+    budget: manifest.trace?.budget ?? 200,
+  });
   const [audioOpts, setAudioOpts] = useState({ rate: 8000, normalize: true });
 
   // Trace tuning UI --------------------------------------------------------
   const [tuningOpen, setTuningOpen] = useState(false);
-  const [trace, setTrace] = useState<TraceParams>({
-    mode: 'silhouette',
-    threshold: 128,
-    dark: 60,
-    light: 200,
-    cannyLo: 60,
-    cannyHi: 160,
-    epsilon: 2,
-    budget: 250,
-    minArea: 25,
-    invert: false,
-    crop: 0,
-    borderMargin: 2,
-  });
+  // Seed from the params the .vrec was actually traced with (manifest.trace),
+  // so the tuning preview matches the movie instead of resetting to silhouette.
+  const [trace, setTrace] = useState<TraceParams>(() => resolveTrace(manifest.trace));
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
+  // A video picked for import but NOT yet converted: the tuning panel previews
+  // it so you can dial the threshold on real frames BEFORE the full conversion.
+  const [pendingImport, setPendingImport] = useState<{ path: string; name: string; fps: number } | null>(null);
+  const [previewT, setPreviewT] = useState(0); // preview timestamp (s) for a pending import (no .vrec frames yet)
+  const [videoDuration, setVideoDuration] = useState(0); // probed source length (s); 0 = unknown
+  const [trimStart, setTrimStart] = useState(0);          // from (s)
+  const [trimEnd, setTrimEnd] = useState(0);              // to (s); 0 = end of video
+  const [sourceHasAudio, setSourceHasAudio] = useState(false); // does the picked video carry a soundtrack?
   const hasPreviewedRef = useRef(false);
   const tracedCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -507,7 +536,14 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
     const next: VmovManifest = { ...manifest };
     next.version = next.version || '1.0';
     next.name = next.name || base;
-    if (kind === 'video') { next.vrec = rel; next.fps = videoConvertOpts.fps || videoOpts.fps; }
+    if (kind === 'video') {
+      next.vrec = rel;
+      next.fps = videoConvertOpts.fps || videoOpts.fps;
+      // Record the params this .vrec was traced with (drop fps — it's separate)
+      // so reopening the tuning panel matches the movie instead of resetting.
+      const { fps: _fps, ...traceOnly } = videoConvertOpts as Record<string, any>;
+      next.trace = resolveTrace(traceOnly as Partial<TraceParams>);
+    }
     else { next.vsmp = rel; }
     next.source = inputPath;
     onChange?.(next);
@@ -522,8 +558,34 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
     if (!movieApi?.pickFile) return;
     const picked = await movieApi.pickFile({ kind });
     if (!picked) return;
+    if (kind === 'video') {
+      // Don't convert blind: stage the file and open the tuning panel so the
+      // user can preview/pick the threshold AND a from/to range, then Convert.
+      setPendingImport({ path: picked.path, name: picked.name, fps: videoOpts.fps });
+      setTrace(t => ({ ...t, mode: videoOpts.mode as TraceMode, epsilon: videoOpts.epsilon, budget: videoOpts.budget }));
+      setPreview(null);
+      setPreviewErr(null);
+      setPreviewT(0);
+      setVideoDuration(0);
+      setTrimStart(0);
+      setTrimEnd(0);
+      setSourceHasAudio(false);
+      hasPreviewedRef.current = false;
+      setImportKind(null);
+      setTuningOpen(true);
+      // Probe the length + audio presence so the trim sliders can be bounded and
+      // we know whether to also generate a matching voice track on Convert.
+      movieApi.probe?.({ videoPath: picked.path }).then((r: any) => {
+        if (r && typeof r.durationSec === 'number' && r.durationSec > 0) {
+          setVideoDuration(r.durationSec);
+          setTrimEnd(r.durationSec);
+        }
+        setSourceHasAudio(!!(r && r.hasAudio));
+      }).catch(() => {});
+      return;
+    }
     await runImport(kind, picked.path, picked.name);
-  }, [runImport]);
+  }, [runImport, videoOpts]);
 
   const reconvert = useCallback(async (kind: 'video' | 'audio') => {
     if (!manifest.source) return;
@@ -550,14 +612,20 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
     borderMargin: trace.borderMargin,
   }), [trace]);
 
+  // Preview against the pending (not-yet-converted) import if there is one,
+  // otherwise against the movie's own source.
+  const previewSource = pendingImport?.path || manifest.source;
+  const previewTime = pendingImport
+    ? previewT
+    : (fps > 0 ? Math.min(frameIdx, Math.max(0, frameCount - 1)) / fps : 0);
+
   const runPreview = useCallback(async () => {
     const movieApi = (window as any).movie;
-    if (!movieApi?.previewFrame || !manifest.source) return;
-    const f = Math.min(frameIdx, Math.max(0, frameCount - 1));
-    const time = fps > 0 ? f / fps : 0;
+    if (!movieApi?.previewFrame || !previewSource) return;
+    if (playing) { stopPlayback(); setPlaying(false); }  // trace a stable, paused frame
     setPreviewing(true);
     setPreviewErr(null);
-    const res = await movieApi.previewFrame({ videoPath: manifest.source, time, opts: buildTraceOpts() });
+    const res = await movieApi.previewFrame({ videoPath: previewSource, time: previewTime, opts: buildTraceOpts() });
     setPreviewing(false);
     if (!res || (res as any).error) {
       setPreviewErr((res as any)?.error || 'preview failed');
@@ -570,18 +638,21 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
           x1: Number(s.x1) || 0, y1: Number(s.y1) || 0, i: Number(s.i) || 0,
         }))
       : [];
-    setPreview({ segments: segs, width: res.width || 0, height: res.height || 0, originalPng: res.originalPng || '' });
-  }, [manifest.source, frameIdx, frameCount, fps, buildTraceOpts]);
+    setPreview({ segments: segs, width: res.width || 0, height: res.height || 0, originalPng: res.originalPng || '', maskPng: res.maskPng || '' });
+  }, [previewSource, previewTime, buildTraceOpts, playing, stopPlayback]);
 
   // Debounced auto-refresh: once the user has previewed once (opted in), a
   // param tweak or frame change re-runs the preview after a short settle so we
   // don't spawn python on every slider tick.
   useEffect(() => {
-    if (!tuningOpen || !hasPreviewedRef.current || !manifest.source) return;
+    // Never auto-preview while the movie is PLAYING: the frame advances every
+    // tick, which would re-spawn python on each frame and leave the panel stuck
+    // on "Tracing…". Tuning is a paused-frame activity.
+    if (!tuningOpen || playing || !hasPreviewedRef.current || !previewSource) return;
     const t = setTimeout(() => { runPreview(); }, 600);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trace, frameIdx, tuningOpen]);
+  }, [trace, frameIdx, previewT, tuningOpen, playing]);
 
   // Draw the traced preview into its own Vectrex canvas (reuse drawFrame).
   useEffect(() => {
@@ -598,6 +669,73 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
     if (!ok) return;
     await runImport('video', manifest.source, baseName(manifest.source), { ...buildTraceOpts(), fps });
   }, [manifest.source, buildTraceOpts, fps, runImport]);
+
+  // Convert the staged (pending) import into the movie, using the params the
+  // user tuned in the preview. Only after this does a .vrec exist.
+  const commitImport = useCallback(async () => {
+    if (!pendingImport) return;
+    const movieApi = (window as any).movie;
+    if (!movieApi?.convert || !assetsDir) return;
+    // Only pass a trim window if the user narrowed it (avoid re-encoding the
+    // whole clip through -ss/-t when they didn't touch the range).
+    const start = Math.max(0, trimStart);
+    const end = trimEnd > 0 ? trimEnd : videoDuration;
+    const trim = (start > 0 || (end > 0 && end < videoDuration - 0.05))
+      ? { start, duration: Math.max(0, end - start) }
+      : {};
+    const base = stripExt(baseName(pendingImport.name)) || (manifest.name || 'movie');
+
+    setConverting(true);
+
+    // 1) Video → recordings/<base>.vrec
+    setProgress('Converting video…');
+    const vOut = `${assetsDir}/recordings/${base}.vrec`;
+    const vres = await movieApi.convert({
+      kind: 'video', inputPath: pendingImport.path, outPath: vOut,
+      opts: { ...buildTraceOpts(), fps: pendingImport.fps, ...trim },
+    });
+    if (!vres || vres.error) {
+      setConverting(false);
+      setProgress(`Error (video): ${vres?.error || 'conversion failed'}`);
+      return;
+    }
+
+    // 2) Audio → samples/<base>.vsmp — SAME source + SAME trim, so the voice
+    //    matches the recording. Only if the video carries a soundtrack.
+    let smpRel: string | undefined = manifest.vsmp || undefined;
+    if (sourceHasAudio) {
+      setProgress('Converting audio…');
+      const aOut = `${assetsDir}/samples/${base}.vsmp`;
+      const ares = await movieApi.convert({
+        kind: 'audio', inputPath: pendingImport.path, outPath: aOut,
+        opts: { rate: audioOpts.rate, normalize: audioOpts.normalize, ...trim },
+      });
+      if (!ares || ares.error) {
+        // Keep the video; just warn — the user can retry audio.
+        setProgress(`Video ok; audio failed: ${ares?.error || 'conversion failed'}`);
+      } else {
+        smpRel = `samples/${base}.vsmp`;
+      }
+    }
+    setConverting(false);
+
+    // 3) One manifest update with BOTH tracks named after the source base.
+    const next: VmovManifest = { ...manifest };
+    next.version = next.version || '1.0';
+    next.name = next.name || base;
+    next.vrec = `recordings/${base}.vrec`;
+    next.fps = pendingImport.fps;
+    next.trace = resolveTrace(buildTraceOpts() as Partial<TraceParams>);
+    if (smpRel) next.vsmp = smpRel;
+    next.source = pendingImport.path;
+    onChange?.(next);
+    setPendingImport(null);
+    setProgress(sourceHasAudio
+      ? `Done: ${base}.vrec + ${base}.vsmp — use DRAW_RECORDING("${base}") and PLAY_SAMPLE("${base}")`
+      : `Done: ${base}.vrec — use DRAW_RECORDING("${base}")`);
+    setTimeout(() => setLoadNonce(n => n + 1), 60);
+  }, [pendingImport, sourceHasAudio, assetsDir, manifest, buildTraceOpts, audioOpts,
+      onChange, trimStart, trimEnd, videoDuration]);
 
   // ── Frame editing (paused) ──────────────────────────────────────────────
 
@@ -720,7 +858,7 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
           {importKind === 'video' ? (
             <div style={S.optRow}>
               <label style={S.optLabel}>mode
-                <select value={videoOpts.mode} onChange={e => setVideoOpts(o => ({ ...o, mode: e.target.value }))} style={S.input}>
+                <select value={videoOpts.mode} onChange={e => setVideoOpts(o => ({ ...o, mode: e.target.value as TraceMode }))} style={S.input}>
                   <option value="silhouette">silhouette</option>
                   <option value="edges">edges</option>
                 </select>
@@ -769,16 +907,76 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
       {/* Trace tuning panel */}
       {tuningOpen && (
         <div style={S.importPanel}>
-          {!manifest.source ? (
+          {!previewSource ? (
             <div style={{ color: '#c96', fontSize: 12 }}>
               Import a video first, or set <code style={{ color: '#dd8' }}>"source"</code> in the .vmov to enable trace tuning.
             </div>
           ) : (
             <>
+              {pendingImport && (() => {
+                const dur = videoDuration > 0 ? videoDuration : 120;
+                const to = trimEnd > 0 ? trimEnd : dur;
+                const clampPrev = Math.min(Math.max(previewT, trimStart), to);
+                const spanSec = Math.max(0, to - trimStart);
+                const estFrames = Math.round(spanSec * pendingImport.fps);
+                return (
+                  <div style={{ color: '#8d8', fontSize: 12, marginBottom: 8 }}>
+                    Tuning <b>{pendingImport.name}</b>
+                    {videoDuration > 0
+                      ? <> · {Math.floor(videoDuration / 60)}m{String(Math.floor(videoDuration % 60)).padStart(2, '0')}s</>
+                      : <> · probing length…</>}
+                    {' '}— pick the threshold AND a from/to range, then <b>Convert to movie</b>.
+                    {/* From / To range on the video timeline */}
+                    <div style={{ display: 'flex', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
+                      <label style={{ ...S.optLabel, flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 240 }}>
+                        <span style={{ whiteSpace: 'nowrap' }}>from ({trimStart.toFixed(1)}s)</span>
+                        <input type="range" min={0} max={dur} step={0.5} value={trimStart}
+                          onChange={e => {
+                            const v = Math.min(Number(e.target.value), to - 0.5);
+                            setTrimStart(v);
+                            if (previewT < v) setPreviewT(v);
+                          }} style={{ ...S.slider, flex: 1 }} />
+                      </label>
+                      <label style={{ ...S.optLabel, flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 240 }}>
+                        <span style={{ whiteSpace: 'nowrap' }}>to ({to.toFixed(1)}s)</span>
+                        <input type="range" min={0} max={dur} step={0.5} value={to}
+                          onChange={e => {
+                            const v = Math.max(Number(e.target.value), trimStart + 0.5);
+                            setTrimEnd(v);
+                            if (previewT > v) setPreviewT(v);
+                          }} style={{ ...S.slider, flex: 1 }} />
+                      </label>
+                    </div>
+                    {/* Preview scrubber, constrained to the selected range */}
+                    <label style={{ ...S.optLabel, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                      <span style={{ whiteSpace: 'nowrap' }}>preview time ({clampPrev.toFixed(1)}s)</span>
+                      <input type="range" min={trimStart} max={to} step={0.5} value={clampPrev}
+                        onChange={e => setPreviewT(Number(e.target.value))} style={{ ...S.slider, flex: 1 }} />
+                    </label>
+                    <div style={{ color: estFrames > 3000 ? '#e97' : '#7a9', fontSize: 11, marginTop: 4 }}>
+                      Selected span: {spanSec.toFixed(1)}s → ~{estFrames.toLocaleString()} frames @ {pendingImport.fps} fps
+                      {estFrames > 3000 && ' (large — consider a shorter range or lower fps)'}
+                    </div>
+                    {(() => {
+                      const base = stripExt(baseName(pendingImport.name)) || 'movie';
+                      return (
+                        <div style={{ color: '#9ab', fontSize: 11, marginTop: 2 }}>
+                          Will write <code style={{ color: '#cde' }}>{base}.vrec</code>
+                          {sourceHasAudio
+                            ? <> + <code style={{ color: '#cde' }}>{base}.vsmp</code> (voice, same range) — reference them as <code style={{ color: '#dd8' }}>DRAW_RECORDING("{base}")</code> and <code style={{ color: '#dd8' }}>PLAY_SAMPLE("{base}")</code></>
+                            : <> — no audio track in this source; reference as <code style={{ color: '#dd8' }}>DRAW_RECORDING("{base}")</code></>}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                );
+              })()}
               {/* Side-by-side: original video frame | traced result */}
               <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <div style={S.previewCol}>
-                  <div style={S.previewLabel}>Original · frame {idx + 1}/{frameCount}</div>
+                  <div style={S.previewLabel}>
+                    {pendingImport ? `Original · t=${previewT.toFixed(1)}s` : `Original · frame ${idx + 1}/${frameCount}`}
+                  </div>
                   {preview?.originalPng ? (
                     <img
                       src={`data:image/png;base64,${preview.originalPng}`}
@@ -788,6 +986,20 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
                   ) : (
                     <div style={S.previewPlaceholder}>
                       {previewing ? 'Tracing…' : 'Press “Preview frame”'}
+                    </div>
+                  )}
+                </div>
+                <div style={S.previewCol}>
+                  <div style={S.previewLabel}>B&amp;W mask · what the tracer sees</div>
+                  {preview?.maskPng ? (
+                    <img
+                      src={`data:image/png;base64,${preview.maskPng}`}
+                      style={S.previewMedia}
+                      alt="black and white mask"
+                    />
+                  ) : (
+                    <div style={S.previewPlaceholder}>
+                      {previewing ? 'Tracing…' : '—'}
                     </div>
                   )}
                 </div>
@@ -887,16 +1099,25 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
                 <button style={S.btnPrimary} disabled={previewing || converting} onClick={runPreview}>
                   {previewing ? 'Tracing…' : '👁 Preview frame'}
                 </button>
-                <button style={S.btnSmall} disabled={converting || previewing} onClick={applyTraceToMovie}
-                  title="Re-trace every frame with these params and overwrite the .vrec">
-                  {converting ? 'Applying…' : '✔ Apply to movie'}
-                </button>
+                {pendingImport ? (
+                  <button style={S.btnSmall} disabled={converting || previewing} onClick={commitImport}
+                    title="Convert the whole video to a .vrec with these params">
+                    {converting ? 'Converting…' : '✔ Convert to movie'}
+                  </button>
+                ) : (
+                  <button style={S.btnSmall} disabled={converting || previewing} onClick={applyTraceToMovie}
+                    title="Re-trace every frame with these params and overwrite the .vrec">
+                    {converting ? 'Applying…' : '✔ Apply to movie'}
+                  </button>
+                )}
                 <span style={{ color: previewErr ? '#f88' : '#9ab', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {previewErr || progress}
                 </span>
               </div>
               <div style={{ color: '#667', fontSize: 10, marginTop: 6 }}>
-                Preview traces only the current frame ({fps > 0 ? (idx / fps).toFixed(2) : '0.00'}s). Scrub to a frame that drops content, then tune. “Apply to movie” re-traces all frames.
+                {pendingImport
+                  ? 'Preview traces one frame at the chosen time. Dial mode/threshold until it looks right, then “Convert to movie” traces the whole video.'
+                  : `Preview traces only the current frame (${fps > 0 ? (idx / fps).toFixed(2) : '0.00'}s). Scrub to a frame that drops content, then tune. “Apply to movie” re-traces all frames.`}
               </div>
             </>
           )}

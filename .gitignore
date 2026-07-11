@@ -81,3 +81,13 @@ VRelease_2017_04_29/
 examples/clockmakers_crypt/
 examples/clockmakers_crypt_web/
 hardware/
+
+# Vector-movie SOURCE videos (dev-only, copyrighted — NOT part of the distributed
+# IDE and never committed). Regenerate/download with tools/fetch/url2vmov.sh.
+examples/tdcm.mp4
+examples/badapple.mov
+examples/*.mp4
+examples/*.mov
+
+# Python bytecode cache (dev tools)
+tools/**/__pycache__/

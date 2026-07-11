@@ -1863,6 +1863,23 @@ function resolveMovieRepoRoot(): string | null {
   return null;
 }
 
+// Environment for the movie converter/preview Python tools. They shell out to
+// ffmpeg — but a macOS GUI app inherits a STRIPPED PATH (no /opt/homebrew/bin,
+// no /usr/local/bin), so a bare `ffmpeg` isn't found and the tool hangs/fails
+// with a confusing error. Fix: hand the tools our BUNDLED ffmpeg-static via the
+// FFMPEG env var (self-contained, no PATH dependency), and also widen PATH as a
+// belt-and-suspenders for anything else the tools invoke.
+function movieSpawnEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  const ff = resolveFfmpegPath();
+  if (ff && existsSync(ff)) env.FFMPEG = ff;
+  const extra = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
+  const sep = process.platform === 'win32' ? ';' : ':';
+  const cur = (env.PATH || '').split(sep).filter(Boolean);
+  env.PATH = [...new Set([...cur, ...extra])].join(sep);
+  return env;
+}
+
 // movie:convert — spawn a converter tool. args:
 //   kind:  'video' | 'audio'
 //   inputPath: absolute source media path
@@ -1911,12 +1928,16 @@ ipcMain.handle('movie:convert', async (_e, args: {
     if (opts.invert) cliArgs.push('--invert');
     if (opts.crop != null && Number(opts.crop) > 0) cliArgs.push('--crop', String(opts.crop));
     if (opts.borderMargin != null) cliArgs.push('--border-margin', String(opts.borderMargin));
+    if (opts.start != null && Number(opts.start) > 0) cliArgs.push('--start', String(opts.start));
+    if (opts.duration != null && Number(opts.duration) > 0) cliArgs.push('--duration', String(opts.duration));
   } else {
     // audio: system python3 (only needs ffmpeg on PATH).
     cmd = process.platform === 'win32' ? 'python' : 'python3';
     cliArgs.push(join(root, 'tools', 'audio2vsmp', 'audio2vsmp.py'), inputPath, outPath);
     if (opts.rate) cliArgs.push('--rate', String(opts.rate));
     if (opts.normalize) cliArgs.push('--normalize');
+    if (opts.start != null && Number(opts.start) > 0) cliArgs.push('--start', String(opts.start));
+    if (opts.duration != null && Number(opts.duration) > 0) cliArgs.push('--duration', String(opts.duration));
   }
 
   return await new Promise((resolve) => {
@@ -1924,7 +1945,7 @@ ipcMain.handle('movie:convert', async (_e, args: {
     let stdout = '';
     let proc;
     try {
-      proc = spawn(cmd, cliArgs, { cwd: root, windowsHide: true });
+      proc = spawn(cmd, cliArgs, { cwd: root, windowsHide: true, env: movieSpawnEnv() });
     } catch (err: any) {
       resolve({ error: `Failed to spawn converter: ${err?.message || err}` });
       return;
@@ -2001,7 +2022,7 @@ ipcMain.handle('movie:previewFrame', async (_e, args: {
     let stderr = '';
     let proc;
     try {
-      proc = spawn(cmd, cliArgs, { cwd: root, windowsHide: true });
+      proc = spawn(cmd, cliArgs, { cwd: root, windowsHide: true, env: movieSpawnEnv() });
     } catch (err: any) {
       resolve({ error: `Failed to spawn preview: ${err?.message || err}` });
       return;
@@ -2024,10 +2045,42 @@ ipcMain.handle('movie:previewFrame', async (_e, args: {
           width: parsed.width || 0,
           height: parsed.height || 0,
           originalPng: parsed.originalPng || '',
+          maskPng: parsed.maskPng || '',
         });
       } catch (err: any) {
         resolve({ error: `Could not parse preview output: ${err?.message || err}` });
       }
+    });
+  });
+});
+
+// movie:probe — get a video's duration (seconds) so the editor can bound the
+// from/to trim range. Uses the bundled ffmpeg (`ffmpeg -i` prints the duration
+// to stderr) rather than ffprobe, which ffmpeg-static doesn't ship.
+ipcMain.handle('movie:probe', async (_e, args: { videoPath: string }) => {
+  const videoPath = args?.videoPath;
+  if (!videoPath) return { error: 'missing_args' };
+  const ff = resolveFfmpegPath();
+  if (!ff || !existsSync(ff)) return { error: 'ffmpeg binary not found' };
+  return await new Promise((resolve) => {
+    let stderr = '';
+    let proc;
+    try {
+      proc = spawn(ff, ['-i', videoPath], { windowsHide: true, env: movieSpawnEnv() });
+    } catch (err: any) {
+      resolve({ error: `Failed to probe: ${err?.message || err}` });
+      return;
+    }
+    proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+    proc.on('error', (err) => resolve({ error: `Failed to probe: ${err.message}` }));
+    // `ffmpeg -i` with no output exits non-zero ("At least one output file...")
+    // but still prints "Duration: HH:MM:SS.ss" — parse it regardless of code.
+    proc.on('close', () => {
+      const m = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+      if (!m) { resolve({ error: 'could not parse duration' }); return; }
+      const durationSec = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
+      const hasAudio = /Stream #\d+:\d+(?:\[[^\]]*\])?(?:\([^)]*\))?: Audio:/.test(stderr);
+      resolve({ durationSec, hasAudio });
     });
   });
 });

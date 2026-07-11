@@ -22,6 +22,9 @@ import numpy as np
 import video2vrec as v  # reuse the exact tracing pipeline
 
 
+# ffmpeg binary: env override (Electron passes the bundled ffmpeg-static path)
+FFMPEG = os.environ.get("FFMPEG", "ffmpeg")
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("video")
@@ -47,7 +50,7 @@ def main():
 
     with tempfile.TemporaryDirectory() as tmp:
         fp = os.path.join(tmp, "frame.png")
-        subprocess.run(["ffmpeg", "-y", "-ss", str(args.time), "-i", args.video,
+        subprocess.run([FFMPEG, "-y", "-ss", str(args.time), "-i", args.video,
                         "-frames:v", "1", fp],
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         color = cv2.imread(fp, cv2.IMREAD_COLOR)
@@ -59,14 +62,23 @@ def main():
 
     if args.emit == "json":
         # Machine-readable for the editor: the traced segments (it renders them in
-        # its own Vectrex canvas) + the original frame as a base64 PNG to show
-        # side by side. Printed to stdout.
+        # its own Vectrex canvas) + the original frame + the 1-bit B&W MASK the
+        # tracer actually sees (so the user can dial the threshold visually).
         import base64, json
+        # Recompute the mask with the SAME crop build_frame applied.
+        mgray = gray
+        if args.crop > 0:
+            c = args.crop
+            mgray = gray[c:gray.shape[0] - c, c:gray.shape[1] - c]
+        mask = v.frame_to_mask(mgray, args.mode, args.threshold, args.invert,
+                               args.dark, args.light, args.canny_lo, args.canny_hi)
         ok, png = cv2.imencode(".png", color)
+        okm, mpng = cv2.imencode(".png", mask)
         print(json.dumps({
             "segments": segs,
             "width": w, "height": h,
             "originalPng": base64.b64encode(png.tobytes()).decode("ascii") if ok else "",
+            "maskPng": base64.b64encode(mpng.tobytes()).decode("ascii") if okm else "",
         }))
         return
     # Render the traced result on a black canvas the same size as the frame.

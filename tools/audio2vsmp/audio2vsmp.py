@@ -28,10 +28,21 @@ import sys
 import wave
 
 
-def load_pcm_s16_mono(path, rate):
-    """Decode `path` to mono s16le at `rate` Hz via ffmpeg; return list[int] (-32768..32767)."""
-    cmd = ["ffmpeg", "-v", "error", "-i", path,
-           "-ac", "1", "-ar", str(rate), "-f", "s16le", "-acodec", "pcm_s16le", "-"]
+# ffmpeg binary: env override (Electron passes the bundled ffmpeg-static path)
+FFMPEG = os.environ.get("FFMPEG", "ffmpeg")
+
+def load_pcm_s16_mono(path, rate, start=0.0, duration=None):
+    """Decode `path` to mono s16le at `rate` Hz via ffmpeg; return list[int] (-32768..32767).
+
+    `start`/`duration` (seconds) trim to the same window as the video track so the
+    voice matches the recording."""
+    cmd = [FFMPEG, "-v", "error"]
+    if start and start > 0:
+        cmd += ["-ss", str(start)]
+    cmd += ["-i", path, "-ac", "1", "-ar", str(rate), "-f", "s16le", "-acodec", "pcm_s16le"]
+    if duration and duration > 0:
+        cmd += ["-t", str(duration)]
+    cmd += ["-"]
     raw = subprocess.run(cmd, check=True, stdout=subprocess.PIPE).stdout
     n = len(raw) // 2
     return list(struct.unpack("<%dh" % n, raw[: n * 2]))
@@ -93,12 +104,16 @@ def main():
     ap.add_argument("--normalize", action="store_true", help="normalize to peak amplitude")
     ap.add_argument("--preview", default=None,
                     help="also write a .wav of the 4-bit result so you can HEAR the quality")
+    ap.add_argument("--start", type=float, default=0.0,
+                    help="trim: start decoding at this timestamp (seconds)")
+    ap.add_argument("--duration", type=float, default=None,
+                    help="trim: only decode this many seconds from --start")
     args = ap.parse_args()
 
     name = args.name or os.path.splitext(os.path.basename(args.output))[0]
 
     print(f"[1/3] decoding → mono {args.rate} Hz…", file=sys.stderr)
-    s16 = load_pcm_s16_mono(args.input, args.rate)
+    s16 = load_pcm_s16_mono(args.input, args.rate, args.start, args.duration)
     print(f"      {len(s16)} samples ({len(s16)/args.rate:.1f} s)", file=sys.stderr)
 
     print("[2/3] quantizing to 4-bit…", file=sys.stderr)
