@@ -1,0 +1,28 @@
+META TITLE = "VREC PLAYER"
+
+# ============================================================
+#  Full-screen .vrec player — plays a vectorized video/clip.
+#
+#  Drop your recording at assets/recordings/clip.vrec (e.g. produced by
+#  tools/video2vrec from Bad Apple etc.), build for the rp2350 target, and
+#  it plays back frame by frame.
+# ============================================================
+
+t: i16 = 0              # menu-frame counter
+frame: i16 = 0          # current recording frame
+FPS_DIV: i16 = 3        # menu ~50 fps / recording 15 fps → advance every 3
+
+
+def main():
+    pass
+
+
+def loop():
+    t = t + 1
+    # Advance the recording frame at the recording's fps (not the 50 fps loop).
+    if t >= FPS_DIV:
+        t = 0
+        frame = frame + 1
+    # scale 128 = 100% (full size); centred at (0,0). DRAW_RECORDING wraps the
+    # frame index internally (frame % frame_count), so this loops forever.
+    DRAW_RECORDING("clip", 0, 0, 128, frame)
