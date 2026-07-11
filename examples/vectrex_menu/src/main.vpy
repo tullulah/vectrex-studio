@@ -10,12 +10,15 @@ META TITLE = "VS MENU"
 
 # --- state ---------------------------------------------------
 selected: i16 = 0       # highlighted entry
+scroll: i16 = 0         # index of the top visible entry (pagination)
+music_on: i16 = 0       # PLAY_MUSIC latch (start once)
 t: i16 = 0              # frame counter (drives the preview animation)
 last_jy: i16 = 0        # joystick edge detection (NOT 'prev_y' — VPy names
                         # are case-insensitive and it would collide with PREV_Y!)
 flash: i16 = 0          # launch feedback flash counter
 
-GAME_COUNT: i16 = 3
+GAME_COUNT: i16 = 6
+PAGE_SIZE: i16 = 4      # entries visible at once (rest scroll)
 PREVIEW_DIV: i16 = 3    # menu_fps (~50) / recording_fps (15) — slows preview to real speed
 
 # layout
@@ -34,6 +37,11 @@ def main():
 
 def loop():
     t = t + 1
+
+    # start the background music once (MUSIC_UPDATE is auto-injected each frame)
+    if music_on == 0:
+        music_on = 1
+        PLAY_MUSIC("menu_theme")
 
     # ---------- input: joystick up/down with edge detection ----------
     jy = J1_Y()
@@ -60,25 +68,50 @@ def loop():
     SET_TEXT_SIZE(7)
     PRINT_TEXT(-60, 115, "VECTREX STUDIO")
 
-    # ---------- game list ----------
+    # ---------- pagination: scroll so `selected` stays in the visible window ----------
+    if selected < scroll:
+        scroll = selected
+    if selected >= scroll + PAGE_SIZE:
+        scroll = selected - PAGE_SIZE + 1
+
+    # ---------- game list (paginated window of PAGE_SIZE entries) ----------
     SET_TEXT_SIZE(6)
-    i = 0
-    while i < GAME_COUNT:
-        y = LIST_Y0 + i * LIST_DY
-        if i == selected:
-            SET_INTENSITY(120)  # highlighted: bright
-            # selector chevron
-            DRAW_LINE(LIST_X - 14, y - 8, LIST_X - 6, y - 4, 120)
-            DRAW_LINE(LIST_X - 6, y - 4, LIST_X - 14, y, 120)
-        else:
-            SET_INTENSITY(55)   # rest: dim
-        if i == 0:
-            PRINT_TEXT(LIST_X, y, "SNOW BROS")
-        if i == 1:
-            PRINT_TEXT(LIST_X, y, "PANG")
-        if i == 2:
-            PRINT_TEXT(LIST_X, y, "INTRO")
-        i = i + 1
+    slot = 0
+    while slot < PAGE_SIZE:
+        gidx = scroll + slot
+        if gidx < GAME_COUNT:
+            y = LIST_Y0 + slot * LIST_DY
+            if gidx == selected:
+                SET_INTENSITY(120)  # highlighted: bright
+                # selector chevron
+                DRAW_LINE(LIST_X - 14, y - 8, LIST_X - 6, y - 4, 120)
+                DRAW_LINE(LIST_X - 6, y - 4, LIST_X - 14, y, 120)
+            else:
+                SET_INTENSITY(55)   # rest: dim
+            if gidx == 0:
+                PRINT_TEXT(LIST_X, y, "SNOW BROS")
+            elif gidx == 1:
+                PRINT_TEXT(LIST_X, y, "PANG")
+            elif gidx == 2:
+                PRINT_TEXT(LIST_X, y, "CLOCK. CRYPT")
+            elif gidx == 3:
+                PRINT_TEXT(LIST_X, y, "STAR HOP")
+            elif gidx == 4:
+                PRINT_TEXT(LIST_X, y, "MARIO")
+            elif gidx == 5:
+                PRINT_TEXT(LIST_X, y, "SOLITAIRE")
+        slot = slot + 1
+
+    # ---------- scroll indicators (triangles) ----------
+    # up triangle if entries exist above the window
+    if scroll > 0:
+        DRAW_LINE(LIST_X + 30, LIST_Y0 + 16, LIST_X + 38, LIST_Y0 + 24, 90)
+        DRAW_LINE(LIST_X + 38, LIST_Y0 + 24, LIST_X + 46, LIST_Y0 + 16, 90)
+    # down triangle if entries exist below the window
+    if scroll + PAGE_SIZE < GAME_COUNT:
+        by = LIST_Y0 + PAGE_SIZE * LIST_DY + 12
+        DRAW_LINE(LIST_X + 30, by, LIST_X + 38, by - 8, 90)
+        DRAW_LINE(LIST_X + 38, by - 8, LIST_X + 46, by, 90)
 
     # ---------- preview box (right side) ----------
     box = 70
@@ -99,3 +132,14 @@ def loop():
     preview_frame = t / PREVIEW_DIV
     if selected == 0:
         DRAW_RECORDING("snowbros_preview", PREV_X, PREV_Y, 48, preview_frame)
+    elif selected == 1:
+        DRAW_RECORDING("pang_preview", PREV_X, PREV_Y, 48, preview_frame)
+    elif selected == 2:
+        DRAW_RECORDING("clockmakers_preview", PREV_X, PREV_Y, 48, preview_frame)
+    elif selected == 3:
+        DRAW_RECORDING("star_hop_preview", PREV_X, PREV_Y, 48, preview_frame)
+    elif selected == 4:
+        DRAW_RECORDING("mario_preview", PREV_X, PREV_Y, 48, preview_frame)
+    elif selected == 5:
+        DRAW_RECORDING("solitaire_preview", PREV_X, PREV_Y, 48, preview_frame)
+
