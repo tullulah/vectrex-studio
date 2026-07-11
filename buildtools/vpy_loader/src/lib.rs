@@ -57,13 +57,15 @@ pub struct SourceFile {
     pub is_entry: bool, // Is this the main entry point?
 }
 
-/// Asset file (vector, music, or recording)
+/// Asset file (vector, music, recording, or audio sample)
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AssetFile {
     Vector(PathBuf),
     Music(PathBuf),
     /// .vrec — multi-frame vector recording (game-preview / attract playback)
     Recording(PathBuf),
+    /// .vsmp — 4-bit PCM audio sample (voice/vector-movie audio track, PSG volume DAC)
+    Sample(PathBuf),
 }
 
 /// Complete project information
@@ -280,6 +282,31 @@ pub fn load_project(vpyproj_path: &Path) -> Result<ProjectInfo, LoadError> {
                 }
             }
         }
+        // Read audio-sample assets (.vsmp — 4-bit PCM voice/vector-movie audio)
+        if let Some(smp_array) = resources_val.get("samples").and_then(|v| v.as_array()) {
+            for item in smp_array {
+                if let Some(path_str) = item.as_str() {
+                    // Handle glob patterns
+                    if path_str.contains('*') || path_str.contains('?') {
+                        match expand_glob_pattern(path_str, &root_dir) {
+                            Ok(files) => {
+                                for file_path in files {
+                                    if file_path.extension().map_or(false, |ext| ext == "vsmp") {
+                                        asset_files.push(AssetFile::Sample(file_path));
+                                    }
+                                }
+                            }
+                            Err(_) => {}
+                        }
+                    } else {
+                        let full_path = root_dir.join(path_str);
+                        if full_path.exists() && full_path.extension().map_or(false, |ext| ext == "vsmp") {
+                            asset_files.push(AssetFile::Sample(full_path));
+                        }
+                    }
+                }
+            }
+        }
         // Read music assets
         if let Some(music_array) = resources_val.get("music").and_then(|v| v.as_array()) {
             for item in music_array {
@@ -314,6 +341,7 @@ pub fn load_project(vpyproj_path: &Path) -> Result<ProjectInfo, LoadError> {
             discover_vector_assets(&assets_dir.join("vectors"), &mut asset_files)?;
             discover_music_assets(&assets_dir.join("music"), &mut asset_files)?;
             discover_recording_assets(&assets_dir.join("recordings"), &mut asset_files)?;
+            discover_sample_assets(&assets_dir.join("samples"), &mut asset_files)?;
         }
     }
 
@@ -417,6 +445,29 @@ fn discover_recording_assets(dir: &Path, assets: &mut Vec<AssetFile>) -> Result<
 
     for path in paths {
         assets.push(AssetFile::Recording(path));
+    }
+
+    Ok(())
+}
+
+/// Discover .vsmp files in samples directory
+fn discover_sample_assets(dir: &Path, assets: &mut Vec<AssetFile>) -> Result<(), LoadError> {
+    if !dir.exists() {
+        return Ok(());
+    }
+
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| LoadError::Io(e.to_string()))?;
+
+    // Collect and sort for deterministic ordering across platforms/filesystems
+    let mut paths: Vec<_> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().map_or(false, |ext| ext == "vsmp"))
+        .collect();
+    paths.sort();
+
+    for path in paths {
+        assets.push(AssetFile::Sample(path));
     }
 
     Ok(())

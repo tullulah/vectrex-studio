@@ -150,6 +150,23 @@ pub fn emit_builtins(msg_entries: &[MsgEntry], usage: &Usage) -> String {
     if usage.has("ANIM") {
         s.push_str(&emit_draw_anim());
     }
+    if usage.has("PLAY_SAMPLE") {
+        s.push_str(&emit_play_sample());
+    }
+    s
+}
+
+// ─── PLAY_SAMPLE ────────────────────────────────────────────────────────────
+
+fn emit_play_sample() -> String {
+    // BIOS trap — hands the .vsmp ROM table (r0 = _NAME_SMP) to the core1 audio
+    // streamer, which clocks 4-bit samples out to the PSG volume register as a
+    // crude DAC. SYS_PLAY_SAMPLE = 9 (next free syscall after SYS_BUS_WRITE = 8).
+    let mut s = String::new();
+    s.push_str("@ vpy_play_sample(r0=sample_data_ptr) — BIOS trap: SYS_PLAY_SAMPLE\n");
+    s.push_str(".global vpy_play_sample\n.type vpy_play_sample, %function\n.thumb_func\nvpy_play_sample:\n");
+    s.push_str("    svc     #9                      @ SYS_PLAY_SAMPLE\n");
+    s.push_str("    bx      lr\n\n");
     s
 }
 

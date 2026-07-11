@@ -60,6 +60,10 @@ const GROUPS: &[(&str, &[&str], &[&str])] = &[
     // vpy_draw_recording (.vrec attract/preview playback): core only —
     // dv_reset/dv_move_to/dv_draw_delta/vpy_set_intensity are always emitted.
     ("DRAW_RECORDING",  &["DRAW_RECORDING"],    &[]),
+    // vpy_play_sample (.vsmp audio-sample playback): SVC stub only (svc #9 →
+    // SYS_PLAY_SAMPLE). No dependencies — it just hands the ROM table to the
+    // core1 audio streamer.
+    ("PLAY_SAMPLE",     &["PLAY_SAMPLE"],       &[]),
     // _SIN_TABLE data + smul_lut (smul_lut reads _SIN_TABLE).
     ("SIN_TABLE",       &[],                    &[]),
     // vpy_sin / vpy_cos: read _SIN_TABLE directly.
@@ -389,6 +393,16 @@ mod tests {
         let m2 = parse("def loop():\n    DRAW_LINE(0, 0, 10)\n");
         let u2 = analyze(&m2);
         assert!(!u2.has("DRAW_RECORDING"), "no DRAW_RECORDING call → group off");
+    }
+
+    #[test]
+    fn test_play_sample_gates_group() {
+        let m = parse("def loop():\n    PLAY_SAMPLE(\"beep\")\n");
+        let u = analyze(&m);
+        assert!(u.has("PLAY_SAMPLE"), "PLAY_SAMPLE call must enable its group");
+        let m2 = parse("def loop():\n    DRAW_LINE(0, 0, 10)\n");
+        let u2 = analyze(&m2);
+        assert!(!u2.has("PLAY_SAMPLE"), "no PLAY_SAMPLE call → group off");
     }
 
     #[test]

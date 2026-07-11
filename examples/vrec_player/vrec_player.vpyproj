@@ -13,3 +13,4 @@ vpy = ["src/**/*.vpy"]
 
 [resources]
 recordings = ["assets/recordings/**/*.vrec"]
+samples = ["assets/samples/**/*.vsmp"]

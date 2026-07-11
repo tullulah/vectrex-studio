@@ -104,6 +104,7 @@ pub enum AssetType {
     Instrument, // .vinstr file (pitched instrument timbre)
     Enemy,      // .venemy file (enemy type definition)
     Recording,  // .vrec file (multi-frame vector recording for attract/preview playback)
+    Sample,     // .vsmp file (4-bit PCM audio sample streamed to the PSG volume DAC)
 }
 
 #[derive(Debug, Clone, Error)]

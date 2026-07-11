@@ -600,6 +600,21 @@ pub fn emit_call(
         }
     }
 
+    // Special case: PLAY_SAMPLE("name") — .vsmp audio-sample playback.
+    // ABI: r0 = _NAME_SMP (ROM table ptr). vpy_play_sample is an SVC trap that
+    // hands the sample off to the core1 audio streamer. Resolves the
+    // string-literal name to the `_<NAME>_SMP` symbol, same as DRAW_RECORDING.
+    if info.name == "PLAY_SAMPLE" {
+        if let Some(Expr::StringLit(smp_name)) = args.first() {
+            let sym_base = smp_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_{sym_base}_SMP");
+            let mut s = String::new();
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ sample '{smp_name}'\n"));
+            s.push_str("    bl      vpy_play_sample\n");
+            return Ok(s);
+        }
+    }
+
     // Special case: DRAW_ANIM("name", ox, oy) — animation asset, symbol is _ANIM_NAME
     if info.name == "DRAW_ANIM" {
         if let Some(Expr::StringLit(anim_name)) = args.first() {

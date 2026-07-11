@@ -234,6 +234,9 @@ export class Rp2350System implements ISystem, IBus {
   // ---- Audio ----
   private audioCtx:  AudioContext | null           = null;
   private audioNode: ScriptProcessorNode | null    = null;
+  // Currently-playing .vsmp PCM sample source (PLAY_SAMPLE). Stopped/replaced
+  // when PLAY_SAMPLE is re-triggered so re-calling restarts (and loops) cleanly.
+  private sampleSource: AudioBufferSourceNode | null = null;
   static readonly AUDIO_SAMPLE_RATE = 44100;
   static readonly AUDIO_BUFFER_SIZE = 512;
 
@@ -621,6 +624,20 @@ export class Rp2350System implements ISystem, IBus {
       });
     }
 
+    // vpy_play_sample(r0 = pointer to _<NAME>_SMP asset in flash):
+    //   Reads sampleRate/numSamples + packed 4-bit PCM from the ROM image and
+    //   streams it in real time via a Web Audio BufferSourceNode. The sync model
+    //   is "audio + video both run in real time" — we just start playback; the
+    //   VPy program advances the video frame itself at the video fps.
+    const playSampleAddr = symbols.get('vpy_play_sample');
+    if (playSampleAddr !== undefined) {
+      this.traps.set(playSampleAddr & ~1, (cpu: Thumb2): number => {
+        this.playSample(cpu.getReg(0) >>> 0);
+        return 20;
+      });
+      console.log(`[Rp2350System] vpy_play_sample trap @ 0x${(playSampleAddr & ~1).toString(16)}`);
+    }
+
     // vpy_msg_def: compile-time declaration, pure no-op at runtime.
     // Trap it to avoid going through cpu.step() + via.tick() + beam.tick().
     const msgDefAddr = symbols.get('vpy_msg_def');
@@ -1003,12 +1020,78 @@ export class Rp2350System implements ISystem, IBus {
     }
   }
 
+  /**
+   * PLAY_SAMPLE("name") — stream a `.vsmp` 4-bit PCM sample from the ROM image.
+   *
+   * The compiler lays out the asset `_<NAME>_SMP` at `assetPtr` (an ARM flash
+   * address, 0x10000000+) as:
+   *   [0..4)  sampleRate  (u32 LE, e.g. 8000)
+   *   [4..8)  numSamples  (u32 LE, total 4-bit samples)
+   *   [8..)   packed 4-bit PCM — 2 samples/byte, low nibble = even sample
+   *
+   * The nibbles (0-15) are expanded to Float32 in [-1, 1] and played through a
+   * standard Web Audio BufferSourceNode connected to ctx.destination, so the
+   * audioGraphTracker picks it up automatically for the video recorder tap.
+   *
+   * Fire-and-forget: it plays in real time. Re-triggering stops the previous
+   * source and starts fresh (so re-calling restarts / loops).
+   */
+  playSample(assetPtr: number): void {
+    // Ensure an AudioContext exists (reuse the PSG one if audio already started).
+    if (!this.audioCtx) {
+      try {
+        this.audioCtx = new AudioContext({ sampleRate: Rp2350System.AUDIO_SAMPLE_RATE });
+      } catch (e) {
+        console.warn('[Rp2350System] PLAY_SAMPLE: AudioContext init failed:', e);
+        return;
+      }
+    }
+    const ctx = this.audioCtx;
+
+    // Read the asset header from the flash image (same accessor as read8/peekFlash).
+    const rd = (addr: number): number =>
+      this.flash[((addr >>> 0) - FLASH_BASE) & (FLASH_SIZE - 1)] ?? 0;
+    const readU32 = (addr: number): number =>
+      (rd(addr) | (rd(addr + 1) << 8) | (rd(addr + 2) << 16) | (rd(addr + 3) << 24)) >>> 0;
+
+    const sampleRate = readU32(assetPtr);
+    const numSamples = readU32(assetPtr + 4);
+    if (sampleRate <= 0 || numSamples <= 0 || numSamples > 0x4000000) {
+      console.warn(`[Rp2350System] PLAY_SAMPLE: bad header rate=${sampleRate} n=${numSamples} @0x${assetPtr.toString(16)}`);
+      return;
+    }
+
+    // Unpack numSamples 4-bit nibbles → Float32 [-1, 1].
+    const dataPtr = assetPtr + 8;
+    const buf = ctx.createBuffer(1, numSamples, sampleRate);
+    const out = buf.getChannelData(0);
+    for (let i = 0; i < numSamples; i++) {
+      const byte = rd(dataPtr + (i >> 1));
+      const v    = (i & 1) === 0 ? (byte & 0x0F) : ((byte >> 4) & 0x0F);
+      out[i] = (v / 15) * 2 - 1;
+    }
+
+    // Stop any previous sample (re-trigger restarts / loops).
+    try { this.sampleSource?.stop(); this.sampleSource?.disconnect(); } catch { /* noop */ }
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);   // tracked by audioGraphTracker for the recorder
+    src.onended = () => { if (this.sampleSource === src) this.sampleSource = null; };
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
+    src.start();
+    this.sampleSource = src;
+  }
+
   /** Stop and destroy the audio context. */
   stopAudio(): void {
     try {
+      this.sampleSource?.stop();
+      this.sampleSource?.disconnect();
       this.audioNode?.disconnect();
       this.audioCtx?.close().catch(() => {});
     } catch {}
+    this.sampleSource = null;
     this.audioNode = null;
     this.audioCtx  = null;
   }

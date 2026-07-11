@@ -10,7 +10,8 @@ META TITLE = "VREC PLAYER"
 
 t: i16 = 0              # menu-frame counter
 frame: i16 = 0          # current recording frame
-FPS_DIV: i16 = 3        # menu ~50 fps / recording 15 fps → advance every 3
+audio_started: i16 = 0  # PLAY_SAMPLE latch (fire once)
+FPS_DIV: i16 = 3        # loop ~50 fps / recording 15 fps → advance every 3
 
 
 def main():
@@ -19,6 +20,13 @@ def main():
 
 def loop():
     t = t + 1
+
+    # Start the audio track once. Audio is the master clock: it streams in real
+    # time; the video below advances at its own fps, so both stay in sync.
+    if audio_started == 0:
+        audio_started = 1
+        PLAY_SAMPLE("audio")
+
     # Advance the recording frame at the recording's fps (not the 50 fps loop).
     if t >= FPS_DIV:
         t = 0

@@ -94,6 +94,8 @@ pub fn generate_uvm2_asm(
 
     // Recordings (.vrec) are usage-filtered (shared with the arm target).
     let asset_list = assets::filter_recording_assets(asset_list, module);
+    // Audio samples (.vsmp) usage-filtered the same way (shared with arm target).
+    let asset_list = assets::filter_sample_assets(&asset_list, module);
     let asset_list = asset_list.as_slice();
 
     // For UVM2, bus_write/bus_read delegate to uvm2_via_write (CLK-synced GPIO),

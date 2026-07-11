@@ -63,6 +63,7 @@ pub fn is_known_builtin(name: &str) -> bool {
             | "DRAW_ELLIPSE"
             | "DRAW_VECTOR_3D"
             | "DRAW_RECORDING"
+            | "PLAY_SAMPLE"
             | "DRAW_BEZIER"
             | "DRAW_BEZIER_QUAD"
             | "PLAY_NOTE"
@@ -84,7 +85,7 @@ pub fn builtin_arity(name: &str) -> Option<usize> {
         | "UPDATE_LEVEL" | "GET_LEVEL_BOUNDS" => Some(0),
 
         // 1-argument builtins
-        "DRAW_VECTOR" | "PLAY_MUSIC" | "PLAY_SFX" | "ABS" | "LEN" | "ASM"
+        "DRAW_VECTOR" | "PLAY_MUSIC" | "PLAY_SFX" | "PLAY_SAMPLE" | "ABS" | "LEN" | "ASM"
         | "SET_CAMERA_X" | "SET_CAMERA_Y" => Some(1),
 
         // 2-argument builtins

@@ -178,6 +178,71 @@ struct VrecSegment {
 }
 
 // ============================================================
+// .vsmp audio-sample format (4-bit PCM, PSG-volume DAC voice)
+// ============================================================
+//
+// Produced by tools/audio2vsmp/audio2vsmp.py: mono audio downsampled and
+// quantized to 4-bit, packed 2 samples/byte (low nibble = even sample),
+// carried as a base64 payload. This is the audio track for "vector movies"
+// (Bad Apple + voice): streamed to the AY-3-8912 volume register as a crude DAC.
+
+#[derive(Deserialize)]
+struct VsmpResource {
+    #[serde(default)]
+    #[allow(dead_code)]
+    version: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    name: String,
+    #[serde(rename = "sampleRate", default)]
+    sample_rate: u32,
+    #[serde(default)]
+    #[allow(dead_code)]
+    bits: u32,
+    #[serde(rename = "numSamples", default)]
+    num_samples: u32,
+    /// Base64 of packed 4-bit samples (2 per byte, low nibble = even sample).
+    #[serde(default)]
+    data: String,
+}
+
+/// Decode a standard base64 string (RFC 4648, `+`/`/` alphabet, `=` padding)
+/// into bytes. Pure Rust — base64 is not a workspace dependency and the
+/// payload format is fixed. Whitespace in the input is ignored; any invalid
+/// character aborts decoding and returns what was decoded so far.
+fn base64_decode(input: &str) -> Vec<u8> {
+    fn val(c: u8) -> Option<u8> {
+        match c {
+            b'A'..=b'Z' => Some(c - b'A'),
+            b'a'..=b'z' => Some(c - b'a' + 26),
+            b'0'..=b'9' => Some(c - b'0' + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+    let mut out = Vec::with_capacity(input.len() / 4 * 3 + 3);
+    let mut acc: u32 = 0;
+    let mut bits: u32 = 0;
+    for &c in input.as_bytes() {
+        if c == b'=' || c.is_ascii_whitespace() {
+            continue;
+        }
+        let v = match val(c) {
+            Some(v) => v as u32,
+            None => break,
+        };
+        acc = (acc << 6) | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    out
+}
+
+// ============================================================
 // Recording usage filter (ARM targets)
 // ============================================================
 
@@ -209,6 +274,114 @@ pub fn filter_recording_assets(assets: &[AssetInfo], module: &Module) -> Vec<Ass
         .filter(|a| !matches!(a.asset_type, AssetType::Recording) || used.contains(&a.name))
         .cloned()
         .collect()
+}
+
+/// Drop .vsmp assets not referenced by a `PLAY_SAMPLE("name")` call.
+/// Mirrors [`filter_recording_assets`]: all other asset types pass through
+/// unchanged; only unreferenced audio samples are pruned so they never bloat
+/// the ROM.
+pub fn filter_sample_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInfo> {
+    if !assets.iter().any(|a| matches!(a.asset_type, AssetType::Sample)) {
+        return assets.to_vec();
+    }
+    let mut used: HashSet<String> = HashSet::new();
+    for item in &module.items {
+        match item {
+            Item::Function(f) => {
+                for st in &f.body {
+                    collect_sample_names_stmt(st, &mut used);
+                }
+            }
+            Item::Const { value, .. } | Item::GlobalLet { value, .. } => {
+                collect_sample_names_expr(value, &mut used);
+            }
+            Item::ExprStatement(e) => collect_sample_names_expr(e, &mut used),
+            _ => {}
+        }
+    }
+    assets
+        .iter()
+        .filter(|a| !matches!(a.asset_type, AssetType::Sample) || used.contains(&a.name))
+        .cloned()
+        .collect()
+}
+
+fn collect_sample_names_stmt(stmt: &Stmt, used: &mut HashSet<String>) {
+    match stmt {
+        Stmt::Expr(e, _) => collect_sample_names_expr(e, used),
+        Stmt::Return(Some(e), _) => collect_sample_names_expr(e, used),
+        Stmt::Let { value, .. } => collect_sample_names_expr(value, used),
+        Stmt::Assign { value, .. } | Stmt::CompoundAssign { value, .. } => {
+            collect_sample_names_expr(value, used);
+        }
+        Stmt::If { cond, body, elifs, else_body, .. } => {
+            collect_sample_names_expr(cond, used);
+            for s in body { collect_sample_names_stmt(s, used); }
+            for (c, b) in elifs {
+                collect_sample_names_expr(c, used);
+                for s in b { collect_sample_names_stmt(s, used); }
+            }
+            if let Some(b) = else_body {
+                for s in b { collect_sample_names_stmt(s, used); }
+            }
+        }
+        Stmt::While { cond, body, .. } => {
+            collect_sample_names_expr(cond, used);
+            for s in body { collect_sample_names_stmt(s, used); }
+        }
+        Stmt::For { start, end, step, body, .. } => {
+            collect_sample_names_expr(start, used);
+            collect_sample_names_expr(end, used);
+            if let Some(st) = step { collect_sample_names_expr(st, used); }
+            for s in body { collect_sample_names_stmt(s, used); }
+        }
+        Stmt::ForIn { iterable, body, .. } => {
+            collect_sample_names_expr(iterable, used);
+            for s in body { collect_sample_names_stmt(s, used); }
+        }
+        Stmt::Switch { expr, cases, default, .. } => {
+            collect_sample_names_expr(expr, used);
+            for (c, b) in cases {
+                collect_sample_names_expr(c, used);
+                for s in b { collect_sample_names_stmt(s, used); }
+            }
+            if let Some(b) = default {
+                for s in b { collect_sample_names_stmt(s, used); }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_sample_names_expr(expr: &Expr, used: &mut HashSet<String>) {
+    match expr {
+        Expr::Call(info) => {
+            if info.name.to_uppercase() == "PLAY_SAMPLE" {
+                if let Some(Expr::StringLit(name)) = info.args.first() {
+                    used.insert(name.clone());
+                }
+            }
+            for a in &info.args { collect_sample_names_expr(a, used); }
+        }
+        Expr::MethodCall(info) => {
+            collect_sample_names_expr(&info.target, used);
+            for a in &info.args { collect_sample_names_expr(a, used); }
+        }
+        Expr::Binary { left, right, .. }
+        | Expr::Compare { left, right, .. }
+        | Expr::Logic { left, right, .. } => {
+            collect_sample_names_expr(left, used);
+            collect_sample_names_expr(right, used);
+        }
+        Expr::Not(e) | Expr::BitNot(e) => collect_sample_names_expr(e, used),
+        Expr::Index { target, index } => {
+            collect_sample_names_expr(target, used);
+            collect_sample_names_expr(index, used);
+        }
+        Expr::FieldAccess { target, .. } => collect_sample_names_expr(target, used),
+        Expr::List(items) => for it in items { collect_sample_names_expr(it, used); },
+        _ => {}
+    }
 }
 
 fn collect_recording_names_stmt(stmt: &Stmt, used: &mut HashSet<String>) {
@@ -478,6 +651,25 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
                 };
                 s.push_str(&compile_vrec(&vrec, &asset.name));
             }
+            AssetType::Sample => {
+                let text = match fs::read_to_string(&asset.path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not read {}: {}\n", asset.path, e));
+                        s.push_str(&format!("    .balign 4\n.global _{sym}_SMP\n_{sym}_SMP:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                let vsmp: VsmpResource = match serde_json::from_str(&text) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not parse {}: {}\n", asset.path, e));
+                        s.push_str(&format!("    .balign 4\n.global _{sym}_SMP\n_{sym}_SMP:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                s.push_str(&compile_vsmp(&vsmp, &asset.name));
+            }
             AssetType::Enemy => {
                 let text = match fs::read_to_string(&asset.path) {
                     Ok(t) => t,
@@ -557,6 +749,42 @@ fn compile_vrec(vrec: &VrecResource, override_name: &str) -> String {
                 x0 as u8, y0 as u8, x1 as u8, y1 as u8, inten, x0, y0, x1, y1, inten
             ));
         }
+    }
+    s.push('\n');
+    s
+}
+
+// ============================================================
+// Sample compiler (.vsmp → 4-bit PCM ROM table)
+// ============================================================
+//
+// Binary layout (read by the core1 audio streamer — SYS_PLAY_SAMPLE):
+//   _<NAME>_SMP:                       (4-byte aligned)
+//     .word  sample_rate               @ Hz (e.g. 8000)
+//     .word  num_samples               @ number of 4-bit samples
+//     .byte  <packed 4-bit bytes...>   @ 2 samples/byte, low nibble = even sample
+//
+// The byte payload is the base64-decoded "data" field, emitted 16 bytes/row.
+
+fn compile_vsmp(vsmp: &VsmpResource, override_name: &str) -> String {
+    let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let bytes = base64_decode(&vsmp.data);
+
+    let mut s = String::new();
+    s.push_str(&format!(
+        "@ --- {} SAMPLE ({} samples @ {} Hz, {} packed bytes) ---\n",
+        override_name, vsmp.num_samples, vsmp.sample_rate, bytes.len()
+    ));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_SMP\n_{sym}_SMP:\n"));
+    s.push_str(&format!("    .word   {}               @ sample_rate (Hz)\n", vsmp.sample_rate));
+    s.push_str(&format!("    .word   {}               @ num_samples\n", vsmp.num_samples));
+    for chunk in bytes.chunks(16) {
+        let row: Vec<String> = chunk.iter().map(|b| format!("0x{:02X}", b)).collect();
+        s.push_str(&format!("    .byte   {}\n", row.join(", ")));
+    }
+    if bytes.is_empty() {
+        s.push_str("    .byte   0x00            @ empty payload\n");
     }
     s.push('\n');
     s
@@ -1307,6 +1535,88 @@ mod tests {
         let asm = emit_arm_assets(&filtered);
         assert!(asm.contains("_PREVIEW_VREC:"), "used recording must be emitted:\n{asm}");
         assert!(!asm.contains("_OTHER_VREC"), "unused recording must not be emitted");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // base64 of the two bytes [0x21, 0x43] = "IUM=". Low nibble = even sample:
+    //   byte0=0x21 → sample0=1, sample1=2 ; byte1=0x43 → sample2=3, sample3=4.
+    const VSMP_JSON: &str = r#"{
+        "version": "1.0",
+        "name": "beep",
+        "sampleRate": 8000,
+        "bits": 4,
+        "numSamples": 4,
+        "data": "IUM="
+    }"#;
+
+    #[test]
+    fn test_base64_decode() {
+        assert_eq!(base64_decode("IUM="), vec![0x21, 0x43]);
+        assert_eq!(base64_decode(""), Vec::<u8>::new());
+        // Standard RFC 4648 vector: "Man" → "TWFu"
+        assert_eq!(base64_decode("TWFu"), b"Man".to_vec());
+    }
+
+    #[test]
+    fn test_compile_vsmp_table_layout() {
+        let vsmp: VsmpResource = serde_json::from_str(VSMP_JSON).unwrap();
+        let asm = compile_vsmp(&vsmp, "beep");
+
+        assert!(asm.contains(".balign 4"), "sample table must be 4-byte aligned:\n{asm}");
+        assert!(asm.contains(".global _BEEP_SMP"), "missing global symbol:\n{asm}");
+        assert!(asm.contains("_BEEP_SMP:\n    .word   8000"),
+            "missing sample_rate word:\n{asm}");
+        assert!(asm.contains(".word   4               @ num_samples"),
+            "missing num_samples word:\n{asm}");
+        assert!(asm.contains(".byte   0x21, 0x43"),
+            "packed 4-bit payload bytes wrong:\n{asm}");
+    }
+
+    #[test]
+    fn test_filter_sample_assets() {
+        let dir = std::env::temp_dir().join(format!("vpy_vsmp_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let used_path = dir.join("beep.vsmp");
+        let unused_path = dir.join("other.vsmp");
+        std::fs::write(&used_path, VSMP_JSON).unwrap();
+        std::fs::write(&unused_path, VSMP_JSON).unwrap();
+
+        let assets = vec![
+            AssetInfo {
+                name: "beep".into(),
+                path: used_path.display().to_string(),
+                asset_type: AssetType::Sample,
+            },
+            AssetInfo {
+                name: "other".into(),
+                path: unused_path.display().to_string(),
+                asset_type: AssetType::Sample,
+            },
+            AssetInfo {
+                name: "ship".into(),
+                path: dir.join("ship.vec").display().to_string(),
+                asset_type: AssetType::Vector,
+            },
+        ];
+
+        let module = parse(concat!(
+            "def main():\n    pass\n\n",
+            "def loop():\n",
+            "    PLAY_SAMPLE(\"beep\")\n",
+        ));
+        let filtered = filter_sample_assets(&assets, &module);
+
+        assert!(filtered.iter().any(|a| a.name == "beep"),
+            "referenced .vsmp must survive the filter");
+        assert!(!filtered.iter().any(|a| a.name == "other"),
+            "unreferenced .vsmp must be dropped");
+        assert!(filtered.iter().any(|a| a.name == "ship"),
+            "non-sample assets pass through unchanged");
+
+        let asm = emit_arm_assets(&filtered);
+        assert!(asm.contains("_BEEP_SMP:"), "used sample must be emitted:\n{asm}");
+        assert!(!asm.contains("_OTHER_SMP"), "unused sample must not be emitted");
 
         std::fs::remove_dir_all(&dir).ok();
     }

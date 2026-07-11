@@ -81,6 +81,9 @@ pub fn generate_arm_asm(
     // DRAW_RECORDING("name", ...) call are emitted. Other asset types pass
     // through unchanged.
     let assets = assets::filter_recording_assets(assets, module);
+    // Audio samples (.vsmp) are usage-filtered the same way: only those
+    // referenced by a PLAY_SAMPLE("name") call are emitted.
+    let assets = assets::filter_sample_assets(&assets, module);
     let assets = assets.as_slice();
 
     // Runtime helpers (bus_write / bus_read GPIO bit-bang + enemy runtime)
