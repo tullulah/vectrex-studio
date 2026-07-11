@@ -49,14 +49,31 @@ def extract_frames(video_path, fps, tmpdir, max_frames=None):
     return files
 
 
-def frame_to_contours(gray, mode, thresh, invert):
-    """Return a list of contours (each an Nx2 int array) for one grayscale frame."""
+def frame_to_contours(gray, mode, thresh, invert, dark=60, light=200, canny_lo=60, canny_hi=160):
+    """Return a list of contours (each an Nx2 int array) for one grayscale frame.
+
+    Modes:
+      silhouette — one threshold, trace filled shapes (binary / shadow art).
+      edges      — dark strokes only (THRESH_BINARY_INV); misses light shapes.
+      duotone    — dark shapes (<dark) UNION light shapes (>light): catches BOTH
+                   a black character and a white one on a mid-grey background
+                   (line-art with mixed light/dark elements).
+      canny      — gradient edges regardless of polarity: every boundary, most
+                   general for busy line-art (but more segments).
+    """
     if mode == "silhouette":
-        # Binary: foreground = the filled shapes. Bad Apple = white shapes on
-        # black (or vice-versa) — `invert` flips which side is "ink".
         _, bw = cv2.threshold(gray, thresh, 255, cv2.THRESH_BINARY)
         if invert:
             bw = cv2.bitwise_not(bw)
+    elif mode == "duotone":
+        _, dark_m = cv2.threshold(gray, dark, 255, cv2.THRESH_BINARY_INV)  # black shapes
+        _, light_m = cv2.threshold(gray, light, 255, cv2.THRESH_BINARY)    # white shapes
+        bw = cv2.bitwise_or(dark_m, light_m)
+        if invert:
+            bw = cv2.bitwise_not(bw)
+    elif mode == "canny":
+        bw = cv2.Canny(gray, canny_lo, canny_hi)
+        bw = cv2.dilate(bw, None, iterations=1)  # close 1px gaps so contours join
     else:  # edges: ink = dark strokes (the black outlines of the cartoon)
         _, bw = cv2.threshold(gray, thresh, 255, cv2.THRESH_BINARY_INV)
         if invert:
@@ -96,7 +113,8 @@ def build_frame(gray, args):
         c = args.crop
         gray = gray[c:gray.shape[0] - c, c:gray.shape[1] - c]
     h, w = gray.shape
-    contours = frame_to_contours(gray, args.mode, args.threshold, args.invert)
+    contours = frame_to_contours(gray, args.mode, args.threshold, args.invert,
+                                 args.dark, args.light, args.canny_lo, args.canny_hi)
     # Largest contours first (drop tiny noise / stay within budget on the big shapes).
     contours = sorted(contours, key=cv2.contourArea, reverse=True)
     segs = []
@@ -129,7 +147,11 @@ def main():
     ap.add_argument("input", help="input video (mp4/gif/…)")
     ap.add_argument("output", help="output .vrec")
     ap.add_argument("--name", default=None, help="recording name (default: from output)")
-    ap.add_argument("--mode", choices=["silhouette", "edges"], default="silhouette")
+    ap.add_argument("--mode", choices=["silhouette", "edges", "duotone", "canny"], default="silhouette")
+    ap.add_argument("--dark", type=int, default=60, help="duotone: dark-shape threshold")
+    ap.add_argument("--light", type=int, default=200, help="duotone: light-shape threshold")
+    ap.add_argument("--canny-lo", type=int, default=60, help="canny low threshold")
+    ap.add_argument("--canny-hi", type=int, default=160, help="canny high threshold")
     ap.add_argument("--fps", type=int, default=15, help="playback/capture fps (default 15)")
     ap.add_argument("--threshold", type=int, default=128, help="binarize threshold 0-255")
     ap.add_argument("--invert", action="store_true", help="flip ink/background")
