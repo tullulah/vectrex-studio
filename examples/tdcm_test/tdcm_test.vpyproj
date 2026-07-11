@@ -1,0 +1,16 @@
+[project]
+name = "tdcm_test"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/tdcm_test.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+recordings = ["assets/recordings/**/*.vrec"]
+samples = ["assets/samples/**/*.vsmp"]
