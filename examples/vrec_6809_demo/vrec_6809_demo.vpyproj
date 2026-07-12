@@ -1,0 +1,15 @@
+[project]
+name = "vrec_6809_demo"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/vrec_6809_demo.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]
+
+[resources]
+recordings = ["assets/recordings/**/*.vrec"]
