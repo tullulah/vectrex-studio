@@ -105,8 +105,9 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         ram.allocate("DRAW_REC_X", 1, "DRAW_RECORDING: center X (i8)");
         ram.allocate("DRAW_REC_Y", 1, "DRAW_RECORDING: center Y (i8)");
         ram.allocate("DRAW_REC_SCALE", 1, "DRAW_RECORDING: scale 0-128 (128=100%)");
-        ram.allocate("DRAW_REC_SEGCNT", 2, "DRAW_RECORDING: remaining segment count");
-        ram.allocate("DRAW_REC_SEGPTR", 2, "DRAW_RECORDING: current segment pointer (survives BIOS calls)");
+        ram.allocate("DRAW_REC_SEGCNT", 2, "DRAW_RECORDING: remaining chain count in frame");
+        ram.allocate("DRAW_REC_SEGPTR", 2, "DRAW_RECORDING: current chain/delta pointer (survives BIOS calls)");
+        ram.allocate("DRAW_REC_CHAIN_SEGS", 1, "DRAW_RECORDING: remaining deltas in current chain");
         ram.allocate("DRAW_REC_SX0", 1, "DRAW_RECORDING: scaled+centered x0 (i8)");
         ram.allocate("DRAW_REC_SY0", 1, "DRAW_RECORDING: scaled+centered y0 (i8)");
         ram.allocate("DRAW_REC_SX1", 1, "DRAW_RECORDING: scaled+centered x1 (i8)");
@@ -2603,37 +2604,43 @@ DAR_DONE:\n\
     RTS\n\n");
 }
 
-/// Emit DRAW_RECORDING_RUNTIME — plays one frame of a .vrec vector recording.
+/// Emit DRAW_RECORDING_RUNTIME — plays one frame of a .vrec vector recording,
+/// walking POLYLINE CHAINS (start point + deltas) instead of independent lines.
 ///
-/// SINGLE-BANK, VIDEO-ONLY. Mirrors the pitrex/arm draw-recording control flow
-/// (frame % frame_count → offset-table lookup → per-segment absolute line) but
-/// draws through the Vectrex BIOS instead of an SDK call.
+/// SINGLE-BANK, VIDEO-ONLY. frame % frame_count → frame ptr → per chain: one
+/// Reset0Ref + Moveto_d to the scaled+centered start, then continuous
+/// Draw_Line_d over the scaled deltas (NO Reset0Ref/Moveto between deltas — the
+/// beam is left at each endpoint, giving true polyline continuity + speed).
 ///
 /// Caller sets (all in RAM, DP=$C8):
 ///   DRAW_REC_PTR   = _<NAME>_VREC header base (also passed in X at entry)
 ///   DRAW_REC_FRAME = free-running frame counter (i16, non-negative)
 ///   DRAW_REC_X/Y   = center (i8)
 ///   DRAW_REC_SCALE = scale 0-128 (128 = 100%; identity for recorded ±127 coords)
-///   DRAW_VEC_INTENSITY = SET_INTENSITY override (0 = use recorded per-seg i)
+///   DRAW_VEC_INTENSITY = SET_INTENSITY override (0 = use recorded per-chain i)
 ///
-/// Data layout (assets.rs compile_vrec):
+/// Chained data layout (assets.rs compile_vrec):
 ///   _<NAME>_VREC: FDB frame_count
 ///                 FDB frame0_ptr, frame1_ptr, ...     (absolute pointers)
-///   frame N:      FDB segment_count
-///                 per segment 5 bytes: FCB x0,y0,x1,y1,intensity (i8,i8,i8,i8,u8)
+///   frame N:      FDB chain_count
+///     per chain:  FCB start_x, start_y  (i8), FCB intensity (u8), FCB seg_count (u8)
+///                 FCB dx,dy × seg_count  (i8 deltas)
 ///
-/// DP discipline: ALL table reads + scale math run with DP=$C8. We compute the
-/// four scaled+centered endpoints into RAM first, THEN switch DP=$D0 for the
-/// BIOS draw (Reset0Ref / Intensity_a / Moveto_d / Draw_Line_d), then back to
-/// $C8. RAM reads use `>` extended addressing so they are DP-agnostic.
+/// DP discipline: table reads + scale math (MUL16 uses direct-addressed TMPPTR)
+/// MUST run with DP=$C8. The start point is scaled+centered (DREC_COORD) under
+/// DP=$C8, then DP=$D0 for the one-time Reset0Ref/ACR/Intensity_a/Moveto_d.
+/// Each delta is scaled (DREC_SCALE, deltas are RELATIVE — no center) under
+/// DP=$C8, then DP flips to $D0 only for the Draw_Line_d, then back. All RAM
+/// reads use `>` extended addressing so they are DP-agnostic.
 ///
 /// Register/temp usage: A/B/D/X scratch; MOD16 clobbers TMPVAL/TMPPTR/TMPPTR2;
-/// segment cursor + counter live in RAM (DRAW_REC_SEGPTR/SEGCNT) so they survive
-/// BIOS calls. DREC_SCALE is a leaf helper (coord*scale>>7, sign-preserved).
+/// chain cursor + counters live in RAM (DRAW_REC_SEGPTR / DRAW_REC_SEGCNT /
+/// DRAW_REC_CHAIN_SEGS) so they survive BIOS calls. Deltas are pre-clamped to i8
+/// at compile time (compile_vrec), so no runtime delta subtraction is needed.
 fn emit_draw_recording_runtime(asm: &mut String) {
     asm.push_str(
 "; ============================================================================\n\
-; DRAW_RECORDING_RUNTIME  (.vrec vector-movie player — single-bank, video-only)\n\
+; DRAW_RECORDING_RUNTIME  (.vrec polyline-chained player — single-bank, video-only)\n\
 ; ============================================================================\n\
 DRAW_RECORDING_RUNTIME:\n\
     PSHS D,X,Y,U\n\
@@ -2650,74 +2657,86 @@ DRAW_RECORDING_RUNTIME:\n\
     LEAX 2,X               ; X = &offset_table[0] (skip frame_count word)\n\
     LEAX D,X               ; X = &offset_table[frame_idx]\n\
     LDX ,X                 ; X = frame data pointer (absolute)\n\
-    LDD ,X                 ; D = segment_count\n\
+    LDD ,X                 ; D = chain_count\n\
     LBEQ DREC_DONE         ; empty frame\n\
-    STD >DRAW_REC_SEGCNT\n\
-    LEAX 2,X               ; X = first segment\n\
+    STD >DRAW_REC_SEGCNT   ; remaining chains in frame\n\
+    LEAX 2,X               ; X = first chain header\n\
     STX >DRAW_REC_SEGPTR\n\
-DREC_SEG_LOOP:\n\
-    ; --- compute scaled+centered endpoints (DP=$C8), clamped to i8 ---\n\
+DREC_CHAIN_LOOP:\n\
+    ; --- scaled+centered start point (DP=$C8), clamped to i8 ---\n\
     LDX >DRAW_REC_SEGPTR\n\
-    LDA ,X                 ; x0 (i8)\n\
+    LDA ,X                 ; start_x (i8)\n\
     LDB >DRAW_REC_X        ; center X (i8)\n\
-    JSR DREC_COORD         ; B = clamp_i8((x0*scale>>7) + centerX)\n\
+    JSR DREC_COORD         ; B = clamp_i8((start_x*scale>>7) + centerX)\n\
     STB >DRAW_REC_SX0\n\
     LDX >DRAW_REC_SEGPTR\n\
-    LDA 1,X                ; y0\n\
+    LDA 1,X                ; start_y\n\
     LDB >DRAW_REC_Y\n\
     JSR DREC_COORD\n\
     STB >DRAW_REC_SY0\n\
-    LDX >DRAW_REC_SEGPTR\n\
-    LDA 2,X                ; x1\n\
-    LDB >DRAW_REC_X\n\
-    JSR DREC_COORD\n\
-    STB >DRAW_REC_SX1\n\
-    LDX >DRAW_REC_SEGPTR\n\
-    LDA 3,X                ; y1\n\
-    LDB >DRAW_REC_Y\n\
-    JSR DREC_COORD\n\
-    STB >DRAW_REC_SY1\n\
     ; --- intensity: SET_INTENSITY override (DRAW_VEC_INTENSITY) wins if nonzero ---\n\
     LDA >DRAW_VEC_INTENSITY\n\
     BNE DREC_HAVE_I\n\
     LDX >DRAW_REC_SEGPTR\n\
-    LDA 4,X                ; recorded intensity\n\
+    LDA 2,X                ; recorded chain intensity\n\
 DREC_HAVE_I:\n\
     STA >DRAW_REC_I\n\
-    ; --- dx = clamp(x1-x0), dy = clamp(y1-y0) (i8 for Draw_Line_d deltas) ---\n\
-    LDA >DRAW_REC_SY1\n\
-    LDB >DRAW_REC_SY0\n\
-    JSR DREC_DIFF          ; B = clamp_i8(y1 - y0)\n\
-    STB >DRAW_REC_SY1      ; reuse as dy\n\
-    LDA >DRAW_REC_SX1\n\
-    LDB >DRAW_REC_SX0\n\
-    JSR DREC_DIFF          ; B = clamp_i8(x1 - x0)\n\
-    STB >DRAW_REC_SX1      ; reuse as dx\n\
-    ; --- draw one absolute line via BIOS (DP=$D0) ---\n\
+    ; --- seg_count, then advance cursor to first delta ---\n\
+    LDX >DRAW_REC_SEGPTR\n\
+    LDB 3,X                ; seg_count (deltas in this chain)\n\
+    STB >DRAW_REC_CHAIN_SEGS\n\
+    LEAX 4,X               ; X = first delta (skip start_x,start_y,i,seg_count)\n\
+    STX >DRAW_REC_SEGPTR\n\
+    ; --- beam setup ONCE per chain (DP=$D0) ---\n\
     LDA #$D0\n\
     TFR A,DP               ; DP=$D0 for VIA/BIOS access\n\
-    JSR Reset0Ref          ; beam does NOT auto-reset between segments\n\
+    JSR Reset0Ref          ; once per chain — deltas continue from the endpoint\n\
     LDA #$80\n\
     STA <$04               ; ACR: SR shift-out (beam control)\n\
     LDA >DRAW_REC_I\n\
     JSR Intensity_a\n\
-    LDA >DRAW_REC_SY0      ; A = Y0 (Moveto_d absolute: A=Y, B=X)\n\
+    LDA >DRAW_REC_SY0      ; A = start Y (Moveto_d absolute: A=Y, B=X)\n\
     LDB >DRAW_REC_SX0\n\
     JSR Moveto_d\n\
+    LDA #$C8\n\
+    TFR A,DP               ; back to DP=$C8 to read/scale deltas\n\
+DREC_DELTA_LOOP:\n\
+    LDB >DRAW_REC_CHAIN_SEGS\n\
+    LBEQ DREC_CHAIN_NEXT   ; chain done\n\
+    ; scale dx (relative — no center), DP=$C8\n\
+    LDX >DRAW_REC_SEGPTR\n\
+    LDA ,X                 ; dx (i8)\n\
+    JSR DREC_SCALE         ; D = (dx*scale)>>7\n\
+    JSR DREC_CLAMP8        ; safety clamp (scale<=128 keeps it in range); B = scaled dx\n\
+    STB >DRAW_REC_SX1\n\
+    LDX >DRAW_REC_SEGPTR\n\
+    LDA 1,X                ; dy (i8)\n\
+    JSR DREC_SCALE\n\
+    JSR DREC_CLAMP8        ; B = scaled dy\n\
+    STB >DRAW_REC_SY1\n\
+    ; draw one chained line (DP=$D0) — NO Reset0Ref/Moveto\n\
+    LDA #$D0\n\
+    TFR A,DP\n\
     LDA >DRAW_REC_SY1      ; A = dy\n\
     LDB >DRAW_REC_SX1      ; B = dx\n\
     CLR Vec_Misc_Count\n\
     JSR Draw_Line_d\n\
     LDA #$C8\n\
-    TFR A,DP               ; back to DP=$C8 for RAM/table reads\n\
-    ; --- advance to next segment (5 bytes) ---\n\
+    TFR A,DP               ; back to DP=$C8\n\
+    ; advance to next delta (2 bytes) and decrement delta count\n\
     LDX >DRAW_REC_SEGPTR\n\
-    LEAX 5,X\n\
+    LEAX 2,X\n\
     STX >DRAW_REC_SEGPTR\n\
-    LDD >DRAW_REC_SEGCNT\n\
+    LDB >DRAW_REC_CHAIN_SEGS\n\
+    DECB\n\
+    STB >DRAW_REC_CHAIN_SEGS\n\
+    LBRA DREC_DELTA_LOOP\n\
+DREC_CHAIN_NEXT:\n\
+    ; DRAW_REC_SEGPTR now points at the next chain header (past last delta)\n\
+    LDD >DRAW_REC_SEGCNT   ; remaining chains\n\
     SUBD #1\n\
     STD >DRAW_REC_SEGCNT\n\
-    LBNE DREC_SEG_LOOP\n\
+    LBNE DREC_CHAIN_LOOP\n\
 DREC_DONE:\n\
     LDA #$C8\n\
     TFR A,DP               ; ensure DP restored on all exit paths\n\
@@ -2734,18 +2753,6 @@ DREC_COORD:\n\
     ADDD >DRAW_REC_TMP16   ; D = scaled + center (i16)\n\
     JSR DREC_CLAMP8        ; D clamped to [-127,127]; low byte in B\n\
     LEAS 1,S               ; drop saved center\n\
-    RTS\n\
-; DREC_DIFF: A = minuend (i8), B = subtrahend (i8)\n\
-;   -> B = clamp_i8(minuend - subtrahend). Clobbers A,D. DP must be $C8.\n\
-DREC_DIFF:\n\
-    PSHS A                 ; save minuend (i8)\n\
-    SEX                    ; D = sign-extended subtrahend (from B)\n\
-    STD >DRAW_REC_TMP16\n\
-    LDB ,S                 ; B = minuend byte\n\
-    SEX                    ; D = sign-extended minuend (i16)\n\
-    SUBD >DRAW_REC_TMP16   ; D = minuend - subtrahend (i16)\n\
-    JSR DREC_CLAMP8        ; D clamped; low byte in B\n\
-    LEAS 1,S               ; drop saved minuend\n\
     RTS\n\
 ; DREC_CLAMP8: D (i16) -> D clamped to [-127,127] (signed). Low byte usable as i8.\n\
 DREC_CLAMP8:\n\

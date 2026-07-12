@@ -881,28 +881,46 @@ pub fn generate_assets_asm(assets: &[AssetInfo]) -> Result<String, String> {
 // ============================================================
 //
 // The .vrec JSON is TARGET-AGNOSTIC (same file drives rp2350/pitrex/m6809).
-// The BINARY layout here differs from the arm/pitrex `.word`/`.hword` layout
-// only in assembler syntax + pointer form: on m6809 the offset table stores
-// ABSOLUTE frame-label pointers (FDB _<SYM>_VREC_Fn), which the linker resolves
-// — no address math in codegen, and the runtime dereferences with LDX ,X just
-// like DRAW_ANIM's frame table. Layout:
+// The offset table stores ABSOLUTE frame-label pointers (FDB _<SYM>_VREC_Fn),
+// which the linker resolves — no address math in codegen; the runtime
+// dereferences with LDX ,X just like DRAW_ANIM's frame table.
+//
+// POLYLINE CHAINING (2026-07): consecutive segments that share an endpoint AND
+// intensity are folded into a single chain (start point once + one delta per
+// line) by the target-agnostic `crate::vrec_chain::chain_frame`. This roughly
+// halves ROM size for traced contours (each interior vertex was stored twice)
+// and draws faster (one Reset0Ref + Moveto_d per chain, then continuous
+// Draw_Line_d deltas). The .vrec FILE format is UNCHANGED — chaining is a
+// compile-time transform. Per-frame layout emitted here:
 //
 //   _<SYM>_VREC:  FDB frame_count
 //                 FDB _<SYM>_VREC_F0, _<SYM>_VREC_F1, ...   (abs frame pointers)
 //   _<SYM>_VREC_Fn:
-//                 FDB segment_count
-//                 per segment (5 bytes): FCB x0,y0,x1,y1,intensity  (i8,i8,i8,i8,u8)
+//                 FDB chain_count
+//     per chain:  FCB start_x, start_y   ; i8 (compile-time clamped)
+//                 FCB intensity          ; u8 (0-127)
+//                 FCB seg_count          ; number of deltas (drawn lines), 1-255
+//                 FCB dx,dy × seg_count  ; i8 deltas (compile-time clamped)
 //
-// Coords/intensity are clamped to i8 / 0-127 exactly like the arm/pitrex path.
-// NOTE: the segments/frame count is a DATA (flicker-budget) concern — the
+// A chain of N segments costs 4 + 2N bytes vs the old 5N (e.g. a 20-line closed
+// contour: 44 bytes vs 100). Deltas are clamped to i8 at compile time exactly
+// like the old runtime DREC_DIFF (no accuracy regression). A chain longer than
+// 255 deltas (rare) is split into consecutive chains, re-anchored at the pen.
+//
+// NOTE: the vectors/frame count remains a DATA (flicker-budget) concern — the
 // runtime draws every segment; it does not decimate.
+const VREC_MAX_DELTAS_PER_CHAIN: usize = 255;
+
 fn compile_vrec(vrec: &VrecResource, override_name: &str) -> String {
+    use crate::vrec_chain::{chain_frame, Segment};
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
     let frame_count = vrec.frames.len();
 
+    let clamp8 = |v: i32| v.clamp(-127, 127) as i8;
+
     let mut s = String::new();
     s.push_str(&format!(
-        "; --- {} RECORDING ({} frame(s), fps={}) ---\n",
+        "; --- {} RECORDING ({} frame(s), fps={}, polyline-chained) ---\n",
         override_name, frame_count, vrec.fps
     ));
     s.push_str(&format!("_{sym}_VREC:\n"));
@@ -911,18 +929,49 @@ fn compile_vrec(vrec: &VrecResource, override_name: &str) -> String {
         s.push_str(&format!("    FDB _{sym}_VREC_F{i}    ; frame {i} pointer\n"));
     }
     for (i, frame) in vrec.frames.iter().enumerate() {
+        // Fold this frame's ordered segments into polyline chains.
+        let segs: Vec<Segment> = frame.segments.iter()
+            .map(|seg| Segment { x0: seg.x0, y0: seg.y0, x1: seg.x1, y1: seg.y1, i: seg.i })
+            .collect();
+        let chains = chain_frame(&segs);
+
+        // Emit each chain, splitting any chain with > 255 deltas so seg_count
+        // fits in one byte. A split re-anchors at the raw pen position.
+        let mut emitted: Vec<(i32, i32, i32, Vec<(i32, i32)>)> = Vec::new(); // (sx, sy, inten, deltas)
+        for c in &chains {
+            if c.deltas.len() <= VREC_MAX_DELTAS_PER_CHAIN {
+                emitted.push((c.start.0, c.start.1, c.intensity, c.deltas.clone()));
+            } else {
+                let (mut px, mut py) = c.start;
+                for part in c.deltas.chunks(VREC_MAX_DELTAS_PER_CHAIN) {
+                    emitted.push((px, py, c.intensity, part.to_vec()));
+                    for (dx, dy) in part {
+                        px += dx;
+                        py += dy;
+                    }
+                }
+            }
+        }
+
         s.push_str(&format!("_{sym}_VREC_F{i}:\n"));
-        s.push_str(&format!("    FDB {}    ; segment_count\n", frame.segments.len()));
-        for seg in &frame.segments {
-            let x0 = seg.x0.clamp(-127, 127) as i8;
-            let y0 = seg.y0.clamp(-127, 127) as i8;
-            let x1 = seg.x1.clamp(-127, 127) as i8;
-            let y1 = seg.y1.clamp(-127, 127) as i8;
-            let inten = seg.i.clamp(0, 127) as u8;
+        s.push_str(&format!("    FDB {}    ; chain_count\n", emitted.len()));
+        for (sx, sy, inten, deltas) in &emitted {
+            let start_x = clamp8(*sx);
+            let start_y = clamp8(*sy);
+            let intensity = (*inten).clamp(0, 127) as u8;
             s.push_str(&format!(
-                "    FCB ${:02X},${:02X},${:02X},${:02X},${:02X}    ; ({},{})->({},{}) i={}\n",
-                x0 as u8, y0 as u8, x1 as u8, y1 as u8, inten, x0, y0, x1, y1, inten
+                "    FCB ${:02X},${:02X},${:02X},${:02X}    ; start=({},{}) i={} segs={}\n",
+                start_x as u8, start_y as u8, intensity, deltas.len() as u8,
+                start_x, start_y, intensity, deltas.len()
             ));
+            for (dx, dy) in deltas {
+                let cdx = clamp8(*dx);
+                let cdy = clamp8(*dy);
+                s.push_str(&format!(
+                    "    FCB ${:02X},${:02X}    ; d=({},{})\n",
+                    cdx as u8, cdy as u8, cdx, cdy
+                ));
+            }
         }
     }
     s.push('\n');
@@ -1813,11 +1862,11 @@ mod tests {
         ]
     }"#;
 
-    /// compile_vrec must emit the MC6809 table: frame_count word, absolute
-    /// frame pointers, per-frame segment_count word, and 5-byte FCB segments
-    /// clamped to i8 / 0-127.
+    /// compile_vrec must emit the CHAINED MC6809 table: frame_count word,
+    /// absolute frame pointers, per-frame chain_count word, and per-chain
+    /// [start_x,start_y,intensity,seg_count] + i8 deltas, clamped to i8 / 0-127.
     #[test]
-    fn test_compile_vrec_m6809_layout() {
+    fn test_compile_vrec_m6809_chained_layout() {
         let vrec: VrecResource = serde_json::from_str(VREC_JSON).unwrap();
         let asm = compile_vrec(&vrec, "clip");
 
@@ -1825,16 +1874,50 @@ mod tests {
             "missing frame_count:\n{asm}");
         assert!(asm.contains("FDB _CLIP_VREC_F0"), "missing frame 0 pointer:\n{asm}");
         assert!(asm.contains("FDB _CLIP_VREC_F1"), "missing frame 1 pointer:\n{asm}");
-        assert!(asm.contains("_CLIP_VREC_F0:\n    FDB 2    ; segment_count"),
-            "frame 0 must have 2 segments:\n{asm}");
-        assert!(asm.contains("_CLIP_VREC_F1:\n    FDB 1    ; segment_count"),
-            "frame 1 must have 1 segment:\n{asm}");
-        // First segment: x0=-50 (0xCE), y0=10 (0x0A), x1=30 (0x1E), y1=20 (0x14), i=95 (0x5F)
-        assert!(asm.contains("FCB $CE,$0A,$1E,$14,$5F"),
-            "first segment FCB bytes wrong:\n{asm}");
-        // Clamping: 200→127 (0x7F), -200→-127 (0x81), i 300→127 (0x7F)
-        assert!(asm.contains("FCB $7F,$81,$00,$00,$7F"),
-            "i8/intensity clamping failed:\n{asm}");
+        // Frame 0: two disjoint segments → 2 chains.
+        assert!(asm.contains("_CLIP_VREC_F0:\n    FDB 2    ; chain_count"),
+            "frame 0 must have 2 chains:\n{asm}");
+        // Frame 1: one segment → 1 chain.
+        assert!(asm.contains("_CLIP_VREC_F1:\n    FDB 1    ; chain_count"),
+            "frame 1 must have 1 chain:\n{asm}");
+        // Chain 0 header: start=(-50,10)=($CE,$0A), i=95=$5F, seg_count=1.
+        assert!(asm.contains("FCB $CE,$0A,$5F,$01"),
+            "chain 0 header bytes wrong:\n{asm}");
+        // Chain 0 delta: (30-(-50), 20-10) = (80,10) = ($50,$0A).
+        assert!(asm.contains("FCB $50,$0A    ; d=(80,10)"),
+            "chain 0 delta wrong:\n{asm}");
+        // Chain 1 header clamped: start 200→127($7F), -200→-127($81), i 300→127($7F), seg_count 1.
+        assert!(asm.contains("FCB $7F,$81,$7F,$01"),
+            "chain 1 clamped header wrong:\n{asm}");
+        // Chain 1 delta clamped: (0-200, 0-(-200)) = (-200,200) → (-127,127) = ($81,$7F).
+        assert!(asm.contains("FCB $81,$7F    ; d=(-127,127)"),
+            "chain 1 clamped delta wrong:\n{asm}");
+    }
+
+    /// A closed square (4 chained segments) must emit ONE chain of 4 deltas.
+    /// Body size: 4 (start_x,start_y,i,seg_count) + 4*2 deltas = 12 bytes,
+    /// vs the old per-segment layout's 5*4 = 20 bytes. Extrapolated to a
+    /// 20-line closed contour: 4 + 40 = 44 bytes (chained) vs 100 (old).
+    #[test]
+    fn test_compile_vrec_closed_square_single_chain() {
+        let json = r#"{ "fps": 10, "frames": [ { "segments": [
+            { "x0": -40, "y0": -40, "x1":  40, "y1": -40, "i": 90 },
+            { "x0":  40, "y0": -40, "x1":  40, "y1":  40, "i": 90 },
+            { "x0":  40, "y0":  40, "x1": -40, "y1":  40, "i": 90 },
+            { "x0": -40, "y0":  40, "x1": -40, "y1": -40, "i": 90 }
+        ] } ] }"#;
+        let vrec: VrecResource = serde_json::from_str(json).unwrap();
+        let asm = compile_vrec(&vrec, "sq");
+
+        assert!(asm.contains("_SQ_VREC_F0:\n    FDB 1    ; chain_count"),
+            "closed square must be a single chain:\n{asm}");
+        // start=(-40,-40)=($D8,$D8), i=90=$5A, seg_count=4.
+        assert!(asm.contains("FCB $D8,$D8,$5A,$04"), "chain header wrong:\n{asm}");
+        // 4 deltas: (80,0),(0,80),(-80,0),(0,-80).
+        assert!(asm.contains("FCB $50,$00    ; d=(80,0)"), "delta 0 wrong:\n{asm}");
+        assert!(asm.contains("FCB $00,$50    ; d=(0,80)"), "delta 1 wrong:\n{asm}");
+        assert!(asm.contains("FCB $B0,$00    ; d=(-80,0)"), "delta 2 wrong:\n{asm}");
+        assert!(asm.contains("FCB $00,$B0    ; d=(0,-80)"), "delta 3 wrong:\n{asm}");
     }
 
     /// Regression test for Bug 2: DRAW_ANIM_BANKED must save X on the stack

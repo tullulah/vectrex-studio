@@ -18,6 +18,7 @@ pub mod instrres;
 pub mod animres;
 pub mod venemy;
 pub mod stack_validator;
+pub mod vrec_chain;
 
 pub use venemy::*;
 
