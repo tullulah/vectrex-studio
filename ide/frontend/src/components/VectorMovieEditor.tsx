@@ -291,6 +291,13 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
     return m ? m[1] : dirOf(fsPath);
   })();
 
+  // Name the movie's tracks after the .vmov ITSELF (its file stem), not the
+  // source video — so `test.vmov` imports produce `test.vrec` / `test.vsmp`, and
+  // the game references the same name the user sees in the tree
+  // (DRAW_RECORDING("test") / PLAY_SAMPLE("test")). Sanitised to a safe symbol.
+  const movieBase = (stripExt(baseName(fsPath)) || manifest.name || 'movie')
+    .replace(/[^A-Za-z0-9_-]/g, '_');
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Loaded track data ------------------------------------------------------
@@ -521,7 +528,7 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
     setConverting(true);
     setProgress('Starting…');
 
-    const base = stripExt(baseName(sourceName)) || (manifest.name || 'movie');
+    const base = movieBase;  // tracks named after the .vmov, not the source video
     const subdir = kind === 'video' ? 'recordings' : 'samples';
     const ext = kind === 'video' ? 'vrec' : 'vsmp';
     const outPath = `${assetsDir}/${subdir}/${base}.${ext}`;
@@ -560,7 +567,7 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
     setImportKind(null);
     // Give the editor store a tick to flush, then reload tracks.
     setTimeout(() => setLoadNonce(n => n + 1), 60);
-  }, [assetsDir, manifest, videoOpts, audioOpts, onChange]);
+  }, [assetsDir, manifest, videoOpts, audioOpts, onChange, movieBase]);
 
   const pickAndImport = useCallback(async (kind: 'video' | 'audio') => {
     const movieApi = (window as any).movie;
@@ -692,7 +699,7 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
     const trim = (start > 0 || (end > 0 && end < videoDuration - 0.05))
       ? { start, duration: Math.max(0, end - start) }
       : {};
-    const base = stripExt(baseName(pendingImport.name)) || (manifest.name || 'movie');
+    const base = movieBase;  // tracks named after the .vmov, not the source video
 
     setConverting(true);
 
@@ -744,7 +751,7 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
       : `Done: ${base}.vrec — use DRAW_RECORDING("${base}")`);
     setTimeout(() => setLoadNonce(n => n + 1), 60);
   }, [pendingImport, sourceHasAudio, assetsDir, manifest, buildTraceOpts, audioOpts,
-      onChange, trimStart, trimEnd, videoDuration]);
+      onChange, trimStart, trimEnd, videoDuration, movieBase]);
 
   // ── Frame editing (paused) ──────────────────────────────────────────────
 
@@ -967,7 +974,7 @@ export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, 
                       {estFrames > 3000 && ' (large — consider a shorter range or lower fps)'}
                     </div>
                     {(() => {
-                      const base = stripExt(baseName(pendingImport.name)) || 'movie';
+                      const base = movieBase;
                       return (
                         <div style={{ color: '#9ab', fontSize: 11, marginTop: 2 }}>
                           Will write <code style={{ color: '#cde' }}>{base}.vrec</code>
