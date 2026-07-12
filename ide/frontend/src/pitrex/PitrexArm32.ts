@@ -739,6 +739,27 @@ const SDK_STUBS: Record<string, SdkStub> = {
     s.regs[0] = divisor !== 0 ? (Math.trunc(dividend / divisor) | 0) : 0;
   },
 
+  '__aeabi_uidiv': (s) => {
+    // Unsigned divide — used by SAMPLE_POS (wall-clock frame index). Without
+    // this stub the bl is a silent no-op and SAMPLE_POS returns garbage.
+    const dividend = s.regs[0] >>> 0;
+    const divisor  = s.regs[1] >>> 0;
+    s.regs[0] = divisor !== 0 ? (Math.floor(dividend / divisor) | 0) : 0;
+  },
+
+  '__aeabi_uidivmod': (s) => {
+    const dividend = s.regs[0] >>> 0;
+    const divisor  = s.regs[1] >>> 0;
+    if (divisor !== 0) {
+      const q = Math.floor(dividend / divisor);
+      s.regs[0] = q | 0;
+      s.regs[1] = (dividend - q * divisor) | 0;
+    } else {
+      s.regs[0] = 0;
+      s.regs[1] = 0;
+    }
+  },
+
   '__aeabi_idivmod': (s) => {
     const dividend = s.regs[0];
     const divisor  = s.regs[1];
