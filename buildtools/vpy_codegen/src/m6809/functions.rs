@@ -328,6 +328,11 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
     asm.push_str("    ; Initialize global variables\n");
     asm.push_str("    CLR VPY_MOVE_X        ; MOVE offset defaults to 0\n");
     asm.push_str("    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0\n");
+    // Vectrex RAM is NOT zero at power-on (emulator fills it with a pattern too).
+    // DRAW_VEC_INTENSITY is the SET_INTENSITY override read by DRAW_VECTOR AND
+    // DRAW_RECORDING; if left uninitialized, its garbage value overrides the
+    // recorded/vector intensity (e.g. $8E blanks the beam → nothing draws).
+    asm.push_str("    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)\n");
     if crate::m6809::level::needs_level_runtime(module) {
         asm.push_str("    ; Init camera ONCE at boot (RAM not zero-init); LOAD_LEVEL must NOT reset it.\n");
         asm.push_str("    LDD #0\n");
@@ -946,6 +951,7 @@ pub fn generate_functions_by_bank(
     bank0_asm.push_str("    ; Initialize global variables\n");
     bank0_asm.push_str("    CLR VPY_MOVE_X        ; MOVE offset defaults to 0\n");
     bank0_asm.push_str("    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0\n");
+    bank0_asm.push_str("    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)\n");
     if crate::m6809::level::needs_level_runtime(module) {
         bank0_asm.push_str("    ; Init camera ONCE at boot (RAM not zero-init). LOAD_LEVEL must NOT\n");
         bank0_asm.push_str("    ; reset it (matches pitrex): the game sets it via SET_CAMERA_Y before\n");
