@@ -229,7 +229,8 @@ fn collect_asset_names_from_expr(expr: &Expr, used_names: &mut HashSet<String>) 
             let up = name.to_uppercase();
             if up == "DRAW_VECTOR" || up == "DRAW_VECTOR_EX" || up == "DRAW_VECTOR_3D" ||
                up == "PLAY_MUSIC" || up == "PLAY_SFX" || up == "LOAD_LEVEL" ||
-               up == "DRAW_ANIM" || up == "PLAY_NOTE" || up == "DRAW_RECORDING" {
+               up == "DRAW_ANIM" || up == "PLAY_NOTE" || up == "DRAW_RECORDING" ||
+               up == "PLAY_SAMPLE" {
                 // First argument should be asset name (string literal)
                 if let Some(Expr::StringLit(asset_name)) = args.first() {
                     used_names.insert(asset_name.clone());
@@ -356,6 +357,17 @@ struct VrecSegment {
     y1: i32,
     /// Intensity 0-127 (recorder only stores visible segments, i > 0)
     i: i32,
+}
+
+#[derive(Deserialize)]
+struct VsmpResource {
+    #[serde(default, rename = "sampleRate")]
+    sample_rate: u32,
+    #[serde(default, rename = "numSamples")]
+    num_samples: u32,
+    /// base64 of the packed 4-bit PCM (2 samples/byte, low nibble = even sample).
+    #[serde(default)]
+    data: String,
 }
 
 // ============================================================
@@ -669,6 +681,25 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                 };
                 s.push_str(&compile_vrec(&vrec, &asset.name));
             }
+            AssetType::Sample => {
+                let text = match fs::read_to_string(&asset.path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not read {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _{sym}_SMP\n_{sym}_SMP:\n    .word 0, 0\n\n"));
+                        continue;
+                    }
+                };
+                let vsmp: VsmpResource = match serde_json::from_str(&text) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not parse {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _{sym}_SMP\n_{sym}_SMP:\n    .word 0, 0\n\n"));
+                        continue;
+                    }
+                };
+                s.push_str(&compile_vsmp(&vsmp, &asset.name));
+            }
             #[allow(unreachable_patterns)]
             _ => {
                 s.push_str(&format!("@ Asset stub: {} ({:?})\n", asset.name, asset.asset_type));
@@ -734,6 +765,67 @@ fn compile_vrec(vrec: &VrecResource, override_name: &str) -> String {
     }
     s.push('\n');
     s
+}
+
+// ============================================================
+// Sample compiler (.vsmp → 4-bit PCM table)
+// ============================================================
+//
+// TARGET-AGNOSTIC layout — identical to the rp2350 (arm) compile_vsmp. Read in
+// the emulator by the pitrex_play_sample trap (video-only on hardware for now):
+//   _<NAME>_SMP:                 (4-byte aligned)
+//     .word  sample_rate         @ Hz (e.g. 8000)
+//     .word  num_samples         @ number of 4-bit samples
+//     .byte  <packed 4-bit ...>  @ 2 samples/byte, low nibble = even sample
+fn compile_vsmp(vsmp: &VsmpResource, override_name: &str) -> String {
+    let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let bytes = base64_decode(&vsmp.data);
+    let mut s = String::new();
+    s.push_str(&format!(
+        "@ --- {} SAMPLE ({} samples @ {} Hz, {} packed bytes) ---\n",
+        override_name, vsmp.num_samples, vsmp.sample_rate, bytes.len()
+    ));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_SMP\n_{sym}_SMP:\n"));
+    s.push_str(&format!("    .word   {}               @ sample_rate (Hz)\n", vsmp.sample_rate));
+    s.push_str(&format!("    .word   {}               @ num_samples\n", vsmp.num_samples));
+    for chunk in bytes.chunks(16) {
+        let row: Vec<String> = chunk.iter().map(|b| format!("0x{:02X}", b)).collect();
+        s.push_str(&format!("    .byte   {}\n", row.join(", ")));
+    }
+    if bytes.is_empty() {
+        s.push_str("    .byte   0x00            @ empty payload\n");
+    }
+    s.push('\n');
+    s
+}
+
+/// Minimal standard base64 decoder (ignores whitespace/newlines).
+fn base64_decode(input: &str) -> Vec<u8> {
+    fn val(c: u8) -> Option<u8> {
+        match c {
+            b'A'..=b'Z' => Some(c - b'A'),
+            b'a'..=b'z' => Some(c - b'a' + 26),
+            b'0'..=b'9' => Some(c - b'0' + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+    let mut out = Vec::new();
+    let mut acc = 0u32;
+    let mut nbits = 0u32;
+    for &c in input.as_bytes() {
+        if c == b'=' { break; }
+        let Some(v) = val(c) else { continue };
+        acc = (acc << 6) | v as u32;
+        nbits += 6;
+        if nbits >= 8 {
+            nbits -= 8;
+            out.push((acc >> nbits) as u8);
+        }
+    }
+    out
 }
 
 // ============================================================

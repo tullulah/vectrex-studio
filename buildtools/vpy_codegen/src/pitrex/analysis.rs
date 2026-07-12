@@ -139,7 +139,8 @@ const BUILTIN_DEPS: &[(&str, &[&str])] = &[
     // The name is auto-collected by walk_expr; this documents the group so the
     // gated pitrex_sample_pos runtime is emitted.
     ("SAMPLE_POS",     &[]),
-    // PLAY_SAMPLE is a no-op on pitrex (voice is rp2350-only) — no runtime.
+    // PLAY_SAMPLE emits a pitrex_play_sample stub (HW no-op; the IDE emulator
+    // traps it to play the .vsmp). Self-contained; the name is auto-collected.
     ("PLAY_SAMPLE",    &[]),
     // Animation drawing fans into draw_vector_ex.
     ("DRAW_ANIM",      &["DRAW_VECTOR_EX"]),

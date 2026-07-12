@@ -74,6 +74,11 @@ export interface PitrexArm32State {
   psgWrite: (reg: number, val: number) => void;
   /** PSG register read callback — set by PitrexCore so SFX can RMW the mixer. */
   psgRead: (reg: number) => number;
+  /** PLAY_SAMPLE trap — set by PitrexCore. Plays a .vsmp voice asset (video
+   *  movie soundtrack) whose _<NAME>_SMP header lives in emulator memory.
+   *  `read8` reads a byte at an absolute address. HW is a no-op; this gives the
+   *  IDE emulator sound. */
+  playSample?: (assetPtr: number, read8: (addr: number) => number) => void;
   /** Buffered UART output — accumulates text until newline, then flushes. */
   uartBuffer: string;
 }
@@ -548,6 +553,13 @@ function drawTextAsSegments(
 const SDK_STUBS: Record<string, SdkStub> = {
   'v_WaitRecal': (s) => {
     s.waitRecalCalled = true;
+  },
+
+  // PLAY_SAMPLE("name") lowers to `pitrex_play_sample(r0=_NAME_SMP)`. On HW that
+  // symbol is a no-op stub; here we hand the asset pointer to PitrexCore, which
+  // reads the .vsmp header from emulator memory and plays it via Web Audio.
+  'pitrex_play_sample': (s) => {
+    s.playSample?.(s.regs[0] >>> 0, (addr) => memRead8(s, addr));
   },
 
   'v_directDraw32': (s) => {

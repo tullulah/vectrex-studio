@@ -760,12 +760,22 @@ pub fn emit_call(
         }
     }
 
-    // Special case: PLAY_SAMPLE("name") — voice/4-bit-PCM playback is rp2350-only
-    // (needs a real-time PSG streamer). On PiTrex it is a NO-OP so a vector-movie
-    // project (which pairs it with SAMPLE_POS) still compiles and plays the video
-    // silently. The string arg is intentionally not evaluated.
+    // Special case: PLAY_SAMPLE("name") — resolve the string literal to the
+    // _<NAME>_SMP asset and call pitrex_play_sample(r0=asset_ptr). On real HW
+    // this is a no-op stub for now (voice/PSG streaming is the deferred hard
+    // part); the IDE emulator TRAPS pitrex_play_sample and plays the .vsmp so
+    // the vector movie has sound in the IDE. Same shape as DRAW_RECORDING.
     if info.name == "PLAY_SAMPLE" {
-        return Ok("    @ PLAY_SAMPLE: no-op on pitrex (voice not implemented — video plays silently)\n".to_string());
+        if let Some(Expr::StringLit(smp_name)) = args.first() {
+            let sym_base = smp_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_{sym_base}_SMP");
+            let mut s = String::new();
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ sample '{smp_name}'\n"));
+            s.push_str("    bl      pitrex_play_sample\n");
+            return Ok(s);
+        }
+        // Non-literal arg: nothing to resolve → no-op.
+        return Ok("    @ PLAY_SAMPLE: dynamic name unsupported on pitrex — no-op\n".to_string());
     }
 
     // Special case: DRAW_RECORDING("name", x, y, scale, frame) — .vrec playback.
@@ -1065,10 +1075,11 @@ mod tests {
             "SAMPLE_POS must call pitrex_sample_pos (got: {asm:?})");
     }
 
-    /// PLAY_SAMPLE is voice (rp2350-only) — on pitrex it must be a NO-OP: no call
-    /// emitted, so a vector-movie project still links and plays video silently.
+    /// PLAY_SAMPLE("name") resolves the string to _<NAME>_SMP and calls the
+    /// pitrex_play_sample stub (a HW no-op that the IDE emulator traps to play
+    /// the .vsmp voice track).
     #[test]
-    fn test_pitrex_play_sample_is_noop() {
+    fn test_pitrex_play_sample_call() {
         let var_addrs = std::collections::HashMap::new();
         let info = CallInfo {
             name: "PLAY_SAMPLE".to_string(),
@@ -1076,7 +1087,9 @@ mod tests {
             args: vec![Expr::StringLit("tdcm".to_string())],
         };
         let asm = emit_call(&info, &var_addrs).unwrap();
-        assert!(!asm.contains("bl "),
-            "PLAY_SAMPLE must emit no call on pitrex (got: {asm:?})");
+        assert!(asm.contains("ldr     r0, =_TDCM_SMP"),
+            "must resolve sample name to _NAME_SMP symbol (got: {asm:?})");
+        assert!(asm.contains("bl      pitrex_play_sample"),
+            "must call pitrex_play_sample (got: {asm:?})");
     }
 }

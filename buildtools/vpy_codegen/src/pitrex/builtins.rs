@@ -110,6 +110,7 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     // only when a DRAW_RECORDING("name", ...) call appears in the AST.
     if any(&["DRAW_RECORDING"])    { s.push_str(&emit_pitrex_draw_recording()); }
     if any(&["SAMPLE_POS"])        { s.push_str(&emit_pitrex_sample_pos()); }
+    if any(&["PLAY_SAMPLE"])       { s.push_str(&emit_pitrex_play_sample()); }
     if any(&["SPAWN_ENEMIES"])     { s.push_str(&emit_pitrex_spawn_enemies()); }
     if any(&["UPDATE_ENEMIES"])    { s.push_str(&emit_pitrex_update_enemies()); }
     if any(&["DRAW_ENEMIES"])      { s.push_str(&emit_pitrex_draw_enemies()); }
@@ -859,6 +860,23 @@ fn emit_pitrex_sample_pos() -> String {
     s.push_str("    bl      __aeabi_uidiv       @ r0 = frame\n");
     s.push_str("    pop     {r4, r5, r6, pc}\n");
     s.push_str("    .ltorg\n\n");
+    s
+}
+
+// ── PLAY_SAMPLE (voice track) ─────────────────────────────────────────────
+//
+// pitrex_play_sample(r0 = _<NAME>_SMP asset ptr).
+//
+// On real PiTrex HW this is a NO-OP stub for now — 4-bit-PCM voice streaming to
+// the PSG volume register needs a real-time streamer (the deferred hard part).
+// The IDE emulator TRAPS this symbol (SDK_STUBS in PitrexArm32) and plays the
+// .vsmp via Web Audio, so a vector movie has sound in the IDE. The r0 pointer is
+// kept live so the emulator trap can read the asset header from memory.
+fn emit_pitrex_play_sample() -> String {
+    let mut s = String::new();
+    s.push_str("@ pitrex_play_sample(r0=_NAME_SMP ptr) — HW no-op; emulator traps + plays\n");
+    s.push_str(".global pitrex_play_sample\n.type pitrex_play_sample, %function\npitrex_play_sample:\n");
+    s.push_str("    bx      lr\n\n");
     s
 }
 

@@ -25,6 +25,9 @@ export class PitrexCore {
   private readonly psg: Psg = new Psg();
   private audioCtx:  AudioContext | null        = null;
   private audioNode: ScriptProcessorNode | null = null;
+  // Vector-movie voice track (.vsmp): a one-shot Web Audio buffer played when the
+  // game calls PLAY_SAMPLE. Separate from the PSG synthesis node above.
+  private sampleSource: AudioBufferSourceNode | null = null;
   static readonly AUDIO_SAMPLE_RATE = 44100;
   static readonly AUDIO_BUFFER_SIZE = 512;
 
@@ -46,6 +49,8 @@ export class PitrexCore {
         this.psg.write(0x10, val & 0xFF);
       };
       this.state.psgRead = (reg: number) => this.psg.Regs[reg & 0x0F] & 0xFF;
+      // PLAY_SAMPLE("name") → play the .vsmp voice track (vector movie sound).
+      this.state.playSample = (assetPtr, read8) => this.playSample(assetPtr, read8);
       this.psg.reset();
       this._ready  = true;
       console.log(
@@ -112,12 +117,56 @@ export class PitrexCore {
     }
   }
 
+  /**
+   * Play a .vsmp voice asset (vector-movie soundtrack). The _<NAME>_SMP header
+   * (sample_rate:u32, num_samples:u32, then packed 4-bit PCM, 2/byte) lives in
+   * emulator memory; `read8` reads a byte there. Decoded to a mono Web Audio
+   * buffer and played once. Mirrors Rp2350System.playSample.
+   */
+  playSample(assetPtr: number, read8: (addr: number) => number): void {
+    if (!this.audioCtx) {
+      try { this.audioCtx = new AudioContext({ sampleRate: PitrexCore.AUDIO_SAMPLE_RATE }); }
+      catch (e) { console.warn('[PitrexCore] PLAY_SAMPLE: AudioContext init failed:', e); return; }
+    }
+    const ctx = this.audioCtx;
+    const readU32 = (a: number): number =>
+      (read8(a) | (read8(a + 1) << 8) | (read8(a + 2) << 16) | (read8(a + 3) << 24)) >>> 0;
+
+    const sampleRate = readU32(assetPtr);
+    const numSamples = readU32(assetPtr + 4);
+    if (sampleRate <= 0 || numSamples <= 0 || numSamples > 0x4000000) {
+      console.warn(`[PitrexCore] PLAY_SAMPLE: bad header rate=${sampleRate} n=${numSamples} @0x${assetPtr.toString(16)}`);
+      return;
+    }
+
+    const dataPtr = assetPtr + 8;
+    const buf = ctx.createBuffer(1, numSamples, sampleRate);
+    const out = buf.getChannelData(0);
+    for (let i = 0; i < numSamples; i++) {
+      const byte = read8(dataPtr + (i >> 1));
+      const v    = (i & 1) === 0 ? (byte & 0x0F) : ((byte >> 4) & 0x0F);
+      out[i] = (v / 15) * 2 - 1;
+    }
+
+    try { this.sampleSource?.stop(); this.sampleSource?.disconnect(); } catch { /* noop */ }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.onended = () => { if (this.sampleSource === src) this.sampleSource = null; };
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
+    src.start();
+    this.sampleSource = src;
+  }
+
   /** Stop and destroy the audio context. */
   stopAudio(): void {
     try {
+      this.sampleSource?.stop();
+      this.sampleSource?.disconnect();
       this.audioNode?.disconnect();
       this.audioCtx?.close().catch(() => {});
     } catch {}
+    this.sampleSource = null;
     this.audioNode = null;
     this.audioCtx  = null;
   }
