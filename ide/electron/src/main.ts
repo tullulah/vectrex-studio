@@ -2513,6 +2513,7 @@ ipcMain.handle('project:create', async (_e, args: { name: string; location?: str
     await fs.mkdir(join(assetsDir, 'music'), { recursive: true });       // Music data
     await fs.mkdir(join(assetsDir, 'sfx'), { recursive: true });         // Sound effects
     await fs.mkdir(join(assetsDir, 'voices'), { recursive: true });      // Voice samples (AtariVox)
+    await fs.mkdir(join(assetsDir, 'movies'), { recursive: true });      // Vector movie manifests (.vmov)
     await fs.mkdir(buildDir, { recursive: true });
     
     // Create project file (TOML)

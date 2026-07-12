@@ -1824,7 +1824,7 @@ def loop():
             }, null, 2);
 
             if (vpyProject?.rootDir && apiFiles?.saveFile) {
-              const filePath = `${vpyProject.rootDir}/assets/${name}.vmov`.replace(/\\/g, '/');
+              const filePath = `${vpyProject.rootDir}/assets/movies/${name}.vmov`.replace(/\\/g, '/');
               try {
                 const result = await apiFiles.saveFile({ path: filePath, content });
                 if (result && !result.error) {

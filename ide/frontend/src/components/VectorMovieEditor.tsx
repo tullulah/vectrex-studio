@@ -280,7 +280,16 @@ type ImportKind = 'video' | 'audio' | null;
 export const VectorMovieEditor: React.FC<VectorMovieEditorProps> = ({ resource, docUri, onChange }) => {
   const manifest = resource || {};
   const fsPath = docUri ? uriToFsPath(docUri) : '';
-  const assetsDir = fsPath ? dirOf(fsPath) : '';
+  // Resolve the manifest's relative track paths (recordings/…, samples/…) against
+  // the project's `assets/` ROOT, not the .vmov's own folder — so a .vmov living
+  // in assets/movies/ still finds assets/recordings/ and assets/samples/. Falls
+  // back to the .vmov's dir for a .vmov sitting directly in assets/ (legacy).
+  const assetsDir = (() => {
+    if (!fsPath) return '';
+    const norm = fsPath.replace(/\\/g, '/');
+    const m = norm.match(/^(.*\/assets)(?:\/|$)/);
+    return m ? m[1] : dirOf(fsPath);
+  })();
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
