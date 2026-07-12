@@ -254,7 +254,31 @@ pub fn generate_m6809_asm(
     assets: &[crate::AssetInfo],
 ) -> Result<String, String> {
     let mut asm = String::new();
-    
+
+    // VALIDATE recording names BEFORE filtering (so the "available" list is the
+    // full set on disk). DRAW_RECORDING("name") resolves by the .vrec FILE stem
+    // (e.g. badapple.vrec -> "badapple"), NOT the .vmov manifest name. A mismatch
+    // used to fail late with a cryptic "Undefined symbol: _NAME_VREC".
+    let used_recordings = functions::collect_draw_recording_names(module);
+    if !used_recordings.is_empty() {
+        let available: Vec<String> = assets.iter()
+            .filter(|a| matches!(a.asset_type, crate::AssetType::Recording))
+            .map(|a| a.name.clone())
+            .collect();
+        for rec in &used_recordings {
+            if !available.iter().any(|a| a.eq_ignore_ascii_case(rec)) {
+                return Err(format!(
+                    "DRAW_RECORDING(\"{rec}\"): no recording named '{rec}' found. \
+                     The name must match a .vrec FILE in assets/recordings/ (the file \
+                     stem — e.g. badapple.vrec -> \"badapple\"), NOT the .vmov manifest name. \
+                     Available recordings: {}.",
+                    if available.is_empty() { "(none — add a .vrec to assets/recordings/)".to_string() }
+                    else { available.join(", ") }
+                ));
+            }
+        }
+    }
+
     // FILTER ASSETS: Only embed assets actually used in code (2026-01-20)
     let assets = assets::filter_used_assets(assets, module);
     

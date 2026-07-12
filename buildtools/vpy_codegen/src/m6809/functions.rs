@@ -247,6 +247,42 @@ pub fn collect_draw_anim_names(module: &Module) -> std::collections::BTreeSet<St
     out
 }
 
+/// Collect the raw recording names referenced by DRAW_RECORDING("name", ...)
+/// calls (as typed in the source — NOT uppercased), for existence validation.
+pub fn collect_draw_recording_names(module: &Module) -> std::collections::BTreeSet<String> {
+    use std::collections::BTreeSet;
+    fn collect_expr(expr: &Expr, out: &mut BTreeSet<String>) {
+        if let Expr::Call(c) = expr {
+            if c.name == "DRAW_RECORDING" {
+                if let Some(Expr::StringLit(name)) = c.args.first() {
+                    out.insert(name.clone());
+                }
+            }
+        }
+    }
+    fn collect_stmt(stmt: &Stmt, out: &mut BTreeSet<String>) {
+        match stmt {
+            Stmt::Expr(expr, _) => collect_expr(expr, out),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                collect_expr(cond, out);
+                body.iter().for_each(|s| collect_stmt(s, out));
+                elifs.iter().for_each(|(e, b)| { collect_expr(e, out); b.iter().for_each(|s| collect_stmt(s, out)); });
+                if let Some(eb) = else_body { eb.iter().for_each(|s| collect_stmt(s, out)); }
+            },
+            Stmt::While { cond, body, .. } => { collect_expr(cond, out); body.iter().for_each(|s| collect_stmt(s, out)); },
+            Stmt::For { body, .. } => body.iter().for_each(|s| collect_stmt(s, out)),
+            _ => {}
+        }
+    }
+    let mut out = BTreeSet::new();
+    for item in &module.items {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().for_each(|s| collect_stmt(s, &mut out));
+        }
+    }
+    out
+}
+
 /// Check if module uses PLAY_MUSIC or PLAY_SFX (needs AUDIO_UPDATE auto-injection)
 /// Check if module uses PLAY_MUSIC or PLAY_SFX builtins
 /// Used to determine if AUDIO_UPDATE helper should be auto-injected
