@@ -467,6 +467,7 @@ pub fn emit_call(
         "DRAW_VECTOR_EX"  => "pitrex_draw_vector_ex",
         "DRAW_VECTOR_3D"  => "pitrex_draw_vector_3d",
         "DRAW_RECORDING"  => "pitrex_draw_recording",
+        "SAMPLE_POS"      => "pitrex_sample_pos",
         "PRINT_TEXT"      => "pitrex_print_text",
         "PRINT_NUMBER"    => "pitrex_print_number",
         "PLAY_MUSIC"      => "pitrex_play_music",
@@ -759,6 +760,14 @@ pub fn emit_call(
         }
     }
 
+    // Special case: PLAY_SAMPLE("name") — voice/4-bit-PCM playback is rp2350-only
+    // (needs a real-time PSG streamer). On PiTrex it is a NO-OP so a vector-movie
+    // project (which pairs it with SAMPLE_POS) still compiles and plays the video
+    // silently. The string arg is intentionally not evaluated.
+    if info.name == "PLAY_SAMPLE" {
+        return Ok("    @ PLAY_SAMPLE: no-op on pitrex (voice not implemented — video plays silently)\n".to_string());
+    }
+
     // Special case: DRAW_RECORDING("name", x, y, scale, frame) — .vrec playback.
     // ABI: r0=_NAME_VREC, r1=x, r2=y, r3=scale (0-128, 128=100%), [sp+0]=frame.
     // frame is a free-running counter — pitrex_draw_recording takes
@@ -1039,5 +1048,35 @@ mod tests {
             "must call pitrex_draw_recording (got: {asm:?})");
         assert!(asm.contains("add     sp, sp, #4"),
             "must clean up the frame stack arg (got: {asm:?})");
+    }
+
+    /// SAMPLE_POS(fps) is a value-returning builtin — the generic call path must
+    /// route it to the pitrex_sample_pos runtime (wall-clock frame index).
+    #[test]
+    fn test_pitrex_sample_pos_call() {
+        let var_addrs = std::collections::HashMap::new();
+        let info = CallInfo {
+            name: "SAMPLE_POS".to_string(),
+            source_line: 0, col: 0,
+            args: vec![Expr::Number(15)],
+        };
+        let asm = emit_call(&info, &var_addrs).unwrap();
+        assert!(asm.contains("bl      pitrex_sample_pos"),
+            "SAMPLE_POS must call pitrex_sample_pos (got: {asm:?})");
+    }
+
+    /// PLAY_SAMPLE is voice (rp2350-only) — on pitrex it must be a NO-OP: no call
+    /// emitted, so a vector-movie project still links and plays video silently.
+    #[test]
+    fn test_pitrex_play_sample_is_noop() {
+        let var_addrs = std::collections::HashMap::new();
+        let info = CallInfo {
+            name: "PLAY_SAMPLE".to_string(),
+            source_line: 0, col: 0,
+            args: vec![Expr::StringLit("tdcm".to_string())],
+        };
+        let asm = emit_call(&info, &var_addrs).unwrap();
+        assert!(!asm.contains("bl "),
+            "PLAY_SAMPLE must emit no call on pitrex (got: {asm:?})");
     }
 }

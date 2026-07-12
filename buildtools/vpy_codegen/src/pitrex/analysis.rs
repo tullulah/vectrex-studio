@@ -135,6 +135,12 @@ const BUILTIN_DEPS: &[(&str, &[&str])] = &[
     // extern v_directDraw32 + __aeabi_idivmod, so it needs no other tree-shaken
     // helper. The name is auto-collected by walk_expr; this documents the group.
     ("DRAW_RECORDING", &[]),
+    // SAMPLE_POS is self-contained (BCM system-timer read + __aeabi_uidiv).
+    // The name is auto-collected by walk_expr; this documents the group so the
+    // gated pitrex_sample_pos runtime is emitted.
+    ("SAMPLE_POS",     &[]),
+    // PLAY_SAMPLE is a no-op on pitrex (voice is rp2350-only) — no runtime.
+    ("PLAY_SAMPLE",    &[]),
     // Animation drawing fans into draw_vector_ex.
     ("DRAW_ANIM",      &["DRAW_VECTOR_EX"]),
     // Enemy update/draw both touch the per-frame draw_vector_ex / draw_anim.

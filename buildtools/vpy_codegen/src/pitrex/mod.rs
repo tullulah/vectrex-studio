@@ -105,6 +105,7 @@ pub fn generate_pitrex_asm(
     asm.push_str("UART_TRACE_FRAMES_LEFT: .space 4\n");
     asm.push_str("UART_FRAME_NUM: .space 4\n");
     asm.push_str("FRAME_WORK_START: .space 4\n");    // µs timestamp after v_WaitRecal
+    asm.push_str("SAMPLE_POS_START: .space 4\n");    // µs timestamp latched on first SAMPLE_POS call (0 = not started)
     asm.push_str("CPU_PRINT_CTR: .space 4\n");       // countdown: print every 50 frames
     asm.push_str("_DV3D_BUF: .space 256\n");           // static buffer for pitrex_draw_vector_3d
     asm.push_str("_DV3D_TRIG: .space 8\n");            // sin/cos cache: sin_x, cos_x, sin_y, cos_y, sin_z, cos_z (1 byte each, +2 pad)

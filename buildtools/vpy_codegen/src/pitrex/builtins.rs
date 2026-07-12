@@ -109,6 +109,7 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     // .vrec vector-recording playback ("vector movie" video track). Emitted
     // only when a DRAW_RECORDING("name", ...) call appears in the AST.
     if any(&["DRAW_RECORDING"])    { s.push_str(&emit_pitrex_draw_recording()); }
+    if any(&["SAMPLE_POS"])        { s.push_str(&emit_pitrex_sample_pos()); }
     if any(&["SPAWN_ENEMIES"])     { s.push_str(&emit_pitrex_spawn_enemies()); }
     if any(&["UPDATE_ENEMIES"])    { s.push_str(&emit_pitrex_update_enemies()); }
     if any(&["DRAW_ENEMIES"])      { s.push_str(&emit_pitrex_draw_enemies()); }
@@ -808,6 +809,55 @@ fn emit_pitrex_draw_recording() -> String {
 
     s.push_str(".Ldvrec_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+// ── SAMPLE_POS (wall-clock frame index) ───────────────────────────────────
+//
+// pitrex_sample_pos(r0=fps) → r0 = current frame index.
+//
+// On rp2350 SAMPLE_POS returns the AUDIO playback position (frame synced to the
+// voice master clock). PiTrex has no voice track, so here it is a free-running
+// WALL-CLOCK frame counter off the BCM system timer (CLO, 1µs, 32-bit): the
+// video plays at real time and DRAW_RECORDING wraps `frame % frame_count`.
+// The clock latches its start on the FIRST call (SAMPLE_POS_START == 0 sentinel).
+//
+//   elapsed_us  = CLO - start                    (unsigned, 32-bit-wrap safe)
+//   us_per_frame = 1_000_000 / fps               (one divide — avoids the
+//   frame        = elapsed_us / us_per_frame       elapsed*fps overflow that a
+//                                                   direct *fps/1e6 would hit)
+// Uses __aeabi_uidiv (ARMv6 has no hardware divide), same lib as DRAW_RECORDING.
+fn emit_pitrex_sample_pos() -> String {
+    let mut s = String::new();
+    s.push_str("@ pitrex_sample_pos(r0=fps) → r0=frame — wall-clock (no voice on pitrex)\n");
+    s.push_str(".global pitrex_sample_pos\n.type pitrex_sample_pos, %function\npitrex_sample_pos:\n");
+    s.push_str("    push    {r4, r5, r6, lr}\n");
+    s.push_str("    mov     r6, r0              @ r6 = fps (survives idiv calls)\n");
+    // CLO now (µs)
+    s.push_str("    ldr     r4, =bcm2835_st\n");
+    s.push_str("    ldr     r4, [r4]            @ dereference: ST base ptr\n");
+    s.push_str("    ldr     r5, [r4, #4]        @ r5 = CLO now (µs)\n");
+    // Latch start on first call (0 = not started)
+    s.push_str("    ldr     r4, =SAMPLE_POS_START\n");
+    s.push_str("    ldr     r0, [r4]            @ r0 = start\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    bne     .Lsp_started\n");
+    s.push_str("    str     r5, [r4]            @ first call: start = now\n");
+    s.push_str("    mov     r0, r5\n");
+    s.push_str(".Lsp_started:\n");
+    s.push_str("    sub     r5, r5, r0          @ r5 = elapsed_us (32-bit-wrap safe)\n");
+    // us_per_frame = 1_000_000 / fps
+    s.push_str("    ldr     r0, =1000000\n");
+    s.push_str("    mov     r1, r6\n");
+    s.push_str("    bl      __aeabi_uidiv       @ r0 = us_per_frame\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    moveq   r0, #1              @ guard: never divide by 0 (fps out of range)\n");
+    // frame = elapsed_us / us_per_frame
+    s.push_str("    mov     r1, r0              @ divisor = us_per_frame\n");
+    s.push_str("    mov     r0, r5              @ numerator = elapsed_us\n");
+    s.push_str("    bl      __aeabi_uidiv       @ r0 = frame\n");
+    s.push_str("    pop     {r4, r5, r6, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
