@@ -290,6 +290,18 @@ pub fn generate_m6809_asm(
     let num_banks = rom_size / bank_size.max(1);
     let is_multibank = rom_size > 32768 && num_banks > 2;
 
+    // SCOPE GUARD: DRAW_RECORDING (.vrec playback) is single-bank only for now.
+    // The banked variant (cross-bank asset access + bank-switched runtime) is a
+    // later task. Fail loudly rather than silently drop the recording.
+    if is_multibank && helpers::analyze_module_helpers(module).contains("DRAW_RECORDING_RUNTIME") {
+        return Err(format!(
+            "DRAW_RECORDING on m6809 is single-bank only for now \
+             (this build is multibank: {} banks). Remove the multibank META \
+             directives or the DRAW_RECORDING call.",
+            num_banks
+        ));
+    }
+
     // Set multibank mode for builtins (affects asset reference generation)
     builtins::set_multibank_mode(is_multibank);
 

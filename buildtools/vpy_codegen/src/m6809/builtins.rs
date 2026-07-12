@@ -123,6 +123,9 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     // Animation
     ("DRAW_ANIM", 1),     // animation_name → draws current frame, advances counter
 
+    // Vector-movie playback (.vrec) — single-bank, video-only
+    ("DRAW_RECORDING", 5),// name, x, y, scale, frame
+
     // Pitched instrument
     ("PLAY_NOTE", 3),     // instrument_name, channel, midi_note
 
@@ -933,6 +936,12 @@ pub fn emit_builtin(
             true
         }
 
+        // ===== Vector-movie playback (.vrec) =====
+        "DRAW_RECORDING" => {
+            emit_draw_recording(args, out, assets);
+            true
+        }
+
         // ===== Enemy system builtins =====
         "SPAWN_ENEMIES" => {
             if args.len() != 1 {
@@ -1246,6 +1255,49 @@ fn emit_draw_line(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     
     out.push_str("    LDD #0\n");
     out.push_str("    STD RESULT\n");
+}
+
+/// DRAW_RECORDING("name", x, y, scale, frame) — play one frame of a .vrec
+/// vector recording. SINGLE-BANK, VIDEO-ONLY. Resolves "name" → _<NAME>_VREC,
+/// stores x/y/scale/frame into DRAW_REC_* RAM, and JSRs DRAW_RECORDING_RUNTIME.
+/// `frame` is a plain VPy variable the game increments each loop (no audio clock).
+fn emit_draw_recording(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
+    // Arity (5) already validated by emit_builtin.
+    match &args[0] {
+        Expr::StringLit(rec_name) => {
+            let symbol = format!("_{}_VREC", rec_name.to_uppercase().replace('-', "_").replace(' ', "_"));
+            out.push_str(&format!("    ; DRAW_RECORDING(\"{}\", x, y, scale, frame)\n", rec_name));
+
+            // x center (arg 1) → DRAW_REC_X (i8, low byte)
+            expressions::emit_simple_expr(&args[1], out, assets);
+            out.push_str("    TFR B,A          ; X center (low byte)\n");
+            out.push_str("    STA >DRAW_REC_X\n");
+
+            // y center (arg 2) → DRAW_REC_Y
+            expressions::emit_simple_expr(&args[2], out, assets);
+            out.push_str("    TFR B,A          ; Y center (low byte)\n");
+            out.push_str("    STA >DRAW_REC_Y\n");
+
+            // scale (arg 3) → DRAW_REC_SCALE (0-128, 128=100%)
+            expressions::emit_simple_expr(&args[3], out, assets);
+            out.push_str("    TFR B,A          ; scale (low byte)\n");
+            out.push_str("    STA >DRAW_REC_SCALE\n");
+
+            // frame counter (arg 4) → DRAW_REC_FRAME (16-bit; runtime does frame % frame_count)
+            expressions::emit_simple_expr(&args[4], out, assets);
+            out.push_str("    STD >DRAW_REC_FRAME\n");
+
+            // Runtime honors SET_INTENSITY override (DRAW_VEC_INTENSITY); recorded
+            // per-segment intensity is used when the override is 0.
+            out.push_str(&format!("    LDX #{}      ; recording header\n", symbol));
+            out.push_str("    JSR DRAW_RECORDING_RUNTIME\n");
+            out.push_str("    LDD #0\n    STD RESULT\n");
+        }
+        _ => {
+            out.push_str("    ; ERROR: DRAW_RECORDING first argument must be a string literal\n");
+            out.push_str("    LDD #0\n    STD RESULT\n");
+        }
+    }
 }
 
 fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
@@ -1842,4 +1894,30 @@ pub fn emit_msg_table(entries: &[MsgEntry], out: &mut String) {
         }
     }
     out.push_str("\n");
+}
+
+#[cfg(test)]
+mod draw_recording_tests {
+    use super::*;
+
+    /// DRAW_RECORDING("clip", 0, 0, 128, frame) must resolve the recording symbol
+    /// (_CLIP_VREC) and JSR the runtime, passing x/y/scale/frame through the
+    /// DRAW_REC_* RAM args.
+    #[test]
+    fn draw_recording_emits_runtime_call_and_symbol() {
+        let args = vec![
+            Expr::StringLit("clip".to_string()),
+            Expr::Number(0),
+            Expr::Number(0),
+            Expr::Number(128),
+            Expr::Number(0), // frame counter (a plain VPy var at runtime; const here for the test)
+        ];
+        let mut out = String::new();
+        let handled = emit_builtin("DRAW_RECORDING", &args, &mut out, &[]);
+        assert!(handled, "DRAW_RECORDING must be handled as a builtin");
+        assert!(out.contains("LDX #_CLIP_VREC"), "must resolve recording symbol:\n{out}");
+        assert!(out.contains("JSR DRAW_RECORDING_RUNTIME"), "must call runtime:\n{out}");
+        assert!(out.contains("STD >DRAW_REC_FRAME"), "must pass frame arg:\n{out}");
+        assert!(out.contains("STA >DRAW_REC_SCALE"), "must pass scale arg:\n{out}");
+    }
 }

@@ -216,7 +216,7 @@ fn collect_asset_names_from_expr(expr: &Expr, used_names: &mut HashSet<String>) 
             let up = name.to_uppercase();
             if up == "DRAW_VECTOR" || up == "DRAW_VECTOR_EX" || up == "DRAW_VECTOR_3D" ||
                up == "PLAY_MUSIC" || up == "PLAY_SFX" || up == "LOAD_LEVEL" ||
-               up == "DRAW_ANIM" || up == "PLAY_NOTE" {
+               up == "DRAW_ANIM" || up == "PLAY_NOTE" || up == "DRAW_RECORDING" {
                 // First argument should be asset name (string literal)
                 if let Some(Expr::StringLit(asset_name)) = args.first() {
                     used_names.insert(asset_name.clone());
@@ -854,7 +854,104 @@ pub fn generate_assets_asm(assets: &[AssetInfo]) -> Result<String, String> {
         }
     }
 
+    // Generate recording assets (.vrec vector-movie playback data).
+    // VIDEO-ONLY, SINGLE-BANK: emitted as MC6809 FDB/FCB tables read by
+    // DRAW_RECORDING_RUNTIME. See compile_vrec for the byte layout.
+    for asset in assets.iter().filter(|a| matches!(a.asset_type, AssetType::Recording)) {
+        match fs::read_to_string(&asset.path) {
+            Ok(text) => match serde_json::from_str::<VrecResource>(&text) {
+                Ok(vrec) => out.push_str(&compile_vrec(&vrec, &asset.name)),
+                Err(e) => {
+                    eprintln!("[WARNING] Failed to parse recording asset '{}': {}", asset.name, e);
+                    let sym = asset.name.to_uppercase().replace('-', "_").replace(' ', "_");
+                    out.push_str(&format!("_{sym}_VREC:\n    FDB 0    ; empty recording (parse error)\n\n"));
+                }
+            },
+            Err(e) => {
+                eprintln!("[WARNING] Failed to read recording asset '{}': {}", asset.name, e);
+            }
+        }
+    }
+
     Ok(out)
+}
+
+// ============================================================
+// Recording compiler (.vrec → MC6809 frame/segment table)
+// ============================================================
+//
+// The .vrec JSON is TARGET-AGNOSTIC (same file drives rp2350/pitrex/m6809).
+// The BINARY layout here differs from the arm/pitrex `.word`/`.hword` layout
+// only in assembler syntax + pointer form: on m6809 the offset table stores
+// ABSOLUTE frame-label pointers (FDB _<SYM>_VREC_Fn), which the linker resolves
+// — no address math in codegen, and the runtime dereferences with LDX ,X just
+// like DRAW_ANIM's frame table. Layout:
+//
+//   _<SYM>_VREC:  FDB frame_count
+//                 FDB _<SYM>_VREC_F0, _<SYM>_VREC_F1, ...   (abs frame pointers)
+//   _<SYM>_VREC_Fn:
+//                 FDB segment_count
+//                 per segment (5 bytes): FCB x0,y0,x1,y1,intensity  (i8,i8,i8,i8,u8)
+//
+// Coords/intensity are clamped to i8 / 0-127 exactly like the arm/pitrex path.
+// NOTE: the segments/frame count is a DATA (flicker-budget) concern — the
+// runtime draws every segment; it does not decimate.
+fn compile_vrec(vrec: &VrecResource, override_name: &str) -> String {
+    let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let frame_count = vrec.frames.len();
+
+    let mut s = String::new();
+    s.push_str(&format!(
+        "; --- {} RECORDING ({} frame(s), fps={}) ---\n",
+        override_name, frame_count, vrec.fps
+    ));
+    s.push_str(&format!("_{sym}_VREC:\n"));
+    s.push_str(&format!("    FDB {}    ; frame_count\n", frame_count));
+    for i in 0..frame_count {
+        s.push_str(&format!("    FDB _{sym}_VREC_F{i}    ; frame {i} pointer\n"));
+    }
+    for (i, frame) in vrec.frames.iter().enumerate() {
+        s.push_str(&format!("_{sym}_VREC_F{i}:\n"));
+        s.push_str(&format!("    FDB {}    ; segment_count\n", frame.segments.len()));
+        for seg in &frame.segments {
+            let x0 = seg.x0.clamp(-127, 127) as i8;
+            let y0 = seg.y0.clamp(-127, 127) as i8;
+            let x1 = seg.x1.clamp(-127, 127) as i8;
+            let y1 = seg.y1.clamp(-127, 127) as i8;
+            let inten = seg.i.clamp(0, 127) as u8;
+            s.push_str(&format!(
+                "    FCB ${:02X},${:02X},${:02X},${:02X},${:02X}    ; ({},{})->({},{}) i={}\n",
+                x0 as u8, y0 as u8, x1 as u8, y1 as u8, inten, x0, y0, x1, y1, inten
+            ));
+        }
+    }
+    s.push('\n');
+    s
+}
+
+// .vrec JSON schema (identical to pitrex/arm VrecResource — target-agnostic).
+#[derive(serde::Deserialize)]
+struct VrecResource {
+    #[serde(default)]
+    fps: f64,
+    #[serde(default)]
+    frames: Vec<VrecFrame>,
+}
+
+#[derive(serde::Deserialize)]
+struct VrecFrame {
+    #[serde(default)]
+    segments: Vec<VrecSegment>,
+}
+
+#[derive(serde::Deserialize)]
+struct VrecSegment {
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    /// Intensity 0-127 (recorder only stores visible segments, i > 0)
+    i: i32,
 }
 
 /// Generate assembly code for assets distributed across multiple banks
@@ -1699,7 +1796,46 @@ pub fn generate_3d_data_asm(assets: &[AssetInfo]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::generate_draw_anim_banked_wrapper;
+    use super::{compile_vrec, generate_draw_anim_banked_wrapper, VrecResource};
+
+    const VREC_JSON: &str = r#"{
+        "version": "1.0",
+        "name": "clip",
+        "fps": 12,
+        "frames": [
+            { "segments": [
+                { "x0": -50, "y0": 10, "x1": 30, "y1": 20, "i": 95 },
+                { "x0": 200, "y0": -200, "x1": 0, "y1": 0, "i": 300 }
+            ] },
+            { "segments": [
+                { "x0": 0, "y0": 0, "x1": 10, "y1": 10, "i": 1 }
+            ] }
+        ]
+    }"#;
+
+    /// compile_vrec must emit the MC6809 table: frame_count word, absolute
+    /// frame pointers, per-frame segment_count word, and 5-byte FCB segments
+    /// clamped to i8 / 0-127.
+    #[test]
+    fn test_compile_vrec_m6809_layout() {
+        let vrec: VrecResource = serde_json::from_str(VREC_JSON).unwrap();
+        let asm = compile_vrec(&vrec, "clip");
+
+        assert!(asm.contains("_CLIP_VREC:\n    FDB 2    ; frame_count"),
+            "missing frame_count:\n{asm}");
+        assert!(asm.contains("FDB _CLIP_VREC_F0"), "missing frame 0 pointer:\n{asm}");
+        assert!(asm.contains("FDB _CLIP_VREC_F1"), "missing frame 1 pointer:\n{asm}");
+        assert!(asm.contains("_CLIP_VREC_F0:\n    FDB 2    ; segment_count"),
+            "frame 0 must have 2 segments:\n{asm}");
+        assert!(asm.contains("_CLIP_VREC_F1:\n    FDB 1    ; segment_count"),
+            "frame 1 must have 1 segment:\n{asm}");
+        // First segment: x0=-50 (0xCE), y0=10 (0x0A), x1=30 (0x1E), y1=20 (0x14), i=95 (0x5F)
+        assert!(asm.contains("FCB $CE,$0A,$1E,$14,$5F"),
+            "first segment FCB bytes wrong:\n{asm}");
+        // Clamping: 200→127 (0x7F), -200→-127 (0x81), i 300→127 (0x7F)
+        assert!(asm.contains("FCB $7F,$81,$00,$00,$7F"),
+            "i8/intensity clamping failed:\n{asm}");
+    }
 
     /// Regression test for Bug 2: DRAW_ANIM_BANKED must save X on the stack
     /// before the Vectrex BIOS calls (Reset0Ref, Moveto_d) that may clobber it,
