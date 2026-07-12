@@ -131,6 +131,10 @@ const BUILTIN_DEPS: &[(&str, &[&str])] = &[
     ("PRINT_NUMBER",   &["PRINT_TEXT"]),
     // DRAW_VECTOR_3D goes through the regular draw_vector path.
     ("DRAW_VECTOR_3D", &["DRAW_VECTOR"]),
+    // DRAW_RECORDING (.vrec playback) is self-contained: it only calls the SDK
+    // extern v_directDraw32 + __aeabi_idivmod, so it needs no other tree-shaken
+    // helper. The name is auto-collected by walk_expr; this documents the group.
+    ("DRAW_RECORDING", &[]),
     // Animation drawing fans into draw_vector_ex.
     ("DRAW_ANIM",      &["DRAW_VECTOR_EX"]),
     // Enemy update/draw both touch the per-frame draw_vector_ex / draw_anim.

@@ -229,7 +229,7 @@ fn collect_asset_names_from_expr(expr: &Expr, used_names: &mut HashSet<String>) 
             let up = name.to_uppercase();
             if up == "DRAW_VECTOR" || up == "DRAW_VECTOR_EX" || up == "DRAW_VECTOR_3D" ||
                up == "PLAY_MUSIC" || up == "PLAY_SFX" || up == "LOAD_LEVEL" ||
-               up == "DRAW_ANIM" || up == "PLAY_NOTE" {
+               up == "DRAW_ANIM" || up == "PLAY_NOTE" || up == "DRAW_RECORDING" {
                 // First argument should be asset name (string literal)
                 if let Some(Expr::StringLit(asset_name)) = args.first() {
                     used_names.insert(asset_name.clone());
@@ -316,6 +316,46 @@ struct VmusNoise {
     channels: u8,
     #[serde(default = "default_max_velocity")]
     velocity: u8,
+}
+
+// ============================================================
+// .vrec vector-recording format (multi-frame segment capture)
+// ============================================================
+//
+// Playback runtime: pitrex_draw_recording (builtins.rs). Reused byte layout
+// from the rp2350 (arm) backend — TARGET-AGNOSTIC data, only the runtime that
+// reads it differs. See compile_vrec below for the emitted binary layout.
+
+#[derive(Deserialize)]
+struct VrecResource {
+    #[serde(default)]
+    #[allow(dead_code)]
+    version: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    name: String,
+    /// Capture rate — informational only; playback pacing is driven by the
+    /// caller's frame counter (DRAW_RECORDING takes frame % frame_count).
+    #[serde(default)]
+    fps: f64,
+    #[serde(default)]
+    frames: Vec<VrecFrame>,
+}
+
+#[derive(Deserialize)]
+struct VrecFrame {
+    #[serde(default)]
+    segments: Vec<VrecSegment>,
+}
+
+#[derive(Deserialize)]
+struct VrecSegment {
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    /// Intensity 0-127 (recorder only stores visible segments, i > 0)
+    i: i32,
 }
 
 // ============================================================
@@ -610,6 +650,25 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                 };
                 s.push_str(&emit_enemy_data_for_pitrex(&resource, &sym, &vec_min_y));
             }
+            AssetType::Recording => {
+                let text = match fs::read_to_string(&asset.path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not read {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _{sym}_VREC\n_{sym}_VREC:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                let vrec: VrecResource = match serde_json::from_str(&text) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not parse {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _{sym}_VREC\n_{sym}_VREC:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                s.push_str(&compile_vrec(&vrec, &asset.name));
+            }
             #[allow(unreachable_patterns)]
             _ => {
                 s.push_str(&format!("@ Asset stub: {} ({:?})\n", asset.name, asset.asset_type));
@@ -618,6 +677,62 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
         }
     }
 
+    s
+}
+
+// ============================================================
+// Recording compiler (.vrec → frame/segment table)
+// ============================================================
+//
+// TARGET-AGNOSTIC binary layout — byte-for-byte identical to the rp2350 (arm)
+// backend's compile_vrec, read here by pitrex_draw_recording (builtins.rs):
+//   _<NAME>_VREC:                       (4-byte aligned)
+//     .word  frame_count
+//     .word  offset_frame0, offset_frame1, ...  @ byte offsets from _<NAME>_VREC
+//   frame N:                            (2-byte aligned)
+//     .hword segment_count
+//     per segment (5 bytes): .byte x0, y0, x1, y1, intensity  (i8,i8,i8,i8,u8)
+//
+// Frame offsets are emitted as assembler label-difference expressions
+// (_<NAME>_VREC_Fn - _<NAME>_VREC) so gas computes them — no address math
+// in the codegen, consistent with the "linker owns addresses" rule.
+fn compile_vrec(vrec: &VrecResource, override_name: &str) -> String {
+    let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let frame_count = vrec.frames.len();
+
+    let mut s = String::new();
+    s.push_str(&format!(
+        "@ --- {} RECORDING ({} frame(s), fps={}) ---\n",
+        override_name, frame_count, vrec.fps
+    ));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_VREC\n_{sym}_VREC:\n"));
+    s.push_str(&format!("    .word   {}               @ frame_count\n", frame_count));
+    for i in 0..frame_count {
+        s.push_str(&format!(
+            "    .word   _{sym}_VREC_F{i} - _{sym}_VREC  @ offset frame {i}\n"
+        ));
+    }
+    for (i, frame) in vrec.frames.iter().enumerate() {
+        s.push_str("    .balign 2\n");
+        s.push_str(&format!("_{sym}_VREC_F{i}:\n"));
+        s.push_str(&format!(
+            "    .hword  {}               @ segment_count\n",
+            frame.segments.len()
+        ));
+        for seg in &frame.segments {
+            let x0 = seg.x0.clamp(-127, 127) as i8;
+            let y0 = seg.y0.clamp(-127, 127) as i8;
+            let x1 = seg.x1.clamp(-127, 127) as i8;
+            let y1 = seg.y1.clamp(-127, 127) as i8;
+            let inten = seg.i.clamp(0, 127) as u8;
+            s.push_str(&format!(
+                "    .byte   0x{:02X}, 0x{:02X}, 0x{:02X}, 0x{:02X}, 0x{:02X}  @ ({},{})->({},{}) i={}\n",
+                x0 as u8, y0 as u8, x1 as u8, y1 as u8, inten, x0, y0, x1, y1, inten
+            ));
+        }
+    }
+    s.push('\n');
     s
 }
 
@@ -1614,4 +1729,53 @@ fn emit_enemy_data_for_pitrex(
 
     s.push('\n');
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const VREC_JSON: &str = r#"{
+        "version": "1.0",
+        "name": "preview",
+        "fps": 12,
+        "frames": [
+            { "segments": [
+                { "x0": -50, "y0": 10, "x1": 30, "y1": 20, "i": 95 },
+                { "x0": 200, "y0": -200, "x1": 0, "y1": 0, "i": 300 },
+                { "x0": 1, "y0": 2, "x1": 3, "y1": 4, "i": 50 }
+            ] },
+            { "segments": [
+                { "x0": 0, "y0": 0, "x1": 10, "y1": 10, "i": 1 },
+                { "x0": 5, "y0": 5, "x1": -5, "y1": -5, "i": 1 }
+            ] }
+        ]
+    }"#;
+
+    /// The PiTrex .vrec table must be byte-for-byte identical to the rp2350
+    /// backend's layout (frame_count word, label-difference offsets, 5-byte
+    /// segments) so the same tools/video2vrec output works across targets.
+    #[test]
+    fn test_compile_vrec_table_layout() {
+        let vrec: VrecResource = serde_json::from_str(VREC_JSON).unwrap();
+        let asm = compile_vrec(&vrec, "preview");
+
+        assert!(asm.contains(".global _PREVIEW_VREC"), "missing global symbol:\n{asm}");
+        assert!(asm.contains("_PREVIEW_VREC:\n    .word   2               @ frame_count"),
+            "missing frame_count word:\n{asm}");
+        assert!(asm.contains(".word   _PREVIEW_VREC_F0 - _PREVIEW_VREC"),
+            "missing frame 0 offset:\n{asm}");
+        assert!(asm.contains(".word   _PREVIEW_VREC_F1 - _PREVIEW_VREC"),
+            "missing frame 1 offset:\n{asm}");
+        assert!(asm.contains("_PREVIEW_VREC_F0:\n    .hword  3"),
+            "frame 0 must have 3 segments:\n{asm}");
+        assert!(asm.contains("_PREVIEW_VREC_F1:\n    .hword  2"),
+            "frame 1 must have 2 segments:\n{asm}");
+        // First segment bytes: x0=-50 (0xCE), y0=10, x1=30, y1=20, i=95 (0x5F)
+        assert!(asm.contains(".byte   0xCE, 0x0A, 0x1E, 0x14, 0x5F"),
+            "first segment bytes wrong:\n{asm}");
+        // Out-of-range values clamp: 200→127 (0x7F), -200→-127 (0x81), i 300→127
+        assert!(asm.contains(".byte   0x7F, 0x81, 0x00, 0x00, 0x7F"),
+            "clamping to i8/intensity range failed:\n{asm}");
+    }
 }

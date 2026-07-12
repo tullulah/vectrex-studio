@@ -466,6 +466,7 @@ pub fn emit_call(
         "DRAW_VECTOR"     => "pitrex_draw_vector",
         "DRAW_VECTOR_EX"  => "pitrex_draw_vector_ex",
         "DRAW_VECTOR_3D"  => "pitrex_draw_vector_3d",
+        "DRAW_RECORDING"  => "pitrex_draw_recording",
         "PRINT_TEXT"      => "pitrex_print_text",
         "PRINT_NUMBER"    => "pitrex_print_number",
         "PLAY_MUSIC"      => "pitrex_play_music",
@@ -758,6 +759,55 @@ pub fn emit_call(
         }
     }
 
+    // Special case: DRAW_RECORDING("name", x, y, scale, frame) — .vrec playback.
+    // ABI: r0=_NAME_VREC, r1=x, r2=y, r3=scale (0-128, 128=100%), [sp+0]=frame.
+    // frame is a free-running counter — pitrex_draw_recording takes
+    // frame % frame_count internally. Same stack-arg pattern as DRAW_VECTOR_EX.
+    if info.name == "DRAW_RECORDING" {
+        if let Some(Expr::StringLit(rec_name)) = args.first() {
+            let sym_base = rec_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_{sym_base}_VREC");
+            let runtime: Vec<&Expr> = args.iter().skip(1).collect();
+            // Push frame first so it sits at [sp] when the routine reads [sp+36]
+            // (after its push of 9 regs = 36 bytes).
+            if let Some(frame) = runtime.get(3) {
+                s.push_str(&emit_arg(frame, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r0 = recording ptr
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ recording '{rec_name}'\n"));
+            s.push_str("    push    {r0}\n");
+            // r1 = x
+            if let Some(x) = runtime.first() {
+                s.push_str(&emit_arg(x, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r2 = y
+            if let Some(y) = runtime.get(1) {
+                s.push_str(&emit_arg(y, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r3 = scale (default 128 = 100%)
+            if let Some(scale) = runtime.get(2) {
+                s.push_str(&emit_arg(scale, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #128\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // pop r3=scale, r2=y, r1=x, r0=recording ptr; frame stays at [sp]
+            s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+            s.push_str("    bl      pitrex_draw_recording\n");
+            s.push_str("    add     sp, sp, #4\n"); // discard frame from stack
+            return Ok(s);
+        }
+    }
+
     // Special case: DRAW_ANIM("name", ox, oy[, mirror[, scale[, speed_mul]]])
     // ABI: r0=anim_ptr, r1=ox, r2=oy, r3=mirror, [sp]=speed_mul
     // scale is ignored on PiTrex (no T1 timer equivalent).
@@ -956,5 +1006,38 @@ fn emit_arg(
         Ok(s)
     } else {
         emit_expr(expr, var_addrs)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vpy_parser::CallInfo;
+
+    /// DRAW_RECORDING("name", x, y, scale, frame) must resolve the string
+    /// literal to the `_<NAME>_VREC` symbol and emit the 5-arg call with the
+    /// frame counter pushed on the stack (AAPCS: 5th arg on the stack).
+    #[test]
+    fn test_pitrex_draw_recording_call() {
+        let var_addrs = std::collections::HashMap::new();
+        let info = CallInfo {
+            name: "DRAW_RECORDING".to_string(),
+            source_line: 0,
+            col: 0,
+            args: vec![
+                Expr::StringLit("snow-bros preview".to_string()),
+                Expr::Number(0),
+                Expr::Number(10),
+                Expr::Number(128),
+                Expr::Number(7),
+            ],
+        };
+        let asm = emit_call(&info, &var_addrs).unwrap();
+        assert!(asm.contains("ldr     r0, =_SNOW_BROS_PREVIEW_VREC"),
+            "must resolve recording name to _NAME_VREC symbol (got: {asm:?})");
+        assert!(asm.contains("bl      pitrex_draw_recording"),
+            "must call pitrex_draw_recording (got: {asm:?})");
+        assert!(asm.contains("add     sp, sp, #4"),
+            "must clean up the frame stack arg (got: {asm:?})");
     }
 }
