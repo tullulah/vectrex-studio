@@ -286,6 +286,15 @@ fn emit_game_main(
     s.push_str(".global game_main\n.type game_main, %function\n.thumb_func\ngame_main:\n");
     s.push_str("    push    {r4, r5, r6, r7, lr}\n");
 
+    // Default drawing state. RP2350 SRAM is NOT zero-initialised, so these RAM
+    // slots hold power-on garbage unless set. A program that never calls
+    // SET_INTENSITY / SET_TEXT_SIZE would then draw text/numbers with a garbage
+    // size/colour (invisible or wrong) — the runtime "if 0 → default" fallbacks
+    // never fire because the value isn't 0, it's garbage. Give them sane defaults.
+    s.push_str("    @ default drawing state (SRAM is not zero-initialised)\n");
+    s.push_str("    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE\n    mov     r0, #0\n    strb    r0, [r1]\n"); // 0 = use .vec/per-path intensity
+    s.push_str("    ldr     r1, =TEXT_SIZE\n    mov     r0, #3\n    str     r0, [r1]\n"); // scale ×1.5
+
     // Initialize globals
     s.push_str("    @ initialize globals\n");
     for item in &module.items {

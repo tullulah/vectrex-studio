@@ -33,13 +33,13 @@ pub fn emit_bus_helpers() -> String {
     s.push_str("    svc     #8                      @ SYS_BUS_WRITE\n");
     s.push_str("    bx      lr\n\n");
 
-    // bus_read: the cart's VIA read path is not available (BIOS has no read
-    // syscall yet). Return 0xFF — all-bits-set — so any leftover bit-poll loop
-    // (tst/beq) exits instead of hanging. The emulator traps the symbol and
-    // returns real emulated values, so this stub only runs on hardware.
-    s.push_str("@ bus_read(r0=addr) — stub: returns 0xFF (no BIOS read syscall yet)\n");
+    // bus_read: BIOS trap SYS_BUS_READ — the BIOS has the working E-synced read
+    // path (the game's own read path never worked, so reads/input were dead on
+    // hardware). The emulator traps the `bus_read` symbol and returns real
+    // emulated values, so this svc only runs on hardware.
+    s.push_str("@ bus_read(r0=addr) -> r0=data — BIOS trap: SYS_BUS_READ\n");
     s.push_str(".global bus_read\n.type bus_read, %function\n.thumb_func\nbus_read:\n");
-    s.push_str("    mov     r0, #0xFF\n");
+    s.push_str("    svc     #11                     @ SYS_BUS_READ\n");
     s.push_str("    bx      lr\n\n");
 
     s

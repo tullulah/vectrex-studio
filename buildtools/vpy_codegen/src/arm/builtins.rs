@@ -84,9 +84,9 @@ pub fn emit_builtins(msg_entries: &[MsgEntry], usage: &Usage) -> String {
     // dv_reset, dv_move_to, dv_draw_delta, _SIN_TABLE (usage-gated there).
     // Here, each runtime group is emitted only when the program uses it
     // (see arm/analysis.rs for the group/dependency table).
-    if usage.has("TEXT") {
-        s.push_str(&emit_font_data());
-    }
+    // The font + glyph renderer now live in the BIOS (firmware text.rs), reached
+    // via SYS_PRINT_TEXT (#16). The game emits no font data — it was ~57% of a
+    // text program's .s and identical in every game.
     // vpy_wait_recal + vpy_set_intensity: always-emit core (SVC stubs; the
     // game loop calls wait_recal and every draw routine calls set_intensity).
     s.push_str(&emit_wait_recal());
@@ -225,10 +225,10 @@ fn emit_move() -> String {
     s.push_str("    ldr     r0, =VPY_MOVE_X\n");
     s.push_str("    str     r4, [r0]            @ VPY_MOVE_X = x\n");
     s.push_str("    str     r5, [r0, #4]        @ VPY_MOVE_Y = y  (VPY_MOVE_Y = VPY_MOVE_X + 4)\n");
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r5\n    bl      bus_write\n"); // PORT_A=y
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x00\n    bl      bus_write\n"); // PB=0 (Y mux)
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r4\n    bl      bus_write\n"); // PORT_A=x
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n"); // PB=1 (X mux)
+    // Position the beam via the BIOS (SYS_MOVE_ABS). The game keeps no VIA/mux
+    // knowledge — it only records VPY_MOVE_X/Y above for draw_line's offset.
+    s.push_str("    mov     r0, r4\n    mov     r1, r5\n");
+    s.push_str("    svc     #15                     @ SYS_MOVE_ABS (r0=x, r1=y)\n");
     s.push_str("    pop     {r4, r5, pc}\n    .ltorg\n\n");
     s
 }
@@ -815,383 +815,29 @@ fn emit_draw_bezier_quad() -> String {
 /// font path. Returns (ascii, Vec<(cmd, glyph_x, glyph_y)>) where cmd=1=MOVE
 /// (beam off), cmd=2=DRAW (beam on); glyph_x in 0..4, glyph_y in 0..6 with
 /// y=0 bottom, y=6 top.
-fn font_glyphs() -> Vec<(u8, Vec<(u8, u8, u8)>)> {
-    // (ascii, [(cmd=1 move | 2 draw, glyph_x 0..4, glyph_y 0..6)])
-    // y=0 bottom, y=6 top; glyph box width=4
-    let mut g: Vec<(u8, Vec<(u8, u8, u8)>)> = vec![
-        (b' ', vec![]),  // space: no strokes, just advance
-        (b'!', vec![(1,2,6),(2,2,2),(1,2,0),(2,2,1)]),
-        (b'"', vec![(1,1,5),(2,1,6),(1,3,5),(2,3,6)]),
-        (b'+', vec![(1,2,1),(2,2,5),(1,0,3),(2,4,3)]),
-        (b',', vec![(1,2,1),(2,1,0)]),
-        (b'-', vec![(1,0,3),(2,4,3)]),
-        (b'.', vec![(1,1,0),(2,2,0)]),
-        (b'/', vec![(1,0,0),(2,4,6)]),
-        (b'0', vec![(1,0,0),(2,4,0),(2,4,6),(2,0,6),(2,0,0)]),
-        (b'1', vec![(1,2,0),(2,2,6)]),
-        (b'2', vec![(1,0,6),(2,4,6),(2,4,3),(2,0,3),(2,0,0),(2,4,0)]),
-        (b'3', vec![(1,0,6),(2,4,6),(2,4,0),(2,0,0),(1,4,3),(2,1,3)]),
-        (b'4', vec![(1,0,6),(2,0,3),(2,4,3),(1,4,6),(2,4,0)]),
-        (b'5', vec![(1,4,6),(2,0,6),(2,0,3),(2,4,3),(2,4,0),(2,0,0)]),
-        (b'6', vec![(1,4,6),(2,0,6),(2,0,0),(2,4,0),(2,4,3),(2,0,3)]),
-        (b'7', vec![(1,0,6),(2,4,6),(2,2,0)]),
-        (b'8', vec![(1,0,0),(2,4,0),(2,4,6),(2,0,6),(2,0,0),(1,0,3),(2,4,3)]),
-        (b'9', vec![(1,4,0),(2,4,6),(2,0,6),(2,0,3),(2,4,3)]),
-        (b':', vec![(1,2,1),(2,2,2),(1,2,4),(2,2,5)]),
-        (b';', vec![(1,2,4),(2,2,5),(1,2,1),(2,1,0)]),
-        (b'<', vec![(1,3,6),(2,0,3),(2,3,0)]),
-        (b'=', vec![(1,0,4),(2,4,4),(1,0,2),(2,4,2)]),
-        (b'>', vec![(1,1,6),(2,4,3),(2,1,0)]),
-        (b'?', vec![(1,0,6),(2,4,6),(2,4,4),(2,2,3),(1,2,1),(2,2,2)]),
-        (b'A', vec![(1,0,0),(2,2,6),(2,4,0),(1,0,3),(2,4,3)]),
-        (b'B', vec![(1,0,0),(2,0,6),(2,3,6),(2,3,3),(2,0,3),(2,3,3),(2,3,0),(2,0,0)]),
-        (b'C', vec![(1,4,6),(2,0,6),(2,0,0),(2,4,0)]),
-        (b'D', vec![(1,0,0),(2,0,6),(2,3,6),(2,4,5),(2,4,1),(2,3,0),(2,0,0)]),
-        (b'E', vec![(1,4,0),(2,0,0),(2,0,6),(2,4,6),(1,0,3),(2,3,3)]),
-        (b'F', vec![(1,0,0),(2,0,6),(2,4,6),(1,0,3),(2,3,3)]),
-        (b'G', vec![(1,4,6),(2,0,6),(2,0,0),(2,4,0),(2,4,3),(2,2,3)]),
-        (b'H', vec![(1,0,0),(2,0,6),(1,4,0),(2,4,6),(1,0,3),(2,4,3)]),
-        (b'I', vec![(1,1,0),(2,3,0),(1,2,0),(2,2,6),(1,1,6),(2,3,6)]),
-        (b'J', vec![(1,0,1),(2,1,0),(2,4,0),(2,4,6),(1,1,6),(2,3,6)]),
-        (b'K', vec![(1,0,0),(2,0,6),(1,0,3),(2,4,6),(1,0,3),(2,4,0)]),
-        (b'L', vec![(1,0,6),(2,0,0),(2,4,0)]),
-        (b'M', vec![(1,0,0),(2,0,6),(2,2,3),(2,4,6),(2,4,0)]),
-        (b'N', vec![(1,0,0),(2,0,6),(2,4,0),(2,4,6)]),
-        (b'O', vec![(1,0,0),(2,4,0),(2,4,6),(2,0,6),(2,0,0)]),
-        (b'P', vec![(1,0,0),(2,0,6),(2,3,6),(2,4,5),(2,4,4),(2,3,3),(2,0,3)]),
-        (b'Q', vec![(1,0,0),(2,4,0),(2,4,6),(2,0,6),(2,0,0),(1,3,1),(2,4,0)]),
-        (b'R', vec![(1,0,0),(2,0,6),(2,3,6),(2,4,5),(2,4,4),(2,3,3),(2,0,3),(2,4,0)]),
-        (b'S', vec![(1,4,6),(2,0,6),(2,0,3),(2,4,3),(2,4,0),(2,0,0)]),
-        (b'T', vec![(1,0,6),(2,4,6),(1,2,6),(2,2,0)]),
-        (b'U', vec![(1,0,6),(2,0,0),(2,4,0),(2,4,6)]),
-        (b'V', vec![(1,0,6),(2,2,0),(2,4,6)]),
-        (b'W', vec![(1,0,6),(2,1,0),(2,2,3),(2,3,0),(2,4,6)]),
-        (b'X', vec![(1,0,0),(2,4,6),(1,0,6),(2,4,0)]),
-        (b'Y', vec![(1,0,6),(2,2,3),(2,4,6),(1,2,3),(2,2,0)]),
-        (b'Z', vec![(1,0,6),(2,4,6),(2,0,0),(2,4,0)]),
-    ];
-    // lowercase maps to uppercase
-    for i in 0..26u8 {
-        let uc = b'A' + i;
-        if let Some(idx) = g.iter().position(|(c, _)| *c == uc) {
-            let strokes = g[idx].1.clone();
-            g.push((b'a' + i, strokes));
-        }
-    }
-    g
-}
-
-fn emit_font_data() -> String {
-    let glyphs = font_glyphs();
-    let mut s = String::new();
-
-    s.push_str("@ ============================================================\n");
-    s.push_str("@ Vector font — ASCII 32-126 stroke data\n");
-    s.push_str("@ Each glyph: [cmd(1=move,2=draw), x(0-4), y(0-6), ..., 0x00]\n");
-    s.push_str("@ _FONT_PTRS[char-32] = absolute address of glyph (0 = no strokes)\n");
-    s.push_str("@ ============================================================\n\n");
-
-    // Build lookup: char → label
-    let mut label_map: std::collections::HashMap<u8, String> = std::collections::HashMap::new();
-    for (ch, strokes) in &glyphs {
-        if !strokes.is_empty() {
-            label_map.insert(*ch, format!("_glyph_{:03}", ch));
-        }
-    }
-
-    // Emit pointer table for chars 32-126 (95 chars, 4 bytes each = 380 bytes)
-    s.push_str(".global _FONT_PTRS\n_FONT_PTRS:\n");
-    for c in 32u8..=126 {
-        if let Some(lbl) = label_map.get(&c) {
-            s.push_str(&format!("    .word   {}   @ '{}'\n", lbl, c as char));
-        } else {
-            s.push_str(&format!("    .word   0    @ '{}' no strokes\n", c as char));
-        }
-    }
-    s.push('\n');
-
-    // Emit glyph data
-    s.push_str(".global _FONT_DATA\n_FONT_DATA:\n");
-    let mut sorted = glyphs;
-    sorted.sort_by_key(|(c, _)| *c);
-    for (ch, strokes) in &sorted {
-        if strokes.is_empty() { continue; }
-        let lbl = label_map.get(ch).unwrap();
-        s.push_str(&format!("{}:  @ '{}'\n", lbl, *ch as char));
-        for (cmd, x, y) in strokes {
-            s.push_str(&format!("    .byte   {}, {}, {}\n", cmd, x, y));
-        }
-        s.push_str("    .byte   0\n");  // end marker
-    }
-    s.push('\n');
-    s
-}
-
 fn emit_print_text() -> String {
-    let mut s = String::new();
-    s.push_str("@ vpy_print_text(r0=x, r1=y, r2=str_ptr)\n");
-    s.push_str("@ Draws null-terminated or $80-terminated ASCII string at (x, y).\n");
-    s.push_str("@ Uses TEXT_SIZE for scale, TEXT_COLOR for intensity.\n");
-    s.push_str(".global vpy_print_text\n.type vpy_print_text, %function\n.thumb_func\nvpy_print_text:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n"); // 9 regs = 36 bytes
-    s.push_str("    mov     r4, r0              @ x\n");
-    s.push_str("    mov     r5, r1              @ y\n");
-    s.push_str("    mov     r6, r2              @ str_ptr\n");
-
-    // Load text_size and text_color from RAM
-    s.push_str("    ldr     r7, =TEXT_SIZE\n    ldr     r7, [r7]\n"); // r7 = scale
-    s.push_str("    cmp     r7, #0\n    bne     vpt_scale_ok\n    mov     r7, #1\n");
-    s.push_str("vpt_scale_ok:\n");
-    s.push_str("    ldr     r8, =TEXT_COLOR\n    ldr     r8, [r8]\n"); // r8 = color
-    s.push_str("    cmp     r8, #0\n    bne     vpt_color_ok\n    mov     r8, #100\n"); // default brightness
-    s.push_str("vpt_color_ok:\n");
-
-    // Reset and position beam
-    s.push_str("    bl      dv_reset\n");
-    s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
-    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to\n");
-    s.push_str("    ldr     r9, =PRINT_BEAM_X\n    str     r4, [r9]\n");
-    s.push_str("    ldr     r10, =PRINT_BEAM_Y\n    str     r5, [r10]\n");
-
-    // r11 = cur_x (current character start x)
-    s.push_str("    mov     r11, r4\n");
-
-    // Main character loop
-    s.push_str("vpt_loop:\n");
-    s.push_str("    ldrb    r0, [r6]\n"); // load char
-    s.push_str("    cmp     r0, #0\n    beq     vpt_done\n"); // null terminator
-    s.push_str("    cmp     r0, #0x80\n    beq     vpt_done\n"); // Vectrex $80 terminator
-    s.push_str("    add     r6, r6, #1\n"); // advance string ptr
-
-    // Fold lowercase to uppercase
-    s.push_str("    cmp     r0, #0x61\n    blt     vpt_not_lower\n");
-    s.push_str("    cmp     r0, #0x7A\n    bgt     vpt_not_lower\n");
-    s.push_str("    sub     r0, r0, #0x20\n"); // 'a'-'A'
-    s.push_str("vpt_not_lower:\n");
-
-    // Bounds check: char must be 32-126
-    s.push_str("    cmp     r0, #32\n    blt     vpt_advance\n");
-    s.push_str("    cmp     r0, #126\n    bgt     vpt_advance\n");
-
-    // Load glyph pointer: _FONT_PTRS[(char-32)*4]
-    s.push_str("    sub     r0, r0, #32\n");
-    s.push_str("    ldr     r1, =_FONT_PTRS\n");
-    s.push_str("    lsl     r0, r0, #2\n    ldr     r0, [r1, r0]\n"); // glyph_ptr
-    s.push_str("    cmp     r0, #0\n    beq     vpt_advance\n"); // no strokes for this char
-
-    // Move beam from current beam pos to char start (r11, r5)
-    s.push_str("    ldr     r1, =PRINT_BEAM_X\n    ldr     r2, [r1]\n"); // r2 = beam_x
-    s.push_str("    ldr     r3, =PRINT_BEAM_Y\n    ldr     r3, [r3]\n"); // r3 = beam_y
-    s.push_str("    sub     r1, r11, r2\n"); // dx = char_x - beam_x
-    s.push_str("    sub     r3, r5, r3\n"); // dy = char_y - beam_y
-    s.push_str("    push    {r0, r3}\n"); // save glyph_ptr and dy
-    s.push_str("    mov     r0, r1\n    pop     {r2}\n    push    {r2}\n"); // dx, dy
-    // Actually let me restructure: save glyph_ptr, compute beam move
-    // r0 = glyph_ptr saved above; r1=dx, r3=dy
-    s.push_str("    push    {r0}\n"); // push glyph_ptr
-    // We have dx in r1 (= r11 - beam_x), dy in r3 (= r5 - beam_y).  Wait, r3 was overwritten.
-    // Let me redo this properly.
-    // Actually I messed up the register flow. Let me restructure draw_glyph call.
-
-    // OK, let's use a simpler flow: call a helper that handles everything.
-    // r0 = glyph_ptr (saved), r11 = char_x, r5 = char_y, r7 = scale, r9/r10 = PRINT_BEAM_X/Y ptrs
-    // Restore and call draw_glyph
-    s.push_str("    pop     {r0}            @ glyph_ptr\n");
-    s.push_str("    mov     r1, r11         @ char_x\n");
-    s.push_str("    mov     r2, r5          @ char_y\n");
-    s.push_str("    mov     r3, r7          @ scale\n");
-    s.push_str("    bl      vpt_draw_glyph\n");
-
-    s.push_str("vpt_advance:\n");
-    // cur_x += 5 * scale
-    s.push_str("    mov     r0, #5\n    mul     r0, r0, r7\n");
-    s.push_str("    add     r11, r11, r0\n");
-    s.push_str("    b       vpt_loop\n");
-
-    s.push_str("vpt_done:\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
-
-    // --- vpt_draw_glyph helper ---
-    // r0=glyph_ptr, r1=char_x, r2=char_y, r3=scale
-    // reads/writes PRINT_BEAM_X, PRINT_BEAM_Y
-    s.push_str("@ vpt_draw_glyph(r0=glyph_ptr, r1=char_x, r2=char_y, r3=scale)\n");
-    s.push_str(".type vpt_draw_glyph, %function\n.thumb_func\nvpt_draw_glyph:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, lr}\n"); // 7×4=28 bytes
-    s.push_str("    mov     r4, r0              @ glyph_ptr\n");
-    s.push_str("    mov     r5, r1              @ char_x\n");
-    s.push_str("    mov     r6, r2              @ char_y\n");
-    s.push_str("    mov     r7, r3              @ scale\n");
-    // r8 = beam_x (current), r9 = beam_y
-    s.push_str("    ldr     r0, =PRINT_BEAM_X\n    ldr     r8, [r0]\n");
-    s.push_str("    ldr     r0, =PRINT_BEAM_Y\n    ldr     r9, [r0]\n");
-
-    s.push_str("vdg_loop:\n");
-    s.push_str("    ldrb    r0, [r4]            @ cmd\n");
-    s.push_str("    cmp     r0, #0\n    beq     vdg_done\n");
-    s.push_str("    ldrb    r1, [r4, #1]        @ gx (0-4)\n");
-    s.push_str("    ldrb    r2, [r4, #2]        @ gy (0-6)\n");
-    s.push_str("    add     r4, r4, #3\n");
-    // target_x = char_x + gx * scale
-    s.push_str("    mul     r1, r1, r7\n    add     r1, r1, r5\n"); // target_x
-    // target_y = char_y + gy * scale
-    s.push_str("    mul     r2, r2, r7\n    add     r2, r2, r6\n"); // target_y
-    // dx = target_x - beam_x; dy = target_y - beam_y
-    s.push_str("    sub     r3, r1, r8          @ dx\n");
-    s.push_str("    push    {r0, r1, r2}\n"); // save cmd, target_x, target_y
-    s.push_str("    sub     r1, r2, r9          @ dy\n");
-    s.push_str("    mov     r0, r3              @ dx\n");
-    s.push_str("    pop     {r3}\n"); // r3 = cmd; target_x and target_y still on stack
-    s.push_str("    push    {r3}\n"); // push cmd back
-    // actually this register dance is getting complicated. Let me use a simpler approach.
-    // Save new_beam_x/y in r8/r9 first, then call.
-    s.pop(); // undo the last push
-    s.pop(); // undo pop {r3}
-    s.pop(); // undo push {r0,r1,r2}
-    s.pop(); // undo sub r3,r1,r8
-    // Let me just directly compute:
-    s.push_str("    sub     r10, r1, r8         @ dx = target_x - beam_x\n");
-    s.push_str("    sub     r11, r2, r9         @ dy = target_y - beam_y\n");
-    s.push_str("    push    {r0, r1, r2}\n"); // save cmd, target_x, target_y
-    s.push_str("    mov     r0, r10\n    mov     r1, r11\n"); // dx, dy for call
-    s.push_str("    pop     {r3}\n"); // r3 = cmd
-    s.push_str("    push    {r3}\n"); // still need target_x, target_y on stack
-    // Hmm, this is getting messy with push/pop. Let me use a completely different approach.
-
-    // The issue is we need both dx/dy for the call AND target_x/target_y to update beam_x/y.
-    // Solution: compute dx/dy, then update beam_x/y before the call (since we know the targets).
-
-    // Let me re-do from vdg_loop cleanly:
-    // Scratch r10, r11 for temp:
-    s.clear(); // Start over this function
-
-    // Redo the whole print_text + draw_glyph cleanly
+    // vpy_print_text is a thin BIOS-trap stub (font + renderer live in the BIOS).
     emit_print_text_clean()
 }
 
 fn emit_print_text_clean() -> String {
     let mut s = String::new();
-
-    // ─── vpy_print_text ───────────────────────────────────────────────────
-    s.push_str("@ vpy_print_text(r0=x, r1=y, r2=str_ptr)\n");
+    // vpy_print_text is now a thin BIOS-trap stub. It resolves scale (TEXT_SIZE,
+    // else 3) and colour (SET_INTENSITY override, else default 100), packs
+    // them into r3 = scale | (colour << 8), and traps: the BIOS owns the font +
+    // glyph renderer (firmware text.rs, SYS_PRINT_TEXT #16). r0=x, r1=y, r2=str_ptr
+    // pass straight through. PRINT_NUMBER/PRINT_MSG still call this symbol.
+    s.push_str("@ vpy_print_text(r0=x, r1=y, r2=str_ptr) -> BIOS trap SYS_PRINT_TEXT\n");
     s.push_str(".global vpy_print_text\n.type vpy_print_text, %function\n.thumb_func\nvpy_print_text:\n");
-    // Save: r4=x, r5=y, r6=str_ptr, r7=scale, r8=color, r9=cur_x, r10=BEAM_X ptr, r11=BEAM_Y ptr
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
-    s.push_str("    mov     r4, r0\n    mov     r5, r1\n    mov     r6, r2\n");
-
-    s.push_str("    ldr     r7, =TEXT_SIZE\n    ldr     r7, [r7]\n");
-    // Scale is stored as 2× the effective multiplier so non-integer sizes are possible.
-    // TEXT_SIZE=2 → effective ×1.0,  TEXT_SIZE=3 → effective ×1.5,  TEXT_SIZE=4 → effective ×2.0
-    s.push_str("    cmp     r7, #0\n    bne     vpt_sc\n    mov     r7, #3\nvpt_sc:\n");
-    // Text intensity: SET_INTENSITY override (VPY_BRIGHTNESS_OVERRIDE) wins if
-    // set this frame — same convention as the logo/wordmark, so SET_INTENSITY
-    // controls text brightness too — else SET_TEXT_COLOR, else a sane default.
-    s.push_str("    ldr     r8, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r8, [r8]\n");
-    s.push_str("    cmp     r8, #0\n    bne     vpt_cc\n");
-    s.push_str("    ldr     r8, =TEXT_COLOR\n    ldr     r8, [r8]\n");
-    s.push_str("    cmp     r8, #0\n    bne     vpt_cc\n    mov     r8, #100\nvpt_cc:\n");
-
-    s.push_str("    bl      dv_reset\n");
-    s.push_str("    mov     r0, r8\n    bl      vpy_set_intensity\n");
-    // ARM font: glyph_y=0 is bottom of glyph, glyph_y=6 is top.
-    // VPy convention: y parameter = top of text. Convert to glyph-bottom so the
-    // top of the glyph aligns with the requested y position.
-    // glyph_height = (6 * scale) >> 1; adjusted_y = y - glyph_height
-    s.push_str("    mov     r0, #6\n    mul     r0, r0, r7\n    asr     r0, r0, #1\n    sub     r5, r5, r0\n");
-    s.push_str("    mov     r0, r4\n    mov     r1, r5\n    bl      dv_move_to\n");
-
-    s.push_str("    ldr     r10, =PRINT_BEAM_X\n    str     r4, [r10]\n");
-    s.push_str("    ldr     r11, =PRINT_BEAM_Y\n    str     r5, [r11]\n");
-    s.push_str("    mov     r9, r4              @ cur_x = x\n");
-
-    s.push_str("vpt_loop:\n");
-    s.push_str("    ldrb    r0, [r6]\n    add     r6, r6, #1\n");
-    s.push_str("    cmp     r0, #0\n    beq     vpt_done\n");
-    s.push_str("    cmp     r0, #0x80\n    beq     vpt_done\n");
-    // fold lowercase
-    s.push_str("    cmp     r0, #0x61\n    blt     vpt_nl\n");
-    s.push_str("    cmp     r0, #0x7A\n    bgt     vpt_nl\n");
-    s.push_str("    sub     r0, r0, #0x20\nvpt_nl:\n");
-    // bounds
-    s.push_str("    cmp     r0, #32\n    blt     vpt_adv\n");
-    s.push_str("    cmp     r0, #126\n    bgt     vpt_adv\n");
-    // load glyph ptr
-    s.push_str("    sub     r0, r0, #32\n");
-    s.push_str("    ldr     r1, =_FONT_PTRS\n    lsl     r0, r0, #2\n    ldr     r0, [r1, r0]\n");
-    s.push_str("    cmp     r0, #0\n    beq     vpt_adv\n");
-    // Draw each glyph exactly like a wordmark PATH: Reset0Ref → set intensity →
-    // start from the centred (0,0). On this HW a bare set_intensity between draws
-    // does NOT relight the beam — the logo/wordmark are visible only because they
-    // dv_reset BEFORE set_intensity per path. A single setup for the whole string
-    // left every glyph blank (beam ran all the moves/draws unlit). Replicate the
-    // proven per-path sequence per glyph. r8=colour, r10/r11=PRINT_BEAM_X/Y ptrs
-    // (all callee-saved across the traps).
-    s.push_str("    push    {r0}\n");                        // save glyph_ptr
-    s.push_str("    bl      dv_reset\n");
-    s.push_str("    mov     r0, r8\n    bl vpy_set_intensity\n");
-    s.push_str("    mov     r0, #0\n    str r0, [r10]\n    str r0, [r11]\n"); // PRINT_BEAM=(0,0)
-    s.push_str("    pop     {r0}\n");                        // restore glyph_ptr
-    // call draw_glyph(glyph_ptr, cur_x, cur_y, scale, beam_x_ptr, beam_y_ptr).
-    // First glyph stroke is always a MOVE, so the blanked jump from centre to the
-    // glyph's absolute position leaves no stray line.
-    s.push_str("    mov     r1, r9\n    mov     r2, r5\n    mov     r3, r7\n");
-    s.push_str("    push    {r10, r11}\n"); // pass BEAM_X/Y ptrs via stack
-    s.push_str("    bl      vpt_draw_glyph\n");
-    s.push_str("    add     sp, sp, #8\n"); // clean up the 2 extra stack args
-    s.push_str("vpt_adv:\n");
-    s.push_str("    mov     r0, #7\n    mul     r0, r0, r7\n    asr     r0, r0, #1\n    add     r9, r9, r0\n");
-    s.push_str("    b       vpt_loop\n");
-    s.push_str("vpt_done:\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
-
-    // ─── vpt_draw_glyph(r0=ptr, r1=char_x, r2=char_y, r3=scale, [sp+0]=bx_ptr, [sp+4]=by_ptr)
-    s.push_str("@ vpt_draw_glyph — internal: draw one glyph at (char_x, char_y) with scale\n");
-    s.push_str(".type vpt_draw_glyph, %function\n.thumb_func\nvpt_draw_glyph:\n");
-    // save r4-r11
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n"); // 9×4=36 bytes
-    s.push_str("    mov     r4, r0              @ glyph_ptr\n");
-    s.push_str("    mov     r5, r1              @ char_x\n");
-    s.push_str("    mov     r6, r2              @ char_y\n");
-    s.push_str("    mov     r7, r3              @ scale\n");
-    // load beam ptrs from stack (past 9 saved regs = 36 bytes + 8 bytes for the push we did in caller)
-    s.push_str("    ldr     r8, [sp, #36]       @ bx_ptr (PRINT_BEAM_X)\n");
-    s.push_str("    ldr     r9, [sp, #40]       @ by_ptr (PRINT_BEAM_Y)\n");
-    s.push_str("    ldr     r10, [r8]           @ beam_x\n");
-    s.push_str("    ldr     r11, [r9]           @ beam_y\n");
-
-    s.push_str("vdg_loop:\n");
-    s.push_str("    ldrb    r0, [r4]\n");
-    s.push_str("    cmp     r0, #0\n    beq     vdg_done\n");
-    s.push_str("    ldrb    r1, [r4, #1]        @ gx\n");
-    s.push_str("    ldrb    r2, [r4, #2]        @ gy\n");
-    s.push_str("    add     r4, r4, #3\n");
-    s.push_str("    push    {r0}               @ save cmd\n");
-    // target_x = char_x + (gx * scale) >> 1  (scale is 2× effective multiplier)
-    s.push_str("    mul     r1, r1, r7\n    asr     r1, r1, #1\n    add     r1, r1, r5\n"); // r1 = target_x
-    // target_y = char_y + (gy * scale) >> 1
-    s.push_str("    mul     r2, r2, r7\n    asr     r2, r2, #1\n    add     r2, r2, r6\n"); // r2 = target_y
-    // dx = target_x - beam_x; dy = target_y - beam_y
-    s.push_str("    sub     r0, r1, r10         @ dx\n");
-    s.push_str("    sub     r3, r2, r11         @ dy\n");
-    // update beam tracking before the call
-    s.push_str("    mov     r10, r1\n    mov     r11, r2\n"); // beam moves to target
-    // call dv_move_to or dv_draw_delta based on cmd
-    s.push_str("    pop     {r1}               @ restore cmd\n");
-    s.push_str("    push    {r0, r3}           @ save dx, dy\n");
-    s.push_str("    cmp     r1, #1\n"); // cmd==1: move
-    s.push_str("    bne     vdg_draw\n");
-    s.push_str("    pop     {r0, r1}\n    bl      dv_move_to\n    b       vdg_loop\n");
-    s.push_str("vdg_draw:\n");
-    s.push_str("    pop     {r0, r1}\n    bl      dv_draw_delta\n    b       vdg_loop\n");
-
-    s.push_str("vdg_done:\n");
-    s.push_str("    str     r10, [r8]           @ update PRINT_BEAM_X\n");
-    s.push_str("    str     r11, [r9]           @ update PRINT_BEAM_Y\n");
-    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
-
+    s.push_str("    ldr     r3, =TEXT_SIZE\n    ldr     r3, [r3]\n");
+    s.push_str("    cmp     r3, #0\n    it      eq\n    moveq   r3, #3\n");
+    s.push_str("    ldr     r12, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r12, [r12]\n");
+    s.push_str("    cmp     r12, #0\n    it      eq\n    moveq   r12, #100\n"); // SET_INTENSITY, else 100
+    s.push_str("    orr     r3, r3, r12, lsl #8\n");   // r3 = scale | colour<<8
+    s.push_str("    svc     #16                     @ SYS_PRINT_TEXT\n");
+    s.push_str("    bx      lr\n    .ltorg\n\n");
     s
 }
-
-// ─── PRINT_NUMBER ──────────────────────────────────────────────────────────
 
 fn emit_print_number() -> String {
     let mut s = String::new();
@@ -1292,49 +938,19 @@ fn emit_joystick() -> String {
 fn emit_psg_helpers() -> String {
     let mut s = String::new();
 
-    // ─── psg_write(r0=reg, r1=data) ─────────────────────────────────────
-    s.push_str("@ psg_write(r0=reg, r1=data) — write AY-3-8912 PSG register\n");
+    // psg_write / psg_read are now thin BIOS-trap stubs — the BIOS owns the VIA,
+    // so the game never drives PORT_A/PORT_B directly. (Was: inline bus_write/read
+    // sequences; the inline read path was a non-working stub anyway. The BIOS's
+    // E-synced read makes joystick/buttons actually work.)
+    s.push_str("@ psg_write(r0=reg, r1=data) — BIOS trap: SYS_PSG_WRITE\n");
     s.push_str(".global psg_write\n.type psg_write, %function\n.thumb_func\npsg_write:\n");
-    s.push_str("    push    {r4, r5, lr}\n");
-    s.push_str("    mov     r4, r0              @ reg\n");
-    s.push_str("    mov     r5, r1              @ data\n");
-    // Port A = register number
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r4\n    bl      bus_write\n");
-    // Port B = LATCH (0x19 = BC1=1, BDIR=1, base=1)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x19\n    bl      bus_write\n");
-    // Port B = INACTIVE
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
-    // Port A = data
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r5\n    bl      bus_write\n");
-    // Port B = WRITE (0x11 = BDIR=1, BC1=0, base=1)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x11\n    bl      bus_write\n");
-    // Port B = INACTIVE
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
-    s.push_str("    pop     {r4, r5, pc}\n    .ltorg\n\n");
+    s.push_str("    svc     #5                      @ SYS_PSG_WRITE\n");
+    s.push_str("    bx      lr\n\n");
 
-    // ─── psg_read(r0=reg) → r0=data ─────────────────────────────────────
-    s.push_str("@ psg_read(r0=reg) → r0 = PSG register value\n");
+    s.push_str("@ psg_read(r0=reg) -> r0=data — BIOS trap: SYS_PSG_READ\n");
     s.push_str(".global psg_read\n.type psg_read, %function\n.thumb_func\npsg_read:\n");
-    s.push_str("    push    {r4, lr}\n");
-    s.push_str("    mov     r4, r0              @ reg\n");
-    // Port A = register number
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r4\n    bl      bus_write\n");
-    // Port B = LATCH
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x19\n    bl      bus_write\n");
-    // Port B = INACTIVE
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
-    // Set Port A as input: write 0x00 to DDR_A ($D003)
-    s.push_str("    mov     r0, #0xD003\n    mov     r1, #0x00\n    bl      bus_write\n");
-    // Port B = READ (0x09 = BC1=1, BDIR=0, base=1)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x09\n    bl      bus_write\n");
-    // Read Port A
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    push    {r0}               @ save result\n");
-    // Port B = INACTIVE; restore Port A DDR to output
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
-    s.push_str("    mov     r0, #0xD003\n    mov     r1, #0xFF\n    bl      bus_write\n");
-    s.push_str("    pop     {r0}               @ return value\n");
-    s.push_str("    pop     {r4, pc}\n    .ltorg\n\n");
+    s.push_str("    svc     #12                     @ SYS_PSG_READ\n");
+    s.push_str("    bx      lr\n\n");
 
     s
 }
@@ -1344,45 +960,25 @@ fn emit_update_buttons() -> String {
     let mut s = String::new();
 
     // ─── vpy_update_buttons() ────────────────────────────────────────────
-    s.push_str("@ vpy_update_buttons() — cache buttons and joystick axes (safe: called in WAIT_RECAL window)\n");
+    // All VIA access now lives in the BIOS: SYS_READ_BUTTONS_RAW (#14) does the
+    // DDR_B dance for J1 + PSG reg 14 for J2; SYS_READ_AXES (#13) reads the four
+    // mux channels. We just unpack the packed results into the RAM cache that the
+    // J1_*/J2_* getters read. No VIA/mux knowledge in the game any more.
+    s.push_str("@ vpy_update_buttons() — cache buttons+axes via BIOS traps (safe: WAIT_RECAL window)\n");
     s.push_str(".global vpy_update_buttons\n.type vpy_update_buttons, %function\n.thumb_func\nvpy_update_buttons:\n");
     s.push_str("    push    {r4, lr}\n");
-    // DDR_B = 0x0F: bits 4-7 become inputs so J1 button pins drive PORT_B[4-7].
-    // The Vectrex BIOS leaves DDR_B = 0xFF (all-output); if we read PORT_B without
-    // switching, we get the output latch (0x01 from dv_draw_delta) → bits 4-7 = 0 →
-    // all J1 buttons appear pressed → try_shoot fires every frame → snowballs → frame
-    // time exceeds phosphor persistence → blank display.
-    s.push_str("    mov     r0, #0xD002\n    mov     r1, #0x0F\n    bl      bus_write\n");
-    // Read J1 buttons (VIA Port B bits 4-7 = hardware button state)
-    s.push_str("    mov     r0, #0xD000\n    bl      bus_read\n");
-    s.push_str("    ldr     r1, =BTN_STATE_J1\n    str     r0, [r1]\n");
-    // Restore DDR_B = 0xFF so drawing code can drive all PORT_B lines as output
-    s.push_str("    mov     r0, #0xD002\n    mov     r1, #0xFF\n    bl      bus_write\n");
-    // Read J2 buttons (PSG reg 14)
-    s.push_str("    mov     r0, #14\n    bl      psg_read\n");
-    s.push_str("    ldr     r1, =BTN_STATE_J2\n    str     r0, [r1]\n");
-    // Cache J1 X axis: PORT_B = 0x01 (mux A0=1 = X channel)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    sxtb    r4, r0\n");
-    s.push_str("    ldr     r0, =J1_AXIS_X\n    str     r4, [r0]\n");
-    // Cache J1 Y axis: PORT_B = 0x03 (mux A0=1, A1=1 = J1 Y channel)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x03\n    bl      bus_write\n");
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    sxtb    r4, r0\n");
-    s.push_str("    ldr     r0, =J1_AXIS_Y\n    str     r4, [r0]\n");
-    // Cache J2 X axis: PORT_B = 0x00 (mux A0=0, A1=0 = J2 X channel)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x00\n    bl      bus_write\n");
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    sxtb    r4, r0\n");
-    s.push_str("    ldr     r0, =J2_AXIS_X\n    str     r4, [r0]\n");
-    // Cache J2 Y axis: PORT_B = 0x02 (mux A0=0, A1=1 = J2 Y channel)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x02\n    bl      bus_write\n");
-    s.push_str("    mov     r0, #0xD001\n    bl      bus_read\n");
-    s.push_str("    sxtb    r4, r0\n");
-    s.push_str("    ldr     r0, =J2_AXIS_Y\n    str     r4, [r0]\n");
-    // Restore PORT_B to neutral (0x01 = same as J1_X mux, safe for display)
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n");
+    // Buttons: r0 = (J1_portB << 8) | J2_psg14
+    s.push_str("    svc     #14                     @ SYS_READ_BUTTONS_RAW\n");
+    s.push_str("    mov     r4, r0\n");
+    s.push_str("    ubfx    r0, r4, #8, #8\n    ldr     r1, =BTN_STATE_J1\n    str     r0, [r1]\n");
+    s.push_str("    and     r0, r4, #0xFF\n    ldr     r1, =BTN_STATE_J2\n    str     r0, [r1]\n");
+    // Axes: r0 = (J1X<<24)|(J1Y<<16)|(J2X<<8)|J2Y, each a raw byte → sign-extend.
+    s.push_str("    svc     #13                     @ SYS_READ_AXES\n");
+    s.push_str("    mov     r4, r0\n");
+    s.push_str("    ubfx    r0, r4, #24, #8\n    sxtb    r0, r0\n    ldr     r1, =J1_AXIS_X\n    str     r0, [r1]\n");
+    s.push_str("    ubfx    r0, r4, #16, #8\n    sxtb    r0, r0\n    ldr     r1, =J1_AXIS_Y\n    str     r0, [r1]\n");
+    s.push_str("    ubfx    r0, r4, #8, #8\n    sxtb    r0, r0\n    ldr     r1, =J2_AXIS_X\n    str     r0, [r1]\n");
+    s.push_str("    sxtb    r0, r4\n    ldr     r1, =J2_AXIS_Y\n    str     r0, [r1]\n");
     s.push_str("    pop     {r4, pc}\n    .ltorg\n\n");
 
     s
@@ -1992,7 +1588,8 @@ fn emit_frame_us() -> String {
     s
 }
 
-/// vpy_set_text_size / vpy_set_text_color — TEXT group (state for print_text).
+/// vpy_set_text_size — TEXT group (state for print_text). (No text "color": the
+/// Vectrex is monochrome; text brightness is SET_INTENSITY.)
 fn emit_text_state() -> String {
     let mut s = String::new();
 
@@ -2010,7 +1607,6 @@ fn emit_text_state() -> String {
     s.push_str("    mov     r1, #1\n");
     s.push_str("vsts_ok:\n");
     s.push_str("    ldr     r0, =TEXT_SIZE\n    str     r1, [r0]\n    bx      lr\n\n");
-    s.push_str(&simple_set("vpy_set_text_color", "TEXT_COLOR"));
 
     s
 }

@@ -88,7 +88,7 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     s.push_str(&emit_pitrex_draw_anim());
 
     // ── Tree-shaken (clearly optional, larger / riskier helpers) ────────
-    if any(&["SET_TEXT_SIZE", "SET_TEXT_COLOR"]) { s.push_str(&emit_pitrex_text_extras()); }
+    if any(&["SET_TEXT_SIZE"]) { s.push_str(&emit_pitrex_text_extras()); }
     if any(&["LEVEL_COLLISION_X", "LEVEL_COLLISION_Y", "LEVEL_VERTICAL_WALL_HIT"]) {
         s.push_str(&emit_pitrex_level_collision());
     }
@@ -2529,11 +2529,6 @@ fn emit_pitrex_text_extras() -> String {
     s.push_str("    str     r0, [r1]\n");
     s.push_str("    bx      lr\n");
     s.push_str("    .ltorg\n\n");
-
-    // pitrex_set_text_color(r0=color) — NOP, PiTrex is monochrome (brightness set globally)
-    s.push_str("@ pitrex_set_text_color(r0=color) — NOP on monochrome PiTrex\n");
-    s.push_str(".global pitrex_set_text_color\n.type pitrex_set_text_color, %function\npitrex_set_text_color:\n");
-    s.push_str("    bx      lr\n\n");
 
     s
 }

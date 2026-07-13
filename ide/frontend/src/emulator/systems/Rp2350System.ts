@@ -40,6 +40,7 @@ import { Psg }            from '../hardware/Psg.js';
 import { Canvas }         from '../hardware/Canvas.js';
 import { Thumb2 }         from '../cpu/Thumb2.js';
 import { extractElf32Symbols, readElf32Entry, loadElf32IntoFlash } from '../util/Elf32Symbols.js';
+import { glyphStrokes } from './vectorFont.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -685,6 +686,108 @@ export class Rp2350System implements ISystem, IBus {
         return 10;
       });
       console.log(`[Rp2350System] vpy_update_buttons trap @ 0x${(updateButtonsAddr & ~1).toString(16)}`);
+    }
+
+    // ── Traps for the BIOS-migrated syscalls ─────────────────────────────
+    // The game now issues single high-level BIOS syscalls (svc #N) instead of
+    // composing bus_write/bus_read. The emulator reimplements them in TS, same
+    // as it already does for dv_reset/dv_move_to/dv_draw_delta.
+
+    // psg_write(r0=reg, r1=data) — was bl bus_write×6 (routed through the VIA to
+    // the PSG); now svc #5. Write the PSG register directly.
+    const psgWriteAddr = symbols.get('psg_write');
+    if (psgWriteAddr !== undefined) {
+      this.traps.set(psgWriteAddr & ~1, (cpu: Thumb2): number => {
+        this.psg.writeReg(cpu.getReg(0) & 0x0f, cpu.getReg(1) & 0xff);
+        return 30;
+      });
+      console.log(`[Rp2350System] psg_write trap @ 0x${(psgWriteAddr & ~1).toString(16)}`);
+    }
+
+    // psg_read(r0=reg) → r0 — svc #12. Buttons (reg 14) come from the trapped
+    // vpy_update_buttons path, so this is only a safe register echo.
+    const psgReadAddr = symbols.get('psg_read');
+    if (psgReadAddr !== undefined) {
+      this.traps.set(psgReadAddr & ~1, (cpu: Thumb2): number => {
+        cpu.setReg(0, this.psg.Regs[cpu.getReg(0) & 0x0f] & 0xff);
+        return 30;
+      });
+    }
+
+    // vpy_move(r0=x, r1=y) — absolute beam positioning (MOVE builtin), was inline
+    // VIA writes, now svc #15. Set the beam directly in unbounded ALG space.
+    const moveAddr = symbols.get('vpy_move');
+    const moveXAddr = symbols.get('VPY_MOVE_X');
+    if (moveAddr !== undefined) {
+      this.traps.set(moveAddr & ~1, (cpu: Thumb2): number => {
+        const x = armI8(cpu.getReg(0));
+        const y = armI8(cpu.getReg(1));
+        this.armBeamX = ALG_CENTER_X + x * ARM_ALG_SCALE;
+        this.armBeamY = ALG_CENTER_Y - y * ARM_ALG_SCALE; // Y inverted
+        // Mirror VPY_MOVE_X/Y into SRAM so draw_line's offset (if used) matches.
+        // .equ symbol may be absent → fixed VPY_MOVE_X address fallback.
+        const off = (moveXAddr ?? 0x2007F300) - 0x20000000;
+        this.sram[off]   = x & 0xff; this.sram[off+1] = (x >> 8) & 0xff;
+        this.sram[off+2] = (x >> 16) & 0xff; this.sram[off+3] = (x >> 24) & 0xff;
+        this.sram[off+4] = y & 0xff; this.sram[off+5] = (y >> 8) & 0xff;
+        this.sram[off+6] = (y >> 16) & 0xff; this.sram[off+7] = (y >> 24) & 0xff;
+        return 200;
+      });
+      console.log(`[Rp2350System] vpy_move trap @ 0x${(moveAddr & ~1).toString(16)}`);
+    }
+
+    // vpy_print_text(r0=x, r1=y, r2=str_ptr) — svc #16. The font + glyph renderer
+    // now live in the BIOS; the emulator renders text itself (vectorFont.ts),
+    // drawing each glyph through the same unbounded-ALG beam model as dv_*.
+    const printTextAddr = symbols.get('vpy_print_text');
+    const textSizeAddr  = symbols.get('TEXT_SIZE');
+    const brightAddr    = symbols.get('VPY_BRIGHTNESS_OVERRIDE');
+    if (printTextAddr !== undefined) {
+      this.traps.set(printTextAddr & ~1, (cpu: Thumb2): number => {
+        const x = armI8(cpu.getReg(0));
+        const y = armI8(cpu.getReg(1));
+        const strPtr = cpu.getReg(2) >>> 0;
+        // Resolve scale/intensity from SRAM (the stub does this; we bypass it).
+        // .equ RAM symbols may not reach the ELF symtab → fixed-address fallback.
+        let scale = this.read8(textSizeAddr ?? 0x2007F154) & 0xff;
+        if (scale === 0) scale = 3;
+        let intensity = this.read8(brightAddr ?? 0x2007F43E) & 0xff;
+        if (intensity === 0) intensity = 100;
+        let curX = x;
+        const adjY = y - ((6 * scale) >> 1);
+        for (let i = 0; i < 256; i++) {
+          const ch = this.read8((strPtr + i) >>> 0) & 0xff;
+          if (ch === 0 || ch === 0x80) break;
+          const strokes = glyphStrokes(ch);
+          if (strokes.length > 0) {
+            // Per-glyph path: reset beam to centre, relight, draw from (0,0).
+            this.armBeamX = ALG_CENTER_X;
+            this.armBeamY = ALG_CENTER_Y;
+            this.armIntensity = intensity;
+            this.beam.alg_zsh = intensity;
+            let bvx = 0, bvy = 0; // beam in Vectrex coords relative to centre
+            for (let s = 0; s < strokes.length; s += 3) {
+              const cmd = strokes[s];
+              const tx = curX + ((strokes[s + 1] * scale) >> 1);
+              const ty = adjY + ((strokes[s + 2] * scale) >> 1);
+              const newX = this.armBeamX + (tx - bvx) * ARM_ALG_SCALE;
+              const newY = this.armBeamY - (ty - bvy) * ARM_ALG_SCALE; // Y inverted
+              bvx = tx; bvy = ty;
+              if (cmd !== 1) { // draw (cmd 2)
+                const clipped = clipSegment(this.armBeamX, this.armBeamY, newX, newY);
+                if (clipped !== null) {
+                  this.beam.addSegmentDirect(clipped[0], clipped[1], clipped[2], clipped[3], this.armIntensity);
+                }
+              }
+              this.armBeamX = newX;
+              this.armBeamY = newY;
+            }
+          }
+          curX += (7 * scale) >> 1;
+        }
+        return 500;
+      });
+      console.log(`[Rp2350System] vpy_print_text trap @ 0x${(printTextAddr & ~1).toString(16)}`);
     }
   }
 

@@ -9,6 +9,8 @@ def main():
 
 def loop():
     # Display text at different positions on screen
+    # SET_INTENSITY(110)
+    # SET_TEXT_SIZE(6)    
     PRINT_TEXT(-40, 20, "HELLO")
     PRINT_TEXT(-40, 0, "WORLD")
     PRINT_TEXT(-55, -20, "VPY TEST")

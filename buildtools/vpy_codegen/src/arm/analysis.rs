@@ -84,7 +84,7 @@ const GROUPS: &[(&str, &[&str], &[&str])] = &[
     ("BEZIER_QUAD",     &["DRAW_BEZIER_QUAD"],  &[]),
     // ── text ───────────────────────────────────────────────────────────────
     // Font tables + vpy_print_text (+ vpt_draw_glyph) + vpy_set_text_size/color.
-    ("TEXT",            &["PRINT_TEXT", "SET_TEXT_SIZE", "SET_TEXT_COLOR"], &[]),
+    ("TEXT",            &["PRINT_TEXT", "SET_TEXT_SIZE"], &[]),
     ("PRINT_NUMBER",    &["PRINT_NUMBER"],      &["TEXT"]),   // calls vpy_print_text
     ("MSG",             &["MSG_DEF", "PRINT_MSG"], &["TEXT"]), // vpy_print_msg → vpy_print_text
     // ── input ──────────────────────────────────────────────────────────────

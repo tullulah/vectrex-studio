@@ -524,7 +524,7 @@ pub fn emit_call(
         "PRINT_MSG"       => "pitrex_print_msg",
         // Text/display extras
         "SET_TEXT_SIZE"   => "pitrex_set_text_size",
-        "SET_TEXT_COLOR"  => "pitrex_set_text_color",
+        // SET_TEXT_COLOR removed — YAGNI on a monochrome console; use SET_INTENSITY.
         "UPDATE_LEVEL"    => "pitrex_update_level",
         // Misc
         "beep" | "BEEP"   => "pitrex_beep",

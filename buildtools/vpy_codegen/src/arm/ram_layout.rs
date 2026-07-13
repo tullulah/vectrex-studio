@@ -48,7 +48,7 @@ pub fn emit_ram_layout() -> String {
         ("CAMERA_X",         0x14C, "camera X offset (used by show_level)"),
         ("CAMERA_Y",         0x150, "camera Y offset"),
         ("TEXT_SIZE",        0x154, "text scale factor (1=normal, 2=double, ...)"),
-        ("TEXT_COLOR",       0x158, "text intensity (0-127)"),
+        // 0x158 free — was TEXT_COLOR (removed: monochrome console, use SET_INTENSITY)
         ("LEVEL_DATA_PTR",   0x15C, "pointer to loaded level ROM data"),
         ("DBGVAL",           0x160, "debug_print last written value"),
         ("PRINT_BEAM_X",     0x164, "beam X shadow during print_text"),

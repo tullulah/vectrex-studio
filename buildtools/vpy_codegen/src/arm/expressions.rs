@@ -345,7 +345,7 @@ pub fn emit_call(
         "PRINT_MSG"       => "vpy_print_msg",
         // Text/display extras
         "SET_TEXT_SIZE"   => "vpy_set_text_size",
-        "SET_TEXT_COLOR"  => "vpy_set_text_color",
+        // SET_TEXT_COLOR removed — YAGNI on a monochrome console; use SET_INTENSITY.
         "UPDATE_LEVEL"    => "vpy_update_level",
         // Misc
         "beep" | "BEEP"   => "vpy_beep",
