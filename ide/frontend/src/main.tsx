@@ -57,6 +57,8 @@ function App() {
   const pitrexSdPath = useSettings(s => s.pitrexSdPath);
   const uvm2CopyToSD = useSettings(s => s.uvm2CopyToSD);
   const uvm2SdPath = useSettings(s => s.uvm2SdPath);
+  const rp2350FlashMethod = useSettings(s => s.rp2350FlashMethod);
+  const rp2350FirmwareDir = useSettings(s => s.rp2350FirmwareDir);
 
   const initializedRef = useRef(false);
 
@@ -481,6 +483,8 @@ function App() {
         pitrexSdPath,
         uvm2CopyToSD,
         uvm2SdPath,
+        rp2350FlashMethod,
+        rp2350FirmwareDir,
       };
 
       // If building from project, include output path
@@ -592,7 +596,7 @@ function App() {
       isCompilingRef.current = false;
       logger.debug('Build', 'Build process completed, flag cleared');
     }
-  }, [documents, compilerBackend, buildTarget, pitrexCopyToSD, pitrexSdPath, uvm2CopyToSD, uvm2SdPath]);
+  }, [documents, compilerBackend, buildTarget, pitrexCopyToSD, pitrexSdPath, uvm2CopyToSD, uvm2SdPath, rp2350FlashMethod, rp2350FirmwareDir]);
 
   const commandExec = useCallback(async (id: string, payload?: any) => {
     const apiFiles: any = (window as any).files;
@@ -815,6 +819,8 @@ def loop():
             pitrexSdPath,
             uvm2CopyToSD,
             uvm2SdPath,
+            rp2350FlashMethod,
+            rp2350FirmwareDir,
           };
 
           // Si el documento está sucio, enviarlo para que se guarde antes de compilar

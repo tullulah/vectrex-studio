@@ -281,25 +281,25 @@ fn emit_draw_vector_3d() -> String {
     // before the path_count word.
     s.push_str("    add     r4, r4, #3\n    bic r4, r4, #3\n");
 
-    // Phase 2: draw paths
+    // Phase 2: draw paths. Load path_count and the vbuf base up front; the
+    // per-path Reset0Ref lives INSIDE the loop (below).
+    s.push_str("    ldr     r10,[r4]\n    add r4,r4,#4\n"); // path_count
+    s.push_str("    ldr     r11,=_dv3d_vbuf\n");           // vbuf base for lookup
+
+    s.push_str("dv3_pl:\n    cmp r10,#0\n    beq dv3_pd\n    sub r10,r10,#1\n");
+    // RE-ZERO PER PATH: draw every path from a fresh Reset0Ref so integrator
+    // error cannot accumulate ACROSS paths. On real HW the analog integrators
+    // drift a little per relative move; with a single zero for the whole shape
+    // the later paths inherited every prior path's drift and trembled worst
+    // (path 4 ≫ path 1). Zeroing per path caps the accumulation to ONE path.
+    // dv_reset zeroes the Z-DAC too, so re-assert intensity; then the path's
+    // first vertex is reached as an ABSOLUTE move from the centred (0,0).
     s.push_str("    bl      dv_reset\n");
-    // dv_reset writes PORT_A = 0 mid-sequence, which leaves the Z-axis DAC
-    // (intensity) at zero — the beam would draw invisibly. Restore a sensible
-    // default. Per-path intensity is not yet supported for 3D assets (the
-    // _3D_DATA format has no per-path intensity byte).
-    // 3D data has no per-path intensity byte → default 127, unless SET_INTENSITY
-    // set an override this frame (this is what makes the logo's brightness animate).
     s.push_str("    mov     r0, #127            @ default 3D intensity\n");
     s.push_str("    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r1, [r1]\n");
     s.push_str("    cmp     r1, #0\n    it      ne\n    movne   r0, r1  @ SET_INTENSITY override wins\n");
     s.push_str("    bl      vpy_set_intensity\n");
-    s.push_str("    ldr     r10,[r4]\n    add r4,r4,#4\n"); // path_count
-    s.push_str("    ldr     r11,=_dv3d_vbuf\n");           // vbuf base for lookup
-
-    // _dv3d_cur = (0,0) — after dv_reset integrators are at origin
-    s.push_str("    ldr     r0,=_dv3d_cur\n    mov r1,#0\n    strh r1,[r0]\n");
-
-    s.push_str("dv3_pl:\n    cmp r10,#0\n    beq dv3_pd\n    sub r10,r10,#1\n");
+    s.push_str("    ldr     r0,=_dv3d_cur\n    mov r1,#0\n    strh r1,[r0]\n"); // cur=(0,0)
     s.push_str("    ldrb    r5,[r4]              @ pt_count\n");
     s.push_str("    ldrb    r6,[r4,#1]           @ closed\n");
     s.push_str("    add     r4,r4,#2\n");

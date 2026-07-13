@@ -1082,6 +1082,11 @@ fn emit_print_text_clean() -> String {
     // Scale is stored as 2× the effective multiplier so non-integer sizes are possible.
     // TEXT_SIZE=2 → effective ×1.0,  TEXT_SIZE=3 → effective ×1.5,  TEXT_SIZE=4 → effective ×2.0
     s.push_str("    cmp     r7, #0\n    bne     vpt_sc\n    mov     r7, #3\nvpt_sc:\n");
+    // Text intensity: SET_INTENSITY override (VPY_BRIGHTNESS_OVERRIDE) wins if
+    // set this frame — same convention as the logo/wordmark, so SET_INTENSITY
+    // controls text brightness too — else SET_TEXT_COLOR, else a sane default.
+    s.push_str("    ldr     r8, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r8, [r8]\n");
+    s.push_str("    cmp     r8, #0\n    bne     vpt_cc\n");
     s.push_str("    ldr     r8, =TEXT_COLOR\n    ldr     r8, [r8]\n");
     s.push_str("    cmp     r8, #0\n    bne     vpt_cc\n    mov     r8, #100\nvpt_cc:\n");
 
@@ -1113,7 +1118,21 @@ fn emit_print_text_clean() -> String {
     s.push_str("    sub     r0, r0, #32\n");
     s.push_str("    ldr     r1, =_FONT_PTRS\n    lsl     r0, r0, #2\n    ldr     r0, [r1, r0]\n");
     s.push_str("    cmp     r0, #0\n    beq     vpt_adv\n");
-    // call draw_glyph(glyph_ptr, cur_x, cur_y, scale, beam_x_ptr, beam_y_ptr)
+    // Draw each glyph exactly like a wordmark PATH: Reset0Ref → set intensity →
+    // start from the centred (0,0). On this HW a bare set_intensity between draws
+    // does NOT relight the beam — the logo/wordmark are visible only because they
+    // dv_reset BEFORE set_intensity per path. A single setup for the whole string
+    // left every glyph blank (beam ran all the moves/draws unlit). Replicate the
+    // proven per-path sequence per glyph. r8=colour, r10/r11=PRINT_BEAM_X/Y ptrs
+    // (all callee-saved across the traps).
+    s.push_str("    push    {r0}\n");                        // save glyph_ptr
+    s.push_str("    bl      dv_reset\n");
+    s.push_str("    mov     r0, r8\n    bl vpy_set_intensity\n");
+    s.push_str("    mov     r0, #0\n    str r0, [r10]\n    str r0, [r11]\n"); // PRINT_BEAM=(0,0)
+    s.push_str("    pop     {r0}\n");                        // restore glyph_ptr
+    // call draw_glyph(glyph_ptr, cur_x, cur_y, scale, beam_x_ptr, beam_y_ptr).
+    // First glyph stroke is always a MOVE, so the blanked jump from centre to the
+    // glyph's absolute position leaves no stray line.
     s.push_str("    mov     r1, r9\n    mov     r2, r5\n    mov     r3, r7\n");
     s.push_str("    push    {r10, r11}\n"); // pass BEAM_X/Y ptrs via stack
     s.push_str("    bl      vpt_draw_glyph\n");

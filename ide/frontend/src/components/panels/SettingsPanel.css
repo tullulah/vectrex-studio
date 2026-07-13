@@ -128,11 +128,19 @@
   user-select: none;
 }
 
-.settings-checkbox input[type="checkbox"] {
+.settings-checkbox input[type="checkbox"],
+.settings-checkbox input[type="radio"] {
   accent-color: #007acc;
   width: 14px;
   height: 14px;
   cursor: pointer;
+}
+
+.rp2350-flash-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #cccccc;
+  user-select: none;
 }
 
 /* SD path row */

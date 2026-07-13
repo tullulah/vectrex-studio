@@ -1110,12 +1110,192 @@ async function copyUvm2ToSDCard(um2Path: string, sdPath: string, win: BrowserWin
   }
 }
 
+// Run a subprocess and stream its stdout/stderr to the build/run output panel.
+// Resolves with the numeric exit code (or -1 if the process failed to spawn).
+function runFlashCommand(
+  cmd: string,
+  cmdArgs: string[],
+  cwd: string | undefined,
+  win: BrowserWindow | null,
+): Promise<number> {
+  return new Promise((resolve) => {
+    win?.webContents.send('run://stdout', `[RP2350] $ ${cmd} ${cmdArgs.join(' ')}\n`);
+    let child;
+    try {
+      child = spawn(cmd, cmdArgs, { cwd, env: process.env });
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[RP2350] Failed to spawn ${cmd}: ${e?.message || e}\n`);
+      resolve(-1);
+      return;
+    }
+    child.stdout?.on('data', (d) => win?.webContents.send('run://stdout', d.toString()));
+    child.stderr?.on('data', (d) => win?.webContents.send('run://stderr', d.toString()));
+    child.on('error', (err) => {
+      win?.webContents.send('run://stderr', `[RP2350] ${cmd} error: ${err.message}\n`);
+      resolve(-1);
+    });
+    child.on('close', (code) => resolve(code ?? -1));
+  });
+}
+
+// Flash the RP2350 debug cartridge with a freshly built VPy program.
+//
+// The `--target rp2350` build produces a standalone ELF that emits `svc #N`
+// traps which only the firmware (BIOS) can service, so the ELF is not
+// flashable on its own. The real deployable is the firmware Rust crate with the
+// VPy program's `.s` embedded as `src/intro.s`. Pipeline:
+//   1. Copy the built `.s` to <firmwareDir>/src/intro.s
+//   2. cargo build --release in <firmwareDir>
+//   3. Flash target/thumbv8m.main-none-eabihf/release/vectrex-cart via:
+//        - SWD: probe-rs download (--speed 1000 is REQUIRED) + probe-rs reset
+//        - USB: ELF -> UF2 via picotool, copy to /Volumes/RP2350 if mounted
+async function flashRp2350(
+  sPath: string,
+  firmwareDir: string,
+  method: 'none' | 'swd' | 'usb',
+  win: BrowserWindow | null,
+): Promise<void> {
+  if (method === 'none') return;
+
+  const fw = (firmwareDir || '').trim();
+  if (!fw) {
+    win?.webContents.send('run://stderr', '[RP2350] No firmware directory set. Configure it in Settings > Build Target > RP2350.\n');
+    win?.webContents.send('run://status', 'RP2350 flash failed: no firmware directory');
+    return;
+  }
+
+  // Verify firmware directory exists
+  try {
+    await fs.access(fw);
+  } catch {
+    win?.webContents.send('run://stderr', `[RP2350] Firmware directory not found: ${fw}\n`);
+    win?.webContents.send('run://status', `RP2350 flash failed: firmware dir not found`);
+    return;
+  }
+
+  // Step 2: copy built .s -> <firmwareDir>/src/intro.s
+  const introDst = join(fw, 'src', 'intro.s');
+  try {
+    await fs.access(sPath);
+  } catch {
+    win?.webContents.send('run://stderr', `[RP2350] Built assembly not found: ${sPath}\n`);
+    win?.webContents.send('run://status', 'RP2350 flash failed: .s not found');
+    return;
+  }
+  try {
+    await fs.copyFile(sPath, introDst);
+    win?.webContents.send('run://stdout', `[RP2350] Embedded program: ${sPath} -> ${introDst}\n`);
+  } catch (e: any) {
+    win?.webContents.send('run://stderr', `[RP2350] Failed to copy .s into firmware: ${e.message}\n`);
+    win?.webContents.send('run://status', 'RP2350 flash failed: could not embed .s');
+    return;
+  }
+
+  // Step 3: build the firmware
+  win?.webContents.send('run://status', 'RP2350: building firmware...');
+  const buildCode = await runFlashCommand('cargo', ['build', '--release'], fw, win);
+  if (buildCode !== 0) {
+    win?.webContents.send('run://stderr', `[RP2350] Firmware build failed (exit ${buildCode}).\n`);
+    win?.webContents.send('run://status', 'RP2350 flash failed: firmware build error');
+    return;
+  }
+
+  const elfPath = join(fw, 'target', 'thumbv8m.main-none-eabihf', 'release', 'vectrex-cart');
+  try {
+    await fs.access(elfPath);
+  } catch {
+    win?.webContents.send('run://stderr', `[RP2350] Firmware ELF not found: ${elfPath}\n`);
+    win?.webContents.send('run://status', 'RP2350 flash failed: ELF not found');
+    return;
+  }
+
+  // Step 4: flash by the chosen method
+  if (method === 'swd') {
+    // --speed 1000 is REQUIRED: at default SWD speed the download silently
+    // fails to commit (verify passes but the old image keeps running).
+    win?.webContents.send('run://status', 'RP2350: flashing via SWD...');
+    const dlCode = await runFlashCommand(
+      'probe-rs',
+      ['download', '--chip', 'RP235x', '--speed', '1000', '--binary-format', 'elf', elfPath],
+      fw,
+      win,
+    );
+    if (dlCode !== 0) {
+      win?.webContents.send('run://stderr', `[RP2350] probe-rs download failed (exit ${dlCode}). Is the SWD probe connected?\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: SWD download error');
+      return;
+    }
+    const resetCode = await runFlashCommand(
+      'probe-rs',
+      ['reset', '--chip', 'RP235x', '--speed', '1000'],
+      fw,
+      win,
+    );
+    if (resetCode !== 0) {
+      win?.webContents.send('run://stderr', `[RP2350] probe-rs reset failed (exit ${resetCode}).\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: SWD reset error');
+      return;
+    }
+    win?.webContents.send('run://stdout', '[RP2350] SWD flash complete. Cartridge reset.\n');
+    win?.webContents.send('run://status', 'RP2350 flashed via SWD');
+    return;
+  }
+
+  if (method === 'usb') {
+    // picotool needs a `.elf` extension on the input, so copy the
+    // extension-less ELF to a temp *.elf first.
+    const tmpElf = join(app.getPath('temp'), 'vectrex-cart.elf');
+    const uf2Out = join(app.getPath('temp'), 'vectrex-cart.uf2');
+    try {
+      await fs.copyFile(elfPath, tmpElf);
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[RP2350] Failed to stage ELF for picotool: ${e.message}\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: could not stage ELF');
+      return;
+    }
+    win?.webContents.send('run://status', 'RP2350: converting ELF -> UF2...');
+    const convCode = await runFlashCommand('picotool', ['uf2', 'convert', tmpElf, uf2Out], undefined, win);
+    if (convCode !== 0) {
+      win?.webContents.send('run://stderr', `[RP2350] picotool uf2 convert failed (exit ${convCode}).\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: UF2 conversion error');
+      return;
+    }
+    // Clear extended attributes so the copy to the FAT volume is clean.
+    await runFlashCommand('xattr', ['-c', uf2Out], undefined, win);
+
+    const bootselVol = '/Volumes/RP2350';
+    let mounted = false;
+    try {
+      await fs.access(bootselVol);
+      mounted = true;
+    } catch { /* not mounted */ }
+
+    if (!mounted) {
+      win?.webContents.send('run://stderr', `[RP2350] ${bootselVol} is not mounted. Hold BOOTSEL while plugging in the cartridge, then Build & Run again.\n`);
+      win?.webContents.send('run://stdout', `[RP2350] UF2 ready at: ${uf2Out}\n`);
+      win?.webContents.send('run://status', 'RP2350 USB: hold BOOTSEL and retry');
+      return;
+    }
+
+    // -X avoids a cosmetic xattr error on the FAT volume.
+    const cpCode = await runFlashCommand('cp', ['-X', uf2Out, bootselVol + '/'], undefined, win);
+    if (cpCode !== 0) {
+      win?.webContents.send('run://stderr', `[RP2350] Failed to copy UF2 to ${bootselVol} (exit ${cpCode}).\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: UF2 copy error');
+      return;
+    }
+    win?.webContents.send('run://stdout', `[RP2350] UF2 copied to ${bootselVol}. Cartridge will reboot into the new image.\n`);
+    win?.webContents.send('run://status', 'RP2350 flashed via USB');
+    return;
+  }
+}
+
 // Exported function for direct invocation (e.g. from MCP server)
-export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string }) {
+export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string }) {
   // CRITICAL: Log received args to debug compiler selection
   console.log('[RUN] executeCompilation received args:', JSON.stringify({ ...args, saveIfDirty: args?.saveIfDirty ? '...' : undefined }));
   
-  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '' } = args || {} as any;
+  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '', rp2350FlashMethod = 'none', rp2350FirmwareDir = '' } = args || {} as any;
   
   console.log('[RUN] Extracted compilerBackend:', compilerBackend);
   // Surface pitrex SD flags to the output panel so they're always visible
@@ -1481,6 +1661,12 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         // Copy to SD card if requested (uvm2 target)
         if (target === 'uvm2' && uvm2CopyToSD) {
           await copyUvm2ToSDCard(binPath, uvm2SdPath, mainWindow ?? null);
+        }
+
+        // Flash the RP2350 debug cartridge if requested (rp2350 target)
+        if (target === 'rp2350' && rp2350FlashMethod !== 'none') {
+          const sPath = binPath.replace(/\.[^.]+$/, '.s');
+          await flashRp2350(sPath, rp2350FirmwareDir, rp2350FlashMethod, mainWindow ?? null);
         }
 
         resolvePromise({ 
