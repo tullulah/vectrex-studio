@@ -714,99 +714,122 @@ fn emit_pitrex_draw_vector_ex() -> String {
 fn emit_pitrex_draw_recording() -> String {
     // pitrex_draw_recording(r0=vrec_ptr, r1=x, r2=y, r3=scale 0-128, [sp]=frame)
     //
-    // Plays one frame of a .vrec vector recording (multi-frame segment capture,
-    // produced by tools/video2vrec). `frame` is a free-running counter — this
-    // routine takes frame % frame_count internally so the caller just passes an
-    // ever-increasing value. Ported from the rp2350 vpy_draw_recording (arm/
-    // drawing.rs) but rewritten for the PiTrex SDK draw convention.
+    // Plays one frame of a POLYLINE-CHAINED .vrec. `frame` is free-running; this
+    // routine takes frame % frame_count internally.
     //
-    // Data layout (target-agnostic, emitted by compile_vrec in assets.rs):
+    // Data layout (chained, from compile_vrec in assets.rs):
     //   _<NAME>_VREC: .word frame_count
     //                 .word off0, off1, ...          @ byte offsets from base
-    //   frame N:      .hword segment_count
-    //                 per seg 5 bytes: x0,y0,x1,y1,intensity  (i8,i8,i8,i8,u8)
+    //   frame N:      .hword chain_count
+    //     per chain:  .byte start_x, start_y, intensity, seg_count
+    //                 .byte dx,dy × seg_count         @ i8 deltas
     //
-    // Per segment we draw an ABSOLUTE endpoint-to-endpoint line via the SDK
-    // v_directDraw32(x0,y0,x1,y1,bright). Each recorded i8 coord is treated as a
-    // VPy DRAW_LINE coordinate: scale (0-128, 128=100%) is applied first as
-    // (coord*scale)>>7 (asr, sign-preserved), then the x/y center is added, then
-    // ×127 to reach PiTrex fixed-point units — EXACTLY matching pitrex_draw_line.
+    // Each chain is walked with a running PEN in VPy units: pen = scaled+centered
+    // start, then every delta advances pen by (delta*scale)>>7 and draws the line
+    // pen→next via v_directDraw32(x0,y0,x1,y1,bright) in ×127 fixed-point (same
+    // convention as pitrex_draw_line). Center is added to the chain START only
+    // (deltas are relative). Pen persists in RAM (DRAW_REC_PEN_X/Y) across the
+    // v_directDraw32 calls.
     //
-    // CALIBRATION NOTE (TBD on hardware): the ×127 fixed-point factor mirrors
-    // pitrex_draw_line/pitrex_draw_vector. The recorder maps a video frame into
-    // ±127, so at scale=128 a full-screen recording spans ±127 VPy units → the
-    // same physical deflection as a ±127 DRAW_LINE. The absolute on-screen SIZE
-    // may still need per-display trimming on real PiTrex hardware; the ×127
-    // assumption here is the documented convention, not a verified pixel match.
-    // We deliberately do NOT add the PITREX_MOVE offset: DRAW_RECORDING carries
-    // its own (x,y) center argument, just like DRAW_VECTOR.
+    // NOTE: on pitrex the DRAW win of chaining is small — v_directDraw32 is an
+    // absolute two-endpoint line, so the call count is unchanged. The win here is
+    // DATA size (flash) + consistency; the big hardware-draw win (relative
+    // draw-delta with no per-segment beam reset/reposition) is on rp2350/m6809.
+    // ×127 absolute on-screen size is TBD on real hardware.
     //
-    // Register map:
-    //   r4 = vrec base ptr        r8  = segment cursor
-    //   r5 = x center (VPy)       r9  = segments remaining
-    //   r6 = y center (VPy)       r10 = per-segment brightness
+    // Register map (callee-saved r4-r11 survive v_directDraw32):
+    //   r4 = data cursor          r8  = chains remaining
+    //   r5 = x center (VPy)       r9  = deltas remaining in chain
+    //   r6 = y center (VPy)       r10 = per-chain brightness
     //   r7 = scale (0-128)        r11 = 127 constant
-    //   r12/r0-r3 = scratch / v_directDraw32 args
     // ARMv6 has no hardware divide → frame % frame_count via __aeabi_idivmod.
-    // ARM32 mul Rd≠Rm constraint honoured: `mul rD, r7|r11, rM` keeps Rd out of
-    // the first operand slot.
+    // ARM32 mul Rd≠Rm honoured (`mul rD, r7|r11, rM`).
     let mut s = String::new();
-    // coord(off, center_reg, target_reg):
-    //   scaled = (i8[r8,#off] * scale) >> 7 ; then (scaled + center) * 127
-    // Only r12 is used as scratch, so previously-computed args (r0..r3) survive.
-    fn coord(s: &mut String, off: u8, center: &str, target: &str) {
-        s.push_str(&format!("    ldrsb   r12, [r8, #{off}]   @ recorded coord (i8, sign-ext)\n"));
-        s.push_str("    mul     r12, r7, r12        @ * scale        (Rd=r12 != Rm=r7)\n");
-        s.push_str("    asr     r12, r12, #7        @ (coord*scale)>>7\n");
-        s.push_str(&format!("    add     r12, r12, {center}       @ + center (VPy units)\n"));
-        s.push_str(&format!("    mul     {target}, r11, r12      @ * 127  (Rd={target} != Rm=r11)\n"));
-    }
-
     s.push_str("@ pitrex_draw_recording(r0=vrec_ptr, r1=x, r2=y, r3=scale 0-128, [sp]=frame)\n");
     s.push_str(".global pitrex_draw_recording\n.type pitrex_draw_recording, %function\npitrex_draw_recording:\n");
-    // push 9 regs = 36 bytes → the frame stack arg is now at [sp+36].
+    // push 9 regs = 36 bytes → the frame stack arg is at [sp+36].
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
     s.push_str("    mov     r4, r0              @ vrec base\n");
     s.push_str("    mov     r5, r1              @ x center\n");
     s.push_str("    mov     r6, r2              @ y center\n");
     s.push_str("    mov     r7, r3              @ scale (0-128, 128 = 100%)\n");
     s.push_str("    mov     r11, #127           @ VPy→PiTrex fixed-point factor\n");
-    // frame_idx = frame % frame_count  (ARMv6: no sdiv → __aeabi_idivmod)
+    // frame_idx = frame % frame_count
     s.push_str("    ldr     r2, [r4]            @ frame_count\n");
     s.push_str("    cmp     r2, #0\n");
     s.push_str("    beq     .Ldvrec_done        @ empty recording\n");
     s.push_str("    ldr     r0, [sp, #36]       @ frame counter (stack arg)\n");
     s.push_str("    mov     r1, r2              @ denominator = frame_count\n");
     s.push_str("    bl      __aeabi_idivmod     @ r1 = frame % frame_count\n");
-    // frame ptr = base + offset_table[idx]  (table starts at base+4)
     s.push_str("    add     r1, r1, #1          @ skip frame_count word\n");
     s.push_str("    lsl     r1, r1, #2          @ (idx+1)*4 byte index\n");
     s.push_str("    ldr     r0, [r4, r1]        @ byte offset of frame from base\n");
-    s.push_str("    add     r8, r4, r0          @ r8 = frame ptr\n");
-    s.push_str("    ldrh    r9, [r8]            @ segment_count\n");
-    s.push_str("    add     r8, r8, #2          @ r8 = first segment\n");
+    s.push_str("    add     r4, r4, r0          @ r4 = frame ptr (now the cursor)\n");
+    s.push_str("    ldrh    r8, [r4]            @ chain_count\n");
+    s.push_str("    add     r4, r4, #2          @ r4 = first chain header\n");
 
-    s.push_str(".Ldvrec_seg:\n");
-    s.push_str("    cmp     r9, #0\n");
+    // ── per-chain ──
+    s.push_str(".Ldvrec_chain:\n");
+    s.push_str("    cmp     r8, #0\n");
     s.push_str("    beq     .Ldvrec_done\n");
-    // Per-segment brightness: recorded intensity, SET_INTENSITY override wins
-    // (same PITREX_BRIGHTNESS_OVERRIDE rule as pitrex_draw_vector).
-    s.push_str("    ldrb    r10, [r8, #4]       @ recorded intensity\n");
+    // intensity (recorded, SET_INTENSITY override wins)
+    s.push_str("    ldrb    r10, [r4, #2]       @ recorded chain intensity\n");
     s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
     s.push_str("    ldrb    r0, [r0]\n");
     s.push_str("    cmp     r0, #0\n");
     s.push_str("    movne   r10, r0             @ SET_INTENSITY override wins\n");
-    // Compute absolute endpoints into r0..r3 (only r12 clobbered between them).
-    coord(&mut s, 0, "r5", "r0");  // x0
-    coord(&mut s, 1, "r6", "r1");  // y0
-    coord(&mut s, 2, "r5", "r2");  // x1
-    coord(&mut s, 3, "r6", "r3");  // y1
+    s.push_str("    ldrb    r9, [r4, #3]        @ seg_count (deltas)\n");
+    // pen_x = (start_x*scale>>7) + center_x   (VPy units)
+    s.push_str("    ldrsb   r12, [r4, #0]       @ start_x (i8)\n");
+    s.push_str("    mul     r12, r7, r12        @ * scale (Rd=r12 != Rm=r7)\n");
+    s.push_str("    asr     r12, r12, #7\n");
+    s.push_str("    add     r12, r12, r5        @ + center_x\n");
+    s.push_str("    ldr     r0, =DRAW_REC_PEN_X\n");
+    s.push_str("    str     r12, [r0]           @ pen_x\n");
+    // pen_y = (start_y*scale>>7) + center_y
+    s.push_str("    ldrsb   r12, [r4, #1]       @ start_y (i8)\n");
+    s.push_str("    mul     r12, r7, r12\n");
+    s.push_str("    asr     r12, r12, #7\n");
+    s.push_str("    add     r12, r12, r6        @ + center_y\n");
+    s.push_str("    str     r12, [r0, #4]       @ pen_y (DRAW_REC_PEN_Y = PEN_X+4)\n");
+    s.push_str("    add     r4, r4, #4          @ cursor → first delta pair\n");
+
+    // ── per-delta: draw pen→next, then pen = next ──
+    s.push_str(".Ldvrec_delta:\n");
+    s.push_str("    cmp     r9, #0\n");
+    s.push_str("    beq     .Ldvrec_chain_next\n");
+    s.push_str("    ldr     r12, =DRAW_REC_PEN_X\n");
+    s.push_str("    ldr     r0, [r12]           @ x0 = pen_x (VPy)\n");
+    s.push_str("    ldr     r1, [r12, #4]       @ y0 = pen_y (VPy)\n");
+    // x1 = x0 + (dx*scale>>7)
+    s.push_str("    ldrsb   r2, [r4, #0]        @ dx (i8)\n");
+    s.push_str("    mul     r2, r7, r2          @ dx*scale (Rd=r2 != Rm=r7)\n");
+    s.push_str("    asr     r2, r2, #7\n");
+    s.push_str("    add     r2, r0, r2          @ x1 = x0 + scaled dx\n");
+    // y1 = y0 + (dy*scale>>7)
+    s.push_str("    ldrsb   r3, [r4, #1]        @ dy (i8)\n");
+    s.push_str("    mul     r3, r7, r3\n");
+    s.push_str("    asr     r3, r3, #7\n");
+    s.push_str("    add     r3, r1, r3          @ y1 = y0 + scaled dy\n");
+    // pen = (x1, y1)
+    s.push_str("    str     r2, [r12]           @ pen_x = x1\n");
+    s.push_str("    str     r3, [r12, #4]       @ pen_y = y1\n");
+    // ×127 → v_directDraw32 args (r0=x0,r1=y0,r2=x1,r3=y1)
+    s.push_str("    mul     r0, r11, r0         @ x0*127 (Rd=r0 != Rm=r11)\n");
+    s.push_str("    mul     r1, r11, r1         @ y0*127\n");
+    s.push_str("    mul     r2, r11, r2         @ x1*127\n");
+    s.push_str("    mul     r3, r11, r3         @ y1*127\n");
     s.push_str("    push    {r10}              @ brightness as 5th arg\n");
     s.push_str("    bl      v_directDraw32\n");
     s.push_str("    add     sp, sp, #4\n");
-    s.push_str("    add     r8, r8, #5          @ next segment (5 bytes)\n");
+    s.push_str("    add     r4, r4, #2          @ next delta pair\n");
     s.push_str("    sub     r9, r9, #1\n");
-    s.push_str("    b       .Ldvrec_seg\n");
+    s.push_str("    b       .Ldvrec_delta\n");
+
+    s.push_str(".Ldvrec_chain_next:\n");
+    // r4 already points at the next chain header (past the last delta pair).
+    s.push_str("    sub     r8, r8, #1\n");
+    s.push_str("    b       .Ldvrec_chain\n");
 
     s.push_str(".Ldvrec_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");

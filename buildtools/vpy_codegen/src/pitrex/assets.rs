@@ -712,8 +712,15 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
 }
 
 // ============================================================
-// Recording compiler (.vrec → frame/segment table)
+// Recording compiler (.vrec → frame/chain table)
 // ============================================================
+//
+// POLYLINE CHAINING (2026-07): consecutive segments that share an endpoint AND
+// intensity are folded into a single chain (start point once + one delta per
+// line) by the target-agnostic `crate::vrec_chain::chain_frame`. Traced
+// contours are closed polylines, so each interior vertex was stored twice
+// (~55% redundant); chaining ~halves the flash size. The .vrec FILE format is
+// UNCHANGED — chaining is a compile-time transform.
 //
 // TARGET-AGNOSTIC binary layout — byte-for-byte identical to the rp2350 (arm)
 // backend's compile_vrec, read here by pitrex_draw_recording (builtins.rs):
@@ -721,19 +728,32 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
 //     .word  frame_count
 //     .word  offset_frame0, offset_frame1, ...  @ byte offsets from _<NAME>_VREC
 //   frame N:                            (2-byte aligned)
-//     .hword segment_count
-//     per segment (5 bytes): .byte x0, y0, x1, y1, intensity  (i8,i8,i8,i8,u8)
+//     .hword chain_count
+//     per chain:
+//       .byte start_x, start_y, intensity, seg_count  (i8,i8,u8,u8 — 4 bytes)
+//       .byte dx, dy × seg_count                      (i8 deltas — 2*seg_count)
+//
+// HONEST NOTE: on pitrex the DRAW win is small — v_directDraw32 is an absolute
+// two-endpoint line, so the runtime's call count is unchanged whether or not
+// segments are chained. The win here is mostly DATA size (flash) + consistency
+// with the other backends; the big hardware-draw win (relative draw-delta that
+// avoids the per-segment beam reset/reposition) is on rp2350/m6809.
 //
 // Frame offsets are emitted as assembler label-difference expressions
 // (_<NAME>_VREC_Fn - _<NAME>_VREC) so gas computes them — no address math
 // in the codegen, consistent with the "linker owns addresses" rule.
+const VREC_MAX_DELTAS_PER_CHAIN: usize = 255;
+
 fn compile_vrec(vrec: &VrecResource, override_name: &str) -> String {
+    use crate::vrec_chain::{chain_frame, Segment};
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
     let frame_count = vrec.frames.len();
 
+    let clamp8 = |v: i32| v.clamp(-127, 127) as i8;
+
     let mut s = String::new();
     s.push_str(&format!(
-        "@ --- {} RECORDING ({} frame(s), fps={}) ---\n",
+        "@ --- {} RECORDING ({} frame(s), fps={}, polyline-chained) ---\n",
         override_name, frame_count, vrec.fps
     ));
     s.push_str("    .balign 4\n");
@@ -745,22 +765,53 @@ fn compile_vrec(vrec: &VrecResource, override_name: &str) -> String {
         ));
     }
     for (i, frame) in vrec.frames.iter().enumerate() {
+        // Fold this frame's ordered segments into polyline chains.
+        let segs: Vec<Segment> = frame.segments.iter()
+            .map(|seg| Segment { x0: seg.x0, y0: seg.y0, x1: seg.x1, y1: seg.y1, i: seg.i })
+            .collect();
+        let chains = chain_frame(&segs);
+
+        // Emit each chain, splitting any chain with > 255 deltas so seg_count
+        // fits in one byte. A split re-anchors at the raw pen position.
+        let mut emitted: Vec<(i32, i32, i32, Vec<(i32, i32)>)> = Vec::new();
+        for c in &chains {
+            if c.deltas.len() <= VREC_MAX_DELTAS_PER_CHAIN {
+                emitted.push((c.start.0, c.start.1, c.intensity, c.deltas.clone()));
+            } else {
+                let (mut px, mut py) = c.start;
+                for part in c.deltas.chunks(VREC_MAX_DELTAS_PER_CHAIN) {
+                    emitted.push((px, py, c.intensity, part.to_vec()));
+                    for (dx, dy) in part {
+                        px += dx;
+                        py += dy;
+                    }
+                }
+            }
+        }
+
         s.push_str("    .balign 2\n");
         s.push_str(&format!("_{sym}_VREC_F{i}:\n"));
         s.push_str(&format!(
-            "    .hword  {}               @ segment_count\n",
-            frame.segments.len()
+            "    .hword  {}               @ chain_count\n",
+            emitted.len()
         ));
-        for seg in &frame.segments {
-            let x0 = seg.x0.clamp(-127, 127) as i8;
-            let y0 = seg.y0.clamp(-127, 127) as i8;
-            let x1 = seg.x1.clamp(-127, 127) as i8;
-            let y1 = seg.y1.clamp(-127, 127) as i8;
-            let inten = seg.i.clamp(0, 127) as u8;
+        for (sx, sy, inten, deltas) in &emitted {
+            let start_x = clamp8(*sx);
+            let start_y = clamp8(*sy);
+            let intensity = (*inten).clamp(0, 127) as u8;
             s.push_str(&format!(
-                "    .byte   0x{:02X}, 0x{:02X}, 0x{:02X}, 0x{:02X}, 0x{:02X}  @ ({},{})->({},{}) i={}\n",
-                x0 as u8, y0 as u8, x1 as u8, y1 as u8, inten, x0, y0, x1, y1, inten
+                "    .byte   0x{:02X}, 0x{:02X}, 0x{:02X}, 0x{:02X}  @ start=({},{}) i={} segs={}\n",
+                start_x as u8, start_y as u8, intensity, deltas.len() as u8,
+                start_x, start_y, intensity, deltas.len()
             ));
+            for (dx, dy) in deltas {
+                let cdx = clamp8(*dx);
+                let cdy = clamp8(*dy);
+                s.push_str(&format!(
+                    "    .byte   0x{:02X}, 0x{:02X}  @ d=({},{})\n",
+                    cdx as u8, cdy as u8, cdx, cdy
+                ));
+            }
         }
     }
     s.push('\n');
@@ -1859,15 +1910,22 @@ mod tests {
             "missing frame 0 offset:\n{asm}");
         assert!(asm.contains(".word   _PREVIEW_VREC_F1 - _PREVIEW_VREC"),
             "missing frame 1 offset:\n{asm}");
+        // Chained: frame 0's 3 disjoint segments → 3 chains; frame 1's 2 → 2 chains.
         assert!(asm.contains("_PREVIEW_VREC_F0:\n    .hword  3"),
-            "frame 0 must have 3 segments:\n{asm}");
+            "frame 0 must have 3 chains:\n{asm}");
         assert!(asm.contains("_PREVIEW_VREC_F1:\n    .hword  2"),
-            "frame 1 must have 2 segments:\n{asm}");
-        // First segment bytes: x0=-50 (0xCE), y0=10, x1=30, y1=20, i=95 (0x5F)
-        assert!(asm.contains(".byte   0xCE, 0x0A, 0x1E, 0x14, 0x5F"),
-            "first segment bytes wrong:\n{asm}");
-        // Out-of-range values clamp: 200→127 (0x7F), -200→-127 (0x81), i 300→127
-        assert!(asm.contains(".byte   0x7F, 0x81, 0x00, 0x00, 0x7F"),
-            "clamping to i8/intensity range failed:\n{asm}");
+            "frame 1 must have 2 chains:\n{asm}");
+        // Chain 0 header: start=(-50,10)=(0xCE,0x0A), i=95=0x5F, seg_count=1.
+        assert!(asm.contains(".byte   0xCE, 0x0A, 0x5F, 0x01"),
+            "chain 0 header bytes wrong:\n{asm}");
+        // Chain 0 delta: (30-(-50), 20-10) = (80,10) = (0x50,0x0A).
+        assert!(asm.contains(".byte   0x50, 0x0A"),
+            "chain 0 delta wrong:\n{asm}");
+        // Chain 1 header clamped: 200→127(0x7F), -200→-127(0x81), i 300→127(0x7F), seg_count 1.
+        assert!(asm.contains(".byte   0x7F, 0x81, 0x7F, 0x01"),
+            "chain 1 clamped header wrong:\n{asm}");
+        // Chain 1 delta clamped: (0-200, 0-(-200)) = (-200,200) → (-127,127) = (0x81,0x7F).
+        assert!(asm.contains(".byte   0x81, 0x7F"),
+            "chain 1 clamped delta wrong:\n{asm}");
     }
 }

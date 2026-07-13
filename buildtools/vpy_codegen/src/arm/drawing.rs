@@ -366,28 +366,31 @@ fn emit_draw_vector_3d() -> String {
 
 // ─── vpy_draw_recording ───────────────────────────────────────────────────
 //
-// _NAME_VREC format (arm/assets.rs compile_vrec):
+// POLYLINE-CHAINED player. _NAME_VREC format (arm/assets.rs compile_vrec):
 //   .word  frame_count
 //   .word  offset_frame0, offset_frame1, ...   @ byte offsets from _NAME_VREC
 // frame N (2-byte aligned):
-//   .hword segment_count
-//   per segment: .byte x0, y0, x1, y1, intensity   (i8,i8,i8,i8,u8 — 5 bytes)
+//   .hword chain_count
+//   per chain:
+//     .byte start_x, start_y, intensity, seg_count   (i8,i8,u8,u8 — 4 bytes)
+//     .byte dx, dy × seg_count                       (i8 deltas — 2*seg_count)
 //
 // vpy_draw_recording(r0=vrec_ptr, r1=x, r2=y, r3=scale, [sp+32]=frame)
 //   scale: 0..128 where 128 = 100% — scaled = (v * scale) >> 7, sign preserved
 //          (ldrsb sign-extends the i8 before the multiply).
 //   frame: any non-negative counter; frame % frame_count is taken here so the
 //          caller can pass an ever-increasing value.
-//   Per segment: dv_reset → vpy_set_intensity(i) → dv_move_to(x+sx0, y+sy0)
-//                → dv_draw_delta(sx1-sx0, sy1-sy0).
+//   Per CHAIN: dv_reset → vpy_set_intensity(i) → dv_move_to(x+sx0, y+sy0) ONCE,
+//              then per delta: dv_draw_delta(scaled dx, scaled dy) with NO
+//              reset/move between — the beam continues from the last endpoint.
+//   Start point is scaled AND centered (coord*scale>>7 + offset); deltas are
+//   scaled ONLY (relative — no center added), matching the m6809 player.
 //   Recorded intensity is used, but a SET_INTENSITY override this frame wins
 //   (same VPY_BRIGHTNESS_OVERRIDE convention as vpy_draw_vector).
-//   Move targets and deltas are clamped to the i8 range [-127, 127] after the
-//   offset addition (a heavily scaled/offset segment saturates instead of
-//   wrapping; the recorder keeps raw coords inside i8 already).
+//   Start targets and deltas are clamped to the i8 range [-127, 127].
 //
-// Register map: r4=segment ptr, r5=segments remaining, r6=x, r7=y, r8=scale,
-//               r9/r10=scaled (sx0,sy0) then (dx,dy); r0-r2 scratch.
+// Register map: r4=cursor ptr, r5=chains remaining, r6=x, r7=y, r8=scale,
+//               r9=deltas remaining in chain; r0-r3 scratch.
 // dv_reset / vpy_set_intensity / dv_move_to / dv_draw_delta are SVC trap stubs
 // and do NOT modify CPU registers (same assumption as vpy_draw_vector).
 // ---------------------------------------------------------------------------
@@ -425,43 +428,56 @@ fn emit_draw_recording() -> String {
     s.push_str("    lsl     r0, r0, #2          @ 4 + idx*4\n");
     s.push_str("    ldr     r0, [r4, r0]        @ byte offset from base\n");
     s.push_str("    add     r0, r4, r0          @ frame ptr\n");
-    s.push_str("    ldrh    r5, [r0]            @ segment_count\n");
-    s.push_str("    add     r4, r0, #2          @ r4 = first segment\n");
+    s.push_str("    ldrh    r5, [r0]            @ chain_count\n");
+    s.push_str("    add     r4, r0, #2          @ r4 = first chain header\n");
 
-    s.push_str("dvrec_seg:\n");
+    // ── per-chain loop ──
+    s.push_str("dvrec_chain:\n");
     s.push_str("    cmp     r5, #0\n    beq     dvrec_done\n");
-    // Beam to a known reference before every segment (recorded coords are absolute).
+    // Beam to a known reference ONCE per chain (chain start is absolute).
     s.push_str("    bl      dv_reset\n");
     // Recorded intensity; SET_INTENSITY override wins (same rule as vpy_draw_vector).
-    s.push_str("    ldrb    r0, [r4, #4]        @ recorded intensity\n");
+    s.push_str("    ldrb    r0, [r4, #2]        @ recorded chain intensity\n");
     s.push_str("    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r1, [r1]\n");
     s.push_str("    cmp     r1, #0\n    it      ne\n    movne   r0, r1  @ SET_INTENSITY override wins\n");
     s.push_str("    bl      vpy_set_intensity\n");
-    // sx0 → r9, sy0 → r10
+    // seg_count (deltas in this chain) → r9
+    s.push_str("    ldrb    r9, [r4, #3]        @ seg_count (deltas)\n");
+    // dv_move_to(x + (start_x*scale>>7), y + (start_y*scale>>7)), clamped to i8
     scale_byte(&mut s, 0);
-    s.push_str("    mov     r9, r0              @ sx0\n");
+    s.push_str("    add     r0, r0, r6          @ x + scaled start_x\n");
+    clamp_i8(&mut s, "r0");
+    s.push_str("    mov     r10, r0             @ save clamped start x\n");
     scale_byte(&mut s, 1);
-    s.push_str("    mov     r10, r0             @ sy0\n");
-    // dv_move_to(x + sx0, y + sy0), clamped to i8
-    s.push_str("    add     r0, r9, r6          @ x + sx0\n");
-    clamp_i8(&mut s, "r0");
-    s.push_str("    add     r1, r10, r7         @ y + sy0\n");
+    s.push_str("    add     r1, r0, r7          @ y + scaled start_y\n");
     clamp_i8(&mut s, "r1");
+    s.push_str("    mov     r0, r10\n");
     s.push_str("    bl      dv_move_to\n");
-    // dx = sx1 - sx0 → r9, dy = sy1 - sy0 → r10
-    scale_byte(&mut s, 2);
-    s.push_str("    sub     r9, r0, r9          @ dx = sx1 - sx0\n");
-    scale_byte(&mut s, 3);
-    s.push_str("    sub     r10, r0, r10        @ dy = sy1 - sy0\n");
-    s.push_str("    mov     r0, r9\n");
+    // advance cursor past the 4-byte chain header to first delta pair
+    s.push_str("    add     r4, r4, #4\n");
+
+    // ── per-delta loop (relative draws, NO reset/move between) ──
+    s.push_str("dvrec_delta:\n");
+    s.push_str("    cmp     r9, #0\n    beq     dvrec_chain_next\n");
+    // dx = scaled delta at [r4,#0]  (relative — NO center added)
+    scale_byte(&mut s, 0);
     clamp_i8(&mut s, "r0");
-    s.push_str("    mov     r1, r10\n");
-    clamp_i8(&mut s, "r1");
+    s.push_str("    mov     r10, r0             @ save clamped dx\n");
+    // dy = scaled delta at [r4,#1]
+    scale_byte(&mut s, 1);
+    clamp_i8(&mut s, "r0");
+    s.push_str("    mov     r1, r0              @ dy\n");
+    s.push_str("    mov     r0, r10             @ dx\n");
     s.push_str("    bl      dv_draw_delta\n");
-    // next segment
-    s.push_str("    add     r4, r4, #5\n");
+    // next delta pair
+    s.push_str("    add     r4, r4, #2\n");
+    s.push_str("    sub     r9, r9, #1\n");
+    s.push_str("    b       dvrec_delta\n");
+
+    s.push_str("dvrec_chain_next:\n");
+    // r4 already points at the next chain header (past the last delta pair).
     s.push_str("    sub     r5, r5, #1\n");
-    s.push_str("    b       dvrec_seg\n");
+    s.push_str("    b       dvrec_chain\n");
 
     s.push_str("dvrec_done:\n    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("    .ltorg\n\n");
