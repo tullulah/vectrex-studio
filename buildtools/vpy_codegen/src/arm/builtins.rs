@@ -383,7 +383,7 @@ fn emit_draw_circle() -> String {
     s.push_str("    sub     sp, sp, #8              @ [sp+0]=first_x [sp+4]=first_y\n");
     s.push_str("    mov     r4, r0                  @ cx\n");
     s.push_str("    mov     r5, r1                  @ cy\n");
-    s.push_str("    asr     r6, r2, #1              @ r6 = diam/2 = radius (matches M6809 convention)\n");
+    s.push_str("    mov     r6, r2                  @ r6 = radius (the 3rd arg IS the radius, per the API/docs; the old asr#1 halved it → circles came out at half size / dim)\n");
     s.push_str("    mov     r7, r3                  @ intensity\n");
     s.push_str("    bl      dv_reset\n");
     s.push_str("    mov     r0, r7\n    bl      vpy_set_intensity\n");
