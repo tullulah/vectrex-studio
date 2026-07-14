@@ -286,6 +286,24 @@ fn emit_game_main(
     s.push_str(".global game_main\n.type game_main, %function\n.thumb_func\ngame_main:\n");
     s.push_str("    push    {r4, r5, r6, r7, lr}\n");
 
+    // Zero the VPy runtime RAM region [TMPVAL .. USER_RAM_START). RP2350 SRAM holds
+    // power-on garbage; the emulator runs with zeroed SRAM, so all system state
+    // (CAMERA_X/Y, LEVEL_DATA_PTR, LEVEL_GP_COUNT, ENEMY_COUNT_ARM, PSG/NOTE engine,
+    // scroll limits, …) is implicitly 0 there. On HW it must be cleared explicitly,
+    // otherwise: garbage CAMERA_Y makes show_level cull every object (black screen),
+    // and a garbage ENEMY_COUNT_ARM / uninitialised pointer spins the enemy and
+    // collision loops on a bogus count until they fault. This is a bss-clear that
+    // gives HW the same zeroed initial state the emulator gets for free. User
+    // globals live at/after USER_RAM_START and are initialised explicitly below.
+    s.push_str("    @ zero runtime RAM (RP2350 SRAM is not zero-initialised)\n");
+    s.push_str("    ldr     r0, =TMPVAL              @ runtime RAM base\n");
+    s.push_str("    ldr     r1, =USER_RAM_START      @ end of system RAM (exclusive)\n");
+    s.push_str("    mov     r2, #0\n");
+    s.push_str("gm_zero_loop:\n");
+    s.push_str("    str     r2, [r0], #4\n");
+    s.push_str("    cmp     r0, r1\n");
+    s.push_str("    blo     gm_zero_loop\n");
+
     // Default drawing state. RP2350 SRAM is NOT zero-initialised, so these RAM
     // slots hold power-on garbage unless set. A program that never calls
     // SET_INTENSITY / SET_TEXT_SIZE would then draw text/numbers with a garbage
