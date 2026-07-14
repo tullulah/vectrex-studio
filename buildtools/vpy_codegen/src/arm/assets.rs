@@ -1371,6 +1371,13 @@ fn emit_3d_resource(res: &VecResource, override_name: &str) -> String {
             s.push_str(&format!("    .byte   {idx}\n"));
         }
     }
+    // Re-align to a 4-byte boundary: this block ends with an odd-length .byte
+    // stream (path index bytes). Without this, whatever the linker places after
+    // the embedded game (e.g. the firmware's SVCall handler when the .s is
+    // global_asm'd into the BIOS) lands at an odd address → misaligned Thumb code
+    // → HardFault on the first svc → blank screen. (An unused .vec still emits
+    // this data, so the crash happens even when the asset is never drawn.)
+    s.push_str("    .balign 4\n");
     s.push('\n');
     s
 }
