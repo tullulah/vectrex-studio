@@ -11,6 +11,7 @@ def main():
     radius = 20
 
 def loop():
+    DRAW_CIRCLE(0,0,127,80)
     # Center circle with constant radius
     DRAW_CIRCLE(0, 0, 30, 80)
 

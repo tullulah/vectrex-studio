@@ -1703,7 +1703,7 @@ fn emit_draw_circle_full(args: &[Expr], out: &mut String, assets: &[AssetInfo]) 
         return;
     }
 
-    out.push_str("    ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter\n");
+    out.push_str("    ; DRAW_CIRCLE: Draw circle at (xc, yc) with radius\n");
     
     // Evaluate xc and store in DRAW_CIRCLE_XC
     expressions::emit_simple_expr(&args[0], out, assets);

@@ -1080,7 +1080,7 @@ fn emit_pitrex_draw_circle() -> String {
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
     s.push_str("    mov     r4, r0          @ cx\n");
     s.push_str("    mov     r5, r1          @ cy\n");
-    s.push_str("    asr     r6, r2, #1      @ radius = diameter/2\n");
+    s.push_str("    mov     r6, r2          @ radius (3rd arg IS the radius, per the API — was diameter/2)\n");
     s.push_str("    mov     r7, r3          @ brightness\n");
     // Scale center and radius by 127
     s.push_str("    mov     r0, #127\n");
