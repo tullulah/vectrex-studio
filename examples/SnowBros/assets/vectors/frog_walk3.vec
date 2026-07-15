@@ -12,20 +12,8 @@
       "visible": true,
       "paths": [
         {
-          "name": "path_1779179982945_copy",
-          "intensity": 85,
-          "closed": false,
-          "points": [
-            {
-              "x": 7,
-              "y": -4,
-              "z": 0
-            }
-          ]
-        },
-        {
           "name": "path_1779292271471_copy",
-          "intensity": 127,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -107,7 +95,7 @@
         },
         {
           "name": "path_1779292302556_copy",
-          "intensity": 127,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -164,7 +152,7 @@
         },
         {
           "name": "path_1779292324068_copy",
-          "intensity": 127,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -181,7 +169,7 @@
         },
         {
           "name": "path_1779292333964_copy",
-          "intensity": 127,
+          "intensity": 85,
           "closed": false,
           "points": [
             {

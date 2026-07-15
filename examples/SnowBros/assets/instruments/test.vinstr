@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "name": "test",
+  "duration_frames": 10,
+  "volume": 14,
+  "arpeggio_count": 3,
+  "arpeggio_speed_frames": 2,
+  "arpeggio_intervals": [
+    0,
+    7,
+    12,
+    0
+  ],
+  "noise_enabled": false,
+  "noise_period": 15,
+  "pitch_sweep_delta": 0,
+  "pitch_sweep_duration_frames": 0
+}

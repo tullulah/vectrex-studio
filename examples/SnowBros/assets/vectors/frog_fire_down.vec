@@ -86,18 +86,6 @@
           ]
         },
         {
-          "name": "path_1779173259323",
-          "intensity": 85,
-          "closed": false,
-          "points": [
-            {
-              "x": -3,
-              "y": 6,
-              "z": 0
-            }
-          ]
-        },
-        {
           "name": "path_1779173044468_copy_copy",
           "intensity": 85,
           "closed": false,
@@ -172,20 +160,8 @@
           ]
         },
         {
-          "name": "path_1779173259323_copy_copy",
-          "intensity": 85,
-          "closed": false,
-          "points": [
-            {
-              "x": 1,
-              "y": 6,
-              "z": 0
-            }
-          ]
-        },
-        {
           "name": "path_1779291699084",
-          "intensity": 127,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -232,7 +208,7 @@
         },
         {
           "name": "path_1779291714802",
-          "intensity": 127,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -254,7 +230,7 @@
         },
         {
           "name": "path_1779291763466",
-          "intensity": 127,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -281,7 +257,7 @@
         },
         {
           "name": "path_1779291925264",
-          "intensity": 127,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
@@ -298,7 +274,7 @@
         },
         {
           "name": "path_1779291928502",
-          "intensity": 127,
+          "intensity": 85,
           "closed": false,
           "points": [
             {
