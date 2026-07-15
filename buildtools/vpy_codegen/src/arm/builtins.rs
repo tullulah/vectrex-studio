@@ -2324,8 +2324,8 @@ fn emit_draw_anim() -> String {
     s.push_str("dar_base_loop:\n");
     s.push_str("    push    {r8, r9}\n");
     s.push_str("    sub     sp, sp, #8                  @ intensity slot + align\n");
-    s.push_str("    mov     r0, #127\n");
-    s.push_str("    str     r0, [sp]                    @ intensity = 127\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    str     r0, [sp]                    @ intensity = 0 → use .vec per-path (authored)\n");
     s.push_str("    ldr     r0, [r9]                    @ ARM ptr to vec data\n");
     s.push_str("    mov     r1, r10                     @ ox\n");
     s.push_str("    mov     r2, r11                     @ oy\n");
@@ -2394,8 +2394,8 @@ fn emit_draw_anim() -> String {
     s.push_str("dar_vec_loop:\n");
     s.push_str("    push    {r6, r9}\n");
     s.push_str("    sub     sp, sp, #8                  @ intensity slot + align\n");
-    s.push_str("    mov     r0, #127\n");
-    s.push_str("    str     r0, [sp]                    @ intensity = 127\n");
+    s.push_str("    mov     r0, #0\n");
+    s.push_str("    str     r0, [sp]                    @ intensity = 0 → use .vec per-path (authored)\n");
     s.push_str("    ldr     r0, [r9]                    @ ARM ptr to vec data\n");
     s.push_str("    mov     r1, r10                     @ ox\n");
     s.push_str("    mov     r2, r11                     @ oy\n");

@@ -786,8 +786,8 @@ fn emit_enemy_runtime() -> String {
     s.push_str("    ldrb    r12, [r5, #27]       @ mirror_on_patrol\n");
     s.push_str("    and     r3, r3, r12          @ mirror = dir & mirror_on_patrol\n");
     s.push_str("    sub     sp, sp, #8           @ reserve 8 bytes (keeps 8-byte alignment)\n");
-    s.push_str("    mov     r12, #127\n");
-    s.push_str("    str     r12, [sp]            @ intensity=127 at [sp+0] (5th arg)\n");
+    s.push_str("    mov     r12, #0\n");
+    s.push_str("    str     r12, [sp]            @ intensity=0 → use .vec per-path (authored)\n");
     s.push_str("    bl      vpy_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #8           @ clean up stack reservation\n");
     s.push_str("    b.w     vdre_next\n");
