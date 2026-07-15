@@ -791,14 +791,22 @@ fn emit_arg(
         static STR_CTR: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let id = STR_CTR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let label = format!("_arg_str_{id}");
-        // Branch over the string data, load its address into r0
+        // Branch over the string data, load its address into r0.
+        //
+        // The `.ltorg` MUST sit between the branch and the string data — i.e. in
+        // the region the branch skips — NOT at `{label}_end`. If it were at
+        // `{label}_end` (the branch target), any pending literal-pool constants
+        // would be emitted as data exactly where execution lands, and the CPU
+        // would execute them as instructions → HardFault. Flushing the pool here
+        // (skipped by the branch) keeps the function's pool in range while the
+        // landing site stays pure code.
         let s = format!(
             "    b       {label}_end\n\
+             .ltorg\n\
              {label}:\n\
              .asciz  \"{text}\"\n\
              .align  2\n\
              {label}_end:\n\
-             .ltorg\n\
              ldr     r0, ={label}\n"
         );
         Ok(s)
