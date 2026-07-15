@@ -20,7 +20,7 @@ def loop():
     # Start the audio track once — it is the MASTER clock.
     if audio_started == 0:
         audio_started = 1
-        PLAY_SAMPLE("audio")
+        #PLAY_SAMPLE("audio")
 
     # Video FOLLOWS the audio: derive the frame from how much audio has played
     # (SAMPLE_POS returns samples_played * fps / rate). No free-running counter,

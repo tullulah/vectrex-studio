@@ -29,6 +29,7 @@ def main():
     bub_vy = 3
 
 def loop():
+    SET_INTENSITY(100)
     PRINT_TEXT(-60, 110, "MOVING VEC")
     PRINT_NUMBER(-60, 90, ball_x)
     PRINT_NUMBER(-60, 70, ball_vx)

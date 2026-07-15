@@ -19,7 +19,7 @@ fade: i16 = 0           # brightness fade-in level, eases 0 -> FADE_MAX
 logo_rot: i16 = 0       # logo Y-rotation angle (0..127 = full turn)
 t: i16 = 0              # frame counter
 
-FADE_MAX: i16 = 100     # peak brightness
+FADE_MAX: i16 = 80     # peak brightness
 SPIN_FRAMES: i16 = 128  # spin for 2 full turns (~2.56 s), covers the jingle
 MENU_START: i16 = 250   # frame to switch to the menu (~5 s @ 50 fps)
 
@@ -50,6 +50,9 @@ def loop():
         else:
             logo_rot = 0
 
+        SET_INTENSITY(fade)
+        PRINT_TEXT(-25,-50, "STUDIO")
+
         # "VS" 3D logo (upper centre)
         SET_INTENSITY(fade)
         DRAW_VECTOR_3D("logo", 0, logo_rot, 0, 0, 34)
@@ -57,6 +60,8 @@ def loop():
         # VECTREX wordmark (lower centre)
         SET_INTENSITY(fade)
         DRAW_VECTOR("text", 0, -40)
+
+        
 
         # after the jingle (+ a couple seconds), go to the menu
         if t >= MENU_START:
@@ -73,7 +78,7 @@ def loop():
         # Start MINIMAL: a title + the preview box, to prove the transition and
         # measure the budget. Build the list up from here.
 
-        SET_INTENSITY(100)
+        SET_INTENSITY(80)
         SET_TEXT_SIZE(4)
         PRINT_TEXT(-42, 70, "GAMES")
 
@@ -85,7 +90,4 @@ def loop():
 
         # preview box (right side)
         SET_INTENSITY(80)
-        DRAW_LINE(10, -55, 100, -55, 80)
-        DRAW_LINE(100, -55, 100, 55, 80)
-        DRAW_LINE(100, 55, 10, 55, 80)
-        DRAW_LINE(10, 55, 10, -55, 80)
+        DRAW_VECTOR("frame", 55, 0)

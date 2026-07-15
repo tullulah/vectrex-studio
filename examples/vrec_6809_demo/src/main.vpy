@@ -28,4 +28,4 @@ def loop():
         tick = 0
         frame = frame + 1
     # Full-size, centred; scale 128 = 100%.
-    DRAW_RECORDING("spin", 0, 0, 128, frame)
+    DRAW_RECORDING("badapple", 0, 0, 128, frame)

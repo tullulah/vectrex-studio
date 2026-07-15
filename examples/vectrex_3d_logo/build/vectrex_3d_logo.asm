@@ -1,2481 +1,5463 @@
-; VPy M6809 Assembly (Vectrex)
-; ROM: 32768 bytes
-
-
-    ORG $0000
-
-;***************************************************************************
-; DEFINE SECTION
-;***************************************************************************
-    INCLUDE "VECTREX.I"
-
-;***************************************************************************
-; CARTRIDGE HEADER
-;***************************************************************************
-    FCC "g GCE 2025"
-    FCB $80                 ; String terminator
-    FDB music1              ; Music pointer
-    FCB $F8,$50,$20,$BB     ; Height, Width, Rel Y, Rel X
-    FCC "VECTREX 3D LOGO"
-    FCB $80                 ; String terminator
-    FCB 0                   ; End of header
-
-;***************************************************************************
-; CODE SECTION
-;***************************************************************************
-
-START:
-    LDA #$D0
-    TFR A,DP        ; Set Direct Page for BIOS
-    CLR $C80E        ; Initialize Vec_Prev_Btns
-    LDA #$80
-    STA VIA_t1_cnt_lo
-    LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
-    TFR X,S
-    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
-
-    ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
-    LDA #0
-    STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
-    JMP MAIN
-
-;***************************************************************************
-; === RAM VARIABLE DEFINITIONS ===
-;***************************************************************************
-RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT) (2 bytes)
-TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
-TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
-VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
-VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
-TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
-BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
-BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
-DRAW_VEC_INTENSITY   EQU $C880+$0E   ; Vector intensity override (0=use vector data) (1 bytes)
-DRAW_VEC_X_HI        EQU $C880+$0F   ; Vector draw X high byte (16-bit screen_x) (1 bytes)
-DRAW_VEC_X           EQU $C880+$10   ; Vector draw X offset (1 bytes)
-DRAW_VEC_Y           EQU $C880+$11   ; Vector draw Y offset (1 bytes)
-MIRROR_PAD           EQU $C880+$12   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
-MIRROR_X             EQU $C880+$22   ; X mirror flag (0=normal, 1=flip) (1 bytes)
-MIRROR_Y             EQU $C880+$23   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
-SLR_CUR_X            EQU $C880+$24   ; DRAW_VECTOR: clamped (visible) beam X for clipping (1 bytes)
-SLR_TRUE_X           EQU $C880+$25   ; DRAW_VECTOR: 16-bit unclamped abs_x for line clipping (2 bytes)
-DRAW_T1_SCALED       EQU $C880+$27   ; DRAW_VECTOR: T1 scale ($7F default for non-SHOW_LEVEL) (1 bytes)
-SDCP_ABS_Y           EQU $C880+$28   ; DRAW_VECTOR: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt SHOW_LEVEL's top_screen between layers) (1 bytes)
-ROT3D_AX             EQU $C880+$29   ; 3D raw angle X (0-127) (1 bytes)
-ROT3D_AY             EQU $C880+$2A   ; 3D raw angle Y (0-127) (1 bytes)
-ROT3D_AZ             EQU $C880+$2B   ; 3D raw angle Z (0-127) (1 bytes)
-ROT3D_COS_X          EQU $C880+$2C   ; 3D cos angle offset for X axis: (AX+32)&0x7F (1 bytes)
-ROT3D_COS_Y          EQU $C880+$2D   ; 3D cos angle offset for Y axis: (AY+32)&0x7F (1 bytes)
-ROT3D_COS_Z          EQU $C880+$2E   ; 3D cos angle offset for Z axis: (AZ+32)&0x7F (1 bytes)
-ROT3D_OX             EQU $C880+$2F   ; 3D draw X offset (1 bytes)
-ROT3D_OY             EQU $C880+$30   ; 3D draw Y offset (1 bytes)
-ROT3D_PC             EQU $C880+$31   ; 3D path/vertex count remaining (1 bytes)
-ROT3D_PT_REM         EQU $C880+$32   ; 3D remaining points in current path (1 bytes)
-ROT3D_CLOSED         EQU $C880+$33   ; 3D path closed flag (1 bytes)
-ROT3D_RX             EQU $C880+$34   ; 3D raw x (1 bytes)
-ROT3D_RY             EQU $C880+$35   ; 3D raw y (1 bytes)
-ROT3D_RZ             EQU $C880+$36   ; 3D raw z (1 bytes)
-ROT3D_Y1             EQU $C880+$37   ; 3D intermediate y after X-axis rotation (1 bytes)
-ROT3D_Z1             EQU $C880+$38   ; 3D intermediate z after X-axis rotation (1 bytes)
-ROT3D_X2             EQU $C880+$39   ; 3D intermediate x after Y-axis rotation (1 bytes)
-ROT3D_SCR_X          EQU $C880+$3A   ; 3D final screen x (1 bytes)
-ROT3D_SCR_Y          EQU $C880+$3B   ; 3D final screen y (1 bytes)
-ROT3D_PREV_X         EQU $C880+$3C   ; 3D previous screen x (1 bytes)
-ROT3D_PREV_Y         EQU $C880+$3D   ; 3D previous screen y (1 bytes)
-ROT3D_FIRST_X        EQU $C880+$3E   ; 3D first screen x (for closed path) (1 bytes)
-ROT3D_FIRST_Y        EQU $C880+$3F   ; 3D first screen y (for closed path) (1 bytes)
-ROT3D_TEMP           EQU $C880+$40   ; 3D rotation temp 1 (1 bytes)
-ROT3D_TEMP2          EQU $C880+$41   ; 3D rotation temp 2 (1 bytes)
-ROT3D_VBUF           EQU $C880+$42   ; 3D rotated vertex cache (127 verts × 2 bytes: x',y') (254 bytes)
-DRAW_LINE_ARGS       EQU $C880+$140   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$14A   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$14C   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$14E   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$14F   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$150   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$152   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-TEXT_SCALE_H         EQU $C880+$154   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$155   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$156   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_ARG0             EQU $C880+$157   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $C880+$159   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $C880+$15B   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $C880+$15D   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $C880+$15F   ; Function argument 4 (16-bit) (2 bytes)
-VAR_ARG5             EQU $C880+$161   ; Function argument 5 (16-bit) (2 bytes)
-VAR_ARG6             EQU $C880+$163   ; Function argument 6 (16-bit) (2 bytes)
-VAR_ARG7             EQU $C880+$165   ; Function argument 7 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$167   ; Current ROM bank ID (multibank tracking) (1 bytes)
-VAR_ROT_X            EQU $C880+$168   ; User variable: ROT_X (2 bytes)
-VAR_ROT_Y            EQU $C880+$16A   ; User variable: ROT_Y (2 bytes)
-VAR_ROT_Z            EQU $C880+$16C   ; User variable: ROT_Z (2 bytes)
-VAR_ROT_SPEED_X      EQU $C880+$16E   ; User variable: ROT_SPEED_X (2 bytes)
-VAR_ROT_SPEED_Y      EQU $C880+$170   ; User variable: ROT_SPEED_Y (2 bytes)
-VAR_ROT_SPEED_Z      EQU $C880+$172   ; User variable: ROT_SPEED_Z (2 bytes)
-VAR_JOY_X            EQU $C880+$174   ; User variable: JOY_X (2 bytes)
-VAR_JOY_Y            EQU $C880+$176   ; User variable: JOY_Y (2 bytes)
-
-;***************************************************************************
-; MAIN PROGRAM
-;***************************************************************************
-
-MAIN:
-    ; Initialize global variables
-    CLR VPY_MOVE_X        ; MOVE offset defaults to 0
-    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
-    LDA #$F8
-    STA TEXT_SCALE_H      ; Default height = -8 (normal size)
-    LDA #$48
-    STA TEXT_SCALE_W      ; Default width = 72 (normal size)
-    LDA #$7F
-    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
-    LDD #0
-    STD VAR_ROT_X
-    LDD #0
-    STD VAR_ROT_Y
-    LDD #0
-    STD VAR_ROT_Z
-    LDD #1
-    STD VAR_ROT_SPEED_X
-    LDD #2
-    STD VAR_ROT_SPEED_Y
-    LDD #1
-    STD VAR_ROT_SPEED_Z
-    ; === Initialize Joystick (one-time setup) ===
-    JSR $F1AF    ; DP_to_C8 (required for RAM access)
-    CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
-    LDA #$01     ; CRITICAL: Resolution threshold (power of 2: $40=fast, $01=accurate)
-    STA $C81A    ; Vec_Joy_Resltn (loop terminates when B=this value after LSRBs)
-    LDA #$01
-    STA $C81F    ; Vec_Joy_Mux_1_X (enable X axis reading)
-    LDA #$03
-    STA $C820    ; Vec_Joy_Mux_1_Y (enable Y axis reading)
-    LDA #$00
-    STA $C821    ; Vec_Joy_Mux_2_X (disable joystick 2 - CRITICAL!)
-    STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
-    ; Mux configured - J1_X()/J1_Y() can now be called
-
-    ; Prime BIOS button state at startup
-    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
-    ; Call main() for initialization
-; VPy_LINE:14
-    ; TODO: Statement Pass { source_line: 14 }
-    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
-
-.MAIN_LOOP:
-    JSR LOOP_BODY
-    LBRA .MAIN_LOOP   ; Use long branch for multibank support
-
-LOOP_BODY:
-    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
-    JSR $F1AA    ; DP_to_D0 (Joy_Analog requires DP=$D0)
-    JSR $F1F5    ; Joy_Analog: poll all 4 axes once → $C81B-$C81E
-    JSR Reset0Ref ; Restore beam state after Joy_Analog
-    JSR $F1AF    ; DP_to_C8 (restore DP for RAM access)
-; VPy_LINE:18
-    LDD >VAR_ROT_SPEED_X
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_ROT_X
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_ROT_X
-; VPy_LINE:19
-    LDD >VAR_ROT_SPEED_Y
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_ROT_Y
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_ROT_Y
-; VPy_LINE:20
-    LDD >VAR_ROT_SPEED_Z
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_ROT_Z
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_ROT_Z
-; VPy_LINE:23
-    LDD #256
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ROT_X
-    CMPD TMPVAL
-    LBGE .CMP_0_TRUE
-    LDD #0
-    LBRA .CMP_0_END
-.CMP_0_TRUE:
-    LDD #1
-.CMP_0_END:
-    LBEQ IF_NEXT_1
-; VPy_LINE:24
-    LDD #256
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_ROT_X
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD VAR_ROT_X
-    LBRA IF_END_0
-IF_NEXT_1:
-IF_END_0:
-; VPy_LINE:25
-    LDD #256
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ROT_Y
-    CMPD TMPVAL
-    LBGE .CMP_1_TRUE
-    LDD #0
-    LBRA .CMP_1_END
-.CMP_1_TRUE:
-    LDD #1
-.CMP_1_END:
-    LBEQ IF_NEXT_3
-; VPy_LINE:26
-    LDD #256
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_ROT_Y
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD VAR_ROT_Y
-    LBRA IF_END_2
-IF_NEXT_3:
-IF_END_2:
-; VPy_LINE:27
-    LDD #256
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ROT_Z
-    CMPD TMPVAL
-    LBGE .CMP_2_TRUE
-    LDD #0
-    LBRA .CMP_2_END
-.CMP_2_TRUE:
-    LDD #1
-.CMP_2_END:
-    LBEQ IF_NEXT_5
-; VPy_LINE:28
-    LDD #256
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_ROT_Z
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD VAR_ROT_Z
-    LBRA IF_END_4
-IF_NEXT_5:
-IF_END_4:
-; VPy_LINE:31
-; NATIVE_CALL: J1_X at line 31
-    JSR J1X_BUILTIN
-    STD RESULT
-    STD VAR_JOY_X
-; VPy_LINE:32
-; NATIVE_CALL: J1_Y at line 32
-    JSR J1Y_BUILTIN
-    STD RESULT
-    STD VAR_JOY_Y
-; VPy_LINE:35
-    LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
-    BITA #$01
-    BNE .J1B1_0_ON
-    LDD #0
-    BRA .J1B1_0_END
-.J1B1_0_ON:
-    LDD #1
-.J1B1_0_END:
-    STD RESULT
-    LBEQ IF_NEXT_7
-; VPy_LINE:36
-    LDD #1
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_ROT_SPEED_X
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_ROT_SPEED_X
-    LBRA IF_END_6
-IF_NEXT_7:
-IF_END_6:
-; VPy_LINE:37
-    LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
-    BITA #$02
-    BNE .J1B2_1_ON
-    LDD #0
-    BRA .J1B2_1_END
-.J1B2_1_ON:
-    LDD #1
-.J1B2_1_END:
-    STD RESULT
-    LBEQ IF_NEXT_9
-; VPy_LINE:38
-    ; CLAMP: Clamp value to range [min, max]
-    LDD #1
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_ROT_SPEED_X
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD TMPPTR     ; Save value
-    LDD #0
-    STD TMPPTR+2   ; Save min
-    LDD #10
-    STD TMPPTR+4   ; Save max
-    LDD TMPPTR     ; Load value
-    CMPD TMPPTR+2  ; Compare with min
-    BGE .CLAMP_0_CHK_MAX ; Branch if value >= min
-    LDD TMPPTR+2
-    STD RESULT
-    BRA .CLAMP_0_END
-.CLAMP_0_CHK_MAX:
-    LDD TMPPTR     ; Load value again
-    CMPD TMPPTR+4  ; Compare with max
-    BLE .CLAMP_0_OK  ; Branch if value <= max
-    LDD TMPPTR+4
-    STD RESULT
-    BRA .CLAMP_0_END
-.CLAMP_0_OK:
-    LDD TMPPTR
-    STD RESULT
-.CLAMP_0_END:
-    STD VAR_ROT_SPEED_X
-    LBRA IF_END_8
-IF_NEXT_9:
-IF_END_8:
-; VPy_LINE:39
-    LDA >$C80F   ; Vec_Btns_1: bit2=1 means btn3 pressed
-    BITA #$04
-    BNE .J1B3_2_ON
-    LDD #0
-    BRA .J1B3_2_END
-.J1B3_2_ON:
-    LDD #1
-.J1B3_2_END:
-    STD RESULT
-    LBEQ IF_NEXT_11
-; VPy_LINE:40
-    LDD #1
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_ROT_SPEED_Y
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_ROT_SPEED_Y
-    LBRA IF_END_10
-IF_NEXT_11:
-IF_END_10:
-; VPy_LINE:41
-    LDA >$C80F   ; Vec_Btns_1: bit3=1 means btn4 pressed
-    BITA #$08
-    BNE .J1B4_3_ON
-    LDD #0
-    BRA .J1B4_3_END
-.J1B4_3_ON:
-    LDD #1
-.J1B4_3_END:
-    STD RESULT
-    LBEQ IF_NEXT_13
-; VPy_LINE:42
-    ; CLAMP: Clamp value to range [min, max]
-    LDD #1
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_ROT_SPEED_Y
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD TMPPTR     ; Save value
-    LDD #0
-    STD TMPPTR+2   ; Save min
-    LDD #10
-    STD TMPPTR+4   ; Save max
-    LDD TMPPTR     ; Load value
-    CMPD TMPPTR+2  ; Compare with min
-    BGE .CLAMP_1_CHK_MAX ; Branch if value >= min
-    LDD TMPPTR+2
-    STD RESULT
-    BRA .CLAMP_1_END
-.CLAMP_1_CHK_MAX:
-    LDD TMPPTR     ; Load value again
-    CMPD TMPPTR+4  ; Compare with max
-    BLE .CLAMP_1_OK  ; Branch if value <= max
-    LDD TMPPTR+4
-    STD RESULT
-    BRA .CLAMP_1_END
-.CLAMP_1_OK:
-    LDD TMPPTR
-    STD RESULT
-.CLAMP_1_END:
-    STD VAR_ROT_SPEED_Y
-    LBRA IF_END_12
-IF_NEXT_13:
-IF_END_12:
-; VPy_LINE:45
-; NATIVE_CALL: DRAW_VECTOR_3D at line 45
-    ; DRAW_VECTOR_3D: Draw vector asset with 3D rotation
-    ; Asset: logo (3D rotation)
-    LDD >VAR_ROT_X
-    STB >ROT3D_AX       ; angle X (0-127)
-    LDD >VAR_ROT_Y
-    STB >ROT3D_AY       ; angle Y (0-127)
-    LDD >VAR_ROT_Z
-    STB >ROT3D_AZ       ; angle Z (0-127)
-    LDD #0
-    STB >ROT3D_OX       ; screen X offset
-    LDD #60
-    STB >ROT3D_OY       ; screen Y offset
-    LDX #_LOGO_3D_DATA  ; pointer to 3D data table
-    JSR DRAW_VECTOR_3D_RUNTIME
-    LDD #0
-    STD RESULT
-; VPy_LINE:48
-; NATIVE_CALL: DRAW_VECTOR at line 48
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: text (index=1, 13 paths)
-    LDD #0
-    STA TMPPTR2      ; save high byte of 16-bit screen_x
-    TFR B,A
-    SEX              ; A = sign-extend of B (0x00 or 0xFF)
-    CMPA TMPPTR2     ; vs actual high byte
-    LBNE DRVEC_SKIP_4          ; out of 8-bit range — skip draw
-    TFR B,A
-    STA TMPPTR       ; save 8-bit x
-    LDD #-44
-    TFR B,A          ; Y position (8-bit signed in A)
-    STA TMPPTR+1     ; Save Y to temporary storage
-    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)
-    STA DRAW_VEC_X
-    LDB #0
-    TSTA
-    BPL .sx_pos_4
-    LDB #$FF
-.sx_pos_4:
-    STB DRAW_VEC_X_HI
-    LDA TMPPTR+1     ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)
-    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDX #_TEXT_PATH0  ; Load path 0
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH1  ; Load path 1
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH2  ; Load path 2
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH3  ; Load path 3
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH4  ; Load path 4
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH5  ; Load path 5
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH6  ; Load path 6
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH7  ; Load path 7
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH8  ; Load path 8
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH9  ; Load path 9
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH10  ; Load path 10
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH11  ; Load path 11
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH12  ; Load path 12
-    JSR Draw_Sync_List_At_With_Mirrors
-    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-DRVEC_SKIP_4:
-    LDD #0
-    STD RESULT
-; VPy_LINE:49
-; NATIVE_CALL: SET_TEXT_SIZE at line 49
-    LDD #8
-    STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
-    NEGB            ; B = -n -> TEXT_SCALE_H
-    STB >TEXT_SCALE_H
-    LDB TMPPTR2+1   ; Reload n (from TMPPTR2, not RESULT)
-    ASLB            ; n*2
-    ASLB            ; n*4
-    ASLB            ; n*8
-    ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
-    STB >TEXT_SCALE_W
-; VPy_LINE:50
-; NATIVE_CALL: PRINT_TEXT at line 50
-    ; PRINT_TEXT: Print text at position
-    LDD #-35
-    STD >VAR_ARG0
-    LDD #-58
-    STD >VAR_ARG1
-    LDX #PRINT_TEXT_STR_2456395222      ; Pointer to string in helpers bank
-    STX >VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    RTS
-
-;***************************************************************************
-; EMBEDDED ASSETS (vectors, music, levels, SFX)
-;***************************************************************************
-
-; Generated from logo.vec (Malban Draw_Sync_List format)
-; Total paths: 4, points: 36
-; X bounds: min=-34, max=33, width=67
-; Center: (0, 0)
-
-_LOGO_WIDTH EQU 67
-_LOGO_HALF_WIDTH EQU 33
-_LOGO_HEIGHT EQU 99
-_LOGO_HALF_HEIGHT EQU 49
-_LOGO_CENTER_X EQU 0
-_LOGO_CENTER_Y EQU 0
-
-_LOGO_VECTORS:  ; Main entry (header + 4 path(s))
-    FDB 4               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _LOGO_PATH0        ; pointer to path 0
-    FDB _LOGO_PATH1        ; pointer to path 1
-    FDB _LOGO_PATH2        ; pointer to path 2
-    FDB _LOGO_PATH3        ; pointer to path 3
-
-_LOGO_PATH0:    ; Path 0
-    FCB 85              ; path0: intensity
-    FCB $D6,$11,0,0        ; path0: header (y=-42, x=17)
-    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
-    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
-    FCB $FF,$F7,$00          ; flag=-1, dy=-9, dx=0
-    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
-    FCB 2                ; End marker (path complete)
-
-_LOGO_PATH1:    ; Path 1
-    FCB 85              ; path1: intensity
-    FCB $CE,$17,0,0        ; path1: header (y=-50, x=23)
-    FCB $FF,$14,$00          ; flag=-1, dy=20, dx=0
-    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
-    FCB $FF,$24,$00          ; flag=-1, dy=36, dx=0
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB $FF,$00,$E6          ; flag=-1, dy=0, dx=-26
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB $FF,$DC,$00          ; flag=-1, dy=-36, dx=0
-    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
-    FCB $FF,$EC,$00          ; flag=-1, dy=-20, dx=0
-    FCB $FF,$00,$1A          ; flag=-1, dy=0, dx=26
-    FCB 2                ; End marker (path complete)
-
-_LOGO_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $2B,$F0,0,0        ; path2: header (y=43, x=-16)
-    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$0C,$00          ; flag=-1, dy=12, dx=0
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB 2                ; End marker (path complete)
-
-_LOGO_PATH3:    ; Path 3
-    FCB 85              ; path3: intensity
-    FCB $31,$E8,0,0        ; path3: header (y=49, x=-24)
-    FCB $FF,$EE,$00          ; flag=-1, dy=-18, dx=0
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB $FF,$DB,$00          ; flag=-1, dy=-37, dx=0
-    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
-    FCB $FF,$F5,$00          ; flag=-1, dy=-11, dx=0
-    FCB $FF,$00,$18          ; flag=-1, dy=0, dx=24
-    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
-    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
-    FCB $FF,$27,$00          ; flag=-1, dy=39, dx=0
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB $FF,$12,$00          ; flag=-1, dy=18, dx=0
-    FCB $FF,$00,$E6          ; flag=-1, dy=0, dx=-26
-    FCB 2                ; End marker (path complete)
-; Generated from text.vec (Malban Draw_Sync_List format)
-; Total paths: 13, points: 98
-; X bounds: min=-85, max=83, width=168
-; Center: (-1, 0)
-
-_TEXT_WIDTH EQU 168
-_TEXT_HALF_WIDTH EQU 84
-_TEXT_HEIGHT EQU 36
-_TEXT_HALF_HEIGHT EQU 18
-_TEXT_CENTER_X EQU -1
-_TEXT_CENTER_Y EQU 0
-
-_TEXT_VECTORS:  ; Main entry (header + 13 path(s))
-    FDB 13               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _TEXT_PATH0        ; pointer to path 0
-    FDB _TEXT_PATH1        ; pointer to path 1
-    FDB _TEXT_PATH2        ; pointer to path 2
-    FDB _TEXT_PATH3        ; pointer to path 3
-    FDB _TEXT_PATH4        ; pointer to path 4
-    FDB _TEXT_PATH5        ; pointer to path 5
-    FDB _TEXT_PATH6        ; pointer to path 6
-    FDB _TEXT_PATH7        ; pointer to path 7
-    FDB _TEXT_PATH8        ; pointer to path 8
-    FDB _TEXT_PATH9        ; pointer to path 9
-    FDB _TEXT_PATH10        ; pointer to path 10
-    FDB _TEXT_PATH11        ; pointer to path 11
-    FDB _TEXT_PATH12        ; pointer to path 12
-
-_TEXT_PATH0:    ; Path 0
-    FCB 85              ; path0: intensity
-    FCB $12,$FA,0,0        ; path0: header (y=18, x=-6)
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$EF,$00          ; flag=-1, dy=-17, dx=0
-    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
-    FCB $FF,$11,$00          ; flag=-1, dy=17, dx=0
-    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
-    FCB $FF,$04,$02          ; flag=-1, dy=4, dx=2
-    FCB $FF,$00,$EE          ; flag=-1, dy=0, dx=-18
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH1:    ; Path 1
-    FCB 85              ; path1: intensity
-    FCB $12,$F4,0,0        ; path1: header (y=18, x=-12)
-    FCB $FF,$00,$F1          ; flag=-1, dy=0, dx=-15
-    FCB $FF,$FC,$FD          ; flag=-1, dy=-4, dx=-3
-    FCB $FF,$FA,$FD          ; flag=-1, dy=-6, dx=-3
-    FCB $FF,$F8,$03          ; flag=-1, dy=-8, dx=3
-    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
-    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
-    FCB $FF,$03,$FD          ; flag=-1, dy=3, dx=-3
-    FCB $FF,$00,$F7          ; flag=-1, dy=0, dx=-9
-    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
-    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
-    FCB $FF,$04,$02          ; flag=-1, dy=4, dx=2
-    FCB $FF,$02,$03          ; flag=-1, dy=2, dx=3
-    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
-    FCB $FF,$04,$02          ; flag=-1, dy=4, dx=2
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $0E,$12,0,0        ; path2: header (y=14, x=18)
-    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
-    FCB $FF,$00,$0F          ; flag=-1, dy=0, dx=15
-    FCB $FF,$FD,$03          ; flag=-1, dy=-3, dx=3
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB $FF,$FB,$FE          ; flag=-1, dy=-5, dx=-2
-    FCB $FF,$FF,$FD          ; flag=-1, dy=-1, dx=-3
-    FCB $FF,$F8,$05          ; flag=-1, dy=-8, dx=5
-    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
-    FCB $FF,$08,$FC          ; flag=-1, dy=8, dx=-4
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
-    FCB $FF,$0C,$00          ; flag=-1, dy=12, dx=0
-    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
-    FCB $FF,$02,$03          ; flag=-1, dy=2, dx=3
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
-    FCB $FF,$00,$F4          ; flag=-1, dy=0, dx=-12
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH3:    ; Path 3
-    FCB 85              ; path3: intensity
-    FCB $0B,$2A,0,0        ; path3: header (y=11, x=42)
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
-    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
-    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH4:    ; Path 4
-    FCB 85              ; path4: intensity
-    FCB $12,$2A,0,0        ; path4: header (y=18, x=42)
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
-    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
-    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH5:    ; Path 5
-    FCB 85              ; path5: intensity
-    FCB $00,$2A,0,0        ; path5: header (y=0, x=42)
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH6:    ; Path 6
-    FCB 85              ; path6: intensity
-    FCB $EE,$37,0,0        ; path6: header (y=-18, x=55)
-    FCB $FF,$00,$12          ; flag=-1, dy=0, dx=18
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH7:    ; Path 7
-    FCB 85              ; path7: intensity
-    FCB $12,$3D,0,0        ; path7: header (y=18, x=61)
-    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
-    FCB $FF,$F8,$05          ; flag=-1, dy=-8, dx=5
-    FCB $FF,$08,$05          ; flag=-1, dy=8, dx=5
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$F5,$F7          ; flag=-1, dy=-11, dx=-9
-    FCB $FF,$F6,$08          ; flag=-1, dy=-10, dx=8
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$07,$FC          ; flag=-1, dy=7, dx=-4
-    FCB $FF,$F9,$FB          ; flag=-1, dy=-7, dx=-5
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$0A,$09          ; flag=-1, dy=10, dx=9
-    FCB $FF,$0B,$F6          ; flag=-1, dy=11, dx=-10
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH8:    ; Path 8
-    FCB 85              ; path8: intensity
-    FCB $12,$C8,0,0        ; path8: header (y=18, x=-56)
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$11          ; flag=-1, dy=0, dx=17
-    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
-    FCB $FF,$00,$EF          ; flag=-1, dy=0, dx=-17
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH9:    ; Path 9
-    FCB 85              ; path9: intensity
-    FCB $0B,$C8,0,0        ; path9: header (y=11, x=-56)
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$11          ; flag=-1, dy=0, dx=17
-    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
-    FCB $FF,$00,$EF          ; flag=-1, dy=0, dx=-17
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH10:    ; Path 10
-    FCB 85              ; path10: intensity
-    FCB $00,$C8,0,0        ; path10: header (y=0, x=-56)
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$11          ; flag=-1, dy=0, dx=17
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$EF          ; flag=-1, dy=0, dx=-17
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH11:    ; Path 11
-    FCB 85              ; path11: intensity
-    FCB $EE,$CB,0,0        ; path11: header (y=-18, x=-53)
-    FCB $FF,$00,$EE          ; flag=-1, dy=0, dx=-18
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH12:    ; Path 12
-    FCB 85              ; path12: intensity
-    FCB $12,$AC,0,0        ; path12: header (y=18, x=-84)
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB $FF,$F0,$08          ; flag=-1, dy=-16, dx=8
-    FCB $FF,$10,$07          ; flag=-1, dy=16, dx=7
-    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
-    FCB $FF,$EB,$F7          ; flag=-1, dy=-21, dx=-9
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
-    FCB $FF,$15,$F6          ; flag=-1, dy=21, dx=-10
-    FCB 2                ; End marker (path complete)
-;***************************************************************************
-; RUNTIME HELPERS
-;***************************************************************************
-
-VECTREX_PRINT_TEXT:
-    ; VPy signature: PRINT_TEXT(x, y, string)
-    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    LDA #$D0
-    TFR A,DP
-    JSR Intensity_5F
-    JSR Reset0Ref
-    LDU >VAR_ARG2
-    LDA >TEXT_SCALE_H
-    STA >$C82A          ; Vec_Text_Height
-    LDA >TEXT_SCALE_W
-    STA >$C82B          ; Vec_Text_Width
-    LDA >VAR_ARG1+1
-    LDB >VAR_ARG0+1
-    LDX >$C82C
-    PSHS X
-    JSR Print_Str_d
-    PULS X
-    STX >$C82C
-    LDA #$F8
-    STA >$C82A
-    LDA #$48
-    STA >$C82B
-    JSR $F1AF
-    RTS
-
-MOD16:
-    ; Signed 16-bit modulo: D = X % D (result has same sign as dividend)
-    ; X = dividend (i16), D = divisor (i16) -> D = remainder
-    STD TMPPTR          ; Save divisor
-    TFR X,D             ; D = dividend (TFR does NOT set flags!)
-    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte
-    BPL .M16_DPOS       ; if dividend >= 0, skip negation
-    COMA
-    COMB
-    ADDD #1             ; D = |dividend|
-    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)
-    LDA #1
-    STA TMPPTR2         ; sign_flag = 1
-    BRA .M16_RCHECK
-.M16_DPOS:
-    STD TMPVAL          ; dividend is positive, store as-is
-    LDA #0
-    STA TMPPTR2         ; sign_flag = 0 (positive result)
-.M16_RCHECK:
-    LDD TMPPTR          ; D = divisor
-    BPL .M16_RPOS       ; if divisor >= 0, skip negation
-    COMA
-    COMB
-    ADDD #1             ; D = |divisor|
-    STD TMPPTR          ; TMPPTR = |divisor|
-.M16_RPOS:
-.M16_LOOP:
-    LDD TMPVAL
-    SUBD TMPPTR         ; |dividend| - |divisor|
-    BLO .M16_END        ; if |dividend| < |divisor|, done
-    STD TMPVAL          ; update remainder
-    BRA .M16_LOOP
-.M16_END:
-    LDD TMPVAL          ; D = |remainder|
-    LDA TMPPTR2
-    BEQ .M16_DONE       ; zero = positive result
-    COMA
-    COMB
-    ADDD #1             ; negate (same sign as dividend)
-.M16_DONE:
-    RTS
-
-; === JOYSTICK BUILTIN SUBROUTINES (cached, Joy_Analog runs once per frame) ===
-; J1_X() - Read Joystick 1 X axis from cached BIOS value at $C81B
-J1X_BUILTIN:
-    LDB >$C81B   ; Vec_Joy_1_X (populated each frame by auto-injected Joy_Analog)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    RTS
-
-; J1_Y() - Read Joystick 1 Y axis from cached BIOS value at $C81C
-J1Y_BUILTIN:
-    LDB >$C81C   ; Vec_Joy_1_Y
-    SEX
-    ADDD #2
-    RTS
-
-Draw_Sync_List_At_With_Mirrors:
-; Unified mirror support using flags: MIRROR_X and MIRROR_Y
-; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing
-LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
-BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_SET_INTENSITY
-DSWM_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
-DSWM_SET_INTENSITY:
-STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)
-LDB ,X+                 ; y_start from .vec (already relative to center)
-; Check if Y mirroring is enabled
-TST >MIRROR_Y
-BEQ DSWM_NO_NEGATE_Y
-NEGB                    ; ← Negate Y if flag set
-DSWM_NO_NEGATE_Y:
-ADDB >DRAW_VEC_Y        ; Add Y offset
-LDA ,X+                 ; x_start from .vec (already relative to center)
-; Check if X mirroring is enabled
-TST >MIRROR_X
-BEQ DSWM_NO_NEGATE_X
-NEGA                    ; ← Negate X if flag set
-DSWM_NO_NEGATE_X:
-ADDA >DRAW_VEC_X        ; Add X offset
-STD >TEMP_YX            ; Save adjusted position
-; Reset completo
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$03
-STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
-LDA #$02
-STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
-LDA #$02
-STA VIA_port_b          ; repeat
-LDA #$01
-STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
-; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)
-LDD >TEMP_YX
-STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
-CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
-PSHS A                  ; ~4 cycle settling delay for Y
-LDA #$CE
-STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
-CLR VIA_shift_reg       ; SR=0: no draw during moveto
-INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
-PULS A                  ; Restore X
-STA VIA_port_a          ; X to DAC
-; Timing setup (match core: hardcoded $7F)
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X                ; Skip next_y, next_x
-; Wait for move to complete (PB=1 on exit)
-DSWM_W1:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W1
-; PB stays 1 — draw loop begins with PB=1
-; Loop de dibujo (conditional mirrors)
-DSWM_LOOP:
-LDA ,X+                 ; Read flag
-CMPA #2                 ; Check end marker
-LBEQ DSWM_DONE
-CMPA #1                 ; Check next path marker
-LBEQ DSWM_NEXT_PATH
-; Draw line with conditional negations
-LDB ,X+                 ; dy
-; Check if Y mirroring is enabled
-TST >MIRROR_Y
-BEQ DSWM_NO_NEGATE_DY
-NEGB                    ; ← Negate dy if flag set
-DSWM_NO_NEGATE_DY:
-LDA ,X+                 ; dx
-; Check if X mirroring is enabled
-TST >MIRROR_X
-BEQ DSWM_NO_NEGATE_DX
-NEGA                    ; ← Negate dx if flag set
-DSWM_NO_NEGATE_DX:
-; B=DY_final, A=DX_final, PB=1 on entry (from moveto or previous segment)
-STB VIA_port_a          ; DY to DAC (PB=1: integrators hold position)
-CLR VIA_port_b          ; PB=0: enable mux, beam tracks DY direction
-NOP                     ; settling 1 (per BIOS Draw_Line_d: LEAX+NOP = ~7 cycles)
-NOP                     ; settling 2
-NOP                     ; settling 3
-INC VIA_port_b          ; PB=1: disable mux, lock direction at DY
-STA VIA_port_a          ; DX to DAC
-LDA #$FF
-STA VIA_shift_reg       ; beam ON first (ramp still off from T1PB7)
-CLR VIA_t1_cnt_hi       ; THEN start T1 -> ramp ON (BIOS order)
-; Wait for line draw
-DSWM_W2:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W2
-CLR VIA_port_a          ; stop X integrator drift between segments
-CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
-LBRA DSWM_LOOP          ; Long branch
-; Next path: repeat mirror logic for new path header
-DSWM_NEXT_PATH:
-TFR X,D
-PSHS D
-; Check intensity override (same logic as start)
-LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
-BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_NEXT_SET_INTENSITY
-DSWM_NEXT_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
-DSWM_NEXT_SET_INTENSITY:
-PSHS A
-LDB ,X+                 ; y_start
-TST >MIRROR_Y
-BEQ DSWM_NEXT_NO_NEGATE_Y
-NEGB
-DSWM_NEXT_NO_NEGATE_Y:
-ADDB >DRAW_VEC_Y        ; Add Y offset
-LDA ,X+                 ; x_start
-TST >MIRROR_X
-BEQ DSWM_NEXT_NO_NEGATE_X
-NEGA
-DSWM_NEXT_NO_NEGATE_X:
-ADDA >DRAW_VEC_X        ; Add X offset
-STD >TEMP_YX
-PULS A                  ; Get intensity back
-STA >$C832              ; Vec_Misc_Count (direct, DP-safe)
-PULS D
-ADDD #3
-TFR D,X
-; Reset to zero
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$03
-STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
-LDA #$02
-STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
-LDA #$02
-STA VIA_port_b          ; repeat
-LDA #$01
-STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
-; Moveto new start position (BIOS Moveto_d order)
-LDD >TEMP_YX
-STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
-CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
-PSHS A                  ; ~4 cycle settling delay for Y
-LDA #$CE
-STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
-CLR VIA_shift_reg       ; SR=0: no draw during moveto
-INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
-PULS A
-STA VIA_port_a          ; X to DAC
-; Timing setup (match core: hardcoded $7F)
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X
-; Wait for move (PB=1 on exit)
-DSWM_W3:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W3
-; PB stays 1 — draw loop continues with PB=1
-LBRA DSWM_LOOP          ; Long branch
-DSWM_DONE:
-RTS
-; === SLR_DRAW_CLIPPED_PATH ===
-SLR_DRAW_CLIPPED_PATH:
-    LDA >DRAW_VEC_INTENSITY ; check override
-    BNE SDCP_USE_OVERRIDE
-    LDA ,X+                 ; read intensity from path data
-    BRA SDCP_SET_INTENS
-SDCP_USE_OVERRIDE:
-    LEAX 1,X                ; skip intensity byte
-SDCP_SET_INTENS:
-    STA >$C832              ; Vec_Misc_Count (DDRB-safe, no JSR)
-    LDB ,X+                 ; B = y_start (relative to center)
-    LDA ,X+                 ; A = x_start (relative to center)
-    ADDB >DRAW_VEC_Y        ; B = abs_y
-    STB >SDCP_ABS_Y         ; save abs_y for moveto (NOT TMPVAL — SHOW_LEVEL's top_screen lives there)
-    TFR A,B                 ; B = x_start (SEX extends B, not A)
-    SEX                      ; sign-extend B→D (A=sign, B=x_start)
-    ADDD >DRAW_VEC_X_HI     ; D = abs_x_16 = SEX(x_start) + screen_x_16
-    ; D = abs_x_16. Save it in 16-bit tracker SLR_TRUE_X (unclamped).
-    STD >SLR_TRUE_X
-    ; Compute clamped beam position for hardware Moveto.
-    TSTA
-    BEQ SDCP_INIT_POS
-    INCA
-    BEQ SDCP_INIT_NEG_OK    ; A was $FF (small negative)
-    ; Way off — clamp to nearest edge by sign of original A (now in INCA result)
-    LDB #$80                ; default to left edge
-    LDA >SLR_TRUE_X         ; original hi byte
-    BMI SDCP_USE_CLAMPED    ; negative → -128 (left)
-    LDB #$7F                ; positive way off → +127 (right)
-    BRA SDCP_USE_CLAMPED
-SDCP_INIT_NEG_OK:
-    CMPB #$80
-    BHS SDCP_USE_CLAMPED    ; -128..-1, valid
-    LDB #$80                ; clamp
-    BRA SDCP_USE_CLAMPED
-SDCP_INIT_POS:
-    CMPB #$7F
-    BLS SDCP_USE_CLAMPED
-    LDB #$7F                ; clamp positive
-SDCP_USE_CLAMPED:
-    TFR B,A                  ; A = clamped beam x
-    STA >SLR_CUR_X          ; clamped value goes to integrator
-    CLR VIA_shift_reg
-    LDA #$CC
-    STA VIA_cntl
-    CLR VIA_port_a
-    LDA #$03
-    STA VIA_port_b
-    LDA #$02
-    STA VIA_port_b
-    LDA #$02
-    STA VIA_port_b
-    LDA #$01
-    STA VIA_port_b
-    LDB >SDCP_ABS_Y         ; B = abs_y
-    STB VIA_port_a          ; DY → DAC (PB=1: hold)
-    CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
-    LDA >SLR_CUR_X          ; abs_x (load = settling for Y)
-    PSHS A                  ; ~4 more settling cycles
-    LDA #$CE
-    STA VIA_cntl            ; PCR=$CE: /ZERO high
-    CLR VIA_shift_reg       ; SR=0: beam off
-    INC VIA_port_b          ; PB=1: lock Y direction
-    PULS A                  ; restore abs_x
-    STA VIA_port_a          ; DX → DAC
-    LDA >DRAW_T1_SCALED     ; effective T1 for this object (scale * 127)
-    STA VIA_t1_cnt_lo       ; load T1 latch
-    LEAX 2,X                ; skip next_y, next_x (the 0,0)
-    CLR VIA_t1_cnt_hi       ; start T1 → ramp
-SDCP_MOVETO_W:
-    LDA VIA_int_flags
-    ANDA #$40
-    BEQ SDCP_MOVETO_W
-    ; PB=1 on exit — draw loop ready
-SDCP_SEG_LOOP:
-    LDA ,X+                 ; flags
-    CMPA #2
-    LBEQ SDCP_DONE
-    LDB ,X+                 ; B = dy
-    STB >TMPPTR2            ; save dy
-    LDA ,X+                 ; A = dx (8-bit signed)
-    ; --- 16-bit add: true_new_x_16 = SLR_TRUE_X + SEX(dx) ---
-    TFR A,B                 ; B = dx
-    SEX                      ; D = sign-extended dx (A=sign, B=dx)
-    ADDD >SLR_TRUE_X        ; D = new true_x_16
-    STD >SLR_TRUE_X         ; update 16-bit tracker
-    ; --- Clamp D to [-128, +127] → 8-bit clamped_new_x in B ---
-    TSTA
-    BEQ SDCP_SEG_POS
-    INCA
-    BEQ SDCP_SEG_NEG_OK     ; A was $FF
-    ; Way off — clamp by sign of original D
-    LDA >SLR_TRUE_X         ; reload hi byte
-    BMI SDCP_SEG_CLAMP_LEFT
-    LDB #$7F                ; positive way off → +127
-    BRA SDCP_SEG_CLAMPED
-SDCP_SEG_CLAMP_LEFT:
-    LDB #$80                ; negative way off → -128
-    BRA SDCP_SEG_CLAMPED
-SDCP_SEG_NEG_OK:
-    CMPB #$80
-    BHS SDCP_SEG_CLAMPED
-    LDB #$80
-    BRA SDCP_SEG_CLAMPED
-SDCP_SEG_POS:
-    CMPB #$7F
-    BLS SDCP_SEG_CLAMPED
-    LDB #$7F
-SDCP_SEG_CLAMPED:
-    ; B = clamped_new_x. Compute beam_dx = B - SLR_CUR_X (8-bit signed).
-    LDA >SLR_CUR_X
-    PSHS B                  ; save clamped_new_x
-    NEGA                    ; A = -cur_x
-    ADDA ,S                 ; A = clamped_new_x - cur_x = beam_dx
-    PULS B                  ; B = clamped_new_x
-    ; Update SLR_CUR_X to new clamped position
-    STB >SLR_CUR_X
-    ; Decide beam ON/OFF/skip:
-    ; - beam_dx != 0                       → beam ON,  ramp(beam_dx, dy)
-    ; - beam_dx == 0 AND cur at edge AND dy==0 → skip (zero motion)
-    ; - beam_dx == 0 AND cur at edge AND dy!=0 → beam OFF ramp(0, dy)
-    ;   (Y must track logical position so subsequent segments draw at correct Y)
-    ; - beam_dx == 0 AND not at edge       → beam ON,  ramp(0, dy) — vertical
-    TSTA
-    BNE SDCP_SEG_DRAW       ; non-zero beam_dx → draw
-    CMPB #$80               ; at left edge?
-    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen left
-    CMPB #$7F               ; at right edge?
-    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen right
-SDCP_SEG_DRAW:
-    LDB >TMPPTR2            ; restore dy
-    ; A = beam_dx (visible X delta), B = dy. Beam ON ramp.
-    STB VIA_port_a          ; DY → DAC (PB=1: hold)
-    CLR VIA_port_b          ; PB=0: mux for DY
-    NOP
-    NOP
-    NOP
-    INC VIA_port_b          ; PB=1: lock DY
-    STA VIA_port_a          ; DX → DAC
-    LDA #$FF
-    STA VIA_shift_reg       ; beam ON
-    CLR VIA_t1_cnt_hi       ; start T1
-SDCP_W_DRAW:
-    LDA VIA_int_flags
-    ANDA #$40
-    BEQ SDCP_W_DRAW
-    CLR VIA_shift_reg       ; beam OFF
-    LBRA SDCP_SEG_LOOP
-
-    ; --- Off-screen-X path: dx contribution is invisible, but Y must track ---
-SDCP_SEG_OFF_X:
-    LDB >TMPPTR2            ; B = dy
-    TSTB                     ; dy == 0?
-    LBEQ SDCP_SEG_LOOP      ; no Y motion either → skip entire segment
-    ; Ramp(0, dy) with beam OFF. A is already 0 (beam_dx).
-    CLRA                     ; defensive: ensure dx=0
-    STB VIA_port_a          ; DY → DAC
-    CLR VIA_port_b
-    NOP
-    NOP
-    NOP
-    INC VIA_port_b
-    STA VIA_port_a          ; DX = 0
-    ; beam stays OFF (no STA VIA_shift_reg)
-    CLR VIA_t1_cnt_hi       ; start T1 (ramp, beam off)
-SDCP_W_OFF_X:
-    LDA VIA_int_flags
-    ANDA #$40
-    BEQ SDCP_W_OFF_X
-    LBRA SDCP_SEG_LOOP
-
-SDCP_DONE:
-    RTS
-
-; ============================================================================
-; SMUL_PROD - Product lookup table for SMUL_LUT
-; SMUL_PROD[val][angle] = (val * sin(angle*2π/128)) >> 7  (i8)
-; val=row (0-63, stride=128), angle=col (0-127) — 8KB total
-; For cos: use angle=(ax+32)&0x7F — same table, shifted column
-; Vertex coords must be ≤63 (clamped at data emit time)
-SMUL_PROD:
-    FCB $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00  ; val=0
-    FCB $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00  ; val=1
-    FCB $00,$00,$00,$00,$00,$00,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$00,$00,$00,$00,$00  ; val=2
-    FCB $00,$00,$00,$00,$01,$01,$01,$01,$01,$01,$01,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$01,$01,$01,$01,$01,$01,$01,$00,$00,$00,$00,$00,$00,$00,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$00,$00,$00  ; val=3
-    FCB $00,$00,$00,$01,$01,$01,$01,$01,$02,$02,$02,$02,$02,$02,$03,$03,$03,$03,$03,$03,$03,$03,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$03,$03,$03,$03,$03,$03,$03,$03,$02,$02,$02,$02,$02,$02,$01,$01,$01,$01,$01,$00,$00,$00,$00,$00,$FF,$FF,$FF,$FF,$FF,$FE,$FE,$FE,$FE,$FE,$FE,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FE,$FE,$FE,$FE,$FE,$FE,$FF,$FF,$FF,$FF,$FF,$00,$00  ; val=4
-    FCB $00,$00,$00,$01,$01,$01,$01,$02,$02,$02,$02,$03,$03,$03,$03,$03,$04,$04,$04,$04,$04,$04,$04,$04,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$04,$04,$04,$04,$04,$04,$04,$04,$03,$03,$03,$03,$03,$02,$02,$02,$02,$01,$01,$01,$01,$00,$00,$00,$00,$00,$FF,$FF,$FF,$FF,$FE,$FE,$FE,$FE,$FD,$FD,$FD,$FD,$FD,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FD,$FD,$FD,$FD,$FD,$FE,$FE,$FE,$FE,$FF,$FF,$FF,$FF,$00,$00  ; val=5
-    FCB $00,$00,$01,$01,$01,$01,$02,$02,$02,$03,$03,$03,$03,$04,$04,$04,$04,$04,$05,$05,$05,$05,$05,$05,$05,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$05,$05,$05,$05,$05,$05,$05,$04,$04,$04,$04,$04,$03,$03,$03,$03,$02,$02,$02,$01,$01,$01,$01,$00,$00,$00,$FF,$FF,$FF,$FF,$FE,$FE,$FE,$FD,$FD,$FD,$FD,$FC,$FC,$FC,$FC,$FC,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FC,$FC,$FC,$FC,$FC,$FD,$FD,$FD,$FD,$FE,$FE,$FE,$FF,$FF,$FF,$FF,$00  ; val=6
-    FCB $00,$00,$01,$01,$01,$02,$02,$02,$03,$03,$03,$04,$04,$04,$04,$05,$05,$05,$05,$06,$06,$06,$06,$06,$06,$07,$07,$07,$07,$07,$07,$07,$07,$07,$07,$07,$07,$07,$07,$07,$06,$06,$06,$06,$06,$06,$05,$05,$05,$05,$04,$04,$04,$04,$03,$03,$03,$02,$02,$02,$01,$01,$01,$00,$00,$00,$FF,$FF,$FF,$FE,$FE,$FE,$FD,$FD,$FD,$FC,$FC,$FC,$FC,$FB,$FB,$FB,$FB,$FA,$FA,$FA,$FA,$FA,$FA,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$FA,$FA,$FA,$FA,$FA,$FA,$FB,$FB,$FB,$FB,$FC,$FC,$FC,$FC,$FD,$FD,$FD,$FE,$FE,$FE,$FF,$FF,$FF,$00  ; val=7
-    FCB $00,$00,$01,$01,$02,$02,$02,$03,$03,$03,$04,$04,$04,$05,$05,$05,$06,$06,$06,$06,$07,$07,$07,$07,$07,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$07,$07,$07,$07,$07,$06,$06,$06,$06,$05,$05,$05,$04,$04,$04,$03,$03,$03,$02,$02,$02,$01,$01,$00,$00,$00,$FF,$FF,$FE,$FE,$FE,$FD,$FD,$FD,$FC,$FC,$FC,$FB,$FB,$FB,$FA,$FA,$FA,$FA,$F9,$F9,$F9,$F9,$F9,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F9,$F9,$F9,$F9,$F9,$FA,$FA,$FA,$FA,$FB,$FB,$FB,$FC,$FC,$FC,$FD,$FD,$FD,$FE,$FE,$FE,$FF,$FF,$00  ; val=8
-    FCB $00,$00,$01,$01,$02,$02,$03,$03,$03,$04,$04,$05,$05,$05,$06,$06,$06,$07,$07,$07,$07,$08,$08,$08,$08,$08,$09,$09,$09,$09,$09,$09,$09,$09,$09,$09,$09,$09,$09,$08,$08,$08,$08,$08,$07,$07,$07,$07,$06,$06,$06,$05,$05,$05,$04,$04,$03,$03,$03,$02,$02,$01,$01,$00,$00,$00,$FF,$FF,$FE,$FE,$FD,$FD,$FD,$FC,$FC,$FB,$FB,$FB,$FA,$FA,$FA,$F9,$F9,$F9,$F9,$F8,$F8,$F8,$F8,$F8,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F8,$F8,$F8,$F8,$F8,$F9,$F9,$F9,$F9,$FA,$FA,$FA,$FB,$FB,$FB,$FC,$FC,$FD,$FD,$FD,$FE,$FE,$FF,$FF,$00  ; val=9
-    FCB $00,$00,$01,$01,$02,$02,$03,$03,$04,$04,$05,$05,$06,$06,$06,$07,$07,$07,$08,$08,$08,$09,$09,$09,$09,$09,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$09,$09,$09,$09,$09,$08,$08,$08,$07,$07,$07,$06,$06,$06,$05,$05,$04,$04,$03,$03,$02,$02,$01,$01,$00,$00,$00,$FF,$FF,$FE,$FE,$FD,$FD,$FC,$FC,$FB,$FB,$FA,$FA,$FA,$F9,$F9,$F9,$F8,$F8,$F8,$F7,$F7,$F7,$F7,$F7,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F7,$F7,$F7,$F7,$F7,$F8,$F8,$F8,$F9,$F9,$F9,$FA,$FA,$FA,$FB,$FB,$FC,$FC,$FD,$FD,$FE,$FE,$FF,$FF,$00  ; val=10
-    FCB $00,$01,$01,$02,$02,$03,$03,$04,$04,$05,$05,$06,$06,$07,$07,$07,$08,$08,$08,$09,$09,$09,$0A,$0A,$0A,$0A,$0A,$0B,$0B,$0B,$0B,$0B,$0B,$0B,$0B,$0B,$0B,$0B,$0A,$0A,$0A,$0A,$0A,$09,$09,$09,$08,$08,$08,$07,$07,$07,$06,$06,$05,$05,$04,$04,$03,$03,$02,$02,$01,$01,$00,$FF,$FF,$FE,$FE,$FD,$FD,$FC,$FC,$FB,$FB,$FA,$FA,$F9,$F9,$F9,$F8,$F8,$F8,$F7,$F7,$F7,$F6,$F6,$F6,$F6,$F6,$F5,$F5,$F5,$F5,$F5,$F5,$F5,$F5,$F5,$F5,$F5,$F6,$F6,$F6,$F6,$F6,$F7,$F7,$F7,$F8,$F8,$F8,$F9,$F9,$F9,$FA,$FA,$FB,$FB,$FC,$FC,$FD,$FD,$FE,$FE,$FF,$FF  ; val=11
-    FCB $00,$01,$01,$02,$02,$03,$03,$04,$05,$05,$06,$06,$07,$07,$08,$08,$08,$09,$09,$0A,$0A,$0A,$0B,$0B,$0B,$0B,$0B,$0C,$0C,$0C,$0C,$0C,$0C,$0C,$0C,$0C,$0C,$0C,$0B,$0B,$0B,$0B,$0B,$0A,$0A,$0A,$09,$09,$08,$08,$08,$07,$07,$06,$06,$05,$05,$04,$03,$03,$02,$02,$01,$01,$00,$FF,$FF,$FE,$FE,$FD,$FD,$FC,$FB,$FB,$FA,$FA,$F9,$F9,$F8,$F8,$F8,$F7,$F7,$F6,$F6,$F6,$F5,$F5,$F5,$F5,$F5,$F4,$F4,$F4,$F4,$F4,$F4,$F4,$F4,$F4,$F4,$F4,$F5,$F5,$F5,$F5,$F5,$F6,$F6,$F6,$F7,$F7,$F8,$F8,$F8,$F9,$F9,$FA,$FA,$FB,$FB,$FC,$FD,$FD,$FE,$FE,$FF,$FF  ; val=12
-    FCB $00,$01,$01,$02,$03,$03,$04,$04,$05,$05,$06,$07,$07,$08,$08,$09,$09,$0A,$0A,$0A,$0B,$0B,$0B,$0C,$0C,$0C,$0C,$0C,$0D,$0D,$0D,$0D,$0D,$0D,$0D,$0D,$0D,$0C,$0C,$0C,$0C,$0C,$0B,$0B,$0B,$0A,$0A,$0A,$09,$09,$08,$08,$07,$07,$06,$05,$05,$04,$04,$03,$03,$02,$01,$01,$00,$FF,$FF,$FE,$FD,$FD,$FC,$FC,$FB,$FB,$FA,$F9,$F9,$F8,$F8,$F7,$F7,$F6,$F6,$F6,$F5,$F5,$F5,$F4,$F4,$F4,$F4,$F4,$F3,$F3,$F3,$F3,$F3,$F3,$F3,$F3,$F3,$F4,$F4,$F4,$F4,$F4,$F5,$F5,$F5,$F6,$F6,$F6,$F7,$F7,$F8,$F8,$F9,$F9,$FA,$FB,$FB,$FC,$FC,$FD,$FD,$FE,$FF,$FF  ; val=13
-    FCB $00,$01,$01,$02,$03,$03,$04,$05,$05,$06,$07,$07,$08,$08,$09,$09,$0A,$0A,$0B,$0B,$0C,$0C,$0C,$0D,$0D,$0D,$0D,$0D,$0E,$0E,$0E,$0E,$0E,$0E,$0E,$0E,$0E,$0D,$0D,$0D,$0D,$0D,$0C,$0C,$0C,$0B,$0B,$0A,$0A,$09,$09,$08,$08,$07,$07,$06,$05,$05,$04,$03,$03,$02,$01,$01,$00,$FF,$FF,$FE,$FD,$FD,$FC,$FB,$FB,$FA,$F9,$F9,$F8,$F8,$F7,$F7,$F6,$F6,$F5,$F5,$F4,$F4,$F4,$F3,$F3,$F3,$F3,$F3,$F2,$F2,$F2,$F2,$F2,$F2,$F2,$F2,$F2,$F3,$F3,$F3,$F3,$F3,$F4,$F4,$F4,$F5,$F5,$F6,$F6,$F7,$F7,$F8,$F8,$F9,$F9,$FA,$FB,$FB,$FC,$FD,$FD,$FE,$FF,$FF  ; val=14
-    FCB $00,$01,$01,$02,$03,$04,$04,$05,$06,$06,$07,$08,$08,$09,$09,$0A,$0B,$0B,$0B,$0C,$0C,$0D,$0D,$0D,$0E,$0E,$0E,$0E,$0F,$0F,$0F,$0F,$0F,$0F,$0F,$0F,$0F,$0E,$0E,$0E,$0E,$0D,$0D,$0D,$0C,$0C,$0B,$0B,$0B,$0A,$09,$09,$08,$08,$07,$06,$06,$05,$04,$04,$03,$02,$01,$01,$00,$FF,$FF,$FE,$FD,$FC,$FC,$FB,$FA,$FA,$F9,$F8,$F8,$F7,$F7,$F6,$F5,$F5,$F5,$F4,$F4,$F3,$F3,$F3,$F2,$F2,$F2,$F2,$F1,$F1,$F1,$F1,$F1,$F1,$F1,$F1,$F1,$F2,$F2,$F2,$F2,$F3,$F3,$F3,$F4,$F4,$F5,$F5,$F5,$F6,$F7,$F7,$F8,$F8,$F9,$FA,$FA,$FB,$FC,$FC,$FD,$FE,$FF,$FF  ; val=15
-    FCB $00,$01,$02,$02,$03,$04,$05,$05,$06,$07,$08,$08,$09,$0A,$0A,$0B,$0B,$0C,$0C,$0D,$0D,$0E,$0E,$0E,$0F,$0F,$0F,$0F,$10,$10,$10,$10,$10,$10,$10,$10,$10,$0F,$0F,$0F,$0F,$0E,$0E,$0E,$0D,$0D,$0C,$0C,$0B,$0B,$0A,$0A,$09,$08,$08,$07,$06,$05,$05,$04,$03,$02,$02,$01,$00,$FF,$FE,$FE,$FD,$FC,$FB,$FB,$FA,$F9,$F8,$F8,$F7,$F6,$F6,$F5,$F5,$F4,$F4,$F3,$F3,$F2,$F2,$F2,$F1,$F1,$F1,$F1,$F0,$F0,$F0,$F0,$F0,$F0,$F0,$F0,$F0,$F1,$F1,$F1,$F1,$F2,$F2,$F2,$F3,$F3,$F4,$F4,$F5,$F5,$F6,$F6,$F7,$F8,$F8,$F9,$FA,$FB,$FB,$FC,$FD,$FE,$FE,$FF  ; val=16
-    FCB $00,$01,$02,$03,$03,$04,$05,$06,$07,$07,$08,$09,$09,$0A,$0B,$0B,$0C,$0C,$0D,$0E,$0E,$0E,$0F,$0F,$10,$10,$10,$10,$11,$11,$11,$11,$11,$11,$11,$11,$11,$10,$10,$10,$10,$0F,$0F,$0E,$0E,$0E,$0D,$0C,$0C,$0B,$0B,$0A,$09,$09,$08,$07,$07,$06,$05,$04,$03,$03,$02,$01,$00,$FF,$FE,$FD,$FD,$FC,$FB,$FA,$F9,$F9,$F8,$F7,$F7,$F6,$F5,$F5,$F4,$F4,$F3,$F2,$F2,$F2,$F1,$F1,$F0,$F0,$F0,$F0,$EF,$EF,$EF,$EF,$EF,$EF,$EF,$EF,$EF,$F0,$F0,$F0,$F0,$F1,$F1,$F2,$F2,$F2,$F3,$F4,$F4,$F5,$F5,$F6,$F7,$F7,$F8,$F9,$F9,$FA,$FB,$FC,$FD,$FD,$FE,$FF  ; val=17
-    FCB $00,$01,$02,$03,$04,$04,$05,$06,$07,$08,$08,$09,$0A,$0B,$0B,$0C,$0D,$0D,$0E,$0E,$0F,$0F,$10,$10,$10,$11,$11,$11,$12,$12,$12,$12,$12,$12,$12,$12,$12,$11,$11,$11,$10,$10,$10,$0F,$0F,$0E,$0E,$0D,$0D,$0C,$0B,$0B,$0A,$09,$08,$08,$07,$06,$05,$04,$04,$03,$02,$01,$00,$FF,$FE,$FD,$FC,$FC,$FB,$FA,$F9,$F8,$F8,$F7,$F6,$F5,$F5,$F4,$F3,$F3,$F2,$F2,$F1,$F1,$F0,$F0,$F0,$EF,$EF,$EF,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EF,$EF,$EF,$F0,$F0,$F0,$F1,$F1,$F2,$F2,$F3,$F3,$F4,$F5,$F5,$F6,$F7,$F8,$F8,$F9,$FA,$FB,$FC,$FC,$FD,$FE,$FF  ; val=18
-    FCB $00,$01,$02,$03,$04,$05,$05,$06,$07,$08,$09,$0A,$0B,$0B,$0C,$0D,$0D,$0E,$0F,$0F,$10,$10,$11,$11,$11,$12,$12,$12,$13,$13,$13,$13,$13,$13,$13,$13,$13,$12,$12,$12,$11,$11,$11,$10,$10,$0F,$0F,$0E,$0D,$0D,$0C,$0B,$0B,$0A,$09,$08,$07,$06,$05,$05,$04,$03,$02,$01,$00,$FF,$FE,$FD,$FC,$FB,$FB,$FA,$F9,$F8,$F7,$F6,$F5,$F5,$F4,$F3,$F3,$F2,$F1,$F1,$F0,$F0,$EF,$EF,$EF,$EE,$EE,$EE,$ED,$ED,$ED,$ED,$ED,$ED,$ED,$ED,$ED,$EE,$EE,$EE,$EF,$EF,$EF,$F0,$F0,$F1,$F1,$F2,$F3,$F3,$F4,$F5,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FB,$FC,$FD,$FE,$FF  ; val=19
-    FCB $00,$01,$02,$03,$04,$05,$06,$07,$08,$08,$09,$0A,$0B,$0C,$0D,$0D,$0E,$0F,$0F,$10,$11,$11,$12,$12,$12,$13,$13,$13,$14,$14,$14,$14,$14,$14,$14,$14,$14,$13,$13,$13,$12,$12,$12,$11,$11,$10,$0F,$0F,$0E,$0D,$0D,$0C,$0B,$0A,$09,$08,$08,$07,$06,$05,$04,$03,$02,$01,$00,$FF,$FE,$FD,$FC,$FB,$FA,$F9,$F8,$F8,$F7,$F6,$F5,$F4,$F3,$F3,$F2,$F1,$F1,$F0,$EF,$EF,$EE,$EE,$EE,$ED,$ED,$ED,$EC,$EC,$EC,$EC,$EC,$EC,$EC,$EC,$EC,$ED,$ED,$ED,$EE,$EE,$EE,$EF,$EF,$F0,$F1,$F1,$F2,$F3,$F3,$F4,$F5,$F6,$F7,$F8,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; val=20
-    FCB $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0C,$0D,$0E,$0F,$0F,$10,$11,$11,$12,$12,$13,$13,$14,$14,$14,$15,$15,$15,$15,$15,$15,$15,$15,$15,$14,$14,$14,$13,$13,$12,$12,$11,$11,$10,$0F,$0F,$0E,$0D,$0C,$0C,$0B,$0A,$09,$08,$07,$06,$05,$04,$03,$02,$01,$00,$FF,$FE,$FD,$FC,$FB,$FA,$F9,$F8,$F7,$F6,$F5,$F4,$F4,$F3,$F2,$F1,$F1,$F0,$EF,$EF,$EE,$EE,$ED,$ED,$EC,$EC,$EC,$EB,$EB,$EB,$EB,$EB,$EB,$EB,$EB,$EB,$EC,$EC,$EC,$ED,$ED,$EE,$EE,$EF,$EF,$F0,$F1,$F1,$F2,$F3,$F4,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; val=21
-    FCB $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F,$0F,$10,$11,$12,$12,$13,$13,$14,$14,$15,$15,$15,$15,$16,$16,$16,$16,$16,$16,$16,$15,$15,$15,$15,$14,$14,$13,$13,$12,$12,$11,$10,$0F,$0F,$0E,$0D,$0C,$0B,$0A,$09,$08,$07,$06,$05,$04,$03,$02,$01,$00,$FF,$FE,$FD,$FC,$FB,$FA,$F9,$F8,$F7,$F6,$F5,$F4,$F3,$F2,$F1,$F1,$F0,$EF,$EE,$EE,$ED,$ED,$EC,$EC,$EB,$EB,$EB,$EB,$EA,$EA,$EA,$EA,$EA,$EA,$EA,$EB,$EB,$EB,$EB,$EC,$EC,$ED,$ED,$EE,$EE,$EF,$F0,$F1,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; val=22
-    FCB $00,$01,$02,$03,$04,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F,$0F,$10,$11,$12,$12,$13,$14,$14,$15,$15,$16,$16,$16,$16,$17,$17,$17,$17,$17,$17,$17,$16,$16,$16,$16,$15,$15,$14,$14,$13,$12,$12,$11,$10,$0F,$0F,$0E,$0D,$0C,$0B,$0A,$09,$08,$07,$06,$04,$03,$02,$01,$00,$FF,$FE,$FD,$FC,$FA,$F9,$F8,$F7,$F6,$F5,$F4,$F3,$F2,$F1,$F1,$F0,$EF,$EE,$EE,$ED,$EC,$EC,$EB,$EB,$EA,$EA,$EA,$EA,$E9,$E9,$E9,$E9,$E9,$E9,$E9,$EA,$EA,$EA,$EA,$EB,$EB,$EC,$EC,$ED,$EE,$EE,$EF,$F0,$F1,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FC,$FD,$FE,$FF  ; val=23
-    FCB $00,$01,$02,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F,$10,$11,$12,$12,$13,$14,$14,$15,$16,$16,$17,$17,$17,$17,$18,$18,$18,$18,$18,$18,$18,$17,$17,$17,$17,$16,$16,$15,$14,$14,$13,$12,$12,$11,$10,$0F,$0E,$0D,$0C,$0B,$0A,$09,$08,$07,$06,$05,$04,$02,$01,$00,$FF,$FE,$FC,$FB,$FA,$F9,$F8,$F7,$F6,$F5,$F4,$F3,$F2,$F1,$F0,$EF,$EE,$EE,$ED,$EC,$EC,$EB,$EA,$EA,$E9,$E9,$E9,$E9,$E8,$E8,$E8,$E8,$E8,$E8,$E8,$E9,$E9,$E9,$E9,$EA,$EA,$EB,$EC,$EC,$ED,$EE,$EE,$EF,$F0,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FE,$FF  ; val=24
-    FCB $00,$01,$02,$04,$05,$06,$07,$08,$0A,$0B,$0C,$0D,$0E,$0F,$10,$11,$12,$12,$13,$14,$15,$15,$16,$16,$17,$17,$18,$18,$18,$19,$19,$19,$19,$19,$19,$19,$18,$18,$18,$17,$17,$16,$16,$15,$15,$14,$13,$12,$12,$11,$10,$0F,$0E,$0D,$0C,$0B,$0A,$08,$07,$06,$05,$04,$02,$01,$00,$FF,$FE,$FC,$FB,$FA,$F9,$F8,$F6,$F5,$F4,$F3,$F2,$F1,$F0,$EF,$EE,$EE,$ED,$EC,$EB,$EB,$EA,$EA,$E9,$E9,$E8,$E8,$E8,$E7,$E7,$E7,$E7,$E7,$E7,$E7,$E8,$E8,$E8,$E9,$E9,$EA,$EA,$EB,$EB,$EC,$ED,$EE,$EE,$EF,$F0,$F1,$F2,$F3,$F4,$F5,$F6,$F8,$F9,$FA,$FB,$FC,$FE,$FF  ; val=25
-    FCB $00,$01,$02,$04,$05,$06,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F,$10,$11,$12,$13,$14,$15,$16,$16,$17,$17,$18,$18,$19,$19,$19,$1A,$1A,$1A,$1A,$1A,$1A,$1A,$19,$19,$19,$18,$18,$17,$17,$16,$16,$15,$14,$13,$12,$11,$10,$0F,$0E,$0D,$0C,$0B,$0A,$09,$08,$06,$05,$04,$02,$01,$00,$FF,$FE,$FC,$FB,$FA,$F8,$F7,$F6,$F5,$F4,$F3,$F2,$F1,$F0,$EF,$EE,$ED,$EC,$EB,$EA,$EA,$E9,$E9,$E8,$E8,$E7,$E7,$E7,$E6,$E6,$E6,$E6,$E6,$E6,$E6,$E7,$E7,$E7,$E8,$E8,$E9,$E9,$EA,$EA,$EB,$EC,$ED,$EE,$EF,$F0,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$FA,$FB,$FC,$FE,$FF  ; val=26
-    FCB $00,$01,$03,$04,$05,$07,$08,$09,$0A,$0B,$0D,$0E,$0F,$10,$11,$12,$13,$14,$15,$16,$16,$17,$18,$18,$19,$19,$1A,$1A,$1A,$1B,$1B,$1B,$1B,$1B,$1B,$1B,$1A,$1A,$1A,$19,$19,$18,$18,$17,$16,$16,$15,$14,$13,$12,$11,$10,$0F,$0E,$0D,$0B,$0A,$09,$08,$07,$05,$04,$03,$01,$00,$FF,$FD,$FC,$FB,$F9,$F8,$F7,$F6,$F5,$F3,$F2,$F1,$F0,$EF,$EE,$ED,$EC,$EB,$EA,$EA,$E9,$E8,$E8,$E7,$E7,$E6,$E6,$E6,$E5,$E5,$E5,$E5,$E5,$E5,$E5,$E6,$E6,$E6,$E7,$E7,$E8,$E8,$E9,$EA,$EA,$EB,$EC,$ED,$EE,$EF,$F0,$F1,$F2,$F3,$F5,$F6,$F7,$F8,$F9,$FB,$FC,$FD,$FF  ; val=27
-    FCB $00,$01,$03,$04,$05,$07,$08,$09,$0B,$0C,$0D,$0E,$10,$11,$12,$13,$14,$15,$15,$16,$17,$18,$19,$19,$1A,$1A,$1B,$1B,$1B,$1C,$1C,$1C,$1C,$1C,$1C,$1C,$1B,$1B,$1B,$1A,$1A,$19,$19,$18,$17,$16,$15,$15,$14,$13,$12,$11,$10,$0E,$0D,$0C,$0B,$09,$08,$07,$05,$04,$03,$01,$00,$FF,$FD,$FC,$FB,$F9,$F8,$F7,$F5,$F4,$F3,$F2,$F0,$EF,$EE,$ED,$EC,$EB,$EB,$EA,$E9,$E8,$E7,$E7,$E6,$E6,$E5,$E5,$E5,$E4,$E4,$E4,$E4,$E4,$E4,$E4,$E5,$E5,$E5,$E6,$E6,$E7,$E7,$E8,$E9,$EA,$EB,$EB,$EC,$ED,$EE,$EF,$F0,$F2,$F3,$F4,$F5,$F7,$F8,$F9,$FB,$FC,$FD,$FF  ; val=28
-    FCB $00,$01,$03,$04,$06,$07,$08,$0A,$0B,$0C,$0E,$0F,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19,$1A,$1B,$1B,$1C,$1C,$1C,$1D,$1D,$1D,$1D,$1D,$1D,$1D,$1C,$1C,$1C,$1B,$1B,$1A,$19,$19,$18,$17,$16,$15,$14,$13,$12,$11,$10,$0F,$0E,$0C,$0B,$0A,$08,$07,$06,$04,$03,$01,$00,$FF,$FD,$FC,$FA,$F9,$F8,$F6,$F5,$F4,$F2,$F1,$F0,$EF,$EE,$ED,$EC,$EB,$EA,$E9,$E8,$E7,$E7,$E6,$E5,$E5,$E4,$E4,$E4,$E3,$E3,$E3,$E3,$E3,$E3,$E3,$E4,$E4,$E4,$E5,$E5,$E6,$E7,$E7,$E8,$E9,$EA,$EB,$EC,$ED,$EE,$EF,$F0,$F1,$F2,$F4,$F5,$F6,$F8,$F9,$FA,$FC,$FD,$FF  ; val=29
-    FCB $00,$01,$03,$04,$06,$07,$09,$0A,$0B,$0D,$0E,$0F,$11,$12,$13,$14,$15,$16,$17,$18,$19,$1A,$1A,$1B,$1B,$1C,$1D,$1D,$1D,$1E,$1E,$1E,$1E,$1E,$1E,$1E,$1D,$1D,$1D,$1C,$1B,$1B,$1A,$1A,$19,$18,$17,$16,$15,$14,$13,$12,$11,$0F,$0E,$0D,$0B,$0A,$09,$07,$06,$04,$03,$01,$00,$FF,$FD,$FC,$FA,$F9,$F7,$F6,$F5,$F3,$F2,$F1,$EF,$EE,$ED,$EC,$EB,$EA,$E9,$E8,$E7,$E6,$E6,$E5,$E5,$E4,$E3,$E3,$E3,$E2,$E2,$E2,$E2,$E2,$E2,$E2,$E3,$E3,$E3,$E4,$E5,$E5,$E6,$E6,$E7,$E8,$E9,$EA,$EB,$EC,$ED,$EE,$EF,$F1,$F2,$F3,$F5,$F6,$F7,$F9,$FA,$FC,$FD,$FF  ; val=30
-    FCB $00,$01,$03,$05,$06,$08,$09,$0A,$0C,$0D,$0F,$10,$11,$12,$14,$15,$16,$17,$18,$19,$1A,$1A,$1B,$1C,$1C,$1D,$1E,$1E,$1E,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1E,$1E,$1E,$1D,$1C,$1C,$1B,$1A,$1A,$19,$18,$17,$16,$15,$14,$12,$11,$10,$0F,$0D,$0C,$0A,$09,$08,$06,$05,$03,$01,$00,$FF,$FD,$FB,$FA,$F8,$F7,$F6,$F4,$F3,$F1,$F0,$EF,$EE,$EC,$EB,$EA,$E9,$E8,$E7,$E6,$E6,$E5,$E4,$E4,$E3,$E2,$E2,$E2,$E1,$E1,$E1,$E1,$E1,$E1,$E1,$E2,$E2,$E2,$E3,$E4,$E4,$E5,$E6,$E6,$E7,$E8,$E9,$EA,$EB,$EC,$EE,$EF,$F0,$F1,$F3,$F4,$F6,$F7,$F8,$FA,$FB,$FD,$FF  ; val=31
-    FCB $00,$02,$03,$05,$06,$08,$09,$0B,$0C,$0E,$0F,$10,$12,$13,$14,$15,$17,$18,$19,$1A,$1B,$1B,$1C,$1D,$1D,$1E,$1F,$1F,$1F,$20,$20,$20,$20,$20,$20,$20,$1F,$1F,$1F,$1E,$1D,$1D,$1C,$1B,$1B,$1A,$19,$18,$17,$15,$14,$13,$12,$10,$0F,$0E,$0C,$0B,$09,$08,$06,$05,$03,$02,$00,$FE,$FD,$FB,$FA,$F8,$F7,$F5,$F4,$F2,$F1,$F0,$EE,$ED,$EC,$EB,$E9,$E8,$E7,$E6,$E5,$E5,$E4,$E3,$E3,$E2,$E1,$E1,$E1,$E0,$E0,$E0,$E0,$E0,$E0,$E0,$E1,$E1,$E1,$E2,$E3,$E3,$E4,$E5,$E5,$E6,$E7,$E8,$E9,$EB,$EC,$ED,$EE,$F0,$F1,$F2,$F4,$F5,$F7,$F8,$FA,$FB,$FD,$FE  ; val=32
-    FCB $00,$02,$03,$05,$06,$08,$0A,$0B,$0D,$0E,$0F,$11,$12,$14,$15,$16,$17,$18,$19,$1A,$1B,$1C,$1D,$1E,$1E,$1F,$1F,$20,$20,$20,$20,$21,$21,$21,$20,$20,$20,$20,$1F,$1F,$1E,$1E,$1D,$1C,$1B,$1A,$19,$18,$17,$16,$15,$14,$12,$11,$0F,$0E,$0D,$0B,$0A,$08,$06,$05,$03,$02,$00,$FE,$FD,$FB,$FA,$F8,$F6,$F5,$F3,$F2,$F1,$EF,$EE,$EC,$EB,$EA,$E9,$E8,$E7,$E6,$E5,$E4,$E3,$E2,$E2,$E1,$E1,$E0,$E0,$E0,$E0,$DF,$DF,$DF,$E0,$E0,$E0,$E0,$E1,$E1,$E2,$E2,$E3,$E4,$E5,$E6,$E7,$E8,$E9,$EA,$EB,$EC,$EE,$EF,$F1,$F2,$F3,$F5,$F6,$F8,$FA,$FB,$FD,$FE  ; val=33
-    FCB $00,$02,$03,$05,$07,$08,$0A,$0B,$0D,$0E,$10,$11,$13,$14,$16,$17,$18,$19,$1A,$1B,$1C,$1D,$1E,$1F,$1F,$20,$20,$21,$21,$21,$21,$22,$22,$22,$21,$21,$21,$21,$20,$20,$1F,$1F,$1E,$1D,$1C,$1B,$1A,$19,$18,$17,$16,$14,$13,$11,$10,$0E,$0D,$0B,$0A,$08,$07,$05,$03,$02,$00,$FE,$FD,$FB,$F9,$F8,$F6,$F5,$F3,$F2,$F0,$EF,$ED,$EC,$EA,$E9,$E8,$E7,$E6,$E5,$E4,$E3,$E2,$E1,$E1,$E0,$E0,$DF,$DF,$DF,$DF,$DE,$DE,$DE,$DF,$DF,$DF,$DF,$E0,$E0,$E1,$E1,$E2,$E3,$E4,$E5,$E6,$E7,$E8,$E9,$EA,$EC,$ED,$EF,$F0,$F2,$F3,$F5,$F6,$F8,$F9,$FB,$FD,$FE  ; val=34
-    FCB $00,$02,$03,$05,$07,$08,$0A,$0C,$0D,$0F,$10,$12,$13,$15,$16,$17,$19,$1A,$1B,$1C,$1D,$1E,$1F,$1F,$20,$21,$21,$22,$22,$22,$22,$23,$23,$23,$22,$22,$22,$22,$21,$21,$20,$1F,$1F,$1E,$1D,$1C,$1B,$1A,$19,$17,$16,$15,$13,$12,$10,$0F,$0D,$0C,$0A,$08,$07,$05,$03,$02,$00,$FE,$FD,$FB,$F9,$F8,$F6,$F4,$F3,$F1,$F0,$EE,$ED,$EB,$EA,$E9,$E7,$E6,$E5,$E4,$E3,$E2,$E1,$E1,$E0,$DF,$DF,$DE,$DE,$DE,$DE,$DD,$DD,$DD,$DE,$DE,$DE,$DE,$DF,$DF,$E0,$E1,$E1,$E2,$E3,$E4,$E5,$E6,$E7,$E9,$EA,$EB,$ED,$EE,$F0,$F1,$F3,$F4,$F6,$F8,$F9,$FB,$FD,$FE  ; val=35
-    FCB $00,$02,$03,$05,$07,$09,$0A,$0C,$0E,$0F,$11,$12,$14,$15,$17,$18,$19,$1A,$1C,$1D,$1E,$1F,$20,$20,$21,$22,$22,$23,$23,$23,$23,$24,$24,$24,$23,$23,$23,$23,$22,$22,$21,$20,$20,$1F,$1E,$1D,$1C,$1A,$19,$18,$17,$15,$14,$12,$11,$0F,$0E,$0C,$0A,$09,$07,$05,$03,$02,$00,$FE,$FD,$FB,$F9,$F7,$F6,$F4,$F2,$F1,$EF,$EE,$EC,$EB,$E9,$E8,$E7,$E6,$E4,$E3,$E2,$E1,$E0,$E0,$DF,$DE,$DE,$DD,$DD,$DD,$DD,$DC,$DC,$DC,$DD,$DD,$DD,$DD,$DE,$DE,$DF,$E0,$E0,$E1,$E2,$E3,$E4,$E6,$E7,$E8,$E9,$EB,$EC,$EE,$EF,$F1,$F2,$F4,$F6,$F7,$F9,$FB,$FD,$FE  ; val=36
-    FCB $00,$02,$03,$05,$07,$09,$0B,$0C,$0E,$10,$11,$13,$15,$16,$17,$19,$1A,$1B,$1C,$1D,$1F,$20,$20,$21,$22,$23,$23,$24,$24,$24,$24,$25,$25,$25,$24,$24,$24,$24,$23,$23,$22,$21,$20,$20,$1F,$1D,$1C,$1B,$1A,$19,$17,$16,$15,$13,$11,$10,$0E,$0C,$0B,$09,$07,$05,$03,$02,$00,$FE,$FD,$FB,$F9,$F7,$F5,$F4,$F2,$F0,$EF,$ED,$EB,$EA,$E9,$E7,$E6,$E5,$E4,$E3,$E1,$E0,$E0,$DF,$DE,$DD,$DD,$DC,$DC,$DC,$DC,$DB,$DB,$DB,$DC,$DC,$DC,$DC,$DD,$DD,$DE,$DF,$E0,$E0,$E1,$E3,$E4,$E5,$E6,$E7,$E9,$EA,$EB,$ED,$EF,$F0,$F2,$F4,$F5,$F7,$F9,$FB,$FD,$FE  ; val=37
-    FCB $00,$02,$04,$06,$07,$09,$0B,$0D,$0F,$10,$12,$13,$15,$17,$18,$19,$1B,$1C,$1D,$1E,$1F,$20,$21,$22,$23,$24,$24,$25,$25,$25,$25,$26,$26,$26,$25,$25,$25,$25,$24,$24,$23,$22,$21,$20,$1F,$1E,$1D,$1C,$1B,$19,$18,$17,$15,$13,$12,$10,$0F,$0D,$0B,$09,$07,$06,$04,$02,$00,$FE,$FC,$FA,$F9,$F7,$F5,$F3,$F1,$F0,$EE,$ED,$EB,$E9,$E8,$E7,$E5,$E4,$E3,$E2,$E1,$E0,$DF,$DE,$DD,$DC,$DC,$DB,$DB,$DB,$DB,$DA,$DA,$DA,$DB,$DB,$DB,$DB,$DC,$DC,$DD,$DE,$DF,$E0,$E1,$E2,$E3,$E4,$E5,$E7,$E8,$E9,$EB,$ED,$EE,$F0,$F1,$F3,$F5,$F7,$F9,$FA,$FC,$FE  ; val=38
-    FCB $00,$02,$04,$06,$08,$09,$0B,$0D,$0F,$10,$12,$14,$16,$17,$19,$1A,$1B,$1D,$1E,$1F,$20,$21,$22,$23,$24,$25,$25,$25,$26,$26,$26,$27,$27,$27,$26,$26,$26,$25,$25,$25,$24,$23,$22,$21,$20,$1F,$1E,$1D,$1B,$1A,$19,$17,$16,$14,$12,$10,$0F,$0D,$0B,$09,$08,$06,$04,$02,$00,$FE,$FC,$FA,$F8,$F7,$F5,$F3,$F1,$F0,$EE,$EC,$EA,$E9,$E7,$E6,$E5,$E3,$E2,$E1,$E0,$DF,$DE,$DD,$DC,$DB,$DB,$DB,$DA,$DA,$DA,$D9,$D9,$D9,$DA,$DA,$DA,$DB,$DB,$DB,$DC,$DD,$DE,$DF,$E0,$E1,$E2,$E3,$E5,$E6,$E7,$E9,$EA,$EC,$EE,$F0,$F1,$F3,$F5,$F7,$F8,$FA,$FC,$FE  ; val=39
-    FCB $00,$02,$04,$06,$08,$0A,$0C,$0D,$0F,$11,$13,$14,$16,$18,$19,$1B,$1C,$1D,$1F,$20,$21,$22,$23,$24,$25,$26,$26,$26,$27,$27,$27,$28,$28,$28,$27,$27,$27,$26,$26,$26,$25,$24,$23,$22,$21,$20,$1F,$1D,$1C,$1B,$19,$18,$16,$14,$13,$11,$0F,$0D,$0C,$0A,$08,$06,$04,$02,$00,$FE,$FC,$FA,$F8,$F6,$F4,$F3,$F1,$EF,$ED,$EC,$EA,$E8,$E7,$E5,$E4,$E3,$E1,$E0,$DF,$DE,$DD,$DC,$DB,$DA,$DA,$DA,$D9,$D9,$D9,$D8,$D8,$D8,$D9,$D9,$D9,$DA,$DA,$DA,$DB,$DC,$DD,$DE,$DF,$E0,$E1,$E3,$E4,$E5,$E7,$E8,$EA,$EC,$ED,$EF,$F1,$F3,$F4,$F6,$F8,$FA,$FC,$FE  ; val=40
-    FCB $00,$02,$04,$06,$08,$0A,$0C,$0E,$10,$11,$13,$15,$17,$18,$1A,$1B,$1D,$1E,$1F,$21,$22,$23,$24,$25,$25,$26,$27,$27,$28,$28,$28,$29,$29,$29,$28,$28,$28,$27,$27,$26,$25,$25,$24,$23,$22,$21,$1F,$1E,$1D,$1B,$1A,$18,$17,$15,$13,$11,$10,$0E,$0C,$0A,$08,$06,$04,$02,$00,$FE,$FC,$FA,$F8,$F6,$F4,$F2,$F0,$EF,$ED,$EB,$E9,$E8,$E6,$E5,$E3,$E2,$E1,$DF,$DE,$DD,$DC,$DB,$DB,$DA,$D9,$D9,$D8,$D8,$D8,$D7,$D7,$D7,$D8,$D8,$D8,$D9,$D9,$DA,$DB,$DB,$DC,$DD,$DE,$DF,$E1,$E2,$E3,$E5,$E6,$E8,$E9,$EB,$ED,$EF,$F0,$F2,$F4,$F6,$F8,$FA,$FC,$FE  ; val=41
-    FCB $00,$02,$04,$06,$08,$0A,$0C,$0E,$10,$12,$14,$15,$17,$19,$1B,$1C,$1E,$1F,$20,$21,$23,$24,$25,$26,$26,$27,$28,$28,$29,$29,$29,$2A,$2A,$2A,$29,$29,$29,$28,$28,$27,$26,$26,$25,$24,$23,$21,$20,$1F,$1E,$1C,$1B,$19,$17,$15,$14,$12,$10,$0E,$0C,$0A,$08,$06,$04,$02,$00,$FE,$FC,$FA,$F8,$F6,$F4,$F2,$F0,$EE,$EC,$EB,$E9,$E7,$E5,$E4,$E2,$E1,$E0,$DF,$DD,$DC,$DB,$DA,$DA,$D9,$D8,$D8,$D7,$D7,$D7,$D6,$D6,$D6,$D7,$D7,$D7,$D8,$D8,$D9,$DA,$DA,$DB,$DC,$DD,$DF,$E0,$E1,$E2,$E4,$E5,$E7,$E9,$EB,$EC,$EE,$F0,$F2,$F4,$F6,$F8,$FA,$FC,$FE  ; val=42
-    FCB $00,$02,$04,$06,$08,$0A,$0C,$0E,$10,$12,$14,$16,$18,$1A,$1B,$1D,$1E,$20,$21,$22,$24,$25,$26,$27,$27,$28,$29,$29,$2A,$2A,$2A,$2B,$2B,$2B,$2A,$2A,$2A,$29,$29,$28,$27,$27,$26,$25,$24,$22,$21,$20,$1E,$1D,$1B,$1A,$18,$16,$14,$12,$10,$0E,$0C,$0A,$08,$06,$04,$02,$00,$FE,$FC,$FA,$F8,$F6,$F4,$F2,$F0,$EE,$EC,$EA,$E8,$E6,$E5,$E3,$E2,$E0,$DF,$DE,$DC,$DB,$DA,$D9,$D9,$D8,$D7,$D7,$D6,$D6,$D6,$D5,$D5,$D5,$D6,$D6,$D6,$D7,$D7,$D8,$D9,$D9,$DA,$DB,$DC,$DE,$DF,$E0,$E2,$E3,$E5,$E6,$E8,$EA,$EC,$EE,$F0,$F2,$F4,$F6,$F8,$FA,$FC,$FE  ; val=43
-    FCB $00,$02,$04,$07,$09,$0B,$0D,$0F,$11,$13,$15,$16,$18,$1A,$1C,$1D,$1F,$20,$22,$23,$24,$25,$27,$28,$28,$29,$2A,$2A,$2B,$2B,$2B,$2C,$2C,$2C,$2B,$2B,$2B,$2A,$2A,$29,$28,$28,$27,$25,$24,$23,$22,$20,$1F,$1D,$1C,$1A,$18,$16,$15,$13,$11,$0F,$0D,$0B,$09,$07,$04,$02,$00,$FE,$FC,$F9,$F7,$F5,$F3,$F1,$EF,$ED,$EB,$EA,$E8,$E6,$E4,$E3,$E1,$E0,$DE,$DD,$DC,$DB,$D9,$D8,$D8,$D7,$D6,$D6,$D5,$D5,$D5,$D4,$D4,$D4,$D5,$D5,$D5,$D6,$D6,$D7,$D8,$D8,$D9,$DB,$DC,$DD,$DE,$E0,$E1,$E3,$E4,$E6,$E8,$EA,$EB,$ED,$EF,$F1,$F3,$F5,$F7,$F9,$FC,$FE  ; val=44
-    FCB $00,$02,$04,$07,$09,$0B,$0D,$0F,$11,$13,$15,$17,$19,$1B,$1C,$1E,$20,$21,$22,$24,$25,$26,$27,$28,$29,$2A,$2B,$2B,$2C,$2C,$2C,$2D,$2D,$2D,$2C,$2C,$2C,$2B,$2B,$2A,$29,$28,$27,$26,$25,$24,$22,$21,$20,$1E,$1C,$1B,$19,$17,$15,$13,$11,$0F,$0D,$0B,$09,$07,$04,$02,$00,$FE,$FC,$F9,$F7,$F5,$F3,$F1,$EF,$ED,$EB,$E9,$E7,$E5,$E4,$E2,$E0,$DF,$DE,$DC,$DB,$DA,$D9,$D8,$D7,$D6,$D5,$D5,$D4,$D4,$D4,$D3,$D3,$D3,$D4,$D4,$D4,$D5,$D5,$D6,$D7,$D8,$D9,$DA,$DB,$DC,$DE,$DF,$E0,$E2,$E4,$E5,$E7,$E9,$EB,$ED,$EF,$F1,$F3,$F5,$F7,$F9,$FC,$FE  ; val=45
-    FCB $00,$02,$04,$07,$09,$0B,$0D,$0F,$12,$13,$16,$17,$1A,$1B,$1D,$1F,$20,$22,$23,$25,$26,$27,$28,$29,$2A,$2B,$2C,$2C,$2D,$2D,$2D,$2E,$2E,$2E,$2D,$2D,$2D,$2C,$2C,$2B,$2A,$29,$28,$27,$26,$25,$23,$22,$20,$1F,$1D,$1B,$1A,$17,$16,$13,$12,$0F,$0D,$0B,$09,$07,$04,$02,$00,$FE,$FC,$F9,$F7,$F5,$F3,$F1,$EE,$ED,$EA,$E9,$E6,$E5,$E3,$E1,$E0,$DE,$DD,$DB,$DA,$D9,$D8,$D7,$D6,$D5,$D4,$D4,$D3,$D3,$D3,$D2,$D2,$D2,$D3,$D3,$D3,$D4,$D4,$D5,$D6,$D7,$D8,$D9,$DA,$DB,$DD,$DE,$E0,$E1,$E3,$E5,$E6,$E9,$EA,$ED,$EE,$F1,$F3,$F5,$F7,$F9,$FC,$FE  ; val=46
-    FCB $00,$02,$04,$07,$09,$0B,$0E,$10,$12,$14,$16,$18,$1A,$1C,$1E,$1F,$21,$23,$24,$25,$27,$28,$29,$2A,$2B,$2C,$2D,$2D,$2E,$2E,$2E,$2F,$2F,$2F,$2E,$2E,$2E,$2D,$2D,$2C,$2B,$2A,$29,$28,$27,$25,$24,$23,$21,$1F,$1E,$1C,$1A,$18,$16,$14,$12,$10,$0E,$0B,$09,$07,$04,$02,$00,$FE,$FC,$F9,$F7,$F5,$F2,$F0,$EE,$EC,$EA,$E8,$E6,$E4,$E2,$E1,$DF,$DD,$DC,$DB,$D9,$D8,$D7,$D6,$D5,$D4,$D3,$D3,$D2,$D2,$D2,$D1,$D1,$D1,$D2,$D2,$D2,$D3,$D3,$D4,$D5,$D6,$D7,$D8,$D9,$DB,$DC,$DD,$DF,$E1,$E2,$E4,$E6,$E8,$EA,$EC,$EE,$F0,$F2,$F5,$F7,$F9,$FC,$FE  ; val=47
-    FCB $00,$02,$05,$07,$09,$0C,$0E,$10,$12,$14,$17,$18,$1B,$1D,$1E,$20,$22,$23,$25,$26,$28,$29,$2A,$2B,$2C,$2D,$2E,$2E,$2F,$2F,$2F,$30,$30,$30,$2F,$2F,$2F,$2E,$2E,$2D,$2C,$2B,$2A,$29,$28,$26,$25,$23,$22,$20,$1E,$1D,$1B,$18,$17,$14,$12,$10,$0E,$0C,$09,$07,$05,$02,$00,$FE,$FB,$F9,$F7,$F4,$F2,$F0,$EE,$EC,$E9,$E8,$E5,$E3,$E2,$E0,$DE,$DD,$DB,$DA,$D8,$D7,$D6,$D5,$D4,$D3,$D2,$D2,$D1,$D1,$D1,$D0,$D0,$D0,$D1,$D1,$D1,$D2,$D2,$D3,$D4,$D5,$D6,$D7,$D8,$DA,$DB,$DD,$DE,$E0,$E2,$E3,$E5,$E8,$E9,$EC,$EE,$F0,$F2,$F4,$F7,$F9,$FB,$FE  ; val=48
-    FCB $00,$02,$05,$07,$0A,$0C,$0E,$10,$13,$15,$17,$19,$1B,$1D,$1F,$21,$22,$24,$26,$27,$29,$2A,$2B,$2C,$2D,$2E,$2F,$2F,$30,$30,$30,$31,$31,$31,$30,$30,$30,$2F,$2F,$2E,$2D,$2C,$2B,$2A,$29,$27,$26,$24,$22,$21,$1F,$1D,$1B,$19,$17,$15,$13,$10,$0E,$0C,$0A,$07,$05,$02,$00,$FE,$FB,$F9,$F6,$F4,$F2,$F0,$ED,$EB,$E9,$E7,$E5,$E3,$E1,$DF,$DE,$DC,$DA,$D9,$D7,$D6,$D5,$D4,$D3,$D2,$D1,$D1,$D0,$D0,$D0,$CF,$CF,$CF,$D0,$D0,$D0,$D1,$D1,$D2,$D3,$D4,$D5,$D6,$D7,$D9,$DA,$DC,$DE,$DF,$E1,$E3,$E5,$E7,$E9,$EB,$ED,$F0,$F2,$F4,$F6,$F9,$FB,$FE  ; val=49
-    FCB $00,$02,$05,$07,$0A,$0C,$0E,$11,$13,$15,$17,$19,$1C,$1E,$20,$21,$23,$25,$26,$28,$29,$2B,$2C,$2D,$2E,$2F,$30,$30,$31,$31,$31,$32,$32,$32,$31,$31,$31,$30,$30,$2F,$2E,$2D,$2C,$2B,$29,$28,$26,$25,$23,$21,$20,$1E,$1C,$19,$17,$15,$13,$11,$0E,$0C,$0A,$07,$05,$02,$00,$FE,$FB,$F9,$F6,$F4,$F2,$EF,$ED,$EB,$E9,$E7,$E4,$E2,$E0,$DF,$DD,$DB,$DA,$D8,$D7,$D5,$D4,$D3,$D2,$D1,$D0,$D0,$CF,$CF,$CF,$CE,$CE,$CE,$CF,$CF,$CF,$D0,$D0,$D1,$D2,$D3,$D4,$D5,$D7,$D8,$DA,$DB,$DD,$DF,$E0,$E2,$E4,$E7,$E9,$EB,$ED,$EF,$F2,$F4,$F6,$F9,$FB,$FE  ; val=50
-    FCB $00,$02,$05,$08,$0A,$0C,$0F,$11,$14,$16,$18,$1A,$1C,$1E,$20,$22,$24,$25,$27,$29,$2A,$2B,$2D,$2E,$2F,$30,$31,$31,$32,$32,$32,$33,$33,$33,$32,$32,$32,$31,$31,$30,$2F,$2E,$2D,$2B,$2A,$29,$27,$25,$24,$22,$20,$1E,$1C,$1A,$18,$16,$14,$11,$0F,$0C,$0A,$08,$05,$02,$00,$FE,$FB,$F8,$F6,$F4,$F1,$EF,$EC,$EA,$E8,$E6,$E4,$E2,$E0,$DE,$DC,$DB,$D9,$D7,$D6,$D5,$D3,$D2,$D1,$D0,$CF,$CF,$CE,$CE,$CE,$CD,$CD,$CD,$CE,$CE,$CE,$CF,$CF,$D0,$D1,$D2,$D3,$D5,$D6,$D7,$D9,$DB,$DC,$DE,$E0,$E2,$E4,$E6,$E8,$EA,$EC,$EF,$F1,$F4,$F6,$F8,$FB,$FE  ; val=51
-    FCB $00,$02,$05,$08,$0A,$0D,$0F,$11,$14,$16,$18,$1A,$1D,$1F,$21,$23,$25,$26,$28,$29,$2B,$2C,$2E,$2F,$30,$31,$32,$32,$33,$33,$33,$34,$34,$34,$33,$33,$33,$32,$32,$31,$30,$2F,$2E,$2C,$2B,$29,$28,$26,$25,$23,$21,$1F,$1D,$1A,$18,$16,$14,$11,$0F,$0D,$0A,$08,$05,$02,$00,$FE,$FB,$F8,$F6,$F3,$F1,$EF,$EC,$EA,$E8,$E6,$E3,$E1,$DF,$DD,$DB,$DA,$D8,$D7,$D5,$D4,$D2,$D1,$D0,$CF,$CE,$CE,$CD,$CD,$CD,$CC,$CC,$CC,$CD,$CD,$CD,$CE,$CE,$CF,$D0,$D1,$D2,$D4,$D5,$D7,$D8,$DA,$DB,$DD,$DF,$E1,$E3,$E6,$E8,$EA,$EC,$EF,$F1,$F3,$F6,$F8,$FB,$FE  ; val=52
-    FCB $00,$02,$05,$08,$0A,$0D,$0F,$12,$14,$16,$19,$1B,$1D,$1F,$22,$23,$25,$27,$29,$2A,$2C,$2D,$2E,$30,$30,$32,$33,$33,$34,$34,$34,$35,$35,$35,$34,$34,$34,$33,$33,$32,$30,$30,$2E,$2D,$2C,$2A,$29,$27,$25,$23,$22,$1F,$1D,$1B,$19,$16,$14,$12,$0F,$0D,$0A,$08,$05,$02,$00,$FE,$FB,$F8,$F6,$F3,$F1,$EE,$EC,$EA,$E7,$E5,$E3,$E1,$DE,$DD,$DB,$D9,$D7,$D6,$D4,$D3,$D2,$D0,$D0,$CE,$CD,$CD,$CC,$CC,$CC,$CB,$CB,$CB,$CC,$CC,$CC,$CD,$CD,$CE,$D0,$D0,$D2,$D3,$D4,$D6,$D7,$D9,$DB,$DD,$DE,$E1,$E3,$E5,$E7,$EA,$EC,$EE,$F1,$F3,$F6,$F8,$FB,$FE  ; val=53
-    FCB $00,$03,$05,$08,$0B,$0D,$10,$12,$15,$17,$19,$1B,$1E,$20,$22,$24,$26,$28,$29,$2B,$2D,$2E,$2F,$31,$31,$33,$33,$34,$35,$35,$35,$36,$36,$36,$35,$35,$35,$34,$33,$33,$31,$31,$2F,$2E,$2D,$2B,$29,$28,$26,$24,$22,$20,$1E,$1B,$19,$17,$15,$12,$10,$0D,$0B,$08,$05,$03,$00,$FD,$FB,$F8,$F5,$F3,$F0,$EE,$EB,$E9,$E7,$E5,$E2,$E0,$DE,$DC,$DA,$D8,$D7,$D5,$D3,$D2,$D1,$CF,$CF,$CD,$CD,$CC,$CB,$CB,$CB,$CA,$CA,$CA,$CB,$CB,$CB,$CC,$CD,$CD,$CF,$CF,$D1,$D2,$D3,$D5,$D7,$D8,$DA,$DC,$DE,$E0,$E2,$E5,$E7,$E9,$EB,$EE,$F0,$F3,$F5,$F8,$FB,$FD  ; val=54
-    FCB $00,$03,$05,$08,$0B,$0D,$10,$12,$15,$17,$1A,$1C,$1F,$21,$23,$25,$27,$28,$2A,$2C,$2E,$2F,$30,$31,$32,$34,$34,$35,$36,$36,$36,$37,$37,$37,$36,$36,$36,$35,$34,$34,$32,$31,$30,$2F,$2E,$2C,$2A,$28,$27,$25,$23,$21,$1F,$1C,$1A,$17,$15,$12,$10,$0D,$0B,$08,$05,$03,$00,$FD,$FB,$F8,$F5,$F3,$F0,$EE,$EB,$E9,$E6,$E4,$E1,$DF,$DD,$DB,$D9,$D8,$D6,$D4,$D2,$D1,$D0,$CF,$CE,$CC,$CC,$CB,$CA,$CA,$CA,$C9,$C9,$C9,$CA,$CA,$CA,$CB,$CC,$CC,$CE,$CF,$D0,$D1,$D2,$D4,$D6,$D8,$D9,$DB,$DD,$DF,$E1,$E4,$E6,$E9,$EB,$EE,$F0,$F3,$F5,$F8,$FB,$FD  ; val=55
-    FCB $00,$03,$05,$08,$0B,$0E,$10,$13,$15,$18,$1A,$1C,$1F,$21,$23,$25,$27,$29,$2B,$2D,$2E,$30,$31,$32,$33,$35,$35,$36,$37,$37,$37,$38,$38,$38,$37,$37,$37,$36,$35,$35,$33,$32,$31,$30,$2E,$2D,$2B,$29,$27,$25,$23,$21,$1F,$1C,$1A,$18,$15,$13,$10,$0E,$0B,$08,$05,$03,$00,$FD,$FB,$F8,$F5,$F2,$F0,$ED,$EB,$E8,$E6,$E4,$E1,$DF,$DD,$DB,$D9,$D7,$D5,$D3,$D2,$D0,$CF,$CE,$CD,$CB,$CB,$CA,$C9,$C9,$C9,$C8,$C8,$C8,$C9,$C9,$C9,$CA,$CB,$CB,$CD,$CE,$CF,$D0,$D2,$D3,$D5,$D7,$D9,$DB,$DD,$DF,$E1,$E4,$E6,$E8,$EB,$ED,$F0,$F2,$F5,$F8,$FB,$FD  ; val=56
-    FCB $00,$03,$05,$08,$0B,$0E,$10,$13,$16,$18,$1B,$1D,$20,$22,$24,$26,$28,$2A,$2C,$2D,$2F,$31,$32,$33,$34,$35,$36,$37,$38,$38,$38,$39,$39,$39,$38,$38,$38,$37,$36,$35,$34,$33,$32,$31,$2F,$2D,$2C,$2A,$28,$26,$24,$22,$20,$1D,$1B,$18,$16,$13,$10,$0E,$0B,$08,$05,$03,$00,$FD,$FB,$F8,$F5,$F2,$F0,$ED,$EA,$E8,$E5,$E3,$E0,$DE,$DC,$DA,$D8,$D6,$D4,$D3,$D1,$CF,$CE,$CD,$CC,$CB,$CA,$C9,$C8,$C8,$C8,$C7,$C7,$C7,$C8,$C8,$C8,$C9,$CA,$CB,$CC,$CD,$CE,$CF,$D1,$D3,$D4,$D6,$D8,$DA,$DC,$DE,$E0,$E3,$E5,$E8,$EA,$ED,$F0,$F2,$F5,$F8,$FB,$FD  ; val=57
-    FCB $00,$03,$05,$09,$0B,$0E,$11,$13,$16,$18,$1B,$1D,$20,$22,$25,$27,$29,$2B,$2C,$2E,$30,$31,$33,$34,$35,$36,$37,$38,$39,$39,$39,$3A,$3A,$3A,$39,$39,$39,$38,$37,$36,$35,$34,$33,$31,$30,$2E,$2C,$2B,$29,$27,$25,$22,$20,$1D,$1B,$18,$16,$13,$11,$0E,$0B,$09,$05,$03,$00,$FD,$FB,$F7,$F5,$F2,$EF,$ED,$EA,$E8,$E5,$E3,$E0,$DE,$DB,$D9,$D7,$D5,$D4,$D2,$D0,$CF,$CD,$CC,$CB,$CA,$C9,$C8,$C7,$C7,$C7,$C6,$C6,$C6,$C7,$C7,$C7,$C8,$C9,$CA,$CB,$CC,$CD,$CF,$D0,$D2,$D4,$D5,$D7,$D9,$DB,$DE,$E0,$E3,$E5,$E8,$EA,$ED,$EF,$F2,$F5,$F7,$FB,$FD  ; val=58
-    FCB $00,$03,$06,$09,$0C,$0E,$11,$14,$17,$19,$1C,$1E,$21,$23,$25,$27,$29,$2B,$2D,$2F,$31,$32,$34,$35,$36,$37,$38,$39,$3A,$3A,$3A,$3B,$3B,$3B,$3A,$3A,$3A,$39,$38,$37,$36,$35,$34,$32,$31,$2F,$2D,$2B,$29,$27,$25,$23,$21,$1E,$1C,$19,$17,$14,$11,$0E,$0C,$09,$06,$03,$00,$FD,$FA,$F7,$F4,$F2,$EF,$EC,$E9,$E7,$E4,$E2,$DF,$DD,$DB,$D9,$D7,$D5,$D3,$D1,$CF,$CE,$CC,$CB,$CA,$C9,$C8,$C7,$C6,$C6,$C6,$C5,$C5,$C5,$C6,$C6,$C6,$C7,$C8,$C9,$CA,$CB,$CC,$CE,$CF,$D1,$D3,$D5,$D7,$D9,$DB,$DD,$DF,$E2,$E4,$E7,$E9,$EC,$EF,$F2,$F4,$F7,$FA,$FD  ; val=59
-    FCB $00,$03,$06,$09,$0C,$0F,$11,$14,$17,$19,$1C,$1E,$21,$24,$26,$28,$2A,$2C,$2E,$30,$32,$33,$35,$36,$37,$38,$39,$3A,$3B,$3B,$3B,$3C,$3C,$3C,$3B,$3B,$3B,$3A,$39,$38,$37,$36,$35,$33,$32,$30,$2E,$2C,$2A,$28,$26,$24,$21,$1E,$1C,$19,$17,$14,$11,$0F,$0C,$09,$06,$03,$00,$FD,$FA,$F7,$F4,$F1,$EF,$EC,$E9,$E7,$E4,$E2,$DF,$DC,$DA,$D8,$D6,$D4,$D2,$D0,$CE,$CD,$CB,$CA,$C9,$C8,$C7,$C6,$C5,$C5,$C5,$C4,$C4,$C4,$C5,$C5,$C5,$C6,$C7,$C8,$C9,$CA,$CB,$CD,$CE,$D0,$D2,$D4,$D6,$D8,$DA,$DC,$DF,$E2,$E4,$E7,$E9,$EC,$EF,$F1,$F4,$F7,$FA,$FD  ; val=60
-    FCB $00,$03,$06,$09,$0C,$0F,$12,$14,$17,$1A,$1D,$1F,$22,$24,$27,$29,$2B,$2D,$2F,$31,$33,$34,$35,$37,$38,$39,$3A,$3B,$3C,$3C,$3C,$3D,$3D,$3D,$3C,$3C,$3C,$3B,$3A,$39,$38,$37,$35,$34,$33,$31,$2F,$2D,$2B,$29,$27,$24,$22,$1F,$1D,$1A,$17,$14,$12,$0F,$0C,$09,$06,$03,$00,$FD,$FA,$F7,$F4,$F1,$EE,$EC,$E9,$E6,$E3,$E1,$DE,$DC,$D9,$D7,$D5,$D3,$D1,$CF,$CD,$CC,$CB,$C9,$C8,$C7,$C6,$C5,$C4,$C4,$C4,$C3,$C3,$C3,$C4,$C4,$C4,$C5,$C6,$C7,$C8,$C9,$CB,$CC,$CD,$CF,$D1,$D3,$D5,$D7,$D9,$DC,$DE,$E1,$E3,$E6,$E9,$EC,$EE,$F1,$F4,$F7,$FA,$FD  ; val=61
-    FCB $00,$03,$06,$09,$0C,$0F,$12,$15,$18,$1A,$1D,$1F,$22,$25,$27,$29,$2C,$2E,$2F,$31,$33,$35,$36,$38,$39,$3A,$3B,$3C,$3D,$3D,$3D,$3E,$3E,$3E,$3D,$3D,$3D,$3C,$3B,$3A,$39,$38,$36,$35,$33,$31,$2F,$2E,$2C,$29,$27,$25,$22,$1F,$1D,$1A,$18,$15,$12,$0F,$0C,$09,$06,$03,$00,$FD,$FA,$F7,$F4,$F1,$EE,$EB,$E8,$E6,$E3,$E1,$DE,$DB,$D9,$D7,$D4,$D2,$D1,$CF,$CD,$CB,$CA,$C8,$C7,$C6,$C5,$C4,$C3,$C3,$C3,$C2,$C2,$C2,$C3,$C3,$C3,$C4,$C5,$C6,$C7,$C8,$CA,$CB,$CD,$CF,$D1,$D2,$D4,$D7,$D9,$DB,$DE,$E1,$E3,$E6,$E8,$EB,$EE,$F1,$F4,$F7,$FA,$FD  ; val=62
-    FCB $00,$03,$06,$09,$0C,$0F,$12,$15,$18,$1B,$1E,$20,$23,$25,$28,$2A,$2C,$2E,$30,$32,$34,$36,$37,$39,$3A,$3B,$3C,$3D,$3E,$3E,$3E,$3F,$3F,$3F,$3E,$3E,$3E,$3D,$3C,$3B,$3A,$39,$37,$36,$34,$32,$30,$2E,$2C,$2A,$28,$25,$23,$20,$1E,$1B,$18,$15,$12,$0F,$0C,$09,$06,$03,$00,$FD,$FA,$F7,$F4,$F1,$EE,$EB,$E8,$E5,$E2,$E0,$DD,$DB,$D8,$D6,$D4,$D2,$D0,$CE,$CC,$CA,$C9,$C7,$C6,$C5,$C4,$C3,$C2,$C2,$C2,$C1,$C1,$C1,$C2,$C2,$C2,$C3,$C4,$C5,$C6,$C7,$C9,$CA,$CC,$CE,$D0,$D2,$D4,$D6,$D8,$DB,$DD,$E0,$E2,$E5,$E8,$EB,$EE,$F1,$F4,$F7,$FA,$FD  ; val=63
-
-; ============================================================================
-; SMUL8 - Signed 8x8 multiply, result = (A * B) / 128  (i8)  [kept for compat]
-; ============================================================================
-; Input:  A = op1 (i8), B = op2 (i8)
-; Output: A = result (i8)
-; Destroys: B  (no RAM touched — sign tracked with branches)
-SMUL8:
-TSTA
-BPL SMUL8_AP        ; A >= 0?
-NEGA
-TSTB
-BPL SMUL8_NEGNEG    ; A<0, B: check sign
-NEGB                ; A<0, B<0 -> result positive
-MUL
-ASLB
-ROLA
-RTS
-SMUL8_NEGNEG:           ; A<0, B>=0 -> result negative
-MUL
-ASLB
-ROLA
-NEGA
-RTS
-SMUL8_AP:               ; A >= 0
-TSTB
-BPL SMUL8_POSPOS    ; A>=0, B>=0 -> result positive
-NEGB                ; A>=0, B<0 -> result negative
-MUL
-ASLB
-ROLA
-NEGA
-RTS
-SMUL8_POSPOS:
-MUL
-ASLB
-ROLA
-RTS
-
-; ============================================================================
-; SMUL_LUT - LUT-based signed 8×8 multiply, result = (A * sin(B*2π/128)) / 128
-; ============================================================================
-; Input:  A = val (i8, |val|≤63), B = angle index (0-127)
-;         Y = SMUL_PROD base address (caller pre-loads: LDY #SMUL_PROD)
-; Output: A = result (i8)
-; Strategy: LSRA trick — D = (|val|/2)*256 + (angle | (bit0*128)) → table offset
-;           LDA D,Y — 7 cycles vs LDX+LEAX+LDA = 12 cycles. Saves 5c per call.
-; Destroys: B  (Y preserved)
-SMUL_LUT:
-TSTA
-BPL SMUL_LUT_P      ; A >= 0 ?
-; --- negative val ---
-NEGA                ; A = |val|
-LSRA                ; A = |val|/2,  C = |val| bit0
-BCC SMUL_LUT_N1
-ORB #$80
-SMUL_LUT_N1:
-LDA D,Y             ; table[|val|/2][angle]
-NEGA
-RTS
-SMUL_LUT_P:
-LSRA                ; A = val/2,  C = val bit0
-BCC SMUL_LUT_P1
-ORB #$80
-SMUL_LUT_P1:
-LDA D,Y
-RTS
-
-; ============================================================================
-; DV3D_ROTATE - Apply X/Y/Z Euler rotation to a single point (inlined LUT)
-; ============================================================================
-; Input:  ROT3D_RX, ROT3D_RY, ROT3D_RZ (i8 world coords, |val|≤63)
-;         ROT3D_AX/AY/AZ = raw sin angle indices (0-127)
-;         ROT3D_COS_X/Y/Z = cos angle offsets: (angle+32)&0x7F
-;         ROT3D_OX, ROT3D_OY (i8 screen offsets)
-; Output: ROT3D_SCR_X, ROT3D_SCR_Y
-; Destroys: A, B, X, Y, ROT3D_TEMP, ROT3D_TEMP2, ROT3D_Y1, ROT3D_Z1, ROT3D_X2
-DV3D_ROTATE:
-LDY #SMUL_PROD      ; Y = table base — shared by all inlined SMUL_LUT calls
-; -- X-axis rotation: y1 = y*cX - z*sX,  z1 = y*sX + z*cX --
-LDA >ROT3D_RY
-LDB >ROT3D_COS_X
-    TSTA
-BPL SL_P_0
-NEGA
-LSRA
-BCC SL_N1_0
-ORB #$80
-SL_N1_0:
-LDA D,Y
-NEGA
-BRA SL_END_0
-SL_P_0:
-LSRA
-BCC SL_P1_0
-ORB #$80
-SL_P1_0:
-LDA D,Y
-SL_END_0:
-    STA >ROT3D_TEMP
-LDA >ROT3D_RZ
-LDB >ROT3D_AX
-    TSTA
-BPL SL_P_1
-NEGA
-LSRA
-BCC SL_N1_1
-ORB #$80
-SL_N1_1:
-LDA D,Y
-NEGA
-BRA SL_END_1
-SL_P_1:
-LSRA
-BCC SL_P1_1
-ORB #$80
-SL_P1_1:
-LDA D,Y
-SL_END_1:
-    STA >ROT3D_TEMP2
-LDA >ROT3D_TEMP
-SUBA >ROT3D_TEMP2
-STA >ROT3D_Y1
-
-LDA >ROT3D_RY
-LDB >ROT3D_AX
-    TSTA
-BPL SL_P_2
-NEGA
-LSRA
-BCC SL_N1_2
-ORB #$80
-SL_N1_2:
-LDA D,Y
-NEGA
-BRA SL_END_2
-SL_P_2:
-LSRA
-BCC SL_P1_2
-ORB #$80
-SL_P1_2:
-LDA D,Y
-SL_END_2:
-    STA >ROT3D_TEMP
-LDA >ROT3D_RZ
-LDB >ROT3D_COS_X
-    TSTA
-BPL SL_P_3
-NEGA
-LSRA
-BCC SL_N1_3
-ORB #$80
-SL_N1_3:
-LDA D,Y
-NEGA
-BRA SL_END_3
-SL_P_3:
-LSRA
-BCC SL_P1_3
-ORB #$80
-SL_P1_3:
-LDA D,Y
-SL_END_3:
-    ADDA >ROT3D_TEMP
-STA >ROT3D_Z1
-
-; -- Y-axis rotation: x2 = x*cY + z1*sY --
-LDA >ROT3D_RX
-LDB >ROT3D_COS_Y
-    TSTA
-BPL SL_P_4
-NEGA
-LSRA
-BCC SL_N1_4
-ORB #$80
-SL_N1_4:
-LDA D,Y
-NEGA
-BRA SL_END_4
-SL_P_4:
-LSRA
-BCC SL_P1_4
-ORB #$80
-SL_P1_4:
-LDA D,Y
-SL_END_4:
-    STA >ROT3D_TEMP
-LDA >ROT3D_Z1
-LDB >ROT3D_AY
-    TSTA
-BPL SL_P_5
-NEGA
-LSRA
-BCC SL_N1_5
-ORB #$80
-SL_N1_5:
-LDA D,Y
-NEGA
-BRA SL_END_5
-SL_P_5:
-LSRA
-BCC SL_P1_5
-ORB #$80
-SL_P1_5:
-LDA D,Y
-SL_END_5:
-    ADDA >ROT3D_TEMP
-STA >ROT3D_X2
-
-; -- Z-axis rotation: sx = x2*cZ - y1*sZ + OX,  sy = x2*sZ + y1*cZ + OY --
-LDA >ROT3D_X2
-LDB >ROT3D_COS_Z
-    TSTA
-BPL SL_P_6
-NEGA
-LSRA
-BCC SL_N1_6
-ORB #$80
-SL_N1_6:
-LDA D,Y
-NEGA
-BRA SL_END_6
-SL_P_6:
-LSRA
-BCC SL_P1_6
-ORB #$80
-SL_P1_6:
-LDA D,Y
-SL_END_6:
-    STA >ROT3D_TEMP
-LDA >ROT3D_Y1
-LDB >ROT3D_AZ
-    TSTA
-BPL SL_P_7
-NEGA
-LSRA
-BCC SL_N1_7
-ORB #$80
-SL_N1_7:
-LDA D,Y
-NEGA
-BRA SL_END_7
-SL_P_7:
-LSRA
-BCC SL_P1_7
-ORB #$80
-SL_P1_7:
-LDA D,Y
-SL_END_7:
-    STA >ROT3D_TEMP2
-LDA >ROT3D_TEMP
-SUBA >ROT3D_TEMP2
-ADDA >ROT3D_OX
-STA >ROT3D_SCR_X
-
-LDA >ROT3D_X2
-LDB >ROT3D_AZ
-    TSTA
-BPL SL_P_8
-NEGA
-LSRA
-BCC SL_N1_8
-ORB #$80
-SL_N1_8:
-LDA D,Y
-NEGA
-BRA SL_END_8
-SL_P_8:
-LSRA
-BCC SL_P1_8
-ORB #$80
-SL_P1_8:
-LDA D,Y
-SL_END_8:
-    STA >ROT3D_TEMP
-LDA >ROT3D_Y1
-LDB >ROT3D_COS_Z
-    TSTA
-BPL SL_P_9
-NEGA
-LSRA
-BCC SL_N1_9
-ORB #$80
-SL_N1_9:
-LDA D,Y
-NEGA
-BRA SL_END_9
-SL_P_9:
-LSRA
-BCC SL_P1_9
-ORB #$80
-SL_P1_9:
-LDA D,Y
-SL_END_9:
-    ADDA >ROT3D_TEMP
-ADDA >ROT3D_OY
-STA >ROT3D_SCR_Y
-RTS
-
-; ============================================================================
-; DV3D_MOVETO - Move beam to absolute (X,Y) using direct VIA (same as DSWM)
-; ============================================================================
-; Input:  ROT3D_TEMP=dy, ROT3D_TEMP2=dx (delta from current beam pos)
-;         DP must be $D0 on entry
-; Destroys: A
-; On exit: PB=1 (ready for draw loop)
-DV3D_MOVETO:
-LDA >ROT3D_TEMP     ; dy
-STA VIA_port_a      ; Y to DAC
-CLR VIA_port_b      ; PB=0: enable mux, beam tracks Y
-NOP                 ; settling
-LDA #$CE
-STA VIA_cntl        ; PCR=$CE: /ZERO high, integrators active
-CLR VIA_shift_reg   ; SR=0: beam off during move
-INC VIA_port_b      ; PB=1: lock direction
-LDA >ROT3D_TEMP2    ; dx
-STA VIA_port_a      ; X to DAC
-LDA #$7F
-STA VIA_t1_cnt_lo   ; T1=$7F — same scale as DSWM
-CLR VIA_t1_cnt_hi   ; start timer (ramp)
-DV3D_MOVETO_WAIT:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DV3D_MOVETO_WAIT
-RTS
-
-; ============================================================================
-; DV3D_DRAWLINE - Draw line with delta (dy,dx) using direct VIA (same as DSWM)
-; ============================================================================
-; Input:  ROT3D_TEMP=dy, ROT3D_TEMP2=dx
-;         PB=1 on entry (left by previous moveto or drawline)
-;         DP must be $D0 on entry
-; Destroys: A
-; On exit: PB=1
-DV3D_DRAWLINE:
-LDA >ROT3D_TEMP     ; dy
-STA VIA_port_a      ; DY to DAC (PB=1: integrators hold)
-CLR VIA_port_b      ; PB=0: enable mux, set direction
-NOP
-NOP
-NOP                 ; settling (~same as DSWM)
-INC VIA_port_b      ; PB=1: lock direction
-LDA >ROT3D_TEMP2    ; dx
-STA VIA_port_a      ; DX to DAC
-LDA #$FF
-STA VIA_shift_reg   ; SR=$FF: beam ON
-CLR VIA_t1_cnt_hi   ; start T1 ramp (lo already $7F from moveto — reuse)
-DV3D_DRAWLINE_WAIT:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DV3D_DRAWLINE_WAIT
-CLR VIA_shift_reg   ; beam OFF
-RTS
-
-; ============================================================================
-; DRAW_VECTOR_3D_RUNTIME - Draw 3D-rotated vector (vertex-dedup + LUT version)
-; ============================================================================
-; Input:  X = pointer to _NAME_3D_DATA (vertex-indexed format)
-;         ROT3D_AX, ROT3D_AY, ROT3D_AZ = raw angles (0-127)
-;         ROT3D_OX, ROT3D_OY = screen offsets
-; Data format:
-;   FDB vertex_count         ; unique vertex count (high byte skipped)
-;   FCB x,y,z × count        ; vertex table (coords ±63)
-;   FDB path_count           ; path count (high byte skipped)
-;   per path: FCB pt_count, closed, idx0, idx1, ...
-; Uses direct VIA access (DP=$D0 required) — same scale as DRAW_VECTOR/DSWM.
-; Destroys: A, B, X, U, all ROT3D_* vars
-DRAW_VECTOR_3D_RUNTIME:
-TFR X,U             ; U = ROM data pointer
-
-; --- Compute cos angle offsets: ROT3D_COS_X = (AX+32)&0x7F, etc. ---
-LDA >ROT3D_AX
-ADDA #32
-ANDA #$7F
-STA >ROT3D_COS_X
-LDA >ROT3D_AY
-ADDA #32
-ANDA #$7F
-STA >ROT3D_COS_Y
-LDA >ROT3D_AZ
-ADDA #32
-ANDA #$7F
-STA >ROT3D_COS_Z
-
-; --- Phase 1: rotate unique vertices → ROT3D_VBUF ---
-LDA ,U+             ; skip high byte of FDB vertex_count
-LDB ,U+             ; B = vertex count
-STB >ROT3D_PC
-LDX #ROT3D_VBUF     ; X = write ptr into RAM cache
-
-DV3D_VERT_LOOP:
-TST >ROT3D_PC
-BEQ DV3D_VERTS_DONE
-DEC >ROT3D_PC
-LDA ,U+
-STA >ROT3D_RX
-LDA ,U+
-STA >ROT3D_RY
-LDA ,U+
-STA >ROT3D_RZ
-PSHS X,U            ; save VBUF write ptr and ROM data ptr (DV3D_ROTATE uses X,Y)
-JSR DV3D_ROTATE     ; -> ROT3D_SCR_X, ROT3D_SCR_Y
-PULS X,U            ; Y was clobbered but not needed outside DV3D_ROTATE
-LDA >ROT3D_SCR_X
-STA ,X+
-LDA >ROT3D_SCR_Y
-STA ,X+
-BRA DV3D_VERT_LOOP
-
-DV3D_VERTS_DONE:
-; U now points to FDB path_count in ROM
-; Switch to DP=$D0 for direct VIA access (same as DSWM)
-LDA #$D0
-TFR A,DP
-
-; --- Reset integrators (DSWM-style: PB sequence + PCR) ---
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$03
-STA VIA_port_b
-LDA #$02
-STA VIA_port_b
-LDA #$02
-STA VIA_port_b
-LDA #$01
-STA VIA_port_b
-
-; Set intensity ($7F) via Port A + Z-axis strobe (DSWM-style)
-LDA #$7F
-STA VIA_port_a
-LDA #$04
-STA VIA_port_b
-LDA #$01
-STA VIA_port_b
-
-; Beam at (0,0) after reset — PREV tracks beam position
-CLR >ROT3D_PREV_X
-CLR >ROT3D_PREV_Y
-; T1 lo pre-loaded — reused by DV3D_DRAWLINE
-LDA #$7F
-STA VIA_t1_cnt_lo
-
-; --- Phase 2: draw paths using VBUF lookup ---
-LDA ,U+             ; skip high byte of FDB path_count
-LDB ,U+             ; B = path count
-STB >ROT3D_PC
-
-DV3D_PATH_LOOP:
-TST >ROT3D_PC
-LBEQ DV3D_ALL_DONE
-DEC >ROT3D_PC
-
-LDB ,U+             ; B = point count for this path
-STB >ROT3D_PT_REM
-LDA ,U+             ; A = closed flag
-STA >ROT3D_CLOSED
-
-; Look up first vertex from VBUF
-LDB ,U+             ; B = vertex index
-ASLB                ; B = index*2 (VBUF stride = 2 bytes: x', y')
-LDX #ROT3D_VBUF
-ABX                 ; X = &VBUF[idx*2]
-LDA ,X
-STA >ROT3D_FIRST_X
-LDA 1,X
-STA >ROT3D_FIRST_Y
-
-; Moveto: delta from current beam position (PREV)
-LDA >ROT3D_FIRST_Y
-SUBA >ROT3D_PREV_Y
-STA >ROT3D_TEMP     ; dy
-LDA >ROT3D_FIRST_X
-SUBA >ROT3D_PREV_X
-STA >ROT3D_TEMP2    ; dx
-JSR DV3D_MOVETO     ; direct VIA move (T1=$7F, same scale as DSWM)
-
-LDA >ROT3D_FIRST_X
-STA >ROT3D_PREV_X
-LDA >ROT3D_FIRST_Y
-STA >ROT3D_PREV_Y
-DEC >ROT3D_PT_REM
-
-DV3D_SEG_LOOP:
-TST >ROT3D_PT_REM
-BEQ DV3D_CLOSE_CHECK
-DEC >ROT3D_PT_REM
-
-LDB ,U+             ; B = vertex index
-ASLB
-LDX #ROT3D_VBUF
-ABX                 ; X = &VBUF[idx*2]
-; Compute dx, update PREV_X: new_X - PREV_X = dx; new_X = dx + PREV_X
-LDA ,X              ; new_X
-SUBA >ROT3D_PREV_X  ; A = dx
-STA >ROT3D_TEMP2    ; save dx
-ADDA >ROT3D_PREV_X  ; A = new_X again
-STA >ROT3D_PREV_X
-; Compute dy, update PREV_Y
-LDA 1,X             ; new_Y
-SUBA >ROT3D_PREV_Y  ; A = dy
-STA >ROT3D_TEMP     ; save dy
-ADDA >ROT3D_PREV_Y  ; A = new_Y again
-STA >ROT3D_PREV_Y
-JSR DV3D_DRAWLINE
-BRA DV3D_SEG_LOOP
-
-DV3D_CLOSE_CHECK:
-TST >ROT3D_CLOSED
-BEQ DV3D_NEXT_PATH
-
-LDA >ROT3D_FIRST_Y
-SUBA >ROT3D_PREV_Y
-STA >ROT3D_TEMP
-LDA >ROT3D_FIRST_X
-SUBA >ROT3D_PREV_X
-STA >ROT3D_TEMP2
-JSR DV3D_DRAWLINE
-LDA >ROT3D_FIRST_X
-STA >ROT3D_PREV_X
-LDA >ROT3D_FIRST_Y
-STA >ROT3D_PREV_Y
-
-DV3D_NEXT_PATH:
-LBRA DV3D_PATH_LOOP
-
-DV3D_ALL_DONE:
-; Restore DP=$C8 for normal RAM access
-JSR $F1AF
-RTS
-
-;***************************************************************************
-; TRIGONOMETRY LOOKUP TABLES (128 entries each)
-;***************************************************************************
-SIN_TABLE:
-    FDB 0    ; angle 0
-    FDB 6    ; angle 1
-    FDB 12    ; angle 2
-    FDB 19    ; angle 3
-    FDB 25    ; angle 4
-    FDB 31    ; angle 5
-    FDB 37    ; angle 6
-    FDB 43    ; angle 7
-    FDB 49    ; angle 8
-    FDB 54    ; angle 9
-    FDB 60    ; angle 10
-    FDB 65    ; angle 11
-    FDB 71    ; angle 12
-    FDB 76    ; angle 13
-    FDB 81    ; angle 14
-    FDB 85    ; angle 15
-    FDB 90    ; angle 16
-    FDB 94    ; angle 17
-    FDB 98    ; angle 18
-    FDB 102    ; angle 19
-    FDB 106    ; angle 20
-    FDB 109    ; angle 21
-    FDB 112    ; angle 22
-    FDB 115    ; angle 23
-    FDB 117    ; angle 24
-    FDB 120    ; angle 25
-    FDB 122    ; angle 26
-    FDB 123    ; angle 27
-    FDB 125    ; angle 28
-    FDB 126    ; angle 29
-    FDB 126    ; angle 30
-    FDB 127    ; angle 31
-    FDB 127    ; angle 32
-    FDB 127    ; angle 33
-    FDB 126    ; angle 34
-    FDB 126    ; angle 35
-    FDB 125    ; angle 36
-    FDB 123    ; angle 37
-    FDB 122    ; angle 38
-    FDB 120    ; angle 39
-    FDB 117    ; angle 40
-    FDB 115    ; angle 41
-    FDB 112    ; angle 42
-    FDB 109    ; angle 43
-    FDB 106    ; angle 44
-    FDB 102    ; angle 45
-    FDB 98    ; angle 46
-    FDB 94    ; angle 47
-    FDB 90    ; angle 48
-    FDB 85    ; angle 49
-    FDB 81    ; angle 50
-    FDB 76    ; angle 51
-    FDB 71    ; angle 52
-    FDB 65    ; angle 53
-    FDB 60    ; angle 54
-    FDB 54    ; angle 55
-    FDB 49    ; angle 56
-    FDB 43    ; angle 57
-    FDB 37    ; angle 58
-    FDB 31    ; angle 59
-    FDB 25    ; angle 60
-    FDB 19    ; angle 61
-    FDB 12    ; angle 62
-    FDB 6    ; angle 63
-    FDB 0    ; angle 64
-    FDB -6    ; angle 65
-    FDB -12    ; angle 66
-    FDB -19    ; angle 67
-    FDB -25    ; angle 68
-    FDB -31    ; angle 69
-    FDB -37    ; angle 70
-    FDB -43    ; angle 71
-    FDB -49    ; angle 72
-    FDB -54    ; angle 73
-    FDB -60    ; angle 74
-    FDB -65    ; angle 75
-    FDB -71    ; angle 76
-    FDB -76    ; angle 77
-    FDB -81    ; angle 78
-    FDB -85    ; angle 79
-    FDB -90    ; angle 80
-    FDB -94    ; angle 81
-    FDB -98    ; angle 82
-    FDB -102    ; angle 83
-    FDB -106    ; angle 84
-    FDB -109    ; angle 85
-    FDB -112    ; angle 86
-    FDB -115    ; angle 87
-    FDB -117    ; angle 88
-    FDB -120    ; angle 89
-    FDB -122    ; angle 90
-    FDB -123    ; angle 91
-    FDB -125    ; angle 92
-    FDB -126    ; angle 93
-    FDB -126    ; angle 94
-    FDB -127    ; angle 95
-    FDB -127    ; angle 96
-    FDB -127    ; angle 97
-    FDB -126    ; angle 98
-    FDB -126    ; angle 99
-    FDB -125    ; angle 100
-    FDB -123    ; angle 101
-    FDB -122    ; angle 102
-    FDB -120    ; angle 103
-    FDB -117    ; angle 104
-    FDB -115    ; angle 105
-    FDB -112    ; angle 106
-    FDB -109    ; angle 107
-    FDB -106    ; angle 108
-    FDB -102    ; angle 109
-    FDB -98    ; angle 110
-    FDB -94    ; angle 111
-    FDB -90    ; angle 112
-    FDB -85    ; angle 113
-    FDB -81    ; angle 114
-    FDB -76    ; angle 115
-    FDB -71    ; angle 116
-    FDB -65    ; angle 117
-    FDB -60    ; angle 118
-    FDB -54    ; angle 119
-    FDB -49    ; angle 120
-    FDB -43    ; angle 121
-    FDB -37    ; angle 122
-    FDB -31    ; angle 123
-    FDB -25    ; angle 124
-    FDB -19    ; angle 125
-    FDB -12    ; angle 126
-    FDB -6    ; angle 127
-
-COS_TABLE:
-    FDB 127    ; angle 0
-    FDB 127    ; angle 1
-    FDB 126    ; angle 2
-    FDB 126    ; angle 3
-    FDB 125    ; angle 4
-    FDB 123    ; angle 5
-    FDB 122    ; angle 6
-    FDB 120    ; angle 7
-    FDB 117    ; angle 8
-    FDB 115    ; angle 9
-    FDB 112    ; angle 10
-    FDB 109    ; angle 11
-    FDB 106    ; angle 12
-    FDB 102    ; angle 13
-    FDB 98    ; angle 14
-    FDB 94    ; angle 15
-    FDB 90    ; angle 16
-    FDB 85    ; angle 17
-    FDB 81    ; angle 18
-    FDB 76    ; angle 19
-    FDB 71    ; angle 20
-    FDB 65    ; angle 21
-    FDB 60    ; angle 22
-    FDB 54    ; angle 23
-    FDB 49    ; angle 24
-    FDB 43    ; angle 25
-    FDB 37    ; angle 26
-    FDB 31    ; angle 27
-    FDB 25    ; angle 28
-    FDB 19    ; angle 29
-    FDB 12    ; angle 30
-    FDB 6    ; angle 31
-    FDB 0    ; angle 32
-    FDB -6    ; angle 33
-    FDB -12    ; angle 34
-    FDB -19    ; angle 35
-    FDB -25    ; angle 36
-    FDB -31    ; angle 37
-    FDB -37    ; angle 38
-    FDB -43    ; angle 39
-    FDB -49    ; angle 40
-    FDB -54    ; angle 41
-    FDB -60    ; angle 42
-    FDB -65    ; angle 43
-    FDB -71    ; angle 44
-    FDB -76    ; angle 45
-    FDB -81    ; angle 46
-    FDB -85    ; angle 47
-    FDB -90    ; angle 48
-    FDB -94    ; angle 49
-    FDB -98    ; angle 50
-    FDB -102    ; angle 51
-    FDB -106    ; angle 52
-    FDB -109    ; angle 53
-    FDB -112    ; angle 54
-    FDB -115    ; angle 55
-    FDB -117    ; angle 56
-    FDB -120    ; angle 57
-    FDB -122    ; angle 58
-    FDB -123    ; angle 59
-    FDB -125    ; angle 60
-    FDB -126    ; angle 61
-    FDB -126    ; angle 62
-    FDB -127    ; angle 63
-    FDB -127    ; angle 64
-    FDB -127    ; angle 65
-    FDB -126    ; angle 66
-    FDB -126    ; angle 67
-    FDB -125    ; angle 68
-    FDB -123    ; angle 69
-    FDB -122    ; angle 70
-    FDB -120    ; angle 71
-    FDB -117    ; angle 72
-    FDB -115    ; angle 73
-    FDB -112    ; angle 74
-    FDB -109    ; angle 75
-    FDB -106    ; angle 76
-    FDB -102    ; angle 77
-    FDB -98    ; angle 78
-    FDB -94    ; angle 79
-    FDB -90    ; angle 80
-    FDB -85    ; angle 81
-    FDB -81    ; angle 82
-    FDB -76    ; angle 83
-    FDB -71    ; angle 84
-    FDB -65    ; angle 85
-    FDB -60    ; angle 86
-    FDB -54    ; angle 87
-    FDB -49    ; angle 88
-    FDB -43    ; angle 89
-    FDB -37    ; angle 90
-    FDB -31    ; angle 91
-    FDB -25    ; angle 92
-    FDB -19    ; angle 93
-    FDB -12    ; angle 94
-    FDB -6    ; angle 95
-    FDB 0    ; angle 96
-    FDB 6    ; angle 97
-    FDB 12    ; angle 98
-    FDB 19    ; angle 99
-    FDB 25    ; angle 100
-    FDB 31    ; angle 101
-    FDB 37    ; angle 102
-    FDB 43    ; angle 103
-    FDB 49    ; angle 104
-    FDB 54    ; angle 105
-    FDB 60    ; angle 106
-    FDB 65    ; angle 107
-    FDB 71    ; angle 108
-    FDB 76    ; angle 109
-    FDB 81    ; angle 110
-    FDB 85    ; angle 111
-    FDB 90    ; angle 112
-    FDB 94    ; angle 113
-    FDB 98    ; angle 114
-    FDB 102    ; angle 115
-    FDB 106    ; angle 116
-    FDB 109    ; angle 117
-    FDB 112    ; angle 118
-    FDB 115    ; angle 119
-    FDB 117    ; angle 120
-    FDB 120    ; angle 121
-    FDB 122    ; angle 122
-    FDB 123    ; angle 123
-    FDB 125    ; angle 124
-    FDB 126    ; angle 125
-    FDB 126    ; angle 126
-    FDB 127    ; angle 127
-
-TAN_TABLE:
-    FDB 0    ; angle 0
-    FDB 1    ; angle 1
-    FDB 2    ; angle 2
-    FDB 3    ; angle 3
-    FDB 4    ; angle 4
-    FDB 5    ; angle 5
-    FDB 6    ; angle 6
-    FDB 7    ; angle 7
-    FDB 8    ; angle 8
-    FDB 9    ; angle 9
-    FDB 11    ; angle 10
-    FDB 12    ; angle 11
-    FDB 13    ; angle 12
-    FDB 15    ; angle 13
-    FDB 16    ; angle 14
-    FDB 18    ; angle 15
-    FDB 20    ; angle 16
-    FDB 22    ; angle 17
-    FDB 24    ; angle 18
-    FDB 27    ; angle 19
-    FDB 30    ; angle 20
-    FDB 33    ; angle 21
-    FDB 37    ; angle 22
-    FDB 42    ; angle 23
-    FDB 48    ; angle 24
-    FDB 56    ; angle 25
-    FDB 66    ; angle 26
-    FDB 80    ; angle 27
-    FDB 101    ; angle 28
-    FDB 120    ; angle 29
-    FDB 120    ; angle 30
-    FDB 120    ; angle 31
-    FDB -120    ; angle 32
-    FDB -120    ; angle 33
-    FDB -120    ; angle 34
-    FDB -120    ; angle 35
-    FDB -101    ; angle 36
-    FDB -80    ; angle 37
-    FDB -66    ; angle 38
-    FDB -56    ; angle 39
-    FDB -48    ; angle 40
-    FDB -42    ; angle 41
-    FDB -37    ; angle 42
-    FDB -33    ; angle 43
-    FDB -30    ; angle 44
-    FDB -27    ; angle 45
-    FDB -24    ; angle 46
-    FDB -22    ; angle 47
-    FDB -20    ; angle 48
-    FDB -18    ; angle 49
-    FDB -16    ; angle 50
-    FDB -15    ; angle 51
-    FDB -13    ; angle 52
-    FDB -12    ; angle 53
-    FDB -11    ; angle 54
-    FDB -9    ; angle 55
-    FDB -8    ; angle 56
-    FDB -7    ; angle 57
-    FDB -6    ; angle 58
-    FDB -5    ; angle 59
-    FDB -4    ; angle 60
-    FDB -3    ; angle 61
-    FDB -2    ; angle 62
-    FDB -1    ; angle 63
-    FDB 0    ; angle 64
-    FDB 1    ; angle 65
-    FDB 2    ; angle 66
-    FDB 3    ; angle 67
-    FDB 4    ; angle 68
-    FDB 5    ; angle 69
-    FDB 6    ; angle 70
-    FDB 7    ; angle 71
-    FDB 8    ; angle 72
-    FDB 9    ; angle 73
-    FDB 11    ; angle 74
-    FDB 12    ; angle 75
-    FDB 13    ; angle 76
-    FDB 15    ; angle 77
-    FDB 16    ; angle 78
-    FDB 18    ; angle 79
-    FDB 20    ; angle 80
-    FDB 22    ; angle 81
-    FDB 24    ; angle 82
-    FDB 27    ; angle 83
-    FDB 30    ; angle 84
-    FDB 33    ; angle 85
-    FDB 37    ; angle 86
-    FDB 42    ; angle 87
-    FDB 48    ; angle 88
-    FDB 56    ; angle 89
-    FDB 66    ; angle 90
-    FDB 80    ; angle 91
-    FDB 101    ; angle 92
-    FDB 120    ; angle 93
-    FDB 120    ; angle 94
-    FDB 120    ; angle 95
-    FDB -120    ; angle 96
-    FDB -120    ; angle 97
-    FDB -120    ; angle 98
-    FDB -120    ; angle 99
-    FDB -101    ; angle 100
-    FDB -80    ; angle 101
-    FDB -66    ; angle 102
-    FDB -56    ; angle 103
-    FDB -48    ; angle 104
-    FDB -42    ; angle 105
-    FDB -37    ; angle 106
-    FDB -33    ; angle 107
-    FDB -30    ; angle 108
-    FDB -27    ; angle 109
-    FDB -24    ; angle 110
-    FDB -22    ; angle 111
-    FDB -20    ; angle 112
-    FDB -18    ; angle 113
-    FDB -16    ; angle 114
-    FDB -15    ; angle 115
-    FDB -13    ; angle 116
-    FDB -12    ; angle 117
-    FDB -11    ; angle 118
-    FDB -9    ; angle 119
-    FDB -8    ; angle 120
-    FDB -7    ; angle 121
-    FDB -6    ; angle 122
-    FDB -5    ; angle 123
-    FDB -4    ; angle 124
-    FDB -3    ; angle 125
-    FDB -2    ; angle 126
-    FDB -1    ; angle 127
-
-;**** PRINT_TEXT String Data ****
-PRINT_TEXT_STR_3327403:
-    FCC "logo"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_3556653:
-    FCC "text"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2456395222:
-    FCC "STUDIO"
-    FCB $80          ; Vectrex string terminator
-
-;***************************************************************************
-; 3D COMPACT DATA TABLES (for DRAW_VECTOR_3D)
-;***************************************************************************
-
-
-; 3D vertex-indexed data for DRAW_VECTOR_3D (32 unique verts, 4 paths, 36 total point refs)
+@ VPy — ARM Thumb2 target (RP2350 / Cortex-M33)
+@ Game: VECTREX 3D LOGO
+@ Generated by vpy_codegen arm backend
+@ Assemble with: arm-none-eabi-as -mthumb -mcpu=cortex-m33 game.s -o game.o
+
+.syntax unified
+.cpu cortex-m33
+.fpu fpv5-sp-d16
+.thumb
+
+@ --- VPy runtime RAM (RP2350 SRAM) ---
+.equ TMPVAL,              0x2007F000  @ 32-bit arithmetic temporary
+.equ TMPPTR,              0x2007F004  @ pointer temporary
+.equ TMPPTR2,             0x2007F008  @ second pointer temporary
+.equ VAR_ARG0,            0x2007F00C  @ function argument 0
+.equ VAR_ARG1,            0x2007F010  @ function argument 1
+.equ VAR_ARG2,            0x2007F014  @ function argument 2
+.equ VAR_ARG3,            0x2007F018  @ function argument 3
+.equ VAR_ARG4,            0x2007F01C  @ function argument 4
+.equ RESULT,              0x2007F020  @ function return value
+.equ BEEP_FRAMES_LEFT,    0x2007F024  @ non-blocking beep counter
+.equ VIA_WRITE_ADDR,      0x2007F028  @ scratch for bus_write address
+.equ VIA_WRITE_DATA,      0x2007F02C  @ scratch for bus_write data
+.equ _dv3d_cos,           0x2007F030  @ 3D cos offsets: cos_ax, cos_ay, cos_az (3 bytes)
+.equ _dv3d_tmp,           0x2007F034  @ 3D vertex raw coords: rx, ry, rz (3 bytes)
+.equ _dv3d_sm,            0x2007F038  @ 3D rotation intermediates: t0, y1, z1, x2 (4 bytes)
+.equ _dv3d_cur,           0x2007F03C  @ 3D current beam pos: cur_x, cur_y (2 bytes)
+.equ _dv3d_fst,           0x2007F03E  @ 3D first vertex of path: first_x, first_y (2 bytes)
+.equ _dv3d_vbuf,          0x2007F040  @ 3D rotated vertex cache: sx,sy pairs (254 bytes max)
+.equ VPY_ANIM_STATE_BUF,  0x2007F13E  @ animation frame_idx(u8) at +0, ticks_left(u8) at +1
+.equ RAND_SEED,           0x2007F140  @ LCG random number seed
+.equ BTN_STATE_J1,        0x2007F144  @ cached VIA Port B (J1 buttons, bits 4-7 active-low)
+.equ BTN_STATE_J2,        0x2007F148  @ cached PSG reg 14 (J2 buttons, bits 0-3 active-low)
+.equ CAMERA_X,            0x2007F14C  @ camera X offset (used by show_level)
+.equ CAMERA_Y,            0x2007F150  @ camera Y offset
+.equ TEXT_SIZE,           0x2007F154  @ text scale factor (1=normal, 2=double, ...)
+.equ TEXT_COLOR,          0x2007F158  @ text intensity (0-127)
+.equ LEVEL_DATA_PTR,      0x2007F15C  @ pointer to loaded level ROM data
+.equ DBGVAL,              0x2007F160  @ debug_print last written value
+.equ PRINT_BEAM_X,        0x2007F164  @ beam X shadow during print_text
+.equ PRINT_BEAM_Y,        0x2007F168  @ beam Y shadow during print_text
+.equ PSG_MUSIC_PTR,       0x2007F16C  @ pointer to current music event in ROM
+.equ PSG_MUSIC_START,     0x2007F170  @ pointer to loop-start event
+.equ PSG_IS_PLAYING,      0x2007F174  @ 1 = music playing
+.equ PSG_DELAY_FRAMES,    0x2007F178  @ frames remaining before next music event
+.equ PSG_SFX_PTR,         0x2007F17C  @ pointer to current SFX event in ROM
+.equ PSG_SFX_ACTIVE,      0x2007F180  @ 1 = SFX playing
+.equ PSG_SFX_DELAY,       0x2007F184  @ frames remaining before next SFX event
+.equ LEVEL_GP_COUNT,      0x2007F188  @ number of active GP objects
+.equ LEVEL_GP_BUF,        0x2007F18C  @ level GP mutable buffer (32 obj × 8 bytes = 256 bytes)
+.equ SCROLL_LIMIT_LEFT,   0x2007F28C  @ camera scroll limit: left world X
+.equ SCROLL_LIMIT_RIGHT,  0x2007F290  @ camera scroll limit: right world X
+.equ SCROLL_LIMIT_TOP,    0x2007F294  @ camera scroll limit: top world Y
+.equ SCROLL_LIMIT_BOTTOM, 0x2007F298  @ camera scroll limit: bottom world Y
+.equ NOTE_STATE,          0x2007F29C  @ note engine state: 3 channels × 32 bytes each
+.equ PSG_MIXER_SHADOW,    0x2007F2FC  @ shadow of AY R7 mixer register (0x3F = all disabled)
+.equ VPY_MOVE_X,          0x2007F300  @ last MOVE X position (added to DRAW_LINE x0/x1)
+.equ VPY_MOVE_Y,          0x2007F304  @ last MOVE Y position (added to DRAW_LINE y0/y1)
+.equ ENEMY_COUNT_ARM,     0x2007F308  @ active enemy count
+.equ ENEMY_POOL_ARM,      0x2007F30C  @ enemy pool: 8 slots × 32 bytes
+.equ J1_AXIS_X,           0x2007F40C  @ cached J1 X axis (-127..127), updated each WAIT_RECAL
+.equ J1_AXIS_Y,           0x2007F410  @ cached J1 Y axis (-127..127), updated each WAIT_RECAL
+.equ J2_AXIS_X,           0x2007F414  @ cached J2 X axis (-127..127), updated each WAIT_RECAL
+.equ J2_AXIS_Y,           0x2007F418  @ cached J2 Y axis (-127..127), updated each WAIT_RECAL
+.equ ENEMY_STATE_ARM,     0x2007F41C  @ enemy state per slot: 8 × i32
+.equ VPY_PLAYER_ANIM_STATE, 0x2007F43C  @ player animation state: frame_idx(u8)+ticks_left(u8)
+.equ WANDER_SCRATCH_ARM,  0x2007F440  @ wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)
+.equ USER_RAM_START,      0x2007F460  @ user variables begin here
+
+@ --- VIA 6522 registers (Vectrex bus addresses) ---
+.equ VIA_BASE,       0xD000
+.equ VIA_PORT_B,     0xD000   @ Port B data (MUX, beam, z-pulse)
+.equ VIA_PORT_A,     0xD001   @ Port A data (DAC / joystick)
+.equ VIA_DDR_B,      0xD002   @ Port B direction
+.equ VIA_DDR_A,      0xD003   @ Port A direction
+.equ VIA_T1C_L,      0xD004   @ Timer 1 counter low
+.equ VIA_T1C_H,      0xD005   @ Timer 1 counter high
+.equ VIA_T1L_L,      0xD006   @ Timer 1 latch low
+.equ VIA_T1L_H,      0xD007   @ Timer 1 latch high
+.equ VIA_SR,         0xD00A   @ Shift register (beam on/off via CB2)
+.equ VIA_ACR,        0xD00B   @ Auxiliary control register
+.equ VIA_PCR,        0xD00C   @ Peripheral control register
+.equ VIA_IFR,        0xD00D   @ Interrupt flag register
+.equ VIA_IER,        0xD00E   @ Interrupt enable register
+
+@ VIA Port B bits
+.equ PB_MUX,         0x01     @ PSG BDIR (bit 0)
+.equ PB_BEAM,        0x08     @ Beam on/off
+.equ PB_ZPULSE,      0x10     @ Z-axis pulse
+
+@ VIA ACR / PCR values
+.equ ACR_SR_SHIFT,   0x18     @ SR = shift out under PHI2
+.equ PCR_BEAM_OFF,   0xCE
+.equ PCR_BEAM_ON,    0xDE
+.equ T1_STANDARD,    0x7F     @ Timer 1 value for standard vector scale
+
+@ --- RP2350 SIO (GPIO bit-bang) ---
+.equ SIO_BASE,       0xD0000000
+.equ SIO_GPIO_OUT,   0xD0000010  @ GPIO output value
+.equ SIO_GPIO_SET,   0xD0000014  @ GPIO output set (atomic)
+.equ SIO_GPIO_CLR,   0xD0000018  @ GPIO output clear (atomic)
+.equ SIO_GPIO_OE_SET,0xD0000024  @ GPIO OE set
+.equ SIO_GPIO_OE_CLR,0xD0000028  @ GPIO OE clear
+.equ SIO_GPIO_IN,    0xD0000004  @ GPIO input value
+
+@ GPIO pin masks (from pins.rs)
+.equ ADDR_MASK,      0x00007FFF  @ GP0-GP14 (A0-A14)
+.equ DATA_MASK,      0x007F8000  @ GP15-GP22 (D0-D7)
+.equ PIN_NCE,        23
+.equ PIN_RW,         24
+.equ PIN_NOE,        25
+.equ PIN_NHALT,      27
+.equ PIN_DIR_CTRL,   29
+
+.section .game_rom, "ax"
+.align 2
+
+@ --- Game ROM image header (offset 0 of game ROM slot) ---
+@ Firmware checks GAME_MAGIC before calling game_main.
+
+.global game_header
+.type game_header, %object
+game_header:
+    .word 0x32795056      @ GAME_MAGIC 'VPy2'
+    .word game_main         @ entry point (thumb bit set by linker)
+    .word 0x00000000        @ reserved
+    .word 0x00000000        @ reserved
+
+@ ============================================================
+@ bus_write: write one byte to Vectrex bus address
+@   r0 = address (16-bit Vectrex bus address, e.g. 0xD000)
+@   r1 = data byte
+@ Clobbers: r2, r3
+@ ============================================================
+.global bus_write
+.type bus_write, %function
+.thumb_func
+bus_write:
+    push    {r4, r5, lr}
+    ldr     r4, =0xD0000000         @ SIO_BASE
+    movw    r2, #0x7FFF
+    and     r2, r0, r2               @ address → GP0-GP14
+    and     r3, r1, #0xFF
+    lsl     r3, r3, #15              @ data → GP15-GP22
+    orr     r2, r2, r3               @ combined GPIO value
+    ldr     r3, =0x007F7FFF          @ ADDR_MASK | DATA_MASK
+    str     r3, [r4, #0x24]          @ SIO_GPIO_OE_SET
+    str     r2, [r4, #0x14]          @ SIO_GPIO_OUT_SET (set bits)
+    mvn     r3, r2
+    ldr     r5, =0x007F7FFF
+    and     r3, r3, r5
+    str     r3, [r4, #0x18]          @ SIO_GPIO_OUT_CLR (clear bits)
+    mov     r3, #1
+    lsl     r3, r3, #24              @ 1 << PIN_RW (24)
+    str     r3, [r4, #0x18]          @ GPIO_CLR: R/W low
+    mov     r3, #300
+1:  subs    r3, r3, #1
+    bne     1b
+    mov     r3, #1
+    lsl     r3, r3, #24
+    str     r3, [r4, #0x14]          @ GPIO_SET: R/W high
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ ============================================================
+@ bus_read: read one byte from Vectrex bus address
+@   r0 = address
+@ Returns: r0 = data byte
+@ Clobbers: r2, r3
+@ ============================================================
+.global bus_read
+.type bus_read, %function
+.thumb_func
+bus_read:
+    push    {r4, lr}
+    ldr     r4, =0xD0000000
+    ldr     r2, =0x00007FFF          @ ADDR_MASK
+    str     r2, [r4, #0x24]          @ OE_SET address lines
+    ldr     r2, =0x007F8000          @ DATA_MASK
+    str     r2, [r4, #0x28]          @ OE_CLR data lines
+    movw    r2, #0x7FFF
+    and     r2, r0, r2
+    str     r2, [r4, #0x14]          @ set addr bits
+    mvn     r3, r2
+    movw    r2, #0x7FFF
+    and     r3, r3, r2
+    str     r3, [r4, #0x18]          @ clear addr bits
+    mov     r2, #1
+    lsl     r2, r2, #24
+    str     r2, [r4, #0x14]
+    mov     r3, #300
+1:  subs    r3, r3, #1
+    bne     1b
+    ldr     r0, [r4, #0x04]          @ SIO_GPIO_IN
+    lsr     r0, r0, #15              @ shift data to bits 0-7
+    and     r0, r0, #0xFF
+    pop     {r4, pc}
+    .ltorg
+
+@ vpy_spawn_enemies(r0=count_ptr, r1=enemies_ptr)
+@ Clears pool, reads CAMERA_Y±150, spawns only in-range enemies.
+.global vpy_spawn_enemies
+.type vpy_spawn_enemies, %function
+.thumb_func
+vpy_spawn_enemies:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    ldr     r6, =ENEMY_POOL_ARM
+    mov     r10, #8
+    mov     r11, #0
+vspe_clear:
+    str     r11, [r6, #0]            @ active = 0
+    add     r6, r6, #32
+    subs    r10, r10, #1
+    bne     vspe_clear
+    ldr     r4, [r0]                 @ total ROM enemy count
+    mov     r5, r1                   @ r5 = ROM entries ptr
+    cmp     r4, #0
+    beq.w   vspe_store_count
+    ldr     r0, =CAMERA_Y
+    ldr     r0, [r0]                 @ camera_y
+    sub     r8, r0, #150             @ y_min = camera_y - 150
+    add     r9, r0, #150             @ y_max = camera_y + 150
+    ldr     r6, =ENEMY_POOL_ARM      @ pool write ptr
+    mov     r7, #0                   @ spawned count
+vspe_loop:
+    cmp     r4, #0
+    beq.w   vspe_store_count     @ no more ROM entries
+    cmp     r7, #8
+    beq     vspe_store_count         @ pool full
+    ldrsh   r10, [r5, #6]            @ spawn_y
+    cmp     r10, r8
+    blt     vspe_next                @ below range
+    cmp     r10, r9
+    bgt     vspe_next                @ above range
+    mov     r0, #1
+    str     r0, [r6, #0]             @ active = 1
+    ldrsh   r0, [r5, #4]             @ spawn_x
+    str     r0, [r6, #4]             @ world_x
+    ldrsh   r0, [r5, #6]             @ spawn_y
+    strh    r0, [r6, #8]             @ world_y (i16)
+    mov     r0, #0
+    strb    r0, [r6, #10]            @ sub_state = WALK
+    strb    r0, [r6, #11]            @ trans_type = 0
+    ldr     r0, [r5, #0]             @ sprite_ptr
+    str     r0, [r6, #12]            @ sprite_ptr
+    ldrb    r0, [r5, #8]             @ ai_type
+    ldrb    r1, [r5, #9]             @ wp_count
+    strb    r1, [r6, #21]            @ wp_count
+    strb    r0, [r6, #22]            @ ai_type
+    cmp     r0, #4
+    beq.w   vspe_wander_wp
+    add     r2, r5, #12              @ patrol: wp_base = ROM+12
+    str     r2, [r6, #16]            @ pool+16 = wp_base
+    mov     r2, #0
+    strb    r2, [r6, #20]            @ wp_idx = 0
+    b.w     vspe_after_wp
+vspe_wander_wp:
+    lsl     r2, r1, #2               @ wp_count * 4
+    add     r2, r2, #20              @ areas_ptr offset = 20 + wp_count*4
+    ldr     r2, [r5, r2]             @ areas_ptr
+    str     r2, [r6, #16]            @ pool+16 = areas_ptr
+    mov     r2, #0xFF
+    strb    r2, [r6, #20]            @ area_idx = 0xFF (not yet found)
+vspe_after_wp:
+    ldrb    r1, [r5, #9]             @ wp_count
+    lsl     r0, r1, #2               @ wp_count * 4
+    add     r0, r0, #12
+    ldrb    r0, [r5, r0]             @ is_anim
+    strb    r0, [r6, #23]            @ pool+23 = is_anim
+    mov     r2, #0
+    strb    r2, [r6, #24]            @ anim_frame_idx = 0
+    strb    r2, [r6, #25]            @ anim_ticks_left = 0
+    ldrb    r0, [r5, #11]            @ default_facing
+    strb    r0, [r6, #26]            @ dir
+    ldrb    r0, [r5, #10]            @ mirror_on_patrol
+    strb    r0, [r6, #27]            @ mirror_on_patrol
+    ldrb    r1, [r5, #9]             @ wp_count
+    lsl     r0, r1, #2               @ wp_count * 4
+    add     r0, r0, #16
+    ldr     r0, [r5, r0]             @ type_data_ptr
+    str     r0, [r6, #28]            @ pool+28 = type_data_ptr
+    add     r6, r6, #32              @ next pool slot
+    add     r7, r7, #1               @ spawned++
+vspe_next:
+    ldrb    r10, [r5, #9]            @ wp_count
+    lsl     r11, r10, #2             @ wp_count * 4
+    add     r11, r11, #24
+    add     r5, r5, r11              @ next ROM entry
+    subs    r4, r4, #1
+    b       vspe_loop
+vspe_store_count:
+    ldr     r0, =ENEMY_COUNT_ARM
+    str     r7, [r0]                 @ store spawned count
+    ldr     r0, =ENEMY_STATE_ARM
+    movs    r1, #0
+    stm     r0!, {r1}
+    stm     r0!, {r1}
+    stm     r0!, {r1}
+    stm     r0!, {r1}
+    stm     r0!, {r1}
+    stm     r0!, {r1}
+    stm     r0!, {r1}
+    stm     r0!, {r1}
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_update_enemies()
+.global vpy_update_enemies
+.type vpy_update_enemies, %function
+.thumb_func
+vpy_update_enemies:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    ldr     r4, =ENEMY_COUNT_ARM
+    ldr     r4, [r4]
+    cmp     r4, #0
+    beq.w   vupe_done
+    ldr     r5, =ENEMY_POOL_ARM  @ r5 = pool base
+    mov     r8, #32              @ pool stride
+vupe_loop:
+    ldr     r0, [r5, #0]         @ active?
+    cmp     r0, #0
+    beq.w   vupe_next
+    ldrb    r0, [r5, #22]        @ ai_type
+    cmp     r0, #1               @ patrol?
+    bne.w   vupe_not_patrol
+    ldrb    r6, [r5, #21]        @ wp_count
+    cmp     r6, #0
+    bne.w   vupe_patrol_has_wps
+    ldr     r0, =ENEMY_POOL_ARM
+    sub     r0, r5, r0
+    lsr     r0, r0, #5           @ slot_idx
+    ldr     r1, =ENEMY_STATE_ARM
+    lsl     r0, r0, #2           @ slot_idx*4
+    ldr     r0, [r1, r0]         @ game state
+    cmp     r0, #0
+    bne.w   vupe_next            @ not normal → keep current sprite
+    ldr     r0, [r5, #28]        @ type_data_ptr
+    cmp     r0, #0
+    beq.w   vupe_next
+    ldr     r1, [r0, #8]         @ idle_sprite_ptr (TYPE_DATA+8)
+    ldrb    r2, [r0, #12]        @ idle_is_anim (TYPE_DATA+12)
+    str     r1, [r5, #12]        @ pool sprite_ptr
+    strb    r2, [r5, #23]        @ pool is_anim
+    b.w     vupe_next
+vupe_patrol_has_wps:
+    ldr     r7, [r5, #16]        @ wp_base
+    ldrb    r9, [r5, #20]        @ wp_idx
+    lsl     r0, r9, #2           @ idx * 4
+    add     r7, r7, r0           @ r7 = &wp[idx]
+    ldrsh   r10, [r7, #0]        @ target_x
+    ldrsh   r11, [r7, #2]        @ target_y
+    ldr     r0, [r5, #4]         @ world_x
+    ldrsh   r1, [r5, #8]         @ world_y (i16)
+    cmp     r0, r10
+    beq.w   vupe_move_y          @ already at target x
+    sub     r2, r10, r0          @ dx = target_x - world_x
+    blt.w   vupe_x_pos
+    rsb     r2, r2, #0           @ |dx|
+    cmp     r2, #1               @ PATROL_SPEED
+    ble.w   vupe_x_snap
+    mov     r2, #1
+    strb    r2, [r5, #26]        @ dir = left
+    sub     r0, r0, #1
+    b.w     vupe_x_store
+vupe_x_pos:
+    cmp     r2, #1               @ PATROL_SPEED
+    ble.w   vupe_x_snap
+    mov     r2, #0
+    strb    r2, [r5, #26]        @ dir = right (moving toward higher x)
+    add     r0, r0, #1
+    b.w     vupe_x_store
+vupe_x_snap:
+    mov     r0, r10              @ snap to target_x
+vupe_x_store:
+    str     r0, [r5, #4]         @ update world_x
+    push    {r6, r7, r12}
+    ldr     r0, [r5, #4]         @ world_x
+    ldrsh   r1, [r5, #8]         @ world_y
+    ldr     r6, [r5, #28]        @ type_data_ptr
+    ldrb    r2, [r6, #6]         @ collision hw from type_data
+    ldrb    r3, [r6, #7]         @ collision hh from type_data
+    bl      vpy_level_collision_x
+    pop     {r6, r7, r12}
+    cmp     r0, #0
+    beq.w   vupe_move_y
+    ldr     r1, [r5, #4]
+    add     r1, r1, r0
+    str     r1, [r5, #4]
+vupe_move_y:
+    ldrsh   r1, [r5, #8]         @ reload world_y
+    cmp     r1, r11
+    beq.w   vupe_check_wp        @ already at target y
+    sub     r2, r11, r1          @ dy = target_y - world_y
+    blt.w   vupe_y_pos
+    rsb     r2, r2, #0           @ |dy|
+    cmp     r2, #1               @ PATROL_SPEED
+    ble.w   vupe_y_snap
+    sub     r1, r1, #1
+    b.w     vupe_y_next
+vupe_y_pos:
+    cmp     r2, #1               @ PATROL_SPEED
+    ble.w   vupe_y_snap
+    add     r1, r1, #1
+    b.w     vupe_y_next
+vupe_y_snap:
+    mov     r1, r11              @ snap to target_y
+vupe_y_next:
+    strh    r1, [r5, #8]         @ update world_y (i16)
+    b.w     vupe_next
+vupe_check_wp:
+    ldr     r0, [r5, #4]         @ world_x (after move)
+    cmp     r0, r10
+    bne.w   vupe_next             @ x not yet at target
+    add     r9, r9, #1
+    cmp     r9, r6               @ >= wp_count?
+    it      ge
+    movge   r9, #0               @ wrap to 0
+    strb    r9, [r5, #20]        @ update wp_idx
+    b.w     vupe_next            @ patrol path done
+vupe_not_patrol:
+    cmp     r0, #4               @ wander?
+    bne.w   vupe_next
+    ldr     r11, =ENEMY_POOL_ARM
+    sub     r11, r5, r11
+    lsr     r11, r11, #5          @ slot_idx
+    ldr     r6, =ENEMY_STATE_ARM
+    lsl     r0, r11, #2
+    ldr     r0, [r6, r0]
+    cmp     r0, #0
+    bne.w   vupe_next
+    ldr     r6, =WANDER_SCRATCH_ARM
+    lsl     r12, r11, #2          @ slot_idx * 4
+    add     r12, r6, r12           @ r12 = scratch ptr
+    ldr     r6, [r5, #16]          @ areas_ptr
+    cmp     r6, #0
+    beq.w   vupe_next
+    ldr     r7, [r6, #0]           @ area_count
+    cmp     r7, #0
+    beq.w   vupe_next
+    ldrb    r9, [r5, #20]          @ area_idx
+    cmp     r9, #0xFF
+    bne.w   vupe_w_have_area
+    ldrsh   r0, [r5, #8]           @ world_y
+    ldr     r3, [r5, #4]           @ world_x
+    mov     r9, #0                 @ best_idx
+    mvn     r10, #0                @ best_score = UINT_MAX
+    mov     r11, #0                @ loop_idx
+    add     r2, r6, #8             @ ptr to area[0]
+vupe_fa_loop:
+    cmp     r11, r7
+    bge.w   vupe_fa_done
+    ldrsh   r1, [r2, #0]           @ area.y
+    sub     r1, r0, r1             @ world_y - area.y
+    cmp     r1, #0
+    it      mi
+    negmi   r1, r1                 @ |dy|
+    ldrsh   r0, [r2, #2]           @ area.x_min
+    cmp     r3, r0
+    blt.w   vupe_fa_xout
+    ldrsh   r0, [r2, #4]           @ area.x_max
+    cmp     r3, r0
+    ble.w   vupe_fa_xin
+vupe_fa_xout:
+    movw    r0, #10000
+    add     r1, r1, r0
+vupe_fa_xin:
+    ldrsh   r0, [r5, #8]           @ restore world_y for loop
+    cmp     r1, r10
+    bhs.w   vupe_fa_next
+    mov     r10, r1
+    mov     r9, r11
+vupe_fa_next:
+    add     r2, r2, #8
+    add     r11, r11, #1
+    b.w     vupe_fa_loop
+vupe_fa_done:
+    strb    r9, [r5, #20]          @ store area_idx
+    lsl     r0, r9, #3             @ idx*8
+    add     r0, r0, #8
+    add     r0, r6, r0             @ &area[idx]
+    ldrsh   r3, [r0, #0]           @ area.y
+    ldr     r1, [r5, #28]          @ type_data_ptr
+    cmp     r1, #0
+    beq     vupe_fa_snap_no_feet
+    ldrsb   r1, [r1, #4]           @ feet_offset
+    add     r3, r3, r1
+vupe_fa_snap_no_feet:
+    strh    r3, [r5, #8]           @ world_y = area.y + feet_offset
+vupe_w_have_area:
+    ldrb    r0, [r5, #10]          @ sub_state
+    ldr     r1, [r5, #28]          @ type_data_ptr
+    cmp     r1, #0
+    beq.w   vupe_w_sprite_disp
+    cmp     r0, #1                 @ IDLE sub-state?
+    bne     vupe_w_sprite_walk
+    ldr     r2, [r1, #8]           @ idle_sprite_ptr
+    ldrb    r3, [r1, #12]          @ idle_is_anim
+    b       vupe_w_sprite_set
+vupe_w_sprite_walk:
+    ldr     r2, [r1, #16]          @ state[0] sprite_ptr (walk)
+    ldrb    r3, [r1, #20]          @ state[0] is_anim
+vupe_w_sprite_set:
+    str     r2, [r5, #12]          @ pool sprite_ptr
+    strb    r3, [r5, #23]          @ pool is_anim
+vupe_w_sprite_disp:
+    cmp     r0, #3
+    beq.w   vupe_w_to_takeoff
+    cmp     r0, #2
+    beq.w   vupe_w_air
+    cmp     r0, #1
+    beq.w   vupe_w_idle
+    ldrb    r9, [r5, #20]          @ area_idx
+    lsl     r0, r9, #3             @ idx*8
+    add     r0, r0, #8
+    add     r0, r6, r0             @ &area[idx]
+    ldrsh   r9,  [r0, #2]          @ x_min
+    ldrsh   r10, [r0, #4]          @ x_max
+    ldr     r11, [r5, #4]          @ world_x (i32)
+    ldrb    r0, [r5, #26]          @ dir (0=right, 1=left)
+    cmp     r0, #0
+    bne.w   vupe_w_walk_left
+    add     r11, r11, #1
+    cmp     r11, r10
+    it      gt
+    movgt   r11, r10
+    str     r11, [r5, #4]          @ world_x
+    push    {r6, r7, r12}
+    mov     r0, r11
+    ldrsh   r1, [r5, #8]           @ world_y
+    ldr     r6, [r5, #28]          @ type_data_ptr
+    ldrb    r2, [r6, #6]           @ collision hw
+    ldrb    r3, [r6, #7]           @ collision hh
+    bl      vpy_level_collision_x
+    pop     {r6, r7, r12}
+    cmp     r0, #0
+    beq.w   vupe_wwr_wall_ok
+    ldr     r1, [r5, #4]
+    add     r1, r1, r0
+    str     r1, [r5, #4]
+    b.w     vupe_w_edge            @ wall hit → flip dir like reaching x_max
+vupe_wwr_wall_ok:
+    cmp     r11, r10
+    bne.w   vupe_next
+    b.w     vupe_w_edge
+vupe_w_walk_left:
+    sub     r11, r11, #1
+    cmp     r11, r9
+    it      lt
+    movlt   r11, r9
+    str     r11, [r5, #4]          @ world_x
+    push    {r6, r7, r12}
+    mov     r0, r11
+    ldrsh   r1, [r5, #8]           @ world_y
+    ldr     r6, [r5, #28]          @ type_data_ptr
+    ldrb    r2, [r6, #6]           @ collision hw
+    ldrb    r3, [r6, #7]           @ collision hh
+    bl      vpy_level_collision_x
+    pop     {r6, r7, r12}
+    cmp     r0, #0
+    beq.w   vupe_wwl_wall_ok
+    ldr     r1, [r5, #4]
+    add     r1, r1, r0
+    str     r1, [r5, #4]
+    b.w     vupe_w_edge            @ wall hit → flip dir like reaching x_min
+vupe_wwl_wall_ok:
+    cmp     r11, r9
+    bne.w   vupe_next
+vupe_w_edge:
+    ldrb    r0, [r5, #26]          @ dir
+    eor     r0, r0, #1             @ flip
+    strb    r0, [r5, #26]
+    push    {r6, r7, r12}
+    bl      vpy_rand
+    pop     {r6, r7, r12}
+    and     r0, r0, #0x3F          @ 0..63
+    add     r0, r0, #90            @ 90..153 frames (~2-3s)
+    strh    r0, [r12, #0]          @ scratch_a = idle_timer
+    mov     r0, #1
+    strb    r0, [r5, #10]          @ sub_state = IDLE
+    b.w     vupe_next
+vupe_w_idle:
+    ldrsh   r0, [r12, #0]          @ idle_timer
+    sub     r0, r0, #1
+    strh    r0, [r12, #0]
+    cmp     r0, #0
+    bgt.w   vupe_next
+    ldr     r9,  [r6, #4]          @ trans_count
+    cmp     r9, #0
+    beq.w   vupe_w_to_walk
+    lsl     r0, r7, #3             @ area_count*8
+    add     r10, r6, #8
+    add     r10, r10, r0           @ r10 = trans_ptr
+    ldrb    r11, [r5, #20]         @ cur_area_idx
+    mov     r7, #0                 @ trans_loop_idx
+vupe_w_pick:
+    cmp     r7, r9
+    bge.w   vupe_w_to_walk         @ exhausted
+    lsl     r0, r7, #3             @ trans[i] offset (8 bytes each)
+    add     r0, r10, r0
+    ldrb    r1, [r0, #0]           @ trans.from
+    cmp     r1, r11
+    bne.w   vupe_w_pick_next
+    push    {r6, r7, r8, r9, r10, r11, r12}
+    bl      vpy_rand
+    pop     {r6, r7, r8, r9, r10, r11, r12}
+    and     r0, r0, #3
+    cmp     r0, #0
+    beq.w   vupe_w_pick_hit
+vupe_w_pick_next:
+    add     r7, r7, #1
+    b.w     vupe_w_pick
+vupe_w_pick_hit:
+    lsl     r0, r7, #3
+    add     r0, r10, r0            @ &trans[r7]
+    ldrb    r1, [r0, #1]           @ to (target area idx)
+    strb    r1, [r5, #20]          @ area_idx = target
+    ldrb    r1, [r0, #2]           @ type
+    strb    r1, [r5, #11]          @ pool+11 = trans_type
+    ldrsh   r1, [r0, #4]           @ from_x
+    strh    r1, [r12, #0]          @ scratch_a = from_x
+    ldrsh   r1, [r0, #6]           @ to_x
+    strh    r1, [r12, #2]          @ scratch_b = target_x
+    mov     r0, #3
+    strb    r0, [r5, #10]          @ sub_state = WALK_TO_TAKEOFF
+    b.w     vupe_next
+vupe_w_to_walk:
+    mov     r0, #0
+    strb    r0, [r5, #10]          @ sub_state = WALK
+    b.w     vupe_next
+vupe_w_to_takeoff:
+    ldrsh   r9,  [r12, #0]         @ from_x (scratch_a)
+    ldr     r10, [r5, #4]           @ world_x
+    sub     r0, r9, r10             @ dx = from_x - x
+    cmp     r0, #0
+    beq.w   vupe_w_tt_reached
+    bgt.w   vupe_w_tt_right
+    mov     r1, #1
+    strb    r1, [r5, #26]           @ dir = left
+    sub     r10, r10, #1
+    cmp     r10, r9
+    it      lt
+    movlt   r10, r9
+    str     r10, [r5, #4]
+    cmp     r10, r9
+    bne.w   vupe_next
+    b.w     vupe_w_tt_reached
+vupe_w_tt_right:
+    mov     r1, #0
+    strb    r1, [r5, #26]           @ dir = right
+    add     r10, r10, #1
+    cmp     r10, r9
+    it      gt
+    movgt   r10, r9
+    str     r10, [r5, #4]
+    cmp     r10, r9
+    bne.w   vupe_next
+vupe_w_tt_reached:
+    ldrb    r9,  [r5, #20]          @ target area_idx
+    lsl     r0,  r9, #3             @ idx*8
+    add     r0,  r0, #8
+    add     r0,  r6, r0             @ &area[target]
+    ldrsh   r9,  [r0, #0]           @ target_area.y (raw)
+    ldrsh   r10, [r5, #8]           @ current world_y (has feet_offset)
+    ldr     r1,  [r5, #28]          @ type_data_ptr
+    cmp     r1, #0
+    beq     vupe_w_tt_no_feet
+    ldrsb   r1, [r1, #4]            @ feet_offset
+    sub     r10, r10, r1            @ remove feet_offset → raw current area.y
+vupe_w_tt_no_feet:
+    sub     r11, r9, r10            @ dy = target.y - current.y
+    ldrb    r6, [r5, #11]           @ trans_type
+    cmp     r6, #2
+    beq.w   vupe_w_tt_drop
+    cmp     r6, #3
+    beq.w   vupe_w_tt_across
+    mov     r3, #4
+vupe_w_tt_vy0_loop:
+    add     r2, r3, #1
+    mul     r2, r3, r2
+    lsr     r2, r2, #1             @ peak = vy0*(vy0+1)/2
+    cmp     r2, r11
+    bge.w   vupe_w_tt_setvy
+    add     r3, r3, #1
+    cmp     r3, #16
+    blt     vupe_w_tt_vy0_loop
+    b.w     vupe_w_tt_setvy
+vupe_w_tt_drop:
+    mvn     r3, #0                 @ vy0 = -1
+    b.w     vupe_w_tt_setvy
+vupe_w_tt_across:
+    mov     r3, #3                 @ vy0 = 3
+vupe_w_tt_setvy:
+    strh    r3, [r12, #0]           @ scratch_a = vy
+    mov     r0, #2
+    strb    r0, [r5, #10]           @ sub_state = AIRBORNE
+    ldrsh   r0, [r12, #2]           @ target_x
+    ldr     r1, [r5, #4]            @ x
+    cmp     r0, r1
+    bge.w   vupe_w_tt_face_r
+    mov     r0, #1
+    strb    r0, [r5, #26]           @ dir = left
+    b.w     vupe_next
+vupe_w_tt_face_r:
+    mov     r0, #0
+    strb    r0, [r5, #26]           @ dir = right
+    b.w     vupe_next
+vupe_w_air:
+    ldr     r10, [r5, #4]           @ x
+    ldrsh   r9,  [r12, #2]          @ target_x
+    sub     r0, r9, r10             @ dx
+    cmp     r0, #0
+    beq.w   vupe_w_air_y_lerp
+    bgt.w   vupe_w_air_xright
+    sub     r10, r10, #4
+    cmp     r10, r9
+    it      lt
+    movlt   r10, r9
+    str     r10, [r5, #4]
+    b.w     vupe_w_air_y_arc
+vupe_w_air_xright:
+    add     r10, r10, #4
+    cmp     r10, r9
+    it      gt
+    movgt   r10, r9
+    str     r10, [r5, #4]
+vupe_w_air_y_arc:
+    ldrsh   r0, [r5, #8]            @ y
+    ldrsh   r1, [r12, #0]           @ vy
+    add     r0, r0, r1
+    strh    r0, [r5, #8]            @ y += vy
+    sub     r1, r1, #1
+    mvn     r2, #2                  @ -3 terminal velocity
+    cmp     r1, r2
+    it      lt
+    movlt   r1, r2
+    strh    r1, [r12, #0]           @ vy updated
+    b.w     vupe_next
+vupe_w_air_y_lerp:
+    ldrb    r9,  [r5, #20]          @ target area_idx
+    lsl     r0,  r9, #3
+    add     r0,  r0, #8
+    add     r0,  r6, r0             @ &area[target]
+    ldrsh   r9,  [r0, #0]           @ target area.y (raw)
+    mov     r10, r9                 @ landing_y = target.y
+    ldr     r1, [r5, #28]           @ type_data_ptr
+    cmp     r1, #0
+    beq     vupe_w_air_no_feet
+    ldrsb   r1, [r1, #4]            @ feet_offset
+    add     r10, r10, r1            @ landing_y = area.y + feet_offset
+vupe_w_air_no_feet:
+    ldrsh   r0, [r5, #8]            @ current y
+    sub     r1, r10, r0             @ delta = landing_y - y
+    cmp     r1, #0
+    beq.w   vupe_w_air_land
+    bgt.w   vupe_w_air_yup
+    sub     r0, r0, #4
+    cmp     r0, r10
+    it      lt
+    movlt   r0, r10
+    strh    r0, [r5, #8]
+    cmp     r0, r10
+    bne.w   vupe_next
+    b.w     vupe_w_air_land
+vupe_w_air_yup:
+    add     r0, r0, #4
+    cmp     r0, r10
+    it      gt
+    movgt   r0, r10
+    strh    r0, [r5, #8]
+    cmp     r0, r10
+    bne.w   vupe_next
+vupe_w_air_land:
+    strh    r10, [r5, #8]           @ snap to landing_y
+    mov     r0, #0
+    strb    r0, [r5, #10]           @ sub_state = WALK
+    b.w     vupe_next
+vupe_next:
+    add     r5, r5, r8
+    subs    r4, r4, #1
+    bne     vupe_loop
+vupe_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_draw_enemies()
+.global vpy_draw_enemies
+.type vpy_draw_enemies, %function
+.thumb_func
+vpy_draw_enemies:
+    push    {r4, r5, r6, r7, r8, lr}
+    ldr     r4, =ENEMY_COUNT_ARM
+    ldr     r4, [r4]
+    cmp     r4, #0
+    beq.w   vdre_done
+    ldr     r5, =ENEMY_POOL_ARM
+    mov     r8, #32
+    ldr     r6, =CAMERA_X
+    ldr     r7, =CAMERA_Y
+    ldr     r6, [r6]             @ camera_x
+    ldr     r7, [r7]             @ camera_y
+vdre_loop:
+    ldr     r0, [r5, #0]         @ active?
+    cmp     r0, #0
+    beq.w   vdre_next
+    ldr     r0, [r5, #12]        @ sprite_ptr
+    cmp     r0, #0
+    beq.w   vdre_next
+    ldr     r1, [r5, #4]         @ world_x
+    sub     r1, r1, r6           @ screen_x
+    ldrsh   r2, [r5, #8]         @ world_y (i16)
+    sub     r2, r2, r7           @ screen_y
+    ldrb    r3, [r5, #23]        @ is_anim
+    cmp     r3, #0
+    bne.w   vdre_use_anim
+    ldrb    r3, [r5, #26]        @ dir (0=right, 1=left)
+    ldrb    r12, [r5, #27]       @ mirror_on_patrol
+    and     r3, r3, r12          @ mirror = dir & mirror_on_patrol
+    sub     sp, sp, #8           @ reserve 8 bytes (keeps 8-byte alignment)
+    mov     r12, #127
+    str     r12, [sp]            @ intensity=127 at [sp+0] (5th arg)
+    bl      vpy_draw_vector_ex
+    add     sp, sp, #8           @ clean up stack reservation
+    b.w     vdre_next
+vdre_use_anim:
+    ldrb    r9, [r5, #26]        @ dir (0=right, 1=left) into r9
+    ldrb    r3, [r5, #27]        @ mirror_on_patrol
+    and     r9, r9, r3           @ mirror in r9 (r0=anim_ptr unchanged)
+    add     r3, r5, #24          @ per-enemy anim state
+    push    {r4, r9}             @ save loop counter + mirror (8-byte align)
+    mov     r4, r9               @ r4 = mirror for vpy_draw_anim
+    @ r0=anim_ptr r1=screen_x r2=screen_y r3=state_ptr r4=mirror
+    bl      vpy_draw_anim
+    pop     {r4, r9}             @ restore loop counter
+vdre_next:
+    add     r5, r5, r8
+    subs    r4, r4, #1
+    bne     vdre_loop
+vdre_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vpy_get_enemy_active(r0=idx) -> r0=active
+.global vpy_get_enemy_active
+.type vpy_get_enemy_active, %function
+.thumb_func
+vpy_get_enemy_active:
+    lsl     r1, r0, #5              @ r1 = idx*32
+    ldr     r0, =ENEMY_POOL_ARM
+    ldr     r0, [r0, r1]            @ active field
+    bx      lr
+    .ltorg
+
+@ vpy_get_enemy_x(r0=idx) -> r0=world_x
+.global vpy_get_enemy_x
+.type vpy_get_enemy_x, %function
+.thumb_func
+vpy_get_enemy_x:
+    lsl     r1, r0, #5              @ r1 = idx*32
+    ldr     r0, =ENEMY_POOL_ARM
+    add     r0, r0, r1
+    ldr     r0, [r0, #4]            @ world_x
+    bx      lr
+    .ltorg
+
+@ vpy_get_enemy_y(r0=idx) -> r0=world_y
+.global vpy_get_enemy_y
+.type vpy_get_enemy_y, %function
+.thumb_func
+vpy_get_enemy_y:
+    lsl     r1, r0, #5              @ r1 = idx*32
+    ldr     r0, =ENEMY_POOL_ARM
+    add     r0, r0, r1
+    ldrsh   r0, [r0, #8]            @ world_y (i16 sign-extended)
+    bx      lr
+    .ltorg
+
+@ vpy_set_enemy_x(r0=idx, r1=x)
+.global vpy_set_enemy_x
+.type vpy_set_enemy_x, %function
+.thumb_func
+vpy_set_enemy_x:
+    lsl     r2, r0, #5              @ r2 = idx*32
+    ldr     r0, =ENEMY_POOL_ARM
+    add     r0, r0, r2
+    str     r1, [r0, #4]            @ world_x = x
+    bx      lr
+    .ltorg
+
+@ vpy_set_enemy_y(r0=idx, r1=y)
+.global vpy_set_enemy_y
+.type vpy_set_enemy_y, %function
+.thumb_func
+vpy_set_enemy_y:
+    lsl     r2, r0, #5              @ r2 = idx*32
+    ldr     r0, =ENEMY_POOL_ARM
+    add     r0, r0, r2
+    strh    r1, [r0, #8]            @ world_y (i16)
+    bx      lr
+    .ltorg
+
+@ vpy_kill_enemy(r0=idx)
+.global vpy_kill_enemy
+.type vpy_kill_enemy, %function
+.thumb_func
+vpy_kill_enemy:
+    lsl     r1, r0, #5              @ r1 = idx*32
+    ldr     r0, =ENEMY_POOL_ARM
+    movs    r2, #0
+    str     r2, [r0, r1]            @ active = 0
+    bx      lr
+    .ltorg
+
+@ vpy_get_enemy_state(r0=idx) -> r0=state
+.global vpy_get_enemy_state
+.type vpy_get_enemy_state, %function
+.thumb_func
+vpy_get_enemy_state:
+    ldr     r1, =ENEMY_STATE_ARM
+    lsl     r0, r0, #2              @ idx*4 (word stride)
+    ldr     r0, [r1, r0]
+    bx      lr
+    .ltorg
+
+@ vpy_set_enemy_state(r0=idx, r1=state) — set state and sync pool sprite/anim
+.global vpy_set_enemy_state
+.type vpy_set_enemy_state, %function
+.thumb_func
+vpy_set_enemy_state:
+    push    {r4, r5, lr}
+    ldr     r2, =ENEMY_STATE_ARM
+    lsl     r3, r0, #2           @ idx * 4
+    str     r1, [r2, r3]         @ ENEMY_STATE_ARM[idx] = state
+    ldr     r4, =ENEMY_POOL_ARM
+    lsl     r3, r0, #5           @ idx * 32
+    add     r4, r4, r3           @ r4 = pool slot ptr
+    ldr     r5, [r4, #28]        @ type_data_ptr
+    cmp     r5, #0
+    beq.w   vsse_done
+    lsl     r0, r1, #3           @ new_state * 8
+    add     r0, r0, #16          @ skip header
+    add     r0, r5, r0           @ ptr to state entry
+    ldr     r1, [r0, #0]         @ sprite_ptr
+    ldrb    r2, [r0, #4]         @ is_anim
+    str     r1, [r4, #12]        @ update pool sprite_ptr
+    strb    r2, [r4, #23]        @ update pool is_anim
+    movs    r0, #0
+    strb    r0, [r4, #24]        @ reset anim_frame_idx
+    strb    r0, [r4, #25]        @ reset anim_ticks_left
+vsse_done:
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ vpy_set_enemy_dir(r0=idx, r1=dir) — write dir into pool+26
+.global vpy_set_enemy_dir
+.type vpy_set_enemy_dir, %function
+.thumb_func
+vpy_set_enemy_dir:
+    lsl     r2, r0, #5           @ idx * 32
+    ldr     r0, =ENEMY_POOL_ARM
+    add     r0, r0, r2           @ pool slot
+    strb    r1, [r0, #26]        @ pool+26 = dir
+    bx      lr
+
+@ vpy_enemy_fire_event(r0=idx, r1=event_name_ptr) — event-routed state transition
+.global vpy_enemy_fire_event
+.type vpy_enemy_fire_event, %function
+.thumb_func
+vpy_enemy_fire_event:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, r12, lr}
+    mov     r7, r1               @ save event name ptr
+    lsl     r12, r0, #5          @ idx * 32
+    ldr     r4, =ENEMY_POOL_ARM
+    add     r4, r4, r12          @ r4 = pool slot
+    lsl     r5, r0, #2           @ idx * 4
+    ldr     r6, =ENEMY_STATE_ARM
+    ldr     r2, [r6, r5]         @ r2 = current state
+    ldr     r3, [r4, #28]        @ r3 = type_data_ptr
+    cmp     r3, #0
+    beq.w   vefe_done        @ no type data
+    ldr     r8, [r3, #0]         @ r8 = state_count
+    sub     r11, r8, #1          @ r11 = max_state
+    ldrb    r9, [r3, #5]         @ r9 = event_count
+    cmp     r9, #0
+    bne.w   vefe_have_events
+    cmp     r7, #0
+    beq.w   vefe_inc
+    cmp     r11, #4              @ max_state >= 4 has fire states
+    bge.w   vefe_inc
+    ldr     r0, [r7, #0]         @ first 4 bytes of event name
+    movw    r12, #0x6E6F
+    movt    r12, #0x6946         @ 0x69466E6F = 'onFi'
+    cmp     r0, r12
+    beq.w   vefe_done            @ 'onFire*' on non-frog: skip
+vefe_inc:
+    add     r2, r2, #1
+    cmp     r2, r11
+    it      gt
+    movgt   r2, r11
+    str     r2, [r6, r5]         @ store new state
+    b.w     vefe_update_sprite
+vefe_have_events:
+    lsl     r0, r8, #3           @ state_count * 8
+    add     r0, r0, #16
+    add     r10, r3, r0          @ r10 = event table base
+    cmp     r7, #0
+    beq.w   vefe_done        @ null event ptr
+    ldr     r8, [r7, #0]         @ name bytes 0-3
+    ldr     r0, [r7, #4]         @ name bytes 4-7
+    mov     r11, #0
+vefe_ev_loop:
+    cmp     r11, r9              @ idx < event_count?
+    bge.w   vefe_done            @ not found → no-op
+    lsl     r1, r11, #3
+    lsl     r12, r11, #2
+    add     r1, r1, r12
+    add     r1, r10, r1          @ r1 = &entry
+    ldrb    r12, [r1, #0]        @ from_state
+    cmp     r12, r2
+    bne     vefe_ev_next
+    ldr     r12, [r1, #4]        @ name[0..3]
+    cmp     r12, r8
+    bne     vefe_ev_next
+    ldr     r12, [r1, #8]        @ name[4..7]
+    cmp     r12, r0
+    bne     vefe_ev_next
+    ldrb    r2, [r1, #1]         @ to_state
+    str     r2, [r6, r5]         @ ENEMY_STATE_ARM[idx] = to_state
+    b.w     vefe_update_sprite
+vefe_ev_next:
+    add     r11, r11, #1
+    b.w     vefe_ev_loop
+vefe_update_sprite:
+    lsl     r0, r2, #3           @ state * 8
+    add     r0, r0, #16          @ skip header
+    add     r0, r3, r0           @ ptr to state entry
+    ldr     r1, [r0, #0]         @ sprite_ptr
+    ldrb    r12, [r0, #4]        @ is_anim
+    str     r1, [r4, #12]        @ pool sprite_ptr
+    strb    r12, [r4, #23]       @ pool is_anim
+    movs    r0, #0
+    strb    r0, [r4, #24]        @ reset anim_frame_idx
+    strb    r0, [r4, #25]        @ reset anim_ticks_left
+vefe_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, r12, pc}
+
+@ vpy_get_enemy_area_idx(r0=idx) -> r0=0 (stub)
+.global vpy_get_enemy_area_idx
+.type vpy_get_enemy_area_idx, %function
+.thumb_func
+vpy_get_enemy_area_idx:
+    movs    r0, #0
+    bx      lr
+
+@ ============================================================
+@ Drawing engine — ARM Thumb2 / RP2350 bus master
+@ ============================================================
+
+@ SIN_TABLE[128]: sin(i*2π/128)*127 as i8
+.global _SIN_TABLE
+_SIN_TABLE:
+    .byte   0x00, 0x06, 0x0C, 0x13, 0x19, 0x1F, 0x25, 0x2B, 0x31, 0x36, 0x3C, 0x41, 0x47, 0x4C, 0x51, 0x55
+    .byte   0x5A, 0x5E, 0x62, 0x66, 0x6A, 0x6D, 0x70, 0x73, 0x75, 0x78, 0x7A, 0x7B, 0x7D, 0x7E, 0x7E, 0x7F
+    .byte   0x7F, 0x7F, 0x7E, 0x7E, 0x7D, 0x7B, 0x7A, 0x78, 0x75, 0x73, 0x70, 0x6D, 0x6A, 0x66, 0x62, 0x5E
+    .byte   0x5A, 0x55, 0x51, 0x4C, 0x47, 0x41, 0x3C, 0x36, 0x31, 0x2B, 0x25, 0x1F, 0x19, 0x13, 0x0C, 0x06
+    .byte   0x00, 0xFA, 0xF4, 0xED, 0xE7, 0xE1, 0xDB, 0xD5, 0xCF, 0xCA, 0xC4, 0xBF, 0xB9, 0xB4, 0xAF, 0xAB
+    .byte   0xA6, 0xA2, 0x9E, 0x9A, 0x96, 0x93, 0x90, 0x8D, 0x8B, 0x88, 0x86, 0x85, 0x83, 0x82, 0x82, 0x81
+    .byte   0x81, 0x81, 0x82, 0x82, 0x83, 0x85, 0x86, 0x88, 0x8B, 0x8D, 0x90, 0x93, 0x96, 0x9A, 0x9E, 0xA2
+    .byte   0xA6, 0xAB, 0xAF, 0xB4, 0xB9, 0xBF, 0xC4, 0xCA, 0xCF, 0xD5, 0xDB, 0xE1, 0xE7, 0xED, 0xF4, 0xFA
+
+@ smul_lut(r0=val i8, r1=angle 0-127) → r0=(val*sin)>>7
+.global smul_lut
+.type smul_lut, %function
+.thumb_func
+smul_lut:
+    ldr     r2, =_SIN_TABLE
+    and     r1, r1, #0x7F
+    ldrb    r2, [r2, r1]
+    sxtb    r2, r2
+    sxtb    r0, r0
+    mul     r0, r0, r2
+    asr     r0, r0, #7
+    bx      lr
+
+@ dv_reset() — reset Vectrex integrators, set ACR=$18
+.global dv_reset
+.type dv_reset, %function
+.thumb_func
+dv_reset:
+    push    {lr}
+    mov     r0, #0xD00A
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD00B
+    mov     r1, #0x18
+    bl      bus_write
+    mov     r0, #0xD00C
+    mov     r1, #0xCC
+    bl      bus_write
+    mov     r0, #0xD001
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x03
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x02
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x02
+    bl      bus_write
+    pop     {pc}
+    .ltorg
+
+@ dv_move_to(r0=dx, r1=dy) — position beam, no draw
+.global dv_move_to
+.type dv_move_to, %function
+.thumb_func
+dv_move_to:
+    push    {r4, r5, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r0, #0xD001
+    mov     r1, r5
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #60
+dv_mt_s: subs r0,r0,#1
+    bne dv_mt_s
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD001
+    mov     r1, r4
+    bl      bus_write
+    mov     r0, #0xD00A
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD006
+    mov     r1, #0x7F
+    bl      bus_write
+    mov     r0, #0xD005
+    mov     r1, #0x00
+    bl      bus_write
+dv_mt_p: mov r0,#0xD00D
+    bl bus_read
+    tst r0,#0x40
+    beq dv_mt_p
+    mov     r0, #0xD004
+    bl      bus_read
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ dv_draw_delta(r0=dx, r1=dy) — draw one vector segment
+.global dv_draw_delta
+.type dv_draw_delta, %function
+.thumb_func
+dv_draw_delta:
+    push    {r4, r5, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r0, #0xD001
+    mov     r1, r5
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #60
+dv_dd_s: subs r0,r0,#1
+    bne dv_dd_s
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD001
+    mov     r1, r4
+    bl      bus_write
+    mov     r0, #0xD00A
+    mov     r1, #0xFF
+    bl      bus_write
+    mov     r0, #0xD006
+    mov     r1, #0x7F
+    bl      bus_write
+    mov     r0, #0xD005
+    mov     r1, #0x00
+    bl      bus_write
+dv_dd_p: mov r0,#0xD00D
+    bl bus_read
+    tst r0,#0x40
+    beq dv_dd_p
+    mov     r0, #0xD00A
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD004
+    bl      bus_read
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ vpy_draw_vector(r0=asset_ptr, r1=ox, r2=oy)
+@ Draws asset at screen position (ox, oy). ox=0, oy=0 = screen centre.
+.global vpy_draw_vector
+.type vpy_draw_vector, %function
+.thumb_func
+vpy_draw_vector:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    mov     r4, r0              @ asset_ptr
+    mov     r9, r1              @ ox
+    mov     r10, r2             @ oy
+    ldr     r5, [r4]            @ path_count
+    mov     r6, #0              @ path index
+dvv_pl:
+    cmp     r6, r5
+    bge     dvv_done
+    lsl     r7, r6, #2
+    add     r7, r7, #4
+    ldr     r7, [r4, r7]
+    bl      dv_reset
+    ldrb    r0, [r7]
+    bl      vpy_set_intensity
+    ldrsb   r0, [r7, #2]
+    add     r0, r0, r9
+    ldrsb   r1, [r7, #1]
+    add     r1, r1, r10
+    bl      dv_move_to
+    add     r8, r7, #5
+dvv_cl:
+    ldrb    r0, [r8]
+    cmp     r0, #0x02
+    beq     dvv_cend
+    cmp     r0, #0xFF
+    bne     dvv_cskip
+    ldrsb   r0, [r8, #2]
+    ldrsb   r1, [r8, #1]
+    bl      dv_draw_delta
+    add     r8, r8, #3
+    b       dvv_cl
+dvv_cskip:
+    add     r8, r8, #1
+    b       dvv_cl
+dvv_cend:
+    add     r6, r6, #1
+    b       dvv_pl
+dvv_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ vpy_draw_vector_3d(r0,r1=ax,r2=ay,r3=az,[sp+36]=ox,[sp+40]=oy)
+.global vpy_draw_vector_3d
+.type vpy_draw_vector_3d, %function
+.thumb_func
+vpy_draw_vector_3d:
+    push    {r4,r5,r6,r7,r8,r9,r10,r11,lr}
+    mov     r4, r0
+    mov     r5, r1               @ ax
+    mov     r6, r2               @ ay
+    mov     r7, r3               @ az
+    ldrsb   r8, [sp, #36]        @ ox (sign-extend)
+    ldrsb   r9, [sp, #40]        @ oy
+    ldr     r0, =_dv3d_cos
+    add     r1, r5, #32
+    and r1,r1,#0x7F
+    strb r1,[r0]
+    add     r1, r6, #32
+    and r1,r1,#0x7F
+    strb r1,[r0,#1]
+    add     r1, r7, #32
+    and r1,r1,#0x7F
+    strb r1,[r0,#2]
+    ldr     r10, [r4]
+    add r4,r4,#4
+    ldr     r11, =_dv3d_vbuf
+dv3_vl:
+    cmp r10,#0
+    beq dv3_vd
+    sub r10,r10,#1
+    ldr     r0, =_dv3d_tmp
+    ldrsb   r1, [r4]
+    strb r1,[r0]
+    ldrsb   r1, [r4,#1]
+  strb r1,[r0,#1]
+    ldrsb   r1, [r4,#2]
+  strb r1,[r0,#2]
+    add     r4, r4, #3
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#1]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#0]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#2]
+    mov     r1,r5
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    sub r0,r3,r0
+    strb r0,[r2,#1]
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#1]
+    mov     r1,r5
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#2]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#0]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    add r0,r0,r3
+    strb r0,[r2,#2]
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#0]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#1]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#2]
+    mov     r1,r6
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    add r0,r0,r3
+    strb r0,[r2,#3]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#3]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#2]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#1]
+    mov     r1,r7
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    sub r0,r3,r0
+    add r0,r0,r8
+    strb    r0,[r11]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#3]
+    mov     r1,r7
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#1]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#2]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    add r0,r0,r3
+    add r0,r0,r9
+    strb    r0,[r11,#1]
+    add     r11,r11,#2
+    b dv3_vl
+dv3_vd:
+    add     r4, r4, #3
+    bic r4, r4, #3
+    bl      dv_reset
+    mov     r0, #127
+    bl      vpy_set_intensity
+    ldr     r10,[r4]
+    add r4,r4,#4
+    ldr     r11,=_dv3d_vbuf
+    ldr     r0,=_dv3d_cur
+    mov r1,#0
+    strh r1,[r0]
+dv3_pl:
+    cmp r10,#0
+    beq dv3_pd
+    sub r10,r10,#1
+    ldrb    r5,[r4]              @ pt_count
+    ldrb    r6,[r4,#1]           @ closed
+    add     r4,r4,#2
+    cmp     r5,#0
+    beq dv3_pnext_emp
+    mov     r7, r4
+    ldrb    r0,[r7]
+    lsl r2,r0,#1
+    ldrsb   r0,[r11,r2]
+    add     r2,r2,#1
+    ldrsb r1,[r11,r2]
+    ldr     r2,=_dv3d_cur
+    ldrsb   r3,[r2,#0]
+    sub r0,r0,r3
+    ldrsb   r3,[r2,#1]
+    sub r1,r1,r3
+    push    {r0,r1}
+    ldrb    r0,[r7]
+    lsl r2,r0,#1
+    ldrsb   r8,[r11,r2]
+    add     r2,r2,#1
+    ldrsb r9,[r11,r2]
+    ldr     r2,=_dv3d_cur
+    strb r8,[r2]
+    strb r9,[r2,#1]
+    pop     {r0,r1}
+    bl      dv_move_to
+    sub     r5,r5,#1
+    add r7,r7,#1
+dv3_vxtx:
+    cmp     r5,#0
+    beq dv3_close
+    sub r5,r5,#1
+    ldrb    r0,[r7]
+    lsl r2,r0,#1
+    ldrsb   r0,[r11,r2]
+    add     r2,r2,#1
+    ldrsb r1,[r11,r2]
+    push    {r0,r1}
+    ldr     r2,=_dv3d_cur
+    ldrsb   r3,[r2,#0]
+    sub r0,r0,r3
+    ldrsb   r3,[r2,#1]
+    sub r1,r1,r3
+    bl      dv_draw_delta
+    pop     {r0,r1}
+    ldr     r2,=_dv3d_cur
+    strb r0,[r2]
+    strb r1,[r2,#1]
+    add     r7,r7,#1
+    b dv3_vxtx
+dv3_close:
+    cmp     r6,#0
+    beq dv3_pnext
+    ldr     r2,=_dv3d_cur
+    ldrsb   r3,[r2,#0]
+    sub r0,r8,r3
+    ldrsb   r3,[r2,#1]
+    sub r1,r9,r3
+    bl      dv_draw_delta
+    ldr     r2,=_dv3d_cur
+    strb r8,[r2]
+    strb r9,[r2,#1]
+dv3_pnext:
+    mov     r4,r7
+    b dv3_pl
+dv3_pnext_emp:
+    b       dv3_pl
+dv3_pd:
+    pop     {r4,r5,r6,r7,r8,r9,r10,r11,pc}
+    .ltorg
+
+@ ============================================================
+@ VPy Builtins — ARM Thumb2 / RP2350
+@ ============================================================
+
+@ ============================================================
+@ Vector font — ASCII 32-126 stroke data
+@ Each glyph: [cmd(1=move,2=draw), x(0-4), y(0-6), ..., 0x00]
+@ _FONT_PTRS[char-32] = absolute address of glyph (0 = no strokes)
+@ ============================================================
+
+.global _FONT_PTRS
+_FONT_PTRS:
+    .word   0    @ ' ' no strokes
+    .word   _glyph_033   @ '!'
+    .word   _glyph_034   @ '"'
+    .word   0    @ '#' no strokes
+    .word   0    @ '$' no strokes
+    .word   0    @ '%' no strokes
+    .word   0    @ '&' no strokes
+    .word   0    @ ''' no strokes
+    .word   0    @ '(' no strokes
+    .word   0    @ ')' no strokes
+    .word   0    @ '*' no strokes
+    .word   _glyph_043   @ '+'
+    .word   _glyph_044   @ ','
+    .word   _glyph_045   @ '-'
+    .word   _glyph_046   @ '.'
+    .word   _glyph_047   @ '/'
+    .word   _glyph_048   @ '0'
+    .word   _glyph_049   @ '1'
+    .word   _glyph_050   @ '2'
+    .word   _glyph_051   @ '3'
+    .word   _glyph_052   @ '4'
+    .word   _glyph_053   @ '5'
+    .word   _glyph_054   @ '6'
+    .word   _glyph_055   @ '7'
+    .word   _glyph_056   @ '8'
+    .word   _glyph_057   @ '9'
+    .word   _glyph_058   @ ':'
+    .word   _glyph_059   @ ';'
+    .word   _glyph_060   @ '<'
+    .word   _glyph_061   @ '='
+    .word   _glyph_062   @ '>'
+    .word   _glyph_063   @ '?'
+    .word   0    @ '@' no strokes
+    .word   _glyph_065   @ 'A'
+    .word   _glyph_066   @ 'B'
+    .word   _glyph_067   @ 'C'
+    .word   _glyph_068   @ 'D'
+    .word   _glyph_069   @ 'E'
+    .word   _glyph_070   @ 'F'
+    .word   _glyph_071   @ 'G'
+    .word   _glyph_072   @ 'H'
+    .word   _glyph_073   @ 'I'
+    .word   _glyph_074   @ 'J'
+    .word   _glyph_075   @ 'K'
+    .word   _glyph_076   @ 'L'
+    .word   _glyph_077   @ 'M'
+    .word   _glyph_078   @ 'N'
+    .word   _glyph_079   @ 'O'
+    .word   _glyph_080   @ 'P'
+    .word   _glyph_081   @ 'Q'
+    .word   _glyph_082   @ 'R'
+    .word   _glyph_083   @ 'S'
+    .word   _glyph_084   @ 'T'
+    .word   _glyph_085   @ 'U'
+    .word   _glyph_086   @ 'V'
+    .word   _glyph_087   @ 'W'
+    .word   _glyph_088   @ 'X'
+    .word   _glyph_089   @ 'Y'
+    .word   _glyph_090   @ 'Z'
+    .word   0    @ '[' no strokes
+    .word   0    @ '\' no strokes
+    .word   0    @ ']' no strokes
+    .word   0    @ '^' no strokes
+    .word   0    @ '_' no strokes
+    .word   0    @ '`' no strokes
+    .word   _glyph_097   @ 'a'
+    .word   _glyph_098   @ 'b'
+    .word   _glyph_099   @ 'c'
+    .word   _glyph_100   @ 'd'
+    .word   _glyph_101   @ 'e'
+    .word   _glyph_102   @ 'f'
+    .word   _glyph_103   @ 'g'
+    .word   _glyph_104   @ 'h'
+    .word   _glyph_105   @ 'i'
+    .word   _glyph_106   @ 'j'
+    .word   _glyph_107   @ 'k'
+    .word   _glyph_108   @ 'l'
+    .word   _glyph_109   @ 'm'
+    .word   _glyph_110   @ 'n'
+    .word   _glyph_111   @ 'o'
+    .word   _glyph_112   @ 'p'
+    .word   _glyph_113   @ 'q'
+    .word   _glyph_114   @ 'r'
+    .word   _glyph_115   @ 's'
+    .word   _glyph_116   @ 't'
+    .word   _glyph_117   @ 'u'
+    .word   _glyph_118   @ 'v'
+    .word   _glyph_119   @ 'w'
+    .word   _glyph_120   @ 'x'
+    .word   _glyph_121   @ 'y'
+    .word   _glyph_122   @ 'z'
+    .word   0    @ '{' no strokes
+    .word   0    @ '|' no strokes
+    .word   0    @ '}' no strokes
+    .word   0    @ '~' no strokes
+
+.global _FONT_DATA
+_FONT_DATA:
+_glyph_033:  @ '!'
+    .byte   1, 2, 6
+    .byte   2, 2, 2
+    .byte   1, 2, 0
+    .byte   2, 2, 1
+    .byte   0
+_glyph_034:  @ '"'
+    .byte   1, 1, 5
+    .byte   2, 1, 6
+    .byte   1, 3, 5
+    .byte   2, 3, 6
+    .byte   0
+_glyph_043:  @ '+'
+    .byte   1, 2, 1
+    .byte   2, 2, 5
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_044:  @ ','
+    .byte   1, 2, 1
+    .byte   2, 1, 0
+    .byte   0
+_glyph_045:  @ '-'
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_046:  @ '.'
+    .byte   1, 1, 0
+    .byte   2, 2, 0
+    .byte   0
+_glyph_047:  @ '/'
+    .byte   1, 0, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_048:  @ '0'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   0
+_glyph_049:  @ '1'
+    .byte   1, 2, 0
+    .byte   2, 2, 6
+    .byte   0
+_glyph_050:  @ '2'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 4, 3
+    .byte   2, 0, 3
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_051:  @ '3'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 4, 0
+    .byte   2, 0, 0
+    .byte   1, 4, 3
+    .byte   2, 1, 3
+    .byte   0
+_glyph_052:  @ '4'
+    .byte   1, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   1, 4, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_053:  @ '5'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   2, 4, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_054:  @ '6'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 3
+    .byte   2, 0, 3
+    .byte   0
+_glyph_055:  @ '7'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 2, 0
+    .byte   0
+_glyph_056:  @ '8'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_057:  @ '9'
+    .byte   1, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_058:  @ ':'
+    .byte   1, 2, 1
+    .byte   2, 2, 2
+    .byte   1, 2, 4
+    .byte   2, 2, 5
+    .byte   0
+_glyph_059:  @ ';'
+    .byte   1, 2, 4
+    .byte   2, 2, 5
+    .byte   1, 2, 1
+    .byte   2, 1, 0
+    .byte   0
+_glyph_060:  @ '<'
+    .byte   1, 3, 6
+    .byte   2, 0, 3
+    .byte   2, 3, 0
+    .byte   0
+_glyph_061:  @ '='
+    .byte   1, 0, 4
+    .byte   2, 4, 4
+    .byte   1, 0, 2
+    .byte   2, 4, 2
+    .byte   0
+_glyph_062:  @ '>'
+    .byte   1, 1, 6
+    .byte   2, 4, 3
+    .byte   2, 1, 0
+    .byte   0
+_glyph_063:  @ '?'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 4, 4
+    .byte   2, 2, 3
+    .byte   1, 2, 1
+    .byte   2, 2, 2
+    .byte   0
+_glyph_065:  @ 'A'
+    .byte   1, 0, 0
+    .byte   2, 2, 6
+    .byte   2, 4, 0
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_066:  @ 'B'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   2, 3, 3
+    .byte   2, 3, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_067:  @ 'C'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_068:  @ 'D'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 1
+    .byte   2, 3, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_069:  @ 'E'
+    .byte   1, 4, 0
+    .byte   2, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 3, 3
+    .byte   0
+_glyph_070:  @ 'F'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 3, 3
+    .byte   0
+_glyph_071:  @ 'G'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 3
+    .byte   2, 2, 3
+    .byte   0
+_glyph_072:  @ 'H'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   1, 4, 0
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_073:  @ 'I'
+    .byte   1, 1, 0
+    .byte   2, 3, 0
+    .byte   1, 2, 0
+    .byte   2, 2, 6
+    .byte   1, 1, 6
+    .byte   2, 3, 6
+    .byte   0
+_glyph_074:  @ 'J'
+    .byte   1, 0, 1
+    .byte   2, 1, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   1, 1, 6
+    .byte   2, 3, 6
+    .byte   0
+_glyph_075:  @ 'K'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 0
+    .byte   0
+_glyph_076:  @ 'L'
+    .byte   1, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_077:  @ 'M'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 2, 3
+    .byte   2, 4, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_078:  @ 'N'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_079:  @ 'O'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   0
+_glyph_080:  @ 'P'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 4
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   0
+_glyph_081:  @ 'Q'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   1, 3, 1
+    .byte   2, 4, 0
+    .byte   0
+_glyph_082:  @ 'R'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 4
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   2, 4, 0
+    .byte   0
+_glyph_083:  @ 'S'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   2, 4, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_084:  @ 'T'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 2, 6
+    .byte   2, 2, 0
+    .byte   0
+_glyph_085:  @ 'U'
+    .byte   1, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_086:  @ 'V'
+    .byte   1, 0, 6
+    .byte   2, 2, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_087:  @ 'W'
+    .byte   1, 0, 6
+    .byte   2, 1, 0
+    .byte   2, 2, 3
+    .byte   2, 3, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_088:  @ 'X'
+    .byte   1, 0, 0
+    .byte   2, 4, 6
+    .byte   1, 0, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_089:  @ 'Y'
+    .byte   1, 0, 6
+    .byte   2, 2, 3
+    .byte   2, 4, 6
+    .byte   1, 2, 3
+    .byte   2, 2, 0
+    .byte   0
+_glyph_090:  @ 'Z'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_097:  @ 'a'
+    .byte   1, 0, 0
+    .byte   2, 2, 6
+    .byte   2, 4, 0
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_098:  @ 'b'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   2, 3, 3
+    .byte   2, 3, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_099:  @ 'c'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_100:  @ 'd'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 1
+    .byte   2, 3, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_101:  @ 'e'
+    .byte   1, 4, 0
+    .byte   2, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 3, 3
+    .byte   0
+_glyph_102:  @ 'f'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 3, 3
+    .byte   0
+_glyph_103:  @ 'g'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 3
+    .byte   2, 2, 3
+    .byte   0
+_glyph_104:  @ 'h'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   1, 4, 0
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_105:  @ 'i'
+    .byte   1, 1, 0
+    .byte   2, 3, 0
+    .byte   1, 2, 0
+    .byte   2, 2, 6
+    .byte   1, 1, 6
+    .byte   2, 3, 6
+    .byte   0
+_glyph_106:  @ 'j'
+    .byte   1, 0, 1
+    .byte   2, 1, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   1, 1, 6
+    .byte   2, 3, 6
+    .byte   0
+_glyph_107:  @ 'k'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 0
+    .byte   0
+_glyph_108:  @ 'l'
+    .byte   1, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_109:  @ 'm'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 2, 3
+    .byte   2, 4, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_110:  @ 'n'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_111:  @ 'o'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   0
+_glyph_112:  @ 'p'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 4
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   0
+_glyph_113:  @ 'q'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   1, 3, 1
+    .byte   2, 4, 0
+    .byte   0
+_glyph_114:  @ 'r'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 4
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   2, 4, 0
+    .byte   0
+_glyph_115:  @ 's'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   2, 4, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_116:  @ 't'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 2, 6
+    .byte   2, 2, 0
+    .byte   0
+_glyph_117:  @ 'u'
+    .byte   1, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_118:  @ 'v'
+    .byte   1, 0, 6
+    .byte   2, 2, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_119:  @ 'w'
+    .byte   1, 0, 6
+    .byte   2, 1, 0
+    .byte   2, 2, 3
+    .byte   2, 3, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_120:  @ 'x'
+    .byte   1, 0, 0
+    .byte   2, 4, 6
+    .byte   1, 0, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_121:  @ 'y'
+    .byte   1, 0, 6
+    .byte   2, 2, 3
+    .byte   2, 4, 6
+    .byte   1, 2, 3
+    .byte   2, 2, 0
+    .byte   0
+_glyph_122:  @ 'z'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+
+@ vpy_wait_recal() — wait for VIA Timer 1 (frame sync)
+.global vpy_wait_recal
+.type vpy_wait_recal, %function
+.thumb_func
+vpy_wait_recal:
+    push    {lr}
+    mov     r0, #0xD006
+    mov     r1, #0x7F
+    bl      bus_write
+    mov     r0, #0xD007
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD005
+    mov     r1, #0x00
+    bl      bus_write
+vpy_wr_poll:
+    mov     r0, #0xD00D
+    bl      bus_read
+    tst     r0, #0x40
+    beq     vpy_wr_poll
+    mov     r0, #0xD004
+    bl      bus_read
+    pop     {pc}
+    .ltorg
+
+@ vpy_set_intensity(r0=intensity 0-127)
+.global vpy_set_intensity
+.type vpy_set_intensity, %function
+.thumb_func
+vpy_set_intensity:
+    push    {lr}
+    and     r1, r0, #0x7F
+    mov     r0, #0xD001
+    bl      bus_write
+    pop     {pc}
+    .ltorg
+
+@ vpy_move(r0=x, r1=y) — position beam (absolute from current)
+.global vpy_move
+.type vpy_move, %function
+.thumb_func
+vpy_move:
+    push    {r4, r5, lr}
+    mov     r4, r0
+    mov     r5, r1
+    ldr     r0, =VPY_MOVE_X
+    str     r4, [r0]            @ VPY_MOVE_X = x
+    str     r5, [r0, #4]        @ VPY_MOVE_Y = y  (VPY_MOVE_Y = VPY_MOVE_X + 4)
+    mov     r0, #0xD001
+    mov     r1, r5
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD001
+    mov     r1, r4
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ vpy_draw_line(r0=x0, r1=y0, r2=x1, r3=y1, [sp+0]=intensity)
+@ Splits segments longer than 127 units using SDIV for proportional steps
+.global vpy_draw_line
+.type vpy_draw_line, %function
+.thumb_func
+vpy_draw_line:
+    push    {r4, r5, r6, r7, r8, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    mov     r7, r3
+    ldr     r2, =VPY_MOVE_X
+    ldr     r3, [r2]            @ r3 = VPY_MOVE_X
+    ldr     r2, [r2, #4]        @ r2 = VPY_MOVE_Y
+    add     r4, r4, r3          @ x0 += MOVE_X
+    add     r5, r5, r2          @ y0 += MOVE_Y
+    add     r6, r6, r3          @ x1 += MOVE_X
+    add     r7, r7, r2          @ y1 += MOVE_Y
+    ldr     r8, [sp, #24]           @ intensity (5th arg, past 6 saved regs)
+    bl      dv_reset
+    mov     r0, r8
+    bl      vpy_set_intensity
+    mov     r0, r4
+    mov     r1, r5
+    bl      dv_move_to
+    sub     r4, r6, r4
+    sub     r5, r7, r5
+    movs    r6, r4
+    bpl     vdl_dx_pos
+    neg     r6, r4
+vdl_dx_pos:
+    movs    r7, r5
+    bpl     vdl_dy_pos
+    neg     r7, r5
+vdl_dy_pos:
+    cmp     r6, r7
+    it      ge
+    movge   r7, r6
+    cmp     r7, #0
+    beq     vdl_done
+    add     r7, r7, #126
+    mov     r6, #127
+    sdiv    r8, r7, r6
+vdl_loop:
+    cmp     r8, #0
+    beq     vdl_done
+    sdiv    r0, r4, r8
+    sdiv    r1, r5, r8
+    sub     r4, r4, r0
+    sub     r5, r5, r1
+    sub     r8, r8, #1
+    bl      dv_draw_delta
+    b       vdl_loop
+vdl_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vpy_draw_vector_ex(r0=asset, r1=ox, r2=oy, r3=mirror, [sp+0]=intensity)
+@ Draws asset centered at (ox,oy); mirror: bit0=flipX, bit1=flipY
+@ dv_reset called before EVERY path so each path starts from screen centre.
+.global vpy_draw_vector_ex
+.type vpy_draw_vector_ex, %function
+.thumb_func
+vpy_draw_vector_ex:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    mov     r4, r0              @ asset_ptr
+    mov     r9, r1              @ ox  (kept for whole function)
+    mov     r10, r2             @ oy  (kept for whole function)
+    mov     r7, r3              @ mirror
+    ldr     r8, [sp, #32]       @ intensity arg (8 saved regs = 32 bytes)
+    ldr     r5, [r4]            @ path_count
+    mov     r6, #0              @ path_idx
+dvex_pl:
+    cmp     r6, r5
+    bge     dvex_done
+    lsl     r3, r6, #2
+    add     r3, r3, #4
+    ldr     r3, [r4, r3]
+    bl      dv_reset
+    ldrb    r0, [r3]            @ .vec per-path intensity
+    cmp     r8, #0
+    it      ne
+    movne   r0, r8             @ if intensity arg != 0, use it
+    bl      vpy_set_intensity
+    ldrsb   r0, [r3, #2]        @ x_start
+    ldrsb   r1, [r3, #1]        @ y_start
+    tst     r7, #1
+    beq     dvex_nfx
+    neg     r0, r0
+dvex_nfx:
+    tst     r7, #2
+    beq     dvex_nfy
+    neg     r1, r1
+dvex_nfy:
+    add     r0, r0, r9          @ x_start + ox
+    add     r1, r1, r10         @ y_start + oy
+    bl      dv_move_to
+    add     r2, r3, #5          @ command ptr
+dvex_cl:
+    ldrb    r0, [r2]
+    cmp     r0, #0x02
+    beq     dvex_cend
+    cmp     r0, #0xFF
+    bne     dvex_cskip
+    ldrsb   r0, [r2, #2]        @ dx
+    ldrsb   r1, [r2, #1]        @ dy
+    tst     r7, #1
+    beq     dvex_nfx2
+    neg     r0, r0
+dvex_nfx2:
+    tst     r7, #2
+    beq     dvex_nfy2
+    neg     r1, r1
+dvex_nfy2:
+    bl      dv_draw_delta
+    add     r2, r2, #3
+    b       dvex_cl
+dvex_cskip:
+    add     r2, r2, #1
+    b       dvex_cl
+dvex_cend:
+    add     r6, r6, #1
+    b       dvex_pl
+dvex_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ vpy_draw_circle(r0=cx, r1=cy, r2=radius, r3=intensity)
+@ 16-segment circle via sin/cos LUT
+.global vpy_draw_circle
+.type vpy_draw_circle, %function
+.thumb_func
+vpy_draw_circle:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    sub     sp, sp, #8              @ [sp+0]=first_x [sp+4]=first_y
+    mov     r4, r0                  @ cx
+    mov     r5, r1                  @ cy
+    asr     r6, r2, #1              @ r6 = diam/2 = radius (matches M6809 convention)
+    mov     r7, r3                  @ intensity
+    bl      dv_reset
+    mov     r0, r7
+    bl      vpy_set_intensity
+    mov     r0, #0
+    bl      vpy_cos
+    mul     r0, r0, r6
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r9, r4, r0              @ prev_x = cx + cos(0)*r/127
+    mov     r0, #0
+    bl      vpy_sin
+    mul     r0, r0, r6
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r10, r5, r0             @ prev_y = cy + sin(0)*r/127
+    str     r9, [sp]
+    str     r10, [sp, #4] @ save first point
+    mov     r0, r9
+    mov     r1, r10
+    bl      dv_move_to
+    mov     r8, #1
+vpy_dc_loop:
+    cmp     r8, #16
+    bge     vpy_dc_close
+    lsl     r0, r8, #3
+    bl      vpy_cos
+    mul     r0, r0, r6
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r11, r4, r0             @ new_x
+    lsl     r0, r8, #3
+    bl      vpy_sin
+    mul     r0, r0, r6
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r0, r5, r0              @ new_y in r0
+    sub     r2, r11, r9             @ dx = new_x - prev_x
+    sub     r3, r0, r10             @ dy = new_y - prev_y
+    mov     r9, r11                 @ prev_x = new_x
+    mov     r10, r0                 @ prev_y = new_y
+    mov     r0, r2
+    mov     r1, r3
+    bl      dv_draw_delta
+    add     r8, r8, #1
+    b       vpy_dc_loop
+vpy_dc_close:
+    ldr     r0, [sp]                @ first_x
+    ldr     r1, [sp, #4]            @ first_y
+    sub     r0, r0, r9              @ dx = first_x - prev_x
+    sub     r1, r1, r10             @ dy = first_y - prev_y
+    bl      dv_draw_delta
+    add     sp, sp, #8
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_draw_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity)
+.global vpy_draw_rect
+.type vpy_draw_rect, %function
+.thumb_func
+vpy_draw_rect:
+    push    {r4, r5, r6, r7, r8, lr}    @ 24 bytes
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    mov     r7, r3
+    ldr     r8, [sp, #24]               @ intensity
+    bl      dv_reset
+    mov     r0, r8
+    bl      vpy_set_intensity
+    mov     r0, r4
+    mov     r1, r5
+    bl      dv_move_to
+    mov     r0, r6
+    mov     r1, #0
+    bl      dv_draw_delta
+    mov     r0, #0
+    mov     r1, r7
+    bl      dv_draw_delta
+    neg     r0, r6
+    mov     r1, #0
+    bl      dv_draw_delta
+    mov     r0, #0
+    neg     r1, r7
+    bl      dv_draw_delta
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vpy_draw_filled_rect(r0=x, r1=y, r2=w, r3=h, [sp+28]=intensity)
+@ Outer outline (vpy_draw_rect) + horizontal scan lines (step=3)
+.global vpy_draw_filled_rect
+.type vpy_draw_filled_rect, %function
+.thumb_func
+vpy_draw_filled_rect:
+    push    {r4, r5, r6, r7, r8, r9, lr}    @ 28 bytes
+    mov     r4, r0              @ x
+    mov     r5, r1              @ y
+    mov     r6, r2              @ w
+    mov     r7, r3              @ h
+    ldr     r8, [sp, #28]       @ intensity
+    push    {r8}                @ intensity as 5th arg
+    mov     r0, r4
+    mov     r1, r5
+    mov     r2, r6
+    mov     r3, r7
+    bl      vpy_draw_rect
+    add     sp, sp, #4
+    bl      dv_reset
+    mov     r0, r8
+    bl      vpy_set_intensity
+    mov     r0, r4
+    mov     r1, r5
+    bl      dv_move_to
+    mov     r9, #0              @ scan offset
+vdfr_loop:
+    cmp     r9, r7
+    bge     vdfr_done
+    mov     r0, r6
+    mov     r1, #0
+    bl      dv_draw_delta
+    add     r9, r9, #3
+    cmp     r9, r7
+    bge     vdfr_done
+    neg     r0, r6
+    mov     r1, #3
+    bl      dv_move_to
+    b       vdfr_loop
+vdfr_done:
+    pop     {r4, r5, r6, r7, r8, r9, pc}
+    .ltorg
+
+@ vpy_draw_polygon(r0=n, r1=intensity, r2=x0, r3=y0, [sp+0]=x1,y1,...)
+.global vpy_draw_polygon
+.type vpy_draw_polygon, %function
+.thumb_func
+vpy_draw_polygon:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes
+    mov     r4, r0              @ n (total vertices)
+    mov     r5, r1              @ intensity
+    mov     r6, r2              @ first_x
+    mov     r7, r3              @ first_y
+    add     r8, sp, #36         @ ptr to x1 (first extra stack arg)
+    mov     r9, r6              @ prev_x = first_x
+    mov     r10, r7             @ prev_y = first_y
+    bl      dv_reset
+    mov     r0, r5
+    bl      vpy_set_intensity
+    mov     r0, r6
+    mov     r1, r7
+    bl      dv_move_to
+    mov     r11, #1             @ vertex idx = 1
+vdpoly_loop:
+    cmp     r11, r4
+    bge     vdpoly_close
+    ldr     r0, [r8]            @ xi
+    ldr     r1, [r8, #4]        @ yi
+    add     r8, r8, #8
+    sub     r2, r0, r9          @ dx = xi - prev_x
+    sub     r3, r1, r10         @ dy = yi - prev_y
+    mov     r9, r0
+    mov     r10, r1
+    mov     r0, r2
+    mov     r1, r3
+    bl      dv_draw_delta
+    add     r11, r11, #1
+    b       vdpoly_loop
+vdpoly_close:
+    sub     r0, r6, r9          @ dx = first_x - prev_x
+    sub     r1, r7, r10         @ dy = first_y - prev_y
+    bl      dv_draw_delta
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_draw_ellipse(r0=cx, r1=cy, r2=rx, r3=ry, [sp+0]=intensity)
+@ 16-segment parametric ellipse via sin/cos LUT
+.global vpy_draw_ellipse
+.type vpy_draw_ellipse, %function
+.thumb_func
+vpy_draw_ellipse:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes
+    sub     sp, sp, #8          @ [sp+0]=first_x [sp+4]=first_y
+    mov     r4, r0              @ cx
+    mov     r5, r1              @ cy
+    mov     r6, r2              @ rx
+    mov     r7, r3              @ ry
+    ldr     r8, [sp, #44]       @ intensity (8+36=44)
+    bl      dv_reset
+    mov     r0, r8
+    bl      vpy_set_intensity
+    mov     r0, #0
+    bl      vpy_cos
+    mul     r0, r0, r6
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r8, r4, r0          @ prev_x = cx + rx*cos(0)/127
+    str     r8, [sp, #0]        @ first_x
+    mov     r0, #0
+    bl      vpy_sin
+    mul     r0, r0, r7
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r9, r5, r0          @ prev_y = cy + ry*sin(0)/127
+    str     r9, [sp, #4]        @ first_y
+    mov     r0, r8
+    mov     r1, r9
+    bl      dv_move_to
+    mov     r10, #1             @ i = 1
+vde_loop:
+    cmp     r10, #16
+    bge     vde_close
+    lsl     r0, r10, #3         @ angle = i*8
+    bl      vpy_cos
+    mul     r0, r0, r6
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r11, r4, r0         @ new_x = cx + rx*cos/127
+    lsl     r0, r10, #3
+    bl      vpy_sin
+    mul     r0, r0, r7
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r0, r5, r0          @ new_y
+    sub     r2, r11, r8         @ dx = new_x - prev_x
+    sub     r3, r0, r9          @ dy = new_y - prev_y
+    mov     r8, r11             @ prev_x = new_x
+    mov     r9, r0              @ prev_y = new_y
+    mov     r0, r2
+    mov     r1, r3
+    bl      dv_draw_delta
+    add     r10, r10, #1
+    b       vde_loop
+vde_close:
+    ldr     r0, [sp, #0]        @ first_x
+    ldr     r1, [sp, #4]        @ first_y
+    sub     r0, r0, r8          @ dx = first_x - prev_x
+    sub     r1, r1, r9          @ dy = first_y - prev_y
+    bl      dv_draw_delta
+    add     sp, sp, #8
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_draw_arc(r0=segs, r1=cx, r2=cy, r3=r, [sp+0]=start_deg, [sp+4]=sweep_deg, [sp+8]=intensity)
+.global vpy_draw_arc
+.type vpy_draw_arc, %function
+.thumb_func
+vpy_draw_arc:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes
+    mov     r4, r0              @ segs (loop counter)
+    mov     r5, r1              @ cx
+    mov     r6, r2              @ cy
+    mov     r7, r3              @ radius
+    ldr     r0, [sp, #36]       @ start_deg
+    lsl     r0, r0, #7          @ * 128
+    mov     r1, #360
+    sdiv    r8, r0, r1          @ r8 = start_step
+    ldr     r0, [sp, #40]       @ sweep_deg
+    lsl     r0, r0, #7
+    sdiv    r0, r0, r1          @ sweep_steps (r1 still 360)
+    cmp     r4, #0
+    beq     vpy_arc_done
+    sdiv    r9, r0, r4          @ r9 = step_size = sweep_steps / segs
+    ldr     r0, [sp, #44]       @ intensity
+    bl      dv_reset
+    bl      vpy_set_intensity
+    and     r0, r8, #127
+    bl      vpy_cos
+    mul     r0, r0, r7
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r10, r5, r0         @ prev_x = cx + r*cos(start)/127
+    and     r0, r8, #127
+    bl      vpy_sin
+    mul     r0, r0, r7
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r11, r6, r0         @ prev_y = cy + r*sin(start)/127
+    mov     r0, r10
+    mov     r1, r11
+    bl      dv_move_to
+vpy_arc_loop:
+    cmp     r4, #0
+    beq     vpy_arc_done
+    add     r8, r8, r9          @ current_angle += step_size
+    and     r0, r8, #127
+    bl      vpy_cos
+    mul     r0, r0, r7
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r0, r5, r0          @ new_x
+    push    {r0}                @ save new_x (r0 clobbered by next bl)
+    and     r0, r8, #127
+    bl      vpy_sin
+    mul     r0, r0, r7
+    mov     r1, #127
+    sdiv    r0, r0, r1
+    add     r1, r6, r0          @ new_y
+    pop     {r0}                @ restore new_x
+    sub     r2, r0, r10         @ dx = new_x - prev_x
+    sub     r3, r1, r11         @ dy = new_y - prev_y
+    mov     r10, r0             @ prev_x = new_x
+    mov     r11, r1             @ prev_y = new_y
+    mov     r0, r2
+    mov     r1, r3
+    bl      dv_draw_delta
+    sub     r4, r4, #1
+    b       vpy_arc_loop
+vpy_arc_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_draw_bezier(x0,y0,cp1x,cp1y,[sp+0]=cp2x,cp2y,x1,y1,steps,intensity)
+.global vpy_draw_bezier
+.type vpy_draw_bezier, %function
+.thumb_func
+vpy_draw_bezier:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    sub     sp, sp, #36
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    mov     r7, r3
+    ldr     r8,  [sp, #72]      @ cp2x
+    ldr     r9,  [sp, #76]      @ cp2y
+    ldr     r10, [sp, #80]      @ x1
+    ldr     r11, [sp, #84]      @ y1
+    ldr     r1,  [sp, #88]      @ steps
+    ldr     r0,  [sp, #92]      @ intensity
+    cmp     r1, #1
+    blt     vbez_done
+    str     r1, [sp]
+    mov     r1, #1
+    str     r1, [sp, #4]
+    bl      dv_reset
+    bl      vpy_set_intensity
+    mov     r0, r4
+    mov     r1, r5
+    bl      dv_move_to
+    str     r4, [sp, #8]
+    str     r5, [sp, #12]
+vbez_loop:
+    ldr     r0, [sp, #4]
+    ldr     r1, [sp]
+    cmp     r0, r1
+    bgt     vbez_done
+    lsl     r2, r0, #8
+    sdiv    r2, r2, r1
+    sub     r0, r6, r4
+    mul     r0, r0, r2
+    asr     r0, r0, #8
+    add     r0, r0, r4
+    str     r0, [sp, #20]
+    sub     r0, r7, r5
+    mul     r0, r0, r2
+    asr     r0, r0, #8
+    add     r0, r0, r5
+    str     r0, [sp, #24]
+    sub     r0, r8, r6
+    mul     r0, r0, r2
+    asr     r0, r0, #8
+    add     r0, r0, r6
+    str     r0, [sp, #28]
+    sub     r0, r9, r7
+    mul     r0, r0, r2
+    asr     r0, r0, #8
+    add     r0, r0, r7
+    str     r0, [sp, #32]
+    sub     r1, r10, r8
+    mul     r1, r1, r2
+    asr     r1, r1, #8
+    add     r1, r1, r8
+    sub     r3, r11, r9
+    mul     r3, r3, r2
+    asr     r3, r3, #8
+    add     r3, r3, r9
+    ldr     r12, [sp, #20]
+    ldr     r0, [sp, #28]
+    sub     r0, r0, r12
+    mul     r0, r0, r2
+    asr     r0, r0, #8
+    add     r0, r0, r12
+    str     r0, [sp, #20]
+    ldr     r12, [sp, #24]
+    ldr     r0, [sp, #32]
+    sub     r0, r0, r12
+    mul     r0, r0, r2
+    asr     r0, r0, #8
+    add     r0, r0, r12
+    str     r0, [sp, #24]
+    ldr     r12, [sp, #28]
+    sub     r1, r1, r12
+    mul     r1, r1, r2
+    asr     r1, r1, #8
+    add     r1, r1, r12
+    str     r1, [sp, #28]
+    ldr     r12, [sp, #32]
+    sub     r3, r3, r12
+    mul     r3, r3, r2
+    asr     r3, r3, #8
+    add     r3, r3, r12
+    str     r3, [sp, #32]
+    ldr     r12, [sp, #20]
+    ldr     r0, [sp, #28]
+    sub     r0, r0, r12
+    mul     r0, r0, r2
+    asr     r0, r0, #8
+    add     r0, r0, r12
+    ldr     r12, [sp, #24]
+    ldr     r1, [sp, #32]
+    sub     r1, r1, r12
+    mul     r1, r1, r2
+    asr     r1, r1, #8
+    add     r1, r1, r12
+    ldr     r2, [sp, #8]        @ prev_x
+    ldr     r3, [sp, #12]       @ prev_y
+    str     r0, [sp, #8]        @ prev_x = bx
+    str     r1, [sp, #12]       @ prev_y = by
+    sub     r0, r0, r2          @ dx = bx - prev_x
+    sub     r1, r1, r3          @ dy = by - prev_y
+    bl      dv_draw_delta
+    ldr     r0, [sp, #4]
+    add     r0, r0, #1
+    str     r0, [sp, #4]
+    b       vbez_loop
+vbez_done:
+    add     sp, sp, #36
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_draw_bezier_quad(x0,y0,cpx,cpy,[sp+0]=x1,y1,steps,intensity)
+.global vpy_draw_bezier_quad
+.type vpy_draw_bezier_quad, %function
+.thumb_func
+vpy_draw_bezier_quad:
+    push    {r4, r5, r6, r7, r8, r9, lr}
+    sub     sp, sp, #28
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    mov     r7, r3
+    ldr     r8, [sp, #56]       @ x1
+    ldr     r9, [sp, #60]       @ y1
+    ldr     r1, [sp, #64]       @ steps
+    ldr     r0, [sp, #68]       @ intensity
+    cmp     r1, #1
+    blt     vbezq_done
+    str     r1, [sp]
+    mov     r1, #1
+    str     r1, [sp, #4]
+    bl      dv_reset
+    bl      vpy_set_intensity
+    mov     r0, r4
+    mov     r1, r5
+    bl      dv_move_to
+    str     r4, [sp, #8]
+    str     r5, [sp, #12]
+vbezq_loop:
+    ldr     r0, [sp, #4]
+    ldr     r1, [sp]
+    cmp     r0, r1
+    bgt     vbezq_done
+    lsl     r2, r0, #8
+    sdiv    r2, r2, r1
+    sub     r3, r6, r4
+    mul     r3, r3, r2
+    asr     r3, r3, #8
+    add     r3, r3, r4
+    sub     r0, r8, r6
+    mul     r0, r0, r2
+    asr     r0, r0, #8
+    add     r0, r0, r6
+    sub     r0, r0, r3
+    mul     r0, r0, r2
+    asr     r0, r0, #8
+    add     r0, r0, r3
+    str     r0, [sp, #20]
+    sub     r3, r7, r5
+    mul     r3, r3, r2
+    asr     r3, r3, #8
+    add     r3, r3, r5
+    sub     r1, r9, r7
+    mul     r1, r1, r2
+    asr     r1, r1, #8
+    add     r1, r1, r7
+    sub     r1, r1, r3
+    mul     r1, r1, r2
+    asr     r1, r1, #8
+    add     r1, r1, r3
+    ldr     r0, [sp, #20]       @ bx
+    ldr     r2, [sp, #8]        @ prev_x
+    ldr     r3, [sp, #12]       @ prev_y
+    str     r0, [sp, #8]        @ prev_x = bx
+    str     r1, [sp, #12]       @ prev_y = by
+    sub     r0, r0, r2          @ dx
+    sub     r1, r1, r3          @ dy
+    bl      dv_draw_delta
+    ldr     r0, [sp, #4]
+    add     r0, r0, #1
+    str     r0, [sp, #4]
+    b       vbezq_loop
+vbezq_done:
+    add     sp, sp, #28
+    pop     {r4, r5, r6, r7, r8, r9, pc}
+    .ltorg
+
+@ vpy_print_text(r0=x, r1=y, r2=str_ptr)
+.global vpy_print_text
+.type vpy_print_text, %function
+.thumb_func
+vpy_print_text:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    ldr     r7, =TEXT_SIZE
+    ldr     r7, [r7]
+    cmp     r7, #0
+    bne     vpt_sc
+    mov     r7, #3
+vpt_sc:
+    ldr     r8, =TEXT_COLOR
+    ldr     r8, [r8]
+    cmp     r8, #0
+    bne     vpt_cc
+    mov     r8, #100
+vpt_cc:
+    bl      dv_reset
+    mov     r0, r8
+    bl      vpy_set_intensity
+    mov     r0, #6
+    mul     r0, r0, r7
+    asr     r0, r0, #1
+    sub     r5, r5, r0
+    mov     r0, r4
+    mov     r1, r5
+    bl      dv_move_to
+    ldr     r10, =PRINT_BEAM_X
+    str     r4, [r10]
+    ldr     r11, =PRINT_BEAM_Y
+    str     r5, [r11]
+    mov     r9, r4              @ cur_x = x
+vpt_loop:
+    ldrb    r0, [r6]
+    add     r6, r6, #1
+    cmp     r0, #0
+    beq     vpt_done
+    cmp     r0, #0x80
+    beq     vpt_done
+    cmp     r0, #0x61
+    blt     vpt_nl
+    cmp     r0, #0x7A
+    bgt     vpt_nl
+    sub     r0, r0, #0x20
+vpt_nl:
+    cmp     r0, #32
+    blt     vpt_adv
+    cmp     r0, #126
+    bgt     vpt_adv
+    sub     r0, r0, #32
+    ldr     r1, =_FONT_PTRS
+    lsl     r0, r0, #2
+    ldr     r0, [r1, r0]
+    cmp     r0, #0
+    beq     vpt_adv
+    mov     r1, r9
+    mov     r2, r5
+    mov     r3, r7
+    push    {r10, r11}
+    bl      vpt_draw_glyph
+    add     sp, sp, #8
+vpt_adv:
+    mov     r0, #7
+    mul     r0, r0, r7
+    asr     r0, r0, #1
+    add     r9, r9, r0
+    b       vpt_loop
+vpt_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpt_draw_glyph — internal: draw one glyph at (char_x, char_y) with scale
+.type vpt_draw_glyph, %function
+.thumb_func
+vpt_draw_glyph:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov     r4, r0              @ glyph_ptr
+    mov     r5, r1              @ char_x
+    mov     r6, r2              @ char_y
+    mov     r7, r3              @ scale
+    ldr     r8, [sp, #36]       @ bx_ptr (PRINT_BEAM_X)
+    ldr     r9, [sp, #40]       @ by_ptr (PRINT_BEAM_Y)
+    ldr     r10, [r8]           @ beam_x
+    ldr     r11, [r9]           @ beam_y
+vdg_loop:
+    ldrb    r0, [r4]
+    cmp     r0, #0
+    beq     vdg_done
+    ldrb    r1, [r4, #1]        @ gx
+    ldrb    r2, [r4, #2]        @ gy
+    add     r4, r4, #3
+    push    {r0}               @ save cmd
+    mul     r1, r1, r7
+    asr     r1, r1, #1
+    add     r1, r1, r5
+    mul     r2, r2, r7
+    asr     r2, r2, #1
+    add     r2, r2, r6
+    sub     r0, r1, r10         @ dx
+    sub     r3, r2, r11         @ dy
+    mov     r10, r1
+    mov     r11, r2
+    pop     {r1}               @ restore cmd
+    push    {r0, r3}           @ save dx, dy
+    cmp     r1, #1
+    bne     vdg_draw
+    pop     {r0, r1}
+    bl      dv_move_to
+    b       vdg_loop
+vdg_draw:
+    pop     {r0, r1}
+    bl      dv_draw_delta
+    b       vdg_loop
+vdg_done:
+    str     r10, [r8]           @ update PRINT_BEAM_X
+    str     r11, [r9]           @ update PRINT_BEAM_Y
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_print_number(r0=x, r1=y, r2=value) — range -9999..9999, no leading zeros
+.global vpy_print_number
+.type vpy_print_number, %function
+.thumb_func
+vpy_print_number:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    sub     sp, sp, #8
+    mov     r7, sp
+    mov     r8, r7
+    cmp     r6, #0
+    bge     vpn_pos
+    mov     r0, #45
+    strb    r0, [r8]
+    add     r8, r8, #1
+    neg     r6, r6
+vpn_pos:
+    ldr     r0, =9999
+    cmp     r6, r0
+    ble     vpn_clamp
+    mov     r6, r0
+vpn_clamp:
+    mov     r9, #0
+    ldr     r0, =1000
+    sdiv    r1, r6, r0
+    mul     r0, r0, r1
+    sub     r6, r6, r0
+    cmp     r1, #0
+    beq     vpn_skip_thou
+    add     r1, r1, #48
+    strb    r1, [r8]
+    add     r8, r8, #1
+    mov     r9, #1
+vpn_skip_thou:
+    mov     r0, #100
+    sdiv    r1, r6, r0
+    mul     r0, r0, r1
+    sub     r6, r6, r0
+    cmp     r9, #0
+    bne     vpn_write_hund
+    cmp     r1, #0
+    beq     vpn_skip_hund
+vpn_write_hund:
+    add     r1, r1, #48
+    strb    r1, [r8]
+    add     r8, r8, #1
+    mov     r9, #1
+vpn_skip_hund:
+    mov     r0, #10
+    sdiv    r1, r6, r0
+    mul     r0, r0, r1
+    sub     r6, r6, r0
+    cmp     r9, #0
+    bne     vpn_write_tens
+    cmp     r1, #0
+    beq     vpn_skip_tens
+vpn_write_tens:
+    add     r1, r1, #48
+    strb    r1, [r8]
+    add     r8, r8, #1
+vpn_skip_tens:
+    add     r1, r6, #48
+    strb    r1, [r8]
+    add     r8, r8, #1
+    mov     r0, #0
+    strb    r0, [r8]
+    mov     r0, r4
+    mov     r1, r5
+    mov     r2, r7
+    bl      vpy_print_text
+    add     sp, sp, #8
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ vpy_j1_x() → r0 = cached J1 X axis (-127..127)
+.global vpy_j1_x
+.type vpy_j1_x, %function
+.thumb_func
+vpy_j1_x:
+    ldr     r0, =J1_AXIS_X
+    ldr     r0, [r0]
+    bx      lr
+
+@ vpy_j1_y() → r0 = cached J1 Y axis (-127..127)
+.global vpy_j1_y
+.type vpy_j1_y, %function
+.thumb_func
+vpy_j1_y:
+    ldr     r0, =J1_AXIS_Y
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_j1_btn1
+.type vpy_j1_btn1, %function
+.thumb_func
+vpy_j1_btn1:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #4, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn2
+.type vpy_j1_btn2, %function
+.thumb_func
+vpy_j1_btn2:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #5, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn3
+.type vpy_j1_btn3, %function
+.thumb_func
+vpy_j1_btn3:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #6, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn4
+.type vpy_j1_btn4, %function
+.thumb_func
+vpy_j1_btn4:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #7, #1
+    eor     r0, r0, #1
+    bx      lr
+
+@ vpy_j2_x() → r0 = cached J2 X axis (-127..127)
+.global vpy_j2_x
+.type vpy_j2_x, %function
+.thumb_func
+vpy_j2_x:
+    ldr     r0, =J2_AXIS_X
+    ldr     r0, [r0]
+    bx      lr
+
+@ vpy_j2_y() → r0 = cached J2 Y axis (-127..127)
+.global vpy_j2_y
+.type vpy_j2_y, %function
+.thumb_func
+vpy_j2_y:
+    ldr     r0, =J2_AXIS_Y
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_j2_btn1
+.type vpy_j2_btn1, %function
+.thumb_func
+vpy_j2_btn1:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #0, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn2
+.type vpy_j2_btn2, %function
+.thumb_func
+vpy_j2_btn2:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #1, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn3
+.type vpy_j2_btn3, %function
+.thumb_func
+vpy_j2_btn3:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #2, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn4
+.type vpy_j2_btn4, %function
+.thumb_func
+vpy_j2_btn4:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #3, #1
+    eor     r0, r0, #1
+    bx      lr
+
+@ psg_write(r0=reg, r1=data) — write AY-3-8912 PSG register
+.global psg_write
+.type psg_write, %function
+.thumb_func
+psg_write:
+    push    {r4, r5, lr}
+    mov     r4, r0              @ reg
+    mov     r5, r1              @ data
+    mov     r0, #0xD001
+    mov     r1, r4
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x19
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD001
+    mov     r1, r5
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x11
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ psg_read(r0=reg) → r0 = PSG register value
+.global psg_read
+.type psg_read, %function
+.thumb_func
+psg_read:
+    push    {r4, lr}
+    mov     r4, r0              @ reg
+    mov     r0, #0xD001
+    mov     r1, r4
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x19
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD003
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x09
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    push    {r0}               @ save result
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD003
+    mov     r1, #0xFF
+    bl      bus_write
+    pop     {r0}               @ return value
+    pop     {r4, pc}
+    .ltorg
+
+@ vpy_update_buttons() — cache buttons and joystick axes (safe: called in WAIT_RECAL window)
+.global vpy_update_buttons
+.type vpy_update_buttons, %function
+.thumb_func
+vpy_update_buttons:
+    push    {r4, lr}
+    mov     r0, #0xD002
+    mov     r1, #0x0F
+    bl      bus_write
+    mov     r0, #0xD000
+    bl      bus_read
+    ldr     r1, =BTN_STATE_J1
+    str     r0, [r1]
+    mov     r0, #0xD002
+    mov     r1, #0xFF
+    bl      bus_write
+    mov     r0, #14
+    bl      psg_read
+    ldr     r1, =BTN_STATE_J2
+    str     r0, [r1]
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    sxtb    r4, r0
+    ldr     r0, =J1_AXIS_X
+    str     r4, [r0]
+    mov     r0, #0xD000
+    mov     r1, #0x03
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    sxtb    r4, r0
+    ldr     r0, =J1_AXIS_Y
+    str     r4, [r0]
+    mov     r0, #0xD000
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    sxtb    r4, r0
+    ldr     r0, =J2_AXIS_X
+    str     r4, [r0]
+    mov     r0, #0xD000
+    mov     r1, #0x02
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    sxtb    r4, r0
+    ldr     r0, =J2_AXIS_Y
+    str     r4, [r0]
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    pop     {r4, pc}
+    .ltorg
+
+.global vpy_abs
+.type vpy_abs, %function
+.thumb_func
+vpy_abs:
+    cmp     r0, #0
+    it      lt
+    neglt   r0, r0
+    bx      lr
+
+.global vpy_min
+.type vpy_min, %function
+.thumb_func
+vpy_min:
+    cmp     r0, r1
+    it      gt
+    movgt   r0, r1
+    bx      lr
+
+.global vpy_max
+.type vpy_max, %function
+.thumb_func
+vpy_max:
+    cmp     r0, r1
+    it      lt
+    movlt   r0, r1
+    bx      lr
+
+.global vpy_clamp
+.type vpy_clamp, %function
+.thumb_func
+vpy_clamp:
+    cmp     r0, r1
+    it      lt
+    movlt   r0, r1
+    cmp     r0, r2
+    it      gt
+    movgt   r0, r2
+    bx      lr
+
+@ vpy_sin(r0=angle) → r0 = sin(angle*2π/128)*127 as signed i8
+.global vpy_sin
+.type vpy_sin, %function
+.thumb_func
+vpy_sin:
+    and     r0, r0, #0x7F
+    ldr     r1, =_SIN_TABLE
+    ldrb    r0, [r1, r0]
+    sxtb    r0, r0
+    bx      lr
+    .ltorg
+
+@ vpy_cos(r0=angle) → r0 = cos(angle*2π/128)*127 as signed i8
+.global vpy_cos
+.type vpy_cos, %function
+.thumb_func
+vpy_cos:
+    add     r0, r0, #32
+    and     r0, r0, #0x7F
+    ldr     r1, =_SIN_TABLE
+    ldrb    r0, [r1, r0]
+    sxtb    r0, r0
+    bx      lr
+    .ltorg
+
+@ vpy_sqrt(r0=n) → r0 = floor(sqrt(n))
+.global vpy_sqrt
+.type vpy_sqrt, %function
+.thumb_func
+vpy_sqrt:
+    cmp     r0, #0
+    beq     vsqrt_zero
+    push    {r4, r5, r6}
+    mov     r4, r0              @ n
+    mov     r5, #0              @ lo
+    ldr     r6, =46340         @ hi (floor(sqrt(2^31-1)))
+    cmp     r4, r6
+    blt     vsqrt_loop
+    mov     r0, r6
+    pop     {r4, r5, r6}
+    bx      lr
+vsqrt_loop:
+    add     r0, r5, r6
+    lsr     r0, r0, #1  @ mid = (lo+hi)/2
+    mul     r2, r0, r0           @ mid*mid
+    cmp     r2, r4
+    beq     vsqrt_exact
+    bgt     vsqrt_high
+    mov     r5, r0
+    add     r5, r5, #1
+    cmp     r5, r6
+    blt     vsqrt_loop
+    b       vsqrt_done
+vsqrt_high:
+    mov     r6, r0
+    cmp     r5, r6
+    blt     vsqrt_loop
+vsqrt_done:
+    mov     r0, r5
+    sub     r0, r0, #1
+    pop     {r4, r5, r6}
+    bx      lr
+vsqrt_exact:
+    pop     {r4, r5, r6}
+    bx      lr
+vsqrt_zero:
+    bx      lr
+    .ltorg
+
+@ vpy_rand() → r0 = pseudo-random 0-32767 (LCG)
+.global vpy_rand
+.type vpy_rand, %function
+.thumb_func
+vpy_rand:
+    push    {r4, r5, lr}
+    ldr     r4, =RAND_SEED
+    ldr     r0, [r4]
+    ldr     r5, =1664525
+    mul     r0, r0, r5
+    ldr     r5, =1013904223
+    add     r0, r0, r5
+    str     r0, [r4]            @ save seed
+    lsr     r0, r0, #16
+    bic     r0, r0, #0x8000      @ clear bit15 (0x8000 is valid Thumb2 immediate)
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ vpy_rand_range(r0=lo, r1=hi) → r0 = random in [lo, hi]
+.global vpy_rand_range
+.type vpy_rand_range, %function
+.thumb_func
+vpy_rand_range:
+    push    {r4, r5, lr}
+    mov     r4, r0              @ lo
+    sub     r5, r1, r0
+    add     r5, r5, #1
+    bl      vpy_rand
+    sdiv    r1, r0, r5
+    mul     r1, r1, r5
+    sub     r0, r0, r1
+    add     r0, r0, r4          @ + lo
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ vpy_peek(r0=vectrex_addr) → r0 = byte at that address
+.global vpy_peek
+.type vpy_peek, %function
+.thumb_func
+vpy_peek:
+    push    {lr}
+    bl      bus_read
+    pop     {pc}
+    .ltorg
+
+@ vpy_poke(r0=vectrex_addr, r1=val)
+.global vpy_poke
+.type vpy_poke, %function
+.thumb_func
+vpy_poke:
+    push    {lr}
+    bl      bus_write
+    pop     {pc}
+    .ltorg
+
+@ vpy_wait(r0=frames) — busy-wait N frames via wait_recal
+.global vpy_wait
+.type vpy_wait, %function
+.thumb_func
+vpy_wait:
+    push    {r4, lr}
+    mov     r4, r0
+vwt_loop:
+    cmp     r4, #0
+    beq     vwt_done
+    bl      vpy_wait_recal
+    sub     r4, r4, #1
+    b       vwt_loop
+vwt_done:
+    pop     {r4, pc}
+    .ltorg
+
+@ vpy_beep(r0=freq_period, r1=duration_frames) — non-blocking PSG tone on channel A
+.global vpy_beep
+.type vpy_beep, %function
+.thumb_func
+vpy_beep:
+    push    {r4, r5, lr}
+    mov     r4, r0              @ freq period (reg 0)
+    mov     r5, r1              @ duration
+    mov     r0, #0
+    mov     r1, r4
+    bl      psg_write
+    mov     r0, #1
+    mov     r1, #0
+    bl      psg_write
+    mov     r0, #7
+    mov     r1, #0x3E
+    bl      psg_write
+    mov     r0, #8
+    mov     r1, #15
+    bl      psg_write
+    ldr     r0, =BEEP_FRAMES_LEFT
+    str     r5, [r0]
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ vpy_beep_update() — decrement beep timer; mute channel A when done
+.global vpy_beep_update
+.type vpy_beep_update, %function
+.thumb_func
+vpy_beep_update:
+    push    {r4, lr}
+    ldr     r4, =BEEP_FRAMES_LEFT
+    ldr     r0, [r4]
+    cmp     r0, #0
+    beq     vbu_done
+    sub     r0, r0, #1
+    str     r0, [r4]
+    bne     vbu_done
+    mov     r0, #8
+    mov     r1, #0
+    bl      psg_write
+    mov     r0, #7
+    mov     r1, #0x3F
+    bl      psg_write
+vbu_done:
+    pop     {r4, pc}
+    .ltorg
+
+@ vpy_len — fallback, returns 0 (len(arr) on static arrays resolved at compile time)
+.global vpy_len
+.type vpy_len, %function
+.thumb_func
+vpy_len:
+    mov     r0, #0
+    bx      lr
+
+@ vpy_play_music(r0=music_data_ptr)
+.global vpy_play_music
+.type vpy_play_music, %function
+.thumb_func
+vpy_play_music:
+    push    {r4, lr}
+    mov     r4, r0
+    ldr     r1, =PSG_MUSIC_START
+    ldr     r1, [r1]
+    cmp     r4, r1
+    beq     vpm_already
+    bl      vpy_stop_music
+    ldr     r1, =PSG_MUSIC_START
+    str     r4, [r1]
+    add     r0, r4, #8
+    ldr     r1, =PSG_MUSIC_PTR
+    str     r0, [r1]
+    ldr     r1, =PSG_IS_PLAYING
+    mov     r0, #1
+    str     r0, [r1]
+    ldr     r1, =PSG_DELAY_FRAMES
+    mov     r0, #0
+    str     r0, [r1]
+vpm_already:
+    pop     {r4, pc}
+    .ltorg
+
+@ vpy_stop_music() — stop playback and silence all PSG channels
+.global vpy_stop_music
+.type vpy_stop_music, %function
+.thumb_func
+vpy_stop_music:
+    push    {lr}
+    ldr     r0, =PSG_IS_PLAYING
+    mov     r1, #0
+    str     r1, [r0]
+    mov     r0, #8
+    mov     r1, #0
+    bl      psg_write
+    mov     r0, #9
+    mov     r1, #0
+    bl      psg_write
+    mov     r0, #10
+   mov     r1, #0
+    bl      psg_write
+    mov     r0, #7
+    mov     r1, #0x3F
+ bl      psg_write
+    pop     {pc}
+    .ltorg
+
+@ vpy_music_update() — advance PSG music sequencer by one frame
+.global vpy_music_update
+.type vpy_music_update, %function
+.thumb_func
+vpy_music_update:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r0, =PSG_IS_PLAYING
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq     vmu_done
+    ldr     r4, =PSG_DELAY_FRAMES
+    ldr     r0, [r4]
+    cmp     r0, #0
+    beq     vmu_process
+    sub     r0, r0, #1
+    str     r0, [r4]
+    b       vmu_done
+vmu_process:
+    ldr     r5, =PSG_MUSIC_PTR
+    ldr     r5, [r5]
+    ldrb    r6, [r5, #1]         @ num_writes
+    cmp     r6, #0
+    beq     vmu_end
+    cmp     r6, #0xFF
+    beq     vmu_loop
+    add     r7, r5, #2
+vmu_write_loop:
+    cmp     r6, #0
+    beq     vmu_after_writes
+    ldrb    r0, [r7]
+    ldrb    r1, [r7, #1]
+    push    {r6, r7}
+    bl      psg_write
+    pop     {r6, r7}
+    add     r7, r7, #2
+    sub     r6, r6, #1
+    b       vmu_write_loop
+vmu_after_writes:
+    ldr     r0, =PSG_MUSIC_PTR
+    str     r7, [r0]
+    ldrb    r0, [r7]
+    str     r0, [r4]
+    b       vmu_done
+vmu_end:
+    bl      vpy_stop_music
+    b       vmu_done
+vmu_loop:
+    ldr     r0, =PSG_MUSIC_START
+    ldr     r0, [r0]
+    ldr     r1, [r0, #4]         @ loop_event_offset
+    add     r1, r0, r1
+    ldr     r0, =PSG_MUSIC_PTR
+    str     r1, [r0]
+    ldrb    r0, [r1]
+    str     r0, [r4]
+vmu_done:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ vpy_play_sfx(r0=sfx_data_ptr)
+.global vpy_play_sfx
+.type vpy_play_sfx, %function
+.thumb_func
+vpy_play_sfx:
+    push    {lr}
+    ldr     r1, =PSG_SFX_PTR
+    add     r2, r0, #4
+    str     r2, [r1]
+    ldr     r1, =PSG_SFX_ACTIVE
+    mov     r2, #1
+    str     r2, [r1]
+    ldr     r1, =PSG_SFX_DELAY
+    mov     r2, #0
+    str     r2, [r1]
+    pop     {pc}
+    .ltorg
+
+@ vpy_audio_update() — advance SFX sequencer by one frame
+.global vpy_audio_update
+.type vpy_audio_update, %function
+.thumb_func
+vpy_audio_update:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r0, =PSG_SFX_ACTIVE
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq     vau_done
+    ldr     r4, =PSG_SFX_DELAY
+    ldr     r0, [r4]
+    cmp     r0, #0
+    beq     vau_proc
+    sub     r0, r0, #1
+    str     r0, [r4]
+    b       vau_done
+vau_proc:
+    ldr     r5, =PSG_SFX_PTR
+    ldr     r5, [r5]
+    ldrb    r6, [r5, #1]         @ num_writes
+    cmp     r6, #0
+    beq     vau_end
+    add     r7, r5, #2
+vau_wl:
+    cmp     r6, #0
+    beq     vau_aw
+    ldrb    r0, [r7]
+    ldrb    r1, [r7, #1]
+    cmp     r0, #7
+    bne     vau_do_write
+    push    {r1, r6, r7}    @ save sfx_mixer, loop vars
+    bl      psg_read         @ r0=7 already → returns Regs[7]
+    pop     {r1, r6, r7}    @ restore sfx_mixer to r1; r0=cur_mixer
+    and     r0, r0, #0xDB   @ keep non-C bits from music (0xDB=~0x24)
+    and     r1, r1, #0x24   @ keep only C bits from SFX
+    orr     r1, r0, r1      @ r1 = merged mixer
+    mov     r0, #7          @ reg = 7
+vau_do_write:
+    push    {r6, r7}
+    bl      psg_write
+    pop     {r6, r7}
+    add     r7, r7, #2
+    sub     r6, r6, #1
+    b       vau_wl
+vau_aw:
+    ldr     r0, =PSG_SFX_PTR
+    str     r7, [r0]
+    ldrb    r0, [r7]
+    str     r0, [r4]
+    b       vau_done
+vau_end:
+    ldr     r0, =PSG_SFX_ACTIVE
+    mov     r1, #0
+    str     r1, [r0]
+vau_done:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- NOTE_PERIOD_TABLE: MIDI 24-107 → AY period (84 hwords) ---
+.section .rodata
+.balign 2
+.global NOTE_PERIOD_TABLE
+NOTE_PERIOD_TABLE:
+    .hword 2697, 2546, 2403, 2268, 2141, 2020, 1907, 1800
+    .hword 1699, 1604, 1514, 1429, 1348, 1273, 1201, 1134
+    .hword 1070, 1010, 954, 900, 849, 802, 757, 714
+    .hword 674, 636, 601, 567, 535, 505, 477, 450
+    .hword 425, 401, 378, 357, 337, 318, 300, 283
+    .hword 268, 253, 238, 225, 212, 200, 189, 179
+    .hword 169, 159, 150, 142, 134, 126, 119, 113
+    .hword 106, 100, 95, 89, 84, 80, 75, 71
+    .hword 67, 63, 60, 56, 53, 50, 47, 45
+    .hword 42, 40, 38, 35, 33, 32, 30, 28
+    .hword 27, 25, 24, 22
+
+.section .text
+.align 2
+
+@ vpy_play_note(r0=instr_ptr, r1=channel 0-2, r2=note MIDI 24-107)
+.global vpy_play_note
+.type vpy_play_note, %function
+.thumb_func
+vpy_play_note:
+    push    {r4, r5, r6, r7, lr}
+    mov     r4, r0          @ r4 = instr_ptr
+    mov     r5, r1          @ r5 = channel
+    mov     r6, r2          @ r6 = note
+    @ clamp note to 24-107
+    cmp     r6, #24
+    it      lt
+    movlt   r6, #24
+    cmp     r6, #107
+    it      gt
+    movgt   r6, #107
+    @ r7 = &NOTE_STATE[channel]
+    ldr     r0, =NOTE_STATE
+    mov     r1, #32
+    mul     r7, r5, r1
+    add     r7, r0, r7
+    @ fill channel state
+    mov     r0, #1
+    str     r0, [r7, #0]    @ active = 1
+    ldrb    r0, [r4, #0]
+    str     r0, [r7, #4]    @ frames_left = duration_frames
+    str     r6, [r7, #8]    @ base_note
+    str     r4, [r7, #12]   @ instr_ptr
+    mov     r0, #0
+    str     r0, [r7, #16]   @ arp_pos = 0
+    ldrb    r0, [r4, #3]
+    str     r0, [r7, #20]   @ arp_timer = arp_speed_frames
+    str     r5, [r7, #28]   @ channel_id
+    @ compute period from note
+    sub     r0, r6, #24     @ r0 = note - 24 (index)
+    lsl     r0, r0, #1      @ r0 = index * 2 (hword offset)
+    ldr     r1, =NOTE_PERIOD_TABLE
+    ldrh    r2, [r1, r0]    @ r2 = period
+    str     r2, [r7, #24]   @ save period in state
+    @ write period to PSG (reg_lo = channel*2, reg_hi = channel*2+1)
+    lsl     r0, r5, #1      @ reg_lo = channel * 2
+    mov     r1, r2
+    and     r1, r1, #0xFF   @ period_lo
+    push    {r2, r5, r7}
+    bl      psg_write
+    pop     {r2, r5, r7}
+    lsl     r0, r5, #1
+    add     r0, r0, #1      @ reg_hi
+    mov     r1, r2
+    lsr     r1, r1, #8      @ period_hi
+    push    {r5, r7}
+    bl      psg_write
+    pop     {r5, r7}
+    @ write volume to PSG (vol reg = channel + 8)
+    ldr     r4, [r7, #12]   @ reload instr_ptr
+    ldrb    r1, [r4, #1]    @ volume
+    add     r0, r5, #8      @ vol reg = channel + 8
+    push    {r5, r7}
+    bl      psg_write
+    pop     {r5, r7}
+    @ update PSG_MIXER_SHADOW: enable tone ch, disable noise ch
+    ldr     r0, =PSG_MIXER_SHADOW
+    ldr     r1, [r0]
+    mov     r2, #1
+    lsl     r2, r2, r5      @ tone bit for channel
+    bic     r1, r1, r2      @ clear = enable tone
+    add     r3, r5, #3
+    mov     r2, #1
+    lsl     r2, r2, r3      @ noise bit
+    orr     r1, r1, r2      @ set = disable noise
+    str     r1, [r0]        @ update shadow
+    mov     r1, r1          @ r1 = shadow value already loaded above
+    ldr     r1, =PSG_MIXER_SHADOW
+    ldr     r1, [r1]
+    mov     r0, #7
+    push    {r5, r7}
+    bl      psg_write
+    pop     {r5, r7}
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ vpy_note_update() — advance note engine one frame (3 channels)
+.global vpy_note_update
+.type vpy_note_update, %function
+.thumb_func
+vpy_note_update:
+    push    {r4, r5, r6, r7, r8, lr}
+    mov     r4, #0              @ r4 = channel index
+.Lvnu_loop:
+    cmp     r4, #3
+    bge     .Lvnu_done
+    ldr     r5, =NOTE_STATE
+    mov     r6, #32
+    mul     r7, r4, r6
+    add     r5, r5, r7      @ r5 = &NOTE_STATE[channel]
+    ldr     r6, [r5, #0]    @ active
+    cmp     r6, #0
+    beq     .Lvnu_next
+    ldr     r6, [r5, #4]    @ frames_left
+    subs    r6, r6, #1
+    str     r6, [r5, #4]
+    bne     .Lvnu_arp
+    @ note expired: mute channel
+    mov     r0, #0
+    str     r0, [r5, #0]    @ active = 0
+    ldr     r6, [r5, #28]   @ channel_id
+    add     r0, r6, #8      @ vol reg = channel_id + 8
+    mov     r1, #0
+    push    {r4, r5}
+    bl      psg_write
+    pop     {r4, r5}
+    b       .Lvnu_next
+.Lvnu_arp:
+    ldr     r6, [r5, #12]   @ instr_ptr
+    ldrb    r7, [r6, #2]    @ arpeggio_count
+    cmp     r7, #0
+    beq     .Lvnu_next
+    ldr     r8, [r5, #20]   @ arp_timer
+    subs    r8, r8, #1
+    str     r8, [r5, #20]
+    bne     .Lvnu_next
+    ldrb    r8, [r6, #3]    @ arpeggio_speed_frames
+    str     r8, [r5, #20]
+    ldr     r8, [r5, #16]   @ arp_pos
+    add     r8, r8, #1
+    cmp     r8, r7
+    it      ge
+    movge   r8, #0
+    str     r8, [r5, #16]
+    ldr     r0, [r5, #8]    @ base_note
+    add     r1, r6, #4      @ ptr to arpeggio_intervals[0]
+    ldrsb   r1, [r1, r8]    @ signed interval at arp_pos
+    add     r0, r0, r1      @ new_note
+    cmp     r0, #24
+    it      lt
+    movlt   r0, #24
+    cmp     r0, #107
+    it      gt
+    movgt   r0, #107
+    sub     r0, r0, #24     @ index into table
+    lsl     r0, r0, #1      @ hword offset
+    ldr     r1, =NOTE_PERIOD_TABLE
+    ldrh    r2, [r1, r0]    @ period
+    ldr     r3, [r5, #28]   @ channel_id
+    lsl     r0, r3, #1      @ reg_lo = channel_id * 2
+    mov     r1, r2
+    and     r1, r1, #0xFF
+    push    {r2, r3, r4, r5}
+    bl      psg_write
+    pop     {r2, r3, r4, r5}
+    lsl     r0, r3, #1
+    add     r0, r0, #1      @ reg_hi
+    mov     r1, r2
+    lsr     r1, r1, #8
+    push    {r3, r4, r5}
+    bl      psg_write
+    pop     {r3, r4, r5}
+.Lvnu_next:
+    add     r4, r4, #1
+    b       .Lvnu_loop
+.Lvnu_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+.global vpy_set_camera_x
+.type vpy_set_camera_x, %function
+.thumb_func
+vpy_set_camera_x:
+    ldr     r1, =CAMERA_X
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_set_camera_y
+.type vpy_set_camera_y, %function
+.thumb_func
+vpy_set_camera_y:
+    ldr     r1, =CAMERA_Y
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_get_camera_x
+.type vpy_get_camera_x, %function
+.thumb_func
+vpy_get_camera_x:
+    ldr     r0, =CAMERA_X
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_get_camera_y
+.type vpy_get_camera_y, %function
+.thumb_func
+vpy_get_camera_y:
+    ldr     r0, =CAMERA_Y
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_get_scroll_limit_left
+.type vpy_get_scroll_limit_left, %function
+.thumb_func
+vpy_get_scroll_limit_left:
+    ldr     r0, =SCROLL_LIMIT_LEFT
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_get_scroll_limit_right
+.type vpy_get_scroll_limit_right, %function
+.thumb_func
+vpy_get_scroll_limit_right:
+    ldr     r0, =SCROLL_LIMIT_RIGHT
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_get_scroll_limit_top
+.type vpy_get_scroll_limit_top, %function
+.thumb_func
+vpy_get_scroll_limit_top:
+    ldr     r0, =SCROLL_LIMIT_TOP
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_get_scroll_limit_bottom
+.type vpy_get_scroll_limit_bottom, %function
+.thumb_func
+vpy_get_scroll_limit_bottom:
+    ldr     r0, =SCROLL_LIMIT_BOTTOM
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_get_level_floor_y
+.type vpy_get_level_floor_y, %function
+.thumb_func
+vpy_get_level_floor_y:
+    ldr     r0, =LEVEL_DATA_PTR
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq     vglfy_none
+    ldrsh   r1, [r0, #32]      @ groundBottomOffset at header +32
+    ldr     r0, =CAMERA_Y
+    ldr     r0, [r0]
+    sub     r0, r0, #128
+    add     r0, r0, r1
+    bx      lr
+vglfy_none:
+    mov     r0, #0
+    bx      lr
+
+.global vpy_get_frame_us
+.type vpy_get_frame_us, %function
+.thumb_func
+vpy_get_frame_us:
+    mov     r0, #0
+    bx      lr
+
+.global vpy_set_text_size
+.type vpy_set_text_size, %function
+.thumb_func
+vpy_set_text_size:
+    lsl     r1, r0, #1
+    add     r1, r1, r0
+    add     r1, r1, #4
+    lsr     r1, r1, #3
+    cmp     r1, #1
+    bhs     vsts_ok
+    mov     r1, #1
+vsts_ok:
+    ldr     r0, =TEXT_SIZE
+    str     r1, [r0]
+    bx      lr
+
+.global vpy_set_text_color
+.type vpy_set_text_color, %function
+.thumb_func
+vpy_set_text_color:
+    ldr     r1, =TEXT_COLOR
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_debug_print
+.type vpy_debug_print, %function
+.thumb_func
+vpy_debug_print:
+    ldr     r1, =DBGVAL
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_debug_print_labeled
+.type vpy_debug_print_labeled, %function
+.thumb_func
+vpy_debug_print_labeled:
+    ldr     r1, =DBGVAL
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_debug_print_str
+.type vpy_debug_print_str, %function
+.thumb_func
+vpy_debug_print_str:
+    bx      lr
+
+@ vpy_load_level(r0=level_data_ptr)
+.global vpy_load_level
+.type vpy_load_level, %function
+.thumb_func
+vpy_load_level:
+    push    {r4, r5, r6, r7, r8, lr}  @ 6 regs = 24 bytes, 8-aligned
+    mov     r4, r0
+    ldr     r1, =LEVEL_DATA_PTR
+    str     r0, [r1]
+    ldrb    r5, [r4, #9]              @ gpCount
+    ldr     r1, =LEVEL_GP_COUNT
+    str     r5, [r1]
+    cmp     r5, #0
+    beq.w   vll_done
+    ldr     r6, [r4, #16]             @ gpObjectsPtr
+    ldr     r7, =LEVEL_GP_BUF
+vll_gp_loop:
+    ldrsh   r0, [r6, #0]              @ world_x
+    ldrsh   r1, [r6, #2]              @ world_y
+    strh    r0, [r7, #0]
+    strh    r1, [r7, #2]
+    ldrsb   r0, [r6, #14]             @ vel_x_init
+    ldrsb   r1, [r6, #15]             @ vel_y_init
+    strb    r0, [r7, #4]
+    strb    r1, [r7, #5]
+    mov     r0, #1
+    strb    r0, [r7, #6]  @ alive=1
+    mov     r0, #0
+    strb    r0, [r7, #7]  @ pad=0
+    add     r6, r6, #20    @ next ROM obj (20 bytes)
+    add     r7, r7, #8
+    subs    r5, r5, #1
+    bne     vll_gp_loop
+vll_done:
+    ldrsh   r0, [r4, #24]             @ scrollLimit left
+    ldr     r1, =SCROLL_LIMIT_LEFT
+    str     r0, [r1]
+    ldrsh   r0, [r4, #26]             @ scrollLimit right
+    ldr     r1, =SCROLL_LIMIT_RIGHT
+    str     r0, [r1]
+    ldrsh   r0, [r4, #28]             @ scrollLimit top
+    ldr     r1, =SCROLL_LIMIT_TOP
+    str     r0, [r1]
+    ldrsh   r0, [r4, #30]             @ scrollLimit bottom
+    ldr     r1, =SCROLL_LIMIT_BOTTOM
+    str     r0, [r1]
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vpy_show_level()
+.global vpy_show_level
+.type vpy_show_level, %function
+.thumb_func
+vpy_show_level:
+    push    {r4, r5, r6, r7, r8, lr}  @ 6 regs = 24 bytes, 8-aligned
+    ldr     r4, =LEVEL_DATA_PTR
+    ldr     r4, [r4]
+    cmp     r4, #0
+    beq.w   vsl_done
+    ldrb    r5, [r4, #8]              @ bgCount
+    cmp     r5, #0
+    beq.w   vsl_skip_bg
+    ldr     r6, [r4, #12]             @ bgObjectsPtr
+    bl      vsl_draw_static
+vsl_skip_bg:
+    ldr     r5, =LEVEL_GP_COUNT
+    ldr     r5, [r5]
+    cmp     r5, #0
+    beq.w   vsl_skip_gp
+    ldr     r6, [r4, #16]             @ gpObjectsPtr (ROM)
+    ldr     r7, =LEVEL_GP_BUF
+    ldr     r8, =CAMERA_X
+vsl_gp_loop:
+    ldrb    r3, [r6, #7]              @ obj type (1=enemy)
+    cmp     r3, #1
+    beq     vsl_gp_next               @ enemies drawn by DRAW_ENEMIES
+    ldrb    r0, [r7, #6]              @ alive
+    cmp     r0, #0
+    beq.w   vsl_gp_next
+    ldrsh   r0, [r7, #0]              @ world_x
+    ldrsh   r1, [r7, #2]              @ world_y
+    ldr     r2, [r8]
+    sub     r0, r0, r2  @ screen_x
+    ldr     r2, [r8, #4]
+    sub     r1, r1, r2  @ screen_y (CAMERA_Y=CAMERA_X+4)
+    movs    r2, r0
+    bpl     vsl_gp_cx_ok
+    neg     r2, r0
+vsl_gp_cx_ok:
+    cmp     r2, #160
+    bgt     vsl_gp_next
+    movs    r2, r1
+    bpl     vsl_gp_cy_ok
+    neg     r2, r1
+vsl_gp_cy_ok:
+    cmp     r2, #160
+    bgt     vsl_gp_next
+    ldrb    r2, [r6, #5]              @ intensity
+    cmp     r2, #0
+    bne     vsl_gp_havei
+    mov     r2, #127
+vsl_gp_havei:
+    mov     r3, #0
+    push    {r2, r3}            @ [sp]=intensity, align+8
+    mov     r2, r1
+    mov     r1, r0
+    ldr     r0, [r6, #8]  @ vector_ptr
+    mov     r3, #0
+    bl      vpy_draw_vector_ex
+    add     sp, sp, #8
+vsl_gp_next:
+    add     r6, r6, #20    @ next ROM obj (20 bytes)
+    add     r7, r7, #8
+    subs    r5, r5, #1
+    bne     vsl_gp_loop
+vsl_skip_gp:
+    ldrb    r5, [r4, #10]             @ fgCount
+    cmp     r5, #0
+    beq.w   vsl_done
+    ldr     r6, [r4, #20]             @ fgObjectsPtr
+    bl      vsl_draw_static
+vsl_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vsl_draw_static — internal
+vsl_draw_static:
+    push    {r4, r5, r6, r7, r8, lr}  @ 24 bytes
+    mov     r4, r5                    @ count
+    mov     r5, r6                    @ ROM ptr
+    ldr     r6, =CAMERA_X
+    ldr     r6, [r6]
+    ldr     r7, =CAMERA_Y
+    ldr     r7, [r7]
+vsd_loop:
+    cmp     r4, #0
+    beq.w   vsd_done
+    ldrsh   r0, [r5, #0]
+    ldrsh   r1, [r5, #2]
+    sub     r0, r0, r6
+    sub     r1, r1, r7
+    movs    r8, r0
+    bpl     vsd_cx_ok
+    neg     r8, r0
+vsd_cx_ok:
+    cmp     r8, #160
+    bgt     vsd_next
+    movs    r8, r1
+    bpl     vsd_cy_ok
+    neg     r8, r1
+vsd_cy_ok:
+    cmp     r8, #160
+    bgt     vsd_next
+    ldrb    r2, [r5, #5]
+    cmp     r2, #0
+    bne     vsd_havei
+    mov     r2, #127
+vsd_havei:
+    mov     r3, #0
+    push    {r2, r3}
+    mov     r2, r1
+    mov     r1, r0
+    ldr     r0, [r5, #8]
+    mov     r3, #0
+    bl      vpy_draw_vector_ex
+    add     sp, sp, #8
+vsd_next:
+    add     r5, r5, #20    @ next ROM obj (20 bytes)
+    subs    r4, r4, #1
+    b       vsd_loop
+vsd_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vpy_update_level()
+.global vpy_update_level
+.type vpy_update_level, %function
+.thumb_func
+vpy_update_level:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}  @ 8 regs = 32 bytes, 8-aligned
+    ldr     r4, =LEVEL_DATA_PTR
+    ldr     r4, [r4]
+    cmp     r4, #0
+    beq.w   vul_done
+    ldrsh   r6, [r4, #0]              @ xMin
+    ldrsh   r7, [r4, #2]              @ xMax
+    ldrsh   r8, [r4, #4]              @ yMin
+    ldrsh   r9, [r4, #6]              @ yMax
+    ldr     r5, =LEVEL_GP_COUNT
+    ldr     r5, [r5]
+    cmp     r5, #0
+    beq.w   vul_done
+    ldr     r10, [r4, #16]            @ gpObjectsPtr (ROM, for flags)
+    ldr     r4, =LEVEL_GP_BUF
+vul_loop:
+    ldrb    r0, [r4, #6]              @ alive
+    cmp     r0, #0
+    beq.w   vul_next
+    ldrb    r0, [r10, #6]             @ ROM flags
+    tst     r0, #0x02
+    beq     vul_nograv
+    ldrsb   r1, [r4, #5]              @ vel_y
+    sub     r1, r1, #1
+    cmp     r1, #-127
+    bge     vul_vy_ok
+    mov     r1, #-127
+vul_vy_ok:
+    strb    r1, [r4, #5]
+vul_nograv:
+    ldrsh   r1, [r4, #0]              @ world_x
+    ldrsb   r2, [r4, #4]              @ vel_x
+    add     r1, r1, r2
+    cmp     r1, r6
+    bge     vul_x_min_ok
+    mov     r1, r6
+    mov     r2, #0
+    strb    r2, [r4, #4]
+vul_x_min_ok:
+    cmp     r1, r7
+    ble     vul_x_max_ok
+    mov     r1, r7
+    mov     r2, #0
+    strb    r2, [r4, #4]
+vul_x_max_ok:
+    strh    r1, [r4, #0]
+    ldrsh   r1, [r4, #2]              @ world_y
+    ldrsb   r2, [r4, #5]              @ vel_y
+    add     r1, r1, r2
+    cmp     r1, r8
+    bge     vul_y_min_ok
+    mov     r1, r8
+    mov     r2, #0
+    strb    r2, [r4, #5]
+vul_y_min_ok:
+    cmp     r1, r9
+    ble     vul_y_max_ok
+    mov     r1, r9
+    mov     r2, #0
+    strb    r2, [r4, #5]
+vul_y_max_ok:
+    strh    r1, [r4, #2]
+vul_next:
+    add     r4, r4, #8
+    add     r10, r10, #20  @ next ROM obj (20 bytes)
+    subs    r5, r5, #1
+    bne     vul_loop
+vul_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ vpy_get_level_width() -> r0
+.global vpy_get_level_width
+.type vpy_get_level_width, %function
+.thumb_func
+vpy_get_level_width:
+    ldr     r0, =LEVEL_DATA_PTR
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq.w   vglw_null
+    ldrsh   r1, [r0, #2]              @ xMax
+    ldrsh   r0, [r0, #0]              @ xMin
+    sub     r0, r1, r0
+    bx      lr
+vglw_null:
+    mov     r0, #0
+    bx      lr
+    .ltorg
+
+@ vpy_get_level_height() -> r0
+.global vpy_get_level_height
+.type vpy_get_level_height, %function
+.thumb_func
+vpy_get_level_height:
+    ldr     r0, =LEVEL_DATA_PTR
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq.w   vglh_null
+    ldrsh   r1, [r0, #6]              @ yMax
+    ldrsh   r0, [r0, #4]              @ yMin
+    sub     r0, r1, r0
+    bx      lr
+vglh_null:
+    mov     r0, #0
+    bx      lr
+    .ltorg
+
+@ vpy_get_level_tile(r0=x, r1=y) -> index or -1
+.global vpy_get_level_tile
+.type vpy_get_level_tile, %function
+.thumb_func
+vpy_get_level_tile:
+    push    {r4, r5, r6, lr}           @ 4 regs = 16 bytes, 8-aligned
+    mov     r4, r0                    @ query_x
+    mov     r5, r1                    @ query_y
+    ldr     r6, =LEVEL_GP_COUNT
+    ldr     r6, [r6]
+    ldr     r0, =LEVEL_GP_BUF
+    mov     r1, #0                    @ index
+vglt_loop:
+    cmp     r1, r6
+    bge     vglt_notfound
+    ldrb    r2, [r0, #6]
+    cmp     r2, #0
+    beq.w   vglt_next
+    ldrsh   r2, [r0, #0]              @ world_x
+    sub     r2, r2, r4
+    movs    r3, r2
+    bpl     vglt_dx_ok
+    neg     r2, r2
+vglt_dx_ok:
+    cmp     r2, #16
+    bgt     vglt_next
+    ldrsh   r2, [r0, #2]              @ world_y
+    sub     r2, r2, r5
+    movs    r3, r2
+    bpl     vglt_dy_ok
+    neg     r2, r2
+vglt_dy_ok:
+    cmp     r2, #16
+    bgt     vglt_next
+    mov     r0, r1                    @ return index
+    pop     {r4, r5, r6, pc}
+vglt_next:
+    add     r0, r0, #8
+    add     r1, r1, #1
+    b       vglt_loop
+vglt_notfound:
+    mvn     r0, #0            @ return -1
+    pop     {r4, r5, r6, pc}
+    .ltorg
+
+@ vpy_level_collision_x(r0=px, r1=py, r2=hw, r3=hy) -> push-out dx
+.global vpy_level_collision_x
+.type vpy_level_collision_x, %function
+.thumb_func
+vpy_level_collision_x:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov     r4, r0              @ px
+    mov     r5, r1              @ py
+    mov     r6, r2              @ half_w (player)
+    mov     r11, r3             @ half_h (player)
+    ldr     r7, =LEVEL_DATA_PTR
+    ldr     r7, [r7]
+    cmp     r7, #0
+    beq.w   vlcx_done_zero
+    ldr     r8, =LEVEL_GP_COUNT
+    ldr     r8, [r8]
+    cmp     r8, #0
+    beq.w   vlcx_done_zero
+    ldr     r9, [r7, #16]       @ gpObjectsPtr (ROM)
+    ldr     r7, =LEVEL_GP_BUF
+    mov     r10, #0             @ best push-out dx
+vlcx_loop:
+    cmp     r8, #0
+    beq.w   vlcx_done
+    ldrb    r0, [r7, #6]
+    cmp     r0, #0
+    beq.w   vlcx_next
+    ldrb    r0, [r9, #6]
+    tst     r0, #0x10
+    beq     vlcx_next
+    ldr     r0, [r9, #16]       @ coll_mesh_ptr
+    cmp     r0, #0
+    beq.w   vlcx_next       @ no mesh = floor only
+    ldr     r1, [r0]            @ floor_count
+    add     r0, r0, #4          @ skip floor_count word
+    lsl     r1, r1, #3          @ floor_count * 8 bytes per seg
+    add     r0, r0, r1          @ r0 = ptr to wall_count
+    ldr     r1, [r0]            @ wall_count
+    cmp     r1, #0
+    beq.w   vlcx_next
+    add     r0, r0, #4          @ r0 = ptr to first wall seg
+vlcx_wall_loop:
+    cmp     r1, #0
+    beq.w   vlcx_next
+    ldrsh   r2, [r0]            @ wall local x
+    ldrsh   r3, [r0, #2]        @ wall local y_min
+    ldrsh   r12, [r0, #6]       @ wall local y_max
+    add     r0, r0, #8
+    subs    r1, r1, #1
+    ldrsh   r14, [r7, #0]       @ obj world_x
+    add     r2, r2, r14         @ world_wall_x
+    ldrsh   r14, [r7, #2]       @ obj world_y
+    add     r3, r3, r14         @ world_y_min
+    add     r12, r12, r14       @ world_y_max
+    sub     r14, r3, r11        @ world_y_min - player_hh
+    cmp     r5, r14
+    ble     vlcx_wall_loop  @ py below wall
+    add     r14, r12, r11       @ world_y_max + player_hh
+    cmp     r5, r14
+    bge     vlcx_wall_loop  @ py above wall
+    sub     r3, r4, r2          @ dx_raw = px - wall_x
+    movs    r2, r3              @ r2 = dx_raw; sets N flag
+    bpl     vlcx_wall_dx_ok
+    neg     r3, r3  @ r3 = |dx_raw|
+vlcx_wall_dx_ok:
+    cmp     r3, r6
+    bge     vlcx_wall_loop  @ |dx| >= hw: no overlap
+    sub     r3, r6, r3          @ overlap = hw - |dx|
+    cmp     r2, #0
+    bge     vlcx_wall_sign_ok
+    neg     r3, r3
+vlcx_wall_sign_ok:
+    mov     r10, r3
+    b.w     vlcx_next
+vlcx_next:
+    add     r7, r7, #8
+    add     r9, r9, #20    @ next ROM obj
+    subs    r8, r8, #1
+    b.w     vlcx_loop
+vlcx_done:
+    mov     r0, r10
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+vlcx_done_zero:
+    mov     r0, #0
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_level_collision_y(r0=px, r1=py, r2=hh) -> floor_center_y
+.global vpy_level_collision_y
+.type vpy_level_collision_y, %function
+.thumb_func
+vpy_level_collision_y:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 9 regs
+    mov     r4, r0                    @ px
+    sub     r5, r1, r2                @ player_feet = py - hh
+    mov     r6, r2                    @ half_h (player)
+    ldr     r7, =LEVEL_DATA_PTR
+    ldr     r7, [r7]
+    ldr     r10, =-32767              @ best_floor_top sentinel
+    cmp     r7, #0
+    beq.w   vlcy_finish
+    ldr     r8, =LEVEL_GP_COUNT
+    ldr     r8, [r8]
+    cmp     r8, #0
+    beq.w   vlcy_finish
+    ldr     r9, [r7, #16]             @ gpObjectsPtr (ROM)
+    ldr     r7, =LEVEL_GP_BUF
+vlcy_loop:
+    cmp     r8, #0
+    beq.w   vlcy_finish
+    ldrb    r1, [r7, #6]
+    cmp     r1, #0
+    beq.w   vlcy_next
+    ldrb    r1, [r9, #6]
+    tst     r1, #0x10
+    beq     vlcy_next
+    ldrb    r1, [r9, #12]             @ obj half_w
+    ldrsh   r2, [r7, #0]              @ obj world_x
+    sub     r2, r4, r2                @ dx = px - obj_x
+    movs    r3, r2
+    bpl     vlcy_dxok
+    neg     r3, r2
+vlcy_dxok:
+    cmp     r3, r1
+    bgt     vlcy_next
+    ldr     r11, [r9, #16]            @ coll_mesh_ptr
+    cmp     r11, #0
+    beq     vlcy_aabb
+    ldrsh   r0, [r7, #0]              @ obj_world_x
+    sub     r0, r4, r0                @ local_px = px - obj_world_x
+    ldrsh   r1, [r7, #2]              @ obj_world_y
+    push    {r0, r1}                  @ [sp]=local_px [sp+4]=obj_world_y
+    ldr     r12, [r11], #4            @ seg_count; r11 → first segment
+vlcy_seg_loop:
+    cmp     r12, #0
+    beq     vlcy_seg_done
+    ldrsh   r0, [r11]                 @ x1
+    ldrsh   r1, [r11, #2]             @ y1
+    ldrsh   r2, [r11, #4]             @ x2
+    ldrsh   r3, [r11, #6]             @ y2
+    add     r11, r11, #8
+    subs    r12, r12, #1
+    cmp     r1, r3
+    bne     vlcy_seg_loop @ skip non-horizontal
+    ldr     r14, [sp]                 @ local_px
+    cmp     r0, r2
+    blt     vlcy_seg_x1lt
+    cmp     r14, r2
+    blt     vlcy_seg_loop
+    cmp     r14, r0
+    bgt     vlcy_seg_loop
+    b       vlcy_seg_y
+vlcy_seg_x1lt:
+    cmp     r14, r0
+    blt     vlcy_seg_loop
+    cmp     r14, r2
+    bgt     vlcy_seg_loop
+vlcy_seg_y:
+    ldr     r14, [sp, #4]             @ obj_world_y
+    add     r3, r1, r14               @ world_seg_y = y1 + obj_world_y
+    cmp     r3, r5
+    bgt     vlcy_seg_loop
+    cmp     r3, r10
+    ble     vlcy_seg_loop
+    mov     r10, r3
+    b       vlcy_seg_loop
+vlcy_seg_done:
+    pop     {r0, r1}
+    b       vlcy_next
+vlcy_aabb:
+    ldrsh   r2, [r7, #2]              @ obj world_y
+    ldrb    r3, [r9, #13]             @ obj half_h
+    add     r2, r2, r3                @ obj_top = world_y + half_h
+    cmp     r2, r5
+    bgt     vlcy_next
+    cmp     r10, r2
+    bge     vlcy_next
+    mov     r10, r2
+vlcy_next:
+    add     r7, r7, #8
+    add     r9, r9, #20    @ next ROM obj (20 bytes)
+    subs    r8, r8, #1
+    b       vlcy_loop
+vlcy_finish:
+    ldr     r1, =-32767
+    cmp     r10, r1
+    beq     vlcy_no_floor
+    add     r0, r10, r6               @ floor_top + half_h
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+vlcy_no_floor:
+    mov     r0, r5                    @ no floor: return player_feet so floor_y < player_y
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ ─── MSG_DEF / PRINT_MSG ─────────────────────────────────────
+
+.global vpy_msg_def
+.type vpy_msg_def, %function
+.thumb_func
+vpy_msg_def:
+    bx      lr
+
+@ vpy_print_msg(r0=id): renders message at pre-defined (x,y)
+.global vpy_print_msg
+.type vpy_print_msg, %function
+.thumb_func
+vpy_print_msg:
+    bx      lr
+
+@ vpy_draw_anim(r0=anim_ptr, r1=ox, r2=oy, r3=state_ptr, r4=mirror)
+.global vpy_draw_anim
+.type vpy_draw_anim, %function
+.thumb_func
+vpy_draw_anim:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, r12, lr}
+    mov     r12, r4                     @ save mirror before r4 overwritten
+    mov     r4, r0                      @ anim header ptr
+    mov     r10, r1                     @ save ox
+    mov     r11, r2                     @ save oy
+    mov     r5, r3                      @ state_ptr from caller
+    ldrb    r6, [r5]                    @ frame_idx
+    ldrb    r7, [r5, #1]                @ ticks_left (0=uninitialized)
+    ldrb    r8, [r4, #2]                @ base_ref_count
+    cmp     r8, #0
+    beq     dar_tick
+    add     r9, r4, #4                  @ first base_ref word-ptr
+dar_base_loop:
+    push    {r8, r9}
+    sub     sp, sp, #8                  @ intensity slot + align
+    mov     r0, #127
+    str     r0, [sp]                    @ intensity = 127
+    ldr     r0, [r9]                    @ ARM ptr to vec data
+    mov     r1, r10                     @ ox
+    mov     r2, r11                     @ oy
+    mov     r3, r12                     @ mirror
+    bl      vpy_draw_vector_ex
+    add     sp, sp, #8
+    pop     {r8, r9}
+    add     r9, r9, #4
+    subs    r8, r8, #1
+    bne     dar_base_loop
+dar_tick:
+    cmp     r7, #0
+    beq     dar_init_frame
+    subs    r7, r7, #1
+    bgt     dar_draw
+    ldrb    r8, [r4]                    @ frame_count
+    add     r6, r6, #1
+    cmp     r6, r8
+    blt     dar_no_wrap
+    ldrb    r9, [r4, #1]                @ loop flag
+    cmp     r9, #0
+    beq     dar_freeze
+    mov     r6, #0
+dar_no_wrap:
+    strb    r6, [r5]
+dar_init_frame:
+    ldrb    r8, [r4, #3]                @ frame_table_offset
+    lsl     r9, r6, #2                  @ frame_idx * 4
+    add     r9, r9, r8
+    ldr     r9, [r4, r9]                @ ARM ptr to frame data
+    ldrb    r7, [r9]                    @ duration_ticks
+    cmp     r7, #0
+    it      le
+    movle   r7, #1
+    strb    r7, [r5, #1]
+    b       dar_draw_vecs
+dar_freeze:
+    sub     r6, r6, #1
+    strb    r6, [r5]
+    mov     r7, #1
+    strb    r7, [r5, #1]
+    b       dar_draw_frame
+dar_draw:
+    strb    r7, [r5, #1]
+dar_draw_frame:
+    ldrb    r8, [r4, #3]                @ frame_table_offset
+    lsl     r9, r6, #2
+    add     r9, r9, r8
+    ldr     r9, [r4, r9]                @ ARM ptr to frame data
+dar_draw_vecs:
+    ldrb    r8, [r9, #1]                @ vec_ref_count
+    cmp     r8, #0
+    beq     dar_done
+    add     r9, r9, #4                  @ skip duration+count+2-byte pad
+    mov     r6, r8
+dar_vec_loop:
+    push    {r6, r9}
+    sub     sp, sp, #8                  @ intensity slot + align
+    mov     r0, #127
+    str     r0, [sp]                    @ intensity = 127
+    ldr     r0, [r9]                    @ ARM ptr to vec data
+    mov     r1, r10                     @ ox
+    mov     r2, r11                     @ oy
+    mov     r3, r12                     @ mirror
+    bl      vpy_draw_vector_ex
+    add     sp, sp, #8
+    pop     {r6, r9}
+    add     r9, r9, #4
+    subs    r6, r6, #1
+    bne     dar_vec_loop
+dar_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, r12, pc}
+    .ltorg
+
+@ --- User variables (RAM) ---
+.equ VAR_ROT_X, 0x2007F460
+.equ VAR_ROT_Y, 0x2007F464
+.equ VAR_ROT_Z, 0x2007F468
+.equ VAR_ROT_SPEED_X, 0x2007F46C
+.equ VAR_ROT_SPEED_Y, 0x2007F470
+.equ VAR_ROT_SPEED_Z, 0x2007F474
+.equ VAR_JOY_X, 0x2007F478  @ implicit
+.equ VAR_JOY_Y, 0x2007F47C  @ implicit
+
+@ --- Const array ROM data ---
+
+@ --- game_main (firmware entry point) ---
+.align 2
+.global game_main
+.type game_main, %function
+.thumb_func
+game_main:
+    push    {r4, r5, r6, r7, lr}
+    @ initialize globals
+    ldr     r1, =0x2007F460
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F464
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F468
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F46C
+    mov     r0, #1
+    str     r0, [r1]
+    ldr     r1, =0x2007F470
+    mov     r0, #2
+    str     r0, [r1]
+    ldr     r1, =0x2007F474
+    mov     r0, #1
+    str     r0, [r1]
+    @ init PSG_MIXER_SHADOW (all channels disabled)
+    ldr     r1, =PSG_MIXER_SHADOW
+    mov     r0, #0x3F
+    str     r0, [r1]
+    @ zero ENEMY_COUNT_ARM (guard against warm-reset SRAM)
+    ldr     r1, =ENEMY_COUNT_ARM
+    mov     r0, #0
+    str     r0, [r1]
+    @ main() body
+game_main_loop:
+    bl      vpy_wait_recal
+    bl      vpy_update_buttons
+    bl      vpy_beep_update
+    bl      vpy_music_update
+    bl      vpy_audio_update
+    ldr     r1, =0x2007F460    @ ROT_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F46C    @ ROT_SPEED_X
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F460    @ ROT_X
+    str     r0, [r1]
+    ldr     r1, =0x2007F464    @ ROT_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F470    @ ROT_SPEED_Y
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F464    @ ROT_Y
+    str     r0, [r1]
+    ldr     r1, =0x2007F468    @ ROT_Z
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F474    @ ROT_SPEED_Z
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F468    @ ROT_Z
+    str     r0, [r1]
+    ldr     r1, =0x2007F460    @ ROT_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #256
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    blt    .Lcf0
+    movs    r0, #1
+    b       .Lcf0e
+.Lcf0:
+    movs    r0, #0
+.Lcf0e:
+    cmp     r0, #0
+    beq     if_else_0
+    ldr     r1, =0x2007F460    @ ROT_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #256
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F460    @ ROT_X
+    str     r0, [r1]
+    b       if_end_0
+if_else_0:
+if_end_0:
+    ldr     r1, =0x2007F464    @ ROT_Y
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #256
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    blt    .Lcf1
+    movs    r0, #1
+    b       .Lcf1e
+.Lcf1:
+    movs    r0, #0
+.Lcf1e:
+    cmp     r0, #0
+    beq     if_else_1
+    ldr     r1, =0x2007F464    @ ROT_Y
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #256
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F464    @ ROT_Y
+    str     r0, [r1]
+    b       if_end_1
+if_else_1:
+if_end_1:
+    ldr     r1, =0x2007F468    @ ROT_Z
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #256
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    blt    .Lcf2
+    movs    r0, #1
+    b       .Lcf2e
+.Lcf2:
+    movs    r0, #0
+.Lcf2e:
+    cmp     r0, #0
+    beq     if_else_2
+    ldr     r1, =0x2007F468    @ ROT_Z
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #256
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F468    @ ROT_Z
+    str     r0, [r1]
+    b       if_end_2
+if_else_2:
+if_end_2:
+    bl      vpy_j1_x
+    ldr     r1, =0x2007F478    @ JOY_X
+    str     r0, [r1]
+    bl      vpy_j1_y
+    ldr     r1, =0x2007F47C    @ JOY_Y
+    str     r0, [r1]
+    bl      vpy_j1_btn1
+    cmp     r0, #0
+    beq     if_else_3
+    ldr     r1, =0x2007F46C    @ ROT_SPEED_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F46C    @ ROT_SPEED_X
+    str     r0, [r1]
+    b       if_end_3
+if_else_3:
+if_end_3:
+    bl      vpy_j1_btn2
+    cmp     r0, #0
+    beq     if_else_4
+    ldr     r1, =0x2007F46C    @ ROT_SPEED_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}
+    mov     r0, #0
+    push    {r0}
+    mov     r0, #10
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_clamp
+    ldr     r1, =0x2007F46C    @ ROT_SPEED_X
+    str     r0, [r1]
+    b       if_end_4
+if_else_4:
+if_end_4:
+    bl      vpy_j1_btn3
+    cmp     r0, #0
+    beq     if_else_5
+    ldr     r1, =0x2007F470    @ ROT_SPEED_Y
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F470    @ ROT_SPEED_Y
+    str     r0, [r1]
+    b       if_end_5
+if_else_5:
+if_end_5:
+    bl      vpy_j1_btn4
+    cmp     r0, #0
+    beq     if_else_6
+    ldr     r1, =0x2007F470    @ ROT_SPEED_Y
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}
+    mov     r0, #0
+    push    {r0}
+    mov     r0, #10
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_clamp
+    ldr     r1, =0x2007F470    @ ROT_SPEED_Y
+    str     r0, [r1]
+    b       if_end_6
+if_else_6:
+if_end_6:
+    mov     r0, #60
+    push    {r0}
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x2007F468    @ ROT_Z
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F464    @ ROT_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F460    @ ROT_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =_LOGO_3D_DATA    @ 3D data for 'logo'
+    push    {r0}
+    pop     {r0}
+    pop     {r1}
+    pop     {r2}
+    pop     {r3}
+    bl      vpy_draw_vector_3d
+    add     sp, sp, #8          @ discard ox, oy
+    ldr     r0, =_TEXT_VECTORS    @ asset 'text'
+    push    {r0}
+    mov     r0, #0
+    push    {r0}
+    ldr     r0, =-44
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_vector
+    mov     r0, #8
+    push    {r0}
+    pop     {r0}
+    bl      vpy_set_text_size
+    ldr     r0, =-35
+    push    {r0}
+    ldr     r0, =-58
+    push    {r0}
+    b       _str_0_after
+_str_0:
+    .asciz  "STUDIO\x80"
+    .align  2
+_str_0_after:
+    ldr     r0, =_str_0
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       game_main_loop
+    .ltorg
+
+@ ============================================================
+@ Asset data
+@ ============================================================
+
+@ --- aa (1 path(s)) ---
+.global _AA_VECTORS
+_AA_VECTORS:
+    .word   1               @ path_count
+    .word   _AA_PATH0      @ ptr path 0
+
+_AA_PATH0:
+    .byte   127               @ intensity
+    .byte   0x0F, 0x00, 0x00, 0x00  @ y=15, x=0, hdr
+    .byte   0xFF, 0xE2, 0xF1  @ line dy=-30, dx=-15
+    .byte   0xFF, 0x00, 0x1E  @ line dy=0, dx=30
+    .byte   0xFF, 0x1E, 0xF1  @ line dy=30, dx=-15
+    .byte   0x02            @ end marker
+
+@ --- AA_3D_DATA (1 path(s)) ---
+    .balign 4
+.global _AA_3D_DATA
+_AA_3D_DATA:
+    .word   3               @ vertex_count
+    .byte   0x00, 0x14, 0x00  @ vert 0: x=0,y=20,z=0
+    .byte   0xF1, 0xF6, 0x00  @ vert 1: x=-15,y=-10,z=0
+    .byte   0x0F, 0xF6, 0x00  @ vert 2: x=15,y=-10,z=0
+    .balign 4
+    .word   1               @ path_count
+    .byte   3               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+
+@ --- logo (4 path(s)) ---
+.global _LOGO_VECTORS
+_LOGO_VECTORS:
+    .word   4               @ path_count
+    .word   _LOGO_PATH0      @ ptr path 0
+    .word   _LOGO_PATH1      @ ptr path 1
+    .word   _LOGO_PATH2      @ ptr path 2
+    .word   _LOGO_PATH3      @ ptr path 3
+
+_LOGO_PATH0:
+    .byte   85               @ intensity
+    .byte   0x31, 0xE8, 0x00, 0x00  @ y=49, x=-24, hdr
+    .byte   0xFF, 0xEE, 0x00  @ line dy=-18, dx=0
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0xDB, 0x00  @ line dy=-37, dx=0
+    .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
+    .byte   0xFF, 0xF5, 0x00  @ line dy=-11, dx=0
+    .byte   0xFF, 0x00, 0x18  @ line dy=0, dx=24
+    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
+    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
+    .byte   0xFF, 0x27, 0x00  @ line dy=39, dx=0
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0xFF, 0x00, 0xE6  @ line dy=0, dx=-26
+    .byte   0x02            @ end marker
+
+_LOGO_PATH1:
+    .byte   85               @ intensity
+    .byte   0x2B, 0xF0, 0x00, 0x00  @ y=43, x=-16, hdr
+    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
+    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0xFF, 0x0C, 0x00  @ line dy=12, dx=0
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0x02            @ end marker
+
+_LOGO_PATH2:
+    .byte   85               @ intensity
+    .byte   0xCE, 0x17, 0x00, 0x00  @ y=-50, x=23, hdr
+    .byte   0xFF, 0x14, 0x00  @ line dy=20, dx=0
+    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
+    .byte   0xFF, 0x24, 0x00  @ line dy=36, dx=0
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0x0A, 0x00  @ line dy=10, dx=0
+    .byte   0xFF, 0x00, 0xE6  @ line dy=0, dx=-26
+    .byte   0xFF, 0xF6, 0x00  @ line dy=-10, dx=0
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0xDC, 0x00  @ line dy=-36, dx=0
+    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
+    .byte   0xFF, 0xEC, 0x00  @ line dy=-20, dx=0
+    .byte   0xFF, 0x00, 0x1A  @ line dy=0, dx=26
+    .byte   0x02            @ end marker
+
+_LOGO_PATH3:
+    .byte   85               @ intensity
+    .byte   0xD6, 0x11, 0x00, 0x00  @ y=-42, x=17, hdr
+    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
+    .byte   0xFF, 0x00, 0xF8  @ line dy=0, dx=-8
+    .byte   0xFF, 0xF7, 0x00  @ line dy=-9, dx=0
+    .byte   0xFF, 0x00, 0x08  @ line dy=0, dx=8
+    .byte   0x02            @ end marker
+
+@ --- LOGO_3D_DATA (4 path(s)) ---
+    .balign 4
+.global _LOGO_3D_DATA
 _LOGO_3D_DATA:
-    FDB 32               ; vertex count (unique)
-    FCB $E8,$31,$00          ; vert 0: x=-24,y=49,z=0
-    FCB $E8,$1F,$00          ; vert 1: x=-24,y=31,z=0
-    FCB $DE,$1F,$00          ; vert 2: x=-34,y=31,z=0
-    FCB $DE,$FA,$00          ; vert 3: x=-34,y=-6,z=0
-    FCB $EA,$FA,$00          ; vert 4: x=-22,y=-6,z=0
-    FCB $EA,$EF,$00          ; vert 5: x=-22,y=-17,z=0
-    FCB $02,$EF,$00          ; vert 6: x=2,y=-17,z=0
-    FCB $02,$F8,$00          ; vert 7: x=2,y=-8,z=0
-    FCB $0C,$F8,$00          ; vert 8: x=12,y=-8,z=0
-    FCB $0C,$1F,$00          ; vert 9: x=12,y=31,z=0
-    FCB $02,$1F,$00          ; vert 10: x=2,y=31,z=0
-    FCB $02,$31,$00          ; vert 11: x=2,y=49,z=0
-    FCB $F0,$2B,$00          ; vert 12: x=-16,y=43,z=0
-    FCB $F0,$1F,$00          ; vert 13: x=-16,y=31,z=0
-    FCB $F6,$1F,$00          ; vert 14: x=-10,y=31,z=0
-    FCB $F6,$2B,$00          ; vert 15: x=-10,y=43,z=0
-    FCB $17,$CE,$00          ; vert 16: x=23,y=-50,z=0
-    FCB $17,$E2,$00          ; vert 17: x=23,y=-30,z=0
-    FCB $21,$E2,$00          ; vert 18: x=33,y=-30,z=0
-    FCB $21,$06,$00          ; vert 19: x=33,y=6,z=0
-    FCB $17,$06,$00          ; vert 20: x=23,y=6,z=0
-    FCB $17,$10,$00          ; vert 21: x=23,y=16,z=0
-    FCB $FD,$10,$00          ; vert 22: x=-3,y=16,z=0
-    FCB $FD,$06,$00          ; vert 23: x=-3,y=6,z=0
-    FCB $F3,$06,$00          ; vert 24: x=-13,y=6,z=0
-    FCB $F3,$E2,$00          ; vert 25: x=-13,y=-30,z=0
-    FCB $FD,$E2,$00          ; vert 26: x=-3,y=-30,z=0
-    FCB $FD,$CE,$00          ; vert 27: x=-3,y=-50,z=0
-    FCB $11,$D6,$00          ; vert 28: x=17,y=-42,z=0
-    FCB $11,$DF,$00          ; vert 29: x=17,y=-33,z=0
-    FCB $09,$DF,$00          ; vert 30: x=9,y=-33,z=0
-    FCB $09,$D6,$00          ; vert 31: x=9,y=-42,z=0
-    FDB 4               ; path count
-    FCB 13               ; path 0: point count
-    FCB 0               ; path 0: closed flag
-    FCB 0               ; vertex index
-    FCB 1               ; vertex index
-    FCB 2               ; vertex index
-    FCB 3               ; vertex index
-    FCB 4               ; vertex index
-    FCB 5               ; vertex index
-    FCB 6               ; vertex index
-    FCB 7               ; vertex index
-    FCB 8               ; vertex index
-    FCB 9               ; vertex index
-    FCB 10               ; vertex index
-    FCB 11               ; vertex index
-    FCB 0               ; vertex index
-    FCB 5               ; path 1: point count
-    FCB 0               ; path 1: closed flag
-    FCB 12               ; vertex index
-    FCB 13               ; vertex index
-    FCB 14               ; vertex index
-    FCB 15               ; vertex index
-    FCB 12               ; vertex index
-    FCB 13               ; path 2: point count
-    FCB 0               ; path 2: closed flag
-    FCB 16               ; vertex index
-    FCB 17               ; vertex index
-    FCB 18               ; vertex index
-    FCB 19               ; vertex index
-    FCB 20               ; vertex index
-    FCB 21               ; vertex index
-    FCB 22               ; vertex index
-    FCB 23               ; vertex index
-    FCB 24               ; vertex index
-    FCB 25               ; vertex index
-    FCB 26               ; vertex index
-    FCB 27               ; vertex index
-    FCB 16               ; vertex index
-    FCB 5               ; path 3: point count
-    FCB 0               ; path 3: closed flag
-    FCB 28               ; vertex index
-    FCB 29               ; vertex index
-    FCB 30               ; vertex index
-    FCB 31               ; vertex index
-    FCB 28               ; vertex index
+    .word   32               @ vertex_count
+    .byte   0xE8, 0x31, 0x00  @ vert 0: x=-24,y=49,z=0
+    .byte   0xE8, 0x1F, 0x00  @ vert 1: x=-24,y=31,z=0
+    .byte   0xDE, 0x1F, 0x00  @ vert 2: x=-34,y=31,z=0
+    .byte   0xDE, 0xFA, 0x00  @ vert 3: x=-34,y=-6,z=0
+    .byte   0xEA, 0xFA, 0x00  @ vert 4: x=-22,y=-6,z=0
+    .byte   0xEA, 0xEF, 0x00  @ vert 5: x=-22,y=-17,z=0
+    .byte   0x02, 0xEF, 0x00  @ vert 6: x=2,y=-17,z=0
+    .byte   0x02, 0xF8, 0x00  @ vert 7: x=2,y=-8,z=0
+    .byte   0x0C, 0xF8, 0x00  @ vert 8: x=12,y=-8,z=0
+    .byte   0x0C, 0x1F, 0x00  @ vert 9: x=12,y=31,z=0
+    .byte   0x02, 0x1F, 0x00  @ vert 10: x=2,y=31,z=0
+    .byte   0x02, 0x31, 0x00  @ vert 11: x=2,y=49,z=0
+    .byte   0xF0, 0x2B, 0x00  @ vert 12: x=-16,y=43,z=0
+    .byte   0xF0, 0x1F, 0x00  @ vert 13: x=-16,y=31,z=0
+    .byte   0xF6, 0x1F, 0x00  @ vert 14: x=-10,y=31,z=0
+    .byte   0xF6, 0x2B, 0x00  @ vert 15: x=-10,y=43,z=0
+    .byte   0x17, 0xCE, 0x00  @ vert 16: x=23,y=-50,z=0
+    .byte   0x17, 0xE2, 0x00  @ vert 17: x=23,y=-30,z=0
+    .byte   0x21, 0xE2, 0x00  @ vert 18: x=33,y=-30,z=0
+    .byte   0x21, 0x06, 0x00  @ vert 19: x=33,y=6,z=0
+    .byte   0x17, 0x06, 0x00  @ vert 20: x=23,y=6,z=0
+    .byte   0x17, 0x10, 0x00  @ vert 21: x=23,y=16,z=0
+    .byte   0xFD, 0x10, 0x00  @ vert 22: x=-3,y=16,z=0
+    .byte   0xFD, 0x06, 0x00  @ vert 23: x=-3,y=6,z=0
+    .byte   0xF3, 0x06, 0x00  @ vert 24: x=-13,y=6,z=0
+    .byte   0xF3, 0xE2, 0x00  @ vert 25: x=-13,y=-30,z=0
+    .byte   0xFD, 0xE2, 0x00  @ vert 26: x=-3,y=-30,z=0
+    .byte   0xFD, 0xCE, 0x00  @ vert 27: x=-3,y=-50,z=0
+    .byte   0x11, 0xD6, 0x00  @ vert 28: x=17,y=-42,z=0
+    .byte   0x11, 0xDF, 0x00  @ vert 29: x=17,y=-33,z=0
+    .byte   0x09, 0xDF, 0x00  @ vert 30: x=9,y=-33,z=0
+    .byte   0x09, 0xD6, 0x00  @ vert 31: x=9,y=-42,z=0
+    .balign 4
+    .word   4               @ path_count
+    .byte   13               @ path 0: pt_count
+    .byte   0               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   10
+    .byte   11
+    .byte   0
+    .byte   5               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   12
+    .byte   13
+    .byte   14
+    .byte   15
+    .byte   12
+    .byte   13               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   16
+    .byte   17
+    .byte   18
+    .byte   19
+    .byte   20
+    .byte   21
+    .byte   22
+    .byte   23
+    .byte   24
+    .byte   25
+    .byte   26
+    .byte   27
+    .byte   16
+    .byte   5               @ path 3: pt_count
+    .byte   0               @ path 3: closed
+    .byte   28
+    .byte   29
+    .byte   30
+    .byte   31
+    .byte   28
 
+@ --- text (13 path(s)) ---
+.global _TEXT_VECTORS
+_TEXT_VECTORS:
+    .word   13               @ path_count
+    .word   _TEXT_PATH0      @ ptr path 0
+    .word   _TEXT_PATH1      @ ptr path 1
+    .word   _TEXT_PATH2      @ ptr path 2
+    .word   _TEXT_PATH3      @ ptr path 3
+    .word   _TEXT_PATH4      @ ptr path 4
+    .word   _TEXT_PATH5      @ ptr path 5
+    .word   _TEXT_PATH6      @ ptr path 6
+    .word   _TEXT_PATH7      @ ptr path 7
+    .word   _TEXT_PATH8      @ ptr path 8
+    .word   _TEXT_PATH9      @ ptr path 9
+    .word   _TEXT_PATH10      @ ptr path 10
+    .word   _TEXT_PATH11      @ ptr path 11
+    .word   _TEXT_PATH12      @ ptr path 12
 
-; 3D vertex-indexed data for DRAW_VECTOR_3D (78 unique verts, 13 paths, 98 total point refs)
+_TEXT_PATH0:
+    .byte   85               @ intensity
+    .byte   0x12, 0xAC, 0x00, 0x00  @ y=18, x=-84, hdr
+    .byte   0xFF, 0x00, 0x04  @ line dy=0, dx=4
+    .byte   0xFF, 0xF0, 0x08  @ line dy=-16, dx=8
+    .byte   0xFF, 0x10, 0x07  @ line dy=16, dx=7
+    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
+    .byte   0xFF, 0xEB, 0xF7  @ line dy=-21, dx=-9
+    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
+    .byte   0xFF, 0x15, 0xF6  @ line dy=21, dx=-10
+    .byte   0x02            @ end marker
+
+_TEXT_PATH1:
+    .byte   85               @ intensity
+    .byte   0x12, 0xC8, 0x00, 0x00  @ y=18, x=-56, hdr
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xFF, 0x00, 0x11  @ line dy=0, dx=17
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0xFF, 0x00, 0xEF  @ line dy=0, dx=-17
+    .byte   0x02            @ end marker
+
+_TEXT_PATH2:
+    .byte   85               @ intensity
+    .byte   0x0B, 0xC8, 0x00, 0x00  @ y=11, x=-56, hdr
+    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0xFF, 0x00, 0x11  @ line dy=0, dx=17
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0xFF, 0x00, 0xEF  @ line dy=0, dx=-17
+    .byte   0x02            @ end marker
+
+_TEXT_PATH3:
+    .byte   85               @ intensity
+    .byte   0x00, 0xC8, 0x00, 0x00  @ y=0, x=-56, hdr
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
+    .byte   0xFF, 0x00, 0x11  @ line dy=0, dx=17
+    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
+    .byte   0xFF, 0x00, 0xEF  @ line dy=0, dx=-17
+    .byte   0x02            @ end marker
+
+_TEXT_PATH4:
+    .byte   85               @ intensity
+    .byte   0x12, 0xF4, 0x00, 0x00  @ y=18, x=-12, hdr
+    .byte   0xFF, 0x00, 0xF1  @ line dy=0, dx=-15
+    .byte   0xFF, 0xFC, 0xFD  @ line dy=-4, dx=-3
+    .byte   0xFF, 0xFA, 0xFD  @ line dy=-6, dx=-3
+    .byte   0xFF, 0xF8, 0x03  @ line dy=-8, dx=3
+    .byte   0xFF, 0xFD, 0x04  @ line dy=-3, dx=4
+    .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
+    .byte   0xFF, 0x03, 0xFD  @ line dy=3, dx=-3
+    .byte   0xFF, 0x00, 0xF7  @ line dy=0, dx=-9
+    .byte   0xFF, 0x02, 0xFD  @ line dy=2, dx=-3
+    .byte   0xFF, 0x06, 0xFE  @ line dy=6, dx=-2
+    .byte   0xFF, 0x04, 0x02  @ line dy=4, dx=2
+    .byte   0xFF, 0x02, 0x03  @ line dy=2, dx=3
+    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
+    .byte   0xFF, 0x04, 0x02  @ line dy=4, dx=2
+    .byte   0x02            @ end marker
+
+_TEXT_PATH5:
+    .byte   85               @ intensity
+    .byte   0x12, 0xFA, 0x00, 0x00  @ y=18, x=-6, hdr
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0xFF, 0xEF, 0x00  @ line dy=-17, dx=0
+    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
+    .byte   0xFF, 0x11, 0x00  @ line dy=17, dx=0
+    .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
+    .byte   0xFF, 0x04, 0x02  @ line dy=4, dx=2
+    .byte   0xFF, 0x00, 0xEE  @ line dy=0, dx=-18
+    .byte   0x02            @ end marker
+
+_TEXT_PATH6:
+    .byte   85               @ intensity
+    .byte   0x0E, 0x12, 0x00, 0x00  @ y=14, x=18, hdr
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0xFF, 0x00, 0x0F  @ line dy=0, dx=15
+    .byte   0xFF, 0xFD, 0x03  @ line dy=-3, dx=3
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xFF, 0xFB, 0xFE  @ line dy=-5, dx=-2
+    .byte   0xFF, 0xFF, 0xFD  @ line dy=-1, dx=-3
+    .byte   0xFF, 0xF8, 0x05  @ line dy=-8, dx=5
+    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
+    .byte   0xFF, 0x08, 0xFC  @ line dy=8, dx=-4
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
+    .byte   0xFF, 0x0C, 0x00  @ line dy=12, dx=0
+    .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
+    .byte   0xFF, 0x02, 0x03  @ line dy=2, dx=3
+    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
+    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
+    .byte   0xFF, 0x00, 0xF4  @ line dy=0, dx=-12
+    .byte   0x02            @ end marker
+
+_TEXT_PATH7:
+    .byte   85               @ intensity
+    .byte   0x12, 0x2A, 0x00, 0x00  @ y=18, x=42, hdr
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xFF, 0x00, 0x10  @ line dy=0, dx=16
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0xFF, 0x00, 0xF0  @ line dy=0, dx=-16
+    .byte   0x02            @ end marker
+
+_TEXT_PATH8:
+    .byte   85               @ intensity
+    .byte   0x0B, 0x2A, 0x00, 0x00  @ y=11, x=42, hdr
+    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0xFF, 0x00, 0x10  @ line dy=0, dx=16
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0xFF, 0x00, 0xF0  @ line dy=0, dx=-16
+    .byte   0x02            @ end marker
+
+_TEXT_PATH9:
+    .byte   85               @ intensity
+    .byte   0x00, 0x2A, 0x00, 0x00  @ y=0, x=42, hdr
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
+    .byte   0xFF, 0x00, 0x10  @ line dy=0, dx=16
+    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
+    .byte   0xFF, 0x00, 0xF0  @ line dy=0, dx=-16
+    .byte   0x02            @ end marker
+
+_TEXT_PATH10:
+    .byte   85               @ intensity
+    .byte   0xEE, 0xB9, 0x00, 0x00  @ y=-18, x=-71, hdr
+    .byte   0xFF, 0x00, 0x12  @ line dy=0, dx=18
+    .byte   0x02            @ end marker
+
+_TEXT_PATH11:
+    .byte   85               @ intensity
+    .byte   0xEE, 0x37, 0x00, 0x00  @ y=-18, x=55, hdr
+    .byte   0xFF, 0x00, 0x12  @ line dy=0, dx=18
+    .byte   0x02            @ end marker
+
+_TEXT_PATH12:
+    .byte   85               @ intensity
+    .byte   0x12, 0x3D, 0x00, 0x00  @ y=18, x=61, hdr
+    .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
+    .byte   0xFF, 0xF8, 0x05  @ line dy=-8, dx=5
+    .byte   0xFF, 0x08, 0x05  @ line dy=8, dx=5
+    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0xFF, 0xF5, 0xF7  @ line dy=-11, dx=-9
+    .byte   0xFF, 0xF6, 0x08  @ line dy=-10, dx=8
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0x07, 0xFC  @ line dy=7, dx=-4
+    .byte   0xFF, 0xF9, 0xFB  @ line dy=-7, dx=-5
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0x0A, 0x09  @ line dy=10, dx=9
+    .byte   0xFF, 0x0B, 0xF6  @ line dy=11, dx=-10
+    .byte   0x02            @ end marker
+
+@ --- TEXT_3D_DATA (13 path(s)) ---
+    .balign 4
+.global _TEXT_3D_DATA
 _TEXT_3D_DATA:
-    FDB 78               ; vertex count (unique)
-    FCB $C1,$12,$00          ; vert 0: x=-63,y=18,z=0
-    FCB $C1,$02,$00          ; vert 1: x=-63,y=2,z=0
-    FCB $C1,$FD,$00          ; vert 2: x=-63,y=-3,z=0
-    FCB $C7,$12,$00          ; vert 3: x=-57,y=18,z=0
-    FCB $C7,$0E,$00          ; vert 4: x=-57,y=14,z=0
-    FCB $D8,$0E,$00          ; vert 5: x=-40,y=14,z=0
-    FCB $D8,$12,$00          ; vert 6: x=-40,y=18,z=0
-    FCB $C7,$0B,$00          ; vert 7: x=-57,y=11,z=0
-    FCB $C7,$05,$00          ; vert 8: x=-57,y=5,z=0
-    FCB $D8,$05,$00          ; vert 9: x=-40,y=5,z=0
-    FCB $D8,$0B,$00          ; vert 10: x=-40,y=11,z=0
-    FCB $C7,$00,$00          ; vert 11: x=-57,y=0,z=0
-    FCB $C7,$FD,$00          ; vert 12: x=-57,y=-3,z=0
-    FCB $D8,$FD,$00          ; vert 13: x=-40,y=-3,z=0
-    FCB $D8,$00,$00          ; vert 14: x=-40,y=0,z=0
-    FCB $F3,$12,$00          ; vert 15: x=-13,y=18,z=0
-    FCB $E4,$12,$00          ; vert 16: x=-28,y=18,z=0
-    FCB $E1,$0E,$00          ; vert 17: x=-31,y=14,z=0
-    FCB $DE,$08,$00          ; vert 18: x=-34,y=8,z=0
-    FCB $E1,$00,$00          ; vert 19: x=-31,y=0,z=0
-    FCB $E5,$FD,$00          ; vert 20: x=-27,y=-3,z=0
-    FCB $F3,$FD,$00          ; vert 21: x=-13,y=-3,z=0
-    FCB $F0,$00,$00          ; vert 22: x=-16,y=0,z=0
-    FCB $E7,$00,$00          ; vert 23: x=-25,y=0,z=0
-    FCB $E4,$02,$00          ; vert 24: x=-28,y=2,z=0
-    FCB $E2,$08,$00          ; vert 25: x=-30,y=8,z=0
-    FCB $E4,$0C,$00          ; vert 26: x=-28,y=12,z=0
-    FCB $E7,$0E,$00          ; vert 27: x=-25,y=14,z=0
-    FCB $F1,$0E,$00          ; vert 28: x=-15,y=14,z=0
-    FCB $F9,$12,$00          ; vert 29: x=-7,y=18,z=0
-    FCB $F9,$0E,$00          ; vert 30: x=-7,y=14,z=0
-    FCB $FF,$0E,$00          ; vert 31: x=-1,y=14,z=0
-    FCB $FF,$FD,$00          ; vert 32: x=-1,y=-3,z=0
-    FCB $02,$FD,$00          ; vert 33: x=2,y=-3,z=0
-    FCB $02,$0E,$00          ; vert 34: x=2,y=14,z=0
-    FCB $09,$0E,$00          ; vert 35: x=9,y=14,z=0
-    FCB $0B,$12,$00          ; vert 36: x=11,y=18,z=0
-    FCB $11,$0E,$00          ; vert 37: x=17,y=14,z=0
-    FCB $11,$12,$00          ; vert 38: x=17,y=18,z=0
-    FCB $20,$12,$00          ; vert 39: x=32,y=18,z=0
-    FCB $23,$0F,$00          ; vert 40: x=35,y=15,z=0
-    FCB $23,$0B,$00          ; vert 41: x=35,y=11,z=0
-    FCB $21,$06,$00          ; vert 42: x=33,y=6,z=0
-    FCB $1E,$05,$00          ; vert 43: x=30,y=5,z=0
-    FCB $23,$FD,$00          ; vert 44: x=35,y=-3,z=0
-    FCB $1E,$FD,$00          ; vert 45: x=30,y=-3,z=0
-    FCB $1A,$05,$00          ; vert 46: x=26,y=5,z=0
-    FCB $14,$05,$00          ; vert 47: x=20,y=5,z=0
-    FCB $14,$FD,$00          ; vert 48: x=20,y=-3,z=0
-    FCB $11,$FD,$00          ; vert 49: x=17,y=-3,z=0
-    FCB $11,$09,$00          ; vert 50: x=17,y=9,z=0
-    FCB $1D,$09,$00          ; vert 51: x=29,y=9,z=0
-    FCB $20,$0B,$00          ; vert 52: x=32,y=11,z=0
-    FCB $20,$0E,$00          ; vert 53: x=32,y=14,z=0
-    FCB $1D,$0E,$00          ; vert 54: x=29,y=14,z=0
-    FCB $29,$12,$00          ; vert 55: x=41,y=18,z=0
-    FCB $29,$0E,$00          ; vert 56: x=41,y=14,z=0
-    FCB $39,$0E,$00          ; vert 57: x=57,y=14,z=0
-    FCB $39,$12,$00          ; vert 58: x=57,y=18,z=0
-    FCB $29,$0B,$00          ; vert 59: x=41,y=11,z=0
-    FCB $29,$05,$00          ; vert 60: x=41,y=5,z=0
-    FCB $39,$05,$00          ; vert 61: x=57,y=5,z=0
-    FCB $39,$0B,$00          ; vert 62: x=57,y=11,z=0
-    FCB $29,$00,$00          ; vert 63: x=41,y=0,z=0
-    FCB $29,$FD,$00          ; vert 64: x=41,y=-3,z=0
-    FCB $39,$FD,$00          ; vert 65: x=57,y=-3,z=0
-    FCB $39,$00,$00          ; vert 66: x=57,y=0,z=0
-    FCB $C1,$EE,$00          ; vert 67: x=-63,y=-18,z=0
-    FCB $CA,$EE,$00          ; vert 68: x=-54,y=-18,z=0
-    FCB $36,$EE,$00          ; vert 69: x=54,y=-18,z=0
-    FCB $3F,$EE,$00          ; vert 70: x=63,y=-18,z=0
-    FCB $3C,$12,$00          ; vert 71: x=60,y=18,z=0
-    FCB $3F,$12,$00          ; vert 72: x=63,y=18,z=0
-    FCB $3F,$0A,$00          ; vert 73: x=63,y=10,z=0
-    FCB $3F,$07,$00          ; vert 74: x=63,y=7,z=0
-    FCB $3F,$FD,$00          ; vert 75: x=63,y=-3,z=0
-    FCB $3F,$04,$00          ; vert 76: x=63,y=4,z=0
-    FCB $3D,$FD,$00          ; vert 77: x=61,y=-3,z=0
-    FDB 13               ; path count
-    FCB 8               ; path 0: point count
-    FCB 0               ; path 0: closed flag
-    FCB 0               ; vertex index
-    FCB 0               ; vertex index
-    FCB 1               ; vertex index
-    FCB 0               ; vertex index
-    FCB 0               ; vertex index
-    FCB 2               ; vertex index
-    FCB 2               ; vertex index
-    FCB 0               ; vertex index
-    FCB 5               ; path 1: point count
-    FCB 0               ; path 1: closed flag
-    FCB 3               ; vertex index
-    FCB 4               ; vertex index
-    FCB 5               ; vertex index
-    FCB 6               ; vertex index
-    FCB 3               ; vertex index
-    FCB 5               ; path 2: point count
-    FCB 0               ; path 2: closed flag
-    FCB 7               ; vertex index
-    FCB 8               ; vertex index
-    FCB 9               ; vertex index
-    FCB 10               ; vertex index
-    FCB 7               ; vertex index
-    FCB 5               ; path 3: point count
-    FCB 0               ; path 3: closed flag
-    FCB 11               ; vertex index
-    FCB 12               ; vertex index
-    FCB 13               ; vertex index
-    FCB 14               ; vertex index
-    FCB 11               ; vertex index
-    FCB 15               ; path 4: point count
-    FCB 0               ; path 4: closed flag
-    FCB 15               ; vertex index
-    FCB 16               ; vertex index
-    FCB 17               ; vertex index
-    FCB 18               ; vertex index
-    FCB 19               ; vertex index
-    FCB 20               ; vertex index
-    FCB 21               ; vertex index
-    FCB 22               ; vertex index
-    FCB 23               ; vertex index
-    FCB 24               ; vertex index
-    FCB 25               ; vertex index
-    FCB 26               ; vertex index
-    FCB 27               ; vertex index
-    FCB 28               ; vertex index
-    FCB 15               ; vertex index
-    FCB 9               ; path 5: point count
-    FCB 0               ; path 5: closed flag
-    FCB 29               ; vertex index
-    FCB 30               ; vertex index
-    FCB 31               ; vertex index
-    FCB 32               ; vertex index
-    FCB 33               ; vertex index
-    FCB 34               ; vertex index
-    FCB 35               ; vertex index
-    FCB 36               ; vertex index
-    FCB 29               ; vertex index
-    FCB 19               ; path 6: point count
-    FCB 0               ; path 6: closed flag
-    FCB 37               ; vertex index
-    FCB 38               ; vertex index
-    FCB 39               ; vertex index
-    FCB 40               ; vertex index
-    FCB 41               ; vertex index
-    FCB 42               ; vertex index
-    FCB 43               ; vertex index
-    FCB 44               ; vertex index
-    FCB 45               ; vertex index
-    FCB 46               ; vertex index
-    FCB 47               ; vertex index
-    FCB 48               ; vertex index
-    FCB 49               ; vertex index
-    FCB 50               ; vertex index
-    FCB 51               ; vertex index
-    FCB 52               ; vertex index
-    FCB 53               ; vertex index
-    FCB 54               ; vertex index
-    FCB 37               ; vertex index
-    FCB 5               ; path 7: point count
-    FCB 0               ; path 7: closed flag
-    FCB 55               ; vertex index
-    FCB 56               ; vertex index
-    FCB 57               ; vertex index
-    FCB 58               ; vertex index
-    FCB 55               ; vertex index
-    FCB 5               ; path 8: point count
-    FCB 0               ; path 8: closed flag
-    FCB 59               ; vertex index
-    FCB 60               ; vertex index
-    FCB 61               ; vertex index
-    FCB 62               ; vertex index
-    FCB 59               ; vertex index
-    FCB 5               ; path 9: point count
-    FCB 0               ; path 9: closed flag
-    FCB 63               ; vertex index
-    FCB 64               ; vertex index
-    FCB 65               ; vertex index
-    FCB 66               ; vertex index
-    FCB 63               ; vertex index
-    FCB 2               ; path 10: point count
-    FCB 0               ; path 10: closed flag
-    FCB 67               ; vertex index
-    FCB 68               ; vertex index
-    FCB 2               ; path 11: point count
-    FCB 0               ; path 11: closed flag
-    FCB 69               ; vertex index
-    FCB 70               ; vertex index
-    FCB 13               ; path 12: point count
-    FCB 0               ; path 12: closed flag
-    FCB 71               ; vertex index
-    FCB 72               ; vertex index
-    FCB 73               ; vertex index
-    FCB 72               ; vertex index
-    FCB 72               ; vertex index
-    FCB 74               ; vertex index
-    FCB 75               ; vertex index
-    FCB 75               ; vertex index
-    FCB 76               ; vertex index
-    FCB 75               ; vertex index
-    FCB 77               ; vertex index
-    FCB 74               ; vertex index
-    FCB 71               ; vertex index
+    .word   78               @ vertex_count
+    .byte   0xC1, 0x12, 0x00  @ vert 0: x=-63,y=18,z=0
+    .byte   0xC1, 0x02, 0x00  @ vert 1: x=-63,y=2,z=0
+    .byte   0xC1, 0xFD, 0x00  @ vert 2: x=-63,y=-3,z=0
+    .byte   0xC7, 0x12, 0x00  @ vert 3: x=-57,y=18,z=0
+    .byte   0xC7, 0x0E, 0x00  @ vert 4: x=-57,y=14,z=0
+    .byte   0xD8, 0x0E, 0x00  @ vert 5: x=-40,y=14,z=0
+    .byte   0xD8, 0x12, 0x00  @ vert 6: x=-40,y=18,z=0
+    .byte   0xC7, 0x0B, 0x00  @ vert 7: x=-57,y=11,z=0
+    .byte   0xC7, 0x05, 0x00  @ vert 8: x=-57,y=5,z=0
+    .byte   0xD8, 0x05, 0x00  @ vert 9: x=-40,y=5,z=0
+    .byte   0xD8, 0x0B, 0x00  @ vert 10: x=-40,y=11,z=0
+    .byte   0xC7, 0x00, 0x00  @ vert 11: x=-57,y=0,z=0
+    .byte   0xC7, 0xFD, 0x00  @ vert 12: x=-57,y=-3,z=0
+    .byte   0xD8, 0xFD, 0x00  @ vert 13: x=-40,y=-3,z=0
+    .byte   0xD8, 0x00, 0x00  @ vert 14: x=-40,y=0,z=0
+    .byte   0xF3, 0x12, 0x00  @ vert 15: x=-13,y=18,z=0
+    .byte   0xE4, 0x12, 0x00  @ vert 16: x=-28,y=18,z=0
+    .byte   0xE1, 0x0E, 0x00  @ vert 17: x=-31,y=14,z=0
+    .byte   0xDE, 0x08, 0x00  @ vert 18: x=-34,y=8,z=0
+    .byte   0xE1, 0x00, 0x00  @ vert 19: x=-31,y=0,z=0
+    .byte   0xE5, 0xFD, 0x00  @ vert 20: x=-27,y=-3,z=0
+    .byte   0xF3, 0xFD, 0x00  @ vert 21: x=-13,y=-3,z=0
+    .byte   0xF0, 0x00, 0x00  @ vert 22: x=-16,y=0,z=0
+    .byte   0xE7, 0x00, 0x00  @ vert 23: x=-25,y=0,z=0
+    .byte   0xE4, 0x02, 0x00  @ vert 24: x=-28,y=2,z=0
+    .byte   0xE2, 0x08, 0x00  @ vert 25: x=-30,y=8,z=0
+    .byte   0xE4, 0x0C, 0x00  @ vert 26: x=-28,y=12,z=0
+    .byte   0xE7, 0x0E, 0x00  @ vert 27: x=-25,y=14,z=0
+    .byte   0xF1, 0x0E, 0x00  @ vert 28: x=-15,y=14,z=0
+    .byte   0xF9, 0x12, 0x00  @ vert 29: x=-7,y=18,z=0
+    .byte   0xF9, 0x0E, 0x00  @ vert 30: x=-7,y=14,z=0
+    .byte   0xFF, 0x0E, 0x00  @ vert 31: x=-1,y=14,z=0
+    .byte   0xFF, 0xFD, 0x00  @ vert 32: x=-1,y=-3,z=0
+    .byte   0x02, 0xFD, 0x00  @ vert 33: x=2,y=-3,z=0
+    .byte   0x02, 0x0E, 0x00  @ vert 34: x=2,y=14,z=0
+    .byte   0x09, 0x0E, 0x00  @ vert 35: x=9,y=14,z=0
+    .byte   0x0B, 0x12, 0x00  @ vert 36: x=11,y=18,z=0
+    .byte   0x11, 0x0E, 0x00  @ vert 37: x=17,y=14,z=0
+    .byte   0x11, 0x12, 0x00  @ vert 38: x=17,y=18,z=0
+    .byte   0x20, 0x12, 0x00  @ vert 39: x=32,y=18,z=0
+    .byte   0x23, 0x0F, 0x00  @ vert 40: x=35,y=15,z=0
+    .byte   0x23, 0x0B, 0x00  @ vert 41: x=35,y=11,z=0
+    .byte   0x21, 0x06, 0x00  @ vert 42: x=33,y=6,z=0
+    .byte   0x1E, 0x05, 0x00  @ vert 43: x=30,y=5,z=0
+    .byte   0x23, 0xFD, 0x00  @ vert 44: x=35,y=-3,z=0
+    .byte   0x1E, 0xFD, 0x00  @ vert 45: x=30,y=-3,z=0
+    .byte   0x1A, 0x05, 0x00  @ vert 46: x=26,y=5,z=0
+    .byte   0x14, 0x05, 0x00  @ vert 47: x=20,y=5,z=0
+    .byte   0x14, 0xFD, 0x00  @ vert 48: x=20,y=-3,z=0
+    .byte   0x11, 0xFD, 0x00  @ vert 49: x=17,y=-3,z=0
+    .byte   0x11, 0x09, 0x00  @ vert 50: x=17,y=9,z=0
+    .byte   0x1D, 0x09, 0x00  @ vert 51: x=29,y=9,z=0
+    .byte   0x20, 0x0B, 0x00  @ vert 52: x=32,y=11,z=0
+    .byte   0x20, 0x0E, 0x00  @ vert 53: x=32,y=14,z=0
+    .byte   0x1D, 0x0E, 0x00  @ vert 54: x=29,y=14,z=0
+    .byte   0x29, 0x12, 0x00  @ vert 55: x=41,y=18,z=0
+    .byte   0x29, 0x0E, 0x00  @ vert 56: x=41,y=14,z=0
+    .byte   0x39, 0x0E, 0x00  @ vert 57: x=57,y=14,z=0
+    .byte   0x39, 0x12, 0x00  @ vert 58: x=57,y=18,z=0
+    .byte   0x29, 0x0B, 0x00  @ vert 59: x=41,y=11,z=0
+    .byte   0x29, 0x05, 0x00  @ vert 60: x=41,y=5,z=0
+    .byte   0x39, 0x05, 0x00  @ vert 61: x=57,y=5,z=0
+    .byte   0x39, 0x0B, 0x00  @ vert 62: x=57,y=11,z=0
+    .byte   0x29, 0x00, 0x00  @ vert 63: x=41,y=0,z=0
+    .byte   0x29, 0xFD, 0x00  @ vert 64: x=41,y=-3,z=0
+    .byte   0x39, 0xFD, 0x00  @ vert 65: x=57,y=-3,z=0
+    .byte   0x39, 0x00, 0x00  @ vert 66: x=57,y=0,z=0
+    .byte   0xC1, 0xEE, 0x00  @ vert 67: x=-63,y=-18,z=0
+    .byte   0xCA, 0xEE, 0x00  @ vert 68: x=-54,y=-18,z=0
+    .byte   0x36, 0xEE, 0x00  @ vert 69: x=54,y=-18,z=0
+    .byte   0x3F, 0xEE, 0x00  @ vert 70: x=63,y=-18,z=0
+    .byte   0x3C, 0x12, 0x00  @ vert 71: x=60,y=18,z=0
+    .byte   0x3F, 0x12, 0x00  @ vert 72: x=63,y=18,z=0
+    .byte   0x3F, 0x0A, 0x00  @ vert 73: x=63,y=10,z=0
+    .byte   0x3F, 0x07, 0x00  @ vert 74: x=63,y=7,z=0
+    .byte   0x3F, 0xFD, 0x00  @ vert 75: x=63,y=-3,z=0
+    .byte   0x3F, 0x04, 0x00  @ vert 76: x=63,y=4,z=0
+    .byte   0x3D, 0xFD, 0x00  @ vert 77: x=61,y=-3,z=0
+    .balign 4
+    .word   13               @ path_count
+    .byte   8               @ path 0: pt_count
+    .byte   0               @ path 0: closed
+    .byte   0
+    .byte   0
+    .byte   1
+    .byte   0
+    .byte   0
+    .byte   2
+    .byte   2
+    .byte   0
+    .byte   5               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   3
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   3
+    .byte   5               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   10
+    .byte   7
+    .byte   5               @ path 3: pt_count
+    .byte   0               @ path 3: closed
+    .byte   11
+    .byte   12
+    .byte   13
+    .byte   14
+    .byte   11
+    .byte   15               @ path 4: pt_count
+    .byte   0               @ path 4: closed
+    .byte   15
+    .byte   16
+    .byte   17
+    .byte   18
+    .byte   19
+    .byte   20
+    .byte   21
+    .byte   22
+    .byte   23
+    .byte   24
+    .byte   25
+    .byte   26
+    .byte   27
+    .byte   28
+    .byte   15
+    .byte   9               @ path 5: pt_count
+    .byte   0               @ path 5: closed
+    .byte   29
+    .byte   30
+    .byte   31
+    .byte   32
+    .byte   33
+    .byte   34
+    .byte   35
+    .byte   36
+    .byte   29
+    .byte   19               @ path 6: pt_count
+    .byte   0               @ path 6: closed
+    .byte   37
+    .byte   38
+    .byte   39
+    .byte   40
+    .byte   41
+    .byte   42
+    .byte   43
+    .byte   44
+    .byte   45
+    .byte   46
+    .byte   47
+    .byte   48
+    .byte   49
+    .byte   50
+    .byte   51
+    .byte   52
+    .byte   53
+    .byte   54
+    .byte   37
+    .byte   5               @ path 7: pt_count
+    .byte   0               @ path 7: closed
+    .byte   55
+    .byte   56
+    .byte   57
+    .byte   58
+    .byte   55
+    .byte   5               @ path 8: pt_count
+    .byte   0               @ path 8: closed
+    .byte   59
+    .byte   60
+    .byte   61
+    .byte   62
+    .byte   59
+    .byte   5               @ path 9: pt_count
+    .byte   0               @ path 9: closed
+    .byte   63
+    .byte   64
+    .byte   65
+    .byte   66
+    .byte   63
+    .byte   2               @ path 10: pt_count
+    .byte   0               @ path 10: closed
+    .byte   67
+    .byte   68
+    .byte   2               @ path 11: pt_count
+    .byte   0               @ path 11: closed
+    .byte   69
+    .byte   70
+    .byte   13               @ path 12: pt_count
+    .byte   0               @ path 12: closed
+    .byte   71
+    .byte   72
+    .byte   73
+    .byte   72
+    .byte   72
+    .byte   74
+    .byte   75
+    .byte   75
+    .byte   76
+    .byte   75
+    .byte   77
+    .byte   74
+    .byte   71
 

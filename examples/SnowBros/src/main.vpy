@@ -5,25 +5,25 @@ META ROM_TOTAL_SIZE = 131072
 META ROM_BANK_SIZE = 16384
 
 # ── Debug ────────────────────────────────────────────────────────────────────
-const INVINCIBLE = 1   # 1 = no muere por enemigos ni por tiempo
-const START_FLOOR = 0 # piso inicial (0=normal floor 1, 2=floor 2, etc.)
+const INVINCIBLE        = 1   # 1 = no muere por enemigos ni por tiempo
+const START_FLOOR       = 0 # piso inicial (0=normal floor 1, 2=floor 2, etc.)
 
 # ── States ──────────────────────────────────────────────────────────────────
-const STATE_TITLE = 0        # título + "press a button"
-const STATE_GAME_START = 1   # "ROUND N" antes de empezar
-const STATE_PLAYING = 2      # gameplay activo
+const STATE_TITLE       = 0  # título + "press a button"
+const STATE_GAME_START  = 1  # "ROUND N" antes de empezar
+const STATE_PLAYING     = 2  # gameplay activo
 const STATE_PLAYER_DEAD = 3  # animación de muerte + delay
 const STATE_LEVEL_CLEAR = 4  # todos los enemigos derrotados
-const STATE_BOSS_INTRO = 5   # pantalla de aviso boss (niveles múltiplos de 10)
-const STATE_BOSS = 6         # combate boss
-const STATE_GAME_OVER = 7    # game over
-const STATE_ALL_CLEAR = 8    # completados los 50 niveles
+const STATE_BOSS_INTRO  = 5  # pantalla de aviso boss (niveles múltiplos de 10)
+const STATE_BOSS        = 6  # combate boss
+const STATE_GAME_OVER   = 7    # game over
+const STATE_ALL_CLEAR   = 8    # completados los 50 niveles
 
 # ── Enemy SM state indices (must match titchi.venemy state order) ─────────
 const TITCHI_STATE_NORMAL = 0
-const TITCHI_STATE_SNOW1 = 1
-const TITCHI_STATE_SNOW2 = 2
-const TITCHI_STATE_BALL = 3
+const TITCHI_STATE_SNOW1  = 1
+const TITCHI_STATE_SNOW2  = 2
+const TITCHI_STATE_BALL   = 3
 
 # ── Frog SM state indices ─────────────────────────────────────────────────
 const FROG_STATE_NORMAL    = 0
@@ -34,11 +34,11 @@ const FROG_STATE_FIRE_SIDE = 4
 const FROG_STATE_FIRE_DOWN = 5
 
 # ── Frog bullet physics ───────────────────────────────────────────────────
-const FROG_FIRE_INTERVAL    = 120   # frames between shots (~2s)
-const FROG_BULLET_SPEED     = 3
+const FROG_FIRE_INTERVAL     = 120   # frames between shots (~2s)
+const FROG_BULLET_SPEED      = 3
 const FROG_BULLET_DOWN_SPEED = 3
-const FROG_BULLET_HW        = 4
-const FROG_BULLET_HH        = 4
+const FROG_BULLET_HW         = 4
+const FROG_BULLET_HH         = 4
 
 # ── Thaw timers (one per enemy slot, managed in VPy) ─────────────────────
 const THAW_TICKS_SNOW = 180   # snow1/snow2: ~3s at 60fps
@@ -49,16 +49,16 @@ thaw_timers = [0, 0, 0, 0, 0, 0, 0, 0]
 frog_fire_timer = [0, 0, 0, 0, 0, 0, 0, 0]   # per-slot shoot countdown
 frog_fire_decay = [0, 0, 0, 0, 0, 0, 0, 0]   # frames until fire anim ends → back to normal
 frog_bullet_active: i16 = 0
-frog_bullet_x: i16 = 0
-frog_bullet_y: i16 = 0
-frog_bullet_vx: i16 = 0
-frog_bullet_vy: i16 = 0
-frog_bullet_dir: i16 = 0      # 0 = side, 1 = down
+frog_bullet_x: i16      = 0
+frog_bullet_y: i16      = 0
+frog_bullet_vx: i16     = 0
+frog_bullet_vy: i16     = 0
+frog_bullet_dir: i16    = 0      # 0 = side, 1 = down
 frog_bullet_mirror: i16 = 0   # 0 = right, 1 = left (side shots only)
 
 # ── Ball-rolling system ───────────────────────────────────────────────────
-const BALL_SPEED = 4
-const BALL_GRAVITY = 1
+const BALL_SPEED    = 4
+const BALL_GRAVITY  = 1
 const BALL_MAX_FALL = 8
 
 ball_rolling  = [0, 0, 0, 0, 0, 0, 0, 0]   # 1 = bola en movimiento

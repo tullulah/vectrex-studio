@@ -10,11 +10,11 @@ def main():
 
 def loop():
     # DIAG: does a vector draw before text "enable" the text? (text-only = blank)
-    DRAW_LINE(0 - 20, 0 - 80, 20, 0 - 80, 80)
+    DRAW_LINE(0 , -80, -30,-80, 80)
     # Display text at different positions on screen
     SET_INTENSITY(110)
     SET_TEXT_SIZE(6)
     DRAW_VECTOR("test", 0, 100)
-    PRINT_TEXT(-40, 20, "HELLO")
-    PRINT_TEXT(-40, 0, "WORLD")
-    PRINT_TEXT(-55, -20, "VPY TEST")
+    PRINT_TEXT(0, 20, "HELLO")
+    PRINT_TEXT(0, 0, "WORLD")
+    PRINT_TEXT(0, -20, "VPY TEST")

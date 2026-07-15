@@ -22,7 +22,7 @@ def loop():
     #DRAW_ARC(12, 40, -30, 20, 0, 270, 80)
 
     # Labels
-    PRINT_TEXT(-70, 95, "POLY")
-    PRINT_TEXT(20, 95, "FILL")
-    PRINT_TEXT(-70, 10, "ELLIP")
-    PRINT_TEXT(20, 10, "ARC")
+    # PRINT_TEXT(-70, 95, "POLY")
+    # PRINT_TEXT(20, 95, "FILL")
+    # PRINT_TEXT(-70, 10, "ELLIP")
+    # PRINT_TEXT(20, 10, "ARC")

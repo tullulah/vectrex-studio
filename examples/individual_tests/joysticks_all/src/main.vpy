@@ -16,7 +16,7 @@
 META TITLE = "JOY12"
 
 def main():
-    pass
+    SET_INTENSITY(80)
 
 def draw_btn(x, y, pressed):
     if pressed == 1:
@@ -27,9 +27,9 @@ def draw_btn(x, y, pressed):
 def draw_panel(cx, jx, jy, b1, b2, b3, b4):
     sx = cx + jx / 4
     sy = jy / 2
-    # DRAW_LINE(sx - 6, sy, sx + 6, sy, 90)
-    # DRAW_LINE(sx, sy - 6, sx, sy + 6, 90)
-    # DRAW_RECT(cx - 32, 32, 64, 64, 25)
+    DRAW_LINE(sx - 6, sy, sx + 6, sy, 90)
+    DRAW_LINE(sx, sy - 6, sx, sy + 6, 90)
+    DRAW_RECT(cx - 32, 32, 64, 64, 25)
     b_y = 0 - 50
     b_x0 = cx - 24
     draw_btn(b_x0, b_y, b1)
@@ -38,6 +38,7 @@ def draw_panel(cx, jx, jy, b1, b2, b3, b4):
     draw_btn(b_x0 + 48, b_y, b4)
 
 def loop():
+    SET_INTENSITY(80)
     PRINT_TEXT(0 - 32, 110, "JOY 1+2")
 
     # Player 1 panel (left half)
@@ -48,4 +49,8 @@ def loop():
     PRINT_TEXT(42, 50, "P2")
     draw_panel(48, J2_X(), J2_Y(), J2_BUTTON_1(), J2_BUTTON_2(), J2_BUTTON_3(), J2_BUTTON_4())
 
-    PRINT_TEXT(0 - 78, 0 - 95, "P2 KEYS J K L M")
+    # DEBUG: raw axis values, offset +128 so centre reads 128 (PRINT_NUMBER is 0-9999)
+    PRINT_NUMBER(0 - 78, 90, J1_X() + 128)
+    PRINT_NUMBER(0 - 78, 78, J1_Y() + 128)
+    PRINT_NUMBER(30, 90, J2_X() + 128)
+    PRINT_NUMBER(30, 78, J2_Y() + 128)
