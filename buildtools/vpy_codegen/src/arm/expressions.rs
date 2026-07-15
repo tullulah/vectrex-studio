@@ -5,8 +5,37 @@
 
 use vpy_parser::{Expr, BinOp, CmpOp, LogicOp, CallInfo};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 static COND_LABEL_CTR: AtomicUsize = AtomicUsize::new(0);
+
+thread_local! {
+    /// Scalar integer constants (VPy `const NAME = N`) known at codegen time.
+    /// Reads of these idents fold directly to immediates instead of a RAM load,
+    /// so no RAM slot or startup initialisation is emitted for them.
+    /// Keyed by UPPERCASE name. Populated by functions::allocate_globals().
+    static SCALAR_CONSTS: RefCell<HashMap<String, i32>> = RefCell::new(HashMap::new());
+}
+
+/// Reset and populate the scalar-const fold table for a fresh compile.
+pub fn set_scalar_consts(consts: HashMap<String, i32>) {
+    SCALAR_CONSTS.with(|c| *c.borrow_mut() = consts);
+}
+
+/// Look up a scalar const value by UPPERCASE name.
+fn scalar_const(name_up: &str) -> Option<i32> {
+    SCALAR_CONSTS.with(|c| c.borrow().get(name_up).copied())
+}
+
+/// Emit code loading an integer literal into r0 (same rule as Expr::Number).
+fn emit_imm_r0(n: i32) -> String {
+    if (0..=65535).contains(&n) {
+        format!("    mov     r0, #{n}\n")
+    } else {
+        format!("    ldr     r0, ={n}\n")
+    }
+}
 
 /// Emit code that sets r0=1 if condition is true, r0=0 otherwise.
 /// `branch_if_false` is the branch mnemonic taken when the condition is FALSE
@@ -42,6 +71,10 @@ pub fn emit_expr(
 
         Expr::Ident(info) => {
             let name_up = info.name.to_uppercase();
+            // Scalar consts fold to an immediate — no RAM round-trip.
+            if let Some(n) = scalar_const(&name_up) {
+                return Ok(emit_imm_r0(n));
+            }
             if let Some(&addr) = var_addrs.get(&name_up) {
                 Ok(format!(
                     "    ldr     r1, =0x{addr:08X}    @ {}\n    ldr     r0, [r1]\n",

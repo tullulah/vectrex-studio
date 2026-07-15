@@ -18,7 +18,11 @@ pub fn emit_functions(
 ) -> Result<String, String> {
     let mut s = String::new();
 
-    let (var_addrs, var_decls) = allocate_globals(module);
+    let (var_addrs, var_decls, scalar_consts) = allocate_globals(module);
+
+    // Register scalar consts so expression codegen folds their reads to
+    // immediates (no RAM slot, no startup init emitted for them).
+    super::expressions::set_scalar_consts(scalar_consts);
 
     s.push_str("@ --- User variables (RAM) ---\n");
     s.push_str(&var_decls);
@@ -60,10 +64,12 @@ pub fn emit_functions(
     Ok(s)
 }
 
-fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String) {
+fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String, HashMap<String, i32>) {
     let mut alloc = RamAllocator::new();
     let mut addrs: HashMap<String, u32> = HashMap::new();
     let mut decls = String::new();
+    // Scalar int consts fold to immediates — collected here, not RAM-backed.
+    let mut scalar_consts: HashMap<String, i32> = HashMap::new();
 
     for item in &module.items {
         match item {
@@ -107,9 +113,14 @@ fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String) {
                         ));
                         addrs.insert(varname, ptr_addr);
                     }
+                    Expr::Number(n) => {
+                        // Scalar int const: fold reads to immediates. No RAM slot
+                        // and no startup init — the value lives only in the fold table.
+                        scalar_consts.insert(varname, *n);
+                    }
                     _ => {
-                        // Scalar const: allocate RAM so reads work via var_addrs.
-                        // Value is initialized in game_main startup.
+                        // Non-literal scalar const: allocate RAM so reads work via
+                        // var_addrs. Value is initialized in game_main startup.
                         let addr = alloc.alloc(4);
                         decls.push_str(&format!(
                             ".equ VAR_{varname}, 0x{addr:08X}  @ const scalar\n"
@@ -134,7 +145,7 @@ fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String) {
         }
     }
 
-    (addrs, decls)
+    (addrs, decls, scalar_consts)
 }
 
 /// Recursively scan `stmts` for local variable declarations/assignments,

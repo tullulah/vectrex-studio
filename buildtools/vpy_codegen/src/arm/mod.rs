@@ -102,10 +102,140 @@ pub fn generate_arm_asm(
     // Asset data (vector draw lists, etc.)
     asm.push_str(&assets::emit_arm_assets(assets));
 
-    // Post-process: expand `cbz rN, label` to `cmp rN, #0; beq.w label`
+    // Post-process 1: peephole cleanup of the naive stack-machine output
+    // (spill elision, compare→branch fusion). Runs on raw text before cbz
+    // expansion so it sees the emitter's deterministic idioms intact.
+    let asm = peephole(&asm);
+
+    // Post-process 2: expand `cbz rN, label` to `cmp rN, #0; beq.w label`
     // cbz only works with low registers (r0-r7) and has ±252 byte range.
     // The wide beq.w form handles high registers and long-range branches.
     Ok(expand_cbz(&asm))
+}
+
+/// Normalise an instruction line for matching: strip any `@` comment and
+/// collapse whitespace runs to single spaces. Label lines (`foo:`) survive
+/// as `"foo:"`.
+fn norm_code(line: &str) -> String {
+    let no_comment = line.split('@').next().unwrap_or(line);
+    no_comment.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// If `code` is `push {rN}` or `pop {rN}` (single register), return the register.
+fn single_reg(code: &str, op: &str) -> Option<String> {
+    let rest = code.strip_prefix(op)?.trim();
+    let inner = rest.strip_prefix('{')?.strip_suffix('}')?.trim();
+    if inner.starts_with('r') && inner[1..].chars().all(|c| c.is_ascii_digit()) {
+        Some(inner.to_string())
+    } else {
+        None
+    }
+}
+
+/// The conditional branch mnemonics emitted by `bool_from_flags`.
+fn is_cond_branch(mnem: &str) -> bool {
+    matches!(mnem, "beq" | "bne" | "blt" | "bgt" | "ble" | "bge" | "bcs" | "bcc")
+}
+
+/// Peephole pass over the deterministic emitter output.
+///
+/// Collapses three idioms produced by the stack-machine codegen:
+///  - P1/P2: operand-spill elision — `push {r0}; <eval right→r0>; mov r1,r0;
+///    pop {r0}` becomes the right operand evaluated straight into r1, when the
+///    right side is a leaf (immediate or single variable load).
+///  - P3: adjacent no-op `push {rX}; pop {rX}` (single-arg call setup) is dropped.
+///  - P4: `bool_from_flags` materialisation immediately consumed by a branch
+///    (`... cmp r0,#0; beq TARGET`) fuses to a single conditional branch.
+fn peephole(asm: &str) -> String {
+    let lines: Vec<&str> = asm.lines().collect();
+    let n = lines.len();
+    let mut out: Vec<String> = Vec::with_capacity(n);
+    let c = |i: usize| -> String { if i < n { norm_code(lines[i]) } else { String::new() } };
+
+    let mut i = 0;
+    while i < n {
+        // --- P4: bool-materialise + branch fusion -------------------------
+        // <cbranch> .LcfK / movs r0,#1 / b .LcfKe / .LcfK: / movs r0,#0 /
+        // .LcfKe: / cmp r0,#0 / beq TARGET   →   <cbranch> TARGET
+        if i + 7 < n {
+            let head = c(i);
+            let mut parts = head.split_whitespace();
+            if let (Some(mnem), Some(lbl)) = (parts.next(), parts.next()) {
+                if is_cond_branch(mnem)
+                    && lbl.starts_with(".Lcf")
+                    && parts.next().is_none()
+                    && c(i + 1) == "movs r0, #1"
+                    && c(i + 2) == format!("b {lbl}e")
+                    && c(i + 3) == format!("{lbl}:")
+                    && c(i + 4) == "movs r0, #0"
+                    && c(i + 5) == format!("{lbl}e:")
+                    && c(i + 6) == "cmp r0, #0"
+                {
+                    let tail = c(i + 7);
+                    let mut tp = tail.split_whitespace();
+                    if let (Some("beq"), Some(target)) = (tp.next(), tp.next()) {
+                        if tp.next().is_none() {
+                            out.push(format!("    {mnem:<7} {target}"));
+                            i += 8;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- P3: adjacent no-op push/pop of the same register -------------
+        if i + 1 < n {
+            if let (Some(a), Some(b)) = (single_reg(&c(i), "push"), single_reg(&c(i + 1), "pop")) {
+                if a == b {
+                    i += 2;
+                    continue;
+                }
+            }
+        }
+
+        // --- P1: immediate right operand spill ---------------------------
+        // push {r0} / (mov r0,#N | ldr r0,=X) / mov r1,r0 / pop {r0}
+        if i + 3 < n
+            && c(i) == "push {r0}"
+            && c(i + 2) == "mov r1, r0"
+            && c(i + 3) == "pop {r0}"
+        {
+            let mid = c(i + 1);
+            if let Some(imm) = mid.strip_prefix("mov r0, ") {
+                out.push(format!("    mov     r1, {imm}"));
+                i += 4;
+                continue;
+            }
+            if let Some(imm) = mid.strip_prefix("ldr r0, ") {
+                out.push(format!("    ldr     r1, {imm}"));
+                i += 4;
+                continue;
+            }
+        }
+
+        // --- P2: single variable-load right operand spill ----------------
+        // push {r0} / ldr r1,=ADDR / ldr r0,[r1] / mov r1,r0 / pop {r0}
+        if i + 4 < n
+            && c(i) == "push {r0}"
+            && c(i + 1).starts_with("ldr r1, =")
+            && c(i + 2) == "ldr r0, [r1]"
+            && c(i + 3) == "mov r1, r0"
+            && c(i + 4) == "pop {r0}"
+        {
+            out.push(lines[i + 1].to_string()); // keep `ldr r1, =ADDR  @ comment`
+            out.push("    ldr     r1, [r1]".to_string());
+            i += 5;
+            continue;
+        }
+
+        out.push(lines[i].to_string());
+        i += 1;
+    }
+
+    let mut result = out.join("\n");
+    result.push('\n');
+    result
 }
 
 /// Public re-export so the uvm2 backend can reuse the same post-processing.
@@ -191,4 +321,107 @@ fn emit_sio_constants() -> String {
     s.push_str(".equ PIN_DIR_CTRL,   29\n");
     s.push_str("\n");
     s
+}
+
+#[cfg(test)]
+mod peephole_tests {
+    use super::peephole;
+
+    /// P4: bool-materialise + `cmp r0,#0; beq TARGET` fuses to one branch.
+    #[test]
+    fn fuses_bool_block_into_branch() {
+        let asm = "\
+    cmp     r0, r1
+    bne    .Lcf80
+    movs    r0, #1
+    b       .Lcf80e
+.Lcf80:
+    movs    r0, #0
+.Lcf80e:
+    cmp     r0, #0
+    beq     while_end_83
+";
+        let out = peephole(asm);
+        assert!(out.contains("bne     while_end_83"), "got:\n{out}");
+        assert!(!out.contains(".Lcf80"), "bool block not removed:\n{out}");
+        assert!(!out.contains("movs    r0, #1"), "materialise not removed:\n{out}");
+    }
+
+    /// P1: immediate right operand — spill push/pop elided into `mov r1,#N`.
+    #[test]
+    fn elides_immediate_operand_spill() {
+        let asm = "\
+    push    {r0}
+    mov     r0, #8
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+";
+        let out = peephole(asm);
+        assert!(out.contains("mov     r1, #8"), "got:\n{out}");
+        assert!(!out.contains("push"), "push not removed:\n{out}");
+        assert!(!out.contains("pop"), "pop not removed:\n{out}");
+    }
+
+    /// P2: single variable-load right operand — spill elided, value into r1.
+    #[test]
+    fn elides_varload_operand_spill() {
+        let asm = "\
+    push    {r0}
+    ldr     r1, =0x2007F6CC    @ ey
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+";
+        let out = peephole(asm);
+        assert!(out.contains("ldr     r1, =0x2007F6CC"), "got:\n{out}");
+        assert!(out.contains("ldr     r1, [r1]"), "value reload missing:\n{out}");
+        assert!(!out.contains("push"), "push not removed:\n{out}");
+        assert!(!out.contains("mov     r1, r0"), "spill move not removed:\n{out}");
+    }
+
+    /// P3: adjacent no-op `push {rX}; pop {rX}` is dropped.
+    #[test]
+    fn drops_adjacent_push_pop_noop() {
+        let asm = "\
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r0}
+    bl      vpy_set_camera_y
+";
+        let out = peephole(asm);
+        assert!(!out.contains("push"), "push not removed:\n{out}");
+        assert!(!out.contains("pop"), "pop not removed:\n{out}");
+        assert!(out.contains("bl      vpy_set_camera_y"), "surrounding code changed:\n{out}");
+    }
+
+    /// A bool block consumed by `and`/`or` (tail `b 2f`, not `cmp r0,#0`) is left intact.
+    #[test]
+    fn leaves_nonbranch_consumer_untouched() {
+        let asm = "\
+    beq    .Lcf5
+    movs    r0, #1
+    b       .Lcf5e
+.Lcf5:
+    movs    r0, #0
+.Lcf5e:
+    b       2f
+";
+        let out = peephole(asm);
+        assert!(out.contains(".Lcf5"), "must not fuse without cmp/beq consumer:\n{out}");
+        assert!(out.contains("movs    r0, #1"), "materialise wrongly removed:\n{out}");
+    }
+
+    /// Push/pop of different registers must NOT be treated as a no-op.
+    #[test]
+    fn keeps_mismatched_push_pop() {
+        let asm = "\
+    push    {r0}
+    pop     {r1}
+";
+        let out = peephole(asm);
+        assert!(out.contains("push    {r0}"), "got:\n{out}");
+        assert!(out.contains("pop     {r1}"), "got:\n{out}");
+    }
 }
