@@ -1211,6 +1211,20 @@ async function flashRp2350(
 
   // Step 4: flash by the chosen method
   if (method === 'swd') {
+    // Before halting the core to reflash, poke the running firmware's "LOADING"
+    // mailbox (SCRATCH_X @ 0x20080000) with a background RAM write. It reacts on
+    // its next frame: silences the AY (which otherwise holds its last tone all
+    // through the CPU-halted flash → a stuck note) and shows a LOADING screen.
+    // Best-effort: if no game is running / probe-rs halts instead of doing a
+    // background write, this is a no-op and the flash proceeds as before.
+    await runFlashCommand(
+      'probe-rs',
+      ['write', '--chip', 'RP235x', '--speed', '1000', 'b32', '0x20080000', '0x10AD10AD'],
+      fw,
+      win,
+    ).catch(() => 0);
+    await new Promise((r) => setTimeout(r, 150)); // let the firmware react (a few frames)
+
     // --speed 1000 is REQUIRED: at default SWD speed the download silently
     // fails to commit (verify passes but the old image keeps running).
     win?.webContents.send('run://status', 'RP2350: flashing via SWD...');
