@@ -1358,6 +1358,28 @@ fn emit_music_engine_inline() -> String {
 fn emit_sfx_engine() -> String {
     let mut s = String::new();
 
+    // SFX now runs on the BIOS's CORE 1 alongside the music sequencer (it overlays
+    // channel C on top of the music in core 1's PSG shadow, which the BIOS flushes
+    // each frame). Thin traps: PLAY hands the .vsfx table pointer to core 1, and
+    // the per-frame UPDATE is a no-op.
+    s.push_str("@ vpy_play_sfx(r0=sfx_data_ptr) — BIOS trap: SYS_PLAY_SFX\n");
+    s.push_str(".global vpy_play_sfx\n.type vpy_play_sfx, %function\n.thumb_func\nvpy_play_sfx:\n");
+    s.push_str("    svc     #23                     @ SYS_PLAY_SFX\n");
+    s.push_str("    bx      lr\n\n");
+
+    s.push_str("@ vpy_audio_update() — no-op: core 1 advances SFX, BIOS flushes each frame\n");
+    s.push_str(".global vpy_audio_update\n.type vpy_audio_update, %function\n.thumb_func\nvpy_audio_update:\n");
+    s.push_str("    bx      lr\n\n");
+
+    s
+}
+
+/// OLD inline core-0 SFX engine — replaced by the core-1 player. Kept for
+/// reference / rollback; not called.
+#[allow(dead_code)]
+fn emit_sfx_engine_inline() -> String {
+    let mut s = String::new();
+
     // ─── vpy_play_sfx(r0=ptr) ────────────────────────────────────────────
     s.push_str("@ vpy_play_sfx(r0=sfx_data_ptr)\n");
     s.push_str(".global vpy_play_sfx\n.type vpy_play_sfx, %function\n.thumb_func\nvpy_play_sfx:\n");
