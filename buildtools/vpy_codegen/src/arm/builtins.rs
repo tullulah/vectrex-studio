@@ -117,7 +117,7 @@ pub fn emit_builtins(msg_entries: &[MsgEntry], usage: &Usage) -> String {
     }
     if usage.has("JOYSTICK") {
         s.push_str(&emit_joystick());
-        s.push_str(&emit_update_buttons());
+        s.push_str(&emit_update_buttons(usage.has("ANALOG")));
     }
     if usage.has("PSG") {
         s.push_str(&emit_psg_helpers());
@@ -150,6 +150,9 @@ pub fn emit_builtins(msg_entries: &[MsgEntry], usage: &Usage) -> String {
     if usage.has("ANIM") {
         s.push_str(&emit_draw_anim());
     }
+    if usage.has("SD") {
+        s.push_str(&emit_sd_builtins());
+    }
     if usage.has("PLAY_SAMPLE") {
         s.push_str(&emit_play_sample());
     }
@@ -169,6 +172,39 @@ fn emit_play_sample() -> String {
     s.push_str("@ vpy_play_sample(r0=sample_data_ptr) — BIOS trap: SYS_PLAY_SAMPLE\n");
     s.push_str(".global vpy_play_sample\n.type vpy_play_sample, %function\n.thumb_func\nvpy_play_sample:\n");
     s.push_str("    svc     #9                      @ SYS_PLAY_SAMPLE\n");
+    s.push_str("    bx      lr\n\n");
+    s
+}
+
+// ─── SD card game list ──────────────────────────────────────────────────────
+
+fn emit_sd_builtins() -> String {
+    // BIOS traps exposing the SD-cached game list. The BIOS parses the FAT root
+    // at boot and serves the data; VPy owns all presentation/navigation.
+    //   SD_FILE_COUNT()  → r0 = number of .BIN games        (SYS_SD_COUNT = 17)
+    //   SD_FILE_NAME(i)  → r0 = ptr to NUL-terminated name  (SYS_SD_NAME  = 18)
+    // The returned pointer is passed straight to PRINT_TEXT (r2 = str_ptr).
+    let mut s = String::new();
+    s.push_str("@ vpy_sd_count() → r0 = number of SD games — BIOS trap: SYS_SD_COUNT\n");
+    s.push_str(".global vpy_sd_count\n.type vpy_sd_count, %function\n.thumb_func\nvpy_sd_count:\n");
+    s.push_str("    svc     #17                     @ SYS_SD_COUNT\n");
+    s.push_str("    bx      lr\n\n");
+    s.push_str("@ vpy_sd_name(r0=index) → r0 = ptr to name — BIOS trap: SYS_SD_NAME\n");
+    s.push_str(".global vpy_sd_name\n.type vpy_sd_name, %function\n.thumb_func\nvpy_sd_name:\n");
+    s.push_str("    svc     #18                     @ SYS_SD_NAME\n");
+    s.push_str("    bx      lr\n\n");
+    // DRAW_SD_PREVIEW(index, x, y, scale): play the SD .vrec preview for game
+    // `index` inside a box at (x,y). IDE-emulator only for now — on real HW the
+    // svc is unhandled (no-op) until precompiled binary previews exist.
+    s.push_str("@ vpy_draw_sd_preview(r0=index, r1=x, r2=y, r3=scale) — BIOS trap: SYS_SD_PREVIEW\n");
+    s.push_str(".global vpy_draw_sd_preview\n.type vpy_draw_sd_preview, %function\n.thumb_func\nvpy_draw_sd_preview:\n");
+    s.push_str("    svc     #19                     @ SYS_SD_PREVIEW\n");
+    s.push_str("    bx      lr\n\n");
+    // LAUNCH_GAME(index): load game[index].BIN from SD and run it. Does NOT
+    // return (the firmware jumps into the game); exit = hold all 4 buttons ~1 s.
+    s.push_str("@ vpy_launch_game(r0=index) — BIOS trap: SYS_LAUNCH (does not return)\n");
+    s.push_str(".global vpy_launch_game\n.type vpy_launch_game, %function\n.thumb_func\nvpy_launch_game:\n");
+    s.push_str("    svc     #20                     @ SYS_LAUNCH\n");
     s.push_str("    bx      lr\n\n");
     s
 }
@@ -956,7 +992,7 @@ fn emit_psg_helpers() -> String {
 }
 
 /// vpy_update_buttons — part of the JOYSTICK group (calls psg_read → PSG group).
-fn emit_update_buttons() -> String {
+fn emit_update_buttons(read_axes: bool) -> String {
     let mut s = String::new();
 
     // ─── vpy_update_buttons() ────────────────────────────────────────────
@@ -964,7 +1000,12 @@ fn emit_update_buttons() -> String {
     // DDR_B dance for J1 + PSG reg 14 for J2; SYS_READ_AXES (#13) reads the four
     // mux channels. We just unpack the packed results into the RAM cache that the
     // J1_*/J2_* getters read. No VIA/mux knowledge in the game any more.
-    s.push_str("@ vpy_update_buttons() — cache buttons+axes via BIOS traps (safe: WAIT_RECAL window)\n");
+    //
+    // The analog read (#13, SAR against the DAC/comparator) perturbs the PSG and
+    // sample-holds → audible speaker noise + a stretched first vector each frame.
+    // So it is emitted ONLY when the program actually reads an analog axis
+    // (J1_X/J1_Y/J2_X/J2_Y). Button-only programs skip it entirely → no noise.
+    s.push_str("@ vpy_update_buttons() — cache buttons (+axes if analog is used)\n");
     s.push_str(".global vpy_update_buttons\n.type vpy_update_buttons, %function\n.thumb_func\nvpy_update_buttons:\n");
     s.push_str("    push    {r4, lr}\n");
     // Buttons: r0 = (J1_portB << 8) | J2_psg14
@@ -972,13 +1013,15 @@ fn emit_update_buttons() -> String {
     s.push_str("    mov     r4, r0\n");
     s.push_str("    ubfx    r0, r4, #8, #8\n    ldr     r1, =BTN_STATE_J1\n    str     r0, [r1]\n");
     s.push_str("    and     r0, r4, #0xFF\n    ldr     r1, =BTN_STATE_J2\n    str     r0, [r1]\n");
-    // Axes: r0 = (J1X<<24)|(J1Y<<16)|(J2X<<8)|J2Y, each a raw byte → sign-extend.
-    s.push_str("    svc     #13                     @ SYS_READ_AXES\n");
-    s.push_str("    mov     r4, r0\n");
-    s.push_str("    ubfx    r0, r4, #24, #8\n    sxtb    r0, r0\n    ldr     r1, =J1_AXIS_X\n    str     r0, [r1]\n");
-    s.push_str("    ubfx    r0, r4, #16, #8\n    sxtb    r0, r0\n    ldr     r1, =J1_AXIS_Y\n    str     r0, [r1]\n");
-    s.push_str("    ubfx    r0, r4, #8, #8\n    sxtb    r0, r0\n    ldr     r1, =J2_AXIS_X\n    str     r0, [r1]\n");
-    s.push_str("    sxtb    r0, r4\n    ldr     r1, =J2_AXIS_Y\n    str     r0, [r1]\n");
+    if read_axes {
+        // Axes: r0 = (J1X<<24)|(J1Y<<16)|(J2X<<8)|J2Y, each a raw byte → sign-extend.
+        s.push_str("    svc     #13                     @ SYS_READ_AXES (analog used)\n");
+        s.push_str("    mov     r4, r0\n");
+        s.push_str("    ubfx    r0, r4, #24, #8\n    sxtb    r0, r0\n    ldr     r1, =J1_AXIS_X\n    str     r0, [r1]\n");
+        s.push_str("    ubfx    r0, r4, #16, #8\n    sxtb    r0, r0\n    ldr     r1, =J1_AXIS_Y\n    str     r0, [r1]\n");
+        s.push_str("    ubfx    r0, r4, #8, #8\n    sxtb    r0, r0\n    ldr     r1, =J2_AXIS_X\n    str     r0, [r1]\n");
+        s.push_str("    sxtb    r0, r4\n    ldr     r1, =J2_AXIS_Y\n    str     r0, [r1]\n");
+    }
     s.push_str("    pop     {r4, pc}\n    .ltorg\n\n");
 
     s
@@ -1201,6 +1244,36 @@ fn emit_len() -> String {
 /// vpy_play_music / vpy_stop_music / vpy_music_update — MUSIC group.
 /// The auto-injected `bl vpy_music_update` in game_main is gated on this group.
 fn emit_music_engine() -> String {
+    let mut s = String::new();
+
+    // The PSG music sequencer now runs on the BIOS's CORE 1, clocked by real time
+    // so the tempo is independent of the frame's draw load (a heavy scene used to
+    // slow the music down). These are thin BIOS traps: PLAY hands the .vmus table
+    // pointer to core 1, STOP silences it, and the per-frame UPDATE is a no-op —
+    // the BIOS flushes core 1's PSG shadow to the chip from WAIT_RECAL each frame.
+    s.push_str("@ vpy_play_music(r0=music_data_ptr) — BIOS trap: SYS_PLAY_MUSIC\n");
+    s.push_str(".global vpy_play_music\n.type vpy_play_music, %function\n.thumb_func\nvpy_play_music:\n");
+    s.push_str("    svc     #21                     @ SYS_PLAY_MUSIC\n");
+    s.push_str("    bx      lr\n\n");
+
+    s.push_str("@ vpy_stop_music() — BIOS trap: SYS_STOP_MUSIC\n");
+    s.push_str(".global vpy_stop_music\n.type vpy_stop_music, %function\n.thumb_func\nvpy_stop_music:\n");
+    s.push_str("    svc     #22                     @ SYS_STOP_MUSIC\n");
+    s.push_str("    bx      lr\n\n");
+
+    s.push_str("@ vpy_music_update() — no-op: core 1 advances the sequencer, the\n");
+    s.push_str("@ BIOS flushes it each frame from WAIT_RECAL. Kept so the auto-\n");
+    s.push_str("@ injected per-frame call still links.\n");
+    s.push_str(".global vpy_music_update\n.type vpy_music_update, %function\n.thumb_func\nvpy_music_update:\n");
+    s.push_str("    bx      lr\n\n");
+
+    s
+}
+
+/// OLD inline core-0 music engine — replaced by the core-1 player above. Kept for
+/// reference / quick rollback; not called.
+#[allow(dead_code)]
+fn emit_music_engine_inline() -> String {
     let mut s = String::new();
 
     // ─── vpy_play_music(r0=ptr) ─────────────────────────────────────────
