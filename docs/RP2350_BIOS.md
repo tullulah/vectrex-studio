@@ -1,6 +1,30 @@
-# RP2350 Cartridge BIOS — Architecture & Plan
+# RP2350 Cartridge BIOS — Architecture & Reference
 
-Status: **design + skeleton** (2026-07-10). Not yet running on hardware.
+Status: **running on hardware.** The BIOS boots the intro, runs a full SD-card
+game launcher, and executes RAM-linked VPy games loaded off the card. Music and
+sound effects play from a second core. `firmware/src/syscalls.rs` is the ABI
+source of truth (mirrored in the table below); current `BIOS_VERSION = 0x0006`.
+
+## What's live (current state)
+
+- **Boot → intro → menu.** The firmware boots into the VPy intro (embedded as
+  `game_main`), then a menu/launcher.
+- **SD game launcher.** The menu lists the `.BIN` games on the card (long/LFN
+  names, up to 200), plays a per-game `.vrb` video **preview** (background-loaded
+  on core 1), and **launches** the selected game: `SYS_LAUNCH` reads its RAM-linked
+  image off the SD into `GAME_RAM` (0x20040000) and jumps to it. Exit back to the
+  menu = hold all four J1 buttons ~1 s (soft reset). A game that HardFaults shows a
+  "FAULT" screen (+ PC stashed in SCRATCH) instead of a black/stuck-tone freeze.
+- **Core-1 audio.** `.vmus` music and `.vsfx` SFX run the sequencers on core 1,
+  clocked by real time so tempo is independent of the draw load; core 0 flushes a
+  14-register PSG shadow each frame (bus stays single-master). Also a `.vsmp` PCM
+  streamer (svc #9/#10).
+- **Full input, text, levels** — analog + digital J1/J2, PRINT_TEXT (BIOS font),
+  SD file list — all via SVC.
+- **Build:** `vpy_cli build --target rp2350 --ram` links a game for SRAM
+  (0x20040000) so the launcher can load it (the IDE's "Build for SD" mode does
+  this + copies to the card). Flash the FIRMWARE (with a game as `game_main`) over
+  SWD with `probe-rs download --chip RP235x --speed 1000`.
 
 ## Goal
 
@@ -70,23 +94,38 @@ signature.** Add new capabilities at new numbers. Reserve `SYS_BIOS_VERSION` so 
 program can query the BIOS version/capabilities at runtime. Breaking this rule
 breaks every already-compiled VPy binary.
 
-## Syscall contract (v0.1)
+## Syscall contract
 
-Canonical source of truth. Mirrored as constants in both the BIOS firmware
-(`firmware/src/syscalls.rs`) and — when the compiler gains BIOS-linked mode — the
-VPy compiler.
+Canonical mirror of `firmware/src/syscalls.rs` (the source of truth). **Append-only**
+(see the golden rule below). `BIOS_VERSION` is `0x0006`.
 
-| # | Name              | Args (r0, r1, …)            | Returns (r0) | Maps to (vinterface) |
-|---|-------------------|-----------------------------|--------------|----------------------|
-| 0 | `SYS_RESET0REF`   | —                           | —            | `zero_beam()` |
-| 1 | `SYS_WAIT_RECAL`  | —                           | —            | `wait_recal()` (frame pace ~50 Hz + zero ref) |
-| 2 | `SYS_SET_INTENSITY` | r0 = intensity 0–127      | —            | `set_brightness()` |
-| 3 | `SYS_MOVE`        | r0 = x (i8), r1 = y (i8)    | —            | `move8()` (beam blanked) |
-| 4 | `SYS_DRAW_DELTA`  | r0 = dx (i8), r1 = dy (i8)  | —            | `draw8()` (beam lit) |
-| 5 | `SYS_PSG_WRITE`   | r0 = reg, r1 = data         | —            | `psg_write()` |
-| 6 | `SYS_PSG_SILENCE` | —                           | —            | `psg_silence()` |
-| 7 | `SYS_READ_BUTTONS`| —                           | r0 = P1(0-3)\|P2(4-7) | `read_buttons()` |
-| 255 | `SYS_BIOS_VERSION` | —                         | r0 = (major<<8)\|minor | constant |
+| #  | Name                 | Args (r0, r1, …)                         | Returns (r0) | Notes |
+|----|----------------------|------------------------------------------|--------------|-------|
+| 0  | `SYS_RESET0REF`      | —                                        | —            | park the beam at centre (`zero_beam`) |
+| 1  | `SYS_WAIT_RECAL`     | —                                        | —            | frame pace ~50 Hz + zero ref; also flushes the core-1 PSG shadow and SEVs core 1 |
+| 2  | `SYS_SET_INTENSITY`  | r0 = intensity 0–127                     | —            | `set_brightness` |
+| 3  | `SYS_MOVE`           | r0 = x (i8), r1 = y (i8)                  | —            | reposition, beam blanked (ramped) |
+| 4  | `SYS_DRAW_DELTA`     | r0 = dx (i8), r1 = dy (i8)               | —            | draw, beam lit |
+| 5  | `SYS_PSG_WRITE`      | r0 = reg, r1 = data                       | —            | write an AY-3-8912 register |
+| 6  | `SYS_PSG_SILENCE`    | —                                        | —            | silence all PSG channels |
+| 7  | `SYS_READ_BUTTONS`   | —                                        | P1(0-3)\|P2(4-7) | debounced 4+4 buttons |
+| 8  | `SYS_BUS_WRITE`      | r0 = vectrex addr (u16), r1 = data       | —            | raw E-synced VIA write |
+| 9  | `SYS_PLAY_SAMPLE`    | r0 = `_NAME_SMP` table ptr               | —            | stream a 4-bit PCM `.vsmp` to the PSG volume DAC (core-1 streamer) |
+| 10 | `SYS_SAMPLE_POS`     | r0 = fps                                 | audio-synced frame | `samples_played*fps/rate` (video follows the audio clock) |
+| 11 | `SYS_BUS_READ`       | r0 = vectrex addr (u16)                   | byte         | E-synced read path |
+| 12 | `SYS_PSG_READ`       | r0 = reg                                 | PSG reg value | used by joystick/buttons |
+| 13 | `SYS_READ_AXES`      | —                                        | (J1X<<24)\|(J1Y<<16)\|(J2X<<8)\|J2Y | 4 analog axes, each raw i8 |
+| 14 | `SYS_READ_BUTTONS_RAW` | —                                      | (J1_portB<<8)\|J2_psg14 | raw; game masks/inverts |
+| 15 | `SYS_MOVE_ABS`       | r0 = x (i8), r1 = y (i8)                  | —            | ABSOLUTE beam position (DAC+mux, not ramped) |
+| 16 | `SYS_PRINT_TEXT`     | r0 = x, r1 = y, r2 = str_ptr, r3 = scale\|(color<<8) | — | BIOS owns the font |
+| 17 | `SYS_SD_COUNT`       | —                                        | game count   | `.BIN` files on the SD root (≤200) |
+| 18 | `SYS_SD_NAME`        | r0 = index                               | ptr to NUL-terminated **display** name (LFN or 8.3 stem) | in BIOS RAM |
+| 19 | `SYS_SD_PREVIEW`     | r0 = index, r1 = x, r2 = y, r3 = scale   | —            | draw game[index]'s `.vrb` preview (background-loaded on core 1) |
+| 20 | `SYS_LAUNCH`         | r0 = index                               | (does not return) | load `<NAME>.BIN` → GAME_RAM (0x20040000), jump. Exit = hold all 4 J1 buttons ~1 s |
+| 21 | `SYS_PLAY_MUSIC`     | r0 = `.vmus` table ptr (0 = stop)        | —            | hand the track to the core-1 player (tempo decoupled from draw load) |
+| 22 | `SYS_STOP_MUSIC`     | —                                        | —            | stop the core-1 music player + silence |
+| 23 | `SYS_PLAY_SFX`       | r0 = `.vsfx` table ptr                    | —            | one-shot SFX on the core-1 player (channel C, overlays music) |
+| 255 | `SYS_BIOS_VERSION`  | —                                        | (major<<8)\|minor | capability query |
 
 Coordinate/units convention (unchanged from the proven `master.rs`): coordinates
 are signed 8-bit (±127) from screen centre, **Y up positive**. A line is drawn as
@@ -112,16 +151,27 @@ Flash 0x10000000 ┌────────────────────
                  │ VPy program store (menu,  │  further VPy "ROMs", selected by
                  │ games) — flash or SD/PSRAM │  the menu/launcher
                  └──────────────────────────┘
-SRAM  0x2007F000 ┌──────────────────────────┐
-                 │ VPy runtime RAM (existing │  ram_layout.rs region
-                 │ arm/ram_layout.rs map)     │
+SRAM  0x20000000 ┌──────────────────────────┐
+                 │ Firmware .data/.bss + heap │  incl. the 128 KB preview buffer
+                 │ + BIOS stack (grows down)  │
+     0x20040000  ├──────────────────────────┤
+                 │ GAME_RAM (252 KB) — an SD- │  SYS_LAUNCH loads a RAM-linked
+                 │ launched game's code/data  │  game .bin here and jumps to it
+     0x2007F000  ├──────────────────────────┤
+                 │ VPy runtime RAM (game vars)│  arm/ram_layout.rs region
+     0x20080000  ├──────────────────────────┤
+                 │ SCRATCH_X: LOADING mailbox │  IDE writes here pre-reflash;
+                 │ + HardFault PC stash        │  fault handler stashes PC here
                  └──────────────────────────┘
 ```
 
-Open decision: whether VPy programs are (a) linked to a fixed load address and
-run in place from flash, or (b) position-independent and copied to RAM/PSRAM by
-the loader. (a) is simplest for the intro; (b) is needed for a general multicart.
-Start with (a) for the boot intro.
+**Load model (decided).** SD games are **RAM-linked**: PSRAM can't XIP-execute (its
+CS is a bit-banged GPIO, not a QMI pad), so games can't run from external memory,
+and a flash-XIP game would need a fixed flash slot. Instead a game is built with
+`--target rp2350 --ram` (bundled `rp2350_game_ram.ld`, ORIGIN 0x20040000, LENGTH
+252 KB), and `SYS_LAUNCH` reads its `.bin` off the SD into GAME_RAM and `bx`es to
+the entry from the `"VPy2"` header. The embedded boot **intro** is still linked at
+flash 0x10200000 (XIP) and run in place as `game_main`.
 
 ## Boot flow
 
@@ -153,15 +203,27 @@ These were hard-won on real hardware — do **not** re-derive or guess:
   register disabled). 0x98 leaves the SR driving CB2 → fights the beam and buzzes
   the PSG.
 - Draw model = immediate8/BIOS: DAC (VIA port A) = beam velocity (raw ±127); VIA
-  T1 timer = ramp duration (fixed `DRAW_SCALE ≈ 0x7F`).
+  T1 timer = ramp duration. `DRAW_SCALE` is the T1CL ramp scale; HW-calibrated to
+  **0xA0** so the ±128 coordinate range reaches the physical screen edge (0x7F drew
+  everything at ~80%). A variable-T1 model scales the ramp to the vector length
+  (short vectors → shorter ramp → more per frame); see `ramp_params` in
+  `vinterface.rs`. `dv_move_to` splits a move > ±127 into ≤127 steps (the
+  integrators accumulate) so scrolled origins don't wrap, capped at 8 steps.
 
-## Compiler changes (VPy `--target rp2350` → BIOS-linked mode)
+## Compiler changes (VPy `--target rp2350` → BIOS-linked mode) — DONE
 
-Design only (not yet implemented — see "Do not break" below):
+`--target rp2350` **is** the BIOS-linked mode: the backend emits `svc #SYS_x` for
+the system primitives (no inline bus/init). SD-launcher builtins (`SD_FILE_COUNT`,
+`SD_FILE_NAME`, `DRAW_SD_PREVIEW`, `LAUNCH_GAME`) and the core-1 audio traps
+(`PLAY_MUSIC`/`STOP_MUSIC`→svc #21/#22, `PLAY_SFX`→#23, `AUDIO_UPDATE` no-op) are
+in too. `--ram` selects the SRAM linker script for SD-launched games. The mapping:
 
-- Add a **BIOS-linked emission mode** (a new `--target rp2350-bios`, or a flag on
-  `rp2350`). In this mode the backend emits `svc #SYS_x` for the system
-  primitives instead of their inline bodies:
+- `dv_reset` → `svc #SYS_RESET0REF`
+- `vpy_wait_recal` → `svc #SYS_WAIT_RECAL`
+- `vpy_set_intensity` / the SET_INTENSITY override store stays program-side, but
+  the DAC write becomes `svc #SYS_SET_INTENSITY`
+- `dv_move_to` → `svc #SYS_MOVE`
+- `dv_draw_delta` → `svc #SYS_DRAW_DELTA`
   - `dv_reset` → `svc #SYS_RESET0REF`
   - `vpy_wait_recal` → `svc #SYS_WAIT_RECAL`
   - `vpy_set_intensity` / the SET_INTENSITY override store stays program-side, but
@@ -187,30 +249,34 @@ Design only (not yet implemented — see "Do not break" below):
   the only end-to-end-verified hardware bring-up. The BIOS reuses its exact
   timing/pinout; it does not replace it until validated on hardware.
 
-## Implementation status (2026-07-10, this session)
+## Firmware layout (`vectrex-arcade-private/hardware/debug_cart/firmware/src/`)
 
-Firmware skeleton added to the private repo
-(`vectrex-arcade-private/hardware/debug_cart/firmware/`):
-
-- `src/syscalls.rs` — the ABI constants above (shared source of truth).
-- `src/vinterface.rs` — the `vectrexInterface` primitives + `init()`, extracted
-  from the proven `master.rs` (same pinout/timing/model), exposed for reuse.
-- `src/bios.rs` — `run()` (init → boot program), the `SVCall` dispatcher, and a
-  demo that exercises the syscall table.
-- `main.rs` still runs `master::run` (the proven demo) by default so nothing
-  regresses; switching the boot to the BIOS is a one-line change once validated.
+- `main.rs` — boots `bios::run`; the HardFault handler (FAULT screen + PC stash).
+- `syscalls.rs` — the ABI constants above (source of truth).
+- `vinterface.rs` — the `vectrexInterface` primitives + `init()` (pinout/timing/
+  draw model, `DRAW_SCALE`, `ramp_params`, the E-synced `bus_write`/`bus_read`).
+- `bios.rs` — `run()` (init → core-1 spawn → `game_main`), the `SVCall` dispatcher,
+  `SYS_LAUNCH` + the exit combo + the LOADING-mailbox check.
+- `sd.rs` — SD (bit-banged SPI) + FAT reader, game-list cache (LFN), preview loader,
+  `load_game`. `music.rs` — core-1 `.vmus`/`.vsfx` player + PSG shadow. `text.rs` —
+  BIOS font. `master.rs` — the original bus-master house demo (kept for reference).
 
 ## Roadmap
 
-1. **BIOS skeleton compiles** (this session) — vinterface + syscalls + SVC
-   dispatcher.
-2. **Validate SVC on hardware** — flash a BIOS that draws the house via `svc`
-   calls (not direct calls); confirm the dispatcher + frame handling work.
-3. **Compiler BIOS-linked mode** — emit `svc #N`; drop inline runtime + init.
-4. **Run the intro** as a BIOS-linked program at boot (the actual goal).
-5. **Loader + menu** — the BIOS boots into a menu that launches VPy ROMs; the
-   intro plays first.
-6. **Emulator SVC support** (optional) so the BIOS-linked build previews too.
+1. ✅ BIOS skeleton — vinterface + syscalls + SVC dispatcher.
+2. ✅ Validate SVC on hardware.
+3. ✅ Compiler BIOS-linked mode — emit `svc #N`; drop inline runtime + init.
+4. ✅ Run the intro as a BIOS-linked program at boot.
+5. ✅ Loader + menu — boots into a menu that launches SD games (RAM-linked);
+   the intro plays first. Long/LFN names, up to 200 games, `.vrb` previews.
+6. Emulator SVC support (partial — the IDE emulator simulates the SD list +
+   previews via `Rp2350System.ts`).
+
+Beyond the original roadmap and now live: core-1 `.vmus`/`.vsfx` audio (tempo
+decoupled from the draw load), a "LOADING" screen during an SWD reflash (the IDE
+pokes a SCRATCH mailbox first so the AY doesn't stick), a "FAULT" screen on a game
+HardFault, and DRAW_SCALE calibration. The dual-core RETAINED-mode render engine
+(below) is still design — the current immediate mode is what ships.
 
 ## Retained-mode dual-core render engine (DESIGN — next milestone after the intro boots)
 
