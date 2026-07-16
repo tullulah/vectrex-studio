@@ -82,12 +82,209 @@ pub fn chain_frame(segments: &[Segment]) -> Vec<Chain> {
     chains
 }
 
+// ============================================================
+// Standalone precompiled binary `.vrb` format
+// ============================================================
+//
+// The SAME polyline-chained layout the ARM/m6809 backends bake into ROM, but as
+// a self-describing standalone file — so a precompiled `.vrb` on the SD is read
+// identically by the IDE emulator and (later) the RP2350 firmware. Streamable:
+// the frame offset table lets a reader seek to any frame without holding the
+// whole file. Little-endian throughout.
+//
+//   [0]  magic         "VRB1"        (4 bytes)
+//   [4]  fps           u16
+//   [6]  frame_count   u16
+//   [8]  offset table  u32 × frame_count  (byte offset from file start → frame)
+//   ...  per frame:
+//          chain_count u16
+//          per chain:  start_x i8, start_y i8, intensity u8, seg_count u8,
+//                      then seg_count × (dx i8, dy i8)
+
+const VRB_MAX_DELTAS_PER_CHAIN: usize = 255;
+
+#[derive(serde::Deserialize)]
+struct VrbSeg { x0: i32, y0: i32, x1: i32, y1: i32, i: i32 }
+#[derive(serde::Deserialize)]
+struct VrbFrame { #[serde(default)] segments: Vec<VrbSeg> }
+#[derive(serde::Deserialize)]
+struct VrbDoc {
+    #[serde(default)] fps: f64,
+    #[serde(default)] frames: Vec<VrbFrame>,
+}
+
+/// Squared perpendicular distance from point `p` to the line through `a`,`b`.
+fn perp_dist_sq(p: (i32, i32), a: (i32, i32), b: (i32, i32)) -> i64 {
+    let (px, py) = (p.0 as i64, p.1 as i64);
+    let (ax, ay) = (a.0 as i64, a.1 as i64);
+    let (bx, by) = (b.0 as i64, b.1 as i64);
+    let (dx, dy) = (bx - ax, by - ay);
+    if dx == 0 && dy == 0 {
+        let (ex, ey) = (px - ax, py - ay);
+        return ex * ex + ey * ey;
+    }
+    let num = (dy * (px - ax) - dx * (py - ay)).abs();
+    (num * num) / (dx * dx + dy * dy)
+}
+
+/// Douglas-Peucker polyline simplification (keeps both endpoints). Drops points
+/// that deviate less than `eps` (eps² passed in) — invisible once the preview is
+/// scaled down, and each dropped point is one fewer vector to draw.
+fn douglas_peucker(pts: &[(i32, i32)], eps_sq: i64) -> Vec<(i32, i32)> {
+    if pts.len() <= 2 {
+        return pts.to_vec();
+    }
+    let (a, b) = (pts[0], *pts.last().unwrap());
+    let mut max_d = -1i64;
+    let mut idx = 0;
+    for i in 1..pts.len() - 1 {
+        let d = perp_dist_sq(pts[i], a, b);
+        if d > max_d {
+            max_d = d;
+            idx = i;
+        }
+    }
+    if max_d > eps_sq {
+        let mut left = douglas_peucker(&pts[..=idx], eps_sq);
+        let right = douglas_peucker(&pts[idx..], eps_sq);
+        left.pop(); // drop the shared join point
+        left.extend(right);
+        left
+    } else {
+        vec![a, b]
+    }
+}
+
+/// Split a delta whose |dx| or |dy| exceeds 127 into ≤127-unit steps along the
+/// line (simplification can merge points into a delta too big for one i8).
+fn split_delta(dx: i32, dy: i32, out: &mut Vec<(i32, i32)>) {
+    let steps = (dx.abs().max(dy.abs()) + 126) / 127;
+    if steps <= 1 {
+        out.push((dx, dy));
+        return;
+    }
+    let (mut ax, mut ay) = (0i32, 0i32);
+    for s in 1..=steps {
+        let (tx, ty) = (dx * s / steps, dy * s / steps);
+        out.push((tx - ax, ty - ay));
+        ax = tx;
+        ay = ty;
+    }
+}
+
+/// Compile a `.vrec` JSON string into the standalone binary `.vrb` blob.
+/// `simplify_eps` runs Douglas-Peucker per polyline (0 = off; ~2 suits previews).
+pub fn compile_vrec_json_to_binary(json: &str, simplify_eps: i32) -> Result<Vec<u8>, String> {
+    let doc: VrbDoc = serde_json::from_str(json).map_err(|e| format!("bad .vrec JSON: {e}"))?;
+    let frame_count = doc.frames.len();
+    if frame_count > u16::MAX as usize {
+        return Err(format!("too many frames: {frame_count} (max {})", u16::MAX));
+    }
+    let clamp8 = |v: i32| v.clamp(-127, 127) as i8;
+    let eps_sq = (simplify_eps.max(0) as i64) * (simplify_eps.max(0) as i64);
+
+    // Serialize each frame's payload first, then assemble with the offset table.
+    let mut frame_blobs: Vec<Vec<u8>> = Vec::with_capacity(frame_count);
+    for frame in &doc.frames {
+        let segs: Vec<Segment> = frame.segments.iter()
+            .map(|s| Segment { x0: s.x0, y0: s.y0, x1: s.x1, y1: s.y1, i: s.i })
+            .collect();
+        let chains = chain_frame(&segs);
+        let mut emitted: Vec<(i32, i32, i32, Vec<(i32, i32)>)> = Vec::new();
+        for c in &chains {
+            // Reconstruct the polyline, simplify, re-delta, split any long delta.
+            let mut pts: Vec<(i32, i32)> = Vec::with_capacity(c.deltas.len() + 1);
+            pts.push(c.start);
+            let (mut x, mut y) = c.start;
+            for (dx, dy) in &c.deltas {
+                x += dx;
+                y += dy;
+                pts.push((x, y));
+            }
+            let pts = if simplify_eps > 0 { douglas_peucker(&pts, eps_sq) } else { pts };
+            if pts.len() < 2 {
+                continue;
+            }
+            let start = pts[0];
+            let mut deltas: Vec<(i32, i32)> = Vec::new();
+            for w in pts.windows(2) {
+                split_delta(w[1].0 - w[0].0, w[1].1 - w[0].1, &mut deltas);
+            }
+            // Split chains > 255 deltas so seg_count fits one byte (re-anchor).
+            if deltas.len() <= VRB_MAX_DELTAS_PER_CHAIN {
+                emitted.push((start.0, start.1, c.intensity, deltas));
+            } else {
+                let (mut px, mut py) = start;
+                for part in deltas.chunks(VRB_MAX_DELTAS_PER_CHAIN) {
+                    emitted.push((px, py, c.intensity, part.to_vec()));
+                    for (dx, dy) in part {
+                        px += dx;
+                        py += dy;
+                    }
+                }
+            }
+        }
+        let mut blob = Vec::new();
+        blob.extend_from_slice(&(emitted.len() as u16).to_le_bytes());
+        for (sx, sy, inten, deltas) in &emitted {
+            blob.push(clamp8(*sx) as u8);
+            blob.push(clamp8(*sy) as u8);
+            blob.push((*inten).clamp(0, 127) as u8);
+            blob.push(deltas.len() as u8);
+            for (dx, dy) in deltas {
+                blob.push(clamp8(*dx) as u8);
+                blob.push(clamp8(*dy) as u8);
+            }
+        }
+        frame_blobs.push(blob);
+    }
+
+    let data_start = 8 + 4 * frame_count; // header + offset table
+    let mut out = Vec::new();
+    out.extend_from_slice(b"VRB1");
+    out.extend_from_slice(&(doc.fps.round().clamp(1.0, 255.0) as u16).to_le_bytes());
+    out.extend_from_slice(&(frame_count as u16).to_le_bytes());
+    let mut off = data_start as u32;
+    for blob in &frame_blobs {
+        out.extend_from_slice(&off.to_le_bytes());
+        off += blob.len() as u32;
+    }
+    for blob in &frame_blobs {
+        out.extend_from_slice(blob);
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn seg(x0: i32, y0: i32, x1: i32, y1: i32, i: i32) -> Segment {
         Segment { x0, y0, x1, y1, i }
+    }
+
+    /// The binary `.vrb` blob has the right header, offset table, and a frame
+    /// whose closed square folds to one 4-delta chain.
+    #[test]
+    fn vrb_binary_header_and_frame() {
+        let json = r#"{"fps":15,"frames":[{"segments":[
+            {"x0":-40,"y0":-40,"x1":40,"y1":-40,"i":90},
+            {"x0":40,"y0":-40,"x1":40,"y1":40,"i":90},
+            {"x0":40,"y0":40,"x1":-40,"y1":40,"i":90},
+            {"x0":-40,"y0":40,"x1":-40,"y1":-40,"i":90}
+        ]}]}"#;
+        let b = compile_vrec_json_to_binary(json, 0).unwrap();
+        assert_eq!(&b[0..4], b"VRB1");
+        assert_eq!(u16::from_le_bytes([b[4], b[5]]), 15);      // fps
+        assert_eq!(u16::from_le_bytes([b[6], b[7]]), 1);       // frame_count
+        let off = u32::from_le_bytes([b[8], b[9], b[10], b[11]]) as usize;
+        assert_eq!(off, 12);                                   // 8 header + 4 table
+        assert_eq!(u16::from_le_bytes([b[off], b[off + 1]]), 1); // chain_count
+        // chain header: start (-40,-40), i=90, seg_count=4
+        assert_eq!(b[off + 2] as i8, -40);
+        assert_eq!(b[off + 3] as i8, -40);
+        assert_eq!(b[off + 4], 90);
+        assert_eq!(b[off + 5], 4);
     }
 
     /// A closed square (4 segments, each end == next start, same intensity)

@@ -65,6 +65,8 @@ const GROUPS: &[(&str, &[&str], &[&str])] = &[
     // core1 audio streamer.
     ("PLAY_SAMPLE",     &["PLAY_SAMPLE"],       &[]),
     ("SAMPLE_POS",      &["SAMPLE_POS"],        &[]),
+    // SD card game list: SVC stubs only (svc #17 SYS_SD_COUNT, #18 SYS_SD_NAME).
+    ("SD",              &["SD_FILE_COUNT", "SD_FILE_NAME", "DRAW_SD_PREVIEW", "LAUNCH_GAME"], &[]),
     // _SIN_TABLE data + smul_lut (smul_lut reads _SIN_TABLE).
     ("SIN_TABLE",       &[],                    &[]),
     // vpy_sin / vpy_cos: read _SIN_TABLE directly.
@@ -98,6 +100,10 @@ const GROUPS: &[(&str, &[&str], &[&str])] = &[
         "J2_BUTTON_1", "J2_BUTTON_2", "J2_BUTTON_3", "J2_BUTTON_4",
         "UPDATE_BUTTONS",
     ], &["PSG"]),
+    // Analog-axis reads. Gates the SAR read (svc #13) inside update_buttons —
+    // that read perturbs the DAC/PSG (speaker noise), so button-only programs
+    // must skip it. Depends on JOYSTICK (the update_buttons + getters live there).
+    ("ANALOG",          &["J1_X", "J1_Y", "J2_X", "J2_Y"], &["JOYSTICK"]),
     // ── audio ──────────────────────────────────────────────────────────────
     // psg_write / psg_read low-level PSG access (bus_write/bus_read = core).
     ("PSG",             &[],                    &[]),

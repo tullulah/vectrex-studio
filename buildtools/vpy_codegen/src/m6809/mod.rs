@@ -694,6 +694,12 @@ pub fn generate_m6809_asm(
         builtins::emit_msg_table(&msg_entries, &mut asm);
     }
 
+    // Simulated SD game list (m6809 preview): emit the name table only when the
+    // program queries it. Real SD lives on rp2350; here it's a home folder.
+    if builtins::module_uses_sd(module) {
+        builtins::emit_sd_tables(&mut asm);
+    }
+
     // Emit compact 3D data tables in bank_00 for DRAW_VECTOR_3D.
     // Must be in the same bank as user code so the fixed helpers bank runtime
     // can read them (the calling bank stays mapped at $0000-$3FFF during the JSR).

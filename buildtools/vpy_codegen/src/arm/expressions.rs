@@ -373,6 +373,11 @@ pub fn emit_call(
         "GET_SCROLL_LIMIT_BOTTOM"=> "vpy_get_scroll_limit_bottom",
         "GET_LEVEL_FLOOR_Y"      => "vpy_get_level_floor_y",
         "GET_FRAME_US"           => "vpy_get_frame_us",
+        // SD card game list (BIOS serves the data; VPy owns presentation)
+        "SD_FILE_COUNT"          => "vpy_sd_count",
+        "SD_FILE_NAME"           => "vpy_sd_name",
+        "DRAW_SD_PREVIEW"        => "vpy_draw_sd_preview",
+        "LAUNCH_GAME"            => "vpy_launch_game",
         // Message system
         "MSG_DEF"         => "vpy_msg_def",
         "PRINT_MSG"       => "vpy_print_msg",
@@ -866,6 +871,41 @@ mod tests {
             col: 0,
             args: vec![vpy_parser::Expr::Number(arg)],
         }
+    }
+
+    /// SD game-list builtins must lower to the vpy_sd_* SVC stubs, and a
+    /// SD_FILE_NAME(i) result must thread into PRINT_TEXT's str_ptr register (r2).
+    #[test]
+    fn test_arm_sd_builtins() {
+        let var_addrs = std::collections::HashMap::new();
+
+        let count = emit_call(&make_call("SD_FILE_COUNT"), &var_addrs).unwrap();
+        assert!(count.contains("bl      vpy_sd_count"),
+            "SD_FILE_COUNT must emit `bl vpy_sd_count` (got: {count:?})");
+
+        let name = emit_call(&make_call_with_arg("SD_FILE_NAME", 0), &var_addrs).unwrap();
+        assert!(name.contains("bl      vpy_sd_name"),
+            "SD_FILE_NAME must emit `bl vpy_sd_name` (got: {name:?})");
+
+        // PRINT_TEXT(x, y, SD_FILE_NAME(i)) — the name pointer (3rd arg) must be
+        // evaluated via vpy_sd_name and land in r2 before vpy_print_text.
+        let pt = CallInfo {
+            name: "PRINT_TEXT".to_string(),
+            source_line: 0,
+            col: 0,
+            args: vec![
+                vpy_parser::Expr::Number(-50),
+                vpy_parser::Expr::Number(40),
+                vpy_parser::Expr::Call(make_call_with_arg("SD_FILE_NAME", 0)),
+            ],
+        };
+        let asm = emit_call(&pt, &var_addrs).unwrap();
+        assert!(asm.contains("bl      vpy_sd_name"),
+            "PRINT_TEXT with SD_FILE_NAME must evaluate the name pointer (got: {asm:?})");
+        let name_pos = asm.find("bl      vpy_sd_name").unwrap();
+        let print_pos = asm.find("bl      vpy_print_text").unwrap();
+        assert!(name_pos < print_pos,
+            "name pointer must be resolved before the print_text call (got: {asm:?})");
     }
 
     /// Regression test for Bug 1: M6809-only enemy builtins must be no-ops on

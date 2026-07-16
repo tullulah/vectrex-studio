@@ -77,6 +77,18 @@ enum Commands {
         format: String,
     },
     
+    /// Precompile a .vrec JSON recording into a standalone binary .vrb
+    /// (polyline-chained; the same format hardware/emulator play from SD).
+    VrecCompile {
+        /// Input .vrec (JSON) file
+        input: PathBuf,
+        /// Output .vrb (binary) file
+        output: PathBuf,
+        /// Douglas-Peucker simplification epsilon (0 = off; ~6 suits small previews)
+        #[arg(long, default_value = "6")]
+        simplify: i32,
+    },
+
     /// Generate unified assembly (single ASM with bank markers)
     Asm {
         /// Entry point VPy file or .vpyproj
@@ -157,6 +169,11 @@ enum Commands {
         /// Compilation target (m6809 or rp2350)
         #[arg(long, default_value = "m6809")]
         target: String,
+
+        /// (rp2350) Link the game to run from internal SRAM (0x20040000) so the
+        /// SD-card launcher can load it. Default is XIP-from-flash (0x10200000).
+        #[arg(long)]
+        ram: bool,
     },
 }
 
@@ -183,6 +200,16 @@ fn main() -> Result<()> {
             println!("{}", "=== GENERATE UNIFIED ASM ===".bright_cyan().bold());
             cmd_asm(&input, rom_size, bank_size, output, target)?;
         }
+
+        Commands::VrecCompile { input, output, simplify } => {
+            let json = std::fs::read_to_string(&input)
+                .map_err(|e| anyhow::anyhow!("read {}: {e}", input.display()))?;
+            let bin = vpy_codegen::vrec_chain::compile_vrec_json_to_binary(&json, simplify)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+            std::fs::write(&output, &bin)
+                .map_err(|e| anyhow::anyhow!("write {}: {e}", output.display()))?;
+            println!("✓ {} → {} ({} bytes)", input.display(), output.display(), bin.len());
+        }
         
         Commands::Allocate { input, graph } => {
             println!("{}", "=== Phase 4: ALLOCATE ===".bright_cyan().bold());
@@ -199,9 +226,9 @@ fn main() -> Result<()> {
             cmd_link(&input, output)?;
         }
         
-        Commands::Build { input, output, rom_size, bank_size, debug, verbose, target } => {
+        Commands::Build { input, output, rom_size, bank_size, debug, verbose, target, ram } => {
             println!("{}", "=== FULL BUILD PIPELINE ===".bright_green().bold());
-            cmd_build(&input, output, rom_size, bank_size, debug, verbose, target)?;
+            cmd_build(&input, output, rom_size, bank_size, debug, verbose, target, ram)?;
         }
     }
     
@@ -1069,10 +1096,13 @@ fn cmd_build_pitrex(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> 
     Ok(())
 }
 
-fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Result<()> {
+fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool, ram: bool) -> Result<()> {
     use std::process::Command;
 
     println!("{}", "Target: RP2350 (ARM Thumb2)".bright_yellow().bold());
+    if ram {
+        println!("  {} RAM-linked (SD launcher) — entry at 0x20040000", "→".cyan());
+    }
 
     // Phase 1: Load project or single file
     let (source_path, project_dir) = if input.extension().and_then(|s| s.to_str()) == Some("vpyproj") {
@@ -1156,11 +1186,17 @@ fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> 
         .with_context(|| format!("Failed to write {}", asm_path.display()))?;
     println!("  {} ARM ASM written: {}", "✓".green(), s_path.display());
 
-    // Linker script: prefer an in-tree copy if present, otherwise use the copy
-    // bundled into the compiler (written to the build dir).
-    let ld_path = match find_rp2350_ld(&project_dir) {
-        Some(p) => p,
-        None => write_bundled_rp2350_ld(&build_dir)?,
+    // Linker script. For --ram builds (SD launcher targets) always use the
+    // bundled RAM script — an in-tree rp2350_game.ld links for XIP flash and
+    // would put the entry pointer at 0x10200xxx, wrong for a RAM-loaded game.
+    // Otherwise prefer an in-tree copy, then the bundled flash script.
+    let ld_path = if ram {
+        write_bundled_rp2350_ram_ld(&build_dir)?
+    } else {
+        match find_rp2350_ld(&project_dir) {
+            Some(p) => p,
+            None => write_bundled_rp2350_ld(&build_dir)?,
+        }
     };
     if verbose {
         println!("  Linker script: {}", ld_path.display());
@@ -1542,6 +1578,16 @@ fn write_bundled_rp2350_ld(build_dir: &Path) -> anyhow::Result<PathBuf> {
     Ok(path)
 }
 
+/// RAM-linked variant: game runs from internal SRAM at 0x20040000, loaded off
+/// the SD card by the cart launcher (see rp2350_game_ram.ld header).
+fn write_bundled_rp2350_ram_ld(build_dir: &Path) -> anyhow::Result<PathBuf> {
+    const BUNDLED_LD: &str = include_str!("../resources/rp2350_game_ram.ld");
+    let path = build_dir.join("rp2350_game_ram.ld");
+    std::fs::write(&path, BUNDLED_LD)
+        .with_context(|| format!("Failed to write bundled linker script {}", path.display()))?;
+    Ok(path)
+}
+
 /// Find the UVM2 linker script — looks for hardware/uvm2/uvm2_game.ld first,
 /// then falls back to the rp2350_game.ld (same Pico SDK memory map).
 #[allow(dead_code)]
@@ -1593,14 +1639,14 @@ fn vpyproj_project_name(vpyproj: &Path) -> Option<String> {
     None
 }
 
-fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_size: usize, _debug: bool, verbose: bool, target: String) -> Result<()> {
+fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_size: usize, _debug: bool, verbose: bool, target: String, ram: bool) -> Result<()> {
     // PiTrex target: separate path — no banks, ARM32 toolchain invocation
     if target == "pitrex" {
         return cmd_build_pitrex(input, output, verbose);
     }
     // RP2350 target: separate path — no banks, ARM toolchain invocation
     if target == "rp2350" {
-        return cmd_build_rp2350(input, output, verbose);
+        return cmd_build_rp2350(input, output, verbose, ram);
     }
     // UVM2 target: Ultimate Vectrex Multicart 2 — same Pico SDK toolchain as rp2350
     if target == "uvm2" {
@@ -1670,7 +1716,7 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
                 return cmd_build_pitrex(input, output, verbose);
             }
             if meta_target == "rp2350" {
-                return cmd_build_rp2350(input, output, verbose);
+                return cmd_build_rp2350(input, output, verbose, ram);
             }
         }
 

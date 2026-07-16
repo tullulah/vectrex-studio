@@ -6,7 +6,7 @@
 //! - WAIT_RECAL: Wait for screen refresh
 //! - SET_INTENSITY: Set drawing intensity
 
-use vpy_parser::{Expr, Module};
+use vpy_parser::{Expr, Item, Module, Stmt};
 use super::expressions;
 use super::math;
 use super::debug;
@@ -85,6 +85,10 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("AUDIO_UPDATE", 0),    // no args
     ("MUSIC_UPDATE", 0),    // no args (deprecated)
     
+    // SD game list (simulated on m6809/emulator; real SD on rp2350)
+    ("SD_FILE_COUNT", 0),   // no args -> count
+    ("SD_FILE_NAME", 1),    // index -> ptr to name string
+
     // Joystick input
     ("J1_X", 0),            // no args
     ("J1_Y", 0),            // no args
@@ -271,6 +275,26 @@ pub fn emit_builtin(
             true
         }
         
+        // ===== SD game list (simulated on m6809 — see sim_sd_files) =====
+        "SD_FILE_COUNT" => {
+            let n = sim_sd_files().len();
+            out.push_str(&format!("    LDD #{}          ; SD_FILE_COUNT (sim: {} file(s))\n", n, n));
+            out.push_str("    STD RESULT\n");
+            true
+        }
+        "SD_FILE_NAME" => {
+            // args[0] = index → D = pointer to simulated name[i].
+            // Use LDX #label + LEAX D,X (same #label form that PRINT_TEXT strings
+            // resolve with) — an immediate ADDD #label does not resolve here.
+            expressions::emit_simple_expr(&args[0], out, assets); // D = i
+            out.push_str("    ASLB\n    ROLA            ; D = i*2 (16-bit ptr stride)\n");
+            out.push_str("    LDX #SD_NAME_TABLE\n");
+            out.push_str("    LEAX D,X        ; X = &SD_NAME_TABLE[i]\n");
+            out.push_str("    LDD ,X          ; D = ptr to name[i]\n");
+            out.push_str("    STD RESULT\n");
+            true
+        }
+
         // ===== Joystick Input =====
         "J1_X" => {
             out.push_str("    JSR J1X_BUILTIN\n");
@@ -1789,6 +1813,106 @@ pub fn emit_print_text_strings(strings: &std::collections::BTreeMap<u64, String>
         out.push_str(&format!("    FCC \"{}\"\n", escape_string(s)));
         out.push_str("    FCB $80          ; Vectrex string terminator\n\n");
     }
+}
+
+// ── Simulated SD game list (m6809 emulator preview) ───────────────────────
+// The RP2350 target reads a real SD card via SYS_SD_* syscalls. The m6809
+// build has no SD hardware, so the IDE preview simulates one from a folder in
+// the user's home (`~/VectrexStudio/sd`, created if missing). Drop `.bin`
+// files there and they appear in the menu. Scanned once, baked into ROM.
+
+/// Absolute path of the simulated-SD folder, created if missing.
+pub fn sim_sd_dir() -> std::path::PathBuf {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
+    std::path::Path::new(&home).join("VectrexStudio").join("sd")
+}
+
+/// The simulated game list: uppercase stems of `*.bin` in the sim-SD folder.
+/// Scanned once per process (each IDE build is a fresh vpy_cli invocation).
+fn sim_sd_files() -> &'static Vec<String> {
+    static FILES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    FILES.get_or_init(|| {
+        let mut out: Vec<String> = Vec::new();
+        let dir = sim_sd_dir();
+        let _ = std::fs::create_dir_all(&dir); // create if missing
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for e in entries.flatten() {
+                let p = e.path();
+                let is_bin = p.extension()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.eq_ignore_ascii_case("bin"))
+                    .unwrap_or(false);
+                if !is_bin { continue; }
+                if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                    if stem.starts_with('.') { continue; } // hidden / macOS ._ junk
+                    let mut name = stem.to_ascii_uppercase();
+                    name.truncate(12); // 8.3-ish cap for the vector display
+                    out.push(name);
+                }
+            }
+        }
+        out.sort();
+        out.truncate(24); // cap the list
+        out
+    })
+}
+
+/// True if the module calls SD_FILE_COUNT / SD_FILE_NAME (so we emit the table).
+pub fn module_uses_sd(module: &Module) -> bool {
+    fn expr_uses(e: &Expr) -> bool {
+        match e {
+            Expr::Call(c) => {
+                let n = c.name.to_ascii_uppercase();
+                n == "SD_FILE_COUNT" || n == "SD_FILE_NAME" || c.args.iter().any(expr_uses)
+            }
+            _ => false,
+        }
+    }
+    fn stmts_use(stmts: &[Stmt]) -> bool {
+        stmts.iter().any(|s| match s {
+            Stmt::Expr(e, _) => expr_uses(e),
+            Stmt::Return(Some(e), _) => expr_uses(e),
+            Stmt::Let { value, .. } => expr_uses(value),
+            Stmt::Assign { value, .. } => expr_uses(value),
+            Stmt::CompoundAssign { value, .. } => expr_uses(value),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                expr_uses(cond) || stmts_use(body)
+                    || elifs.iter().any(|(c, b)| expr_uses(c) || stmts_use(b))
+                    || else_body.as_ref().map(|b| stmts_use(b)).unwrap_or(false)
+            }
+            Stmt::While { cond, body, .. } => expr_uses(cond) || stmts_use(body),
+            Stmt::For { body, .. } => stmts_use(body),
+            Stmt::ForIn { body, .. } => stmts_use(body),
+            Stmt::Switch { cases, default, .. } => {
+                cases.iter().any(|(_, b)| stmts_use(b))
+                    || default.as_ref().map(|b| stmts_use(b)).unwrap_or(false)
+            }
+            _ => false,
+        })
+    }
+    module.items.iter().any(|it| matches!(it, Item::Function(f) if stmts_use(&f.body)))
+}
+
+/// Emit the simulated SD name table + strings (helpers bank).
+pub fn emit_sd_tables(out: &mut String) {
+    let files = sim_sd_files();
+    out.push_str(";**** Simulated SD game list (m6809 preview; ~/VectrexStudio/sd) ****\n");
+    out.push_str("SD_NAME_TABLE:\n");
+    if files.is_empty() {
+        out.push_str("    FDB 0            ; no .bin files in the sim-SD folder\n");
+    } else {
+        for i in 0..files.len() {
+            out.push_str(&format!("    FDB SD_NAME_{}\n", i));
+        }
+    }
+    for (i, name) in files.iter().enumerate() {
+        out.push_str(&format!("SD_NAME_{}:\n", i));
+        out.push_str(&format!("    FCC \"{}\"\n", escape_string(name)));
+        out.push_str("    FCB $80          ; Vectrex string terminator\n");
+    }
+    out.push('\n');
 }
 
 /// Collect all MSG_DEF(id, x, y, "text") calls from the module
