@@ -108,10 +108,35 @@ fn emit_dv_reset() -> String {
 
 fn emit_dv_move_to() -> String {
     let mut s = String::new();
-    s.push_str("@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (delta after a reset)\n");
+    s.push_str("@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (a ramped delta after a\n");
+    s.push_str("@ reset). Split into <=127-per-axis steps: a scrolled origin can land far\n");
+    s.push_str("@ past the i8 DAC range, and SYS_MOVE casts to i8 → the whole shape WRAPS to\n");
+    s.push_str("@ the wrong side of the screen (mario_poc floor tiles). SYS_MOVE ramps the\n");
+    s.push_str("@ INTEGRATORS (velocity×time), not an absolute DAC, so stepping accumulates\n");
+    s.push_str("@ to the true (off-screen) origin — the visible part draws in place and the\n");
+    s.push_str("@ physical screen clips the rest. A move already within +/-127 does one step\n");
+    s.push_str("@ (unchanged).\n");
     s.push_str(".global dv_move_to\n.type dv_move_to, %function\n.thumb_func\ndv_move_to:\n");
-    s.push_str("    svc     #3                      @ SYS_MOVE\n");
-    s.push_str("    bx      lr\n\n");
+    s.push_str("    push    {r2, r3, r4, r5, r6, r7, lr}  @ callers assume traps preserve regs\n");
+    s.push_str("    mov     r4, r0                  @ remaining dx\n");
+    s.push_str("    mov     r5, r1                  @ remaining dy\n");
+    s.push_str("    mov     r6, #127\n");
+    s.push_str("    rsb     r7, r6, #0              @ r7 = -127\n");
+    s.push_str("dvmt_loop:\n");
+    s.push_str("    mov     r0, r4                  @ step_x = clamp(remaining_x, -127, 127)\n");
+    s.push_str("    cmp     r0, r6\n    it      gt\n    movgt   r0, r6\n");
+    s.push_str("    cmp     r0, r7\n    it      lt\n    movlt   r0, r7\n");
+    s.push_str("    mov     r1, r5                  @ step_y = clamp(remaining_y, -127, 127)\n");
+    s.push_str("    cmp     r1, r6\n    it      gt\n    movgt   r1, r6\n");
+    s.push_str("    cmp     r1, r7\n    it      lt\n    movlt   r1, r7\n");
+    s.push_str("    push    {r0, r1}                @ svc clobbers r0; keep the steps\n");
+    s.push_str("    svc     #3                      @ SYS_MOVE (this step)\n");
+    s.push_str("    pop     {r0, r1}\n");
+    s.push_str("    subs    r4, r4, r0              @ remaining -= step\n");
+    s.push_str("    subs    r5, r5, r1\n");
+    s.push_str("    orrs    r2, r4, r5              @ both zero? → done\n");
+    s.push_str("    bne     dvmt_loop\n");
+    s.push_str("    pop     {r2, r3, r4, r5, r6, r7, pc}\n\n");
     s
 }
 
