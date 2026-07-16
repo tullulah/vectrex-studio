@@ -14,13 +14,15 @@ export const SettingsPanel: React.FC = () => {
     uvm2SdPath, setUvm2SdPath,
     rp2350FlashMethod, setRp2350FlashMethod,
     rp2350FirmwareDir, setRp2350FirmwareDir,
+    rp2350SdPath, setRp2350SdPath,
+    rp2350BuildMode, setRp2350BuildMode,
   } = useSettings();
 
   const handleBrowseSD = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     try {
-      const result = await (window as any).file.openFolder();
+      const result = await (window as any).files.openFolder();
       if (result && result.path) {
         setPitrexSdPath(result.path);
       }
@@ -33,7 +35,7 @@ export const SettingsPanel: React.FC = () => {
     e.preventDefault();
     e.stopPropagation();
     try {
-      const result = await (window as any).file.openFolder();
+      const result = await (window as any).files.openFolder();
       if (result && result.path) {
         setRp2350FirmwareDir(result.path);
       }
@@ -42,11 +44,24 @@ export const SettingsPanel: React.FC = () => {
     }
   };
 
+  const handleBrowseRp2350SD = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const result = await (window as any).files.openFolder();
+      if (result && result.path) {
+        setRp2350SdPath(result.path);
+      }
+    } catch (err) {
+      console.error('[SettingsPanel] Browse RP2350 SD failed:', err);
+    }
+  };
+
   const handleBrowseUvm2SD = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     try {
-      const result = await (window as any).file.openFolder();
+      const result = await (window as any).files.openFolder();
       if (result && result.path) {
         setUvm2SdPath(result.path);
       }
@@ -141,52 +156,103 @@ export const SettingsPanel: React.FC = () => {
             </label>
             {buildTarget === 'rp2350' && (
               <div className="pitrex-suboption">
+                {/* Build mode: run on the cart (flash) vs. a RAM-linked binary for
+                    the SD-card launcher. */}
                 <span className="rp2350-flash-label">
-                  {t('settings.target.rp2350.flash.title', 'Flash on Build & Run:')}
+                  {t('settings.target.rp2350.mode.title', 'Build mode:')}
                 </span>
                 <label className="settings-checkbox">
                   <input
                     type="radio"
-                    name="rp2350FlashMethod"
-                    value="none"
-                    checked={rp2350FlashMethod === 'none'}
-                    onChange={() => setRp2350FlashMethod('none')}
+                    name="rp2350BuildMode"
+                    value="flash"
+                    checked={rp2350BuildMode === 'flash'}
+                    onChange={() => setRp2350BuildMode('flash')}
                   />
-                  <span>{t('settings.target.rp2350.flash.off', 'Off')}</span>
+                  <span>{t('settings.target.rp2350.mode.flash', 'Flash to cart (XIP)')}</span>
                 </label>
                 <label className="settings-checkbox">
                   <input
                     type="radio"
-                    name="rp2350FlashMethod"
-                    value="swd"
-                    checked={rp2350FlashMethod === 'swd'}
-                    onChange={() => setRp2350FlashMethod('swd')}
+                    name="rp2350BuildMode"
+                    value="sd"
+                    checked={rp2350BuildMode === 'sd'}
+                    onChange={() => setRp2350BuildMode('sd')}
                   />
-                  <span>{t('settings.target.rp2350.flash.swd', 'SWD (BIOS)')}</span>
+                  <span>{t('settings.target.rp2350.mode.sd', 'SD card (RAM-linked, for the launcher)')}</span>
                 </label>
-                <label className="settings-checkbox">
-                  <input
-                    type="radio"
-                    name="rp2350FlashMethod"
-                    value="usb"
-                    checked={rp2350FlashMethod === 'usb'}
-                    onChange={() => setRp2350FlashMethod('usb')}
-                  />
-                  <span>{t('settings.target.rp2350.flash.usb', 'USB (BOOTSEL)')}</span>
-                </label>
-                <div className="pitrex-sd-path">
-                  <input
-                    className="pitrex-sd-input"
-                    type="text"
-                    placeholder={t('settings.target.rp2350.firmwareDir.placeholder', 'Firmware directory (Rust crate with src/intro.s)')}
-                    value={rp2350FirmwareDir}
-                    onChange={e => setRp2350FirmwareDir(e.target.value)}
-                    spellCheck={false}
-                  />
-                  <button type="button" className="pitrex-sd-browse" onClick={handleBrowseRp2350Firmware}>
-                    Browse
-                  </button>
-                </div>
+
+                {rp2350BuildMode === 'flash' && (
+                  <>
+                    <span className="rp2350-flash-label">
+                      {t('settings.target.rp2350.flash.title', 'Flash on Build & Run:')}
+                    </span>
+                    <label className="settings-checkbox">
+                      <input
+                        type="radio"
+                        name="rp2350FlashMethod"
+                        value="none"
+                        checked={rp2350FlashMethod === 'none'}
+                        onChange={() => setRp2350FlashMethod('none')}
+                      />
+                      <span>{t('settings.target.rp2350.flash.off', 'Off')}</span>
+                    </label>
+                    <label className="settings-checkbox">
+                      <input
+                        type="radio"
+                        name="rp2350FlashMethod"
+                        value="swd"
+                        checked={rp2350FlashMethod === 'swd'}
+                        onChange={() => setRp2350FlashMethod('swd')}
+                      />
+                      <span>{t('settings.target.rp2350.flash.swd', 'SWD (BIOS)')}</span>
+                    </label>
+                    <label className="settings-checkbox">
+                      <input
+                        type="radio"
+                        name="rp2350FlashMethod"
+                        value="usb"
+                        checked={rp2350FlashMethod === 'usb'}
+                        onChange={() => setRp2350FlashMethod('usb')}
+                      />
+                      <span>{t('settings.target.rp2350.flash.usb', 'USB (BOOTSEL)')}</span>
+                    </label>
+                    <div className="pitrex-sd-path">
+                      <input
+                        className="pitrex-sd-input"
+                        type="text"
+                        placeholder={t('settings.target.rp2350.firmwareDir.placeholder', 'Firmware directory (Rust crate with src/intro.s)')}
+                        value={rp2350FirmwareDir}
+                        onChange={e => setRp2350FirmwareDir(e.target.value)}
+                        spellCheck={false}
+                      />
+                      <button type="button" className="pitrex-sd-browse" onClick={handleBrowseRp2350Firmware}>
+                        Browse
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {rp2350BuildMode === 'sd' && (
+                  <>
+                    <span className="rp2350-flash-label">
+                      {t('settings.target.rp2350.sd.title', 'SD card folder (auto-copy as NAME.BIN):')}
+                    </span>
+                    <div className="pitrex-sd-path">
+                      <input
+                        className="pitrex-sd-input"
+                        type="text"
+                        placeholder={t('settings.target.rp2350.sd.placeholder', 'SD card mount (e.g. /Volumes/VECTREX) — blank = build only')}
+                        value={rp2350SdPath}
+                        onChange={e => setRp2350SdPath(e.target.value)}
+                        spellCheck={false}
+                      />
+                      <button type="button" className="pitrex-sd-browse" onClick={handleBrowseRp2350SD}>
+                        Browse
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

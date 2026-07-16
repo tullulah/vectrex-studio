@@ -81,9 +81,12 @@ const ALG_UNITS_PER_COORD = 127;
 
 /** Capture rate written to the .vrec `fps` field. */
 export const CAPTURE_FPS = 15;
-/** Hard cap on recording length (seconds) — recording auto-stops here. */
-export const MAX_RECORD_SECONDS = 10;
-const MAX_FRAMES = CAPTURE_FPS * MAX_RECORD_SECONDS; // 150
+/** Safety cap on recording length (seconds). This is NOT the normal stop —
+ *  recordings are variable-length: you stop when you want with the record
+ *  toggle. It's only a runaway/OOM guard. (Firmware preview buffer is 128 KB ≈
+ *  ~25 s of dense content; longer previews truncate on real hardware.) */
+export const MAX_RECORD_SECONDS = 60;
+const MAX_FRAMES = CAPTURE_FPS * MAX_RECORD_SECONDS; // 900
 
 function clampCoord(v: number): number {
   const r = Math.round(v);

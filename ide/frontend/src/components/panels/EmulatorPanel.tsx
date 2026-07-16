@@ -438,6 +438,11 @@ export const EmulatorPanel: React.FC = () => {
         console.error('[EmulatorPanel] Failed to save recording:', res.error);
       } else {
         console.log(`[EmulatorPanel] ✓ Vector recording saved: ${path} (${vrec.frames.length} frames @ ${vrec.fps} fps)`);
+        // Also emit the hardware-compatible precompiled .vrb sibling.
+        try {
+          const vrb = await (window as any).electronAPI?.vrecCompile?.(path);
+          if (vrb?.ok) console.log(`[EmulatorPanel] ✓ Precompiled preview: ${vrb.vrbPath}`);
+        } catch { /* non-fatal */ }
       }
     } catch (e) {
       console.error('[EmulatorPanel] Failed to save recording:', e);
@@ -2627,7 +2632,8 @@ export const EmulatorPanel: React.FC = () => {
           }
         }
 
-        emuCore.loadArm(romData, elfData, canvasRef.current ?? undefined);
+        const sdSim1 = await (window as any).electronAPI?.sdSimList?.().catch(() => null);
+        emuCore.loadArm(romData, elfData, canvasRef.current ?? undefined, sdSim1?.files ?? [], sdSim1?.previews ?? {});
         console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
 
         // Clear the canvas before first rp2350 frame
@@ -3034,7 +3040,8 @@ export const EmulatorPanel: React.FC = () => {
           console.log(`[EmulatorPanel] rp2350: bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvasRef.current ? `${canvasRef.current.width}x${canvasRef.current.height}` : 'null'}`);
           if (typeof emuCore.loadArm === 'function') {
             // Pass the shared canvas so Rp2350System renders directly to it
-            emuCore.loadArm(bin, elf, canvasRef.current ?? undefined);
+            const sdSim2 = await (electronAPI as any)?.sdSimList?.().catch(() => null);
+            emuCore.loadArm(bin, elf, canvasRef.current ?? undefined, sdSim2?.files ?? [], sdSim2?.previews ?? {});
             console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
 
             // Clear the canvas before first rp2350 frame (Minestorm may have drawn there)
@@ -3519,7 +3526,7 @@ export const EmulatorPanel: React.FC = () => {
           onClick={onToggleRecording}
           title={isRecording
             ? 'Stop vector recording and save .vrec'
-            : `Record vectors to .vrec for game preview (max ${MAX_RECORD_SECONDS} s)`}
+            : `Record vectors to .vrec for game preview — stop when done (safety cap ${MAX_RECORD_SECONDS} s)`}
         >
           {isRecording ? '⏹' : '🔴'}
         </button>

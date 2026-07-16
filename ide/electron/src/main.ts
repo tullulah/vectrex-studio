@@ -1291,11 +1291,11 @@ async function flashRp2350(
 }
 
 // Exported function for direct invocation (e.g. from MCP server)
-export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string }) {
+export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string }) {
   // CRITICAL: Log received args to debug compiler selection
   console.log('[RUN] executeCompilation received args:', JSON.stringify({ ...args, saveIfDirty: args?.saveIfDirty ? '...' : undefined }));
   
-  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '', rp2350FlashMethod = 'none', rp2350FirmwareDir = '' } = args || {} as any;
+  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '', rp2350FlashMethod = 'none', rp2350FirmwareDir = '', rp2350Ram = false, rp2350SdPath = '' } = args || {} as any;
   
   console.log('[RUN] Extracted compilerBackend:', compilerBackend);
   // Surface pitrex SD flags to the output panel so they're always visible
@@ -1420,6 +1420,19 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         await fs.mkdir(outputDir, { recursive: true });
       } catch {}
     }
+
+    // "Build for SD": a RAM-linked rp2350 game (loaded off the SD by the cart
+    // launcher, entry at 0x20040000). Write it to a distinct <name>_sd.bin so it
+    // never clobbers the runnable flash .bin, and never feed it to the emulator
+    // (which runs the flash-linked image).
+    const buildForSd = target === 'rp2350' && rp2350Ram;
+    if (buildForSd) {
+      finalBinPath = finalBinPath.replace(/\.bin$/, '_sd.bin');
+      // Keep outAsm in step so the post-build ASM-generated check (and the stale-
+      // file cleanup) look for <name>_sd.asm — the name vpy_cli derives from the
+      // _sd.bin output stem — not the plain <name>.asm (which never gets written).
+      outAsm = outAsm.replace(/\.asm$/, '_sd.asm');
+    }
     
     // Build compiler arguments based on backend
     let argsv: string[];
@@ -1440,6 +1453,12 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
 
       // Target platform
       argsv.push('--target', buildTarget);
+
+      // Build for SD: link the game to run from internal SRAM (0x20040000) so
+      // the cart's SD launcher can load it.
+      if (buildForSd) {
+        argsv.push('--ram');
+      }
 
       // Always generate debug symbols
       argsv.push('--debug');
@@ -1645,6 +1664,40 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           }
         }
 
+        // A RAM-linked SD build is not runnable in the emulator (it images the
+        // flash-linked game); don't push it to the renderer or flash it. Instead
+        // copy it onto the SD card under the name the launcher expects: the
+        // uppercased project stem + ".BIN" (e.g. SnowBros -> SNOWBROS.BIN).
+        if (buildForSd) {
+          const stem = basename(binPath).replace(/_sd\.bin$/i, '');
+          const sdName = `${stem.toUpperCase()}.BIN`;
+          if (rp2350SdPath) {
+            // The SD folder must already exist — it's a mounted volume (e.g.
+            // /Volumes/VMC2), NOT something we create. If it's missing the card
+            // isn't mounted on this computer; say so plainly instead of failing
+            // with a raw ENOENT (and don't mkdir a /Volumes mount point).
+            try {
+              await fs.access(rp2350SdPath);
+            } catch {
+              mainWindow?.webContents.send('run://stderr',
+                `⚠ Built ${binPath}\n   but the SD folder "${rp2350SdPath}" isn't there — is the card mounted on this computer? Copy it manually as ${sdName}.\n`);
+              resolvePromise({ ok: true, binPath, size: buf.length, stdout: stdoutBuf, stderr: stderrBuf, savedMTime, pdbData });
+              return;
+            }
+            try {
+              const dest = join(rp2350SdPath, sdName);
+              await fs.copyFile(binPath, dest);
+              mainWindow?.webContents.send('run://status', `✅ Built for SD → ${dest} (${buf.length} bytes)`);
+            } catch (e: any) {
+              mainWindow?.webContents.send('run://stderr', `⚠ Built ${binPath} but copy to SD failed: ${e.message}\n`);
+            }
+          } else {
+            mainWindow?.webContents.send('run://status', `✅ Built for SD: ${binPath} — copy it to the card as ${sdName}`);
+          }
+          resolvePromise({ ok: true, binPath, size: buf.length, stdout: stdoutBuf, stderr: stderrBuf, savedMTime, pdbData });
+          return;
+        }
+
         // Notify renderer to load binary
         mainWindow?.webContents.send('emu://compiledBin', {
           base64, size: buf.length, binPath, pdbData,
@@ -1719,6 +1772,75 @@ ipcMain.handle('file:read', async (_e, path: string) => {
     return { path, content, mtime: stat.mtimeMs, size: stat.size, name: basename(path) };
   } catch (e:any) {
     return { error: e?.message || 'read_failed' };
+  }
+});
+
+// Precompile a .vrec (JSON) into a binary .vrb via `vpy_cli vrec-compile`.
+function vrecToVrb(cli: string, input: string, output: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn(cli, ['vrec-compile', input, output], { stdio: 'ignore' });
+    child.on('exit', (code) => resolve(code === 0));
+    child.on('error', () => resolve(false));
+  });
+}
+
+// Compile a single .vrec → its .vrb sibling (called after a recording is saved,
+// so every recording ships with its hardware-compatible binary preview).
+ipcMain.handle('vrec:compile', async (_e, vrecPath: string) => {
+  try {
+    if (!vrecPath || !vrecPath.toLowerCase().endsWith('.vrec')) return { ok: false, error: 'not a .vrec' };
+    const cli = resolveCompilerPath('buildtools');
+    if (!cli) return { ok: false, error: 'compiler not found' };
+    const vrbPath = vrecPath.slice(0, -5) + '.vrb';
+    const ok = await vrecToVrb(cli, vrecPath, vrbPath);
+    return ok ? { ok: true, vrbPath } : { ok: false, error: 'vrec-compile failed' };
+  } catch (e:any) {
+    return { ok: false, error: e?.message || 'vrec_compile_failed' };
+  }
+});
+
+// Simulated SD card for the rp2350 emulator preview: a folder in the user's
+// home (`~/VectrexStudio/sd`, created if missing). Returns the uppercase stems
+// of its *.bin files — the game list the SD_FILE_COUNT/NAME traps serve.
+ipcMain.handle('sd:simList', async () => {
+  try {
+    const dir = join(os.homedir(), 'VectrexStudio', 'sd');
+    await fs.mkdir(dir, { recursive: true });
+    const entries = await fs.readdir(dir);
+    const files = entries
+      .filter(f => !f.startsWith('.') && f.toLowerCase().endsWith('.bin'))
+      .map(f => f.slice(0, -4).toUpperCase().slice(0, 12))
+      .sort()
+      .slice(0, 24);
+    // Precompile each preview .vrec → binary .vrb (cached by mtime) and return
+    // the .vrb bytes as base64. The .vrb is the hardware-compatible format the
+    // emulator parses — the same bytes the RP2350 firmware will stream from SD.
+    const previews: Record<string, string> = {};
+    try {
+      const pdir = join(dir, 'preview');
+      const cli = resolveCompilerPath('buildtools');
+      const pentries = await fs.readdir(pdir);
+      for (const pe of pentries) {
+        if (pe.startsWith('.') || !pe.toLowerCase().endsWith('.vrec')) continue;
+        const key = pe.slice(0, -5).toUpperCase().slice(0, 12);
+        if (!files.includes(key)) continue;
+        const vrecPath = join(pdir, pe);
+        const vrbPath = vrecPath.slice(0, -5) + '.vrb';
+        try {
+          let needCompile = true;
+          try {
+            const [vs, bs] = await Promise.all([fs.stat(vrecPath), fs.stat(vrbPath)]);
+            needCompile = bs.mtimeMs < vs.mtimeMs; // rebuild if .vrb is stale
+          } catch { needCompile = true; }
+          if (needCompile && cli) await vrecToVrb(cli, vrecPath, vrbPath);
+          const vrb = await fs.readFile(vrbPath);
+          previews[key] = vrb.toString('base64');
+        } catch { /* skip this preview */ }
+      }
+    } catch { /* no preview/ subfolder */ }
+    return { ok: true, dir, files, previews };
+  } catch (e:any) {
+    return { ok: false, error: e?.message || 'sd_list_failed', files: [] as string[], previews: {} };
   }
 });
 

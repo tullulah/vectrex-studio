@@ -69,6 +69,10 @@ const SRAM_BASE   = 0x20000000;
 const SRAM_END    = 0x20080000;
 /** SRAM size: 512 KB. */
 const SRAM_SIZE   = 512 * 1024;
+/** Scratch SRAM region where the simulated SD names are written (below the
+ *  0x2007F000 VPy game-RAM area, so it never collides). SD_FILE_NAME returns
+ *  pointers here for PRINT_TEXT to read. */
+const SD_NAMES_BASE = 0x2007E000;
 
 /**
  * Offset within the flash array at which the game binary is loaded.
@@ -109,6 +113,60 @@ const MAX_CYCLES_PER_FRAME = 45_000_000;
 function armI8(r: number): number {
   const b = r & 0xFF;
   return b > 127 ? b - 256 : b;
+}
+
+/** Preview frame model decoded from a `.vrb` blob. */
+interface VrbPreview {
+  fps: number;
+  frames: Array<{ segments: Array<{ x0: number; y0: number; x1: number; y1: number; i: number }> }>;
+}
+
+/**
+ * Decode a precompiled `.vrb` (base64) into the preview frame model — reverses
+ * vpy_codegen::vrec_chain::compile_vrec_json_to_binary. This is the same binary
+ * the RP2350 firmware will stream from SD, so the emulator validates the format.
+ * Layout: "VRB1", u16 fps, u16 frame_count, u32×count offset table, then per
+ * frame: u16 chain_count, chains [start_x i8, start_y i8, i u8, seg_count u8,
+ * (dx i8, dy i8)×seg_count]. Returns null on malformed data.
+ */
+function parseVrb(b64: string): VrbPreview | null {
+  let bytes: Uint8Array;
+  try {
+    const bin = atob(b64);
+    bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  } catch { return null; }
+  if (bytes.length < 8 || bytes[0] !== 0x56 || bytes[1] !== 0x52 || bytes[2] !== 0x42 || bytes[3] !== 0x31) {
+    return null; // not "VRB1"
+  }
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const fps = dv.getUint16(4, true);
+  const frameCount = dv.getUint16(6, true);
+  const i8 = (v: number) => (v << 24) >> 24;
+  const frames: VrbPreview['frames'] = [];
+  for (let f = 0; f < frameCount; f++) {
+    let p = dv.getUint32(8 + f * 4, true);
+    const segments: VrbPreview['frames'][number]['segments'] = [];
+    if (p + 2 <= bytes.length) {
+      const chainCount = dv.getUint16(p, true); p += 2;
+      for (let c = 0; c < chainCount && p + 4 <= bytes.length; c++) {
+        let px = i8(bytes[p]);
+        let py = i8(bytes[p + 1]);
+        const inten = bytes[p + 2];
+        const segCount = bytes[p + 3];
+        p += 4;
+        for (let d = 0; d < segCount && p + 2 <= bytes.length; d++) {
+          const nx = px + i8(bytes[p]);
+          const ny = py + i8(bytes[p + 1]);
+          p += 2;
+          segments.push({ x0: px, y0: py, x1: nx, y1: ny, i: inten });
+          px = nx; py = ny;
+        }
+      }
+    }
+    frames.push({ segments });
+  }
+  return { fps, frames };
 }
 
 /**
@@ -204,6 +262,31 @@ export class Rp2350System implements ISystem, IBus {
   // Memory
   private readonly flash: Uint8Array = new Uint8Array(FLASH_SIZE);
   private readonly sram:  Uint8Array = new Uint8Array(SRAM_SIZE);
+
+  /** Simulated SD game list (the emulator has no real card). Injected by the
+   *  renderer from the ~/VectrexStudio/sd folder; backs SD_FILE_COUNT/NAME. */
+  private simSdFiles: string[] = [];
+
+  /** Set the simulated SD game list (uppercase stems, ≤12 chars each). */
+  setSimSdFiles(files: string[]): void {
+    this.simSdFiles = files.slice(0, 24).map(f => f.slice(0, 12));
+  }
+
+  /** Parsed .vrec previews from ~/VectrexStudio/sd/preview, keyed by game stem.
+   *  Backs DRAW_SD_PREVIEW; emulator-only (real HW needs precompiled previews). */
+  private simSdPreviews: Record<string, { fps: number; frames: Array<{ segments: Array<{ x0: number; y0: number; x1: number; y1: number; i: number }> }> }> = {};
+  /** Free-running preview playback tick (advances the .vrec frame at its fps). */
+  private previewTick: number = 0;
+
+  /** Set the SD previews from base64 `.vrb` blobs (the precompiled binary format
+   *  hardware also uses). Each is parsed into the frame model once here. */
+  setSimSdPreviews(previews: Record<string, string>): void {
+    this.simSdPreviews = {};
+    for (const key of Object.keys(previews || {})) {
+      const rec = parseVrb(previews[key]);
+      if (rec) this.simSdPreviews[key] = rec;
+    }
+  }
 
   // Trap table: PC value (Thumb bit already stripped) → handler
   private readonly traps: Map<number, TrapFn> = new Map();
@@ -712,6 +795,74 @@ export class Rp2350System implements ISystem, IBus {
         cpu.setReg(0, this.psg.Regs[cpu.getReg(0) & 0x0f] & 0xff);
         return 30;
       });
+    }
+
+    // SD game list — svc #17/#18. No real card in the emulator, so simulate one
+    // from `this.simSdFiles` (injected from ~/VectrexStudio/sd). SD_FILE_COUNT
+    // returns the length; SD_FILE_NAME(i) writes name[i] into a scratch SRAM
+    // slot and returns its address for PRINT_TEXT (r2 = str_ptr) to read.
+    const sdCountAddr = symbols.get('vpy_sd_count');
+    if (sdCountAddr !== undefined) {
+      this.traps.set(sdCountAddr & ~1, (cpu: Thumb2): number => {
+        cpu.setReg(0, this.simSdFiles.length >>> 0);
+        return 30;
+      });
+      console.log(`[Rp2350System] vpy_sd_count trap @ 0x${(sdCountAddr & ~1).toString(16)} (${this.simSdFiles.length} sim file(s))`);
+    }
+    const sdNameAddr = symbols.get('vpy_sd_name');
+    if (sdNameAddr !== undefined) {
+      this.traps.set(sdNameAddr & ~1, (cpu: Thumb2): number => {
+        const idx = cpu.getReg(0) >>> 0;
+        if (idx >= this.simSdFiles.length) { cpu.setReg(0, 0); return 30; }
+        const name = this.simSdFiles[idx];
+        const addr = SD_NAMES_BASE + idx * 16;
+        const off = addr - SRAM_BASE;
+        let k = 0;
+        for (; k < name.length && k < 15; k++) this.sram[off + k] = name.charCodeAt(k) & 0xff;
+        this.sram[off + k] = 0; // NUL terminator
+        cpu.setReg(0, addr >>> 0);
+        return 30;
+      });
+      console.log(`[Rp2350System] vpy_sd_name trap @ 0x${(sdNameAddr & ~1).toString(16)}`);
+    }
+
+    // vpy_draw_sd_preview(r0=index, r1=x, r2=y, r3=scale) — svc #19. Plays the
+    // current frame of game[index]'s .vrec preview, scaled by `scale` (0-128 =
+    // 0-100%) and centred at (x,y). Emulator-only; the recording advances at its
+    // own fps via a free-running tick.
+    const sdPreviewAddr = symbols.get('vpy_draw_sd_preview');
+    if (sdPreviewAddr !== undefined) {
+      this.traps.set(sdPreviewAddr & ~1, (cpu: Thumb2): number => {
+        const idx = cpu.getReg(0) | 0;
+        const ox = armI8(cpu.getReg(1));
+        const oy = armI8(cpu.getReg(2));
+        let scale = cpu.getReg(3) & 0xff;
+        if (scale === 0) scale = 64; // default ~50%
+        const name = this.simSdFiles[idx];
+        const rec = name ? this.simSdPreviews[name] : undefined;
+        if (!rec || !rec.frames || rec.frames.length === 0) return 30;
+        this.previewTick++;
+        const vf = Math.floor((this.previewTick * (rec.fps || 15)) / 50) % rec.frames.length;
+        const segs = rec.frames[vf]?.segments;
+        if (!segs) return 30;
+        for (let s = 0; s < segs.length; s++) {
+          const seg = segs[s];
+          const vx0 = ox + (seg.x0 * scale) / 128;
+          const vy0 = oy + (seg.y0 * scale) / 128;
+          const vx1 = ox + (seg.x1 * scale) / 128;
+          const vy1 = oy + (seg.y1 * scale) / 128;
+          const ax0 = ALG_CENTER_X + vx0 * ARM_ALG_SCALE;
+          const ay0 = ALG_CENTER_Y - vy0 * ARM_ALG_SCALE; // Y inverted
+          const ax1 = ALG_CENTER_X + vx1 * ARM_ALG_SCALE;
+          const ay1 = ALG_CENTER_Y - vy1 * ARM_ALG_SCALE;
+          const clipped = clipSegment(ax0, ay0, ax1, ay1);
+          if (clipped !== null) {
+            this.beam.addSegmentDirect(clipped[0], clipped[1], clipped[2], clipped[3], seg.i & 0xff);
+          }
+        }
+        return 500 + segs.length * 8;
+      });
+      console.log(`[Rp2350System] vpy_draw_sd_preview trap @ 0x${(sdPreviewAddr & ~1).toString(16)}`);
     }
 
     // vpy_move(r0=x, r1=y) — absolute beam positioning (MOVE builtin), was inline

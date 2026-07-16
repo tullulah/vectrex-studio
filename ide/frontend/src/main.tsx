@@ -59,6 +59,8 @@ function App() {
   const uvm2SdPath = useSettings(s => s.uvm2SdPath);
   const rp2350FlashMethod = useSettings(s => s.rp2350FlashMethod);
   const rp2350FirmwareDir = useSettings(s => s.rp2350FirmwareDir);
+  const rp2350SdPath = useSettings(s => s.rp2350SdPath);
+  const rp2350BuildMode = useSettings(s => s.rp2350BuildMode);
 
   const initializedRef = useRef(false);
 
@@ -379,7 +381,12 @@ function App() {
   const buildDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Función para manejar build y run
-  const handleBuild = useCallback(async (autoRun: boolean = false) => {
+  const handleBuild = useCallback(async (autoRun: boolean = false, opts?: { forSd?: boolean }) => {
+    // "Build for SD": produce a RAM-linked rp2350 game for the cart's SD launcher.
+    // Triggered either explicitly (Build menu item) or by selecting the rp2350
+    // "SD card" build mode in Settings so a normal Build/Run makes the SD binary.
+    // Never auto-run (the RAM image isn't emulatable) and never flash.
+    const forSd = !!opts?.forSd || (buildTarget === 'rp2350' && rp2350BuildMode === 'sd');
     // CRITICAL: Prevent parallel compilations - return early if already compiling
     if (isCompilingRef.current) {
       logger.debug('Build', 'Build already in progress, skipping duplicate request');
@@ -476,15 +483,17 @@ function App() {
       
       const args: any = {
         path: filePath,
-        autoStart: autoRun,
+        autoStart: forSd ? false : autoRun,
         compilerBackend, // from useSettings
-        target: buildTarget, // from useSettings
+        target: forSd ? 'rp2350' : buildTarget, // SD games are always rp2350
         pitrexCopyToSD,
         pitrexSdPath,
         uvm2CopyToSD,
         uvm2SdPath,
-        rp2350FlashMethod,
+        rp2350FlashMethod: forSd ? 'none' : rp2350FlashMethod,
         rp2350FirmwareDir,
+        rp2350Ram: forSd,
+        rp2350SdPath,
       };
 
       // If building from project, include output path
@@ -596,7 +605,7 @@ function App() {
       isCompilingRef.current = false;
       logger.debug('Build', 'Build process completed, flag cleared');
     }
-  }, [documents, compilerBackend, buildTarget, pitrexCopyToSD, pitrexSdPath, uvm2CopyToSD, uvm2SdPath, rp2350FlashMethod, rp2350FirmwareDir]);
+  }, [documents, compilerBackend, buildTarget, pitrexCopyToSD, pitrexSdPath, uvm2CopyToSD, uvm2SdPath, rp2350FlashMethod, rp2350FirmwareDir, rp2350SdPath, rp2350BuildMode]);
 
   const commandExec = useCallback(async (id: string, payload?: any) => {
     const apiFiles: any = (window as any).files;
@@ -765,6 +774,17 @@ def loop():
         }
         buildDebounceTimerRef.current = setTimeout(() => {
           handleBuild(true); // Compilar y ejecutar
+          buildDebounceTimerRef.current = null;
+        }, 0);
+        break;
+      case 'build.sd':
+        // Build a RAM-linked rp2350 game for the cart's SD launcher.
+        if (buildDebounceTimerRef.current) {
+          logger.debug('Build', 'Build-for-SD request debounced (already queued)');
+          clearTimeout(buildDebounceTimerRef.current);
+        }
+        buildDebounceTimerRef.current = setTimeout(() => {
+          handleBuild(false, { forSd: true });
           buildDebounceTimerRef.current = null;
         }, 0);
         break;
@@ -1509,6 +1529,7 @@ def loop():
           <MenuRoot label={t('menu.build', 'Build')} open={openMenu==='build'} setOpen={()=>setOpenMenu(openMenu==='build'?null:'build')}>
             <MenuItem label={`${t('build.build', 'Build')}	⌘F7`} onClick={()=>{ commandExec('build.build'); setOpenMenu(null); }} />
             <MenuItem label={`${t('build.buildAndRun', 'Build && Run')}	F5`} onClick={()=>{ commandExec('build.run'); setOpenMenu(null); }} />
+            <MenuItem label={t('build.buildForSd', 'Build for SD (RP2350)')} onClick={()=>{ commandExec('build.sd'); setOpenMenu(null); }} />
             <MenuItem label={t('build.clean', 'Clean')} onClick={()=>{ commandExec('build.clean'); setOpenMenu(null); }} />
             <MenuSeparator />
             <MenuItem label={`${t('build.targetBinary', 'Target Binary')}: ${activeBinName}`} disabled />
