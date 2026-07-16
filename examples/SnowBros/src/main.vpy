@@ -187,6 +187,7 @@ def loop():
 
 # ── Estado: título ───────────────────────────────────────────────────────────
 def state_title():
+    SET_INTENSITY(85)
     DRAW_VECTOR("init_screen", 0, 40)
     PRINT_TEXT(-70, -40, "PRESS A BUTTON")
     if J1_BUTTON_1():

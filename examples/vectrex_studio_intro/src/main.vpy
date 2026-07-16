@@ -18,6 +18,8 @@ music_on: i16 = 0       # jingle-started latch (play once)
 fade: i16 = 0           # brightness fade-in level, eases 0 -> FADE_MAX
 logo_rot: i16 = 0       # logo Y-rotation angle (0..127 = full turn)
 t: i16 = 0              # frame counter
+sel: i16 = 0            # menu: selected game index
+nav_latch: i16 = 0      # menu: joystick edge latch (one move per push)
 
 FADE_MAX: i16 = 80     # peak brightness
 SPIN_FRAMES: i16 = 128  # spin for 2 full turns (~2.56 s), covers the jingle
@@ -80,14 +82,71 @@ def loop():
 
         SET_INTENSITY(80)
         SET_TEXT_SIZE(4)
-        PRINT_TEXT(-42, 70, "GAMES")
+        PRINT_TEXT(-10, 100, "GAMES")
 
-        # NOTE: the game list (SNOW BROS / PANG / ...) is ~29 glyphs ≈ 26 ms on
-        # single-core (~1 ms/glyph via the per-glyph Reset0Ref) → overruns the
-        # 20 ms budget → flicker. The full text menu (list + nav + DRAW_RECORDING
-        # previews) is a DUAL-CORE deliverable (retained-mode engine), same as the
-        # STUDIO subtitle. Kept minimal here: title + preview box (~5.7 ms, stable).
+        # Game list from the SD card (SD_FILE_COUNT / SD_FILE_NAME). VPy owns the
+        # navigation + drawing. Up/down moves a highlighted selection; at most 5
+        # rows are shown at once, scrolling to keep the selection visible.
+        n = SD_FILE_COUNT()
+        if n == 0:
+            SET_INTENSITY(80)
+            SET_TEXT_SIZE(3)
+            PRINT_TEXT(-75, 0, "NO SD INSERTED")
+        else:
+            # --- navigation: J1 buttons 1 (up) / 2 (down), edge-latched ---
+            # Digital buttons, NOT the analog stick: reading the analog axes runs
+            # a SAR against the DAC/comparator that perturbs the PSG → speaker
+            # noise + stretched vectors every frame. Buttons are clean.
+            if J1_BUTTON_1() == 1:
+                if nav_latch == 0:
+                    sel = sel - 1
+                    nav_latch = 1
+            elif J1_BUTTON_2() == 1:
+                if nav_latch == 0:
+                    sel = sel + 1
+                    nav_latch = 1
+            else:
+                nav_latch = 0
+            if sel < 0:
+                sel = 0
+            if sel >= n:
+                sel = n - 1
+
+            # --- launch the selected game with button 4 ---
+            # LAUNCH_GAME loads <NAME>.BIN from the SD into RAM and jumps to it;
+            # it does not return. Exit back here = hold all 4 buttons ~1 s.
+            if J1_BUTTON_4() == 1:
+                LAUNCH_GAME(sel)
+
+            # --- scroll window: up to 5 rows, keeping the selection visible ---
+            top = 0
+            if n > 5:
+                top = sel - 2
+                if top < 0:
+                    top = 0
+                if top > n - 5:
+                    top = n - 5
+
+            # --- draw the visible rows; selected one is bright ---
+            SET_TEXT_SIZE(4)
+            row = 0
+            i = top
+            while i < n and row < 5:
+                y = 55 - row * 26
+                bright = 40
+                if i == sel:
+                    bright = 80
+                SET_INTENSITY(bright)
+                PRINT_TEXT(-85, y, SD_FILE_NAME(i))
+                i = i + 1
+                row = row + 1
 
         # preview box (right side)
         SET_INTENSITY(80)
-        DRAW_VECTOR("frame", 55, 0)
+        DRAW_VECTOR("frame", 55, 20)
+
+        # play the selected game's video preview inside the frame (SD .vrec).
+        # Emulator-only for now; on real HW this is a no-op until precompiled
+        # binary previews exist.
+        if n > 0:
+            DRAW_SD_PREVIEW(sel, 52, 20, 40)
