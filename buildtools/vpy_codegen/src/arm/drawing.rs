@@ -122,6 +122,12 @@ fn emit_dv_move_to() -> String {
     s.push_str("    mov     r5, r1                  @ remaining dy\n");
     s.push_str("    mov     r6, #127\n");
     s.push_str("    rsb     r7, r6, #0              @ r7 = -127\n");
+    // Iteration cap: a real (even fully-scrolled) coordinate needs a handful of
+    // steps. A garbage/huge value (e.g. an object drawn at an uninitialized
+    // position) would otherwise spin millions of times → hang. The OLD single
+    // SYS_MOVE just wrapped garbage to i8 (harmless); the cap restores that
+    // tolerance. 8 steps = ±1016 travel, far past any on/off-screen need.
+    s.push_str("    mov     r3, #8                  @ max split steps (anti-hang guard)\n");
     s.push_str("dvmt_loop:\n");
     s.push_str("    mov     r0, r4                  @ step_x = clamp(remaining_x, -127, 127)\n");
     s.push_str("    cmp     r0, r6\n    it      gt\n    movgt   r0, r6\n");
@@ -135,7 +141,10 @@ fn emit_dv_move_to() -> String {
     s.push_str("    subs    r4, r4, r0              @ remaining -= step\n");
     s.push_str("    subs    r5, r5, r1\n");
     s.push_str("    orrs    r2, r4, r5              @ both zero? → done\n");
+    s.push_str("    beq     dvmt_done\n");
+    s.push_str("    subs    r3, r3, #1              @ else step, until the cap\n");
     s.push_str("    bne     dvmt_loop\n");
+    s.push_str("dvmt_done:\n");
     s.push_str("    pop     {r2, r3, r4, r5, r6, r7, pc}\n\n");
     s
 }
