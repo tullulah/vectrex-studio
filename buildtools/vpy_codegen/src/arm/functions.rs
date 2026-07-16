@@ -326,6 +326,18 @@ fn emit_game_main(
 
     // Initialize globals
     s.push_str("    @ initialize globals\n");
+    // Resolve numeric consts so a global initialized from one (e.g.
+    // `state: i16 = STATE_TITLE`) gets initialized too — otherwise it was silently
+    // skipped and left as uninitialized RAM (garbage on a cold boot → wrong state
+    // → black screen; only "worked" after another game seeded that RAM address).
+    let const_vals: std::collections::HashMap<String, i32> = module
+        .items
+        .iter()
+        .filter_map(|it| match it {
+            Item::Const { name, value: Expr::Number(n), .. } => Some((name.to_uppercase(), *n)),
+            _ => None,
+        })
+        .collect();
     for item in &module.items {
         match item {
             Item::GlobalLet { name, value, .. } => {
@@ -369,6 +381,18 @@ fn emit_game_main(
                                 }
                             }
                             s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    str     r2, [r1]\n"));
+                        }
+                        Expr::Ident(info) => {
+                            // Global initialized from a numeric const, e.g.
+                            // `state: i16 = STATE_TITLE`. Resolve and emit it.
+                            if let Some(&n) = const_vals.get(&info.name.to_uppercase()) {
+                                let mov = if (0..=65535).contains(&n) {
+                                    format!("    mov     r0, #{n}\n")
+                                } else {
+                                    format!("    ldr     r0, ={n}\n")
+                                };
+                                s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n{mov}    str     r0, [r1]\n"));
+                            }
                         }
                         _ => {}
                     }

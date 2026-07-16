@@ -2411,6 +2411,21 @@ fn emit_draw_anim() -> String {
     s.push_str("    ldrb    r6, [r5]                    @ frame_idx\n");
     s.push_str("    ldrb    r7, [r5, #1]                @ ticks_left (0=uninitialized)\n");
 
+    // Guard a STALE frame_idx. The anim state (frame_idx, ticks_left) is shared
+    // between a player's animations (e.g. player_walk vs player_idle), which have
+    // different frame counts. If a longer anim left frame_idx past THIS anim's
+    // frame_count, dar_draw_frame indexes past its frame table → a garbage frame
+    // ptr → garbage vec ptr → bus fault (the star_hop crash on walk→idle). Clamp
+    // to frame 0 and zero ticks so dar_tick re-inits this frame cleanly.
+    s.push_str("    ldrb    r8, [r4]                    @ frame_count of THIS anim\n");
+    s.push_str("    cmp     r6, r8\n");
+    s.push_str("    bcc     dar_idx_ok                  @ frame_idx < frame_count (unsigned) → ok\n");
+    s.push_str("    mov     r6, #0\n");
+    s.push_str("    mov     r7, #0\n");
+    s.push_str("    strb    r6, [r5]\n");
+    s.push_str("    strb    r7, [r5, #1]\n");
+    s.push_str("dar_idx_ok:\n");
+
     // Draw base_refs every frame
     s.push_str("    ldrb    r8, [r4, #2]                @ base_ref_count\n");
     s.push_str("    cmp     r8, #0\n");
