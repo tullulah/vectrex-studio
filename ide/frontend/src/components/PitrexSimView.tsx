@@ -65,6 +65,9 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
   const disposedRef = useRef<boolean>(false);
   const startMsRef = useRef<number>(Date.now());
   const moduleRef = useRef<any>(null);
+  // AY-3-8910 audio on an AudioWorklet (audio thread — a synth stall can't
+  // freeze the UI). Holds { ctx, node, resume } once set up.
+  const audioRef = useRef<any>(null);
   const log = useRef(onLog);
   log.current = onLog;
 
@@ -163,13 +166,42 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       joyX: () => controllerRef.current.joyX,
       joyY: () => controllerRef.current.joyY,
       millis: () => (Date.now() - startMsRef.current) | 0,
-      // Audio: the AY register writes are surfaced for future wiring. Kept a
-      // no-op here so the sim is silent rather than mis-driving WebAudio.
-      soundAY: (_reg: number, _val: number) => { /* TODO: PSG synth */ },
+      // Audio: forward AY-3-8910 register writes to the AudioWorklet synth.
+      soundAY: (reg: number, val: number) => {
+        if (disposedRef.current) return;
+        const a = audioRef.current;
+        if (a) a.node.port.postMessage({ type: 'reg', reg: reg & 0x0f, val: val & 0xff });
+      },
     };
 
     (async () => {
       try {
+        // Set up AY-3-8910 audio on an AudioWorklet (audio thread). Best-effort:
+        // failure here must never block the game from loading.
+        try {
+          const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
+          if (AC) {
+            const ctx = new AC({ sampleRate: 44100 });
+            const workletUrl = new URL('ay8910-worklet.js', document.baseURI).href;
+            await ctx.audioWorklet.addModule(workletUrl);
+            if (!cancelled && !disposedRef.current) {
+              const node = new AudioWorkletNode(ctx, 'ay8910', {
+                numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1],
+              });
+              node.connect(ctx.destination);
+              // Browsers gate audio until a user gesture; resume on the next one.
+              const resume = () => { if (ctx.state !== 'running') ctx.resume().catch(() => {}); };
+              document.addEventListener('keydown', resume);
+              document.addEventListener('click', resume);
+              audioRef.current = { ctx, node, resume };
+            } else {
+              ctx.close?.();
+            }
+          }
+        } catch (e: any) {
+          log.current?.(`[PiTrex simulator] audio unavailable: ${e?.message || e}`);
+        }
+
         const files = (window as any).files;
         if (!files?.readFile || !files?.readFileBin) {
           throw new Error('file IPC unavailable');
@@ -269,6 +301,18 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       // present(). The module instance is then dropped for GC.
       disposedRef.current = true;
       moduleRef.current = null;
+      // Tear down the AY worklet + its AudioContext so repeated Build & Run
+      // doesn't leak audio nodes.
+      try {
+        const a = audioRef.current;
+        if (a) {
+          document.removeEventListener('keydown', a.resume);
+          document.removeEventListener('click', a.resume);
+          a.node?.disconnect?.();
+          a.ctx?.close?.();
+        }
+      } catch { /* ignore */ }
+      audioRef.current = null;
     };
   }, [modulePath]);
 
