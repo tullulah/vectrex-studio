@@ -312,12 +312,20 @@ function parseMemOp(
     const inc = incStr.startsWith('0x') ? parseInt(incStr.slice(2), 16) : parseInt(incStr, 10);
     return { addr: getReg(s, rn), postIncReg: rn, postIncVal: inc };
   }
-  // Offset: "[r1, #8]"
-  const offMatch = tok.match(/^\[(\w+)\s*,\s*#(-?(?:0x[\da-fA-F]+|\d+))\]/);
+  // Offset: "[r1, #8]", with optional PRE-INDEX WRITEBACK "[r1, #8]!".
+  // Writeback: effective address = rn+imm AND rn is updated to rn+imm. gcc emits
+  // this for pointer-advance loops — libvpy's font renderer walks the glyph
+  // stream with `ldrsb r3, [r4, #3]!` and the string with `ldrb r3, [r7, #1]!`,
+  // and pushes with `str rX, [sp, #-4]!`. Reuse the post-inc machinery (applied
+  // to the OLD rn) so rn ends at rn+imm. Without the writeback the pointers never
+  // advance and font_draw_string spins forever (~2.4M segments/frame).
+  const offMatch = tok.match(/^\[(\w+)\s*,\s*#(-?(?:0x[\da-fA-F]+|\d+))\](!?)/);
   if (offMatch) {
     const rn  = regIdx(offMatch[1]);
     const off = offMatch[2].startsWith('0x') ? parseInt(offMatch[2].slice(2), 16) : parseInt(offMatch[2], 10);
-    return { addr: (getReg(s, rn) + off) | 0, postIncReg: -1, postIncVal: 0 };
+    const addr = (getReg(s, rn) + off) | 0;
+    if (offMatch[3] === '!') return { addr, postIncReg: rn, postIncVal: off };
+    return { addr, postIncReg: -1, postIncVal: 0 };
   }
   // Scaled register offset: "[r3, r2, lsl #1]" (also lsr/asr). gcc emits this
   // for indexed byte/word array access (e.g. libvpy's music sequencer next-delay
