@@ -1018,9 +1018,84 @@ fn build_center_overrides(
 //   when 0 it fires the event at PSG_MUSIC_PTR, then reads delay from NEXT event.
 //   So delay_byte D means "N+1 frames after current event, fire next event".
 
+/// One event (or terminator) in a compiled PSG stream.
+struct CompiledEvent {
+    delay: u8,
+    num_writes_byte: u8,      // real event = writes.len(); 0xFF = loop marker; 0 = end
+    writes: Vec<(u8, u8)>,    // empty for terminators
+    comment: String,
+}
+
+/// A compiled PSG event stream (music or SFX). This is the SINGLE shared
+/// artifact behind BOTH the ARM/PiTrex `.byte`/`.word` asm emission AND the
+/// C-header / raw-byte emission used by the C (vpy.h) runtime. `header_words`
+/// are little-endian `.word`s (4 bytes each); events are `.byte`s. `to_bytes()`
+/// and `to_asm()` are two views of the exact same data.
+struct CompiledStream {
+    header_words: Vec<(u32, String)>,   // (value, comment)
+    events: Vec<CompiledEvent>,
+}
+
+impl CompiledStream {
+    /// Little-endian byte image (header words expanded LE), exactly what the
+    /// runtime sequencer reads at run time.
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut b = Vec::new();
+        for (w, _) in &self.header_words {
+            b.extend_from_slice(&w.to_le_bytes());
+        }
+        for e in &self.events {
+            b.push(e.delay);
+            b.push(e.num_writes_byte);
+            for (r, v) in &e.writes {
+                b.push(*r);
+                b.push(*v);
+            }
+        }
+        b
+    }
+
+    /// ARM/PiTrex assembly view (`.word` header + `.byte` events). Byte-identical
+    /// to `to_bytes()` once assembled.
+    fn to_asm(&self, global_label: &str) -> String {
+        let mut s = String::new();
+        s.push_str(&format!(".global {global_label}\n{global_label}:\n"));
+        for (w, comment) in &self.header_words {
+            s.push_str(&format!("    .word   {}           @ {}\n", w, comment));
+        }
+        for e in &self.events {
+            s.push_str(&format!("    .byte   {}, {}  @ {}\n", e.delay, e.num_writes_byte, e.comment));
+            for (reg, val) in &e.writes {
+                s.push_str(&format!("    .byte   {}, {}  @ PSG r{}\n", reg, val, reg));
+            }
+        }
+        s.push('\n');
+        s
+    }
+}
+
+/// Parse a `.vmus` file and return its compiled little-endian PSG byte stream.
+/// Reuses the exact notes→PSG compiler used for the ARM/PiTrex asm backend, so
+/// the C runtime plays byte-for-byte the same music the hardware does.
+pub fn compile_vmus_file_to_bytes(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let vmus: VmusResource = serde_json::from_str(&text)
+        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    Ok(vmus_stream(&vmus).to_bytes())
+}
+
 fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let stream = vmus_stream(vmus);
+    let num_events = stream.header_words.first().map(|(w, _)| *w).unwrap_or(0);
+    let mut s = String::new();
+    s.push_str(&format!("@ --- {} MUSIC ({} events) ---\n", override_name, num_events));
+    s.push_str(&stream.to_asm(&format!("_{sym}_MUSIC")));
+    s
+}
 
+/// Compile a parsed `.vmus` into a `CompiledStream` (notes → PSG event bytes).
+fn vmus_stream(vmus: &VmusResource) -> CompiledStream {
     // Timing conversion: ticks → frames @ 50 fps
     // PiTrex hardware refreshes at 50 Hz (v_setRefresh(50)).
     let ticks_per_sec = vmus.tempo / 60.0 * vmus.ticks_per_beat;
@@ -1157,14 +1232,8 @@ fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
         loop_byte_offset += 2 + 2 * writes.len() as u32; // delay + num_writes + N×(reg,val)
     }
 
-    // ── Emit assembly ────────────────────────────────────────────────────────
-    let mut s = String::new();
-    s.push_str(&format!("@ --- {} MUSIC ({} events, loop@{}) ---\n",
-        override_name, events.len(), loop_start_frame));
-    s.push_str(&format!(".global _{sym}_MUSIC\n_{sym}_MUSIC:\n"));
-    s.push_str(&format!("    .word   {}           @ num_events\n", events.len()));
-    s.push_str(&format!("    .word   {}           @ loop_event_byte_offset from base\n", loop_byte_offset));
-
+    // ── Build CompiledStream (shared asm + byte serialization) ───────────────
+    let mut cevents: Vec<CompiledEvent> = Vec::new();
     let mut prev_frame: u32 = 0;
     for (i, (frame, writes)) in events.iter().enumerate() {
         // delay_byte: read by previous event handler to set PSG_DELAY_FRAMES.
@@ -1176,29 +1245,46 @@ fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
         } else {
             (*frame - prev_frame).saturating_sub(1).min(255) as u8
         };
-        s.push_str(&format!("    .byte   {}, {}  @ frame={} delay={} writes={}\n",
-            delay_byte, writes.len(), frame, delay_byte, writes.len()));
-        for (reg, val) in writes {
-            s.push_str(&format!("    .byte   {}, {}  @ PSG r{}\n", reg, val, reg));
-        }
+        cevents.push(CompiledEvent {
+            delay: delay_byte,
+            num_writes_byte: writes.len() as u8,
+            writes: writes.clone(),
+            comment: format!("frame={} delay={} writes={}", frame, delay_byte, writes.len()),
+        });
         prev_frame = *frame;
     }
 
     // Terminator: loop marker (0xFF) if the track loops, else end marker (num_writes=0).
-    // The end marker mirrors the SFX terminator (".byte 0, 0"); the runtime stops
-    // playback on num_writes=0, leaving the PSG silent (note-off frames already
-    // wrote volume=0 before the terminator).
+    // The end marker mirrors the SFX terminator; the runtime stops playback on
+    // num_writes=0, leaving the PSG silent (note-off frames already wrote
+    // volume=0 before the terminator).
     if vmus.r#loop {
         // Loop marker: fires at loopEnd, jumps back to loop_event_byte_offset
         let last_event_frame = events.last().map(|(f, _)| *f).unwrap_or(0);
         let loop_marker_delay = loop_end_frame.saturating_sub(last_event_frame).saturating_sub(1).min(255) as u8;
-        s.push_str(&format!("    .byte   {}, 0xFF   @ loop back (fires frame ~{})\n",
-            loop_marker_delay, loop_end_frame));
+        cevents.push(CompiledEvent {
+            delay: loop_marker_delay,
+            num_writes_byte: 0xFF,
+            writes: Vec::new(),
+            comment: format!("loop back (fires frame ~{})", loop_end_frame),
+        });
     } else {
-        s.push_str("    .byte   0, 0   @ end (no loop)\n");
+        cevents.push(CompiledEvent {
+            delay: 0,
+            num_writes_byte: 0,
+            writes: Vec::new(),
+            comment: "end (no loop)".to_string(),
+        });
     }
-    s.push('\n');
-    s
+
+    let _ = loop_start_frame;
+    CompiledStream {
+        header_words: vec![
+            (events.len() as u32, "num_events".to_string()),
+            (loop_byte_offset, "loop_event_byte_offset from base".to_string()),
+        ],
+        events: cevents,
+    }
 }
 
 // ============================================================
@@ -1212,9 +1298,27 @@ fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
 // Same per-event format as music. No loop marker; ends with num_writes=0.
 // Per-frame events: delay=0 between consecutive frames.
 
+/// Parse a `.vsfx` file and return its compiled little-endian PSG byte stream.
+/// Reuses the exact ADSR/arpeggio→PSG compiler used for the ARM/PiTrex backend.
+pub fn compile_vsfx_file_to_bytes(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let vsfx: VsfxResource = serde_json::from_str(&text)
+        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    Ok(vsfx_stream(&vsfx).to_bytes())
+}
+
 fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let stream = vsfx_stream(vsfx);
+    let num_events = stream.header_words.first().map(|(w, _)| *w).unwrap_or(0);
+    let mut s = String::new();
+    s.push_str(&format!("@ --- {} SFX ({} events) ---\n", override_name, num_events));
+    s.push_str(&stream.to_asm(&format!("_{sym}_SFX")));
+    s
+}
 
+/// Compile a parsed `.vsfx` into a `CompiledStream` (ADSR/arpeggio → PSG bytes).
+fn vsfx_stream(vsfx: &VsfxResource) -> CompiledStream {
     // Force SFX onto channel C (regs 4/5 period, 10 volume) so it cannot
     // overwrite music playing on channels A/B. Matches M6809 sfx_doframe.
     let _ = vsfx.oscillator.channel;
@@ -1356,13 +1460,8 @@ fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
         frame_events.push((mute_frame, mute));
     }
 
-    // ── Emit ─────────────────────────────────────────────────────────────────
-    let mut s = String::new();
-    s.push_str(&format!("@ --- {} SFX ({} frames, {} events) ---\n",
-        override_name, total_frames, frame_events.len()));
-    s.push_str(&format!(".global _{sym}_SFX\n_{sym}_SFX:\n"));
-    s.push_str(&format!("    .word   {}  @ num_events\n", frame_events.len()));
-
+    // ── Build CompiledStream (shared asm + byte serialization) ───────────────
+    let mut cevents: Vec<CompiledEvent> = Vec::new();
     let mut prev_frame: u32 = 0;
     for (i, (frame, writes)) in frame_events.iter().enumerate() {
         let delay_byte: u8 = if i == 0 {
@@ -1370,16 +1469,27 @@ fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
         } else {
             (*frame - prev_frame).saturating_sub(1).min(255) as u8
         };
-        s.push_str(&format!("    .byte   {}, {}  @ frame={}\n",
-            delay_byte, writes.len(), frame));
-        for (reg, val) in writes {
-            s.push_str(&format!("    .byte   {}, {}  @ PSG r{}\n", reg, val, reg));
-        }
+        cevents.push(CompiledEvent {
+            delay: delay_byte,
+            num_writes_byte: writes.len() as u8,
+            writes: writes.clone(),
+            comment: format!("frame={}", frame),
+        });
         prev_frame = *frame;
     }
     // End marker
-    s.push_str("    .byte   0, 0  @ end\n\n");
-    s
+    cevents.push(CompiledEvent {
+        delay: 0,
+        num_writes_byte: 0,
+        writes: Vec::new(),
+        comment: "end".to_string(),
+    });
+
+    let _ = total_frames;
+    CompiledStream {
+        header_words: vec![(frame_events.len() as u32, "num_events".to_string())],
+        events: cevents,
+    }
 }
 
 // ============================================================

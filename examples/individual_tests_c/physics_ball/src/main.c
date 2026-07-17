@@ -1,11 +1,16 @@
 /* physics_ball — C port of examples/individual_tests/physics_ball (VPy).
  * The gravity/bounce/joystick physics is procedural and ported faithfully.
- * Asset-backed lines are out of scope for the vpy.h runtime:
- *   - PLAY_MUSIC("music1") / PLAY_SFX("jump"|"hit") dropped (no asset audio).
- *   - DRAW_VECTOR("bubble_medium", bx, by) replaced with DRAW_CIRCLE so the
- *     bouncing ball stays visible. */
+ * Audio is restored via the vpy.h compiled-asset sequencer:
+ *   - PLAY_MUSIC(MUSIC1_music) at startup (music1.vmus)
+ *   - PLAY_SFX(JUMP_sfx) on jump, PLAY_SFX(HIT_sfx) on bounce (jump/hit .vsfx)
+ * The .vmus/.vsfx are compiled to gen headers by `vpy_cli compile-asset` (common.mk).
+ * DRAW_VECTOR("bubble_medium", bx, by) is replaced with DRAW_CIRCLE so the
+ * bouncing ball stays visible (asset vectors are out of scope for vpy.h). */
 #define VPY_SHORT_NAMES
 #include <vpy.h>
+#include "music1.h"   /* MUSIC1_music[] */
+#include "jump.h"     /* JUMP_sfx[]     */
+#include "hit.h"      /* HIT_sfx[]      */
 
 static int bx = 0, by = 60;
 static int vx = 1, vy = 0;
@@ -13,7 +18,7 @@ static int jx = 0;
 
 static void setup(void)
 {
-    /* PLAY_MUSIC("music1") — asset audio, out of scope */
+    PLAY_MUSIC(MUSIC1_music);
     bx = 0; by = 60;
     vx = 1; vy = 0;
 }
@@ -34,7 +39,7 @@ static void loop(void)
     /* Jump button */
     if (vpy_j1_button(1)) {
         vy = 8;
-        /* PLAY_SFX("jump") — asset audio, out of scope */
+        PLAY_SFX(JUMP_sfx);
     }
 
     /* Clamp horizontal velocity */
@@ -50,7 +55,7 @@ static void loop(void)
         by = -90;
         vy = 0 - vy;
         if (vy > 12) vy = 12;
-        /* PLAY_SFX("hit") — asset audio, out of scope */
+        PLAY_SFX(HIT_sfx);
     }
 
     /* Ceiling bounce */
@@ -63,12 +68,12 @@ static void loop(void)
     if (bx > 100) {
         bx = 100;
         vx = 0 - vx;
-        /* PLAY_SFX("hit") — asset audio, out of scope */
+        PLAY_SFX(HIT_sfx);
     }
     if (bx < -100) {
         bx = -100;
         vx = 0 - vx;
-        /* PLAY_SFX("hit") — asset audio, out of scope */
+        PLAY_SFX(HIT_sfx);
     }
 
     /* Draw ball (was DRAW_VECTOR("bubble_medium", bx, by)) */

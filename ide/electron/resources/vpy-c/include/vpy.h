@@ -62,6 +62,18 @@ void vpy_seed(unsigned s);
 void vpy_beep(int on);
 void vpy_tone(int period, int volume); /* period 12-bit, volume 0..15; 0 vol = off */
 
+/* ---- compiled music / SFX playback ---------------------------------------
+ * `data` is a PSG event stream compiled from a .vmus/.vsfx by
+ *   `vpy_cli compile-asset <file> --format c --out <name>.h`
+ * (same notes->PSG compiler as the ARM/PiTrex backend). A simple 50 Hz
+ * sequencer walks the stream, writing PSG registers via v_setSoundAY each frame.
+ * vpy_run() drives vpy_music_update()/vpy_sfx_update() automatically. */
+void vpy_play_music(const unsigned char *data);  /* start/replace music playback */
+void vpy_music_update(void);                      /* advance one frame (auto-called) */
+void vpy_stop_music(void);                         /* mute channels + stop */
+void vpy_play_sfx(const unsigned char *data);     /* trigger a one-shot SFX (channel C) */
+void vpy_sfx_update(void);                         /* advance one frame (auto-called) */
+
 /* Optional VPy-style uppercase aliases so migrated .vpy reads naturally. */
 #ifdef VPY_SHORT_NAMES
 #define SET_INTENSITY   vpy_set_intensity
@@ -77,6 +89,9 @@ void vpy_tone(int period, int volume); /* period 12-bit, volume 0..15; 0 vol = o
 #define PRINT_NUMBER    vpy_print_number
 #define J1_X            vpy_j1_x
 #define J1_Y            vpy_j1_y
+#define PLAY_MUSIC      vpy_play_music
+#define STOP_MUSIC      vpy_stop_music
+#define PLAY_SFX        vpy_play_sfx
 #endif
 
 #ifdef __cplusplus

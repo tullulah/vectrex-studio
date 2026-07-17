@@ -42,7 +42,7 @@ void vpy_init(void)
     ensure_tables();
     vectrexinit(1);
     v_init();
-    v_setRefresh(60);
+    v_setRefresh(50);   /* Vectrex refresh; .vmus/.vsfx are compiled at 50 fps */
 }
 
 void vpy_frame_begin(void)
@@ -61,6 +61,10 @@ void vpy_run(void (*setup)(void), void (*loop)(void))
     if (setup) setup();
     for (;;) {
         vpy_frame_begin();
+        /* VPy auto-injects MUSIC_UPDATE at loop start — mirror that here so
+         * games don't have to call the sequencers manually. */
+        vpy_music_update();
+        vpy_sfx_update();
         if (loop) loop();
     }
 }
@@ -267,3 +271,126 @@ void vpy_tone(int period, int volume)
     v_setSoundAY(7, 0x3e);           /* enable tone A only */
 }
 void vpy_beep(int on) { if (on) vpy_tone(0xD5, 0x0f); else vpy_tone(0, 0); }
+
+/* ---- compiled music / SFX sequencer -----------------------------------------
+ * Plays a compiled PSG event stream (see compile-asset). Byte format (LE):
+ *   MUSIC: [0..4]=num_events, [4..8]=loop_event_byte_offset, events at base+8.
+ *   SFX:   [0..4]=num_events, events at base+4.
+ *   event = [delay, num_writes, (reg,val)*num_writes]
+ *          num_writes==0xFF -> loop (music), ==0 -> end.
+ * Sequencer model (mirrors the ARM pitrex_music_update / pitrex_sfx_update):
+ *   the FIRST event fires immediately (delay starts 0); each event's own delay
+ *   byte is the wait BEFORE the NEXT event, read after the current one fires. */
+
+static const unsigned char *s_mus_base = 0;   /* stream base (for loop) */
+static const unsigned char *s_mus_ptr  = 0;   /* cursor: current event */
+static int s_mus_playing = 0;
+static int s_mus_delay   = 0;                  /* frames left before next event */
+
+static const unsigned char *s_sfx_ptr = 0;
+static int s_sfx_active = 0;
+static int s_sfx_delay  = 0;
+
+/* Shadow of PSG mixer reg 7 so SFX (channel C) can read-modify-write it without
+ * silencing music on channels A/B (the ARM runtime read-modify-writes reg 7). */
+static uint8_t s_psg_mixer = 0x3f;
+
+static uint32_t rd_le32(const unsigned char *p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8)
+         | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+/* Write a PSG register, tracking the mixer shadow. */
+static void psg_write(uint8_t reg, uint8_t val)
+{
+    if (reg == 7) s_psg_mixer = val;
+    v_setSoundAY(reg, val);
+}
+
+void vpy_play_music(const unsigned char *data)
+{
+    if (!data) return;
+    /* Guard: same track already playing -> no-op (prevents per-frame restart). */
+    if (s_mus_playing && s_mus_base == data) return;
+    s_mus_base    = data;
+    s_mus_ptr     = data + 8;   /* first event follows the 8-byte header */
+    s_mus_playing = 1;
+    s_mus_delay   = 0;          /* first event fires immediately */
+}
+
+void vpy_stop_music(void)
+{
+    s_mus_playing = 0;
+    psg_write(8, 0);            /* channel A volume */
+    psg_write(9, 0);            /* channel B volume */
+    psg_write(10, 0);           /* channel C volume */
+    psg_write(7, 0x3f);         /* mixer: all disabled */
+}
+
+void vpy_music_update(void)
+{
+    if (!s_mus_playing || !s_mus_ptr) return;
+    if (s_mus_delay > 0) { s_mus_delay--; return; }
+
+    const unsigned char *p = s_mus_ptr;
+    uint8_t num_writes = p[1];
+
+    if (num_writes == 0x00) {          /* end marker */
+        vpy_stop_music();
+        return;
+    }
+    if (num_writes == 0xff) {          /* loop marker */
+        uint32_t off = rd_le32(s_mus_base + 4);
+        s_mus_ptr   = s_mus_base + off;
+        s_mus_delay = s_mus_ptr[0];    /* delay of the loop-start event */
+        return;
+    }
+
+    /* Fire this event: write each (reg,val) pair. */
+    const unsigned char *w = p + 2;
+    for (uint8_t i = 0; i < num_writes; i++) {
+        psg_write(w[0], w[1]);
+        w += 2;
+    }
+    /* Advance to next event; its delay byte is the wait before it fires. */
+    s_mus_ptr   = w;
+    s_mus_delay = w[0];
+}
+
+void vpy_play_sfx(const unsigned char *data)
+{
+    if (!data) return;
+    s_sfx_ptr    = data + 4;   /* first event follows the 4-byte header */
+    s_sfx_active = 1;
+    s_sfx_delay  = 0;
+}
+
+void vpy_sfx_update(void)
+{
+    if (!s_sfx_active || !s_sfx_ptr) return;
+    if (s_sfx_delay > 0) { s_sfx_delay--; return; }
+
+    const unsigned char *p = s_sfx_ptr;
+    uint8_t num_writes = p[1];
+
+    if (num_writes == 0x00) {          /* end of SFX */
+        psg_write(10, 0);              /* mute channel C */
+        s_sfx_active = 0;
+        return;
+    }
+
+    const unsigned char *w = p + 2;
+    for (uint8_t i = 0; i < num_writes; i++) {
+        uint8_t reg = w[0], val = w[1];
+        if (reg == 7) {
+            /* Merge only channel-C mixer bits (0x24) from the SFX; keep the
+             * music's A/B bits from the current mixer shadow. */
+            val = (uint8_t)((s_psg_mixer & 0xdb) | (val & 0x24));
+        }
+        psg_write(reg, val);
+        w += 2;
+    }
+    s_sfx_ptr   = w;
+    s_sfx_delay = w[0];
+}
