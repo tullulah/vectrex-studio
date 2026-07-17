@@ -665,6 +665,96 @@ int vpy_get_level_floor_y(void)
     return s_cam_y - 128 + (int)rd_i16(s_level + 32);
 }
 
+/* Bit-exact ports of pitrex_level_collision_y / _x, reading the position-
+ * independent collision mesh (object +16 = byte offset from the level base, 0 =
+ * AABB fallback). Mesh block: u32 floor_count; floors[](i16 x1,y1,x2,y2);
+ * u32 wall_count; walls[](i16 x,y_min,x,y_max). GP object mutable position comes
+ * from s_gp_buf; half_w/half_h/flags/mesh from the level image (single state). */
+int vpy_level_collision_y(int px, int py, int hh)
+{
+    const unsigned char *lvl = s_level;
+    if (!lvl || s_gp_count == 0) return -10000;
+    int player_feet = py - hh;
+    const unsigned char *o = lvl + rd_le32(lvl + 16);   /* GP ROM objects */
+    int best = -32767;
+    for (int i = 0; i < s_gp_count; i++, o += 20) {
+        if (!(o[6] & 0x10)) continue;                    /* collidable */
+        int half_w = o[12];
+        int ox = s_gp_buf[i][0];
+        int dxb = px - ox; if (dxb < 0) dxb = -dxb;
+        if (dxb > half_w) continue;                      /* x broadphase */
+        uint32_t mesh_off = rd_le32(o + 16);
+        if (mesh_off != 0) {
+            const unsigned char *m = lvl + mesh_off;
+            int seg_count = (int)rd_le32(m); m += 4;
+            int local_px = px - s_gp_buf[i][0];
+            int obj_world_y = s_gp_buf[i][1];
+            for (int s = 0; s < seg_count; s++, m += 8) {
+                int x1 = rd_i16(m), y1 = rd_i16(m + 2), x2 = rd_i16(m + 4), y2 = rd_i16(m + 6);
+                if (y1 != y2) continue;                  /* non-horizontal */
+                int lo = x1 < x2 ? x1 : x2, hi = x1 < x2 ? x2 : x1;
+                if (local_px < lo || local_px > hi) continue;
+                int world_seg_y = y1 + obj_world_y;
+                if (world_seg_y > player_feet) continue; /* above feet */
+                if (world_seg_y <= best) continue;       /* not better */
+                best = world_seg_y;
+            }
+        } else {
+            int obj_top = s_gp_buf[i][1] + o[13];         /* world_y + half_h */
+            int player_center = player_feet + hh;
+            if (obj_top > player_center) continue;
+            if (obj_top <= best) continue;
+            best = obj_top;
+        }
+    }
+    if (best == -32767) return -10000;
+    return best + hh;
+}
+
+int vpy_level_collision_x(int px, int py, int hw, int hy)
+{
+    const unsigned char *lvl = s_level;
+    if (!lvl || s_gp_count == 0) return 0;
+    const unsigned char *o = lvl + rd_le32(lvl + 16);
+    int best = 0;
+    for (int i = 0; i < s_gp_count; i++, o += 20) {
+        if (!(o[6] & 0x10)) continue;                    /* collidable */
+        uint32_t mesh_off = rd_le32(o + 16);
+        if (mesh_off != 0) {
+            const unsigned char *m = lvl + mesh_off;
+            int floor_count = (int)rd_le32(m); m += 4;
+            m += floor_count * 8;                        /* skip floors */
+            int wall_count = (int)rd_le32(m); m += 4;
+            for (int w = 0; w < wall_count; w++, m += 8) {
+                int wx = rd_i16(m), wy_min = rd_i16(m + 2), wy_max = rd_i16(m + 6);
+                int owx = s_gp_buf[i][0], owy = s_gp_buf[i][1];
+                int world_wall_x = wx + owx;
+                int world_y_min = wy_min + owy, world_y_max = wy_max + owy;
+                if (py <= world_y_min - hy) continue;    /* below wall */
+                if (py >= world_y_max + hy) continue;    /* above wall */
+                int dxr = px - world_wall_x;
+                int adx = dxr < 0 ? -dxr : dxr;
+                if (adx >= hw) continue;
+                int push = hw - adx;
+                if (dxr < 0) push = -push;
+                best = push;
+            }
+        } else {
+            int obj_hh = o[13], owy = s_gp_buf[i][1];
+            int dy = py - owy, ady = dy < 0 ? -dy : dy;
+            if (ady >= obj_hh + hy) continue;            /* y-overlap */
+            int obj_hw = o[12], owx = s_gp_buf[i][0];
+            int dxr = px - owx, total_hw = hw + obj_hw;
+            int adxr = dxr < 0 ? -dxr : dxr;
+            if (adxr >= total_hw) continue;              /* x-overlap */
+            int push = total_hw - adxr;
+            if (dxr < 0) push = -push;
+            best = push;
+        }
+    }
+    return best;
+}
+
 /* no-tree-vectorize: at -Ofast/armv8 gcc auto-vectorizes the 8-byte GP-object
  * copy (x,y,vx,vy → s_gp_buf) into NEON `vldr d16 / vst1.64 {d16},[r2:64]!`.
  * That is the ONLY NEON in all of libvpy, and the VPy PitrexArm32 sim (which

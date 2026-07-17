@@ -114,6 +114,8 @@ int  vpy_get_scroll_limit_right(void);
 int  vpy_get_scroll_limit_top(void);
 int  vpy_get_scroll_limit_bottom(void);
 int  vpy_get_level_floor_y(void);
+int  vpy_level_collision_y(int px, int py, int hh);
+int  vpy_level_collision_x(int px, int py, int hw, int hy);
 
 /* Enemy runtime (Phase 2 of the LEVELS bridge; not yet codegen-wired). `img` is
  * a position-independent `_NAME_ENEMIES_C` image; `sprites[i]` a `_{SPRITE}_VEC`

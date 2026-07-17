@@ -1853,6 +1853,21 @@ impl VPlayLevel {
     ///   +24 scrollLeft i16 +26 scrollRight i16 +28 scrollTop i16 +30 scrollBottom i16
     ///   +32 groundBottomOffset i16  +34 pad u16
     pub fn compile_to_c_bytes(&self) -> (Vec<u8>, Vec<String>) {
+        self.compile_to_c_bytes_with_meshes(&HashMap::new())
+    }
+
+    /// As `compile_to_c_bytes`, but also emits per-object COLLISION MESHES
+    /// position-independently: each object's `coll_mesh_ptr` (+16) becomes a byte
+    /// OFFSET from the image base to a mesh block appended after the object
+    /// arrays (0 = AABB fallback / no mesh). Mesh block (LE), identical layout to
+    /// the inline `_COLMESH_*`:
+    ///   u32 floor_count; per floor: i16 x1, y1, x2, y2  (y1==y2, horizontal)
+    ///   u32 wall_count;  per wall:  i16 x, y_min, x, y_max
+    /// `vpy_level_collision_x/y` read it via `s_level + coll_mesh_off`.
+    pub fn compile_to_c_bytes_with_meshes(
+        &self,
+        vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
+    ) -> (Vec<u8>, Vec<String>) {
         let mut sprite_names: Vec<String> = Vec::new();
         let mut sprite_index = |name: &str| -> u32 {
             let key = name.to_lowercase();
@@ -1965,6 +1980,29 @@ impl VPlayLevel {
         for obj in &self.layers.background { emit_obj(&mut bytes, obj, &mut sprite_index); }
         for obj in &self.layers.gameplay   { emit_obj(&mut bytes, obj, &mut sprite_index); }
         for obj in &self.layers.foreground { emit_obj(&mut bytes, obj, &mut sprite_index); }
+
+        // ── Collision meshes (position-independent) ─────────────────────────
+        // Objects are 36-byte header + contiguous 20-byte records (bg, gp, fg),
+        // so object i's +16 coll_mesh field is at 36 + i*20 + 16. Append each
+        // non-empty mesh block and patch that field with its image-base offset.
+        let all_objs = self.layers.background.iter()
+            .chain(self.layers.gameplay.iter())
+            .chain(self.layers.foreground.iter());
+        for (i, obj) in all_objs.enumerate() {
+            let (floors, walls) = self.collision_segments(obj, vec_meshes);
+            if floors.is_empty() && walls.is_empty() { continue; }
+            let mesh_off = bytes.len() as u32;
+            bytes.extend_from_slice(&(floors.len() as u32).to_le_bytes());
+            for &(x_min, x_max, y) in &floors {
+                for v in [x_min, y, x_max, y] { bytes.extend_from_slice(&v.to_le_bytes()); }
+            }
+            bytes.extend_from_slice(&(walls.len() as u32).to_le_bytes());
+            for &(x, y_min, y_max) in &walls {
+                for v in [x, y_min, x, y_max] { bytes.extend_from_slice(&v.to_le_bytes()); }
+            }
+            let fld = HEADER_LEN as usize + i * 20 + 16;
+            bytes[fld..fld + 4].copy_from_slice(&mesh_off.to_le_bytes());
+        }
 
         (bytes, sprite_names)
     }
