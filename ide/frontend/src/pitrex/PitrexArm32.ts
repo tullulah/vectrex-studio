@@ -319,6 +319,24 @@ function parseMemOp(
     const off = offMatch[2].startsWith('0x') ? parseInt(offMatch[2].slice(2), 16) : parseInt(offMatch[2], 10);
     return { addr: (getReg(s, rn) + off) | 0, postIncReg: -1, postIncVal: 0 };
   }
+  // Scaled register offset: "[r3, r2, lsl #1]" (also lsr/asr). gcc emits this
+  // for indexed byte/word array access (e.g. libvpy's music sequencer next-delay
+  // read `ldrb r3, [r3, r2, lsl #1]` and level/font table indexing). Must be
+  // tried BEFORE the plain register-offset case, whose regex would otherwise
+  // match the "[rn, rm" prefix and silently drop the shift.
+  const scaledMatch = tok.match(/^\[(\w+)\s*,\s*(\w+)\s*,\s*(lsl|lsr|asr)\s*#(\d+)\]/i);
+  if (scaledMatch) {
+    const rn = regIdx(scaledMatch[1]);
+    const rm = regIdx(scaledMatch[2]);
+    const shOp = scaledMatch[3].toLowerCase();
+    const shAmt = parseInt(scaledMatch[4], 10);
+    const rmVal = getReg(s, rm);
+    let idx: number;
+    if (shOp === 'lsl') idx = (rmVal << shAmt) | 0;
+    else if (shOp === 'lsr') idx = (rmVal >>> shAmt) | 0;
+    else idx = (rmVal >> shAmt) | 0;   // asr
+    return { addr: (getReg(s, rn) + idx) | 0, postIncReg: -1, postIncVal: 0 };
+  }
   // Register offset: "[r4, r5]"
   const regOffMatch = tok.match(/^\[(\w+)\s*,\s*(\w+)\]/);
   if (regOffMatch) {

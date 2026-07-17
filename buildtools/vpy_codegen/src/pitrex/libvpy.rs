@@ -198,6 +198,60 @@ pub fn libvpy_symbol(vpy_name: &str) -> Option<&'static str> {
         | "J1_BTN4" | "J1_BUTTON_4" => Some("vpy_j1_button"),
         "UPDATE_BUTTONS" => Some("vpy_update_buttons"),
 
+        // ── BLOCK 6: the MUSIC/SFX sequencer STATE-GROUP ────────────────────
+        // PLAY_MUSIC / STOP_MUSIC / PLAY_SFX plus the game-loop-injected
+        // MUSIC_UPDATE / SFX_UPDATE. These share the compiled PSG event-stream
+        // sequencer STATE (music cursor + delay, SFX cursor + delay, and the
+        // reg-7 mixer shadow), so they are bridged AS A GROUP or not at all —
+        // the inline `.bss` (PSG_MUSIC_PTR/PSG_IS_PLAYING/PSG_SFX_* …) and
+        // libvpy's `s_mus_*`/`s_sfx_*`/`s_psg_mixer` must never both be live.
+        //
+        // Equivalence (verified against the inline `pitrex_*` bodies in
+        // builtins.rs):
+        //   * The .vmus/.vsfx byte image is produced by the SAME
+        //     `compile_vmus`/`compile_vsfx` (assets.rs) that libvpy's C runtime
+        //     consumes, so `_NAME_MUSIC`/`_NAME_SFX` are byte-identical on both
+        //     paths (header: num_events word, loop_offset word, then
+        //     [delay,num_writes,(reg,val)…]; 0xFF=loop→base+loop_offset,
+        //     num_writes==0=end). No internal pointers.
+        //   * Sequencer model is identical: fire event, set delay = NEXT event's
+        //     delay byte, count down per frame; loop marker rewinds to
+        //     base+loop_offset; end marker calls stop (regs 8/9/10=0, reg7=0x3F).
+        //   * SFX reg-7 is read-modify-written to preserve music's A/B channels:
+        //     inline `and 0xDB / and 0x24 / orr` on `v_readPSG(7)`; libvpy the
+        //     identical mask on the `s_psg_mixer` shadow (kept in sync because
+        //     every reg-7 write on both paths goes through the tracking writer).
+        //   * "same music already playing → no-op" guard preserved on both.
+        //
+        // RECONCILED DIVERGENCE (the ONE non-trivial gap, fixed in libvpy):
+        // the inline `pitrex_music_update` is a BCM-CLO real-time sequencer; its
+        // FIRST update-while-playing hits the `pmu_init_clo` path — it only
+        // captures the timer baseline and fires NOTHING that frame (the timer
+        // baseline `PSG_MUSIC_LAST_CLO` is zero-initialised, so this priming
+        // happens exactly once per program). libvpy has no BCM timer (it is a
+        // pure one-tick-per-frame sequencer), so it originally fired the first
+        // music event one frame EARLIER. libvpy's `vpy_music_update` now carries
+        // a one-shot `s_mus_primed` flag reproducing that single priming frame,
+        // making the two paths emit the SAME PSG-write sequence frame-for-frame
+        // (headless PitrexCore harness: 0 differing writes over 120 frames).
+        // SFX has no such offset (inline `pitrex_sfx_update` is already a plain
+        // per-frame counter, bit-identical to `vpy_sfx_update`).
+        //
+        // SUPPRESSION CAVEAT (call-site remap only, inline bodies stay EMITTED —
+        // the atan2/rand/text pattern): the inline sequencer bodies live in
+        // `emit_pitrex_music_helpers`, which ALSO emits the still-inline level
+        // helpers `pitrex_load_level`/`pitrex_show_level`, so that block cannot
+        // be suppressed. The now-orphaned inline `pitrex_play_music` /
+        // `music_update` / `stop_music` / `play_sfx` / `sfx_update` remain as
+        // harmless dead code (their inline `PSG_*` .bss is never touched once the
+        // call sites — PLAY_* here + the game-loop MUSIC_UPDATE/SFX_UPDATE in
+        // functions.rs — are all remapped, so the state lives ONLY in libvpy).
+        "PLAY_MUSIC"   => Some("vpy_play_music"),
+        "STOP_MUSIC"   => Some("vpy_stop_music"),
+        "PLAY_SFX"     => Some("vpy_play_sfx"),
+        "MUSIC_UPDATE" => Some("vpy_music_update"),
+        "SFX_UPDATE"   => Some("vpy_sfx_update"),
+
         // Deferred (NOT bridged yet):
         //   beep       — the inline `pitrex_beep` is a NO-OP stub (silent; the
         //                allocated BEEP_FRAMES_LEFT slot is never used on pitrex,
@@ -218,4 +272,17 @@ pub fn libvpy_symbol(vpy_name: &str) -> Option<&'static str> {
 /// `emit_pitrex_*()` call on `!is_bridged(..)`.
 pub fn is_bridged(vpy_name: &str) -> bool {
     libvpy_symbol(vpy_name).is_some()
+}
+
+/// True if the MUSIC/SFX sequencer group (BLOCK 6) is bridged to libvpy.
+///
+/// The game loop (`functions.rs`) auto-injects the per-frame sequencer advance
+/// (`MUSIC_UPDATE`/`SFX_UPDATE`) which is NOT a user-callable builtin, so its
+/// call site can't be remapped by the generic `libvpy_symbol` path in
+/// `expressions.rs`. This gate lets the game loop emit `bl vpy_music_update` /
+/// `bl vpy_sfx_update` instead of the inline `pitrex_*` helpers when the group
+/// is active. Keyed on `PLAY_MUSIC` as the group anchor (the whole group is
+/// bridged together — see BLOCK 6).
+pub fn music_group_bridged() -> bool {
+    is_bridged("PLAY_MUSIC")
 }

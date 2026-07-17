@@ -258,6 +258,17 @@ export function parseAsm(src: string): ParsedAsm {
       if (line.includes('.bss'))    { section = 'bss';    continue; }
       if (line.includes('.rodata')) { section = 'rodata'; continue; }
       if (line.includes('.text'))   { section = 'text';   continue; }
+      // gcc with -fdata-sections puts each initialized static in its own
+      // `.section .data.<name>,"aw"` (e.g. libvpy's s_psg_mixer=0x3f default,
+      // s_intensity=90, s_text_size=8). Route it through the rodata path — the
+      // same as a bare `.data` — so the init byte/word lands in initMemory and
+      // its address gets a UNIQUE rodata slot. Without this the directive fell
+      // through and the label was allocated in whatever section preceded it
+      // (usually .bss), overlapping a real .bss variable (e.g. s_psg_mixer
+      // aliased s_sfx_delay, so PLAY_SFX silently zeroed the mixer shadow).
+      // Checked after .rodata so ".rodata" never mis-matches (it has no ".data"
+      // substring).
+      if (line.includes('.data'))   { section = 'rodata'; continue; }
       continue;
     }
     // Bare section directives (without .section prefix, e.g. just ".bss" or ".text")

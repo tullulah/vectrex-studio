@@ -485,6 +485,15 @@ static const unsigned char *s_mus_base = 0;   /* stream base (for loop) */
 static const unsigned char *s_mus_ptr  = 0;   /* cursor: current event */
 static int s_mus_playing = 0;
 static int s_mus_delay   = 0;                  /* frames left before next event */
+/* One-shot timer-priming flag reproducing the inline PiTrex BCM-CLO sequencer:
+ * `pitrex_music_update`'s FIRST update-while-playing only captures the timer
+ * baseline (pmu_init_clo, PSG_MUSIC_LAST_CLO==0) and fires nothing that frame.
+ * That baseline is zeroed once at program start, so the priming frame happens
+ * exactly once per program, delaying the whole music timeline by one frame.
+ * libvpy is otherwise a pure one-tick-per-frame sequencer, so without this it
+ * would fire the first music event one frame early; the flag makes the two
+ * paths emit identical PSG-write sequences (headless-verified). */
+static int s_mus_primed  = 0;
 
 static const unsigned char *s_sfx_ptr = 0;
 static int s_sfx_active = 0;
@@ -530,6 +539,9 @@ void vpy_stop_music(void)
 void vpy_music_update(void)
 {
     if (!s_mus_playing || !s_mus_ptr) return;
+    /* Inline BCM-CLO parity: the very first update-while-playing primes the
+     * (virtual) timer baseline and fires nothing — see s_mus_primed. */
+    if (!s_mus_primed) { s_mus_primed = 1; return; }
     if (s_mus_delay > 0) { s_mus_delay--; return; }
 
     const unsigned char *p = s_mus_ptr;
