@@ -1103,19 +1103,19 @@ mod tests {
             "must marshal 4 args into AAPCS registers (got: {asm:?})");
     }
 
-    /// A non-bridged builtin (atan2 — divergent LUT, deferred) must still
-    /// target its inline helper: the two mechanisms coexist during the migration.
+    /// A non-bridged builtin (pow — no C counterpart) must still target its
+    /// inline helper: the two mechanisms coexist during the migration.
     #[test]
     fn test_libvpy_bridge_leaves_others_inline() {
         let var_addrs = std::collections::HashMap::new();
         let info = CallInfo {
-            name: "atan2".to_string(),
+            name: "pow".to_string(),
             source_line: 0, col: 0,
-            args: vec![Expr::Number(10), Expr::Number(10)],
+            args: vec![Expr::Number(2), Expr::Number(8)],
         };
         let asm = emit_call(&info, &var_addrs).unwrap();
-        assert!(asm.contains("bl      pitrex_atan2"),
-            "atan2 must stay on the inline helper (got: {asm:?})");
+        assert!(asm.contains("bl      pitrex_pow"),
+            "pow must stay on the inline helper (got: {asm:?})");
     }
 
     /// BLOCK 2: the MOVE + DRAW_LINE state-pair must route to their libvpy C
@@ -1184,15 +1184,16 @@ mod tests {
         }
     }
 
-    /// Deferred builtins must remain on their inline `pitrex_*` helpers this block.
+    /// BLOCK 3: the reconciled divergent builtins (atan2, rand, rand_range) now
+    /// route to their libvpy C symbols. Their inline `pitrex_*` bodies stay
+    /// emitted (shared code) but the CALL SITE targets the bridged symbol.
     #[test]
-    fn test_libvpy_block1_defers() {
+    fn test_libvpy_block3_bridges() {
         let var_addrs = std::collections::HashMap::new();
         let cases: &[(&str, &[i32], &str)] = &[
-            ("atan2",      &[3, 4],  "pitrex_atan2"),
-            ("rand",       &[],      "pitrex_rand"),
-            ("rand_range", &[1, 6],  "pitrex_rand_range"),
-            ("pow",        &[2, 8],  "pitrex_pow"),
+            ("atan2",      &[3, 4],  "vpy_atan2"),
+            ("rand",       &[],      "vpy_rand"),
+            ("rand_range", &[1, 6],  "vpy_rand_range"),
         ];
         for (name, args, sym) in cases {
             let info = CallInfo {
@@ -1202,7 +1203,28 @@ mod tests {
             };
             let asm = emit_call(&info, &var_addrs).unwrap();
             assert!(asm.contains(&format!("bl      {sym}")),
-                "{name} must stay on inline {sym} this block (got: {asm:?})");
+                "{name} must bridge to {sym} (got: {asm:?})");
+        }
+    }
+
+    /// Builtins with no C counterpart (pow, tan) or a no-op inline stub (beep)
+    /// must remain on their inline `pitrex_*` helpers.
+    #[test]
+    fn test_libvpy_defers_remaining() {
+        let var_addrs = std::collections::HashMap::new();
+        let cases: &[(&str, &[i32], &str)] = &[
+            ("pow",  &[2, 8],  "pitrex_pow"),
+            ("beep", &[1],     "pitrex_beep"),
+        ];
+        for (name, args, sym) in cases {
+            let info = CallInfo {
+                name: name.to_string(),
+                source_line: 0, col: 0,
+                args: args.iter().map(|n| Expr::Number(*n)).collect(),
+            };
+            let asm = emit_call(&info, &var_addrs).unwrap();
+            assert!(asm.contains(&format!("bl      {sym}")),
+                "{name} must stay on inline {sym} (got: {asm:?})");
         }
     }
 

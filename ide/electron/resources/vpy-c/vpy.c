@@ -14,7 +14,7 @@
 static int   s_cur_x = 0, s_cur_y = 0;   /* MOVE origin, in VPy units */
 static int   s_intensity = 90;
 static int   s_text_size = 2;
-static uint32_t s_rng = 0x1234567u;
+static uint32_t s_rng = 0u;   /* matches the inline RAND_SEED (zeroed .bss) */
 static int   s_jx = 0, s_jy = 0;
 static uint8_t s_btn = 0;
 
@@ -29,8 +29,15 @@ static const int8_t s_sin[128] = {
     -127,-127,-126,-126,-125,-123,-122,-120,-117,-115,-112,-109,-106,-102, -98, -94,
      -90, -85, -81, -76, -71, -65, -60, -54, -49, -43, -37, -31, -25, -19, -12,  -6,
 };
-/* atan(i/16) in 128-unit angle (45deg = 16), for the integer atan2 octant. */
-static const uint8_t s_atan[17] = { 0,1,3,4,5,6,7,8,9,10,11,12,13,14,15,15,16 };
+/* atan LUT for the integer atan2 octant — ported BIT-EXACT from the VPy PiTrex
+ * inline codegen (`pitrex_atan_lut` in vpy_codegen builtins.rs). 33 entries map a
+ * ratio 0..32 (= |smaller|*32/|larger|) to an octant angle 0..22. This is the
+ * SAME quantized table the inline `pitrex_atan2` uses, so vpy_atan2 reproduces it
+ * exactly (the inline's 45deg endpoint is 22, NOT the ideal 16 — matched on
+ * purpose for bit-identical output). */
+static const uint8_t s_atan[33] = {
+    0,1,2,3,4,5,6,7,8,8,9,10,11,12,12,13,14,14,15,15,16,17,17,18,18,19,19,20,20,20,21,21,22
+};
 
 static void ensure_tables(void) { /* tables are compile-time const now */ }
 
@@ -344,25 +351,57 @@ int vpy_sqrt(int v) {
     while (y < x) { x = y; y = (x + v / x) / 2; }   /* integer Newton */
     return x;
 }
+/* Integer atan2 -> full-circle angle 0..127. BIT-EXACT port of the VPy PiTrex
+ * inline `pitrex_atan2(r0=y, r1=x)`:
+ *   octant split on |x| >= |y| (shallow) vs |y| > |x| (steep);
+ *   ratio = |smaller| * 32 / |larger| (integer div, truncates toward zero — both
+ *   operands non-negative, identical to ARM __aeabi_idiv here);
+ *   shallow angle = s_atan[ratio], steep angle = 32 - s_atan[ratio];
+ *   then the same quadrant map (Q4 = 128-a) and & 127.
+ * The ratio is clamped to 32 to mirror the inline's `cmp/movgt` guard before the
+ * table index. */
 int vpy_atan2(int y, int x) {
-    if (x == 0 && y == 0) return 0;
     int ax = x < 0 ? -x : x;
     int ay = y < 0 ? -y : y;
-    int a;                                 /* 0..32 units = first quadrant (0..90deg) */
-    if (ax >= ay) a = s_atan[ax ? (ay * 16) / ax : 0];        /* 0..16  (0..45deg)  */
-    else          a = 32 - s_atan[ay ? (ax * 16) / ay : 0];   /* 16..32 (45..90deg) */
+    if (ax == 0 && ay == 0) return 0;
+    int a;                                 /* octant angle 0..32 */
+    if (ax >= ay) {                        /* shallow: |y| <= |x| (0..45deg) */
+        int r = ax ? (ay * 32) / ax : 0;
+        if (r > 32) r = 32;
+        a = s_atan[r];
+    } else {                               /* steep: |y| > |x| (45..90deg) */
+        int r = ay ? (ax * 32) / ay : 0;
+        if (r > 32) r = 32;
+        a = 32 - s_atan[r];
+    }
     int ang;
     if      (x >= 0 && y >= 0) ang = a;            /* Q1 */
     else if (x <  0 && y >= 0) ang = 64 - a;       /* Q2 */
     else if (x <  0 && y <  0) ang = 64 + a;       /* Q3 */
-    else                        ang = 128 - a;      /* Q4 */
+    else                        ang = 128 - a;      /* Q4 (x>=0, y<0) */
     return ang & 127;
 }
-void vpy_seed(unsigned s) { s_rng = s ? s : 1; }
-int vpy_rand(void) { s_rng = s_rng * 1103515245u + 12345u; return (int)((s_rng >> 16) & 0x7fff); }
+
+/* PRNG — BIT-EXACT port of the VPy PiTrex inline `pitrex_random`:
+ *   state = state * 1664525 + 1013904223  (32-bit wraparound)
+ *   output = (state >> 16) & 0xFFFF        (16-bit, 0..65535)
+ * The inline seed lives in a zeroed .bss word (RAND_SEED), so the initial state
+ * is 0 — s_rng starts at 0 to match, giving an identical sequence from reset. */
+void vpy_seed(unsigned s) { s_rng = s; }
+int vpy_rand(void) {
+    s_rng = s_rng * 1664525u + 1013904223u;
+    return (int)((s_rng >> 16) & 0xFFFFu);
+}
+/* rand_range — BIT-EXACT port of inline `pitrex_rand_range`:
+ *   range = hi - lo + 1;  return lo + rand() % range.
+ * The inline has no lo/hi guard (it relies on ARM aeabi div-by-zero -> 0 for the
+ * degenerate hi < lo case); we guard only the truly-undefined range <= 0 path to
+ * avoid C modulo-by-zero UB. For the real contract (hi >= lo) the guard never
+ * fires and the result is identical to the inline. */
 int vpy_rand_range(int lo, int hi) {
-    if (hi <= lo) return lo;
-    return lo + vpy_rand() % (hi - lo + 1);
+    int range = hi - lo + 1;
+    if (range <= 0) return lo;
+    return lo + vpy_rand() % range;
 }
 
 /* ---- sound ---- */

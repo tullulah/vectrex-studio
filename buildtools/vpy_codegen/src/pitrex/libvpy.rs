@@ -28,10 +28,19 @@
 //! BLOCK 2 scope: the MOVE + DRAW_LINE state-pair — they share the beam origin
 //! (libvpy `s_cur_x/y` vs the inline `PITREX_MOVE_X/Y`), so they are bridged
 //! together or not at all. Verified bit-identical net output (see the
-//! per-arm comment). Builtins with a divergent implementation (`atan2`, `rand`,
-//! `rand_range`), no C counterpart (`pow`, `tan`), or a different arg shape
-//! (`DRAW_POLYGON`) are intentionally left inline for a later block. See the
-//! per-arm comments in [`libvpy_symbol`] for the exact reason each was deferred.
+//! per-arm comment).
+//!
+//! BLOCK 3 scope: the previously-divergent builtins `atan2`, `rand`,
+//! `rand_range` — libvpy's C has been rewritten to port the inline algorithm
+//! BIT-EXACTLY (same atan LUT + octant/quadrant math; same LCG constants, output
+//! width and zero seed), so their call sites are now remapped too. Their inline
+//! `pitrex_*` bodies stay EMITTED (call-site remap only) because they share code
+//! with other still-inline helpers (`atan2` shares the math-helpers emit block +
+//! `pitrex_atan_lut`; `pitrex_random` is called by the inline enemy AI).
+//!
+//! Still inline: no C counterpart (`pow`, `tan`), a different arg shape
+//! (`DRAW_POLYGON`), or a no-op inline stub (`beep`). See the per-arm comments in
+//! [`libvpy_symbol`] for the exact reason each remains deferred.
 
 /// Map a VPy builtin name to its libvpy C symbol, if that builtin has been
 /// migrated to the C runtime. Returns `None` for builtins still emitted inline.
@@ -90,12 +99,37 @@ pub fn libvpy_symbol(vpy_name: &str) -> Option<&'static str> {
         "MOVE"      => Some("vpy_move"),
         "DRAW_LINE" => Some("vpy_draw_line"),
 
+        // ── BLOCK 3: reconciled divergent-implementation builtins ───────────
+        // These previously DIFFERED from the inline body; libvpy's C has been
+        // rewritten to port the inline algorithm bit-exactly, so the call site
+        // can now be remapped. Unlike the draw/state builtins above, their inline
+        // `pitrex_*` bodies are NOT suppressed (only the call site is remapped) —
+        // exactly like the already-bridged pure-math helpers (sqrt/abs/…). The
+        // reason each inline body stays emitted:
+        //   atan2 — the inline `pitrex_atan2` shares one emit block
+        //     (`emit_pitrex_math_helpers`) with sqrt/pow AND the shared
+        //     `pitrex_atan_lut` + `.ltorg`; it can't be split out without
+        //     breaking those symbols, so it stays emitted as dead code.
+        //   rand/rand_range — `pitrex_random` is called DIRECTLY by the inline
+        //     enemy-AI (`pitrex_update_enemies`/wander) ARM helpers, so it must
+        //     stay emitted. VPy-level rand()/rand_range() are remapped to
+        //     vpy_rand/vpy_rand_range (own `s_rng`, seeded 0, same LCG => same
+        //     sequence). CAVEAT: a program that calls BOTH VPy rand() AND the
+        //     pitrex enemy-AI builtins now draws from two INDEPENDENT streams
+        //     (each deterministic from seed 0) instead of one shared RAND_SEED
+        //     counter — a subtle change only for that combination.
+        "atan2" | "ATAN2"           => Some("vpy_atan2"),
+        "rand" | "RAND"             => Some("vpy_rand"),
+        "rand_range" | "RAND_RANGE" => Some("vpy_rand_range"),
+
         // Deferred (NOT bridged yet):
-        //   atan2      — inline octant LUT (33-entry, 45°→22) disagrees with
-        //                libvpy's 17-entry s_atan (45°→16): different angles.
-        //   rand/rand_range — different LCG constants and output width (inline
-        //                16-bit LCG 1664525/1013904223 vs libvpy 15-bit
-        //                1103515245/12345): different sequences.
+        //   beep       — the inline `pitrex_beep` is a NO-OP stub (silent; the
+        //                allocated BEEP_FRAMES_LEFT slot is never used on pitrex,
+        //                unlike the m6809 frame-decay model). libvpy's vpy_beep
+        //                emits an actual tone, so bridging would turn silence into
+        //                sound — a behavior change, not a reconciliation. There is
+        //                no inline algorithm to make bit-identical, so it stays
+        //                deferred (see report).
         //   pow/tan    — no vpy_pow/vpy_tan in libvpy.
         //   DRAW_POLYGON — arg-shape mismatch: VPy passes a flat count-first
         //                vertex list; vpy_draw_polygon takes (const int* xy,n,b).
