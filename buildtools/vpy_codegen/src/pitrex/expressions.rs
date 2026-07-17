@@ -1103,19 +1103,72 @@ mod tests {
             "must marshal 4 args into AAPCS registers (got: {asm:?})");
     }
 
-    /// A non-bridged builtin (DRAW_RECT) must still target its inline helper —
-    /// the two mechanisms coexist during the migration.
+    /// A non-bridged builtin (DRAW_LINE — MOVE-coupled, deferred) must still
+    /// target its inline helper: the two mechanisms coexist during the migration.
     #[test]
     fn test_libvpy_bridge_leaves_others_inline() {
         let var_addrs = std::collections::HashMap::new();
         let info = CallInfo {
-            name: "DRAW_RECT".to_string(),
+            name: "DRAW_LINE".to_string(),
             source_line: 0, col: 0,
             args: vec![Expr::Number(0), Expr::Number(0), Expr::Number(10), Expr::Number(10), Expr::Number(80)],
         };
         let asm = emit_call(&info, &var_addrs).unwrap();
-        assert!(asm.contains("bl      pitrex_draw_rect"),
-            "DRAW_RECT must stay on the inline helper (got: {asm:?})");
+        assert!(asm.contains("bl      pitrex_draw_line"),
+            "DRAW_LINE must stay on the inline helper (got: {asm:?})");
+    }
+
+    /// BLOCK 1: the stateless draws and pure-math builtins must route to their
+    /// libvpy C symbols (never the inline `pitrex_*` helper).
+    #[test]
+    fn test_libvpy_block1_bridges() {
+        let var_addrs = std::collections::HashMap::new();
+        let cases: &[(&str, &[i32], &str)] = &[
+            ("DRAW_RECT",        &[0, 0, 10, 10, 80], "vpy_draw_rect"),
+            ("DRAW_FILLED_RECT", &[0, 0, 10, 10, 80], "vpy_draw_filled_rect"),
+            ("DRAW_ELLIPSE",     &[0, 0, 12, 8, 80],  "vpy_draw_ellipse"),
+            ("abs",              &[-5],               "vpy_abs"),
+            ("min",              &[3, 7],             "vpy_min"),
+            ("max",              &[3, 7],             "vpy_max"),
+            ("clamp",            &[9, 0, 5],          "vpy_clamp"),
+            ("sin",              &[32],               "vpy_sin"),
+            ("cos",              &[32],               "vpy_cos"),
+            ("sqrt",             &[144],              "vpy_sqrt"),
+        ];
+        for (name, args, sym) in cases {
+            let info = CallInfo {
+                name: name.to_string(),
+                source_line: 0, col: 0,
+                args: args.iter().map(|n| Expr::Number(*n)).collect(),
+            };
+            let asm = emit_call(&info, &var_addrs).unwrap();
+            assert!(asm.contains(&format!("bl      {sym}")),
+                "{name} must bridge to {sym} (got: {asm:?})");
+            assert!(!asm.contains("pitrex_"),
+                "{name} must NOT reference the inline pitrex helper (got: {asm:?})");
+        }
+    }
+
+    /// Deferred builtins must remain on their inline `pitrex_*` helpers this block.
+    #[test]
+    fn test_libvpy_block1_defers() {
+        let var_addrs = std::collections::HashMap::new();
+        let cases: &[(&str, &[i32], &str)] = &[
+            ("atan2",      &[3, 4],  "pitrex_atan2"),
+            ("rand",       &[],      "pitrex_rand"),
+            ("rand_range", &[1, 6],  "pitrex_rand_range"),
+            ("pow",        &[2, 8],  "pitrex_pow"),
+        ];
+        for (name, args, sym) in cases {
+            let info = CallInfo {
+                name: name.to_string(),
+                source_line: 0, col: 0,
+                args: args.iter().map(|n| Expr::Number(*n)).collect(),
+            };
+            let asm = emit_call(&info, &var_addrs).unwrap();
+            assert!(asm.contains(&format!("bl      {sym}")),
+                "{name} must stay on inline {sym} this block (got: {asm:?})");
+        }
     }
 
     /// PLAY_SAMPLE("name") resolves the string to _<NAME>_SMP and calls the

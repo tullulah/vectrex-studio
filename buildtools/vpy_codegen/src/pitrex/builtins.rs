@@ -62,16 +62,25 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     s.push_str(&emit_pitrex_draw_line_rel());
     s.push_str(&emit_pitrex_draw_vector());
     s.push_str(&emit_pitrex_draw_vector_ex());
-    s.push_str(&emit_pitrex_draw_rect());
-    s.push_str(&emit_pitrex_draw_filled_rect());
+    // libvpy bridge: when a draw is routed to the C runtime, suppress the inline
+    // body so only the `bl vpy_*` remains. pitrex_draw_rect is additionally
+    // depended on by the inline pitrex_draw_filled_rect body, so it must stay
+    // emitted whenever THAT body is emitted — hence the compound guard.
+    let filled_rect_inline = !crate::pitrex::libvpy::is_bridged("DRAW_FILLED_RECT");
+    if !crate::pitrex::libvpy::is_bridged("DRAW_RECT") || filled_rect_inline {
+        s.push_str(&emit_pitrex_draw_rect());
+    }
+    if filled_rect_inline {
+        s.push_str(&emit_pitrex_draw_filled_rect());
+    }
     s.push_str(&emit_pitrex_draw_polygon());
-    // libvpy bridge (POC): when DRAW_CIRCLE is routed to the C runtime
-    // (vpy_draw_circle), suppress the inline body so only the `bl` remains.
     // No other inline helper calls pitrex_draw_circle, so this is safe.
     if !crate::pitrex::libvpy::is_bridged("DRAW_CIRCLE") {
         s.push_str(&emit_pitrex_draw_circle());
     }
-    s.push_str(&emit_pitrex_draw_ellipse());
+    if !crate::pitrex::libvpy::is_bridged("DRAW_ELLIPSE") {
+        s.push_str(&emit_pitrex_draw_ellipse());
+    }
     s.push_str(&emit_pitrex_draw_arc());
     s.push_str(&emit_pitrex_update_buttons());
     s.push_str(&emit_pitrex_j1_x());

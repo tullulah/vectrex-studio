@@ -19,6 +19,15 @@
 //! AAPCS with the identical argument order/semantics as the C prototype
 //! `void vpy_draw_circle(int cx,int cy,int r,int b)` (both scale VPy units by
 //! 127 internally), so no argument marshalling shim is needed.
+//!
+//! BLOCK 1 scope: the STATELESS builtins whose inline ARM body is semantically
+//! identical to their libvpy C function — the stateless draws
+//! `DRAW_RECT`/`DRAW_FILLED_RECT`/`DRAW_ELLIPSE` (absolute, no MOVE offset) and
+//! the pure-math helpers `abs/min/max/clamp/sin/cos/sqrt`. Builtins with a
+//! divergent implementation (`atan2`, `rand`, `rand_range`), no C counterpart
+//! (`pow`, `tan`), a MOVE-state coupling, or a different arg shape
+//! (`DRAW_POLYGON`) are intentionally left inline for a later block. See the
+//! per-arm comments in [`libvpy_symbol`] for the exact reason each was deferred.
 
 /// Map a VPy builtin name to its libvpy C symbol, if that builtin has been
 /// migrated to the C runtime. Returns `None` for builtins still emitted inline.
@@ -27,7 +36,43 @@
 /// place of the inline `pitrex_*` helper name; argument evaluation is unchanged.
 pub fn libvpy_symbol(vpy_name: &str) -> Option<&'static str> {
     match vpy_name {
+        // ── POC: first bridged builtin ──────────────────────────────────────
         "DRAW_CIRCLE" => Some("vpy_draw_circle"),
+
+        // ── BLOCK 1: stateless builtins ─────────────────────────────────────
+        // Stateless draws — verified ABSOLUTE (no MOVE offset), same arg
+        // order/ABI, same VPy×127 scaling as their inline `pitrex_*` bodies.
+        //   DRAW_RECT / DRAW_FILLED_RECT: coordinates are bit-exact vs inline.
+        //   DRAW_ELLIPSE: identical 16-gon algorithm; vertices differ from the
+        //   inline table by <1 VPy unit (libvpy rounds each vertex to integer
+        //   VPy units before the ×127 scale) — the SAME quantization already
+        //   accepted for the bridged DRAW_CIRCLE (they share the geometry).
+        "DRAW_RECT"        => Some("vpy_draw_rect"),
+        "DRAW_FILLED_RECT" => Some("vpy_draw_filled_rect"),
+        "DRAW_ELLIPSE"     => Some("vpy_draw_ellipse"),
+
+        // Pure math — no state, no draw. abs/min/max/clamp are bit-identical to
+        // the inline helpers; sin/cos use a byte-identical LUT; sqrt matches the
+        // inline VFP path for every input a VPy game can produce (verified
+        // identical over 0..1e6). Accepted in both lower- and upper-case because
+        // `libvpy_symbol` is keyed on the raw VPy call name.
+        "abs" | "ABS"     => Some("vpy_abs"),
+        "min" | "MIN"     => Some("vpy_min"),
+        "max" | "MAX"     => Some("vpy_max"),
+        "clamp" | "CLAMP" => Some("vpy_clamp"),
+        "sin" | "SIN"     => Some("vpy_sin"),
+        "cos" | "COS"     => Some("vpy_cos"),
+        "sqrt" | "SQRT"   => Some("vpy_sqrt"),
+
+        // Deferred (NOT bridged in BLOCK 1):
+        //   atan2      — inline octant LUT (33-entry, 45°→22) disagrees with
+        //                libvpy's 17-entry s_atan (45°→16): different angles.
+        //   rand/rand_range — different LCG constants and output width (inline
+        //                16-bit LCG 1664525/1013904223 vs libvpy 15-bit
+        //                1103515245/12345): different sequences.
+        //   pow/tan    — no vpy_pow/vpy_tan in libvpy.
+        //   DRAW_POLYGON — arg-shape mismatch: VPy passes a flat count-first
+        //                vertex list; vpy_draw_polygon takes (const int* xy,n,b).
         _ => None,
     }
 }

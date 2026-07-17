@@ -1399,6 +1399,19 @@ function executeOne(s: PitrexArm32State): boolean {
     // ── B (unconditional/conditional branch) ────────────────────────────
     case 'b': {
       const target = (operands[0] ?? '').trim();
+      // Tail call to an SDK builtin: gcc's tail-call optimisation emits a plain
+      // `b <fn>` (instead of `bl <fn>` + `bx lr`) for the last call in a leaf
+      // function — e.g. libvpy's vpy_draw_rect ends with `b v_directDraw32`.
+      // Run the stub, then return to the current LR: the callee's return is
+      // this function's return. Without this the branch fell through into the
+      // next function's code and corrupted execution (only the loop-based
+      // vpy_draw_circle/ellipse, whose last raw_line is not a tail call, worked).
+      const stub = SDK_STUBS[target];
+      if (stub) {
+        stub(s);
+        s.pc = s.regs[LR];
+        break;
+      }
       const idx    = resolveBranchTarget(s, target);
       if (idx !== null) {
         s.pc = idx;
