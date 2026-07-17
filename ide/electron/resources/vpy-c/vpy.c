@@ -798,14 +798,22 @@ void vpy_update_level(void)
 #define VPY_MAX_ENEMIES 32
 #define VPY_PATROL_SPEED 1
 
+/* Sprite-index sentinel for "no sprite" (null in the inline type_data). */
+#define VPY_SPR_NONE 0xFFFF
+
 typedef struct {
     int x, y;                 /* world position (VPy units) */
     int active;
     int ai_type, wp_count, mirror_on_patrol, default_facing, is_anim;
     int sprite_index, feet_offset;
+    /* wander sprite swaps (from inline type_data): idle sprite on IDLE, walk
+     * sprite on WALK. VPY_SPR_NONE => the inline null pointer => swap is a no-op. */
+    int idle_sprite_index, idle_is_anim, walk_sprite_index, walk_is_anim;
     int dir;                  /* 0=left, 1=right */
-    int cur_target;           /* waypoint index */
-    int sm_state, sub_state, cur_area, idle_timer;
+    int cur_target;           /* waypoint idx (patrol) / target_x (wander pool+14) */
+    int sm_state, sub_state, cur_area;
+    int idle_timer;           /* pool+8 multiplex: idle_timer/vy/from_x (wander) */
+    int w_type;               /* wander transition type (pool+15) */
     int anim_frame_idx, anim_ticks_left;
     const unsigned char *wp_base;   /* into the enemy image: first waypoint pair */
     const unsigned char *areas;     /* into the enemy image: at area_count u16 */
@@ -840,6 +848,23 @@ static int area_snap_index(const unsigned char *areas, int area_count,
     return best_idx;
 }
 
+/* PI anim descriptor `_{ANIM}_ANIMC`: [0]=frame_count, then per frame
+ * [dur(u8), vec_index(u16)] (3 bytes). Matches emit in levelres.rs. */
+static int anim_frame0_dur(const unsigned char *desc) { return desc ? desc[1] : 0; }
+
+/* Set an enemy's current sprite (mirrors pitrex_wander_set_sprite): null index
+ * (VPY_SPR_NONE) is a no-op; otherwise store sprite + is_anim, reset the anim
+ * frame, and prime anim_ticks_left from the descriptor's frame-0 duration. */
+static void enemy_set_sprite(VpyEnemy *en, int idx, int is_anim)
+{
+    if (idx == VPY_SPR_NONE) return;
+    en->sprite_index = idx;
+    en->is_anim = is_anim;
+    en->anim_frame_idx = 0;
+    if (is_anim && s_enemy_sprites)
+        en->anim_ticks_left = anim_frame0_dur(s_enemy_sprites[idx]);
+}
+
 /* no-tree-vectorize: keep libvpy NEON-free for the PitrexArm32 sim (gcc -Ofast
  * vectorizes the pool-entry init into vmov.i32/vstr d16). See vpy_load_level. */
 __attribute__((optimize("no-tree-vectorize")))
@@ -865,7 +890,12 @@ void vpy_spawn_enemies(const unsigned char *img, const unsigned char *const *spr
         int facing = p[9];
         int is_anim = p[10];
         int feet_offset = (int)(int8_t)p[11];
-        const unsigned char *wp_base = p + 12;
+        /* wander sprite-swap slots (turn 3): idle @12(u16)+14(u8), walk @15(u16)+17(u8). */
+        int idle_sprite_index = rd_u16(p + 12);
+        int idle_is_anim = p[14];
+        int walk_sprite_index = rd_u16(p + 15);
+        int walk_is_anim = p[17];
+        const unsigned char *wp_base = p + 18;
         const unsigned char *ap = wp_base + wp_count * 4;   /* -> area_count u16 */
         int area_count = rd_u16(ap);
         const unsigned char *areas = ap;                     /* points at area_count */
@@ -883,9 +913,12 @@ void vpy_spawn_enemies(const unsigned char *img, const unsigned char *const *spr
         en->mirror_on_patrol = mirror; en->default_facing = facing;
         en->is_anim = is_anim;
         en->sprite_index = sprite_index; en->feet_offset = feet_offset;
+        en->idle_sprite_index = idle_sprite_index; en->idle_is_anim = idle_is_anim;
+        en->walk_sprite_index = walk_sprite_index; en->walk_is_anim = walk_is_anim;
         en->dir = 1;                 /* right */
         en->cur_target = 0;
         en->sm_state = 0; en->sub_state = 0; en->cur_area = 0; en->idle_timer = 0;
+        en->w_type = 0;
         en->anim_frame_idx = 0; en->anim_ticks_left = 0;
         en->wp_base = wp_base;
         en->areas = (area_count > 0) ? areas : 0;
@@ -898,7 +931,9 @@ void vpy_spawn_enemies(const unsigned char *img, const unsigned char *const *spr
             int ay = rd_i16(areas + 2 + bi * 6);
             en->y = ay + feet_offset;
         }
-        /* vanim init (turn 3): frame0 duration — deferred with the anim reader. */
+        /* vanim init: prime frame-0 duration for an animated default sprite. */
+        if (is_anim && area_count >= 0)
+            en->anim_ticks_left = anim_frame0_dur(sprites ? sprites[sprite_index] : 0);
 
         p = next;
         spawned++;
@@ -919,8 +954,112 @@ void vpy_update_enemies(void)
         if (en->sm_state != 0) continue;          /* frozen (snowed/balled) */
 
         if (en->ai_type == 4) {
-            /* WANDER — turn-3 TODO (RNG). Intentionally not implemented here;
-             * leaving it inert keeps the bridge honest (do not half-do RNG). */
+            /* ── WANDER (bit-exact port of pitrex_update_enemies' wander branch).
+             * RNG: exactly two vpy_rand() sites, mirroring the inline call order:
+             *   (a) WALK edge-reversal -> (rand & 0x3F) + 90 -> idle_timer.
+             *   (b) IDLE expiry: per matching transition, rand & 3 == 0 commits.
+             * vpy_rand == pitrex_random (same LCG, seed 0). CAVEAT: a program
+             * using BOTH VPy rand() and wander enemies shares one s_rng stream
+             * (bridged) vs two independent streams (inline) — the documented
+             * rand caveat, now applying to enemies too. */
+            const unsigned char *ap = en->areas;
+            if (!ap) continue;
+            int area_count = rd_u16(ap);
+            if (area_count == 0) continue;
+            const unsigned char *area_base = ap + 2;                 /* areas[] (6B stride) */
+            const unsigned char *tp = area_base + area_count * 6;    /* -> trans_count u16 */
+            int trans_count = rd_u16(tp);
+            const unsigned char *trans_base = tp + 2;                /* trans[] (8B stride) */
+            const int SPEED = VPY_PATROL_SPEED, AIR = 4;
+
+            if (en->sub_state == 3) {
+                /* WALK_TO_TAKEOFF: walk X toward from_x (idle_timer). */
+                int from_x = en->idle_timer, x = en->x, reached = 0;
+                int dx = from_x - x;
+                if (dx == 0) reached = 1;
+                else if (dx > 0) { en->dir = 1; x += SPEED; if (x > from_x) x = from_x; en->x = x; reached = (x == from_x); }
+                else             { en->dir = 0; x -= SPEED; if (x < from_x) x = from_x; en->x = x; reached = (x == from_x); }
+                if (!reached) continue;
+                /* takeoff -> AIRBORNE: pick vy0 by transition type. */
+                int ty = rd_i16(area_base + en->cur_area * 6);
+                int dy = ty - en->y;
+                int vy0;
+                if (en->w_type == 2) vy0 = -1;              /* drop */
+                else if (en->w_type == 3) vy0 = 3;          /* jump_across */
+                else { vy0 = 4; while (vy0 * (vy0 + 1) / 2 < dy && vy0 < 16) vy0++; }  /* jump_up */
+                en->idle_timer = vy0;                        /* pool+8 = vy */
+                en->sub_state = 2;                           /* AIRBORNE */
+                en->dir = (en->cur_target >= en->x) ? 1 : 0; /* face target_x */
+                continue;
+            }
+            if (en->sub_state == 2) {
+                /* AIRBORNE. Phase A: X step + parabolic Y; Phase B: Y-lerp + land. */
+                int x = en->x, target_x = en->cur_target;
+                int dx = target_x - x;
+                if (dx != 0) {
+                    if (dx > 0) { x += AIR; if (x > target_x) x = target_x; }
+                    else        { x -= AIR; if (x < target_x) x = target_x; }
+                    en->x = x;
+                    int y = en->y, vy = en->idle_timer;
+                    y += vy; en->y = y;
+                    vy -= 1; if (vy < -3) vy = -3; en->idle_timer = vy;
+                    continue;
+                }
+                /* Phase B: X done — lerp Y toward target_y, then land. */
+                int ty = rd_i16(area_base + en->cur_area * 6);
+                int y = en->y, d = ty - y, landed = 0;
+                if (d == 0) landed = 1;
+                else if (d > 0) { y += AIR; if (y > ty) y = ty; en->y = y; landed = (y == ty); }
+                else            { y -= AIR; if (y < ty) y = ty; en->y = y; landed = (y == ty); }
+                if (!landed) continue;
+                en->y = ty + en->feet_offset;
+                en->sub_state = 0;                           /* WALK */
+                continue;
+            }
+            if (en->sub_state == 1) {
+                /* IDLE: count down; on expiry pick a transition (RNG coin). */
+                if (--en->idle_timer > 0) continue;
+                if (trans_count == 0) {
+                    en->sub_state = 0;
+                    enemy_set_sprite(en, en->walk_sprite_index, en->walk_is_anim);
+                    continue;
+                }
+                int cur = en->cur_area, hit = -1;
+                for (int ti = 0; ti < trans_count; ti++) {
+                    const unsigned char *t = trans_base + ti * 8;
+                    if (t[0] != cur) continue;
+                    if ((vpy_rand() & 3) == 0) { hit = ti; break; }
+                }
+                if (hit < 0) {
+                    en->sub_state = 0;
+                    enemy_set_sprite(en, en->walk_sprite_index, en->walk_is_anim);
+                    continue;
+                }
+                const unsigned char *t = trans_base + hit * 8;
+                en->cur_area = t[1];                          /* to (target area) */
+                en->w_type = t[2];                           /* transition type */
+                en->idle_timer = rd_i16(t + 4);              /* from_x (pool+8) */
+                en->cur_target = rd_i16(t + 6);              /* to_x (pool+14) */
+                en->sub_state = 3;                           /* WALK_TO_TAKEOFF */
+                enemy_set_sprite(en, en->walk_sprite_index, en->walk_is_anim);
+                continue;
+            }
+            /* WALK (sub_state 0): bounce X within the current area's edges. */
+            const unsigned char *area = area_base + en->cur_area * 6;
+            int x_min = rd_i16(area + 2), x_max = rd_i16(area + 4);
+            int x = en->x, edge = 0;
+            if (en->dir == 1) {
+                if (x >= x_max) edge = 1;
+                else { x += SPEED; if (x > x_max) x = x_max; en->x = x; edge = (x == x_max); }
+            } else {
+                if (x <= x_min) edge = 1;
+                else { x -= SPEED; if (x < x_min) x = x_min; en->x = x; edge = (x == x_min); }
+            }
+            if (!edge) continue;
+            en->dir ^= 1;
+            en->idle_timer = (vpy_rand() & 0x3F) + 90;       /* idle_timer */
+            en->sub_state = 1;                                /* IDLE */
+            enemy_set_sprite(en, en->idle_sprite_index, en->idle_is_anim);
             continue;
         }
         if (en->ai_type != 1) continue;           /* unsupported */
@@ -1001,8 +1140,29 @@ void vpy_draw_enemies(void)
         if (!en->is_anim) {
             vpy_draw_vector_ex(sprite, ox, oy, mirror, 127);
         } else {
-            /* anim tick/extract — turn-3 TODO (needs the PI anim reader). */
-            vpy_draw_vector_ex(sprite, ox, oy, mirror, 127);
+            /* Anim tick/extract — bit-exact port of pitrex_draw_enemies' vanim
+             * branch, over the PI anim descriptor `_{ANIM}_ANIMC`:
+             *   [0]=frame_count, then per frame [dur(u8), vec_index(u16)].
+             * `sprite` here is the descriptor; each frame's vec_index resolves to
+             * a static `_{FRAME}_VEC` in the same sprite table. Tick: ticks-1; if
+             * >0 keep frame, else advance (wrap) and reload dur from the new frame.
+             * Draw the current frame's vec. (Matches the inline tick order.) */
+            const unsigned char *anim = sprite;
+            int frame_count = anim[0];
+            int ti = en->anim_ticks_left - 1;
+            int fi = en->anim_frame_idx;
+            if (ti > 0) {
+                en->anim_ticks_left = ti;                /* keep frame */
+            } else {
+                fi++; if (fi >= frame_count) fi = 0;      /* advance, wrap */
+                en->anim_frame_idx = fi;
+                ti = anim[1 + fi * 3];                    /* new frame duration */
+                en->anim_ticks_left = ti;
+            }
+            const unsigned char *fp = anim + 1 + fi * 3;
+            int vec_index = fp[1] | (fp[2] << 8);         /* frame vec sprite-index */
+            const unsigned char *vec = s_enemy_sprites[vec_index];
+            if (vec) vpy_draw_vector_ex(vec, ox, oy, mirror, 127);
         }
     }
 }

@@ -112,15 +112,18 @@ function memWrite32(s: PitrexArm32State, addr: number, val: number): void {
   s.mem.set(addr & ~3, val | 0);
 }
 function memRead16(s: PitrexArm32State, addr: number): number {
-  const word  = memRead32(s, addr);
-  const shift = (addr & 2) * 8;
-  return (word >>> shift) & 0xFFFF;
+  // Byte-granular so UNALIGNED (odd-address) ldrh/ldrsh read the correct two
+  // bytes. gcc emits `ldrh [rn, #odd] @ unaligned` for libvpy's packed enemy
+  // image (u16 sprite-index fields at odd offsets); the old (addr&2)-shift form
+  // only handled 2-byte alignment and returned the wrong halfword at odd
+  // addresses (e.g. a wander walk_sprite_index read 0xFF00 instead of 0xFFFF,
+  // corrupting the drawn sprite).
+  return (memRead8(s, addr) | (memRead8(s, addr + 1) << 8)) & 0xFFFF;
 }
 function memWrite16(s: PitrexArm32State, addr: number, val: number): void {
-  const aligned = addr & ~3;
-  const shift   = (addr & 2) * 8;
-  const word    = memRead32(s, aligned);
-  memWrite32(s, aligned, (word & ~(0xFFFF << shift)) | ((val & 0xFFFF) << shift));
+  // Byte-granular so UNALIGNED strh writes the correct two bytes (see memRead16).
+  memWrite8(s, addr, val & 0xFF);
+  memWrite8(s, addr + 1, (val >>> 8) & 0xFF);
 }
 function memRead8(s: PitrexArm32State, addr: number): number {
   const word  = memRead32(s, addr);
@@ -1179,6 +1182,34 @@ function executeOne(s: PitrexArm32State): boolean {
       const mlaRes = (Math.imul(getReg(s, rn), getReg(s, rm)) + getReg(s, ra)) | 0;
       setReg(s, rd, mlaRes);
       if (op === 'mlas') setNZFlags(s, mlaRes);
+      break;
+    }
+    case 'smlabb': {
+      // smlabb rd, rn, rm, ra → rd = sext16(rn.lo) * sext16(rm.lo) + ra.
+      // gcc emits this for libvpy's wander area-snap cost (flag*1024 + base).
+      // Missing before, it was a no-op and the spawn snap silently broke.
+      const rd = regIdx(operands[0] ?? '');
+      const rn = regIdx(operands[1] ?? '');
+      const rm = regIdx(operands[2] ?? '');
+      const ra = regIdx(operands[3] ?? '');
+      if (rd < 0 || rn < 0 || rm < 0 || ra < 0) break;
+      const lo = (v: number) => (v << 16) >> 16;
+      setReg(s, rd, (Math.imul(lo(getReg(s, rn)), lo(getReg(s, rm))) + getReg(s, ra)) | 0);
+      break;
+    }
+    case 'ldm': case 'ldmia': {
+      // Load multiple, increment-after: r[list[0]] = [rn], next = [rn+4], …
+      // (ascending address / ascending register). Optional `!` writeback on rn.
+      // gcc emits `ldm sp, {r1, r3}` to reload stashed area-snap temporaries.
+      let baseTok = (operands[0] ?? '').trim();
+      const wb = baseTok.includes('!');
+      baseTok = baseTok.replace('!', '').trim();
+      const rn = regIdx(baseTok);
+      if (rn < 0) break;
+      const list = parseRegList(operands.slice(1).join(','));
+      let addr = getReg(s, rn);
+      for (const r of list) { setReg(s, r, memRead32(s, addr)); addr = (addr + 4) | 0; }
+      if (wb) setReg(s, rn, addr);
       break;
     }
 

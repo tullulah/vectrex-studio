@@ -805,7 +805,7 @@ impl VPlayLevel {
     }
 
     pub fn compile_to_arm_asm_with_venemy(&self, dims: &HashMap<String, (i32, i32)>, venemy_dir: Option<&Path>) -> String {
-        self.compile_to_arm_asm_with_venemy_and_meshes(dims, venemy_dir, &HashMap::new(), &HashMap::new())
+        self.compile_to_arm_asm_with_venemy_and_meshes(dims, venemy_dir, &HashMap::new(), &HashMap::new(), &HashMap::new())
     }
 
     pub fn compile_to_arm_asm_with_venemy_and_meshes(
@@ -814,6 +814,7 @@ impl VPlayLevel {
         venemy_dir: Option<&Path>,
         vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
         vec_walk_areas: &HashMap<String, Vec<crate::vecres::VecWalkableArea>>,
+        vec_min_y: &HashMap<String, i16>,   // for the PI enemy feet_offset (= -min_y)
     ) -> String {
         let mut out = String::new();
         let name = self.metadata.name.to_uppercase().replace('-', "_").replace(' ', "_");
@@ -1055,7 +1056,23 @@ impl VPlayLevel {
                     pi_bytes.push(mirror_byte);
                     pi_bytes.push(facing_byte);
                     pi_bytes.push(is_anim_byte);
-                    pi_bytes.push(0u8); // feet_offset (TODO turn-3: from type_data[209])
+                    // feet_offset = -min_y of the enemy-type sprite (matches
+                    // venemy.rs type_data[209]; used by the wander area-snap/land).
+                    let feet_pi: i8 = vec_min_y
+                        .get(&et.to_lowercase())
+                        .map(|my| (-my).clamp(-127, 127) as i8)
+                        .unwrap_or(0);
+                    pi_bytes.push(feet_pi as u8);
+                    // Wander sprite-swap slots: idle sprite = the enemy's default
+                    // sprite (the inline type_data[204] idle action resolves to the
+                    // same static vec for a no-anim wander enemy); walk sprite =
+                    // NONE (inline state-0 sprite is null -> swap is a no-op). This
+                    // keeps the sprite constant across WALK/IDLE like the inline.
+                    // (Distinct idle/walk anim actions are a follow-up.)
+                    pi_bytes.extend_from_slice(&sprite_index.to_le_bytes()); // idle_sprite_index
+                    pi_bytes.push(is_anim_byte);                             // idle_is_anim
+                    pi_bytes.extend_from_slice(&0xFFFFu16.to_le_bytes());    // walk_sprite_index = NONE
+                    pi_bytes.push(0u8);                                      // walk_is_anim
                     for wp in wps {
                         pi_bytes.extend_from_slice(&wp.x.to_le_bytes());
                         pi_bytes.extend_from_slice(&wp.y.to_le_bytes());

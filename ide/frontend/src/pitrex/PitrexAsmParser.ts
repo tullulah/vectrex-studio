@@ -69,6 +69,8 @@ const BASE_MNEMONICS = new Set([
   // gcc integer-codegen additions (libvpy vpy.s): 32-bit immediate builders,
   // long multiplies, multiply-subtract, bitfield-extract, double load/store.
   'movw','movt','smull','umull','mls','ubfx','ldrd','strd',
+  // mla + wander/enemy area-snap: signed 16×16 mul-accumulate, load-multiple.
+  'mla','smlabb','ldm','ldmia',
 ]);
 
 /** Parse mnemonic into { op, cond }. */

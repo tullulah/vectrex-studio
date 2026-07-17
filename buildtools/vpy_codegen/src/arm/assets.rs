@@ -594,7 +594,7 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
                     .parent()
                     .and_then(|p| p.parent())
                     .map(|p| p.join("enemies"));
-                s.push_str(&level.compile_to_arm_asm_with_venemy_and_meshes(&dims_map, venemy_dir.as_deref(), &vec_meshes, &vec_walk_areas));
+                s.push_str(&level.compile_to_arm_asm_with_venemy_and_meshes(&dims_map, venemy_dir.as_deref(), &vec_meshes, &vec_walk_areas, &std::collections::HashMap::new()));
             }
             AssetType::Animation => {
                 let text = match fs::read_to_string(&asset.path) {
