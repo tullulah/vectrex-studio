@@ -643,6 +643,16 @@ void vpy_set_camera_y(int y) { s_cam_y = y; }
 int  vpy_get_camera_x(void)  { return s_cam_x; }
 int  vpy_get_camera_y(void)  { return s_cam_y; }
 
+/* no-tree-vectorize: at -Ofast/armv8 gcc auto-vectorizes the 8-byte GP-object
+ * copy (x,y,vx,vy → s_gp_buf) into NEON `vldr d16 / vst1.64 {d16},[r2:64]!`.
+ * That is the ONLY NEON in all of libvpy, and the VPy PitrexArm32 sim (which
+ * runs libvpy for the bridged builtins) has no VFP/NEON register model. Pin
+ * this one function to scalar codegen so libvpy stays NEON-free and the sim can
+ * execute it — the body is already integer-only; this only changes the copy to
+ * plain strh/str, no semantic change. (Prerequisite for a future LEVELS bridge;
+ * levels are otherwise DEFERRED — the camera/level state is shared with the
+ * still-inline enemy runtime, see pitrex/libvpy.rs.) */
+__attribute__((optimize("no-tree-vectorize")))
 void vpy_load_level(const unsigned char *level, const unsigned char *const *sprites)
 {
     s_level   = level;
