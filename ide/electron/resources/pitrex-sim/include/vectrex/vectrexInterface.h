@@ -48,7 +48,8 @@ void     v_readJoystick1Analog(void);  /* stores into currentJoy1X / currentJoy1
 uint32_t v_millis(void);
 
 /* Audio — one AY-3-8910 register write. */
-void     v_setSoundAY(uint8_t reg, uint8_t val);
+void     v_setSoundAY(uint8_t reg, uint8_t val);   /* legacy name (some games use it) */
+void     v_writePSG(uint8_t reg, uint8_t val);     /* real PiTrex SDK name — libvpy uses this */
 
 #ifdef __cplusplus
 }

@@ -180,7 +180,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         const alpha = Math.max(0, Math.min(1, s.b / 127));
         if (alpha <= 0) continue;
         // Phosphor-green vector stroke, intensity scaled by brightness.
-        ctx.strokeStyle = `rgba(170,255,170,${alpha})`;
+        ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
         ctx.beginPath();
         ctx.moveTo(sx(s.x0), sy(s.y0));
         ctx.lineTo(sx(s.x1), sy(s.y1));

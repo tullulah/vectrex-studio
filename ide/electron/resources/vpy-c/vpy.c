@@ -1,6 +1,6 @@
 /*
  * vpy.c — implementation of the VPy builtin runtime on the PiTrex SDK contract.
- * See vpy.h. Everything routes through v_directDraw32 / v_setSoundAY etc., so it
+ * See vpy.h. Everything routes through v_directDraw32 / v_writePSG etc., so it
  * behaves identically on real hardware and in the IDE simulator.
  */
 #include "vpy.h"
@@ -463,11 +463,11 @@ int vpy_rand_range(int lo, int hi) {
 /* ---- sound ---- */
 void vpy_tone(int period, int volume)
 {
-    if (volume <= 0) { v_setSoundAY(8, 0x00); return; }
-    v_setSoundAY(0, period & 0xff);
-    v_setSoundAY(1, (period >> 8) & 0x0f);
-    v_setSoundAY(8, volume & 0x0f);
-    v_setSoundAY(7, 0x3e);           /* enable tone A only */
+    if (volume <= 0) { v_writePSG(8, 0x00); return; }
+    v_writePSG(0, period & 0xff);
+    v_writePSG(1, (period >> 8) & 0x0f);
+    v_writePSG(8, volume & 0x0f);
+    v_writePSG(7, 0x3e);           /* enable tone A only */
 }
 void vpy_beep(int on) { if (on) vpy_tone(0xD5, 0x0f); else vpy_tone(0, 0); }
 
@@ -504,7 +504,7 @@ static uint32_t rd_le32(const unsigned char *p)
 static void psg_write(uint8_t reg, uint8_t val)
 {
     if (reg == 7) s_psg_mixer = val;
-    v_setSoundAY(reg, val);
+    v_writePSG(reg, val);
 }
 
 void vpy_play_music(const unsigned char *data)

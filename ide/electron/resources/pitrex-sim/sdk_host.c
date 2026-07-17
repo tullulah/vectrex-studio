@@ -88,6 +88,7 @@ void v_readJoystick1Analog(void) {
 uint32_t v_millis(void) { return (uint32_t)js_millis(); }
 
 void v_setSoundAY(uint8_t reg, uint8_t val) { js_sound_ay((int)reg, (int)val); }
+void v_writePSG(uint8_t reg, uint8_t val)   { js_sound_ay((int)reg, (int)val); }
 
 /* ---- FatFs over stdio (emscripten MEMFS) ---- */
 FRESULT f_open(FIL* fp, const char* path, BYTE mode) {
