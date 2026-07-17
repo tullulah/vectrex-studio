@@ -164,6 +164,40 @@ pub fn libvpy_symbol(vpy_name: &str) -> Option<&'static str> {
         "PRINT_NUMBER"              => Some("vpy_print_number"),
         "SET_TEXT_SIZE"             => Some("vpy_set_text_size"),
 
+        // ── BLOCK 5: INPUT builtins (J1 only) ───────────────────────────────
+        // The inline `pitrex_j1_x/y` do `ldrsb` of the SDK globals
+        // currentJoy1X/currentJoy1Y (int8_t, -128..127); libvpy's vpy_j1_x/y
+        // now read the SAME globals directly (was a stale s_jx/s_jy snapshot
+        // only refreshed by vpy_frame_begin, which the VPy game loop never
+        // calls). Range/sign are byte-identical.
+        //
+        // Buttons: the inline `pitrex_j1_btnN` returns
+        // `(currentButtonState >> (N-1)) & 1` (btn1->bit0 … btn4->bit3);
+        // vpy_j1_button(n) returns the identical `(currentButtonState>>(n-1))&1`.
+        // The VPy builtins J1_BUTTON_1..4 / J1_BTN1..4 are NAME-BAKED (no
+        // runtime arg), so the codegen (expressions.rs) intercepts the
+        // vpy_j1_button symbol and emits `mov r0,#N; bl vpy_j1_button` — the
+        // constant N is passed in r0 exactly as the C prototype expects.
+        //
+        // UPDATE_BUTTONS: inline `pitrex_update_buttons` = `bl v_readButtons` +
+        // `bl v_readJoystick1Analog`; vpy_update_buttons does the identical two
+        // SDK calls. (The VPy game loop already calls these each frame; this is
+        // the explicit mid-frame re-read.)
+        //
+        // NOT bridged: J2_* — the sim SDK contract (pitrex-sim) exposes ONLY J1
+        // (currentJoy1X/Y, currentButtonState; no currentJoy2X/Y, no
+        // v_readJoystick2Analog). Adding vpy_j2_* would fail to link against the
+        // integer-only C runtime's minimal contract and require extending the
+        // simulator host (sdk_host.c + JS hooks) — deferred. The inline J2 path
+        // (bits 4-7, currentJoy2X/Y) still serves HW/rp2350.
+        "J1_X" => Some("vpy_j1_x"),
+        "J1_Y" => Some("vpy_j1_y"),
+        "J1_BTN1" | "J1_BUTTON_1"
+        | "J1_BTN2" | "J1_BUTTON_2"
+        | "J1_BTN3" | "J1_BUTTON_3"
+        | "J1_BTN4" | "J1_BUTTON_4" => Some("vpy_j1_button"),
+        "UPDATE_BUTTONS" => Some("vpy_update_buttons"),
+
         // Deferred (NOT bridged yet):
         //   beep       — the inline `pitrex_beep` is a NO-OP stub (silent; the
         //                allocated BEEP_FRAMES_LEFT slot is never used on pitrex,

@@ -544,6 +544,24 @@ pub fn emit_call(
     let fn_name = crate::pitrex::libvpy::libvpy_symbol(info.name.as_str())
         .unwrap_or(fn_name);
 
+    // libvpy J1-button bridge: J1_BUTTON_n / J1_BTNn are NAME-BAKED (no runtime
+    // arg), but the C runtime's vpy_j1_button(int n) takes the button number in
+    // r0. Emit the constant then call. Bit numbering matches the inline
+    // pitrex_j1_btnN exactly (n=1 -> bit0 … n=4 -> bit3).
+    if fn_name == "vpy_j1_button" {
+        let n = match info.name.as_str() {
+            "J1_BTN1" | "J1_BUTTON_1" => 1,
+            "J1_BTN2" | "J1_BUTTON_2" => 2,
+            "J1_BTN3" | "J1_BUTTON_3" => 3,
+            "J1_BTN4" | "J1_BUTTON_4" => 4,
+            _ => 0,
+        };
+        return Ok(format!(
+            "    @ {} -> vpy_j1_button({n})\n    mov     r0, #{n}\n    bl      vpy_j1_button\n",
+            info.name
+        ));
+    }
+
     let mut s = String::new();
     let args = &info.args;
 

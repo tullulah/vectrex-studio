@@ -91,13 +91,19 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
         s.push_str(&emit_pitrex_draw_ellipse());
     }
     s.push_str(&emit_pitrex_draw_arc());
-    s.push_str(&emit_pitrex_update_buttons());
-    s.push_str(&emit_pitrex_j1_x());
-    s.push_str(&emit_pitrex_j1_y());
-    s.push_str(&emit_pitrex_j1_btn1());
-    s.push_str(&emit_pitrex_j1_btn2());
-    s.push_str(&emit_pitrex_j1_btn3());
-    s.push_str(&emit_pitrex_j1_btn4());
+    // J1 input + UPDATE_BUTTONS are bridged to libvpy (vpy_j1_x/y/button,
+    // vpy_update_buttons). No OTHER inline helper calls these standalone
+    // symbols, so suppress the inline bodies fully when bridged (same pattern
+    // as DRAW_CIRCLE/DRAW_ELLIPSE, not the atan2/rand keep-emitted case).
+    // J2_* stays inline (deferred — sim contract has no J2).
+    use crate::pitrex::libvpy::is_bridged;
+    if !is_bridged("UPDATE_BUTTONS") { s.push_str(&emit_pitrex_update_buttons()); }
+    if !is_bridged("J1_X")       { s.push_str(&emit_pitrex_j1_x()); }
+    if !is_bridged("J1_Y")       { s.push_str(&emit_pitrex_j1_y()); }
+    if !is_bridged("J1_BUTTON_1") { s.push_str(&emit_pitrex_j1_btn1()); }
+    if !is_bridged("J1_BUTTON_2") { s.push_str(&emit_pitrex_j1_btn2()); }
+    if !is_bridged("J1_BUTTON_3") { s.push_str(&emit_pitrex_j1_btn3()); }
+    if !is_bridged("J1_BUTTON_4") { s.push_str(&emit_pitrex_j1_btn4()); }
     s.push_str(&emit_pitrex_j2());
     s.push_str(&emit_pitrex_print_text());
     s.push_str(&emit_pitrex_print_number());

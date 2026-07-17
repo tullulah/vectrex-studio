@@ -15,8 +15,6 @@ static int   s_cur_x = 0, s_cur_y = 0;   /* MOVE origin, in VPy units */
 static int   s_intensity = 90;
 static int   s_text_size = 8;   /* matches inline PITREX_TEXT_SIZE default (0 -> 8) */
 static uint32_t s_rng = 0u;   /* matches the inline RAND_SEED (zeroed .bss) */
-static int   s_jx = 0, s_jy = 0;
-static uint8_t s_btn = 0;
 
 /* sin table: 128 steps per full circle, amplitude +-127 (compile-time const). */
 static const int8_t s_sin[128] = {
@@ -60,11 +58,8 @@ void vpy_init(void)
 void vpy_frame_begin(void)
 {
     v_WaitRecal();
-    v_readButtons();
-    v_readJoystick1Analog();
-    s_btn = currentButtonState;
-    s_jx = (int)currentJoy1X;
-    s_jy = (int)currentJoy1Y;
+    v_readButtons();          /* refresh currentButtonState */
+    v_readJoystick1Analog();  /* refresh currentJoy1X / currentJoy1Y */
 }
 
 void vpy_run(void (*setup)(void), void (*loop)(void))
@@ -386,10 +381,18 @@ void vpy_print_number(int x, int y, long n)
     font_draw_string(x, y, p);
 }
 
-/* ---- input ---- */
-int vpy_j1_x(void) { return s_jx; }
-int vpy_j1_y(void) { return s_jy; }
-int vpy_j1_button(int n) { return (n >= 1 && n <= 4) ? ((s_btn >> (n - 1)) & 1) : 0; }
+/* ---- input ----
+ * Read the SDK input globals DIRECTLY. They are refreshed every frame by
+ * v_readButtons() / v_readJoystick1Analog() — called by BOTH vpy_frame_begin()
+ * (the C vpy_run path) AND the VPy pitrex game loop before the loop body. This
+ * makes these functions bit-identical to the inline VPy codegen (pitrex_j1_x/y
+ * ldrsb currentJoy1X/Y; pitrex_j1_btnN reads bit N-1 of currentButtonState) and
+ * avoids the stale-snapshot bug: the old s_jx/s_jy/s_btn snapshot was only taken
+ * by vpy_frame_begin, which the VPy game loop never calls. */
+int vpy_j1_x(void) { return (int)currentJoy1X; }
+int vpy_j1_y(void) { return (int)currentJoy1Y; }
+int vpy_j1_button(int n) { return (n >= 1 && n <= 4) ? ((currentButtonState >> (n - 1)) & 1) : 0; }
+void vpy_update_buttons(void) { v_readButtons(); v_readJoystick1Analog(); }
 
 /* ---- math ---- */
 int vpy_abs(int v) { return v < 0 ? -v : v; }

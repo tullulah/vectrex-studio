@@ -51,10 +51,14 @@ void vpy_set_text_size(int s);       /* glyph scale (VPy units per grid unit ~ s
 void vpy_print_text(int x, int y, const char *s);
 void vpy_print_number(int x, int y, long n);
 
-/* ---- input ---- */
+/* ---- input ----
+ * All read the SDK input globals (currentJoy1X/Y, currentButtonState) directly;
+ * they are refreshed each frame by vpy_frame_begin() (vpy_run path) or by the
+ * VPy game loop. vpy_update_buttons() forces an immediate re-read mid-frame. */
 int vpy_j1_x(void);                  /* -127..127 */
 int vpy_j1_y(void);                  /* -127..127 (+ = up) */
-int vpy_j1_button(int n);            /* n = 1..4 -> 0/1 */
+int vpy_j1_button(int n);            /* n = 1..4 -> 0/1 (bit n-1 of button state) */
+void vpy_update_buttons(void);       /* v_readButtons + v_readJoystick1Analog */
 
 /* ---- math ---- */
 int vpy_abs(int v);
@@ -122,6 +126,7 @@ int  vpy_get_camera_y(void);
 #define PRINT_NUMBER    vpy_print_number
 #define J1_X            vpy_j1_x
 #define J1_Y            vpy_j1_y
+#define UPDATE_BUTTONS  vpy_update_buttons
 #define PLAY_MUSIC      vpy_play_music
 #define STOP_MUSIC      vpy_stop_music
 #define PLAY_SFX        vpy_play_sfx
