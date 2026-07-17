@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useJoystickStore } from '../state/joystickStore';
 
 /*
  * PitrexSimView — runs an external project's WASM "simulator" module in the
@@ -24,6 +25,7 @@ const PITREX_X_RANGE = 18000; // half-width
 const PITREX_Y_RANGE = 24000; // half-height
 const INTERNAL_W = 330;
 const INTERNAL_H = 440;
+const DEBUG_INPUT = false;    // draw a live controller-state readout (diagnostic)
 
 interface Segment { x0: number; y0: number; x1: number; y1: number; b: number; }
 
@@ -61,6 +63,55 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
 
   // Live refs read by the JS hooks each frame.
   const controllerRef = useRef<ControllerState>({ buttons: 0, joyX: 0, joyY: 0 });
+  const keysRef = useRef<Record<string, boolean>>({});      // live keyboard state
+  const keyDbgRef = useRef({ n: 0, last: '-' }); // DEBUG: raw keydown counter
+
+  // Merge keyboard + physical gamepad (HTML5 Gamepad API, honouring the IDE's
+  // joystick config) into the controller state the game reads. Called on every
+  // key event and once per frame (so a plugged-in gamepad is polled live).
+  const pollInput = useCallback(() => {
+    const keys = keysRef.current;
+    let x = 0, y = 0, buttons = 0;
+    if (keys['ArrowLeft'] || keys['KeyA']) x -= 127;
+    if (keys['ArrowRight'] || keys['KeyD']) x += 127;
+    if (keys['ArrowUp'] || keys['KeyW']) y += 127;   // +Y = up
+    if (keys['ArrowDown'] || keys['KeyS']) y -= 127;
+    if (keys['KeyZ']) buttons |= 0x01;
+    if (keys['KeyX']) buttons |= 0x02;
+    if (keys['KeyC']) buttons |= 0x04;
+    if (keys['KeyV']) buttons |= 0x08;
+
+    try {
+      const cfg = useJoystickStore.getState();
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      // Use the configured pad, or fall back to the first connected one so a
+      // plugged-in controller works without prior setup.
+      let gp = (cfg.gamepadIndex != null ? pads[cfg.gamepadIndex] : null) || null;
+      if (!gp) { for (const p of pads) { if (p && p.connected) { gp = p; break; } } }
+      if (gp && gp.connected) {
+        const dz = cfg.deadzone ?? 0.15;
+        const dead = (v: number) => (Math.abs(v) < dz ? 0 : v);
+        const gx = dead(gp.axes[cfg.axisXIndex ?? 0] || 0) * (cfg.axisXInverted ? -1 : 1);
+        const gy = dead(gp.axes[cfg.axisYIndex ?? 1] || 0) * (cfg.axisYInverted ? -1 : 1);
+        const dL = gp.buttons[cfg.dpadLeftButton]?.pressed;
+        const dR = gp.buttons[cfg.dpadRightButton]?.pressed;
+        const dU = gp.buttons[cfg.dpadUpButton]?.pressed;
+        const dD = gp.buttons[cfg.dpadDownButton]?.pressed;
+        if (dL) x = -127; else if (dR) x = 127; else if (gx) x = Math.round(gx * 127);
+        // Match the 6809 emulator's convention: axis * 127 with the user's
+        // axisYInverted config (no extra negation), so both cores behave the
+        // same for a given joystick setup.
+        if (dU) y = 127; else if (dD) y = -127; else if (gy) y = Math.round(gy * 127);
+        const maps = cfg.buttonMappings && cfg.buttonMappings.length
+          ? cfg.buttonMappings
+          : [{ vectrexButton: 1, gamepadButton: 0 }, { vectrexButton: 2, gamepadButton: 1 },
+             { vectrexButton: 3, gamepadButton: 2 }, { vectrexButton: 4, gamepadButton: 3 }];
+        maps.forEach((m) => { if (gp!.buttons[m.gamepadButton]?.pressed) buttons |= (1 << (m.vectrexButton - 1)); });
+      }
+    } catch { /* no gamepad */ }
+
+    controllerRef.current = { joyX: x, joyY: y, buttons };
+  }, []);
   const segmentsRef = useRef<Segment[]>([]);
   const disposedRef = useRef<boolean>(false);
   const startMsRef = useRef<number>(Date.now());
@@ -78,41 +129,30 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
   // don't swallow the keys first. This is a generic Vectrex-controller mapping,
   // not tied to any particular game.
   useEffect(() => {
-    const keys: Record<string, boolean> = {};
-    const recompute = () => {
-      let x = 0, y = 0, buttons = 0;
-      if (keys['ArrowLeft'] || keys['KeyA']) x -= 127;
-      if (keys['ArrowRight'] || keys['KeyD']) x += 127;
-      if (keys['ArrowUp'] || keys['KeyW']) y += 127;   // +Y = up/forward
-      if (keys['ArrowDown'] || keys['KeyS']) y -= 127;
-      if (keys['KeyZ']) buttons |= 0x01; // button 1
-      if (keys['KeyX']) buttons |= 0x02; // button 2
-      if (keys['KeyC']) buttons |= 0x04; // button 3
-      if (keys['KeyV']) buttons |= 0x08; // button 4
-      controllerRef.current = { joyX: x, joyY: y, buttons };
-    };
     const isGameKey = (code: string) =>
       code === 'ArrowLeft' || code === 'ArrowRight' || code === 'ArrowUp' || code === 'ArrowDown' ||
       code === 'KeyA' || code === 'KeyD' || code === 'KeyW' || code === 'KeyS' ||
       code === 'KeyZ' || code === 'KeyX' || code === 'KeyC' || code === 'KeyV';
     const down = (e: KeyboardEvent) => {
+      keyDbgRef.current.n++;              // DEBUG: count every keydown reaching us
+      keyDbgRef.current.last = e.code;
       if (!isGameKey(e.code)) return;
-      keys[e.code] = true;
+      keysRef.current[e.code] = true;
       e.preventDefault();
-      recompute();
+      pollInput();
     };
     const up = (e: KeyboardEvent) => {
       if (!isGameKey(e.code)) return;
-      keys[e.code] = false;
-      recompute();
+      keysRef.current[e.code] = false;
+      pollInput();
     };
-    document.addEventListener('keydown', down, { capture: true });
-    document.addEventListener('keyup', up, { capture: true });
+    window.addEventListener('keydown', down, { capture: true });
+    window.addEventListener('keyup', up, { capture: true });
     return () => {
-      document.removeEventListener('keydown', down, { capture: true } as any);
-      document.removeEventListener('keyup', up, { capture: true } as any);
+      window.removeEventListener('keydown', down, { capture: true } as any);
+      window.removeEventListener('keyup', up, { capture: true } as any);
     };
-  }, []);
+  }, [pollInput]);
 
   // ── Load + instantiate the WASM module ────────────────────────────────────
   useEffect(() => {
@@ -146,6 +186,14 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         ctx.lineTo(sx(s.x1), sy(s.y1));
         ctx.stroke();
       }
+      // DEBUG: live controller state the game reads (flip DEBUG_INPUT off later).
+      if (DEBUG_INPUT) {
+        const c = controllerRef.current;
+        const k = keyDbgRef.current;
+        ctx.fillStyle = '#3f6';
+        ctx.font = '11px monospace';
+        ctx.fillText(`J ${c.joyX},${c.joyY} B ${c.buttons.toString(2).padStart(4, '0')} k:${k.n} ${k.last}`, 4, 12);
+      }
     };
 
     // The Module.pitrex contract implemented by sdk_host.c. Every hook is a
@@ -158,6 +206,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       },
       present: () => {
         if (disposedRef.current) throw 'pitrex-sim-disposed';
+        pollInput();   // poll the physical gamepad once per frame (live)
         const segs = segmentsRef.current;
         segmentsRef.current = [];
         draw(segs);
@@ -314,7 +363,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       } catch { /* ignore */ }
       audioRef.current = null;
     };
-  }, [modulePath]);
+  }, [modulePath, pollInput]);
 
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>

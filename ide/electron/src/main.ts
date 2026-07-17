@@ -1510,11 +1510,12 @@ export async function executeSimBuild(args: {
     return { error: 'no_simulate_target' };
   }
 
-  // Host SDK shim ships in the app resources.
+  // Host SDK shim + the C VPy runtime ship in the app resources.
   const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
   const shimDir = join(resourcesDir, 'pitrex-sim');
+  const vpyCDir = join(resourcesDir, 'vpy-c');
 
-  const env: NodeJS.ProcessEnv = { ...process.env, ...(manifest.env || {}), PITREX_SIM_SDK: shimDir };
+  const env: NodeJS.ProcessEnv = { ...process.env, ...(manifest.env || {}), PITREX_SIM_SDK: shimDir, VPY_C_SDK: vpyCDir };
   const emDir = resolveEmscriptenDir();
   if (emDir) {
     env.PATH = `${emDir}${require('path').delimiter}${env.PATH || ''}`;

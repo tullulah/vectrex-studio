@@ -1,0 +1,15 @@
+# draw_line — C port of the VPy individual_test, using the vpy.h runtime.
+[project]
+name = "draw_line"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["draw_line_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["draw_line_wasm"]
+module = "build_wasm/draw_line.js"

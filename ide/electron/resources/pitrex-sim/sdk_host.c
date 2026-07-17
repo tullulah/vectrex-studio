@@ -49,9 +49,24 @@ EM_JS(void, js_sound_ay, (int reg, int val), {
 });
 
 /* ---- vectrexInterface ---- */
+static int s_refresh_hz = 50;   /* Vectrex frame rate; the game may change it */
+
 void vectrexinit(int mode) { (void)mode; }
 void v_init(void) {}
-void v_setRefresh(int hz) { (void)hz; }
+void v_setRefresh(int hz) { if (hz > 0) s_refresh_hz = hz; }
+
+/* Pace the game loop to the declared refresh: return how many ms v_WaitRecal
+ * should sleep so frames advance at ~hz, instead of running flat-out. Keeps a
+ * running target on the JS side and re-syncs if it falls behind. */
+EM_JS(int, js_frame_delay, (int hz), {
+    var now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+    var period = 1000 / (hz > 0 ? hz : 50);
+    if (Module._simNextFrame === undefined || Module._simNextFrame < now - 4 * period)
+        Module._simNextFrame = now;
+    Module._simNextFrame += period;
+    var d = Module._simNextFrame - now;
+    return (d < 0) ? 0 : (d | 0);
+});
 
 void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b) {
     js_draw_line((int)x0, (int)y0, (int)x1, (int)y1, (int)b);
@@ -59,7 +74,7 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b) {
 
 void v_WaitRecal(void) {
     js_present();
-    emscripten_sleep(0); /* Asyncify yield → host rAF */
+    emscripten_sleep(js_frame_delay(s_refresh_hz)); /* pace to the game's refresh */
 }
 
 uint8_t v_readButtons(void) {

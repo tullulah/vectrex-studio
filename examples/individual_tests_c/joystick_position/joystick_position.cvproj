@@ -1,0 +1,14 @@
+[project]
+name = "joystick_position"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["joystick_position_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["joystick_position_wasm"]
+module = "build_wasm/joystick_position.js"
