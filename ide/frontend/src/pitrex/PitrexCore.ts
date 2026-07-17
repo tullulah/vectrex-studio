@@ -31,10 +31,22 @@ export class PitrexCore {
   static readonly AUDIO_SAMPLE_RATE = 44100;
   static readonly AUDIO_BUFFER_SIZE = 512;
 
-  /** Parse and load the generated .s file text. */
-  loadAssembly(sFileText: string): void {
+  /**
+   * Parse and load the generated .s file text.
+   *
+   * @param sFileText  the VPy-emitted program .s
+   * @param libvpyAsm  optional libvpy C runtime asm (vpy.c compiled to .s at
+   *   build time). When a bridged builtin is used the codegen emits
+   *   `bl vpy_<name>` (e.g. DRAW_CIRCLE → vpy_draw_circle) whose body only
+   *   exists in libvpy; appending it here lets label/address allocation flow
+   *   continuously so those calls land on the real C body. Programs with no
+   *   bridged builtin pass nothing and still load fine (unused libvpy code is
+   *   simply never reached from the program's entry).
+   */
+  loadAssembly(sFileText: string, libvpyAsm?: string | null): void {
     try {
-      const parsed = parseAsm(sFileText);
+      const combined = libvpyAsm ? `${sFileText}\n${libvpyAsm}` : sFileText;
+      const parsed = parseAsm(combined);
       this.state   = createState(parsed);
       // Wire PSG callback: v_writePSG calls this so audio synthesis gets the data
       this.state.psgWrite = (reg: number, val: number) => {

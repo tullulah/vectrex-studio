@@ -222,8 +222,9 @@ function regIdx(s: string): number {
   if (t === 'sp')  return 13;
   if (t === 'lr')  return 14;
   if (t === 'pc')  return 15;
-  if (t === 'r12') return 12; // also called 'ip'
-  if (t === 'ip')  return 12;
+  if (t === 'r12' || t === 'ip') return 12; // r12 = intra-procedure scratch (ip)
+  if (t === 'r11' || t === 'fp') return 11; // r11 = frame pointer (fp) in gcc output
+  if (t === 'r10' || t === 'sl') return 10; // r10 = stack limit (sl)
   if (t.startsWith('r')) {
     const n = parseInt(t.slice(1), 10);
     if (!isNaN(n)) return n;
@@ -443,6 +444,33 @@ function resolveLdrLiteral(s: PitrexArm32State, operand: string): number {
 
   console.warn(`[PitrexArm32] unresolved ldr literal: ${inner}`);
   return 0;
+}
+
+/**
+ * Resolve a movw/movt operand to its 16-bit half-word value.
+ *
+ * gcc builds 32-bit constants and symbol addresses with a movw/movt pair:
+ *   movw rd, #imm16                 → low half is imm16
+ *   movt rd, #imm16                 → high half is imm16 (note: no `#` sometimes)
+ *   movw rd, #:lower16:SYMBOL       → low half is (addr(SYMBOL) & 0xFFFF)
+ *   movt rd, #:upper16:SYMBOL       → high half is ((addr(SYMBOL) >> 16) & 0xFFFF)
+ * This returns the already-extracted 16-bit half for whichever form is present,
+ * so the caller just places it in the low (movw) or high (movt) half of rd.
+ */
+function resolveMovHalf(s: PitrexArm32State, tokRaw: string): number {
+  const tok = tokRaw.trim().replace(/^#/, '');
+  const lower = tok.match(/^:lower16:(.+)$/);
+  if (lower) {
+    const v = resolveSymbol(lower[1].trim(), s.parsed);
+    return (v === null ? 0 : v) & 0xFFFF;
+  }
+  const upper = tok.match(/^:upper16:(.+)$/);
+  if (upper) {
+    const v = resolveSymbol(upper[1].trim(), s.parsed);
+    return ((v === null ? 0 : v) >>> 16) & 0xFFFF;
+  }
+  // Plain immediate (gcc writes movw with `#`, movt sometimes without).
+  return parseImm('#' + tok) & 0xFFFF;
 }
 
 // ---------------------------------------------------------------------------
@@ -847,6 +875,110 @@ function executeOne(s: PitrexArm32State): boolean {
       const rd = regIdx(operands[0] ?? '');
       if (rd < 0) break;
       setReg(s, rd, (~resolveOp(s, operands[1] ?? '#0')) | 0);
+      break;
+    }
+
+    // ── MOVW (load 16-bit immediate / :lower16: of a symbol) ─────────────
+    case 'movw': {
+      const rd = regIdx(operands[0] ?? '');
+      if (rd < 0) break;
+      // movw clears the top 16 bits (rd = imm16 or lower16 of a symbol addr).
+      setReg(s, rd, resolveMovHalf(s, operands[1] ?? '#0'));
+      break;
+    }
+
+    // ── MOVT (set top 16 bits / :upper16: of a symbol) ──────────────────
+    case 'movt': {
+      const rd = regIdx(operands[0] ?? '');
+      if (rd < 0) break;
+      const hi = resolveMovHalf(s, operands[1] ?? '#0');
+      setReg(s, rd, ((getReg(s, rd) & 0xFFFF) | (hi << 16)) | 0);
+      break;
+    }
+
+    // ── SMULL / UMULL (32×32 → 64-bit multiply into RdLo:RdHi) ──────────
+    case 'smull': case 'umull': {
+      const rdLo = regIdx(operands[0] ?? '');
+      const rdHi = regIdx(operands[1] ?? '');
+      const rn   = regIdx(operands[2] ?? '');
+      const rm   = regIdx(operands[3] ?? '');
+      if (rdLo < 0 || rdHi < 0 || rn < 0 || rm < 0) break;
+      // BigInt gives an exact 64-bit product; signed vs unsigned differ only in
+      // how the 32-bit register values are reinterpreted before multiplying.
+      const a = op === 'smull' ? BigInt(getReg(s, rn)) : BigInt(getReg(s, rn) >>> 0);
+      const b = op === 'smull' ? BigInt(getReg(s, rm)) : BigInt(getReg(s, rm) >>> 0);
+      const prod = a * b;
+      setReg(s, rdLo, Number(prod & 0xFFFFFFFFn) | 0);
+      setReg(s, rdHi, Number((prod >> 32n) & 0xFFFFFFFFn) | 0);
+      break;
+    }
+
+    // ── MLS (multiply-subtract: rd = ra - rn*rm) ────────────────────────
+    case 'mls': {
+      const rd = regIdx(operands[0] ?? '');
+      const rn = regIdx(operands[1] ?? '');
+      const rm = regIdx(operands[2] ?? '');
+      const ra = regIdx(operands[3] ?? '');
+      if (rd < 0 || rn < 0 || rm < 0 || ra < 0) break;
+      setReg(s, rd, (getReg(s, ra) - Math.imul(getReg(s, rn), getReg(s, rm))) | 0);
+      break;
+    }
+
+    // ── UBFX (unsigned bitfield extract: rd = (rn >> lsb) & mask) ───────
+    case 'ubfx': {
+      const rd  = regIdx(operands[0] ?? '');
+      const rn  = regIdx(operands[1] ?? '');
+      if (rd < 0 || rn < 0) break;
+      const lsb   = parseImm(operands[2] ?? '#0') & 0x1F;
+      const width = parseImm(operands[3] ?? '#1') & 0x3F;
+      const mask  = width >= 32 ? 0xFFFFFFFF : ((1 << width) - 1);
+      setReg(s, rd, ((getReg(s, rn) >>> lsb) & mask) | 0);
+      break;
+    }
+
+    // ── SDIV / UDIV (hardware integer divide, armv8) ────────────────────
+    case 'sdiv': case 'udiv': {
+      const rd = regIdx(operands[0] ?? '');
+      const rn = regIdx(operands[1] ?? '');
+      const rm = regIdx(operands[2] ?? '');
+      if (rd < 0 || rn < 0 || rm < 0) break;
+      const divisor = getReg(s, rm);
+      if (divisor === 0) { setReg(s, rd, 0); break; }  // ARMv8: divide-by-zero → 0
+      if (op === 'sdiv') {
+        setReg(s, rd, Math.trunc(getReg(s, rn) / divisor) | 0);
+      } else {
+        setReg(s, rd, Math.floor((getReg(s, rn) >>> 0) / (divisor >>> 0)) | 0);
+      }
+      break;
+    }
+
+    // ── LDRD / STRD (load/store two consecutive registers) ──────────────
+    // Syntax used by gcc: "ldrd r2, [r4, #8]" → r2 = [addr], r3 = [addr+4]
+    // (the second register is implicitly Rt+1). The optional explicit-Rt2
+    // form "ldrd r2, r3, [r4, #8]" is handled by detecting a bare register in
+    // operands[1].
+    case 'ldrd': case 'strd': {
+      const rt = regIdx(operands[0] ?? '');
+      if (rt < 0) break;
+      let memTok = operands[1] ?? '';
+      let extra  = operands[2];
+      let rt2 = rt + 1;
+      if (!memTok.trim().startsWith('[')) {
+        // Explicit second register form.
+        const r2 = regIdx(memTok);
+        if (r2 >= 0) rt2 = r2;
+        memTok = operands[2] ?? '';
+        extra  = operands[3];
+      }
+      const { addr, postIncReg, postIncVal } = parseMemOp(s, memTok, extra);
+      if (op === 'ldrd') {
+        setReg(s, rt,  memRead32(s, addr));
+        setReg(s, rt2, memRead32(s, (addr + 4) | 0));
+      } else {
+        memWrite32(s, addr,        getReg(s, rt));
+        memWrite32(s, (addr + 4) | 0, getReg(s, rt2));
+      }
+      if (postIncReg >= 0) s.regs[postIncReg] = (s.regs[postIncReg] + postIncVal) | 0;
       break;
     }
 

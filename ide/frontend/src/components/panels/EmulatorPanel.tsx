@@ -352,6 +352,7 @@ export const EmulatorPanel: React.FC = () => {
   const pitrexCoreRef = useRef<import('../../pitrex/PitrexCore.js').PitrexCore | null>(null);
   // Last assembly text loaded into PitrexCore — needed for reset (re-parse + restart loop)
   const pitrexSFileRef = useRef<string | null>(null);
+  const pitrexLibvpyRef = useRef<string | null>(null);
   
   // Hook editor store para documentos activos
   const editorActive = useEditorStore(s => s.active);
@@ -2506,7 +2507,7 @@ export const EmulatorPanel: React.FC = () => {
       // Re-parse assembly into a fresh core
       import('../../pitrex/PitrexCore.js').then(({ PitrexCore }) => {
         const core = new PitrexCore();
-        core.loadAssembly(pitrexSFileRef.current!);
+        core.loadAssembly(pitrexSFileRef.current!, pitrexLibvpyRef.current);
         pitrexCoreRef.current = core;
 
         if (!core.isReady()) {
@@ -2940,7 +2941,7 @@ export const EmulatorPanel: React.FC = () => {
     const electronAPI: any = (window as any).electronAPI;
     if (!electronAPI?.onCompiledBin) return;
 
-    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null }) => {
+    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null; libvpyAsm?: string | null }) => {
       console.log(`[EmulatorPanel] Loading compiled binary: ${payload.binPath} (${payload.size} bytes) target=${payload.target ?? 'm6809'}`);
 
       // A VPy / hardware binary is loading — tear down any external-project WASM
@@ -3038,9 +3039,10 @@ export const EmulatorPanel: React.FC = () => {
           // Dynamically import PitrexCore to avoid bundling it unless needed
           const { PitrexCore } = await import('../../pitrex/PitrexCore.js');
           const core = new PitrexCore();
-          core.loadAssembly(payload.sFileText);
+          core.loadAssembly(payload.sFileText, payload.libvpyAsm);
           pitrexCoreRef.current = core;
           pitrexSFileRef.current = payload.sFileText; // persist for reset
+          pitrexLibvpyRef.current = payload.libvpyAsm ?? null; // persist for reset
 
           if (!core.isReady()) {
             console.error('[EmulatorPanel] PitrexCore failed to load assembly');

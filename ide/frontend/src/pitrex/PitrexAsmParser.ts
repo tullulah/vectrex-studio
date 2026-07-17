@@ -66,6 +66,9 @@ const BASE_MNEMONICS = new Set([
   'nop','wfi','wfe',
   'uxth','uxtb','sxtb','sxth',
   'clz','udiv','sdiv',
+  // gcc integer-codegen additions (libvpy vpy.s): 32-bit immediate builders,
+  // long multiplies, multiply-subtract, bitfield-extract, double load/store.
+  'movw','movt','smull','umull','mls','ubfx','ldrd','strd',
 ]);
 
 /** Parse mnemonic into { op, cond }. */
@@ -134,6 +137,23 @@ function parseNumber(s: string): number | null {
     return parseInt(s, 10);
   }
   return null;
+}
+
+/**
+ * Decode the escape sequences inside a `.ascii`/`.asciz` string literal.
+ * Handles gcc's octal (`\NNN`, e.g. the s_sin table in libvpy's vpy.s), plus
+ * `\xNN`, `\n`, `\r`, `\t`, and `\\`. Octal is matched first because gcc always
+ * zero-pads octal escapes to 3 digits, so a following literal digit is never
+ * consumed. Literal printable characters pass through untouched.
+ */
+function decodeAsmString(raw: string): string {
+  return raw
+    .replace(/\\([0-7]{1,3})/g, (_m, o) => String.fromCharCode(parseInt(o, 8) & 0xFF))
+    .replace(/\\x([0-9a-fA-F]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\\\/g, '\\');
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +263,11 @@ export function parseAsm(src: string): ParsedAsm {
     // Bare section directives (without .section prefix, e.g. just ".bss" or ".text")
     if (line === '.bss')  { section = 'bss';    textDataActive = false; continue; }
     if (line === '.text') { section = 'text';   textDataActive = false; continue; }
-    if (line === '.data') { section = 'text';   textDataActive = false; continue; }
+    // gcc emits initialized statics (s_intensity, s_psg_mixer, …) in a bare
+    // `.data` section as `LABEL: .word/.byte`. Route it through the rodata path
+    // so those bytes land in initMemory and their addresses resolve. (The VPy
+    // pitrex backend never emits `.data`, so this only affects libvpy's vpy.s.)
+    if (line === '.data') { section = 'rodata'; textDataActive = false; continue; }
 
     // ── Global .equ (can appear in bss or anywhere) ─────────────────────
     if (line.startsWith('.equ ') || line.startsWith('.equ\t')) {
@@ -272,6 +296,39 @@ export function parseAsm(src: string): ParsedAsm {
       continue;
     }
 
+    // ── .set NAME, VALUE ────────────────────────────────────────────────
+    // gcc names its section anchors this way: `.set .LANCHOR2, . + 0` binds
+    // the anchor to the current location counter (`.`). movw/movt then load
+    // :lower16:/:upper16: of the anchor to address the following data (e.g.
+    // vpy_draw_circle addresses the s_sin table via .LANCHOR2). We align the
+    // counter to 4 first — matching the alignment the very next data label
+    // applies — so the anchor and the label resolve to the same address.
+    // (Handled before SKIP_DIRECTIVES, which lists `.set`.)
+    if (line.startsWith('.set ') || line.startsWith('.set\t')) {
+      const rest  = line.slice(4).trim();
+      const comma = rest.indexOf(',');
+      if (comma >= 0) {
+        const name   = rest.slice(0, comma).trim();
+        const valStr = rest.slice(comma + 1).trim();
+        let v: number | null = null;
+        if (valStr.startsWith('.')) {
+          // Location-counter-relative: "." / ". + N" / ". - N".
+          let addr = section === 'bss' ? bssNext : rodataNext;
+          addr = (addr + 3) & ~3;
+          if (section === 'bss') bssNext = addr; else rodataNext = addr;
+          const m = valStr.match(/^\.\s*([+-])\s*(\d+)/);
+          v = m ? (m[1] === '-' ? addr - parseInt(m[2], 10) : addr + parseInt(m[2], 10)) : addr;
+        } else {
+          v = parseNumber(valStr);
+        }
+        if (name && v !== null) {
+          equs.set(name, v);
+          symbols.set(name, { kind: 'equ', value: v });
+        }
+      }
+      continue;
+    }
+
     // ── Skip directives with no useful data ────────────────────────────
     {
       const tok = line.split(/[\s\t]/)[0];
@@ -280,7 +337,7 @@ export function parseAsm(src: string): ParsedAsm {
 
     // ── BSS section ─────────────────────────────────────────────────────
     if (section === 'bss') {
-      // LABEL: .space N
+      // VPy form: "LABEL: .space N" (label + reservation on one line).
       const spaceMatch = line.match(/^(\w[\w.]*)\s*:\s*\.space\s+(\d+)/);
       if (spaceMatch) {
         const name = spaceMatch[1];
@@ -288,6 +345,19 @@ export function parseAsm(src: string): ParsedAsm {
         bssNext = (bssNext + 3) & ~3; // align to 4
         symbols.set(name, { kind: 'bss', value: bssNext });
         bssNext += sz;
+        continue;
+      }
+      // gcc form: bare "LABEL:" on its own line, reservation on the next.
+      const bareLabel = line.match(/^(\w[\w.]*)\s*:\s*$/);
+      if (bareLabel) {
+        bssNext = (bssNext + 3) & ~3;
+        symbols.set(bareLabel[1], { kind: 'bss', value: bssNext });
+        continue;
+      }
+      // gcc form: bare ".space N" (reservation / padding) advances the counter.
+      const bareSpace = line.match(/^\.space\s+(\d+)/);
+      if (bareSpace) {
+        bssNext += parseInt(bareSpace[1], 10);
         continue;
       }
       continue;
@@ -360,17 +430,33 @@ export function parseAsm(src: string): ParsedAsm {
       // .asciz "..." — null-terminated string bytes stored in initMemory
       const ascizMatch = line.match(/^\.asciz\s+"((?:[^"\\]|\\.)*)"/);
       if (ascizMatch) {
-        const raw = ascizMatch[1];
-        const decoded = raw
-          .replace(/\\x([0-9a-fA-F]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16)))
-          .replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t')
-          .replace(/\\0/g, '\0').replace(/\\\\/g, '\\');
+        const decoded = decodeAsmString(ascizMatch[1]);
         for (let i = 0; i < decoded.length; i++) {
           writeMemByte(rodataNext, decoded.charCodeAt(i) & 0xFF);
           rodataNext++;
         }
         writeMemByte(rodataNext, 0); // null terminator
         rodataNext++;
+        continue;
+      }
+
+      // .ascii "..." — like .asciz but NO trailing null. gcc emits the libvpy
+      // const tables (s_sin, glyph strokes) as one or more concatenated .ascii
+      // lines; each appends its decoded bytes at the running rodata address.
+      const asciiMatch = line.match(/^\.ascii\s+"((?:[^"\\]|\\.)*)"/);
+      if (asciiMatch) {
+        const decoded = decodeAsmString(asciiMatch[1]);
+        for (let i = 0; i < decoded.length; i++) {
+          writeMemByte(rodataNext, decoded.charCodeAt(i) & 0xFF);
+          rodataNext++;
+        }
+        continue;
+      }
+
+      // .space N — zero-filled reservation / struct padding (advance counter).
+      const rodataSpace = line.match(/^\.space\s+(\d+)/);
+      if (rodataSpace) {
+        rodataNext += parseInt(rodataSpace[1], 10);
         continue;
       }
 
@@ -397,14 +483,7 @@ export function parseAsm(src: string): ParsedAsm {
       if (ascizMatch) {
         if (lastTextLabel) {
           // Decode escape sequences in the string
-          const raw = ascizMatch[1];
-          const decoded = raw
-            .replace(/\\x([0-9a-fA-F]{2})/g, (_m, h) => String.fromCharCode(parseInt(h, 16)))
-            .replace(/\\n/g, '\n')
-            .replace(/\\r/g, '\r')
-            .replace(/\\t/g, '\t')
-            .replace(/\\0/g, '\0')
-            .replace(/\\\\/g, '\\');
+          const decoded = decodeAsmString(ascizMatch[1]);
           strings.set(lastTextLabel, decoded);
           // Assign fake string address if not already in symbols.
           // Advance stringNext by actual string length + null terminator,

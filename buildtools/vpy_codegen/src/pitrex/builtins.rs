@@ -65,7 +65,12 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     s.push_str(&emit_pitrex_draw_rect());
     s.push_str(&emit_pitrex_draw_filled_rect());
     s.push_str(&emit_pitrex_draw_polygon());
-    s.push_str(&emit_pitrex_draw_circle());
+    // libvpy bridge (POC): when DRAW_CIRCLE is routed to the C runtime
+    // (vpy_draw_circle), suppress the inline body so only the `bl` remains.
+    // No other inline helper calls pitrex_draw_circle, so this is safe.
+    if !crate::pitrex::libvpy::is_bridged("DRAW_CIRCLE") {
+        s.push_str(&emit_pitrex_draw_circle());
+    }
     s.push_str(&emit_pitrex_draw_ellipse());
     s.push_str(&emit_pitrex_draw_arc());
     s.push_str(&emit_pitrex_update_buttons());

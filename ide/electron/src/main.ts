@@ -1905,6 +1905,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
 
         // For pitrex builds, also read the .s assembly file for the in-browser ARM32 interpreter
         let sFileText: string | null = null;
+        let libvpyAsm: string | null = null;
         if (target === 'pitrex') {
           // Derive .s path from binary path — handle .img, .bin, .elf, or any extension
           const sPath = binPath.replace(/\.[^.]+$/, '.s');
@@ -1914,6 +1915,17 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           } catch (_e) {
             // .s file not found at derived path — try sibling with project name
             console.warn('[main] pitrex: could not load .s from', sPath);
+          }
+          // Also read the sibling libvpy .s (vpy.c compiled at build time) so
+          // the sim can resolve bridged builtins (e.g. `bl vpy_draw_circle`).
+          // Absent for programs that use no bridged builtin — that's fine, the
+          // renderer just parses the program .s on its own.
+          const libvpyPath = sPath.replace(/\.s$/, '_libvpy.s');
+          try {
+            libvpyAsm = await fs.readFile(libvpyPath, 'utf8');
+            mainWindow?.webContents.send('run://status', `✅ pitrex libvpy .s loaded (${libvpyAsm.length} chars)`);
+          } catch (_e) {
+            // No libvpy .s — program uses no bridged builtin, or vpy-c absent.
           }
         }
 
@@ -1957,6 +1969,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           target: target || 'm6809',
           elfBase64,
           sFileText,
+          libvpyAsm,
         });
 
         // Copy to SD card if requested (pitrex target only)

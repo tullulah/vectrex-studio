@@ -537,6 +537,13 @@ pub fn emit_call(
         other             => other,
     };
 
+    // libvpy bridge (POC): if this builtin has been migrated to the C runtime
+    // (vpy.c), call `vpy_<name>` instead of the inline `pitrex_<name>` body.
+    // AAPCS argument passing (r0-r3 + stack) is identical, so only the callee
+    // symbol changes — the generic emit path below is reused unchanged.
+    let fn_name = crate::pitrex::libvpy::libvpy_symbol(info.name.as_str())
+        .unwrap_or(fn_name);
+
     let mut s = String::new();
     let args = &info.args;
 
@@ -1073,6 +1080,42 @@ mod tests {
         let asm = emit_call(&info, &var_addrs).unwrap();
         assert!(asm.contains("bl      pitrex_sample_pos"),
             "SAMPLE_POS must call pitrex_sample_pos (got: {asm:?})");
+    }
+
+    /// libvpy bridge (POC): DRAW_CIRCLE must be routed to the C runtime symbol
+    /// `vpy_draw_circle` (not the inline `pitrex_draw_circle`), with the 4 args
+    /// marshalled into AAPCS r0-r3. Every OTHER builtin stays inline.
+    #[test]
+    fn test_libvpy_bridge_draw_circle() {
+        let var_addrs = std::collections::HashMap::new();
+        let info = CallInfo {
+            name: "DRAW_CIRCLE".to_string(),
+            source_line: 0, col: 0,
+            args: vec![Expr::Number(0), Expr::Number(0), Expr::Number(15), Expr::Number(80)],
+        };
+        let asm = emit_call(&info, &var_addrs).unwrap();
+        assert!(asm.contains("bl      vpy_draw_circle"),
+            "DRAW_CIRCLE must call the libvpy C symbol (got: {asm:?})");
+        assert!(!asm.contains("pitrex_draw_circle"),
+            "DRAW_CIRCLE must NOT call the inline pitrex helper (got: {asm:?})");
+        // r0-r3 marshalling: 4 args pushed, then popped into r3..r0 before the call.
+        assert!(asm.contains("pop     {r0}") && asm.contains("pop     {r3}"),
+            "must marshal 4 args into AAPCS registers (got: {asm:?})");
+    }
+
+    /// A non-bridged builtin (DRAW_RECT) must still target its inline helper —
+    /// the two mechanisms coexist during the migration.
+    #[test]
+    fn test_libvpy_bridge_leaves_others_inline() {
+        let var_addrs = std::collections::HashMap::new();
+        let info = CallInfo {
+            name: "DRAW_RECT".to_string(),
+            source_line: 0, col: 0,
+            args: vec![Expr::Number(0), Expr::Number(0), Expr::Number(10), Expr::Number(10), Expr::Number(80)],
+        };
+        let asm = emit_call(&info, &var_addrs).unwrap();
+        assert!(asm.contains("bl      pitrex_draw_rect"),
+            "DRAW_RECT must stay on the inline helper (got: {asm:?})");
     }
 
     /// PLAY_SAMPLE("name") resolves the string to _<NAME>_SMP and calls the

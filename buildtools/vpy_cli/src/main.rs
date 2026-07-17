@@ -972,6 +972,44 @@ fn find_arm_objcopy() -> String {
     oc_path.unwrap_or_else(|| "arm-none-eabi-objcopy".to_string())
 }
 
+fn find_arm_ar() -> String {
+    let gcc = find_arm_gcc();
+    let ar_path = std::path::Path::new(&gcc)
+        .parent()
+        .map(|d| d.join("arm-none-eabi-ar"))
+        .filter(|p| p.exists())
+        .map(|p| p.to_string_lossy().to_string());
+    ar_path.unwrap_or_else(|| "arm-none-eabi-ar".to_string())
+}
+
+/// Locate the libvpy C runtime source directory (`vpy.c` + `include/vpy.h`).
+///
+/// This is the shared C reimplementation of the VPy builtins on the PiTrex SDK
+/// contract; the pitrex backend can call into it (`bl vpy_<name>`) instead of
+/// emitting the builtin body inline. Search order:
+///   1. `VPY_C_DIR` env var
+///   2. bundled next to the executable: `<exe_dir>/vpy-c` (IDE packaging)
+///   3. the repo tree relative to this crate: `ide/electron/resources/vpy-c`
+fn find_vpy_c_dir() -> Option<std::path::PathBuf> {
+    let ok = |p: &std::path::Path| p.join("vpy.c").exists();
+
+    if let Ok(dir) = std::env::var("VPY_C_DIR") {
+        let p = std::path::PathBuf::from(dir);
+        if ok(&p) { return Some(p); }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(d) = exe.parent() {
+            let p = d.join("vpy-c");
+            if ok(&p) { return Some(p); }
+        }
+    }
+    // CARGO_MANIFEST_DIR = <repo>/buildtools/vpy_cli → repo root is two levels up.
+    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let p = manifest.join("../../ide/electron/resources/vpy-c");
+    if ok(&p) { return p.canonicalize().ok(); }
+    None
+}
+
 fn cmd_build_pitrex(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Result<()> {
     use std::process::Command;
 
@@ -1168,16 +1206,96 @@ fn cmd_build_pitrex(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> 
         }
         println!("  {} Compiled Bézier supplement: {}", "✓".green(), bezier_o_path.display());
 
+        // ── libvpy C runtime (vpy.c) ──────────────────────────────────────
+        // The VPy builtins reimplemented in C on the PiTrex SDK contract. The
+        // pitrex codegen can call these directly (`bl vpy_<name>`) instead of
+        // emitting the builtin body inline (see pitrex/libvpy.rs). Compiled
+        // with the SAME arch flags as the program and -ffunction-sections /
+        // -fdata-sections, then archived into libvpy.a so it's tree-shaken:
+        // a member (function/data section) is pulled into the image ONLY if a
+        // vpy_* symbol is actually referenced. A program using no bridged
+        // builtin references no vpy_* symbol → nothing from libvpy is linked.
+        let libvpy_a_path = build_dir.join("libvpy.a");
+        if let Some(vpy_c_dir) = find_vpy_c_dir() {
+            let vpy_c   = vpy_c_dir.join("vpy.c");
+            let vpy_inc = vpy_c_dir.join("include");
+            let vpy_o   = build_dir.join(format!("{}_vpy.o", project_name));
+            // Sibling of the program .s. This single compile of vpy.c to
+            // assembly feeds BOTH the JS sim (the IDE reads this file and hands
+            // it to PitrexCore so bridged builtins like `bl vpy_draw_circle`
+            // resolve) AND the hardware object (assembled below into libvpy.a).
+            // Always emitted when the vpy-c runtime is present — simpler than
+            // gating on builtin usage; the sim just parses the extra functions.
+            let libvpy_s = build_dir.join(format!("{}_libvpy.s", project_name));
+
+            // Step 1: compile vpy.c -> .s with the SAME arch flags as the
+            // program object. -ffunction-sections/-fdata-sections keep each
+            // function/data section separate so the archive stays tree-shakeable.
+            let mut vs_args: Vec<String> = gcc_arch_flags.iter().map(|s| s.to_string()).collect();
+            vs_args.push("-S".into());
+            vs_args.push("-ffunction-sections".into());
+            vs_args.push("-fdata-sections".into());
+            vs_args.push(format!("-I{}", vpy_inc.display()));
+            vs_args.push(format!("-I{}", sdk_inc.display()));
+            vs_args.push(format!("-I{}", sdk_inc_uspi.display()));
+            vs_args.push(vpy_c.to_str().unwrap().into());
+            vs_args.push("-o".into());
+            vs_args.push(libvpy_s.to_str().unwrap().into());
+
+            let vs_out = Command::new(&arm_gcc).args(&vs_args).output()
+                .map_err(|e| anyhow::anyhow!("arm-none-eabi-gcc not found: {}", e))?;
+            if !vs_out.status.success() {
+                return Err(anyhow::anyhow!("libvpy (vpy.c) -S compile failed:\n{}", String::from_utf8_lossy(&vs_out.stderr)));
+            }
+            println!("  {} Emitted libvpy ARM asm: {}", "✓".green(), libvpy_s.display());
+
+            // Step 2: assemble the emitted .s into the object for the archive,
+            // so the sim .s and the hardware .o come from one identical compile.
+            let mut vc_args: Vec<String> = gcc_arch_flags.iter().map(|s| s.to_string()).collect();
+            vc_args.push("-c".into());
+            vc_args.push(libvpy_s.to_str().unwrap().into());
+            vc_args.push("-o".into());
+            vc_args.push(vpy_o.to_str().unwrap().into());
+
+            let vc_out = Command::new(&arm_gcc).args(&vc_args).output()
+                .map_err(|e| anyhow::anyhow!("arm-none-eabi-gcc not found: {}", e))?;
+            if !vc_out.status.success() {
+                return Err(anyhow::anyhow!("libvpy (vpy.c) assemble failed:\n{}", String::from_utf8_lossy(&vc_out.stderr)));
+            }
+
+            // Archive so the linker pulls only referenced members (tree-shaking).
+            let _ = std::fs::remove_file(&libvpy_a_path);
+            let ar = find_arm_ar();
+            let ar_out = Command::new(&ar)
+                .args(["crs", libvpy_a_path.to_str().unwrap(), vpy_o.to_str().unwrap()])
+                .output()
+                .map_err(|e| anyhow::anyhow!("arm-none-eabi-ar not found: {}", e))?;
+            if !ar_out.status.success() {
+                return Err(anyhow::anyhow!("libvpy archive failed:\n{}", String::from_utf8_lossy(&ar_out.stderr)));
+            }
+            println!("  {} Compiled libvpy C runtime: {}", "✓".green(), libvpy_a_path.display());
+        } else if verbose {
+            println!("  {} libvpy C runtime (vpy-c) not found — inline builtins only", "→".yellow());
+        }
+
         // Phase 5+6: Link directly against precompiled .a (no need to compile SDK sources)
         println!("\n{}", "Phase 5+6: ARM32 Link".bright_cyan().bold());
         let mut link_args: Vec<String> = gcc_arch_flags.iter().map(|s| s.to_string()).collect();
         link_args.push(format!("-L{}", lib_dir.display()));
         link_args.push("-Wl,--allow-multiple-definition".into());
+        // Drop unreferenced sections so archived libvpy members that aren't
+        // called are pruned from the image (per-function/-data tree-shaking).
+        link_args.push("-Wl,--gc-sections".into());
         link_args.push("-o".into());
         link_args.push(elf_path.to_str().unwrap().into());
         link_args.push(o_path.to_str().unwrap().into());
         // Bézier supplement must precede -lvectrexInterface so its symbols win
         link_args.push(bezier_o_path.to_str().unwrap().into());
+        // libvpy archive: placed before the SDK libs so its vpy_* refs resolve,
+        // and after the program object so the program's refs pull members in.
+        if libvpy_a_path.exists() {
+            link_args.push(libvpy_a_path.to_str().unwrap().into());
+        }
         link_args.extend(["-lvectrexInterface", "-luspi", "-lm", "-lc"].iter().map(|s| s.to_string()));
         link_args.push(heap_ld.to_str().unwrap().into());
         link_args.push("-lbaremetal".into());
