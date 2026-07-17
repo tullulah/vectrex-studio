@@ -609,6 +609,10 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                     .and_then(|p| p.parent())
                     .map(|p| p.join("enemies"));
                 s.push_str(&level.compile_to_arm_asm_with_venemy_and_meshes(&dims_map, venemy_dir.as_deref(), &vec_meshes, &vec_walk_areas));
+                // libvpy position-independent level image + sprite-pointer table
+                // for the bridged LOAD/SHOW/UPDATE_LEVEL path (Phase 1 of the
+                // LEVELS bridge — NEW, tree-shaken until the group is wired).
+                s.push_str(&emit_level_c_bytes(&level, &asset.name));
             }
             AssetType::Animation => {
                 let text = match fs::read_to_string(&asset.path) {
@@ -1689,6 +1693,47 @@ fn emit_vec_resource_c_bytes(
     s.push_str(&format!(".section .rodata._{sym}_VEC,\"a\",%progbits\n"));
     s.push_str("    .balign 4\n");
     s.push_str(&format!(".global _{sym}_VEC\n_{sym}_VEC:\n"));
+    for chunk in bytes.chunks(16) {
+        let vals: Vec<String> = chunk.iter().map(|b| format!("0x{b:02X}")).collect();
+        s.push_str(&format!("    .byte   {}\n", vals.join(", ")));
+    }
+    s.push_str(".section .text\n\n");
+    s
+}
+
+/// Emit the position-independent C level image (`VPlayLevel::compile_to_c_bytes`)
+/// as `_NAME_LEVEL_C`, plus the companion `{NAME}_level_sprites` pointer table
+/// that libvpy's `vpy_load_level(level, sprites)` indexes. Each sprite slot is
+/// the sprite's libvpy-format `_{SPRITE}_VEC` image (drawn by `vpy_draw_vector_ex`
+/// in `vpy_show_level`), so the sprite table + level image are wholly
+/// position-independent. Own `.rodata` sections + `.balign 4` + `--gc-sections`
+/// so both drop out when the level group isn't bridged (the `_NAME_VEC` pattern).
+///
+/// Phase 1: NEW, unused symbols — the LOAD/SHOW/UPDATE_LEVEL call sites still
+/// route inline until the whole level+enemy group flips atomically.
+fn emit_level_c_bytes(level: &crate::levelres::VPlayLevel, name: &str) -> String {
+    let sym = name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let (bytes, sprite_names) = level.compile_to_c_bytes();
+    let mut s = String::new();
+    // Sprite-pointer table (index → _{SPRITE}_VEC). Emitted first, in its own
+    // section; the level image references it only via vpy_load_level's 2nd arg.
+    s.push_str(&format!("@ --- {sym}_level_sprites (libvpy sprite-index table) ---\n"));
+    s.push_str(&format!(".section .rodata._{sym}_LEVEL_SPRITES,\"a\",%progbits\n"));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_level_sprites\n_{sym}_level_sprites:\n"));
+    if sprite_names.is_empty() {
+        s.push_str("    .word 0\n");
+    } else {
+        for sp in &sprite_names {
+            let ssym = sp.to_uppercase().replace('-', "_").replace(' ', "_");
+            s.push_str(&format!("    .word _{ssym}_VEC\n"));
+        }
+    }
+    // Position-independent level byte image.
+    s.push_str(&format!("@ --- {sym}_LEVEL_C (libvpy position-independent level image) ---\n"));
+    s.push_str(&format!(".section .rodata._{sym}_LEVEL_C,\"a\",%progbits\n"));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_LEVEL_C\n_{sym}_LEVEL_C:\n"));
     for chunk in bytes.chunks(16) {
         let vals: Vec<String> = chunk.iter().map(|b| format!("0x{b:02X}")).collect();
         s.push_str(&format!("    .byte   {}\n", vals.join(", ")));

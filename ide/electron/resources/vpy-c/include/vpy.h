@@ -108,6 +108,12 @@ void vpy_set_camera_x(int x);
 void vpy_set_camera_y(int y);
 int  vpy_get_camera_x(void);
 int  vpy_get_camera_y(void);
+/* Level scalar accessors (Phase 1 of the LEVELS bridge; not yet codegen-wired). */
+int  vpy_get_scroll_limit_left(void);
+int  vpy_get_scroll_limit_right(void);
+int  vpy_get_scroll_limit_top(void);
+int  vpy_get_scroll_limit_bottom(void);
+int  vpy_get_level_floor_y(void);
 
 /* Optional VPy-style uppercase aliases so migrated .vpy reads naturally. */
 #ifdef VPY_SHORT_NAMES

@@ -643,6 +643,28 @@ void vpy_set_camera_y(int y) { s_cam_y = y; }
 int  vpy_get_camera_x(void)  { return s_cam_x; }
 int  vpy_get_camera_y(void)  { return s_cam_y; }
 
+/* ---- level scalar accessors (Phase 1 of the LEVELS bridge) ----------------
+ * Bit-exact ports of the inline pitrex_get_scroll_limit_* / pitrex_get_level_
+ * floor_y. They read the immutable level header (offsets identical to the ARM
+ * `_NAME_LEVEL`): scroll limits i16 at +24/+26/+28/+30, groundBottomOffset i16
+ * at +32. No level loaded → 0 (matches the inline zeroed .bss). These read the
+ * SAME s_level/s_cam state as vpy_show/update_level, so once the level group is
+ * bridged the state lives in exactly one place. NOTE: these are not wired to the
+ * codegen bridge yet — the LEVELS group flips ATOMICALLY together with the enemy
+ * runtime (see pitrex/libvpy.rs); until then this is dead C code. */
+int vpy_get_scroll_limit_left(void)   { return s_level ? (int)rd_i16(s_level + 24) : 0; }
+int vpy_get_scroll_limit_right(void)  { return s_level ? (int)rd_i16(s_level + 26) : 0; }
+int vpy_get_scroll_limit_top(void)    { return s_level ? (int)rd_i16(s_level + 28) : 0; }
+int vpy_get_scroll_limit_bottom(void) { return s_level ? (int)rd_i16(s_level + 30) : 0; }
+
+/* floor_surface_world_y = camera_y - 128 + groundBottomOffset (header +32).
+ * Matches pitrex_get_level_floor_y exactly; 0 when no level is loaded. */
+int vpy_get_level_floor_y(void)
+{
+    if (!s_level) return 0;
+    return s_cam_y - 128 + (int)rd_i16(s_level + 32);
+}
+
 /* no-tree-vectorize: at -Ofast/armv8 gcc auto-vectorizes the 8-byte GP-object
  * copy (x,y,vx,vy → s_gp_buf) into NEON `vldr d16 / vst1.64 {d16},[r2:64]!`.
  * That is the ONLY NEON in all of libvpy, and the VPy PitrexArm32 sim (which
