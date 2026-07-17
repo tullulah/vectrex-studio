@@ -460,10 +460,11 @@ function App() {
           projectState.vpyProject.manifestPath || projectState.vpyProject.projectFile;
         const projName = projectState.vpyProject.config.project.name;
 
-        // Build & Run (autoRun): build the project's [simulate] WASM module and
-        // load it into the emulator panel so the game renders in-browser. Plain
-        // Build (F7) and "Build for SD" keep the hardware kernel path below.
-        if (autoRun && !forSd) {
+        // Both Build (F7) and Build & Run (F5) build the [simulate] WASM module
+        // and run it in the emulator panel — consistent with every other target,
+        // where F7/F5 land the game in the emulator. The bare-metal hardware
+        // kernel is a separate action: "Build for SD" (forSd) below.
+        if (!forSd) {
           if (!electronAPI?.runBuildSim) {
             logger.error('Build', 'electronAPI.runBuildSim not available');
             return;
@@ -477,20 +478,20 @@ function App() {
             useEmulatorStore.getState().setSimModule(simResult.modulePath);
             return;
           }
-          // No [simulate] target: fall through to the hardware build so
-          // Build & Run still does something useful. Any other error surfaces.
+          // No [simulate] target: fall through to the hardware build so Build
+          // still does something useful. Any other error surfaces.
           if (simResult?.error && simResult.error !== 'no_simulate_target') {
             logger.error('Build', 'Simulator build failed:', simResult.error, simResult.detail || '');
             return;
           }
-          logger.warn('Build', `No [simulate] target for ${projName} — running the hardware build instead.`);
+          logger.warn('Build', `No [simulate] target for ${projName} — building the hardware kernel instead.`);
         }
 
         if (!electronAPI?.runBuildExternal) {
           logger.error('Build', 'electronAPI.runBuildExternal not available');
           return;
         }
-        logger.info('Build', `Building external project: ${projName}`);
+        logger.info('Build', `Building external project (hardware kernel): ${projName}`);
         const extResult = await electronAPI.runBuildExternal({
           manifestPath,
           // Reuse the existing PiTrex "copy to SD" settings used by the VPy path.
