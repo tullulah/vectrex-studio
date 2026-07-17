@@ -5,7 +5,8 @@
  */
 #include "vpy.h"
 #include <vectrex/vectrexInterface.h>
-#include <math.h>
+/* No <math.h>: libvpy is integer-only so it compiles to plain integer ARM that
+ * both real hardware and the VPy sim (PitrexCore's ARMv6 interpreter) can run. */
 
 #define VPY_SCALE 127   /* VPy logical unit -> PiTrex deflection unit */
 
@@ -17,17 +18,21 @@ static uint32_t s_rng = 0x1234567u;
 static int   s_jx = 0, s_jy = 0;
 static uint8_t s_btn = 0;
 
-/* sin table: 128 steps per full circle, amplitude +-127 */
-static int8_t s_sin[128];
-static int s_inited = 0;
+/* sin table: 128 steps per full circle, amplitude +-127 (compile-time const). */
+static const int8_t s_sin[128] = {
+       0,   6,  12,  19,  25,  31,  37,  43,  49,  54,  60,  65,  71,  76,  81,  85,
+      90,  94,  98, 102, 106, 109, 112, 115, 117, 120, 122, 123, 125, 126, 126, 127,
+     127, 127, 126, 126, 125, 123, 122, 120, 117, 115, 112, 109, 106, 102,  98,  94,
+      90,  85,  81,  76,  71,  65,  60,  54,  49,  43,  37,  31,  25,  19,  12,   6,
+       0,  -6, -12, -19, -25, -31, -37, -43, -49, -54, -60, -65, -71, -76, -81, -85,
+     -90, -94, -98,-102,-106,-109,-112,-115,-117,-120,-122,-123,-125,-126,-126,-127,
+    -127,-127,-126,-126,-125,-123,-122,-120,-117,-115,-112,-109,-106,-102, -98, -94,
+     -90, -85, -81, -76, -71, -65, -60, -54, -49, -43, -37, -31, -25, -19, -12,  -6,
+};
+/* atan(i/16) in 128-unit angle (45deg = 16), for the integer atan2 octant. */
+static const uint8_t s_atan[17] = { 0,1,3,4,5,6,7,8,9,10,11,12,13,14,15,15,16 };
 
-static void ensure_tables(void)
-{
-    if (s_inited) return;
-    for (int i = 0; i < 128; i++)
-        s_sin[i] = (int8_t)lroundf(sinf((float)i * 6.2831853f / 128.0f) * 127.0f);
-    s_inited = 1;
-}
+static void ensure_tables(void) { /* tables are compile-time const now */ }
 
 /* Draw one segment in absolute VPy space (no MOVE offset). */
 static void raw_line(int x0, int y0, int x1, int y1, int b)
@@ -169,19 +174,20 @@ static void draw_vec_stream(const unsigned char *data, int ox, int oy,
                 p += 8;
                 if (mirror) { ax = -ax; c1x = -c1x; c2x = -c2x; bx = -bx; }
                 /* Absolute (VPy-unit) control points, sprite-origin relative. */
-                float p0x = (float)(ox + ax),  p0y = (float)(oy + ay);
-                float p1x = (float)(ox + c1x), p1y = (float)(oy + c1y);
-                float p2x = (float)(ox + c2x), p2y = (float)(oy + c2y);
-                float p3x = (float)(ox + bx),  p3y = (float)(oy + by);
-                /* De Casteljau tessellation into 8 line segments. */
-                int px = (int)lroundf(p0x), py = (int)lroundf(p0y);
+                int P0x = ox + ax,  P0y = oy + ay;
+                int P1x = ox + c1x, P1y = oy + c1y;
+                int P2x = ox + c2x, P2y = oy + c2y;
+                int P3x = ox + bx,  P3y = oy + by;
+                /* Integer De Casteljau into 8 line segments (repeated lerp). */
+                int px = P0x, py = P0y;
                 const int STEPS = 8;
-                for (int s = 1; s <= STEPS; s++) {
-                    float t = (float)s / (float)STEPS, u = 1.0f - t;
-                    float uu = u * u, tt = t * t;
-                    float w0 = uu * u, w1 = 3.0f * uu * t, w2 = 3.0f * u * tt, w3 = tt * t;
-                    int nx = (int)lroundf(w0*p0x + w1*p1x + w2*p2x + w3*p3x);
-                    int ny = (int)lroundf(w0*p0y + w1*p1y + w2*p2y + w3*p3y);
+                for (int t = 1; t <= STEPS; t++) {
+                    int abx = P0x + (P1x-P0x)*t/STEPS, aby = P0y + (P1y-P0y)*t/STEPS;
+                    int bcx = P1x + (P2x-P1x)*t/STEPS, bcy = P1y + (P2y-P1y)*t/STEPS;
+                    int cdx = P2x + (P3x-P2x)*t/STEPS, cdy = P2y + (P3y-P2y)*t/STEPS;
+                    int abc_x = abx + (bcx-abx)*t/STEPS, abc_y = aby + (bcy-aby)*t/STEPS;
+                    int bcd_x = bcx + (cdx-bcx)*t/STEPS, bcd_y = bcy + (cdy-bcy)*t/STEPS;
+                    int nx = abc_x + (bcd_x-abc_x)*t/STEPS, ny = abc_y + (bcd_y-abc_y)*t/STEPS;
                     raw_line(px, py, nx, ny, b);
                     px = nx; py = ny;
                 }
@@ -332,11 +338,25 @@ int vpy_max(int a, int b) { return a > b ? a : b; }
 int vpy_clamp(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 int vpy_sin(int a) { ensure_tables(); return s_sin[((a % 128) + 128) & 127]; }
 int vpy_cos(int a) { ensure_tables(); return s_sin[(((a % 128) + 128) + 32) & 127]; }
-int vpy_sqrt(int v) { return v <= 0 ? 0 : (int)lroundf(sqrtf((float)v)); }
+int vpy_sqrt(int v) {
+    if (v <= 0) return 0;
+    int x = v, y = (x + 1) / 2;
+    while (y < x) { x = y; y = (x + v / x) / 2; }   /* integer Newton */
+    return x;
+}
 int vpy_atan2(int y, int x) {
-    float a = atan2f((float)y, (float)x);   /* -pi..pi */
-    int t = (int)lroundf(a * 128.0f / 6.2831853f);
-    return ((t % 128) + 128) & 127;
+    if (x == 0 && y == 0) return 0;
+    int ax = x < 0 ? -x : x;
+    int ay = y < 0 ? -y : y;
+    int a;                                 /* 0..32 units = first quadrant (0..90deg) */
+    if (ax >= ay) a = s_atan[ax ? (ay * 16) / ax : 0];        /* 0..16  (0..45deg)  */
+    else          a = 32 - s_atan[ay ? (ax * 16) / ay : 0];   /* 16..32 (45..90deg) */
+    int ang;
+    if      (x >= 0 && y >= 0) ang = a;            /* Q1 */
+    else if (x <  0 && y >= 0) ang = 64 - a;       /* Q2 */
+    else if (x <  0 && y <  0) ang = 64 + a;       /* Q3 */
+    else                        ang = 128 - a;      /* Q4 */
+    return ang & 127;
 }
 void vpy_seed(unsigned s) { s_rng = s ? s : 1; }
 int vpy_rand(void) { s_rng = s_rng * 1103515245u + 12345u; return (int)((s_rng >> 16) & 0x7fff); }
