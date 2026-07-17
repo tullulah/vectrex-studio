@@ -1,11 +1,15 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  lspStart: () => ipcRenderer.invoke('lsp_start'),
-  lspSend: (payload: string) => ipcRenderer.invoke('lsp_send', payload),
-  onLspMessage: (cb: (json: string) => void) => ipcRenderer.on('lsp://message', (_e: IpcRendererEvent, data: string) => cb(data)),
+  // Multi-language LSP: serverId selects the server ('vpy' | 'clangd'); cwd is
+  // the project root (clangd finds compile_flags.txt / compile_commands.json there).
+  lspStart: (args?: { serverId?: string; cwd?: string }) => ipcRenderer.invoke('lsp_start', args),
+  lspSend: (args: { serverId?: string; payload: string } | string) => ipcRenderer.invoke('lsp_send', args),
+  lspStop: (args?: { serverId?: string }) => ipcRenderer.invoke('lsp_stop', args),
+  // Messages/diagnostics are tagged with the originating serverId.
+  onLspMessage: (cb: (msg: { serverId: string; body: string }) => void) => ipcRenderer.on('lsp://message', (_e: IpcRendererEvent, data: { serverId: string; body: string }) => cb(data)),
   onLspStdout: (cb: (line: string) => void) => ipcRenderer.on('lsp://stdout', (_e: IpcRendererEvent, data: string) => cb(data)),
-  onLspStderr: (cb: (line: string) => void) => ipcRenderer.on('lsp://stderr', (_e: IpcRendererEvent, data: string) => cb(data)),
+  onLspStderr: (cb: (msg: { serverId: string; line: string }) => void) => ipcRenderer.on('lsp://stderr', (_e: IpcRendererEvent, data: { serverId: string; line: string }) => cb(data)),
   onCommand: (cb: (cmd: string, payload?: any) => void) => {
     const handler = (_e: IpcRendererEvent, cmd: string, payload?: any) => cb(cmd, payload);
     ipcRenderer.on('command', handler);

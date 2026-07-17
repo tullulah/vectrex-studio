@@ -9,7 +9,7 @@ import './i18n.js';
 import './global.css';
 import { useTranslation } from 'react-i18next';
 // (import eliminado duplicado) 
-import { initLsp, lspClient } from './lspClient.js';
+import { initLsp, lspClient, getLspClient } from './lspClient.js';
 import { DockWorkspace } from './components/DockWorkspace.js';
 import { restoreEditorState, ensureEditorPersistence } from './state/editorPersistence.js';
 import { deriveBinaryName } from './utils/index.js';
@@ -118,6 +118,27 @@ function App() {
       }
     };
     lspClient.onNotification(handler);
+  }, [setDiagnosticsBySource, documents]);
+
+  // Same, but for clangd (C/C++). Populates the Errors tab for C/C++ files so the
+  // panel reflects clangd diagnostics even when the editor isn't mounted.
+  useEffect(() => {
+    const handler = (method: string, params: any) => {
+      if (method !== 'textDocument/publishDiagnostics') return;
+      const { uri, diagnostics } = params || {};
+      if (!uri) return;
+      let decodedUri: string;
+      try { decodedUri = decodeURIComponent(uri); } catch { decodedUri = uri; }
+      const mapped = (diagnostics || []).map((d: any) => ({
+        message: d.message,
+        severity: (d.severity === 1 ? 'error' : d.severity === 2 ? 'warning' : 'info'),
+        line: d.range?.start?.line || 0,
+        column: d.range?.start?.character || 0
+      }));
+      try { setDiagnosticsBySource(decodedUri, 'clangd', mapped as any); }
+      catch (error) { logger.error('LSP', '[clangd] Error calling setDiagnosticsBySource:', error); }
+    };
+    getLspClient('clangd').onNotification(handler);
   }, [setDiagnosticsBySource, documents]);
 
   // Listen for compilation diagnostics from Electron backend (run://diagnostics)
@@ -754,7 +775,9 @@ def loop():
             logger.debug('File', 'Opening file with path:', path, 'normPath:', normPath, 'uri:', uri);
             openDocument({ uri, language: 'vpy', content, dirty: false, diagnostics: [], diskPath: path, mtime, lastSavedContent: content });
             // If already initialized, notify didOpen immediately; else init effect will do first doc.
-            try { if ((window as any)._lspInit) { lspClient.didOpen(uri, 'vpy', content); } } catch {}
+            // Only VPy files go to the VPy server here; C/C++ files are opened against
+            // clangd by MonacoEditorWrapper when their model binds.
+            try { if ((window as any)._lspInit && uri.toLowerCase().endsWith('.vpy')) { lspClient.didOpen(uri, 'vpy', content); } } catch {}
         });
         break; }
       case 'file.save': {
@@ -1548,7 +1571,12 @@ def loop():
     if (!(window as any).electronAPI) return; // no backend in web build
     if ((window as any)._lspInit) return;
     if (documents.length === 0) return;
-    const first = documents[0];
+    // Initialize the VPy server against the first .vpy document. C/C++ files are
+    // handled separately by clangd (started lazily in MonacoEditorWrapper), so
+    // never hand one to the VPy server. If only non-VPy files are open yet, wait
+    // until a .vpy document appears (this effect re-runs on documents.length).
+    const first = documents.find(d => d.uri.toLowerCase().endsWith('.vpy'));
+    if (!first) return;
     (async () => {
       try {
         await initLsp(i18n.language || 'en', first.uri, first.content);

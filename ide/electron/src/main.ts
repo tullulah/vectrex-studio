@@ -123,7 +123,10 @@ interface LspChild {
   proc: ReturnType<typeof spawn>;
   stdin: NodeJS.WritableStream;
 }
-let lsp: LspChild | null = null;
+// Multiple concurrent language servers keyed by a serverId ('vpy', 'clangd', …).
+// Each speaks LSP over stdio with Content-Length framing; messages are tagged
+// with the serverId so the renderer can route them to the right client.
+const lspServers = new Map<string, LspChild>();
 
 // macOS auto-injects Writing Tools / AutoFill / Dictation / Emoji items into any
 // menu labeled "Edit". Suppress them via NSUserDefaults so AppKit skips the injection
@@ -590,10 +593,36 @@ function resolveLspPath(): string | null {
   }
   if (!lspPathWarned) {
     lspPathWarned = true;
-    mainWindow?.webContents.send('lsp://stderr', `[LSP] CWD=${cwd}`);
-    mainWindow?.webContents.send('lsp://stderr', `LSP binary not found. Tried paths:\n${candidates.join('\n')}\nCompile with: cargo build -p vectrex_lang --bin vpy_lsp`);
+    mainWindow?.webContents.send('lsp://stderr', { serverId: 'vpy', line: `[LSP] CWD=${cwd}` });
+    mainWindow?.webContents.send('lsp://stderr', { serverId: 'vpy', line: `LSP binary not found. Tried paths:\n${candidates.join('\n')}\nCompile with: cargo build -p vectrex_lang --bin vpy_lsp` });
   }
   return null;
+}
+
+// Locate clangd (C/C++ IntelliSense). Prefer $CLANGD, then a bundled copy, then
+// common system locations; finally fall back to bare 'clangd' resolved via PATH.
+function resolveClangd(): string {
+  const exe = process.platform === 'win32' ? 'clangd.exe' : 'clangd';
+  const candidates = [
+    process.env.CLANGD || '',
+    join(process.resourcesPath, exe),
+    '/usr/bin/clangd',
+    '/usr/local/bin/clangd',
+    '/opt/homebrew/bin/clangd',
+    '/Library/Developer/CommandLineTools/usr/bin/clangd',
+  ].filter(Boolean);
+  for (const p of candidates) { try { if (existsSync(p)) return p; } catch {} }
+  return exe; // rely on PATH
+}
+
+// Resolve the command + args for a given language server id.
+function resolveServerCommand(serverId: string): { cmd: string; args: string[] } | null {
+  if (serverId === 'clangd') {
+    return { cmd: resolveClangd(), args: ['--background-index', '--clang-tidy=false', '--header-insertion=never'] };
+  }
+  // default: the VPy language server
+  const p = resolveLspPath();
+  return p ? { cmd: p, args: [] } : null;
 }
 
 // Enumerate .vpy and .asm under examples/ and working directory (non-recursive + shallow recursive examples)
@@ -775,19 +804,32 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
   return { ok:true, sources: uniq.slice(0, limit) };
 });
 
-ipcMain.handle('lsp_start', async () => {
+// Start a language server. serverId selects the binary ('vpy' | 'clangd'); cwd
+// should be the project root (clangd discovers compile_flags.txt / compile_commands.json
+// there). Messages are emitted on 'lsp://message' as { serverId, body }.
+ipcMain.handle('lsp_start', async (_e, args?: { serverId?: string; cwd?: string }) => {
   const verbose = process.env.VPY_IDE_VERBOSE_LSP === '1';
-  if (lsp) return;
-  if (verbose) console.log('[LSP] start request');
-  const path = resolveLspPath();
-  if (!path) return; // mensaje detallado ya emitido en resolveLspPath (una sola vez)
-  if (verbose) console.log('[LSP] spawning', path);
-  const child = spawn(path, [], { stdio: ['pipe', 'pipe', 'pipe'] });
-  lsp = { proc: child, stdin: child.stdin! };
+  const serverId = args?.serverId || 'vpy';
+  if (lspServers.has(serverId)) return { ok: true, already: true };
+  const resolved = resolveServerCommand(serverId);
+  if (!resolved) {
+    mainWindow?.webContents.send('lsp://stderr', { serverId, line: `[LSP:${serverId}] server binary not found` });
+    return { ok: false, error: 'binary_not_found' };
+  }
+  if (verbose) console.log(`[LSP:${serverId}] spawning`, resolved.cmd, resolved.args, 'cwd=', args?.cwd);
+  let child;
+  try {
+    child = spawn(resolved.cmd, resolved.args, { stdio: ['pipe', 'pipe', 'pipe'], cwd: args?.cwd || undefined, env: process.env });
+  } catch (e: any) {
+    mainWindow?.webContents.send('lsp://stderr', { serverId, line: `[LSP:${serverId}] spawn failed: ${e?.message || e}` });
+    return { ok: false, error: 'spawn_failed' };
+  }
+  const entry: LspChild = { proc: child, stdin: child.stdin! };
+  lspServers.set(serverId, entry);
 
   let buffer = '';
   let expected: number | null = null;
-  child.stdout.on('data', (chunk: Buffer) => {
+  child.stdout!.on('data', (chunk: Buffer) => {
     buffer += chunk.toString('utf8');
     while (true) {
       if (expected === null) {
@@ -795,10 +837,7 @@ ipcMain.handle('lsp_start', async () => {
         if (headerEnd === -1) break;
         const header = buffer.slice(0, headerEnd);
         const match = /Content-Length: *([0-9]+)/i.exec(header);
-        if (!match) {
-          buffer = buffer.slice(headerEnd + 4);
-          continue;
-        }
+        if (!match) { buffer = buffer.slice(headerEnd + 4); continue; }
         expected = parseInt(match[1], 10);
         buffer = buffer.slice(headerEnd + 4);
       }
@@ -806,30 +845,41 @@ ipcMain.handle('lsp_start', async () => {
         const body = buffer.slice(0, expected);
         buffer = buffer.slice(expected);
         expected = null;
-        mainWindow?.webContents.send('lsp://message', body);
-        mainWindow?.webContents.send('lsp://stdout', body);
-        if (verbose) console.log('[LSP<-] message len', body.length);
+        mainWindow?.webContents.send('lsp://message', { serverId, body });
         continue;
       }
       break;
     }
   });
 
-  const rlErr = createInterface({ input: child.stderr });
-  rlErr.on('line', line => mainWindow?.webContents.send('lsp://stderr', line));
+  const rlErr = createInterface({ input: child.stderr! });
+  rlErr.on('line', line => mainWindow?.webContents.send('lsp://stderr', { serverId, line }));
   child.on('exit', code => {
-    mainWindow?.webContents.send('lsp://stderr', `[LSP exited ${code}]`);
-    if (verbose) console.log('[LSP] exited', code);
-    lsp = null;
+    mainWindow?.webContents.send('lsp://stderr', { serverId, line: `[LSP:${serverId} exited ${code}]` });
+    if (verbose) console.log(`[LSP:${serverId}] exited`, code);
+    lspServers.delete(serverId);
   });
+  return { ok: true };
 });
 
-ipcMain.handle('lsp_send', async (_e, payload: string) => {
-  if (!lsp) return;
+// Send a framed LSP message to a server. Accepts { serverId, payload } or a bare
+// string (back-compat → the default 'vpy' server).
+ipcMain.handle('lsp_send', async (_e, args: { serverId?: string; payload: string } | string) => {
+  const serverId = typeof args === 'string' ? 'vpy' : (args?.serverId || 'vpy');
+  const payload = typeof args === 'string' ? args : args?.payload;
+  const entry = lspServers.get(serverId);
+  if (!entry || typeof payload !== 'string') return;
   const bytes = Buffer.from(payload, 'utf8');
-  const header = `Content-Length: ${bytes.length}\r\n\r\n`;
-  lsp.stdin.write(header);
-  lsp.stdin.write(bytes);
+  entry.stdin.write(`Content-Length: ${bytes.length}\r\n\r\n`);
+  entry.stdin.write(bytes);
+});
+
+// Stop a language server (e.g. when closing a project).
+ipcMain.handle('lsp_stop', async (_e, args?: { serverId?: string }) => {
+  const serverId = args?.serverId || 'vpy';
+  const entry = lspServers.get(serverId);
+  if (entry) { try { entry.proc.kill(); } catch {} lspServers.delete(serverId); }
+  return { ok: true };
 });
 
 // MCP Server handler - Handle JSON-RPC requests from AI agents

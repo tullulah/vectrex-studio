@@ -9,6 +9,9 @@ import * as monacoApi from 'monaco-editor/esm/vs/editor/editor.api';
 // diagnostic underlines show native tooltips and language features work.
 // Without this, only the bare API loads and marker hovers won't appear.
 import 'monaco-editor/esm/vs/editor/editor.all';
+// Registers the built-in 'c' and 'cpp' languages (ids + Monarch highlighting).
+// clangd provides the actual IntelliSense; this gives tokenization + language ids.
+import 'monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution';
 import { logger } from '../utils/logger';
 // Bundle the core editor worker via Vite (?worker) so we don't craft blob strings manually.
 // If later we add languages needing their own workers we can import them similarly.
@@ -21,8 +24,161 @@ if (!(window as any).monaco) {
   (window as any).monaco = monacoApi;
 }
 import { dockBus } from '../state/dockBus';
-import { lspClient } from '../lspClient';
+import { lspClient, getLspClient, openClangdDocument } from '../lspClient';
+import { useProjectStore } from '../state/projectStore';
 // TODO(i18n): Adapt Monaco UI strings (context menu, messages) when supporting dynamic locale changes.
+
+// --- C/C++ (clangd) support ------------------------------------------------
+// Map a document URI to the LSP languageId we drive its server with.
+// '.c'/'.h' → 'c'; '.cpp'/'.cc'/'.cxx'/'.hpp'/'.hxx' → 'cpp'; '.vpy' → 'vpy'.
+export function fileLanguageId(uri: string): 'vpy' | 'c' | 'cpp' | null {
+  const l = uri.toLowerCase();
+  if (l.endsWith('.vpy')) return 'vpy';
+  if (l.endsWith('.c') || l.endsWith('.h')) return 'c';
+  if (/\.(cpp|cc|cxx|hpp|hxx)$/.test(l)) return 'cpp';
+  return null;
+}
+
+export function isCppUri(uri: string): boolean {
+  const lang = fileLanguageId(uri);
+  return lang === 'c' || lang === 'cpp';
+}
+
+// The project root clangd should index in (compile_flags.txt lives here).
+// For external C/C++ projects that's the manifest's rootDir; VPy projects reuse
+// the same field. Returns null when no project is open.
+function clangdRootDir(): string | null {
+  try {
+    const p = (useProjectStore as any).getState().vpyProject;
+    return p?.rootDir || null;
+  } catch { return null; }
+}
+
+// Map an LSP CompletionItemKind number to a Monaco CompletionItemKind.
+function mapCompletionKind(kind: number | undefined, monaco: Monaco): any {
+  const K = monaco.languages.CompletionItemKind;
+  switch (kind) {
+    case 2: return K.Method;
+    case 3: return K.Function;
+    case 4: return K.Constructor;
+    case 5: return K.Field;
+    case 6: return K.Variable;
+    case 7: return K.Class;
+    case 8: return K.Interface;
+    case 9: return K.Module;
+    case 10: return K.Property;
+    case 11: return K.Unit;
+    case 12: return K.Value;
+    case 13: return K.Enum;
+    case 14: return K.Keyword;
+    case 15: return K.Snippet;
+    case 17: return K.File;
+    case 21: return K.Constant;
+    case 22: return K.Struct;
+    default: return K.Text;
+  }
+}
+
+// Register completion / hover / definition / signatureHelp providers for the
+// 'c' and 'cpp' languages, routed at the clangd client. Mirrors the VPy wiring
+// but pointed at getLspClient('clangd'). Registered once (Monaco providers are
+// global per monaco instance, not per editor).
+let clangdProvidersRegistered = false;
+export function registerClangdProviders(monaco: Monaco) {
+  if (clangdProvidersRegistered) return;
+  clangdProvidersRegistered = true;
+  const client = getLspClient('clangd');
+  for (const langId of ['c', 'cpp']) {
+    monaco.languages.registerCompletionItemProvider(langId, {
+      triggerCharacters: ['.', '>', ':', '<', '"', '/', '_'],
+      provideCompletionItems: async (model, position) => {
+        try {
+          const uri = model.uri.toString();
+          client.didChange(uri, model.getValue());
+          const params = {
+            textDocument: { uri },
+            position: { line: position.lineNumber - 1, character: position.column - 1 },
+            context: { triggerKind: 1 }
+          };
+          const res = await client.request('textDocument/completion', params);
+          const items = Array.isArray(res?.items) ? res.items : (Array.isArray(res) ? res : []);
+          const suggestions = items.map((it: any) => {
+            const label = typeof it.label === 'string' ? it.label : (it.label?.label ?? '');
+            return {
+              label: it.label,
+              kind: mapCompletionKind(it.kind, monaco),
+              insertText: it.insertText || label,
+              detail: it.detail,
+              documentation: it.documentation?.value ?? it.documentation,
+              range: undefined
+            };
+          });
+          return { suggestions };
+        } catch (e) {
+          logger.warn('LSP', '[clangd] completion error:', e);
+          return { suggestions: [] };
+        }
+      }
+    });
+    monaco.languages.registerHoverProvider(langId, {
+      provideHover: async (model, position) => {
+        try {
+          const uri = model.uri.toString();
+          const params = { textDocument: { uri }, position: { line: position.lineNumber - 1, character: position.column - 1 } };
+          const res = await client.request('textDocument/hover', params);
+          if (res && res.contents) {
+            const c = res.contents;
+            const value = typeof c === 'string'
+              ? c
+              : (Array.isArray(c) ? c.map((x: any) => (typeof x === 'string' ? x : x.value)).join('\n\n') : (c.value || ''));
+            if (!value) return null as any;
+            return { contents: [{ value }], range: undefined } as any;
+          }
+        } catch (e) { logger.warn('LSP', '[clangd] hover error:', e); }
+        return null as any;
+      }
+    });
+    monaco.languages.registerDefinitionProvider(langId, {
+      provideDefinition: async (model, position) => {
+        try {
+          const uri = model.uri.toString();
+          const params = { textDocument: { uri }, position: { line: position.lineNumber - 1, character: position.column - 1 } };
+          const res = await client.request('textDocument/definition', params);
+          if (!res) return [];
+          const locs = Array.isArray(res) ? res : [res];
+          return locs.map((loc: any) => {
+            const targetUri = loc.uri || loc.targetUri || uri;
+            const range = loc.range || loc.targetSelectionRange || loc.targetRange;
+            return {
+              uri: monaco.Uri.parse(targetUri),
+              range: new monaco.Range(
+                range.start.line + 1,
+                range.start.character + 1,
+                range.end.line + 1,
+                range.end.character + 1
+              )
+            };
+          });
+        } catch (e) { logger.warn('LSP', '[clangd] definition error:', e); }
+        return [];
+      }
+    });
+    monaco.languages.registerSignatureHelpProvider(langId, {
+      signatureHelpTriggerCharacters: ['(', ','],
+      provideSignatureHelp: async (model, position) => {
+        try {
+          const res = await client.signatureHelp(model.uri.toString(), position.lineNumber - 1, position.column - 1);
+          if (!res) return { value: { signatures: [], activeParameter: 0, activeSignature: 0 }, dispose: () => {} };
+          return { value: res, dispose: () => {} } as any;
+        } catch (e) {
+          logger.warn('LSP', '[clangd] signatureHelp error:', e);
+          return { value: { signatures: [], activeParameter: 0, activeSignature: 0 }, dispose: () => {} };
+        }
+      }
+    });
+  }
+  logger.debug('LSP', '[clangd] Monaco providers registered for c/cpp');
+}
 
 // Simple language placeholder registration for 'vpy'
 export function ensureLanguage(monaco: Monaco) {
@@ -154,9 +310,29 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
   // Track which URIs already sent didOpen to LSP
   const openedRef = useRef<Set<string>>(new Set());
 
+  // Route LSP didOpen/didChange to the correct server by file type:
+  //  - .vpy  → the VPy language server (unchanged behaviour)
+  //  - C/C++ → clangd, started lazily with cwd = the project root
+  const dispatchDidOpen = useCallback((uri: string, text: string) => {
+    const lang = fileLanguageId(uri);
+    if (lang === 'vpy') { try { lspClient.didOpen(uri, 'vpy', text); } catch {} return; }
+    if (lang === 'c' || lang === 'cpp') {
+      const root = clangdRootDir();
+      if (!root) { logger.warn('LSP', '[clangd] no project root open; cannot start for', uri); return; }
+      openClangdDocument(root, uri, lang, text).catch(e => logger.warn('LSP', '[clangd] didOpen failed:', e));
+    }
+  }, []);
+
+  const dispatchDidChange = useCallback((uri: string, text: string) => {
+    const lang = fileLanguageId(uri);
+    if (lang === 'vpy') { try { lspClient.didChange(uri, text); } catch {} return; }
+    if (lang === 'c' || lang === 'cpp') { try { getLspClient('clangd').didChange(uri, text); } catch {} }
+  }, []);
+
   const handleMount = useCallback((editor: any, monaco: Monaco) => {
     logger.debug('App', 'Monaco Editor mounted');
     ensureLanguage(monaco);
+    registerClangdProviders(monaco);
     editorRef.current = editor;
     monacoRef.current = monaco;
     setEditorReady(true); // Signal that editor is ready for F9 registration
@@ -423,7 +599,7 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
       const mUri = monaco.Uri.parse(doc.uri);
       let model = monaco.editor.getModel(mUri);
       if (!model) {
-        model = monaco.editor.createModel(doc.content, 'vpy', mUri);
+        model = monaco.editor.createModel(doc.content, fileLanguageId(doc.uri) || 'vpy', mUri);
       }
       editor.setModel(model);
       lastModelRef.current = doc.uri;
@@ -440,9 +616,10 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
       } catch {}
       // Trigger an initial didChange to encourage semanticTokens/full soon after mount
       if (!openedRef.current.has(doc.uri)) {
-        try { lspClient.didOpen(doc.uri, 'vpy', model.getValue()); openedRef.current.add(doc.uri); } catch {}
+        dispatchDidOpen(doc.uri, model.getValue());
+        openedRef.current.add(doc.uri);
       } else {
-        lspClient.didChange(doc.uri, model.getValue());
+        dispatchDidChange(doc.uri, model.getValue());
       }
       // Listen for scroll to persist position (debounced lightly)
       try {
@@ -475,7 +652,9 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
       logger.debug('App', 'Monaco hadFocusBeforeUpdate:', hadFocusBeforeUpdate);
       
       updateContent(doc.uri, value);
-      // Don't duplicate lspClient.didChange - it's already called in updateContent
+      // For VPy, didChange is sent lazily by the completion provider (unchanged).
+      // For C/C++, push didChange on every edit so clangd re-diagnoses live.
+      if (isCppUri(doc.uri)) dispatchDidChange(doc.uri, value);
       
       // Restore focus if it was lost during update
       if (hadFocusBeforeUpdate) {
@@ -498,9 +677,15 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
       const mUri = monaco.Uri.parse(doc.uri);
       let model = monaco.editor.getModel(mUri);
       if (!model) {
-        model = monaco.editor.createModel(doc.content, 'vpy', mUri);
+        model = monaco.editor.createModel(doc.content, fileLanguageId(doc.uri) || 'vpy', mUri);
       } else if (model.getValue() !== doc.content) {
         model.setValue(doc.content);
+      }
+      // First time we bind a C/C++ document, make sure clangd is started/indexed
+      // and receives didOpen. (.vpy files get didOpen via handleMount / main.tsx.)
+      if (isCppUri(doc.uri) && !openedRef.current.has(doc.uri)) {
+        dispatchDidOpen(doc.uri, model.getValue());
+        openedRef.current.add(doc.uri);
       }
       if (lastModelRef.current !== doc.uri) {
         editorRef.current.setModel(model);
@@ -597,6 +782,39 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
       }
     };
     lspClient.onNotification(handler);
+  }, []);
+
+  // Subscribe to clangd publishDiagnostics and apply them as Monaco markers on
+  // the matching C/C++ model. Kept separate from the VPy handler (different owner
+  // 'clangd', different client) so the two servers never clobber each other's markers.
+  useEffect(() => {
+    const handler = (method: string, params: any) => {
+      if (method !== 'textDocument/publishDiagnostics' || !monacoRef.current) return;
+      const monaco = monacoRef.current;
+      const { uri, diagnostics } = params || {};
+      if (!uri) return;
+      const lc = String(uri).toLowerCase();
+      const models = monaco.editor.getModels();
+      let model = models.find(m => m.uri.toString().toLowerCase() === lc);
+      if (!model) {
+        // Loose tail match (handle file:// vs file:/// slash differences)
+        const tail = lc.replace(/^file:\/+/, '').split('/').slice(-2).join('/');
+        model = models.find(m => m.uri.toString().toLowerCase().endsWith(tail));
+      }
+      if (!model) return; // only annotate open C/C++ models
+      const markers = (diagnostics || []).map((d: any) => ({
+        severity: severityToMonaco(d.severity, monaco),
+        message: d.message,
+        startLineNumber: d.range.start.line + 1,
+        startColumn: d.range.start.character + 1,
+        endLineNumber: d.range.end.line + 1,
+        endColumn: d.range.end.character + 1,
+        source: d.source || 'clangd'
+      }));
+      monaco.editor.setModelMarkers(model, 'clangd', markers);
+      logger.debug('LSP', '[clangd] applied markers:', markers.length, 'to', model.uri.toString());
+    };
+    getLspClient('clangd').onNotification(handler);
   }, []);
 
   // Listen for compilation diagnostics from Electron to clear Monaco markers
@@ -1073,8 +1291,8 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
   return (
     <Editor
       height="100%"
-      defaultLanguage="vpy"
-      language="vpy"
+      defaultLanguage={fileLanguageId(doc.uri) || 'vpy'}
+      language={fileLanguageId(doc.uri) || 'vpy'}
   theme="vpy-dark"
   // Model is managed manually; prevent internal re-create by not binding value each render
   value={undefined}
