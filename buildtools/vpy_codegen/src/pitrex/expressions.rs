@@ -1103,19 +1103,54 @@ mod tests {
             "must marshal 4 args into AAPCS registers (got: {asm:?})");
     }
 
-    /// A non-bridged builtin (DRAW_LINE — MOVE-coupled, deferred) must still
+    /// A non-bridged builtin (atan2 — divergent LUT, deferred) must still
     /// target its inline helper: the two mechanisms coexist during the migration.
     #[test]
     fn test_libvpy_bridge_leaves_others_inline() {
         let var_addrs = std::collections::HashMap::new();
         let info = CallInfo {
-            name: "DRAW_LINE".to_string(),
+            name: "atan2".to_string(),
             source_line: 0, col: 0,
-            args: vec![Expr::Number(0), Expr::Number(0), Expr::Number(10), Expr::Number(10), Expr::Number(80)],
+            args: vec![Expr::Number(10), Expr::Number(10)],
         };
         let asm = emit_call(&info, &var_addrs).unwrap();
-        assert!(asm.contains("bl      pitrex_draw_line"),
-            "DRAW_LINE must stay on the inline helper (got: {asm:?})");
+        assert!(asm.contains("bl      pitrex_atan2"),
+            "atan2 must stay on the inline helper (got: {asm:?})");
+    }
+
+    /// BLOCK 2: the MOVE + DRAW_LINE state-pair must route to their libvpy C
+    /// symbols (never the inline `pitrex_move` / `pitrex_draw_line`). They share
+    /// the beam origin so both are bridged together.
+    #[test]
+    fn test_libvpy_block2_move_draw_line_bridges() {
+        let var_addrs = std::collections::HashMap::new();
+
+        let move_info = CallInfo {
+            name: "MOVE".to_string(),
+            source_line: 0, col: 0,
+            args: vec![Expr::Number(-60), Expr::Number(60)],
+        };
+        let move_asm = emit_call(&move_info, &var_addrs).unwrap();
+        assert!(move_asm.contains("bl      vpy_move"),
+            "MOVE must bridge to vpy_move (got: {move_asm:?})");
+        assert!(!move_asm.contains("pitrex_move"),
+            "MOVE must NOT reference the inline pitrex helper (got: {move_asm:?})");
+
+        let line_info = CallInfo {
+            name: "DRAW_LINE".to_string(),
+            source_line: 0, col: 0,
+            args: vec![Expr::Number(0), Expr::Number(0), Expr::Number(40), Expr::Number(-40), Expr::Number(80)],
+        };
+        let line_asm = emit_call(&line_info, &var_addrs).unwrap();
+        assert!(line_asm.contains("bl      vpy_draw_line"),
+            "DRAW_LINE must bridge to vpy_draw_line (got: {line_asm:?})");
+        assert!(!line_asm.contains("pitrex_draw_line"),
+            "DRAW_LINE must NOT reference the inline pitrex helper (got: {line_asm:?})");
+        // 5-arg marshalling: 4 endpoints into r0-r3, brightness left at [sp+0].
+        assert!(line_asm.contains("pop     {r0}") && line_asm.contains("pop     {r3}"),
+            "DRAW_LINE must marshal 4 args into AAPCS registers (got: {line_asm:?})");
+        assert!(line_asm.contains("add     sp, sp, #4"),
+            "DRAW_LINE must clean up the stacked 5th arg (got: {line_asm:?})");
     }
 
     /// BLOCK 1: the stateless draws and pure-math builtins must route to their

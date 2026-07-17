@@ -57,8 +57,17 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     s.push_str(&emit_pitrex_camera());
     s.push_str(&emit_pitrex_get_frame_us());
     s.push_str(&emit_pitrex_set_intensity());
-    s.push_str(&emit_pitrex_move());
-    s.push_str(&emit_pitrex_draw_line());
+    // libvpy BLOCK 2: MOVE + DRAW_LINE are bridged to the C runtime as a pair
+    // (they share the beam origin). Suppress both inline bodies when bridged so
+    // only the `bl vpy_move` / `bl vpy_draw_line` calls remain. pitrex_draw_line_rel
+    // is an INTERNAL helper (DRAW_VECTOR/POLYGON) with no VPy-level builtin and is
+    // NOT bridged, so it is always emitted.
+    if !crate::pitrex::libvpy::is_bridged("MOVE") {
+        s.push_str(&emit_pitrex_move());
+    }
+    if !crate::pitrex::libvpy::is_bridged("DRAW_LINE") {
+        s.push_str(&emit_pitrex_draw_line());
+    }
     s.push_str(&emit_pitrex_draw_line_rel());
     s.push_str(&emit_pitrex_draw_vector());
     s.push_str(&emit_pitrex_draw_vector_ex());

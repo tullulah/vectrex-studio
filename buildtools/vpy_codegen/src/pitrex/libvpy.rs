@@ -23,9 +23,13 @@
 //! BLOCK 1 scope: the STATELESS builtins whose inline ARM body is semantically
 //! identical to their libvpy C function — the stateless draws
 //! `DRAW_RECT`/`DRAW_FILLED_RECT`/`DRAW_ELLIPSE` (absolute, no MOVE offset) and
-//! the pure-math helpers `abs/min/max/clamp/sin/cos/sqrt`. Builtins with a
-//! divergent implementation (`atan2`, `rand`, `rand_range`), no C counterpart
-//! (`pow`, `tan`), a MOVE-state coupling, or a different arg shape
+//! the pure-math helpers `abs/min/max/clamp/sin/cos/sqrt`.
+//!
+//! BLOCK 2 scope: the MOVE + DRAW_LINE state-pair — they share the beam origin
+//! (libvpy `s_cur_x/y` vs the inline `PITREX_MOVE_X/Y`), so they are bridged
+//! together or not at all. Verified bit-identical net output (see the
+//! per-arm comment). Builtins with a divergent implementation (`atan2`, `rand`,
+//! `rand_range`), no C counterpart (`pow`, `tan`), or a different arg shape
 //! (`DRAW_POLYGON`) are intentionally left inline for a later block. See the
 //! per-arm comments in [`libvpy_symbol`] for the exact reason each was deferred.
 
@@ -64,7 +68,29 @@ pub fn libvpy_symbol(vpy_name: &str) -> Option<&'static str> {
         "cos" | "COS"     => Some("vpy_cos"),
         "sqrt" | "SQRT"   => Some("vpy_sqrt"),
 
-        // Deferred (NOT bridged in BLOCK 1):
+        // ── BLOCK 2: the MOVE + DRAW_LINE state-pair ────────────────────────
+        // These share the beam-origin state so they MUST be bridged together:
+        // MOVE stores the origin, DRAW_LINE reads it. The inline pair stores the
+        // origin PRE-SCALED (PITREX_MOVE_X/Y = arg*127) and adds it to the
+        // ×127-scaled endpoints; libvpy stores it in VPy units (s_cur_x/y) and
+        // scales in raw_line. The NET result is bit-identical — worked example
+        // MOVE(-60,60); DRAW_LINE(0,0,40,-40,80) yields
+        // v_directDraw32(-7620, 7620, -2540, 2540, 80) on BOTH paths (segment
+        // (-60,60)->(-20,20) in VPy units, ×127). Arg order and the 5th-arg
+        // brightness match. The inline MOVE additionally issues a redundant
+        // v_directMove32 (beam physically moved) that no absolute-coordinate
+        // draw consumes, so dropping it changes no output. No OTHER inline
+        // builtin reads PITREX_MOVE_X/Y (only the inline DRAW_LINE did), and
+        // DRAW_VECTOR/DRAW_POLYGON seed PITREX_CUR_X/Y themselves rather than
+        // relying on a prior MOVE — so the pair is self-consistent once bridged.
+        //   Note: there is no VPy-level DRAW_LINE_REL/DRAW_TO builtin —
+        //   pitrex_draw_line_rel is an INTERNAL helper of DRAW_VECTOR/POLYGON
+        //   (each seeds PITREX_CUR itself), not reachable from a VPy call, so it
+        //   is not part of this group.
+        "MOVE"      => Some("vpy_move"),
+        "DRAW_LINE" => Some("vpy_draw_line"),
+
+        // Deferred (NOT bridged yet):
         //   atan2      — inline octant LUT (33-entry, 45°→22) disagrees with
         //                libvpy's 17-entry s_atan (45°→16): different angles.
         //   rand/rand_range — different LCG constants and output width (inline
