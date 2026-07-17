@@ -775,3 +775,234 @@ void vpy_update_level(void)
         s_gp_buf[i][3] = (short)vy;
     }
 }
+
+/* ---- enemy runtime (Phase 2 of the LEVELS bridge; NOT yet codegen-wired) ----
+ * Bit-exact port of the RNG-FREE inline enemy paths (pitrex_spawn_enemies,
+ * pitrex_update_enemies' waypoint + area-bounce patrol, pitrex_draw_enemies,
+ * pitrex_kill_enemy). The wander AI (ai_type==4) is a turn-3 TODO stub below.
+ *
+ * Position-independent enemy image `_NAME_ENEMIES_C` (emitted by
+ * levelres.rs::emit_enemies_c_bytes — sprite refs are INDICES into a companion
+ * sprite table, so NO absolute pointers / no inline `_NAME_VECTORS` reader):
+ *   u16 count
+ *   per enemy (sequential, self-delimiting via wp_count / area_count):
+ *     u16 sprite_index      -> s_enemy_sprites[idx]  (a `_{SPRITE}_VEC` image)
+ *     i16 spawn_x, i16 spawn_y
+ *     u8  ai_type, u8 wp_count, u8 mirror_on_patrol, u8 default_facing,
+ *     u8  is_anim, i8 feet_offset
+ *     waypoints[wp_count]:  i16 x, i16 y
+ *     u16 area_count; areas[area_count]: i16 y, i16 x_min, i16 x_max
+ *     u16 trans_count; trans[trans_count]: u8 from,to,type,pad, i16 from_x,to_x
+ * The mutable enemy pool lives ONLY here (single state home once bridged). */
+
+#define VPY_MAX_ENEMIES 32
+#define VPY_PATROL_SPEED 1
+
+typedef struct {
+    int x, y;                 /* world position (VPy units) */
+    int active;
+    int ai_type, wp_count, mirror_on_patrol, default_facing, is_anim;
+    int sprite_index, feet_offset;
+    int dir;                  /* 0=left, 1=right */
+    int cur_target;           /* waypoint index */
+    int sm_state, sub_state, cur_area, idle_timer;
+    int anim_frame_idx, anim_ticks_left;
+    const unsigned char *wp_base;   /* into the enemy image: first waypoint pair */
+    const unsigned char *areas;     /* into the enemy image: at area_count u16 */
+} VpyEnemy;
+
+static VpyEnemy s_enemies[VPY_MAX_ENEMIES];
+static int s_enemy_count = 0;
+static const unsigned char *const *s_enemy_sprites = 0;
+
+static int rd_u16(const unsigned char *p) { return (int)((uint16_t)p[0] | ((uint16_t)p[1] << 8)); }
+
+/* Area-snap cost (mirrors the inline spawn cost fn): |area.y - spawn_y|,
+ * +1024 if spawn_x outside [x_min,x_max], +4096 if area.y > spawn_y. Lowest
+ * cost wins; ties keep the earlier index (strict `<`). */
+static int area_snap_index(const unsigned char *areas, int area_count,
+                           int spawn_x, int spawn_y)
+{
+    const unsigned char *a = areas + 4;   /* skip area_count u16 + trans hint? no: layout below */
+    (void)a;
+    /* areas points at: u16 area_count, then areas[]: i16 y, x_min, x_max (6 bytes). */
+    const unsigned char *ap = areas + 2;
+    int best_idx = 0, best_cost = 0x10000;
+    for (int i = 0; i < area_count; i++, ap += 6) {
+        int ay = rd_i16(ap);
+        int xmin = rd_i16(ap + 2);
+        int xmax = rd_i16(ap + 4);
+        int cost = ay - spawn_y; if (cost < 0) cost = -cost;
+        if (spawn_x < xmin || spawn_x > xmax) cost += 1024;
+        if (ay > spawn_y) cost += 4096;
+        if (cost < best_cost) { best_cost = cost; best_idx = i; }
+    }
+    return best_idx;
+}
+
+/* no-tree-vectorize: keep libvpy NEON-free for the PitrexArm32 sim (gcc -Ofast
+ * vectorizes the pool-entry init into vmov.i32/vstr d16). See vpy_load_level. */
+__attribute__((optimize("no-tree-vectorize")))
+void vpy_spawn_enemies(const unsigned char *img, const unsigned char *const *sprites)
+{
+    s_enemy_count = 0;
+    s_enemy_sprites = sprites;
+    if (!img) return;
+
+    int total = rd_u16(img);
+    const unsigned char *p = img + 2;
+    int cam_y = s_cam_y;
+    int y_min = cam_y - 150, y_max = cam_y + 150;
+    int spawned = 0;
+
+    for (int e = 0; e < total && spawned < VPY_MAX_ENEMIES; e++) {
+        int sprite_index = rd_u16(p);
+        int spawn_x = rd_i16(p + 2);
+        int spawn_y = rd_i16(p + 4);
+        int ai_type = p[6];
+        int wp_count = p[7];
+        int mirror = p[8];
+        int facing = p[9];
+        int is_anim = p[10];
+        int feet_offset = (int)(int8_t)p[11];
+        const unsigned char *wp_base = p + 12;
+        const unsigned char *ap = wp_base + wp_count * 4;   /* -> area_count u16 */
+        int area_count = rd_u16(ap);
+        const unsigned char *areas = ap;                     /* points at area_count */
+        const unsigned char *tp = ap + 2 + area_count * 6;   /* -> trans_count u16 */
+        int trans_count = rd_u16(tp);
+        const unsigned char *next = tp + 2 + trans_count * 8;
+
+        /* Y-range spawn filter (matches inline). */
+        if (spawn_y < y_min || spawn_y > y_max) { p = next; continue; }
+
+        VpyEnemy *en = &s_enemies[spawned];
+        en->x = spawn_x; en->y = spawn_y;
+        en->active = 1;
+        en->ai_type = ai_type; en->wp_count = wp_count;
+        en->mirror_on_patrol = mirror; en->default_facing = facing;
+        en->is_anim = is_anim;
+        en->sprite_index = sprite_index; en->feet_offset = feet_offset;
+        en->dir = 1;                 /* right */
+        en->cur_target = 0;
+        en->sm_state = 0; en->sub_state = 0; en->cur_area = 0; en->idle_timer = 0;
+        en->anim_frame_idx = 0; en->anim_ticks_left = 0;
+        en->wp_base = wp_base;
+        en->areas = (area_count > 0) ? areas : 0;
+
+        /* Area-snap (wander OR patrol with no waypoints), matches inline. */
+        int want_snap = (ai_type == 4) || (ai_type == 1 && wp_count == 0);
+        if (want_snap && area_count > 0) {
+            int bi = area_snap_index(areas, area_count, spawn_x, spawn_y);
+            en->cur_area = bi;
+            int ay = rd_i16(areas + 2 + bi * 6);
+            en->y = ay + feet_offset;
+        }
+        /* vanim init (turn 3): frame0 duration — deferred with the anim reader. */
+
+        p = next;
+        spawned++;
+    }
+    s_enemy_count = spawned;
+}
+
+void vpy_kill_enemy(int idx)
+{
+    if (idx >= 0 && idx < s_enemy_count) s_enemies[idx].active = 0;
+}
+
+void vpy_update_enemies(void)
+{
+    for (int i = 0; i < s_enemy_count; i++) {
+        VpyEnemy *en = &s_enemies[i];
+        if (!en->active) continue;
+        if (en->sm_state != 0) continue;          /* frozen (snowed/balled) */
+
+        if (en->ai_type == 4) {
+            /* WANDER — turn-3 TODO (RNG). Intentionally not implemented here;
+             * leaving it inert keeps the bridge honest (do not half-do RNG). */
+            continue;
+        }
+        if (en->ai_type != 1) continue;           /* unsupported */
+
+        if (en->wp_count == 0) {
+            /* area-bounded X-bounce patrol */
+            if (!en->areas) continue;
+            const unsigned char *area = en->areas + 2 + en->cur_area * 6;
+            int xmin = rd_i16(area + 2);
+            int xmax = rd_i16(area + 4);
+            int x = en->x;
+            if (en->dir == 1) {
+                if (x >= xmax) { en->dir ^= 1; continue; }
+                x += VPY_PATROL_SPEED; if (x > xmax) x = xmax;
+                en->x = x;
+                if (x != xmax) continue;
+            } else {
+                if (x <= xmin) { en->dir ^= 1; continue; }
+                x -= VPY_PATROL_SPEED; if (x < xmin) x = xmin;
+                en->x = x;
+                if (x != xmin) continue;
+            }
+            en->dir ^= 1;
+            continue;
+        }
+        if (en->wp_count < 2) continue;           /* wp_count==1 invalid */
+
+        /* classic waypoint patrol (X then Y toward wp[cur_target]) */
+        const unsigned char *wp = en->wp_base + en->cur_target * 4;
+        int tx = rd_i16(wp);
+        int ty = rd_i16(wp + 2);
+        int x = en->x, y = en->y;
+        int S = VPY_PATROL_SPEED;
+
+        int dx = tx - x;
+        if (dx != 0) {
+            en->dir = (dx > 0) ? 1 : 0;
+            if (dx > 0) { if (dx <= S) x = tx; else x += S; }
+            else        { int adx = -dx; if (adx <= S) x = tx; else x -= S; }
+        }
+        int dy = ty - y;
+        if (dy != 0) {
+            if (dy > 0) { if (dy <= S) y = ty; else y += S; }
+            else        { int ady = -dy; if (ady <= S) y = ty; else y -= S; }
+        }
+        en->x = x; en->y = y;
+        if (x == tx && y == ty) {
+            int nt = en->cur_target + 1;
+            if (nt >= en->wp_count) nt = 0;
+            en->cur_target = nt;
+        }
+    }
+}
+
+void vpy_draw_enemies(void)
+{
+    int cam_x = s_cam_x, cam_y = s_cam_y;
+    for (int i = 0; i < s_enemy_count; i++) {
+        VpyEnemy *en = &s_enemies[i];
+        if (!en->active) continue;
+
+        /* sm_state==0 -> default sprite (state-sprite table is wander/frozen,
+         * turn 3). is_anim static case only for now. */
+        int sidx = en->sprite_index;
+        if (!s_enemy_sprites) continue;
+        const unsigned char *sprite = s_enemy_sprites[sidx];
+        if (!sprite) continue;
+
+        int ox = en->x - cam_x;
+        if (ox < 0 ? (-ox > 180) : (ox > 180)) continue;
+        int oy = en->y - cam_y;
+        if (oy < 0 ? (-oy > 140) : (oy > 140)) continue;
+
+        int mirror = 0;
+        if (en->mirror_on_patrol)
+            mirror = (en->default_facing ^ en->dir ^ 1) & 1;
+
+        if (!en->is_anim) {
+            vpy_draw_vector_ex(sprite, ox, oy, mirror, 127);
+        } else {
+            /* anim tick/extract — turn-3 TODO (needs the PI anim reader). */
+            vpy_draw_vector_ex(sprite, ox, oy, mirror, 127);
+        }
+    }
+}

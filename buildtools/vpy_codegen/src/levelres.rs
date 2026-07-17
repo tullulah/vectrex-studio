@@ -928,6 +928,15 @@ impl VPlayLevel {
             // Per-enemy walkable-area tables are appended after the enemies array.
             let mut areas_tables = String::new();
 
+            // Position-independent enemy image for libvpy (Phase 2 of the LEVELS
+            // bridge — NEW, tree-shaken until the group is wired). Built from the
+            // SAME derived data as the inline table below; sprite refs become
+            // INDICES into `_NAME_ENEMY_SPRITES` (-> `_{SPRITE}_VEC`), no absolute
+            // pointers. Layout matches libvpy vpy_spawn_enemies (see vpy.c).
+            let mut pi_bytes: Vec<u8> = Vec::new();
+            pi_bytes.extend_from_slice(&(ec as u16).to_le_bytes());
+            let mut enemy_sprite_syms: Vec<String> = Vec::new();
+
             for (idx, obj) in enemy_objs.iter().enumerate() {
                 let et = obj.enemy_type.as_deref().unwrap_or("").to_uppercase();
                 let ai = ai_type_byte(&obj.ai_type);
@@ -1027,6 +1036,56 @@ impl VPlayLevel {
                     );
                     &derived_trans
                 };
+                // ── Position-independent enemy record for libvpy ─────────────
+                // Same derived fields as the inline table; sprite ref -> index.
+                {
+                    let vec_sym = if sprite_sym.ends_with("_VECTORS") {
+                        format!("{}_VEC", &sprite_sym[..sprite_sym.len() - 8])
+                    } else {
+                        // anim / other sprite: turn-3 (no `_VEC` form yet).
+                        sprite_sym.clone()
+                    };
+                    let sprite_index = enemy_sprite_syms.iter().position(|s| s == &vec_sym)
+                        .unwrap_or_else(|| { enemy_sprite_syms.push(vec_sym.clone()); enemy_sprite_syms.len() - 1 }) as u16;
+                    pi_bytes.extend_from_slice(&sprite_index.to_le_bytes());
+                    pi_bytes.extend_from_slice(&obj.x.to_le_bytes());
+                    pi_bytes.extend_from_slice(&obj.y.to_le_bytes());
+                    pi_bytes.push(ai);
+                    pi_bytes.push(wpc);
+                    pi_bytes.push(mirror_byte);
+                    pi_bytes.push(facing_byte);
+                    pi_bytes.push(is_anim_byte);
+                    pi_bytes.push(0u8); // feet_offset (TODO turn-3: from type_data[209])
+                    for wp in wps {
+                        pi_bytes.extend_from_slice(&wp.x.to_le_bytes());
+                        pi_bytes.extend_from_slice(&wp.y.to_le_bytes());
+                    }
+                    pi_bytes.extend_from_slice(&(areas.len() as u16).to_le_bytes());
+                    for a in &areas {
+                        pi_bytes.extend_from_slice(&a.y.to_le_bytes());
+                        pi_bytes.extend_from_slice(&a.x_min.to_le_bytes());
+                        pi_bytes.extend_from_slice(&a.x_max.to_le_bytes());
+                    }
+                    pi_bytes.extend_from_slice(&(trans.len() as u16).to_le_bytes());
+                    let center_of = |ci: u8| -> i16 {
+                        let a = areas.get(ci as usize).unwrap_or(&WalkableArea { y: 0, x_min: 0, x_max: 0 });
+                        ((a.x_min as i32 + a.x_max as i32) / 2) as i16
+                    };
+                    for t in trans {
+                        let ttype = match t.ttype.as_str() {
+                            "jump_up" => 1u8, "drop" => 2u8, "jump_across" => 3u8, _ => 0u8,
+                        };
+                        let fx = t.from_x.unwrap_or_else(|| center_of(t.from));
+                        let tx = t.to_x.unwrap_or_else(|| center_of(t.to));
+                        pi_bytes.push(t.from);
+                        pi_bytes.push(t.to);
+                        pi_bytes.push(ttype);
+                        pi_bytes.push(0u8);
+                        pi_bytes.extend_from_slice(&fx.to_le_bytes());
+                        pi_bytes.extend_from_slice(&tx.to_le_bytes());
+                    }
+                }
+
                 if !areas.is_empty() {
                     let alabel = format!("_{name}_ENEMY{idx}_AREAS");
                     out.push_str(&format!("    .word {alabel}   @ areas_ptr\n"));
@@ -1073,6 +1132,30 @@ impl VPlayLevel {
                 out.push_str(&areas_tables);
                 out.push_str("\n");
             }
+
+            // ── libvpy position-independent enemy image + sprite table ───────
+            // NEW, tree-shaken until the LEVELS group is wired (own .rodata,
+            // .balign 4, --gc-sections). Consumed by vpy_spawn_enemies.
+            out.push_str(&format!("@ --- {name}_ENEMY_SPRITES (libvpy enemy sprite-index table) ---\n"));
+            out.push_str(&format!(".section .rodata._{name}_ENEMY_SPRITES,\"a\",%progbits\n"));
+            out.push_str("    .balign 4\n");
+            out.push_str(&format!(".global _{name}_ENEMY_SPRITES\n_{name}_ENEMY_SPRITES:\n"));
+            if enemy_sprite_syms.is_empty() {
+                out.push_str("    .word 0\n");
+            } else {
+                for sp in &enemy_sprite_syms {
+                    out.push_str(&format!("    .word {sp}\n"));
+                }
+            }
+            out.push_str(&format!("@ --- {name}_ENEMIES_C (libvpy position-independent enemy image) ---\n"));
+            out.push_str(&format!(".section .rodata._{name}_ENEMIES_C,\"a\",%progbits\n"));
+            out.push_str("    .balign 4\n");
+            out.push_str(&format!(".global _{name}_ENEMIES_C\n_{name}_ENEMIES_C:\n"));
+            for chunk in pi_bytes.chunks(16) {
+                let vals: Vec<String> = chunk.iter().map(|b| format!("0x{b:02X}")).collect();
+                out.push_str(&format!("    .byte   {}\n", vals.join(", ")));
+            }
+            out.push_str(".section .text\n\n");
         }
 
         out

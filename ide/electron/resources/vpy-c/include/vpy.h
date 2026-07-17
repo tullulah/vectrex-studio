@@ -115,6 +115,14 @@ int  vpy_get_scroll_limit_top(void);
 int  vpy_get_scroll_limit_bottom(void);
 int  vpy_get_level_floor_y(void);
 
+/* Enemy runtime (Phase 2 of the LEVELS bridge; not yet codegen-wired). `img` is
+ * a position-independent `_NAME_ENEMIES_C` image; `sprites[i]` a `_{SPRITE}_VEC`
+ * image. Wander AI (ai_type==4) + anim draw are turn-3 TODOs. */
+void vpy_spawn_enemies(const unsigned char *img, const unsigned char *const *sprites);
+void vpy_update_enemies(void);
+void vpy_draw_enemies(void);
+void vpy_kill_enemy(int idx);
+
 /* Optional VPy-style uppercase aliases so migrated .vpy reads naturally. */
 #ifdef VPY_SHORT_NAMES
 #define SET_INTENSITY   vpy_set_intensity

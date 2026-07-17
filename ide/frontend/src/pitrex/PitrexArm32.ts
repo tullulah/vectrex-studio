@@ -872,6 +872,18 @@ function executeOne(s: PitrexArm32State): boolean {
       break;
 
     // ── MOV ─────────────────────────────────────────────────────────────
+    case 'clz': {
+      // Count leading zeros (32-bit). gcc emits `clz rd,rm; lsr rd,#5` as a
+      // branchless (rm==0)?1:0 (clz(0)=32→1, clz(nonzero)<32→0) — used by
+      // libvpy's enemy waypoint "reached" test. Without this case the op was a
+      // no-op, leaving garbage that spuriously flipped the reached flag at
+      // certain values (an early waypoint advance in vpy_update_enemies).
+      const rd = regIdx(operands[0] ?? '');
+      const rm = regIdx(operands[1] ?? '');
+      if (rd < 0 || rm < 0) break;
+      setReg(s, rd, Math.clz32(getReg(s, rm) >>> 0));
+      break;
+    }
     case 'mov': case 'movs': {
       const rd = regIdx(operands[0] ?? '');
       if (rd < 0) break;
