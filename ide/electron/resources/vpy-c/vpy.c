@@ -478,3 +478,141 @@ void vpy_sfx_update(void)
     s_sfx_ptr   = w;
     s_sfx_delay = w[0];
 }
+
+/* ---- compiled levels (.vplay) ------------------------------------------------
+ * Interprets the level byte image produced by `vpy_cli compile-asset
+ * <file>.vplay --format c`. The layout mirrors the ARM/PiTrex level format
+ * (pitrex_load_level / pitrex_show_level / pitrex_update_level) byte-for-byte at
+ * the object level, so this is a straight C port of that runtime. The only two
+ * differences (a static C array can't hold absolute addresses) are:
+ *   - header layer pointers are byte OFFSETS from the image base
+ *   - object sprite field is an INDEX into the sprite pointer table supplied to
+ *     vpy_load_level (0xFFFFFFFF = no sprite / enemy marker → not drawn here).
+ *
+ * Header (36 bytes):
+ *   +0  xMin i16  +2 xMax i16  +4 yMin i16  +6 yMax i16
+ *   +8  bgCount u8 +9 gpCount u8 +10 fgCount u8 +11 pad
+ *   +12 bgObjectsOff u32 +16 gpObjectsOff u32 +20 fgObjectsOff u32
+ *   +24 scrollLeft i16 +26 scrollRight i16 +28 scrollTop i16 +30 scrollBottom i16
+ *   +32 groundBottomOffset i16 +34 pad
+ * Object (20 bytes):
+ *   +0 x i16 +2 y i16 +4 scale u8 +5 intensity u8 +6 flags u8 +7 type u8
+ *   +8 sprite_index u32 +12 half_w u8 +13 half_h u8 +14 vel_x i8 +15 vel_y i8
+ *   +16 coll_mesh u32 (unused in C — collision queries deferred)
+ * GP mutable buffer entry (8 bytes): x i16, y i16, vx i16, vy i16. */
+
+#define VPY_LEVEL_MAX_GP 64   /* mutable gameplay-object slots */
+
+static const unsigned char       *s_level      = 0;    /* header base */
+static const unsigned char *const *s_sprites   = 0;    /* sprite pointer table */
+static int  s_cam_x = 0, s_cam_y = 0;
+static int  s_gp_count = 0;
+static short s_gp_buf[VPY_LEVEL_MAX_GP][4];             /* x, y, vx, vy per GP object */
+
+static int16_t rd_i16(const unsigned char *p) { return (int16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8)); }
+
+void vpy_set_camera_x(int x) { s_cam_x = x; }
+void vpy_set_camera_y(int y) { s_cam_y = y; }
+int  vpy_get_camera_x(void)  { return s_cam_x; }
+int  vpy_get_camera_y(void)  { return s_cam_y; }
+
+void vpy_load_level(const unsigned char *level, const unsigned char *const *sprites)
+{
+    s_level   = level;
+    s_sprites = sprites;
+    s_gp_count = 0;
+    if (!level) return;
+
+    int gp = level[9];
+    if (gp > VPY_LEVEL_MAX_GP) gp = VPY_LEVEL_MAX_GP;
+    s_gp_count = gp;
+
+    /* Copy GP object positions/velocities into the mutable buffer (positions
+     * mutate via UPDATE_LEVEL; the ROM image stays the source of sprite/type). */
+    uint32_t gp_off = rd_le32(level + 16);
+    const unsigned char *o = level + gp_off;
+    for (int i = 0; i < gp; i++) {
+        s_gp_buf[i][0] = rd_i16(o + 0);          /* x */
+        s_gp_buf[i][1] = rd_i16(o + 2);          /* y */
+        s_gp_buf[i][2] = (short)(int8_t)o[14];   /* vx (init) */
+        s_gp_buf[i][3] = (short)(int8_t)o[15];   /* vy (init) */
+        o += 20;
+    }
+}
+
+/* Draw one object: sprite via index, offset by (x - cam_x, y - cam_y), culled
+ * to the screen. Mirrors the per-object body of pitrex_show_level. */
+static void level_draw_obj(const unsigned char *o, int wx, int wy)
+{
+    uint32_t sidx = rd_le32(o + 8);
+    if (sidx == 0xFFFFFFFFu || !s_sprites) return;        /* no sprite / enemy */
+    const unsigned char *sprite = s_sprites[sidx];
+    if (!sprite) return;
+
+    int ox = wx - s_cam_x;
+    int oy = wy - s_cam_y;
+    /* Cull off-screen (13-unit buffer past the ±127 screen edge), like ARM. */
+    if (vpy_abs(ox) > 180 || vpy_abs(oy) > 140) return;
+
+    int intensity = o[5];
+    vpy_draw_vector_ex(sprite, ox, oy, 0, intensity);
+}
+
+void vpy_show_level(void)
+{
+    const unsigned char *lvl = s_level;
+    if (!lvl) return;
+
+    /* BG layer — positions straight from the ROM image. */
+    int bg = lvl[8];
+    const unsigned char *o = lvl + rd_le32(lvl + 12);
+    for (int i = 0; i < bg; i++, o += 20)
+        level_draw_obj(o, rd_i16(o + 0), rd_i16(o + 2));
+
+    /* GP layer — positions from the mutable buffer; skip enemy-type objects
+     * (type byte == 1), which a future enemy runtime would draw instead. */
+    const unsigned char *g = lvl + rd_le32(lvl + 16);
+    for (int i = 0; i < s_gp_count; i++, g += 20) {
+        if (g[7] == 1) continue;
+        level_draw_obj(g, s_gp_buf[i][0], s_gp_buf[i][1]);
+    }
+
+    /* FG layer — positions straight from the ROM image. */
+    int fg = lvl[10];
+    o = lvl + rd_le32(lvl + 20);
+    for (int i = 0; i < fg; i++, o += 20)
+        level_draw_obj(o, rd_i16(o + 0), rd_i16(o + 2));
+}
+
+void vpy_update_level(void)
+{
+    const unsigned char *lvl = s_level;
+    if (!lvl || s_gp_count == 0) return;
+
+    int y_min = rd_i16(lvl + 4);
+    int y_max = rd_i16(lvl + 6);
+    const unsigned char *o = lvl + rd_le32(lvl + 16);   /* ROM GP (for flags) */
+
+    for (int i = 0; i < s_gp_count; i++, o += 20) {
+        unsigned char flags = o[6];
+        if (!(flags & 0x01)) continue;                  /* physics disabled */
+
+        int x  = s_gp_buf[i][0];
+        int y  = s_gp_buf[i][1];
+        int vx = s_gp_buf[i][2];
+        int vy = s_gp_buf[i][3];
+
+        if (flags & 0x02) {                             /* gravity */
+            vy -= 1;
+            if (vy < -32) vy = -32;                      /* clamp fall speed */
+        }
+        x += vx;
+        y += vy;
+        if (y < y_min) { y = y_min; vy = 0; }           /* hit floor */
+        if (y > y_max) { y = y_max; vy = 0; }           /* hit ceiling */
+
+        s_gp_buf[i][0] = (short)x;
+        s_gp_buf[i][1] = (short)y;
+        s_gp_buf[i][3] = (short)vy;
+    }
+}

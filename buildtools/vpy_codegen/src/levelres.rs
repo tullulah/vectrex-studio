@@ -1724,6 +1724,158 @@ impl VPlayLevel {
         out.push_str("\n");
         (mesh, out)
     }
+
+    /// Serialize this level into the position-independent **C byte image**
+    /// consumed by the vpy.h runtime (`vpy_load_level` / `vpy_show_level` /
+    /// `vpy_update_level`).
+    ///
+    /// The layout deliberately mirrors the ARM/PiTrex level format
+    /// (`compile_to_arm_asm_*`) byte-for-byte at the OBJECT level (20-byte
+    /// stride, identical field offsets) so the C interpreter is a direct port
+    /// of the ARM runtime. The two link-time-resolved pointers are the only
+    /// thing that changes, because a static C array cannot hold absolute
+    /// addresses:
+    ///   * header layer pointers  → byte OFFSETS from the image base (u32 LE)
+    ///   * object `vector_ptr`    → SPRITE INDEX (u32 LE) into a companion
+    ///                              sprite-pointer table the C side supplies.
+    ///     `0xFFFFFFFF` = no sprite (empty vectorName or enemy marker).
+    ///   * object `coll_mesh_ptr` → always 0 (collision queries are deferred
+    ///                              in the C runtime — see report).
+    ///
+    /// Returns `(bytes, sprite_names)` where `sprite_names[i]` is the lowercase
+    /// `vectorName` bound to sprite index `i` (in first-reference order). The
+    /// caller emits `#include "<name>.h"` + a `{NAME}_vec` entry per sprite.
+    ///
+    /// Header (36 bytes):
+    ///   +0  xMin i16   +2 xMax i16   +4 yMin i16   +6 yMax i16
+    ///   +8  bgCount u8 +9 gpCount u8 +10 fgCount u8 +11 pad
+    ///   +12 bgObjectsOff u32  +16 gpObjectsOff u32  +20 fgObjectsOff u32
+    ///   +24 scrollLeft i16 +26 scrollRight i16 +28 scrollTop i16 +30 scrollBottom i16
+    ///   +32 groundBottomOffset i16  +34 pad u16
+    pub fn compile_to_c_bytes(&self) -> (Vec<u8>, Vec<String>) {
+        let mut sprite_names: Vec<String> = Vec::new();
+        let mut sprite_index = |name: &str| -> u32 {
+            let key = name.to_lowercase();
+            if let Some(i) = sprite_names.iter().position(|n| n == &key) {
+                i as u32
+            } else {
+                sprite_names.push(key);
+                (sprite_names.len() - 1) as u32
+            }
+        };
+
+        // Serialize one 20-byte object record.
+        let emit_obj = |out: &mut Vec<u8>, obj: &VPlayObject, idx_fn: &mut dyn FnMut(&str) -> u32| {
+            out.extend_from_slice(&obj.x.to_le_bytes());
+            out.extend_from_slice(&obj.y.to_le_bytes());
+
+            let scale_u8 = (obj.scale * 8.0).round().clamp(1.0, 255.0) as u8;
+            out.push(scale_u8);
+
+            out.push(obj.intensity.unwrap_or(127));
+
+            // flags — identical semantics to compile_arm_object
+            let mut flags: u8 = 0;
+            let collidable = obj.collidable || obj.collision.as_ref().map_or(false, |c| c.enabled);
+            if collidable { flags |= 0x10; }
+            if obj.physics_enabled {
+                let has_physics = obj.physics.as_ref().map_or(true, |p| p.physics_type == "dynamic");
+                if has_physics { flags |= 0x01; }
+                let has_gravity = obj.gravity != 0.0
+                    || obj.physics.as_ref().map_or(false, |p| p.gravity != 0.0)
+                    || obj.physics_type.as_ref().map_or(false, |t| t == "gravity" || t == "projectile");
+                if has_gravity { flags |= 0x02; }
+                let bounce = obj.bounce_damping != 0.0
+                    || obj.physics_type.as_ref().map_or(false, |t| t == "bounce" || t == "gravity")
+                    || obj.collision.as_ref().map_or(false, |c| c.bounce_walls);
+                if bounce { flags |= 0x20; }
+            }
+            out.push(flags);
+
+            let type_byte = match obj.obj_type.as_str() {
+                "player_start" => 0u8,
+                "enemy"        => 1,
+                "obstacle"     => 2,
+                "collectible"  => 3,
+                "background"   => 4,
+                "trigger"      => 5,
+                _              => 255,
+            };
+            out.push(type_byte);
+
+            // sprite index (replaces the ARM absolute vector_ptr)
+            let is_enemy = obj.enemy_type.as_ref().map_or(false, |t| !t.is_empty());
+            let sidx: u32 = if obj.vector_name.is_empty() || is_enemy {
+                0xFFFF_FFFF
+            } else {
+                idx_fn(&obj.vector_name)
+            };
+            out.extend_from_slice(&sidx.to_le_bytes());
+
+            // half_w / half_h — collision override if present, else placeholder
+            // (16). The C runtime does not yet answer collision queries, so
+            // these only matter for a future LEVEL_COLLISION port.
+            let hw = obj.collision.as_ref().and_then(|c| c.width).unwrap_or(16).clamp(1, 127) as u8;
+            let hh = obj.collision.as_ref().and_then(|c| c.height).unwrap_or(16).clamp(1, 127) as u8;
+            out.push(hw);
+            out.push(hh);
+
+            out.push(obj.velocity.x.clamp(-128.0, 127.0) as i8 as u8);
+            out.push(obj.velocity.y.clamp(-128.0, 127.0) as i8 as u8);
+
+            // coll_mesh_ptr — deferred, always 0 (AABB/no collision)
+            out.extend_from_slice(&0u32.to_le_bytes());
+        };
+
+        // Header (36 bytes). Layer offsets are patched once we know where each
+        // object array lands (BG right after the header, then GP, then FG).
+        let mut bytes: Vec<u8> = Vec::new();
+        bytes.extend_from_slice(&self.world_bounds.x_min.to_le_bytes());
+        bytes.extend_from_slice(&self.world_bounds.x_max.to_le_bytes());
+        bytes.extend_from_slice(&self.world_bounds.y_min.to_le_bytes());
+        bytes.extend_from_slice(&self.world_bounds.y_max.to_le_bytes());
+        bytes.push(self.layers.background.len().min(255) as u8);
+        bytes.push(self.layers.gameplay.len().min(255) as u8);
+        bytes.push(self.layers.foreground.len().min(255) as u8);
+        bytes.push(0); // pad
+
+        const HEADER_LEN: u32 = 36;
+        let bg_len = self.layers.background.len() as u32 * 20;
+        let gp_len = self.layers.gameplay.len() as u32 * 20;
+        let bg_off = HEADER_LEN;
+        let gp_off = bg_off + bg_len;
+        let fg_off = gp_off + gp_len;
+        bytes.extend_from_slice(&bg_off.to_le_bytes());
+        bytes.extend_from_slice(&gp_off.to_le_bytes());
+        bytes.extend_from_slice(&fg_off.to_le_bytes());
+
+        let sl_left   = self.scroll_limits.left.unwrap_or(self.world_bounds.x_min);
+        let sl_right  = self.scroll_limits.right.unwrap_or(self.world_bounds.x_max);
+        let sl_top    = self.scroll_limits.top.unwrap_or(self.world_bounds.y_max);
+        let sl_bottom = self.scroll_limits.bottom.unwrap_or(self.world_bounds.y_min);
+        bytes.extend_from_slice(&sl_left.to_le_bytes());
+        bytes.extend_from_slice(&sl_right.to_le_bytes());
+        bytes.extend_from_slice(&sl_top.to_le_bytes());
+        bytes.extend_from_slice(&sl_bottom.to_le_bytes());
+        bytes.extend_from_slice(&self.editor_meta.ground_bottom_offset.to_le_bytes());
+        bytes.extend_from_slice(&0u16.to_le_bytes()); // pad → 36 bytes total
+
+        debug_assert_eq!(bytes.len() as u32, HEADER_LEN);
+
+        for obj in &self.layers.background { emit_obj(&mut bytes, obj, &mut sprite_index); }
+        for obj in &self.layers.gameplay   { emit_obj(&mut bytes, obj, &mut sprite_index); }
+        for obj in &self.layers.foreground { emit_obj(&mut bytes, obj, &mut sprite_index); }
+
+        (bytes, sprite_names)
+    }
+}
+
+/// Load a `.vplay` file and serialize it into the C byte image + its ordered
+/// sprite-name list. Reuses the exact object layout of the ARM/PiTrex level
+/// compiler (see `VPlayLevel::compile_to_c_bytes`).
+pub fn compile_vplay_file_to_c_bytes(path: &Path) -> Result<(Vec<u8>, Vec<String>)> {
+    let level = VPlayLevel::load(path)?;
+    Ok(level.compile_to_c_bytes())
 }
 
 #[cfg(test)]
@@ -1807,5 +1959,72 @@ mod tests {
         let asm = level.compile_to_asm();
         assert!(asm.contains("_EMPTY_LEVEL:"));
         assert!(asm.contains("; Background object count"));
+    }
+
+    fn obj(vector_name: &str, x: i16, y: i16) -> VPlayObject {
+        VPlayObject {
+            id: format!("o_{vector_name}_{x}_{y}"),
+            obj_type: "background".to_string(),
+            vector_name: vector_name.to_string(),
+            x, y, scale: 1.0, rotation: 0,
+            intensity: None, layer: "gameplay".to_string(), visible: true,
+            velocity: Vec2::default(), physics: None, collision: None, properties: None,
+            spawn_delay: 0, destroy_offscreen: false,
+            physics_enabled: false, physics_type: None, collidable: true,
+            gravity: 0.0, bounce_damping: 0.0,
+            enemy_type: None, ai_type: None, patrol_waypoints: None,
+            wave: 0, respawn: false, mirror_on_patrol: false, default_facing: String::new(),
+            walkable_areas: None, transitions: None,
+        }
+    }
+
+    #[test]
+    fn test_compile_c_bytes_layout() {
+        let level = VPlayLevel {
+            version: "2.0".to_string(),
+            level_type: "level".to_string(),
+            metadata: VPlayMetadata {
+                name: "world".to_string(), author: String::new(), difficulty: String::new(),
+                time_limit: 0, target_score: 0, description: String::new(),
+            },
+            world_bounds: VPlayWorldBounds { x_min: -96, x_max: 479, y_min: -384, y_max: 127 },
+            layers: VPlayLayers {
+                background: vec![],
+                // ground reused → index 0 for both; marker → index 1
+                gameplay: vec![obj("ground", -1, -65), obj("marker", 0, 75), obj("ground", 193, -65)],
+                foreground: vec![],
+            },
+            scroll_limits: VPlayScrollLimits::default(),
+            editor_meta: VPlayEditorMeta { ground_bottom_offset: 42 },
+            walkable_areas: None, transitions: None, isolate_screens: false,
+            transition_min_x_overlap: None, transition_lateral_y: None, transition_lateral_gap: None,
+        };
+
+        let (bytes, sprites) = level.compile_to_c_bytes();
+
+        // Header (36) + 3 objects × 20 = 96 bytes.
+        assert_eq!(bytes.len(), 36 + 3 * 20);
+        // counts
+        assert_eq!(bytes[8], 0);  // bgCount
+        assert_eq!(bytes[9], 3);  // gpCount
+        assert_eq!(bytes[10], 0); // fgCount
+        // gpObjectsOff == 36 (right after header, bg empty)
+        let gp_off = u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
+        assert_eq!(gp_off, 36);
+        // groundBottomOffset at +32
+        assert_eq!(i16::from_le_bytes([bytes[32], bytes[33]]), 42);
+
+        // Sprite de-dup: ground+marker → 2 names, ground first.
+        assert_eq!(sprites, vec!["ground".to_string(), "marker".to_string()]);
+
+        // Object 0 (ground) sprite index at +8 == 0; object 1 (marker) == 1;
+        // object 2 (ground) == 0 again.
+        let sidx = |obj_i: usize| -> u32 {
+            let base = 36 + obj_i * 20 + 8;
+            u32::from_le_bytes([bytes[base], bytes[base+1], bytes[base+2], bytes[base+3]])
+        };
+        assert_eq!(sidx(0), 0);
+        assert_eq!(sidx(1), 1);
+        assert_eq!(sidx(2), 0);
     }
 }

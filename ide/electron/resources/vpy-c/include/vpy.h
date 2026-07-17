@@ -85,6 +85,26 @@ void vpy_stop_music(void);                         /* mute channels + stop */
 void vpy_play_sfx(const unsigned char *data);     /* trigger a one-shot SFX (channel C) */
 void vpy_sfx_update(void);                         /* advance one frame (auto-called) */
 
+/* ---- compiled levels (.vplay) --------------------------------------------
+ * `level` is a level byte image compiled from a .vplay by
+ *   `vpy_cli compile-asset <file>.vplay --format c --out <name>.h`
+ * (same header/object layout as the ARM/PiTrex level backend). Objects
+ * reference sprites by INDEX; `sprites` is the companion pointer table the
+ * generated header emits alongside the image (`{NAME}_level_sprites`), each
+ * entry pointing at a compiled `.vec` array. Both are passed to LOAD_LEVEL:
+ *   LOAD_LEVEL(WORLD_level, WORLD_level_sprites);
+ * SHOW_LEVEL() draws every visible object (BG + GP + FG) offset by the camera
+ * and culled to the screen, calling vpy_draw_vector_ex per object — mirroring
+ * pitrex_show_level. UPDATE_LEVEL() advances gameplay-object physics (velocity
+ * + gravity) exactly like pitrex_update_level. Camera is in VPy units. */
+void vpy_load_level(const unsigned char *level, const unsigned char *const *sprites);
+void vpy_show_level(void);                          /* draw all layers with camera offset */
+void vpy_update_level(void);                        /* advance GP object physics one frame */
+void vpy_set_camera_x(int x);
+void vpy_set_camera_y(int y);
+int  vpy_get_camera_x(void);
+int  vpy_get_camera_y(void);
+
 /* Optional VPy-style uppercase aliases so migrated .vpy reads naturally. */
 #ifdef VPY_SHORT_NAMES
 #define SET_INTENSITY   vpy_set_intensity
@@ -105,6 +125,13 @@ void vpy_sfx_update(void);                         /* advance one frame (auto-ca
 #define PLAY_MUSIC      vpy_play_music
 #define STOP_MUSIC      vpy_stop_music
 #define PLAY_SFX        vpy_play_sfx
+#define LOAD_LEVEL      vpy_load_level
+#define SHOW_LEVEL      vpy_show_level
+#define UPDATE_LEVEL    vpy_update_level
+#define SET_CAMERA_X    vpy_set_camera_x
+#define SET_CAMERA_Y    vpy_set_camera_y
+#define GET_CAMERA_X    vpy_get_camera_x
+#define GET_CAMERA_Y    vpy_get_camera_y
 #endif
 
 #ifdef __cplusplus

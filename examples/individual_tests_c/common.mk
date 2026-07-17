@@ -14,7 +14,11 @@ VPY_CLI     ?= $(HOME)/projects/vectrex-pseudo-python/buildtools/target/debug/vp
 GEN_DIR     := gen
 AUDIO_SRCS  := $(wildcard assets/music/*.vmus assets/sfx/*.vsfx assets/*.vmus assets/*.vsfx)
 VEC_SRCS    := $(wildcard assets/vectors/*.vec assets/*.vec)
-ASSET_SRCS  := $(AUDIO_SRCS) $(VEC_SRCS)
+# .vplay levels compile to gen/<stem>.h too (byte image + sprite table). They
+# `#include` the per-sprite .vec headers, so VEC_SRCS must be listed FIRST so
+# their gen/<name>.h exist by the time the level header is compiled.
+LEVEL_SRCS  := $(wildcard assets/playground/*.vplay assets/*.vplay)
+ASSET_SRCS  := $(AUDIO_SRCS) $(VEC_SRCS) $(LEVEL_SRCS)
 
 # `gen_audio` retained as an alias for older test Makefiles.
 gen_audio: gen_assets

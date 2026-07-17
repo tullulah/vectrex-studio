@@ -1,0 +1,376 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "world",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Created in Playground - 2026-05-24"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 479,
+    "yMin": -384,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [],
+    "gameplay": [
+      {
+        "id": "obj_1779657561201",
+        "type": "background",
+        "vectorName": "ground",
+        "layer": "gameplay",
+        "x": -1,
+        "y": -65,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657565467",
+        "type": "background",
+        "vectorName": "marker",
+        "layer": "gameplay",
+        "x": 0,
+        "y": 75,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657569239",
+        "type": "background",
+        "vectorName": "tile",
+        "layer": "gameplay",
+        "x": 0,
+        "y": 0,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657580298",
+        "type": "background",
+        "vectorName": "ground",
+        "layer": "gameplay",
+        "x": 193,
+        "y": -65,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657589777",
+        "type": "background",
+        "vectorName": "tile",
+        "layer": "gameplay",
+        "x": 193,
+        "y": -1,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657592365",
+        "type": "background",
+        "vectorName": "marker",
+        "layer": "gameplay",
+        "x": 192,
+        "y": 63,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657600377",
+        "type": "background",
+        "vectorName": "tile",
+        "layer": "gameplay",
+        "x": 193,
+        "y": -224,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657602346",
+        "type": "background",
+        "vectorName": "tile",
+        "layer": "gameplay",
+        "x": 0,
+        "y": -217,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657608661",
+        "type": "background",
+        "vectorName": "ground",
+        "layer": "gameplay",
+        "x": 0,
+        "y": -322,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657614384",
+        "type": "background",
+        "vectorName": "ground",
+        "layer": "gameplay",
+        "x": 192,
+        "y": -321,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657622986",
+        "type": "background",
+        "vectorName": "ground",
+        "layer": "gameplay",
+        "x": 385,
+        "y": -322,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657628445",
+        "type": "background",
+        "vectorName": "tile",
+        "layer": "gameplay",
+        "x": 385,
+        "y": -226,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657644983",
+        "type": "background",
+        "vectorName": "marker",
+        "layer": "gameplay",
+        "x": 192,
+        "y": -156,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657649588",
+        "type": "background",
+        "vectorName": "marker",
+        "layer": "gameplay",
+        "x": 0,
+        "y": -153,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657657825",
+        "type": "background",
+        "vectorName": "marker",
+        "layer": "gameplay",
+        "x": 385,
+        "y": -160,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657699691",
+        "type": "background",
+        "vectorName": "ground",
+        "layer": "gameplay",
+        "x": 384,
+        "y": -66,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657705939",
+        "type": "background",
+        "vectorName": "tile",
+        "layer": "gameplay",
+        "x": 383,
+        "y": 0,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1779657710619",
+        "type": "background",
+        "vectorName": "marker",
+        "layer": "gameplay",
+        "x": 383,
+        "y": 63,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": {
+      "x": 0,
+      "y": -100
+    }
+  },
+  "hotspots": [],
+  "_editorMeta": {
+    "groundBottomOffset": 42
+  }
+}
