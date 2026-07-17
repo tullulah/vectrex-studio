@@ -110,6 +110,19 @@ void vpy_draw_polygon(const int *xy, int n, int b)
     raw_line(xy[2*(n-1)], xy[2*(n-1)+1], xy[0], xy[1], b);  /* close */
 }
 
+void vpy_draw_ellipse(int cx, int cy, int rx, int ry, int b)
+{
+    ensure_tables();
+    int px = cx + rx, py = cy;                /* angle 0 */
+    for (int i = 1; i <= 16; i++) {
+        int a = (i * 128) / 16;               /* 0..128 */
+        int x = cx + (rx * s_sin[(a + 32) & 127]) / 127;  /* cos */
+        int y = cy + (ry * s_sin[a & 127]) / 127;         /* sin */
+        raw_line(px, py, x, y, b);
+        px = x; py = y;
+    }
+}
+
 /* ---- vector font: glyphs on a 0..4 (w) x 0..6 (h) grid, +Y up ---- */
 typedef struct { const int8_t *seg; uint8_t nseg; } Glyph;
 #define GLYPH(v) { v, (uint8_t)(sizeof(v) / 4) }

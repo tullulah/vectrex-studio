@@ -33,6 +33,7 @@ void vpy_draw_circle(int cx, int cy, int r, int b);
 void vpy_draw_rect(int x, int y, int w, int h, int b);           /* x,y = lower-left */
 void vpy_draw_filled_rect(int x, int y, int w, int h, int b);
 void vpy_draw_polygon(const int *xy, int n, int b);              /* n vertices, xy[2n] */
+void vpy_draw_ellipse(int cx, int cy, int rx, int ry, int b);    /* 16-segment ellipse */
 
 /* ---- text ---- */
 void vpy_set_text_size(int s);       /* glyph scale (VPy units per grid unit ~ s) */
@@ -70,6 +71,7 @@ void vpy_tone(int period, int volume); /* period 12-bit, volume 0..15; 0 vol = o
 #define DRAW_RECT       vpy_draw_rect
 #define DRAW_FILLED_RECT vpy_draw_filled_rect
 #define DRAW_POLYGON    vpy_draw_polygon
+#define DRAW_ELLIPSE    vpy_draw_ellipse
 #define SET_TEXT_SIZE   vpy_set_text_size
 #define PRINT_TEXT      vpy_print_text
 #define PRINT_NUMBER    vpy_print_number

@@ -1,0 +1,14 @@
+[project]
+name = "print_number"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["print_number_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["print_number_wasm"]
+module = "build_wasm/print_number.js"

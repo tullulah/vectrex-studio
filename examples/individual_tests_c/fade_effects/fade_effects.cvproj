@@ -1,0 +1,14 @@
+[project]
+name = "fade_effects"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["fade_effects_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["fade_effects_wasm"]
+module = "build_wasm/fade_effects.js"

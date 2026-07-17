@@ -1,0 +1,14 @@
+[project]
+name = "set_intensity"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["set_intensity_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["set_intensity_wasm"]
+module = "build_wasm/set_intensity.js"

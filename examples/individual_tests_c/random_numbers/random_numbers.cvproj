@@ -1,0 +1,14 @@
+[project]
+name = "random_numbers"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["random_numbers_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["random_numbers_wasm"]
+module = "build_wasm/random_numbers.js"
