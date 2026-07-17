@@ -545,6 +545,9 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                     .get(&asset.name.to_lowercase())
                     .copied();
                 s.push_str(&emit_vec_resource(&resource, &asset.name, override_center));
+                // libvpy position-independent .vec image for the bridged
+                // DRAW_VECTOR path (tree-shaken away when DRAW_VECTOR is unused).
+                s.push_str(&emit_vec_resource_c_bytes(&resource, &asset.name, override_center));
                 s.push_str(&emit_3d_resource(&resource, &asset.name));
             }
             AssetType::Music => {
@@ -1656,13 +1659,51 @@ pub fn compile_vec_file_to_bytes(path: &std::path::Path) -> Result<Vec<u8>, Stri
     let text = fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let res: VecResource = serde_json::from_str(&text)
         .map_err(|e| format!("parse {}: {e}", path.display()))?;
-    Ok(vec_resource_to_bytes(&res))
+    Ok(vec_resource_to_bytes(&res, None))
+}
+
+/// Emit the position-independent C `.vec` byte image (`vec_resource_to_bytes`)
+/// as an ARM `.byte` blob under the symbol `_NAME_VEC`, for libvpy's
+/// `vpy_draw_vector`/`vpy_draw_vector_ex` (the bridged DRAW_VECTOR path).
+///
+/// This is the DRAW_VECTOR analogue of how the music/SFX bytes stayed shared:
+/// the SAME `vec_resource_to_bytes` behind the C `compile-asset` produces these
+/// bytes, so the bridged libvpy sprite is byte-identical to what hardware draws.
+/// It coexists with the inline `_NAME_VECTORS` (link-time pointer-table format)
+/// which the still-inline level/enemy/anim/DRAW_VECTOR_EX runtimes need.
+///
+/// `.balign 4` (ARMv6 `ldr` of the u16 header via byte loads is fine, but keep
+/// parity with the 3D/level blobs — cf. rp2350 unaligned-embed hazard). Emitted
+/// in its OWN `.rodata._NAME_VEC` section so `--gc-sections` drops it when
+/// DRAW_VECTOR isn't used for this asset; restores `.text` afterwards because
+/// the surrounding asset loop emits into `.text`.
+fn emit_vec_resource_c_bytes(
+    res: &VecResource,
+    override_name: &str,
+    override_center: Option<(i16, i16)>,
+) -> String {
+    let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let bytes = vec_resource_to_bytes(res, override_center);
+    let mut s = String::new();
+    s.push_str(&format!("@ --- {sym}_VEC (libvpy position-independent .vec image) ---\n"));
+    s.push_str(&format!(".section .rodata._{sym}_VEC,\"a\",%progbits\n"));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_VEC\n_{sym}_VEC:\n"));
+    for chunk in bytes.chunks(16) {
+        let vals: Vec<String> = chunk.iter().map(|b| format!("0x{b:02X}")).collect();
+        s.push_str(&format!("    .byte   {}\n", vals.join(", ")));
+    }
+    s.push_str(".section .text\n\n");
+    s
 }
 
 /// Serialize a `VecResource` into the position-independent C byte image
-/// documented on `compile_vec_file_to_bytes`.
-fn vec_resource_to_bytes(res: &VecResource) -> Vec<u8> {
-    let (center_x, center_y) = res.calculate_center();
+/// documented on `compile_vec_file_to_bytes`. `override_center` mirrors
+/// `emit_vec_resource`: vanim/venemy group members share a group center so the
+/// `_NAME_VEC` image centers identically to the inline `_NAME_VECTORS` (else a
+/// grouped sprite drawn via DRAW_VECTOR would shift vs the inline path).
+fn vec_resource_to_bytes(res: &VecResource, override_center: Option<(i16, i16)>) -> Vec<u8> {
+    let (center_x, center_y) = override_center.unwrap_or_else(|| res.calculate_center());
 
     let paths: Vec<_> = res.visible_paths()
         .into_iter()

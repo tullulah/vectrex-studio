@@ -252,7 +252,56 @@ pub fn libvpy_symbol(vpy_name: &str) -> Option<&'static str> {
         "MUSIC_UPDATE" => Some("vpy_music_update"),
         "SFX_UPDATE"   => Some("vpy_sfx_update"),
 
+        // ── BLOCK 7: DRAW_VECTOR (compiled .vec sprites) ────────────────────
+        // DRAW_VECTOR("name", x, y) draws a compiled `.vec` sprite. It is
+        // SPECIAL-CASED in expressions.rs (asset-name → symbol marshalling), so
+        // this map entry is only for the `is_bridged`/`vector_group_bridged`
+        // gate; the actual call is emitted there.
+        //
+        // .vec DATA (the crux): the inline `_NAME_VECTORS` header holds link-time
+        // ABSOLUTE `.word` path pointers (walked by `pitrex_draw_vector`), which
+        // is NOT position-independent and can't be handed to a C function. So the
+        // data is NOT directly shared. The clean fix (mirrors how the music bytes
+        // stayed shared): VPy now ALSO emits `_NAME_VEC` — the SAME
+        // position-independent byte image `vec_resource_to_bytes` produces behind
+        // the C `compile-asset` (u16 path_count + back-to-back path bodies, each
+        // `intensity,y0,x0,0,0, 0xFF dy dx / 0xFE bezier…, 0x02`). The per-path
+        // body + the 127-unit segment split are byte-identical to `_NAME_VECTORS`
+        // (both go through `split_segment_pairs`), so the two paths draw the same
+        // v_directDraw32 stream. Bridged DRAW_VECTOR passes `_NAME_VEC` to
+        // `vpy_draw_vector_ex` (x,y are absolute, ×127-scaled on both sides — same
+        // seed-and-delta model already proven bit-identical for MOVE+DRAW_LINE).
+        //
+        // BRIGHTNESS stays in ONE place WITHOUT bridging SET_INTENSITY: the inline
+        // `PITREX_BRIGHTNESS_OVERRIDE` global (0 ⇒ use the .vec per-path intensity,
+        // >0 ⇒ the SET_INTENSITY value, reset each frame by the game loop) is read
+        // AT THE CALL SITE (VPy-emitted asm) and passed as the 5th
+        // `vpy_draw_vector_ex(…, override)` arg. `draw_vec_stream` then does
+        // `b = override>0 ? override : path_intensity` — the identical rule to the
+        // inline `pitrex_draw_vector` (`movne r10, override`). So no libvpy
+        // brightness state is introduced and libvpy stays agnostic (the override
+        // is an ordinary arg, not a VPy-global dependency).
+        //
+        // SET_INTENSITY is DELIBERATELY NOT bridged: its `PITREX_BRIGHTNESS_OVERRIDE`
+        // is shared by FOUR still-inline draws (`pitrex_draw_vector_ex`,
+        // `pitrex_draw_anim`, `pitrex_show_level`, plus the level runtime).
+        // Bridging SET_INTENSITY to a libvpy global in isolation would desync/break
+        // brightness for all of those, and making libvpy read the VPy global would
+        // couple the agnostic C runtime to VPy codegen. The call-site-arg approach
+        // above keeps brightness in one place with zero regression; a full
+        // SET_INTENSITY bridge only becomes clean once the whole vector-draw family
+        // (VECTOR_EX/ANIM/SHOW_LEVEL + the level/enemy data formats) is bridged.
+        //
+        // The inline `pitrex_draw_vector` stays EMITTED (call-site remap only): it
+        // is uniquely called by DRAW_VECTOR so it becomes dead code once bridged,
+        // but it's cheaper/safer to leave it than to thread suppression through the
+        // shared vector-helpers emit block (the atan2/rand/text/music pattern).
+        "DRAW_VECTOR" => Some("vpy_draw_vector_ex"),
+
         // Deferred (NOT bridged yet):
+        //   SET_INTENSITY — see BLOCK 7: its brightness override is shared by the
+        //                still-inline VECTOR_EX/ANIM/SHOW_LEVEL draws; bridged
+        //                DRAW_VECTOR reads it at the call site instead.
         //   beep       — the inline `pitrex_beep` is a NO-OP stub (silent; the
         //                allocated BEEP_FRAMES_LEFT slot is never used on pitrex,
         //                unlike the m6809 frame-decay model). libvpy's vpy_beep
@@ -285,4 +334,15 @@ pub fn is_bridged(vpy_name: &str) -> bool {
 /// bridged together — see BLOCK 6).
 pub fn music_group_bridged() -> bool {
     is_bridged("PLAY_MUSIC")
+}
+
+/// True if DRAW_VECTOR (BLOCK 7) is bridged to libvpy's `vpy_draw_vector_ex`.
+///
+/// DRAW_VECTOR is special-cased in `expressions.rs` (asset-symbol marshalling),
+/// so the call site checks this gate to decide between the inline
+/// `pitrex_draw_vector` (with the link-time `_NAME_VECTORS` pointer table) and
+/// the bridged `vpy_draw_vector_ex` (with the position-independent `_NAME_VEC`
+/// image + the brightness override passed as a call-site arg — see BLOCK 7).
+pub fn vector_group_bridged() -> bool {
+    is_bridged("DRAW_VECTOR")
 }

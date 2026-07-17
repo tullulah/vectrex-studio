@@ -714,6 +714,39 @@ pub fn emit_call(
                 s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
                 s.push_str("    bl      pitrex_draw_vector_ex\n");
                 s.push_str("    add     sp, sp, #4\n"); // discard intensity
+            } else if crate::pitrex::libvpy::vector_group_bridged() {
+                // BLOCK 7 bridge: libvpy vpy_draw_vector_ex(data, x, y, mirror=0,
+                // override). Uses the position-independent `_NAME_VEC` image; the
+                // brightness override is read from PITREX_BRIGHTNESS_OVERRIDE (the
+                // SAME global SET_INTENSITY writes — brightness stays in one place,
+                // SET_INTENSITY is NOT bridged) and passed as the 5th arg so
+                // draw_vec_stream applies `override>0 ? override : path_intensity`,
+                // identical to the inline pitrex_draw_vector. ABI: r0=data, r1=x,
+                // r2=y, r3=mirror, [sp]=override. Push override first so it sits at
+                // [sp] after the four pops (mirror pattern).
+                let vec_symbol = format!("_{sym_base}_VEC");
+                s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
+                s.push_str("    ldrb    r0, [r0]           @ brightness override (0=use .vec intensity)\n");
+                s.push_str("    push    {r0}\n");
+                s.push_str(&format!("    ldr     r0, ={vec_symbol}    @ asset '{asset_name}' (libvpy image)\n"));
+                s.push_str("    push    {r0}\n");
+                if let Some(ox) = runtime.first() {
+                    s.push_str(&emit_arg(ox, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                s.push_str("    push    {r0}\n");
+                if let Some(oy) = runtime.get(1) {
+                    s.push_str(&emit_arg(oy, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                s.push_str("    push    {r0}\n");
+                s.push_str("    mov     r0, #0             @ mirror=0\n");
+                s.push_str("    push    {r0}\n");
+                s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+                s.push_str("    bl      vpy_draw_vector_ex\n");
+                s.push_str("    add     sp, sp, #4         @ discard override\n");
             } else {
                 // No mirror → simple pitrex_draw_vector(r0=asset, r1=ox, r2=oy)
                 s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
