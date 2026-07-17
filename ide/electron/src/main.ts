@@ -185,6 +185,7 @@ async function createWindow() {
             label: 'Open',
             submenu: [
               { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow?.webContents.send('command', 'project.open') },
+              { label: 'Import C/C++ Project...', click: () => mainWindow?.webContents.send('command', 'project.importC') },
               { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('command', 'file.open') }
             ]
           },
@@ -644,6 +645,7 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
           label: 'Open',
           submenu: [
             { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow?.webContents.send('command', 'project.open') },
+            { label: 'Import C/C++ Project...', click: () => mainWindow?.webContents.send('command', 'project.importC') },
             { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('command', 'file.open') }
           ]
         },
@@ -1010,7 +1012,7 @@ function parseCompilerDiagnostics(output: string, sourceFile: string): Array<{ f
 }
 
 
-async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserWindow | null): Promise<void> {
+async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserWindow | null, extraFiles: string[] = []): Promise<void> {
   const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
   const sdBundlePath = join(resourcesDir, 'pitrex-sd');
 
@@ -1060,12 +1062,24 @@ async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserW
   const kernelDst = join(sdMount, 'kernel7l.img');
   try {
     await fs.copyFile(imgPath, kernelDst);
-    win?.webContents.send('run://stdout', `[SD]   + kernel7.img\n`);
-    win?.webContents.send('run://status', `Copied to SD: ${sdMount}`);
-    win?.webContents.send('run://stdout', `[SD] Done.\n`);
+    win?.webContents.send('run://stdout', `[SD]   + kernel7l.img\n`);
   } catch (e: any) {
-    win?.webContents.send('run://stderr', `[SD] Failed to copy kernel7.img: ${e.message}\n`);
+    win?.webContents.send('run://stderr', `[SD] Failed to copy kernel7l.img: ${e.message}\n`);
+    return;
   }
+
+  // Extra payload files (e.g. a DOOM .wad) copied to the SD root by basename.
+  for (const extra of extraFiles) {
+    try {
+      await fs.copyFile(extra, join(sdMount, basename(extra)));
+      win?.webContents.send('run://stdout', `[SD]   + ${basename(extra)}\n`);
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[SD] Failed to copy ${basename(extra)}: ${e.message}\n`);
+    }
+  }
+
+  win?.webContents.send('run://status', `Copied to SD: ${sdMount}`);
+  win?.webContents.send('run://stdout', `[SD] Done.\n`);
 }
 
 async function copyUvm2ToSDCard(um2Path: string, sdPath: string, win: BrowserWindow | null): Promise<void> {
@@ -1112,26 +1126,33 @@ async function copyUvm2ToSDCard(um2Path: string, sdPath: string, win: BrowserWin
 
 // Run a subprocess and stream its stdout/stderr to the build/run output panel.
 // Resolves with the numeric exit code (or -1 if the process failed to spawn).
+//
+// `opts.label` prefixes the streamed lines (default 'RP2350'); `opts.env`
+// overrides the child environment (default the IDE's own env). Both let the
+// generic external-build path (C/C++ projects) reuse this without inheriting
+// the RP2350-flavoured logging.
 function runFlashCommand(
   cmd: string,
   cmdArgs: string[],
   cwd: string | undefined,
   win: BrowserWindow | null,
+  opts?: { env?: NodeJS.ProcessEnv; label?: string },
 ): Promise<number> {
+  const label = opts?.label ?? 'RP2350';
   return new Promise((resolve) => {
-    win?.webContents.send('run://stdout', `[RP2350] $ ${cmd} ${cmdArgs.join(' ')}\n`);
+    win?.webContents.send('run://stdout', `[${label}] $ ${cmd} ${cmdArgs.join(' ')}\n`);
     let child;
     try {
-      child = spawn(cmd, cmdArgs, { cwd, env: process.env });
+      child = spawn(cmd, cmdArgs, { cwd, env: opts?.env ?? process.env });
     } catch (e: any) {
-      win?.webContents.send('run://stderr', `[RP2350] Failed to spawn ${cmd}: ${e?.message || e}\n`);
+      win?.webContents.send('run://stderr', `[${label}] Failed to spawn ${cmd}: ${e?.message || e}\n`);
       resolve(-1);
       return;
     }
     child.stdout?.on('data', (d) => win?.webContents.send('run://stdout', d.toString()));
     child.stderr?.on('data', (d) => win?.webContents.send('run://stderr', d.toString()));
     child.on('error', (err) => {
-      win?.webContents.send('run://stderr', `[RP2350] ${cmd} error: ${err.message}\n`);
+      win?.webContents.send('run://stderr', `[${label}] ${cmd} error: ${err.message}\n`);
       resolve(-1);
     });
     child.on('close', (code) => resolve(code ?? -1));
@@ -1302,6 +1323,173 @@ async function flashRp2350(
     win?.webContents.send('run://status', 'RP2350 flashed via USB');
     return;
   }
+}
+
+// ---------------------------------------------------------------------------
+// External C/C++ projects (imported, built by their own make/cmake toolchain)
+// ---------------------------------------------------------------------------
+//
+// Unlike VPy projects (compiled by vpy_cli), an external project is described
+// by a `.cvproj` TOML manifest at its root and built by running its own build
+// command. For the `pitrex` target the produced bare-metal kernel image is
+// deployed to the SD card via the same copyPitrexToSDCard() path a VPy pitrex
+// build uses — same artifact (`kernel7l.img`), same SD bundle.
+interface ExternalProjectManifest {
+  project: { name: string; type: string; target?: 'pitrex' };
+  build: { command: string; args?: string[]; artifact: string; deploy_extra?: string[] };
+  // Optional simulator build: compiles the project to a WASM module (via
+  // emscripten) that runs in the IDE emulator panel against the host SDK shim.
+  // `module` is the emitted MODULARIZE loader (.js) with sibling .wasm/.data.
+  simulate?: { command: string; args?: string[]; module: string };
+  toolchain?: { path?: string };
+  env?: Record<string, string>;
+}
+
+// Resolve the emscripten bin dir (contains emcc) for the sim build. Checks
+// $EMSDK and the conventional ~/emsdk layout; returns null to fall back to PATH.
+function resolveEmscriptenDir(): string | null {
+  const candidates: string[] = [];
+  if (process.env.EMSDK) candidates.push(join(process.env.EMSDK, 'upstream', 'emscripten'));
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  if (home) candidates.push(join(home, 'emsdk', 'upstream', 'emscripten'));
+  for (const c of candidates) {
+    try { require('fs').accessSync(join(c, process.platform === 'win32' ? 'emcc.bat' : 'emcc')); return c; } catch {}
+  }
+  return null;
+}
+
+function isExternalManifest(parsed: any): parsed is ExternalProjectManifest {
+  return parsed?.project?.type === 'c-external'
+    && typeof parsed?.build?.command === 'string'
+    && typeof parsed?.build?.artifact === 'string';
+}
+
+// Build (and optionally deploy) an imported external C/C++ project.
+// Returns { ok, artifactPath } on success or { error } on failure.
+export async function executeExternalBuild(args: {
+  manifestPath: string;
+  deploy?: boolean;
+  sdPath?: string;
+}): Promise<{ ok: true; artifactPath: string } | { error: string; detail?: string }> {
+  const win = mainWindow ?? null;
+  const { manifestPath, deploy = false, sdPath = '' } = args || ({} as any);
+
+  let manifest: ExternalProjectManifest;
+  let rootDir: string;
+  try {
+    const content = await fs.readFile(manifestPath, 'utf-8');
+    const toml = await import('toml');
+    const parsed = toml.parse(content);
+    if (!isExternalManifest(parsed)) {
+      win?.webContents.send('run://stderr', `[C] Not a valid c-external manifest: ${manifestPath}\n`);
+      return { error: 'invalid_manifest' };
+    }
+    manifest = parsed;
+    rootDir = join(manifestPath, '..');
+  } catch (e: any) {
+    win?.webContents.send('run://stderr', `[C] Failed to read manifest: ${e?.message || e}\n`);
+    return { error: 'manifest_read_failed', detail: e?.message };
+  }
+
+  // Compose the child env: IDE env + optional toolchain PATH prefix + overrides.
+  const env: NodeJS.ProcessEnv = { ...process.env, ...(manifest.env || {}) };
+  if (manifest.toolchain?.path) {
+    env.PATH = `${manifest.toolchain.path}${require('path').delimiter}${env.PATH || ''}`;
+  }
+
+  win?.webContents.send('run://status', `Building ${manifest.project.name}...`);
+  const buildArgs = manifest.build.args || [];
+  const code = await runFlashCommand(manifest.build.command, buildArgs, rootDir, win, { env, label: 'C' });
+  if (code !== 0) {
+    win?.webContents.send('run://stderr', `[C] Build failed (exit ${code}).\n`);
+    win?.webContents.send('run://status', `Build failed: ${manifest.project.name}`);
+    return { error: 'build_failed' };
+  }
+
+  // Resolve the artifact relative to the project root.
+  const artifactPath = join(rootDir, manifest.build.artifact);
+  try {
+    await fs.access(artifactPath);
+  } catch {
+    win?.webContents.send('run://stderr', `[C] Build reported success but artifact not found: ${artifactPath}\n`);
+    return { error: 'artifact_not_found', detail: artifactPath };
+  }
+  win?.webContents.send('run://stdout', `[C] Built: ${artifactPath}\n`);
+  win?.webContents.send('run://status', `Built ${manifest.project.name}`);
+
+  // Deploy (pitrex target → SD card, reusing the VPy pitrex deploy path).
+  if (deploy) {
+    if (manifest.project.target !== 'pitrex') {
+      win?.webContents.send('run://stderr', `[C] Deploy is only supported for target=pitrex (got ${manifest.project.target}).\n`);
+    } else {
+      const extra = (manifest.build.deploy_extra || []).map((f) => join(rootDir, f));
+      await copyPitrexToSDCard(artifactPath, sdPath, win, extra);
+    }
+  }
+
+  return { ok: true, artifactPath };
+}
+
+// Build the simulator (WASM) module for an external project so it can run in
+// the IDE emulator panel. Injects the host SDK shim (PITREX_SIM_SDK) + emcc on
+// PATH; the project's declared [simulate] command links its C against the shim.
+// Returns { ok, modulePath } — the emitted MODULARIZE .js (with sibling
+// .wasm/.data) — or { error }.
+export async function executeSimBuild(args: {
+  manifestPath: string;
+}): Promise<{ ok: true; modulePath: string } | { error: string; detail?: string }> {
+  const win = mainWindow ?? null;
+  const { manifestPath } = args || ({} as any);
+
+  let manifest: ExternalProjectManifest;
+  let rootDir: string;
+  try {
+    const content = await fs.readFile(manifestPath, 'utf-8');
+    const toml = await import('toml');
+    const parsed = toml.parse(content);
+    if (!isExternalManifest(parsed)) return { error: 'invalid_manifest' };
+    manifest = parsed;
+    rootDir = join(manifestPath, '..');
+  } catch (e: any) {
+    win?.webContents.send('run://stderr', `[SIM] Failed to read manifest: ${e?.message || e}\n`);
+    return { error: 'manifest_read_failed', detail: e?.message };
+  }
+
+  if (!manifest.simulate?.command || !manifest.simulate?.module) {
+    win?.webContents.send('run://stderr', `[SIM] No [simulate] section in manifest — nothing to run in the panel.\n`);
+    return { error: 'no_simulate_target' };
+  }
+
+  // Host SDK shim ships in the app resources.
+  const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
+  const shimDir = join(resourcesDir, 'pitrex-sim');
+
+  const env: NodeJS.ProcessEnv = { ...process.env, ...(manifest.env || {}), PITREX_SIM_SDK: shimDir };
+  const emDir = resolveEmscriptenDir();
+  if (emDir) {
+    env.PATH = `${emDir}${require('path').delimiter}${env.PATH || ''}`;
+  } else {
+    win?.webContents.send('run://stdout', `[SIM] emscripten not found in $EMSDK or ~/emsdk — relying on emcc being on PATH.\n`);
+  }
+
+  win?.webContents.send('run://status', `Building simulator: ${manifest.project.name}...`);
+  const code = await runFlashCommand(manifest.simulate.command, manifest.simulate.args || [], rootDir, win, { env, label: 'SIM' });
+  if (code !== 0) {
+    win?.webContents.send('run://stderr', `[SIM] Simulator build failed (exit ${code}).\n`);
+    win?.webContents.send('run://status', `Simulator build failed: ${manifest.project.name}`);
+    return { error: 'sim_build_failed' };
+  }
+
+  const modulePath = join(rootDir, manifest.simulate.module);
+  try {
+    await fs.access(modulePath);
+  } catch {
+    win?.webContents.send('run://stderr', `[SIM] Build succeeded but module not found: ${modulePath}\n`);
+    return { error: 'module_not_found', detail: modulePath };
+  }
+  win?.webContents.send('run://stdout', `[SIM] Built simulator module: ${modulePath}\n`);
+  win?.webContents.send('run://status', `Simulator ready: ${manifest.project.name}`);
+  return { ok: true, modulePath };
 }
 
 // Exported function for direct invocation (e.g. from MCP server)
@@ -1758,6 +1946,16 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
 // IPC handler wraps the exported function
 ipcMain.handle('run:compile', async (_e, args) => {
   return executeCompilation(args);
+});
+
+// Build (and optionally deploy) an imported external C/C++ project.
+ipcMain.handle('run:buildExternal', async (_e, args) => {
+  return executeExternalBuild(args);
+});
+
+// Build the WASM simulator module for an external project (for the panel).
+ipcMain.handle('run:buildSim', async (_e, args) => {
+  return executeSimBuild(args);
 });
 
 // Emulator: run until next frame (or max steps)
@@ -2574,6 +2772,7 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
           label: 'Open',
           submenu: [
             { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow?.webContents.send('command', 'project.open') },
+            { label: 'Import C/C++ Project...', click: () => mainWindow?.webContents.send('command', 'project.importC') },
             { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('command', 'file.open') }
           ]
         },
@@ -2907,6 +3106,83 @@ def loop():
     };
   } catch (e: any) {
     return { error: e.message || 'Failed to create project' };
+  }
+});
+
+// Import an external C/C++ project: pick a folder with a Makefile, scaffold a
+// `.cvproj` manifest (prefilled by sniffing the Makefile for a pitrex target),
+// and return its path. The user can tweak the manifest afterwards.
+ipcMain.handle('project:importC', async (_e, args?: { dir?: string }) => {
+  try {
+    let projectDir = args?.dir?.trim() || '';
+    if (!projectDir) {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Import C/C++ Project (select folder with a Makefile)',
+        properties: ['openDirectory'],
+      });
+      if (result.canceled || result.filePaths.length === 0) return { canceled: true };
+      projectDir = result.filePaths[0];
+    }
+
+    const name = basename(projectDir);
+    const manifestPath = join(projectDir, `${name}.cvproj`);
+
+    // Don't clobber an existing manifest — just open it.
+    try {
+      await fs.access(manifestPath);
+      return { ok: true, manifestPath, existed: true };
+    } catch { /* no manifest yet, scaffold one */ }
+
+    // Sniff the Makefile for a build target whose name mentions "pitrex".
+    let buildArg = '';
+    try {
+      const mk = await fs.readFile(join(projectDir, 'Makefile'), 'utf-8');
+      const m = mk.match(/^([A-Za-z0-9_.-]*pitrex[A-Za-z0-9_.-]*)\s*:/m);
+      if (m) buildArg = m[1];
+    } catch { /* no Makefile / unreadable — leave build arg blank for the user */ }
+
+    // Any .wad in the project root is a likely deploy payload (e.g. DOOM).
+    let deployExtra: string[] = [];
+    try {
+      const entries = await fs.readdir(projectDir);
+      deployExtra = entries.filter((e) => e.toLowerCase().endsWith('.wad'));
+    } catch {}
+
+    const argsToml = buildArg ? `["${buildArg}"]` : `[]`;
+    const extraToml = deployExtra.length ? `[${deployExtra.map((f) => `"${f}"`).join(', ')}]` : `[]`;
+    const manifest = `# External C/C++ project imported into Vectrex Studio.
+# Built by running the command below; deployed to the PiTrex SD card.
+[project]
+name = "${name}"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ${argsToml}          # Makefile target(s) to build
+artifact = "kernel7l.img"    # produced image, relative to this folder
+deploy_extra = ${extraToml}  # extra files copied to the SD root
+
+# Optional: a WASM build that runs in the IDE emulator panel (compiled against
+# the host SDK shim via emscripten). Declare a make target that emits a
+# MODULARIZE loader; the IDE injects $PITREX_SIM_SDK + emcc.
+# [simulate]
+# command = "make"
+# args = ["sim"]
+# module = "build_wasm/game.js"
+
+# Optional: prepend a toolchain bin dir to PATH for the build.
+# [toolchain]
+# path = "/opt/arm-toolchain/bin"
+
+# Optional: environment overrides passed to the build.
+# [env]
+# PITREX_SDK = "/Users/you/projects/pitrex-baremetal"
+`;
+    await fs.writeFile(manifestPath, manifest, 'utf-8');
+    return { ok: true, manifestPath, existed: false, detectedTarget: buildArg || null };
+  } catch (e: any) {
+    return { error: e.message || 'Failed to import C project' };
   }
 });
 

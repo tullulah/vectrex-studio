@@ -1,0 +1,57 @@
+/*
+ * PiTrex SDK host contract — DECLARATIONS ONLY.
+ *
+ * This header is the ABI the IDE simulator implements. ANY pitrex program
+ * (DOOM, a hand-written C game, VPy-pitrex output) links against exactly this
+ * surface — the simulator is agnostic to which program it runs. The host
+ * implementation lives in sdk_host.c and bridges each call to JS hooks on
+ * `Module.pitrex` provided by the harness / IDE panel.
+ *
+ * Deliberately free of the bare-metal SDK's transitive includes (uspi.h,
+ * pi_support.h, osWrapper.h, ...): those pull in hardware code that cannot
+ * compile/run under WASM. A sim build puts this include dir AHEAD of the real
+ * SDK so this shim wins.
+ */
+#ifndef PITREX_SIM_VECTREXINTERFACE_H
+#define PITREX_SIM_VECTREXINTERFACE_H
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Input state — written by v_readButtons() / v_readJoystick1Analog(),
+ * read directly by the game afterwards. */
+extern uint8_t currentButtonState;
+extern int8_t  currentJoy1X;
+extern int8_t  currentJoy1Y;
+
+/* Lifecycle */
+void     vectrexinit(int mode);        /* pre-SDK bring-up (SD mount etc.) */
+void     v_init(void);
+void     v_setRefresh(int hz);
+
+/* Frame boundary — presents the accumulated vectors and yields to the host. */
+void     v_WaitRecal(void);
+
+/* The one drawing primitive: a vector line in PiTrex space
+ * (roughly x:[-18000,18000], y:[-24000,24000]), brightness 0-127. */
+void     v_directDraw32(int32_t xStart, int32_t yStart,
+                        int32_t xEnd,  int32_t yEnd, uint8_t brightness);
+
+/* Input */
+uint8_t  v_readButtons(void);          /* also stores into currentButtonState */
+void     v_readJoystick1Analog(void);  /* stores into currentJoy1X / currentJoy1Y */
+
+/* Time */
+uint32_t v_millis(void);
+
+/* Audio — one AY-3-8910 register write. */
+void     v_setSoundAY(uint8_t reg, uint8_t val);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* PITREX_SIM_VECTREXINTERFACE_H */

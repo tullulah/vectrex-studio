@@ -31,12 +31,21 @@ export interface ProjectConfig {
     author?: string;
     description?: string;
     entry: string;
+    // Discriminates an external C/C++ project (.cvproj) from a VPy project.
+    // Absent / "game" / "library" => VPy project (default behaviour).
+    type?: string;
+    target?: string;
   };
   build: {
     output: string;
     target?: string;
     optimization?: number;
     debug_symbols?: boolean;
+    // External C/C++ (.cvproj) build fields.
+    command?: string;
+    args?: string[];
+    artifact?: string;
+    deploy_extra?: string[];
   };
   sources?: {
     vpy?: string[];
@@ -59,6 +68,13 @@ export interface LoadedVpyProject {
   projectFile: string;
   rootDir: string;
   config: ProjectConfig;
+  // True when this is an external C/C++ project (config.project.type === 'c-external').
+  // VPy projects leave this falsy and behave exactly as before.
+  isExternal?: boolean;
+  // For external projects, the path to the .cvproj manifest (same as projectFile).
+  manifestPath?: string;
+  // Resolved build target (e.g. "pitrex") for external projects.
+  target?: string;
 }
 
 interface ProjectState {
@@ -284,17 +300,38 @@ export const useProjectStore = create<ProjectState>()(
             return false;
           }
           
+          const config = result.config as ProjectConfig;
+          const isExternal = config.project?.type === 'c-external';
           const loaded: LoadedVpyProject = {
             projectFile: result.path,
             rootDir: result.rootDir,
-            config: result.config as ProjectConfig,
+            config,
+            isExternal,
+            manifestPath: isExternal ? result.path : undefined,
+            target: isExternal ? config.project?.target : undefined,
           };
-          
+
           get().setVpyProject(loaded);
-          
+
           // Store project path globally for breakpoint persistence
           (window as any).__currentProjectPath__ = result.path;
-          
+
+          // External C/C++ projects have no VPy sources: skip breakpoints, PDB
+          // and debug-symbol loading (Phase 1 is build & deploy only).
+          if (isExternal) {
+            // Set workspace/file explorer to the manifest's folder and return.
+            const extFiles = await (window as any).files?.readDirectory?.(loaded.rootDir);
+            if (extFiles?.files) {
+              set({
+                project: { rootPath: loaded.rootDir, files: extFiles.files },
+                workspaceName: loaded.config.project.name,
+                lastWorkspacePath: loaded.rootDir
+              });
+            }
+            logger.info('Project', 'Opened external C/C++ project:', loaded.config.project.name);
+            return true;
+          }
+
           // Load breakpoints from database for this project
           if (typeof (window as any).__editorStore__ !== 'undefined') {
             const editorStore = (window as any).__editorStore__.getState();
@@ -304,7 +341,7 @@ export const useProjectStore = create<ProjectState>()(
               });
             }
           }
-          
+
           // Load existing PDB file if available
           const debugAPI = (window as any).debug;
           if (debugAPI && result.config.project.entry) {

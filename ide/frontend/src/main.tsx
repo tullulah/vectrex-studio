@@ -29,6 +29,7 @@ import { SettingsPanel } from './components/panels/SettingsPanel.js';
 import { EpromProgrammerDialog } from './components/dialogs/EpromProgrammerDialog.js';
 import { useSettings } from './state/settingsStore.js';
 import { useEmulatorSettings } from './state/emulatorSettings.js';
+import { useEmulatorStore } from './state/emulatorStore.js';
 
 // Initialize store reference for cross-store access
 setEditorStoreRef(useEditorStore);
@@ -428,7 +429,61 @@ function App() {
 
       const editorState = useEditorStore.getState();
       const projectState = useProjectStore.getState();
-    
+
+      // External C/C++ project: run its own build command (make, etc.) instead
+      // of the VPy compiler. Output streams over the same run://stdout/stderr
+      // channels the Build Output panel already subscribes to. Never load a
+      // .bin into the emulator or start the VPy debugger for these.
+      if (projectState.vpyProject?.isExternal) {
+        const manifestPath =
+          projectState.vpyProject.manifestPath || projectState.vpyProject.projectFile;
+        const projName = projectState.vpyProject.config.project.name;
+
+        // Build & Run (autoRun): build the project's [simulate] WASM module and
+        // load it into the emulator panel so the game renders in-browser. Plain
+        // Build (F7) and "Build for SD" keep the hardware kernel path below.
+        if (autoRun && !forSd) {
+          if (!electronAPI?.runBuildSim) {
+            logger.error('Build', 'electronAPI.runBuildSim not available');
+            return;
+          }
+          logger.info('Build', `Building simulator for external project: ${projName}`);
+          const simResult = await electronAPI.runBuildSim({ manifestPath });
+          if (simResult?.ok && simResult.modulePath) {
+            logger.info('Build', 'Simulator module ready:', simResult.modulePath);
+            // Hand the module to the emulator panel (PitrexSimView loads it).
+            // setSimModule bumps a nonce so a rebuilt same-path module reloads.
+            useEmulatorStore.getState().setSimModule(simResult.modulePath);
+            return;
+          }
+          // No [simulate] target: fall through to the hardware build so
+          // Build & Run still does something useful. Any other error surfaces.
+          if (simResult?.error && simResult.error !== 'no_simulate_target') {
+            logger.error('Build', 'Simulator build failed:', simResult.error, simResult.detail || '');
+            return;
+          }
+          logger.warn('Build', `No [simulate] target for ${projName} — running the hardware build instead.`);
+        }
+
+        if (!electronAPI?.runBuildExternal) {
+          logger.error('Build', 'electronAPI.runBuildExternal not available');
+          return;
+        }
+        logger.info('Build', `Building external project: ${projName}`);
+        const extResult = await electronAPI.runBuildExternal({
+          manifestPath,
+          // Reuse the existing PiTrex "copy to SD" settings used by the VPy path.
+          deploy: pitrexCopyToSD,
+          sdPath: pitrexSdPath,
+        });
+        if (extResult?.error) {
+          logger.error('Build', 'External build failed:', extResult.error, extResult.detail || '');
+        } else {
+          logger.info('Build', 'External build complete:', extResult?.artifactPath || '');
+        }
+        return;
+      }
+
     // If we have a project, use project entry point
     let activeDoc;
     let buildFromProject = false;
@@ -1088,6 +1143,36 @@ def loop():
         setShowNewProjectDialog(true);
         break;
       }
+      case 'project.importC': {
+        // Import & scaffold an external C/C++ project (.cvproj manifest), then
+        // load it as the active project via the same path used for .vpyproj.
+        const electronAPI: any = (window as any).electronAPI;
+        if (!electronAPI?.importCProject) {
+          logger.error('Project', 'electronAPI.importCProject not available');
+          break;
+        }
+        try {
+          const result = await electronAPI.importCProject();
+          if (result?.canceled) break;
+          if (result?.error) {
+            logger.error('Project', 'Import C/C++ project failed:', result.error);
+            break;
+          }
+          if (result?.ok && result.manifestPath) {
+            // openVpyProject detects config.project.type === 'c-external',
+            // sets isExternal on the store and adds it to recents.
+            const success = await openVpyProject(result.manifestPath);
+            if (success) {
+              logger.info('Project', 'Imported external C/C++ project:', result.manifestPath);
+            } else {
+              logger.error('Project', 'Failed to load imported manifest:', result.manifestPath);
+            }
+          }
+        } catch (e: any) {
+          logger.error('Project', 'Import C/C++ project error:', e?.message || e);
+        }
+        break;
+      }
       case 'project.open': {
         const projectAPI = (window as any).project;
         if (!projectAPI) {
@@ -1394,6 +1479,16 @@ def loop():
     return () => window.removeEventListener('keydown', handler, { capture: true } as any);
   }, [commandExec]);
 
+  // F5 on an external C/C++ project routes here (via EmulatorPanel) → Build & Run
+  // the WASM simulator instead of continuing the 6809 emulator.
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'vpy-run-external') handleBuild(true);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [handleBuild]);
+
   // Listen for vpy-command events from WelcomeView and other components
   useEffect(() => {
     const handler = (e: CustomEvent) => {
@@ -1488,6 +1583,7 @@ def loop():
             </SubMenu>
             <SubMenu label={t('file.open', 'Open')}>
               <MenuItem label={`${t('project.open', 'Project...')}	Ctrl+Shift+O`} onClick={()=>{ commandExec('project.open'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('project.importC', 'Import C/C++ Project…')}`} onClick={()=>{ commandExec('project.importC'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.openFile', 'File...')}	Ctrl+O`} onClick={()=>{ commandExec('file.open'); setOpenMenu(null); }} />
             </SubMenu>
             <MenuSeparator />

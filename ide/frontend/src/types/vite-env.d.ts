@@ -43,8 +43,39 @@ interface PyPilotAPI {
   getMessageCount: (sessionId: number) => Promise<{ success: boolean; count?: number; error?: string }>;
 }
 
+// Electron main-process API bridge (exposed via preload as window.electronAPI).
+// Only the members needed by strongly-typed call sites are declared here; the
+// index signature keeps the many existing `(window as any).electronAPI` uses valid.
+interface ElectronAPI {
+  // Import an external C/C++ project: opens a folder picker (unless `dir` is
+  // given), scaffolds a `<name>.cvproj` TOML manifest and returns its path.
+  importCProject: (args?: { dir?: string }) => Promise<{
+    ok?: boolean;
+    manifestPath?: string;
+    existed?: boolean;
+    detectedTarget?: string | null;
+    canceled?: boolean;
+    error?: string;
+  }>;
+  // Run an external C/C++ project's own build command (output streams over the
+  // existing run://stdout / run://stderr channels). When deploy=true it copies
+  // the resulting artifact + extra files to the PiTrex SD card.
+  runBuildExternal: (args: {
+    manifestPath: string;
+    deploy?: boolean;
+    sdPath?: string;
+  }) => Promise<{
+    ok?: boolean;
+    artifactPath?: string;
+    error?: string;
+    detail?: string;
+  }>;
+  [key: string]: any;
+}
+
 // Electron API types
 interface Window {
+  electronAPI?: ElectronAPI;
   electron: {
     runCommand: (command: string) => Promise<{
       success: boolean;
