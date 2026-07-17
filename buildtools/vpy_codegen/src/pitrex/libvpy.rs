@@ -38,6 +38,15 @@
 //! with other still-inline helpers (`atan2` shares the math-helpers emit block +
 //! `pitrex_atan_lut`; `pitrex_random` is called by the inline enemy AI).
 //!
+//! BLOCK 4 scope: the TEXT builtins `PRINT_TEXT` / `PRINT_NUMBER` /
+//! `SET_TEXT_SIZE` — the last previously-diverging group. libvpy now carries the
+//! SDK vector-font glyph data (ported from `vectorFont.i`) and renders it via
+//! `v_directDraw32`, reproducing the inline SDK-font text (same glyphs,
+//! positions and size) instead of libvpy's old hand-built 4x6 table. The inline
+//! `pitrex_print_text` stays EMITTED (call-site remap only) because the
+//! always-emitted `pitrex_print_msg` (PRINT_MSG) forwards to it — the same
+//! shared-symbol pattern as atan2/rand.
+//!
 //! Still inline: no C counterpart (`pow`, `tan`), a different arg shape
 //! (`DRAW_POLYGON`), or a no-op inline stub (`beep`). See the per-arm comments in
 //! [`libvpy_symbol`] for the exact reason each remains deferred.
@@ -121,6 +130,39 @@ pub fn libvpy_symbol(vpy_name: &str) -> Option<&'static str> {
         "atan2" | "ATAN2"           => Some("vpy_atan2"),
         "rand" | "RAND"             => Some("vpy_rand"),
         "rand_range" | "RAND_RANGE" => Some("vpy_rand_range"),
+
+        // ── BLOCK 4: the TEXT builtins ──────────────────────────────────────
+        // Previously the last DIVERGING group: the inline `pitrex_print_text`
+        // draws with the PiTrex SDK vector font via `v_printString`, while
+        // libvpy's `vpy_print_text` used its OWN hand-built 4x6 glyph table
+        // (different glyphs). Reconciled by porting the SDK vector-font glyph
+        // data (the ACTIVE BLOW_UP=15 table from vectorFont.i) into libvpy and
+        // reimplementing `vpy_print_text` to walk it and draw each stroke via
+        // `v_directDraw32` — reproducing v_printString's glyph shapes, advance
+        // and scale plus the inline sequence's -8 baseline, 127/128 pre-scale
+        // and default textSize=8. Same font, positions and size as the inline
+        // SDK text; glyph GEOMETRY is beam-identical (same v_directDraw32
+        // segment count/coords). NOT beam-identical in brightness only: the
+        // inline hard-codes 0x50 and v_printString applies the SDK's
+        // intensityMul, whereas libvpy honors SET_INTENSITY (s_intensity) —
+        // exactly like every other bridged libvpy draw. `v_printString` is NOT
+        // added to the minimal SDK contract (one font copy, drawn via
+        // v_directDraw32 on all three runtimes).
+        //
+        // SHARED-SYMBOL CAVEAT (why the inline bodies stay EMITTED, call-site
+        // remap only — the atan2/rand pattern): `emit_pitrex_msg_system` is
+        // emitted UNCONDITIONALLY (builtins.rs) and its `pitrex_print_msg`
+        // forwards to `pitrex_print_text`, so suppressing the inline
+        // `pitrex_print_text` would leave PRINT_MSG's `bl pitrex_print_text`
+        // unresolved. PRINT_MSG keeps using the inline SDK-font path (same
+        // ported glyphs, so it looks identical). The `PITREX_TEXT_SIZE` RAM
+        // slot is a `.equ` alias always defined in functions.rs regardless of
+        // bridging, so no data symbol is lost either. `pitrex_print_number` /
+        // `pitrex_set_text_size` are not shared, but stay emitted too for
+        // consistency (harmless dead code once their call sites are remapped).
+        "PRINT_TEXT"                => Some("vpy_print_text"),
+        "PRINT_NUMBER"              => Some("vpy_print_number"),
+        "SET_TEXT_SIZE"             => Some("vpy_set_text_size"),
 
         // Deferred (NOT bridged yet):
         //   beep       — the inline `pitrex_beep` is a NO-OP stub (silent; the

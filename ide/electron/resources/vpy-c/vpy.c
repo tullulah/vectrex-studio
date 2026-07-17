@@ -13,7 +13,7 @@
 /* ---- state ---- */
 static int   s_cur_x = 0, s_cur_y = 0;   /* MOVE origin, in VPy units */
 static int   s_intensity = 90;
-static int   s_text_size = 2;
+static int   s_text_size = 8;   /* matches inline PITREX_TEXT_SIZE default (0 -> 8) */
 static uint32_t s_rng = 0u;   /* matches the inline RAND_SEED (zeroed .bss) */
 static int   s_jx = 0, s_jy = 0;
 static uint8_t s_btn = 0;
@@ -224,113 +224,166 @@ void vpy_draw_vector_ex(const unsigned char *data, int x, int y, int mirror, int
     draw_vec_stream(data, x, y, mirror ? 1 : 0, intensity);
 }
 
-/* ---- vector font: glyphs on a 0..4 (w) x 0..6 (h) grid, +Y up ---- */
-typedef struct { const int8_t *seg; uint8_t nseg; } Glyph;
-#define GLYPH(v) { v, (uint8_t)(sizeof(v) / 4) }
+/* ---- SDK vector font (ported from pitrex-baremetal vectorFont.i, the ACTIVE
+ * BLOW_UP=15 table) ---------------------------------------------------------
+ * This is the SAME font the inline PiTrex path renders via v_printString, so
+ * PRINT_TEXT looks identical on hardware, the C-import WASM sim, and the VPy
+ * PitrexCore sim — all drawn through v_directDraw32 (we do NOT add
+ * v_printString to the SDK contract).
+ *
+ * Each glyph is a stream of [pattern, dy, dx] signed-byte triples (the dy/dx
+ * deltas are already ×BLOW_UP=15), terminated by a lone 0x01. Reproducing
+ * v_printString's pipeline:
+ *   pattern != 0  -> draw a stroke  cursor -> cursor + delta*SCALEFONT
+ *   pattern == 0  -> move only (no beam), advance the cursor
+ * with SCALEFONT = textSize*1.5. The loop continues while the NEXT entry's
+ * pattern byte is <= 0; the 0x01 endmarker (positive) stops it. The trailing
+ * move in each glyph bakes in the inter-character advance. */
+static const signed char F_Folder[] = {-1,120,0,-1,0,60,-1,-60,0,0,0,-15,-1,-60,0,0,0,30,-1,45,0,-1,15,-15,-1,0,-15,0,-60,-45,-1,0,75,0,0,15,1};
+static const signed char F_ABC_0[] = {-1,45,0,-1,45,0,-1,30,30,-1,-30,30,-1,-45,0,-1,0,-60,0,0,60,-1,-45,0,0,0,30,1};
+static const signed char F_ABC_1[] = {-1,120,0,-1,0,30,-1,-15,30,-1,-30,-15,0,0,-45,-1,0,45,-1,-45,15,-1,-30,-30,-1,0,-30,0,0,90,1};
+static const signed char F_ABC_2[] = {0,120,60,-1,0,-60,-1,-120,0,-1,0,60,0,0,30,1};
+static const signed char F_ABC_3[] = {-1,120,0,-1,0,30,-1,-45,30,-1,-30,0,-1,-45,-30,-1,0,-30,0,0,90,1};
+static const signed char F_ABC_4[] = {0,120,60,-1,0,-60,-1,-45,0,0,0,60,-1,0,-60,-1,-75,0,-1,0,60,0,0,30,1};
+static const signed char F_ABC_5[] = {-1,75,0,-1,0,60,0,0,-60,-1,45,0,-1,0,60,0,-120,30,1};
+static const signed char F_ABC_6[] = {0,105,60,-1,15,0,-1,0,-60,-1,-120,0,-1,0,60,-1,75,0,-1,0,-30,0,-75,60,1};
+static const signed char F_ABC_7[] = {-1,120,0,0,-45,0,-1,0,60,0,45,0,-1,-120,0,0,0,30,1};
+static const signed char F_ABC_8[] = {-1,0,60,0,0,-30,-1,120,0,0,0,-30,-1,0,60,0,-120,30,1};
+static const signed char F_ABC_9[] = {0,30,0,-1,-30,15,-1,0,45,-1,120,0,-1,0,-30,0,-120,60,1};
+static const signed char F_ABC_10[] = {-1,120,0,0,-45,0,-1,45,60,0,-45,-60,-1,-75,60,0,0,30,1};
+static const signed char F_ABC_11[] = {0,120,0,-1,-120,0,-1,0,60,0,0,30,1};
+static const signed char F_ABC_12[] = {-1,120,0,-1,-45,30,-1,45,30,-1,-120,0,0,0,30,1};
+static const signed char F_ABC_13[] = {-1,120,0,-1,-120,60,-1,120,0,0,-120,30,1};
+static const signed char F_ABC_14[] = {0,0,0,-1,120,0,-1,0,60,-1,-120,0,-1,0,-60,0,0,90,1};
+static const signed char F_ABC_15[] = {-1,120,0,-1,0,60,-1,-45,0,-1,0,-60,0,-75,90,1};
+static const signed char F_ABC_16[] = {0,0,30,-1,0,-30,-1,120,0,-1,0,60,-1,-90,0,-1,-30,-30,0,30,0,-1,-30,30,0,0,30,1};
+static const signed char F_ABC_17[] = {-1,120,0,-1,0,60,-1,-45,0,-1,0,-60,-1,-75,60,0,0,30,1};
+static const signed char F_ABC_18[] = {0,120,60,-1,0,-60,-1,-45,0,-1,0,60,-1,-75,0,-1,0,-60,0,0,90,1};
+static const signed char F_ABC_19[] = {0,0,30,-1,120,0,0,0,-30,-1,0,60,0,-120,30,1};
+static const signed char F_ABC_20[] = {0,120,0,-1,-120,0,-1,0,60,-1,120,0,0,-120,30,1};
+static const signed char F_ABC_21[] = {0,120,0,-1,-120,30,-1,120,30,0,-120,30,1};
+static const signed char F_ABC_22[] = {0,120,0,-1,-120,0,-1,45,30,-1,-45,30,-1,120,0,0,-120,30,1};
+static const signed char F_ABC_23[] = {-1,120,60,0,0,-60,-1,-120,60,0,0,30,1};
+static const signed char F_ABC_24[] = {0,120,0,-1,-45,30,-1,45,30,0,-45,-30,-1,-75,0,0,0,60,1};
+static const signed char F_ABC_25[] = {0,120,0,-1,0,60,-1,-120,-60,-1,0,60,0,0,30,1};
+static const signed char F_ABC_26[] = {-1,0,30,-1,30,0,-1,0,-30,-1,-30,0,0,0,90,1};
+static const signed char F_ABC_27[] = {0,0,90,1};
+static const signed char F_ABC_28[] = {-1,0,30,-1,30,0,-1,0,-30,-1,-30,0,0,45,15,-1,75,0,0,-120,60,1};
+static const signed char F_ABC_29[] = {0,120,45,-1,-120,0,0,0,45,1};
+static const signed char F_ABC_30[] = {0,120,0,-1,0,60,-1,-45,0,-1,0,-60,-1,-75,0,-1,0,60,0,0,30,1};
+static const signed char F_ABC_31[] = {0,120,0,-1,0,60,-1,-45,0,-1,0,-60,0,0,60,-1,-75,0,-1,0,-60,0,0,90,1};
+static const signed char F_ABC_32[] = {0,0,60,-1,120,0,0,0,-60,-1,-45,0,-1,0,60,0,-75,30,1};
+static const signed char F_ABC_33[] = {-1,0,60,-1,75,0,-1,0,-60,-1,45,0,-1,0,60,0,-120,30,1};
+static const signed char F_ABC_34[] = {-1,120,0,-1,0,60,0,-45,-60,-1,0,60,-1,-75,0,-1,0,-60,0,0,90,1};
+static const signed char F_ABC_35[] = {0,0,60,-1,120,0,-1,0,-60,0,-120,90,1};
+static const signed char F_ABC_36[] = {-1,120,0,-1,0,60,-1,-120,0,-1,0,-60,0,75,0,-1,0,60,0,-75,30,1};
+static const signed char F_ABC_37[] = {0,75,60,-1,0,-60,-1,45,0,-1,0,60,-1,-120,0,0,0,30,1};
+static const signed char F_ABC_38[] = {-1,120,0,-1,0,60,-1,-120,0,-1,0,-60,0,0,90,1};
+static const signed char F_ABC_39[] = {0,30,15,-1,30,-15,-1,30,15,0,-30,45,-1,0,-60,0,-60,90,1};
+static const signed char F_ABC_40[] = {0,60,0,-1,0,60,-1,30,-15,0,-60,0,-1,30,15,0,-60,30,1};
 
-static const int8_t f_sp[] = { 0 };
-static const int8_t f_0[] = { 0,0,4,0, 4,0,4,6, 4,6,0,6, 0,6,0,0, 0,0,4,6 };
-static const int8_t f_1[] = { 2,0,2,6, 0,4,2,6 };
-static const int8_t f_2[] = { 0,6,4,6, 4,6,4,3, 4,3,0,3, 0,3,0,0, 0,0,4,0 };
-static const int8_t f_3[] = { 0,6,4,6, 4,6,4,0, 4,0,0,0, 0,3,4,3 };
-static const int8_t f_4[] = { 0,6,0,3, 0,3,4,3, 4,6,4,0 };
-static const int8_t f_5[] = { 4,6,0,6, 0,6,0,3, 0,3,4,3, 4,3,4,0, 4,0,0,0 };
-static const int8_t f_6[] = { 4,6,0,6, 0,6,0,0, 0,0,4,0, 4,0,4,3, 4,3,0,3 };
-static const int8_t f_7[] = { 0,6,4,6, 4,6,2,0 };
-static const int8_t f_8[] = { 0,0,4,0, 4,0,4,6, 4,6,0,6, 0,6,0,0, 0,3,4,3 };
-static const int8_t f_9[] = { 4,0,4,6, 4,6,0,6, 0,6,0,3, 0,3,4,3 };
-static const int8_t f_A[] = { 0,0,2,6, 2,6,4,0, 1,2,3,2 };
-static const int8_t f_B[] = { 0,0,0,6, 0,6,4,6, 4,6,4,3, 4,3,0,3, 4,3,4,0, 4,0,0,0 };
-static const int8_t f_C[] = { 4,6,0,6, 0,6,0,0, 0,0,4,0 };
-static const int8_t f_D[] = { 0,0,0,6, 0,6,3,6, 3,6,4,5, 4,5,4,1, 4,1,3,0, 3,0,0,0 };
-static const int8_t f_E[] = { 4,6,0,6, 0,6,0,0, 0,0,4,0, 0,3,3,3 };
-static const int8_t f_F[] = { 4,6,0,6, 0,6,0,0, 0,3,3,3 };
-static const int8_t f_G[] = { 4,6,0,6, 0,6,0,0, 0,0,4,0, 4,0,4,3, 4,3,2,3 };
-static const int8_t f_H[] = { 0,0,0,6, 4,0,4,6, 0,3,4,3 };
-static const int8_t f_I[] = { 0,6,4,6, 2,6,2,0, 0,0,4,0 };
-static const int8_t f_J[] = { 4,6,4,0, 4,0,0,0, 0,0,0,2 };
-static const int8_t f_K[] = { 0,0,0,6, 4,6,0,3, 0,3,4,0 };
-static const int8_t f_L[] = { 0,6,0,0, 0,0,4,0 };
-static const int8_t f_M[] = { 0,0,0,6, 0,6,2,3, 2,3,4,6, 4,6,4,0 };
-static const int8_t f_N[] = { 0,0,0,6, 0,6,4,0, 4,0,4,6 };
-static const int8_t f_O[] = { 0,0,4,0, 4,0,4,6, 4,6,0,6, 0,6,0,0 };
-static const int8_t f_P[] = { 0,0,0,6, 0,6,4,6, 4,6,4,3, 4,3,0,3 };
-static const int8_t f_Q[] = { 0,0,4,0, 4,0,4,6, 4,6,0,6, 0,6,0,0, 2,2,4,0 };
-static const int8_t f_R[] = { 0,0,0,6, 0,6,4,6, 4,6,4,3, 4,3,0,3, 0,3,4,0 };
-static const int8_t f_S[] = { 4,6,0,6, 0,6,0,3, 0,3,4,3, 4,3,4,0, 4,0,0,0 };
-static const int8_t f_T[] = { 0,6,4,6, 2,6,2,0 };
-static const int8_t f_U[] = { 0,6,0,0, 0,0,4,0, 4,0,4,6 };
-static const int8_t f_V[] = { 0,6,2,0, 2,0,4,6 };
-static const int8_t f_W[] = { 0,6,0,0, 0,0,2,3, 2,3,4,0, 4,0,4,6 };
-static const int8_t f_X[] = { 0,0,4,6, 0,6,4,0 };
-static const int8_t f_Y[] = { 0,6,2,3, 4,6,2,3, 2,3,2,0 };
-static const int8_t f_Z[] = { 0,6,4,6, 4,6,0,0, 0,0,4,0 };
-static const int8_t f_lp[] = { 3,6,1,4, 1,4,1,2, 1,2,3,0 };   /* ( */
-static const int8_t f_rp[] = { 1,6,3,4, 3,4,3,2, 3,2,1,0 };   /* ) */
-static const int8_t f_min[] = { 1,3,3,3 };                    /* - */
-static const int8_t f_dot[] = { 1,0,2,0 };                    /* . */
-static const int8_t f_com[] = { 2,1,1,-1 };                   /* , */
-static const int8_t f_col[] = { 2,1,2,2, 2,4,2,5 };           /* : */
-static const int8_t f_sl[]  = { 0,0,4,6 };                    /* / */
-static const int8_t f_ex[]  = { 2,6,2,2, 2,0,2,1 };           /* ! */
-static const int8_t f_q[]   = { 0,5,2,6, 2,6,4,5, 4,5,2,3, 2,3,2,2, 2,0,2,1 }; /* ? */
+/* ASCII(0x20..)->glyph pointer, exactly as the SDK ABC[] index. */
+static const signed char *const FONT_ABC[143] = {
+    F_ABC_27,F_ABC_28,F_ABC_27,F_ABC_27,F_Folder,F_ABC_27,F_ABC_27,F_ABC_27,
+    F_ABC_27,F_ABC_27,F_ABC_27,F_ABC_27,F_ABC_27,F_ABC_27,F_ABC_26,F_ABC_27,
+    F_ABC_38,F_ABC_29,F_ABC_30,F_ABC_31,F_ABC_32,F_ABC_33,F_ABC_34,F_ABC_35,
+    F_ABC_36,F_ABC_37,F_ABC_27,F_ABC_27,F_ABC_39,F_ABC_27,F_ABC_40,F_ABC_27,
+    F_ABC_27,F_ABC_0,F_ABC_1,F_ABC_2,F_ABC_3,F_ABC_4,F_ABC_5,F_ABC_6,
+    F_ABC_7,F_ABC_8,F_ABC_9,F_ABC_10,F_ABC_11,F_ABC_12,F_ABC_13,F_ABC_14,
+    F_ABC_15,F_ABC_16,F_ABC_17,F_ABC_18,F_ABC_19,F_ABC_20,F_ABC_21,F_ABC_22,
+    F_ABC_23,F_ABC_24,F_ABC_25,F_ABC_27,F_ABC_27,F_ABC_27,F_ABC_27,F_ABC_27,
+    F_ABC_27,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,
+    F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,
+    F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,
+    F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,
+    F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,
+    F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,
+    F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,
+    F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,
+    F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,
+    F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,F_ABC_26,
+};
+#define FONT_ABC_N 143
 
-static const Glyph *glyph_for(char c)
+/* toupper + range-map to a glyph pointer, exactly like the SDK ABC[] lookup
+ * (`ABC[toupper(*string)-0x20]`); out-of-range chars fall back to space. */
+static const signed char *font_glyph(unsigned char c)
 {
-    static const Glyph G_SP = GLYPH(f_sp);
-    static const Glyph digits[10] = {
-        GLYPH(f_0),GLYPH(f_1),GLYPH(f_2),GLYPH(f_3),GLYPH(f_4),
-        GLYPH(f_5),GLYPH(f_6),GLYPH(f_7),GLYPH(f_8),GLYPH(f_9) };
-    static const Glyph letters[26] = {
-        GLYPH(f_A),GLYPH(f_B),GLYPH(f_C),GLYPH(f_D),GLYPH(f_E),GLYPH(f_F),
-        GLYPH(f_G),GLYPH(f_H),GLYPH(f_I),GLYPH(f_J),GLYPH(f_K),GLYPH(f_L),
-        GLYPH(f_M),GLYPH(f_N),GLYPH(f_O),GLYPH(f_P),GLYPH(f_Q),GLYPH(f_R),
-        GLYPH(f_S),GLYPH(f_T),GLYPH(f_U),GLYPH(f_V),GLYPH(f_W),GLYPH(f_X),
-        GLYPH(f_Y),GLYPH(f_Z) };
-    static const Glyph g_lp = GLYPH(f_lp), g_rp = GLYPH(f_rp), g_min = GLYPH(f_min),
-        g_dot = GLYPH(f_dot), g_com = GLYPH(f_com), g_col = GLYPH(f_col),
-        g_sl = GLYPH(f_sl), g_ex = GLYPH(f_ex), g_q = GLYPH(f_q);
-
-    if (c >= '0' && c <= '9') return &digits[c - '0'];
-    if (c >= 'A' && c <= 'Z') return &letters[c - 'A'];
-    if (c >= 'a' && c <= 'z') return &letters[c - 'a'];
-    switch (c) {
-        case ' ': return &G_SP;
-        case '(': return &g_lp;  case ')': return &g_rp;
-        case '-': return &g_min; case '.': return &g_dot;
-        case ',': return &g_com; case ':': return &g_col;
-        case '/': return &g_sl;  case '!': return &g_ex;
-        case '?': return &g_q;
-    }
-    return &G_SP;
+    if (c >= 'a' && c <= 'z') c -= 32;
+    int idx = (int)c - 0x20;
+    if (idx < 0 || idx >= FONT_ABC_N) idx = 0;   /* -> space (F_ABC_27) */
+    return FONT_ABC[idx];
 }
 
-void vpy_set_text_size(int s) { s_text_size = (s < 1) ? 1 : s; }
+/* textSize used by the print routines: SET_TEXT_SIZE value, or 8 by default
+ * (matches the inline PITREX_TEXT_SIZE default = m6809 "normal"). */
+static int font_text_size(void) { return (s_text_size > 0) ? s_text_size : 8; }
 
-void vpy_print_text(int x, int y, const char *s)
+/* Core glyph-stream renderer, reproducing the inline PiTrex print sequence
+ * (builtins.rs pitrex_print_text) followed by v_printString's pipeline, but
+ * drawing each stroke via v_directDraw32 in raw deflection units:
+ *   baseline = y - 8                       (inline cap_height shift, VPy units)
+ *   startX   = ((x*127) >> 7) * 128        (inline 127/128 pre-scale, then *128)
+ * Each stroke endpoint = trunc(cursor + delta * textSize * 1.5); computed
+ * exactly in integer as (cursor*2 + delta*textSize*3) / 2 (C /2 truncates
+ * toward zero, matching v_printString's double->int truncation). */
+static void font_draw_string(int x, int y, const char *s)
 {
-    int sz = s_text_size;
+    int ts = font_text_size();
+    int yb = y - 8;
+    int startX = ((x  * 127) >> 7) * 128;
+    int startY = ((yb * 127) >> 7) * 128;
     for (; *s; s++) {
-        const Glyph *g = glyph_for(*s);
-        for (int i = 0; i < g->nseg; i++) {
-            const int8_t *p = &g->seg[i * 4];
-            raw_line(x + p[0] * sz, y + p[1] * sz, x + p[2] * sz, y + p[3] * sz, s_intensity);
-        }
-        x += 5 * sz;   /* advance: 4-wide glyph + 1 gap */
+        const signed char *list = font_glyph((unsigned char)*s);
+        do {
+            int pat = list[0];
+            int nx = (startX * 2 + (int)list[2] * ts * 3) / 2;
+            int ny = (startY * 2 + (int)list[1] * ts * 3) / 2;
+            if (pat != 0)
+                v_directDraw32(startX, startY, nx, ny, (uint8_t)s_intensity);
+            startX = nx;
+            startY = ny;
+            list += 3;
+        } while ((int)list[0] <= 0);
     }
 }
+
+void vpy_set_text_size(int s) { s_text_size = s; }
+
+void vpy_print_text(int x, int y, const char *s) { font_draw_string(x, y, s); }
 
 void vpy_print_number(int x, int y, long n)
 {
-    char buf[16];
+    int ts = font_text_size();
+    int neg = (n < 0);
+    long v = neg ? -n : n;
+
+    /* Format a fixed 4-digit field (1000s/100s/10s/1s), '-' prefix if negative,
+     * exactly like the inline pitrex_print_number buffer layout. */
+    char buf[8];
     int i = 0;
-    if (n < 0) { buf[i++] = '-'; n = -n; }
-    char digs[12]; int d = 0;
-    if (n == 0) digs[d++] = '0';
-    while (n > 0 && d < 12) { digs[d++] = (char)('0' + (n % 10)); n /= 10; }
-    while (d > 0) buf[i++] = digs[--d];
-    buf[i] = 0;
-    vpy_print_text(x, y, buf);
+    if (neg) buf[i++] = '-';
+    buf[i++] = (char)('0' + (int)((v / 1000) % 10));
+    buf[i++] = (char)('0' + (int)((v / 100)  % 10));
+    buf[i++] = (char)('0' + (int)((v / 10)   % 10));
+    buf[i++] = (char)('0' + (int)( v         % 10));
+    buf[i]   = 0;
+
+    /* The SDK vector font maps '-' to a blank space glyph, so the inline path
+     * draws the minus as a manual horizontal stroke in raw deflection units:
+     *   x0 = x*127, x1 = x0 + 8*ts, y = (y-8)*127 + 6*ts. Reproduce it here. */
+    if (neg) {
+        int x0   = x * 127;
+        int ymid = (y - 8) * 127 + 6 * ts;
+        v_directDraw32(x0, ymid, x0 + 8 * ts, ymid, (uint8_t)s_intensity);
+    }
+
+    /* Leading-zero suppression: the inline scan starts at buf[0]; for negatives
+     * that is '-' (not '0') so it stops immediately — i.e. suppression applies
+     * to positive values only. Reproduce that quirk for a matching layout. */
+    const char *p = buf;
+    while (p[0] == '0' && p[1] != 0) p++;
+    font_draw_string(x, y, p);
 }
 
 /* ---- input ---- */
