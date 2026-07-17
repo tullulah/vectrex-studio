@@ -4,13 +4,14 @@
  *   - PLAY_MUSIC(MUSIC1_music) at startup (music1.vmus)
  *   - PLAY_SFX(JUMP_sfx) on jump, PLAY_SFX(HIT_sfx) on bounce (jump/hit .vsfx)
  * The .vmus/.vsfx are compiled to gen headers by `vpy_cli compile-asset` (common.mk).
- * DRAW_VECTOR("bubble_medium", bx, by) is replaced with DRAW_CIRCLE so the
- * bouncing ball stays visible (asset vectors are out of scope for vpy.h). */
+ * The bouncing ball is the original bubble_medium.vec sprite, drawn via
+ * DRAW_VECTOR (compiled to gen/bubble_medium.h by the same tool). */
 #define VPY_SHORT_NAMES
 #include <vpy.h>
-#include "music1.h"   /* MUSIC1_music[] */
-#include "jump.h"     /* JUMP_sfx[]     */
-#include "hit.h"      /* HIT_sfx[]      */
+#include "music1.h"        /* MUSIC1_music[]        */
+#include "jump.h"          /* JUMP_sfx[]            */
+#include "hit.h"           /* HIT_sfx[]             */
+#include "bubble_medium.h" /* BUBBLE_MEDIUM_vec[]   */
 
 static int bx = 0, by = 60;
 static int vx = 1, vy = 0;
@@ -76,8 +77,8 @@ static void loop(void)
         PLAY_SFX(HIT_sfx);
     }
 
-    /* Draw ball (was DRAW_VECTOR("bubble_medium", bx, by)) */
-    DRAW_CIRCLE(bx, by, 10, 90);
+    /* Draw ball sprite at physics position */
+    DRAW_VECTOR(BUBBLE_MEDIUM_vec, bx, by);
 
     /* Draw floor line */
     DRAW_LINE(-100, -110, 100, -110, 60);

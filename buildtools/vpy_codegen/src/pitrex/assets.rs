@@ -1629,6 +1629,122 @@ fn emit_vec_resource(
     s
 }
 
+/// Parse a `.vec` file and return a self-contained little-endian byte image of
+/// its paths, for the C (vpy.h) runtime.
+///
+/// This reuses the EXACT geometry compiler behind the ARM/PiTrex asm backend
+/// (`VecResource::visible_paths` / `calculate_center` for centering, and
+/// `split_segment_pairs` for <=127-unit segment splitting), so the C runtime
+/// draws the same sprite the hardware does.
+///
+/// Unlike the ARM `emit_vec_resource` — whose header holds link-time absolute
+/// `.word` path pointers — the C image is fully position-independent: paths are
+/// laid out back-to-back and the interpreter walks them sequentially, each
+/// terminated by `0x02`. Layout:
+/// ```text
+///   [0..2]  path_count            (u16 LE)
+///   per path (repeated path_count times):
+///     intensity   (u8)
+///     y0, x0      (i8, i8)        center-relative move-to header
+///     0x00, 0x00                  2 padding bytes (parity with the ARM header)
+///     segments:
+///       0xFF, dy, dx              line delta (i8, i8)
+///       0xFE, ax,ay,c1x,c1y,c2x,c2y,bx,by   cubic bezier (8×i8), center-relative
+///     0x02                        end-of-path marker
+/// ```
+pub fn compile_vec_file_to_bytes(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let res: VecResource = serde_json::from_str(&text)
+        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    Ok(vec_resource_to_bytes(&res))
+}
+
+/// Serialize a `VecResource` into the position-independent C byte image
+/// documented on `compile_vec_file_to_bytes`.
+fn vec_resource_to_bytes(res: &VecResource) -> Vec<u8> {
+    let (center_x, center_y) = res.calculate_center();
+
+    let paths: Vec<_> = res.visible_paths()
+        .into_iter()
+        .filter(|p| p.points.len() >= 2)
+        .collect();
+
+    let mut out: Vec<u8> = Vec::new();
+    out.extend_from_slice(&(paths.len() as u16).to_le_bytes());
+
+    if paths.is_empty() {
+        out.push(0x02); // end marker (empty asset)
+        return out;
+    }
+
+    let clamp8 = |v: i16| v.clamp(-127, 127) as i8 as u8;
+
+    for path in &paths {
+        // Bezier paths: emit 0xFE cubic segments (center-relative control pts),
+        // mirroring emit_vec_resource. The C runtime tessellates them.
+        if path.path_type.as_deref() == Some("bezier") {
+            let pts = &path.points;
+            if pts.len() < 4 {
+                out.push(0x02); // degenerate bezier
+                continue;
+            }
+            out.push(path.intensity);
+            out.push(clamp8(pts[0].y - center_y)); // y0
+            out.push(clamp8(pts[0].x - center_x)); // x0
+            out.push(0x00);
+            out.push(0x00);
+            let mut i = 0;
+            while i + 3 < pts.len() {
+                out.push(0xFE);
+                out.push(clamp8(pts[i    ].x - center_x)); // ax
+                out.push(clamp8(pts[i    ].y - center_y)); // ay
+                out.push(clamp8(pts[i + 1].x - center_x)); // c1x
+                out.push(clamp8(pts[i + 1].y - center_y)); // c1y
+                out.push(clamp8(pts[i + 2].x - center_x)); // c2x
+                out.push(clamp8(pts[i + 2].y - center_y)); // c2y
+                out.push(clamp8(pts[i + 3].x - center_x)); // bx
+                out.push(clamp8(pts[i + 3].y - center_y)); // by
+                i += 3;
+            }
+            out.push(0x02);
+            continue;
+        }
+
+        // Polyline path: bake points to 0xFF delta segments.
+        let baked: Vec<(i16, i16)> = path.points.iter().map(|p| (p.x, p.y)).collect();
+        let (x0_raw, y0_raw) = baked[0];
+        out.push(path.intensity);
+        out.push(clamp8(y0_raw - center_y)); // y0
+        out.push(clamp8(x0_raw - center_x)); // x0
+        out.push(0x00);
+        out.push(0x00);
+
+        for j in 0..baked.len() - 1 {
+            let (fx, fy) = baked[j];
+            let (tx, ty) = baked[j + 1];
+            for (sub_dy, sub_dx) in split_segment_pairs(tx - fx, ty - fy) {
+                out.push(0xFF);
+                out.push(sub_dy as u8);
+                out.push(sub_dx as u8);
+            }
+        }
+
+        if path.closed && baked.len() > 2 {
+            let (fx, fy) = baked[baked.len() - 1];
+            let (tx, ty) = baked[0];
+            for (sub_dy, sub_dx) in split_segment_pairs(tx - fx, ty - fy) {
+                out.push(0xFF);
+                out.push(sub_dy as u8);
+                out.push(sub_dx as u8);
+            }
+        }
+
+        out.push(0x02);
+    }
+
+    out
+}
+
 fn emit_3d_resource(res: &VecResource, override_name: &str) -> String {
     let mut s = String::new();
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
@@ -1697,21 +1813,34 @@ fn emit_3d_resource(res: &VecResource, override_name: &str) -> String {
     s
 }
 
-fn emit_split_segment_arm(s: &mut String, dx: i16, dy: i16) {
+/// Split a delta segment into <=127-unit steps, returning the (dy, dx) i8 pairs
+/// that follow each `0xFF` line marker. This is the SINGLE geometry source used
+/// by BOTH the ARM `.byte` emitter (`emit_split_segment_arm`) and the raw
+/// byte-image emitter (`vec_resource_to_bytes`) behind the C runtime, so the two
+/// views stay byte-identical.
+fn split_segment_pairs(dx: i16, dy: i16) -> Vec<(i8, i8)> {
     let n = {
         let max_d = dx.abs().max(dy.abs()) as usize;
-        if max_d == 0 { return; }
+        if max_d == 0 { return Vec::new(); }
         (max_d + 126) / 127
     };
 
     let mut rem_dx = dx;
     let mut rem_dy = dy;
+    let mut out = Vec::with_capacity(n);
     for step in 0..n {
         let steps_left = (n - step) as i16;
         let sub_dx = rem_dx / steps_left;
         let sub_dy = rem_dy / steps_left;
         rem_dx -= sub_dx;
         rem_dy -= sub_dy;
+        out.push((sub_dy as i8, sub_dx as i8));
+    }
+    out
+}
+
+fn emit_split_segment_arm(s: &mut String, dx: i16, dy: i16) {
+    for (sub_dy, sub_dx) in split_segment_pairs(dx, dy) {
         s.push_str(&format!(
             "    .byte   0xFF, 0x{:02X}, 0x{:02X}  @ line dy={}, dx={}\n",
             sub_dy as u8, sub_dx as u8, sub_dy, sub_dx

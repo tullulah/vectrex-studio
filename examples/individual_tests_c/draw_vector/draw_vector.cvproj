@@ -1,0 +1,14 @@
+[project]
+name = "draw_vector"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["draw_vector_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["draw_vector_wasm"]
+module = "build_wasm/draw_vector.js"

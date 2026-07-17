@@ -35,6 +35,17 @@ void vpy_draw_filled_rect(int x, int y, int w, int h, int b);
 void vpy_draw_polygon(const int *xy, int n, int b);              /* n vertices, xy[2n] */
 void vpy_draw_ellipse(int cx, int cy, int rx, int ry, int b);    /* 16-segment ellipse */
 
+/* ---- compiled vector sprites (.vec) --------------------------------------
+ * `data` is a vector path stream compiled from a .vec by
+ *   `vpy_cli compile-asset <file>.vec --format c --out <name>.h`
+ * (same path/segment geometry compiler as the ARM/PiTrex backend). The sprite
+ * is drawn at VPy position (x,y) using the asset's own per-path intensity.
+ * Bezier segments are tessellated into lines (the host contract only exposes
+ * v_directDraw32). draw_vector_ex adds horizontal mirror + an optional
+ * intensity override (pass intensity<=0 to keep each path's own intensity). */
+void vpy_draw_vector(const unsigned char *data, int x, int y);
+void vpy_draw_vector_ex(const unsigned char *data, int x, int y, int mirror, int intensity);
+
 /* ---- text ---- */
 void vpy_set_text_size(int s);       /* glyph scale (VPy units per grid unit ~ s) */
 void vpy_print_text(int x, int y, const char *s);
@@ -84,6 +95,8 @@ void vpy_sfx_update(void);                         /* advance one frame (auto-ca
 #define DRAW_FILLED_RECT vpy_draw_filled_rect
 #define DRAW_POLYGON    vpy_draw_polygon
 #define DRAW_ELLIPSE    vpy_draw_ellipse
+#define DRAW_VECTOR     vpy_draw_vector
+#define DRAW_VECTOR_EX  vpy_draw_vector_ex
 #define SET_TEXT_SIZE   vpy_set_text_size
 #define PRINT_TEXT      vpy_print_text
 #define PRINT_NUMBER    vpy_print_number

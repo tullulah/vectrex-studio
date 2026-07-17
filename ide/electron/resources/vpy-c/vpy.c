@@ -127,6 +127,90 @@ void vpy_draw_ellipse(int cx, int cy, int rx, int ry, int b)
     }
 }
 
+/* ---- compiled vector sprites (.vec) --------------------------------------
+ * Draw a compiled .vec path stream (from `vpy_cli compile-asset --format c`).
+ * Byte format (LE, position-independent — no absolute pointers):
+ *   [0..2] path_count (u16)
+ *   per path: intensity, y0, x0, 0x00, 0x00, segments..., 0x02
+ *     0xFF, dy, dx      -> line delta (i8, i8)
+ *     0xFE, 8×i8        -> cubic bezier (ax,ay,cp1x,cp1y,cp2x,cp2y,bx,by),
+ *                          center-relative; tessellated here into line segments
+ *                          because the host SDK contract only has v_directDraw32.
+ * Mirrors pitrex_draw_vector: the beam is seeded at (x0+ox, y0+oy) in VPy units
+ * and each line adds its delta; bezier control points are sprite-origin
+ * relative. Coordinates scale by VPY_SCALE (via raw_line), exactly like the ARM
+ * path (which multiplies by 127). */
+static void draw_vec_stream(const unsigned char *data, int ox, int oy,
+                            int mirror, int override_b)
+{
+    if (!data) return;
+    int path_count = (int)data[0] | ((int)data[1] << 8);
+    const unsigned char *p = data + 2;
+
+    for (int pi = 0; pi < path_count; pi++) {
+        int intensity = p[0];
+        int y0 = (int8_t)p[1];
+        int x0 = (int8_t)p[2];
+        p += 5;                     /* intensity + y0 + x0 + 2 padding bytes */
+        int b = (override_b > 0) ? override_b : intensity;
+
+        int cx = ox + (mirror ? -x0 : x0);
+        int cy = oy + y0;
+
+        for (;;) {
+            unsigned char marker = *p++;
+            if (marker == 0x02) break;          /* end of path */
+
+            if (marker == 0xFE) {               /* cubic bezier segment */
+                int ax  = (int8_t)p[0], ay  = (int8_t)p[1];
+                int c1x = (int8_t)p[2], c1y = (int8_t)p[3];
+                int c2x = (int8_t)p[4], c2y = (int8_t)p[5];
+                int bx  = (int8_t)p[6], by  = (int8_t)p[7];
+                p += 8;
+                if (mirror) { ax = -ax; c1x = -c1x; c2x = -c2x; bx = -bx; }
+                /* Absolute (VPy-unit) control points, sprite-origin relative. */
+                float p0x = (float)(ox + ax),  p0y = (float)(oy + ay);
+                float p1x = (float)(ox + c1x), p1y = (float)(oy + c1y);
+                float p2x = (float)(ox + c2x), p2y = (float)(oy + c2y);
+                float p3x = (float)(ox + bx),  p3y = (float)(oy + by);
+                /* De Casteljau tessellation into 8 line segments. */
+                int px = (int)lroundf(p0x), py = (int)lroundf(p0y);
+                const int STEPS = 8;
+                for (int s = 1; s <= STEPS; s++) {
+                    float t = (float)s / (float)STEPS, u = 1.0f - t;
+                    float uu = u * u, tt = t * t;
+                    float w0 = uu * u, w1 = 3.0f * uu * t, w2 = 3.0f * u * tt, w3 = tt * t;
+                    int nx = (int)lroundf(w0*p0x + w1*p1x + w2*p2x + w3*p3x);
+                    int ny = (int)lroundf(w0*p0y + w1*p1y + w2*p2y + w3*p3y);
+                    raw_line(px, py, nx, ny, b);
+                    px = nx; py = ny;
+                }
+                cx = px; cy = py;
+                continue;
+            }
+
+            /* line segment: marker (0xFF) then dy, dx */
+            int dy = (int8_t)p[0];
+            int dx = (int8_t)p[1];
+            p += 2;
+            if (mirror) dx = -dx;
+            int nx = cx + dx, ny = cy + dy;
+            raw_line(cx, cy, nx, ny, b);
+            cx = nx; cy = ny;
+        }
+    }
+}
+
+void vpy_draw_vector(const unsigned char *data, int x, int y)
+{
+    draw_vec_stream(data, x, y, 0, 0);
+}
+
+void vpy_draw_vector_ex(const unsigned char *data, int x, int y, int mirror, int intensity)
+{
+    draw_vec_stream(data, x, y, mirror ? 1 : 0, intensity);
+}
+
 /* ---- vector font: glyphs on a 0..4 (w) x 0..6 (h) grid, +Y up ---- */
 typedef struct { const int8_t *seg; uint8_t nseg; } Glyph;
 #define GLYPH(v) { v, (uint8_t)(sizeof(v) / 4) }
