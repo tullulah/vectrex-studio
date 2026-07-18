@@ -163,6 +163,36 @@ void vpy_enemy_fire_event(int idx, int hash);
 #define SET_CAMERA_Y    vpy_set_camera_y
 #define GET_CAMERA_X    vpy_get_camera_x
 #define GET_CAMERA_Y    vpy_get_camera_y
+/* Level accessors */
+#define GET_LEVEL_FLOOR_Y      vpy_get_level_floor_y
+#define GET_SCROLL_LIMIT_LEFT   vpy_get_scroll_limit_left
+#define GET_SCROLL_LIMIT_RIGHT  vpy_get_scroll_limit_right
+#define GET_SCROLL_LIMIT_TOP    vpy_get_scroll_limit_top
+#define GET_SCROLL_LIMIT_BOTTOM vpy_get_scroll_limit_bottom
+#define LEVEL_COLLISION_X       vpy_level_collision_x
+#define LEVEL_COLLISION_Y       vpy_level_collision_y
+/* Enemies. SPAWN_ENEMIES(data, sprites) takes the compiled `_NAME_ENEMIES_C`
+ * image + its `_NAME_ENEMY_SPRITES` table (VPy resolves those from the level
+ * name; C passes the symbols explicitly). */
+#define SPAWN_ENEMIES   vpy_spawn_enemies
+#define UPDATE_ENEMIES  vpy_update_enemies
+#define DRAW_ENEMIES    vpy_draw_enemies
+#define KILL_ENEMY      vpy_kill_enemy
+#define GET_ENEMY_ACTIVE vpy_get_enemy_active
+#define GET_ENEMY_X     vpy_get_enemy_x
+#define GET_ENEMY_Y     vpy_get_enemy_y
+#define GET_ENEMY_STATE vpy_get_enemy_state
+#define SET_ENEMY_X     vpy_set_enemy_x
+#define SET_ENEMY_Y     vpy_set_enemy_y
+#define SET_ENEMY_STATE vpy_set_enemy_state
+#define SET_ENEMY_DIR   vpy_set_enemy_dir
+/* Digital buttons: VPy exposes J1_BUTTON_1..4 (); C maps each to vpy_j1_button(n). */
+#define J1_BUTTON_1()   vpy_j1_button(1)
+#define J1_BUTTON_2()   vpy_j1_button(2)
+#define J1_BUTTON_3()   vpy_j1_button(3)
+#define J1_BUTTON_4()   vpy_j1_button(4)
+/* Debug print is a no-op on the minimal C runtime (no host console). */
+#define DEBUG_PRINT_LABELED(label, val) ((void)(val))
 #endif
 
 #ifdef __cplusplus

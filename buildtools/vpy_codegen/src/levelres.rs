@@ -2330,6 +2330,113 @@ pub fn compile_vplay_file_to_c_bytes(path: &Path) -> Result<(Vec<u8>, Vec<String
     Ok(level.compile_to_c_bytes())
 }
 
+/// Compile a `.vplay` level's ENEMY runtime into position-independent C data.
+///
+/// Returns `(enemy_image_bytes, sprite_syms, extra_blobs)`:
+///   * `enemy_image_bytes` — the `_NAME_ENEMIES_C` byte image consumed by
+///     `vpy_spawn_enemies` (count u16, then per-enemy records).
+///   * `sprite_syms` — the ordered assembly symbols the image indexes into
+///     (`_NAME_ENEMY_SPRITES`), e.g. `_ENEMY_VEC` for a static `.vec`, or an
+///     anim-descriptor / state-machine blob symbol.
+///   * `extra_blobs` — `(symbol, bytes)` for any anim/SM blob the sprite table
+///     references, so the C header can emit those inline arrays too.
+///
+/// This REUSES the real backend emitter
+/// (`compile_to_arm_asm_with_venemy_and_meshes`) and text-extracts the enemy
+/// section, so the bytes are byte-identical to the VPy pitrex build and to what
+/// `vpy.c`'s `vpy_spawn_enemies` reads. The `.venemy` directory is derived from
+/// the level path (`{level_dir}/../enemies`) exactly like the pitrex build.
+pub fn compile_enemies_to_c_bytes(
+    path: &Path,
+) -> Result<(Vec<u8>, Vec<String>, Vec<(String, Vec<u8>)>)> {
+    let level = VPlayLevel::load(path)?;
+    let name = level.metadata.name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let venemy_dir = path.parent().and_then(|p| p.parent()).map(|p| p.join("enemies"));
+    let asm = level.compile_to_arm_asm_with_venemy_and_meshes(
+        &HashMap::new(),
+        venemy_dir.as_deref(),
+        &HashMap::new(),
+        &HashMap::new(),
+        &HashMap::new(),
+    );
+
+    let bytes = extract_asm_byte_section(&asm, &format!("_{name}_ENEMIES_C:"));
+    let sprite_syms = extract_asm_word_section(&asm, &format!("_{name}_ENEMY_SPRITES:"));
+    // Any sprite-table entry that is not a `_..._VEC` is an anim/SM blob whose
+    // bytes live in its own `.rodata.<sym>` section — pull those out too so the
+    // C header is self-contained (anim/SM is out of scope for enemy_test but the
+    // extraction is general for a future SnowBros-C).
+    let mut extra_blobs = Vec::new();
+    for sym in &sprite_syms {
+        if !sym.ends_with("_VEC") {
+            let b = extract_asm_byte_section(&asm, &format!("{sym}:"));
+            if !b.is_empty() {
+                extra_blobs.push((sym.clone(), b));
+            }
+        }
+    }
+    Ok((bytes, sprite_syms, extra_blobs))
+}
+
+/// Collect the little-endian bytes of a `.byte`-run that follows `label`
+/// (a line equal to e.g. `_LEVEL1_ENEMIES_C:`), stopping at the first line that
+/// is not a `.byte` directive.
+fn extract_asm_byte_section(asm: &str, label: &str) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut in_section = false;
+    for line in asm.lines() {
+        let t = line.trim();
+        if !in_section {
+            if t == label {
+                in_section = true;
+            }
+            continue;
+        }
+        if let Some(rest) = t.strip_prefix(".byte") {
+            // Drop any trailing `@ comment`, then parse the hex tokens.
+            let data = rest.split('@').next().unwrap_or("");
+            for tok in data.split(',') {
+                let tok = tok.trim();
+                if tok.is_empty() { continue; }
+                let hex = tok.trim_start_matches("0x").trim_start_matches("0X");
+                if let Ok(v) = u8::from_str_radix(hex, 16) {
+                    out.push(v);
+                } else if let Ok(v) = tok.parse::<i16>() {
+                    out.push((v & 0xff) as u8);
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    out
+}
+
+/// Collect the `.word <symbol>` operands that follow `label`, stopping at the
+/// first non-`.word` line. A lone `.word 0` (placeholder for "no sprites")
+/// yields an empty list.
+fn extract_asm_word_section(asm: &str, label: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut in_section = false;
+    for line in asm.lines() {
+        let t = line.trim();
+        if !in_section {
+            if t == label {
+                in_section = true;
+            }
+            continue;
+        }
+        if let Some(rest) = t.strip_prefix(".word") {
+            let sym = rest.split('@').next().unwrap_or("").trim().to_string();
+            if sym == "0" { continue; }
+            if !sym.is_empty() { out.push(sym); }
+        } else {
+            break;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2372,6 +2479,32 @@ mod tests {
 
         assert_eq!(level.version, "2.0");
         assert_eq!(level.metadata.name, "test_level");
+    }
+
+    #[test]
+    fn test_extract_enemy_asm_sections() {
+        // Mirrors the emitter shape: a `.word` sprite table and a `.byte` image,
+        // each terminated by a non-directive line.
+        let asm = concat!(
+            ".global _L1_ENEMY_SPRITES\n",
+            "_L1_ENEMY_SPRITES:\n",
+            "    .word _ENEMY_VEC\n",
+            "    .word _FOO_VEC   @ second sprite\n",
+            "@ --- image ---\n",
+            ".section .rodata._L1_ENEMIES_C,\"a\",%progbits\n",
+            "_L1_ENEMIES_C:\n",
+            "    .byte   0x01, 0x00, 0xFF  @ count, hi\n",
+            "    .byte   0x10\n",
+            ".section .text\n",
+        );
+        let bytes = extract_asm_byte_section(asm, "_L1_ENEMIES_C:");
+        assert_eq!(bytes, vec![0x01, 0x00, 0xFF, 0x10]);
+        let syms = extract_asm_word_section(asm, "_L1_ENEMY_SPRITES:");
+        assert_eq!(syms, vec!["_ENEMY_VEC".to_string(), "_FOO_VEC".to_string()]);
+
+        // A lone `.word 0` placeholder ("no sprites") yields an empty list.
+        let empty = "_X_ENEMY_SPRITES:\n    .word 0\n.section .text\n";
+        assert!(extract_asm_word_section(empty, "_X_ENEMY_SPRITES:").is_empty());
     }
 
     #[test]

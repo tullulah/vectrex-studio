@@ -1,0 +1,14 @@
+[project]
+name = "enemy_test_c"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["enemy_test_c_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["enemy_test_c_wasm"]
+module = "build_wasm/enemy_test_c.js"
