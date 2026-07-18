@@ -157,7 +157,7 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     if any(&["UPDATE_ENEMIES"]) && !level_bridged { s.push_str(&emit_pitrex_update_enemies()); }
     if any(&["DRAW_ENEMIES"])   && !level_bridged { s.push_str(&emit_pitrex_draw_enemies()); }
     if any(&["KILL_ENEMY"])     && !level_bridged { s.push_str(&emit_pitrex_kill_enemy()); }
-    if any(&["ENEMY_FIRE_EVENT"])  { s.push_str(&emit_pitrex_enemy_fire_event()); }
+    if any(&["ENEMY_FIRE_EVENT"]) && !level_bridged { s.push_str(&emit_pitrex_enemy_fire_event()); }
 
     s
 }

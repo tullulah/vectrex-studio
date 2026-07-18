@@ -323,6 +323,9 @@ pub fn emit_call(
     // Pool layout: stride=32, active@+12, x@+4(i16), y@+6(i16), sm_state@+18
     if info.name.to_uppercase() == "GET_ENEMY_ACTIVE" {
         let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_ACTIVE: missing arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!("    @ GET_ENEMY_ACTIVE(idx) -> libvpy\n{idx_s}    bl      vpy_get_enemy_active\n"));
+        }
         return Ok(format!(
             "    @ GET_ENEMY_ACTIVE(idx)\n\
              {idx_s}\
@@ -335,6 +338,9 @@ pub fn emit_call(
     }
     if info.name.to_uppercase() == "GET_ENEMY_X" {
         let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_X: missing arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!("    @ GET_ENEMY_X(idx) -> libvpy\n{idx_s}    bl      vpy_get_enemy_x\n"));
+        }
         return Ok(format!(
             "    @ GET_ENEMY_X(idx)\n\
              {idx_s}\
@@ -347,6 +353,9 @@ pub fn emit_call(
     }
     if info.name.to_uppercase() == "GET_ENEMY_Y" {
         let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_Y: missing arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!("    @ GET_ENEMY_Y(idx) -> libvpy\n{idx_s}    bl      vpy_get_enemy_y\n"));
+        }
         return Ok(format!(
             "    @ GET_ENEMY_Y(idx)\n\
              {idx_s}\
@@ -360,6 +369,10 @@ pub fn emit_call(
     if info.name.to_uppercase() == "SET_ENEMY_X" {
         let idx_s = emit_expr(info.args.first().ok_or("SET_ENEMY_X: missing idx arg")?, var_addrs)?;
         let val_s = emit_expr(info.args.get(1).ok_or("SET_ENEMY_X: missing x arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!(
+                "    @ SET_ENEMY_X(idx, x) -> libvpy\n{idx_s}    push    {{r0}}\n{val_s}    mov     r1, r0\n    pop     {{r0}}\n    bl      vpy_set_enemy_x\n"));
+        }
         return Ok(format!(
             "    @ SET_ENEMY_X(idx, x)\n\
              {idx_s}\
@@ -376,6 +389,10 @@ pub fn emit_call(
     if info.name.to_uppercase() == "SET_ENEMY_Y" {
         let idx_s = emit_expr(info.args.first().ok_or("SET_ENEMY_Y: missing idx arg")?, var_addrs)?;
         let val_s = emit_expr(info.args.get(1).ok_or("SET_ENEMY_Y: missing y arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!(
+                "    @ SET_ENEMY_Y(idx, y) -> libvpy\n{idx_s}    push    {{r0}}\n{val_s}    mov     r1, r0\n    pop     {{r0}}\n    bl      vpy_set_enemy_y\n"));
+        }
         return Ok(format!(
             "    @ SET_ENEMY_Y(idx, y)\n\
              {idx_s}\
@@ -394,6 +411,10 @@ pub fn emit_call(
         // and default_facing, draw_enemies decides whether to flip the sprite.
         let idx_s = emit_expr(info.args.first().ok_or("SET_ENEMY_DIR: missing idx arg")?, var_addrs)?;
         let val_s = emit_expr(info.args.get(1).ok_or("SET_ENEMY_DIR: missing dir arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!(
+                "    @ SET_ENEMY_DIR(idx, dir) -> libvpy\n{idx_s}    push    {{r0}}\n{val_s}    mov     r1, r0\n    pop     {{r0}}\n    bl      vpy_set_enemy_dir\n"));
+        }
         return Ok(format!(
             "    @ SET_ENEMY_DIR(idx, dir)  ; 0=left, 1=right\n\
              {idx_s}\
@@ -429,6 +450,9 @@ pub fn emit_call(
     }
     if info.name.to_uppercase() == "GET_ENEMY_STATE" {
         let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_STATE: missing arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!("    @ GET_ENEMY_STATE(idx) -> libvpy\n{idx_s}    bl      vpy_get_enemy_state\n"));
+        }
         return Ok(format!(
             "    @ GET_ENEMY_STATE(idx)\n\
              {idx_s}\
@@ -442,6 +466,10 @@ pub fn emit_call(
     if info.name.to_uppercase() == "SET_ENEMY_STATE" {
         let idx_s = emit_expr(info.args.first().ok_or("SET_ENEMY_STATE: missing idx arg")?, var_addrs)?;
         let val_s = emit_expr(info.args.get(1).ok_or("SET_ENEMY_STATE: missing state arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!(
+                "    @ SET_ENEMY_STATE(idx, state) -> libvpy\n{idx_s}    push    {{r0}}\n{val_s}    mov     r1, r0\n    pop     {{r0}}\n    bl      vpy_set_enemy_state\n"));
+        }
         return Ok(format!(
             "    @ SET_ENEMY_STATE(idx, state)\n\
              {idx_s}\
@@ -473,11 +501,12 @@ pub fn emit_call(
             for b in ev.bytes() { h = h.wrapping_mul(16777619) ^ (b as u32); }
             (h & 0xFF) as u8
         } else { 0 };
+        let f = if crate::pitrex::libvpy::level_group_bridged() { "vpy_enemy_fire_event" } else { "pitrex_enemy_fire_event" };
         return Ok(format!(
             "    @ ENEMY_FIRE_EVENT(idx, hash=0x{hash:02X})\n\
              {idx_s}\
              \x20   mov     r1, #{hash}\n\
-             \x20   bl      pitrex_enemy_fire_event\n"
+             \x20   bl      {f}\n"
         ));
     }
 

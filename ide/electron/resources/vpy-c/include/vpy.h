@@ -124,6 +124,16 @@ void vpy_spawn_enemies(const unsigned char *img, const unsigned char *const *spr
 void vpy_update_enemies(void);
 void vpy_draw_enemies(void);
 void vpy_kill_enemy(int idx);
+/* Enemy pool accessors (read/write the same s_enemies pool). */
+int  vpy_get_enemy_active(int idx);
+int  vpy_get_enemy_x(int idx);
+int  vpy_get_enemy_y(int idx);
+int  vpy_get_enemy_state(int idx);
+void vpy_set_enemy_x(int idx, int x);
+void vpy_set_enemy_y(int idx, int y);
+void vpy_set_enemy_state(int idx, int st);
+void vpy_set_enemy_dir(int idx, int dir);
+void vpy_enemy_fire_event(int idx, int hash);
 
 /* Optional VPy-style uppercase aliases so migrated .vpy reads naturally. */
 #ifdef VPY_SHORT_NAMES

@@ -907,6 +907,7 @@ typedef struct {
     int anim_frame_idx, anim_ticks_left;
     const unsigned char *wp_base;   /* into the enemy image: first waypoint pair */
     const unsigned char *areas;     /* into the enemy image: at area_count u16 */
+    const unsigned char *sm_data;   /* PI state-machine blob (state sprites + event table), 0 if none */
 } VpyEnemy;
 
 static VpyEnemy s_enemies[VPY_MAX_ENEMIES];
@@ -985,7 +986,8 @@ void vpy_spawn_enemies(const unsigned char *img, const unsigned char *const *spr
         int idle_is_anim = p[14];
         int walk_sprite_index = rd_u16(p + 15);
         int walk_is_anim = p[17];
-        const unsigned char *wp_base = p + 18;
+        int sm_index = rd_u16(p + 18);                      /* PI state-machine blob index (0xFFFF=none) */
+        const unsigned char *wp_base = p + 20;
         const unsigned char *ap = wp_base + wp_count * 4;   /* -> area_count u16 */
         int area_count = rd_u16(ap);
         const unsigned char *areas = ap;                     /* points at area_count */
@@ -1012,6 +1014,9 @@ void vpy_spawn_enemies(const unsigned char *img, const unsigned char *const *spr
         en->anim_frame_idx = 0; en->anim_ticks_left = 0;
         en->wp_base = wp_base;
         en->areas = (area_count > 0) ? areas : 0;
+        /* PI state-machine blob (state sprites + event table), by sprite-table
+         * index; 0xFFFF => this enemy type has no state machine. */
+        en->sm_data = (sm_index != 0xFFFF && sprites) ? sprites[sm_index] : 0;
 
         /* Area-snap (wander OR patrol with no waypoints), matches inline. */
         int want_snap = (ai_type == 4) || (ai_type == 1 && wp_count == 0);
@@ -1034,6 +1039,78 @@ void vpy_spawn_enemies(const unsigned char *img, const unsigned char *const *spr
 void vpy_kill_enemy(int idx)
 {
     if (idx >= 0 && idx < s_enemy_count) s_enemies[idx].active = 0;
+}
+
+/* ── Enemy pool accessors ────────────────────────────────────────────────────
+ * Bit-exact ports of the inline pitrex_{get,set}_enemy_* call-site bodies (they
+ * read/write the 32-byte inline pool at active@12/x@4/y@6/sm_state@18/dir@26).
+ * Here they read/write the SAME s_enemies pool the bridged spawn/update/draw
+ * own, so enemy state has ONE home. The inline spawn clears every pool slot's
+ * active byte, so slots >= s_enemy_count read back 0 — reproduced by the
+ * bound-check. Getters mirror the inline load width (active/state: unsigned
+ * byte; x/y: sign-extended i16). Setters mirror strh (x/y, 16-bit) / strb
+ * (state/dir, low byte). */
+int vpy_get_enemy_active(int idx)
+{
+    if (idx < 0 || idx >= s_enemy_count) return 0;
+    return s_enemies[idx].active;
+}
+int vpy_get_enemy_x(int idx)
+{
+    if (idx < 0 || idx >= s_enemy_count) return 0;
+    return s_enemies[idx].x;
+}
+int vpy_get_enemy_y(int idx)
+{
+    if (idx < 0 || idx >= s_enemy_count) return 0;
+    return s_enemies[idx].y;
+}
+int vpy_get_enemy_state(int idx)
+{
+    if (idx < 0 || idx >= s_enemy_count) return 0;
+    return s_enemies[idx].sm_state & 0xFF;
+}
+void vpy_set_enemy_x(int idx, int x)
+{
+    if (idx < 0 || idx >= s_enemy_count) return;
+    s_enemies[idx].x = (int)(short)x;          /* inline strh: 16-bit, sign-extended on read */
+}
+void vpy_set_enemy_y(int idx, int y)
+{
+    if (idx < 0 || idx >= s_enemy_count) return;
+    s_enemies[idx].y = (int)(short)y;
+}
+void vpy_set_enemy_state(int idx, int st)
+{
+    if (idx < 0 || idx >= s_enemy_count) return;
+    s_enemies[idx].sm_state = st & 0xFF;        /* inline strb */
+}
+void vpy_set_enemy_dir(int idx, int dir)
+{
+    if (idx < 0 || idx >= s_enemy_count) return;
+    s_enemies[idx].dir = dir & 0xFF;            /* inline strb (0=left,1=right) */
+}
+
+/* vpy_enemy_fire_event(idx, hash) — dispatch a named event (FNV-1a u8 hash,
+ * computed at the call site) through the enemy's state machine, bit-exact vs
+ * inline pitrex_enemy_fire_event. The PI state-machine blob (en->sm_data) event
+ * table lives at offset 28 + sm_state*20: [event_count u8, 3 pad, then up to 4 x
+ * (hash u8, target_state u8, 2 pad)]. First hash match writes target -> sm_state.
+ * (The inline reads the same structure at type_data + 44 + sm_state*20; only the
+ * header size — hence the base offset — differs, the dispatch loop is identical.) */
+void vpy_enemy_fire_event(int idx, int hash)
+{
+    if (idx < 0 || idx >= s_enemy_count) return;
+    VpyEnemy *en = &s_enemies[idx];
+    const unsigned char *sm = en->sm_data;
+    if (!sm) return;
+    int st = en->sm_state & 0xFF;
+    const unsigned char *base = sm + 28 + st * 20;
+    int ec = base[0];
+    const unsigned char *e = base + 4;
+    for (int i = 0; i < ec; i++, e += 4) {
+        if (e[0] == (hash & 0xFF)) { en->sm_state = e[1]; return; }
+    }
 }
 
 void vpy_update_enemies(void)
@@ -1211,9 +1288,20 @@ void vpy_draw_enemies(void)
         VpyEnemy *en = &s_enemies[i];
         if (!en->active) continue;
 
-        /* sm_state==0 -> default sprite (state-sprite table is wander/frozen,
-         * turn 3). is_anim static case only for now. */
+        /* sm_state==0 -> default sprite (en->sprite_index). sm_state>0 (frozen:
+         * snowed/balled) -> the state sprite from the PI state-machine blob at
+         * [4 + state*2] (u16 index) with is_anim at [20 + state], mirroring the
+         * inline pitrex_draw_enemies (type_data[sm_state] sprite, null -> default). */
         int sidx = en->sprite_index;
+        int is_anim = en->is_anim;
+        if (en->sm_state != 0 && en->sm_data) {
+            int st = en->sm_state & 0xFF;
+            int st_sidx = rd_u16(en->sm_data + 4 + st * 2);
+            if (st_sidx != 0xFFFF) {
+                sidx = st_sidx;
+                is_anim = en->sm_data[20 + st];
+            }
+        }
         if (!s_enemy_sprites) continue;
         const unsigned char *sprite = s_enemy_sprites[sidx];
         if (!sprite) continue;
@@ -1227,7 +1315,7 @@ void vpy_draw_enemies(void)
         if (en->mirror_on_patrol)
             mirror = (en->default_facing ^ en->dir ^ 1) & 1;
 
-        if (!en->is_anim) {
+        if (!is_anim) {
             /* override_b=0 -> use the .vec's own per-path brightness, matching
              * the inline pitrex_draw_vector_ex (which ignores its intensity arg
              * and reads per-path brightness unless a SET_INTENSITY override). */

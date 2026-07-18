@@ -361,6 +361,18 @@ pub fn libvpy_symbol(vpy_name: &str) -> Option<&'static str> {
         "UPDATE_ENEMIES"         => Some("vpy_update_enemies"),
         "DRAW_ENEMIES"           => Some("vpy_draw_enemies"),
         "KILL_ENEMY"             => Some("vpy_kill_enemy"),
+        // Enemy pool accessors — read/write the SAME s_enemies pool as the
+        // bridged spawn/update/draw (single state home). Special-cased in
+        // expressions.rs (idx in r0, value in r1, hash-as-const for fire_event).
+        "GET_ENEMY_ACTIVE"       => Some("vpy_get_enemy_active"),
+        "GET_ENEMY_X"            => Some("vpy_get_enemy_x"),
+        "GET_ENEMY_Y"            => Some("vpy_get_enemy_y"),
+        "GET_ENEMY_STATE"        => Some("vpy_get_enemy_state"),
+        "SET_ENEMY_X"            => Some("vpy_set_enemy_x"),
+        "SET_ENEMY_Y"            => Some("vpy_set_enemy_y"),
+        "SET_ENEMY_STATE"        => Some("vpy_set_enemy_state"),
+        "SET_ENEMY_DIR"          => Some("vpy_set_enemy_dir"),
+        "ENEMY_FIRE_EVENT"       => Some("vpy_enemy_fire_event"),
 
         // Deferred (NOT bridged yet):
         //   SET_INTENSITY — see BLOCK 7: its brightness override is shared by the

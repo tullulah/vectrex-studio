@@ -821,6 +821,113 @@ impl VPlayLevel {
         if out.is_empty() { None } else { Some(out) }
     }
 
+    /// FNV-1a 8-bit hash of an event name — matches the inline
+    /// `pitrex_enemy_fire_event` dispatch (expressions.rs computes the same hash
+    /// at each ENEMY_FIRE_EVENT call site).
+    fn fnv1a_u8(s: &str) -> u8 {
+        let mut h: u32 = 2166136261;
+        for b in s.bytes() { h = h.wrapping_mul(16777619) ^ (b as u32); }
+        (h & 0xFF) as u8
+    }
+
+    /// Load an enemy type's state machine for the libvpy PI state-machine blob.
+    /// Returns `(states, events)`:
+    ///   states[i] = (is_anim, frames) where frames = [(dur_ticks, vec_ref)]
+    ///     (a single (0, vec_stem) entry for a static .vec action; the .vanim
+    ///     frame list for an animated action). Indexed by sm_state.
+    ///   events[i] = [(fnv1a_hash, target_state_idx)] for state i's on_event list.
+    /// Mirrors emit_enemy_data_for_pitrex (pitrex/assets.rs): the SAME
+    /// state→sprite + event dispatch data, but position-independent (sprite
+    /// refs become indices, event table is bytes). None if no state machine.
+    fn lookup_venemy_smdata(
+        enemy_type: &str,
+        venemy_dir: Option<&Path>,
+    ) -> Option<(Vec<(u8, Vec<(u8, String)>)>, Vec<Vec<(u8, u8)>>)> {
+        let dir = venemy_dir?;
+        let vtext = std::fs::read_to_string(dir.join(format!("{}.venemy", enemy_type))).ok()?;
+        let vval: serde_json::Value = serde_json::from_str(&vtext).ok()?;
+        let actions = vval["actions"].as_array()?;
+        let states_json = vval["state_machine"]["states"].as_array()?;
+        let state_names: Vec<String> = states_json.iter()
+            .filter_map(|s| s["name"].as_str().map(|x| x.to_string())).collect();
+        let proj_root = dir.parent()?.parent()?;
+        let mut states: Vec<(u8, Vec<(u8, String)>)> = Vec::new();
+        let mut events: Vec<Vec<(u8, u8)>> = Vec::new();
+        for st in states_json.iter().take(8) {
+            let action_name = st["action"].as_str().unwrap_or("");
+            let action = actions.iter().find(|a| a["name"].as_str() == Some(action_name));
+            let sprite_path = action.and_then(|a| a["sprite"].as_str()).unwrap_or("");
+            let sprite = if sprite_path.ends_with(".vanim") {
+                let mut fr = Vec::new();
+                if let Ok(atext) = std::fs::read_to_string(proj_root.join(sprite_path)) {
+                    if let Ok(aval) = serde_json::from_str::<serde_json::Value>(&atext) {
+                        if let Some(frs) = aval["frames"].as_array() {
+                            for f in frs {
+                                let dur = f["duration_ticks"].as_u64().unwrap_or(1) as u8;
+                                let vr = f["vec_refs"].as_array()
+                                    .and_then(|v| v.first()).and_then(|s| s.as_str()).unwrap_or("");
+                                if !vr.is_empty() { fr.push((dur, vr.to_string())); }
+                            }
+                        }
+                    }
+                }
+                (1u8, fr)
+            } else if sprite_path.ends_with(".vec") {
+                let stem = Path::new(sprite_path).file_stem()
+                    .and_then(|s| s.to_str()).unwrap_or("").to_string();
+                (0u8, if stem.is_empty() { vec![] } else { vec![(0u8, stem)] })
+            } else {
+                (0u8, vec![])
+            };
+            states.push(sprite);
+            let mut evs = Vec::new();
+            if let Some(oe) = st["on_event"].as_array() {
+                for e in oe.iter().take(4) {
+                    let name = e["event"].as_str().unwrap_or("");
+                    let to = e["to"].as_str().unwrap_or("");
+                    let target = state_names.iter().position(|n| n == to).unwrap_or(0) as u8;
+                    if !name.is_empty() { evs.push((Self::fnv1a_u8(name), target)); }
+                }
+            }
+            events.push(evs);
+        }
+        Some((states, events))
+    }
+
+    /// Resolve the enemy's IDLE-sprite (wander IDLE sub-state swap target),
+    /// returning `(is_anim, frames)` like a state sprite. Priority mirrors the
+    /// inline emit_enemy_data_for_pitrex idle pick: action named "idle" > first
+    /// static (.vec) action > first action. None if unresolvable.
+    fn lookup_venemy_idle(
+        enemy_type: &str,
+        venemy_dir: Option<&Path>,
+    ) -> Option<(u8, Vec<(u8, String)>)> {
+        let dir = venemy_dir?;
+        let vtext = std::fs::read_to_string(dir.join(format!("{}.venemy", enemy_type))).ok()?;
+        let vval: serde_json::Value = serde_json::from_str(&vtext).ok()?;
+        let actions = vval["actions"].as_array()?;
+        let action = actions.iter().find(|a| a["name"].as_str() == Some("idle"))
+            .or_else(|| actions.iter().find(|a| a["sprite"].as_str().map_or(false, |s| s.ends_with(".vec"))))
+            .or_else(|| actions.first())?;
+        let sprite_path = action["sprite"].as_str().unwrap_or("");
+        if sprite_path.ends_with(".vec") {
+            let stem = Path::new(sprite_path).file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+            if stem.is_empty() { return None; }
+            Some((0u8, vec![(0u8, stem)]))
+        } else if sprite_path.ends_with(".vanim") {
+            let proj_root = dir.parent()?.parent()?;
+            let atext = std::fs::read_to_string(proj_root.join(sprite_path)).ok()?;
+            let aval: serde_json::Value = serde_json::from_str(&atext).ok()?;
+            let mut fr = Vec::new();
+            for f in aval["frames"].as_array()? {
+                let dur = f["duration_ticks"].as_u64().unwrap_or(1) as u8;
+                let vr = f["vec_refs"].as_array().and_then(|v| v.first()).and_then(|s| s.as_str()).unwrap_or("");
+                if !vr.is_empty() { fr.push((dur, vr.to_string())); }
+            }
+            if fr.is_empty() { None } else { Some((1u8, fr)) }
+        } else { None }
+    }
+
     /// Look up mirror_on_patrol and default_facing for an enemy type.
     /// Searches for `{venemy_dir}/{enemy_type}.venemy`. Returns (mirror, facing_byte).
     fn lookup_venemy_mirror(enemy_type: &str, venemy_dir: Option<&Path>) -> (u8, u8) {
@@ -973,6 +1080,9 @@ impl VPlayLevel {
             // PI anim descriptors `_{ANIM}_ANIMC`-style blobs for anim enemies,
             // emitted after the sprite table. Each entry: (symbol, bytes).
             let mut anim_descriptors: Vec<(String, Vec<u8>)> = Vec::new();
+            // PI state-machine blobs `_{NAME}_ENEMY_SM{idx}` (state→sprite + event
+            // table) for enemies with a state machine (SnowBros freeze states).
+            let mut smdata_blobs: Vec<(String, Vec<u8>)> = Vec::new();
 
             for (idx, obj) in enemy_objs.iter().enumerate() {
                 let et = obj.enemy_type.as_deref().unwrap_or("").to_uppercase();
@@ -1122,23 +1232,126 @@ impl VPlayLevel {
                     pi_bytes.push(mirror_byte);
                     pi_bytes.push(facing_byte);
                     pi_bytes.push(is_anim_byte);
-                    // feet_offset = -min_y of the enemy-type sprite (matches
-                    // venemy.rs type_data[209]; used by the wander area-snap/land).
-                    let feet_pi: i8 = vec_min_y
-                        .get(&et.to_lowercase())
-                        .map(|my| (-my).clamp(-127, 127) as i8)
-                        .unwrap_or(0);
+                    // feet_offset = -(min_y across EVERY sprite of this enemy type,
+                    // i.e. `{type}` or `{type}_*`), matching the inline
+                    // compute_enemy_feet_offset that fills _DATA[209]. Looking up
+                    // only the exact-name vec diverged the spawn area-snap Y by the
+                    // feet delta (e.g. SnowBros enemies drawn 8 units off).
+                    let et_lc = et.to_lowercase();
+                    let et_prefix = format!("{et_lc}_");
+                    let mut acc_my: Option<i16> = None;
+                    for (n, &my) in vec_min_y {
+                        if n == &et_lc || n.starts_with(&et_prefix) {
+                            acc_my = Some(acc_my.map_or(my, |a| a.min(my)));
+                        }
+                    }
+                    let feet_pi: i8 = acc_my.map(|my| (-my).clamp(-127, 127) as i8).unwrap_or(0);
                     pi_bytes.push(feet_pi as u8);
-                    // Wander sprite-swap slots: idle sprite = the enemy's default
-                    // sprite (the inline type_data[204] idle action resolves to the
-                    // same static vec for a no-anim wander enemy); walk sprite =
-                    // NONE (inline state-0 sprite is null -> swap is a no-op). This
-                    // keeps the sprite constant across WALK/IDLE like the inline.
-                    // (Distinct idle/walk anim actions are a follow-up.)
-                    pi_bytes.extend_from_slice(&sprite_index.to_le_bytes()); // idle_sprite_index
-                    pi_bytes.push(is_anim_byte);                             // idle_is_anim
-                    pi_bytes.extend_from_slice(&0xFFFFu16.to_le_bytes());    // walk_sprite_index = NONE
-                    pi_bytes.push(0u8);                                      // walk_is_anim
+                    // Wander sprite-swap slots (used by vpy_update_enemies'
+                    // WANDER sub-state transitions via enemy_set_sprite):
+                    //   walk sprite = the enemy's default/state-0 sprite (the
+                    //     patrol/walk action — same as sprite_index),
+                    //   idle sprite = the IDLE action sprite (inline type_data[204]).
+                    // Matches the inline wander swap (WALK -> state-0 sprite,
+                    // IDLE -> idle action). Emitting these correctly (vs the old
+                    // walk=NONE/idle=default no-op) makes a wander enemy with a
+                    // distinct idle sprite (e.g. SnowBros: walk vanim, idle .vec)
+                    // draw the right sprite per sub-state.
+                    let (idle_idx, idle_anim): (u16, u8) =
+                        match Self::lookup_venemy_idle(&et.to_lowercase(), venemy_dir) {
+                            Some((is_anim, frames)) if !frames.is_empty() => {
+                                if is_anim == 1 {
+                                    let mut desc: Vec<u8> = Vec::new();
+                                    desc.push(frames.len().min(255) as u8);
+                                    for (dur, vec_ref) in &frames {
+                                        let vsym = format!("_{}_VEC",
+                                            vec_ref.to_uppercase().replace('-', "_").replace(' ', "_"));
+                                        let vidx = push_sprite(&mut enemy_sprite_syms, vsym);
+                                        desc.push(*dur);
+                                        desc.extend_from_slice(&vidx.to_le_bytes());
+                                    }
+                                    let dsym = format!("_{name}_ENEMY_IDLE{idx}");
+                                    anim_descriptors.push((dsym.clone(), desc));
+                                    (push_sprite(&mut enemy_sprite_syms, dsym), 1u8)
+                                } else {
+                                    let vsym = format!("_{}_VEC",
+                                        frames[0].1.to_uppercase().replace('-', "_").replace(' ', "_"));
+                                    (push_sprite(&mut enemy_sprite_syms, vsym), 0u8)
+                                }
+                            }
+                            // No idle action -> idle == default (swap is a no-op).
+                            _ => (sprite_index, is_anim_byte),
+                        };
+                    pi_bytes.extend_from_slice(&idle_idx.to_le_bytes());     // idle_sprite_index
+                    pi_bytes.push(idle_anim);                                // idle_is_anim
+                    pi_bytes.extend_from_slice(&sprite_index.to_le_bytes()); // walk_sprite_index = default
+                    pi_bytes.push(is_anim_byte);                             // walk_is_anim
+                    // ── PI state-machine blob index (offset +18) ─────────────
+                    // sm_index -> a `_{name}_ENEMY_SM{idx}` blob in the sprite
+                    // table (state→sprite + event table), or 0xFFFF if the enemy
+                    // type has no state machine. Consumed by vpy_enemy_fire_event
+                    // (event dispatch) and vpy_draw_enemies (state-sprite swap).
+                    let sm_index: u16 = match Self::lookup_venemy_smdata(&et.to_lowercase(), venemy_dir) {
+                        Some((states, events)) if !states.is_empty() => {
+                            let mut blob: Vec<u8> = Vec::new();
+                            blob.push(states.len().min(8) as u8);      // [0] state_count
+                            blob.extend_from_slice(&[0u8; 3]);         // [1..4] pad
+                            let mut sanim = [0u8; 8];
+                            // [4..20] 8 x u16 state sprite_index (state 0 uses the
+                            // enemy's default sprite in draw, so leave it NONE).
+                            for i in 0..8 {
+                                let sidx: u16 = if i == 0 {
+                                    0xFFFFu16
+                                } else if let Some((is_anim, frames)) = states.get(i) {
+                                    sanim[i] = *is_anim;
+                                    if frames.is_empty() {
+                                        0xFFFFu16
+                                    } else if *is_anim == 1 {
+                                        let mut desc: Vec<u8> = Vec::new();
+                                        desc.push(frames.len().min(255) as u8);
+                                        for (dur, vec_ref) in frames {
+                                            let vsym = format!("_{}_VEC",
+                                                vec_ref.to_uppercase().replace('-', "_").replace(' ', "_"));
+                                            let vidx = push_sprite(&mut enemy_sprite_syms, vsym);
+                                            desc.push(*dur);
+                                            desc.extend_from_slice(&vidx.to_le_bytes());
+                                        }
+                                        let dsym = format!("_{name}_ENEMY_SM{idx}_S{i}");
+                                        anim_descriptors.push((dsym.clone(), desc));
+                                        push_sprite(&mut enemy_sprite_syms, dsym)
+                                    } else {
+                                        let vsym = format!("_{}_VEC",
+                                            frames[0].1.to_uppercase().replace('-', "_").replace(' ', "_"));
+                                        push_sprite(&mut enemy_sprite_syms, vsym)
+                                    }
+                                } else { 0xFFFFu16 };
+                                blob.extend_from_slice(&sidx.to_le_bytes());
+                            }
+                            // [20..28] 8 x u8 is_anim
+                            blob.extend_from_slice(&sanim);
+                            // [28 + state*20] event table: 8 blocks x 20 bytes.
+                            // Per block: event_count(u8), 3 pad, 4 x (hash, target, 2 pad).
+                            for i in 0..8 {
+                                let evs = events.get(i).cloned().unwrap_or_default();
+                                blob.push(evs.len().min(4) as u8);
+                                blob.extend_from_slice(&[0u8; 3]);
+                                for e in 0..4 {
+                                    if let Some((hash, target)) = evs.get(e) {
+                                        blob.push(*hash);
+                                        blob.push(*target);
+                                        blob.extend_from_slice(&[0u8; 2]);
+                                    } else {
+                                        blob.extend_from_slice(&[0u8; 4]);
+                                    }
+                                }
+                            }
+                            let smsym = format!("_{name}_ENEMY_SM{idx}");
+                            smdata_blobs.push((smsym.clone(), blob));
+                            push_sprite(&mut enemy_sprite_syms, smsym)
+                        }
+                        _ => 0xFFFFu16,
+                    };
+                    pi_bytes.extend_from_slice(&sm_index.to_le_bytes());     // [18] sm_index
                     for wp in wps {
                         pi_bytes.extend_from_slice(&wp.x.to_le_bytes());
                         pi_bytes.extend_from_slice(&wp.y.to_le_bytes());
@@ -1236,6 +1449,17 @@ impl VPlayLevel {
                 out.push_str(&format!(".section .rodata.{dsym},\"a\",%progbits\n"));
                 out.push_str("    .balign 4\n");
                 out.push_str(&format!(".global {dsym}\n{dsym}:\n"));
+                for chunk in bytes.chunks(16) {
+                    let vals: Vec<String> = chunk.iter().map(|b| format!("0x{b:02X}")).collect();
+                    out.push_str(&format!("    .byte   {}\n", vals.join(", ")));
+                }
+            }
+            // PI state-machine blobs (referenced by `.word` in the sprite table).
+            for (smsym, bytes) in &smdata_blobs {
+                out.push_str(&format!("@ --- {smsym} (libvpy PI state-machine: state sprites + event table) ---\n"));
+                out.push_str(&format!(".section .rodata.{smsym},\"a\",%progbits\n"));
+                out.push_str("    .balign 4\n");
+                out.push_str(&format!(".global {smsym}\n{smsym}:\n"));
                 for chunk in bytes.chunks(16) {
                     let vals: Vec<String> = chunk.iter().map(|b| format!("0x{b:02X}")).collect();
                     out.push_str(&format!("    .byte   {}\n", vals.join(", ")));
@@ -1964,7 +2188,12 @@ impl VPlayLevel {
             let scale_u8 = (obj.scale * 8.0).round().clamp(1.0, 255.0) as u8;
             out.push(scale_u8);
 
-            out.push(obj.intensity.unwrap_or(127));
+            // intensity 0 => vpy_show_level's level_draw_obj passes override_b=0
+            // so draw_vec_stream uses the .vec's own per-path brightness — matching
+            // the inline pitrex_show_level (which clears PITREX_BRIGHTNESS_OVERRIDE
+            // and lets pitrex_draw_vector_ex read per-path). (>0 would force a flat
+            // override and diverge, e.g. SnowBros' 85-brightness level art.)
+            out.push(obj.intensity.unwrap_or(0));
 
             // flags — identical semantics to compile_arm_object
             let mut flags: u8 = 0;
