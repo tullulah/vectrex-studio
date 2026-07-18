@@ -771,13 +771,19 @@ def update_balls():
                 floor = LEVEL_COLLISION_Y(bx, prev_by, ENEMY_HH)
                 screen_bottom = camera_y - 127
                 if floor < screen_bottom:
-                    floor = camera_y - 86
+                    # El suelo de pantalla NO es un mesh de colisión (es
+                    # GET_LEVEL_FLOOR_Y), así que la bola cae al fallback: usa el
+                    # mismo suelo caminable que el jugador (antes camera_y-86 lo
+                    # dejaba ~19u por encima del suelo → la bola flotaba).
+                    floor = GET_LEVEL_FLOOR_Y() + ENEMY_HH
                 if by <= floor:
                     by = floor
                     ball_vy_arr[i] = 0
-            # Fallback: fondo del mundo
-            if by < WORLD_Y_MIN:
-                by = WORLD_Y_MIN
+            # Fallback: fondo del mundo. WORLD_Y_MIN (-2403) queda ~6u por encima
+            # del suelo caminable real, así que usa GET_LEVEL_FLOOR_Y (mismo suelo
+            # que el jugador) para que la bola descanse EN el suelo, no flotando.
+            if by < GET_LEVEL_FLOOR_Y() + ENEMY_HH:
+                by = GET_LEVEL_FLOOR_Y() + ENEMY_HH
                 ball_vy_arr[i] = 0
             # Rebote en paredes
             if bx < WORLD_X_MIN:
