@@ -1,6 +1,8 @@
 [project]
 name = "wander_test"
 entry = "src/main.vpy"
+[build]
+output = "build/wander_test.bin"
 [resources]
 vectors = ["assets/vectors/*.vec"]
 levels = ["assets/playground/*.vplay"]

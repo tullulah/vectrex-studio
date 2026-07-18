@@ -266,6 +266,18 @@ if [ $? -ne 0 ]; then
 fi
 echo '[OK  ] dist/ actualizado'
 
+# ALWAYS rebuild the Electron main process too (ide/electron/dist/main.js). Electron
+# runs the COMPILED main from dist/, so edits to ide/electron/src/*.ts (IPC, the
+# compile pipeline, emulator payloads) are invisible until this tsc runs — the same
+# "silently runs yesterday's bundle" trap as the frontend above.
+echo '[INFO] Construyendo Electron main (dist/) ...'
+(cd "$ROOT/ide/electron" && npm run build)
+if [ $? -ne 0 ]; then
+  echo '[ERR ] Electron main build falló (tsc)'
+  exit 1
+fi
+echo '[OK  ] Electron main actualizado'
+
 if [ "$PRODUCTION" = true ]; then
   echo '[INFO] Modo producción - sin hot reload'
   # Ejecutar en modo producción (dist/ ya está fresco arriba)

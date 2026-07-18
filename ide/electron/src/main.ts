@@ -1900,39 +1900,60 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           mainWindow?.webContents.send('run://stderr', `⚠ Warning: Failed to load .pdb: ${e.message}`);
         }
         
+        // The compiler writes the .s/.elf/etc. into the project's build/ dir, which
+        // is NOT necessarily next to the output binary (a .vpyproj without an
+        // explicit `[build] output = "build/…"` sends the .bin/.img to the project
+        // root while the .s/.elf still land in build/). Resolve an artifact by
+        // trying the sibling-of-binary path first, then build/<name>.<ext>.
+        const resolveArtifact = async (ext: string): Promise<string | null> => {
+          const sibling = binPath.replace(/\.[^.]+$/, ext);
+          if (await fs.access(sibling).then(() => true).catch(() => false)) return sibling;
+          const inBuild = join(dirname(binPath), 'build', basename(binPath).replace(/\.[^.]+$/, '') + ext);
+          if (await fs.access(inBuild).then(() => true).catch(() => false)) return inBuild;
+          return null;
+        };
+
         // For rp2350 builds, also load the .elf for symbol extraction in Rp2350System
         let elfBase64: string | null = null;
         if (target === 'rp2350') {
-          const elfPath = binPath.replace(/\.[^.]+$/, '.elf');
-          try {
-            const elfBuf = await fs.readFile(elfPath);
-            elfBase64 = Buffer.from(elfBuf).toString('base64');
-          } catch (_e) { /* elf not available */ }
+          const elfPath = await resolveArtifact('.elf');
+          if (elfPath) {
+            try {
+              const elfBuf = await fs.readFile(elfPath);
+              elfBase64 = Buffer.from(elfBuf).toString('base64');
+            } catch (_e) { /* elf not available */ }
+          } else {
+            console.warn('[main] rp2350: could not find .elf next to', binPath, 'or in build/');
+          }
         }
 
         // For pitrex builds, also read the .s assembly file for the in-browser ARM32 interpreter
         let sFileText: string | null = null;
         let libvpyAsm: string | null = null;
         if (target === 'pitrex') {
-          // Derive .s path from binary path — handle .img, .bin, .elf, or any extension
-          const sPath = binPath.replace(/\.[^.]+$/, '.s');
-          try {
-            sFileText = await fs.readFile(sPath, 'utf8');
-            mainWindow?.webContents.send('run://status', `✅ pitrex .s file loaded (${sFileText.length} chars)`);
-          } catch (_e) {
-            // .s file not found at derived path — try sibling with project name
-            console.warn('[main] pitrex: could not load .s from', sPath);
-          }
-          // Also read the sibling libvpy .s (vpy.c compiled at build time) so
-          // the sim can resolve bridged builtins (e.g. `bl vpy_draw_circle`).
-          // Absent for programs that use no bridged builtin — that's fine, the
-          // renderer just parses the program .s on its own.
-          const libvpyPath = sPath.replace(/\.s$/, '_libvpy.s');
-          try {
-            libvpyAsm = await fs.readFile(libvpyPath, 'utf8');
-            mainWindow?.webContents.send('run://status', `✅ pitrex libvpy .s loaded (${libvpyAsm.length} chars)`);
-          } catch (_e) {
-            // No libvpy .s — program uses no bridged builtin, or vpy-c absent.
+          // Resolve the .s (sibling-of-binary, else build/<name>.s) for the
+          // in-browser ARM32 interpreter.
+          const sPath = await resolveArtifact('.s');
+          if (sPath) {
+            try {
+              sFileText = await fs.readFile(sPath, 'utf8');
+              mainWindow?.webContents.send('run://status', `✅ pitrex .s file loaded (${sFileText.length} chars)`);
+              // Also read the sibling libvpy .s (vpy.c compiled at build time) so
+              // the sim can resolve bridged builtins (e.g. `bl vpy_draw_circle`).
+              // Absent for programs that use no bridged builtin — that's fine, the
+              // renderer just parses the program .s on its own.
+              const libvpyPath = sPath.replace(/\.s$/, '_libvpy.s');
+              try {
+                libvpyAsm = await fs.readFile(libvpyPath, 'utf8');
+                mainWindow?.webContents.send('run://status', `✅ pitrex libvpy .s loaded (${libvpyAsm.length} chars)`);
+              } catch (_e) {
+                // No libvpy .s — program uses no bridged builtin, or vpy-c absent.
+              }
+            } catch (_e) {
+              console.warn('[main] pitrex: could not read .s from', sPath);
+            }
+          } else {
+            console.warn('[main] pitrex: could not find .s next to', binPath, 'or in build/');
           }
         }
 
