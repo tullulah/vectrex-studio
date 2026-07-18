@@ -3230,10 +3230,9 @@ UPD_W_TRY_LOOP:\n\
     ; Match: roll 25% chance\n\
     PSHS B,X\n\
     JSR RAND_HELPER\n\
-    ANDB #3\n\
-    TSTB\n\
-    PULS B,X\n\
-    BNE UPD_W_NEXT_TRY\n\
+    CMPA #32            ; ~25% commit. Use the high byte (A, 0..127): the LCG's\n\
+    PULS B,X            ; low 2 bits flip +1/call, and with 2 rolls/idle cycle a\n\
+    BHS UPD_W_NEXT_TRY  ; low-bit coin locks to {1,3} for odd seeds -> never fires.\n\
     ; Commit transition: X = &trans[matched]\n\
     LDA 1,X\n\
     STA 19,Y            ; cur_area_idx = to\n\
@@ -3562,10 +3561,9 @@ UPD_W_TRY_LOOP:\n\
     BNE UPD_W_NEXT_TRY\n\
     PSHS B,X\n\
     JSR RAND_HELPER\n\
-    ANDB #3\n\
-    TSTB\n\
-    PULS B,X\n\
-    BNE UPD_W_NEXT_TRY\n\
+    CMPA #32            ; ~25% commit. Use the high byte (A, 0..127): the LCG's\n\
+    PULS B,X            ; low 2 bits flip +1/call, and with 2 rolls/idle cycle a\n\
+    BHS UPD_W_NEXT_TRY  ; low-bit coin locks to {1,3} for odd seeds -> never fires.\n\
     LDA 1,X\n\
     STA 19,Y\n\
     LDA 2,X\n\
