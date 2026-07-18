@@ -612,7 +612,7 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                 // libvpy position-independent level image + sprite-pointer table
                 // for the bridged LOAD/SHOW/UPDATE_LEVEL path (Phase 1 of the
                 // LEVELS bridge — NEW, tree-shaken until the group is wired).
-                s.push_str(&emit_level_c_bytes(&level, &asset.name, &vec_meshes));
+                s.push_str(&emit_level_c_bytes(&level, &asset.name, &vec_meshes, &dims_map));
             }
             AssetType::Animation => {
                 let text = match fs::read_to_string(&asset.path) {
@@ -1715,9 +1715,10 @@ fn emit_level_c_bytes(
     level: &crate::levelres::VPlayLevel,
     name: &str,
     vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
+    dims: &HashMap<String, (i32, i32)>,
 ) -> String {
     let sym = name.to_uppercase().replace('-', "_").replace(' ', "_");
-    let (bytes, sprite_names) = level.compile_to_c_bytes_with_meshes(vec_meshes);
+    let (bytes, sprite_names) = level.compile_to_c_bytes_with_meshes(vec_meshes, dims);
     let mut s = String::new();
     // Sprite-pointer table (index → _{SPRITE}_VEC). Emitted first, in its own
     // section; the level image references it only via vpy_load_level's 2nd arg.

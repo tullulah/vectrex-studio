@@ -2154,7 +2154,7 @@ impl VPlayLevel {
     ///   +24 scrollLeft i16 +26 scrollRight i16 +28 scrollTop i16 +30 scrollBottom i16
     ///   +32 groundBottomOffset i16  +34 pad u16
     pub fn compile_to_c_bytes(&self) -> (Vec<u8>, Vec<String>) {
-        self.compile_to_c_bytes_with_meshes(&HashMap::new())
+        self.compile_to_c_bytes_with_meshes(&HashMap::new(), &HashMap::new())
     }
 
     /// As `compile_to_c_bytes`, but also emits per-object COLLISION MESHES
@@ -2168,6 +2168,7 @@ impl VPlayLevel {
     pub fn compile_to_c_bytes_with_meshes(
         &self,
         vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
+        dims: &HashMap<String, (i32, i32)>,
     ) -> (Vec<u8>, Vec<String>) {
         let mut sprite_names: Vec<String> = Vec::new();
         let mut sprite_index = |name: &str| -> u32 {
@@ -2233,11 +2234,18 @@ impl VPlayLevel {
             };
             out.extend_from_slice(&sidx.to_le_bytes());
 
-            // half_w / half_h — collision override if present, else placeholder
-            // (16). The C runtime does not yet answer collision queries, so
-            // these only matter for a future LEVEL_COLLISION port.
-            let hw = obj.collision.as_ref().and_then(|c| c.width).unwrap_or(16).clamp(1, 127) as u8;
-            let hh = obj.collision.as_ref().and_then(|c| c.height).unwrap_or(16).clamp(1, 127) as u8;
+            // half_w / half_h — explicit collision.width/height, else the vec's
+            // natural bounding-box half-size from `dims` (matching the inline ARM
+            // object at compile_arm_object). half_w is the collision_y/x
+            // X-broadphase gate: a 16 placeholder clipped wide platforms to a
+            // 32-wide walkable strip (only the center was walkable); the vec
+            // half-width covers the full authored platform, like inline.
+            let dkey = obj.vector_name.to_lowercase();
+            let (nat_hw, nat_hh) = dims.get(&dkey).copied().unwrap_or((16, 16));
+            let hw = obj.collision.as_ref().and_then(|c| c.width).map(|v| v as i32)
+                .unwrap_or(nat_hw).clamp(1, 127) as u8;
+            let hh = obj.collision.as_ref().and_then(|c| c.height).map(|v| v as i32)
+                .unwrap_or(nat_hh).clamp(1, 127) as u8;
             out.push(hw);
             out.push(hh);
 
