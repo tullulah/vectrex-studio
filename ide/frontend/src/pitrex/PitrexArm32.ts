@@ -1361,6 +1361,22 @@ function executeOne(s: PitrexArm32State): boolean {
       setReg(s, rd, ((v & 0xFF) << 24) >> 24);
       break;
     }
+    // ── SXTAH / UXTAH (extend halfword and add) ──────────────────────────
+    // rd = rn + {sign,zero}_extend16(ror(rm, n)). gcc emits sxtah for the
+    // collision wall-boundary math (world_y_max = obj_y + mesh_y_max); a silent
+    // no-op here drops the rn addend and mis-gates walls (bridged LEVEL_COLLISION_X).
+    case 'sxtah':
+    case 'uxtah': {
+      const rd = regIdx(operands[0] ?? '');
+      if (rd < 0) break;
+      const rn = getReg(s, regIdx(operands[1] ?? ''));
+      let rm = getReg(s, regIdx(operands[2] ?? ''));
+      const rot = operands[3] ? (parseInt(String(operands[3]).replace(/[^0-9]/g, ''), 10) || 0) : 0;
+      if (rot) rm = ((rm >>> rot) | (rm << (32 - rot))) >>> 0;
+      const ext = op === 'sxtah' ? (((rm & 0xFFFF) << 16) >> 16) : (rm & 0xFFFF);
+      setReg(s, rd, (rn + ext) | 0);
+      break;
+    }
 
     // ── LDMIA (load multiple, increment after) ───────────────────────────
     case 'ldmia': {

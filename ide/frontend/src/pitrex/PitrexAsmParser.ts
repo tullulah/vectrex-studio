@@ -64,7 +64,7 @@ const BASE_MNEMONICS = new Set([
   'push','pop','b','bl','bx','blx',
   'it','ite','itt','ittee','itete',
   'nop','wfi','wfe',
-  'uxth','uxtb','sxtb','sxth',
+  'uxth','uxtb','sxtb','sxth','sxtah','uxtah',
   'clz','udiv','sdiv',
   // gcc integer-codegen additions (libvpy vpy.s): 32-bit immediate builders,
   // long multiplies, multiply-subtract, bitfield-extract, double load/store.
