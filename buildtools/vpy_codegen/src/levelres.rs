@@ -509,16 +509,118 @@ impl VPlayLevel {
             out.push_str("\n");
         }
 
-        // Phase 2 wander: precompute the level-wide AREAS + TRANS tables (shared by
-        // all wander enemies in this level). Areas pool: level walkable_areas plus
-        // per-vec walkable_areas translated to world coords.
-        let level_areas_input = self.walkable_areas.as_deref().unwrap_or(&[]);
-        let level_areas_world = Self::collect_all_walk_areas_world(&self.layers, vec_walk_areas, level_areas_input);
-        let level_transitions = Self::derive_transitions_m6809(
-            &level_areas_world,
-            self.isolate_screens,
-            self.world_bounds.y_max,
-        );
+        // Phase 2 wander: resolve each enemy's walkable AREAS + inter-area
+        // TRANSITIONS using the SAME shared derivation the ARM/pitrex backend
+        // uses (`derive_enemy_areas_and_transitions`), so the two targets emit
+        // identical areas/transitions for a given level. Each wander enemy gets
+        // its own `_{name}_ENEMY{i}_AREAS` header (mirroring ARM's per-enemy
+        // table) that the M6809 runtime reads via wp_ptr (pool +11..12) /
+        // wp_count (pool +16). Indexed parallel to `enemy_objects`.
+        // M6809-only ROM-budget cap on the number of inter-area transitions a
+        // single wander enemy's table may hold. The derivation itself is shared
+        // with ARM/pitrex (identical areas + transition set + tuning), so for
+        // any level within budget (e.g. wander_test's single transition) the
+        // M6809 table is byte-identical to pitrex. Only pathological levels
+        // (SnowBros derives 124 transitions across 59 platform areas) are
+        // truncated so the level bank stays under the 16 KB multibank limit;
+        // ARM/pitrex have no such limit and keep the full set. This preserves
+        // the historical M6809 transition budget (previously MAX_TRANS in the
+        // now-removed derive_transitions_m6809).
+        const M6809_MAX_TRANS: usize = 24;
+        let enemy_areas_trans: Vec<(Vec<WalkableArea>, Vec<AreaTransition>)> = enemy_objects
+            .iter()
+            .map(|obj| {
+                if obj.ai_type.as_deref() == Some("wander") {
+                    let (areas, mut trans) =
+                        self.derive_enemy_areas_and_transitions(obj, vec_walk_areas);
+                    trans.truncate(M6809_MAX_TRANS);
+                    (areas, trans)
+                } else {
+                    (Vec::new(), Vec::new())
+                }
+            })
+            .collect();
+
+        // Build each wander enemy's AREAS-header body, then DEDUPLICATE by body
+        // content: wander enemies that inherit the same level/vec areas (e.g.
+        // every enemy in a level with no per-enemy walkable_areas) produce the
+        // byte-identical table and share a single label, so we emit one table
+        // for the level instead of one per enemy. This keeps the M6809 ROM the
+        // same size as the pre-fix single shared table while still supporting
+        // enemies that define their own distinct areas. `enemy_area_label[i]`
+        // is the label wander enemy i points at (None → no table / area_count 0).
+        let vy0_for_jump_up = |dy: i16| -> i8 {
+            for v in 4i16..=16 {
+                if v * (v + 1) / 2 >= dy { return v as i8; }
+            }
+            16
+        };
+        // Produce the deterministic table BODY (everything after the label line)
+        // for one enemy's areas + transitions. Identical (areas, trans) → identical body.
+        let build_area_body = |areas: &[WalkableArea], trans: &[AreaTransition]| -> String {
+            let center_of = |idx: u8| -> i16 {
+                areas
+                    .get(idx as usize)
+                    .map(|a| ((a.x_min as i32 + a.x_max as i32) / 2) as i16)
+                    .unwrap_or(0)
+            };
+            let mut b = String::new();
+            b.push_str(&format!("    FCB {}    ; area_count\n", areas.len()));
+            b.push_str(&format!("    FCB {}    ; trans_count\n", trans.len()));
+            b.push_str("; Areas (8 bytes each): FDB y, FDB x_min, FDB x_max, FCB 0, FCB 0\n");
+            for (idx, a) in areas.iter().enumerate() {
+                b.push_str(&format!("    FDB {}  ; area[{}].y\n", a.y, idx));
+                b.push_str(&format!("    FDB {}  ; area[{}].x_min\n", a.x_min, idx));
+                b.push_str(&format!("    FDB {}  ; area[{}].x_max\n", a.x_max, idx));
+                b.push_str("    FCB 0,0      ; pad\n");
+            }
+            if !trans.is_empty() {
+                b.push_str("; Transitions (8 bytes each): FCB from, FCB to, FCB type, FCB vy0, FDB from_x, FDB to_x\n");
+                b.push_str("; type: 1=jump_up, 2=drop, 3=jump_across; vy0 = signed initial velocity\n");
+                for (idx, t) in trans.iter().enumerate() {
+                    let ttype: u8 = match t.ttype.as_str() {
+                        "jump_up" => 1,
+                        "drop" => 2,
+                        "jump_across" => 3,
+                        _ => 0,
+                    };
+                    let to_y = areas.get(t.to as usize).map(|a| a.y).unwrap_or(0);
+                    let from_y = areas.get(t.from as usize).map(|a| a.y).unwrap_or(0);
+                    let dy = to_y - from_y;
+                    let vy0: i8 = match ttype {
+                        1 => vy0_for_jump_up(dy.max(0)),
+                        2 => -1,
+                        3 => 3,
+                        _ => 0,
+                    };
+                    let from_x = t.from_x.unwrap_or_else(|| center_of(t.from));
+                    let to_x = t.to_x.unwrap_or_else(|| center_of(t.to));
+                    b.push_str(&format!("    FCB {},{},{},${:02X}  ; trans[{}] from,to,type,vy0\n",
+                        t.from, t.to, ttype, vy0 as u8, idx));
+                    b.push_str(&format!("    FDB {}     ; from_x\n", from_x));
+                    b.push_str(&format!("    FDB {}     ; to_x\n", to_x));
+                }
+            }
+            b
+        };
+        let mut enemy_area_label: Vec<Option<String>> = vec![None; enemy_objects.len()];
+        let mut area_tables: Vec<(String, String)> = Vec::new(); // (label, body) in emit order
+        let mut body_to_label: HashMap<String, String> = HashMap::new();
+        for (i, obj) in enemy_objects.iter().enumerate() {
+            let is_wander = obj.ai_type.as_deref() == Some("wander");
+            let (areas, trans) = &enemy_areas_trans[i];
+            if !is_wander || areas.is_empty() { continue; }
+            let body = build_area_body(areas, trans);
+            let label = if let Some(l) = body_to_label.get(&body) {
+                l.clone()
+            } else {
+                let l = format!("_{}_ENEMY{}_AREAS", name, i);
+                body_to_label.insert(body.clone(), l.clone());
+                area_tables.push((l.clone(), body));
+                l
+            };
+            enemy_area_label[i] = Some(label);
+        }
 
         // Emit enemy instances (separate section — enemy_objects computed at top of fn)
 
@@ -559,9 +661,11 @@ impl VPlayLevel {
                     0
                 };
 
+                let enemy_areas = &enemy_areas_trans[i].0;
+
                 // Initial area index: find best area for spawn (x,y). Min |dy| with X-in-range bias.
-                let init_area_idx = if is_wander && !level_areas_world.is_empty() {
-                    level_areas_world
+                let init_area_idx = if is_wander && !enemy_areas.is_empty() {
+                    enemy_areas
                         .iter()
                         .enumerate()
                         .min_by_key(|(_, a)| {
@@ -576,10 +680,10 @@ impl VPlayLevel {
                 };
 
                 // For wander enemies, wp_count becomes area_count and wp_ptr
-                // becomes areas_header_ptr (the level-wide shared table).
-                let (ai_byte, wp_count, wp_label) = if is_wander && !level_areas_world.is_empty() {
-                    let area_count = level_areas_world.len();
-                    (4u8, area_count, format!("_{}_AREAS_HEADER", name))
+                // becomes areas_header_ptr (this enemy's areas table, possibly
+                // shared with other enemies via dedup).
+                let (ai_byte, wp_count, wp_label) = if let Some(lbl) = &enemy_area_label[i] {
+                    (4u8, enemy_areas.len(), lbl.clone())
                 } else if is_wander {
                     // No areas at all — wander degenerates to no-op
                     (4u8, 0usize, "0".to_string())
@@ -618,103 +722,24 @@ impl VPlayLevel {
                 }
             }
 
-            // Emit shared Phase 2 wander AREAS + TRANS tables (level-wide)
-            if !level_areas_world.is_empty() {
-                let area_count = level_areas_world.len();
-                let trans_count = level_transitions.len();
-                out.push_str(&format!("; ---- Phase 2 wander: level-wide areas ({} areas, {} transitions) ----\n",
-                    area_count, trans_count));
-                out.push_str(&format!("_{}_AREAS_HEADER:\n", name));
-                out.push_str(&format!("    FCB {}    ; area_count\n", area_count));
-                out.push_str(&format!("    FCB {}    ; trans_count\n", trans_count));
-                out.push_str(&format!("; Areas (8 bytes each): FDB y, FDB x_min, FDB x_max, FCB 0, FCB 0\n"));
-                for (idx, a) in level_areas_world.iter().enumerate() {
-                    out.push_str(&format!("    FDB {}  ; area[{}].y\n", a.y, idx));
-                    out.push_str(&format!("    FDB {}  ; area[{}].x_min\n", a.x_min, idx));
-                    out.push_str(&format!("    FDB {}  ; area[{}].x_max\n", a.x_max, idx));
-                    out.push_str(&format!("    FCB 0,0      ; pad\n"));
-                }
-                if trans_count > 0 {
-                    out.push_str(&format!("; Transitions (8 bytes each): FCB from, FCB to, FCB type, FCB vy0, FDB from_x, FDB to_x\n"));
-                    out.push_str(&format!("; type: 1=jump_up, 2=drop, 3=jump_across; vy0 = signed initial velocity\n"));
-                    for (idx, t) in level_transitions.iter().enumerate() {
-                        let (from, to, ttype, vy0, from_x, to_x) = t;
-                        // vy0 is i8; emit as unsigned byte by reinterpreting
-                        let vy0_byte = *vy0 as u8;
-                        out.push_str(&format!("    FCB {},{},{},${:02X}  ; trans[{}] from,to,type,vy0\n",
-                            from, to, ttype, vy0_byte, idx));
-                        out.push_str(&format!("    FDB {}     ; from_x\n", from_x));
-                        out.push_str(&format!("    FDB {}     ; to_x\n", to_x));
-                    }
-                }
+            // Emit the (deduplicated) Phase 2 wander AREAS + TRANS tables. Each
+            // table mirrors ARM's `_{name}_ENEMY{i}_AREAS`; the M6809 runtime
+            // reads it at areas_ptr (= wp_ptr, pool +11..12). Layout must match
+            // helpers.rs (~3046):
+            //   +0  FCB area_count
+            //   +1  FCB trans_count
+            //   +2  area[k]: FDB y, FDB x_min, FDB x_max, FCB 0, FCB 0 (8 bytes)
+            //   trans[k]: FCB from, FCB to, FCB type, FCB vy0, FDB from_x, FDB to_x (8 bytes)
+            // Unlike ARM (which computes vy0 at runtime), the M6809 runtime uses
+            // a compiler-precomputed vy0 (vy0_stash), derived in build_area_body.
+            for (label, body) in &area_tables {
+                out.push_str(&format!("; ---- Phase 2 wander: areas table {} ----\n", label));
+                out.push_str(&format!("{}:\n", label));
+                out.push_str(body);
                 out.push_str("\n");
             }
         }
 
-        out
-    }
-
-    /// Auto-derive transitions between walkable areas based on geometry.
-    /// Filters cross-screen pairs when isolate_screens is set (256-unit Y screen partition).
-    /// Returns Vec<(from, to, type, vy0, from_x, to_x)>.
-    fn derive_transitions_m6809(
-        areas: &[WalkableArea],
-        isolate_screens: bool,
-        world_y_max: i16,
-    ) -> Vec<(u8, u8, u8, i8, i16, i16)> {
-        let mut out = Vec::new();
-        const MAX_TRANS: usize = 24;
-        const MAX_JUMP_DY: i16 = 100;          // max height for jump_up reach
-        const MAX_ACROSS_GAP: i16 = 60;        // max horizontal gap for jump_across
-        const MAX_ACROSS_DY: i16 = 40;         // max vertical delta for jump_across
-
-        // Screen partition aligned to worldBounds.yMax (256-unit Y bands).
-        let screen_of = |y: i16| -> i32 {
-            (world_y_max as i32 - y as i32).div_euclid(256)
-        };
-
-        // Compute jump_up vy0 such that vy0*(vy0+1)/2 >= dy (peak height covers dy).
-        // Cap at 16 to fit in i8. Matches PiTrex iterative formula.
-        let vy0_for_jump_up = |dy: i16| -> i8 {
-            for v in 4i16..=16 {
-                if v * (v + 1) / 2 >= dy { return v as i8; }
-            }
-            16
-        };
-
-        for (i, a) in areas.iter().enumerate() {
-            for (j, b) in areas.iter().enumerate() {
-                if i == j { continue; }
-                if out.len() >= MAX_TRANS { return out; }
-                if isolate_screens && screen_of(a.y) != screen_of(b.y) { continue; }
-                let ov_min = a.x_min.max(b.x_min);
-                let ov_max = a.x_max.min(b.x_max);
-                let overlap = ov_max - ov_min;
-                let dy = b.y - a.y;
-                if overlap > 0 {
-                    let from_x = (ov_min + ov_max) / 2;
-                    let to_x = from_x;
-                    if dy > 0 && dy <= MAX_JUMP_DY {
-                        // jump_up: target higher than source
-                        let vy0 = vy0_for_jump_up(dy);
-                        out.push((i as u8, j as u8, 1u8, vy0, from_x, to_x));
-                    } else if dy < 0 && (-dy) <= MAX_JUMP_DY {
-                        // drop: target lower
-                        out.push((i as u8, j as u8, 2u8, -1i8, from_x, to_x));
-                    }
-                } else {
-                    let gap = (-overlap).max(0);
-                    if gap > 0 && gap <= MAX_ACROSS_GAP && dy.abs() <= MAX_ACROSS_DY {
-                        let (from_x, to_x) = if a.x_max < b.x_min {
-                            (a.x_max, b.x_min)
-                        } else {
-                            (a.x_min, b.x_max)
-                        };
-                        out.push((i as u8, j as u8, 3u8, 3i8, from_x, to_x));
-                    }
-                }
-            }
-        }
         out
     }
 
@@ -1138,51 +1163,11 @@ impl VPlayLevel {
                 // This lets platform .vec files define where enemies walk and
                 // those areas are automatically inherited by enemies that don't
                 // specify their own walkable_areas.
-                let (vec_areas, vec_sources) = Self::collect_vec_walkable_areas_with_sources(&self.layers, vec_walk_areas);
-                let (level_areas, level_sources): (Vec<WalkableArea>, Option<Vec<usize>>) =
-                    if !vec_areas.is_empty() {
-                        (vec_areas, Some(vec_sources))
-                    } else {
-                        match self.walkable_areas.as_deref() {
-                            Some(a) if !a.is_empty() => (a.to_vec(), None),
-                            _ => (Vec::new(), None),
-                        }
-                    };
-                let areas = Self::derive_walkable_areas(obj, Some(level_areas.as_slice()));
-                // Only pass sources when the resolved area list IS the level one
-                // (so indices match). If derive picked enemy-own or waypoints,
-                // sources don't apply.
-                let sources_for_derive: Option<&[usize]> =
-                    if obj.walkable_areas.as_ref().map_or(true, |v| v.is_empty()) && areas.len() == level_areas.len() {
-                        level_sources.as_deref()
-                    } else { None };
-                // Transitions: explicit override on the enemy → use as-is.
-                // Else explicit override at level → use as-is. Else auto-derive
-                // from the area geometry (immediate neighbors only).
-                // Treat an empty `transitions` list the same as None: it means
-                // "no explicit override, please auto-derive". The IDE often
-                // saves `"transitions": []` even when the designer hasn't
-                // touched them, and that empty list would otherwise suppress
-                // auto-derive entirely.
-                let derived_trans;
-                let obj_trans = obj.transitions.as_deref().filter(|t| !t.is_empty());
-                let self_trans = self.transitions.as_deref().filter(|t| !t.is_empty());
-                let trans: &[AreaTransition] = if let Some(t) = obj_trans {
-                    t
-                } else if let Some(t) = self_trans {
-                    t
-                } else {
-                    derived_trans = Self::derive_transitions(
-                        &areas,
-                        self.isolate_screens,
-                        self.world_bounds.y_max as i16,
-                        self.transition_min_x_overlap.unwrap_or(4),
-                        self.transition_lateral_y.unwrap_or(8),
-                        self.transition_lateral_gap.unwrap_or(60),
-                        sources_for_derive,
-                    );
-                    &derived_trans
-                };
+                // Resolve areas + transitions via the shared helper (same
+                // precedence + auto-derivation used by the M6809 backend, so
+                // both targets stay in lockstep).
+                let (areas, trans_vec) = self.derive_enemy_areas_and_transitions(obj, vec_walk_areas);
+                let trans: &[AreaTransition] = &trans_vec;
                 // ── Position-independent enemy record for libvpy ─────────────
                 // Same derived fields as the inline table; sprite ref -> index.
                 {
@@ -1691,6 +1676,7 @@ impl VPlayLevel {
     /// object's (x, y). Returns a flat Vec usable as a candidate set for
     /// wander-enemy patrol-bound derivation on the M6809 target (matches
     /// ARM's `collect_vec_walkable_areas_with_sources` plus level pool).
+    #[allow(dead_code)]
     fn collect_all_walk_areas_world(
         layers: &VPlayLayers,
         vec_walk_areas: &HashMap<String, Vec<crate::vecres::VecWalkableArea>>,
@@ -1754,6 +1740,68 @@ impl VPlayLevel {
         } else {
             vec![]
         }
+    }
+
+    /// Resolve the effective walkable AREAS and inter-area TRANSITIONS for a
+    /// single enemy, applying the exact same precedence + auto-derivation the
+    /// ARM/pitrex backend uses. Shared by both `compile_arm` (per-enemy areas
+    /// table) and `compile_m6809_inner` (per-enemy m6809 areas header) so the
+    /// two targets never drift.
+    ///
+    /// Areas precedence (via `derive_walkable_areas`):
+    ///   1. enemy's own `walkable_areas`
+    ///   2. .vec-derived areas (placed platforms) or level-wide `walkable_areas`
+    ///   3. single area from patrol waypoints
+    /// Transitions precedence:
+    ///   1. enemy's own non-empty `transitions`
+    ///   2. level-wide non-empty `transitions`
+    ///   3. auto-derived from area geometry (`derive_transitions`)
+    fn derive_enemy_areas_and_transitions(
+        &self,
+        obj: &VPlayObject,
+        vec_walk_areas: &HashMap<String, Vec<crate::vecres::VecWalkableArea>>,
+    ) -> (Vec<WalkableArea>, Vec<AreaTransition>) {
+        let (vec_areas, vec_sources) =
+            Self::collect_vec_walkable_areas_with_sources(&self.layers, vec_walk_areas);
+        let (level_areas, level_sources): (Vec<WalkableArea>, Option<Vec<usize>>) =
+            if !vec_areas.is_empty() {
+                (vec_areas, Some(vec_sources))
+            } else {
+                match self.walkable_areas.as_deref() {
+                    Some(a) if !a.is_empty() => (a.to_vec(), None),
+                    _ => (Vec::new(), None),
+                }
+            };
+        let areas = Self::derive_walkable_areas(obj, Some(level_areas.as_slice()));
+        // Only pass sources when the resolved area list IS the level one (so
+        // indices match). If derive picked enemy-own or waypoints, sources
+        // don't apply.
+        let sources_for_derive: Option<&[usize]> =
+            if obj.walkable_areas.as_ref().map_or(true, |v| v.is_empty())
+                && areas.len() == level_areas.len()
+            {
+                level_sources.as_deref()
+            } else {
+                None
+            };
+        let obj_trans = obj.transitions.as_deref().filter(|t| !t.is_empty());
+        let self_trans = self.transitions.as_deref().filter(|t| !t.is_empty());
+        let trans: Vec<AreaTransition> = if let Some(t) = obj_trans {
+            t.to_vec()
+        } else if let Some(t) = self_trans {
+            t.to_vec()
+        } else {
+            Self::derive_transitions(
+                &areas,
+                self.isolate_screens,
+                self.world_bounds.y_max as i16,
+                self.transition_min_x_overlap.unwrap_or(4),
+                self.transition_lateral_y.unwrap_or(8),
+                self.transition_lateral_gap.unwrap_or(60),
+                sources_for_derive,
+            )
+        };
+        (areas, trans)
     }
 
     /// Compile a single object for the ARM binary format (20 bytes).
