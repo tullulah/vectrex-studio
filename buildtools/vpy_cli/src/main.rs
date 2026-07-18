@@ -1542,6 +1542,15 @@ fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool, ram
     println!("\n{}", "Phase 5: ARM Link".bright_cyan().bold());
     let ld_result = Command::new("arm-none-eabi-ld")
         .args([
+            // --gc-sections drops unreachable per-symbol sections (each vec/level/
+            // enemy blob is in its own `.rodata._NAME_*`). Without it, the shared
+            // libvpy PI enemy image (`_NAME_ENEMIES_C` / `_NAME_ENEMY_SPRITES` ->
+            // `_*_VEC`) — emitted for every level but NOT referenced by the arm
+            // enemy path — was force-kept, both bloating the 252 KB GAME_RAM RAM
+            // build past its limit and (before `_VEC` was emitted) failing the
+            // link on `undefined reference to _*_VEC`. Roots: ENTRY(game_main) +
+            // the linker script's KEEP(*(.game_rom)).
+            "--gc-sections",
             "-T",
             ld_path.to_str().unwrap(),
             o_path.to_str().unwrap(),
