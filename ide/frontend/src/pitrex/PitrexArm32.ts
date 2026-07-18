@@ -1030,11 +1030,17 @@ function executeOne(s: PitrexArm32State): boolean {
       const src  = (operands[1] ?? '').trim();
       if (src.startsWith('=')) {
         // Literal pool load
-        setReg(s, rd, resolveLdrLiteral(s, src));
+        const v = resolveLdrLiteral(s, src);
+        if (rd === 15) s.pc = v; else setReg(s, rd, v);
       } else if (src.startsWith('[')) {
         const { addr, postIncReg, postIncVal } = parseMemOp(s, src, operands[2]);
-        setReg(s, rd, memRead32(s, addr));
+        const v = memRead32(s, addr);
         if (postIncReg >= 0) s.regs[postIncReg] = (s.regs[postIncReg] + postIncVal) | 0;
+        // `ldr pc, [...]` is a branch/return: gcc emits it (e.g. vpy_rand_range's
+        // `ldr pc, [sp], #4`). The PC is s.pc, not regs[15], so it must be routed
+        // there — otherwise the return falls through into the next (dead)
+        // function and jumps to garbage (black screen, e.g. SnowBros ball launch).
+        if (rd === 15) s.pc = v; else setReg(s, rd, v);
       }
       break;
     }
