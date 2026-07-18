@@ -1228,7 +1228,10 @@ void vpy_draw_enemies(void)
             mirror = (en->default_facing ^ en->dir ^ 1) & 1;
 
         if (!en->is_anim) {
-            vpy_draw_vector_ex(sprite, ox, oy, mirror, 127);
+            /* override_b=0 -> use the .vec's own per-path brightness, matching
+             * the inline pitrex_draw_vector_ex (which ignores its intensity arg
+             * and reads per-path brightness unless a SET_INTENSITY override). */
+            vpy_draw_vector_ex(sprite, ox, oy, mirror, 0);
         } else {
             /* Anim tick/extract — bit-exact port of pitrex_draw_enemies' vanim
              * branch, over the PI anim descriptor `_{ANIM}_ANIMC`:
@@ -1252,7 +1255,7 @@ void vpy_draw_enemies(void)
             const unsigned char *fp = anim + 1 + fi * 3;
             int vec_index = fp[1] | (fp[2] << 8);         /* frame vec sprite-index */
             const unsigned char *vec = s_enemy_sprites[vec_index];
-            if (vec) vpy_draw_vector_ex(vec, ox, oy, mirror, 127);
+            if (vec) vpy_draw_vector_ex(vec, ox, oy, mirror, 0); /* per-path brightness */
         }
     }
 }

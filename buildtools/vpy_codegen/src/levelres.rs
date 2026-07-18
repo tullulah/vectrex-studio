@@ -788,6 +788,39 @@ impl VPlayLevel {
         }
     }
 
+    /// For an anim enemy: load the `.vanim` referenced by the enemy's patrol/idle
+    /// action and return its frames as `(duration_ticks, first_vec_ref_name)`.
+    /// Mirrors what the inline vanim draw ticks (frame duration + the frame's
+    /// first vec_ref). The `.vanim` path in the action is project-root-relative
+    /// (project root = `{venemy_dir}/../..`). None if the action sprite isn't a
+    /// `.vanim` or the file can't be read.
+    fn lookup_venemy_anim(enemy_type: &str, venemy_dir: Option<&Path>) -> Option<Vec<(u8, String)>> {
+        let dir = venemy_dir?;
+        let vtext = std::fs::read_to_string(dir.join(format!("{}.venemy", enemy_type))).ok()?;
+        let vval: serde_json::Value = serde_json::from_str(&vtext).ok()?;
+        let patrol_action = vval["behavior"]["patrol"]["patrolAction"].as_str().unwrap_or("");
+        let actions = vval["actions"].as_array()?;
+        let action = if !patrol_action.is_empty() {
+            actions.iter().find(|a| a["name"].as_str() == Some(patrol_action))?
+        } else {
+            actions.iter().find(|a| a["name"].as_str() == Some("idle")).or_else(|| actions.first())?
+        };
+        let sprite_path = action["sprite"].as_str().unwrap_or("");
+        if !sprite_path.ends_with(".vanim") { return None; }
+        let proj_root = dir.parent()?.parent()?;
+        let atext = std::fs::read_to_string(proj_root.join(sprite_path)).ok()?;
+        let aval: serde_json::Value = serde_json::from_str(&atext).ok()?;
+        let frames = aval["frames"].as_array()?;
+        let mut out = Vec::new();
+        for f in frames {
+            let dur = f["duration_ticks"].as_u64().unwrap_or(1) as u8;
+            let vec_ref = f["vec_refs"].as_array()
+                .and_then(|v| v.first()).and_then(|s| s.as_str()).unwrap_or("");
+            if !vec_ref.is_empty() { out.push((dur, vec_ref.to_string())); }
+        }
+        if out.is_empty() { None } else { Some(out) }
+    }
+
     /// Look up mirror_on_patrol and default_facing for an enemy type.
     /// Searches for `{venemy_dir}/{enemy_type}.venemy`. Returns (mirror, facing_byte).
     fn lookup_venemy_mirror(enemy_type: &str, venemy_dir: Option<&Path>) -> (u8, u8) {
@@ -937,6 +970,9 @@ impl VPlayLevel {
             let mut pi_bytes: Vec<u8> = Vec::new();
             pi_bytes.extend_from_slice(&(ec as u16).to_le_bytes());
             let mut enemy_sprite_syms: Vec<String> = Vec::new();
+            // PI anim descriptors `_{ANIM}_ANIMC`-style blobs for anim enemies,
+            // emitted after the sprite table. Each entry: (symbol, bytes).
+            let mut anim_descriptors: Vec<(String, Vec<u8>)> = Vec::new();
 
             for (idx, obj) in enemy_objs.iter().enumerate() {
                 let et = obj.enemy_type.as_deref().unwrap_or("").to_uppercase();
@@ -1040,14 +1076,44 @@ impl VPlayLevel {
                 // ── Position-independent enemy record for libvpy ─────────────
                 // Same derived fields as the inline table; sprite ref -> index.
                 {
-                    let vec_sym = if sprite_sym.ends_with("_VECTORS") {
-                        format!("{}_VEC", &sprite_sym[..sprite_sym.len() - 8])
-                    } else {
-                        // anim / other sprite: turn-3 (no `_VEC` form yet).
-                        sprite_sym.clone()
+                    let push_sprite = |syms: &mut Vec<String>, sym: String| -> u16 {
+                        syms.iter().position(|s| s == &sym)
+                            .unwrap_or_else(|| { syms.push(sym); syms.len() - 1 }) as u16
                     };
-                    let sprite_index = enemy_sprite_syms.iter().position(|s| s == &vec_sym)
-                        .unwrap_or_else(|| { enemy_sprite_syms.push(vec_sym.clone()); enemy_sprite_syms.len() - 1 }) as u16;
+                    // sprite_index -> either a static `_{X}_VEC` or (for an anim
+                    // enemy) a PI anim descriptor `_{NAME}_ENEMY_ANIM{idx}` that
+                    // the libvpy reader decodes: [frame_count, per frame
+                    // (dur u8, vec_index u16)] with vec_index into this same table.
+                    let sprite_index: u16 = if is_anim_byte == 1 {
+                        match Self::lookup_venemy_anim(&et.to_lowercase(), venemy_dir) {
+                            Some(frames) if !frames.is_empty() => {
+                                let mut desc: Vec<u8> = Vec::new();
+                                desc.push(frames.len().min(255) as u8);
+                                for (dur, vec_ref) in &frames {
+                                    let vsym = format!("_{}_VEC",
+                                        vec_ref.to_uppercase().replace('-', "_").replace(' ', "_"));
+                                    let vidx = push_sprite(&mut enemy_sprite_syms, vsym);
+                                    desc.push(*dur);
+                                    desc.extend_from_slice(&vidx.to_le_bytes());
+                                }
+                                let dsym = format!("_{name}_ENEMY_ANIM{idx}");
+                                anim_descriptors.push((dsym.clone(), desc));
+                                push_sprite(&mut enemy_sprite_syms, dsym)
+                            }
+                            // No frames -> fall back to a static `_VEC` of the anim stem.
+                            _ => {
+                                let base = sprite_sym.trim_start_matches("_ANIM_");
+                                push_sprite(&mut enemy_sprite_syms, format!("_{base}_VEC"))
+                            }
+                        }
+                    } else {
+                        let vec_sym = if sprite_sym.ends_with("_VECTORS") {
+                            format!("{}_VEC", &sprite_sym[..sprite_sym.len() - 8])
+                        } else {
+                            sprite_sym.clone()
+                        };
+                        push_sprite(&mut enemy_sprite_syms, vec_sym)
+                    };
                     pi_bytes.extend_from_slice(&sprite_index.to_le_bytes());
                     pi_bytes.extend_from_slice(&obj.x.to_le_bytes());
                     pi_bytes.extend_from_slice(&obj.y.to_le_bytes());
@@ -1162,6 +1228,17 @@ impl VPlayLevel {
             } else {
                 for sp in &enemy_sprite_syms {
                     out.push_str(&format!("    .word {sp}\n"));
+                }
+            }
+            // PI anim descriptors (referenced by `.word` in the sprite table above).
+            for (dsym, bytes) in &anim_descriptors {
+                out.push_str(&format!("@ --- {dsym} (libvpy PI anim descriptor) ---\n"));
+                out.push_str(&format!(".section .rodata.{dsym},\"a\",%progbits\n"));
+                out.push_str("    .balign 4\n");
+                out.push_str(&format!(".global {dsym}\n{dsym}:\n"));
+                for chunk in bytes.chunks(16) {
+                    let vals: Vec<String> = chunk.iter().map(|b| format!("0x{b:02X}")).collect();
+                    out.push_str(&format!("    .byte   {}\n", vals.join(", ")));
                 }
             }
             out.push_str(&format!("@ --- {name}_ENEMIES_C (libvpy position-independent enemy image) ---\n"));
