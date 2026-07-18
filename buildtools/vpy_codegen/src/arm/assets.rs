@@ -535,6 +535,15 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
                     }
                 };
                 s.push_str(&emit_vec_resource(&resource, &asset.name));
+                // libvpy position-independent `_NAME_VEC` image: the shared
+                // enemy/level PI sprite tables (levelres.rs) index sprites as
+                // `_{NAME}_VEC`, and libvpy's vpy_draw_enemies / vpy_show_level
+                // draw them via vpy_draw_vector_ex. The inline `_NAME_VECTORS`
+                // (arm's own DRAW_VECTOR format) is NOT that format, so without
+                // this the rp2350 link fails on `undefined reference to _*_VEC`.
+                // Own `.rodata._NAME_VEC` section -> `--gc-sections` drops it when
+                // unused.
+                s.push_str(&crate::pitrex::assets::emit_vec_resource_c_bytes(&resource, &asset.name, None));
                 s.push_str(&emit_3d_resource(&resource, &asset.name));
             }
             AssetType::Music => {

@@ -1681,7 +1681,7 @@ pub fn compile_vec_file_to_bytes(path: &std::path::Path) -> Result<Vec<u8>, Stri
 /// in its OWN `.rodata._NAME_VEC` section so `--gc-sections` drops it when
 /// DRAW_VECTOR isn't used for this asset; restores `.text` afterwards because
 /// the surrounding asset loop emits into `.text`.
-fn emit_vec_resource_c_bytes(
+pub(crate) fn emit_vec_resource_c_bytes(
     res: &VecResource,
     override_name: &str,
     override_center: Option<(i16, i16)>,
