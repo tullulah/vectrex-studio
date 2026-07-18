@@ -1,0 +1,14 @@
+[project]
+name = "SnowBros_c"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["SnowBros_c_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["SnowBros_c_wasm"]
+module = "build_wasm/SnowBros_c.js"
