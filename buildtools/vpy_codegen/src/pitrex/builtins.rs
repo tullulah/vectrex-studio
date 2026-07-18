@@ -54,7 +54,11 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     s.push_str(&emit_pitrex_random());
     s.push_str(&emit_pitrex_msg_system());
     s.push_str(&emit_pitrex_debug_print());
-    s.push_str(&emit_pitrex_camera());
+    // BLOCK 8: pitrex_set_camera_x/y own the inline CAMERA_X/Y; suppressed when
+    // the LEVELS group is bridged (state lives in libvpy s_cam_x/y).
+    if !crate::pitrex::libvpy::level_group_bridged() {
+        s.push_str(&emit_pitrex_camera());
+    }
     s.push_str(&emit_pitrex_get_frame_us());
     s.push_str(&emit_pitrex_set_intensity());
     // libvpy BLOCK 2: MOVE + DRAW_LINE are bridged to the C runtime as a pair
@@ -117,21 +121,30 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     s.push_str(&emit_pitrex_draw_anim());
 
     // ── Tree-shaken (clearly optional, larger / riskier helpers) ────────
+    // BLOCK 8: the LEVELS+CAMERA+ENEMIES+collision inline bodies own the old
+    // state (CAMERA_X/Y, LEVEL_DATA_PTR, LEVEL_GP_*, SCROLL_LIMIT_*,
+    // PITREX_ENEMY_POOL/COUNT). When the group is bridged they are fully
+    // suppressed so state lives ONLY in libvpy and the desync-trap grep is clean.
+    let level_bridged = crate::pitrex::libvpy::level_group_bridged();
     if any(&["SET_TEXT_SIZE"]) { s.push_str(&emit_pitrex_text_extras()); }
-    if any(&["LEVEL_COLLISION_X", "LEVEL_COLLISION_Y", "LEVEL_VERTICAL_WALL_HIT"]) {
+    if any(&["LEVEL_COLLISION_X", "LEVEL_COLLISION_Y", "LEVEL_VERTICAL_WALL_HIT"]) && !level_bridged {
         s.push_str(&emit_pitrex_level_collision());
     }
     if any(&[
         "GET_CAMERA_X", "GET_CAMERA_Y", "GET_LEVEL_FLOOR_Y",
         "GET_SCROLL_LIMIT_LEFT", "GET_SCROLL_LIMIT_RIGHT",
         "GET_SCROLL_LIMIT_TOP", "GET_SCROLL_LIMIT_BOTTOM",
-    ]) {
+    ]) && !level_bridged {
         s.push_str(&emit_pitrex_camera_getters());
     }
-    // emit_pitrex_misc_stubs also provides UPDATE_LEVEL + DRAW_VECTOR_3D.
-    if any(&["UPDATE_LEVEL", "DRAW_VECTOR_3D"]) { s.push_str(&emit_pitrex_misc_stubs()); }
+    // emit_pitrex_misc_stubs provides UPDATE_LEVEL (level state) + DRAW_VECTOR_3D
+    // (unrelated). UPDATE_LEVEL is bridged, so only emit this block for
+    // DRAW_VECTOR_3D, or for UPDATE_LEVEL when the group is NOT bridged.
+    if any(&["DRAW_VECTOR_3D"]) || (any(&["UPDATE_LEVEL"]) && !level_bridged) {
+        s.push_str(&emit_pitrex_misc_stubs());
+    }
     if any(&["PLAY_NOTE", "NOTE_UPDATE"]) { s.push_str(&emit_pitrex_note_engine()); }
-    if any(&["UPDATE_ENEMIES", "SPAWN_ENEMIES", "DRAW_ENEMIES"]) {
+    if any(&["UPDATE_ENEMIES", "SPAWN_ENEMIES", "DRAW_ENEMIES"]) && !level_bridged {
         // wander_set_sprite is reached transitively from UPDATE_ENEMIES.
         s.push_str(&emit_pitrex_wander_set_sprite());
     }
@@ -140,10 +153,10 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     if any(&["DRAW_RECORDING"])    { s.push_str(&emit_pitrex_draw_recording()); }
     if any(&["SAMPLE_POS"])        { s.push_str(&emit_pitrex_sample_pos()); }
     if any(&["PLAY_SAMPLE"])       { s.push_str(&emit_pitrex_play_sample()); }
-    if any(&["SPAWN_ENEMIES"])     { s.push_str(&emit_pitrex_spawn_enemies()); }
-    if any(&["UPDATE_ENEMIES"])    { s.push_str(&emit_pitrex_update_enemies()); }
-    if any(&["DRAW_ENEMIES"])      { s.push_str(&emit_pitrex_draw_enemies()); }
-    if any(&["KILL_ENEMY"])        { s.push_str(&emit_pitrex_kill_enemy()); }
+    if any(&["SPAWN_ENEMIES"])  && !level_bridged { s.push_str(&emit_pitrex_spawn_enemies()); }
+    if any(&["UPDATE_ENEMIES"]) && !level_bridged { s.push_str(&emit_pitrex_update_enemies()); }
+    if any(&["DRAW_ENEMIES"])   && !level_bridged { s.push_str(&emit_pitrex_draw_enemies()); }
+    if any(&["KILL_ENEMY"])     && !level_bridged { s.push_str(&emit_pitrex_kill_enemy()); }
     if any(&["ENEMY_FIRE_EVENT"])  { s.push_str(&emit_pitrex_enemy_fire_event()); }
 
     s
@@ -1849,6 +1862,12 @@ fn emit_pitrex_music_helpers() -> String {
     //   [6]: flags u8, [7]: type u8, [8..12]: vector_ptr u32,
     //   [12]: half_w u8, [13]: half_h u8, [14]: vel_x_init i8, [15]: vel_y_init i8
     // LEVEL_GP_BUF layout (8 bytes/entry): x i16, y i16, vx i16, vy i16
+    // BLOCK 8: pitrex_load_level + pitrex_show_level own LEVEL_DATA_PTR /
+    // LEVEL_GP_* / SCROLL_LIMIT_* / CAMERA_X/Y. They are physically emitted here
+    // (inside the always-emitted music-helpers block) but are the level group's
+    // ONLY readers of that state, so suppress both when the group is bridged —
+    // state then lives ONLY in libvpy (s_level/s_gp_buf/s_cam).
+    if !crate::pitrex::libvpy::level_group_bridged() {
     s.push_str("@ pitrex_load_level(r0=level_ptr) — initialise level runtime state\n");
     s.push_str(".global pitrex_load_level\n.type pitrex_load_level, %function\npitrex_load_level:\n");
     s.push_str("    push    {r4, r5, r6, r7, lr}\n");
@@ -2050,6 +2069,7 @@ fn emit_pitrex_music_helpers() -> String {
     s.push_str("    add     sp, sp, #4          @ pop saved override word\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
     s.push_str("    .ltorg\n\n");
+    } // end BLOCK 8 !level_group_bridged() (load_level + show_level)
 
     s
 }

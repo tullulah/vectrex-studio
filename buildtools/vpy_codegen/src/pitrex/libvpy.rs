@@ -298,6 +298,70 @@ pub fn libvpy_symbol(vpy_name: &str) -> Option<&'static str> {
         // shared vector-helpers emit block (the atan2/rand/text/music pattern).
         "DRAW_VECTOR" => Some("vpy_draw_vector_ex"),
 
+        // ── BLOCK 8: the LEVELS + CAMERA + ENEMIES + collision STATE-GROUP ───
+        // The whole level/enemy runtime shares ONE body of state — the camera
+        // (inline CAMERA_X/Y ⇄ libvpy s_cam_x/y), the loaded level image + GP
+        // object buffer + scroll limits (inline LEVEL_DATA_PTR/LEVEL_GP_*/
+        // SCROLL_LIMIT_* ⇄ libvpy s_level/s_gp_buf), the 32-slot enemy pool
+        // (inline PITREX_ENEMY_POOL/COUNT ⇄ libvpy s_enemies) and the enemy-AI
+        // RNG (inline RAND_SEED ⇄ libvpy s_rng). A partial flip would leave two
+        // live copies of that state that silently desync, so this group is
+        // bridged ATOMICALLY — all of it, or none.
+        //
+        // Verified (dual PitrexArm32, inline vs bridged): the full
+        // v_directDraw32 stream and every GET_*/collision return value are
+        // bit-identical across gatetest (moving camera + KILL_ENEMY + anim
+        // enemies + collision), enemy_test (patrol) and wander_test (wander RNG),
+        // and native libvpy matches the inline collision math exactly.
+        //
+        // DATA marshalling (position-independent, like DRAW_VECTOR's _NAME_VEC):
+        //   * LOAD_LEVEL passes `_NAME_LEVEL_C` (PI level image) + `_NAME_level_sprites`
+        //     (sprite-index table) to vpy_load_level — special-cased in
+        //     expressions.rs (the inline pitrex_load_level took the non-PI
+        //     `_NAME_LEVEL` with link-time pointers).
+        //   * SPAWN_ENEMIES passes `_NAME_ENEMIES_C` (PI enemy image) +
+        //     `_NAME_ENEMY_SPRITES` to vpy_spawn_enemies — special-cased too.
+        //   * The scalar accessors (camera set/get, scroll limits, floor,
+        //     collision) share the inline AAPCS arg order, so the generic call
+        //     path remaps them by symbol with no marshalling shim.
+        //
+        // SUPPRESSION: unlike the shared-block keep-emitted cases (atan2/rand/
+        // text/music), the inline bodies here are the group's ONLY readers of the
+        // old state, so they are fully SUPPRESSED (builtins.rs gates each emit on
+        // `!level_group_bridged()`) — the load/show-level pair split out of the
+        // always-emitted music-helpers block, camera + getters + collision +
+        // update_level + spawn/update/draw/kill-enemy + wander_set_sprite. After
+        // the flip the state lives ONLY in libvpy; the desync-trap grep for
+        // CAMERA_*/LEVEL_DATA_PTR/LEVEL_GP_*/SCROLL_LIMIT_*/PITREX_ENEMY_* finds
+        // no reachable inline reader.
+        //   RAND_SEED caveat: it is now referenced ONLY by the already-bridged-
+        //   dead VPy rand path (pitrex_rand→pitrex_random, BLOCK 3 keep-emitted),
+        //   never by enemies (they draw from libvpy s_rng) — so enemies no longer
+        //   own it and there is no enemy-side desync.
+        //   GET_ENEMY_*/SET_ENEMY_* caveat: these inline pool accessors have no
+        //   libvpy counterpart and would read the now-stale PITREX_ENEMY_POOL if
+        //   used AFTER the flip. None of the three gate programs use them; a
+        //   program that does must not mix them with bridged enemies until
+        //   vpy_get/set_enemy_* exist (follow-up).
+        "LOAD_LEVEL"              => Some("vpy_load_level"),
+        "SHOW_LEVEL"             => Some("vpy_show_level"),
+        "UPDATE_LEVEL"           => Some("vpy_update_level"),
+        "SET_CAMERA_X"           => Some("vpy_set_camera_x"),
+        "SET_CAMERA_Y"           => Some("vpy_set_camera_y"),
+        "GET_CAMERA_X"           => Some("vpy_get_camera_x"),
+        "GET_CAMERA_Y"           => Some("vpy_get_camera_y"),
+        "GET_SCROLL_LIMIT_LEFT"  => Some("vpy_get_scroll_limit_left"),
+        "GET_SCROLL_LIMIT_RIGHT" => Some("vpy_get_scroll_limit_right"),
+        "GET_SCROLL_LIMIT_TOP"   => Some("vpy_get_scroll_limit_top"),
+        "GET_SCROLL_LIMIT_BOTTOM"=> Some("vpy_get_scroll_limit_bottom"),
+        "GET_LEVEL_FLOOR_Y"      => Some("vpy_get_level_floor_y"),
+        "LEVEL_COLLISION_X"      => Some("vpy_level_collision_x"),
+        "LEVEL_COLLISION_Y"      => Some("vpy_level_collision_y"),
+        "SPAWN_ENEMIES"          => Some("vpy_spawn_enemies"),
+        "UPDATE_ENEMIES"         => Some("vpy_update_enemies"),
+        "DRAW_ENEMIES"           => Some("vpy_draw_enemies"),
+        "KILL_ENEMY"             => Some("vpy_kill_enemy"),
+
         // Deferred (NOT bridged yet):
         //   SET_INTENSITY — see BLOCK 7: its brightness override is shared by the
         //                still-inline VECTOR_EX/ANIM/SHOW_LEVEL draws; bridged
@@ -345,4 +409,13 @@ pub fn music_group_bridged() -> bool {
 /// image + the brightness override passed as a call-site arg — see BLOCK 7).
 pub fn vector_group_bridged() -> bool {
     is_bridged("DRAW_VECTOR")
+}
+
+/// True if the LEVELS + CAMERA + ENEMIES + collision group (BLOCK 8) is bridged
+/// to libvpy. The whole group shares the level/camera/enemy/RNG state, so it is
+/// flipped atomically. Used by `expressions.rs` (LOAD_LEVEL/SPAWN_ENEMIES/enemy
+/// call-site marshalling) and `builtins.rs` (suppress every inline body that
+/// reads the old state). Keyed on `LOAD_LEVEL` as the group anchor.
+pub fn level_group_bridged() -> bool {
+    is_bridged("LOAD_LEVEL")
 }

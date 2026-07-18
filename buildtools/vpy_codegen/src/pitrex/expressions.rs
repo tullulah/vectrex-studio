@@ -272,6 +272,18 @@ pub fn emit_call(
     if info.name.to_uppercase() == "SPAWN_ENEMIES" {
         if let Some(Expr::StringLit(level_name)) = info.args.first() {
             let sym = level_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            // BLOCK 8 bridge: libvpy vpy_spawn_enemies(img=_NAME_ENEMIES_C,
+            // sprites=_NAME_ENEMY_SPRITES) — the position-independent enemy image
+            // + sprite-index table (the inline path used _NAME_PITREX_ENEMIES +
+            // a count word).
+            if crate::pitrex::libvpy::level_group_bridged() {
+                return Ok(format!(
+                    "    @ SPAWN_ENEMIES(\"{level_name}\") -> libvpy\n\
+                     \x20   ldr     r0, =_{sym}_ENEMIES_C\n\
+                     \x20   ldr     r1, =_{sym}_ENEMY_SPRITES\n\
+                     \x20   bl      vpy_spawn_enemies\n"
+                ));
+            }
             return Ok(format!(
                 "    @ SPAWN_ENEMIES(\"{level_name}\")\n\
                  \x20   ldr     r0, =_{sym}_PITREX_ENEMIES\n\
@@ -283,10 +295,28 @@ pub fn emit_call(
         return Ok(format!("    @ SPAWN_ENEMIES — missing level name arg\n"));
     }
     if info.name.to_uppercase() == "UPDATE_ENEMIES" {
-        return Ok("    @ UPDATE_ENEMIES\n    bl      pitrex_update_enemies\n".to_string());
+        let f = if crate::pitrex::libvpy::level_group_bridged() { "vpy_update_enemies" } else { "pitrex_update_enemies" };
+        return Ok(format!("    @ UPDATE_ENEMIES\n    bl      {f}\n"));
     }
     if info.name.to_uppercase() == "DRAW_ENEMIES" {
-        return Ok("    @ DRAW_ENEMIES\n    bl      pitrex_draw_enemies\n".to_string());
+        let f = if crate::pitrex::libvpy::level_group_bridged() { "vpy_draw_enemies" } else { "pitrex_draw_enemies" };
+        return Ok(format!("    @ DRAW_ENEMIES\n    bl      {f}\n"));
+    }
+    // BLOCK 8 bridge: LOAD_LEVEL("name") → vpy_load_level(level=_NAME_LEVEL_C,
+    // sprites=_NAME_level_sprites) — the position-independent level image + its
+    // sprite-index table (the inline pitrex_load_level took the non-PI
+    // _NAME_LEVEL with link-time pointers). Special-cased here because the generic
+    // asset path only sets r0; vpy_load_level needs the sprite table in r1.
+    if info.name.to_uppercase() == "LOAD_LEVEL" && crate::pitrex::libvpy::level_group_bridged() {
+        if let Some(Expr::StringLit(level_name)) = info.args.first() {
+            let sym = level_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            return Ok(format!(
+                "    @ LOAD_LEVEL(\"{level_name}\") -> libvpy\n\
+                 \x20   ldr     r0, =_{sym}_LEVEL_C\n\
+                 \x20   ldr     r1, =_{sym}_level_sprites\n\
+                 \x20   bl      vpy_load_level\n"
+            ));
+        }
     }
 
     // ── Enemy query/command builtins — ARM32 pool access ───────────────────
@@ -427,10 +457,11 @@ pub fn emit_call(
     }
     if info.name.to_uppercase() == "KILL_ENEMY" {
         let idx_s = emit_expr(info.args.first().ok_or("KILL_ENEMY: missing arg")?, var_addrs)?;
+        let f = if crate::pitrex::libvpy::level_group_bridged() { "vpy_kill_enemy" } else { "pitrex_kill_enemy" };
         return Ok(format!(
             "    @ KILL_ENEMY(idx)\n\
              {idx_s}\
-             \x20   bl      pitrex_kill_enemy\n"
+             \x20   bl      {f}\n"
         ));
     }
     if info.name.to_uppercase() == "ENEMY_FIRE_EVENT" {
