@@ -18,7 +18,10 @@ VEC_SRCS    := $(wildcard assets/vectors/*.vec assets/*.vec)
 # `#include` the per-sprite .vec headers, so VEC_SRCS must be listed FIRST so
 # their gen/<name>.h exist by the time the level header is compiled.
 LEVEL_SRCS  := $(wildcard assets/playground/*.vplay assets/*.vplay)
-ASSET_SRCS  := $(AUDIO_SRCS) $(VEC_SRCS) $(LEVEL_SRCS)
+# .vanim animations compile to gen/<stem>.h (PI anim descriptor + sprite table).
+# They `#include` their frame .vec headers, so VEC_SRCS must precede them.
+ANIM_SRCS   := $(wildcard assets/animations/*.vanim assets/*.vanim)
+ASSET_SRCS  := $(AUDIO_SRCS) $(VEC_SRCS) $(ANIM_SRCS) $(LEVEL_SRCS)
 
 # `gen_audio` retained as an alias for older test Makefiles.
 gen_audio: gen_assets

@@ -1113,6 +1113,117 @@ void vpy_enemy_fire_event(int idx, int hash)
     }
 }
 
+/* vpy_enemy_fire_event_str(idx, "onSnowHit") — the ergonomic C entry point that
+ * matches the VPy `ENEMY_FIRE_EVENT(idx, "name")` builtin. The VPy codegen hashes
+ * the event NAME at compile time (FNV-1a, truncated to 8 bits) and calls
+ * vpy_enemy_fire_event(idx, hash); C has the string at runtime, so we compute the
+ * SAME hash here. The constants/order MUST match pitrex/expressions.rs +
+ * assets.rs::fnv1a_u8 exactly (offset basis 2166136261, prime 16777619, XOR each
+ * byte after multiply, keep low 8 bits) — a mismatch means the SM transition
+ * (whose event table stores those hashes) never fires. */
+static int vpy_fnv1a_u8(const char *s)
+{
+    uint32_t h = 2166136261u;
+    for (; *s; s++) h = (h * 16777619u) ^ (uint8_t)*s;
+    return (int)(h & 0xFF);
+}
+
+void vpy_enemy_fire_event_str(int idx, const char *event)
+{
+    if (!event) return;
+    vpy_enemy_fire_event(idx, vpy_fnv1a_u8(event));
+}
+
+/* ── Standalone animation draw: DRAW_ANIM ────────────────────────────────────
+ * Bit-exact port of the inline pitrex_draw_anim tick/advance state machine, over
+ * the position-independent anim descriptor compiled from a .vanim by
+ * `vpy_cli compile-asset <name>.vanim --format c` (VanimResource::compile_to_c_bytes).
+ * Descriptor layout (little-endian):
+ *   [0] frame_count  [1] loop_flag  [2] base_ref_count  [3] pad
+ *   base_ref_count × u16 vec_index          (drawn every call, before the tick)
+ *   frame_count    × u16 frame_offset       (byte offset to each frame block)
+ *   per frame block: [0] duration_ticks [1] vec_ref_count, then vec_ref_count × u16 vec_index
+ * `sprites[i]` is a compiled `.vec` byte array.
+ *
+ * State: a SINGLE global cursor (frame_idx, ticks_left) shared by all DRAW_ANIM
+ * calls, exactly like the inline PITREX_ANIM_STATE_BUF (one animation ticked per
+ * frame). ticks_left==0 means "uninitialized" → the first call primes frame 0.
+ * speed_mul is fixed at 1 (the common DRAW_ANIM(name, x, y, mirror) form). Vecs
+ * are drawn with per-path brightness (intensity 0), matching the inline path
+ * where pitrex_draw_vector_ex reads per-path brightness. */
+static int s_anim_frame_idx = 0;
+static int s_anim_ticks_left = 0;   /* 0 = uninitialized */
+
+static const unsigned char *anim_frame_block(const unsigned char *anim,
+                                             int base_ref_count, int fi)
+{
+    const unsigned char *frame_off_tbl = anim + 4 + base_ref_count * 2;
+    return anim + rd_u16(frame_off_tbl + fi * 2);
+}
+
+void vpy_draw_anim(const unsigned char *anim, const unsigned char *const *sprites,
+                   int x, int y, int mirror)
+{
+    if (!anim || !sprites) return;
+    int frame_count    = anim[0];
+    int loop_flag      = anim[1];
+    int base_ref_count = anim[2];
+    int mir = mirror ? 1 : 0;
+    if (frame_count <= 0) return;
+
+    int fi = s_anim_frame_idx;
+    int tl = s_anim_ticks_left;
+
+    /* base refs are drawn every call, before tick management (per-path bright). */
+    const unsigned char *base_tbl = anim + 4;
+    for (int b = 0; b < base_ref_count; b++) {
+        const unsigned char *v = sprites[rd_u16(base_tbl + b * 2)];
+        if (v) vpy_draw_vector_ex(v, x, y, mir, 0);
+    }
+
+    /* tick management — bit-exact pitrex_draw_anim par_tick/advance/freeze. */
+    if (tl == 0) {
+        /* first call: init frame 0 (fi already 0). */
+        tl = anim_frame_block(anim, base_ref_count, fi)[0];
+        if (tl < 1) tl = 1;
+        s_anim_ticks_left = tl;
+    } else {
+        tl -= 1;
+        if (tl > 0) {
+            s_anim_ticks_left = tl;                  /* still ticking, same frame */
+        } else {
+            fi += 1;                                 /* ticks exhausted: advance */
+            if (fi >= frame_count) {
+                if (loop_flag) {
+                    fi = 0;                          /* loop: wrap to frame 0 */
+                    s_anim_frame_idx = fi;
+                    tl = anim_frame_block(anim, base_ref_count, fi)[0];
+                    if (tl < 1) tl = 1;
+                    s_anim_ticks_left = tl;
+                } else {
+                    fi = frame_count - 1;            /* freeze: stay on last frame */
+                    s_anim_frame_idx = fi;
+                    s_anim_ticks_left = 1;
+                }
+            } else {
+                s_anim_frame_idx = fi;
+                tl = anim_frame_block(anim, base_ref_count, fi)[0];
+                if (tl < 1) tl = 1;
+                s_anim_ticks_left = tl;
+            }
+        }
+    }
+
+    /* draw the current frame's vec refs (per-path brightness). */
+    const unsigned char *fp = anim_frame_block(anim, base_ref_count, fi);
+    int vec_ref_count = fp[1];
+    const unsigned char *vtbl = fp + 2;
+    for (int k = 0; k < vec_ref_count; k++) {
+        const unsigned char *v = sprites[rd_u16(vtbl + k * 2)];
+        if (v) vpy_draw_vector_ex(v, x, y, mir, 0);
+    }
+}
+
 void vpy_update_enemies(void)
 {
     for (int i = 0; i < s_enemy_count; i++) {

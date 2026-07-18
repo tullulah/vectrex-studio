@@ -2048,10 +2048,27 @@ fn compile_vanim_for_arm(resource: &VanimResource, asset_name: &str) -> String {
 // ============================================================
 //
 // FNV-1a hash truncated to 8 bits — must match the hash in pitrex/expressions.rs
+// AND libvpy's vpy_fnv1a_u8 (vpy.c), so ENEMY_FIRE_EVENT(idx, "name") from C
+// hashes to the same value baked into the SM event table here.
 fn fnv1a_u8(s: &str) -> u8 {
     let mut h: u32 = 2166136261;
     for b in s.bytes() { h = h.wrapping_mul(16777619) ^ (b as u32); }
     (h & 0xFF) as u8
+}
+
+#[cfg(test)]
+mod fnv_tests {
+    use super::fnv1a_u8;
+    #[test]
+    fn fnv1a_u8_matches_libvpy_runtime_hash() {
+        // Ground-truth values the libvpy C runtime (vpy_fnv1a_u8) must produce;
+        // a mismatch means ENEMY_FIRE_EVENT from C never fires the SM transition.
+        assert_eq!(fnv1a_u8("onSnowHit"), 0xAE);
+        assert_eq!(fnv1a_u8("onKick"), 0xEC);
+        assert_eq!(fnv1a_u8("onHit"), 0x19);
+        assert_eq!(fnv1a_u8("onStomp"), 0x01);
+        assert_eq!(fnv1a_u8("onThaw"), 0xD2);
+    }
 }
 
 /// Compute the per-enemy-type feet_offset baked into _DATA[209]. Scans the

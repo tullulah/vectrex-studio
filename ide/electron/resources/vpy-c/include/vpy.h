@@ -46,6 +46,18 @@ void vpy_draw_ellipse(int cx, int cy, int rx, int ry, int b);    /* 16-segment e
 void vpy_draw_vector(const unsigned char *data, int x, int y);
 void vpy_draw_vector_ex(const unsigned char *data, int x, int y, int mirror, int intensity);
 
+/* ---- compiled animations (.vanim) ----------------------------------------
+ * `anim` is a position-independent anim descriptor compiled from a .vanim by
+ *   `vpy_cli compile-asset <file>.vanim --format c --out <name>.h`
+ * and `sprites` its companion frame-sprite pointer table (`{NAME}_anim_sprites`),
+ * each entry pointing at a compiled frame `.vec` array. vpy_draw_anim ticks the
+ * animation (advancing frames by each frame's duration, looping or freezing per
+ * the asset) and draws the current frame at VPy position (x,y). Bit-exact with
+ * the VPy pitrex `pitrex_draw_anim`: a SINGLE global cursor is shared by all
+ * calls (one animation ticked per frame). */
+void vpy_draw_anim(const unsigned char *anim, const unsigned char *const *sprites,
+                   int x, int y, int mirror);
+
 /* ---- text ---- */
 void vpy_set_text_size(int s);       /* glyph scale (VPy units per grid unit ~ s) */
 void vpy_print_text(int x, int y, const char *s);
@@ -108,7 +120,7 @@ void vpy_set_camera_x(int x);
 void vpy_set_camera_y(int y);
 int  vpy_get_camera_x(void);
 int  vpy_get_camera_y(void);
-/* Level scalar accessors (Phase 1 of the LEVELS bridge; not yet codegen-wired). */
+/* Level scalar accessors (bridged: the VPy pitrex codegen calls these). */
 int  vpy_get_scroll_limit_left(void);
 int  vpy_get_scroll_limit_right(void);
 int  vpy_get_scroll_limit_top(void);
@@ -117,9 +129,10 @@ int  vpy_get_level_floor_y(void);
 int  vpy_level_collision_y(int px, int py, int hh);
 int  vpy_level_collision_x(int px, int py, int hw, int hy);
 
-/* Enemy runtime (Phase 2 of the LEVELS bridge; not yet codegen-wired). `img` is
- * a position-independent `_NAME_ENEMIES_C` image; `sprites[i]` a `_{SPRITE}_VEC`
- * image. Wander AI (ai_type==4) + anim draw are turn-3 TODOs. */
+/* Enemy runtime (bridged: the VPy pitrex codegen calls these). `img` is a
+ * position-independent `_NAME_ENEMIES_C` image; `sprites[i]` a `_{SPRITE}_VEC`
+ * image. Full AI (patrol/area/wander) + static & anim draw, all render-verified
+ * bit-exact vs the inline pitrex enemy runtime. */
 void vpy_spawn_enemies(const unsigned char *img, const unsigned char *const *sprites);
 void vpy_update_enemies(void);
 void vpy_draw_enemies(void);
@@ -134,6 +147,10 @@ void vpy_set_enemy_y(int idx, int y);
 void vpy_set_enemy_state(int idx, int st);
 void vpy_set_enemy_dir(int idx, int dir);
 void vpy_enemy_fire_event(int idx, int hash);
+/* Runtime-hashing wrapper matching the VPy `ENEMY_FIRE_EVENT(idx, "name")`
+ * builtin: computes the SAME FNV-1a u8 hash the codegen bakes in and dispatches
+ * it through the enemy's state machine. */
+void vpy_enemy_fire_event_str(int idx, const char *event);
 
 /* Optional VPy-style uppercase aliases so migrated .vpy reads naturally. */
 #ifdef VPY_SHORT_NAMES
@@ -147,6 +164,7 @@ void vpy_enemy_fire_event(int idx, int hash);
 #define DRAW_ELLIPSE    vpy_draw_ellipse
 #define DRAW_VECTOR     vpy_draw_vector
 #define DRAW_VECTOR_EX  vpy_draw_vector_ex
+#define DRAW_ANIM       vpy_draw_anim
 #define SET_TEXT_SIZE   vpy_set_text_size
 #define PRINT_TEXT      vpy_print_text
 #define PRINT_NUMBER    vpy_print_number
@@ -186,6 +204,8 @@ void vpy_enemy_fire_event(int idx, int hash);
 #define SET_ENEMY_Y     vpy_set_enemy_y
 #define SET_ENEMY_STATE vpy_set_enemy_state
 #define SET_ENEMY_DIR   vpy_set_enemy_dir
+/* ENEMY_FIRE_EVENT(idx, "name") — runtime-hashed exactly like the VPy builtin. */
+#define ENEMY_FIRE_EVENT vpy_enemy_fire_event_str
 /* Digital buttons: VPy exposes J1_BUTTON_1..4 (); C maps each to vpy_j1_button(n). */
 #define J1_BUTTON_1()   vpy_j1_button(1)
 #define J1_BUTTON_2()   vpy_j1_button(2)
