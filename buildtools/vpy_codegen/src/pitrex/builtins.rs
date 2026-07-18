@@ -4091,94 +4091,76 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    strb    r0, [r5, #26]       @ dir = right\n");
     s.push_str("    b       .Lpue_skip\n");
 
-    // ── AIRBORNE: two phases.
+    // ── AIRBORNE: one clean parabola, matching the m6809 runtime.
     //
-    //   Phase A (X moving): step X toward target by AIR_SPEED=4 and run the
-    //                       parabolic Y arc (y += vy; vy -= 1; vy clamped to
-    //                       >= -3). This is the visible jump.
+    // Each frame: step X toward target_x by AIR_SPEED_X=2 (clamped, never
+    // overshoots) and run the parabolic Y arc (y += vy; vy -= 1; vy clamped
+    // >= -4). LAND the moment the *descending* arc crosses the target
+    // platform's Y. Landing is Y-crossing-driven (not "X reached target_x,
+    // then lerp Y") so the whole motion is a single continuous arc — no
+    // halfway stop + second hop.
     //
-    //   Phase B (X done):   lerp Y toward target_y at AIR_SPEED until reached,
-    //                       then land. Guarantees the AIRBORNE state ends in
-    //                       a bounded number of frames regardless of arc shape
-    //                       — previously, long jump_across with vy capped at
-    //                       -3 made Y diverge past target and the proximity
-    //                       check never fired, leaving enemies floating and
-    //                       the frame budget blown (visible as flicker and
-    //                       brighter beam dwell).
+    // Termination needs no timer: after the peak, gravity pulls Y down without
+    // bound, so `y <= target_y` becomes (and stays) true within a bounded
+    // number of frames for every transition type. drop enters with vy<0 and
+    // lands as soon as it descends onto the target. This is exactly the m6809
+    // AIRBORNE semantics (X 2/frame, gravity clamp -4, descending Y-crossing),
+    // which fixed the old two-phase float/proximity divergence for jump_across.
     s.push_str(".Lpue_w_air:\n");
-    s.push_str("    ldrsh   r10, [r5, #4]       @ current x\n");
-    s.push_str("    ldrsh   r8, [r5, #14]       @ target_x\n");
-    s.push_str("    sub     r6, r8, r10         @ dx\n");
-    s.push_str("    cmp     r6, #0\n");
-    s.push_str("    beq     .Lpue_w_air_y_lerp  @ Phase B: lerp Y, then land\n");
-    // Phase A: X step + parabolic Y.
-    s.push_str("    bgt     .Lpue_w_air_xright\n");
-    s.push_str("    sub     r10, r10, #4        @ x -= AIR_SPEED\n");
-    s.push_str("    cmp     r10, r8\n");
-    s.push_str("    it      lt\n");
-    s.push_str("    movlt   r10, r8\n");
-    s.push_str("    strh    r10, [r5, #4]\n");
-    s.push_str("    b       .Lpue_w_air_y_arc\n");
-    s.push_str(".Lpue_w_air_xright:\n");
-    s.push_str("    add     r10, r10, #4        @ x += AIR_SPEED\n");
-    s.push_str("    cmp     r10, r8\n");
-    s.push_str("    it      gt\n");
-    s.push_str("    movgt   r10, r8\n");
-    s.push_str("    strh    r10, [r5, #4]\n");
-    s.push_str(".Lpue_w_air_y_arc:\n");
-    s.push_str("    ldrsh   r6, [r5, #6]\n");
-    s.push_str("    ldrsh   r7, [r5, #8]        @ vy\n");
-    s.push_str("    add     r6, r6, r7\n");
-    s.push_str("    strh    r6, [r5, #6]        @ y += vy\n");
-    s.push_str("    sub     r7, r7, #1\n");
-    s.push_str("    mvn     r0, #2              @ -3 (terminal)\n");
-    s.push_str("    cmp     r7, r0\n");
-    s.push_str("    it      lt\n");
-    s.push_str("    movlt   r7, r0              @ clamp vy >= -3\n");
-    s.push_str("    strh    r7, [r5, #8]\n");
-    s.push_str("    b       .Lpue_skip\n");
-
-    // Phase B: X is at target_x. Step Y toward target_y at AIR_SPEED, land
-    // when equal. r6 is reused as current y, r9 as target_y.
-    s.push_str(".Lpue_w_air_y_lerp:\n");
+    // target_y = area[current_area_idx].y + feet_offset  (current_area = target).
     s.push_str("    ldr     r8, [r5, #28]       @ areas_ptr\n");
     s.push_str("    ldrb    r2, [r5, #11]       @ current_area_idx (= target)\n");
     s.push_str("    lsl     r2, r2, #3\n");
     s.push_str("    add     r8, r8, r2\n");
     s.push_str("    add     r8, r8, #8          @ &area[target]\n");
-    s.push_str("    ldrsh   r9, [r8]            @ target_y\n");
-    s.push_str("    ldrsh   r6, [r5, #6]\n");
-    s.push_str("    sub     r0, r9, r6          @ target_y - y\n");
-    s.push_str("    cmp     r0, #0\n");
-    s.push_str("    beq     .Lpue_w_air_land\n");
-    s.push_str("    bgt     .Lpue_w_air_ylerp_up\n");
-    // y > target: step down
-    s.push_str("    sub     r6, r6, #4\n");
-    s.push_str("    cmp     r6, r9\n");
-    s.push_str("    it      lt\n");
-    s.push_str("    movlt   r6, r9\n");
-    s.push_str("    strh    r6, [r5, #6]\n");
-    s.push_str("    cmp     r6, r9\n");
-    s.push_str("    bne     .Lpue_skip\n");
-    s.push_str("    b       .Lpue_w_air_land\n");
-    s.push_str(".Lpue_w_air_ylerp_up:\n");
-    s.push_str("    add     r6, r6, #4\n");
-    s.push_str("    cmp     r6, r9\n");
-    s.push_str("    it      gt\n");
-    s.push_str("    movgt   r6, r9\n");
-    s.push_str("    strh    r6, [r5, #6]\n");
-    s.push_str("    cmp     r6, r9\n");
-    s.push_str("    bne     .Lpue_skip\n");
-    s.push_str(".Lpue_w_air_land:\n");
-    // Apply feet_offset (from _DATA[209]) so the sprite lands feet-first on
-    // the target platform, matching the spawn snap convention.
+    s.push_str("    ldrsh   r9, [r8]            @ target area y\n");
     s.push_str("    ldr     r0, [r5, #20]       @ type_data_ptr\n");
     s.push_str("    cmp     r0, #0\n");
-    s.push_str("    beq     .Lpue_w_air_land_no_off\n");
+    s.push_str("    beq     .Lpue_w_air_nofeet\n");
     s.push_str("    ldrsb   r0, [r0, #209]      @ feet_offset\n");
-    s.push_str("    add     r9, r9, r0\n");
-    s.push_str(".Lpue_w_air_land_no_off:\n");
-    s.push_str("    strh    r9, [r5, #6]        @ snap y = target_y + feet_offset\n");
+    s.push_str("    add     r9, r9, r0          @ target_y = area.y + feet\n");
+    s.push_str(".Lpue_w_air_nofeet:\n");
+    // Step X toward target_x by AIR_SPEED_X = 2, clamped so it never overshoots.
+    s.push_str("    ldrsh   r10, [r5, #4]       @ x\n");
+    s.push_str("    ldrsh   r8, [r5, #14]       @ target_x\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    beq     .Lpue_w_air_yarc    @ x already at target_x\n");
+    s.push_str("    bgt     .Lpue_w_air_xleft\n");
+    s.push_str("    add     r10, r10, #2        @ x += AIR_SPEED_X\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    it      gt\n");
+    s.push_str("    movgt   r10, r8             @ clamp to target_x\n");
+    s.push_str("    strh    r10, [r5, #4]\n");
+    s.push_str("    b       .Lpue_w_air_yarc\n");
+    s.push_str(".Lpue_w_air_xleft:\n");
+    s.push_str("    sub     r10, r10, #2        @ x -= AIR_SPEED_X\n");
+    s.push_str("    cmp     r10, r8\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r10, r8             @ clamp to target_x\n");
+    s.push_str("    strh    r10, [r5, #4]\n");
+    // Parabolic Y: y += vy; vy -= 1; clamp vy >= -4.
+    s.push_str(".Lpue_w_air_yarc:\n");
+    s.push_str("    ldrsh   r6, [r5, #6]        @ y\n");
+    s.push_str("    ldrsh   r7, [r5, #8]        @ vy\n");
+    s.push_str("    add     r6, r6, r7\n");
+    s.push_str("    strh    r6, [r5, #6]        @ y += vy\n");
+    s.push_str("    sub     r7, r7, #1\n");
+    s.push_str("    mvn     r0, #3              @ -4 (terminal velocity)\n");
+    s.push_str("    cmp     r7, r0\n");
+    s.push_str("    it      lt\n");
+    s.push_str("    movlt   r7, r0              @ clamp vy >= -4\n");
+    s.push_str("    strh    r7, [r5, #8]\n");
+    // Land when (type==drop OR descending vy<0) AND y has reached/passed target_y.
+    s.push_str("    ldrb    r0, [r5, #15]       @ transition type\n");
+    s.push_str("    cmp     r0, #2\n");
+    s.push_str("    beq     .Lpue_w_air_chk     @ drop: eligible immediately\n");
+    s.push_str("    cmp     r7, #0\n");
+    s.push_str("    bge     .Lpue_skip          @ ascending (vy>=0): keep flying\n");
+    s.push_str(".Lpue_w_air_chk:\n");
+    s.push_str("    cmp     r6, r9              @ y vs target_y\n");
+    s.push_str("    bgt     .Lpue_skip          @ y > target_y: still above, keep arcing\n");
+    // Land: snap y onto the platform (target_y already includes feet) and WALK.
+    s.push_str("    strh    r9, [r5, #6]        @ y = target_y\n");
     s.push_str("    mov     r0, #0\n");
     s.push_str("    strb    r0, [r5, #10]       @ sub_state = WALK\n");
     s.push_str("    @ fall through to skip\n");

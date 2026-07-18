@@ -1248,7 +1248,7 @@ void vpy_update_enemies(void)
             const unsigned char *tp = area_base + area_count * 6;    /* -> trans_count u16 */
             int trans_count = rd_u16(tp);
             const unsigned char *trans_base = tp + 2;                /* trans[] (8B stride) */
-            const int SPEED = VPY_PATROL_SPEED, AIR = 4;
+            const int SPEED = VPY_PATROL_SPEED;
 
             if (en->sub_state == 3) {
                 /* WALK_TO_TAKEOFF: walk X toward from_x (idle_timer). */
@@ -1271,27 +1271,30 @@ void vpy_update_enemies(void)
                 continue;
             }
             if (en->sub_state == 2) {
-                /* AIRBORNE. Phase A: X step + parabolic Y; Phase B: Y-lerp + land. */
+                /* AIRBORNE: one clean parabola, matching the m6809 runtime.
+                 * Step X toward target_x by AIR_X=2 (clamped, never overshoots)
+                 * and run the parabolic Y arc (y += vy; vy -= 1; clamp vy>=-4).
+                 * LAND the instant the *descending* arc crosses the target
+                 * platform Y. The landing is Y-crossing-driven (not "X reached
+                 * target_x, then lerp Y back up"), so the motion is a single
+                 * continuous arc — no halfway stop + second hop. Termination
+                 * needs no timer: after the peak, gravity pulls Y down without
+                 * bound, so y<=target_y becomes (and stays) true within a
+                 * bounded number of frames for every transition type; drop
+                 * enters with vy<0 and lands as soon as it descends. */
+                const int AIR_X = 2;
                 int x = en->x, target_x = en->cur_target;
-                int dx = target_x - x;
-                if (dx != 0) {
-                    if (dx > 0) { x += AIR; if (x > target_x) x = target_x; }
-                    else        { x -= AIR; if (x < target_x) x = target_x; }
-                    en->x = x;
-                    int y = en->y, vy = en->idle_timer;
-                    y += vy; en->y = y;
-                    vy -= 1; if (vy < -3) vy = -3; en->idle_timer = vy;
-                    continue;
+                if (x < target_x)      { x += AIR_X; if (x > target_x) x = target_x; en->x = x; }
+                else if (x > target_x) { x -= AIR_X; if (x < target_x) x = target_x; en->x = x; }
+                int y = en->y, vy = en->idle_timer;
+                y += vy; en->y = y;
+                vy -= 1; if (vy < -4) vy = -4; en->idle_timer = vy;
+                /* target_y = target area's y + feet_offset (same as the snap). */
+                int ty = rd_i16(area_base + en->cur_area * 6) + en->feet_offset;
+                if ((en->w_type == 2 || vy < 0) && y <= ty) {
+                    en->y = ty;                              /* snap onto platform */
+                    en->sub_state = 0;                       /* WALK */
                 }
-                /* Phase B: X done — lerp Y toward target_y, then land. */
-                int ty = rd_i16(area_base + en->cur_area * 6);
-                int y = en->y, d = ty - y, landed = 0;
-                if (d == 0) landed = 1;
-                else if (d > 0) { y += AIR; if (y > ty) y = ty; en->y = y; landed = (y == ty); }
-                else            { y -= AIR; if (y < ty) y = ty; en->y = y; landed = (y == ty); }
-                if (!landed) continue;
-                en->y = ty + en->feet_offset;
-                en->sub_state = 0;                           /* WALK */
                 continue;
             }
             if (en->sub_state == 1) {
