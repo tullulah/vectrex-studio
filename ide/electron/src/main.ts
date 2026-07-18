@@ -1764,44 +1764,51 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
       // Use finalBinPath which accounts for project output path
       const binPath = finalBinPath;
       
-      // Phase 1: Check if ASM was generated
-      mainWindow?.webContents.send('run://status', `✓ Compilation Phase 1: Checking ASM generation...`);
-      try {
-        const asmExists = await fs.access(outAsm).then(() => true).catch(() => false);
-        if (!asmExists) {
-          mainWindow?.webContents.send('run://stderr', `ERROR: ASM file not generated: ${outAsm}`);
-          mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: ASM generation failed`);
-          
-          // Parse semantic errors from stdout/stderr even when ASM is not generated
-          const allOutput = stdoutBuf + '\n' + stderrBuf;
-          const diags = parseCompilerDiagnostics(allOutput, fsPath);
-          if (diags.length) {
-            mainWindow?.webContents.send('run://diagnostics', diags);
+      // Phase 1: Check if ASM was generated.
+      // Only m6809 writes a sibling `<name>.asm`; the ARM backends (pitrex/rp2350)
+      // write `build/<name>.s` instead, so the `.asm` existence check does not
+      // apply to them — the Phase 2 binary check (which validates the real
+      // .img/.bin artifact) is the authoritative success signal for ARM targets.
+      const isArmTarget = target === 'pitrex' || target === 'rp2350';
+      if (!isArmTarget) {
+        mainWindow?.webContents.send('run://status', `✓ Compilation Phase 1: Checking ASM generation...`);
+        try {
+          const asmExists = await fs.access(outAsm).then(() => true).catch(() => false);
+          if (!asmExists) {
+            mainWindow?.webContents.send('run://stderr', `ERROR: ASM file not generated: ${outAsm}`);
+            mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: ASM generation failed`);
+
+            // Parse semantic errors from stdout/stderr even when ASM is not generated
+            const allOutput = stdoutBuf + '\n' + stderrBuf;
+            const diags = parseCompilerDiagnostics(allOutput, fsPath);
+            if (diags.length) {
+              mainWindow?.webContents.send('run://diagnostics', diags);
+            }
+
+            return resolvePromise({ error: 'asm_not_generated', detail: `Expected ASM file: ${outAsm}` });
           }
-          
-          return resolvePromise({ error: 'asm_not_generated', detail: `Expected ASM file: ${outAsm}` });
-        }
-        
-        const asmStats = await fs.stat(outAsm);
-        if (asmStats.size === 0) {
-          mainWindow?.webContents.send('run://stderr', `ERROR: ASM file is empty: ${outAsm}`);
-          mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: Empty ASM file generated`);
-          
-          // Parse semantic errors from stdout/stderr even when compilation "succeeds" but generates empty ASM
-          const allOutput = stdoutBuf + '\n' + stderrBuf;
-          const diags = parseCompilerDiagnostics(allOutput, fsPath);
-          if (diags.length) {
-            mainWindow?.webContents.send('run://diagnostics', diags);
+
+          const asmStats = await fs.stat(outAsm);
+          if (asmStats.size === 0) {
+            mainWindow?.webContents.send('run://stderr', `ERROR: ASM file is empty: ${outAsm}`);
+            mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: Empty ASM file generated`);
+
+            // Parse semantic errors from stdout/stderr even when compilation "succeeds" but generates empty ASM
+            const allOutput = stdoutBuf + '\n' + stderrBuf;
+            const diags = parseCompilerDiagnostics(allOutput, fsPath);
+            if (diags.length) {
+              mainWindow?.webContents.send('run://diagnostics', diags);
+            }
+
+            return resolvePromise({ error: 'empty_asm_file', detail: `ASM file exists but is empty: ${outAsm}` });
           }
-          
-          return resolvePromise({ error: 'empty_asm_file', detail: `ASM file exists but is empty: ${outAsm}` });
+
+          mainWindow?.webContents.send('run://status', `✓ Phase 1 SUCCESS: ASM generated (${asmStats.size} bytes)`);
+        } catch (e: any) {
+          mainWindow?.webContents.send('run://stderr', `ERROR checking ASM file: ${e.message}`);
+          mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: Error checking ASM file`);
+          return resolvePromise({ error: 'asm_check_failed', detail: e.message });
         }
-        
-        mainWindow?.webContents.send('run://status', `✓ Phase 1 SUCCESS: ASM generated (${asmStats.size} bytes)`);
-      } catch (e: any) {
-        mainWindow?.webContents.send('run://stderr', `ERROR checking ASM file: ${e.message}`);
-        mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: Error checking ASM file`);
-        return resolvePromise({ error: 'asm_check_failed', detail: e.message });
       }
       
       // Phase 2: Check if binary was assembled
