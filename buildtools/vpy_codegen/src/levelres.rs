@@ -2375,7 +2375,39 @@ impl VPlayLevel {
 /// compiler (see `VPlayLevel::compile_to_c_bytes`).
 pub fn compile_vplay_file_to_c_bytes(path: &Path) -> Result<(Vec<u8>, Vec<String>)> {
     let level = VPlayLevel::load(path)?;
-    Ok(level.compile_to_c_bytes())
+
+    // Collect collision meshes + natural dims from the sibling assets/vectors/ dir,
+    // exactly like the ARM/PiTrex full build (pitrex/assets.rs). Without this the
+    // C level image carries EMPTY meshes, so every platform falls back to a solid
+    // AABB box (mesh_off=0) — the player collides with a platform's whole box and
+    // can't walk under it, whereas a mesh-backed platform is a thin one-way floor.
+    // The .vplay lives at <proj>/assets/playground/<name>.vplay; vecs at
+    // <proj>/assets/vectors/*.vec (keyed by file stem = the level's vectorName).
+    let mut vec_meshes: std::collections::HashMap<String, Vec<crate::vecres::VecMeshSegment>> =
+        std::collections::HashMap::new();
+    let mut dims: std::collections::HashMap<String, (i32, i32)> = std::collections::HashMap::new();
+    if let Some(vectors_dir) = path.parent().and_then(|p| p.parent()).map(|p| p.join("vectors")) {
+        if let Ok(entries) = std::fs::read_dir(&vectors_dir) {
+            for entry in entries.flatten() {
+                let vp = entry.path();
+                if vp.extension().and_then(|e| e.to_str()) != Some("vec") { continue; }
+                let Ok(text) = std::fs::read_to_string(&vp) else { continue; };
+                let Ok(res) = serde_json::from_str::<crate::vecres::VecResource>(&text) else { continue; };
+                let name = vp.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+                let (min_x, max_x) = res.calculate_x_bounds();
+                let (_min_y, max_y) = res.calculate_y_bounds();
+                let hw = ((max_x - min_x) as i32) / 2;
+                let hh = (max_y as i32).max(1);
+                dims.insert(name.clone(), (hw, hh));
+                if let Some(mesh) = &res.collision_mesh {
+                    if !mesh.segments.is_empty() {
+                        vec_meshes.insert(name.clone(), mesh.segments.clone());
+                    }
+                }
+            }
+        }
+    }
+    Ok(level.compile_to_c_bytes_with_meshes(&vec_meshes, &dims))
 }
 
 /// Compile a `.vplay` level's ENEMY runtime into position-independent C data.

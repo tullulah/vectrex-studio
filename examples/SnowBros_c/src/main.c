@@ -135,24 +135,13 @@ static void load_current_level(void)
     SET_CAMERA_Y(camera_y);
     SPAWN_ENEMIES(WORLD_1_1_enemies, WORLD_1_1_enemy_sprites);
 
-    /* Ground reference for the walk-off guard (screen-bottom floor). */
+    /* Spawn the player on the screen-bottom floor — EXACTLY as VPy
+     * load_current_level does (spawn_floor_y = GET_LEVEL_FLOOR_Y() + PLAYER_HH;
+     * player_y = spawn_floor_y). The earlier "search a platform with
+     * LEVEL_COLLISION_Y" diverged from the reference and landed the player at a
+     * different height than the VPy build. */
     spawn_floor_y = GET_LEVEL_FLOOR_Y() + PLAYER_HH;
-
-    /* Snap the player onto the REAL platform surface in its spawn column.
-     * GET_LEVEL_FLOOR_Y is only the screen-bottom fallback; SnowBros platforms
-     * are solid AABB boxes, so dropping the player there wedges it under/beside
-     * a box (its head clips the box -> LEVEL_COLLISION_X ejects it). Instead
-     * search downward from the top of the screen: LEVEL_COLLISION_Y returns the
-     * highest floor below the search feet, i.e. the platform top to stand on.
-     * (Matches the VPy "search point -> LEVEL_COLLISION_Y adjusts to the real
-     * floor" intent.) Fall back to the screen ground if nothing is found. */
-    {
-        /* Search from screen centre (not the very top) so the player lands on
-         * the first platform below mid-screen -> the bottom spawn platform,
-         * matching the .vplay player spawn point, not the topmost platform. */
-        int fy = LEVEL_COLLISION_Y(player_x, camera_y, PLAYER_HH);
-        player_y = (fy <= -9999) ? spawn_floor_y : fy;
-    }
+    player_y = spawn_floor_y;
     /* Block 7: PLAY_MUSIC("Yukidama-Ondo") once .vmus assets exist. */
 }
 
