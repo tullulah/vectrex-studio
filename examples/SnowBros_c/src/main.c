@@ -403,6 +403,13 @@ void sbc_force_snow0(int x, int y) { snow0_x = x; snow0_y = y; snow0_vx = 0; sno
                                      snow0_life = SNOW_LIFE_NORMAL; snow0_active = 1; }
 void sbc_run_snow_check(void)      { check_snowball_enemy_collision(); }
 int  sbc_thaw_timer(int i)         { return (i>=0 && i<MAX_ENEMY_SLOTS) ? thaw_timers[i] : -1; }
+/* enemy-pool observation (mirror GET_ENEMY_* used by the game code). */
+int  sbc_enemy_active(int i)       { return GET_ENEMY_ACTIVE(i); }
+int  sbc_enemy_state(int i)        { return GET_ENEMY_STATE(i); }
+int  sbc_enemy_x(int i)            { return GET_ENEMY_X(i); }
+int  sbc_enemy_y(int i)            { return GET_ENEMY_Y(i); }
+/* drive one full playing-state frame (locomotion + thaw + collision). */
+void sbc_update_thaw(void)         { update_thaw(); }
 #endif
 
 int main(void)

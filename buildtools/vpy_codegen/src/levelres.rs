@@ -2431,13 +2431,49 @@ pub fn compile_enemies_to_c_bytes(
 ) -> Result<(Vec<u8>, Vec<String>, Vec<(String, Vec<u8>)>)> {
     let level = VPlayLevel::load(path)?;
     let name = level.metadata.name.to_uppercase().replace('-', "_").replace(' ', "_");
-    let venemy_dir = path.parent().and_then(|p| p.parent()).map(|p| p.join("enemies"));
+    let assets_dir = path.parent().and_then(|p| p.parent());
+    let venemy_dir = assets_dir.map(|p| p.join("enemies"));
+
+    // Load the level's sibling `vectors/` directory so the C enemy image carries
+    // the SAME auto-derived walkable AREAS + inter-area transitions the m6809/ARM
+    // game build derives (emit_pitrex_assets builds these maps from the placed
+    // platforms' .vec `walkableAreas`). Without them every wander enemy's
+    // area_count is 0 and libvpy's UPDATE_ENEMIES leaves them stationary — the C
+    // build would diverge from the VPy, whose enemies wander the platforms.
+    let mut dims: HashMap<String, (i32, i32)> = HashMap::new();
+    let mut vec_walk_areas: HashMap<String, Vec<crate::vecres::VecWalkableArea>> = HashMap::new();
+    let mut vec_meshes: HashMap<String, Vec<crate::vecres::VecMeshSegment>> = HashMap::new();
+    let mut vec_min_y: HashMap<String, i16> = HashMap::new();
+    if let Some(vectors_dir) = assets_dir.map(|p| p.join("vectors")) {
+        if let Ok(entries) = std::fs::read_dir(&vectors_dir) {
+            for entry in entries.flatten() {
+                let vp = entry.path();
+                if vp.extension().and_then(|e| e.to_str()) != Some("vec") { continue; }
+                let Ok(text) = std::fs::read_to_string(&vp) else { continue };
+                let Ok(res) = serde_json::from_str::<crate::vecres::VecResource>(&text) else { continue };
+                let key = res.name.to_lowercase();
+                let (min_x, max_x) = res.calculate_x_bounds();
+                let (my, max_y) = res.calculate_y_bounds();
+                dims.insert(key.clone(), (((max_x - min_x) as i32) / 2, (max_y as i32).max(1)));
+                vec_min_y.insert(key.clone(), my);
+                if let Some(mesh) = &res.collision_mesh {
+                    if !mesh.segments.is_empty() {
+                        vec_meshes.insert(key.clone(), mesh.segments.clone());
+                    }
+                }
+                if !res.walkable_areas.is_empty() {
+                    vec_walk_areas.insert(key, res.walkable_areas.clone());
+                }
+            }
+        }
+    }
+
     let asm = level.compile_to_arm_asm_with_venemy_and_meshes(
-        &HashMap::new(),
+        &dims,
         venemy_dir.as_deref(),
-        &HashMap::new(),
-        &HashMap::new(),
-        &HashMap::new(),
+        &vec_meshes,
+        &vec_walk_areas,
+        &vec_min_y,
     );
 
     let bytes = extract_asm_byte_section(&asm, &format!("_{name}_ENEMIES_C:"));
