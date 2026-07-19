@@ -2451,7 +2451,17 @@ pub fn compile_enemies_to_c_bytes(
                 if vp.extension().and_then(|e| e.to_str()) != Some("vec") { continue; }
                 let Ok(text) = std::fs::read_to_string(&vp) else { continue };
                 let Ok(res) = serde_json::from_str::<crate::vecres::VecResource>(&text) else { continue };
-                let key = res.name.to_lowercase();
+                // Key by the FILE STEM, not the .vec's internal `name` field:
+                // placed objects reference platforms by file name (their
+                // `vectorName`), and some .vec files carry a stale/duplicate
+                // `name` (e.g. platform1.vec + platform3.vec both name themselves
+                // "platform2"). The m6809/ARM game build keys these maps by the
+                // asset file stem for exactly this reason; mirror it so the C
+                // enemy image derives the SAME per-platform walkable areas.
+                let key = match vp.file_stem().and_then(|s| s.to_str()) {
+                    Some(s) => s.to_lowercase(),
+                    None => continue,
+                };
                 let (min_x, max_x) = res.calculate_x_bounds();
                 let (my, max_y) = res.calculate_y_bounds();
                 dims.insert(key.clone(), (((max_x - min_x) as i32) / 2, (max_y as i32).max(1)));
