@@ -354,13 +354,16 @@ export function PlaygroundPanel() {
           return;
         }
 
-        // Get vectors from project config
-        const vectorResources = vpyProject.config.resources?.vectors;
+        // Get vectors from project config. VPy projects (.vpyproj) list them under
+        // [resources] vectors; C-external projects (.cvproj) have no such config, so
+        // fall back to the conventional assets/vectors/ dir — the .vec files are
+        // physically there regardless of project type (the glob logic below scans it).
+        let vectorResources = vpyProject.config?.resources?.vectors;
         console.log('[Playground] Vector resources:', vectorResources);
-        
+
         if (!vectorResources || vectorResources.length === 0) {
-          console.log('[Playground] No vectors in project');
-          return;
+          console.log('[Playground] No vectors in project config — scanning assets/vectors/');
+          vectorResources = ['assets/vectors/*.vec'];
         }
 
         const projectPath = vpyProject.rootDir;
