@@ -72,6 +72,11 @@ enum {
 #define TITCHI_STATE_NORMAL 0
 #define TITCHI_STATE_BALL   3
 
+/* ── Ball-rolling / kick (mirror main.vpy) ─────────────────────────────────── */
+#define BALL_SPEED    4       /* rolling horizontal speed */
+#define BALL_GRAVITY  1       /* per-frame downward accel */
+#define BALL_MAX_FALL 8       /* terminal fall speed */
+
 /* ── Globals (mirror main.vpy) ────────────────────────────────────────────── */
 static int game_state    = STATE_TITLE;
 static int score         = 0;
@@ -96,7 +101,16 @@ static int snow2_active = 0, snow2_x = 0, snow2_y = 0, snow2_vx = 0, snow2_vy = 
 
 /* ── Enemy freeze/thaw state (one slot per enemy, managed here) ────────────── */
 static int thaw_timers[MAX_ENEMY_SLOTS] = {0};
-static int ball_rolling[MAX_ENEMY_SLOTS] = {0};   /* ball-rolling system -> later sub-step */
+
+/* ── Ball-rolling state (one slot per enemy, mirror main.vpy) ──────────────── */
+static int ball_rolling[MAX_ENEMY_SLOTS]  = {0};   /* 1 = ball in motion */
+static int ball_vx_arr[MAX_ENEMY_SLOTS]   = {0};
+static int ball_vy_arr[MAX_ENEMY_SLOTS]   = {0};
+static int ball_bounces[MAX_ENEMY_SLOTS]  = {0};   /* bounces left before it pops */
+static int ball_collided[MAX_ENEMY_SLOTS] = {0};   /* per-frame ball-vs-ball guard */
+static int ball_launched = 0;                      /* try_launch_ball found a ball */
+
+static void reset_balls(void);   /* fwd: called from load_current_level */
 
 /* level camera for a given level (screen N stacks +256 above screen 1). */
 static int level_camera_y(int level)
@@ -129,7 +143,8 @@ static void load_current_level(void)
     shoot_cooldown = 0;
     snow_life_max = SNOW_LIFE_NORMAL;
     snow0_active = snow1_active = snow2_active = 0;
-    for (int i = 0; i < MAX_ENEMY_SLOTS; i++) { thaw_timers[i] = 0; ball_rolling[i] = 0; }
+    for (int i = 0; i < MAX_ENEMY_SLOTS; i++) thaw_timers[i] = 0;
+    reset_balls();
 
     LOAD_LEVEL(WORLD_1_1_level, WORLD_1_1_level_sprites);
     SET_CAMERA_Y(camera_y);
@@ -145,7 +160,8 @@ static void load_current_level(void)
     /* Block 7: PLAY_MUSIC("Yukidama-Ondo") once .vmus assets exist. */
 }
 
-static void try_shoot(void);   /* fwd: called from update_player */
+static void try_shoot(void);        /* fwd: called from update_player */
+static void try_launch_ball(void);  /* fwd: kick a nearby frozen ball */
 
 /* ── Player (mirror main.vpy update_player/draw_player) ────────────────────── */
 static void update_player(void)
@@ -199,12 +215,17 @@ static void update_player(void)
         player_on_ground = 1;
     }
 
-    /* Shoot a snowball with button 2 (ball-rolling try_launch_ball -> later,
-     * with the enemy freeze/ball system). */
+    /* Button 2: kick a nearby frozen ball if touching one, else shoot a
+     * snowball. Mirror main.vpy exactly: try_launch_ball sets ball_launched
+     * when it kicks; only when it did NOT do we spawn a snowball. */
     if (shoot_cooldown > 0) shoot_cooldown--;
     if (J1_BUTTON_2() && shoot_cooldown == 0) {
-        snow_spawn_vx = (player_facing == 1) ? -SNOW_SPEED : SNOW_SPEED;
-        try_shoot();
+        ball_launched = 0;
+        try_launch_ball();
+        if (ball_launched == 0) {
+            snow_spawn_vx = (player_facing == 1) ? -SNOW_SPEED : SNOW_SPEED;
+            try_shoot();
+        }
     }
 }
 
@@ -324,6 +345,142 @@ static void update_thaw(void)
     }
 }
 
+/* ── Ball-rolling / kick (mirror main.vpy) ─────────────────────────────────── */
+
+/* Reset the whole ball system on level load (mirror reset_balls). */
+static void reset_balls(void)
+{
+    for (int i = 0; i < MAX_ENEMY_SLOTS; i++) {
+        ball_rolling[i]  = 0;
+        ball_vx_arr[i]   = 0;
+        ball_vy_arr[i]   = 0;
+        ball_bounces[i]  = 0;
+        ball_collided[i] = 0;
+    }
+}
+
+/* Kick a nearby frozen (BALL-state) enemy into a rolling ball. Launches at most
+ * one per call and sets ball_launched so update_player skips the snowball. */
+static void try_launch_ball(void)
+{
+    int found = 0;
+    for (int i = 0; i < MAX_ENEMY_SLOTS; i++) {
+        if (found) break;
+        if (GET_ENEMY_ACTIVE(i) != 1) continue;
+        if (GET_ENEMY_STATE(i) != TITCHI_STATE_BALL) continue;
+        if (ball_rolling[i] != 0) continue;
+        int ex = GET_ENEMY_X(i), ey = GET_ENEMY_Y(i);
+        int dx = player_x - ex; if (dx < 0) dx = -dx;
+        int dy = player_y - ey; if (dy < 0) dy = -dy;
+        if (dx < 25 && dy < 25) {
+            ball_rolling[i]  = 1;
+            ball_vx_arr[i]   = (player_facing == 1) ? -BALL_SPEED : BALL_SPEED;
+            ball_vy_arr[i]   = 0;
+            ball_bounces[i]  = vpy_rand_range(3, 5);
+            thaw_timers[i]   = 0;
+            shoot_cooldown   = SHOOT_COOLDOWN_MAX;
+            ball_launched    = 1;
+            found            = 1;
+        }
+    }
+}
+
+/* A rolling ball flattens any not-yet-ball enemy it overlaps (mirror
+ * ball_kill_enemies). The +200 is intrinsic to the kill in main.vpy. */
+static void ball_kill_enemies(int bx, int by)
+{
+    for (int j = 0; j < MAX_ENEMY_SLOTS; j++) {
+        if (GET_ENEMY_ACTIVE(j) != 1) continue;
+        int st = GET_ENEMY_STATE(j);
+        if (st < TITCHI_STATE_BALL) {
+            int ejx = GET_ENEMY_X(j), ejy = GET_ENEMY_Y(j);
+            int dx = bx - ejx; if (dx < 0) dx = -dx;
+            int dy = by - ejy; if (dy < 0) dy = -dy;
+            if (dx < 24 && dy < 24) {
+                KILL_ENEMY(j);
+                score += 200;
+            }
+        }
+    }
+}
+
+/* Physics for rolling balls: gravity, platform/floor landing (raycast from the
+ * previous Y like the player), wall/mesh bounce with a bounce budget, then it
+ * kills enemies it touches. When bounces run out the ball pops (mirror
+ * update_balls). */
+static void update_balls(void)
+{
+    for (int i = 0; i < MAX_ENEMY_SLOTS; i++) {
+        if (ball_rolling[i] != 1) continue;
+
+        ball_vy_arr[i] -= BALL_GRAVITY;
+        if (ball_vy_arr[i] < -BALL_MAX_FALL) ball_vy_arr[i] = -BALL_MAX_FALL;
+
+        int prev_by = GET_ENEMY_Y(i);
+        int bx = GET_ENEMY_X(i) + ball_vx_arr[i];
+        int by = prev_by + ball_vy_arr[i];
+
+        /* Falling: land on the platform under the PREVIOUS position (no tunnel). */
+        if (ball_vy_arr[i] < 0) {
+            int floor = LEVEL_COLLISION_Y(bx, prev_by, ENEMY_HH);
+            int screen_bottom = camera_y - 127;
+            if (floor < screen_bottom) floor = GET_LEVEL_FLOOR_Y() + ENEMY_HH;
+            if (by <= floor) { by = floor; ball_vy_arr[i] = 0; }
+        }
+        /* World-floor fallback so a ball rests ON the ground, not floating. */
+        if (by < GET_LEVEL_FLOOR_Y() + ENEMY_HH) {
+            by = GET_LEVEL_FLOOR_Y() + ENEMY_HH;
+            ball_vy_arr[i] = 0;
+        }
+
+        /* Wall bounce (consumes a bounce). */
+        if (bx < WORLD_X_MIN) { bx = WORLD_X_MIN; ball_vx_arr[i] =  BALL_SPEED; ball_bounces[i]--; }
+        if (bx > WORLD_X_MAX) { bx = WORLD_X_MAX; ball_vx_arr[i] = -BALL_SPEED; ball_bounces[i]--; }
+
+        /* Mesh bounce (does NOT consume a bounce, matches main.vpy). */
+        int push = LEVEL_COLLISION_X(bx, by, ENEMY_HW, ENEMY_HH);
+        if (push != 0) { bx += push; ball_vx_arr[i] = -ball_vx_arr[i]; }
+
+        SET_ENEMY_X(i, bx);
+        SET_ENEMY_Y(i, by);
+        ball_kill_enemies(bx, by);
+
+        if (ball_bounces[i] <= 0) { ball_rolling[i] = 0; KILL_ENEMY(i); }
+    }
+}
+
+/* Ball-vs-ball billiard repulsion. Guard ball_collided so each (i,j) pair is
+ * processed once per frame: i reverses, j inherits i's original direction
+ * (mirror ball_ball_collision). */
+static void ball_ball_collision(void)
+{
+    for (int k = 0; k < MAX_ENEMY_SLOTS; k++) ball_collided[k] = 0;
+    for (int i = 0; i < MAX_ENEMY_SLOTS; i++) {
+        if (ball_rolling[i] != 1) continue;
+        if (ball_collided[i] != 0) continue;
+        int bx = GET_ENEMY_X(i), by = GET_ENEMY_Y(i);
+        for (int j = 0; j < MAX_ENEMY_SLOTS; j++) {
+            if (i == j) continue;
+            if (ball_collided[j] != 0) continue;
+            if (GET_ENEMY_ACTIVE(j) != 1) continue;
+            if (GET_ENEMY_STATE(j) != TITCHI_STATE_BALL) continue;
+            int ejx = GET_ENEMY_X(j), ejy = GET_ENEMY_Y(j);
+            int dx = bx - ejx; if (dx < 0) dx = -dx;
+            int dy = by - ejy; if (dy < 0) dy = -dy;
+            if (dx < 20 && dy < 20) {
+                int old_vx = ball_vx_arr[i];
+                ball_vx_arr[i] = -old_vx;
+                ball_vx_arr[j] =  old_vx;
+                ball_rolling[j] = 1;
+                thaw_timers[j] = 0;
+                if (ball_bounces[j] <= 0) ball_bounces[j] = vpy_rand_range(3, 5);
+                ball_collided[i] = 1;
+                ball_collided[j] = 1;
+            }
+        }
+    }
+}
+
 static int count_active_enemies(void)
 {
     int n = 0;
@@ -372,6 +529,8 @@ static void state_playing(void)
     update_snowballs();
     UPDATE_ENEMIES();
     update_thaw();
+    update_balls();
+    ball_ball_collision();
     check_snowball_enemy_collision();
 
     SET_CAMERA_Y(camera_y);
@@ -410,6 +569,19 @@ int  sbc_enemy_x(int i)            { return GET_ENEMY_X(i); }
 int  sbc_enemy_y(int i)            { return GET_ENEMY_Y(i); }
 /* drive one full playing-state frame (locomotion + thaw + collision). */
 void sbc_update_thaw(void)         { update_thaw(); }
+/* ball-rolling test seam. */
+int  sbc_ball_rolling(int i)       { return (i>=0&&i<MAX_ENEMY_SLOTS)?ball_rolling[i]:-1; }
+int  sbc_ball_bounces(int i)       { return (i>=0&&i<MAX_ENEMY_SLOTS)?ball_bounces[i]:-1; }
+int  sbc_ball_vx(int i)            { return (i>=0&&i<MAX_ENEMY_SLOTS)?ball_vx_arr[i]:0; }
+int  sbc_ball_launched(void)       { return ball_launched; }
+void sbc_set_player(int x,int y,int f){ player_x=x; player_y=y; player_facing=f; }
+void sbc_set_enemy_state(int i,int s){ SET_ENEMY_STATE(i,s); }
+void sbc_set_enemy_x(int i,int v)  { SET_ENEMY_X(i,v); }
+void sbc_set_enemy_y(int i,int v)  { SET_ENEMY_Y(i,v); }
+void sbc_try_launch_ball(void)     { ball_launched=0; try_launch_ball(); }
+void sbc_update_balls(void)        { update_balls(); }
+void sbc_ball_ball_collision(void) { ball_ball_collision(); }
+void sbc_reset_balls(void)         { reset_balls(); }
 #endif
 
 int main(void)
