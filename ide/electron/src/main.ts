@@ -1385,8 +1385,13 @@ async function flashRp2350(
 // deployed to the SD card via the same copyPitrexToSDCard() path a VPy pitrex
 // build uses — same artifact (`kernel7l.img`), same SD bundle.
 interface ExternalProjectManifest {
-  project: { name: string; type: string; target?: 'pitrex' };
+  project: { name: string; type: string; target?: 'pitrex' | 'rp2350' };
   build: { command: string; args?: string[]; artifact: string; deploy_extra?: string[] };
+  // Per-hardware-target build overrides. When the IDE builds for a selected
+  // target (e.g. rp2350), these replace the default [build] command/args/
+  // artifact so a C project uses the CORRECT compiler per target instead of
+  // always the pitrex one. Declared in the .cvproj as `[targets.rp2350]` etc.
+  targets?: Record<string, { command?: string; args?: string[]; artifact?: string; deploy_extra?: string[] }>;
   // Optional simulator build: compiles the project to a WASM module (via
   // emscripten) that runs in the IDE emulator panel against the host SDK shim.
   // `module` is the emitted MODULARIZE loader (.js) with sibling .wasm/.data.
@@ -1420,9 +1425,11 @@ export async function executeExternalBuild(args: {
   manifestPath: string;
   deploy?: boolean;
   sdPath?: string;
+  target?: 'pitrex' | 'rp2350';
+  preview?: boolean;   // rp2350: after building, push the .bin to the emulator panel
 }): Promise<{ ok: true; artifactPath: string } | { error: string; detail?: string }> {
   const win = mainWindow ?? null;
-  const { manifestPath, deploy = false, sdPath = '' } = args || ({} as any);
+  const { manifestPath, deploy = false, sdPath = '', target, preview = false } = args || ({} as any);
 
   let manifest: ExternalProjectManifest;
   let rootDir: string;
@@ -1447,9 +1454,18 @@ export async function executeExternalBuild(args: {
     env.PATH = `${manifest.toolchain.path}${require('path').delimiter}${env.PATH || ''}`;
   }
 
-  win?.webContents.send('run://status', `Building ${manifest.project.name}...`);
-  const buildArgs = manifest.build.args || [];
-  const code = await runFlashCommand(manifest.build.command, buildArgs, rootDir, win, { env, label: 'C' });
+  // Pick the build recipe for the selected hardware target. Default = the
+  // [build] table (pitrex, back-compat); a [targets.<target>] table overrides
+  // command/args/artifact so each target uses its OWN compiler/make target
+  // (previously ANY target for a C project ran the pitrex build).
+  const effectiveTarget = target || manifest.project.target || 'pitrex';
+  const override = manifest.targets?.[effectiveTarget] || {};
+  const buildCommand  = override.command  ?? manifest.build.command;
+  const buildArgs     = override.args     ?? manifest.build.args ?? [];
+  const buildArtifact = override.artifact ?? manifest.build.artifact;
+
+  win?.webContents.send('run://status', `Building ${manifest.project.name} (${effectiveTarget})...`);
+  const code = await runFlashCommand(buildCommand, buildArgs, rootDir, win, { env, label: 'C' });
   if (code !== 0) {
     win?.webContents.send('run://stderr', `[C] Build failed (exit ${code}).\n`);
     win?.webContents.send('run://status', `Build failed: ${manifest.project.name}`);
@@ -1457,7 +1473,7 @@ export async function executeExternalBuild(args: {
   }
 
   // Resolve the artifact relative to the project root.
-  const artifactPath = join(rootDir, manifest.build.artifact);
+  const artifactPath = join(rootDir, buildArtifact);
   try {
     await fs.access(artifactPath);
   } catch {
@@ -1467,13 +1483,50 @@ export async function executeExternalBuild(args: {
   win?.webContents.send('run://stdout', `[C] Built: ${artifactPath}\n`);
   win?.webContents.send('run://status', `Built ${manifest.project.name}`);
 
-  // Deploy (pitrex target → SD card, reusing the VPy pitrex deploy path).
+  // Preview the RP2350 binary in the emulator panel: push the RAM-linked .bin
+  // to the renderer via the SAME `emu://compiledBin` event the VPy path uses.
+  // handleCompiledBin routes target=rp2350 to Rp2350System, and jsvecxCore
+  // loadArm detects the RAM-linked 'VPy2' entry (0x2004xxxx) → initRamGame → the
+  // svc dispatcher. So the actual RP2350 machine code runs in-panel (vs the WASM
+  // sim, which is the same C compiled natively against the host shim).
+  if (preview && effectiveTarget === 'rp2350') {
+    try {
+      const buf = await fs.readFile(artifactPath);
+      win?.webContents.send('emu://compiledBin', {
+        base64: buf.toString('base64'),
+        size: buf.length,
+        binPath: artifactPath,
+        target: 'rp2350',
+        elfBase64: null,
+      });
+      win?.webContents.send('run://status', `Previewing RP2350 binary: ${manifest.project.name}`);
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[C] rp2350 preview: could not read ${artifactPath}: ${e?.message || e}\n`);
+    }
+  }
+
+  // Deploy: pitrex → SD (kernel image, reusing the VPy pitrex path); rp2350 →
+  // copy the RAM-linked game .bin onto the SD card so the cart launcher lists +
+  // launches it (same as the VPy "Build for SD"). The launcher lists `.BIN`
+  // files, so strip the internal `_sd` suffix for the on-card name.
   if (deploy) {
-    if (manifest.project.target !== 'pitrex') {
-      win?.webContents.send('run://stderr', `[C] Deploy is only supported for target=pitrex (got ${manifest.project.target}).\n`);
-    } else {
-      const extra = (manifest.build.deploy_extra || []).map((f) => join(rootDir, f));
+    if (effectiveTarget === 'pitrex') {
+      const extra = ((override.deploy_extra ?? manifest.build.deploy_extra) || []).map((f) => join(rootDir, f));
       await copyPitrexToSDCard(artifactPath, sdPath, win, extra);
+    } else if (effectiveTarget === 'rp2350') {
+      if (!sdPath) {
+        win?.webContents.send('run://stderr', `[C] rp2350 deploy: no SD path set — copy ${basename(artifactPath)} to the card manually.\n`);
+      } else {
+        const sdName = basename(artifactPath).replace(/_sd\.bin$/i, '.bin');
+        try {
+          await fs.copyFile(artifactPath, join(sdPath, sdName));
+          win?.webContents.send('run://stdout', `[C] Copied ${sdName} to SD card (${sdPath}).\n`);
+        } catch (e: any) {
+          win?.webContents.send('run://stderr', `[C] rp2350 SD copy failed: ${e?.message || e}\n`);
+        }
+      }
+    } else {
+      win?.webContents.send('run://stderr', `[C] Deploy not supported for target=${effectiveTarget}.\n`);
     }
   }
 
@@ -2041,6 +2094,8 @@ ipcMain.handle('run:compile', async (_e, args) => {
 });
 
 // Build (and optionally deploy) an imported external C/C++ project.
+// `args.target` (pitrex | rp2350) selects the per-target build recipe so the
+// correct compiler runs; omitted → the manifest default ([build], pitrex).
 ipcMain.handle('run:buildExternal', async (_e, args) => {
   return executeExternalBuild(args);
 });
@@ -3225,12 +3280,15 @@ ipcMain.handle('project:importC', async (_e, args?: { dir?: string }) => {
       return { ok: true, manifestPath, existed: true };
     } catch { /* no manifest yet, scaffold one */ }
 
-    // Sniff the Makefile for a build target whose name mentions "pitrex".
+    // Sniff the Makefile for per-target build rules (pitrex + rp2350).
     let buildArg = '';
+    let rp2350Arg = '';
     try {
       const mk = await fs.readFile(join(projectDir, 'Makefile'), 'utf-8');
-      const m = mk.match(/^([A-Za-z0-9_.-]*pitrex[A-Za-z0-9_.-]*)\s*:/m);
-      if (m) buildArg = m[1];
+      const mp = mk.match(/^([A-Za-z0-9_.-]*pitrex[A-Za-z0-9_.-]*)\s*:/m);
+      if (mp) buildArg = mp[1];
+      const mr = mk.match(/^([A-Za-z0-9_.-]*rp2350[A-Za-z0-9_.-]*)\s*:/m);
+      if (mr) rp2350Arg = mr[1];
     } catch { /* no Makefile / unreadable — leave build arg blank for the user */ }
 
     // Any .wad in the project root is a likely deploy payload (e.g. DOOM).
@@ -3242,6 +3300,17 @@ ipcMain.handle('project:importC', async (_e, args?: { dir?: string }) => {
 
     const argsToml = buildArg ? `["${buildArg}"]` : `[]`;
     const extraToml = deployExtra.length ? `[${deployExtra.map((f) => `"${f}"`).join(', ')}]` : `[]`;
+    // If the Makefile has an rp2350 rule, declare a per-target override so the
+    // IDE builds the RAM-linked SD game when the rp2350 target is selected
+    // (otherwise a C project would build pitrex for every target).
+    const rp2350Toml = rp2350Arg
+      ? `
+# rp2350 override: RAM-linked game .bin the cart launcher loads off the SD card.
+[targets.rp2350]
+args = ["${rp2350Arg}"]
+artifact = "build_rp2350/${name}_sd.bin"
+`
+      : '';
     const manifest = `# External C/C++ project imported into Vectrex Studio.
 # Built by running the command below; deployed to the PiTrex SD card.
 [project]
@@ -3254,7 +3323,7 @@ command = "make"
 args = ${argsToml}          # Makefile target(s) to build
 artifact = "kernel7l.img"    # produced image, relative to this folder
 deploy_extra = ${extraToml}  # extra files copied to the SD root
-
+${rp2350Toml}
 # Optional: a WASM build that runs in the IDE emulator panel (compiled against
 # the host SDK shim via emscripten). Declare a make target that emits a
 # MODULARIZE loader; the IDE injects $PITREX_SIM_SDK + emcc.

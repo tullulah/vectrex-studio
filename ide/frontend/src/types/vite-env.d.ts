@@ -64,6 +64,8 @@ interface ElectronAPI {
     manifestPath: string;
     deploy?: boolean;
     sdPath?: string;
+    target?: 'pitrex' | 'rp2350';
+    preview?: boolean;
   }) => Promise<{
     ok?: boolean;
     artifactPath?: string;

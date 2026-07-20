@@ -460,6 +460,24 @@ function App() {
           projectState.vpyProject.manifestPath || projectState.vpyProject.projectFile;
         const projName = projectState.vpyProject.config.project.name;
 
+        // RP2350 binary preview: when the rp2350 target is selected (and not the
+        // "Build for SD" action), build the RAM-linked .bin and run the ACTUAL
+        // ARM machine code in Rp2350System (svc dispatcher) — not the WASM sim
+        // (which is the same C compiled natively against the host shim). The
+        // electron side pushes the .bin via emu://compiledBin; handleCompiledBin
+        // loads it. Clear the WASM sim module so its view doesn't overlay.
+        if (!forSd && buildTarget === 'rp2350') {
+          if (!electronAPI?.runBuildExternal) {
+            logger.error('Build', 'electronAPI.runBuildExternal not available');
+            return;
+          }
+          useEmulatorStore.getState().setSimModule(null);
+          logger.info('Build', `Building + previewing RP2350 binary: ${projName}`);
+          const pv = await electronAPI.runBuildExternal({ manifestPath, target: 'rp2350', preview: true });
+          if (pv?.error) logger.error('Build', 'RP2350 preview build failed:', pv.error, pv.detail || '');
+          return;
+        }
+
         // Both Build (F7) and Build & Run (F5) build the [simulate] WASM module
         // and run it in the emulator panel — consistent with every other target,
         // where F7/F5 land the game in the emulator. The bare-metal hardware
@@ -491,12 +509,17 @@ function App() {
           logger.error('Build', 'electronAPI.runBuildExternal not available');
           return;
         }
-        logger.info('Build', `Building external project (hardware kernel): ${projName}`);
+        // Route to the compiler for the SELECTED target (previously a C project
+        // always built pitrex). "Build for SD" (forSd) is always an rp2350 game
+        // (matches the VPy path); otherwise follow the selected target. rp2350 →
+        // the RAM-linked SD game + copy to the card; else → the pitrex kernel.
+        const extTarget: 'pitrex' | 'rp2350' = (forSd || buildTarget === 'rp2350') ? 'rp2350' : 'pitrex';
+        logger.info('Build', `Building external project (${extTarget}): ${projName}`);
         const extResult = await electronAPI.runBuildExternal({
           manifestPath,
-          // Reuse the existing PiTrex "copy to SD" settings used by the VPy path.
-          deploy: pitrexCopyToSD,
-          sdPath: pitrexSdPath,
+          target: extTarget,
+          deploy: extTarget === 'rp2350' ? !!rp2350SdPath : pitrexCopyToSD,
+          sdPath: extTarget === 'rp2350' ? rp2350SdPath : pitrexSdPath,
         });
         if (extResult?.error) {
           logger.error('Build', 'External build failed:', extResult.error, extResult.detail || '');
