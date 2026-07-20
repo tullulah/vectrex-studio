@@ -2688,6 +2688,61 @@ mod tests {
         assert!(asm.contains("; Background object count"));
     }
 
+    #[test]
+    fn test_walkable_area_y_at_max_defaults_to_y() {
+        // Flat area (y2 absent) -> y_at_max() == y; slope (y2 present) -> == y2.
+        assert_eq!(WalkableArea { y: 42, x_min: -10, x_max: 10, y2: None }.y_at_max(), 42);
+        assert_eq!(WalkableArea { y: 42, x_min: -10, x_max: 10, y2: Some(-8) }.y_at_max(), -8);
+    }
+
+    #[test]
+    fn test_sloped_walkable_area_emits_y2() {
+        // Regression guard for sloped walkable areas: the 8-byte area record must
+        // carry y2 (surface height at x_max) as its 4th field. A SLOPE emits
+        // y2 != y; a FLAT area emits y2 == y (byte-identical to the old padding).
+        let mut enemy = obj("enemy", -40, -20);
+        enemy.obj_type = "enemy".to_string();
+        enemy.layer = "gameplay".to_string();
+        enemy.enemy_type = Some("enemy".to_string());
+        enemy.ai_type = Some("wander".to_string());
+        enemy.walkable_areas = Some(vec![
+            WalkableArea { y: -20, x_min: -80, x_max: 0, y2: Some(20) }, // SLOPE
+            WalkableArea { y: 30, x_min: 10, x_max: 80, y2: None },      // FLAT
+        ]);
+
+        let level = VPlayLevel {
+            version: "2.0".to_string(),
+            level_type: "level".to_string(),
+            metadata: VPlayMetadata {
+                name: "slopes".to_string(), author: String::new(),
+                difficulty: "easy".to_string(), time_limit: 0, target_score: 0,
+                description: String::new(),
+            },
+            world_bounds: VPlayWorldBounds { x_min: -96, x_max: 95, y_min: -128, y_max: 127 },
+            layers: VPlayLayers { background: vec![], gameplay: vec![enemy], foreground: vec![] },
+            scroll_limits: VPlayScrollLimits::default(),
+            editor_meta: VPlayEditorMeta::default(),
+            walkable_areas: None, transitions: None, isolate_screens: false,
+            transition_min_x_overlap: None, transition_lateral_y: None, transition_lateral_gap: None,
+        };
+
+        // m6809: FDB y(@x_min), x_min, x_max, y2(@x_max).
+        let m6809 = level.compile_to_asm();
+        assert!(m6809.contains("FDB -20  ; area[0].y (@x_min)"), "m6809 area[0].y");
+        assert!(m6809.contains("FDB 20  ; area[0].y2 (@x_max)"),
+            "m6809 sloped area[0] must emit y2=20 (distinct from y=-20)");
+        assert!(m6809.contains("FDB 30  ; area[1].y (@x_min)"), "m6809 flat area[1].y");
+        assert!(m6809.contains("FDB 30  ; area[1].y2 (@x_max)"),
+            "m6809 flat area[1] must emit y2==y (30)");
+
+        // ARM: .hword y, x_min, x_max, y2.
+        let arm = level.compile_to_arm_asm(&HashMap::new());
+        assert!(arm.contains(".hword -20, -80, 0, 20"),
+            "ARM sloped area must emit y2=20 as the 4th hword");
+        assert!(arm.contains(".hword 30, 10, 80, 30"),
+            "ARM flat area must emit y2==y (30)");
+    }
+
     fn obj(vector_name: &str, x: i16, y: i16) -> VPlayObject {
         VPlayObject {
             id: format!("o_{vector_name}_{x}_{y}"),
