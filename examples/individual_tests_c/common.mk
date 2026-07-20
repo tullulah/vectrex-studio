@@ -54,6 +54,30 @@ $(NAME)_pitrex: gen_assets | build_pitrex
 build_pitrex:
 	mkdir -p build_pitrex
 
+# ---- RP2350 cartridge (SD-launched game via the cart BIOS) ----
+# main.c + vpy.c + the RP2350 SDK backend (sdk_rp2350.c: maps the libvpy SDK
+# contract onto BIOS `svc` traps) + the header/entry stub, linked RAM-resident
+# at 0x20040000 (rp2350_game_ram.ld). Produces <name>_sd.bin — the launcher
+# reads it off the SD card and jumps to game_main. Same main.c/vpy.c as PiTrex
+# and WASM; only the SDK backend differs.
+RP2350_SDK     ?= $(HOME)/projects/vectrex-pseudo-python/ide/electron/resources/rp2350-sdk
+RP2350_CC      ?= arm-none-eabi-gcc
+RP2350_OBJCOPY ?= arm-none-eabi-objcopy
+RP2350_CFLAGS   = -mthumb -mcpu=cortex-m33 -mfloat-abi=soft \
+                  -ffreestanding -Os -ffunction-sections -fdata-sections \
+                  -I$(VPY_C_SDK)/include -I$(PITREX_SIM_SDK)/include -Isrc -I$(GEN_DIR)
+RP2350_LDFLAGS  = -nostdlib -Wl,--gc-sections -Wl,-T,$(RP2350_SDK)/rp2350_game_ram.ld
+
+$(NAME)_rp2350: gen_assets | build_rp2350
+	$(RP2350_CC) $(RP2350_CFLAGS) $(RP2350_LDFLAGS) \
+	    $(RP2350_SDK)/rp2350_start.s src/main.c $(VPY_C_SDK)/vpy.c $(RP2350_SDK)/sdk_rp2350.c \
+	    -lgcc -o build_rp2350/$(NAME).elf
+	$(RP2350_OBJCOPY) -O binary build_rp2350/$(NAME).elf build_rp2350/$(NAME)_sd.bin
+	@echo "=== Build OK (rp2350 SD game): build_rp2350/$(NAME)_sd.bin ==="
+
+build_rp2350:
+	mkdir -p build_rp2350
+
 # ---- IDE simulator (WASM) ----
 EMCC ?= emcc
 WASM_LDFLAGS = -sASYNCIFY -sASYNCIFY_STACK_SIZE=65536 \
@@ -71,5 +95,5 @@ build_wasm:
 	mkdir -p build_wasm
 
 clean:
-	rm -rf build_pitrex build_wasm gen kernel7l.img
-.PHONY: clean gen_audio gen_assets $(NAME)_pitrex $(NAME)_wasm
+	rm -rf build_pitrex build_wasm build_rp2350 gen kernel7l.img
+.PHONY: clean gen_audio gen_assets $(NAME)_pitrex $(NAME)_wasm $(NAME)_rp2350

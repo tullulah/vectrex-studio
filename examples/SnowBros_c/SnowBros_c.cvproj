@@ -8,6 +8,17 @@ command = "make"
 args = ["SnowBros_c_pitrex"]
 artifact = "kernel7l.img"
 
+# Per-target build overrides. When the IDE builds for a given hardware target it
+# picks the matching recipe here (falling back to [build] = pitrex). This is how
+# a C project uses the CORRECT compiler per target instead of always pitrex.
+[targets.pitrex]
+args = ["SnowBros_c_pitrex"]
+artifact = "kernel7l.img"
+
+[targets.rp2350]
+args = ["SnowBros_c_rp2350"]
+artifact = "build_rp2350/SnowBros_c_sd.bin"
+
 [simulate]
 command = "make"
 args = ["SnowBros_c_wasm"]
