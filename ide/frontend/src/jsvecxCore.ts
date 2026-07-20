@@ -542,7 +542,22 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     // before init so the SD_FILE_* / DRAW_SD_PREVIEW traps see them.
     if (simSdFiles) this._rp2350System.setSimSdFiles(simSdFiles);
     if (simSdPreviews) this._rp2350System.setSimSdPreviews(simSdPreviews);
-    this._rp2350System.init(bin, elf);
+    // Two rp2350 image kinds, told apart by the 'VPy2' header entry pointer:
+    //   • flash/XIP-linked (VPy inline mode): entry in flash 0x1020xxxx → init()
+    //     runs it with PC-symbol traps.
+    //   • RAM-linked (SD-launched games, incl. the C rp2350 SDK backend): entry
+    //     in SRAM 0x2004xxxx → initRamGame() loads it at 0x20040000 and runs it
+    //     through the `svc` BIOS-syscall dispatcher.
+    const hasMagic = bin.length >= 8 &&
+      bin[0] === 0x56 && bin[1] === 0x50 && bin[2] === 0x79 && bin[3] === 0x32;
+    const entry = hasMagic ? ((bin[4] | (bin[5] << 8) | (bin[6] << 16) | (bin[7] << 24)) >>> 0) : 0;
+    const ramLinked = entry >= 0x20040000 && entry < 0x20080000;
+    if (ramLinked && typeof this._rp2350System.initRamGame === 'function') {
+      console.log('[loadArm] RAM-linked svc image (entry 0x' + entry.toString(16) + ') → initRamGame');
+      this._rp2350System.initRamGame(bin);
+    } else {
+      this._rp2350System.init(bin, elf);
+    }
     if (canvas) this._rp2350System.setCanvas(canvas);
     this._activeTarget = 'rp2350';
     // Start PSG audio synthesis (requires user gesture — loadArm is always

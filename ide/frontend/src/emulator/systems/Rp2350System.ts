@@ -1204,8 +1204,118 @@ export class Rp2350System implements ISystem, IBus {
   }
 
   // -------------------------------------------------------------------------
+  // IBus.onSvc — BIOS syscall dispatcher (Cortex-M `svc #N`)
+  // -------------------------------------------------------------------------
+  //
+  // A game built with the RP2350 SDK backend (sdk_rp2350.c) issues `svc #N` for
+  // every BIOS service, instead of the VPy inline functions the PC-address traps
+  // above intercept by symbol name. This dispatches those svc numbers to the
+  // SAME beam / PSG / input emulation. ABI (docs/RP2350_BIOS.md): args in
+  // r0-r3, return value in r0. Beam coordinate mapping matches the dv_* traps
+  // (ARM_ALG_SCALE, Y inverted, unbounded virtual space + Cohen-Sutherland clip).
+  onSvc(imm: number, cpu: { getReg(i: number): number; setReg(i: number, v: number): void }): void {
+    switch (imm) {
+      case 0: // SYS_RESET0REF — beam to centre, blanked
+        this.armBeamX = ALG_CENTER_X;
+        this.armBeamY = ALG_CENTER_Y;
+        this.armIntensity = 0;
+        this.beam.alg_dx = 0; this.beam.alg_dy = 0;
+        this.beam.alg_vectoring = 0; this.beam.alg_zsh = 0;
+        break;
+      case 1: // SYS_WAIT_RECAL — end the frame + zero-ref (beam back to centre)
+        this.cpu.hitWfi = true;
+        this.armBeamX = ALG_CENTER_X;
+        this.armBeamY = ALG_CENTER_Y;
+        break;
+      case 2: // SYS_SET_INTENSITY(r0)
+        this.armIntensity = cpu.getReg(0) & 0x7F;
+        this.beam.alg_zsh = this.armIntensity;
+        break;
+      case 3: { // SYS_MOVE(r0=dx, r1=dy) — blanked delta move (unbounded)
+        this.armBeamX += (cpu.getReg(0) | 0) * ARM_ALG_SCALE;
+        this.armBeamY -= (cpu.getReg(1) | 0) * ARM_ALG_SCALE;
+        break;
+      }
+      case 4: { // SYS_DRAW_DELTA(r0=dx, r1=dy) — lit segment
+        const dx = armI8(cpu.getReg(0)), dy = armI8(cpu.getReg(1));
+        const newX = this.armBeamX + dx * ARM_ALG_SCALE;
+        const newY = this.armBeamY - dy * ARM_ALG_SCALE;
+        const clipped = clipSegment(this.armBeamX, this.armBeamY, newX, newY);
+        if (clipped !== null) {
+          this.beam.addSegmentDirect(clipped[0], clipped[1], clipped[2], clipped[3], this.armIntensity);
+        }
+        this.armBeamX = newX; this.armBeamY = newY;
+        break;
+      }
+      case 5: // SYS_PSG_WRITE(r0=reg, r1=data)
+        this.psg.writeReg(cpu.getReg(0) & 0x0f, cpu.getReg(1) & 0xff);
+        break;
+      case 6: // SYS_PSG_SILENCE — mute the three amplitude channels
+        this.psg.writeReg(8, 0); this.psg.writeReg(9, 0); this.psg.writeReg(10, 0);
+        break;
+      case 7: // SYS_READ_BUTTONS → r0 = P1(bits 0-3) | P2(bits 4-7), 1 = pressed
+        cpu.setReg(0, this.readButtonsBios());
+        break;
+      case 12: // SYS_PSG_READ(r0=reg) → r0
+        cpu.setReg(0, this.psg.Regs[cpu.getReg(0) & 0x0f] & 0xff);
+        break;
+      case 13: // SYS_READ_AXES → (J1X<<24)|(J1Y<<16)|(J2X<<8)|J2Y, each i8
+        cpu.setReg(0, ((((this.joyJ1X & 0xff) << 24) | ((this.joyJ1Y & 0xff) << 16) |
+                        ((this.joyJ2X & 0xff) << 8)  |  (this.joyJ2Y & 0xff)) >>> 0));
+        break;
+      case 15: { // SYS_MOVE_ABS(r0=x, r1=y) — absolute blanked position
+        this.armBeamX = ALG_CENTER_X + (cpu.getReg(0) | 0) * ARM_ALG_SCALE;
+        this.armBeamY = ALG_CENTER_Y - (cpu.getReg(1) | 0) * ARM_ALG_SCALE;
+        break;
+      }
+      // #16 PRINT_TEXT: libvpy renders text via v_directDraw32, not this call.
+      // #21/#22/#23 core-1 music/sfx: the C runtime sequences music on core 0
+      //   via SYS_PSG_WRITE, so these are unused by libvpy games. All no-ops.
+      default:
+        break;
+    }
+  }
+
+  /** BIOS SYS_READ_BUTTONS format: J1 buttons in bits 0-3, J2 in 4-7, 1=pressed.
+   * The emulator holds Port-B active-low masks (bits 4-7, 0=pressed). */
+  private readButtonsBios(): number {
+    let p1 = 0, p2 = 0;
+    for (let i = 0; i < 4; i++) {
+      if (((this.joyButtonState  >> (4 + i)) & 1) === 0) p1 |= (1 << i);
+      if (((this.joyButtonState2 >> (4 + i)) & 1) === 0) p2 |= (1 << i);
+    }
+    return (p1 | (p2 << 4)) >>> 0;
+  }
+
+  // -------------------------------------------------------------------------
   // Public utilities
   // -------------------------------------------------------------------------
+
+  /**
+   * Load a RAM-linked RP2350 game (built with the C rp2350 SDK backend or VPy
+   * `--ram`: ORIGIN 0x20040000, 'VPy2' header, BIOS calls via `svc`). Unlike
+   * init() (flash/XIP + PC-symbol traps), the game executes from SRAM and traps
+   * only on `svc`, dispatched by onSvc(). The BIOS runs a game on the firmware
+   * stack below GAME_RAM, so SP is parked at the GAME_RAM base (grows down).
+   */
+  initRamGame(bin: Uint8Array): void {
+    this.reset();               // clears SRAM + hw; PC/SP set below for this image
+    this.traps.clear();         // svc games use the svc dispatcher, not PC-traps
+
+    const gameOff = 0x20040000 - SRAM_BASE;   // GAME_RAM offset into SRAM
+    const len = Math.min(bin.length, this.sram.length - gameOff);
+    this.sram.set(bin.subarray(0, len), gameOff);
+
+    let entry = 0x20040000;     // 'VPy2' header: [magic][game_main][rsv][rsv]
+    if (bin.length >= 8 && bin[0] === 0x56 && bin[1] === 0x50 && bin[2] === 0x79 && bin[3] === 0x32) {
+      const e = (bin[4] | (bin[5] << 8) | (bin[6] << 16) | (bin[7] << 24)) >>> 0;
+      if (e !== 0) entry = e;
+    }
+    this.cpu.setReg(13, 0x20040000);   // SP: firmware stack, below the game image
+    this.cpu.setReg(15, entry & ~1);   // PC = game_main (thumb bit stripped)
+    this.cpu.setReg(14, 0xFFFFFFFE);   // LR sentinel (halt if game_main returns)
+    console.log(`[Rp2350System.initRamGame] loaded ${len}b @ 0x20040000, entry=0x${entry.toString(16)}`);
+  }
 
   /**
    * Wire the DOM canvas element so renderFrame() draws to the screen.

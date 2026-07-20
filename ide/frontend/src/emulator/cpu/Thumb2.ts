@@ -467,7 +467,9 @@ export class Thumb2 implements ICpu {
         throw new Error(`UDF at PC=0x${pc.toString(16)}`);
       }
       if (cond === 0xf) {
-        // SVC — treat as NOP in emulator
+        // SVC #imm8 — supervisor call. Dispatch to the system's BIOS syscall
+        // handler if it provides one (RP2350); otherwise a NOP (no supervisor).
+        bus.onSvc?.(hw & 0xff, this);
         return 1;
       }
       if (this.condPasses(cond)) {
@@ -1131,13 +1133,42 @@ export class Thumb2 implements ICpu {
       return 8;
     }
 
-    // MUL (32-bit Thumb2): hw0=1111 1011 0000 Rn, hw1=Rn Rd 0000 Rm
-    // (Thumb2 wide MUL — the standard 16-bit MUL also exists)
-    if ((hw0 & 0xfff0) === 0xfb00 && (hw1 & 0x00f0) === 0x0000) {
+    // MUL / MLA / MLS (32-bit): hw0=1111 1011 0000 Rn, hw1 = Ra Rd 000 op Rm.
+    //   Ra==1111 → MUL (rd = rn*rm)
+    //   op(bit4)=0 → MLA (rd = rn*rm + Ra)   ← was mis-decoded as plain MUL,
+    //   op(bit4)=1 → MLS (rd = Ra - rn*rm)      dropping Ra → the vpy_load_level
+    // copy loop's bound `20*count + base` collapsed to `20*count`, so the pointer
+    // never reached it and the level load spun forever.
+    if ((hw0 & 0xfff0) === 0xfb00 && (hw1 & 0x00e0) === 0x0000) {
       const rn = hw0 & 0xf;
+      const ra = (hw1 >>> 12) & 0xf;
       const rd = (hw1 >>> 8) & 0xf;
+      const op = (hw1 >>> 4) & 0x1;
       const rm = hw1 & 0xf;
-      this.regs[rd] = u32(Math.imul(this.regs[rn], this.regs[rm]));
+      const prod = Math.imul(this.regs[rn], this.regs[rm]);
+      if (ra === 15)      this.regs[rd] = u32(prod);                    // MUL
+      else if (op === 1)  this.regs[rd] = u32(this.regs[ra] - prod);    // MLS
+      else                this.regs[rd] = u32(this.regs[ra] + prod);    // MLA
+      return 3;
+    }
+
+    // SMUL{B,T}{B,T} / SMLA{B,T}{B,T} — signed 16×16→32 halfword multiply.
+    // hw0 = 1111 1011 0001 Rn, hw1 = Ra Rd 00 N M Rm. N/M pick the top(1) or
+    // bottom(0) signed halfword of Rn/Rm; Ra==15 → SMUL, else SMLA (add Ra).
+    // C emits these for fixed-point/16-bit math; VPy codegen never did (the
+    // "blocks at 10 s" freeze — an unimplemented-instruction throw mid-frame).
+    if ((hw0 & 0xfff0) === 0xfb10 && (hw1 & 0x00c0) === 0x0000) {
+      const rn = hw0 & 0xf;
+      const ra = (hw1 >>> 12) & 0xf;
+      const rd = (hw1 >>> 8) & 0xf;
+      const n  = (hw1 >>> 5) & 1;
+      const m  = (hw1 >>> 4) & 1;
+      const rm = hw1 & 0xf;
+      const op1 = n ? (this.regs[rn] >> 16) : ((this.regs[rn] << 16) >> 16);
+      const op2 = m ? (this.regs[rm] >> 16) : ((this.regs[rm] << 16) >> 16);
+      let res = op1 * op2;                       // ≤ ±2^30, exact in JS
+      if (ra !== 15) res += this.regs[ra] | 0;   // SMLA: + Ra (signed)
+      this.regs[rd] = u32(res);
       return 3;
     }
 
@@ -1230,6 +1261,52 @@ export class Thumb2 implements ICpu {
       return count + 1;
     }
 
+    // ── TBB / TBH (table branch — `switch` dispatch) ─────────────────────
+    // hw0 = 1110 1000 1101 Rn (0xE8D0|Rn; Rn=15 → 0xE8DF, table follows PC).
+    // hw1 = 1111 0000 000 H Rm (H: 0=byte, 1=halfword table; Rm = index).
+    // Branch: PC = (insn+4) + 2*table[base + Rm (<<1 if H)]. VPy codegen never
+    // emits this, but C compilers use it for dense switches (the game_state
+    // loop in a C-built game), so it's needed to run the C rp2350 backend.
+    if ((hw0 & 0xFFF0) === 0xE8D0 && (hw1 & 0xFFE0) === 0xF000) {
+      const rnTbl = hw0 & 0xF;
+      const H     = (hw1 >>> 4) & 1;
+      const rmIdx = hw1 & 0xF;
+      // regs[15] is already (insn addr + 4) = the architectural PC.
+      const base  = (rnTbl === 15) ? this.regs[15] : this.regs[rnTbl];
+      const idx   = this.regs[rmIdx];
+      const value = H
+        ? this.read16(bus, u32(base + (idx << 1)))
+        : (bus.read8(u32(base + idx)) & 0xff);
+      this.regs[15] = u32(this.regs[15] + (value << 1));
+      return 2;
+    }
+
+    // ── STRD / LDRD (store/load register dual, immediate T1) ─────────────
+    // hw0 = 1110 100P U1WL Rn (bit4 L: 0=STRD, 1=LDRD). hw1 = Rt Rt2 imm8.
+    // addr = Rn +/- imm8*4 (pre/post per P, optional writeback W). C compilers
+    // use this to spill/reload register pairs (frame setup); VPy codegen didn't.
+    if ((hw0 & 0xFE40) === 0xE840) {
+      const P    = (hw0 >>> 8) & 1;
+      const U    = (hw0 >>> 7) & 1;
+      const W    = (hw0 >>> 5) & 1;
+      const L    = (hw0 >>> 4) & 1;
+      const rnD  = hw0 & 0xF;
+      const rt1  = (hw1 >>> 12) & 0xF;
+      const rt2  = (hw1 >>> 8) & 0xF;
+      const off  = (U ? (hw1 & 0xff) : -(hw1 & 0xff)) * 4;
+      const base = (rnD === 15) ? u32(this.regs[15] & ~3) : this.regs[rnD];
+      const addr = P ? u32(base + off) : u32(base);
+      if (L) {
+        this.regs[rt1] = this.read32(bus, addr);
+        this.regs[rt2] = this.read32(bus, u32(addr + 4));
+      } else {
+        this.write32(bus, addr, this.regs[rt1]);
+        this.write32(bus, u32(addr + 4), this.regs[rt2]);
+      }
+      if (W && rnD !== 15) this.regs[rnD] = u32(base + off);
+      return 3;
+    }
+
     // ── LDMIA (load multiple, increment after) T2 ───────────────────────
     // hw0 = 0xE890|Rn (W=0) or 0xE8B0|Rn (W=1, writeback). hw1 = reglist.
     // Note: 0xE8BD (LDMIA SP!, …) is already handled as POP T2 above.
@@ -1303,13 +1380,15 @@ export class Thumb2 implements ICpu {
       let writeback = false;
       let wbValue = 0;
       const base = this.regs[rn];
-      if ((hw0 & 0xfe00) === 0xf800 && hw1_11 === 0 && (hw1 >>> 8) === 0) {
-        // Positive imm12 (no writeback in this encoding)
-        const imm12 = hw1 & 0xfff;
-        addr = u32(base + imm12);
+      // The form is selected by hw0 bit7 (0x0080) and hw1[11] — NOT by whether
+      // the upper hw1 bits happen to be zero. (The old `(hw1>>>8)===0` heuristic
+      // mis-read register-indexed loads with Rt=0, e.g. `ldr r0,[ip,r0,lsl#2]`
+      // for sprites[idx], as an imm12 load [base+32] → wrong pointer tables.)
+      if ((hw0 & 0x0080) !== 0) {
+        // T3: LDR/STR.W Rt, [Rn, #imm12]  — hw0 = 0xF8D0/0xF8C0|Rn (bit7=1)
+        addr = u32(base + (hw1 & 0xfff));
       } else if (hw1_11 === 1) {
-        // T4 PUW form: hw1 = Rt[15:12] | 1 | P[10] | U[9] | W[8] | imm8[7:0]
-        // Honour P (pre/post-index) and W (writeback) bits.
+        // T4 PUW form: hw1 = Rt | 1 | P[10] | U[9] | W[8] | imm8[7:0]
         const P    = (hw1 >>> 10) & 1;
         const U    = (hw1 >>> 9)  & 1;
         const W    = (hw1 >>> 8)  & 1;
@@ -1317,13 +1396,8 @@ export class Thumb2 implements ICpu {
         const offset = U ? imm8 : -imm8;
         addr = P ? u32(base + offset) : u32(base);
         if (W) { writeback = true; wbValue = u32(base + offset); }
-      } else if ((hw0 & 0x0080) !== 0) {
-        // T3: LDR/STR.W Rt, [Rn, #imm12]  — hw0=0xF8D0|Rn or 0xF8C0|Rn (bit7=1)
-        const imm12 = hw1 & 0xfff;
-        addr = u32(base + imm12);
       } else {
-        // T2 register-indexed: LDR/STR.W Rt, [Rn, Rm{, LSL #imm2}]  — hw0=0xF850|Rn (bit7=0)
-        // hw1: Rt[15:12] | 0[11] | 000[10:8] | 00[7:6] | imm2[5:4] | Rm[3:0]
+        // T2 register-indexed: LDR/STR.W Rt, [Rn, Rm{, LSL #imm2}] (bit7=0, hw1[11]=0)
         const rm   = hw1 & 0xf;
         const imm2 = (hw1 >>> 4) & 0x3;
         addr = u32(base + (this.regs[rm] << imm2));
@@ -1452,48 +1526,94 @@ export class Thumb2 implements ICpu {
       return 2;
     }
 
-    // LDRB Rt,[Rn,Rm,LSL#imm2] register: hw0=1111 1000 0001 Rn, hw1=Rt 000000 imm2 Rm
+    // LDRB: hw0=1111 1000 0001 Rn — register (hw1[11]=0) or immediate pre/post
+    // (hw1[11]=1). C uses `ldrb [Rn,#1]!` to walk NUL-terminated strings
+    // (font_draw_string) — the register-only version broke that walk.
     if ((hw0 & 0xfff0) === 0xf810) {
-      const rm   = hw1 & 0xf;
-      const imm2 = (hw1 >>> 4) & 0x3;
-      const addr = u32(this.regs[rn] + (this.regs[rm] << imm2));
-      this.regs[rt] = bus.read8(addr);
+      if ((hw1 >>> 11) & 1) {
+        const P = (hw1 >>> 10) & 1, U = (hw1 >>> 9) & 1, W = (hw1 >>> 8) & 1;
+        const imm8 = hw1 & 0xff;
+        const base = this.regs[rn];
+        const offset = U ? imm8 : -imm8;
+        const addr = P ? u32(base + offset) : u32(base);
+        this.regs[rt] = bus.read8(addr);
+        if (W) this.regs[rn] = u32(base + offset);
+      } else {
+        const rm = hw1 & 0xf, imm2 = (hw1 >>> 4) & 0x3;
+        this.regs[rt] = bus.read8(u32(this.regs[rn] + (this.regs[rm] << imm2)));
+      }
       return 2;
     }
 
-    // STRB Rt,[Rn,Rm,LSL#imm2] register: hw0=1111 1000 0000 Rn, hw1=Rt 000000 imm2 Rm
+    // STRB: hw0=1111 1000 0000 Rn — register (hw1[11]=0) or immediate pre/post.
     if ((hw0 & 0xfff0) === 0xf800) {
-      const rm   = hw1 & 0xf;
-      const imm2 = (hw1 >>> 4) & 0x3;
-      const addr = u32(this.regs[rn] + (this.regs[rm] << imm2));
-      bus.write8(addr, this.regs[rt] & 0xff);
+      if ((hw1 >>> 11) & 1) {
+        const P = (hw1 >>> 10) & 1, U = (hw1 >>> 9) & 1, W = (hw1 >>> 8) & 1;
+        const imm8 = hw1 & 0xff;
+        const base = this.regs[rn];
+        const offset = U ? imm8 : -imm8;
+        const addr = P ? u32(base + offset) : u32(base);
+        bus.write8(addr, this.regs[rt] & 0xff);
+        if (W) this.regs[rn] = u32(base + offset);
+      } else {
+        const rm = hw1 & 0xf, imm2 = (hw1 >>> 4) & 0x3;
+        bus.write8(u32(this.regs[rn] + (this.regs[rm] << imm2)), this.regs[rt] & 0xff);
+      }
       return 2;
     }
 
-    // LDRH Rt,[Rn,Rm,LSL#imm2]: hw0=1111 1000 0011 Rn
+    // LDRH: hw0=1111 1000 0011 Rn — TWO sub-encodings (hw1[11] selects):
+    //   hw1[11]=0: register  Rt,[Rn,Rm,LSL#imm2]
+    //   hw1[11]=1: immediate  Rt,[Rn,#±imm8] with P/U/W (pre/post-index, C uses
+    //     the post-index form `[Rn],#2` to walk .vec path streams — the bug that
+    //     made draw_vec_stream read a garbage count and spin).
     if ((hw0 & 0xfff0) === 0xf830) {
-      const rm   = hw1 & 0xf;
-      const imm2 = (hw1 >>> 4) & 0x3;
-      const addr = u32(this.regs[rn] + (this.regs[rm] << imm2));
-      this.regs[rt] = this.read16(bus, addr);
+      if ((hw1 >>> 11) & 1) {
+        const P = (hw1 >>> 10) & 1, U = (hw1 >>> 9) & 1, W = (hw1 >>> 8) & 1;
+        const imm8 = hw1 & 0xff;
+        const base = this.regs[rn];
+        const offset = U ? imm8 : -imm8;
+        const addr = P ? u32(base + offset) : u32(base);
+        this.regs[rt] = this.read16(bus, addr);
+        if (W) this.regs[rn] = u32(base + offset);
+      } else {
+        const rm = hw1 & 0xf, imm2 = (hw1 >>> 4) & 0x3;
+        this.regs[rt] = this.read16(bus, u32(this.regs[rn] + (this.regs[rm] << imm2)));
+      }
       return 2;
     }
 
-    // STRH Rt,[Rn,Rm,LSL#imm2]: hw0=1111 1000 0010 Rn
+    // STRH: hw0=1111 1000 0010 Rn — register (hw1[11]=0) or immediate pre/post.
     if ((hw0 & 0xfff0) === 0xf820) {
-      const rm   = hw1 & 0xf;
-      const imm2 = (hw1 >>> 4) & 0x3;
-      const addr = u32(this.regs[rn] + (this.regs[rm] << imm2));
-      this.write16(bus, addr, this.regs[rt] & 0xffff);
+      if ((hw1 >>> 11) & 1) {
+        const P = (hw1 >>> 10) & 1, U = (hw1 >>> 9) & 1, W = (hw1 >>> 8) & 1;
+        const imm8 = hw1 & 0xff;
+        const base = this.regs[rn];
+        const offset = U ? imm8 : -imm8;
+        const addr = P ? u32(base + offset) : u32(base);
+        this.write16(bus, addr, this.regs[rt] & 0xffff);
+        if (W) this.regs[rn] = u32(base + offset);
+      } else {
+        const rm = hw1 & 0xf, imm2 = (hw1 >>> 4) & 0x3;
+        this.write16(bus, u32(this.regs[rn] + (this.regs[rm] << imm2)), this.regs[rt] & 0xffff);
+      }
       return 2;
     }
 
-    // LDRSH Rt,[Rn,Rm,LSL#imm2]: hw0=1111 1001 0011 Rn
+    // LDRSH: hw0=1111 1001 0011 Rn — register (hw1[11]=0) or immediate pre/post.
     if ((hw0 & 0xfff0) === 0xf930) {
-      const rm   = hw1 & 0xf;
-      const imm2 = (hw1 >>> 4) & 0x3;
-      const addr = u32(this.regs[rn] + (this.regs[rm] << imm2));
-      this.regs[rt] = u32((this.read16(bus, addr) << 16) >> 16);
+      if ((hw1 >>> 11) & 1) {
+        const P = (hw1 >>> 10) & 1, U = (hw1 >>> 9) & 1, W = (hw1 >>> 8) & 1;
+        const imm8 = hw1 & 0xff;
+        const base = this.regs[rn];
+        const offset = U ? imm8 : -imm8;
+        const addr = P ? u32(base + offset) : u32(base);
+        this.regs[rt] = u32((this.read16(bus, addr) << 16) >> 16);
+        if (W) this.regs[rn] = u32(base + offset);
+      } else {
+        const rm = hw1 & 0xf, imm2 = (hw1 >>> 4) & 0x3;
+        this.regs[rt] = u32((this.read16(bus, u32(this.regs[rn] + (this.regs[rm] << imm2))) << 16) >> 16);
+      }
       return 2;
     }
 
@@ -1680,9 +1800,9 @@ export class Thumb2 implements ICpu {
     }
 
     switch (op) {
-      case 0x0: {  // AND{S}
+      case 0x0: {  // AND{S}  /  TST Rn,Rm{,shift} (Rd=15,S=1 → discard result)
         const r = u32(this.regs[rn] & rmVal);
-        this.regs[rd] = r;
+        if (rd !== 15) this.regs[rd] = r;
         if (s) this.setNZ(r);
         break;
       }
@@ -1716,9 +1836,9 @@ export class Thumb2 implements ICpu {
         }
         break;
       }
-      case 0x4: {  // EOR{S}
+      case 0x4: {  // EOR{S}  /  TEQ Rn,Rm{,shift} (Rd=15,S=1 → discard result)
         const r = u32(this.regs[rn] ^ rmVal);
-        this.regs[rd] = r;
+        if (rd !== 15) this.regs[rd] = r;
         if (s) this.setNZ(r);
         break;
       }
@@ -1729,10 +1849,10 @@ export class Thumb2 implements ICpu {
         if (s) this.setNZ(r);
         break;
       }
-      case 0x8: {  // ADD{S}
+      case 0x8: {  // ADD{S}  /  CMN Rn,Rm{,shift} (Rd=15,S=1 → discard result)
         const a = this.regs[rn];
         const r = u32(a + rmVal);
-        this.regs[rd] = r;
+        if (rd !== 15) this.regs[rd] = r;
         if (s) this.setNZCV_add(a, rmVal);
         break;
       }
@@ -1744,10 +1864,10 @@ export class Thumb2 implements ICpu {
         if (s) this.setNZCV_add(a, rmVal + c);
         break;
       }
-      case 0xd: {  // SUB{S}
+      case 0xd: {  // SUB{S}  /  CMP Rn,Rm{,shift} (Rd=15,S=1 → discard result)
         const a = this.regs[rn];
         const r = u32(a - rmVal);
-        this.regs[rd] = r;
+        if (rd !== 15) this.regs[rd] = r;   // Rd=15 → CMP: flags only, no PC write
         if (s) this.setNZCV_sub(a, rmVal);
         break;
       }
