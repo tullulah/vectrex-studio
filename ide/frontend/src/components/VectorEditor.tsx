@@ -809,16 +809,23 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const isInternalChange = useRef(false);
   
   // Sync with external resource changes (but not our own changes)
-  // Resize the canvas to the largest square that fits the available space
+  // Resize the canvas to FILL the available space (was a centered square, which
+  // left big empty side gutters when the area is wider than tall). Drawing stays
+  // aspect-correct and centered because the coordinate scale uses min(w,h); the
+  // extra width just becomes more visible workspace/grid.
   useEffect(() => {
     const el = canvasContainerRef.current;
     if (!el) return;
     const obs = new ResizeObserver(([entry]) => {
       const { width: cw, height: ch } = entry.contentRect;
       if (cw > 20 && ch > 20) {
-        const size = Math.min(Math.floor(cw), Math.floor(ch));
-        setWidth(size);
-        setHeight(size);
+        // The <canvas> has a 2px border on every side, so its visual box is the
+        // drawing buffer + 4px. Subtract that (plus 1px slack) so the border
+        // isn't clipped by the container's overflow:hidden — otherwise the right
+        // edge line disappears and the canvas looks like it runs under the panel.
+        const BORDER = 5;
+        setWidth(Math.max(20, Math.floor(cw) - BORDER));
+        setHeight(Math.max(20, Math.floor(ch) - BORDER));
       }
     });
     obs.observe(el);
@@ -3278,137 +3285,6 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   // UI Components
   const Toolbar = () => (
     <div style={{ display: 'flex', gap: '4px', marginBottom: '8px', padding: '4px', background: '#2a2a4e', borderRadius: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
-      <button
-        onClick={() => setCurrentTool('select')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'select' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Select tool - click to select, drag to box select"
-      >
-        ⬚ Select
-      </button>
-      <button
-        onClick={() => setCurrentTool('pen')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'pen' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Pen tool - click to add points, double-click to finish path"
-      >
-        ✏️ Pen
-      </button>
-      <button
-        onClick={() => setCurrentTool('pan')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'pan' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title={viewMode === '3d' ? 'Pan/Rotate - drag to rotate 3D view' : 'Pan - drag to move view'}
-      >
-        {viewMode === '3d' ? '🔄 Rotate' : '✋ Pan'}
-      </button>
-      <button
-        onClick={() => setCurrentTool('walkarea')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'walkarea' ? '#4a8e6a' : '#3a5e4a',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Walkable area — click-drag horizontally to paint a [x_min,x_max] at y (Phase 2 wander AI)"
-      >
-        🛣️ WalkArea
-      </button>
-      <button
-        onClick={() => setCurrentTool('circle')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'circle' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Circle tool - click center, drag to set radius"
-      >
-        ⭕ Circle
-      </button>
-      <button
-        onClick={() => setCurrentTool('arc')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'arc' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Arc tool - click center, drag to set radius"
-      >
-        ◔ Arc
-      </button>
-      <button
-        onClick={() => setCurrentTool('polygon')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'polygon' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Polygon tool - click center, drag to set radius"
-      >
-        ⬡ Polygon
-      </button>
-      <button
-        onClick={() => setCurrentTool('bezier')}
-        style={{
-          padding: '8px 12px',
-          background: currentTool === 'bezier' ? '#4a4a8e' : '#3a3a5e',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-        }}
-        title="Bezier tool - click to add sharp anchor, click+drag to add smooth anchor. Enter/Right-click to finish."
-      >
-        ∿ Bezier
-      </button>
-      {backgroundImage && (
-        <button
-          onClick={() => setCurrentTool('background')}
-          style={{
-            padding: '8px 12px',
-            background: currentTool === 'background' ? '#8a6a4a' : '#5a4a3a',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-          title="Move background - drag to reposition the background image"
-        >
-          🖼️ Move BG
-        </button>
-      )}
-      
-      <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
-      
       {/* Scale buttons */}
       <button
         onClick={() => {
@@ -3425,7 +3301,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Scale up - increase size by 50%"
       >
-        🔍+ Scale Up
+        🔍+
       </button>
       <button
         onClick={() => {
@@ -3442,7 +3318,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Scale down - decrease size by 33%"
       >
-        🔍- Scale Down
+        🔍-
       </button>
       
       <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
@@ -3468,7 +3344,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Delete selected points or paths (Delete key)"
       >
-        🗑️ Delete {selectedTreePathKeys.size > 1 ? `(${selectedTreePathKeys.size} paths)` : selectedPoints.size > 0 ? `(${selectedPoints.size})` : ''}
+        🗑️ {selectedTreePathKeys.size > 1 ? `(${selectedTreePathKeys.size})` : selectedPoints.size > 0 ? `(${selectedPoints.size})` : ''}
       </button>
       
       <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
@@ -3488,7 +3364,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Undo (Ctrl+Z / Cmd+Z)"
       >
-        ↶ Undo
+        ↶
       </button>
       <button
         onClick={handleRedo}
@@ -3504,7 +3380,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Redo (Ctrl+Shift+Z / Cmd+Shift+Z)"
       >
-        ↷ Redo
+        ↷
       </button>
       
       <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
@@ -3522,7 +3398,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Center - move all points so center aligns to (0,0)"
       >
-        📍 Center
+        📍
       </button>
       <button
         onClick={mirrorVectorX}
@@ -3536,7 +3412,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Mirror X - flip horizontally (negate X coordinates)"
       >
-        ↔️ Mirror X
+        ↔️
       </button>
       <button
         onClick={mirrorVectorY}
@@ -3550,7 +3426,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Mirror Y - flip vertically (negate Y coordinates)"
       >
-        ⇅ Mirror Y
+        ⇅
       </button>
       <button
         onClick={() => rotateVector(90)}
@@ -3564,7 +3440,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Rotate 90° counter-clockwise around (0,0)"
       >
-        ↺ Rotate +90°
+        ↺
       </button>
       <button
         onClick={() => rotateVector(-90)}
@@ -3578,7 +3454,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Rotate 90° clockwise around (0,0)"
       >
-        ↻ Rotate -90°
+        ↻
       </button>
       <input
         type="number"
@@ -3618,30 +3494,31 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }}
         title="Rotate by the angle in the input (positive = CCW)"
       >
-        🔁 Rotate
+        🔁
       </button>
       <button
         onClick={chainEdges}
         style={{ padding: '8px 12px', background: '#3a5a3e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
         title="Chain edges — merge 2-point paths that share endpoints into polylines, reducing path count"
       >
-        🔗 Chain Edges
+        🔗
       </button>
       <button
         onClick={() => handleSimplify(2.0)}
         style={{ padding: '8px 12px', background: '#5a3a2e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
         title="Simplify paths (ε=2) — Ramer-Douglas-Peucker: removes near-collinear points invisible at Vectrex scale. Undoable with Ctrl+Z."
       >
-        ✂️ Simplify
+        ✂️
       </button>
 
       <div style={{ width: '1px', background: '#4a4a6e', margin: '0 8px' }} />
       
       <button
         onClick={() => fileInputRef.current?.click()}
-        style={{ padding: '8px 12px', background: '#3a5a3e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        style={{ padding: '8px 10px', background: '#3a5a3e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        title="Load a background reference image"
       >
-        📷 Load Image
+        📷
       </button>
       <input
         ref={fileInputRef}
@@ -3655,7 +3532,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         style={{ padding: '8px 12px', background: '#3a4a5a', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
         title="Import DXF geometry as new paths on current layer"
       >
-        📐 Import DXF
+        📐
       </button>
       <input
         ref={dxfInputRef}
@@ -3669,7 +3546,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         style={{ padding: '8px 12px', background: '#3a4a5a', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
         title="Import OBJ 3D mesh wireframe as paths (Fusion 360, Blender, etc.)"
       >
-        📦 Import OBJ
+        📦
       </button>
       <input
         ref={objInputRef}
@@ -3684,40 +3561,43 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           <button
             onClick={() => setShowBackground(!showBackground)}
             style={{
-              padding: '8px 12px',
+              padding: '8px 10px',
               background: showBackground ? '#4a4a8e' : '#3a3a5e',
               color: 'white',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
             }}
+            title="Show/hide the background reference"
           >
-            {showBackground ? '👁 Hide' : '👁 Show'}
+            👁
           </button>
           <button
             onClick={handleAutoDetect}
             disabled={isProcessing}
             style={{
-              padding: '8px 12px',
+              padding: '8px 10px',
               background: isProcessing ? '#666' : '#5a3a8e',
               color: 'white',
               border: 'none',
               borderRadius: '4px',
               cursor: isProcessing ? 'wait' : 'pointer',
             }}
+            title="Auto-trace the background image into paths"
           >
-            {isProcessing ? '⏳ Processing...' : '✨ Auto-Trace'}
+            {isProcessing ? '⏳' : '✨'}
           </button>
           <button
             onClick={() => setShowEdgeSettings(!showEdgeSettings)}
             style={{
-              padding: '8px 12px',
+              padding: '8px 10px',
               background: showEdgeSettings ? '#4a4a8e' : '#3a3a5e',
               color: 'white',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
             }}
+            title="Edge/trace settings"
           >
             ⚙️
           </button>
@@ -3741,6 +3621,55 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       <span style={{ color: '#aaa', padding: '8px' }}>{Math.round(zoom * 100)}%</span>
     </div>
   );
+
+  const ToolRail = () => {
+    const railTools: { id: Tool; icon: string; title: string; active: string; idle: string }[] = [
+      { id: 'select', icon: '⬚', title: 'Select — click to select, drag to box-select', active: '#4a4a8e', idle: '#3a3a5e' },
+      { id: 'pen', icon: '✏️', title: 'Pen — click to add points, double-click to finish path', active: '#4a4a8e', idle: '#3a3a5e' },
+      {
+        id: 'pan',
+        icon: viewMode === '3d' ? '🔄' : '✋',
+        title: viewMode === '3d' ? 'Pan/Rotate — drag to rotate 3D view' : 'Pan — drag to move view',
+        active: '#4a4a8e',
+        idle: '#3a3a5e',
+      },
+      { id: 'walkarea', icon: '🛣️', title: 'WalkArea — click-drag horizontally to paint a [x_min,x_max] at y (Phase 2 wander AI)', active: '#4a8e6a', idle: '#3a5e4a' },
+      { id: 'circle', icon: '⭕', title: 'Circle — click center, drag to set radius', active: '#4a4a8e', idle: '#3a3a5e' },
+      { id: 'arc', icon: '◔', title: 'Arc — click center, drag to set radius', active: '#4a4a8e', idle: '#3a3a5e' },
+      { id: 'polygon', icon: '⬡', title: 'Polygon — click center, drag to set radius', active: '#4a4a8e', idle: '#3a3a5e' },
+      { id: 'bezier', icon: '∿', title: 'Bezier — click to add sharp anchor, click+drag to add smooth anchor. Enter/Right-click to finish.', active: '#4a4a8e', idle: '#3a3a5e' },
+    ];
+    if (backgroundImage) {
+      railTools.push({ id: 'background', icon: '🖼️', title: 'Move BG — drag to reposition the background image', active: '#8a6a4a', idle: '#5a4a3a' });
+    }
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '4px', background: '#2a2a4e', borderRadius: '4px', alignSelf: 'flex-start' }}>
+        {railTools.map(t => {
+          const isActive = currentTool === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setCurrentTool(t.id)}
+              style={{
+                width: 40,
+                height: 40,
+                fontSize: 18,
+                padding: 0,
+                background: isActive ? t.active : t.idle,
+                color: 'white',
+                border: isActive ? '1px solid #8ab' : '1px solid transparent',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+              title={t.title}
+            >
+              {t.icon}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
 
   const CircleArcSettings = () => {
     if (currentTool !== 'circle' && currentTool !== 'arc' && currentTool !== 'polygon') return null;
@@ -4835,8 +4764,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       <Toolbar />
       <CircleArcSettings />
       <div style={{ display: 'flex', gap: '8px', overflow: 'hidden', flex: 1 }}>
+        <ToolRail />
         {/* Centering wrapper — takes all remaining horizontal space */}
-        <div ref={canvasContainerRef} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        <div ref={canvasContainerRef} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         {/* Inner div sized to the square canvas — no wasted black area */}
         <div style={{ position: 'relative', width, height, flexShrink: 0 }}>
           <canvas
