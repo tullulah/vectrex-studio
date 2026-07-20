@@ -4520,7 +4520,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                 <input type="number" key={`y_${a.y}`} defaultValue={a.y} onBlur={commit('y')} onKeyDown={onKey('y')} onWheel={onWheel} style={inputStyle} />
                 <span>x</span>
                 <input type="number" key={`xmin_${a.x_min}`} defaultValue={a.x_min} onBlur={commit('x_min')} onKeyDown={onKey('x_min')} onWheel={onWheel} style={inputStyle} />
-                <span title="x_max (rango x: x_min .. x_max)">..</span>
+                <span title="x_max (rango horizontal: de x_min a x_max)" style={{ color: '#8ab', padding: '0 1px' }}>→</span>
                 <input type="number" key={`xmax_${a.x_max}`} defaultValue={a.x_max} onBlur={commit('x_max')} onKeyDown={onKey('x_max')} onWheel={onWheel} style={inputStyle} />
                 <button
                   onClick={() => {
