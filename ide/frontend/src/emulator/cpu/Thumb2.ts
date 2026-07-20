@@ -1512,17 +1512,24 @@ export class Thumb2 implements ICpu {
       return 2;
     }
 
-    // STR Rt,[Rn,{+/-}imm8] with PUW: hw0=1111 1000 0100 Rn
+    // STR word: hw0=1111 1000 0100 Rn — register-indexed (hw1[11]=0) or the T4
+    // PUW immediate (hw1[11]=1). The register form `str Rt,[Rn,Rm,LSL#imm2]` was
+    // missing: it fell into the PUW path (P=0 → addr=base, index dropped), so
+    // `arr[idx] = v` (e.g. thaw_timers[idx]=180) wrote to arr[0] for every idx —
+    // only enemy 0 stayed frozen, the rest thawed instantly.
     if ((hw0 & 0xfff0) === 0xf840) {
-      const P = (hw1 >>> 10) & 1;
-      const U = (hw1 >>> 9)  & 1;
-      const W = (hw1 >>> 8)  & 1;
-      const imm8 = hw1 & 0xff;
-      const base = this.regs[rn];
-      const offset = U ? imm8 : -imm8;
-      const addr = P ? u32(base + offset) : u32(base);
-      this.write32(bus, addr, this.regs[rt]);
-      if (W) this.regs[rn] = u32(base + offset);
+      if ((hw1 >>> 11) & 1) {
+        const P = (hw1 >>> 10) & 1, U = (hw1 >>> 9) & 1, W = (hw1 >>> 8) & 1;
+        const imm8 = hw1 & 0xff;
+        const base = this.regs[rn];
+        const offset = U ? imm8 : -imm8;
+        const addr = P ? u32(base + offset) : u32(base);
+        this.write32(bus, addr, this.regs[rt]);
+        if (W) this.regs[rn] = u32(base + offset);
+      } else {
+        const rm = hw1 & 0xf, imm2 = (hw1 >>> 4) & 0x3;
+        this.write32(bus, u32(this.regs[rn] + (this.regs[rm] << imm2)), this.regs[rt]);
+      }
       return 2;
     }
 
