@@ -5,14 +5,14 @@
  * and is render-verified through the PitrexArm32 sim before the next lands.
  *
  *   Block 0 (skeleton)  ok  boot + LOAD_LEVEL/SPAWN_ENEMIES/SHOW_LEVEL/DRAW_ENEMIES
- *   Block 1 (this file) ok  state machine + title screen -> ROUND intro -> playing
- *   Block 2  player movement + input          (pending)
- *   Block 3  enemy locomotion (GET/SET_ENEMY)  (pending)
- *   Block 4  collision                         (pending)
- *   Block 5  snowball / throw                  (pending)
- *   Block 6  scoring / HUD                      (pending)
- *   Block 7  music / sfx                        (pending — SnowBros ships .vgz/.mid,
- *                                                needs .vmus/.vsfx conversion first)
+ *   Block 1  ok  state machine + title screen -> ROUND intro -> playing
+ *   Block 2  ok  player movement + input
+ *   Block 3  ok  enemy locomotion (GET/SET_ENEMY) + freeze
+ *   Block 4  ok  collision (snowball/enemy, player/enemy)
+ *   Block 5  ok  snowball / throw + ball-rolling / kick
+ *   Block 6  ok  scoring / HUD + level-clear + player death + frog fire
+ *   Block 7  ok  music / sfx (.vmus/.vsfx -> PLAY_MUSIC/STOP_MUSIC/PLAY_SFX,
+ *                per-frame vpy_music_update()/vpy_sfx_update() in the main loop)
  *
  * ── Asset-reference mechanism (the enemy_test_c pattern) ────────────────────
  * The build compiles each asset to a self-contained C header via
@@ -34,6 +34,12 @@
 #include "player_die4.h"
 #include "frog_fireball_side.h"   /* FROG_FIREBALL_SIDE_vec */
 #include "frog_fireball_down.h"   /* FROG_FIREBALL_DOWN_vec */
+#include "intro.h"               /* INTRO_music */
+#include "Yukidama-Ondo.h"       /* YUKIDAMA_ONDO_music (stage music) */
+#include "Henshoku.h"            /* HENSHOKU_music (item music) */
+#include "Boss_Intro.h"          /* BOSS_INTRO_music */
+#include "Game_Over.h"           /* GAME_OVER_music */
+#include "shot_normal.h"         /* SHOT_NORMAL_sfx */
 
 int vpy_clamp(int v, int lo, int hi);   /* libvpy (no CLAMP short-name macro) */
 
@@ -191,7 +197,7 @@ static void enter_level_clear(void)
 
 static void enter_boss_intro(void)
 {
-    /* Block 7: PLAY_MUSIC("Boss_Intro"). */
+    PLAY_MUSIC(BOSS_INTRO_music);
     frame_timer = BOSS_INTRO_DELAY;
     game_state = STATE_BOSS_INTRO;
 }
@@ -226,6 +232,12 @@ static void load_current_level(void)
     SET_CAMERA_Y(camera_y);
     SPAWN_ENEMIES(WORLD_1_1_enemies, WORLD_1_1_enemy_sprites);
 
+    /* Per-level music (mirror main.vpy: levels 16 and 7 use Henshoku, the rest
+     * the stage theme Yukidama-Ondo). */
+    if (current_level == 16)     PLAY_MUSIC(HENSHOKU_music);
+    else if (current_level == 7) PLAY_MUSIC(HENSHOKU_music);
+    else                         PLAY_MUSIC(YUKIDAMA_ONDO_music);
+
     /* Spawn the player on the screen-bottom floor — EXACTLY as VPy
      * load_current_level does (spawn_floor_y = GET_LEVEL_FLOOR_Y() + PLAYER_HH;
      * player_y = spawn_floor_y). The earlier "search a platform with
@@ -233,7 +245,6 @@ static void load_current_level(void)
      * different height than the VPy build. */
     spawn_floor_y = GET_LEVEL_FLOOR_Y() + PLAYER_HH;
     player_y = spawn_floor_y;
-    /* Block 7: PLAY_MUSIC("Yukidama-Ondo") once .vmus assets exist. */
 }
 
 static void try_shoot(void);        /* fwd: called from update_player */
@@ -326,18 +337,20 @@ static void try_shoot(void)
         snow0_vx = snow_spawn_vx; snow0_vy = SNOW_LAUNCH_VY;
         snow0_life = snow_life_max; snow0_active = 1;
         shoot_cooldown = SHOOT_COOLDOWN_MAX;
+        PLAY_SFX(SHOT_NORMAL_sfx);
     } else if (snow1_active == 0) {
         snow1_x = player_x; snow1_y = player_y;
         snow1_vx = snow_spawn_vx; snow1_vy = SNOW_LAUNCH_VY;
         snow1_life = snow_life_max; snow1_active = 1;
         shoot_cooldown = SHOOT_COOLDOWN_MAX;
+        PLAY_SFX(SHOT_NORMAL_sfx);
     } else if (snow2_active == 0) {
         snow2_x = player_x; snow2_y = player_y;
         snow2_vx = snow_spawn_vx; snow2_vy = SNOW_LAUNCH_VY;
         snow2_life = snow_life_max; snow2_active = 1;
         shoot_cooldown = SHOOT_COOLDOWN_MAX;
+        PLAY_SFX(SHOT_NORMAL_sfx);
     }
-    /* Block 7: PLAY_SFX("shot_normal") once .vsfx assets exist. */
 }
 
 /* one snowball slot step: gravity + move + life/offscreen cull. */
@@ -712,7 +725,7 @@ static void state_title(void)
     DRAW_VECTOR(INIT_SCREEN_vec, 0, 40);
     PRINT_TEXT(-70, -40, "PRESS A BUTTON");
     if (J1_BUTTON_1()) {
-        /* Block 7: PLAY_MUSIC("intro"); */
+        PLAY_MUSIC(INTRO_music);
         score = 0;
         lives = LIVES_START;
         current_level = 1;
@@ -786,7 +799,7 @@ static void state_player_dead(void)
     draw_player_death();
     if (--frame_timer <= 0) {
         if (lives <= 0) {
-            /* Block 7: PLAY_MUSIC("Game_Over"). */
+            PLAY_MUSIC(GAME_OVER_music);
             frame_timer = GAME_OVER_DELAY;
             game_state = STATE_GAME_OVER;
         }
@@ -848,7 +861,7 @@ static void state_boss_intro(void)
     PRINT_TEXT(-50,  0, "BOSS INCOMING");
     if (--frame_timer <= 0) {
         load_current_level();
-        /* Block 7: play_boss_music(). */
+        PLAY_MUSIC(BOSS_INTRO_music);   /* play_boss_music(): all boss levels use Boss_Intro */
         game_state = STATE_BOSS;
     }
 }
@@ -960,6 +973,8 @@ int main(void)
 
     for (;;) {
         vpy_frame_begin();      /* WAIT_RECAL + refresh input */
+        vpy_music_update();     /* advance the music/SFX sequencers (VPy auto- */
+        vpy_sfx_update();       /* injects MUSIC_UPDATE at loop start; we mirror it) */
         switch (game_state) {
             case STATE_TITLE:       state_title();       break;
             case STATE_GAME_START:  state_game_start();  break;
