@@ -4765,8 +4765,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           window.addEventListener('mousemove', onMove);
           window.addEventListener('mouseup', onUp);
         }}
-        style={{ position: 'absolute', left: -4, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 10 }}
-        title="Arrastra para redimensionar"
+        onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#6a6aa0'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#3a3a5e'; }}
+        style={{ position: 'absolute', left: -5, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 10,
+                 background: '#3a3a5e', borderRadius: 4, transition: 'background 0.12s' }}
+        title="Arrastra para redimensionar el panel"
       />
       {/* Set Intensity + Clean Orphans — always at top */}
       <div style={{ background: '#1e2230', border: '1px solid #3a3a5e', borderRadius: '4px', padding: '8px' }}>
