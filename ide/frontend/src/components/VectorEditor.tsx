@@ -4507,10 +4507,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             return (
               <div key={idx} style={{
                 fontSize: '9px', color: '#4fc', fontFamily: 'monospace',
-                marginTop: '2px', display: 'flex', alignItems: 'center', gap: '3px',
+                marginTop: '2px', overflowX: 'auto',
                 background: idx === selectedWalkAreaIdx ? '#2a4a44' : 'transparent',
                 borderRadius: '3px', padding: '1px 2px',
               }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', minWidth: 'max-content' }}>
                 <span
                   onClick={() => setSelectedWalkAreaIdx(idx === selectedWalkAreaIdx ? null : idx)}
                   title="Click to select/highlight this area on the canvas"
@@ -4520,7 +4521,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                 <input type="number" key={`y_${a.y}`} defaultValue={a.y} onBlur={commit('y')} onKeyDown={onKey('y')} onWheel={onWheel} style={inputStyle} />
                 <span>x</span>
                 <input type="number" key={`xmin_${a.x_min}`} defaultValue={a.x_min} onBlur={commit('x_min')} onKeyDown={onKey('x_min')} onWheel={onWheel} style={inputStyle} />
-                <span>..</span>
+                <span title="x_max (rango x: x_min .. x_max)">..</span>
                 <input type="number" key={`xmax_${a.x_max}`} defaultValue={a.x_max} onBlur={commit('x_max')} onKeyDown={onKey('x_max')} onWheel={onWheel} style={inputStyle} />
                 <button
                   onClick={() => {
@@ -4532,9 +4533,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                   style={{
                     padding: '1px 4px', background: 'transparent',
                     border: '1px solid #666', color: '#f88', borderRadius: '2px',
-                    cursor: 'pointer', fontSize: '9px',
+                    cursor: 'pointer', fontSize: '9px', flexShrink: 0,
                   }}
                 >x</button>
+                </div>
               </div>
             );
           })}
