@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-07-16"
+    "description": "Created in Playground - 2026-07-19"
   },
   "worldBounds": {
     "xMin": -96,
@@ -24,7 +24,7 @@
         "type": "obstacle",
         "vectorName": "platform1",
         "layer": "gameplay",
-        "x": -71,
+        "x": -70,
         "y": -2388,
         "rotation": 0,
         "scale": 1,
@@ -43,8 +43,8 @@
         "type": "obstacle",
         "vectorName": "platform1",
         "layer": "gameplay",
-        "x": 73,
-        "y": -2387,
+        "x": 71,
+        "y": -2388,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -119,7 +119,7 @@
         "type": "obstacle",
         "vectorName": "platform3",
         "layer": "gameplay",
-        "x": 55,
+        "x": 53,
         "y": -2316,
         "rotation": 0,
         "scale": 1,
