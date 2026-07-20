@@ -703,7 +703,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   // clicking a bar on the canvas or its row in the list; highlighted in both.
   const [selectedWalkAreaIdx, setSelectedWalkAreaIdx] = useState<number | null>(null);
   // Width of the right properties panel — user-resizable by dragging its left edge.
-  const [rightPanelWidth, setRightPanelWidth] = useState(200);
+  const [rightPanelWidth, setRightPanelWidth] = useState(300);
 
   // Tracks the mousedown position for bezier anchor drag detection
   const bezierMouseDownRef = useRef<{ canvasX: number; canvasY: number; resPoint: Point } | null>(null);
@@ -4507,11 +4507,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             return (
               <div key={idx} style={{
                 fontSize: '9px', color: '#4fc', fontFamily: 'monospace',
-                marginTop: '2px', overflowX: 'auto',
+                marginTop: '2px', display: 'flex', alignItems: 'center', gap: '3px',
                 background: idx === selectedWalkAreaIdx ? '#2a4a44' : 'transparent',
                 borderRadius: '3px', padding: '1px 2px',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', minWidth: 'max-content' }}>
                 <span
                   onClick={() => setSelectedWalkAreaIdx(idx === selectedWalkAreaIdx ? null : idx)}
                   title="Click to select/highlight this area on the canvas"
@@ -4536,7 +4535,6 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                     cursor: 'pointer', fontSize: '9px', flexShrink: 0,
                   }}
                 >x</button>
-                </div>
               </div>
             );
           })}
