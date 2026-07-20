@@ -764,7 +764,11 @@ int vpy_level_collision_x(int px, int py, int hw, int hy)
  * plain strh/str, no semantic change. (Prerequisite for a future LEVELS bridge;
  * levels are otherwise DEFERRED — the camera/level state is shared with the
  * still-inline enemy runtime, see pitrex/libvpy.rs.) */
+/* GCC-only optimizer hint; Clang (emcc) has no optimize() attribute and would
+ * warn -Wunknown-attributes. Guard it so only the GCC/ARM build applies it. */
+#if defined(__GNUC__) && !defined(__clang__)
 __attribute__((optimize("no-tree-vectorize")))
+#endif
 void vpy_load_level(const unsigned char *level, const unsigned char *const *sprites)
 {
     s_level   = level;
@@ -958,7 +962,9 @@ static void enemy_set_sprite(VpyEnemy *en, int idx, int is_anim)
 
 /* no-tree-vectorize: keep libvpy NEON-free for the PitrexArm32 sim (gcc -Ofast
  * vectorizes the pool-entry init into vmov.i32/vstr d16). See vpy_load_level. */
+#if defined(__GNUC__) && !defined(__clang__)   /* GCC-only; Clang lacks optimize() (see vpy_load_level) */
 __attribute__((optimize("no-tree-vectorize")))
+#endif
 void vpy_spawn_enemies(const unsigned char *img, const unsigned char *const *sprites)
 {
     s_enemy_count = 0;
