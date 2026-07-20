@@ -699,6 +699,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   // Walkable-area paint state (active when currentTool === 'walkarea').
   const walkAreaDrawStartRef = useRef<{ x: number; y: number } | null>(null);
   const [walkAreaPreview, setWalkAreaPreview] = useState<{ y: number; x_min: number; x_max: number } | null>(null);
+  // Currently-selected walkable area (index into resource.walkableAreas), set by
+  // clicking a bar on the canvas or its row in the list; highlighted in both.
+  const [selectedWalkAreaIdx, setSelectedWalkAreaIdx] = useState<number | null>(null);
+  // Width of the right properties panel — user-resizable by dragging its left edge.
+  const [rightPanelWidth, setRightPanelWidth] = useState(200);
 
   // Tracks the mousedown position for bezier anchor drag detection
   const bezierMouseDownRef = useRef<{ canvasX: number; canvasY: number; resPoint: Point } | null>(null);
@@ -1517,11 +1522,12 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     // dashed bars with their index, plus the live preview while painting.
     if (resource.walkableAreas?.length || walkAreaPreview) {
       ctx.save();
-      ctx.strokeStyle = '#44ffcc';
-      ctx.fillStyle = '#44ffcc';
-      ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 3]);
       (resource.walkableAreas ?? []).forEach((a, idx) => {
+        const sel = idx === selectedWalkAreaIdx;
+        ctx.strokeStyle = sel ? '#ffdd33' : '#44ffcc';
+        ctx.fillStyle = sel ? '#ffdd33' : '#44ffcc';
+        ctx.lineWidth = sel ? 3 : 1.5;
         const left  = resourceToCanvas({ x: a.x_min, y: a.y });
         const right = resourceToCanvas({ x: a.x_max, y: a.y });
         ctx.beginPath();
@@ -1852,7 +1858,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.stroke();
       ctx.restore();
     }
-  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge, walkAreaPreview]);
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge, walkAreaPreview, selectedWalkAreaIdx]);
 
   useEffect(() => {
     draw();
@@ -2533,6 +2539,21 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       if (a.x_max - a.x_min >= 2) {
         const next = [...(resource.walkableAreas ?? []), { y: a.y, x_min: a.x_min, x_max: a.x_max }];
         updateResource(resource, { ...resource, walkableAreas: next });
+      } else {
+        // No horizontal drag → treat as a click: select the nearest existing
+        // walkable area (highlight it here and in the list). Tolerance is a
+        // fixed ~8px in canvas space, converted to resource units via zoom.
+        const clickX = (a.x_min + a.x_max) / 2;
+        const tol = 8 / zoom;
+        let hit: number | null = null;
+        let bestDy = Infinity;
+        (resource.walkableAreas ?? []).forEach((w, idx) => {
+          const dy = Math.abs(w.y - a.y);
+          const lo = Math.min(w.x_min, w.x_max) - tol;
+          const hi = Math.max(w.x_min, w.x_max) + tol;
+          if (dy <= tol && clickX >= lo && clickX <= hi && dy < bestDy) { bestDy = dy; hit = idx; }
+        });
+        setSelectedWalkAreaIdx(hit);
       }
       walkAreaDrawStartRef.current = null;
       setWalkAreaPreview(null);
@@ -4215,12 +4236,12 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
 
   // Path properties panel - shows when a path is selected
   const PathPropertiesPanel = () => {
-    if (currentPathIndex < 0) return null;
-    
     const activeLayer = resource.layers[currentLayerIndex];
-    if (!activeLayer || !activeLayer.paths[currentPathIndex]) return null;
-    
-    const path = activeLayer.paths[currentPathIndex];
+    // .vec-level data (Walkable Areas / Collision Mesh) renders regardless of
+    // path selection; `path` is null when no path is selected, and the
+    // path-specific sections (intensity, points) are guarded on it below.
+    const path = (currentPathIndex >= 0 && activeLayer && activeLayer.paths[currentPathIndex])
+      ? activeLayer.paths[currentPathIndex] : null;
     
     const handleIntensityChange = (newIntensity: number) => {
       const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
@@ -4232,6 +4253,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     
     return (
       <div style={{ background: '#2a2a4e', padding: '8px', borderRadius: '4px', marginTop: '8px' }}>
+        {path && (<>
         <div style={{ color: '#6af', marginBottom: '8px', fontSize: '12px', fontWeight: 'bold' }}>
           Path {currentPathIndex + 1} Properties
         </div>
@@ -4298,7 +4320,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           </div>
         </div>
 
-        {/* Collision Mesh section */}
+        </>)}
+
+        {/* Collision Mesh section — .vec-level, always visible */}
         <div style={{ marginTop: '10px', borderTop: '1px solid #444', paddingTop: '8px' }}>
           <div style={{ color: '#c8a', marginBottom: '6px', fontSize: '12px', fontWeight: 'bold' }}>
             Collision Mesh
@@ -4306,23 +4330,25 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           <div style={{ display: 'flex', gap: '4px', marginBottom: '6px', flexWrap: 'wrap' }}>
             <button
               onClick={() => {
+                if (!path) return;
                 const segs = generateMeshFromPath(path);
                 const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
                 newResource.collisionMesh = { segments: segs };
                 updateResource(resource, newResource);
                 setShowCollisionMesh(true);
               }}
+              disabled={!path}
               style={{
                 flex: 1,
                 padding: '5px 4px',
-                background: '#3a3a6a',
-                border: '1px solid #6060aa',
-                color: '#ccf',
+                background: path ? '#3a3a6a' : '#2a2a2a',
+                border: path ? '1px solid #6060aa' : '1px solid #444',
+                color: path ? '#ccf' : '#666',
                 borderRadius: '3px',
-                cursor: 'pointer',
+                cursor: path ? 'pointer' : 'default',
                 fontSize: '10px',
               }}
-              title="Auto-generate collision mesh from horizontal edges of selected path"
+              title={path ? "Auto-generate collision mesh from horizontal edges of selected path" : "Select a path first to auto-generate from its edges"}
             >
               Auto-generate
             </button>
@@ -4411,6 +4437,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               ? `${resource.collisionMesh.segments.length} segment${resource.collisionMesh.segments.length !== 1 ? 's' : ''}`
               : 'No mesh — click Auto-generate or select an edge'}
           </div>
+          <div style={{ maxHeight: '120px', overflowY: 'auto', overflowX: 'hidden' }}>
           {resource.collisionMesh?.segments?.map((seg, idx) => (
             <div key={idx} style={{
               fontSize: '9px', color: '#c8a', fontFamily: 'monospace',
@@ -4433,6 +4460,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               >x</button>
             </div>
           ))}
+          </div>
         </div>
 
         {/* Walkable Areas section: stored on the .vec itself and inherited
@@ -4446,6 +4474,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               ? `${resource.walkableAreas.length} area${resource.walkableAreas.length !== 1 ? 's' : ''} — pick 🛣️ WalkArea to add more`
               : 'No areas — pick 🛣️ WalkArea and drag horizontally to paint'}
           </div>
+          <div style={{ maxHeight: '150px', overflowY: 'auto', overflowX: 'hidden' }}>
           {(resource.walkableAreas ?? []).map((a, idx) => {
             const patch = (k: 'y' | 'x_min' | 'x_max', v: number) => {
               const next = (resource.walkableAreas ?? []).slice();
@@ -4478,9 +4507,15 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             return (
               <div key={idx} style={{
                 fontSize: '9px', color: '#4fc', fontFamily: 'monospace',
-                marginTop: '2px', display: 'flex', alignItems: 'center', gap: '3px'
+                marginTop: '2px', display: 'flex', alignItems: 'center', gap: '3px',
+                background: idx === selectedWalkAreaIdx ? '#2a4a44' : 'transparent',
+                borderRadius: '3px', padding: '1px 2px',
               }}>
-                <span style={{ width: 18 }}>W{idx}</span>
+                <span
+                  onClick={() => setSelectedWalkAreaIdx(idx === selectedWalkAreaIdx ? null : idx)}
+                  title="Click to select/highlight this area on the canvas"
+                  style={{ width: 18, cursor: 'pointer', color: idx === selectedWalkAreaIdx ? '#ffdd33' : '#4fc', fontWeight: idx === selectedWalkAreaIdx ? 'bold' : 'normal' }}
+                >W{idx}</span>
                 <span title="Vertical position: usually the platform's top surface; nudge until enemies sit correctly">y</span>
                 <input type="number" key={`y_${a.y}`} defaultValue={a.y} onBlur={commit('y')} onKeyDown={onKey('y')} onWheel={onWheel} style={inputStyle} />
                 <span>x</span>
@@ -4492,6 +4527,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                     const next = (resource.walkableAreas ?? []).slice();
                     next.splice(idx, 1);
                     updateResource(resource, { ...resource, walkableAreas: next });
+                    setSelectedWalkAreaIdx(null);
                   }}
                   style={{
                     padding: '1px 4px', background: 'transparent',
@@ -4502,9 +4538,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               </div>
             );
           })}
+          </div>
           {(resource.walkableAreas?.length ?? 0) > 0 && (
             <button
-              onClick={() => updateResource(resource, { ...resource, walkableAreas: [] })}
+              onClick={() => { updateResource(resource, { ...resource, walkableAreas: [] }); setSelectedWalkAreaIdx(null); }}
               style={{
                 marginTop: '6px', padding: '4px 8px', background: '#4a2a2a',
                 border: '1px solid #8a4a4a', color: '#faa', borderRadius: '3px',
@@ -4514,11 +4551,13 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           )}
         </div>
 
+        {path && (
         <div style={{ fontSize: '11px', color: '#888' }}>
           <div>Points: {path.points.length}</div>
           <div>Closed: {path.closed ? 'Yes' : 'No'}</div>
           <div style={{ marginTop: '4px', color: '#666' }}>{path.name}</div>
         </div>
+        )}
       </div>
     );
   };
@@ -4714,7 +4753,21 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     const hasPathSel = allSelKeys.size > 0;
     const selCount = allSelKeys.size;
     return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '200px', flexShrink: 0, overflowY: 'auto' }}>
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '8px', width: rightPanelWidth, minWidth: 140, flexShrink: 0, overflowY: 'auto', minHeight: 0 }}>
+      {/* Drag the left edge to resize the panel wider/narrower. */}
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault();
+          const startX = e.clientX;
+          const startW = rightPanelWidth;
+          const onMove = (ev: MouseEvent) => setRightPanelWidth(Math.max(140, Math.min(600, startW + (startX - ev.clientX))));
+          const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        }}
+        style={{ position: 'absolute', left: -4, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 10 }}
+        title="Arrastra para redimensionar"
+      />
       {/* Set Intensity + Clean Orphans — always at top */}
       <div style={{ background: '#1e2230', border: '1px solid #3a3a5e', borderRadius: '4px', padding: '8px' }}>
         <div style={{ color: '#aaa', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px' }}>Intensity</div>
