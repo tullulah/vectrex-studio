@@ -183,12 +183,23 @@ pub struct VPlayObject {
     pub transitions: Option<Vec<AreaTransition>>,
 }
 
-/// A horizontal walkable area for wander enemies.
+/// A walkable area for wander enemies. `y` is the surface height at `x_min`;
+/// `y2` is the height at `x_max`. When `y2` is absent (or equal to `y`) the area
+/// is FLAT (the historical behaviour). When they differ the surface is a SLOPE,
+/// and the runtime interpolates the enemy's Y from its X across [x_min, x_max].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalkableArea {
     pub y: i16,
     pub x_min: i16,
     pub x_max: i16,
+    /// Surface height at x_max. Absent = flat (y2 == y). See `y_at_max`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y2: Option<i16>,
+}
+
+impl WalkableArea {
+    /// Surface height at x_max (defaults to `y` → flat).
+    pub fn y_at_max(&self) -> i16 { self.y2.unwrap_or(self.y) }
 }
 
 /// A transition between two walkable areas (by index in `walkable_areas`).
@@ -567,12 +578,12 @@ impl VPlayLevel {
             let mut b = String::new();
             b.push_str(&format!("    FCB {}    ; area_count\n", areas.len()));
             b.push_str(&format!("    FCB {}    ; trans_count\n", trans.len()));
-            b.push_str("; Areas (8 bytes each): FDB y, FDB x_min, FDB x_max, FCB 0, FCB 0\n");
+            b.push_str("; Areas (8 bytes each): FDB y, FDB x_min, FDB x_max, FDB y2 (y at x_max; ==y when flat)\n");
             for (idx, a) in areas.iter().enumerate() {
-                b.push_str(&format!("    FDB {}  ; area[{}].y\n", a.y, idx));
+                b.push_str(&format!("    FDB {}  ; area[{}].y (@x_min)\n", a.y, idx));
                 b.push_str(&format!("    FDB {}  ; area[{}].x_min\n", a.x_min, idx));
                 b.push_str(&format!("    FDB {}  ; area[{}].x_max\n", a.x_max, idx));
-                b.push_str("    FCB 0,0      ; pad\n");
+                b.push_str(&format!("    FDB {}  ; area[{}].y2 (@x_max)\n", a.y_at_max(), idx));
             }
             if !trans.is_empty() {
                 b.push_str("; Transitions (8 bytes each): FCB from, FCB to, FCB type, FCB vy0, FDB from_x, FDB to_x\n");
@@ -1343,13 +1354,16 @@ impl VPlayLevel {
                     }
                     pi_bytes.extend_from_slice(&(areas.len() as u16).to_le_bytes());
                     for a in &areas {
+                        // 8-byte area record (matches the m6809/ARM asm layout):
+                        // i16 y(@x_min), i16 x_min, i16 x_max, i16 y2(@x_max).
                         pi_bytes.extend_from_slice(&a.y.to_le_bytes());
                         pi_bytes.extend_from_slice(&a.x_min.to_le_bytes());
                         pi_bytes.extend_from_slice(&a.x_max.to_le_bytes());
+                        pi_bytes.extend_from_slice(&a.y_at_max().to_le_bytes());
                     }
                     pi_bytes.extend_from_slice(&(trans.len() as u16).to_le_bytes());
                     let center_of = |ci: u8| -> i16 {
-                        let a = areas.get(ci as usize).unwrap_or(&WalkableArea { y: 0, x_min: 0, x_max: 0 });
+                        let a = areas.get(ci as usize).unwrap_or(&WalkableArea { y: 0, x_min: 0, x_max: 0, y2: None });
                         ((a.x_min as i32 + a.x_max as i32) / 2) as i16
                     };
                     for t in trans {
@@ -1377,8 +1391,8 @@ impl VPlayLevel {
                     areas_tables.push_str(&format!("    .word {}  @ trans_count\n", trans.len()));
                     for (ai_idx, a) in areas.iter().enumerate() {
                         areas_tables.push_str(&format!(
-                            "    .hword {}, {}, {}, 0  @ area {}: y, x_min, x_max\n",
-                            a.y, a.x_min, a.x_max, ai_idx));
+                            "    .hword {}, {}, {}, {}  @ area {}: y(@x_min), x_min, x_max, y2(@x_max)\n",
+                            a.y, a.x_min, a.x_max, a.y_at_max(), ai_idx));
                     }
                     for (ti_idx, t) in trans.iter().enumerate() {
                         let ttype = match t.ttype.as_str() {
@@ -1392,7 +1406,7 @@ impl VPlayLevel {
                         // default rendering).
                         let center_of = |idx: u8| -> i16 {
                             let a = areas.get(idx as usize)
-                                .unwrap_or(&WalkableArea { y: 0, x_min: 0, x_max: 0 });
+                                .unwrap_or(&WalkableArea { y: 0, x_min: 0, x_max: 0, y2: None });
                             ((a.x_min as i32 + a.x_max as i32) / 2) as i16
                         };
                         let fx = t.from_x.unwrap_or_else(|| center_of(t.from));
@@ -1662,6 +1676,7 @@ impl VPlayLevel {
                         y: a.y.saturating_add(obj.y as i16),
                         x_min: a.x_min.saturating_add(obj.x as i16),
                         x_max: a.x_max.saturating_add(obj.x as i16),
+                        y2: a.y2.map(|y2| y2.saturating_add(obj.y as i16)),
                     });
                     sources.push(obj_idx);
                 }
@@ -1692,6 +1707,7 @@ impl VPlayLevel {
                         y: a.y.saturating_add(obj.y as i16),
                         x_min: a.x_min.saturating_add(obj.x as i16),
                         x_max: a.x_max.saturating_add(obj.x as i16),
+                        y2: a.y2.map(|y2| y2.saturating_add(obj.y as i16)),
                     });
                 }
             }
@@ -1736,7 +1752,7 @@ impl VPlayLevel {
         if wps.len() >= 2 {
             let x_min = wps.iter().map(|w| w.x).min().unwrap();
             let x_max = wps.iter().map(|w| w.x).max().unwrap();
-            vec![WalkableArea { y: obj.y as i16, x_min, x_max }]
+            vec![WalkableArea { y: obj.y as i16, x_min, x_max, y2: None }]
         } else {
             vec![]
         }

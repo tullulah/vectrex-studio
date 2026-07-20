@@ -885,7 +885,7 @@ void vpy_update_level(void)
  *     u8  ai_type, u8 wp_count, u8 mirror_on_patrol, u8 default_facing,
  *     u8  is_anim, i8 feet_offset
  *     waypoints[wp_count]:  i16 x, i16 y
- *     u16 area_count; areas[area_count]: i16 y, i16 x_min, i16 x_max
+ *     u16 area_count; areas[area_count]: i16 y(@x_min), i16 x_min, i16 x_max, i16 y2(@x_max)
  *     u16 trans_count; trans[trans_count]: u8 from,to,type,pad, i16 from_x,to_x
  * The mutable enemy pool lives ONLY here (single state home once bridged). */
 
@@ -926,12 +926,11 @@ static int rd_u16(const unsigned char *p) { return (int)((uint16_t)p[0] | ((uint
 static int area_snap_index(const unsigned char *areas, int area_count,
                            int spawn_x, int spawn_y)
 {
-    const unsigned char *a = areas + 4;   /* skip area_count u16 + trans hint? no: layout below */
-    (void)a;
-    /* areas points at: u16 area_count, then areas[]: i16 y, x_min, x_max (6 bytes). */
+    /* areas points at: u16 area_count, then areas[]: i16 y, x_min, x_max, y2
+     * (8 bytes). The snap COST uses y (@x_min), matching the asm backends. */
     const unsigned char *ap = areas + 2;
     int best_idx = 0, best_cost = 0x10000;
-    for (int i = 0; i < area_count; i++, ap += 6) {
+    for (int i = 0; i < area_count; i++, ap += 8) {
         int ay = rd_i16(ap);
         int xmin = rd_i16(ap + 2);
         int xmax = rd_i16(ap + 4);
@@ -941,6 +940,24 @@ static int area_snap_index(const unsigned char *areas, int area_count,
         if (cost < best_cost) { best_cost = cost; best_idx = i; }
     }
     return best_idx;
+}
+
+/* Surface height of an 8-byte area record at world-X `x`. Flat area (y2==y1 or
+ * degenerate x-range) → y1. Otherwise linear interpolation between the endpoints
+ * (x_min,y1)-(x_max,y2), clamped to the area's x-range. The exact integer form
+ *   y1 + (y2 - y1) * (x - x_min) / (x_max - x_min)
+ * (signed, truncating division) is what the m6809/ARM/pitrex backends replicate,
+ * so this is the single source of truth for sloped-walkable-area Y. */
+static int surface_y_at(const unsigned char *area, int x)
+{
+    int y1 = rd_i16(area);
+    int x_min = rd_i16(area + 2);
+    int x_max = rd_i16(area + 4);
+    int y2 = rd_i16(area + 6);
+    if (y2 == y1 || x_max <= x_min) return y1;   /* flat / degenerate */
+    if (x <= x_min) return y1;
+    if (x >= x_max) return y2;
+    return y1 + (int)((long)(y2 - y1) * (long)(x - x_min) / (long)(x_max - x_min));
 }
 
 /* PI anim descriptor `_{ANIM}_ANIMC`: [0]=frame_count, then per frame
@@ -997,7 +1014,7 @@ void vpy_spawn_enemies(const unsigned char *img, const unsigned char *const *spr
         const unsigned char *ap = wp_base + wp_count * 4;   /* -> area_count u16 */
         int area_count = rd_u16(ap);
         const unsigned char *areas = ap;                     /* points at area_count */
-        const unsigned char *tp = ap + 2 + area_count * 6;   /* -> trans_count u16 */
+        const unsigned char *tp = ap + 2 + area_count * 8;   /* -> trans_count u16 */
         int trans_count = rd_u16(tp);
         const unsigned char *next = tp + 2 + trans_count * 8;
 
@@ -1029,7 +1046,7 @@ void vpy_spawn_enemies(const unsigned char *img, const unsigned char *const *spr
         if (want_snap && area_count > 0) {
             int bi = area_snap_index(areas, area_count, spawn_x, spawn_y);
             en->cur_area = bi;
-            int ay = rd_i16(areas + 2 + bi * 6);
+            int ay = surface_y_at(areas + 2 + bi * 8, spawn_x);
             en->y = ay + feet_offset;
         }
         /* vanim init: prime frame-0 duration for an animated default sprite. */
@@ -1250,8 +1267,8 @@ void vpy_update_enemies(void)
             if (!ap) continue;
             int area_count = rd_u16(ap);
             if (area_count == 0) continue;
-            const unsigned char *area_base = ap + 2;                 /* areas[] (6B stride) */
-            const unsigned char *tp = area_base + area_count * 6;    /* -> trans_count u16 */
+            const unsigned char *area_base = ap + 2;                 /* areas[] (8B stride) */
+            const unsigned char *tp = area_base + area_count * 8;    /* -> trans_count u16 */
             int trans_count = rd_u16(tp);
             const unsigned char *trans_base = tp + 2;                /* trans[] (8B stride) */
             const int SPEED = VPY_PATROL_SPEED;
@@ -1264,8 +1281,9 @@ void vpy_update_enemies(void)
                 else if (dx > 0) { en->dir = 1; x += SPEED; if (x > from_x) x = from_x; en->x = x; reached = (x == from_x); }
                 else             { en->dir = 0; x -= SPEED; if (x < from_x) x = from_x; en->x = x; reached = (x == from_x); }
                 if (!reached) continue;
-                /* takeoff -> AIRBORNE: pick vy0 by transition type. */
-                int ty = rd_i16(area_base + en->cur_area * 6);
+                /* takeoff -> AIRBORNE: pick vy0 by transition type. Target Y is
+                 * the destination area's surface at the landing X (target_x). */
+                int ty = surface_y_at(area_base + en->cur_area * 8, en->cur_target);
                 int dy = ty - en->y;
                 int vy0;
                 if (en->w_type == 2) vy0 = -1;              /* drop */
@@ -1295,8 +1313,8 @@ void vpy_update_enemies(void)
                 int y = en->y, vy = en->idle_timer;
                 y += vy; en->y = y;
                 vy -= 1; if (vy < -4) vy = -4; en->idle_timer = vy;
-                /* target_y = target area's y + feet_offset (same as the snap). */
-                int ty = rd_i16(area_base + en->cur_area * 6) + en->feet_offset;
+                /* target_y = target area's surface at the landing X + feet_offset. */
+                int ty = surface_y_at(area_base + en->cur_area * 8, en->cur_target) + en->feet_offset;
                 if ((en->w_type == 2 || vy < 0) && y <= ty) {
                     en->y = ty;                              /* snap onto platform */
                     en->sub_state = 0;                       /* WALK */
@@ -1331,16 +1349,18 @@ void vpy_update_enemies(void)
                 enemy_set_sprite(en, en->walk_sprite_index, en->walk_is_anim);
                 continue;
             }
-            /* WALK (sub_state 0): bounce X within the current area's edges. */
-            const unsigned char *area = area_base + en->cur_area * 6;
+            /* WALK (sub_state 0): bounce X within the current area's edges.
+             * On a sloped area the surface Y follows X, so re-derive Y from the
+             * enemy's X every walked frame (flat area → surface_y_at == y1). */
+            const unsigned char *area = area_base + en->cur_area * 8;
             int x_min = rd_i16(area + 2), x_max = rd_i16(area + 4);
             int x = en->x, edge = 0;
             if (en->dir == 1) {
                 if (x >= x_max) edge = 1;
-                else { x += SPEED; if (x > x_max) x = x_max; en->x = x; edge = (x == x_max); }
+                else { x += SPEED; if (x > x_max) x = x_max; en->x = x; en->y = surface_y_at(area, x) + en->feet_offset; edge = (x == x_max); }
             } else {
                 if (x <= x_min) edge = 1;
-                else { x -= SPEED; if (x < x_min) x = x_min; en->x = x; edge = (x == x_min); }
+                else { x -= SPEED; if (x < x_min) x = x_min; en->x = x; en->y = surface_y_at(area, x) + en->feet_offset; edge = (x == x_min); }
             }
             if (!edge) continue;
             en->dir ^= 1;
@@ -1352,21 +1372,21 @@ void vpy_update_enemies(void)
         if (en->ai_type != 1) continue;           /* unsupported */
 
         if (en->wp_count == 0) {
-            /* area-bounded X-bounce patrol */
+            /* area-bounded X-bounce patrol (Y follows a sloped area's surface) */
             if (!en->areas) continue;
-            const unsigned char *area = en->areas + 2 + en->cur_area * 6;
+            const unsigned char *area = en->areas + 2 + en->cur_area * 8;
             int xmin = rd_i16(area + 2);
             int xmax = rd_i16(area + 4);
             int x = en->x;
             if (en->dir == 1) {
                 if (x >= xmax) { en->dir ^= 1; continue; }
                 x += VPY_PATROL_SPEED; if (x > xmax) x = xmax;
-                en->x = x;
+                en->x = x; en->y = surface_y_at(area, x) + en->feet_offset;
                 if (x != xmax) continue;
             } else {
                 if (x <= xmin) { en->dir ^= 1; continue; }
                 x -= VPY_PATROL_SPEED; if (x < xmin) x = xmin;
-                en->x = x;
+                en->x = x; en->y = surface_y_at(area, x) + en->feet_offset;
                 if (x != xmin) continue;
             }
             en->dir ^= 1;

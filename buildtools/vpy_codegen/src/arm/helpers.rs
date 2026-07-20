@@ -413,7 +413,9 @@ fn emit_enemy_runtime() -> String {
     s.push_str("    lsl     r0, r9, #3             @ idx*8\n");
     s.push_str("    add     r0, r0, #8\n");
     s.push_str("    add     r0, r6, r0             @ &area[idx]\n");
-    s.push_str("    ldrsh   r3, [r0, #0]           @ area.y\n");
+    s.push_str("    ldr     r1, [r5, #4]           @ spawn_x (world_x)\n");
+    s.push_str("    bl      vupe_surf              @ r0 = surface_y_at(area, spawn_x)\n");
+    s.push_str("    mov     r3, r0                 @ surface height (raw)\n");
     s.push_str("    ldr     r1, [r5, #28]          @ type_data_ptr\n");
     s.push_str("    cmp     r1, #0\n");
     s.push_str("    beq     vupe_fa_snap_no_feet\n");
@@ -481,7 +483,7 @@ fn emit_enemy_runtime() -> String {
     s.push_str("    b.w     vupe_w_edge            @ wall hit → flip dir like reaching x_max\n");
     s.push_str("vupe_wwr_wall_ok:\n");
     s.push_str("    cmp     r11, r10\n");
-    s.push_str("    bne.w   vupe_next\n");
+    s.push_str("    bne.w   vupe_w_surf            @ still walking: follow incline\n");
     s.push_str("    b.w     vupe_w_edge\n");
     s.push_str("vupe_w_walk_left:\n");
     // dir=1: moving left toward x_min
@@ -504,9 +506,24 @@ fn emit_enemy_runtime() -> String {
     s.push_str("    b.w     vupe_w_edge            @ wall hit → flip dir like reaching x_min\n");
     s.push_str("vupe_wwl_wall_ok:\n");
     s.push_str("    cmp     r11, r9\n");
-    s.push_str("    bne.w   vupe_next\n");
+    s.push_str("    bne.w   vupe_w_surf            @ still walking: follow incline\n");
     // Reached an edge → flip dir, pick random idle timer, enter IDLE
     s.push_str("vupe_w_edge:\n");
+    // Slope: follow the incline onto the (clamped) edge x before entering IDLE.
+    s.push_str("    ldrb    r9, [r5, #20]          @ area_idx\n");
+    s.push_str("    lsl     r0, r9, #3\n");
+    s.push_str("    add     r0, r0, #8\n");
+    s.push_str("    add     r0, r6, r0             @ area_ptr\n");
+    s.push_str("    ldr     r1, [r5, #4]           @ world_x (clamped to edge)\n");
+    s.push_str("    bl      vupe_surf              @ r0 = surface_y (raw)\n");
+    s.push_str("    mov     r3, r0\n");
+    s.push_str("    ldr     r1, [r5, #28]          @ type_data_ptr\n");
+    s.push_str("    cmp     r1, #0\n");
+    s.push_str("    beq     vupe_w_edge_nofeet\n");
+    s.push_str("    ldrsb   r1, [r1, #4]           @ feet_offset\n");
+    s.push_str("    add     r3, r3, r1\n");
+    s.push_str("vupe_w_edge_nofeet:\n");
+    s.push_str("    strh    r3, [r5, #8]           @ world_y = surface + feet\n");
     s.push_str("    ldrb    r0, [r5, #26]          @ dir\n");
     s.push_str("    eor     r0, r0, #1             @ flip\n");
     s.push_str("    strb    r0, [r5, #26]\n");
@@ -519,6 +536,26 @@ fn emit_enemy_runtime() -> String {
     s.push_str("    strh    r0, [r12, #0]          @ scratch_a = idle_timer\n");
     s.push_str("    mov     r0, #1\n");
     s.push_str("    strb    r0, [r5, #10]          @ sub_state = IDLE\n");
+    s.push_str("    b.w     vupe_next\n");
+
+    // ── Slope surface-follow (WALK continue): world_y = surface_y_at(area,x)+feet.
+    //     For FLAT areas surface_y_at == area.y, so world_y stays equal to the
+    //     spawn-snapped value — byte-identical to the pre-slope behavior.
+    s.push_str("vupe_w_surf:\n");
+    s.push_str("    ldrb    r9, [r5, #20]          @ area_idx\n");
+    s.push_str("    lsl     r0, r9, #3\n");
+    s.push_str("    add     r0, r0, #8\n");
+    s.push_str("    add     r0, r6, r0             @ area_ptr\n");
+    s.push_str("    ldr     r1, [r5, #4]           @ world_x (after update+clamp)\n");
+    s.push_str("    bl      vupe_surf              @ r0 = surface_y (raw)\n");
+    s.push_str("    mov     r3, r0\n");
+    s.push_str("    ldr     r1, [r5, #28]          @ type_data_ptr\n");
+    s.push_str("    cmp     r1, #0\n");
+    s.push_str("    beq     vupe_w_surf_nofeet\n");
+    s.push_str("    ldrsb   r1, [r1, #4]           @ feet_offset\n");
+    s.push_str("    add     r3, r3, r1\n");
+    s.push_str("vupe_w_surf_nofeet:\n");
+    s.push_str("    strh    r3, [r5, #8]           @ world_y = surface + feet\n");
     s.push_str("    b.w     vupe_next\n");
 
     // ── IDLE: decrement timer; when done → pick transition or WALK ───────
@@ -614,7 +651,9 @@ fn emit_enemy_runtime() -> String {
     s.push_str("    lsl     r0,  r9, #3             @ idx*8\n");
     s.push_str("    add     r0,  r0, #8\n");
     s.push_str("    add     r0,  r6, r0             @ &area[target]\n");
-    s.push_str("    ldrsh   r9,  [r0, #0]           @ target_area.y (raw)\n");
+    s.push_str("    ldrsh   r1,  [r12, #2]          @ to_x (target_x)\n");
+    s.push_str("    bl      vupe_surf               @ r0 = surface_y_at(area, to_x)\n");
+    s.push_str("    mov     r9,  r0                 @ target_area.y (raw)\n");
     // dy = target_y - current_y (both raw area.y values, before feet_offset)
     // Use raw area.y for arc calc; feet_offset applied on landing
     s.push_str("    ldrsh   r10, [r5, #8]           @ current world_y (has feet_offset)\n");
@@ -681,7 +720,9 @@ fn emit_enemy_runtime() -> String {
     s.push_str("    lsl     r0,  r9, #3             @ idx*8\n");
     s.push_str("    add     r0,  r0, #8\n");
     s.push_str("    add     r0,  r6, r0             @ &area[target]\n");
-    s.push_str("    ldrsh   r9,  [r0, #0]           @ target area.y (raw)\n");
+    s.push_str("    ldrsh   r1,  [r12, #2]          @ to_x (target_x)\n");
+    s.push_str("    bl      vupe_surf               @ r0 = surface_y_at(area, to_x)\n");
+    s.push_str("    mov     r9,  r0                 @ target area.y (raw)\n");
     s.push_str("    ldr     r1,  [r5, #28]          @ type_data_ptr\n");
     s.push_str("    cmp     r1, #0\n");
     s.push_str("    beq     vupe_w_air_nofeet\n");
@@ -739,6 +780,45 @@ fn emit_enemy_runtime() -> String {
     s.push_str("    bne     vupe_loop\n");
     s.push_str("vupe_done:\n");
     s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
+    // ── surface_y_at(r0=area_ptr, r1=x) -> r0 = surface height (raw, no feet).
+    // Slope interpolation over the 8-byte walkable-area record:
+    //   +0 i16 y1, +2 i16 x_min, +4 i16 x_max, +6 i16 y2.
+    // Matches the reference C bit-exactly (SIGNED, sdiv truncates toward zero).
+    // Leaf routine — clobbers only r0-r3; preserves r4-r12 (esp. scratch r12).
+    s.push_str("vupe_surf:\n");
+    s.push_str("    ldrsh   r2, [r0, #0]           @ y1\n");
+    s.push_str("    ldrsh   r3, [r0, #6]           @ y2\n");
+    s.push_str("    subs    r3, r3, r2             @ dy = y2 - y1\n");
+    s.push_str("    beq     vupe_surf_r2           @ dy==0 (flat) -> y1\n");
+    s.push_str("    ldrsh   r2, [r0, #2]           @ x_min\n");
+    s.push_str("    ldrsh   r3, [r0, #4]           @ x_max\n");
+    s.push_str("    subs    r3, r3, r2             @ w = x_max - x_min\n");
+    s.push_str("    ble     vupe_surf_y1           @ w<=0 -> y1\n");
+    s.push_str("    cmp     r1, r2                 @ x vs x_min\n");
+    s.push_str("    ble     vupe_surf_y1           @ x<=x_min -> y1\n");
+    s.push_str("    ldrsh   r3, [r0, #4]           @ x_max\n");
+    s.push_str("    cmp     r1, r3                 @ x vs x_max\n");
+    s.push_str("    bge     vupe_surf_y2           @ x>=x_max -> y2\n");
+    s.push_str("    subs    r1, r1, r2             @ t = x - x_min\n");
+    s.push_str("    ldrsh   r2, [r0, #4]           @ x_max\n");
+    s.push_str("    ldrsh   r3, [r0, #2]           @ x_min\n");
+    s.push_str("    subs    r2, r2, r3             @ w = x_max - x_min\n");
+    s.push_str("    ldrsh   r3, [r0, #6]           @ y2\n");
+    s.push_str("    ldrsh   r0, [r0, #0]           @ y1\n");
+    s.push_str("    subs    r3, r3, r0             @ dy = y2 - y1\n");
+    s.push_str("    mul     r3, r3, r1             @ dy * t\n");
+    s.push_str("    sdiv    r3, r3, r2             @ (dy*t) / w  (trunc toward zero)\n");
+    s.push_str("    add     r0, r0, r3             @ y1 + dy*t/w\n");
+    s.push_str("    bx      lr\n");
+    s.push_str("vupe_surf_y1:\n");
+    s.push_str("    ldrsh   r0, [r0, #0]           @ y1\n");
+    s.push_str("    bx      lr\n");
+    s.push_str("vupe_surf_r2:\n");
+    s.push_str("    mov     r0, r2                 @ y1 (already in r2)\n");
+    s.push_str("    bx      lr\n");
+    s.push_str("vupe_surf_y2:\n");
+    s.push_str("    ldrsh   r0, [r0, #6]           @ y2\n");
+    s.push_str("    bx      lr\n");
     s.push_str("    .ltorg\n\n");
 
     // vpy_draw_enemies() — draw each active enemy at its world position

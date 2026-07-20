@@ -79,9 +79,13 @@ pub struct VecResource {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VecWalkableArea {
     /// Y offset from vec origin (positive = up, matches vec convention).
+    /// Surface height at `x_min`.
     pub y: i16,
     pub x_min: i16,
     pub x_max: i16,
+    /// Surface height at `x_max`. Absent = flat (y2 == y); differs = SLOPE.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y2: Option<i16>,
 }
 
 fn default_version() -> String {

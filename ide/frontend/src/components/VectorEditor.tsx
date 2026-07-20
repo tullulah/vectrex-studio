@@ -73,7 +73,10 @@ interface VecResource {
   /** Reusable walkable areas (Phase 2 wander AI). Coordinates are relative
    *  to the vec's origin; the playground / codegen translate them by each
    *  placed object's (x, y). Inheritance: .vec → .vplay → .venemy. */
-  walkableAreas?: { y: number; x_min: number; x_max: number }[];
+  // `y` is the surface height at x_min; optional `y2` is the height at x_max.
+  // Absent/equal y2 → FLAT area (historical). Differing → SLOPE (the runtime
+  // interpolates the enemy's Y from its X across [x_min, x_max]).
+  walkableAreas?: { y: number; x_min: number; x_max: number; y2?: number }[];
 }
 
 interface VectorEditorProps {
@@ -1528,8 +1531,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         ctx.strokeStyle = sel ? '#ffdd33' : '#44ffcc';
         ctx.fillStyle = sel ? '#ffdd33' : '#44ffcc';
         ctx.lineWidth = sel ? 3 : 1.5;
+        // Right end sits at y2 (surface height at x_max) — draws the incline
+        // for a sloped area; equals `y` for a flat one.
         const left  = resourceToCanvas({ x: a.x_min, y: a.y });
-        const right = resourceToCanvas({ x: a.x_max, y: a.y });
+        const right = resourceToCanvas({ x: a.x_max, y: a.y2 ?? a.y });
         ctx.beginPath();
         ctx.moveTo(left.x, left.y);
         ctx.lineTo(right.x, right.y);
@@ -1541,7 +1546,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         ctx.stroke();
         ctx.font = '11px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(`W${idx}`, (left.x + right.x) / 2, left.y - 6);
+        ctx.fillText(`W${idx}`, (left.x + right.x) / 2, Math.min(left.y, right.y) - 6);
         ctx.setLineDash([4, 3]);
       });
       if (walkAreaPreview) {
@@ -4476,9 +4481,15 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           </div>
           <div style={{ maxHeight: '150px', overflowY: 'auto', overflowX: 'hidden' }}>
           {(resource.walkableAreas ?? []).map((a, idx) => {
-            const patch = (k: 'y' | 'x_min' | 'x_max', v: number) => {
+            const patch = (k: 'y' | 'x_min' | 'x_max' | 'y2', v: number) => {
               const next = (resource.walkableAreas ?? []).slice();
-              next[idx] = { ...next[idx], [k]: v };
+              // y2 equal to y means "flat" — drop it so the data stays clean.
+              if (k === 'y2' && v === next[idx].y) {
+                const { y2: _drop, ...flat } = next[idx];
+                next[idx] = flat;
+              } else {
+                next[idx] = { ...next[idx], [k]: v };
+              }
               updateResource(resource, { ...resource, walkableAreas: next });
             };
             const inputStyle = {
@@ -4492,15 +4503,18 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             // setResource and the deep re-render reflowed the side panel,
             // visibly jumping its scroll to the top. defaultValue + a key
             // bound to the committed value avoids the re-render loop.
-            const commit = (k: 'y' | 'x_min' | 'x_max') => (e: React.FocusEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>) => {
+            // `y2` reads back the effective slope end-height (defaults to y).
+            const fieldVal = (k: 'y' | 'x_min' | 'x_max' | 'y2') => (k === 'y2' ? (a.y2 ?? a.y) : a[k]);
+            const commit = (k: 'y' | 'x_min' | 'x_max' | 'y2') => (e: React.FocusEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>) => {
               const el = e.currentTarget;
               const v = parseInt(el.value);
-              if (Number.isFinite(v) && v !== a[k]) patch(k, v);
+              if (Number.isFinite(v) && v !== fieldVal(k)) patch(k, v);
             };
-            const onKey = (k: 'y' | 'x_min' | 'x_max') => (e: React.KeyboardEvent<HTMLInputElement>) => {
+            const onKey = (k: 'y' | 'x_min' | 'x_max' | 'y2') => (e: React.KeyboardEvent<HTMLInputElement>) => {
               if (e.key === 'Enter') { e.currentTarget.blur(); }
-              else if (e.key === 'Escape') { e.currentTarget.value = String(a[k]); e.currentTarget.blur(); }
+              else if (e.key === 'Escape') { e.currentTarget.value = String(fieldVal(k)); e.currentTarget.blur(); }
             };
+            const isSlope = a.y2 !== undefined && a.y2 !== a.y;
             // Disable mouse-wheel value-change so scrolling the panel doesn't
             // change the field while it has focus.
             const onWheel = (e: React.WheelEvent<HTMLInputElement>) => { e.currentTarget.blur(); };
@@ -4514,14 +4528,16 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                 <span
                   onClick={() => setSelectedWalkAreaIdx(idx === selectedWalkAreaIdx ? null : idx)}
                   title="Click to select/highlight this area on the canvas"
-                  style={{ width: 18, cursor: 'pointer', color: idx === selectedWalkAreaIdx ? '#ffdd33' : '#4fc', fontWeight: idx === selectedWalkAreaIdx ? 'bold' : 'normal' }}
-                >W{idx}</span>
-                <span title="Vertical position: usually the platform's top surface; nudge until enemies sit correctly">y</span>
+                  style={{ width: 18, cursor: 'pointer', color: idx === selectedWalkAreaIdx ? '#ffdd33' : (isSlope ? '#fc8' : '#4fc'), fontWeight: idx === selectedWalkAreaIdx ? 'bold' : 'normal' }}
+                >{isSlope ? '⧗' : ''}W{idx}</span>
+                <span title="Surface height at x_min (the left end of the area). On a flat area this is the whole platform's height.">y</span>
                 <input type="number" key={`y_${a.y}`} defaultValue={a.y} onBlur={commit('y')} onKeyDown={onKey('y')} onWheel={onWheel} style={inputStyle} />
                 <span>x</span>
                 <input type="number" key={`xmin_${a.x_min}`} defaultValue={a.x_min} onBlur={commit('x_min')} onKeyDown={onKey('x_min')} onWheel={onWheel} style={inputStyle} />
                 <span title="x_max (rango horizontal: de x_min a x_max)" style={{ color: '#8ab', padding: '0 1px' }}>→</span>
                 <input type="number" key={`xmax_${a.x_max}`} defaultValue={a.x_max} onBlur={commit('x_max')} onKeyDown={onKey('x_max')} onWheel={onWheel} style={inputStyle} />
+                <span title="Surface height at x_max (the right end). Set it different from y to make the area a SLOPE — enemies follow the incline. Equal to y = flat." style={{ color: isSlope ? '#fc8' : '#8ab', padding: '0 1px' }}>⇕y2</span>
+                <input type="number" key={`y2_${a.y2 ?? a.y}`} defaultValue={a.y2 ?? a.y} onBlur={commit('y2')} onKeyDown={onKey('y2')} onWheel={onWheel} style={{ ...inputStyle, color: isSlope ? '#fc8' : '#4fc', borderColor: isSlope ? '#a74' : '#4a4' }} />
                 <button
                   onClick={() => {
                     const next = (resource.walkableAreas ?? []).slice();
