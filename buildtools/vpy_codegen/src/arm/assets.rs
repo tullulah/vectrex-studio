@@ -3,7 +3,7 @@
 //! Reads .vec / .vmus / .vsfx files and emits their data as ARM assembly.
 
 use crate::{AssetInfo, AssetType};
-use crate::vecres::VecResource;
+use crate::vecres::{VecResource, simplify_polyline, simplify_xy, vec_simplify_epsilon};
 use crate::animres::VanimResource;
 use crate::instrres::InstrResource;
 use crate::venemy::EnemyResource;
@@ -1251,6 +1251,7 @@ fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
     let mut s = String::new();
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
     let (center_x, center_y) = res.calculate_center();
+    let epsilon = vec_simplify_epsilon();
 
     let paths = res.visible_paths();
 
@@ -1278,8 +1279,14 @@ fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
             continue;
         }
 
+        // Collinear-vertex reduction: fewer segments => fewer beam draws.
+        // Endpoints and intensity-bearing vertices are preserved, so the header
+        // and the closing seam stay correct.
+        let pts = simplify_polyline(&path.points, epsilon);
+        let dropped = path.points.len() - pts.len();
+
         let intensity = path.intensity;
-        let p0 = &path.points[0];
+        let p0 = &pts[0];
         let y0 = (p0.y - center_y).clamp(-127, 127) as i8;
         let x0 = (p0.x - center_x).clamp(-127, 127) as i8;
 
@@ -1288,21 +1295,22 @@ fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
             intensity
         ));
         s.push_str(&format!(
-            "    .byte   0x{:02X}, 0x{:02X}, 0x00, 0x00  @ y={}, x={}, hdr\n",
-            y0 as u8, x0 as u8, y0, x0
+            "    .byte   0x{:02X}, 0x{:02X}, 0x00, 0x00  @ y={}, x={}, hdr{}\n",
+            y0 as u8, x0 as u8, y0, x0,
+            if dropped > 0 { format!(" (simplified: -{dropped} pts)") } else { String::new() }
         ));
 
-        for j in 0..path.points.len() - 1 {
-            let pf = &path.points[j];
-            let pt = &path.points[j + 1];
+        for j in 0..pts.len() - 1 {
+            let pf = &pts[j];
+            let pt = &pts[j + 1];
             let dx = pt.x - pf.x;
             let dy = pt.y - pf.y;
             emit_split_segment_arm(&mut s, dx, dy);
         }
 
-        if path.closed && path.points.len() > 2 {
-            let pf = &path.points[path.points.len() - 1];
-            let pt = &path.points[0];
+        if path.closed && pts.len() > 2 {
+            let pf = &pts[pts.len() - 1];
+            let pt = &pts[0];
             let dx = pt.x - pf.x;
             let dy = pt.y - pf.y;
             emit_split_segment_arm(&mut s, dx, dy);
@@ -1421,6 +1429,7 @@ fn emit_split_segment_arm(s: &mut String, dx: i16, dy: i16) {
 
 fn compile_vanim_for_arm(resource: &VanimResource, asset_name: &str) -> String {
     let sym = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let epsilon = vec_simplify_epsilon();
     let mut s = String::new();
 
     // Convert inline paths to synthetic vec assets first — emitted as full ARM
@@ -1440,20 +1449,22 @@ fn compile_vanim_for_arm(resource: &VanimResource, asset_name: &str) -> String {
         if path.points.is_empty() {
             s.push_str("    .byte   0x02            @ end marker (empty path)\n\n");
         } else {
-            let p0 = &path.points[0];
-            let y0 = p0.y.clamp(-127, 127) as i8;
-            let x0 = p0.x.clamp(-127, 127) as i8;
+            // Same collinear reduction as named .vec paths (VanimPoint carries no
+            // per-vertex intensity, so the plain (x,y) simplifier applies).
+            let xy: Vec<(i16, i16)> = path.points.iter().map(|p| (p.x, p.y)).collect();
+            let pts = simplify_xy(&xy, epsilon);
+            let (x0v, y0v) = pts[0];
+            let y0 = y0v.clamp(-127, 127) as i8;
+            let x0 = x0v.clamp(-127, 127) as i8;
             s.push_str(&format!("    .byte   {}               @ intensity\n", path.intensity));
             s.push_str(&format!(
                 "    .byte   0x{:02X}, 0x{:02X}, 0x00, 0x00  @ y={}, x={}, hdr\n",
                 y0 as u8, x0 as u8, y0, x0
             ));
-            for j in 0..path.points.len() - 1 {
-                let pf = &path.points[j];
-                let pt = &path.points[j + 1];
-                let dx = pt.x - pf.x;
-                let dy = pt.y - pf.y;
-                emit_split_segment_arm(&mut s, dx, dy);
+            for j in 0..pts.len() - 1 {
+                let (fx, fy) = pts[j];
+                let (tx, ty) = pts[j + 1];
+                emit_split_segment_arm(&mut s, tx - fx, ty - fy);
             }
             s.push_str("    .byte   0x02            @ end marker\n\n");
         }

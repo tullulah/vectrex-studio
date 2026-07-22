@@ -534,6 +534,11 @@ impl VecResource {
                 path.points.iter().map(|p| (p.x, p.y)).collect()
             };
 
+            // Collinear-vertex reduction: fewer segments => fewer beam draws.
+            // Endpoints (and thus the closing seam) are preserved. Biggest win on
+            // baked beziers, which are dense by construction.
+            let baked = simplify_xy(&baked, vec_simplify_epsilon());
+
             if baked.is_empty() {
                 if is_last_path {
                     asm.push_str("    FCB 2                ; end marker (no points)\n");
@@ -785,4 +790,199 @@ pub fn compile_vec_to_binary(input: &Path, output: &Path) -> Result<()> {
     Ok(())
 }
 
+// ============================================================
+// Collinear-vector reduction (compile-time analogue of PiTrex's
+// angleOptimization / small-vector merge — vectrexInterface_pipeline.c).
+//
+// A path drawn as many short, near-collinear segments (finely tessellated
+// curves, baked beziers, over-subdivided edges) costs one beam draw per segment
+// on real hardware. Douglas-Peucker discards interior vertices whose
+// perpendicular distance to the retained chord is <= `epsilon` (in .vec DAC-ish
+// units, screen ~±127), guaranteeing the simplified polyline never deviates
+// from the original by more than `epsilon`. Fewer vertices => fewer draws =>
+// more shape budget per frame, with bounded, predictable error.
+//
+// Backend-agnostic: consumed by BOTH the m6809 (`compile_to_asm`) and the
+// ARM/RP2350 (`arm::assets::emit_vec_resource`) emitters. It is purely offline
+// on STATIC assets and does NOT touch the beam zero/relight protocol, so it
+// carries none of the trembling / blank-glyph hardware risk of changing the
+// per-path re-zero strategy.
+// ============================================================
+
+/// Default collinear-reduction tolerance, in `.vec` DAC-ish units (screen
+/// ~±127). `1.0` removes vertices up to a sub-unit off the retained chord —
+/// imperceptible on-screen — while collapsing finely-tessellated curves /
+/// over-subdivided edges into fewer beam draws. Single knob shared by every
+/// backend (m6809, ARM/RP2350).
+pub const VEC_SIMPLIFY_EPSILON: f64 = 1.0;
+
+/// Resolve the active simplification epsilon: `VPY_VEC_SIMPLIFY_EPSILON` env
+/// override if set (`0` disables the pass; higher = more aggressive), else the
+/// conservative default. One source of truth for all backends.
+pub fn vec_simplify_epsilon() -> f64 {
+    std::env::var("VPY_VEC_SIMPLIFY_EPSILON")
+        .ok()
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(VEC_SIMPLIFY_EPSILON)
+}
+
+/// Perpendicular distance from `(px,py)` to the line through `(ax,ay)`-`(bx,by)`.
+/// Degenerate (a==b) falls back to the point-to-point distance.
+fn perp_distance_xy(px: f64, py: f64, ax: f64, ay: f64, bx: f64, by: f64) -> f64 {
+    let dx = bx - ax;
+    let dy = by - ay;
+    let len2 = dx * dx + dy * dy;
+    if len2 < 1e-9 {
+        let ex = px - ax;
+        let ey = py - ay;
+        return (ex * ex + ey * ey).sqrt();
+    }
+    // |cross((b-a), (a-p))| / |b-a|
+    ((dx * (ay - py) - (ax - px) * dy).abs()) / len2.sqrt()
+}
+
+/// Douglas-Peucker core over coordinate list `pts[first..=last]`, marking
+/// survivors in `keep`. Indices flagged in `forced` are never dropped.
+fn dp_recurse(pts: &[(f64, f64)], first: usize, last: usize, eps: f64, forced: &[bool], keep: &mut [bool]) {
+    if last <= first + 1 {
+        return;
+    }
+    let (ax, ay) = pts[first];
+    let (bx, by) = pts[last];
+    let mut max_d = -1.0_f64;
+    let mut split = first;
+    for i in (first + 1)..last {
+        let d = if forced[i] {
+            f64::INFINITY // force-keep (e.g. a per-vertex intensity change)
+        } else {
+            perp_distance_xy(pts[i].0, pts[i].1, ax, ay, bx, by)
+        };
+        if d > max_d {
+            max_d = d;
+            split = i;
+        }
+    }
+    if max_d > eps {
+        keep[split] = true;
+        dp_recurse(pts, first, split, eps, forced, keep);
+        dp_recurse(pts, split, last, eps, forced, keep);
+    }
+}
+
+/// Shared driver: given coordinates + a force-keep mask, return the kept-index
+/// bitmap (endpoints always kept). `epsilon <= 0` or fewer than 3 points keeps
+/// everything.
+fn dp_keep_mask(pts: &[(f64, f64)], forced: &[bool], epsilon: f64) -> Vec<bool> {
+    let n = pts.len();
+    if epsilon <= 0.0 || n < 3 {
+        return vec![true; n];
+    }
+    let mut keep = vec![false; n];
+    keep[0] = true;
+    keep[n - 1] = true;
+    dp_recurse(pts, 0, n - 1, epsilon, forced, &mut keep);
+    keep
+}
+
+/// Simplify a `Point` polyline, dropping interior vertices within `epsilon` of
+/// the retained chord. Endpoints are always kept (a closed path's seam is
+/// preserved) and a vertex carrying its own `intensity` override never drops.
+pub fn simplify_polyline(points: &[Point], epsilon: f64) -> Vec<Point> {
+    let n = points.len();
+    if epsilon <= 0.0 || n < 3 {
+        return points.to_vec();
+    }
+    let coords: Vec<(f64, f64)> = points.iter().map(|p| (p.x as f64, p.y as f64)).collect();
+    let forced: Vec<bool> = points.iter().map(|p| p.intensity.is_some()).collect();
+    let keep = dp_keep_mask(&coords, &forced, epsilon);
+    points
+        .iter()
+        .zip(keep)
+        .filter_map(|(p, k)| if k { Some(*p) } else { None })
+        .collect()
+}
+
+/// Simplify a bare `(x, y)` coordinate polyline (e.g. a bezier already baked to
+/// a dense polyline). Same bounded-error guarantee as `simplify_polyline`.
+pub fn simplify_xy(pts: &[(i16, i16)], epsilon: f64) -> Vec<(i16, i16)> {
+    let n = pts.len();
+    if epsilon <= 0.0 || n < 3 {
+        return pts.to_vec();
+    }
+    let coords: Vec<(f64, f64)> = pts.iter().map(|&(x, y)| (x as f64, y as f64)).collect();
+    let forced = vec![false; n];
+    let keep = dp_keep_mask(&coords, &forced, epsilon);
+    pts.iter()
+        .zip(keep)
+        .filter_map(|(&p, k)| if k { Some(p) } else { None })
+        .collect()
+}
+
 // Tests moved to core/tests/vecres_tests.rs to keep production code clean
+
+#[cfg(test)]
+mod simplify_tests {
+    use super::*;
+
+    fn pt(x: i16, y: i16) -> Point {
+        Point { x, y, z: None, intensity: None, t: None }
+    }
+    fn pt_i(x: i16, y: i16, i: u8) -> Point {
+        Point { x, y, z: None, intensity: Some(i), t: None }
+    }
+
+    #[test]
+    fn collinear_interior_points_are_removed() {
+        let pts = vec![pt(0, 0), pt(10, 0), pt(20, 0), pt(30, 0), pt(40, 0)];
+        let out = simplify_polyline(&pts, 1.0);
+        assert_eq!(out.len(), 2, "collinear run should collapse to endpoints");
+        assert_eq!((out[0].x, out[0].y), (0, 0));
+        assert_eq!((out[1].x, out[1].y), (40, 0));
+    }
+
+    #[test]
+    fn corners_are_preserved() {
+        let pts = vec![pt(0, 0), pt(20, 0), pt(20, 20), pt(0, 20)];
+        let out = simplify_polyline(&pts, 1.0);
+        assert_eq!(out.len(), 4, "right-angle corners must survive");
+    }
+
+    #[test]
+    fn error_stays_within_epsilon() {
+        let flat = vec![pt(0, 0), pt(10, 1), pt(20, 0)];
+        assert_eq!(simplify_polyline(&flat, 1.0).len(), 2, "1-unit bump within eps → dropped");
+        let bumpy = vec![pt(0, 0), pt(10, 3), pt(20, 0)];
+        assert_eq!(simplify_polyline(&bumpy, 1.0).len(), 3, "3-unit bump beyond eps → kept");
+    }
+
+    #[test]
+    fn intensity_vertices_are_never_dropped() {
+        let pts = vec![pt(0, 0), pt_i(20, 0, 64), pt(40, 0)];
+        let out = simplify_polyline(&pts, 1.0);
+        assert_eq!(out.len(), 3, "intensity-bearing vertex must survive simplification");
+        assert_eq!(out[1].intensity, Some(64));
+    }
+
+    #[test]
+    fn disabled_and_tiny_paths_passthrough() {
+        let pts = vec![pt(0, 0), pt(10, 0), pt(20, 0)];
+        assert_eq!(simplify_polyline(&pts, 0.0).len(), 3, "eps<=0 is a no-op");
+        let two = vec![pt(0, 0), pt(9, 9)];
+        assert_eq!(simplify_polyline(&two, 1.0).len(), 2, "<3 points passthrough");
+    }
+
+    #[test]
+    fn closed_path_seam_endpoints_kept() {
+        let pts = vec![pt(-10, 0), pt(-5, 0), pt(0, 0), pt(5, 0), pt(10, 0)];
+        let out = simplify_polyline(&pts, 1.0);
+        assert_eq!((out[0].x, out[out.len() - 1].x), (-10, 10));
+    }
+
+    #[test]
+    fn xy_variant_collapses_collinear_run() {
+        // The m6809 path (bezier-baked (x,y) tuples) uses simplify_xy.
+        let pts = vec![(0i16, 0i16), (5, 0), (10, 0), (15, 0), (20, 0)];
+        let out = simplify_xy(&pts, 1.0);
+        assert_eq!(out, vec![(0, 0), (20, 0)], "collinear tuple run collapses to endpoints");
+    }
+}
