@@ -1254,14 +1254,15 @@ fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
     let (center_x, center_y) = res.calculate_center();
     let epsilon = vec_simplify_epsilon();
 
-    // Stage 2 (opt-in): fuse contiguous open polylines to skip per-path
-    // dv_reset at shared joins. Clone to owned so the pass can rewrite the list.
-    // OFF by default (changes beam behaviour — see merge_contiguous_paths).
-    let owned = res.visible_paths().into_iter().cloned().collect::<Vec<_>>();
+    // Stage 2 (opt-in): reorder contiguous paths adjacent (nearest-neighbour,
+    // like m6809's optimized_paths — Stage 2b) THEN fuse them, so the runtime
+    // skips the per-path dv_reset at shared joins. Without the reorder, ARM's
+    // raw visible_paths order rarely places contiguous paths next to each other,
+    // so fusion barely fires. OFF by default → visible order, byte-identical.
     let paths = if vec_merge_enabled() {
-        merge_contiguous_paths(owned, vec_merge_max_segs())
+        merge_contiguous_paths(res.optimized_paths(), vec_merge_max_segs())
     } else {
-        owned
+        res.visible_paths().into_iter().cloned().collect()
     };
 
     s.push_str(&format!("@ --- {} ({} path(s)) ---\n", override_name, paths.len()));
