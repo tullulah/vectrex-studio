@@ -65,6 +65,7 @@ RP2350_CC      ?= arm-none-eabi-gcc
 RP2350_OBJCOPY ?= arm-none-eabi-objcopy
 RP2350_CFLAGS   = -mthumb -mcpu=cortex-m33 -mfloat-abi=soft \
                   -ffreestanding -Os -ffunction-sections -fdata-sections \
+                  -DVPY_RP2350 \
                   -I$(VPY_C_SDK)/include -I$(PITREX_SIM_SDK)/include -Isrc -I$(GEN_DIR)
 RP2350_LDFLAGS  = -nostdlib -Wl,--gc-sections -Wl,-T,$(RP2350_SDK)/rp2350_game_ram.ld
 

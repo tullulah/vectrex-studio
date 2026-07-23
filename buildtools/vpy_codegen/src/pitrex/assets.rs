@@ -5,7 +5,8 @@
 //! Reads .vec / .vmus / .vsfx files and emits their data as ARM assembly.
 
 use crate::{AssetInfo, AssetType};
-use crate::vecres::VecResource;
+use crate::vecres::{VecResource, VecPath, simplify_polyline, merge_contiguous_paths,
+    vec_simplify_epsilon, vec_merge_enabled, vec_merge_max_segs};
 use crate::animres::VanimResource;
 use crate::instrres::InstrResource;
 use crate::venemy::EnemyResource;
@@ -1755,10 +1756,17 @@ fn emit_level_c_bytes(
 fn vec_resource_to_bytes(res: &VecResource, override_center: Option<(i16, i16)>) -> Vec<u8> {
     let (center_x, center_y) = override_center.unwrap_or_else(|| res.calculate_center());
 
-    let paths: Vec<_> = res.visible_paths()
-        .into_iter()
-        .filter(|p| p.points.len() >= 2)
-        .collect();
+    // Apply the SAME contiguous-path fusion (+ nearest-neighbour reorder) the
+    // ARM/m6809 backends use, so the C (libvpy) byte image draws as few paths as
+    // the VPy ROM. libvpy re-zeros the beam per path, so fewer paths = fewer
+    // re-zeros = less flicker on real hardware. Per-path simplify is applied
+    // below when baking. OFF only if VPY_VEC_MERGE_PATHS=0.
+    let merged: Vec<VecPath> = if vec_merge_enabled() {
+        merge_contiguous_paths(res.optimized_paths(), vec_merge_max_segs())
+    } else {
+        res.visible_paths().into_iter().cloned().collect()
+    };
+    let paths: Vec<VecPath> = merged.into_iter().filter(|p| p.points.len() >= 2).collect();
 
     let mut out: Vec<u8> = Vec::new();
     out.extend_from_slice(&(paths.len() as u16).to_le_bytes());
@@ -1801,8 +1809,10 @@ fn vec_resource_to_bytes(res: &VecResource, override_center: Option<(i16, i16)>)
             continue;
         }
 
-        // Polyline path: bake points to 0xFF delta segments.
-        let baked: Vec<(i16, i16)> = path.points.iter().map(|p| (p.x, p.y)).collect();
+        // Polyline path: collinear-simplify (same sub-pixel epsilon as the ARM
+        // backend), then bake points to 0xFF delta segments.
+        let simp = simplify_polyline(&path.points, vec_simplify_epsilon());
+        let baked: Vec<(i16, i16)> = simp.iter().map(|p| (p.x, p.y)).collect();
         let (x0_raw, y0_raw) = baked[0];
         out.push(path.intensity);
         out.push(clamp8(y0_raw - center_y)); // y0

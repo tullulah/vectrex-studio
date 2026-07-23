@@ -147,6 +147,14 @@ void vpy_draw_ellipse(int cx, int cy, int rx, int ry, int b)
  * and each line adds its delta; bezier control points are sprite-origin
  * relative. Coordinates scale by VPY_SCALE (via raw_line), exactly like the ARM
  * path (which multiplies by 127). */
+#ifdef VPY_RP2350
+/* Per-path beam re-zero (RP2350 backend). Without it, chaining every path of
+ * every shape with only relative moves lets integrator drift carry across shape
+ * boundaries → each .vec wobbles as a block. Re-zeroing per path mirrors the
+ * native ARM backend and kills the cross-shape drift. */
+extern void v_beamNewStroke(void);
+#endif
+
 static void draw_vec_stream(const unsigned char *data, int ox, int oy,
                             int mirror, int override_b)
 {
@@ -155,6 +163,9 @@ static void draw_vec_stream(const unsigned char *data, int ox, int oy,
     const unsigned char *p = data + 2;
 
     for (int pi = 0; pi < path_count; pi++) {
+#ifdef VPY_RP2350
+        v_beamNewStroke();   /* fresh zero-ref per path — no cross-shape drift */
+#endif
         int intensity = p[0];
         int y0 = (int8_t)p[1];
         int x0 = (int8_t)p[2];
@@ -516,28 +527,47 @@ static void psg_write(uint8_t reg, uint8_t val)
     v_writePSG(reg, val);
 }
 
+#ifdef VPY_RP2350
+/* RP2350 backend: the .vmus sequencer runs on core 1 (BIOS svc #21/#22), so the
+ * tempo is independent of core-0 draw load. libvpy just hands over / stops the
+ * track; AUDIO_UPDATE is a no-op. (PiTrex/WASM keep the software sequencer.) */
+extern void v_playMusic(const unsigned char *vmus);
+extern void v_stopMusic(void);
+#endif
+
 void vpy_play_music(const unsigned char *data)
 {
     if (!data) return;
     /* Guard: same track already playing -> no-op (prevents per-frame restart). */
     if (s_mus_playing && s_mus_base == data) return;
     s_mus_base    = data;
-    s_mus_ptr     = data + 8;   /* first event follows the 8-byte header */
     s_mus_playing = 1;
+#ifdef VPY_RP2350
+    v_playMusic(data);          /* hand the .vmus track to the core-1 player */
+#else
+    s_mus_ptr     = data + 8;   /* first event follows the 8-byte header */
     s_mus_delay   = 0;          /* first event fires immediately */
+#endif
 }
 
 void vpy_stop_music(void)
 {
     s_mus_playing = 0;
+#ifdef VPY_RP2350
+    v_stopMusic();              /* core-1 player stops + silences */
+#else
     psg_write(8, 0);            /* channel A volume */
     psg_write(9, 0);            /* channel B volume */
     psg_write(10, 0);           /* channel C volume */
     psg_write(7, 0x3f);         /* mixer: all disabled */
+#endif
 }
 
 void vpy_music_update(void)
 {
+#ifdef VPY_RP2350
+    return;   /* core 1 sequences the .vmus; AUDIO_UPDATE is a no-op on RP2350 */
+#else
     if (!s_mus_playing || !s_mus_ptr) return;
     /* Inline BCM-CLO parity: the very first update-while-playing primes the
      * (virtual) timer baseline and fires nothing — see s_mus_primed. */
@@ -567,6 +597,7 @@ void vpy_music_update(void)
     /* Advance to next event; its delay byte is the wait before it fires. */
     s_mus_ptr   = w;
     s_mus_delay = w[0];
+#endif
 }
 
 void vpy_play_sfx(const unsigned char *data)

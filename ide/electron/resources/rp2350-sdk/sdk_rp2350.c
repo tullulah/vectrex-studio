@@ -28,6 +28,8 @@ static inline void sys_draw_delta(int dx,int dy){ register int r0 __asm__("r0")=
 static inline void sys_psg_write(int reg,int val){ register int r0 __asm__("r0")=reg; register int r1 __asm__("r1")=val; __asm__ volatile("svc #5" : "+r"(r0) : "r"(r1) : "memory"); }
 static inline int  sys_read_buttons(void)    { register int r0 __asm__("r0"); __asm__ volatile("svc #7"  : "=r"(r0) :: "memory"); return r0; }
 static inline int  sys_read_axes(void)       { register int r0 __asm__("r0"); __asm__ volatile("svc #13" : "=r"(r0) :: "memory"); return r0; }
+static inline void sys_play_music(const void *p){ register const void *r0 __asm__("r0")=p; __asm__ volatile("svc #21" : "+r"(r0) :: "memory"); }
+static inline void sys_stop_music(void)      { __asm__ volatile("svc #22" ::: "r0","r1","r2","r3","memory"); }
 
 /* ── Input snapshot owned by the SDK layer (libvpy reads these as externs). ── */
 uint8_t currentButtonState = 0;
@@ -50,6 +52,14 @@ void v_setRefresh(int hz)  { (void)hz; }   /* BIOS paces ~50 Hz in SYS_WAIT_RECA
  * re-zero between connected strokes). ── */
 static int s_beam_x = 0, s_beam_y = 0;
 
+/* Bound integrator drift: chaining segments with only relative moves (no re-zero)
+ * lets the integrators drift, so after N consecutive segments we force a fresh
+ * zero-ref. This is the runtime analogue of PiTrex's MAX_CONSECUTIVE_DRAWS (=65)
+ * and of the VPy compiler's fusion cap: 32 was HW-validated to draw cleanly
+ * without a re-zero, above which shapes visibly wobble. */
+#define VPY_MAX_CONSECUTIVE_DRAWS 32
+static int s_draws_since_zero = 0;
+
 static int clamp127(int v) { return v > 127 ? 127 : (v < -127 ? -127 : v); }
 
 /* Blanked move to (x,y), split into ≤127 steps so a long move doesn't wrap the
@@ -62,7 +72,10 @@ static void beam_move_to(int x, int y)
         sys_move(sx, sy);
         dx -= sx; dy -= sy; steps++;
     }
-    sys_move(dx, dy);
+    /* Skip the reposition when the beam is already there — connected segments in
+     * a path share endpoints, so this elides one MOVE(0,0) syscall per segment
+     * (matches the native backend's stroke chaining; big win vs a move per seg). */
+    if (dx || dy) sys_move(dx, dy);
     s_beam_x = x; s_beam_y = y;
 }
 
@@ -72,10 +85,18 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
 {
     int ax0 = (int)x0 / VPY_SCALE, ay0 = (int)y0 / VPY_SCALE;
     int ax1 = (int)x1 / VPY_SCALE, ay1 = (int)y1 / VPY_SCALE;
+    /* After N chained segments the beam has drifted enough to wobble — force a
+     * fresh zero-ref so the next segment positions from a clean origin. */
+    if (s_draws_since_zero >= VPY_MAX_CONSECUTIVE_DRAWS) {
+        sys_reset0ref();
+        s_beam_x = 0; s_beam_y = 0;
+        s_draws_since_zero = 0;
+    }
     sys_set_intensity(b);
     beam_move_to(ax0, ay0);
     sys_draw_delta(ax1 - ax0, ay1 - ay0);
     s_beam_x = ax1; s_beam_y = ay1;
+    s_draws_since_zero++;
 }
 
 /* ── Frame pace + input. vpy_frame_begin() calls v_WaitRecal then the two input
@@ -84,6 +105,18 @@ void v_WaitRecal(void)
 {
     sys_wait_recal();
     s_beam_x = 0; s_beam_y = 0;
+    s_draws_since_zero = 0;   /* WAIT_RECAL zero-refs the beam → fresh drift budget */
+}
+
+/* Start a new stroke/path with a fresh zero-ref, so integrator drift can't carry
+ * across shape/path boundaries (mirrors the native ARM backend's per-path
+ * re-zero). libvpy calls this at each path start on RP2350. The MAX_CONSECUTIVE
+ * cap in v_directDraw32 still bounds a single very long path on top of this. */
+void v_beamNewStroke(void)
+{
+    sys_reset0ref();
+    s_beam_x = 0; s_beam_y = 0;
+    s_draws_since_zero = 0;
 }
 
 uint8_t v_readButtons(void)
@@ -103,6 +136,12 @@ void v_readJoystick1Analog(void)
 }
 
 void v_writePSG(uint8_t reg, uint8_t val) { sys_psg_write(reg, val); }
+
+/* ── Core-1 music. The BIOS runs the .vmus sequencer on core 1 (tempo decoupled
+ * from core-0 draw load); core 0 just hands over the track and stops it. libvpy
+ * calls these instead of its software sequencer when built for RP2350. ── */
+void v_playMusic(const unsigned char *vmus) { sys_play_music(vmus); }
+void v_stopMusic(void)                      { sys_stop_music(); }
 
 /* ── Freestanding libc bits. GCC emits calls to memset/memcpy/memmove for
  * aggregate init and array ops, and there is no libc in this bare-metal link
