@@ -128,22 +128,27 @@ export class Thumb2 implements ICpu {
     // ran unconditionally AND failed to advance the IT state — desynchronising
     // the remaining slots so a following conditional store was wrongly skipped
     // (BEQ/BNE etc. computed the branch target but never wrote it back).
-    let itSkip = false;
-    if (this.inItBlock()) {
-      const execute = this.itCondTrue();
-      this.advanceIt();
-      if (!execute) itSkip = true;
-    }
+    // Decide skip BEFORE executing, but advance the IT state AFTER, so that
+    // inItBlock() stays true *during* the instruction — 16-bit ALU ops that
+    // would set flags outside an IT block must NOT set them inside one, and they
+    // check inItBlock() to decide (see setFlagsInIt()).
+    const wasInIt = this.inItBlock();
+    const itSkip = wasInIt && !this.itCondTrue();
 
     let cycles: number;
-    if (is32) {
+    if (itSkip) {
+      this.regs[15] = pc + (is32 ? 4 : 2);
+      cycles = 1;
+    } else if (is32) {
       const hw1 = bus.read8(pc + 2) | (bus.read8(pc + 3) << 8);
       this.regs[15] = pc + 4;
-      cycles = itSkip ? 1 : this.exec32(hw0, hw1, bus, pc);
+      cycles = this.exec32(hw0, hw1, bus, pc);
     } else {
       this.regs[15] = pc + 2;
-      cycles = itSkip ? 1 : this.exec16(hw0, bus, pc);
+      cycles = this.exec16(hw0, bus, pc);
     }
+
+    if (wasInIt) this.advanceIt();
 
     this._stepCount++;
     this._cycles += cycles;
@@ -200,6 +205,16 @@ export class Thumb2 implements ICpu {
   private setZ(val: boolean): void { this.setFlag(30, val); }
   private setC(val: boolean): void { this.setFlag(29, val); }
   private setV(val: boolean): void { this.setFlag(28, val); }
+
+  // Flag updates for a *destination-writing* 16-bit ALU op (MOV/ADD/SUB/shift/
+  // logical). In Thumb-1 these set flags OUTSIDE an IT block but NOT inside one
+  // (the S is implicit only outside IT). Compares (CMP/CMN/TST) have no
+  // destination and always set flags, so they keep calling setNZ/setNZCV_*.
+  // step() advances the IT state AFTER the instruction, so inItBlock() is true
+  // here for an in-block instruction.
+  private nzIt(result: number): void { if (!this.inItBlock()) this.setNZ(result); }
+  private addIt(a: number, b: number): void { if (!this.inItBlock()) this.setNZCV_add(a, b); }
+  private subIt(a: number, b: number): void { if (!this.inItBlock()) this.setNZCV_sub(a, b); }
 
   private setNZ(result: number): void {
     const r = u32(result);
@@ -509,23 +524,23 @@ export class Thumb2 implements ICpu {
         case 0: {  // MOV Rd, #imm8
           const r = u32(imm8);
           this.regs[rdn] = r;
-          this.setNZ(r);
+          this.nzIt(r);
           // C,V unchanged
           break;
         }
-        case 1: {  // CMP Rn, #imm8
+        case 1: {  // CMP Rn, #imm8 (compare — always sets flags)
           this.setNZCV_sub(this.regs[rdn], imm8);
           break;
         }
         case 2: {  // ADD Rd, #imm8
           const a = this.regs[rdn];
-          this.setNZCV_add(a, imm8);
+          this.addIt(a, imm8);
           this.regs[rdn] = u32(a + imm8);
           break;
         }
         case 3: {  // SUB Rd, #imm8
           const a = this.regs[rdn];
-          this.setNZCV_sub(a, imm8);
+          this.subIt(a, imm8);
           this.regs[rdn] = u32(a - imm8);
           break;
         }
@@ -551,7 +566,7 @@ export class Thumb2 implements ICpu {
         result = this.asr(this.regs[rm], imm5 === 0 ? 32 : imm5, true);
       }
       this.regs[rd] = result;
-      this.setNZ(result);
+      this.nzIt(result);
       return 1;
     }
 
@@ -569,26 +584,26 @@ export class Thumb2 implements ICpu {
       const rm = (hw >>> 6) & 0x7;
       const a  = this.regs[rn];
       const b  = this.regs[rm];
-      this.setNZCV_add(a, b);
+      this.addIt(a, b);
       this.regs[rd] = u32(a + b);
     } else if (b12_9 === 0xd) {
       // SUB Rd, Rn, Rm
       const rm = (hw >>> 6) & 0x7;
       const a  = this.regs[rn];
       const b  = this.regs[rm];
-      this.setNZCV_sub(a, b);
+      this.subIt(a, b);
       this.regs[rd] = u32(a - b);
     } else if (b12_9 === 0xe) {
       // ADD Rd, Rn, #imm3
       const imm3 = (hw >>> 6) & 0x7;
       const a    = this.regs[rn];
-      this.setNZCV_add(a, imm3);
+      this.addIt(a, imm3);
       this.regs[rd] = u32(a + imm3);
     } else if (b12_9 === 0xf) {
       // SUB Rd, Rn, #imm3
       const imm3 = (hw >>> 6) & 0x7;
       const a    = this.regs[rn];
-      this.setNZCV_sub(a, imm3);
+      this.subIt(a, imm3);
       this.regs[rd] = u32(a - imm3);
     } else {
       throw new Error(`Unimplemented shift_add group: 0x${hw.toString(16).padStart(4,'0')}`);
@@ -609,34 +624,34 @@ export class Thumb2 implements ICpu {
       case 0x0: {  // AND
         const r = u32(a & b);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0x1: {  // EOR
         const r = u32(a ^ b);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0x2: {  // LSL reg
         const shift = b & 0xff;
         const r = this.lsl(a, shift, true);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0x3: {  // LSR reg
         const shift = b & 0xff;
         const r = this.lsr(a, shift === 0 ? 0 : shift, shift !== 0);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0x4: {  // ASR reg
         const shift = b & 0xff;
         const r = this.asr(a, shift, shift !== 0);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0x5: {  // ADC
@@ -644,29 +659,30 @@ export class Thumb2 implements ICpu {
         const r64 = u32(a) + u32(b) + carry;
         const r32 = u32(r64);
         this.regs[rdn] = r32;
-        this.setN((r32 >>> 31) === 1);
-        this.setZ(r32 === 0);
-        this.setC(r64 > 0xffff_ffff);
-        const sA = (a >>> 31) & 1;
-        const sB = (b >>> 31) & 1;
-        const sR = (r32 >>> 31) & 1;
-        this.setV(sA === sB && sR !== sA);
+        if (!this.inItBlock()) {
+          this.setN((r32 >>> 31) === 1);
+          this.setZ(r32 === 0);
+          this.setC(r64 > 0xffff_ffff);
+          const sA = (a >>> 31) & 1;
+          const sB = (b >>> 31) & 1;
+          const sR = (r32 >>> 31) & 1;
+          this.setV(sA === sB && sR !== sA);
+        }
         break;
       }
       case 0x6: {  // SBC
         const borrow = 1 - this.flagC;
         const r64 = u32(a) - u32(b) - borrow;
         const r32 = u32(r64);
+        if (!this.inItBlock()) this.setNZCV_sub(a, b + borrow);  // approximate for flags
         this.regs[rdn] = r32;
-        this.setNZCV_sub(a, b + borrow);  // approximate for flags
-        this.regs[rdn] = r32;  // restore after setNZCV_sub overwrites via sub
         break;
       }
       case 0x7: {  // ROR
         const shift = b & 0xff;
         const r = this.ror(a, shift, shift !== 0);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0x8: {  // TST
@@ -677,7 +693,7 @@ export class Thumb2 implements ICpu {
       case 0x9: {  // RSB / NEG (Rd = 0 - Rn)
         const r = u32(0 - b);
         this.regs[rdn] = r;
-        this.setNZCV_sub(0, b);
+        this.subIt(0, b);
         break;
       }
       case 0xa: {  // CMP
@@ -691,7 +707,7 @@ export class Thumb2 implements ICpu {
       case 0xc: {  // ORR
         const r = u32(a | b);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0xd: {  // MUL
@@ -700,19 +716,19 @@ export class Thumb2 implements ICpu {
         // at the extremes, but for VPy the values are bounded to ±127 typically.
         const r = u32(Math.imul(a, b));
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0xe: {  // BIC
         const r = u32(a & ~b);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
       case 0xf: {  // MVN
         const r = u32(~b);
         this.regs[rdn] = r;
-        this.setNZ(r);
+        this.nzIt(r);
         break;
       }
     }
@@ -987,15 +1003,11 @@ export class Thumb2 implements ICpu {
     //   11110 (0x1E) → data-processing immediate OR branch (hw1[15] discriminates)
     //   11111 (0x1F) → coprocessor / FP / misc
 
-    // 32-bit instructions inside IT blocks must also be gated by the condition.
-    // (The 16-bit exec16 path already does this; exec32 must mirror it so that
-    //  non-flag-setting 32-bit MOVs, e.g. mov.w r0, #1, work correctly inside ITE.)
-    if (this.inItBlock()) {
-      const execute = this.itCondTrue();
-      this.advanceIt();
-      if (!execute) return 1;
-    }
-
+    // IT-block conditioning (skip + advance) is handled once in step() for BOTH
+    // 16- and 32-bit instructions. It must NOT be repeated here: doing it in both
+    // step() and exec32 advanced the IT state TWICE per 32-bit instruction,
+    // desyncing mixed 16/32-bit IT blocks (e.g. the 6502 BIT flag macro
+    // `ite eq; orreq.w; bicne.w` ran the else branch too, corrupting the Z flag).
     const op5 = (hw0 >>> 11) & 0x1f;
 
     if (op5 === 0x1e) {
