@@ -120,17 +120,29 @@ export class Thumb2 implements ICpu {
   step(bus: IBus): number {
     const pc = this.regs[15];
     const hw0 = bus.read8(pc) | (bus.read8(pc + 1) << 8);
+    const is32 = (hw0 >>> 11) >= 0x1d;   // 32-bit when bits[15:11] >= 0b11101
+
+    // IT-block conditioning applies to BOTH 16- and 32-bit instructions. It used
+    // to live only in exec16(), so a 32-bit instruction inside an IT block (e.g.
+    // gcc's `itete mi; addmi; addpl.w; strmi; addpl` for the 6502 branch macros)
+    // ran unconditionally AND failed to advance the IT state — desynchronising
+    // the remaining slots so a following conditional store was wrongly skipped
+    // (BEQ/BNE etc. computed the branch target but never wrote it back).
+    let itSkip = false;
+    if (this.inItBlock()) {
+      const execute = this.itCondTrue();
+      this.advanceIt();
+      if (!execute) itSkip = true;
+    }
 
     let cycles: number;
-
-    // 32-bit instruction when bits[15:11] >= 0b11101 (i.e. 0x1D..0x1F)
-    if ((hw0 >>> 11) >= 0x1d) {
+    if (is32) {
       const hw1 = bus.read8(pc + 2) | (bus.read8(pc + 3) << 8);
       this.regs[15] = pc + 4;
-      cycles = this.exec32(hw0, hw1, bus, pc);
+      cycles = itSkip ? 1 : this.exec32(hw0, hw1, bus, pc);
     } else {
       this.regs[15] = pc + 2;
-      cycles = this.exec16(hw0, bus, pc);
+      cycles = itSkip ? 1 : this.exec16(hw0, bus, pc);
     }
 
     this._stepCount++;
@@ -341,14 +353,8 @@ export class Thumb2 implements ICpu {
   // =========================================================================
 
   private exec16(hw: number, bus: IBus, pc: number): number {
-    // Handle IT-block conditioning: if we're inside an IT block and the
-    // condition is false, skip this instruction (but still advance IT state).
-    if (this.inItBlock()) {
-      const execute = this.itCondTrue();
-      this.advanceIt();
-      if (!execute) return 1;
-    }
-
+    // IT-block conditioning (skip + advance) is handled in step() for BOTH
+    // 16- and 32-bit instructions, so exec16 no longer does it here.
     const op = (hw >>> 10) & 0x3f;   // bits[15:10]
 
     // ── Shift / Add / Sub / Move / Compare (bits[15:14] = 00 or 001) ──────
@@ -1172,6 +1178,38 @@ export class Thumb2 implements ICpu {
       return 3;
     }
 
+    // SMULL/UMULL/SMLAL/UMLAL — 32×32→64 long multiply(-accumulate).
+    // hw0 = 1111 1011 1 op1 Rn (op1[6:4]: 000/010/100/110), hw1 = RdLo RdHi 0000 Rm.
+    //   bit5 (0x20): 1 = unsigned (U…), 0 = signed (S…)
+    //   bit6 (0x40): 1 = accumulate into {RdHi:RdLo} (…LAL)
+    // gcc emits these for 64-bit and widening integer math; VPy codegen never
+    // did, so C imports (e.g. AAE's 6502 core) are the first to reach them.
+    // BigInt keeps the 64-bit product exact (JS numbers lose precision > 2^53).
+    if ((hw0 & 0xff90) === 0xfb80 && (hw1 & 0x00f0) === 0x0000) {
+      const rn = hw0 & 0xf, rm = hw1 & 0xf;
+      const rdlo = (hw1 >>> 12) & 0xf, rdhi = (hw1 >>> 8) & 0xf;
+      const unsigned   = (hw0 & 0x0020) !== 0;
+      const accumulate = (hw0 & 0x0040) !== 0;
+      const a = unsigned ? BigInt(this.regs[rn] >>> 0) : BigInt(s32(this.regs[rn]));
+      const b = unsigned ? BigInt(this.regs[rm] >>> 0) : BigInt(s32(this.regs[rm]));
+      let res = a * b;
+      if (accumulate) {
+        res += (BigInt(this.regs[rdhi] >>> 0) << 32n) | BigInt(this.regs[rdlo] >>> 0);
+      }
+      res &= (1n << 64n) - 1n;
+      this.regs[rdlo] = Number(res & 0xffffffffn) >>> 0;
+      this.regs[rdhi] = Number((res >> 32n) & 0xffffffffn) >>> 0;
+      return 5;
+    }
+
+    // CLZ Rd, Rm — count leading zeros. hw0 = 1111 1010 1011 Rm, hw1 = 1111 Rd 1000 Rm.
+    if ((hw0 & 0xfff0) === 0xfab0 && (hw1 & 0xf0f0) === 0xf080) {
+      const rm = hw1 & 0xf;
+      const rd = (hw1 >>> 8) & 0xf;
+      this.regs[rd] = Math.clz32(this.regs[rm] >>> 0);
+      return 1;
+    }
+
     // ── 32-bit Data-processing immediate ─────────────────────────────────
     // hw0[15:11]=11110: covers AND/BIC/ORR/MOV/EOR/ADD/ADC/SUB/RSB with imm
     if ((hw0 & 0xf800) === 0xf000) {
@@ -1404,7 +1442,16 @@ export class Thumb2 implements ICpu {
       }
       const actualLoad = ((hw0 >>> 4) & 1) !== 0;
       if (actualLoad) {
-        this.regs[rt] = this.read32(bus, addr);
+        const v = this.read32(bus, addr);
+        // LDR pc,[...] is an interworking branch (BXWritePC): bit0 selects Thumb
+        // state (always Thumb on M-profile), so mask it off for the fetch PC.
+        // gcc compiles a dense switch (e.g. the 6502 opcode dispatch) as
+        // `ldr.w pc,[table, idx, lsl #2]` into a table of Thumb handler
+        // addresses (bit0=1); without this the PC lands odd and the next fetch
+        // decodes garbage. VPy codegen never emits this form, so C imports hit
+        // it first.
+        if (rt === 15) this.regs[15] = v & ~1;
+        else this.regs[rt] = v;
       } else {
         this.write32(bus, addr, this.regs[rt]);
       }
