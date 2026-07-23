@@ -1258,7 +1258,7 @@ fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
     // like m6809's optimized_paths — Stage 2b) THEN fuse them, so the runtime
     // skips the per-path dv_reset at shared joins. Without the reorder, ARM's
     // raw visible_paths order rarely places contiguous paths next to each other,
-    // so fusion barely fires. OFF by default → visible order, byte-identical.
+    // so fusion barely fires. ON by default; VPY_VEC_MERGE_PATHS=0 → visible order.
     let paths = if vec_merge_enabled() {
         merge_contiguous_paths(res.optimized_paths(), vec_merge_max_segs())
     } else {

@@ -504,7 +504,7 @@ impl VecResource {
             .collect();
         // Stage 2 (opt-in): fuse contiguous open polylines so the runtime skips
         // the per-path dv_reset at shared joins. `optimized_paths` already put
-        // adjacent contiguous paths next to each other. OFF by default.
+        // adjacent contiguous paths next to each other. ON by default.
         let paths = if vec_merge_enabled() {
             merge_contiguous_paths(paths, vec_merge_max_segs())
         } else {
@@ -936,24 +936,27 @@ pub fn simplify_xy(pts: &[(i16, i16)], epsilon: f64) -> Vec<(i16, i16)> {
 // analogue of PiTrex's re-zero avoidance (vectrexInterface.c consecutiveDraws /
 // MAX_CONSECUTIVE_DRAWS).
 //
-// ⚠️ HARDWARE RISK: dropping the per-path re-zero lets integrator drift
-// accumulate across the join — the exact trembling the per-path re-zero was
-// added to fix (see arm/drawing.rs "path 4 ≫ path 1"). The `cap` bounds a fused
-// chain's length so drift is re-zeroed at least every `cap` segments (mirroring
-// MAX_CONSECUTIVE_DRAWS), but the safe cap is HARDWARE-dependent. Therefore this
-// pass is OFF by default and must be validated on the real cartridge.
+// Dropping the per-path re-zero lets integrator drift accumulate across the
+// join. The `cap` bounds a fused chain so drift is re-zeroed at least every
+// `cap` segments (mirroring MAX_CONSECUTIVE_DRAWS). HARDWARE-VALIDATED on the
+// RP2350 cartridge: no trembling at any cap, and real content (SnowBros, chains
+// ≤31) closes cleanly; a barely-visible non-closing drift only appears on a
+// single fused chain of ~48+ segments, which real assets don't reach. So this
+// pass is ON by default at a conservative cap; env vars tune or disable it.
 // ============================================================
 
-/// Conservative default segment cap for a fused chain before a re-zero is
-/// forced (drift bound). ~PiTrex uses 65; we start much lower until HW-validated.
-pub const VEC_MERGE_MAX_SEGS: usize = 8;
+/// Segment cap for a fused chain before a re-zero is forced (drift bound).
+/// 32 covers the longest real contiguous chains observed (~31, SnowBros) while
+/// staying below the ~48 where drift starts to show. PiTrex uses 65 (it also
+/// recalibrates integrator offsets in firmware, which we don't yet).
+pub const VEC_MERGE_MAX_SEGS: usize = 32;
 
-/// Whether Stage-2 path fusion runs. OFF unless `VPY_VEC_MERGE_PATHS` is set to
-/// a truthy value (`1`/`true`) — it changes beam behaviour, so it is opt-in.
+/// Whether Stage-2 path fusion runs. ON by default (HW-validated); set
+/// `VPY_VEC_MERGE_PATHS=0` to disable, or any truthy value to force-enable.
 pub fn vec_merge_enabled() -> bool {
     match std::env::var("VPY_VEC_MERGE_PATHS") {
         Ok(v) => !matches!(v.as_str(), "" | "0" | "false" | "off"),
-        Err(_) => false,
+        Err(_) => true,
     }
 }
 
@@ -1142,7 +1145,8 @@ mod merge_tests {
     }
 
     #[test]
-    fn stage2_is_off_by_default() {
-        assert!(!vec_merge_enabled(), "path fusion must be OFF unless VPY_VEC_MERGE_PATHS is set");
+    fn stage2_is_on_by_default() {
+        // HW-validated on RP2350: ON by default. VPY_VEC_MERGE_PATHS=0 disables.
+        assert!(vec_merge_enabled(), "path fusion is ON by default");
     }
 }
