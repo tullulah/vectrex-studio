@@ -98,11 +98,28 @@ Two fixes were needed to get from "links" to "runs":
   ON, so the ROM sits in its RAM-test diagnostic (fills RAM with `0x88`) forever
   instead of running the game.
 
-### Still to do before it plays / ships
+### ✅ Playable — controls wired
 
-- **Real input** — `getport()` is hard-wired to `0x00` (nothing pressed), so
-  only attract mode runs. Wire it to `v_readButtons` / `v_readJoystick1Analog`
-  (mind the per-bit polarity: `0` = released/off).
+`getport()` maps the Vectrex controller (via the shim's `currentButtonState` /
+`currentJoy1X/Y`, refreshed each frame by `v_readButtons` /
+`v_readJoystick1Analog`) onto the Asteroids ports (bit-per-switch, active-high,
+per AAE `asteroid_keys`):
+
+| Vectrex | Asteroids |
+|---|---|
+| Stick ◀ / ▶ | Rotate Left / Right |
+| Stick ▲ (or button 2) | Thrust |
+| Button 1 | Fire |
+| Button 3 | Hyperspace |
+| Button 4 | Coin + P1 Start (press to begin) |
+
+Validated in the WASM sim (attract ~220 vec/frame → gameplay ~179 on start;
+Fire adds bullets). Works on HW and sim (same shim globals).
+
+### Still to do before it ships
+
+- **Coordinate scale** — HW-confirmed fine as-is (shim `/127`), the field fits
+  and centres; only revisit if a game needs a different range.
 - **Coordinate scale on HW** — the sim renders PiTrex space directly, but the
   RP2350 shim divides by `VPY_SCALE=127`: ±18 k → ±142, so the field slightly
   overflows ±127 and clips at the edges. Add a tunable scale (~÷145) and centre
