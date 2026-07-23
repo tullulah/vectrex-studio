@@ -15,10 +15,19 @@
     .section .game_rom, "a", %progbits
     .global game_header
     .type game_header, %object
+@ reserved[0] = DUAL-CORE flag. 0 = single-core (default; the BIOS runs the game
+@ on core 0, drawing inline via svc — unchanged for VPy games). 0x44430001
+@ ("DC" v1) = the game records its draws to the shared RAM buffer (svc-free) and
+@ the BIOS launches it on core 1 while core 0 materialises the beam in parallel.
+@ A game opts in at build time: -Wa,--defsym,DUAL_CORE_FLAG=0x44430001 (and it
+@ must be built with -DVPY_DUAL_CORE so sdk_rp2350.c uses the RAM-record path).
+    .ifndef DUAL_CORE_FLAG
+    .set DUAL_CORE_FLAG, 0
+    .endif
 game_header:
     .word 0x32795056        @ GAME_MAGIC 'VPy2' (little-endian)
     .word game_main         @ entry point (linker sets the thumb bit)
-    .word 0x00000000        @ reserved
+    .word DUAL_CORE_FLAG    @ reserved[0] = dual-core flag (see above)
     .word 0x00000000        @ reserved
     .size game_header, . - game_header
 

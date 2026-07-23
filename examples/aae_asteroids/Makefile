@@ -26,8 +26,14 @@ OBJCOPY     ?= arm-none-eabi-objcopy
 # -O3 (speed): AAE is a 6502 interpreter + soft-float coord math, both CPU-bound
 # on HW — -Os ran the game in slow motion. Code size has ample room (bss, not
 # text, dominates the 252 KB budget).
+# -DVPY_DUAL_CORE: run the 6502 compute on core 1 and record draws to a shared
+#   RAM buffer (svc-free) so the BIOS materialises the beam on core 0 in parallel
+#   — overlaps compute with draw (see sdk_rp2350.c + the firmware dc.rs).
+# --defsym DUAL_CORE_FLAG: sets the VPy2 header's dual-core flag so the BIOS
+#   launches this game on core 1 (rp2350_start.s). The two MUST agree.
 CFLAGS  = -mthumb -mcpu=cortex-m33 -mfloat-abi=soft -ffreestanding -O3 -std=gnu11 \
-          -ffunction-sections -fdata-sections -DVPY_RP2350 -D'CCNT0(x)=do{}while(0)' \
+          -ffunction-sections -fdata-sections -DVPY_RP2350 -DVPY_DUAL_CORE -D'CCNT0(x)=do{}while(0)' \
+          -Wa,--defsym,DUAL_CORE_FLAG=0x44430001 \
           -Iinclude -Isrc -I$(AAE_SRC) -I$(VPY_C_INC) -I$(PITREX_INC)
 LDFLAGS = -nostdlib -Wl,--gc-sections -Wl,-T,$(RP2350_SDK)/rp2350_game_ram.ld
 

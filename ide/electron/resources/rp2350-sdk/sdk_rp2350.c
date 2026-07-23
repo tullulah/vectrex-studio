@@ -52,6 +52,57 @@ void v_setRefresh(int hz)  { (void)hz; }   /* BIOS paces ~50 Hz in SYS_WAIT_RECA
  * re-zero between connected strokes). ── */
 static int s_beam_x = 0, s_beam_y = 0;
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * DUAL-CORE MODE (opt-in via -DVPY_DUAL_CORE; the game's VPy2 header also sets
+ * the dual-core flag so the BIOS launches it on core 1). Compute-heavy games
+ * (AAE's 6502 interpreter) overlap their compute with the beam draw: the game
+ * runs on CORE 1 and RECORDS its draw commands into a shared RAM ring buffer
+ * with NO `svc` — so core 1 makes ZERO flash fetches during a frame. CORE 0
+ * materialises the sealed buffer (flash-timed, E-synced bus writes) in parallel.
+ * The svc-free requirement is load-bearing: an `svc` fetches the exception
+ * vector+handler from flash, which would stall core 0's cycle-timed beam ramps
+ * (stretched vectors / broken E-sync). Fixed shared addresses — MUST match the
+ * firmware (hardware/debug_cart/firmware/src/dc.rs). VPy games don't define
+ * VPY_DUAL_CORE and keep the unchanged single-core svc path below. ══════════ */
+#ifdef VPY_DUAL_CORE
+struct dc_cmd  { unsigned char op; signed char a; signed char b; unsigned char _pad; };
+struct dc_ctrl {
+    volatile unsigned char  state[2];  /* 0=FREE (game may write), 1=SEALED (core 0 draws) */
+    unsigned char           _p0[2];
+    volatile unsigned short count[2];  /* # commands in each buffer */
+    volatile unsigned int   axes;      /* SYS_READ_AXES snapshot, published by core 0 */
+    volatile unsigned int   buttons;   /* SYS_READ_BUTTONS snapshot (P1 bits 0-3) */
+};
+#define DC_CTRL   ((struct dc_ctrl *)0x2007CF00u)
+#define DC_BUF0   ((struct dc_cmd  *)0x2007D000u)
+#define DC_BUF1   ((struct dc_cmd  *)0x2007E000u)
+#define DC_CMDS_MAX 1024
+#define DC_FREE 0
+#define DC_SEALED 1
+#define DC_OP_ZERO 0
+#define DC_OP_INTENSITY 1
+#define DC_OP_MOVE 2
+#define DC_OP_DRAW 3
+static int s_dc_w = 0;   /* current write buffer (0/1) */
+static int s_dc_n = 0;   /* commands recorded into it so far */
+static inline void dc_push(unsigned char op, signed char a, signed char b) {
+    if (s_dc_n < DC_CMDS_MAX) {
+        struct dc_cmd *buf = s_dc_w ? DC_BUF1 : DC_BUF0;
+        buf[s_dc_n].op = op; buf[s_dc_n].a = a; buf[s_dc_n].b = b;
+        s_dc_n++;
+    }
+}
+#define BEAM_ZERO()       dc_push(DC_OP_ZERO, 0, 0)
+#define BEAM_INTENSITY(b) dc_push(DC_OP_INTENSITY, (signed char)(b), 0)
+#define BEAM_MOVE(x,y)    dc_push(DC_OP_MOVE, (signed char)(x), (signed char)(y))
+#define BEAM_DRAW(x,y)    dc_push(DC_OP_DRAW, (signed char)(x), (signed char)(y))
+#else
+#define BEAM_ZERO()       sys_reset0ref()
+#define BEAM_INTENSITY(b) sys_set_intensity(b)
+#define BEAM_MOVE(x,y)    sys_move((x),(y))
+#define BEAM_DRAW(x,y)    sys_draw_delta((x),(y))
+#endif
+
 /* Bound integrator drift: chaining segments with only relative moves (no re-zero)
  * lets the integrators drift, so after N consecutive segments we force a fresh
  * zero-ref. This is the runtime analogue of PiTrex's MAX_CONSECUTIVE_DRAWS (=65)
@@ -69,13 +120,13 @@ static void beam_move_to(int x, int y)
     int dx = x - s_beam_x, dy = y - s_beam_y, steps = 0;
     while ((dx > 127 || dx < -127 || dy > 127 || dy < -127) && steps < 8) {
         int sx = clamp127(dx), sy = clamp127(dy);
-        sys_move(sx, sy);
+        BEAM_MOVE(sx, sy);
         dx -= sx; dy -= sy; steps++;
     }
     /* Skip the reposition when the beam is already there — connected segments in
      * a path share endpoints, so this elides one MOVE(0,0) syscall per segment
      * (matches the native backend's stroke chaining; big win vs a move per seg). */
-    if (dx || dy) sys_move(dx, dy);
+    if (dx || dy) BEAM_MOVE(dx, dy);
     s_beam_x = x; s_beam_y = y;
 }
 
@@ -88,13 +139,13 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
     /* After N chained segments the beam has drifted enough to wobble — force a
      * fresh zero-ref so the next segment positions from a clean origin. */
     if (s_draws_since_zero >= VPY_MAX_CONSECUTIVE_DRAWS) {
-        sys_reset0ref();
+        BEAM_ZERO();
         s_beam_x = 0; s_beam_y = 0;
         s_draws_since_zero = 0;
     }
-    sys_set_intensity(b);
+    BEAM_INTENSITY(b);
     beam_move_to(ax0, ay0);
-    sys_draw_delta(ax1 - ax0, ay1 - ay0);
+    BEAM_DRAW(ax1 - ax0, ay1 - ay0);
     s_beam_x = ax1; s_beam_y = ay1;
     s_draws_since_zero++;
 }
@@ -103,7 +154,21 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
  * refreshers, so v_WaitRecal only paces + re-zeros our tracked beam. ── */
 void v_WaitRecal(void)
 {
+#ifdef VPY_DUAL_CORE
+    /* Seal the frame we just recorded for core 0, then spin (in RAM, no svc/flash)
+     * until the OTHER buffer is free so we never overwrite one core 0 is drawing.
+     * Pipeline: core 0 draws buffer A while we record buffer B → frame = max(). */
+    DC_CTRL->count[s_dc_w] = (unsigned short)s_dc_n;
+    __asm__ volatile("dmb 0xf" ::: "memory");
+    DC_CTRL->state[s_dc_w] = DC_SEALED;
+    __asm__ volatile("sev" ::: "memory");           /* wake core 0 if it's waiting */
+    int n = 1 - s_dc_w;
+    while (DC_CTRL->state[n] != DC_FREE) { __asm__ volatile("" ::: "memory"); }
+    __asm__ volatile("dmb 0xf" ::: "memory");
+    s_dc_w = n; s_dc_n = 0;
+#else
     sys_wait_recal();
+#endif
     s_beam_x = 0; s_beam_y = 0;
     s_draws_since_zero = 0;   /* WAIT_RECAL zero-refs the beam → fresh drift budget */
 }
@@ -114,7 +179,7 @@ void v_WaitRecal(void)
  * cap in v_directDraw32 still bounds a single very long path on top of this. */
 void v_beamNewStroke(void)
 {
-    sys_reset0ref();
+    BEAM_ZERO();
     s_beam_x = 0; s_beam_y = 0;
     s_draws_since_zero = 0;
 }
@@ -122,15 +187,24 @@ void v_beamNewStroke(void)
 uint8_t v_readButtons(void)
 {
     /* SYS_READ_BUTTONS returns P1 in bits 0-3 (P2 in 4-7); libvpy's J1_BUTTON_N
-     * reads bit N-1 of currentButtonState, so this maps 1:1. */
+     * reads bit N-1 of currentButtonState, so this maps 1:1. In dual-core, core 0
+     * owns the bus and publishes the snapshot (no svc / bus access from core 1). */
+#ifdef VPY_DUAL_CORE
+    currentButtonState = (uint8_t)DC_CTRL->buttons;
+#else
     currentButtonState = (uint8_t)sys_read_buttons();
+#endif
     return currentButtonState;
 }
 
 void v_readJoystick1Analog(void)
 {
     /* SYS_READ_AXES: (J1X<<24)|(J1Y<<16)|(J2X<<8)|J2Y, each a raw i8. */
-    int a = sys_read_axes();
+#ifdef VPY_DUAL_CORE
+    unsigned int a = DC_CTRL->axes;
+#else
+    unsigned int a = (unsigned int)sys_read_axes();
+#endif
     currentJoy1X = (int8_t)(a >> 24);
     currentJoy1Y = (int8_t)(a >> 16);
 }
