@@ -1,0 +1,18 @@
+[project]
+name = "aae_asteroids"
+type = "c-external"
+target = "rp2350"
+
+# AAE (Another Arcade Emulator) — Asteroids — ported to run as a C game on the
+# RP2350 cartridge via libvpy's SDK shim. WORK IN PROGRESS: see
+# docs/AAE_RP2350_PORT.md for the state + the remaining build steps.
+
+[build]
+command = "make"
+args = ["aae_asteroids_rp2350"]
+artifact = "build_rp2350/aae_asteroids_sd.bin"
+
+# Per-target recipe (the IDE picks this when building for rp2350).
+[targets.rp2350]
+args = ["aae_asteroids_rp2350"]
+artifact = "build_rp2350/aae_asteroids_sd.bin"

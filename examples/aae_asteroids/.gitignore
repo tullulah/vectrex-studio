@@ -1,0 +1,6 @@
+# Copyrighted arcade ROMs — never commit. Regenerate src/asteroid_roms.h from
+# your local asteroid.zip (see docs/AAE_RP2350_PORT.md).
+roms/
+src/asteroid_roms.h
+build_rp2350/
+.DS_Store
