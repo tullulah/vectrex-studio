@@ -4,24 +4,11 @@
  * (AAE allocates a few fixed buffers at init and never frees). printf/logging
  * are no-ops on the cart. rand() is the same LCG style AAE expects. */
 #include <stddef.h>
+#include <string.h>   /* memset (provided by the SDK shim) for calloc */
 
 /* ---- mem/str ---- */
-void *memcpy(void *d, const void *s, size_t n) {
-    unsigned char *dst = d; const unsigned char *src = s;
-    while (n--) *dst++ = *src++;
-    return d;
-}
-void *memset(void *d, int c, size_t n) {
-    unsigned char *dst = d;
-    while (n--) *dst++ = (unsigned char)c;
-    return d;
-}
-void *memmove(void *d, const void *s, size_t n) {
-    unsigned char *dst = d; const unsigned char *src = s;
-    if (dst < src) while (n--) *dst++ = *src++;
-    else { dst += n; src += n; while (n--) *--dst = *--src; }
-    return d;
-}
+/* memset/memcpy/memmove are provided by the RP2350 SDK shim (sdk_rp2350.c);
+ * defining them here too would be a multiple-definition link error. */
 int memcmp(const void *a, const void *b, size_t n) {
     const unsigned char *x = a, *y = b;
     while (n--) { if (*x != *y) return *x - *y; x++; y++; }
@@ -38,6 +25,19 @@ char *strncpy(char *d, const char *s, size_t n) {
     while (n && (*d = *s)) { d++; s++; n--; }
     while (n--) *d++ = 0;
     return r;
+}
+char *strcat(char *d, const char *s) {
+    char *r = d; while (*d) d++; while ((*d++ = *s++)) ; return r;
+}
+char *strncat(char *d, const char *s, size_t n) {
+    char *r = d; while (*d) d++;
+    while (n && (*d = *s)) { d++; s++; n--; }
+    *d = 0; return r;
+}
+int strncmp(const char *a, const char *b, size_t n) {
+    while (n && *a && *a == *b) { a++; b++; n--; }
+    if (!n) return 0;
+    return (unsigned char)*a - (unsigned char)*b;
 }
 
 /* ---- malloc: bump allocator over a static arena (no free) ---- */
@@ -68,6 +68,26 @@ void srand(unsigned s) { s_rng = s; }
 int  abs(int v)  { return v < 0 ? -v : v; }
 long labs(long v){ return v < 0 ? -v : v; }
 void exit(int code) { (void)code; for (;;) ; }
+
+/* ---- file I/O: no filesystem on the cart (embedded ROMs, no save states) ---- */
+void *fopen(const char *path, const char *mode) { (void)path; (void)mode; return (void *)0; }
+int   fclose(void *f) { (void)f; return 0; }
+size_t fread(void *ptr, size_t size, size_t n, void *f)        { (void)ptr; (void)size; (void)n; (void)f; return 0; }
+size_t fwrite(const void *ptr, size_t size, size_t n, void *f) { (void)ptr; (void)size; (void)n; (void)f; return 0; }
+int   fseek(void *f, long off, int whence) { (void)f; (void)off; (void)whence; return 0; }
+long  ftell(void *f) { (void)f; return 0; }
+int   fputc(int c, void *f) { (void)f; return c; }
+int   fgetc(void *f) { (void)f; return -1; }
+
+/* ---- math: only log() is referenced (acommon.c); rest satisfy decls ---- */
+double log(double x)   { (void)x; return 0; }
+double sin(double x)   { (void)x; return 0; }
+double cos(double x)   { (void)x; return 0; }
+double sqrt(double x)  { (void)x; return 0; }
+double atan2(double y, double x) { (void)y; (void)x; return 0; }
+double pow(double b, double e)   { (void)b; (void)e; return 0; }
+double floor(double x) { (void)x; return x; }
+double fabs(double x)  { return x < 0 ? -x : x; }
 
 /* ---- logging/printf are no-ops on the cart ---- */
 void *stderr = 0, *stdout = 0;

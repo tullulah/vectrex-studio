@@ -29,7 +29,11 @@
 extern int  init_asteroid(void);
 extern void run_asteroids(void);
 extern void run_cpus_to_cycles(void);   /* cpu_control.c */
-extern int  gamenum;                    /* set to ASTEROID before init */
+extern void init_cpu_config(void);      /* cpu_control.c: derive num_cpus + cyclecount */
+
+/* Our machine setup (aae_machine.c). aae_load_asteroid_roms builds GI[0] (the
+ * 6502 memory image) and copies the embedded ROMs in — must run before init. */
+extern void aae_load_asteroid_roms(void);
 
 /* RP2350 SDK shim (sdk_rp2350.c). */
 extern void v_init(void);
@@ -37,14 +41,18 @@ extern void v_WaitRecal(void);
 extern unsigned char v_readButtons(void);
 extern void v_readJoystick1Analog(void);
 
-/* libvpy game entry: the BIOS jumps here after loading us at 0x20040000. */
-void game_main(void)
+/* libvpy game entry. rp2350_start.s provides game_main (the VPy2-header entry
+ * that zeroes .bss and calls main); the game defines main(), like SnowBros_c. */
+int main(void)
 {
     v_init();
 
-    /* TODO(1,2): set up the Asteroids machine (driver row, cyclecount, ROMs)
-     * then init_asteroid(). Placeholder call so the structure is visible. */
-    init_asteroid();
+    /* Match aaemain.c's init order: load ROMs, configure the CPUs (derives
+     * num_cpus + per-frame cyclecount from the driver row — WITHOUT this the
+     * 6502 runs 0 cycles/frame and nothing draws), then the game's init. */
+    aae_load_asteroid_roms();  /* build GI[0] + copy ROMs (must precede init) */
+    init_cpu_config();         /* num_cpus + cyclecount from driver[gamenum]   */
+    init_asteroid();           /* init 6502 context, colours, DVG state        */
 
     for (;;) {
         v_WaitRecal();            /* frame pace + zero-ref (shim) */
@@ -53,4 +61,5 @@ void game_main(void)
         run_cpus_to_cycles();     /* run the 6502 a frame; DVG-GO draws vectors */
         run_asteroids();          /* per-frame housekeeping */
     }
+    return 0;
 }

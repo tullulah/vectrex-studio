@@ -3,4 +3,5 @@
 roms/
 src/asteroid_roms.h
 build_rp2350/
+build_wasm/
 .DS_Store

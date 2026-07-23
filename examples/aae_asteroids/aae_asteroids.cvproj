@@ -16,3 +16,10 @@ artifact = "build_rp2350/aae_asteroids_sd.bin"
 [targets.rp2350]
 args = ["aae_asteroids_rp2350"]
 artifact = "build_rp2350/aae_asteroids_sd.bin"
+
+# WASM build that runs in the IDE emulator panel (compiled against the pitrex-sim
+# host SDK shim via emscripten). The IDE injects $PITREX_SIM_SDK + emcc.
+[simulate]
+command = "make"
+args = ["sim"]
+module = "build_wasm/game.js"
