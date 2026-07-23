@@ -502,6 +502,14 @@ impl VecResource {
             .into_iter()
             .filter(|p| p.points.len() >= 2)
             .collect();
+        // Stage 2 (opt-in): fuse contiguous open polylines so the runtime skips
+        // the per-path dv_reset at shared joins. `optimized_paths` already put
+        // adjacent contiguous paths next to each other. OFF by default.
+        let paths = if vec_merge_enabled() {
+            merge_contiguous_paths(paths, vec_merge_max_segs())
+        } else {
+            paths
+        };
         let path_count = paths.len();
         
         asm.push_str(&format!("_{}_VECTORS:  ; Main entry (header + {} path(s))\n", symbol_name, path_count));
@@ -918,6 +926,86 @@ pub fn simplify_xy(pts: &[(i16, i16)], epsilon: f64) -> Vec<(i16, i16)> {
         .collect()
 }
 
+// ============================================================
+// Stage 2 — contiguous-path fusion (compile-time re-zero avoidance)
+//
+// The draw runtime does one dv_reset (SYS_RESET0REF, the expensive beam
+// settle) at the START of every path. Where consecutive OPEN polylines share an
+// endpoint and the same intensity, fusing them into one path lets the runtime
+// draw a continuous chain and skip the re-zero at the join — the compile-time
+// analogue of PiTrex's re-zero avoidance (vectrexInterface.c consecutiveDraws /
+// MAX_CONSECUTIVE_DRAWS).
+//
+// ⚠️ HARDWARE RISK: dropping the per-path re-zero lets integrator drift
+// accumulate across the join — the exact trembling the per-path re-zero was
+// added to fix (see arm/drawing.rs "path 4 ≫ path 1"). The `cap` bounds a fused
+// chain's length so drift is re-zeroed at least every `cap` segments (mirroring
+// MAX_CONSECUTIVE_DRAWS), but the safe cap is HARDWARE-dependent. Therefore this
+// pass is OFF by default and must be validated on the real cartridge.
+// ============================================================
+
+/// Conservative default segment cap for a fused chain before a re-zero is
+/// forced (drift bound). ~PiTrex uses 65; we start much lower until HW-validated.
+pub const VEC_MERGE_MAX_SEGS: usize = 8;
+
+/// Whether Stage-2 path fusion runs. OFF unless `VPY_VEC_MERGE_PATHS` is set to
+/// a truthy value (`1`/`true`) — it changes beam behaviour, so it is opt-in.
+pub fn vec_merge_enabled() -> bool {
+    match std::env::var("VPY_VEC_MERGE_PATHS") {
+        Ok(v) => !matches!(v.as_str(), "" | "0" | "false" | "off"),
+        Err(_) => false,
+    }
+}
+
+/// Active fused-chain segment cap: `VPY_VEC_MERGE_MAX_SEGS` (min 2) or the
+/// conservative default.
+pub fn vec_merge_max_segs() -> usize {
+    std::env::var("VPY_VEC_MERGE_MAX_SEGS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|&n| n >= 2)
+        .unwrap_or(VEC_MERGE_MAX_SEGS)
+}
+
+/// Fuse consecutive OPEN polyline paths that share an endpoint (last point of
+/// one == first point of the next) AND the same beam intensity into a single
+/// path, so the runtime draws a continuous chain instead of re-zeroing between
+/// them. A fused chain is capped at `cap` segments; beyond that a break is left
+/// (forcing a re-zero) to bound drift. Closed paths and beziers never fuse and
+/// break any running chain. Per-vertex intensity overrides ride along untouched.
+///
+/// Order-sensitive: it only fuses ADJACENT paths, so callers should reorder
+/// contiguous paths together first (m6809's `optimized_paths` already does).
+pub fn merge_contiguous_paths(paths: Vec<VecPath>, cap: usize) -> Vec<VecPath> {
+    fn open_polyline(p: &VecPath) -> bool {
+        !p.closed && p.path_type.as_deref() != Some("bezier") && p.points.len() >= 2
+    }
+    fn segs(p: &VecPath) -> usize { p.points.len().saturating_sub(1) }
+    // Point has no PartialEq; compare position (incl. Z so 3D paths only fuse
+    // when they truly coincide at the join).
+    fn pos(p: &Point) -> (i16, i16, Option<i16>) { (p.x, p.y, p.z) }
+
+    let mut out: Vec<VecPath> = Vec::with_capacity(paths.len());
+    for p in paths {
+        let fuse = match out.last() {
+            Some(last) =>
+                open_polyline(last)
+                && open_polyline(&p)
+                && last.intensity == p.intensity
+                && segs(last) + segs(&p) <= cap
+                && last.points.last().map(pos) == p.points.first().map(pos),
+            None => false,
+        };
+        if fuse {
+            // drop the shared join vertex from `p`
+            out.last_mut().unwrap().points.extend_from_slice(&p.points[1..]);
+        } else {
+            out.push(p);
+        }
+    }
+    out
+}
+
 // Tests moved to core/tests/vecres_tests.rs to keep production code clean
 
 #[cfg(test)]
@@ -984,5 +1072,77 @@ mod simplify_tests {
         let pts = vec![(0i16, 0i16), (5, 0), (10, 0), (15, 0), (20, 0)];
         let out = simplify_xy(&pts, 1.0);
         assert_eq!(out, vec![(0, 0), (20, 0)], "collinear tuple run collapses to endpoints");
+    }
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+
+    fn pt(x: i16, y: i16) -> Point {
+        Point { x, y, z: None, intensity: None, t: None }
+    }
+    fn open_path(intensity: u8, points: Vec<Point>) -> VecPath {
+        VecPath { name: String::new(), intensity, closed: false, path_type: None, points }
+    }
+
+    #[test]
+    fn contiguous_same_intensity_fuses() {
+        let a = open_path(127, vec![pt(0, 0), pt(10, 0)]);
+        let b = open_path(127, vec![pt(10, 0), pt(10, 10)]); // shares (10,0)
+        let out = merge_contiguous_paths(vec![a, b], 8);
+        assert_eq!(out.len(), 1, "contiguous same-intensity open paths fuse");
+        assert_eq!(out[0].points.len(), 3, "shared join vertex is dropped once");
+        assert_eq!((out[0].points[2].x, out[0].points[2].y), (10, 10));
+    }
+
+    #[test]
+    fn non_contiguous_not_fused() {
+        let a = open_path(127, vec![pt(0, 0), pt(10, 0)]);
+        let b = open_path(127, vec![pt(50, 50), pt(60, 60)]); // no shared endpoint
+        assert_eq!(merge_contiguous_paths(vec![a, b], 8).len(), 2);
+    }
+
+    #[test]
+    fn intensity_change_forces_break() {
+        let a = open_path(127, vec![pt(0, 0), pt(10, 0)]);
+        let b = open_path(40, vec![pt(10, 0), pt(20, 0)]);
+        assert_eq!(merge_contiguous_paths(vec![a, b], 8).len(), 2);
+    }
+
+    #[test]
+    fn closed_and_bezier_break_chain() {
+        let mut closed = open_path(127, vec![pt(0, 0), pt(10, 0), pt(10, 10)]);
+        closed.closed = true;
+        let after_closed = open_path(127, vec![pt(10, 10), pt(20, 20)]);
+        assert_eq!(merge_contiguous_paths(vec![closed, after_closed], 8).len(), 2,
+            "a closed path is never a fuse target");
+
+        let mut bez = open_path(127, vec![pt(0, 0), pt(10, 0)]);
+        bez.path_type = Some("bezier".to_string());
+        let after_bez = open_path(127, vec![pt(10, 0), pt(20, 0)]);
+        assert_eq!(merge_contiguous_paths(vec![bez, after_bez], 8).len(), 2, "beziers never fuse");
+    }
+
+    #[test]
+    fn cap_bounds_the_chain() {
+        let a = open_path(127, vec![pt(0, 0), pt(10, 0), pt(20, 0)]);  // 2 segs
+        let b = open_path(127, vec![pt(20, 0), pt(30, 0), pt(40, 0)]); // 2 segs, shares (20,0)
+        assert_eq!(merge_contiguous_paths(vec![a.clone(), b.clone()], 4).len(), 1, "4 segs <= cap fuses");
+        assert_eq!(merge_contiguous_paths(vec![a, b], 3).len(), 2, "combined 4 > cap 3 forces a break");
+    }
+
+    #[test]
+    fn per_vertex_intensity_rides_along() {
+        let a = open_path(127, vec![pt(0, 0), pt(10, 0)]);
+        let b = open_path(127, vec![pt(10, 0), Point { x: 20, y: 0, z: None, intensity: Some(64), t: None }]);
+        let out = merge_contiguous_paths(vec![a, b], 8);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].points.last().unwrap().intensity, Some(64), "per-vertex intensity survives fusion");
+    }
+
+    #[test]
+    fn stage2_is_off_by_default() {
+        assert!(!vec_merge_enabled(), "path fusion must be OFF unless VPY_VEC_MERGE_PATHS is set");
     }
 }

@@ -3,7 +3,8 @@
 //! Reads .vec / .vmus / .vsfx files and emits their data as ARM assembly.
 
 use crate::{AssetInfo, AssetType};
-use crate::vecres::{VecResource, simplify_polyline, simplify_xy, vec_simplify_epsilon};
+use crate::vecres::{VecResource, simplify_polyline, simplify_xy, vec_simplify_epsilon,
+    merge_contiguous_paths, vec_merge_enabled, vec_merge_max_segs};
 use crate::animres::VanimResource;
 use crate::instrres::InstrResource;
 use crate::venemy::EnemyResource;
@@ -1253,7 +1254,15 @@ fn emit_vec_resource(res: &VecResource, override_name: &str) -> String {
     let (center_x, center_y) = res.calculate_center();
     let epsilon = vec_simplify_epsilon();
 
-    let paths = res.visible_paths();
+    // Stage 2 (opt-in): fuse contiguous open polylines to skip per-path
+    // dv_reset at shared joins. Clone to owned so the pass can rewrite the list.
+    // OFF by default (changes beam behaviour — see merge_contiguous_paths).
+    let owned = res.visible_paths().into_iter().cloned().collect::<Vec<_>>();
+    let paths = if vec_merge_enabled() {
+        merge_contiguous_paths(owned, vec_merge_max_segs())
+    } else {
+        owned
+    };
 
     s.push_str(&format!("@ --- {} ({} path(s)) ---\n", override_name, paths.len()));
     s.push_str(&format!(".global _{sym}_VECTORS\n"));
