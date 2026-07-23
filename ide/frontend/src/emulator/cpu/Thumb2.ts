@@ -1233,6 +1233,27 @@ export class Thumb2 implements ICpu {
       return this.exec32_dp_reg(hw0, hw1);
     }
 
+    // ── LSL/LSR/ASR/ROR (register), 32-bit ────────────────────────────────
+    // hw0 = 1111 1010 0 tt S Rn, hw1 = 1111 Rd 0000 Rm  (tt: 0=LSL,1=LSR,2=ASR,3=ROR).
+    // These share the FA00-FA7F block with the extend ops but are distinguished
+    // by hw1[15:12]=1111 AND hw1[7:4]=0000. Without this they were misrouted to
+    // exec32_extend (UXTB/SXTB…) and mangled — e.g. __aeabi_f2iz's `lsr.w r0,r3,r2`
+    // returned garbage, so every soft-float coordinate (AAE's draws) was wrong.
+    if ((hw0 & 0xff80) === 0xfa00 && (hw1 & 0xf0f0) === 0xf000) {
+      const rn = hw0 & 0xf, rm = hw1 & 0xf, rd = (hw1 >>> 8) & 0xf;
+      const s = ((hw0 >>> 4) & 1) === 1;
+      const type = (hw0 >>> 5) & 0x3;
+      const amount = this.regs[rm] & 0xff;
+      let r: number;
+      if (type === 0) r = this.lsl(this.regs[rn], amount, s);
+      else if (type === 1) r = this.lsr(this.regs[rn], amount === 0 ? 0 : amount, s && amount !== 0);
+      else if (type === 2) r = this.asr(this.regs[rn], amount, s && amount !== 0);
+      else r = this.ror(this.regs[rn], amount, s && amount !== 0);
+      this.regs[rd] = r;
+      if (s) this.setNZ(r);
+      return 1;
+    }
+
     // ── Saturate / extend / misc (FA00-FA7F) ──────────────────────────────
     if ((hw0 & 0xff80) === 0xfa00) {
       return this.exec32_extend(hw0, hw1);
