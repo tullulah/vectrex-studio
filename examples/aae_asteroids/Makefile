@@ -23,7 +23,10 @@ OBJCOPY     ?= arm-none-eabi-objcopy
 #   C23 where `()` means `(void)`, which turns AAE's handler tables into errors.
 # CCNT0(): PiTrex ARM cycle-counter profiling macro, absent here -> no-op.
 # -Iinclude FIRST so our libc shims (stdlib/string/stdio) win over anything else.
-CFLAGS  = -mthumb -mcpu=cortex-m33 -mfloat-abi=soft -ffreestanding -Os -std=gnu11 \
+# -O3 (speed): AAE is a 6502 interpreter + soft-float coord math, both CPU-bound
+# on HW — -Os ran the game in slow motion. Code size has ample room (bss, not
+# text, dominates the 252 KB budget).
+CFLAGS  = -mthumb -mcpu=cortex-m33 -mfloat-abi=soft -ffreestanding -O3 -std=gnu11 \
           -ffunction-sections -fdata-sections -DVPY_RP2350 -D'CCNT0(x)=do{}while(0)' \
           -Iinclude -Isrc -I$(AAE_SRC) -I$(VPY_C_INC) -I$(PITREX_INC)
 LDFLAGS = -nostdlib -Wl,--gc-sections -Wl,-T,$(RP2350_SDK)/rp2350_game_ram.ld
