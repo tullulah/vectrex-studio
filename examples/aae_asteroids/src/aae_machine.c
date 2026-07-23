@@ -62,9 +62,39 @@ struct AAEDriver driver[] =
     }
 };
 
-/* ---- input: 6502 reads control ports through getport(). Stubbed to "nothing
- * pressed" for now; wired to v_readButtons / v_readJoystick1Analog later. ---- */
-int getport(int port) { (void)port; return 0x00; }
+/* ---- input: the 6502 reads Asteroids' control ports through getport(port),
+ * one bit per switch (all active-high; see asteroid_keys in AAE gamekeys.h):
+ *   port 0: Fire 0x10, Hyperspace 0x08
+ *   port 1: RotateLeft 0x80, RotateRight 0x40, Thrust 0x20, P1-Start 0x08, Coin 0x01
+ * We map the Vectrex controller onto them via the SDK shim's input snapshot
+ * (currentButtonState / currentJoy1X/Y), refreshed each frame by
+ * v_readButtons + v_readJoystick1Analog in the main loop. Same globals in the
+ * rp2350 cart shim and the WASM host shim, so this works on HW and in the sim.
+ *   stick left/right -> rotate    stick up -> thrust
+ *   button 1 -> Fire   button 2 -> Thrust   button 3 -> Hyperspace
+ *   button 4 -> insert Coin + P1 Start (press to begin a game)
+ */
+extern unsigned char currentButtonState;   /* P1 buttons in bits 0-3 (btn N = bit N-1) */
+extern signed char   currentJoy1X;         /* -127..127                                */
+extern signed char   currentJoy1Y;         /* -127..127, + = up                        */
+
+int getport(int port)
+{
+    int b = currentButtonState;
+    int jx = currentJoy1X, jy = currentJoy1Y;
+    const int DZ = 40;                       /* analog dead-zone */
+    int r = 0;
+    if (port == 0) {
+        if (b & 0x01) r |= 0x10;             /* button 1 -> Fire       */
+        if (b & 0x04) r |= 0x08;             /* button 3 -> Hyperspace */
+    } else {                                 /* port 1 */
+        if (jx < -DZ)               r |= 0x80;        /* stick left  -> Rotate Left  */
+        if (jx >  DZ)               r |= 0x40;        /* stick right -> Rotate Right */
+        if (jy >  DZ || (b & 0x02)) r |= 0x20;        /* stick up / button 2 -> Thrust */
+        if (b & 0x08)               r |= 0x08 | 0x01; /* button 4 -> P1 Start + Coin  */
+    }
+    return r;
+}
 
 /* ---- ROM loader: build the 6502 64 KB memory image and copy the embedded
  * Asteroids ROMs to their load addresses (from gameroms.h ROM_START(asteroid)).
