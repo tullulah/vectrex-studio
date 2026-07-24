@@ -403,7 +403,7 @@ function App() {
   const buildDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Función para manejar build y run
-  const handleBuild = useCallback(async (autoRun: boolean = false, opts?: { forSd?: boolean }) => {
+  const handleBuild = useCallback(async (autoRun: boolean = false, opts?: { forSd?: boolean; rp2350Emu?: boolean }) => {
     // "Build for SD": produce a RAM-linked rp2350 game for the cart's SD launcher.
     // Triggered either explicitly (Build menu item) or by selecting the rp2350
     // "SD card" build mode in Settings so a normal Build/Run makes the SD binary.
@@ -460,13 +460,13 @@ function App() {
           projectState.vpyProject.manifestPath || projectState.vpyProject.projectFile;
         const projName = projectState.vpyProject.config.project.name;
 
-        // RP2350 binary preview: when the rp2350 target is selected (and not the
-        // "Build for SD" action), build the RAM-linked .bin and run the ACTUAL
-        // ARM machine code in Rp2350System (svc dispatcher) — not the WASM sim
-        // (which is the same C compiled natively against the host shim). The
-        // electron side pushes the .bin via emu://compiledBin; handleCompiledBin
-        // loads it. Clear the WASM sim module so its view doesn't overlay.
-        if (!forSd && buildTarget === 'rp2350') {
+        // RP2350 binary preview (fidelity): run the ACTUAL ARM machine code in
+        // Rp2350System (svc dispatcher / Thumb2 interpreter). This is now an
+        // EXPLICIT action (opts.rp2350Emu, e.g. Shift+F5 "Run on RP2350 Emulator")
+        // instead of the F5 default — the Thumb2 interpreter is faithful but slow
+        // for heavy games (e.g. a Z80 arcade port), so plain F5/F7 use the fast
+        // native WASM sim below. Use this to verify the real cartridge binary.
+        if (!forSd && opts?.rp2350Emu) {
           if (!electronAPI?.runBuildExternal) {
             logger.error('Build', 'electronAPI.runBuildExternal not available');
             return;
@@ -887,6 +887,18 @@ def loop():
         }
         buildDebounceTimerRef.current = setTimeout(() => {
           handleBuild(false, { forSd: true });
+          buildDebounceTimerRef.current = null;
+        }, 0);
+        break;
+      case 'build.rp2350emu':
+        // Build & run the REAL rp2350 ARM binary in the Thumb2 emulator (fidelity
+        // check). Faithful but slow — plain F5 uses the fast WASM sim instead.
+        if (buildDebounceTimerRef.current) {
+          logger.debug('Build', 'RP2350-emu request debounced (already queued)');
+          clearTimeout(buildDebounceTimerRef.current);
+        }
+        buildDebounceTimerRef.current = setTimeout(() => {
+          handleBuild(true, { rp2350Emu: true });
           buildDebounceTimerRef.current = null;
         }, 0);
         break;

@@ -90,6 +90,20 @@ uint32_t v_millis(void) { return (uint32_t)js_millis(); }
 void v_setSoundAY(uint8_t reg, uint8_t val) { js_sound_ay((int)reg, (int)val); }
 void v_writePSG(uint8_t reg, uint8_t val)   { js_sound_ay((int)reg, (int)val); }
 
+/* Digitised-sample playback → the JS side (PitrexSimView) mixes via Web Audio. */
+EM_JS(void, js_play_sample, (int idx, int voice, int loop), {
+    if (Module.pitrex && Module.pitrex.playSample) Module.pitrex.playSample(idx, voice, loop);
+});
+EM_JS(void, js_stop_sample, (int voice), {
+    if (Module.pitrex && Module.pitrex.stopSample) Module.pitrex.stopSample(voice);
+});
+EM_JS(int, js_sample_playing, (int voice), {
+    return (Module.pitrex && Module.pitrex.samplePlaying) ? (Module.pitrex.samplePlaying(voice) | 0) : 0;
+});
+void v_playSample(int idx, int voice, int loop) { js_play_sample(idx, voice, loop); }
+void v_stopSample(int voice)                    { js_stop_sample(voice); }
+int  v_samplePlaying(int voice)                 { return js_sample_playing(voice); }
+
 /* ---- FatFs over stdio (emscripten MEMFS) ---- */
 FRESULT f_open(FIL* fp, const char* path, BYTE mode) {
     const char* m = (mode & FA_WRITE) ? "wb" : "rb";

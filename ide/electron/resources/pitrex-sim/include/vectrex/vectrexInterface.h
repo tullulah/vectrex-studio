@@ -51,6 +51,14 @@ uint32_t v_millis(void);
 void     v_setSoundAY(uint8_t reg, uint8_t val);   /* legacy name (some games use it) */
 void     v_writePSG(uint8_t reg, uint8_t val);     /* real PiTrex SDK name — libvpy uses this */
 
+/* Digitised-sample audio (e.g. AAE Sega-G80 arcade sound). A game with sampled
+ * SFX plays voice `voice` (a mixing channel) with sample bank index `idx`,
+ * `loop`=1 to repeat. The sim mixes voices in Web Audio; on RP2350 these are
+ * no-ops for now (HW needs a software mixer → PSG DAC stream). */
+void     v_playSample(int idx, int voice, int loop);
+void     v_stopSample(int voice);
+int      v_samplePlaying(int voice);
+
 #ifdef __cplusplus
 }
 #endif

@@ -1064,8 +1064,21 @@ export class Thumb2 implements ICpu {
         this.regs[15] = u32(pc + 4 + offset);
         return 3;
       } else {
-        // B.W conditional: hw1[11]=J2 used as J2, cond in hw0[9:6]
+        // hw1[15:14]=0b10, hw1[12]=0 is EITHER a conditional B.W (cond != 0b111x)
+        // OR — when cond (hw0[9:6]) == 0b111x — a "branch and miscellaneous
+        // control" instruction: barriers (DMB/DSB/ISB/CLREX), hints (NOP/SEV/
+        // WFE/WFI/DBG), MSR/MRS. The dual-core game SDK uses `dmb sy` (0xf3bf
+        // 0x8f5f) in v_WaitRecal; without this it decoded as an always-taken
+        // branch and jumped to garbage. VPy single-core games never emit these.
         const cond = (hw0 >>> 6) & 0xf;
+        if (cond >= 0xE) {
+          const op = (hw0 >>> 4) & 0x7f;  // hw0[10:4]
+          // 0x3b = CLREX/DSB/DMB/ISB, 0x3a = hint space (NOP/YIELD/WFE/SEV/WFI/DBG).
+          // All are no-ops in this functional core (no caches, no real 2nd core).
+          if (op === 0x3b || op === 0x3a) return 1;
+          throw new Error(`Unimplemented 32-bit misc-control: hw0=0x${hw0.toString(16)} hw1=0x${hw1.toString(16)} at PC=0x${pc.toString(16)}`);
+        }
+        // B.W conditional: hw1[11]=J2 used as J2, cond in hw0[9:6]
         const S2   = (hw0 >>> 10) & 1;
         const imm6 = hw0 & 0x3f;
         const imm11 = hw1 & 0x7ff;
@@ -1949,6 +1962,18 @@ export class Thumb2 implements ICpu {
         const r = u32(a + rmVal + c);
         this.regs[rd] = r;
         if (s) this.setNZCV_add(a, rmVal + c);
+        break;
+      }
+      case 0xb: {  // SBC{S} Rd,Rn,Rm{,shift} — Rn - Rm - borrow (borrow = 1-C).
+        // Was MISSING: fell through to default (no-op). Soft-float __adddf3 uses
+        // `sbc.w rX,rX,rX,lsl#1` to conditionally negate a mantissa by the sign
+        // (carry) bit; without it, different-sign dadd/dsub added instead of
+        // subtracting (5.0-3.0 → 8.0) and __divdf3 was wrong. See [[thumb2-bugs]].
+        const a = this.regs[rn];
+        const c = this.flagC;
+        const r = u32(a - rmVal - (1 - c));
+        this.regs[rd] = r;
+        if (s) this.setNZCV_sub(a, rmVal + (1 - c));  // approximate borrow flags
         break;
       }
       case 0xd: {  // SUB{S}  /  CMP Rn,Rm{,shift} (Rd=15,S=1 → discard result)

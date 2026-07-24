@@ -278,6 +278,7 @@ async function createWindow() {
         submenu: [
           { label: 'Build', accelerator: 'CmdOrCtrl+F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
           { label: 'Build & Run', accelerator: 'CmdOrCtrl+F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
+          { label: 'Run on RP2350 Emulator', accelerator: 'CmdOrCtrl+Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.rp2350emu') },
           { label: 'Clean', click: () => mainWindow?.webContents.send('command', 'build.clean') }
         ]
       },
@@ -719,6 +720,7 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
       submenu: [
         { label: 'Build', accelerator: 'F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
         { label: 'Build & Run', accelerator: 'F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
+        { label: 'Run on RP2350 Emulator', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.rp2350emu') },
         { label: 'Clean', click: () => mainWindow?.webContents.send('command', 'build.clean') }
       ]
     },
@@ -2967,6 +2969,7 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
       submenu: [
         { label: 'Build', accelerator: 'F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
         { label: 'Build & Run', accelerator: 'F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
+        { label: 'Run on RP2350 Emulator', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.rp2350emu') },
         { label: 'Clean', click: () => mainWindow?.webContents.send('command', 'build.clean') }
       ]
     },

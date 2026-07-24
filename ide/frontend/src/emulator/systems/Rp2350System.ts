@@ -465,6 +465,7 @@ export class Rp2350System implements ISystem, IBus {
    * Returns all vector segments drawn during the frame.
    */
   runFrame(): Segment[] {
+    if (this.dcActive) return this.runFrameDualCore();
     const fc     = this.frameCounter;
     const debugEnabled = (typeof window !== 'undefined') && !!(window as any).RP2350_DEBUG;
     const logAll = debugEnabled && (fc < 10 || fc % 60 === 0);
@@ -1311,10 +1312,83 @@ export class Rp2350System implements ISystem, IBus {
       const e = (bin[4] | (bin[5] << 8) | (bin[6] << 16) | (bin[7] << 24)) >>> 0;
       if (e !== 0) entry = e;
     }
-    this.cpu.setReg(13, 0x20040000);   // SP: firmware stack, below the game image
+    // DUAL-CORE game? header reserved[0] (offset 8) == 0x44430001. On HW the game
+    // runs on core 1 and records draws to a shared RAM buffer (no svc) while the
+    // firmware materialises them on core 0. This single-core emulator plays BOTH
+    // roles: it runs the game and, when the game seals a buffer, drains it (see
+    // runFrameDualCore). It also uses the same lowered stack top (0x2007CF00) so
+    // the game's stack can't clobber the shared buffer.
+    this.dcActive = bin.length >= 12 &&
+      ((bin[8] | (bin[9] << 8) | (bin[10] << 16) | (bin[11] << 24)) >>> 0) === 0x44430001;
+    this.cpu.setReg(13, this.dcActive ? 0x2007CF00 : 0x20040000); // SP
     this.cpu.setReg(15, entry & ~1);   // PC = game_main (thumb bit stripped)
     this.cpu.setReg(14, 0xFFFFFFFE);   // LR sentinel (halt if game_main returns)
-    console.log(`[Rp2350System.initRamGame] loaded ${len}b @ 0x20040000, entry=0x${entry.toString(16)}`);
+    console.log(`[Rp2350System.initRamGame] loaded ${len}b @ 0x20040000, entry=0x${entry.toString(16)}${this.dcActive ? ' (DUAL-CORE)' : ''}`);
+  }
+
+  private dcActive = false;
+
+  /** DUAL-CORE frame: the game (would-be core 1) records its draws into a shared
+   * RAM double-buffer with no svc; we act as core 0 — publish input, run the CPU
+   * until it SEALS a buffer, then drain that buffer into segments and free it so
+   * the game's v_WaitRecal spin exits. Fixed addresses match sdk_rp2350.c/dc.rs. */
+  private runFrameDualCore(): Segment[] {
+    const CTRL = 0x2007CF00 - SRAM_BASE;
+    const BUF = [0x2007D000 - SRAM_BASE, 0x2007E000 - SRAM_BASE];
+    // Publish input the game reads from DC_CTRL (axes @+8, buttons @+12).
+    const axes = (((this.joyJ1X & 0xff) << 24) | ((this.joyJ1Y & 0xff) << 16) |
+                  ((this.joyJ2X & 0xff) << 8) | (this.joyJ2Y & 0xff)) >>> 0;
+    this.dcWr32(CTRL + 8, axes);
+    this.dcWr32(CTRL + 12, this.readButtonsBios() >>> 0);
+
+    let spent = 0;
+    while (spent < MAX_CYCLES_PER_FRAME) {
+      for (let i = 0; i < 128; i++) spent += this.cpu.step(this);
+      if (this.sram[CTRL + 0] === 1) return this.dcDrain(0, CTRL, BUF[0]);
+      if (this.sram[CTRL + 1] === 1) return this.dcDrain(1, CTRL, BUF[1]);
+    }
+    return []; // no frame sealed this budget (still initialising, or stuck)
+  }
+
+  private dcDrain(w: number, ctrl: number, bufOff: number): Segment[] {
+    const count = Math.min(this.sram[ctrl + 4 + w * 2] | (this.sram[ctrl + 5 + w * 2] << 8), 1024);
+    this.armBeamX = ALG_CENTER_X; this.armBeamY = ALG_CENTER_Y; this.armIntensity = 0;
+    for (let k = 0; k < count; k++) {
+      const o = bufOff + k * 4;
+      const op = this.sram[o];
+      const a = (this.sram[o + 1] << 24) >> 24;   // sign-extend i8
+      const b = (this.sram[o + 2] << 24) >> 24;
+      switch (op) {
+        case 0: // OP_ZERO
+          this.armBeamX = ALG_CENTER_X; this.armBeamY = ALG_CENTER_Y; this.armIntensity = 0;
+          this.beam.alg_dx = 0; this.beam.alg_dy = 0; this.beam.alg_vectoring = 0; this.beam.alg_zsh = 0;
+          break;
+        case 1: // OP_INTENSITY
+          this.armIntensity = a & 0x7f; this.beam.alg_zsh = this.armIntensity;
+          break;
+        case 2: // OP_MOVE
+          this.armBeamX += a * ARM_ALG_SCALE; this.armBeamY -= b * ARM_ALG_SCALE;
+          break;
+        case 3: { // OP_DRAW
+          const nx = this.armBeamX + a * ARM_ALG_SCALE, ny = this.armBeamY - b * ARM_ALG_SCALE;
+          const cl = clipSegment(this.armBeamX, this.armBeamY, nx, ny);
+          if (cl !== null) this.beam.addSegmentDirect(cl[0], cl[1], cl[2], cl[3], this.armIntensity);
+          this.armBeamX = nx; this.armBeamY = ny;
+          break;
+        }
+      }
+    }
+    this.sram[ctrl + w] = 0; // FREE → the game's v_WaitRecal spin exits
+    const { draw, drawCnt, erse, erseCnt } = this.beam.swapBuffers();
+    this.canvas.renderFrame(draw, drawCnt, erse, erseCnt);
+    const segments = vectorsToSegments(draw, drawCnt, this.frameCounter);
+    this.frameCounter++;
+    return segments;
+  }
+
+  private dcWr32(off: number, v: number): void {
+    this.sram[off] = v & 0xff; this.sram[off + 1] = (v >>> 8) & 0xff;
+    this.sram[off + 2] = (v >>> 16) & 0xff; this.sram[off + 3] = (v >>> 24) & 0xff;
   }
 
   /**

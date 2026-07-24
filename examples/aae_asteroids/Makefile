@@ -50,7 +50,7 @@ AAE_SRCS = \
   $(AAE_SRC)/rand.c \
   $(AAE_SRC)/acommon.c
 
-LOCAL_SRCS = src/main.c src/libc_stub.c src/aae_stubs.c src/aae_machine.c
+LOCAL_SRCS = src/main.c src/libc_stub.c src/aae_stubs.c src/aae_machine.c src/samples.c
 
 aae_asteroids_rp2350: | build_rp2350
 	$(RP2350_CC) $(CFLAGS) $(LDFLAGS) \
@@ -77,7 +77,7 @@ EMCC        ?= emcc
 EMSDK        ?= $(HOME)/emsdk
 EMSDK_PY     := $(firstword $(wildcard $(EMSDK)/python/*/bin))
 EMCC_PATH    := $(if $(EMSDK_PY),$(EMSDK_PY):,)$(PATH)
-WASM_SRCS    = src/main.c src/aae_stubs.c src/aae_machine.c
+WASM_SRCS    = src/main.c src/aae_stubs.c src/aae_machine.c src/samples.c
 WASM_CFLAGS  = -std=gnu11 -O2 -D'CCNT0(x)=do{}while(0)' \
                -Isrc -I$(AAE_SRC) -I$(VPY_C_INC) -I$(PITREX_INC)
 WASM_LDFLAGS = -sASYNCIFY -sASYNCIFY_STACK_SIZE=65536 \

@@ -211,6 +211,13 @@ void v_readJoystick1Analog(void)
 
 void v_writePSG(uint8_t reg, uint8_t val) { sys_psg_write(reg, val); }
 
+/* Digitised-sample audio (AAE Sega-G80). No-op on RP2350 for now: HW needs a
+ * software voice mixer feeding the PSG volume-DAC streamer (see the .vsmp path).
+ * A game built for rp2350 still triggers these; they just stay silent. */
+void v_playSample(int idx, int voice, int loop) { (void)idx; (void)voice; (void)loop; }
+void v_stopSample(int voice)                    { (void)voice; }
+int  v_samplePlaying(int voice)                 { (void)voice; return 0; }
+
 /* ── Core-1 music. The BIOS runs the .vmus sequencer on core 1 (tempo decoupled
  * from core-0 draw load); core 0 just hands over the track and stops it. libvpy
  * calls these instead of its software sequencer when built for RP2350. ── */
