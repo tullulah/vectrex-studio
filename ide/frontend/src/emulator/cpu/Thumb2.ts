@@ -1783,8 +1783,26 @@ export class Thumb2 implements ICpu {
         // Sign-extend: shift left to put sign bit at bit31, then arithmetic right shift
         const shift   = 32 - width;
         this.regs[rd] = u32((raw << shift) >> shift);
+      } else if (op === 0xb) {
+        // BFI Rd,Rn,#lsb,#width (T1) / BFC Rd,#lsb,#width (Rn=1111)
+        // hw1: 0 imm3[14:12] Rd[11:8] imm2[7:6] 0 msb[4:0];  lsb={imm3,imm2}
+        // BFC is the mask gcc emits for `x & 0xf000` etc.; skipping it left the
+        // masked value unchanged (e.g. the ccpu conditional-jump page mask), which
+        // silently corrupted the AAE Cinematronics cores on this emulator.
+        const imm3 = (hw1 >>> 12) & 0x7;
+        const imm2 = (hw1 >>> 6)  & 0x3;
+        const lsb  = (imm3 << 2) | imm2;
+        const msb  = hw1 & 0x1f;
+        if (msb >= lsb) {
+          const width     = msb - lsb + 1;
+          const fieldMask = u32(width >= 32 ? 0xFFFFFFFF : (((1 << width) - 1) << lsb));
+          const cleared   = u32(this.regs[rd] & ~fieldMask);
+          this.regs[rd] = rn === 0xf
+            ? cleared                                              // BFC: clear field
+            : u32(cleared | (u32(this.regs[rn] << lsb) & fieldMask)); // BFI: insert Rn
+        }
       }
-      // Other plain-binary encodings (SSAT, USAT, BFI…) — skip
+      // Other plain-binary encodings (SSAT, USAT) — skip
       return 2;
     }
 
