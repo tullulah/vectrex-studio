@@ -110,6 +110,12 @@ static inline void dc_push(unsigned char op, signed char a, signed char b) {
  * without a re-zero, above which shapes visibly wobble. */
 #define VPY_MAX_CONSECUTIVE_DRAWS 32
 static int s_draws_since_zero = 0;
+/* Cache the last intensity so we skip the redundant SET_INTENSITY syscall+bus
+ * write when consecutive segments share a brightness — measured 42–100% of them
+ * do (starcas 100%, tacscan 92%, bzone/redbaron ~45%). Reset each frame in case
+ * the BIOS touches intensity between frames. Cuts per-frame beam work → less
+ * flicker on the vector-heavy AAE arcade ports. */
+static int s_last_intensity = -1;
 
 static int clamp127(int v) { return v > 127 ? 127 : (v < -127 ? -127 : v); }
 
@@ -143,7 +149,7 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
         s_beam_x = 0; s_beam_y = 0;
         s_draws_since_zero = 0;
     }
-    BEAM_INTENSITY(b);
+    if ((int)b != s_last_intensity) { BEAM_INTENSITY(b); s_last_intensity = (int)b; }
     beam_move_to(ax0, ay0);
     BEAM_DRAW(ax1 - ax0, ay1 - ay0);
     s_beam_x = ax1; s_beam_y = ay1;
@@ -171,6 +177,7 @@ void v_WaitRecal(void)
 #endif
     s_beam_x = 0; s_beam_y = 0;
     s_draws_since_zero = 0;   /* WAIT_RECAL zero-refs the beam → fresh drift budget */
+    s_last_intensity = -1;    /* re-establish brightness on the first segment of the frame */
 }
 
 /* Start a new stroke/path with a fresh zero-ref, so integrator drift can't carry
