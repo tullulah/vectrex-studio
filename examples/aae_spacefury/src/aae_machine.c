@@ -43,22 +43,30 @@ struct AAEDriver driver[SPACFURY + 1] =
 extern unsigned char currentButtonState;
 extern signed char   currentJoy1X, currentJoy1Y;
 
+/* Space Fury reads input via sega_ports_r → getport(0..4) (NOT sega_ports_r2/r3).
+ * Exact bits from spacfury_keys — all ACTIVE-LOW in the HIGH nibble (sega_fix_dips
+ * masks the low nibble). Standard VPy mapping: btn3=Coin, btn4=Start, btn1=Fire,
+ * btn2=Thrust, stick=rotate. */
 int getport(int port)
 {
     int b = currentButtonState, jx = currentJoy1X;
+    const int DZ = 25;
     switch (port) {
-    case 0: return (b & 0x04) ? (0xe0 & ~0x20) : 0xe0;      /* $F8 Coin1 (btn3), active low */
-    case 4: { int v=0;                                       /* $FC buttons, active high */
-        if (b & 0x08) v |= 0x01;   /* btn4 -> Start1 */
-        if (b & 0x01) v |= 0x04;   /* btn1 -> Fire   */
-        if (b & 0x02) v |= 0x08;   /* btn2 -> aux    */
+    case 0:  /* $F8 coins (active low, default 0xe0): Coin1=0x80 */
+        return (b & 0x04) ? (0xe0 & ~0x80) : 0xe0;   /* btn3 -> Coin 1 */
+    case 1:  /* $F9 start (active low, default 0xf0): Start1=0x20 */
+        return (b & 0x08) ? (0xf0 & ~0x20) : 0xf0;   /* btn4 -> Start 1 */
+    case 2: { /* $FA rotate (active low): Left=0x20 Right=0x10 */
+        int v = 0xf0;
+        if (jx < -DZ) v &= ~0x20;   /* stick left  -> Rotate Left  */
+        if (jx >  DZ) v &= ~0x10;   /* stick right -> Rotate Right */
         return v; }
-    case 6:                                                  /* $FC spinner delta */
-        if (jx >  20) return (jx >  80) ?  5 :  3;
-        if (jx < -20) return (jx < -80) ? -5 : -3;
-        return 0;
-    case 1: case 2: case 3: return 0xf0;
-    default: return 0xff;
+    case 3: { /* $FB buttons (active low): Fire=0x10 Thrust=0x20 */
+        int v = 0xf0;
+        if (b & 0x01) v &= ~0x10;   /* btn1 -> Fire   */
+        if (b & 0x02) v &= ~0x20;   /* btn2 -> Thrust */
+        return v; }
+    default: return (port >= 1 && port <= 3) ? 0xf0 : 0xff;
     }
 }
 

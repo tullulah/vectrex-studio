@@ -47,7 +47,7 @@ int getport(int port)
 {
     int b = currentButtonState, jx = currentJoy1X;
     switch (port) {
-    case 0: return (b & 0x04) ? (0xe0 & ~0x20) : 0xe0;      /* $F8 Coin1 (btn3), active low */
+    case 0: return (b & 0x04) ? (0xe0 & ~0x80) : 0xe0;      /* $F8 Coin1 (btn3)=0x80, active low (zektor_keys) */
     case 4: { int v=0;                                       /* $FC buttons, active high */
         if (b & 0x08) v |= 0x01;   /* btn4 -> Start1 */
         if (b & 0x01) v |= 0x04;   /* btn1 -> Fire   */
