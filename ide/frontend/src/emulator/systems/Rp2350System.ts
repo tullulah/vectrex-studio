@@ -1313,11 +1313,16 @@ export class Rp2350System implements ISystem, IBus {
     this.reset();               // clears SRAM + hw; PC/SP set below for this image
     this.traps.clear();         // svc games use the svc dispatcher, not PC-traps
 
-    const gameOff = 0x20040000 - SRAM_BASE;   // GAME_RAM offset into SRAM
+    // GAME_RAM origin lowered from 0x20040000 to 0x20010000 (444 KB) — the BIOS
+    // only uses ~4 B of static RAM, so the old 252 KB cap was mostly wasted; large
+    // C ports (Major Havoc = 200 KB of dual-6502 images) need the room. Must match
+    // rp2350_game_ram.ld ORIGIN + the firmware sd.rs GAME_LOAD_ADDR.
+    const GAME_LOAD_ADDR = 0x20010000;
+    const gameOff = GAME_LOAD_ADDR - SRAM_BASE;   // GAME_RAM offset into SRAM
     const len = Math.min(bin.length, this.sram.length - gameOff);
     this.sram.set(bin.subarray(0, len), gameOff);
 
-    let entry = 0x20040000;     // 'VPy2' header: [magic][game_main][rsv][rsv]
+    let entry = GAME_LOAD_ADDR;     // 'VPy2' header: [magic][game_main][rsv][rsv]
     if (bin.length >= 8 && bin[0] === 0x56 && bin[1] === 0x50 && bin[2] === 0x79 && bin[3] === 0x32) {
       const e = (bin[4] | (bin[5] << 8) | (bin[6] << 16) | (bin[7] << 24)) >>> 0;
       if (e !== 0) entry = e;
@@ -1330,10 +1335,10 @@ export class Rp2350System implements ISystem, IBus {
     // the game's stack can't clobber the shared buffer.
     this.dcActive = bin.length >= 12 &&
       ((bin[8] | (bin[9] << 8) | (bin[10] << 16) | (bin[11] << 24)) >>> 0) === 0x44430001;
-    this.cpu.setReg(13, this.dcActive ? 0x2007CF00 : 0x20040000); // SP
+    this.cpu.setReg(13, this.dcActive ? 0x2007CF00 : GAME_LOAD_ADDR); // SP
     this.cpu.setReg(15, entry & ~1);   // PC = game_main (thumb bit stripped)
     this.cpu.setReg(14, 0xFFFFFFFE);   // LR sentinel (halt if game_main returns)
-    console.log(`[Rp2350System.initRamGame] loaded ${len}b @ 0x20040000, entry=0x${entry.toString(16)}${this.dcActive ? ' (DUAL-CORE)' : ''}`);
+    console.log(`[Rp2350System.initRamGame] loaded ${len}b @ 0x${GAME_LOAD_ADDR.toString(16)}, entry=0x${entry.toString(16)}${this.dcActive ? ' (DUAL-CORE)' : ''}`);
   }
 
   private dcActive = false;
