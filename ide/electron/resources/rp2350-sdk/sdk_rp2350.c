@@ -107,8 +107,13 @@ static inline void dc_push(unsigned char op, signed char a, signed char b) {
  * lets the integrators drift, so after N consecutive segments we force a fresh
  * zero-ref. This is the runtime analogue of PiTrex's MAX_CONSECUTIVE_DRAWS (=65)
  * and of the VPy compiler's fusion cap: 32 was HW-validated to draw cleanly
- * without a re-zero, above which shapes visibly wobble. */
+ * without a re-zero, above which shapes visibly wobble. Per-game overridable
+ * (-DVPY_MAX_CONSECUTIVE_DRAWS=N): games whose runtime MERGES segments emit fewer
+ * but LONGER vectors that drift more per vector, so they want a lower cap (more
+ * frequent re-zeros) to keep glyphs/shapes landing where they belong. */
+#ifndef VPY_MAX_CONSECUTIVE_DRAWS
 #define VPY_MAX_CONSECUTIVE_DRAWS 32
+#endif
 static int s_draws_since_zero = 0;
 /* Cache the last intensity so we skip the redundant SET_INTENSITY syscall+bus
  * write when consecutive segments share a brightness — measured 42–100% of them
@@ -136,6 +141,27 @@ static void beam_move_to(int x, int y)
     s_beam_x = x; s_beam_y = y;
 }
 
+/* LIT draw to (x,y), split into N PROPORTIONAL ≤127 i8 chunks. A DP-simplified
+ * long vector (Speed Freak's road rail collapses to one segment >127 units) would
+ * be truncated by the i8 BEAM_DRAW / dc_cmd delta and vanish. But the split must
+ * keep the SLOPE: clamping dx and dy independently draws chunks of different angles
+ * → the line kinks/goes random (the bent right rail). Divide the whole vector into
+ * n = ceil(max(|dx|,|dy|)/127) equal sub-segments so every chunk is collinear. */
+static void beam_draw_to(int x, int y)
+{
+    int sx0 = s_beam_x, sy0 = s_beam_y;
+    int dx = x - sx0, dy = y - sy0;
+    int adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
+    int n = ((adx > ady ? adx : ady) + 126) / 127;   /* ceil(max/127) */
+    if (n < 1) n = 1;
+    for (int i = 1; i <= n; i++) {
+        int tx = sx0 + (int)((long)dx * i / n);
+        int ty = sy0 + (int)((long)dy * i / n);
+        BEAM_DRAW(tx - s_beam_x, ty - s_beam_y);
+        s_beam_x = tx; s_beam_y = ty;
+    }
+}
+
 /* ── Contiguous collinear-run merge — the runtime analogue of the VPy codegen's
  * vec-simplify. The AAE 3D ports (Battlezone/Red Baron) subdivide straight edges
  * into many ≤2-unit segments — ~70% of the scene — and each pays a full beam
@@ -147,37 +173,157 @@ static void beam_move_to(int x, int y)
 #ifndef MERGE_TOL
 #define MERGE_TOL 1
 #endif
+/* Intensity-gated merge: some games mix BRIGHT long straight lines (which want an
+ * aggressive tolerance so a slightly-curved run collapses to a couple of vectors —
+ * e.g. Speed Freak's perspective road rails) with DIM small glyphs (text, which a
+ * high tolerance would visibly deform). A vector whose brightness ≥ MERGE_INT_HI
+ * uses MERGE_TOL_HI instead of MERGE_TOL. Defaults leave every game unchanged:
+ * MERGE_TOL_HI = MERGE_TOL, MERGE_INT_HI = 128 (never triggers). */
+#ifndef MERGE_TOL_HI
+#define MERGE_TOL_HI MERGE_TOL
+#endif
+#ifndef MERGE_INT_HI
+#define MERGE_INT_HI 128
+#endif
 static int s_run = 0, s_run_x0, s_run_y0, s_run_x1, s_run_y1, s_run_b;
+
+/* Douglas-Peucker chain simplification — the runtime twin of the compile-time
+ * simplify_polyline in vpy_codegen/src/vecres.rs. A curved multi-segment path
+ * (Speed Freak's road) fits the greedy collinear merge badly: it snaps at every
+ * bend yet fuses near-collinear glyph strokes (text deforms). DP instead keeps the
+ * vertices of maximum perpendicular deviation and drops the ones lying on the
+ * retained chord — a smooth run collapses to a few long vectors while true corners
+ * (glyph vertices, road bends) survive. Per-game (-DSIMPLIFY_EPS=N, a ±127-space
+ * epsilon); 0 = off (default; other games unchanged). Integer math: compare
+ * perp²·len2 = cross² against eps²·len2, so no sqrt. */
+#ifndef SIMPLIFY_EPS
+#define SIMPLIFY_EPS 0
+#endif
+/* Only Douglas-Peucker chains of at least this many points. Long polylines (a road)
+ * simplify; short shapes (text glyphs — a few strokes) pass through INTACT, so DP
+ * shrinks the road without eating letters. Per-game (-DSIMPLIFY_MIN_CHAIN=N). */
+#ifndef SIMPLIFY_MIN_CHAIN
+#define SIMPLIFY_MIN_CHAIN 1
+#endif
+#if SIMPLIFY_EPS > 0
+#define CHAIN_MAX 96
+static int s_chx[CHAIN_MAX], s_chy[CHAIN_MAX], s_chn = 0, s_chb = -1;
+static void dp_rec(int first, int last, long long eps2, unsigned char *keep)
+{
+    if (last <= first + 1) return;
+    long ax = s_chx[first], ay = s_chy[first];
+    long bx = s_chx[last],  by = s_chy[last];
+    long dx = bx - ax, dy = by - ay;
+    long long len2 = (long long)dx * dx + (long long)dy * dy;
+    long long best = -1; int split = first;
+    for (int i = first + 1; i < last; i++) {
+        long px = s_chx[i], py = s_chy[i];
+        long long m;
+        if (len2 > 0) {                    /* perp² · len2 == cross²          */
+            long long cross = (long long)dx * (ay - py) - (long long)(ax - px) * dy;
+            m = cross * cross;
+        } else {                           /* degenerate chord: point dist²   */
+            long long ex = px - ax, ey = py - ay;
+            m = ex * ex + ey * ey;
+        }
+        if (m > best) { best = m; split = i; }
+    }
+    long long thresh = (len2 > 0) ? eps2 * len2 : eps2;
+    if (best > thresh) {
+        keep[split] = 1;
+        dp_rec(first, split, eps2, keep);
+        dp_rec(split, last,  eps2, keep);
+    }
+}
+#endif
 
 /* Emit one absolute segment: re-zero if the drift budget is spent, set brightness
  * (cached), blank-move to the start, lit-draw to the end (BIOS convention). */
 static void emit_seg(int ax0, int ay0, int ax1, int ay1, int b)
 {
-    if (s_draws_since_zero >= VPY_MAX_CONSECUTIVE_DRAWS) {
+    /* Bound integrator drift by re-zeroing — but ONLY at a chain boundary (where a
+     * blanked move to the next start is needed anyway), never MID contiguous run.
+     * A mid-run re-zero sends the beam to centre and re-approaches over a long
+     * blanked move whose settle error DISPLACES the segment — worst on runs far
+     * from centre (Speed Freak's right road rail, always the one that "walks off").
+     * So a contiguous run draws unbroken; drift only resets between runs. */
+    int need_move = (ax0 != s_beam_x || ay0 != s_beam_y);
+    if (need_move && s_draws_since_zero >= VPY_MAX_CONSECUTIVE_DRAWS) {
         BEAM_ZERO();
         s_beam_x = 0; s_beam_y = 0;
         s_draws_since_zero = 0;
     }
     if (b != s_last_intensity) { BEAM_INTENSITY(b); s_last_intensity = b; }
     beam_move_to(ax0, ay0);
-    BEAM_DRAW(ax1 - ax0, ay1 - ay0);
-    s_beam_x = ax1; s_beam_y = ay1;
+    beam_draw_to(ax1, ay1);   /* splits >127 i8 chunks (DP long vectors) */
     s_draws_since_zero++;
 }
+
+#if SIMPLIFY_EPS > 0
+/* Douglas-Peucker the buffered contiguous chain, emit the kept vertices as
+ * connected segments. */
+static void flush_chain(void)
+{
+    if (s_chn < 2) { s_chn = 0; return; }
+    unsigned char keep[CHAIN_MAX];
+    for (int i = 0; i < s_chn; i++) keep[i] = 0;
+    keep[0] = keep[s_chn - 1] = 1;
+    if (s_chn >= SIMPLIFY_MIN_CHAIN)
+        dp_rec(0, s_chn - 1, (long long)SIMPLIFY_EPS * SIMPLIFY_EPS, keep);
+    else
+        for (int i = 1; i < s_chn - 1; i++) keep[i] = 1;   /* short shape: keep all */
+    int px = s_chx[0], py = s_chy[0];
+    for (int i = 1; i < s_chn; i++)
+        if (keep[i]) { emit_seg(px, py, s_chx[i], s_chy[i], s_chb); px = s_chx[i]; py = s_chy[i]; }
+    s_chn = 0;
+}
+#endif
 
 /* Draw + clear the pending merged run. MUST be called before anything that
  * re-zeros the beam (WAIT_RECAL, new stroke) or the run draws from a stale origin. */
 static void flush_run(void)
 {
     if (s_run) { emit_seg(s_run_x0, s_run_y0, s_run_x1, s_run_y1, s_run_b); s_run = 0; }
+#if SIMPLIFY_EPS > 0
+    flush_chain();
+#endif
 }
+
+/* Drop lit segments whose device delta is below CULL_MIN_AX (in ±127 space) on
+ * BOTH axes: sub-visible short vectors that still cost a full beam settle. For
+ * pseudo-3D / ray-cast games (Speed Freak) these are the far-distance detail that
+ * clusters near the vanishing point — invisible-but-expensive now, and re-drawn at
+ * full size as the camera nears. Per-game (-DCULL_MIN_AX=N); default 0 = keep all. */
+#ifndef CULL_MIN_AX
+#define CULL_MIN_AX 0
+#endif
 
 void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
 {
     int ax0 = (int)x0 / VPY_SCALE, ay0 = (int)y0 / VPY_SCALE;
     int ax1 = (int)x1 / VPY_SCALE, ay1 = (int)y1 / VPY_SCALE;
-#if MERGE_TOL > 0
-    if (s_run && (int)b == s_run_b && ax0 == s_run_x1 && ay0 == s_run_y1) {
+#if CULL_MIN_AX > 0
+    {
+        int cdx = ax1 - ax0, cdy = ay1 - ay0;
+        if (cdx < CULL_MIN_AX && cdx > -CULL_MIN_AX &&
+            cdy < CULL_MIN_AX && cdy > -CULL_MIN_AX)
+            return;   /* too small to see; the next lit seg's move_to repositions */
+    }
+#endif
+#if SIMPLIFY_EPS > 0
+    /* Buffer a contiguous, same-brightness chain; Douglas-Peucker it on flush. */
+    if (s_chn > 0 && (int)b == s_chb &&
+        ax0 == s_chx[s_chn - 1] && ay0 == s_chy[s_chn - 1] && s_chn < CHAIN_MAX - 1) {
+        s_chx[s_chn] = ax1; s_chy[s_chn] = ay1; s_chn++;
+    } else {
+        flush_chain();
+        s_chx[0] = ax0; s_chy[0] = ay0; s_chx[1] = ax1; s_chy[1] = ay1; s_chn = 2; s_chb = (int)b;
+    }
+    return;
+#endif
+#if MERGE_TOL > 0 || MERGE_TOL_HI > 0
+    int tol = ((int)b >= MERGE_INT_HI) ? MERGE_TOL_HI : MERGE_TOL;   /* per-brightness */
+    if (tol > 0 && s_run && (int)b == s_run_b && ax0 == s_run_x1 && ay0 == s_run_y1) {
         int rdx = s_run_x1 - s_run_x0, rdy = s_run_y1 - s_run_y0;  /* run so far     */
         int ndx = ax1 - ax0,          ndy = ay1 - ay0;            /* new segment    */
         int ex  = ax1 - s_run_x0,     ey  = ay1 - s_run_y0;       /* merged delta   */
@@ -185,8 +331,8 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
         long dot   = (long)rdx * ndx + (long)rdy * ndy;           /* same direction? */
         long run2  = (long)rdx * rdx + (long)rdy * rdy;
         /* Extend the run iff: same general direction, perpendicular deviation
-         * (|cross|/|run|) ≤ MERGE_TOL, and the merged delta still fits an i8 DRAW. */
-        if (dot >= 0 && cross * cross <= run2 * (long)(MERGE_TOL * MERGE_TOL)
+         * (|cross|/|run|) ≤ tol, and the merged delta still fits an i8 DRAW. */
+        if (dot >= 0 && cross * cross <= run2 * (long)(tol * tol)
             && ex <= 127 && ex >= -127 && ey <= 127 && ey >= -127) {
             s_run_x1 = ax1; s_run_y1 = ay1;
             return;
