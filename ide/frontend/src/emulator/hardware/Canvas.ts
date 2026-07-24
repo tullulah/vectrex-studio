@@ -18,6 +18,11 @@ import { Beam } from './Beam.js';
 const SCREEN_X_DEFAULT  = 330;
 const SCREEN_Y_DEFAULT  = 410;
 const VECTREX_COLORS    = 128;
+// Vector-CRT brightness curve. A linear intensity→grayscale ramp reads dim on a
+// gamma-2.2 monitor (mid intensities — the AAE ccpu games sit ~0x40 — looked
+// washed-out vs real hardware, where the phosphor lights brightly at mid DAC).
+// Gamma < 1 boosts the low/mid range; 0 stays black, max stays white. Tune here.
+const VECTREX_GAMMA     = 0.55;
 const BYTES_PER_PIXEL   = 4;
 const ALG_MAX_X         = 33000;
 const ALG_MAX_Y         = 41000;
@@ -79,7 +84,7 @@ export class Canvas {
   private buildColorTable(): void {
     this.color_set = [];
     for (let c = 0; c < VECTREX_COLORS; c++) {
-      const v = ((c * 256 / VECTREX_COLORS) | 0) as number;
+      const v = Math.round(255 * Math.pow(c / (VECTREX_COLORS - 1), VECTREX_GAMMA));
       this.color_set.push([v, v, v]);
     }
   }
