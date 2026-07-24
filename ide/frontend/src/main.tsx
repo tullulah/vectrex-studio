@@ -461,12 +461,12 @@ function App() {
         const projName = projectState.vpyProject.config.project.name;
 
         // RP2350 binary preview (fidelity): run the ACTUAL ARM machine code in
-        // Rp2350System (svc dispatcher / Thumb2 interpreter). This is now an
-        // EXPLICIT action (opts.rp2350Emu, e.g. Shift+F5 "Run on RP2350 Emulator")
-        // instead of the F5 default — the Thumb2 interpreter is faithful but slow
-        // for heavy games (e.g. a Z80 arcade port), so plain F5/F7 use the fast
-        // native WASM sim below. Use this to verify the real cartridge binary.
-        if (!forSd && opts?.rp2350Emu) {
+        // Rp2350System (svc dispatcher / Thumb2 interpreter). Triggered when the
+        // build target is rp2350 (so plain F5 runs the faithful emulator that
+        // matches the cartridge) OR explicitly via Shift+F5 ("Run on RP2350
+        // Emulator") regardless of target. The WASM sim below (pitrex target) is
+        // faster but diverges from hardware; the Thumb2 emulator is the HW oracle.
+        if (!forSd && (opts?.rp2350Emu || buildTarget === 'rp2350')) {
           if (!electronAPI?.runBuildExternal) {
             logger.error('Build', 'electronAPI.runBuildExternal not available');
             return;
@@ -1524,7 +1524,14 @@ def loop():
       else if (e.key === 'F11' && !e.shiftKey) { e.preventDefault(); commandExec('debug.stepInto'); }
       else if (e.key === 'F11' && e.shiftKey) { e.preventDefault(); commandExec('debug.stepOut'); }
       else if (e.key === 'F12') { e.preventDefault(); commandExec('debug.continue'); }
-      else if (e.key === 'F5' && e.shiftKey) { e.preventDefault(); commandExec('debug.stop'); }
+      else if (e.key === 'F5' && e.shiftKey) {
+        e.preventDefault();
+        // Shift+F5: stop the debug session if one is running; otherwise run the
+        // real cartridge binary on the faithful RP2350 Thumb2 emulator. (Was
+        // hard-wired to debug.stop, which shadowed "Run on RP2350 Emulator".)
+        if (useDebugStore.getState().state !== 'stopped') commandExec('debug.stop');
+        else commandExec('build.rp2350emu');
+      }
       // Git
       else if (ctrl && e.key.toLowerCase() === 'g' && !e.shiftKey) { e.preventDefault(); commandExec('git.checkout'); } // Ctrl+G = Git checkout branch
       else if (ctrl && e.key.toLowerCase() === 'g' && e.shiftKey) { e.preventDefault(); commandExec('git.history'); } // Ctrl+Shift+G = Git history
