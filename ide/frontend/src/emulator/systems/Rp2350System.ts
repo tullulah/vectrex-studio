@@ -1241,8 +1241,14 @@ export class Rp2350System implements ISystem, IBus {
         this.armBeamY -= (cpu.getReg(1) | 0) * ARM_ALG_SCALE;
         break;
       }
-      case 4: { // SYS_DRAW_DELTA(r0=dx, r1=dy) — lit segment
-        const dx = armI8(cpu.getReg(0)), dy = armI8(cpu.getReg(1));
+      case 4: { // SYS_DRAW_DELTA(r0=dx, r1=dy) — lit segment.
+        // Full signed delta, NOT i8-truncated: the SDK's emit_seg splits blanked
+        // MOVES to ≤127 but draws a segment in one BEAM_DRAW(ax1-ax0, …) that can
+        // exceed ±127 (e.g. Lunar Lander's wide terrain runs). HW draws the whole
+        // vector; masking to i8 here wrapped 143→-113, flipping the segment and
+        // corrupting the beam origin for the rest of the frame (mountain collapsed
+        // to the left). Read the true displacement like SYS_MOVE does.
+        const dx = cpu.getReg(0) | 0, dy = cpu.getReg(1) | 0;
         const newX = this.armBeamX + dx * ARM_ALG_SCALE;
         const newY = this.armBeamY - dy * ARM_ALG_SCALE;
         const clipped = clipSegment(this.armBeamX, this.armBeamY, newX, newY);
