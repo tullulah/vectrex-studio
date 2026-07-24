@@ -136,30 +136,74 @@ static void beam_move_to(int x, int y)
     s_beam_x = x; s_beam_y = y;
 }
 
-/* One absolute segment: set brightness, blank-move to the start, lit-draw to the
- * end. A line per the BIOS convention: SET_INTENSITY → MOVE(x0,y0) → DRAW_DELTA. */
-void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
+/* ── Contiguous collinear-run merge — the runtime analogue of the VPy codegen's
+ * vec-simplify. The AAE 3D ports (Battlezone/Red Baron) subdivide straight edges
+ * into many ≤2-unit segments — ~70% of the scene — and each pays a full beam
+ * setup (Y S&H charge + ramp) → flicker. Accumulate a run of contiguous,
+ * same-brightness, near-collinear segments and draw it as ONE vector. MERGE_TOL
+ * is the max perpendicular deviation (device units, ±127 space) a segment may add
+ * before it's treated as a corner; 0 disables the merge. Applies to every game
+ * that draws via v_directDraw32 (VPy games already simplify, so few merges fire). */
+#ifndef MERGE_TOL
+#define MERGE_TOL 1
+#endif
+static int s_run = 0, s_run_x0, s_run_y0, s_run_x1, s_run_y1, s_run_b;
+
+/* Emit one absolute segment: re-zero if the drift budget is spent, set brightness
+ * (cached), blank-move to the start, lit-draw to the end (BIOS convention). */
+static void emit_seg(int ax0, int ay0, int ax1, int ay1, int b)
 {
-    int ax0 = (int)x0 / VPY_SCALE, ay0 = (int)y0 / VPY_SCALE;
-    int ax1 = (int)x1 / VPY_SCALE, ay1 = (int)y1 / VPY_SCALE;
-    /* After N chained segments the beam has drifted enough to wobble — force a
-     * fresh zero-ref so the next segment positions from a clean origin. */
     if (s_draws_since_zero >= VPY_MAX_CONSECUTIVE_DRAWS) {
         BEAM_ZERO();
         s_beam_x = 0; s_beam_y = 0;
         s_draws_since_zero = 0;
     }
-    if ((int)b != s_last_intensity) { BEAM_INTENSITY(b); s_last_intensity = (int)b; }
+    if (b != s_last_intensity) { BEAM_INTENSITY(b); s_last_intensity = b; }
     beam_move_to(ax0, ay0);
     BEAM_DRAW(ax1 - ax0, ay1 - ay0);
     s_beam_x = ax1; s_beam_y = ay1;
     s_draws_since_zero++;
 }
 
+/* Draw + clear the pending merged run. MUST be called before anything that
+ * re-zeros the beam (WAIT_RECAL, new stroke) or the run draws from a stale origin. */
+static void flush_run(void)
+{
+    if (s_run) { emit_seg(s_run_x0, s_run_y0, s_run_x1, s_run_y1, s_run_b); s_run = 0; }
+}
+
+void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
+{
+    int ax0 = (int)x0 / VPY_SCALE, ay0 = (int)y0 / VPY_SCALE;
+    int ax1 = (int)x1 / VPY_SCALE, ay1 = (int)y1 / VPY_SCALE;
+#if MERGE_TOL > 0
+    if (s_run && (int)b == s_run_b && ax0 == s_run_x1 && ay0 == s_run_y1) {
+        int rdx = s_run_x1 - s_run_x0, rdy = s_run_y1 - s_run_y0;  /* run so far     */
+        int ndx = ax1 - ax0,          ndy = ay1 - ay0;            /* new segment    */
+        int ex  = ax1 - s_run_x0,     ey  = ay1 - s_run_y0;       /* merged delta   */
+        long cross = (long)rdx * ndy - (long)rdy * ndx;           /* |run||new|sinθ  */
+        long dot   = (long)rdx * ndx + (long)rdy * ndy;           /* same direction? */
+        long run2  = (long)rdx * rdx + (long)rdy * rdy;
+        /* Extend the run iff: same general direction, perpendicular deviation
+         * (|cross|/|run|) ≤ MERGE_TOL, and the merged delta still fits an i8 DRAW. */
+        if (dot >= 0 && cross * cross <= run2 * (long)(MERGE_TOL * MERGE_TOL)
+            && ex <= 127 && ex >= -127 && ey <= 127 && ey >= -127) {
+            s_run_x1 = ax1; s_run_y1 = ay1;
+            return;
+        }
+    }
+    flush_run();
+    s_run = 1; s_run_x0 = ax0; s_run_y0 = ay0; s_run_x1 = ax1; s_run_y1 = ay1; s_run_b = (int)b;
+#else
+    emit_seg(ax0, ay0, ax1, ay1, (int)b);
+#endif
+}
+
 /* ── Frame pace + input. vpy_frame_begin() calls v_WaitRecal then the two input
  * refreshers, so v_WaitRecal only paces + re-zeros our tracked beam. ── */
 void v_WaitRecal(void)
 {
+    flush_run();   /* draw the frame's last pending merged run before the re-zero */
 #ifdef VPY_DUAL_CORE
     /* Seal the frame we just recorded for core 0, then spin (in RAM, no svc/flash)
      * until the OTHER buffer is free so we never overwrite one core 0 is drawing.
@@ -186,6 +230,7 @@ void v_WaitRecal(void)
  * cap in v_directDraw32 still bounds a single very long path on top of this. */
 void v_beamNewStroke(void)
 {
+    flush_run();   /* finish the pending run before this stroke's re-zero */
     BEAM_ZERO();
     s_beam_x = 0; s_beam_y = 0;
     s_draws_since_zero = 0;
