@@ -1730,7 +1730,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
     }
 
     // "Build for SD": a RAM-linked rp2350 game (loaded off the SD by the cart
-    // launcher, entry at 0x20040000). Write it to a distinct <name>_sd.bin so it
+    // launcher, entry at 0x20010000). Write it to a distinct <name>_sd.bin so it
     // never clobbers the runnable flash .bin, and never feed it to the emulator
     // (which runs the flash-linked image).
     const buildForSd = target === 'rp2350' && rp2350Ram;
@@ -1762,7 +1762,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
       // Target platform
       argsv.push('--target', buildTarget);
 
-      // Build for SD: link the game to run from internal SRAM (0x20040000) so
+      // Build for SD: link the game to run from internal SRAM (0x20010000) so
       // the cart's SD launcher can load it.
       if (buildForSd) {
         argsv.push('--ram');
