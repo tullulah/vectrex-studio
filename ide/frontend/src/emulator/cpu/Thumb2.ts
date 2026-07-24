@@ -71,6 +71,17 @@ export class Thumb2 implements ICpu {
   /** Accumulated cycle counter since reset(). */
   private _cycles: number = 0;
 
+  /** Instruction-fetch fast path: a linear code region (the RAM/flash image) the
+   * CPU can read directly, skipping the per-byte bus range-dispatch. Set by the
+   * system after load. When PC is in [base, base+mem.length) the fetch reads the
+   * array; otherwise it falls back to bus.read8. Data accesses always use the bus. */
+  private _fetchMem: Uint8Array | null = null;
+  private _fetchBase: number = 0;
+  setFetchRegion(mem: Uint8Array | null, base: number): void {
+    this._fetchMem = mem;
+    this._fetchBase = base >>> 0;
+  }
+
   /**
    * Set by exec of a WFI instruction; cleared by the outer run-loop at the
    * start of each frame.  The Rp2350System uses this as the frame-sync gate.
@@ -119,7 +130,15 @@ export class Thumb2 implements ICpu {
 
   step(bus: IBus): number {
     const pc = this.regs[15];
-    const hw0 = bus.read8(pc) | (bus.read8(pc + 1) << 8);
+    // Fetch fast path: read the 16/32-bit instruction directly from the code
+    // array when PC is inside it (RAM-linked games run from SRAM), avoiding 2–4
+    // bus.read8 range-dispatch calls per instruction — the dominant cost for the
+    // heavy Z80/6502 arcade cores.
+    const fm = this._fetchMem;
+    const foff = pc - this._fetchBase;
+    const fast = fm !== null && foff >= 0 && (foff + 3) < fm.length;
+    const hw0 = fast ? (fm![foff] | (fm![foff + 1] << 8))
+                     : (bus.read8(pc) | (bus.read8(pc + 1) << 8));
     const is32 = (hw0 >>> 11) >= 0x1d;   // 32-bit when bits[15:11] >= 0b11101
 
     // IT-block conditioning applies to BOTH 16- and 32-bit instructions. It used
@@ -140,7 +159,8 @@ export class Thumb2 implements ICpu {
       this.regs[15] = pc + (is32 ? 4 : 2);
       cycles = 1;
     } else if (is32) {
-      const hw1 = bus.read8(pc + 2) | (bus.read8(pc + 3) << 8);
+      const hw1 = fast ? (fm![foff + 2] | (fm![foff + 3] << 8))
+                       : (bus.read8(pc + 2) | (bus.read8(pc + 3) << 8));
       this.regs[15] = pc + 4;
       cycles = this.exec32(hw0, hw1, bus, pc);
     } else {

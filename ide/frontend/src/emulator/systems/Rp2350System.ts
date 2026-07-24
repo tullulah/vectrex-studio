@@ -443,6 +443,10 @@ export class Rp2350System implements ISystem, IBus {
     this.psg.reset();
 
     this.cpu.reset();
+    // Fetch fast path: RAM-linked games execute from SRAM, so let the CPU read
+    // instructions straight out of the array (falls back to the bus for any PC
+    // outside it, e.g. flash/XIP games). Big speedup for the heavy arcade cores.
+    this.cpu.setFetchRegion(this.sram, SRAM_BASE);
 
     // Set SP to top of SRAM (standard ARM convention)
     // The linker script places the stack at the top of the RAM region.
