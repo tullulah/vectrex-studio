@@ -72,7 +72,7 @@
   "edit.toggleComment": "Toggle Comment",
   "edit.format": "Format Document",
   "build.build": "Build",
-  "build.buildAndRun": "Build && Run",
+  "build.buildAndRun": "Build && Run (Simulate)",
   "build.buildForSd": "Build for SD (RP2350)",
   "build.clean": "Clean",
   "settings.target.rp2350.mode.title": "Build mode:",
@@ -249,5 +249,6 @@
   "ai.ui.settingsButton": "⚙️ Config",
   "ai.button.save": "Save",
   "ai.button.cancel": "Cancel",
-  "dialog.unsavedChanges": "File has unsaved changes. Close anyway?"
+  "dialog.unsavedChanges": "File has unsaved changes. Close anyway?",
+  "build.runRp2350Emu": "Run on RP2350 Emulator (slow, HW-accurate)"
 }

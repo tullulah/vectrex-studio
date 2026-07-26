@@ -461,12 +461,16 @@ function App() {
         const projName = projectState.vpyProject.config.project.name;
 
         // RP2350 binary preview (fidelity): run the ACTUAL ARM machine code in
-        // Rp2350System (svc dispatcher / Thumb2 interpreter). Triggered when the
-        // build target is rp2350 (so plain F5 runs the faithful emulator that
-        // matches the cartridge) OR explicitly via Shift+F5 ("Run on RP2350
-        // Emulator") regardless of target. The WASM sim below (pitrex target) is
-        // faster but diverges from hardware; the Thumb2 emulator is the HW oracle.
-        if (!forSd && (opts?.rp2350Emu || buildTarget === 'rp2350')) {
+        // Rp2350System (svc dispatcher / Thumb2 interpreter).  This is the HW
+        // oracle but it's SLOW (triple emulation: JS interprets ARM, ARM runs the
+        // game's own CPU-emulator, that runs the game) — brutal for 68000/Musashi
+        // games.  So it is ONLY entered on an EXPLICIT request (Shift+F5 → "Run on
+        // RP2350 Emulator", opts.rp2350Emu).  Plain F5 / Build & Run always takes
+        // the fast WASM simulator below, regardless of the build target — the user
+        // opts into hardware-accurate emulation deliberately.  (Previously plain F5
+        // auto-ran the emulator whenever target==rp2350, so F5 and Shift+F5 were
+        // indistinguishable and there was no way to reach the fast sim.)
+        if (!forSd && opts?.rp2350Emu) {
           if (!electronAPI?.runBuildExternal) {
             logger.error('Build', 'electronAPI.runBuildExternal not available');
             return;
@@ -1695,7 +1699,8 @@ def loop():
           {/* Build menu */}
           <MenuRoot label={t('menu.build', 'Build')} open={openMenu==='build'} setOpen={()=>setOpenMenu(openMenu==='build'?null:'build')}>
             <MenuItem label={`${t('build.build', 'Build')}	⌘F7`} onClick={()=>{ commandExec('build.build'); setOpenMenu(null); }} />
-            <MenuItem label={`${t('build.buildAndRun', 'Build && Run')}	F5`} onClick={()=>{ commandExec('build.run'); setOpenMenu(null); }} />
+            <MenuItem label={`${t('build.buildAndRun', 'Build && Run (Simulate)')}	F5`} onClick={()=>{ commandExec('build.run'); setOpenMenu(null); }} />
+            <MenuItem label={`${t('build.runRp2350Emu', 'Run on RP2350 Emulator (slow, HW-accurate)')}	Shift+F5`} onClick={()=>{ commandExec('build.rp2350emu'); setOpenMenu(null); }} />
             <MenuItem label={t('build.buildForSd', 'Build for SD (RP2350)')} onClick={()=>{ commandExec('build.sd'); setOpenMenu(null); }} />
             <MenuItem label={t('build.clean', 'Clean')} onClick={()=>{ commandExec('build.clean'); setOpenMenu(null); }} />
             <MenuSeparator />

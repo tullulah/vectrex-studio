@@ -282,6 +282,10 @@ export const EmulatorPanel: React.FC = () => {
   const simModulePath = useEmulatorStore(s => s.simModulePath);
   const simModuleNonce = useEmulatorStore(s => s.simModuleNonce);
   const setSimModule = useEmulatorStore(s => s.setSimModule);
+  // Which run backend is active, shown as a badge so it's never ambiguous whether
+  // you're SIMULATING (fast WASM, F5) or EMULATING the RP2350 ARM binary (slow
+  // HW-accurate, Shift+F5).  'rp2350' is set when an ARM binary is loaded below.
+  const [runMode, setRunMode] = useState<'rp2350' | null>(null);
   const { setConfigOpen, loadConfig } = useJoystickStore();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   
@@ -2645,6 +2649,7 @@ export const EmulatorPanel: React.FC = () => {
 
       if (isRp2350) {
         console.log(`[EmulatorPanel] ✓ Detected rp2350 binary (magic "VPy2") — routing to Rp2350System`);
+        setRunMode('rp2350');   // show the "EMULATING RP2350 (ARM)" badge
         if (typeof emuCore.loadArm !== 'function') {
           console.error('[EmulatorPanel] emuCore.loadArm not available — rp2350 target unsupported in this build');
           return;
@@ -3372,6 +3377,22 @@ export const EmulatorPanel: React.FC = () => {
         }}
       >
         <div style={{ position: 'relative', display: 'inline-block' }}>
+          {/* Run-mode badge — SIMULATING (fast WASM, F5) vs EMULATING the RP2350
+              ARM binary (slow, HW-accurate, Shift+F5). Removes the ambiguity of
+              not knowing which backend a run used. */}
+          {(simModulePath || runMode === 'rp2350') && (
+            <div style={{
+              position: 'absolute', top: 4, right: 4, zIndex: 30,
+              padding: '2px 7px', borderRadius: 4, pointerEvents: 'none',
+              fontFamily: 'monospace', fontSize: 10, fontWeight: 'bold',
+              letterSpacing: '0.5px',
+              background: simModulePath ? 'rgba(30,90,40,0.85)' : 'rgba(110,70,20,0.9)',
+              color: simModulePath ? '#8f8' : '#fc9',
+              border: `1px solid ${simModulePath ? '#4a4' : '#c94'}`,
+            }}>
+              {simModulePath ? '▶ SIMULATING (WASM)' : '🎯 EMULATING RP2350 (ARM · slow)'}
+            </div>
+          )}
           {/* External-project WASM simulator (runs any module speaking the
               PiTrex host SDK contract). Overlays the Vectrex canvas. */}
           {simModulePath && (

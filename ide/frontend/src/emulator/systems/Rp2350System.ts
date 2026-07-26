@@ -66,9 +66,9 @@ const FLASH_SIZE  = 4 * 1024 * 1024;
 /** SRAM base address. */
 const SRAM_BASE   = 0x20000000;
 /** SRAM end (exclusive). */
-const SRAM_END    = 0x20080000;
+const SRAM_END    = 0x20810000;  /* 8MB+ model for big 68000/Musashi games (emulator only; real HW is 520KB SRAM + rev3 PSRAM) */
 /** SRAM size: 512 KB. */
-const SRAM_SIZE   = 512 * 1024;
+const SRAM_SIZE   = 0x810000;     /* 8.06 MB: fits Musashi's ~580KB tables past the 444KB budget */
 /** Scratch SRAM region where the simulated SD names are written (below the
  *  0x2007F000 VPy game-RAM area, so it never collides). SD_FILE_NAME returns
  *  pointers here for PRINT_TEXT to read. */
