@@ -375,12 +375,21 @@ static void flush_run(void)
 #define CULL_MIN_AX 0
 #endif
 
+/* TEXT opts OUT of the sub-visible cull: glyph strokes ARE small (1-2 units), so
+ * culling them mangles the letters. The game brackets its text with v_textBegin()
+ * /v_textEnd(); segments drawn in between are kept at full detail, and only
+ * NON-text sub-visible vectors are dropped. No-op for games that never call it
+ * (s_in_text stays 0) or build with CULL off. */
+static int s_in_text = 0;
+void v_textBegin(void) { s_in_text = 1; }
+void v_textEnd(void)   { s_in_text = 0; }
+
 void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
 {
     int ax0 = (int)x0 / VPY_SCALE, ay0 = (int)y0 / VPY_SCALE;
     int ax1 = (int)x1 / VPY_SCALE, ay1 = (int)y1 / VPY_SCALE;
 #if CULL_MIN_AX > 0
-    {
+    if (!s_in_text) {
         int cdx = ax1 - ax0, cdy = ay1 - ay0;
         if (cdx < CULL_MIN_AX && cdx > -CULL_MIN_AX &&
             cdy < CULL_MIN_AX && cdy > -CULL_MIN_AX)
