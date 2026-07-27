@@ -239,7 +239,7 @@ static void dp_rec(int first, int last, long long eps2, unsigned char *keep)
 
 /* Emit one absolute segment: re-zero if the drift budget is spent, set brightness
  * (cached), blank-move to the start, lit-draw to the end (BIOS convention). */
-static void emit_seg(int ax0, int ay0, int ax1, int ay1, int b)
+static void beam_seg(int ax0, int ay0, int ax1, int ay1, int b)
 {
     /* Bound integrator drift by re-zeroing — but ONLY at a chain boundary (where a
      * blanked move to the next start is needed anyway), never MID contiguous run.
@@ -258,6 +258,80 @@ static void emit_seg(int ax0, int ay0, int ax1, int ay1, int b)
     beam_draw_to(ax1, ay1);   /* splits >127 i8 chunks (DP long vectors) */
     s_draws_since_zero++;
 }
+
+/* ── Frame-level stroke reorder (nearest-neighbour) ─────────────────────────
+ * On this HW the beam's per-vector time is ∝ travel, so drawing shapes in the
+ * order the game emits them makes the beam criss-cross the screen BLANKED — for
+ * a busy screen (Donkey Kong) ~80% of the frame's beam-time was wasted on those
+ * repositioning moves, collapsing the refresh rate → heavy flicker. So instead
+ * of emitting each segment immediately, emit_seg() RECORDS it into a stroke (a
+ * maximal run of connected, same-brightness segments); at v_WaitRecal the frame
+ * is flushed with the strokes ordered greedily nearest-first, each in whichever
+ * direction starts closest to the beam. Same picture (phosphor persistence hides
+ * draw order), a fraction of the blanked travel — applies to EVERY game.
+ * Per-game escape: -DVPY_NO_REORDER falls back to immediate emission. */
+#ifndef VPY_NO_REORDER
+#ifndef VPY_REORDER_MAX_PTS
+#define VPY_REORDER_MAX_PTS    4096
+#endif
+#ifndef VPY_REORDER_MAX_STROKE
+#define VPY_REORDER_MAX_STROKE 1024
+#endif
+static short  rr_y[VPY_REORDER_MAX_PTS], rr_x[VPY_REORDER_MAX_PTS];
+static int    rr_off[VPY_REORDER_MAX_STROKE], rr_len[VPY_REORDER_MAX_STROKE], rr_b[VPY_REORDER_MAX_STROKE];
+static int    rr_npts = 0, rr_nst = 0;
+
+/* record a segment; extend the open stroke iff it connects and shares brightness */
+static void emit_seg(int ax0, int ay0, int ax1, int ay1, int b)
+{
+    if (rr_nst > 0 && rr_npts > 0 && rr_npts < VPY_REORDER_MAX_PTS &&
+        rr_y[rr_npts-1] == ay0 && rr_x[rr_npts-1] == ax0 && rr_b[rr_nst-1] == b) {
+        rr_y[rr_npts] = ay1; rr_x[rr_npts] = ax1; rr_npts++;
+        rr_len[rr_nst-1]++;
+        return;
+    }
+    if (rr_nst < VPY_REORDER_MAX_STROKE && rr_npts + 2 <= VPY_REORDER_MAX_PTS) {
+        rr_off[rr_nst] = rr_npts; rr_len[rr_nst] = 2; rr_b[rr_nst] = b; rr_nst++;
+        rr_y[rr_npts] = ay0; rr_x[rr_npts] = ax0; rr_npts++;
+        rr_y[rr_npts] = ay1; rr_x[rr_npts] = ax1; rr_npts++;
+        return;
+    }
+    beam_seg(ax0, ay0, ax1, ay1, b);   /* buffer full → emit directly (no reorder) */
+}
+
+static long rr_d2(int ay, int ax, int by, int bx){ long dy = ay-by, dx = ax-bx; return dy*dy + dx*dx; }
+
+/* reorder + emit the frame's recorded strokes, then reset. Beam starts at the
+ * device origin (0,0) — v_WaitRecal re-zeros it right after. O(strokes^2). */
+static void flush_frame(void)
+{
+    int by = 0, bx = 0;
+    for (int done = 0; done < rr_nst; done++) {
+        int best = -1, rev = 0; long bestd = 0;
+        for (int s = 0; s < rr_nst; s++) {
+            if (rr_len[s] < 0) continue;                 /* already emitted */
+            int a = rr_off[s], z = rr_off[s] + rr_len[s] - 1;
+            long d0 = rr_d2(by, bx, rr_y[a], rr_x[a]);
+            long d1 = rr_d2(by, bx, rr_y[z], rr_x[z]);
+            if (best < 0 || d0 < bestd) { bestd = d0; best = s; rev = 0; }
+            if (d1 < bestd)             { bestd = d1; best = s; rev = 1; }
+        }
+        int a = rr_off[best], n = rr_len[best], b = rr_b[best];
+        rr_len[best] = -1;
+        if (!rev) {
+            for (int i = 0; i < n-1; i++) beam_seg(rr_x[a+i], rr_y[a+i], rr_x[a+i+1], rr_y[a+i+1], b);
+            by = rr_y[a+n-1]; bx = rr_x[a+n-1];
+        } else {
+            for (int i = n-1; i > 0; i--) beam_seg(rr_x[a+i], rr_y[a+i], rr_x[a+i-1], rr_y[a+i-1], b);
+            by = rr_y[a]; bx = rr_x[a];
+        }
+    }
+    rr_npts = 0; rr_nst = 0;
+}
+#else
+#define emit_seg    beam_seg    /* reorder disabled: emit immediately */
+#define flush_frame()           ((void)0)
+#endif
 
 #if SIMPLIFY_EPS > 0
 /* Douglas-Peucker the buffered contiguous chain, emit the kept vertices as
@@ -349,7 +423,8 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
  * refreshers, so v_WaitRecal only paces + re-zeros our tracked beam. ── */
 void v_WaitRecal(void)
 {
-    flush_run();   /* draw the frame's last pending merged run before the re-zero */
+    flush_run();    /* push the frame's last pending merged run into the buffer  */
+    flush_frame();  /* reorder the frame's strokes nearest-first, then emit them */
 #ifdef VPY_DUAL_CORE
     /* Seal the frame we just recorded for core 0, then spin (in RAM, no svc/flash)
      * until the OTHER buffer is free so we never overwrite one core 0 is drawing.
