@@ -73,10 +73,13 @@ struct dc_ctrl {
     volatile unsigned int   axes;      /* SYS_READ_AXES snapshot, published by core 0 */
     volatile unsigned int   buttons;   /* SYS_READ_BUTTONS snapshot (P1 bits 0-3) */
 };
-#define DC_CTRL   ((struct dc_ctrl *)0x2007CF00u)
-#define DC_BUF0   ((struct dc_cmd  *)0x2007D000u)
-#define DC_BUF1   ((struct dc_cmd  *)0x2007E000u)
-#define DC_CMDS_MAX 1024
+/* MUST match the firmware dc.rs. 4096 cmds (was 1024): DK's title/intro emit
+ * >1024 beam ops; the overflow was dropped, and vk_render draws text/logo LAST,
+ * so the title/letters vanished. Buffers moved down into the game-stack gap. */
+#define DC_CTRL   ((struct dc_ctrl *)0x20076F00u)
+#define DC_BUF0   ((struct dc_cmd  *)0x20077000u)
+#define DC_BUF1   ((struct dc_cmd  *)0x2007B000u)
+#define DC_CMDS_MAX 4096
 #define DC_FREE 0
 #define DC_SEALED 1
 #define DC_OP_ZERO 0
