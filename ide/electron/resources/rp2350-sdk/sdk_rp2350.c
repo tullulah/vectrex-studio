@@ -30,6 +30,7 @@ static inline int  sys_read_buttons(void)    { register int r0 __asm__("r0"); __
 static inline int  sys_read_axes(void)       { register int r0 __asm__("r0"); __asm__ volatile("svc #13" : "=r"(r0) :: "memory"); return r0; }
 static inline void sys_play_music(const void *p){ register const void *r0 __asm__("r0")=p; __asm__ volatile("svc #21" : "+r"(r0) :: "memory"); }
 static inline void sys_stop_music(void)      { __asm__ volatile("svc #22" ::: "r0","r1","r2","r3","memory"); }
+static inline void sys_raster_text(int x,int y,const unsigned char*s,int n){ register int r0 __asm__("r0")=x; register int r1 __asm__("r1")=y; register const unsigned char* r2 __asm__("r2")=s; register int r3 __asm__("r3")=n; __asm__ volatile("svc #23" :: "r"(r0),"r"(r1),"r"(r2),"r"(r3) : "memory"); }
 
 /* ── Input snapshot owned by the SDK layer (libvpy reads these as externs). ── */
 uint8_t currentButtonState = 0;
@@ -86,6 +87,9 @@ struct dc_ctrl {
 #define DC_OP_INTENSITY 1
 #define DC_OP_MOVE 2
 #define DC_OP_DRAW 3
+#define DC_OP_RASTER 4   /* header cmd: a=x, b=y, _pad=len; then ceil(len/4) cmds
+                          * of raw string bytes. core 0 draws it with the BIOS
+                          * shift-register raster font (one sweep per pixel row). */
 static int s_dc_w = 0;   /* current write buffer (0/1) */
 static int s_dc_n = 0;   /* commands recorded into it so far */
 static inline void dc_push(unsigned char op, signed char a, signed char b) {
@@ -95,16 +99,42 @@ static inline void dc_push(unsigned char op, signed char a, signed char b) {
         s_dc_n++;
     }
 }
+/* Record a raster-text run: a header cmd (x,y,len) followed by the string bytes
+ * packed 4 per cmd. core0_materialize replays it via the shift-register font. */
+static void dc_push_raster(signed char x, signed char y, const unsigned char *s, int len) {
+    if (len < 0) len = 0;
+    if (len > 255) len = 255;
+    int ndata = (len + 3) / 4;
+    if (s_dc_n + 1 + ndata > DC_CMDS_MAX) return;   /* no room this frame */
+    struct dc_cmd *buf = s_dc_w ? DC_BUF1 : DC_BUF0;
+    buf[s_dc_n].op = DC_OP_RASTER; buf[s_dc_n].a = x; buf[s_dc_n].b = y;
+    buf[s_dc_n]._pad = (unsigned char)len; s_dc_n++;
+    for (int i = 0; i < len; i += 4) {
+        unsigned char *p = (unsigned char *)&buf[s_dc_n];
+        p[0] = s[i];
+        p[1] = (i + 1 < len) ? s[i + 1] : 0;
+        p[2] = (i + 2 < len) ? s[i + 2] : 0;
+        p[3] = (i + 3 < len) ? s[i + 3] : 0;
+        s_dc_n++;
+    }
+}
 #define BEAM_ZERO()       dc_push(DC_OP_ZERO, 0, 0)
 #define BEAM_INTENSITY(b) dc_push(DC_OP_INTENSITY, (signed char)(b), 0)
 #define BEAM_MOVE(x,y)    dc_push(DC_OP_MOVE, (signed char)(x), (signed char)(y))
 #define BEAM_DRAW(x,y)    dc_push(DC_OP_DRAW, (signed char)(x), (signed char)(y))
+#define BEAM_RASTER(x,y,s,n) dc_push_raster((signed char)(x),(signed char)(y),(s),(n))
 #else
 #define BEAM_ZERO()       sys_reset0ref()
 #define BEAM_INTENSITY(b) sys_set_intensity(b)
 #define BEAM_MOVE(x,y)    sys_move((x),(y))
 #define BEAM_DRAW(x,y)    sys_draw_delta((x),(y))
+#define BEAM_RASTER(x,y,s,n) sys_raster_text((x),(y),(s),(n)) /* SYS #23 */
 #endif
+
+/* Draw a raster-font string at device coords (x,y) (i8, ±127). Dual-core records
+ * it into the shared list (core 0 replays via the BIOS shift-register font);
+ * single-core traps to the BIOS raster primitive. `s` = bytes 0x20..0x6F. */
+void v_rasterText(int x, int y, const unsigned char *s, int n) { BEAM_RASTER(x, y, s, n); }
 
 /* Bound integrator drift: chaining segments with only relative moves (no re-zero)
  * lets the integrators drift, so after N consecutive segments we force a fresh
