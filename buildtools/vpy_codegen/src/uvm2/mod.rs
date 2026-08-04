@@ -22,8 +22,6 @@
 //! Deploy: generate UF2 with standard Pico SDK uf2conv.py, or copy binary to SD card
 //! (the UVM2 firmware loads SD binaries as RAM-resident code).
 
-pub mod bus;
-
 use vpy_parser::Module;
 use crate::AssetInfo;
 use crate::arm::{
@@ -63,10 +61,19 @@ pub fn generate_uvm2_asm(
     asm.push_str(".word game_main + 1     @ Reset_Handler (Thumb bit set)\n");
     // Minimal remaining Cortex-M33 vectors (16 system + 52 IRQ = 68 words total).
     // Point all unused handlers at a safe infinite-loop stub defined below.
+    // Vector 11 (SVCall) is the whole point: every VPy builtin is an `svc #N`,
+    // and uvm2_svc_handler (uvm2-sdk/uvm2_svc_entry.s) is the UVM2
+    // implementation of the same syscall ABI the cartridge firmware and the IDE
+    // emulator implement. Leave it on the default stub and the first
+    // WAIT_RECAL parks the game in an infinite loop.
     for name in &["NMI","HardFault","MemManage","BusFault","UsageFault",
                   "SecureFault","_reserved7","_reserved8","_reserved9",
                   "SVC","DebugMon","_reserved11","PendSV","SysTick"] {
-        asm.push_str(&format!(".word _uvm2_default_handler @ {}\n", name));
+        if *name == "SVC" {
+            asm.push_str(".word uvm2_svc_handler   @ SVCall → UVM2 syscall ABI\n");
+        } else {
+            asm.push_str(&format!(".word _uvm2_default_handler @ {}\n", name));
+        }
     }
     // 52 external IRQs
     asm.push_str(".rept 52\n.word _uvm2_default_handler\n.endr\n");
@@ -79,14 +86,10 @@ pub fn generate_uvm2_asm(
     // VIA register addresses (Vectrex bus — same hardware, same addresses)
     asm.push_str(&emit_via_constants());
 
-    // UVM2 SIO GPIO constants (Ralf's pinout)
-    asm.push_str(&emit_sio_constants());
-
     asm.push_str(".section .game_rom, \"ax\"\n");
     asm.push_str(".align 2\n\n");
 
     asm.push_str(&header::emit_image_def());
-    asm.push_str(&bus::emit_uvm2_bus_helpers());
 
     // Usage analysis (shared with the arm target): emit runtime routines only
     // when the program actually uses them. Core stubs are always emitted.
@@ -98,11 +101,10 @@ pub fn generate_uvm2_asm(
     let asset_list = assets::filter_sample_assets(&asset_list, module);
     let asset_list = asset_list.as_slice();
 
-    // For UVM2, bus_write/bus_read delegate to uvm2_via_write (CLK-synced GPIO),
-    // so we skip helpers::emit_bus_helpers() — that uses the debug-cart pinout.
-    // The pinout-agnostic runtime (enemy pool) is emitted when used.
-    asm.push_str(&emit_uvm2_bus_shims());
-    asm.push_str(&crate::arm::helpers::emit_runtime_helpers(&usage));
+    // Identical to the arm target: bus_write/bus_read are the SYS_BUS_WRITE /
+    // SYS_BUS_READ syscalls. On UVM2 they land in uvm2_svc.c, which performs a
+    // real halt-mode VIA cycle — same ABI, different implementation.
+    asm.push_str(&crate::arm::helpers::emit_helpers(&usage));
     asm.push_str(&drawing::emit_drawing(&usage));
 
     let msg_entries = builtins::collect_msg_entries(module);
@@ -111,38 +113,9 @@ pub fn generate_uvm2_asm(
     asm.push_str(&functions::emit_functions(module, asset_list, &usage)?);
     asm.push_str(&assets::emit_arm_assets(asset_list));
 
-    // Expand cbz, then inject uvm2_bus_init call at start of game_main
+    // Expand cbz, then inject the runtime bring-up call at start of game_main
     let expanded = crate::arm::expand_cbz_pub(&asm);
-    Ok(inject_bus_init(&expanded))
-}
-
-// ── UVM2 bus shims ────────────────────────────────────────────────────────────
-// drawing.rs calls bus_write(r0=addr, r1=data) and bus_read(r0=addr).
-// For UVM2 these are thin wrappers around uvm2_via_write / uvm2_via_read
-// so the drawing code works unchanged with the CLK-synced GPIO protocol.
-
-fn emit_uvm2_bus_shims() -> String {
-    r#"@ --- UVM2 bus shims: bus_write / bus_read → CLK-synced GPIO ---
-@ bus_write(r0=addr, r1=data) — delegates to uvm2_via_write
-.global bus_write
-.thumb_func
-bus_write:
-    b       uvm2_via_write
-
-@ bus_read(r0=addr) → r0=data
-@ OPTION A: real CLK-synced read  → uncomment the line below
-@ OPTION B: fixed spin-delay      → uncomment the line below
-@ Change one line to switch between them. Default: OPTION B (safer first test).
-.global bus_read
-.thumb_func
-bus_read:
-    @ OPTION A (CLK-synced read):
-    @ b       uvm2_via_read
-    @ OPTION B (spin delay, always returns 0x40 = timer done):
-    b       uvm2_timer_wait
-
-"#
-    .to_string()
+    inject_runtime_init(&expanded)
 }
 
 // ── VIA constants (same addresses — it's the same Vectrex VIA chip) ──────────
@@ -176,53 +149,22 @@ fn emit_via_constants() -> String {
     s
 }
 
-// ── UVM2 GPIO constants (Ralf's pinout) ──────────────────────────────────────
-
-fn emit_sio_constants() -> String {
-    let mut s = String::from("@ --- RP2350 SIO (GPIO bit-bang) — UVM2 pinout ---\n");
-    s.push_str("@ Source: Ralf (UVM2 firmware author), 2026-04-16\n");
-    s.push_str(".equ SIO_BASE,       0xD0000000\n");
-    s.push_str(".equ SIO_GPIO_OUT,   0xD0000010\n");
-    s.push_str(".equ SIO_GPIO_SET,   0xD0000014\n");
-    s.push_str(".equ SIO_GPIO_CLR,   0xD0000018\n");
-    s.push_str(".equ SIO_GPIO_OE_SET,0xD0000024\n");
-    s.push_str(".equ SIO_GPIO_OE_CLR,0xD0000028\n");
-    s.push_str(".equ SIO_GPIO_IN,    0xD0000004\n");
-    s.push_str("\n@ UVM2 GPIO pin assignments\n");
-    // Data bus: GPIO 0-7 = D0-D7
-    s.push_str(".equ PIN_D0,         0          @ D0\n");
-    s.push_str(".equ PIN_D7,         7          @ D7\n");
-    s.push_str(".equ DATA_MASK,      0x000000FF  @ GPIO 0-7\n");
-    // Address bus: GPIO 8-21 = A0-A13
-    s.push_str(".equ PIN_A0,         8          @ A0  (GPIO8)\n");
-    s.push_str(".equ PIN_A13,        21         @ A13 (GPIO21)\n");
-    s.push_str(".equ ADDR_MASK,      0x003FFF00  @ GPIO 8-21 = A0-A13\n");
-    // Control signals
-    s.push_str(".equ PIN_PB6,        22         @ VIA Port B bit 6 (beam control)\n");
-    s.push_str(".equ PIN_NIRQ,       23         @ /IRQ\n");
-    s.push_str(".equ PIN_A14,        24         @ A14 (GPIO24)\n");
-    s.push_str(".equ PIN_A15,        25         @ A15\n");
-    s.push_str(".equ PIN_RW,         26         @ R/W (1=read, 0=write)\n");
-    s.push_str(".equ PIN_NHALT,      27         @ /HALT — assert LOW to take bus\n");
-    s.push_str(".equ PIN_NNMI,       29         @ /NMI\n");
-    s.push_str(".equ PIN_CLK,        31         @ System clock (1.5 MHz)\n");
-    s.push_str("\n@ Convenience masks\n");
-    s.push_str(".equ MASK_NHALT,     (1 << 27)  @ /HALT pin mask\n");
-    s.push_str(".equ MASK_RW,        (1 << 26)  @ R/W pin mask\n");
-    s.push_str(".equ MASK_CLK,       (1 << 31)  @ CLK pin mask\n");
-    s.push_str("\n");
-    s
-}
-
 // ── Post-processing ───────────────────────────────────────────────────────────
 
-/// Inject `bl uvm2_bus_init` as the very first instruction of `game_main`.
-/// This ensures GPIO directions are configured before any game code runs.
-fn inject_bus_init(asm: &str) -> String {
-    // The ARM codegen always emits game_main with this exact prologue.
-    // We insert the init call before the push so it runs unconditionally.
-    asm.replace(
-        "game_main:\n    push    {r4,",
-        "game_main:\n    bl      uvm2_bus_init\n    push    {r4,",
-    )
+/// Inject `bl uvm2_runtime_init` as the very first instruction of `game_main`.
+/// That call (uvm2-sdk/uvm2_svc.c) takes over the vector table and interrupts,
+/// configures the pads, halts the 6809 and primes the VIA — all of which must
+/// happen before any syscall runs.  If the shared ARM codegen ever changes
+/// game_main's prologue the patch must fail loudly: silently skipping it
+/// produces an image that boots into an unconfigured bus and does nothing.
+fn inject_runtime_init(asm: &str) -> Result<String, String> {
+    const ANCHOR: &str = "game_main:\n    push    {r4,";
+    if !asm.contains(ANCHOR) {
+        return Err("uvm2: could not inject uvm2_runtime_init — game_main prologue \
+                    changed in arm::functions (expected `push {r4, ...}`)".to_string());
+    }
+    Ok(asm.replace(
+        ANCHOR,
+        "game_main:\n    bl      uvm2_runtime_init\n    push    {r4,",
+    ))
 }

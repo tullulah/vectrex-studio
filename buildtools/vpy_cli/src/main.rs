@@ -112,6 +112,22 @@ enum Commands {
         name: Option<String>,
     },
 
+    /// Wrap a raw RAM image in a `.um2` header for the Ultimate Vectrex Multicart 2.
+    /// Any toolchain that can produce a flat SRAM binary (VPy, C/C++, SBT output)
+    /// can ship a UVM2 game with this; the header format lives in one place.
+    PackageUm2 {
+        /// Input binary (flat SRAM image, starting with the Cortex-M vector table)
+        input: PathBuf,
+
+        /// Output `.um2` file
+        #[arg(short, long)]
+        out: PathBuf,
+
+        /// Load address in SRAM (the firmware copies the image here)
+        #[arg(long, default_value = "0x20000000")]
+        load_addr: String,
+    },
+
     /// Generate unified assembly (single ASM with bank markers)
     Asm {
         /// Entry point VPy file or .vpyproj
@@ -222,6 +238,19 @@ fn main() -> Result<()> {
         Commands::Asm { input, rom_size, bank_size, output, target } => {
             println!("{}", "=== GENERATE UNIFIED ASM ===".bright_cyan().bold());
             cmd_asm(&input, rom_size, bank_size, output, target)?;
+        }
+
+        Commands::PackageUm2 { input, out, load_addr } => {
+            let addr = load_addr.strip_prefix("0x").unwrap_or(&load_addr);
+            let addr = u32::from_str_radix(addr, 16)
+                .with_context(|| format!("Invalid load address: {}", load_addr))?;
+            let bin = std::fs::read(&input)
+                .with_context(|| format!("Failed to read {}", input.display()))?;
+            let um2 = build_um2(&bin, addr);
+            std::fs::write(&out, &um2)
+                .with_context(|| format!("Failed to write {}", out.display()))?;
+            println!("{} {} ({} bytes) → {} ({} bytes, load {:#010x})",
+                "✓".green(), input.display(), bin.len(), out.display(), um2.len(), addr);
         }
 
         Commands::CompileAsset { input, format, out, name } => {
@@ -1155,6 +1184,28 @@ fn find_vpy_c_dir() -> Option<std::path::PathBuf> {
     None
 }
 
+/// Locate the UVM2 SDK (halt-mode bus + beam runtime + syscall handler).
+/// Same resolution order as find_vpy_c_dir: env override, next to the binary
+/// (packaged IDE), then the repo checkout.
+fn find_uvm2_sdk_dir() -> Option<std::path::PathBuf> {
+    let ok = |p: &std::path::Path| p.join("uvm2_bus.c").exists();
+
+    if let Ok(dir) = std::env::var("UVM2_SDK_DIR") {
+        let p = std::path::PathBuf::from(dir);
+        if ok(&p) { return Some(p); }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(d) = exe.parent() {
+            let p = d.join("uvm2-sdk");
+            if ok(&p) { return Some(p); }
+        }
+    }
+    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let p = manifest.join("../../ide/electron/resources/uvm2-sdk");
+    if ok(&p) { return p.canonicalize().ok(); }
+    None
+}
+
 fn cmd_build_pitrex(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Result<()> {
     use std::process::Command;
 
@@ -1823,12 +1874,17 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         .with_context(|| format!("Failed to write {}", asm_path.display()))?;
     println!("  {} ARM ASM written: {}", "✓".green(), s_path.display());
 
-    // Linker script — prefer a uvm2-specific one, fall back to the bundled rp2350 script
-    let ld_path = match find_uvm2_ld(&project_dir).or_else(|| find_rp2350_ld(&project_dir)) {
-        Some(p) => p,
-        None => write_bundled_rp2350_ld(&build_dir)?,
-    };
-    if verbose { println!("  Linker script: {}", ld_path.display()); }
+    // The UVM2 SDK carries its own linker script alongside the runtime it links.
+    let sdk_dir = find_uvm2_sdk_dir().ok_or_else(|| anyhow::anyhow!(
+        "UVM2 SDK not found (expected ide/electron/resources/uvm2-sdk, or set UVM2_SDK_DIR).\n\
+         It provides the halt-mode bus, the beam runtime and the SVCall handler —\n\
+         without it the image has no implementation for any VPy builtin."))?;
+    // One source of truth: the script ships with the SDK it belongs to.
+    let ld_path = sdk_dir.join("uvm2_game.ld");
+    if verbose {
+        println!("  UVM2 SDK:      {}", sdk_dir.display());
+        println!("  Linker script: {}", ld_path.display());
+    }
 
     println!("\n{}", "Phase 4: ARM Assemble".bright_cyan().bold());
     let as_out = Command::new("arm-none-eabi-as")
@@ -1848,11 +1904,56 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         }
     }
 
+    // Phase 4b: the UVM2 runtime. Compiled per build rather than shipped
+    // prebuilt so a change to the beam timing is one rebuild away, and archived
+    // so the linker only pulls the parts a program actually references.
+    println!("\n{}", "Phase 4b: UVM2 SDK".bright_cyan().bold());
+    let arm_gcc = find_arm_gcc();
+    let sdk_sources = ["uvm2_bus.c", "uvm2_draw.c", "uvm2_input.c", "uvm2_led.c", "uvm2_text.c", "uvm2_audio.c", "uvm2_svc.c"];
+    let mut sdk_objects: Vec<PathBuf> = Vec::new();
+
+    for src in sdk_sources {
+        let src_path = sdk_dir.join(src);
+        let obj_path = build_dir.join(format!("uvm2_{}.o", src.trim_end_matches(".c")));
+        let out = Command::new(&arm_gcc)
+            .args(["-mcpu=cortex-m33", "-mthumb", "-mfloat-abi=softfp", "-mfpu=fpv5-sp-d16",
+                   "-Os", "-ffreestanding", "-std=c11", "-Wall",
+                   "-ffunction-sections", "-fdata-sections"])
+            .arg(format!("-I{}", sdk_dir.display()))
+            .args(["-c", src_path.to_str().unwrap(), "-o", obj_path.to_str().unwrap()])
+            .output()
+            .map_err(|e| anyhow::anyhow!("arm-none-eabi-gcc not found: {}", e))?;
+        if !out.status.success() {
+            return Err(anyhow::anyhow!("UVM2 SDK compile failed ({}):\n{}",
+                src, String::from_utf8_lossy(&out.stderr)));
+        }
+        sdk_objects.push(obj_path);
+    }
+
+    let svc_s   = sdk_dir.join("uvm2_svc_entry.s");
+    let svc_obj = build_dir.join("uvm2_svc_entry.o");
+    let out = Command::new("arm-none-eabi-as")
+        .args(["-mthumb", "-mcpu=cortex-m33",
+               svc_s.to_str().unwrap(), "-o", svc_obj.to_str().unwrap()])
+        .output()
+        .map_err(|e| anyhow::anyhow!("arm-none-eabi-as not found: {}", e))?;
+    if !out.status.success() {
+        return Err(anyhow::anyhow!("UVM2 SVC shim assemble failed:\n{}",
+            String::from_utf8_lossy(&out.stderr)));
+    }
+    sdk_objects.push(svc_obj);
+    println!("  {} Built UVM2 runtime ({} objects)", "✓".green(), sdk_objects.len());
+
     println!("\n{}", "Phase 5: ARM Link".bright_cyan().bold());
-    let ld_out = Command::new("arm-none-eabi-ld")
-        .args(["-T", ld_path.to_str().unwrap(),
-               o_path.to_str().unwrap(), "-o", elf_path.to_str().unwrap()])
-        .output();
+    let mut ld_args: Vec<String> = vec![
+        "-T".into(), ld_path.to_str().unwrap().into(),
+        o_path.to_str().unwrap().into(),
+    ];
+    for obj in &sdk_objects { ld_args.push(obj.to_str().unwrap().into()); }
+    ld_args.push("-o".into());
+    ld_args.push(elf_path.to_str().unwrap().into());
+
+    let ld_out = Command::new("arm-none-eabi-ld").args(&ld_args).output();
     match ld_out {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound =>
             return Err(anyhow::anyhow!("arm-none-eabi-ld not found.")),
@@ -1905,27 +2006,31 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
 /// Build a .um2 file for the Ultimate Vectrex Multicart 2.
 ///
 /// Header format (20 bytes, all fields little-endian):
-///   [0..4]   Magic:       "2CMU"  (0x554D4332)
+///   [0..4]   Magic:       "2CMU"
 ///   [4..8]   Version:     1
-///   [8..12]  GameCount:   1
-///   [12..16] LoadAddr:    load address in SRAM (e.g. 0x20000000)
-///   [16..20] BinarySize:  length of the ARM binary in bytes
-///   [20..]   Binary data  (ARM Thumb2, Cortex-M33)
-#[allow(dead_code)]
+///   [8..12]  BlockCount:  1
+///   [12..16] LoadAddr:    load address in SRAM (0x20000000 — RAM-only image)
+///   [16..20] LengthWords: payload length in 32-bit WORDS, not bytes
+///   [20..]   Payload      (ARM Thumb2 image, starts with the Cortex-M vector
+///                          table: word 0 = initial SP, word 1 = entry point)
+///
+/// The word count is derived from the reference image `Asteroids_0_1a.um2`,
+/// whose header says 0x8AC0 = 35520 while its payload is 142080 bytes —
+/// exactly 35520 × 4.  Writing bytes here makes the loader copy a quarter of
+/// the image.  (Worth a one-line confirmation from Ralf.)
 fn build_um2(bin: &[u8], load_addr: u32) -> Vec<u8> {
-    let mut out = Vec::with_capacity(20 + bin.len());
-    // Magic "2CMU"
+    let mut out = Vec::with_capacity(24 + bin.len());
+    // A word-counted payload has to be a whole number of words.
+    let padding = (4 - (bin.len() % 4)) % 4;
+    let words = ((bin.len() + padding) / 4) as u32;
+
     out.extend_from_slice(b"2CMU");
-    // Version = 1
-    out.extend_from_slice(&1u32.to_le_bytes());
-    // GameCount = 1
-    out.extend_from_slice(&1u32.to_le_bytes());
-    // LoadAddr
-    out.extend_from_slice(&load_addr.to_le_bytes());
-    // BinarySize
-    out.extend_from_slice(&(bin.len() as u32).to_le_bytes());
-    // ARM binary payload
+    out.extend_from_slice(&1u32.to_le_bytes());          // Version
+    out.extend_from_slice(&1u32.to_le_bytes());          // BlockCount
+    out.extend_from_slice(&load_addr.to_le_bytes());     // LoadAddr
+    out.extend_from_slice(&words.to_le_bytes());         // LengthWords
     out.extend_from_slice(bin);
+    out.extend(std::iter::repeat(0u8).take(padding));
     out
 }
 
@@ -2044,26 +2149,6 @@ fn write_bundled_rp2350_ram_ld(build_dir: &Path) -> anyhow::Result<PathBuf> {
     std::fs::write(&path, BUNDLED_LD)
         .with_context(|| format!("Failed to write bundled linker script {}", path.display()))?;
     Ok(path)
-}
-
-/// Find the UVM2 linker script — looks for hardware/uvm2/uvm2_game.ld first,
-/// then falls back to the rp2350_game.ld (same Pico SDK memory map).
-#[allow(dead_code)]
-fn find_uvm2_ld(project_dir: &Path) -> Option<PathBuf> {
-    fn walk_up(start: &Path) -> Option<PathBuf> {
-        let mut current = start;
-        loop {
-            let candidate = current.join("hardware/uvm2/uvm2_game.ld");
-            if candidate.exists() { return Some(candidate); }
-            match current.parent() {
-                Some(p) => current = p,
-                None => return None,
-            }
-        }
-    }
-    walk_up(project_dir)
-        .or_else(|| { std::env::current_exe().ok().and_then(|e| e.parent().and_then(|d| walk_up(d))) })
-        .or_else(|| { std::env::current_dir().ok().and_then(|d| walk_up(&d)) })
 }
 
 /// Extract project name from a .vpyproj file without pulling in the full toml crate.
