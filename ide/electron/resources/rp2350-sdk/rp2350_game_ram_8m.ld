@@ -38,17 +38,6 @@ SECTIONS {
         *(.text.*)
         *(.rodata)
         *(.rodata.*)
-
-        /* C++ static constructors. A freestanding image has no C runtime to run
-         * these, so rp2350_start.s walks the array before main(). Without it a
-         * C++ game whose globals have constructors starts with them unbuilt —
-         * it links and boots, then misbehaves far from the cause. KEEP, or
-         * --gc-sections drops the array entirely. */
-        . = ALIGN(4);
-        __init_array_start = .;
-        KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
-        KEEP(*(.init_array))
-        __init_array_end = .;
         . = ALIGN(4);
     } > GAME_RAM
 

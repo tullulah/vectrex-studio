@@ -31,6 +31,18 @@ SECTIONS {
         *(.text.*)
         *(.rodata)
         *(.rodata.*)
+
+        /* C++ static constructors. A freestanding image has no C runtime to
+         * run these, so uvm2_start.s walks the array itself before main() —
+         * without it a game whose globals have constructors starts with them
+         * unbuilt, which fails silently rather than loudly. KEEP, or
+         * --gc-sections drops the whole array. */
+        . = ALIGN(4);
+        __init_array_start = .;
+        KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
+        KEEP(*(.init_array))
+        __init_array_end = .;
+
         . = ALIGN(4);
         _etext = .;
     } > GAME_RAM
@@ -53,6 +65,12 @@ SECTIONS {
         . = ALIGN(4);
         _bss_end = .;
     } > GAME_RAM
+
+    /* newlib's sbrk grows the heap from `end`. A game linked against a real
+     * libc references it even if it never allocates, so provide it right after
+     * .bss — PROVIDE, so a project that sets its own via --defsym still wins. */
+    PROVIDE(end = _bss_end);
+    PROVIDE(_end = _bss_end);
 
     /* VPy runtime variables (stack pointer, camera, SFX state, etc.) */
     .vpy_runtime : {

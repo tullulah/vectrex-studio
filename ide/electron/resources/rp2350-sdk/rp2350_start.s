@@ -48,6 +48,19 @@ gm_bss_loop:
     str     r2, [r0], #4
     b       gm_bss_loop
 gm_bss_done:
+    @ Run the C++ static constructors — nothing else will (see the linker
+    @ script). A C game's array is empty, so this costs it four instructions.
+    ldr     r0, =__init_array_start
+    ldr     r1, =__init_array_end
+gm_ctor_loop:
+    cmp     r0, r1
+    bhs     gm_ctor_done
+    ldr     r2, [r0], #4
+    push    {r0, r1}
+    blx     r2
+    pop     {r0, r1}
+    b       gm_ctor_loop
+gm_ctor_done:
     bl      main
 gm_spin:                    @ main() loops forever; spin if it ever returns
     b       gm_spin

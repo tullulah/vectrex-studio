@@ -30,7 +30,13 @@ static inline int  sys_read_buttons(void)    { register int r0 __asm__("r0"); __
 static inline int  sys_read_axes(void)       { register int r0 __asm__("r0"); __asm__ volatile("svc #13" : "=r"(r0) :: "memory"); return r0; }
 static inline void sys_play_music(const void *p){ register const void *r0 __asm__("r0")=p; __asm__ volatile("svc #21" : "+r"(r0) :: "memory"); }
 static inline void sys_stop_music(void)      { __asm__ volatile("svc #22" ::: "r0","r1","r2","r3","memory"); }
-static inline void sys_raster_text(int x,int y,const unsigned char*s,int n){ register int r0 __asm__("r0")=x; register int r1 __asm__("r1")=y; register const unsigned char* r2 __asm__("r2")=s; register int r3 __asm__("r3")=n; __asm__ volatile("svc #23" :: "r"(r0),"r"(r1),"r"(r2),"r"(r3) : "memory"); }
+/* SYS_RASTER_TEXT = 26. It used to be 23 — which the BIOS defines as SYS_PLAY_SFX
+ * and dispatches to music::play_sfx(r0). Single-core, r2 (a string pointer) landed
+ * in the SFX player as a track pointer: on the UVM2 that walked off into 0xffffffa4
+ * and locked the core up inside the SVC handler. Dual-core cart games never saw it
+ * because BEAM_RASTER records into the shared buffer instead of trapping, which is
+ * why it stayed hidden. 26 is the first free number after SET_TEXT_METRICS (25). */
+static inline void sys_raster_text(int x,int y,const unsigned char*s,int n){ register int r0 __asm__("r0")=x; register int r1 __asm__("r1")=y; register const unsigned char* r2 __asm__("r2")=s; register int r3 __asm__("r3")=n; __asm__ volatile("svc #26" :: "r"(r0),"r"(r1),"r"(r2),"r"(r3) : "memory"); }
 
 /* ── Input snapshot owned by the SDK layer (libvpy reads these as externs). ── */
 uint8_t currentButtonState = 0;
@@ -128,13 +134,24 @@ static void dc_push_raster(signed char x, signed char y, const unsigned char *s,
 #define BEAM_INTENSITY(b) sys_set_intensity(b)
 #define BEAM_MOVE(x,y)    sys_move((x),(y))
 #define BEAM_DRAW(x,y)    sys_draw_delta((x),(y))
-#define BEAM_RASTER(x,y,s,n) sys_raster_text((x),(y),(s),(n)) /* SYS #23 */
+#define BEAM_RASTER(x,y,s,n) sys_raster_text((x),(y),(s),(n)) /* SYS #26 */
 #endif
 
 /* Draw a raster-font string at device coords (x,y) (i8, ±127). Dual-core records
  * it into the shared list (core 0 replays via the BIOS shift-register font);
  * single-core traps to the BIOS raster primitive. `s` = bytes 0x20..0x6F. */
 void v_rasterText(int x, int y, const unsigned char *s, int n) { BEAM_RASTER(x, y, s, n); }
+
+/* Draw ONE horizontal row of RAW bytes (each byte = 8 pixels, bit7 = leftmost) at
+ * device coords (x,y) via the shift-register raster sweep — the general primitive
+ * behind the ZX-Spectrum screen render (one sweep per non-blank pixel row). Same
+ * DC encoding as v_rasterText; core 0 now materialises OP_RASTER as raw rows. */
+void v_rasterRow(int x, int y, const unsigned char *s, int n) { BEAM_RASTER(x, y, s, n); }
+
+/* Set the beam Z-axis intensity for the following draws (records OP_INTENSITY in
+ * dual-core; the core-0 materialiser calls set_brightness before replaying). The
+ * raster row sweep relies on this being set BEFORE the rows (not inline). */
+void v_setIntensity(int b) { BEAM_INTENSITY((signed char)b); }
 
 /* Bound integrator drift: chaining segments with only relative moves (no re-zero)
  * lets the integrators drift, so after N consecutive segments we force a fresh
@@ -217,6 +234,15 @@ static void beam_draw_to(int x, int y)
 #endif
 #ifndef MERGE_INT_HI
 #define MERGE_INT_HI 128
+#endif
+/* Longest merged vector, in device units. The merge is bounded anyway by the i8
+ * DRAW delta (±127), but a game whose art is drawn as deliberately SHORT collinear
+ * chunks may have chosen that length because one long analog ramp visibly drifts or
+ * bows on its hardware — merging the chunks back would undo the workaround. Lower
+ * this to keep the benefit (fewer beam setups) without recreating the long ramp.
+ * Default 127 = the i8 limit, i.e. unchanged for every existing game. */
+#ifndef MERGE_MAX
+#define MERGE_MAX 127
 #endif
 static int s_run = 0, s_run_x0, s_run_y0, s_run_x1, s_run_y1, s_run_b;
 
@@ -313,6 +339,8 @@ static void beam_seg(int ax0, int ay0, int ax1, int ay1, int b)
 static short  rr_y[VPY_REORDER_MAX_PTS], rr_x[VPY_REORDER_MAX_PTS];
 static int    rr_off[VPY_REORDER_MAX_STROKE], rr_len[VPY_REORDER_MAX_STROKE], rr_b[VPY_REORDER_MAX_STROKE];
 static int    rr_npts = 0, rr_nst = 0;
+/* Last frame's stroke count, kept after the reset so it can be read live. */
+volatile int  vpy_strokes_last = 0;
 
 /* record a segment; extend the open stroke iff it connects and shares brightness */
 static void emit_seg(int ax0, int ay0, int ax1, int ay1, int b)
@@ -359,6 +387,7 @@ static void flush_frame(void)
             by = rr_y[a]; bx = rr_x[a];
         }
     }
+    vpy_strokes_last = rr_nst;
     rr_npts = 0; rr_nst = 0;
 }
 #else
@@ -405,11 +434,15 @@ static void flush_run(void)
 #define CULL_MIN_AX 0
 #endif
 
-/* TEXT opts OUT of the sub-visible cull: glyph strokes ARE small (1-2 units), so
- * culling them mangles the letters. The game brackets its text with v_textBegin()
- * /v_textEnd(); segments drawn in between are kept at full detail, and only
- * NON-text sub-visible vectors are dropped. No-op for games that never call it
- * (s_in_text stays 0) or build with CULL off. */
+/* TEXT opts OUT of the sub-visible cull AND of the collinear merge: glyph strokes
+ * ARE small (1-2 units), so culling them mangles the letters, and merging fuses
+ * strokes of adjacent letters that happen to abut into one long bright bar. The
+ * game brackets its text with v_textBegin()/v_textEnd(); segments drawn in between
+ * are kept at full detail and emitted one-for-one, so only NON-text vectors are
+ * culled/merged. Before this, a game with vector text had to disable the merge
+ * game-wide (jetpac_sbt built -DMERGE_TOL=0), which left its long straight line-art
+ * — platforms, floor — drawn as a chain of separate short dashes. No-op for games
+ * that never call it (s_in_text stays 0) or that build with both off. */
 static int s_in_text = 0;
 void v_textBegin(void) { s_in_text = 1; }
 void v_textEnd(void)   { s_in_text = 0; }
@@ -438,7 +471,7 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
     return;
 #endif
 #if MERGE_TOL > 0 || MERGE_TOL_HI > 0
-    int tol = ((int)b >= MERGE_INT_HI) ? MERGE_TOL_HI : MERGE_TOL;   /* per-brightness */
+    int tol = s_in_text ? 0 : (((int)b >= MERGE_INT_HI) ? MERGE_TOL_HI : MERGE_TOL);
     if (tol > 0 && s_run && (int)b == s_run_b && ax0 == s_run_x1 && ay0 == s_run_y1) {
         int rdx = s_run_x1 - s_run_x0, rdy = s_run_y1 - s_run_y0;  /* run so far     */
         int ndx = ax1 - ax0,          ndy = ay1 - ay0;            /* new segment    */
@@ -447,9 +480,10 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
         long dot   = (long)rdx * ndx + (long)rdy * ndy;           /* same direction? */
         long run2  = (long)rdx * rdx + (long)rdy * rdy;
         /* Extend the run iff: same general direction, perpendicular deviation
-         * (|cross|/|run|) ≤ tol, and the merged delta still fits an i8 DRAW. */
+         * (|cross|/|run|) ≤ tol, and the merged delta still fits an i8 DRAW (and
+         * MERGE_MAX, if the game asked for a shorter ceiling than the i8 limit). */
         if (dot >= 0 && cross * cross <= run2 * (long)(tol * tol)
-            && ex <= 127 && ex >= -127 && ey <= 127 && ey >= -127) {
+            && ex <= MERGE_MAX && ex >= -MERGE_MAX && ey <= MERGE_MAX && ey >= -MERGE_MAX) {
             s_run_x1 = ax1; s_run_y1 = ay1;
             return;
         }
@@ -524,6 +558,28 @@ void v_readJoystick1Analog(void)
     currentJoy1Y = (int8_t)(a >> 16);
 }
 
+/* The OTHER two mux channels. SYS_READ_AXES already samples all four (the BIOS SARs
+ * channels 0..3 = J1X, J1Y, J2X, J2Y in one go), so this costs nothing extra — it just
+ * unpacks the half that v_readJoystick1Analog throws away. Useful for a second pad, and
+ * for telling "this axis is dead" apart from "this axis is on a different channel than
+ * we think" when a controller misbehaves. */
+/* WEAK: several AAE ports already define these in their own aae_stubs.c (as
+ * `signed char`), and a strong definition here collided with them — 9 games stopped
+ * linking with "multiple definition of `currentJoy2X'" the moment this was added.
+ * Weak means the SDK supplies them only when the game does not. */
+__attribute__((weak)) int8_t currentJoy2X = 0;
+__attribute__((weak)) int8_t currentJoy2Y = 0;
+__attribute__((weak)) void v_readJoystick2Analog(void)
+{
+#ifdef VPY_DUAL_CORE
+    unsigned int a = DC_CTRL->axes;
+#else
+    unsigned int a = (unsigned int)sys_read_axes();
+#endif
+    currentJoy2X = (int8_t)(a >> 8);
+    currentJoy2Y = (int8_t)a;
+}
+
 void v_writePSG(uint8_t reg, uint8_t val) { sys_psg_write(reg, val); }
 
 /* Digitised-sample audio (AAE Sega-G80). No-op on RP2350 for now: HW needs a
@@ -543,6 +599,15 @@ void v_stopMusic(void)                      { sys_stop_music(); }
  * aggregate init and array ops, and there is no libc in this bare-metal link
  * (we pull in only libgcc for the AEABI integer-division helpers). ── */
 #include <stddef.h>
+/* Only when there is NO libc behind us. Under the UVM2 pico-sdk build there is,
+ * and defining these again is actively dangerous rather than merely redundant:
+ * GCC recognises `while (n--) *p++ = c` as a memset and rewrites it into a CALL
+ * to memset — this function — so it recurses until the stack eats the image.
+ * Seen on hardware 2026-08-04: dkong's stack walked from 0x20082000 down past
+ * 0x20027700 (371 KB) overwriting its own code, then took a HardFault whose
+ * handler faulted too and locked the core up. The freestanding cartridge build
+ * still needs them; it links no libc at all. */
+#ifndef UVM2_PICO_RUNTIME
 void *memset(void *d, int c, size_t n)  { unsigned char *p = d; while (n--) *p++ = (unsigned char)c; return d; }
 void *memcpy(void *d, const void *s, size_t n) { unsigned char *pd = d; const unsigned char *ps = s; while (n--) *pd++ = *ps++; return d; }
 void *memmove(void *d, const void *s, size_t n) {
@@ -551,3 +616,4 @@ void *memmove(void *d, const void *s, size_t n) {
     else { pd += n; ps += n; while (n--) *--pd = *--ps; }
     return d;
 }
+#endif
