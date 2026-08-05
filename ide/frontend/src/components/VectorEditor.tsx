@@ -67,6 +67,13 @@ interface VecResource {
   backgroundImage?: string;
   // Background image offset in canvas pixels
   backgroundOffset?: { x: number; y: number };
+  /** Stretch the background to fill the whole Vectrex screen, or draw it at its
+   *  natural size (one image pixel = one resource unit) with its bottom-left corner on
+   *  the origin. Stretching suits a photo or a full-screen mock-up; natural size suits
+   *  a sprite ripped at its real dimensions, which would otherwise be blown up to fill
+   *  the screen and be useless to trace over. Absent = stretch, so files written before
+   *  this existed keep looking the way they did. */
+  backgroundStretch?: boolean;
   collisionMesh?: {
     segments: CollisionSegment[];
   };
@@ -1067,6 +1074,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [backgroundImage, setBackgroundImage] = useState<HTMLImageElement | null>(null);
   const [backgroundOpacity, setBackgroundOpacity] = useState(0.5);
   const [showBackground, setShowBackground] = useState(true);
+  const [backgroundStretch, setBackgroundStretch] = useState(true);
   const [backgroundOffset, setBackgroundOffset] = useState({ x: 0, y: 0 });
   const [isBackgroundSelected, setIsBackgroundSelected] = useState(false);
   
@@ -1272,21 +1280,30 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.save();
       ctx.globalAlpha = backgroundOpacity;
 
-      // Fit image inside the Vectrex screen rect (3:4 portrait, object-fit: contain)
-      const screenL = resourceToCanvas({ x: -96, y: 0 });
-      const screenR = resourceToCanvas({ x: 95, y: 0 });
-      const screenT = resourceToCanvas({ x: 0, y: 127 });
-      const screenB = resourceToCanvas({ x: 0, y: -128 });
-      const rectX = screenL.x + backgroundOffset.x;
-      const rectY = screenT.y + backgroundOffset.y;
-      const rectW = screenR.x - screenL.x;
-      const rectH = screenB.y - screenT.y;
-
-      // Stretch image to fill the Vectrex screen rect (same as vplay editor)
-      const drawWidth = rectW;
-      const drawHeight = rectH;
-      const drawX = rectX;
-      const drawY = rectY;
+      // Two placements. STRETCHED fills the Vectrex screen rect, which is what a photo
+      // or a full-screen mock-up wants. NATURAL maps one image pixel to one resource
+      // unit with the image's bottom-left corner on the origin, which is what a sprite
+      // ripped at its real size wants: shapes here are authored in a small box off the
+      // origin (a 16x16 sprite is x 0..15, y 0..15), so a 43x36 sprite stretched across
+      // 191x255 units is five times too big to trace over.
+      let drawX: number, drawY: number, drawWidth: number, drawHeight: number;
+      if (backgroundStretch) {
+        const screenL = resourceToCanvas({ x: -96, y: 0 });
+        const screenR = resourceToCanvas({ x: 95, y: 0 });
+        const screenT = resourceToCanvas({ x: 0, y: 127 });
+        const screenB = resourceToCanvas({ x: 0, y: -128 });
+        drawX = screenL.x + backgroundOffset.x;
+        drawY = screenT.y + backgroundOffset.y;
+        drawWidth = screenR.x - screenL.x;
+        drawHeight = screenB.y - screenT.y;
+      } else {
+        const tl = resourceToCanvas({ x: 0, y: backgroundImage.height });
+        const br = resourceToCanvas({ x: backgroundImage.width, y: 0 });
+        drawX = tl.x + backgroundOffset.x;
+        drawY = tl.y + backgroundOffset.y;
+        drawWidth = br.x - tl.x;
+        drawHeight = br.y - tl.y;
+      }
 
       ctx.drawImage(backgroundImage, drawX, drawY, drawWidth, drawHeight);
 
@@ -1870,7 +1887,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.stroke();
       ctx.restore();
     }
-  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge, walkAreaPreview, selectedWalkAreaIdx]);
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, backgroundStretch, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge, walkAreaPreview, selectedWalkAreaIdx]);
 
   useEffect(() => {
     draw();
@@ -2118,6 +2135,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       };
       img.src = resource.backgroundImage;
       setBackgroundOffset(resource.backgroundOffset ?? { x: 0, y: 0 });
+      setBackgroundStretch(resource.backgroundStretch ?? true);
     } else {
       setBackgroundImage(null);
       setShowBackground(false);
@@ -3984,6 +4002,24 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                 style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#a66', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}
               >✕</button>
             </div>
+            <label
+              title="Off: one image pixel = one unit, bottom-left on the origin. Use this for a sprite ripped at its real size — stretched, it fills the whole screen and is useless to trace over."
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', cursor: 'pointer' }}
+            >
+              <input
+                type="checkbox"
+                checked={backgroundStretch}
+                onChange={(e) => {
+                  const v = e.target.checked;
+                  setBackgroundStretch(v);
+                  updateResource(resource, { ...resource, backgroundStretch: v });
+                }}
+                style={{ margin: 0 }}
+              />
+              <span style={{ opacity: 0.85 }}>
+                stretch to screen{backgroundStretch ? '' : ` (${backgroundImage.width}×${backgroundImage.height} units)`}
+              </span>
+            </label>
           </div>
         )}
 
