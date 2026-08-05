@@ -44,6 +44,7 @@ add_executable(${UVM2_NAME}
     ${UVM2_SDK_DIR}/uvm2_text.c
     ${UVM2_SDK_DIR}/uvm2_audio.c
     ${UVM2_SDK_DIR}/uvm2_svc.c
+    ${UVM2_SDK_DIR}/uvm2_core1.c
     ${UVM2_SDK_DIR}/uvm2_svc_entry.s
     ${UVM2_SDK_DIR}/uvm2_pico_main.c
     ${UVM2_SDK_DIR}/uvm2_pico_svc.S
@@ -62,12 +63,24 @@ set_source_files_properties(${UVM2_GAME_SRCS} PROPERTIES
 # Tells uvm2-sdk that crt0 owns .bss and the vector table now.
 target_compile_definitions(${UVM2_NAME} PRIVATE UVM2_PICO_RUNTIME=1 ${UVM2_GAME_DEFS})
 
-# The UVM2 is SINGLE-CORE. A game whose rp2350 flags carry -DVPY_DUAL_CORE would
-# record its draws into a shared buffer nobody drains here, so callers must not
-# pass it — the old uvm2.mk filtered it out of the reused flags and this build
-# expects the same discipline from whoever sets UVM2_GAME_DEFS.
+# NOT because the UVM2 is single-core — it carries the same RP2350 we do, and
+# Ralf's own games use both halves of it (core 0 fills commandBuffer[2][8K],
+# core 1 replays it and reads the controls, handshaken through two volatile
+# frame counters). What is single-core is OUR UVM2 runtime: we never wrote the
+# core-1 consumer for it.
+#
+# So the flag has to be refused, because -DVPY_DUAL_CORE does not mean "use two
+# cores". It means "record draws into a buffer that THE CARTRIDGE FIRMWARE's
+# core 1 drains", and on the UVM2 there is no firmware — the image is the whole
+# program, and nobody drains it. A game built with it would draw nothing at all.
+# Failing here beats failing on the screen.
+#
+# Worth doing eventually: a second core would not make the drawing faster (the
+# replay is paced by the Vectrex's own 1.5 MHz clock and cannot outrun it), but
+# it would overlap the game logic with the replay instead of running them back
+# to back, which is exactly what Ralf's split buys.
 if("VPY_DUAL_CORE" IN_LIST UVM2_GAME_DEFS)
-    message(FATAL_ERROR "VPY_DUAL_CORE in UVM2_GAME_DEFS: the UVM2 has no second core to drain the buffer")
+    message(FATAL_ERROR "VPY_DUAL_CORE in UVM2_GAME_DEFS: that flag targets the cartridge firmware's core 1, which does not exist here")
 endif()
 
 # The game's include dirs go on the GAME SOURCES, not on the target. A port that
@@ -78,7 +91,7 @@ set_source_files_properties(${UVM2_GAME_SRCS} PROPERTIES
     INCLUDE_DIRECTORIES "${UVM2_GAME_INCS}")
 
 target_include_directories(${UVM2_NAME} PRIVATE ${UVM2_SDK_DIR})
-target_link_libraries(${UVM2_NAME} pico_stdlib hardware_dma hardware_pio ${UVM2_GAME_LIBS})
+target_link_libraries(${UVM2_NAME} pico_stdlib pico_multicore hardware_dma hardware_pio ${UVM2_GAME_LIBS})
 
 # Keep the SVC handler alive. Nothing in C calls uvm2_svc_handler — it is reached
 # only through the vector table — so --gc-sections drops its section, and the

@@ -21,8 +21,30 @@
  * (a vector is ~8 commands, and a 50 Hz frame only affords ~220 vectors). */
 #define UVM2_CMD_CAPACITY  8192u
 
-static uint32_t s_cmds[UVM2_CMD_CAPACITY];
+/* One buffer single-core, two when core 1 replays: core 0 fills the buffer for
+ * frame n while core 1 is still replaying frame n-1.  Single-core builds keep
+ * exactly one, so nothing grows for a target that does not use it. */
+#ifdef UVM2_DUAL_CORE
+#  define UVM2_NBUF 2u
+#else
+#  define UVM2_NBUF 1u
+#endif
+static uint32_t s_cmds[UVM2_NBUF][UVM2_CMD_CAPACITY];
 static uint32_t s_count;
+static uint32_t s_buf;                  /* buffer being filled; always 0 single-core */
+
+#ifdef UVM2_DUAL_CORE
+/* The handshake, and the only shared state between the cores besides the
+ * buffers themselves.  Both only ever count up, so a 32-bit load can never tear
+ * and no lock is needed — ordering comes from the barriers around them. */
+volatile uint32_t uvm2_frame_request;   /* frames core 0 has finished building */
+volatile uint32_t uvm2_frame_done;      /* frames core 1 has finished replaying */
+static volatile uint32_t s_len[2];
+static uint32_t s_frame_no = 1;
+
+const uint32_t *uvm2_frame_buffer(uint32_t frame) { return s_cmds[frame & 1u]; }
+uint32_t        uvm2_frame_length(uint32_t frame) { return s_len[frame & 1u]; }
+#endif
 static uint32_t s_frames;
 
 /* Shadow of the VIA state, so a command is only emitted when something really
@@ -51,7 +73,7 @@ static int      s_fixup = 0;
 
 static inline void emit(uint32_t reg, uint32_t data, uint32_t delay)
 {
-    if (s_count < UVM2_CMD_CAPACITY) s_cmds[s_count++] = UVM2_CMD(reg, data, delay);
+    if (s_count < UVM2_CMD_CAPACITY) s_cmds[s_buf][s_count++] = UVM2_CMD(reg, data, delay);
 }
 
 /* ── Primitive register writes ────────────────────────────────────────────── */
@@ -169,7 +191,7 @@ void uvm2_draw_init(void)
     s_count = 0;
     via_setup();
 
-    uvm2_stats.bus_cycles = uvm2_exec(s_cmds, s_count);
+    uvm2_stats.bus_cycles = uvm2_exec(s_cmds[s_buf], s_count);
     uvm2_stats.commands   = s_count;
     s_count = 0;
 }
@@ -363,7 +385,7 @@ void uvm2_frame_begin(void)
 
 void uvm2_frame_end(void)
 {
-    uint32_t cycles;
+    uint32_t cycles = 0;
 
     /* Blanked already (every lit segment restores the PCR), so just clamp the
      * beam at centre: an idle integrator drifts, and a drifting beam is a
@@ -372,10 +394,39 @@ void uvm2_frame_end(void)
     s_pos_x = 0;
     s_pos_y = 0;
 
-    cycles = uvm2_exec(s_cmds, s_count);
+#ifdef UVM2_DUAL_CORE
+    /* Hand the finished list to core 1 and go straight back to the game.  The
+     * replay, the input, the audio and the 50 Hz pacing all happen over there
+     * now (uvm2_core1.c), so the game's next frame of logic overlaps the beam
+     * still drawing this one. */
+    s_len[s_buf]        = s_count;
+    uvm2_stats.commands = s_count;
+
+    uvm2_stats.vectors_last     = uvm2_stats.vectors;
+    uvm2_stats.moves_last       = uvm2_stats.moves;
+    uvm2_stats.ramp_cycles_last = uvm2_stats.ramp_cycles;
+
+    s_count = 0;
+    s_frames++;
+
+    __asm volatile ("dmb" ::: "memory");   /* the buffer and its length, then the flag */
+    uvm2_frame_request = s_frame_no;
+
+    /* Next we fill the OTHER buffer, which core 1 last replayed for frame n-1.
+     * Block until it has finished with it — this is the only place core 0 ever
+     * waits, and it waits at most one frame. */
+    while ((int32_t)(uvm2_frame_done - (s_frame_no - 1u)) < 0) { }
+
+    s_frame_no++;
+    s_buf = s_frame_no & 1u;
+    (void)cycles;
+    return;
+#else
+    cycles = uvm2_exec(s_cmds[s_buf], s_count);
 
     uvm2_stats.commands   = s_count;
     uvm2_stats.bus_cycles = cycles;
+#endif
 
     /* Freeze this frame's per-frame counters where a debugger can still read them
      * once uvm2_frame_begin has cleared the live ones. */

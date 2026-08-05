@@ -169,6 +169,10 @@ typedef struct {
 
 extern uvm2_stats_t uvm2_stats;
 
+/* Bus cycles consumed by single accesses (input, PSG) — see uvm2_bus.c.  The
+ * frame pacing must subtract these or it overshoots by whatever they cost. */
+extern uint32_t uvm2_single_cycles;
+
 #define UVM2_CYCLES_PER_FRAME  30000u   /* 1.5 MHz / 50 Hz */
 
 #ifdef __cplusplus

@@ -18,11 +18,20 @@
 
 int uvm2_game_main(void);          /* the game's own main(), renamed at compile time */
 void uvm2_runtime_init(void);      /* uvm2_svc.c */
+#ifdef UVM2_DUAL_CORE
+void uvm2_core1_start(void);       /* uvm2_core1.c */
+#endif
 
 int main(void)
 {
 #ifndef UVM2_STEP_OWNS_INIT
     uvm2_runtime_init();
+#  ifdef UVM2_DUAL_CORE
+    /* After the runtime init, never before: core 1 takes the bus from here on,
+     * and it must not start until the VIA has been programmed and the 6809 is
+     * halted. */
+    uvm2_core1_start();
+#  endif
 #endif
     /* UVM2_STEP_OWNS_INIT: a diagnostic image that brings the machine up itself,
      * one stage at a time. Calling runtime_init here would do every stage before

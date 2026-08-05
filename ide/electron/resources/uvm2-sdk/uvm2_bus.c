@@ -201,6 +201,13 @@ void uvm2_bus_delay(uint32_t cycles)
 
 /* ── Single accesses ──────────────────────────────────────────────────────── */
 
+/* Bus cycles spent in single accesses (input reads, PSG writes) since it was
+ * last cleared.  uvm2_exec returns its own count, but these do not go through
+ * it, so without this the frame pacing has no idea they happened and overshoots
+ * 50 Hz by however long the controls and the sound took.  Counted rather than
+ * assumed: an input read's cost depends on how many SAR steps an axis needs. */
+uint32_t uvm2_single_cycles;
+
 void uvm2_via_write(uint32_t reg, uint32_t data)
 {
     uint32_t out = UVM2_VIA_BASE_BITS
@@ -211,6 +218,7 @@ void uvm2_via_write(uint32_t reg, uint32_t data)
     uvm2_put_masked(out, UVM2_BUS_MASK);          /* R/W low = write */
     UVM2_WAIT_CLK_LOW();
     uvm2_put_masked(UVM2_PARK_BITS, UVM2_BUS_MASK & ~UVM2_DATA_MASK);
+    uvm2_single_cycles++;
 }
 
 uint8_t uvm2_via_read(uint32_t reg)
@@ -239,5 +247,6 @@ uint8_t uvm2_via_read(uint32_t reg)
      * simply lost.  Costs half a bus cycle and makes every access start from
      * the same known phase. */
     UVM2_WAIT_CLK_LOW();
+    uvm2_single_cycles += 2u;      /* one to address, one to sample */
     return (uint8_t)(state & 0xFFu);
 }

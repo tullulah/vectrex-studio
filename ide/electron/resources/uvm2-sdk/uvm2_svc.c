@@ -45,6 +45,23 @@ enum {
  * sequences disturb Port B, so they may only run between frames. */
 static uint8_t  s_buttons;
 static uint32_t s_axes;
+
+/* Where the controls come from.  Single-core, this file reads them itself at the
+ * frame boundary; dual-core, core 1 does and leaves them here.  Either way the
+ * syscalls have always answered from a cache rather than from the wire, which is
+ * why moving the read to the other core is invisible to every game. */
+#ifdef UVM2_DUAL_CORE
+extern volatile uint8_t  uvm2_cached_buttons;
+extern volatile uint32_t uvm2_cached_axes;
+void uvm2_psg_queue(uint32_t reg, uint32_t value);
+#  define UVM2_BUTTONS  uvm2_cached_buttons
+#  define UVM2_AXES     uvm2_cached_axes
+#  define UVM2_PSG(r,v) uvm2_psg_queue((r), (v))
+#else
+#  define UVM2_BUTTONS  s_buttons
+#  define UVM2_AXES     s_axes
+#  define UVM2_PSG(r,v) uvm2_psg_write((r), (v))
+#endif
 /* Leftover Vectrex time not yet handed to the sequencer, in bus cycles. */
 static uint32_t s_audio_acc;
 
@@ -114,6 +131,17 @@ void uvm2_svc_dispatch(uint32_t *frame)
 
     case SYS_WAIT_RECAL:
         uvm2_frame_end();
+#ifdef UVM2_DUAL_CORE
+        /* Core 1 owns the bus now: the replay, the control reads, the PSG queue,
+         * the audio tick and the 50 Hz pacing all happen there (uvm2_core1.c).
+         * Touching Port A or Port B from here would put two writers on the VIA
+         * with no arbitration — the exact fault the cartridge shipped when 40
+         * games claimed dual-core while compiled single-core.
+         *
+         * uvm2_frame_end has already blocked until core 1 released the buffer we
+         * are about to fill, so this returns at the same rate as before; what it
+         * no longer does is wait out the beam. */
+#else
         /* Between frames, with the beam clamped at centre — the only window in
          * which input reads and PSG writes may drive Port B.  Audio is ticked
          * here rather than on a second core, so the .vmus tempo follows the
@@ -140,6 +168,7 @@ void uvm2_svc_dispatch(uint32_t *frame)
             uvm2_audio_tick();
         }
 #endif
+#endif /* UVM2_DUAL_CORE */
 
         uvm2_frame_begin();
         /* First commands of the new frame: put the zero reference and the Y/Z
@@ -209,17 +238,24 @@ void uvm2_svc_dispatch(uint32_t *frame)
 #endif /* UVM2_NO_DRAW */
 
     case SYS_PSG_WRITE:
-        uvm2_psg_write(r0, r1);
+        UVM2_PSG(r0, r1);
         break;
 
+    /* A PSG read has to happen on the bus, now, and cannot be queued.  Dual-core
+     * that means core 1 owns the pins and we must not — return silence, which is
+     * what the register would read while nothing is playing. */
     case SYS_PSG_READ:
+#ifdef UVM2_DUAL_CORE
+        frame[0] = 0;
+#else
         frame[0] = uvm2_psg_read(r0);
+#endif
         break;
 
     case SYS_PSG_SILENCE:
-        uvm2_psg_write(8, 0);
-        uvm2_psg_write(9, 0);
-        uvm2_psg_write(10, 0);
+        UVM2_PSG(8, 0);
+        UVM2_PSG(9, 0);
+        UVM2_PSG(10, 0);
         break;
 
     /* Two different shapes of the same byte, and they are not interchangeable.
@@ -230,28 +266,39 @@ void uvm2_svc_dispatch(uint32_t *frame)
      * Returning one where the other is expected leaves every button reading as
      * held down, which is exactly how this went wrong the first time. */
     case SYS_READ_BUTTONS:
-        frame[0] = (uint32_t)(uint8_t)~s_buttons;
+        frame[0] = (uint32_t)(uint8_t)~UVM2_BUTTONS;
         break;
 
     case SYS_READ_BTN_RAW: {
-        uint32_t j1 = (uint32_t)(((s_buttons & 0x0Fu) << 4) | 0x0Fu);
-        uint32_t j2 = (uint32_t)(((s_buttons >> 4) & 0x0Fu) | 0xF0u);
+        uint8_t  b  = UVM2_BUTTONS;
+        uint32_t j1 = (uint32_t)(((b & 0x0Fu) << 4) | 0x0Fu);
+        uint32_t j2 = (uint32_t)(((b >> 4) & 0x0Fu) | 0xF0u);
         frame[0] = (j1 << 8) | j2;
         break;
     }
 
     case SYS_READ_AXES:
-        frame[0] = s_axes;
+        frame[0] = UVM2_AXES;
         break;
 
     /* Raw bus access. The address is a full Vectrex address; only the VIA is
      * reachable while the 6809 is halted, and the register is its low nibble. */
+    /* Refused under UVM2_DUAL_CORE: core 1 owns the pins, and a raw access from
+     * here would collide with a replay in progress.  Silently doing nothing is
+     * the safe answer — these are diagnostic calls, and a game that depends on
+     * them has a bigger problem than this target. */
     case SYS_BUS_WRITE:
+#ifndef UVM2_DUAL_CORE
         uvm2_via_write(r0 & 0x0Fu, r1);
+#endif
         break;
 
     case SYS_BUS_READ:
+#ifdef UVM2_DUAL_CORE
+        frame[0] = 0;
+#else
         frame[0] = uvm2_via_read(r0 & 0x0Fu);
+#endif
         break;
 
     /* Digitised samples and SD browsing are not implemented on UVM2.  They are
