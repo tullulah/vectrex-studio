@@ -162,9 +162,38 @@ void v_setIntensity(int b) { BEAM_INTENSITY((signed char)b); }
  * but LONGER vectors that drift more per vector, so they want a lower cap (more
  * frequent re-zeros) to keep glyphs/shapes landing where they belong. */
 #ifndef VPY_MAX_CONSECUTIVE_DRAWS
-#define VPY_MAX_CONSECUTIVE_DRAWS 32
+#define VPY_MAX_CONSECUTIVE_DRAWS 1
+#endif
+
+/* DEFAULT 1 SINCE 2026-08-05 — measured, replacing a 32 that was making every game
+ * wobble. The position error is FIXED PER MOVEMENT (the deflection lag at the end of
+ * each blanked move), not proportional to distance, so it accumulates by COUNT: two or
+ * three moves are already visible. That is why nothing between 1 and 32 works —
+ * 2/4/8 were each tried on hardware and each still wobbled — and why the two
+ * distance-based policies (re-zero before a long move; re-zero on a path budget) both
+ * failed outright: a line of text only ever makes SHORT hops, so neither ever fired,
+ * and the text piled up anyway.
+ *
+ * Cost, measured on Asteroids, same geometry either side:
+ *     gameplay     ~205 vectors   44.2 -> 44.2 fps    NOTHING (the frame is paced,
+ *                                                      not beam-bound, at this load)
+ *     high scores  ~509 vectors   26.9 -> 23.1 fps    14%, and ~5-9% once the reorder
+ *                                                      below is dropped
+ * So it is free where you actually play and only bites on text-heavy screens. The
+ * firmware's own `print_text` has always re-zeroed per glyph and has always rendered
+ * cleanly; this is the SDK doing the same thing.
+ *
+ * WITH A PER-STROKE RE-ZERO THE NEAREST-NEIGHBOUR REORDER CANNOT HELP: every move now
+ * starts from the origin, so there is no inter-stroke travel left to shorten, and its
+ * O(n^2) search (145 strokes ~ 21k distance tests per frame, on the game's core) is
+ * pure waste. Disabled automatically rather than left as a flag someone has to
+ * remember — the two settings are not independent. */
+#if VPY_MAX_CONSECUTIVE_DRAWS <= 1 && !defined(VPY_NO_REORDER)
+#define VPY_NO_REORDER 1
 #endif
 static int s_draws_since_zero = 0;
+
+
 /* Cache the last intensity so we skip the redundant SET_INTENSITY syscall+bus
  * write when consecutive segments share a brightness — measured 42–100% of them
  * do (starcas 100%, tacscan 92%, bzone/redbaron ~45%). Reset each frame in case
@@ -307,10 +336,15 @@ static void beam_seg(int ax0, int ay0, int ax1, int ay1, int b)
      * from centre (Speed Freak's right road rail, always the one that "walks off").
      * So a contiguous run draws unbroken; drift only resets between runs. */
     int need_move = (ax0 != s_beam_x || ay0 != s_beam_y);
-    if (need_move && s_draws_since_zero >= VPY_MAX_CONSECUTIVE_DRAWS) {
+    int rezero = need_move && s_draws_since_zero >= VPY_MAX_CONSECUTIVE_DRAWS;
+    if (rezero) {
         BEAM_ZERO();
         s_beam_x = 0; s_beam_y = 0;
         s_draws_since_zero = 0;
+        /* The approach from the origin is itself travel, and it is billed to the new
+         * budget — otherwise a shape far from centre re-zeroes and immediately spends
+         * its whole allowance getting back out there, which is the "walks off" failure
+         * the comment above describes. */
     }
     if (b != s_last_intensity) { BEAM_INTENSITY(b); s_last_intensity = b; }
     beam_move_to(ax0, ay0);
@@ -352,7 +386,8 @@ static void emit_seg(int ax0, int ay0, int ax1, int ay1, int b)
         return;
     }
     if (rr_nst < VPY_REORDER_MAX_STROKE && rr_npts + 2 <= VPY_REORDER_MAX_PTS) {
-        rr_off[rr_nst] = rr_npts; rr_len[rr_nst] = 2; rr_b[rr_nst] = b; rr_nst++;
+        rr_off[rr_nst] = rr_npts; rr_len[rr_nst] = 2; rr_b[rr_nst] = b;
+        rr_nst++;
         rr_y[rr_npts] = ay0; rr_x[rr_npts] = ax0; rr_npts++;
         rr_y[rr_npts] = ay1; rr_x[rr_npts] = ax1; rr_npts++;
         return;
