@@ -460,6 +460,21 @@ function App() {
           projectState.vpyProject.manifestPath || projectState.vpyProject.projectFile;
         const projName = projectState.vpyProject.config.project.name;
 
+        // The WASM preview is ONE build that runs against the host SDK shim, so
+        // it is the same picture whichever hardware target is selected. Say so:
+        // otherwise F5 looks like it is ignoring the target selector, which is
+        // exactly how it reads when three targets produce identical output.
+        if (!forSd && !opts?.rp2350Emu) {
+          logger.info('Build',
+            `Simulator preview (WASM) — the same build for every target; ` +
+            `use Shift+F5 to build for ${buildTarget}.`);
+          if (buildTarget === 'm6809') {
+            logger.warn('Build',
+              `${projName} is a C/C++ project and has no 6809 build path, so ` +
+              `there is nothing to compile for m6809 — only this preview runs.`);
+          }
+        }
+
         // RP2350 binary preview (fidelity): run the ACTUAL ARM machine code in
         // Rp2350System (svc dispatcher / Thumb2 interpreter).  This is the HW
         // oracle but it's SLOW (triple emulation: JS interprets ARM, ARM runs the
@@ -470,12 +485,50 @@ function App() {
         // opts into hardware-accurate emulation deliberately.  (Previously plain F5
         // auto-ran the emulator whenever target==rp2350, so F5 and Shift+F5 were
         // indistinguishable and there was no way to reach the fast sim.)
+        //
+        // Shift+F5 follows the SELECTED TARGET, like the VPy path below does with
+        // `target: forSd ? 'rp2350' : buildTarget`. It used to be hardcoded to
+        // rp2350, so a C project with target=pitrex had NO way to build its
+        // bare-metal kernel from the IDE: F5/F7 went to the WASM sim and Shift+F5
+        // built an rp2350 binary instead. There is no PiTrex emulator to preview
+        // in, so for that target this builds the kernel image (and copies it to
+        // the SD when "Copy to SD" is on) — the hardware action, which is the
+        // point of asking for hardware from the keyboard.
         if (!forSd && opts?.rp2350Emu) {
           if (!electronAPI?.runBuildExternal) {
             logger.error('Build', 'electronAPI.runBuildExternal not available');
             return;
           }
           useEmulatorStore.getState().setSimModule(null);
+          if (buildTarget === 'pitrex') {
+            logger.info('Build', `Building PiTrex kernel: ${projName}`);
+            const kr = await electronAPI.runBuildExternal({
+              manifestPath, target: 'pitrex',
+              deploy: pitrexCopyToSD, sdPath: pitrexSdPath,
+            });
+            if (kr?.error) logger.error('Build', 'PiTrex build failed:', kr.error, kr.detail || '');
+            else logger.info('Build', 'PiTrex kernel ready:', kr?.artifactPath || '');
+            return;
+          }
+          // UVM2: builds a .um2 SD image. There is no in-panel preview for it
+          // yet (Uvm2System loads .um2 files, but nothing wires a C project's
+          // artifact into it), so this is the hardware action, like PiTrex.
+          if (buildTarget === 'uvm2') {
+            logger.info('Build', `Building UVM2 image: ${projName}`);
+            const ur = await electronAPI.runBuildExternal({
+              manifestPath, target: 'uvm2',
+              deploy: uvm2CopyToSD, sdPath: uvm2SdPath,
+            });
+            if (ur?.error) logger.error('Build', 'UVM2 build failed:', ur.error, ur.detail || '');
+            else logger.info('Build', 'UVM2 image ready:', ur?.artifactPath || '');
+            return;
+          }
+          if (buildTarget === 'm6809') {
+            logger.error('Build',
+              `${projName} is a C/C++ project: there is no 6809 build path. ` +
+              `Pick rp2350, pitrex or uvm2, or press F5 for the simulator preview.`);
+            return;
+          }
           logger.info('Build', `Building + previewing RP2350 binary: ${projName}`);
           const pv = await electronAPI.runBuildExternal({ manifestPath, target: 'rp2350', preview: true });
           if (pv?.error) logger.error('Build', 'RP2350 preview build failed:', pv.error, pv.detail || '');
@@ -517,13 +570,30 @@ function App() {
         // always built pitrex). "Build for SD" (forSd) is always an rp2350 game
         // (matches the VPy path); otherwise follow the selected target. rp2350 →
         // the RAM-linked SD game + copy to the card; else → the pitrex kernel.
-        const extTarget: 'pitrex' | 'rp2350' = (forSd || buildTarget === 'rp2350') ? 'rp2350' : 'pitrex';
+        // UVM2 ENTRA AQUI, y antes no podia: el tipo era 'pitrex' | 'rp2350', asi que con
+        // uvm2 seleccionado esta accion construia otra cosa. Con dkong el efecto era
+        // silencioso y feo — forzaba rp2350, su .cvproj no tenia [targets.rp2350], se caia
+        // al [build] por defecto (que es `make sim`) y **copiaba game.js a la SD**.
+        //
+        // "Build for SD" sigue implicando rp2350 cuando el target seleccionado no es de
+        // hardware, que es lo que hace el camino de VPy; lo que cambia es que un target de
+        // hardware EXPLICITO manda sobre esa suposicion.
+        const extTarget: 'pitrex' | 'rp2350' | 'uvm2' =
+          buildTarget === 'uvm2' ? 'uvm2'
+          : (forSd || buildTarget === 'rp2350') ? 'rp2350'
+          : 'pitrex';
+        const extSdPath = extTarget === 'rp2350' ? rp2350SdPath
+                        : extTarget === 'uvm2'   ? uvm2SdPath
+                        : pitrexSdPath;
+        const extDeploy = extTarget === 'rp2350' ? !!rp2350SdPath
+                        : extTarget === 'uvm2'   ? uvm2CopyToSD
+                        : pitrexCopyToSD;
         logger.info('Build', `Building external project (${extTarget}): ${projName}`);
         const extResult = await electronAPI.runBuildExternal({
           manifestPath,
           target: extTarget,
-          deploy: extTarget === 'rp2350' ? !!rp2350SdPath : pitrexCopyToSD,
-          sdPath: extTarget === 'rp2350' ? rp2350SdPath : pitrexSdPath,
+          deploy: extDeploy,
+          sdPath: extSdPath,
         });
         if (extResult?.error) {
           logger.error('Build', 'External build failed:', extResult.error, extResult.detail || '');
@@ -1700,7 +1770,11 @@ def loop():
           <MenuRoot label={t('menu.build', 'Build')} open={openMenu==='build'} setOpen={()=>setOpenMenu(openMenu==='build'?null:'build')}>
             <MenuItem label={`${t('build.build', 'Build')}	⌘F7`} onClick={()=>{ commandExec('build.build'); setOpenMenu(null); }} />
             <MenuItem label={`${t('build.buildAndRun', 'Build && Run (Simulate)')}	F5`} onClick={()=>{ commandExec('build.run'); setOpenMenu(null); }} />
-            <MenuItem label={`${t('build.runRp2350Emu', 'Run on RP2350 Emulator (slow, HW-accurate)')}	Shift+F5`} onClick={()=>{ commandExec('build.rp2350emu'); setOpenMenu(null); }} />
+            {/* Follows the selected target: rp2350 → the slow HW-accurate emulator,
+                pitrex → build the bare-metal kernel image (there is nothing to emulate). */}
+            <MenuItem label={`${buildTarget === 'pitrex'
+              ? t('build.buildPitrexKernel', 'Build PiTrex kernel (real hardware)')
+              : t('build.runRp2350Emu', 'Run on RP2350 Emulator (slow, HW-accurate)')}	Shift+F5`} onClick={()=>{ commandExec('build.rp2350emu'); setOpenMenu(null); }} />
             <MenuItem label={t('build.buildForSd', 'Build for SD (RP2350)')} onClick={()=>{ commandExec('build.sd'); setOpenMenu(null); }} />
             <MenuItem label={t('build.clean', 'Clean')} onClick={()=>{ commandExec('build.clean'); setOpenMenu(null); }} />
             <MenuSeparator />
