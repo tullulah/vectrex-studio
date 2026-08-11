@@ -162,8 +162,38 @@ void v_setIntensity(int b) { BEAM_INTENSITY((signed char)b); }
  * but LONGER vectors that drift more per vector, so they want a lower cap (more
  * frequent re-zeros) to keep glyphs/shapes landing where they belong. */
 #ifndef VPY_MAX_CONSECUTIVE_DRAWS
-#define VPY_MAX_CONSECUTIVE_DRAWS 1
+#define VPY_MAX_CONSECUTIVE_DRAWS 4
 #endif
+
+/* ── 1 -> 4 EL 2026-08-11, y la clave es que el 1 estaba compensando OTRA COSA ──
+ * El 1 se puso el 5-ago porque con 32 todo se tambaleaba. Y era cierto, pero la causa
+ * no era el presupuesto: era que **subirlo encendia automaticamente el reordenado por
+ * vecino mas cercano** (ver la nota de VPY_NO_REORDER, ahora opt-in). El reordenado
+ * ordena por proximidad sobre objetos QUE SE MUEVEN, asi que el orden de dibujo cambia
+ * entre frames y con el que valor tenia antes cada sample-and-hold — cuyo residuo depende
+ * del valor anterior. Eso baila. Un error determinista no puede temblar.
+ *
+ * Desacoplados los dos, el presupuesto se puede subir y NO tiembla.
+ *
+ * MEDIDO EN HARDWARE con Donkey Kong, con la escena FIJADA (esperando a que el contador
+ * de segmentos se estabilizara) y los dos binarios en los mismos tres cuadros:
+ *
+ *     pantalla    presup. 1   presup. 4    mejora
+ *     475 seg       17543       15789      -10,0%   (18 -> 20 fps)
+ *     424 seg       17688       13606      -23,1%
+ *     373 seg       16085       14894       -7,4%
+ *
+ * NO ES UN NUMERO, ES UN RANGO: el ahorro es proporcional a cuantos re-ceros evita cada
+ * pantalla, y eso depende de cuantas cadenas cortas tenga el dibujo.
+ *
+ * POR QUE 4 Y NO MAS: con 8 no mejora, y con 16 **el HUD tiembla cuando hay muchos
+ * vectores** — eso ya no es el reordenado, es deriva sistematica que crece con la LONGITUD
+ * de la cadena. 4 esta por debajo de ese limite con margen.
+ *
+ * OJO: esto se midio en UN JUEGO. El mecanismo generaliza (menos re-ceros = movimientos
+ * mas cortos, porque dejan de salir del centro), pero el limite de deriva depende del
+ * contenido. Un juego que se vea temblar o desplazado con esto quiere un valor menor, y
+ * se le pone en su Makefile: -DVPY_MAX_CONSECUTIVE_DRAWS=N. */
 
 /* DEFAULT 1 SINCE 2026-08-05 — measured, replacing a 32 that was making every game
  * wobble. The position error is FIXED PER MOVEMENT (the deflection lag at the end of
