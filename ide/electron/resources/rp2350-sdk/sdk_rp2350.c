@@ -186,9 +186,40 @@ void v_setIntensity(int b) { BEAM_INTENSITY((signed char)b); }
  * WITH A PER-STROKE RE-ZERO THE NEAREST-NEIGHBOUR REORDER CANNOT HELP: every move now
  * starts from the origin, so there is no inter-stroke travel left to shorten, and its
  * O(n^2) search (145 strokes ~ 21k distance tests per frame, on the game's core) is
- * pure waste. Disabled automatically rather than left as a flag someone has to
- * remember — the two settings are not independent. */
-#if VPY_MAX_CONSECUTIVE_DRAWS <= 1 && !defined(VPY_NO_REORDER)
+ * pure waste.
+ *
+ * ── EL REORDENADO ES OPT-IN (2026-08-11), Y ANTES SE ENCENDIA SOLO ─────────────
+ * Aqui habia esto:
+ *
+ *     #if VPY_MAX_CONSECUTIVE_DRAWS <= 1 && !defined(VPY_NO_REORDER)
+ *     #define VPY_NO_REORDER 1
+ *     #endif
+ *
+ * o sea que SUBIR EL PRESUPUESTO ENCENDIA EL REORDENADO automaticamente. La intencion
+ * era buena —"disabled automatically rather than left as a flag someone has to
+ * remember"— pero encadenaba las dos cosas en el sentido peligroso: quien sube el
+ * presupuesto para ahorrar zeros se lleva de propina un reordenado que no pidio.
+ *
+ * MEDIDO EN HARDWARE con Donkey Kong, pareado y con el binario de control verificado
+ * byte a byte: con el reordenado el dibujo TIEMBLA mucho; sin el, nada. Y en velocidad
+ * los dos son indistinguibles, asi que no se pierde nada.
+ *
+ * MECANISMO, y por eso no es un caso particular de un juego: un error determinista NO
+ * PUEDE TEMBLAR — con escena estatica sale igual en cada frame, quedaria torcido, no
+ * bailando. Para temblar, algo tiene que CAMBIAR entre frames. Y el reordenado ordena por
+ * proximidad sobre objetos QUE SE MUEVEN, asi que el orden de dibujo varia frame a frame,
+ * y con el que valor tenia antes cada sample-and-hold — cuyo residuo depende del valor
+ * anterior. Eso vale para cualquier juego con movimiento.
+ *
+ * Por eso no lo arreglaba ningun knob de temporizacion (Y_MUX_ECYC, T1_EXTRA_Q8): reducen
+ * el TAMANO del residuo, pero lo que baila es que el residuo cambie de SITIO.
+ *
+ * LA SALIDA BUENA, sin hacer: un reordenado ESTABLE, que fije el orden mientras la
+ * topologia de la escena no cambie en vez de recalcularlo con las posiciones nuevas cada
+ * frame. Daria los ~53 movimientos por frame que ahorra SIN el baile.
+ *
+ * Quien lo quiera, que lo pida: -DVPY_REORDER=1 */
+#if !defined(VPY_REORDER) && !defined(VPY_NO_REORDER)
 #define VPY_NO_REORDER 1
 #endif
 static int s_draws_since_zero = 0;
