@@ -61,7 +61,17 @@ set_source_files_properties(${UVM2_GAME_SRCS} PROPERTIES
     COMPILE_DEFINITIONS "main=uvm2_game_main")
 
 # Tells uvm2-sdk that crt0 owns .bss and the vector table now.
-target_compile_definitions(${UVM2_NAME} PRIVATE UVM2_PICO_RUNTIME=1 ${UVM2_GAME_DEFS})
+target_compile_definitions(${UVM2_NAME} PRIVATE UVM2_PICO_RUNTIME=1)
+
+# Los defines del juego van como OPCIONES, no como definiciones. CMake se come
+# los que llevan parentesis: -D'CCNT0(x)=do{}while(0)' entra en la lista, no da
+# ningun aviso, y no aparece en flags.make — el juego compila con CCNT0 sin
+# declarar y falla en aae-src/cpuintrf.c. Como opcion cruda llega intacto, y
+# ademas cada define es un unico elemento de argv, asi que las llaves y los
+# parentesis no pasan por ningun shell.
+foreach(def ${UVM2_GAME_DEFS})
+    target_compile_options(${UVM2_NAME} PRIVATE "-D${def}")
+endforeach()
 
 # NOT because the UVM2 is single-core — it carries the same RP2350 we do, and
 # Ralf's own games use both halves of it (core 0 fills commandBuffer[2][8K],
@@ -89,6 +99,19 @@ endif()
 # and fail to build. Scoped this way each side gets the headers it expects.
 set_source_files_properties(${UVM2_GAME_SRCS} PROPERTIES
     INCLUDE_DIRECTORIES "${UVM2_GAME_INCS}")
+
+# Cabeceras preincluidas (`-include foo.h`). Los ports aae las usan para su
+# aae_compat.h, y sin ellas el juego no compila: salen decenas de simbolos
+# "undeclared" que parecen un problema de fuentes y no lo son. Van sobre las
+# fuentes del JUEGO, como las inclusiones, para no metersela al pico-sdk.
+if(UVM2_GAME_PREINC)
+    set(UVM2_PREINC_OPTS "")
+    foreach(hdr ${UVM2_GAME_PREINC})
+        list(APPEND UVM2_PREINC_OPTS "-include" "${hdr}")
+    endforeach()
+    set_source_files_properties(${UVM2_GAME_SRCS} PROPERTIES
+        COMPILE_OPTIONS "${UVM2_PREINC_OPTS}")
+endif()
 
 target_include_directories(${UVM2_NAME} PRIVATE ${UVM2_SDK_DIR})
 target_link_libraries(${UVM2_NAME} pico_stdlib pico_multicore hardware_dma hardware_pio ${UVM2_GAME_LIBS})

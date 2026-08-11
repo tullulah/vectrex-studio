@@ -54,6 +54,15 @@ pub fn generate_uvm2_asm(
     //   word 0: initial SP  → loaded into MSP before jump
     //   word 1: Reset_Handler (Thumb addr = game_main | 1) → firmware jumps here
     // Without this, the firmware sets SP to random bytes and crashes.
+    // Bajo el pico-sdk (UVM2_PICO_RUNTIME) NADA de esto se emite: el crt0 pone su
+    // propia tabla de vectores y su propio IMAGE_DEF, y dos IMAGE_DEF en la misma
+    // imagen se estorban. `isr_svcall` es weak en el crt0, asi que uvm2_svc_handler
+    // lo sustituye sin que hagamos nada.
+    //
+    // Requiere que el fichero se ensamble con gcc y extension .S, para que pase por
+    // el preprocesador. Con .s y arm-none-eabi-as estas lineas serian texto muerto
+    // y la guarda no haria nada — silenciosamente.
+    asm.push_str("#ifndef UVM2_PICO_RUNTIME\n");
     asm.push_str("@ === ARM Cortex-M vector table (required by UVM2 firmware) ===\n");
     asm.push_str(".section .vectors, \"ax\"\n");
     asm.push_str(".align 2\n");
@@ -96,6 +105,12 @@ pub fn generate_uvm2_asm(
     asm.push_str(".word 0x000003ff        @ LAST_ITEM\n");
     asm.push_str(".word 0x00000000        @ sin bloque siguiente\n");
     asm.push_str(".word 0xab123579        @ marca de fin\n");
+    asm.push_str("#endif  /* UVM2_PICO_RUNTIME */\n");
+    // El envoltorio del pico-sdk (uvm2_pico_main.c) llama a uvm2_game_main(). En
+    // el camino propio la tabla de vectores apunta a game_main. Un alias deja los
+    // dos caminos contentos sin duplicar codigo ni renombrar nada.
+    asm.push_str(".global uvm2_game_main\n");
+    asm.push_str(".thumb_set uvm2_game_main, game_main\n");
     asm.push_str("\n");
     // Default handler: safe infinite loop (avoids runaway on unexpected exceptions)
     asm.push_str(".thumb_func\n_uvm2_default_handler:\n    b _uvm2_default_handler\n\n");

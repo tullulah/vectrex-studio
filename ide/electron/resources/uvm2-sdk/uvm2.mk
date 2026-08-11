@@ -61,17 +61,78 @@ $(UVM2_BUILD)/svc_bridge.o: $(RP2350_SDK)/sdk_rp2350.c | $(UVM2_BUILD)
 # must not pull the C++ driver in.
 UVM2_LINKER = $(if $(UVM2_CXXSRCS),$(UVM2_CXX),$(UVM2_CC))
 
+# ─── El enlazado va por el pico-sdk, NO por uvm2_start.s ────────────────────
+#
+# Esta regla enlazaba a mano con uvm2_start.s + uvm2_game.ld. Ese camino produce
+# imagenes que arrancan pero DIBUJAN UN SEGMENTO FANTASMA ILUMINADO desde el
+# origen, uno por frame.
+#
+# MEDIDO en consola 2026-08-11, mismo juego (dkong) y mismo uvm2-sdk:
+#   por aqui (uvm2_start.s):        fantasma
+#   por uvm2_pico.cmake (pico-sdk): limpio
+# Y no esta en el dibujo: la lista de comandos leida POR SWD del cartucho
+# mientras dibujaba tenia exactamente los comandos que encienden el haz que debe
+# tener. Un trazo que empieza en el origen —frame sin ningun movimiento— mostraba
+# el fantasma igual, y el mismo binario lo hacia en dos consolas distintas.
+# Lo que cambia es el arranque: uvm2_cpu_init() no toca los relojes, y bajo el
+# pico-sdk el crt0 hace el runtime_init completo (ademas del IMAGE_DEF y del
+# init del RCP que una imagen que NO pasa por el bootrom necesita).
+#
+# uvm2_pico.cmake existe desde el 2026-08-04 y esta migracion quedo pendiente;
+# mientras tanto todos los juegos siguieron saliendo por el camino muerto. Se
+# hace AQUI, una vez, y la heredan todos los que ya incluyen este fichero.
+#
+# El cmake quiere las inclusiones, los defines y las librerias por separado, asi
+# que se extraen de los mismos UVM2_CFLAGS/UVM2_LDLIBS que el juego ya define.
+empty :=
+space := $(empty) $(empty)
+semi  := ;
+list   = $(subst $(space),$(semi),$(strip $1))
+
+UVM2_PICO_SDK ?= $(HOME)/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk
+# Homebrew's arm-none-eabi-gcc has no nosys.specs — this toolchain does.
+UVM2_ARM_TOOLCHAIN ?= /Applications/ArmGNUToolchain/15.2.rel1/arm-none-eabi
+UVM2_CMAKE_BUILD   ?= $(UVM2_BUILD)/pico
+
+# `-include foo.h` son DOS palabras, asi que un $(filter) simple se queda con el
+# flag y tira la cabecera. Se pegan antes de filtrar. Sin esto, aae_speedfrk y
+# los demas aae —que preincluyen su aae_compat.h— fallan con medio fichero de
+# simbolos "undeclared", que no parece un problema de flags sino de fuentes.
+UVM2_CFLAGS_GLUED = $(subst -include ,-include=,$(UVM2_CFLAGS_CLEAN))
+
+# Y las comillas simples de defines como -D'CCNT0(x)=do{}while(0)' son cosa del
+# shell: al pasar por cmake sobreviven literales y el define sale con comillas
+# dentro. Fuera.
+quote := '
+# Fuentes que sobran EN ESTE CAMINO, no en el juego. libc_stub.c existe en los 41
+# ports aae porque el enlazado viejo iba con -nostdlib y habia que rellenar exit,
+# fclose y compania a mano. El pico-sdk trae newlib, asi que los stubs chocan con
+# el de verdad: "multiple definition of 'exit'". Se quitan aqui, que es donde se
+# sabe por que camino vamos; el juego sigue teniendolos para su build rp2350.
+UVM2_SRCS_DROP ?= libc_stub.c
+UVM2_SRCS_KEPT  = $(foreach s,$(UVM2_SRCS) $(UVM2_CXXSRCS),\
+                    $(if $(filter $(UVM2_SRCS_DROP),$(notdir $(s))),,$(s)))
+UVM2_GAME_SRCS   = $(abspath $(UVM2_SRCS_KEPT) $(RP2350_SDK)/sdk_rp2350.c)
+UVM2_GAME_INCS   = $(abspath $(patsubst -I%,%,$(filter -I%,$(UVM2_CFLAGS_GLUED))))
+UVM2_GAME_DEFS   = $(subst $(quote),,$(patsubst -D%,%,$(filter -D%,$(UVM2_CFLAGS_GLUED))))
+UVM2_GAME_PREINC = $(abspath $(patsubst -include=%,%,$(filter -include=%,$(UVM2_CFLAGS_GLUED))))
+UVM2_GAME_LIBS   = $(patsubst -l%,%,$(filter -l%,$(UVM2_LDLIBS)))
+
 # UVM2_DEPS lets a project name generated headers the build needs first.
-uvm2: $(UVM2_DEPS) $(UVM2_SDK_OBJS) $(UVM2_BUILD)/svc_bridge.o | $(UVM2_BUILD)
-	$(UVM2_LINKER) $(UVM2_CFLAGS_CLEAN) \
-	    $(if $(UVM2_LDFLAGS_EXTRA),$(UVM2_LDFLAGS_EXTRA),-nostdlib) \
-	    -Wl,--gc-sections -Wl,-T,$(UVM2_SDK)/uvm2_game.ld \
-	    $(UVM2_SDK)/uvm2_start.s $(UVM2_SDK)/uvm2_svc_entry.s \
-	    $(UVM2_SRCS) $(UVM2_CXXSRCS) \
-	    $(UVM2_SDK_OBJS) $(UVM2_BUILD)/svc_bridge.o \
-	    $(UVM2_LDLIBS) -lgcc -o $(UVM2_BUILD)/$(UVM2_NAME).elf
-	$(UVM2_OBJCOPY) -O binary $(UVM2_BUILD)/$(UVM2_NAME).elf $(UVM2_BUILD)/$(UVM2_NAME).bin
-	$(VPY_CLI) package-um2 $(UVM2_BUILD)/$(UVM2_NAME).bin --out $(UVM2_BUILD)/$(UVM2_NAME).um2
+uvm2: $(UVM2_DEPS) | $(UVM2_BUILD)
+	cmake -S $(UVM2_SDK)/pico -B $(UVM2_CMAKE_BUILD) \
+	    -DCMAKE_BUILD_TYPE=Release \
+	    -DCMAKE_TOOLCHAIN_FILE=$(UVM2_PICO_SDK)/cmake/preload/toolchains/pico_arm_cortex_m33_gcc.cmake \
+	    -DPICO_SDK_PATH=$(UVM2_PICO_SDK) -DPICO_TOOLCHAIN_PATH=$(UVM2_ARM_TOOLCHAIN) \
+	    -DUVM2_SDK_DIR=$(UVM2_SDK) -DVPY_CLI_DIR=$(dir $(VPY_CLI)) \
+	    -DUVM2_NAME=$(UVM2_NAME) \
+	    -DUVM2_GAME_SRCS="$(call list,$(UVM2_GAME_SRCS))" \
+	    -DUVM2_GAME_INCS="$(call list,$(UVM2_GAME_INCS))" \
+	    -DUVM2_GAME_DEFS="$(call list,$(UVM2_GAME_DEFS))" \
+	    -DUVM2_GAME_PREINC="$(call list,$(UVM2_GAME_PREINC))" \
+	    -DUVM2_GAME_LIBS="$(call list,$(UVM2_GAME_LIBS))" > $(UVM2_CMAKE_BUILD).log
+	cmake --build $(UVM2_CMAKE_BUILD) -j8
+	cp $(UVM2_CMAKE_BUILD)/$(UVM2_NAME).um2 $(UVM2_BUILD)/$(UVM2_NAME).um2
 	@echo "=== Build OK (uvm2 SD game): $(UVM2_BUILD)/$(UVM2_NAME).um2 ==="
 
 $(UVM2_BUILD):
