@@ -1946,7 +1946,16 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
              .unwrap_or_default().display()))
         .arg(format!("-DUVM2_NAME={}", project_name))
         .arg(format!("-DUVM2_GAME_SRCS={}", s_path.canonicalize().unwrap_or(s_path.clone()).display()))
-        .arg("-DUVM2_GAME_DEFS=UVM2_STEP_OWNS_INIT")
+        // UVM2_DUAL_CORE=1 enciende NUESTRO core 1 dentro de la imagen
+        // (uvm2_core1.c): reproduccion, entrada, cola del PSG y ritmo de 50 Hz
+        // alli, con el mismo doble buffer y los mismos contadores que el
+        // cartucho. No confundir con VPY_DUAL_CORE, que apunta al core 1 del
+        // FIRMWARE del cartucho y aqui no existe nadie que drene el buffer.
+        .arg(if std::env::var("UVM2_DUAL_CORE").as_deref() == Ok("1") {
+            "-DUVM2_GAME_DEFS=UVM2_STEP_OWNS_INIT;UVM2_DUAL_CORE"
+        } else {
+            "-DUVM2_GAME_DEFS=UVM2_STEP_OWNS_INIT"
+        })
         .output()
         .map_err(|e| anyhow::anyhow!("cmake no encontrado: {}", e))?;
     if !cfg.status.success() {

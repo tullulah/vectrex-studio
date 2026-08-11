@@ -73,6 +73,14 @@ foreach(def ${UVM2_GAME_DEFS})
     target_compile_options(${UVM2_NAME} PRIVATE "-D${def}")
 endforeach()
 
+# DESACTUALIZADO EN UN PUNTO: lo de "nunca escribimos el consumidor de core 1"
+# ya no es cierto — uvm2_core1.c existe (reproduccion, entrada, cola del PSG y
+# ritmo de 50 Hz) y uvm2_pico_main.c lo arranca. Lo que faltaba era el
+# interruptor: se enciende con UVM2_DUAL_CORE en UVM2_GAME_DEFS (make uvm2
+# UVM2_DUAL_CORE=1, o la variable de entorno del mismo nombre para vpy_cli).
+# El rechazo de abajo sigue siendo correcto y necesario: VPY_DUAL_CORE es OTRA
+# cosa y aqui no la drena nadie.
+#
 # NOT because the UVM2 is single-core — it carries the same RP2350 we do, and
 # Ralf's own games use both halves of it (core 0 fills commandBuffer[2][8K],
 # core 1 replays it and reads the controls, handshaken through two volatile

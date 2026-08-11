@@ -118,6 +118,28 @@ UVM2_GAME_DEFS   = $(subst $(quote),,$(patsubst -D%,%,$(filter -D%,$(UVM2_CFLAGS
 UVM2_GAME_PREINC = $(abspath $(patsubst -include=%,%,$(filter -include=%,$(UVM2_CFLAGS_GLUED))))
 UVM2_GAME_LIBS   = $(patsubst -l%,%,$(filter -l%,$(UVM2_LDLIBS)))
 
+# Dual core. OJO A LOS NOMBRES, que es lo que lo tuvo apagado:
+#
+#   VPY_DUAL_CORE  = "graba los trazos en un buffer que drena el core 1 del
+#                     FIRMWARE DEL CARTUCHO". En el UVM2 no hay firmware, la
+#                     imagen es todo el programa, y nadie lo drenaria. Se filtra
+#                     arriba y uvm2_pico.cmake lo rechaza con un error.
+#   UVM2_DUAL_CORE = el nuestro, dentro de la imagen: uvm2_core1.c arranca el
+#                     core 1 y ahi ocurren la reproduccion, la entrada, la cola
+#                     del PSG y el ritmo de 50 Hz. Mismo mecanismo que el
+#                     cartucho: doble buffer por frame&1 y dos contadores
+#                     monotonos con dmb.
+#
+# Estaba escrito entero y NADIE lo definia. No hace el dibujo mas rapido —lo
+# marca el reloj de 1,5 MHz de la Vectrex— sino que solapa la logica del juego
+# con el barrido del haz, que es lo que hace Ralf con su reparto.
+#
+#   make uvm2 UVM2_DUAL_CORE=1
+UVM2_DUAL_CORE ?= 0
+ifeq ($(UVM2_DUAL_CORE),1)
+UVM2_GAME_DEFS += UVM2_DUAL_CORE
+endif
+
 # UVM2_DEPS lets a project name generated headers the build needs first.
 uvm2: $(UVM2_DEPS) | $(UVM2_BUILD)
 	cmake -S $(UVM2_SDK)/pico -B $(UVM2_CMAKE_BUILD) \
