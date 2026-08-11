@@ -77,6 +77,25 @@ pub fn generate_uvm2_asm(
     }
     // 52 external IRQs
     asm.push_str(".rept 52\n.word _uvm2_default_handler\n.endr\n");
+    // === IMAGE_DEF ===
+    // El RP2350 no reconoce una imagen sin este bloque, y sin reconocerla no la
+    // ejecuta: LED apagado, pantalla negra, ni una pista. Es la SEGUNDA vez que
+    // nos rompe la cadena UVM2 — la primera se tapo compilando aquel objetivo con
+    // el pico-sdk, que lo emite solo; estos dos emisores escritos a mano no.
+    //
+    // MEDIDO: Asteroids_0_1a.um2 y Centipede_0_3a.um2 —las dos imagenes de
+    // referencia que SI arrancan— lo llevan en payload+0x15c, y las siete palabras
+    // son identicas byte a byte en ambas. Ninguna imagen nuestra lo tenia.
+    //
+    // El gemelo de esto vive en uvm2-sdk/uvm2_start.s (camino C/SBT). Los dos
+    // tienen que decir lo mismo.
+    asm.push_str(".word 0xffffded3        @ marca de inicio de bloque\n");
+    asm.push_str(".word 0x10210142        @ IMAGE_DEF: ejecutable, ARM, RP2350\n");
+    asm.push_str(".word 0x00000203        @ item VECTOR_TABLE, 2 palabras\n");
+    asm.push_str(".word 0x20000000        @   -> la tabla esta en la base de la carga\n");
+    asm.push_str(".word 0x000003ff        @ LAST_ITEM\n");
+    asm.push_str(".word 0x00000000        @ sin bloque siguiente\n");
+    asm.push_str(".word 0xab123579        @ marca de fin\n");
     asm.push_str("\n");
     // Default handler: safe infinite loop (avoids runaway on unexpected exceptions)
     asm.push_str(".thumb_func\n_uvm2_default_handler:\n    b _uvm2_default_handler\n\n");
