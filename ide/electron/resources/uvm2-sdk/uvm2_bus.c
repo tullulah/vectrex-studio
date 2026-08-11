@@ -140,10 +140,40 @@ uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
      * command stream (s_count = 0, verified over SWD 2026-08-04).
      *
      * Ralf's executor does `... | c_ReadWriteMask` here for exactly this reason,
-     * which is why his game never showed it. */
-    UVM2_WAIT_CLK_HIGH();
+     * which is why his game never showed it.
+     *
+     * PERO SOLO SE COPIO LA MITAD. El suyo es:
+     *
+     *     gpio_put_masked (c_HaltModeOutputs, c_VIABase | 0xC00 | c_ReadWriteMask);
+     *                                                     ^^^^^ registro 0xC = PCR
+     *
+     * El R/W alto y el registro son DOS defensas, no una. El R/W alto dice "esto
+     * es una lectura"; el registro elige QUE se rompe si esa lectura no se
+     * respeta. Con el registro a 0 lo que se escribe es PORT B = 0x00: mux
+     * habilitado y /RAMP CORRIENDO, o sea un trazo. Con el registro a 0xC lo que
+     * se escribe es PCR = 0x00, que deja CB2 bajo —haz apagado— y no mueve nada.
+     *
+     * El fantasma sobrevivio a quitar el dibujo, la entrada y el audio, y la
+     * lista de comandos impresa en el host sale limpia (los dos movimientos con
+     * el haz apagado, solo los dos trazos encendidos). Lo unico que queda fuera
+     * de la lista es este preambulo.
+     *
+     * Y LA FASE TAMPOCO ERA LA SUYA. El suyo, con Start = CLK bajo y End = CLK alto:
+     *
+     *     Start(); End(); gpio_put_masked(preambulo); Start();
+     *
+     * o sea: pone con CLK ALTO y lo mantiene hasta que CLK baja — la misma fase
+     * que usan sus comandos, y que los nuestros. El nuestro hacia lo contrario
+     * (HIGH, LOW, poner), asi que cambiaba direccion y R/W con CLK BAJO. El pin
+     * es ~E, luego CLK bajo es E ALTA: cambiabamos el bus en mitad de E alta,
+     * que es precisamente lo que este proyecto tiene escrito que no se hace, y
+     * el flanco siguiente lo engancha igual. Los comandos estaban bien; el
+     * preambulo, que es lo unico que queda fuera de la lista, no. */
     UVM2_WAIT_CLK_LOW();
-    uvm2_put_masked(UVM2_VIA_BASE_BITS | UVM2_RW_MASK, UVM2_BUS_MASK);
+    UVM2_WAIT_CLK_HIGH();
+    uvm2_put_masked(UVM2_VIA_BASE_BITS | UVM2_RW_MASK | (UVM2_VIA_PCR << 8),
+                    UVM2_BUS_MASK);
+    UVM2_WAIT_CLK_LOW();
 
     while (count--) {
         uint32_t c     = *cmds++;
@@ -217,8 +247,17 @@ void uvm2_via_write(uint32_t reg, uint32_t data)
     UVM2_WAIT_CLK_HIGH();
     uvm2_put_masked(out, UVM2_BUS_MASK);          /* R/W low = write */
     UVM2_WAIT_CLK_LOW();
+
+    /* El aparcado va con CLK ALTO, no aqui. Estaba justo detras del WAIT_CLK_LOW,
+     * o sea que cambiaba la direccion y el R/W con E ALTA — el mismo error de
+     * fase que tenia el preambulo del ejecutor, y en el camino que mas se usa:
+     * cada escritura del PSG y cada paso de la lectura de mandos pasa por aqui.
+     * Ralf ni siquiera aparca por escritura: su WriteVia termina en el flanco y
+     * el aparcado ocurre una sola vez, en EndDirectViaMode, con un
+     * WaitForBusCycleEnd() delante. */
+    UVM2_WAIT_CLK_HIGH();
     uvm2_put_masked(UVM2_PARK_BITS, UVM2_BUS_MASK & ~UVM2_DATA_MASK);
-    uvm2_single_cycles++;
+    uvm2_single_cycles += 2;
 }
 
 uint8_t uvm2_via_read(uint32_t reg)

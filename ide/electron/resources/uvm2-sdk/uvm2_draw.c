@@ -257,10 +257,17 @@ void uvm2_draw_reset(void)
     s_pos_y = 0;
 }
 
+/* Ultima intensidad pedida, que SOBREVIVE al frame. via_setup() ceba Z a 0 cada
+ * frame, asi que sin esto el hueco entre soltar la pinza y el primer SET_INTENSITY
+ * del juego se recorre con Z desconocido. Ralf no tiene ese hueco: pone Z y
+ * DESPUES suelta la pinza (SetZ(0x5F); SetZero(false);). */
+static int s_z_last = 0;
+
 void uvm2_draw_intensity(int brightness)
 {
     if (brightness < 0)   brightness = 0;
     if (brightness > 127) brightness = 127;
+    s_z_last = brightness;
     set_z(brightness, UVM2_HOLD_DELAY);
 }
 
@@ -374,6 +381,16 @@ void uvm2_frame_begin(void)
     via_setup();
 #endif
 
+    /* Reponer la intensidad ANTES de soltar la pinza, como el escritor de Ralf:
+     *
+     *     commandWriter.SetZ(0x5F);
+     *     commandWriter.SetZero(false);
+     *
+     * via_setup() acaba de cebar Z a 0, y el juego no pondra la suya hasta su
+     * primer SET_INTENSITY. Entre esas dos cosas hay comandos que corren con la
+     * pinza ya suelta y con Z en un valor que no eligio nadie. */
+    set_z(s_z_last, UVM2_HOLD_DELAY);
+
     /* Only now release the clamp that has held the beam at centre since the
      * last frame ended.  The clamp covers the whole inter-frame gap and the
      * priming above, so no drift reaches the screen and the holds are charged
@@ -387,9 +404,17 @@ void uvm2_frame_end(void)
 {
     uint32_t cycles = 0;
 
-    /* Blanked already (every lit segment restores the PCR), so just clamp the
-     * beam at centre: an idle integrator drifts, and a drifting beam is a
-     * bright dot burned into the middle of the screen. */
+    /* APAGAR EXPLICITAMENTE, no darlo por hecho. Aqui decia "blanked already
+     * (every lit segment restores the PCR)", que es una SUPOSICION: solo se
+     * cumple si el frame termino en un segmento iluminado. Un frame sin dibujo,
+     * o que acabe en un movimiento, o en texto, sale de aqui con el haz como
+     * estuviera. Ralf no lo supone: emite SetBlank(true) al cerrar cada frame.
+     * Cuesta un comando. */
+    s_pcr = (uint8_t)(s_pcr & ~UVM2_PCR_BLANK_OFF);
+    emit(UVM2_VIA_PCR, s_pcr, 0);
+
+    /* Y ahora si, pinzar el haz en el centro: un integrador parado deriva, y un
+     * haz que deriva es un punto brillante quemado en mitad de la pantalla. */
     set_zero(1, UVM2_ZERO_BASE + s_scale / 4u);
     s_pos_x = 0;
     s_pos_y = 0;

@@ -104,12 +104,26 @@ void uvm2_runtime_init(void)
      * for less of it, so short vectors come out dimmer. Same bargain as the cart's
      * MIN_T1 floor. Turn it back off with uvm2_draw_set_fixup(0) if that costs more
      * than the refresh rate buys. */
+    /* El "sale grande y luego encoge" NO era esto: era el prime_holds cebando contra
+     * integradores libres (ver el WAIT_RECAL de abajo). Se probo con fixup=0 y el
+     * fantasma seguia, asi que vuelve a 1: lo que compra esta MEDIDO —dkong gastaba
+     * 140911 ciclos de bus por frame contra un presupuesto de 30000— y Ralf lo tenga
+     * comentado no es razon para pagar eso. */
     uvm2_draw_set_fixup(1);
     /* Analog stick. It was implemented all along (read_axis_analog is the BIOS
      * SAR) but s_analog defaulted to 0 and nobody turned it on, so every game got
      * a -1/0/1 verdict. Asteroids and the rest are analog games on real hardware
      * and the cart reads them that way. */
     uvm2_input_set_analog(1);
+    /* Poner el PSG en un estado conocido. NADIE lo hacia: uvm2_stop_music() es
+     * la unica funcion que escribe el registro 7, y solo se llama al parar la
+     * musica, asi que al arrancar ese registro se quedaba como lo hubiera dejado
+     * el 6809 antes de que lo halteramos. El bit 6 del registro 7 es la DIRECCION
+     * del puerto A del PSG, y ahi es donde viven los botones: si quedo como
+     * salida, leer el registro 14 devuelve el latch en vez de los mandos, y los
+     * botones salen pulsados solos. De paso deja los tres volumenes a cero, que
+     * es el estado sano para arrancar. */
+    uvm2_stop_music();
     uvm2_frame_begin();
     uvm2_led_status(UVM2_STATUS_RUNNING);
 }
@@ -171,10 +185,23 @@ void uvm2_svc_dispatch(uint32_t *frame)
 #endif /* UVM2_DUAL_CORE */
 
         uvm2_frame_begin();
-        /* First commands of the new frame: put the zero reference and the Y/Z
-         * holds back where the analog read left them. Must come after
-         * frame_begin so they are part of the new stream. */
-        uvm2_draw_prime_holds();
+        /* AQUI HABIA UN uvm2_draw_prime_holds(), y era un SEGUNDO cebado hecho
+         * al lado equivocado de la pinza de cero.
+         *
+         * frame_begin() termina soltando la pinza, asi que esta llamada cebaba
+         * los tres sample-and-hold —incluida la referencia de cero— contra unos
+         * integradores YA LIBRES. Es exactamente la divergencia que ya
+         * diagnosticamos contra el escritor de Ralf en 2026-08-04: "priming
+         * against a free-running integrator measures the drift instead of a
+         * reference — this is the square that starts the right size and then
+         * shrinks and skews". Observado en consola hoy: "primero sale grande y
+         * luego se reduce la escala".
+         *
+         * Su intencion (el comentario decia "must come after frame_begin so they
+         * are part of the new stream") ya la cumple via_setup(), que ceba los
+         * mismos tres canales al principio de frame_begin con la pinza PUESTA.
+         * Asi que esto no solo estaba mal colocado: sobraba. De paso ponia
+         * s_z = 0, tirando la intensidad que frame_begin acababa de reponer. */
         break;
 
 #ifdef UVM2_NO_DRAW

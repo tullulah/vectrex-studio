@@ -18,10 +18,29 @@
 #include "uvm2_bus.h"
 #include "uvm2_input.h"
 
-/* Port B control bytes for the AY-3-8910 handshake (BC1 = bit 3, BDIR = bit 4). */
-#define PSG_LATCH_ADDR  0x19u   /* BDIR | BC1 → latch the register number */
-#define PSG_READ        0x09u   /* BC1        → put the register on the bus */
-#define PSG_INACTIVE    0x01u
+/* Port B control bytes for the AY-3-8910 handshake (BC1 = bit 3, BDIR = bit 4).
+ *
+ * EL BIT 7 VA DENTRO DE LA CONSTANTE, no en el sitio de uso. PB7 es /RAMP, y
+ * estos bytes salen por Port B mientras Port A —que ES el DAC del haz— lleva el
+ * numero de registro y luego el valor. Con el bit 7 a cero los integradores
+ * corren libres con esa basura en el DAC: un segmento brillante desde el origen
+ * en direccion arbitraria, en CADA acceso al PSG. Y hay uno por frame de sonido
+ * y otro por lectura de mandos.
+ *
+ * Los lectores de ejes ya se protegian escribiendo UVM2_PB_RAMP_OFF | ... en
+ * cada linea; uvm2_psg_write, uvm2_psg_read y uvm2_read_buttons se quedaron
+ * fuera. Poniendolo en la definicion, ningun sitio de uso puede olvidarlo.
+ *
+ * El PSG no se entera: solo mira BC1 (bit 3) y BDIR (bit 4). Bit 0 = 1 en los
+ * tres deja ademas el mux analogico deshabilitado, que es lo que ya hacian.
+ *
+ * Ya estaba MEDIDO que esta ventana era la culpable, en el propio fichero mas
+ * abajo: "con la lectura de entrada quitada del todo los vectores fantasma
+ * bajaron de 4-5 a 1" (hardware, 2026-08-04). */
+#define PSG_LATCH_ADDR  (UVM2_PB_RAMP_OFF | 0x19u)  /* BDIR | BC1 → latch reg nº */
+#define PSG_READ        (UVM2_PB_RAMP_OFF | 0x09u)  /* BC1  → reg on the bus     */
+#define PSG_INACTIVE    (UVM2_PB_RAMP_OFF | 0x01u)
+#define PSG_WRITE       (UVM2_PB_RAMP_OFF | 0x11u)  /* BDIR → write to the PSG   */
 
 /* PSG register 14 carries both joystick button ports: bits 0-3 = J1,
  * bits 4-7 = J2, active low. */
@@ -167,7 +186,7 @@ void uvm2_psg_write(uint32_t reg, uint32_t value)
     uvm2_via_write(UVM2_VIA_PORTB, PSG_INACTIVE);
 
     uvm2_via_write(UVM2_VIA_PORTA, value & 0xFFu);
-    uvm2_via_write(UVM2_VIA_PORTB, 0x11u);          /* BDIR → write to the PSG */
+    uvm2_via_write(UVM2_VIA_PORTB, PSG_WRITE);
     uvm2_via_write(UVM2_VIA_PORTB, PSG_INACTIVE);
     uvm2_via_write(UVM2_VIA_PORTB, UVM2_PB_IDLE);
 }
