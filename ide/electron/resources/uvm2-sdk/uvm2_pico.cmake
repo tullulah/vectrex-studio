@@ -123,6 +123,17 @@ target_link_libraries(${UVM2_NAME} pico_stdlib pico_multicore hardware_dma hardw
 # actually happen; without this every libvpy builtin faults on its first svc.
 target_link_options(${UVM2_NAME} PRIVATE -Wl,--undefined=uvm2_svc_handler)
 
+# VPY_RAM. Los programas VPy guardan sus variables en direcciones ABSOLUTAS
+# (0x2007C000..0x20080000, ver vpy_codegen arm/ram_layout.rs). uvm2_game.ld tenia
+# una region para ellas; el script del pico-sdk no, su RAM llega a 0x20080000 y
+# puede poner .bss justo encima — corrupcion silenciosa en un juego grande.
+#
+# El .S generado declara una seccion .vpyram vacia (NOBITS) y esto la fija ahi:
+# si .bss llegara a solaparla, ld lo dice y el build FALLA, que es infinitamente
+# mejor que descubrirlo en la pantalla. Para juegos en C la seccion no existe y
+# la opcion no hace nada.
+target_link_options(${UVM2_NAME} PRIVATE -Wl,--section-start=.vpyram=0x2007C000)
+
 # No USB/UART stdio: the cart has neither, and enabling it drags TinyUSB into a
 # 50 Hz draw loop.
 pico_enable_stdio_uart(${UVM2_NAME} 0)

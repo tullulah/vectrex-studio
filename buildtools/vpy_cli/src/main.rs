@@ -1862,143 +1862,129 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         .or_else(|| vpyproj_project_name(input))
         .unwrap_or_else(|| project_dir.file_name().and_then(|n| n.to_str()).unwrap_or("output").to_string());
 
-    let s_path   = build_dir.join(format!("{}.s",   project_name));
+    let s_path   = build_dir.join(format!("{}.S",   project_name));
     let asm_path = build_dir.join(format!("{}.asm", project_name));
-    let o_path   = build_dir.join(format!("{}.o",   project_name));
-    let elf_path = build_dir.join(format!("{}.elf", project_name));
-    let bin_path = output.unwrap_or_else(|| build_dir.join(format!("{}.bin", project_name)));
+    // El .o y el .elf los produce cmake dentro de build/uvm2/, no nosotros.
 
+    // El nombre TIENE que quedar en .S mayuscula: gcc solo pasa el preprocesador
+    // con esa extension, y las guardas #ifndef UVM2_PICO_RUNTIME del codegen
+    // dependen de el. En macOS el sistema de ficheros no distingue mayusculas, asi
+    // que si de un build anterior quedaba un "<juego>.s", escribir "<juego>.S"
+    // reutiliza ESE fichero y conserva el nombre viejo: cmake lo compila como .s,
+    // sin preprocesador, y las guardas se vuelven texto muerto EN SILENCIO. El
+    // sintoma es una imagen con DOS bloques IMAGE_DEF —el nuestro y el del crt0—
+    // y el entry equivocado. Se borra el viejo antes de escribir.
+    let stale = s_path.with_extension("s");
+    let _ = std::fs::remove_file(&stale);
     std::fs::write(&s_path, &generated.asm_source)
         .with_context(|| format!("Failed to write {}", s_path.display()))?;
     std::fs::copy(&s_path, &asm_path)
         .with_context(|| format!("Failed to write {}", asm_path.display()))?;
     println!("  {} ARM ASM written: {}", "✓".green(), s_path.display());
 
-    // The UVM2 SDK carries its own linker script alongside the runtime it links.
+    // ── Enlazado: por el pico-sdk, NO a mano ──────────────────────────────
+    //
+    // Aqui se ensamblaba con arm-none-eabi-as, se compilaba el uvm2-sdk a mano y
+    // se enlazaba contra uvm2_game.ld. Ese camino produce imagenes que arrancan
+    // pero DIBUJAN UN SEGMENTO FANTASMA ILUMINADO desde el origen, uno por frame.
+    //
+    // MEDIDO en consola 2026-08-11 con dkong, mismo juego y mismo uvm2-sdk por
+    // los dos caminos: por el de mano, fantasma; por uvm2_pico.cmake, limpio. Y
+    // no esta en el dibujo — la lista de comandos leida por SWD del cartucho
+    // tenia exactamente los comandos que encienden el haz que debia tener. Lo que
+    // cambia es el arranque: el crt0 del pico-sdk hace el runtime_init completo
+    // (relojes, RCP, IMAGE_DEF) y nuestro uvm2_cpu_init() no toca los relojes.
+    //
+    // Los juegos en C ya se migraron en uvm2.mk; esto es lo mismo para VPy.
     let sdk_dir = find_uvm2_sdk_dir().ok_or_else(|| anyhow::anyhow!(
         "UVM2 SDK not found (expected ide/electron/resources/uvm2-sdk, or set UVM2_SDK_DIR).\n\
          It provides the halt-mode bus, the beam runtime and the SVCall handler —\n\
          without it the image has no implementation for any VPy builtin."))?;
-    // One source of truth: the script ships with the SDK it belongs to.
-    let ld_path = sdk_dir.join("uvm2_game.ld");
+
+    // El pico-sdk vive en el checkout de Ralf: esta en .gitignore y pesa 391 MB,
+    // asi que no se puede asumir la ruta sin decirlo. UVM2_PICO_SDK la sustituye.
+    let pico_sdk = std::env::var("UVM2_PICO_SDK").map(PathBuf::from).unwrap_or_else(|_| {
+        PathBuf::from(std::env::var("HOME").unwrap_or_default())
+            .join("projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk")
+    });
+    if !pico_sdk.join("cmake/preload/toolchains/pico_arm_cortex_m33_gcc.cmake").exists() {
+        return Err(anyhow::anyhow!(
+            "pico-sdk no encontrado en {}.\n\
+             El objetivo uvm2 enlaza por el pico-sdk (uvm2_pico.cmake): el camino\n\
+             viejo, hecho a mano, dibuja un vector fantasma por frame.\n\
+             Ponlo con UVM2_PICO_SDK=<ruta>.", pico_sdk.display()));
+    }
+    // Homebrew's arm-none-eabi-gcc has no nosys.specs — this toolchain does.
+    let arm_tc = std::env::var("UVM2_ARM_TOOLCHAIN")
+        .unwrap_or_else(|_| "/Applications/ArmGNUToolchain/15.2.rel1/arm-none-eabi".into());
+
+    let cmake_build = build_dir.join("uvm2");
     if verbose {
-        println!("  UVM2 SDK:      {}", sdk_dir.display());
-        println!("  Linker script: {}", ld_path.display());
+        println!("  UVM2 SDK:  {}", sdk_dir.display());
+        println!("  pico-sdk:  {}", pico_sdk.display());
     }
 
-    println!("\n{}", "Phase 4: ARM Assemble".bright_cyan().bold());
-    let as_out = Command::new("arm-none-eabi-as")
-        .args(["-mthumb", "-mcpu=cortex-m33", "-mfpu=fpv5-sp-d16",
-               s_path.to_str().unwrap(), "-o", o_path.to_str().unwrap()])
-        .output();
-    match as_out {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound =>
-            return Err(anyhow::anyhow!("arm-none-eabi-as not found. Install gcc-arm-embedded.")),
-        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-as: {}", e)),
-        Ok(out) => {
-            if !out.status.success() {
-                return Err(anyhow::anyhow!("arm-none-eabi-as failed:\n{}",
-                    String::from_utf8_lossy(&out.stderr)));
-            }
-            println!("  {} Assembled: {}", "✓".green(), o_path.display());
-        }
-    }
-
-    // Phase 4b: the UVM2 runtime. Compiled per build rather than shipped
-    // prebuilt so a change to the beam timing is one rebuild away, and archived
-    // so the linker only pulls the parts a program actually references.
-    println!("\n{}", "Phase 4b: UVM2 SDK".bright_cyan().bold());
-    let arm_gcc = find_arm_gcc();
-    let sdk_sources = ["uvm2_bus.c", "uvm2_draw.c", "uvm2_input.c", "uvm2_led.c", "uvm2_text.c", "uvm2_audio.c", "uvm2_svc.c"];
-    let mut sdk_objects: Vec<PathBuf> = Vec::new();
-
-    for src in sdk_sources {
-        let src_path = sdk_dir.join(src);
-        let obj_path = build_dir.join(format!("uvm2_{}.o", src.trim_end_matches(".c")));
-        let out = Command::new(&arm_gcc)
-            .args(["-mcpu=cortex-m33", "-mthumb", "-mfloat-abi=softfp", "-mfpu=fpv5-sp-d16",
-                   "-Os", "-ffreestanding", "-std=c11", "-Wall",
-                   "-ffunction-sections", "-fdata-sections"])
-            .arg(format!("-I{}", sdk_dir.display()))
-            .args(["-c", src_path.to_str().unwrap(), "-o", obj_path.to_str().unwrap()])
-            .output()
-            .map_err(|e| anyhow::anyhow!("arm-none-eabi-gcc not found: {}", e))?;
-        if !out.status.success() {
-            return Err(anyhow::anyhow!("UVM2 SDK compile failed ({}):\n{}",
-                src, String::from_utf8_lossy(&out.stderr)));
-        }
-        sdk_objects.push(obj_path);
-    }
-
-    let svc_s   = sdk_dir.join("uvm2_svc_entry.s");
-    let svc_obj = build_dir.join("uvm2_svc_entry.o");
-    let out = Command::new("arm-none-eabi-as")
-        .args(["-mthumb", "-mcpu=cortex-m33",
-               svc_s.to_str().unwrap(), "-o", svc_obj.to_str().unwrap()])
+    println!("\n{}", "Phase 4: CMake configure (pico-sdk)".bright_cyan().bold());
+    // UVM2_STEP_OWNS_INIT: el codegen ya inyecta `bl uvm2_runtime_init` como
+    // primera instruccion de game_main, asi que uvm2_pico_main.c NO debe volver
+    // a llamarlo. Sin esto el runtime se inicializa dos veces por arranque.
+    let cfg = Command::new("cmake")
+        .args(["-S", sdk_dir.join("pico").to_str().unwrap(),
+               "-B", cmake_build.to_str().unwrap(),
+               "-DCMAKE_BUILD_TYPE=Release"])
+        .arg(format!("-DCMAKE_TOOLCHAIN_FILE={}",
+             pico_sdk.join("cmake/preload/toolchains/pico_arm_cortex_m33_gcc.cmake").display()))
+        .arg(format!("-DPICO_SDK_PATH={}", pico_sdk.display()))
+        .arg(format!("-DPICO_TOOLCHAIN_PATH={}", arm_tc))
+        .arg(format!("-DUVM2_SDK_DIR={}", sdk_dir.display()))
+        // uvm2_pico.cmake envuelve el .bin en .um2 llamando a vpy_cli. Somos
+        // nosotros: se le pasa nuestro propio directorio en vez de confiar en
+        // que este en el PATH, que es como se queda sin empaquetar y solo avisa
+        // con un WARNING facil de pasar por alto.
+        .arg(format!("-DVPY_CLI_DIR={}", std::env::current_exe().ok()
+             .and_then(|e| e.parent().map(|d| d.to_path_buf()))
+             .unwrap_or_default().display()))
+        .arg(format!("-DUVM2_NAME={}", project_name))
+        .arg(format!("-DUVM2_GAME_SRCS={}", s_path.canonicalize().unwrap_or(s_path.clone()).display()))
+        .arg("-DUVM2_GAME_DEFS=UVM2_STEP_OWNS_INIT")
         .output()
-        .map_err(|e| anyhow::anyhow!("arm-none-eabi-as not found: {}", e))?;
-    if !out.status.success() {
-        return Err(anyhow::anyhow!("UVM2 SVC shim assemble failed:\n{}",
-            String::from_utf8_lossy(&out.stderr)));
+        .map_err(|e| anyhow::anyhow!("cmake no encontrado: {}", e))?;
+    if !cfg.status.success() {
+        return Err(anyhow::anyhow!("cmake configure fallo:\n{}\n{}",
+            String::from_utf8_lossy(&cfg.stdout), String::from_utf8_lossy(&cfg.stderr)));
     }
-    sdk_objects.push(svc_obj);
-    println!("  {} Built UVM2 runtime ({} objects)", "✓".green(), sdk_objects.len());
+    println!("  {} configurado en {}", "✓".green(), cmake_build.display());
 
-    println!("\n{}", "Phase 5: ARM Link".bright_cyan().bold());
-    let mut ld_args: Vec<String> = vec![
-        "-T".into(), ld_path.to_str().unwrap().into(),
-        o_path.to_str().unwrap().into(),
-    ];
-    for obj in &sdk_objects { ld_args.push(obj.to_str().unwrap().into()); }
-    ld_args.push("-o".into());
-    ld_args.push(elf_path.to_str().unwrap().into());
-
-    let ld_out = Command::new("arm-none-eabi-ld").args(&ld_args).output();
-    match ld_out {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound =>
-            return Err(anyhow::anyhow!("arm-none-eabi-ld not found.")),
-        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-ld: {}", e)),
-        Ok(out) => {
-            if !out.status.success() {
-                return Err(anyhow::anyhow!("arm-none-eabi-ld failed:\n{}",
-                    String::from_utf8_lossy(&out.stderr)));
-            }
-            println!("  {} Linked: {}", "✓".green(), elf_path.display());
-        }
+    println!("\n{}", "Phase 5: Build + link".bright_cyan().bold());
+    let bld = Command::new("cmake")
+        .args(["--build", cmake_build.to_str().unwrap(), "-j8"])
+        .output()
+        .map_err(|e| anyhow::anyhow!("cmake --build fallo: {}", e))?;
+    if !bld.status.success() {
+        return Err(anyhow::anyhow!("build fallo:\n{}\n{}",
+            String::from_utf8_lossy(&bld.stdout), String::from_utf8_lossy(&bld.stderr)));
     }
+    println!("  {} enlazado", "✓".green());
 
-    println!("\n{}", "Phase 6: Extract Binary".bright_cyan().bold());
-    let oc_out = Command::new("arm-none-eabi-objcopy")
-        .args(["-O", "binary", elf_path.to_str().unwrap(), bin_path.to_str().unwrap()])
-        .output();
-    match oc_out {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound =>
-            return Err(anyhow::anyhow!("arm-none-eabi-objcopy not found.")),
-        Err(e) => return Err(anyhow::anyhow!("Failed to invoke arm-none-eabi-objcopy: {}", e)),
-        Ok(out) => {
-            if !out.status.success() {
-                return Err(anyhow::anyhow!("arm-none-eabi-objcopy failed:\n{}",
-                    String::from_utf8_lossy(&out.stderr)));
-            }
-        }
+    // uvm2_pico.cmake ya empaqueta el .um2 como paso posterior al enlazado.
+    println!("\n{}", "Phase 6: UM2".bright_cyan().bold());
+    let built_um2 = cmake_build.join(format!("{}.um2", project_name));
+    if !built_um2.exists() {
+        return Err(anyhow::anyhow!(
+            "el build no dejo {}. uvm2_pico.cmake empaqueta el .um2 con vpy_cli:\n\
+             si no lo encuentra, avisa con un WARNING y solo deja el .bin.",
+            built_um2.display()));
     }
-
-    let bin_size = std::fs::metadata(&bin_path).map(|m| m.len()).unwrap_or(0);
-    println!("  {} Binary: {} ({} bytes)", "✓".green(), bin_path.display(), bin_size);
-
-    // Phase 7: Wrap with UM2 header for SD card (UVM2 game format)
-    println!("\n{}", "Phase 7: UM2 Package".bright_cyan().bold());
     let um2_path = build_dir.join(format!("{}.um2", project_name));
-    let bin_data = std::fs::read(&bin_path)
-        .with_context(|| format!("Failed to read binary for UM2 packaging: {}", bin_path.display()))?;
-    let um2_data = build_um2(&bin_data, 0x20000000u32);
-    std::fs::write(&um2_path, &um2_data)
-        .with_context(|| format!("Failed to write UM2: {}", um2_path.display()))?;
-    println!("  {} UM2: {} ({} bytes) — header(20) + ARM binary",
-        "✓".green(), um2_path.display(), um2_data.len());
+    std::fs::copy(&built_um2, &um2_path)?;
+    // -o apunta al .bin, que es lo que esta funcion prometia historicamente.
+    let bin_path = output.unwrap_or_else(|| build_dir.join(format!("{}.bin", project_name)));
+    std::fs::copy(cmake_build.join(format!("{}.bin", project_name)), &bin_path).ok();
+    let um2_len = std::fs::metadata(&um2_path)?.len();
+    println!("  {} UM2: {} ({} bytes)", "✓".green(), um2_path.display(), um2_len);
 
     println!("\n{}", format!("✓ BUILD SUCCESS (uvm2): {} bytes  →  {}",
-        um2_data.len(), um2_path.display()).bright_green().bold());
+        um2_len, um2_path.display()).bright_green().bold());
 
     Ok(())
 }

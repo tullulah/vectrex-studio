@@ -112,6 +112,30 @@ pub fn generate_uvm2_asm(
     asm.push_str(".global uvm2_game_main\n");
     asm.push_str(".thumb_set uvm2_game_main, game_main\n");
     asm.push_str("\n");
+
+    // VPY_RAM, reservada de verdad.
+    //
+    // Las variables del runtime y las del usuario viven en direcciones ABSOLUTAS
+    // (0x2007C000..0x20080000, ver arm/ram_layout.rs). Nuestro uvm2_game.ld las
+    // reservaba con una region propia; el linker script del pico-sdk NO, su RAM
+    // llega hasta 0x20080000 y puede colocar .bss justo encima. Con un juego
+    // grande eso es corrupcion silenciosa de las variables del programa.
+    //
+    // Declararla como seccion vacia y fijarla con --section-start convierte ese
+    // solape en un ERROR DE ENLAZADO en vez de en un bicho de ejecucion. Es
+    // NOBITS, asi que no ocupa nada en el .bin ni se copia a la SD.
+    asm.push_str("#ifdef UVM2_PICO_RUNTIME\n");
+    // La "R" es SHF_GNU_RETAIN: sin ella --gc-sections se lleva la seccion por
+    // delante —nadie la referencia— y la reserva no existe. Comprobado: sin la
+    // R la seccion esta en el .S y NO en el ELF, en silencio.
+    asm.push_str(".section .vpyram, \"awR\", %nobits\n");
+    asm.push_str(".space 0x4000            @ 16 KB: VPY_RAM completa\n");
+    // Volver a .text, o lo que venga detras se queda DENTRO de la reserva. Paso:
+    // _uvm2_default_handler caia en .vpyram y la seccion medía 0x4002 en vez de
+    // 0x4000, que es como se descubrio (ld: .stack1_dummy overlaps .vpyram).
+    // Va dentro del #ifdef para no mover de sitio nada en el camino de siempre.
+    asm.push_str(".text\n");
+    asm.push_str("#endif\n\n");
     // Default handler: safe infinite loop (avoids runaway on unexpected exceptions)
     asm.push_str(".thumb_func\n_uvm2_default_handler:\n    b _uvm2_default_handler\n\n");
     // NOTE: base address matches uvm2_game.ld VPY_RAM region (0x2007C000)
