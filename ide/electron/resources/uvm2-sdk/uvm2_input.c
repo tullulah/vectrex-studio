@@ -102,6 +102,8 @@ static int read_axis_digital(int channel)
     uint8_t  probe, expect, state;
     int      value;
 
+    uvm2_via_write(UVM2_VIA_DDRA, 0xFF);   /* el DAC va por el puerto A */
+
     uvm2_via_write(UVM2_VIA_PORTB, UVM2_PB_RAMP_OFF | 0x01u | sel);
     uvm2_via_write(UVM2_VIA_PORTA, 0x00);
     uvm2_via_write(UVM2_VIA_PORTB, UVM2_PB_RAMP_OFF | 0x00u | sel);
@@ -136,6 +138,8 @@ static int read_axis_analog(int channel)
     const uint32_t enable  = UVM2_PB_RAMP_OFF | 0x00u | sel;  /* PB0=0 -> mux ON  */
     uint8_t pa = 0x00;      /* the D/A value, and the answer */
     uint8_t b  = 0x80;      /* bit under test — STARTS AT THE SIGN BIT */
+
+    uvm2_via_write(UVM2_VIA_DDRA, 0xFF);   /* el DAC va por el puerto A */
 
     /* Select while inhibited, enable to let the pot charge C307, then inhibit
      * again and convert off the held charge. That order is the BIOS's and it
@@ -194,6 +198,16 @@ uint32_t uvm2_read_axes(void)
 /* PSG register write, through the VIA's AY handshake. */
 void uvm2_psg_write(uint32_t reg, uint32_t value)
 {
+    /* EL PUERTO A TIENE QUE SER SALIDA: por el van el numero de registro Y el
+     * valor. Si no lo es, no llega ninguno de los dos, y el sintoma es
+     * desconcertante — el secuenciador dispara en el instante correcto, asi que
+     * los tiempos cuadran con la musica de verdad, pero suenan registros y
+     * valores equivocados. Observado en consola en dual core el 2026-08-12.
+     *
+     * Es el MISMO fallo que tenian uvm2_read_buttons y uvm2_psg_read, y se
+     * arreglaron sin mirar este. Los tres daban por hecha la direccion del
+     * puerto, o sea apostaban a que quien corrio antes la dejo bien. */
+    uvm2_via_write(UVM2_VIA_DDRA, 0xFF);
     uvm2_via_write(UVM2_VIA_PORTA, reg & 0x0Fu);
     uvm2_via_write(UVM2_VIA_PORTB, PSG_LATCH_ADDR);
     uvm2_via_write(UVM2_VIA_PORTB, PSG_INACTIVE);
