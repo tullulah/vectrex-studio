@@ -166,6 +166,11 @@ typedef struct {
     uint32_t vectors_last;
     uint32_t moves_last;
     uint32_t ramp_cycles_last;
+    uint32_t wait_spins;    /* vueltas que core 0 espero al buffer */
+    uint32_t us_exec;       /* core 1: microsegundos ejecutando la lista   */
+    uint32_t us_input;      /* core 1: leyendo mandos y ejes               */
+    uint32_t us_rest;       /* core 1: todo lo demas del bucle             */
+    uint32_t us_wait;       /* core 1: esperando a que core 0 publique     */
 } uvm2_stats_t;
 
 extern uvm2_stats_t uvm2_stats;

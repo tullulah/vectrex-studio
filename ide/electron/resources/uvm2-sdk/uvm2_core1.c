@@ -47,6 +47,7 @@
 #ifdef UVM2_DUAL_CORE
 
 #include "pico/multicore.h"
+#include "pico/time.h"
 
 /* Published by uvm2_draw.c. `request` counts frames core 0 has finished
  * building, `done` frames core 1 has finished replaying; the buffer for frame n
@@ -111,12 +112,21 @@ static void core1_main(void)
     uint32_t served = 0;
 
     for (;;) {
+        /* CRONOMETRADO DE VERDAD, en microsegundos. Se llego aqui tras dos rondas
+         * adivinando de donde salian ~17 ms por frame que no eran el haz: se
+         * culpo al audio y se midio que no. Un reloj cuesta menos que una
+         * hipotesis. */
+        uint32_t t_w0 = time_us_32();
         while (uvm2_frame_request == served) { }   /* nothing published yet */
+        uint32_t t0 = time_us_32();
+        uvm2_stats.us_wait = t0 - t_w0;
         served++;
         __asm volatile ("dmb" ::: "memory");       /* the buffer before the count */
 
         uint32_t cycles = uvm2_exec(uvm2_frame_buffer(served),
                                     uvm2_frame_length(served));
+        uint32_t t1 = time_us_32();
+        uvm2_stats.us_exec = t1 - t0;
 
         /* Between frames, with the beam clamped at centre by the last command of
          * the stream — the only window in which anything else may drive Port A
@@ -126,6 +136,8 @@ static void core1_main(void)
         uvm2_cached_buttons = uvm2_read_buttons();
         uvm2_cached_axes    = uvm2_read_axes();
 #endif
+        uint32_t t2 = time_us_32();
+        uvm2_stats.us_input = t2 - t1;
         psg_drain();
 #ifndef UVM2_NO_AUDIO
         /* Avanzar el secuenciador por TIEMPO VECTREX TRANSCURRIDO, no una vez por
@@ -159,6 +171,7 @@ static void core1_main(void)
             uvm2_stats.bus_cycles = cycles;
         }
 
+        uvm2_stats.us_rest = time_us_32() - t2;
         __asm volatile ("dmb" ::: "memory");       /* the work before the flag */
         uvm2_frame_done = served;
     }

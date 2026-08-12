@@ -188,8 +188,19 @@ static void set_x(int x, uint32_t delay)
     set_porta((uint8_t)x, delay);
 }
 
+static int32_t s_drift_ax, s_drift_ay;   /* ver la compensacion de deriva, abajo */
+
 static void set_zero(int active, uint32_t delay)
 {
+    /* CADA re-cero borra la deriva acumulada, porque devuelve el haz al centro.
+     * Si el acumulador sobrevive, se sigue corrigiendo un error que ya no existe
+     * — y como los re-ceros caen en sitios distintos segun la escena, ese sobrante
+     * CAMBIA entre frames: tiembla. Un error determinista no puede temblar.
+     *
+     * Aqui y no en frame_begin: los re-ceros ocurren muchas veces dentro de un
+     * frame (uno por objeto, mas los que mete el tope de trazos). */
+    if (active) { s_drift_ax = 0; s_drift_ay = 0; }
+
     s_pcr = (uint8_t)((s_pcr & ~UVM2_PCR_ZERO_OFF) | (active ? 0u : UVM2_PCR_ZERO_OFF));
     emit(UVM2_VIA_PCR, s_pcr, delay);
 }
@@ -316,6 +327,31 @@ void uvm2_draw_prime_holds(void)
 
 void uvm2_draw_reset(void)
 {
+    /* RE-CEBAR LA REFERENCIA DE CERO, COMO HACE LA BIOS.
+     *
+     * Reset0Ref ($F354) cae en Reset_Pen ($F35B), que en CADA re-cero pone el DAC
+     * a cero y da el ciclo de mux del canal de referencia:
+     *
+     *     CLR <VIA_port_a      ; DAC a cero
+     *     STA <VIA_port_b      ; mux=1, deshabilitado
+     *     STB <VIA_port_b      ; mux=1, habilitado
+     *     STB <VIA_port_b      ; otra vez
+     *     LDB #$01 / STB       ; deshabilitar
+     *
+     * Nosotros lo haciamos UNA VEZ POR FRAME, en via_setup. Y ese condensador
+     * derrama: si la referencia se ha ido, el "cero" al que vuelve el haz no es el
+     * mismo al principio del frame que al final, y el error depende de cuantos
+     * objetos se hayan dibujado antes — o sea que CAMBIA cuando aparece un barril.
+     * Eso es un temblor, y encaja con lo observado en consola.
+     *
+     * Cuesta tres escrituras y su asentamiento por re-cero. Con fronteras de
+     * objeto los re-ceros son pocos, asi que sale barato.
+     * UVM2_NO_REPRIME_ON_RESET lo desactiva para comparar. */
+#ifndef UVM2_NO_REPRIME_ON_RESET
+    set_porta(0x00, 0);
+    mux_sample(UVM2_MUX_ZEROREF, hold_for(0, 0));
+#endif
+
     /* Already centred and already released? Nothing to do — re-zeroing is the
      * single most expensive thing a frame can repeat needlessly. */
     if (s_pos_x == 0 && s_pos_y == 0 && (s_pcr & UVM2_PCR_ZERO_OFF) != 0)
@@ -380,8 +416,72 @@ static void fixup(int *x, int *y, uint32_t *scale)
     }
 }
 
+/* ── Compensacion de deriva ────────────────────────────────────────────────
+ *
+ * MEDIDO EN CONSOLA el 2026-08-12 con hardware/uvm2/drift, que dibuja una rejilla
+ * rectangular de saltos y deja ajustar la correccion desde el mando hasta que sale
+ * recta. Sin compensar, la rejilla sale como una cascada en diagonal: el haz NO
+ * acaba donde se le manda, y el error se acumula salto a salto.
+ *
+ *     X  -16/256  = -0,06 unidades por salto
+ *     Y -112/256  = -0,44 unidades por salto
+ *
+ * SIETE VECES MAS EN Y, y eso tiene explicacion fisica: X va directo al DAC, Y pasa
+ * por el mux y el sample-and-hold. El condensador es quien lo mete. Por eso TODOS
+ * los sintomas de ese dia eran verticales — peldaños caidos en Y, el Kong partido
+ * por la mitad, el escenario encogido.
+ *
+ * El signo dice que el haz SE PASA, no que se quede corto: la hipotesis del retardo
+ * de deflexion era la contraria. Encaja con que el integrador siga un instante
+ * despues de congelar la rampa.
+ *
+ * EL ACUMULADOR ES LO QUE LO HACE FUNCIONAR. El error es una FRACCION de unidad, y
+ * sumar una unidad entera por salto pasa de "corta" a "pasada" sin punto medio
+ * (comprobado: con 1 unidad las columnas se iban al otro lado). Se lleva en 1/256 y
+ * solo se traslada al delta al completar una unidad; el resto se guarda. Es
+ * Bresenham: la correccion media es exacta aunque cada paso sea entero.
+ *
+ * Se pone a cero en frame_begin: el re-cero del frame borra la deriva real, asi que
+ * arrastrar el acumulador seria corregir un error que ya no existe.
+ *
+ * COSTE: CERO ciclos de bus. Es aritmetica sobre un delta que ya se iba a escribir.
+ * Para desactivarla, UVM2_DRIFT_X/Y = 0.  */
+/* AJUSTABLES EN CALIENTE, no defines: el banco los mueve desde el mando y por
+ * SWD sin recompilar. Por defecto CERO = desactivada, para no cambiar el
+ * comportamiento de ningun juego hasta que este medida de verdad.
+ *
+ *   uvm2_drift_mode 0 -> la correccion sigue el SIGNO del salto
+ *                   1 -> direccion FIJA, siempre al mismo lado
+ * Esas dos hipotesis son indistinguibles si todos los saltos van igual, que es
+ * el fallo que tenia el primer banco. Con texto se separan. */
+/* CERO = DESACTIVADA, y asi se queda hasta que este bien medida. Lo que hay
+ * medido es que el error EXISTE y es sistematico; el MODELO no esta cerrado:
+ * el primer banco no podia distinguir si la correccion debe seguir el signo del
+ * salto o ir siempre al mismo lado, porque todos sus saltos iban igual. Aplicarla
+ * con el modelo equivocado empeora dkong (se probo: plataformas desplazadas hacia
+ * arriba y temblor al aparecer los barriles). Ver hardware/uvm2/DERIVA.md. */
+volatile int32_t uvm2_drift_x    = 0;
+volatile int32_t uvm2_drift_y    = 0;
+volatile int32_t uvm2_drift_mode = 0;
+
+
+void uvm2_draw_drift_reset(void) { s_drift_ax = s_drift_ay = 0; }
+
+static int drift_fix(int d, int32_t *acc, int32_t cte)
+{
+    if (cte == 0) return 0;
+    if (uvm2_drift_mode == 0 && d == 0) return 0;   /* con signo: sin salto no hay error */
+    *acc += cte;
+    int32_t entero = *acc / 256;
+    *acc -= entero * 256;
+    if (uvm2_drift_mode) return (int)entero;        /* direccion fija */
+    return (d > 0) ? (int)entero : -(int)entero;    /* con el signo del salto */
+}
+
 void uvm2_draw_move(int dx, int dy)
 {
+    dx += drift_fix(dx, &s_drift_ax, uvm2_drift_x);
+    dy += drift_fix(dy, &s_drift_ay, uvm2_drift_y);
     uint32_t s = s_scale;
 
     s_pos_x += dx;
@@ -510,7 +610,15 @@ void uvm2_frame_end(void)
     /* Next we fill the OTHER buffer, which core 1 last replayed for frame n-1.
      * Block until it has finished with it — this is the only place core 0 ever
      * waits, and it waits at most one frame. */
-    while ((int32_t)(uvm2_frame_done - (s_frame_no - 1u)) < 0) { }
+    /* ¿QUIEN MANDA, EL HAZ O LA LOGICA? Esta es la unica espera de core 0, y su
+     * duracion lo dice sin ambiguedad: si espera mucho, core 1 va justo y manda el
+     * haz; si no espera nada, core 1 esta ocioso y manda la logica del juego.
+     * Se cuentan vueltas, no tiempo: solo hace falta comparar. */
+    {
+        uint32_t giros = 0;
+        while ((int32_t)(uvm2_frame_done - (s_frame_no - 1u)) < 0) { giros++; }
+        uvm2_stats.wait_spins = giros;
+    }
 
     s_frame_no++;
     s_buf = s_frame_no & 1u;
