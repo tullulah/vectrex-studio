@@ -1,0 +1,16 @@
+{
+ "version": "1.0",
+ "name": "0x9f",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": []
+  }
+ ]
+}

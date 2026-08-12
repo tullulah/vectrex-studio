@@ -1,0 +1,52 @@
+{
+ "version": "1.0",
+ "name": "0x14",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "p0",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 0,
+       "y": 0
+      },
+      {
+       "x": 0,
+       "y": 6
+      },
+      {
+       "x": 4,
+       "y": 6
+      },
+      {
+       "x": 6,
+       "y": 4
+      },
+      {
+       "x": 6,
+       "y": 2
+      },
+      {
+       "x": 4,
+       "y": 0
+      },
+      {
+       "x": 0,
+       "y": 0
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

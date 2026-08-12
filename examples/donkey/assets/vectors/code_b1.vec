@@ -1,0 +1,44 @@
+{
+ "version": "1.0",
+ "name": "0xb1",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "p0",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 0,
+       "y": 0
+      },
+      {
+       "x": 0,
+       "y": 7
+      },
+      {
+       "x": 7,
+       "y": 7
+      },
+      {
+       "x": 7,
+       "y": 0
+      },
+      {
+       "x": 0,
+       "y": 0
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
