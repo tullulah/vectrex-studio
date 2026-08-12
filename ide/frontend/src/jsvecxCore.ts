@@ -1,6 +1,7 @@
 import type { MetricsSnapshot, RegistersSnapshot, Segment, IEmulatorCore } from './emulatorCore.js';
 import { VectrexSystem } from './emulator/systems/VectrexSystem.js';
 import { Rp2350System } from './emulator/systems/Rp2350System.js';
+import { Uvm2System }   from './emulator/systems/Uvm2System.js';
 
 export class JsVecxEmulatorCore implements IEmulatorCore {
   private mod: any = null;
@@ -20,7 +21,12 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
 
   // Phase 4: Rp2350System — ARM emulation backend.
   private _rp2350System: Rp2350System | null = null;
-  private _activeTarget: 'm6809' | 'rp2350' = 'm6809';
+  // Phase 4b: Uvm2System — the Ultimate Vectrex Multicart 2. A separate system
+  // rather than a mode of Rp2350System: that one implements the syscalls in JS,
+  // whereas a UVM2 image implements them itself and drives the VIA over a
+  // halt-mode bus, which is the whole thing worth simulating.
+  private _uvm2System: Uvm2System | null = null;
+  private _activeTarget: 'm6809' | 'rp2350' | 'uvm2' = 'm6809';
   
   // Debug output system
   private debugMessages: string[] = [];
@@ -484,6 +490,9 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     if (this._activeTarget === 'rp2350' && this._rp2350System) {
       this._rp2350System.setJoyAxis(x, y);
     }
+    if (this._activeTarget === 'uvm2' && this._uvm2System) {
+      this._uvm2System.setJoyAxis(x, y);
+    }
     if (this._activeTarget === 'm6809' && this._vectrexSystem) {
       this._vectrexSystem.setJoyAxis(x, y);
     }
@@ -507,6 +516,9 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     if (this._activeTarget === 'rp2350' && this._rp2350System) {
       this._rp2350System.setJoyButtons(portBMask);
     }
+    if (this._activeTarget === 'uvm2' && this._uvm2System) {
+      this._uvm2System.setJoyButtons(portBMask);
+    }
   }
 
   /** Player 2 button state (active-low, bits 0-3 = btn 1-4). */
@@ -525,6 +537,9 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
   getAudioContextAndOutputNode(): { ctx: AudioContext; outputNode: AudioNode } | null {
     if (this._activeTarget === 'rp2350' && this._rp2350System) {
       return this._rp2350System.getAudioContextAndOutputNode();
+    }
+    if (this._activeTarget === 'uvm2' && this._uvm2System) {
+      return this._uvm2System.getAudioContextAndOutputNode();
     }
     if (this._vectrexSystem) {
       return this._vectrexSystem.getAudioContextAndOutputNode();
@@ -568,7 +583,41 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     console.log(`[loadArm] DONE — activeTarget=${this._activeTarget} traps registered`);
   }
 
+  /**
+   * Load a `.um2` image (uvm2 target) and switch the active system to
+   * Uvm2System. Unlike loadArm there is no ELF and no trap registration: the
+   * image carries its own syscall handler, and the simulator runs it.
+   */
+  loadUvm2(um2: Uint8Array, canvas?: HTMLCanvasElement): void {
+    console.log(`[loadUvm2] START um2=${um2.length}b canvas=${canvas ? `${canvas.width}x${canvas.height}` : 'none'}`);
+    if (this._activeTarget === 'rp2350' && this._rp2350System) {
+      try { this._rp2350System.stopAudio(); } catch {}
+    }
+    if (!this._uvm2System) this._uvm2System = new Uvm2System();
+    this._uvm2System.init(um2);
+    if (canvas) this._uvm2System.setCanvas(canvas);
+    this._activeTarget = 'uvm2';
+    this._uvm2System.startAudio();
+    console.log('[loadUvm2] DONE — activeTarget=uvm2');
+  }
+
+  private _runFrameUvm2(): { stepsRun: number; vectors: Segment[] } {
+    if (!this._uvm2System) return { stepsRun: 0, vectors: [] };
+    try {
+      const segments = this._uvm2System.runFrame();
+      this.lastFrameSegments = segments;
+      this.frameCounter++;
+      return { stepsRun: 2_500_000, vectors: segments };
+    } catch (e) {
+      console.error(`[uvm2 runFrame] frame=${this.frameCounter} THREW:`, e);
+      return { stepsRun: 0, vectors: [] };
+    }
+  }
+
   runFrame(_maxInstr?: number){
+    if (this._activeTarget === 'uvm2' && this._uvm2System) {
+      return this._runFrameUvm2();
+    }
     // Phase 4: ARM target routes through Rp2350System (doesn't need this.inst).
     if (this._activeTarget === 'rp2350' && this._rp2350System) {
       return this._runFrameRp2350();

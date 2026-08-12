@@ -1,0 +1,22 @@
+{
+  "version": "1.0",
+  "name": "test",
+  "fps": 15,
+  "vrec": "recordings/badapple.vrec",
+  "vsmp": "samples/badapple.vsmp",
+  "trace": {
+    "mode": "silhouette",
+    "threshold": 128,
+    "dark": 60,
+    "light": 200,
+    "cannyLo": 60,
+    "cannyHi": 160,
+    "epsilon": 2,
+    "budget": 200,
+    "minArea": 25,
+    "invert": false,
+    "crop": 0,
+    "borderMargin": 2
+  },
+  "source": "/Users/daniel/projects/vectrex-pseudo-python/examples/badapple.mov"
+}

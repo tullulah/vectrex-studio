@@ -50,194 +50,139 @@ LEVEL_GP_PTR         EQU $C880+$56   ; GP active pointer (RAM buffer after LOAD_
 LEVEL_BANK           EQU $C880+$58   ; Bank ID for current level (for multibank) (1 bytes)
 LEVEL_ENEMY_COUNT    EQU $C880+$59   ; Enemy count from current level header (1 bytes)
 LEVEL_ENEMY_INSTANCES_PTR EQU $C880+$5A   ; Ptr to enemy instances table in level bank (2 bytes)
-SLR_CUR_X            EQU $C880+$5C   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
-DRAW_T1_SCALED       EQU $C880+$5D   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
-LEVEL_GP_BUFFER      EQU $C880+$5E   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
-LCOL_PX              EQU $C880+$23E   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
-LCOL_BEST_Y          EQU $C880+$240   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
-LCOL_PY              EQU $C880+$242   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
-LCOL_PHH             EQU $C880+$244   ; LEVEL_COLLISION player half_height (1 bytes)
-LCOL_PHW             EQU $C880+$245   ; LEVEL_COLLISION_X player half_width (1 bytes)
-LCOL_THW             EQU $C880+$246   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
-UGPC_OUTER_IDX       EQU $C880+$247   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$248   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$249   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$24A   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$24C   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$24E   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$24F   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$250   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$251   ; GP-FG |dy| (1 bytes)
-TEXT_SCALE_H         EQU $C880+$252   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$253   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$254   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_STATE_TITLE      EQU $C880+$255   ; User variable: STATE_TITLE (2 bytes)
-VAR_STATE_INTRO      EQU $C880+$257   ; User variable: STATE_INTRO (2 bytes)
-VAR_STATE_ROOM       EQU $C880+$259   ; User variable: STATE_ROOM (2 bytes)
-VAR_STATE_ENDING     EQU $C880+$25B   ; User variable: STATE_ENDING (2 bytes)
-VAR_STATE_TESTAMENT  EQU $C880+$25D   ; User variable: STATE_TESTAMENT (2 bytes)
-VAR_ROOM_ENTRANCE    EQU $C880+$25F   ; User variable: ROOM_ENTRANCE (2 bytes)
-VAR_ROOM_WORKSHOP    EQU $C880+$261   ; User variable: ROOM_WORKSHOP (2 bytes)
-VAR_ROOM_ANTEROOM    EQU $C880+$263   ; User variable: ROOM_ANTEROOM (2 bytes)
-VAR_ROOM_WEIGHTS     EQU $C880+$265   ; User variable: ROOM_WEIGHTS (2 bytes)
-VAR_ROOM_OPTICS      EQU $C880+$267   ; User variable: ROOM_OPTICS (2 bytes)
-VAR_ROOM_CONSERVATORY EQU $C880+$269   ; User variable: ROOM_CONSERVATORY (2 bytes)
-VAR_ROOM_VAULT_CORRIDOR EQU $C880+$26B   ; User variable: ROOM_VAULT_CORRIDOR (2 bytes)
-VAR_VERB_EXAMINE     EQU $C880+$26D   ; User variable: VERB_EXAMINE (2 bytes)
-VAR_VERB_TAKE        EQU $C880+$26F   ; User variable: VERB_TAKE (2 bytes)
-VAR_VERB_USE         EQU $C880+$271   ; User variable: VERB_USE (2 bytes)
-VAR_VERB_GIVE        EQU $C880+$273   ; User variable: VERB_GIVE (2 bytes)
-VAR_NPC_CARETAKER    EQU $C880+$275   ; User variable: NPC_CARETAKER (2 bytes)
-VAR_NPC_HANS         EQU $C880+$277   ; User variable: NPC_HANS (2 bytes)
-VAR_NPC_ELISA        EQU $C880+$279   ; User variable: NPC_ELISA (2 bytes)
-VAR_NPC_APPRENTICE   EQU $C880+$27B   ; User variable: NPC_APPRENTICE (2 bytes)
-VAR_ITEM_LENS        EQU $C880+$27D   ; User variable: ITEM_LENS (2 bytes)
-VAR_ITEM_GEAR        EQU $C880+$27F   ; User variable: ITEM_GEAR (2 bytes)
-VAR_ITEM_PRISM       EQU $C880+$281   ; User variable: ITEM_PRISM (2 bytes)
-VAR_ITEM_BLANKET     EQU $C880+$283   ; User variable: ITEM_BLANKET (2 bytes)
-VAR_ITEM_EYE         EQU $C880+$285   ; User variable: ITEM_EYE (2 bytes)
-VAR_ITEM_OIL         EQU $C880+$287   ; User variable: ITEM_OIL (2 bytes)
-VAR_ITEM_SHEET       EQU $C880+$289   ; User variable: ITEM_SHEET (2 bytes)
-VAR_ITEM_KEY         EQU $C880+$28B   ; User variable: ITEM_KEY (2 bytes)
-VAR_ITEM_COUNT       EQU $C880+$28D   ; User variable: ITEM_COUNT (2 bytes)
-VAR_ITEM_WEIGHT      EQU $C880+$28F   ; User variable: ITEM_WEIGHT (2 bytes)
-VAR_MUSIC_NONE       EQU $C880+$291   ; User variable: MUSIC_NONE (2 bytes)
-VAR_MUSIC_TITLE      EQU $C880+$293   ; User variable: MUSIC_TITLE (2 bytes)
-VAR_MUSIC_EXPLORATION EQU $C880+$295   ; User variable: MUSIC_EXPLORATION (2 bytes)
-VAR_FL_DATE_KNOWN    EQU $C880+$297   ; User variable: FL_DATE_KNOWN (2 bytes)
-VAR_FL_TALLER_OPEN   EQU $C880+$299   ; User variable: FL_TALLER_OPEN (2 bytes)
-VAR_FL_SARC_OPEN     EQU $C880+$29B   ; User variable: FL_SARC_OPEN (2 bytes)
-VAR_FL_CLOCK_READ    EQU $C880+$29D   ; User variable: FL_CLOCK_READ (2 bytes)
-VAR_FL_PANEL_ACTIVE  EQU $C880+$29F   ; User variable: FL_PANEL_ACTIVE (2 bytes)
-VAR_FL_ITEMS_DEPOSITED EQU $C880+$2A1   ; User variable: FL_ITEMS_DEPOSITED (2 bytes)
-VAR_FL_OPTICS_SOLVED EQU $C880+$2A3   ; User variable: FL_OPTICS_SOLVED (2 bytes)
-VAR_FL_OPTICS_OPEN   EQU $C880+$2A5   ; User variable: FL_OPTICS_OPEN (2 bytes)
-VAR_FL_PLAT_DOWN     EQU $C880+$2A7   ; User variable: FL_PLAT_DOWN (2 bytes)
-VAR_FL_ELISA_HELPED  EQU $C880+$2A9   ; User variable: FL_ELISA_HELPED (2 bytes)
-VAR_FL_HANS_HELPED   EQU $C880+$2AB   ; User variable: FL_HANS_HELPED (2 bytes)
-VAR_FL_CARETAKER_DONE EQU $C880+$2AD   ; User variable: FL_CARETAKER_DONE (2 bytes)
-VAR_FL_EXIT_TESTAMENT EQU $C880+$2AF   ; User variable: FL_EXIT_TESTAMENT (2 bytes)
-VAR_FL_EXIT_ENDING   EQU $C880+$2B1   ; User variable: FL_EXIT_ENDING (2 bytes)
-VAR_ENT_HS_PAINTING  EQU $C880+$2B3   ; User variable: ENT_HS_PAINTING (2 bytes)
-VAR_ENT_HS_DOOR      EQU $C880+$2B5   ; User variable: ENT_HS_DOOR (2 bytes)
-VAR_ENT_HS_CARETAKER EQU $C880+$2B7   ; User variable: ENT_HS_CARETAKER (2 bytes)
-VAR_ENT_HS_CONS_DOOR EQU $C880+$2B9   ; User variable: ENT_HS_CONS_DOOR (2 bytes)
-VAR_ENT_HS_X         EQU $C880+$2BB   ; User variable: ENT_HS_X (2 bytes)
-VAR_ENT_HS_Y         EQU $C880+$2BD   ; User variable: ENT_HS_Y (2 bytes)
-VAR_ENT_HS_W         EQU $C880+$2BF   ; User variable: ENT_HS_W (2 bytes)
-VAR_ENT_HS_H         EQU $C880+$2C1   ; User variable: ENT_HS_H (2 bytes)
-VAR_CLOCK_HS_SARC    EQU $C880+$2C3   ; User variable: CLOCK_HS_SARC (2 bytes)
-VAR_CLOCK_HS_CLOCK   EQU $C880+$2C5   ; User variable: CLOCK_HS_CLOCK (2 bytes)
-VAR_CLOCK_HS_GEAR    EQU $C880+$2C7   ; User variable: CLOCK_HS_GEAR (2 bytes)
-VAR_CLOCK_HS_HANS    EQU $C880+$2C9   ; User variable: CLOCK_HS_HANS (2 bytes)
-VAR_CLOCK_HS_OIL     EQU $C880+$2CB   ; User variable: CLOCK_HS_OIL (2 bytes)
-VAR_CLOCK_HS_OPTICS  EQU $C880+$2CD   ; User variable: CLOCK_HS_OPTICS (2 bytes)
-VAR_CLOCK_HS_X       EQU $C880+$2CF   ; User variable: CLOCK_HS_X (2 bytes)
-VAR_CLOCK_HS_Y       EQU $C880+$2D1   ; User variable: CLOCK_HS_Y (2 bytes)
-VAR_CLOCK_HS_W       EQU $C880+$2D3   ; User variable: CLOCK_HS_W (2 bytes)
-VAR_CLOCK_HS_H       EQU $C880+$2D5   ; User variable: CLOCK_HS_H (2 bytes)
-VAR_ANT_HS_DIARY     EQU $C880+$2D7   ; User variable: ANT_HS_DIARY (2 bytes)
-VAR_ANT_HS_EXIT      EQU $C880+$2D9   ; User variable: ANT_HS_EXIT (2 bytes)
-VAR_ANT_HS_SHELF     EQU $C880+$2DB   ; User variable: ANT_HS_SHELF (2 bytes)
-VAR_ANT_HS_CABINET   EQU $C880+$2DD   ; User variable: ANT_HS_CABINET (2 bytes)
-VAR_ANT_HS_X         EQU $C880+$2DF   ; User variable: ANT_HS_X (2 bytes)
-VAR_ANT_HS_Y         EQU $C880+$2E1   ; User variable: ANT_HS_Y (2 bytes)
-VAR_ANT_HS_W         EQU $C880+$2E3   ; User variable: ANT_HS_W (2 bytes)
-VAR_ANT_HS_H         EQU $C880+$2E5   ; User variable: ANT_HS_H (2 bytes)
-VAR_WGT_HS_PEDESTAL  EQU $C880+$2E7   ; User variable: WGT_HS_PEDESTAL (2 bytes)
-VAR_WGT_HS_EXIT      EQU $C880+$2E9   ; User variable: WGT_HS_EXIT (2 bytes)
-VAR_WGT_HS_X         EQU $C880+$2EB   ; User variable: WGT_HS_X (2 bytes)
-VAR_WGT_HS_Y         EQU $C880+$2ED   ; User variable: WGT_HS_Y (2 bytes)
-VAR_WGT_HS_W         EQU $C880+$2EF   ; User variable: WGT_HS_W (2 bytes)
-VAR_WGT_HS_H         EQU $C880+$2F1   ; User variable: WGT_HS_H (2 bytes)
-VAR_OPT_HS_PEDESTAL  EQU $C880+$2F3   ; User variable: OPT_HS_PEDESTAL (2 bytes)
-VAR_OPT_HS_COMPARTMENT EQU $C880+$2F5   ; User variable: OPT_HS_COMPARTMENT (2 bytes)
-VAR_OPT_HS_X         EQU $C880+$2F7   ; User variable: OPT_HS_X (2 bytes)
-VAR_OPT_HS_Y         EQU $C880+$2F9   ; User variable: OPT_HS_Y (2 bytes)
-VAR_OPT_HS_W         EQU $C880+$2FB   ; User variable: OPT_HS_W (2 bytes)
-VAR_OPT_HS_H         EQU $C880+$2FD   ; User variable: OPT_HS_H (2 bytes)
-VAR_CONS_HS_ELISA    EQU $C880+$2FF   ; User variable: CONS_HS_ELISA (2 bytes)
-VAR_CONS_HS_X        EQU $C880+$301   ; User variable: CONS_HS_X (2 bytes)
-VAR_CONS_HS_Y        EQU $C880+$303   ; User variable: CONS_HS_Y (2 bytes)
-VAR_CONS_HS_W        EQU $C880+$305   ; User variable: CONS_HS_W (2 bytes)
-VAR_CONS_HS_H        EQU $C880+$307   ; User variable: CONS_HS_H (2 bytes)
-VAR_VAULT_HS_APPR    EQU $C880+$309   ; User variable: VAULT_HS_APPR (2 bytes)
-VAR_VAULT_HS_DOOR    EQU $C880+$30B   ; User variable: VAULT_HS_DOOR (2 bytes)
-VAR_VAULT_HS_X       EQU $C880+$30D   ; User variable: VAULT_HS_X (2 bytes)
-VAR_VAULT_HS_Y       EQU $C880+$30F   ; User variable: VAULT_HS_Y (2 bytes)
-VAR_VAULT_HS_W       EQU $C880+$311   ; User variable: VAULT_HS_W (2 bytes)
-VAR_VAULT_HS_H       EQU $C880+$313   ; User variable: VAULT_HS_H (2 bytes)
-VAR_SCREEN           EQU $C880+$315   ; User variable: SCREEN (2 bytes)
-VAR_BLINK_TIMER      EQU $C880+$317   ; User variable: BLINK_TIMER (2 bytes)
-VAR_BLINK_ON         EQU $C880+$319   ; User variable: BLINK_ON (2 bytes)
-VAR_INTRO_PAGE       EQU $C880+$31B   ; User variable: INTRO_PAGE (2 bytes)
-VAR_CURRENT_ROOM     EQU $C880+$31D   ; User variable: CURRENT_ROOM (2 bytes)
-VAR_PLAYER_X         EQU $C880+$31F   ; User variable: PLAYER_X (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$321   ; User variable: PLAYER_Y (2 bytes)
-VAR_SCROLL_X         EQU $C880+$323   ; User variable: SCROLL_X (2 bytes)
-VAR_PLAYER_SPEED     EQU $C880+$325   ; User variable: PLAYER_SPEED (2 bytes)
-VAR_CURRENT_VERB     EQU $C880+$327   ; User variable: CURRENT_VERB (2 bytes)
-VAR_NEAR_HS          EQU $C880+$329   ; User variable: NEAR_HS (2 bytes)
-VAR_MSG_ID           EQU $C880+$32B   ; User variable: MSG_ID (2 bytes)
-VAR_MSG_TIMER        EQU $C880+$32D   ; User variable: MSG_TIMER (2 bytes)
-VAR_ROOM_EXIT        EQU $C880+$32F   ; User variable: ROOM_EXIT (2 bytes)
-VAR_FLAGS_A          EQU $C880+$331   ; User variable: FLAGS_A (2 bytes)
-VAR_FLAGS_B          EQU $C880+$333   ; User variable: FLAGS_B (2 bytes)
-VAR_EXIT_ROOM_TARGET EQU $C880+$335   ; User variable: EXIT_ROOM_TARGET (2 bytes)
-VAR_CURRENT_MUSIC    EQU $C880+$337   ; User variable: CURRENT_MUSIC (1 bytes)
-VAR_BTN1_FIRED       EQU $C880+$338   ; User variable: BTN1_FIRED (2 bytes)
-VAR_BTN2_FIRED       EQU $C880+$33A   ; User variable: BTN2_FIRED (2 bytes)
-VAR_BTN3_FIRED       EQU $C880+$33C   ; User variable: BTN3_FIRED (2 bytes)
-VAR_PREV_BTN1        EQU $C880+$33E   ; User variable: PREV_BTN1 (2 bytes)
-VAR_PREV_BTN2        EQU $C880+$340   ; User variable: PREV_BTN2 (2 bytes)
-VAR_PREV_BTN3        EQU $C880+$342   ; User variable: PREV_BTN3 (2 bytes)
-VAR_INV_COUNT        EQU $C880+$344   ; User variable: INV_COUNT (2 bytes)
-VAR_INV_WEIGHT       EQU $C880+$346   ; User variable: INV_WEIGHT (2 bytes)
-VAR_SHOW_INVENTORY   EQU $C880+$348   ; User variable: SHOW_INVENTORY (2 bytes)
-VAR_ACTIVE_ITEM      EQU $C880+$34A   ; User variable: ACTIVE_ITEM (2 bytes)
-VAR_INV_CURSOR       EQU $C880+$34C   ; User variable: INV_CURSOR (2 bytes)
-VAR_HEARTBEAT_TEMPO  EQU $C880+$34E   ; User variable: HEARTBEAT_TEMPO (2 bytes)
-VAR_HEARTBEAT_TIMER  EQU $C880+$350   ; User variable: HEARTBEAT_TIMER (2 bytes)
-VAR_TESTAMENT_Y      EQU $C880+$352   ; User variable: TESTAMENT_Y (2 bytes)
-VAR_TESTAMENT_PAGE   EQU $C880+$354   ; User variable: TESTAMENT_PAGE (2 bytes)
-VAR_ENDING_Y         EQU $C880+$356   ; User variable: ENDING_Y (2 bytes)
-VAR_SKIPPEDFRAMES    EQU $C880+$358   ; User variable: SKIPPEDFRAMES (2 bytes)
-VAR_RAW1             EQU $C880+$35A   ; User variable: RAW1 (2 bytes)
-VAR_RAW2             EQU $C880+$35C   ; User variable: RAW2 (2 bytes)
-VAR_RAW3             EQU $C880+$35E   ; User variable: RAW3 (2 bytes)
-VAR_ROOM_ID          EQU $C880+$362   ; User variable: room_id (2 bytes)
-VAR_ROOM_ID          EQU $C880+$362   ; User variable: ROOM_ID (2 bytes)
-VAR_JOY_X            EQU $C880+$364   ; User variable: JOY_X (2 bytes)
-VAR_INV_ITEMS        EQU $C880+$366   ; User variable: INV_ITEMS (2 bytes)
-VAR_DX               EQU $C880+$368   ; User variable: DX (2 bytes)
-VAR_DY               EQU $C880+$36A   ; User variable: DY (2 bytes)
-VAR_HS               EQU $C880+$36E   ; User variable: hs (2 bytes)
-VAR_HS               EQU $C880+$36E   ; User variable: HS (2 bytes)
-VAR_NPC_STATE        EQU $C880+$370   ; User variable: NPC_STATE (2 bytes)
-VAR_CARETAKER_SX     EQU $C880+$372   ; User variable: CARETAKER_SX (2 bytes)
-VAR_HANS_SX          EQU $C880+$374   ; User variable: HANS_SX (2 bytes)
-VAR_PLAT_SX          EQU $C880+$376   ; User variable: PLAT_SX (2 bytes)
-VAR_COMP_SX          EQU $C880+$378   ; User variable: COMP_SX (2 bytes)
-VAR_SCREEN_X         EQU $C880+$37A   ; User variable: SCREEN_X (2 bytes)
-VAR_ITEM_ID          EQU $C880+$37E   ; User variable: item_id (2 bytes)
-VAR_ITEM_ID          EQU $C880+$37E   ; User variable: ITEM_ID (2 bytes)
-VAR_NPC_STATE_DATA   EQU $C880+$380   ; Mutable array 'NPC_STATE' data (4 elements x 2 bytes) (8 bytes)
-VAR_INV_ITEMS_DATA   EQU $C880+$388   ; Mutable array 'INV_ITEMS' data (8 elements x 2 bytes) (16 bytes)
-PSG_MUSIC_PTR        EQU $C880+$398   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$39A   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$39C   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $C880+$39D   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$39E   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $C880+$39F   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $C880+$3A0   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $C880+$3A2   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $C880+$3A3   ; SFX bank ID (for multibank) (1 bytes)
-VAR_ARG0             EQU $C880+$3A4   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $C880+$3A6   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $C880+$3A8   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $C880+$3AA   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $C880+$3AC   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$3AE   ; Current ROM bank ID (multibank tracking) (1 bytes)
+LEVEL_SCREEN_COUNT   EQU $C880+$5C   ; Total Y screens partitioning the level (1 bytes)
+LEVEL_BG_SCREENS_PTR EQU $C880+$5D   ; Per-screen BG index ptr (3 bytes per screen) (2 bytes)
+LEVEL_GP_SCREENS_PTR EQU $C880+$5F   ; Per-screen GP index ptr (2 bytes)
+LEVEL_FG_SCREENS_PTR EQU $C880+$61   ; Per-screen FG index ptr (2 bytes)
+SLR_CUR_X            EQU $C880+$63   ; SHOW_LEVEL: clamped (visible) beam X — actually written to integrator (1 bytes)
+SLR_TRUE_X           EQU $C880+$64   ; SHOW_LEVEL: 16-bit unclamped abs_x for per-segment line clipping (2 bytes)
+DRAW_T1_SCALED       EQU $C880+$66   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
+SDCP_ABS_Y           EQU $C880+$67   ; SHOW_LEVEL: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt top_screen between layers) (1 bytes)
+SLR_TOP_SCREEN       EQU $C880+$68   ; SHOW_LEVEL: top Y screen idx (lives across all 3 layers — must not be in TMPVAL) (1 bytes)
+SLR_BOT_SCREEN       EQU $C880+$69   ; SHOW_LEVEL: bot Y screen idx (lives across all 3 layers) (1 bytes)
+LEVEL_GP_BUFFER      EQU $C880+$6A   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
+LCOL_PX              EQU $C880+$24A   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
+LCOL_BEST_Y          EQU $C880+$24C   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
+LCOL_PY              EQU $C880+$24E   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
+LCOL_PHH             EQU $C880+$250   ; LEVEL_COLLISION player half_height (1 bytes)
+LCOL_PHW             EQU $C880+$251   ; LEVEL_COLLISION_X player half_width (1 bytes)
+LCOL_THW             EQU $C880+$252   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
+LCOL_OBJ_Y           EQU $C880+$253   ; LEVEL_COLLISION_Y current object world_y (16-bit) (2 bytes)
+LCOL_LOCAL_PX        EQU $C880+$255   ; LEVEL_COLLISION_Y player_x in object-local coords (16-bit) (2 bytes)
+LCOL_OBJ_CNT         EQU $C880+$257   ; LEVEL_COLLISION_Y GP objects remaining (1 bytes)
+LCOL_SEG_CNT         EQU $C880+$258   ; LEVEL_COLLISION_Y mesh floor segments remaining (1 bytes)
+UGPC_OUTER_IDX       EQU $C880+$259   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$25A   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$25B   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$25C   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$25E   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$260   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$261   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$262   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$263   ; GP-FG |dy| (1 bytes)
+TEXT_SCALE_H         EQU $C880+$264   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$265   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+DRAW_SCALE           EQU $C880+$266   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_ARG0             EQU $C880+$267   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$269   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$26B   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$26D   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$26F   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$271   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$273   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$275   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$277   ; Current ROM bank ID (multibank tracking) (1 bytes)
+VAR_ITEM_WEIGHT      EQU $C880+$278   ; User variable: ITEM_WEIGHT (2 bytes)
+VAR_ENT_HS_X         EQU $C880+$27A   ; User variable: ENT_HS_X (2 bytes)
+VAR_ENT_HS_Y         EQU $C880+$27C   ; User variable: ENT_HS_Y (2 bytes)
+VAR_ENT_HS_W         EQU $C880+$27E   ; User variable: ENT_HS_W (2 bytes)
+VAR_ENT_HS_H         EQU $C880+$280   ; User variable: ENT_HS_H (2 bytes)
+VAR_CLOCK_HS_X       EQU $C880+$282   ; User variable: CLOCK_HS_X (2 bytes)
+VAR_CLOCK_HS_Y       EQU $C880+$284   ; User variable: CLOCK_HS_Y (2 bytes)
+VAR_CLOCK_HS_W       EQU $C880+$286   ; User variable: CLOCK_HS_W (2 bytes)
+VAR_CLOCK_HS_H       EQU $C880+$288   ; User variable: CLOCK_HS_H (2 bytes)
+VAR_ANT_HS_X         EQU $C880+$28A   ; User variable: ANT_HS_X (2 bytes)
+VAR_ANT_HS_Y         EQU $C880+$28C   ; User variable: ANT_HS_Y (2 bytes)
+VAR_ANT_HS_W         EQU $C880+$28E   ; User variable: ANT_HS_W (2 bytes)
+VAR_ANT_HS_H         EQU $C880+$290   ; User variable: ANT_HS_H (2 bytes)
+VAR_WGT_HS_X         EQU $C880+$292   ; User variable: WGT_HS_X (2 bytes)
+VAR_WGT_HS_Y         EQU $C880+$294   ; User variable: WGT_HS_Y (2 bytes)
+VAR_WGT_HS_W         EQU $C880+$296   ; User variable: WGT_HS_W (2 bytes)
+VAR_WGT_HS_H         EQU $C880+$298   ; User variable: WGT_HS_H (2 bytes)
+VAR_OPT_HS_X         EQU $C880+$29A   ; User variable: OPT_HS_X (2 bytes)
+VAR_OPT_HS_Y         EQU $C880+$29C   ; User variable: OPT_HS_Y (2 bytes)
+VAR_OPT_HS_W         EQU $C880+$29E   ; User variable: OPT_HS_W (2 bytes)
+VAR_OPT_HS_H         EQU $C880+$2A0   ; User variable: OPT_HS_H (2 bytes)
+VAR_CONS_HS_X        EQU $C880+$2A2   ; User variable: CONS_HS_X (2 bytes)
+VAR_CONS_HS_Y        EQU $C880+$2A4   ; User variable: CONS_HS_Y (2 bytes)
+VAR_CONS_HS_W        EQU $C880+$2A6   ; User variable: CONS_HS_W (2 bytes)
+VAR_CONS_HS_H        EQU $C880+$2A8   ; User variable: CONS_HS_H (2 bytes)
+VAR_VAULT_HS_X       EQU $C880+$2AA   ; User variable: VAULT_HS_X (2 bytes)
+VAR_VAULT_HS_Y       EQU $C880+$2AC   ; User variable: VAULT_HS_Y (2 bytes)
+VAR_VAULT_HS_W       EQU $C880+$2AE   ; User variable: VAULT_HS_W (2 bytes)
+VAR_VAULT_HS_H       EQU $C880+$2B0   ; User variable: VAULT_HS_H (2 bytes)
+VAR_SCREEN           EQU $C880+$2B2   ; User variable: SCREEN (2 bytes)
+VAR_BLINK_TIMER      EQU $C880+$2B4   ; User variable: BLINK_TIMER (2 bytes)
+VAR_BLINK_ON         EQU $C880+$2B6   ; User variable: BLINK_ON (2 bytes)
+VAR_INTRO_PAGE       EQU $C880+$2B8   ; User variable: INTRO_PAGE (2 bytes)
+VAR_CURRENT_ROOM     EQU $C880+$2BA   ; User variable: CURRENT_ROOM (2 bytes)
+VAR_PLAYER_X         EQU $C880+$2BC   ; User variable: PLAYER_X (2 bytes)
+VAR_PLAYER_Y         EQU $C880+$2BE   ; User variable: PLAYER_Y (2 bytes)
+VAR_SCROLL_X         EQU $C880+$2C0   ; User variable: SCROLL_X (2 bytes)
+VAR_PLAYER_SPEED     EQU $C880+$2C2   ; User variable: PLAYER_SPEED (2 bytes)
+VAR_CURRENT_VERB     EQU $C880+$2C4   ; User variable: CURRENT_VERB (2 bytes)
+VAR_NEAR_HS          EQU $C880+$2C6   ; User variable: NEAR_HS (2 bytes)
+VAR_MSG_ID           EQU $C880+$2C8   ; User variable: MSG_ID (2 bytes)
+VAR_MSG_TIMER        EQU $C880+$2CA   ; User variable: MSG_TIMER (2 bytes)
+VAR_ROOM_EXIT        EQU $C880+$2CC   ; User variable: ROOM_EXIT (2 bytes)
+VAR_FLAGS_A          EQU $C880+$2CE   ; User variable: FLAGS_A (2 bytes)
+VAR_FLAGS_B          EQU $C880+$2D0   ; User variable: FLAGS_B (2 bytes)
+VAR_EXIT_ROOM_TARGET EQU $C880+$2D2   ; User variable: EXIT_ROOM_TARGET (2 bytes)
+VAR_CURRENT_MUSIC    EQU $C880+$2D4   ; User variable: CURRENT_MUSIC (1 bytes)
+VAR_BTN1_FIRED       EQU $C880+$2D5   ; User variable: BTN1_FIRED (2 bytes)
+VAR_BTN2_FIRED       EQU $C880+$2D7   ; User variable: BTN2_FIRED (2 bytes)
+VAR_BTN3_FIRED       EQU $C880+$2D9   ; User variable: BTN3_FIRED (2 bytes)
+VAR_PREV_BTN1        EQU $C880+$2DB   ; User variable: PREV_BTN1 (2 bytes)
+VAR_PREV_BTN2        EQU $C880+$2DD   ; User variable: PREV_BTN2 (2 bytes)
+VAR_PREV_BTN3        EQU $C880+$2DF   ; User variable: PREV_BTN3 (2 bytes)
+VAR_INV_COUNT        EQU $C880+$2E1   ; User variable: INV_COUNT (2 bytes)
+VAR_INV_WEIGHT       EQU $C880+$2E3   ; User variable: INV_WEIGHT (2 bytes)
+VAR_SHOW_INVENTORY   EQU $C880+$2E5   ; User variable: SHOW_INVENTORY (2 bytes)
+VAR_ACTIVE_ITEM      EQU $C880+$2E7   ; User variable: ACTIVE_ITEM (2 bytes)
+VAR_INV_CURSOR       EQU $C880+$2E9   ; User variable: INV_CURSOR (2 bytes)
+VAR_HEARTBEAT_TEMPO  EQU $C880+$2EB   ; User variable: HEARTBEAT_TEMPO (2 bytes)
+VAR_HEARTBEAT_TIMER  EQU $C880+$2ED   ; User variable: HEARTBEAT_TIMER (2 bytes)
+VAR_TESTAMENT_Y      EQU $C880+$2EF   ; User variable: TESTAMENT_Y (2 bytes)
+VAR_TESTAMENT_PAGE   EQU $C880+$2F1   ; User variable: TESTAMENT_PAGE (2 bytes)
+VAR_ENDING_Y         EQU $C880+$2F3   ; User variable: ENDING_Y (2 bytes)
+VAR_SKIPPEDFRAMES    EQU $C880+$2F5   ; User variable: SKIPPEDFRAMES (2 bytes)
+VAR_RAW1             EQU $C880+$2F7   ; User variable: RAW1 (2 bytes)
+VAR_RAW2             EQU $C880+$2F9   ; User variable: RAW2 (2 bytes)
+VAR_RAW3             EQU $C880+$2FB   ; User variable: RAW3 (2 bytes)
+VAR_ROOM_ID          EQU $C880+$2FD   ; User variable: room_id (2 bytes)
+VAR_JOY_X            EQU $C880+$2FF   ; User variable: JOY_X (2 bytes)
+VAR_INV_ITEMS        EQU $C880+$301   ; User variable: INV_ITEMS (2 bytes)
+VAR_DX               EQU $C880+$303   ; User variable: DX (2 bytes)
+VAR_DY               EQU $C880+$305   ; User variable: DY (2 bytes)
+VAR_HS               EQU $C880+$307   ; User variable: hs (2 bytes)
+VAR_NPC_STATE        EQU $C880+$309   ; User variable: NPC_STATE (2 bytes)
+VAR_CARETAKER_SX     EQU $C880+$30B   ; User variable: CARETAKER_SX (2 bytes)
+VAR_HANS_SX          EQU $C880+$30D   ; User variable: HANS_SX (2 bytes)
+VAR_PLAT_SX          EQU $C880+$30F   ; User variable: PLAT_SX (2 bytes)
+VAR_COMP_SX          EQU $C880+$311   ; User variable: COMP_SX (2 bytes)
+VAR_SCREEN_X         EQU $C880+$313   ; User variable: SCREEN_X (2 bytes)
+VAR_ITEM_ID          EQU $C880+$315   ; User variable: item_id (2 bytes)
+VAR_NPC_STATE_DATA   EQU $C880+$317   ; Mutable array 'NPC_STATE' data (4 elements x 2 bytes) (8 bytes)
+VAR_INV_ITEMS_DATA   EQU $C880+$31F   ; Mutable array 'INV_ITEMS' data (8 elements x 2 bytes) (16 bytes)
+PSG_MUSIC_PTR        EQU $C880+$32F   ; PSG music data pointer (2 bytes)
+PSG_MUSIC_START      EQU $C880+$331   ; PSG music start pointer (for loops) (2 bytes)
+PSG_MUSIC_ACTIVE     EQU $C880+$333   ; PSG music active flag (1 bytes)
+PSG_IS_PLAYING       EQU $C880+$334   ; PSG playing flag (1 bytes)
+PSG_DELAY_FRAMES     EQU $C880+$335   ; PSG frame delay counter (1 bytes)
+PSG_MUSIC_BANK       EQU $C880+$336   ; PSG music bank ID (for multibank) (1 bytes)
+SFX_PTR              EQU $C880+$337   ; SFX data pointer (2 bytes)
+SFX_ACTIVE           EQU $C880+$339   ; SFX active flag (1 bytes)
+SFX_BANK             EQU $C880+$33A   ; SFX bank ID (for multibank) (1 bytes)
 ; Array length constants
 ARRAY_ITEM_WEIGHT_LEN         EQU 8   ; 8 elements
 ARRAY_ENT_HS_X_LEN         EQU 4   ; 4 elements
@@ -282,48 +227,48 @@ ARRAY_INV_ITEMS_LEN         EQU 8   ; 8 elements
 ;***************************************************************************
 
 ; Vector Asset Index Mapping:
-;   0 = canvas (Bank #1)
+;   0 = canvas (Bank #2)
 ;   1 = caretaker (Bank #1)
 ;   2 = conservatory (Bank #1)
 ;   3 = crypt_logo (Bank #1)
 ;   4 = crystal_apprentice (Bank #1)
 ;   5 = desk (Bank #1)
 ;   6 = door_locked (Bank #1)
-;   7 = elisa_ghost (Bank #1)
+;   7 = elisa_ghost (Bank #2)
 ;   8 = entrance_arc (Bank #1)
-;   9 = floor (Bank #1)
+;   9 = floor (Bank #2)
 ;   10 = hans_automata (Bank #1)
 ;   11 = lamp (Bank #1)
-;   12 = locked_door (Bank #1)
-;   13 = optics_pedestal (Bank #1)
+;   12 = locked_door (Bank #2)
+;   13 = optics_pedestal (Bank #2)
 ;   14 = painting (Bank #1)
 ;   15 = platform_down (Bank #1)
-;   16 = platform_up (Bank #1)
+;   16 = platform_up (Bank #2)
 ;   17 = player (Bank #1)
 ;   18 = vault_corridor (Bank #1)
-;   19 = wall_compartment (Bank #1)
+;   19 = wall_compartment (Bank #2)
 
 VECTOR_BANK_TABLE:
+    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
 
 VECTOR_ADDR_TABLE:
     FDB _CANVAS_VECTORS    ; canvas
@@ -361,13 +306,13 @@ MUSIC_ADDR_TABLE:
 
 ; SFX Asset Index Mapping:
 ;   0 = door_unlock (Bank #1)
-;   1 = item_pickup (Bank #1)
+;   1 = item_pickup (Bank #2)
 ;   2 = puzzle_fail (Bank #1)
 ;   3 = puzzle_success (Bank #1)
 
 SFX_BANK_TABLE:
     FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
 
@@ -382,7 +327,7 @@ SFX_ADDR_TABLE:
 ;   1 = clockroom (Bank #1)
 ;   2 = conservatory (Bank #1)
 ;   3 = entrance (Bank #1)
-;   4 = optics_lab (Bank #1)
+;   4 = optics_lab (Bank #2)
 ;   5 = vault_corridor (Bank #1)
 ;   6 = weights_room (Bank #1)
 
@@ -391,7 +336,7 @@ LEVEL_BANK_TABLE:
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
 
@@ -406,15 +351,15 @@ LEVEL_ADDR_TABLE:
 
 ; Legacy unified tables (all assets)
 ASSET_BANK_TABLE:
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 2              ; Bank ID
+    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
@@ -441,38 +386,38 @@ ASSET_BANK_TABLE:
     FCB 1              ; Bank ID
 
 ASSET_ADDR_TABLE:
+    FDB _LOCKED_DOOR_VECTORS    ; locked_door
+    FDB _OPTICS_PEDESTAL_VECTORS    ; optics_pedestal
+    FDB _WALL_COMPARTMENT_VECTORS    ; wall_compartment
+    FDB _OPTICS_LAB_LEVEL    ; optics_lab
+    FDB _CANVAS_VECTORS    ; canvas
+    FDB _PLATFORM_UP_VECTORS    ; platform_up
+    FDB _ELISA_GHOST_VECTORS    ; elisa_ghost
+    FDB _ITEM_PICKUP_SFX    ; item_pickup
+    FDB _FLOOR_VECTORS    ; floor
     FDB _CRYPT_LOGO_VECTORS    ; crypt_logo
     FDB _EXPLORATION_MUSIC    ; exploration
     FDB _INTRO_MUSIC    ; intro
     FDB _DOOR_LOCKED_VECTORS    ; door_locked
     FDB _PAINTING_VECTORS    ; painting
+    FDB _CONSERVATORY_LEVEL    ; conservatory
+    FDB _VAULT_CORRIDOR_LEVEL    ; vault_corridor
     FDB _VAULT_CORRIDOR_VECTORS    ; vault_corridor
     FDB _CONSERVATORY_VECTORS    ; conservatory
     FDB _CRYSTAL_APPRENTICE_VECTORS    ; crystal_apprentice
-    FDB _CONSERVATORY_LEVEL    ; conservatory
-    FDB _VAULT_CORRIDOR_LEVEL    ; vault_corridor
     FDB _HANS_AUTOMATA_VECTORS    ; hans_automata
     FDB _DESK_VECTORS    ; desk
-    FDB _PLAYER_VECTORS    ; player
-    FDB _PUZZLE_SUCCESS_SFX    ; puzzle_success
-    FDB _ENTRANCE_ARC_VECTORS    ; entrance_arc
-    FDB _DOOR_UNLOCK_SFX    ; door_unlock
-    FDB _FLOOR_VECTORS    ; floor
-    FDB _LAMP_VECTORS    ; lamp
-    FDB _PLATFORM_DOWN_VECTORS    ; platform_down
     FDB _ANTEROOM_LEVEL    ; anteroom
     FDB _CLOCKROOM_LEVEL    ; clockroom
     FDB _ENTRANCE_LEVEL    ; entrance
-    FDB _CARETAKER_VECTORS    ; caretaker
-    FDB _LOCKED_DOOR_VECTORS    ; locked_door
-    FDB _OPTICS_PEDESTAL_VECTORS    ; optics_pedestal
-    FDB _WALL_COMPARTMENT_VECTORS    ; wall_compartment
+    FDB _PLAYER_VECTORS    ; player
+    FDB _PUZZLE_SUCCESS_SFX    ; puzzle_success
+    FDB _ENTRANCE_ARC_VECTORS    ; entrance_arc
     FDB _WEIGHTS_ROOM_LEVEL    ; weights_room
-    FDB _CANVAS_VECTORS    ; canvas
-    FDB _PLATFORM_UP_VECTORS    ; platform_up
-    FDB _OPTICS_LAB_LEVEL    ; optics_lab
-    FDB _ELISA_GHOST_VECTORS    ; elisa_ghost
-    FDB _ITEM_PICKUP_SFX    ; item_pickup
+    FDB _DOOR_UNLOCK_SFX    ; door_unlock
+    FDB _LAMP_VECTORS    ; lamp
+    FDB _PLATFORM_DOWN_VECTORS    ; platform_down
+    FDB _CARETAKER_VECTORS    ; caretaker
     FDB _PUZZLE_FAIL_SFX    ; puzzle_fail
 
 ;***************************************************************************
@@ -508,6 +453,10 @@ DRAW_VECTOR_BANKED:
     ; Set DP=$D0 for DSWM / VIA access (caller set MIRROR_X/Y/INTENSITY)
     JSR $F1AA            ; DP_to_D0
 
+    ; Set DRAW_T1_SCALED to BIOS default ($7F) — SLR_DRAW_CLIPPED_PATH reads it
+    ; when the fallback path is taken.
+    LDA #$7F
+    STA >DRAW_T1_SCALED
     ; Loop over all paths (header: FDB path_count, then FDB table)
     LDD ,X               ; D = path_count (16-bit FDB at header start)
     CMPD #0
@@ -516,7 +465,25 @@ DRAW_VECTOR_BANKED:
 DVB_PATH_LOOP:
     PSHS D               ; Save remaining path count (2 bytes)
     LDX ,Y               ; X = path data address (FDB entry)
+    ; Hybrid clip decision: fast DSWM if screen_x deep inside, slow SDCP near edges.
+    LDA >DRAW_VEC_X_HI
+    BEQ DVB_CHECK_POS
+    INCA
+    BNE DVB_USE_SDCP
+    LDA >DRAW_VEC_X
+    CMPA #$B0            ; -80
+    BHS DVB_USE_DSWM
+    BRA DVB_USE_SDCP
+DVB_CHECK_POS:
+    LDA >DRAW_VEC_X
+    CMPA #80
+    BLS DVB_USE_DSWM
+DVB_USE_SDCP:
+    JSR SLR_DRAW_CLIPPED_PATH
+    BRA DVB_PATH_AFTER
+DVB_USE_DSWM:
     JSR Draw_Sync_List_At_With_Mirrors
+DVB_PATH_AFTER:
     LEAY 2,Y             ; Advance to next FDB entry
     PULS D               ; Restore count
     SUBD #1
@@ -670,30 +637,27 @@ LOAD_LEVEL_BANKED:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
-    ;       causing integrators to drift toward joystick DAC value.
-    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref   ; Reset beam to center before positioning text
-    LDU VAR_ARG2   ; string pointer
-    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
-    STA >$C82A      ; Vec_Text_Height: controls character Y scale
-    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
-    STA >$C82B      ; Vec_Text_Width: controls character X spacing
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
-    LDX >$C82C      ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    TFR A,DP
+    JSR Intensity_5F
+    JSR Reset0Ref
+    LDU >VAR_ARG2
+    LDA >TEXT_SCALE_H
+    STA >$C82A          ; Vec_Text_Height
+    LDA >TEXT_SCALE_W
+    STA >$C82B          ; Vec_Text_Width
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    LDX >$C82C
     PSHS X
     JSR Print_Str_d
     PULS X
-    STX >$C82C      ; Restore Vec_Str_Ptr to safe ROM value
+    STX >$C82C
     LDA #$F8
-    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    STA >$C82A
     LDA #$48
-    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    STA >$C82B
+    JSR $F1AF
     RTS
 
 MOD16:
@@ -738,19 +702,12 @@ MOD16:
 .M16_DONE:
     RTS
 
-; === JOYSTICK BUILTIN SUBROUTINES ===
-; J1_X() - Read Joystick 1 X axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81B after Joy_Analog call
+; === JOYSTICK BUILTIN SUBROUTINES (cached, Joy_Analog runs once per frame) ===
+; J1_X() - Read Joystick 1 X axis from cached BIOS value at $C81B
 J1X_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
-    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
+    LDB >$C81B   ; Vec_Joy_1_X (populated each frame by auto-injected Joy_Analog)
     SEX          ; Sign-extend B to D
     ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
     RTS
 
 Draw_Sync_List_At_With_Mirrors:
@@ -938,10 +895,9 @@ LOAD_LEVEL_RUNTIME:
     LDA #1
     STA >LEVEL_LOADED    ; Mark level as loaded
     
-    ; Reset camera to world origin — JSVecX RAM is NOT zero-initialized
-    LDD #0
-    STD >CAMERA_X
-    STD >CAMERA_Y
+    ; Camera is NOT reset here (matches pitrex/rp2350). It is initialised once
+    ; at boot in MAIN; the game sets it via SET_CAMERA_Y before LOAD_LEVEL, and
+    ; GET_LEVEL_FLOOR_Y / the SPAWN_ENEMIES Y-filter read it after this call.
     
     ; Skip world bounds (8 bytes) + time/score (4 bytes)
     LEAX 12,X        ; X now points to object counts (+12)
@@ -976,11 +932,22 @@ LOAD_LEVEL_RUNTIME:
     ; Read enemy data from header (+29: count, +30,+31: instances_ptr)
     LDB ,X+         ; B = enemy_count
     STB >LEVEL_ENEMY_COUNT
-    LDD ,X          ; D = enemy_instances_ptr
+    LDD ,X++        ; D = enemy_instances_ptr (advance past +30..+31)
     STD >LEVEL_ENEMY_INSTANCES_PTR
+    LEAX 2,X        ; skip groundBottomOffset (+32..+33)
+    
+    ; Per-screen object index (+34..+40)
+    LDB ,X+         ; B = screen_count
+    STB >LEVEL_SCREEN_COUNT
+    LDD ,X++        ; D = bg_screens_ptr
+    STD >LEVEL_BG_SCREENS_PTR
+    LDD ,X++        ; D = gp_screens_ptr
+    STD >LEVEL_GP_SCREENS_PTR
+    LDD ,X          ; D = fg_screens_ptr
+    STD >LEVEL_FG_SCREENS_PTR
     
     ; === Setup GP pointer: point directly to ROM (matches core) ===
-    ; GP objects are read from ROM with stride=20, same as BG/FG
+    ; GP objects are read from ROM with stride=21 (stride-21 format), same as BG/FG
     LDB >LEVEL_GP_COUNT
     BEQ LLR_SKIP_GP  ; Skip if no GP objects
     LDD >LEVEL_GP_ROM_PTR ; Just point to ROM
@@ -995,13 +962,14 @@ LLR_SKIP_GP:
     
     PULS D,X,Y,U,PC  ; Restore and return
     
-; === LLR_COPY_OBJECTS - Copy N ROM objects to RAM buffer ===
-; Input:  B = count, X = source (ROM, 20 bytes/obj), U = dest (RAM, 15 bytes/obj)
-; ROM object layout (20 bytes):
+; === LLR_COPY_OBJECTS - LEGACY (not called; GP objects read from ROM directly)
+; Input:  B = count, X = source (ROM, 21 bytes/obj stride-21), U = dest (RAM)
+; ROM object layout (21 bytes, stride-21):
 ;   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),
 ;   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,
 ;   +11: physics_flags, +12: collision_flags, +13: collision_size,
-;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: half_height
+;   +14-15: spawn_delay(FDB), +16: vector_bank(FCB), +17-18: vector_ptr(FDB),
+;   +19: half_width, +20: half_height
 ; RAM object layout (15 bytes):
 ;   +0-1: world_x(FDB i16), +2: y(i8), +3: scale(low), +4: rotation,
 ;   +5: velocity_x, +6: velocity_y, +7: physics_flags, +8: collision_flags,
@@ -1050,21 +1018,21 @@ LLR_COPY_LOOP:
     ; RAM +10: spawn_delay low byte (ROM +15, skip high at ROM +14)
     LDA 1,X          ; ROM +15 = low byte of spawn_delay FDB
     STA ,U+
-    LEAX 2,X         ; Skip spawn_delay FDB (2 bytes), X now at ROM +16
-    ; RAM +11-12: vector_ptr FDB (ROM +16-17)
-    LDD ,X++         ; ROM +16-17
+    LEAX 3,X         ; Skip spawn_delay FDB (2 bytes) + vector_bank (1), X now at ROM+17
+    ; RAM +11-12: vector_ptr FDB (ROM +17-18, stride-21)
+    LDD ,X++         ; ROM +17-18 = vector_ptr FDB
     STD ,U++
-    ; RAM +13-14: properties_ptr FDB (ROM +18-19)
-    LDD ,X++         ; ROM +18-19
+    ; RAM +13-14: half_width + half_height (ROM +19-20, stride-21)
+    LDD ,X++         ; ROM +19-20
     STD ,U++
-    ; X is now past end of this ROM object (ROM +1 + 8 + 5 + 2 + 2 + 2 = +20 total)
+    ; X is now past end of this ROM object (ROM+1 + 8 + 5 + 3 + 2 + 2 = +21 total)
     ; NOTE: We started at ROM+1 (after LEAX 1,X), walked:
     ;   ,X and 1,X and 3,X and 5,X and 6,X via indexed → X unchanged
     ;   then LEAX 8,X (X now at ROM+9)
     ;   then 5 post-increment ,X+ → X at ROM+14
-    ;   then LEAX 2,X (X at ROM+16)
-    ;   then 2x LDD ,X++ → X at ROM+20
-    ;   ROM+20 from original ROM+0 = next object start
+    ;   then LEAX 3,X (X at ROM+17)
+    ;   then 2x LDD ,X++ → X at ROM+21
+    ;   ROM+21 from original ROM+0 = next object start (stride-21)
     
     PULS B           ; Restore counter
     DECB
@@ -1075,8 +1043,14 @@ LLR_COPY_DONE:
 ; === SHOW_LEVEL_RUNTIME ===
 ; Draw all level objects from all layers
 ; Input:  LEVEL_PTR = pointer to level header
-; Layers: BG (ROM stride 20), GP (RAM stride 15), FG (ROM stride 20)
-; Each object: load intensity, x, y, vector_ptr, call SLR_DRAW_OBJECTS
+; Layers: BG (ROM stride 21), GP (ROM stride 21), FG (ROM stride 21)
+; ROM object layout (21 bytes, stride-21):
+;   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),
+;   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,
+;   +11: physics_flags, +12: collision_flags, +13: collision_size,
+;   +14-15: spawn_delay(FDB), +16: vector_bank(FCB, $FF=null),
+;   +17-18: vector_ptr(FDB), +19: half_width(FCB), +20: half_height(FCB)
+; Each object: load intensity, x, y, vector_bank, vector_ptr, call SLR_DRAW_OBJECTS
 SHOW_LEVEL_RUNTIME:
     PSHS D,X,Y,U     ; Preserve registers
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
@@ -1092,7 +1066,7 @@ SHOW_LEVEL_RUNTIME:
     BEQ SLR_DONE     ; No level loaded, skip
     LDX >LEVEL_PTR
     
-    ; Re-read object counts from header
+    ; Re-read object counts from header (legacy: kept for any caller that reads RAM vars)
     LEAX 12,X        ; X points to counts (+12)
     LDB ,X+          ; B = bgCount
     STB >LEVEL_BG_COUNT
@@ -1101,37 +1075,60 @@ SHOW_LEVEL_RUNTIME:
     LDB ,X+          ; B = fgCount
     STB >LEVEL_FG_COUNT
     
-    ; === Draw Background Layer (ROM, stride=20) ===
-SLR_BG_COUNT:
-    CLRB
-    LDB >LEVEL_BG_COUNT
-    CMPB #0
-    BEQ SLR_GAMEPLAY
-    LDA #20          ; ROM object stride
-    LDX >LEVEL_BG_ROM_PTR
-    JSR SLR_DRAW_OBJECTS
+    ; ── PER-SCREEN VISIBLE RANGE ─────────────────────────────────────
+    ; Compute top_screen, bot_screen — only iterate objects whose screen
+    ; band overlaps the camera's ±128 Y window. For SnowBros (1 screen
+    ; visible) this is normally 1 screen, occasionally 2 during scroll.
+    LDX >LEVEL_PTR
+    LDD 6,X          ; D = yMax
+    STD >TMPPTR      ; cache yMax
+    LDD >CAMERA_Y
+    ADDD #128        ; D = top_y (camera_y + 128, higher Y = top of screen)
+    PSHS D
+    LDD >TMPPTR      ; yMax
+    SUBD ,S++        ; D = yMax - top_y
+    TSTA             ; sign byte
+    BPL SLR_TOP_OK   ; positive → A is the screen idx (D / 256)
+    CLRA             ; negative → clamp top_screen to 0
+SLR_TOP_OK:
+    STA >SLR_TOP_SCREEN  ; top_screen (separate from TMPVAL — survives per-object cull)
+    LDD >CAMERA_Y
+    SUBD #128        ; D = bot_y (camera_y - 128)
+    PSHS D
+    LDD >TMPPTR      ; yMax
+    SUBD ,S++        ; D = yMax - bot_y
+    TSTA
+    BPL SLR_BOT_OK
+    CLRA
+SLR_BOT_OK:
+    ; Clamp bot_screen to (LEVEL_SCREEN_COUNT - 1) max
+    LDB >LEVEL_SCREEN_COUNT
+    LBEQ SLR_DONE    ; no screens → nothing to draw
+    DECB             ; B = max_idx = screen_count - 1
+    STB >SLR_BOT_SCREEN  ; stash max_idx for compare
+    CMPA >SLR_BOT_SCREEN ; A (bot_screen) vs max_idx
+    BLS SLR_BOT_NOCLAMP
+    LDA >SLR_BOT_SCREEN  ; clamp bot_screen = max_idx
+SLR_BOT_NOCLAMP:
+    STA >SLR_BOT_SCREEN  ; bot_screen
     
-    ; === Draw Gameplay Layer (RAM, stride=15) ===
+    ; === Draw Background Layer ===
+SLR_BG_LAYER:
+    LDD >LEVEL_BG_SCREENS_PTR
+    STD >TMPPTR      ; TMPPTR = table base for this layer
+    JSR SLR_DRAW_SCREEN_RANGE
+    
+    ; === Draw Gameplay Layer ===
 SLR_GAMEPLAY:
-SLR_GP_COUNT:
-    CLRB
-    LDB >LEVEL_GP_COUNT
-    CMPB #0
-    BEQ SLR_FOREGROUND
-    LDA #20          ; GP objects read from ROM (20 bytes)
-    LDX >LEVEL_GP_PTR
-    JSR SLR_DRAW_OBJECTS
+    LDD >LEVEL_GP_SCREENS_PTR
+    STD >TMPPTR
+    JSR SLR_DRAW_SCREEN_RANGE
     
-    ; === Draw Foreground Layer (ROM, stride=20) ===
+    ; === Draw Foreground Layer ===
 SLR_FOREGROUND:
-SLR_FG_COUNT:
-    CLRB
-    LDB >LEVEL_FG_COUNT
-    CMPB #0
-    BEQ SLR_DONE
-    LDA #20          ; ROM object stride
-    LDX >LEVEL_FG_ROM_PTR
-    JSR SLR_DRAW_OBJECTS
+    LDD >LEVEL_FG_SCREENS_PTR
+    STD >TMPPTR
+    JSR SLR_DRAW_SCREEN_RANGE
     
 SLR_DONE:
     ; MULTIBANK: Restore original bank
@@ -1141,11 +1138,37 @@ SLR_DONE:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     PULS D,X,Y,U,PC  ; Restore and return
     
+; === SLR_DRAW_SCREEN_RANGE — iterate screens in visible camera range ===
+SLR_DRAW_SCREEN_RANGE:
+    LDA >SLR_TOP_SCREEN  ; A = current screen idx (start at top)
+SLR_SR_LOOP:
+    CMPA >SLR_BOT_SCREEN
+    BHI SLR_SR_DONE      ; current > bot → finished
+    CMPA >LEVEL_SCREEN_COUNT
+    BHS SLR_SR_DONE      ; defensive: don't index past table
+    ; Compute &table[s] = TMPPTR + s*3
+    PSHS A               ; save loop var
+    LDB #3
+    MUL                  ; D = s*3 (A=0 since s < 256/3, B = offset)
+    LDX >TMPPTR          ; X = screens table base
+    LEAX D,X             ; X = &table[s]
+    LDB ,X               ; B = count for this screen
+    BEQ SLR_SR_NEXT      ; empty screen → skip
+    LDX 1,X              ; X = ptr to first object in this screen
+    LDA #23              ; ROM object stride
+    JSR SLR_DRAW_OBJECTS
+SLR_SR_NEXT:
+    PULS A
+    INCA
+    BRA SLR_SR_LOOP
+SLR_SR_DONE:
+    RTS
+    
 ; === SLR_DRAW_OBJECTS - Draw N objects from a layer ===
-; Input:  A = stride (15=RAM, 20=ROM), B = count, X = objects ptr
-; For ROM objects (stride=20): intensity at +8, y FDB at +3, x FDB at +1, vector_ptr FDB at +16
-; For RAM objects (stride=15): look up intensity from ROM via LEVEL_GP_ROM_PTR,
-;   world_x at +0-1 (16-bit), y at +2, vector_ptr FDB at +11
+; Input:  A = stride (21=ROM), B = count, X = objects ptr
+; For ROM objects (stride=21, stride-21 format):
+;   intensity at +8, y FDB at +3, x FDB at +1, half_width at +19
+;   vector_bank at +16 ($FF=null), vector_ptr FDB at +17
 ; Camera: SUBD >CAMERA_X applied to world_x; objects outside i8 range are culled
 SLR_DRAW_OBJECTS:
     PSHS A           ; Save stride on stack (A=stride)
@@ -1155,92 +1178,10 @@ SLR_OBJ_LOOP:
     
     PSHS B           ; Save counter (LDD clobbers B)
     
-    ; Determine ROM vs RAM offsets via stride
-    LDA 1,S          ; Peek stride from stack (+1 because B is on top)
-    CMPA #20
-    LBEQ SLR_ROM_OFFSETS
-    
-    ; === RAM object (stride=15) ===
-    ; Need to look up intensity from ROM counterpart
-    ; objIndex = LEVEL_GP_COUNT - currentCount
-    PSHS X           ; Save RAM object pointer
-    LDB >LEVEL_GP_COUNT
-    SUBB 2,S         ; B = objIndex = totalCount - currentCounter
-    LDX >LEVEL_GP_ROM_PTR  ; X = ROM base
-SLR_ROM_ADDR_LOOP:
-    BEQ SLR_INTENSITY_READ ; Done if index=0
-    LEAX 20,X        ; Advance by ROM stride
-    DECB
-    BRA SLR_ROM_ADDR_LOOP
-SLR_INTENSITY_READ:
-    LDA 8,X          ; intensity at ROM +8
-    STA >DRAW_VEC_INTENSITY  ; DP=$D0, must use extended addressing
-    PULS X           ; Restore RAM object pointer
-    
-    CLR >MIRROR_X    ; DP=$D0, must use extended addressing
-    CLR >MIRROR_Y
-    ; Load world_x (16-bit), subtract CAMERA_X, check visibility
-    LDD 0,X          ; RAM +0-1 = world_x (16-bit)
-    SUBD >CAMERA_X   ; screen_x = world_x - camera_x
-    STD >TMPVAL      ; save screen_x (overwritten by CMPB below)
-    ; Per-object cull using half_width from RAM+13
-    ; Wider culling: object stays until fully off-screen
-    ; Visible range: [-(128+hw), 127+hw]
-    ; right_limit = 127 + hw  (A=$00, B <= right_limit)
-    ; left_limit  = 128 - hw  (A=$FF, B >= left_limit)
-    LDB 13,X         ; B = half_width (RAM+13)
-    STB >TMPPTR2     ; save hw
-    LDA #127
-    ADDA >TMPPTR2    ; A = 127 + hw (right boundary)
-    STA >TMPPTR
-    LDA #128
-    SUBA >TMPPTR2    ; A = 128 - hw (left boundary, unsigned)
-    STA >TMPPTR+1
-    LDD >TMPVAL      ; restore screen_x into D
-    TSTA
-    BEQ SLR_RAM_A_ZERO
-    INCA
-    LBNE SLR_OBJ_NEXT        ; A not $FF: too far
-    ; A=$FF: visible if B >= left_limit (128-hw)
-    CMPB >TMPPTR+1
-    BHS SLR_RAM_VISIBLE       ; unsigned >=
-    LBRA SLR_OBJ_NEXT
-SLR_RAM_A_ZERO:
-    ; A=0: visible if B <= right_limit (127+hw)
-    CMPB >TMPPTR
-    BLS SLR_RAM_VISIBLE       ; unsigned <=
-    LBRA SLR_OBJ_NEXT
-SLR_RAM_VISIBLE:
-    LDD >TMPVAL      ; reload full 16-bit screen_x (INCA corrupted A)
-    STD >DRAW_VEC_X_HI ; store full 16-bit screen_x (A=hi, B=lo)
-    ; Apply CAMERA_Y: sign-extend world_y (8-bit), subtract CAMERA_Y, cull
-    LDB 2,X          ; world_y (signed byte at RAM +2)
-    SEX              ; sign-extend B into D
-    SUBD >CAMERA_Y   ; screen_y = world_y - camera_y
-    TSTA
-    BEQ SLR_RAM_Y_ZERO
-    INCA
-    LBNE SLR_OBJ_NEXT    ; A not $FF: too far above
-    ; A=$FF: visible if B >= 128 (i.e. >= -128 signed)
-    CMPB #128
-    BHS SLR_RAM_Y_VISIBLE
-    LBRA SLR_OBJ_NEXT
-SLR_RAM_Y_ZERO:
-    ; A=0: visible if B <= 127
-    CMPB #127
-    BLS SLR_RAM_Y_VISIBLE
-    LBRA SLR_OBJ_NEXT
-SLR_RAM_Y_VISIBLE:
-    STB >DRAW_VEC_Y
-    LDU 11,X         ; vector_ptr at RAM +11
-    CMPU #0          ; null vector_ptr? (enemy type objects have no visual)
-    LBEQ SLR_OBJ_NEXT ; skip draw if no vector assigned
-    LDA 3,X          ; scale_t1 from RAM +3 (pre-computed T1 = scale*127)
-    STA >DRAW_T1_SCALED
-    LBRA SLR_DRAW_VECTOR
+    ; All layers use stride-21 ROM format — fall straight through
     
 SLR_ROM_OFFSETS:
-    ; === ROM object (stride=20) ===
+    ; === ROM object (stride=21, stride-21 format) ===
     ; Skip enemy spawn markers (type==1): drawn by DRAW_ENEMIES, not SHOW_LEVEL
     LDA ,X           ; type byte at ROM+0
     CMPA #1
@@ -1271,9 +1212,8 @@ SLR_ROM_Y_VISIBLE:
     LDD 1,X          ; x FDB at ROM +1
     SUBD >CAMERA_X   ; screen_x = world_x - camera_x
     STD >TMPVAL
-    ; Per-object cull: half_width at ROM+18
-    ; Wider culling: object stays until fully off-screen
-    LDB 18,X         ; B = half_width (ROM+18)
+    ; Wide cull at ±(127+hw): partial-edge objects still render via SDCP.
+    LDB 19,X         ; B = half_width (ROM+19)
     STB >TMPPTR2     ; save hw
     LDA #127
     ADDA >TMPPTR2    ; A = 127 + hw (right boundary)
@@ -1296,11 +1236,20 @@ SLR_ROM_A_ZERO:
 SLR_ROM_VISIBLE:
     LDD >TMPVAL      ; reload full 16-bit screen_x (INCA corrupted A)
     STD >DRAW_VEC_X_HI ; store full 16-bit screen_x (A=hi, B=lo)
-    LDU 16,X         ; vector_ptr FDB at ROM +16
-    CMPU #0          ; null vector_ptr? (enemy type objects have no visual)
-    LBEQ SLR_OBJ_NEXT ; skip draw if no vector assigned
-    LDA 6,X          ; scale_t1 from ROM +6 (low byte of scale FDB; pre-computed T1 = scale*127)
+    ; Stride-21: vector_bank at ROM+16 ($FF=null), vector_ptr FDB at ROM+17
+    ; CRITICAL: read ALL level-bank data BEFORE switching to vector bank.
+    LDA 16,X         ; A = vector_bank (LEVEL BANK ACTIVE)
+    CMPA #$FF        ; $FF = null (no visual for this object)
+    LBEQ SLR_OBJ_NEXT ; null bank → skip draw
+    LDU 17,X         ; vector_ptr FDB at ROM+17 (STILL IN LEVEL BANK)
+    LDA 6,X          ; scale_t1 at ROM+6 (STILL IN LEVEL BANK)
     STA >DRAW_T1_SCALED
+    ; MULTIBANK: NOW switch to the vector's bank.
+    ; U = vector address valid in that bank; level data fully read above.
+    ; Level bank is restored in SLR_PATH_DONE after all paths are drawn.
+    LDA 16,X         ; reload vector_bank (LDA 6,X clobbered A)
+    STA >CURRENT_ROM_BANK
+    STA $DF00        ; switch to vector bank
     
 SLR_DRAW_VECTOR:
     PSHS X           ; Save object pointer
@@ -1318,13 +1267,35 @@ SLR_PATH_LOOP:
     LDU ,X++         ; U = path pointer, X advances to next entry
     PSHS X           ; Save pointer table position
     TFR U,X          ; X = actual path data
-    JSR Draw_Sync_List_At_With_Mirrors  ; Draw this path
+    LDA >DRAW_VEC_X_HI
+    BEQ SLR_PATH_CHECK_POS
+    INCA
+    BNE SLR_PATH_USE_SDCP
+    LDA >DRAW_VEC_X
+    CMPA #$B0
+    BHS SLR_PATH_USE_DSWM
+    BRA SLR_PATH_USE_SDCP
+SLR_PATH_CHECK_POS:
+    LDA >DRAW_VEC_X
+    CMPA #80
+    BLS SLR_PATH_USE_DSWM
+SLR_PATH_USE_SDCP:
+    JSR SLR_DRAW_CLIPPED_PATH
+    BRA SLR_PATH_AFTER
+SLR_PATH_USE_DSWM:
+    JSR Draw_Sync_List_At_With_Mirrors
+SLR_PATH_AFTER:
     PULS X           ; Restore pointer table position
     PULS B           ; Restore count
     BRA SLR_PATH_LOOP
     
 SLR_PATH_DONE:
     PULS X           ; Restore object pointer
+    ; MULTIBANK: Restore level bank now that all vector paths are drawn.
+    ; SLR_OBJ_NEXT needs the level bank active to advance X through level objects.
+    LDA >LEVEL_BANK
+    STA >CURRENT_ROM_BANK
+    STA $DF00        ; switch back to level bank
     
 SLR_OBJ_NEXT:
     ; Advance to next object using stride
@@ -1343,11 +1314,6 @@ SLR_OBJ_DONE:
     RTS
 
 ; === SLR_DRAW_CLIPPED_PATH ===
-; Per-segment X-axis clipping using direct VIA register writes.
-; Mirrors the DSWM VIA pattern — no BIOS calls (Intensity_a corrupts
-; DDRB with DP=$D0; Draw_Line_d / Moveto_d are BIOS-only).
-; Segments whose new_x = cur_x+dx overflows a signed byte are moved
-; with beam OFF, preventing screen-wrap at left/right edges.
 SLR_DRAW_CLIPPED_PATH:
     LDA >DRAW_VEC_INTENSITY ; check override
     BNE SDCP_USE_OVERRIDE
@@ -1360,32 +1326,35 @@ SDCP_SET_INTENS:
     LDB ,X+                 ; B = y_start (relative to center)
     LDA ,X+                 ; A = x_start (relative to center)
     ADDB >DRAW_VEC_Y        ; B = abs_y
-    STB >TMPVAL             ; save abs_y for moveto
+    STB >SDCP_ABS_Y         ; save abs_y for moveto (NOT TMPVAL — SHOW_LEVEL's top_screen lives there)
     TFR A,B                 ; B = x_start (SEX extends B, not A)
     SEX                      ; sign-extend B→D (A=sign, B=x_start)
     ADDD >DRAW_VEC_X_HI     ; D = abs_x_16 = SEX(x_start) + screen_x_16
-    ; Range check: abs_x must fit in signed byte [-128, +127]
-    ; If out of range, skip this path (can't position beam correctly).
-    ; Progressive clipping works because paths starting on-screen are
-    ; drawn normally, and their segments get clipped at the edge.
+    ; D = abs_x_16. Save it in 16-bit tracker SLR_TRUE_X (unclamped).
+    STD >SLR_TRUE_X
+    ; Compute clamped beam position for hardware Moveto.
     TSTA
-    BEQ SDCP_CHECK_POS       ; A=$00 → check positive range
-    INCA                      ; was A=$FF?
-    BNE SDCP_SKIP_PATH        ; A was not $00 or $FF → way off
-    ; A was $FF: valid if B >= $80 (negative signed byte)
+    BEQ SDCP_INIT_POS
+    INCA
+    BEQ SDCP_INIT_NEG_OK    ; A was $FF (small negative)
+    ; Way off — clamp to nearest edge by sign of original A (now in INCA result)
+    LDB #$80                ; default to left edge
+    LDA >SLR_TRUE_X         ; original hi byte
+    BMI SDCP_USE_CLAMPED    ; negative → -128 (left)
+    LDB #$7F                ; positive way off → +127 (right)
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_NEG_OK:
     CMPB #$80
-    BHS SDCP_ABS_OK
-    BRA SDCP_SKIP_PATH
-SDCP_CHECK_POS:
-    ; A=$00: valid if B <= $7F
+    BHS SDCP_USE_CLAMPED    ; -128..-1, valid
+    LDB #$80                ; clamp
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_POS:
     CMPB #$7F
-    BLS SDCP_ABS_OK
-SDCP_SKIP_PATH:
-    RTS
-SDCP_ABS_OK:
-    ; B = abs_x (valid signed byte)
-    TFR B,A                  ; A = abs_x for moveto
-    STA >SLR_CUR_X          ; init beam-x tracker
+    BLS SDCP_USE_CLAMPED
+    LDB #$7F                ; clamp positive
+SDCP_USE_CLAMPED:
+    TFR B,A                  ; A = clamped beam x
+    STA >SLR_CUR_X          ; clamped value goes to integrator
     CLR VIA_shift_reg
     LDA #$CC
     STA VIA_cntl
@@ -1398,7 +1367,7 @@ SDCP_ABS_OK:
     STA VIA_port_b
     LDA #$01
     STA VIA_port_b
-    LDB >TMPVAL             ; B = abs_y
+    LDB >SDCP_ABS_Y         ; B = abs_y
     STB VIA_port_a          ; DY → DAC (PB=1: hold)
     CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
     LDA >SLR_CUR_X          ; abs_x (load = settling for Y)
@@ -1421,19 +1390,61 @@ SDCP_MOVETO_W:
 SDCP_SEG_LOOP:
     LDA ,X+                 ; flags
     CMPA #2
-    BEQ SDCP_DONE
-    ; Read dy → B, dx → A (DSWM order)
+    LBEQ SDCP_DONE
     LDB ,X+                 ; B = dy
-    LDA ,X+                 ; A = dx
-    ; --- X-axis clip check: new_x = cur_x + dx ---
     STB >TMPPTR2            ; save dy
-    PSHS A                  ; push dx
+    LDA ,X+                 ; A = dx (8-bit signed)
+    ; --- 16-bit add: true_new_x_16 = SLR_TRUE_X + SEX(dx) ---
+    TFR A,B                 ; B = dx
+    SEX                      ; D = sign-extended dx (A=sign, B=dx)
+    ADDD >SLR_TRUE_X        ; D = new true_x_16
+    STD >SLR_TRUE_X         ; update 16-bit tracker
+    ; --- Clamp D to [-128, +127] → 8-bit clamped_new_x in B ---
+    TSTA
+    BEQ SDCP_SEG_POS
+    INCA
+    BEQ SDCP_SEG_NEG_OK     ; A was $FF
+    ; Way off — clamp by sign of original D
+    LDA >SLR_TRUE_X         ; reload hi byte
+    BMI SDCP_SEG_CLAMP_LEFT
+    LDB #$7F                ; positive way off → +127
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_CLAMP_LEFT:
+    LDB #$80                ; negative way off → -128
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_NEG_OK:
+    CMPB #$80
+    BHS SDCP_SEG_CLAMPED
+    LDB #$80
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_POS:
+    CMPB #$7F
+    BLS SDCP_SEG_CLAMPED
+    LDB #$7F
+SDCP_SEG_CLAMPED:
+    ; B = clamped_new_x. Compute beam_dx = B - SLR_CUR_X (8-bit signed).
     LDA >SLR_CUR_X
-    ADDA ,S                 ; A = cur_x + dx; V set on overflow
-    BVS SDCP_CLIP           ; overflow → clip
-    STA >SLR_CUR_X          ; update tracker
-    PULS A                  ; restore dx
+    PSHS B                  ; save clamped_new_x
+    NEGA                    ; A = -cur_x
+    ADDA ,S                 ; A = clamped_new_x - cur_x = beam_dx
+    PULS B                  ; B = clamped_new_x
+    ; Update SLR_CUR_X to new clamped position
+    STB >SLR_CUR_X
+    ; Decide beam ON/OFF/skip:
+    ; - beam_dx != 0                       → beam ON,  ramp(beam_dx, dy)
+    ; - beam_dx == 0 AND cur at edge AND dy==0 → skip (zero motion)
+    ; - beam_dx == 0 AND cur at edge AND dy!=0 → beam OFF ramp(0, dy)
+    ;   (Y must track logical position so subsequent segments draw at correct Y)
+    ; - beam_dx == 0 AND not at edge       → beam ON,  ramp(0, dy) — vertical
+    TSTA
+    BNE SDCP_SEG_DRAW       ; non-zero beam_dx → draw
+    CMPB #$80               ; at left edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen left
+    CMPB #$7F               ; at right edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen right
+SDCP_SEG_DRAW:
     LDB >TMPPTR2            ; restore dy
+    ; A = beam_dx (visible X delta), B = dy. Beam ON ramp.
     STB VIA_port_a          ; DY → DAC (PB=1: hold)
     CLR VIA_port_b          ; PB=0: mux for DY
     NOP
@@ -1449,25 +1460,30 @@ SDCP_W_DRAW:
     ANDA #$40
     BEQ SDCP_W_DRAW
     CLR VIA_shift_reg       ; beam OFF
-    BRA SDCP_SEG_LOOP
-SDCP_CLIP:
-    STA >SLR_CUR_X          ; store wrapped x (approx)
-    PULS A                  ; restore dx
-    LDB >TMPPTR2            ; restore dy
+    LBRA SDCP_SEG_LOOP
+
+    ; --- Off-screen-X path: dx contribution is invisible, but Y must track ---
+SDCP_SEG_OFF_X:
+    LDB >TMPPTR2            ; B = dy
+    TSTB                     ; dy == 0?
+    LBEQ SDCP_SEG_LOOP      ; no Y motion either → skip entire segment
+    ; Ramp(0, dy) with beam OFF. A is already 0 (beam_dx).
+    CLRA                     ; defensive: ensure dx=0
     STB VIA_port_a          ; DY → DAC
     CLR VIA_port_b
     NOP
     NOP
     NOP
     INC VIA_port_b
-    STA VIA_port_a          ; DX → DAC
+    STA VIA_port_a          ; DX = 0
     ; beam stays OFF (no STA VIA_shift_reg)
     CLR VIA_t1_cnt_hi       ; start T1 (ramp, beam off)
-SDCP_W_MOVE:
+SDCP_W_OFF_X:
     LDA VIA_int_flags
     ANDA #$40
-    BEQ SDCP_W_MOVE
-    BRA SDCP_SEG_LOOP
+    BEQ SDCP_W_OFF_X
+    LBRA SDCP_SEG_LOOP
+
 SDCP_DONE:
     RTS
 
@@ -1925,7 +1941,7 @@ UGFC_PUSH_DOWN:
     STA 2,U          ; store back y (RAM +2)
     
 UGFC_NEXT_FG:
-    LEAX 20,X        ; Next FG object (ROM stride 20)
+    LEAX 23,X        ; Next FG object (ROM stride 23)
     DECB
     LBRA UGFC_FG_LOOP
     
@@ -2071,6 +2087,17 @@ LBRA PSG_update_done
 
 PSG_music_ended:
 CLR >PSG_IS_PLAYING
+; Silence all 3 PSG channels so the last note doesn't keep ringing
+; until the next PLAY_MUSIC. DP is already $D0 (set by AUDIO_UPDATE).
+LDA #8                  ; PSG reg 8 = Volume Channel A
+LDB #0
+JSR Sound_Byte
+LDA #9                  ; PSG reg 9 = Volume Channel B
+LDB #0
+JSR Sound_Byte
+LDA #10                 ; PSG reg 10 = Volume Channel C
+LDB #0
+JSR Sound_Byte
 LBRA PSG_update_done
 
 PSG_music_loop:
@@ -2179,19 +2206,36 @@ STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)
 BRA AU_UPDATE_SFX       ; Skip reading data this frame
 
 AU_MUSIC_PROCESS_WRITES:
-PSHS B                  ; Save count
-
+; Per-event write loop. Inlined PSG protocol instead of JSR Sound_Byte
+; (~35 cycles vs ~92 incl JSR/RTS overhead — saves ~57 cycles per
+; register write). For theme-style music with 8-10 writes per event,
+; saves ~500-600 cycles per event frame → frees enough budget that the
+; music event no longer pushes the frame over vsync. Mirrors the BIOS
+; Sound_Byte protocol exactly (Vectrex VIA bits: BC1=bit3, BDIR=bit4).
+PSHS B                  ; save register-write count on stack for in-place DEC
 AU_MUSIC_WRITE_LOOP:
-LDA ,X+                 ; Load register number
-LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer
-JSR Sound_Byte          ; Write to PSG using BIOS (DP=$D0)
-PULS X                  ; Restore pointer
-PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ AU_MUSIC_DONE       ; Done if count=0
-PSHS B                  ; Save counter
-BRA AU_MUSIC_WRITE_LOOP ; Continue
+LDA ,X+                 ; A = register number
+LDB ,X+                 ; B = register value
+STA VIA_port_a          ; data bus = reg num
+LDA #$19                ; BC1=1, BDIR=1 → LATCH ADDR
+STA VIA_port_b
+LDA #$01                ; back to INACTIVE (BC1=0, BDIR=0)
+STA VIA_port_b
+LDA VIA_port_a          ; READ STATUS — settling delay so PSG finishes
+; latching the register address before we drive
+; the value. Without this, the PSG occasionally
+; writes the new value into the PREVIOUS register
+; (audible as glitchy pitch / 'noisy' music,
+; especially when other CPU activity perturbs
+; the timing between this loop and adjacent code).
+STB VIA_port_a          ; data bus = value
+LDA #$11                ; BC1=0, BDIR=1 → WRITE DATA
+STA VIA_port_b
+LDA #$01                ; back to INACTIVE
+STA VIA_port_b
+DEC ,S                  ; decrement count on stack (in-place; no PSHS/PULS per iter)
+BNE AU_MUSIC_WRITE_LOOP
+LEAS 1,S                ; discard saved count
 
 AU_MUSIC_DONE:
 STX >PSG_MUSIC_PTR      ; Update music pointer
@@ -2931,7 +2975,7 @@ PRINT_TEXT_STR_18135904787860682873:
 ;**** PRINT_MSG Dispatch ****
 PRINT_MSG_DISPATCH:
     ; VAR_ARG0 = msg_id (set by PRINT_MSG caller)
-    LDB VAR_ARG0+1      ; B = msg_id (low byte)
+    LDB >VAR_ARG0+1      ; B = msg_id (low byte)
     BEQ PRINT_MSG_SKIP  ; id=0 → nothing to print
     DECB                ; 0-based index (id starts at 1)
     LSLB               ; B = index * 2
@@ -2940,12 +2984,12 @@ PRINT_MSG_DISPATCH:
     ABX                ; X = &table[index * 4]
     LDB ,X+            ; B = x (signed byte)
     SEX                ; D = sign-extended x
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDB ,X+            ; B = y (signed byte)
     SEX                ; D = sign-extended y
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX ,X             ; X = string pointer
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JMP VECTREX_PRINT_TEXT  ; tail call (no RTS needed)
 PRINT_MSG_SKIP:
     RTS
@@ -3086,17 +3130,6 @@ PRINT_MSG_TABLE:
     FDB PRINT_TEXT_STR_12951030068845256446  ; msg 44 "VAULT UNSEALED!"
 
 ; === CROSS-BANK USER FUNCTION TRAMPOLINES ===
-TRAMP_UPDATE_ROOM:
-    LDA CURRENT_ROM_BANK  ; save caller's bank
-    PSHS A
-    LDA #$01  ; switch to bank #1
-    STA CURRENT_ROM_BANK
-    STA $DF00
-    JSR UPDATE_ROOM
-    PULS A
-    STA CURRENT_ROM_BANK  ; restore caller's bank
-    STA $DF00
-    RTS
 TRAMP_CHECK_ENTRANCE_HOTSPOTS:
     LDA CURRENT_ROM_BANK  ; save caller's bank
     PSHS A
@@ -3225,6 +3258,17 @@ TRAMP_PICKUP_ITEM:
     STA CURRENT_ROM_BANK
     STA $DF00
     JSR PICKUP_ITEM
+    PULS A
+    STA CURRENT_ROM_BANK  ; restore caller's bank
+    STA $DF00
+    RTS
+TRAMP_UPDATE_ROOM:
+    LDA CURRENT_ROM_BANK  ; save caller's bank
+    PSHS A
+    LDA #$01  ; switch to bank #1
+    STA CURRENT_ROM_BANK
+    STA $DF00
+    JSR UPDATE_ROOM
     PULS A
     STA CURRENT_ROM_BANK  ; restore caller's bank
     STA $DF00

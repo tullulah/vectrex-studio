@@ -1,0 +1,38 @@
+{
+  "version": "1.0",
+  "name": "explosion1",
+  "category": "custom",
+  "duration_ms": 740,
+  "oscillator": {
+    "frequency": 19531,
+    "channel": 0,
+    "duty": 50
+  },
+  "envelope": {
+    "attack": 40,
+    "decay": 360,
+    "sustain": 11,
+    "release": 0,
+    "peak": 14
+  },
+  "pitch": {
+    "enabled": false,
+    "start_mult": 1.0,
+    "end_mult": 1.0,
+    "curve": 0
+  },
+  "noise": {
+    "enabled": true,
+    "period": 26,
+    "volume": 14,
+    "decay_ms": 0
+  },
+  "modulation": {
+    "arpeggio": false,
+    "arpeggio_notes": [],
+    "arpeggio_speed": 100,
+    "vibrato": false,
+    "vibrato_depth": 0,
+    "vibrato_speed": 0
+  }
+}

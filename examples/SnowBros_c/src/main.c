@@ -115,7 +115,7 @@ enum {
 static int game_state    = STATE_TITLE;
 static int score         = 0;
 static int lives         = LIVES_START;
-static int current_level = 1;
+static int current_level = 2;
 static int frame_timer   = 0;
 static int camera_y      = CAMERA_Y_MIN;
 static int time_left     = 0;

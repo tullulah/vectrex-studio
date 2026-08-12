@@ -25,8 +25,8 @@ int8_t  currentJoy1X = 0;
 int8_t  currentJoy1Y = 0;
 
 /* ---- JS bridges: the host supplies Module.pitrex.* (all optional) ---- */
-EM_JS(void, js_draw_line, (int x0, int y0, int x1, int y1, int b), {
-    if (Module.pitrex && Module.pitrex.drawLine) Module.pitrex.drawLine(x0, y0, x1, y1, b);
+EM_JS(void, js_draw_line, (int x0, int y0, int x1, int y1, int b, int rgb), {
+    if (Module.pitrex && Module.pitrex.drawLine) Module.pitrex.drawLine(x0, y0, x1, y1, b, rgb);
 });
 EM_JS(void, js_present, (void), {
     if (Module.pitrex && Module.pitrex.present) Module.pitrex.present();
@@ -68,8 +68,21 @@ EM_JS(int, js_frame_delay, (int hz), {
     return (d < 0) ? 0 : (d | 0);
 });
 
+/* COLOUR. The Vectrex is monochrome and so is this by default: s_colour 0 means "use the
+ * display's own look", which is what every existing game gets without changing a line.
+ *
+ * It is here because colour vector hardware is coming (the Masteroids board drives colour
+ * arcade monitors), and because a port that is still half raster needs its untraced art
+ * TELLABLE APART — a colour game's raster is one flat white blob otherwise. So: vectors
+ * stay monochrome by default, the raster fallback colours itself from the game's palette.
+ *
+ * v_setColour(0) restores the default. Backends without colour ignore it. */
+static uint32_t s_colour = 0;
+
+void v_setColour(uint32_t rgb) { s_colour = rgb & 0xffffff; }
+
 void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b) {
-    js_draw_line((int)x0, (int)y0, (int)x1, (int)y1, (int)b);
+    js_draw_line((int)x0, (int)y0, (int)x1, (int)y1, (int)b, (int)s_colour);
 }
 
 void v_WaitRecal(void) {

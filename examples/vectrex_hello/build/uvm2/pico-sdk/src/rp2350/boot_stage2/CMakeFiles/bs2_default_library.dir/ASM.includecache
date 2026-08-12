@@ -1,0 +1,10 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/Users/daniel/projects/vectrex-pseudo-python/examples/vectrex_hello/build/uvm2/pico-sdk/src/rp2350/boot_stage2/bs2_default_padded_checksummed.S
+

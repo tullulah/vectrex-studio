@@ -1,0 +1,1 @@
+{"version": "1.0", "name": "tdcm", "fps": 12, "vrec": "recordings/clip.vrec", "vsmp": "samples/audio.vsmp", "source": "/tmp/vmov_dl/tdcm.mp4", "trace": {"mode": "edges", "threshold": 230, "minArea": 40, "epsilon": 2.5, "budget": 250, "borderMargin": 2}}

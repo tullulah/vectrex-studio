@@ -720,7 +720,11 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
       submenu: [
         { label: 'Build', accelerator: 'F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
         { label: 'Build & Run', accelerator: 'F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
-        { label: 'Run on RP2350 Emulator', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.rp2350emu') },
+        // Follows the SELECTED build target: rp2350 -> the slow HW-accurate emulator,
+        // pitrex -> build the bare-metal kernel image (nothing to emulate there).
+        // The native menu is static, so the label stays target-neutral; the in-app
+        // Build menu shows the specific action.
+        { label: 'Build for Hardware Target', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.rp2350emu') },
         { label: 'Clean', click: () => mainWindow?.webContents.send('command', 'build.clean') }
       ]
     },
@@ -1387,7 +1391,7 @@ async function flashRp2350(
 // deployed to the SD card via the same copyPitrexToSDCard() path a VPy pitrex
 // build uses — same artifact (`kernel7l.img`), same SD bundle.
 interface ExternalProjectManifest {
-  project: { name: string; type: string; target?: 'pitrex' | 'rp2350' };
+  project: { name: string; type: string; target?: 'pitrex' | 'rp2350' | 'uvm2' };
   build: { command: string; args?: string[]; artifact: string; deploy_extra?: string[] };
   // Per-hardware-target build overrides. When the IDE builds for a selected
   // target (e.g. rp2350), these replace the default [build] command/args/
@@ -1427,7 +1431,7 @@ export async function executeExternalBuild(args: {
   manifestPath: string;
   deploy?: boolean;
   sdPath?: string;
-  target?: 'pitrex' | 'rp2350';
+  target?: 'pitrex' | 'rp2350' | 'uvm2';
   preview?: boolean;   // rp2350: after building, push the .bin to the emulator panel
 }): Promise<{ ok: true; artifactPath: string } | { error: string; detail?: string }> {
   const win = mainWindow ?? null;
@@ -1462,6 +1466,15 @@ export async function executeExternalBuild(args: {
   // (previously ANY target for a C project ran the pitrex build).
   const effectiveTarget = target || manifest.project.target || 'pitrex';
   const override = manifest.targets?.[effectiveTarget] || {};
+
+  // A manifest that declares per-target recipes but not this one silently fell
+  // back to the [build] table — so asking for uvm2 quietly built pitrex, and the
+  // log gave no hint. Say so instead.
+  if (manifest.targets && !manifest.targets[effectiveTarget]) {
+    win?.webContents.send('run://stderr',
+      `[C] ${manifest.project.name} has no [targets.${effectiveTarget}] recipe — ` +
+      `falling back to the default [build] one. Add it to the .cvproj to build for ${effectiveTarget}.\n`);
+  }
   const buildCommand  = override.command  ?? manifest.build.command;
   const buildArgs     = override.args     ?? manifest.build.args ?? [];
   const buildArtifact = override.artifact ?? manifest.build.artifact;
@@ -1525,6 +1538,19 @@ export async function executeExternalBuild(args: {
           win?.webContents.send('run://stdout', `[C] Copied ${sdName} to SD card (${sdPath}).\n`);
         } catch (e: any) {
           win?.webContents.send('run://stderr', `[C] rp2350 SD copy failed: ${e?.message || e}\n`);
+        }
+      }
+    } else if (effectiveTarget === 'uvm2') {
+      // The UVM2 firmware reads the `.um2` straight off the card, so the
+      // artifact goes across under its own name.
+      if (!sdPath) {
+        win?.webContents.send('run://stderr', `[C] uvm2 deploy: no SD path set — copy ${basename(artifactPath)} to the card manually.\n`);
+      } else {
+        try {
+          await fs.copyFile(artifactPath, join(sdPath, basename(artifactPath)));
+          win?.webContents.send('run://stdout', `[C] Copied ${basename(artifactPath)} to SD card (${sdPath}).\n`);
+        } catch (e: any) {
+          win?.webContents.send('run://stderr', `[C] uvm2 SD copy failed: ${e?.message || e}\n`);
         }
       }
     } else {
@@ -1968,6 +1994,21 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           return null;
         };
 
+        // uvm2 ships a `.um2` (20-byte header + the RAM image the cartridge
+        // loads), not the raw `.bin`. The simulator and the SD card both want
+        // that file, so send it in place of the binary.
+        let payloadBase64 = base64;
+        if (target === 'uvm2') {
+          const um2Path = await resolveArtifact('.um2');
+          if (um2Path) {
+            try {
+              payloadBase64 = Buffer.from(await fs.readFile(um2Path)).toString('base64');
+            } catch (_e) { /* fall back to the .bin */ }
+          } else {
+            console.warn('[main] uvm2: no .um2 next to', binPath, 'or in build/');
+          }
+        }
+
         // For rp2350 builds, also load the .elf for symbol extraction in Rp2350System
         let elfBase64: string | null = null;
         if (target === 'rp2350') {
@@ -2048,7 +2089,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
 
         // Notify renderer to load binary
         mainWindow?.webContents.send('emu://compiledBin', {
-          base64, size: buf.length, binPath, pdbData,
+          base64: payloadBase64, size: buf.length, binPath, pdbData,
           target: target || 'm6809',
           elfBase64,
           sFileText,
@@ -2060,9 +2101,19 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           await copyPitrexToSDCard(binPath, pitrexSdPath, mainWindow ?? null);
         }
 
-        // Copy to SD card if requested (uvm2 target)
+        // Copy to SD card if requested (uvm2 target).
+        // The cartridge reads `.um2` — a 20-byte header plus the RAM image. The
+        // raw `.bin` has no '2CMU' magic, so copying that produces a card the
+        // firmware silently refuses to load.
         if (target === 'uvm2' && uvm2CopyToSD) {
-          await copyUvm2ToSDCard(binPath, uvm2SdPath, mainWindow ?? null);
+          const um2ForSd = await resolveArtifact('.um2');
+          if (um2ForSd) {
+            await copyUvm2ToSDCard(um2ForSd, uvm2SdPath, mainWindow ?? null);
+          } else {
+            mainWindow?.webContents.send('run://stderr',
+              `[SD] No .um2 found next to ${binPath} — nothing copied. ` +
+              `The cartridge cannot load a raw .bin.\n`);
+          }
         }
 
         // Flash the RP2350 debug cartridge if requested (rp2350 target)
@@ -2969,7 +3020,11 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
       submenu: [
         { label: 'Build', accelerator: 'F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
         { label: 'Build & Run', accelerator: 'F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
-        { label: 'Run on RP2350 Emulator', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.rp2350emu') },
+        // Follows the SELECTED build target: rp2350 -> the slow HW-accurate emulator,
+        // pitrex -> build the bare-metal kernel image (nothing to emulate there).
+        // The native menu is static, so the label stays target-neutral; the in-app
+        // Build menu shows the specific action.
+        { label: 'Build for Hardware Target', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.rp2350emu') },
         { label: 'Clean', click: () => mainWindow?.webContents.send('command', 'build.clean') }
       ]
     },

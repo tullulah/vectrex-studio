@@ -1,0 +1,12 @@
+[project]
+name = "s4_cross"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/s4_cross.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]

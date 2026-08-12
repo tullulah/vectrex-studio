@@ -1,0 +1,12 @@
+[project]
+name = "s5_square"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/s5_square.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]

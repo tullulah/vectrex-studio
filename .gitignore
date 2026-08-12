@@ -91,3 +91,8 @@ examples/*.mov
 
 # Python bytecode cache (dev tools)
 tools/**/__pycache__/
+
+# Instaladores construidos: 100 MB que GitHub rechaza, y no son fuente
+*.dmg
+*.AppImage
+*.exe

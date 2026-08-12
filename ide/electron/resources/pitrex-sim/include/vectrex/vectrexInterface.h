@@ -40,6 +40,15 @@ void     v_WaitRecal(void);
 void     v_directDraw32(int32_t xStart, int32_t yStart,
                         int32_t xEnd,  int32_t yEnd, uint8_t brightness);
 
+/* Colour for subsequent draws, 0x00RRGGBB. 0 = the display's own default, which is what
+ * a monochrome Vectrex always uses and what every existing game gets for free.
+ *
+ * Kept because colour vector hardware is coming (Masteroids drives colour arcade
+ * monitors) and because a half-finished port needs its untraced RASTER art tellable
+ * apart. Vectors stay monochrome unless a port asks otherwise. Backends without colour
+ * ignore this. */
+void     v_setColour(uint32_t rgb);
+
 /* Input */
 uint8_t  v_readButtons(void);          /* also stores into currentButtonState */
 void     v_readJoystick1Analog(void);  /* stores into currentJoy1X / currentJoy1Y */

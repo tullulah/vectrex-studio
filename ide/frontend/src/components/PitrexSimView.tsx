@@ -27,7 +27,8 @@ const INTERNAL_W = 330;
 const INTERNAL_H = 440;
 const DEBUG_INPUT = false;    // draw a live controller-state readout (diagnostic)
 
-interface Segment { x0: number; y0: number; x1: number; y1: number; b: number; }
+/* rgb: 0x00RRGGBB, 0 = the display's own monochrome look (the Vectrex default). */
+interface Segment { x0: number; y0: number; x1: number; y1: number; b: number; rgb: number; }
 
 // Vectrex controller state fed back to the WASM via Module.pitrex hooks.
 interface ControllerState {
@@ -184,8 +185,13 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       for (const s of segs) {
         const alpha = Math.max(0, Math.min(1, s.b / 127));
         if (alpha <= 0) continue;
-        // Phosphor-green vector stroke, intensity scaled by brightness.
-        ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+        // Monochrome unless the game asked for a colour; brightness scales either way.
+        if (s.rgb) {
+          const r = (s.rgb >> 16) & 0xff, g = (s.rgb >> 8) & 0xff, bl = s.rgb & 0xff;
+          ctx.strokeStyle = `rgba(${r},${g},${bl},${alpha})`;
+        } else {
+          ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+        }
         ctx.beginPath();
         ctx.moveTo(sx(s.x0), sy(s.y0));
         ctx.lineTo(sx(s.x1), sy(s.y1));
@@ -205,9 +211,12 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
     // no-op once disposed; `present` additionally throws a sentinel so the
     // Asyncify main loop unwinds and stops (swallowed in the callMain catch).
     const pitrex = {
-      drawLine: (x0: number, y0: number, x1: number, y1: number, b: number) => {
+      // `rgb` is 0x00RRGGBB, 0 meaning "use the display's own look". The Vectrex is
+      // monochrome so 0 is the norm; colour exists for the Masteroids board (colour
+      // arcade monitors) and so a half-ported game's raster art stays tellable apart.
+      drawLine: (x0: number, y0: number, x1: number, y1: number, b: number, rgb?: number) => {
         if (disposedRef.current) return;
-        segmentsRef.current.push({ x0, y0, x1, y1, b });
+        segmentsRef.current.push({ x0, y0, x1, y1, b, rgb: rgb || 0 });
       },
       present: () => {
         if (disposedRef.current) throw 'pitrex-sim-disposed';

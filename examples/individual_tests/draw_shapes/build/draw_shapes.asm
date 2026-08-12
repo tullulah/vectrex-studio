@@ -34,7 +34,6 @@
 .equ CAMERA_X,            0x2007F14C  @ camera X offset (used by show_level)
 .equ CAMERA_Y,            0x2007F150  @ camera Y offset
 .equ TEXT_SIZE,           0x2007F154  @ text scale factor (1=normal, 2=double, ...)
-.equ TEXT_COLOR,          0x2007F158  @ text intensity (0-127)
 .equ LEVEL_DATA_PTR,      0x2007F15C  @ pointer to loaded level ROM data
 .equ DBGVAL,              0x2007F160  @ debug_print last written value
 .equ PRINT_BEAM_X,        0x2007F164  @ beam X shadow during print_text
@@ -135,12 +134,12 @@ bus_write:
     svc     #8                      @ SYS_BUS_WRITE
     bx      lr
 
-@ bus_read(r0=addr) — stub: returns 0xFF (no BIOS read syscall yet)
+@ bus_read(r0=addr) -> r0=data — BIOS trap: SYS_BUS_READ
 .global bus_read
 .type bus_read, %function
 .thumb_func
 bus_read:
-    mov     r0, #0xFF
+    svc     #11                     @ SYS_BUS_READ
     bx      lr
 
 @ ============================================================
@@ -438,6 +437,21 @@ vpy_cos:
 .thumb_func
 game_main:
     push    {r4, r5, r6, r7, lr}
+    @ zero runtime RAM (RP2350 SRAM is not zero-initialised)
+    ldr     r0, =TMPVAL              @ runtime RAM base
+    ldr     r1, =USER_RAM_START      @ end of system RAM (exclusive)
+    mov     r2, #0
+gm_zero_loop:
+    str     r2, [r0], #4
+    cmp     r0, r1
+    blo     gm_zero_loop
+    @ default drawing state (SRAM is not zero-initialised)
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    mov     r0, #0
+    strb    r0, [r1]
+    ldr     r1, =TEXT_SIZE
+    mov     r0, #3
+    str     r0, [r1]
     @ initialize globals
     @ init PSG_MIXER_SHADOW (all channels disabled)
     ldr     r1, =PSG_MIXER_SHADOW

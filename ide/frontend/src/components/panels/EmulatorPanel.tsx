@@ -285,7 +285,7 @@ export const EmulatorPanel: React.FC = () => {
   // Which run backend is active, shown as a badge so it's never ambiguous whether
   // you're SIMULATING (fast WASM, F5) or EMULATING the RP2350 ARM binary (slow
   // HW-accurate, Shift+F5).  'rp2350' is set when an ARM binary is loaded below.
-  const [runMode, setRunMode] = useState<'rp2350' | null>(null);
+  const [runMode, setRunMode] = useState<'rp2350' | 'uvm2' | null>(null);
   const { setConfigOpen, loadConfig } = useJoystickStore();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   
@@ -2641,6 +2641,58 @@ export const EmulatorPanel: React.FC = () => {
         return;
       }
 
+      // A fresh ROM means a fresh run mode; the branches below set it if they
+      // take over, and the plain 6809 cartridge path correctly leaves it unset.
+      setRunMode(null);
+
+      // Auto-detect a UVM2 image by its "2CMU" header. It carries its own
+      // syscall handler and drives the VIA itself, so it goes to Uvm2System
+      // rather than the RP2350 one, which would implement those syscalls in JS.
+      const isUvm2 =
+        romData.length >= 20 &&
+        romData[0] === 0x32 && romData[1] === 0x43 &&
+        romData[2] === 0x4D && romData[3] === 0x55;
+
+      if (isUvm2) {
+        console.log('[EmulatorPanel] ✓ Detected UVM2 image (magic "2CMU") — routing to Uvm2System');
+        setRunMode('uvm2');
+        if (typeof emuCore.loadUvm2 !== 'function') {
+          console.error('[EmulatorPanel] emuCore.loadUvm2 not available — uvm2 target unsupported in this build');
+          return;
+        }
+        emuCore.loadUvm2(romData, canvasRef.current ?? undefined);
+        if (canvasRef.current) {
+          const ctx = canvasRef.current.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          }
+        }
+
+        // Same 50 Hz rAF cap as the rp2350 path — the image paces itself against
+        // the emulated bus clock, so the host loop only has to not outrun it.
+        {
+          const TARGET_MS = 1000 / 50;
+          let lastFrameTs = 0;
+          const uvm2Loop = (ts: number) => {
+            rp2350LoopRef.current = requestAnimationFrame(uvm2Loop);
+            const elapsed = ts - lastFrameTs;
+            if (elapsed < TARGET_MS) return;
+            lastFrameTs = ts - (elapsed % TARGET_MS);
+            if (useDebugStore.getState().state !== 'running') return;
+            emuCore.runFrame();
+          };
+          useDebugStore.getState().setState('running');
+          rp2350LoopRef.current = requestAnimationFrame(uvm2Loop);
+        }
+
+        setLoadedROM(`${romName} (${romData.length} bytes, uvm2)`);
+        setLastRom(null, romName);
+        setSelectedROM('');
+        window.dispatchEvent(new Event('programLoaded'));
+        return;
+      }
+
       // Auto-detect rp2350 binaries by magic header "VPy2" (0x56 0x50 0x79 0x32)
       const isRp2350 =
         romData.length >= 4 &&
@@ -2947,6 +2999,10 @@ export const EmulatorPanel: React.FC = () => {
     if (!electronAPI?.onCompiledBin) return;
 
     const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null; libvpyAsm?: string | null }) => {
+      // Clear the run-mode badge first: only the branch that handles THIS build
+      // may set it. Without this it survives into the next build and a project
+      // compiled for m6809 keeps claiming it is emulating whatever ran last.
+      setRunMode(null);
       console.log(`[EmulatorPanel] Loading compiled binary: ${payload.binPath} (${payload.size} bytes) target=${payload.target ?? 'm6809'}`);
 
       // A VPy / hardware binary is loading — tear down any external-project WASM
@@ -2989,17 +3045,6 @@ export const EmulatorPanel: React.FC = () => {
         useDebugStore.getState().clearPdbData();
       }
       
-      // ── uvm2 path: hardware-only target, no in-browser emulation ──
-      if (payload.target === 'uvm2') {
-        console.log('[EmulatorPanel] uvm2 target — hardware only, no browser emulation');
-        setHardwareOverlayKind('uvm2');
-        setPitrexImgPath(payload.binPath);
-        setShowPitrexOverlay(true);
-        const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
-        loadOverlay(romName + '.bin');
-        return;
-      }
-
       // ── Shared helper: stop ALL three emulators before switching targets ──
       const stopAllEmulators = () => {
         // 1. JSVecX (m6809) — stop its internal setInterval/setTimeout loop
@@ -3075,9 +3120,13 @@ export const EmulatorPanel: React.FC = () => {
         return;
       }
 
-      // ── rp2350 path: route through Rp2350System instead of M6809/JSVecX ──
-      if (payload.target === 'rp2350') {
+      // ── ARM paths: rp2350 (BIOS syscalls in JS) and uvm2 (the image's own
+      //    halt-mode runtime). Both drive the same rAF loop below, so they
+      //    share this branch and differ only in which loader they call. ──
+      if (payload.target === 'rp2350' || payload.target === 'uvm2') {
+        const isUvm2 = payload.target === 'uvm2';
         setShowPitrexOverlay(false);
+        setRunMode(isUvm2 ? 'uvm2' : 'rp2350');
         try {
           stopAllEmulators();
 
@@ -3085,12 +3134,20 @@ export const EmulatorPanel: React.FC = () => {
           const elf = payload.elfBase64
             ? Uint8Array.from(atob(payload.elfBase64), c => c.charCodeAt(0))
             : undefined;
-          console.log(`[EmulatorPanel] rp2350: bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvasRef.current ? `${canvasRef.current.width}x${canvasRef.current.height}` : 'null'}`);
-          if (typeof emuCore.loadArm === 'function') {
-            // Pass the shared canvas so Rp2350System renders directly to it
-            const sdSim2 = await (electronAPI as any)?.sdSimList?.().catch(() => null);
-            emuCore.loadArm(bin, elf, canvasRef.current ?? undefined, sdSim2?.files ?? [], sdSim2?.previews ?? {});
-            console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
+          console.log(`[EmulatorPanel] ${payload.target}: bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvasRef.current ? `${canvasRef.current.width}x${canvasRef.current.height}` : 'null'}`);
+          const loaderAvailable = isUvm2
+            ? typeof emuCore.loadUvm2 === 'function'
+            : typeof emuCore.loadArm === 'function';
+          if (loaderAvailable) {
+            if (isUvm2) {
+              emuCore.loadUvm2!(bin, canvasRef.current ?? undefined);
+              console.log('[EmulatorPanel] ✓ .um2 image loaded into Uvm2System');
+            } else {
+              // Pass the shared canvas so Rp2350System renders directly to it
+              const sdSim2 = await (electronAPI as any)?.sdSimList?.().catch(() => null);
+              emuCore.loadArm!(bin, elf, canvasRef.current ?? undefined, sdSim2?.files ?? [], sdSim2?.previews ?? {});
+              console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
+            }
 
             // Clear the canvas before first rp2350 frame (Minestorm may have drawn there)
             if (canvasRef.current) {
@@ -3126,7 +3183,7 @@ export const EmulatorPanel: React.FC = () => {
             rp2350LoopRef.current = requestAnimationFrame(loop);
             console.log('[EmulatorPanel] ✓ rp2350 rAF loop started');
           } else {
-            console.error('[EmulatorPanel] loadArm not available on emuCore');
+            console.error(`[EmulatorPanel] loader for ${payload.target} not available on emuCore`);
           }
         } catch (e) {
           console.error('[EmulatorPanel] Failed to load ARM binary:', e);
@@ -3380,7 +3437,7 @@ export const EmulatorPanel: React.FC = () => {
           {/* Run-mode badge — SIMULATING (fast WASM, F5) vs EMULATING the RP2350
               ARM binary (slow, HW-accurate, Shift+F5). Removes the ambiguity of
               not knowing which backend a run used. */}
-          {(simModulePath || runMode === 'rp2350') && (
+          {(simModulePath || runMode === 'rp2350' || runMode === 'uvm2') && (
             <div style={{
               position: 'absolute', top: 4, right: 4, zIndex: 30,
               padding: '2px 7px', borderRadius: 4, pointerEvents: 'none',
@@ -3390,7 +3447,11 @@ export const EmulatorPanel: React.FC = () => {
               color: simModulePath ? '#8f8' : '#fc9',
               border: `1px solid ${simModulePath ? '#4a4' : '#c94'}`,
             }}>
-              {simModulePath ? '▶ SIMULATING (WASM)' : '🎯 EMULATING RP2350 (ARM · slow)'}
+              {simModulePath
+                ? '▶ SIMULATING (WASM)'
+                : runMode === 'uvm2'
+                  ? '🎯 EMULATING UVM2 (halt-mode bus · slow)'
+                  : '🎯 EMULATING RP2350 (ARM · slow)'}
             </div>
           )}
           {/* External-project WASM simulator (runs any module speaking the
