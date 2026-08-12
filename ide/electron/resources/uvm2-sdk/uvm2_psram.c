@@ -215,6 +215,32 @@ int uvm2_psram_probe(void)
         r->mf_id_after_qpi_exit = id[0];
     }
 
+    /* Barrido de velocidad. CLKDIV vive en DIRECT_CSR, asi que se cambia con el
+     * modo directo apagado y se vuelve a entrar. */
+    {
+        static const uint8_t divs[4] = { 6, 12, 30, 120 };
+        for (int k = 0; k < 4; k++) {
+            uint32_t csr = qmi_hw->direct_csr;
+            csr = (csr & ~QMI_DIRECT_CSR_CLKDIV_BITS)
+                | ((uint32_t)divs[k] << QMI_DIRECT_CSR_CLKDIV_LSB);
+            qmi_hw->direct_csr = csr;
+
+            direct_begin();
+            cs1_xfer(c_rsten, 1, 0, 0);
+            cs1_xfer(c_rst,   1, 0, 0);
+            direct_end();
+            spin(30000);
+
+            uint8_t idk[2] = { 0, 0 };
+            direct_begin();
+            cs1_xfer(c_id, 4, idk, 2);
+            direct_end();
+
+            r->clkdiv_probados[k] = divs[k];
+            r->id_por_clkdiv[k]   = ((uint32_t)idk[0] << 8) | idk[1];
+        }
+    }
+
     /* El cable, ya que el chip no habla. FUNCSEL 5 = SIO. */
     io_bank0_hw->io[PSRAM_CS_GPIO].ctrl = 5u;
     sio_hw->gpio_hi_oe_set = 1u << (PSRAM_CS_GPIO - 32);

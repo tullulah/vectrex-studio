@@ -54,6 +54,11 @@ typedef struct {
      * El discriminante es cs_float_tras_bajo. */
     uint32_t cs_float_tras_bajo;
     uint32_t cs_float_tras_alto;
+    /* El mismo READ_ID a varias velocidades. Un chip bien cableado que calla
+     * suele destaparse bajando el reloj. CLKDIV 6 = 25 MHz, 30 = 5 MHz,
+     * 120 = 1,25 MHz. */
+    uint32_t id_por_clkdiv[4];
+    uint32_t clkdiv_probados[4];
     uint32_t rx_timeouts;
     uint32_t csr_after_cmd; /* DIRECT_CSR tras sacar el primer byte */
     uint32_t already_mapped;/* 1 = CS1 venia configurado: NO tocamos el chip  */
