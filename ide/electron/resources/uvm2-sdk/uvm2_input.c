@@ -50,9 +50,36 @@ static int s_analog = 0;
 
 void uvm2_input_set_analog(int enable) { s_analog = enable; }
 
+/* Ventanas de diagnostico. Los botones salen mal en los DOS caminos —en
+ * monocore se veian "pulsados solos" el 2026-08-11— y programar el registro 7 al
+ * arrancar no lo curo. Esto expone lo que de verdad contesta el chip, para
+ * mirarlo por SWD en vez de seguir razonando. */
+volatile uint8_t uvm2_dbg_btn_raw;   /* lo ultimo que devolvio el registro 14 */
+volatile uint8_t uvm2_dbg_psg_r7;    /* el registro 7, leido del PSG          */
+volatile uint32_t uvm2_dbg_btn_reads;/* cuantas lecturas van                  */
+volatile uint8_t uvm2_dbg_btn_raw2;  /* SEGUNDA lectura seguida, sin resoltar  */
+volatile uint8_t uvm2_dbg_btn_raw3;  /* TERCERA, tras dejar asentar            */
+volatile uint8_t uvm2_dbg_ddra;      /* DDRA releido DEL CHIP antes de muestrear */
+volatile uint8_t uvm2_dbg_ddra_entry;/* DDRA AL ENTRAR: ¿podiamos escribir el nº? */
+volatile uint8_t uvm2_dbg_portb;     /* PORTB idem: BC1/BDIR de verdad puestos?  */
+
 uint8_t uvm2_read_buttons(void)
 {
     uint8_t raw;
+
+    /* PARA ESCRIBIR EL NUMERO DE REGISTRO, EL PUERTO A TIENE QUE SER SALIDA.
+     *
+     * Esto se daba por hecho —"lo habra dejado asi quien corrio antes"— y es una
+     * suposicion sobre el orden, no una garantia. Si el puerto sigue como
+     * entrada, el 0x0E no llega al bus, el PSG NO latchea el registro 14 y se
+     * queda con el ultimo que le pusieran; leerlo devuelve ESE. Encaja con lo
+     * medido en dual core: 0x3F constante, que es justo el contenido del
+     * registro 7, el mezclador que escribe el audio.
+     *
+     * En monocore funcionaba por casualidad de orden. Una lectura no puede
+     * depender de quien corrio antes. */
+    uvm2_dbg_ddra_entry = uvm2_via_read(UVM2_VIA_DDRA);
+    uvm2_via_write(UVM2_VIA_DDRA, 0xFF);
 
     uvm2_via_write(UVM2_VIA_PORTA, PSG_REG_BUTTONS);
     uvm2_via_write(UVM2_VIA_PORTB, PSG_LATCH_ADDR);
@@ -60,12 +87,27 @@ uint8_t uvm2_read_buttons(void)
 
     uvm2_via_write(UVM2_VIA_DDRA,  0x00);           /* Port A → input */
     uvm2_via_write(UVM2_VIA_PORTB, PSG_READ);
+    /* Releer del CHIP lo que creemos haberle escrito. Si DDRA no es 0x00, el
+     * puerto A sigue siendo SALIDA y lo que leemos es el registro de salida, no
+     * las patas: un valor fijo. Encaja con el 0x3F estable del dual core. */
+    uvm2_dbg_ddra  = uvm2_via_read(UVM2_VIA_DDRA);
+    uvm2_dbg_portb = uvm2_via_read(UVM2_VIA_PORTB);
+
     raw = uvm2_via_read(UVM2_VIA_PORTA);
+    /* Dos lecturas mas SIN rehacer el handshake: si la primera difiere de las
+     * siguientes, el chip si contesta y la estabamos muestreando pronto. Si las
+     * tres coinciden, lo que devuelve el bus es lo que hay. */
+    uvm2_dbg_btn_raw2 = uvm2_via_read(UVM2_VIA_PORTA);
+    uvm2_bus_delay(8);
+    uvm2_dbg_btn_raw3 = uvm2_via_read(UVM2_VIA_PORTA);
     uvm2_via_write(UVM2_VIA_PORTB, PSG_INACTIVE);
     uvm2_via_write(UVM2_VIA_DDRA,  0xFF);           /* Port A → output (the DAC) */
 
     /* Leave Port B where the drawing code expects it. */
     uvm2_via_write(UVM2_VIA_PORTB, UVM2_PB_IDLE);
+
+    uvm2_dbg_btn_raw = raw;
+    uvm2_dbg_btn_reads++;
 
     /* Returned RAW, exactly as the chip presents it: active-low, J1 in bits
      * 0-3 and J2 in bits 4-7.  The two button syscalls want different shapes
@@ -195,6 +237,10 @@ uint8_t uvm2_psg_read(uint32_t reg)
 {
     uint8_t v;
 
+    /* Mismo caso que uvm2_read_buttons: para poner el numero de registro en el
+     * bus, el puerto A tiene que ser SALIDA. Darlo por hecho es apostar a que
+     * quien corrio antes lo dejo asi. */
+    uvm2_via_write(UVM2_VIA_DDRA, 0xFF);
     uvm2_via_write(UVM2_VIA_PORTA, reg & 0x0Fu);
     uvm2_via_write(UVM2_VIA_PORTB, PSG_LATCH_ADDR);
     uvm2_via_write(UVM2_VIA_PORTB, PSG_INACTIVE);

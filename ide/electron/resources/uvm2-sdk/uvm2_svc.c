@@ -125,6 +125,9 @@ void uvm2_runtime_init(void)
      * botones salen pulsados solos. De paso deja los tres volumenes a cero, que
      * es el estado sano para arrancar. */
     uvm2_stop_music();
+    /* Leer el registro 7 DESPUES de programarlo, para comprobar que lo que
+     * creemos haber escrito es lo que el chip tiene. */
+    { extern volatile uint8_t uvm2_dbg_psg_r7; uvm2_dbg_psg_r7 = uvm2_psg_read(7); }
     /* Sonda de PSRAM, solo si se pide (-DUVM2_PSRAM_PROBE). Va bajo interruptor
      * porque toca el bus QSPI, que es el mismo por el que cuelga la flash del
      * multicart: en un arranque normal no hay ninguna razon para meterse ahi.
