@@ -1832,9 +1832,17 @@ impl VPlayLevel {
         out.push_str(&format!("    .hword {}  @ x\n", obj.x));
         out.push_str(&format!("    .hword {}  @ y\n", obj.y));
 
-        // +4: scale (scale*8, clamped 1-255; 8=1:1)
-        let scale_u8 = (obj.scale * 8.0).round().clamp(1.0, 255.0) as u8;
-        out.push_str(&format!("    .byte {}   @ scale (x8)\n", scale_u8));
+        // +4: escala en TREINTAYDOSAVOS — 32 = 1:1, y el techo son 255/32 = 7,97x.
+        //
+        // Era x8, y con ese paso un 0,7 del editor caia en 6/8 = 0,75: un 7% de error
+        // que se ve en un sprite de 16 px. A x32 el mismo 0,7 da 22/32 = 0,6875, un
+        // 1,8%. Se puede cambiar la unidad sin migrar nada porque hasta ahora NINGUN
+        // dibujante leia este byte — el valor viajaba al binario y se tiraba. Quien
+        // lo lee es vpy_draw_vector_ex (arm/builtins.rs), y 0 se sigue tratando como
+        // 1:1 para que un nivel viejo dibuje igual.
+        let scale_u8 = (obj.scale * 32.0).round().clamp(1.0, 255.0) as u8;
+        out.push_str(&format!("    .byte {}   @ scale (x32; {:.2}x -> {:.4}x)\n",
+                              scale_u8, obj.scale, scale_u8 as f32 / 32.0));
 
         // +5: intensity
         let intensity = obj.intensity.unwrap_or(127);

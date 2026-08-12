@@ -345,16 +345,31 @@ fn emit_draw_vector_ex() -> String {
     //   r9 = ox
     //   r10 = oy
     // Push r10 so it is callee-saved.  8 regs × 4 = 32 bytes → sp+32 = intensity arg.
-    s.push_str("@ vpy_draw_vector_ex(r0=asset, r1=ox, r2=oy, r3=mirror, [sp+0]=intensity)\n");
+    s.push_str("@ vpy_draw_vector_ex(r0=asset, r1=ox, r2=oy, r3=mirror, [sp+0]=intensity; escala en VPY_DRAW_SCALE)\n");
     s.push_str("@ Draws asset centered at (ox,oy); mirror: bit0=flipX, bit1=flipY\n");
     s.push_str("@ dv_reset called before EVERY path so each path starts from screen centre.\n");
+    s.push_str("@\n");
+    s.push_str("@ ESCALA (r11) desde VPY_DRAW_SCALE, en treintaydosavos: 32 = 1:1, y 0 tambien.\n");
+    s.push_str("@ El .vplay siempre llevo el byte y NINGUN dibujante lo leia — por eso los\n");
+    s.push_str("@ objetos salian al 100% aunque el editor dijera 0,7.\n");
+    s.push_str("@\n");
+    s.push_str("@ Se escala la POSICION ACUMULADA, no cada delta. Escalar delta a delta\n");
+    s.push_str("@ redondea en cada uno y el error se suma: con 0,7 un trazo de veinte\n");
+    s.push_str("@ segmentos de 1 unidad acabaria a cero o al doble segun caiga el redondeo.\n");
+    s.push_str("@ Llevando la cuenta sin escalar y restando posiciones escaladas, el error\n");
+    s.push_str("@ nunca pasa de medio punto. [sp+0..12] = ux, uy, lsx, lsy.\n");
     s.push_str(".global vpy_draw_vector_ex\n.type vpy_draw_vector_ex, %function\n.thumb_func\nvpy_draw_vector_ex:\n");
-    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n"); // 8 regs = 32 bytes
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n"); // 9 regs = 36 bytes
+    s.push_str("    sub     sp, sp, #16         @ [sp+0]=ux [sp+4]=uy [sp+8]=lsx [sp+12]=lsy\n");
     s.push_str("    mov     r4, r0              @ asset_ptr\n");
     s.push_str("    mov     r9, r1              @ ox  (kept for whole function)\n");
     s.push_str("    mov     r10, r2             @ oy  (kept for whole function)\n");
     s.push_str("    mov     r7, r3              @ mirror\n");
-    s.push_str("    ldr     r8, [sp, #32]       @ intensity arg (8 saved regs = 32 bytes)\n");
+    s.push_str("    ldr     r8, [sp, #52]       @ intensity arg (16 locales + 9 regs = 52)\n");
+    s.push_str("    ldr     r0, =VPY_DRAW_SCALE\n");
+    s.push_str("    ldrb    r11, [r0]           @ escala pedida (x32)\n");
+    s.push_str("    mov     r1, #0\n    strb    r1, [r0]    @ CONSUMIDA: no se hereda\n");
+    s.push_str("    cmp     r11, #0\n    it      eq\n    moveq   r11, #32   @ 0 => 1:1\n");
     s.push_str("    ldr     r5, [r4]            @ path_count\n");
     s.push_str("    mov     r6, #0              @ path_idx\n");
     s.push_str("dvex_pl:\n");
@@ -379,8 +394,16 @@ fn emit_draw_vector_ex() -> String {
     s.push_str("dvex_nfx:\n");
     s.push_str("    tst     r7, #2\n    beq     dvex_nfy\n    neg     r1, r1\n");
     s.push_str("dvex_nfy:\n");
-    s.push_str("    add     r0, r0, r9          @ x_start + ox\n");
-    s.push_str("    add     r1, r1, r10         @ y_start + oy\n");
+    // La POSICION del objeto (ox,oy) no se escala: escalar mueve el dibujo, no
+    // lo coloca. Se escala solo el punto de arranque DENTRO del asset.
+    s.push_str("    str     r0, [sp, #0]        @ ux = x_start (sin escalar)\n");
+    s.push_str("    str     r1, [sp, #4]        @ uy = y_start\n");
+    s.push_str("    mul     r0, r0, r11\n    add     r0, r0, #16\n    asr     r0, r0, #5   @ (x*s+16)>>5\n");
+    s.push_str("    mul     r1, r1, r11\n    add     r1, r1, #16\n    asr     r1, r1, #5\n");
+    s.push_str("    str     r0, [sp, #8]        @ lsx = ultimo x escalado\n");
+    s.push_str("    str     r1, [sp, #12]       @ lsy\n");
+    s.push_str("    add     r0, r0, r9          @ x_start*escala + ox\n");
+    s.push_str("    add     r1, r1, r10         @ y_start*escala + oy\n");
     s.push_str("    bl      dv_move_to\n");
     // r2 = cmd_ptr (r3 still holds path_ptr; r2 is caller-free across dv_* traps)
     s.push_str("    add     r2, r3, #5          @ command ptr\n");
@@ -394,11 +417,26 @@ fn emit_draw_vector_ex() -> String {
     s.push_str("dvex_nfx2:\n");
     s.push_str("    tst     r7, #2\n    beq     dvex_nfy2\n    neg     r1, r1\n");
     s.push_str("dvex_nfy2:\n");
+    // Escalado: se acumula la posicion SIN escalar y se emite la diferencia entre
+    // posiciones escaladas. r12 es de arranque libre (AAPCS) y aqui no cruza el bl.
+    s.push_str("    ldr     r12, [sp, #0]       @ ux\n");
+    s.push_str("    add     r12, r12, r0\n    str     r12, [sp, #0]\n");
+    s.push_str("    mul     r12, r12, r11\n    add     r12, r12, #16\n    asr     r12, r12, #5\n");
+    s.push_str("    ldr     r0, [sp, #8]        @ lsx\n");
+    s.push_str("    sub     r0, r12, r0         @ dx escalado\n");
+    s.push_str("    str     r12, [sp, #8]\n");
+    s.push_str("    ldr     r12, [sp, #4]       @ uy\n");
+    s.push_str("    add     r12, r12, r1\n    str     r12, [sp, #4]\n");
+    s.push_str("    mul     r12, r12, r11\n    add     r12, r12, #16\n    asr     r12, r12, #5\n");
+    s.push_str("    ldr     r1, [sp, #12]       @ lsy\n");
+    s.push_str("    sub     r1, r12, r1         @ dy escalado\n");
+    s.push_str("    str     r12, [sp, #12]\n");
     s.push_str("    bl      dv_draw_delta\n");
     s.push_str("    add     r2, r2, #3\n    b       dvex_cl\n");
     s.push_str("dvex_cskip:\n    add     r2, r2, #1\n    b       dvex_cl\n");
     s.push_str("dvex_cend:\n    add     r6, r6, #1\n    b       dvex_pl\n");
-    s.push_str("dvex_done:\n    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n    .ltorg\n\n");
+    s.push_str("dvex_done:\n    add     sp, sp, #16         @ soltar ux/uy/lsx/lsy\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
     s
 }
 
@@ -1922,7 +1960,9 @@ fn emit_level_builtins() -> String {
     s.push_str("    cmp     r2, #0\n    bne     vsl_gp_havei\n    mov     r2, #127\n");
     s.push_str("vsl_gp_havei:\n");
     // push {intensity(r2), pad(r3=0)} → 8 bytes, maintains 8-alignment
-    s.push_str("    mov     r3, #0\n    push    {r2, r3}            @ [sp+0]=intensity pad\n");
+    s.push_str("    ldrb    r3, [r6, #4]              @ escala del objeto (x32)\n");
+    s.push_str("    ldr     r12, =VPY_DRAW_SCALE\n    strb    r3, [r12]\n");
+    s.push_str("    mov     r3, #0\n    push    {r2, r3}            @ [sp+0]=intensity, +4 relleno\n");
     // reorder: r0=vector_ptr, r1=screen_x, r2=screen_y, r3=mirror=0
     s.push_str("    mov     r2, r1                    @ screen_y\n");
     s.push_str("    mov     r1, r0                    @ screen_x\n");
@@ -1975,7 +2015,9 @@ fn emit_level_builtins() -> String {
     s.push_str("    cmp     r2, #0\n    bne     vsd_havei\n    mov     r2, #127\n");
     s.push_str("vsd_havei:\n");
     // push {intensity(r2), pad(r3=0)} → 8 bytes, sp stays 8-aligned (48+8=56)
-    s.push_str("    mov     r3, #0\n    push    {r2, r3}\n");
+    s.push_str("    ldrb    r3, [r5, #4]              @ escala del objeto (x32)\n");
+    s.push_str("    ldr     r12, =VPY_DRAW_SCALE\n    strb    r3, [r12]\n");
+    s.push_str("    mov     r3, #0\n    push    {r2, r3}            @ [sp+0]=intensity, +4 relleno\n");
     // args: r0=vector_ptr, r1=screen_x, r2=screen_y, r3=mirror
     s.push_str("    mov     r2, r1                    @ screen_y\n");
     s.push_str("    mov     r1, r0                    @ screen_x\n");
@@ -2084,7 +2126,9 @@ fn emit_level_builtins() -> String {
     s.push_str("    ldrb    r2, [r6, #5]              @ intensity\n");
     s.push_str("    cmp     r2, #0\n    bne     vsl_gp_havei\n    mov     r2, #127\n");
     s.push_str("vsl_gp_havei:\n");
-    s.push_str("    mov     r3, #0\n    push    {r2, r3}            @ [sp]=intensity, align+8\n");
+    s.push_str("    ldrb    r3, [r6, #4]              @ escala del objeto (x32)\n");
+    s.push_str("    ldr     r12, =VPY_DRAW_SCALE\n    strb    r3, [r12]\n");
+    s.push_str("    mov     r3, #0\n    push    {r2, r3}            @ [sp+0]=intensity, +4 relleno\n");
     s.push_str("    mov     r2, r1\n    mov     r1, r0\n    ldr     r0, [r6, #8]  @ vector_ptr\n");
     s.push_str("    mov     r3, #0\n    bl      vpy_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #8\n");
@@ -2119,7 +2163,9 @@ fn emit_level_builtins() -> String {
     s.push_str("    ldrb    r2, [r5, #5]\n    cmp     r2, #0\n    bne     vsd_havei\n    mov     r2, #127\n");
     s.push_str("vsd_havei:\n");
     // push {intensity, pad} = 8 bytes → total (24+24+8=56), 8-aligned ✓
-    s.push_str("    mov     r3, #0\n    push    {r2, r3}\n");
+    s.push_str("    ldrb    r3, [r5, #4]              @ escala del objeto (x32)\n");
+    s.push_str("    ldr     r12, =VPY_DRAW_SCALE\n    strb    r3, [r12]\n");
+    s.push_str("    mov     r3, #0\n    push    {r2, r3}            @ [sp+0]=intensity, +4 relleno\n");
     s.push_str("    mov     r2, r1\n    mov     r1, r0\n    ldr     r0, [r5, #8]\n");
     s.push_str("    mov     r3, #0\n    bl      vpy_draw_vector_ex\n");
     s.push_str("    add     sp, sp, #8\n");
