@@ -23,6 +23,9 @@
 #include "uvm2_bus.h"
 #include "uvm2_input.h"
 #include "uvm2_audio.h"
+#ifdef UVM2_DUAL_CORE
+void uvm2_psg_queue(uint32_t reg, uint32_t value);   /* uvm2_core1.c */
+#endif
 
 /* Event streams (little-endian):
  *   MUSIC: [0..4] num_events, [4..8] loop event byte offset, events at base+8
@@ -54,7 +57,42 @@ static uint32_t rd_le32(const uint8_t *p)
 
 static void psg(uint8_t reg, uint8_t val)
 {
-    if (reg == 7) s_psg_mixer = val;
+    if (reg == 7) {
+        /* El bit 6 se queda a cero: es una INVARIANTE, no un arreglo.
+         *
+         * En el AY-3-8912 ese bit es la direccion del puerto A, y en la Vectrex
+         * ese puerto es por donde se leen los botones. Ponerlo a uno lo convierte
+         * en salida y los mandos dejan de poder leerse. No hay ningun caso
+         * legitimo en el que un juego de Vectrex lo quiera, y aqui pasan TODAS
+         * las escrituras al registro 7, asi que este es el sitio.
+         *
+         * OJO: esto NO fue la causa del 0x3F constante que se vio en los botones
+         * el 2026-08-12, aunque se anadio creyendolo. Aquello era que
+         * uvm2_read_buttons no aseguraba DDRA, asi que el numero de registro no
+         * llegaba al bus y el PSG seguia con el 7 latcheado — y 0x3F es
+         * justamente el contenido de ese registro. Ver [[via-porta-direction]]. */
+        val = (uint8_t)(val & ~0x40u);
+        s_psg_mixer = val;
+    }
+
+#ifdef UVM2_DUAL_CORE
+    /* EN DUAL CORE EL BUS ES DE CORE 1. Quien no sea core 1, encola.
+     *
+     * Se enruta por el CORE QUE EJECUTA, no por la funcion que llama: asi sigue
+     * siendo correcto cuando alguien anada una llamada nueva sin acordarse de
+     * esta regla. Hoy el unico que entraba aqui desde core 0 era
+     * uvm2_stop_music() por su syscall; uvm2_audio_tick() ya corre en core 1 y
+     * sigue escribiendo directo, sin pasar por la cola ni perder un frame.
+     *
+     * Dos escritores sin arbitrar en la VIA es el fallo con el que el cartucho
+     * llego a shippear cuando 40 juegos decian dual-core y estaban compilados
+     * mono. Aqui no habia dado sintoma, y esa es exactamente la clase de cosa
+     * que reaparece un mes despues como un glitch irreproducible. */
+    if (UVM2_CPUID != 1u) {
+        uvm2_psg_queue(reg, val);
+        return;
+    }
+#endif
     uvm2_psg_write(reg, val);
 }
 

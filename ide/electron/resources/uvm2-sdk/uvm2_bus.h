@@ -41,6 +41,7 @@ extern "C" {
 #define UVM2_SIO_BASE       0xD0000000u
 #define UVM2_MMIO(addr)     (*(volatile uint32_t *)(uintptr_t)(addr))
 #define UVM2_REG(off)       UVM2_MMIO(UVM2_SIO_BASE + (off))
+#define UVM2_CPUID          UVM2_REG(0x000)   /* 0 o 1: que core ejecuta */
 #define UVM2_GPIO_IN        UVM2_REG(0x004)
 #define UVM2_GPIO_OUT       UVM2_REG(0x010)
 #define UVM2_GPIO_OUT_SET   UVM2_REG(0x018)
