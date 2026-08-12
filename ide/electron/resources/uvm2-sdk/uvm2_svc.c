@@ -18,6 +18,7 @@
 #include "uvm2_led.h"
 #include "uvm2_text.h"
 #include "uvm2_audio.h"
+#include "uvm2_psram.h"
 
 enum {
     SYS_RESET0REF     = 0,
@@ -124,6 +125,13 @@ void uvm2_runtime_init(void)
      * botones salen pulsados solos. De paso deja los tres volumenes a cero, que
      * es el estado sano para arrancar. */
     uvm2_stop_music();
+    /* Sonda de PSRAM, solo si se pide (-DUVM2_PSRAM_PROBE). Va bajo interruptor
+     * porque toca el bus QSPI, que es el mismo por el que cuelga la flash del
+     * multicart: en un arranque normal no hay ninguna razon para meterse ahi.
+     * Resultado en uvm2_psram_result, legible por SWD. */
+#ifdef UVM2_PSRAM_PROBE
+    uvm2_psram_probe();
+#endif
     uvm2_frame_begin();
     uvm2_led_status(UVM2_STATUS_RUNNING);
 }

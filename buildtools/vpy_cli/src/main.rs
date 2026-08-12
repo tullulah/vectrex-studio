@@ -1951,10 +1951,17 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         // alli, con el mismo doble buffer y los mismos contadores que el
         // cartucho. No confundir con VPY_DUAL_CORE, que apunta al core 1 del
         // FIRMWARE del cartucho y aqui no existe nadie que drene el buffer.
-        .arg(if std::env::var("UVM2_DUAL_CORE").as_deref() == Ok("1") {
-            "-DUVM2_GAME_DEFS=UVM2_STEP_OWNS_INIT;UVM2_DUAL_CORE"
-        } else {
-            "-DUVM2_GAME_DEFS=UVM2_STEP_OWNS_INIT"
+        .arg({
+            let mut defs = String::from("UVM2_STEP_OWNS_INIT");
+            if std::env::var("UVM2_DUAL_CORE").as_deref() == Ok("1") {
+                defs.push_str(";UVM2_DUAL_CORE");
+            }
+            // Escotilla para experimentos que no merecen una bandera propia,
+            // como UVM2_PSRAM_PROBE. Separados por ';', que es lo que come cmake.
+            if let Ok(extra) = std::env::var("UVM2_EXTRA_DEFS") {
+                if !extra.is_empty() { defs.push(';'); defs.push_str(&extra); }
+            }
+            format!("-DUVM2_GAME_DEFS={}", defs)
         })
         .output()
         .map_err(|e| anyhow::anyhow!("cmake no encontrado: {}", e))?;
