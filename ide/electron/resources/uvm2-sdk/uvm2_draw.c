@@ -61,7 +61,29 @@ static int      s_pos_x = 0;        /* beam position since the last centre */
 static int      s_pos_y = 0;
 
 static uint32_t s_frame_cycles;     /* bus cycles the last frame really took */
-static uint32_t s_scale = 128;      /* ramp cycles for a full-range delta  */
+/* Ciclos de rampa para un delta de fondo de escala. 160 lo pone del TAMAÑO DEL
+ * CARTUCHO, comprobado en pantalla con dkong el 2026-08-12; con 128 el escenario
+ * salia visiblemente pequeño. Y sale MAS BARATO que el 128 que habia: 154 ciclos
+ * por vector contra 157. Llevabamos dibujando pequeño y pagando mas.
+ *
+ * El motivo no es que agrandar sea gratis —la distancia es velocidad por tiempo y
+ * el DAC ya va lleno: de 992 escrituras medidas la mediana es 25, el p90 es 89 y
+ * 11 saturan en 127, asi que subir la ganancia recortaria los trazos largos— sino
+ * el suelo del fixup, que dobla el delta y parte la rampa mientras la escala
+ * supere UVM2_RAMP_FLOOR:
+ *
+ *     desde 128:  128 -> 64 -> 32          se para.  Rampa final 32
+ *     desde 160:  160 -> 80 -> 40 -> 20    una mas.  Rampa final 20
+ *
+ * O sea que esta perilla va A SALTOS, no de forma continua. Medido:
+ *     128 -> 157 c/vector    144 -> 147    160 -> 154
+ * El 144 es el mas barato y dibuja pequeño; el 160 acierta el tamaño. Si algun
+ * dia hay que afinar de verdad, el sitio es RAMP_FLOOR, no este numero.
+ *
+ * SE PAGA EN BRILLO: los vectores cortos pasan de 32 ciclos de rampa a 20, o sea
+ * menos rato encendidos. No se vio empeorar en dkong; es lo que hay que mirar si
+ * un juego con detalle fino sale apagado. */
+static uint32_t s_scale = 160;
 static int      s_fixup = 0;
 
 /* Timings, in bus cycles.  Named because they are exactly the knobs to turn
