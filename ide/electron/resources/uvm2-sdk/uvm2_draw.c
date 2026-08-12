@@ -66,7 +66,29 @@ static int      s_fixup = 0;
 
 /* Timings, in bus cycles.  Named because they are exactly the knobs to turn
  * when the picture is right but the frame is too expensive. */
-#define UVM2_HOLD_DELAY      8u     /* sample/hold settle for a mux channel   */
+/* Asentamiento del sample-and-hold, EN FUNCION DEL SALTO.
+ *
+ * El condensador tarda segun cuanta tension tenga que recorrer, no segun lo que
+ * dure el trazo que viene despues. Y el fixup dobla el delta de los vectores
+ * cortos, asi que un peldaño acaba pidiendo un salto GRANDE — por eso sufrian
+ * los cortos, que es lo contrario de lo que uno esperaria.
+ *
+ * MEDIDO en consola 2026-08-12 con dkong: con 8 fijo los peldaños caen en Y y el
+ * dibujo encoge; con 14 fijo salen bien pero el refresco baja de 24,8 a 13,3 fps
+ * (138 -> 167 ciclos por vector), porque se paga en CADA muestreo de mux. Con 10
+ * salen bien "casi siempre", que es la firma de un umbral mal puesto: unos saltos
+ * llegan y otros no.
+ *
+ * La fisica: Ron(4052) x 10 nF = 1,8 us = 2,7 ciclos de E por tau. 8 ciclos son
+ * 3 tau (5% de error), 14 son 5,2 tau (0,6%). Un salto pequeño puede permitirse
+ * el 5%; uno de fondo de escala, no.
+ *
+ * Lineal en el salto entre los dos extremos. La ley de verdad es logaritmica, asi
+ * que esto PAGA DE MAS en los saltos medianos — y aun asi sale mucho mas barato
+ * que el maximo fijo. Si hay que afinar, es aqui y con el corchete en pantalla. */
+#define UVM2_HOLD_MIN        4u     /* saltos diminutos: no piden mas          */
+#define UVM2_HOLD_MAX        15u    /* fondo de escala: 5,5 tau, 1 LSB de error */
+#define UVM2_HOLD_DELAY      UVM2_HOLD_MAX   /* cuando no se sabe de donde venimos */
 #define UVM2_BLANK_OFF_DELAY 3u     /* ramp starts this early, before lighting */
 #define UVM2_BLANK_ON_DELAY  16u    /* beam stays lit after the ramp stops     */
 #define UVM2_ZERO_BASE       45u    /* centring cost, plus scale/4             */
@@ -96,9 +118,34 @@ static void mux_sample(uint8_t channel, uint32_t delay)
     emit(UVM2_VIA_PORTB, s_portb, 0);
 }
 
+/* Ciclos que necesita el hold para recorrer `from` -> `to`.
+ *
+ * LA LEY ES LOGARITMICA, no lineal: un RC llega a 1 LSB en t = tau * ln(salto),
+ * con tau = Ron(4052) x 10 nF = 1,8 us = 2,7 ciclos de E. Doblar el salto cuesta
+ * un tau mas, no el doble de tiempo.
+ *
+ * La primera version interpolaba linealmente y era mala en los DOS sentidos:
+ * sobrepagaba los saltos pequeños —que son la mayoria— y se quedaba CORTA en los
+ * medianos (un salto de 64 necesita 11,3 ciclos y le daba 9,5). Costaba 151
+ * ciclos por vector contra 138 del minimo roto y 167 del maximo fijo.
+ *
+ * ln(d) = log2(d) * 0,693, y log2 entero es la posicion del bit mas alto, que el
+ * micro da con una instruccion. tau * ln2 = 1,87 ciclos por bit. */
+static uint32_t hold_for(int from, int to)
+{
+    uint32_t d = (uint32_t)(to > from ? to - from : from - to);
+    if (d == 0) return UVM2_HOLD_MIN;
+    uint32_t bits = 32u - (uint32_t)__builtin_clz(d);      /* ~log2(d) + 1 */
+    uint32_t t    = (bits * 187u) / 100u;                  /* tau * ln2    */
+    if (t < UVM2_HOLD_MIN) t = UVM2_HOLD_MIN;
+    if (t > UVM2_HOLD_MAX) t = UVM2_HOLD_MAX;
+    return t;
+}
+
 static void set_y(int y, uint32_t delay)
 {
     if (s_y == y) return;                 /* the S/H still holds it */
+    delay = hold_for(s_y, y);
     s_y = y;
     set_porta((uint8_t)y, 0);
     mux_sample(UVM2_MUX_Y, delay);
@@ -107,6 +154,7 @@ static void set_y(int y, uint32_t delay)
 static void set_z(int z, uint32_t delay)
 {
     if (s_z == z) return;
+    delay = hold_for(s_z, z);
     s_z = z;
     set_porta((uint8_t)z, 0);
     mux_sample(UVM2_MUX_Z, delay);
