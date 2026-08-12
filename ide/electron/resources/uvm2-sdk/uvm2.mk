@@ -134,8 +134,17 @@ UVM2_GAME_LIBS   = $(patsubst -l%,%,$(filter -l%,$(UVM2_LDLIBS)))
 # marca el reloj de 1,5 MHz de la Vectrex— sino que solapa la logica del juego
 # con el barrido del haz, que es lo que hace Ralf con su reparto.
 #
-#   make uvm2 UVM2_DUAL_CORE=1
-UVM2_DUAL_CORE ?= 0
+# POR DEFECTO DESDE 2026-08-12, validado en consola con dkong: dibuja, los mandos
+# responden, y el frame queda al 98% del techo del haz (39,51 ms de barrido sobre
+# 40,25 ms de frame). Se apaga con UVM2_DUAL_CORE=0.
+#
+# ABIERTO: la MUSICA no suena en dual core. Un sospechoso claro es el ritmo del
+# secuenciador — el camino monocore avanza la pista por TIEMPO VECTREX
+# transcurrido (varios ticks si el frame se pasa del presupuesto, y dkong gasta
+# 59.000 ciclos sobre 30.000), mientras core 1 la avanza UNA vez por frame.
+#
+#   make uvm2 UVM2_DUAL_CORE=0
+UVM2_DUAL_CORE ?= 1
 ifeq ($(UVM2_DUAL_CORE),1)
 UVM2_GAME_DEFS += UVM2_DUAL_CORE
 endif

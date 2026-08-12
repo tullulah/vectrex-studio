@@ -103,6 +103,9 @@ static void psg_drain(void)
 volatile uint8_t  uvm2_cached_buttons;
 volatile uint32_t uvm2_cached_axes;
 
+/* Tiempo Vectrex no entregado aun al secuenciador, en ciclos de bus. */
+static uint32_t s_audio_acc;
+
 static void core1_main(void)
 {
     uint32_t served = 0;
@@ -125,7 +128,20 @@ static void core1_main(void)
 #endif
         psg_drain();
 #ifndef UVM2_NO_AUDIO
-        uvm2_audio_tick();
+        /* Avanzar el secuenciador por TIEMPO VECTREX TRANSCURRIDO, no una vez por
+         * frame. Es lo que hace el camino monocore, y por una razon medida: un
+         * frame que revienta el presupuesto de 50 Hz vale dos frames de musica, y
+         * dkong gasta 59.000 ciclos sobre 30.000. Un tick por frame toca la pista
+         * a media velocidad.
+         *
+         * Esto NO es un diagnostico de "la musica no suena en dual core", que
+         * sigue abierto: es que los dos caminos tenian semanticas distintas para
+         * lo mismo, y eso hay que igualarlo antes de comparar nada. */
+        s_audio_acc += cycles;
+        while (s_audio_acc >= UVM2_CYCLES_PER_FRAME) {
+            s_audio_acc -= UVM2_CYCLES_PER_FRAME;
+            uvm2_audio_tick();
+        }
 #endif
         /* Counted, not assumed: an axis conversion costs as many bus cycles as
          * its SAR needed, and the PSG queue's depth varies with the music. */
