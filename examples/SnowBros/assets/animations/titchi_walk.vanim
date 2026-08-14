@@ -16,7 +16,7 @@
       "index": 1,
       "duration_ticks": 8,
       "vec_refs": [
-        "titchi_walk2"
+        "titchi_idle"
       ],
       "paths": []
     },
@@ -32,7 +32,7 @@
       "index": 3,
       "duration_ticks": 8,
       "vec_refs": [
-        "titchi_walk4"
+        "titchi_idle"
       ],
       "paths": []
     }

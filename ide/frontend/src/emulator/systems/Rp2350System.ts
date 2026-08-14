@@ -40,6 +40,7 @@ import { Psg }            from '../hardware/Psg.js';
 import { Canvas }         from '../hardware/Canvas.js';
 import { Thumb2 }         from '../cpu/Thumb2.js';
 import { extractElf32Symbols, readElf32Entry, loadElf32IntoFlash } from '../util/Elf32Symbols.js';
+import { glyphStrokes } from './vectorFont.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -68,6 +69,10 @@ const SRAM_BASE   = 0x20000000;
 const SRAM_END    = 0x20080000;
 /** SRAM size: 512 KB. */
 const SRAM_SIZE   = 512 * 1024;
+/** Scratch SRAM region where the simulated SD names are written (below the
+ *  0x2007F000 VPy game-RAM area, so it never collides). SD_FILE_NAME returns
+ *  pointers here for PRINT_TEXT to read. */
+const SD_NAMES_BASE = 0x2007E000;
 
 /**
  * Offset within the flash array at which the game binary is loaded.
@@ -108,6 +113,60 @@ const MAX_CYCLES_PER_FRAME = 45_000_000;
 function armI8(r: number): number {
   const b = r & 0xFF;
   return b > 127 ? b - 256 : b;
+}
+
+/** Preview frame model decoded from a `.vrb` blob. */
+interface VrbPreview {
+  fps: number;
+  frames: Array<{ segments: Array<{ x0: number; y0: number; x1: number; y1: number; i: number }> }>;
+}
+
+/**
+ * Decode a precompiled `.vrb` (base64) into the preview frame model — reverses
+ * vpy_codegen::vrec_chain::compile_vrec_json_to_binary. This is the same binary
+ * the RP2350 firmware will stream from SD, so the emulator validates the format.
+ * Layout: "VRB1", u16 fps, u16 frame_count, u32×count offset table, then per
+ * frame: u16 chain_count, chains [start_x i8, start_y i8, i u8, seg_count u8,
+ * (dx i8, dy i8)×seg_count]. Returns null on malformed data.
+ */
+function parseVrb(b64: string): VrbPreview | null {
+  let bytes: Uint8Array;
+  try {
+    const bin = atob(b64);
+    bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  } catch { return null; }
+  if (bytes.length < 8 || bytes[0] !== 0x56 || bytes[1] !== 0x52 || bytes[2] !== 0x42 || bytes[3] !== 0x31) {
+    return null; // not "VRB1"
+  }
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const fps = dv.getUint16(4, true);
+  const frameCount = dv.getUint16(6, true);
+  const i8 = (v: number) => (v << 24) >> 24;
+  const frames: VrbPreview['frames'] = [];
+  for (let f = 0; f < frameCount; f++) {
+    let p = dv.getUint32(8 + f * 4, true);
+    const segments: VrbPreview['frames'][number]['segments'] = [];
+    if (p + 2 <= bytes.length) {
+      const chainCount = dv.getUint16(p, true); p += 2;
+      for (let c = 0; c < chainCount && p + 4 <= bytes.length; c++) {
+        let px = i8(bytes[p]);
+        let py = i8(bytes[p + 1]);
+        const inten = bytes[p + 2];
+        const segCount = bytes[p + 3];
+        p += 4;
+        for (let d = 0; d < segCount && p + 2 <= bytes.length; d++) {
+          const nx = px + i8(bytes[p]);
+          const ny = py + i8(bytes[p + 1]);
+          p += 2;
+          segments.push({ x0: px, y0: py, x1: nx, y1: ny, i: inten });
+          px = nx; py = ny;
+        }
+      }
+    }
+    frames.push({ segments });
+  }
+  return { fps, frames };
 }
 
 /**
@@ -204,6 +263,31 @@ export class Rp2350System implements ISystem, IBus {
   private readonly flash: Uint8Array = new Uint8Array(FLASH_SIZE);
   private readonly sram:  Uint8Array = new Uint8Array(SRAM_SIZE);
 
+  /** Simulated SD game list (the emulator has no real card). Injected by the
+   *  renderer from the ~/VectrexStudio/sd folder; backs SD_FILE_COUNT/NAME. */
+  private simSdFiles: string[] = [];
+
+  /** Set the simulated SD game list (uppercase stems, ≤12 chars each). */
+  setSimSdFiles(files: string[]): void {
+    this.simSdFiles = files.slice(0, 24).map(f => f.slice(0, 12));
+  }
+
+  /** Parsed .vrec previews from ~/VectrexStudio/sd/preview, keyed by game stem.
+   *  Backs DRAW_SD_PREVIEW; emulator-only (real HW needs precompiled previews). */
+  private simSdPreviews: Record<string, { fps: number; frames: Array<{ segments: Array<{ x0: number; y0: number; x1: number; y1: number; i: number }> }> }> = {};
+  /** Free-running preview playback tick (advances the .vrec frame at its fps). */
+  private previewTick: number = 0;
+
+  /** Set the SD previews from base64 `.vrb` blobs (the precompiled binary format
+   *  hardware also uses). Each is parsed into the frame model once here. */
+  setSimSdPreviews(previews: Record<string, string>): void {
+    this.simSdPreviews = {};
+    for (const key of Object.keys(previews || {})) {
+      const rec = parseVrb(previews[key]);
+      if (rec) this.simSdPreviews[key] = rec;
+    }
+  }
+
   // Trap table: PC value (Thumb bit already stripped) → handler
   private readonly traps: Map<number, TrapFn> = new Map();
 
@@ -234,6 +318,12 @@ export class Rp2350System implements ISystem, IBus {
   // ---- Audio ----
   private audioCtx:  AudioContext | null           = null;
   private audioNode: ScriptProcessorNode | null    = null;
+  // Currently-playing .vsmp PCM sample source (PLAY_SAMPLE). Stopped/replaced
+  // when PLAY_SAMPLE is re-triggered so re-calling restarts (and loops) cleanly.
+  private sampleSource: AudioBufferSourceNode | null = null;
+  private sampleStartTime = 0;   // audioCtx.currentTime when the sample started
+  private sampleRateHz = 0;      // the playing sample's rate
+  private sampleDurationSec = 0; // the playing sample's length (for loop wrap)
   static readonly AUDIO_SAMPLE_RATE = 44100;
   static readonly AUDIO_BUFFER_SIZE = 512;
 
@@ -621,6 +711,31 @@ export class Rp2350System implements ISystem, IBus {
       });
     }
 
+    // vpy_play_sample(r0 = pointer to _<NAME>_SMP asset in flash):
+    //   Reads sampleRate/numSamples + packed 4-bit PCM from the ROM image and
+    //   streams it in real time via a Web Audio BufferSourceNode. The sync model
+    //   is "audio + video both run in real time" — we just start playback; the
+    //   VPy program advances the video frame itself at the video fps.
+    const playSampleAddr = symbols.get('vpy_play_sample');
+    if (playSampleAddr !== undefined) {
+      this.traps.set(playSampleAddr & ~1, (cpu: Thumb2): number => {
+        this.playSample(cpu.getReg(0) >>> 0);
+        return 20;
+      });
+      console.log(`[Rp2350System] vpy_play_sample trap @ 0x${(playSampleAddr & ~1).toString(16)}`);
+    }
+
+    // vpy_sample_pos(r0 = fps) → r0 = current audio-synced frame. Lets the video
+    // follow the audio master clock so it can't drift ahead of the song.
+    const samplePosAddr = symbols.get('vpy_sample_pos');
+    if (samplePosAddr !== undefined) {
+      this.traps.set(samplePosAddr & ~1, (cpu: Thumb2): number => {
+        cpu.setReg(0, this.samplePos(cpu.getReg(0) | 0));
+        return 20;
+      });
+      console.log(`[Rp2350System] vpy_sample_pos trap @ 0x${(samplePosAddr & ~1).toString(16)}`);
+    }
+
     // vpy_msg_def: compile-time declaration, pure no-op at runtime.
     // Trap it to avoid going through cpu.step() + via.tick() + beam.tick().
     const msgDefAddr = symbols.get('vpy_msg_def');
@@ -654,6 +769,176 @@ export class Rp2350System implements ISystem, IBus {
         return 10;
       });
       console.log(`[Rp2350System] vpy_update_buttons trap @ 0x${(updateButtonsAddr & ~1).toString(16)}`);
+    }
+
+    // ── Traps for the BIOS-migrated syscalls ─────────────────────────────
+    // The game now issues single high-level BIOS syscalls (svc #N) instead of
+    // composing bus_write/bus_read. The emulator reimplements them in TS, same
+    // as it already does for dv_reset/dv_move_to/dv_draw_delta.
+
+    // psg_write(r0=reg, r1=data) — was bl bus_write×6 (routed through the VIA to
+    // the PSG); now svc #5. Write the PSG register directly.
+    const psgWriteAddr = symbols.get('psg_write');
+    if (psgWriteAddr !== undefined) {
+      this.traps.set(psgWriteAddr & ~1, (cpu: Thumb2): number => {
+        this.psg.writeReg(cpu.getReg(0) & 0x0f, cpu.getReg(1) & 0xff);
+        return 30;
+      });
+      console.log(`[Rp2350System] psg_write trap @ 0x${(psgWriteAddr & ~1).toString(16)}`);
+    }
+
+    // psg_read(r0=reg) → r0 — svc #12. Buttons (reg 14) come from the trapped
+    // vpy_update_buttons path, so this is only a safe register echo.
+    const psgReadAddr = symbols.get('psg_read');
+    if (psgReadAddr !== undefined) {
+      this.traps.set(psgReadAddr & ~1, (cpu: Thumb2): number => {
+        cpu.setReg(0, this.psg.Regs[cpu.getReg(0) & 0x0f] & 0xff);
+        return 30;
+      });
+    }
+
+    // SD game list — svc #17/#18. No real card in the emulator, so simulate one
+    // from `this.simSdFiles` (injected from ~/VectrexStudio/sd). SD_FILE_COUNT
+    // returns the length; SD_FILE_NAME(i) writes name[i] into a scratch SRAM
+    // slot and returns its address for PRINT_TEXT (r2 = str_ptr) to read.
+    const sdCountAddr = symbols.get('vpy_sd_count');
+    if (sdCountAddr !== undefined) {
+      this.traps.set(sdCountAddr & ~1, (cpu: Thumb2): number => {
+        cpu.setReg(0, this.simSdFiles.length >>> 0);
+        return 30;
+      });
+      console.log(`[Rp2350System] vpy_sd_count trap @ 0x${(sdCountAddr & ~1).toString(16)} (${this.simSdFiles.length} sim file(s))`);
+    }
+    const sdNameAddr = symbols.get('vpy_sd_name');
+    if (sdNameAddr !== undefined) {
+      this.traps.set(sdNameAddr & ~1, (cpu: Thumb2): number => {
+        const idx = cpu.getReg(0) >>> 0;
+        if (idx >= this.simSdFiles.length) { cpu.setReg(0, 0); return 30; }
+        const name = this.simSdFiles[idx];
+        const addr = SD_NAMES_BASE + idx * 16;
+        const off = addr - SRAM_BASE;
+        let k = 0;
+        for (; k < name.length && k < 15; k++) this.sram[off + k] = name.charCodeAt(k) & 0xff;
+        this.sram[off + k] = 0; // NUL terminator
+        cpu.setReg(0, addr >>> 0);
+        return 30;
+      });
+      console.log(`[Rp2350System] vpy_sd_name trap @ 0x${(sdNameAddr & ~1).toString(16)}`);
+    }
+
+    // vpy_draw_sd_preview(r0=index, r1=x, r2=y, r3=scale) — svc #19. Plays the
+    // current frame of game[index]'s .vrec preview, scaled by `scale` (0-128 =
+    // 0-100%) and centred at (x,y). Emulator-only; the recording advances at its
+    // own fps via a free-running tick.
+    const sdPreviewAddr = symbols.get('vpy_draw_sd_preview');
+    if (sdPreviewAddr !== undefined) {
+      this.traps.set(sdPreviewAddr & ~1, (cpu: Thumb2): number => {
+        const idx = cpu.getReg(0) | 0;
+        const ox = armI8(cpu.getReg(1));
+        const oy = armI8(cpu.getReg(2));
+        let scale = cpu.getReg(3) & 0xff;
+        if (scale === 0) scale = 64; // default ~50%
+        const name = this.simSdFiles[idx];
+        const rec = name ? this.simSdPreviews[name] : undefined;
+        if (!rec || !rec.frames || rec.frames.length === 0) return 30;
+        this.previewTick++;
+        const vf = Math.floor((this.previewTick * (rec.fps || 15)) / 50) % rec.frames.length;
+        const segs = rec.frames[vf]?.segments;
+        if (!segs) return 30;
+        for (let s = 0; s < segs.length; s++) {
+          const seg = segs[s];
+          const vx0 = ox + (seg.x0 * scale) / 128;
+          const vy0 = oy + (seg.y0 * scale) / 128;
+          const vx1 = ox + (seg.x1 * scale) / 128;
+          const vy1 = oy + (seg.y1 * scale) / 128;
+          const ax0 = ALG_CENTER_X + vx0 * ARM_ALG_SCALE;
+          const ay0 = ALG_CENTER_Y - vy0 * ARM_ALG_SCALE; // Y inverted
+          const ax1 = ALG_CENTER_X + vx1 * ARM_ALG_SCALE;
+          const ay1 = ALG_CENTER_Y - vy1 * ARM_ALG_SCALE;
+          const clipped = clipSegment(ax0, ay0, ax1, ay1);
+          if (clipped !== null) {
+            this.beam.addSegmentDirect(clipped[0], clipped[1], clipped[2], clipped[3], seg.i & 0xff);
+          }
+        }
+        return 500 + segs.length * 8;
+      });
+      console.log(`[Rp2350System] vpy_draw_sd_preview trap @ 0x${(sdPreviewAddr & ~1).toString(16)}`);
+    }
+
+    // vpy_move(r0=x, r1=y) — absolute beam positioning (MOVE builtin), was inline
+    // VIA writes, now svc #15. Set the beam directly in unbounded ALG space.
+    const moveAddr = symbols.get('vpy_move');
+    const moveXAddr = symbols.get('VPY_MOVE_X');
+    if (moveAddr !== undefined) {
+      this.traps.set(moveAddr & ~1, (cpu: Thumb2): number => {
+        const x = armI8(cpu.getReg(0));
+        const y = armI8(cpu.getReg(1));
+        this.armBeamX = ALG_CENTER_X + x * ARM_ALG_SCALE;
+        this.armBeamY = ALG_CENTER_Y - y * ARM_ALG_SCALE; // Y inverted
+        // Mirror VPY_MOVE_X/Y into SRAM so draw_line's offset (if used) matches.
+        // .equ symbol may be absent → fixed VPY_MOVE_X address fallback.
+        const off = (moveXAddr ?? 0x2007F300) - 0x20000000;
+        this.sram[off]   = x & 0xff; this.sram[off+1] = (x >> 8) & 0xff;
+        this.sram[off+2] = (x >> 16) & 0xff; this.sram[off+3] = (x >> 24) & 0xff;
+        this.sram[off+4] = y & 0xff; this.sram[off+5] = (y >> 8) & 0xff;
+        this.sram[off+6] = (y >> 16) & 0xff; this.sram[off+7] = (y >> 24) & 0xff;
+        return 200;
+      });
+      console.log(`[Rp2350System] vpy_move trap @ 0x${(moveAddr & ~1).toString(16)}`);
+    }
+
+    // vpy_print_text(r0=x, r1=y, r2=str_ptr) — svc #16. The font + glyph renderer
+    // now live in the BIOS; the emulator renders text itself (vectorFont.ts),
+    // drawing each glyph through the same unbounded-ALG beam model as dv_*.
+    const printTextAddr = symbols.get('vpy_print_text');
+    const textSizeAddr  = symbols.get('TEXT_SIZE');
+    const brightAddr    = symbols.get('VPY_BRIGHTNESS_OVERRIDE');
+    if (printTextAddr !== undefined) {
+      this.traps.set(printTextAddr & ~1, (cpu: Thumb2): number => {
+        const x = armI8(cpu.getReg(0));
+        const y = armI8(cpu.getReg(1));
+        const strPtr = cpu.getReg(2) >>> 0;
+        // Resolve scale/intensity from SRAM (the stub does this; we bypass it).
+        // .equ RAM symbols may not reach the ELF symtab → fixed-address fallback.
+        let scale = this.read8(textSizeAddr ?? 0x2007F154) & 0xff;
+        if (scale === 0) scale = 3;
+        let intensity = this.read8(brightAddr ?? 0x2007F43E) & 0xff;
+        if (intensity === 0) intensity = 100;
+        let curX = x;
+        const adjY = y - ((6 * scale) >> 1);
+        for (let i = 0; i < 256; i++) {
+          const ch = this.read8((strPtr + i) >>> 0) & 0xff;
+          if (ch === 0 || ch === 0x80) break;
+          const strokes = glyphStrokes(ch);
+          if (strokes.length > 0) {
+            // Per-glyph path: reset beam to centre, relight, draw from (0,0).
+            this.armBeamX = ALG_CENTER_X;
+            this.armBeamY = ALG_CENTER_Y;
+            this.armIntensity = intensity;
+            this.beam.alg_zsh = intensity;
+            let bvx = 0, bvy = 0; // beam in Vectrex coords relative to centre
+            for (let s = 0; s < strokes.length; s += 3) {
+              const cmd = strokes[s];
+              const tx = curX + ((strokes[s + 1] * scale) >> 1);
+              const ty = adjY + ((strokes[s + 2] * scale) >> 1);
+              const newX = this.armBeamX + (tx - bvx) * ARM_ALG_SCALE;
+              const newY = this.armBeamY - (ty - bvy) * ARM_ALG_SCALE; // Y inverted
+              bvx = tx; bvy = ty;
+              if (cmd !== 1) { // draw (cmd 2)
+                const clipped = clipSegment(this.armBeamX, this.armBeamY, newX, newY);
+                if (clipped !== null) {
+                  this.beam.addSegmentDirect(clipped[0], clipped[1], clipped[2], clipped[3], this.armIntensity);
+                }
+              }
+              this.armBeamX = newX;
+              this.armBeamY = newY;
+            }
+          }
+          curX += (7 * scale) >> 1;
+        }
+        return 500;
+      });
+      console.log(`[Rp2350System] vpy_print_text trap @ 0x${(printTextAddr & ~1).toString(16)}`);
     }
   }
 
@@ -1003,14 +1288,111 @@ export class Rp2350System implements ISystem, IBus {
     }
   }
 
+  /**
+   * PLAY_SAMPLE("name") — stream a `.vsmp` 4-bit PCM sample from the ROM image.
+   *
+   * The compiler lays out the asset `_<NAME>_SMP` at `assetPtr` (an ARM flash
+   * address, 0x10000000+) as:
+   *   [0..4)  sampleRate  (u32 LE, e.g. 8000)
+   *   [4..8)  numSamples  (u32 LE, total 4-bit samples)
+   *   [8..)   packed 4-bit PCM — 2 samples/byte, low nibble = even sample
+   *
+   * The nibbles (0-15) are expanded to Float32 in [-1, 1] and played through a
+   * standard Web Audio BufferSourceNode connected to ctx.destination, so the
+   * audioGraphTracker picks it up automatically for the video recorder tap.
+   *
+   * Fire-and-forget: it plays in real time. Re-triggering stops the previous
+   * source and starts fresh (so re-calling restarts / loops).
+   */
+  playSample(assetPtr: number): void {
+    // Ensure an AudioContext exists (reuse the PSG one if audio already started).
+    if (!this.audioCtx) {
+      try {
+        this.audioCtx = new AudioContext({ sampleRate: Rp2350System.AUDIO_SAMPLE_RATE });
+      } catch (e) {
+        console.warn('[Rp2350System] PLAY_SAMPLE: AudioContext init failed:', e);
+        return;
+      }
+    }
+    const ctx = this.audioCtx;
+
+    // Read the asset header from the flash image (same accessor as read8/peekFlash).
+    const rd = (addr: number): number =>
+      this.flash[((addr >>> 0) - FLASH_BASE) & (FLASH_SIZE - 1)] ?? 0;
+    const readU32 = (addr: number): number =>
+      (rd(addr) | (rd(addr + 1) << 8) | (rd(addr + 2) << 16) | (rd(addr + 3) << 24)) >>> 0;
+
+    const sampleRate = readU32(assetPtr);
+    const numSamples = readU32(assetPtr + 4);
+    if (sampleRate <= 0 || numSamples <= 0 || numSamples > 0x4000000) {
+      console.warn(`[Rp2350System] PLAY_SAMPLE: bad header rate=${sampleRate} n=${numSamples} @0x${assetPtr.toString(16)}`);
+      return;
+    }
+
+    // Unpack numSamples 4-bit nibbles → Float32 [-1, 1].
+    const dataPtr = assetPtr + 8;
+    const buf = ctx.createBuffer(1, numSamples, sampleRate);
+    const out = buf.getChannelData(0);
+    for (let i = 0; i < numSamples; i++) {
+      const byte = rd(dataPtr + (i >> 1));
+      const v    = (i & 1) === 0 ? (byte & 0x0F) : ((byte >> 4) & 0x0F);
+      out[i] = (v / 15) * 2 - 1;
+    }
+
+    // Stop any previous sample (re-trigger restarts / loops).
+    try { this.sampleSource?.stop(); this.sampleSource?.disconnect(); } catch { /* noop */ }
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);   // tracked by audioGraphTracker for the recorder
+    src.onended = () => { if (this.sampleSource === src) this.sampleSource = null; };
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
+    src.start();
+    this.sampleSource = src;
+    // Remember the clock origin + rate so SAMPLE_POS can derive the video frame
+    // from how much audio has played (audio is the master clock).
+    this.sampleStartTime = ctx.currentTime;
+    this.sampleRateHz = sampleRate;
+    this.sampleDurationSec = numSamples / sampleRate;
+  }
+
+  /** SAMPLE_POS(fps): current audio-synced frame index (video follows audio).
+   *  frame = floor(elapsed_seconds * fps), wrapping isn't done here (the video
+   *  player wraps via frame % frame_count in DRAW_RECORDING). Returns 0 if no
+   *  sample is playing. */
+  samplePos(fps: number): number {
+    if (!this.audioCtx || !this.sampleSource || this.sampleRateHz <= 0) return 0;
+    let elapsed = this.audioCtx.currentTime - this.sampleStartTime;
+    if (elapsed < 0) elapsed = 0;
+    // Loop the clock with the sample so a re-triggered/looping video re-syncs.
+    if (this.sampleDurationSec > 0) elapsed = elapsed % this.sampleDurationSec;
+    const frame = Math.floor(elapsed * fps);
+    return frame & 0x7fff; // fits the i16 the VPy side reads
+  }
+
   /** Stop and destroy the audio context. */
   stopAudio(): void {
     try {
+      this.sampleSource?.stop();
+      this.sampleSource?.disconnect();
       this.audioNode?.disconnect();
       this.audioCtx?.close().catch(() => {});
     } catch {}
+    this.sampleSource = null;
     this.audioNode = null;
     this.audioCtx  = null;
+  }
+
+  /**
+   * Expose the live AudioContext and the output node feeding ctx.destination
+   * so a parallel MediaStreamAudioDestinationNode can be attached for the
+   * video recorder. Returns null when audio hasn't started yet.
+   */
+  getAudioContextAndOutputNode(): { ctx: AudioContext; outputNode: AudioNode } | null {
+    if (this.audioCtx && this.audioNode) {
+      return { ctx: this.audioCtx, outputNode: this.audioNode };
+    }
+    return null;
   }
 
   /**

@@ -120,6 +120,16 @@ export class Psg {
     this.ready   = 1;  // safe to call fillBuffer() from now on
   }
 
+  /**
+   * Write a PSG register directly (register number + value), applying the same
+   * side effects as the VIA-latched path. Used by the emulator's SYS_PSG_WRITE
+   * (#5) trap now that the game issues `psg_write(reg, data)` as one BIOS syscall
+   * instead of bit-banging the VIA latch protocol.
+   */
+  writeReg(r: number, v: number): void {
+    this.writeRegister(r & 0x0f, v & 0xff);
+  }
+
   // ------------------------------------------------------------------ //
   // Register write — mirrors e8910_write in vecx_full.js
   // ------------------------------------------------------------------ //

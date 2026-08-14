@@ -229,7 +229,8 @@ fn collect_asset_names_from_expr(expr: &Expr, used_names: &mut HashSet<String>) 
             let up = name.to_uppercase();
             if up == "DRAW_VECTOR" || up == "DRAW_VECTOR_EX" || up == "DRAW_VECTOR_3D" ||
                up == "PLAY_MUSIC" || up == "PLAY_SFX" || up == "LOAD_LEVEL" ||
-               up == "DRAW_ANIM" || up == "PLAY_NOTE" {
+               up == "DRAW_ANIM" || up == "PLAY_NOTE" || up == "DRAW_RECORDING" ||
+               up == "PLAY_SAMPLE" {
                 // First argument should be asset name (string literal)
                 if let Some(Expr::StringLit(asset_name)) = args.first() {
                     used_names.insert(asset_name.clone());
@@ -289,7 +290,13 @@ struct VmusResource {
     loop_start: f64,
     #[serde(rename = "loopEnd")]
     loop_end: Option<f64>,
+    /// Whether the track loops (true) or plays once (false).
+    /// Defaults to true for backward compatibility.
+    #[serde(default = "default_loop_true")]
+    r#loop: bool,
 }
+
+fn default_loop_true() -> bool { true }
 
 #[derive(Deserialize)]
 struct VmusNote {
@@ -310,6 +317,57 @@ struct VmusNoise {
     channels: u8,
     #[serde(default = "default_max_velocity")]
     velocity: u8,
+}
+
+// ============================================================
+// .vrec vector-recording format (multi-frame segment capture)
+// ============================================================
+//
+// Playback runtime: pitrex_draw_recording (builtins.rs). Reused byte layout
+// from the rp2350 (arm) backend — TARGET-AGNOSTIC data, only the runtime that
+// reads it differs. See compile_vrec below for the emitted binary layout.
+
+#[derive(Deserialize)]
+struct VrecResource {
+    #[serde(default)]
+    #[allow(dead_code)]
+    version: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    name: String,
+    /// Capture rate — informational only; playback pacing is driven by the
+    /// caller's frame counter (DRAW_RECORDING takes frame % frame_count).
+    #[serde(default)]
+    fps: f64,
+    #[serde(default)]
+    frames: Vec<VrecFrame>,
+}
+
+#[derive(Deserialize)]
+struct VrecFrame {
+    #[serde(default)]
+    segments: Vec<VrecSegment>,
+}
+
+#[derive(Deserialize)]
+struct VrecSegment {
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    /// Intensity 0-127 (recorder only stores visible segments, i > 0)
+    i: i32,
+}
+
+#[derive(Deserialize)]
+struct VsmpResource {
+    #[serde(default, rename = "sampleRate")]
+    sample_rate: u32,
+    #[serde(default, rename = "numSamples")]
+    num_samples: u32,
+    /// base64 of the packed 4-bit PCM (2 samples/byte, low nibble = even sample).
+    #[serde(default)]
+    data: String,
 }
 
 // ============================================================
@@ -604,6 +662,44 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                 };
                 s.push_str(&emit_enemy_data_for_pitrex(&resource, &sym, &vec_min_y));
             }
+            AssetType::Recording => {
+                let text = match fs::read_to_string(&asset.path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not read {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _{sym}_VREC\n_{sym}_VREC:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                let vrec: VrecResource = match serde_json::from_str(&text) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not parse {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _{sym}_VREC\n_{sym}_VREC:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                s.push_str(&compile_vrec(&vrec, &asset.name));
+            }
+            AssetType::Sample => {
+                let text = match fs::read_to_string(&asset.path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not read {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _{sym}_SMP\n_{sym}_SMP:\n    .word 0, 0\n\n"));
+                        continue;
+                    }
+                };
+                let vsmp: VsmpResource = match serde_json::from_str(&text) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not parse {}: {}\n", asset.path, e));
+                        s.push_str(&format!(".global _{sym}_SMP\n_{sym}_SMP:\n    .word 0, 0\n\n"));
+                        continue;
+                    }
+                };
+                s.push_str(&compile_vsmp(&vsmp, &asset.name));
+            }
             #[allow(unreachable_patterns)]
             _ => {
                 s.push_str(&format!("@ Asset stub: {} ({:?})\n", asset.name, asset.asset_type));
@@ -613,6 +709,174 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
     }
 
     s
+}
+
+// ============================================================
+// Recording compiler (.vrec → frame/chain table)
+// ============================================================
+//
+// POLYLINE CHAINING (2026-07): consecutive segments that share an endpoint AND
+// intensity are folded into a single chain (start point once + one delta per
+// line) by the target-agnostic `crate::vrec_chain::chain_frame`. Traced
+// contours are closed polylines, so each interior vertex was stored twice
+// (~55% redundant); chaining ~halves the flash size. The .vrec FILE format is
+// UNCHANGED — chaining is a compile-time transform.
+//
+// TARGET-AGNOSTIC binary layout — byte-for-byte identical to the rp2350 (arm)
+// backend's compile_vrec, read here by pitrex_draw_recording (builtins.rs):
+//   _<NAME>_VREC:                       (4-byte aligned)
+//     .word  frame_count
+//     .word  offset_frame0, offset_frame1, ...  @ byte offsets from _<NAME>_VREC
+//   frame N:                            (2-byte aligned)
+//     .hword chain_count
+//     per chain:
+//       .byte start_x, start_y, intensity, seg_count  (i8,i8,u8,u8 — 4 bytes)
+//       .byte dx, dy × seg_count                      (i8 deltas — 2*seg_count)
+//
+// HONEST NOTE: on pitrex the DRAW win is small — v_directDraw32 is an absolute
+// two-endpoint line, so the runtime's call count is unchanged whether or not
+// segments are chained. The win here is mostly DATA size (flash) + consistency
+// with the other backends; the big hardware-draw win (relative draw-delta that
+// avoids the per-segment beam reset/reposition) is on rp2350/m6809.
+//
+// Frame offsets are emitted as assembler label-difference expressions
+// (_<NAME>_VREC_Fn - _<NAME>_VREC) so gas computes them — no address math
+// in the codegen, consistent with the "linker owns addresses" rule.
+const VREC_MAX_DELTAS_PER_CHAIN: usize = 255;
+
+fn compile_vrec(vrec: &VrecResource, override_name: &str) -> String {
+    use crate::vrec_chain::{chain_frame, Segment};
+    let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let frame_count = vrec.frames.len();
+
+    let clamp8 = |v: i32| v.clamp(-127, 127) as i8;
+
+    let mut s = String::new();
+    s.push_str(&format!(
+        "@ --- {} RECORDING ({} frame(s), fps={}, polyline-chained) ---\n",
+        override_name, frame_count, vrec.fps
+    ));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_VREC\n_{sym}_VREC:\n"));
+    s.push_str(&format!("    .word   {}               @ frame_count\n", frame_count));
+    for i in 0..frame_count {
+        s.push_str(&format!(
+            "    .word   _{sym}_VREC_F{i} - _{sym}_VREC  @ offset frame {i}\n"
+        ));
+    }
+    for (i, frame) in vrec.frames.iter().enumerate() {
+        // Fold this frame's ordered segments into polyline chains.
+        let segs: Vec<Segment> = frame.segments.iter()
+            .map(|seg| Segment { x0: seg.x0, y0: seg.y0, x1: seg.x1, y1: seg.y1, i: seg.i })
+            .collect();
+        let chains = chain_frame(&segs);
+
+        // Emit each chain, splitting any chain with > 255 deltas so seg_count
+        // fits in one byte. A split re-anchors at the raw pen position.
+        let mut emitted: Vec<(i32, i32, i32, Vec<(i32, i32)>)> = Vec::new();
+        for c in &chains {
+            if c.deltas.len() <= VREC_MAX_DELTAS_PER_CHAIN {
+                emitted.push((c.start.0, c.start.1, c.intensity, c.deltas.clone()));
+            } else {
+                let (mut px, mut py) = c.start;
+                for part in c.deltas.chunks(VREC_MAX_DELTAS_PER_CHAIN) {
+                    emitted.push((px, py, c.intensity, part.to_vec()));
+                    for (dx, dy) in part {
+                        px += dx;
+                        py += dy;
+                    }
+                }
+            }
+        }
+
+        s.push_str("    .balign 2\n");
+        s.push_str(&format!("_{sym}_VREC_F{i}:\n"));
+        s.push_str(&format!(
+            "    .hword  {}               @ chain_count\n",
+            emitted.len()
+        ));
+        for (sx, sy, inten, deltas) in &emitted {
+            let start_x = clamp8(*sx);
+            let start_y = clamp8(*sy);
+            let intensity = (*inten).clamp(0, 127) as u8;
+            s.push_str(&format!(
+                "    .byte   0x{:02X}, 0x{:02X}, 0x{:02X}, 0x{:02X}  @ start=({},{}) i={} segs={}\n",
+                start_x as u8, start_y as u8, intensity, deltas.len() as u8,
+                start_x, start_y, intensity, deltas.len()
+            ));
+            for (dx, dy) in deltas {
+                let cdx = clamp8(*dx);
+                let cdy = clamp8(*dy);
+                s.push_str(&format!(
+                    "    .byte   0x{:02X}, 0x{:02X}  @ d=({},{})\n",
+                    cdx as u8, cdy as u8, cdx, cdy
+                ));
+            }
+        }
+    }
+    s.push('\n');
+    s
+}
+
+// ============================================================
+// Sample compiler (.vsmp → 4-bit PCM table)
+// ============================================================
+//
+// TARGET-AGNOSTIC layout — identical to the rp2350 (arm) compile_vsmp. Read in
+// the emulator by the pitrex_play_sample trap (video-only on hardware for now):
+//   _<NAME>_SMP:                 (4-byte aligned)
+//     .word  sample_rate         @ Hz (e.g. 8000)
+//     .word  num_samples         @ number of 4-bit samples
+//     .byte  <packed 4-bit ...>  @ 2 samples/byte, low nibble = even sample
+fn compile_vsmp(vsmp: &VsmpResource, override_name: &str) -> String {
+    let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let bytes = base64_decode(&vsmp.data);
+    let mut s = String::new();
+    s.push_str(&format!(
+        "@ --- {} SAMPLE ({} samples @ {} Hz, {} packed bytes) ---\n",
+        override_name, vsmp.num_samples, vsmp.sample_rate, bytes.len()
+    ));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_SMP\n_{sym}_SMP:\n"));
+    s.push_str(&format!("    .word   {}               @ sample_rate (Hz)\n", vsmp.sample_rate));
+    s.push_str(&format!("    .word   {}               @ num_samples\n", vsmp.num_samples));
+    for chunk in bytes.chunks(16) {
+        let row: Vec<String> = chunk.iter().map(|b| format!("0x{:02X}", b)).collect();
+        s.push_str(&format!("    .byte   {}\n", row.join(", ")));
+    }
+    if bytes.is_empty() {
+        s.push_str("    .byte   0x00            @ empty payload\n");
+    }
+    s.push('\n');
+    s
+}
+
+/// Minimal standard base64 decoder (ignores whitespace/newlines).
+fn base64_decode(input: &str) -> Vec<u8> {
+    fn val(c: u8) -> Option<u8> {
+        match c {
+            b'A'..=b'Z' => Some(c - b'A'),
+            b'a'..=b'z' => Some(c - b'a' + 26),
+            b'0'..=b'9' => Some(c - b'0' + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+    let mut out = Vec::new();
+    let mut acc = 0u32;
+    let mut nbits = 0u32;
+    for &c in input.as_bytes() {
+        if c == b'=' { break; }
+        let Some(v) = val(c) else { continue };
+        acc = (acc << 6) | v as u32;
+        nbits += 6;
+        if nbits >= 8 {
+            nbits -= 8;
+            out.push((acc >> nbits) as u8);
+        }
+    }
+    out
 }
 
 // ============================================================
@@ -920,11 +1184,19 @@ fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
         prev_frame = *frame;
     }
 
-    // Loop marker: fires at loopEnd, jumps back to loop_event_byte_offset
-    let last_event_frame = events.last().map(|(f, _)| *f).unwrap_or(0);
-    let loop_marker_delay = loop_end_frame.saturating_sub(last_event_frame).saturating_sub(1).min(255) as u8;
-    s.push_str(&format!("    .byte   {}, 0xFF   @ loop back (fires frame ~{})\n",
-        loop_marker_delay, loop_end_frame));
+    // Terminator: loop marker (0xFF) if the track loops, else end marker (num_writes=0).
+    // The end marker mirrors the SFX terminator (".byte 0, 0"); the runtime stops
+    // playback on num_writes=0, leaving the PSG silent (note-off frames already
+    // wrote volume=0 before the terminator).
+    if vmus.r#loop {
+        // Loop marker: fires at loopEnd, jumps back to loop_event_byte_offset
+        let last_event_frame = events.last().map(|(f, _)| *f).unwrap_or(0);
+        let loop_marker_delay = loop_end_frame.saturating_sub(last_event_frame).saturating_sub(1).min(255) as u8;
+        s.push_str(&format!("    .byte   {}, 0xFF   @ loop back (fires frame ~{})\n",
+            loop_marker_delay, loop_end_frame));
+    } else {
+        s.push_str("    .byte   0, 0   @ end (no loop)\n");
+    }
     s.push('\n');
     s
 }
@@ -1600,4 +1872,60 @@ fn emit_enemy_data_for_pitrex(
 
     s.push('\n');
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const VREC_JSON: &str = r#"{
+        "version": "1.0",
+        "name": "preview",
+        "fps": 12,
+        "frames": [
+            { "segments": [
+                { "x0": -50, "y0": 10, "x1": 30, "y1": 20, "i": 95 },
+                { "x0": 200, "y0": -200, "x1": 0, "y1": 0, "i": 300 },
+                { "x0": 1, "y0": 2, "x1": 3, "y1": 4, "i": 50 }
+            ] },
+            { "segments": [
+                { "x0": 0, "y0": 0, "x1": 10, "y1": 10, "i": 1 },
+                { "x0": 5, "y0": 5, "x1": -5, "y1": -5, "i": 1 }
+            ] }
+        ]
+    }"#;
+
+    /// The PiTrex .vrec table must be byte-for-byte identical to the rp2350
+    /// backend's layout (frame_count word, label-difference offsets, 5-byte
+    /// segments) so the same tools/video2vrec output works across targets.
+    #[test]
+    fn test_compile_vrec_table_layout() {
+        let vrec: VrecResource = serde_json::from_str(VREC_JSON).unwrap();
+        let asm = compile_vrec(&vrec, "preview");
+
+        assert!(asm.contains(".global _PREVIEW_VREC"), "missing global symbol:\n{asm}");
+        assert!(asm.contains("_PREVIEW_VREC:\n    .word   2               @ frame_count"),
+            "missing frame_count word:\n{asm}");
+        assert!(asm.contains(".word   _PREVIEW_VREC_F0 - _PREVIEW_VREC"),
+            "missing frame 0 offset:\n{asm}");
+        assert!(asm.contains(".word   _PREVIEW_VREC_F1 - _PREVIEW_VREC"),
+            "missing frame 1 offset:\n{asm}");
+        // Chained: frame 0's 3 disjoint segments → 3 chains; frame 1's 2 → 2 chains.
+        assert!(asm.contains("_PREVIEW_VREC_F0:\n    .hword  3"),
+            "frame 0 must have 3 chains:\n{asm}");
+        assert!(asm.contains("_PREVIEW_VREC_F1:\n    .hword  2"),
+            "frame 1 must have 2 chains:\n{asm}");
+        // Chain 0 header: start=(-50,10)=(0xCE,0x0A), i=95=0x5F, seg_count=1.
+        assert!(asm.contains(".byte   0xCE, 0x0A, 0x5F, 0x01"),
+            "chain 0 header bytes wrong:\n{asm}");
+        // Chain 0 delta: (30-(-50), 20-10) = (80,10) = (0x50,0x0A).
+        assert!(asm.contains(".byte   0x50, 0x0A"),
+            "chain 0 delta wrong:\n{asm}");
+        // Chain 1 header clamped: 200→127(0x7F), -200→-127(0x81), i 300→127(0x7F), seg_count 1.
+        assert!(asm.contains(".byte   0x7F, 0x81, 0x7F, 0x01"),
+            "chain 1 clamped header wrong:\n{asm}");
+        // Chain 1 delta clamped: (0-200, 0-(-200)) = (-200,200) → (-127,127) = (0x81,0x7F).
+        assert!(asm.contains(".byte   0x81, 0x7F"),
+            "chain 1 clamped delta wrong:\n{asm}");
+    }
 }

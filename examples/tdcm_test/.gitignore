@@ -1,0 +1,9 @@
+# The Demented Cartoon Movie is copyrighted (Brian Kendall). Media-derived
+# assets are DEV-ONLY and NOT committed. Regenerate locally:
+#   tools/fetch/url2vmov.sh <url> examples/tdcm_test/assets tdcm
+#   then: cp assets/tdcm.vrec assets/recordings/clip.vrec
+#         cp assets/tdcm.vsmp assets/samples/audio.vsmp
+assets/recordings/
+assets/samples/
+assets/*.vmov
+build/

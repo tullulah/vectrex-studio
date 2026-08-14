@@ -68,4 +68,20 @@ interface Window {
     }>;
   };
   pypilot: PyPilotAPI;
+  videoExport?: {
+    saveMp4: (args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) =>
+      Promise<{ path: string } | { canceled: true } | { error: string }>;
+  };
+  movie?: {
+    convert: (args: { kind: 'video' | 'audio'; inputPath: string; outPath: string; opts?: Record<string, any> }) =>
+      Promise<{ ok: true; outPath: string; stdout?: string; stderr?: string } | { error: string }>;
+    pickFile: (args: { kind: 'video' | 'audio' }) =>
+      Promise<{ path: string; name: string } | null>;
+    previewFrame: (args: { videoPath: string; time: number; opts?: Record<string, any> }) =>
+      Promise<
+        { segments: Array<{ x0: number; y0: number; x1: number; y1: number; i: number }>; width: number; height: number; originalPng: string }
+        | { error: string }
+      >;
+    onProgress: (cb: (line: string) => void) => () => void;
+  };
 }

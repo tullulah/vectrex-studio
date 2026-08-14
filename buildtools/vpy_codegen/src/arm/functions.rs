@@ -5,45 +5,24 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use super::ram_layout::RamAllocator;
 use super::expressions::emit_expr;
+use super::analysis::Usage;
 use crate::AssetInfo;
 
 static LABEL_CTR: AtomicU32 = AtomicU32::new(0);
 fn next_id() -> u32 { LABEL_CTR.fetch_add(1, Ordering::Relaxed) }
 
-/// Returns true if any function in `module` contains a PLAY_NOTE() call.
-/// Used to gate auto-injection of vpy_note_update in the game loop.
-fn has_note_calls(module: &Module) -> bool {
-    fn scan_stmts(stmts: &[Stmt]) -> bool {
-        for stmt in stmts {
-            match stmt {
-                Stmt::Expr(Expr::Call(c), _) if c.name.to_uppercase() == "PLAY_NOTE" => {
-                    return true;
-                }
-                Stmt::If { body, elifs, else_body, .. } => {
-                    if scan_stmts(body) { return true; }
-                    for (_, b) in elifs { if scan_stmts(b) { return true; } }
-                    if let Some(eb) = else_body { if scan_stmts(eb) { return true; } }
-                }
-                Stmt::While { body, .. } | Stmt::For { body, .. } => {
-                    if scan_stmts(body) { return true; }
-                }
-                _ => {}
-            }
-        }
-        false
-    }
-    for item in &module.items {
-        if let Item::Function(f) = item {
-            if scan_stmts(&f.body) { return true; }
-        }
-    }
-    false
-}
-
-pub fn emit_functions(module: &Module, _assets: &[AssetInfo]) -> Result<String, String> {
+pub fn emit_functions(
+    module: &Module,
+    _assets: &[AssetInfo],
+    usage: &Usage,
+) -> Result<String, String> {
     let mut s = String::new();
 
-    let (var_addrs, var_decls) = allocate_globals(module);
+    let (var_addrs, var_decls, scalar_consts) = allocate_globals(module);
+
+    // Register scalar consts so expression codegen folds their reads to
+    // immediates (no RAM slot, no startup init emitted for them).
+    super::expressions::set_scalar_consts(scalar_consts);
 
     s.push_str("@ --- User variables (RAM) ---\n");
     s.push_str(&var_decls);
@@ -80,15 +59,17 @@ pub fn emit_functions(module: &Module, _assets: &[AssetInfo]) -> Result<String, 
         }
     }
 
-    s.push_str(&emit_game_main(module, &var_addrs)?);
+    s.push_str(&emit_game_main(module, &var_addrs, usage)?);
 
     Ok(s)
 }
 
-fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String) {
+fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String, HashMap<String, i32>) {
     let mut alloc = RamAllocator::new();
     let mut addrs: HashMap<String, u32> = HashMap::new();
     let mut decls = String::new();
+    // Scalar int consts fold to immediates — collected here, not RAM-backed.
+    let mut scalar_consts: HashMap<String, i32> = HashMap::new();
 
     for item in &module.items {
         match item {
@@ -132,9 +113,14 @@ fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String) {
                         ));
                         addrs.insert(varname, ptr_addr);
                     }
+                    Expr::Number(n) => {
+                        // Scalar int const: fold reads to immediates. No RAM slot
+                        // and no startup init — the value lives only in the fold table.
+                        scalar_consts.insert(varname, *n);
+                    }
                     _ => {
-                        // Scalar const: allocate RAM so reads work via var_addrs.
-                        // Value is initialized in game_main startup.
+                        // Non-literal scalar const: allocate RAM so reads work via
+                        // var_addrs. Value is initialized in game_main startup.
                         let addr = alloc.alloc(4);
                         decls.push_str(&format!(
                             ".equ VAR_{varname}, 0x{addr:08X}  @ const scalar\n"
@@ -159,7 +145,7 @@ fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String) {
         }
     }
 
-    (addrs, decls)
+    (addrs, decls, scalar_consts)
 }
 
 /// Recursively scan `stmts` for local variable declarations/assignments,
@@ -285,7 +271,11 @@ fn emit_function(
     Ok(s)
 }
 
-fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<String, String> {
+fn emit_game_main(
+    module: &Module,
+    var_addrs: &HashMap<String, u32>,
+    usage: &Usage,
+) -> Result<String, String> {
     let mut s = String::new();
 
     // After unification all function names are uppercase.
@@ -307,8 +297,47 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str(".global game_main\n.type game_main, %function\n.thumb_func\ngame_main:\n");
     s.push_str("    push    {r4, r5, r6, r7, lr}\n");
 
+    // Zero the VPy runtime RAM region [TMPVAL .. USER_RAM_START). RP2350 SRAM holds
+    // power-on garbage; the emulator runs with zeroed SRAM, so all system state
+    // (CAMERA_X/Y, LEVEL_DATA_PTR, LEVEL_GP_COUNT, ENEMY_COUNT_ARM, PSG/NOTE engine,
+    // scroll limits, …) is implicitly 0 there. On HW it must be cleared explicitly,
+    // otherwise: garbage CAMERA_Y makes show_level cull every object (black screen),
+    // and a garbage ENEMY_COUNT_ARM / uninitialised pointer spins the enemy and
+    // collision loops on a bogus count until they fault. This is a bss-clear that
+    // gives HW the same zeroed initial state the emulator gets for free. User
+    // globals live at/after USER_RAM_START and are initialised explicitly below.
+    s.push_str("    @ zero runtime RAM (RP2350 SRAM is not zero-initialised)\n");
+    s.push_str("    ldr     r0, =TMPVAL              @ runtime RAM base\n");
+    s.push_str("    ldr     r1, =USER_RAM_START      @ end of system RAM (exclusive)\n");
+    s.push_str("    mov     r2, #0\n");
+    s.push_str("gm_zero_loop:\n");
+    s.push_str("    str     r2, [r0], #4\n");
+    s.push_str("    cmp     r0, r1\n");
+    s.push_str("    blo     gm_zero_loop\n");
+
+    // Default drawing state. RP2350 SRAM is NOT zero-initialised, so these RAM
+    // slots hold power-on garbage unless set. A program that never calls
+    // SET_INTENSITY / SET_TEXT_SIZE would then draw text/numbers with a garbage
+    // size/colour (invisible or wrong) — the runtime "if 0 → default" fallbacks
+    // never fire because the value isn't 0, it's garbage. Give them sane defaults.
+    s.push_str("    @ default drawing state (SRAM is not zero-initialised)\n");
+    s.push_str("    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE\n    mov     r0, #0\n    strb    r0, [r1]\n"); // 0 = use .vec/per-path intensity
+    s.push_str("    ldr     r1, =TEXT_SIZE\n    mov     r0, #3\n    str     r0, [r1]\n"); // scale ×1.5
+
     // Initialize globals
     s.push_str("    @ initialize globals\n");
+    // Resolve numeric consts so a global initialized from one (e.g.
+    // `state: i16 = STATE_TITLE`) gets initialized too — otherwise it was silently
+    // skipped and left as uninitialized RAM (garbage on a cold boot → wrong state
+    // → black screen; only "worked" after another game seeded that RAM address).
+    let const_vals: std::collections::HashMap<String, i32> = module
+        .items
+        .iter()
+        .filter_map(|it| match it {
+            Item::Const { name, value: Expr::Number(n), .. } => Some((name.to_uppercase(), *n)),
+            _ => None,
+        })
+        .collect();
     for item in &module.items {
         match item {
             Item::GlobalLet { name, value, .. } => {
@@ -352,6 +381,18 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
                                 }
                             }
                             s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    str     r2, [r1]\n"));
+                        }
+                        Expr::Ident(info) => {
+                            // Global initialized from a numeric const, e.g.
+                            // `state: i16 = STATE_TITLE`. Resolve and emit it.
+                            if let Some(&n) = const_vals.get(&info.name.to_uppercase()) {
+                                let mov = if (0..=65535).contains(&n) {
+                                    format!("    mov     r0, #{n}\n")
+                                } else {
+                                    format!("    ldr     r0, ={n}\n")
+                                };
+                                s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n{mov}    str     r0, [r1]\n"));
+                            }
                         }
                         _ => {}
                     }
@@ -408,16 +449,32 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
         }
     }
 
-    // Game loop
+    // Game loop. Per-frame runtime updates are auto-injected ONLY for the
+    // engines the program actually uses (same gating as the routine emission
+    // in builtins.rs — see arm/analysis.rs).
     s.push_str("game_main_loop:\n");
     s.push_str("    bl      vpy_wait_recal\n");
-    s.push_str("    bl      vpy_update_buttons\n");
-    s.push_str("    bl      vpy_beep_update\n");
-    s.push_str("    bl      vpy_music_update\n");
-    s.push_str("    bl      vpy_audio_update\n");
-    if has_note_calls(module) {
+    if usage.has("JOYSTICK") {
+        s.push_str("    bl      vpy_update_buttons\n");
+    }
+    if usage.has("BEEP") {
+        s.push_str("    bl      vpy_beep_update\n");
+    }
+    if usage.has("MUSIC") {
+        s.push_str("    bl      vpy_music_update\n");
+    }
+    if usage.has("SFX") {
+        s.push_str("    bl      vpy_audio_update\n");
+    }
+    if usage.has("NOTE") {
         s.push_str("    bl      vpy_note_update\n");
     }
+    // Reset the brightness override each frame so draws without a SET_INTENSITY
+    // fall back to their .vec per-path intensities. SET_INTENSITY re-applies it
+    // and it only persists for the frame it is issued (mirrors PiTrex).
+    s.push_str("    ldr     r0, =VPY_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    mov     r1, #0\n");
+    s.push_str("    strb    r1, [r0]\n");
     if let Some(f) = loop_fn {
         for stmt in &f.body {
             // return_label="game_main_loop": `return` in loop() jumps to next frame

@@ -247,6 +247,42 @@ pub fn collect_draw_anim_names(module: &Module) -> std::collections::BTreeSet<St
     out
 }
 
+/// Collect the raw recording names referenced by DRAW_RECORDING("name", ...)
+/// calls (as typed in the source — NOT uppercased), for existence validation.
+pub fn collect_draw_recording_names(module: &Module) -> std::collections::BTreeSet<String> {
+    use std::collections::BTreeSet;
+    fn collect_expr(expr: &Expr, out: &mut BTreeSet<String>) {
+        if let Expr::Call(c) = expr {
+            if c.name == "DRAW_RECORDING" {
+                if let Some(Expr::StringLit(name)) = c.args.first() {
+                    out.insert(name.clone());
+                }
+            }
+        }
+    }
+    fn collect_stmt(stmt: &Stmt, out: &mut BTreeSet<String>) {
+        match stmt {
+            Stmt::Expr(expr, _) => collect_expr(expr, out),
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                collect_expr(cond, out);
+                body.iter().for_each(|s| collect_stmt(s, out));
+                elifs.iter().for_each(|(e, b)| { collect_expr(e, out); b.iter().for_each(|s| collect_stmt(s, out)); });
+                if let Some(eb) = else_body { eb.iter().for_each(|s| collect_stmt(s, out)); }
+            },
+            Stmt::While { cond, body, .. } => { collect_expr(cond, out); body.iter().for_each(|s| collect_stmt(s, out)); },
+            Stmt::For { body, .. } => body.iter().for_each(|s| collect_stmt(s, out)),
+            _ => {}
+        }
+    }
+    let mut out = BTreeSet::new();
+    for item in &module.items {
+        if let vpy_parser::Item::Function(func) = item {
+            func.body.iter().for_each(|s| collect_stmt(s, &mut out));
+        }
+    }
+    out
+}
+
 /// Check if module uses PLAY_MUSIC or PLAY_SFX (needs AUDIO_UPDATE auto-injection)
 /// Check if module uses PLAY_MUSIC or PLAY_SFX builtins
 /// Used to determine if AUDIO_UPDATE helper should be auto-injected
@@ -328,6 +364,11 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
     asm.push_str("    ; Initialize global variables\n");
     asm.push_str("    CLR VPY_MOVE_X        ; MOVE offset defaults to 0\n");
     asm.push_str("    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0\n");
+    // Vectrex RAM is NOT zero at power-on (emulator fills it with a pattern too).
+    // DRAW_VEC_INTENSITY is the SET_INTENSITY override read by DRAW_VECTOR AND
+    // DRAW_RECORDING; if left uninitialized, its garbage value overrides the
+    // recorded/vector intensity (e.g. $8E blanks the beam → nothing draws).
+    asm.push_str("    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)\n");
     if crate::m6809::level::needs_level_runtime(module) {
         asm.push_str("    ; Init camera ONCE at boot (RAM not zero-init); LOAD_LEVEL must NOT reset it.\n");
         asm.push_str("    LDD #0\n");
@@ -946,6 +987,7 @@ pub fn generate_functions_by_bank(
     bank0_asm.push_str("    ; Initialize global variables\n");
     bank0_asm.push_str("    CLR VPY_MOVE_X        ; MOVE offset defaults to 0\n");
     bank0_asm.push_str("    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0\n");
+    bank0_asm.push_str("    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)\n");
     if crate::m6809::level::needs_level_runtime(module) {
         bank0_asm.push_str("    ; Init camera ONCE at boot (RAM not zero-init). LOAD_LEVEL must NOT\n");
         bank0_asm.push_str("    ; reset it (matches pitrex): the game sets it via SET_CAMERA_Y before\n");

@@ -18,6 +18,7 @@ pub mod instrres;
 pub mod animres;
 pub mod venemy;
 pub mod stack_validator;
+pub mod vrec_chain;
 
 pub use venemy::*;
 
@@ -103,6 +104,8 @@ pub enum AssetType {
     Animation,  // .vanim file (frame-by-frame vector animation)
     Instrument, // .vinstr file (pitched instrument timbre)
     Enemy,      // .venemy file (enemy type definition)
+    Recording,  // .vrec file (multi-frame vector recording for attract/preview playback)
+    Sample,     // .vsmp file (4-bit PCM audio sample streamed to the PSG volume DAC)
 }
 
 #[derive(Debug, Clone, Error)]

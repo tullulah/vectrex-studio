@@ -75,8 +75,15 @@ The assembler is built-in (no lwasm dependency). The LSP server (`core/src/lsp.r
 | Audio | `PLAY_MUSIC`, `PLAY_SFX`, `STOP_MUSIC` | ✅ |
 | Input | `J1_X`, `J1_Y`, `J1_BUTTON_1–4`, `J2_X`, `J2_Y`, `J2_BUTTON_1–4` | ✅ |
 | Level | `LOAD_LEVEL`, `SHOW_LEVEL`, `UPDATE_LEVEL` | ✅ |
+| SD launcher (rp2350) | `SD_FILE_COUNT`, `SD_FILE_NAME`, `DRAW_SD_PREVIEW`, `LAUNCH_GAME` | ✅ |
 | Misc | `ASM` (inline assembly), `LEN`, `POKE`, `PEEK` | ✅ |
 - Addressing modes: immediate, direct, extended, indexed (basic: ,X ,Y ,U ,S)
+
+**RP2350 (debug cart) target:** `vpy_cli build --target rp2350` emits BIOS-linked
+code (`svc #N` traps — see `docs/RP2350_BIOS.md`). Add `--ram` to link a game for
+SRAM (0x20040000) so the cart's SD launcher can load it; the IDE's "Build for SD"
+mode does this and copies the binary to the card. Audio (`PLAY_MUSIC`/`PLAY_SFX`)
+runs on the BIOS's second core, so tempo is independent of the draw load.
 
 **Asset pipeline:**
 - `.vec` vector lists

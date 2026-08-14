@@ -12,10 +12,10 @@ def main():
 
 def loop():
     # Center circle with constant radius
-    DRAW_CIRCLE(0, 0, 30, 80)
+    DRAW_CIRCLE(0, 0, 15, 80)
 
     # Left circle with constant radius
-    DRAW_CIRCLE(-60, 0, 20, 80)
+    DRAW_CIRCLE(-60, 0, 10, 80)
 
     # Right circle with variable radius (increments slowly)
     DRAW_CIRCLE(60, 0, radius, 80)
@@ -25,5 +25,5 @@ def loop():
 
     # Slowly vary radius
     radius = radius + 1
-    if radius > 35:
-        radius = 15
+    if radius > 20:
+        radius = 5

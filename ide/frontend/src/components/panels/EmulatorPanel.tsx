@@ -12,6 +12,9 @@ import { psgAudio } from '../../psgAudio';
 import { inputManager } from '../../inputManager';
 import { asmAddressToVpyLine, formatAddress } from '../../utils/debugHelpers';
 import { emuCore } from '../../emulatorCoreSingleton';
+import { VectorRecorder, serializeVrec, defaultRecordingName, MAX_RECORD_SECONDS, type RawSegment } from '../../emulator/recorder/VectorRecorder';
+import { VideoRecorder, defaultVideoName } from '../../emulator/recorder/VideoRecorder';
+import { getRunningContextOutputs } from '../../emulator/recorder/audioGraphTracker';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -324,6 +327,20 @@ export const EmulatorPanel: React.FC = () => {
   // rp2350 requestAnimationFrame loop handle
   const rp2350LoopRef = useRef<number | null>(null);
 
+  // Vector recorder (.vrec capture for game-preview / attract-mode playback)
+  const recorderRef = useRef<VectorRecorder | null>(null);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [recordElapsed, setRecordElapsed] = useState<number>(0);
+
+  // Gameplay video recorder (real pixels + audio → WebM → MP4 via ffmpeg).
+  // Separate from the .vrec vector recorder above.
+  const videoRecorderRef = useRef<VideoRecorder | null>(null);
+  const [isVideoRecording, setIsVideoRecording] = useState<boolean>(false);
+  const [videoElapsed, setVideoElapsed] = useState<number>(0);
+  // idle | recording | transcoding | saved | error
+  const [videoStatus, setVideoStatus] = useState<'idle' | 'recording' | 'transcoding' | 'saved' | 'error'>('idle');
+  const [videoMessage, setVideoMessage] = useState<string>('');
+
   // PiTrex ARM32 interpreter loop handle and core instance
   const pitrexLoopRef = useRef<number | null>(null);
   const pitrexCoreRef = useRef<import('../../pitrex/PitrexCore.js').PitrexCore | null>(null);
@@ -345,8 +362,219 @@ export const EmulatorPanel: React.FC = () => {
         cancelAnimationFrame(rp2350LoopRef.current);
         rp2350LoopRef.current = null;
       }
+      // Discard any in-progress vector recording
+      recorderRef.current?.discard();
+      // Discard any in-progress gameplay video recording
+      videoRecorderRef.current?.discard();
     };
   }, []);
+
+  // ── Vector recorder (.vrec) ─────────────────────────────────────────────
+  // Samples the most recent completed frame's draw list from whichever
+  // emulator backend is active.  All backends produce segments in the same
+  // ALG integrator space (x 0..33000, y 0..41000, Y down); conversion to
+  // Vectrex space (-127..127, Y up) happens inside VectorRecorder.
+  const captureCurrentSegments = useCallback((): RawSegment[] | null => {
+    // rp2350 path (Rp2350System): emuCore.runFrame() stores each completed
+    // frame in lastFrameSegments, exposed via getSegmentsShared().
+    if ((emuCore as any)?._activeTarget === 'rp2350') {
+      return emuCore.getSegmentsShared() ?? null;
+    }
+    // Legacy M6809 JSVecX: after the frame-boundary swap in vecx_emu(), the
+    // just-completed frame's draw list lives in vectors_erse[0..vector_erse_cnt).
+    // Pure read-only tap — entries carry intensity in `color`.
+    const vecx = (window as any).vecx;
+    if (vecx && Array.isArray(vecx.vectors_erse)) {
+      const cnt = Math.min(vecx.vector_erse_cnt | 0, vecx.vectors_erse.length);
+      const out: RawSegment[] = [];
+      for (let i = 0; i < cnt; i++) {
+        const v = vecx.vectors_erse[i];
+        if (v) out.push({ x0: v.x0, y0: v.y0, x1: v.x1, y1: v.y1, intensity: v.color });
+      }
+      return out;
+    }
+    // Fallback: VectrexSystem path (useVectrexSystem flag) also updates
+    // lastFrameSegments through emuCore.runFrame().
+    return emuCore.getSegmentsShared() ?? null;
+  }, []);
+
+  const finishRecording = useCallback(async () => {
+    const rec = recorderRef.current;
+    if (!rec) return;
+    setIsRecording(false);
+
+    const fallbackName = defaultRecordingName();
+    let name: string = fallbackName;
+    try {
+      const answer = window.prompt('Recording name (saved to assets/recordings/):', fallbackName);
+      if (answer === null) {
+        // User cancelled → discard the capture
+        rec.discard();
+        console.log('[EmulatorPanel] Vector recording discarded (cancelled)');
+        return;
+      }
+      name = answer.trim() || fallbackName;
+    } catch {
+      name = fallbackName; // window.prompt unsupported — derive the name
+    }
+    name = name.replace(/\.vrec$/i, '').replace(/[^\w.-]+/g, '_');
+
+    const vrec = rec.stop(name);
+    if (vrec.frames.length === 0) {
+      console.warn('[EmulatorPanel] Vector recording empty — nothing saved');
+      return;
+    }
+
+    const rootDir = useProjectStore.getState().vpyProject?.rootDir?.replace(/\\/g, '/');
+    const api = (window as any).files;
+    if (!rootDir || !api?.saveFile) {
+      console.error('[EmulatorPanel] Cannot save .vrec — no open project or saveFile API unavailable');
+      return;
+    }
+    const path = `${rootDir}/assets/recordings/${name}.vrec`;
+    try {
+      const res = await api.saveFile({ path, content: serializeVrec(vrec) });
+      if (res?.error) {
+        console.error('[EmulatorPanel] Failed to save recording:', res.error);
+      } else {
+        console.log(`[EmulatorPanel] ✓ Vector recording saved: ${path} (${vrec.frames.length} frames @ ${vrec.fps} fps)`);
+        // Also emit the hardware-compatible precompiled .vrb sibling.
+        try {
+          const vrb = await (window as any).electronAPI?.vrecCompile?.(path);
+          if (vrb?.ok) console.log(`[EmulatorPanel] ✓ Precompiled preview: ${vrb.vrbPath}`);
+        } catch { /* non-fatal */ }
+      }
+    } catch (e) {
+      console.error('[EmulatorPanel] Failed to save recording:', e);
+    }
+  }, []);
+
+  const onToggleRecording = useCallback(() => {
+    let rec = recorderRef.current;
+    if (!rec) {
+      rec = new VectorRecorder();
+      recorderRef.current = rec;
+    }
+    if (rec.isRecording) {
+      void finishRecording();
+      return;
+    }
+    rec.onTick = (elapsed) => setRecordElapsed(elapsed);
+    rec.onAutoStop = () => { void finishRecording(); }; // 10 s cap reached
+    setRecordElapsed(0);
+    setIsRecording(true);
+    rec.start(captureCurrentSegments);
+    console.log(`[EmulatorPanel] Vector recording started (max ${MAX_RECORD_SECONDS} s)`);
+  }, [captureCurrentSegments, finishRecording]);
+
+  // ── Gameplay video recorder (MP4) ───────────────────────────────────────
+  // Captures the live display canvas + the active target's audio to a WebM
+  // MediaStream, then hands the bytes to the Electron main process which
+  // transcodes to MP4 with the bundled ffmpeg. Independent of the .vrec path.
+
+  // Resolve the active target's live { ctx, outputNode } for the audio tap.
+  // PiTrex has its own core (not part of emuCore); everything else routes
+  // through emuCore's active system (m6809 → VectrexSystem, rp2350 → Rp2350System).
+  const getActiveAudio = useCallback((): { ctx: AudioContext; outputs: AudioNode[] } | null => {
+    try {
+      // Universal tap: the graph tracker knows every live AudioContext and ALL
+      // the nodes feeding its speakers (PSG music AND late sources like a
+      // PLAY_SAMPLE BufferSource). Prefer it — the recorder connects every
+      // output, so it captures the full mix regardless of which subsystem plays.
+      const tracked = getRunningContextOutputs();
+      if (tracked) return tracked;
+      // Fallbacks (wrap a single output node): PiTrex, emuCore systems, legacy
+      // psgAudio, and window.vecx's internal ctx (m6809 sound).
+      const pit = (pitrexCoreRef.current as any)?.getAudioContextAndOutputNode?.();
+      const core = (emuCore as any)?.getAudioContextAndOutputNode?.();
+      const legacy = psgAudio.getAudioContextAndOutputNode?.();
+      const vx = (window as any).vecx;
+      const vecxAudio = (vx?.ctx && vx?.node) ? { ctx: vx.ctx as AudioContext, outputNode: vx.node as AudioNode } : null;
+      const one = [pit, core, legacy, vecxAudio]
+        .find((c): c is { ctx: AudioContext; outputNode: AudioNode } =>
+          !!c?.ctx && !!c?.outputNode && c.ctx.state === 'running');
+      return one ? { ctx: one.ctx, outputs: [one.outputNode] } : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const finishVideoRecording = useCallback(async () => {
+    const rec = videoRecorderRef.current;
+    if (!rec) return;
+    setIsVideoRecording(false);
+
+    const blob = await rec.stop();
+    if (!blob || blob.size === 0) {
+      setVideoStatus('error');
+      setVideoMessage('Nothing captured');
+      setTimeout(() => setVideoStatus('idle'), 4000);
+      return;
+    }
+
+    const api = (window as any).videoExport;
+    if (!api?.saveMp4) {
+      setVideoStatus('error');
+      setVideoMessage('Video export API unavailable');
+      setTimeout(() => setVideoStatus('idle'), 4000);
+      return;
+    }
+
+    setVideoStatus('transcoding');
+    setVideoMessage('Transcoding to MP4…');
+    try {
+      const webmBytes = await blob.arrayBuffer();
+      const res = await api.saveMp4({ webmBytes, name: defaultVideoName() });
+      if (res?.path) {
+        setVideoStatus('saved');
+        setVideoMessage(`Saved to ${res.path}`);
+        console.log(`[EmulatorPanel] ✓ Gameplay MP4 saved: ${res.path}`);
+        setTimeout(() => setVideoStatus('idle'), 6000);
+      } else if (res?.canceled) {
+        setVideoStatus('idle');
+        setVideoMessage('');
+      } else {
+        setVideoStatus('error');
+        setVideoMessage(res?.error || 'Transcode failed');
+        console.error('[EmulatorPanel] Video export failed:', res?.error);
+        setTimeout(() => setVideoStatus('idle'), 8000);
+      }
+    } catch (e: any) {
+      setVideoStatus('error');
+      setVideoMessage(e?.message || 'Video export failed');
+      console.error('[EmulatorPanel] Video export threw:', e);
+      setTimeout(() => setVideoStatus('idle'), 8000);
+    }
+  }, []);
+
+  const onToggleVideoRecording = useCallback(() => {
+    let rec = videoRecorderRef.current;
+    if (!rec) {
+      rec = new VideoRecorder();
+      videoRecorderRef.current = rec;
+    }
+    if (rec.isRecording) {
+      void finishVideoRecording();
+      return;
+    }
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      setVideoStatus('error');
+      setVideoMessage('No display canvas');
+      setTimeout(() => setVideoStatus('idle'), 4000);
+      return;
+    }
+    rec.onTick = (elapsed) => setVideoElapsed(elapsed);
+    setVideoElapsed(0);
+    setIsVideoRecording(true);
+    setVideoStatus('recording');
+    // Pass getActiveAudio as a CALLBACK: the recorder holds its own audio track
+    // from frame 0 and bridges the emulator's audio in once it appears — so you
+    // can hit Record before the game boots (e.g. the intro) and still get sound.
+    // Vectrex/6809 render at ~50 Hz; capture at 60 so no frame is dropped.
+    rec.start(canvas, 60, getActiveAudio);
+    console.log('[EmulatorPanel] Gameplay video recording started (audio bridges when it appears)');
+  }, [finishVideoRecording, getActiveAudio]);
 
   useEffect(() => {
     // Lista basada en las ROMs que vimos en la carpeta public/roms/
@@ -2404,7 +2632,8 @@ export const EmulatorPanel: React.FC = () => {
           }
         }
 
-        emuCore.loadArm(romData, elfData, canvasRef.current ?? undefined);
+        const sdSim1 = await (window as any).electronAPI?.sdSimList?.().catch(() => null);
+        emuCore.loadArm(romData, elfData, canvasRef.current ?? undefined, sdSim1?.files ?? [], sdSim1?.previews ?? {});
         console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
 
         // Clear the canvas before first rp2350 frame
@@ -2811,7 +3040,8 @@ export const EmulatorPanel: React.FC = () => {
           console.log(`[EmulatorPanel] rp2350: bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvasRef.current ? `${canvasRef.current.width}x${canvasRef.current.height}` : 'null'}`);
           if (typeof emuCore.loadArm === 'function') {
             // Pass the shared canvas so Rp2350System renders directly to it
-            emuCore.loadArm(bin, elf, canvasRef.current ?? undefined);
+            const sdSim2 = await (electronAPI as any)?.sdSimList?.().catch(() => null);
+            emuCore.loadArm(bin, elf, canvasRef.current ?? undefined, sdSim2?.files ?? [], sdSim2?.previews ?? {});
             console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
 
             // Clear the canvas before first rp2350 frame (Minestorm may have drawn there)
@@ -3277,7 +3507,116 @@ export const EmulatorPanel: React.FC = () => {
         >
           🔄
         </button>
-        
+
+        {/* Botón Record vectores (.vrec) */}
+        <button
+          style={{
+            ...btn,
+            backgroundColor: isRecording ? '#5a2a2a' : '#3a3a3a',
+            color: isRecording ? '#f66' : '#aaa',
+            fontSize: '20px',
+            padding: '10px',
+            minWidth: '50px',
+            minHeight: '50px',
+            borderRadius: '6px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onClick={onToggleRecording}
+          title={isRecording
+            ? 'Stop vector recording and save .vrec'
+            : `Record vectors to .vrec for game preview — stop when done (safety cap ${MAX_RECORD_SECONDS} s)`}
+        >
+          {isRecording ? '⏹' : '🔴'}
+        </button>
+
+        {/* Indicador de grabación: punto rojo + segundos transcurridos */}
+        {isRecording && (
+          <span style={{
+            color: '#f44',
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            minWidth: '54px'
+          }}>
+            <span style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: '#f00',
+              display: 'inline-block'
+            }} />
+            REC {recordElapsed.toFixed(1)}s
+          </span>
+        )}
+
+        {/* Botón Record video de gameplay (MP4 con audio) */}
+        <button
+          style={{
+            ...btn,
+            backgroundColor: isVideoRecording ? '#5a2a2a' : '#3a3a3a',
+            color: isVideoRecording ? '#f66' : '#aaa',
+            fontSize: '20px',
+            padding: '10px',
+            minWidth: '50px',
+            minHeight: '50px',
+            borderRadius: '6px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+          onClick={onToggleVideoRecording}
+          disabled={videoStatus === 'transcoding'}
+          title={isVideoRecording
+            ? 'Stop gameplay recording and export MP4'
+            : 'Record gameplay video + audio to MP4 (for YouTube etc.)'}
+        >
+          {isVideoRecording ? '⏹' : '🎥'}
+        </button>
+
+        {/* Indicador de grabación de video: punto rojo + segundos / estado */}
+        {isVideoRecording && (
+          <span style={{
+            color: '#f44',
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            minWidth: '54px'
+          }}>
+            <span style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: '#f00',
+              display: 'inline-block'
+            }} />
+            VID {videoElapsed.toFixed(1)}s
+          </span>
+        )}
+        {!isVideoRecording && videoStatus !== 'idle' && videoMessage && (
+          <span style={{
+            color: videoStatus === 'error' ? '#f66' : videoStatus === 'saved' ? '#6f6' : '#ccc',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+            display: 'flex',
+            alignItems: 'center',
+            maxWidth: '260px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }} title={videoMessage}>
+            {videoStatus === 'transcoding' ? '⏳ ' : videoStatus === 'saved' ? '✅ ' : '⚠️ '}
+            {videoMessage}
+          </span>
+        )}
+
         {/* Botón Audio Mute/Unmute */}
         <button
           style={{

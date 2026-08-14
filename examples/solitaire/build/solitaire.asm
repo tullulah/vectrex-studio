@@ -1,4908 +1,7479 @@
-; VPy M6809 Assembly (Vectrex)
-; ROM: 32768 bytes
-
-
-    ORG $0000
-
-;***************************************************************************
-; DEFINE SECTION
-;***************************************************************************
-    INCLUDE "VECTREX.I"
-
-;***************************************************************************
-; CARTRIDGE HEADER
-;***************************************************************************
-    FCC "g GCE 2025"
-    FCB $80                 ; String terminator
-    FDB music1              ; Music pointer
-    FCB $F8,$50,$20,$BB     ; Height, Width, Rel Y, Rel X
-    FCC "SOLITAIRE"
-    FCB $80                 ; String terminator
-    FCB 0                   ; End of header
-
-;***************************************************************************
-; CODE SECTION
-;***************************************************************************
-
-START:
-    LDA #$D0
-    TFR A,DP        ; Set Direct Page for BIOS
-    CLR $C80E        ; Initialize Vec_Prev_Btns
-    LDA #$80
-    STA VIA_t1_cnt_lo
-    LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
-    TFR X,S
-    ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
-    LDA #0
-    STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
-    JMP MAIN
-
-;***************************************************************************
-; === RAM VARIABLE DEFINITIONS ===
-;***************************************************************************
-RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT) (2 bytes)
-TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
-TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
-VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
-VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
-TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
-BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
-BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
-RAND_SEED            EQU $C880+$0E   ; Random seed for RAND() (2 bytes)
-DRAW_RECT_X          EQU $C880+$10   ; Rectangle X (1 bytes)
-DRAW_RECT_Y          EQU $C880+$11   ; Rectangle Y (1 bytes)
-DRAW_RECT_WIDTH      EQU $C880+$12   ; Rectangle width (1 bytes)
-DRAW_RECT_HEIGHT     EQU $C880+$13   ; Rectangle height (1 bytes)
-DRAW_RECT_INTENSITY  EQU $C880+$14   ; Rectangle intensity (1 bytes)
-DRAW_VEC_INTENSITY   EQU $C880+$15   ; Vector intensity override (0=use vector data) (1 bytes)
-DRAW_VEC_X_HI        EQU $C880+$16   ; Vector draw X high byte (16-bit screen_x) (1 bytes)
-DRAW_VEC_X           EQU $C880+$17   ; Vector draw X offset (1 bytes)
-DRAW_VEC_Y           EQU $C880+$18   ; Vector draw Y offset (1 bytes)
-MIRROR_PAD           EQU $C880+$19   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
-MIRROR_X             EQU $C880+$29   ; X mirror flag (0=normal, 1=flip) (1 bytes)
-MIRROR_Y             EQU $C880+$2A   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$2B   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$35   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$37   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$39   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$3A   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$3B   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$3D   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-TEXT_SCALE_H         EQU $C880+$3F   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$40   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$41   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_CARD_W           EQU $C880+$42   ; User variable: CARD_W (2 bytes)
-VAR_CARD_H           EQU $C880+$44   ; User variable: CARD_H (2 bytes)
-VAR_COL_DY           EQU $C880+$46   ; User variable: COL_DY (2 bytes)
-VAR_HALF_W           EQU $C880+$48   ; User variable: HALF_W (2 bytes)
-VAR_TOP_Y            EQU $C880+$4A   ; User variable: TOP_Y (2 bytes)
-VAR_TAB_Y            EQU $C880+$4C   ; User variable: TAB_Y (2 bytes)
-VAR_STK_X            EQU $C880+$4E   ; User variable: STK_X (2 bytes)
-VAR_WST_X            EQU $C880+$50   ; User variable: WST_X (2 bytes)
-VAR_F0_X             EQU $C880+$52   ; User variable: F0_X (2 bytes)
-VAR_F1_X             EQU $C880+$54   ; User variable: F1_X (2 bytes)
-VAR_F2_X             EQU $C880+$56   ; User variable: F2_X (2 bytes)
-VAR_F3_X             EQU $C880+$58   ; User variable: F3_X (2 bytes)
-VAR_TAB_X0           EQU $C880+$5A   ; User variable: TAB_X0 (2 bytes)
-VAR_TAB_X1           EQU $C880+$5C   ; User variable: TAB_X1 (2 bytes)
-VAR_TAB_X2           EQU $C880+$5E   ; User variable: TAB_X2 (2 bytes)
-VAR_TAB_X3           EQU $C880+$60   ; User variable: TAB_X3 (2 bytes)
-VAR_TAB_X4           EQU $C880+$62   ; User variable: TAB_X4 (2 bytes)
-VAR_TAB_X5           EQU $C880+$64   ; User variable: TAB_X5 (2 bytes)
-VAR_TAB_X6           EQU $C880+$66   ; User variable: TAB_X6 (2 bytes)
-VAR_INT_CARD         EQU $C880+$68   ; User variable: INT_CARD (2 bytes)
-VAR_INT_CURSOR       EQU $C880+$6A   ; User variable: INT_CURSOR (2 bytes)
-VAR_INT_FACEDN       EQU $C880+$6C   ; User variable: INT_FACEDN (2 bytes)
-VAR_INT_EMPTY        EQU $C880+$6E   ; User variable: INT_EMPTY (2 bytes)
-VAR_INT_HELD         EQU $C880+$70   ; User variable: INT_HELD (2 bytes)
-VAR_STATE_PLAY       EQU $C880+$72   ; User variable: STATE_PLAY (2 bytes)
-VAR_STATE_WIN        EQU $C880+$74   ; User variable: STATE_WIN (2 bytes)
-VAR_STK_SZ           EQU $C880+$76   ; User variable: stk_sz (2 bytes)
-VAR_WST_SZ           EQU $C880+$78   ; User variable: wst_sz (2 bytes)
-VAR_CURSOR           EQU $C880+$7A   ; User variable: cursor (2 bytes)
-VAR_SEL_CARD         EQU $C880+$7C   ; User variable: sel_card (2 bytes)
-VAR_SEL_SRC          EQU $C880+$7E   ; User variable: sel_src (2 bytes)
-VAR_GAME_STATE       EQU $C880+$80   ; User variable: game_state (2 bytes)
-VAR_WIN_BLINK        EQU $C880+$82   ; User variable: win_blink (2 bytes)
-VAR_PREV_BTN1        EQU $C880+$84   ; User variable: prev_btn1 (2 bytes)
-VAR_PREV_BTN2        EQU $C880+$86   ; User variable: prev_btn2 (2 bytes)
-VAR_BTN1_FIRE        EQU $C880+$88   ; User variable: btn1_fire (2 bytes)
-VAR_BTN2_FIRE        EQU $C880+$8A   ; User variable: btn2_fire (2 bytes)
-VAR_PREV_JX          EQU $C880+$8C   ; User variable: prev_jx (2 bytes)
-VAR_G_RESULT         EQU $C880+$8E   ; User variable: g_result (2 bytes)
-VAR_G_COL_X          EQU $C880+$90   ; User variable: g_col_x (2 bytes)
-VAR_G_CARD           EQU $C880+$92   ; User variable: g_card (2 bytes)
-VAR_G_RANK           EQU $C880+$94   ; User variable: g_rank (2 bytes)
-VAR_G_SUIT           EQU $C880+$96   ; User variable: g_suit (2 bytes)
-VAR_G_SZ             EQU $C880+$98   ; User variable: g_sz (2 bytes)
-VAR_G_HD             EQU $C880+$9A   ; User variable: g_hd (2 bytes)
-VAR_G_IDX            EQU $C880+$9C   ; User variable: g_idx (2 bytes)
-VAR_G_CY             EQU $C880+$9E   ; User variable: g_cy (2 bytes)
-VAR_G_TIDX           EQU $C880+$A0   ; User variable: g_tidx (2 bytes)
-VAR_G_TOP            EQU $C880+$A2   ; User variable: g_top (2 bytes)
-VAR_G_TR             EQU $C880+$A4   ; User variable: g_tr (2 bytes)
-VAR_G_TC             EQU $C880+$A6   ; User variable: g_tc (2 bytes)
-VAR_G_TOP_RED        EQU $C880+$A8   ; User variable: g_top_red (2 bytes)
-VAR_G_CARD_RED       EQU $C880+$AA   ; User variable: g_card_red (2 bytes)
-VAR_G_PLACED         EQU $C880+$AC   ; User variable: g_placed (2 bytes)
-VAR_DEAL_IDX         EQU $C880+$AE   ; User variable: deal_idx (2 bytes)
-VAR_G_ROW            EQU $C880+$B0   ; User variable: g_row (2 bytes)
-VAR_G_C              EQU $C880+$B2   ; User variable: g_c (2 bytes)
-VAR_G_CX             EQU $C880+$B4   ; User variable: g_cx (2 bytes)
-VAR_G_FC             EQU $C880+$B6   ; User variable: g_fc (2 bytes)
-VAR_G_WCARD          EQU $C880+$B8   ; User variable: g_wcard (2 bytes)
-VAR_G_FX             EQU $C880+$BA   ; User variable: g_fx (2 bytes)
-VAR_DECK             EQU $C880+$BC   ; User variable: deck (2 bytes)
-VAR_TAB_SZ           EQU $C880+$BE   ; User variable: tab_sz (2 bytes)
-VAR_TAB_HID          EQU $C880+$C0   ; User variable: tab_hid (2 bytes)
-VAR_FOUND_CNT        EQU $C880+$C2   ; User variable: found_cnt (2 bytes)
-VAR_TAB              EQU $C880+$C4   ; User variable: tab (2 bytes)
-VAR_STOCK            EQU $C880+$C6   ; User variable: stock (2 bytes)
-VAR_WASTE            EQU $C880+$C8   ; User variable: waste (2 bytes)
-VAR_CARD             EQU $C880+$CA   ; User variable: card (2 bytes)
-VAR_COL              EQU $C880+$CC   ; User variable: col (2 bytes)
-VAR_SUIT             EQU $C880+$CE   ; User variable: suit (2 bytes)
-VAR_FX               EQU $C880+$D0   ; User variable: fx (2 bytes)
-VAR_X                EQU $C880+$D2   ; User variable: x (2 bytes)
-VAR_Y                EQU $C880+$D4   ; User variable: y (2 bytes)
-VAR_INTENSITY        EQU $C880+$D6   ; User variable: intensity (2 bytes)
-VAR_N                EQU $C880+$D8   ; User variable: n (2 bytes)
-VAR_R                EQU $C880+$DA   ; User variable: r (2 bytes)
-VAR_S                EQU $C880+$DC   ; User variable: s (2 bytes)
-VAR_DECK_DATA        EQU $C880+$DE   ; Mutable array 'deck' data (52 elements x 2 bytes) (104 bytes)
-VAR_TAB_DATA         EQU $C880+$146   ; Mutable array 'tab' data (140 elements x 2 bytes) (280 bytes)
-VAR_TAB_SZ_DATA      EQU $C880+$25E   ; Mutable array 'tab_sz' data (7 elements x 2 bytes) (14 bytes)
-VAR_TAB_HID_DATA     EQU $C880+$26C   ; Mutable array 'tab_hid' data (7 elements x 2 bytes) (14 bytes)
-VAR_FOUND_CNT_DATA   EQU $C880+$27A   ; Mutable array 'found_cnt' data (4 elements x 2 bytes) (8 bytes)
-VAR_STOCK_DATA       EQU $C880+$282   ; Mutable array 'stock' data (24 elements x 2 bytes) (48 bytes)
-VAR_WASTE_DATA       EQU $C880+$2B2   ; Mutable array 'waste' data (24 elements x 2 bytes) (48 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-; Array length constants
-ARRAY_DECK_LEN         EQU 52   ; 52 elements
-ARRAY_TAB_LEN         EQU 140   ; 140 elements
-ARRAY_TAB_SZ_LEN         EQU 7   ; 7 elements
-ARRAY_TAB_HID_LEN         EQU 7   ; 7 elements
-ARRAY_FOUND_CNT_LEN         EQU 4   ; 4 elements
-ARRAY_STOCK_LEN         EQU 24   ; 24 elements
-ARRAY_WASTE_LEN         EQU 24   ; 24 elements
-
-;***************************************************************************
-; ARRAY DATA (ROM literals)
-;***************************************************************************
-; Arrays are stored in ROM and accessed via pointers
-; At startup, main() initializes VAR_{name} to point to ARRAY_{name}_DATA
-
-; Array literal for variable 'deck' (52 elements, 2 bytes each)
-ARRAY_DECK_DATA:
-    FDB 0   ; Element 0
-    FDB 1   ; Element 1
-    FDB 2   ; Element 2
-    FDB 3   ; Element 3
-    FDB 4   ; Element 4
-    FDB 5   ; Element 5
-    FDB 6   ; Element 6
-    FDB 7   ; Element 7
-    FDB 8   ; Element 8
-    FDB 9   ; Element 9
-    FDB 10   ; Element 10
-    FDB 11   ; Element 11
-    FDB 12   ; Element 12
-    FDB 13   ; Element 13
-    FDB 14   ; Element 14
-    FDB 15   ; Element 15
-    FDB 16   ; Element 16
-    FDB 17   ; Element 17
-    FDB 18   ; Element 18
-    FDB 19   ; Element 19
-    FDB 20   ; Element 20
-    FDB 21   ; Element 21
-    FDB 22   ; Element 22
-    FDB 23   ; Element 23
-    FDB 24   ; Element 24
-    FDB 25   ; Element 25
-    FDB 26   ; Element 26
-    FDB 27   ; Element 27
-    FDB 28   ; Element 28
-    FDB 29   ; Element 29
-    FDB 30   ; Element 30
-    FDB 31   ; Element 31
-    FDB 32   ; Element 32
-    FDB 33   ; Element 33
-    FDB 34   ; Element 34
-    FDB 35   ; Element 35
-    FDB 36   ; Element 36
-    FDB 37   ; Element 37
-    FDB 38   ; Element 38
-    FDB 39   ; Element 39
-    FDB 40   ; Element 40
-    FDB 41   ; Element 41
-    FDB 42   ; Element 42
-    FDB 43   ; Element 43
-    FDB 44   ; Element 44
-    FDB 45   ; Element 45
-    FDB 46   ; Element 46
-    FDB 47   ; Element 47
-    FDB 48   ; Element 48
-    FDB 49   ; Element 49
-    FDB 50   ; Element 50
-    FDB 51   ; Element 51
-
-; Array literal for variable 'tab' (140 elements, 2 bytes each)
-ARRAY_TAB_DATA:
-    FDB 0   ; Element 0
-    FDB 0   ; Element 1
-    FDB 0   ; Element 2
-    FDB 0   ; Element 3
-    FDB 0   ; Element 4
-    FDB 0   ; Element 5
-    FDB 0   ; Element 6
-    FDB 0   ; Element 7
-    FDB 0   ; Element 8
-    FDB 0   ; Element 9
-    FDB 0   ; Element 10
-    FDB 0   ; Element 11
-    FDB 0   ; Element 12
-    FDB 0   ; Element 13
-    FDB 0   ; Element 14
-    FDB 0   ; Element 15
-    FDB 0   ; Element 16
-    FDB 0   ; Element 17
-    FDB 0   ; Element 18
-    FDB 0   ; Element 19
-    FDB 0   ; Element 20
-    FDB 0   ; Element 21
-    FDB 0   ; Element 22
-    FDB 0   ; Element 23
-    FDB 0   ; Element 24
-    FDB 0   ; Element 25
-    FDB 0   ; Element 26
-    FDB 0   ; Element 27
-    FDB 0   ; Element 28
-    FDB 0   ; Element 29
-    FDB 0   ; Element 30
-    FDB 0   ; Element 31
-    FDB 0   ; Element 32
-    FDB 0   ; Element 33
-    FDB 0   ; Element 34
-    FDB 0   ; Element 35
-    FDB 0   ; Element 36
-    FDB 0   ; Element 37
-    FDB 0   ; Element 38
-    FDB 0   ; Element 39
-    FDB 0   ; Element 40
-    FDB 0   ; Element 41
-    FDB 0   ; Element 42
-    FDB 0   ; Element 43
-    FDB 0   ; Element 44
-    FDB 0   ; Element 45
-    FDB 0   ; Element 46
-    FDB 0   ; Element 47
-    FDB 0   ; Element 48
-    FDB 0   ; Element 49
-    FDB 0   ; Element 50
-    FDB 0   ; Element 51
-    FDB 0   ; Element 52
-    FDB 0   ; Element 53
-    FDB 0   ; Element 54
-    FDB 0   ; Element 55
-    FDB 0   ; Element 56
-    FDB 0   ; Element 57
-    FDB 0   ; Element 58
-    FDB 0   ; Element 59
-    FDB 0   ; Element 60
-    FDB 0   ; Element 61
-    FDB 0   ; Element 62
-    FDB 0   ; Element 63
-    FDB 0   ; Element 64
-    FDB 0   ; Element 65
-    FDB 0   ; Element 66
-    FDB 0   ; Element 67
-    FDB 0   ; Element 68
-    FDB 0   ; Element 69
-    FDB 0   ; Element 70
-    FDB 0   ; Element 71
-    FDB 0   ; Element 72
-    FDB 0   ; Element 73
-    FDB 0   ; Element 74
-    FDB 0   ; Element 75
-    FDB 0   ; Element 76
-    FDB 0   ; Element 77
-    FDB 0   ; Element 78
-    FDB 0   ; Element 79
-    FDB 0   ; Element 80
-    FDB 0   ; Element 81
-    FDB 0   ; Element 82
-    FDB 0   ; Element 83
-    FDB 0   ; Element 84
-    FDB 0   ; Element 85
-    FDB 0   ; Element 86
-    FDB 0   ; Element 87
-    FDB 0   ; Element 88
-    FDB 0   ; Element 89
-    FDB 0   ; Element 90
-    FDB 0   ; Element 91
-    FDB 0   ; Element 92
-    FDB 0   ; Element 93
-    FDB 0   ; Element 94
-    FDB 0   ; Element 95
-    FDB 0   ; Element 96
-    FDB 0   ; Element 97
-    FDB 0   ; Element 98
-    FDB 0   ; Element 99
-    FDB 0   ; Element 100
-    FDB 0   ; Element 101
-    FDB 0   ; Element 102
-    FDB 0   ; Element 103
-    FDB 0   ; Element 104
-    FDB 0   ; Element 105
-    FDB 0   ; Element 106
-    FDB 0   ; Element 107
-    FDB 0   ; Element 108
-    FDB 0   ; Element 109
-    FDB 0   ; Element 110
-    FDB 0   ; Element 111
-    FDB 0   ; Element 112
-    FDB 0   ; Element 113
-    FDB 0   ; Element 114
-    FDB 0   ; Element 115
-    FDB 0   ; Element 116
-    FDB 0   ; Element 117
-    FDB 0   ; Element 118
-    FDB 0   ; Element 119
-    FDB 0   ; Element 120
-    FDB 0   ; Element 121
-    FDB 0   ; Element 122
-    FDB 0   ; Element 123
-    FDB 0   ; Element 124
-    FDB 0   ; Element 125
-    FDB 0   ; Element 126
-    FDB 0   ; Element 127
-    FDB 0   ; Element 128
-    FDB 0   ; Element 129
-    FDB 0   ; Element 130
-    FDB 0   ; Element 131
-    FDB 0   ; Element 132
-    FDB 0   ; Element 133
-    FDB 0   ; Element 134
-    FDB 0   ; Element 135
-    FDB 0   ; Element 136
-    FDB 0   ; Element 137
-    FDB 0   ; Element 138
-    FDB 0   ; Element 139
-
-; Array literal for variable 'tab_sz' (7 elements, 2 bytes each)
-ARRAY_TAB_SZ_DATA:
-    FDB 0   ; Element 0
-    FDB 0   ; Element 1
-    FDB 0   ; Element 2
-    FDB 0   ; Element 3
-    FDB 0   ; Element 4
-    FDB 0   ; Element 5
-    FDB 0   ; Element 6
-
-; Array literal for variable 'tab_hid' (7 elements, 2 bytes each)
-ARRAY_TAB_HID_DATA:
-    FDB 0   ; Element 0
-    FDB 0   ; Element 1
-    FDB 0   ; Element 2
-    FDB 0   ; Element 3
-    FDB 0   ; Element 4
-    FDB 0   ; Element 5
-    FDB 0   ; Element 6
-
-; Array literal for variable 'found_cnt' (4 elements, 2 bytes each)
-ARRAY_FOUND_CNT_DATA:
-    FDB 0   ; Element 0
-    FDB 0   ; Element 1
-    FDB 0   ; Element 2
-    FDB 0   ; Element 3
-
-; Array literal for variable 'stock' (24 elements, 2 bytes each)
-ARRAY_STOCK_DATA:
-    FDB 0   ; Element 0
-    FDB 0   ; Element 1
-    FDB 0   ; Element 2
-    FDB 0   ; Element 3
-    FDB 0   ; Element 4
-    FDB 0   ; Element 5
-    FDB 0   ; Element 6
-    FDB 0   ; Element 7
-    FDB 0   ; Element 8
-    FDB 0   ; Element 9
-    FDB 0   ; Element 10
-    FDB 0   ; Element 11
-    FDB 0   ; Element 12
-    FDB 0   ; Element 13
-    FDB 0   ; Element 14
-    FDB 0   ; Element 15
-    FDB 0   ; Element 16
-    FDB 0   ; Element 17
-    FDB 0   ; Element 18
-    FDB 0   ; Element 19
-    FDB 0   ; Element 20
-    FDB 0   ; Element 21
-    FDB 0   ; Element 22
-    FDB 0   ; Element 23
-
-; Array literal for variable 'waste' (24 elements, 2 bytes each)
-ARRAY_WASTE_DATA:
-    FDB 0   ; Element 0
-    FDB 0   ; Element 1
-    FDB 0   ; Element 2
-    FDB 0   ; Element 3
-    FDB 0   ; Element 4
-    FDB 0   ; Element 5
-    FDB 0   ; Element 6
-    FDB 0   ; Element 7
-    FDB 0   ; Element 8
-    FDB 0   ; Element 9
-    FDB 0   ; Element 10
-    FDB 0   ; Element 11
-    FDB 0   ; Element 12
-    FDB 0   ; Element 13
-    FDB 0   ; Element 14
-    FDB 0   ; Element 15
-    FDB 0   ; Element 16
-    FDB 0   ; Element 17
-    FDB 0   ; Element 18
-    FDB 0   ; Element 19
-    FDB 0   ; Element 20
-    FDB 0   ; Element 21
-    FDB 0   ; Element 22
-    FDB 0   ; Element 23
-
-
-;***************************************************************************
-; MAIN PROGRAM
-;***************************************************************************
-
-MAIN:
-    ; Initialize global variables
-    CLR VPY_MOVE_X        ; MOVE offset defaults to 0
-    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
-    LDA #$F8
-    STA TEXT_SCALE_H      ; Default height = -8 (normal size)
-    LDA #$48
-    STA TEXT_SCALE_W      ; Default width = 72 (normal size)
-    LDA #$7F
-    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
-    ; Copy array 'deck' from ROM to RAM (52 elements)
-    LDX #ARRAY_DECK_DATA       ; Source: ROM array data
-    LDU #VAR_DECK_DATA       ; Dest: RAM array space
-    LDD #52        ; Number of elements
-.COPY_LOOP_0:
-    LDY ,X++        ; Load word from ROM, increment source
-    STY ,U++        ; Store word to RAM, increment dest
-    SUBD #1         ; Decrement counter
-    LBNE .COPY_LOOP_0 ; Loop until done (LBNE for long branch)
-    LDX #VAR_DECK_DATA    ; Array now in RAM
-    STX VAR_DECK
-    ; Copy array 'tab' from ROM to RAM (140 elements)
-    LDX #ARRAY_TAB_DATA       ; Source: ROM array data
-    LDU #VAR_TAB_DATA       ; Dest: RAM array space
-    LDD #140        ; Number of elements
-.COPY_LOOP_1:
-    LDY ,X++        ; Load word from ROM, increment source
-    STY ,U++        ; Store word to RAM, increment dest
-    SUBD #1         ; Decrement counter
-    LBNE .COPY_LOOP_1 ; Loop until done (LBNE for long branch)
-    LDX #VAR_TAB_DATA    ; Array now in RAM
-    STX VAR_TAB
-    ; Copy array 'tab_sz' from ROM to RAM (7 elements)
-    LDX #ARRAY_TAB_SZ_DATA       ; Source: ROM array data
-    LDU #VAR_TAB_SZ_DATA       ; Dest: RAM array space
-    LDD #7        ; Number of elements
-.COPY_LOOP_2:
-    LDY ,X++        ; Load word from ROM, increment source
-    STY ,U++        ; Store word to RAM, increment dest
-    SUBD #1         ; Decrement counter
-    LBNE .COPY_LOOP_2 ; Loop until done (LBNE for long branch)
-    LDX #VAR_TAB_SZ_DATA    ; Array now in RAM
-    STX VAR_TAB_SZ
-    ; Copy array 'tab_hid' from ROM to RAM (7 elements)
-    LDX #ARRAY_TAB_HID_DATA       ; Source: ROM array data
-    LDU #VAR_TAB_HID_DATA       ; Dest: RAM array space
-    LDD #7        ; Number of elements
-.COPY_LOOP_3:
-    LDY ,X++        ; Load word from ROM, increment source
-    STY ,U++        ; Store word to RAM, increment dest
-    SUBD #1         ; Decrement counter
-    LBNE .COPY_LOOP_3 ; Loop until done (LBNE for long branch)
-    LDX #VAR_TAB_HID_DATA    ; Array now in RAM
-    STX VAR_TAB_HID
-    ; Copy array 'found_cnt' from ROM to RAM (4 elements)
-    LDX #ARRAY_FOUND_CNT_DATA       ; Source: ROM array data
-    LDU #VAR_FOUND_CNT_DATA       ; Dest: RAM array space
-    LDD #4        ; Number of elements
-.COPY_LOOP_4:
-    LDY ,X++        ; Load word from ROM, increment source
-    STY ,U++        ; Store word to RAM, increment dest
-    SUBD #1         ; Decrement counter
-    LBNE .COPY_LOOP_4 ; Loop until done (LBNE for long branch)
-    LDX #VAR_FOUND_CNT_DATA    ; Array now in RAM
-    STX VAR_FOUND_CNT
-    ; Copy array 'stock' from ROM to RAM (24 elements)
-    LDX #ARRAY_STOCK_DATA       ; Source: ROM array data
-    LDU #VAR_STOCK_DATA       ; Dest: RAM array space
-    LDD #24        ; Number of elements
-.COPY_LOOP_5:
-    LDY ,X++        ; Load word from ROM, increment source
-    STY ,U++        ; Store word to RAM, increment dest
-    SUBD #1         ; Decrement counter
-    LBNE .COPY_LOOP_5 ; Loop until done (LBNE for long branch)
-    LDX #VAR_STOCK_DATA    ; Array now in RAM
-    STX VAR_STOCK
-    LDD #0
-    STD VAR_STK_SZ
-    ; Copy array 'waste' from ROM to RAM (24 elements)
-    LDX #ARRAY_WASTE_DATA       ; Source: ROM array data
-    LDU #VAR_WASTE_DATA       ; Dest: RAM array space
-    LDD #24        ; Number of elements
-.COPY_LOOP_6:
-    LDY ,X++        ; Load word from ROM, increment source
-    STY ,U++        ; Store word to RAM, increment dest
-    SUBD #1         ; Decrement counter
-    LBNE .COPY_LOOP_6 ; Loop until done (LBNE for long branch)
-    LDX #VAR_WASTE_DATA    ; Array now in RAM
-    STX VAR_WASTE
-    LDD #0
-    STD VAR_WST_SZ
-    LDD #0
-    STD VAR_CURSOR
-    LDD #-1
-    STD VAR_SEL_CARD
-    LDD #-1
-    STD VAR_SEL_SRC
-    LDD #0  ; const STATE_PLAY
-    STD VAR_GAME_STATE
-    LDD #0
-    STD VAR_WIN_BLINK
-    LDD #0
-    STD VAR_PREV_BTN1
-    LDD #0
-    STD VAR_PREV_BTN2
-    LDD #0
-    STD VAR_BTN1_FIRE
-    LDD #0
-    STD VAR_BTN2_FIRE
-    LDD #0
-    STD VAR_PREV_JX
-    LDD #0
-    STD VAR_G_RESULT
-    LDD #0
-    STD VAR_G_COL_X
-    LDD #0
-    STD VAR_G_CARD
-    LDD #0
-    STD VAR_G_RANK
-    LDD #0
-    STD VAR_G_SUIT
-    LDD #0
-    STD VAR_G_SZ
-    LDD #0
-    STD VAR_G_HD
-    LDD #0
-    STD VAR_G_IDX
-    LDD #0
-    STD VAR_G_CY
-    LDD #0
-    STD VAR_G_TIDX
-    LDD #0
-    STD VAR_G_TOP
-    LDD #0
-    STD VAR_G_TR
-    LDD #0
-    STD VAR_G_TC
-    LDD #0
-    STD VAR_G_TOP_RED
-    LDD #0
-    STD VAR_G_CARD_RED
-    LDD #0
-    STD VAR_G_PLACED
-    LDD #0
-    STD VAR_DEAL_IDX
-    LDD #0
-    STD VAR_G_ROW
-    LDD #0
-    STD VAR_G_C
-    LDD #0
-    STD VAR_G_CX
-    LDD #0
-    STD VAR_G_FC
-    LDD #0
-    STD VAR_G_WCARD
-    LDD #0
-    STD VAR_G_FX
-    ; === Initialize Joystick (one-time setup) ===
-    JSR $F1AF    ; DP_to_C8 (required for RAM access)
-    CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
-    LDA #$01     ; CRITICAL: Resolution threshold (power of 2: $40=fast, $01=accurate)
-    STA $C81A    ; Vec_Joy_Resltn (loop terminates when B=this value after LSRBs)
-    LDA #$01
-    STA $C81F    ; Vec_Joy_Mux_1_X (enable X axis reading)
-    LDA #$03
-    STA $C820    ; Vec_Joy_Mux_1_Y (enable Y axis reading)
-    LDA #$00
-    STA $C821    ; Vec_Joy_Mux_2_X (disable joystick 2 - CRITICAL!)
-    STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
-    ; Mux configured - J1_X()/J1_Y() can now be called
-
-    ; Prime BIOS button state at startup
-    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
-    ; Call main() for initialization
-    LDD #0  ; const STATE_PLAY
-    STD VAR_GAME_STATE
-    JSR shuffle
-    JSR deal
-    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
-
-.MAIN_LOOP:
-    JSR LOOP_BODY
-    LBRA .MAIN_LOOP   ; Use long branch for multibank support
-
-LOOP_BODY:
-    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
-    LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
-    BITA #$01
-    BNE .J1B1_0_ON
-    LDD #0
-    BRA .J1B1_0_END
-.J1B1_0_ON:
-    LDD #1
-.J1B1_0_END:
-    STD RESULT
-    STD VAR_G_CARD
-    LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
-    BITA #$02
-    BNE .J1B2_1_ON
-    LDD #0
-    BRA .J1B2_1_END
-.J1B2_1_ON:
-    LDD #1
-.J1B2_1_END:
-    STD RESULT
-    STD VAR_G_RANK
-    LDD #0
-    STD VAR_BTN1_FIRE
-    LDD #0
-    STD VAR_BTN2_FIRE
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_CARD
-    CMPD TMPVAL
-    LBEQ .CMP_1_TRUE
-    LDD #0
-    LBRA .CMP_1_END
-.CMP_1_TRUE:
-    LDD #1
-.CMP_1_END:
-    LBEQ .LOGIC_0_FALSE
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PREV_BTN1
-    CMPD TMPVAL
-    LBEQ .CMP_2_TRUE
-    LDD #0
-    LBRA .CMP_2_END
-.CMP_2_TRUE:
-    LDD #1
-.CMP_2_END:
-    LBEQ .LOGIC_0_FALSE
-    LDD #1
-    LBRA .LOGIC_0_END
-.LOGIC_0_FALSE:
-    LDD #0
-.LOGIC_0_END:
-    LBEQ IF_NEXT_1
-    LDD #1
-    STD VAR_BTN1_FIRE
-    LBRA IF_END_0
-IF_NEXT_1:
-IF_END_0:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    CMPD TMPVAL
-    LBEQ .CMP_4_TRUE
-    LDD #0
-    LBRA .CMP_4_END
-.CMP_4_TRUE:
-    LDD #1
-.CMP_4_END:
-    LBEQ .LOGIC_3_FALSE
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PREV_BTN2
-    CMPD TMPVAL
-    LBEQ .CMP_5_TRUE
-    LDD #0
-    LBRA .CMP_5_END
-.CMP_5_TRUE:
-    LDD #1
-.CMP_5_END:
-    LBEQ .LOGIC_3_FALSE
-    LDD #1
-    LBRA .LOGIC_3_END
-.LOGIC_3_FALSE:
-    LDD #0
-.LOGIC_3_END:
-    LBEQ IF_NEXT_3
-    LDD #1
-    STD VAR_BTN2_FIRE
-    LBRA IF_END_2
-IF_NEXT_3:
-IF_END_2:
-    LDD >VAR_G_CARD
-    STD VAR_PREV_BTN1
-    LDD >VAR_G_RANK
-    STD VAR_PREV_BTN2
-    LDD #0  ; const STATE_PLAY
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_GAME_STATE
-    CMPD TMPVAL
-    LBEQ .CMP_6_TRUE
-    LDD #0
-    LBRA .CMP_6_END
-.CMP_6_TRUE:
-    LDD #1
-.CMP_6_END:
-    LBEQ IF_NEXT_5
-    JSR update_input
-    JSR draw_table
-    JSR check_win
-    LBRA IF_END_4
-IF_NEXT_5:
-    JSR draw_win_screen
-IF_END_4:
-    RTS
-
-; Function: shuffle
-shuffle:
-    LDD #51
-    STD VAR_G_C
-WH_6: ; while start
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_C
-    CMPD TMPVAL
-    LBGT .CMP_7_TRUE
-    LDD #0
-    LBRA .CMP_7_END
-.CMP_7_TRUE:
-    LDD #1
-.CMP_7_END:
-    LBEQ WH_END_7
-    ; RAND_RANGE: Random in range [min, max]
-    LDD #0
-    STD TMPPTR     ; Save min
-    LDD >VAR_G_C
-    STD TMPPTR2    ; Save max
-    JSR RAND_RANGE_HELPER
-    STD RESULT
-    STD VAR_G_IDX
-    LDX #VAR_DECK_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_G_CARD
-    LDD >VAR_G_C
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_DECK_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_DECK_DATA  ; Array base
-    LDD >VAR_G_IDX
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD >VAR_G_IDX
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_DECK_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD >VAR_G_CARD
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_C
-    LBRA WH_6
-WH_END_7: ; while end
-    RTS
-
-; Function: deal
-deal:
-    LDD #0
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_SZ_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #1
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_SZ_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #2
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_SZ_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #3
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_SZ_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #4
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_SZ_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #5
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_SZ_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #6
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_SZ_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #0
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_HID_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #1
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_HID_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #2
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_HID_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #3
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_HID_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #4
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_HID_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #5
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_HID_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #6
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_HID_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #0
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_FOUND_CNT_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #1
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_FOUND_CNT_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #2
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_FOUND_CNT_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #3
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_FOUND_CNT_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD #0
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #0
-    STD VAR_STK_SZ
-    LDD #0
-    STD VAR_WST_SZ
-    LDD #-1
-    STD VAR_SEL_CARD
-    LDD #-1
-    STD VAR_SEL_SRC
-    LDD #0
-    STD VAR_CURSOR
-    LDD #0
-    STD VAR_DEAL_IDX
-    LDD #0
-    STD VAR_G_C
-WH_8: ; while start
-    LDD #7
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_C
-    CMPD TMPVAL
-    LBLT .CMP_8_TRUE
-    LDD #0
-    LBRA .CMP_8_END
-.CMP_8_TRUE:
-    LDD #1
-.CMP_8_END:
-    LBEQ WH_END_9
-    LDD #0
-    STD VAR_G_ROW
-WH_10: ; while start
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_ROW
-    CMPD TMPVAL
-    LBLE .CMP_9_TRUE
-    LDD #0
-    LBRA .CMP_9_END
-.CMP_9_TRUE:
-    LDD #1
-.CMP_9_END:
-    LBEQ WH_END_11
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #20
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_ROW
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_G_TIDX
-    LDD >VAR_G_TIDX
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_DECK_DATA  ; Array base
-    LDD >VAR_DEAL_IDX
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD >VAR_DEAL_IDX
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_DEAL_IDX
-    LDD >VAR_G_ROW
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_G_ROW
-    LBRA WH_10
-WH_END_11: ; while end
-    LDD >VAR_G_C
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_SZ_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD >VAR_G_C
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_HID_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD >VAR_G_C
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_G_C
-    LBRA WH_8
-WH_END_9: ; while end
-    LDD #0
-    STD VAR_G_ROW
-WH_12: ; while start
-    LDD #52
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_DEAL_IDX
-    CMPD TMPVAL
-    LBLT .CMP_10_TRUE
-    LDD #0
-    LBRA .CMP_10_END
-.CMP_10_TRUE:
-    LDD #1
-.CMP_10_END:
-    LBEQ WH_END_13
-    LDD >VAR_G_ROW
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_STOCK_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_DECK_DATA  ; Array base
-    LDD >VAR_DEAL_IDX
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD >VAR_DEAL_IDX
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_DEAL_IDX
-    LDD >VAR_G_ROW
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_G_ROW
-    LBRA WH_12
-WH_END_13: ; while end
-    LDD >VAR_G_ROW
-    STD VAR_STK_SZ
-    RTS
-
-; Function: update_input
-update_input:
-    JSR J1X_BUILTIN
-    STD RESULT
-    STD VAR_G_IDX
-    LDD #0
-    STD VAR_G_ROW
-    LDD #40
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_IDX
-    CMPD TMPVAL
-    LBGT .CMP_11_TRUE
-    LDD #0
-    LBRA .CMP_11_END
-.CMP_11_TRUE:
-    LDD #1
-.CMP_11_END:
-    LBEQ IF_NEXT_15
-    LDD #1
-    STD VAR_G_ROW
-    LBRA IF_END_14
-IF_NEXT_15:
-    LDD #-40
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_IDX
-    CMPD TMPVAL
-    LBLT .CMP_12_TRUE
-    LDD #0
-    LBRA .CMP_12_END
-.CMP_12_TRUE:
-    LDD #1
-.CMP_12_END:
-    LBEQ IF_END_14
-    LDD #-1
-    STD VAR_G_ROW
-    LBRA IF_END_14
-IF_END_14:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_ROW
-    CMPD TMPVAL
-    LBEQ .CMP_14_TRUE
-    LDD #0
-    LBRA .CMP_14_END
-.CMP_14_TRUE:
-    LDD #1
-.CMP_14_END:
-    LBEQ .LOGIC_13_FALSE
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PREV_JX
-    CMPD TMPVAL
-    LBEQ .CMP_15_TRUE
-    LDD #0
-    LBRA .CMP_15_END
-.CMP_15_TRUE:
-    LDD #1
-.CMP_15_END:
-    LBEQ .LOGIC_13_FALSE
-    LDD #1
-    LBRA .LOGIC_13_END
-.LOGIC_13_FALSE:
-    LDD #0
-.LOGIC_13_END:
-    LBEQ IF_NEXT_17
-    LDD >VAR_CURSOR
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_CURSOR
-    LDD #12
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBGT .CMP_16_TRUE
-    LDD #0
-    LBRA .CMP_16_END
-.CMP_16_TRUE:
-    LDD #1
-.CMP_16_END:
-    LBEQ IF_NEXT_19
-    LDD #0
-    STD VAR_CURSOR
-    LBRA IF_END_18
-IF_NEXT_19:
-IF_END_18:
-    LBRA IF_END_16
-IF_NEXT_17:
-    LDD #-1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_ROW
-    CMPD TMPVAL
-    LBEQ .CMP_18_TRUE
-    LDD #0
-    LBRA .CMP_18_END
-.CMP_18_TRUE:
-    LDD #1
-.CMP_18_END:
-    LBEQ .LOGIC_17_FALSE
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PREV_JX
-    CMPD TMPVAL
-    LBEQ .CMP_19_TRUE
-    LDD #0
-    LBRA .CMP_19_END
-.CMP_19_TRUE:
-    LDD #1
-.CMP_19_END:
-    LBEQ .LOGIC_17_FALSE
-    LDD #1
-    LBRA .LOGIC_17_END
-.LOGIC_17_FALSE:
-    LDD #0
-.LOGIC_17_END:
-    LBEQ IF_END_16
-    LDD >VAR_CURSOR
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_CURSOR
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBLT .CMP_20_TRUE
-    LDD #0
-    LBRA .CMP_20_END
-.CMP_20_TRUE:
-    LDD #1
-.CMP_20_END:
-    LBEQ IF_NEXT_21
-    LDD #12
-    STD VAR_CURSOR
-    LBRA IF_END_20
-IF_NEXT_21:
-IF_END_20:
-    LBRA IF_END_16
-IF_END_16:
-    LDD >VAR_G_ROW
-    STD VAR_PREV_JX
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_BTN2_FIRE
-    CMPD TMPVAL
-    LBEQ .CMP_21_TRUE
-    LDD #0
-    LBRA .CMP_21_END
-.CMP_21_TRUE:
-    LDD #1
-.CMP_21_END:
-    LBEQ IF_NEXT_23
-    JSR do_deal_stock
-    LBRA IF_END_22
-IF_NEXT_23:
-IF_END_22:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_BTN1_FIRE
-    CMPD TMPVAL
-    LBEQ .CMP_22_TRUE
-    LDD #0
-    LBRA .CMP_22_END
-.CMP_22_TRUE:
-    LDD #1
-.CMP_22_END:
-    LBEQ IF_NEXT_25
-    LDD #-1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SEL_CARD
-    CMPD TMPVAL
-    LBEQ .CMP_23_TRUE
-    LDD #0
-    LBRA .CMP_23_END
-.CMP_23_TRUE:
-    LDD #1
-.CMP_23_END:
-    LBEQ IF_NEXT_27
-    JSR do_pick_up
-    LBRA IF_END_26
-IF_NEXT_27:
-    JSR do_place
-IF_END_26:
-    LBRA IF_END_24
-IF_NEXT_25:
-IF_END_24:
-    RTS
-
-; Function: do_deal_stock
-do_deal_stock:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_STK_SZ
-    CMPD TMPVAL
-    LBGT .CMP_24_TRUE
-    LDD #0
-    LBRA .CMP_24_END
-.CMP_24_TRUE:
-    LDD #1
-.CMP_24_END:
-    LBEQ IF_NEXT_29
-    LDD >VAR_STK_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_STK_SZ
-    LDD >VAR_WST_SZ
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_WASTE_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_STOCK_DATA  ; Array base
-    LDD >VAR_STK_SZ
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD >VAR_WST_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_WST_SZ
-    LBRA IF_END_28
-IF_NEXT_29:
-    LDD #0
-    STD VAR_G_ROW
-WH_30: ; while start
-    LDD >VAR_WST_SZ
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_ROW
-    CMPD TMPVAL
-    LBLT .CMP_25_TRUE
-    LDD #0
-    LBRA .CMP_25_END
-.CMP_25_TRUE:
-    LDD #1
-.CMP_25_END:
-    LBEQ WH_END_31
-    LDD >VAR_G_ROW
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_STOCK_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_WASTE_DATA  ; Array base
-    LDD >VAR_G_ROW
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD >VAR_G_ROW
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_G_ROW
-    LBRA WH_30
-WH_END_31: ; while end
-    LDD >VAR_WST_SZ
-    STD VAR_STK_SZ
-    LDD #0
-    STD VAR_WST_SZ
-IF_END_28:
-    RTS
-
-; Function: do_pick_up
-do_pick_up:
-    LDD #6
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBLE .CMP_26_TRUE
-    LDD #0
-    LBRA .CMP_26_END
-.CMP_26_TRUE:
-    LDD #1
-.CMP_26_END:
-    LBEQ IF_NEXT_33
-    LDD >VAR_CURSOR
-    STD VAR_G_C
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_G_SZ
-    LDX #VAR_TAB_HID_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_G_HD
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_SZ
-    CMPD TMPVAL
-    LBGT .CMP_28_TRUE
-    LDD #0
-    LBRA .CMP_28_END
-.CMP_28_TRUE:
-    LDD #1
-.CMP_28_END:
-    LBEQ .LOGIC_27_FALSE
-    LDD >VAR_G_HD
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_SZ
-    CMPD TMPVAL
-    LBGT .CMP_29_TRUE
-    LDD #0
-    LBRA .CMP_29_END
-.CMP_29_TRUE:
-    LDD #1
-.CMP_29_END:
-    LBEQ .LOGIC_27_FALSE
-    LDD #1
-    LBRA .LOGIC_27_END
-.LOGIC_27_FALSE:
-    LDD #0
-.LOGIC_27_END:
-    LBEQ IF_NEXT_35
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #20
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_SZ
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_TIDX
-    LDX #VAR_TAB_DATA  ; Array base
-    LDD >VAR_G_TIDX
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_SEL_CARD
-    LDD >VAR_CURSOR
-    STD VAR_SEL_SRC
-    LDD >VAR_G_C
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_SZ_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD >VAR_G_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBGT .CMP_31_TRUE
-    LDD #0
-    LBRA .CMP_31_END
-.CMP_31_TRUE:
-    LDD #1
-.CMP_31_END:
-    LBEQ .LOGIC_30_FALSE
-    LDX #VAR_TAB_HID_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBLE .CMP_32_TRUE
-    LDD #0
-    LBRA .CMP_32_END
-.CMP_32_TRUE:
-    LDD #1
-.CMP_32_END:
-    LBEQ .LOGIC_30_FALSE
-    LDD #1
-    LBRA .LOGIC_30_END
-.LOGIC_30_FALSE:
-    LDD #0
-.LOGIC_30_END:
-    LBEQ IF_NEXT_37
-    LDD >VAR_G_C
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_HID_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_TAB_HID_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LBRA IF_END_36
-IF_NEXT_37:
-IF_END_36:
-    LBRA IF_END_34
-IF_NEXT_35:
-IF_END_34:
-    LBRA IF_END_32
-IF_NEXT_33:
-    LDD #8
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_33_TRUE
-    LDD #0
-    LBRA .CMP_33_END
-.CMP_33_TRUE:
-    LDD #1
-.CMP_33_END:
-    LBEQ IF_END_32
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_WST_SZ
-    CMPD TMPVAL
-    LBGT .CMP_34_TRUE
-    LDD #0
-    LBRA .CMP_34_END
-.CMP_34_TRUE:
-    LDD #1
-.CMP_34_END:
-    LBEQ IF_NEXT_39
-    LDX #VAR_WASTE_DATA  ; Array base
-    LDD >VAR_WST_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_SEL_CARD
-    LDD #8
-    STD VAR_SEL_SRC
-    LDD >VAR_WST_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_WST_SZ
-    LBRA IF_END_38
-IF_NEXT_39:
-IF_END_38:
-    LBRA IF_END_32
-IF_END_32:
-    RTS
-
-; Function: do_place
-do_place:
-    LDD #0
-    STD VAR_G_PLACED
-    LDD #6
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBLE .CMP_35_TRUE
-    LDD #0
-    LBRA .CMP_35_END
-.CMP_35_TRUE:
-    LDD #1
-.CMP_35_END:
-    LBEQ IF_NEXT_41
-    LDD >VAR_SEL_CARD
-    STD VAR_ARG0
-    LDD >VAR_CURSOR
-    STD VAR_ARG1
-    JSR can_move_to_tab
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RESULT
-    CMPD TMPVAL
-    LBEQ .CMP_36_TRUE
-    LDD #0
-    LBRA .CMP_36_END
-.CMP_36_TRUE:
-    LDD #1
-.CMP_36_END:
-    LBEQ IF_NEXT_43
-    LDD >VAR_CURSOR
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #20
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_CURSOR
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_G_TIDX
-    LDD >VAR_G_TIDX
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD >VAR_SEL_CARD
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD >VAR_CURSOR
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_SZ_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_CURSOR
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #1
-    STD VAR_G_PLACED
-    LBRA IF_END_42
-IF_NEXT_43:
-IF_END_42:
-    LBRA IF_END_40
-IF_NEXT_41:
-    LDD #9
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBGE .CMP_38_TRUE
-    LDD #0
-    LBRA .CMP_38_END
-.CMP_38_TRUE:
-    LDD #1
-.CMP_38_END:
-    LBEQ .LOGIC_37_FALSE
-    LDD #12
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBLE .CMP_39_TRUE
-    LDD #0
-    LBRA .CMP_39_END
-.CMP_39_TRUE:
-    LDD #1
-.CMP_39_END:
-    LBEQ .LOGIC_37_FALSE
-    LDD #1
-    LBRA .LOGIC_37_END
-.LOGIC_37_FALSE:
-    LDD #0
-.LOGIC_37_END:
-    LBEQ IF_END_40
-    LDD >VAR_CURSOR
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #9
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_SUIT
-    LDD >VAR_SEL_CARD
-    STD VAR_ARG0
-    LDD >VAR_G_SUIT
-    STD VAR_ARG1
-    JSR can_move_to_found
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RESULT
-    CMPD TMPVAL
-    LBEQ .CMP_40_TRUE
-    LDD #0
-    LBRA .CMP_40_END
-.CMP_40_TRUE:
-    LDD #1
-.CMP_40_END:
-    LBEQ IF_NEXT_45
-    LDD >VAR_G_SUIT
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_FOUND_CNT_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_FOUND_CNT_DATA  ; Array base
-    LDD >VAR_G_SUIT
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD #1
-    STD VAR_G_PLACED
-    LBRA IF_END_44
-IF_NEXT_45:
-IF_END_44:
-    LBRA IF_END_40
-IF_END_40:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_PLACED
-    CMPD TMPVAL
-    LBEQ .CMP_41_TRUE
-    LDD #0
-    LBRA .CMP_41_END
-.CMP_41_TRUE:
-    LDD #1
-.CMP_41_END:
-    LBEQ IF_NEXT_47
-    LDD #-1
-    STD VAR_SEL_CARD
-    LDD #-1
-    STD VAR_SEL_SRC
-    LBRA IF_END_46
-IF_NEXT_47:
-    JSR return_card_to_src
-IF_END_46:
-    RTS
-
-; Function: return_card_to_src
-return_card_to_src:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SEL_SRC
-    CMPD TMPVAL
-    LBGE .CMP_43_TRUE
-    LDD #0
-    LBRA .CMP_43_END
-.CMP_43_TRUE:
-    LDD #1
-.CMP_43_END:
-    LBEQ .LOGIC_42_FALSE
-    LDD #6
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SEL_SRC
-    CMPD TMPVAL
-    LBLE .CMP_44_TRUE
-    LDD #0
-    LBRA .CMP_44_END
-.CMP_44_TRUE:
-    LDD #1
-.CMP_44_END:
-    LBEQ .LOGIC_42_FALSE
-    LDD #1
-    LBRA .LOGIC_42_END
-.LOGIC_42_FALSE:
-    LDD #0
-.LOGIC_42_END:
-    LBEQ IF_NEXT_49
-    LDD >VAR_SEL_SRC
-    STD VAR_G_C
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBGT .CMP_46_TRUE
-    LDD #0
-    LBRA .CMP_46_END
-.CMP_46_TRUE:
-    LDD #1
-.CMP_46_END:
-    LBEQ .LOGIC_45_FALSE
-    LDX #VAR_TAB_HID_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_47_TRUE
-    LDD #0
-    LBRA .CMP_47_END
-.CMP_47_TRUE:
-    LDD #1
-.CMP_47_END:
-    LBEQ .LOGIC_45_FALSE
-    LDD #1
-    LBRA .LOGIC_45_END
-.LOGIC_45_FALSE:
-    LDD #0
-.LOGIC_45_END:
-    LBEQ IF_NEXT_51
-    LDD >VAR_G_C
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_HID_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_TAB_HID_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LBRA IF_END_50
-IF_NEXT_51:
-IF_END_50:
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #20
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_G_TIDX
-    LDD >VAR_G_TIDX
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD >VAR_SEL_CARD
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD >VAR_G_C
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_TAB_SZ_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LBRA IF_END_48
-IF_NEXT_49:
-    LDD #8
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SEL_SRC
-    CMPD TMPVAL
-    LBEQ .CMP_48_TRUE
-    LDD #0
-    LBRA .CMP_48_END
-.CMP_48_TRUE:
-    LDD #1
-.CMP_48_END:
-    LBEQ IF_END_48
-    LDD >VAR_WST_SZ
-    ASLB            ; Multiply index by 2 (16-bit elements)
-    ROLA
-    STD TMPPTR      ; Save offset temporarily
-    LDD #VAR_WASTE_DATA  ; Array data address
-    TFR D,X         ; X = array base pointer
-    LDD TMPPTR      ; D = offset
-    LEAX D,X        ; X = base + offset
-    STX TMPPTR2     ; Save computed address
-    LDD >VAR_SEL_CARD
-    LDX TMPPTR2     ; Load computed address
-    STD ,X          ; Store 16-bit value
-    LDD >VAR_WST_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_WST_SZ
-    LBRA IF_END_48
-IF_END_48:
-    LDD #-1
-    STD VAR_SEL_CARD
-    LDD #-1
-    STD VAR_SEL_SRC
-    RTS
-
-; Function: can_move_to_tab
-can_move_to_tab:
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_ARG1
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_G_SZ
-    LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
-    STD VAR_G_RANK
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_SZ
-    CMPD TMPVAL
-    LBEQ .CMP_49_TRUE
-    LDD #0
-    LBRA .CMP_49_END
-.CMP_49_TRUE:
-    LDD #1
-.CMP_49_END:
-    LBEQ IF_NEXT_53
-    LDD #12
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    CMPD TMPVAL
-    LBEQ .CMP_50_TRUE
-    LDD #0
-    LBRA .CMP_50_END
-.CMP_50_TRUE:
-    LDD #1
-.CMP_50_END:
-    LBEQ IF_NEXT_55
-    LDD #1
-    STD VAR_G_RESULT
-    LBRA IF_END_54
-IF_NEXT_55:
-    LDD #0
-    STD VAR_G_RESULT
-IF_END_54:
-    RTS
-    LBRA IF_END_52
-IF_NEXT_53:
-IF_END_52:
-    LDD >VAR_ARG1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #20
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_SZ
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_TIDX
-    LDX #VAR_TAB_DATA  ; Array base
-    LDD >VAR_G_TIDX
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_G_TOP
-    LDD >VAR_G_TOP
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
-    STD VAR_G_TR
-    LDD >VAR_G_TOP
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_TR
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_TC
-    LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_SUIT
-    LDD #0
-    STD VAR_G_TOP_RED
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_TC
-    CMPD TMPVAL
-    LBEQ .CMP_52_TRUE
-    LDD #0
-    LBRA .CMP_52_END
-.CMP_52_TRUE:
-    LDD #1
-.CMP_52_END:
-    LBNE .LOGIC_51_TRUE
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_TC
-    CMPD TMPVAL
-    LBEQ .CMP_53_TRUE
-    LDD #0
-    LBRA .CMP_53_END
-.CMP_53_TRUE:
-    LDD #1
-.CMP_53_END:
-    LBNE .LOGIC_51_TRUE
-    LDD #0
-    LBRA .LOGIC_51_END
-.LOGIC_51_TRUE:
-    LDD #1
-.LOGIC_51_END:
-    LBEQ IF_NEXT_57
-    LDD #1
-    STD VAR_G_TOP_RED
-    LBRA IF_END_56
-IF_NEXT_57:
-IF_END_56:
-    LDD #0
-    STD VAR_G_CARD_RED
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_SUIT
-    CMPD TMPVAL
-    LBEQ .CMP_55_TRUE
-    LDD #0
-    LBRA .CMP_55_END
-.CMP_55_TRUE:
-    LDD #1
-.CMP_55_END:
-    LBNE .LOGIC_54_TRUE
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_SUIT
-    CMPD TMPVAL
-    LBEQ .CMP_56_TRUE
-    LDD #0
-    LBRA .CMP_56_END
-.CMP_56_TRUE:
-    LDD #1
-.CMP_56_END:
-    LBNE .LOGIC_54_TRUE
-    LDD #0
-    LBRA .LOGIC_54_END
-.LOGIC_54_TRUE:
-    LDD #1
-.LOGIC_54_END:
-    LBEQ IF_NEXT_59
-    LDD #1
-    STD VAR_G_CARD_RED
-    LBRA IF_END_58
-IF_NEXT_59:
-IF_END_58:
-    LDD >VAR_G_CARD_RED
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_TOP_RED
-    CMPD TMPVAL
-    LBEQ .CMP_57_TRUE
-    LDD #0
-    LBRA .CMP_57_END
-.CMP_57_TRUE:
-    LDD #1
-.CMP_57_END:
-    LBEQ IF_NEXT_61
-    LDD #0
-    STD VAR_G_RESULT
-    RTS
-    LBRA IF_END_60
-IF_NEXT_61:
-IF_END_60:
-    LDD >VAR_G_TR
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    CMPD TMPVAL
-    LBEQ .CMP_58_TRUE
-    LDD #0
-    LBRA .CMP_58_END
-.CMP_58_TRUE:
-    LDD #1
-.CMP_58_END:
-    LBEQ IF_NEXT_63
-    LDD #1
-    STD VAR_G_RESULT
-    LBRA IF_END_62
-IF_NEXT_63:
-    LDD #0
-    STD VAR_G_RESULT
-IF_END_62:
-    RTS
-
-; Function: can_move_to_found
-can_move_to_found:
-    LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
-    STD VAR_G_RANK
-    LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_SUIT
-    LDD >VAR_ARG1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_SUIT
-    CMPD TMPVAL
-    LBNE .CMP_59_TRUE
-    LDD #0
-    LBRA .CMP_59_END
-.CMP_59_TRUE:
-    LDD #1
-.CMP_59_END:
-    LBEQ IF_NEXT_65
-    LDD #0
-    STD VAR_G_RESULT
-    RTS
-    LBRA IF_END_64
-IF_NEXT_65:
-IF_END_64:
-    LDX #VAR_FOUND_CNT_DATA  ; Array base
-    LDD >VAR_ARG1
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_G_FC
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_FC
-    CMPD TMPVAL
-    LBEQ .CMP_61_TRUE
-    LDD #0
-    LBRA .CMP_61_END
-.CMP_61_TRUE:
-    LDD #1
-.CMP_61_END:
-    LBEQ .LOGIC_60_FALSE
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    CMPD TMPVAL
-    LBEQ .CMP_62_TRUE
-    LDD #0
-    LBRA .CMP_62_END
-.CMP_62_TRUE:
-    LDD #1
-.CMP_62_END:
-    LBEQ .LOGIC_60_FALSE
-    LDD #1
-    LBRA .LOGIC_60_END
-.LOGIC_60_FALSE:
-    LDD #0
-.LOGIC_60_END:
-    LBEQ IF_NEXT_67
-    LDD #1
-    STD VAR_G_RESULT
-    RTS
-    LBRA IF_END_66
-IF_NEXT_67:
-IF_END_66:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_FC
-    CMPD TMPVAL
-    LBGT .CMP_64_TRUE
-    LDD #0
-    LBRA .CMP_64_END
-.CMP_64_TRUE:
-    LDD #1
-.CMP_64_END:
-    LBEQ .LOGIC_63_FALSE
-    LDD >VAR_G_FC
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    CMPD TMPVAL
-    LBEQ .CMP_65_TRUE
-    LDD #0
-    LBRA .CMP_65_END
-.CMP_65_TRUE:
-    LDD #1
-.CMP_65_END:
-    LBEQ .LOGIC_63_FALSE
-    LDD #1
-    LBRA .LOGIC_63_END
-.LOGIC_63_FALSE:
-    LDD #0
-.LOGIC_63_END:
-    LBEQ IF_NEXT_69
-    LDD #1
-    STD VAR_G_RESULT
-    RTS
-    LBRA IF_END_68
-IF_NEXT_69:
-IF_END_68:
-    LDD #0
-    STD VAR_G_RESULT
-    RTS
-
-; Function: check_win
-check_win:
-    LDD #13
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_FOUND_CNT_DATA  ; Array base
-    LDD #0
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_69_TRUE
-    LDD #0
-    LBRA .CMP_69_END
-.CMP_69_TRUE:
-    LDD #1
-.CMP_69_END:
-    LBEQ .LOGIC_68_FALSE
-    LDD #13
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_FOUND_CNT_DATA  ; Array base
-    LDD #1
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_70_TRUE
-    LDD #0
-    LBRA .CMP_70_END
-.CMP_70_TRUE:
-    LDD #1
-.CMP_70_END:
-    LBEQ .LOGIC_68_FALSE
-    LDD #1
-    LBRA .LOGIC_68_END
-.LOGIC_68_FALSE:
-    LDD #0
-.LOGIC_68_END:
-    LBEQ .LOGIC_67_FALSE
-    LDD #13
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_FOUND_CNT_DATA  ; Array base
-    LDD #2
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_71_TRUE
-    LDD #0
-    LBRA .CMP_71_END
-.CMP_71_TRUE:
-    LDD #1
-.CMP_71_END:
-    LBEQ .LOGIC_67_FALSE
-    LDD #1
-    LBRA .LOGIC_67_END
-.LOGIC_67_FALSE:
-    LDD #0
-.LOGIC_67_END:
-    LBEQ .LOGIC_66_FALSE
-    LDD #13
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDX #VAR_FOUND_CNT_DATA  ; Array base
-    LDD #3
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    CMPD TMPVAL
-    LBEQ .CMP_72_TRUE
-    LDD #0
-    LBRA .CMP_72_END
-.CMP_72_TRUE:
-    LDD #1
-.CMP_72_END:
-    LBEQ .LOGIC_66_FALSE
-    LDD #1
-    LBRA .LOGIC_66_END
-.LOGIC_66_FALSE:
-    LDD #0
-.LOGIC_66_END:
-    LBEQ IF_NEXT_71
-    LDD #1  ; const STATE_WIN
-    STD VAR_GAME_STATE
-    LBRA IF_END_70
-IF_NEXT_71:
-IF_END_70:
-    RTS
-
-; Function: draw_table
-draw_table:
-    JSR draw_stock
-    JSR draw_waste
-    JSR draw_foundations
-    JSR draw_tableau
-    JSR draw_held_label
-    JSR draw_cursor
-    RTS
-
-; Function: get_col_x
-get_col_x:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_73_TRUE
-    LDD #0
-    LBRA .CMP_73_END
-.CMP_73_TRUE:
-    LDD #1
-.CMP_73_END:
-    LBEQ IF_NEXT_73
-    LDD #-102  ; const TAB_X0
-    STD VAR_G_COL_X
-    LBRA IF_END_72
-IF_NEXT_73:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_74_TRUE
-    LDD #0
-    LBRA .CMP_74_END
-.CMP_74_TRUE:
-    LDD #1
-.CMP_74_END:
-    LBEQ IF_NEXT_74
-    LDD #-68  ; const TAB_X1
-    STD VAR_G_COL_X
-    LBRA IF_END_72
-IF_NEXT_74:
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_75_TRUE
-    LDD #0
-    LBRA .CMP_75_END
-.CMP_75_TRUE:
-    LDD #1
-.CMP_75_END:
-    LBEQ IF_NEXT_75
-    LDD #-34  ; const TAB_X2
-    STD VAR_G_COL_X
-    LBRA IF_END_72
-IF_NEXT_75:
-    LDD #3
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_76_TRUE
-    LDD #0
-    LBRA .CMP_76_END
-.CMP_76_TRUE:
-    LDD #1
-.CMP_76_END:
-    LBEQ IF_NEXT_76
-    LDD #0  ; const TAB_X3
-    STD VAR_G_COL_X
-    LBRA IF_END_72
-IF_NEXT_76:
-    LDD #4
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_77_TRUE
-    LDD #0
-    LBRA .CMP_77_END
-.CMP_77_TRUE:
-    LDD #1
-.CMP_77_END:
-    LBEQ IF_NEXT_77
-    LDD #34  ; const TAB_X4
-    STD VAR_G_COL_X
-    LBRA IF_END_72
-IF_NEXT_77:
-    LDD #5
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG0
-    CMPD TMPVAL
-    LBEQ .CMP_78_TRUE
-    LDD #0
-    LBRA .CMP_78_END
-.CMP_78_TRUE:
-    LDD #1
-.CMP_78_END:
-    LBEQ IF_NEXT_78
-    LDD #68  ; const TAB_X5
-    STD VAR_G_COL_X
-    LBRA IF_END_72
-IF_NEXT_78:
-    LDD #102  ; const TAB_X6
-    STD VAR_G_COL_X
-IF_END_72:
-    RTS
-
-; Function: draw_stock
-draw_stock:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_STK_SZ
-    CMPD TMPVAL
-    LBGT .CMP_79_TRUE
-    LDD #0
-    LBRA .CMP_79_END
-.CMP_79_TRUE:
-    LDD #1
-.CMP_79_END:
-    LBEQ IF_NEXT_80
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #40  ; const INT_FACEDN
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-102  ; const STK_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG0
-    LDD #85  ; const TOP_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #10
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_1120      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_79
-IF_NEXT_80:
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #25  ; const INT_EMPTY
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-102  ; const STK_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG0
-    LDD #85  ; const TOP_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #10
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_2657      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-IF_END_79:
-    RTS
-
-; Function: draw_waste
-draw_waste:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_WST_SZ
-    CMPD TMPVAL
-    LBGT .CMP_80_TRUE
-    LDD #0
-    LBRA .CMP_80_END
-.CMP_80_TRUE:
-    LDD #1
-.CMP_80_END:
-    LBEQ IF_NEXT_82
-    LDX #VAR_WASTE_DATA  ; Array base
-    LDD >VAR_WST_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_G_WCARD
-    LDD #-68  ; const WST_X
-    STD VAR_ARG0
-    LDD #85  ; const TOP_Y
-    STD VAR_ARG1
-    LDD >VAR_G_WCARD
-    STD VAR_ARG2
-    LDD #70  ; const INT_CARD
-    STD VAR_ARG3
-    JSR draw_card
-    LBRA IF_END_81
-IF_NEXT_82:
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #25  ; const INT_EMPTY
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-68  ; const WST_X
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG0
-    LDD #85  ; const TOP_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #10
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_2780      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-IF_END_81:
-    RTS
-
-; Function: draw_foundations
-draw_foundations:
-    LDD #0  ; const F0_X
-    STD VAR_G_FX
-    LDD >VAR_G_FX
-    STD VAR_ARG0
-    LDD #0
-    STD VAR_ARG1
-    JSR draw_one_foundation
-    LDD #34  ; const F1_X
-    STD VAR_G_FX
-    LDD >VAR_G_FX
-    STD VAR_ARG0
-    LDD #1
-    STD VAR_ARG1
-    JSR draw_one_foundation
-    LDD #68  ; const F2_X
-    STD VAR_G_FX
-    LDD >VAR_G_FX
-    STD VAR_ARG0
-    LDD #2
-    STD VAR_ARG1
-    JSR draw_one_foundation
-    LDD #102  ; const F3_X
-    STD VAR_G_FX
-    LDD >VAR_G_FX
-    STD VAR_ARG0
-    LDD #3
-    STD VAR_ARG1
-    JSR draw_one_foundation
-    RTS
-
-; Function: draw_one_foundation
-draw_one_foundation:
-    LDX #VAR_FOUND_CNT_DATA  ; Array base
-    LDD >VAR_ARG1
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_G_FC
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_FC
-    CMPD TMPVAL
-    LBEQ .CMP_81_TRUE
-    LDD #0
-    LBRA .CMP_81_END
-.CMP_81_TRUE:
-    LDD #1
-.CMP_81_END:
-    LBEQ IF_NEXT_84
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
-    LDD #0
-    STD RESULT
-    LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #13  ; const HALF_W
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG0
-    LDD #85  ; const TOP_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #13  ; const HALF_W
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDD >VAR_ARG1
-    STD VAR_ARG2
-    JSR draw_suit_at
-    LBRA IF_END_83
-IF_NEXT_84:
-    LDD >VAR_G_FC
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_RANK
-    LDD >VAR_G_RANK
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_G_CARD
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD #85  ; const TOP_Y
-    STD VAR_ARG1
-    LDD >VAR_G_CARD
-    STD VAR_ARG2
-    LDD #70  ; const INT_CARD
-    STD VAR_ARG3
-    JSR draw_card
-IF_END_83:
-    RTS
-
-; Function: draw_tableau
-draw_tableau:
-    LDD #0
-    STD VAR_G_C
-WH_85: ; while start
-    LDD #7
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_C
-    CMPD TMPVAL
-    LBLT .CMP_82_TRUE
-    LDD #0
-    LBRA .CMP_82_END
-.CMP_82_TRUE:
-    LDD #1
-.CMP_82_END:
-    LBEQ WH_END_86
-    LDD >VAR_G_C
-    STD VAR_ARG0
-    JSR get_col_x
-    LDD >VAR_G_COL_X
-    STD VAR_G_CX
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_G_SZ
-    LDX #VAR_TAB_HID_DATA  ; Array base
-    LDD >VAR_G_C
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_G_HD
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_SZ
-    CMPD TMPVAL
-    LBEQ .CMP_83_TRUE
-    LDD #0
-    LBRA .CMP_83_END
-.CMP_83_TRUE:
-    LDD #1
-.CMP_83_END:
-    LBEQ IF_NEXT_88
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
-    LDD #0
-    STD RESULT
-    LBRA IF_END_87
-IF_NEXT_88:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_HD
-    CMPD TMPVAL
-    LBGT .CMP_84_TRUE
-    LDD #0
-    LBRA .CMP_84_END
-.CMP_84_TRUE:
-    LDD #1
-.CMP_84_END:
-    LBEQ IF_NEXT_90
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
-    LDD #0
-    STD RESULT
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
-    LDD #0
-    STD RESULT
-    LBRA IF_END_89
-IF_NEXT_90:
-IF_END_89:
-    LDD >VAR_G_HD
-    STD VAR_G_ROW
-    LDD #0
-    STD VAR_G_IDX
-WH_91: ; while start
-    LDD >VAR_G_SZ
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_ROW
-    CMPD TMPVAL
-    LBLT .CMP_86_TRUE
-    LDD #0
-    LBRA .CMP_86_END
-.CMP_86_TRUE:
-    LDD #1
-.CMP_86_END:
-    LBEQ .LOGIC_85_FALSE
-    LDD #4
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_IDX
-    CMPD TMPVAL
-    LBLT .CMP_87_TRUE
-    LDD #0
-    LBRA .CMP_87_END
-.CMP_87_TRUE:
-    LDD #1
-.CMP_87_END:
-    LBEQ .LOGIC_85_FALSE
-    LDD #1
-    LBRA .LOGIC_85_END
-.LOGIC_85_FALSE:
-    LDD #0
-.LOGIC_85_END:
-    LBEQ WH_END_92
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_HD
-    CMPD TMPVAL
-    LBGT .CMP_88_TRUE
-    LDD #0
-    LBRA .CMP_88_END
-.CMP_88_TRUE:
-    LDD #1
-.CMP_88_END:
-    LBEQ IF_NEXT_94
-    LDD #30  ; const TAB_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #32  ; const CARD_H
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_ROW
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_HD
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #14  ; const COL_DY
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_CY
-    LBRA IF_END_93
-IF_NEXT_94:
-    LDD #30  ; const TAB_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_ROW
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_HD
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #14  ; const COL_DY
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_CY
-IF_END_93:
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #20
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_ROW
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_G_TIDX
-    LDX #VAR_TAB_DATA  ; Array base
-    LDD >VAR_G_TIDX
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_G_CARD
-    LDD >VAR_G_CX
-    STD VAR_ARG0
-    LDD >VAR_G_CY
-    STD VAR_ARG1
-    LDD >VAR_G_CARD
-    STD VAR_ARG2
-    LDD #70  ; const INT_CARD
-    STD VAR_ARG3
-    JSR draw_card
-    LDD >VAR_G_ROW
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_G_ROW
-    LDD >VAR_G_IDX
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_G_IDX
-    LBRA WH_91
-WH_END_92: ; while end
-IF_END_87:
-    LDD >VAR_G_C
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_G_C
-    LBRA WH_85
-WH_END_86: ; while end
-    RTS
-
-; Function: draw_held_label
-draw_held_label:
-    LDD #-1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SEL_CARD
-    CMPD TMPVAL
-    LBNE .CMP_89_TRUE
-    LDD #0
-    LBRA .CMP_89_END
-.CMP_89_TRUE:
-    LDD #1
-.CMP_89_END:
-    LBEQ IF_NEXT_96
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #100  ; const INT_HELD
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-60
-    STD VAR_ARG0
-    LDD #-100
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_68624293      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LDD >VAR_SEL_CARD
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
-    STD VAR_G_RANK
-    LDD >VAR_SEL_CARD
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_SUIT
-    LDD #-15
-    STD VAR_ARG0
-    LDD #-100
-    STD VAR_ARG1
-    LDD >VAR_G_RANK
-    STD VAR_ARG2
-    JSR draw_rank_at
-    LDD #0
-    STD VAR_ARG0
-    LDD #-100
-    STD VAR_ARG1
-    LDD >VAR_G_SUIT
-    STD VAR_ARG2
-    JSR draw_suit_at
-    LBRA IF_END_95
-IF_NEXT_96:
-IF_END_95:
-    RTS
-
-; Function: draw_cursor
-draw_cursor:
-    LDD #0
-    STD VAR_G_CX
-    LDD #85  ; const TOP_Y
-    STD VAR_G_CY
-    LDD #7
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_90_TRUE
-    LDD #0
-    LBRA .CMP_90_END
-.CMP_90_TRUE:
-    LDD #1
-.CMP_90_END:
-    LBEQ IF_NEXT_98
-    LDD #-102  ; const STK_X
-    STD VAR_G_CX
-    LBRA IF_END_97
-IF_NEXT_98:
-    LDD #8
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_91_TRUE
-    LDD #0
-    LBRA .CMP_91_END
-.CMP_91_TRUE:
-    LDD #1
-.CMP_91_END:
-    LBEQ IF_NEXT_99
-    LDD #-68  ; const WST_X
-    STD VAR_G_CX
-    LBRA IF_END_97
-IF_NEXT_99:
-    LDD #9
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_92_TRUE
-    LDD #0
-    LBRA .CMP_92_END
-.CMP_92_TRUE:
-    LDD #1
-.CMP_92_END:
-    LBEQ IF_NEXT_100
-    LDD #0  ; const F0_X
-    STD VAR_G_CX
-    LBRA IF_END_97
-IF_NEXT_100:
-    LDD #10
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_93_TRUE
-    LDD #0
-    LBRA .CMP_93_END
-.CMP_93_TRUE:
-    LDD #1
-.CMP_93_END:
-    LBEQ IF_NEXT_101
-    LDD #34  ; const F1_X
-    STD VAR_G_CX
-    LBRA IF_END_97
-IF_NEXT_101:
-    LDD #11
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_94_TRUE
-    LDD #0
-    LBRA .CMP_94_END
-.CMP_94_TRUE:
-    LDD #1
-.CMP_94_END:
-    LBEQ IF_NEXT_102
-    LDD #68  ; const F2_X
-    STD VAR_G_CX
-    LBRA IF_END_97
-IF_NEXT_102:
-    LDD #12
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_CURSOR
-    CMPD TMPVAL
-    LBEQ .CMP_95_TRUE
-    LDD #0
-    LBRA .CMP_95_END
-.CMP_95_TRUE:
-    LDD #1
-.CMP_95_END:
-    LBEQ IF_NEXT_103
-    LDD #102  ; const F3_X
-    STD VAR_G_CX
-    LBRA IF_END_97
-IF_NEXT_103:
-    LDD >VAR_CURSOR
-    STD VAR_ARG0
-    JSR get_col_x
-    LDD >VAR_G_COL_X
-    STD VAR_G_CX
-    LDX #VAR_TAB_SZ_DATA  ; Array base
-    LDD >VAR_CURSOR
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_G_SZ
-    LDX #VAR_TAB_HID_DATA  ; Array base
-    LDD >VAR_CURSOR
-    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)
-    LDD TMPPTR  ; Load index
-    ASLB        ; Multiply by 2 (16-bit elements)
-    ROLA
-    LEAX D,X    ; X = base + (index * element_size)
-    LDD ,X      ; Load 16-bit value
-    STD VAR_G_HD
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_SZ
-    CMPD TMPVAL
-    LBEQ .CMP_96_TRUE
-    LDD #0
-    LBRA .CMP_96_END
-.CMP_96_TRUE:
-    LDD #1
-.CMP_96_END:
-    LBEQ IF_NEXT_105
-    LDD #30  ; const TAB_Y
-    STD VAR_G_CY
-    LBRA IF_END_104
-IF_NEXT_105:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_HD
-    CMPD TMPVAL
-    LBEQ .CMP_97_TRUE
-    LDD #0
-    LBRA .CMP_97_END
-.CMP_97_TRUE:
-    LDD #1
-.CMP_97_END:
-    LBEQ IF_NEXT_106
-    LDD #30  ; const TAB_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #14  ; const COL_DY
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_CY
-    LBRA IF_END_104
-IF_NEXT_106:
-    LDD #30  ; const TAB_Y
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #32  ; const CARD_H
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_SZ
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_HD
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #14  ; const COL_DY
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_CY
-IF_END_104:
-IF_END_97:
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #127  ; const INT_CURSOR
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
-    LDD #0
-    STD RESULT
-    RTS
-
-; Function: draw_card
-draw_card:
-    ; ERROR: DRAW_RECT with variables requires expressions module access
-    ; Use constant values for now
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD >VAR_ARG3
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-    LDD >VAR_ARG2
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR DIV16       ; D = X / D
-    STD VAR_G_RANK
-    LDD >VAR_ARG2
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD >VAR_G_RANK
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #4
-    LDX TMPVAL      ; Get left into X from TMPVAL
-    JSR MUL16       ; D = X * D
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
-    STD VAR_G_SUIT
-    LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #3
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #26
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDD >VAR_G_RANK
-    STD VAR_ARG2
-    JSR draw_rank_at
-    LDD >VAR_ARG0
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #13  ; const HALF_W
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #12
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_ARG1
-    LDD >VAR_G_SUIT
-    STD VAR_ARG2
-    JSR draw_suit_at
-    RTS
-
-; Function: draw_small_count
-draw_small_count:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_98_TRUE
-    LDD #0
-    LBRA .CMP_98_END
-.CMP_98_TRUE:
-    LDD #1
-.CMP_98_END:
-    LBEQ IF_NEXT_108
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_49      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_107
-IF_NEXT_108:
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_99_TRUE
-    LDD #0
-    LBRA .CMP_99_END
-.CMP_99_TRUE:
-    LDD #1
-.CMP_99_END:
-    LBEQ IF_NEXT_109
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_50      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_107
-IF_NEXT_109:
-    LDD #3
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_100_TRUE
-    LDD #0
-    LBRA .CMP_100_END
-.CMP_100_TRUE:
-    LDD #1
-.CMP_100_END:
-    LBEQ IF_NEXT_110
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_51      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_107
-IF_NEXT_110:
-    LDD #4
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_101_TRUE
-    LDD #0
-    LBRA .CMP_101_END
-.CMP_101_TRUE:
-    LDD #1
-.CMP_101_END:
-    LBEQ IF_NEXT_111
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_52      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_107
-IF_NEXT_111:
-    LDD #5
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_102_TRUE
-    LDD #0
-    LBRA .CMP_102_END
-.CMP_102_TRUE:
-    LDD #1
-.CMP_102_END:
-    LBEQ IF_NEXT_112
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_53      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_107
-IF_NEXT_112:
-    LDD #6
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_103_TRUE
-    LDD #0
-    LBRA .CMP_103_END
-.CMP_103_TRUE:
-    LDD #1
-.CMP_103_END:
-    LBEQ IF_NEXT_113
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_54      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_107
-IF_NEXT_113:
-    LDD #7
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_104_TRUE
-    LDD #0
-    LBRA .CMP_104_END
-.CMP_104_TRUE:
-    LDD #1
-.CMP_104_END:
-    LBEQ IF_NEXT_114
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_55      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_107
-IF_NEXT_114:
-    LDD #8
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_105_TRUE
-    LDD #0
-    LBRA .CMP_105_END
-.CMP_105_TRUE:
-    LDD #1
-.CMP_105_END:
-    LBEQ IF_NEXT_115
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_56      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_107
-IF_NEXT_115:
-    LDD #9
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_106_TRUE
-    LDD #0
-    LBRA .CMP_106_END
-.CMP_106_TRUE:
-    LDD #1
-.CMP_106_END:
-    LBEQ IF_NEXT_116
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_57      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_107
-IF_NEXT_116:
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_43      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-IF_END_107:
-    RTS
-
-; Function: draw_rank_at
-draw_rank_at:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_107_TRUE
-    LDD #0
-    LBRA .CMP_107_END
-.CMP_107_TRUE:
-    LDD #1
-.CMP_107_END:
-    LBEQ IF_NEXT_118
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_65      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_117
-IF_NEXT_118:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_108_TRUE
-    LDD #0
-    LBRA .CMP_108_END
-.CMP_108_TRUE:
-    LDD #1
-.CMP_108_END:
-    LBEQ IF_NEXT_119
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_50      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_117
-IF_NEXT_119:
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_109_TRUE
-    LDD #0
-    LBRA .CMP_109_END
-.CMP_109_TRUE:
-    LDD #1
-.CMP_109_END:
-    LBEQ IF_NEXT_120
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_51      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_117
-IF_NEXT_120:
-    LDD #3
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_110_TRUE
-    LDD #0
-    LBRA .CMP_110_END
-.CMP_110_TRUE:
-    LDD #1
-.CMP_110_END:
-    LBEQ IF_NEXT_121
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_52      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_117
-IF_NEXT_121:
-    LDD #4
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_111_TRUE
-    LDD #0
-    LBRA .CMP_111_END
-.CMP_111_TRUE:
-    LDD #1
-.CMP_111_END:
-    LBEQ IF_NEXT_122
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_53      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_117
-IF_NEXT_122:
-    LDD #5
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_112_TRUE
-    LDD #0
-    LBRA .CMP_112_END
-.CMP_112_TRUE:
-    LDD #1
-.CMP_112_END:
-    LBEQ IF_NEXT_123
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_54      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_117
-IF_NEXT_123:
-    LDD #6
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_113_TRUE
-    LDD #0
-    LBRA .CMP_113_END
-.CMP_113_TRUE:
-    LDD #1
-.CMP_113_END:
-    LBEQ IF_NEXT_124
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_55      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_117
-IF_NEXT_124:
-    LDD #7
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_114_TRUE
-    LDD #0
-    LBRA .CMP_114_END
-.CMP_114_TRUE:
-    LDD #1
-.CMP_114_END:
-    LBEQ IF_NEXT_125
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_56      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_117
-IF_NEXT_125:
-    LDD #8
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_115_TRUE
-    LDD #0
-    LBRA .CMP_115_END
-.CMP_115_TRUE:
-    LDD #1
-.CMP_115_END:
-    LBEQ IF_NEXT_126
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_57      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_117
-IF_NEXT_126:
-    LDD #9
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_116_TRUE
-    LDD #0
-    LBRA .CMP_116_END
-.CMP_116_TRUE:
-    LDD #1
-.CMP_116_END:
-    LBEQ IF_NEXT_127
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_1567      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_117
-IF_NEXT_127:
-    LDD #10
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_117_TRUE
-    LDD #0
-    LBRA .CMP_117_END
-.CMP_117_TRUE:
-    LDD #1
-.CMP_117_END:
-    LBEQ IF_NEXT_128
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_74      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_117
-IF_NEXT_128:
-    LDD #11
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_118_TRUE
-    LDD #0
-    LBRA .CMP_118_END
-.CMP_118_TRUE:
-    LDD #1
-.CMP_118_END:
-    LBEQ IF_NEXT_129
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_81      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_117
-IF_NEXT_129:
-    ; PRINT_TEXT: Print text at position
-    LDD >VAR_ARG0
-    STD VAR_ARG0
-    LDD >VAR_ARG1
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_75      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-IF_END_117:
-    RTS
-
-; Function: draw_suit_at
-draw_suit_at:
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_119_TRUE
-    LDD #0
-    LBRA .CMP_119_END
-.CMP_119_TRUE:
-    LDD #1
-.CMP_119_END:
-    LBEQ IF_NEXT_131
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: suit_clubs (index=0, 5 paths)
-    LDD >VAR_ARG0
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
-    LDD >VAR_ARG1
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDX #_SUIT_CLUBS_PATH0  ; Load path 0
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_SUIT_CLUBS_PATH1  ; Load path 1
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_SUIT_CLUBS_PATH2  ; Load path 2
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_SUIT_CLUBS_PATH3  ; Load path 3
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_SUIT_CLUBS_PATH4  ; Load path 4
-    JSR Draw_Sync_List_At_With_Mirrors
-    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
-    LDD #0
-    STD RESULT
-    LBRA IF_END_130
-IF_NEXT_131:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_120_TRUE
-    LDD #0
-    LBRA .CMP_120_END
-.CMP_120_TRUE:
-    LDD #1
-.CMP_120_END:
-    LBEQ IF_NEXT_132
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: suit_diamonds (index=1, 1 paths)
-    LDD >VAR_ARG0
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
-    LDD >VAR_ARG1
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDX #_SUIT_DIAMONDS_PATH0  ; Load path 0
-    JSR Draw_Sync_List_At_With_Mirrors
-    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
-    LDD #0
-    STD RESULT
-    LBRA IF_END_130
-IF_NEXT_132:
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ARG2
-    CMPD TMPVAL
-    LBEQ .CMP_121_TRUE
-    LDD #0
-    LBRA .CMP_121_END
-.CMP_121_TRUE:
-    LDD #1
-.CMP_121_END:
-    LBEQ IF_NEXT_133
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: suit_hearts (index=2, 1 paths)
-    LDD >VAR_ARG0
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
-    LDD >VAR_ARG1
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDX #_SUIT_HEARTS_PATH0  ; Load path 0
-    JSR Draw_Sync_List_At_With_Mirrors
-    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
-    LDD #0
-    STD RESULT
-    LBRA IF_END_130
-IF_NEXT_133:
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: suit_spades (index=3, 3 paths)
-    LDD >VAR_ARG0
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
-    LDD >VAR_ARG1
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
-    STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDX #_SUIT_SPADES_PATH0  ; Load path 0
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_SUIT_SPADES_PATH1  ; Load path 1
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_SUIT_SPADES_PATH2  ; Load path 2
-    JSR Draw_Sync_List_At_With_Mirrors
-    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
-    LDD #0
-    STD RESULT
-IF_END_130:
-    RTS
-
-; Function: draw_win_screen
-draw_win_screen:
-    LDD >VAR_WIN_BLINK
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
-    LDD #1
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
-    STD VAR_WIN_BLINK
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #127
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-42
-    STD VAR_ARG0
-    LDD #30
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_2521201141606      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #80
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-63
-    STD VAR_ARG0
-    LDD #0
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_3321124269434895794      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LDD #30
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_WIN_BLINK
-    CMPD TMPVAL
-    LBLT .CMP_122_TRUE
-    LDD #0
-    LBRA .CMP_122_END
-.CMP_122_TRUE:
-    LDD #1
-.CMP_122_END:
-    LBEQ IF_NEXT_135
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #60
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-    ; PRINT_TEXT: Print text at position
-    LDD #-63
-    STD VAR_ARG0
-    LDD #-30
-    STD VAR_ARG1
-    LDX #PRINT_TEXT_STR_2487248696027089637      ; Pointer to string in helpers bank
-    STX VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_134
-IF_NEXT_135:
-IF_END_134:
-    LDD #60
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_WIN_BLINK
-    CMPD TMPVAL
-    LBGE .CMP_123_TRUE
-    LDD #0
-    LBRA .CMP_123_END
-.CMP_123_TRUE:
-    LDD #1
-.CMP_123_END:
-    LBEQ IF_NEXT_137
-    LDD #0
-    STD VAR_WIN_BLINK
-    LBRA IF_END_136
-IF_NEXT_137:
-IF_END_136:
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_BTN1_FIRE
-    CMPD TMPVAL
-    LBEQ .CMP_124_TRUE
-    LDD #0
-    LBRA .CMP_124_END
-.CMP_124_TRUE:
-    LDD #1
-.CMP_124_END:
-    LBEQ IF_NEXT_139
-    LDD #0  ; const STATE_PLAY
-    STD VAR_GAME_STATE
-    JSR shuffle
-    JSR deal
-    LBRA IF_END_138
-IF_NEXT_139:
-IF_END_138:
-    RTS
-
-;***************************************************************************
-; EMBEDDED ASSETS (vectors, music, levels, SFX)
-;***************************************************************************
-
-; Generated from suit_clubs.vec (Malban Draw_Sync_List format)
-; Total paths: 5, points: 22
-; X bounds: min=-5, max=5, width=10
-; Center: (0, 0)
-
-_SUIT_CLUBS_WIDTH EQU 10
-_SUIT_CLUBS_HALF_WIDTH EQU 5
-_SUIT_CLUBS_HEIGHT EQU 11
-_SUIT_CLUBS_HALF_HEIGHT EQU 5
-_SUIT_CLUBS_CENTER_X EQU 0
-_SUIT_CLUBS_CENTER_Y EQU 0
-
-_SUIT_CLUBS_VECTORS:  ; Main entry (header + 5 path(s))
-    FDB 5               ; path_count (runtime metadata, 2 bytes)
-    FDB _SUIT_CLUBS_PATH0        ; pointer to path 0
-    FDB _SUIT_CLUBS_PATH1        ; pointer to path 1
-    FDB _SUIT_CLUBS_PATH2        ; pointer to path 2
-    FDB _SUIT_CLUBS_PATH3        ; pointer to path 3
-    FDB _SUIT_CLUBS_PATH4        ; pointer to path 4
-
-_SUIT_CLUBS_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $FF,$00,0,0        ; path0: header (y=-1, x=0)
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB 2                ; End marker (path complete)
-
-_SUIT_CLUBS_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $FB,$FE,0,0        ; path1: header (y=-5, x=-2)
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB 2                ; End marker (path complete)
-
-_SUIT_CLUBS_PATH2:    ; Path 2
-    FCB 127              ; path2: intensity
-    FCB $FF,$04,0,0        ; path2: header (y=-1, x=4)
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_SUIT_CLUBS_PATH3:    ; Path 3
-    FCB 127              ; path3: intensity
-    FCB $02,$01,0,0        ; path3: header (y=2, x=1)
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB 2                ; End marker (path complete)
-
-_SUIT_CLUBS_PATH4:    ; Path 4
-    FCB 127              ; path4: intensity
-    FCB $01,$FF,0,0        ; path4: header (y=1, x=-1)
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB $FF,$00,$FE          ; flag=-1, dy=0, dx=-2
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
-    FCB 2                ; End marker (path complete)
-; Generated from suit_diamonds.vec (Malban Draw_Sync_List format)
-; Total paths: 1, points: 4
-; X bounds: min=-5, max=5, width=10
-; Center: (0, 0)
-
-_SUIT_DIAMONDS_WIDTH EQU 10
-_SUIT_DIAMONDS_HALF_WIDTH EQU 5
-_SUIT_DIAMONDS_HEIGHT EQU 14
-_SUIT_DIAMONDS_HALF_HEIGHT EQU 7
-_SUIT_DIAMONDS_CENTER_X EQU 0
-_SUIT_DIAMONDS_CENTER_Y EQU 0
-
-_SUIT_DIAMONDS_VECTORS:  ; Main entry (header + 1 path(s))
-    FDB 1               ; path_count (runtime metadata, 2 bytes)
-    FDB _SUIT_DIAMONDS_PATH0        ; pointer to path 0
-
-_SUIT_DIAMONDS_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $07,$00,0,0        ; path0: header (y=7, x=0)
-    FCB $FF,$F9,$05          ; flag=-1, dy=-7, dx=5
-    FCB $FF,$F9,$FB          ; flag=-1, dy=-7, dx=-5
-    FCB $FF,$07,$FB          ; flag=-1, dy=7, dx=-5
-    FCB $FF,$07,$05          ; flag=-1, dy=7, dx=5
-    FCB 2                ; End marker (path complete)
-; Generated from suit_hearts.vec (Malban Draw_Sync_List format)
-; Total paths: 1, points: 10
-; X bounds: min=-6, max=6, width=12
-; Center: (0, 0)
-
-_SUIT_HEARTS_WIDTH EQU 12
-_SUIT_HEARTS_HALF_WIDTH EQU 6
-_SUIT_HEARTS_HEIGHT EQU 13
-_SUIT_HEARTS_HALF_HEIGHT EQU 6
-_SUIT_HEARTS_CENTER_X EQU 0
-_SUIT_HEARTS_CENTER_Y EQU 0
-
-_SUIT_HEARTS_VECTORS:  ; Main entry (header + 1 path(s))
-    FDB 1               ; path_count (runtime metadata, 2 bytes)
-    FDB _SUIT_HEARTS_PATH0        ; pointer to path 0
-
-_SUIT_HEARTS_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $FA,$00,0,0        ; path0: header (y=-6, x=0)
-    FCB $FF,$05,$05          ; flag=-1, dy=5, dx=5
-    FCB $FF,$03,$01          ; flag=-1, dy=3, dx=1
-    FCB $FF,$04,$FE          ; flag=-1, dy=4, dx=-2
-    FCB $FF,$01,$FD          ; flag=-1, dy=1, dx=-3
-    FCB $FF,$FE,$FF          ; flag=-1, dy=-2, dx=-1
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB $FF,$FF,$FD          ; flag=-1, dy=-1, dx=-3
-    FCB $FF,$FC,$FE          ; flag=-1, dy=-4, dx=-2
-    FCB $FF,$FD,$01          ; flag=-1, dy=-3, dx=1
-    FCB $FF,$FB,$05          ; flag=-1, dy=-5, dx=5
-    FCB 2                ; End marker (path complete)
-; Generated from suit_spades.vec (Malban Draw_Sync_List format)
-; Total paths: 3, points: 14
-; X bounds: min=-6, max=6, width=12
-; Center: (0, 0)
-
-_SUIT_SPADES_WIDTH EQU 12
-_SUIT_SPADES_HALF_WIDTH EQU 6
-_SUIT_SPADES_HEIGHT EQU 14
-_SUIT_SPADES_HALF_HEIGHT EQU 7
-_SUIT_SPADES_CENTER_X EQU 0
-_SUIT_SPADES_CENTER_Y EQU 0
-
-_SUIT_SPADES_VECTORS:  ; Main entry (header + 3 path(s))
-    FDB 3               ; path_count (runtime metadata, 2 bytes)
-    FDB _SUIT_SPADES_PATH0        ; pointer to path 0
-    FDB _SUIT_SPADES_PATH1        ; pointer to path 1
-    FDB _SUIT_SPADES_PATH2        ; pointer to path 2
-
-_SUIT_SPADES_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $FC,$00,0,0        ; path0: header (y=-4, x=0)
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB 2                ; End marker (path complete)
-
-_SUIT_SPADES_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $F9,$FD,0,0        ; path1: header (y=-7, x=-3)
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB 2                ; End marker (path complete)
-
-_SUIT_SPADES_PATH2:    ; Path 2
-    FCB 127              ; path2: intensity
-    FCB $02,$FB,0,0        ; path2: header (y=2, x=-5)
-    FCB $FF,$FD,$FF          ; flag=-1, dy=-3, dx=-1
-    FCB $FF,$FC,$02          ; flag=-1, dy=-4, dx=2
-    FCB $FF,$FF,$03          ; flag=-1, dy=-1, dx=3
-    FCB $FF,$02,$01          ; flag=-1, dy=2, dx=1
-    FCB $FF,$FE,$01          ; flag=-1, dy=-2, dx=1
-    FCB $FF,$01,$03          ; flag=-1, dy=1, dx=3
-    FCB $FF,$04,$02          ; flag=-1, dy=4, dx=2
-    FCB $FF,$03,$FF          ; flag=-1, dy=3, dx=-1
-    FCB $FF,$05,$FB          ; flag=-1, dy=5, dx=-5
-    FCB $FF,$FB,$FB          ; flag=-1, dy=-5, dx=-5
-    FCB 2                ; End marker (path complete)
-;***************************************************************************
-; RUNTIME HELPERS
-;***************************************************************************
-
-VECTREX_PRINT_TEXT:
-    ; VPy signature: PRINT_TEXT(x, y, string)
-    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
-    ;       causing integrators to drift toward joystick DAC value.
-    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
-    LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref   ; Reset beam to center before positioning text
-    LDU VAR_ARG2   ; string pointer
-    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
-    STA >$C82A      ; Vec_Text_Height: controls character Y scale
-    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
-    STA >$C82B      ; Vec_Text_Width: controls character X spacing
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
-    JSR Print_Str_d
-    LDA #$F8
-    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
-    LDA #$48
-    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
-    RTS
-
-MUL16:
-    ; Multiply 16-bit X * D -> D
-    ; Simple implementation (can be optimized)
-    PSHS X,B,A
-    LDD #0         ; Result accumulator
-    LDX 2,S        ; Multiplier
-.MUL16_LOOP:
-    BEQ .MUL16_END
-    ADDD ,S        ; Add multiplicand
-    LEAX -1,X
-    BRA .MUL16_LOOP
-.MUL16_END:
-    LEAS 4,S
-    RTS
-
-DIV16:
-    ; Signed 16-bit division: D = X / D
-    ; X = dividend (i16), D = divisor (i16) -> D = quotient
-    STD TMPPTR          ; Save divisor
-    TFR X,D             ; D = dividend (TFR does NOT set flags!)
-    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte
-    BPL .D16_DPOS       ; if dividend >= 0, skip negation
-    COMA
-    COMB
-    ADDD #1             ; D = |dividend|
-    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)
-    LDA #1
-    STA TMPPTR2         ; sign_flag = 1 (dividend was negative)
-    BRA .D16_RCHECK
-.D16_DPOS:
-    STD TMPVAL          ; dividend is positive, store as-is
-    LDA #0
-    STA TMPPTR2         ; sign_flag = 0 (positive result)
-.D16_RCHECK:
-    LDD TMPPTR          ; D = divisor
-    BPL .D16_RPOS       ; if divisor >= 0, skip negation
-    COMA
-    COMB
-    ADDD #1             ; D = |divisor|
-    STD TMPPTR          ; TMPPTR = |divisor|
-    LDA TMPPTR2
-    EORA #1
-    STA TMPPTR2         ; toggle sign flag (XOR with 1)
-.D16_RPOS:
-    LDD #0
-    STD RESULT          ; quotient = 0
-.D16_LOOP:
-    LDD TMPVAL
-    SUBD TMPPTR         ; |dividend| - |divisor|
-    BLO .D16_END        ; if |dividend| < |divisor|, done
-    STD TMPVAL          ; update remainder
-    LDD RESULT
-    ADDD #1
-    STD RESULT          ; quotient++
-    BRA .D16_LOOP
-.D16_END:
-    LDD RESULT          ; D = unsigned quotient
-    LDA TMPPTR2
-    BEQ .D16_DONE       ; zero = positive result
-    COMA
-    COMB
-    ADDD #1             ; negate for negative result
-.D16_DONE:
-    RTS
-
-MOD16:
-    ; Signed 16-bit modulo: D = X % D (result has same sign as dividend)
-    ; X = dividend (i16), D = divisor (i16) -> D = remainder
-    STD TMPPTR          ; Save divisor
-    TFR X,D             ; D = dividend (TFR does NOT set flags!)
-    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte
-    BPL .M16_DPOS       ; if dividend >= 0, skip negation
-    COMA
-    COMB
-    ADDD #1             ; D = |dividend|
-    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)
-    LDA #1
-    STA TMPPTR2         ; sign_flag = 1
-    BRA .M16_RCHECK
-.M16_DPOS:
-    STD TMPVAL          ; dividend is positive, store as-is
-    LDA #0
-    STA TMPPTR2         ; sign_flag = 0 (positive result)
-.M16_RCHECK:
-    LDD TMPPTR          ; D = divisor
-    BPL .M16_RPOS       ; if divisor >= 0, skip negation
-    COMA
-    COMB
-    ADDD #1             ; D = |divisor|
-    STD TMPPTR          ; TMPPTR = |divisor|
-.M16_RPOS:
-.M16_LOOP:
-    LDD TMPVAL
-    SUBD TMPPTR         ; |dividend| - |divisor|
-    BLO .M16_END        ; if |dividend| < |divisor|, done
-    STD TMPVAL          ; update remainder
-    BRA .M16_LOOP
-.M16_END:
-    LDD TMPVAL          ; D = |remainder|
-    LDA TMPPTR2
-    BEQ .M16_DONE       ; zero = positive result
-    COMA
-    COMB
-    ADDD #1             ; negate (same sign as dividend)
-.M16_DONE:
-    RTS
-
-RAND_HELPER:
-    ; LCG: seed = (seed * 1103515245 + 12345) & 0x7FFF
-    ; Simplified for 6809: seed = (seed * 25 + 13) & 0x7FFF
-    LDD RAND_SEED
-    LDX #26
-    ; Multiply by 25: loop runs 25 times (LCG a=25, Hull-Dobell ok)
-    PSHS D
-    LDD #0
-RAND_MUL_LOOP:
-    LEAX -1,X
-    BEQ RAND_MUL_DONE
-    ADDD ,S
-    BRA RAND_MUL_LOOP
-RAND_MUL_DONE:
-    LEAS 2,S
-    ADDD #13       ; Add constant c=13 (odd, Hull-Dobell ok)
-    STD RAND_SEED  ; Store full 16-bit state BEFORE masking output
-    ANDA #$7F      ; Mask output to positive 15-bit (state stays full)
-    RTS
-
-RAND_RANGE_HELPER:
-    ; Input: TMPPTR = min (i16), TMPPTR2 = max (i16)
-    ; Returns: D = min + (rand % (max - min + 1))
-    JSR RAND_HELPER        ; D = rand (0..$7FFF)
-    PSHS D                 ; Save rand
-    LDD TMPPTR2            ; max
-    SUBD TMPPTR            ; D = max - min
-    ADDD #1                ; D = inclusive range
-    STD TMPPTR2            ; TMPPTR2 = range
-    PULS D                 ; Restore rand
-RRH_MOD:
-    SUBD TMPPTR2           ; D -= range
-    BCC RRH_MOD            ; if no borrow (D >= range), keep subtracting
-    ADDD TMPPTR2           ; Undo last subtract: now 0 <= D < range
-    ADDD TMPPTR            ; Add min -> D in [min, max]
-    RTS
-
-; === JOYSTICK BUILTIN SUBROUTINES ===
-; J1_X() - Read Joystick 1 X axis (INCREMENTAL - with state preservation)
-; Returns: D = raw value from $C81B after Joy_Analog call
-J1X_BUILTIN:
-    PSHS X       ; Save X (Joy_Analog uses it)
-    JSR $F1AA    ; DP_to_D0 (required for Joy_Analog BIOS call)
-    JSR $F1F5    ; Joy_Analog (updates $C81B from hardware)
-    JSR Reset0Ref ; Full beam reset: zeros DAC (VIA_port_a=0) via Reset_Pen + grounds integrators
-    JSR $F1AF    ; DP_to_C8 (required to read RAM $C81B)
-    LDB $C81B    ; Vec_Joy_1_X (BIOS writes ~$FE at center)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
-    RTS
-
-DRAW_RECT_RUNTIME:
-    ; Input: DRAW_RECT_X, DRAW_RECT_Y, DRAW_RECT_WIDTH, DRAW_RECT_HEIGHT, DRAW_RECT_INTENSITY
-    ; Draws 4 sides of rectangle
-    
-    ; Save parameters to stack before DP change
-    LDB DRAW_RECT_INTENSITY
-    PSHS B
-    LDB DRAW_RECT_HEIGHT
-    PSHS B
-    LDB DRAW_RECT_WIDTH
-    PSHS B
-    LDB DRAW_RECT_Y
-    PSHS B
-    LDB DRAW_RECT_X
-    PSHS B
-    
-    ; Setup BIOS
-    LDA #$D0
-    TFR A,DP
-    JSR Reset0Ref
-    LDA #$80
-    STA <$04            ; VIA_t1_cnt_lo = $80 (ensure correct scale)
-    
-    ; Set intensity
-    LDA 4,S             ; intensity
-    JSR Intensity_a
-    
-    ; Move to starting position (x, y)
-    LDA 1,S             ; y
-    LDB ,S              ; x
-    JSR Moveto_d_7F
-    
-    ; Draw right side
-    CLR Vec_Misc_Count
-    LDA #0
-    LDB 2,S             ; width
-    JSR Draw_Line_d
-    
-    ; Draw down side
-    CLR Vec_Misc_Count
-    LDA 3,S             ; height
-    NEGA                ; -height
-    LDB #0
-    JSR Draw_Line_d
-    
-    ; Draw left side
-    CLR Vec_Misc_Count
-    LDA #0
-    LDB 2,S             ; width
-    NEGB                ; -width
-    JSR Draw_Line_d
-    
-    ; Draw up side
-    CLR Vec_Misc_Count
-    LDA 2,S             ; height
-    NEGA                ; -height
-    LDB #0
-    JSR Draw_Line_d
-    
-    LDA #$C8
-    TFR A,DP            ; Restore DP=$C8 before return
-    LEAS 5,S            ; Clean stack
-    RTS
-
-Draw_Sync_List_At_With_Mirrors:
-; Unified mirror support using flags: MIRROR_X and MIRROR_Y
-; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller must ensure DP=$D0 for VIA access
-; Z-axis intensity: use exact BIOS Intensity_a sequence (PB=$05->$04, PA=val, PB=$00->$01)
-; Caller (DRAW_ANIM_RUNTIME, DRAW_VECTOR) ensures DP=$D0 before JSR here.
-LDA ,X+                 ; Read per-path intensity from vector data
-DSWM_SET_INTENSITY:
-TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB value
-BEQ DSWM_USE_FCB_INT
-LDA >DRAW_VEC_INTENSITY  ; non-zero override (from SET_INTENSITY)
-DSWM_USE_FCB_INT:
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-PSHS A                  ; save brightness
-LDA #$05
-STA >$D000              ; PB=$05: pre-condition Z-axis (mirrors BIOS Intensity_a)
-LDA #$04
-STA >$D000              ; PB=$04: select Z-axis channel
-PULS A                  ; restore brightness
-STA >$D001              ; PA=brightness while Z-axis selected -> charges S/H
-LDA #$00
-STA >$D000              ; PB=$00: deselect all channels
-LDA #$01
-STA >$D000              ; PB=$01: restore X-integrator channel
-LDB ,X+                 ; y_start from .vec (already relative to center)
-; Check if Y mirroring is enabled
-TST >MIRROR_Y
-BEQ DSWM_NO_NEGATE_Y
-NEGB                    ; ← Negate Y if flag set
-DSWM_NO_NEGATE_Y:
-ADDB >DRAW_VEC_Y        ; Add Y offset
-LDA ,X+                 ; x_start from .vec (already relative to center)
-; Check if X mirroring is enabled
-TST >MIRROR_X
-BEQ DSWM_NO_NEGATE_X
-NEGA                    ; ← Negate X if flag set
-DSWM_NO_NEGATE_X:
-ADDA >DRAW_VEC_X        ; Add X offset
-STD >TEMP_YX            ; Save adjusted position
-; Reset completo
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$03
-STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
-LDA #$02
-STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
-LDA #$02
-STA VIA_port_b          ; repeat
-LDA #$01
-STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
-; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)
-LDD >TEMP_YX
-STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
-CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
-PSHS A                  ; ~4 cycle settling delay for Y
-LDA #$CE
-STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
-CLR VIA_shift_reg       ; SR=0: no draw during moveto
-INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
-PULS A                  ; Restore X
-STA VIA_port_a          ; X to DAC
-; T1 scale from DRAW_SCALE variable ($7F=normal)
-LDA >DRAW_SCALE
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X                ; Skip next_y, next_x
-; Wait for move to complete (PB=1 on exit)
-DSWM_W1:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W1
-; PB stays 1 — draw loop begins with PB=1
-; Loop de dibujo (conditional mirrors)
-DSWM_LOOP:
-LDA ,X+                 ; Read flag
-CMPA #2                 ; Check end marker
-LBEQ DSWM_DONE
-CMPA #1                 ; Check next path marker
-LBEQ DSWM_NEXT_PATH
-; Draw line with conditional negations
-LDB ,X+                 ; dy
-; Check if Y mirroring is enabled
-TST >MIRROR_Y
-BEQ DSWM_NO_NEGATE_DY
-NEGB                    ; ← Negate dy if flag set
-DSWM_NO_NEGATE_DY:
-LDA ,X+                 ; dx
-; Check if X mirroring is enabled
-TST >MIRROR_X
-BEQ DSWM_NO_NEGATE_DX
-NEGA                    ; ← Negate dx if flag set
-DSWM_NO_NEGATE_DX:
-; B=DY_final, A=DX_final, PB=1 on entry (from moveto or previous segment)
-STB VIA_port_a          ; DY to DAC (PB=1: integrators hold position)
-CLR VIA_port_b          ; PB=0: enable mux, beam tracks DY direction
-NOP                     ; settling 1 (per BIOS Draw_Line_d: LEAX+NOP = ~7 cycles)
-NOP                     ; settling 2
-NOP                     ; settling 3
-INC VIA_port_b          ; PB=1: disable mux, lock direction at DY
-STA VIA_port_a          ; DX to DAC
-LDA #$FF
-STA VIA_shift_reg       ; beam ON first (ramp still off from T1PB7)
-CLR VIA_t1_cnt_hi       ; THEN start T1 -> ramp ON (BIOS order)
-; Wait for line draw
-DSWM_W2:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W2
-CLR VIA_port_a          ; PA=0: stop X integrator FIRST (alg_xsh=128=rsh → dx=0)
-CLR VIA_port_b          ; PB=0: Y mux enabled → ysh=0 (stop Y integrator)
-INC VIA_port_b          ; PB=1: Y mux hold (lock Y at 0)
-CLR VIA_shift_reg       ; beam off (rate=0 so no drift during these 3 insns)
-LBRA DSWM_LOOP          ; Long branch
-; Next path: repeat mirror logic for new path header
-DSWM_NEXT_PATH:
-TFR X,D
-PSHS D
-; Read per-path intensity from vector data (check DRAW_VEC_INTENSITY override)
-LDA ,X+                 ; Read FCB intensity from vector data
-DSWM_NEXT_SET_INTENSITY:
-TST >DRAW_VEC_INTENSITY  ; 0 = no override, use FCB
-BEQ DSWM_NEXT_USE_FCB_INT
-LDA >DRAW_VEC_INTENSITY  ; non-zero override
-DSWM_NEXT_USE_FCB_INT:
-PSHS A                  ; save intensity for later
-LDB ,X+                 ; y_start
-TST >MIRROR_Y
-BEQ DSWM_NEXT_NO_NEGATE_Y
-NEGB
-DSWM_NEXT_NO_NEGATE_Y:
-ADDB >DRAW_VEC_Y        ; Add Y offset
-LDA ,X+                 ; x_start
-TST >MIRROR_X
-BEQ DSWM_NEXT_NO_NEGATE_X
-NEGA
-DSWM_NEXT_NO_NEGATE_X:
-ADDA >DRAW_VEC_X        ; Add X offset
-STD >TEMP_YX
-PULS A                  ; restore intensity
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-PSHS A                  ; save brightness for Z-axis write
-LDA #$05
-STA >$D000              ; PB=$05: pre-condition (BIOS Intensity_a step 1)
-LDA #$04
-STA >$D000              ; PB=$04: select Z-axis channel
-PULS A                  ; restore brightness
-STA >$D001              ; PA=brightness while Z-axis selected
-LDA #$00
-STA >$D000              ; PB=$00: deselect
-LDA #$01
-STA >$D000              ; PB=$01: restore X-integrator channel
-PULS D
-ADDD #3
-TFR D,X
-; Reset to zero
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$03
-STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
-LDA #$02
-STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
-LDA #$02
-STA VIA_port_b          ; repeat
-LDA #$01
-STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
-; Moveto new start position (BIOS Moveto_d order)
-LDD >TEMP_YX
-STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
-CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
-PSHS A                  ; ~4 cycle settling delay for Y
-LDA #$CE
-STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
-CLR VIA_shift_reg       ; SR=0: no draw during moveto
-INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
-PULS A
-STA VIA_port_a          ; X to DAC
-; T1 scale from DRAW_SCALE variable ($7F=normal)
-LDA >DRAW_SCALE
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X
-; Wait for move (PB=1 on exit)
-DSWM_W3:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W3
-; PB stays 1 — draw loop continues with PB=1
-LBRA DSWM_LOOP          ; Long branch
-DSWM_DONE:
-RTS
-;**** PRINT_TEXT String Data ****
-PRINT_TEXT_STR_43:
-    FCC "+"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_49:
-    FCC "1"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_50:
-    FCC "2"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_51:
-    FCC "3"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_52:
-    FCC "4"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_53:
-    FCC "5"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_54:
-    FCC "6"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_55:
-    FCC "7"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_56:
-    FCC "8"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_57:
-    FCC "9"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_65:
-    FCC "A"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_74:
-    FCC "J"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_75:
-    FCC "K"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_81:
-    FCC "Q"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_1120:
-    FCC "##"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_1567:
-    FCC "10"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2657:
-    FCC "ST"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2780:
-    FCC "WS"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_68624293:
-    FCC "HELD:"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2521201141606:
-    FCC "YOU WIN!"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_3143339389297355:
-    FCC "suit_clubs"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_97443521204318815:
-    FCC "suit_hearts"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_97443521529384288:
-    FCC "suit_spades"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_1409503402297413265:
-    FCC "suit_diamonds"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2487248696027089637:
-    FCC "PRESS B1 TO PLAY"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_3321124269434895794:
-    FCC "ALL SUITS COMPLETE"
-    FCB $80          ; Vectrex string terminator
+@ VPy — ARM Thumb2 target (RP2350 / Cortex-M33)
+@ Game: SOLITAIRE
+@ Generated by vpy_codegen arm backend
+@ Assemble with: arm-none-eabi-as -mthumb -mcpu=cortex-m33 game.s -o game.o
+
+.syntax unified
+.cpu cortex-m33
+.fpu fpv5-sp-d16
+.thumb
+
+@ --- VPy runtime RAM (RP2350 SRAM) ---
+.equ TMPVAL,              0x2007F000  @ 32-bit arithmetic temporary
+.equ TMPPTR,              0x2007F004  @ pointer temporary
+.equ TMPPTR2,             0x2007F008  @ second pointer temporary
+.equ VAR_ARG0,            0x2007F00C  @ function argument 0
+.equ VAR_ARG1,            0x2007F010  @ function argument 1
+.equ VAR_ARG2,            0x2007F014  @ function argument 2
+.equ VAR_ARG3,            0x2007F018  @ function argument 3
+.equ VAR_ARG4,            0x2007F01C  @ function argument 4
+.equ RESULT,              0x2007F020  @ function return value
+.equ BEEP_FRAMES_LEFT,    0x2007F024  @ non-blocking beep counter
+.equ VIA_WRITE_ADDR,      0x2007F028  @ scratch for bus_write address
+.equ VIA_WRITE_DATA,      0x2007F02C  @ scratch for bus_write data
+.equ _dv3d_cos,           0x2007F030  @ 3D cos offsets: cos_ax, cos_ay, cos_az (3 bytes)
+.equ _dv3d_tmp,           0x2007F034  @ 3D vertex raw coords: rx, ry, rz (3 bytes)
+.equ _dv3d_sm,            0x2007F038  @ 3D rotation intermediates: t0, y1, z1, x2 (4 bytes)
+.equ _dv3d_cur,           0x2007F03C  @ 3D current beam pos: cur_x, cur_y (2 bytes)
+.equ _dv3d_fst,           0x2007F03E  @ 3D first vertex of path: first_x, first_y (2 bytes)
+.equ _dv3d_vbuf,          0x2007F040  @ 3D rotated vertex cache: sx,sy pairs (254 bytes max)
+.equ VPY_ANIM_STATE_BUF,  0x2007F13E  @ animation frame_idx(u8) at +0, ticks_left(u8) at +1
+.equ RAND_SEED,           0x2007F140  @ LCG random number seed
+.equ BTN_STATE_J1,        0x2007F144  @ cached VIA Port B (J1 buttons, bits 4-7 active-low)
+.equ BTN_STATE_J2,        0x2007F148  @ cached PSG reg 14 (J2 buttons, bits 0-3 active-low)
+.equ CAMERA_X,            0x2007F14C  @ camera X offset (used by show_level)
+.equ CAMERA_Y,            0x2007F150  @ camera Y offset
+.equ TEXT_SIZE,           0x2007F154  @ text scale factor (1=normal, 2=double, ...)
+.equ TEXT_COLOR,          0x2007F158  @ text intensity (0-127)
+.equ LEVEL_DATA_PTR,      0x2007F15C  @ pointer to loaded level ROM data
+.equ DBGVAL,              0x2007F160  @ debug_print last written value
+.equ PRINT_BEAM_X,        0x2007F164  @ beam X shadow during print_text
+.equ PRINT_BEAM_Y,        0x2007F168  @ beam Y shadow during print_text
+.equ PSG_MUSIC_PTR,       0x2007F16C  @ pointer to current music event in ROM
+.equ PSG_MUSIC_START,     0x2007F170  @ pointer to loop-start event
+.equ PSG_IS_PLAYING,      0x2007F174  @ 1 = music playing
+.equ PSG_DELAY_FRAMES,    0x2007F178  @ frames remaining before next music event
+.equ PSG_SFX_PTR,         0x2007F17C  @ pointer to current SFX event in ROM
+.equ PSG_SFX_ACTIVE,      0x2007F180  @ 1 = SFX playing
+.equ PSG_SFX_DELAY,       0x2007F184  @ frames remaining before next SFX event
+.equ LEVEL_GP_COUNT,      0x2007F188  @ number of active GP objects
+.equ LEVEL_GP_BUF,        0x2007F18C  @ level GP mutable buffer (32 obj × 8 bytes = 256 bytes)
+.equ SCROLL_LIMIT_LEFT,   0x2007F28C  @ camera scroll limit: left world X
+.equ SCROLL_LIMIT_RIGHT,  0x2007F290  @ camera scroll limit: right world X
+.equ SCROLL_LIMIT_TOP,    0x2007F294  @ camera scroll limit: top world Y
+.equ SCROLL_LIMIT_BOTTOM, 0x2007F298  @ camera scroll limit: bottom world Y
+.equ NOTE_STATE,          0x2007F29C  @ note engine state: 3 channels × 32 bytes each
+.equ PSG_MIXER_SHADOW,    0x2007F2FC  @ shadow of AY R7 mixer register (0x3F = all disabled)
+.equ VPY_MOVE_X,          0x2007F300  @ last MOVE X position (added to DRAW_LINE x0/x1)
+.equ VPY_MOVE_Y,          0x2007F304  @ last MOVE Y position (added to DRAW_LINE y0/y1)
+.equ ENEMY_COUNT_ARM,     0x2007F308  @ active enemy count
+.equ ENEMY_POOL_ARM,      0x2007F30C  @ enemy pool: 8 slots × 32 bytes
+.equ J1_AXIS_X,           0x2007F40C  @ cached J1 X axis (-127..127), updated each WAIT_RECAL
+.equ J1_AXIS_Y,           0x2007F410  @ cached J1 Y axis (-127..127), updated each WAIT_RECAL
+.equ J2_AXIS_X,           0x2007F414  @ cached J2 X axis (-127..127), updated each WAIT_RECAL
+.equ J2_AXIS_Y,           0x2007F418  @ cached J2 Y axis (-127..127), updated each WAIT_RECAL
+.equ ENEMY_STATE_ARM,     0x2007F41C  @ enemy state per slot: 8 × i32
+.equ VPY_PLAYER_ANIM_STATE, 0x2007F43C  @ player animation state: frame_idx(u8)+ticks_left(u8)
+.equ VPY_BRIGHTNESS_OVERRIDE, 0x2007F43E  @ SET_INTENSITY override: 0=.vec intensity, >0=override (1 byte)
+.equ WANDER_SCRATCH_ARM,  0x2007F440  @ wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)
+.equ USER_RAM_START,      0x2007F460  @ user variables begin here
+
+@ --- VIA 6522 registers (Vectrex bus addresses) ---
+.equ VIA_BASE,       0xD000
+.equ VIA_PORT_B,     0xD000   @ Port B data (MUX, beam, z-pulse)
+.equ VIA_PORT_A,     0xD001   @ Port A data (DAC / joystick)
+.equ VIA_DDR_B,      0xD002   @ Port B direction
+.equ VIA_DDR_A,      0xD003   @ Port A direction
+.equ VIA_T1C_L,      0xD004   @ Timer 1 counter low
+.equ VIA_T1C_H,      0xD005   @ Timer 1 counter high
+.equ VIA_T1L_L,      0xD006   @ Timer 1 latch low
+.equ VIA_T1L_H,      0xD007   @ Timer 1 latch high
+.equ VIA_SR,         0xD00A   @ Shift register (beam on/off via CB2)
+.equ VIA_ACR,        0xD00B   @ Auxiliary control register
+.equ VIA_PCR,        0xD00C   @ Peripheral control register
+.equ VIA_IFR,        0xD00D   @ Interrupt flag register
+.equ VIA_IER,        0xD00E   @ Interrupt enable register
+
+@ VIA Port B bits
+.equ PB_MUX,         0x01     @ PSG BDIR (bit 0)
+.equ PB_BEAM,        0x08     @ Beam on/off
+.equ PB_ZPULSE,      0x10     @ Z-axis pulse
+
+@ VIA ACR / PCR values
+.equ ACR_SR_SHIFT,   0x18     @ SR = shift out under PHI2
+.equ PCR_BEAM_OFF,   0xCE
+.equ PCR_BEAM_ON,    0xDE
+.equ T1_STANDARD,    0x7F     @ Timer 1 value for standard vector scale
+
+@ --- RP2350 SIO (GPIO bit-bang) ---
+.equ SIO_BASE,       0xD0000000
+.equ SIO_GPIO_OUT,   0xD0000010  @ GPIO output value
+.equ SIO_GPIO_SET,   0xD0000014  @ GPIO output set (atomic)
+.equ SIO_GPIO_CLR,   0xD0000018  @ GPIO output clear (atomic)
+.equ SIO_GPIO_OE_SET,0xD0000024  @ GPIO OE set
+.equ SIO_GPIO_OE_CLR,0xD0000028  @ GPIO OE clear
+.equ SIO_GPIO_IN,    0xD0000004  @ GPIO input value
+
+@ GPIO pin masks (from pins.rs)
+.equ ADDR_MASK,      0x00007FFF  @ GP0-GP14 (A0-A14)
+.equ DATA_MASK,      0x007F8000  @ GP15-GP22 (D0-D7)
+.equ PIN_NCE,        23
+.equ PIN_RW,         24
+.equ PIN_NOE,        25
+.equ PIN_NHALT,      27
+.equ PIN_DIR_CTRL,   29
+
+.section .game_rom, "ax"
+.align 2
+
+@ --- Game ROM image header (offset 0 of game ROM slot) ---
+@ Firmware checks GAME_MAGIC before calling game_main.
+
+.global game_header
+.type game_header, %object
+game_header:
+    .word 0x32795056      @ GAME_MAGIC 'VPy2'
+    .word game_main         @ entry point (thumb bit set by linker)
+    .word 0x00000000        @ reserved
+    .word 0x00000000        @ reserved
+
+@ bus_write(r0=vectrex addr, r1=data) — BIOS trap: SYS_BUS_WRITE
+.global bus_write
+.type bus_write, %function
+.thumb_func
+bus_write:
+    svc     #8                      @ SYS_BUS_WRITE
+    bx      lr
+
+@ bus_read(r0=addr) — stub: returns 0xFF (no BIOS read syscall yet)
+.global bus_read
+.type bus_read, %function
+.thumb_func
+bus_read:
+    mov     r0, #0xFF
+    bx      lr
+
+@ ============================================================
+@ Drawing engine — ARM Thumb2 / RP2350 bus master
+@ ============================================================
+
+@ dv_reset() — BIOS trap: SYS_RESET0REF
+.global dv_reset
+.type dv_reset, %function
+.thumb_func
+dv_reset:
+    svc     #0                      @ SYS_RESET0REF
+    bx      lr
+
+@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (delta after a reset)
+.global dv_move_to
+.type dv_move_to, %function
+.thumb_func
+dv_move_to:
+    svc     #3                      @ SYS_MOVE
+    bx      lr
+
+@ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA
+.global dv_draw_delta
+.type dv_draw_delta, %function
+.thumb_func
+dv_draw_delta:
+    svc     #4                      @ SYS_DRAW_DELTA
+    bx      lr
+
+@ vpy_draw_vector(r0=asset_ptr, r1=ox, r2=oy)
+@ Draws asset at screen position (ox, oy). ox=0, oy=0 = screen centre.
+.global vpy_draw_vector
+.type vpy_draw_vector, %function
+.thumb_func
+vpy_draw_vector:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    mov     r4, r0              @ asset_ptr
+    mov     r9, r1              @ ox
+    mov     r10, r2             @ oy
+    ldr     r5, [r4]            @ path_count
+    mov     r6, #0              @ path index
+dvv_pl:
+    cmp     r6, r5
+    bge     dvv_done
+    lsl     r7, r6, #2
+    add     r7, r7, #4
+    ldr     r7, [r4, r7]
+    bl      dv_reset
+    ldrb    r0, [r7]            @ per-path .vec intensity
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    ldrb    r1, [r1]
+    cmp     r1, #0
+    it      ne
+    movne   r0, r1  @ SET_INTENSITY override wins
+    bl      vpy_set_intensity
+    ldrsb   r0, [r7, #2]
+    add     r0, r0, r9
+    ldrsb   r1, [r7, #1]
+    add     r1, r1, r10
+    bl      dv_move_to
+    add     r8, r7, #5
+dvv_cl:
+    ldrb    r0, [r8]
+    cmp     r0, #0x02
+    beq     dvv_cend
+    cmp     r0, #0xFF
+    bne     dvv_cskip
+    ldrsb   r0, [r8, #2]
+    ldrsb   r1, [r8, #1]
+    bl      dv_draw_delta
+    add     r8, r8, #3
+    b       dvv_cl
+dvv_cskip:
+    add     r8, r8, #1
+    b       dvv_cl
+dvv_cend:
+    add     r6, r6, #1
+    b       dvv_pl
+dvv_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ ============================================================
+@ VPy Builtins — ARM Thumb2 / RP2350
+@ ============================================================
+
+@ ============================================================
+@ Vector font — ASCII 32-126 stroke data
+@ Each glyph: [cmd(1=move,2=draw), x(0-4), y(0-6), ..., 0x00]
+@ _FONT_PTRS[char-32] = absolute address of glyph (0 = no strokes)
+@ ============================================================
+
+.global _FONT_PTRS
+_FONT_PTRS:
+    .word   0    @ ' ' no strokes
+    .word   _glyph_033   @ '!'
+    .word   _glyph_034   @ '"'
+    .word   0    @ '#' no strokes
+    .word   0    @ '$' no strokes
+    .word   0    @ '%' no strokes
+    .word   0    @ '&' no strokes
+    .word   0    @ ''' no strokes
+    .word   0    @ '(' no strokes
+    .word   0    @ ')' no strokes
+    .word   0    @ '*' no strokes
+    .word   _glyph_043   @ '+'
+    .word   _glyph_044   @ ','
+    .word   _glyph_045   @ '-'
+    .word   _glyph_046   @ '.'
+    .word   _glyph_047   @ '/'
+    .word   _glyph_048   @ '0'
+    .word   _glyph_049   @ '1'
+    .word   _glyph_050   @ '2'
+    .word   _glyph_051   @ '3'
+    .word   _glyph_052   @ '4'
+    .word   _glyph_053   @ '5'
+    .word   _glyph_054   @ '6'
+    .word   _glyph_055   @ '7'
+    .word   _glyph_056   @ '8'
+    .word   _glyph_057   @ '9'
+    .word   _glyph_058   @ ':'
+    .word   _glyph_059   @ ';'
+    .word   _glyph_060   @ '<'
+    .word   _glyph_061   @ '='
+    .word   _glyph_062   @ '>'
+    .word   _glyph_063   @ '?'
+    .word   0    @ '@' no strokes
+    .word   _glyph_065   @ 'A'
+    .word   _glyph_066   @ 'B'
+    .word   _glyph_067   @ 'C'
+    .word   _glyph_068   @ 'D'
+    .word   _glyph_069   @ 'E'
+    .word   _glyph_070   @ 'F'
+    .word   _glyph_071   @ 'G'
+    .word   _glyph_072   @ 'H'
+    .word   _glyph_073   @ 'I'
+    .word   _glyph_074   @ 'J'
+    .word   _glyph_075   @ 'K'
+    .word   _glyph_076   @ 'L'
+    .word   _glyph_077   @ 'M'
+    .word   _glyph_078   @ 'N'
+    .word   _glyph_079   @ 'O'
+    .word   _glyph_080   @ 'P'
+    .word   _glyph_081   @ 'Q'
+    .word   _glyph_082   @ 'R'
+    .word   _glyph_083   @ 'S'
+    .word   _glyph_084   @ 'T'
+    .word   _glyph_085   @ 'U'
+    .word   _glyph_086   @ 'V'
+    .word   _glyph_087   @ 'W'
+    .word   _glyph_088   @ 'X'
+    .word   _glyph_089   @ 'Y'
+    .word   _glyph_090   @ 'Z'
+    .word   0    @ '[' no strokes
+    .word   0    @ '\' no strokes
+    .word   0    @ ']' no strokes
+    .word   0    @ '^' no strokes
+    .word   0    @ '_' no strokes
+    .word   0    @ '`' no strokes
+    .word   _glyph_097   @ 'a'
+    .word   _glyph_098   @ 'b'
+    .word   _glyph_099   @ 'c'
+    .word   _glyph_100   @ 'd'
+    .word   _glyph_101   @ 'e'
+    .word   _glyph_102   @ 'f'
+    .word   _glyph_103   @ 'g'
+    .word   _glyph_104   @ 'h'
+    .word   _glyph_105   @ 'i'
+    .word   _glyph_106   @ 'j'
+    .word   _glyph_107   @ 'k'
+    .word   _glyph_108   @ 'l'
+    .word   _glyph_109   @ 'm'
+    .word   _glyph_110   @ 'n'
+    .word   _glyph_111   @ 'o'
+    .word   _glyph_112   @ 'p'
+    .word   _glyph_113   @ 'q'
+    .word   _glyph_114   @ 'r'
+    .word   _glyph_115   @ 's'
+    .word   _glyph_116   @ 't'
+    .word   _glyph_117   @ 'u'
+    .word   _glyph_118   @ 'v'
+    .word   _glyph_119   @ 'w'
+    .word   _glyph_120   @ 'x'
+    .word   _glyph_121   @ 'y'
+    .word   _glyph_122   @ 'z'
+    .word   0    @ '{' no strokes
+    .word   0    @ '|' no strokes
+    .word   0    @ '}' no strokes
+    .word   0    @ '~' no strokes
+
+.global _FONT_DATA
+_FONT_DATA:
+_glyph_033:  @ '!'
+    .byte   1, 2, 6
+    .byte   2, 2, 2
+    .byte   1, 2, 0
+    .byte   2, 2, 1
+    .byte   0
+_glyph_034:  @ '"'
+    .byte   1, 1, 5
+    .byte   2, 1, 6
+    .byte   1, 3, 5
+    .byte   2, 3, 6
+    .byte   0
+_glyph_043:  @ '+'
+    .byte   1, 2, 1
+    .byte   2, 2, 5
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_044:  @ ','
+    .byte   1, 2, 1
+    .byte   2, 1, 0
+    .byte   0
+_glyph_045:  @ '-'
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_046:  @ '.'
+    .byte   1, 1, 0
+    .byte   2, 2, 0
+    .byte   0
+_glyph_047:  @ '/'
+    .byte   1, 0, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_048:  @ '0'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   0
+_glyph_049:  @ '1'
+    .byte   1, 2, 0
+    .byte   2, 2, 6
+    .byte   0
+_glyph_050:  @ '2'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 4, 3
+    .byte   2, 0, 3
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_051:  @ '3'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 4, 0
+    .byte   2, 0, 0
+    .byte   1, 4, 3
+    .byte   2, 1, 3
+    .byte   0
+_glyph_052:  @ '4'
+    .byte   1, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   1, 4, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_053:  @ '5'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   2, 4, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_054:  @ '6'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 3
+    .byte   2, 0, 3
+    .byte   0
+_glyph_055:  @ '7'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 2, 0
+    .byte   0
+_glyph_056:  @ '8'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_057:  @ '9'
+    .byte   1, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_058:  @ ':'
+    .byte   1, 2, 1
+    .byte   2, 2, 2
+    .byte   1, 2, 4
+    .byte   2, 2, 5
+    .byte   0
+_glyph_059:  @ ';'
+    .byte   1, 2, 4
+    .byte   2, 2, 5
+    .byte   1, 2, 1
+    .byte   2, 1, 0
+    .byte   0
+_glyph_060:  @ '<'
+    .byte   1, 3, 6
+    .byte   2, 0, 3
+    .byte   2, 3, 0
+    .byte   0
+_glyph_061:  @ '='
+    .byte   1, 0, 4
+    .byte   2, 4, 4
+    .byte   1, 0, 2
+    .byte   2, 4, 2
+    .byte   0
+_glyph_062:  @ '>'
+    .byte   1, 1, 6
+    .byte   2, 4, 3
+    .byte   2, 1, 0
+    .byte   0
+_glyph_063:  @ '?'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 4, 4
+    .byte   2, 2, 3
+    .byte   1, 2, 1
+    .byte   2, 2, 2
+    .byte   0
+_glyph_065:  @ 'A'
+    .byte   1, 0, 0
+    .byte   2, 2, 6
+    .byte   2, 4, 0
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_066:  @ 'B'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   2, 3, 3
+    .byte   2, 3, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_067:  @ 'C'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_068:  @ 'D'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 1
+    .byte   2, 3, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_069:  @ 'E'
+    .byte   1, 4, 0
+    .byte   2, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 3, 3
+    .byte   0
+_glyph_070:  @ 'F'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 3, 3
+    .byte   0
+_glyph_071:  @ 'G'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 3
+    .byte   2, 2, 3
+    .byte   0
+_glyph_072:  @ 'H'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   1, 4, 0
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_073:  @ 'I'
+    .byte   1, 1, 0
+    .byte   2, 3, 0
+    .byte   1, 2, 0
+    .byte   2, 2, 6
+    .byte   1, 1, 6
+    .byte   2, 3, 6
+    .byte   0
+_glyph_074:  @ 'J'
+    .byte   1, 0, 1
+    .byte   2, 1, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   1, 1, 6
+    .byte   2, 3, 6
+    .byte   0
+_glyph_075:  @ 'K'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 0
+    .byte   0
+_glyph_076:  @ 'L'
+    .byte   1, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_077:  @ 'M'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 2, 3
+    .byte   2, 4, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_078:  @ 'N'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_079:  @ 'O'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   0
+_glyph_080:  @ 'P'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 4
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   0
+_glyph_081:  @ 'Q'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   1, 3, 1
+    .byte   2, 4, 0
+    .byte   0
+_glyph_082:  @ 'R'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 4
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   2, 4, 0
+    .byte   0
+_glyph_083:  @ 'S'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   2, 4, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_084:  @ 'T'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 2, 6
+    .byte   2, 2, 0
+    .byte   0
+_glyph_085:  @ 'U'
+    .byte   1, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_086:  @ 'V'
+    .byte   1, 0, 6
+    .byte   2, 2, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_087:  @ 'W'
+    .byte   1, 0, 6
+    .byte   2, 1, 0
+    .byte   2, 2, 3
+    .byte   2, 3, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_088:  @ 'X'
+    .byte   1, 0, 0
+    .byte   2, 4, 6
+    .byte   1, 0, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_089:  @ 'Y'
+    .byte   1, 0, 6
+    .byte   2, 2, 3
+    .byte   2, 4, 6
+    .byte   1, 2, 3
+    .byte   2, 2, 0
+    .byte   0
+_glyph_090:  @ 'Z'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_097:  @ 'a'
+    .byte   1, 0, 0
+    .byte   2, 2, 6
+    .byte   2, 4, 0
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_098:  @ 'b'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   2, 3, 3
+    .byte   2, 3, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_099:  @ 'c'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_100:  @ 'd'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 1
+    .byte   2, 3, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_101:  @ 'e'
+    .byte   1, 4, 0
+    .byte   2, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 3, 3
+    .byte   0
+_glyph_102:  @ 'f'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 3, 3
+    .byte   0
+_glyph_103:  @ 'g'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 3
+    .byte   2, 2, 3
+    .byte   0
+_glyph_104:  @ 'h'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   1, 4, 0
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 3
+    .byte   0
+_glyph_105:  @ 'i'
+    .byte   1, 1, 0
+    .byte   2, 3, 0
+    .byte   1, 2, 0
+    .byte   2, 2, 6
+    .byte   1, 1, 6
+    .byte   2, 3, 6
+    .byte   0
+_glyph_106:  @ 'j'
+    .byte   1, 0, 1
+    .byte   2, 1, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   1, 1, 6
+    .byte   2, 3, 6
+    .byte   0
+_glyph_107:  @ 'k'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 6
+    .byte   1, 0, 3
+    .byte   2, 4, 0
+    .byte   0
+_glyph_108:  @ 'l'
+    .byte   1, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+_glyph_109:  @ 'm'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 2, 3
+    .byte   2, 4, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_110:  @ 'n'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_111:  @ 'o'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   0
+_glyph_112:  @ 'p'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 4
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   0
+_glyph_113:  @ 'q'
+    .byte   1, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 0
+    .byte   1, 3, 1
+    .byte   2, 4, 0
+    .byte   0
+_glyph_114:  @ 'r'
+    .byte   1, 0, 0
+    .byte   2, 0, 6
+    .byte   2, 3, 6
+    .byte   2, 4, 5
+    .byte   2, 4, 4
+    .byte   2, 3, 3
+    .byte   2, 0, 3
+    .byte   2, 4, 0
+    .byte   0
+_glyph_115:  @ 's'
+    .byte   1, 4, 6
+    .byte   2, 0, 6
+    .byte   2, 0, 3
+    .byte   2, 4, 3
+    .byte   2, 4, 0
+    .byte   2, 0, 0
+    .byte   0
+_glyph_116:  @ 't'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   1, 2, 6
+    .byte   2, 2, 0
+    .byte   0
+_glyph_117:  @ 'u'
+    .byte   1, 0, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_118:  @ 'v'
+    .byte   1, 0, 6
+    .byte   2, 2, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_119:  @ 'w'
+    .byte   1, 0, 6
+    .byte   2, 1, 0
+    .byte   2, 2, 3
+    .byte   2, 3, 0
+    .byte   2, 4, 6
+    .byte   0
+_glyph_120:  @ 'x'
+    .byte   1, 0, 0
+    .byte   2, 4, 6
+    .byte   1, 0, 6
+    .byte   2, 4, 0
+    .byte   0
+_glyph_121:  @ 'y'
+    .byte   1, 0, 6
+    .byte   2, 2, 3
+    .byte   2, 4, 6
+    .byte   1, 2, 3
+    .byte   2, 2, 0
+    .byte   0
+_glyph_122:  @ 'z'
+    .byte   1, 0, 6
+    .byte   2, 4, 6
+    .byte   2, 0, 0
+    .byte   2, 4, 0
+    .byte   0
+
+@ vpy_wait_recal() — BIOS trap: SYS_WAIT_RECAL
+.global vpy_wait_recal
+.type vpy_wait_recal, %function
+.thumb_func
+vpy_wait_recal:
+    svc     #1                      @ SYS_WAIT_RECAL
+    bx      lr
+
+@ vpy_set_intensity(r0=intensity 0-127) — BIOS trap: SYS_SET_INTENSITY
+.global vpy_set_intensity
+.type vpy_set_intensity, %function
+.thumb_func
+vpy_set_intensity:
+    svc     #2                      @ SYS_SET_INTENSITY
+    bx      lr
+
+@ vpy_draw_rect(r0=x, r1=y, r2=w, r3=h, [sp+0]=intensity)
+.global vpy_draw_rect
+.type vpy_draw_rect, %function
+.thumb_func
+vpy_draw_rect:
+    push    {r4, r5, r6, r7, r8, lr}    @ 24 bytes
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    mov     r7, r3
+    ldr     r8, [sp, #24]               @ intensity
+    bl      dv_reset
+    mov     r0, r8
+    bl      vpy_set_intensity
+    mov     r0, r4
+    mov     r1, r5
+    bl      dv_move_to
+    mov     r0, r6
+    mov     r1, #0
+    bl      dv_draw_delta
+    mov     r0, #0
+    mov     r1, r7
+    bl      dv_draw_delta
+    neg     r0, r6
+    mov     r1, #0
+    bl      dv_draw_delta
+    mov     r0, #0
+    neg     r1, r7
+    bl      dv_draw_delta
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vpy_print_text(r0=x, r1=y, r2=str_ptr)
+.global vpy_print_text
+.type vpy_print_text, %function
+.thumb_func
+vpy_print_text:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov     r4, r0
+    mov     r5, r1
+    mov     r6, r2
+    ldr     r7, =TEXT_SIZE
+    ldr     r7, [r7]
+    cmp     r7, #0
+    bne     vpt_sc
+    mov     r7, #3
+vpt_sc:
+    ldr     r8, =VPY_BRIGHTNESS_OVERRIDE
+    ldrb    r8, [r8]
+    cmp     r8, #0
+    bne     vpt_cc
+    ldr     r8, =TEXT_COLOR
+    ldr     r8, [r8]
+    cmp     r8, #0
+    bne     vpt_cc
+    mov     r8, #100
+vpt_cc:
+    bl      dv_reset
+    mov     r0, r8
+    bl      vpy_set_intensity
+    mov     r0, #6
+    mul     r0, r0, r7
+    asr     r0, r0, #1
+    sub     r5, r5, r0
+    mov     r0, r4
+    mov     r1, r5
+    bl      dv_move_to
+    ldr     r10, =PRINT_BEAM_X
+    str     r4, [r10]
+    ldr     r11, =PRINT_BEAM_Y
+    str     r5, [r11]
+    mov     r9, r4              @ cur_x = x
+vpt_loop:
+    ldrb    r0, [r6]
+    add     r6, r6, #1
+    cmp     r0, #0
+    beq     vpt_done
+    cmp     r0, #0x80
+    beq     vpt_done
+    cmp     r0, #0x61
+    blt     vpt_nl
+    cmp     r0, #0x7A
+    bgt     vpt_nl
+    sub     r0, r0, #0x20
+vpt_nl:
+    cmp     r0, #32
+    blt     vpt_adv
+    cmp     r0, #126
+    bgt     vpt_adv
+    sub     r0, r0, #32
+    ldr     r1, =_FONT_PTRS
+    lsl     r0, r0, #2
+    ldr     r0, [r1, r0]
+    cmp     r0, #0
+    beq     vpt_adv
+    push    {r0}
+    bl      dv_reset
+    mov     r0, r8
+    bl vpy_set_intensity
+    mov     r0, #0
+    str r0, [r10]
+    str r0, [r11]
+    pop     {r0}
+    mov     r1, r9
+    mov     r2, r5
+    mov     r3, r7
+    push    {r10, r11}
+    bl      vpt_draw_glyph
+    add     sp, sp, #8
+vpt_adv:
+    mov     r0, #7
+    mul     r0, r0, r7
+    asr     r0, r0, #1
+    add     r9, r9, r0
+    b       vpt_loop
+vpt_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpt_draw_glyph — internal: draw one glyph at (char_x, char_y) with scale
+.type vpt_draw_glyph, %function
+.thumb_func
+vpt_draw_glyph:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov     r4, r0              @ glyph_ptr
+    mov     r5, r1              @ char_x
+    mov     r6, r2              @ char_y
+    mov     r7, r3              @ scale
+    ldr     r8, [sp, #36]       @ bx_ptr (PRINT_BEAM_X)
+    ldr     r9, [sp, #40]       @ by_ptr (PRINT_BEAM_Y)
+    ldr     r10, [r8]           @ beam_x
+    ldr     r11, [r9]           @ beam_y
+vdg_loop:
+    ldrb    r0, [r4]
+    cmp     r0, #0
+    beq     vdg_done
+    ldrb    r1, [r4, #1]        @ gx
+    ldrb    r2, [r4, #2]        @ gy
+    add     r4, r4, #3
+    push    {r0}               @ save cmd
+    mul     r1, r1, r7
+    asr     r1, r1, #1
+    add     r1, r1, r5
+    mul     r2, r2, r7
+    asr     r2, r2, #1
+    add     r2, r2, r6
+    sub     r0, r1, r10         @ dx
+    sub     r3, r2, r11         @ dy
+    mov     r10, r1
+    mov     r11, r2
+    pop     {r1}               @ restore cmd
+    push    {r0, r3}           @ save dx, dy
+    cmp     r1, #1
+    bne     vdg_draw
+    pop     {r0, r1}
+    bl      dv_move_to
+    b       vdg_loop
+vdg_draw:
+    pop     {r0, r1}
+    bl      dv_draw_delta
+    b       vdg_loop
+vdg_done:
+    str     r10, [r8]           @ update PRINT_BEAM_X
+    str     r11, [r9]           @ update PRINT_BEAM_Y
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_j1_x() → r0 = cached J1 X axis (-127..127)
+.global vpy_j1_x
+.type vpy_j1_x, %function
+.thumb_func
+vpy_j1_x:
+    ldr     r0, =J1_AXIS_X
+    ldr     r0, [r0]
+    bx      lr
+
+@ vpy_j1_y() → r0 = cached J1 Y axis (-127..127)
+.global vpy_j1_y
+.type vpy_j1_y, %function
+.thumb_func
+vpy_j1_y:
+    ldr     r0, =J1_AXIS_Y
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_j1_btn1
+.type vpy_j1_btn1, %function
+.thumb_func
+vpy_j1_btn1:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #4, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn2
+.type vpy_j1_btn2, %function
+.thumb_func
+vpy_j1_btn2:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #5, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn3
+.type vpy_j1_btn3, %function
+.thumb_func
+vpy_j1_btn3:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #6, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn4
+.type vpy_j1_btn4, %function
+.thumb_func
+vpy_j1_btn4:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #7, #1
+    eor     r0, r0, #1
+    bx      lr
+
+@ vpy_j2_x() → r0 = cached J2 X axis (-127..127)
+.global vpy_j2_x
+.type vpy_j2_x, %function
+.thumb_func
+vpy_j2_x:
+    ldr     r0, =J2_AXIS_X
+    ldr     r0, [r0]
+    bx      lr
+
+@ vpy_j2_y() → r0 = cached J2 Y axis (-127..127)
+.global vpy_j2_y
+.type vpy_j2_y, %function
+.thumb_func
+vpy_j2_y:
+    ldr     r0, =J2_AXIS_Y
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_j2_btn1
+.type vpy_j2_btn1, %function
+.thumb_func
+vpy_j2_btn1:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #0, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn2
+.type vpy_j2_btn2, %function
+.thumb_func
+vpy_j2_btn2:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #1, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn3
+.type vpy_j2_btn3, %function
+.thumb_func
+vpy_j2_btn3:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #2, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn4
+.type vpy_j2_btn4, %function
+.thumb_func
+vpy_j2_btn4:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #3, #1
+    eor     r0, r0, #1
+    bx      lr
+
+@ vpy_update_buttons() — cache buttons and joystick axes (safe: called in WAIT_RECAL window)
+.global vpy_update_buttons
+.type vpy_update_buttons, %function
+.thumb_func
+vpy_update_buttons:
+    push    {r4, lr}
+    mov     r0, #0xD002
+    mov     r1, #0x0F
+    bl      bus_write
+    mov     r0, #0xD000
+    bl      bus_read
+    ldr     r1, =BTN_STATE_J1
+    str     r0, [r1]
+    mov     r0, #0xD002
+    mov     r1, #0xFF
+    bl      bus_write
+    mov     r0, #14
+    bl      psg_read
+    ldr     r1, =BTN_STATE_J2
+    str     r0, [r1]
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    sxtb    r4, r0
+    ldr     r0, =J1_AXIS_X
+    str     r4, [r0]
+    mov     r0, #0xD000
+    mov     r1, #0x03
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    sxtb    r4, r0
+    ldr     r0, =J1_AXIS_Y
+    str     r4, [r0]
+    mov     r0, #0xD000
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    sxtb    r4, r0
+    ldr     r0, =J2_AXIS_X
+    str     r4, [r0]
+    mov     r0, #0xD000
+    mov     r1, #0x02
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    sxtb    r4, r0
+    ldr     r0, =J2_AXIS_Y
+    str     r4, [r0]
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    pop     {r4, pc}
+    .ltorg
+
+@ psg_write(r0=reg, r1=data) — write AY-3-8912 PSG register
+.global psg_write
+.type psg_write, %function
+.thumb_func
+psg_write:
+    push    {r4, r5, lr}
+    mov     r4, r0              @ reg
+    mov     r5, r1              @ data
+    mov     r0, #0xD001
+    mov     r1, r4
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x19
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD001
+    mov     r1, r5
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x11
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ psg_read(r0=reg) → r0 = PSG register value
+.global psg_read
+.type psg_read, %function
+.thumb_func
+psg_read:
+    push    {r4, lr}
+    mov     r4, r0              @ reg
+    mov     r0, #0xD001
+    mov     r1, r4
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x19
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD003
+    mov     r1, #0x00
+    bl      bus_write
+    mov     r0, #0xD000
+    mov     r1, #0x09
+    bl      bus_write
+    mov     r0, #0xD001
+    bl      bus_read
+    push    {r0}               @ save result
+    mov     r0, #0xD000
+    mov     r1, #0x01
+    bl      bus_write
+    mov     r0, #0xD003
+    mov     r1, #0xFF
+    bl      bus_write
+    pop     {r0}               @ return value
+    pop     {r4, pc}
+    .ltorg
+
+@ vpy_rand() → r0 = pseudo-random 0-32767 (LCG)
+.global vpy_rand
+.type vpy_rand, %function
+.thumb_func
+vpy_rand:
+    push    {r4, r5, lr}
+    ldr     r4, =RAND_SEED
+    ldr     r0, [r4]
+    ldr     r5, =1664525
+    mul     r0, r0, r5
+    ldr     r5, =1013904223
+    add     r0, r0, r5
+    str     r0, [r4]            @ save seed
+    lsr     r0, r0, #16
+    bic     r0, r0, #0x8000      @ clear bit15 (0x8000 is valid Thumb2 immediate)
+    pop     {r4, r5, pc}
+    .ltorg
+
+@ vpy_rand_range(r0=lo, r1=hi) → r0 = random in [lo, hi]
+.global vpy_rand_range
+.type vpy_rand_range, %function
+.thumb_func
+vpy_rand_range:
+    push    {r4, r5, lr}
+    mov     r4, r0              @ lo
+    sub     r5, r1, r0
+    add     r5, r5, #1
+    bl      vpy_rand
+    sdiv    r1, r0, r5
+    mul     r1, r1, r5
+    sub     r0, r0, r1
+    add     r0, r0, r4          @ + lo
+    pop     {r4, r5, pc}
+    .ltorg
+
+.global vpy_set_text_size
+.type vpy_set_text_size, %function
+.thumb_func
+vpy_set_text_size:
+    lsl     r1, r0, #1
+    add     r1, r1, r0
+    add     r1, r1, #4
+    lsr     r1, r1, #3
+    cmp     r1, #1
+    bhs     vsts_ok
+    mov     r1, #1
+vsts_ok:
+    ldr     r0, =TEXT_SIZE
+    str     r1, [r0]
+    bx      lr
+
+.global vpy_set_text_color
+.type vpy_set_text_color, %function
+.thumb_func
+vpy_set_text_color:
+    ldr     r1, =TEXT_COLOR
+    str     r0, [r1]
+    bx      lr
+
+@ --- User variables (RAM) ---
+.equ VAR_CARD_W, 0x2007F460  @ const scalar
+.equ VAR_CARD_H, 0x2007F464  @ const scalar
+.equ VAR_COL_DY, 0x2007F468  @ const scalar
+.equ VAR_HALF_W, 0x2007F46C  @ const scalar
+.equ VAR_TOP_Y, 0x2007F470  @ const scalar
+.equ VAR_TAB_Y, 0x2007F474  @ const scalar
+.equ VAR_STK_X, 0x2007F478  @ const scalar
+.equ VAR_WST_X, 0x2007F47C  @ const scalar
+.equ VAR_F0_X, 0x2007F480  @ const scalar
+.equ VAR_F1_X, 0x2007F484  @ const scalar
+.equ VAR_F2_X, 0x2007F488  @ const scalar
+.equ VAR_F3_X, 0x2007F48C  @ const scalar
+.equ VAR_TAB_X0, 0x2007F490  @ const scalar
+.equ VAR_TAB_X1, 0x2007F494  @ const scalar
+.equ VAR_TAB_X2, 0x2007F498  @ const scalar
+.equ VAR_TAB_X3, 0x2007F49C  @ const scalar
+.equ VAR_TAB_X4, 0x2007F4A0  @ const scalar
+.equ VAR_TAB_X5, 0x2007F4A4  @ const scalar
+.equ VAR_TAB_X6, 0x2007F4A8  @ const scalar
+.equ VAR_INT_CARD, 0x2007F4AC  @ const scalar
+.equ VAR_INT_CURSOR, 0x2007F4B0  @ const scalar
+.equ VAR_INT_FACEDN, 0x2007F4B4  @ const scalar
+.equ VAR_INT_EMPTY, 0x2007F4B8  @ const scalar
+.equ VAR_INT_HELD, 0x2007F4BC  @ const scalar
+.equ VAR_STATE_PLAY, 0x2007F4C0  @ const scalar
+.equ VAR_STATE_WIN, 0x2007F4C4  @ const scalar
+.equ ARRAY_DECK_DATA, 0x2007F4C8
+.equ ARRAY_DECK_LEN, 52
+.equ VAR_DECK, 0x2007F530  @ array pointer
+.equ ARRAY_TAB_DATA, 0x2007F534
+.equ ARRAY_TAB_LEN, 140
+.equ VAR_TAB, 0x2007F64C  @ array pointer
+.equ ARRAY_TAB_SZ_DATA, 0x2007F650
+.equ ARRAY_TAB_SZ_LEN, 7
+.equ VAR_TAB_SZ, 0x2007F660  @ array pointer
+.equ ARRAY_TAB_HID_DATA, 0x2007F664
+.equ ARRAY_TAB_HID_LEN, 7
+.equ VAR_TAB_HID, 0x2007F674  @ array pointer
+.equ ARRAY_FOUND_CNT_DATA, 0x2007F678
+.equ ARRAY_FOUND_CNT_LEN, 4
+.equ VAR_FOUND_CNT, 0x2007F680  @ array pointer
+.equ ARRAY_STOCK_DATA, 0x2007F684
+.equ ARRAY_STOCK_LEN, 24
+.equ VAR_STOCK, 0x2007F6B4  @ array pointer
+.equ VAR_STK_SZ, 0x2007F6B8
+.equ ARRAY_WASTE_DATA, 0x2007F6BC
+.equ ARRAY_WASTE_LEN, 24
+.equ VAR_WASTE, 0x2007F6EC  @ array pointer
+.equ VAR_WST_SZ, 0x2007F6F0
+.equ VAR_CURSOR, 0x2007F6F4
+.equ VAR_SEL_CARD, 0x2007F6F8
+.equ VAR_SEL_SRC, 0x2007F6FC
+.equ VAR_GAME_STATE, 0x2007F700
+.equ VAR_WIN_BLINK, 0x2007F704
+.equ VAR_PREV_BTN1, 0x2007F708
+.equ VAR_PREV_BTN2, 0x2007F70C
+.equ VAR_BTN1_FIRE, 0x2007F710
+.equ VAR_BTN2_FIRE, 0x2007F714
+.equ VAR_PREV_JX, 0x2007F718
+.equ VAR_G_RESULT, 0x2007F71C
+.equ VAR_G_COL_X, 0x2007F720
+.equ VAR_G_CARD, 0x2007F724
+.equ VAR_G_RANK, 0x2007F728
+.equ VAR_G_SUIT, 0x2007F72C
+.equ VAR_G_SZ, 0x2007F730
+.equ VAR_G_HD, 0x2007F734
+.equ VAR_G_IDX, 0x2007F738
+.equ VAR_G_CY, 0x2007F73C
+.equ VAR_G_TIDX, 0x2007F740
+.equ VAR_G_TOP, 0x2007F744
+.equ VAR_G_TR, 0x2007F748
+.equ VAR_G_TC, 0x2007F74C
+.equ VAR_G_TOP_RED, 0x2007F750
+.equ VAR_G_CARD_RED, 0x2007F754
+.equ VAR_G_PLACED, 0x2007F758
+.equ VAR_DEAL_IDX, 0x2007F75C
+.equ VAR_G_ROW, 0x2007F760
+.equ VAR_G_C, 0x2007F764
+.equ VAR_G_CX, 0x2007F768
+.equ VAR_G_FC, 0x2007F76C
+.equ VAR_G_WCARD, 0x2007F770
+.equ VAR_G_FX, 0x2007F774
+.equ VAR_CARD, 0x2007F778  @ param
+.equ VAR_COL, 0x2007F77C  @ param
+.equ VAR_SUIT, 0x2007F780  @ param
+.equ VAR_FX, 0x2007F784  @ param
+.equ VAR_X, 0x2007F788  @ param
+.equ VAR_Y, 0x2007F78C  @ param
+.equ VAR_INTENSITY, 0x2007F790  @ param
+.equ VAR_N, 0x2007F794  @ param
+.equ VAR_R, 0x2007F798  @ param
+.equ VAR_S, 0x2007F79C  @ param
+
+@ --- Const array ROM data ---
+
+@ --- function SHUFFLE ---
+.align 2
+.global SHUFFLE
+.type SHUFFLE, %function
+.thumb_func
+SHUFFLE:
+    push    {r4, r5, r6, r7, lr}
+    mov     r0, #51
+    ldr     r1, =0x2007F764    @ G_C
+    str     r0, [r1]
+while_top_0:
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf0
+    movs    r0, #1
+    b       .Lcf0e
+.Lcf0:
+    movs    r0, #0
+.Lcf0e:
+    cmp     r0, #0
+    beq     while_end_0
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_rand_range
+    ldr     r1, =0x2007F738    @ G_IDX
+    str     r0, [r1]
+    ldr     r1, =0x2007F530    @ DECK
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F724    @ G_CARD
+    str     r0, [r1]
+    ldr     r1, =0x2007F530    @ DECK
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F738    @ G_IDX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F530    @ DECK
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    ldr     r1, =0x2007F724    @ G_CARD
+    ldr     r0, [r1]
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F530    @ DECK
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F738    @ G_IDX
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F764    @ G_C
+    str     r0, [r1]
+    b       while_top_0
+while_end_0:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DEAL ---
+.align 2
+.global DEAL
+.type DEAL, %function
+.thumb_func
+DEAL:
+    push    {r4, r5, r6, r7, lr}
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #0
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #1
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #2
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #3
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #4
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #5
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #6
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #0
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #1
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #2
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #3
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #4
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #5
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #6
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F680    @ FOUND_CNT
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #0
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F680    @ FOUND_CNT
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #1
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F680    @ FOUND_CNT
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #2
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F680    @ FOUND_CNT
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    mov     r0, #3
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #0
+    ldr     r1, =0x2007F6B8    @ STK_SZ
+    str     r0, [r1]
+    mov     r0, #0
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    str     r0, [r1]
+    ldr     r0, =-1
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    str     r0, [r1]
+    ldr     r0, =-1
+    ldr     r1, =0x2007F6FC    @ SEL_SRC
+    str     r0, [r1]
+    mov     r0, #0
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    str     r0, [r1]
+    mov     r0, #0
+    ldr     r1, =0x2007F75C    @ DEAL_IDX
+    str     r0, [r1]
+    mov     r0, #0
+    ldr     r1, =0x2007F764    @ G_C
+    str     r0, [r1]
+while_top_1:
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #7
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf1
+    movs    r0, #1
+    b       .Lcf1e
+.Lcf1:
+    movs    r0, #0
+.Lcf1e:
+    cmp     r0, #0
+    beq     while_end_1
+    mov     r0, #0
+    ldr     r1, =0x2007F760    @ G_ROW
+    str     r0, [r1]
+while_top_2:
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bgt    .Lcf2
+    movs    r0, #1
+    b       .Lcf2e
+.Lcf2:
+    movs    r0, #0
+.Lcf2e:
+    cmp     r0, #0
+    beq     while_end_2
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #20
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F740    @ G_TIDX
+    str     r0, [r1]
+    ldr     r1, =0x2007F530    @ DECK
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F75C    @ DEAL_IDX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F64C    @ TAB
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F740    @ G_TIDX
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    ldr     r1, =0x2007F75C    @ DEAL_IDX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F75C    @ DEAL_IDX
+    str     r0, [r1]
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F760    @ G_ROW
+    str     r0, [r1]
+    b       while_top_2
+while_end_2:
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F764    @ G_C
+    str     r0, [r1]
+    b       while_top_1
+while_end_1:
+    mov     r0, #0
+    ldr     r1, =0x2007F760    @ G_ROW
+    str     r0, [r1]
+while_top_3:
+    ldr     r1, =0x2007F75C    @ DEAL_IDX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #52
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf3
+    movs    r0, #1
+    b       .Lcf3e
+.Lcf3:
+    movs    r0, #0
+.Lcf3e:
+    cmp     r0, #0
+    beq     while_end_3
+    ldr     r1, =0x2007F530    @ DECK
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F75C    @ DEAL_IDX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F6B4    @ STOCK
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    ldr     r1, =0x2007F75C    @ DEAL_IDX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F75C    @ DEAL_IDX
+    str     r0, [r1]
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F760    @ G_ROW
+    str     r0, [r1]
+    b       while_top_3
+while_end_3:
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F6B8    @ STK_SZ
+    str     r0, [r1]
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function UPDATE_INPUT ---
+.align 2
+.global UPDATE_INPUT
+.type UPDATE_INPUT, %function
+.thumb_func
+UPDATE_INPUT:
+    push    {r4, r5, r6, r7, lr}
+    bl      vpy_j1_x
+    ldr     r1, =0x2007F738    @ G_IDX
+    str     r0, [r1]
+    mov     r0, #0
+    ldr     r1, =0x2007F760    @ G_ROW
+    str     r0, [r1]
+    ldr     r1, =0x2007F738    @ G_IDX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #40
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf4
+    movs    r0, #1
+    b       .Lcf4e
+.Lcf4:
+    movs    r0, #0
+.Lcf4e:
+    cmp     r0, #0
+    beq     if_else_4
+    mov     r0, #1
+    ldr     r1, =0x2007F760    @ G_ROW
+    str     r0, [r1]
+    b       if_end_4
+if_else_4:
+    ldr     r1, =0x2007F738    @ G_IDX
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-40
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf5
+    movs    r0, #1
+    b       .Lcf5e
+.Lcf5:
+    movs    r0, #0
+.Lcf5e:
+    cmp     r0, #0
+    beq     elif_end_5
+    ldr     r0, =-1
+    ldr     r1, =0x2007F760    @ G_ROW
+    str     r0, [r1]
+    b       if_end_4
+elif_end_5:
+if_end_4:
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf6
+    movs    r0, #1
+    b       .Lcf6e
+.Lcf6:
+    movs    r0, #0
+.Lcf6e:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F718    @ PREV_JX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf7
+    movs    r0, #1
+    b       .Lcf7e
+.Lcf7:
+    movs    r0, #0
+.Lcf7e:
+    cmp     r0, #0
+    beq    .Lcf8
+    movs    r0, #1
+    b       .Lcf8e
+.Lcf8:
+    movs    r0, #0
+.Lcf8e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     if_else_6
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    str     r0, [r1]
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #12
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf9
+    movs    r0, #1
+    b       .Lcf9e
+.Lcf9:
+    movs    r0, #0
+.Lcf9e:
+    cmp     r0, #0
+    beq     if_else_7
+    mov     r0, #0
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    str     r0, [r1]
+    b       if_end_7
+if_else_7:
+if_end_7:
+    b       if_end_6
+if_else_6:
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf10
+    movs    r0, #1
+    b       .Lcf10e
+.Lcf10:
+    movs    r0, #0
+.Lcf10e:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F718    @ PREV_JX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf11
+    movs    r0, #1
+    b       .Lcf11e
+.Lcf11:
+    movs    r0, #0
+.Lcf11e:
+    cmp     r0, #0
+    beq    .Lcf12
+    movs    r0, #1
+    b       .Lcf12e
+.Lcf12:
+    movs    r0, #0
+.Lcf12e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     elif_end_8
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    str     r0, [r1]
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf13
+    movs    r0, #1
+    b       .Lcf13e
+.Lcf13:
+    movs    r0, #0
+.Lcf13e:
+    cmp     r0, #0
+    beq     if_else_9
+    mov     r0, #12
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    str     r0, [r1]
+    b       if_end_9
+if_else_9:
+if_end_9:
+    b       if_end_6
+elif_end_8:
+if_end_6:
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F718    @ PREV_JX
+    str     r0, [r1]
+    ldr     r1, =0x2007F714    @ BTN2_FIRE
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf14
+    movs    r0, #1
+    b       .Lcf14e
+.Lcf14:
+    movs    r0, #0
+.Lcf14e:
+    cmp     r0, #0
+    beq     if_else_10
+    bl      DO_DEAL_STOCK
+    b       if_end_10
+if_else_10:
+if_end_10:
+    ldr     r1, =0x2007F710    @ BTN1_FIRE
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf15
+    movs    r0, #1
+    b       .Lcf15e
+.Lcf15:
+    movs    r0, #0
+.Lcf15e:
+    cmp     r0, #0
+    beq     if_else_11
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf16
+    movs    r0, #1
+    b       .Lcf16e
+.Lcf16:
+    movs    r0, #0
+.Lcf16e:
+    cmp     r0, #0
+    beq     if_else_12
+    bl      DO_PICK_UP
+    b       if_end_12
+if_else_12:
+    bl      DO_PLACE
+if_end_12:
+    b       if_end_11
+if_else_11:
+if_end_11:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DO_DEAL_STOCK ---
+.align 2
+.global DO_DEAL_STOCK
+.type DO_DEAL_STOCK, %function
+.thumb_func
+DO_DEAL_STOCK:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r1, =0x2007F6B8    @ STK_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf17
+    movs    r0, #1
+    b       .Lcf17e
+.Lcf17:
+    movs    r0, #0
+.Lcf17e:
+    cmp     r0, #0
+    beq     if_else_13
+    ldr     r1, =0x2007F6B8    @ STK_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F6B8    @ STK_SZ
+    str     r0, [r1]
+    ldr     r1, =0x2007F6B4    @ STOCK
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F6B8    @ STK_SZ
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F6EC    @ WASTE
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    str     r0, [r1]
+    b       if_end_13
+if_else_13:
+    mov     r0, #0
+    ldr     r1, =0x2007F760    @ G_ROW
+    str     r0, [r1]
+while_top_14:
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf18
+    movs    r0, #1
+    b       .Lcf18e
+.Lcf18:
+    movs    r0, #0
+.Lcf18e:
+    cmp     r0, #0
+    beq     while_end_14
+    ldr     r1, =0x2007F6EC    @ WASTE
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F6B4    @ STOCK
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F760    @ G_ROW
+    str     r0, [r1]
+    b       while_top_14
+while_end_14:
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F6B8    @ STK_SZ
+    str     r0, [r1]
+    mov     r0, #0
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    str     r0, [r1]
+if_end_13:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DO_PICK_UP ---
+.align 2
+.global DO_PICK_UP
+.type DO_PICK_UP, %function
+.thumb_func
+DO_PICK_UP:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #6
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bgt    .Lcf19
+    movs    r0, #1
+    b       .Lcf19e
+.Lcf19:
+    movs    r0, #0
+.Lcf19e:
+    cmp     r0, #0
+    beq     if_else_15
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F764    @ G_C
+    str     r0, [r1]
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F730    @ G_SZ
+    str     r0, [r1]
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F734    @ G_HD
+    str     r0, [r1]
+    ldr     r1, =0x2007F730    @ G_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf20
+    movs    r0, #1
+    b       .Lcf20e
+.Lcf20:
+    movs    r0, #0
+.Lcf20e:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F730    @ G_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F734    @ G_HD
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf21
+    movs    r0, #1
+    b       .Lcf21e
+.Lcf21:
+    movs    r0, #0
+.Lcf21e:
+    cmp     r0, #0
+    beq    .Lcf22
+    movs    r0, #1
+    b       .Lcf22e
+.Lcf22:
+    movs    r0, #0
+.Lcf22e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     if_else_16
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #20
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F730    @ G_SZ
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F740    @ G_TIDX
+    str     r0, [r1]
+    ldr     r1, =0x2007F64C    @ TAB
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F740    @ G_TIDX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    str     r0, [r1]
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F6FC    @ SEL_SRC
+    str     r0, [r1]
+    ldr     r1, =0x2007F730    @ G_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf23
+    movs    r0, #1
+    b       .Lcf23e
+.Lcf23:
+    movs    r0, #0
+.Lcf23e:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bgt    .Lcf24
+    movs    r0, #1
+    b       .Lcf24e
+.Lcf24:
+    movs    r0, #0
+.Lcf24e:
+    cmp     r0, #0
+    beq    .Lcf25
+    movs    r0, #1
+    b       .Lcf25e
+.Lcf25:
+    movs    r0, #0
+.Lcf25e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     if_else_17
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    b       if_end_17
+if_else_17:
+if_end_17:
+    b       if_end_16
+if_else_16:
+if_end_16:
+    b       if_end_15
+if_else_15:
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #8
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf26
+    movs    r0, #1
+    b       .Lcf26e
+.Lcf26:
+    movs    r0, #0
+.Lcf26e:
+    cmp     r0, #0
+    beq     elif_end_18
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf27
+    movs    r0, #1
+    b       .Lcf27e
+.Lcf27:
+    movs    r0, #0
+.Lcf27e:
+    cmp     r0, #0
+    beq     if_else_19
+    ldr     r1, =0x2007F6EC    @ WASTE
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    str     r0, [r1]
+    mov     r0, #8
+    ldr     r1, =0x2007F6FC    @ SEL_SRC
+    str     r0, [r1]
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    str     r0, [r1]
+    b       if_end_19
+if_else_19:
+if_end_19:
+    b       if_end_15
+elif_end_18:
+if_end_15:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DO_PLACE ---
+.align 2
+.global DO_PLACE
+.type DO_PLACE, %function
+.thumb_func
+DO_PLACE:
+    push    {r4, r5, r6, r7, lr}
+    mov     r0, #0
+    ldr     r1, =0x2007F758    @ G_PLACED
+    str     r0, [r1]
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #6
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bgt    .Lcf28
+    movs    r0, #1
+    b       .Lcf28e
+.Lcf28:
+    movs    r0, #0
+.Lcf28e:
+    cmp     r0, #0
+    beq     if_else_20
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r1}
+    pop     {r0}
+    bl      CAN_MOVE_TO_TAB
+    ldr     r1, =0x2007F71C    @ G_RESULT
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf29
+    movs    r0, #1
+    b       .Lcf29e
+.Lcf29:
+    movs    r0, #0
+.Lcf29e:
+    cmp     r0, #0
+    beq     if_else_21
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #20
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F740    @ G_TIDX
+    str     r0, [r1]
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    ldr     r0, [r1]
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F64C    @ TAB
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F740    @ G_TIDX
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #1
+    ldr     r1, =0x2007F758    @ G_PLACED
+    str     r0, [r1]
+    b       if_end_21
+if_else_21:
+if_end_21:
+    b       if_end_20
+if_else_20:
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #9
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    blt    .Lcf30
+    movs    r0, #1
+    b       .Lcf30e
+.Lcf30:
+    movs    r0, #0
+.Lcf30e:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #12
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bgt    .Lcf31
+    movs    r0, #1
+    b       .Lcf31e
+.Lcf31:
+    movs    r0, #0
+.Lcf31e:
+    cmp     r0, #0
+    beq    .Lcf32
+    movs    r0, #1
+    b       .Lcf32e
+.Lcf32:
+    movs    r0, #0
+.Lcf32e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     elif_end_22
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #9
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F72C    @ G_SUIT
+    str     r0, [r1]
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F72C    @ G_SUIT
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r1}
+    pop     {r0}
+    bl      CAN_MOVE_TO_FOUND
+    ldr     r1, =0x2007F71C    @ G_RESULT
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf33
+    movs    r0, #1
+    b       .Lcf33e
+.Lcf33:
+    movs    r0, #0
+.Lcf33e:
+    cmp     r0, #0
+    beq     if_else_23
+    ldr     r1, =0x2007F680    @ FOUND_CNT
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F72C    @ G_SUIT
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F680    @ FOUND_CNT
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F72C    @ G_SUIT
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    mov     r0, #1
+    ldr     r1, =0x2007F758    @ G_PLACED
+    str     r0, [r1]
+    b       if_end_23
+if_else_23:
+if_end_23:
+    b       if_end_20
+elif_end_22:
+if_end_20:
+    ldr     r1, =0x2007F758    @ G_PLACED
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf34
+    movs    r0, #1
+    b       .Lcf34e
+.Lcf34:
+    movs    r0, #0
+.Lcf34e:
+    cmp     r0, #0
+    beq     if_else_24
+    ldr     r0, =-1
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    str     r0, [r1]
+    ldr     r0, =-1
+    ldr     r1, =0x2007F6FC    @ SEL_SRC
+    str     r0, [r1]
+    b       if_end_24
+if_else_24:
+    bl      RETURN_CARD_TO_SRC
+if_end_24:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function RETURN_CARD_TO_SRC ---
+.align 2
+.global RETURN_CARD_TO_SRC
+.type RETURN_CARD_TO_SRC, %function
+.thumb_func
+RETURN_CARD_TO_SRC:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r1, =0x2007F6FC    @ SEL_SRC
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    blt    .Lcf35
+    movs    r0, #1
+    b       .Lcf35e
+.Lcf35:
+    movs    r0, #0
+.Lcf35e:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F6FC    @ SEL_SRC
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #6
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bgt    .Lcf36
+    movs    r0, #1
+    b       .Lcf36e
+.Lcf36:
+    movs    r0, #0
+.Lcf36e:
+    cmp     r0, #0
+    beq    .Lcf37
+    movs    r0, #1
+    b       .Lcf37e
+.Lcf37:
+    movs    r0, #0
+.Lcf37e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     if_else_25
+    ldr     r1, =0x2007F6FC    @ SEL_SRC
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F764    @ G_C
+    str     r0, [r1]
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf38
+    movs    r0, #1
+    b       .Lcf38e
+.Lcf38:
+    movs    r0, #0
+.Lcf38e:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf39
+    movs    r0, #1
+    b       .Lcf39e
+.Lcf39:
+    movs    r0, #0
+.Lcf39e:
+    cmp     r0, #0
+    beq    .Lcf40
+    movs    r0, #1
+    b       .Lcf40e
+.Lcf40:
+    movs    r0, #0
+.Lcf40e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     if_else_26
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    b       if_end_26
+if_else_26:
+if_end_26:
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #20
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F740    @ G_TIDX
+    str     r0, [r1]
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    ldr     r0, [r1]
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F64C    @ TAB
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F740    @ G_TIDX
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    b       if_end_25
+if_else_25:
+    ldr     r1, =0x2007F6FC    @ SEL_SRC
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #8
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf41
+    movs    r0, #1
+    b       .Lcf41e
+.Lcf41:
+    movs    r0, #0
+.Lcf41e:
+    cmp     r0, #0
+    beq     elif_end_27
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    ldr     r0, [r1]
+    push    {r0}           @ save value
+    ldr     r1, =0x2007F6EC    @ WASTE
+    ldr     r0, [r1]
+    push    {r0}           @ save base ptr
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    ldr     r0, [r1]
+    lsl     r0, r0, #1     @ index * 2 (16-bit elements)
+    pop     {r1}           @ base ptr
+    add     r1, r1, r0     @ element addr
+    pop     {r0}           @ value
+    strh    r0, [r1]       @ store 16-bit
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    str     r0, [r1]
+    b       if_end_25
+elif_end_27:
+if_end_25:
+    ldr     r0, =-1
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    str     r0, [r1]
+    ldr     r0, =-1
+    ldr     r1, =0x2007F6FC    @ SEL_SRC
+    str     r0, [r1]
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function CAN_MOVE_TO_TAB ---
+.align 2
+.global CAN_MOVE_TO_TAB
+.type CAN_MOVE_TO_TAB, %function
+.thumb_func
+CAN_MOVE_TO_TAB:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r4, =0x2007F778    @ save param card
+    str     r0, [r4]
+    ldr     r4, =0x2007F77C    @ save param col
+    str     r1, [r4]
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F77C    @ COL
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F730    @ G_SZ
+    str     r0, [r1]
+    ldr     r1, =0x2007F778    @ CARD
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    sdiv    r0, r0, r1
+    ldr     r1, =0x2007F728    @ G_RANK
+    str     r0, [r1]
+    ldr     r1, =0x2007F730    @ G_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf42
+    movs    r0, #1
+    b       .Lcf42e
+.Lcf42:
+    movs    r0, #0
+.Lcf42e:
+    cmp     r0, #0
+    beq     if_else_28
+    ldr     r1, =0x2007F728    @ G_RANK
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #12
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf43
+    movs    r0, #1
+    b       .Lcf43e
+.Lcf43:
+    movs    r0, #0
+.Lcf43e:
+    cmp     r0, #0
+    beq     if_else_29
+    mov     r0, #1
+    ldr     r1, =0x2007F71C    @ G_RESULT
+    str     r0, [r1]
+    b       if_end_29
+if_else_29:
+    mov     r0, #0
+    ldr     r1, =0x2007F71C    @ G_RESULT
+    str     r0, [r1]
+if_end_29:
+    pop     {r4, r5, r6, r7, pc}
+    b       if_end_28
+if_else_28:
+if_end_28:
+    ldr     r1, =0x2007F77C    @ COL
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #20
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F730    @ G_SZ
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F740    @ G_TIDX
+    str     r0, [r1]
+    ldr     r1, =0x2007F64C    @ TAB
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F740    @ G_TIDX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F744    @ G_TOP
+    str     r0, [r1]
+    ldr     r1, =0x2007F744    @ G_TOP
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    sdiv    r0, r0, r1
+    ldr     r1, =0x2007F748    @ G_TR
+    str     r0, [r1]
+    ldr     r1, =0x2007F744    @ G_TOP
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F748    @ G_TR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F74C    @ G_TC
+    str     r0, [r1]
+    ldr     r1, =0x2007F778    @ CARD
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F728    @ G_RANK
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F72C    @ G_SUIT
+    str     r0, [r1]
+    mov     r0, #0
+    ldr     r1, =0x2007F750    @ G_TOP_RED
+    str     r0, [r1]
+    ldr     r1, =0x2007F74C    @ G_TC
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf44
+    movs    r0, #1
+    b       .Lcf44e
+.Lcf44:
+    movs    r0, #0
+.Lcf44e:
+    cmp     r0, #0
+    bne     1f
+    ldr     r1, =0x2007F74C    @ G_TC
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #2
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf45
+    movs    r0, #1
+    b       .Lcf45e
+.Lcf45:
+    movs    r0, #0
+.Lcf45e:
+    b       2f
+1:  mov     r0, #1
+2:
+    cmp     r0, #0
+    beq     if_else_30
+    mov     r0, #1
+    ldr     r1, =0x2007F750    @ G_TOP_RED
+    str     r0, [r1]
+    b       if_end_30
+if_else_30:
+if_end_30:
+    mov     r0, #0
+    ldr     r1, =0x2007F754    @ G_CARD_RED
+    str     r0, [r1]
+    ldr     r1, =0x2007F72C    @ G_SUIT
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf46
+    movs    r0, #1
+    b       .Lcf46e
+.Lcf46:
+    movs    r0, #0
+.Lcf46e:
+    cmp     r0, #0
+    bne     1f
+    ldr     r1, =0x2007F72C    @ G_SUIT
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #2
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf47
+    movs    r0, #1
+    b       .Lcf47e
+.Lcf47:
+    movs    r0, #0
+.Lcf47e:
+    b       2f
+1:  mov     r0, #1
+2:
+    cmp     r0, #0
+    beq     if_else_31
+    mov     r0, #1
+    ldr     r1, =0x2007F754    @ G_CARD_RED
+    str     r0, [r1]
+    b       if_end_31
+if_else_31:
+if_end_31:
+    ldr     r1, =0x2007F750    @ G_TOP_RED
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F754    @ G_CARD_RED
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf48
+    movs    r0, #1
+    b       .Lcf48e
+.Lcf48:
+    movs    r0, #0
+.Lcf48e:
+    cmp     r0, #0
+    beq     if_else_32
+    mov     r0, #0
+    ldr     r1, =0x2007F71C    @ G_RESULT
+    str     r0, [r1]
+    pop     {r4, r5, r6, r7, pc}
+    b       if_end_32
+if_else_32:
+if_end_32:
+    ldr     r1, =0x2007F728    @ G_RANK
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F748    @ G_TR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf49
+    movs    r0, #1
+    b       .Lcf49e
+.Lcf49:
+    movs    r0, #0
+.Lcf49e:
+    cmp     r0, #0
+    beq     if_else_33
+    mov     r0, #1
+    ldr     r1, =0x2007F71C    @ G_RESULT
+    str     r0, [r1]
+    b       if_end_33
+if_else_33:
+    mov     r0, #0
+    ldr     r1, =0x2007F71C    @ G_RESULT
+    str     r0, [r1]
+if_end_33:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function CAN_MOVE_TO_FOUND ---
+.align 2
+.global CAN_MOVE_TO_FOUND
+.type CAN_MOVE_TO_FOUND, %function
+.thumb_func
+CAN_MOVE_TO_FOUND:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r4, =0x2007F778    @ save param card
+    str     r0, [r4]
+    ldr     r4, =0x2007F780    @ save param suit
+    str     r1, [r4]
+    ldr     r1, =0x2007F778    @ CARD
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    sdiv    r0, r0, r1
+    ldr     r1, =0x2007F728    @ G_RANK
+    str     r0, [r1]
+    ldr     r1, =0x2007F778    @ CARD
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F728    @ G_RANK
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F72C    @ G_SUIT
+    str     r0, [r1]
+    ldr     r1, =0x2007F72C    @ G_SUIT
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F780    @ SUIT
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    beq    .Lcf50
+    movs    r0, #1
+    b       .Lcf50e
+.Lcf50:
+    movs    r0, #0
+.Lcf50e:
+    cmp     r0, #0
+    beq     if_else_34
+    mov     r0, #0
+    ldr     r1, =0x2007F71C    @ G_RESULT
+    str     r0, [r1]
+    pop     {r4, r5, r6, r7, pc}
+    b       if_end_34
+if_else_34:
+if_end_34:
+    ldr     r1, =0x2007F680    @ FOUND_CNT
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F780    @ SUIT
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F76C    @ G_FC
+    str     r0, [r1]
+    ldr     r1, =0x2007F76C    @ G_FC
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf51
+    movs    r0, #1
+    b       .Lcf51e
+.Lcf51:
+    movs    r0, #0
+.Lcf51e:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F728    @ G_RANK
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf52
+    movs    r0, #1
+    b       .Lcf52e
+.Lcf52:
+    movs    r0, #0
+.Lcf52e:
+    cmp     r0, #0
+    beq    .Lcf53
+    movs    r0, #1
+    b       .Lcf53e
+.Lcf53:
+    movs    r0, #0
+.Lcf53e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     if_else_35
+    mov     r0, #1
+    ldr     r1, =0x2007F71C    @ G_RESULT
+    str     r0, [r1]
+    pop     {r4, r5, r6, r7, pc}
+    b       if_end_35
+if_else_35:
+if_end_35:
+    ldr     r1, =0x2007F76C    @ G_FC
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf54
+    movs    r0, #1
+    b       .Lcf54e
+.Lcf54:
+    movs    r0, #0
+.Lcf54e:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F728    @ G_RANK
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F76C    @ G_FC
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf55
+    movs    r0, #1
+    b       .Lcf55e
+.Lcf55:
+    movs    r0, #0
+.Lcf55e:
+    cmp     r0, #0
+    beq    .Lcf56
+    movs    r0, #1
+    b       .Lcf56e
+.Lcf56:
+    movs    r0, #0
+.Lcf56e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     if_else_36
+    mov     r0, #1
+    ldr     r1, =0x2007F71C    @ G_RESULT
+    str     r0, [r1]
+    pop     {r4, r5, r6, r7, pc}
+    b       if_end_36
+if_else_36:
+if_end_36:
+    mov     r0, #0
+    ldr     r1, =0x2007F71C    @ G_RESULT
+    str     r0, [r1]
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function CHECK_WIN ---
+.align 2
+.global CHECK_WIN
+.type CHECK_WIN, %function
+.thumb_func
+CHECK_WIN:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r1, =0x2007F680    @ FOUND_CNT
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}
+    mov     r0, #13
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf57
+    movs    r0, #1
+    b       .Lcf57e
+.Lcf57:
+    movs    r0, #0
+.Lcf57e:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F680    @ FOUND_CNT
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}
+    mov     r0, #13
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf58
+    movs    r0, #1
+    b       .Lcf58e
+.Lcf58:
+    movs    r0, #0
+.Lcf58e:
+    cmp     r0, #0
+    beq    .Lcf59
+    movs    r0, #1
+    b       .Lcf59e
+.Lcf59:
+    movs    r0, #0
+.Lcf59e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F680    @ FOUND_CNT
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #2
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}
+    mov     r0, #13
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf60
+    movs    r0, #1
+    b       .Lcf60e
+.Lcf60:
+    movs    r0, #0
+.Lcf60e:
+    cmp     r0, #0
+    beq    .Lcf61
+    movs    r0, #1
+    b       .Lcf61e
+.Lcf61:
+    movs    r0, #0
+.Lcf61e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F680    @ FOUND_CNT
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #3
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    push    {r0}
+    mov     r0, #13
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf62
+    movs    r0, #1
+    b       .Lcf62e
+.Lcf62:
+    movs    r0, #0
+.Lcf62e:
+    cmp     r0, #0
+    beq    .Lcf63
+    movs    r0, #1
+    b       .Lcf63e
+.Lcf63:
+    movs    r0, #0
+.Lcf63e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     if_else_37
+    ldr     r1, =0x2007F4C4    @ STATE_WIN
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F700    @ GAME_STATE
+    str     r0, [r1]
+    b       if_end_37
+if_else_37:
+if_end_37:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DRAW_TABLE ---
+.align 2
+.global DRAW_TABLE
+.type DRAW_TABLE, %function
+.thumb_func
+DRAW_TABLE:
+    push    {r4, r5, r6, r7, lr}
+    bl      DRAW_STOCK
+    bl      DRAW_WASTE
+    bl      DRAW_FOUNDATIONS
+    bl      DRAW_TABLEAU
+    bl      DRAW_HELD_LABEL
+    bl      DRAW_CURSOR
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function GET_COL_X ---
+.align 2
+.global GET_COL_X
+.type GET_COL_X, %function
+.thumb_func
+GET_COL_X:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r4, =0x2007F77C    @ save param col
+    str     r0, [r4]
+    ldr     r1, =0x2007F77C    @ COL
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf64
+    movs    r0, #1
+    b       .Lcf64e
+.Lcf64:
+    movs    r0, #0
+.Lcf64e:
+    cmp     r0, #0
+    beq     if_else_38
+    ldr     r1, =0x2007F490    @ TAB_X0
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F720    @ G_COL_X
+    str     r0, [r1]
+    b       if_end_38
+if_else_38:
+    ldr     r1, =0x2007F77C    @ COL
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf65
+    movs    r0, #1
+    b       .Lcf65e
+.Lcf65:
+    movs    r0, #0
+.Lcf65e:
+    cmp     r0, #0
+    beq     elif_end_39
+    ldr     r1, =0x2007F494    @ TAB_X1
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F720    @ G_COL_X
+    str     r0, [r1]
+    b       if_end_38
+elif_end_39:
+    ldr     r1, =0x2007F77C    @ COL
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #2
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf66
+    movs    r0, #1
+    b       .Lcf66e
+.Lcf66:
+    movs    r0, #0
+.Lcf66e:
+    cmp     r0, #0
+    beq     elif_end_40
+    ldr     r1, =0x2007F498    @ TAB_X2
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F720    @ G_COL_X
+    str     r0, [r1]
+    b       if_end_38
+elif_end_40:
+    ldr     r1, =0x2007F77C    @ COL
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #3
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf67
+    movs    r0, #1
+    b       .Lcf67e
+.Lcf67:
+    movs    r0, #0
+.Lcf67e:
+    cmp     r0, #0
+    beq     elif_end_41
+    ldr     r1, =0x2007F49C    @ TAB_X3
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F720    @ G_COL_X
+    str     r0, [r1]
+    b       if_end_38
+elif_end_41:
+    ldr     r1, =0x2007F77C    @ COL
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf68
+    movs    r0, #1
+    b       .Lcf68e
+.Lcf68:
+    movs    r0, #0
+.Lcf68e:
+    cmp     r0, #0
+    beq     elif_end_42
+    ldr     r1, =0x2007F4A0    @ TAB_X4
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F720    @ G_COL_X
+    str     r0, [r1]
+    b       if_end_38
+elif_end_42:
+    ldr     r1, =0x2007F77C    @ COL
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #5
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf69
+    movs    r0, #1
+    b       .Lcf69e
+.Lcf69:
+    movs    r0, #0
+.Lcf69e:
+    cmp     r0, #0
+    beq     elif_end_43
+    ldr     r1, =0x2007F4A4    @ TAB_X5
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F720    @ G_COL_X
+    str     r0, [r1]
+    b       if_end_38
+elif_end_43:
+    ldr     r1, =0x2007F4A8    @ TAB_X6
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F720    @ G_COL_X
+    str     r0, [r1]
+if_end_38:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DRAW_STOCK ---
+.align 2
+.global DRAW_STOCK
+.type DRAW_STOCK, %function
+.thumb_func
+DRAW_STOCK:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r1, =0x2007F6B8    @ STK_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf70
+    movs    r0, #1
+    b       .Lcf70e
+.Lcf70:
+    movs    r0, #0
+.Lcf70e:
+    cmp     r0, #0
+    beq     if_else_44
+    ldr     r1, =0x2007F4B4    @ INT_FACEDN
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F478    @ STK_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F470    @ TOP_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F460    @ CARD_W
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F464    @ CARD_H
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_rect
+    add     sp, sp, #4
+    ldr     r1, =0x2007F4B4    @ INT_FACEDN
+    ldr     r0, [r1]
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    ldr     r1, =0x2007F478    @ STK_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F470    @ TOP_Y
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #10
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    b       _str_0_after
+_str_0:
+    .asciz  "##\x80"
+    .align  2
+_str_0_after:
+    ldr     r0, =_str_0
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_44
+if_else_44:
+    ldr     r1, =0x2007F4B8    @ INT_EMPTY
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F478    @ STK_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F470    @ TOP_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F460    @ CARD_W
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F464    @ CARD_H
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_rect
+    add     sp, sp, #4
+    ldr     r1, =0x2007F4B8    @ INT_EMPTY
+    ldr     r0, [r1]
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    ldr     r1, =0x2007F478    @ STK_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F470    @ TOP_Y
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #10
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    b       _str_1_after
+_str_1:
+    .asciz  "ST\x80"
+    .align  2
+_str_1_after:
+    ldr     r0, =_str_1
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+if_end_44:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DRAW_WASTE ---
+.align 2
+.global DRAW_WASTE
+.type DRAW_WASTE, %function
+.thumb_func
+DRAW_WASTE:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf71
+    movs    r0, #1
+    b       .Lcf71e
+.Lcf71:
+    movs    r0, #0
+.Lcf71e:
+    cmp     r0, #0
+    beq     if_else_45
+    ldr     r1, =0x2007F6EC    @ WASTE
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F6F0    @ WST_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F770    @ G_WCARD
+    str     r0, [r1]
+    ldr     r1, =0x2007F47C    @ WST_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F470    @ TOP_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F770    @ G_WCARD
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F4AC    @ INT_CARD
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      DRAW_CARD
+    b       if_end_45
+if_else_45:
+    ldr     r1, =0x2007F4B8    @ INT_EMPTY
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F47C    @ WST_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F470    @ TOP_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F460    @ CARD_W
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F464    @ CARD_H
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_rect
+    add     sp, sp, #4
+    ldr     r1, =0x2007F4B8    @ INT_EMPTY
+    ldr     r0, [r1]
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    ldr     r1, =0x2007F47C    @ WST_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F470    @ TOP_Y
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #10
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    b       _str_2_after
+_str_2:
+    .asciz  "WS\x80"
+    .align  2
+_str_2_after:
+    ldr     r0, =_str_2
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+if_end_45:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DRAW_FOUNDATIONS ---
+.align 2
+.global DRAW_FOUNDATIONS
+.type DRAW_FOUNDATIONS, %function
+.thumb_func
+DRAW_FOUNDATIONS:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r1, =0x2007F480    @ F0_X
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F774    @ G_FX
+    str     r0, [r1]
+    ldr     r1, =0x2007F774    @ G_FX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    push    {r0}
+    pop     {r1}
+    pop     {r0}
+    bl      DRAW_ONE_FOUNDATION
+    ldr     r1, =0x2007F484    @ F1_X
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F774    @ G_FX
+    str     r0, [r1]
+    ldr     r1, =0x2007F774    @ G_FX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    push    {r0}
+    pop     {r1}
+    pop     {r0}
+    bl      DRAW_ONE_FOUNDATION
+    ldr     r1, =0x2007F488    @ F2_X
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F774    @ G_FX
+    str     r0, [r1]
+    ldr     r1, =0x2007F774    @ G_FX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #2
+    push    {r0}
+    pop     {r1}
+    pop     {r0}
+    bl      DRAW_ONE_FOUNDATION
+    ldr     r1, =0x2007F48C    @ F3_X
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F774    @ G_FX
+    str     r0, [r1]
+    ldr     r1, =0x2007F774    @ G_FX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #3
+    push    {r0}
+    pop     {r1}
+    pop     {r0}
+    bl      DRAW_ONE_FOUNDATION
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DRAW_ONE_FOUNDATION ---
+.align 2
+.global DRAW_ONE_FOUNDATION
+.type DRAW_ONE_FOUNDATION, %function
+.thumb_func
+DRAW_ONE_FOUNDATION:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r4, =0x2007F784    @ save param fx
+    str     r0, [r4]
+    ldr     r4, =0x2007F780    @ save param suit
+    str     r1, [r4]
+    ldr     r1, =0x2007F680    @ FOUND_CNT
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F780    @ SUIT
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F76C    @ G_FC
+    str     r0, [r1]
+    ldr     r1, =0x2007F76C    @ G_FC
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf72
+    movs    r0, #1
+    b       .Lcf72e
+.Lcf72:
+    movs    r0, #0
+.Lcf72e:
+    cmp     r0, #0
+    beq     if_else_46
+    ldr     r1, =0x2007F4B8    @ INT_EMPTY
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F784    @ FX
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F470    @ TOP_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F460    @ CARD_W
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F464    @ CARD_H
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_rect
+    add     sp, sp, #4
+    ldr     r1, =0x2007F784    @ FX
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F46C    @ HALF_W
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F470    @ TOP_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F46C    @ HALF_W
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F780    @ SUIT
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      DRAW_SUIT_AT
+    b       if_end_46
+if_else_46:
+    ldr     r1, =0x2007F76C    @ G_FC
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F728    @ G_RANK
+    str     r0, [r1]
+    ldr     r1, =0x2007F728    @ G_RANK
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F780    @ SUIT
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F724    @ G_CARD
+    str     r0, [r1]
+    ldr     r1, =0x2007F784    @ FX
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F470    @ TOP_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F724    @ G_CARD
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F4AC    @ INT_CARD
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      DRAW_CARD
+if_end_46:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DRAW_TABLEAU ---
+.align 2
+.global DRAW_TABLEAU
+.type DRAW_TABLEAU, %function
+.thumb_func
+DRAW_TABLEAU:
+    push    {r4, r5, r6, r7, lr}
+    mov     r0, #0
+    ldr     r1, =0x2007F764    @ G_C
+    str     r0, [r1]
+while_top_47:
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #7
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf73
+    movs    r0, #1
+    b       .Lcf73e
+.Lcf73:
+    movs    r0, #0
+.Lcf73e:
+    cmp     r0, #0
+    beq     while_end_47
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r0}
+    bl      GET_COL_X
+    ldr     r1, =0x2007F720    @ G_COL_X
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F768    @ G_CX
+    str     r0, [r1]
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F730    @ G_SZ
+    str     r0, [r1]
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F734    @ G_HD
+    str     r0, [r1]
+    ldr     r1, =0x2007F730    @ G_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf74
+    movs    r0, #1
+    b       .Lcf74e
+.Lcf74:
+    movs    r0, #0
+.Lcf74e:
+    cmp     r0, #0
+    beq     if_else_48
+    ldr     r1, =0x2007F4B8    @ INT_EMPTY
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F768    @ G_CX
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F474    @ TAB_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F460    @ CARD_W
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F464    @ CARD_H
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_rect
+    add     sp, sp, #4
+    b       if_end_48
+if_else_48:
+    ldr     r1, =0x2007F734    @ G_HD
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf75
+    movs    r0, #1
+    b       .Lcf75e
+.Lcf75:
+    movs    r0, #0
+.Lcf75e:
+    cmp     r0, #0
+    beq     if_else_49
+    ldr     r1, =0x2007F4B4    @ INT_FACEDN
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F768    @ G_CX
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F474    @ TAB_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F460    @ CARD_W
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F464    @ CARD_H
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_rect
+    add     sp, sp, #4
+    ldr     r1, =0x2007F4B4    @ INT_FACEDN
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F768    @ G_CX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #3
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F474    @ TAB_Y
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F460    @ CARD_W
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #6
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F464    @ CARD_H
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #8
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_rect
+    add     sp, sp, #4
+    b       if_end_49
+if_else_49:
+if_end_49:
+    ldr     r1, =0x2007F734    @ G_HD
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F760    @ G_ROW
+    str     r0, [r1]
+    mov     r0, #0
+    ldr     r1, =0x2007F738    @ G_IDX
+    str     r0, [r1]
+while_top_50:
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F730    @ G_SZ
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf76
+    movs    r0, #1
+    b       .Lcf76e
+.Lcf76:
+    movs    r0, #0
+.Lcf76e:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F738    @ G_IDX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf77
+    movs    r0, #1
+    b       .Lcf77e
+.Lcf77:
+    movs    r0, #0
+.Lcf77e:
+    cmp     r0, #0
+    beq    .Lcf78
+    movs    r0, #1
+    b       .Lcf78e
+.Lcf78:
+    movs    r0, #0
+.Lcf78e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     while_end_50
+    ldr     r1, =0x2007F734    @ G_HD
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf79
+    movs    r0, #1
+    b       .Lcf79e
+.Lcf79:
+    movs    r0, #0
+.Lcf79e:
+    cmp     r0, #0
+    beq     if_else_51
+    ldr     r1, =0x2007F474    @ TAB_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F464    @ CARD_H
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F734    @ G_HD
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F468    @ COL_DY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F73C    @ G_CY
+    str     r0, [r1]
+    b       if_end_51
+if_else_51:
+    ldr     r1, =0x2007F474    @ TAB_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F734    @ G_HD
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F468    @ COL_DY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F73C    @ G_CY
+    str     r0, [r1]
+if_end_51:
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #20
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F740    @ G_TIDX
+    str     r0, [r1]
+    ldr     r1, =0x2007F64C    @ TAB
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F740    @ G_TIDX
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F724    @ G_CARD
+    str     r0, [r1]
+    ldr     r1, =0x2007F768    @ G_CX
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F73C    @ G_CY
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F724    @ G_CARD
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F4AC    @ INT_CARD
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      DRAW_CARD
+    ldr     r1, =0x2007F760    @ G_ROW
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F760    @ G_ROW
+    str     r0, [r1]
+    ldr     r1, =0x2007F738    @ G_IDX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F738    @ G_IDX
+    str     r0, [r1]
+    b       while_top_50
+while_end_50:
+if_end_48:
+    ldr     r1, =0x2007F764    @ G_C
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F764    @ G_C
+    str     r0, [r1]
+    b       while_top_47
+while_end_47:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DRAW_HELD_LABEL ---
+.align 2
+.global DRAW_HELD_LABEL
+.type DRAW_HELD_LABEL, %function
+.thumb_func
+DRAW_HELD_LABEL:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    beq    .Lcf80
+    movs    r0, #1
+    b       .Lcf80e
+.Lcf80:
+    movs    r0, #0
+.Lcf80e:
+    cmp     r0, #0
+    beq     if_else_52
+    ldr     r1, =0x2007F4BC    @ INT_HELD
+    ldr     r0, [r1]
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    ldr     r0, =-60
+    push    {r0}
+    ldr     r0, =-100
+    push    {r0}
+    b       _str_3_after
+_str_3:
+    .asciz  "HELD:\x80"
+    .align  2
+_str_3_after:
+    ldr     r0, =_str_3
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    sdiv    r0, r0, r1
+    ldr     r1, =0x2007F728    @ G_RANK
+    str     r0, [r1]
+    ldr     r1, =0x2007F6F8    @ SEL_CARD
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F728    @ G_RANK
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F72C    @ G_SUIT
+    str     r0, [r1]
+    ldr     r0, =-15
+    push    {r0}
+    ldr     r0, =-100
+    push    {r0}
+    ldr     r1, =0x2007F728    @ G_RANK
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      DRAW_RANK_AT
+    mov     r0, #0
+    push    {r0}
+    ldr     r0, =-100
+    push    {r0}
+    ldr     r1, =0x2007F72C    @ G_SUIT
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      DRAW_SUIT_AT
+    b       if_end_52
+if_else_52:
+if_end_52:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DRAW_CURSOR ---
+.align 2
+.global DRAW_CURSOR
+.type DRAW_CURSOR, %function
+.thumb_func
+DRAW_CURSOR:
+    push    {r4, r5, r6, r7, lr}
+    mov     r0, #0
+    ldr     r1, =0x2007F768    @ G_CX
+    str     r0, [r1]
+    ldr     r1, =0x2007F470    @ TOP_Y
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F73C    @ G_CY
+    str     r0, [r1]
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #7
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf81
+    movs    r0, #1
+    b       .Lcf81e
+.Lcf81:
+    movs    r0, #0
+.Lcf81e:
+    cmp     r0, #0
+    beq     if_else_53
+    ldr     r1, =0x2007F478    @ STK_X
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F768    @ G_CX
+    str     r0, [r1]
+    b       if_end_53
+if_else_53:
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #8
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf82
+    movs    r0, #1
+    b       .Lcf82e
+.Lcf82:
+    movs    r0, #0
+.Lcf82e:
+    cmp     r0, #0
+    beq     elif_end_54
+    ldr     r1, =0x2007F47C    @ WST_X
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F768    @ G_CX
+    str     r0, [r1]
+    b       if_end_53
+elif_end_54:
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #9
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf83
+    movs    r0, #1
+    b       .Lcf83e
+.Lcf83:
+    movs    r0, #0
+.Lcf83e:
+    cmp     r0, #0
+    beq     elif_end_55
+    ldr     r1, =0x2007F480    @ F0_X
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F768    @ G_CX
+    str     r0, [r1]
+    b       if_end_53
+elif_end_55:
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #10
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf84
+    movs    r0, #1
+    b       .Lcf84e
+.Lcf84:
+    movs    r0, #0
+.Lcf84e:
+    cmp     r0, #0
+    beq     elif_end_56
+    ldr     r1, =0x2007F484    @ F1_X
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F768    @ G_CX
+    str     r0, [r1]
+    b       if_end_53
+elif_end_56:
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #11
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf85
+    movs    r0, #1
+    b       .Lcf85e
+.Lcf85:
+    movs    r0, #0
+.Lcf85e:
+    cmp     r0, #0
+    beq     elif_end_57
+    ldr     r1, =0x2007F488    @ F2_X
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F768    @ G_CX
+    str     r0, [r1]
+    b       if_end_53
+elif_end_57:
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #12
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf86
+    movs    r0, #1
+    b       .Lcf86e
+.Lcf86:
+    movs    r0, #0
+.Lcf86e:
+    cmp     r0, #0
+    beq     elif_end_58
+    ldr     r1, =0x2007F48C    @ F3_X
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F768    @ G_CX
+    str     r0, [r1]
+    b       if_end_53
+elif_end_58:
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r0}
+    bl      GET_COL_X
+    ldr     r1, =0x2007F720    @ G_COL_X
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F768    @ G_CX
+    str     r0, [r1]
+    ldr     r1, =0x2007F660    @ TAB_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F730    @ G_SZ
+    str     r0, [r1]
+    ldr     r1, =0x2007F674    @ TAB_HID
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F6F4    @ CURSOR
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}           @ base ptr
+    lsl     r1, r1, #1     @ index * 2 (i16 stride)
+    add     r0, r0, r1
+    ldrsh   r0, [r0]       @ sign-extend 16-bit load
+    ldr     r1, =0x2007F734    @ G_HD
+    str     r0, [r1]
+    ldr     r1, =0x2007F730    @ G_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf87
+    movs    r0, #1
+    b       .Lcf87e
+.Lcf87:
+    movs    r0, #0
+.Lcf87e:
+    cmp     r0, #0
+    beq     if_else_59
+    ldr     r1, =0x2007F474    @ TAB_Y
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F73C    @ G_CY
+    str     r0, [r1]
+    b       if_end_59
+if_else_59:
+    ldr     r1, =0x2007F734    @ G_HD
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf88
+    movs    r0, #1
+    b       .Lcf88e
+.Lcf88:
+    movs    r0, #0
+.Lcf88e:
+    cmp     r0, #0
+    beq     elif_end_60
+    ldr     r1, =0x2007F474    @ TAB_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F730    @ G_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F468    @ COL_DY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F73C    @ G_CY
+    str     r0, [r1]
+    b       if_end_59
+elif_end_60:
+    ldr     r1, =0x2007F474    @ TAB_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F464    @ CARD_H
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F730    @ G_SZ
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F734    @ G_HD
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F468    @ COL_DY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F73C    @ G_CY
+    str     r0, [r1]
+if_end_59:
+if_end_53:
+    ldr     r1, =0x2007F4B0    @ INT_CURSOR
+    ldr     r0, [r1]
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    ldr     r1, =0x2007F4B0    @ INT_CURSOR
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F768    @ G_CX
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F73C    @ G_CY
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F460    @ CARD_W
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #2
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F464    @ CARD_H
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #2
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_rect
+    add     sp, sp, #4
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DRAW_CARD ---
+.align 2
+.global DRAW_CARD
+.type DRAW_CARD, %function
+.thumb_func
+DRAW_CARD:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r4, =0x2007F788    @ save param x
+    str     r0, [r4]
+    ldr     r4, =0x2007F78C    @ save param y
+    str     r1, [r4]
+    ldr     r4, =0x2007F778    @ save param card
+    str     r2, [r4]
+    ldr     r4, =0x2007F790    @ save param intensity
+    str     r3, [r4]
+    ldr     r1, =0x2007F790    @ INTENSITY
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F460    @ CARD_W
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F464    @ CARD_H
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_rect
+    add     sp, sp, #4
+    ldr     r1, =0x2007F790    @ INTENSITY
+    ldr     r0, [r1]
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    ldr     r1, =0x2007F778    @ CARD
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    sdiv    r0, r0, r1
+    ldr     r1, =0x2007F728    @ G_RANK
+    str     r0, [r1]
+    ldr     r1, =0x2007F778    @ CARD
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F728    @ G_RANK
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    mul     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F72C    @ G_SUIT
+    str     r0, [r1]
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #3
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #26
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F728    @ G_RANK
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      DRAW_RANK_AT
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F46C    @ HALF_W
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #12
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    push    {r0}
+    ldr     r1, =0x2007F72C    @ G_SUIT
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      DRAW_SUIT_AT
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DRAW_SMALL_COUNT ---
+.align 2
+.global DRAW_SMALL_COUNT
+.type DRAW_SMALL_COUNT, %function
+.thumb_func
+DRAW_SMALL_COUNT:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r4, =0x2007F788    @ save param x
+    str     r0, [r4]
+    ldr     r4, =0x2007F78C    @ save param y
+    str     r1, [r4]
+    ldr     r4, =0x2007F794    @ save param n
+    str     r2, [r4]
+    ldr     r1, =0x2007F794    @ N
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf89
+    movs    r0, #1
+    b       .Lcf89e
+.Lcf89:
+    movs    r0, #0
+.Lcf89e:
+    cmp     r0, #0
+    beq     if_else_61
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_4_after
+_str_4:
+    .asciz  "1\x80"
+    .align  2
+_str_4_after:
+    ldr     r0, =_str_4
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_61
+if_else_61:
+    ldr     r1, =0x2007F794    @ N
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #2
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf90
+    movs    r0, #1
+    b       .Lcf90e
+.Lcf90:
+    movs    r0, #0
+.Lcf90e:
+    cmp     r0, #0
+    beq     elif_end_62
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_5_after
+_str_5:
+    .asciz  "2\x80"
+    .align  2
+_str_5_after:
+    ldr     r0, =_str_5
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_61
+elif_end_62:
+    ldr     r1, =0x2007F794    @ N
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #3
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf91
+    movs    r0, #1
+    b       .Lcf91e
+.Lcf91:
+    movs    r0, #0
+.Lcf91e:
+    cmp     r0, #0
+    beq     elif_end_63
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_6_after
+_str_6:
+    .asciz  "3\x80"
+    .align  2
+_str_6_after:
+    ldr     r0, =_str_6
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_61
+elif_end_63:
+    ldr     r1, =0x2007F794    @ N
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf92
+    movs    r0, #1
+    b       .Lcf92e
+.Lcf92:
+    movs    r0, #0
+.Lcf92e:
+    cmp     r0, #0
+    beq     elif_end_64
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_7_after
+_str_7:
+    .asciz  "4\x80"
+    .align  2
+_str_7_after:
+    ldr     r0, =_str_7
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_61
+elif_end_64:
+    ldr     r1, =0x2007F794    @ N
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #5
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf93
+    movs    r0, #1
+    b       .Lcf93e
+.Lcf93:
+    movs    r0, #0
+.Lcf93e:
+    cmp     r0, #0
+    beq     elif_end_65
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_8_after
+_str_8:
+    .asciz  "5\x80"
+    .align  2
+_str_8_after:
+    ldr     r0, =_str_8
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_61
+elif_end_65:
+    ldr     r1, =0x2007F794    @ N
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #6
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf94
+    movs    r0, #1
+    b       .Lcf94e
+.Lcf94:
+    movs    r0, #0
+.Lcf94e:
+    cmp     r0, #0
+    beq     elif_end_66
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_9_after
+_str_9:
+    .asciz  "6\x80"
+    .align  2
+_str_9_after:
+    ldr     r0, =_str_9
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_61
+elif_end_66:
+    ldr     r1, =0x2007F794    @ N
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #7
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf95
+    movs    r0, #1
+    b       .Lcf95e
+.Lcf95:
+    movs    r0, #0
+.Lcf95e:
+    cmp     r0, #0
+    beq     elif_end_67
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_10_after
+_str_10:
+    .asciz  "7\x80"
+    .align  2
+_str_10_after:
+    ldr     r0, =_str_10
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_61
+elif_end_67:
+    ldr     r1, =0x2007F794    @ N
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #8
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf96
+    movs    r0, #1
+    b       .Lcf96e
+.Lcf96:
+    movs    r0, #0
+.Lcf96e:
+    cmp     r0, #0
+    beq     elif_end_68
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_11_after
+_str_11:
+    .asciz  "8\x80"
+    .align  2
+_str_11_after:
+    ldr     r0, =_str_11
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_61
+elif_end_68:
+    ldr     r1, =0x2007F794    @ N
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #9
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf97
+    movs    r0, #1
+    b       .Lcf97e
+.Lcf97:
+    movs    r0, #0
+.Lcf97e:
+    cmp     r0, #0
+    beq     elif_end_69
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_12_after
+_str_12:
+    .asciz  "9\x80"
+    .align  2
+_str_12_after:
+    ldr     r0, =_str_12
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_61
+elif_end_69:
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_13_after
+_str_13:
+    .asciz  "+\x80"
+    .align  2
+_str_13_after:
+    ldr     r0, =_str_13
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+if_end_61:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DRAW_RANK_AT ---
+.align 2
+.global DRAW_RANK_AT
+.type DRAW_RANK_AT, %function
+.thumb_func
+DRAW_RANK_AT:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r4, =0x2007F788    @ save param x
+    str     r0, [r4]
+    ldr     r4, =0x2007F78C    @ save param y
+    str     r1, [r4]
+    ldr     r4, =0x2007F798    @ save param r
+    str     r2, [r4]
+    ldr     r1, =0x2007F798    @ R
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf98
+    movs    r0, #1
+    b       .Lcf98e
+.Lcf98:
+    movs    r0, #0
+.Lcf98e:
+    cmp     r0, #0
+    beq     if_else_70
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_14_after
+_str_14:
+    .asciz  "A\x80"
+    .align  2
+_str_14_after:
+    ldr     r0, =_str_14
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_70
+if_else_70:
+    ldr     r1, =0x2007F798    @ R
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf99
+    movs    r0, #1
+    b       .Lcf99e
+.Lcf99:
+    movs    r0, #0
+.Lcf99e:
+    cmp     r0, #0
+    beq     elif_end_71
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_15_after
+_str_15:
+    .asciz  "2\x80"
+    .align  2
+_str_15_after:
+    ldr     r0, =_str_15
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_70
+elif_end_71:
+    ldr     r1, =0x2007F798    @ R
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #2
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf100
+    movs    r0, #1
+    b       .Lcf100e
+.Lcf100:
+    movs    r0, #0
+.Lcf100e:
+    cmp     r0, #0
+    beq     elif_end_72
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_16_after
+_str_16:
+    .asciz  "3\x80"
+    .align  2
+_str_16_after:
+    ldr     r0, =_str_16
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_70
+elif_end_72:
+    ldr     r1, =0x2007F798    @ R
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #3
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf101
+    movs    r0, #1
+    b       .Lcf101e
+.Lcf101:
+    movs    r0, #0
+.Lcf101e:
+    cmp     r0, #0
+    beq     elif_end_73
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_17_after
+_str_17:
+    .asciz  "4\x80"
+    .align  2
+_str_17_after:
+    ldr     r0, =_str_17
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_70
+elif_end_73:
+    ldr     r1, =0x2007F798    @ R
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #4
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf102
+    movs    r0, #1
+    b       .Lcf102e
+.Lcf102:
+    movs    r0, #0
+.Lcf102e:
+    cmp     r0, #0
+    beq     elif_end_74
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_18_after
+_str_18:
+    .asciz  "5\x80"
+    .align  2
+_str_18_after:
+    ldr     r0, =_str_18
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_70
+elif_end_74:
+    ldr     r1, =0x2007F798    @ R
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #5
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf103
+    movs    r0, #1
+    b       .Lcf103e
+.Lcf103:
+    movs    r0, #0
+.Lcf103e:
+    cmp     r0, #0
+    beq     elif_end_75
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_19_after
+_str_19:
+    .asciz  "6\x80"
+    .align  2
+_str_19_after:
+    ldr     r0, =_str_19
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_70
+elif_end_75:
+    ldr     r1, =0x2007F798    @ R
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #6
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf104
+    movs    r0, #1
+    b       .Lcf104e
+.Lcf104:
+    movs    r0, #0
+.Lcf104e:
+    cmp     r0, #0
+    beq     elif_end_76
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_20_after
+_str_20:
+    .asciz  "7\x80"
+    .align  2
+_str_20_after:
+    ldr     r0, =_str_20
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_70
+elif_end_76:
+    ldr     r1, =0x2007F798    @ R
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #7
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf105
+    movs    r0, #1
+    b       .Lcf105e
+.Lcf105:
+    movs    r0, #0
+.Lcf105e:
+    cmp     r0, #0
+    beq     elif_end_77
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_21_after
+_str_21:
+    .asciz  "8\x80"
+    .align  2
+_str_21_after:
+    ldr     r0, =_str_21
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_70
+elif_end_77:
+    ldr     r1, =0x2007F798    @ R
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #8
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf106
+    movs    r0, #1
+    b       .Lcf106e
+.Lcf106:
+    movs    r0, #0
+.Lcf106e:
+    cmp     r0, #0
+    beq     elif_end_78
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_22_after
+_str_22:
+    .asciz  "9\x80"
+    .align  2
+_str_22_after:
+    ldr     r0, =_str_22
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_70
+elif_end_78:
+    ldr     r1, =0x2007F798    @ R
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #9
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf107
+    movs    r0, #1
+    b       .Lcf107e
+.Lcf107:
+    movs    r0, #0
+.Lcf107e:
+    cmp     r0, #0
+    beq     elif_end_79
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_23_after
+_str_23:
+    .asciz  "10\x80"
+    .align  2
+_str_23_after:
+    ldr     r0, =_str_23
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_70
+elif_end_79:
+    ldr     r1, =0x2007F798    @ R
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #10
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf108
+    movs    r0, #1
+    b       .Lcf108e
+.Lcf108:
+    movs    r0, #0
+.Lcf108e:
+    cmp     r0, #0
+    beq     elif_end_80
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_24_after
+_str_24:
+    .asciz  "J\x80"
+    .align  2
+_str_24_after:
+    ldr     r0, =_str_24
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_70
+elif_end_80:
+    ldr     r1, =0x2007F798    @ R
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #11
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf109
+    movs    r0, #1
+    b       .Lcf109e
+.Lcf109:
+    movs    r0, #0
+.Lcf109e:
+    cmp     r0, #0
+    beq     elif_end_81
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_25_after
+_str_25:
+    .asciz  "Q\x80"
+    .align  2
+_str_25_after:
+    ldr     r0, =_str_25
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_70
+elif_end_81:
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    b       _str_26_after
+_str_26:
+    .asciz  "K\x80"
+    .align  2
+_str_26_after:
+    ldr     r0, =_str_26
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+if_end_70:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DRAW_SUIT_AT ---
+.align 2
+.global DRAW_SUIT_AT
+.type DRAW_SUIT_AT, %function
+.thumb_func
+DRAW_SUIT_AT:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r4, =0x2007F788    @ save param x
+    str     r0, [r4]
+    ldr     r4, =0x2007F78C    @ save param y
+    str     r1, [r4]
+    ldr     r4, =0x2007F79C    @ save param s
+    str     r2, [r4]
+    ldr     r1, =0x2007F79C    @ S
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf110
+    movs    r0, #1
+    b       .Lcf110e
+.Lcf110:
+    movs    r0, #0
+.Lcf110e:
+    cmp     r0, #0
+    beq     if_else_82
+    ldr     r0, =_SUIT_CLUBS_VECTORS    @ asset 'suit_clubs'
+    push    {r0}
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_vector
+    b       if_end_82
+if_else_82:
+    ldr     r1, =0x2007F79C    @ S
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf111
+    movs    r0, #1
+    b       .Lcf111e
+.Lcf111:
+    movs    r0, #0
+.Lcf111e:
+    cmp     r0, #0
+    beq     elif_end_83
+    ldr     r0, =_SUIT_DIAMONDS_VECTORS    @ asset 'suit_diamonds'
+    push    {r0}
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_vector
+    b       if_end_82
+elif_end_83:
+    ldr     r1, =0x2007F79C    @ S
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #2
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf112
+    movs    r0, #1
+    b       .Lcf112e
+.Lcf112:
+    movs    r0, #0
+.Lcf112e:
+    cmp     r0, #0
+    beq     elif_end_84
+    ldr     r0, =_SUIT_HEARTS_VECTORS    @ asset 'suit_hearts'
+    push    {r0}
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_vector
+    b       if_end_82
+elif_end_84:
+    ldr     r0, =_SUIT_SPADES_VECTORS    @ asset 'suit_spades'
+    push    {r0}
+    ldr     r1, =0x2007F788    @ X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F78C    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_vector
+if_end_82:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- function DRAW_WIN_SCREEN ---
+.align 2
+.global DRAW_WIN_SCREEN
+.type DRAW_WIN_SCREEN, %function
+.thumb_func
+DRAW_WIN_SCREEN:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r1, =0x2007F704    @ WIN_BLINK
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F704    @ WIN_BLINK
+    str     r0, [r1]
+    mov     r0, #127
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    ldr     r0, =-42
+    push    {r0}
+    mov     r0, #30
+    push    {r0}
+    b       _str_27_after
+_str_27:
+    .asciz  "YOU WIN!\x80"
+    .align  2
+_str_27_after:
+    ldr     r0, =_str_27
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    mov     r0, #80
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    ldr     r0, =-63
+    push    {r0}
+    mov     r0, #0
+    push    {r0}
+    b       _str_28_after
+_str_28:
+    .asciz  "ALL SUITS COMPLETE\x80"
+    .align  2
+_str_28_after:
+    ldr     r0, =_str_28
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    ldr     r1, =0x2007F704    @ WIN_BLINK
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #30
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf113
+    movs    r0, #1
+    b       .Lcf113e
+.Lcf113:
+    movs    r0, #0
+.Lcf113e:
+    cmp     r0, #0
+    beq     if_else_85
+    mov     r0, #60
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    ldr     r0, =-63
+    push    {r0}
+    ldr     r0, =-30
+    push    {r0}
+    b       _str_29_after
+_str_29:
+    .asciz  "PRESS B1 TO PLAY\x80"
+    .align  2
+_str_29_after:
+    ldr     r0, =_str_29
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_85
+if_else_85:
+if_end_85:
+    ldr     r1, =0x2007F704    @ WIN_BLINK
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #60
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    blt    .Lcf114
+    movs    r0, #1
+    b       .Lcf114e
+.Lcf114:
+    movs    r0, #0
+.Lcf114e:
+    cmp     r0, #0
+    beq     if_else_86
+    mov     r0, #0
+    ldr     r1, =0x2007F704    @ WIN_BLINK
+    str     r0, [r1]
+    b       if_end_86
+if_else_86:
+if_end_86:
+    ldr     r1, =0x2007F710    @ BTN1_FIRE
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf115
+    movs    r0, #1
+    b       .Lcf115e
+.Lcf115:
+    movs    r0, #0
+.Lcf115e:
+    cmp     r0, #0
+    beq     if_else_87
+    ldr     r1, =0x2007F4C0    @ STATE_PLAY
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F700    @ GAME_STATE
+    str     r0, [r1]
+    bl      SHUFFLE
+    bl      DEAL
+    b       if_end_87
+if_else_87:
+if_end_87:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+@ --- game_main (firmware entry point) ---
+.align 2
+.global game_main
+.type game_main, %function
+.thumb_func
+game_main:
+    push    {r4, r5, r6, r7, lr}
+    @ initialize globals
+    ldr     r1, =0x2007F460
+    mov     r0, #26
+    str     r0, [r1]
+    ldr     r1, =0x2007F464
+    mov     r0, #32
+    str     r0, [r1]
+    ldr     r1, =0x2007F468
+    mov     r0, #14
+    str     r0, [r1]
+    ldr     r1, =0x2007F46C
+    mov     r0, #13
+    str     r0, [r1]
+    ldr     r1, =0x2007F470
+    mov     r0, #85
+    str     r0, [r1]
+    ldr     r1, =0x2007F474
+    mov     r0, #30
+    str     r0, [r1]
+    ldr     r1, =0x2007F478
+    ldr     r0, =-102
+    str     r0, [r1]
+    ldr     r1, =0x2007F47C
+    ldr     r0, =-68
+    str     r0, [r1]
+    ldr     r1, =0x2007F480
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F484
+    mov     r0, #34
+    str     r0, [r1]
+    ldr     r1, =0x2007F488
+    mov     r0, #68
+    str     r0, [r1]
+    ldr     r1, =0x2007F48C
+    mov     r0, #102
+    str     r0, [r1]
+    ldr     r1, =0x2007F490
+    ldr     r0, =-102
+    str     r0, [r1]
+    ldr     r1, =0x2007F494
+    ldr     r0, =-68
+    str     r0, [r1]
+    ldr     r1, =0x2007F498
+    ldr     r0, =-34
+    str     r0, [r1]
+    ldr     r1, =0x2007F49C
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F4A0
+    mov     r0, #34
+    str     r0, [r1]
+    ldr     r1, =0x2007F4A4
+    mov     r0, #68
+    str     r0, [r1]
+    ldr     r1, =0x2007F4A8
+    mov     r0, #102
+    str     r0, [r1]
+    ldr     r1, =0x2007F4AC
+    mov     r0, #70
+    str     r0, [r1]
+    ldr     r1, =0x2007F4B0
+    mov     r0, #127
+    str     r0, [r1]
+    ldr     r1, =0x2007F4B4
+    mov     r0, #40
+    str     r0, [r1]
+    ldr     r1, =0x2007F4B8
+    mov     r0, #25
+    str     r0, [r1]
+    ldr     r1, =0x2007F4BC
+    mov     r0, #100
+    str     r0, [r1]
+    ldr     r1, =0x2007F4C0
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F4C4
+    mov     r0, #1
+    str     r0, [r1]
+    @ init array DECK
+    ldr     r2, =ARRAY_DECK_DATA
+    mov     r0, #0
+    strh    r0, [r2, #0]
+    mov     r0, #1
+    strh    r0, [r2, #2]
+    mov     r0, #2
+    strh    r0, [r2, #4]
+    mov     r0, #3
+    strh    r0, [r2, #6]
+    mov     r0, #4
+    strh    r0, [r2, #8]
+    mov     r0, #5
+    strh    r0, [r2, #10]
+    mov     r0, #6
+    strh    r0, [r2, #12]
+    mov     r0, #7
+    strh    r0, [r2, #14]
+    mov     r0, #8
+    strh    r0, [r2, #16]
+    mov     r0, #9
+    strh    r0, [r2, #18]
+    mov     r0, #10
+    strh    r0, [r2, #20]
+    mov     r0, #11
+    strh    r0, [r2, #22]
+    mov     r0, #12
+    strh    r0, [r2, #24]
+    mov     r0, #13
+    strh    r0, [r2, #26]
+    mov     r0, #14
+    strh    r0, [r2, #28]
+    mov     r0, #15
+    strh    r0, [r2, #30]
+    mov     r0, #16
+    strh    r0, [r2, #32]
+    mov     r0, #17
+    strh    r0, [r2, #34]
+    mov     r0, #18
+    strh    r0, [r2, #36]
+    mov     r0, #19
+    strh    r0, [r2, #38]
+    mov     r0, #20
+    strh    r0, [r2, #40]
+    mov     r0, #21
+    strh    r0, [r2, #42]
+    mov     r0, #22
+    strh    r0, [r2, #44]
+    mov     r0, #23
+    strh    r0, [r2, #46]
+    mov     r0, #24
+    strh    r0, [r2, #48]
+    mov     r0, #25
+    strh    r0, [r2, #50]
+    mov     r0, #26
+    strh    r0, [r2, #52]
+    mov     r0, #27
+    strh    r0, [r2, #54]
+    mov     r0, #28
+    strh    r0, [r2, #56]
+    mov     r0, #29
+    strh    r0, [r2, #58]
+    mov     r0, #30
+    strh    r0, [r2, #60]
+    mov     r0, #31
+    strh    r0, [r2, #62]
+    mov     r0, #32
+    strh    r0, [r2, #64]
+    mov     r0, #33
+    strh    r0, [r2, #66]
+    mov     r0, #34
+    strh    r0, [r2, #68]
+    mov     r0, #35
+    strh    r0, [r2, #70]
+    mov     r0, #36
+    strh    r0, [r2, #72]
+    mov     r0, #37
+    strh    r0, [r2, #74]
+    mov     r0, #38
+    strh    r0, [r2, #76]
+    mov     r0, #39
+    strh    r0, [r2, #78]
+    mov     r0, #40
+    strh    r0, [r2, #80]
+    mov     r0, #41
+    strh    r0, [r2, #82]
+    mov     r0, #42
+    strh    r0, [r2, #84]
+    mov     r0, #43
+    strh    r0, [r2, #86]
+    mov     r0, #44
+    strh    r0, [r2, #88]
+    mov     r0, #45
+    strh    r0, [r2, #90]
+    mov     r0, #46
+    strh    r0, [r2, #92]
+    mov     r0, #47
+    strh    r0, [r2, #94]
+    mov     r0, #48
+    strh    r0, [r2, #96]
+    mov     r0, #49
+    strh    r0, [r2, #98]
+    mov     r0, #50
+    strh    r0, [r2, #100]
+    mov     r0, #51
+    strh    r0, [r2, #102]
+    ldr     r1, =0x2007F530
+    str     r2, [r1]
+    @ init array TAB
+    ldr     r2, =ARRAY_TAB_DATA
+    mov     r0, #0
+    strh    r0, [r2, #0]
+    mov     r0, #0
+    strh    r0, [r2, #2]
+    mov     r0, #0
+    strh    r0, [r2, #4]
+    mov     r0, #0
+    strh    r0, [r2, #6]
+    mov     r0, #0
+    strh    r0, [r2, #8]
+    mov     r0, #0
+    strh    r0, [r2, #10]
+    mov     r0, #0
+    strh    r0, [r2, #12]
+    mov     r0, #0
+    strh    r0, [r2, #14]
+    mov     r0, #0
+    strh    r0, [r2, #16]
+    mov     r0, #0
+    strh    r0, [r2, #18]
+    mov     r0, #0
+    strh    r0, [r2, #20]
+    mov     r0, #0
+    strh    r0, [r2, #22]
+    mov     r0, #0
+    strh    r0, [r2, #24]
+    mov     r0, #0
+    strh    r0, [r2, #26]
+    mov     r0, #0
+    strh    r0, [r2, #28]
+    mov     r0, #0
+    strh    r0, [r2, #30]
+    mov     r0, #0
+    strh    r0, [r2, #32]
+    mov     r0, #0
+    strh    r0, [r2, #34]
+    mov     r0, #0
+    strh    r0, [r2, #36]
+    mov     r0, #0
+    strh    r0, [r2, #38]
+    mov     r0, #0
+    strh    r0, [r2, #40]
+    mov     r0, #0
+    strh    r0, [r2, #42]
+    mov     r0, #0
+    strh    r0, [r2, #44]
+    mov     r0, #0
+    strh    r0, [r2, #46]
+    mov     r0, #0
+    strh    r0, [r2, #48]
+    mov     r0, #0
+    strh    r0, [r2, #50]
+    mov     r0, #0
+    strh    r0, [r2, #52]
+    mov     r0, #0
+    strh    r0, [r2, #54]
+    mov     r0, #0
+    strh    r0, [r2, #56]
+    mov     r0, #0
+    strh    r0, [r2, #58]
+    mov     r0, #0
+    strh    r0, [r2, #60]
+    mov     r0, #0
+    strh    r0, [r2, #62]
+    mov     r0, #0
+    strh    r0, [r2, #64]
+    mov     r0, #0
+    strh    r0, [r2, #66]
+    mov     r0, #0
+    strh    r0, [r2, #68]
+    mov     r0, #0
+    strh    r0, [r2, #70]
+    mov     r0, #0
+    strh    r0, [r2, #72]
+    mov     r0, #0
+    strh    r0, [r2, #74]
+    mov     r0, #0
+    strh    r0, [r2, #76]
+    mov     r0, #0
+    strh    r0, [r2, #78]
+    mov     r0, #0
+    strh    r0, [r2, #80]
+    mov     r0, #0
+    strh    r0, [r2, #82]
+    mov     r0, #0
+    strh    r0, [r2, #84]
+    mov     r0, #0
+    strh    r0, [r2, #86]
+    mov     r0, #0
+    strh    r0, [r2, #88]
+    mov     r0, #0
+    strh    r0, [r2, #90]
+    mov     r0, #0
+    strh    r0, [r2, #92]
+    mov     r0, #0
+    strh    r0, [r2, #94]
+    mov     r0, #0
+    strh    r0, [r2, #96]
+    mov     r0, #0
+    strh    r0, [r2, #98]
+    mov     r0, #0
+    strh    r0, [r2, #100]
+    mov     r0, #0
+    strh    r0, [r2, #102]
+    mov     r0, #0
+    strh    r0, [r2, #104]
+    mov     r0, #0
+    strh    r0, [r2, #106]
+    mov     r0, #0
+    strh    r0, [r2, #108]
+    mov     r0, #0
+    strh    r0, [r2, #110]
+    mov     r0, #0
+    strh    r0, [r2, #112]
+    mov     r0, #0
+    strh    r0, [r2, #114]
+    mov     r0, #0
+    strh    r0, [r2, #116]
+    mov     r0, #0
+    strh    r0, [r2, #118]
+    mov     r0, #0
+    strh    r0, [r2, #120]
+    mov     r0, #0
+    strh    r0, [r2, #122]
+    mov     r0, #0
+    strh    r0, [r2, #124]
+    mov     r0, #0
+    strh    r0, [r2, #126]
+    mov     r0, #0
+    strh    r0, [r2, #128]
+    mov     r0, #0
+    strh    r0, [r2, #130]
+    mov     r0, #0
+    strh    r0, [r2, #132]
+    mov     r0, #0
+    strh    r0, [r2, #134]
+    mov     r0, #0
+    strh    r0, [r2, #136]
+    mov     r0, #0
+    strh    r0, [r2, #138]
+    mov     r0, #0
+    strh    r0, [r2, #140]
+    mov     r0, #0
+    strh    r0, [r2, #142]
+    mov     r0, #0
+    strh    r0, [r2, #144]
+    mov     r0, #0
+    strh    r0, [r2, #146]
+    mov     r0, #0
+    strh    r0, [r2, #148]
+    mov     r0, #0
+    strh    r0, [r2, #150]
+    mov     r0, #0
+    strh    r0, [r2, #152]
+    mov     r0, #0
+    strh    r0, [r2, #154]
+    mov     r0, #0
+    strh    r0, [r2, #156]
+    mov     r0, #0
+    strh    r0, [r2, #158]
+    mov     r0, #0
+    strh    r0, [r2, #160]
+    mov     r0, #0
+    strh    r0, [r2, #162]
+    mov     r0, #0
+    strh    r0, [r2, #164]
+    mov     r0, #0
+    strh    r0, [r2, #166]
+    mov     r0, #0
+    strh    r0, [r2, #168]
+    mov     r0, #0
+    strh    r0, [r2, #170]
+    mov     r0, #0
+    strh    r0, [r2, #172]
+    mov     r0, #0
+    strh    r0, [r2, #174]
+    mov     r0, #0
+    strh    r0, [r2, #176]
+    mov     r0, #0
+    strh    r0, [r2, #178]
+    mov     r0, #0
+    strh    r0, [r2, #180]
+    mov     r0, #0
+    strh    r0, [r2, #182]
+    mov     r0, #0
+    strh    r0, [r2, #184]
+    mov     r0, #0
+    strh    r0, [r2, #186]
+    mov     r0, #0
+    strh    r0, [r2, #188]
+    mov     r0, #0
+    strh    r0, [r2, #190]
+    mov     r0, #0
+    strh    r0, [r2, #192]
+    mov     r0, #0
+    strh    r0, [r2, #194]
+    mov     r0, #0
+    strh    r0, [r2, #196]
+    mov     r0, #0
+    strh    r0, [r2, #198]
+    mov     r0, #0
+    strh    r0, [r2, #200]
+    mov     r0, #0
+    strh    r0, [r2, #202]
+    mov     r0, #0
+    strh    r0, [r2, #204]
+    mov     r0, #0
+    strh    r0, [r2, #206]
+    mov     r0, #0
+    strh    r0, [r2, #208]
+    mov     r0, #0
+    strh    r0, [r2, #210]
+    mov     r0, #0
+    strh    r0, [r2, #212]
+    mov     r0, #0
+    strh    r0, [r2, #214]
+    mov     r0, #0
+    strh    r0, [r2, #216]
+    mov     r0, #0
+    strh    r0, [r2, #218]
+    mov     r0, #0
+    strh    r0, [r2, #220]
+    mov     r0, #0
+    strh    r0, [r2, #222]
+    mov     r0, #0
+    strh    r0, [r2, #224]
+    mov     r0, #0
+    strh    r0, [r2, #226]
+    mov     r0, #0
+    strh    r0, [r2, #228]
+    mov     r0, #0
+    strh    r0, [r2, #230]
+    mov     r0, #0
+    strh    r0, [r2, #232]
+    mov     r0, #0
+    strh    r0, [r2, #234]
+    mov     r0, #0
+    strh    r0, [r2, #236]
+    mov     r0, #0
+    strh    r0, [r2, #238]
+    mov     r0, #0
+    strh    r0, [r2, #240]
+    mov     r0, #0
+    strh    r0, [r2, #242]
+    mov     r0, #0
+    strh    r0, [r2, #244]
+    mov     r0, #0
+    strh    r0, [r2, #246]
+    mov     r0, #0
+    strh    r0, [r2, #248]
+    mov     r0, #0
+    strh    r0, [r2, #250]
+    mov     r0, #0
+    strh    r0, [r2, #252]
+    mov     r0, #0
+    strh    r0, [r2, #254]
+    ldr     r3, =(ARRAY_TAB_DATA + 256)
+    mov     r0, #0
+    strh    r0, [r3, #0]
+    mov     r0, #0
+    strh    r0, [r3, #2]
+    mov     r0, #0
+    strh    r0, [r3, #4]
+    mov     r0, #0
+    strh    r0, [r3, #6]
+    mov     r0, #0
+    strh    r0, [r3, #8]
+    mov     r0, #0
+    strh    r0, [r3, #10]
+    mov     r0, #0
+    strh    r0, [r3, #12]
+    mov     r0, #0
+    strh    r0, [r3, #14]
+    mov     r0, #0
+    strh    r0, [r3, #16]
+    mov     r0, #0
+    strh    r0, [r3, #18]
+    mov     r0, #0
+    strh    r0, [r3, #20]
+    mov     r0, #0
+    strh    r0, [r3, #22]
+    ldr     r1, =0x2007F64C
+    str     r2, [r1]
+    @ init array TAB_SZ
+    ldr     r2, =ARRAY_TAB_SZ_DATA
+    mov     r0, #0
+    strh    r0, [r2, #0]
+    mov     r0, #0
+    strh    r0, [r2, #2]
+    mov     r0, #0
+    strh    r0, [r2, #4]
+    mov     r0, #0
+    strh    r0, [r2, #6]
+    mov     r0, #0
+    strh    r0, [r2, #8]
+    mov     r0, #0
+    strh    r0, [r2, #10]
+    mov     r0, #0
+    strh    r0, [r2, #12]
+    ldr     r1, =0x2007F660
+    str     r2, [r1]
+    @ init array TAB_HID
+    ldr     r2, =ARRAY_TAB_HID_DATA
+    mov     r0, #0
+    strh    r0, [r2, #0]
+    mov     r0, #0
+    strh    r0, [r2, #2]
+    mov     r0, #0
+    strh    r0, [r2, #4]
+    mov     r0, #0
+    strh    r0, [r2, #6]
+    mov     r0, #0
+    strh    r0, [r2, #8]
+    mov     r0, #0
+    strh    r0, [r2, #10]
+    mov     r0, #0
+    strh    r0, [r2, #12]
+    ldr     r1, =0x2007F674
+    str     r2, [r1]
+    @ init array FOUND_CNT
+    ldr     r2, =ARRAY_FOUND_CNT_DATA
+    mov     r0, #0
+    strh    r0, [r2, #0]
+    mov     r0, #0
+    strh    r0, [r2, #2]
+    mov     r0, #0
+    strh    r0, [r2, #4]
+    mov     r0, #0
+    strh    r0, [r2, #6]
+    ldr     r1, =0x2007F680
+    str     r2, [r1]
+    @ init array STOCK
+    ldr     r2, =ARRAY_STOCK_DATA
+    mov     r0, #0
+    strh    r0, [r2, #0]
+    mov     r0, #0
+    strh    r0, [r2, #2]
+    mov     r0, #0
+    strh    r0, [r2, #4]
+    mov     r0, #0
+    strh    r0, [r2, #6]
+    mov     r0, #0
+    strh    r0, [r2, #8]
+    mov     r0, #0
+    strh    r0, [r2, #10]
+    mov     r0, #0
+    strh    r0, [r2, #12]
+    mov     r0, #0
+    strh    r0, [r2, #14]
+    mov     r0, #0
+    strh    r0, [r2, #16]
+    mov     r0, #0
+    strh    r0, [r2, #18]
+    mov     r0, #0
+    strh    r0, [r2, #20]
+    mov     r0, #0
+    strh    r0, [r2, #22]
+    mov     r0, #0
+    strh    r0, [r2, #24]
+    mov     r0, #0
+    strh    r0, [r2, #26]
+    mov     r0, #0
+    strh    r0, [r2, #28]
+    mov     r0, #0
+    strh    r0, [r2, #30]
+    mov     r0, #0
+    strh    r0, [r2, #32]
+    mov     r0, #0
+    strh    r0, [r2, #34]
+    mov     r0, #0
+    strh    r0, [r2, #36]
+    mov     r0, #0
+    strh    r0, [r2, #38]
+    mov     r0, #0
+    strh    r0, [r2, #40]
+    mov     r0, #0
+    strh    r0, [r2, #42]
+    mov     r0, #0
+    strh    r0, [r2, #44]
+    mov     r0, #0
+    strh    r0, [r2, #46]
+    ldr     r1, =0x2007F6B4
+    str     r2, [r1]
+    ldr     r1, =0x2007F6B8
+    mov     r0, #0
+    str     r0, [r1]
+    @ init array WASTE
+    ldr     r2, =ARRAY_WASTE_DATA
+    mov     r0, #0
+    strh    r0, [r2, #0]
+    mov     r0, #0
+    strh    r0, [r2, #2]
+    mov     r0, #0
+    strh    r0, [r2, #4]
+    mov     r0, #0
+    strh    r0, [r2, #6]
+    mov     r0, #0
+    strh    r0, [r2, #8]
+    mov     r0, #0
+    strh    r0, [r2, #10]
+    mov     r0, #0
+    strh    r0, [r2, #12]
+    mov     r0, #0
+    strh    r0, [r2, #14]
+    mov     r0, #0
+    strh    r0, [r2, #16]
+    mov     r0, #0
+    strh    r0, [r2, #18]
+    mov     r0, #0
+    strh    r0, [r2, #20]
+    mov     r0, #0
+    strh    r0, [r2, #22]
+    mov     r0, #0
+    strh    r0, [r2, #24]
+    mov     r0, #0
+    strh    r0, [r2, #26]
+    mov     r0, #0
+    strh    r0, [r2, #28]
+    mov     r0, #0
+    strh    r0, [r2, #30]
+    mov     r0, #0
+    strh    r0, [r2, #32]
+    mov     r0, #0
+    strh    r0, [r2, #34]
+    mov     r0, #0
+    strh    r0, [r2, #36]
+    mov     r0, #0
+    strh    r0, [r2, #38]
+    mov     r0, #0
+    strh    r0, [r2, #40]
+    mov     r0, #0
+    strh    r0, [r2, #42]
+    mov     r0, #0
+    strh    r0, [r2, #44]
+    mov     r0, #0
+    strh    r0, [r2, #46]
+    ldr     r1, =0x2007F6EC
+    str     r2, [r1]
+    ldr     r1, =0x2007F6F0
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F6F4
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F6F8
+    ldr     r0, =-1
+    str     r0, [r1]
+    ldr     r1, =0x2007F6FC
+    ldr     r0, =-1
+    str     r0, [r1]
+    ldr     r1, =0x2007F704
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F708
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F70C
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F710
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F714
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F718
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F71C
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F720
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F724
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F728
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F72C
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F730
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F734
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F738
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F73C
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F740
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F744
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F748
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F74C
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F750
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F754
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F758
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F75C
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F760
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F764
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F768
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F76C
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F770
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F774
+    mov     r0, #0
+    str     r0, [r1]
+    @ init PSG_MIXER_SHADOW (all channels disabled)
+    ldr     r1, =PSG_MIXER_SHADOW
+    mov     r0, #0x3F
+    str     r0, [r1]
+    @ zero ENEMY_COUNT_ARM (guard against warm-reset SRAM)
+    ldr     r1, =ENEMY_COUNT_ARM
+    mov     r0, #0
+    str     r0, [r1]
+    @ main() body
+    ldr     r1, =0x2007F4C0    @ STATE_PLAY
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F700    @ GAME_STATE
+    str     r0, [r1]
+    bl      SHUFFLE
+    bl      DEAL
+game_main_loop:
+    bl      vpy_wait_recal
+    bl      vpy_update_buttons
+    ldr     r0, =VPY_BRIGHTNESS_OVERRIDE
+    mov     r1, #0
+    strb    r1, [r0]
+    bl      vpy_j1_btn1
+    ldr     r1, =0x2007F724    @ G_CARD
+    str     r0, [r1]
+    bl      vpy_j1_btn2
+    ldr     r1, =0x2007F728    @ G_RANK
+    str     r0, [r1]
+    mov     r0, #0
+    ldr     r1, =0x2007F710    @ BTN1_FIRE
+    str     r0, [r1]
+    mov     r0, #0
+    ldr     r1, =0x2007F714    @ BTN2_FIRE
+    str     r0, [r1]
+    ldr     r1, =0x2007F724    @ G_CARD
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf116
+    movs    r0, #1
+    b       .Lcf116e
+.Lcf116:
+    movs    r0, #0
+.Lcf116e:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F708    @ PREV_BTN1
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf117
+    movs    r0, #1
+    b       .Lcf117e
+.Lcf117:
+    movs    r0, #0
+.Lcf117e:
+    cmp     r0, #0
+    beq    .Lcf118
+    movs    r0, #1
+    b       .Lcf118e
+.Lcf118:
+    movs    r0, #0
+.Lcf118e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     if_else_88
+    mov     r0, #1
+    ldr     r1, =0x2007F710    @ BTN1_FIRE
+    str     r0, [r1]
+    b       if_end_88
+if_else_88:
+if_end_88:
+    ldr     r1, =0x2007F728    @ G_RANK
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf119
+    movs    r0, #1
+    b       .Lcf119e
+.Lcf119:
+    movs    r0, #0
+.Lcf119e:
+    cmp     r0, #0
+    beq     1f
+    ldr     r1, =0x2007F70C    @ PREV_BTN2
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf120
+    movs    r0, #1
+    b       .Lcf120e
+.Lcf120:
+    movs    r0, #0
+.Lcf120e:
+    cmp     r0, #0
+    beq    .Lcf121
+    movs    r0, #1
+    b       .Lcf121e
+.Lcf121:
+    movs    r0, #0
+.Lcf121e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     if_else_89
+    mov     r0, #1
+    ldr     r1, =0x2007F714    @ BTN2_FIRE
+    str     r0, [r1]
+    b       if_end_89
+if_else_89:
+if_end_89:
+    ldr     r1, =0x2007F724    @ G_CARD
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F708    @ PREV_BTN1
+    str     r0, [r1]
+    ldr     r1, =0x2007F728    @ G_RANK
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F70C    @ PREV_BTN2
+    str     r0, [r1]
+    ldr     r1, =0x2007F700    @ GAME_STATE
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F4C0    @ STATE_PLAY
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf122
+    movs    r0, #1
+    b       .Lcf122e
+.Lcf122:
+    movs    r0, #0
+.Lcf122e:
+    cmp     r0, #0
+    beq     if_else_90
+    bl      UPDATE_INPUT
+    bl      DRAW_TABLE
+    bl      CHECK_WIN
+    b       if_end_90
+if_else_90:
+    bl      DRAW_WIN_SCREEN
+if_end_90:
+    b       game_main_loop
+    .ltorg
+
+@ ============================================================
+@ Asset data
+@ ============================================================
+
+@ --- suit_clubs (5 path(s)) ---
+.global _SUIT_CLUBS_VECTORS
+_SUIT_CLUBS_VECTORS:
+    .word   5               @ path_count
+    .word   _SUIT_CLUBS_PATH0      @ ptr path 0
+    .word   _SUIT_CLUBS_PATH1      @ ptr path 1
+    .word   _SUIT_CLUBS_PATH2      @ ptr path 2
+    .word   _SUIT_CLUBS_PATH3      @ ptr path 3
+    .word   _SUIT_CLUBS_PATH4      @ ptr path 4
+
+_SUIT_CLUBS_PATH0:
+    .byte   127               @ intensity
+    .byte   0x04, 0x02, 0x00, 0x00  @ y=4, x=2, hdr
+    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
+    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
+    .byte   0xFF, 0xFE, 0xFF  @ line dy=-2, dx=-1
+    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
+    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
+    .byte   0xFF, 0x02, 0x01  @ line dy=2, dx=1
+    .byte   0x02            @ end marker
+
+_SUIT_CLUBS_PATH1:
+    .byte   127               @ intensity
+    .byte   0x01, 0xFF, 0x00, 0x00  @ y=1, x=-1, hdr
+    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
+    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
+    .byte   0xFF, 0xFE, 0xFF  @ line dy=-2, dx=-1
+    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
+    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
+    .byte   0xFF, 0x02, 0x01  @ line dy=2, dx=1
+    .byte   0x02            @ end marker
+
+_SUIT_CLUBS_PATH2:
+    .byte   127               @ intensity
+    .byte   0x01, 0x05, 0x00, 0x00  @ y=1, x=5, hdr
+    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
+    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
+    .byte   0xFF, 0xFE, 0xFF  @ line dy=-2, dx=-1
+    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
+    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
+    .byte   0xFF, 0x02, 0x01  @ line dy=2, dx=1
+    .byte   0x02            @ end marker
+
+_SUIT_CLUBS_PATH3:
+    .byte   127               @ intensity
+    .byte   0xFF, 0x00, 0x00, 0x00  @ y=-1, x=0, hdr
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0x02            @ end marker
+
+_SUIT_CLUBS_PATH4:
+    .byte   127               @ intensity
+    .byte   0xFB, 0xFE, 0x00, 0x00  @ y=-5, x=-2, hdr
+    .byte   0xFF, 0x00, 0x04  @ line dy=0, dx=4
+    .byte   0x02            @ end marker
+
+@ --- SUIT_CLUBS_3D_DATA (5 path(s)) ---
+    .balign 4
+.global _SUIT_CLUBS_3D_DATA
+_SUIT_CLUBS_3D_DATA:
+    .word   22               @ vertex_count
+    .byte   0x02, 0x04, 0x00  @ vert 0: x=2,y=4,z=0
+    .byte   0x01, 0x06, 0x00  @ vert 1: x=1,y=6,z=0
+    .byte   0xFF, 0x06, 0x00  @ vert 2: x=-1,y=6,z=0
+    .byte   0xFE, 0x04, 0x00  @ vert 3: x=-2,y=4,z=0
+    .byte   0xFF, 0x02, 0x00  @ vert 4: x=-1,y=2,z=0
+    .byte   0x01, 0x02, 0x00  @ vert 5: x=1,y=2,z=0
+    .byte   0xFF, 0x01, 0x00  @ vert 6: x=-1,y=1,z=0
+    .byte   0xFE, 0x03, 0x00  @ vert 7: x=-2,y=3,z=0
+    .byte   0xFC, 0x03, 0x00  @ vert 8: x=-4,y=3,z=0
+    .byte   0xFB, 0x01, 0x00  @ vert 9: x=-5,y=1,z=0
+    .byte   0xFC, 0xFF, 0x00  @ vert 10: x=-4,y=-1,z=0
+    .byte   0xFE, 0xFF, 0x00  @ vert 11: x=-2,y=-1,z=0
+    .byte   0x05, 0x01, 0x00  @ vert 12: x=5,y=1,z=0
+    .byte   0x04, 0x03, 0x00  @ vert 13: x=4,y=3,z=0
+    .byte   0x02, 0x03, 0x00  @ vert 14: x=2,y=3,z=0
+    .byte   0x01, 0x01, 0x00  @ vert 15: x=1,y=1,z=0
+    .byte   0x02, 0xFF, 0x00  @ vert 16: x=2,y=-1,z=0
+    .byte   0x04, 0xFF, 0x00  @ vert 17: x=4,y=-1,z=0
+    .byte   0x00, 0xFF, 0x00  @ vert 18: x=0,y=-1,z=0
+    .byte   0x00, 0xFB, 0x00  @ vert 19: x=0,y=-5,z=0
+    .byte   0xFE, 0xFB, 0x00  @ vert 20: x=-2,y=-5,z=0
+    .byte   0x02, 0xFB, 0x00  @ vert 21: x=2,y=-5,z=0
+    .balign 4
+    .word   5               @ path_count
+    .byte   6               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   4
+    .byte   5
+    .byte   6               @ path 1: pt_count
+    .byte   1               @ path 1: closed
+    .byte   6
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   10
+    .byte   11
+    .byte   6               @ path 2: pt_count
+    .byte   1               @ path 2: closed
+    .byte   12
+    .byte   13
+    .byte   14
+    .byte   15
+    .byte   16
+    .byte   17
+    .byte   2               @ path 3: pt_count
+    .byte   0               @ path 3: closed
+    .byte   18
+    .byte   19
+    .byte   2               @ path 4: pt_count
+    .byte   0               @ path 4: closed
+    .byte   20
+    .byte   21
+
+@ --- suit_diamonds (1 path(s)) ---
+.global _SUIT_DIAMONDS_VECTORS
+_SUIT_DIAMONDS_VECTORS:
+    .word   1               @ path_count
+    .word   _SUIT_DIAMONDS_PATH0      @ ptr path 0
+
+_SUIT_DIAMONDS_PATH0:
+    .byte   127               @ intensity
+    .byte   0x07, 0x00, 0x00, 0x00  @ y=7, x=0, hdr
+    .byte   0xFF, 0xF9, 0x05  @ line dy=-7, dx=5
+    .byte   0xFF, 0xF9, 0xFB  @ line dy=-7, dx=-5
+    .byte   0xFF, 0x07, 0xFB  @ line dy=7, dx=-5
+    .byte   0xFF, 0x07, 0x05  @ line dy=7, dx=5
+    .byte   0x02            @ end marker
+
+@ --- SUIT_DIAMONDS_3D_DATA (1 path(s)) ---
+    .balign 4
+.global _SUIT_DIAMONDS_3D_DATA
+_SUIT_DIAMONDS_3D_DATA:
+    .word   4               @ vertex_count
+    .byte   0x00, 0x07, 0x00  @ vert 0: x=0,y=7,z=0
+    .byte   0x05, 0x00, 0x00  @ vert 1: x=5,y=0,z=0
+    .byte   0x00, 0xF9, 0x00  @ vert 2: x=0,y=-7,z=0
+    .byte   0xFB, 0x00, 0x00  @ vert 3: x=-5,y=0,z=0
+    .balign 4
+    .word   1               @ path_count
+    .byte   4               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+
+@ --- suit_hearts (1 path(s)) ---
+.global _SUIT_HEARTS_VECTORS
+_SUIT_HEARTS_VECTORS:
+    .word   1               @ path_count
+    .word   _SUIT_HEARTS_PATH0      @ ptr path 0
+
+_SUIT_HEARTS_PATH0:
+    .byte   127               @ intensity
+    .byte   0xFA, 0x00, 0x00, 0x00  @ y=-6, x=0, hdr
+    .byte   0xFF, 0x05, 0x05  @ line dy=5, dx=5
+    .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
+    .byte   0xFF, 0x04, 0xFE  @ line dy=4, dx=-2
+    .byte   0xFF, 0x01, 0xFD  @ line dy=1, dx=-3
+    .byte   0xFF, 0xFE, 0xFF  @ line dy=-2, dx=-1
+    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
+    .byte   0xFF, 0xFF, 0xFD  @ line dy=-1, dx=-3
+    .byte   0xFF, 0xFC, 0xFE  @ line dy=-4, dx=-2
+    .byte   0xFF, 0xFD, 0x01  @ line dy=-3, dx=1
+    .byte   0xFF, 0xFB, 0x05  @ line dy=-5, dx=5
+    .byte   0x02            @ end marker
+
+@ --- SUIT_HEARTS_3D_DATA (1 path(s)) ---
+    .balign 4
+.global _SUIT_HEARTS_3D_DATA
+_SUIT_HEARTS_3D_DATA:
+    .word   10               @ vertex_count
+    .byte   0x00, 0xFA, 0x00  @ vert 0: x=0,y=-6,z=0
+    .byte   0x05, 0xFF, 0x00  @ vert 1: x=5,y=-1,z=0
+    .byte   0x06, 0x02, 0x00  @ vert 2: x=6,y=2,z=0
+    .byte   0x04, 0x06, 0x00  @ vert 3: x=4,y=6,z=0
+    .byte   0x01, 0x07, 0x00  @ vert 4: x=1,y=7,z=0
+    .byte   0x00, 0x05, 0x00  @ vert 5: x=0,y=5,z=0
+    .byte   0xFF, 0x07, 0x00  @ vert 6: x=-1,y=7,z=0
+    .byte   0xFC, 0x06, 0x00  @ vert 7: x=-4,y=6,z=0
+    .byte   0xFA, 0x02, 0x00  @ vert 8: x=-6,y=2,z=0
+    .byte   0xFB, 0xFF, 0x00  @ vert 9: x=-5,y=-1,z=0
+    .balign 4
+    .word   1               @ path_count
+    .byte   10               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   7
+    .byte   8
+    .byte   9
+
+@ --- suit_spades (3 path(s)) ---
+.global _SUIT_SPADES_VECTORS
+_SUIT_SPADES_VECTORS:
+    .word   3               @ path_count
+    .word   _SUIT_SPADES_PATH0      @ ptr path 0
+    .word   _SUIT_SPADES_PATH1      @ ptr path 1
+    .word   _SUIT_SPADES_PATH2      @ ptr path 2
+
+_SUIT_SPADES_PATH0:
+    .byte   127               @ intensity
+    .byte   0x07, 0x00, 0x00, 0x00  @ y=7, x=0, hdr
+    .byte   0xFF, 0xFB, 0x05  @ line dy=-5, dx=5
+    .byte   0xFF, 0xFD, 0x01  @ line dy=-3, dx=1
+    .byte   0xFF, 0xFC, 0xFE  @ line dy=-4, dx=-2
+    .byte   0xFF, 0xFF, 0xFD  @ line dy=-1, dx=-3
+    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
+    .byte   0xFF, 0xFE, 0xFF  @ line dy=-2, dx=-1
+    .byte   0xFF, 0x01, 0xFD  @ line dy=1, dx=-3
+    .byte   0xFF, 0x04, 0xFE  @ line dy=4, dx=-2
+    .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
+    .byte   0xFF, 0x05, 0x05  @ line dy=5, dx=5
+    .byte   0x02            @ end marker
+
+_SUIT_SPADES_PATH1:
+    .byte   127               @ intensity
+    .byte   0xFC, 0x00, 0x00, 0x00  @ y=-4, x=0, hdr
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
+    .byte   0x02            @ end marker
+
+_SUIT_SPADES_PATH2:
+    .byte   127               @ intensity
+    .byte   0xF9, 0xFD, 0x00, 0x00  @ y=-7, x=-3, hdr
+    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0x02            @ end marker
+
+@ --- SUIT_SPADES_3D_DATA (3 path(s)) ---
+    .balign 4
+.global _SUIT_SPADES_3D_DATA
+_SUIT_SPADES_3D_DATA:
+    .word   13               @ vertex_count
+    .byte   0x00, 0x07, 0x00  @ vert 0: x=0,y=7,z=0
+    .byte   0x05, 0x02, 0x00  @ vert 1: x=5,y=2,z=0
+    .byte   0x06, 0xFF, 0x00  @ vert 2: x=6,y=-1,z=0
+    .byte   0x04, 0xFB, 0x00  @ vert 3: x=4,y=-5,z=0
+    .byte   0x01, 0xFA, 0x00  @ vert 4: x=1,y=-6,z=0
+    .byte   0x00, 0xFC, 0x00  @ vert 5: x=0,y=-4,z=0
+    .byte   0xFF, 0xFA, 0x00  @ vert 6: x=-1,y=-6,z=0
+    .byte   0xFC, 0xFB, 0x00  @ vert 7: x=-4,y=-5,z=0
+    .byte   0xFA, 0xFF, 0x00  @ vert 8: x=-6,y=-1,z=0
+    .byte   0xFB, 0x02, 0x00  @ vert 9: x=-5,y=2,z=0
+    .byte   0x00, 0xF9, 0x00  @ vert 10: x=0,y=-7,z=0
+    .byte   0xFD, 0xF9, 0x00  @ vert 11: x=-3,y=-7,z=0
+    .byte   0x03, 0xF9, 0x00  @ vert 12: x=3,y=-7,z=0
+    .balign 4
+    .word   3               @ path_count
+    .byte   10               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   2               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   5
+    .byte   10
+    .byte   2               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   11
+    .byte   12
 

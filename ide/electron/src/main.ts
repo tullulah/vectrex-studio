@@ -35,6 +35,10 @@ import {
   getFileBreakpoints,
   clearBreakpoints
 } from './pypilotDb.js';
+import os from 'os';
+// ffmpeg-static exports the absolute path to a per-platform prebuilt ffmpeg
+// binary. Used to transcode the renderer's WebM gameplay capture to MP4.
+import ffmpegStatic from 'ffmpeg-static';
 
 // macOS GUI apps launched from Finder/installer inherit a minimal PATH from
 // launchd (typically /usr/bin:/bin:/usr/sbin:/sbin) and do NOT pick up the
@@ -170,6 +174,7 @@ async function createWindow() {
               { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
               { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
               { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
+            { label: 'Vector Movie (.vmov)', click: () => mainWindow?.webContents.send('command', 'file.new.vmov') },
               { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
               { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
               { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
@@ -628,6 +633,7 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
             { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
             { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
             { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
+            { label: 'Vector Movie (.vmov)', click: () => mainWindow?.webContents.send('command', 'file.new.vmov') },
             { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
             { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
             { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
@@ -1104,12 +1110,206 @@ async function copyUvm2ToSDCard(um2Path: string, sdPath: string, win: BrowserWin
   }
 }
 
+// Run a subprocess and stream its stdout/stderr to the build/run output panel.
+// Resolves with the numeric exit code (or -1 if the process failed to spawn).
+function runFlashCommand(
+  cmd: string,
+  cmdArgs: string[],
+  cwd: string | undefined,
+  win: BrowserWindow | null,
+): Promise<number> {
+  return new Promise((resolve) => {
+    win?.webContents.send('run://stdout', `[RP2350] $ ${cmd} ${cmdArgs.join(' ')}\n`);
+    let child;
+    try {
+      child = spawn(cmd, cmdArgs, { cwd, env: process.env });
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[RP2350] Failed to spawn ${cmd}: ${e?.message || e}\n`);
+      resolve(-1);
+      return;
+    }
+    child.stdout?.on('data', (d) => win?.webContents.send('run://stdout', d.toString()));
+    child.stderr?.on('data', (d) => win?.webContents.send('run://stderr', d.toString()));
+    child.on('error', (err) => {
+      win?.webContents.send('run://stderr', `[RP2350] ${cmd} error: ${err.message}\n`);
+      resolve(-1);
+    });
+    child.on('close', (code) => resolve(code ?? -1));
+  });
+}
+
+// Flash the RP2350 debug cartridge with a freshly built VPy program.
+//
+// The `--target rp2350` build produces a standalone ELF that emits `svc #N`
+// traps which only the firmware (BIOS) can service, so the ELF is not
+// flashable on its own. The real deployable is the firmware Rust crate with the
+// VPy program's `.s` embedded as `src/intro.s`. Pipeline:
+//   1. Copy the built `.s` to <firmwareDir>/src/intro.s
+//   2. cargo build --release in <firmwareDir>
+//   3. Flash target/thumbv8m.main-none-eabihf/release/vectrex-cart via:
+//        - SWD: probe-rs download (--speed 1000 is REQUIRED) + probe-rs reset
+//        - USB: ELF -> UF2 via picotool, copy to /Volumes/RP2350 if mounted
+async function flashRp2350(
+  sPath: string,
+  firmwareDir: string,
+  method: 'none' | 'swd' | 'usb',
+  win: BrowserWindow | null,
+): Promise<void> {
+  if (method === 'none') return;
+
+  const fw = (firmwareDir || '').trim();
+  if (!fw) {
+    win?.webContents.send('run://stderr', '[RP2350] No firmware directory set. Configure it in Settings > Build Target > RP2350.\n');
+    win?.webContents.send('run://status', 'RP2350 flash failed: no firmware directory');
+    return;
+  }
+
+  // Verify firmware directory exists
+  try {
+    await fs.access(fw);
+  } catch {
+    win?.webContents.send('run://stderr', `[RP2350] Firmware directory not found: ${fw}\n`);
+    win?.webContents.send('run://status', `RP2350 flash failed: firmware dir not found`);
+    return;
+  }
+
+  // Step 2: copy built .s -> <firmwareDir>/src/intro.s
+  const introDst = join(fw, 'src', 'intro.s');
+  try {
+    await fs.access(sPath);
+  } catch {
+    win?.webContents.send('run://stderr', `[RP2350] Built assembly not found: ${sPath}\n`);
+    win?.webContents.send('run://status', 'RP2350 flash failed: .s not found');
+    return;
+  }
+  try {
+    await fs.copyFile(sPath, introDst);
+    win?.webContents.send('run://stdout', `[RP2350] Embedded program: ${sPath} -> ${introDst}\n`);
+  } catch (e: any) {
+    win?.webContents.send('run://stderr', `[RP2350] Failed to copy .s into firmware: ${e.message}\n`);
+    win?.webContents.send('run://status', 'RP2350 flash failed: could not embed .s');
+    return;
+  }
+
+  // Step 3: build the firmware
+  win?.webContents.send('run://status', 'RP2350: building firmware...');
+  const buildCode = await runFlashCommand('cargo', ['build', '--release'], fw, win);
+  if (buildCode !== 0) {
+    win?.webContents.send('run://stderr', `[RP2350] Firmware build failed (exit ${buildCode}).\n`);
+    win?.webContents.send('run://status', 'RP2350 flash failed: firmware build error');
+    return;
+  }
+
+  const elfPath = join(fw, 'target', 'thumbv8m.main-none-eabihf', 'release', 'vectrex-cart');
+  try {
+    await fs.access(elfPath);
+  } catch {
+    win?.webContents.send('run://stderr', `[RP2350] Firmware ELF not found: ${elfPath}\n`);
+    win?.webContents.send('run://status', 'RP2350 flash failed: ELF not found');
+    return;
+  }
+
+  // Step 4: flash by the chosen method
+  if (method === 'swd') {
+    // Before halting the core to reflash, poke the running firmware's "LOADING"
+    // mailbox (SCRATCH_X @ 0x20080000) with a background RAM write. It reacts on
+    // its next frame: silences the AY (which otherwise holds its last tone all
+    // through the CPU-halted flash → a stuck note) and shows a LOADING screen.
+    // Best-effort: if no game is running / probe-rs halts instead of doing a
+    // background write, this is a no-op and the flash proceeds as before.
+    await runFlashCommand(
+      'probe-rs',
+      ['write', '--chip', 'RP235x', '--speed', '1000', 'b32', '0x20080000', '0x10AD10AD'],
+      fw,
+      win,
+    ).catch(() => 0);
+    await new Promise((r) => setTimeout(r, 150)); // let the firmware react (a few frames)
+
+    // --speed 1000 is REQUIRED: at default SWD speed the download silently
+    // fails to commit (verify passes but the old image keeps running).
+    win?.webContents.send('run://status', 'RP2350: flashing via SWD...');
+    const dlCode = await runFlashCommand(
+      'probe-rs',
+      ['download', '--chip', 'RP235x', '--speed', '1000', '--binary-format', 'elf', elfPath],
+      fw,
+      win,
+    );
+    if (dlCode !== 0) {
+      win?.webContents.send('run://stderr', `[RP2350] probe-rs download failed (exit ${dlCode}). Is the SWD probe connected?\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: SWD download error');
+      return;
+    }
+    const resetCode = await runFlashCommand(
+      'probe-rs',
+      ['reset', '--chip', 'RP235x', '--speed', '1000'],
+      fw,
+      win,
+    );
+    if (resetCode !== 0) {
+      win?.webContents.send('run://stderr', `[RP2350] probe-rs reset failed (exit ${resetCode}).\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: SWD reset error');
+      return;
+    }
+    win?.webContents.send('run://stdout', '[RP2350] SWD flash complete. Cartridge reset.\n');
+    win?.webContents.send('run://status', 'RP2350 flashed via SWD');
+    return;
+  }
+
+  if (method === 'usb') {
+    // picotool needs a `.elf` extension on the input, so copy the
+    // extension-less ELF to a temp *.elf first.
+    const tmpElf = join(app.getPath('temp'), 'vectrex-cart.elf');
+    const uf2Out = join(app.getPath('temp'), 'vectrex-cart.uf2');
+    try {
+      await fs.copyFile(elfPath, tmpElf);
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[RP2350] Failed to stage ELF for picotool: ${e.message}\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: could not stage ELF');
+      return;
+    }
+    win?.webContents.send('run://status', 'RP2350: converting ELF -> UF2...');
+    const convCode = await runFlashCommand('picotool', ['uf2', 'convert', tmpElf, uf2Out], undefined, win);
+    if (convCode !== 0) {
+      win?.webContents.send('run://stderr', `[RP2350] picotool uf2 convert failed (exit ${convCode}).\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: UF2 conversion error');
+      return;
+    }
+    // Clear extended attributes so the copy to the FAT volume is clean.
+    await runFlashCommand('xattr', ['-c', uf2Out], undefined, win);
+
+    const bootselVol = '/Volumes/RP2350';
+    let mounted = false;
+    try {
+      await fs.access(bootselVol);
+      mounted = true;
+    } catch { /* not mounted */ }
+
+    if (!mounted) {
+      win?.webContents.send('run://stderr', `[RP2350] ${bootselVol} is not mounted. Hold BOOTSEL while plugging in the cartridge, then Build & Run again.\n`);
+      win?.webContents.send('run://stdout', `[RP2350] UF2 ready at: ${uf2Out}\n`);
+      win?.webContents.send('run://status', 'RP2350 USB: hold BOOTSEL and retry');
+      return;
+    }
+
+    // -X avoids a cosmetic xattr error on the FAT volume.
+    const cpCode = await runFlashCommand('cp', ['-X', uf2Out, bootselVol + '/'], undefined, win);
+    if (cpCode !== 0) {
+      win?.webContents.send('run://stderr', `[RP2350] Failed to copy UF2 to ${bootselVol} (exit ${cpCode}).\n`);
+      win?.webContents.send('run://status', 'RP2350 flash failed: UF2 copy error');
+      return;
+    }
+    win?.webContents.send('run://stdout', `[RP2350] UF2 copied to ${bootselVol}. Cartridge will reboot into the new image.\n`);
+    win?.webContents.send('run://status', 'RP2350 flashed via USB');
+    return;
+  }
+}
+
 // Exported function for direct invocation (e.g. from MCP server)
-export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string }) {
+export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string }) {
   // CRITICAL: Log received args to debug compiler selection
   console.log('[RUN] executeCompilation received args:', JSON.stringify({ ...args, saveIfDirty: args?.saveIfDirty ? '...' : undefined }));
   
-  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '' } = args || {} as any;
+  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '', rp2350FlashMethod = 'none', rp2350FirmwareDir = '', rp2350Ram = false, rp2350SdPath = '' } = args || {} as any;
   
   console.log('[RUN] Extracted compilerBackend:', compilerBackend);
   // Surface pitrex SD flags to the output panel so they're always visible
@@ -1234,6 +1434,19 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         await fs.mkdir(outputDir, { recursive: true });
       } catch {}
     }
+
+    // "Build for SD": a RAM-linked rp2350 game (loaded off the SD by the cart
+    // launcher, entry at 0x20040000). Write it to a distinct <name>_sd.bin so it
+    // never clobbers the runnable flash .bin, and never feed it to the emulator
+    // (which runs the flash-linked image).
+    const buildForSd = target === 'rp2350' && rp2350Ram;
+    if (buildForSd) {
+      finalBinPath = finalBinPath.replace(/\.bin$/, '_sd.bin');
+      // Keep outAsm in step so the post-build ASM-generated check (and the stale-
+      // file cleanup) look for <name>_sd.asm — the name vpy_cli derives from the
+      // _sd.bin output stem — not the plain <name>.asm (which never gets written).
+      outAsm = outAsm.replace(/\.asm$/, '_sd.asm');
+    }
     
     // Build compiler arguments based on backend
     let argsv: string[];
@@ -1254,6 +1467,12 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
 
       // Target platform
       argsv.push('--target', buildTarget);
+
+      // Build for SD: link the game to run from internal SRAM (0x20040000) so
+      // the cart's SD launcher can load it.
+      if (buildForSd) {
+        argsv.push('--ram');
+      }
 
       // Always generate debug symbols
       argsv.push('--debug');
@@ -1459,6 +1678,40 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           }
         }
 
+        // A RAM-linked SD build is not runnable in the emulator (it images the
+        // flash-linked game); don't push it to the renderer or flash it. Instead
+        // copy it onto the SD card under the name the launcher expects: the
+        // uppercased project stem + ".BIN" (e.g. SnowBros -> SNOWBROS.BIN).
+        if (buildForSd) {
+          const stem = basename(binPath).replace(/_sd\.bin$/i, '');
+          const sdName = `${stem.toUpperCase()}.BIN`;
+          if (rp2350SdPath) {
+            // The SD folder must already exist — it's a mounted volume (e.g.
+            // /Volumes/VMC2), NOT something we create. If it's missing the card
+            // isn't mounted on this computer; say so plainly instead of failing
+            // with a raw ENOENT (and don't mkdir a /Volumes mount point).
+            try {
+              await fs.access(rp2350SdPath);
+            } catch {
+              mainWindow?.webContents.send('run://stderr',
+                `⚠ Built ${binPath}\n   but the SD folder "${rp2350SdPath}" isn't there — is the card mounted on this computer? Copy it manually as ${sdName}.\n`);
+              resolvePromise({ ok: true, binPath, size: buf.length, stdout: stdoutBuf, stderr: stderrBuf, savedMTime, pdbData });
+              return;
+            }
+            try {
+              const dest = join(rp2350SdPath, sdName);
+              await fs.copyFile(binPath, dest);
+              mainWindow?.webContents.send('run://status', `✅ Built for SD → ${dest} (${buf.length} bytes)`);
+            } catch (e: any) {
+              mainWindow?.webContents.send('run://stderr', `⚠ Built ${binPath} but copy to SD failed: ${e.message}\n`);
+            }
+          } else {
+            mainWindow?.webContents.send('run://status', `✅ Built for SD: ${binPath} — copy it to the card as ${sdName}`);
+          }
+          resolvePromise({ ok: true, binPath, size: buf.length, stdout: stdoutBuf, stderr: stderrBuf, savedMTime, pdbData });
+          return;
+        }
+
         // Notify renderer to load binary
         mainWindow?.webContents.send('emu://compiledBin', {
           base64, size: buf.length, binPath, pdbData,
@@ -1475,6 +1728,12 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         // Copy to SD card if requested (uvm2 target)
         if (target === 'uvm2' && uvm2CopyToSD) {
           await copyUvm2ToSDCard(binPath, uvm2SdPath, mainWindow ?? null);
+        }
+
+        // Flash the RP2350 debug cartridge if requested (rp2350 target)
+        if (target === 'rp2350' && rp2350FlashMethod !== 'none') {
+          const sPath = binPath.replace(/\.[^.]+$/, '.s');
+          await flashRp2350(sPath, rp2350FirmwareDir, rp2350FlashMethod, mainWindow ?? null);
         }
 
         resolvePromise({ 
@@ -1527,6 +1786,75 @@ ipcMain.handle('file:read', async (_e, path: string) => {
     return { path, content, mtime: stat.mtimeMs, size: stat.size, name: basename(path) };
   } catch (e:any) {
     return { error: e?.message || 'read_failed' };
+  }
+});
+
+// Precompile a .vrec (JSON) into a binary .vrb via `vpy_cli vrec-compile`.
+function vrecToVrb(cli: string, input: string, output: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn(cli, ['vrec-compile', input, output], { stdio: 'ignore' });
+    child.on('exit', (code) => resolve(code === 0));
+    child.on('error', () => resolve(false));
+  });
+}
+
+// Compile a single .vrec → its .vrb sibling (called after a recording is saved,
+// so every recording ships with its hardware-compatible binary preview).
+ipcMain.handle('vrec:compile', async (_e, vrecPath: string) => {
+  try {
+    if (!vrecPath || !vrecPath.toLowerCase().endsWith('.vrec')) return { ok: false, error: 'not a .vrec' };
+    const cli = resolveCompilerPath('buildtools');
+    if (!cli) return { ok: false, error: 'compiler not found' };
+    const vrbPath = vrecPath.slice(0, -5) + '.vrb';
+    const ok = await vrecToVrb(cli, vrecPath, vrbPath);
+    return ok ? { ok: true, vrbPath } : { ok: false, error: 'vrec-compile failed' };
+  } catch (e:any) {
+    return { ok: false, error: e?.message || 'vrec_compile_failed' };
+  }
+});
+
+// Simulated SD card for the rp2350 emulator preview: a folder in the user's
+// home (`~/VectrexStudio/sd`, created if missing). Returns the uppercase stems
+// of its *.bin files — the game list the SD_FILE_COUNT/NAME traps serve.
+ipcMain.handle('sd:simList', async () => {
+  try {
+    const dir = join(os.homedir(), 'VectrexStudio', 'sd');
+    await fs.mkdir(dir, { recursive: true });
+    const entries = await fs.readdir(dir);
+    const files = entries
+      .filter(f => !f.startsWith('.') && f.toLowerCase().endsWith('.bin'))
+      .map(f => f.slice(0, -4).toUpperCase().slice(0, 12))
+      .sort()
+      .slice(0, 24);
+    // Precompile each preview .vrec → binary .vrb (cached by mtime) and return
+    // the .vrb bytes as base64. The .vrb is the hardware-compatible format the
+    // emulator parses — the same bytes the RP2350 firmware will stream from SD.
+    const previews: Record<string, string> = {};
+    try {
+      const pdir = join(dir, 'preview');
+      const cli = resolveCompilerPath('buildtools');
+      const pentries = await fs.readdir(pdir);
+      for (const pe of pentries) {
+        if (pe.startsWith('.') || !pe.toLowerCase().endsWith('.vrec')) continue;
+        const key = pe.slice(0, -5).toUpperCase().slice(0, 12);
+        if (!files.includes(key)) continue;
+        const vrecPath = join(pdir, pe);
+        const vrbPath = vrecPath.slice(0, -5) + '.vrb';
+        try {
+          let needCompile = true;
+          try {
+            const [vs, bs] = await Promise.all([fs.stat(vrecPath), fs.stat(vrbPath)]);
+            needCompile = bs.mtimeMs < vs.mtimeMs; // rebuild if .vrb is stale
+          } catch { needCompile = true; }
+          if (needCompile && cli) await vrecToVrb(cli, vrecPath, vrbPath);
+          const vrb = await fs.readFile(vrbPath);
+          previews[key] = vrb.toString('base64');
+        } catch { /* skip this preview */ }
+      }
+    } catch { /* no preview/ subfolder */ }
+    return { ok: true, dir, files, previews };
+  } catch (e:any) {
+    return { ok: false, error: e?.message || 'sd_list_failed', files: [] as string[], previews: {} };
   }
 });
 
@@ -1719,6 +2047,378 @@ ipcMain.handle('file:saveAs', async (_e, args: { suggestedName?: string; content
   }
 });
 
+// ── Gameplay video export (WebM → MP4 via bundled ffmpeg) ─────────────────
+// The renderer records the emulator canvas + audio as a WebM MediaStream and
+// hands the raw bytes here. We write a temp .webm, transcode with ffmpeg to
+// H.264/AAC .mp4 (yuv420p + faststart = max player/upload compatibility),
+// then return the saved path. Chromium's MediaRecorder can't reliably emit
+// MP4, hence the WebM-in-renderer / transcode-in-main split.
+function resolveFfmpegPath(): string | null {
+  const p = ffmpegStatic as unknown as string | null;
+  if (!p) return null;
+  // In a packaged build the binary lives inside app.asar, which isn't
+  // executable — electron-builder's asarUnpack extracts it to
+  // app.asar.unpacked. Rewrite the path so spawn finds the real file.
+  return p.replace('app.asar', 'app.asar.unpacked');
+}
+
+ipcMain.handle('video:saveMp4', async (_e, args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!win) return { error: 'no_window' };
+
+  const ffmpegPath = resolveFfmpegPath();
+  if (!ffmpegPath || !existsSync(ffmpegPath)) {
+    return { error: 'ffmpeg binary not found (ffmpeg-static missing or not unpacked)' };
+  }
+
+  const rawName = (args?.name || 'gameplay').replace(/\.(mp4|webm)$/i, '').replace(/[^\w.-]+/g, '_') || 'gameplay';
+
+  // Ask the user where to save the final MP4.
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    defaultPath: join(app.getPath('desktop') || os.homedir(), `${rawName}.mp4`),
+    filters: [{ name: 'MP4 Video', extensions: ['mp4'] }],
+  });
+  if (canceled || !filePath) return { canceled: true };
+
+  const stamp = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const tmpWebm = join(os.tmpdir(), `vpy_gameplay_${stamp}.webm`);
+
+  try {
+    const buf = Buffer.isBuffer(args.webmBytes)
+      ? args.webmBytes
+      : Buffer.from(args.webmBytes as ArrayBuffer);
+    await fs.writeFile(tmpWebm, buf);
+
+    const ffArgs = [
+      '-y',
+      '-i', tmpWebm,
+      // Explicit stream mapping: take video + audio (audio optional via '?' so a
+      // video-only input doesn't fail). Guards against default stream selection
+      // silently dropping the audio track.
+      '-map', '0:v:0',
+      '-map', '0:a:0?',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-preset', 'veryfast',
+      '-crf', '20',
+      '-c:a', 'aac',
+      '-b:a', '160k',
+      '-movflags', '+faststart',
+      filePath,
+    ];
+
+    const result = await new Promise<{ ok: boolean; stderr: string }>((resolve) => {
+      let stderr = '';
+      const proc = spawn(ffmpegPath, ffArgs, { windowsHide: true });
+      proc.stderr.on('data', (d) => { stderr += d.toString(); });
+      proc.on('error', (err) => resolve({ ok: false, stderr: String(err?.message || err) }));
+      proc.on('close', (code) => resolve({ ok: code === 0, stderr }));
+    });
+
+    // Clean up the temp WebM regardless of outcome.
+    await fs.unlink(tmpWebm).catch(() => {});
+
+    // Diagnostic: did the INPUT webm contain an audio stream? ffmpeg prints the
+    // input stream list ("Stream #0:N: Audio: opus ...") to stderr. This tells
+    // us whether the problem is upstream (MediaRecorder didn't encode audio) or
+    // here (ffmpeg dropped it). Extract just the Input section.
+    const inputSection = result.stderr.split(/Output #0|Stream mapping:/)[0];
+    const inputHadAudio = /Stream #\d+:\d+.*Audio:/i.test(inputSection);
+    const streamLines = (result.stderr.match(/Stream #\d+:\d+.*?(Video|Audio):[^\n]*/gi) || []).slice(0, 6);
+    console.log('[video:saveMp4] ffmpeg — inputHadAudio:', inputHadAudio, '| streams:', streamLines);
+
+    if (!result.ok) {
+      const tail = result.stderr.split('\n').slice(-12).join('\n').trim();
+      return { error: `ffmpeg failed: ${tail || 'unknown error'}` };
+    }
+    return { path: filePath, inputHadAudio, streams: streamLines };
+  } catch (e: any) {
+    await fs.unlink(tmpWebm).catch(() => {});
+    return { error: e?.message || 'video_export_failed' };
+  }
+});
+
+// Raw WebM save (no transcode) — isolates whether MediaRecorder encoded audio.
+ipcMain.handle('video:saveWebm', async (_e, args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!win) return { error: 'no_window' };
+  const rawName = (args?.name || 'gameplay').replace(/\.(mp4|webm)$/i, '').replace(/[^\w.-]+/g, '_') || 'gameplay';
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    defaultPath: join(app.getPath('desktop') || os.homedir(), `${rawName}.webm`),
+    filters: [{ name: 'WebM Video', extensions: ['webm'] }],
+  });
+  if (canceled || !filePath) return { canceled: true };
+  try {
+    const buf = Buffer.isBuffer(args.webmBytes) ? args.webmBytes : Buffer.from(args.webmBytes as ArrayBuffer);
+    await fs.writeFile(filePath, buf);
+    console.log('[video:saveWebm] wrote', buf.length, 'bytes →', filePath);
+    return { path: filePath };
+  } catch (e: any) {
+    return { error: e?.message || 'webm_save_failed' };
+  }
+});
+
+// ── Vector Movie converters (video → .vrec, audio → .vsmp) ────────────────
+// The VectorMovieEditor imports media by spawning the on-disk Python tools
+// (tools/video2vrec + tools/audio2vsmp). We resolve the repo root, spawn the
+// tool, stream its stderr progress ("[1/3] …") to the renderer via
+// 'movie://progress', and resolve with the produced file path.
+
+// Locate the repository root that holds the tools/ directory. Tries several
+// candidate roots (env override, dist-relative, cwd-relative) and returns the
+// first that actually contains tools/video2vrec/video2vrec.py.
+function resolveMovieRepoRoot(): string | null {
+  const candidates = [
+    process.env.VPY_REPO_ROOT,
+    // dev: compiled main lives in ide/electron/dist → up 3 = repo root
+    join(__dirname, '..', '..', '..'),
+    join(process.cwd(), '..', '..'),
+    process.cwd(),
+    // packaged: app dir sibling
+    app.isPackaged ? dirname(app.getPath('exe')) : undefined,
+  ].filter(Boolean) as string[];
+  for (const root of candidates) {
+    try {
+      if (existsSync(join(root, 'tools', 'video2vrec', 'video2vrec.py'))) return root;
+    } catch {}
+  }
+  return null;
+}
+
+// Environment for the movie converter/preview Python tools. They shell out to
+// ffmpeg — but a macOS GUI app inherits a STRIPPED PATH (no /opt/homebrew/bin,
+// no /usr/local/bin), so a bare `ffmpeg` isn't found and the tool hangs/fails
+// with a confusing error. Fix: hand the tools our BUNDLED ffmpeg-static via the
+// FFMPEG env var (self-contained, no PATH dependency), and also widen PATH as a
+// belt-and-suspenders for anything else the tools invoke.
+function movieSpawnEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  const ff = resolveFfmpegPath();
+  if (ff && existsSync(ff)) env.FFMPEG = ff;
+  const extra = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
+  const sep = process.platform === 'win32' ? ';' : ':';
+  const cur = (env.PATH || '').split(sep).filter(Boolean);
+  env.PATH = [...new Set([...cur, ...extra])].join(sep);
+  return env;
+}
+
+// movie:convert — spawn a converter tool. args:
+//   kind:  'video' | 'audio'
+//   inputPath: absolute source media path
+//   outPath:   absolute destination (.vrec or .vsmp); parent dir auto-created
+//   opts:      converter flags (see below)
+// video opts: { mode, fps, epsilon, budget, threshold, invert, crop, borderMargin }
+// audio opts: { rate, normalize }
+ipcMain.handle('movie:convert', async (_e, args: {
+  kind: 'video' | 'audio';
+  inputPath: string;
+  outPath: string;
+  opts?: Record<string, any>;
+}) => {
+  const { kind, inputPath, outPath, opts = {} } = args || ({} as any);
+  if (!kind || !inputPath || !outPath) return { error: 'missing_args' };
+
+  const root = resolveMovieRepoRoot();
+  if (!root) {
+    return { error: 'Converter tools not found. Expected tools/video2vrec/video2vrec.py under the repo root (set VPY_REPO_ROOT to override).' };
+  }
+
+  // Ensure the destination directory exists (recordings/ or samples/).
+  try { await fs.mkdir(dirname(outPath), { recursive: true }); } catch {}
+
+  let cmd: string;
+  const cliArgs: string[] = [];
+
+  if (kind === 'video') {
+    // Prefer the tool's dedicated venv python (has opencv); fall back to python3.
+    const isWin = process.platform === 'win32';
+    const venvPy = isWin
+      ? join(root, 'tools', 'video2vrec', '.venv', 'Scripts', 'python.exe')
+      : join(root, 'tools', 'video2vrec', '.venv', 'bin', 'python');
+    cmd = existsSync(venvPy) ? venvPy : (isWin ? 'python' : 'python3');
+    cliArgs.push(join(root, 'tools', 'video2vrec', 'video2vrec.py'), inputPath, outPath);
+    if (opts.mode) cliArgs.push('--mode', String(opts.mode));
+    if (opts.fps) cliArgs.push('--fps', String(opts.fps));
+    if (opts.epsilon != null) cliArgs.push('--epsilon', String(opts.epsilon));
+    if (opts.budget != null) cliArgs.push('--budget', String(opts.budget));
+    if (opts.threshold != null) cliArgs.push('--threshold', String(opts.threshold));
+    if (opts.dark != null) cliArgs.push('--dark', String(opts.dark));
+    if (opts.light != null) cliArgs.push('--light', String(opts.light));
+    if (opts.cannyLo != null) cliArgs.push('--canny-lo', String(opts.cannyLo));
+    if (opts.cannyHi != null) cliArgs.push('--canny-hi', String(opts.cannyHi));
+    if (opts.minArea != null) cliArgs.push('--min-area', String(opts.minArea));
+    if (opts.invert) cliArgs.push('--invert');
+    if (opts.crop != null && Number(opts.crop) > 0) cliArgs.push('--crop', String(opts.crop));
+    if (opts.borderMargin != null) cliArgs.push('--border-margin', String(opts.borderMargin));
+    if (opts.start != null && Number(opts.start) > 0) cliArgs.push('--start', String(opts.start));
+    if (opts.duration != null && Number(opts.duration) > 0) cliArgs.push('--duration', String(opts.duration));
+  } else {
+    // audio: system python3 (only needs ffmpeg on PATH).
+    cmd = process.platform === 'win32' ? 'python' : 'python3';
+    cliArgs.push(join(root, 'tools', 'audio2vsmp', 'audio2vsmp.py'), inputPath, outPath);
+    if (opts.rate) cliArgs.push('--rate', String(opts.rate));
+    if (opts.normalize) cliArgs.push('--normalize');
+    if (opts.start != null && Number(opts.start) > 0) cliArgs.push('--start', String(opts.start));
+    if (opts.duration != null && Number(opts.duration) > 0) cliArgs.push('--duration', String(opts.duration));
+  }
+
+  return await new Promise((resolve) => {
+    let stderr = '';
+    let stdout = '';
+    let proc;
+    try {
+      proc = spawn(cmd, cliArgs, { cwd: root, windowsHide: true, env: movieSpawnEnv() });
+    } catch (err: any) {
+      resolve({ error: `Failed to spawn converter: ${err?.message || err}` });
+      return;
+    }
+    const pushProgress = (chunk: string) => {
+      for (const raw of chunk.split(/\r?\n/)) {
+        const line = raw.trim();
+        if (line) mainWindow?.webContents.send('movie://progress', line);
+      }
+    };
+    proc.stdout?.on('data', (d) => { const s = d.toString(); stdout += s; pushProgress(s); });
+    proc.stderr?.on('data', (d) => { const s = d.toString(); stderr += s; pushProgress(s); });
+    proc.on('error', (err) => {
+      resolve({ error: `Failed to run converter (${cmd}): ${err.message}. Ensure Python and ffmpeg are installed and on PATH.` });
+    });
+    proc.on('close', (code) => {
+      if (code === 0 && existsSync(outPath)) {
+        resolve({ ok: true, outPath, stdout, stderr });
+      } else {
+        const tail = (stderr || stdout).split('\n').slice(-8).join('\n').trim();
+        resolve({ error: `Converter exited with code ${code}: ${tail || 'unknown error'}` });
+      }
+    });
+  });
+});
+
+// movie:previewFrame — trace ONE frame of a video at a timestamp so the editor's
+// "Trace tuning" panel can show original-vs-traced and dial in params before a
+// full convert. Spawns preview_frame.py with --emit json, parses stdout, and
+// returns { segments, width, height, originalPng(base64) } or { error }.
+//   videoPath: absolute source video path
+//   time:      timestamp in seconds (frame / fps)
+//   opts:      same trace flags as movie:convert's video branch
+ipcMain.handle('movie:previewFrame', async (_e, args: {
+  videoPath: string;
+  time: number;
+  opts?: Record<string, any>;
+}) => {
+  const { videoPath, time = 0, opts = {} } = args || ({} as any);
+  if (!videoPath) return { error: 'missing_args' };
+
+  const root = resolveMovieRepoRoot();
+  if (!root) {
+    return { error: 'Converter tools not found. Expected tools/video2vrec/preview_frame.py under the repo root (set VPY_REPO_ROOT to override).' };
+  }
+
+  const isWin = process.platform === 'win32';
+  const venvPy = isWin
+    ? join(root, 'tools', 'video2vrec', '.venv', 'Scripts', 'python.exe')
+    : join(root, 'tools', 'video2vrec', '.venv', 'bin', 'python');
+  const cmd = existsSync(venvPy) ? venvPy : (isWin ? 'python' : 'python3');
+
+  const cliArgs: string[] = [
+    join(root, 'tools', 'video2vrec', 'preview_frame.py'),
+    videoPath, '/dev/stdout',
+    '--time', String(time),
+    '--emit', 'json',
+  ];
+  if (opts.mode) cliArgs.push('--mode', String(opts.mode));
+  if (opts.threshold != null) cliArgs.push('--threshold', String(opts.threshold));
+  if (opts.dark != null) cliArgs.push('--dark', String(opts.dark));
+  if (opts.light != null) cliArgs.push('--light', String(opts.light));
+  if (opts.cannyLo != null) cliArgs.push('--canny-lo', String(opts.cannyLo));
+  if (opts.cannyHi != null) cliArgs.push('--canny-hi', String(opts.cannyHi));
+  if (opts.epsilon != null) cliArgs.push('--epsilon', String(opts.epsilon));
+  if (opts.budget != null) cliArgs.push('--budget', String(opts.budget));
+  if (opts.minArea != null) cliArgs.push('--min-area', String(opts.minArea));
+  if (opts.invert) cliArgs.push('--invert');
+  if (opts.crop != null && Number(opts.crop) > 0) cliArgs.push('--crop', String(opts.crop));
+  if (opts.borderMargin != null) cliArgs.push('--border-margin', String(opts.borderMargin));
+
+  return await new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let proc;
+    try {
+      proc = spawn(cmd, cliArgs, { cwd: root, windowsHide: true, env: movieSpawnEnv() });
+    } catch (err: any) {
+      resolve({ error: `Failed to spawn preview: ${err?.message || err}` });
+      return;
+    }
+    proc.stdout?.on('data', (d) => { stdout += d.toString(); });
+    proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+    proc.on('error', (err) => {
+      resolve({ error: `Failed to run preview (${cmd}): ${err.message}. Ensure Python and ffmpeg are installed and on PATH.` });
+    });
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        const tail = (stderr || stdout).split('\n').slice(-8).join('\n').trim();
+        resolve({ error: `Preview exited with code ${code}: ${tail || 'unknown error'}` });
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stdout);
+        resolve({
+          segments: parsed.segments || [],
+          width: parsed.width || 0,
+          height: parsed.height || 0,
+          originalPng: parsed.originalPng || '',
+          maskPng: parsed.maskPng || '',
+        });
+      } catch (err: any) {
+        resolve({ error: `Could not parse preview output: ${err?.message || err}` });
+      }
+    });
+  });
+});
+
+// movie:probe — get a video's duration (seconds) so the editor can bound the
+// from/to trim range. Uses the bundled ffmpeg (`ffmpeg -i` prints the duration
+// to stderr) rather than ffprobe, which ffmpeg-static doesn't ship.
+ipcMain.handle('movie:probe', async (_e, args: { videoPath: string }) => {
+  const videoPath = args?.videoPath;
+  if (!videoPath) return { error: 'missing_args' };
+  const ff = resolveFfmpegPath();
+  if (!ff || !existsSync(ff)) return { error: 'ffmpeg binary not found' };
+  return await new Promise((resolve) => {
+    let stderr = '';
+    let proc;
+    try {
+      proc = spawn(ff, ['-i', videoPath], { windowsHide: true, env: movieSpawnEnv() });
+    } catch (err: any) {
+      resolve({ error: `Failed to probe: ${err?.message || err}` });
+      return;
+    }
+    proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+    proc.on('error', (err) => resolve({ error: `Failed to probe: ${err.message}` }));
+    // `ffmpeg -i` with no output exits non-zero ("At least one output file...")
+    // but still prints "Duration: HH:MM:SS.ss" — parse it regardless of code.
+    proc.on('close', () => {
+      const m = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+      if (!m) { resolve({ error: 'could not parse duration' }); return; }
+      const durationSec = (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
+      const hasAudio = /Stream #\d+:\d+(?:\[[^\]]*\])?(?:\([^)]*\))?: Audio:/.test(stderr);
+      resolve({ durationSec, hasAudio });
+    });
+  });
+});
+
+// movie:pickFile — native open dialog for importing source media.
+ipcMain.handle('movie:pickFile', async (_e, args: { kind: 'video' | 'audio' }) => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow;
+  if (!win) return null;
+  const filters = args?.kind === 'audio'
+    ? [{ name: 'Audio / Video', extensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'mov', 'mp4', 'mkv', 'webm', 'avi'] }]
+    : [{ name: 'Video', extensions: ['mp4', 'mov', 'mkv', 'webm', 'avi', 'gif', 'm4v'] }];
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, { properties: ['openFile'], filters });
+  if (canceled || filePaths.length === 0) return null;
+  return { path: filePaths[0], name: basename(filePaths[0]) };
+});
+
 ipcMain.handle('file:openFolder', async () => {
   const win = BrowserWindow.getFocusedWindow() || mainWindow;
   if (!win) return null;
@@ -1863,6 +2563,7 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
             { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
             { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
             { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
+            { label: 'Vector Movie (.vmov)', click: () => mainWindow?.webContents.send('command', 'file.new.vmov') },
             { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
             { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
             { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
@@ -2134,6 +2835,7 @@ ipcMain.handle('project:create', async (_e, args: { name: string; location?: str
     await fs.mkdir(join(assetsDir, 'music'), { recursive: true });       // Music data
     await fs.mkdir(join(assetsDir, 'sfx'), { recursive: true });         // Sound effects
     await fs.mkdir(join(assetsDir, 'voices'), { recursive: true });      // Voice samples (AtariVox)
+    await fs.mkdir(join(assetsDir, 'movies'), { recursive: true });      // Vector movie manifests (.vmov)
     await fs.mkdir(buildDir, { recursive: true });
     
     // Create project file (TOML)

@@ -1,2976 +1,5448 @@
-; VPy M6809 Assembly (Vectrex)
-; ROM: 32768 bytes
-
-
-    ORG $0000
-
-;***************************************************************************
-; DEFINE SECTION
-;***************************************************************************
-    INCLUDE "VECTREX.I"
-
-;***************************************************************************
-; CARTRIDGE HEADER
-;***************************************************************************
-    FCC "g GCE 2025"
-    FCB $80                 ; String terminator
-    FDB music1              ; Music pointer
-    FCB $F8,$50,$20,$BB     ; Height, Width, Rel Y, Rel X
-    FCC "SUPER MARIO POC"
-    FCB $80                 ; String terminator
-    FCB 0                   ; End of header
-
-;***************************************************************************
-; CODE SECTION
-;***************************************************************************
-
-START:
-    LDA #$D0
-    TFR A,DP        ; Set Direct Page for BIOS
-    CLR $C80E        ; Initialize Vec_Prev_Btns
-    LDA #$80
-    STA VIA_t1_cnt_lo
-    LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
-    TFR X,S
-    JSR $F533        ; Init_Music_Buf: init BIOS sound work buffer at Vec_Default_Stk
-    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
-
-    ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
-    LDA #0
-    STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
-    CLR >LEVEL_LOADED       ; No level loaded yet (flag, not a pointer)
-    ; Initialize audio system variables to prevent random noise on startup
-    CLR >SFX_ACTIVE         ; Mark SFX as inactive (0=off)
-    LDD #$0000
-    STD >SFX_PTR            ; Clear SFX pointer
-    STA >PSG_MUSIC_BANK     ; Bank 0 for music (prevents garbage bank switch in emulator)
-    STA >SFX_BANK           ; Bank 0 for SFX (prevents garbage bank switch in emulator)
-    CLR >PSG_IS_PLAYING     ; No music playing at startup
-    CLR >PSG_DELAY_FRAMES   ; Clear delay counter
-    STD >PSG_MUSIC_PTR      ; Clear music pointer (D is already 0)
-    STD >PSG_MUSIC_START    ; Clear loop pointer
-    JMP MAIN
-
-;***************************************************************************
-; === RAM VARIABLE DEFINITIONS ===
-;***************************************************************************
-RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT) (2 bytes)
-TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
-TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
-VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
-VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
-TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
-BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
-BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
-DRAW_VEC_INTENSITY   EQU $C880+$0E   ; Vector intensity override (0=use vector data) (1 bytes)
-DRAW_VEC_X_HI        EQU $C880+$0F   ; Vector draw X high byte (16-bit screen_x) (1 bytes)
-DRAW_VEC_X           EQU $C880+$10   ; Vector draw X offset (1 bytes)
-DRAW_VEC_Y           EQU $C880+$11   ; Vector draw Y offset (1 bytes)
-MIRROR_PAD           EQU $C880+$12   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
-MIRROR_X             EQU $C880+$22   ; X mirror flag (0=normal, 1=flip) (1 bytes)
-MIRROR_Y             EQU $C880+$23   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$24   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$2E   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$30   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$32   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$33   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$34   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$36   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-LEVEL_PTR            EQU $C880+$38   ; Pointer to currently loaded level header (2 bytes)
-LEVEL_LOADED         EQU $C880+$3A   ; Level loaded flag (0=not loaded, 1=loaded) (1 bytes)
-LEVEL_WIDTH          EQU $C880+$3B   ; Level width (legacy tile API) (1 bytes)
-LEVEL_HEIGHT         EQU $C880+$3C   ; Level height (legacy tile API) (1 bytes)
-LEVEL_TILE_SIZE      EQU $C880+$3D   ; Tile size (legacy tile API) (1 bytes)
-LEVEL_Y_IDX          EQU $C880+$3E   ; SHOW_LEVEL row counter (legacy) (1 bytes)
-LEVEL_X_IDX          EQU $C880+$3F   ; SHOW_LEVEL column counter (legacy) (1 bytes)
-LEVEL_TEMP           EQU $C880+$40   ; SHOW_LEVEL temporary byte (legacy) (1 bytes)
-LEVEL_BG_COUNT       EQU $C880+$41   ; BG object count (1 bytes)
-LEVEL_GP_COUNT       EQU $C880+$42   ; GP object count (1 bytes)
-LEVEL_FG_COUNT       EQU $C880+$43   ; FG object count (1 bytes)
-CAMERA_X             EQU $C880+$44   ; Camera X scroll offset (16-bit signed world units) (2 bytes)
-CAMERA_Y             EQU $C880+$46   ; Camera Y scroll offset (16-bit signed world units) (2 bytes)
-SCROLL_LIMIT_LEFT    EQU $C880+$48   ; Camera scroll limit: left world X (2 bytes)
-SCROLL_LIMIT_RIGHT   EQU $C880+$4A   ; Camera scroll limit: right world X (2 bytes)
-SCROLL_LIMIT_TOP     EQU $C880+$4C   ; Camera scroll limit: top world Y (2 bytes)
-SCROLL_LIMIT_BOTTOM  EQU $C880+$4E   ; Camera scroll limit: bottom world Y (2 bytes)
-LEVEL_BG_ROM_PTR     EQU $C880+$50   ; BG layer ROM pointer (2 bytes)
-LEVEL_GP_ROM_PTR     EQU $C880+$52   ; GP layer ROM pointer (2 bytes)
-LEVEL_FG_ROM_PTR     EQU $C880+$54   ; FG layer ROM pointer (2 bytes)
-LEVEL_GP_PTR         EQU $C880+$56   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
-LEVEL_BANK           EQU $C880+$58   ; Bank ID for current level (for multibank) (1 bytes)
-LEVEL_ENEMY_COUNT    EQU $C880+$59   ; Enemy count from current level header (1 bytes)
-LEVEL_ENEMY_INSTANCES_PTR EQU $C880+$5A   ; Ptr to enemy instances table in level bank (2 bytes)
-LEVEL_SCREEN_COUNT   EQU $C880+$5C   ; Total Y screens partitioning the level (1 bytes)
-LEVEL_BG_SCREENS_PTR EQU $C880+$5D   ; Per-screen BG index ptr (3 bytes per screen) (2 bytes)
-LEVEL_GP_SCREENS_PTR EQU $C880+$5F   ; Per-screen GP index ptr (2 bytes)
-LEVEL_FG_SCREENS_PTR EQU $C880+$61   ; Per-screen FG index ptr (2 bytes)
-SLR_CUR_X            EQU $C880+$63   ; SHOW_LEVEL: clamped (visible) beam X — actually written to integrator (1 bytes)
-SLR_TRUE_X           EQU $C880+$64   ; SHOW_LEVEL: 16-bit unclamped abs_x for per-segment line clipping (2 bytes)
-DRAW_T1_SCALED       EQU $C880+$66   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
-SDCP_ABS_Y           EQU $C880+$67   ; SHOW_LEVEL: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt top_screen between layers) (1 bytes)
-SLR_TOP_SCREEN       EQU $C880+$68   ; SHOW_LEVEL: top Y screen idx (lives across all 3 layers — must not be in TMPVAL) (1 bytes)
-SLR_BOT_SCREEN       EQU $C880+$69   ; SHOW_LEVEL: bot Y screen idx (lives across all 3 layers) (1 bytes)
-LCOL_PX              EQU $C880+$6A   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
-LCOL_BEST_Y          EQU $C880+$6C   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
-LCOL_PY              EQU $C880+$6E   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
-LCOL_PHH             EQU $C880+$70   ; LEVEL_COLLISION player half_height (1 bytes)
-LCOL_PHW             EQU $C880+$71   ; LEVEL_COLLISION_X player half_width (1 bytes)
-LCOL_THW             EQU $C880+$72   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
-LCOL_OBJ_Y           EQU $C880+$73   ; LEVEL_COLLISION_Y current object world_y (16-bit) (2 bytes)
-LCOL_LOCAL_PX        EQU $C880+$75   ; LEVEL_COLLISION_Y player_x in object-local coords (16-bit) (2 bytes)
-LCOL_OBJ_CNT         EQU $C880+$77   ; LEVEL_COLLISION_Y GP objects remaining (1 bytes)
-LCOL_SEG_CNT         EQU $C880+$78   ; LEVEL_COLLISION_Y mesh floor segments remaining (1 bytes)
-DRAW_SCALE           EQU $C880+$79   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_ARG0             EQU $C880+$7A   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $C880+$7C   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $C880+$7E   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $C880+$80   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $C880+$82   ; Function argument 4 (16-bit) (2 bytes)
-VAR_ARG5             EQU $C880+$84   ; Function argument 5 (16-bit) (2 bytes)
-VAR_ARG6             EQU $C880+$86   ; Function argument 6 (16-bit) (2 bytes)
-VAR_ARG7             EQU $C880+$88   ; Function argument 7 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-VAR_PLAYER_X         EQU $C880+$8B   ; User variable: PLAYER_X (2 bytes)
-VAR_PLAYER_Y         EQU $C880+$8D   ; User variable: PLAYER_Y (2 bytes)
-VAR_VEL_Y            EQU $C880+$8F   ; User variable: VEL_Y (2 bytes)
-VAR_ON_GROUND        EQU $C880+$91   ; User variable: ON_GROUND (1 bytes)
-VAR_PREV_Y           EQU $C880+$92   ; User variable: PREV_Y (2 bytes)
-VAR_CAMERA_X         EQU $C880+$94   ; User variable: CAMERA_X (2 bytes)
-VAR_FLOOR_Y          EQU $C880+$96   ; User variable: FLOOR_Y (2 bytes)
-VAR_JOY_X            EQU $C880+$98   ; User variable: JOY_X (2 bytes)
-VAR_BTN_JUMP         EQU $C880+$9A   ; User variable: BTN_JUMP (2 bytes)
-PSG_MUSIC_PTR        EQU $C880+$9C   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$9E   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$A0   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $C880+$A1   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$A2   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $C880+$A3   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $C880+$A4   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $C880+$A6   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $C880+$A7   ; SFX bank ID (for multibank) (1 bytes)
-
-;***************************************************************************
-; MAIN PROGRAM
-;***************************************************************************
-
-MAIN:
-    ; Initialize global variables
-    CLR VPY_MOVE_X        ; MOVE offset defaults to 0
-    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
-    ; Init camera ONCE at boot (RAM not zero-init); LOAD_LEVEL must NOT reset it.
-    LDD #0
-    STD >CAMERA_X
-    STD >CAMERA_Y
-    LDA #$7F
-    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
-    LDD #0
-    STD VAR_PLAYER_X
-    LDD #-57
-    STD VAR_PLAYER_Y
-    LDD #0
-    STD VAR_VEL_Y
-    LDD #1
-    STD VAR_ON_GROUND
-    LDD #-57
-    STD VAR_PREV_Y
-    LDD #0
-    STD VAR_CAMERA_X
-    LDD #-57
-    STD VAR_FLOOR_Y
-    ; === Initialize Joystick (one-time setup) ===
-    JSR $F1AF    ; DP_to_C8 (required for RAM access)
-    CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
-    LDA #$01     ; CRITICAL: Resolution threshold (power of 2: $40=fast, $01=accurate)
-    STA $C81A    ; Vec_Joy_Resltn (loop terminates when B=this value after LSRBs)
-    LDA #$01
-    STA $C81F    ; Vec_Joy_Mux_1_X (enable X axis reading)
-    LDA #$03
-    STA $C820    ; Vec_Joy_Mux_1_Y (enable Y axis reading)
-    LDA #$00
-    STA $C821    ; Vec_Joy_Mux_2_X (disable joystick 2 - CRITICAL!)
-    STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
-    ; Mux configured - J1_X()/J1_Y() can now be called
-
-    ; Prime BIOS button state at startup
-    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
-    ; Call main() for initialization
-; VPy_LINE:22
-    ; ===== LOAD_LEVEL builtin =====
-    ; Load level: 'world_1_1'
-    LDX #_WORLD_1_1_LEVEL          ; Pointer to level data in ROM
-    JSR LOAD_LEVEL_RUNTIME
-    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
-
-.MAIN_LOOP:
-    JSR LOOP_BODY
-    LBRA .MAIN_LOOP   ; Use long branch for multibank support
-
-LOOP_BODY:
-    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
-    JSR $F1AA    ; DP_to_D0 (Joy_Analog requires DP=$D0)
-    JSR $F1F5    ; Joy_Analog: poll all 4 axes once → $C81B-$C81E
-    JSR Reset0Ref ; Restore beam state after Joy_Analog
-    JSR $F1AF    ; DP_to_C8 (restore DP for RAM access)
-; VPy_LINE:26
-; NATIVE_CALL: J1_X at line 26
-    JSR J1X_BUILTIN
-    STD RESULT
-    STD VAR_JOY_X
-; VPy_LINE:27
-; NATIVE_CALL: J1_BUTTON_1 at line 27
-    LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
-    BITA #$01
-    BNE .J1B1_0_ON
-    LDD #0
-    BRA .J1B1_0_END
-.J1B1_0_ON:
-    LDD #1
-.J1B1_0_END:
-    STD RESULT
-    STD VAR_BTN_JUMP
-; VPy_LINE:30
-    LDD #20
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_JOY_X
-    CMPD TMPVAL
-    LBGT .CMP_0_TRUE
-    LDD #0
-    LBRA .CMP_0_END
-.CMP_0_TRUE:
-    LDD #1
-.CMP_0_END:
-    LBEQ IF_NEXT_1
-; VPy_LINE:31
-    LDD #3
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_PLAYER_X
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_PLAYER_X
-    LBRA IF_END_0
-IF_NEXT_1:
-IF_END_0:
-; VPy_LINE:32
-    LDD #-20
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_JOY_X
-    CMPD TMPVAL
-    LBLT .CMP_1_TRUE
-    LDD #0
-    LBRA .CMP_1_END
-.CMP_1_TRUE:
-    LDD #1
-.CMP_1_END:
-    LBEQ IF_NEXT_3
-; VPy_LINE:33
-    LDD #3
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_PLAYER_X
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD VAR_PLAYER_X
-    LBRA IF_END_2
-IF_NEXT_3:
-IF_END_2:
-; VPy_LINE:36
-    ; CLAMP: Clamp value to range [min, max]
-    LDD >VAR_PLAYER_X
-    STD TMPPTR     ; Save value
-    LDD #-100
-    STD TMPPTR+2   ; Save min
-    LDD #1050
-    STD TMPPTR+4   ; Save max
-    LDD TMPPTR     ; Load value
-    CMPD TMPPTR+2  ; Compare with min
-    BGE .CLAMP_0_CHK_MAX ; Branch if value >= min
-    LDD TMPPTR+2
-    STD RESULT
-    BRA .CLAMP_0_END
-.CLAMP_0_CHK_MAX:
-    LDD TMPPTR     ; Load value again
-    CMPD TMPPTR+4  ; Compare with max
-    BLE .CLAMP_0_OK  ; Branch if value <= max
-    LDD TMPPTR+4
-    STD RESULT
-    BRA .CLAMP_0_END
-.CLAMP_0_OK:
-    LDD TMPPTR
-    STD RESULT
-.CLAMP_0_END:
-    STD VAR_PLAYER_X
-; VPy_LINE:39
-    LDD >VAR_BTN_JUMP
-    CMPD #1
-    LBNE IF_NEXT_5
-; VPy_LINE:40
-    LDB >VAR_ON_GROUND
-    CLRA            ; Zero-extend: A=0, B=value
-    CMPD #1
-    LBNE IF_NEXT_7
-; VPy_LINE:41
-    LDD #12
-    STD VAR_VEL_Y
-; VPy_LINE:42
-    LDD #0
-    STB VAR_ON_GROUND
-; VPy_LINE:43
-; NATIVE_CALL: PLAY_SFX at line 43
-    ; PLAY_SFX("jump") - play SFX asset (index=0)
-    LDX #_JUMP_SFX  ; Load SFX data pointer
-    JSR PLAY_SFX_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_6
-IF_NEXT_7:
-IF_END_6:
-    LBRA IF_END_4
-IF_NEXT_5:
-IF_END_4:
-; VPy_LINE:46
-    LDB >VAR_ON_GROUND
-    CLRA            ; Zero-extend: A=0, B=value
-    CMPD #0
-    LBNE IF_NEXT_9
-; VPy_LINE:47
-    LDD >VAR_PLAYER_Y
-    STD VAR_PREV_Y
-; VPy_LINE:48
-    LDD >VAR_VEL_Y
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_PLAYER_Y
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_PLAYER_Y
-; VPy_LINE:49
-    LDD #1
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_VEL_Y
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD VAR_VEL_Y
-; VPy_LINE:53
-; NATIVE_CALL: LEVEL_COLLISION_Y at line 53
-    ; ===== LEVEL_COLLISION_Y builtin =====
-    LDD >VAR_PLAYER_X
-    STD >LCOL_PX         ; store player world_x (16-bit)
-    LDD #13  ; const MARIO_HH
-    STB >LCOL_PHH        ; store player half_height
-    LDD >VAR_PREV_Y
-    ; Compute player_feet = player_y - player_hh (16-bit)
-    STD >TMPVAL          ; save player_y
-    LDB >LCOL_PHH        ; B = player_hh
-    CLRA
-    STD >LCOL_PY         ; reuse as scratch (16-bit hh)
-    LDD >TMPVAL          ; D = player_y
-    SUBD >LCOL_PY        ; D = player_y - player_hh = player_feet
-    STD >LCOL_PY         ; store player_feet Y (16-bit) for surface filter
-    JSR LEVEL_COLLISION_Y_RUNTIME
-    STD VAR_FLOOR_Y
-; VPy_LINE:55
-; NATIVE_CALL: MAX at line 55
-    ; MAX: Return maximum of two values
-    LDD >VAR_FLOOR_Y
-    STD TMPPTR     ; Save first value
-    LDD #-57
-    STD TMPPTR2    ; Save second value
-    LDD TMPPTR     ; Load first value
-    CMPD TMPPTR2   ; Compare first vs second
-    BGE .MAX_1_FIRST ; Branch if first >= second
-    LDD TMPPTR2    ; Second is larger
-    STD RESULT
-    BRA .MAX_1_END
-.MAX_1_FIRST:
-    STD RESULT     ; First is larger (D still = first from LDD TMPPTR)
-.MAX_1_END:
-    STD VAR_FLOOR_Y
-; VPy_LINE:58
-    LDD >VAR_FLOOR_Y
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_Y
-    CMPD TMPVAL
-    LBLE .CMP_2_TRUE
-    LDD #0
-    LBRA .CMP_2_END
-.CMP_2_TRUE:
-    LDD #1
-.CMP_2_END:
-    LBEQ IF_NEXT_11
-; VPy_LINE:59
-    LDD >VAR_FLOOR_Y
-    STD VAR_PLAYER_Y
-; VPy_LINE:60
-    LDD #0
-    STD VAR_VEL_Y
-; VPy_LINE:61
-    LDD #1
-    STB VAR_ON_GROUND
-    LBRA IF_END_10
-IF_NEXT_11:
-IF_END_10:
-    LBRA IF_END_8
-IF_NEXT_9:
-IF_END_8:
-; VPy_LINE:64
-    LDB >VAR_ON_GROUND
-    CLRA            ; Zero-extend: A=0, B=value
-    CMPD #1
-    LBNE IF_NEXT_13
-; VPy_LINE:65
-; NATIVE_CALL: LEVEL_COLLISION_Y at line 65
-    ; ===== LEVEL_COLLISION_Y builtin =====
-    LDD >VAR_PLAYER_X
-    STD >LCOL_PX         ; store player world_x (16-bit)
-    LDD #13  ; const MARIO_HH
-    STB >LCOL_PHH        ; store player half_height
-    LDD >VAR_PLAYER_Y
-    ; Compute player_feet = player_y - player_hh (16-bit)
-    STD >TMPVAL          ; save player_y
-    LDB >LCOL_PHH        ; B = player_hh
-    CLRA
-    STD >LCOL_PY         ; reuse as scratch (16-bit hh)
-    LDD >TMPVAL          ; D = player_y
-    SUBD >LCOL_PY        ; D = player_y - player_hh = player_feet
-    STD >LCOL_PY         ; store player_feet Y (16-bit) for surface filter
-    JSR LEVEL_COLLISION_Y_RUNTIME
-    STD VAR_FLOOR_Y
-; VPy_LINE:66
-; NATIVE_CALL: MAX at line 66
-    ; MAX: Return maximum of two values
-    LDD >VAR_FLOOR_Y
-    STD TMPPTR     ; Save first value
-    LDD #-57
-    STD TMPPTR2    ; Save second value
-    LDD TMPPTR     ; Load first value
-    CMPD TMPPTR2   ; Compare first vs second
-    BGE .MAX_2_FIRST ; Branch if first >= second
-    LDD TMPPTR2    ; Second is larger
-    STD RESULT
-    BRA .MAX_2_END
-.MAX_2_FIRST:
-    STD RESULT     ; First is larger (D still = first from LDD TMPPTR)
-.MAX_2_END:
-    STD VAR_FLOOR_Y
-; VPy_LINE:67
-    LDD >VAR_FLOOR_Y
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_PLAYER_Y
-    CMPD TMPVAL
-    LBGT .CMP_3_TRUE
-    LDD #0
-    LBRA .CMP_3_END
-.CMP_3_TRUE:
-    LDD #1
-.CMP_3_END:
-    LBEQ IF_NEXT_15
-; VPy_LINE:68
-    LDD #0
-    STB VAR_ON_GROUND
-    LBRA IF_END_14
-IF_NEXT_15:
-IF_END_14:
-    LBRA IF_END_12
-IF_NEXT_13:
-IF_END_12:
-; VPy_LINE:71
-    LDD #30
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_PLAYER_X
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_CAMERA_X
-; VPy_LINE:72
-    ; CLAMP: Clamp value to range [min, max]
-    LDD >VAR_CAMERA_X
-    STD TMPPTR     ; Save value
-    LDD #0
-    STD TMPPTR+2   ; Save min
-    LDD #970
-    STD TMPPTR+4   ; Save max
-    LDD TMPPTR     ; Load value
-    CMPD TMPPTR+2  ; Compare with min
-    BGE .CLAMP_3_CHK_MAX ; Branch if value >= min
-    LDD TMPPTR+2
-    STD RESULT
-    BRA .CLAMP_3_END
-.CLAMP_3_CHK_MAX:
-    LDD TMPPTR     ; Load value again
-    CMPD TMPPTR+4  ; Compare with max
-    BLE .CLAMP_3_OK  ; Branch if value <= max
-    LDD TMPPTR+4
-    STD RESULT
-    BRA .CLAMP_3_END
-.CLAMP_3_OK:
-    LDD TMPPTR
-    STD RESULT
-.CLAMP_3_END:
-    STD VAR_CAMERA_X
-; VPy_LINE:74
-; NATIVE_CALL: SET_CAMERA_X at line 74
-    ; ===== SET_CAMERA_X builtin =====
-    LDD >VAR_CAMERA_X
-    STD >CAMERA_X    ; Store 16-bit camera X scroll offset
-    LDD #0
-    STD RESULT
-; VPy_LINE:75
-    ; ===== SHOW_LEVEL builtin =====
-    JSR SHOW_LEVEL_RUNTIME
-    LDD #0
-    STD RESULT
-; VPy_LINE:78
-; NATIVE_CALL: DRAW_VECTOR at line 78
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: mario (index=2, 10 paths)
-    LDD #-30
-    STA TMPPTR2      ; save high byte of 16-bit screen_x
-    TFR B,A
-    SEX              ; A = sign-extend of B (0x00 or 0xFF)
-    CMPA TMPPTR2     ; vs actual high byte
-    LBNE DRVEC_SKIP_1          ; out of 8-bit range — skip draw
-    TFR B,A
-    STA TMPPTR       ; save 8-bit x
-    LDD >VAR_PLAYER_Y
-    TFR B,A          ; Y position (8-bit signed in A)
-    STA TMPPTR+1     ; Save Y to temporary storage
-    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)
-    STA DRAW_VEC_X
-    LDB #0
-    TSTA
-    BPL .sx_pos_1
-    LDB #$FF
-.sx_pos_1:
-    STB DRAW_VEC_X_HI
-    LDA TMPPTR+1     ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)
-    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDX #_MARIO_PATH0  ; Load path 0
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_PATH1  ; Load path 1
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_PATH2  ; Load path 2
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_PATH3  ; Load path 3
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_PATH4  ; Load path 4
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_PATH5  ; Load path 5
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_PATH6  ; Load path 6
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_PATH7  ; Load path 7
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_PATH8  ; Load path 8
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_MARIO_PATH9  ; Load path 9
-    JSR Draw_Sync_List_At_With_Mirrors
-    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-DRVEC_SKIP_1:
-    LDD #0
-    STD RESULT
-; VPy_LINE:79
-; NATIVE_CALL: DEBUG_PRINT at line 79
-    LDD >VAR_FLOOR_Y
-    ; DEBUG_PRINT(FLOOR_Y)
-    STB $C000
-    STA $C002
-    LDX #DEBUG_LABEL_FLOOR_Y
-    STX $C004
-    LDA #$FE
-    STA $C001
-    BRA DEBUG_SKIP_0
-DEBUG_LABEL_FLOOR_Y:
-    FCC "FLOOR_Y"
-    FCB $00
-DEBUG_SKIP_0:
-    LDD #0
-    STD RESULT
-; VPy_LINE:80
-; NATIVE_CALL: DEBUG_PRINT at line 80
-    LDD >VAR_PLAYER_Y
-    ; DEBUG_PRINT(PLAYER_Y)
-    STB $C000
-    STA $C002
-    LDX #DEBUG_LABEL_PLAYER_Y
-    STX $C004
-    LDA #$FE
-    STA $C001
-    BRA DEBUG_SKIP_1
-DEBUG_LABEL_PLAYER_Y:
-    FCC "PLAYER_Y"
-    FCB $00
-DEBUG_SKIP_1:
-    LDD #0
-    STD RESULT
-    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX
-    RTS
-
-;***************************************************************************
-; EMBEDDED ASSETS (vectors, music, levels, SFX)
-;***************************************************************************
-
-; Generated from cloud.vec (Malban Draw_Sync_List format)
-; Total paths: 1, points: 12
-; X bounds: min=-25, max=25, width=50
-; Center: (0, 0)
-
-_CLOUD_WIDTH EQU 50
-_CLOUD_HALF_WIDTH EQU 25
-_CLOUD_HEIGHT EQU 20
-_CLOUD_HALF_HEIGHT EQU 10
-_CLOUD_CENTER_X EQU 0
-_CLOUD_CENTER_Y EQU 0
-
-_CLOUD_VECTORS:  ; Main entry (header + 1 path(s))
-    FDB 1               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _CLOUD_PATH0        ; pointer to path 0
-
-_CLOUD_PATH0:    ; Path 0
-    FCB 55              ; path0: intensity
-    FCB $F6,$E7,0,0        ; path0: header (y=-10, x=-25)
-    FCB $FF,$00,$32          ; flag=-1, dy=0, dx=50
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
-    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
-    FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB 2                ; End marker (path complete)
-; Generated from ground_tile.vec (Malban Draw_Sync_List format)
-; Total paths: 7, points: 17
-; X bounds: min=-30, max=30, width=60
-; Center: (0, 0)
-
-_GROUND_TILE_WIDTH EQU 60
-_GROUND_TILE_HALF_WIDTH EQU 30
-_GROUND_TILE_HEIGHT EQU 16
-_GROUND_TILE_HALF_HEIGHT EQU 8
-_GROUND_TILE_CENTER_X EQU 0
-_GROUND_TILE_CENTER_Y EQU 0
-
-_GROUND_TILE_VECTORS:  ; Main entry (header + 7 path(s))
-    FDB 7               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _GROUND_TILE_PATH0        ; pointer to path 0
-    FDB _GROUND_TILE_PATH1        ; pointer to path 1
-    FDB _GROUND_TILE_PATH2        ; pointer to path 2
-    FDB _GROUND_TILE_PATH3        ; pointer to path 3
-    FDB _GROUND_TILE_PATH4        ; pointer to path 4
-    FDB _GROUND_TILE_PATH5        ; pointer to path 5
-    FDB _GROUND_TILE_PATH6        ; pointer to path 6
-
-_GROUND_TILE_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $00,$02,0,0        ; path0: header (y=0, x=2)
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB 2                ; End marker (path complete)
-
-_GROUND_TILE_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $00,$0B,0,0        ; path1: header (y=0, x=11)
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB 2                ; End marker (path complete)
-
-_GROUND_TILE_PATH2:    ; Path 2
-    FCB 127              ; path2: intensity
-    FCB $00,$17,0,0        ; path2: header (y=0, x=23)
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB 2                ; End marker (path complete)
-
-_GROUND_TILE_PATH3:    ; Path 3
-    FCB 60              ; path3: intensity
-    FCB $00,$1E,0,0        ; path3: header (y=0, x=30)
-    FCB $FF,$00,$C4          ; flag=-1, dy=0, dx=-60
-    FCB 2                ; End marker (path complete)
-
-_GROUND_TILE_PATH4:    ; Path 4
-    FCB 80              ; path4: intensity
-    FCB $F8,$E2,0,0        ; path4: header (y=-8, x=-30)
-    FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
-    FCB $FF,$10,$00          ; flag=-1, dy=16, dx=0
-    FCB $FF,$00,$C4          ; flag=-1, dy=0, dx=-60
-    FCB $FF,$F0,$00          ; flag=-1, dy=-16, dx=0
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_GROUND_TILE_PATH5:    ; Path 5
-    FCB 127              ; path5: intensity
-    FCB $00,$EC,0,0        ; path5: header (y=0, x=-20)
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB 2                ; End marker (path complete)
-
-_GROUND_TILE_PATH6:    ; Path 6
-    FCB 127              ; path6: intensity
-    FCB $00,$F7,0,0        ; path6: header (y=0, x=-9)
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB 2                ; End marker (path complete)
-; Generated from mario.vec (Malban Draw_Sync_List format)
-; Total paths: 10, points: 26
-; X bounds: min=-7, max=7, width=14
-; Center: (0, 2)
-
-_MARIO_WIDTH EQU 14
-_MARIO_HALF_WIDTH EQU 7
-_MARIO_HEIGHT EQU 26
-_MARIO_HALF_HEIGHT EQU 13
-_MARIO_CENTER_X EQU 0
-_MARIO_CENTER_Y EQU 2
-
-_MARIO_VECTORS:  ; Main entry (header + 10 path(s))
-    FDB 10               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _MARIO_PATH0        ; pointer to path 0
-    FDB _MARIO_PATH1        ; pointer to path 1
-    FDB _MARIO_PATH2        ; pointer to path 2
-    FDB _MARIO_PATH3        ; pointer to path 3
-    FDB _MARIO_PATH4        ; pointer to path 4
-    FDB _MARIO_PATH5        ; pointer to path 5
-    FDB _MARIO_PATH6        ; pointer to path 6
-    FDB _MARIO_PATH7        ; pointer to path 7
-    FDB _MARIO_PATH8        ; pointer to path 8
-    FDB _MARIO_PATH9        ; pointer to path 9
-
-_MARIO_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $01,$FA,0,0        ; path0: header (y=1, x=-6)
-    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB $FF,$00,$F4          ; flag=-1, dy=0, dx=-12
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_MARIO_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $09,$F9,0,0        ; path1: header (y=9, x=-7)
-    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
-    FCB 2                ; End marker (path complete)
-
-_MARIO_PATH2:    ; Path 2
-    FCB 127              ; path2: intensity
-    FCB $09,$05,0,0        ; path2: header (y=9, x=5)
-    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
-    FCB 2                ; End marker (path complete)
-
-_MARIO_PATH3:    ; Path 3
-    FCB 127              ; path3: intensity
-    FCB $0D,$05,0,0        ; path3: header (y=13, x=5)
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB 2                ; End marker (path complete)
-
-_MARIO_PATH4:    ; Path 4
-    FCB 127              ; path4: intensity
-    FCB $0D,$FB,0,0        ; path4: header (y=13, x=-5)
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB 2                ; End marker (path complete)
-
-_MARIO_PATH5:    ; Path 5
-    FCB 127              ; path5: intensity
-    FCB $F9,$F9,0,0        ; path5: header (y=-7, x=-7)
-    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB $FF,$00,$F2          ; flag=-1, dy=0, dx=-14
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_MARIO_PATH6:    ; Path 6
-    FCB 127              ; path6: intensity
-    FCB $F9,$F9,0,0        ; path6: header (y=-7, x=-7)
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
-    FCB 2                ; End marker (path complete)
-
-_MARIO_PATH7:    ; Path 7
-    FCB 127              ; path7: intensity
-    FCB $F3,$F9,0,0        ; path7: header (y=-13, x=-7)
-    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
-    FCB 2                ; End marker (path complete)
-
-_MARIO_PATH8:    ; Path 8
-    FCB 127              ; path8: intensity
-    FCB $F3,$02,0,0        ; path8: header (y=-13, x=2)
-    FCB $FF,$00,$05          ; flag=-1, dy=0, dx=5
-    FCB 2                ; End marker (path complete)
-
-_MARIO_PATH9:    ; Path 9
-    FCB 127              ; path9: intensity
-    FCB $F3,$07,0,0        ; path9: header (y=-13, x=7)
-    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
-    FCB 2                ; End marker (path complete)
-; Generated from mountain.vec (Malban Draw_Sync_List format)
-; Total paths: 1, points: 19
-; X bounds: min=-30, max=30, width=60
-; Center: (0, 0)
-
-_MOUNTAIN_WIDTH EQU 60
-_MOUNTAIN_HALF_WIDTH EQU 30
-_MOUNTAIN_HEIGHT EQU 38
-_MOUNTAIN_HALF_HEIGHT EQU 19
-_MOUNTAIN_CENTER_X EQU 0
-_MOUNTAIN_CENTER_Y EQU 0
-
-_MOUNTAIN_VECTORS:  ; Main entry (header + 1 path(s))
-    FDB 1               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _MOUNTAIN_PATH0        ; pointer to path 0
-
-_MOUNTAIN_PATH0:    ; Path 0
-    FCB 45              ; path0: intensity
-    FCB $ED,$E2,0,0        ; path0: header (y=-19, x=-30)
-    FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$08,$FA          ; flag=-1, dy=8, dx=-6
-    FCB $FF,$F8,$FA          ; flag=-1, dy=-8, dx=-6
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB 2                ; End marker (path complete)
-; Generated from pipe.vec (Malban Draw_Sync_List format)
-; Total paths: 3, points: 9
-; X bounds: min=-12, max=10, width=22
-; Center: (-1, 0)
-
-_PIPE_WIDTH EQU 22
-_PIPE_HALF_WIDTH EQU 11
-_PIPE_HEIGHT EQU 50
-_PIPE_HALF_HEIGHT EQU 25
-_PIPE_CENTER_X EQU -1
-_PIPE_CENTER_Y EQU 0
-
-_PIPE_VECTORS:  ; Main entry (header + 3 path(s))
-    FDB 3               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _PIPE_PATH0        ; pointer to path 0
-    FDB _PIPE_PATH1        ; pointer to path 1
-    FDB _PIPE_PATH2        ; pointer to path 2
-
-_PIPE_PATH0:    ; Path 0
-    FCB 100              ; path0: intensity
-    FCB $14,$F5,0,0        ; path0: header (y=20, x=-11)
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-
-_PIPE_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $19,$F7,0,0        ; path1: header (y=25, x=-9)
-    FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
-    FCB 2                ; End marker (path complete)
-
-_PIPE_PATH2:    ; Path 2
-    FCB 100              ; path2: intensity
-    FCB $E7,$F7,0,0        ; path2: header (y=-25, x=-9)
-    FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
-    FCB $FF,$32,$00          ; flag=-1, dy=50, dx=0
-    FCB $FF,$00,$EC          ; flag=-1, dy=0, dx=-20
-    FCB $FF,$CE,$00          ; flag=-1, dy=-50, dx=0
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-; Generated from question_block.vec (Malban Draw_Sync_List format)
-; Total paths: 3, points: 11
-; X bounds: min=-8, max=8, width=16
-; Center: (0, 0)
-
-_QUESTION_BLOCK_WIDTH EQU 16
-_QUESTION_BLOCK_HALF_WIDTH EQU 8
-_QUESTION_BLOCK_HEIGHT EQU 16
-_QUESTION_BLOCK_HALF_HEIGHT EQU 8
-_QUESTION_BLOCK_CENTER_X EQU 0
-_QUESTION_BLOCK_CENTER_Y EQU 0
-
-_QUESTION_BLOCK_VECTORS:  ; Main entry (header + 3 path(s))
-    FDB 3               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _QUESTION_BLOCK_PATH0        ; pointer to path 0
-    FDB _QUESTION_BLOCK_PATH1        ; pointer to path 1
-    FDB _QUESTION_BLOCK_PATH2        ; pointer to path 2
-
-_QUESTION_BLOCK_PATH0:    ; Path 0
-    FCB 100              ; path0: intensity
-    FCB $00,$00,0,0        ; path0: header (y=0, x=0)
-    FCB $FF,$02,$04          ; flag=-1, dy=2, dx=4
-    FCB $FF,$02,$FF          ; flag=-1, dy=2, dx=-1
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB 2                ; End marker (path complete)
-
-_QUESTION_BLOCK_PATH1:    ; Path 1
-    FCB 100              ; path1: intensity
-    FCB $FC,$FF,0,0        ; path1: header (y=-4, x=-1)
-    FCB $FF,$00,$02          ; flag=-1, dy=0, dx=2
-    FCB 2                ; End marker (path complete)
-
-_QUESTION_BLOCK_PATH2:    ; Path 2
-    FCB 120              ; path2: intensity
-    FCB $F8,$F8,0,0        ; path2: header (y=-8, x=-8)
-    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
-    FCB $FF,$10,$00          ; flag=-1, dy=16, dx=0
-    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
-    FCB $FF,$F0,$00          ; flag=-1, dy=-16, dx=0
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
-; ==== Level: WORLD_1_1 ====
-; Author: 
-; Difficulty: medium
-
-_WORLD_1_1_LEVEL:
-    FDB -96  ; World bounds: xMin (16-bit signed)
-    FDB 1055  ; xMax (16-bit signed)
-    FDB -128  ; yMin (16-bit signed)
-    FDB 127  ; yMax (16-bit signed)
-    FDB 0  ; Time limit (seconds)
-    FDB 0  ; Target score
-    FCB 22  ; Background object count
-    FCB 10  ; Gameplay object count
-    FCB 1  ; Foreground object count
-    FDB _WORLD_1_1_BG_OBJECTS
-    FDB _WORLD_1_1_GAMEPLAY_OBJECTS
-    FDB _WORLD_1_1_FG_OBJECTS
-    FDB 0  ; scrollLimit left (camera left cannot go below this)
-    FDB 1020  ; scrollLimit right (camera right cannot exceed this)
-    FDB 127  ; scrollLimit top
-    FDB -128  ; scrollLimit bottom
-    FCB 0  ; enemy_count
-    FDB 0  ; enemy_instances_ptr (0 if none)
-    FDB 42  ; groundBottomOffset (floor surface offset from screen bottom)
-    FCB 1    ; +34 screen_count
-    FDB _WORLD_1_1_BG_SCREENS  ; +35 BG screens index
-    FDB _WORLD_1_1_GP_SCREENS  ; +37 GP screens index
-    FDB _WORLD_1_1_FG_SCREENS  ; +39 FG screens index
-
-_WORLD_1_1_BG_OBJECTS:
-_WORLD_1_1_BG_OBJECTS_S0:
-; Object: obj_bg_cloud_1 (decoration)
-    FCB 255  ; type
-    FDB 100  ; x
-    FDB 30  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _CLOUD_VECTORS  ; vector_ptr (ROM+17)
-    FCB 25  ; half_width (1.00x, ROM+19)
-    FCB 10  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_cloud_2 (decoration)
-    FCB 255  ; type
-    FDB 350  ; x
-    FDB 45  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _CLOUD_VECTORS  ; vector_ptr (ROM+17)
-    FCB 25  ; half_width (1.00x, ROM+19)
-    FCB 10  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_cloud_3 (decoration)
-    FCB 255  ; type
-    FDB 600  ; x
-    FDB 20  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _CLOUD_VECTORS  ; vector_ptr (ROM+17)
-    FCB 25  ; half_width (1.00x, ROM+19)
-    FCB 10  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_cloud_4 (decoration)
-    FCB 255  ; type
-    FDB 850  ; x
-    FDB 38  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _CLOUD_VECTORS  ; vector_ptr (ROM+17)
-    FCB 25  ; half_width (1.00x, ROM+19)
-    FCB 10  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_7 (tile)
-    FCB 255  ; type
-    FDB 245  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_3 (tile)
-    FCB 255  ; type
-    FDB 59  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_4 (tile)
-    FCB 255  ; type
-    FDB 121  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_6 (tile)
-    FCB 255  ; type
-    FDB 183  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_8 (tile)
-    FCB 255  ; type
-    FDB 307  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_9 (tile)
-    FCB 255  ; type
-    FDB 369  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_10 (tile)
-    FCB 255  ; type
-    FDB 431  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_11 (tile)
-    FCB 255  ; type
-    FDB 493  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_12 (tile)
-    FCB 255  ; type
-    FDB 555  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_13 (tile)
-    FCB 255  ; type
-    FDB 617  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_14 (tile)
-    FCB 255  ; type
-    FDB 679  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_15 (tile)
-    FCB 255  ; type
-    FDB 741  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_16 (tile)
-    FCB 255  ; type
-    FDB 803  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_17 (tile)
-    FCB 255  ; type
-    FDB 865  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_18 (tile)
-    FCB 255  ; type
-    FDB 927  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_19 (tile)
-    FCB 255  ; type
-    FDB 989  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_1 (tile)
-    FCB 255  ; type
-    FDB -65  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_2 (tile)
-    FCB 255  ; type
-    FDB -3  ; x
-    FDB -78  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _GROUND_TILE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-
-_WORLD_1_1_GAMEPLAY_OBJECTS:
-_WORLD_1_1_GAMEPLAY_OBJECTS_S0:
-; Object: obj_bg_mountain_2 (decoration)
-    FCB 255  ; type
-    FDB 570  ; x
-    FDB -50  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _MOUNTAIN_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 19  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_bg_mountain_3 (decoration)
-    FCB 255  ; type
-    FDB 750  ; x
-    FDB -49  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _MOUNTAIN_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 19  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_1773216572040 (enemy)
-    FCB 1  ; type
-    FDB 270  ; x
-    FDB -50  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 0  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _MOUNTAIN_VECTORS  ; vector_ptr (ROM+17)
-    FCB 30  ; half_width (1.00x, ROM+19)
-    FCB 19  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_gp_pipe_1 (obstacle)
-    FCB 2  ; type
-    FDB 200  ; x
-    FDB -43  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _PIPE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 11  ; half_width (1.00x, ROM+19)
-    FCB 25  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_gp_pipe_2 (obstacle)
-    FCB 2  ; type
-    FDB 420  ; x
-    FDB -45  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _PIPE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 11  ; half_width (1.00x, ROM+19)
-    FCB 25  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_gp_pipe_3 (obstacle)
-    FCB 2  ; type
-    FDB 680  ; x
-    FDB -44  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _PIPE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 11  ; half_width (1.00x, ROM+19)
-    FCB 25  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_gp_pipe_4 (obstacle)
-    FCB 2  ; type
-    FDB 850  ; x
-    FDB -44  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _PIPE_VECTORS  ; vector_ptr (ROM+17)
-    FCB 11  ; half_width (1.00x, ROM+19)
-    FCB 25  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_gp_qblock_2 (item)
-    FCB 255  ; type
-    FDB 260  ; x
-    FDB -10  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _QUESTION_BLOCK_VECTORS  ; vector_ptr (ROM+17)
-    FCB 8  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_gp_qblock_3 (item)
-    FCB 255  ; type
-    FDB 500  ; x
-    FDB -10  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _QUESTION_BLOCK_VECTORS  ; vector_ptr (ROM+17)
-    FCB 8  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_gp_qblock_4 (item)
-    FCB 255  ; type
-    FDB 760  ; x
-    FDB -10  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _QUESTION_BLOCK_VECTORS  ; vector_ptr (ROM+17)
-    FCB 8  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-
-_WORLD_1_1_FG_OBJECTS:
-_WORLD_1_1_FG_OBJECTS_S0:
-; Object: obj_gp_qblock_1 (item)
-    FCB 255  ; type
-    FDB 130  ; x
-    FDB -10  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _QUESTION_BLOCK_VECTORS  ; vector_ptr (ROM+17)
-    FCB 8  ; half_width (1.00x, ROM+19)
-    FCB 8  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-
-_WORLD_1_1_BG_SCREENS:
-    FCB 22  ; screen 0 count
-    FDB _WORLD_1_1_BG_OBJECTS_S0  ; screen 0 ptr
-
-_WORLD_1_1_GP_SCREENS:
-    FCB 10  ; screen 0 count
-    FDB _WORLD_1_1_GAMEPLAY_OBJECTS_S0  ; screen 0 ptr
-
-_WORLD_1_1_FG_SCREENS:
-    FCB 1  ; screen 0 count
-    FDB _WORLD_1_1_FG_OBJECTS_S0  ; screen 0 ptr
-
-_WORLD_1_1_ENEMY_COUNT EQU 0
-
+@ VPy — ARM Thumb2 target (RP2350 / Cortex-M33)
+@ Game: SUPER MARIO POC
+@ Generated by vpy_codegen arm backend
+@ Assemble with: arm-none-eabi-as -mthumb -mcpu=cortex-m33 game.s -o game.o
+
+.syntax unified
+.cpu cortex-m33
+.fpu fpv5-sp-d16
+.thumb
+
+@ --- VPy runtime RAM (RP2350 SRAM) ---
+.equ TMPVAL,              0x2007F000  @ 32-bit arithmetic temporary
+.equ TMPPTR,              0x2007F004  @ pointer temporary
+.equ TMPPTR2,             0x2007F008  @ second pointer temporary
+.equ VAR_ARG0,            0x2007F00C  @ function argument 0
+.equ VAR_ARG1,            0x2007F010  @ function argument 1
+.equ VAR_ARG2,            0x2007F014  @ function argument 2
+.equ VAR_ARG3,            0x2007F018  @ function argument 3
+.equ VAR_ARG4,            0x2007F01C  @ function argument 4
+.equ RESULT,              0x2007F020  @ function return value
+.equ BEEP_FRAMES_LEFT,    0x2007F024  @ non-blocking beep counter
+.equ VIA_WRITE_ADDR,      0x2007F028  @ scratch for bus_write address
+.equ VIA_WRITE_DATA,      0x2007F02C  @ scratch for bus_write data
+.equ _dv3d_cos,           0x2007F030  @ 3D cos offsets: cos_ax, cos_ay, cos_az (3 bytes)
+.equ _dv3d_tmp,           0x2007F034  @ 3D vertex raw coords: rx, ry, rz (3 bytes)
+.equ _dv3d_sm,            0x2007F038  @ 3D rotation intermediates: t0, y1, z1, x2 (4 bytes)
+.equ _dv3d_cur,           0x2007F03C  @ 3D current beam pos: cur_x, cur_y (2 bytes)
+.equ _dv3d_fst,           0x2007F03E  @ 3D first vertex of path: first_x, first_y (2 bytes)
+.equ _dv3d_vbuf,          0x2007F040  @ 3D rotated vertex cache: sx,sy pairs (254 bytes max)
+.equ VPY_ANIM_STATE_BUF,  0x2007F13E  @ animation frame_idx(u8) at +0, ticks_left(u8) at +1
+.equ RAND_SEED,           0x2007F140  @ LCG random number seed
+.equ BTN_STATE_J1,        0x2007F144  @ cached VIA Port B (J1 buttons, bits 4-7 active-low)
+.equ BTN_STATE_J2,        0x2007F148  @ cached PSG reg 14 (J2 buttons, bits 0-3 active-low)
+.equ CAMERA_X,            0x2007F14C  @ camera X offset (used by show_level)
+.equ CAMERA_Y,            0x2007F150  @ camera Y offset
+.equ TEXT_SIZE,           0x2007F154  @ text scale factor (1=normal, 2=double, ...)
+.equ LEVEL_DATA_PTR,      0x2007F15C  @ pointer to loaded level ROM data
+.equ DBGVAL,              0x2007F160  @ debug_print last written value
+.equ PRINT_BEAM_X,        0x2007F164  @ beam X shadow during print_text
+.equ PRINT_BEAM_Y,        0x2007F168  @ beam Y shadow during print_text
+.equ PSG_MUSIC_PTR,       0x2007F16C  @ pointer to current music event in ROM
+.equ PSG_MUSIC_START,     0x2007F170  @ pointer to loop-start event
+.equ PSG_IS_PLAYING,      0x2007F174  @ 1 = music playing
+.equ PSG_DELAY_FRAMES,    0x2007F178  @ frames remaining before next music event
+.equ PSG_SFX_PTR,         0x2007F17C  @ pointer to current SFX event in ROM
+.equ PSG_SFX_ACTIVE,      0x2007F180  @ 1 = SFX playing
+.equ PSG_SFX_DELAY,       0x2007F184  @ frames remaining before next SFX event
+.equ LEVEL_GP_COUNT,      0x2007F188  @ number of active GP objects
+.equ LEVEL_GP_BUF,        0x2007F18C  @ level GP mutable buffer (32 obj × 8 bytes = 256 bytes)
+.equ SCROLL_LIMIT_LEFT,   0x2007F28C  @ camera scroll limit: left world X
+.equ SCROLL_LIMIT_RIGHT,  0x2007F290  @ camera scroll limit: right world X
+.equ SCROLL_LIMIT_TOP,    0x2007F294  @ camera scroll limit: top world Y
+.equ SCROLL_LIMIT_BOTTOM, 0x2007F298  @ camera scroll limit: bottom world Y
+.equ NOTE_STATE,          0x2007F29C  @ note engine state: 3 channels × 32 bytes each
+.equ PSG_MIXER_SHADOW,    0x2007F2FC  @ shadow of AY R7 mixer register (0x3F = all disabled)
+.equ VPY_MOVE_X,          0x2007F300  @ last MOVE X position (added to DRAW_LINE x0/x1)
+.equ VPY_MOVE_Y,          0x2007F304  @ last MOVE Y position (added to DRAW_LINE y0/y1)
+.equ ENEMY_COUNT_ARM,     0x2007F308  @ active enemy count
+.equ ENEMY_POOL_ARM,      0x2007F30C  @ enemy pool: 8 slots × 32 bytes
+.equ J1_AXIS_X,           0x2007F40C  @ cached J1 X axis (-127..127), updated each WAIT_RECAL
+.equ J1_AXIS_Y,           0x2007F410  @ cached J1 Y axis (-127..127), updated each WAIT_RECAL
+.equ J2_AXIS_X,           0x2007F414  @ cached J2 X axis (-127..127), updated each WAIT_RECAL
+.equ J2_AXIS_Y,           0x2007F418  @ cached J2 Y axis (-127..127), updated each WAIT_RECAL
+.equ ENEMY_STATE_ARM,     0x2007F41C  @ enemy state per slot: 8 × i32
+.equ VPY_PLAYER_ANIM_STATE, 0x2007F43C  @ player animation state: frame_idx(u8)+ticks_left(u8)
+.equ VPY_BRIGHTNESS_OVERRIDE, 0x2007F43E  @ SET_INTENSITY override: 0=.vec intensity, >0=override (1 byte)
+.equ WANDER_SCRATCH_ARM,  0x2007F440  @ wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)
+.equ USER_RAM_START,      0x2007F460  @ user variables begin here
+
+@ --- VIA 6522 registers (Vectrex bus addresses) ---
+.equ VIA_BASE,       0xD000
+.equ VIA_PORT_B,     0xD000   @ Port B data (MUX, beam, z-pulse)
+.equ VIA_PORT_A,     0xD001   @ Port A data (DAC / joystick)
+.equ VIA_DDR_B,      0xD002   @ Port B direction
+.equ VIA_DDR_A,      0xD003   @ Port A direction
+.equ VIA_T1C_L,      0xD004   @ Timer 1 counter low
+.equ VIA_T1C_H,      0xD005   @ Timer 1 counter high
+.equ VIA_T1L_L,      0xD006   @ Timer 1 latch low
+.equ VIA_T1L_H,      0xD007   @ Timer 1 latch high
+.equ VIA_SR,         0xD00A   @ Shift register (beam on/off via CB2)
+.equ VIA_ACR,        0xD00B   @ Auxiliary control register
+.equ VIA_PCR,        0xD00C   @ Peripheral control register
+.equ VIA_IFR,        0xD00D   @ Interrupt flag register
+.equ VIA_IER,        0xD00E   @ Interrupt enable register
+
+@ VIA Port B bits
+.equ PB_MUX,         0x01     @ PSG BDIR (bit 0)
+.equ PB_BEAM,        0x08     @ Beam on/off
+.equ PB_ZPULSE,      0x10     @ Z-axis pulse
+
+@ VIA ACR / PCR values
+.equ ACR_SR_SHIFT,   0x18     @ SR = shift out under PHI2
+.equ PCR_BEAM_OFF,   0xCE
+.equ PCR_BEAM_ON,    0xDE
+.equ T1_STANDARD,    0x7F     @ Timer 1 value for standard vector scale
+
+@ --- RP2350 SIO (GPIO bit-bang) ---
+.equ SIO_BASE,       0xD0000000
+.equ SIO_GPIO_OUT,   0xD0000010  @ GPIO output value
+.equ SIO_GPIO_SET,   0xD0000014  @ GPIO output set (atomic)
+.equ SIO_GPIO_CLR,   0xD0000018  @ GPIO output clear (atomic)
+.equ SIO_GPIO_OE_SET,0xD0000024  @ GPIO OE set
+.equ SIO_GPIO_OE_CLR,0xD0000028  @ GPIO OE clear
+.equ SIO_GPIO_IN,    0xD0000004  @ GPIO input value
+
+@ GPIO pin masks (from pins.rs)
+.equ ADDR_MASK,      0x00007FFF  @ GP0-GP14 (A0-A14)
+.equ DATA_MASK,      0x007F8000  @ GP15-GP22 (D0-D7)
+.equ PIN_NCE,        23
+.equ PIN_RW,         24
+.equ PIN_NOE,        25
+.equ PIN_NHALT,      27
+.equ PIN_DIR_CTRL,   29
+
+.section .game_rom, "ax"
+.align 2
+
+@ --- Game ROM image header (offset 0 of game ROM slot) ---
+@ Firmware checks GAME_MAGIC before calling game_main.
+
+.global game_header
+.type game_header, %object
+game_header:
+    .word 0x32795056      @ GAME_MAGIC 'VPy2'
+    .word game_main         @ entry point (thumb bit set by linker)
+    .word 0x00000000        @ reserved
+    .word 0x00000000        @ reserved
+
+@ bus_write(r0=vectrex addr, r1=data) — BIOS trap: SYS_BUS_WRITE
+.global bus_write
+.type bus_write, %function
+.thumb_func
+bus_write:
+    svc     #8                      @ SYS_BUS_WRITE
+    bx      lr
+
+@ bus_read(r0=addr) -> r0=data — BIOS trap: SYS_BUS_READ
+.global bus_read
+.type bus_read, %function
+.thumb_func
+bus_read:
+    svc     #11                     @ SYS_BUS_READ
+    bx      lr
+
+@ ============================================================
+@ Drawing engine — ARM Thumb2 / RP2350 bus master
+@ ============================================================
+
+@ dv_reset() — BIOS trap: SYS_RESET0REF
+.global dv_reset
+.type dv_reset, %function
+.thumb_func
+dv_reset:
+    svc     #0                      @ SYS_RESET0REF
+    bx      lr
+
+@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (delta after a reset)
+.global dv_move_to
+.type dv_move_to, %function
+.thumb_func
+dv_move_to:
+    svc     #3                      @ SYS_MOVE
+    bx      lr
+
+@ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA
+.global dv_draw_delta
+.type dv_draw_delta, %function
+.thumb_func
+dv_draw_delta:
+    svc     #4                      @ SYS_DRAW_DELTA
+    bx      lr
+
+@ vpy_draw_vector(r0=asset_ptr, r1=ox, r2=oy)
+@ Draws asset at screen position (ox, oy). ox=0, oy=0 = screen centre.
+.global vpy_draw_vector
+.type vpy_draw_vector, %function
+.thumb_func
+vpy_draw_vector:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    mov     r4, r0              @ asset_ptr
+    mov     r9, r1              @ ox
+    mov     r10, r2             @ oy
+    ldr     r5, [r4]            @ path_count
+    mov     r6, #0              @ path index
+dvv_pl:
+    cmp     r6, r5
+    bge     dvv_done
+    lsl     r7, r6, #2
+    add     r7, r7, #4
+    ldr     r7, [r4, r7]
+    bl      dv_reset
+    ldrb    r0, [r7]            @ per-path .vec intensity
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    ldrb    r1, [r1]
+    cmp     r1, #0
+    it      ne
+    movne   r0, r1  @ SET_INTENSITY override wins
+    bl      vpy_set_intensity
+    ldrsb   r0, [r7, #2]
+    add     r0, r0, r9
+    ldrsb   r1, [r7, #1]
+    add     r1, r1, r10
+    bl      dv_move_to
+    add     r8, r7, #5
+dvv_cl:
+    ldrb    r0, [r8]
+    cmp     r0, #0x02
+    beq     dvv_cend
+    cmp     r0, #0xFF
+    bne     dvv_cskip
+    ldrsb   r0, [r8, #2]
+    ldrsb   r1, [r8, #1]
+    bl      dv_draw_delta
+    add     r8, r8, #3
+    b       dvv_cl
+dvv_cskip:
+    add     r8, r8, #1
+    b       dvv_cl
+dvv_cend:
+    add     r6, r6, #1
+    b       dvv_pl
+dvv_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ ============================================================
+@ VPy Builtins — ARM Thumb2 / RP2350
+@ ============================================================
+
+@ vpy_wait_recal() — BIOS trap: SYS_WAIT_RECAL
+.global vpy_wait_recal
+.type vpy_wait_recal, %function
+.thumb_func
+vpy_wait_recal:
+    svc     #1                      @ SYS_WAIT_RECAL
+    bx      lr
+
+@ vpy_set_intensity(r0=intensity 0-127) — BIOS trap: SYS_SET_INTENSITY
+.global vpy_set_intensity
+.type vpy_set_intensity, %function
+.thumb_func
+vpy_set_intensity:
+    svc     #2                      @ SYS_SET_INTENSITY
+    bx      lr
+
+@ vpy_draw_vector_ex(r0=asset, r1=ox, r2=oy, r3=mirror, [sp+0]=intensity)
+@ Draws asset centered at (ox,oy); mirror: bit0=flipX, bit1=flipY
+@ dv_reset called before EVERY path so each path starts from screen centre.
+.global vpy_draw_vector_ex
+.type vpy_draw_vector_ex, %function
+.thumb_func
+vpy_draw_vector_ex:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    mov     r4, r0              @ asset_ptr
+    mov     r9, r1              @ ox  (kept for whole function)
+    mov     r10, r2             @ oy  (kept for whole function)
+    mov     r7, r3              @ mirror
+    ldr     r8, [sp, #32]       @ intensity arg (8 saved regs = 32 bytes)
+    ldr     r5, [r4]            @ path_count
+    mov     r6, #0              @ path_idx
+dvex_pl:
+    cmp     r6, r5
+    bge     dvex_done
+    lsl     r3, r6, #2
+    add     r3, r3, #4
+    ldr     r3, [r4, r3]
+    bl      dv_reset
+    ldrb    r0, [r3]            @ .vec per-path intensity
+    cmp     r8, #0
+    it      ne
+    movne   r0, r8             @ if intensity arg != 0, use it
+    bl      vpy_set_intensity
+    ldrsb   r0, [r3, #2]        @ x_start
+    ldrsb   r1, [r3, #1]        @ y_start
+    tst     r7, #1
+    beq     dvex_nfx
+    neg     r0, r0
+dvex_nfx:
+    tst     r7, #2
+    beq     dvex_nfy
+    neg     r1, r1
+dvex_nfy:
+    add     r0, r0, r9          @ x_start + ox
+    add     r1, r1, r10         @ y_start + oy
+    bl      dv_move_to
+    add     r2, r3, #5          @ command ptr
+dvex_cl:
+    ldrb    r0, [r2]
+    cmp     r0, #0x02
+    beq     dvex_cend
+    cmp     r0, #0xFF
+    bne     dvex_cskip
+    ldrsb   r0, [r2, #2]        @ dx
+    ldrsb   r1, [r2, #1]        @ dy
+    tst     r7, #1
+    beq     dvex_nfx2
+    neg     r0, r0
+dvex_nfx2:
+    tst     r7, #2
+    beq     dvex_nfy2
+    neg     r1, r1
+dvex_nfy2:
+    bl      dv_draw_delta
+    add     r2, r2, #3
+    b       dvex_cl
+dvex_cskip:
+    add     r2, r2, #1
+    b       dvex_cl
+dvex_cend:
+    add     r6, r6, #1
+    b       dvex_pl
+dvex_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ vpy_j1_x() → r0 = cached J1 X axis (-127..127)
+.global vpy_j1_x
+.type vpy_j1_x, %function
+.thumb_func
+vpy_j1_x:
+    ldr     r0, =J1_AXIS_X
+    ldr     r0, [r0]
+    bx      lr
+
+@ vpy_j1_y() → r0 = cached J1 Y axis (-127..127)
+.global vpy_j1_y
+.type vpy_j1_y, %function
+.thumb_func
+vpy_j1_y:
+    ldr     r0, =J1_AXIS_Y
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_j1_btn1
+.type vpy_j1_btn1, %function
+.thumb_func
+vpy_j1_btn1:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #4, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn2
+.type vpy_j1_btn2, %function
+.thumb_func
+vpy_j1_btn2:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #5, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn3
+.type vpy_j1_btn3, %function
+.thumb_func
+vpy_j1_btn3:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #6, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn4
+.type vpy_j1_btn4, %function
+.thumb_func
+vpy_j1_btn4:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #7, #1
+    eor     r0, r0, #1
+    bx      lr
+
+@ vpy_j2_x() → r0 = cached J2 X axis (-127..127)
+.global vpy_j2_x
+.type vpy_j2_x, %function
+.thumb_func
+vpy_j2_x:
+    ldr     r0, =J2_AXIS_X
+    ldr     r0, [r0]
+    bx      lr
+
+@ vpy_j2_y() → r0 = cached J2 Y axis (-127..127)
+.global vpy_j2_y
+.type vpy_j2_y, %function
+.thumb_func
+vpy_j2_y:
+    ldr     r0, =J2_AXIS_Y
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_j2_btn1
+.type vpy_j2_btn1, %function
+.thumb_func
+vpy_j2_btn1:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #0, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn2
+.type vpy_j2_btn2, %function
+.thumb_func
+vpy_j2_btn2:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #1, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn3
+.type vpy_j2_btn3, %function
+.thumb_func
+vpy_j2_btn3:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #2, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn4
+.type vpy_j2_btn4, %function
+.thumb_func
+vpy_j2_btn4:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #3, #1
+    eor     r0, r0, #1
+    bx      lr
+
+@ vpy_update_buttons() — cache buttons+axes via BIOS traps (safe: WAIT_RECAL window)
+.global vpy_update_buttons
+.type vpy_update_buttons, %function
+.thumb_func
+vpy_update_buttons:
+    push    {r4, lr}
+    svc     #14                     @ SYS_READ_BUTTONS_RAW
+    mov     r4, r0
+    ubfx    r0, r4, #8, #8
+    ldr     r1, =BTN_STATE_J1
+    str     r0, [r1]
+    and     r0, r4, #0xFF
+    ldr     r1, =BTN_STATE_J2
+    str     r0, [r1]
+    svc     #13                     @ SYS_READ_AXES
+    mov     r4, r0
+    ubfx    r0, r4, #24, #8
+    sxtb    r0, r0
+    ldr     r1, =J1_AXIS_X
+    str     r0, [r1]
+    ubfx    r0, r4, #16, #8
+    sxtb    r0, r0
+    ldr     r1, =J1_AXIS_Y
+    str     r0, [r1]
+    ubfx    r0, r4, #8, #8
+    sxtb    r0, r0
+    ldr     r1, =J2_AXIS_X
+    str     r0, [r1]
+    sxtb    r0, r4
+    ldr     r1, =J2_AXIS_Y
+    str     r0, [r1]
+    pop     {r4, pc}
+    .ltorg
+
+@ psg_write(r0=reg, r1=data) — BIOS trap: SYS_PSG_WRITE
+.global psg_write
+.type psg_write, %function
+.thumb_func
+psg_write:
+    svc     #5                      @ SYS_PSG_WRITE
+    bx      lr
+
+@ psg_read(r0=reg) -> r0=data — BIOS trap: SYS_PSG_READ
+.global psg_read
+.type psg_read, %function
+.thumb_func
+psg_read:
+    svc     #12                     @ SYS_PSG_READ
+    bx      lr
+
+.global vpy_abs
+.type vpy_abs, %function
+.thumb_func
+vpy_abs:
+    cmp     r0, #0
+    it      lt
+    neglt   r0, r0
+    bx      lr
+
+.global vpy_min
+.type vpy_min, %function
+.thumb_func
+vpy_min:
+    cmp     r0, r1
+    it      gt
+    movgt   r0, r1
+    bx      lr
+
+.global vpy_max
+.type vpy_max, %function
+.thumb_func
+vpy_max:
+    cmp     r0, r1
+    it      lt
+    movlt   r0, r1
+    bx      lr
+
+.global vpy_clamp
+.type vpy_clamp, %function
+.thumb_func
+vpy_clamp:
+    cmp     r0, r1
+    it      lt
+    movlt   r0, r1
+    cmp     r0, r2
+    it      gt
+    movgt   r0, r2
+    bx      lr
+
+@ vpy_play_sfx(r0=sfx_data_ptr)
+.global vpy_play_sfx
+.type vpy_play_sfx, %function
+.thumb_func
+vpy_play_sfx:
+    push    {lr}
+    ldr     r1, =PSG_SFX_PTR
+    add     r2, r0, #4
+    str     r2, [r1]
+    ldr     r1, =PSG_SFX_ACTIVE
+    mov     r2, #1
+    str     r2, [r1]
+    ldr     r1, =PSG_SFX_DELAY
+    mov     r2, #0
+    str     r2, [r1]
+    pop     {pc}
+    .ltorg
+
+@ vpy_audio_update() — advance SFX sequencer by one frame
+.global vpy_audio_update
+.type vpy_audio_update, %function
+.thumb_func
+vpy_audio_update:
+    push    {r4, r5, r6, r7, lr}
+    ldr     r0, =PSG_SFX_ACTIVE
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq     vau_done
+    ldr     r4, =PSG_SFX_DELAY
+    ldr     r0, [r4]
+    cmp     r0, #0
+    beq     vau_proc
+    sub     r0, r0, #1
+    str     r0, [r4]
+    b       vau_done
+vau_proc:
+    ldr     r5, =PSG_SFX_PTR
+    ldr     r5, [r5]
+    ldrb    r6, [r5, #1]         @ num_writes
+    cmp     r6, #0
+    beq     vau_end
+    add     r7, r5, #2
+vau_wl:
+    cmp     r6, #0
+    beq     vau_aw
+    ldrb    r0, [r7]
+    ldrb    r1, [r7, #1]
+    cmp     r0, #7
+    bne     vau_do_write
+    push    {r1, r6, r7}    @ save sfx_mixer, loop vars
+    bl      psg_read         @ r0=7 already → returns Regs[7]
+    pop     {r1, r6, r7}    @ restore sfx_mixer to r1; r0=cur_mixer
+    and     r0, r0, #0xDB   @ keep non-C bits from music (0xDB=~0x24)
+    and     r1, r1, #0x24   @ keep only C bits from SFX
+    orr     r1, r0, r1      @ r1 = merged mixer
+    mov     r0, #7          @ reg = 7
+vau_do_write:
+    push    {r6, r7}
+    bl      psg_write
+    pop     {r6, r7}
+    add     r7, r7, #2
+    sub     r6, r6, #1
+    b       vau_wl
+vau_aw:
+    ldr     r0, =PSG_SFX_PTR
+    str     r7, [r0]
+    ldrb    r0, [r7]
+    str     r0, [r4]
+    b       vau_done
+vau_end:
+    ldr     r0, =PSG_SFX_ACTIVE
+    mov     r1, #0
+    str     r1, [r0]
+vau_done:
+    pop     {r4, r5, r6, r7, pc}
+    .ltorg
+
+.global vpy_set_camera_x
+.type vpy_set_camera_x, %function
+.thumb_func
+vpy_set_camera_x:
+    ldr     r1, =CAMERA_X
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_set_camera_y
+.type vpy_set_camera_y, %function
+.thumb_func
+vpy_set_camera_y:
+    ldr     r1, =CAMERA_Y
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_get_camera_x
+.type vpy_get_camera_x, %function
+.thumb_func
+vpy_get_camera_x:
+    ldr     r0, =CAMERA_X
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_get_camera_y
+.type vpy_get_camera_y, %function
+.thumb_func
+vpy_get_camera_y:
+    ldr     r0, =CAMERA_Y
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_get_scroll_limit_left
+.type vpy_get_scroll_limit_left, %function
+.thumb_func
+vpy_get_scroll_limit_left:
+    ldr     r0, =SCROLL_LIMIT_LEFT
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_get_scroll_limit_right
+.type vpy_get_scroll_limit_right, %function
+.thumb_func
+vpy_get_scroll_limit_right:
+    ldr     r0, =SCROLL_LIMIT_RIGHT
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_get_scroll_limit_top
+.type vpy_get_scroll_limit_top, %function
+.thumb_func
+vpy_get_scroll_limit_top:
+    ldr     r0, =SCROLL_LIMIT_TOP
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_get_scroll_limit_bottom
+.type vpy_get_scroll_limit_bottom, %function
+.thumb_func
+vpy_get_scroll_limit_bottom:
+    ldr     r0, =SCROLL_LIMIT_BOTTOM
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_get_level_floor_y
+.type vpy_get_level_floor_y, %function
+.thumb_func
+vpy_get_level_floor_y:
+    ldr     r0, =LEVEL_DATA_PTR
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq     vglfy_none
+    ldrsh   r1, [r0, #32]      @ groundBottomOffset at header +32
+    ldr     r0, =CAMERA_Y
+    ldr     r0, [r0]
+    sub     r0, r0, #128
+    add     r0, r0, r1
+    bx      lr
+vglfy_none:
+    mov     r0, #0
+    bx      lr
+
+.global vpy_debug_print
+.type vpy_debug_print, %function
+.thumb_func
+vpy_debug_print:
+    ldr     r1, =DBGVAL
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_debug_print_labeled
+.type vpy_debug_print_labeled, %function
+.thumb_func
+vpy_debug_print_labeled:
+    ldr     r1, =DBGVAL
+    str     r0, [r1]
+    bx      lr
+
+.global vpy_debug_print_str
+.type vpy_debug_print_str, %function
+.thumb_func
+vpy_debug_print_str:
+    bx      lr
+
+@ vpy_load_level(r0=level_data_ptr)
+.global vpy_load_level
+.type vpy_load_level, %function
+.thumb_func
+vpy_load_level:
+    push    {r4, r5, r6, r7, r8, lr}  @ 6 regs = 24 bytes, 8-aligned
+    mov     r4, r0
+    ldr     r1, =LEVEL_DATA_PTR
+    str     r0, [r1]
+    ldrb    r5, [r4, #9]              @ gpCount
+    ldr     r1, =LEVEL_GP_COUNT
+    str     r5, [r1]
+    cmp     r5, #0
+    beq.w   vll_done
+    ldr     r6, [r4, #16]             @ gpObjectsPtr
+    ldr     r7, =LEVEL_GP_BUF
+vll_gp_loop:
+    ldrsh   r0, [r6, #0]              @ world_x
+    ldrsh   r1, [r6, #2]              @ world_y
+    strh    r0, [r7, #0]
+    strh    r1, [r7, #2]
+    ldrsb   r0, [r6, #14]             @ vel_x_init
+    ldrsb   r1, [r6, #15]             @ vel_y_init
+    strb    r0, [r7, #4]
+    strb    r1, [r7, #5]
+    mov     r0, #1
+    strb    r0, [r7, #6]  @ alive=1
+    mov     r0, #0
+    strb    r0, [r7, #7]  @ pad=0
+    add     r6, r6, #20    @ next ROM obj (20 bytes)
+    add     r7, r7, #8
+    subs    r5, r5, #1
+    bne     vll_gp_loop
+vll_done:
+    ldrsh   r0, [r4, #24]             @ scrollLimit left
+    ldr     r1, =SCROLL_LIMIT_LEFT
+    str     r0, [r1]
+    ldrsh   r0, [r4, #26]             @ scrollLimit right
+    ldr     r1, =SCROLL_LIMIT_RIGHT
+    str     r0, [r1]
+    ldrsh   r0, [r4, #28]             @ scrollLimit top
+    ldr     r1, =SCROLL_LIMIT_TOP
+    str     r0, [r1]
+    ldrsh   r0, [r4, #30]             @ scrollLimit bottom
+    ldr     r1, =SCROLL_LIMIT_BOTTOM
+    str     r0, [r1]
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vpy_show_level()
+.global vpy_show_level
+.type vpy_show_level, %function
+.thumb_func
+vpy_show_level:
+    push    {r4, r5, r6, r7, r8, lr}  @ 6 regs = 24 bytes, 8-aligned
+    ldr     r4, =LEVEL_DATA_PTR
+    ldr     r4, [r4]
+    cmp     r4, #0
+    beq.w   vsl_done
+    ldrb    r5, [r4, #8]              @ bgCount
+    cmp     r5, #0
+    beq.w   vsl_skip_bg
+    ldr     r6, [r4, #12]             @ bgObjectsPtr
+    bl      vsl_draw_static
+vsl_skip_bg:
+    ldr     r5, =LEVEL_GP_COUNT
+    ldr     r5, [r5]
+    cmp     r5, #0
+    beq.w   vsl_skip_gp
+    ldr     r6, [r4, #16]             @ gpObjectsPtr (ROM)
+    ldr     r7, =LEVEL_GP_BUF
+    ldr     r8, =CAMERA_X
+vsl_gp_loop:
+    ldrb    r3, [r6, #7]              @ obj type (1=enemy)
+    cmp     r3, #1
+    beq     vsl_gp_next               @ enemies drawn by DRAW_ENEMIES
+    ldrb    r0, [r7, #6]              @ alive
+    cmp     r0, #0
+    beq.w   vsl_gp_next
+    ldrsh   r0, [r7, #0]              @ world_x
+    ldrsh   r1, [r7, #2]              @ world_y
+    ldr     r2, [r8]
+    sub     r0, r0, r2  @ screen_x
+    ldr     r2, [r8, #4]
+    sub     r1, r1, r2  @ screen_y (CAMERA_Y=CAMERA_X+4)
+    movs    r2, r0
+    bpl     vsl_gp_cx_ok
+    neg     r2, r0
+vsl_gp_cx_ok:
+    cmp     r2, #160
+    bgt     vsl_gp_next
+    movs    r2, r1
+    bpl     vsl_gp_cy_ok
+    neg     r2, r1
+vsl_gp_cy_ok:
+    cmp     r2, #160
+    bgt     vsl_gp_next
+    ldrb    r2, [r6, #5]              @ intensity
+    cmp     r2, #0
+    bne     vsl_gp_havei
+    mov     r2, #127
+vsl_gp_havei:
+    mov     r3, #0
+    push    {r2, r3}            @ [sp]=intensity, align+8
+    mov     r2, r1
+    mov     r1, r0
+    ldr     r0, [r6, #8]  @ vector_ptr
+    mov     r3, #0
+    bl      vpy_draw_vector_ex
+    add     sp, sp, #8
+vsl_gp_next:
+    add     r6, r6, #20    @ next ROM obj (20 bytes)
+    add     r7, r7, #8
+    subs    r5, r5, #1
+    bne     vsl_gp_loop
+vsl_skip_gp:
+    ldrb    r5, [r4, #10]             @ fgCount
+    cmp     r5, #0
+    beq.w   vsl_done
+    ldr     r6, [r4, #20]             @ fgObjectsPtr
+    bl      vsl_draw_static
+vsl_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vsl_draw_static — internal
+vsl_draw_static:
+    push    {r4, r5, r6, r7, r8, lr}  @ 24 bytes
+    mov     r4, r5                    @ count
+    mov     r5, r6                    @ ROM ptr
+    ldr     r6, =CAMERA_X
+    ldr     r6, [r6]
+    ldr     r7, =CAMERA_Y
+    ldr     r7, [r7]
+vsd_loop:
+    cmp     r4, #0
+    beq.w   vsd_done
+    ldrsh   r0, [r5, #0]
+    ldrsh   r1, [r5, #2]
+    sub     r0, r0, r6
+    sub     r1, r1, r7
+    movs    r8, r0
+    bpl     vsd_cx_ok
+    neg     r8, r0
+vsd_cx_ok:
+    cmp     r8, #160
+    bgt     vsd_next
+    movs    r8, r1
+    bpl     vsd_cy_ok
+    neg     r8, r1
+vsd_cy_ok:
+    cmp     r8, #160
+    bgt     vsd_next
+    ldrb    r2, [r5, #5]
+    cmp     r2, #0
+    bne     vsd_havei
+    mov     r2, #127
+vsd_havei:
+    mov     r3, #0
+    push    {r2, r3}
+    mov     r2, r1
+    mov     r1, r0
+    ldr     r0, [r5, #8]
+    mov     r3, #0
+    bl      vpy_draw_vector_ex
+    add     sp, sp, #8
+vsd_next:
+    add     r5, r5, #20    @ next ROM obj (20 bytes)
+    subs    r4, r4, #1
+    b       vsd_loop
+vsd_done:
+    pop     {r4, r5, r6, r7, r8, pc}
+    .ltorg
+
+@ vpy_update_level()
+.global vpy_update_level
+.type vpy_update_level, %function
+.thumb_func
+vpy_update_level:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}  @ 8 regs = 32 bytes, 8-aligned
+    ldr     r4, =LEVEL_DATA_PTR
+    ldr     r4, [r4]
+    cmp     r4, #0
+    beq.w   vul_done
+    ldrsh   r6, [r4, #0]              @ xMin
+    ldrsh   r7, [r4, #2]              @ xMax
+    ldrsh   r8, [r4, #4]              @ yMin
+    ldrsh   r9, [r4, #6]              @ yMax
+    ldr     r5, =LEVEL_GP_COUNT
+    ldr     r5, [r5]
+    cmp     r5, #0
+    beq.w   vul_done
+    ldr     r10, [r4, #16]            @ gpObjectsPtr (ROM, for flags)
+    ldr     r4, =LEVEL_GP_BUF
+vul_loop:
+    ldrb    r0, [r4, #6]              @ alive
+    cmp     r0, #0
+    beq.w   vul_next
+    ldrb    r0, [r10, #6]             @ ROM flags
+    tst     r0, #0x02
+    beq     vul_nograv
+    ldrsb   r1, [r4, #5]              @ vel_y
+    sub     r1, r1, #1
+    cmp     r1, #-127
+    bge     vul_vy_ok
+    mov     r1, #-127
+vul_vy_ok:
+    strb    r1, [r4, #5]
+vul_nograv:
+    ldrsh   r1, [r4, #0]              @ world_x
+    ldrsb   r2, [r4, #4]              @ vel_x
+    add     r1, r1, r2
+    cmp     r1, r6
+    bge     vul_x_min_ok
+    mov     r1, r6
+    mov     r2, #0
+    strb    r2, [r4, #4]
+vul_x_min_ok:
+    cmp     r1, r7
+    ble     vul_x_max_ok
+    mov     r1, r7
+    mov     r2, #0
+    strb    r2, [r4, #4]
+vul_x_max_ok:
+    strh    r1, [r4, #0]
+    ldrsh   r1, [r4, #2]              @ world_y
+    ldrsb   r2, [r4, #5]              @ vel_y
+    add     r1, r1, r2
+    cmp     r1, r8
+    bge     vul_y_min_ok
+    mov     r1, r8
+    mov     r2, #0
+    strb    r2, [r4, #5]
+vul_y_min_ok:
+    cmp     r1, r9
+    ble     vul_y_max_ok
+    mov     r1, r9
+    mov     r2, #0
+    strb    r2, [r4, #5]
+vul_y_max_ok:
+    strh    r1, [r4, #2]
+vul_next:
+    add     r4, r4, #8
+    add     r10, r10, #20  @ next ROM obj (20 bytes)
+    subs    r5, r5, #1
+    bne     vul_loop
+vul_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ vpy_get_level_width() -> r0
+.global vpy_get_level_width
+.type vpy_get_level_width, %function
+.thumb_func
+vpy_get_level_width:
+    ldr     r0, =LEVEL_DATA_PTR
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq.w   vglw_null
+    ldrsh   r1, [r0, #2]              @ xMax
+    ldrsh   r0, [r0, #0]              @ xMin
+    sub     r0, r1, r0
+    bx      lr
+vglw_null:
+    mov     r0, #0
+    bx      lr
+    .ltorg
+
+@ vpy_get_level_height() -> r0
+.global vpy_get_level_height
+.type vpy_get_level_height, %function
+.thumb_func
+vpy_get_level_height:
+    ldr     r0, =LEVEL_DATA_PTR
+    ldr     r0, [r0]
+    cmp     r0, #0
+    beq.w   vglh_null
+    ldrsh   r1, [r0, #6]              @ yMax
+    ldrsh   r0, [r0, #4]              @ yMin
+    sub     r0, r1, r0
+    bx      lr
+vglh_null:
+    mov     r0, #0
+    bx      lr
+    .ltorg
+
+@ vpy_get_level_tile(r0=x, r1=y) -> index or -1
+.global vpy_get_level_tile
+.type vpy_get_level_tile, %function
+.thumb_func
+vpy_get_level_tile:
+    push    {r4, r5, r6, lr}           @ 4 regs = 16 bytes, 8-aligned
+    mov     r4, r0                    @ query_x
+    mov     r5, r1                    @ query_y
+    ldr     r6, =LEVEL_GP_COUNT
+    ldr     r6, [r6]
+    ldr     r0, =LEVEL_GP_BUF
+    mov     r1, #0                    @ index
+vglt_loop:
+    cmp     r1, r6
+    bge     vglt_notfound
+    ldrb    r2, [r0, #6]
+    cmp     r2, #0
+    beq.w   vglt_next
+    ldrsh   r2, [r0, #0]              @ world_x
+    sub     r2, r2, r4
+    movs    r3, r2
+    bpl     vglt_dx_ok
+    neg     r2, r2
+vglt_dx_ok:
+    cmp     r2, #16
+    bgt     vglt_next
+    ldrsh   r2, [r0, #2]              @ world_y
+    sub     r2, r2, r5
+    movs    r3, r2
+    bpl     vglt_dy_ok
+    neg     r2, r2
+vglt_dy_ok:
+    cmp     r2, #16
+    bgt     vglt_next
+    mov     r0, r1                    @ return index
+    pop     {r4, r5, r6, pc}
+vglt_next:
+    add     r0, r0, #8
+    add     r1, r1, #1
+    b       vglt_loop
+vglt_notfound:
+    mvn     r0, #0            @ return -1
+    pop     {r4, r5, r6, pc}
+    .ltorg
+
+@ vpy_level_collision_x(r0=px, r1=py, r2=hw, r3=hy) -> push-out dx
+.global vpy_level_collision_x
+.type vpy_level_collision_x, %function
+.thumb_func
+vpy_level_collision_x:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
+    mov     r4, r0              @ px
+    mov     r5, r1              @ py
+    mov     r6, r2              @ half_w (player)
+    mov     r11, r3             @ half_h (player)
+    ldr     r7, =LEVEL_DATA_PTR
+    ldr     r7, [r7]
+    cmp     r7, #0
+    beq.w   vlcx_done_zero
+    ldr     r8, =LEVEL_GP_COUNT
+    ldr     r8, [r8]
+    cmp     r8, #0
+    beq.w   vlcx_done_zero
+    ldr     r9, [r7, #16]       @ gpObjectsPtr (ROM)
+    ldr     r7, =LEVEL_GP_BUF
+    mov     r10, #0             @ best push-out dx
+vlcx_loop:
+    cmp     r8, #0
+    beq.w   vlcx_done
+    ldrb    r0, [r7, #6]
+    cmp     r0, #0
+    beq.w   vlcx_next
+    ldrb    r0, [r9, #6]
+    tst     r0, #0x10
+    beq     vlcx_next
+    ldr     r0, [r9, #16]       @ coll_mesh_ptr
+    cmp     r0, #0
+    beq.w   vlcx_next       @ no mesh = floor only
+    ldr     r1, [r0]            @ floor_count
+    add     r0, r0, #4          @ skip floor_count word
+    lsl     r1, r1, #3          @ floor_count * 8 bytes per seg
+    add     r0, r0, r1          @ r0 = ptr to wall_count
+    ldr     r1, [r0]            @ wall_count
+    cmp     r1, #0
+    beq.w   vlcx_next
+    add     r0, r0, #4          @ r0 = ptr to first wall seg
+vlcx_wall_loop:
+    cmp     r1, #0
+    beq.w   vlcx_next
+    ldrsh   r2, [r0]            @ wall local x
+    ldrsh   r3, [r0, #2]        @ wall local y_min
+    ldrsh   r12, [r0, #6]       @ wall local y_max
+    add     r0, r0, #8
+    subs    r1, r1, #1
+    ldrsh   r14, [r7, #0]       @ obj world_x
+    add     r2, r2, r14         @ world_wall_x
+    ldrsh   r14, [r7, #2]       @ obj world_y
+    add     r3, r3, r14         @ world_y_min
+    add     r12, r12, r14       @ world_y_max
+    sub     r14, r3, r11        @ world_y_min - player_hh
+    cmp     r5, r14
+    ble     vlcx_wall_loop  @ py below wall
+    add     r14, r12, r11       @ world_y_max + player_hh
+    cmp     r5, r14
+    bge     vlcx_wall_loop  @ py above wall
+    sub     r3, r4, r2          @ dx_raw = px - wall_x
+    movs    r2, r3              @ r2 = dx_raw; sets N flag
+    bpl     vlcx_wall_dx_ok
+    neg     r3, r3  @ r3 = |dx_raw|
+vlcx_wall_dx_ok:
+    cmp     r3, r6
+    bge     vlcx_wall_loop  @ |dx| >= hw: no overlap
+    sub     r3, r6, r3          @ overlap = hw - |dx|
+    cmp     r2, #0
+    bge     vlcx_wall_sign_ok
+    neg     r3, r3
+vlcx_wall_sign_ok:
+    mov     r10, r3
+    b.w     vlcx_next
+vlcx_next:
+    add     r7, r7, #8
+    add     r9, r9, #20    @ next ROM obj
+    subs    r8, r8, #1
+    b.w     vlcx_loop
+vlcx_done:
+    mov     r0, r10
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+vlcx_done_zero:
+    mov     r0, #0
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ vpy_level_collision_y(r0=px, r1=py, r2=hh) -> floor_center_y
+.global vpy_level_collision_y
+.type vpy_level_collision_y, %function
+.thumb_func
+vpy_level_collision_y:
+    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 9 regs
+    mov     r4, r0                    @ px
+    sub     r5, r1, r2                @ player_feet = py - hh
+    mov     r6, r2                    @ half_h (player)
+    ldr     r7, =LEVEL_DATA_PTR
+    ldr     r7, [r7]
+    ldr     r10, =-32767              @ best_floor_top sentinel
+    cmp     r7, #0
+    beq.w   vlcy_finish
+    ldr     r8, =LEVEL_GP_COUNT
+    ldr     r8, [r8]
+    cmp     r8, #0
+    beq.w   vlcy_finish
+    ldr     r9, [r7, #16]             @ gpObjectsPtr (ROM)
+    ldr     r7, =LEVEL_GP_BUF
+vlcy_loop:
+    cmp     r8, #0
+    beq.w   vlcy_finish
+    ldrb    r1, [r7, #6]
+    cmp     r1, #0
+    beq.w   vlcy_next
+    ldrb    r1, [r9, #6]
+    tst     r1, #0x10
+    beq     vlcy_next
+    ldrb    r1, [r9, #12]             @ obj half_w
+    ldrsh   r2, [r7, #0]              @ obj world_x
+    sub     r2, r4, r2                @ dx = px - obj_x
+    movs    r3, r2
+    bpl     vlcy_dxok
+    neg     r3, r2
+vlcy_dxok:
+    cmp     r3, r1
+    bgt     vlcy_next
+    ldr     r11, [r9, #16]            @ coll_mesh_ptr
+    cmp     r11, #0
+    beq     vlcy_aabb
+    ldrsh   r0, [r7, #0]              @ obj_world_x
+    sub     r0, r4, r0                @ local_px = px - obj_world_x
+    ldrsh   r1, [r7, #2]              @ obj_world_y
+    push    {r0, r1}                  @ [sp]=local_px [sp+4]=obj_world_y
+    ldr     r12, [r11], #4            @ seg_count; r11 → first segment
+vlcy_seg_loop:
+    cmp     r12, #0
+    beq     vlcy_seg_done
+    ldrsh   r0, [r11]                 @ x1
+    ldrsh   r1, [r11, #2]             @ y1
+    ldrsh   r2, [r11, #4]             @ x2
+    ldrsh   r3, [r11, #6]             @ y2
+    add     r11, r11, #8
+    subs    r12, r12, #1
+    cmp     r1, r3
+    bne     vlcy_seg_loop @ skip non-horizontal
+    ldr     r14, [sp]                 @ local_px
+    cmp     r0, r2
+    blt     vlcy_seg_x1lt
+    cmp     r14, r2
+    blt     vlcy_seg_loop
+    cmp     r14, r0
+    bgt     vlcy_seg_loop
+    b       vlcy_seg_y
+vlcy_seg_x1lt:
+    cmp     r14, r0
+    blt     vlcy_seg_loop
+    cmp     r14, r2
+    bgt     vlcy_seg_loop
+vlcy_seg_y:
+    ldr     r14, [sp, #4]             @ obj_world_y
+    add     r3, r1, r14               @ world_seg_y = y1 + obj_world_y
+    cmp     r3, r5
+    bgt     vlcy_seg_loop
+    cmp     r3, r10
+    ble     vlcy_seg_loop
+    mov     r10, r3
+    b       vlcy_seg_loop
+vlcy_seg_done:
+    pop     {r0, r1}
+    b       vlcy_next
+vlcy_aabb:
+    ldrsh   r2, [r7, #2]              @ obj world_y
+    ldrb    r3, [r9, #13]             @ obj half_h
+    add     r2, r2, r3                @ obj_top = world_y + half_h
+    cmp     r2, r5
+    bgt     vlcy_next
+    cmp     r10, r2
+    bge     vlcy_next
+    mov     r10, r2
+vlcy_next:
+    add     r7, r7, #8
+    add     r9, r9, #20    @ next ROM obj (20 bytes)
+    subs    r8, r8, #1
+    b       vlcy_loop
+vlcy_finish:
+    ldr     r1, =-32767
+    cmp     r10, r1
+    beq     vlcy_no_floor
+    add     r0, r10, r6               @ floor_top + half_h
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+vlcy_no_floor:
+    mov     r0, r5                    @ no floor: return player_feet so floor_y < player_y
+    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    .ltorg
+
+@ --- User variables (RAM) ---
+.equ VAR_MARIO_HH, 0x2007F460  @ const scalar
+.equ VAR_PLAYER_X, 0x2007F464
+.equ VAR_PLAYER_Y, 0x2007F468
+.equ VAR_VEL_Y, 0x2007F46C
+.equ VAR_ON_GROUND, 0x2007F470
+.equ VAR_PREV_Y, 0x2007F474
+.equ VAR_CAMERA_X, 0x2007F478
+.equ VAR_FLOOR_Y, 0x2007F47C
+.equ VAR_JOY_X, 0x2007F480  @ implicit
+.equ VAR_BTN_JUMP, 0x2007F484  @ implicit
+
+@ --- Const array ROM data ---
+
+@ --- game_main (firmware entry point) ---
+.align 2
+.global game_main
+.type game_main, %function
+.thumb_func
+game_main:
+    push    {r4, r5, r6, r7, lr}
+    @ zero runtime RAM (RP2350 SRAM is not zero-initialised)
+    ldr     r0, =TMPVAL              @ runtime RAM base
+    ldr     r1, =USER_RAM_START      @ end of system RAM (exclusive)
+    mov     r2, #0
+gm_zero_loop:
+    str     r2, [r0], #4
+    cmp     r0, r1
+    blo     gm_zero_loop
+    @ default drawing state (SRAM is not zero-initialised)
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    mov     r0, #0
+    strb    r0, [r1]
+    ldr     r1, =TEXT_SIZE
+    mov     r0, #3
+    str     r0, [r1]
+    @ initialize globals
+    ldr     r1, =0x2007F460
+    mov     r0, #13
+    str     r0, [r1]
+    ldr     r1, =0x2007F464
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F468
+    ldr     r0, =-57
+    str     r0, [r1]
+    ldr     r1, =0x2007F46C
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F470
+    mov     r0, #1
+    str     r0, [r1]
+    ldr     r1, =0x2007F474
+    ldr     r0, =-57
+    str     r0, [r1]
+    ldr     r1, =0x2007F478
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F47C
+    ldr     r0, =-57
+    str     r0, [r1]
+    @ init PSG_MIXER_SHADOW (all channels disabled)
+    ldr     r1, =PSG_MIXER_SHADOW
+    mov     r0, #0x3F
+    str     r0, [r1]
+    @ zero ENEMY_COUNT_ARM (guard against warm-reset SRAM)
+    ldr     r1, =ENEMY_COUNT_ARM
+    mov     r0, #0
+    str     r0, [r1]
+    @ main() body
+    ldr     r0, =_WORLD_1_1_LEVEL    @ asset 'world_1_1'
+    push    {r0}
+    pop     {r0}
+    bl      vpy_load_level
+game_main_loop:
+    bl      vpy_wait_recal
+    bl      vpy_update_buttons
+    bl      vpy_audio_update
+    ldr     r0, =VPY_BRIGHTNESS_OVERRIDE
+    mov     r1, #0
+    strb    r1, [r0]
+    bl      vpy_j1_x
+    ldr     r1, =0x2007F480    @ JOY_X
+    str     r0, [r1]
+    bl      vpy_j1_btn1
+    ldr     r1, =0x2007F484    @ BTN_JUMP
+    str     r0, [r1]
+    ldr     r1, =0x2007F480    @ JOY_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #20
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf0
+    movs    r0, #1
+    b       .Lcf0e
+.Lcf0:
+    movs    r0, #0
+.Lcf0e:
+    cmp     r0, #0
+    beq     if_else_0
+    ldr     r1, =0x2007F464    @ PLAYER_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #3
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F464    @ PLAYER_X
+    str     r0, [r1]
+    b       if_end_0
+if_else_0:
+if_end_0:
+    ldr     r1, =0x2007F480    @ JOY_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-20
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bge    .Lcf1
+    movs    r0, #1
+    b       .Lcf1e
+.Lcf1:
+    movs    r0, #0
+.Lcf1e:
+    cmp     r0, #0
+    beq     if_else_1
+    ldr     r1, =0x2007F464    @ PLAYER_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #3
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F464    @ PLAYER_X
+    str     r0, [r1]
+    b       if_end_1
+if_else_1:
+if_end_1:
+    ldr     r1, =0x2007F464    @ PLAYER_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-100
+    push    {r0}
+    mov     r0, #1050
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_clamp
+    ldr     r1, =0x2007F464    @ PLAYER_X
+    str     r0, [r1]
+    ldr     r1, =0x2007F484    @ BTN_JUMP
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf2
+    movs    r0, #1
+    b       .Lcf2e
+.Lcf2:
+    movs    r0, #0
+.Lcf2e:
+    cmp     r0, #0
+    beq     if_else_2
+    ldr     r1, =0x2007F470    @ ON_GROUND
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf3
+    movs    r0, #1
+    b       .Lcf3e
+.Lcf3:
+    movs    r0, #0
+.Lcf3e:
+    cmp     r0, #0
+    beq     if_else_3
+    mov     r0, #12
+    ldr     r1, =0x2007F46C    @ VEL_Y
+    str     r0, [r1]
+    mov     r0, #0
+    ldr     r1, =0x2007F470    @ ON_GROUND
+    str     r0, [r1]
+    ldr     r0, =_JUMP_SFX    @ asset 'jump'
+    push    {r0}
+    pop     {r0}
+    bl      vpy_play_sfx
+    b       if_end_3
+if_else_3:
+if_end_3:
+    b       if_end_2
+if_else_2:
+if_end_2:
+    ldr     r1, =0x2007F470    @ ON_GROUND
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf4
+    movs    r0, #1
+    b       .Lcf4e
+.Lcf4:
+    movs    r0, #0
+.Lcf4e:
+    cmp     r0, #0
+    beq     if_else_4
+    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F474    @ PREV_Y
+    str     r0, [r1]
+    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F46C    @ VEL_Y
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F468    @ PLAYER_Y
+    str     r0, [r1]
+    ldr     r1, =0x2007F46C    @ VEL_Y
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F46C    @ VEL_Y
+    str     r0, [r1]
+    ldr     r1, =0x2007F464    @ PLAYER_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F474    @ PREV_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F460    @ MARIO_HH
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_level_collision_y
+    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    str     r0, [r1]
+    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-57
+    push    {r0}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_max
+    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    str     r0, [r1]
+    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bgt    .Lcf5
+    movs    r0, #1
+    b       .Lcf5e
+.Lcf5:
+    movs    r0, #0
+.Lcf5e:
+    cmp     r0, #0
+    beq     if_else_5
+    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F468    @ PLAYER_Y
+    str     r0, [r1]
+    mov     r0, #0
+    ldr     r1, =0x2007F46C    @ VEL_Y
+    str     r0, [r1]
+    mov     r0, #1
+    ldr     r1, =0x2007F470    @ ON_GROUND
+    str     r0, [r1]
+    b       if_end_5
+if_else_5:
+if_end_5:
+    b       if_end_4
+if_else_4:
+if_end_4:
+    ldr     r1, =0x2007F470    @ ON_GROUND
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    bne    .Lcf6
+    movs    r0, #1
+    b       .Lcf6e
+.Lcf6:
+    movs    r0, #0
+.Lcf6e:
+    cmp     r0, #0
+    beq     if_else_6
+    ldr     r1, =0x2007F464    @ PLAYER_X
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F460    @ MARIO_HH
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_level_collision_y
+    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    str     r0, [r1]
+    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r0, =-57
+    push    {r0}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_max
+    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    str     r0, [r1]
+    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    ldr     r0, [r1]
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble    .Lcf7
+    movs    r0, #1
+    b       .Lcf7e
+.Lcf7:
+    movs    r0, #0
+.Lcf7e:
+    cmp     r0, #0
+    beq     if_else_7
+    mov     r0, #0
+    ldr     r1, =0x2007F470    @ ON_GROUND
+    str     r0, [r1]
+    b       if_end_7
+if_else_7:
+if_end_7:
+    b       if_end_6
+if_else_6:
+if_end_6:
+    ldr     r1, =0x2007F464    @ PLAYER_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #30
+    mov     r1, r0
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F478    @ CAMERA_X
+    str     r0, [r1]
+    ldr     r1, =0x2007F478    @ CAMERA_X
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    push    {r0}
+    mov     r0, #970
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_clamp
+    ldr     r1, =0x2007F478    @ CAMERA_X
+    str     r0, [r1]
+    ldr     r1, =0x2007F478    @ CAMERA_X
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r0}
+    bl      vpy_set_camera_x
+    bl      vpy_show_level
+    ldr     r0, =_MARIO_VECTORS    @ asset 'mario'
+    push    {r0}
+    ldr     r0, =-30
+    push    {r0}
+    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_vector
+    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r0}
+    bl      vpy_debug_print
+    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r0, [r1]
+    push    {r0}
+    pop     {r0}
+    bl      vpy_debug_print
+    b       game_main_loop
+    .ltorg
+
+@ ============================================================
+@ Asset data
+@ ============================================================
+
+@ --- cloud (1 path(s)) ---
+.global _CLOUD_VECTORS
+_CLOUD_VECTORS:
+    .word   1               @ path_count
+    .word   _CLOUD_PATH0      @ ptr path 0
+
+_CLOUD_PATH0:
+    .byte   55               @ intensity
+    .byte   0xF6, 0xE7, 0x00, 0x00  @ y=-10, x=-25, hdr
+    .byte   0xFF, 0x00, 0x32  @ line dy=0, dx=50
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
+    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0xFF, 0x00, 0xEC  @ line dy=0, dx=-20
+    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0x02            @ end marker
+
+@ --- CLOUD_3D_DATA (1 path(s)) ---
+    .balign 4
+.global _CLOUD_3D_DATA
+_CLOUD_3D_DATA:
+    .word   12               @ vertex_count
+    .byte   0xE7, 0xF6, 0x00  @ vert 0: x=-25,y=-10,z=0
+    .byte   0x19, 0xF6, 0x00  @ vert 1: x=25,y=-10,z=0
+    .byte   0x19, 0xFE, 0x00  @ vert 2: x=25,y=-2,z=0
+    .byte   0x14, 0xFE, 0x00  @ vert 3: x=20,y=-2,z=0
+    .byte   0x14, 0x04, 0x00  @ vert 4: x=20,y=4,z=0
+    .byte   0x0A, 0x04, 0x00  @ vert 5: x=10,y=4,z=0
+    .byte   0x0A, 0x0A, 0x00  @ vert 6: x=10,y=10,z=0
+    .byte   0xF6, 0x0A, 0x00  @ vert 7: x=-10,y=10,z=0
+    .byte   0xF6, 0x04, 0x00  @ vert 8: x=-10,y=4,z=0
+    .byte   0xEC, 0x04, 0x00  @ vert 9: x=-20,y=4,z=0
+    .byte   0xEC, 0xFE, 0x00  @ vert 10: x=-20,y=-2,z=0
+    .byte   0xE7, 0xFE, 0x00  @ vert 11: x=-25,y=-2,z=0
+    .balign 4
+    .word   1               @ path_count
+    .byte   12               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   10
+    .byte   11
+    .balign 4
+
+@ --- ground_tile (7 path(s)) ---
+.global _GROUND_TILE_VECTORS
+_GROUND_TILE_VECTORS:
+    .word   7               @ path_count
+    .word   _GROUND_TILE_PATH0      @ ptr path 0
+    .word   _GROUND_TILE_PATH1      @ ptr path 1
+    .word   _GROUND_TILE_PATH2      @ ptr path 2
+    .word   _GROUND_TILE_PATH3      @ ptr path 3
+    .word   _GROUND_TILE_PATH4      @ ptr path 4
+    .word   _GROUND_TILE_PATH5      @ ptr path 5
+    .word   _GROUND_TILE_PATH6      @ ptr path 6
+
+_GROUND_TILE_PATH0:
+    .byte   80               @ intensity
+    .byte   0xF8, 0xE2, 0x00, 0x00  @ y=-8, x=-30, hdr
+    .byte   0xFF, 0x00, 0x3C  @ line dy=0, dx=60
+    .byte   0xFF, 0x10, 0x00  @ line dy=16, dx=0
+    .byte   0xFF, 0x00, 0xC4  @ line dy=0, dx=-60
+    .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
+    .byte   0x02            @ end marker
+
+_GROUND_TILE_PATH1:
+    .byte   60               @ intensity
+    .byte   0x00, 0xE2, 0x00, 0x00  @ y=0, x=-30, hdr
+    .byte   0xFF, 0x00, 0x3C  @ line dy=0, dx=60
+    .byte   0x02            @ end marker
+
+_GROUND_TILE_PATH2:
+    .byte   127               @ intensity
+    .byte   0x08, 0xEC, 0x00, 0x00  @ y=8, x=-20, hdr
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0x02            @ end marker
+
+_GROUND_TILE_PATH3:
+    .byte   127               @ intensity
+    .byte   0x00, 0xF7, 0x00, 0x00  @ y=0, x=-9, hdr
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0x02            @ end marker
+
+_GROUND_TILE_PATH4:
+    .byte   127               @ intensity
+    .byte   0x00, 0x02, 0x00, 0x00  @ y=0, x=2, hdr
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
+    .byte   0x02            @ end marker
+
+_GROUND_TILE_PATH5:
+    .byte   127               @ intensity
+    .byte   0x00, 0x0B, 0x00, 0x00  @ y=0, x=11, hdr
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0x02            @ end marker
+
+_GROUND_TILE_PATH6:
+    .byte   127               @ intensity
+    .byte   0x00, 0x17, 0x00, 0x00  @ y=0, x=23, hdr
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
+    .byte   0x02            @ end marker
+
+@ --- GROUND_TILE_3D_DATA (7 path(s)) ---
+    .balign 4
+.global _GROUND_TILE_3D_DATA
+_GROUND_TILE_3D_DATA:
+    .word   16               @ vertex_count
+    .byte   0xE2, 0xF8, 0x00  @ vert 0: x=-30,y=-8,z=0
+    .byte   0x1E, 0xF8, 0x00  @ vert 1: x=30,y=-8,z=0
+    .byte   0x1E, 0x08, 0x00  @ vert 2: x=30,y=8,z=0
+    .byte   0xE2, 0x08, 0x00  @ vert 3: x=-30,y=8,z=0
+    .byte   0xE2, 0x00, 0x00  @ vert 4: x=-30,y=0,z=0
+    .byte   0x1E, 0x00, 0x00  @ vert 5: x=30,y=0,z=0
+    .byte   0xEC, 0x08, 0x00  @ vert 6: x=-20,y=8,z=0
+    .byte   0xEC, 0x00, 0x00  @ vert 7: x=-20,y=0,z=0
+    .byte   0xF7, 0x00, 0x00  @ vert 8: x=-9,y=0,z=0
+    .byte   0xF7, 0xF8, 0x00  @ vert 9: x=-9,y=-8,z=0
+    .byte   0x02, 0x00, 0x00  @ vert 10: x=2,y=0,z=0
+    .byte   0x02, 0x08, 0x00  @ vert 11: x=2,y=8,z=0
+    .byte   0x0B, 0x00, 0x00  @ vert 12: x=11,y=0,z=0
+    .byte   0x0B, 0xF8, 0x00  @ vert 13: x=11,y=-8,z=0
+    .byte   0x17, 0x00, 0x00  @ vert 14: x=23,y=0,z=0
+    .byte   0x17, 0x08, 0x00  @ vert 15: x=23,y=8,z=0
+    .balign 4
+    .word   7               @ path_count
+    .byte   5               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   0
+    .byte   2               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   4
+    .byte   5
+    .byte   2               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   6
+    .byte   7
+    .byte   2               @ path 3: pt_count
+    .byte   0               @ path 3: closed
+    .byte   8
+    .byte   9
+    .byte   2               @ path 4: pt_count
+    .byte   0               @ path 4: closed
+    .byte   10
+    .byte   11
+    .byte   2               @ path 5: pt_count
+    .byte   0               @ path 5: closed
+    .byte   12
+    .byte   13
+    .byte   2               @ path 6: pt_count
+    .byte   0               @ path 6: closed
+    .byte   14
+    .byte   15
+    .balign 4
+
+@ --- jump SFX (13 frames, 14 events) ---
+.global _JUMP_SFX
 _JUMP_SFX:
-    ; SFX: jump (jump)
-    ; Duration: 250ms (12fr), Freq: 440Hz, Channel: 0
-    FCB $AF         ; Frame 0 - flags (vol=15, noisevol=0, tone=Y, noise=N)
-    FCB $01, $0B  ; Tone period = 267 (big-endian)
-    FCB $AE         ; Frame 1 - flags (vol=14, noisevol=0, tone=Y, noise=N)
-    FCB $00, $E8  ; Tone period = 232 (big-endian)
-    FCB $AD         ; Frame 2 - flags (vol=13, noisevol=0, tone=Y, noise=N)
-    FCB $00, $CD  ; Tone period = 205 (big-endian)
-    FCB $AB         ; Frame 3 - flags (vol=11, noisevol=0, tone=Y, noise=N)
-    FCB $00, $B8  ; Tone period = 184 (big-endian)
-    FCB $AA         ; Frame 4 - flags (vol=10, noisevol=0, tone=Y, noise=N)
-    FCB $00, $A6  ; Tone period = 166 (big-endian)
-    FCB $A9         ; Frame 5 - flags (vol=9, noisevol=0, tone=Y, noise=N)
-    FCB $00, $98  ; Tone period = 152 (big-endian)
-    FCB $A7         ; Frame 6 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $8C  ; Tone period = 140 (big-endian)
-    FCB $A6         ; Frame 7 - flags (vol=6, noisevol=0, tone=Y, noise=N)
-    FCB $00, $82  ; Tone period = 130 (big-endian)
-    FCB $A5         ; Frame 8 - flags (vol=5, noisevol=0, tone=Y, noise=N)
-    FCB $00, $79  ; Tone period = 121 (big-endian)
-    FCB $A3         ; Frame 9 - flags (vol=3, noisevol=0, tone=Y, noise=N)
-    FCB $00, $71  ; Tone period = 113 (big-endian)
-    FCB $A2         ; Frame 10 - flags (vol=2, noisevol=0, tone=Y, noise=N)
-    FCB $00, $6A  ; Tone period = 106 (big-endian)
-    FCB $A0         ; Frame 11 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $64  ; Tone period = 100 (big-endian)
-    FCB $D0, $20    ; End of effect marker
+    .word   14  @ num_events
+    .byte   0, 4  @ frame=0
+    .byte   4, 11  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 15  @ PSG r10
+    .byte   7, 59  @ PSG r7
+    .byte   0, 3  @ frame=1
+    .byte   4, 235  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   0, 3  @ frame=2
+    .byte   4, 209  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   0, 3  @ frame=3
+    .byte   4, 189  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 11  @ PSG r10
+    .byte   0, 3  @ frame=4
+    .byte   4, 172  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 10  @ PSG r10
+    .byte   0, 3  @ frame=5
+    .byte   4, 158  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 9  @ PSG r10
+    .byte   0, 3  @ frame=6
+    .byte   4, 146  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 7  @ PSG r10
+    .byte   0, 3  @ frame=7
+    .byte   4, 136  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 6  @ PSG r10
+    .byte   0, 3  @ frame=8
+    .byte   4, 127  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 5  @ PSG r10
+    .byte   0, 3  @ frame=9
+    .byte   4, 119  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 3  @ PSG r10
+    .byte   0, 3  @ frame=10
+    .byte   4, 112  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 2  @ PSG r10
+    .byte   0, 4  @ frame=11
+    .byte   4, 106  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   0, 2  @ frame=12
+    .byte   4, 100  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   0, 2  @ frame=13
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   0, 0  @ end
 
-;***************************************************************************
-; RUNTIME HELPERS
-;***************************************************************************
+@ ==== ARM Level: KONG ====
+    .balign 4
+.global _KONG_LEVEL
+_KONG_LEVEL:
+    .hword -96  @ xMin
+    .hword 95  @ xMax
+    .hword -128  @ yMin
+    .hword 127  @ yMax
+    .byte 0   @ bgCount
+    .byte 1   @ gpCount
+    .byte 0   @ fgCount
+    .byte 0    @ pad
+    .word _KONG_BG_OBJECTS
+    .word _KONG_GP_OBJECTS
+    .word _KONG_FG_OBJECTS
+    .hword -96  @ scrollLimit left
+    .hword 95  @ scrollLimit right
+    .hword 127  @ scrollLimit top
+    .hword -128  @ scrollLimit bottom
+    .hword 0  @ groundBottomOffset
+    .hword 0  @ pad
 
-MOD16:
-    ; Signed 16-bit modulo: D = X % D (result has same sign as dividend)
-    ; X = dividend (i16), D = divisor (i16) -> D = remainder
-    STD TMPPTR          ; Save divisor
-    TFR X,D             ; D = dividend (TFR does NOT set flags!)
-    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte
-    BPL .M16_DPOS       ; if dividend >= 0, skip negation
-    COMA
-    COMB
-    ADDD #1             ; D = |dividend|
-    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)
-    LDA #1
-    STA TMPPTR2         ; sign_flag = 1
-    BRA .M16_RCHECK
-.M16_DPOS:
-    STD TMPVAL          ; dividend is positive, store as-is
-    LDA #0
-    STA TMPPTR2         ; sign_flag = 0 (positive result)
-.M16_RCHECK:
-    LDD TMPPTR          ; D = divisor
-    BPL .M16_RPOS       ; if divisor >= 0, skip negation
-    COMA
-    COMB
-    ADDD #1             ; D = |divisor|
-    STD TMPPTR          ; TMPPTR = |divisor|
-.M16_RPOS:
-.M16_LOOP:
-    LDD TMPVAL
-    SUBD TMPPTR         ; |dividend| - |divisor|
-    BLO .M16_END        ; if |dividend| < |divisor|, done
-    STD TMPVAL          ; update remainder
-    BRA .M16_LOOP
-.M16_END:
-    LDD TMPVAL          ; D = |remainder|
-    LDA TMPPTR2
-    BEQ .M16_DONE       ; zero = positive result
-    COMA
-    COMB
-    ADDD #1             ; negate (same sign as dividend)
-.M16_DONE:
-    RTS
+    .balign 4
+_KONG_BG_OBJECTS:
 
-; === JOYSTICK BUILTIN SUBROUTINES (cached, Joy_Analog runs once per frame) ===
-; J1_X() - Read Joystick 1 X axis from cached BIOS value at $C81B
-J1X_BUILTIN:
-    LDB >$C81B   ; Vec_Joy_1_X (populated each frame by auto-injected Joy_Analog)
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    RTS
+    .balign 4
+_KONG_GP_OBJECTS:
+    @ obj_1773176623321 (enemy)
+    .hword 34  @ x
+    .hword 0  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 1   @ type
+    .word _PLATFORM_VECTORS  @ vector_ptr
+    .byte 81   @ half_w (vec:81)
+    .byte 82   @ half_h (vec:82)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
 
-Draw_Sync_List_At_With_Mirrors:
-; Unified mirror support using flags: MIRROR_X and MIRROR_Y
-; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing
-LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
-BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_SET_INTENSITY
-DSWM_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
-DSWM_SET_INTENSITY:
-STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)
-LDB ,X+                 ; y_start from .vec (already relative to center)
-; Check if Y mirroring is enabled
-TST >MIRROR_Y
-BEQ DSWM_NO_NEGATE_Y
-NEGB                    ; ← Negate Y if flag set
-DSWM_NO_NEGATE_Y:
-ADDB >DRAW_VEC_Y        ; Add Y offset
-LDA ,X+                 ; x_start from .vec (already relative to center)
-; Check if X mirroring is enabled
-TST >MIRROR_X
-BEQ DSWM_NO_NEGATE_X
-NEGA                    ; ← Negate X if flag set
-DSWM_NO_NEGATE_X:
-ADDA >DRAW_VEC_X        ; Add X offset
-STD >TEMP_YX            ; Save adjusted position
-; Reset completo
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$03
-STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
-LDA #$02
-STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
-LDA #$02
-STA VIA_port_b          ; repeat
-LDA #$01
-STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
-; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)
-LDD >TEMP_YX
-STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
-CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
-PSHS A                  ; ~4 cycle settling delay for Y
-LDA #$CE
-STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
-CLR VIA_shift_reg       ; SR=0: no draw during moveto
-INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
-PULS A                  ; Restore X
-STA VIA_port_a          ; X to DAC
-; Timing setup (match core: hardcoded $7F)
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X                ; Skip next_y, next_x
-; Wait for move to complete (PB=1 on exit)
-DSWM_W1:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W1
-; PB stays 1 — draw loop begins with PB=1
-; Loop de dibujo (conditional mirrors)
-DSWM_LOOP:
-LDA ,X+                 ; Read flag
-CMPA #2                 ; Check end marker
-LBEQ DSWM_DONE
-CMPA #1                 ; Check next path marker
-LBEQ DSWM_NEXT_PATH
-; Draw line with conditional negations
-LDB ,X+                 ; dy
-; Check if Y mirroring is enabled
-TST >MIRROR_Y
-BEQ DSWM_NO_NEGATE_DY
-NEGB                    ; ← Negate dy if flag set
-DSWM_NO_NEGATE_DY:
-LDA ,X+                 ; dx
-; Check if X mirroring is enabled
-TST >MIRROR_X
-BEQ DSWM_NO_NEGATE_DX
-NEGA                    ; ← Negate dx if flag set
-DSWM_NO_NEGATE_DX:
-; B=DY_final, A=DX_final, PB=1 on entry (from moveto or previous segment)
-STB VIA_port_a          ; DY to DAC (PB=1: integrators hold position)
-CLR VIA_port_b          ; PB=0: enable mux, beam tracks DY direction
-NOP                     ; settling 1 (per BIOS Draw_Line_d: LEAX+NOP = ~7 cycles)
-NOP                     ; settling 2
-NOP                     ; settling 3
-INC VIA_port_b          ; PB=1: disable mux, lock direction at DY
-STA VIA_port_a          ; DX to DAC
-LDA #$FF
-STA VIA_shift_reg       ; beam ON first (ramp still off from T1PB7)
-CLR VIA_t1_cnt_hi       ; THEN start T1 -> ramp ON (BIOS order)
-; Wait for line draw
-DSWM_W2:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W2
-CLR VIA_port_a          ; stop X integrator drift between segments
-CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
-LBRA DSWM_LOOP          ; Long branch
-; Next path: repeat mirror logic for new path header
-DSWM_NEXT_PATH:
-TFR X,D
-PSHS D
-; Check intensity override (same logic as start)
-LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
-BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_NEXT_SET_INTENSITY
-DSWM_NEXT_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
-DSWM_NEXT_SET_INTENSITY:
-PSHS A
-LDB ,X+                 ; y_start
-TST >MIRROR_Y
-BEQ DSWM_NEXT_NO_NEGATE_Y
-NEGB
-DSWM_NEXT_NO_NEGATE_Y:
-ADDB >DRAW_VEC_Y        ; Add Y offset
-LDA ,X+                 ; x_start
-TST >MIRROR_X
-BEQ DSWM_NEXT_NO_NEGATE_X
-NEGA
-DSWM_NEXT_NO_NEGATE_X:
-ADDA >DRAW_VEC_X        ; Add X offset
-STD >TEMP_YX
-PULS A                  ; Get intensity back
-STA >$C832              ; Vec_Misc_Count (direct, DP-safe)
-PULS D
-ADDD #3
-TFR D,X
-; Reset to zero
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$03
-STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
-LDA #$02
-STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
-LDA #$02
-STA VIA_port_b          ; repeat
-LDA #$01
-STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
-; Moveto new start position (BIOS Moveto_d order)
-LDD >TEMP_YX
-STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
-CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
-PSHS A                  ; ~4 cycle settling delay for Y
-LDA #$CE
-STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
-CLR VIA_shift_reg       ; SR=0: no draw during moveto
-INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
-PULS A
-STA VIA_port_a          ; X to DAC
-; Timing setup (match core: hardcoded $7F)
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X
-; Wait for move (PB=1 on exit)
-DSWM_W3:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W3
-; PB stays 1 — draw loop continues with PB=1
-LBRA DSWM_LOOP          ; Long branch
-DSWM_DONE:
-RTS
-; === LOAD_LEVEL_RUNTIME ===
-; Load level data from ROM and copy GP objects to RAM buffer
-; Input:  X = pointer to level data in ROM
-; Output: LEVEL_PTR = level header pointer
-;         RESULT    = level header pointer (return value)
-; BG and FG layers are static — read from ROM directly.
-; GP layer is copied to LEVEL_GP_BUFFER (14 bytes/object).
-LOAD_LEVEL_RUNTIME:
-    PSHS D,X,Y,U     ; Preserve registers
-    
-    ; Store level pointer and mark as loaded
-    STX >LEVEL_PTR
-    LDA #1
-    STA >LEVEL_LOADED    ; Mark level as loaded
-    
-    ; Camera is NOT reset here (matches pitrex/rp2350). It is initialised once
-    ; at boot in MAIN; the game sets it via SET_CAMERA_Y before LOAD_LEVEL, and
-    ; GET_LEVEL_FLOOR_Y / the SPAWN_ENEMIES Y-filter read it after this call.
-    
-    ; Skip world bounds (8 bytes) + time/score (4 bytes)
-    LEAX 12,X        ; X now points to object counts (+12)
-    
-    ; Read object counts (one byte each)
-    LDB ,X+          ; B = bgCount
-    STB >LEVEL_BG_COUNT
-    LDB ,X+          ; B = gpCount
-    STB >LEVEL_GP_COUNT
-    LDB ,X+          ; B = fgCount
-    STB >LEVEL_FG_COUNT
-    
-    ; Read layer ROM pointers (FDB, 2 bytes each)
-    LDD ,X++         ; D = bgObjectsPtr
-    STD >LEVEL_BG_ROM_PTR
-    LDD ,X++         ; D = gpObjectsPtr
-    STD >LEVEL_GP_ROM_PTR
-    LDD ,X++         ; D = fgObjectsPtr
-    STD >LEVEL_FG_ROM_PTR
-    
-    ; Read scroll limits from ROM header (+21..+28)
-    ; X is now at +21 (right after the 3 FDB layer pointers)
-    LDD ,X++         ; D = scrollLimit left
-    STD >SCROLL_LIMIT_LEFT
-    LDD ,X++         ; D = scrollLimit right
-    STD >SCROLL_LIMIT_RIGHT
-    LDD ,X++         ; D = scrollLimit top
-    STD >SCROLL_LIMIT_TOP
-    LDD ,X++         ; D = scrollLimit bottom
-    STD >SCROLL_LIMIT_BOTTOM
-    
-    ; Read enemy data from header (+29: count, +30,+31: instances_ptr)
-    LDB ,X+         ; B = enemy_count
-    STB >LEVEL_ENEMY_COUNT
-    LDD ,X++        ; D = enemy_instances_ptr (advance past +30..+31)
-    STD >LEVEL_ENEMY_INSTANCES_PTR
-    LEAX 2,X        ; skip groundBottomOffset (+32..+33)
-    
-    ; Per-screen object index (+34..+40)
-    LDB ,X+         ; B = screen_count
-    STB >LEVEL_SCREEN_COUNT
-    LDD ,X++        ; D = bg_screens_ptr
-    STD >LEVEL_BG_SCREENS_PTR
-    LDD ,X++        ; D = gp_screens_ptr
-    STD >LEVEL_GP_SCREENS_PTR
-    LDD ,X          ; D = fg_screens_ptr
-    STD >LEVEL_FG_SCREENS_PTR
-    
-    ; === Setup GP pointer: point directly to ROM (matches core) ===
-    ; GP objects are read from ROM with stride=21 (stride-21 format), same as BG/FG
-    LDB >LEVEL_GP_COUNT
-    BEQ LLR_SKIP_GP  ; Skip if no GP objects
-    LDD >LEVEL_GP_ROM_PTR ; Just point to ROM
-    STD >LEVEL_GP_PTR    ; Store ROM pointer
-    
-LLR_GP_DONE:
-LLR_SKIP_GP:
-    
-    ; Return level pointer in RESULT
-    LDX >LEVEL_PTR
-    STX RESULT
-    
-    PULS D,X,Y,U,PC  ; Restore and return
-    
-; === LLR_COPY_OBJECTS - LEGACY (not called; GP objects read from ROM directly)
-; Input:  B = count, X = source (ROM, 21 bytes/obj stride-21), U = dest (RAM)
-; ROM object layout (21 bytes, stride-21):
-;   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),
-;   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,
-;   +11: physics_flags, +12: collision_flags, +13: collision_size,
-;   +14-15: spawn_delay(FDB), +16: vector_bank(FCB), +17-18: vector_ptr(FDB),
-;   +19: half_width, +20: half_height
-; RAM object layout (15 bytes):
-;   +0-1: world_x(FDB i16), +2: y(i8), +3: scale(low), +4: rotation,
-;   +5: velocity_x, +6: velocity_y, +7: physics_flags, +8: collision_flags,
-;   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: half_height
-; Clobbers: A, B, X, U
-LLR_COPY_OBJECTS:
-LLR_COPY_LOOP:
-    TSTB
-    BEQ LLR_COPY_DONE
-    PSHS B           ; Save counter (LDD will clobber B)
-    
-    ; X points to ROM object start (+0 = type)
-    LEAX 1,X         ; Skip type (+0), X now at +1 (x FDB high)
-    
-    ; RAM +0-1: world_x FDB (16-bit, ROM +1-2)
-    LDA ,X           ; ROM +1 = high byte of x FDB
-    STA ,U+
-    LDA 1,X          ; ROM +2 = low byte of x FDB
-    STA ,U+
-    ; RAM +2: y low byte (ROM +4, low byte of y FDB)
-    LDA 3,X          ; ROM +4 = low byte of y FDB
-    STA ,U+
-    ; RAM +3: scale low byte (ROM +6, low byte of scale FDB)
-    LDA 5,X          ; ROM +6 = low byte of scale FDB
-    STA ,U+
-    ; RAM +4: rotation (ROM +7)
-    LDA 6,X          ; ROM +7 = rotation
-    STA ,U+
-    ; Skip to ROM +9 (past intensity at ROM +8)
-    LEAX 8,X         ; X now points to ROM +9 (velocity_x)
-    ; RAM +5: velocity_x (ROM +9)
-    LDA ,X+          ; ROM +9
-    STA ,U+
-    ; RAM +6: velocity_y (ROM +10)
-    LDA ,X+          ; ROM +10
-    STA ,U+
-    ; RAM +7: physics_flags (ROM +11)
-    LDA ,X+          ; ROM +11
-    STA ,U+
-    ; RAM +8: collision_flags (ROM +12)
-    LDA ,X+          ; ROM +12
-    STA ,U+
-    ; RAM +9: collision_size (ROM +13)
-    LDA ,X+          ; ROM +13
-    STA ,U+
-    ; RAM +10: spawn_delay low byte (ROM +15, skip high at ROM +14)
-    LDA 1,X          ; ROM +15 = low byte of spawn_delay FDB
-    STA ,U+
-    LEAX 3,X         ; Skip spawn_delay FDB (2 bytes) + vector_bank (1), X now at ROM+17
-    ; RAM +11-12: vector_ptr FDB (ROM +17-18, stride-21)
-    LDD ,X++         ; ROM +17-18 = vector_ptr FDB
-    STD ,U++
-    ; RAM +13-14: half_width + half_height (ROM +19-20, stride-21)
-    LDD ,X++         ; ROM +19-20
-    STD ,U++
-    ; X is now past end of this ROM object (ROM+1 + 8 + 5 + 3 + 2 + 2 = +21 total)
-    ; NOTE: We started at ROM+1 (after LEAX 1,X), walked:
-    ;   ,X and 1,X and 3,X and 5,X and 6,X via indexed → X unchanged
-    ;   then LEAX 8,X (X now at ROM+9)
-    ;   then 5 post-increment ,X+ → X at ROM+14
-    ;   then LEAX 3,X (X at ROM+17)
-    ;   then 2x LDD ,X++ → X at ROM+21
-    ;   ROM+21 from original ROM+0 = next object start (stride-21)
-    
-    PULS B           ; Restore counter
-    DECB
-    BRA LLR_COPY_LOOP
-LLR_COPY_DONE:
-    RTS
 
-; === SHOW_LEVEL_RUNTIME ===
-; Draw all level objects from all layers
-; Input:  LEVEL_PTR = pointer to level header
-; Layers: BG (ROM stride 21), GP (ROM stride 21), FG (ROM stride 21)
-; ROM object layout (21 bytes, stride-21):
-;   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),
-;   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,
-;   +11: physics_flags, +12: collision_flags, +13: collision_size,
-;   +14-15: spawn_delay(FDB), +16: vector_bank(FCB, $FF=null),
-;   +17-18: vector_ptr(FDB), +19: half_width(FCB), +20: half_height(FCB)
-; Each object: load intensity, x, y, vector_bank, vector_ptr, call SLR_DRAW_OBJECTS
-SHOW_LEVEL_RUNTIME:
-    PSHS D,X,Y,U     ; Preserve registers
-    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    
-    ; Check if level is loaded
-    TST >LEVEL_LOADED
-    BEQ SLR_DONE     ; No level loaded, skip
-    LDX >LEVEL_PTR
-    
-    ; Re-read object counts from header (legacy: kept for any caller that reads RAM vars)
-    LEAX 12,X        ; X points to counts (+12)
-    LDB ,X+          ; B = bgCount
-    STB >LEVEL_BG_COUNT
-    LDB ,X+          ; B = gpCount
-    STB >LEVEL_GP_COUNT
-    LDB ,X+          ; B = fgCount
-    STB >LEVEL_FG_COUNT
-    
-    ; ── PER-SCREEN VISIBLE RANGE ─────────────────────────────────────
-    ; Compute top_screen, bot_screen — only iterate objects whose screen
-    ; band overlaps the camera's ±128 Y window. For SnowBros (1 screen
-    ; visible) this is normally 1 screen, occasionally 2 during scroll.
-    LDX >LEVEL_PTR
-    LDD 6,X          ; D = yMax
-    STD >TMPPTR      ; cache yMax
-    LDD >CAMERA_Y
-    ADDD #128        ; D = top_y (camera_y + 128, higher Y = top of screen)
-    PSHS D
-    LDD >TMPPTR      ; yMax
-    SUBD ,S++        ; D = yMax - top_y
-    TSTA             ; sign byte
-    BPL SLR_TOP_OK   ; positive → A is the screen idx (D / 256)
-    CLRA             ; negative → clamp top_screen to 0
-SLR_TOP_OK:
-    STA >SLR_TOP_SCREEN  ; top_screen (separate from TMPVAL — survives per-object cull)
-    LDD >CAMERA_Y
-    SUBD #128        ; D = bot_y (camera_y - 128)
-    PSHS D
-    LDD >TMPPTR      ; yMax
-    SUBD ,S++        ; D = yMax - bot_y
-    TSTA
-    BPL SLR_BOT_OK
-    CLRA
-SLR_BOT_OK:
-    ; Clamp bot_screen to (LEVEL_SCREEN_COUNT - 1) max
-    LDB >LEVEL_SCREEN_COUNT
-    LBEQ SLR_DONE    ; no screens → nothing to draw
-    DECB             ; B = max_idx = screen_count - 1
-    STB >SLR_BOT_SCREEN  ; stash max_idx for compare
-    CMPA >SLR_BOT_SCREEN ; A (bot_screen) vs max_idx
-    BLS SLR_BOT_NOCLAMP
-    LDA >SLR_BOT_SCREEN  ; clamp bot_screen = max_idx
-SLR_BOT_NOCLAMP:
-    STA >SLR_BOT_SCREEN  ; bot_screen
-    
-    ; === Draw Background Layer ===
-SLR_BG_LAYER:
-    LDD >LEVEL_BG_SCREENS_PTR
-    STD >TMPPTR      ; TMPPTR = table base for this layer
-    JSR SLR_DRAW_SCREEN_RANGE
-    
-    ; === Draw Gameplay Layer ===
-SLR_GAMEPLAY:
-    LDD >LEVEL_GP_SCREENS_PTR
-    STD >TMPPTR
-    JSR SLR_DRAW_SCREEN_RANGE
-    
-    ; === Draw Foreground Layer ===
-SLR_FOREGROUND:
-    LDD >LEVEL_FG_SCREENS_PTR
-    STD >TMPPTR
-    JSR SLR_DRAW_SCREEN_RANGE
-    
-SLR_DONE:
-    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-    PULS D,X,Y,U,PC  ; Restore and return
-    
-; === SLR_DRAW_SCREEN_RANGE — iterate screens in visible camera range ===
-SLR_DRAW_SCREEN_RANGE:
-    LDA >SLR_TOP_SCREEN  ; A = current screen idx (start at top)
-SLR_SR_LOOP:
-    CMPA >SLR_BOT_SCREEN
-    BHI SLR_SR_DONE      ; current > bot → finished
-    CMPA >LEVEL_SCREEN_COUNT
-    BHS SLR_SR_DONE      ; defensive: don't index past table
-    ; Compute &table[s] = TMPPTR + s*3
-    PSHS A               ; save loop var
-    LDB #3
-    MUL                  ; D = s*3 (A=0 since s < 256/3, B = offset)
-    LDX >TMPPTR          ; X = screens table base
-    LEAX D,X             ; X = &table[s]
-    LDB ,X               ; B = count for this screen
-    BEQ SLR_SR_NEXT      ; empty screen → skip
-    LDX 1,X              ; X = ptr to first object in this screen
-    LDA #23              ; ROM object stride
-    JSR SLR_DRAW_OBJECTS
-SLR_SR_NEXT:
-    PULS A
-    INCA
-    BRA SLR_SR_LOOP
-SLR_SR_DONE:
-    RTS
-    
-; === SLR_DRAW_OBJECTS - Draw N objects from a layer ===
-; Input:  A = stride (21=ROM), B = count, X = objects ptr
-; For ROM objects (stride=21, stride-21 format):
-;   intensity at +8, y FDB at +3, x FDB at +1, half_width at +19
-;   vector_bank at +16 ($FF=null), vector_ptr FDB at +17
-; Camera: SUBD >CAMERA_X applied to world_x; objects outside i8 range are culled
-SLR_DRAW_OBJECTS:
-    PSHS A           ; Save stride on stack (A=stride)
-SLR_OBJ_LOOP:
-    TSTB
-    LBEQ SLR_OBJ_DONE
-    
-    PSHS B           ; Save counter (LDD clobbers B)
-    
-    ; All layers use stride-21 ROM format — fall straight through
-    
-SLR_ROM_OFFSETS:
-    ; === ROM object (stride=21, stride-21 format) ===
-    ; Skip enemy spawn markers (type==1): drawn by DRAW_ENEMIES, not SHOW_LEVEL
-    LDA ,X           ; type byte at ROM+0
-    CMPA #1
-    LBEQ SLR_OBJ_NEXT ; enemy marker: skip, handle via DRAW_ENEMIES
-    CLR >MIRROR_X    ; DP=$D0, must use extended addressing
-    CLR >MIRROR_Y
-    LDA 8,X          ; intensity at ROM +8
-    STA >DRAW_VEC_INTENSITY
-    ; Apply CAMERA_Y: load world_y FDB at ROM +3, subtract CAMERA_Y, cull
-    LDD 3,X          ; world_y FDB at ROM +3 (16-bit signed)
-    SUBD >CAMERA_Y   ; screen_y = world_y - camera_y
-    TSTA
-    BEQ SLR_ROM_Y_ZERO
-    INCA
-    LBNE SLR_OBJ_NEXT    ; A not $FF: too far above
-    ; A=$FF: visible if B >= 128 (i.e. >= -128 signed)
-    CMPB #128
-    BHS SLR_ROM_Y_VISIBLE
-    LBRA SLR_OBJ_NEXT
-SLR_ROM_Y_ZERO:
-    ; A=0: visible if B <= 127
-    CMPB #127
-    BLS SLR_ROM_Y_VISIBLE
-    LBRA SLR_OBJ_NEXT
-SLR_ROM_Y_VISIBLE:
-    STB >DRAW_VEC_Y  ; DP=$D0, must use extended addressing
-    ; Load world_x (16-bit), subtract CAMERA_X, check visibility
-    LDD 1,X          ; x FDB at ROM +1
-    SUBD >CAMERA_X   ; screen_x = world_x - camera_x
-    STD >TMPVAL
-    ; Wide cull at ±(127+hw): partial-edge objects still render via SDCP.
-    LDB 19,X         ; B = half_width (ROM+19)
-    STB >TMPPTR2     ; save hw
-    LDA #127
-    ADDA >TMPPTR2    ; A = 127 + hw (right boundary)
-    STA >TMPPTR
-    LDA #128
-    SUBA >TMPPTR2    ; A = 128 - hw (left boundary)
-    STA >TMPPTR+1
-    LDD >TMPVAL
-    TSTA
-    BEQ SLR_ROM_A_ZERO
-    INCA
-    LBNE SLR_OBJ_NEXT
-    CMPB >TMPPTR+1
-    BHS SLR_ROM_VISIBLE
-    LBRA SLR_OBJ_NEXT
-SLR_ROM_A_ZERO:
-    CMPB >TMPPTR
-    BLS SLR_ROM_VISIBLE
-    LBRA SLR_OBJ_NEXT
-SLR_ROM_VISIBLE:
-    LDD >TMPVAL      ; reload full 16-bit screen_x (INCA corrupted A)
-    STD >DRAW_VEC_X_HI ; store full 16-bit screen_x (A=hi, B=lo)
-    ; Stride-21: vector_bank at ROM+16 ($FF=null), vector_ptr FDB at ROM+17
-    ; CRITICAL: read ALL level-bank data BEFORE switching to vector bank.
-    LDA 16,X         ; A = vector_bank (LEVEL BANK ACTIVE)
-    CMPA #$FF        ; $FF = null (no visual for this object)
-    LBEQ SLR_OBJ_NEXT ; null bank → skip draw
-    LDU 17,X         ; vector_ptr FDB at ROM+17 (STILL IN LEVEL BANK)
-    LDA 6,X          ; scale_t1 at ROM+6 (STILL IN LEVEL BANK)
-    STA >DRAW_T1_SCALED
-    
-SLR_DRAW_VECTOR:
-    PSHS X           ; Save object pointer
-    TFR U,X          ; X = vector data pointer (header)
-    
-    ; Read path_count from vector header (FDB = 2 bytes, high byte ignored)
-    LDD ,X++         ; D = path_count FDB; B = low byte = actual count, X now at pointer table
-    
-    ; DP is already $D0 (set by SHOW_LEVEL_RUNTIME at entry)
-SLR_PATH_LOOP:
-    TSTB
-    BEQ SLR_PATH_DONE
-    DECB
-    PSHS B           ; Save decremented count
-    LDU ,X++         ; U = path pointer, X advances to next entry
-    PSHS X           ; Save pointer table position
-    TFR U,X          ; X = actual path data
-    LDA >DRAW_VEC_X_HI
-    BEQ SLR_PATH_CHECK_POS
-    INCA
-    BNE SLR_PATH_USE_SDCP
-    LDA >DRAW_VEC_X
-    CMPA #$B0
-    BHS SLR_PATH_USE_DSWM
-    BRA SLR_PATH_USE_SDCP
-SLR_PATH_CHECK_POS:
-    LDA >DRAW_VEC_X
-    CMPA #80
-    BLS SLR_PATH_USE_DSWM
-SLR_PATH_USE_SDCP:
-    JSR SLR_DRAW_CLIPPED_PATH
-    BRA SLR_PATH_AFTER
-SLR_PATH_USE_DSWM:
-    JSR Draw_Sync_List_At_With_Mirrors
-SLR_PATH_AFTER:
-    PULS X           ; Restore pointer table position
-    PULS B           ; Restore count
-    BRA SLR_PATH_LOOP
-    
-SLR_PATH_DONE:
-    PULS X           ; Restore object pointer
-    
-SLR_OBJ_NEXT:
-    ; Advance to next object using stride
-    ; Reached here after draw (X restored by PULS X above) OR from
-    ; visibility skip (X never pushed, still points to current object)
-    ; Stack state in both cases: B on top, A=stride below
-    LDA 1,S          ; Load stride from stack (+1 because B is on top)
-    LEAX A,X         ; X += stride
-    
-    PULS B           ; Restore counter
-    DECB
-    LBRA SLR_OBJ_LOOP
-    
-SLR_OBJ_DONE:
-    PULS A           ; Clean up stride from stack
-    RTS
+    .balign 4
+_KONG_FG_OBJECTS:
 
-; === SLR_DRAW_CLIPPED_PATH ===
-SLR_DRAW_CLIPPED_PATH:
-    LDA >DRAW_VEC_INTENSITY ; check override
-    BNE SDCP_USE_OVERRIDE
-    LDA ,X+                 ; read intensity from path data
-    BRA SDCP_SET_INTENS
-SDCP_USE_OVERRIDE:
-    LEAX 1,X                ; skip intensity byte
-SDCP_SET_INTENS:
-    STA >$C832              ; Vec_Misc_Count (DDRB-safe, no JSR)
-    LDB ,X+                 ; B = y_start (relative to center)
-    LDA ,X+                 ; A = x_start (relative to center)
-    ADDB >DRAW_VEC_Y        ; B = abs_y
-    STB >SDCP_ABS_Y         ; save abs_y for moveto (NOT TMPVAL — SHOW_LEVEL's top_screen lives there)
-    TFR A,B                 ; B = x_start (SEX extends B, not A)
-    SEX                      ; sign-extend B→D (A=sign, B=x_start)
-    ADDD >DRAW_VEC_X_HI     ; D = abs_x_16 = SEX(x_start) + screen_x_16
-    ; D = abs_x_16. Save it in 16-bit tracker SLR_TRUE_X (unclamped).
-    STD >SLR_TRUE_X
-    ; Compute clamped beam position for hardware Moveto.
-    TSTA
-    BEQ SDCP_INIT_POS
-    INCA
-    BEQ SDCP_INIT_NEG_OK    ; A was $FF (small negative)
-    ; Way off — clamp to nearest edge by sign of original A (now in INCA result)
-    LDB #$80                ; default to left edge
-    LDA >SLR_TRUE_X         ; original hi byte
-    BMI SDCP_USE_CLAMPED    ; negative → -128 (left)
-    LDB #$7F                ; positive way off → +127 (right)
-    BRA SDCP_USE_CLAMPED
-SDCP_INIT_NEG_OK:
-    CMPB #$80
-    BHS SDCP_USE_CLAMPED    ; -128..-1, valid
-    LDB #$80                ; clamp
-    BRA SDCP_USE_CLAMPED
-SDCP_INIT_POS:
-    CMPB #$7F
-    BLS SDCP_USE_CLAMPED
-    LDB #$7F                ; clamp positive
-SDCP_USE_CLAMPED:
-    TFR B,A                  ; A = clamped beam x
-    STA >SLR_CUR_X          ; clamped value goes to integrator
-    CLR VIA_shift_reg
-    LDA #$CC
-    STA VIA_cntl
-    CLR VIA_port_a
-    LDA #$03
-    STA VIA_port_b
-    LDA #$02
-    STA VIA_port_b
-    LDA #$02
-    STA VIA_port_b
-    LDA #$01
-    STA VIA_port_b
-    LDB >SDCP_ABS_Y         ; B = abs_y
-    STB VIA_port_a          ; DY → DAC (PB=1: hold)
-    CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
-    LDA >SLR_CUR_X          ; abs_x (load = settling for Y)
-    PSHS A                  ; ~4 more settling cycles
-    LDA #$CE
-    STA VIA_cntl            ; PCR=$CE: /ZERO high
-    CLR VIA_shift_reg       ; SR=0: beam off
-    INC VIA_port_b          ; PB=1: lock Y direction
-    PULS A                  ; restore abs_x
-    STA VIA_port_a          ; DX → DAC
-    LDA >DRAW_T1_SCALED     ; effective T1 for this object (scale * 127)
-    STA VIA_t1_cnt_lo       ; load T1 latch
-    LEAX 2,X                ; skip next_y, next_x (the 0,0)
-    CLR VIA_t1_cnt_hi       ; start T1 → ramp
-SDCP_MOVETO_W:
-    LDA VIA_int_flags
-    ANDA #$40
-    BEQ SDCP_MOVETO_W
-    ; PB=1 on exit — draw loop ready
-SDCP_SEG_LOOP:
-    LDA ,X+                 ; flags
-    CMPA #2
-    LBEQ SDCP_DONE
-    LDB ,X+                 ; B = dy
-    STB >TMPPTR2            ; save dy
-    LDA ,X+                 ; A = dx (8-bit signed)
-    ; --- 16-bit add: true_new_x_16 = SLR_TRUE_X + SEX(dx) ---
-    TFR A,B                 ; B = dx
-    SEX                      ; D = sign-extended dx (A=sign, B=dx)
-    ADDD >SLR_TRUE_X        ; D = new true_x_16
-    STD >SLR_TRUE_X         ; update 16-bit tracker
-    ; --- Clamp D to [-128, +127] → 8-bit clamped_new_x in B ---
-    TSTA
-    BEQ SDCP_SEG_POS
-    INCA
-    BEQ SDCP_SEG_NEG_OK     ; A was $FF
-    ; Way off — clamp by sign of original D
-    LDA >SLR_TRUE_X         ; reload hi byte
-    BMI SDCP_SEG_CLAMP_LEFT
-    LDB #$7F                ; positive way off → +127
-    BRA SDCP_SEG_CLAMPED
-SDCP_SEG_CLAMP_LEFT:
-    LDB #$80                ; negative way off → -128
-    BRA SDCP_SEG_CLAMPED
-SDCP_SEG_NEG_OK:
-    CMPB #$80
-    BHS SDCP_SEG_CLAMPED
-    LDB #$80
-    BRA SDCP_SEG_CLAMPED
-SDCP_SEG_POS:
-    CMPB #$7F
-    BLS SDCP_SEG_CLAMPED
-    LDB #$7F
-SDCP_SEG_CLAMPED:
-    ; B = clamped_new_x. Compute beam_dx = B - SLR_CUR_X (8-bit signed).
-    LDA >SLR_CUR_X
-    PSHS B                  ; save clamped_new_x
-    NEGA                    ; A = -cur_x
-    ADDA ,S                 ; A = clamped_new_x - cur_x = beam_dx
-    PULS B                  ; B = clamped_new_x
-    ; Update SLR_CUR_X to new clamped position
-    STB >SLR_CUR_X
-    ; Decide beam ON/OFF/skip:
-    ; - beam_dx != 0                       → beam ON,  ramp(beam_dx, dy)
-    ; - beam_dx == 0 AND cur at edge AND dy==0 → skip (zero motion)
-    ; - beam_dx == 0 AND cur at edge AND dy!=0 → beam OFF ramp(0, dy)
-    ;   (Y must track logical position so subsequent segments draw at correct Y)
-    ; - beam_dx == 0 AND not at edge       → beam ON,  ramp(0, dy) — vertical
-    TSTA
-    BNE SDCP_SEG_DRAW       ; non-zero beam_dx → draw
-    CMPB #$80               ; at left edge?
-    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen left
-    CMPB #$7F               ; at right edge?
-    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen right
-SDCP_SEG_DRAW:
-    LDB >TMPPTR2            ; restore dy
-    ; A = beam_dx (visible X delta), B = dy. Beam ON ramp.
-    STB VIA_port_a          ; DY → DAC (PB=1: hold)
-    CLR VIA_port_b          ; PB=0: mux for DY
-    NOP
-    NOP
-    NOP
-    INC VIA_port_b          ; PB=1: lock DY
-    STA VIA_port_a          ; DX → DAC
-    LDA #$FF
-    STA VIA_shift_reg       ; beam ON
-    CLR VIA_t1_cnt_hi       ; start T1
-SDCP_W_DRAW:
-    LDA VIA_int_flags
-    ANDA #$40
-    BEQ SDCP_W_DRAW
-    CLR VIA_shift_reg       ; beam OFF
-    LBRA SDCP_SEG_LOOP
+@ ARM enemy spawn table for KONG
+.align 2
+.global _KONG_PITREX_ENEMY_COUNT
+_KONG_PITREX_ENEMY_COUNT:
+    .word 0  @ enemy count
 
-    ; --- Off-screen-X path: dx contribution is invisible, but Y must track ---
-SDCP_SEG_OFF_X:
-    LDB >TMPPTR2            ; B = dy
-    TSTB                     ; dy == 0?
-    LBEQ SDCP_SEG_LOOP      ; no Y motion either → skip entire segment
-    ; Ramp(0, dy) with beam OFF. A is already 0 (beam_dx).
-    CLRA                     ; defensive: ensure dx=0
-    STB VIA_port_a          ; DY → DAC
-    CLR VIA_port_b
-    NOP
-    NOP
-    NOP
-    INC VIA_port_b
-    STA VIA_port_a          ; DX = 0
-    ; beam stays OFF (no STA VIA_shift_reg)
-    CLR VIA_t1_cnt_hi       ; start T1 (ramp, beam off)
-SDCP_W_OFF_X:
-    LDA VIA_int_flags
-    ANDA #$40
-    BEQ SDCP_W_OFF_X
-    LBRA SDCP_SEG_LOOP
+.global _KONG_PITREX_ENEMIES
+_KONG_PITREX_ENEMIES:
+@ --- mario (10 path(s)) ---
+.global _MARIO_VECTORS
+_MARIO_VECTORS:
+    .word   10               @ path_count
+    .word   _MARIO_PATH0      @ ptr path 0
+    .word   _MARIO_PATH1      @ ptr path 1
+    .word   _MARIO_PATH2      @ ptr path 2
+    .word   _MARIO_PATH3      @ ptr path 3
+    .word   _MARIO_PATH4      @ ptr path 4
+    .word   _MARIO_PATH5      @ ptr path 5
+    .word   _MARIO_PATH6      @ ptr path 6
+    .word   _MARIO_PATH7      @ ptr path 7
+    .word   _MARIO_PATH8      @ ptr path 8
+    .word   _MARIO_PATH9      @ ptr path 9
 
-SDCP_DONE:
-    RTS
+_MARIO_PATH0:
+    .byte   127               @ intensity
+    .byte   0x09, 0xF9, 0x00, 0x00  @ y=9, x=-7, hdr
+    .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
+    .byte   0x02            @ end marker
 
-; === LEVEL_COLLISION_Y_RUNTIME ===
-; Find the highest collidable floor Y at player_x in the GP layer.
-; Input:  LCOL_PX (16-bit) = player world_x
-;         LCOL_PY (16-bit) = player_feet (player_y - player_hh)
-; Output: RESULT = highest floor landing Y (i16)
-;         Returns $FF80 (-128) if no collidable surface found at that X.
-; Algorithm: for each collidable GP object, check X AABB overlap,
-;   compute surface_top = obj_y(16) + half_height, track max (16-bit).
-; ROM object offsets (stride-21): +0=type, +1-2=x(FDB), +3-4=y(FDB), +12=collision_flags,
-;   +16=vector_bank, +17-18=vector_ptr, +19=half_width, +20=half_height. Stride=21.
-LEVEL_COLLISION_Y_RUNTIME:
-    PSHS X,Y,U       ; Save regs (NOT D - result returns in D)
-    
-    ; Initialize best_floor = -32768 ($8000, no floor found)
-    LDD #$8000
-    STD >LCOL_BEST_Y
-    
-    ; Check level loaded
-    TST >LEVEL_LOADED
-    LBEQ LCOL_Y_DONE
-    
-    LDB >LEVEL_GP_COUNT
-    LBEQ LCOL_Y_DONE
-    STB >LCOL_OBJ_CNT  ; GP objects remaining
-    LDX >LEVEL_GP_PTR  ; X = ROM GP objects
-    
-LCOL_Y_LOOP:
-    ; --- collision flag (bit 0 at ROM+12) ---
-    LDA 12,X
-    BITA #$01
-    LBEQ LCOL_Y_NEXT  ; not collidable
-    ; --- broadphase X: obj_x - hw <= player_x <= obj_x + hw ---
-    LDD 1,X          ; obj_x FDB (ROM+1)
-    SUBB 19,X        ; - half_width (ROM+19)
-    SBCA #0
-    STD >TMPVAL      ; left_edge
-    LDD >LCOL_PX
-    CMPD >TMPVAL
-    LBLT LCOL_Y_NEXT ; player_x < left_edge
-    LDD 1,X
-    ADDB 19,X        ; + half_width
-    ADCA #0
-    STD >TMPVAL      ; right_edge
-    LDD >LCOL_PX
-    CMPD >TMPVAL
-    LBGT LCOL_Y_NEXT ; player_x > right_edge
-    
-    ; --- X overlaps. Ray-cast mesh if coll_mesh_ptr(ROM+21) != 0, else AABB ---
-    LDD 21,X         ; coll_mesh_ptr
-    LBEQ LCOL_Y_AABB
-    PSHS X           ; preserve object ptr across the segment walk
-    LDD >LCOL_PX
-    SUBD 1,X         ; local_px = player_x - obj_x
-    STD >LCOL_LOCAL_PX
-    LDD 3,X          ; obj world_y (ROM+3)
-    STD >LCOL_OBJ_Y
-    LDY 21,X         ; Y = mesh data ptr (level bank)
-    LDB 1,Y          ; floor_count low byte (FDB at mesh+0)
-    STB >LCOL_SEG_CNT
-    LEAY 2,Y         ; Y -> first floor segment
-LCOL_Y_SEG:
-    LDB >LCOL_SEG_CNT
-    BEQ LCOL_Y_SEG_DONE
-    ; floor segment: x1=,Y y1=2,Y x2=4,Y (y2=6,Y unused; y1==y2)
-    LDD >LCOL_LOCAL_PX
-    CMPD ,Y          ; local_px vs x1
-    BLT LCOL_Y_SEG_ADV ; local_px < x1 → off this segment
-    LDD >LCOL_LOCAL_PX
-    CMPD 4,Y         ; local_px vs x2
-    BGT LCOL_Y_SEG_ADV ; local_px > x2 → off this segment
-    LDD 2,Y          ; y1 (local)
-    ADDD >LCOL_OBJ_Y ; world_seg_y = y1 + obj_world_y
-    CMPD >LCOL_PY    ; vs player_feet
-    BGT LCOL_Y_SEG_ADV ; above feet → skip
-    CMPD >LCOL_BEST_Y
-    BLE LCOL_Y_SEG_ADV ; not higher than best
-    STD >LCOL_BEST_Y ; new best floor top
-LCOL_Y_SEG_ADV:
-    LEAY 8,Y         ; next floor segment (4 FDB)
-    DEC >LCOL_SEG_CNT
-    BRA LCOL_Y_SEG
-LCOL_Y_SEG_DONE:
-    PULS X           ; restore object ptr
-    BRA LCOL_Y_NEXT
-    
-LCOL_Y_AABB:
-    ; AABB fallback: surface_top = obj_y(ROM+3) + half_height(ROM+20)
-    LDD 3,X
-    ADDB 20,X
-    ADCA #0
-    CMPD >LCOL_PY    ; vs player_feet
-    BGT LCOL_Y_NEXT  ; above feet → skip
-    CMPD >LCOL_BEST_Y
-    BLE LCOL_Y_NEXT  ; not higher
-    STD >LCOL_BEST_Y
-    
-LCOL_Y_NEXT:
-    LEAX 23,X        ; next ROM object (stride 23)
-    DEC >LCOL_OBJ_CNT
-    LBNE LCOL_Y_LOOP
-    
-LCOL_Y_DONE:
-    ; best holds floor_top (16-bit). Landing Y = floor_top + player_hh.
-    LDD >LCOL_BEST_Y
-    CMPD #$8000
-    BEQ LCOL_Y_NOFLOOR
-    ADDB >LCOL_PHH   ; + player_hh
-    ADCA #0
-    BRA LCOL_Y_RET
-LCOL_Y_NOFLOOR:
-    LDD #$FF80       ; -128 (no floor found)
-LCOL_Y_RET:
-    STD RESULT
-    
-    PULS X,Y,U,PC    ; Restore (NOT D - result stays in D)
+_MARIO_PATH1:
+    .byte   127               @ intensity
+    .byte   0x09, 0xFB, 0x00, 0x00  @ y=9, x=-5, hdr
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0x02            @ end marker
 
-; ============================================================================
-; PSG DIRECT MUSIC PLAYER (inspired by Christman2024/malbanGit)
-; ============================================================================
-; Writes directly to PSG chip using WRITE_PSG sequence
-;
-; Music data format (frame-based):
-;   FCB count           ; Number of register writes this frame
-;   FCB reg, val        ; PSG register/value pairs
-;   ...                 ; Repeat for each register
-;   FCB $FF             ; End marker
-;
-; PSG Registers:
-;   0-1: Channel A frequency (12-bit)
-;   2-3: Channel B frequency
-;   4-5: Channel C frequency
-;   6:   Noise period
-;   7:   Mixer control (enable/disable channels)
-;   8-10: Channel A/B/C volume
-;   11-12: Envelope period
-;   13:  Envelope shape
-; ============================================================================
+_MARIO_PATH2:
+    .byte   127               @ intensity
+    .byte   0x09, 0x05, 0x00, 0x00  @ y=9, x=5, hdr
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0x02            @ end marker
 
-; RAM variables (defined in SYSTEM RAM VARIABLES section):
-; PSG_MUSIC_PTR, PSG_MUSIC_START, PSG_IS_PLAYING,
-; PSG_MUSIC_ACTIVE, PSG_DELAY_FRAMES
+_MARIO_PATH3:
+    .byte   127               @ intensity
+    .byte   0x0D, 0xFB, 0x00, 0x00  @ y=13, x=-5, hdr
+    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
+    .byte   0x02            @ end marker
 
-; PLAY_MUSIC_RUNTIME - Start PSG music playback
-; Input: X = pointer to PSG music data
-PLAY_MUSIC_RUNTIME:
-CMPX >PSG_MUSIC_START   ; Check if already playing this music
-BNE PMr_start_new       ; If different, start fresh
-LDA >PSG_IS_PLAYING     ; Check if currently playing
-BNE PMr_done            ; If playing same song, ignore
-PMr_start_new:
-; Silence PSG before switching tracks (prevents noise bleed-through)
-PSHS X,DP               ; Save music pointer and DP
-LDA #$D0
-TFR A,DP                ; Set DP=$D0 for Sound_Byte
-LDA #7                  ; PSG reg 7 = Mixer
-LDB #$3F                ; All channels disabled (bits 0-5 only; bits 6-7=0=IOA/IOB input!)
-JSR Sound_Byte
-LDA #8                  ; PSG reg 8 = Volume channel A
-LDB #0
-JSR Sound_Byte
-LDA #9                  ; PSG reg 9 = Volume channel B
-LDB #0
-JSR Sound_Byte
-LDA #10                 ; PSG reg 10 = Volume channel C
-LDB #0
-JSR Sound_Byte
-PULS X,DP               ; Restore music pointer and DP
-STX >PSG_MUSIC_PTR      ; Store current music pointer (force extended)
-STX >PSG_MUSIC_START    ; Store start pointer for loops (force extended)
-CLR >PSG_DELAY_FRAMES   ; Clear delay counter
-LDA #$01
-STA >PSG_IS_PLAYING     ; Mark as playing (extended - var at 0xC8A0)
-PMr_done:
-RTS
+_MARIO_PATH4:
+    .byte   127               @ intensity
+    .byte   0x01, 0xFA, 0x00, 0x00  @ y=1, x=-6, hdr
+    .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
+    .byte   0xFF, 0x00, 0xF4  @ line dy=0, dx=-12
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0x02            @ end marker
 
-; ============================================================================
-; UPDATE_MUSIC_PSG - Update PSG (call every frame)
-; Data format per event: FCB delay, FCB count, (FCB reg, FCB val)*N
-; delay = frames since previous event (0 = apply immediately)
-; End marker: FCB 0 after last event's count
-; Loop marker: delay=$FF is treated as loop; OR count=$FF followed by FDB addr
-; PSG_DELAY_FRAMES counts down to the next event fire point.
-; PSG_MUSIC_PTR always points to delay byte of next pending event.
-; ============================================================================
-UPDATE_MUSIC_PSG:
-LDA #$01
-STA >PSG_MUSIC_ACTIVE   ; Mark music system active
-LDA >PSG_IS_PLAYING
-LBEQ PSG_update_done    ; Not playing
+_MARIO_PATH5:
+    .byte   127               @ intensity
+    .byte   0xF9, 0xF9, 0x00, 0x00  @ y=-7, x=-7, hdr
+    .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
+    .byte   0xFF, 0x00, 0xF2  @ line dy=0, dx=-14
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0x02            @ end marker
 
-; Check if delay counter is running
-LDA >PSG_DELAY_FRAMES
-BEQ PSG_read_delay      ; Counter=0: time to read next delay byte
-DECA
-STA >PSG_DELAY_FRAMES
-LBNE PSG_update_done    ; Still waiting
-BRA PSG_process_event   ; Counter just hit 0: apply the event
+_MARIO_PATH6:
+    .byte   127               @ intensity
+    .byte   0xF9, 0xF9, 0x00, 0x00  @ y=-7, x=-7, hdr
+    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0x02            @ end marker
 
-PSG_read_delay:
-LDX >PSG_MUSIC_PTR      ; PTR → delay byte of current event
-LDB ,X+                 ; Consume delay byte, X → count byte
-CMPB #$FF
-LBEQ PSG_music_loop_d   ; $FF as delay = loop command
-STB >PSG_DELAY_FRAMES   ; Store delay count
-STX >PSG_MUSIC_PTR      ; Advance PTR past delay byte (now at count byte)
-BEQ PSG_process_event   ; delay=0: apply immediately
-DEC >PSG_DELAY_FRAMES   ; Decrement once (fires after delay-1 more frames)
-LBRA PSG_update_done    ; Wait
+_MARIO_PATH7:
+    .byte   127               @ intensity
+    .byte   0xF3, 0xF9, 0x00, 0x00  @ y=-13, x=-7, hdr
+    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
+    .byte   0x02            @ end marker
 
-PSG_process_event:
-LDX >PSG_MUSIC_PTR      ; PTR is at count byte
-LDB ,X+
-LBEQ PSG_music_ended    ; Count=0 means end
-CMPB #$FF
-LBEQ PSG_music_loop     ; Count=$FF means loop
+_MARIO_PATH8:
+    .byte   127               @ intensity
+    .byte   0xF9, 0x07, 0x00, 0x00  @ y=-7, x=7, hdr
+    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0x02            @ end marker
 
-PSHS B                  ; Save count on stack
-PSG_write_loop:
-LDA ,X+                 ; Load register number
-LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer
+_MARIO_PATH9:
+    .byte   127               @ intensity
+    .byte   0xF3, 0x07, 0x00, 0x00  @ y=-13, x=7, hdr
+    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
+    .byte   0x02            @ end marker
 
-; WRITE_PSG sequence (direct VIA access)
-STA VIA_port_a          ; Store register number
-LDA #$19                ; BDIR=1, BC1=1 (LATCH)
-STA VIA_port_b
-LDA #$01                ; BDIR=0, BC1=0 (INACTIVE)
-STA VIA_port_b
-LDA VIA_port_a          ; Read status
-STB VIA_port_a          ; Store data
-LDB #$11                ; BDIR=1, BC1=0 (WRITE)
-STB VIA_port_b
-LDB #$01                ; BDIR=0, BC1=0 (INACTIVE)
-STB VIA_port_b
+@ --- MARIO_3D_DATA (10 path(s)) ---
+    .balign 4
+.global _MARIO_3D_DATA
+_MARIO_3D_DATA:
+    .word   18               @ vertex_count
+    .byte   0xF9, 0x0B, 0x00  @ vert 0: x=-7,y=11,z=0
+    .byte   0x07, 0x0B, 0x00  @ vert 1: x=7,y=11,z=0
+    .byte   0xFB, 0x0B, 0x00  @ vert 2: x=-5,y=11,z=0
+    .byte   0xFB, 0x0F, 0x00  @ vert 3: x=-5,y=15,z=0
+    .byte   0x05, 0x0B, 0x00  @ vert 4: x=5,y=11,z=0
+    .byte   0x05, 0x0F, 0x00  @ vert 5: x=5,y=15,z=0
+    .byte   0xFA, 0x03, 0x00  @ vert 6: x=-6,y=3,z=0
+    .byte   0x06, 0x03, 0x00  @ vert 7: x=6,y=3,z=0
+    .byte   0x06, 0x0B, 0x00  @ vert 8: x=6,y=11,z=0
+    .byte   0xFA, 0x0B, 0x00  @ vert 9: x=-6,y=11,z=0
+    .byte   0xF9, 0xFB, 0x00  @ vert 10: x=-7,y=-5,z=0
+    .byte   0x07, 0xFB, 0x00  @ vert 11: x=7,y=-5,z=0
+    .byte   0x07, 0x03, 0x00  @ vert 12: x=7,y=3,z=0
+    .byte   0xF9, 0x03, 0x00  @ vert 13: x=-7,y=3,z=0
+    .byte   0xF9, 0xF5, 0x00  @ vert 14: x=-7,y=-11,z=0
+    .byte   0xFE, 0xF5, 0x00  @ vert 15: x=-2,y=-11,z=0
+    .byte   0x07, 0xF5, 0x00  @ vert 16: x=7,y=-11,z=0
+    .byte   0x02, 0xF5, 0x00  @ vert 17: x=2,y=-11,z=0
+    .balign 4
+    .word   10               @ path_count
+    .byte   2               @ path 0: pt_count
+    .byte   0               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   2
+    .byte   3
+    .byte   2               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   4
+    .byte   5
+    .byte   2               @ path 3: pt_count
+    .byte   0               @ path 3: closed
+    .byte   3
+    .byte   5
+    .byte   5               @ path 4: pt_count
+    .byte   1               @ path 4: closed
+    .byte   6
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   6
+    .byte   5               @ path 5: pt_count
+    .byte   1               @ path 5: closed
+    .byte   10
+    .byte   11
+    .byte   12
+    .byte   13
+    .byte   10
+    .byte   2               @ path 6: pt_count
+    .byte   0               @ path 6: closed
+    .byte   10
+    .byte   14
+    .byte   2               @ path 7: pt_count
+    .byte   0               @ path 7: closed
+    .byte   14
+    .byte   15
+    .byte   2               @ path 8: pt_count
+    .byte   0               @ path 8: closed
+    .byte   11
+    .byte   16
+    .byte   2               @ path 9: pt_count
+    .byte   0               @ path 9: closed
+    .byte   16
+    .byte   17
+    .balign 4
 
-PULS X                  ; Restore pointer
-PULS B                  ; Get counter
-DECB
-BEQ PSG_event_done      ; Done with this event
-PSHS B                  ; Save counter back
-BRA PSG_write_loop
+@ --- mario_body (6 path(s)) ---
+.global _MARIO_BODY_VECTORS
+_MARIO_BODY_VECTORS:
+    .word   6               @ path_count
+    .word   _MARIO_BODY_PATH0      @ ptr path 0
+    .word   _MARIO_BODY_PATH1      @ ptr path 1
+    .word   _MARIO_BODY_PATH2      @ ptr path 2
+    .word   _MARIO_BODY_PATH3      @ ptr path 3
+    .word   _MARIO_BODY_PATH4      @ ptr path 4
+    .word   _MARIO_BODY_PATH5      @ ptr path 5
 
-PSG_event_done:
-STX >PSG_MUSIC_PTR      ; PTR → delay byte of next event
-CLR >PSG_DELAY_FRAMES   ; Trigger PSG_read_delay next frame
-LBRA PSG_update_done
+_MARIO_BODY_PATH0:
+    .byte   127               @ intensity
+    .byte   0x05, 0xF9, 0x00, 0x00  @ y=5, x=-7, hdr
+    .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
+    .byte   0x02            @ end marker
 
-PSG_music_ended:
-CLR >PSG_IS_PLAYING
-; Silence all 3 PSG channels so the last note doesn't keep ringing
-; until the next PLAY_MUSIC. DP is already $D0 (set by AUDIO_UPDATE).
-LDA #8                  ; PSG reg 8 = Volume Channel A
-LDB #0
-JSR Sound_Byte
-LDA #9                  ; PSG reg 9 = Volume Channel B
-LDB #0
-JSR Sound_Byte
-LDA #10                 ; PSG reg 10 = Volume Channel C
-LDB #0
-JSR Sound_Byte
-LBRA PSG_update_done
+_MARIO_BODY_PATH1:
+    .byte   127               @ intensity
+    .byte   0x05, 0xFB, 0x00, 0x00  @ y=5, x=-5, hdr
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0x02            @ end marker
 
-PSG_music_loop:
-; count=$FF: X points after $FF, at FDB loop address
-LDD ,X
-STD >PSG_MUSIC_PTR
-CLR >PSG_DELAY_FRAMES
-LBRA PSG_update_done
+_MARIO_BODY_PATH2:
+    .byte   127               @ intensity
+    .byte   0x05, 0x05, 0x00, 0x00  @ y=5, x=5, hdr
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0x02            @ end marker
 
-PSG_music_loop_d:
-; delay=$FF: X points after $FF, at FDB loop address
-LDD ,X
-STD >PSG_MUSIC_PTR
-CLR >PSG_DELAY_FRAMES
+_MARIO_BODY_PATH3:
+    .byte   127               @ intensity
+    .byte   0x09, 0xFB, 0x00, 0x00  @ y=9, x=-5, hdr
+    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
+    .byte   0x02            @ end marker
 
-PSG_update_done:
-CLR >PSG_MUSIC_ACTIVE   ; Clear flag (music system done)
-RTS
+_MARIO_BODY_PATH4:
+    .byte   127               @ intensity
+    .byte   0xFD, 0xFA, 0x00, 0x00  @ y=-3, x=-6, hdr
+    .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
+    .byte   0xFF, 0x00, 0xF4  @ line dy=0, dx=-12
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0x02            @ end marker
 
-; ============================================================================
-; STOP_MUSIC_RUNTIME - Stop music playback
-; ============================================================================
-STOP_MUSIC_RUNTIME:
-CLR >PSG_IS_PLAYING     ; Clear playing flag
-CLR >PSG_MUSIC_PTR      ; Clear pointer high byte
-CLR >PSG_MUSIC_PTR+1    ; Clear pointer low byte
-; Mute all PSG channels so the last note doesn't keep sounding
-PSHS DP
-LDA #$D0
-TFR A,DP                ; Set DP=$D0 for Sound_Byte
-LDA #8                  ; PSG reg 8 = Volume Channel A
-LDB #0
-JSR Sound_Byte
-LDA #9                  ; PSG reg 9 = Volume Channel B
-LDB #0
-JSR Sound_Byte
-LDA #10                 ; PSG reg 10 = Volume Channel C
-LDB #0
-JSR Sound_Byte
-PULS DP
-RTS
+_MARIO_BODY_PATH5:
+    .byte   127               @ intensity
+    .byte   0xF7, 0xF9, 0x00, 0x00  @ y=-9, x=-7, hdr
+    .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0xFF, 0x00, 0xF2  @ line dy=0, dx=-14
+    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0x02            @ end marker
 
-; ============================================================================
-; AUDIO_UPDATE - Unified music + SFX update (auto-injected after WAIT_RECAL)
-; ============================================================================
-; Uses Sound_Byte (BIOS) for PSG writes - compatible with both systems
-; Sets DP=$D0 once at entry, restores at exit
+@ --- MARIO_BODY_3D_DATA (6 path(s)) ---
+    .balign 4
+.global _MARIO_BODY_3D_DATA
+_MARIO_BODY_3D_DATA:
+    .word   14               @ vertex_count
+    .byte   0xF9, 0x0B, 0x00  @ vert 0: x=-7,y=11,z=0
+    .byte   0x07, 0x0B, 0x00  @ vert 1: x=7,y=11,z=0
+    .byte   0xFB, 0x0B, 0x00  @ vert 2: x=-5,y=11,z=0
+    .byte   0xFB, 0x0F, 0x00  @ vert 3: x=-5,y=15,z=0
+    .byte   0x05, 0x0B, 0x00  @ vert 4: x=5,y=11,z=0
+    .byte   0x05, 0x0F, 0x00  @ vert 5: x=5,y=15,z=0
+    .byte   0xFA, 0x03, 0x00  @ vert 6: x=-6,y=3,z=0
+    .byte   0x06, 0x03, 0x00  @ vert 7: x=6,y=3,z=0
+    .byte   0x06, 0x0B, 0x00  @ vert 8: x=6,y=11,z=0
+    .byte   0xFA, 0x0B, 0x00  @ vert 9: x=-6,y=11,z=0
+    .byte   0xF9, 0xFD, 0x00  @ vert 10: x=-7,y=-3,z=0
+    .byte   0x07, 0xFD, 0x00  @ vert 11: x=7,y=-3,z=0
+    .byte   0x07, 0x03, 0x00  @ vert 12: x=7,y=3,z=0
+    .byte   0xF9, 0x03, 0x00  @ vert 13: x=-7,y=3,z=0
+    .balign 4
+    .word   6               @ path_count
+    .byte   2               @ path 0: pt_count
+    .byte   0               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   2
+    .byte   3
+    .byte   2               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   4
+    .byte   5
+    .byte   2               @ path 3: pt_count
+    .byte   0               @ path 3: closed
+    .byte   3
+    .byte   5
+    .byte   5               @ path 4: pt_count
+    .byte   1               @ path 4: closed
+    .byte   6
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   6
+    .byte   5               @ path 5: pt_count
+    .byte   1               @ path 5: closed
+    .byte   10
+    .byte   11
+    .byte   12
+    .byte   13
+    .byte   10
+    .balign 4
 
-AUDIO_UPDATE:
-PSHS DP                 ; Save current DP
-LDA #$D0                ; Set DP=$D0 (Sound_Byte requirement)
-TFR A,DP
+@ --- mario_legs_straight (2 path(s)) ---
+.global _MARIO_LEGS_STRAIGHT_VECTORS
+_MARIO_LEGS_STRAIGHT_VECTORS:
+    .word   2               @ path_count
+    .word   _MARIO_LEGS_STRAIGHT_PATH0      @ ptr path 0
+    .word   _MARIO_LEGS_STRAIGHT_PATH1      @ ptr path 1
 
-        ; UPDATE MUSIC
-LDA >PSG_IS_PLAYING     ; Check if music is playing
-BEQ AU_SKIP_MUSIC       ; Skip if not
+_MARIO_LEGS_STRAIGHT_PATH0:
+    .byte   127               @ intensity
+    .byte   0x05, 0xF9, 0x00, 0x00  @ y=5, x=-7, hdr
+    .byte   0xFF, 0xF6, 0x00  @ line dy=-10, dx=0
+    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
+    .byte   0x02            @ end marker
 
-; Check delay counter first
-LDA >PSG_DELAY_FRAMES   ; Load delay counter
-BEQ AU_MUSIC_READ       ; If zero, read next frame data
-DECA                    ; Decrement delay
-STA >PSG_DELAY_FRAMES   ; Store back
-CMPA #0                 ; Check if it just reached zero
-BNE AU_UPDATE_SFX       ; If not zero yet, skip this frame
+_MARIO_LEGS_STRAIGHT_PATH1:
+    .byte   127               @ intensity
+    .byte   0x05, 0x07, 0x00, 0x00  @ y=5, x=7, hdr
+    .byte   0xFF, 0xF6, 0x00  @ line dy=-10, dx=0
+    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
+    .byte   0x02            @ end marker
 
-; Delay just reached zero, X points to count byte already
-LDX >PSG_MUSIC_PTR      ; Load music pointer (points to count)
-BRA AU_MUSIC_READ_COUNT ; Skip delay read, go straight to count
+@ --- MARIO_LEGS_STRAIGHT_3D_DATA (2 path(s)) ---
+    .balign 4
+.global _MARIO_LEGS_STRAIGHT_3D_DATA
+_MARIO_LEGS_STRAIGHT_3D_DATA:
+    .word   6               @ vertex_count
+    .byte   0xF9, 0xFD, 0x00  @ vert 0: x=-7,y=-3,z=0
+    .byte   0xF9, 0xF3, 0x00  @ vert 1: x=-7,y=-13,z=0
+    .byte   0xFE, 0xF3, 0x00  @ vert 2: x=-2,y=-13,z=0
+    .byte   0x07, 0xFD, 0x00  @ vert 3: x=7,y=-3,z=0
+    .byte   0x07, 0xF3, 0x00  @ vert 4: x=7,y=-13,z=0
+    .byte   0x02, 0xF3, 0x00  @ vert 5: x=2,y=-13,z=0
+    .balign 4
+    .word   2               @ path_count
+    .byte   3               @ path 0: pt_count
+    .byte   0               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   3
+    .byte   4
+    .byte   5
+    .balign 4
 
-AU_MUSIC_READ:
-LDX >PSG_MUSIC_PTR      ; Load music pointer
+@ --- mario_legs_stride_a (2 path(s)) ---
+.global _MARIO_LEGS_STRIDE_A_VECTORS
+_MARIO_LEGS_STRIDE_A_VECTORS:
+    .word   2               @ path_count
+    .word   _MARIO_LEGS_STRIDE_A_PATH0      @ ptr path 0
+    .word   _MARIO_LEGS_STRIDE_A_PATH1      @ ptr path 1
 
-; Check if we need to read delay or we're ready for count
-; PSG_DELAY_FRAMES just reached 0, so we read delay byte first
-LDB ,X+                 ; Read delay counter (X now points to count byte)
-CMPB #$FF               ; Check for loop marker
-BEQ AU_MUSIC_LOOP       ; Handle loop
-CMPB #0                 ; Check if delay is 0
-BNE AU_MUSIC_HAS_DELAY  ; If not 0, process delay
+_MARIO_LEGS_STRIDE_A_PATH0:
+    .byte   127               @ intensity
+    .byte   0x05, 0xFA, 0x00, 0x00  @ y=5, x=-6, hdr
+    .byte   0xFF, 0xF6, 0xFC  @ line dy=-10, dx=-4
+    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0x02            @ end marker
 
-; Delay is 0, read count immediately
-AU_MUSIC_NO_DELAY:
-AU_MUSIC_READ_COUNT:
-LDB ,X+                 ; Read count (number of register writes)
-BEQ AU_MUSIC_ENDED      ; If 0, end of music
-CMPB #$FF               ; Check for loop marker (can appear after delay)
-BEQ AU_MUSIC_LOOP       ; Handle loop
-BRA AU_MUSIC_PROCESS_WRITES
+_MARIO_LEGS_STRIDE_A_PATH1:
+    .byte   127               @ intensity
+    .byte   0x05, 0x08, 0x00, 0x00  @ y=5, x=8, hdr
+    .byte   0xFF, 0xF6, 0xFC  @ line dy=-10, dx=-4
+    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0x02            @ end marker
 
-AU_MUSIC_HAS_DELAY:
-; B has delay > 0, store it and skip to next frame
-DECB                    ; Delay-1 (we consume this frame)
-BEQ AU_MUSIC_READ_COUNT ; delay was 1: X already at count byte, process immediately
-STB >PSG_DELAY_FRAMES   ; Save delay counter
-STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)
-BRA AU_UPDATE_SFX       ; Skip reading data this frame
+@ --- MARIO_LEGS_STRIDE_A_3D_DATA (2 path(s)) ---
+    .balign 4
+.global _MARIO_LEGS_STRIDE_A_3D_DATA
+_MARIO_LEGS_STRIDE_A_3D_DATA:
+    .word   6               @ vertex_count
+    .byte   0xF9, 0xFD, 0x00  @ vert 0: x=-7,y=-3,z=0
+    .byte   0xF5, 0xF3, 0x00  @ vert 1: x=-11,y=-13,z=0
+    .byte   0xFB, 0xF3, 0x00  @ vert 2: x=-5,y=-13,z=0
+    .byte   0x07, 0xFD, 0x00  @ vert 3: x=7,y=-3,z=0
+    .byte   0x03, 0xF3, 0x00  @ vert 4: x=3,y=-13,z=0
+    .byte   0x09, 0xF3, 0x00  @ vert 5: x=9,y=-13,z=0
+    .balign 4
+    .word   2               @ path_count
+    .byte   3               @ path 0: pt_count
+    .byte   0               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   3
+    .byte   4
+    .byte   5
+    .balign 4
 
-AU_MUSIC_PROCESS_WRITES:
-; Per-event write loop. Inlined PSG protocol instead of JSR Sound_Byte
-; (~35 cycles vs ~92 incl JSR/RTS overhead — saves ~57 cycles per
-; register write). For theme-style music with 8-10 writes per event,
-; saves ~500-600 cycles per event frame → frees enough budget that the
-; music event no longer pushes the frame over vsync. Mirrors the BIOS
-; Sound_Byte protocol exactly (Vectrex VIA bits: BC1=bit3, BDIR=bit4).
-PSHS B                  ; save register-write count on stack for in-place DEC
-AU_MUSIC_WRITE_LOOP:
-LDA ,X+                 ; A = register number
-LDB ,X+                 ; B = register value
-STA VIA_port_a          ; data bus = reg num
-LDA #$19                ; BC1=1, BDIR=1 → LATCH ADDR
-STA VIA_port_b
-LDA #$01                ; back to INACTIVE (BC1=0, BDIR=0)
-STA VIA_port_b
-LDA VIA_port_a          ; READ STATUS — settling delay so PSG finishes
-; latching the register address before we drive
-; the value. Without this, the PSG occasionally
-; writes the new value into the PREVIOUS register
-; (audible as glitchy pitch / 'noisy' music,
-; especially when other CPU activity perturbs
-; the timing between this loop and adjacent code).
-STB VIA_port_a          ; data bus = value
-LDA #$11                ; BC1=0, BDIR=1 → WRITE DATA
-STA VIA_port_b
-LDA #$01                ; back to INACTIVE
-STA VIA_port_b
-DEC ,S                  ; decrement count on stack (in-place; no PSHS/PULS per iter)
-BNE AU_MUSIC_WRITE_LOOP
-LEAS 1,S                ; discard saved count
+@ --- mario_legs_stride_b (2 path(s)) ---
+.global _MARIO_LEGS_STRIDE_B_VECTORS
+_MARIO_LEGS_STRIDE_B_VECTORS:
+    .word   2               @ path_count
+    .word   _MARIO_LEGS_STRIDE_B_PATH0      @ ptr path 0
+    .word   _MARIO_LEGS_STRIDE_B_PATH1      @ ptr path 1
 
-AU_MUSIC_DONE:
-STX >PSG_MUSIC_PTR      ; Update music pointer
-BRA AU_UPDATE_SFX       ; Now update SFX
+_MARIO_LEGS_STRIDE_B_PATH0:
+    .byte   127               @ intensity
+    .byte   0x05, 0xF7, 0x00, 0x00  @ y=5, x=-9, hdr
+    .byte   0xFF, 0xF6, 0x04  @ line dy=-10, dx=4
+    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
+    .byte   0x02            @ end marker
 
-AU_MUSIC_ENDED:
-CLR >PSG_IS_PLAYING     ; Stop music
-BRA AU_UPDATE_SFX       ; Continue to SFX
+_MARIO_LEGS_STRIDE_B_PATH1:
+    .byte   127               @ intensity
+    .byte   0x05, 0x05, 0x00, 0x00  @ y=5, x=5, hdr
+    .byte   0xFF, 0xF6, 0x04  @ line dy=-10, dx=4
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0x02            @ end marker
 
-AU_MUSIC_LOOP:
-LDD ,X                  ; Load loop target
-STD >PSG_MUSIC_PTR      ; Set music pointer to loop
-CLR >PSG_DELAY_FRAMES   ; Clear delay on loop
-BRA AU_UPDATE_SFX       ; Continue to SFX
+@ --- MARIO_LEGS_STRIDE_B_3D_DATA (2 path(s)) ---
+    .balign 4
+.global _MARIO_LEGS_STRIDE_B_3D_DATA
+_MARIO_LEGS_STRIDE_B_3D_DATA:
+    .word   6               @ vertex_count
+    .byte   0xF9, 0xFD, 0x00  @ vert 0: x=-7,y=-3,z=0
+    .byte   0xFD, 0xF3, 0x00  @ vert 1: x=-3,y=-13,z=0
+    .byte   0x02, 0xF3, 0x00  @ vert 2: x=2,y=-13,z=0
+    .byte   0x07, 0xFD, 0x00  @ vert 3: x=7,y=-3,z=0
+    .byte   0x0B, 0xF3, 0x00  @ vert 4: x=11,y=-13,z=0
+    .byte   0x05, 0xF3, 0x00  @ vert 5: x=5,y=-13,z=0
+    .balign 4
+    .word   2               @ path_count
+    .byte   3               @ path 0: pt_count
+    .byte   0               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   3
+    .byte   4
+    .byte   5
+    .balign 4
 
-AU_SKIP_MUSIC:
-BRA AU_UPDATE_SFX       ; Skip music, go to SFX
+@ --- Animation: mario_walk (4 frames, 1 base_refs) ---
+.balign 4
+.global _ANIM_MARIO_WALK
+_ANIM_MARIO_WALK:
+    .byte 4, 1, 1, 8  @ frame_count, loop, base_ref_count, frame_table_offset
+    .word _MARIO_BODY_VECTORS  @ base_ref 'mario_body'
+    .word _ANIM_MARIO_WALK_F0  @ frame 0
+    .word _ANIM_MARIO_WALK_F1  @ frame 1
+    .word _ANIM_MARIO_WALK_F2  @ frame 2
+    .word _ANIM_MARIO_WALK_F3  @ frame 3
+.balign 4
+_ANIM_MARIO_WALK_F0:
+    .byte 6, 1  @ duration_ticks, vec_ref_count
+    .byte 0, 0  @ alignment padding
+    .word _MARIO_LEGS_STRAIGHT_VECTORS  @ vec_ref 'mario_legs_straight'
+    .byte 0  @ inline_path_count (paths converted to synthetic vec_refs)
+.balign 4
+_ANIM_MARIO_WALK_F1:
+    .byte 6, 1  @ duration_ticks, vec_ref_count
+    .byte 0, 0  @ alignment padding
+    .word _MARIO_LEGS_STRIDE_A_VECTORS  @ vec_ref 'mario_legs_stride_a'
+    .byte 0  @ inline_path_count (paths converted to synthetic vec_refs)
+.balign 4
+_ANIM_MARIO_WALK_F2:
+    .byte 6, 1  @ duration_ticks, vec_ref_count
+    .byte 0, 0  @ alignment padding
+    .word _MARIO_LEGS_STRAIGHT_VECTORS  @ vec_ref 'mario_legs_straight'
+    .byte 0  @ inline_path_count (paths converted to synthetic vec_refs)
+.balign 4
+_ANIM_MARIO_WALK_F3:
+    .byte 6, 1  @ duration_ticks, vec_ref_count
+    .byte 0, 0  @ alignment padding
+    .word _MARIO_LEGS_STRIDE_B_VECTORS  @ vec_ref 'mario_legs_stride_b'
+    .byte 0  @ inline_path_count (paths converted to synthetic vec_refs)
 
-; UPDATE SFX (channel C: registers 4/5=tone, 6=noise, 10=volume, 7=mixer)
-AU_UPDATE_SFX:
-LDA >SFX_ACTIVE         ; Check if SFX is active
-BEQ AU_DONE             ; Skip if not active
+@ --- mountain (1 path(s)) ---
+.global _MOUNTAIN_VECTORS
+_MOUNTAIN_VECTORS:
+    .word   1               @ path_count
+    .word   _MOUNTAIN_PATH0      @ ptr path 0
 
-        JSR sfx_doframe         ; Process one SFX frame (uses Sound_Byte internally)
+_MOUNTAIN_PATH0:
+    .byte   45               @ intensity
+    .byte   0xED, 0xE2, 0x00, 0x00  @ y=-19, x=-30, hdr
+    .byte   0xFF, 0x00, 0x3C  @ line dy=0, dx=60
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0x08, 0xFA  @ line dy=8, dx=-6
+    .byte   0xFF, 0xF8, 0xFA  @ line dy=-8, dx=-6
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0x02            @ end marker
 
-AU_DONE:
-        PULS DP                 ; Restore original DP
-RTS
+@ --- MOUNTAIN_3D_DATA (1 path(s)) ---
+    .balign 4
+.global _MOUNTAIN_3D_DATA
+_MOUNTAIN_3D_DATA:
+    .word   19               @ vertex_count
+    .byte   0xE2, 0xED, 0x00  @ vert 0: x=-30,y=-19,z=0
+    .byte   0x1E, 0xED, 0x00  @ vert 1: x=30,y=-19,z=0
+    .byte   0x1E, 0xF5, 0x00  @ vert 2: x=30,y=-11,z=0
+    .byte   0x18, 0xF5, 0x00  @ vert 3: x=24,y=-11,z=0
+    .byte   0x18, 0xFD, 0x00  @ vert 4: x=24,y=-3,z=0
+    .byte   0x12, 0xFD, 0x00  @ vert 5: x=18,y=-3,z=0
+    .byte   0x12, 0x05, 0x00  @ vert 6: x=18,y=5,z=0
+    .byte   0x0C, 0x05, 0x00  @ vert 7: x=12,y=5,z=0
+    .byte   0x0C, 0x0B, 0x00  @ vert 8: x=12,y=11,z=0
+    .byte   0x06, 0x0B, 0x00  @ vert 9: x=6,y=11,z=0
+    .byte   0x00, 0x13, 0x00  @ vert 10: x=0,y=19,z=0
+    .byte   0xFA, 0x0B, 0x00  @ vert 11: x=-6,y=11,z=0
+    .byte   0xF4, 0x0B, 0x00  @ vert 12: x=-12,y=11,z=0
+    .byte   0xF4, 0x05, 0x00  @ vert 13: x=-12,y=5,z=0
+    .byte   0xEE, 0x05, 0x00  @ vert 14: x=-18,y=5,z=0
+    .byte   0xEE, 0xFD, 0x00  @ vert 15: x=-18,y=-3,z=0
+    .byte   0xE8, 0xFD, 0x00  @ vert 16: x=-24,y=-3,z=0
+    .byte   0xE8, 0xF5, 0x00  @ vert 17: x=-24,y=-11,z=0
+    .byte   0xE2, 0xF5, 0x00  @ vert 18: x=-30,y=-11,z=0
+    .balign 4
+    .word   1               @ path_count
+    .byte   19               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   10
+    .byte   11
+    .byte   12
+    .byte   13
+    .byte   14
+    .byte   15
+    .byte   16
+    .byte   17
+    .byte   18
+    .balign 4
 
-; ============================================================================
-; AYFX SOUND EFFECTS PLAYER (Richard Chadd original system)
-; ============================================================================
-; Uses channel C (registers 4/5=tone, 6=noise, 10=volume, 7=mixer bit2/bit5)
-; RAM variables: SFX_PTR (16-bit), SFX_ACTIVE (8-bit)
-; AYFX format: flag byte + optional data per frame, end marker $D0 $20
-; Flag bits: 0-3=volume, 4=disable tone, 5=tone data present,
-;            6=noise data present, 7=disable noise
-; ============================================================================
+@ WARNING: could not parse /Users/daniel/projects/vectrex-pseudo-python/examples/mario_poc/assets/music/overworld.vmus: expected value at line 9 column 5
+.global _OVERWORLD_MUSIC
+_OVERWORLD_MUSIC:
+    .word 0
 
-; PLAY_SFX_RUNTIME - Start SFX playback
-; Input: X = pointer to AYFX data
-PLAY_SFX_RUNTIME:
-STX >SFX_PTR           ; Store pointer (force extended addressing)
-LDA #$01
-STA >SFX_ACTIVE        ; Mark as active
-RTS
+@ --- pipe (3 path(s)) ---
+.global _PIPE_VECTORS
+_PIPE_VECTORS:
+    .word   3               @ path_count
+    .word   _PIPE_PATH0      @ ptr path 0
+    .word   _PIPE_PATH1      @ ptr path 1
+    .word   _PIPE_PATH2      @ ptr path 2
 
-; SFX_UPDATE - Process one AYFX frame (call once per frame in loop)
-SFX_UPDATE:
-LDA >SFX_ACTIVE        ; Check if active
-BEQ noay               ; Not active, skip
-JSR sfx_doframe        ; Process one frame
-noay:
-RTS
+_PIPE_PATH0:
+    .byte   100               @ intensity
+    .byte   0xE7, 0xF7, 0x00, 0x00  @ y=-25, x=-9, hdr
+    .byte   0xFF, 0x00, 0x14  @ line dy=0, dx=20
+    .byte   0xFF, 0x32, 0x00  @ line dy=50, dx=0
+    .byte   0xFF, 0x00, 0xEC  @ line dy=0, dx=-20
+    .byte   0xFF, 0xCE, 0x00  @ line dy=-50, dx=0
+    .byte   0x02            @ end marker
 
-; sfx_doframe - AYFX frame parser (Richard Chadd original)
-sfx_doframe:
-LDU >SFX_PTR           ; Get current frame pointer
-LDB ,U                 ; Read flag byte (NO auto-increment)
-CMPB #$D0              ; Check end marker (first byte)
-BNE sfx_checktonefreq  ; Not end, continue
-LDB 1,U                ; Check second byte at offset 1
-CMPB #$20              ; End marker $D0 $20?
-BEQ sfx_endofeffect    ; Yes, stop
+_PIPE_PATH1:
+    .byte   100               @ intensity
+    .byte   0x14, 0xF5, 0x00, 0x00  @ y=20, x=-11, hdr
+    .byte   0x02            @ end marker
 
-sfx_checktonefreq:
-LEAY 1,U               ; Y = pointer to tone/noise data
-LDB ,U                 ; Reload flag byte (Sound_Byte corrupts B)
-BITB #$20              ; Bit 5: tone data present?
-BEQ sfx_checknoisefreq ; No, skip tone
-; Set tone frequency (channel C = reg 4/5)
-LDB 2,U                ; Get LOW byte (fine tune)
-LDA #$04               ; Register 4
-JSR Sound_Byte         ; Write to PSG
-LDB 1,U                ; Get HIGH byte (coarse tune)
-LDA #$05               ; Register 5
-JSR Sound_Byte         ; Write to PSG
-LEAY 2,Y               ; Skip 2 tone bytes
+_PIPE_PATH2:
+    .byte   127               @ intensity
+    .byte   0x19, 0xF7, 0x00, 0x00  @ y=25, x=-9, hdr
+    .byte   0xFF, 0x00, 0x14  @ line dy=0, dx=20
+    .byte   0x02            @ end marker
 
-sfx_checknoisefreq:
-LDB ,U                 ; Reload flag byte
-BITB #$40              ; Bit 6: noise data present?
-BEQ sfx_checkvolume    ; No, skip noise
-LDB ,Y                 ; Get noise period
-LDA #$06               ; Register 6
-JSR Sound_Byte         ; Write to PSG
-LEAY 1,Y               ; Skip 1 noise byte
+@ --- PIPE_3D_DATA (3 path(s)) ---
+    .balign 4
+.global _PIPE_3D_DATA
+_PIPE_3D_DATA:
+    .word   5               @ vertex_count
+    .byte   0xF6, 0xE7, 0x00  @ vert 0: x=-10,y=-25,z=0
+    .byte   0x0A, 0xE7, 0x00  @ vert 1: x=10,y=-25,z=0
+    .byte   0x0A, 0x19, 0x00  @ vert 2: x=10,y=25,z=0
+    .byte   0xF6, 0x19, 0x00  @ vert 3: x=-10,y=25,z=0
+    .byte   0xF4, 0x14, 0x00  @ vert 4: x=-12,y=20,z=0
+    .balign 4
+    .word   3               @ path_count
+    .byte   5               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   0
+    .byte   2               @ path 1: pt_count
+    .byte   1               @ path 1: closed
+    .byte   4
+    .byte   4
+    .byte   2               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   3
+    .byte   2
+    .balign 4
 
-sfx_checkvolume:
-LDB ,U                 ; Reload flag byte
-ANDB #$0F              ; Get volume from bits 0-3
-LDA #$0A               ; Register 10 (volume C)
-JSR Sound_Byte         ; Write to PSG
+@ --- platform (7 path(s)) ---
+.global _PLATFORM_VECTORS
+_PLATFORM_VECTORS:
+    .word   7               @ path_count
+    .word   _PLATFORM_PATH0      @ ptr path 0
+    .word   _PLATFORM_PATH1      @ ptr path 1
+    .word   _PLATFORM_PATH2      @ ptr path 2
+    .word   _PLATFORM_PATH3      @ ptr path 3
+    .word   _PLATFORM_PATH4      @ ptr path 4
+    .word   _PLATFORM_PATH5      @ ptr path 5
+    .word   _PLATFORM_PATH6      @ ptr path 6
 
-; Combined mixer update: read shadow once, apply tone+noise, write once
-sfx_updatemixer:
-LDB $C807              ; Read mixer shadow ONCE
-LDA ,U                 ; Load flag byte into A
-; Handle tone (flag bit 4 → mixer bit 2)
-BITA #$10              ; Bit 4: disable tone?
-BNE sfx_m_tonedis
-ANDB #$FB              ; Clear bit 2 (enable tone C)
-BRA sfx_m_noise
-sfx_m_tonedis:
-ORB #$04               ; Set bit 2 (disable tone C)
-sfx_m_noise:
-; Handle noise (flag bit 7 → mixer bit 5)
-BITA #$80              ; Bit 7: disable noise?
-BNE sfx_m_noisedis
-ANDB #$DF              ; Clear bit 5 (enable noise C)
-BRA sfx_m_write
-sfx_m_noisedis:
-ORB #$20               ; Set bit 5 (disable noise C)
-sfx_m_write:
-STB $C807              ; Update mixer shadow
-LDA #$07               ; Register 7 (mixer)
-JSR Sound_Byte         ; Single write to PSG
+_PLATFORM_PATH0:
+    .byte   127               @ intensity
+    .byte   0xB5, 0xAF, 0x00, 0x00  @ y=-75, x=-81, hdr
+    .byte   0xFF, 0xFF, 0x50  @ line dy=-1, dx=80
+    .byte   0xFF, 0x07, 0x50  @ line dy=7, dx=80
+    .byte   0xFF, 0xF9, 0x00  @ line dy=-7, dx=0
+    .byte   0xFF, 0xFA, 0xAF  @ line dy=-6, dx=-81
+    .byte   0xFF, 0x01, 0xB1  @ line dy=1, dx=-79
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0x02            @ end marker
 
-sfx_nextframe:
-STY >SFX_PTR            ; Update pointer for next frame
-RTS
+_PLATFORM_PATH1:
+    .byte   127               @ intensity
+    .byte   0xD4, 0xB1, 0x00, 0x00  @ y=-44, x=-79, hdr
+    .byte   0xFF, 0xFA, 0xFF  @ line dy=-6, dx=-1
+    .byte   0xFF, 0xFC, 0x4A  @ line dy=-4, dx=74
+    .byte   0xFF, 0xFC, 0x4B  @ line dy=-4, dx=75
+    .byte   0xFF, 0x06, 0x01  @ line dy=6, dx=1
+    .byte   0xFF, 0x04, 0xB6  @ line dy=4, dx=-74
+    .byte   0xFF, 0x04, 0xB5  @ line dy=4, dx=-75
+    .byte   0x02            @ end marker
 
-sfx_endofeffect:
-; Stop SFX - silence channel C and restore mixer
-CLR >SFX_ACTIVE         ; Mark as inactive
-LDA #$0A                ; Register 10 (volume C)
-LDB #$00                ; Volume = 0
-JSR Sound_Byte
-; Restore mixer: disable tone+noise on channel C
-LDB $C807              ; Read mixer shadow
-ORB #$24               ; Set bits 2+5 (disable tone C + noise C)
-STB $C807              ; Update shadow
-LDA #$07               ; Register 7
-JSR Sound_Byte         ; Write mixer
-LDD #$0000
-STD >SFX_PTR            ; Clear pointer
-RTS
+_PLATFORM_PATH2:
+    .byte   127               @ intensity
+    .byte   0xE6, 0xBB, 0x00, 0x00  @ y=-26, x=-69, hdr
+    .byte   0xFF, 0xF8, 0xFF  @ line dy=-8, dx=-1
+    .byte   0xFF, 0x05, 0x4B  @ line dy=5, dx=75
+    .byte   0xFF, 0x05, 0x4B  @ line dy=5, dx=75
+    .byte   0xFF, 0x07, 0x01  @ line dy=7, dx=1
+    .byte   0xFF, 0xFC, 0xB5  @ line dy=-4, dx=-75
+    .byte   0xFF, 0xFB, 0xB5  @ line dy=-5, dx=-75
+    .byte   0x02            @ end marker
 
-;**** PRINT_TEXT String Data ****
-PRINT_TEXT_STR_3273774:
-    FCC "jump"
-    FCB $80          ; Vectrex string terminator
+_PLATFORM_PATH3:
+    .byte   127               @ intensity
+    .byte   0x01, 0x46, 0x00, 0x00  @ y=1, x=70, hdr
+    .byte   0xFF, 0xF9, 0xFF  @ line dy=-7, dx=-1
+    .byte   0xFF, 0x05, 0xB6  @ line dy=5, dx=-74
+    .byte   0xFF, 0x05, 0xB5  @ line dy=5, dx=-75
+    .byte   0xFF, 0x07, 0x02  @ line dy=7, dx=2
+    .byte   0xFF, 0xFB, 0x4A  @ line dy=-5, dx=74
+    .byte   0xFF, 0xFB, 0x4A  @ line dy=-5, dx=74
+    .byte   0x02            @ end marker
 
-PRINT_TEXT_STR_103666436:
-    FCC "mario"
-    FCB $80          ; Vectrex string terminator
+_PLATFORM_PATH4:
+    .byte   127               @ intensity
+    .byte   0x1E, 0xBB, 0x00, 0x00  @ y=30, x=-69, hdr
+    .byte   0xFF, 0xF7, 0xFF  @ line dy=-9, dx=-1
+    .byte   0xFF, 0x05, 0x4B  @ line dy=5, dx=75
+    .byte   0xFF, 0x05, 0x4C  @ line dy=5, dx=76
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
+    .byte   0xFF, 0xFC, 0xB5  @ line dy=-4, dx=-75
+    .byte   0xFF, 0xFB, 0xB5  @ line dy=-5, dx=-75
+    .byte   0x02            @ end marker
 
-PRINT_TEXT_STR_104652296222070:
-    FCC "world_1_1"
-    FCB $80          ; Vectrex string terminator
+_PLATFORM_PATH5:
+    .byte   127               @ intensity
+    .byte   0x3A, 0xAF, 0x00, 0x00  @ y=58, x=-81, hdr
+    .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
+    .byte   0xFF, 0xFF, 0x68  @ line dy=-1, dx=104
+    .byte   0xFF, 0xFD, 0x2E  @ line dy=-3, dx=46
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0xFF, 0x03, 0xD3  @ line dy=3, dx=-45
+    .byte   0xFF, 0x00, 0x97  @ line dy=0, dx=-105
+    .byte   0x02            @ end marker
 
+_PLATFORM_PATH6:
+    .byte   127               @ intensity
+    .byte   0x52, 0xED, 0x00, 0x00  @ y=82, x=-19, hdr
+    .byte   0xFF, 0x00, 0x26  @ line dy=0, dx=38
+    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0xFF, 0x00, 0xDB  @ line dy=0, dx=-37
+    .byte   0x02            @ end marker
+
+@ --- PLATFORM_3D_DATA (7 path(s)) ---
+    .balign 4
+.global _PLATFORM_3D_DATA
+_PLATFORM_3D_DATA:
+    .word   29               @ vertex_count
+    .byte   0xC1, 0xC1, 0x00  @ vert 0: x=-63,y=-63,z=0
+    .byte   0xFF, 0xC1, 0x00  @ vert 1: x=-1,y=-63,z=0
+    .byte   0x3F, 0xC1, 0x00  @ vert 2: x=63,y=-63,z=0
+    .byte   0xFE, 0xC1, 0x00  @ vert 3: x=-2,y=-63,z=0
+    .byte   0xC1, 0xD4, 0x00  @ vert 4: x=-63,y=-44,z=0
+    .byte   0xC1, 0xCE, 0x00  @ vert 5: x=-63,y=-50,z=0
+    .byte   0x3F, 0xC6, 0x00  @ vert 6: x=63,y=-58,z=0
+    .byte   0x3F, 0xCC, 0x00  @ vert 7: x=63,y=-52,z=0
+    .byte   0xC1, 0xE6, 0x00  @ vert 8: x=-63,y=-26,z=0
+    .byte   0xC1, 0xDE, 0x00  @ vert 9: x=-63,y=-34,z=0
+    .byte   0x3F, 0xE8, 0x00  @ vert 10: x=63,y=-24,z=0
+    .byte   0x3F, 0xEF, 0x00  @ vert 11: x=63,y=-17,z=0
+    .byte   0x3F, 0x01, 0x00  @ vert 12: x=63,y=1,z=0
+    .byte   0x3F, 0xFA, 0x00  @ vert 13: x=63,y=-6,z=0
+    .byte   0xC1, 0x04, 0x00  @ vert 14: x=-63,y=4,z=0
+    .byte   0xC1, 0x0B, 0x00  @ vert 15: x=-63,y=11,z=0
+    .byte   0xC1, 0x1E, 0x00  @ vert 16: x=-63,y=30,z=0
+    .byte   0xC1, 0x15, 0x00  @ vert 17: x=-63,y=21,z=0
+    .byte   0x3F, 0x1F, 0x00  @ vert 18: x=63,y=31,z=0
+    .byte   0x3F, 0x27, 0x00  @ vert 19: x=63,y=39,z=0
+    .byte   0xC1, 0x3A, 0x00  @ vert 20: x=-63,y=58,z=0
+    .byte   0xC1, 0x35, 0x00  @ vert 21: x=-63,y=53,z=0
+    .byte   0x17, 0x34, 0x00  @ vert 22: x=23,y=52,z=0
+    .byte   0x3F, 0x31, 0x00  @ vert 23: x=63,y=49,z=0
+    .byte   0x3F, 0x37, 0x00  @ vert 24: x=63,y=55,z=0
+    .byte   0x18, 0x3A, 0x00  @ vert 25: x=24,y=58,z=0
+    .byte   0xED, 0x3F, 0x00  @ vert 26: x=-19,y=63,z=0
+    .byte   0x13, 0x3F, 0x00  @ vert 27: x=19,y=63,z=0
+    .byte   0xEE, 0x3F, 0x00  @ vert 28: x=-18,y=63,z=0
+    .balign 4
+    .word   7               @ path_count
+    .byte   7               @ path 0: pt_count
+    .byte   0               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   2
+    .byte   3
+    .byte   0
+    .byte   0
+    .byte   5               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   7
+    .byte   4
+    .byte   5               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   8
+    .byte   9
+    .byte   10
+    .byte   11
+    .byte   8
+    .byte   5               @ path 3: pt_count
+    .byte   0               @ path 3: closed
+    .byte   12
+    .byte   13
+    .byte   14
+    .byte   15
+    .byte   12
+    .byte   5               @ path 4: pt_count
+    .byte   0               @ path 4: closed
+    .byte   16
+    .byte   17
+    .byte   18
+    .byte   19
+    .byte   16
+    .byte   7               @ path 5: pt_count
+    .byte   0               @ path 5: closed
+    .byte   20
+    .byte   21
+    .byte   22
+    .byte   23
+    .byte   24
+    .byte   25
+    .byte   20
+    .byte   4               @ path 6: pt_count
+    .byte   0               @ path 6: closed
+    .byte   26
+    .byte   27
+    .byte   27
+    .byte   28
+    .balign 4
+
+@ --- question_block (3 path(s)) ---
+.global _QUESTION_BLOCK_VECTORS
+_QUESTION_BLOCK_VECTORS:
+    .word   3               @ path_count
+    .word   _QUESTION_BLOCK_PATH0      @ ptr path 0
+    .word   _QUESTION_BLOCK_PATH1      @ ptr path 1
+    .word   _QUESTION_BLOCK_PATH2      @ ptr path 2
+
+_QUESTION_BLOCK_PATH0:
+    .byte   120               @ intensity
+    .byte   0xF8, 0xF8, 0x00, 0x00  @ y=-8, x=-8, hdr
+    .byte   0xFF, 0x00, 0x10  @ line dy=0, dx=16
+    .byte   0xFF, 0x10, 0x00  @ line dy=16, dx=0
+    .byte   0xFF, 0x00, 0xF0  @ line dy=0, dx=-16
+    .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
+    .byte   0x02            @ end marker
+
+_QUESTION_BLOCK_PATH1:
+    .byte   100               @ intensity
+    .byte   0x04, 0xFD, 0x00, 0x00  @ y=4, x=-3, hdr
+    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
+    .byte   0xFF, 0xFE, 0xFC  @ line dy=-2, dx=-4
+    .byte   0x02            @ end marker
+
+_QUESTION_BLOCK_PATH2:
+    .byte   100               @ intensity
+    .byte   0xFC, 0xFF, 0x00, 0x00  @ y=-4, x=-1, hdr
+    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
+    .byte   0x02            @ end marker
+
+@ --- QUESTION_BLOCK_3D_DATA (3 path(s)) ---
+    .balign 4
+.global _QUESTION_BLOCK_3D_DATA
+_QUESTION_BLOCK_3D_DATA:
+    .word   10               @ vertex_count
+    .byte   0xF8, 0xF8, 0x00  @ vert 0: x=-8,y=-8,z=0
+    .byte   0x08, 0xF8, 0x00  @ vert 1: x=8,y=-8,z=0
+    .byte   0x08, 0x08, 0x00  @ vert 2: x=8,y=8,z=0
+    .byte   0xF8, 0x08, 0x00  @ vert 3: x=-8,y=8,z=0
+    .byte   0xFD, 0x04, 0x00  @ vert 4: x=-3,y=4,z=0
+    .byte   0x03, 0x04, 0x00  @ vert 5: x=3,y=4,z=0
+    .byte   0x04, 0x02, 0x00  @ vert 6: x=4,y=2,z=0
+    .byte   0x00, 0x00, 0x00  @ vert 7: x=0,y=0,z=0
+    .byte   0xFF, 0xFC, 0x00  @ vert 8: x=-1,y=-4,z=0
+    .byte   0x01, 0xFC, 0x00  @ vert 9: x=1,y=-4,z=0
+    .balign 4
+    .word   3               @ path_count
+    .byte   5               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   0
+    .byte   4               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   7
+    .byte   2               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   8
+    .byte   9
+    .balign 4
+
+@ --- theme MUSIC (299 events, loop@0) ---
+.global _THEME_MUSIC
+_THEME_MUSIC:
+    .word   299           @ num_events
+    .word   8           @ loop_event_byte_offset from base
+    .byte   0, 11  @ frame=0 delay=0 writes=11
+    .byte   6, 24  @ PSG r6
+    .byte   0, 71  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 15  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 11  @ frame=6 delay=5 writes=11
+    .byte   6, 24  @ PSG r6
+    .byte   0, 71  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 15  @ PSG r9
+    .byte   4, 179  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 4  @ frame=12 delay=5 writes=4
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   4, 11  @ frame=17 delay=4 writes=11
+    .byte   6, 24  @ PSG r6
+    .byte   0, 71  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 15  @ PSG r9
+    .byte   4, 179  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 4  @ frame=23 delay=5 writes=4
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   5, 11  @ frame=29 delay=5 writes=11
+    .byte   6, 24  @ PSG r6
+    .byte   0, 90  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 179  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 15  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 11  @ frame=35 delay=5 writes=11
+    .byte   6, 24  @ PSG r6
+    .byte   0, 71  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 15  @ PSG r9
+    .byte   4, 179  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   4, 4  @ frame=40 delay=4 writes=4
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   5, 11  @ frame=46 delay=5 writes=11
+    .byte   6, 22  @ PSG r6
+    .byte   0, 60  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 120  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 15  @ PSG r9
+    .byte   4, 134  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 4  @ frame=52 delay=5 writes=4
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   16, 11  @ frame=69 delay=16 writes=11
+    .byte   6, 28  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 15  @ PSG r8
+    .byte   2, 120  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 239  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 15  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 4  @ frame=75 delay=5 writes=4
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   16, 11  @ frame=92 delay=16 writes=11
+    .byte   6, 25  @ PSG r6
+    .byte   0, 179  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 222  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   11, 6  @ frame=104 delay=11 writes=6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   3, 2  @ frame=108 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 55  @ PSG r7
+    .byte   1, 11  @ frame=110 delay=1 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 239  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 222  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 57  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   10, 4  @ frame=121 delay=10 writes=4
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   7, 55  @ PSG r7
+    .byte   5, 11  @ frame=127 delay=5 writes=11
+    .byte   6, 22  @ PSG r6
+    .byte   0, 28  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 57  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 205  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   10, 6  @ frame=138 delay=10 writes=6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 62  @ PSG r7
+    .byte   3, 2  @ frame=142 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 63  @ PSG r7
+    .byte   1, 11  @ frame=144 delay=1 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 213  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 170  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 25  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   11, 11  @ frame=156 delay=11 writes=11
+    .byte   6, 22  @ PSG r6
+    .byte   0, 190  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 124  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 222  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   10, 11  @ frame=167 delay=10 writes=11
+    .byte   6, 22  @ PSG r6
+    .byte   0, 201  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 146  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 251  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 11  @ frame=173 delay=5 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 213  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 170  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 25  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   11, 11  @ frame=185 delay=11 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 239  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 222  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 57  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   6, 11  @ frame=192 delay=6 writes=11
+    .byte   6, 19  @ PSG r6
+    .byte   0, 142  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   7, 11  @ frame=200 delay=7 writes=11
+    .byte   6, 17  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 239  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 28  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   7, 11  @ frame=208 delay=7 writes=11
+    .byte   6, 17  @ PSG r6
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 213  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=212 delay=3 writes=2
+    .byte   9, 0  @ PSG r9
+    .byte   7, 50  @ PSG r7
+    .byte   0, 3  @ frame=213 delay=0 writes=3
+    .byte   8, 0  @ PSG r8
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   5, 11  @ frame=219 delay=5 writes=11
+    .byte   6, 18  @ PSG r6
+    .byte   0, 134  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 12  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 63  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 11  @ frame=225 delay=5 writes=11
+    .byte   6, 17  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 239  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 28  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 6  @ frame=231 delay=5 writes=6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 62  @ PSG r7
+    .byte   3, 2  @ frame=235 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 63  @ PSG r7
+    .byte   1, 11  @ frame=237 delay=1 writes=11
+    .byte   6, 19  @ PSG r6
+    .byte   0, 142  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   4, 6  @ frame=242 delay=4 writes=6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 62  @ PSG r7
+    .byte   3, 2  @ frame=246 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 63  @ PSG r7
+    .byte   1, 11  @ frame=248 delay=1 writes=11
+    .byte   6, 21  @ PSG r6
+    .byte   0, 179  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   11, 11  @ frame=260 delay=11 writes=11
+    .byte   6, 20  @ PSG r6
+    .byte   0, 160  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 63  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 124  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   4, 11  @ frame=265 delay=4 writes=11
+    .byte   6, 22  @ PSG r6
+    .byte   0, 190  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 124  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 222  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   11, 11  @ frame=277 delay=11 writes=11
+    .byte   6, 25  @ PSG r6
+    .byte   0, 179  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 222  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   10, 6  @ frame=288 delay=10 writes=6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   3, 2  @ frame=292 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 55  @ PSG r7
+    .byte   1, 11  @ frame=294 delay=1 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 239  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 222  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 57  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   11, 4  @ frame=306 delay=11 writes=4
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   7, 55  @ PSG r7
+    .byte   5, 11  @ frame=312 delay=5 writes=11
+    .byte   6, 22  @ PSG r6
+    .byte   0, 28  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 57  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 205  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   10, 6  @ frame=323 delay=10 writes=6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 62  @ PSG r7
+    .byte   3, 2  @ frame=327 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 63  @ PSG r7
+    .byte   1, 11  @ frame=329 delay=1 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 213  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 170  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 25  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   10, 11  @ frame=340 delay=10 writes=11
+    .byte   6, 22  @ PSG r6
+    .byte   0, 190  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 124  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 222  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   11, 11  @ frame=352 delay=11 writes=11
+    .byte   6, 22  @ PSG r6
+    .byte   0, 201  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 146  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 251  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 11  @ frame=358 delay=5 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 213  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 170  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 25  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   10, 11  @ frame=369 delay=10 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 239  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 222  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 57  @ PSG r4
+    .byte   5, 2  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   7, 11  @ frame=377 delay=7 writes=11
+    .byte   6, 19  @ PSG r6
+    .byte   0, 142  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   7, 11  @ frame=385 delay=7 writes=11
+    .byte   6, 17  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 239  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 28  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   6, 11  @ frame=392 delay=6 writes=11
+    .byte   6, 17  @ PSG r6
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 213  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=396 delay=3 writes=2
+    .byte   9, 0  @ PSG r9
+    .byte   7, 50  @ PSG r7
+    .byte   1, 3  @ frame=398 delay=1 writes=3
+    .byte   8, 0  @ PSG r8
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   5, 11  @ frame=404 delay=5 writes=11
+    .byte   6, 18  @ PSG r6
+    .byte   0, 134  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 12  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 63  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 11  @ frame=410 delay=5 writes=11
+    .byte   6, 17  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 239  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 28  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   4, 6  @ frame=415 delay=4 writes=6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 62  @ PSG r7
+    .byte   3, 2  @ frame=419 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 63  @ PSG r7
+    .byte   1, 11  @ frame=421 delay=1 writes=11
+    .byte   6, 19  @ PSG r6
+    .byte   0, 142  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 6  @ frame=427 delay=5 writes=6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 62  @ PSG r7
+    .byte   3, 2  @ frame=431 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 63  @ PSG r7
+    .byte   1, 11  @ frame=433 delay=1 writes=11
+    .byte   6, 21  @ PSG r6
+    .byte   0, 179  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   10, 11  @ frame=444 delay=10 writes=11
+    .byte   6, 20  @ PSG r6
+    .byte   0, 160  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 63  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 124  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 11  @ frame=450 delay=5 writes=11
+    .byte   6, 22  @ PSG r6
+    .byte   0, 190  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 124  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 222  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   11, 11  @ frame=462 delay=11 writes=11
+    .byte   6, 25  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   2, 2  @ frame=465 delay=2 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   7, 10  @ frame=473 delay=7 writes=10
+    .byte   0, 239  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=477 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 11  @ frame=479 delay=1 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 253  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 10  @ frame=485 delay=5 writes=10
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   2, 2  @ frame=488 delay=2 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 7  @ frame=490 delay=1 writes=7
+    .byte   0, 45  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 124  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   5, 8  @ frame=496 delay=5 writes=8
+    .byte   6, 22  @ PSG r6
+    .byte   0, 135  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 153  @ PSG r2
+    .byte   3, 5  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   3, 2  @ frame=500 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 53  @ PSG r7
+    .byte   1, 7  @ frame=502 delay=1 writes=7
+    .byte   0, 28  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=508 delay=5 writes=7
+    .byte   6, 23  @ PSG r6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   3, 2  @ frame=512 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 55  @ PSG r7
+    .byte   0, 10  @ frame=513 delay=0 writes=10
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 195  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 10  @ frame=519 delay=5 writes=10
+    .byte   0, 170  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 25  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=523 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 11  @ frame=525 delay=1 writes=11
+    .byte   6, 19  @ PSG r6
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 10  @ frame=531 delay=5 writes=10
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=535 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 4  @ frame=537 delay=1 writes=4
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   4, 11  @ frame=542 delay=4 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 102  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 57  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 135  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=546 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 7  @ frame=548 delay=1 writes=7
+    .byte   0, 63  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 25  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   1, 4  @ frame=550 delay=1 writes=4
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 11  @ frame=554 delay=3 writes=11
+    .byte   6, 25  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=558 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   6, 10  @ frame=565 delay=6 writes=10
+    .byte   0, 239  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=569 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 11  @ frame=571 delay=1 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 253  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 10  @ frame=577 delay=5 writes=10
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=581 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 7  @ frame=583 delay=1 writes=7
+    .byte   0, 45  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 124  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   4, 8  @ frame=588 delay=4 writes=8
+    .byte   6, 22  @ PSG r6
+    .byte   0, 135  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 153  @ PSG r2
+    .byte   3, 5  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   3, 2  @ frame=592 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 53  @ PSG r7
+    .byte   1, 7  @ frame=594 delay=1 writes=7
+    .byte   0, 28  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=600 delay=5 writes=7
+    .byte   6, 23  @ PSG r6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   3, 2  @ frame=604 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 55  @ PSG r7
+    .byte   1, 10  @ frame=606 delay=1 writes=10
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 179  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 6  @ frame=612 delay=5 writes=6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   2, 2  @ frame=615 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 55  @ PSG r7
+    .byte   1, 11  @ frame=617 delay=1 writes=11
+    .byte   6, 26  @ PSG r6
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 179  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 10  @ frame=623 delay=5 writes=10
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 179  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   11, 6  @ frame=635 delay=11 writes=6
+    .byte   6, 26  @ PSG r6
+    .byte   9, 0  @ PSG r9
+    .byte   0, 135  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 50  @ PSG r7
+    .byte   2, 2  @ frame=638 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 51  @ PSG r7
+    .byte   3, 5  @ frame=642 delay=3 writes=5
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   3, 11  @ frame=646 delay=3 writes=11
+    .byte   6, 25  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=650 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   7, 10  @ frame=658 delay=7 writes=10
+    .byte   0, 239  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=662 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   0, 11  @ frame=663 delay=0 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 253  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 10  @ frame=669 delay=5 writes=10
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=673 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 7  @ frame=675 delay=1 writes=7
+    .byte   0, 45  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 124  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   5, 8  @ frame=681 delay=5 writes=8
+    .byte   6, 22  @ PSG r6
+    .byte   0, 135  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 153  @ PSG r2
+    .byte   3, 5  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   3, 2  @ frame=685 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 53  @ PSG r7
+    .byte   1, 7  @ frame=687 delay=1 writes=7
+    .byte   0, 28  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   4, 7  @ frame=692 delay=4 writes=7
+    .byte   6, 23  @ PSG r6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   3, 2  @ frame=696 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 55  @ PSG r7
+    .byte   1, 10  @ frame=698 delay=1 writes=10
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 195  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 10  @ frame=704 delay=5 writes=10
+    .byte   0, 170  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 25  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   2, 4  @ frame=707 delay=2 writes=4
+    .byte   0, 102  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   7, 48  @ PSG r7
+    .byte   0, 2  @ frame=708 delay=0 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 11  @ frame=710 delay=1 writes=11
+    .byte   6, 19  @ PSG r6
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 195  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   2, 4  @ frame=713 delay=2 writes=4
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   1, 10  @ frame=715 delay=1 writes=10
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=719 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   7, 11  @ frame=727 delay=7 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 63  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 25  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 135  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=731 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 3  @ frame=733 delay=1 writes=3
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   7, 55  @ PSG r7
+    .byte   1, 4  @ frame=735 delay=1 writes=4
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   2, 8  @ frame=738 delay=2 writes=8
+    .byte   6, 25  @ PSG r6
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 153  @ PSG r2
+    .byte   3, 5  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   3, 2  @ frame=742 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 53  @ PSG r7
+    .byte   7, 11  @ frame=750 delay=7 writes=11
+    .byte   6, 21  @ PSG r6
+    .byte   0, 113  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 151  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 45  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 2  @ frame=756 delay=5 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 60  @ PSG r7
+    .byte   1, 4  @ frame=758 delay=1 writes=4
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   3, 6  @ frame=762 delay=3 writes=6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 213  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 62  @ PSG r7
+    .byte   2, 2  @ frame=765 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 63  @ PSG r7
+    .byte   1, 11  @ frame=767 delay=1 writes=11
+    .byte   6, 20  @ PSG r6
+    .byte   0, 101  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 12  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 4  @ frame=773 delay=5 writes=4
+    .byte   4, 135  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   3, 2  @ frame=777 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 60  @ PSG r7
+    .byte   1, 3  @ frame=779 delay=1 writes=3
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   7, 63  @ PSG r7
+    .byte   1, 4  @ frame=781 delay=1 writes=4
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 62  @ PSG r7
+    .byte   3, 11  @ frame=785 delay=3 writes=11
+    .byte   6, 19  @ PSG r6
+    .byte   0, 90  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 28  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   10, 2  @ frame=796 delay=10 writes=2
+    .byte   6, 22  @ PSG r6
+    .byte   7, 48  @ PSG r7
+    .byte   5, 2  @ frame=802 delay=5 writes=2
+    .byte   6, 22  @ PSG r6
+    .byte   7, 48  @ PSG r7
+    .byte   5, 2  @ frame=808 delay=5 writes=2
+    .byte   6, 19  @ PSG r6
+    .byte   7, 48  @ PSG r7
+    .byte   16, 4  @ frame=825 delay=16 writes=4
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   7, 55  @ PSG r7
+    .byte   1, 4  @ frame=827 delay=1 writes=4
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 62  @ PSG r7
+    .byte   3, 11  @ frame=831 delay=3 writes=11
+    .byte   6, 25  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=835 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   6, 10  @ frame=842 delay=6 writes=10
+    .byte   0, 239  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=846 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 11  @ frame=848 delay=1 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 253  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 10  @ frame=854 delay=5 writes=10
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=858 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 7  @ frame=860 delay=1 writes=7
+    .byte   0, 45  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 124  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   4, 8  @ frame=865 delay=4 writes=8
+    .byte   6, 22  @ PSG r6
+    .byte   0, 135  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 153  @ PSG r2
+    .byte   3, 5  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   3, 2  @ frame=869 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 53  @ PSG r7
+    .byte   1, 7  @ frame=871 delay=1 writes=7
+    .byte   0, 28  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=877 delay=5 writes=7
+    .byte   6, 23  @ PSG r6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   3, 2  @ frame=881 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 55  @ PSG r7
+    .byte   1, 10  @ frame=883 delay=1 writes=10
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 195  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   4, 10  @ frame=888 delay=4 writes=10
+    .byte   0, 170  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 25  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=892 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 11  @ frame=894 delay=1 writes=11
+    .byte   6, 19  @ PSG r6
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 10  @ frame=900 delay=5 writes=10
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=904 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 4  @ frame=906 delay=1 writes=4
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 11  @ frame=912 delay=5 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 102  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 57  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 135  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   2, 2  @ frame=915 delay=2 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 7  @ frame=917 delay=1 writes=7
+    .byte   0, 63  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 25  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   1, 4  @ frame=919 delay=1 writes=4
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 11  @ frame=923 delay=3 writes=11
+    .byte   6, 25  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=927 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   7, 10  @ frame=935 delay=7 writes=10
+    .byte   0, 239  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   2, 2  @ frame=938 delay=2 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 11  @ frame=940 delay=1 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 253  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 10  @ frame=946 delay=5 writes=10
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=950 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 7  @ frame=952 delay=1 writes=7
+    .byte   0, 45  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 124  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   5, 8  @ frame=958 delay=5 writes=8
+    .byte   6, 22  @ PSG r6
+    .byte   0, 135  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 153  @ PSG r2
+    .byte   3, 5  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   3, 2  @ frame=962 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 53  @ PSG r7
+    .byte   0, 7  @ frame=963 delay=0 writes=7
+    .byte   0, 28  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=969 delay=5 writes=7
+    .byte   6, 23  @ PSG r6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   3, 2  @ frame=973 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 55  @ PSG r7
+    .byte   1, 10  @ frame=975 delay=1 writes=10
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 179  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 6  @ frame=981 delay=5 writes=6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   3, 2  @ frame=985 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 55  @ PSG r7
+    .byte   1, 11  @ frame=987 delay=1 writes=11
+    .byte   6, 26  @ PSG r6
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 179  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   4, 10  @ frame=992 delay=4 writes=10
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 179  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   11, 6  @ frame=1004 delay=11 writes=6
+    .byte   6, 26  @ PSG r6
+    .byte   9, 0  @ PSG r9
+    .byte   0, 135  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 50  @ PSG r7
+    .byte   3, 2  @ frame=1008 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 51  @ PSG r7
+    .byte   3, 5  @ frame=1012 delay=3 writes=5
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   2, 11  @ frame=1015 delay=2 writes=11
+    .byte   6, 25  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=1019 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   7, 10  @ frame=1027 delay=7 writes=10
+    .byte   0, 239  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=1031 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 11  @ frame=1033 delay=1 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 253  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   4, 10  @ frame=1038 delay=4 writes=10
+    .byte   0, 120  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=1042 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 7  @ frame=1044 delay=1 writes=7
+    .byte   0, 45  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 124  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   5, 8  @ frame=1050 delay=5 writes=8
+    .byte   6, 22  @ PSG r6
+    .byte   0, 135  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 153  @ PSG r2
+    .byte   3, 5  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   3, 2  @ frame=1054 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 53  @ PSG r7
+    .byte   1, 7  @ frame=1056 delay=1 writes=7
+    .byte   0, 28  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=1062 delay=5 writes=7
+    .byte   6, 23  @ PSG r6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   2, 2  @ frame=1065 delay=2 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 55  @ PSG r7
+    .byte   1, 10  @ frame=1067 delay=1 writes=10
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 195  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 10  @ frame=1073 delay=5 writes=10
+    .byte   0, 170  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 25  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   2, 4  @ frame=1076 delay=2 writes=4
+    .byte   0, 102  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   7, 48  @ PSG r7
+    .byte   0, 2  @ frame=1077 delay=0 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 11  @ frame=1079 delay=1 writes=11
+    .byte   6, 19  @ PSG r6
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 195  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   2, 4  @ frame=1082 delay=2 writes=4
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   2, 10  @ frame=1085 delay=2 writes=10
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   2, 2  @ frame=1088 delay=2 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   7, 11  @ frame=1096 delay=7 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 63  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   2, 25  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 135  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=1100 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 3  @ frame=1102 delay=1 writes=3
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   7, 55  @ PSG r7
+    .byte   1, 4  @ frame=1104 delay=1 writes=4
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 54  @ PSG r7
+    .byte   3, 8  @ frame=1108 delay=3 writes=8
+    .byte   6, 25  @ PSG r6
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 153  @ PSG r2
+    .byte   3, 5  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   7, 52  @ PSG r7
+    .byte   3, 2  @ frame=1112 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 53  @ PSG r7
+    .byte   6, 11  @ frame=1119 delay=6 writes=11
+    .byte   6, 21  @ PSG r6
+    .byte   0, 113  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 151  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 45  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 2  @ frame=1125 delay=5 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 60  @ PSG r7
+    .byte   1, 4  @ frame=1127 delay=1 writes=4
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   3, 6  @ frame=1131 delay=3 writes=6
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   0, 213  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 62  @ PSG r7
+    .byte   3, 2  @ frame=1135 delay=3 writes=2
+    .byte   8, 0  @ PSG r8
+    .byte   7, 63  @ PSG r7
+    .byte   1, 11  @ frame=1137 delay=1 writes=11
+    .byte   6, 20  @ PSG r6
+    .byte   0, 101  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 134  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 12  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   4, 4  @ frame=1142 delay=4 writes=4
+    .byte   4, 135  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   3, 2  @ frame=1146 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 60  @ PSG r7
+    .byte   1, 3  @ frame=1148 delay=1 writes=3
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   7, 63  @ PSG r7
+    .byte   1, 4  @ frame=1150 delay=1 writes=4
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 62  @ PSG r7
+    .byte   3, 11  @ frame=1154 delay=3 writes=11
+    .byte   6, 19  @ PSG r6
+    .byte   0, 90  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 142  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 28  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   10, 2  @ frame=1165 delay=10 writes=2
+    .byte   6, 22  @ PSG r6
+    .byte   7, 48  @ PSG r7
+    .byte   5, 2  @ frame=1171 delay=5 writes=2
+    .byte   6, 22  @ PSG r6
+    .byte   7, 48  @ PSG r7
+    .byte   5, 2  @ frame=1177 delay=5 writes=2
+    .byte   6, 19  @ PSG r6
+    .byte   7, 48  @ PSG r7
+    .byte   16, 4  @ frame=1194 delay=16 writes=4
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   7, 55  @ PSG r7
+    .byte   1, 4  @ frame=1196 delay=1 writes=4
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 62  @ PSG r7
+    .byte   3, 11  @ frame=1200 delay=3 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 213  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=1206 delay=5 writes=7
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 5  @ frame=1212 delay=5 writes=5
+    .byte   10, 0  @ PSG r10
+    .byte   2, 246  @ PSG r2
+    .byte   3, 3  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   7, 60  @ PSG r7
+    .byte   2, 2  @ frame=1215 delay=2 writes=2
+    .byte   9, 0  @ PSG r9
+    .byte   7, 62  @ PSG r7
+    .byte   1, 7  @ frame=1217 delay=1 writes=7
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   5, 2  @ frame=1223 delay=5 writes=2
+    .byte   6, 22  @ PSG r6
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=1229 delay=5 writes=7
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=1235 delay=5 writes=7
+    .byte   2, 63  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   10, 11  @ frame=1246 delay=10 writes=11
+    .byte   6, 22  @ PSG r6
+    .byte   0, 239  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=1252 delay=5 writes=7
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 5  @ frame=1258 delay=5 writes=5
+    .byte   10, 0  @ PSG r10
+    .byte   2, 246  @ PSG r2
+    .byte   3, 3  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   7, 60  @ PSG r7
+    .byte   3, 2  @ frame=1262 delay=3 writes=2
+    .byte   9, 0  @ PSG r9
+    .byte   7, 62  @ PSG r7
+    .byte   0, 7  @ frame=1263 delay=0 writes=7
+    .byte   2, 170  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 222  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   5, 8  @ frame=1269 delay=5 writes=8
+    .byte   6, 21  @ PSG r6
+    .byte   2, 213  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 222  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=1273 delay=3 writes=2
+    .byte   9, 0  @ PSG r9
+    .byte   7, 50  @ PSG r7
+    .byte   7, 5  @ frame=1281 delay=7 writes=5
+    .byte   6, 23  @ PSG r6
+    .byte   2, 164  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   7, 48  @ PSG r7
+    .byte   5, 2  @ frame=1287 delay=5 writes=2
+    .byte   6, 24  @ PSG r6
+    .byte   7, 48  @ PSG r7
+    .byte   0, 4  @ frame=1288 delay=0 writes=4
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 11  @ frame=1292 delay=3 writes=11
+    .byte   6, 24  @ PSG r6
+    .byte   0, 12  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=1298 delay=5 writes=7
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 5  @ frame=1304 delay=5 writes=5
+    .byte   10, 0  @ PSG r10
+    .byte   2, 246  @ PSG r2
+    .byte   3, 3  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   7, 60  @ PSG r7
+    .byte   3, 2  @ frame=1308 delay=3 writes=2
+    .byte   9, 0  @ PSG r9
+    .byte   7, 62  @ PSG r7
+    .byte   1, 7  @ frame=1310 delay=1 writes=7
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   4, 2  @ frame=1315 delay=4 writes=2
+    .byte   6, 22  @ PSG r6
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=1321 delay=5 writes=7
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=1327 delay=5 writes=7
+    .byte   2, 63  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   5, 7  @ frame=1333 delay=5 writes=7
+    .byte   2, 28  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 124  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   4, 5  @ frame=1338 delay=4 writes=5
+    .byte   6, 25  @ PSG r6
+    .byte   0, 28  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 48  @ PSG r7
+    .byte   11, 1  @ frame=1350 delay=11 writes=1
+    .byte   7, 56  @ PSG r7
+    .byte   1, 3  @ frame=1352 delay=1 writes=3
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   7, 62  @ PSG r7
+    .byte   3, 8  @ frame=1356 delay=3 writes=8
+    .byte   6, 25  @ PSG r6
+    .byte   2, 71  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 90  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   10, 8  @ frame=1367 delay=10 writes=8
+    .byte   6, 25  @ PSG r6
+    .byte   2, 80  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 95  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 2  @ frame=1373 delay=5 writes=2
+    .byte   6, 24  @ PSG r6
+    .byte   7, 48  @ PSG r7
+    .byte   5, 2  @ frame=1379 delay=5 writes=2
+    .byte   6, 23  @ PSG r6
+    .byte   7, 48  @ PSG r7
+    .byte   5, 11  @ frame=1385 delay=5 writes=11
+    .byte   6, 23  @ PSG r6
+    .byte   0, 213  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   4, 7  @ frame=1390 delay=4 writes=7
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 5  @ frame=1396 delay=5 writes=5
+    .byte   10, 0  @ PSG r10
+    .byte   2, 246  @ PSG r2
+    .byte   3, 3  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   7, 60  @ PSG r7
+    .byte   3, 2  @ frame=1400 delay=3 writes=2
+    .byte   9, 0  @ PSG r9
+    .byte   7, 62  @ PSG r7
+    .byte   1, 7  @ frame=1402 delay=1 writes=7
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   5, 2  @ frame=1408 delay=5 writes=2
+    .byte   6, 22  @ PSG r6
+    .byte   7, 48  @ PSG r7
+    .byte   4, 7  @ frame=1413 delay=4 writes=7
+    .byte   2, 102  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=1419 delay=5 writes=7
+    .byte   2, 63  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 14  @ PSG r9
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   11, 11  @ frame=1431 delay=11 writes=11
+    .byte   6, 22  @ PSG r6
+    .byte   0, 179  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 239  @ PSG r2
+    .byte   3, 0  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 28  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   5, 7  @ frame=1437 delay=5 writes=7
+    .byte   0, 190  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   4, 102  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   4, 7  @ frame=1442 delay=4 writes=7
+    .byte   0, 201  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   4, 246  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   3, 2  @ frame=1446 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 60  @ PSG r7
+    .byte   1, 7  @ frame=1448 delay=1 writes=7
+    .byte   0, 213  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   4, 170  @ PSG r4
+    .byte   5, 1  @ PSG r5
+    .byte   10, 14  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   5, 5  @ frame=1454 delay=5 writes=5
+    .byte   6, 21  @ PSG r6
+    .byte   4, 213  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=1458 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 2  @ frame=1460 delay=1 writes=2
+    .byte   6, 27  @ PSG r6
+    .byte   7, 52  @ PSG r7
+    .byte   4, 5  @ frame=1465 delay=4 writes=5
+    .byte   6, 26  @ PSG r6
+    .byte   4, 135  @ PSG r4
+    .byte   5, 3  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 48  @ PSG r7
+    .byte   3, 2  @ frame=1469 delay=3 writes=2
+    .byte   10, 0  @ PSG r10
+    .byte   7, 52  @ PSG r7
+    .byte   1, 2  @ frame=1471 delay=1 writes=2
+    .byte   6, 25  @ PSG r6
+    .byte   7, 52  @ PSG r7
+    .byte   1, 4  @ frame=1473 delay=1 writes=4
+    .byte   0, 246  @ PSG r0
+    .byte   1, 3  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 52  @ PSG r7
+    .byte   3, 3  @ frame=1477 delay=3 writes=3
+    .byte   9, 0  @ PSG r9
+    .byte   8, 0  @ PSG r8
+    .byte   7, 63  @ PSG r7
+    .byte   0, 0xFF   @ loop back (fires frame ~1477)
+
+@ ==== ARM Level: WORLD_1_1 ====
+    .balign 4
+.global _WORLD_1_1_LEVEL
+_WORLD_1_1_LEVEL:
+    .hword -96  @ xMin
+    .hword 1055  @ xMax
+    .hword -128  @ yMin
+    .hword 127  @ yMax
+    .byte 22   @ bgCount
+    .byte 10   @ gpCount
+    .byte 1   @ fgCount
+    .byte 0    @ pad
+    .word _WORLD_1_1_BG_OBJECTS
+    .word _WORLD_1_1_GP_OBJECTS
+    .word _WORLD_1_1_FG_OBJECTS
+    .hword 0  @ scrollLimit left
+    .hword 1020  @ scrollLimit right
+    .hword 127  @ scrollLimit top
+    .hword -128  @ scrollLimit bottom
+    .hword 42  @ groundBottomOffset
+    .hword 0  @ pad
+
+    .balign 4
+_WORLD_1_1_BG_OBJECTS:
+    @ obj_bg_cloud_1 (decoration)
+    .hword 100  @ x
+    .hword 30  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x00  @ flags
+    .byte 255   @ type
+    .word _CLOUD_VECTORS  @ vector_ptr
+    .byte 25   @ half_w (vec:25)
+    .byte 10   @ half_h (vec:10)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_cloud_2 (decoration)
+    .hword 350  @ x
+    .hword 45  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x00  @ flags
+    .byte 255   @ type
+    .word _CLOUD_VECTORS  @ vector_ptr
+    .byte 25   @ half_w (vec:25)
+    .byte 10   @ half_h (vec:10)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_cloud_3 (decoration)
+    .hword 600  @ x
+    .hword 20  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x00  @ flags
+    .byte 255   @ type
+    .word _CLOUD_VECTORS  @ vector_ptr
+    .byte 25   @ half_w (vec:25)
+    .byte 10   @ half_h (vec:10)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_cloud_4 (decoration)
+    .hword 850  @ x
+    .hword 38  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x00  @ flags
+    .byte 255   @ type
+    .word _CLOUD_VECTORS  @ vector_ptr
+    .byte 25   @ half_w (vec:25)
+    .byte 10   @ half_h (vec:10)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_7 (tile)
+    .hword 245  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_3 (tile)
+    .hword 59  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_4 (tile)
+    .hword 121  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_6 (tile)
+    .hword 183  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_8 (tile)
+    .hword 307  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_9 (tile)
+    .hword 369  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_10 (tile)
+    .hword 431  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_11 (tile)
+    .hword 493  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_12 (tile)
+    .hword 555  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_13 (tile)
+    .hword 617  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_14 (tile)
+    .hword 679  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_15 (tile)
+    .hword 741  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_16 (tile)
+    .hword 803  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_17 (tile)
+    .hword 865  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_18 (tile)
+    .hword 927  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_19 (tile)
+    .hword 989  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_1 (tile)
+    .hword -65  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_2 (tile)
+    .hword -3  @ x
+    .hword -78  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _GROUND_TILE_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+
+    .balign 4
+_WORLD_1_1_GP_OBJECTS:
+    @ obj_bg_mountain_2 (decoration)
+    .hword 570  @ x
+    .hword -50  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x00  @ flags
+    .byte 255   @ type
+    .word _MOUNTAIN_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 19   @ half_h (vec:19)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_bg_mountain_3 (decoration)
+    .hword 750  @ x
+    .hword -49  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x00  @ flags
+    .byte 255   @ type
+    .word _MOUNTAIN_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 19   @ half_h (vec:19)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_1773216572040 (enemy)
+    .hword 270  @ x
+    .hword -50  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x00  @ flags
+    .byte 1   @ type
+    .word _MOUNTAIN_VECTORS  @ vector_ptr
+    .byte 30   @ half_w (vec:30)
+    .byte 19   @ half_h (vec:19)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_gp_pipe_1 (obstacle)
+    .hword 200  @ x
+    .hword -43  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 2   @ type
+    .word _PIPE_VECTORS  @ vector_ptr
+    .byte 11   @ half_w (vec:11)
+    .byte 25   @ half_h (vec:25)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_gp_pipe_2 (obstacle)
+    .hword 420  @ x
+    .hword -45  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 2   @ type
+    .word _PIPE_VECTORS  @ vector_ptr
+    .byte 11   @ half_w (vec:11)
+    .byte 25   @ half_h (vec:25)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_gp_pipe_3 (obstacle)
+    .hword 680  @ x
+    .hword -44  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 2   @ type
+    .word _PIPE_VECTORS  @ vector_ptr
+    .byte 11   @ half_w (vec:11)
+    .byte 25   @ half_h (vec:25)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_gp_pipe_4 (obstacle)
+    .hword 850  @ x
+    .hword -44  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 2   @ type
+    .word _PIPE_VECTORS  @ vector_ptr
+    .byte 11   @ half_w (vec:11)
+    .byte 25   @ half_h (vec:25)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_gp_qblock_2 (item)
+    .hword 260  @ x
+    .hword -10  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _QUESTION_BLOCK_VECTORS  @ vector_ptr
+    .byte 8   @ half_w (vec:8)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_gp_qblock_3 (item)
+    .hword 500  @ x
+    .hword -10  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _QUESTION_BLOCK_VECTORS  @ vector_ptr
+    .byte 8   @ half_w (vec:8)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+    @ obj_gp_qblock_4 (item)
+    .hword 760  @ x
+    .hword -10  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _QUESTION_BLOCK_VECTORS  @ vector_ptr
+    .byte 8   @ half_w (vec:8)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+
+    .balign 4
+_WORLD_1_1_FG_OBJECTS:
+    @ obj_gp_qblock_1 (item)
+    .hword 130  @ x
+    .hword -10  @ y
+    .byte 8   @ scale (x8)
+    .byte 127   @ intensity
+    .byte 0x10  @ flags
+    .byte 255   @ type
+    .word _QUESTION_BLOCK_VECTORS  @ vector_ptr
+    .byte 8   @ half_w (vec:8)
+    .byte 8   @ half_h (vec:8)
+    .byte 0   @ vel_x_init
+    .byte 0   @ vel_y_init
+    .word 0  @ coll_mesh_ptr (AABB fallback)
+
+
+@ ARM enemy spawn table for WORLD_1_1
+.align 2
+.global _WORLD_1_1_PITREX_ENEMY_COUNT
+_WORLD_1_1_PITREX_ENEMY_COUNT:
+    .word 0  @ enemy count
+
+.global _WORLD_1_1_PITREX_ENEMIES
+_WORLD_1_1_PITREX_ENEMIES:

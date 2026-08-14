@@ -48,7 +48,7 @@ pub fn emit_ram_layout() -> String {
         ("CAMERA_X",         0x14C, "camera X offset (used by show_level)"),
         ("CAMERA_Y",         0x150, "camera Y offset"),
         ("TEXT_SIZE",        0x154, "text scale factor (1=normal, 2=double, ...)"),
-        ("TEXT_COLOR",       0x158, "text intensity (0-127)"),
+        // 0x158 free — was TEXT_COLOR (removed: monochrome console, use SET_INTENSITY)
         ("LEVEL_DATA_PTR",   0x15C, "pointer to loaded level ROM data"),
         ("DBGVAL",           0x160, "debug_print last written value"),
         ("PRINT_BEAM_X",     0x164, "beam X shadow during print_text"),
@@ -95,6 +95,10 @@ pub fn emit_ram_layout() -> String {
         ("ENEMY_STATE_ARM",     0x41C, "enemy state per slot: 8 × i32"),
         // Per-player animation state (0x43C–0x43D): frame_idx(u8)+ticks_left(u8)
         ("VPY_PLAYER_ANIM_STATE", 0x43C, "player animation state: frame_idx(u8)+ticks_left(u8)"),
+        // Brightness override (0x43E, in the free gap before wander scratch): 0=use
+        // .vec per-path intensity, >0=override from SET_INTENSITY. Written only by the
+        // SET_INTENSITY builtin, read by DRAW_VECTOR/DRAW_VECTOR_3D, reset once per frame.
+        ("VPY_BRIGHTNESS_OVERRIDE", 0x43E, "SET_INTENSITY override: 0=.vec intensity, >0=override (1 byte)"),
         // Wander AI per-slot scratch (0x440–0x45F): 8 slots × 4 bytes
         // Each slot: +0..1 idle_timer/from_x/vy (i16), +2..3 target_x (i16)
         ("WANDER_SCRATCH_ARM",  0x440, "wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)"),

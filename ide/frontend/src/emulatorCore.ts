@@ -43,7 +43,7 @@ export interface IEmulatorCore {
   getLastDebugOutput?(): string;
 
   /** Load an ARM binary (rp2350 target). Switches the active backend to Rp2350System. */
-  loadArm?(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement): void;
+  loadArm?(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement, simSdFiles?: string[], simSdPreviews?: Record<string, string>): void;
 
   /** Set joystick J1 axis values for RP2350 backend (-128..127, 0=center). */
   setJoyAxis?(x: number, y: number): void;
@@ -53,6 +53,10 @@ export interface IEmulatorCore {
   setJoyAxis2?(x: number, y: number): void;
   /** Set joystick J2 button state (active-low, bits 0-3 = btn 1-4). */
   setJoyButtons2?(mask: number): void;
+
+  // Live AudioContext + output node of the active target, for the parallel
+  // MediaStream tap used by the gameplay video recorder. Null when no audio.
+  getAudioContextAndOutputNode?(): { ctx: AudioContext; outputNode: AudioNode } | null;
 }
 
 // Tipo del identificador de backend.

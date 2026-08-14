@@ -5,8 +5,37 @@
 
 use vpy_parser::{Expr, BinOp, CmpOp, LogicOp, CallInfo};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::cell::RefCell;
+use std::collections::HashMap;
 
 static COND_LABEL_CTR: AtomicUsize = AtomicUsize::new(0);
+
+thread_local! {
+    /// Scalar integer constants (VPy `const NAME = N`) known at codegen time.
+    /// Reads of these idents fold directly to immediates instead of a RAM load,
+    /// so no RAM slot or startup initialisation is emitted for them.
+    /// Keyed by UPPERCASE name. Populated by functions::allocate_globals().
+    static SCALAR_CONSTS: RefCell<HashMap<String, i32>> = RefCell::new(HashMap::new());
+}
+
+/// Reset and populate the scalar-const fold table for a fresh compile.
+pub fn set_scalar_consts(consts: HashMap<String, i32>) {
+    SCALAR_CONSTS.with(|c| *c.borrow_mut() = consts);
+}
+
+/// Look up a scalar const value by UPPERCASE name.
+fn scalar_const(name_up: &str) -> Option<i32> {
+    SCALAR_CONSTS.with(|c| c.borrow().get(name_up).copied())
+}
+
+/// Emit code loading an integer literal into r0 (same rule as Expr::Number).
+fn emit_imm_r0(n: i32) -> String {
+    if (0..=65535).contains(&n) {
+        format!("    mov     r0, #{n}\n")
+    } else {
+        format!("    ldr     r0, ={n}\n")
+    }
+}
 
 /// Emit code that sets r0=1 if condition is true, r0=0 otherwise.
 /// `branch_if_false` is the branch mnemonic taken when the condition is FALSE
@@ -42,6 +71,10 @@ pub fn emit_expr(
 
         Expr::Ident(info) => {
             let name_up = info.name.to_uppercase();
+            // Scalar consts fold to an immediate — no RAM round-trip.
+            if let Some(n) = scalar_const(&name_up) {
+                return Ok(emit_imm_r0(n));
+            }
             if let Some(&addr) = var_addrs.get(&name_up) {
                 Ok(format!(
                     "    ldr     r1, =0x{addr:08X}    @ {}\n    ldr     r0, [r1]\n",
@@ -259,6 +292,21 @@ pub fn emit_call(
         }
     }
 
+    // SET_INTENSITY(v): record a per-frame brightness override (read by
+    // DRAW_VECTOR / DRAW_VECTOR_3D so brightness animates, mirroring PiTrex) AND
+    // write the DAC. The override is written ONLY here — never inside the draw
+    // routines — so per-path .vec intensities remain intact when SET_INTENSITY
+    // is not used. Reset to 0 once per frame in functions.rs.
+    if info.name == "SET_INTENSITY" && info.args.len() == 1 {
+        let mut s = String::new();
+        s.push_str(&emit_expr(&info.args[0], var_addrs)?); // r0 = intensity
+        s.push_str("    and     r0, r0, #0x7F\n");
+        s.push_str("    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE\n");
+        s.push_str("    strb    r0, [r1]            @ record override for DRAW_VECTOR*\n");
+        s.push_str("    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)\n");
+        return Ok(s);
+    }
+
     let fn_name = match info.name.as_str() {
         "WAIT_RECAL"      => "vpy_wait_recal",
         "SET_INTENSITY"   => "vpy_set_intensity",
@@ -275,6 +323,7 @@ pub fn emit_call(
         "DRAW_VECTOR"     => "vpy_draw_vector",
         "DRAW_VECTOR_EX"  => "vpy_draw_vector_ex",
         "DRAW_VECTOR_3D"  => "vpy_draw_vector_3d",
+        "DRAW_RECORDING"  => "vpy_draw_recording",
         "PRINT_TEXT"      => "vpy_print_text",
         "PRINT_NUMBER"    => "vpy_print_number",
         "PLAY_MUSIC"      => "vpy_play_music",
@@ -283,6 +332,7 @@ pub fn emit_call(
         "PLAY_NOTE"       => "vpy_play_note",
         "LOAD_LEVEL"      => "vpy_load_level",
         "SHOW_LEVEL"      => "vpy_show_level",
+        "SAMPLE_POS"      => "vpy_sample_pos",
         "J1_X"            => "vpy_j1_x",
         "J1_Y"            => "vpy_j1_y",
         "J1_BTN1" | "J1_BUTTON_1" => "vpy_j1_btn1",
@@ -323,12 +373,17 @@ pub fn emit_call(
         "GET_SCROLL_LIMIT_BOTTOM"=> "vpy_get_scroll_limit_bottom",
         "GET_LEVEL_FLOOR_Y"      => "vpy_get_level_floor_y",
         "GET_FRAME_US"           => "vpy_get_frame_us",
+        // SD card game list (BIOS serves the data; VPy owns presentation)
+        "SD_FILE_COUNT"          => "vpy_sd_count",
+        "SD_FILE_NAME"           => "vpy_sd_name",
+        "DRAW_SD_PREVIEW"        => "vpy_draw_sd_preview",
+        "LAUNCH_GAME"            => "vpy_launch_game",
         // Message system
         "MSG_DEF"         => "vpy_msg_def",
         "PRINT_MSG"       => "vpy_print_msg",
         // Text/display extras
         "SET_TEXT_SIZE"   => "vpy_set_text_size",
-        "SET_TEXT_COLOR"  => "vpy_set_text_color",
+        // SET_TEXT_COLOR removed — YAGNI on a monochrome console; use SET_INTENSITY.
         "UPDATE_LEVEL"    => "vpy_update_level",
         // Misc
         "beep" | "BEEP"   => "vpy_beep",
@@ -535,6 +590,70 @@ pub fn emit_call(
         }
     }
 
+    // Special case: DRAW_RECORDING("name", x, y, scale, frame) — .vrec playback.
+    // ABI: r0=_NAME_VREC, r1=x, r2=y, r3=scale (0-128, 128=100%), [sp+0]=frame.
+    // frame is a free-running counter — vpy_draw_recording takes frame %
+    // frame_count internally. Same stack-arg pattern as DRAW_VECTOR_EX.
+    if info.name == "DRAW_RECORDING" {
+        if let Some(Expr::StringLit(rec_name)) = args.first() {
+            let sym_base = rec_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_{sym_base}_VREC");
+            let runtime: Vec<&Expr> = args.iter().skip(1).collect();
+            // Push frame first so it sits at [sp] when the routine reads [sp+32]
+            // (after its push of 8 regs = 32 bytes).
+            if let Some(frame) = runtime.get(3) {
+                s.push_str(&emit_arg(frame, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r0 = recording ptr
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ recording '{rec_name}'\n"));
+            s.push_str("    push    {r0}\n");
+            // r1 = x
+            if let Some(x) = runtime.first() {
+                s.push_str(&emit_arg(x, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r2 = y
+            if let Some(y) = runtime.get(1) {
+                s.push_str(&emit_arg(y, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // r3 = scale (default 128 = 100%)
+            if let Some(scale) = runtime.get(2) {
+                s.push_str(&emit_arg(scale, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #128\n");
+            }
+            s.push_str("    push    {r0}\n");
+            // pop r3=scale, r2=y, r1=x, r0=recording ptr; frame stays at [sp]
+            s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+            s.push_str("    bl      vpy_draw_recording\n");
+            s.push_str("    add     sp, sp, #4\n"); // discard frame from stack
+            return Ok(s);
+        }
+    }
+
+    // Special case: PLAY_SAMPLE("name") — .vsmp audio-sample playback.
+    // ABI: r0 = _NAME_SMP (ROM table ptr). vpy_play_sample is an SVC trap that
+    // hands the sample off to the core1 audio streamer. Resolves the
+    // string-literal name to the `_<NAME>_SMP` symbol, same as DRAW_RECORDING.
+    if info.name == "PLAY_SAMPLE" {
+        if let Some(Expr::StringLit(smp_name)) = args.first() {
+            let sym_base = smp_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_{sym_base}_SMP");
+            let mut s = String::new();
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ sample '{smp_name}'\n"));
+            s.push_str("    bl      vpy_play_sample\n");
+            return Ok(s);
+        }
+    }
+
     // Special case: DRAW_ANIM("name", ox, oy) — animation asset, symbol is _ANIM_NAME
     if info.name == "DRAW_ANIM" {
         if let Some(Expr::StringLit(anim_name)) = args.first() {
@@ -710,14 +829,22 @@ fn emit_arg(
         static STR_CTR: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let id = STR_CTR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let label = format!("_arg_str_{id}");
-        // Branch over the string data, load its address into r0
+        // Branch over the string data, load its address into r0.
+        //
+        // The `.ltorg` MUST sit between the branch and the string data — i.e. in
+        // the region the branch skips — NOT at `{label}_end`. If it were at
+        // `{label}_end` (the branch target), any pending literal-pool constants
+        // would be emitted as data exactly where execution lands, and the CPU
+        // would execute them as instructions → HardFault. Flushing the pool here
+        // (skipped by the branch) keeps the function's pool in range while the
+        // landing site stays pure code.
         let s = format!(
             "    b       {label}_end\n\
+             .ltorg\n\
              {label}:\n\
              .asciz  \"{text}\"\n\
              .align  2\n\
              {label}_end:\n\
-             .ltorg\n\
              ldr     r0, ={label}\n"
         );
         Ok(s)
@@ -744,6 +871,41 @@ mod tests {
             col: 0,
             args: vec![vpy_parser::Expr::Number(arg)],
         }
+    }
+
+    /// SD game-list builtins must lower to the vpy_sd_* SVC stubs, and a
+    /// SD_FILE_NAME(i) result must thread into PRINT_TEXT's str_ptr register (r2).
+    #[test]
+    fn test_arm_sd_builtins() {
+        let var_addrs = std::collections::HashMap::new();
+
+        let count = emit_call(&make_call("SD_FILE_COUNT"), &var_addrs).unwrap();
+        assert!(count.contains("bl      vpy_sd_count"),
+            "SD_FILE_COUNT must emit `bl vpy_sd_count` (got: {count:?})");
+
+        let name = emit_call(&make_call_with_arg("SD_FILE_NAME", 0), &var_addrs).unwrap();
+        assert!(name.contains("bl      vpy_sd_name"),
+            "SD_FILE_NAME must emit `bl vpy_sd_name` (got: {name:?})");
+
+        // PRINT_TEXT(x, y, SD_FILE_NAME(i)) — the name pointer (3rd arg) must be
+        // evaluated via vpy_sd_name and land in r2 before vpy_print_text.
+        let pt = CallInfo {
+            name: "PRINT_TEXT".to_string(),
+            source_line: 0,
+            col: 0,
+            args: vec![
+                vpy_parser::Expr::Number(-50),
+                vpy_parser::Expr::Number(40),
+                vpy_parser::Expr::Call(make_call_with_arg("SD_FILE_NAME", 0)),
+            ],
+        };
+        let asm = emit_call(&pt, &var_addrs).unwrap();
+        assert!(asm.contains("bl      vpy_sd_name"),
+            "PRINT_TEXT with SD_FILE_NAME must evaluate the name pointer (got: {asm:?})");
+        let name_pos = asm.find("bl      vpy_sd_name").unwrap();
+        let print_pos = asm.find("bl      vpy_print_text").unwrap();
+        assert!(name_pos < print_pos,
+            "name pointer must be resolved before the print_text call (got: {asm:?})");
     }
 
     /// Regression test for Bug 1: M6809-only enemy builtins must be no-ops on
@@ -793,6 +955,32 @@ mod tests {
         // SPAWN_ENEMIES with no level arg is a no-op.
         let sa_asm = emit_call(&make_call("SPAWN_ENEMIES"), &var_addrs).unwrap();
         assert!(sa_asm.contains("no-op"), "SPAWN_ENEMIES (no arg) should be no-op");
+    }
+
+    /// DRAW_RECORDING("name", x, y, scale, frame) — .vrec playback call site.
+    /// r0=_NAME_VREC, r1=x, r2=y, r3=scale, [sp]=frame (cleaned up after call).
+    #[test]
+    fn test_arm_draw_recording_call() {
+        let var_addrs = std::collections::HashMap::new();
+        let info = CallInfo {
+            name: "DRAW_RECORDING".to_string(),
+            source_line: 0,
+            col: 0,
+            args: vec![
+                vpy_parser::Expr::StringLit("snow-bros preview".to_string()),
+                vpy_parser::Expr::Number(0),
+                vpy_parser::Expr::Number(10),
+                vpy_parser::Expr::Number(45),
+                vpy_parser::Expr::Number(7),
+            ],
+        };
+        let asm = emit_call(&info, &var_addrs).unwrap();
+        assert!(asm.contains("ldr     r0, =_SNOW_BROS_PREVIEW_VREC"),
+            "must resolve recording name to _NAME_VREC symbol (got: {asm:?})");
+        assert!(asm.contains("bl      vpy_draw_recording"),
+            "must call vpy_draw_recording (got: {asm:?})");
+        assert!(asm.contains("add     sp, sp, #4"),
+            "must clean up the frame stack arg (got: {asm:?})");
     }
 
     /// SPAWN_ENEMIES / UPDATE_ENEMIES / DRAW_ENEMIES were already no-ops before

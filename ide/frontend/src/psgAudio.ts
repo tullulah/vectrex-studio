@@ -66,6 +66,15 @@ export class PsgAudioStreamer {
   start(){ if (this.running) return; this.running=true; this.schedulePump(); }
   stop(){ this.running=false; if (this.pumpTimer){ clearTimeout(this.pumpTimer); this.pumpTimer=null; } }
 
+  /** For the video recorder's parallel audio tap. Returns this streamer's
+   *  AudioContext + its output node (the ScriptProcessor feeding the speakers),
+   *  or null if audio hasn't been initialised. The legacy JSVecX 6809 path
+   *  produces sound HERE, so the recorder must tap this too. */
+  getAudioContextAndOutputNode(): { ctx: AudioContext; outputNode: AudioNode } | null {
+    if (this.ctx && this.spNode) return { ctx: this.ctx, outputNode: this.spNode };
+    return null;
+  }
+
   private schedulePump(){ if (!this.running) return; this.pumpTimer = window.setTimeout(()=>this.pump(), 16); }
 
   private pump(){

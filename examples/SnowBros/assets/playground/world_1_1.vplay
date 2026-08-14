@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-05-30"
+    "description": "Created in Playground - 2026-07-16"
   },
   "worldBounds": {
     "xMin": -96,
@@ -25,7 +25,7 @@
         "vectorName": "platform1",
         "layer": "gameplay",
         "x": -71,
-        "y": -2363,
+        "y": -2395,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -44,7 +44,7 @@
         "vectorName": "platform1",
         "layer": "gameplay",
         "x": 73,
-        "y": -2362,
+        "y": -2394,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -63,7 +63,7 @@
         "vectorName": "platform1",
         "layer": "gameplay",
         "x": 1,
-        "y": -2363,
+        "y": -2395,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -82,7 +82,7 @@
         "vectorName": "platform2",
         "layer": "gameplay",
         "x": 0,
-        "y": -2326,
+        "y": -2358,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -101,7 +101,7 @@
         "vectorName": "platform3",
         "layer": "gameplay",
         "x": -54,
-        "y": -2291,
+        "y": -2323,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -120,7 +120,7 @@
         "vectorName": "platform3",
         "layer": "gameplay",
         "x": 55,
-        "y": -2291,
+        "y": -2323,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -139,7 +139,7 @@
         "vectorName": "platform4",
         "layer": "gameplay",
         "x": -2,
-        "y": -2239,
+        "y": -2271,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -193,7 +193,7 @@
         "vectorName": "titchi_walk",
         "layer": "gameplay",
         "x": -42,
-        "y": -2207,
+        "y": -2239,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -215,7 +215,7 @@
         "vectorName": "titchi_walk",
         "layer": "gameplay",
         "x": 43,
-        "y": -2207,
+        "y": -2239,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -236,7 +236,7 @@
         "vectorName": "titchi_walk",
         "layer": "gameplay",
         "x": -86,
-        "y": -2270,
+        "y": -2302,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -257,7 +257,7 @@
         "vectorName": "titchi_walk",
         "layer": "gameplay",
         "x": 86,
-        "y": -2270,
+        "y": -2302,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -278,7 +278,7 @@
         "vectorName": "titchi_walk",
         "layer": "gameplay",
         "x": -52,
-        "y": -2306,
+        "y": -2338,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -394,7 +394,7 @@
         "vectorName": "platform7",
         "layer": "gameplay",
         "x": -39,
-        "y": -2022,
+        "y": -2031,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -417,7 +417,7 @@
         "vectorName": "platform3",
         "layer": "gameplay",
         "x": -15,
-        "y": -1959,
+        "y": -1968,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -440,35 +440,6 @@
             }
           ]
         }
-      },
-      {
-        "id": "enemy_1779084902399",
-        "type": "enemy",
-        "vectorName": "titchi_idle",
-        "layer": "gameplay",
-        "x": -22,
-        "y": -1439,
-        "rotation": 0,
-        "scale": 1,
-        "enemyType": "titchi",
-        "aiType": "patrol",
-        "patrolWaypoints": [
-          {
-            "x": -31,
-            "y": -1439
-          },
-          {
-            "x": 70,
-            "y": -1439
-          }
-        ],
-        "wave": 0,
-        "respawn": false,
-        "velocity": {
-          "x": 0,
-          "y": 0
-        },
-        "_facingRight": false
       },
       {
         "id": "enemy_1779084905301",
@@ -899,21 +870,12 @@
         "vectorName": "frog_idle",
         "layer": "gameplay",
         "x": -11,
-        "y": -1937,
+        "y": -1946,
         "rotation": 0,
         "scale": 1,
         "enemyType": "frog",
         "aiType": "patrol",
-        "patrolWaypoints": [
-          {
-            "x": -52,
-            "y": -1937
-          },
-          {
-            "x": 24,
-            "y": -1937
-          }
-        ],
+        "patrolWaypoints": [],
         "wave": 0,
         "respawn": false,
         "velocity": {
@@ -929,7 +891,7 @@
         "vectorName": "platform15",
         "layer": "gameplay",
         "x": 39,
-        "y": -1982,
+        "y": -1991,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -952,7 +914,7 @@
         "vectorName": "platform15",
         "layer": "gameplay",
         "x": 39,
-        "y": -2063,
+        "y": -2072,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -971,7 +933,7 @@
         "vectorName": "platform7",
         "layer": "gameplay",
         "x": -38,
-        "y": -2102,
+        "y": -2111,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -1274,7 +1236,7 @@
         "vectorName": "yellow_troll_idle",
         "layer": "gameplay",
         "x": 43,
-        "y": -1980,
+        "y": -1989,
         "rotation": 0,
         "scale": 1,
         "enemyType": "yellow_troll",
@@ -1295,7 +1257,7 @@
         "vectorName": "yellow_troll_idle",
         "layer": "gameplay",
         "x": -42,
-        "y": -2020,
+        "y": -2029,
         "rotation": 0,
         "scale": 1,
         "enemyType": "yellow_troll",
@@ -1316,7 +1278,7 @@
         "vectorName": "yellow_troll_idle",
         "layer": "gameplay",
         "x": 42,
-        "y": -2061,
+        "y": -2070,
         "rotation": 0,
         "scale": 1,
         "enemyType": "yellow_troll",
@@ -1337,7 +1299,7 @@
         "vectorName": "yellow_troll_idle",
         "layer": "gameplay",
         "x": -45,
-        "y": -2098,
+        "y": -2107,
         "rotation": 0,
         "scale": 1,
         "enemyType": "yellow_troll",
@@ -1568,6 +1530,6 @@
         "offsetY": -12
       }
     ],
-    "groundBottomOffset": 25
+    "groundBottomOffset": 12
   }
 }

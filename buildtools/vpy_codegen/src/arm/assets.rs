@@ -10,8 +10,10 @@ use crate::venemy::EnemyResource;
 use crate::vecres::VecMeshSegment;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fs;
 use serde::Deserialize;
+use vpy_parser::{Module, Item, Stmt, Expr};
 
 // ============================================================
 // .vmus music format
@@ -31,7 +33,13 @@ struct VmusResource {
     loop_start: f64,
     #[serde(rename = "loopEnd")]
     loop_end: Option<f64>,
+    /// Whether the track loops (true) or plays once (false).
+    /// Defaults to true for backward compatibility.
+    #[serde(default = "default_loop_true")]
+    r#loop: bool,
 }
+
+fn default_loop_true() -> bool { true }
 
 #[derive(Deserialize)]
 struct VmusNote {
@@ -131,6 +139,327 @@ struct VsfxNoise {
     volume: u8,
     #[serde(default)]
     decay_ms: f64,
+}
+
+// ============================================================
+// .vrec vector-recording format (multi-frame segment capture)
+// ============================================================
+
+#[derive(Deserialize)]
+struct VrecResource {
+    #[serde(default)]
+    #[allow(dead_code)]
+    version: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    name: String,
+    /// Capture rate — informational only; playback pacing is driven by the
+    /// caller's frame counter (DRAW_RECORDING takes frame % frame_count).
+    #[serde(default)]
+    fps: f64,
+    #[serde(default)]
+    frames: Vec<VrecFrame>,
+}
+
+#[derive(Deserialize)]
+struct VrecFrame {
+    #[serde(default)]
+    segments: Vec<VrecSegment>,
+}
+
+#[derive(Deserialize)]
+struct VrecSegment {
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    /// Intensity 0-127 (recorder only stores visible segments, i > 0)
+    i: i32,
+}
+
+// ============================================================
+// .vsmp audio-sample format (4-bit PCM, PSG-volume DAC voice)
+// ============================================================
+//
+// Produced by tools/audio2vsmp/audio2vsmp.py: mono audio downsampled and
+// quantized to 4-bit, packed 2 samples/byte (low nibble = even sample),
+// carried as a base64 payload. This is the audio track for "vector movies"
+// (Bad Apple + voice): streamed to the AY-3-8912 volume register as a crude DAC.
+
+#[derive(Deserialize)]
+struct VsmpResource {
+    #[serde(default)]
+    #[allow(dead_code)]
+    version: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    name: String,
+    #[serde(rename = "sampleRate", default)]
+    sample_rate: u32,
+    #[serde(default)]
+    #[allow(dead_code)]
+    bits: u32,
+    #[serde(rename = "numSamples", default)]
+    num_samples: u32,
+    /// Base64 of packed 4-bit samples (2 per byte, low nibble = even sample).
+    #[serde(default)]
+    data: String,
+}
+
+/// Decode a standard base64 string (RFC 4648, `+`/`/` alphabet, `=` padding)
+/// into bytes. Pure Rust — base64 is not a workspace dependency and the
+/// payload format is fixed. Whitespace in the input is ignored; any invalid
+/// character aborts decoding and returns what was decoded so far.
+fn base64_decode(input: &str) -> Vec<u8> {
+    fn val(c: u8) -> Option<u8> {
+        match c {
+            b'A'..=b'Z' => Some(c - b'A'),
+            b'a'..=b'z' => Some(c - b'a' + 26),
+            b'0'..=b'9' => Some(c - b'0' + 52),
+            b'+' => Some(62),
+            b'/' => Some(63),
+            _ => None,
+        }
+    }
+    let mut out = Vec::with_capacity(input.len() / 4 * 3 + 3);
+    let mut acc: u32 = 0;
+    let mut bits: u32 = 0;
+    for &c in input.as_bytes() {
+        if c == b'=' || c.is_ascii_whitespace() {
+            continue;
+        }
+        let v = match val(c) {
+            Some(v) => v as u32,
+            None => break,
+        };
+        acc = (acc << 6) | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    out
+}
+
+// ============================================================
+// Recording usage filter (ARM targets)
+// ============================================================
+
+/// Drop .vrec assets not referenced by a `DRAW_RECORDING("name", ...)` call.
+/// All other asset types pass through unchanged (the ARM backend emits every
+/// discovered asset of the other kinds; recordings are usage-filtered so an
+/// unreferenced capture never bloats the ROM).
+pub fn filter_recording_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInfo> {
+    if !assets.iter().any(|a| matches!(a.asset_type, AssetType::Recording)) {
+        return assets.to_vec();
+    }
+    let mut used: HashSet<String> = HashSet::new();
+    for item in &module.items {
+        match item {
+            Item::Function(f) => {
+                for st in &f.body {
+                    collect_recording_names_stmt(st, &mut used);
+                }
+            }
+            Item::Const { value, .. } | Item::GlobalLet { value, .. } => {
+                collect_recording_names_expr(value, &mut used);
+            }
+            Item::ExprStatement(e) => collect_recording_names_expr(e, &mut used),
+            _ => {}
+        }
+    }
+    assets
+        .iter()
+        .filter(|a| !matches!(a.asset_type, AssetType::Recording) || used.contains(&a.name))
+        .cloned()
+        .collect()
+}
+
+/// Drop .vsmp assets not referenced by a `PLAY_SAMPLE("name")` call.
+/// Mirrors [`filter_recording_assets`]: all other asset types pass through
+/// unchanged; only unreferenced audio samples are pruned so they never bloat
+/// the ROM.
+pub fn filter_sample_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInfo> {
+    if !assets.iter().any(|a| matches!(a.asset_type, AssetType::Sample)) {
+        return assets.to_vec();
+    }
+    let mut used: HashSet<String> = HashSet::new();
+    for item in &module.items {
+        match item {
+            Item::Function(f) => {
+                for st in &f.body {
+                    collect_sample_names_stmt(st, &mut used);
+                }
+            }
+            Item::Const { value, .. } | Item::GlobalLet { value, .. } => {
+                collect_sample_names_expr(value, &mut used);
+            }
+            Item::ExprStatement(e) => collect_sample_names_expr(e, &mut used),
+            _ => {}
+        }
+    }
+    assets
+        .iter()
+        .filter(|a| !matches!(a.asset_type, AssetType::Sample) || used.contains(&a.name))
+        .cloned()
+        .collect()
+}
+
+fn collect_sample_names_stmt(stmt: &Stmt, used: &mut HashSet<String>) {
+    match stmt {
+        Stmt::Expr(e, _) => collect_sample_names_expr(e, used),
+        Stmt::Return(Some(e), _) => collect_sample_names_expr(e, used),
+        Stmt::Let { value, .. } => collect_sample_names_expr(value, used),
+        Stmt::Assign { value, .. } | Stmt::CompoundAssign { value, .. } => {
+            collect_sample_names_expr(value, used);
+        }
+        Stmt::If { cond, body, elifs, else_body, .. } => {
+            collect_sample_names_expr(cond, used);
+            for s in body { collect_sample_names_stmt(s, used); }
+            for (c, b) in elifs {
+                collect_sample_names_expr(c, used);
+                for s in b { collect_sample_names_stmt(s, used); }
+            }
+            if let Some(b) = else_body {
+                for s in b { collect_sample_names_stmt(s, used); }
+            }
+        }
+        Stmt::While { cond, body, .. } => {
+            collect_sample_names_expr(cond, used);
+            for s in body { collect_sample_names_stmt(s, used); }
+        }
+        Stmt::For { start, end, step, body, .. } => {
+            collect_sample_names_expr(start, used);
+            collect_sample_names_expr(end, used);
+            if let Some(st) = step { collect_sample_names_expr(st, used); }
+            for s in body { collect_sample_names_stmt(s, used); }
+        }
+        Stmt::ForIn { iterable, body, .. } => {
+            collect_sample_names_expr(iterable, used);
+            for s in body { collect_sample_names_stmt(s, used); }
+        }
+        Stmt::Switch { expr, cases, default, .. } => {
+            collect_sample_names_expr(expr, used);
+            for (c, b) in cases {
+                collect_sample_names_expr(c, used);
+                for s in b { collect_sample_names_stmt(s, used); }
+            }
+            if let Some(b) = default {
+                for s in b { collect_sample_names_stmt(s, used); }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_sample_names_expr(expr: &Expr, used: &mut HashSet<String>) {
+    match expr {
+        Expr::Call(info) => {
+            if info.name.to_uppercase() == "PLAY_SAMPLE" {
+                if let Some(Expr::StringLit(name)) = info.args.first() {
+                    used.insert(name.clone());
+                }
+            }
+            for a in &info.args { collect_sample_names_expr(a, used); }
+        }
+        Expr::MethodCall(info) => {
+            collect_sample_names_expr(&info.target, used);
+            for a in &info.args { collect_sample_names_expr(a, used); }
+        }
+        Expr::Binary { left, right, .. }
+        | Expr::Compare { left, right, .. }
+        | Expr::Logic { left, right, .. } => {
+            collect_sample_names_expr(left, used);
+            collect_sample_names_expr(right, used);
+        }
+        Expr::Not(e) | Expr::BitNot(e) => collect_sample_names_expr(e, used),
+        Expr::Index { target, index } => {
+            collect_sample_names_expr(target, used);
+            collect_sample_names_expr(index, used);
+        }
+        Expr::FieldAccess { target, .. } => collect_sample_names_expr(target, used),
+        Expr::List(items) => for it in items { collect_sample_names_expr(it, used); },
+        _ => {}
+    }
+}
+
+fn collect_recording_names_stmt(stmt: &Stmt, used: &mut HashSet<String>) {
+    match stmt {
+        Stmt::Expr(e, _) => collect_recording_names_expr(e, used),
+        Stmt::Return(Some(e), _) => collect_recording_names_expr(e, used),
+        Stmt::Let { value, .. } => collect_recording_names_expr(value, used),
+        Stmt::Assign { value, .. } | Stmt::CompoundAssign { value, .. } => {
+            collect_recording_names_expr(value, used);
+        }
+        Stmt::If { cond, body, elifs, else_body, .. } => {
+            collect_recording_names_expr(cond, used);
+            for s in body { collect_recording_names_stmt(s, used); }
+            for (c, b) in elifs {
+                collect_recording_names_expr(c, used);
+                for s in b { collect_recording_names_stmt(s, used); }
+            }
+            if let Some(b) = else_body {
+                for s in b { collect_recording_names_stmt(s, used); }
+            }
+        }
+        Stmt::While { cond, body, .. } => {
+            collect_recording_names_expr(cond, used);
+            for s in body { collect_recording_names_stmt(s, used); }
+        }
+        Stmt::For { start, end, step, body, .. } => {
+            collect_recording_names_expr(start, used);
+            collect_recording_names_expr(end, used);
+            if let Some(st) = step { collect_recording_names_expr(st, used); }
+            for s in body { collect_recording_names_stmt(s, used); }
+        }
+        Stmt::ForIn { iterable, body, .. } => {
+            collect_recording_names_expr(iterable, used);
+            for s in body { collect_recording_names_stmt(s, used); }
+        }
+        Stmt::Switch { expr, cases, default, .. } => {
+            collect_recording_names_expr(expr, used);
+            for (c, b) in cases {
+                collect_recording_names_expr(c, used);
+                for s in b { collect_recording_names_stmt(s, used); }
+            }
+            if let Some(b) = default {
+                for s in b { collect_recording_names_stmt(s, used); }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_recording_names_expr(expr: &Expr, used: &mut HashSet<String>) {
+    match expr {
+        Expr::Call(info) => {
+            if info.name.to_uppercase() == "DRAW_RECORDING" {
+                if let Some(Expr::StringLit(name)) = info.args.first() {
+                    used.insert(name.clone());
+                }
+            }
+            for a in &info.args { collect_recording_names_expr(a, used); }
+        }
+        Expr::MethodCall(info) => {
+            collect_recording_names_expr(&info.target, used);
+            for a in &info.args { collect_recording_names_expr(a, used); }
+        }
+        Expr::Binary { left, right, .. }
+        | Expr::Compare { left, right, .. }
+        | Expr::Logic { left, right, .. } => {
+            collect_recording_names_expr(left, used);
+            collect_recording_names_expr(right, used);
+        }
+        Expr::Not(e) | Expr::BitNot(e) => collect_recording_names_expr(e, used),
+        Expr::Index { target, index } => {
+            collect_recording_names_expr(target, used);
+            collect_recording_names_expr(index, used);
+        }
+        Expr::FieldAccess { target, .. } => collect_recording_names_expr(target, used),
+        Expr::List(items) => for it in items { collect_recording_names_expr(it, used); },
+        _ => {}
+    }
 }
 
 // ============================================================
@@ -303,6 +632,44 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
                     }
                 }
             }
+            AssetType::Recording => {
+                let text = match fs::read_to_string(&asset.path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not read {}: {}\n", asset.path, e));
+                        s.push_str(&format!("    .balign 4\n.global _{sym}_VREC\n_{sym}_VREC:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                let vrec: VrecResource = match serde_json::from_str(&text) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not parse {}: {}\n", asset.path, e));
+                        s.push_str(&format!("    .balign 4\n.global _{sym}_VREC\n_{sym}_VREC:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                s.push_str(&compile_vrec(&vrec, &asset.name));
+            }
+            AssetType::Sample => {
+                let text = match fs::read_to_string(&asset.path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not read {}: {}\n", asset.path, e));
+                        s.push_str(&format!("    .balign 4\n.global _{sym}_SMP\n_{sym}_SMP:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                let vsmp: VsmpResource = match serde_json::from_str(&text) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        s.push_str(&format!("@ WARNING: could not parse {}: {}\n", asset.path, e));
+                        s.push_str(&format!("    .balign 4\n.global _{sym}_SMP\n_{sym}_SMP:\n    .word 0\n\n"));
+                        continue;
+                    }
+                };
+                s.push_str(&compile_vsmp(&vsmp, &asset.name));
+            }
             AssetType::Enemy => {
                 let text = match fs::read_to_string(&asset.path) {
                     Ok(t) => t,
@@ -328,6 +695,149 @@ pub fn emit_arm_assets(assets: &[AssetInfo]) -> String {
         }
     }
 
+    s
+}
+
+// ============================================================
+// Recording compiler (.vrec → frame/chain table)
+// ============================================================
+//
+// POLYLINE CHAINING (2026-07): consecutive segments that share an endpoint AND
+// intensity are folded into a single chain (start point once + one delta per
+// line) by the target-agnostic `crate::vrec_chain::chain_frame`. Traced
+// contours are closed polylines, so each interior vertex was stored twice
+// (~55% redundant); chaining ~halves the flash size and, on real Vectrex
+// hardware, removes the per-segment beam reset+reposition (the costly analog
+// op) → higher vector budget / less flicker. The .vrec FILE format is UNCHANGED
+// — chaining is a compile-time transform.
+//
+// Binary layout (read by vpy_draw_recording in drawing.rs):
+//   _<NAME>_VREC:                       (4-byte aligned)
+//     .word  frame_count
+//     .word  offset_frame0, offset_frame1, ...  @ byte offsets from _<NAME>_VREC
+//   frame N:                            (2-byte aligned)
+//     .hword chain_count
+//     per chain:
+//       .byte start_x, start_y, intensity, seg_count  (i8,i8,u8,u8 — 4 bytes)
+//       .byte dx, dy × seg_count                      (i8 deltas — 2*seg_count)
+//
+// A chain of N segments costs 4 + 2N bytes vs the old 5N (break-even at N>=2).
+// Deltas are clamped to i8 at compile time exactly like the old per-segment
+// path (no accuracy regression). A chain longer than 255 deltas (rare) is split
+// into consecutive chains, re-anchored at the raw pen position.
+//
+// Frame offsets are emitted as assembler label-difference expressions
+// (_<NAME>_VREC_Fn - _<NAME>_VREC) so gas computes them — no address math
+// in the codegen, consistent with the "linker owns addresses" rule.
+const VREC_MAX_DELTAS_PER_CHAIN: usize = 255;
+
+fn compile_vrec(vrec: &VrecResource, override_name: &str) -> String {
+    use crate::vrec_chain::{chain_frame, Segment};
+    let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let frame_count = vrec.frames.len();
+
+    let clamp8 = |v: i32| v.clamp(-127, 127) as i8;
+
+    let mut s = String::new();
+    s.push_str(&format!(
+        "@ --- {} RECORDING ({} frame(s), fps={}, polyline-chained) ---\n",
+        override_name, frame_count, vrec.fps
+    ));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_VREC\n_{sym}_VREC:\n"));
+    s.push_str(&format!("    .word   {}               @ frame_count\n", frame_count));
+    for i in 0..frame_count {
+        s.push_str(&format!(
+            "    .word   _{sym}_VREC_F{i} - _{sym}_VREC  @ offset frame {i}\n"
+        ));
+    }
+    for (i, frame) in vrec.frames.iter().enumerate() {
+        // Fold this frame's ordered segments into polyline chains.
+        let segs: Vec<Segment> = frame.segments.iter()
+            .map(|seg| Segment { x0: seg.x0, y0: seg.y0, x1: seg.x1, y1: seg.y1, i: seg.i })
+            .collect();
+        let chains = chain_frame(&segs);
+
+        // Emit each chain, splitting any chain with > 255 deltas so seg_count
+        // fits in one byte. A split re-anchors at the raw pen position.
+        let mut emitted: Vec<(i32, i32, i32, Vec<(i32, i32)>)> = Vec::new();
+        for c in &chains {
+            if c.deltas.len() <= VREC_MAX_DELTAS_PER_CHAIN {
+                emitted.push((c.start.0, c.start.1, c.intensity, c.deltas.clone()));
+            } else {
+                let (mut px, mut py) = c.start;
+                for part in c.deltas.chunks(VREC_MAX_DELTAS_PER_CHAIN) {
+                    emitted.push((px, py, c.intensity, part.to_vec()));
+                    for (dx, dy) in part {
+                        px += dx;
+                        py += dy;
+                    }
+                }
+            }
+        }
+
+        s.push_str("    .balign 2\n");
+        s.push_str(&format!("_{sym}_VREC_F{i}:\n"));
+        s.push_str(&format!(
+            "    .hword  {}               @ chain_count\n",
+            emitted.len()
+        ));
+        for (sx, sy, inten, deltas) in &emitted {
+            let start_x = clamp8(*sx);
+            let start_y = clamp8(*sy);
+            let intensity = (*inten).clamp(0, 127) as u8;
+            s.push_str(&format!(
+                "    .byte   0x{:02X}, 0x{:02X}, 0x{:02X}, 0x{:02X}  @ start=({},{}) i={} segs={}\n",
+                start_x as u8, start_y as u8, intensity, deltas.len() as u8,
+                start_x, start_y, intensity, deltas.len()
+            ));
+            for (dx, dy) in deltas {
+                let cdx = clamp8(*dx);
+                let cdy = clamp8(*dy);
+                s.push_str(&format!(
+                    "    .byte   0x{:02X}, 0x{:02X}  @ d=({},{})\n",
+                    cdx as u8, cdy as u8, cdx, cdy
+                ));
+            }
+        }
+    }
+    s.push('\n');
+    s
+}
+
+// ============================================================
+// Sample compiler (.vsmp → 4-bit PCM ROM table)
+// ============================================================
+//
+// Binary layout (read by the core1 audio streamer — SYS_PLAY_SAMPLE):
+//   _<NAME>_SMP:                       (4-byte aligned)
+//     .word  sample_rate               @ Hz (e.g. 8000)
+//     .word  num_samples               @ number of 4-bit samples
+//     .byte  <packed 4-bit bytes...>   @ 2 samples/byte, low nibble = even sample
+//
+// The byte payload is the base64-decoded "data" field, emitted 16 bytes/row.
+
+fn compile_vsmp(vsmp: &VsmpResource, override_name: &str) -> String {
+    let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let bytes = base64_decode(&vsmp.data);
+
+    let mut s = String::new();
+    s.push_str(&format!(
+        "@ --- {} SAMPLE ({} samples @ {} Hz, {} packed bytes) ---\n",
+        override_name, vsmp.num_samples, vsmp.sample_rate, bytes.len()
+    ));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_SMP\n_{sym}_SMP:\n"));
+    s.push_str(&format!("    .word   {}               @ sample_rate (Hz)\n", vsmp.sample_rate));
+    s.push_str(&format!("    .word   {}               @ num_samples\n", vsmp.num_samples));
+    for chunk in bytes.chunks(16) {
+        let row: Vec<String> = chunk.iter().map(|b| format!("0x{:02X}", b)).collect();
+        s.push_str(&format!("    .byte   {}\n", row.join(", ")));
+    }
+    if bytes.is_empty() {
+        s.push_str("    .byte   0x00            @ empty payload\n");
+    }
+    s.push('\n');
     s
 }
 
@@ -523,11 +1033,19 @@ fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
         prev_frame = *frame;
     }
 
-    // Loop marker: fires at loopEnd, jumps back to loop_event_byte_offset
-    let last_event_frame = events.last().map(|(f, _)| *f).unwrap_or(0);
-    let loop_marker_delay = loop_end_frame.saturating_sub(last_event_frame).saturating_sub(1).min(255) as u8;
-    s.push_str(&format!("    .byte   {}, 0xFF   @ loop back (fires frame ~{})\n",
-        loop_marker_delay, loop_end_frame));
+    // Terminator: loop marker (0xFF) if the track loops, else end marker (num_writes=0).
+    // The end marker mirrors the SFX terminator (".byte 0, 0"); the runtime stops
+    // playback on num_writes=0, leaving the PSG silent (note-off frames already
+    // wrote volume=0 before the terminator).
+    if vmus.r#loop {
+        // Loop marker: fires at loopEnd, jumps back to loop_event_byte_offset
+        let last_event_frame = events.last().map(|(f, _)| *f).unwrap_or(0);
+        let loop_marker_delay = loop_end_frame.saturating_sub(last_event_frame).saturating_sub(1).min(255) as u8;
+        s.push_str(&format!("    .byte   {}, 0xFF   @ loop back (fires frame ~{})\n",
+            loop_marker_delay, loop_end_frame));
+    } else {
+        s.push_str("    .byte   0, 0   @ end (no loop)\n");
+    }
     s.push('\n');
     s
 }
@@ -853,6 +1371,13 @@ fn emit_3d_resource(res: &VecResource, override_name: &str) -> String {
             s.push_str(&format!("    .byte   {idx}\n"));
         }
     }
+    // Re-align to a 4-byte boundary: this block ends with an odd-length .byte
+    // stream (path index bytes). Without this, whatever the linker places after
+    // the embedded game (e.g. the firmware's SVCall handler when the .s is
+    // global_asm'd into the BIOS) lands at an odd address → misaligned Thumb code
+    // → HardFault on the first svc → blank screen. (An unused .vec still emits
+    // this data, so the crash happens even when the asset is never drawn.)
+    s.push_str("    .balign 4\n");
     s.push('\n');
     s
 }
@@ -965,4 +1490,203 @@ fn compile_vanim_for_arm(resource: &VanimResource, asset_name: &str) -> String {
     }
     s.push('\n');
     s
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(src: &str) -> Module {
+        let tokens = vpy_parser::lex(src).expect("lex");
+        vpy_parser::parser::parse(tokens, "test").expect("parse")
+    }
+
+    const VREC_JSON: &str = r#"{
+        "version": "1.0",
+        "name": "preview",
+        "fps": 15,
+        "frames": [
+            { "segments": [
+                { "x0": -50, "y0": 10, "x1": 30, "y1": 20, "i": 95 },
+                { "x0": 30, "y0": 20, "x1": 30, "y1": -40, "i": 95 },
+                { "x0": 200, "y0": -200, "x1": 0, "y1": 0, "i": 300 }
+            ] },
+            { "segments": [
+                { "x0": 0, "y0": 0, "x1": 127, "y1": -127, "i": 40 },
+                { "x0": 5, "y0": 5, "x1": -5, "y1": -5, "i": 1 }
+            ] }
+        ]
+    }"#;
+
+    #[test]
+    fn test_compile_vrec_table_layout() {
+        let vrec: VrecResource = serde_json::from_str(VREC_JSON).unwrap();
+        let asm = compile_vrec(&vrec, "preview");
+
+        // Header: aligned symbol + frame_count + label-difference offsets
+        assert!(asm.contains(".global _PREVIEW_VREC"), "missing global symbol:\n{asm}");
+        assert!(asm.contains("_PREVIEW_VREC:\n    .word   2               @ frame_count"),
+            "missing frame_count word:\n{asm}");
+        assert!(asm.contains(".word   _PREVIEW_VREC_F0 - _PREVIEW_VREC"),
+            "missing frame 0 offset:\n{asm}");
+        assert!(asm.contains(".word   _PREVIEW_VREC_F1 - _PREVIEW_VREC"),
+            "missing frame 1 offset:\n{asm}");
+
+        // Frame bodies: .hword chain_count + per-chain {header, deltas}.
+        // Frame 0's first two segments share the endpoint (30,20) and intensity
+        // 95, so they fold into ONE chain of 2 deltas; the third segment starts
+        // a new chain → 2 chains. Frame 1's two segments are disjoint → 2 chains.
+        assert!(asm.contains("_PREVIEW_VREC_F0:\n    .hword  2"),
+            "frame 0 must have 2 chains:\n{asm}");
+        assert!(asm.contains("_PREVIEW_VREC_F1:\n    .hword  2"),
+            "frame 1 must have 2 chains:\n{asm}");
+        // Chain 0 header: start_x=-50 (0xCE), start_y=10 (0x0A), i=95 (0x5F), seg_count=2
+        assert!(asm.contains(".byte   0xCE, 0x0A, 0x5F, 0x02"),
+            "chain 0 header bytes wrong:\n{asm}");
+        // Chain 0 deltas: (80,10) then (0,-60 → 0xC4)
+        assert!(asm.contains(".byte   0x50, 0x0A"),
+            "chain 0 delta 0 wrong:\n{asm}");
+        assert!(asm.contains(".byte   0x00, 0xC4"),
+            "chain 0 delta 1 wrong:\n{asm}");
+        // Chain 1 start clamped: (200,-200)→(127,-127)=(0x7F,0x81), i 300→127, seg_count=1;
+        // its single delta (0-200, 0+200)=(-200,200) clamps to (-127,127)=(0x81,0x7F)
+        assert!(asm.contains(".byte   0x7F, 0x81, 0x7F, 0x01"),
+            "chain 1 header clamping wrong:\n{asm}");
+        assert!(asm.contains(".byte   0x81, 0x7F"),
+            "chain 1 delta clamping wrong:\n{asm}");
+    }
+
+    #[test]
+    fn test_filter_recording_assets() {
+        let dir = std::env::temp_dir().join(format!("vpy_vrec_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let used_path = dir.join("preview.vrec");
+        let unused_path = dir.join("other.vrec");
+        std::fs::write(&used_path, VREC_JSON).unwrap();
+        std::fs::write(&unused_path, VREC_JSON).unwrap();
+
+        let assets = vec![
+            AssetInfo {
+                name: "preview".into(),
+                path: used_path.display().to_string(),
+                asset_type: AssetType::Recording,
+            },
+            AssetInfo {
+                name: "other".into(),
+                path: unused_path.display().to_string(),
+                asset_type: AssetType::Recording,
+            },
+            AssetInfo {
+                name: "ship".into(),
+                path: dir.join("ship.vec").display().to_string(),
+                asset_type: AssetType::Vector,
+            },
+        ];
+
+        let module = parse(concat!(
+            "def main():\n    pass\n\n",
+            "def loop():\n",
+            "    t = t + 1\n",
+            "    DRAW_RECORDING(\"preview\", 0, 0, 45, t)\n",
+        ));
+        let filtered = filter_recording_assets(&assets, &module);
+
+        assert!(filtered.iter().any(|a| a.name == "preview"),
+            "referenced .vrec must survive the filter");
+        assert!(!filtered.iter().any(|a| a.name == "other"),
+            "unreferenced .vrec must be dropped");
+        assert!(filtered.iter().any(|a| a.name == "ship"),
+            "non-recording assets pass through unchanged");
+
+        // Full emission includes the used recording table only
+        let asm = emit_arm_assets(&filtered);
+        assert!(asm.contains("_PREVIEW_VREC:"), "used recording must be emitted:\n{asm}");
+        assert!(!asm.contains("_OTHER_VREC"), "unused recording must not be emitted");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // base64 of the two bytes [0x21, 0x43] = "IUM=". Low nibble = even sample:
+    //   byte0=0x21 → sample0=1, sample1=2 ; byte1=0x43 → sample2=3, sample3=4.
+    const VSMP_JSON: &str = r#"{
+        "version": "1.0",
+        "name": "beep",
+        "sampleRate": 8000,
+        "bits": 4,
+        "numSamples": 4,
+        "data": "IUM="
+    }"#;
+
+    #[test]
+    fn test_base64_decode() {
+        assert_eq!(base64_decode("IUM="), vec![0x21, 0x43]);
+        assert_eq!(base64_decode(""), Vec::<u8>::new());
+        // Standard RFC 4648 vector: "Man" → "TWFu"
+        assert_eq!(base64_decode("TWFu"), b"Man".to_vec());
+    }
+
+    #[test]
+    fn test_compile_vsmp_table_layout() {
+        let vsmp: VsmpResource = serde_json::from_str(VSMP_JSON).unwrap();
+        let asm = compile_vsmp(&vsmp, "beep");
+
+        assert!(asm.contains(".balign 4"), "sample table must be 4-byte aligned:\n{asm}");
+        assert!(asm.contains(".global _BEEP_SMP"), "missing global symbol:\n{asm}");
+        assert!(asm.contains("_BEEP_SMP:\n    .word   8000"),
+            "missing sample_rate word:\n{asm}");
+        assert!(asm.contains(".word   4               @ num_samples"),
+            "missing num_samples word:\n{asm}");
+        assert!(asm.contains(".byte   0x21, 0x43"),
+            "packed 4-bit payload bytes wrong:\n{asm}");
+    }
+
+    #[test]
+    fn test_filter_sample_assets() {
+        let dir = std::env::temp_dir().join(format!("vpy_vsmp_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let used_path = dir.join("beep.vsmp");
+        let unused_path = dir.join("other.vsmp");
+        std::fs::write(&used_path, VSMP_JSON).unwrap();
+        std::fs::write(&unused_path, VSMP_JSON).unwrap();
+
+        let assets = vec![
+            AssetInfo {
+                name: "beep".into(),
+                path: used_path.display().to_string(),
+                asset_type: AssetType::Sample,
+            },
+            AssetInfo {
+                name: "other".into(),
+                path: unused_path.display().to_string(),
+                asset_type: AssetType::Sample,
+            },
+            AssetInfo {
+                name: "ship".into(),
+                path: dir.join("ship.vec").display().to_string(),
+                asset_type: AssetType::Vector,
+            },
+        ];
+
+        let module = parse(concat!(
+            "def main():\n    pass\n\n",
+            "def loop():\n",
+            "    PLAY_SAMPLE(\"beep\")\n",
+        ));
+        let filtered = filter_sample_assets(&assets, &module);
+
+        assert!(filtered.iter().any(|a| a.name == "beep"),
+            "referenced .vsmp must survive the filter");
+        assert!(!filtered.iter().any(|a| a.name == "other"),
+            "unreferenced .vsmp must be dropped");
+        assert!(filtered.iter().any(|a| a.name == "ship"),
+            "non-sample assets pass through unchanged");
+
+        let asm = emit_arm_assets(&filtered);
+        assert!(asm.contains("_BEEP_SMP:"), "used sample must be emitted:\n{asm}");
+        assert!(!asm.contains("_OTHER_SMP"), "unused sample must not be emitted");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

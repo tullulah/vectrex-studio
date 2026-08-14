@@ -15,7 +15,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateRecentProjects: (recents: Array<{name: string; path: string}>) => ipcRenderer.invoke('menu:updateRecentProjects', recents),
   // Legacy emulator IPC removed. All runtime control now via WASM service in renderer.
   emuAssemble: (args: { asmPath: string; outPath?: string; extra?: string[] }) => ipcRenderer.invoke('emu:assemble', args) as Promise<{ ok?: boolean; error?: string; binPath?: string; size?: number; base64?: string; stdout?: string; stderr?: string }>,
-  runCompile: (args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string }) => ipcRenderer.invoke('run:compile', args) as Promise<{ ok?: boolean; error?: string; binPath?: string; size?: number; stdout?: string; stderr?: string; conflict?: boolean; currentMTime?: number }>,
+  runCompile: (args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string }) => ipcRenderer.invoke('run:compile', args) as Promise<{ ok?: boolean; error?: string; binPath?: string; size?: number; stdout?: string; stderr?: string; conflict?: boolean; currentMTime?: number }>,
   onRunStdout: (cb: (chunk: string) => void) => ipcRenderer.on('run://stdout', (_e: IpcRendererEvent, data: string) => cb(data)),
   onRunStderr: (cb: (chunk: string) => void) => ipcRenderer.on('run://stderr', (_e: IpcRendererEvent, data: string) => cb(data)),
   onRunDiagnostics: (cb: (diags: Array<{ file: string; line: number; col: number; message: string }>) => void) => ipcRenderer.on('run://diagnostics', (_e: IpcRendererEvent, diags) => cb(diags)),
@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onCompiledBin: (cb: (payload: { base64: string; size: number; binPath: string }) => void) => ipcRenderer.on('emu://compiledBin', (_e: IpcRendererEvent, data) => cb(data)),
   // setVectorMode legacy removed
   listSources: (args?: { limit?: number }) => ipcRenderer.invoke('list:sources', args) as Promise<{ ok?:boolean; sources?: Array<{ path:string; kind:'vpy'|'asm'; size:number; mtime:number }> }> ,
+  sdSimList: () => ipcRenderer.invoke('sd:simList') as Promise<{ ok?: boolean; dir?: string; files?: string[]; previews?: Record<string, string>; error?: string }>,
+  vrecCompile: (vrecPath: string) => ipcRenderer.invoke('vrec:compile', vrecPath) as Promise<{ ok?: boolean; vrbPath?: string; error?: string }>,
   // Disassemble a ROM snapshot (base64) using buildtools/vpy_disasm
   disassembleSnapshot: (args: { base64: string; startHex?: string; binPath?: string }) => ipcRenderer.invoke('tools:disassembleSnapshot', args) as Promise<{ ok: boolean; output?: string; error?: string; snapshotPath?: string; dissPath?: string; message?: string; stderr?: string }>,
 
@@ -66,6 +68,35 @@ contextBridge.exposeInMainWorld('files', {
     ipcRenderer.on('file://changed', handler);
     // Return cleanup function to remove listener
     return () => ipcRenderer.removeListener('file://changed', handler);
+  },
+});
+
+// Gameplay video export: renderer records the emulator as WebM, main
+// transcodes to MP4 with the bundled ffmpeg and returns the saved path.
+contextBridge.exposeInMainWorld('videoExport', {
+  saveMp4: (args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) =>
+    ipcRenderer.invoke('video:saveMp4', args) as Promise<{ path: string } | { canceled: true } | { error: string }>,
+  // Raw WebM save (no ffmpeg) — isolates whether MediaRecorder encoded audio.
+  saveWebm: (args: { webmBytes: ArrayBuffer | Uint8Array; name?: string }) =>
+    ipcRenderer.invoke('video:saveWebm', args) as Promise<{ path: string } | { canceled: true } | { error: string }>,
+});
+
+// Vector Movie editor: spawn Python converters + progress stream + file picker.
+contextBridge.exposeInMainWorld('movie', {
+  convert: (args: { kind: 'video' | 'audio'; inputPath: string; outPath: string; opts?: Record<string, any> }) =>
+    ipcRenderer.invoke('movie:convert', args) as Promise<{ ok: true; outPath: string; stdout?: string; stderr?: string } | { error: string }>,
+  pickFile: (args: { kind: 'video' | 'audio' }) =>
+    ipcRenderer.invoke('movie:pickFile', args) as Promise<{ path: string; name: string } | null>,
+  probe: (args: { videoPath: string }) =>
+    ipcRenderer.invoke('movie:probe', args) as Promise<{ durationSec: number; hasAudio: boolean } | { error: string }>,
+  previewFrame: (args: { videoPath: string; time: number; opts?: Record<string, any> }) =>
+    ipcRenderer.invoke('movie:previewFrame', args) as Promise<
+      { segments: Array<{ x0: number; y0: number; x1: number; y1: number; i: number }>; width: number; height: number; originalPng: string; maskPng: string } | { error: string }
+    >,
+  onProgress: (cb: (line: string) => void) => {
+    const handler = (_e: IpcRendererEvent, data: string) => cb(data);
+    ipcRenderer.on('movie://progress', handler);
+    return () => ipcRenderer.removeListener('movie://progress', handler);
   },
 });
 

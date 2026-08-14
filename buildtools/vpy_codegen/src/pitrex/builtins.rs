@@ -88,7 +88,7 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     s.push_str(&emit_pitrex_draw_anim());
 
     // ── Tree-shaken (clearly optional, larger / riskier helpers) ────────
-    if any(&["SET_TEXT_SIZE", "SET_TEXT_COLOR"]) { s.push_str(&emit_pitrex_text_extras()); }
+    if any(&["SET_TEXT_SIZE"]) { s.push_str(&emit_pitrex_text_extras()); }
     if any(&["LEVEL_COLLISION_X", "LEVEL_COLLISION_Y", "LEVEL_VERTICAL_WALL_HIT"]) {
         s.push_str(&emit_pitrex_level_collision());
     }
@@ -106,6 +106,11 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
         // wander_set_sprite is reached transitively from UPDATE_ENEMIES.
         s.push_str(&emit_pitrex_wander_set_sprite());
     }
+    // .vrec vector-recording playback ("vector movie" video track). Emitted
+    // only when a DRAW_RECORDING("name", ...) call appears in the AST.
+    if any(&["DRAW_RECORDING"])    { s.push_str(&emit_pitrex_draw_recording()); }
+    if any(&["SAMPLE_POS"])        { s.push_str(&emit_pitrex_sample_pos()); }
+    if any(&["PLAY_SAMPLE"])       { s.push_str(&emit_pitrex_play_sample()); }
     if any(&["SPAWN_ENEMIES"])     { s.push_str(&emit_pitrex_spawn_enemies()); }
     if any(&["UPDATE_ENEMIES"])    { s.push_str(&emit_pitrex_update_enemies()); }
     if any(&["DRAW_ENEMIES"])      { s.push_str(&emit_pitrex_draw_enemies()); }
@@ -704,6 +709,200 @@ fn emit_pitrex_draw_vector_ex() -> String {
     s
 }
 
+// ── Draw recording (.vrec "vector movie" playback) ─────────────────────────
+
+fn emit_pitrex_draw_recording() -> String {
+    // pitrex_draw_recording(r0=vrec_ptr, r1=x, r2=y, r3=scale 0-128, [sp]=frame)
+    //
+    // Plays one frame of a POLYLINE-CHAINED .vrec. `frame` is free-running; this
+    // routine takes frame % frame_count internally.
+    //
+    // Data layout (chained, from compile_vrec in assets.rs):
+    //   _<NAME>_VREC: .word frame_count
+    //                 .word off0, off1, ...          @ byte offsets from base
+    //   frame N:      .hword chain_count
+    //     per chain:  .byte start_x, start_y, intensity, seg_count
+    //                 .byte dx,dy × seg_count         @ i8 deltas
+    //
+    // Each chain is walked with a running PEN in VPy units: pen = scaled+centered
+    // start, then every delta advances pen by (delta*scale)>>7 and draws the line
+    // pen→next via v_directDraw32(x0,y0,x1,y1,bright) in ×127 fixed-point (same
+    // convention as pitrex_draw_line). Center is added to the chain START only
+    // (deltas are relative). Pen persists in RAM (DRAW_REC_PEN_X/Y) across the
+    // v_directDraw32 calls.
+    //
+    // NOTE: on pitrex the DRAW win of chaining is small — v_directDraw32 is an
+    // absolute two-endpoint line, so the call count is unchanged. The win here is
+    // DATA size (flash) + consistency; the big hardware-draw win (relative
+    // draw-delta with no per-segment beam reset/reposition) is on rp2350/m6809.
+    // ×127 absolute on-screen size is TBD on real hardware.
+    //
+    // Register map (callee-saved r4-r11 survive v_directDraw32):
+    //   r4 = data cursor          r8  = chains remaining
+    //   r5 = x center (VPy)       r9  = deltas remaining in chain
+    //   r6 = y center (VPy)       r10 = per-chain brightness
+    //   r7 = scale (0-128)        r11 = 127 constant
+    // ARMv6 has no hardware divide → frame % frame_count via __aeabi_idivmod.
+    // ARM32 mul Rd≠Rm honoured (`mul rD, r7|r11, rM`).
+    let mut s = String::new();
+    s.push_str("@ pitrex_draw_recording(r0=vrec_ptr, r1=x, r2=y, r3=scale 0-128, [sp]=frame)\n");
+    s.push_str(".global pitrex_draw_recording\n.type pitrex_draw_recording, %function\npitrex_draw_recording:\n");
+    // push 9 regs = 36 bytes → the frame stack arg is at [sp+36].
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
+    s.push_str("    mov     r4, r0              @ vrec base\n");
+    s.push_str("    mov     r5, r1              @ x center\n");
+    s.push_str("    mov     r6, r2              @ y center\n");
+    s.push_str("    mov     r7, r3              @ scale (0-128, 128 = 100%)\n");
+    s.push_str("    mov     r11, #127           @ VPy→PiTrex fixed-point factor\n");
+    // frame_idx = frame % frame_count
+    s.push_str("    ldr     r2, [r4]            @ frame_count\n");
+    s.push_str("    cmp     r2, #0\n");
+    s.push_str("    beq     .Ldvrec_done        @ empty recording\n");
+    s.push_str("    ldr     r0, [sp, #36]       @ frame counter (stack arg)\n");
+    s.push_str("    mov     r1, r2              @ denominator = frame_count\n");
+    s.push_str("    bl      __aeabi_idivmod     @ r1 = frame % frame_count\n");
+    s.push_str("    add     r1, r1, #1          @ skip frame_count word\n");
+    s.push_str("    lsl     r1, r1, #2          @ (idx+1)*4 byte index\n");
+    s.push_str("    ldr     r0, [r4, r1]        @ byte offset of frame from base\n");
+    s.push_str("    add     r4, r4, r0          @ r4 = frame ptr (now the cursor)\n");
+    s.push_str("    ldrh    r8, [r4]            @ chain_count\n");
+    s.push_str("    add     r4, r4, #2          @ r4 = first chain header\n");
+
+    // ── per-chain ──
+    s.push_str(".Ldvrec_chain:\n");
+    s.push_str("    cmp     r8, #0\n");
+    s.push_str("    beq     .Ldvrec_done\n");
+    // intensity (recorded, SET_INTENSITY override wins)
+    s.push_str("    ldrb    r10, [r4, #2]       @ recorded chain intensity\n");
+    s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
+    s.push_str("    ldrb    r0, [r0]\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    movne   r10, r0             @ SET_INTENSITY override wins\n");
+    s.push_str("    ldrb    r9, [r4, #3]        @ seg_count (deltas)\n");
+    // pen_x = (start_x*scale>>7) + center_x   (VPy units)
+    s.push_str("    ldrsb   r12, [r4, #0]       @ start_x (i8)\n");
+    s.push_str("    mul     r12, r7, r12        @ * scale (Rd=r12 != Rm=r7)\n");
+    s.push_str("    asr     r12, r12, #7\n");
+    s.push_str("    add     r12, r12, r5        @ + center_x\n");
+    s.push_str("    ldr     r0, =DRAW_REC_PEN_X\n");
+    s.push_str("    str     r12, [r0]           @ pen_x\n");
+    // pen_y = (start_y*scale>>7) + center_y
+    s.push_str("    ldrsb   r12, [r4, #1]       @ start_y (i8)\n");
+    s.push_str("    mul     r12, r7, r12\n");
+    s.push_str("    asr     r12, r12, #7\n");
+    s.push_str("    add     r12, r12, r6        @ + center_y\n");
+    s.push_str("    str     r12, [r0, #4]       @ pen_y (DRAW_REC_PEN_Y = PEN_X+4)\n");
+    s.push_str("    add     r4, r4, #4          @ cursor → first delta pair\n");
+
+    // ── per-delta: draw pen→next, then pen = next ──
+    s.push_str(".Ldvrec_delta:\n");
+    s.push_str("    cmp     r9, #0\n");
+    s.push_str("    beq     .Ldvrec_chain_next\n");
+    s.push_str("    ldr     r12, =DRAW_REC_PEN_X\n");
+    s.push_str("    ldr     r0, [r12]           @ x0 = pen_x (VPy)\n");
+    s.push_str("    ldr     r1, [r12, #4]       @ y0 = pen_y (VPy)\n");
+    // x1 = x0 + (dx*scale>>7)
+    s.push_str("    ldrsb   r2, [r4, #0]        @ dx (i8)\n");
+    s.push_str("    mul     r2, r7, r2          @ dx*scale (Rd=r2 != Rm=r7)\n");
+    s.push_str("    asr     r2, r2, #7\n");
+    s.push_str("    add     r2, r0, r2          @ x1 = x0 + scaled dx\n");
+    // y1 = y0 + (dy*scale>>7)
+    s.push_str("    ldrsb   r3, [r4, #1]        @ dy (i8)\n");
+    s.push_str("    mul     r3, r7, r3\n");
+    s.push_str("    asr     r3, r3, #7\n");
+    s.push_str("    add     r3, r1, r3          @ y1 = y0 + scaled dy\n");
+    // pen = (x1, y1)
+    s.push_str("    str     r2, [r12]           @ pen_x = x1\n");
+    s.push_str("    str     r3, [r12, #4]       @ pen_y = y1\n");
+    // ×127 → v_directDraw32 args (r0=x0,r1=y0,r2=x1,r3=y1)
+    s.push_str("    mul     r0, r11, r0         @ x0*127 (Rd=r0 != Rm=r11)\n");
+    s.push_str("    mul     r1, r11, r1         @ y0*127\n");
+    s.push_str("    mul     r2, r11, r2         @ x1*127\n");
+    s.push_str("    mul     r3, r11, r3         @ y1*127\n");
+    s.push_str("    push    {r10}              @ brightness as 5th arg\n");
+    s.push_str("    bl      v_directDraw32\n");
+    s.push_str("    add     sp, sp, #4\n");
+    s.push_str("    add     r4, r4, #2          @ next delta pair\n");
+    s.push_str("    sub     r9, r9, #1\n");
+    s.push_str("    b       .Ldvrec_delta\n");
+
+    s.push_str(".Ldvrec_chain_next:\n");
+    // r4 already points at the next chain header (past the last delta pair).
+    s.push_str("    sub     r8, r8, #1\n");
+    s.push_str("    b       .Ldvrec_chain\n");
+
+    s.push_str(".Ldvrec_done:\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+// ── SAMPLE_POS (wall-clock frame index) ───────────────────────────────────
+//
+// pitrex_sample_pos(r0=fps) → r0 = current frame index.
+//
+// On rp2350 SAMPLE_POS returns the AUDIO playback position (frame synced to the
+// voice master clock). PiTrex has no voice track, so here it is a free-running
+// WALL-CLOCK frame counter off the BCM system timer (CLO, 1µs, 32-bit): the
+// video plays at real time and DRAW_RECORDING wraps `frame % frame_count`.
+// The clock latches its start on the FIRST call (SAMPLE_POS_START == 0 sentinel).
+//
+//   elapsed_us  = CLO - start                    (unsigned, 32-bit-wrap safe)
+//   us_per_frame = 1_000_000 / fps               (one divide — avoids the
+//   frame        = elapsed_us / us_per_frame       elapsed*fps overflow that a
+//                                                   direct *fps/1e6 would hit)
+// Uses __aeabi_uidiv (ARMv6 has no hardware divide), same lib as DRAW_RECORDING.
+fn emit_pitrex_sample_pos() -> String {
+    let mut s = String::new();
+    s.push_str("@ pitrex_sample_pos(r0=fps) → r0=frame — wall-clock (no voice on pitrex)\n");
+    s.push_str(".global pitrex_sample_pos\n.type pitrex_sample_pos, %function\npitrex_sample_pos:\n");
+    s.push_str("    push    {r4, r5, r6, lr}\n");
+    s.push_str("    mov     r6, r0              @ r6 = fps (survives idiv calls)\n");
+    // CLO now (µs)
+    s.push_str("    ldr     r4, =bcm2835_st\n");
+    s.push_str("    ldr     r4, [r4]            @ dereference: ST base ptr\n");
+    s.push_str("    ldr     r5, [r4, #4]        @ r5 = CLO now (µs)\n");
+    // Latch start on first call (0 = not started)
+    s.push_str("    ldr     r4, =SAMPLE_POS_START\n");
+    s.push_str("    ldr     r0, [r4]            @ r0 = start\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    bne     .Lsp_started\n");
+    s.push_str("    str     r5, [r4]            @ first call: start = now\n");
+    s.push_str("    mov     r0, r5\n");
+    s.push_str(".Lsp_started:\n");
+    s.push_str("    sub     r5, r5, r0          @ r5 = elapsed_us (32-bit-wrap safe)\n");
+    // us_per_frame = 1_000_000 / fps
+    s.push_str("    ldr     r0, =1000000\n");
+    s.push_str("    mov     r1, r6\n");
+    s.push_str("    bl      __aeabi_uidiv       @ r0 = us_per_frame\n");
+    s.push_str("    cmp     r0, #0\n");
+    s.push_str("    moveq   r0, #1              @ guard: never divide by 0 (fps out of range)\n");
+    // frame = elapsed_us / us_per_frame
+    s.push_str("    mov     r1, r0              @ divisor = us_per_frame\n");
+    s.push_str("    mov     r0, r5              @ numerator = elapsed_us\n");
+    s.push_str("    bl      __aeabi_uidiv       @ r0 = frame\n");
+    s.push_str("    pop     {r4, r5, r6, pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+// ── PLAY_SAMPLE (voice track) ─────────────────────────────────────────────
+//
+// pitrex_play_sample(r0 = _<NAME>_SMP asset ptr).
+//
+// On real PiTrex HW this is a NO-OP stub for now — 4-bit-PCM voice streaming to
+// the PSG volume register needs a real-time streamer (the deferred hard part).
+// The IDE emulator TRAPS this symbol (SDK_STUBS in PitrexArm32) and plays the
+// .vsmp via Web Audio, so a vector movie has sound in the IDE. The r0 pointer is
+// kept live so the emulator trap can read the asset header from memory.
+fn emit_pitrex_play_sample() -> String {
+    let mut s = String::new();
+    s.push_str("@ pitrex_play_sample(r0=_NAME_SMP ptr) — HW no-op; emulator traps + plays\n");
+    s.push_str(".global pitrex_play_sample\n.type pitrex_play_sample, %function\npitrex_play_sample:\n");
+    s.push_str("    bx      lr\n\n");
+    s
+}
+
 // ── Joystick / Buttons ────────────────────────────────────────────────────
 
 fn emit_pitrex_j1_x() -> String {
@@ -881,7 +1080,7 @@ fn emit_pitrex_draw_circle() -> String {
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}\n");
     s.push_str("    mov     r4, r0          @ cx\n");
     s.push_str("    mov     r5, r1          @ cy\n");
-    s.push_str("    asr     r6, r2, #1      @ radius = diameter/2\n");
+    s.push_str("    mov     r6, r2          @ radius (3rd arg IS the radius, per the API — was diameter/2)\n");
     s.push_str("    mov     r7, r3          @ brightness\n");
     // Scale center and radius by 127
     s.push_str("    mov     r0, #127\n");
@@ -2330,11 +2529,6 @@ fn emit_pitrex_text_extras() -> String {
     s.push_str("    str     r0, [r1]\n");
     s.push_str("    bx      lr\n");
     s.push_str("    .ltorg\n\n");
-
-    // pitrex_set_text_color(r0=color) — NOP, PiTrex is monochrome (brightness set globally)
-    s.push_str("@ pitrex_set_text_color(r0=color) — NOP on monochrome PiTrex\n");
-    s.push_str(".global pitrex_set_text_color\n.type pitrex_set_text_color, %function\npitrex_set_text_color:\n");
-    s.push_str("    bx      lr\n\n");
 
     s
 }

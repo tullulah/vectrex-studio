@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 use vpy_parser::Expr;
 
-/// DRAW_CIRCLE(xc, yc, diam) or DRAW_CIRCLE(xc, yc, diam, intensity)
+/// DRAW_CIRCLE(xc, yc, radius) or DRAW_CIRCLE(xc, yc, radius, intensity)
 pub fn emit_draw_circle(
     args: &[Expr],
     out: &mut String,
@@ -27,7 +27,7 @@ pub fn emit_draw_circle(
             }
             
             let segs = 16; // 16-sided polygon approximation (use DRAW_CIRCLE_SEG for more)
-            let r = (*diam as f64) / 2.0;
+            let r = *diam as f64; // 3rd arg IS the radius (was diameter/2)
             let mut verts: Vec<(i32, i32)> = Vec::new();
             
             for k in 0..segs {
@@ -247,7 +247,7 @@ pub fn emit_draw_circle_seg(
             }
             
             let segs = (*nseg).clamp(3, 64) as usize;
-            let r = (*diam as f64) / 2.0;
+            let r = *diam as f64; // 3rd arg IS the radius (was diameter/2)
             let mut verts: Vec<(i32, i32)> = Vec::new();
             
             for k in 0..segs {
@@ -631,10 +631,8 @@ pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
         PSHS B                 ; Save intensity on stack\n\
         \n\
         LDB DRAW_CIRCLE_DIAM\n\
-        SEX                    ; Sign-extend to 16-bit (diameter is unsigned 0..255)\n\
-        LSRA                   ; Divide by 2 to get radius\n\
-        RORB\n\
-        STD >DRAW_CIRCLE_TEMP   ; >DRAW_CIRCLE_TEMP = radius (16-bit, big-endian: +0=hi, +1=lo)\n\
+        SEX                    ; Sign-extend to 16-bit (radius is the arg, 0..127)\n\
+        STD >DRAW_CIRCLE_TEMP   ; >DRAW_CIRCLE_TEMP = radius (the 3rd arg IS the radius; was diameter/2)\n\
         \n\
         LDB DRAW_CIRCLE_XC     ; xc (signed -128..127)\n\
         SEX\n\

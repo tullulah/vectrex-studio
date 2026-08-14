@@ -254,7 +254,31 @@ pub fn generate_m6809_asm(
     assets: &[crate::AssetInfo],
 ) -> Result<String, String> {
     let mut asm = String::new();
-    
+
+    // VALIDATE recording names BEFORE filtering (so the "available" list is the
+    // full set on disk). DRAW_RECORDING("name") resolves by the .vrec FILE stem
+    // (e.g. badapple.vrec -> "badapple"), NOT the .vmov manifest name. A mismatch
+    // used to fail late with a cryptic "Undefined symbol: _NAME_VREC".
+    let used_recordings = functions::collect_draw_recording_names(module);
+    if !used_recordings.is_empty() {
+        let available: Vec<String> = assets.iter()
+            .filter(|a| matches!(a.asset_type, crate::AssetType::Recording))
+            .map(|a| a.name.clone())
+            .collect();
+        for rec in &used_recordings {
+            if !available.iter().any(|a| a.eq_ignore_ascii_case(rec)) {
+                return Err(format!(
+                    "DRAW_RECORDING(\"{rec}\"): no recording named '{rec}' found. \
+                     The name must match a .vrec FILE in assets/recordings/ (the file \
+                     stem — e.g. badapple.vrec -> \"badapple\"), NOT the .vmov manifest name. \
+                     Available recordings: {}.",
+                    if available.is_empty() { "(none — add a .vrec to assets/recordings/)".to_string() }
+                    else { available.join(", ") }
+                ));
+            }
+        }
+    }
+
     // FILTER ASSETS: Only embed assets actually used in code (2026-01-20)
     let assets = assets::filter_used_assets(assets, module);
     
@@ -289,6 +313,18 @@ pub fn generate_m6809_asm(
     // cross-bank symbol resolution for the helpers bank is not yet implemented.
     let num_banks = rom_size / bank_size.max(1);
     let is_multibank = rom_size > 32768 && num_banks > 2;
+
+    // SCOPE GUARD: DRAW_RECORDING (.vrec playback) is single-bank only for now.
+    // The banked variant (cross-bank asset access + bank-switched runtime) is a
+    // later task. Fail loudly rather than silently drop the recording.
+    if is_multibank && helpers::analyze_module_helpers(module).contains("DRAW_RECORDING_RUNTIME") {
+        return Err(format!(
+            "DRAW_RECORDING on m6809 is single-bank only for now \
+             (this build is multibank: {} banks). Remove the multibank META \
+             directives or the DRAW_RECORDING call.",
+            num_banks
+        ));
+    }
 
     // Set multibank mode for builtins (affects asset reference generation)
     builtins::set_multibank_mode(is_multibank);
@@ -656,6 +692,12 @@ pub fn generate_m6809_asm(
 
     if !msg_entries.is_empty() {
         builtins::emit_msg_table(&msg_entries, &mut asm);
+    }
+
+    // Simulated SD game list (m6809 preview): emit the name table only when the
+    // program queries it. Real SD lives on rp2350; here it's a home folder.
+    if builtins::module_uses_sd(module) {
+        builtins::emit_sd_tables(&mut asm);
     }
 
     // Emit compact 3D data tables in bank_00 for DRAW_VECTOR_3D.

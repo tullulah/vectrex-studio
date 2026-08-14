@@ -1,3 +1,8 @@
+import { installAudioGraphTracker } from './emulator/recorder/audioGraphTracker.js';
+// Patch AudioContext/AudioNode BEFORE any audio context is created so the video
+// recorder can find whichever context/node actually feeds the speakers.
+installAudioGraphTracker();
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import './i18n.js';
@@ -52,6 +57,10 @@ function App() {
   const pitrexSdPath = useSettings(s => s.pitrexSdPath);
   const uvm2CopyToSD = useSettings(s => s.uvm2CopyToSD);
   const uvm2SdPath = useSettings(s => s.uvm2SdPath);
+  const rp2350FlashMethod = useSettings(s => s.rp2350FlashMethod);
+  const rp2350FirmwareDir = useSettings(s => s.rp2350FirmwareDir);
+  const rp2350SdPath = useSettings(s => s.rp2350SdPath);
+  const rp2350BuildMode = useSettings(s => s.rp2350BuildMode);
 
   const initializedRef = useRef(false);
 
@@ -306,7 +315,7 @@ function App() {
   const [defaultProjectLocation, setDefaultProjectLocation] = useState('');
   // New File dialog state (for .vec files that need a name)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
-  const [newFileType, setNewFileType] = useState<'vec' | 'c' | 'vpy' | 'vmus' | 'vsfx' | 'vanim' | 'vinstr' | 'venemy'>('vec');
+  const [newFileType, setNewFileType] = useState<'vec' | 'c' | 'vpy' | 'vmus' | 'vsfx' | 'vanim' | 'vinstr' | 'venemy' | 'vmov'>('vec');
   // EPROM Programmer dialog state
   const [showEpromDialog, setShowEpromDialog] = useState(false);
   const lastCompiledBinary = useEmulatorSettings(s => s.lastCompiledBinary);
@@ -372,7 +381,12 @@ function App() {
   const buildDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Función para manejar build y run
-  const handleBuild = useCallback(async (autoRun: boolean = false) => {
+  const handleBuild = useCallback(async (autoRun: boolean = false, opts?: { forSd?: boolean }) => {
+    // "Build for SD": produce a RAM-linked rp2350 game for the cart's SD launcher.
+    // Triggered either explicitly (Build menu item) or by selecting the rp2350
+    // "SD card" build mode in Settings so a normal Build/Run makes the SD binary.
+    // Never auto-run (the RAM image isn't emulatable) and never flash.
+    const forSd = !!opts?.forSd || (buildTarget === 'rp2350' && rp2350BuildMode === 'sd');
     // CRITICAL: Prevent parallel compilations - return early if already compiling
     if (isCompilingRef.current) {
       logger.debug('Build', 'Build already in progress, skipping duplicate request');
@@ -469,13 +483,17 @@ function App() {
       
       const args: any = {
         path: filePath,
-        autoStart: autoRun,
+        autoStart: forSd ? false : autoRun,
         compilerBackend, // from useSettings
-        target: buildTarget, // from useSettings
+        target: forSd ? 'rp2350' : buildTarget, // SD games are always rp2350
         pitrexCopyToSD,
         pitrexSdPath,
         uvm2CopyToSD,
         uvm2SdPath,
+        rp2350FlashMethod: forSd ? 'none' : rp2350FlashMethod,
+        rp2350FirmwareDir,
+        rp2350Ram: forSd,
+        rp2350SdPath,
       };
 
       // If building from project, include output path
@@ -587,7 +605,7 @@ function App() {
       isCompilingRef.current = false;
       logger.debug('Build', 'Build process completed, flag cleared');
     }
-  }, [documents, compilerBackend, buildTarget, pitrexCopyToSD, pitrexSdPath, uvm2CopyToSD, uvm2SdPath]);
+  }, [documents, compilerBackend, buildTarget, pitrexCopyToSD, pitrexSdPath, uvm2CopyToSD, uvm2SdPath, rp2350FlashMethod, rp2350FirmwareDir, rp2350SdPath, rp2350BuildMode]);
 
   const commandExec = useCallback(async (id: string, payload?: any) => {
     const apiFiles: any = (window as any).files;
@@ -636,6 +654,11 @@ def loop():
       case 'file.new.vmus': {
         // Open dialog to ask for filename
         setNewFileType('vmus');
+        setShowNewFileDialog(true);
+        break; }
+      case 'file.new.vmov': {
+        // Open dialog to ask for filename for a vector movie
+        setNewFileType('vmov');
         setShowNewFileDialog(true);
         break; }
       case 'file.new.vsfx': {
@@ -754,6 +777,17 @@ def loop():
           buildDebounceTimerRef.current = null;
         }, 0);
         break;
+      case 'build.sd':
+        // Build a RAM-linked rp2350 game for the cart's SD launcher.
+        if (buildDebounceTimerRef.current) {
+          logger.debug('Build', 'Build-for-SD request debounced (already queued)');
+          clearTimeout(buildDebounceTimerRef.current);
+        }
+        buildDebounceTimerRef.current = setTimeout(() => {
+          handleBuild(false, { forSd: true });
+          buildDebounceTimerRef.current = null;
+        }, 0);
+        break;
       case 'build.clean':
   logger.debug('App', 'clean build artifacts (pending implementation)');
         break;
@@ -805,6 +839,8 @@ def loop():
             pitrexSdPath,
             uvm2CopyToSD,
             uvm2SdPath,
+            rp2350FlashMethod,
+            rp2350FirmwareDir,
           };
 
           // Si el documento está sucio, enviarlo para que se guarde antes de compilar
@@ -1444,6 +1480,7 @@ def loop():
               <MenuItem label={`${t('file.new.c', 'C/C++ File')}`} onClick={()=>{ commandExec('file.new.c'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vec', 'Vector List (.vec)')}`} onClick={()=>{ commandExec('file.new.vec'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vmus', 'Music File (.vmus)')}`} onClick={()=>{ commandExec('file.new.vmus'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('file.new.vmov', 'Vector Movie (.vmov)')}`} onClick={()=>{ commandExec('file.new.vmov'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vsfx', 'Sound Effect (.vsfx)')}`} onClick={()=>{ commandExec('file.new.vsfx'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vanim', 'Animation (.vanim)')}`} onClick={()=>{ commandExec('file.new.vanim'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vinstr', 'Instrument (.vinstr)')}`} onClick={()=>{ commandExec('file.new.vinstr'); setOpenMenu(null); }} />
@@ -1492,6 +1529,7 @@ def loop():
           <MenuRoot label={t('menu.build', 'Build')} open={openMenu==='build'} setOpen={()=>setOpenMenu(openMenu==='build'?null:'build')}>
             <MenuItem label={`${t('build.build', 'Build')}	⌘F7`} onClick={()=>{ commandExec('build.build'); setOpenMenu(null); }} />
             <MenuItem label={`${t('build.buildAndRun', 'Build && Run')}	F5`} onClick={()=>{ commandExec('build.run'); setOpenMenu(null); }} />
+            <MenuItem label={t('build.buildForSd', 'Build for SD (RP2350)')} onClick={()=>{ commandExec('build.sd'); setOpenMenu(null); }} />
             <MenuItem label={t('build.clean', 'Clean')} onClick={()=>{ commandExec('build.clean'); setOpenMenu(null); }} />
             <MenuSeparator />
             <MenuItem label={`${t('build.targetBinary', 'Target Binary')}: ${activeBinName}`} disabled />
@@ -1687,9 +1725,9 @@ def loop():
       {/* New File Dialog */}
       <InputDialog
         isOpen={showNewFileDialog}
-        title={newFileType === 'vec' ? 'New Vector List' : newFileType === 'vmus' ? 'New Music File' : newFileType === 'vsfx' ? 'New Sound Effect' : newFileType === 'vanim' ? 'New Animation' : newFileType === 'vinstr' ? 'New Instrument' : newFileType === 'venemy' ? 'New Enemy Type' : 'New File'}
-        message={newFileType === 'vec' ? 'Enter a name for the vector list (without extension):' : newFileType === 'vmus' ? 'Enter a name for the music file (without extension):' : newFileType === 'vsfx' ? 'Enter a name for the sound effect (without extension):' : newFileType === 'vanim' ? 'Enter a name for the animation (without extension):' : newFileType === 'vinstr' ? 'Enter a name for the instrument (without extension):' : newFileType === 'venemy' ? 'Enter a name for the enemy type (without extension):' : 'Enter filename:'}
-        placeholder={newFileType === 'vec' ? 'my_sprite' : newFileType === 'vmus' ? 'my_music' : newFileType === 'vsfx' ? 'laser' : newFileType === 'vanim' ? 'player_walk' : newFileType === 'vinstr' ? 'pluck' : newFileType === 'venemy' ? 'snowbrother' : 'filename'}
+        title={newFileType === 'vec' ? 'New Vector List' : newFileType === 'vmus' ? 'New Music File' : newFileType === 'vmov' ? 'New Vector Movie' : newFileType === 'vsfx' ? 'New Sound Effect' : newFileType === 'vanim' ? 'New Animation' : newFileType === 'vinstr' ? 'New Instrument' : newFileType === 'venemy' ? 'New Enemy Type' : 'New File'}
+        message={newFileType === 'vec' ? 'Enter a name for the vector list (without extension):' : newFileType === 'vmus' ? 'Enter a name for the music file (without extension):' : newFileType === 'vmov' ? 'Enter a name for the vector movie (without extension):' : newFileType === 'vsfx' ? 'Enter a name for the sound effect (without extension):' : newFileType === 'vanim' ? 'Enter a name for the animation (without extension):' : newFileType === 'vinstr' ? 'Enter a name for the instrument (without extension):' : newFileType === 'venemy' ? 'Enter a name for the enemy type (without extension):' : 'Enter filename:'}
+        placeholder={newFileType === 'vec' ? 'my_sprite' : newFileType === 'vmus' ? 'my_music' : newFileType === 'vmov' ? 'my_movie' : newFileType === 'vsfx' ? 'laser' : newFileType === 'vanim' ? 'player_walk' : newFileType === 'vinstr' ? 'pluck' : newFileType === 'venemy' ? 'snowbrother' : 'filename'}
         defaultValue=""
         validateFn={(value) => {
           if (!value.trim()) return 'Name is required';
@@ -1801,6 +1839,37 @@ def loop():
             
             // Fallback: create in-memory
             const uri = `inmemory://${name}.vmus`;
+            openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
+          } else if (newFileType === 'vmov') {
+            // Vector movie manifest: empty tracks — import video/audio from the editor.
+            const content = JSON.stringify({
+              version: "1.0",
+              name: name,
+              fps: 15,
+              vrec: "",
+              vsmp: ""
+            }, null, 2);
+
+            if (vpyProject?.rootDir && apiFiles?.saveFile) {
+              const filePath = `${vpyProject.rootDir}/assets/movies/${name}.vmov`.replace(/\\/g, '/');
+              try {
+                const result = await apiFiles.saveFile({ path: filePath, content });
+                if (result && !result.error) {
+                  const normPath = filePath.replace(/\\/g, '/');
+                  const uri = normPath.match(/^[A-Za-z]:\//) ? `file:///${normPath}` : `file://${normPath}`;
+                  openDocument({
+                    uri, language: 'json', content, dirty: false, diagnostics: [],
+                    diskPath: filePath, mtime: result.mtime, lastSavedContent: content
+                  });
+                  useProjectStore.getState().refreshWorkspace();
+                  logger.info('File', `Created ${filePath}`);
+                  return;
+                }
+              } catch (e) {
+                logger.warn('File', 'Failed to save to project folder, creating in-memory');
+              }
+            }
+            const uri = `inmemory://${name}.vmov`;
             openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
           } else if (newFileType === 'vsfx') {
             // SFX default content

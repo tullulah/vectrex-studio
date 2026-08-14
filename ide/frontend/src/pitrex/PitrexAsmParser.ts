@@ -538,9 +538,35 @@ export function parseAsm(src: string): ParsedAsm {
   // blocks (e.g. the asset pointer tables). Symbols defined later in the file
   // are guaranteed to be known by now.
   // ---------------------------------------------------------------------------
+  // Resolve a single operand of a data expression to a byte value:
+  // a literal number, or a symbol/equ address. (Code labels are instruction
+  // indices, not byte addresses, so they are intentionally NOT consulted here.)
+  const resolveDataOperand = (name: string): number | null => {
+    const n = parseNumber(name);
+    if (n !== null) return n;
+    const s = symbols.get(name);
+    if (s) return s.value;
+    const e = equs.get(name);
+    if (e !== undefined) return e;
+    return null;
+  };
   for (const ref of pendingTextRefs) {
-    const sym = symbols.get(ref.symbol);
-    if (sym) writeMemWord(ref.addr, sym.value);
+    // Support label arithmetic in `.word` data — crucially the offset tables
+    // emitted by compile_vrec use `.word FRAME_LABEL - BASE_LABEL` to encode a
+    // byte offset. Also handles `SYM + N` / `SYM - N`. Falls back to a plain
+    // symbol lookup. Without this the whole table resolves to 0, which makes
+    // DRAW_RECORDING read segment_count from the base (= frame_count) → garbage.
+    const expr = ref.symbol.trim();
+    const m = expr.match(/^(\S+)\s*([+-])\s*(\S+)$/);
+    let val: number | null;
+    if (m) {
+      const a = resolveDataOperand(m[1]);
+      const b = resolveDataOperand(m[3]);
+      val = (a !== null && b !== null) ? (m[2] === '-' ? a - b : a + b) : null;
+    } else {
+      val = resolveDataOperand(expr);
+    }
+    if (val !== null) writeMemWord(ref.addr, val >>> 0);
   }
 
   return { equs, symbols, labels, numericLabels, strings, instructions, initMemory };

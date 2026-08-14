@@ -18,18 +18,33 @@
 //!   x2=smul(rx,cY)+smul(z1,sY)
 //!   sx=smul(x2,cZ)-smul(y1,sZ)+ox   sy=smul(x2,sZ)+smul(y1,cZ)+oy
 
-pub fn emit_drawing() -> String {
+use super::analysis::Usage;
+
+pub fn emit_drawing(usage: &Usage) -> String {
     let mut s = String::new();
     s.push_str("@ ============================================================\n");
     s.push_str("@ Drawing engine — ARM Thumb2 / RP2350 bus master\n");
     s.push_str("@ ============================================================\n\n");
-    s.push_str(&emit_sin_table());
-    s.push_str(&emit_smul_lut());
+    // _SIN_TABLE + smul_lut: needed by vpy_sin/vpy_cos (TRIG) and
+    // vpy_draw_vector_3d — both enable the SIN_TABLE group.
+    if usage.has("SIN_TABLE") {
+        s.push_str(&emit_sin_table());
+        s.push_str(&emit_smul_lut());
+    }
+    // Core beam primitives: ALWAYS emitted (tiny SVC stubs; the IDE emulator
+    // traps these symbols and every drawing routine calls them).
     s.push_str(&emit_dv_reset());
     s.push_str(&emit_dv_move_to());
     s.push_str(&emit_dv_draw_delta());
-    s.push_str(&emit_draw_vector());
-    s.push_str(&emit_draw_vector_3d());
+    if usage.has("DRAW_VECTOR") {
+        s.push_str(&emit_draw_vector());
+    }
+    if usage.has("DRAW_VECTOR_3D") {
+        s.push_str(&emit_draw_vector_3d());
+    }
+    if usage.has("DRAW_RECORDING") {
+        s.push_str(&emit_draw_recording());
+    }
     s
 }
 
@@ -73,70 +88,75 @@ fn emit_smul_lut() -> String {
 
 // ─── dv_reset ─────────────────────────────────────────────────────────────
 
+// BIOS-linked emission: the system primitives are SVC stubs into the cartridge
+// BIOS (see docs/RP2350_BIOS.md and the firmware's syscalls.rs — the canonical
+// numbering; append-only). The BIOS owns the real hardware protocol (E-synced
+// CS-gated bus writes, BIOS.ASM-exact VIA sequences). The emulator traps these
+// SYMBOLS before executing their bodies, so it works unchanged (its Thumb2
+// core also treats a reached SVC as NOP).
+
 fn emit_dv_reset() -> String {
-    // Reset integrators (DSWM-style PB sequence); ACR=$18 (SR→CB2 beam ctrl).
     let mut s = String::new();
-    s.push_str("@ dv_reset() — reset Vectrex integrators, set ACR=$18\n");
+    s.push_str("@ dv_reset() — BIOS trap: SYS_RESET0REF\n");
     s.push_str(".global dv_reset\n.type dv_reset, %function\n.thumb_func\ndv_reset:\n");
-    s.push_str("    push    {lr}\n");
-    s.push_str("    mov     r0, #0xD00A\n    mov     r1, #0x00\n    bl      bus_write\n"); // SR=0
-    s.push_str("    mov     r0, #0xD00B\n    mov     r1, #0x18\n    bl      bus_write\n"); // ACR=$18
-    s.push_str("    mov     r0, #0xD00C\n    mov     r1, #0xCC\n    bl      bus_write\n"); // PCR=$CC
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, #0x00\n    bl      bus_write\n"); // PORT_A=0
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x03\n    bl      bus_write\n"); // PB=3
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x02\n    bl      bus_write\n"); // PB=2
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x02\n    bl      bus_write\n"); // PB=2
-    s.push_str("    pop     {pc}\n");
-    s.push_str("    .ltorg\n\n");
+    s.push_str("    svc     #0                      @ SYS_RESET0REF\n");
+    s.push_str("    bx      lr\n\n");
     s
 }
 
 // ─── dv_move_to ───────────────────────────────────────────────────────────
 
 fn emit_dv_move_to() -> String {
-    // r0=dx, r1=dy (signed deltas). Beam off during ramp.
     let mut s = String::new();
-    s.push_str("@ dv_move_to(r0=dx, r1=dy) — position beam, no draw\n");
+    s.push_str("@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (a ramped delta after a\n");
+    s.push_str("@ reset). Split into <=127-per-axis steps: a scrolled origin can land far\n");
+    s.push_str("@ past the i8 DAC range, and SYS_MOVE casts to i8 → the whole shape WRAPS to\n");
+    s.push_str("@ the wrong side of the screen (mario_poc floor tiles). SYS_MOVE ramps the\n");
+    s.push_str("@ INTEGRATORS (velocity×time), not an absolute DAC, so stepping accumulates\n");
+    s.push_str("@ to the true (off-screen) origin — the visible part draws in place and the\n");
+    s.push_str("@ physical screen clips the rest. A move already within +/-127 does one step\n");
+    s.push_str("@ (unchanged).\n");
     s.push_str(".global dv_move_to\n.type dv_move_to, %function\n.thumb_func\ndv_move_to:\n");
-    s.push_str("    push    {r4, r5, lr}\n");
-    s.push_str("    mov     r4, r0\n    mov     r5, r1\n");       // r4=dx, r5=dy
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r5\n    bl      bus_write\n"); // PORT_A=dy
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x00\n    bl      bus_write\n"); // PB=0 (Y)
-    s.push_str("    mov     r0, #60\ndv_mt_s: subs r0,r0,#1\n    bne dv_mt_s\n");     // settle
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n"); // PB=1 (X)
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r4\n    bl      bus_write\n"); // PORT_A=dx
-    s.push_str("    mov     r0, #0xD00A\n    mov     r1, #0x00\n    bl      bus_write\n"); // SR=0 (off)
-    s.push_str("    mov     r0, #0xD006\n    mov     r1, #0x7F\n    bl      bus_write\n"); // T1L_L=$7F
-    s.push_str("    mov     r0, #0xD005\n    mov     r1, #0x00\n    bl      bus_write\n"); // T1C_H=0 (start)
-    s.push_str("dv_mt_p: mov r0,#0xD00D\n    bl bus_read\n    tst r0,#0x40\n    beq dv_mt_p\n");
-    s.push_str("    mov     r0, #0xD004\n    bl      bus_read\n");  // clear IFR (read T1C_L)
-    s.push_str("    pop     {r4, r5, pc}\n");
-    s.push_str("    .ltorg\n\n");
+    s.push_str("    push    {r2, r3, r4, r5, r6, r7, lr}  @ callers assume traps preserve regs\n");
+    s.push_str("    mov     r4, r0                  @ remaining dx\n");
+    s.push_str("    mov     r5, r1                  @ remaining dy\n");
+    s.push_str("    mov     r6, #127\n");
+    s.push_str("    rsb     r7, r6, #0              @ r7 = -127\n");
+    // Iteration cap: a real (even fully-scrolled) coordinate needs a handful of
+    // steps. A garbage/huge value (e.g. an object drawn at an uninitialized
+    // position) would otherwise spin millions of times → hang. The OLD single
+    // SYS_MOVE just wrapped garbage to i8 (harmless); the cap restores that
+    // tolerance. 8 steps = ±1016 travel, far past any on/off-screen need.
+    s.push_str("    mov     r3, #8                  @ max split steps (anti-hang guard)\n");
+    s.push_str("dvmt_loop:\n");
+    s.push_str("    mov     r0, r4                  @ step_x = clamp(remaining_x, -127, 127)\n");
+    s.push_str("    cmp     r0, r6\n    it      gt\n    movgt   r0, r6\n");
+    s.push_str("    cmp     r0, r7\n    it      lt\n    movlt   r0, r7\n");
+    s.push_str("    mov     r1, r5                  @ step_y = clamp(remaining_y, -127, 127)\n");
+    s.push_str("    cmp     r1, r6\n    it      gt\n    movgt   r1, r6\n");
+    s.push_str("    cmp     r1, r7\n    it      lt\n    movlt   r1, r7\n");
+    s.push_str("    push    {r0, r1}                @ svc clobbers r0; keep the steps\n");
+    s.push_str("    svc     #3                      @ SYS_MOVE (this step)\n");
+    s.push_str("    pop     {r0, r1}\n");
+    s.push_str("    subs    r4, r4, r0              @ remaining -= step\n");
+    s.push_str("    subs    r5, r5, r1\n");
+    s.push_str("    orrs    r2, r4, r5              @ both zero? → done\n");
+    s.push_str("    beq     dvmt_done\n");
+    s.push_str("    subs    r3, r3, #1              @ else step, until the cap\n");
+    s.push_str("    bne     dvmt_loop\n");
+    s.push_str("dvmt_done:\n");
+    s.push_str("    pop     {r2, r3, r4, r5, r6, r7, pc}\n\n");
     s
 }
 
 // ─── dv_draw_delta ────────────────────────────────────────────────────────
 
 fn emit_dv_draw_delta() -> String {
-    // r0=dx, r1=dy. Beam on during ramp.
     let mut s = String::new();
-    s.push_str("@ dv_draw_delta(r0=dx, r1=dy) — draw one vector segment\n");
+    s.push_str("@ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA\n");
     s.push_str(".global dv_draw_delta\n.type dv_draw_delta, %function\n.thumb_func\ndv_draw_delta:\n");
-    s.push_str("    push    {r4, r5, lr}\n");
-    s.push_str("    mov     r4, r0\n    mov     r5, r1\n");
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r5\n    bl      bus_write\n"); // PORT_A=dy
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x00\n    bl      bus_write\n"); // PB=0
-    s.push_str("    mov     r0, #60\ndv_dd_s: subs r0,r0,#1\n    bne dv_dd_s\n");
-    s.push_str("    mov     r0, #0xD000\n    mov     r1, #0x01\n    bl      bus_write\n"); // PB=1
-    s.push_str("    mov     r0, #0xD001\n    mov     r1, r4\n    bl      bus_write\n"); // PORT_A=dx
-    s.push_str("    mov     r0, #0xD00A\n    mov     r1, #0xFF\n    bl      bus_write\n"); // SR=$FF (beam on)
-    s.push_str("    mov     r0, #0xD006\n    mov     r1, #0x7F\n    bl      bus_write\n"); // T1L_L=$7F
-    s.push_str("    mov     r0, #0xD005\n    mov     r1, #0x00\n    bl      bus_write\n"); // T1C_H=0
-    s.push_str("dv_dd_p: mov r0,#0xD00D\n    bl bus_read\n    tst r0,#0x40\n    beq dv_dd_p\n");
-    s.push_str("    mov     r0, #0xD00A\n    mov     r1, #0x00\n    bl      bus_write\n"); // SR=0 (off)
-    s.push_str("    mov     r0, #0xD004\n    bl      bus_read\n");  // clear IFR
-    s.push_str("    pop     {r4, r5, pc}\n");
-    s.push_str("    .ltorg\n\n");
+    s.push_str("    svc     #4                      @ SYS_DRAW_DELTA\n");
+    s.push_str("    bx      lr\n\n");
     s
 }
 
@@ -172,7 +192,13 @@ fn emit_draw_vector() -> String {
     s.push_str("    lsl     r7, r6, #2\n    add     r7, r7, #4\n    ldr     r7, [r4, r7]\n"); // path ptr
     // Reset beam before each path so every path starts from a known centre reference.
     s.push_str("    bl      dv_reset\n");
-    s.push_str("    ldrb    r0, [r7]\n    bl      vpy_set_intensity\n");          // intensity
+    // Per-path .vec intensity in r0; if SET_INTENSITY set an override this frame,
+    // use it instead (r1 scratch, reloaded right after). vpy_set_intensity is DAC-
+    // only and does NOT record the override, so per-path intensities stay intact.
+    s.push_str("    ldrb    r0, [r7]            @ per-path .vec intensity\n");
+    s.push_str("    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r1, [r1]\n");
+    s.push_str("    cmp     r1, #0\n    it      ne\n    movne   r0, r1  @ SET_INTENSITY override wins\n");
+    s.push_str("    bl      vpy_set_intensity\n");
     // Move to (x_start + ox, y_start + oy) — places path relative to object origin.
     s.push_str("    ldrsb   r0, [r7, #2]\n    add     r0, r0, r9\n");  // x = x_start + ox
     s.push_str("    ldrsb   r1, [r7, #1]\n    add     r1, r1, r10\n"); // y = y_start + oy
@@ -289,21 +315,25 @@ fn emit_draw_vector_3d() -> String {
     // before the path_count word.
     s.push_str("    add     r4, r4, #3\n    bic r4, r4, #3\n");
 
-    // Phase 2: draw paths
-    s.push_str("    bl      dv_reset\n");
-    // dv_reset writes PORT_A = 0 mid-sequence, which leaves the Z-axis DAC
-    // (intensity) at zero — the beam would draw invisibly. Restore a sensible
-    // default. Per-path intensity is not yet supported for 3D assets (the
-    // _3D_DATA format has no per-path intensity byte).
-    s.push_str("    mov     r0, #127\n");
-    s.push_str("    bl      vpy_set_intensity\n");
+    // Phase 2: draw paths. Load path_count and the vbuf base up front; the
+    // per-path Reset0Ref lives INSIDE the loop (below).
     s.push_str("    ldr     r10,[r4]\n    add r4,r4,#4\n"); // path_count
     s.push_str("    ldr     r11,=_dv3d_vbuf\n");           // vbuf base for lookup
 
-    // _dv3d_cur = (0,0) — after dv_reset integrators are at origin
-    s.push_str("    ldr     r0,=_dv3d_cur\n    mov r1,#0\n    strh r1,[r0]\n");
-
     s.push_str("dv3_pl:\n    cmp r10,#0\n    beq dv3_pd\n    sub r10,r10,#1\n");
+    // RE-ZERO PER PATH: draw every path from a fresh Reset0Ref so integrator
+    // error cannot accumulate ACROSS paths. On real HW the analog integrators
+    // drift a little per relative move; with a single zero for the whole shape
+    // the later paths inherited every prior path's drift and trembled worst
+    // (path 4 ≫ path 1). Zeroing per path caps the accumulation to ONE path.
+    // dv_reset zeroes the Z-DAC too, so re-assert intensity; then the path's
+    // first vertex is reached as an ABSOLUTE move from the centred (0,0).
+    s.push_str("    bl      dv_reset\n");
+    s.push_str("    mov     r0, #127            @ default 3D intensity\n");
+    s.push_str("    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r1, [r1]\n");
+    s.push_str("    cmp     r1, #0\n    it      ne\n    movne   r0, r1  @ SET_INTENSITY override wins\n");
+    s.push_str("    bl      vpy_set_intensity\n");
+    s.push_str("    ldr     r0,=_dv3d_cur\n    mov r1,#0\n    strh r1,[r0]\n"); // cur=(0,0)
     s.push_str("    ldrb    r5,[r4]              @ pt_count\n");
     s.push_str("    ldrb    r6,[r4,#1]           @ closed\n");
     s.push_str("    add     r4,r4,#2\n");
@@ -364,6 +394,126 @@ fn emit_draw_vector_3d() -> String {
 
     s.push_str("dv3_pd:\n");
     s.push_str("    pop     {r4,r5,r6,r7,r8,r9,r10,r11,pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+// ─── vpy_draw_recording ───────────────────────────────────────────────────
+//
+// POLYLINE-CHAINED player. _NAME_VREC format (arm/assets.rs compile_vrec):
+//   .word  frame_count
+//   .word  offset_frame0, offset_frame1, ...   @ byte offsets from _NAME_VREC
+// frame N (2-byte aligned):
+//   .hword chain_count
+//   per chain:
+//     .byte start_x, start_y, intensity, seg_count   (i8,i8,u8,u8 — 4 bytes)
+//     .byte dx, dy × seg_count                       (i8 deltas — 2*seg_count)
+//
+// vpy_draw_recording(r0=vrec_ptr, r1=x, r2=y, r3=scale, [sp+32]=frame)
+//   scale: 0..128 where 128 = 100% — scaled = (v * scale) >> 7, sign preserved
+//          (ldrsb sign-extends the i8 before the multiply).
+//   frame: any non-negative counter; frame % frame_count is taken here so the
+//          caller can pass an ever-increasing value.
+//   Per CHAIN: dv_reset → vpy_set_intensity(i) → dv_move_to(x+sx0, y+sy0) ONCE,
+//              then per delta: dv_draw_delta(scaled dx, scaled dy) with NO
+//              reset/move between — the beam continues from the last endpoint.
+//   Start point is scaled AND centered (coord*scale>>7 + offset); deltas are
+//   scaled ONLY (relative — no center added), matching the m6809 player.
+//   Recorded intensity is used, but a SET_INTENSITY override this frame wins
+//   (same VPY_BRIGHTNESS_OVERRIDE convention as vpy_draw_vector).
+//   Start targets and deltas are clamped to the i8 range [-127, 127].
+//
+// Register map: r4=cursor ptr, r5=chains remaining, r6=x, r7=y, r8=scale,
+//               r9=deltas remaining in chain; r0-r3 scratch.
+// dv_reset / vpy_set_intensity / dv_move_to / dv_draw_delta are SVC trap stubs
+// and do NOT modify CPU registers (same assumption as vpy_draw_vector).
+// ---------------------------------------------------------------------------
+fn emit_draw_recording() -> String {
+    // Clamp the value in `reg` to [-127, 127] using r2 as scratch.
+    fn clamp_i8(s: &mut String, reg: &str) {
+        s.push_str(&format!("    cmp     {reg}, #127\n    it      gt\n    movgt   {reg}, #127\n"));
+        s.push_str("    mvn     r2, #126            @ r2 = -127\n");
+        s.push_str(&format!("    cmp     {reg}, r2\n    it      lt\n    movlt   {reg}, r2\n"));
+    }
+    // r0 = (i8 at [r4, #off]) * scale >> 7  (sign preserved: ldrsb sign-extends)
+    fn scale_byte(s: &mut String, off: u8) {
+        s.push_str(&format!("    ldrsb   r0, [r4, #{off}]\n"));
+        s.push_str("    mul     r0, r0, r8\n");
+        s.push_str("    asr     r0, r0, #7\n");
+    }
+
+    let mut s = String::new();
+    s.push_str("@ vpy_draw_recording(r0=vrec_ptr, r1=x, r2=y, r3=scale 0-128, [sp+32]=frame)\n");
+    s.push_str(".global vpy_draw_recording\n.type vpy_draw_recording, %function\n.thumb_func\nvpy_draw_recording:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
+    s.push_str("    mov     r4, r0              @ vrec base\n");
+    s.push_str("    mov     r6, r1              @ x offset\n");
+    s.push_str("    mov     r7, r2              @ y offset\n");
+    s.push_str("    mov     r8, r3              @ scale (0-128, 128 = 100%)\n");
+    // frame_idx = frame % frame_count (sdiv+mul+sub — no mls, emulator-safe)
+    s.push_str("    ldr     r1, [r4]            @ frame_count\n");
+    s.push_str("    cmp     r1, #0\n    beq     dvrec_done          @ empty recording\n");
+    s.push_str("    ldr     r0, [sp, #32]       @ frame counter (stack arg)\n");
+    s.push_str("    sdiv    r2, r0, r1\n");
+    s.push_str("    mul     r2, r2, r1\n");
+    s.push_str("    sub     r0, r0, r2          @ frame % frame_count\n");
+    // frame ptr = base + offset_table[idx]  (table starts at base+4)
+    s.push_str("    add     r0, r0, #1\n");
+    s.push_str("    lsl     r0, r0, #2          @ 4 + idx*4\n");
+    s.push_str("    ldr     r0, [r4, r0]        @ byte offset from base\n");
+    s.push_str("    add     r0, r4, r0          @ frame ptr\n");
+    s.push_str("    ldrh    r5, [r0]            @ chain_count\n");
+    s.push_str("    add     r4, r0, #2          @ r4 = first chain header\n");
+
+    // ── per-chain loop ──
+    s.push_str("dvrec_chain:\n");
+    s.push_str("    cmp     r5, #0\n    beq     dvrec_done\n");
+    // Beam to a known reference ONCE per chain (chain start is absolute).
+    s.push_str("    bl      dv_reset\n");
+    // Recorded intensity; SET_INTENSITY override wins (same rule as vpy_draw_vector).
+    s.push_str("    ldrb    r0, [r4, #2]        @ recorded chain intensity\n");
+    s.push_str("    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r1, [r1]\n");
+    s.push_str("    cmp     r1, #0\n    it      ne\n    movne   r0, r1  @ SET_INTENSITY override wins\n");
+    s.push_str("    bl      vpy_set_intensity\n");
+    // seg_count (deltas in this chain) → r9
+    s.push_str("    ldrb    r9, [r4, #3]        @ seg_count (deltas)\n");
+    // dv_move_to(x + (start_x*scale>>7), y + (start_y*scale>>7)), clamped to i8
+    scale_byte(&mut s, 0);
+    s.push_str("    add     r0, r0, r6          @ x + scaled start_x\n");
+    clamp_i8(&mut s, "r0");
+    s.push_str("    mov     r10, r0             @ save clamped start x\n");
+    scale_byte(&mut s, 1);
+    s.push_str("    add     r1, r0, r7          @ y + scaled start_y\n");
+    clamp_i8(&mut s, "r1");
+    s.push_str("    mov     r0, r10\n");
+    s.push_str("    bl      dv_move_to\n");
+    // advance cursor past the 4-byte chain header to first delta pair
+    s.push_str("    add     r4, r4, #4\n");
+
+    // ── per-delta loop (relative draws, NO reset/move between) ──
+    s.push_str("dvrec_delta:\n");
+    s.push_str("    cmp     r9, #0\n    beq     dvrec_chain_next\n");
+    // dx = scaled delta at [r4,#0]  (relative — NO center added)
+    scale_byte(&mut s, 0);
+    clamp_i8(&mut s, "r0");
+    s.push_str("    mov     r10, r0             @ save clamped dx\n");
+    // dy = scaled delta at [r4,#1]
+    scale_byte(&mut s, 1);
+    clamp_i8(&mut s, "r0");
+    s.push_str("    mov     r1, r0              @ dy\n");
+    s.push_str("    mov     r0, r10             @ dx\n");
+    s.push_str("    bl      dv_draw_delta\n");
+    // next delta pair
+    s.push_str("    add     r4, r4, #2\n");
+    s.push_str("    sub     r9, r9, #1\n");
+    s.push_str("    b       dvrec_delta\n");
+
+    s.push_str("dvrec_chain_next:\n");
+    // r4 already points at the next chain header (past the last delta pair).
+    s.push_str("    sub     r5, r5, #1\n");
+    s.push_str("    b       dvrec_chain\n");
+
+    s.push_str("dvrec_done:\n    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("    .ltorg\n\n");
     s
 }
