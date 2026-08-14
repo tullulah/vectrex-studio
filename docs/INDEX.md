@@ -70,6 +70,7 @@ All documentation lives in `docs/`. The only exception is `README.md` at the pro
 |------|-------------|
 | [6809_opcodes.md](6809_opcodes.md) | Complete MC6809 opcode table with addressing modes and cycle counts |
 | [MEMORY_MAP.md](MEMORY_MAP.md) | Vectrex memory map (RAM, ROM, BIOS, hardware registers) |
+| [UVM2_TARGET.md](UVM2_TARGET.md) | Ultimate Vectrex Multicart 2 target: halt-mode bus, `.um2` format, frame budget, bring-up ladder |
 | [AUTOMATIC_BANK_SWITCHING.md](AUTOMATIC_BANK_SWITCHING.md) | Multibank ROM banking architecture and switching mechanism |
 | [VECTOR_DRAWING_EXACT_SEQUENCE.md](VECTOR_DRAWING_EXACT_SEQUENCE.md) | Exact draw sequence for vector rendering |
 | [VECTOR_MULTIPATH_LIMITATION.md](VECTOR_MULTIPATH_LIMITATION.md) | Known limitation: multipath vector drawing |

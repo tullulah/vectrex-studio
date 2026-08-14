@@ -183,12 +183,23 @@ pub struct VPlayObject {
     pub transitions: Option<Vec<AreaTransition>>,
 }
 
-/// A horizontal walkable area for wander enemies.
+/// A walkable area for wander enemies. `y` is the surface height at `x_min`;
+/// `y2` is the height at `x_max`. When `y2` is absent (or equal to `y`) the area
+/// is FLAT (the historical behaviour). When they differ the surface is a SLOPE,
+/// and the runtime interpolates the enemy's Y from its X across [x_min, x_max].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalkableArea {
     pub y: i16,
     pub x_min: i16,
     pub x_max: i16,
+    /// Surface height at x_max. Absent = flat (y2 == y). See `y_at_max`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y2: Option<i16>,
+}
+
+impl WalkableArea {
+    /// Surface height at x_max (defaults to `y` → flat).
+    pub fn y_at_max(&self) -> i16 { self.y2.unwrap_or(self.y) }
 }
 
 /// A transition between two walkable areas (by index in `walkable_areas`).
@@ -567,12 +578,12 @@ impl VPlayLevel {
             let mut b = String::new();
             b.push_str(&format!("    FCB {}    ; area_count\n", areas.len()));
             b.push_str(&format!("    FCB {}    ; trans_count\n", trans.len()));
-            b.push_str("; Areas (8 bytes each): FDB y, FDB x_min, FDB x_max, FCB 0, FCB 0\n");
+            b.push_str("; Areas (8 bytes each): FDB y, FDB x_min, FDB x_max, FDB y2 (y at x_max; ==y when flat)\n");
             for (idx, a) in areas.iter().enumerate() {
-                b.push_str(&format!("    FDB {}  ; area[{}].y\n", a.y, idx));
+                b.push_str(&format!("    FDB {}  ; area[{}].y (@x_min)\n", a.y, idx));
                 b.push_str(&format!("    FDB {}  ; area[{}].x_min\n", a.x_min, idx));
                 b.push_str(&format!("    FDB {}  ; area[{}].x_max\n", a.x_max, idx));
-                b.push_str("    FCB 0,0      ; pad\n");
+                b.push_str(&format!("    FDB {}  ; area[{}].y2 (@x_max)\n", a.y_at_max(), idx));
             }
             if !trans.is_empty() {
                 b.push_str("; Transitions (8 bytes each): FCB from, FCB to, FCB type, FCB vy0, FDB from_x, FDB to_x\n");
@@ -1343,13 +1354,16 @@ impl VPlayLevel {
                     }
                     pi_bytes.extend_from_slice(&(areas.len() as u16).to_le_bytes());
                     for a in &areas {
+                        // 8-byte area record (matches the m6809/ARM asm layout):
+                        // i16 y(@x_min), i16 x_min, i16 x_max, i16 y2(@x_max).
                         pi_bytes.extend_from_slice(&a.y.to_le_bytes());
                         pi_bytes.extend_from_slice(&a.x_min.to_le_bytes());
                         pi_bytes.extend_from_slice(&a.x_max.to_le_bytes());
+                        pi_bytes.extend_from_slice(&a.y_at_max().to_le_bytes());
                     }
                     pi_bytes.extend_from_slice(&(trans.len() as u16).to_le_bytes());
                     let center_of = |ci: u8| -> i16 {
-                        let a = areas.get(ci as usize).unwrap_or(&WalkableArea { y: 0, x_min: 0, x_max: 0 });
+                        let a = areas.get(ci as usize).unwrap_or(&WalkableArea { y: 0, x_min: 0, x_max: 0, y2: None });
                         ((a.x_min as i32 + a.x_max as i32) / 2) as i16
                     };
                     for t in trans {
@@ -1377,8 +1391,8 @@ impl VPlayLevel {
                     areas_tables.push_str(&format!("    .word {}  @ trans_count\n", trans.len()));
                     for (ai_idx, a) in areas.iter().enumerate() {
                         areas_tables.push_str(&format!(
-                            "    .hword {}, {}, {}, 0  @ area {}: y, x_min, x_max\n",
-                            a.y, a.x_min, a.x_max, ai_idx));
+                            "    .hword {}, {}, {}, {}  @ area {}: y(@x_min), x_min, x_max, y2(@x_max)\n",
+                            a.y, a.x_min, a.x_max, a.y_at_max(), ai_idx));
                     }
                     for (ti_idx, t) in trans.iter().enumerate() {
                         let ttype = match t.ttype.as_str() {
@@ -1392,7 +1406,7 @@ impl VPlayLevel {
                         // default rendering).
                         let center_of = |idx: u8| -> i16 {
                             let a = areas.get(idx as usize)
-                                .unwrap_or(&WalkableArea { y: 0, x_min: 0, x_max: 0 });
+                                .unwrap_or(&WalkableArea { y: 0, x_min: 0, x_max: 0, y2: None });
                             ((a.x_min as i32 + a.x_max as i32) / 2) as i16
                         };
                         let fx = t.from_x.unwrap_or_else(|| center_of(t.from));
@@ -1662,6 +1676,7 @@ impl VPlayLevel {
                         y: a.y.saturating_add(obj.y as i16),
                         x_min: a.x_min.saturating_add(obj.x as i16),
                         x_max: a.x_max.saturating_add(obj.x as i16),
+                        y2: a.y2.map(|y2| y2.saturating_add(obj.y as i16)),
                     });
                     sources.push(obj_idx);
                 }
@@ -1692,6 +1707,7 @@ impl VPlayLevel {
                         y: a.y.saturating_add(obj.y as i16),
                         x_min: a.x_min.saturating_add(obj.x as i16),
                         x_max: a.x_max.saturating_add(obj.x as i16),
+                        y2: a.y2.map(|y2| y2.saturating_add(obj.y as i16)),
                     });
                 }
             }
@@ -1736,7 +1752,7 @@ impl VPlayLevel {
         if wps.len() >= 2 {
             let x_min = wps.iter().map(|w| w.x).min().unwrap();
             let x_max = wps.iter().map(|w| w.x).max().unwrap();
-            vec![WalkableArea { y: obj.y as i16, x_min, x_max }]
+            vec![WalkableArea { y: obj.y as i16, x_min, x_max, y2: None }]
         } else {
             vec![]
         }
@@ -1816,9 +1832,17 @@ impl VPlayLevel {
         out.push_str(&format!("    .hword {}  @ x\n", obj.x));
         out.push_str(&format!("    .hword {}  @ y\n", obj.y));
 
-        // +4: scale (scale*8, clamped 1-255; 8=1:1)
-        let scale_u8 = (obj.scale * 8.0).round().clamp(1.0, 255.0) as u8;
-        out.push_str(&format!("    .byte {}   @ scale (x8)\n", scale_u8));
+        // +4: escala en TREINTAYDOSAVOS — 32 = 1:1, y el techo son 255/32 = 7,97x.
+        //
+        // Era x8, y con ese paso un 0,7 del editor caia en 6/8 = 0,75: un 7% de error
+        // que se ve en un sprite de 16 px. A x32 el mismo 0,7 da 22/32 = 0,6875, un
+        // 1,8%. Se puede cambiar la unidad sin migrar nada porque hasta ahora NINGUN
+        // dibujante leia este byte — el valor viajaba al binario y se tiraba. Quien
+        // lo lee es vpy_draw_vector_ex (arm/builtins.rs), y 0 se sigue tratando como
+        // 1:1 para que un nivel viejo dibuje igual.
+        let scale_u8 = (obj.scale * 32.0).round().clamp(1.0, 255.0) as u8;
+        out.push_str(&format!("    .byte {}   @ scale (x32; {:.2}x -> {:.4}x)\n",
+                              scale_u8, obj.scale, scale_u8 as f32 / 32.0));
 
         // +5: intensity
         let intensity = obj.intensity.unwrap_or(127);
@@ -2670,6 +2694,61 @@ mod tests {
         let asm = level.compile_to_asm();
         assert!(asm.contains("_EMPTY_LEVEL:"));
         assert!(asm.contains("; Background object count"));
+    }
+
+    #[test]
+    fn test_walkable_area_y_at_max_defaults_to_y() {
+        // Flat area (y2 absent) -> y_at_max() == y; slope (y2 present) -> == y2.
+        assert_eq!(WalkableArea { y: 42, x_min: -10, x_max: 10, y2: None }.y_at_max(), 42);
+        assert_eq!(WalkableArea { y: 42, x_min: -10, x_max: 10, y2: Some(-8) }.y_at_max(), -8);
+    }
+
+    #[test]
+    fn test_sloped_walkable_area_emits_y2() {
+        // Regression guard for sloped walkable areas: the 8-byte area record must
+        // carry y2 (surface height at x_max) as its 4th field. A SLOPE emits
+        // y2 != y; a FLAT area emits y2 == y (byte-identical to the old padding).
+        let mut enemy = obj("enemy", -40, -20);
+        enemy.obj_type = "enemy".to_string();
+        enemy.layer = "gameplay".to_string();
+        enemy.enemy_type = Some("enemy".to_string());
+        enemy.ai_type = Some("wander".to_string());
+        enemy.walkable_areas = Some(vec![
+            WalkableArea { y: -20, x_min: -80, x_max: 0, y2: Some(20) }, // SLOPE
+            WalkableArea { y: 30, x_min: 10, x_max: 80, y2: None },      // FLAT
+        ]);
+
+        let level = VPlayLevel {
+            version: "2.0".to_string(),
+            level_type: "level".to_string(),
+            metadata: VPlayMetadata {
+                name: "slopes".to_string(), author: String::new(),
+                difficulty: "easy".to_string(), time_limit: 0, target_score: 0,
+                description: String::new(),
+            },
+            world_bounds: VPlayWorldBounds { x_min: -96, x_max: 95, y_min: -128, y_max: 127 },
+            layers: VPlayLayers { background: vec![], gameplay: vec![enemy], foreground: vec![] },
+            scroll_limits: VPlayScrollLimits::default(),
+            editor_meta: VPlayEditorMeta::default(),
+            walkable_areas: None, transitions: None, isolate_screens: false,
+            transition_min_x_overlap: None, transition_lateral_y: None, transition_lateral_gap: None,
+        };
+
+        // m6809: FDB y(@x_min), x_min, x_max, y2(@x_max).
+        let m6809 = level.compile_to_asm();
+        assert!(m6809.contains("FDB -20  ; area[0].y (@x_min)"), "m6809 area[0].y");
+        assert!(m6809.contains("FDB 20  ; area[0].y2 (@x_max)"),
+            "m6809 sloped area[0] must emit y2=20 (distinct from y=-20)");
+        assert!(m6809.contains("FDB 30  ; area[1].y (@x_min)"), "m6809 flat area[1].y");
+        assert!(m6809.contains("FDB 30  ; area[1].y2 (@x_max)"),
+            "m6809 flat area[1] must emit y2==y (30)");
+
+        // ARM: .hword y, x_min, x_max, y2.
+        let arm = level.compile_to_arm_asm(&HashMap::new());
+        assert!(arm.contains(".hword -20, -80, 0, 20"),
+            "ARM sloped area must emit y2=20 as the 4th hword");
+        assert!(arm.contains(".hword 30, 10, 80, 30"),
+            "ARM flat area must emit y2==y (30)");
     }
 
     fn obj(vector_name: &str, x: i16, y: i16) -> VPlayObject {

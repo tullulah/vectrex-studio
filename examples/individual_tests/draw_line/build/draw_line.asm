@@ -154,13 +154,50 @@ dv_reset:
     svc     #0                      @ SYS_RESET0REF
     bx      lr
 
-@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (delta after a reset)
+@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (a ramped delta after a
+@ reset). Split into <=127-per-axis steps: a scrolled origin can land far
+@ past the i8 DAC range, and SYS_MOVE casts to i8 → the whole shape WRAPS to
+@ the wrong side of the screen (mario_poc floor tiles). SYS_MOVE ramps the
+@ INTEGRATORS (velocity×time), not an absolute DAC, so stepping accumulates
+@ to the true (off-screen) origin — the visible part draws in place and the
+@ physical screen clips the rest. A move already within +/-127 does one step
+@ (unchanged).
 .global dv_move_to
 .type dv_move_to, %function
 .thumb_func
 dv_move_to:
-    svc     #3                      @ SYS_MOVE
-    bx      lr
+    push    {r2, r3, r4, r5, r6, r7, lr}  @ callers assume traps preserve regs
+    mov     r4, r0                  @ remaining dx
+    mov     r5, r1                  @ remaining dy
+    mov     r6, #127
+    rsb     r7, r6, #0              @ r7 = -127
+    mov     r3, #8                  @ max split steps (anti-hang guard)
+dvmt_loop:
+    mov     r0, r4                  @ step_x = clamp(remaining_x, -127, 127)
+    cmp     r0, r6
+    it      gt
+    movgt   r0, r6
+    cmp     r0, r7
+    it      lt
+    movlt   r0, r7
+    mov     r1, r5                  @ step_y = clamp(remaining_y, -127, 127)
+    cmp     r1, r6
+    it      gt
+    movgt   r1, r6
+    cmp     r1, r7
+    it      lt
+    movlt   r1, r7
+    push    {r0, r1}                @ svc clobbers r0; keep the steps
+    svc     #3                      @ SYS_MOVE (this step)
+    pop     {r0, r1}
+    subs    r4, r4, r0              @ remaining -= step
+    subs    r5, r5, r1
+    orrs    r2, r4, r5              @ both zero? → done
+    beq     dvmt_done
+    subs    r3, r3, #1              @ else step, until the cap
+    bne     dvmt_loop
+dvmt_done:
+    pop     {r2, r3, r4, r5, r6, r7, pc}
 
 @ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA
 .global dv_draw_delta
@@ -370,6 +407,14 @@ vsts_ok:
 .thumb_func
 game_main:
     push    {r4, r5, r6, r7, lr}
+    @ zero runtime RAM (RP2350 SRAM is not zero-initialised)
+    ldr     r0, =TMPVAL              @ runtime RAM base
+    ldr     r1, =USER_RAM_START      @ end of system RAM (exclusive)
+    mov     r2, #0
+gm_zero_loop:
+    str     r2, [r0], #4
+    cmp     r0, r1
+    blo     gm_zero_loop
     @ default drawing state (SRAM is not zero-initialised)
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
     mov     r0, #0

@@ -1,0 +1,126 @@
+{
+  "version": "1.0",
+  "name": "stacked",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "p0",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": -5,
+              "y": -5
+            },
+            {
+              "x": -5,
+              "y": 4
+            },
+            {
+              "x": -3,
+              "y": 7
+            },
+            {
+              "x": 2,
+              "y": 7
+            },
+            {
+              "x": 4,
+              "y": 4
+            },
+            {
+              "x": 4,
+              "y": -5
+            },
+            {
+              "x": 2,
+              "y": -8
+            },
+            {
+              "x": 2,
+              "y": -8
+            },
+            {
+              "x": -3,
+              "y": -8
+            },
+            {
+              "x": -5,
+              "y": -5
+            }
+          ]
+        },
+        {
+          "name": "p1",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": -3,
+              "y": -7
+            },
+            {
+              "x": 2,
+              "y": -7
+            }
+          ]
+        },
+        {
+          "name": "p2",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": -3,
+              "y": 6
+            },
+            {
+              "x": 2,
+              "y": 6
+            }
+          ]
+        },
+        {
+          "name": "p3",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": -2,
+              "y": -6
+            },
+            {
+              "x": -2,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "p4",
+          "intensity": 100,
+          "closed": false,
+          "points": [
+            {
+              "x": 1,
+              "y": -6
+            },
+            {
+              "x": 1,
+              "y": 5
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 0,
+  "center_y": 0
+}

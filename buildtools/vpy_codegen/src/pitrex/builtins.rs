@@ -147,6 +147,11 @@ pub fn emit_builtins(needed: &std::collections::HashSet<String>) -> String {
     if any(&["UPDATE_ENEMIES", "SPAWN_ENEMIES", "DRAW_ENEMIES"]) && !level_bridged {
         // wander_set_sprite is reached transitively from UPDATE_ENEMIES.
         s.push_str(&emit_pitrex_wander_set_sprite());
+        // Sloped-walkable-area helpers: surface_y_at interpolates the area
+        // surface at an x; wander_follow_y = surface_y_at + feet_offset -> pool.y.
+        // Called from spawn (area-snap) and update_enemies (WALK/takeoff/land).
+        s.push_str(&emit_pitrex_surface_y_at());
+        s.push_str(&emit_pitrex_wander_follow_y());
     }
     // .vrec vector-recording playback ("vector movie" video track). Emitted
     // only when a DRAW_RECORDING("name", ...) call appears in the AST.
@@ -3401,6 +3406,89 @@ pub(crate) fn emit_pitrex_wander_set_sprite() -> String {
     s
 }
 
+/// surface_y_at(&area, x): interpolate the walkable area's surface height at x.
+///
+/// Area record (8 bytes): +0 i16 y1, +2 i16 x_min, +4 i16 x_max, +6 i16 y2.
+/// FLAT area → y2 == y1 (returns y1 for every x, so callers stay byte-identical
+/// to the old raw `ldrsh ,[area]`). SLOPE → y2 != y1, linearly interpolated.
+///
+/// Matches the ground-truth C exactly:
+///   if (y2==y1 || x_max<=x_min) return y1;
+///   if (x<=x_min) return y1; if (x>=x_max) return y2;
+///   return y1 + (y2-y1)*(x-x_min)/(x_max-x_min);   // signed, truncate toward 0
+///
+/// ARMv6 has NO sdiv. We reuse __aeabi_idiv (already an extern in this backend),
+/// whose signed division truncates toward zero — exactly the C semantics — so no
+/// manual sign-fixup or shift-subtract loop is needed. All flat/clamp early-outs
+/// run BEFORE the multiply/divide. Preserves r1-r12; clobbers only r0 (return).
+pub(crate) fn emit_pitrex_surface_y_at() -> String {
+    let mut s = String::new();
+    s.push_str("@ pitrex_surface_y_at(r0=&area, r1=x) -> r0 = interpolated surface height\n");
+    s.push_str("@ area: +0 i16 y1, +2 i16 x_min, +4 i16 x_max, +6 i16 y2 (y2==y1 => flat)\n");
+    s.push_str("@ Preserves r1-r12; clobbers r0 (return) and lr. No sdiv (ARMv6).\n");
+    s.push_str(".global pitrex_surface_y_at\n");
+    s.push_str(".type pitrex_surface_y_at, %function\n");
+    s.push_str("pitrex_surface_y_at:\n");
+    s.push_str("    push    {r1, r2, r3, r4, r12, lr}\n");
+    s.push_str("    ldrsh   r2, [r0, #0]        @ y1\n");
+    s.push_str("    ldrsh   r3, [r0, #2]        @ x_min\n");
+    s.push_str("    ldrsh   r4, [r0, #4]        @ x_max\n");
+    s.push_str("    ldrsh   r0, [r0, #6]        @ y2 (reuse r0)\n");
+    s.push_str("    cmp     r0, r2\n");
+    s.push_str("    beq     .Lsya_flat          @ y2 == y1 -> flat, return y1\n");
+    s.push_str("    cmp     r4, r3\n");
+    s.push_str("    ble     .Lsya_flat          @ x_max <= x_min -> degenerate, return y1\n");
+    s.push_str("    cmp     r1, r3\n");
+    s.push_str("    ble     .Lsya_flat          @ x <= x_min -> clamp to y1\n");
+    s.push_str("    cmp     r1, r4\n");
+    s.push_str("    bge     .Lsya_ret           @ x >= x_max -> clamp to y2 (already in r0)\n");
+    s.push_str("    sub     r0, r0, r2          @ dy = y2 - y1\n");
+    s.push_str("    sub     r1, r1, r3          @ t  = x - x_min          (>= 0 in range)\n");
+    s.push_str("    mul     r0, r1, r0          @ num = dy * t            (signed 32-bit)\n");
+    s.push_str("    sub     r1, r4, r3          @ w = x_max - x_min       (> 0)\n");
+    s.push_str("    bl      __aeabi_idiv        @ r0 = num / w (signed, truncated toward zero)\n");
+    s.push_str("    add     r0, r0, r2          @ + y1\n");
+    s.push_str("    b       .Lsya_ret\n");
+    s.push_str(".Lsya_flat:\n");
+    s.push_str("    mov     r0, r2              @ return y1\n");
+    s.push_str(".Lsya_ret:\n");
+    s.push_str("    pop     {r1, r2, r3, r4, r12, pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
+/// wander_follow_y(pool, &area): pool.y = surface_y_at(area, pool.x) + feet_offset.
+///
+/// Bundles the "read surface height at the enemy's current x, add the per-type
+/// feet_offset (type_data_ptr+209), store into pool.y" sequence shared by the
+/// spawn area-snap and the WALK incline-follow. feet_offset handling mirrors the
+/// existing spawn/airborne code (skipped when type_data_ptr == 0). For a FLAT
+/// area this writes area.y + feet — bit-identical to the previous behavior.
+/// Preserves r2-r12; clobbers r0, r1 and lr.
+pub(crate) fn emit_pitrex_wander_follow_y() -> String {
+    let mut s = String::new();
+    s.push_str("@ pitrex_wander_follow_y(r0=pool, r1=&area) -> pool.y = surface_y_at(area,pool.x)+feet\n");
+    s.push_str("@ Preserves r2-r12; clobbers r0, r1, lr.\n");
+    s.push_str(".global pitrex_wander_follow_y\n");
+    s.push_str(".type pitrex_wander_follow_y, %function\n");
+    s.push_str("pitrex_wander_follow_y:\n");
+    s.push_str("    push    {r4, lr}\n");
+    s.push_str("    mov     r4, r0              @ pool\n");
+    s.push_str("    mov     r0, r1              @ &area\n");
+    s.push_str("    ldrsh   r1, [r4, #4]        @ pool.x\n");
+    s.push_str("    bl      pitrex_surface_y_at @ r0 = surface height at pool.x\n");
+    s.push_str("    ldr     r1, [r4, #20]       @ type_data_ptr\n");
+    s.push_str("    cmp     r1, #0\n");
+    s.push_str("    beq     .Lwfy_nofeet\n");
+    s.push_str("    ldrsb   r1, [r1, #209]      @ feet_offset (signed byte)\n");
+    s.push_str("    add     r0, r0, r1\n");
+    s.push_str(".Lwfy_nofeet:\n");
+    s.push_str("    strh    r0, [r4, #6]        @ pool.y = surface + feet\n");
+    s.push_str("    pop     {r4, pc}\n");
+    s.push_str("    .ltorg\n\n");
+    s
+}
+
 pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     // pitrex_spawn_enemies(r0=data_ptr, r1=count)
     // ROM record layout (variable, stride = 24 + wp_count*4):
@@ -3617,17 +3705,14 @@ pub(crate) fn emit_pitrex_spawn_enemies() -> String {
     s.push_str("    add     r10, r10, #8\n");
     s.push_str("    lsl     r12, r2, #3\n");
     s.push_str("    add     r10, r10, r12\n");
-    s.push_str("    ldrsh   r0, [r10]           @ area[best].y\n");
-    // Apply per-enemy-type feet_offset baked into _DATA[209]. area.y is the
-    // platform top; pool.y = area.y + feet_offset places the sprite's lowest
-    // pixel on that top regardless of sprite size or current sm_state.
-    s.push_str("    ldr     r12, [r6, #20]      @ type_data_ptr\n");
-    s.push_str("    cmp     r12, #0\n");
-    s.push_str("    beq     .Lspe_no_feet\n");
-    s.push_str("    ldrsb   r12, [r12, #209]    @ feet_offset (signed byte)\n");
-    s.push_str("    add     r0, r0, r12\n");
-    s.push_str(".Lspe_no_feet:\n");
-    s.push_str("    strh    r0, [r6, #6]        @ snap pool.y = area.y + feet_offset\n");
+    // Snap pool.y onto the area's surface AT the spawn x (r6=pool, r10=&area[best]).
+    // surface_y_at interpolates for a sloped area and adds the per-enemy-type
+    // feet_offset (_DATA[209]); for a FLAT area this is area.y + feet_offset,
+    // byte-identical to the previous raw `ldrsh ,[r10]` + feet code. follow_y
+    // preserves r4-r12 (the snap loop's invariants) and only clobbers r0/r1/lr.
+    s.push_str("    mov     r0, r6              @ pool ptr\n");
+    s.push_str("    mov     r1, r10             @ &area[best]\n");
+    s.push_str("    bl      pitrex_wander_follow_y  @ pool.y = surface_y_at(area, spawn_x) + feet\n");
     s.push_str(".Lspe_no_area_snap:\n");
     // vanim init: set frame_idx=0, anim_ticks_left=frame0.duration
     s.push_str("    ldrb    r0, [r6, #27]   @ is_anim\n");
@@ -3888,7 +3973,7 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    movlt   r11, r9             @ clamp to x_min\n");
     s.push_str("    strh    r11, [r5, #4]\n");
     s.push_str("    cmp     r11, r9\n");
-    s.push_str("    bne     .Lpue_skip\n");
+    s.push_str("    bne     .Lpue_w_walked      @ walked (not at edge): follow incline\n");
     s.push_str("    b       .Lpue_w_edge\n");
     s.push_str(".Lpue_w_right:\n");
     // dir = RIGHT: target = x_max
@@ -3900,10 +3985,16 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    movgt   r11, r10\n");
     s.push_str("    strh    r11, [r5, #4]\n");
     s.push_str("    cmp     r11, r10\n");
-    s.push_str("    bne     .Lpue_skip\n");
+    s.push_str("    bne     .Lpue_w_walked      @ walked (not at edge): follow incline\n");
 
-    // Reached an edge — reverse direction and enter IDLE
+    // Reached an edge — snap Y to the edge surface, reverse direction, enter IDLE.
+    // The Y-follow here keeps a sloped platform's endpoint (y1 at x_min / y2 at
+    // x_max) correct while the enemy pauses in IDLE; for a FLAT area it re-writes
+    // the same area.y+feet the enemy already had (byte-identical, no regression).
     s.push_str(".Lpue_w_edge:\n");
+    s.push_str("    mov     r0, r5              @ pool\n");
+    s.push_str("    mov     r1, r8              @ &area[idx]\n");
+    s.push_str("    bl      pitrex_wander_follow_y  @ pool.y = surface_y_at(area, x) + feet\n");
     s.push_str("    ldrb    r6, [r5, #26]       @ dir\n");
     s.push_str("    eor     r6, r6, #1          @ flip\n");
     s.push_str("    strb    r6, [r5, #26]\n");
@@ -3920,6 +4011,19 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    mov     r0, r5\n");
     s.push_str("    bl      pitrex_wander_set_sprite\n");
     s.push_str("    mov     r12, #1\n");
+    s.push_str("    b       .Lpue_skip\n");
+
+    // ── WALK, mid-platform: follow the incline ──────────────────────────
+    // Reached only when the enemy stepped X this frame but is NOT at an edge.
+    // Set pool.y = surface_y_at(area, new_x) + feet so Y tracks a sloped
+    // platform every walked frame. For a FLAT area surface_y_at == area.y, so
+    // this writes the unchanged area.y+feet (byte-identical to old behavior).
+    // r5=pool, r8=&area[idx] are both still live here; follow_y preserves r5/r8
+    // and r12 (SPEED), only clobbering r0/r1/lr, none of which are needed after.
+    s.push_str(".Lpue_w_walked:\n");
+    s.push_str("    mov     r0, r5              @ pool\n");
+    s.push_str("    mov     r1, r8              @ &area[idx]\n");
+    s.push_str("    bl      pitrex_wander_follow_y\n");
     s.push_str("    b       .Lpue_skip\n");
 
     // ── IDLE ────────────────────────────────────────────────────────────
@@ -4046,7 +4150,13 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    lsl     r6, r6, #3\n");
     s.push_str("    add     r8, r8, r6\n");
     s.push_str("    add     r8, r8, #8          @ &area[target]\n");
-    s.push_str("    ldrsh   r9, [r8]            @ target_y\n");
+    // Target surface height at the landing x (to_x = pool+14). NO feet_offset
+    // here — the original read the raw area.y purely to size the jump impulse
+    // (dy). For a FLAT area surface_y_at == area.y, so this is byte-identical.
+    s.push_str("    mov     r0, r8              @ &area[target]\n");
+    s.push_str("    ldrsh   r1, [r5, #14]       @ to_x (target_x)\n");
+    s.push_str("    bl      pitrex_surface_y_at @ r0 = surface y at to_x (== area.y if flat)\n");
+    s.push_str("    mov     r9, r0              @ target_y\n");
     s.push_str("    ldrsh   r1, [r5, #6]        @ current y\n");
     s.push_str("    sub     r9, r9, r1          @ dy = target_y - y\n");
     s.push_str("    ldrb    r6, [r5, #15]       @ transition type\n");
@@ -4113,7 +4223,13 @@ fn emit_pitrex_update_enemies() -> String {
     s.push_str("    lsl     r2, r2, #3\n");
     s.push_str("    add     r8, r8, r2\n");
     s.push_str("    add     r8, r8, #8          @ &area[target]\n");
-    s.push_str("    ldrsh   r9, [r8]            @ target area y\n");
+    // Target surface height at the landing x (to_x = pool+14); the feet_offset
+    // is still added below, exactly as before. FLAT area -> surface_y_at ==
+    // area.y, so the landing plane is byte-identical to the old raw read.
+    s.push_str("    mov     r0, r8              @ &area[target]\n");
+    s.push_str("    ldrsh   r1, [r5, #14]       @ to_x (target_x)\n");
+    s.push_str("    bl      pitrex_surface_y_at @ r0 = surface y at to_x (== area.y if flat)\n");
+    s.push_str("    mov     r9, r0              @ target area surface y\n");
     s.push_str("    ldr     r0, [r5, #20]       @ type_data_ptr\n");
     s.push_str("    cmp     r0, #0\n");
     s.push_str("    beq     .Lpue_w_air_nofeet\n");

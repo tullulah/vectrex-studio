@@ -89,9 +89,12 @@ def loop():
         # rows are shown at once, scrolling to keep the selection visible.
         n = SD_FILE_COUNT()
         if n == 0:
+            # No card (or a card with no .BIN): same text size as the game rows.
+            # At size 4 a cell is 14 px wide, so the message has to be short to
+            # stay clear of the preview frame, which starts at x ~ +11.
             SET_INTENSITY(80)
-            SET_TEXT_SIZE(3)
-            PRINT_TEXT(-75, 0, "NO SD INSERTED")
+            SET_TEXT_SIZE(4)
+            PRINT_TEXT(-70, 0, "NO SD")
         else:
             # --- navigation: J1 buttons 1 (up) / 2 (down), edge-latched ---
             # Digital buttons, NOT the analog stick: reading the analog axes runs

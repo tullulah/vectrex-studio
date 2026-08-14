@@ -1,0 +1,12 @@
+[project]
+name = "s1_frame"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/s1_frame.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]

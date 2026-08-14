@@ -1,0 +1,12 @@
+[project]
+name = "s2_dot"
+version = "0.1.0"
+entry = "src/main.vpy"
+
+[build]
+output = "build/s2_dot.bin"
+optimization = 2
+debug_symbols = true
+
+[sources]
+vpy = ["src/**/*.vpy"]

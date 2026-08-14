@@ -79,9 +79,13 @@ pub struct VecResource {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VecWalkableArea {
     /// Y offset from vec origin (positive = up, matches vec convention).
+    /// Surface height at `x_min`.
     pub y: i16,
     pub x_min: i16,
     pub x_max: i16,
+    /// Surface height at `x_max`. Absent = flat (y2 == y); differs = SLOPE.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub y2: Option<i16>,
 }
 
 fn default_version() -> String {
@@ -498,6 +502,14 @@ impl VecResource {
             .into_iter()
             .filter(|p| p.points.len() >= 2)
             .collect();
+        // Stage 2 (opt-in): fuse contiguous open polylines so the runtime skips
+        // the per-path dv_reset at shared joins. `optimized_paths` already put
+        // adjacent contiguous paths next to each other. ON by default.
+        let paths = if vec_merge_enabled() {
+            merge_contiguous_paths(paths, vec_merge_max_segs())
+        } else {
+            paths
+        };
         let path_count = paths.len();
         
         asm.push_str(&format!("_{}_VECTORS:  ; Main entry (header + {} path(s))\n", symbol_name, path_count));
@@ -529,6 +541,11 @@ impl VecResource {
             } else {
                 path.points.iter().map(|p| (p.x, p.y)).collect()
             };
+
+            // Collinear-vertex reduction: fewer segments => fewer beam draws.
+            // Endpoints (and thus the closing seam) are preserved. Biggest win on
+            // baked beziers, which are dense by construction.
+            let baked = simplify_xy(&baked, vec_simplify_epsilon());
 
             if baked.is_empty() {
                 if is_last_path {
@@ -781,4 +798,355 @@ pub fn compile_vec_to_binary(input: &Path, output: &Path) -> Result<()> {
     Ok(())
 }
 
+// ============================================================
+// Collinear-vector reduction (compile-time analogue of PiTrex's
+// angleOptimization / small-vector merge — vectrexInterface_pipeline.c).
+//
+// A path drawn as many short, near-collinear segments (finely tessellated
+// curves, baked beziers, over-subdivided edges) costs one beam draw per segment
+// on real hardware. Douglas-Peucker discards interior vertices whose
+// perpendicular distance to the retained chord is <= `epsilon` (in .vec DAC-ish
+// units, screen ~±127), guaranteeing the simplified polyline never deviates
+// from the original by more than `epsilon`. Fewer vertices => fewer draws =>
+// more shape budget per frame, with bounded, predictable error.
+//
+// Backend-agnostic: consumed by BOTH the m6809 (`compile_to_asm`) and the
+// ARM/RP2350 (`arm::assets::emit_vec_resource`) emitters. It is purely offline
+// on STATIC assets and does NOT touch the beam zero/relight protocol, so it
+// carries none of the trembling / blank-glyph hardware risk of changing the
+// per-path re-zero strategy.
+// ============================================================
+
+/// Default collinear-reduction tolerance, in `.vec` DAC-ish units (screen
+/// ~±127). `1.0` removes vertices up to a sub-unit off the retained chord —
+/// imperceptible on-screen — while collapsing finely-tessellated curves /
+/// over-subdivided edges into fewer beam draws. Single knob shared by every
+/// backend (m6809, ARM/RP2350).
+pub const VEC_SIMPLIFY_EPSILON: f64 = 1.0;
+
+/// Resolve the active simplification epsilon: `VPY_VEC_SIMPLIFY_EPSILON` env
+/// override if set (`0` disables the pass; higher = more aggressive), else the
+/// conservative default. One source of truth for all backends.
+pub fn vec_simplify_epsilon() -> f64 {
+    std::env::var("VPY_VEC_SIMPLIFY_EPSILON")
+        .ok()
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(VEC_SIMPLIFY_EPSILON)
+}
+
+/// Perpendicular distance from `(px,py)` to the line through `(ax,ay)`-`(bx,by)`.
+/// Degenerate (a==b) falls back to the point-to-point distance.
+fn perp_distance_xy(px: f64, py: f64, ax: f64, ay: f64, bx: f64, by: f64) -> f64 {
+    let dx = bx - ax;
+    let dy = by - ay;
+    let len2 = dx * dx + dy * dy;
+    if len2 < 1e-9 {
+        let ex = px - ax;
+        let ey = py - ay;
+        return (ex * ex + ey * ey).sqrt();
+    }
+    // |cross((b-a), (a-p))| / |b-a|
+    ((dx * (ay - py) - (ax - px) * dy).abs()) / len2.sqrt()
+}
+
+/// Douglas-Peucker core over coordinate list `pts[first..=last]`, marking
+/// survivors in `keep`. Indices flagged in `forced` are never dropped.
+fn dp_recurse(pts: &[(f64, f64)], first: usize, last: usize, eps: f64, forced: &[bool], keep: &mut [bool]) {
+    if last <= first + 1 {
+        return;
+    }
+    let (ax, ay) = pts[first];
+    let (bx, by) = pts[last];
+    let mut max_d = -1.0_f64;
+    let mut split = first;
+    for i in (first + 1)..last {
+        let d = if forced[i] {
+            f64::INFINITY // force-keep (e.g. a per-vertex intensity change)
+        } else {
+            perp_distance_xy(pts[i].0, pts[i].1, ax, ay, bx, by)
+        };
+        if d > max_d {
+            max_d = d;
+            split = i;
+        }
+    }
+    if max_d > eps {
+        keep[split] = true;
+        dp_recurse(pts, first, split, eps, forced, keep);
+        dp_recurse(pts, split, last, eps, forced, keep);
+    }
+}
+
+/// Shared driver: given coordinates + a force-keep mask, return the kept-index
+/// bitmap (endpoints always kept). `epsilon <= 0` or fewer than 3 points keeps
+/// everything.
+fn dp_keep_mask(pts: &[(f64, f64)], forced: &[bool], epsilon: f64) -> Vec<bool> {
+    let n = pts.len();
+    if epsilon <= 0.0 || n < 3 {
+        return vec![true; n];
+    }
+    let mut keep = vec![false; n];
+    keep[0] = true;
+    keep[n - 1] = true;
+    dp_recurse(pts, 0, n - 1, epsilon, forced, &mut keep);
+    keep
+}
+
+/// Simplify a `Point` polyline, dropping interior vertices within `epsilon` of
+/// the retained chord. Endpoints are always kept (a closed path's seam is
+/// preserved) and a vertex carrying its own `intensity` override never drops.
+pub fn simplify_polyline(points: &[Point], epsilon: f64) -> Vec<Point> {
+    let n = points.len();
+    if epsilon <= 0.0 || n < 3 {
+        return points.to_vec();
+    }
+    let coords: Vec<(f64, f64)> = points.iter().map(|p| (p.x as f64, p.y as f64)).collect();
+    let forced: Vec<bool> = points.iter().map(|p| p.intensity.is_some()).collect();
+    let keep = dp_keep_mask(&coords, &forced, epsilon);
+    points
+        .iter()
+        .zip(keep)
+        .filter_map(|(p, k)| if k { Some(*p) } else { None })
+        .collect()
+}
+
+/// Simplify a bare `(x, y)` coordinate polyline (e.g. a bezier already baked to
+/// a dense polyline). Same bounded-error guarantee as `simplify_polyline`.
+pub fn simplify_xy(pts: &[(i16, i16)], epsilon: f64) -> Vec<(i16, i16)> {
+    let n = pts.len();
+    if epsilon <= 0.0 || n < 3 {
+        return pts.to_vec();
+    }
+    let coords: Vec<(f64, f64)> = pts.iter().map(|&(x, y)| (x as f64, y as f64)).collect();
+    let forced = vec![false; n];
+    let keep = dp_keep_mask(&coords, &forced, epsilon);
+    pts.iter()
+        .zip(keep)
+        .filter_map(|(&p, k)| if k { Some(p) } else { None })
+        .collect()
+}
+
+// ============================================================
+// Stage 2 — contiguous-path fusion (compile-time re-zero avoidance)
+//
+// The draw runtime does one dv_reset (SYS_RESET0REF, the expensive beam
+// settle) at the START of every path. Where consecutive OPEN polylines share an
+// endpoint and the same intensity, fusing them into one path lets the runtime
+// draw a continuous chain and skip the re-zero at the join — the compile-time
+// analogue of PiTrex's re-zero avoidance (vectrexInterface.c consecutiveDraws /
+// MAX_CONSECUTIVE_DRAWS).
+//
+// Dropping the per-path re-zero lets integrator drift accumulate across the
+// join. The `cap` bounds a fused chain so drift is re-zeroed at least every
+// `cap` segments (mirroring MAX_CONSECUTIVE_DRAWS). HARDWARE-VALIDATED on the
+// RP2350 cartridge: no trembling at any cap, and real content (SnowBros, chains
+// ≤31) closes cleanly; a barely-visible non-closing drift only appears on a
+// single fused chain of ~48+ segments, which real assets don't reach. So this
+// pass is ON by default at a conservative cap; env vars tune or disable it.
+// ============================================================
+
+/// Segment cap for a fused chain before a re-zero is forced (drift bound).
+/// 32 covers the longest real contiguous chains observed (~31, SnowBros) while
+/// staying below the ~48 where drift starts to show. PiTrex uses 65 (it also
+/// recalibrates integrator offsets in firmware, which we don't yet).
+pub const VEC_MERGE_MAX_SEGS: usize = 32;
+
+/// Whether Stage-2 path fusion runs. ON by default (HW-validated); set
+/// `VPY_VEC_MERGE_PATHS=0` to disable, or any truthy value to force-enable.
+pub fn vec_merge_enabled() -> bool {
+    match std::env::var("VPY_VEC_MERGE_PATHS") {
+        Ok(v) => !matches!(v.as_str(), "" | "0" | "false" | "off"),
+        Err(_) => true,
+    }
+}
+
+/// Active fused-chain segment cap: `VPY_VEC_MERGE_MAX_SEGS` (min 2) or the
+/// conservative default.
+pub fn vec_merge_max_segs() -> usize {
+    std::env::var("VPY_VEC_MERGE_MAX_SEGS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|&n| n >= 2)
+        .unwrap_or(VEC_MERGE_MAX_SEGS)
+}
+
+/// Fuse consecutive OPEN polyline paths that share an endpoint (last point of
+/// one == first point of the next) AND the same beam intensity into a single
+/// path, so the runtime draws a continuous chain instead of re-zeroing between
+/// them. A fused chain is capped at `cap` segments; beyond that a break is left
+/// (forcing a re-zero) to bound drift. Closed paths and beziers never fuse and
+/// break any running chain. Per-vertex intensity overrides ride along untouched.
+///
+/// Order-sensitive: it only fuses ADJACENT paths, so callers should reorder
+/// contiguous paths together first (m6809's `optimized_paths` already does).
+pub fn merge_contiguous_paths(paths: Vec<VecPath>, cap: usize) -> Vec<VecPath> {
+    fn open_polyline(p: &VecPath) -> bool {
+        !p.closed && p.path_type.as_deref() != Some("bezier") && p.points.len() >= 2
+    }
+    fn segs(p: &VecPath) -> usize { p.points.len().saturating_sub(1) }
+    // Point has no PartialEq; compare position (incl. Z so 3D paths only fuse
+    // when they truly coincide at the join).
+    fn pos(p: &Point) -> (i16, i16, Option<i16>) { (p.x, p.y, p.z) }
+
+    let mut out: Vec<VecPath> = Vec::with_capacity(paths.len());
+    for p in paths {
+        let fuse = match out.last() {
+            Some(last) =>
+                open_polyline(last)
+                && open_polyline(&p)
+                && last.intensity == p.intensity
+                && segs(last) + segs(&p) <= cap
+                && last.points.last().map(pos) == p.points.first().map(pos),
+            None => false,
+        };
+        if fuse {
+            // drop the shared join vertex from `p`
+            out.last_mut().unwrap().points.extend_from_slice(&p.points[1..]);
+        } else {
+            out.push(p);
+        }
+    }
+    out
+}
+
 // Tests moved to core/tests/vecres_tests.rs to keep production code clean
+
+#[cfg(test)]
+mod simplify_tests {
+    use super::*;
+
+    fn pt(x: i16, y: i16) -> Point {
+        Point { x, y, z: None, intensity: None, t: None }
+    }
+    fn pt_i(x: i16, y: i16, i: u8) -> Point {
+        Point { x, y, z: None, intensity: Some(i), t: None }
+    }
+
+    #[test]
+    fn collinear_interior_points_are_removed() {
+        let pts = vec![pt(0, 0), pt(10, 0), pt(20, 0), pt(30, 0), pt(40, 0)];
+        let out = simplify_polyline(&pts, 1.0);
+        assert_eq!(out.len(), 2, "collinear run should collapse to endpoints");
+        assert_eq!((out[0].x, out[0].y), (0, 0));
+        assert_eq!((out[1].x, out[1].y), (40, 0));
+    }
+
+    #[test]
+    fn corners_are_preserved() {
+        let pts = vec![pt(0, 0), pt(20, 0), pt(20, 20), pt(0, 20)];
+        let out = simplify_polyline(&pts, 1.0);
+        assert_eq!(out.len(), 4, "right-angle corners must survive");
+    }
+
+    #[test]
+    fn error_stays_within_epsilon() {
+        let flat = vec![pt(0, 0), pt(10, 1), pt(20, 0)];
+        assert_eq!(simplify_polyline(&flat, 1.0).len(), 2, "1-unit bump within eps → dropped");
+        let bumpy = vec![pt(0, 0), pt(10, 3), pt(20, 0)];
+        assert_eq!(simplify_polyline(&bumpy, 1.0).len(), 3, "3-unit bump beyond eps → kept");
+    }
+
+    #[test]
+    fn intensity_vertices_are_never_dropped() {
+        let pts = vec![pt(0, 0), pt_i(20, 0, 64), pt(40, 0)];
+        let out = simplify_polyline(&pts, 1.0);
+        assert_eq!(out.len(), 3, "intensity-bearing vertex must survive simplification");
+        assert_eq!(out[1].intensity, Some(64));
+    }
+
+    #[test]
+    fn disabled_and_tiny_paths_passthrough() {
+        let pts = vec![pt(0, 0), pt(10, 0), pt(20, 0)];
+        assert_eq!(simplify_polyline(&pts, 0.0).len(), 3, "eps<=0 is a no-op");
+        let two = vec![pt(0, 0), pt(9, 9)];
+        assert_eq!(simplify_polyline(&two, 1.0).len(), 2, "<3 points passthrough");
+    }
+
+    #[test]
+    fn closed_path_seam_endpoints_kept() {
+        let pts = vec![pt(-10, 0), pt(-5, 0), pt(0, 0), pt(5, 0), pt(10, 0)];
+        let out = simplify_polyline(&pts, 1.0);
+        assert_eq!((out[0].x, out[out.len() - 1].x), (-10, 10));
+    }
+
+    #[test]
+    fn xy_variant_collapses_collinear_run() {
+        // The m6809 path (bezier-baked (x,y) tuples) uses simplify_xy.
+        let pts = vec![(0i16, 0i16), (5, 0), (10, 0), (15, 0), (20, 0)];
+        let out = simplify_xy(&pts, 1.0);
+        assert_eq!(out, vec![(0, 0), (20, 0)], "collinear tuple run collapses to endpoints");
+    }
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+
+    fn pt(x: i16, y: i16) -> Point {
+        Point { x, y, z: None, intensity: None, t: None }
+    }
+    fn open_path(intensity: u8, points: Vec<Point>) -> VecPath {
+        VecPath { name: String::new(), intensity, closed: false, path_type: None, points }
+    }
+
+    #[test]
+    fn contiguous_same_intensity_fuses() {
+        let a = open_path(127, vec![pt(0, 0), pt(10, 0)]);
+        let b = open_path(127, vec![pt(10, 0), pt(10, 10)]); // shares (10,0)
+        let out = merge_contiguous_paths(vec![a, b], 8);
+        assert_eq!(out.len(), 1, "contiguous same-intensity open paths fuse");
+        assert_eq!(out[0].points.len(), 3, "shared join vertex is dropped once");
+        assert_eq!((out[0].points[2].x, out[0].points[2].y), (10, 10));
+    }
+
+    #[test]
+    fn non_contiguous_not_fused() {
+        let a = open_path(127, vec![pt(0, 0), pt(10, 0)]);
+        let b = open_path(127, vec![pt(50, 50), pt(60, 60)]); // no shared endpoint
+        assert_eq!(merge_contiguous_paths(vec![a, b], 8).len(), 2);
+    }
+
+    #[test]
+    fn intensity_change_forces_break() {
+        let a = open_path(127, vec![pt(0, 0), pt(10, 0)]);
+        let b = open_path(40, vec![pt(10, 0), pt(20, 0)]);
+        assert_eq!(merge_contiguous_paths(vec![a, b], 8).len(), 2);
+    }
+
+    #[test]
+    fn closed_and_bezier_break_chain() {
+        let mut closed = open_path(127, vec![pt(0, 0), pt(10, 0), pt(10, 10)]);
+        closed.closed = true;
+        let after_closed = open_path(127, vec![pt(10, 10), pt(20, 20)]);
+        assert_eq!(merge_contiguous_paths(vec![closed, after_closed], 8).len(), 2,
+            "a closed path is never a fuse target");
+
+        let mut bez = open_path(127, vec![pt(0, 0), pt(10, 0)]);
+        bez.path_type = Some("bezier".to_string());
+        let after_bez = open_path(127, vec![pt(10, 0), pt(20, 0)]);
+        assert_eq!(merge_contiguous_paths(vec![bez, after_bez], 8).len(), 2, "beziers never fuse");
+    }
+
+    #[test]
+    fn cap_bounds_the_chain() {
+        let a = open_path(127, vec![pt(0, 0), pt(10, 0), pt(20, 0)]);  // 2 segs
+        let b = open_path(127, vec![pt(20, 0), pt(30, 0), pt(40, 0)]); // 2 segs, shares (20,0)
+        assert_eq!(merge_contiguous_paths(vec![a.clone(), b.clone()], 4).len(), 1, "4 segs <= cap fuses");
+        assert_eq!(merge_contiguous_paths(vec![a, b], 3).len(), 2, "combined 4 > cap 3 forces a break");
+    }
+
+    #[test]
+    fn per_vertex_intensity_rides_along() {
+        let a = open_path(127, vec![pt(0, 0), pt(10, 0)]);
+        let b = open_path(127, vec![pt(10, 0), Point { x: 20, y: 0, z: None, intensity: Some(64), t: None }]);
+        let out = merge_contiguous_paths(vec![a, b], 8);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].points.last().unwrap().intensity, Some(64), "per-vertex intensity survives fusion");
+    }
+
+    #[test]
+    fn stage2_is_on_by_default() {
+        // HW-validated on RP2350: ON by default. VPY_VEC_MERGE_PATHS=0 disables.
+        assert!(vec_merge_enabled(), "path fusion is ON by default");
+    }
+}

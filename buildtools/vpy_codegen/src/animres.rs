@@ -256,21 +256,24 @@ pub fn compile_inline_path(path: &VanimPath) -> String {
         return asm;
     }
 
-    let p0 = &path.points[0];
-    let y0 = p0.y.clamp(-127, 127) as i8;
-    let x0 = p0.x.clamp(-127, 127) as i8;
+    // Collinear-vertex reduction (same as named .vec paths). VanimPoint has no
+    // per-vertex intensity, so the plain (x,y) simplifier applies.
+    let xy: Vec<(i16, i16)> = path.points.iter().map(|p| (p.x, p.y)).collect();
+    let pts = crate::vecres::simplify_xy(&xy, crate::vecres::vec_simplify_epsilon());
+
+    let (x0v, y0v) = pts[0];
+    let y0 = y0v.clamp(-127, 127) as i8;
+    let x0 = x0v.clamp(-127, 127) as i8;
 
     asm.push_str(&format!("    FCB {}               ; intensity\n", path.intensity));
     asm.push_str(&format!("    FCB {},{},0,0        ; y_start={} x_start={}\n",
         fmt_byte(y0), fmt_byte(x0), y0, x0));
 
     // Segments: FCB $FF, dy, dx
-    for i in 0..path.points.len() - 1 {
-        let from = &path.points[i];
-        let to = &path.points[i + 1];
-        let dx = to.x - from.x;
-        let dy = to.y - from.y;
-        emit_split_segment(&mut asm, dx, dy);
+    for i in 0..pts.len() - 1 {
+        let (fx, fy) = pts[i];
+        let (tx, ty) = pts[i + 1];
+        emit_split_segment(&mut asm, tx - fx, ty - fy);
     }
 
     asm.push_str("    FCB 2                    ; end of inline path\n");

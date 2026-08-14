@@ -72,7 +72,7 @@
   "edit.toggleComment": "Alternar comentario",
   "edit.format": "Formatear documento",
   "build.build": "Compilar",
-  "build.buildAndRun": "Compilar y ejecutar",
+  "build.buildAndRun": "Compilar y ejecutar (Simular)",
   "build.buildForSd": "Compilar para SD (RP2350)",
   "build.clean": "Limpiar",
   "settings.target.rp2350.mode.title": "Modo de compilación:",
@@ -249,5 +249,6 @@
   "ai.ui.settingsButton": "⚙️ Config",
   "ai.button.save": "Guardar",
   "ai.button.cancel": "Cancelar",
-  "dialog.unsavedChanges": "El archivo tiene cambios sin guardar. ¿Cerrar de todas formas?"
+  "dialog.unsavedChanges": "El archivo tiene cambios sin guardar. ¿Cerrar de todas formas?",
+  "build.runRp2350Emu": "Ejecutar en emulador RP2350 (lento, fiel al HW)"
 }

@@ -1,142 +1,68 @@
-UNKNOWN PAGE-0 OPCODE ERROR:
-e6809.js:2538   PC: 0x0004
-e6809.js:2539   Opcode: 0x45 (69)
-e6809.js:2540   Registers:
-e6809.js:2541     A: 0xFFFF
-e6809.js:2542     B: 0x100
-e6809.js:2543     X: 0x0016
-e6809.js:2544     Y: 0x3153
-e6809.js:2545     U: 0x0005
-e6809.js:2546     S: 0xCFFF
-e6809.js:2547     DP: 0xC8
-e6809.js:2548     CC: 0x59
-e6809.js:2550 === STACK SNAPSHOT (from S=CFFF) ===
-CFFF: 00 81 38 9F FF FA F7 7F 00 70 17 00 98 CE 00 80
-D00F: 38 81 38 9F FF FA F7 7F 00 70 17 00 98 CE 00 80
-D01F: 38 81 38 9F FF FA F7 7F 00 70 17 00 98 CE 00 80
-D02F: 38 81 38 9F FF FA F7 7F 00 70 17 00 98 CE 00 80
-
-=== STACK WORDS (big-endian) ===
-CFFF 0081
-D001 389F
-D003 FFFA
-D005 F77F
-D007 0070
-D009 1700
-D00B 98CE
-D00D 0080
-D00F 3881
-D011 389F
-D013 FFFA
-D015 F77F
-D017 0070
-D019 1700
-D01B 98CE
-D01D 0080
-D01F 3881
-D021 389F
-D023 FFFA
-D025 F77F
-D027 0070
-D029 1700
-D02B 98CE
-D02D 0080
-D02F 3881
-D031 389F
-D033 FFFA
-D035 F77F
-D037 0070
-D039 1700
-D03B 98CE
-D03D 0080
-
-e6809.js:2554 
-=== LAST INSTRUCTIONS BEFORE CRASH ===
-e6809.js:2555 === OPCODE EXECUTION TRACE (Last 2000 instructions, max 2000) ===
-Error: Unknown page-0 opcode: 0x45 at PC=0x0004
-
-PC     BANK BYTES           A  B  X    Y    U    S    DP CC
-====== ==== =============== == == ==== ==== ==== ==== == ==
-49FB   0001 10 27 FF F7     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 FD 2EDD 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 FD 2EDD 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 FD 2EDD 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 FD 2EDD 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 FD 2EDD 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 FD 2EDD 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 FD 2EDD 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 FD 2EDD 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 FD 2EDD 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     64 FD 2EDD 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     40 FD 2EDD 3153 2ECC CFE5 D0 70
-49FF   0001 7F D0 01 7F     40 FD 2EDD 3153 2ECC CFE5 D0 70
-4A02   0001 7F D0 0A 16     40 FD 2EDD 3153 2ECC CFE5 D0 74
-4A05   0001 16 FF B5 1F     40 FD 2EDD 3153 2ECC CFE5 D0 74
-49BD   0001 A6 80 81 02     40 FD 2EDD 3153 2ECC CFE5 D0 74
-49BF   0001 81 02 10 27     FF FD 2EDE 3153 2ECC CFE5 D0 78
-49C1   0001 10 27 00 D0     FF FD 2EDE 3153 2ECC CFE5 D0 78
-49C5   0001 81 01 10 27     FF FD 2EDE 3153 2ECC CFE5 D0 78
-49C7   0001 10 27 00 3D     FF FD 2EDE 3153 2ECC CFE5 D0 78
-49CB   0001 E6 80 7D C8     FF FD 2EDE 3153 2ECC CFE5 D0 78
-49CD   0001 7D C8 B6 10     FF F8 2EDF 3153 2ECC CFE5 D0 78
-49D0   0001 10 27 00 01     FF F8 2EDF 3153 2ECC CFE5 D0 74
-49D5   0001 A6 80 7D C8     FF F8 2EDF 3153 2ECC CFE5 D0 74
-49D7   0001 7D C8 B5 10     FA F8 2EE0 3153 2ECC CFE5 D0 78
-49DA   0001 10 27 00 01     FA F8 2EE0 3153 2ECC CFE5 D0 74
-49DF   0001 F7 D0 01 7F     FA F8 2EE0 3153 2ECC CFE5 D0 74
-49E2   0001 7F D0 00 12     FA F8 2EE0 3153 2ECC CFE5 D0 78
-49E5   0001 12 12 12 7C     FA F8 2EE0 3153 2ECC CFE5 D0 74
-49E6   0001 12 12 7C D0     FA F8 2EE0 3153 2ECC CFE5 D0 74
-49E7   0001 12 7C D0 00     FA F8 2EE0 3153 2ECC CFE5 D0 74
-49E8   0001 7C D0 00 B7     FA F8 2EE0 3153 2ECC CFE5 D0 74
-49EB   0001 B7 D0 01 86     FA F8 2EE0 3153 2ECC CFE5 D0 78
-49EE   0001 86 FF B7 D0     FA F8 2EE0 3153 2ECC CFE5 D0 78
-49F0   0001 B7 D0 0A 7F     FF F8 2EE0 3153 2ECC CFE5 D0 78
-49F3   0001 7F D0 05 B6     FF F8 2EE0 3153 2ECC CFE5 D0 78
-49F6   0001 B6 D0 0D 84     FF F8 2EE0 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 F8 2EE0 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 F8 2EE0 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 F8 2EE0 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 F8 2EE0 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 F8 2EE0 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 F8 2EE0 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 F8 2EE0 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 F8 2EE0 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F9   0001 84 40 10 27     24 F8 2EE0 3153 2ECC CFE5 D0 70
-49FB   0001 10 27 FF F7     00 F8 2EE0 3153 2ECC CFE5 D0 74
-49F6   0001 B6 D0 0D 84  
-e6809.js:2556 === END TRACE ===
-vecx.js:1379 [JSVecx Debug] Execution stopped
-utils.js:28 Unknown page-0 opcode: 0x45 at PC=0x0004
+EmulatorPanel.tsx:2051 [EmulatorPanel] 🎮 F5 (external project) - triggering simulator build & run
+vecx.js:1617 [JSVecx Debug] Unknown message type: vpy-run-external
+(anonymous) @ vecx.js:1617
+postMessage (async)
+handleF5Continue @ EmulatorPanel.tsx:2052
+handler @ VM5:45
+emit @ VM4 sandbox_bundle:2
+onMessage @ VM4 sandbox_bundle:2
+(index):233 [DEBUG] Messages, variables and strings cleared
+EmulatorPanel.tsx:1312 [EmulatorPanel] 🔔 handleDebugMessage received event: {type: 'vpy-run-external'}
+EmulatorPanel.tsx:1326 [EmulatorPanel] 📨 Message type: vpy-run-external address: undefined line: undefined currentVpyLine: undefined
+FileTreePanel.tsx:185 FileTreePanel: File change detected: {type: 'changed', path: '/Users/daniel/projects/vectrex-pseudo-python/examples/aae_asteroids/build_wasm/game.wasm', isDir: false}
+FileTreePanel.tsx:185 FileTreePanel: File change detected: {type: 'changed', path: '/Users/daniel/projects/vectrex-pseudo-python/examples/aae_asteroids/build_wasm/game.wasm', isDir: false}
+EmulatorPanel.tsx:399 [EmulatorPanel] PiTrex simulator active — Vectrex backends stopped
+EmulatorPanel.tsx:3384 [PiTrex simulator] loaded 11/11 samples
+EmulatorPanel.tsx:3384 [PiTrex simulator] module ready — starting main()
+FileTreePanel.tsx:185 FileTreePanel: File change detected: {type: 'changed', path: '/Users/daniel/projects/vectrex-pseudo-python/examples/aae_asteroids/build_wasm/game.js', isDir: false}
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=85 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=126 joyY=19
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=126 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=127 joyY=-28
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=-96
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=-47 joyY=-78
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=-127 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=-127 joyY=26
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=127
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=77 joyY=104
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=-28 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0
+EmulatorPanel.tsx:1064 [GamepadManager] TRANSITION DETECTED: {buttonState: '0100', transitions: '0100'}
+PitrexSimView.tsx:117 [sim input] buttons=0100 joyX=0 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0
+EmulatorPanel.tsx:1064 [GamepadManager] TRANSITION DETECTED: {buttonState: '1000', transitions: '1000'}
+PitrexSimView.tsx:117 [sim input] buttons=1000 joyX=0 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0010 joyX=0 joyY=0
+EmulatorPanel.tsx:1064 [GamepadManager] TRANSITION DETECTED: {buttonState: '0010', transitions: '0010'}
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0
+EmulatorPanel.tsx:1064 [GamepadManager] TRANSITION DETECTED: {buttonState: '0001', transitions: '0001'}
+PitrexSimView.tsx:117 [sim input] buttons=0001 joyX=0 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0
+EmulatorPanel.tsx:1064 [GamepadManager] TRANSITION DETECTED: {buttonState: '0100', transitions: '0100'}
+PitrexSimView.tsx:117 [sim input] buttons=0100 joyX=0 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0
+EmulatorPanel.tsx:1064 [GamepadManager] TRANSITION DETECTED: {buttonState: '0100', transitions: '0100'}
+PitrexSimView.tsx:117 [sim input] buttons=0100 joyX=0 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0
+EmulatorPanel.tsx:1064 [GamepadManager] TRANSITION DETECTED: {buttonState: '0100', transitions: '0100'}
+PitrexSimView.tsx:117 [sim input] buttons=0100 joyX=0 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0
+EmulatorPanel.tsx:1064 [GamepadManager] TRANSITION DETECTED: {buttonState: '1000', transitions: '1000'}
+PitrexSimView.tsx:117 [sim input] buttons=1000 joyX=0 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0010 joyX=0 joyY=0
+EmulatorPanel.tsx:1064 [GamepadManager] TRANSITION DETECTED: {buttonState: '0010', transitions: '0010'}
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0
+EmulatorPanel.tsx:1064 [GamepadManager] TRANSITION DETECTED: {buttonState: '0001', transitions: '0001'}
+PitrexSimView.tsx:117 [sim input] buttons=0001 joyX=0 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0
+EmulatorPanel.tsx:1064 [GamepadManager] TRANSITION DETECTED: {buttonState: '0010', transitions: '0010'}
+PitrexSimView.tsx:117 [sim input] buttons=0010 joyX=0 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0
+EmulatorPanel.tsx:1064 [GamepadManager] TRANSITION DETECTED: {buttonState: '0100', transitions: '0100'}
+PitrexSimView.tsx:117 [sim input] buttons=0100 joyX=0 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0
+PitrexSimView.tsx:117 [sim input] buttons=0100 joyX=0 joyY=0
+EmulatorPanel.tsx:1064 [GamepadManager] TRANSITION DETECTED: {buttonState: '0100', transitions: '0100'}
+PitrexSimView.tsx:117 [sim input] buttons=0000 joyX=0 joyY=0

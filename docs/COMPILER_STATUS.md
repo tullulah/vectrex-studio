@@ -139,6 +139,13 @@ Plus `vpy_disasm` (disassembler utility) and `vpy_cli` (orchestrator).
 - Not all addressing modes fully tested in `vpy_assembler`
 - `DRAW_TO(x,y)` not yet implemented in codegen
 - `SET_SCALE()` not yet implemented
+- Sloped walkable areas: the m6809 wander runtime interpolates the enemy's Y
+  along a slope only during WALK-follow and landing. Unlike the libvpy (C) and
+  ARM runtimes, it does **not** interpolate at spawn (it uses the authored
+  instance Y) or at jump takeoff (it uses a compiler-precomputed `vy0`). The
+  enemy still walks and lands the incline correctly; only the exact spawn height
+  and the jump-arc peak can differ by ~1 frame. Candidate for the final
+  fine-tuning pass — make m6809 spawn/takeoff read the interpolated surface too.
 
 ### Recently Fixed Issues
 

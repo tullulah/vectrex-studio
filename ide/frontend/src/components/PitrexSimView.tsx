@@ -27,7 +27,8 @@ const INTERNAL_W = 330;
 const INTERNAL_H = 440;
 const DEBUG_INPUT = false;    // draw a live controller-state readout (diagnostic)
 
-interface Segment { x0: number; y0: number; x1: number; y1: number; b: number; }
+/* rgb: 0x00RRGGBB, 0 = the display's own monochrome look (the Vectrex default). */
+interface Segment { x0: number; y0: number; x1: number; y1: number; b: number; rgb: number; }
 
 // Vectrex controller state fed back to the WASM via Module.pitrex hooks.
 interface ControllerState {
@@ -119,6 +120,11 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
   // AY-3-8910 audio on an AudioWorklet (audio thread — a synth stall can't
   // freeze the UI). Holds { ctx, node, resume } once set up.
   const audioRef = useRef<any>(null);
+  // Digitised-sample audio (e.g. AAE Sega-G80). `samplesRef` holds one decoded
+  // AudioBuffer per bank index (from samples/samples.json, order = the game's
+  // sample index); `voiceNodesRef` maps a mixing voice → its live source node.
+  const samplesRef = useRef<(AudioBuffer | null)[]>([]);
+  const voiceNodesRef = useRef<Map<number, AudioBufferSourceNode>>(new Map());
   const log = useRef(onLog);
   log.current = onLog;
 
@@ -179,8 +185,13 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       for (const s of segs) {
         const alpha = Math.max(0, Math.min(1, s.b / 127));
         if (alpha <= 0) continue;
-        // Phosphor-green vector stroke, intensity scaled by brightness.
-        ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+        // Monochrome unless the game asked for a colour; brightness scales either way.
+        if (s.rgb) {
+          const r = (s.rgb >> 16) & 0xff, g = (s.rgb >> 8) & 0xff, bl = s.rgb & 0xff;
+          ctx.strokeStyle = `rgba(${r},${g},${bl},${alpha})`;
+        } else {
+          ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+        }
         ctx.beginPath();
         ctx.moveTo(sx(s.x0), sy(s.y0));
         ctx.lineTo(sx(s.x1), sy(s.y1));
@@ -200,9 +211,12 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
     // no-op once disposed; `present` additionally throws a sentinel so the
     // Asyncify main loop unwinds and stops (swallowed in the callMain catch).
     const pitrex = {
-      drawLine: (x0: number, y0: number, x1: number, y1: number, b: number) => {
+      // `rgb` is 0x00RRGGBB, 0 meaning "use the display's own look". The Vectrex is
+      // monochrome so 0 is the norm; colour exists for the Masteroids board (colour
+      // arcade monitors) and so a half-ported game's raster art stays tellable apart.
+      drawLine: (x0: number, y0: number, x1: number, y1: number, b: number, rgb?: number) => {
         if (disposedRef.current) return;
-        segmentsRef.current.push({ x0, y0, x1, y1, b });
+        segmentsRef.current.push({ x0, y0, x1, y1, b, rgb: rgb || 0 });
       },
       present: () => {
         if (disposedRef.current) throw 'pitrex-sim-disposed';
@@ -221,6 +235,28 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         const a = audioRef.current;
         if (a) a.node.port.postMessage({ type: 'reg', reg: reg & 0x0f, val: val & 0xff });
       },
+      // Digitised-sample audio: play bank[idx] on mixing voice `voice` (Web Audio
+      // mixes voices for us). Retriggering a voice stops its previous node.
+      playSample: (idx: number, voice: number, loop: number) => {
+        if (disposedRef.current) return;
+        const a = audioRef.current;
+        const buf = samplesRef.current[idx];
+        if (!a || !buf) return;
+        const prev = voiceNodesRef.current.get(voice);
+        if (prev) { try { prev.stop(); } catch { /* already stopped */ } }
+        const src = a.ctx.createBufferSource();
+        src.buffer = buf;
+        src.loop = !!loop;
+        src.connect(a.ctx.destination);
+        src.onended = () => { if (voiceNodesRef.current.get(voice) === src) voiceNodesRef.current.delete(voice); };
+        try { src.start(); } catch { /* ctx not running yet */ }
+        voiceNodesRef.current.set(voice, src);
+      },
+      stopSample: (voice: number) => {
+        const n = voiceNodesRef.current.get(voice);
+        if (n) { try { n.stop(); } catch { /* already stopped */ } voiceNodesRef.current.delete(voice); }
+      },
+      samplePlaying: (voice: number) => (voiceNodesRef.current.has(voice) ? 1 : 0),
     };
 
     (async () => {
@@ -238,11 +274,14 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
                 numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1],
               });
               node.connect(ctx.destination);
-              // Browsers gate audio until a user gesture; resume on the next one.
+              // Browsers gate audio until a real mouse/keyboard/touch gesture —
+              // GAMEPAD input does NOT qualify, so a pad-only player hears nothing
+              // until they click/key once. Listen on ALL gesture types (capture,
+              // on window) so any interaction unlocks it.
               const resume = () => { if (ctx.state !== 'running') ctx.resume().catch(() => {}); };
-              document.addEventListener('keydown', resume);
-              document.addEventListener('click', resume);
-              audioRef.current = { ctx, node, resume };
+              const evts = ['keydown', 'pointerdown', 'mousedown', 'click', 'touchstart'];
+              evts.forEach((e) => window.addEventListener(e, resume, { capture: true }));
+              audioRef.current = { ctx, node, resume, evts };
             } else {
               ctx.close?.();
             }
@@ -255,6 +294,34 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         if (!files?.readFile || !files?.readFileBin) {
           throw new Error('file IPC unavailable');
         }
+
+        // Optional digitised samples: <project>/samples/samples.json lists the
+        // .wav files in the game's bank-index order. Decode them (best-effort —
+        // a game with no samples just runs silent). The module lives in
+        // <project>/build_wasm/, so the samples dir is a sibling two levels up.
+        try {
+          const a = audioRef.current;
+          const samplesDir = modulePath.replace(/\/build_wasm\/[^/]+$/, '/samples');
+          if (a && samplesDir !== modulePath) {
+            const manifest = await files.readFile(`${samplesDir}/samples.json`).catch(() => null);
+            if (manifest && !manifest.error && typeof manifest.content === 'string') {
+              const names: string[] = JSON.parse(manifest.content);
+              const bufs = await Promise.all(names.map(async (n) => {
+                const r = await files.readFileBin(`${samplesDir}/${n}`).catch(() => null);
+                if (!r || r.error || !r.base64) return null;
+                const bytes = Uint8Array.from(atob(r.base64), (c) => c.charCodeAt(0));
+                return await a.ctx.decodeAudioData(bytes.buffer).catch(() => null);
+              }));
+              if (!cancelled && !disposedRef.current) {
+                samplesRef.current = bufs;
+                log.current?.(`[PiTrex simulator] loaded ${bufs.filter(Boolean).length}/${names.length} samples`);
+              }
+            }
+          }
+        } catch (e: any) {
+          log.current?.(`[PiTrex simulator] samples unavailable: ${e?.message || e}`);
+        }
+
         const base = modulePath.replace(/\.js$/i, '');
         const wasmPath = `${base}.wasm`;
         const dataPath = `${base}.data`;
@@ -353,10 +420,12 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       // Tear down the AY worklet + its AudioContext so repeated Build & Run
       // doesn't leak audio nodes.
       try {
+        voiceNodesRef.current.forEach((n) => { try { n.stop(); } catch { /* ignore */ } });
+        voiceNodesRef.current.clear();
+        samplesRef.current = [];
         const a = audioRef.current;
         if (a) {
-          document.removeEventListener('keydown', a.resume);
-          document.removeEventListener('click', a.resume);
+          (a.evts || []).forEach((e: string) => window.removeEventListener(e, a.resume, { capture: true } as any));
           a.node?.disconnect?.();
           a.ctx?.close?.();
         }

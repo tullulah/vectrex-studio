@@ -1,0 +1,262 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "floor1",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Created in Playground - 2026-08-12"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 95,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [],
+    "gameplay": [
+      {
+        "id": "obj_1786546573655",
+        "type": "background",
+        "vectorName": "fondo",
+        "layer": "gameplay",
+        "x": 0,
+        "y": 8,
+        "rotation": 0,
+        "scale": 1.2,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1786547286993",
+        "type": "background",
+        "vectorName": "stacked",
+        "layer": "gameplay",
+        "x": -73,
+        "y": 47,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1786547293725",
+        "type": "background",
+        "vectorName": "stacked",
+        "layer": "gameplay",
+        "x": -73,
+        "y": 64,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1786547300864",
+        "type": "background",
+        "vectorName": "stacked",
+        "layer": "gameplay",
+        "x": -62,
+        "y": 47,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1786547316011",
+        "type": "background",
+        "vectorName": "stacked",
+        "layer": "gameplay",
+        "x": -62,
+        "y": 64,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1786547339850",
+        "type": "background",
+        "vectorName": "dk-side",
+        "layer": "gameplay",
+        "x": -49,
+        "y": 48,
+        "rotation": 0,
+        "scale": 0.6,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1786547384603",
+        "type": "background",
+        "vectorName": "hammer-up",
+        "layer": "gameplay",
+        "x": -54,
+        "y": 20,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1786547391965",
+        "type": "background",
+        "vectorName": "hammer-up",
+        "layer": "gameplay",
+        "x": 38,
+        "y": -45,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1786547409140",
+        "type": "background",
+        "vectorName": "pauline",
+        "layer": "gameplay",
+        "x": -2,
+        "y": 66,
+        "rotation": 0,
+        "scale": 0.7,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1786547424503",
+        "type": "background",
+        "vectorName": "oilcan",
+        "layer": "gameplay",
+        "x": -71,
+        "y": -72,
+        "rotation": 0,
+        "scale": 0.6,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1786547453317",
+        "type": "background",
+        "vectorName": "flames",
+        "layer": "gameplay",
+        "x": -72,
+        "y": -62,
+        "rotation": 0,
+        "scale": 0.7,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      },
+      {
+        "id": "obj_1786547486746",
+        "type": "background",
+        "vectorName": "jm-0",
+        "layer": "gameplay",
+        "x": -55,
+        "y": -71,
+        "rotation": 0,
+        "scale": 0.7,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": {
+      "x": 0,
+      "y": -100
+    }
+  },
+  "hotspots": [],
+  "_editorMeta": {
+    "groundBottomOffset": 42
+  }
+}

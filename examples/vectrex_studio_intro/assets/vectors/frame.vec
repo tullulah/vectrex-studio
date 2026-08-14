@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "name": "frame",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "polygon_1784015176233",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            {
+              "x": 46,
+              "y": -39
+            },
+            {
+              "x": 46,
+              "y": 38
+            },
+            {
+              "x": -42,
+              "y": 39
+            },
+            {
+              "x": -42,
+              "y": -39
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "center_x": 2,
+  "center_y": 0
+}

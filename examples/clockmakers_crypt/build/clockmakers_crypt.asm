@@ -34,7 +34,6 @@
 .equ CAMERA_X,            0x2007F14C  @ camera X offset (used by show_level)
 .equ CAMERA_Y,            0x2007F150  @ camera Y offset
 .equ TEXT_SIZE,           0x2007F154  @ text scale factor (1=normal, 2=double, ...)
-.equ TEXT_COLOR,          0x2007F158  @ text intensity (0-127)
 .equ LEVEL_DATA_PTR,      0x2007F15C  @ pointer to loaded level ROM data
 .equ DBGVAL,              0x2007F160  @ debug_print last written value
 .equ PRINT_BEAM_X,        0x2007F164  @ beam X shadow during print_text
@@ -135,12 +134,12 @@ bus_write:
     svc     #8                      @ SYS_BUS_WRITE
     bx      lr
 
-@ bus_read(r0=addr) — stub: returns 0xFF (no BIOS read syscall yet)
+@ bus_read(r0=addr) -> r0=data — BIOS trap: SYS_BUS_READ
 .global bus_read
 .type bus_read, %function
 .thumb_func
 bus_read:
-    mov     r0, #0xFF
+    svc     #11                     @ SYS_BUS_READ
     bx      lr
 
 @ ============================================================
@@ -155,13 +154,46 @@ dv_reset:
     svc     #0                      @ SYS_RESET0REF
     bx      lr
 
-@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (delta after a reset)
+@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (a ramped delta after a
+@ reset). Split into <=127-per-axis steps: a scrolled origin can land far
+@ past the i8 DAC range, and SYS_MOVE casts to i8 → the whole shape WRAPS to
+@ the wrong side of the screen (mario_poc floor tiles). SYS_MOVE ramps the
+@ INTEGRATORS (velocity×time), not an absolute DAC, so stepping accumulates
+@ to the true (off-screen) origin — the visible part draws in place and the
+@ physical screen clips the rest. A move already within +/-127 does one step
+@ (unchanged).
 .global dv_move_to
 .type dv_move_to, %function
 .thumb_func
 dv_move_to:
-    svc     #3                      @ SYS_MOVE
-    bx      lr
+    push    {r2, r3, r4, r5, r6, r7, lr}  @ callers assume traps preserve regs
+    mov     r4, r0                  @ remaining dx
+    mov     r5, r1                  @ remaining dy
+    mov     r6, #127
+    rsb     r7, r6, #0              @ r7 = -127
+dvmt_loop:
+    mov     r0, r4                  @ step_x = clamp(remaining_x, -127, 127)
+    cmp     r0, r6
+    it      gt
+    movgt   r0, r6
+    cmp     r0, r7
+    it      lt
+    movlt   r0, r7
+    mov     r1, r5                  @ step_y = clamp(remaining_y, -127, 127)
+    cmp     r1, r6
+    it      gt
+    movgt   r1, r6
+    cmp     r1, r7
+    it      lt
+    movlt   r1, r7
+    push    {r0, r1}                @ svc clobbers r0; keep the steps
+    svc     #3                      @ SYS_MOVE (this step)
+    pop     {r0, r1}
+    subs    r4, r4, r0              @ remaining -= step
+    subs    r5, r5, r1
+    orrs    r2, r4, r5              @ both zero? → done
+    bne     dvmt_loop
+    pop     {r2, r3, r4, r5, r6, r7, pc}
 
 @ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA
 .global dv_draw_delta
@@ -227,636 +259,6 @@ dvv_done:
 @ ============================================================
 @ VPy Builtins — ARM Thumb2 / RP2350
 @ ============================================================
-
-@ ============================================================
-@ Vector font — ASCII 32-126 stroke data
-@ Each glyph: [cmd(1=move,2=draw), x(0-4), y(0-6), ..., 0x00]
-@ _FONT_PTRS[char-32] = absolute address of glyph (0 = no strokes)
-@ ============================================================
-
-.global _FONT_PTRS
-_FONT_PTRS:
-    .word   0    @ ' ' no strokes
-    .word   _glyph_033   @ '!'
-    .word   _glyph_034   @ '"'
-    .word   0    @ '#' no strokes
-    .word   0    @ '$' no strokes
-    .word   0    @ '%' no strokes
-    .word   0    @ '&' no strokes
-    .word   0    @ ''' no strokes
-    .word   0    @ '(' no strokes
-    .word   0    @ ')' no strokes
-    .word   0    @ '*' no strokes
-    .word   _glyph_043   @ '+'
-    .word   _glyph_044   @ ','
-    .word   _glyph_045   @ '-'
-    .word   _glyph_046   @ '.'
-    .word   _glyph_047   @ '/'
-    .word   _glyph_048   @ '0'
-    .word   _glyph_049   @ '1'
-    .word   _glyph_050   @ '2'
-    .word   _glyph_051   @ '3'
-    .word   _glyph_052   @ '4'
-    .word   _glyph_053   @ '5'
-    .word   _glyph_054   @ '6'
-    .word   _glyph_055   @ '7'
-    .word   _glyph_056   @ '8'
-    .word   _glyph_057   @ '9'
-    .word   _glyph_058   @ ':'
-    .word   _glyph_059   @ ';'
-    .word   _glyph_060   @ '<'
-    .word   _glyph_061   @ '='
-    .word   _glyph_062   @ '>'
-    .word   _glyph_063   @ '?'
-    .word   0    @ '@' no strokes
-    .word   _glyph_065   @ 'A'
-    .word   _glyph_066   @ 'B'
-    .word   _glyph_067   @ 'C'
-    .word   _glyph_068   @ 'D'
-    .word   _glyph_069   @ 'E'
-    .word   _glyph_070   @ 'F'
-    .word   _glyph_071   @ 'G'
-    .word   _glyph_072   @ 'H'
-    .word   _glyph_073   @ 'I'
-    .word   _glyph_074   @ 'J'
-    .word   _glyph_075   @ 'K'
-    .word   _glyph_076   @ 'L'
-    .word   _glyph_077   @ 'M'
-    .word   _glyph_078   @ 'N'
-    .word   _glyph_079   @ 'O'
-    .word   _glyph_080   @ 'P'
-    .word   _glyph_081   @ 'Q'
-    .word   _glyph_082   @ 'R'
-    .word   _glyph_083   @ 'S'
-    .word   _glyph_084   @ 'T'
-    .word   _glyph_085   @ 'U'
-    .word   _glyph_086   @ 'V'
-    .word   _glyph_087   @ 'W'
-    .word   _glyph_088   @ 'X'
-    .word   _glyph_089   @ 'Y'
-    .word   _glyph_090   @ 'Z'
-    .word   0    @ '[' no strokes
-    .word   0    @ '\' no strokes
-    .word   0    @ ']' no strokes
-    .word   0    @ '^' no strokes
-    .word   0    @ '_' no strokes
-    .word   0    @ '`' no strokes
-    .word   _glyph_097   @ 'a'
-    .word   _glyph_098   @ 'b'
-    .word   _glyph_099   @ 'c'
-    .word   _glyph_100   @ 'd'
-    .word   _glyph_101   @ 'e'
-    .word   _glyph_102   @ 'f'
-    .word   _glyph_103   @ 'g'
-    .word   _glyph_104   @ 'h'
-    .word   _glyph_105   @ 'i'
-    .word   _glyph_106   @ 'j'
-    .word   _glyph_107   @ 'k'
-    .word   _glyph_108   @ 'l'
-    .word   _glyph_109   @ 'm'
-    .word   _glyph_110   @ 'n'
-    .word   _glyph_111   @ 'o'
-    .word   _glyph_112   @ 'p'
-    .word   _glyph_113   @ 'q'
-    .word   _glyph_114   @ 'r'
-    .word   _glyph_115   @ 's'
-    .word   _glyph_116   @ 't'
-    .word   _glyph_117   @ 'u'
-    .word   _glyph_118   @ 'v'
-    .word   _glyph_119   @ 'w'
-    .word   _glyph_120   @ 'x'
-    .word   _glyph_121   @ 'y'
-    .word   _glyph_122   @ 'z'
-    .word   0    @ '{' no strokes
-    .word   0    @ '|' no strokes
-    .word   0    @ '}' no strokes
-    .word   0    @ '~' no strokes
-
-.global _FONT_DATA
-_FONT_DATA:
-_glyph_033:  @ '!'
-    .byte   1, 2, 6
-    .byte   2, 2, 2
-    .byte   1, 2, 0
-    .byte   2, 2, 1
-    .byte   0
-_glyph_034:  @ '"'
-    .byte   1, 1, 5
-    .byte   2, 1, 6
-    .byte   1, 3, 5
-    .byte   2, 3, 6
-    .byte   0
-_glyph_043:  @ '+'
-    .byte   1, 2, 1
-    .byte   2, 2, 5
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_044:  @ ','
-    .byte   1, 2, 1
-    .byte   2, 1, 0
-    .byte   0
-_glyph_045:  @ '-'
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_046:  @ '.'
-    .byte   1, 1, 0
-    .byte   2, 2, 0
-    .byte   0
-_glyph_047:  @ '/'
-    .byte   1, 0, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_048:  @ '0'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   0
-_glyph_049:  @ '1'
-    .byte   1, 2, 0
-    .byte   2, 2, 6
-    .byte   0
-_glyph_050:  @ '2'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 4, 3
-    .byte   2, 0, 3
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_051:  @ '3'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   1, 4, 3
-    .byte   2, 1, 3
-    .byte   0
-_glyph_052:  @ '4'
-    .byte   1, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   1, 4, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_053:  @ '5'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_054:  @ '6'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 3
-    .byte   2, 0, 3
-    .byte   0
-_glyph_055:  @ '7'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 2, 0
-    .byte   0
-_glyph_056:  @ '8'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_057:  @ '9'
-    .byte   1, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_058:  @ ':'
-    .byte   1, 2, 1
-    .byte   2, 2, 2
-    .byte   1, 2, 4
-    .byte   2, 2, 5
-    .byte   0
-_glyph_059:  @ ';'
-    .byte   1, 2, 4
-    .byte   2, 2, 5
-    .byte   1, 2, 1
-    .byte   2, 1, 0
-    .byte   0
-_glyph_060:  @ '<'
-    .byte   1, 3, 6
-    .byte   2, 0, 3
-    .byte   2, 3, 0
-    .byte   0
-_glyph_061:  @ '='
-    .byte   1, 0, 4
-    .byte   2, 4, 4
-    .byte   1, 0, 2
-    .byte   2, 4, 2
-    .byte   0
-_glyph_062:  @ '>'
-    .byte   1, 1, 6
-    .byte   2, 4, 3
-    .byte   2, 1, 0
-    .byte   0
-_glyph_063:  @ '?'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 4, 4
-    .byte   2, 2, 3
-    .byte   1, 2, 1
-    .byte   2, 2, 2
-    .byte   0
-_glyph_065:  @ 'A'
-    .byte   1, 0, 0
-    .byte   2, 2, 6
-    .byte   2, 4, 0
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_066:  @ 'B'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 3, 3
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_067:  @ 'C'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_068:  @ 'D'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 1
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_069:  @ 'E'
-    .byte   1, 4, 0
-    .byte   2, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_070:  @ 'F'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_071:  @ 'G'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 3
-    .byte   2, 2, 3
-    .byte   0
-_glyph_072:  @ 'H'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_073:  @ 'I'
-    .byte   1, 1, 0
-    .byte   2, 3, 0
-    .byte   1, 2, 0
-    .byte   2, 2, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_074:  @ 'J'
-    .byte   1, 0, 1
-    .byte   2, 1, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_075:  @ 'K'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_076:  @ 'L'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_077:  @ 'M'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_078:  @ 'N'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_079:  @ 'O'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   0
-_glyph_080:  @ 'P'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   0
-_glyph_081:  @ 'Q'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   1, 3, 1
-    .byte   2, 4, 0
-    .byte   0
-_glyph_082:  @ 'R'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_083:  @ 'S'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_084:  @ 'T'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 2, 6
-    .byte   2, 2, 0
-    .byte   0
-_glyph_085:  @ 'U'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_086:  @ 'V'
-    .byte   1, 0, 6
-    .byte   2, 2, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_087:  @ 'W'
-    .byte   1, 0, 6
-    .byte   2, 1, 0
-    .byte   2, 2, 3
-    .byte   2, 3, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_088:  @ 'X'
-    .byte   1, 0, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_089:  @ 'Y'
-    .byte   1, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   1, 2, 3
-    .byte   2, 2, 0
-    .byte   0
-_glyph_090:  @ 'Z'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_097:  @ 'a'
-    .byte   1, 0, 0
-    .byte   2, 2, 6
-    .byte   2, 4, 0
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_098:  @ 'b'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 3, 3
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_099:  @ 'c'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_100:  @ 'd'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 1
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_101:  @ 'e'
-    .byte   1, 4, 0
-    .byte   2, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_102:  @ 'f'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_103:  @ 'g'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 3
-    .byte   2, 2, 3
-    .byte   0
-_glyph_104:  @ 'h'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_105:  @ 'i'
-    .byte   1, 1, 0
-    .byte   2, 3, 0
-    .byte   1, 2, 0
-    .byte   2, 2, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_106:  @ 'j'
-    .byte   1, 0, 1
-    .byte   2, 1, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_107:  @ 'k'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_108:  @ 'l'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_109:  @ 'm'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_110:  @ 'n'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_111:  @ 'o'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   0
-_glyph_112:  @ 'p'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   0
-_glyph_113:  @ 'q'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   1, 3, 1
-    .byte   2, 4, 0
-    .byte   0
-_glyph_114:  @ 'r'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_115:  @ 's'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_116:  @ 't'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 2, 6
-    .byte   2, 2, 0
-    .byte   0
-_glyph_117:  @ 'u'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_118:  @ 'v'
-    .byte   1, 0, 6
-    .byte   2, 2, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_119:  @ 'w'
-    .byte   1, 0, 6
-    .byte   2, 1, 0
-    .byte   2, 2, 3
-    .byte   2, 3, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_120:  @ 'x'
-    .byte   1, 0, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_121:  @ 'y'
-    .byte   1, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   1, 2, 3
-    .byte   2, 2, 0
-    .byte   0
-_glyph_122:  @ 'z'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
 
 @ vpy_wait_recal() — BIOS trap: SYS_WAIT_RECAL
 .global vpy_wait_recal
@@ -944,139 +346,24 @@ dvex_done:
     pop     {r4, r5, r6, r7, r8, r9, r10, pc}
     .ltorg
 
-@ vpy_print_text(r0=x, r1=y, r2=str_ptr)
+@ vpy_print_text(r0=x, r1=y, r2=str_ptr) -> BIOS trap SYS_PRINT_TEXT
 .global vpy_print_text
 .type vpy_print_text, %function
 .thumb_func
 vpy_print_text:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
-    mov     r4, r0
-    mov     r5, r1
-    mov     r6, r2
-    ldr     r7, =TEXT_SIZE
-    ldr     r7, [r7]
-    cmp     r7, #0
-    bne     vpt_sc
-    mov     r7, #3
-vpt_sc:
-    ldr     r8, =VPY_BRIGHTNESS_OVERRIDE
-    ldrb    r8, [r8]
-    cmp     r8, #0
-    bne     vpt_cc
-    ldr     r8, =TEXT_COLOR
-    ldr     r8, [r8]
-    cmp     r8, #0
-    bne     vpt_cc
-    mov     r8, #100
-vpt_cc:
-    bl      dv_reset
-    mov     r0, r8
-    bl      vpy_set_intensity
-    mov     r0, #6
-    mul     r0, r0, r7
-    asr     r0, r0, #1
-    sub     r5, r5, r0
-    mov     r0, r4
-    mov     r1, r5
-    bl      dv_move_to
-    ldr     r10, =PRINT_BEAM_X
-    str     r4, [r10]
-    ldr     r11, =PRINT_BEAM_Y
-    str     r5, [r11]
-    mov     r9, r4              @ cur_x = x
-vpt_loop:
-    ldrb    r0, [r6]
-    add     r6, r6, #1
-    cmp     r0, #0
-    beq     vpt_done
-    cmp     r0, #0x80
-    beq     vpt_done
-    cmp     r0, #0x61
-    blt     vpt_nl
-    cmp     r0, #0x7A
-    bgt     vpt_nl
-    sub     r0, r0, #0x20
-vpt_nl:
-    cmp     r0, #32
-    blt     vpt_adv
-    cmp     r0, #126
-    bgt     vpt_adv
-    sub     r0, r0, #32
-    ldr     r1, =_FONT_PTRS
-    lsl     r0, r0, #2
-    ldr     r0, [r1, r0]
-    cmp     r0, #0
-    beq     vpt_adv
-    push    {r0}
-    bl      dv_reset
-    mov     r0, r8
-    bl vpy_set_intensity
-    mov     r0, #0
-    str r0, [r10]
-    str r0, [r11]
-    pop     {r0}
-    mov     r1, r9
-    mov     r2, r5
-    mov     r3, r7
-    push    {r10, r11}
-    bl      vpt_draw_glyph
-    add     sp, sp, #8
-vpt_adv:
-    mov     r0, #7
-    mul     r0, r0, r7
-    asr     r0, r0, #1
-    add     r9, r9, r0
-    b       vpt_loop
-vpt_done:
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-
-@ vpt_draw_glyph — internal: draw one glyph at (char_x, char_y) with scale
-.type vpt_draw_glyph, %function
-.thumb_func
-vpt_draw_glyph:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
-    mov     r4, r0              @ glyph_ptr
-    mov     r5, r1              @ char_x
-    mov     r6, r2              @ char_y
-    mov     r7, r3              @ scale
-    ldr     r8, [sp, #36]       @ bx_ptr (PRINT_BEAM_X)
-    ldr     r9, [sp, #40]       @ by_ptr (PRINT_BEAM_Y)
-    ldr     r10, [r8]           @ beam_x
-    ldr     r11, [r9]           @ beam_y
-vdg_loop:
-    ldrb    r0, [r4]
-    cmp     r0, #0
-    beq     vdg_done
-    ldrb    r1, [r4, #1]        @ gx
-    ldrb    r2, [r4, #2]        @ gy
-    add     r4, r4, #3
-    push    {r0}               @ save cmd
-    mul     r1, r1, r7
-    asr     r1, r1, #1
-    add     r1, r1, r5
-    mul     r2, r2, r7
-    asr     r2, r2, #1
-    add     r2, r2, r6
-    sub     r0, r1, r10         @ dx
-    sub     r3, r2, r11         @ dy
-    mov     r10, r1
-    mov     r11, r2
-    pop     {r1}               @ restore cmd
-    push    {r0, r3}           @ save dx, dy
-    cmp     r1, #1
-    bne     vdg_draw
-    pop     {r0, r1}
-    bl      dv_move_to
-    b       vdg_loop
-vdg_draw:
-    pop     {r0, r1}
-    bl      dv_draw_delta
-    b       vdg_loop
-vdg_done:
-    str     r10, [r8]           @ update PRINT_BEAM_X
-    str     r11, [r9]           @ update PRINT_BEAM_Y
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    ldr     r3, =TEXT_SIZE
+    ldr     r3, [r3]
+    cmp     r3, #0
+    it      eq
+    moveq   r3, #3
+    ldr     r12, =VPY_BRIGHTNESS_OVERRIDE
+    ldrb    r12, [r12]
+    cmp     r12, #0
+    it      eq
+    moveq   r12, #100
+    orr     r3, r3, r12, lsl #8
+    svc     #16                     @ SYS_PRINT_TEXT
+    bx      lr
     .ltorg
 
 @ vpy_j1_x() → r0 = cached J1 X axis (-127..127)
@@ -1195,127 +482,55 @@ vpy_j2_btn4:
     eor     r0, r0, #1
     bx      lr
 
-@ vpy_update_buttons() — cache buttons and joystick axes (safe: called in WAIT_RECAL window)
+@ vpy_update_buttons() — cache buttons (+axes if analog is used)
 .global vpy_update_buttons
 .type vpy_update_buttons, %function
 .thumb_func
 vpy_update_buttons:
     push    {r4, lr}
-    mov     r0, #0xD002
-    mov     r1, #0x0F
-    bl      bus_write
-    mov     r0, #0xD000
-    bl      bus_read
+    svc     #14                     @ SYS_READ_BUTTONS_RAW
+    mov     r4, r0
+    ubfx    r0, r4, #8, #8
     ldr     r1, =BTN_STATE_J1
     str     r0, [r1]
-    mov     r0, #0xD002
-    mov     r1, #0xFF
-    bl      bus_write
-    mov     r0, #14
-    bl      psg_read
+    and     r0, r4, #0xFF
     ldr     r1, =BTN_STATE_J2
     str     r0, [r1]
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    sxtb    r4, r0
-    ldr     r0, =J1_AXIS_X
-    str     r4, [r0]
-    mov     r0, #0xD000
-    mov     r1, #0x03
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    sxtb    r4, r0
-    ldr     r0, =J1_AXIS_Y
-    str     r4, [r0]
-    mov     r0, #0xD000
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    sxtb    r4, r0
-    ldr     r0, =J2_AXIS_X
-    str     r4, [r0]
-    mov     r0, #0xD000
-    mov     r1, #0x02
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    sxtb    r4, r0
-    ldr     r0, =J2_AXIS_Y
-    str     r4, [r0]
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
+    svc     #13                     @ SYS_READ_AXES (analog used)
+    mov     r4, r0
+    ubfx    r0, r4, #24, #8
+    sxtb    r0, r0
+    ldr     r1, =J1_AXIS_X
+    str     r0, [r1]
+    ubfx    r0, r4, #16, #8
+    sxtb    r0, r0
+    ldr     r1, =J1_AXIS_Y
+    str     r0, [r1]
+    ubfx    r0, r4, #8, #8
+    sxtb    r0, r0
+    ldr     r1, =J2_AXIS_X
+    str     r0, [r1]
+    sxtb    r0, r4
+    ldr     r1, =J2_AXIS_Y
+    str     r0, [r1]
     pop     {r4, pc}
     .ltorg
 
-@ psg_write(r0=reg, r1=data) — write AY-3-8912 PSG register
+@ psg_write(r0=reg, r1=data) — BIOS trap: SYS_PSG_WRITE
 .global psg_write
 .type psg_write, %function
 .thumb_func
 psg_write:
-    push    {r4, r5, lr}
-    mov     r4, r0              @ reg
-    mov     r5, r1              @ data
-    mov     r0, #0xD001
-    mov     r1, r4
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x19
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD001
-    mov     r1, r5
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x11
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    pop     {r4, r5, pc}
-    .ltorg
+    svc     #5                      @ SYS_PSG_WRITE
+    bx      lr
 
-@ psg_read(r0=reg) → r0 = PSG register value
+@ psg_read(r0=reg) -> r0=data — BIOS trap: SYS_PSG_READ
 .global psg_read
 .type psg_read, %function
 .thumb_func
 psg_read:
-    push    {r4, lr}
-    mov     r4, r0              @ reg
-    mov     r0, #0xD001
-    mov     r1, r4
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x19
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD003
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x09
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    push    {r0}               @ save result
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD003
-    mov     r1, #0xFF
-    bl      bus_write
-    pop     {r0}               @ return value
-    pop     {r4, pc}
-    .ltorg
+    svc     #12                     @ SYS_PSG_READ
+    bx      lr
 
 .global vpy_abs
 .type vpy_abs, %function
@@ -1356,192 +571,45 @@ vpy_clamp:
     movgt   r0, r2
     bx      lr
 
-@ vpy_play_music(r0=music_data_ptr)
+@ vpy_play_music(r0=music_data_ptr) — BIOS trap: SYS_PLAY_MUSIC
 .global vpy_play_music
 .type vpy_play_music, %function
 .thumb_func
 vpy_play_music:
-    push    {r4, lr}
-    mov     r4, r0
-    ldr     r1, =PSG_MUSIC_START
-    ldr     r1, [r1]
-    cmp     r4, r1
-    beq     vpm_already
-    bl      vpy_stop_music
-    ldr     r1, =PSG_MUSIC_START
-    str     r4, [r1]
-    add     r0, r4, #8
-    ldr     r1, =PSG_MUSIC_PTR
-    str     r0, [r1]
-    ldr     r1, =PSG_IS_PLAYING
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r1, =PSG_DELAY_FRAMES
-    mov     r0, #0
-    str     r0, [r1]
-vpm_already:
-    pop     {r4, pc}
-    .ltorg
+    svc     #21                     @ SYS_PLAY_MUSIC
+    bx      lr
 
-@ vpy_stop_music() — stop playback and silence all PSG channels
+@ vpy_stop_music() — BIOS trap: SYS_STOP_MUSIC
 .global vpy_stop_music
 .type vpy_stop_music, %function
 .thumb_func
 vpy_stop_music:
-    push    {lr}
-    ldr     r0, =PSG_IS_PLAYING
-    mov     r1, #0
-    str     r1, [r0]
-    mov     r0, #8
-    mov     r1, #0
-    bl      psg_write
-    mov     r0, #9
-    mov     r1, #0
-    bl      psg_write
-    mov     r0, #10
-   mov     r1, #0
-    bl      psg_write
-    mov     r0, #7
-    mov     r1, #0x3F
- bl      psg_write
-    pop     {pc}
-    .ltorg
+    svc     #22                     @ SYS_STOP_MUSIC
+    bx      lr
 
-@ vpy_music_update() — advance PSG music sequencer by one frame
+@ vpy_music_update() — no-op: core 1 advances the sequencer, the
+@ BIOS flushes it each frame from WAIT_RECAL. Kept so the auto-
+@ injected per-frame call still links.
 .global vpy_music_update
 .type vpy_music_update, %function
 .thumb_func
 vpy_music_update:
-    push    {r4, r5, r6, r7, lr}
-    ldr     r0, =PSG_IS_PLAYING
-    ldr     r0, [r0]
-    cmp     r0, #0
-    beq     vmu_done
-    ldr     r4, =PSG_DELAY_FRAMES
-    ldr     r0, [r4]
-    cmp     r0, #0
-    beq     vmu_process
-    sub     r0, r0, #1
-    str     r0, [r4]
-    b       vmu_done
-vmu_process:
-    ldr     r5, =PSG_MUSIC_PTR
-    ldr     r5, [r5]
-    ldrb    r6, [r5, #1]         @ num_writes
-    cmp     r6, #0
-    beq     vmu_end
-    cmp     r6, #0xFF
-    beq     vmu_loop
-    add     r7, r5, #2
-vmu_write_loop:
-    cmp     r6, #0
-    beq     vmu_after_writes
-    ldrb    r0, [r7]
-    ldrb    r1, [r7, #1]
-    push    {r6, r7}
-    bl      psg_write
-    pop     {r6, r7}
-    add     r7, r7, #2
-    sub     r6, r6, #1
-    b       vmu_write_loop
-vmu_after_writes:
-    ldr     r0, =PSG_MUSIC_PTR
-    str     r7, [r0]
-    ldrb    r0, [r7]
-    str     r0, [r4]
-    b       vmu_done
-vmu_end:
-    bl      vpy_stop_music
-    b       vmu_done
-vmu_loop:
-    ldr     r0, =PSG_MUSIC_START
-    ldr     r0, [r0]
-    ldr     r1, [r0, #4]         @ loop_event_offset
-    add     r1, r0, r1
-    ldr     r0, =PSG_MUSIC_PTR
-    str     r1, [r0]
-    ldrb    r0, [r1]
-    str     r0, [r4]
-vmu_done:
-    pop     {r4, r5, r6, r7, pc}
-    .ltorg
+    bx      lr
 
-@ vpy_play_sfx(r0=sfx_data_ptr)
+@ vpy_play_sfx(r0=sfx_data_ptr) — BIOS trap: SYS_PLAY_SFX
 .global vpy_play_sfx
 .type vpy_play_sfx, %function
 .thumb_func
 vpy_play_sfx:
-    push    {lr}
-    ldr     r1, =PSG_SFX_PTR
-    add     r2, r0, #4
-    str     r2, [r1]
-    ldr     r1, =PSG_SFX_ACTIVE
-    mov     r2, #1
-    str     r2, [r1]
-    ldr     r1, =PSG_SFX_DELAY
-    mov     r2, #0
-    str     r2, [r1]
-    pop     {pc}
-    .ltorg
+    svc     #23                     @ SYS_PLAY_SFX
+    bx      lr
 
-@ vpy_audio_update() — advance SFX sequencer by one frame
+@ vpy_audio_update() — no-op: core 1 advances SFX, BIOS flushes each frame
 .global vpy_audio_update
 .type vpy_audio_update, %function
 .thumb_func
 vpy_audio_update:
-    push    {r4, r5, r6, r7, lr}
-    ldr     r0, =PSG_SFX_ACTIVE
-    ldr     r0, [r0]
-    cmp     r0, #0
-    beq     vau_done
-    ldr     r4, =PSG_SFX_DELAY
-    ldr     r0, [r4]
-    cmp     r0, #0
-    beq     vau_proc
-    sub     r0, r0, #1
-    str     r0, [r4]
-    b       vau_done
-vau_proc:
-    ldr     r5, =PSG_SFX_PTR
-    ldr     r5, [r5]
-    ldrb    r6, [r5, #1]         @ num_writes
-    cmp     r6, #0
-    beq     vau_end
-    add     r7, r5, #2
-vau_wl:
-    cmp     r6, #0
-    beq     vau_aw
-    ldrb    r0, [r7]
-    ldrb    r1, [r7, #1]
-    cmp     r0, #7
-    bne     vau_do_write
-    push    {r1, r6, r7}    @ save sfx_mixer, loop vars
-    bl      psg_read         @ r0=7 already → returns Regs[7]
-    pop     {r1, r6, r7}    @ restore sfx_mixer to r1; r0=cur_mixer
-    and     r0, r0, #0xDB   @ keep non-C bits from music (0xDB=~0x24)
-    and     r1, r1, #0x24   @ keep only C bits from SFX
-    orr     r1, r0, r1      @ r1 = merged mixer
-    mov     r0, #7          @ reg = 7
-vau_do_write:
-    push    {r6, r7}
-    bl      psg_write
-    pop     {r6, r7}
-    add     r7, r7, #2
-    sub     r6, r6, #1
-    b       vau_wl
-vau_aw:
-    ldr     r0, =PSG_SFX_PTR
-    str     r7, [r0]
-    ldrb    r0, [r7]
-    str     r0, [r4]
-    b       vau_done
-vau_end:
-    ldr     r0, =PSG_SFX_ACTIVE
-    mov     r1, #0
-    str     r1, [r0]
-vau_done:
-    pop     {r4, r5, r6, r7, pc}
-    .ltorg
+    bx      lr
 
 .global vpy_set_camera_x
 .type vpy_set_camera_x, %function
@@ -1639,14 +707,6 @@ vpy_set_text_size:
 vsts_ok:
     ldr     r0, =TEXT_SIZE
     str     r1, [r0]
-    bx      lr
-
-.global vpy_set_text_color
-.type vpy_set_text_color, %function
-.thumb_func
-vpy_set_text_color:
-    ldr     r1, =TEXT_COLOR
-    str     r0, [r1]
     bx      lr
 
 @ vpy_load_level(r0=level_data_ptr)
@@ -2233,186 +1293,119 @@ _pmsg_str_43:
     .byte 86, 65, 85, 76, 84, 32, 85, 78, 83, 69, 65, 76, 69, 68, 33, 0
 
 @ --- User variables (RAM) ---
-.equ VAR_STATE_TITLE, 0x2007F460  @ const scalar
-.equ VAR_STATE_INTRO, 0x2007F464  @ const scalar
-.equ VAR_STATE_ROOM, 0x2007F468  @ const scalar
-.equ VAR_STATE_ENDING, 0x2007F46C  @ const scalar
-.equ VAR_STATE_TESTAMENT, 0x2007F470  @ const scalar
-.equ VAR_ROOM_ENTRANCE, 0x2007F474  @ const scalar
-.equ VAR_ROOM_WORKSHOP, 0x2007F478  @ const scalar
-.equ VAR_ROOM_ANTEROOM, 0x2007F47C  @ const scalar
-.equ VAR_ROOM_WEIGHTS, 0x2007F480  @ const scalar
-.equ VAR_ROOM_OPTICS, 0x2007F484  @ const scalar
-.equ VAR_ROOM_CONSERVATORY, 0x2007F488  @ const scalar
-.equ VAR_ROOM_VAULT_CORRIDOR, 0x2007F48C  @ const scalar
-.equ VAR_VERB_EXAMINE, 0x2007F490  @ const scalar
-.equ VAR_VERB_TAKE, 0x2007F494  @ const scalar
-.equ VAR_VERB_USE, 0x2007F498  @ const scalar
-.equ VAR_VERB_GIVE, 0x2007F49C  @ const scalar
-.equ VAR_NPC_CARETAKER, 0x2007F4A0  @ const scalar
-.equ VAR_NPC_HANS, 0x2007F4A4  @ const scalar
-.equ VAR_NPC_ELISA, 0x2007F4A8  @ const scalar
-.equ VAR_NPC_APPRENTICE, 0x2007F4AC  @ const scalar
-.equ VAR_ITEM_LENS, 0x2007F4B0  @ const scalar
-.equ VAR_ITEM_GEAR, 0x2007F4B4  @ const scalar
-.equ VAR_ITEM_PRISM, 0x2007F4B8  @ const scalar
-.equ VAR_ITEM_BLANKET, 0x2007F4BC  @ const scalar
-.equ VAR_ITEM_EYE, 0x2007F4C0  @ const scalar
-.equ VAR_ITEM_OIL, 0x2007F4C4  @ const scalar
-.equ VAR_ITEM_SHEET, 0x2007F4C8  @ const scalar
-.equ VAR_ITEM_KEY, 0x2007F4CC  @ const scalar
-.equ VAR_ITEM_COUNT, 0x2007F4D0  @ const scalar
 .equ ARRAY_ITEM_WEIGHT_LEN, 8
-.equ VAR_ITEM_WEIGHT, 0x2007F4D4  @ const array pointer
-.equ VAR_MUSIC_NONE, 0x2007F4D8  @ const scalar
-.equ VAR_MUSIC_TITLE, 0x2007F4DC  @ const scalar
-.equ VAR_MUSIC_EXPLORATION, 0x2007F4E0  @ const scalar
-.equ VAR_FL_DATE_KNOWN, 0x2007F4E4  @ const scalar
-.equ VAR_FL_TALLER_OPEN, 0x2007F4E8  @ const scalar
-.equ VAR_FL_SARC_OPEN, 0x2007F4EC  @ const scalar
-.equ VAR_FL_CLOCK_READ, 0x2007F4F0  @ const scalar
-.equ VAR_FL_PANEL_ACTIVE, 0x2007F4F4  @ const scalar
-.equ VAR_FL_ITEMS_DEPOSITED, 0x2007F4F8  @ const scalar
-.equ VAR_FL_OPTICS_SOLVED, 0x2007F4FC  @ const scalar
-.equ VAR_FL_OPTICS_OPEN, 0x2007F500  @ const scalar
-.equ VAR_FL_PLAT_DOWN, 0x2007F504  @ const scalar
-.equ VAR_FL_ELISA_HELPED, 0x2007F508  @ const scalar
-.equ VAR_FL_HANS_HELPED, 0x2007F50C  @ const scalar
-.equ VAR_FL_CARETAKER_DONE, 0x2007F510  @ const scalar
-.equ VAR_FL_EXIT_TESTAMENT, 0x2007F514  @ const scalar
-.equ VAR_FL_EXIT_ENDING, 0x2007F518  @ const scalar
-.equ VAR_ENT_HS_PAINTING, 0x2007F51C  @ const scalar
-.equ VAR_ENT_HS_DOOR, 0x2007F520  @ const scalar
-.equ VAR_ENT_HS_CARETAKER, 0x2007F524  @ const scalar
-.equ VAR_ENT_HS_CONS_DOOR, 0x2007F528  @ const scalar
+.equ VAR_ITEM_WEIGHT, 0x2007F460  @ const array pointer
 .equ ARRAY_ENT_HS_X_LEN, 4
-.equ VAR_ENT_HS_X, 0x2007F52C  @ const array pointer
+.equ VAR_ENT_HS_X, 0x2007F464  @ const array pointer
 .equ ARRAY_ENT_HS_Y_LEN, 4
-.equ VAR_ENT_HS_Y, 0x2007F530  @ const array pointer
+.equ VAR_ENT_HS_Y, 0x2007F468  @ const array pointer
 .equ ARRAY_ENT_HS_W_LEN, 4
-.equ VAR_ENT_HS_W, 0x2007F534  @ const array pointer
+.equ VAR_ENT_HS_W, 0x2007F46C  @ const array pointer
 .equ ARRAY_ENT_HS_H_LEN, 4
-.equ VAR_ENT_HS_H, 0x2007F538  @ const array pointer
-.equ VAR_CLOCK_HS_SARC, 0x2007F53C  @ const scalar
-.equ VAR_CLOCK_HS_CLOCK, 0x2007F540  @ const scalar
-.equ VAR_CLOCK_HS_GEAR, 0x2007F544  @ const scalar
-.equ VAR_CLOCK_HS_HANS, 0x2007F548  @ const scalar
-.equ VAR_CLOCK_HS_OIL, 0x2007F54C  @ const scalar
-.equ VAR_CLOCK_HS_OPTICS, 0x2007F550  @ const scalar
+.equ VAR_ENT_HS_H, 0x2007F470  @ const array pointer
 .equ ARRAY_CLOCK_HS_X_LEN, 6
-.equ VAR_CLOCK_HS_X, 0x2007F554  @ const array pointer
+.equ VAR_CLOCK_HS_X, 0x2007F474  @ const array pointer
 .equ ARRAY_CLOCK_HS_Y_LEN, 6
-.equ VAR_CLOCK_HS_Y, 0x2007F558  @ const array pointer
+.equ VAR_CLOCK_HS_Y, 0x2007F478  @ const array pointer
 .equ ARRAY_CLOCK_HS_W_LEN, 6
-.equ VAR_CLOCK_HS_W, 0x2007F55C  @ const array pointer
+.equ VAR_CLOCK_HS_W, 0x2007F47C  @ const array pointer
 .equ ARRAY_CLOCK_HS_H_LEN, 6
-.equ VAR_CLOCK_HS_H, 0x2007F560  @ const array pointer
-.equ VAR_ANT_HS_DIARY, 0x2007F564  @ const scalar
-.equ VAR_ANT_HS_EXIT, 0x2007F568  @ const scalar
-.equ VAR_ANT_HS_SHELF, 0x2007F56C  @ const scalar
-.equ VAR_ANT_HS_CABINET, 0x2007F570  @ const scalar
+.equ VAR_CLOCK_HS_H, 0x2007F480  @ const array pointer
 .equ ARRAY_ANT_HS_X_LEN, 4
-.equ VAR_ANT_HS_X, 0x2007F574  @ const array pointer
+.equ VAR_ANT_HS_X, 0x2007F484  @ const array pointer
 .equ ARRAY_ANT_HS_Y_LEN, 4
-.equ VAR_ANT_HS_Y, 0x2007F578  @ const array pointer
+.equ VAR_ANT_HS_Y, 0x2007F488  @ const array pointer
 .equ ARRAY_ANT_HS_W_LEN, 4
-.equ VAR_ANT_HS_W, 0x2007F57C  @ const array pointer
+.equ VAR_ANT_HS_W, 0x2007F48C  @ const array pointer
 .equ ARRAY_ANT_HS_H_LEN, 4
-.equ VAR_ANT_HS_H, 0x2007F580  @ const array pointer
-.equ VAR_WGT_HS_PEDESTAL, 0x2007F584  @ const scalar
-.equ VAR_WGT_HS_EXIT, 0x2007F588  @ const scalar
+.equ VAR_ANT_HS_H, 0x2007F490  @ const array pointer
 .equ ARRAY_WGT_HS_X_LEN, 2
-.equ VAR_WGT_HS_X, 0x2007F58C  @ const array pointer
+.equ VAR_WGT_HS_X, 0x2007F494  @ const array pointer
 .equ ARRAY_WGT_HS_Y_LEN, 2
-.equ VAR_WGT_HS_Y, 0x2007F590  @ const array pointer
+.equ VAR_WGT_HS_Y, 0x2007F498  @ const array pointer
 .equ ARRAY_WGT_HS_W_LEN, 2
-.equ VAR_WGT_HS_W, 0x2007F594  @ const array pointer
+.equ VAR_WGT_HS_W, 0x2007F49C  @ const array pointer
 .equ ARRAY_WGT_HS_H_LEN, 2
-.equ VAR_WGT_HS_H, 0x2007F598  @ const array pointer
-.equ VAR_OPT_HS_PEDESTAL, 0x2007F59C  @ const scalar
-.equ VAR_OPT_HS_COMPARTMENT, 0x2007F5A0  @ const scalar
+.equ VAR_WGT_HS_H, 0x2007F4A0  @ const array pointer
 .equ ARRAY_OPT_HS_X_LEN, 2
-.equ VAR_OPT_HS_X, 0x2007F5A4  @ const array pointer
+.equ VAR_OPT_HS_X, 0x2007F4A4  @ const array pointer
 .equ ARRAY_OPT_HS_Y_LEN, 2
-.equ VAR_OPT_HS_Y, 0x2007F5A8  @ const array pointer
+.equ VAR_OPT_HS_Y, 0x2007F4A8  @ const array pointer
 .equ ARRAY_OPT_HS_W_LEN, 2
-.equ VAR_OPT_HS_W, 0x2007F5AC  @ const array pointer
+.equ VAR_OPT_HS_W, 0x2007F4AC  @ const array pointer
 .equ ARRAY_OPT_HS_H_LEN, 2
-.equ VAR_OPT_HS_H, 0x2007F5B0  @ const array pointer
-.equ VAR_CONS_HS_ELISA, 0x2007F5B4  @ const scalar
+.equ VAR_OPT_HS_H, 0x2007F4B0  @ const array pointer
 .equ ARRAY_CONS_HS_X_LEN, 1
-.equ VAR_CONS_HS_X, 0x2007F5B8  @ const array pointer
+.equ VAR_CONS_HS_X, 0x2007F4B4  @ const array pointer
 .equ ARRAY_CONS_HS_Y_LEN, 1
-.equ VAR_CONS_HS_Y, 0x2007F5BC  @ const array pointer
+.equ VAR_CONS_HS_Y, 0x2007F4B8  @ const array pointer
 .equ ARRAY_CONS_HS_W_LEN, 1
-.equ VAR_CONS_HS_W, 0x2007F5C0  @ const array pointer
+.equ VAR_CONS_HS_W, 0x2007F4BC  @ const array pointer
 .equ ARRAY_CONS_HS_H_LEN, 1
-.equ VAR_CONS_HS_H, 0x2007F5C4  @ const array pointer
-.equ VAR_VAULT_HS_APPR, 0x2007F5C8  @ const scalar
-.equ VAR_VAULT_HS_DOOR, 0x2007F5CC  @ const scalar
+.equ VAR_CONS_HS_H, 0x2007F4C0  @ const array pointer
 .equ ARRAY_VAULT_HS_X_LEN, 2
-.equ VAR_VAULT_HS_X, 0x2007F5D0  @ const array pointer
+.equ VAR_VAULT_HS_X, 0x2007F4C4  @ const array pointer
 .equ ARRAY_VAULT_HS_Y_LEN, 2
-.equ VAR_VAULT_HS_Y, 0x2007F5D4  @ const array pointer
+.equ VAR_VAULT_HS_Y, 0x2007F4C8  @ const array pointer
 .equ ARRAY_VAULT_HS_W_LEN, 2
-.equ VAR_VAULT_HS_W, 0x2007F5D8  @ const array pointer
+.equ VAR_VAULT_HS_W, 0x2007F4CC  @ const array pointer
 .equ ARRAY_VAULT_HS_H_LEN, 2
-.equ VAR_VAULT_HS_H, 0x2007F5DC  @ const array pointer
-.equ VAR_SCREEN, 0x2007F5E0
-.equ VAR_BLINK_TIMER, 0x2007F5E4
-.equ VAR_BLINK_ON, 0x2007F5E8
-.equ VAR_INTRO_PAGE, 0x2007F5EC
-.equ VAR_CURRENT_ROOM, 0x2007F5F0
-.equ VAR_PLAYER_X, 0x2007F5F4
-.equ VAR_PLAYER_Y, 0x2007F5F8
-.equ VAR_SCROLL_X, 0x2007F5FC
-.equ VAR_PLAYER_SPEED, 0x2007F600
-.equ VAR_CURRENT_VERB, 0x2007F604
-.equ VAR_NEAR_HS, 0x2007F608
-.equ VAR_MSG_ID, 0x2007F60C
-.equ VAR_MSG_TIMER, 0x2007F610
-.equ VAR_ROOM_EXIT, 0x2007F614
-.equ VAR_FLAGS_A, 0x2007F618
-.equ VAR_FLAGS_B, 0x2007F61C
-.equ ARRAY_NPC_STATE_DATA, 0x2007F620
+.equ VAR_VAULT_HS_H, 0x2007F4D0  @ const array pointer
+.equ VAR_SCREEN, 0x2007F4D4
+.equ VAR_BLINK_TIMER, 0x2007F4D8
+.equ VAR_BLINK_ON, 0x2007F4DC
+.equ VAR_INTRO_PAGE, 0x2007F4E0
+.equ VAR_CURRENT_ROOM, 0x2007F4E4
+.equ VAR_PLAYER_X, 0x2007F4E8
+.equ VAR_PLAYER_Y, 0x2007F4EC
+.equ VAR_SCROLL_X, 0x2007F4F0
+.equ VAR_PLAYER_SPEED, 0x2007F4F4
+.equ VAR_CURRENT_VERB, 0x2007F4F8
+.equ VAR_NEAR_HS, 0x2007F4FC
+.equ VAR_MSG_ID, 0x2007F500
+.equ VAR_MSG_TIMER, 0x2007F504
+.equ VAR_ROOM_EXIT, 0x2007F508
+.equ VAR_FLAGS_A, 0x2007F50C
+.equ VAR_FLAGS_B, 0x2007F510
+.equ ARRAY_NPC_STATE_DATA, 0x2007F514
 .equ ARRAY_NPC_STATE_LEN, 4
-.equ VAR_NPC_STATE, 0x2007F628  @ array pointer
-.equ VAR_EXIT_ROOM_TARGET, 0x2007F62C
-.equ VAR_CURRENT_MUSIC, 0x2007F630
-.equ VAR_BTN1_FIRED, 0x2007F634
-.equ VAR_BTN2_FIRED, 0x2007F638
-.equ VAR_BTN3_FIRED, 0x2007F63C
-.equ VAR_PREV_BTN1, 0x2007F640
-.equ VAR_PREV_BTN2, 0x2007F644
-.equ VAR_PREV_BTN3, 0x2007F648
-.equ ARRAY_INV_ITEMS_DATA, 0x2007F64C
+.equ VAR_NPC_STATE, 0x2007F51C  @ array pointer
+.equ VAR_EXIT_ROOM_TARGET, 0x2007F520
+.equ VAR_CURRENT_MUSIC, 0x2007F524
+.equ VAR_BTN1_FIRED, 0x2007F528
+.equ VAR_BTN2_FIRED, 0x2007F52C
+.equ VAR_BTN3_FIRED, 0x2007F530
+.equ VAR_PREV_BTN1, 0x2007F534
+.equ VAR_PREV_BTN2, 0x2007F538
+.equ VAR_PREV_BTN3, 0x2007F53C
+.equ ARRAY_INV_ITEMS_DATA, 0x2007F540
 .equ ARRAY_INV_ITEMS_LEN, 8
-.equ VAR_INV_ITEMS, 0x2007F65C  @ array pointer
-.equ VAR_INV_COUNT, 0x2007F660
-.equ VAR_INV_WEIGHT, 0x2007F664
-.equ VAR_SHOW_INVENTORY, 0x2007F668
-.equ VAR_ACTIVE_ITEM, 0x2007F66C
-.equ VAR_INV_CURSOR, 0x2007F670
-.equ VAR_HEARTBEAT_TEMPO, 0x2007F674
-.equ VAR_HEARTBEAT_TIMER, 0x2007F678
-.equ VAR_TESTAMENT_Y, 0x2007F67C
-.equ VAR_TESTAMENT_PAGE, 0x2007F680
-.equ VAR_ENDING_Y, 0x2007F684
-.equ VAR_SKIPPEDFRAMES, 0x2007F688
-.equ VAR_RAW1, 0x2007F68C  @ implicit
-.equ VAR_RAW2, 0x2007F690  @ implicit
-.equ VAR_RAW3, 0x2007F694  @ implicit
-.equ VAR_ROOM_ID, 0x2007F698  @ param
-.equ VAR_JOY_X, 0x2007F69C  @ implicit
-.equ VAR_DX, 0x2007F6A0  @ implicit
-.equ VAR_DY, 0x2007F6A4  @ implicit
-.equ VAR_HS, 0x2007F6A8  @ param
-.equ VAR_CARETAKER_SX, 0x2007F6AC  @ implicit
-.equ VAR_HANS_SX, 0x2007F6B0  @ implicit
-.equ VAR_PLAT_SX, 0x2007F6B4  @ implicit
-.equ VAR_COMP_SX, 0x2007F6B8  @ implicit
-.equ VAR_SCREEN_X, 0x2007F6BC  @ implicit
-.equ VAR_ITEM_ID, 0x2007F6C0  @ param
+.equ VAR_INV_ITEMS, 0x2007F550  @ array pointer
+.equ VAR_INV_COUNT, 0x2007F554
+.equ VAR_INV_WEIGHT, 0x2007F558
+.equ VAR_SHOW_INVENTORY, 0x2007F55C
+.equ VAR_ACTIVE_ITEM, 0x2007F560
+.equ VAR_INV_CURSOR, 0x2007F564
+.equ VAR_HEARTBEAT_TEMPO, 0x2007F568
+.equ VAR_HEARTBEAT_TIMER, 0x2007F56C
+.equ VAR_TESTAMENT_Y, 0x2007F570
+.equ VAR_TESTAMENT_PAGE, 0x2007F574
+.equ VAR_ENDING_Y, 0x2007F578
+.equ VAR_SKIPPEDFRAMES, 0x2007F57C
+.equ VAR_RAW1, 0x2007F580  @ implicit
+.equ VAR_RAW2, 0x2007F584  @ implicit
+.equ VAR_RAW3, 0x2007F588  @ implicit
+.equ VAR_ROOM_ID, 0x2007F58C  @ param
+.equ VAR_JOY_X, 0x2007F590  @ implicit
+.equ VAR_DX, 0x2007F594  @ implicit
+.equ VAR_DY, 0x2007F598  @ implicit
+.equ VAR_HS, 0x2007F59C  @ param
+.equ VAR_CARETAKER_SX, 0x2007F5A0  @ implicit
+.equ VAR_HANS_SX, 0x2007F5A4  @ implicit
+.equ VAR_PLAT_SX, 0x2007F5A8  @ implicit
+.equ VAR_COMP_SX, 0x2007F5AC  @ implicit
+.equ VAR_SCREEN_X, 0x2007F5B0  @ implicit
+.equ VAR_ITEM_ID, 0x2007F5B4  @ param
 
 @ --- Const array ROM data ---
 .align 2
@@ -2589,103 +1582,57 @@ DRAW_TITLE:
     pop     {r0}
     bl      vpy_draw_vector_ex
     add     sp, sp, #4
-    ldr     r1, =0x2007F5E4    @ BLINK_TIMER
+    ldr     r1, =0x2007F4D8    @ BLINK_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     add     r0, r0, r1
-    ldr     r1, =0x2007F5E4    @ BLINK_TIMER
+    ldr     r1, =0x2007F4D8    @ BLINK_TIMER
     str     r0, [r1]
-    ldr     r1, =0x2007F5E4    @ BLINK_TIMER
+    ldr     r1, =0x2007F4D8    @ BLINK_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #40
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #40
     cmp     r0, r1
-    blt    .Lcf0
-    movs    r0, #1
-    b       .Lcf0e
-.Lcf0:
-    movs    r0, #0
-.Lcf0e:
-    cmp     r0, #0
-    beq     if_else_0
+    blt     if_else_0
     mov     r0, #0
-    ldr     r1, =0x2007F5E4    @ BLINK_TIMER
+    ldr     r1, =0x2007F4D8    @ BLINK_TIMER
     str     r0, [r1]
-    ldr     r1, =0x2007F5E8    @ BLINK_ON
+    ldr     r1, =0x2007F4DC    @ BLINK_ON
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf1
-    movs    r0, #1
-    b       .Lcf1e
-.Lcf1:
-    movs    r0, #0
-.Lcf1e:
-    cmp     r0, #0
-    beq     if_else_1
+    bne     if_else_1
     mov     r0, #1
-    ldr     r1, =0x2007F5E8    @ BLINK_ON
+    ldr     r1, =0x2007F4DC    @ BLINK_ON
     str     r0, [r1]
     b       if_end_1
 if_else_1:
     mov     r0, #0
-    ldr     r1, =0x2007F5E8    @ BLINK_ON
+    ldr     r1, =0x2007F4DC    @ BLINK_ON
     str     r0, [r1]
 if_end_1:
     b       if_end_0
 if_else_0:
 if_end_0:
-    ldr     r1, =0x2007F5E8    @ BLINK_ON
+    ldr     r1, =0x2007F4DC    @ BLINK_ON
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf2
-    movs    r0, #1
-    b       .Lcf2e
-.Lcf2:
-    movs    r0, #0
-.Lcf2e:
-    cmp     r0, #0
-    beq     if_else_2
+    bne     if_else_2
     mov     r0, #7
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_text_size
     b       if_end_2
 if_else_2:
 if_end_2:
-    ldr     r1, =0x2007F634    @ BTN1_FIRED
+    ldr     r1, =0x2007F528    @ BTN1_FIRED
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf3
-    movs    r0, #1
-    b       .Lcf3e
-.Lcf3:
-    movs    r0, #0
-.Lcf3e:
-    cmp     r0, #0
-    beq     if_else_3
+    bne     if_else_3
     mov     r0, #0
-    ldr     r1, =0x2007F5EC    @ INTRO_PAGE
+    ldr     r1, =0x2007F4E0    @ INTRO_PAGE
     str     r0, [r1]
-    ldr     r1, =0x2007F464    @ STATE_INTRO
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    mov     r0, #1
+    ldr     r1, =0x2007F4D4    @ SCREEN
     str     r0, [r1]
     b       if_end_3
 if_else_3:
@@ -2701,24 +1648,12 @@ if_end_3:
 DRAW_INTRO:
     push    {r4, r5, r6, r7, lr}
     mov     r0, #7
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_text_size
-    ldr     r1, =0x2007F5EC    @ INTRO_PAGE
+    ldr     r1, =0x2007F4E0    @ INTRO_PAGE
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf4
-    movs    r0, #1
-    b       .Lcf4e
-.Lcf4:
-    movs    r0, #0
-.Lcf4e:
-    cmp     r0, #0
-    beq     if_else_4
+    bne     if_else_4
     mov     r0, #100
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -2811,21 +1746,11 @@ _str_4_after:
     bl      vpy_print_text
     b       if_end_4
 if_else_4:
-    ldr     r1, =0x2007F5EC    @ INTRO_PAGE
+    ldr     r1, =0x2007F4E0    @ INTRO_PAGE
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf5
-    movs    r0, #1
-    b       .Lcf5e
-.Lcf5:
-    movs    r0, #0
-.Lcf5e:
-    cmp     r0, #0
-    beq     elif_end_5
+    bne     elif_end_5
     mov     r0, #100
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -2919,55 +1844,28 @@ _str_9_after:
     b       if_end_4
 elif_end_5:
 if_end_4:
-    ldr     r1, =0x2007F634    @ BTN1_FIRED
+    ldr     r1, =0x2007F528    @ BTN1_FIRED
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf6
-    movs    r0, #1
-    b       .Lcf6e
-.Lcf6:
-    movs    r0, #0
-.Lcf6e:
-    cmp     r0, #0
-    beq     if_else_6
-    ldr     r1, =0x2007F5EC    @ INTRO_PAGE
+    bne     if_else_6
+    ldr     r1, =0x2007F4E0    @ INTRO_PAGE
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bge    .Lcf7
-    movs    r0, #1
-    b       .Lcf7e
-.Lcf7:
-    movs    r0, #0
-.Lcf7e:
-    cmp     r0, #0
-    beq     if_else_7
-    ldr     r1, =0x2007F5EC    @ INTRO_PAGE
+    bge     if_else_7
+    ldr     r1, =0x2007F4E0    @ INTRO_PAGE
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     add     r0, r0, r1
-    ldr     r1, =0x2007F5EC    @ INTRO_PAGE
+    ldr     r1, =0x2007F4E0    @ INTRO_PAGE
     str     r0, [r1]
     b       if_end_7
 if_else_7:
-    ldr     r1, =0x2007F474    @ ROOM_ENTRANCE
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #0
     bl      ENTER_ROOM
-    ldr     r1, =0x2007F468    @ STATE_ROOM
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    mov     r0, #2
+    ldr     r1, =0x2007F4D4    @ SCREEN
     str     r0, [r1]
 if_end_7:
     b       if_end_6
@@ -2983,455 +1881,252 @@ if_end_6:
 .thumb_func
 ENTER_ROOM:
     push    {r4, r5, r6, r7, lr}
-    ldr     r4, =0x2007F698    @ save param room_id
+    ldr     r4, =0x2007F58C    @ save param room_id
     str     r0, [r4]
-    ldr     r1, =0x2007F698    @ ROOM_ID
+    ldr     r1, =0x2007F58C    @ ROOM_ID
     ldr     r0, [r1]
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     str     r0, [r1]
     ldr     r0, =-1
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F614    @ ROOM_EXIT
+    ldr     r1, =0x2007F508    @ ROOM_EXIT
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F668    @ SHOW_INVENTORY
+    ldr     r1, =0x2007F55C    @ SHOW_INVENTORY
     str     r0, [r1]
-    ldr     r1, =0x2007F698    @ ROOM_ID
+    ldr     r1, =0x2007F58C    @ ROOM_ID
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F474    @ ROOM_ENTRANCE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf8
-    movs    r0, #1
-    b       .Lcf8e
-.Lcf8:
-    movs    r0, #0
-.Lcf8e:
-    cmp     r0, #0
-    beq     if_else_8
+    bne     if_else_8
     ldr     r0, =_ENTRANCE_LEVEL    @ asset 'entrance'
-    push    {r0}
-    pop     {r0}
     bl      vpy_load_level
     mov     r0, #0
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     str     r0, [r1]
     ldr     r0, =-115
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
     str     r0, [r1]
     mov     r0, #0
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_camera_x
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    beq    .Lcf9
-    movs    r0, #1
-    b       .Lcf9e
-.Lcf9:
-    movs    r0, #0
-.Lcf9e:
-    cmp     r0, #0
     beq     if_else_9
     ldr     r0, =_EXPLORATION_MUSIC    @ asset 'exploration'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_music
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    mov     r0, #2
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     str     r0, [r1]
     b       if_end_9
 if_else_9:
 if_end_9:
     b       if_end_8
 if_else_8:
-    ldr     r1, =0x2007F698    @ ROOM_ID
+    ldr     r1, =0x2007F58C    @ ROOM_ID
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F478    @ ROOM_WORKSHOP
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf10
-    movs    r0, #1
-    b       .Lcf10e
-.Lcf10:
-    movs    r0, #0
-.Lcf10e:
-    cmp     r0, #0
-    beq     elif_end_10
+    bne     elif_end_10
     ldr     r0, =_CLOCKROOM_LEVEL    @ asset 'clockroom'
-    push    {r0}
-    pop     {r0}
     bl      vpy_load_level
     mov     r0, #70
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     str     r0, [r1]
     ldr     r0, =-75
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
     str     r0, [r1]
     mov     r0, #0
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_camera_x
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    beq    .Lcf11
-    movs    r0, #1
-    b       .Lcf11e
-.Lcf11:
-    movs    r0, #0
-.Lcf11e:
-    cmp     r0, #0
     beq     if_else_11
     ldr     r0, =_EXPLORATION_MUSIC    @ asset 'exploration'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_music
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    mov     r0, #2
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     str     r0, [r1]
     b       if_end_11
 if_else_11:
 if_end_11:
     b       if_end_8
 elif_end_10:
-    ldr     r1, =0x2007F698    @ ROOM_ID
+    ldr     r1, =0x2007F58C    @ ROOM_ID
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F47C    @ ROOM_ANTEROOM
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf12
-    movs    r0, #1
-    b       .Lcf12e
-.Lcf12:
-    movs    r0, #0
-.Lcf12e:
-    cmp     r0, #0
-    beq     elif_end_12
+    bne     elif_end_12
     ldr     r0, =_ANTEROOM_LEVEL    @ asset 'anteroom'
-    push    {r0}
-    pop     {r0}
     bl      vpy_load_level
     mov     r0, #50
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     str     r0, [r1]
     ldr     r0, =-115
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
     str     r0, [r1]
     mov     r0, #0
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_camera_x
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    beq    .Lcf13
-    movs    r0, #1
-    b       .Lcf13e
-.Lcf13:
-    movs    r0, #0
-.Lcf13e:
-    cmp     r0, #0
     beq     if_else_13
     ldr     r0, =_EXPLORATION_MUSIC    @ asset 'exploration'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_music
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    mov     r0, #2
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     str     r0, [r1]
     b       if_end_13
 if_else_13:
 if_end_13:
     b       if_end_8
 elif_end_12:
-    ldr     r1, =0x2007F698    @ ROOM_ID
+    ldr     r1, =0x2007F58C    @ ROOM_ID
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F480    @ ROOM_WEIGHTS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf14
-    movs    r0, #1
-    b       .Lcf14e
-.Lcf14:
-    movs    r0, #0
-.Lcf14e:
-    cmp     r0, #0
-    beq     elif_end_14
+    bne     elif_end_14
     ldr     r0, =_WEIGHTS_ROOM_LEVEL    @ asset 'weights_room'
-    push    {r0}
-    pop     {r0}
     bl      vpy_load_level
     mov     r0, #50
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     str     r0, [r1]
     ldr     r0, =-115
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
     str     r0, [r1]
     mov     r0, #0
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_camera_x
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    beq    .Lcf15
-    movs    r0, #1
-    b       .Lcf15e
-.Lcf15:
-    movs    r0, #0
-.Lcf15e:
-    cmp     r0, #0
     beq     if_else_15
     ldr     r0, =_EXPLORATION_MUSIC    @ asset 'exploration'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_music
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    mov     r0, #2
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     str     r0, [r1]
     b       if_end_15
 if_else_15:
 if_end_15:
     b       if_end_8
 elif_end_14:
-    ldr     r1, =0x2007F698    @ ROOM_ID
+    ldr     r1, =0x2007F58C    @ ROOM_ID
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F484    @ ROOM_OPTICS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     cmp     r0, r1
-    bne    .Lcf16
-    movs    r0, #1
-    b       .Lcf16e
-.Lcf16:
-    movs    r0, #0
-.Lcf16e:
-    cmp     r0, #0
-    beq     elif_end_16
+    bne     elif_end_16
     ldr     r0, =_OPTICS_LAB_LEVEL    @ asset 'optics_lab'
-    push    {r0}
-    pop     {r0}
     bl      vpy_load_level
     mov     r0, #50
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     str     r0, [r1]
     ldr     r0, =-115
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
     str     r0, [r1]
     mov     r0, #0
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_camera_x
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    beq    .Lcf17
-    movs    r0, #1
-    b       .Lcf17e
-.Lcf17:
-    movs    r0, #0
-.Lcf17e:
-    cmp     r0, #0
     beq     if_else_17
     ldr     r0, =_EXPLORATION_MUSIC    @ asset 'exploration'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_music
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    mov     r0, #2
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     str     r0, [r1]
     b       if_end_17
 if_else_17:
 if_end_17:
     b       if_end_8
 elif_end_16:
-    ldr     r1, =0x2007F698    @ ROOM_ID
+    ldr     r1, =0x2007F58C    @ ROOM_ID
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F488    @ ROOM_CONSERVATORY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     cmp     r0, r1
-    bne    .Lcf18
-    movs    r0, #1
-    b       .Lcf18e
-.Lcf18:
-    movs    r0, #0
-.Lcf18e:
-    cmp     r0, #0
-    beq     elif_end_18
+    bne     elif_end_18
     ldr     r0, =_CONSERVATORY_LEVEL    @ asset 'conservatory'
-    push    {r0}
-    pop     {r0}
     bl      vpy_load_level
     ldr     r0, =-60
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     str     r0, [r1]
     ldr     r0, =-115
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
     str     r0, [r1]
     mov     r0, #0
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_camera_x
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    beq    .Lcf19
-    movs    r0, #1
-    b       .Lcf19e
-.Lcf19:
-    movs    r0, #0
-.Lcf19e:
-    cmp     r0, #0
     beq     if_else_19
     ldr     r0, =_EXPLORATION_MUSIC    @ asset 'exploration'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_music
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    mov     r0, #2
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     str     r0, [r1]
     b       if_end_19
 if_else_19:
 if_end_19:
     b       if_end_8
 elif_end_18:
-    ldr     r1, =0x2007F698    @ ROOM_ID
+    ldr     r1, =0x2007F58C    @ ROOM_ID
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F48C    @ ROOM_VAULT_CORRIDOR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #6
     cmp     r0, r1
-    bne    .Lcf20
-    movs    r0, #1
-    b       .Lcf20e
-.Lcf20:
-    movs    r0, #0
-.Lcf20e:
-    cmp     r0, #0
-    beq     elif_end_20
+    bne     elif_end_20
     ldr     r0, =_VAULT_CORRIDOR_LEVEL    @ asset 'vault_corridor'
-    push    {r0}
-    pop     {r0}
     bl      vpy_load_level
     ldr     r0, =-60
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     str     r0, [r1]
     ldr     r0, =-115
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
     str     r0, [r1]
     mov     r0, #0
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_camera_x
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    beq    .Lcf21
-    movs    r0, #1
-    b       .Lcf21e
-.Lcf21:
-    movs    r0, #0
-.Lcf21e:
-    cmp     r0, #0
     beq     if_else_21
     ldr     r0, =_EXPLORATION_MUSIC    @ asset 'exploration'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_music
-    ldr     r1, =0x2007F4E0    @ MUSIC_EXPLORATION
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    mov     r0, #2
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     str     r0, [r1]
     b       if_end_21
 if_else_21:
@@ -3450,64 +2145,38 @@ if_end_8:
 UPDATE_ROOM:
     push    {r4, r5, r6, r7, lr}
     bl      vpy_j1_x
-    ldr     r1, =0x2007F69C    @ JOY_X
+    ldr     r1, =0x2007F590    @ JOY_X
     str     r0, [r1]
-    ldr     r1, =0x2007F69C    @ JOY_X
+    ldr     r1, =0x2007F590    @ JOY_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #30
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #30
     cmp     r0, r1
-    ble    .Lcf22
-    movs    r0, #1
-    b       .Lcf22e
-.Lcf22:
-    movs    r0, #0
-.Lcf22e:
-    cmp     r0, #0
-    beq     if_else_22
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ble     if_else_22
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F600    @ PLAYER_SPEED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =0x2007F4F4    @ PLAYER_SPEED
+    ldr     r1, [r1]
     add     r0, r0, r1
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     str     r0, [r1]
     b       if_end_22
 if_else_22:
-    ldr     r1, =0x2007F69C    @ JOY_X
+    ldr     r1, =0x2007F590    @ JOY_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-30
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-30
     cmp     r0, r1
-    bge    .Lcf23
-    movs    r0, #1
-    b       .Lcf23e
-.Lcf23:
-    movs    r0, #0
-.Lcf23e:
-    cmp     r0, #0
-    beq     elif_end_23
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    bge     elif_end_23
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F600    @ PLAYER_SPEED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =0x2007F4F4    @ PLAYER_SPEED
+    ldr     r1, [r1]
     sub     r0, r0, r1
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     str     r0, [r1]
     b       if_end_22
 elif_end_23:
 if_end_22:
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
     ldr     r0, =-90
@@ -3518,9 +2187,9 @@ if_end_22:
     pop     {r1}
     pop     {r0}
     bl      vpy_clamp
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     str     r0, [r1]
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
     mov     r0, #0
@@ -3531,69 +2200,32 @@ if_end_22:
     pop     {r1}
     pop     {r0}
     bl      vpy_clamp
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
     str     r0, [r1]
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_camera_x
     ldr     r0, =-1
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F474    @ ROOM_ENTRANCE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf24
-    movs    r0, #1
-    b       .Lcf24e
-.Lcf24:
-    movs    r0, #0
-.Lcf24e:
-    cmp     r0, #0
-    beq     if_else_24
+    bne     if_else_24
     bl      CHECK_ENTRANCE_HOTSPOTS
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-85
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-85
     cmp     r0, r1
-    bgt    .Lcf25
-    movs    r0, #1
-    b       .Lcf25e
-.Lcf25:
-    movs    r0, #0
-.Lcf25e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    bgt     1f
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4E8    @ FL_TALLER_OPEN
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf26
-    movs    r0, #1
-    b       .Lcf26e
-.Lcf26:
-    movs    r0, #0
-.Lcf26e:
-    cmp     r0, #0
-    beq    .Lcf27
+    beq     .Lcf27
     movs    r0, #1
     b       .Lcf27e
 .Lcf27:
@@ -3604,21 +2236,11 @@ if_end_22:
 2:
     cmp     r0, #0
     beq     1f
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf28
-    movs    r0, #1
-    b       .Lcf28e
-.Lcf28:
-    movs    r0, #0
-.Lcf28e:
-    cmp     r0, #0
-    beq    .Lcf29
+    bne     .Lcf29
     movs    r0, #1
     b       .Lcf29e
 .Lcf29:
@@ -3629,69 +2251,31 @@ if_end_22:
 2:
     cmp     r0, #0
     beq     if_else_25
-    ldr     r1, =0x2007F488    @ ROOM_CONSERVATORY
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #5
     bl      ENTER_ROOM
     b       if_end_25
 if_else_25:
 if_end_25:
     b       if_end_24
 if_else_24:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F478    @ ROOM_WORKSHOP
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf30
-    movs    r0, #1
-    b       .Lcf30e
-.Lcf30:
-    movs    r0, #0
-.Lcf30e:
-    cmp     r0, #0
-    beq     elif_end_26
+    bne     elif_end_26
     bl      CHECK_WORKSHOP_HOTSPOTS
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #770
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #770
     cmp     r0, r1
-    blt    .Lcf31
-    movs    r0, #1
-    b       .Lcf31e
-.Lcf31:
-    movs    r0, #0
-.Lcf31e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    blt     1f
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4F4    @ FL_PANEL_ACTIVE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #16
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf32
-    movs    r0, #1
-    b       .Lcf32e
-.Lcf32:
-    movs    r0, #0
-.Lcf32e:
-    cmp     r0, #0
-    beq    .Lcf33
+    beq     .Lcf33
     movs    r0, #1
     b       .Lcf33e
 .Lcf33:
@@ -3702,21 +2286,11 @@ if_else_24:
 2:
     cmp     r0, #0
     beq     1f
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf34
-    movs    r0, #1
-    b       .Lcf34e
-.Lcf34:
-    movs    r0, #0
-.Lcf34e:
-    cmp     r0, #0
-    beq    .Lcf35
+    bne     .Lcf35
     movs    r0, #1
     b       .Lcf35e
 .Lcf35:
@@ -3727,50 +2301,23 @@ if_else_24:
 2:
     cmp     r0, #0
     beq     if_else_27
-    ldr     r1, =0x2007F48C    @ ROOM_VAULT_CORRIDOR
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #6
     bl      ENTER_ROOM
     b       if_end_27
 if_else_27:
 if_end_27:
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #690
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #690
     cmp     r0, r1
-    blt    .Lcf36
-    movs    r0, #1
-    b       .Lcf36e
-.Lcf36:
-    movs    r0, #0
-.Lcf36e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    blt     1f
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F500    @ FL_OPTICS_OPEN
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #128
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf37
-    movs    r0, #1
-    b       .Lcf37e
-.Lcf37:
-    movs    r0, #0
-.Lcf37e:
-    cmp     r0, #0
-    beq    .Lcf38
+    beq     .Lcf38
     movs    r0, #1
     b       .Lcf38e
 .Lcf38:
@@ -3781,21 +2328,11 @@ if_end_27:
 2:
     cmp     r0, #0
     beq     1f
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #770
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #770
     cmp     r0, r1
-    bge    .Lcf39
-    movs    r0, #1
-    b       .Lcf39e
-.Lcf39:
-    movs    r0, #0
-.Lcf39e:
-    cmp     r0, #0
-    beq    .Lcf40
+    bge     .Lcf40
     movs    r0, #1
     b       .Lcf40e
 .Lcf40:
@@ -3806,21 +2343,11 @@ if_end_27:
 2:
     cmp     r0, #0
     beq     1f
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf41
-    movs    r0, #1
-    b       .Lcf41e
-.Lcf41:
-    movs    r0, #0
-.Lcf41e:
-    cmp     r0, #0
-    beq    .Lcf42
+    bne     .Lcf42
     movs    r0, #1
     b       .Lcf42e
 .Lcf42:
@@ -3831,63 +2358,29 @@ if_end_27:
 2:
     cmp     r0, #0
     beq     if_else_28
-    ldr     r1, =0x2007F484    @ ROOM_OPTICS
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #4
     bl      ENTER_ROOM
     b       if_end_28
 if_else_28:
 if_end_28:
     b       if_end_24
 elif_end_26:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F47C    @ ROOM_ANTEROOM
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf43
-    movs    r0, #1
-    b       .Lcf43e
-.Lcf43:
-    movs    r0, #0
-.Lcf43e:
-    cmp     r0, #0
-    beq     elif_end_29
+    bne     elif_end_29
     bl      CHECK_ANTEROOM_HOTSPOTS
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-85
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-85
     cmp     r0, r1
-    bgt    .Lcf44
-    movs    r0, #1
-    b       .Lcf44e
-.Lcf44:
-    movs    r0, #0
-.Lcf44e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    bgt     1f
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf45
-    movs    r0, #1
-    b       .Lcf45e
-.Lcf45:
-    movs    r0, #0
-.Lcf45e:
-    cmp     r0, #0
-    beq    .Lcf46
+    bne     .Lcf46
     movs    r0, #1
     b       .Lcf46e
 .Lcf46:
@@ -3898,63 +2391,29 @@ elif_end_26:
 2:
     cmp     r0, #0
     beq     if_else_30
-    ldr     r1, =0x2007F474    @ ROOM_ENTRANCE
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #0
     bl      ENTER_ROOM
     b       if_end_30
 if_else_30:
 if_end_30:
     b       if_end_24
 elif_end_29:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F480    @ ROOM_WEIGHTS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf47
-    movs    r0, #1
-    b       .Lcf47e
-.Lcf47:
-    movs    r0, #0
-.Lcf47e:
-    cmp     r0, #0
-    beq     elif_end_31
+    bne     elif_end_31
     bl      CHECK_WEIGHTS_HOTSPOTS
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-85
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-85
     cmp     r0, r1
-    bgt    .Lcf48
-    movs    r0, #1
-    b       .Lcf48e
-.Lcf48:
-    movs    r0, #0
-.Lcf48e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    bgt     1f
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf49
-    movs    r0, #1
-    b       .Lcf49e
-.Lcf49:
-    movs    r0, #0
-.Lcf49e:
-    cmp     r0, #0
-    beq    .Lcf50
+    bne     .Lcf50
     movs    r0, #1
     b       .Lcf50e
 .Lcf50:
@@ -3965,63 +2424,29 @@ elif_end_29:
 2:
     cmp     r0, #0
     beq     if_else_32
-    ldr     r1, =0x2007F47C    @ ROOM_ANTEROOM
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #2
     bl      ENTER_ROOM
     b       if_end_32
 if_else_32:
 if_end_32:
     b       if_end_24
 elif_end_31:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F484    @ ROOM_OPTICS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     cmp     r0, r1
-    bne    .Lcf51
-    movs    r0, #1
-    b       .Lcf51e
-.Lcf51:
-    movs    r0, #0
-.Lcf51e:
-    cmp     r0, #0
-    beq     elif_end_33
+    bne     elif_end_33
     bl      CHECK_OPTICS_HOTSPOTS
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-85
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-85
     cmp     r0, r1
-    bgt    .Lcf52
-    movs    r0, #1
-    b       .Lcf52e
-.Lcf52:
-    movs    r0, #0
-.Lcf52e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    bgt     1f
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf53
-    movs    r0, #1
-    b       .Lcf53e
-.Lcf53:
-    movs    r0, #0
-.Lcf53e:
-    cmp     r0, #0
-    beq    .Lcf54
+    bne     .Lcf54
     movs    r0, #1
     b       .Lcf54e
 .Lcf54:
@@ -4032,63 +2457,29 @@ elif_end_31:
 2:
     cmp     r0, #0
     beq     if_else_34
-    ldr     r1, =0x2007F478    @ ROOM_WORKSHOP
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #1
     bl      ENTER_ROOM
     b       if_end_34
 if_else_34:
 if_end_34:
     b       if_end_24
 elif_end_33:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F488    @ ROOM_CONSERVATORY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     cmp     r0, r1
-    bne    .Lcf55
-    movs    r0, #1
-    b       .Lcf55e
-.Lcf55:
-    movs    r0, #0
-.Lcf55e:
-    cmp     r0, #0
-    beq     elif_end_35
+    bne     elif_end_35
     bl      CHECK_CONSERVATORY_HOTSPOTS
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #60
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #60
     cmp     r0, r1
-    blt    .Lcf56
-    movs    r0, #1
-    b       .Lcf56e
-.Lcf56:
-    movs    r0, #0
-.Lcf56e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    blt     1f
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf57
-    movs    r0, #1
-    b       .Lcf57e
-.Lcf57:
-    movs    r0, #0
-.Lcf57e:
-    cmp     r0, #0
-    beq    .Lcf58
+    bne     .Lcf58
     movs    r0, #1
     b       .Lcf58e
 .Lcf58:
@@ -4099,63 +2490,29 @@ elif_end_33:
 2:
     cmp     r0, #0
     beq     if_else_36
-    ldr     r1, =0x2007F474    @ ROOM_ENTRANCE
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #0
     bl      ENTER_ROOM
     b       if_end_36
 if_else_36:
 if_end_36:
     b       if_end_24
 elif_end_35:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F48C    @ ROOM_VAULT_CORRIDOR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #6
     cmp     r0, r1
-    bne    .Lcf59
-    movs    r0, #1
-    b       .Lcf59e
-.Lcf59:
-    movs    r0, #0
-.Lcf59e:
-    cmp     r0, #0
-    beq     elif_end_37
+    bne     elif_end_37
     bl      CHECK_VAULT_HOTSPOTS
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-85
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-85
     cmp     r0, r1
-    bgt    .Lcf60
-    movs    r0, #1
-    b       .Lcf60e
-.Lcf60:
-    movs    r0, #0
-.Lcf60e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    bgt     1f
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf61
-    movs    r0, #1
-    b       .Lcf61e
-.Lcf61:
-    movs    r0, #0
-.Lcf61e:
-    cmp     r0, #0
-    beq    .Lcf62
+    bne     .Lcf62
     movs    r0, #1
     b       .Lcf62e
 .Lcf62:
@@ -4166,10 +2523,7 @@ elif_end_35:
 2:
     cmp     r0, #0
     beq     if_else_38
-    ldr     r1, =0x2007F478    @ ROOM_WORKSHOP
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #1
     bl      ENTER_ROOM
     b       if_end_38
 if_else_38:
@@ -4177,60 +2531,27 @@ if_end_38:
     b       if_end_24
 elif_end_37:
 if_end_24:
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    ble    .Lcf63
-    movs    r0, #1
-    b       .Lcf63e
-.Lcf63:
-    movs    r0, #0
-.Lcf63e:
-    cmp     r0, #0
-    beq     if_else_39
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ble     if_else_39
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     sub     r0, r0, r1
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf64
-    movs    r0, #1
-    b       .Lcf64e
-.Lcf64:
-    movs    r0, #0
-.Lcf64e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F614    @ ROOM_EXIT
+    bne     1f
+    ldr     r1, =0x2007F508    @ ROOM_EXIT
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf65
-    movs    r0, #1
-    b       .Lcf65e
-.Lcf65:
-    movs    r0, #0
-.Lcf65e:
-    cmp     r0, #0
-    beq    .Lcf66
+    bne     .Lcf66
     movs    r0, #1
     b       .Lcf66e
 .Lcf66:
@@ -4242,93 +2563,55 @@ if_end_24:
     cmp     r0, #0
     beq     if_else_40
     mov     r0, #0
-    ldr     r1, =0x2007F614    @ ROOM_EXIT
+    ldr     r1, =0x2007F508    @ ROOM_EXIT
     str     r0, [r1]
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F514    @ FL_EXIT_TESTAMENT
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #16
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf67
-    movs    r0, #1
-    b       .Lcf67e
-.Lcf67:
-    movs    r0, #0
-.Lcf67e:
-    cmp     r0, #0
     beq     if_else_41
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #239
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #239
     and     r0, r0, r1
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     str     r0, [r1]
     ldr     r0, =-110
-    ldr     r1, =0x2007F67C    @ TESTAMENT_Y
+    ldr     r1, =0x2007F570    @ TESTAMENT_Y
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F680    @ TESTAMENT_PAGE
+    ldr     r1, =0x2007F574    @ TESTAMENT_PAGE
     str     r0, [r1]
-    ldr     r1, =0x2007F470    @ STATE_TESTAMENT
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    mov     r0, #4
+    ldr     r1, =0x2007F4D4    @ SCREEN
     str     r0, [r1]
     b       if_end_41
 if_else_41:
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F518    @ FL_EXIT_ENDING
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #32
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf68
-    movs    r0, #1
-    b       .Lcf68e
-.Lcf68:
-    movs    r0, #0
-.Lcf68e:
-    cmp     r0, #0
     beq     elif_end_42
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #223
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #223
     and     r0, r0, r1
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     str     r0, [r1]
     ldr     r0, =-110
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     str     r0, [r1]
-    ldr     r1, =0x2007F46C    @ STATE_ENDING
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    mov     r0, #3
+    ldr     r1, =0x2007F4D4    @ SCREEN
     str     r0, [r1]
     b       if_end_41
 elif_end_42:
-    ldr     r1, =0x2007F62C    @ EXIT_ROOM_TARGET
+    ldr     r1, =0x2007F520    @ EXIT_ROOM_TARGET
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      ENTER_ROOM
 if_end_41:
     b       if_end_40
@@ -4337,114 +2620,55 @@ if_end_40:
     b       if_end_39
 if_else_39:
 if_end_39:
-    ldr     r1, =0x2007F63C    @ BTN3_FIRED
+    ldr     r1, =0x2007F530    @ BTN3_FIRED
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf69
-    movs    r0, #1
-    b       .Lcf69e
-.Lcf69:
-    movs    r0, #0
-.Lcf69e:
-    cmp     r0, #0
-    beq     if_else_43
-    ldr     r1, =0x2007F668    @ SHOW_INVENTORY
+    bne     if_else_43
+    ldr     r1, =0x2007F55C    @ SHOW_INVENTORY
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf70
-    movs    r0, #1
-    b       .Lcf70e
-.Lcf70:
-    movs    r0, #0
-.Lcf70e:
-    cmp     r0, #0
-    beq     if_else_44
-    ldr     r1, =0x2007F670    @ INV_CURSOR
+    bne     if_else_44
+    ldr     r1, =0x2007F564    @ INV_CURSOR
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     add     r0, r0, r1
-    ldr     r1, =0x2007F670    @ INV_CURSOR
+    ldr     r1, =0x2007F564    @ INV_CURSOR
     str     r0, [r1]
-    ldr     r1, =0x2007F670    @ INV_CURSOR
+    ldr     r1, =0x2007F564    @ INV_CURSOR
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4D0    @ ITEM_COUNT
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #8
     cmp     r0, r1
-    blt    .Lcf71
-    movs    r0, #1
-    b       .Lcf71e
-.Lcf71:
-    movs    r0, #0
-.Lcf71e:
-    cmp     r0, #0
-    beq     if_else_45
+    blt     if_else_45
     mov     r0, #0
-    ldr     r1, =0x2007F670    @ INV_CURSOR
+    ldr     r1, =0x2007F564    @ INV_CURSOR
     str     r0, [r1]
     b       if_end_45
 if_else_45:
 if_end_45:
     b       if_end_44
 if_else_44:
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
+    mov     r1, #0
+    cmp     r0, r1
+    bne     elif_end_46
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
+    ldr     r0, [r1]
+    mov     r1, #3
+    cmp     r0, r1
+    bne     if_else_47
     mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
-    cmp     r0, r1
-    bne    .Lcf72
-    movs    r0, #1
-    b       .Lcf72e
-.Lcf72:
-    movs    r0, #0
-.Lcf72e:
-    cmp     r0, #0
-    beq     elif_end_46
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
-    ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F49C    @ VERB_GIVE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
-    cmp     r0, r1
-    bne    .Lcf73
-    movs    r0, #1
-    b       .Lcf73e
-.Lcf73:
-    movs    r0, #0
-.Lcf73e:
-    cmp     r0, #0
-    beq     if_else_47
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     str     r0, [r1]
     b       if_end_47
 if_else_47:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     add     r0, r0, r1
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     str     r0, [r1]
 if_end_47:
     b       if_end_44
@@ -4453,189 +2677,98 @@ if_end_44:
     b       if_end_43
 if_else_43:
 if_end_43:
-    ldr     r1, =0x2007F634    @ BTN1_FIRED
+    ldr     r1, =0x2007F528    @ BTN1_FIRED
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf74
-    movs    r0, #1
-    b       .Lcf74e
-.Lcf74:
-    movs    r0, #0
-.Lcf74e:
-    cmp     r0, #0
-    beq     if_else_48
-    ldr     r1, =0x2007F668    @ SHOW_INVENTORY
+    bne     if_else_48
+    ldr     r1, =0x2007F55C    @ SHOW_INVENTORY
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf75
-    movs    r0, #1
-    b       .Lcf75e
-.Lcf75:
-    movs    r0, #0
-.Lcf75e:
-    cmp     r0, #0
-    beq     if_else_49
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    bne     if_else_49
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F670    @ INV_CURSOR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    ldr     r1, =0x2007F564    @ INV_CURSOR
+    ldr     r1, [r1]
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf76
-    movs    r0, #1
-    b       .Lcf76e
-.Lcf76:
-    movs    r0, #0
-.Lcf76e:
-    cmp     r0, #0
-    beq     if_else_50
-    ldr     r1, =0x2007F670    @ INV_CURSOR
+    bne     if_else_50
+    ldr     r1, =0x2007F564    @ INV_CURSOR
     ldr     r0, [r1]
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     str     r0, [r1]
     b       if_end_50
 if_else_50:
 if_end_50:
     mov     r0, #0
-    ldr     r1, =0x2007F668    @ SHOW_INVENTORY
+    ldr     r1, =0x2007F55C    @ SHOW_INVENTORY
     str     r0, [r1]
     b       if_end_49
 if_else_49:
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    ble    .Lcf77
-    movs    r0, #1
-    b       .Lcf77e
-.Lcf77:
-    movs    r0, #0
-.Lcf77e:
-    cmp     r0, #0
-    beq     elif_end_51
+    ble     elif_end_51
     mov     r0, #0
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
-    ldr     r1, =0x2007F614    @ ROOM_EXIT
+    ldr     r1, =0x2007F508    @ ROOM_EXIT
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf78
-    movs    r0, #1
-    b       .Lcf78e
-.Lcf78:
-    movs    r0, #0
-.Lcf78e:
-    cmp     r0, #0
-    beq     if_else_52
+    bne     if_else_52
     mov     r0, #0
-    ldr     r1, =0x2007F614    @ ROOM_EXIT
+    ldr     r1, =0x2007F508    @ ROOM_EXIT
     str     r0, [r1]
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F514    @ FL_EXIT_TESTAMENT
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #16
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf79
-    movs    r0, #1
-    b       .Lcf79e
-.Lcf79:
-    movs    r0, #0
-.Lcf79e:
-    cmp     r0, #0
     beq     if_else_53
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #239
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #239
     and     r0, r0, r1
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     str     r0, [r1]
     ldr     r0, =-110
-    ldr     r1, =0x2007F67C    @ TESTAMENT_Y
+    ldr     r1, =0x2007F570    @ TESTAMENT_Y
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F680    @ TESTAMENT_PAGE
+    ldr     r1, =0x2007F574    @ TESTAMENT_PAGE
     str     r0, [r1]
-    ldr     r1, =0x2007F470    @ STATE_TESTAMENT
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    mov     r0, #4
+    ldr     r1, =0x2007F4D4    @ SCREEN
     str     r0, [r1]
     b       if_end_53
 if_else_53:
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F518    @ FL_EXIT_ENDING
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #32
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf80
-    movs    r0, #1
-    b       .Lcf80e
-.Lcf80:
-    movs    r0, #0
-.Lcf80e:
-    cmp     r0, #0
     beq     elif_end_54
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #223
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #223
     and     r0, r0, r1
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     str     r0, [r1]
-    ldr     r1, =0x2007F46C    @ STATE_ENDING
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    mov     r0, #3
+    ldr     r1, =0x2007F4D4    @ SCREEN
     str     r0, [r1]
     b       if_end_53
 elif_end_54:
-    ldr     r1, =0x2007F62C    @ EXIT_ROOM_TARGET
+    ldr     r1, =0x2007F520    @ EXIT_ROOM_TARGET
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      ENTER_ROOM
 if_end_53:
     b       if_end_52
@@ -4643,179 +2776,78 @@ if_else_52:
 if_end_52:
     b       if_end_49
 elif_end_51:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    blt    .Lcf81
-    movs    r0, #1
-    b       .Lcf81e
-.Lcf81:
-    movs    r0, #0
-.Lcf81e:
-    cmp     r0, #0
-    beq     elif_end_55
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    blt     elif_end_55
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F474    @ ROOM_ENTRANCE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf82
-    movs    r0, #1
-    b       .Lcf82e
-.Lcf82:
-    movs    r0, #0
-.Lcf82e:
-    cmp     r0, #0
-    beq     if_else_56
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     if_else_56
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      INTERACT_ENTRANCE
     b       if_end_56
 if_else_56:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F478    @ ROOM_WORKSHOP
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf83
-    movs    r0, #1
-    b       .Lcf83e
-.Lcf83:
-    movs    r0, #0
-.Lcf83e:
-    cmp     r0, #0
-    beq     elif_end_57
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     elif_end_57
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      INTERACT_WORKSHOP
     b       if_end_56
 elif_end_57:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F47C    @ ROOM_ANTEROOM
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf84
-    movs    r0, #1
-    b       .Lcf84e
-.Lcf84:
-    movs    r0, #0
-.Lcf84e:
-    cmp     r0, #0
-    beq     elif_end_58
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     elif_end_58
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      INTERACT_ANTEROOM
     b       if_end_56
 elif_end_58:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F480    @ ROOM_WEIGHTS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf85
-    movs    r0, #1
-    b       .Lcf85e
-.Lcf85:
-    movs    r0, #0
-.Lcf85e:
-    cmp     r0, #0
-    beq     elif_end_59
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     elif_end_59
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      INTERACT_WEIGHTS
     b       if_end_56
 elif_end_59:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F484    @ ROOM_OPTICS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     cmp     r0, r1
-    bne    .Lcf86
-    movs    r0, #1
-    b       .Lcf86e
-.Lcf86:
-    movs    r0, #0
-.Lcf86e:
-    cmp     r0, #0
-    beq     elif_end_60
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     elif_end_60
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      INTERACT_OPTICS
     b       if_end_56
 elif_end_60:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F488    @ ROOM_CONSERVATORY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     cmp     r0, r1
-    bne    .Lcf87
-    movs    r0, #1
-    b       .Lcf87e
-.Lcf87:
-    movs    r0, #0
-.Lcf87e:
-    cmp     r0, #0
-    beq     elif_end_61
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     elif_end_61
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      INTERACT_CONSERVATORY
     b       if_end_56
 elif_end_61:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F48C    @ ROOM_VAULT_CORRIDOR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #6
     cmp     r0, r1
-    bne    .Lcf88
-    movs    r0, #1
-    b       .Lcf88e
-.Lcf88:
-    movs    r0, #0
-.Lcf88e:
-    cmp     r0, #0
-    beq     elif_end_62
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     elif_end_62
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      INTERACT_VAULT
     b       if_end_56
 elif_end_62:
@@ -4836,92 +2868,62 @@ if_end_48:
 .thumb_func
 CHECK_ENTRANCE_HOTSPOTS:
     push    {r4, r5, r6, r7, lr}
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F52C    @ ENT_HS_X
+    ldr     r1, =0x2007F464    @ ENT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F530    @ ENT_HS_Y
+    ldr     r1, =0x2007F468    @ ENT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F534    @ ENT_HS_W
+    ldr     r1, =0x2007F46C    @ ENT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf89
-    movs    r0, #1
-    b       .Lcf89e
-.Lcf89:
-    movs    r0, #0
-.Lcf89e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F538    @ ENT_HS_H
+    ldr     r1, =0x2007F470    @ ENT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf90
-    movs    r0, #1
-    b       .Lcf90e
-.Lcf90:
-    movs    r0, #0
-.Lcf90e:
-    cmp     r0, #0
-    beq    .Lcf91
+    bgt     .Lcf91
     movs    r0, #1
     b       .Lcf91e
 .Lcf91:
@@ -4933,97 +2935,67 @@ CHECK_ENTRANCE_HOTSPOTS:
     cmp     r0, #0
     beq     if_else_63
     mov     r0, #0
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_63
 if_else_63:
 if_end_63:
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F52C    @ ENT_HS_X
+    ldr     r1, =0x2007F464    @ ENT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F530    @ ENT_HS_Y
+    ldr     r1, =0x2007F468    @ ENT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F534    @ ENT_HS_W
+    ldr     r1, =0x2007F46C    @ ENT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf92
-    movs    r0, #1
-    b       .Lcf92e
-.Lcf92:
-    movs    r0, #0
-.Lcf92e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F538    @ ENT_HS_H
+    ldr     r1, =0x2007F470    @ ENT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf93
-    movs    r0, #1
-    b       .Lcf93e
-.Lcf93:
-    movs    r0, #0
-.Lcf93e:
-    cmp     r0, #0
-    beq    .Lcf94
+    bgt     .Lcf94
     movs    r0, #1
     b       .Lcf94e
 .Lcf94:
@@ -5035,97 +3007,67 @@ if_end_63:
     cmp     r0, #0
     beq     if_else_64
     mov     r0, #1
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_64
 if_else_64:
 if_end_64:
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F52C    @ ENT_HS_X
+    ldr     r1, =0x2007F464    @ ENT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F530    @ ENT_HS_Y
+    ldr     r1, =0x2007F468    @ ENT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F534    @ ENT_HS_W
+    ldr     r1, =0x2007F46C    @ ENT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf95
-    movs    r0, #1
-    b       .Lcf95e
-.Lcf95:
-    movs    r0, #0
-.Lcf95e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F538    @ ENT_HS_H
+    ldr     r1, =0x2007F470    @ ENT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf96
-    movs    r0, #1
-    b       .Lcf96e
-.Lcf96:
-    movs    r0, #0
-.Lcf96e:
-    cmp     r0, #0
-    beq    .Lcf97
+    bgt     .Lcf97
     movs    r0, #1
     b       .Lcf97e
 .Lcf97:
@@ -5137,118 +3079,74 @@ if_end_64:
     cmp     r0, #0
     beq     if_else_65
     mov     r0, #2
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_65
 if_else_65:
 if_end_65:
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4E8    @ FL_TALLER_OPEN
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf98
-    movs    r0, #1
-    b       .Lcf98e
-.Lcf98:
-    movs    r0, #0
-.Lcf98e:
-    cmp     r0, #0
     beq     if_else_66
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F52C    @ ENT_HS_X
+    ldr     r1, =0x2007F464    @ ENT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F530    @ ENT_HS_Y
+    ldr     r1, =0x2007F468    @ ENT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F534    @ ENT_HS_W
+    ldr     r1, =0x2007F46C    @ ENT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf99
-    movs    r0, #1
-    b       .Lcf99e
-.Lcf99:
-    movs    r0, #0
-.Lcf99e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F538    @ ENT_HS_H
+    ldr     r1, =0x2007F470    @ ENT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf100
-    movs    r0, #1
-    b       .Lcf100e
-.Lcf100:
-    movs    r0, #0
-.Lcf100e:
-    cmp     r0, #0
-    beq    .Lcf101
+    bgt     .Lcf101
     movs    r0, #1
     b       .Lcf101e
 .Lcf101:
@@ -5260,7 +3158,7 @@ if_end_65:
     cmp     r0, #0
     beq     if_else_67
     mov     r0, #3
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_67
 if_else_67:
@@ -5278,92 +3176,62 @@ if_end_66:
 .thumb_func
 CHECK_WORKSHOP_HOTSPOTS:
     push    {r4, r5, r6, r7, lr}
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F554    @ CLOCK_HS_X
+    ldr     r1, =0x2007F474    @ CLOCK_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F558    @ CLOCK_HS_Y
+    ldr     r1, =0x2007F478    @ CLOCK_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F55C    @ CLOCK_HS_W
+    ldr     r1, =0x2007F47C    @ CLOCK_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf102
-    movs    r0, #1
-    b       .Lcf102e
-.Lcf102:
-    movs    r0, #0
-.Lcf102e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F560    @ CLOCK_HS_H
+    ldr     r1, =0x2007F480    @ CLOCK_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf103
-    movs    r0, #1
-    b       .Lcf103e
-.Lcf103:
-    movs    r0, #0
-.Lcf103e:
-    cmp     r0, #0
-    beq    .Lcf104
+    bgt     .Lcf104
     movs    r0, #1
     b       .Lcf104e
 .Lcf104:
@@ -5375,97 +3243,67 @@ CHECK_WORKSHOP_HOTSPOTS:
     cmp     r0, #0
     beq     if_else_68
     mov     r0, #0
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_68
 if_else_68:
 if_end_68:
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F554    @ CLOCK_HS_X
+    ldr     r1, =0x2007F474    @ CLOCK_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F558    @ CLOCK_HS_Y
+    ldr     r1, =0x2007F478    @ CLOCK_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F55C    @ CLOCK_HS_W
+    ldr     r1, =0x2007F47C    @ CLOCK_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf105
-    movs    r0, #1
-    b       .Lcf105e
-.Lcf105:
-    movs    r0, #0
-.Lcf105e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F560    @ CLOCK_HS_H
+    ldr     r1, =0x2007F480    @ CLOCK_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf106
-    movs    r0, #1
-    b       .Lcf106e
-.Lcf106:
-    movs    r0, #0
-.Lcf106e:
-    cmp     r0, #0
-    beq    .Lcf107
+    bgt     .Lcf107
     movs    r0, #1
     b       .Lcf107e
 .Lcf107:
@@ -5477,120 +3315,76 @@ if_end_68:
     cmp     r0, #0
     beq     if_else_69
     mov     r0, #1
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_69
 if_else_69:
 if_end_69:
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B4    @ ITEM_GEAR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf108
-    movs    r0, #1
-    b       .Lcf108e
-.Lcf108:
-    movs    r0, #0
-.Lcf108e:
-    cmp     r0, #0
-    beq     if_else_70
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    bne     if_else_70
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F554    @ CLOCK_HS_X
+    ldr     r1, =0x2007F474    @ CLOCK_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F558    @ CLOCK_HS_Y
+    ldr     r1, =0x2007F478    @ CLOCK_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F55C    @ CLOCK_HS_W
+    ldr     r1, =0x2007F47C    @ CLOCK_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf109
-    movs    r0, #1
-    b       .Lcf109e
-.Lcf109:
-    movs    r0, #0
-.Lcf109e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F560    @ CLOCK_HS_H
+    ldr     r1, =0x2007F480    @ CLOCK_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf110
-    movs    r0, #1
-    b       .Lcf110e
-.Lcf110:
-    movs    r0, #0
-.Lcf110e:
-    cmp     r0, #0
-    beq    .Lcf111
+    bgt     .Lcf111
     movs    r0, #1
     b       .Lcf111e
 .Lcf111:
@@ -5602,57 +3396,29 @@ if_end_69:
     cmp     r0, #0
     beq     if_else_71
     mov     r0, #2
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_71
 if_else_71:
 if_end_71:
     b       if_end_70
 if_else_70:
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4F4    @ FL_PANEL_ACTIVE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #16
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf112
-    movs    r0, #1
-    b       .Lcf112e
-.Lcf112:
-    movs    r0, #0
-.Lcf112e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    bne     1f
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B4    @ ITEM_GEAR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf113
-    movs    r0, #1
-    b       .Lcf113e
-.Lcf113:
-    movs    r0, #0
-.Lcf113e:
-    cmp     r0, #0
-    beq    .Lcf114
+    bne     .Lcf114
     movs    r0, #1
     b       .Lcf114e
 .Lcf114:
@@ -5663,92 +3429,62 @@ if_else_70:
 2:
     cmp     r0, #0
     beq     elif_end_72
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F554    @ CLOCK_HS_X
+    ldr     r1, =0x2007F474    @ CLOCK_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F558    @ CLOCK_HS_Y
+    ldr     r1, =0x2007F478    @ CLOCK_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F55C    @ CLOCK_HS_W
+    ldr     r1, =0x2007F47C    @ CLOCK_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf115
-    movs    r0, #1
-    b       .Lcf115e
-.Lcf115:
-    movs    r0, #0
-.Lcf115e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F560    @ CLOCK_HS_H
+    ldr     r1, =0x2007F480    @ CLOCK_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf116
-    movs    r0, #1
-    b       .Lcf116e
-.Lcf116:
-    movs    r0, #0
-.Lcf116e:
-    cmp     r0, #0
-    beq    .Lcf117
+    bgt     .Lcf117
     movs    r0, #1
     b       .Lcf117e
 .Lcf117:
@@ -5760,7 +3496,7 @@ if_else_70:
     cmp     r0, #0
     beq     if_else_73
     mov     r0, #2
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_73
 if_else_73:
@@ -5768,92 +3504,62 @@ if_end_73:
     b       if_end_70
 elif_end_72:
 if_end_70:
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F554    @ CLOCK_HS_X
+    ldr     r1, =0x2007F474    @ CLOCK_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F558    @ CLOCK_HS_Y
+    ldr     r1, =0x2007F478    @ CLOCK_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F55C    @ CLOCK_HS_W
+    ldr     r1, =0x2007F47C    @ CLOCK_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf118
-    movs    r0, #1
-    b       .Lcf118e
-.Lcf118:
-    movs    r0, #0
-.Lcf118e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F560    @ CLOCK_HS_H
+    ldr     r1, =0x2007F480    @ CLOCK_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf119
-    movs    r0, #1
-    b       .Lcf119e
-.Lcf119:
-    movs    r0, #0
-.Lcf119e:
-    cmp     r0, #0
-    beq    .Lcf120
+    bgt     .Lcf120
     movs    r0, #1
     b       .Lcf120e
 .Lcf120:
@@ -5865,120 +3571,76 @@ if_end_70:
     cmp     r0, #0
     beq     if_else_74
     mov     r0, #3
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_74
 if_else_74:
 if_end_74:
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C4    @ ITEM_OIL
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #5
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf121
-    movs    r0, #1
-    b       .Lcf121e
-.Lcf121:
-    movs    r0, #0
-.Lcf121e:
-    cmp     r0, #0
-    beq     if_else_75
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    bne     if_else_75
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F554    @ CLOCK_HS_X
+    ldr     r1, =0x2007F474    @ CLOCK_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #4
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #4
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F558    @ CLOCK_HS_Y
+    ldr     r1, =0x2007F478    @ CLOCK_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #4
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #4
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F55C    @ CLOCK_HS_W
+    ldr     r1, =0x2007F47C    @ CLOCK_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #4
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #4
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf122
-    movs    r0, #1
-    b       .Lcf122e
-.Lcf122:
-    movs    r0, #0
-.Lcf122e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F560    @ CLOCK_HS_H
+    ldr     r1, =0x2007F480    @ CLOCK_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #4
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #4
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf123
-    movs    r0, #1
-    b       .Lcf123e
-.Lcf123:
-    movs    r0, #0
-.Lcf123e:
-    cmp     r0, #0
-    beq    .Lcf124
+    bgt     .Lcf124
     movs    r0, #1
     b       .Lcf124e
 .Lcf124:
@@ -5990,7 +3652,7 @@ if_end_74:
     cmp     r0, #0
     beq     if_else_76
     mov     r0, #4
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_76
 if_else_76:
@@ -5998,92 +3660,62 @@ if_end_76:
     b       if_end_75
 if_else_75:
 if_end_75:
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F554    @ CLOCK_HS_X
+    ldr     r1, =0x2007F474    @ CLOCK_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #5
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #5
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F558    @ CLOCK_HS_Y
+    ldr     r1, =0x2007F478    @ CLOCK_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #5
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #5
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F55C    @ CLOCK_HS_W
+    ldr     r1, =0x2007F47C    @ CLOCK_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #5
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #5
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf125
-    movs    r0, #1
-    b       .Lcf125e
-.Lcf125:
-    movs    r0, #0
-.Lcf125e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F560    @ CLOCK_HS_H
+    ldr     r1, =0x2007F480    @ CLOCK_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #5
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #5
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf126
-    movs    r0, #1
-    b       .Lcf126e
-.Lcf126:
-    movs    r0, #0
-.Lcf126e:
-    cmp     r0, #0
-    beq    .Lcf127
+    bgt     .Lcf127
     movs    r0, #1
     b       .Lcf127e
 .Lcf127:
@@ -6095,7 +3727,7 @@ if_end_75:
     cmp     r0, #0
     beq     if_else_77
     mov     r0, #5
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_77
 if_else_77:
@@ -6110,92 +3742,62 @@ if_end_77:
 .thumb_func
 CHECK_ANTEROOM_HOTSPOTS:
     push    {r4, r5, r6, r7, lr}
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F574    @ ANT_HS_X
+    ldr     r1, =0x2007F484    @ ANT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F578    @ ANT_HS_Y
+    ldr     r1, =0x2007F488    @ ANT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F57C    @ ANT_HS_W
+    ldr     r1, =0x2007F48C    @ ANT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf128
-    movs    r0, #1
-    b       .Lcf128e
-.Lcf128:
-    movs    r0, #0
-.Lcf128e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F580    @ ANT_HS_H
+    ldr     r1, =0x2007F490    @ ANT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf129
-    movs    r0, #1
-    b       .Lcf129e
-.Lcf129:
-    movs    r0, #0
-.Lcf129e:
-    cmp     r0, #0
-    beq    .Lcf130
+    bgt     .Lcf130
     movs    r0, #1
     b       .Lcf130e
 .Lcf130:
@@ -6207,97 +3809,67 @@ CHECK_ANTEROOM_HOTSPOTS:
     cmp     r0, #0
     beq     if_else_78
     mov     r0, #0
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_78
 if_else_78:
 if_end_78:
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F574    @ ANT_HS_X
+    ldr     r1, =0x2007F484    @ ANT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F578    @ ANT_HS_Y
+    ldr     r1, =0x2007F488    @ ANT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F57C    @ ANT_HS_W
+    ldr     r1, =0x2007F48C    @ ANT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf131
-    movs    r0, #1
-    b       .Lcf131e
-.Lcf131:
-    movs    r0, #0
-.Lcf131e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F580    @ ANT_HS_H
+    ldr     r1, =0x2007F490    @ ANT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf132
-    movs    r0, #1
-    b       .Lcf132e
-.Lcf132:
-    movs    r0, #0
-.Lcf132e:
-    cmp     r0, #0
-    beq    .Lcf133
+    bgt     .Lcf133
     movs    r0, #1
     b       .Lcf133e
 .Lcf133:
@@ -6309,97 +3881,67 @@ if_end_78:
     cmp     r0, #0
     beq     if_else_79
     mov     r0, #1
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_79
 if_else_79:
 if_end_79:
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F574    @ ANT_HS_X
+    ldr     r1, =0x2007F484    @ ANT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F578    @ ANT_HS_Y
+    ldr     r1, =0x2007F488    @ ANT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F57C    @ ANT_HS_W
+    ldr     r1, =0x2007F48C    @ ANT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf134
-    movs    r0, #1
-    b       .Lcf134e
-.Lcf134:
-    movs    r0, #0
-.Lcf134e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F580    @ ANT_HS_H
+    ldr     r1, =0x2007F490    @ ANT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf135
-    movs    r0, #1
-    b       .Lcf135e
-.Lcf135:
-    movs    r0, #0
-.Lcf135e:
-    cmp     r0, #0
-    beq    .Lcf136
+    bgt     .Lcf136
     movs    r0, #1
     b       .Lcf136e
 .Lcf136:
@@ -6411,97 +3953,67 @@ if_end_79:
     cmp     r0, #0
     beq     if_else_80
     mov     r0, #2
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_80
 if_else_80:
 if_end_80:
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F574    @ ANT_HS_X
+    ldr     r1, =0x2007F484    @ ANT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F578    @ ANT_HS_Y
+    ldr     r1, =0x2007F488    @ ANT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F57C    @ ANT_HS_W
+    ldr     r1, =0x2007F48C    @ ANT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf137
-    movs    r0, #1
-    b       .Lcf137e
-.Lcf137:
-    movs    r0, #0
-.Lcf137e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F580    @ ANT_HS_H
+    ldr     r1, =0x2007F490    @ ANT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf138
-    movs    r0, #1
-    b       .Lcf138e
-.Lcf138:
-    movs    r0, #0
-.Lcf138e:
-    cmp     r0, #0
-    beq    .Lcf139
+    bgt     .Lcf139
     movs    r0, #1
     b       .Lcf139e
 .Lcf139:
@@ -6513,7 +4025,7 @@ if_end_80:
     cmp     r0, #0
     beq     if_else_81
     mov     r0, #3
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_81
 if_else_81:
@@ -6528,92 +4040,62 @@ if_end_81:
 .thumb_func
 CHECK_WEIGHTS_HOTSPOTS:
     push    {r4, r5, r6, r7, lr}
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F58C    @ WGT_HS_X
+    ldr     r1, =0x2007F494    @ WGT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F590    @ WGT_HS_Y
+    ldr     r1, =0x2007F498    @ WGT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F594    @ WGT_HS_W
+    ldr     r1, =0x2007F49C    @ WGT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf140
-    movs    r0, #1
-    b       .Lcf140e
-.Lcf140:
-    movs    r0, #0
-.Lcf140e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F598    @ WGT_HS_H
+    ldr     r1, =0x2007F4A0    @ WGT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf141
-    movs    r0, #1
-    b       .Lcf141e
-.Lcf141:
-    movs    r0, #0
-.Lcf141e:
-    cmp     r0, #0
-    beq    .Lcf142
+    bgt     .Lcf142
     movs    r0, #1
     b       .Lcf142e
 .Lcf142:
@@ -6625,97 +4107,67 @@ CHECK_WEIGHTS_HOTSPOTS:
     cmp     r0, #0
     beq     if_else_82
     mov     r0, #0
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_82
 if_else_82:
 if_end_82:
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F58C    @ WGT_HS_X
+    ldr     r1, =0x2007F494    @ WGT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F590    @ WGT_HS_Y
+    ldr     r1, =0x2007F498    @ WGT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F594    @ WGT_HS_W
+    ldr     r1, =0x2007F49C    @ WGT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf143
-    movs    r0, #1
-    b       .Lcf143e
-.Lcf143:
-    movs    r0, #0
-.Lcf143e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F598    @ WGT_HS_H
+    ldr     r1, =0x2007F4A0    @ WGT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf144
-    movs    r0, #1
-    b       .Lcf144e
-.Lcf144:
-    movs    r0, #0
-.Lcf144e:
-    cmp     r0, #0
-    beq    .Lcf145
+    bgt     .Lcf145
     movs    r0, #1
     b       .Lcf145e
 .Lcf145:
@@ -6727,7 +4179,7 @@ if_end_82:
     cmp     r0, #0
     beq     if_else_83
     mov     r0, #1
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_83
 if_else_83:
@@ -6742,92 +4194,62 @@ if_end_83:
 .thumb_func
 CHECK_OPTICS_HOTSPOTS:
     push    {r4, r5, r6, r7, lr}
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F5A4    @ OPT_HS_X
+    ldr     r1, =0x2007F4A4    @ OPT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F5A8    @ OPT_HS_Y
+    ldr     r1, =0x2007F4A8    @ OPT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F5AC    @ OPT_HS_W
+    ldr     r1, =0x2007F4AC    @ OPT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf146
-    movs    r0, #1
-    b       .Lcf146e
-.Lcf146:
-    movs    r0, #0
-.Lcf146e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F5B0    @ OPT_HS_H
+    ldr     r1, =0x2007F4B0    @ OPT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf147
-    movs    r0, #1
-    b       .Lcf147e
-.Lcf147:
-    movs    r0, #0
-.Lcf147e:
-    cmp     r0, #0
-    beq    .Lcf148
+    bgt     .Lcf148
     movs    r0, #1
     b       .Lcf148e
 .Lcf148:
@@ -6839,118 +4261,74 @@ CHECK_OPTICS_HOTSPOTS:
     cmp     r0, #0
     beq     if_else_84
     mov     r0, #0
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_84
 if_else_84:
 if_end_84:
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4FC    @ FL_OPTICS_SOLVED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #64
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf149
-    movs    r0, #1
-    b       .Lcf149e
-.Lcf149:
-    movs    r0, #0
-.Lcf149e:
-    cmp     r0, #0
     beq     if_else_85
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F5A4    @ OPT_HS_X
+    ldr     r1, =0x2007F4A4    @ OPT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F5A8    @ OPT_HS_Y
+    ldr     r1, =0x2007F4A8    @ OPT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F5AC    @ OPT_HS_W
+    ldr     r1, =0x2007F4AC    @ OPT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf150
-    movs    r0, #1
-    b       .Lcf150e
-.Lcf150:
-    movs    r0, #0
-.Lcf150e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F5B0    @ OPT_HS_H
+    ldr     r1, =0x2007F4B0    @ OPT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf151
-    movs    r0, #1
-    b       .Lcf151e
-.Lcf151:
-    movs    r0, #0
-.Lcf151e:
-    cmp     r0, #0
-    beq    .Lcf152
+    bgt     .Lcf152
     movs    r0, #1
     b       .Lcf152e
 .Lcf152:
@@ -6962,7 +4340,7 @@ if_end_84:
     cmp     r0, #0
     beq     if_else_86
     mov     r0, #1
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_86
 if_else_86:
@@ -6980,92 +4358,62 @@ if_end_85:
 .thumb_func
 CHECK_CONSERVATORY_HOTSPOTS:
     push    {r4, r5, r6, r7, lr}
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F5B8    @ CONS_HS_X
+    ldr     r1, =0x2007F4B4    @ CONS_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F5BC    @ CONS_HS_Y
+    ldr     r1, =0x2007F4B8    @ CONS_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F5C0    @ CONS_HS_W
+    ldr     r1, =0x2007F4BC    @ CONS_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf153
-    movs    r0, #1
-    b       .Lcf153e
-.Lcf153:
-    movs    r0, #0
-.Lcf153e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F5C4    @ CONS_HS_H
+    ldr     r1, =0x2007F4C0    @ CONS_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf154
-    movs    r0, #1
-    b       .Lcf154e
-.Lcf154:
-    movs    r0, #0
-.Lcf154e:
-    cmp     r0, #0
-    beq    .Lcf155
+    bgt     .Lcf155
     movs    r0, #1
     b       .Lcf155e
 .Lcf155:
@@ -7077,7 +4425,7 @@ CHECK_CONSERVATORY_HOTSPOTS:
     cmp     r0, #0
     beq     if_else_87
     mov     r0, #0
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_87
 if_else_87:
@@ -7092,92 +4440,62 @@ if_end_87:
 .thumb_func
 CHECK_VAULT_HOTSPOTS:
     push    {r4, r5, r6, r7, lr}
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F5D0    @ VAULT_HS_X
+    ldr     r1, =0x2007F4C4    @ VAULT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F5D4    @ VAULT_HS_Y
+    ldr     r1, =0x2007F4C8    @ VAULT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F5D8    @ VAULT_HS_W
+    ldr     r1, =0x2007F4CC    @ VAULT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf156
-    movs    r0, #1
-    b       .Lcf156e
-.Lcf156:
-    movs    r0, #0
-.Lcf156e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F5DC    @ VAULT_HS_H
+    ldr     r1, =0x2007F4D0    @ VAULT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf157
-    movs    r0, #1
-    b       .Lcf157e
-.Lcf157:
-    movs    r0, #0
-.Lcf157e:
-    cmp     r0, #0
-    beq    .Lcf158
+    bgt     .Lcf158
     movs    r0, #1
     b       .Lcf158e
 .Lcf158:
@@ -7189,97 +4507,67 @@ CHECK_VAULT_HOTSPOTS:
     cmp     r0, #0
     beq     if_else_88
     mov     r0, #0
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_88
 if_else_88:
 if_end_88:
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F5D0    @ VAULT_HS_X
+    ldr     r1, =0x2007F4C4    @ VAULT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     str     r0, [r1]
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F5D4    @ VAULT_HS_Y
+    ldr     r1, =0x2007F4C8    @ VAULT_HS_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6A4    @ DY
+    ldr     r1, =0x2007F598    @ DY
     str     r0, [r1]
-    ldr     r1, =0x2007F6A0    @ DX
+    ldr     r1, =0x2007F594    @ DX
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F5D8    @ VAULT_HS_W
+    ldr     r1, =0x2007F4CC    @ VAULT_HS_W
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf159
-    movs    r0, #1
-    b       .Lcf159e
-.Lcf159:
-    movs    r0, #0
-.Lcf159e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6A4    @ DY
+    bgt     1f
+    ldr     r1, =0x2007F598    @ DY
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     push    {r0}
-    ldr     r1, =0x2007F5DC    @ VAULT_HS_H
+    ldr     r1, =0x2007F4D0    @ VAULT_HS_H
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     cmp     r0, r1
-    bgt    .Lcf160
-    movs    r0, #1
-    b       .Lcf160e
-.Lcf160:
-    movs    r0, #0
-.Lcf160e:
-    cmp     r0, #0
-    beq    .Lcf161
+    bgt     .Lcf161
     movs    r0, #1
     b       .Lcf161e
 .Lcf161:
@@ -7291,7 +4579,7 @@ if_end_88:
     cmp     r0, #0
     beq     if_else_89
     mov     r0, #1
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     str     r0, [r1]
     b       if_end_89
 if_else_89:
@@ -7306,657 +4594,364 @@ if_end_89:
 .thumb_func
 INTERACT_ENTRANCE:
     push    {r4, r5, r6, r7, lr}
-    ldr     r4, =0x2007F6A8    @ save param hs
+    ldr     r4, =0x2007F59C    @ save param hs
     str     r0, [r4]
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F51C    @ ENT_HS_PAINTING
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf162
-    movs    r0, #1
-    b       .Lcf162e
-.Lcf162:
-    movs    r0, #0
-.Lcf162e:
-    cmp     r0, #0
-    beq     if_else_90
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     if_else_90
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf163
-    movs    r0, #1
-    b       .Lcf163e
-.Lcf163:
-    movs    r0, #0
-.Lcf163e:
-    cmp     r0, #0
-    beq     if_else_91
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    bne     if_else_91
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4E4    @ FL_DATE_KNOWN
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     orr     r0, r0, r1
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     str     r0, [r1]
     mov     r0, #1
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #160
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_91
 if_else_91:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf164
-    movs    r0, #1
-    b       .Lcf164e
-.Lcf164:
-    movs    r0, #0
-.Lcf164e:
-    cmp     r0, #0
-    beq     elif_end_92
+    bne     elif_end_92
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_91
 elif_end_92:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf165
-    movs    r0, #1
-    b       .Lcf165e
-.Lcf165:
-    movs    r0, #0
-.Lcf165e:
-    cmp     r0, #0
-    beq     elif_end_93
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    bne     elif_end_93
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C0    @ ITEM_EYE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #4
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf166
-    movs    r0, #1
-    b       .Lcf166e
-.Lcf166:
-    movs    r0, #0
-.Lcf166e:
-    cmp     r0, #0
-    beq     if_else_94
+    bne     if_else_94
     mov     r0, #43
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_94
 if_else_94:
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_94:
     b       if_end_91
 elif_end_93:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F49C    @ VERB_GIVE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf167
-    movs    r0, #1
-    b       .Lcf167e
-.Lcf167:
-    movs    r0, #0
-.Lcf167e:
-    cmp     r0, #0
-    beq     elif_end_95
+    bne     elif_end_95
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_91
 elif_end_95:
 if_end_91:
     b       if_end_90
 if_else_90:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F520    @ ENT_HS_DOOR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf168
-    movs    r0, #1
-    b       .Lcf168e
-.Lcf168:
-    movs    r0, #0
-.Lcf168e:
-    cmp     r0, #0
-    beq     elif_end_96
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     elif_end_96
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf169
-    movs    r0, #1
-    b       .Lcf169e
-.Lcf169:
-    movs    r0, #0
-.Lcf169e:
-    cmp     r0, #0
-    beq     if_else_97
+    bne     if_else_97
     mov     r0, #2
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_97
 if_else_97:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf170
-    movs    r0, #1
-    b       .Lcf170e
-.Lcf170:
-    movs    r0, #0
-.Lcf170e:
-    cmp     r0, #0
-    beq     elif_end_98
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    bne     elif_end_98
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4E8    @ FL_TALLER_OPEN
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf171
-    movs    r0, #1
-    b       .Lcf171e
-.Lcf171:
-    movs    r0, #0
-.Lcf171e:
-    cmp     r0, #0
     beq     if_else_99
-    ldr     r1, =0x2007F47C    @ ROOM_ANTEROOM
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F62C    @ EXIT_ROOM_TARGET
+    mov     r0, #2
+    ldr     r1, =0x2007F520    @ EXIT_ROOM_TARGET
     str     r0, [r1]
     mov     r0, #1
-    ldr     r1, =0x2007F614    @ ROOM_EXIT
+    ldr     r1, =0x2007F508    @ ROOM_EXIT
     str     r0, [r1]
     mov     r0, #60
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_99
 if_else_99:
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4E4    @ FL_DATE_KNOWN
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf172
-    movs    r0, #1
-    b       .Lcf172e
-.Lcf172:
-    movs    r0, #0
-.Lcf172e:
-    cmp     r0, #0
     beq     elif_end_100
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4E8    @ FL_TALLER_OPEN
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     orr     r0, r0, r1
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     str     r0, [r1]
-    ldr     r1, =0x2007F47C    @ ROOM_ANTEROOM
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F62C    @ EXIT_ROOM_TARGET
+    mov     r0, #2
+    ldr     r1, =0x2007F520    @ EXIT_ROOM_TARGET
     str     r0, [r1]
     mov     r0, #4
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #200
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     mov     r0, #1
-    ldr     r1, =0x2007F614    @ ROOM_EXIT
+    ldr     r1, =0x2007F508    @ ROOM_EXIT
     str     r0, [r1]
     ldr     r0, =_DOOR_UNLOCK_SFX    @ asset 'door_unlock'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_sfx
     bl      ACCELERATE_HEARTBEAT
     b       if_end_99
 elif_end_100:
     mov     r0, #3
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     ldr     r0, =_PUZZLE_FAIL_SFX    @ asset 'puzzle_fail'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_sfx
 if_end_99:
     b       if_end_97
 elif_end_98:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf173
-    movs    r0, #1
-    b       .Lcf173e
-.Lcf173:
-    movs    r0, #0
-.Lcf173e:
-    cmp     r0, #0
-    beq     elif_end_101
+    bne     elif_end_101
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_97
 elif_end_101:
 if_end_97:
     b       if_end_90
 elif_end_96:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F524    @ ENT_HS_CARETAKER
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf174
-    movs    r0, #1
-    b       .Lcf174e
-.Lcf174:
-    movs    r0, #0
-.Lcf174e:
-    cmp     r0, #0
-    beq     elif_end_102
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     elif_end_102
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf175
-    movs    r0, #1
-    b       .Lcf175e
-.Lcf175:
-    movs    r0, #0
-.Lcf175e:
-    cmp     r0, #0
-    beq     if_else_103
+    bne     if_else_103
     mov     r0, #1
     push    {r0}           @ save value
-    ldr     r1, =0x2007F628    @ NPC_STATE
+    ldr     r1, =0x2007F51C    @ NPC_STATE
     ldr     r0, [r1]
     push    {r0}           @ save base ptr
-    ldr     r1, =0x2007F4A0    @ NPC_CARETAKER
-    ldr     r0, [r1]
+    mov     r0, #0
     lsl     r0, r0, #1     @ index * 2 (16-bit elements)
     pop     {r1}           @ base ptr
     add     r1, r1, r0     @ element addr
     pop     {r0}           @ value
     strh    r0, [r1]       @ store 16-bit
     mov     r0, #24
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #160
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_103
 if_else_103:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf176
-    movs    r0, #1
-    b       .Lcf176e
-.Lcf176:
-    movs    r0, #0
-.Lcf176e:
-    cmp     r0, #0
-    beq     elif_end_104
+    bne     elif_end_104
     mov     r0, #36
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_103
 elif_end_104:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F49C    @ VERB_GIVE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf177
-    movs    r0, #1
-    b       .Lcf177e
-.Lcf177:
-    movs    r0, #0
-.Lcf177e:
-    cmp     r0, #0
-    beq     elif_end_105
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    bne     elif_end_105
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4BC    @ ITEM_BLANKET
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf178
-    movs    r0, #1
-    b       .Lcf178e
-.Lcf178:
-    movs    r0, #0
-.Lcf178e:
-    cmp     r0, #0
-    beq     if_else_106
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    bne     if_else_106
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F510    @ FL_CARETAKER_DONE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #8
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf179
-    movs    r0, #1
-    b       .Lcf179e
-.Lcf179:
-    movs    r0, #0
-.Lcf179e:
-    cmp     r0, #0
-    beq     if_else_107
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    bne     if_else_107
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F510    @ FL_CARETAKER_DONE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #8
     orr     r0, r0, r1
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     str     r0, [r1]
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F500    @ FL_OPTICS_OPEN
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #128
     orr     r0, r0, r1
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     str     r0, [r1]
-    ldr     r1, =0x2007F4BC    @ ITEM_BLANKET
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #3
     bl      DROP_ITEM
     ldr     r0, =-1
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     str     r0, [r1]
     mov     r0, #2
     push    {r0}           @ save value
-    ldr     r1, =0x2007F628    @ NPC_STATE
+    ldr     r1, =0x2007F51C    @ NPC_STATE
     ldr     r0, [r1]
     push    {r0}           @ save base ptr
-    ldr     r1, =0x2007F4A0    @ NPC_CARETAKER
-    ldr     r0, [r1]
+    mov     r0, #0
     lsl     r0, r0, #1     @ index * 2 (16-bit elements)
     pop     {r1}           @ base ptr
     add     r1, r1, r0     @ element addr
     pop     {r0}           @ value
     strh    r0, [r1]       @ store 16-bit
     mov     r0, #26
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #200
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     bl      ACCELERATE_HEARTBEAT
     b       if_end_107
 if_else_107:
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_107:
     b       if_end_106
 if_else_106:
     mov     r0, #36
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_106:
     b       if_end_103
 elif_end_105:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf180
-    movs    r0, #1
-    b       .Lcf180e
-.Lcf180:
-    movs    r0, #0
-.Lcf180e:
-    cmp     r0, #0
-    beq     elif_end_108
+    bne     elif_end_108
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_103
 elif_end_108:
 if_end_103:
     b       if_end_90
 elif_end_102:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F528    @ ENT_HS_CONS_DOOR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf181
-    movs    r0, #1
-    b       .Lcf181e
-.Lcf181:
-    movs    r0, #0
-.Lcf181e:
-    cmp     r0, #0
-    beq     elif_end_109
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     elif_end_109
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf182
-    movs    r0, #1
-    b       .Lcf182e
-.Lcf182:
-    movs    r0, #0
-.Lcf182e:
-    cmp     r0, #0
-    beq     if_else_110
+    bne     if_else_110
     mov     r0, #43
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_110
 if_else_110:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf183
-    movs    r0, #1
-    b       .Lcf183e
-.Lcf183:
-    movs    r0, #0
-.Lcf183e:
-    cmp     r0, #0
-    beq     elif_end_111
-    ldr     r1, =0x2007F488    @ ROOM_CONSERVATORY
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F62C    @ EXIT_ROOM_TARGET
+    bne     elif_end_111
+    mov     r0, #5
+    ldr     r1, =0x2007F520    @ EXIT_ROOM_TARGET
     str     r0, [r1]
     mov     r0, #1
-    ldr     r1, =0x2007F614    @ ROOM_EXIT
+    ldr     r1, =0x2007F508    @ ROOM_EXIT
     str     r0, [r1]
     mov     r0, #60
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_110
 elif_end_111:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf184
-    movs    r0, #1
-    b       .Lcf184e
-.Lcf184:
-    movs    r0, #0
-.Lcf184e:
-    cmp     r0, #0
-    beq     elif_end_112
+    bne     elif_end_112
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_110
 elif_end_112:
@@ -7974,846 +4969,462 @@ if_end_90:
 .thumb_func
 INTERACT_WORKSHOP:
     push    {r4, r5, r6, r7, lr}
-    ldr     r4, =0x2007F6A8    @ save param hs
+    ldr     r4, =0x2007F59C    @ save param hs
     str     r0, [r4]
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F53C    @ CLOCK_HS_SARC
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf185
-    movs    r0, #1
-    b       .Lcf185e
-.Lcf185:
-    movs    r0, #0
-.Lcf185e:
-    cmp     r0, #0
-    beq     if_else_113
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     if_else_113
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf186
-    movs    r0, #1
-    b       .Lcf186e
-.Lcf186:
-    movs    r0, #0
-.Lcf186e:
-    cmp     r0, #0
-    beq     if_else_114
+    bne     if_else_114
     mov     r0, #6
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_114
 if_else_114:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf187
-    movs    r0, #1
-    b       .Lcf187e
-.Lcf187:
-    movs    r0, #0
-.Lcf187e:
-    cmp     r0, #0
-    beq     elif_end_115
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    bne     elif_end_115
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4EC    @ FL_SARC_OPEN
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf188
-    movs    r0, #1
-    b       .Lcf188e
-.Lcf188:
-    movs    r0, #0
-.Lcf188e:
-    cmp     r0, #0
     beq     if_else_116
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_116
 if_else_116:
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4F0    @ FL_CLOCK_READ
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #8
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf189
-    movs    r0, #1
-    b       .Lcf189e
-.Lcf189:
-    movs    r0, #0
-.Lcf189e:
-    cmp     r0, #0
     beq     elif_end_117
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4EC    @ FL_SARC_OPEN
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     orr     r0, r0, r1
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     str     r0, [r1]
-    ldr     r1, =0x2007F4BC    @ ITEM_BLANKET
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
-    bl      PICKUP_ITEM
-    ldr     r1, =0x2007F4CC    @ ITEM_KEY
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #3
     bl      PICKUP_ITEM
     mov     r0, #7
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    bl      PICKUP_ITEM
+    mov     r0, #7
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #200
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     ldr     r0, =_PUZZLE_SUCCESS_SFX    @ asset 'puzzle_success'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_sfx
     bl      ACCELERATE_HEARTBEAT
     b       if_end_116
 elif_end_117:
     mov     r0, #23
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_116:
     b       if_end_114
 elif_end_115:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf190
-    movs    r0, #1
-    b       .Lcf190e
-.Lcf190:
-    movs    r0, #0
-.Lcf190e:
-    cmp     r0, #0
-    beq     elif_end_118
+    bne     elif_end_118
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_114
 elif_end_118:
 if_end_114:
     b       if_end_113
 if_else_113:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F540    @ CLOCK_HS_CLOCK
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf191
-    movs    r0, #1
-    b       .Lcf191e
-.Lcf191:
-    movs    r0, #0
-.Lcf191e:
-    cmp     r0, #0
-    beq     elif_end_119
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     elif_end_119
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf192
-    movs    r0, #1
-    b       .Lcf192e
-.Lcf192:
-    movs    r0, #0
-.Lcf192e:
-    cmp     r0, #0
-    beq     if_else_120
+    bne     if_else_120
     mov     r0, #8
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_120
 if_else_120:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf193
-    movs    r0, #1
-    b       .Lcf193e
-.Lcf193:
-    movs    r0, #0
-.Lcf193e:
-    cmp     r0, #0
-    beq     elif_end_121
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    bne     elif_end_121
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B0    @ ITEM_LENS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf194
-    movs    r0, #1
-    b       .Lcf194e
-.Lcf194:
-    movs    r0, #0
-.Lcf194e:
-    cmp     r0, #0
-    beq     if_else_122
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    bne     if_else_122
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4F0    @ FL_CLOCK_READ
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #8
     orr     r0, r0, r1
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     str     r0, [r1]
     mov     r0, #8
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #160
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_122
 if_else_122:
     mov     r0, #22
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_122:
     b       if_end_120
 elif_end_121:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf195
-    movs    r0, #1
-    b       .Lcf195e
-.Lcf195:
-    movs    r0, #0
-.Lcf195e:
-    cmp     r0, #0
-    beq     elif_end_123
+    bne     elif_end_123
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_120
 elif_end_123:
 if_end_120:
     b       if_end_113
 elif_end_119:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F544    @ CLOCK_HS_GEAR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf196
-    movs    r0, #1
-    b       .Lcf196e
-.Lcf196:
-    movs    r0, #0
-.Lcf196e:
-    cmp     r0, #0
-    beq     elif_end_124
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    bne     elif_end_124
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B4    @ ITEM_GEAR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf197
-    movs    r0, #1
-    b       .Lcf197e
-.Lcf197:
-    movs    r0, #0
-.Lcf197e:
-    cmp     r0, #0
-    beq     if_else_125
-    ldr     r1, =0x2007F4B4    @ ITEM_GEAR
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    bne     if_else_125
+    mov     r0, #1
     bl      PICKUP_ITEM
     mov     r0, #25
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #140
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_125
 if_else_125:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf198
-    movs    r0, #1
-    b       .Lcf198e
-.Lcf198:
-    movs    r0, #0
-.Lcf198e:
-    cmp     r0, #0
-    beq     elif_end_126
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    bne     elif_end_126
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B4    @ ITEM_GEAR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf199
-    movs    r0, #1
-    b       .Lcf199e
-.Lcf199:
-    movs    r0, #0
-.Lcf199e:
-    cmp     r0, #0
-    beq     if_else_127
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    bne     if_else_127
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4F4    @ FL_PANEL_ACTIVE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #16
     orr     r0, r0, r1
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     str     r0, [r1]
-    ldr     r1, =0x2007F4B4    @ ITEM_GEAR
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #1
     bl      DROP_ITEM
     mov     r0, #44
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #160
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     ldr     r0, =_PUZZLE_SUCCESS_SFX    @ asset 'puzzle_success'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_sfx
     bl      ACCELERATE_HEARTBEAT
     b       if_end_127
 if_else_127:
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_127:
     b       if_end_125
 elif_end_126:
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_125:
     b       if_end_113
 elif_end_124:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F548    @ CLOCK_HS_HANS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf200
-    movs    r0, #1
-    b       .Lcf200e
-.Lcf200:
-    movs    r0, #0
-.Lcf200e:
-    cmp     r0, #0
-    beq     elif_end_128
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     elif_end_128
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf201
-    movs    r0, #1
-    b       .Lcf201e
-.Lcf201:
-    movs    r0, #0
-.Lcf201e:
-    cmp     r0, #0
-    beq     if_else_129
+    bne     if_else_129
     mov     r0, #1
     push    {r0}           @ save value
-    ldr     r1, =0x2007F628    @ NPC_STATE
+    ldr     r1, =0x2007F51C    @ NPC_STATE
     ldr     r0, [r1]
     push    {r0}           @ save base ptr
-    ldr     r1, =0x2007F4A4    @ NPC_HANS
-    ldr     r0, [r1]
+    mov     r0, #1
     lsl     r0, r0, #1     @ index * 2 (16-bit elements)
     pop     {r1}           @ base ptr
     add     r1, r1, r0     @ element addr
     pop     {r0}           @ value
     strh    r0, [r1]       @ store 16-bit
     mov     r0, #27
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #160
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_129
 if_else_129:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf202
-    movs    r0, #1
-    b       .Lcf202e
-.Lcf202:
-    movs    r0, #0
-.Lcf202e:
-    cmp     r0, #0
-    beq     elif_end_130
+    bne     elif_end_130
     mov     r0, #37
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_129
 elif_end_130:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F49C    @ VERB_GIVE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf203
-    movs    r0, #1
-    b       .Lcf203e
-.Lcf203:
-    movs    r0, #0
-.Lcf203e:
-    cmp     r0, #0
-    beq     elif_end_131
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    bne     elif_end_131
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C4    @ ITEM_OIL
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     cmp     r0, r1
-    bne    .Lcf204
-    movs    r0, #1
-    b       .Lcf204e
-.Lcf204:
-    movs    r0, #0
-.Lcf204e:
-    cmp     r0, #0
-    beq     if_else_132
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    bne     if_else_132
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F50C    @ FL_HANS_HELPED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf205
-    movs    r0, #1
-    b       .Lcf205e
-.Lcf205:
-    movs    r0, #0
-.Lcf205e:
-    cmp     r0, #0
-    beq     if_else_133
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    bne     if_else_133
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F50C    @ FL_HANS_HELPED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     orr     r0, r0, r1
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     str     r0, [r1]
-    ldr     r1, =0x2007F4C4    @ ITEM_OIL
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #5
     bl      DROP_ITEM
     ldr     r0, =-1
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     str     r0, [r1]
     mov     r0, #2
     push    {r0}           @ save value
-    ldr     r1, =0x2007F628    @ NPC_STATE
+    ldr     r1, =0x2007F51C    @ NPC_STATE
     ldr     r0, [r1]
     push    {r0}           @ save base ptr
-    ldr     r1, =0x2007F4A4    @ NPC_HANS
-    ldr     r0, [r1]
+    mov     r0, #1
     lsl     r0, r0, #1     @ index * 2 (16-bit elements)
     pop     {r1}           @ base ptr
     add     r1, r1, r0     @ element addr
     pop     {r0}           @ value
     strh    r0, [r1]       @ store 16-bit
     mov     r0, #28
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #200
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     bl      ACCELERATE_HEARTBEAT
     b       if_end_133
 if_else_133:
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_133:
     b       if_end_132
 if_else_132:
     mov     r0, #37
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_132:
     b       if_end_129
 elif_end_131:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf206
-    movs    r0, #1
-    b       .Lcf206e
-.Lcf206:
-    movs    r0, #0
-.Lcf206e:
-    cmp     r0, #0
-    beq     elif_end_134
+    bne     elif_end_134
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_129
 elif_end_134:
 if_end_129:
     b       if_end_113
 elif_end_128:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F54C    @ CLOCK_HS_OIL
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     cmp     r0, r1
-    bne    .Lcf207
-    movs    r0, #1
-    b       .Lcf207e
-.Lcf207:
-    movs    r0, #0
-.Lcf207e:
-    cmp     r0, #0
-    beq     elif_end_135
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    bne     elif_end_135
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C4    @ ITEM_OIL
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #5
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf208
-    movs    r0, #1
-    b       .Lcf208e
-.Lcf208:
-    movs    r0, #0
-.Lcf208e:
-    cmp     r0, #0
-    beq     if_else_136
-    ldr     r1, =0x2007F4C4    @ ITEM_OIL
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    bne     if_else_136
+    mov     r0, #5
     bl      PICKUP_ITEM
     mov     r0, #34
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #140
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_136
 if_else_136:
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_136:
     b       if_end_113
 elif_end_135:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F550    @ CLOCK_HS_OPTICS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     cmp     r0, r1
-    bne    .Lcf209
-    movs    r0, #1
-    b       .Lcf209e
-.Lcf209:
-    movs    r0, #0
-.Lcf209e:
-    cmp     r0, #0
-    beq     elif_end_137
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     elif_end_137
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf210
-    movs    r0, #1
-    b       .Lcf210e
-.Lcf210:
-    movs    r0, #0
-.Lcf210e:
-    cmp     r0, #0
-    beq     if_else_138
+    bne     if_else_138
     mov     r0, #40
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_138
 if_else_138:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf211
-    movs    r0, #1
-    b       .Lcf211e
-.Lcf211:
-    movs    r0, #0
-.Lcf211e:
-    cmp     r0, #0
-    beq     elif_end_139
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    bne     elif_end_139
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F500    @ FL_OPTICS_OPEN
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #128
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf212
-    movs    r0, #1
-    b       .Lcf212e
-.Lcf212:
-    movs    r0, #0
-.Lcf212e:
-    cmp     r0, #0
     beq     if_else_140
-    ldr     r1, =0x2007F484    @ ROOM_OPTICS
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F62C    @ EXIT_ROOM_TARGET
+    mov     r0, #4
+    ldr     r1, =0x2007F520    @ EXIT_ROOM_TARGET
     str     r0, [r1]
     mov     r0, #1
-    ldr     r1, =0x2007F614    @ ROOM_EXIT
+    ldr     r1, =0x2007F508    @ ROOM_EXIT
     str     r0, [r1]
     mov     r0, #60
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_140
 if_else_140:
     mov     r0, #40
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_140:
     b       if_end_138
 elif_end_139:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf213
-    movs    r0, #1
-    b       .Lcf213e
-.Lcf213:
-    movs    r0, #0
-.Lcf213e:
-    cmp     r0, #0
-    beq     elif_end_141
+    bne     elif_end_141
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_138
 elif_end_141:
@@ -8831,129 +5442,68 @@ if_end_113:
 .thumb_func
 INTERACT_ANTEROOM:
     push    {r4, r5, r6, r7, lr}
-    ldr     r4, =0x2007F6A8    @ save param hs
+    ldr     r4, =0x2007F59C    @ save param hs
     str     r0, [r4]
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F564    @ ANT_HS_DIARY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf214
-    movs    r0, #1
-    b       .Lcf214e
-.Lcf214:
-    movs    r0, #0
-.Lcf214e:
-    cmp     r0, #0
-    beq     if_else_142
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     if_else_142
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf215
-    movs    r0, #1
-    b       .Lcf215e
-.Lcf215:
-    movs    r0, #0
-.Lcf215e:
-    cmp     r0, #0
-    beq     if_else_143
+    bne     if_else_143
     mov     r0, #9
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #140
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_143
 if_else_143:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf216
-    movs    r0, #1
-    b       .Lcf216e
-.Lcf216:
-    movs    r0, #0
-.Lcf216e:
-    cmp     r0, #0
-    beq     elif_end_144
+    bne     elif_end_144
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_143
 elif_end_144:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf217
-    movs    r0, #1
-    b       .Lcf217e
-.Lcf217:
-    movs    r0, #0
-.Lcf217e:
-    cmp     r0, #0
-    beq     elif_end_145
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    bne     elif_end_145
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B0    @ ITEM_LENS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf218
-    movs    r0, #1
-    b       .Lcf218e
-.Lcf218:
-    movs    r0, #0
-.Lcf218e:
-    cmp     r0, #0
-    beq     if_else_146
-    ldr     r1, =0x2007F4B0    @ ITEM_LENS
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    bne     if_else_146
+    mov     r0, #0
     bl      PICKUP_ITEM
     mov     r0, #10
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #160
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_146
 if_else_146:
     mov     r0, #11
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_146:
     b       if_end_143
@@ -8961,331 +5511,164 @@ elif_end_145:
 if_end_143:
     b       if_end_142
 if_else_142:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F568    @ ANT_HS_EXIT
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf219
-    movs    r0, #1
-    b       .Lcf219e
-.Lcf219:
-    movs    r0, #0
-.Lcf219e:
-    cmp     r0, #0
-    beq     elif_end_147
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     elif_end_147
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf220
-    movs    r0, #1
-    b       .Lcf220e
-.Lcf220:
-    movs    r0, #0
-.Lcf220e:
-    cmp     r0, #0
-    beq     if_else_148
+    bne     if_else_148
     mov     r0, #12
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_148
 if_else_148:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf221
-    movs    r0, #1
-    b       .Lcf221e
-.Lcf221:
-    movs    r0, #0
-.Lcf221e:
-    cmp     r0, #0
-    beq     elif_end_149
-    ldr     r1, =0x2007F480    @ ROOM_WEIGHTS
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F62C    @ EXIT_ROOM_TARGET
+    bne     elif_end_149
+    mov     r0, #3
+    ldr     r1, =0x2007F520    @ EXIT_ROOM_TARGET
     str     r0, [r1]
     mov     r0, #1
-    ldr     r1, =0x2007F614    @ ROOM_EXIT
+    ldr     r1, =0x2007F508    @ ROOM_EXIT
     str     r0, [r1]
     mov     r0, #60
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_148
 elif_end_149:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf222
-    movs    r0, #1
-    b       .Lcf222e
-.Lcf222:
-    movs    r0, #0
-.Lcf222e:
-    cmp     r0, #0
-    beq     elif_end_150
+    bne     elif_end_150
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_148
 elif_end_150:
 if_end_148:
     b       if_end_142
 elif_end_147:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F56C    @ ANT_HS_SHELF
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf223
-    movs    r0, #1
-    b       .Lcf223e
-.Lcf223:
-    movs    r0, #0
-.Lcf223e:
-    cmp     r0, #0
-    beq     elif_end_151
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     elif_end_151
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf224
-    movs    r0, #1
-    b       .Lcf224e
-.Lcf224:
-    movs    r0, #0
-.Lcf224e:
-    cmp     r0, #0
-    beq     if_else_152
+    bne     if_else_152
     mov     r0, #33
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_152
 if_else_152:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf225
-    movs    r0, #1
-    b       .Lcf225e
-.Lcf225:
-    movs    r0, #0
-.Lcf225e:
-    cmp     r0, #0
-    beq     elif_end_153
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    bne     elif_end_153
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C8    @ ITEM_SHEET
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #6
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf226
-    movs    r0, #1
-    b       .Lcf226e
-.Lcf226:
-    movs    r0, #0
-.Lcf226e:
-    cmp     r0, #0
-    beq     if_else_154
-    ldr     r1, =0x2007F4C8    @ ITEM_SHEET
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    bne     if_else_154
+    mov     r0, #6
     bl      PICKUP_ITEM
     mov     r0, #33
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #140
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_154
 if_else_154:
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_154:
     b       if_end_152
 elif_end_153:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf227
-    movs    r0, #1
-    b       .Lcf227e
-.Lcf227:
-    movs    r0, #0
-.Lcf227e:
-    cmp     r0, #0
-    beq     elif_end_155
+    bne     elif_end_155
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_152
 elif_end_155:
 if_end_152:
     b       if_end_142
 elif_end_151:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F570    @ ANT_HS_CABINET
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf228
-    movs    r0, #1
-    b       .Lcf228e
-.Lcf228:
-    movs    r0, #0
-.Lcf228e:
-    cmp     r0, #0
-    beq     elif_end_156
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     elif_end_156
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf229
-    movs    r0, #1
-    b       .Lcf229e
-.Lcf229:
-    movs    r0, #0
-.Lcf229e:
-    cmp     r0, #0
-    beq     if_else_157
+    bne     if_else_157
     mov     r0, #35
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_157
 if_else_157:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf230
-    movs    r0, #1
-    b       .Lcf230e
-.Lcf230:
-    movs    r0, #0
-.Lcf230e:
-    cmp     r0, #0
-    beq     elif_end_158
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    bne     elif_end_158
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B8    @ ITEM_PRISM
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf231
-    movs    r0, #1
-    b       .Lcf231e
-.Lcf231:
-    movs    r0, #0
-.Lcf231e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    bne     1f
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B0    @ ITEM_LENS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf232
-    movs    r0, #1
-    b       .Lcf232e
-.Lcf232:
-    movs    r0, #0
-.Lcf232e:
-    cmp     r0, #0
-    beq    .Lcf233
+    bne     .Lcf233
     movs    r0, #1
     b       .Lcf233e
 .Lcf233:
@@ -9296,80 +5679,52 @@ if_else_157:
 2:
     cmp     r0, #0
     beq     if_else_159
-    ldr     r1, =0x2007F4B8    @ ITEM_PRISM
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #2
     bl      PICKUP_ITEM
     mov     r0, #35
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #160
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_159
 if_else_159:
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B8    @ ITEM_PRISM
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf234
-    movs    r0, #1
-    b       .Lcf234e
-.Lcf234:
-    movs    r0, #0
-.Lcf234e:
-    cmp     r0, #0
-    beq     elif_end_160
+    bne     elif_end_160
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_159
 elif_end_160:
     mov     r0, #22
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_159:
     b       if_end_157
 elif_end_158:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf235
-    movs    r0, #1
-    b       .Lcf235e
-.Lcf235:
-    movs    r0, #0
-.Lcf235e:
-    cmp     r0, #0
-    beq     elif_end_161
+    bne     elif_end_161
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_157
 elif_end_161:
@@ -9387,253 +5742,138 @@ if_end_142:
 .thumb_func
 INTERACT_WEIGHTS:
     push    {r4, r5, r6, r7, lr}
-    ldr     r4, =0x2007F6A8    @ save param hs
+    ldr     r4, =0x2007F59C    @ save param hs
     str     r0, [r4]
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F584    @ WGT_HS_PEDESTAL
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf236
-    movs    r0, #1
-    b       .Lcf236e
-.Lcf236:
-    movs    r0, #0
-.Lcf236e:
-    cmp     r0, #0
-    beq     if_else_162
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     if_else_162
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf237
-    movs    r0, #1
-    b       .Lcf237e
-.Lcf237:
-    movs    r0, #0
-.Lcf237e:
-    cmp     r0, #0
-    beq     if_else_163
+    bne     if_else_163
     mov     r0, #13
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_163
 if_else_163:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf238
-    movs    r0, #1
-    b       .Lcf238e
-.Lcf238:
-    movs    r0, #0
-.Lcf238e:
-    cmp     r0, #0
-    beq     elif_end_164
-    ldr     r1, =0x2007F664    @ INV_WEIGHT
+    bne     elif_end_164
+    ldr     r1, =0x2007F558    @ INV_WEIGHT
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    ble    .Lcf239
-    movs    r0, #1
-    b       .Lcf239e
-.Lcf239:
-    movs    r0, #0
-.Lcf239e:
-    cmp     r0, #0
-    beq     if_else_165
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ble     if_else_165
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4F8    @ FL_ITEMS_DEPOSITED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #32
     orr     r0, r0, r1
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F664    @ INV_WEIGHT
+    ldr     r1, =0x2007F558    @ INV_WEIGHT
     str     r0, [r1]
     mov     r0, #14
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #140
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_165
 if_else_165:
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_165:
     b       if_end_163
 elif_end_164:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf240
-    movs    r0, #1
-    b       .Lcf240e
-.Lcf240:
-    movs    r0, #0
-.Lcf240e:
-    cmp     r0, #0
-    beq     elif_end_166
+    bne     elif_end_166
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_163
 elif_end_166:
 if_end_163:
     b       if_end_162
 if_else_162:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F588    @ WGT_HS_EXIT
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf241
-    movs    r0, #1
-    b       .Lcf241e
-.Lcf241:
-    movs    r0, #0
-.Lcf241e:
-    cmp     r0, #0
-    beq     elif_end_167
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     elif_end_167
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf242
-    movs    r0, #1
-    b       .Lcf242e
-.Lcf242:
-    movs    r0, #0
-.Lcf242e:
-    cmp     r0, #0
-    beq     if_else_168
+    bne     if_else_168
     mov     r0, #15
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_168
 if_else_168:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf243
-    movs    r0, #1
-    b       .Lcf243e
-.Lcf243:
-    movs    r0, #0
-.Lcf243e:
-    cmp     r0, #0
-    beq     elif_end_169
-    ldr     r1, =0x2007F664    @ INV_WEIGHT
+    bne     elif_end_169
+    ldr     r1, =0x2007F558    @ INV_WEIGHT
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    ble    .Lcf244
-    movs    r0, #1
-    b       .Lcf244e
-.Lcf244:
-    movs    r0, #0
-.Lcf244e:
-    cmp     r0, #0
-    beq     if_else_170
+    ble     if_else_170
     mov     r0, #16
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #140
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     ldr     r0, =_PUZZLE_FAIL_SFX    @ asset 'puzzle_fail'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_sfx
     b       if_end_170
 if_else_170:
-    ldr     r1, =0x2007F478    @ ROOM_WORKSHOP
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F62C    @ EXIT_ROOM_TARGET
+    mov     r0, #1
+    ldr     r1, =0x2007F520    @ EXIT_ROOM_TARGET
     str     r0, [r1]
     mov     r0, #1
-    ldr     r1, =0x2007F614    @ ROOM_EXIT
+    ldr     r1, =0x2007F508    @ ROOM_EXIT
     str     r0, [r1]
     mov     r0, #60
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_170:
     b       if_end_168
 elif_end_169:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf245
-    movs    r0, #1
-    b       .Lcf245e
-.Lcf245:
-    movs    r0, #0
-.Lcf245e:
-    cmp     r0, #0
-    beq     elif_end_171
+    bne     elif_end_171
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_168
 elif_end_171:
@@ -9651,302 +5891,160 @@ if_end_162:
 .thumb_func
 INTERACT_OPTICS:
     push    {r4, r5, r6, r7, lr}
-    ldr     r4, =0x2007F6A8    @ save param hs
+    ldr     r4, =0x2007F59C    @ save param hs
     str     r0, [r4]
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F59C    @ OPT_HS_PEDESTAL
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf246
-    movs    r0, #1
-    b       .Lcf246e
-.Lcf246:
-    movs    r0, #0
-.Lcf246e:
-    cmp     r0, #0
-    beq     if_else_172
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     if_else_172
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf247
-    movs    r0, #1
-    b       .Lcf247e
-.Lcf247:
-    movs    r0, #0
-.Lcf247e:
-    cmp     r0, #0
-    beq     if_else_173
+    bne     if_else_173
     mov     r0, #17
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_173
 if_else_173:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf248
-    movs    r0, #1
-    b       .Lcf248e
-.Lcf248:
-    movs    r0, #0
-.Lcf248e:
-    cmp     r0, #0
-    beq     elif_end_174
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    bne     elif_end_174
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4FC    @ FL_OPTICS_SOLVED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #64
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf249
-    movs    r0, #1
-    b       .Lcf249e
-.Lcf249:
-    movs    r0, #0
-.Lcf249e:
-    cmp     r0, #0
     beq     if_else_175
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_175
 if_else_175:
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B8    @ ITEM_PRISM
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf250
-    movs    r0, #1
-    b       .Lcf250e
-.Lcf250:
-    movs    r0, #0
-.Lcf250e:
-    cmp     r0, #0
-    beq     elif_end_176
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    bne     elif_end_176
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4FC    @ FL_OPTICS_SOLVED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #64
     orr     r0, r0, r1
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     str     r0, [r1]
-    ldr     r1, =0x2007F4B8    @ ITEM_PRISM
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #2
     bl      DROP_ITEM
     mov     r0, #19
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #200
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     ldr     r0, =_PUZZLE_SUCCESS_SFX    @ asset 'puzzle_success'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_sfx
     bl      ACCELERATE_HEARTBEAT
     b       if_end_175
 elif_end_176:
     mov     r0, #18
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_175:
     b       if_end_173
 elif_end_174:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf251
-    movs    r0, #1
-    b       .Lcf251e
-.Lcf251:
-    movs    r0, #0
-.Lcf251e:
-    cmp     r0, #0
-    beq     elif_end_177
+    bne     elif_end_177
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_173
 elif_end_177:
 if_end_173:
     b       if_end_172
 if_else_172:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F5A0    @ OPT_HS_COMPARTMENT
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf252
-    movs    r0, #1
-    b       .Lcf252e
-.Lcf252:
-    movs    r0, #0
-.Lcf252e:
-    cmp     r0, #0
-    beq     elif_end_178
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     elif_end_178
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf253
-    movs    r0, #1
-    b       .Lcf253e
-.Lcf253:
-    movs    r0, #0
-.Lcf253e:
-    cmp     r0, #0
-    beq     if_else_179
+    bne     if_else_179
     mov     r0, #20
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_179
 if_else_179:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf254
-    movs    r0, #1
-    b       .Lcf254e
-.Lcf254:
-    movs    r0, #0
-.Lcf254e:
-    cmp     r0, #0
-    beq     elif_end_180
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    bne     elif_end_180
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C0    @ ITEM_EYE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #4
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf255
-    movs    r0, #1
-    b       .Lcf255e
-.Lcf255:
-    movs    r0, #0
-.Lcf255e:
-    cmp     r0, #0
-    beq     if_else_181
-    ldr     r1, =0x2007F4C0    @ ITEM_EYE
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    bne     if_else_181
+    mov     r0, #4
     bl      PICKUP_ITEM
     mov     r0, #21
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #140
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_181
 if_else_181:
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_181:
     b       if_end_179
 elif_end_180:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf256
-    movs    r0, #1
-    b       .Lcf256e
-.Lcf256:
-    movs    r0, #0
-.Lcf256e:
-    cmp     r0, #0
-    beq     elif_end_182
+    bne     elif_end_182
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_179
 elif_end_182:
@@ -9964,219 +6062,128 @@ if_end_172:
 .thumb_func
 INTERACT_CONSERVATORY:
     push    {r4, r5, r6, r7, lr}
-    ldr     r4, =0x2007F6A8    @ save param hs
+    ldr     r4, =0x2007F59C    @ save param hs
     str     r0, [r4]
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F5B4    @ CONS_HS_ELISA
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf257
-    movs    r0, #1
-    b       .Lcf257e
-.Lcf257:
-    movs    r0, #0
-.Lcf257e:
-    cmp     r0, #0
-    beq     if_else_183
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     if_else_183
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf258
-    movs    r0, #1
-    b       .Lcf258e
-.Lcf258:
-    movs    r0, #0
-.Lcf258e:
-    cmp     r0, #0
-    beq     if_else_184
+    bne     if_else_184
     mov     r0, #1
     push    {r0}           @ save value
-    ldr     r1, =0x2007F628    @ NPC_STATE
+    ldr     r1, =0x2007F51C    @ NPC_STATE
     ldr     r0, [r1]
     push    {r0}           @ save base ptr
-    ldr     r1, =0x2007F4A8    @ NPC_ELISA
-    ldr     r0, [r1]
+    mov     r0, #2
     lsl     r0, r0, #1     @ index * 2 (16-bit elements)
     pop     {r1}           @ base ptr
     add     r1, r1, r0     @ element addr
     pop     {r0}           @ value
     strh    r0, [r1]       @ store 16-bit
     mov     r0, #29
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #160
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_184
 if_else_184:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf259
-    movs    r0, #1
-    b       .Lcf259e
-.Lcf259:
-    movs    r0, #0
-.Lcf259e:
-    cmp     r0, #0
-    beq     elif_end_185
+    bne     elif_end_185
     mov     r0, #38
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_184
 elif_end_185:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F49C    @ VERB_GIVE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf260
-    movs    r0, #1
-    b       .Lcf260e
-.Lcf260:
-    movs    r0, #0
-.Lcf260e:
-    cmp     r0, #0
-    beq     elif_end_186
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    bne     elif_end_186
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C8    @ ITEM_SHEET
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #6
     cmp     r0, r1
-    bne    .Lcf261
-    movs    r0, #1
-    b       .Lcf261e
-.Lcf261:
-    movs    r0, #0
-.Lcf261e:
-    cmp     r0, #0
-    beq     if_else_187
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    bne     if_else_187
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F508    @ FL_ELISA_HELPED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf262
-    movs    r0, #1
-    b       .Lcf262e
-.Lcf262:
-    movs    r0, #0
-.Lcf262e:
-    cmp     r0, #0
-    beq     if_else_188
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    bne     if_else_188
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F508    @ FL_ELISA_HELPED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     orr     r0, r0, r1
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     str     r0, [r1]
-    ldr     r1, =0x2007F4C8    @ ITEM_SHEET
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    mov     r0, #6
     bl      DROP_ITEM
     ldr     r0, =-1
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     str     r0, [r1]
     mov     r0, #2
     push    {r0}           @ save value
-    ldr     r1, =0x2007F628    @ NPC_STATE
+    ldr     r1, =0x2007F51C    @ NPC_STATE
     ldr     r0, [r1]
     push    {r0}           @ save base ptr
-    ldr     r1, =0x2007F4A8    @ NPC_ELISA
-    ldr     r0, [r1]
+    mov     r0, #2
     lsl     r0, r0, #1     @ index * 2 (16-bit elements)
     pop     {r1}           @ base ptr
     add     r1, r1, r0     @ element addr
     pop     {r0}           @ value
     strh    r0, [r1]       @ store 16-bit
     mov     r0, #30
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #200
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     ldr     r0, =_PUZZLE_SUCCESS_SFX    @ asset 'puzzle_success'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_sfx
     bl      ACCELERATE_HEARTBEAT
     b       if_end_188
 if_else_188:
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_188:
     b       if_end_187
 if_else_187:
     mov     r0, #38
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_187:
     b       if_end_184
 elif_end_186:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf263
-    movs    r0, #1
-    b       .Lcf263e
-.Lcf263:
-    movs    r0, #0
-.Lcf263e:
-    cmp     r0, #0
-    beq     elif_end_189
+    bne     elif_end_189
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_184
 elif_end_189:
@@ -10194,310 +6201,177 @@ if_end_183:
 .thumb_func
 INTERACT_VAULT:
     push    {r4, r5, r6, r7, lr}
-    ldr     r4, =0x2007F6A8    @ save param hs
+    ldr     r4, =0x2007F59C    @ save param hs
     str     r0, [r4]
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F5C8    @ VAULT_HS_APPR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf264
-    movs    r0, #1
-    b       .Lcf264e
-.Lcf264:
-    movs    r0, #0
-.Lcf264e:
-    cmp     r0, #0
-    beq     if_else_190
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     if_else_190
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf265
-    movs    r0, #1
-    b       .Lcf265e
-.Lcf265:
-    movs    r0, #0
-.Lcf265e:
-    cmp     r0, #0
-    beq     if_else_191
+    bne     if_else_191
     mov     r0, #1
     push    {r0}           @ save value
-    ldr     r1, =0x2007F628    @ NPC_STATE
+    ldr     r1, =0x2007F51C    @ NPC_STATE
     ldr     r0, [r1]
     push    {r0}           @ save base ptr
-    ldr     r1, =0x2007F4AC    @ NPC_APPRENTICE
-    ldr     r0, [r1]
+    mov     r0, #3
     lsl     r0, r0, #1     @ index * 2 (16-bit elements)
     pop     {r1}           @ base ptr
     add     r1, r1, r0     @ element addr
     pop     {r0}           @ value
     strh    r0, [r1]       @ store 16-bit
     mov     r0, #31
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #200
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_191
 if_else_191:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf266
-    movs    r0, #1
-    b       .Lcf266e
-.Lcf266:
-    movs    r0, #0
-.Lcf266e:
-    cmp     r0, #0
-    beq     elif_end_192
+    bne     elif_end_192
     mov     r0, #39
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_191
 elif_end_192:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F49C    @ VERB_GIVE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf267
-    movs    r0, #1
-    b       .Lcf267e
-.Lcf267:
-    movs    r0, #0
-.Lcf267e:
-    cmp     r0, #0
-    beq     elif_end_193
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    bne     elif_end_193
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B4    @ ITEM_GEAR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf268
-    movs    r0, #1
-    b       .Lcf268e
-.Lcf268:
-    movs    r0, #0
-.Lcf268e:
-    cmp     r0, #0
-    beq     if_else_194
+    bne     if_else_194
     mov     r0, #2
     push    {r0}           @ save value
-    ldr     r1, =0x2007F628    @ NPC_STATE
+    ldr     r1, =0x2007F51C    @ NPC_STATE
     ldr     r0, [r1]
     push    {r0}           @ save base ptr
-    ldr     r1, =0x2007F4AC    @ NPC_APPRENTICE
-    ldr     r0, [r1]
+    mov     r0, #3
     lsl     r0, r0, #1     @ index * 2 (16-bit elements)
     pop     {r1}           @ base ptr
     add     r1, r1, r0     @ element addr
     pop     {r0}           @ value
     strh    r0, [r1]       @ store 16-bit
     ldr     r0, =-1
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     str     r0, [r1]
     mov     r0, #32
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #200
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_194
 if_else_194:
     mov     r0, #39
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_194:
     b       if_end_191
 elif_end_193:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf269
-    movs    r0, #1
-    b       .Lcf269e
-.Lcf269:
-    movs    r0, #0
-.Lcf269e:
-    cmp     r0, #0
-    beq     elif_end_195
+    bne     elif_end_195
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_191
 elif_end_195:
 if_end_191:
     b       if_end_190
 if_else_190:
-    ldr     r1, =0x2007F6A8    @ HS
+    ldr     r1, =0x2007F59C    @ HS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F5CC    @ VAULT_HS_DOOR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf270
-    movs    r0, #1
-    b       .Lcf270e
-.Lcf270:
-    movs    r0, #0
-.Lcf270e:
-    cmp     r0, #0
-    beq     elif_end_196
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    bne     elif_end_196
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf271
-    movs    r0, #1
-    b       .Lcf271e
-.Lcf271:
-    movs    r0, #0
-.Lcf271e:
-    cmp     r0, #0
-    beq     if_else_197
+    bne     if_else_197
     mov     r0, #42
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_197
 if_else_197:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf272
-    movs    r0, #1
-    b       .Lcf272e
-.Lcf272:
-    movs    r0, #0
-.Lcf272e:
-    cmp     r0, #0
-    beq     elif_end_198
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    bne     elif_end_198
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4CC    @ ITEM_KEY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #7
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf273
-    movs    r0, #1
-    b       .Lcf273e
-.Lcf273:
-    movs    r0, #0
-.Lcf273e:
-    cmp     r0, #0
-    beq     if_else_199
-    ldr     r1, =0x2007F4CC    @ ITEM_KEY
-    ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
+    bne     if_else_199
+    mov     r0, #7
     bl      DROP_ITEM
     ldr     r0, =-1
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     str     r0, [r1]
     mov     r0, #1
-    ldr     r1, =0x2007F614    @ ROOM_EXIT
+    ldr     r1, =0x2007F508    @ ROOM_EXIT
     str     r0, [r1]
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F514    @ FL_EXIT_TESTAMENT
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #16
     orr     r0, r0, r1
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     str     r0, [r1]
     mov     r0, #80
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_199
 if_else_199:
     mov     r0, #42
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #120
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
 if_end_199:
     b       if_end_197
 elif_end_198:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf274
-    movs    r0, #1
-    b       .Lcf274e
-.Lcf274:
-    movs    r0, #0
-.Lcf274e:
-    cmp     r0, #0
-    beq     elif_end_200
+    bne     elif_end_200
     mov     r0, #5
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     str     r0, [r1]
     mov     r0, #100
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     str     r0, [r1]
     b       if_end_197
 elif_end_200:
@@ -10522,70 +6396,32 @@ DRAW_ROOM:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     bl      vpy_update_level
     bl      vpy_show_level
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F474    @ ROOM_ENTRANCE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf275
-    movs    r0, #1
-    b       .Lcf275e
-.Lcf275:
-    movs    r0, #0
-.Lcf275e:
-    cmp     r0, #0
-    beq     if_else_201
-    ldr     r1, =0x2007F52C    @ ENT_HS_X
+    bne     if_else_201
+    ldr     r1, =0x2007F464    @ ENT_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F524    @ ENT_HS_CARETAKER
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
+    ldr     r1, [r1]
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6AC    @ CARETAKER_SX
+    ldr     r1, =0x2007F5A0    @ CARETAKER_SX
     str     r0, [r1]
-    ldr     r1, =0x2007F6AC    @ CARETAKER_SX
+    ldr     r1, =0x2007F5A0    @ CARETAKER_SX
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-120
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-120
     cmp     r0, r1
-    ble    .Lcf276
-    movs    r0, #1
-    b       .Lcf276e
-.Lcf276:
-    movs    r0, #0
-.Lcf276e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6AC    @ CARETAKER_SX
+    ble     1f
+    ldr     r1, =0x2007F5A0    @ CARETAKER_SX
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #120
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #120
     cmp     r0, r1
-    bge    .Lcf277
-    movs    r0, #1
-    b       .Lcf277e
-.Lcf277:
-    movs    r0, #0
-.Lcf277e:
-    cmp     r0, #0
-    beq    .Lcf278
+    bge     .Lcf278
     movs    r0, #1
     b       .Lcf278e
 .Lcf278:
@@ -10596,29 +6432,15 @@ DRAW_ROOM:
 2:
     cmp     r0, #0
     beq     if_else_202
-    ldr     r1, =0x2007F628    @ NPC_STATE
+    ldr     r1, =0x2007F51C    @ NPC_STATE
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4A0    @ NPC_CARETAKER
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bge    .Lcf279
-    movs    r0, #1
-    b       .Lcf279e
-.Lcf279:
-    movs    r0, #0
-.Lcf279e:
-    cmp     r0, #0
-    beq     if_else_203
+    bge     if_else_203
     mov     r0, #90
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -10634,7 +6456,7 @@ if_else_203:
 if_end_203:
     ldr     r0, =_CARETAKER_VECTORS    @ asset 'caretaker'
     push    {r0}
-    ldr     r1, =0x2007F6AC    @ CARETAKER_SX
+    ldr     r1, =0x2007F5A0    @ CARETAKER_SX
     ldr     r0, [r1]
     push    {r0}
     ldr     r0, =-118
@@ -10649,70 +6471,32 @@ if_end_202:
     b       if_end_201
 if_else_201:
 if_end_201:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F478    @ ROOM_WORKSHOP
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf280
-    movs    r0, #1
-    b       .Lcf280e
-.Lcf280:
-    movs    r0, #0
-.Lcf280e:
-    cmp     r0, #0
-    beq     if_else_204
-    ldr     r1, =0x2007F554    @ CLOCK_HS_X
+    bne     if_else_204
+    ldr     r1, =0x2007F474    @ CLOCK_HS_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F548    @ CLOCK_HS_HANS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
+    ldr     r1, [r1]
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6B0    @ HANS_SX
+    ldr     r1, =0x2007F5A4    @ HANS_SX
     str     r0, [r1]
-    ldr     r1, =0x2007F6B0    @ HANS_SX
+    ldr     r1, =0x2007F5A4    @ HANS_SX
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-120
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-120
     cmp     r0, r1
-    ble    .Lcf281
-    movs    r0, #1
-    b       .Lcf281e
-.Lcf281:
-    movs    r0, #0
-.Lcf281e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6B0    @ HANS_SX
+    ble     1f
+    ldr     r1, =0x2007F5A4    @ HANS_SX
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #120
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #120
     cmp     r0, r1
-    bge    .Lcf282
-    movs    r0, #1
-    b       .Lcf282e
-.Lcf282:
-    movs    r0, #0
-.Lcf282e:
-    cmp     r0, #0
-    beq    .Lcf283
+    bge     .Lcf283
     movs    r0, #1
     b       .Lcf283e
 .Lcf283:
@@ -10723,29 +6507,15 @@ if_end_201:
 2:
     cmp     r0, #0
     beq     if_else_205
-    ldr     r1, =0x2007F628    @ NPC_STATE
+    ldr     r1, =0x2007F51C    @ NPC_STATE
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4A4    @ NPC_HANS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bge    .Lcf284
-    movs    r0, #1
-    b       .Lcf284e
-.Lcf284:
-    movs    r0, #0
-.Lcf284e:
-    cmp     r0, #0
-    beq     if_else_206
+    bge     if_else_206
     mov     r0, #90
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -10761,7 +6531,7 @@ if_else_206:
 if_end_206:
     ldr     r0, =_HANS_AUTOMATA_VECTORS    @ asset 'hans_automata'
     push    {r0}
-    ldr     r1, =0x2007F6B0    @ HANS_SX
+    ldr     r1, =0x2007F5A4    @ HANS_SX
     ldr     r0, [r1]
     push    {r0}
     ldr     r0, =-118
@@ -10776,98 +6546,47 @@ if_end_205:
     b       if_end_204
 if_else_204:
 if_end_204:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F480    @ ROOM_WEIGHTS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf285
-    movs    r0, #1
-    b       .Lcf285e
-.Lcf285:
-    movs    r0, #0
-.Lcf285e:
-    cmp     r0, #0
-    beq     if_else_207
-    ldr     r1, =0x2007F664    @ INV_WEIGHT
+    bne     if_else_207
+    ldr     r1, =0x2007F558    @ INV_WEIGHT
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    ble    .Lcf286
-    movs    r0, #1
-    b       .Lcf286e
-.Lcf286:
-    movs    r0, #0
-.Lcf286e:
-    cmp     r0, #0
-    beq     if_else_208
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ble     if_else_208
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F504    @ FL_PLAT_DOWN
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     orr     r0, r0, r1
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     str     r0, [r1]
     b       if_end_208
 if_else_208:
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #254
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #254
     and     r0, r0, r1
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     str     r0, [r1]
 if_end_208:
     mov     r0, #280
-    push    {r0}
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
+    ldr     r1, [r1]
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6B4    @ PLAT_SX
+    ldr     r1, =0x2007F5A8    @ PLAT_SX
     str     r0, [r1]
-    ldr     r1, =0x2007F6B4    @ PLAT_SX
+    ldr     r1, =0x2007F5A8    @ PLAT_SX
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-120
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-120
     cmp     r0, r1
-    ble    .Lcf287
-    movs    r0, #1
-    b       .Lcf287e
-.Lcf287:
-    movs    r0, #0
-.Lcf287e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6B4    @ PLAT_SX
+    ble     1f
+    ldr     r1, =0x2007F5A8    @ PLAT_SX
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #120
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #120
     cmp     r0, r1
-    bge    .Lcf288
-    movs    r0, #1
-    b       .Lcf288e
-.Lcf288:
-    movs    r0, #0
-.Lcf288e:
-    cmp     r0, #0
-    beq    .Lcf289
+    bge     .Lcf289
     movs    r0, #1
     b       .Lcf289e
 .Lcf289:
@@ -10883,30 +6602,16 @@ if_end_208:
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
     strb    r0, [r1]            @ record override for DRAW_VECTOR*
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F504    @ FL_PLAT_DOWN
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf290
-    movs    r0, #1
-    b       .Lcf290e
-.Lcf290:
-    movs    r0, #0
-.Lcf290e:
-    cmp     r0, #0
-    beq     if_else_210
+    bne     if_else_210
     ldr     r0, =_PLATFORM_UP_VECTORS    @ asset 'platform_up'
     push    {r0}
-    ldr     r1, =0x2007F6B4    @ PLAT_SX
+    ldr     r1, =0x2007F5A8    @ PLAT_SX
     ldr     r0, [r1]
     push    {r0}
     ldr     r0, =-85
@@ -10919,7 +6624,7 @@ if_end_208:
 if_else_210:
     ldr     r0, =_PLATFORM_DOWN_VECTORS    @ asset 'platform_down'
     push    {r0}
-    ldr     r1, =0x2007F6B4    @ PLAT_SX
+    ldr     r1, =0x2007F5A8    @ PLAT_SX
     ldr     r0, [r1]
     push    {r0}
     ldr     r0, =-85
@@ -10935,82 +6640,34 @@ if_end_209:
     b       if_end_207
 if_else_207:
 if_end_207:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F484    @ ROOM_OPTICS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     cmp     r0, r1
-    bne    .Lcf291
-    movs    r0, #1
-    b       .Lcf291e
-.Lcf291:
-    movs    r0, #0
-.Lcf291e:
-    cmp     r0, #0
-    beq     if_else_211
-    ldr     r1, =0x2007F618    @ FLAGS_A
+    bne     if_else_211
+    ldr     r1, =0x2007F50C    @ FLAGS_A
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4FC    @ FL_OPTICS_SOLVED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #64
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf292
-    movs    r0, #1
-    b       .Lcf292e
-.Lcf292:
-    movs    r0, #0
-.Lcf292e:
-    cmp     r0, #0
     beq     if_else_212
     mov     r0, #420
-    push    {r0}
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
+    ldr     r1, [r1]
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6B8    @ COMP_SX
+    ldr     r1, =0x2007F5AC    @ COMP_SX
     str     r0, [r1]
-    ldr     r1, =0x2007F6B8    @ COMP_SX
+    ldr     r1, =0x2007F5AC    @ COMP_SX
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-120
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-120
     cmp     r0, r1
-    ble    .Lcf293
-    movs    r0, #1
-    b       .Lcf293e
-.Lcf293:
-    movs    r0, #0
-.Lcf293e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F6B8    @ COMP_SX
+    ble     1f
+    ldr     r1, =0x2007F5AC    @ COMP_SX
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #120
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #120
     cmp     r0, r1
-    bge    .Lcf294
-    movs    r0, #1
-    b       .Lcf294e
-.Lcf294:
-    movs    r0, #0
-.Lcf294e:
-    cmp     r0, #0
-    beq    .Lcf295
+    bge     .Lcf295
     movs    r0, #1
     b       .Lcf295e
 .Lcf295:
@@ -11028,7 +6685,7 @@ if_end_207:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =_WALL_COMPARTMENT_VECTORS    @ asset 'wall_compartment'
     push    {r0}
-    ldr     r1, =0x2007F6B8    @ COMP_SX
+    ldr     r1, =0x2007F5AC    @ COMP_SX
     ldr     r0, [r1]
     push    {r0}
     ldr     r0, =-88
@@ -11046,45 +6703,20 @@ if_end_212:
     b       if_end_211
 if_else_211:
 if_end_211:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F488    @ ROOM_CONSERVATORY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     cmp     r0, r1
-    bne    .Lcf296
-    movs    r0, #1
-    b       .Lcf296e
-.Lcf296:
-    movs    r0, #0
-.Lcf296e:
-    cmp     r0, #0
-    beq     if_else_214
-    ldr     r1, =0x2007F628    @ NPC_STATE
+    bne     if_else_214
+    ldr     r1, =0x2007F51C    @ NPC_STATE
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4A8    @ NPC_ELISA
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bge    .Lcf297
-    movs    r0, #1
-    b       .Lcf297e
-.Lcf297:
-    movs    r0, #0
-.Lcf297e:
-    cmp     r0, #0
-    beq     if_else_215
+    bge     if_else_215
     mov     r0, #80
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -11111,22 +6743,11 @@ if_end_215:
     b       if_end_214
 if_else_214:
 if_end_214:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F48C    @ ROOM_VAULT_CORRIDOR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #6
     cmp     r0, r1
-    bne    .Lcf298
-    movs    r0, #1
-    b       .Lcf298e
-.Lcf298:
-    movs    r0, #0
-.Lcf298e:
-    cmp     r0, #0
-    beq     if_else_216
+    bne     if_else_216
     mov     r0, #85
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -11145,15 +6766,12 @@ if_end_214:
     b       if_end_216
 if_else_216:
 if_end_216:
-    ldr     r1, =0x2007F5F4    @ PLAYER_X
+    ldr     r1, =0x2007F4E8    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F5FC    @ SCROLL_X
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =0x2007F4F0    @ SCROLL_X
+    ldr     r1, [r1]
     sub     r0, r0, r1
-    ldr     r1, =0x2007F6BC    @ SCREEN_X
+    ldr     r1, =0x2007F5B0    @ SCREEN_X
     str     r0, [r1]
     mov     r0, #110
     and     r0, r0, #0x7F
@@ -11162,10 +6780,10 @@ if_end_216:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =_PLAYER_VECTORS    @ asset 'player'
     push    {r0}
-    ldr     r1, =0x2007F6BC    @ SCREEN_X
+    ldr     r1, =0x2007F5B0    @ SCREEN_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F5F8    @ PLAYER_Y
+    ldr     r1, =0x2007F4EC    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
     pop     {r2}
@@ -11184,8 +6802,6 @@ if_end_216:
 DRAW_BOTTOM_HUD:
     push    {r4, r5, r6, r7, lr}
     mov     r0, #7
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_text_size
     mov     r0, #70
     and     r0, r0, #0x7F
@@ -11193,39 +6809,19 @@ DRAW_BOTTOM_HUD:
     strb    r0, [r1]            @ record override for DRAW_VECTOR*
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     bl      DRAW_VERB_INDICATOR
-    ldr     r1, =0x2007F610    @ MSG_TIMER
+    ldr     r1, =0x2007F504    @ MSG_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    ble    .Lcf299
-    movs    r0, #1
-    b       .Lcf299e
-.Lcf299:
-    movs    r0, #0
-.Lcf299e:
-    cmp     r0, #0
-    beq     if_else_217
+    ble     if_else_217
     bl      DRAW_MESSAGE
     b       if_end_217
 if_else_217:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    blt    .Lcf300
-    movs    r0, #1
-    b       .Lcf300e
-.Lcf300:
-    movs    r0, #0
-.Lcf300e:
-    cmp     r0, #0
-    beq     elif_end_218
+    blt     elif_end_218
     bl      DRAW_HOTSPOT_NAME
     b       if_end_217
 elif_end_218:
@@ -11241,45 +6837,22 @@ if_end_217:
 DRAW_HOTSPOT_NAME:
     push    {r4, r5, r6, r7, lr}
     mov     r0, #7
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_text_size
     mov     r0, #100
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
     strb    r0, [r1]            @ record override for DRAW_VECTOR*
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F474    @ ROOM_ENTRANCE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf301
-    movs    r0, #1
-    b       .Lcf301e
-.Lcf301:
-    movs    r0, #0
-.Lcf301e:
-    cmp     r0, #0
-    beq     if_else_219
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     if_else_219
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf302
-    movs    r0, #1
-    b       .Lcf302e
-.Lcf302:
-    movs    r0, #0
-.Lcf302e:
-    cmp     r0, #0
-    beq     if_else_220
+    bne     if_else_220
     ldr     r0, =-35
     push    {r0}
     mov     r0, #114
@@ -11297,21 +6870,11 @@ _str_10_after:
     bl      vpy_print_text
     b       if_end_220
 if_else_220:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf303
-    movs    r0, #1
-    b       .Lcf303e
-.Lcf303:
-    movs    r0, #0
-.Lcf303e:
-    cmp     r0, #0
-    beq     elif_end_221
+    bne     elif_end_221
     ldr     r0, =-56
     push    {r0}
     mov     r0, #114
@@ -11329,21 +6892,11 @@ _str_11_after:
     bl      vpy_print_text
     b       if_end_220
 elif_end_221:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf304
-    movs    r0, #1
-    b       .Lcf304e
-.Lcf304:
-    movs    r0, #0
-.Lcf304e:
-    cmp     r0, #0
-    beq     elif_end_222
+    bne     elif_end_222
     ldr     r0, =-42
     push    {r0}
     mov     r0, #114
@@ -11361,21 +6914,11 @@ _str_12_after:
     bl      vpy_print_text
     b       if_end_220
 elif_end_222:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf305
-    movs    r0, #1
-    b       .Lcf305e
-.Lcf305:
-    movs    r0, #0
-.Lcf305e:
-    cmp     r0, #0
-    beq     elif_end_223
+    bne     elif_end_223
     ldr     r0, =-56
     push    {r0}
     mov     r0, #114
@@ -11396,37 +6939,16 @@ elif_end_223:
 if_end_220:
     b       if_end_219
 if_else_219:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F478    @ ROOM_WORKSHOP
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf306
-    movs    r0, #1
-    b       .Lcf306e
-.Lcf306:
-    movs    r0, #0
-.Lcf306e:
-    cmp     r0, #0
-    beq     elif_end_224
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     elif_end_224
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf307
-    movs    r0, #1
-    b       .Lcf307e
-.Lcf307:
-    movs    r0, #0
-.Lcf307e:
-    cmp     r0, #0
-    beq     if_else_225
+    bne     if_else_225
     ldr     r0, =-49
     push    {r0}
     mov     r0, #114
@@ -11444,21 +6966,11 @@ _str_14_after:
     bl      vpy_print_text
     b       if_end_225
 if_else_225:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf308
-    movs    r0, #1
-    b       .Lcf308e
-.Lcf308:
-    movs    r0, #0
-.Lcf308e:
-    cmp     r0, #0
-    beq     elif_end_226
+    bne     elif_end_226
     ldr     r0, =-21
     push    {r0}
     mov     r0, #114
@@ -11476,21 +6988,11 @@ _str_15_after:
     bl      vpy_print_text
     b       if_end_225
 elif_end_226:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf309
-    movs    r0, #1
-    b       .Lcf309e
-.Lcf309:
-    movs    r0, #0
-.Lcf309e:
-    cmp     r0, #0
-    beq     elif_end_227
+    bne     elif_end_227
     ldr     r0, =-42
     push    {r0}
     mov     r0, #114
@@ -11508,21 +7010,11 @@ _str_16_after:
     bl      vpy_print_text
     b       if_end_225
 elif_end_227:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf310
-    movs    r0, #1
-    b       .Lcf310e
-.Lcf310:
-    movs    r0, #0
-.Lcf310e:
-    cmp     r0, #0
-    beq     elif_end_228
+    bne     elif_end_228
     ldr     r0, =-21
     push    {r0}
     mov     r0, #114
@@ -11540,21 +7032,11 @@ _str_17_after:
     bl      vpy_print_text
     b       if_end_225
 elif_end_228:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #4
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     cmp     r0, r1
-    bne    .Lcf311
-    movs    r0, #1
-    b       .Lcf311e
-.Lcf311:
-    movs    r0, #0
-.Lcf311e:
-    cmp     r0, #0
-    beq     elif_end_229
+    bne     elif_end_229
     ldr     r0, =-35
     push    {r0}
     mov     r0, #114
@@ -11572,21 +7054,11 @@ _str_18_after:
     bl      vpy_print_text
     b       if_end_225
 elif_end_229:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #5
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     cmp     r0, r1
-    bne    .Lcf312
-    movs    r0, #1
-    b       .Lcf312e
-.Lcf312:
-    movs    r0, #0
-.Lcf312e:
-    cmp     r0, #0
-    beq     elif_end_230
+    bne     elif_end_230
     ldr     r0, =-49
     push    {r0}
     mov     r0, #114
@@ -11607,37 +7079,16 @@ elif_end_230:
 if_end_225:
     b       if_end_219
 elif_end_224:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F47C    @ ROOM_ANTEROOM
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf313
-    movs    r0, #1
-    b       .Lcf313e
-.Lcf313:
-    movs    r0, #0
-.Lcf313e:
-    cmp     r0, #0
-    beq     elif_end_231
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     elif_end_231
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf314
-    movs    r0, #1
-    b       .Lcf314e
-.Lcf314:
-    movs    r0, #0
-.Lcf314e:
-    cmp     r0, #0
-    beq     if_else_232
+    bne     if_else_232
     ldr     r0, =-21
     push    {r0}
     mov     r0, #114
@@ -11655,21 +7106,11 @@ _str_20_after:
     bl      vpy_print_text
     b       if_end_232
 if_else_232:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf315
-    movs    r0, #1
-    b       .Lcf315e
-.Lcf315:
-    movs    r0, #0
-.Lcf315e:
-    cmp     r0, #0
-    beq     elif_end_233
+    bne     elif_end_233
     ldr     r0, =-42
     push    {r0}
     mov     r0, #114
@@ -11687,21 +7128,11 @@ _str_21_after:
     bl      vpy_print_text
     b       if_end_232
 elif_end_233:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf316
-    movs    r0, #1
-    b       .Lcf316e
-.Lcf316:
-    movs    r0, #0
-.Lcf316e:
-    cmp     r0, #0
-    beq     elif_end_234
+    bne     elif_end_234
     ldr     r0, =-49
     push    {r0}
     mov     r0, #114
@@ -11719,21 +7150,11 @@ _str_22_after:
     bl      vpy_print_text
     b       if_end_232
 elif_end_234:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf317
-    movs    r0, #1
-    b       .Lcf317e
-.Lcf317:
-    movs    r0, #0
-.Lcf317e:
-    cmp     r0, #0
-    beq     elif_end_235
+    bne     elif_end_235
     ldr     r0, =-35
     push    {r0}
     mov     r0, #114
@@ -11754,37 +7175,16 @@ elif_end_235:
 if_end_232:
     b       if_end_219
 elif_end_231:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F480    @ ROOM_WEIGHTS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf318
-    movs    r0, #1
-    b       .Lcf318e
-.Lcf318:
-    movs    r0, #0
-.Lcf318e:
-    cmp     r0, #0
-    beq     elif_end_236
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     elif_end_236
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf319
-    movs    r0, #1
-    b       .Lcf319e
-.Lcf319:
-    movs    r0, #0
-.Lcf319e:
-    cmp     r0, #0
-    beq     if_else_237
+    bne     if_else_237
     ldr     r0, =-35
     push    {r0}
     mov     r0, #114
@@ -11802,21 +7202,11 @@ _str_24_after:
     bl      vpy_print_text
     b       if_end_237
 if_else_237:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf320
-    movs    r0, #1
-    b       .Lcf320e
-.Lcf320:
-    movs    r0, #0
-.Lcf320e:
-    cmp     r0, #0
-    beq     elif_end_238
+    bne     elif_end_238
     ldr     r0, =-42
     push    {r0}
     mov     r0, #114
@@ -11837,37 +7227,16 @@ elif_end_238:
 if_end_237:
     b       if_end_219
 elif_end_236:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F484    @ ROOM_OPTICS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     cmp     r0, r1
-    bne    .Lcf321
-    movs    r0, #1
-    b       .Lcf321e
-.Lcf321:
-    movs    r0, #0
-.Lcf321e:
-    cmp     r0, #0
-    beq     elif_end_239
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     elif_end_239
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf322
-    movs    r0, #1
-    b       .Lcf322e
-.Lcf322:
-    movs    r0, #0
-.Lcf322e:
-    cmp     r0, #0
-    beq     if_else_240
+    bne     if_else_240
     ldr     r0, =-49
     push    {r0}
     mov     r0, #114
@@ -11885,21 +7254,11 @@ _str_26_after:
     bl      vpy_print_text
     b       if_end_240
 if_else_240:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf323
-    movs    r0, #1
-    b       .Lcf323e
-.Lcf323:
-    movs    r0, #0
-.Lcf323e:
-    cmp     r0, #0
-    beq     elif_end_241
+    bne     elif_end_241
     ldr     r0, =-49
     push    {r0}
     mov     r0, #114
@@ -11920,37 +7279,16 @@ elif_end_241:
 if_end_240:
     b       if_end_219
 elif_end_239:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F488    @ ROOM_CONSERVATORY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     cmp     r0, r1
-    bne    .Lcf324
-    movs    r0, #1
-    b       .Lcf324e
-.Lcf324:
-    movs    r0, #0
-.Lcf324e:
-    cmp     r0, #0
-    beq     elif_end_242
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     elif_end_242
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf325
-    movs    r0, #1
-    b       .Lcf325e
-.Lcf325:
-    movs    r0, #0
-.Lcf325e:
-    cmp     r0, #0
-    beq     if_else_243
+    bne     if_else_243
     ldr     r0, =-21
     push    {r0}
     mov     r0, #114
@@ -11971,37 +7309,16 @@ if_else_243:
 if_end_243:
     b       if_end_219
 elif_end_242:
-    ldr     r1, =0x2007F5F0    @ CURRENT_ROOM
+    ldr     r1, =0x2007F4E4    @ CURRENT_ROOM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F48C    @ ROOM_VAULT_CORRIDOR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #6
     cmp     r0, r1
-    bne    .Lcf326
-    movs    r0, #1
-    b       .Lcf326e
-.Lcf326:
-    movs    r0, #0
-.Lcf326e:
-    cmp     r0, #0
-    beq     elif_end_244
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    bne     elif_end_244
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf327
-    movs    r0, #1
-    b       .Lcf327e
-.Lcf327:
-    movs    r0, #0
-.Lcf327e:
-    cmp     r0, #0
-    beq     if_else_245
+    bne     if_else_245
     ldr     r0, =-42
     push    {r0}
     mov     r0, #114
@@ -12019,21 +7336,11 @@ _str_29_after:
     bl      vpy_print_text
     b       if_end_245
 if_else_245:
-    ldr     r1, =0x2007F608    @ NEAR_HS
+    ldr     r1, =0x2007F4FC    @ NEAR_HS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf328
-    movs    r0, #1
-    b       .Lcf328e
-.Lcf328:
-    movs    r0, #0
-.Lcf328e:
-    cmp     r0, #0
-    beq     elif_end_246
+    bne     elif_end_246
     ldr     r0, =-42
     push    {r0}
     mov     r0, #114
@@ -12065,22 +7372,11 @@ if_end_219:
 .thumb_func
 DRAW_VERB_INDICATOR:
     push    {r4, r5, r6, r7, lr}
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F490    @ VERB_EXAMINE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf329
-    movs    r0, #1
-    b       .Lcf329e
-.Lcf329:
-    movs    r0, #0
-.Lcf329e:
-    cmp     r0, #0
-    beq     if_else_247
+    bne     if_else_247
     ldr     r0, =-42
     push    {r0}
     mov     r0, #127
@@ -12098,22 +7394,11 @@ _str_31_after:
     bl      vpy_print_text
     b       if_end_247
 if_else_247:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F494    @ VERB_TAKE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf330
-    movs    r0, #1
-    b       .Lcf330e
-.Lcf330:
-    movs    r0, #0
-.Lcf330e:
-    cmp     r0, #0
-    beq     elif_end_248
+    bne     elif_end_248
     ldr     r0, =-28
     push    {r0}
     mov     r0, #127
@@ -12131,22 +7416,11 @@ _str_32_after:
     bl      vpy_print_text
     b       if_end_247
 elif_end_248:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F498    @ VERB_USE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf331
-    movs    r0, #1
-    b       .Lcf331e
-.Lcf331:
-    movs    r0, #0
-.Lcf331e:
-    cmp     r0, #0
-    beq     elif_end_249
+    bne     elif_end_249
     ldr     r0, =-21
     push    {r0}
     mov     r0, #127
@@ -12164,37 +7438,16 @@ _str_33_after:
     bl      vpy_print_text
     b       if_end_247
 elif_end_249:
-    ldr     r1, =0x2007F604    @ CURRENT_VERB
+    ldr     r1, =0x2007F4F8    @ CURRENT_VERB
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F49C    @ VERB_GIVE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf332
-    movs    r0, #1
-    b       .Lcf332e
-.Lcf332:
-    movs    r0, #0
-.Lcf332e:
-    cmp     r0, #0
-    beq     elif_end_250
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    bne     elif_end_250
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-1
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-1
     cmp     r0, r1
-    bne    .Lcf333
-    movs    r0, #1
-    b       .Lcf333e
-.Lcf333:
-    movs    r0, #0
-.Lcf333e:
-    cmp     r0, #0
-    beq     if_else_251
+    bne     if_else_251
     ldr     r0, =-28
     push    {r0}
     mov     r0, #127
@@ -12212,22 +7465,11 @@ _str_34_after:
     bl      vpy_print_text
     b       if_end_251
 if_else_251:
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B0    @ ITEM_LENS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf334
-    movs    r0, #1
-    b       .Lcf334e
-.Lcf334:
-    movs    r0, #0
-.Lcf334e:
-    cmp     r0, #0
-    beq     elif_end_252
+    bne     elif_end_252
     ldr     r0, =-49
     push    {r0}
     mov     r0, #127
@@ -12245,22 +7487,11 @@ _str_35_after:
     bl      vpy_print_text
     b       if_end_251
 elif_end_252:
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B4    @ ITEM_GEAR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf335
-    movs    r0, #1
-    b       .Lcf335e
-.Lcf335:
-    movs    r0, #0
-.Lcf335e:
-    cmp     r0, #0
-    beq     elif_end_253
+    bne     elif_end_253
     ldr     r0, =-49
     push    {r0}
     mov     r0, #127
@@ -12278,22 +7509,11 @@ _str_36_after:
     bl      vpy_print_text
     b       if_end_251
 elif_end_253:
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B8    @ ITEM_PRISM
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf336
-    movs    r0, #1
-    b       .Lcf336e
-.Lcf336:
-    movs    r0, #0
-.Lcf336e:
-    cmp     r0, #0
-    beq     elif_end_254
+    bne     elif_end_254
     ldr     r0, =-56
     push    {r0}
     mov     r0, #127
@@ -12311,22 +7531,11 @@ _str_37_after:
     bl      vpy_print_text
     b       if_end_251
 elif_end_254:
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4BC    @ ITEM_BLANKET
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf337
-    movs    r0, #1
-    b       .Lcf337e
-.Lcf337:
-    movs    r0, #0
-.Lcf337e:
-    cmp     r0, #0
-    beq     elif_end_255
+    bne     elif_end_255
     ldr     r0, =-63
     push    {r0}
     mov     r0, #127
@@ -12344,22 +7553,11 @@ _str_38_after:
     bl      vpy_print_text
     b       if_end_251
 elif_end_255:
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C0    @ ITEM_EYE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     cmp     r0, r1
-    bne    .Lcf338
-    movs    r0, #1
-    b       .Lcf338e
-.Lcf338:
-    movs    r0, #0
-.Lcf338e:
-    cmp     r0, #0
-    beq     elif_end_256
+    bne     elif_end_256
     ldr     r0, =-42
     push    {r0}
     mov     r0, #127
@@ -12377,22 +7575,11 @@ _str_39_after:
     bl      vpy_print_text
     b       if_end_251
 elif_end_256:
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C4    @ ITEM_OIL
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     cmp     r0, r1
-    bne    .Lcf339
-    movs    r0, #1
-    b       .Lcf339e
-.Lcf339:
-    movs    r0, #0
-.Lcf339e:
-    cmp     r0, #0
-    beq     elif_end_257
+    bne     elif_end_257
     ldr     r0, =-42
     push    {r0}
     mov     r0, #127
@@ -12410,22 +7597,11 @@ _str_40_after:
     bl      vpy_print_text
     b       if_end_251
 elif_end_257:
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C8    @ ITEM_SHEET
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #6
     cmp     r0, r1
-    bne    .Lcf340
-    movs    r0, #1
-    b       .Lcf340e
-.Lcf340:
-    movs    r0, #0
-.Lcf340e:
-    cmp     r0, #0
-    beq     elif_end_258
+    bne     elif_end_258
     ldr     r0, =-56
     push    {r0}
     mov     r0, #127
@@ -12443,22 +7619,11 @@ _str_41_after:
     bl      vpy_print_text
     b       if_end_251
 elif_end_258:
-    ldr     r1, =0x2007F66C    @ ACTIVE_ITEM
+    ldr     r1, =0x2007F560    @ ACTIVE_ITEM
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4CC    @ ITEM_KEY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #7
     cmp     r0, r1
-    bne    .Lcf341
-    movs    r0, #1
-    b       .Lcf341e
-.Lcf341:
-    movs    r0, #0
-.Lcf341e:
-    cmp     r0, #0
-    beq     elif_end_259
+    bne     elif_end_259
     ldr     r0, =-42
     push    {r0}
     mov     r0, #127
@@ -12491,18 +7656,14 @@ if_end_247:
 DRAW_MESSAGE:
     push    {r4, r5, r6, r7, lr}
     mov     r0, #7
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_text_size
     mov     r0, #100
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
     strb    r0, [r1]            @ record override for DRAW_VECTOR*
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
-    ldr     r1, =0x2007F60C    @ MSG_ID
+    ldr     r1, =0x2007F500    @ MSG_ID
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_print_msg
     pop     {r4, r5, r6, r7, pc}
     .ltorg
@@ -12514,73 +7675,52 @@ DRAW_MESSAGE:
 .thumb_func
 PICKUP_ITEM:
     push    {r4, r5, r6, r7, lr}
-    ldr     r4, =0x2007F6C0    @ save param item_id
+    ldr     r4, =0x2007F5B4    @ save param item_id
     str     r0, [r4]
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F6C0    @ ITEM_ID
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    ldr     r1, =0x2007F5B4    @ ITEM_ID
+    ldr     r1, [r1]
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf342
-    movs    r0, #1
-    b       .Lcf342e
-.Lcf342:
-    movs    r0, #0
-.Lcf342e:
-    cmp     r0, #0
-    beq     if_else_260
+    bne     if_else_260
     mov     r0, #1
     push    {r0}           @ save value
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
     push    {r0}           @ save base ptr
-    ldr     r1, =0x2007F6C0    @ ITEM_ID
+    ldr     r1, =0x2007F5B4    @ ITEM_ID
     ldr     r0, [r1]
     lsl     r0, r0, #1     @ index * 2 (16-bit elements)
     pop     {r1}           @ base ptr
     add     r1, r1, r0     @ element addr
     pop     {r0}           @ value
     strh    r0, [r1]       @ store 16-bit
-    ldr     r1, =0x2007F660    @ INV_COUNT
+    ldr     r1, =0x2007F554    @ INV_COUNT
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     add     r0, r0, r1
-    ldr     r1, =0x2007F660    @ INV_COUNT
+    ldr     r1, =0x2007F554    @ INV_COUNT
     str     r0, [r1]
-    ldr     r1, =0x2007F664    @ INV_WEIGHT
+    ldr     r1, =0x2007F558    @ INV_WEIGHT
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F4D4    @ ITEM_WEIGHT
+    ldr     r1, =0x2007F460    @ ITEM_WEIGHT
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F6C0    @ ITEM_ID
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    ldr     r1, =0x2007F5B4    @ ITEM_ID
+    ldr     r1, [r1]
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     add     r0, r0, r1
-    ldr     r1, =0x2007F664    @ INV_WEIGHT
+    ldr     r1, =0x2007F558    @ INV_WEIGHT
     str     r0, [r1]
     ldr     r0, =_ITEM_PICKUP_SFX    @ asset 'item_pickup'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_sfx
     b       if_end_260
 if_else_260:
@@ -12595,69 +7735,50 @@ if_end_260:
 .thumb_func
 DROP_ITEM:
     push    {r4, r5, r6, r7, lr}
-    ldr     r4, =0x2007F6C0    @ save param item_id
+    ldr     r4, =0x2007F5B4    @ save param item_id
     str     r0, [r4]
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F6C0    @ ITEM_ID
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    ldr     r1, =0x2007F5B4    @ ITEM_ID
+    ldr     r1, [r1]
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf343
-    movs    r0, #1
-    b       .Lcf343e
-.Lcf343:
-    movs    r0, #0
-.Lcf343e:
-    cmp     r0, #0
-    beq     if_else_261
+    bne     if_else_261
     mov     r0, #0
     push    {r0}           @ save value
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
     push    {r0}           @ save base ptr
-    ldr     r1, =0x2007F6C0    @ ITEM_ID
+    ldr     r1, =0x2007F5B4    @ ITEM_ID
     ldr     r0, [r1]
     lsl     r0, r0, #1     @ index * 2 (16-bit elements)
     pop     {r1}           @ base ptr
     add     r1, r1, r0     @ element addr
     pop     {r0}           @ value
     strh    r0, [r1]       @ store 16-bit
-    ldr     r1, =0x2007F660    @ INV_COUNT
+    ldr     r1, =0x2007F554    @ INV_COUNT
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     sub     r0, r0, r1
-    ldr     r1, =0x2007F660    @ INV_COUNT
+    ldr     r1, =0x2007F554    @ INV_COUNT
     str     r0, [r1]
-    ldr     r1, =0x2007F664    @ INV_WEIGHT
+    ldr     r1, =0x2007F558    @ INV_WEIGHT
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F4D4    @ ITEM_WEIGHT
+    ldr     r1, =0x2007F460    @ ITEM_WEIGHT
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F6C0    @ ITEM_ID
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    ldr     r1, =0x2007F5B4    @ ITEM_ID
+    ldr     r1, [r1]
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
     mov     r1, r0
     pop     {r0}
     sub     r0, r0, r1
-    ldr     r1, =0x2007F664    @ INV_WEIGHT
+    ldr     r1, =0x2007F558    @ INV_WEIGHT
     str     r0, [r1]
     b       if_end_261
 if_else_261:
@@ -12673,8 +7794,6 @@ if_end_261:
 DRAW_INVENTORY:
     push    {r4, r5, r6, r7, lr}
     mov     r0, #7
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_text_size
     mov     r0, #100
     and     r0, r0, #0x7F
@@ -12696,45 +7815,20 @@ _str_43_after:
     pop     {r1}
     pop     {r0}
     bl      vpy_print_text
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B0    @ ITEM_LENS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #0
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf344
-    movs    r0, #1
-    b       .Lcf344e
-.Lcf344:
-    movs    r0, #0
-.Lcf344e:
-    cmp     r0, #0
-    beq     if_else_262
-    ldr     r1, =0x2007F670    @ INV_CURSOR
+    bne     if_else_262
+    ldr     r1, =0x2007F564    @ INV_CURSOR
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B0    @ ITEM_LENS
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf345
-    movs    r0, #1
-    b       .Lcf345e
-.Lcf345:
-    movs    r0, #0
-.Lcf345e:
-    cmp     r0, #0
-    beq     if_else_263
+    bne     if_else_263
     mov     r0, #127
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -12771,45 +7865,20 @@ _str_44_after:
     pop     {r1}
     pop     {r0}
     bl      vpy_print_text
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B4    @ ITEM_GEAR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #1
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf346
-    movs    r0, #1
-    b       .Lcf346e
-.Lcf346:
-    movs    r0, #0
-.Lcf346e:
-    cmp     r0, #0
-    beq     if_else_264
-    ldr     r1, =0x2007F670    @ INV_CURSOR
+    bne     if_else_264
+    ldr     r1, =0x2007F564    @ INV_CURSOR
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B4    @ ITEM_GEAR
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf347
-    movs    r0, #1
-    b       .Lcf347e
-.Lcf347:
-    movs    r0, #0
-.Lcf347e:
-    cmp     r0, #0
-    beq     if_else_265
+    bne     if_else_265
     mov     r0, #127
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -12846,45 +7915,20 @@ _str_45_after:
     pop     {r1}
     pop     {r0}
     bl      vpy_print_text
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B8    @ ITEM_PRISM
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #2
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf348
-    movs    r0, #1
-    b       .Lcf348e
-.Lcf348:
-    movs    r0, #0
-.Lcf348e:
-    cmp     r0, #0
-    beq     if_else_266
-    ldr     r1, =0x2007F670    @ INV_CURSOR
+    bne     if_else_266
+    ldr     r1, =0x2007F564    @ INV_CURSOR
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4B8    @ ITEM_PRISM
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf349
-    movs    r0, #1
-    b       .Lcf349e
-.Lcf349:
-    movs    r0, #0
-.Lcf349e:
-    cmp     r0, #0
-    beq     if_else_267
+    bne     if_else_267
     mov     r0, #127
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -12921,45 +7965,20 @@ _str_46_after:
     pop     {r1}
     pop     {r0}
     bl      vpy_print_text
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4BC    @ ITEM_BLANKET
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #3
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf350
-    movs    r0, #1
-    b       .Lcf350e
-.Lcf350:
-    movs    r0, #0
-.Lcf350e:
-    cmp     r0, #0
-    beq     if_else_268
-    ldr     r1, =0x2007F670    @ INV_CURSOR
+    bne     if_else_268
+    ldr     r1, =0x2007F564    @ INV_CURSOR
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4BC    @ ITEM_BLANKET
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf351
-    movs    r0, #1
-    b       .Lcf351e
-.Lcf351:
-    movs    r0, #0
-.Lcf351e:
-    cmp     r0, #0
-    beq     if_else_269
+    bne     if_else_269
     mov     r0, #127
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -12996,45 +8015,20 @@ _str_47_after:
     pop     {r1}
     pop     {r0}
     bl      vpy_print_text
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C0    @ ITEM_EYE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #4
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf352
-    movs    r0, #1
-    b       .Lcf352e
-.Lcf352:
-    movs    r0, #0
-.Lcf352e:
-    cmp     r0, #0
-    beq     if_else_270
-    ldr     r1, =0x2007F670    @ INV_CURSOR
+    bne     if_else_270
+    ldr     r1, =0x2007F564    @ INV_CURSOR
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C0    @ ITEM_EYE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     cmp     r0, r1
-    bne    .Lcf353
-    movs    r0, #1
-    b       .Lcf353e
-.Lcf353:
-    movs    r0, #0
-.Lcf353e:
-    cmp     r0, #0
-    beq     if_else_271
+    bne     if_else_271
     mov     r0, #127
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -13071,45 +8065,20 @@ _str_48_after:
     pop     {r1}
     pop     {r0}
     bl      vpy_print_text
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C4    @ ITEM_OIL
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #5
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf354
-    movs    r0, #1
-    b       .Lcf354e
-.Lcf354:
-    movs    r0, #0
-.Lcf354e:
-    cmp     r0, #0
-    beq     if_else_272
-    ldr     r1, =0x2007F670    @ INV_CURSOR
+    bne     if_else_272
+    ldr     r1, =0x2007F564    @ INV_CURSOR
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C4    @ ITEM_OIL
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     cmp     r0, r1
-    bne    .Lcf355
-    movs    r0, #1
-    b       .Lcf355e
-.Lcf355:
-    movs    r0, #0
-.Lcf355e:
-    cmp     r0, #0
-    beq     if_else_273
+    bne     if_else_273
     mov     r0, #127
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -13146,45 +8115,20 @@ _str_49_after:
     pop     {r1}
     pop     {r0}
     bl      vpy_print_text
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C8    @ ITEM_SHEET
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #6
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf356
-    movs    r0, #1
-    b       .Lcf356e
-.Lcf356:
-    movs    r0, #0
-.Lcf356e:
-    cmp     r0, #0
-    beq     if_else_274
-    ldr     r1, =0x2007F670    @ INV_CURSOR
+    bne     if_else_274
+    ldr     r1, =0x2007F564    @ INV_CURSOR
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4C8    @ ITEM_SHEET
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #6
     cmp     r0, r1
-    bne    .Lcf357
-    movs    r0, #1
-    b       .Lcf357e
-.Lcf357:
-    movs    r0, #0
-.Lcf357e:
-    cmp     r0, #0
-    beq     if_else_275
+    bne     if_else_275
     mov     r0, #127
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -13221,45 +8165,20 @@ _str_50_after:
     pop     {r1}
     pop     {r0}
     bl      vpy_print_text
-    ldr     r1, =0x2007F65C    @ INV_ITEMS
+    ldr     r1, =0x2007F550    @ INV_ITEMS
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4CC    @ ITEM_KEY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}           @ base ptr
+    mov     r1, #7
     lsl     r1, r1, #1     @ index * 2 (i16 stride)
     add     r0, r0, r1
     ldrsh   r0, [r0]       @ sign-extend 16-bit load
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf358
-    movs    r0, #1
-    b       .Lcf358e
-.Lcf358:
-    movs    r0, #0
-.Lcf358e:
-    cmp     r0, #0
-    beq     if_else_276
-    ldr     r1, =0x2007F670    @ INV_CURSOR
+    bne     if_else_276
+    ldr     r1, =0x2007F564    @ INV_CURSOR
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4CC    @ ITEM_KEY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #7
     cmp     r0, r1
-    bne    .Lcf359
-    movs    r0, #1
-    b       .Lcf359e
-.Lcf359:
-    movs    r0, #0
-.Lcf359e:
-    cmp     r0, #0
-    beq     if_else_277
+    bne     if_else_277
     mov     r0, #127
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -13296,21 +8215,11 @@ _str_51_after:
     pop     {r1}
     pop     {r0}
     bl      vpy_print_text
-    ldr     r1, =0x2007F664    @ INV_WEIGHT
+    ldr     r1, =0x2007F558    @ INV_WEIGHT
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    ble    .Lcf360
-    movs    r0, #1
-    b       .Lcf360e
-.Lcf360:
-    movs    r0, #0
-.Lcf360e:
-    cmp     r0, #0
-    beq     if_else_278
+    ble     if_else_278
     mov     r0, #100
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -13385,33 +8294,18 @@ _str_54_after:
 DRAW_TESTAMENT:
     push    {r4, r5, r6, r7, lr}
     mov     r0, #7
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_text_size
-    ldr     r1, =0x2007F67C    @ TESTAMENT_Y
+    ldr     r1, =0x2007F570    @ TESTAMENT_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     add     r0, r0, r1
-    ldr     r1, =0x2007F67C    @ TESTAMENT_Y
+    ldr     r1, =0x2007F570    @ TESTAMENT_Y
     str     r0, [r1]
-    ldr     r1, =0x2007F680    @ TESTAMENT_PAGE
+    ldr     r1, =0x2007F574    @ TESTAMENT_PAGE
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf361
-    movs    r0, #1
-    b       .Lcf361e
-.Lcf361:
-    movs    r0, #0
-.Lcf361e:
-    cmp     r0, #0
-    beq     if_else_279
+    bne     if_else_279
     mov     r0, #100
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -13419,12 +8313,9 @@ DRAW_TESTAMENT:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-91
     push    {r0}
-    ldr     r1, =0x2007F67C    @ TESTAMENT_Y
+    ldr     r1, =0x2007F570    @ TESTAMENT_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #15
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #15
     add     r0, r0, r1
     push    {r0}
     b       _str_55_after
@@ -13445,12 +8336,9 @@ _str_55_after:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-84
     push    {r0}
-    ldr     r1, =0x2007F67C    @ TESTAMENT_Y
+    ldr     r1, =0x2007F570    @ TESTAMENT_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #15
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #15
     sub     r0, r0, r1
     push    {r0}
     b       _str_56_after
@@ -13466,21 +8354,11 @@ _str_56_after:
     bl      vpy_print_text
     b       if_end_279
 if_else_279:
-    ldr     r1, =0x2007F680    @ TESTAMENT_PAGE
+    ldr     r1, =0x2007F574    @ TESTAMENT_PAGE
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf362
-    movs    r0, #1
-    b       .Lcf362e
-.Lcf362:
-    movs    r0, #0
-.Lcf362e:
-    cmp     r0, #0
-    beq     elif_end_280
+    bne     elif_end_280
     mov     r0, #100
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -13488,12 +8366,9 @@ if_else_279:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-70
     push    {r0}
-    ldr     r1, =0x2007F67C    @ TESTAMENT_Y
+    ldr     r1, =0x2007F570    @ TESTAMENT_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #15
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #15
     add     r0, r0, r1
     push    {r0}
     b       _str_57_after
@@ -13514,12 +8389,9 @@ _str_57_after:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-84
     push    {r0}
-    ldr     r1, =0x2007F67C    @ TESTAMENT_Y
+    ldr     r1, =0x2007F570    @ TESTAMENT_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #15
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #15
     sub     r0, r0, r1
     push    {r0}
     b       _str_58_after
@@ -13536,51 +8408,27 @@ _str_58_after:
     b       if_end_279
 elif_end_280:
 if_end_279:
-    ldr     r1, =0x2007F67C    @ TESTAMENT_Y
+    ldr     r1, =0x2007F570    @ TESTAMENT_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #110
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #110
     cmp     r0, r1
-    ble    .Lcf363
-    movs    r0, #1
-    b       .Lcf363e
-.Lcf363:
-    movs    r0, #0
-.Lcf363e:
-    cmp     r0, #0
-    beq     if_else_281
-    ldr     r1, =0x2007F680    @ TESTAMENT_PAGE
+    ble     if_else_281
+    ldr     r1, =0x2007F574    @ TESTAMENT_PAGE
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     add     r0, r0, r1
-    ldr     r1, =0x2007F680    @ TESTAMENT_PAGE
+    ldr     r1, =0x2007F574    @ TESTAMENT_PAGE
     str     r0, [r1]
     ldr     r0, =-110
-    ldr     r1, =0x2007F67C    @ TESTAMENT_Y
+    ldr     r1, =0x2007F570    @ TESTAMENT_Y
     str     r0, [r1]
-    ldr     r1, =0x2007F680    @ TESTAMENT_PAGE
+    ldr     r1, =0x2007F574    @ TESTAMENT_PAGE
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #2
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    blt    .Lcf364
-    movs    r0, #1
-    b       .Lcf364e
-.Lcf364:
-    movs    r0, #0
-.Lcf364e:
-    cmp     r0, #0
-    beq     if_else_282
-    ldr     r1, =0x2007F46C    @ STATE_ENDING
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    blt     if_else_282
+    mov     r0, #3
+    ldr     r1, =0x2007F4D4    @ SCREEN
     str     r0, [r1]
     b       if_end_282
 if_else_282:
@@ -13599,78 +8447,35 @@ if_end_281:
 DRAW_ENDING:
     push    {r4, r5, r6, r7, lr}
     mov     r0, #7
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_text_size
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #50
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #50
     cmp     r0, r1
-    bge    .Lcf365
-    movs    r0, #1
-    b       .Lcf365e
-.Lcf365:
-    movs    r0, #0
-.Lcf365e:
-    cmp     r0, #0
-    beq     if_else_283
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    bge     if_else_283
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     add     r0, r0, r1
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     str     r0, [r1]
     b       if_end_283
 if_else_283:
 if_end_283:
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F508    @ FL_ELISA_HELPED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf366
-    movs    r0, #1
-    b       .Lcf366e
-.Lcf366:
-    movs    r0, #0
-.Lcf366e:
-    cmp     r0, #0
     beq     1f
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F50C    @ FL_HANS_HELPED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf367
-    movs    r0, #1
-    b       .Lcf367e
-.Lcf367:
-    movs    r0, #0
-.Lcf367e:
-    cmp     r0, #0
-    beq    .Lcf368
+    beq     .Lcf368
     movs    r0, #1
     b       .Lcf368e
 .Lcf368:
@@ -13688,12 +8493,9 @@ if_end_283:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-91
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #70
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #70
     add     r0, r0, r1
     push    {r0}
     b       _str_59_after
@@ -13714,12 +8516,9 @@ _str_59_after:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-91
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #50
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #50
     add     r0, r0, r1
     push    {r0}
     b       _str_60_after
@@ -13735,12 +8534,9 @@ _str_60_after:
     bl      vpy_print_text
     ldr     r0, =-84
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #30
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #30
     add     r0, r0, r1
     push    {r0}
     b       _str_61_after
@@ -13761,12 +8557,9 @@ _str_61_after:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-91
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #5
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     add     r0, r0, r1
     push    {r0}
     b       _str_62_after
@@ -13782,12 +8575,9 @@ _str_62_after:
     bl      vpy_print_text
     ldr     r0, =-91
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #15
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #15
     sub     r0, r0, r1
     push    {r0}
     b       _str_63_after
@@ -13803,12 +8593,9 @@ _str_63_after:
     bl      vpy_print_text
     ldr     r0, =-63
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #35
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #35
     sub     r0, r0, r1
     push    {r0}
     b       _str_64_after
@@ -13829,12 +8616,9 @@ _str_64_after:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-63
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #65
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #65
     sub     r0, r0, r1
     push    {r0}
     b       _str_65_after
@@ -13850,26 +8634,12 @@ _str_65_after:
     bl      vpy_print_text
     b       if_end_284
 if_else_284:
-    ldr     r1, =0x2007F61C    @ FLAGS_B
+    ldr     r1, =0x2007F510    @ FLAGS_B
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F508    @ FL_ELISA_HELPED
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     and     r0, r0, r1
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    beq    .Lcf369
-    movs    r0, #1
-    b       .Lcf369e
-.Lcf369:
-    movs    r0, #0
-.Lcf369e:
-    cmp     r0, #0
     beq     elif_end_285
     mov     r0, #110
     and     r0, r0, #0x7F
@@ -13878,12 +8648,9 @@ if_else_284:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-91
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #70
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #70
     add     r0, r0, r1
     push    {r0}
     b       _str_66_after
@@ -13904,12 +8671,9 @@ _str_66_after:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-84
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #50
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #50
     add     r0, r0, r1
     push    {r0}
     b       _str_67_after
@@ -13925,12 +8689,9 @@ _str_67_after:
     bl      vpy_print_text
     ldr     r0, =-91
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #30
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #30
     add     r0, r0, r1
     push    {r0}
     b       _str_68_after
@@ -13946,12 +8707,9 @@ _str_68_after:
     bl      vpy_print_text
     ldr     r0, =-56
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #10
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #10
     add     r0, r0, r1
     push    {r0}
     b       _str_69_after
@@ -13972,12 +8730,9 @@ _str_69_after:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-91
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #15
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #15
     sub     r0, r0, r1
     push    {r0}
     b       _str_70_after
@@ -13993,12 +8748,9 @@ _str_70_after:
     bl      vpy_print_text
     ldr     r0, =-91
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #35
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #35
     sub     r0, r0, r1
     push    {r0}
     b       _str_71_after
@@ -14014,12 +8766,9 @@ _str_71_after:
     bl      vpy_print_text
     ldr     r0, =-70
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #55
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #55
     sub     r0, r0, r1
     push    {r0}
     b       _str_72_after
@@ -14040,12 +8789,9 @@ _str_72_after:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-56
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #80
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #80
     sub     r0, r0, r1
     push    {r0}
     b       _str_73_after
@@ -14068,12 +8814,9 @@ elif_end_285:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-77
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #70
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #70
     add     r0, r0, r1
     push    {r0}
     b       _str_74_after
@@ -14094,12 +8837,9 @@ _str_74_after:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-91
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #50
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #50
     add     r0, r0, r1
     push    {r0}
     b       _str_75_after
@@ -14115,12 +8855,9 @@ _str_75_after:
     bl      vpy_print_text
     ldr     r0, =-91
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #30
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #30
     add     r0, r0, r1
     push    {r0}
     b       _str_76_after
@@ -14136,12 +8873,9 @@ _str_76_after:
     bl      vpy_print_text
     ldr     r0, =-84
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #10
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #10
     add     r0, r0, r1
     push    {r0}
     b       _str_77_after
@@ -14162,12 +8896,9 @@ _str_77_after:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-91
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #15
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #15
     sub     r0, r0, r1
     push    {r0}
     b       _str_78_after
@@ -14183,12 +8914,9 @@ _str_78_after:
     bl      vpy_print_text
     ldr     r0, =-84
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #35
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #35
     sub     r0, r0, r1
     push    {r0}
     b       _str_79_after
@@ -14209,12 +8937,9 @@ _str_79_after:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-70
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #65
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #65
     sub     r0, r0, r1
     push    {r0}
     b       _str_80_after
@@ -14236,12 +8961,9 @@ if_end_284:
     bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
     ldr     r0, =-49
     push    {r0}
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #95
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #95
     sub     r0, r0, r1
     push    {r0}
     b       _str_81_after
@@ -14255,21 +8977,11 @@ _str_81_after:
     pop     {r1}
     pop     {r0}
     bl      vpy_print_text
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #50
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #50
     cmp     r0, r1
-    blt    .Lcf370
-    movs    r0, #1
-    b       .Lcf370e
-.Lcf370:
-    movs    r0, #0
-.Lcf370e:
-    cmp     r0, #0
-    beq     if_else_286
+    blt     if_else_286
     mov     r0, #50
     and     r0, r0, #0x7F
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
@@ -14290,35 +9002,21 @@ _str_82_after:
     pop     {r1}
     pop     {r0}
     bl      vpy_print_text
-    ldr     r1, =0x2007F634    @ BTN1_FIRED
+    ldr     r1, =0x2007F528    @ BTN1_FIRED
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf371
-    movs    r0, #1
-    b       .Lcf371e
-.Lcf371:
-    movs    r0, #0
-.Lcf371e:
-    cmp     r0, #0
-    beq     if_else_287
+    bne     if_else_287
     ldr     r0, =-110
-    ldr     r1, =0x2007F684    @ ENDING_Y
+    ldr     r1, =0x2007F578    @ ENDING_Y
     str     r0, [r1]
-    ldr     r1, =0x2007F460    @ STATE_TITLE
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    mov     r0, #0
+    ldr     r1, =0x2007F4D4    @ SCREEN
     str     r0, [r1]
-    ldr     r1, =0x2007F4DC    @ MUSIC_TITLE
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    mov     r0, #1
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     str     r0, [r1]
     ldr     r0, =_INTRO_MUSIC    @ asset 'intro'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_music
     b       if_end_287
 if_else_287:
@@ -14336,32 +9034,19 @@ if_end_286:
 .thumb_func
 ACCELERATE_HEARTBEAT:
     push    {r4, r5, r6, r7, lr}
-    ldr     r1, =0x2007F674    @ HEARTBEAT_TEMPO
+    ldr     r1, =0x2007F568    @ HEARTBEAT_TEMPO
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #8
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #8
     sub     r0, r0, r1
-    ldr     r1, =0x2007F674    @ HEARTBEAT_TEMPO
+    ldr     r1, =0x2007F568    @ HEARTBEAT_TEMPO
     str     r0, [r1]
-    ldr     r1, =0x2007F674    @ HEARTBEAT_TEMPO
+    ldr     r1, =0x2007F568    @ HEARTBEAT_TEMPO
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #20
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #20
     cmp     r0, r1
-    bge    .Lcf372
-    movs    r0, #1
-    b       .Lcf372e
-.Lcf372:
-    movs    r0, #0
-.Lcf372e:
-    cmp     r0, #0
-    beq     if_else_288
+    bge     if_else_288
     mov     r0, #20
-    ldr     r1, =0x2007F674    @ HEARTBEAT_TEMPO
+    ldr     r1, =0x2007F568    @ HEARTBEAT_TEMPO
     str     r0, [r1]
     b       if_end_288
 if_else_288:
@@ -14376,332 +9061,155 @@ if_end_288:
 .thumb_func
 game_main:
     push    {r4, r5, r6, r7, lr}
+    @ zero runtime RAM (RP2350 SRAM is not zero-initialised)
+    ldr     r0, =TMPVAL              @ runtime RAM base
+    ldr     r1, =USER_RAM_START      @ end of system RAM (exclusive)
+    mov     r2, #0
+gm_zero_loop:
+    str     r2, [r0], #4
+    cmp     r0, r1
+    blo     gm_zero_loop
+    @ default drawing state (SRAM is not zero-initialised)
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    mov     r0, #0
+    strb    r0, [r1]
+    ldr     r1, =TEXT_SIZE
+    mov     r0, #3
+    str     r0, [r1]
     @ initialize globals
-    ldr     r1, =0x2007F460
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F464
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r1, =0x2007F468
-    mov     r0, #2
-    str     r0, [r1]
-    ldr     r1, =0x2007F46C
-    mov     r0, #3
-    str     r0, [r1]
-    ldr     r1, =0x2007F470
-    mov     r0, #4
-    str     r0, [r1]
-    ldr     r1, =0x2007F474
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F478
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r1, =0x2007F47C
-    mov     r0, #2
-    str     r0, [r1]
-    ldr     r1, =0x2007F480
-    mov     r0, #3
-    str     r0, [r1]
-    ldr     r1, =0x2007F484
-    mov     r0, #4
-    str     r0, [r1]
-    ldr     r1, =0x2007F488
-    mov     r0, #5
-    str     r0, [r1]
-    ldr     r1, =0x2007F48C
-    mov     r0, #6
-    str     r0, [r1]
-    ldr     r1, =0x2007F490
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F494
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r1, =0x2007F498
-    mov     r0, #2
-    str     r0, [r1]
-    ldr     r1, =0x2007F49C
-    mov     r0, #3
-    str     r0, [r1]
-    ldr     r1, =0x2007F4A0
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F4A4
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r1, =0x2007F4A8
-    mov     r0, #2
-    str     r0, [r1]
-    ldr     r1, =0x2007F4AC
-    mov     r0, #3
-    str     r0, [r1]
-    ldr     r1, =0x2007F4B0
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F4B4
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r1, =0x2007F4B8
-    mov     r0, #2
-    str     r0, [r1]
-    ldr     r1, =0x2007F4BC
-    mov     r0, #3
-    str     r0, [r1]
-    ldr     r1, =0x2007F4C0
-    mov     r0, #4
-    str     r0, [r1]
-    ldr     r1, =0x2007F4C4
-    mov     r0, #5
-    str     r0, [r1]
-    ldr     r1, =0x2007F4C8
-    mov     r0, #6
-    str     r0, [r1]
-    ldr     r1, =0x2007F4CC
-    mov     r0, #7
-    str     r0, [r1]
-    ldr     r1, =0x2007F4D0
-    mov     r0, #8
-    str     r0, [r1]
     ldr     r0, =ARRAY_ITEM_WEIGHT_DATA
-    ldr     r1, =0x2007F4D4
+    ldr     r1, =0x2007F460
     str     r0, [r1]  @ const array ITEM_WEIGHT -> ROM
+    ldr     r0, =ARRAY_ENT_HS_X_DATA
+    ldr     r1, =0x2007F464
+    str     r0, [r1]  @ const array ENT_HS_X -> ROM
+    ldr     r0, =ARRAY_ENT_HS_Y_DATA
+    ldr     r1, =0x2007F468
+    str     r0, [r1]  @ const array ENT_HS_Y -> ROM
+    ldr     r0, =ARRAY_ENT_HS_W_DATA
+    ldr     r1, =0x2007F46C
+    str     r0, [r1]  @ const array ENT_HS_W -> ROM
+    ldr     r0, =ARRAY_ENT_HS_H_DATA
+    ldr     r1, =0x2007F470
+    str     r0, [r1]  @ const array ENT_HS_H -> ROM
+    ldr     r0, =ARRAY_CLOCK_HS_X_DATA
+    ldr     r1, =0x2007F474
+    str     r0, [r1]  @ const array CLOCK_HS_X -> ROM
+    ldr     r0, =ARRAY_CLOCK_HS_Y_DATA
+    ldr     r1, =0x2007F478
+    str     r0, [r1]  @ const array CLOCK_HS_Y -> ROM
+    ldr     r0, =ARRAY_CLOCK_HS_W_DATA
+    ldr     r1, =0x2007F47C
+    str     r0, [r1]  @ const array CLOCK_HS_W -> ROM
+    ldr     r0, =ARRAY_CLOCK_HS_H_DATA
+    ldr     r1, =0x2007F480
+    str     r0, [r1]  @ const array CLOCK_HS_H -> ROM
+    ldr     r0, =ARRAY_ANT_HS_X_DATA
+    ldr     r1, =0x2007F484
+    str     r0, [r1]  @ const array ANT_HS_X -> ROM
+    ldr     r0, =ARRAY_ANT_HS_Y_DATA
+    ldr     r1, =0x2007F488
+    str     r0, [r1]  @ const array ANT_HS_Y -> ROM
+    ldr     r0, =ARRAY_ANT_HS_W_DATA
+    ldr     r1, =0x2007F48C
+    str     r0, [r1]  @ const array ANT_HS_W -> ROM
+    ldr     r0, =ARRAY_ANT_HS_H_DATA
+    ldr     r1, =0x2007F490
+    str     r0, [r1]  @ const array ANT_HS_H -> ROM
+    ldr     r0, =ARRAY_WGT_HS_X_DATA
+    ldr     r1, =0x2007F494
+    str     r0, [r1]  @ const array WGT_HS_X -> ROM
+    ldr     r0, =ARRAY_WGT_HS_Y_DATA
+    ldr     r1, =0x2007F498
+    str     r0, [r1]  @ const array WGT_HS_Y -> ROM
+    ldr     r0, =ARRAY_WGT_HS_W_DATA
+    ldr     r1, =0x2007F49C
+    str     r0, [r1]  @ const array WGT_HS_W -> ROM
+    ldr     r0, =ARRAY_WGT_HS_H_DATA
+    ldr     r1, =0x2007F4A0
+    str     r0, [r1]  @ const array WGT_HS_H -> ROM
+    ldr     r0, =ARRAY_OPT_HS_X_DATA
+    ldr     r1, =0x2007F4A4
+    str     r0, [r1]  @ const array OPT_HS_X -> ROM
+    ldr     r0, =ARRAY_OPT_HS_Y_DATA
+    ldr     r1, =0x2007F4A8
+    str     r0, [r1]  @ const array OPT_HS_Y -> ROM
+    ldr     r0, =ARRAY_OPT_HS_W_DATA
+    ldr     r1, =0x2007F4AC
+    str     r0, [r1]  @ const array OPT_HS_W -> ROM
+    ldr     r0, =ARRAY_OPT_HS_H_DATA
+    ldr     r1, =0x2007F4B0
+    str     r0, [r1]  @ const array OPT_HS_H -> ROM
+    ldr     r0, =ARRAY_CONS_HS_X_DATA
+    ldr     r1, =0x2007F4B4
+    str     r0, [r1]  @ const array CONS_HS_X -> ROM
+    ldr     r0, =ARRAY_CONS_HS_Y_DATA
+    ldr     r1, =0x2007F4B8
+    str     r0, [r1]  @ const array CONS_HS_Y -> ROM
+    ldr     r0, =ARRAY_CONS_HS_W_DATA
+    ldr     r1, =0x2007F4BC
+    str     r0, [r1]  @ const array CONS_HS_W -> ROM
+    ldr     r0, =ARRAY_CONS_HS_H_DATA
+    ldr     r1, =0x2007F4C0
+    str     r0, [r1]  @ const array CONS_HS_H -> ROM
+    ldr     r0, =ARRAY_VAULT_HS_X_DATA
+    ldr     r1, =0x2007F4C4
+    str     r0, [r1]  @ const array VAULT_HS_X -> ROM
+    ldr     r0, =ARRAY_VAULT_HS_Y_DATA
+    ldr     r1, =0x2007F4C8
+    str     r0, [r1]  @ const array VAULT_HS_Y -> ROM
+    ldr     r0, =ARRAY_VAULT_HS_W_DATA
+    ldr     r1, =0x2007F4CC
+    str     r0, [r1]  @ const array VAULT_HS_W -> ROM
+    ldr     r0, =ARRAY_VAULT_HS_H_DATA
+    ldr     r1, =0x2007F4D0
+    str     r0, [r1]  @ const array VAULT_HS_H -> ROM
+    ldr     r1, =0x2007F4D4
+    mov     r0, #0
+    str     r0, [r1]
     ldr     r1, =0x2007F4D8
     mov     r0, #0
     str     r0, [r1]
     ldr     r1, =0x2007F4DC
-    mov     r0, #1
+    mov     r0, #0
     str     r0, [r1]
     ldr     r1, =0x2007F4E0
-    mov     r0, #2
+    mov     r0, #0
     str     r0, [r1]
     ldr     r1, =0x2007F4E4
-    mov     r0, #1
+    mov     r0, #0
     str     r0, [r1]
     ldr     r1, =0x2007F4E8
-    mov     r0, #2
+    mov     r0, #0
     str     r0, [r1]
     ldr     r1, =0x2007F4EC
-    mov     r0, #4
-    str     r0, [r1]
-    ldr     r1, =0x2007F4F0
-    mov     r0, #8
-    str     r0, [r1]
-    ldr     r1, =0x2007F4F4
-    mov     r0, #16
-    str     r0, [r1]
-    ldr     r1, =0x2007F4F8
-    mov     r0, #32
-    str     r0, [r1]
-    ldr     r1, =0x2007F4FC
-    mov     r0, #64
-    str     r0, [r1]
-    ldr     r1, =0x2007F500
-    mov     r0, #128
-    str     r0, [r1]
-    ldr     r1, =0x2007F504
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r1, =0x2007F508
-    mov     r0, #2
-    str     r0, [r1]
-    ldr     r1, =0x2007F50C
-    mov     r0, #4
-    str     r0, [r1]
-    ldr     r1, =0x2007F510
-    mov     r0, #8
-    str     r0, [r1]
-    ldr     r1, =0x2007F514
-    mov     r0, #16
-    str     r0, [r1]
-    ldr     r1, =0x2007F518
-    mov     r0, #32
-    str     r0, [r1]
-    ldr     r1, =0x2007F51C
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F520
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r1, =0x2007F524
-    mov     r0, #2
-    str     r0, [r1]
-    ldr     r1, =0x2007F528
-    mov     r0, #3
-    str     r0, [r1]
-    ldr     r0, =ARRAY_ENT_HS_X_DATA
-    ldr     r1, =0x2007F52C
-    str     r0, [r1]  @ const array ENT_HS_X -> ROM
-    ldr     r0, =ARRAY_ENT_HS_Y_DATA
-    ldr     r1, =0x2007F530
-    str     r0, [r1]  @ const array ENT_HS_Y -> ROM
-    ldr     r0, =ARRAY_ENT_HS_W_DATA
-    ldr     r1, =0x2007F534
-    str     r0, [r1]  @ const array ENT_HS_W -> ROM
-    ldr     r0, =ARRAY_ENT_HS_H_DATA
-    ldr     r1, =0x2007F538
-    str     r0, [r1]  @ const array ENT_HS_H -> ROM
-    ldr     r1, =0x2007F53C
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F540
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r1, =0x2007F544
-    mov     r0, #2
-    str     r0, [r1]
-    ldr     r1, =0x2007F548
-    mov     r0, #3
-    str     r0, [r1]
-    ldr     r1, =0x2007F54C
-    mov     r0, #4
-    str     r0, [r1]
-    ldr     r1, =0x2007F550
-    mov     r0, #5
-    str     r0, [r1]
-    ldr     r0, =ARRAY_CLOCK_HS_X_DATA
-    ldr     r1, =0x2007F554
-    str     r0, [r1]  @ const array CLOCK_HS_X -> ROM
-    ldr     r0, =ARRAY_CLOCK_HS_Y_DATA
-    ldr     r1, =0x2007F558
-    str     r0, [r1]  @ const array CLOCK_HS_Y -> ROM
-    ldr     r0, =ARRAY_CLOCK_HS_W_DATA
-    ldr     r1, =0x2007F55C
-    str     r0, [r1]  @ const array CLOCK_HS_W -> ROM
-    ldr     r0, =ARRAY_CLOCK_HS_H_DATA
-    ldr     r1, =0x2007F560
-    str     r0, [r1]  @ const array CLOCK_HS_H -> ROM
-    ldr     r1, =0x2007F564
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F568
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r1, =0x2007F56C
-    mov     r0, #2
-    str     r0, [r1]
-    ldr     r1, =0x2007F570
-    mov     r0, #3
-    str     r0, [r1]
-    ldr     r0, =ARRAY_ANT_HS_X_DATA
-    ldr     r1, =0x2007F574
-    str     r0, [r1]  @ const array ANT_HS_X -> ROM
-    ldr     r0, =ARRAY_ANT_HS_Y_DATA
-    ldr     r1, =0x2007F578
-    str     r0, [r1]  @ const array ANT_HS_Y -> ROM
-    ldr     r0, =ARRAY_ANT_HS_W_DATA
-    ldr     r1, =0x2007F57C
-    str     r0, [r1]  @ const array ANT_HS_W -> ROM
-    ldr     r0, =ARRAY_ANT_HS_H_DATA
-    ldr     r1, =0x2007F580
-    str     r0, [r1]  @ const array ANT_HS_H -> ROM
-    ldr     r1, =0x2007F584
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F588
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r0, =ARRAY_WGT_HS_X_DATA
-    ldr     r1, =0x2007F58C
-    str     r0, [r1]  @ const array WGT_HS_X -> ROM
-    ldr     r0, =ARRAY_WGT_HS_Y_DATA
-    ldr     r1, =0x2007F590
-    str     r0, [r1]  @ const array WGT_HS_Y -> ROM
-    ldr     r0, =ARRAY_WGT_HS_W_DATA
-    ldr     r1, =0x2007F594
-    str     r0, [r1]  @ const array WGT_HS_W -> ROM
-    ldr     r0, =ARRAY_WGT_HS_H_DATA
-    ldr     r1, =0x2007F598
-    str     r0, [r1]  @ const array WGT_HS_H -> ROM
-    ldr     r1, =0x2007F59C
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F5A0
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r0, =ARRAY_OPT_HS_X_DATA
-    ldr     r1, =0x2007F5A4
-    str     r0, [r1]  @ const array OPT_HS_X -> ROM
-    ldr     r0, =ARRAY_OPT_HS_Y_DATA
-    ldr     r1, =0x2007F5A8
-    str     r0, [r1]  @ const array OPT_HS_Y -> ROM
-    ldr     r0, =ARRAY_OPT_HS_W_DATA
-    ldr     r1, =0x2007F5AC
-    str     r0, [r1]  @ const array OPT_HS_W -> ROM
-    ldr     r0, =ARRAY_OPT_HS_H_DATA
-    ldr     r1, =0x2007F5B0
-    str     r0, [r1]  @ const array OPT_HS_H -> ROM
-    ldr     r1, =0x2007F5B4
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r0, =ARRAY_CONS_HS_X_DATA
-    ldr     r1, =0x2007F5B8
-    str     r0, [r1]  @ const array CONS_HS_X -> ROM
-    ldr     r0, =ARRAY_CONS_HS_Y_DATA
-    ldr     r1, =0x2007F5BC
-    str     r0, [r1]  @ const array CONS_HS_Y -> ROM
-    ldr     r0, =ARRAY_CONS_HS_W_DATA
-    ldr     r1, =0x2007F5C0
-    str     r0, [r1]  @ const array CONS_HS_W -> ROM
-    ldr     r0, =ARRAY_CONS_HS_H_DATA
-    ldr     r1, =0x2007F5C4
-    str     r0, [r1]  @ const array CONS_HS_H -> ROM
-    ldr     r1, =0x2007F5C8
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F5CC
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r0, =ARRAY_VAULT_HS_X_DATA
-    ldr     r1, =0x2007F5D0
-    str     r0, [r1]  @ const array VAULT_HS_X -> ROM
-    ldr     r0, =ARRAY_VAULT_HS_Y_DATA
-    ldr     r1, =0x2007F5D4
-    str     r0, [r1]  @ const array VAULT_HS_Y -> ROM
-    ldr     r0, =ARRAY_VAULT_HS_W_DATA
-    ldr     r1, =0x2007F5D8
-    str     r0, [r1]  @ const array VAULT_HS_W -> ROM
-    ldr     r0, =ARRAY_VAULT_HS_H_DATA
-    ldr     r1, =0x2007F5DC
-    str     r0, [r1]  @ const array VAULT_HS_H -> ROM
-    ldr     r1, =0x2007F5E4
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F5E8
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F5EC
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F5F4
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F5F8
     ldr     r0, =-115
     str     r0, [r1]
-    ldr     r1, =0x2007F5FC
+    ldr     r1, =0x2007F4F0
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F600
+    ldr     r1, =0x2007F4F4
     mov     r0, #5
     str     r0, [r1]
-    ldr     r1, =0x2007F608
+    ldr     r1, =0x2007F4F8
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F4FC
     ldr     r0, =-1
     str     r0, [r1]
-    ldr     r1, =0x2007F60C
+    ldr     r1, =0x2007F500
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F610
+    ldr     r1, =0x2007F504
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F614
+    ldr     r1, =0x2007F508
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F618
+    ldr     r1, =0x2007F50C
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F61C
+    ldr     r1, =0x2007F510
     mov     r0, #0
     str     r0, [r1]
     @ init array NPC_STATE
@@ -14714,27 +9222,30 @@ game_main:
     strh    r0, [r2, #4]
     mov     r0, #0
     strh    r0, [r2, #6]
-    ldr     r1, =0x2007F628
+    ldr     r1, =0x2007F51C
     str     r2, [r1]
-    ldr     r1, =0x2007F62C
+    ldr     r1, =0x2007F520
     mov     r0, #1
     str     r0, [r1]
-    ldr     r1, =0x2007F634
+    ldr     r1, =0x2007F524
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F638
+    ldr     r1, =0x2007F528
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F63C
+    ldr     r1, =0x2007F52C
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F640
+    ldr     r1, =0x2007F530
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F644
+    ldr     r1, =0x2007F534
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F648
+    ldr     r1, =0x2007F538
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F53C
     mov     r0, #0
     str     r0, [r1]
     @ init array INV_ITEMS
@@ -14755,39 +9266,39 @@ game_main:
     strh    r0, [r2, #12]
     mov     r0, #0
     strh    r0, [r2, #14]
-    ldr     r1, =0x2007F65C
+    ldr     r1, =0x2007F550
     str     r2, [r1]
-    ldr     r1, =0x2007F660
+    ldr     r1, =0x2007F554
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F664
+    ldr     r1, =0x2007F558
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F668
+    ldr     r1, =0x2007F55C
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F66C
+    ldr     r1, =0x2007F560
     ldr     r0, =-1
     str     r0, [r1]
-    ldr     r1, =0x2007F670
+    ldr     r1, =0x2007F564
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F674
+    ldr     r1, =0x2007F568
     mov     r0, #60
     str     r0, [r1]
-    ldr     r1, =0x2007F678
+    ldr     r1, =0x2007F56C
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F67C
+    ldr     r1, =0x2007F570
     ldr     r0, =-110
     str     r0, [r1]
-    ldr     r1, =0x2007F680
+    ldr     r1, =0x2007F574
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F684
+    ldr     r1, =0x2007F578
     ldr     r0, =-110
     str     r0, [r1]
-    ldr     r1, =0x2007F688
+    ldr     r1, =0x2007F57C
     mov     r0, #0
     str     r0, [r1]
     @ init PSG_MIXER_SHADOW (all channels disabled)
@@ -14800,8 +9311,6 @@ game_main:
     str     r0, [r1]
     @ main() body
     ldr     r0, =_ENTRANCE_LEVEL    @ asset 'entrance'
-    push    {r0}
-    pop     {r0}
     bl      vpy_load_level
 game_main_loop:
     bl      vpy_wait_recal
@@ -14811,118 +9320,71 @@ game_main_loop:
     ldr     r0, =VPY_BRIGHTNESS_OVERRIDE
     mov     r1, #0
     strb    r1, [r0]
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F4D8    @ MUSIC_NONE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf373
-    movs    r0, #1
-    b       .Lcf373e
-.Lcf373:
-    movs    r0, #0
-.Lcf373e:
-    cmp     r0, #0
-    beq     if_else_289
-    ldr     r1, =0x2007F4DC    @ MUSIC_TITLE
-    ldr     r0, [r1]
-    ldr     r1, =0x2007F630    @ CURRENT_MUSIC
+    bne     if_else_289
+    mov     r0, #1
+    ldr     r1, =0x2007F524    @ CURRENT_MUSIC
     str     r0, [r1]
     ldr     r0, =_INTRO_MUSIC    @ asset 'intro'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_music
     b       if_end_289
 if_else_289:
 if_end_289:
-    ldr     r1, =0x2007F688    @ SKIPPEDFRAMES
+    ldr     r1, =0x2007F57C    @ SKIPPEDFRAMES
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #10
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #10
     cmp     r0, r1
-    bge    .Lcf374
-    movs    r0, #1
-    b       .Lcf374e
-.Lcf374:
-    movs    r0, #0
-.Lcf374e:
-    cmp     r0, #0
-    beq     if_else_290
-    ldr     r1, =0x2007F688
+    bge     if_else_290
+    ldr     r1, =0x2007F57C
     ldr     r0, [r1]
-    push    {r0}       @ left operand
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     add     r0, r0, r1
-    ldr     r1, =0x2007F688
+    ldr     r1, =0x2007F57C
     str     r0, [r1]
     bl      vpy_j1_btn1
-    ldr     r1, =0x2007F640    @ PREV_BTN1
+    ldr     r1, =0x2007F534    @ PREV_BTN1
     str     r0, [r1]
     bl      vpy_j1_btn2
-    ldr     r1, =0x2007F644    @ PREV_BTN2
+    ldr     r1, =0x2007F538    @ PREV_BTN2
     str     r0, [r1]
     bl      vpy_j1_btn3
-    ldr     r1, =0x2007F648    @ PREV_BTN3
+    ldr     r1, =0x2007F53C    @ PREV_BTN3
     str     r0, [r1]
     b       game_main_loop
     b       if_end_290
 if_else_290:
 if_end_290:
     bl      vpy_j1_btn1
-    ldr     r1, =0x2007F68C    @ RAW1
+    ldr     r1, =0x2007F580    @ RAW1
     str     r0, [r1]
     bl      vpy_j1_btn2
-    ldr     r1, =0x2007F690    @ RAW2
+    ldr     r1, =0x2007F584    @ RAW2
     str     r0, [r1]
     bl      vpy_j1_btn3
-    ldr     r1, =0x2007F694    @ RAW3
+    ldr     r1, =0x2007F588    @ RAW3
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F634    @ BTN1_FIRED
+    ldr     r1, =0x2007F528    @ BTN1_FIRED
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F638    @ BTN2_FIRED
+    ldr     r1, =0x2007F52C    @ BTN2_FIRED
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F63C    @ BTN3_FIRED
+    ldr     r1, =0x2007F530    @ BTN3_FIRED
     str     r0, [r1]
-    ldr     r1, =0x2007F68C    @ RAW1
+    ldr     r1, =0x2007F580    @ RAW1
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf375
-    movs    r0, #1
-    b       .Lcf375e
-.Lcf375:
-    movs    r0, #0
-.Lcf375e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F640    @ PREV_BTN1
+    bne     1f
+    ldr     r1, =0x2007F534    @ PREV_BTN1
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf376
-    movs    r0, #1
-    b       .Lcf376e
-.Lcf376:
-    movs    r0, #0
-.Lcf376e:
-    cmp     r0, #0
-    beq    .Lcf377
+    bne     .Lcf377
     movs    r0, #1
     b       .Lcf377e
 .Lcf377:
@@ -14934,41 +9396,21 @@ if_end_290:
     cmp     r0, #0
     beq     if_else_291
     mov     r0, #1
-    ldr     r1, =0x2007F634    @ BTN1_FIRED
+    ldr     r1, =0x2007F528    @ BTN1_FIRED
     str     r0, [r1]
     b       if_end_291
 if_else_291:
 if_end_291:
-    ldr     r1, =0x2007F690    @ RAW2
+    ldr     r1, =0x2007F584    @ RAW2
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf378
-    movs    r0, #1
-    b       .Lcf378e
-.Lcf378:
-    movs    r0, #0
-.Lcf378e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F644    @ PREV_BTN2
+    bne     1f
+    ldr     r1, =0x2007F538    @ PREV_BTN2
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf379
-    movs    r0, #1
-    b       .Lcf379e
-.Lcf379:
-    movs    r0, #0
-.Lcf379e:
-    cmp     r0, #0
-    beq    .Lcf380
+    bne     .Lcf380
     movs    r0, #1
     b       .Lcf380e
 .Lcf380:
@@ -14980,41 +9422,21 @@ if_end_291:
     cmp     r0, #0
     beq     if_else_292
     mov     r0, #1
-    ldr     r1, =0x2007F638    @ BTN2_FIRED
+    ldr     r1, =0x2007F52C    @ BTN2_FIRED
     str     r0, [r1]
     b       if_end_292
 if_else_292:
 if_end_292:
-    ldr     r1, =0x2007F694    @ RAW3
+    ldr     r1, =0x2007F588    @ RAW3
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf381
-    movs    r0, #1
-    b       .Lcf381e
-.Lcf381:
-    movs    r0, #0
-.Lcf381e:
-    cmp     r0, #0
-    beq     1f
-    ldr     r1, =0x2007F648    @ PREV_BTN3
+    bne     1f
+    ldr     r1, =0x2007F53C    @ PREV_BTN3
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf382
-    movs    r0, #1
-    b       .Lcf382e
-.Lcf382:
-    movs    r0, #0
-.Lcf382e:
-    cmp     r0, #0
-    beq    .Lcf383
+    bne     .Lcf383
     movs    r0, #1
     b       .Lcf383e
 .Lcf383:
@@ -15026,66 +9448,42 @@ if_end_292:
     cmp     r0, #0
     beq     if_else_293
     mov     r0, #1
-    ldr     r1, =0x2007F63C    @ BTN3_FIRED
+    ldr     r1, =0x2007F530    @ BTN3_FIRED
     str     r0, [r1]
     b       if_end_293
 if_else_293:
 if_end_293:
-    ldr     r1, =0x2007F68C    @ RAW1
+    ldr     r1, =0x2007F580    @ RAW1
     ldr     r0, [r1]
-    ldr     r1, =0x2007F640    @ PREV_BTN1
+    ldr     r1, =0x2007F534    @ PREV_BTN1
     str     r0, [r1]
-    ldr     r1, =0x2007F690    @ RAW2
+    ldr     r1, =0x2007F584    @ RAW2
     ldr     r0, [r1]
-    ldr     r1, =0x2007F644    @ PREV_BTN2
+    ldr     r1, =0x2007F538    @ PREV_BTN2
     str     r0, [r1]
-    ldr     r1, =0x2007F694    @ RAW3
+    ldr     r1, =0x2007F588    @ RAW3
     ldr     r0, [r1]
-    ldr     r1, =0x2007F648    @ PREV_BTN3
+    ldr     r1, =0x2007F53C    @ PREV_BTN3
     str     r0, [r1]
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    ldr     r1, =0x2007F4D4    @ SCREEN
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F468    @ STATE_ROOM
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf384
-    movs    r0, #1
-    b       .Lcf384e
-.Lcf384:
-    movs    r0, #0
-.Lcf384e:
-    cmp     r0, #0
-    beq     if_else_294
-    ldr     r1, =0x2007F678    @ HEARTBEAT_TIMER
+    bne     if_else_294
+    ldr     r1, =0x2007F56C    @ HEARTBEAT_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     add     r0, r0, r1
-    ldr     r1, =0x2007F678    @ HEARTBEAT_TIMER
+    ldr     r1, =0x2007F56C    @ HEARTBEAT_TIMER
     str     r0, [r1]
-    ldr     r1, =0x2007F678    @ HEARTBEAT_TIMER
+    ldr     r1, =0x2007F56C    @ HEARTBEAT_TIMER
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F674    @ HEARTBEAT_TEMPO
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =0x2007F568    @ HEARTBEAT_TEMPO
+    ldr     r1, [r1]
     cmp     r0, r1
-    blt    .Lcf385
-    movs    r0, #1
-    b       .Lcf385e
-.Lcf385:
-    movs    r0, #0
-.Lcf385e:
-    cmp     r0, #0
-    beq     if_else_295
+    blt     if_else_295
     mov     r0, #0
-    ldr     r1, =0x2007F678    @ HEARTBEAT_TIMER
+    ldr     r1, =0x2007F56C    @ HEARTBEAT_TIMER
     str     r0, [r1]
     b       if_end_295
 if_else_295:
@@ -15093,59 +9491,28 @@ if_end_295:
     b       if_end_294
 if_else_294:
 if_end_294:
-    ldr     r1, =0x2007F638    @ BTN2_FIRED
+    ldr     r1, =0x2007F52C    @ BTN2_FIRED
     ldr     r0, [r1]
-    push    {r0}
+    mov     r1, #1
+    cmp     r0, r1
+    bne     if_else_296
+    ldr     r1, =0x2007F4D4    @ SCREEN
+    ldr     r0, [r1]
+    mov     r1, #2
+    cmp     r0, r1
+    bne     if_else_297
+    ldr     r1, =0x2007F55C    @ SHOW_INVENTORY
+    ldr     r0, [r1]
+    mov     r1, #0
+    cmp     r0, r1
+    bne     if_else_298
     mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
-    cmp     r0, r1
-    bne    .Lcf386
-    movs    r0, #1
-    b       .Lcf386e
-.Lcf386:
-    movs    r0, #0
-.Lcf386e:
-    cmp     r0, #0
-    beq     if_else_296
-    ldr     r1, =0x2007F5E0    @ SCREEN
-    ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F468    @ STATE_ROOM
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
-    cmp     r0, r1
-    bne    .Lcf387
-    movs    r0, #1
-    b       .Lcf387e
-.Lcf387:
-    movs    r0, #0
-.Lcf387e:
-    cmp     r0, #0
-    beq     if_else_297
-    ldr     r1, =0x2007F668    @ SHOW_INVENTORY
-    ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
-    cmp     r0, r1
-    bne    .Lcf388
-    movs    r0, #1
-    b       .Lcf388e
-.Lcf388:
-    movs    r0, #0
-.Lcf388e:
-    cmp     r0, #0
-    beq     if_else_298
-    mov     r0, #1
-    ldr     r1, =0x2007F668    @ SHOW_INVENTORY
+    ldr     r1, =0x2007F55C    @ SHOW_INVENTORY
     str     r0, [r1]
     b       if_end_298
 if_else_298:
     mov     r0, #0
-    ldr     r1, =0x2007F668    @ SHOW_INVENTORY
+    ldr     r1, =0x2007F55C    @ SHOW_INVENTORY
     str     r0, [r1]
 if_end_298:
     b       if_end_297
@@ -15154,76 +9521,33 @@ if_end_297:
     b       if_end_296
 if_else_296:
 if_end_296:
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    ldr     r1, =0x2007F4D4    @ SCREEN
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F460    @ STATE_TITLE
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf389
-    movs    r0, #1
-    b       .Lcf389e
-.Lcf389:
-    movs    r0, #0
-.Lcf389e:
-    cmp     r0, #0
-    beq     if_else_299
+    bne     if_else_299
     bl      DRAW_TITLE
     b       if_end_299
 if_else_299:
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    ldr     r1, =0x2007F4D4    @ SCREEN
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F464    @ STATE_INTRO
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf390
-    movs    r0, #1
-    b       .Lcf390e
-.Lcf390:
-    movs    r0, #0
-.Lcf390e:
-    cmp     r0, #0
-    beq     elif_end_300
+    bne     elif_end_300
     bl      DRAW_INTRO
     b       if_end_299
 elif_end_300:
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    ldr     r1, =0x2007F4D4    @ SCREEN
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F468    @ STATE_ROOM
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #2
     cmp     r0, r1
-    bne    .Lcf391
-    movs    r0, #1
-    b       .Lcf391e
-.Lcf391:
-    movs    r0, #0
-.Lcf391e:
-    cmp     r0, #0
-    beq     elif_end_301
+    bne     elif_end_301
     bl      UPDATE_ROOM
-    ldr     r1, =0x2007F668    @ SHOW_INVENTORY
+    ldr     r1, =0x2007F55C    @ SHOW_INVENTORY
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf392
-    movs    r0, #1
-    b       .Lcf392e
-.Lcf392:
-    movs    r0, #0
-.Lcf392e:
-    cmp     r0, #0
-    beq     if_else_302
+    bne     if_else_302
     bl      DRAW_INVENTORY
     b       if_end_302
 if_else_302:
@@ -15231,41 +9555,19 @@ if_else_302:
 if_end_302:
     b       if_end_299
 elif_end_301:
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    ldr     r1, =0x2007F4D4    @ SCREEN
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F470    @ STATE_TESTAMENT
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #4
     cmp     r0, r1
-    bne    .Lcf393
-    movs    r0, #1
-    b       .Lcf393e
-.Lcf393:
-    movs    r0, #0
-.Lcf393e:
-    cmp     r0, #0
-    beq     elif_end_303
+    bne     elif_end_303
     bl      DRAW_TESTAMENT
     b       if_end_299
 elif_end_303:
-    ldr     r1, =0x2007F5E0    @ SCREEN
+    ldr     r1, =0x2007F4D4    @ SCREEN
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F46C    @ STATE_ENDING
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     cmp     r0, r1
-    bne    .Lcf394
-    movs    r0, #1
-    b       .Lcf394e
-.Lcf394:
-    movs    r0, #0
-.Lcf394e:
-    cmp     r0, #0
-    beq     elif_end_304
+    bne     elif_end_304
     bl      DRAW_ENDING
     b       if_end_299
 elif_end_304:
@@ -15446,6 +9748,7 @@ _CANVAS_3D_DATA:
     .byte   0               @ path 3: closed
     .byte   7
     .byte   5
+    .balign 4
 
 @ --- caretaker (7 path(s)) ---
 .global _CARETAKER_VECTORS
@@ -15558,6 +9861,7 @@ _CARETAKER_3D_DATA:
     .byte   0               @ path 6: closed
     .byte   6
     .byte   14
+    .balign 4
 
 @ ==== ARM Level: CLOCKROOM ====
     .balign 4
@@ -15831,6 +10135,7 @@ _CONSERVATORY_3D_DATA:
     .byte   0               @ path 9: closed
     .byte   25
     .byte   26
+    .balign 4
 
 @ ==== ARM Level: CONSERVATORY ====
     .balign 4
@@ -16756,6 +11061,7 @@ _CRYPT_LOGO_3D_DATA:
     .byte   0               @ path 39: closed
     .byte   148
     .byte   149
+    .balign 4
 
 @ --- crystal_apprentice (7 path(s)) ---
 .global _CRYSTAL_APPRENTICE_VECTORS
@@ -16907,6 +11213,7 @@ _CRYSTAL_APPRENTICE_3D_DATA:
     .byte   25
     .byte   26
     .byte   27
+    .balign 4
 
 @ --- desk (10 path(s)) ---
 .global _DESK_VECTORS
@@ -17064,6 +11371,7 @@ _DESK_3D_DATA:
     .byte   0               @ path 9: closed
     .byte   22
     .byte   23
+    .balign 4
 
 @ --- door_locked (13 path(s)) ---
 .global _DOOR_LOCKED_VECTORS
@@ -17342,6 +11650,7 @@ _DOOR_LOCKED_3D_DATA:
     .byte   50
     .byte   51
     .byte   44
+    .balign 4
 
 @ --- door_unlock SFX (20 frames, 21 events) ---
 .global _DOOR_UNLOCK_SFX
@@ -17490,6 +11799,7 @@ _ELISA_GHOST_3D_DATA:
     .byte   0               @ path 2: closed
     .byte   5
     .byte   8
+    .balign 4
 
 @ ==== ARM Level: ENTRANCE ====
     .balign 4
@@ -17684,6 +11994,7 @@ _ENTRANCE_ARC_3D_DATA:
     .byte   12
     .byte   13
     .byte   14
+    .balign 4
 
 @ --- exploration MUSIC (45 events, loop@0) ---
 .global _EXPLORATION_MUSIC
@@ -18102,6 +12413,7 @@ _FLOOR_3D_DATA:
     .byte   1               @ path 11: pt_count
     .byte   0               @ path 11: closed
     .byte   10
+    .balign 4
 
 @ --- hans_automata (8 path(s)) ---
 .global _HANS_AUTOMATA_VECTORS
@@ -18247,6 +12559,7 @@ _HANS_AUTOMATA_3D_DATA:
     .byte   0               @ path 7: closed
     .byte   22
     .byte   23
+    .balign 4
 
 @ --- heartbeat SFX (14 frames, 14 events) ---
 .global _HEARTBEAT_SFX
@@ -18697,6 +13010,7 @@ _LAMP_3D_DATA:
     .byte   15
     .byte   16
     .byte   17
+    .balign 4
 
 @ --- locked_door (4 path(s)) ---
 .global _LOCKED_DOOR_VECTORS
@@ -18784,6 +13098,7 @@ _LOCKED_DOOR_3D_DATA:
     .byte   8
     .byte   12
     .byte   9
+    .balign 4
 
 @ --- logo (12 path(s)) ---
 .global _LOGO_VECTORS
@@ -18992,6 +13307,7 @@ _LOGO_3D_DATA:
     .byte   30
     .byte   31
     .byte   30
+    .balign 4
 
 @ ==== ARM Level: OPTICS_LAB ====
     .balign 4
@@ -19151,6 +13467,7 @@ _OPTICS_PEDESTAL_3D_DATA:
     .byte   13
     .byte   14
     .byte   12
+    .balign 4
 
 @ --- painting (10 path(s)) ---
 .global _PAINTING_VECTORS
@@ -19349,6 +13666,7 @@ _PAINTING_3D_DATA:
     .byte   28
     .byte   29
     .byte   30
+    .balign 4
 
 @ --- platform_down (7 path(s)) ---
 .global _PLATFORM_DOWN_VECTORS
@@ -19467,6 +13785,7 @@ _PLATFORM_DOWN_3D_DATA:
     .byte   15
     .byte   16
     .byte   17
+    .balign 4
 
 @ --- platform_up (5 path(s)) ---
 .global _PLATFORM_UP_VECTORS
@@ -19553,6 +13872,7 @@ _PLATFORM_UP_3D_DATA:
     .byte   0               @ path 4: closed
     .byte   10
     .byte   11
+    .balign 4
 
 @ --- player (7 path(s)) ---
 .global _PLAYER_VECTORS
@@ -19688,6 +14008,7 @@ _PLAYER_3D_DATA:
     .byte   0               @ path 6: closed
     .byte   20
     .byte   21
+    .balign 4
 
 @ --- puzzle_fail SFX (8 frames, 9 events) ---
 .global _PUZZLE_FAIL_SFX
@@ -19835,6 +14156,7 @@ _ROOM1_3D_DATA:
     .byte   6
     .byte   6
     .byte   6
+    .balign 4
 
 @ --- room2 (138 path(s)) ---
 .global _ROOM2_VECTORS
@@ -22355,6 +16677,7 @@ _ROOM2_3D_DATA:
     .byte   0               @ path 137: closed
     .byte   0
     .byte   0
+    .balign 4
 
 @ --- vault_corridor (12 path(s)) ---
 .global _VAULT_CORRIDOR_VECTORS
@@ -22548,6 +16871,7 @@ _VAULT_CORRIDOR_3D_DATA:
     .byte   18
     .byte   20
     .byte   17
+    .balign 4
 
 @ ==== ARM Level: VAULT_CORRIDOR ====
     .balign 4
@@ -22774,6 +17098,7 @@ _WALL_COMPARTMENT_3D_DATA:
     .byte   11
     .byte   12
     .byte   13
+    .balign 4
 
 @ ==== ARM Level: WEIGHTS_ROOM ====
     .balign 4

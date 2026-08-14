@@ -22,8 +22,6 @@
 //! Deploy: generate UF2 with standard Pico SDK uf2conv.py, or copy binary to SD card
 //! (the UVM2 firmware loads SD binaries as RAM-resident code).
 
-pub mod bus;
-
 use vpy_parser::Module;
 use crate::AssetInfo;
 use crate::arm::{
@@ -56,6 +54,15 @@ pub fn generate_uvm2_asm(
     //   word 0: initial SP  → loaded into MSP before jump
     //   word 1: Reset_Handler (Thumb addr = game_main | 1) → firmware jumps here
     // Without this, the firmware sets SP to random bytes and crashes.
+    // Bajo el pico-sdk (UVM2_PICO_RUNTIME) NADA de esto se emite: el crt0 pone su
+    // propia tabla de vectores y su propio IMAGE_DEF, y dos IMAGE_DEF en la misma
+    // imagen se estorban. `isr_svcall` es weak en el crt0, asi que uvm2_svc_handler
+    // lo sustituye sin que hagamos nada.
+    //
+    // Requiere que el fichero se ensamble con gcc y extension .S, para que pase por
+    // el preprocesador. Con .s y arm-none-eabi-as estas lineas serian texto muerto
+    // y la guarda no haria nada — silenciosamente.
+    asm.push_str("#ifndef UVM2_PICO_RUNTIME\n");
     asm.push_str("@ === ARM Cortex-M vector table (required by UVM2 firmware) ===\n");
     asm.push_str(".section .vectors, \"ax\"\n");
     asm.push_str(".align 2\n");
@@ -63,14 +70,72 @@ pub fn generate_uvm2_asm(
     asm.push_str(".word game_main + 1     @ Reset_Handler (Thumb bit set)\n");
     // Minimal remaining Cortex-M33 vectors (16 system + 52 IRQ = 68 words total).
     // Point all unused handlers at a safe infinite-loop stub defined below.
+    // Vector 11 (SVCall) is the whole point: every VPy builtin is an `svc #N`,
+    // and uvm2_svc_handler (uvm2-sdk/uvm2_svc_entry.s) is the UVM2
+    // implementation of the same syscall ABI the cartridge firmware and the IDE
+    // emulator implement. Leave it on the default stub and the first
+    // WAIT_RECAL parks the game in an infinite loop.
     for name in &["NMI","HardFault","MemManage","BusFault","UsageFault",
                   "SecureFault","_reserved7","_reserved8","_reserved9",
                   "SVC","DebugMon","_reserved11","PendSV","SysTick"] {
-        asm.push_str(&format!(".word _uvm2_default_handler @ {}\n", name));
+        if *name == "SVC" {
+            asm.push_str(".word uvm2_svc_handler   @ SVCall → UVM2 syscall ABI\n");
+        } else {
+            asm.push_str(&format!(".word _uvm2_default_handler @ {}\n", name));
+        }
     }
     // 52 external IRQs
     asm.push_str(".rept 52\n.word _uvm2_default_handler\n.endr\n");
+    // === IMAGE_DEF ===
+    // El RP2350 no reconoce una imagen sin este bloque, y sin reconocerla no la
+    // ejecuta: LED apagado, pantalla negra, ni una pista. Es la SEGUNDA vez que
+    // nos rompe la cadena UVM2 — la primera se tapo compilando aquel objetivo con
+    // el pico-sdk, que lo emite solo; estos dos emisores escritos a mano no.
+    //
+    // MEDIDO: Asteroids_0_1a.um2 y Centipede_0_3a.um2 —las dos imagenes de
+    // referencia que SI arrancan— lo llevan en payload+0x15c, y las siete palabras
+    // son identicas byte a byte en ambas. Ninguna imagen nuestra lo tenia.
+    //
+    // El gemelo de esto vive en uvm2-sdk/uvm2_start.s (camino C/SBT). Los dos
+    // tienen que decir lo mismo.
+    asm.push_str(".word 0xffffded3        @ marca de inicio de bloque\n");
+    asm.push_str(".word 0x10210142        @ IMAGE_DEF: ejecutable, ARM, RP2350\n");
+    asm.push_str(".word 0x00000203        @ item VECTOR_TABLE, 2 palabras\n");
+    asm.push_str(".word 0x20000000        @   -> la tabla esta en la base de la carga\n");
+    asm.push_str(".word 0x000003ff        @ LAST_ITEM\n");
+    asm.push_str(".word 0x00000000        @ sin bloque siguiente\n");
+    asm.push_str(".word 0xab123579        @ marca de fin\n");
+    asm.push_str("#endif  /* UVM2_PICO_RUNTIME */\n");
+    // El envoltorio del pico-sdk (uvm2_pico_main.c) llama a uvm2_game_main(). En
+    // el camino propio la tabla de vectores apunta a game_main. Un alias deja los
+    // dos caminos contentos sin duplicar codigo ni renombrar nada.
+    asm.push_str(".global uvm2_game_main\n");
+    asm.push_str(".thumb_set uvm2_game_main, game_main\n");
     asm.push_str("\n");
+
+    // VPY_RAM, reservada de verdad.
+    //
+    // Las variables del runtime y las del usuario viven en direcciones ABSOLUTAS
+    // (0x2007C000..0x20080000, ver arm/ram_layout.rs). Nuestro uvm2_game.ld las
+    // reservaba con una region propia; el linker script del pico-sdk NO, su RAM
+    // llega hasta 0x20080000 y puede colocar .bss justo encima. Con un juego
+    // grande eso es corrupcion silenciosa de las variables del programa.
+    //
+    // Declararla como seccion vacia y fijarla con --section-start convierte ese
+    // solape en un ERROR DE ENLAZADO en vez de en un bicho de ejecucion. Es
+    // NOBITS, asi que no ocupa nada en el .bin ni se copia a la SD.
+    asm.push_str("#ifdef UVM2_PICO_RUNTIME\n");
+    // La "R" es SHF_GNU_RETAIN: sin ella --gc-sections se lleva la seccion por
+    // delante —nadie la referencia— y la reserva no existe. Comprobado: sin la
+    // R la seccion esta en el .S y NO en el ELF, en silencio.
+    asm.push_str(".section .vpyram, \"awR\", %nobits\n");
+    asm.push_str(".space 0x4000            @ 16 KB: VPY_RAM completa\n");
+    // Volver a .text, o lo que venga detras se queda DENTRO de la reserva. Paso:
+    // _uvm2_default_handler caia en .vpyram y la seccion medía 0x4002 en vez de
+    // 0x4000, que es como se descubrio (ld: .stack1_dummy overlaps .vpyram).
+    // Va dentro del #ifdef para no mover de sitio nada en el camino de siempre.
+    asm.push_str(".text\n");
+    asm.push_str("#endif\n\n");
     // Default handler: safe infinite loop (avoids runaway on unexpected exceptions)
     asm.push_str(".thumb_func\n_uvm2_default_handler:\n    b _uvm2_default_handler\n\n");
     // NOTE: base address matches uvm2_game.ld VPY_RAM region (0x2007C000)
@@ -79,14 +144,10 @@ pub fn generate_uvm2_asm(
     // VIA register addresses (Vectrex bus — same hardware, same addresses)
     asm.push_str(&emit_via_constants());
 
-    // UVM2 SIO GPIO constants (Ralf's pinout)
-    asm.push_str(&emit_sio_constants());
-
     asm.push_str(".section .game_rom, \"ax\"\n");
     asm.push_str(".align 2\n\n");
 
     asm.push_str(&header::emit_image_def());
-    asm.push_str(&bus::emit_uvm2_bus_helpers());
 
     // Usage analysis (shared with the arm target): emit runtime routines only
     // when the program actually uses them. Core stubs are always emitted.
@@ -98,11 +159,10 @@ pub fn generate_uvm2_asm(
     let asset_list = assets::filter_sample_assets(&asset_list, module);
     let asset_list = asset_list.as_slice();
 
-    // For UVM2, bus_write/bus_read delegate to uvm2_via_write (CLK-synced GPIO),
-    // so we skip helpers::emit_bus_helpers() — that uses the debug-cart pinout.
-    // The pinout-agnostic runtime (enemy pool) is emitted when used.
-    asm.push_str(&emit_uvm2_bus_shims());
-    asm.push_str(&crate::arm::helpers::emit_runtime_helpers(&usage));
+    // Identical to the arm target: bus_write/bus_read are the SYS_BUS_WRITE /
+    // SYS_BUS_READ syscalls. On UVM2 they land in uvm2_svc.c, which performs a
+    // real halt-mode VIA cycle — same ABI, different implementation.
+    asm.push_str(&crate::arm::helpers::emit_helpers(&usage));
     asm.push_str(&drawing::emit_drawing(&usage));
 
     let msg_entries = builtins::collect_msg_entries(module);
@@ -111,38 +171,9 @@ pub fn generate_uvm2_asm(
     asm.push_str(&functions::emit_functions(module, asset_list, &usage)?);
     asm.push_str(&assets::emit_arm_assets(asset_list));
 
-    // Expand cbz, then inject uvm2_bus_init call at start of game_main
+    // Expand cbz, then inject the runtime bring-up call at start of game_main
     let expanded = crate::arm::expand_cbz_pub(&asm);
-    Ok(inject_bus_init(&expanded))
-}
-
-// ── UVM2 bus shims ────────────────────────────────────────────────────────────
-// drawing.rs calls bus_write(r0=addr, r1=data) and bus_read(r0=addr).
-// For UVM2 these are thin wrappers around uvm2_via_write / uvm2_via_read
-// so the drawing code works unchanged with the CLK-synced GPIO protocol.
-
-fn emit_uvm2_bus_shims() -> String {
-    r#"@ --- UVM2 bus shims: bus_write / bus_read → CLK-synced GPIO ---
-@ bus_write(r0=addr, r1=data) — delegates to uvm2_via_write
-.global bus_write
-.thumb_func
-bus_write:
-    b       uvm2_via_write
-
-@ bus_read(r0=addr) → r0=data
-@ OPTION A: real CLK-synced read  → uncomment the line below
-@ OPTION B: fixed spin-delay      → uncomment the line below
-@ Change one line to switch between them. Default: OPTION B (safer first test).
-.global bus_read
-.thumb_func
-bus_read:
-    @ OPTION A (CLK-synced read):
-    @ b       uvm2_via_read
-    @ OPTION B (spin delay, always returns 0x40 = timer done):
-    b       uvm2_timer_wait
-
-"#
-    .to_string()
+    inject_runtime_init(&expanded)
 }
 
 // ── VIA constants (same addresses — it's the same Vectrex VIA chip) ──────────
@@ -176,53 +207,22 @@ fn emit_via_constants() -> String {
     s
 }
 
-// ── UVM2 GPIO constants (Ralf's pinout) ──────────────────────────────────────
-
-fn emit_sio_constants() -> String {
-    let mut s = String::from("@ --- RP2350 SIO (GPIO bit-bang) — UVM2 pinout ---\n");
-    s.push_str("@ Source: Ralf (UVM2 firmware author), 2026-04-16\n");
-    s.push_str(".equ SIO_BASE,       0xD0000000\n");
-    s.push_str(".equ SIO_GPIO_OUT,   0xD0000010\n");
-    s.push_str(".equ SIO_GPIO_SET,   0xD0000014\n");
-    s.push_str(".equ SIO_GPIO_CLR,   0xD0000018\n");
-    s.push_str(".equ SIO_GPIO_OE_SET,0xD0000024\n");
-    s.push_str(".equ SIO_GPIO_OE_CLR,0xD0000028\n");
-    s.push_str(".equ SIO_GPIO_IN,    0xD0000004\n");
-    s.push_str("\n@ UVM2 GPIO pin assignments\n");
-    // Data bus: GPIO 0-7 = D0-D7
-    s.push_str(".equ PIN_D0,         0          @ D0\n");
-    s.push_str(".equ PIN_D7,         7          @ D7\n");
-    s.push_str(".equ DATA_MASK,      0x000000FF  @ GPIO 0-7\n");
-    // Address bus: GPIO 8-21 = A0-A13
-    s.push_str(".equ PIN_A0,         8          @ A0  (GPIO8)\n");
-    s.push_str(".equ PIN_A13,        21         @ A13 (GPIO21)\n");
-    s.push_str(".equ ADDR_MASK,      0x003FFF00  @ GPIO 8-21 = A0-A13\n");
-    // Control signals
-    s.push_str(".equ PIN_PB6,        22         @ VIA Port B bit 6 (beam control)\n");
-    s.push_str(".equ PIN_NIRQ,       23         @ /IRQ\n");
-    s.push_str(".equ PIN_A14,        24         @ A14 (GPIO24)\n");
-    s.push_str(".equ PIN_A15,        25         @ A15\n");
-    s.push_str(".equ PIN_RW,         26         @ R/W (1=read, 0=write)\n");
-    s.push_str(".equ PIN_NHALT,      27         @ /HALT — assert LOW to take bus\n");
-    s.push_str(".equ PIN_NNMI,       29         @ /NMI\n");
-    s.push_str(".equ PIN_CLK,        31         @ System clock (1.5 MHz)\n");
-    s.push_str("\n@ Convenience masks\n");
-    s.push_str(".equ MASK_NHALT,     (1 << 27)  @ /HALT pin mask\n");
-    s.push_str(".equ MASK_RW,        (1 << 26)  @ R/W pin mask\n");
-    s.push_str(".equ MASK_CLK,       (1 << 31)  @ CLK pin mask\n");
-    s.push_str("\n");
-    s
-}
-
 // ── Post-processing ───────────────────────────────────────────────────────────
 
-/// Inject `bl uvm2_bus_init` as the very first instruction of `game_main`.
-/// This ensures GPIO directions are configured before any game code runs.
-fn inject_bus_init(asm: &str) -> String {
-    // The ARM codegen always emits game_main with this exact prologue.
-    // We insert the init call before the push so it runs unconditionally.
-    asm.replace(
-        "game_main:\n    push    {r4,",
-        "game_main:\n    bl      uvm2_bus_init\n    push    {r4,",
-    )
+/// Inject `bl uvm2_runtime_init` as the very first instruction of `game_main`.
+/// That call (uvm2-sdk/uvm2_svc.c) takes over the vector table and interrupts,
+/// configures the pads, halts the 6809 and primes the VIA — all of which must
+/// happen before any syscall runs.  If the shared ARM codegen ever changes
+/// game_main's prologue the patch must fail loudly: silently skipping it
+/// produces an image that boots into an unconfigured bus and does nothing.
+fn inject_runtime_init(asm: &str) -> Result<String, String> {
+    const ANCHOR: &str = "game_main:\n    push    {r4,";
+    if !asm.contains(ANCHOR) {
+        return Err("uvm2: could not inject uvm2_runtime_init — game_main prologue \
+                    changed in arm::functions (expected `push {r4, ...}`)".to_string());
+    }
+    Ok(asm.replace(
+        ANCHOR,
+        "game_main:\n    bl      uvm2_runtime_init\n    push    {r4,",
+    ))
 }

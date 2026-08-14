@@ -99,6 +99,12 @@ pub fn emit_ram_layout() -> String {
         // .vec per-path intensity, >0=override from SET_INTENSITY. Written only by the
         // SET_INTENSITY builtin, read by DRAW_VECTOR/DRAW_VECTOR_3D, reset once per frame.
         ("VPY_BRIGHTNESS_OVERRIDE", 0x43E, "SET_INTENSITY override: 0=.vec intensity, >0=override (1 byte)"),
+        // Escala del PROXIMO vpy_draw_vector_ex, en treintaydosavos (32 = 1:1).
+        // La pone show_level desde el byte +4 del objeto, y vpy_draw_vector_ex la
+        // CONSUME (la deja a 0) para que no se herede a la llamada siguiente. Va por
+        // aqui y no como sexto argumento porque los seis llamantes montan la pila de
+        // tres formas distintas: un argumento mas habria leido basura en tres de ellos.
+        ("VPY_DRAW_SCALE",      0x43F, "escala del proximo DRAW_VECTOR_EX (x32; 0/32 = 1:1, 1 byte)"),
         // Wander AI per-slot scratch (0x440–0x45F): 8 slots × 4 bytes
         // Each slot: +0..1 idle_timer/from_x/vy (i16), +2..3 target_x (i16)
         ("WANDER_SCRATCH_ARM",  0x440, "wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)"),

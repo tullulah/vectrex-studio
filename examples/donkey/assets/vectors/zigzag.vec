@@ -1,0 +1,36 @@
+{
+ "version": "1.0",
+ "name": "zigzag",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "p0",
+     "intensity": 100,
+     "closed": false,
+     "points": [
+      {
+       "x": 4,
+       "y": 3
+      },
+      {
+       "x": 8,
+       "y": 4
+      },
+      {
+       "x": 12,
+       "y": 3
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

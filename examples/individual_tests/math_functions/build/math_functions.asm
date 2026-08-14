@@ -34,7 +34,6 @@
 .equ CAMERA_X,            0x2007F14C  @ camera X offset (used by show_level)
 .equ CAMERA_Y,            0x2007F150  @ camera Y offset
 .equ TEXT_SIZE,           0x2007F154  @ text scale factor (1=normal, 2=double, ...)
-.equ TEXT_COLOR,          0x2007F158  @ text intensity (0-127)
 .equ LEVEL_DATA_PTR,      0x2007F15C  @ pointer to loaded level ROM data
 .equ DBGVAL,              0x2007F160  @ debug_print last written value
 .equ PRINT_BEAM_X,        0x2007F164  @ beam X shadow during print_text
@@ -135,12 +134,12 @@ bus_write:
     svc     #8                      @ SYS_BUS_WRITE
     bx      lr
 
-@ bus_read(r0=addr) — stub: returns 0xFF (no BIOS read syscall yet)
+@ bus_read(r0=addr) -> r0=data — BIOS trap: SYS_BUS_READ
 .global bus_read
 .type bus_read, %function
 .thumb_func
 bus_read:
-    mov     r0, #0xFF
+    svc     #11                     @ SYS_BUS_READ
     bx      lr
 
 @ ============================================================
@@ -175,636 +174,6 @@ dv_draw_delta:
 @ VPy Builtins — ARM Thumb2 / RP2350
 @ ============================================================
 
-@ ============================================================
-@ Vector font — ASCII 32-126 stroke data
-@ Each glyph: [cmd(1=move,2=draw), x(0-4), y(0-6), ..., 0x00]
-@ _FONT_PTRS[char-32] = absolute address of glyph (0 = no strokes)
-@ ============================================================
-
-.global _FONT_PTRS
-_FONT_PTRS:
-    .word   0    @ ' ' no strokes
-    .word   _glyph_033   @ '!'
-    .word   _glyph_034   @ '"'
-    .word   0    @ '#' no strokes
-    .word   0    @ '$' no strokes
-    .word   0    @ '%' no strokes
-    .word   0    @ '&' no strokes
-    .word   0    @ ''' no strokes
-    .word   0    @ '(' no strokes
-    .word   0    @ ')' no strokes
-    .word   0    @ '*' no strokes
-    .word   _glyph_043   @ '+'
-    .word   _glyph_044   @ ','
-    .word   _glyph_045   @ '-'
-    .word   _glyph_046   @ '.'
-    .word   _glyph_047   @ '/'
-    .word   _glyph_048   @ '0'
-    .word   _glyph_049   @ '1'
-    .word   _glyph_050   @ '2'
-    .word   _glyph_051   @ '3'
-    .word   _glyph_052   @ '4'
-    .word   _glyph_053   @ '5'
-    .word   _glyph_054   @ '6'
-    .word   _glyph_055   @ '7'
-    .word   _glyph_056   @ '8'
-    .word   _glyph_057   @ '9'
-    .word   _glyph_058   @ ':'
-    .word   _glyph_059   @ ';'
-    .word   _glyph_060   @ '<'
-    .word   _glyph_061   @ '='
-    .word   _glyph_062   @ '>'
-    .word   _glyph_063   @ '?'
-    .word   0    @ '@' no strokes
-    .word   _glyph_065   @ 'A'
-    .word   _glyph_066   @ 'B'
-    .word   _glyph_067   @ 'C'
-    .word   _glyph_068   @ 'D'
-    .word   _glyph_069   @ 'E'
-    .word   _glyph_070   @ 'F'
-    .word   _glyph_071   @ 'G'
-    .word   _glyph_072   @ 'H'
-    .word   _glyph_073   @ 'I'
-    .word   _glyph_074   @ 'J'
-    .word   _glyph_075   @ 'K'
-    .word   _glyph_076   @ 'L'
-    .word   _glyph_077   @ 'M'
-    .word   _glyph_078   @ 'N'
-    .word   _glyph_079   @ 'O'
-    .word   _glyph_080   @ 'P'
-    .word   _glyph_081   @ 'Q'
-    .word   _glyph_082   @ 'R'
-    .word   _glyph_083   @ 'S'
-    .word   _glyph_084   @ 'T'
-    .word   _glyph_085   @ 'U'
-    .word   _glyph_086   @ 'V'
-    .word   _glyph_087   @ 'W'
-    .word   _glyph_088   @ 'X'
-    .word   _glyph_089   @ 'Y'
-    .word   _glyph_090   @ 'Z'
-    .word   0    @ '[' no strokes
-    .word   0    @ '\' no strokes
-    .word   0    @ ']' no strokes
-    .word   0    @ '^' no strokes
-    .word   0    @ '_' no strokes
-    .word   0    @ '`' no strokes
-    .word   _glyph_097   @ 'a'
-    .word   _glyph_098   @ 'b'
-    .word   _glyph_099   @ 'c'
-    .word   _glyph_100   @ 'd'
-    .word   _glyph_101   @ 'e'
-    .word   _glyph_102   @ 'f'
-    .word   _glyph_103   @ 'g'
-    .word   _glyph_104   @ 'h'
-    .word   _glyph_105   @ 'i'
-    .word   _glyph_106   @ 'j'
-    .word   _glyph_107   @ 'k'
-    .word   _glyph_108   @ 'l'
-    .word   _glyph_109   @ 'm'
-    .word   _glyph_110   @ 'n'
-    .word   _glyph_111   @ 'o'
-    .word   _glyph_112   @ 'p'
-    .word   _glyph_113   @ 'q'
-    .word   _glyph_114   @ 'r'
-    .word   _glyph_115   @ 's'
-    .word   _glyph_116   @ 't'
-    .word   _glyph_117   @ 'u'
-    .word   _glyph_118   @ 'v'
-    .word   _glyph_119   @ 'w'
-    .word   _glyph_120   @ 'x'
-    .word   _glyph_121   @ 'y'
-    .word   _glyph_122   @ 'z'
-    .word   0    @ '{' no strokes
-    .word   0    @ '|' no strokes
-    .word   0    @ '}' no strokes
-    .word   0    @ '~' no strokes
-
-.global _FONT_DATA
-_FONT_DATA:
-_glyph_033:  @ '!'
-    .byte   1, 2, 6
-    .byte   2, 2, 2
-    .byte   1, 2, 0
-    .byte   2, 2, 1
-    .byte   0
-_glyph_034:  @ '"'
-    .byte   1, 1, 5
-    .byte   2, 1, 6
-    .byte   1, 3, 5
-    .byte   2, 3, 6
-    .byte   0
-_glyph_043:  @ '+'
-    .byte   1, 2, 1
-    .byte   2, 2, 5
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_044:  @ ','
-    .byte   1, 2, 1
-    .byte   2, 1, 0
-    .byte   0
-_glyph_045:  @ '-'
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_046:  @ '.'
-    .byte   1, 1, 0
-    .byte   2, 2, 0
-    .byte   0
-_glyph_047:  @ '/'
-    .byte   1, 0, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_048:  @ '0'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   0
-_glyph_049:  @ '1'
-    .byte   1, 2, 0
-    .byte   2, 2, 6
-    .byte   0
-_glyph_050:  @ '2'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 4, 3
-    .byte   2, 0, 3
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_051:  @ '3'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   1, 4, 3
-    .byte   2, 1, 3
-    .byte   0
-_glyph_052:  @ '4'
-    .byte   1, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   1, 4, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_053:  @ '5'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_054:  @ '6'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 3
-    .byte   2, 0, 3
-    .byte   0
-_glyph_055:  @ '7'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 2, 0
-    .byte   0
-_glyph_056:  @ '8'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_057:  @ '9'
-    .byte   1, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_058:  @ ':'
-    .byte   1, 2, 1
-    .byte   2, 2, 2
-    .byte   1, 2, 4
-    .byte   2, 2, 5
-    .byte   0
-_glyph_059:  @ ';'
-    .byte   1, 2, 4
-    .byte   2, 2, 5
-    .byte   1, 2, 1
-    .byte   2, 1, 0
-    .byte   0
-_glyph_060:  @ '<'
-    .byte   1, 3, 6
-    .byte   2, 0, 3
-    .byte   2, 3, 0
-    .byte   0
-_glyph_061:  @ '='
-    .byte   1, 0, 4
-    .byte   2, 4, 4
-    .byte   1, 0, 2
-    .byte   2, 4, 2
-    .byte   0
-_glyph_062:  @ '>'
-    .byte   1, 1, 6
-    .byte   2, 4, 3
-    .byte   2, 1, 0
-    .byte   0
-_glyph_063:  @ '?'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 4, 4
-    .byte   2, 2, 3
-    .byte   1, 2, 1
-    .byte   2, 2, 2
-    .byte   0
-_glyph_065:  @ 'A'
-    .byte   1, 0, 0
-    .byte   2, 2, 6
-    .byte   2, 4, 0
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_066:  @ 'B'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 3, 3
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_067:  @ 'C'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_068:  @ 'D'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 1
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_069:  @ 'E'
-    .byte   1, 4, 0
-    .byte   2, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_070:  @ 'F'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_071:  @ 'G'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 3
-    .byte   2, 2, 3
-    .byte   0
-_glyph_072:  @ 'H'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_073:  @ 'I'
-    .byte   1, 1, 0
-    .byte   2, 3, 0
-    .byte   1, 2, 0
-    .byte   2, 2, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_074:  @ 'J'
-    .byte   1, 0, 1
-    .byte   2, 1, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_075:  @ 'K'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_076:  @ 'L'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_077:  @ 'M'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_078:  @ 'N'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_079:  @ 'O'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   0
-_glyph_080:  @ 'P'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   0
-_glyph_081:  @ 'Q'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   1, 3, 1
-    .byte   2, 4, 0
-    .byte   0
-_glyph_082:  @ 'R'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_083:  @ 'S'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_084:  @ 'T'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 2, 6
-    .byte   2, 2, 0
-    .byte   0
-_glyph_085:  @ 'U'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_086:  @ 'V'
-    .byte   1, 0, 6
-    .byte   2, 2, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_087:  @ 'W'
-    .byte   1, 0, 6
-    .byte   2, 1, 0
-    .byte   2, 2, 3
-    .byte   2, 3, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_088:  @ 'X'
-    .byte   1, 0, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_089:  @ 'Y'
-    .byte   1, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   1, 2, 3
-    .byte   2, 2, 0
-    .byte   0
-_glyph_090:  @ 'Z'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_097:  @ 'a'
-    .byte   1, 0, 0
-    .byte   2, 2, 6
-    .byte   2, 4, 0
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_098:  @ 'b'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 3, 3
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_099:  @ 'c'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_100:  @ 'd'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 1
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_101:  @ 'e'
-    .byte   1, 4, 0
-    .byte   2, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_102:  @ 'f'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_103:  @ 'g'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 3
-    .byte   2, 2, 3
-    .byte   0
-_glyph_104:  @ 'h'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_105:  @ 'i'
-    .byte   1, 1, 0
-    .byte   2, 3, 0
-    .byte   1, 2, 0
-    .byte   2, 2, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_106:  @ 'j'
-    .byte   1, 0, 1
-    .byte   2, 1, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_107:  @ 'k'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_108:  @ 'l'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_109:  @ 'm'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_110:  @ 'n'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_111:  @ 'o'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   0
-_glyph_112:  @ 'p'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   0
-_glyph_113:  @ 'q'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   1, 3, 1
-    .byte   2, 4, 0
-    .byte   0
-_glyph_114:  @ 'r'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_115:  @ 's'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_116:  @ 't'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 2, 6
-    .byte   2, 2, 0
-    .byte   0
-_glyph_117:  @ 'u'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_118:  @ 'v'
-    .byte   1, 0, 6
-    .byte   2, 2, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_119:  @ 'w'
-    .byte   1, 0, 6
-    .byte   2, 1, 0
-    .byte   2, 2, 3
-    .byte   2, 3, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_120:  @ 'x'
-    .byte   1, 0, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_121:  @ 'y'
-    .byte   1, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   1, 2, 3
-    .byte   2, 2, 0
-    .byte   0
-_glyph_122:  @ 'z'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-
 @ vpy_wait_recal() — BIOS trap: SYS_WAIT_RECAL
 .global vpy_wait_recal
 .type vpy_wait_recal, %function
@@ -821,139 +190,24 @@ vpy_set_intensity:
     svc     #2                      @ SYS_SET_INTENSITY
     bx      lr
 
-@ vpy_print_text(r0=x, r1=y, r2=str_ptr)
+@ vpy_print_text(r0=x, r1=y, r2=str_ptr) -> BIOS trap SYS_PRINT_TEXT
 .global vpy_print_text
 .type vpy_print_text, %function
 .thumb_func
 vpy_print_text:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
-    mov     r4, r0
-    mov     r5, r1
-    mov     r6, r2
-    ldr     r7, =TEXT_SIZE
-    ldr     r7, [r7]
-    cmp     r7, #0
-    bne     vpt_sc
-    mov     r7, #3
-vpt_sc:
-    ldr     r8, =VPY_BRIGHTNESS_OVERRIDE
-    ldrb    r8, [r8]
-    cmp     r8, #0
-    bne     vpt_cc
-    ldr     r8, =TEXT_COLOR
-    ldr     r8, [r8]
-    cmp     r8, #0
-    bne     vpt_cc
-    mov     r8, #100
-vpt_cc:
-    bl      dv_reset
-    mov     r0, r8
-    bl      vpy_set_intensity
-    mov     r0, #6
-    mul     r0, r0, r7
-    asr     r0, r0, #1
-    sub     r5, r5, r0
-    mov     r0, r4
-    mov     r1, r5
-    bl      dv_move_to
-    ldr     r10, =PRINT_BEAM_X
-    str     r4, [r10]
-    ldr     r11, =PRINT_BEAM_Y
-    str     r5, [r11]
-    mov     r9, r4              @ cur_x = x
-vpt_loop:
-    ldrb    r0, [r6]
-    add     r6, r6, #1
-    cmp     r0, #0
-    beq     vpt_done
-    cmp     r0, #0x80
-    beq     vpt_done
-    cmp     r0, #0x61
-    blt     vpt_nl
-    cmp     r0, #0x7A
-    bgt     vpt_nl
-    sub     r0, r0, #0x20
-vpt_nl:
-    cmp     r0, #32
-    blt     vpt_adv
-    cmp     r0, #126
-    bgt     vpt_adv
-    sub     r0, r0, #32
-    ldr     r1, =_FONT_PTRS
-    lsl     r0, r0, #2
-    ldr     r0, [r1, r0]
-    cmp     r0, #0
-    beq     vpt_adv
-    push    {r0}
-    bl      dv_reset
-    mov     r0, r8
-    bl vpy_set_intensity
-    mov     r0, #0
-    str r0, [r10]
-    str r0, [r11]
-    pop     {r0}
-    mov     r1, r9
-    mov     r2, r5
-    mov     r3, r7
-    push    {r10, r11}
-    bl      vpt_draw_glyph
-    add     sp, sp, #8
-vpt_adv:
-    mov     r0, #7
-    mul     r0, r0, r7
-    asr     r0, r0, #1
-    add     r9, r9, r0
-    b       vpt_loop
-vpt_done:
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-
-@ vpt_draw_glyph — internal: draw one glyph at (char_x, char_y) with scale
-.type vpt_draw_glyph, %function
-.thumb_func
-vpt_draw_glyph:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
-    mov     r4, r0              @ glyph_ptr
-    mov     r5, r1              @ char_x
-    mov     r6, r2              @ char_y
-    mov     r7, r3              @ scale
-    ldr     r8, [sp, #36]       @ bx_ptr (PRINT_BEAM_X)
-    ldr     r9, [sp, #40]       @ by_ptr (PRINT_BEAM_Y)
-    ldr     r10, [r8]           @ beam_x
-    ldr     r11, [r9]           @ beam_y
-vdg_loop:
-    ldrb    r0, [r4]
-    cmp     r0, #0
-    beq     vdg_done
-    ldrb    r1, [r4, #1]        @ gx
-    ldrb    r2, [r4, #2]        @ gy
-    add     r4, r4, #3
-    push    {r0}               @ save cmd
-    mul     r1, r1, r7
-    asr     r1, r1, #1
-    add     r1, r1, r5
-    mul     r2, r2, r7
-    asr     r2, r2, #1
-    add     r2, r2, r6
-    sub     r0, r1, r10         @ dx
-    sub     r3, r2, r11         @ dy
-    mov     r10, r1
-    mov     r11, r2
-    pop     {r1}               @ restore cmd
-    push    {r0, r3}           @ save dx, dy
-    cmp     r1, #1
-    bne     vdg_draw
-    pop     {r0, r1}
-    bl      dv_move_to
-    b       vdg_loop
-vdg_draw:
-    pop     {r0, r1}
-    bl      dv_draw_delta
-    b       vdg_loop
-vdg_done:
-    str     r10, [r8]           @ update PRINT_BEAM_X
-    str     r11, [r9]           @ update PRINT_BEAM_Y
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    ldr     r3, =TEXT_SIZE
+    ldr     r3, [r3]
+    cmp     r3, #0
+    it      eq
+    moveq   r3, #3
+    ldr     r12, =VPY_BRIGHTNESS_OVERRIDE
+    ldrb    r12, [r12]
+    cmp     r12, #0
+    it      eq
+    moveq   r12, #100
+    orr     r3, r3, r12, lsl #8
+    svc     #16                     @ SYS_PRINT_TEXT
+    bx      lr
     .ltorg
 
 @ vpy_print_number(r0=x, r1=y, r2=value) — range -9999..9999, no leading zeros
@@ -1087,14 +341,6 @@ vsts_ok:
     str     r1, [r0]
     bx      lr
 
-.global vpy_set_text_color
-.type vpy_set_text_color, %function
-.thumb_func
-vpy_set_text_color:
-    ldr     r1, =TEXT_COLOR
-    str     r0, [r1]
-    bx      lr
-
 @ --- User variables (RAM) ---
 .equ VAR_VAL1, 0x2007F460  @ implicit
 .equ VAR_VAL2, 0x2007F464  @ implicit
@@ -1110,15 +356,20 @@ vpy_set_text_color:
 .thumb_func
 game_main:
     push    {r4, r5, r6, r7, lr}
+    @ zero runtime RAM (RP2350 SRAM is not zero-initialised)
+    ldr     r0, =TMPVAL              @ runtime RAM base
+    ldr     r1, =USER_RAM_START      @ end of system RAM (exclusive)
+    mov     r2, #0
+gm_zero_loop:
+    str     r2, [r0], #4
+    cmp     r0, r1
+    blo     gm_zero_loop
     @ default drawing state (SRAM is not zero-initialised)
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
     mov     r0, #0
     strb    r0, [r1]
     ldr     r1, =TEXT_SIZE
     mov     r0, #3
-    str     r0, [r1]
-    ldr     r1, =TEXT_COLOR
-    mov     r0, #100
     str     r0, [r1]
     @ initialize globals
     @ init PSG_MIXER_SHADOW (all channels disabled)
@@ -1136,8 +387,6 @@ game_main_loop:
     mov     r1, #0
     strb    r1, [r0]
     ldr     r0, =-50
-    push    {r0}
-    pop     {r0}
     bl      vpy_abs
     ldr     r1, =0x2007F460    @ VAL1
     str     r0, [r1]

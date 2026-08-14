@@ -3173,11 +3173,13 @@ UPD_W_WALK:\n\
     LBLT UPD_W_EDGE_R   ; proposed > x_max → edge\n\
     PULS D\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY      ; world_y = surface_y_at(area, new_x) + feet_offset\n\
     LBRA UPD_ENE_NEXT_POP\n\
 UPD_W_EDGE_R:\n\
     LEAS 2,S\n\
     LDD 4,X             ; clamp to x_max\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY      ; world_y at clamped x (= y2 side)\n\
     LBRA UPD_W_EDGE\n\
 UPD_W_WALK_L:\n\
     LDD 1,Y\n\
@@ -3188,11 +3190,13 @@ UPD_W_WALK_L:\n\
     LBGT UPD_W_EDGE_L\n\
     PULS D\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY      ; world_y = surface_y_at(area, new_x) + feet_offset\n\
     LBRA UPD_ENE_NEXT_POP\n\
 UPD_W_EDGE_L:\n\
     LEAS 2,S\n\
     LDD 2,X             ; clamp to x_min\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY      ; world_y at clamped x (= y1 side)\n\
 UPD_W_EDGE:\n\
     ; Reached an edge: flip dir, enter IDLE\n\
     LDA 17,Y\n\
@@ -3206,6 +3210,16 @@ UPD_W_EDGE:\n\
     ADDB #90\n\
     STB 20,Y            ; idle_timer\n\
     LBRA UPD_ENE_NEXT_POP\n\
+\n\
+; Set pool world_y from the sloped surface at the enemy's current x.\n\
+; Entry: X = &area (current area), Y = pool. Clobbers A,B,X.\n\
+UPD_W_SETY:\n\
+    LDD 1,Y             ; query x = current x (after ±1 update / clamp)\n\
+    JSR AREA_SURF_Y     ; D = surface_y_at(area, x)  (X clobbered)\n\
+    ADDB 26,Y           ; + feet_offset (low byte)\n\
+    ADCA #0             ; propagate carry (feet is 0..255)\n\
+    STD 3,Y             ; world_y\n\
+    RTS\n\
 \n\
 UPD_W_IDLE:\n\
     DEC 20,Y\n\
@@ -3345,9 +3359,10 @@ UPD_W_AIR_VYOK:\n\
     MUL\n\
     ADDD #2\n\
     LEAX D,X            ; X = &area[cur_area_idx] (target)\n\
-    LDB 26,Y            ; B = feet_offset (low byte)\n\
-    CLRA                ; A = 0 (high byte)\n\
-    ADDD ,X             ; D = feet_offset + area.y (16-bit at X)\n\
+    LDD 22,Y            ; target_x (to_x)\n\
+    JSR AREA_SURF_Y     ; D = surface_y_at(area, to_x)\n\
+    ADDB 26,Y           ; + feet_offset (low byte)\n\
+    ADCA #0             ; propagate carry (feet is 0..255)\n\
     ; If trans_type=2 (drop) or vy<=0 (descending): land if cur_y <= target_y\n\
     ; Else (ascending jump_up): just keep going\n\
     PSHS D              ; stash target_y (we'll need it twice)\n\
@@ -3381,9 +3396,10 @@ UPD_W_AIR_LAND:\n\
     MUL\n\
     ADDD #2\n\
     LEAX D,X\n\
-    LDB 26,Y\n\
-    CLRA\n\
-    ADDD ,X             ; D = feet_offset + area.y\n\
+    LDD 22,Y            ; target_x (to_x)\n\
+    JSR AREA_SURF_Y     ; D = surface_y_at(area, to_x)\n\
+    ADDB 26,Y           ; + feet_offset (low)\n\
+    ADCA #0\n\
     STD 3,Y\n\
     CLR 18,Y            ; sub_state = WALK\n\
     LDA #1\n\
@@ -3507,11 +3523,13 @@ UPD_W_WALK:\n\
     LBLT UPD_W_EDGE_R\n\
     PULS D\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY      ; world_y = surface_y_at(area, new_x) + feet_offset\n\
     LBRA UPD_ENE_NEXT_POP\n\
 UPD_W_EDGE_R:\n\
     LEAS 2,S\n\
     LDD 4,X\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY\n\
     LBRA UPD_W_EDGE\n\
 UPD_W_WALK_L:\n\
     LDD 1,Y\n\
@@ -3522,11 +3540,13 @@ UPD_W_WALK_L:\n\
     LBGT UPD_W_EDGE_L\n\
     PULS D\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY      ; world_y = surface_y_at(area, new_x) + feet_offset\n\
     LBRA UPD_ENE_NEXT_POP\n\
 UPD_W_EDGE_L:\n\
     LEAS 2,S\n\
     LDD 2,X\n\
     STD 1,Y\n\
+    JSR UPD_W_SETY\n\
 UPD_W_EDGE:\n\
     LDA 17,Y\n\
     EORA #1\n\
@@ -3539,6 +3559,16 @@ UPD_W_EDGE:\n\
     ADDB #90\n\
     STB 20,Y\n\
     LBRA UPD_ENE_NEXT_POP\n\
+\n\
+; Set pool world_y from the sloped surface at the enemy's current x.\n\
+; Entry: X = &area, Y = pool. Clobbers A,B,X.\n\
+UPD_W_SETY:\n\
+    LDD 1,Y             ; query x = current x\n\
+    JSR AREA_SURF_Y     ; D = surface_y_at(area, x)\n\
+    ADDB 26,Y           ; + feet_offset (low)\n\
+    ADCA #0\n\
+    STD 3,Y             ; world_y\n\
+    RTS\n\
 \n\
 UPD_W_IDLE:\n\
     DEC 20,Y\n\
@@ -3667,9 +3697,10 @@ UPD_W_AIR_VYOK:\n\
     MUL\n\
     ADDD #2\n\
     LEAX D,X            ; X = &area[cur_area]\n\
-    LDB 26,Y            ; B = feet_offset\n\
-    CLRA\n\
-    ADDD ,X             ; D = feet_offset + area.y\n\
+    LDD 22,Y            ; target_x (to_x)\n\
+    JSR AREA_SURF_Y     ; D = surface_y_at(area, to_x)\n\
+    ADDB 26,Y           ; + feet_offset (low)\n\
+    ADCA #0\n\
     PSHS D              ; stash target_y\n\
     LDA 21,Y\n\
     CMPA #2\n\
@@ -3699,9 +3730,10 @@ UPD_W_AIR_LAND:\n\
     MUL\n\
     ADDD #2\n\
     LEAX D,X\n\
-    LDB 26,Y\n\
-    CLRA\n\
-    ADDD ,X             ; D = feet_offset + area.y\n\
+    LDD 22,Y            ; target_x (to_x)\n\
+    JSR AREA_SURF_Y     ; D = surface_y_at(area, to_x)\n\
+    ADDB 26,Y           ; + feet_offset (low)\n\
+    ADCA #0\n\
     STD 3,Y\n\
     CLR 18,Y\n\
     LDA #1\n\
@@ -3717,6 +3749,142 @@ UPD_ENE_DONE:\n\
     RTS\n\n"
         );
     }
+
+    // AREA_SURF_Y — sloped walkable-area surface height sampler.
+    // Reproduces bit-exactly the reference surface_y_at(area, x):
+    //   y1=i16[X+0] x_min=i16[X+2] x_max=i16[X+4] y2=i16[X+6]
+    //   if y2==y1 || x_max<=x_min || x<=x_min: return y1
+    //   if x>=x_max: return y2
+    //   return y1 + (y2-y1)*(x-x_min)/(x_max-x_min)   (signed, truncate toward zero)
+    // Contract:
+    //   Entry: X = &area (8-byte record), D = query x (i16).
+    //   Exit : D = interpolated i16 surface y (feet_offset NOT added — caller adds it).
+    //   Preserves Y and U. Clobbers A,B,X,CC. Uses ONLY the hardware stack for
+    //   scratch (no RAM temps) so it never disturbs TMPVAL/TMPPTR/TMPPTR2/RESULT.
+    // Math: 32-bit product |dy|*(x-x_min) via four 8x8 MULs, divided by
+    //   (x_max-x_min) with a constant-time 16-iteration shift-subtract long
+    //   division (quotient always fits 16 bits since t<=w => Q<=|dy|), sign
+    //   re-applied afterwards (truncate toward zero), then y1 added.
+    asm.push_str(
+"; ---- AREA_SURF_Y: sloped walkable-area surface height ----\n\
+AREA_SURF_Y:\n\
+    PSHS D              ; [S+0..1] = query_x (saved for interp)\n\
+    LDD 6,X             ; y2\n\
+    CMPD 0,X            ; vs y1\n\
+    BEQ ASY_FLAT        ; flat area -> y1\n\
+    LDD 4,X             ; x_max\n\
+    CMPD 2,X            ; vs x_min (signed)\n\
+    BLE ASY_FLAT        ; x_max <= x_min -> y1\n\
+    LDD ,S              ; query_x\n\
+    CMPD 2,X            ; vs x_min (signed)\n\
+    BLE ASY_FLAT        ; x <= x_min -> y1\n\
+    CMPD 4,X            ; query_x vs x_max (signed)\n\
+    BGE ASY_FAR         ; x >= x_max -> y2\n\
+    BRA ASY_INTERP\n\
+ASY_FLAT:\n\
+    LDD 0,X             ; return y1\n\
+    LEAS 2,S            ; drop saved query_x\n\
+    RTS\n\
+ASY_FAR:\n\
+    LDD 6,X             ; return y2\n\
+    LEAS 2,S\n\
+    RTS\n\
+ASY_INTERP:\n\
+    LEAS -14,S          ; locals: [0..3]P [4..5]w [6..7]t [8]sign [9..10]|dy| [11..12]y1 [13]cnt ; [14..15]query_x\n\
+    LDD 0,X             ; y1\n\
+    STD 11,S\n\
+    LDD 6,X             ; y2\n\
+    SUBD 0,X            ; dy = y2 - y1 (signed)\n\
+    TSTA\n\
+    BPL ASY_DYP\n\
+    COMA\n\
+    COMB\n\
+    ADDD #1             ; |dy|\n\
+    STD 9,S\n\
+    LDA #1\n\
+    STA 8,S             ; sign = negative\n\
+    BRA ASY_DYD\n\
+ASY_DYP:\n\
+    STD 9,S             ; |dy| = dy\n\
+    CLR 8,S             ; sign = positive\n\
+ASY_DYD:\n\
+    LDD 4,X             ; x_max\n\
+    SUBD 2,X            ; w = x_max - x_min (>0)\n\
+    STD 4,S\n\
+    LDD 14,S            ; query_x\n\
+    SUBD 2,X            ; t = query_x - x_min (>=1)\n\
+    STD 6,S\n\
+    ; ---- X is now free; build 32-bit product P = |dy| * t ----\n\
+    LDA 10,S            ; al = |dy| low\n\
+    LDB 7,S             ; bl = t low\n\
+    MUL                 ; D = al*bl (p_ll)\n\
+    STD 2,S             ; P1:P0\n\
+    LDA 9,S             ; ah = |dy| high\n\
+    LDB 6,S             ; bh = t high\n\
+    MUL                 ; D = ah*bh (p_hh)\n\
+    STD 0,S             ; P3:P2\n\
+    LDA 9,S             ; ah\n\
+    LDB 7,S             ; bl\n\
+    MUL                 ; D = ah*bl (mid1)\n\
+    ADDB 2,S            ; add mid1<<8 into P\n\
+    STB 2,S\n\
+    ADCA 1,S\n\
+    STA 1,S\n\
+    LDA 0,S\n\
+    ADCA #0\n\
+    STA 0,S\n\
+    LDA 10,S            ; al\n\
+    LDB 6,S             ; bh\n\
+    MUL                 ; D = al*bh (mid2)\n\
+    ADDB 2,S            ; add mid2<<8 into P\n\
+    STB 2,S\n\
+    ADCA 1,S\n\
+    STA 1,S\n\
+    LDA 0,S\n\
+    ADCA #0\n\
+    STA 0,S\n\
+    ; ---- divide P (32-bit) by w -> Q in P1:P0, 16-iter shift-subtract ----\n\
+    ; The 32-bit dividend is shifted left through carry using only register\n\
+    ; rotates (ASLB/ROLA/ROLB); LDD/STD do not affect C, so the carry chains\n\
+    ; across the two 16-bit halves (the assembler has no indexed shifts).\n\
+    LDA #16\n\
+    STA 13,S            ; loop counter\n\
+ASY_DIVLOOP:\n\
+    LDD 2,S             ; low word P1:P0\n\
+    ASLB                ; P0<<1, bit0=0, C=old bit7(P0)\n\
+    ROLA                ; P1<<1 | C, C=old bit7(P1)\n\
+    STD 2,S             ; store low word (C preserved)\n\
+    LDD 0,S             ; high word P3:P2 = rem (C preserved)\n\
+    ROLB                ; P2<<1 | C, C=old bit7(P2)\n\
+    ROLA                ; P3<<1 | C, C=old bit7(P3) = bit16\n\
+    STD 0,S             ; store rem (C preserved), D still = rem\n\
+    BCS ASY_DSUB        ; bit16 set -> rem definitely >= w\n\
+    CMPD 4,S            ; rem vs w (unsigned); D = rem\n\
+    BLO ASY_DNOSUB      ; rem < w -> quotient bit 0\n\
+ASY_DSUB:\n\
+    LDD 0,S\n\
+    SUBD 4,S            ; rem -= w\n\
+    STD 0,S\n\
+    INC 3,S             ; quotient bit = 1 (LSB of P0, was 0 after shift)\n\
+ASY_DNOSUB:\n\
+    DEC 13,S\n\
+    BNE ASY_DIVLOOP\n\
+    ; ---- apply sign (truncate toward zero) and add y1 ----\n\
+    LDA 8,S             ; sign flag (0=pos, 1=neg); sets Z\n\
+    BNE ASY_QNEG\n\
+    LDD 2,S             ; Q (fits 16 bits)\n\
+    ADDD 11,S           ; result = y1 + Q\n\
+    LEAS 16,S           ; drop 14 locals + saved query_x\n\
+    RTS\n\
+ASY_QNEG:\n\
+    LDD 2,S             ; Q\n\
+    COMA\n\
+    COMB\n\
+    ADDD #1             ; -Q (truncate toward zero)\n\
+    ADDD 11,S           ; result = y1 - Q\n\
+    LEAS 16,S           ; drop 14 locals + saved query_x\n\
+    RTS\n\n"
+    );
 
     asm.push_str(
 "; DRAW_ENEMIES_RUNTIME\n\

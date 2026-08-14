@@ -154,13 +154,50 @@ dv_reset:
     svc     #0                      @ SYS_RESET0REF
     bx      lr
 
-@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (delta after a reset)
+@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (a ramped delta after a
+@ reset). Split into <=127-per-axis steps: a scrolled origin can land far
+@ past the i8 DAC range, and SYS_MOVE casts to i8 → the whole shape WRAPS to
+@ the wrong side of the screen (mario_poc floor tiles). SYS_MOVE ramps the
+@ INTEGRATORS (velocity×time), not an absolute DAC, so stepping accumulates
+@ to the true (off-screen) origin — the visible part draws in place and the
+@ physical screen clips the rest. A move already within +/-127 does one step
+@ (unchanged).
 .global dv_move_to
 .type dv_move_to, %function
 .thumb_func
 dv_move_to:
-    svc     #3                      @ SYS_MOVE
-    bx      lr
+    push    {r2, r3, r4, r5, r6, r7, lr}  @ callers assume traps preserve regs
+    mov     r4, r0                  @ remaining dx
+    mov     r5, r1                  @ remaining dy
+    mov     r6, #127
+    rsb     r7, r6, #0              @ r7 = -127
+    mov     r3, #8                  @ max split steps (anti-hang guard)
+dvmt_loop:
+    mov     r0, r4                  @ step_x = clamp(remaining_x, -127, 127)
+    cmp     r0, r6
+    it      gt
+    movgt   r0, r6
+    cmp     r0, r7
+    it      lt
+    movlt   r0, r7
+    mov     r1, r5                  @ step_y = clamp(remaining_y, -127, 127)
+    cmp     r1, r6
+    it      gt
+    movgt   r1, r6
+    cmp     r1, r7
+    it      lt
+    movlt   r1, r7
+    push    {r0, r1}                @ svc clobbers r0; keep the steps
+    svc     #3                      @ SYS_MOVE (this step)
+    pop     {r0, r1}
+    subs    r4, r4, r0              @ remaining -= step
+    subs    r5, r5, r1
+    orrs    r2, r4, r5              @ both zero? → done
+    beq     dvmt_done
+    subs    r3, r3, #1              @ else step, until the cap
+    bne     dvmt_loop
+dvmt_done:
+    pop     {r2, r3, r4, r5, r6, r7, pc}
 
 @ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA
 .global dv_draw_delta
@@ -429,7 +466,7 @@ vpy_j2_btn4:
     eor     r0, r0, #1
     bx      lr
 
-@ vpy_update_buttons() — cache buttons+axes via BIOS traps (safe: WAIT_RECAL window)
+@ vpy_update_buttons() — cache buttons (+axes if analog is used)
 .global vpy_update_buttons
 .type vpy_update_buttons, %function
 .thumb_func
@@ -443,7 +480,7 @@ vpy_update_buttons:
     and     r0, r4, #0xFF
     ldr     r1, =BTN_STATE_J2
     str     r0, [r1]
-    svc     #13                     @ SYS_READ_AXES
+    svc     #13                     @ SYS_READ_AXES (analog used)
     mov     r4, r0
     ubfx    r0, r4, #24, #8
     sxtb    r0, r0
@@ -518,82 +555,20 @@ vpy_clamp:
     movgt   r0, r2
     bx      lr
 
-@ vpy_play_sfx(r0=sfx_data_ptr)
+@ vpy_play_sfx(r0=sfx_data_ptr) — BIOS trap: SYS_PLAY_SFX
 .global vpy_play_sfx
 .type vpy_play_sfx, %function
 .thumb_func
 vpy_play_sfx:
-    push    {lr}
-    ldr     r1, =PSG_SFX_PTR
-    add     r2, r0, #4
-    str     r2, [r1]
-    ldr     r1, =PSG_SFX_ACTIVE
-    mov     r2, #1
-    str     r2, [r1]
-    ldr     r1, =PSG_SFX_DELAY
-    mov     r2, #0
-    str     r2, [r1]
-    pop     {pc}
-    .ltorg
+    svc     #23                     @ SYS_PLAY_SFX
+    bx      lr
 
-@ vpy_audio_update() — advance SFX sequencer by one frame
+@ vpy_audio_update() — no-op: core 1 advances SFX, BIOS flushes each frame
 .global vpy_audio_update
 .type vpy_audio_update, %function
 .thumb_func
 vpy_audio_update:
-    push    {r4, r5, r6, r7, lr}
-    ldr     r0, =PSG_SFX_ACTIVE
-    ldr     r0, [r0]
-    cmp     r0, #0
-    beq     vau_done
-    ldr     r4, =PSG_SFX_DELAY
-    ldr     r0, [r4]
-    cmp     r0, #0
-    beq     vau_proc
-    sub     r0, r0, #1
-    str     r0, [r4]
-    b       vau_done
-vau_proc:
-    ldr     r5, =PSG_SFX_PTR
-    ldr     r5, [r5]
-    ldrb    r6, [r5, #1]         @ num_writes
-    cmp     r6, #0
-    beq     vau_end
-    add     r7, r5, #2
-vau_wl:
-    cmp     r6, #0
-    beq     vau_aw
-    ldrb    r0, [r7]
-    ldrb    r1, [r7, #1]
-    cmp     r0, #7
-    bne     vau_do_write
-    push    {r1, r6, r7}    @ save sfx_mixer, loop vars
-    bl      psg_read         @ r0=7 already → returns Regs[7]
-    pop     {r1, r6, r7}    @ restore sfx_mixer to r1; r0=cur_mixer
-    and     r0, r0, #0xDB   @ keep non-C bits from music (0xDB=~0x24)
-    and     r1, r1, #0x24   @ keep only C bits from SFX
-    orr     r1, r0, r1      @ r1 = merged mixer
-    mov     r0, #7          @ reg = 7
-vau_do_write:
-    push    {r6, r7}
-    bl      psg_write
-    pop     {r6, r7}
-    add     r7, r7, #2
-    sub     r6, r6, #1
-    b       vau_wl
-vau_aw:
-    ldr     r0, =PSG_SFX_PTR
-    str     r7, [r0]
-    ldrb    r0, [r7]
-    str     r0, [r4]
-    b       vau_done
-vau_end:
-    ldr     r0, =PSG_SFX_ACTIVE
-    mov     r1, #0
-    str     r1, [r0]
-vau_done:
-    pop     {r4, r5, r6, r7, pc}
-    .ltorg
+    bx      lr
 
 .global vpy_set_camera_x
 .type vpy_set_camera_x, %function
@@ -1226,16 +1201,15 @@ vlcy_no_floor:
     .ltorg
 
 @ --- User variables (RAM) ---
-.equ VAR_MARIO_HH, 0x2007F460  @ const scalar
-.equ VAR_PLAYER_X, 0x2007F464
-.equ VAR_PLAYER_Y, 0x2007F468
-.equ VAR_VEL_Y, 0x2007F46C
-.equ VAR_ON_GROUND, 0x2007F470
-.equ VAR_PREV_Y, 0x2007F474
-.equ VAR_CAMERA_X, 0x2007F478
-.equ VAR_FLOOR_Y, 0x2007F47C
-.equ VAR_JOY_X, 0x2007F480  @ implicit
-.equ VAR_BTN_JUMP, 0x2007F484  @ implicit
+.equ VAR_PLAYER_X, 0x2007F460
+.equ VAR_PLAYER_Y, 0x2007F464
+.equ VAR_VEL_Y, 0x2007F468
+.equ VAR_ON_GROUND, 0x2007F46C
+.equ VAR_PREV_Y, 0x2007F470
+.equ VAR_CAMERA_X, 0x2007F474
+.equ VAR_FLOOR_Y, 0x2007F478
+.equ VAR_JOY_X, 0x2007F47C  @ implicit
+.equ VAR_BTN_JUMP, 0x2007F480  @ implicit
 
 @ --- Const array ROM data ---
 
@@ -1263,27 +1237,24 @@ gm_zero_loop:
     str     r0, [r1]
     @ initialize globals
     ldr     r1, =0x2007F460
-    mov     r0, #13
+    mov     r0, #0
     str     r0, [r1]
     ldr     r1, =0x2007F464
-    mov     r0, #0
+    ldr     r0, =-57
     str     r0, [r1]
     ldr     r1, =0x2007F468
-    ldr     r0, =-57
+    mov     r0, #0
     str     r0, [r1]
     ldr     r1, =0x2007F46C
-    mov     r0, #0
-    str     r0, [r1]
-    ldr     r1, =0x2007F470
     mov     r0, #1
     str     r0, [r1]
-    ldr     r1, =0x2007F474
+    ldr     r1, =0x2007F470
     ldr     r0, =-57
     str     r0, [r1]
-    ldr     r1, =0x2007F478
+    ldr     r1, =0x2007F474
     mov     r0, #0
     str     r0, [r1]
-    ldr     r1, =0x2007F47C
+    ldr     r1, =0x2007F478
     ldr     r0, =-57
     str     r0, [r1]
     @ init PSG_MIXER_SHADOW (all channels disabled)
@@ -1296,8 +1267,6 @@ gm_zero_loop:
     str     r0, [r1]
     @ main() body
     ldr     r0, =_WORLD_1_1_LEVEL    @ asset 'world_1_1'
-    push    {r0}
-    pop     {r0}
     bl      vpy_load_level
 game_main_loop:
     bl      vpy_wait_recal
@@ -1307,66 +1276,40 @@ game_main_loop:
     mov     r1, #0
     strb    r1, [r0]
     bl      vpy_j1_x
-    ldr     r1, =0x2007F480    @ JOY_X
+    ldr     r1, =0x2007F47C    @ JOY_X
     str     r0, [r1]
     bl      vpy_j1_btn1
-    ldr     r1, =0x2007F484    @ BTN_JUMP
+    ldr     r1, =0x2007F480    @ BTN_JUMP
     str     r0, [r1]
-    ldr     r1, =0x2007F480    @ JOY_X
+    ldr     r1, =0x2007F47C    @ JOY_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #20
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #20
     cmp     r0, r1
-    ble    .Lcf0
-    movs    r0, #1
-    b       .Lcf0e
-.Lcf0:
-    movs    r0, #0
-.Lcf0e:
-    cmp     r0, #0
-    beq     if_else_0
-    ldr     r1, =0x2007F464    @ PLAYER_X
+    ble     if_else_0
+    ldr     r1, =0x2007F460    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     add     r0, r0, r1
-    ldr     r1, =0x2007F464    @ PLAYER_X
+    ldr     r1, =0x2007F460    @ PLAYER_X
     str     r0, [r1]
     b       if_end_0
 if_else_0:
 if_end_0:
-    ldr     r1, =0x2007F480    @ JOY_X
+    ldr     r1, =0x2007F47C    @ JOY_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-20
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-20
     cmp     r0, r1
-    bge    .Lcf1
-    movs    r0, #1
-    b       .Lcf1e
-.Lcf1:
-    movs    r0, #0
-.Lcf1e:
-    cmp     r0, #0
-    beq     if_else_1
-    ldr     r1, =0x2007F464    @ PLAYER_X
+    bge     if_else_1
+    ldr     r1, =0x2007F460    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #3
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #3
     sub     r0, r0, r1
-    ldr     r1, =0x2007F464    @ PLAYER_X
+    ldr     r1, =0x2007F460    @ PLAYER_X
     str     r0, [r1]
     b       if_end_1
 if_else_1:
 if_end_1:
-    ldr     r1, =0x2007F464    @ PLAYER_X
+    ldr     r1, =0x2007F460    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
     ldr     r0, =-100
@@ -1377,47 +1320,25 @@ if_end_1:
     pop     {r1}
     pop     {r0}
     bl      vpy_clamp
-    ldr     r1, =0x2007F464    @ PLAYER_X
+    ldr     r1, =0x2007F460    @ PLAYER_X
     str     r0, [r1]
-    ldr     r1, =0x2007F484    @ BTN_JUMP
+    ldr     r1, =0x2007F480    @ BTN_JUMP
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf2
-    movs    r0, #1
-    b       .Lcf2e
-.Lcf2:
-    movs    r0, #0
-.Lcf2e:
-    cmp     r0, #0
-    beq     if_else_2
-    ldr     r1, =0x2007F470    @ ON_GROUND
+    bne     if_else_2
+    ldr     r1, =0x2007F46C    @ ON_GROUND
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf3
-    movs    r0, #1
-    b       .Lcf3e
-.Lcf3:
-    movs    r0, #0
-.Lcf3e:
-    cmp     r0, #0
-    beq     if_else_3
+    bne     if_else_3
     mov     r0, #12
-    ldr     r1, =0x2007F46C    @ VEL_Y
+    ldr     r1, =0x2007F468    @ VEL_Y
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F470    @ ON_GROUND
+    ldr     r1, =0x2007F46C    @ ON_GROUND
     str     r0, [r1]
     ldr     r0, =_JUMP_SFX    @ asset 'jump'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_sfx
     b       if_end_3
 if_else_3:
@@ -1425,60 +1346,43 @@ if_end_3:
     b       if_end_2
 if_else_2:
 if_end_2:
-    ldr     r1, =0x2007F470    @ ON_GROUND
+    ldr     r1, =0x2007F46C    @ ON_GROUND
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #0
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #0
     cmp     r0, r1
-    bne    .Lcf4
-    movs    r0, #1
-    b       .Lcf4e
-.Lcf4:
-    movs    r0, #0
-.Lcf4e:
-    cmp     r0, #0
-    beq     if_else_4
-    ldr     r1, =0x2007F468    @ PLAYER_Y
+    bne     if_else_4
+    ldr     r1, =0x2007F464    @ PLAYER_Y
     ldr     r0, [r1]
-    ldr     r1, =0x2007F474    @ PREV_Y
+    ldr     r1, =0x2007F470    @ PREV_Y
     str     r0, [r1]
-    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r1, =0x2007F464    @ PLAYER_Y
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F46C    @ VEL_Y
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =0x2007F468    @ VEL_Y
+    ldr     r1, [r1]
     add     r0, r0, r1
-    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r1, =0x2007F464    @ PLAYER_Y
     str     r0, [r1]
-    ldr     r1, =0x2007F46C    @ VEL_Y
+    ldr     r1, =0x2007F468    @ VEL_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     sub     r0, r0, r1
-    ldr     r1, =0x2007F46C    @ VEL_Y
+    ldr     r1, =0x2007F468    @ VEL_Y
     str     r0, [r1]
-    ldr     r1, =0x2007F464    @ PLAYER_X
+    ldr     r1, =0x2007F460    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F474    @ PREV_Y
+    ldr     r1, =0x2007F470    @ PREV_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F460    @ MARIO_HH
-    ldr     r0, [r1]
+    mov     r0, #13
     push    {r0}
     pop     {r2}
     pop     {r1}
     pop     {r0}
     bl      vpy_level_collision_y
-    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    ldr     r1, =0x2007F478    @ FLOOR_Y
     str     r0, [r1]
-    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    ldr     r1, =0x2007F478    @ FLOOR_Y
     ldr     r0, [r1]
     push    {r0}
     ldr     r0, =-57
@@ -1486,33 +1390,23 @@ if_end_2:
     pop     {r1}
     pop     {r0}
     bl      vpy_max
-    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    ldr     r1, =0x2007F478    @ FLOOR_Y
     str     r0, [r1]
-    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r1, =0x2007F464    @ PLAYER_Y
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F47C    @ FLOOR_Y
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =0x2007F478    @ FLOOR_Y
+    ldr     r1, [r1]
     cmp     r0, r1
-    bgt    .Lcf5
-    movs    r0, #1
-    b       .Lcf5e
-.Lcf5:
-    movs    r0, #0
-.Lcf5e:
-    cmp     r0, #0
-    beq     if_else_5
-    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    bgt     if_else_5
+    ldr     r1, =0x2007F478    @ FLOOR_Y
     ldr     r0, [r1]
-    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r1, =0x2007F464    @ PLAYER_Y
     str     r0, [r1]
     mov     r0, #0
-    ldr     r1, =0x2007F46C    @ VEL_Y
+    ldr     r1, =0x2007F468    @ VEL_Y
     str     r0, [r1]
     mov     r0, #1
-    ldr     r1, =0x2007F470    @ ON_GROUND
+    ldr     r1, =0x2007F46C    @ ON_GROUND
     str     r0, [r1]
     b       if_end_5
 if_else_5:
@@ -1520,37 +1414,26 @@ if_end_5:
     b       if_end_4
 if_else_4:
 if_end_4:
-    ldr     r1, =0x2007F470    @ ON_GROUND
+    ldr     r1, =0x2007F46C    @ ON_GROUND
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     cmp     r0, r1
-    bne    .Lcf6
-    movs    r0, #1
-    b       .Lcf6e
-.Lcf6:
-    movs    r0, #0
-.Lcf6e:
-    cmp     r0, #0
-    beq     if_else_6
-    ldr     r1, =0x2007F464    @ PLAYER_X
+    bne     if_else_6
+    ldr     r1, =0x2007F460    @ PLAYER_X
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r1, =0x2007F464    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
-    ldr     r1, =0x2007F460    @ MARIO_HH
-    ldr     r0, [r1]
+    mov     r0, #13
     push    {r0}
     pop     {r2}
     pop     {r1}
     pop     {r0}
     bl      vpy_level_collision_y
-    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    ldr     r1, =0x2007F478    @ FLOOR_Y
     str     r0, [r1]
-    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    ldr     r1, =0x2007F478    @ FLOOR_Y
     ldr     r0, [r1]
     push    {r0}
     ldr     r0, =-57
@@ -1558,26 +1441,16 @@ if_end_4:
     pop     {r1}
     pop     {r0}
     bl      vpy_max
-    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    ldr     r1, =0x2007F478    @ FLOOR_Y
     str     r0, [r1]
-    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r1, =0x2007F464    @ PLAYER_Y
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r1, =0x2007F47C    @ FLOOR_Y
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =0x2007F478    @ FLOOR_Y
+    ldr     r1, [r1]
     cmp     r0, r1
-    ble    .Lcf7
-    movs    r0, #1
-    b       .Lcf7e
-.Lcf7:
-    movs    r0, #0
-.Lcf7e:
-    cmp     r0, #0
-    beq     if_else_7
+    ble     if_else_7
     mov     r0, #0
-    ldr     r1, =0x2007F470    @ ON_GROUND
+    ldr     r1, =0x2007F46C    @ ON_GROUND
     str     r0, [r1]
     b       if_end_7
 if_else_7:
@@ -1585,16 +1458,13 @@ if_end_7:
     b       if_end_6
 if_else_6:
 if_end_6:
-    ldr     r1, =0x2007F464    @ PLAYER_X
+    ldr     r1, =0x2007F460    @ PLAYER_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #30
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #30
     add     r0, r0, r1
-    ldr     r1, =0x2007F478    @ CAMERA_X
+    ldr     r1, =0x2007F474    @ CAMERA_X
     str     r0, [r1]
-    ldr     r1, =0x2007F478    @ CAMERA_X
+    ldr     r1, =0x2007F474    @ CAMERA_X
     ldr     r0, [r1]
     push    {r0}
     mov     r0, #0
@@ -1605,34 +1475,28 @@ if_end_6:
     pop     {r1}
     pop     {r0}
     bl      vpy_clamp
-    ldr     r1, =0x2007F478    @ CAMERA_X
+    ldr     r1, =0x2007F474    @ CAMERA_X
     str     r0, [r1]
-    ldr     r1, =0x2007F478    @ CAMERA_X
+    ldr     r1, =0x2007F474    @ CAMERA_X
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_set_camera_x
     bl      vpy_show_level
     ldr     r0, =_MARIO_VECTORS    @ asset 'mario'
     push    {r0}
     ldr     r0, =-30
     push    {r0}
-    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r1, =0x2007F464    @ PLAYER_Y
     ldr     r0, [r1]
     push    {r0}
     pop     {r2}
     pop     {r1}
     pop     {r0}
     bl      vpy_draw_vector
-    ldr     r1, =0x2007F47C    @ FLOOR_Y
+    ldr     r1, =0x2007F478    @ FLOOR_Y
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_debug_print
-    ldr     r1, =0x2007F468    @ PLAYER_Y
+    ldr     r1, =0x2007F464    @ PLAYER_Y
     ldr     r0, [r1]
-    push    {r0}
-    pop     {r0}
     bl      vpy_debug_print
     b       game_main_loop
     .ltorg
@@ -1663,6 +1527,16 @@ _CLOUD_PATH0:
     .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
     .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
     .byte   0x02            @ end marker
+
+@ --- CLOUD_VEC (libvpy position-independent .vec image) ---
+.section .rodata._CLOUD_VEC,"a",%progbits
+    .balign 4
+.global _CLOUD_VEC
+_CLOUD_VEC:
+    .byte   0x01, 0x00, 0x37, 0xF6, 0xE7, 0x00, 0x00, 0xFF, 0x00, 0x32, 0xFF, 0x08, 0x00, 0xFF, 0x00, 0xFB
+    .byte   0xFF, 0x06, 0x00, 0xFF, 0x00, 0xF6, 0xFF, 0x06, 0x00, 0xFF, 0x00, 0xEC, 0xFF, 0xFA, 0x00, 0xFF
+    .byte   0x00, 0xF6, 0xFF, 0xFA, 0x00, 0xFF, 0x00, 0xFB, 0xFF, 0xF8, 0x00, 0x02
+.section .text
 
 @ --- CLOUD_3D_DATA (1 path(s)) ---
     .balign 4
@@ -1712,6 +1586,30 @@ _GROUND_TILE_VECTORS:
     .word   _GROUND_TILE_PATH6      @ ptr path 6
 
 _GROUND_TILE_PATH0:
+    .byte   127               @ intensity
+    .byte   0x00, 0x02, 0x00, 0x00  @ y=0, x=2, hdr
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
+    .byte   0x02            @ end marker
+
+_GROUND_TILE_PATH1:
+    .byte   127               @ intensity
+    .byte   0x00, 0x0B, 0x00, 0x00  @ y=0, x=11, hdr
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0x02            @ end marker
+
+_GROUND_TILE_PATH2:
+    .byte   127               @ intensity
+    .byte   0x00, 0x17, 0x00, 0x00  @ y=0, x=23, hdr
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
+    .byte   0x02            @ end marker
+
+_GROUND_TILE_PATH3:
+    .byte   60               @ intensity
+    .byte   0x00, 0x1E, 0x00, 0x00  @ y=0, x=30, hdr
+    .byte   0xFF, 0x00, 0xC4  @ line dy=0, dx=-60
+    .byte   0x02            @ end marker
+
+_GROUND_TILE_PATH4:
     .byte   80               @ intensity
     .byte   0xF8, 0xE2, 0x00, 0x00  @ y=-8, x=-30, hdr
     .byte   0xFF, 0x00, 0x3C  @ line dy=0, dx=60
@@ -1720,41 +1618,29 @@ _GROUND_TILE_PATH0:
     .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
     .byte   0x02            @ end marker
 
-_GROUND_TILE_PATH1:
-    .byte   60               @ intensity
-    .byte   0x00, 0xE2, 0x00, 0x00  @ y=0, x=-30, hdr
-    .byte   0xFF, 0x00, 0x3C  @ line dy=0, dx=60
-    .byte   0x02            @ end marker
-
-_GROUND_TILE_PATH2:
+_GROUND_TILE_PATH5:
     .byte   127               @ intensity
-    .byte   0x08, 0xEC, 0x00, 0x00  @ y=8, x=-20, hdr
-    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0x00, 0xEC, 0x00, 0x00  @ y=0, x=-20, hdr
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
     .byte   0x02            @ end marker
 
-_GROUND_TILE_PATH3:
+_GROUND_TILE_PATH6:
     .byte   127               @ intensity
     .byte   0x00, 0xF7, 0x00, 0x00  @ y=0, x=-9, hdr
     .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
     .byte   0x02            @ end marker
 
-_GROUND_TILE_PATH4:
-    .byte   127               @ intensity
-    .byte   0x00, 0x02, 0x00, 0x00  @ y=0, x=2, hdr
-    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
-    .byte   0x02            @ end marker
-
-_GROUND_TILE_PATH5:
-    .byte   127               @ intensity
-    .byte   0x00, 0x0B, 0x00, 0x00  @ y=0, x=11, hdr
-    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
-    .byte   0x02            @ end marker
-
-_GROUND_TILE_PATH6:
-    .byte   127               @ intensity
-    .byte   0x00, 0x17, 0x00, 0x00  @ y=0, x=23, hdr
-    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
-    .byte   0x02            @ end marker
+@ --- GROUND_TILE_VEC (libvpy position-independent .vec image) ---
+.section .rodata._GROUND_TILE_VEC,"a",%progbits
+    .balign 4
+.global _GROUND_TILE_VEC
+_GROUND_TILE_VEC:
+    .byte   0x07, 0x00, 0x7F, 0x00, 0x02, 0x00, 0x00, 0xFF, 0x08, 0x00, 0x02, 0x7F, 0x00, 0x0B, 0x00, 0x00
+    .byte   0xFF, 0xF8, 0x00, 0x02, 0x7F, 0x00, 0x17, 0x00, 0x00, 0xFF, 0x08, 0x00, 0x02, 0x3C, 0x00, 0x1E
+    .byte   0x00, 0x00, 0xFF, 0x00, 0xC4, 0x02, 0x50, 0xF8, 0xE2, 0x00, 0x00, 0xFF, 0x00, 0x3C, 0xFF, 0x10
+    .byte   0x00, 0xFF, 0x00, 0xC4, 0xFF, 0xF0, 0x00, 0x02, 0x7F, 0x00, 0xEC, 0x00, 0x00, 0xFF, 0x08, 0x00
+    .byte   0x02, 0x7F, 0x00, 0xF7, 0x00, 0x00, 0xFF, 0xF8, 0x00, 0x02
+.section .text
 
 @ --- GROUND_TILE_3D_DATA (7 path(s)) ---
     .balign 4
@@ -1927,46 +1813,18 @@ _KONG_PITREX_ENEMY_COUNT:
 
 .global _KONG_PITREX_ENEMIES
 _KONG_PITREX_ENEMIES:
-@ --- mario (10 path(s)) ---
+@ --- mario (6 path(s)) ---
 .global _MARIO_VECTORS
 _MARIO_VECTORS:
-    .word   10               @ path_count
+    .word   6               @ path_count
     .word   _MARIO_PATH0      @ ptr path 0
     .word   _MARIO_PATH1      @ ptr path 1
     .word   _MARIO_PATH2      @ ptr path 2
     .word   _MARIO_PATH3      @ ptr path 3
     .word   _MARIO_PATH4      @ ptr path 4
     .word   _MARIO_PATH5      @ ptr path 5
-    .word   _MARIO_PATH6      @ ptr path 6
-    .word   _MARIO_PATH7      @ ptr path 7
-    .word   _MARIO_PATH8      @ ptr path 8
-    .word   _MARIO_PATH9      @ ptr path 9
 
 _MARIO_PATH0:
-    .byte   127               @ intensity
-    .byte   0x09, 0xF9, 0x00, 0x00  @ y=9, x=-7, hdr
-    .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
-    .byte   0x02            @ end marker
-
-_MARIO_PATH1:
-    .byte   127               @ intensity
-    .byte   0x09, 0xFB, 0x00, 0x00  @ y=9, x=-5, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_MARIO_PATH2:
-    .byte   127               @ intensity
-    .byte   0x09, 0x05, 0x00, 0x00  @ y=9, x=5, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_MARIO_PATH3:
-    .byte   127               @ intensity
-    .byte   0x0D, 0xFB, 0x00, 0x00  @ y=13, x=-5, hdr
-    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
-    .byte   0x02            @ end marker
-
-_MARIO_PATH4:
     .byte   127               @ intensity
     .byte   0x01, 0xFA, 0x00, 0x00  @ y=1, x=-6, hdr
     .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
@@ -1975,7 +1833,21 @@ _MARIO_PATH4:
     .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
     .byte   0x02            @ end marker
 
-_MARIO_PATH5:
+_MARIO_PATH1:
+    .byte   127               @ intensity
+    .byte   0x09, 0xF9, 0x00, 0x00  @ y=9, x=-7, hdr
+    .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
+    .byte   0x02            @ end marker
+
+_MARIO_PATH2:
+    .byte   127               @ intensity
+    .byte   0x09, 0x05, 0x00, 0x00  @ y=9, x=5, hdr
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0x02            @ end marker
+
+_MARIO_PATH3:
     .byte   127               @ intensity
     .byte   0xF9, 0xF9, 0x00, 0x00  @ y=-7, x=-7, hdr
     .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
@@ -1984,29 +1856,32 @@ _MARIO_PATH5:
     .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
     .byte   0x02            @ end marker
 
-_MARIO_PATH6:
+_MARIO_PATH4:
     .byte   127               @ intensity
     .byte   0xF9, 0xF9, 0x00, 0x00  @ y=-7, x=-7, hdr
     .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
-    .byte   0x02            @ end marker
-
-_MARIO_PATH7:
-    .byte   127               @ intensity
-    .byte   0xF3, 0xF9, 0x00, 0x00  @ y=-13, x=-7, hdr
     .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
     .byte   0x02            @ end marker
 
-_MARIO_PATH8:
+_MARIO_PATH5:
     .byte   127               @ intensity
-    .byte   0xF9, 0x07, 0x00, 0x00  @ y=-7, x=7, hdr
-    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0xF3, 0x02, 0x00, 0x00  @ y=-13, x=2, hdr
+    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
     .byte   0x02            @ end marker
 
-_MARIO_PATH9:
-    .byte   127               @ intensity
-    .byte   0xF3, 0x07, 0x00, 0x00  @ y=-13, x=7, hdr
-    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
-    .byte   0x02            @ end marker
+@ --- MARIO_VEC (libvpy position-independent .vec image) ---
+.section .rodata._MARIO_VEC,"a",%progbits
+    .balign 4
+.global _MARIO_VEC
+_MARIO_VEC:
+    .byte   0x06, 0x00, 0x7F, 0x01, 0xFA, 0x00, 0x00, 0xFF, 0x00, 0x0C, 0xFF, 0x08, 0x00, 0xFF, 0x00, 0xF4
+    .byte   0xFF, 0xF8, 0x00, 0x02, 0x7F, 0x09, 0xF9, 0x00, 0x00, 0xFF, 0x00, 0x0E, 0x02, 0x7F, 0x09, 0x05
+    .byte   0x00, 0x00, 0xFF, 0x04, 0x00, 0xFF, 0x00, 0xF6, 0xFF, 0xFC, 0x00, 0x02, 0x7F, 0xF9, 0xF9, 0x00
+    .byte   0x00, 0xFF, 0x00, 0x0E, 0xFF, 0x08, 0x00, 0xFF, 0x00, 0xF2, 0xFF, 0xF8, 0x00, 0x02, 0x7F, 0xF9
+    .byte   0xF9, 0x00, 0x00, 0xFF, 0xFA, 0x00, 0xFF, 0x00, 0x05, 0x02, 0x7F, 0xF3, 0x02, 0x00, 0x00, 0xFF
+    .byte   0x00, 0x05, 0xFF, 0x06, 0x00, 0x02
+.section .text
 
 @ --- MARIO_3D_DATA (10 path(s)) ---
     .balign 4
@@ -2081,42 +1956,16 @@ _MARIO_3D_DATA:
     .byte   17
     .balign 4
 
-@ --- mario_body (6 path(s)) ---
+@ --- mario_body (4 path(s)) ---
 .global _MARIO_BODY_VECTORS
 _MARIO_BODY_VECTORS:
-    .word   6               @ path_count
+    .word   4               @ path_count
     .word   _MARIO_BODY_PATH0      @ ptr path 0
     .word   _MARIO_BODY_PATH1      @ ptr path 1
     .word   _MARIO_BODY_PATH2      @ ptr path 2
     .word   _MARIO_BODY_PATH3      @ ptr path 3
-    .word   _MARIO_BODY_PATH4      @ ptr path 4
-    .word   _MARIO_BODY_PATH5      @ ptr path 5
 
 _MARIO_BODY_PATH0:
-    .byte   127               @ intensity
-    .byte   0x05, 0xF9, 0x00, 0x00  @ y=5, x=-7, hdr
-    .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
-    .byte   0x02            @ end marker
-
-_MARIO_BODY_PATH1:
-    .byte   127               @ intensity
-    .byte   0x05, 0xFB, 0x00, 0x00  @ y=5, x=-5, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_MARIO_BODY_PATH2:
-    .byte   127               @ intensity
-    .byte   0x05, 0x05, 0x00, 0x00  @ y=5, x=5, hdr
-    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
-    .byte   0x02            @ end marker
-
-_MARIO_BODY_PATH3:
-    .byte   127               @ intensity
-    .byte   0x09, 0xFB, 0x00, 0x00  @ y=9, x=-5, hdr
-    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
-    .byte   0x02            @ end marker
-
-_MARIO_BODY_PATH4:
     .byte   127               @ intensity
     .byte   0xFD, 0xFA, 0x00, 0x00  @ y=-3, x=-6, hdr
     .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
@@ -2125,7 +1974,7 @@ _MARIO_BODY_PATH4:
     .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
     .byte   0x02            @ end marker
 
-_MARIO_BODY_PATH5:
+_MARIO_BODY_PATH1:
     .byte   127               @ intensity
     .byte   0xF7, 0xF9, 0x00, 0x00  @ y=-9, x=-7, hdr
     .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
@@ -2133,6 +1982,31 @@ _MARIO_BODY_PATH5:
     .byte   0xFF, 0x00, 0xF2  @ line dy=0, dx=-14
     .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
     .byte   0x02            @ end marker
+
+_MARIO_BODY_PATH2:
+    .byte   127               @ intensity
+    .byte   0x05, 0xF9, 0x00, 0x00  @ y=5, x=-7, hdr
+    .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
+    .byte   0x02            @ end marker
+
+_MARIO_BODY_PATH3:
+    .byte   127               @ intensity
+    .byte   0x05, 0x05, 0x00, 0x00  @ y=5, x=5, hdr
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0x02            @ end marker
+
+@ --- MARIO_BODY_VEC (libvpy position-independent .vec image) ---
+.section .rodata._MARIO_BODY_VEC,"a",%progbits
+    .balign 4
+.global _MARIO_BODY_VEC
+_MARIO_BODY_VEC:
+    .byte   0x04, 0x00, 0x7F, 0xFD, 0xFA, 0x00, 0x00, 0xFF, 0x00, 0x0C, 0xFF, 0x08, 0x00, 0xFF, 0x00, 0xF4
+    .byte   0xFF, 0xF8, 0x00, 0x02, 0x7F, 0xF7, 0xF9, 0x00, 0x00, 0xFF, 0x00, 0x0E, 0xFF, 0x06, 0x00, 0xFF
+    .byte   0x00, 0xF2, 0xFF, 0xFA, 0x00, 0x02, 0x7F, 0x05, 0xF9, 0x00, 0x00, 0xFF, 0x00, 0x0E, 0x02, 0x7F
+    .byte   0x05, 0x05, 0x00, 0x00, 0xFF, 0x04, 0x00, 0xFF, 0x00, 0xF6, 0xFF, 0xFC, 0x00, 0x02
+.section .text
 
 @ --- MARIO_BODY_3D_DATA (6 path(s)) ---
     .balign 4
@@ -2203,10 +2077,19 @@ _MARIO_LEGS_STRAIGHT_PATH0:
 
 _MARIO_LEGS_STRAIGHT_PATH1:
     .byte   127               @ intensity
-    .byte   0x05, 0x07, 0x00, 0x00  @ y=5, x=7, hdr
-    .byte   0xFF, 0xF6, 0x00  @ line dy=-10, dx=0
-    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
+    .byte   0xFB, 0x02, 0x00, 0x00  @ y=-5, x=2, hdr
+    .byte   0xFF, 0x00, 0x05  @ line dy=0, dx=5
+    .byte   0xFF, 0x0A, 0x00  @ line dy=10, dx=0
     .byte   0x02            @ end marker
+
+@ --- MARIO_LEGS_STRAIGHT_VEC (libvpy position-independent .vec image) ---
+.section .rodata._MARIO_LEGS_STRAIGHT_VEC,"a",%progbits
+    .balign 4
+.global _MARIO_LEGS_STRAIGHT_VEC
+_MARIO_LEGS_STRAIGHT_VEC:
+    .byte   0x02, 0x00, 0x7F, 0x05, 0xF9, 0x00, 0x00, 0xFF, 0xF6, 0x00, 0xFF, 0x00, 0x05, 0x02, 0x7F, 0xFB
+    .byte   0x02, 0x00, 0x00, 0xFF, 0x00, 0x05, 0xFF, 0x0A, 0x00, 0x02
+.section .text
 
 @ --- MARIO_LEGS_STRAIGHT_3D_DATA (2 path(s)) ---
     .balign 4
@@ -2249,10 +2132,19 @@ _MARIO_LEGS_STRIDE_A_PATH0:
 
 _MARIO_LEGS_STRIDE_A_PATH1:
     .byte   127               @ intensity
-    .byte   0x05, 0x08, 0x00, 0x00  @ y=5, x=8, hdr
-    .byte   0xFF, 0xF6, 0xFC  @ line dy=-10, dx=-4
-    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0xFB, 0x0A, 0x00, 0x00  @ y=-5, x=10, hdr
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0x0A, 0x04  @ line dy=10, dx=4
     .byte   0x02            @ end marker
+
+@ --- MARIO_LEGS_STRIDE_A_VEC (libvpy position-independent .vec image) ---
+.section .rodata._MARIO_LEGS_STRIDE_A_VEC,"a",%progbits
+    .balign 4
+.global _MARIO_LEGS_STRIDE_A_VEC
+_MARIO_LEGS_STRIDE_A_VEC:
+    .byte   0x02, 0x00, 0x7F, 0x05, 0xFA, 0x00, 0x00, 0xFF, 0xF6, 0xFC, 0xFF, 0x00, 0x06, 0x02, 0x7F, 0xFB
+    .byte   0x0A, 0x00, 0x00, 0xFF, 0x00, 0xFA, 0xFF, 0x0A, 0x04, 0x02
+.section .text
 
 @ --- MARIO_LEGS_STRIDE_A_3D_DATA (2 path(s)) ---
     .balign 4
@@ -2295,10 +2187,19 @@ _MARIO_LEGS_STRIDE_B_PATH0:
 
 _MARIO_LEGS_STRIDE_B_PATH1:
     .byte   127               @ intensity
-    .byte   0x05, 0x05, 0x00, 0x00  @ y=5, x=5, hdr
-    .byte   0xFF, 0xF6, 0x04  @ line dy=-10, dx=4
-    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFB, 0x03, 0x00, 0x00  @ y=-5, x=3, hdr
+    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0xFF, 0x0A, 0xFC  @ line dy=10, dx=-4
     .byte   0x02            @ end marker
+
+@ --- MARIO_LEGS_STRIDE_B_VEC (libvpy position-independent .vec image) ---
+.section .rodata._MARIO_LEGS_STRIDE_B_VEC,"a",%progbits
+    .balign 4
+.global _MARIO_LEGS_STRIDE_B_VEC
+_MARIO_LEGS_STRIDE_B_VEC:
+    .byte   0x02, 0x00, 0x7F, 0x05, 0xF7, 0x00, 0x00, 0xFF, 0xF6, 0x04, 0xFF, 0x00, 0x05, 0x02, 0x7F, 0xFB
+    .byte   0x03, 0x00, 0x00, 0xFF, 0x00, 0x06, 0xFF, 0x0A, 0xFC, 0x02
+.section .text
 
 @ --- MARIO_LEGS_STRIDE_B_3D_DATA (2 path(s)) ---
     .balign 4
@@ -2390,6 +2291,18 @@ _MOUNTAIN_PATH0:
     .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
     .byte   0x02            @ end marker
 
+@ --- MOUNTAIN_VEC (libvpy position-independent .vec image) ---
+.section .rodata._MOUNTAIN_VEC,"a",%progbits
+    .balign 4
+.global _MOUNTAIN_VEC
+_MOUNTAIN_VEC:
+    .byte   0x01, 0x00, 0x2D, 0xED, 0xE2, 0x00, 0x00, 0xFF, 0x00, 0x3C, 0xFF, 0x08, 0x00, 0xFF, 0x00, 0xFA
+    .byte   0xFF, 0x08, 0x00, 0xFF, 0x00, 0xFA, 0xFF, 0x08, 0x00, 0xFF, 0x00, 0xFA, 0xFF, 0x06, 0x00, 0xFF
+    .byte   0x00, 0xFA, 0xFF, 0x08, 0xFA, 0xFF, 0xF8, 0xFA, 0xFF, 0x00, 0xFA, 0xFF, 0xFA, 0x00, 0xFF, 0x00
+    .byte   0xFA, 0xFF, 0xF8, 0x00, 0xFF, 0x00, 0xFA, 0xFF, 0xF8, 0x00, 0xFF, 0x00, 0xFA, 0xFF, 0xF8, 0x00
+    .byte   0x02
+.section .text
+
 @ --- MOUNTAIN_3D_DATA (1 path(s)) ---
     .balign 4
 .global _MOUNTAIN_3D_DATA
@@ -2454,6 +2367,17 @@ _PIPE_VECTORS:
 
 _PIPE_PATH0:
     .byte   100               @ intensity
+    .byte   0x14, 0xF5, 0x00, 0x00  @ y=20, x=-11, hdr
+    .byte   0x02            @ end marker
+
+_PIPE_PATH1:
+    .byte   127               @ intensity
+    .byte   0x19, 0xF7, 0x00, 0x00  @ y=25, x=-9, hdr
+    .byte   0xFF, 0x00, 0x14  @ line dy=0, dx=20
+    .byte   0x02            @ end marker
+
+_PIPE_PATH2:
+    .byte   100               @ intensity
     .byte   0xE7, 0xF7, 0x00, 0x00  @ y=-25, x=-9, hdr
     .byte   0xFF, 0x00, 0x14  @ line dy=0, dx=20
     .byte   0xFF, 0x32, 0x00  @ line dy=50, dx=0
@@ -2461,16 +2385,15 @@ _PIPE_PATH0:
     .byte   0xFF, 0xCE, 0x00  @ line dy=-50, dx=0
     .byte   0x02            @ end marker
 
-_PIPE_PATH1:
-    .byte   100               @ intensity
-    .byte   0x14, 0xF5, 0x00, 0x00  @ y=20, x=-11, hdr
-    .byte   0x02            @ end marker
-
-_PIPE_PATH2:
-    .byte   127               @ intensity
-    .byte   0x19, 0xF7, 0x00, 0x00  @ y=25, x=-9, hdr
-    .byte   0xFF, 0x00, 0x14  @ line dy=0, dx=20
-    .byte   0x02            @ end marker
+@ --- PIPE_VEC (libvpy position-independent .vec image) ---
+.section .rodata._PIPE_VEC,"a",%progbits
+    .balign 4
+.global _PIPE_VEC
+_PIPE_VEC:
+    .byte   0x03, 0x00, 0x64, 0x14, 0xF5, 0x00, 0x00, 0x02, 0x7F, 0x19, 0xF7, 0x00, 0x00, 0xFF, 0x00, 0x14
+    .byte   0x02, 0x64, 0xE7, 0xF7, 0x00, 0x00, 0xFF, 0x00, 0x14, 0xFF, 0x32, 0x00, 0xFF, 0x00, 0xEC, 0xFF
+    .byte   0xCE, 0x00, 0x02
+.section .text
 
 @ --- PIPE_3D_DATA (3 path(s)) ---
     .balign 4
@@ -2515,39 +2438,6 @@ _PLATFORM_VECTORS:
 
 _PLATFORM_PATH0:
     .byte   127               @ intensity
-    .byte   0xB5, 0xAF, 0x00, 0x00  @ y=-75, x=-81, hdr
-    .byte   0xFF, 0xFF, 0x50  @ line dy=-1, dx=80
-    .byte   0xFF, 0x07, 0x50  @ line dy=7, dx=80
-    .byte   0xFF, 0xF9, 0x00  @ line dy=-7, dx=0
-    .byte   0xFF, 0xFA, 0xAF  @ line dy=-6, dx=-81
-    .byte   0xFF, 0x01, 0xB1  @ line dy=1, dx=-79
-    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH1:
-    .byte   127               @ intensity
-    .byte   0xD4, 0xB1, 0x00, 0x00  @ y=-44, x=-79, hdr
-    .byte   0xFF, 0xFA, 0xFF  @ line dy=-6, dx=-1
-    .byte   0xFF, 0xFC, 0x4A  @ line dy=-4, dx=74
-    .byte   0xFF, 0xFC, 0x4B  @ line dy=-4, dx=75
-    .byte   0xFF, 0x06, 0x01  @ line dy=6, dx=1
-    .byte   0xFF, 0x04, 0xB6  @ line dy=4, dx=-74
-    .byte   0xFF, 0x04, 0xB5  @ line dy=4, dx=-75
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH2:
-    .byte   127               @ intensity
-    .byte   0xE6, 0xBB, 0x00, 0x00  @ y=-26, x=-69, hdr
-    .byte   0xFF, 0xF8, 0xFF  @ line dy=-8, dx=-1
-    .byte   0xFF, 0x05, 0x4B  @ line dy=5, dx=75
-    .byte   0xFF, 0x05, 0x4B  @ line dy=5, dx=75
-    .byte   0xFF, 0x07, 0x01  @ line dy=7, dx=1
-    .byte   0xFF, 0xFC, 0xB5  @ line dy=-4, dx=-75
-    .byte   0xFF, 0xFB, 0xB5  @ line dy=-5, dx=-75
-    .byte   0x02            @ end marker
-
-_PLATFORM_PATH3:
-    .byte   127               @ intensity
     .byte   0x01, 0x46, 0x00, 0x00  @ y=1, x=70, hdr
     .byte   0xFF, 0xF9, 0xFF  @ line dy=-7, dx=-1
     .byte   0xFF, 0x05, 0xB6  @ line dy=5, dx=-74
@@ -2557,18 +2447,15 @@ _PLATFORM_PATH3:
     .byte   0xFF, 0xFB, 0x4A  @ line dy=-5, dx=74
     .byte   0x02            @ end marker
 
-_PLATFORM_PATH4:
+_PLATFORM_PATH1:
     .byte   127               @ intensity
-    .byte   0x1E, 0xBB, 0x00, 0x00  @ y=30, x=-69, hdr
-    .byte   0xFF, 0xF7, 0xFF  @ line dy=-9, dx=-1
-    .byte   0xFF, 0x05, 0x4B  @ line dy=5, dx=75
-    .byte   0xFF, 0x05, 0x4C  @ line dy=5, dx=76
-    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
-    .byte   0xFF, 0xFC, 0xB5  @ line dy=-4, dx=-75
-    .byte   0xFF, 0xFB, 0xB5  @ line dy=-5, dx=-75
+    .byte   0x4C, 0xEE, 0x00, 0x00  @ y=76, x=-18, hdr
+    .byte   0xFF, 0x00, 0x25  @ line dy=0, dx=37
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0xFF, 0x00, 0xDA  @ line dy=0, dx=-38
     .byte   0x02            @ end marker
 
-_PLATFORM_PATH5:
+_PLATFORM_PATH2:
     .byte   127               @ intensity
     .byte   0x3A, 0xAF, 0x00, 0x00  @ y=58, x=-81, hdr
     .byte   0xFF, 0xFB, 0x00  @ line dy=-5, dx=0
@@ -2579,13 +2466,67 @@ _PLATFORM_PATH5:
     .byte   0xFF, 0x00, 0x97  @ line dy=0, dx=-105
     .byte   0x02            @ end marker
 
+_PLATFORM_PATH3:
+    .byte   127               @ intensity
+    .byte   0x1E, 0xBB, 0x00, 0x00  @ y=30, x=-69, hdr
+    .byte   0xFF, 0xF7, 0xFF  @ line dy=-9, dx=-1
+    .byte   0xFF, 0x05, 0x4B  @ line dy=5, dx=75
+    .byte   0xFF, 0x05, 0x4C  @ line dy=5, dx=76
+    .byte   0xFF, 0x08, 0x00  @ line dy=8, dx=0
+    .byte   0xFF, 0xFC, 0xB5  @ line dy=-4, dx=-75
+    .byte   0xFF, 0xFB, 0xB5  @ line dy=-5, dx=-75
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH4:
+    .byte   127               @ intensity
+    .byte   0xE6, 0xBB, 0x00, 0x00  @ y=-26, x=-69, hdr
+    .byte   0xFF, 0xF8, 0xFF  @ line dy=-8, dx=-1
+    .byte   0xFF, 0x05, 0x4B  @ line dy=5, dx=75
+    .byte   0xFF, 0x05, 0x4B  @ line dy=5, dx=75
+    .byte   0xFF, 0x07, 0x01  @ line dy=7, dx=1
+    .byte   0xFF, 0xFC, 0xB5  @ line dy=-4, dx=-75
+    .byte   0xFF, 0xFB, 0xB5  @ line dy=-5, dx=-75
+    .byte   0x02            @ end marker
+
+_PLATFORM_PATH5:
+    .byte   127               @ intensity
+    .byte   0xD4, 0xB1, 0x00, 0x00  @ y=-44, x=-79, hdr
+    .byte   0xFF, 0xFA, 0xFF  @ line dy=-6, dx=-1
+    .byte   0xFF, 0xFC, 0x4A  @ line dy=-4, dx=74
+    .byte   0xFF, 0xFC, 0x4B  @ line dy=-4, dx=75
+    .byte   0xFF, 0x06, 0x01  @ line dy=6, dx=1
+    .byte   0xFF, 0x04, 0xB6  @ line dy=4, dx=-74
+    .byte   0xFF, 0x04, 0xB5  @ line dy=4, dx=-75
+    .byte   0x02            @ end marker
+
 _PLATFORM_PATH6:
     .byte   127               @ intensity
-    .byte   0x52, 0xED, 0x00, 0x00  @ y=82, x=-19, hdr
-    .byte   0xFF, 0x00, 0x26  @ line dy=0, dx=38
-    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
-    .byte   0xFF, 0x00, 0xDB  @ line dy=0, dx=-37
+    .byte   0xB5, 0xAF, 0x00, 0x00  @ y=-75, x=-81, hdr
+    .byte   0xFF, 0xFF, 0x50  @ line dy=-1, dx=80
+    .byte   0xFF, 0x07, 0x50  @ line dy=7, dx=80
+    .byte   0xFF, 0xF9, 0x00  @ line dy=-7, dx=0
+    .byte   0xFF, 0xFA, 0xAF  @ line dy=-6, dx=-81
+    .byte   0xFF, 0x01, 0xB1  @ line dy=1, dx=-79
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
     .byte   0x02            @ end marker
+
+@ --- PLATFORM_VEC (libvpy position-independent .vec image) ---
+.section .rodata._PLATFORM_VEC,"a",%progbits
+    .balign 4
+.global _PLATFORM_VEC
+_PLATFORM_VEC:
+    .byte   0x07, 0x00, 0x7F, 0x01, 0x46, 0x00, 0x00, 0xFF, 0xF9, 0xFF, 0xFF, 0x05, 0xB6, 0xFF, 0x05, 0xB5
+    .byte   0xFF, 0x07, 0x02, 0xFF, 0xFB, 0x4A, 0xFF, 0xFB, 0x4A, 0x02, 0x7F, 0x4C, 0xEE, 0x00, 0x00, 0xFF
+    .byte   0x00, 0x25, 0xFF, 0x06, 0x00, 0xFF, 0x00, 0xDA, 0x02, 0x7F, 0x3A, 0xAF, 0x00, 0x00, 0xFF, 0xFB
+    .byte   0x00, 0xFF, 0xFF, 0x68, 0xFF, 0xFD, 0x2E, 0xFF, 0x06, 0x00, 0xFF, 0x03, 0xD3, 0xFF, 0x00, 0x97
+    .byte   0x02, 0x7F, 0x1E, 0xBB, 0x00, 0x00, 0xFF, 0xF7, 0xFF, 0xFF, 0x05, 0x4B, 0xFF, 0x05, 0x4C, 0xFF
+    .byte   0x08, 0x00, 0xFF, 0xFC, 0xB5, 0xFF, 0xFB, 0xB5, 0x02, 0x7F, 0xE6, 0xBB, 0x00, 0x00, 0xFF, 0xF8
+    .byte   0xFF, 0xFF, 0x05, 0x4B, 0xFF, 0x05, 0x4B, 0xFF, 0x07, 0x01, 0xFF, 0xFC, 0xB5, 0xFF, 0xFB, 0xB5
+    .byte   0x02, 0x7F, 0xD4, 0xB1, 0x00, 0x00, 0xFF, 0xFA, 0xFF, 0xFF, 0xFC, 0x4A, 0xFF, 0xFC, 0x4B, 0xFF
+    .byte   0x06, 0x01, 0xFF, 0x04, 0xB6, 0xFF, 0x04, 0xB5, 0x02, 0x7F, 0xB5, 0xAF, 0x00, 0x00, 0xFF, 0xFF
+    .byte   0x50, 0xFF, 0x07, 0x50, 0xFF, 0xF9, 0x00, 0xFF, 0xFA, 0xAF, 0xFF, 0x01, 0xB1, 0xFF, 0x06, 0x00
+    .byte   0x02
+.section .text
 
 @ --- PLATFORM_3D_DATA (7 path(s)) ---
     .balign 4
@@ -2686,6 +2627,20 @@ _QUESTION_BLOCK_VECTORS:
     .word   _QUESTION_BLOCK_PATH2      @ ptr path 2
 
 _QUESTION_BLOCK_PATH0:
+    .byte   100               @ intensity
+    .byte   0x00, 0x00, 0x00, 0x00  @ y=0, x=0, hdr
+    .byte   0xFF, 0x02, 0x04  @ line dy=2, dx=4
+    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0x02            @ end marker
+
+_QUESTION_BLOCK_PATH1:
+    .byte   100               @ intensity
+    .byte   0xFC, 0xFF, 0x00, 0x00  @ y=-4, x=-1, hdr
+    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
+    .byte   0x02            @ end marker
+
+_QUESTION_BLOCK_PATH2:
     .byte   120               @ intensity
     .byte   0xF8, 0xF8, 0x00, 0x00  @ y=-8, x=-8, hdr
     .byte   0xFF, 0x00, 0x10  @ line dy=0, dx=16
@@ -2694,19 +2649,15 @@ _QUESTION_BLOCK_PATH0:
     .byte   0xFF, 0xF0, 0x00  @ line dy=-16, dx=0
     .byte   0x02            @ end marker
 
-_QUESTION_BLOCK_PATH1:
-    .byte   100               @ intensity
-    .byte   0x04, 0xFD, 0x00, 0x00  @ y=4, x=-3, hdr
-    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
-    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
-    .byte   0xFF, 0xFE, 0xFC  @ line dy=-2, dx=-4
-    .byte   0x02            @ end marker
-
-_QUESTION_BLOCK_PATH2:
-    .byte   100               @ intensity
-    .byte   0xFC, 0xFF, 0x00, 0x00  @ y=-4, x=-1, hdr
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0x02            @ end marker
+@ --- QUESTION_BLOCK_VEC (libvpy position-independent .vec image) ---
+.section .rodata._QUESTION_BLOCK_VEC,"a",%progbits
+    .balign 4
+.global _QUESTION_BLOCK_VEC
+_QUESTION_BLOCK_VEC:
+    .byte   0x03, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x02, 0x04, 0xFF, 0x02, 0xFF, 0xFF, 0x00, 0xFA
+    .byte   0x02, 0x64, 0xFC, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x02, 0x02, 0x78, 0xF8, 0xF8, 0x00, 0x00, 0xFF
+    .byte   0x00, 0x10, 0xFF, 0x10, 0x00, 0xFF, 0x00, 0xF0, 0xFF, 0xF0, 0x00, 0x02
+.section .text
 
 @ --- QUESTION_BLOCK_3D_DATA (3 path(s)) ---
     .balign 4

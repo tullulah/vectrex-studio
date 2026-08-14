@@ -14,6 +14,11 @@
 const ALG_MAX_X      = 33000;
 const ALG_MAX_Y      = 41000;
 const VECTREX_COLORS = 128;
+// Floor for lit vectors injected via addSegmentDirect (RP2350 draw path). The AAE
+// ports can hand us colour 0 for genuinely-visible geometry (Speed Freak's HUD),
+// which would render pure black; a real drawn vector always lights, so clamp to a
+// small-but-visible grey. ~half the mid ccpu level (0x40) reads as a dim HUD.
+const DIRECT_MIN_INTENSITY = 32;
 const VECTOR_HASH    = 65521;
 const VECTOR_CNT     = (1500000 / 30) | 0; // VECTREX_MHZ / VECTREX_PDECAY
 
@@ -382,9 +387,16 @@ export class Beam {
    * coordinate system doesn't map cleanly through the VIA S&H model.
    */
   addSegmentDirect(x0: number, y0: number, x1: number, y1: number, color: number): void {
-    if (x0 !== x1 || y0 !== y1) {
-      this.addLine(x0, y0, x1, y1, color);
-    }
+    // A segment reaching this direct path IS a lit vector — beam-off repositioning
+    // goes through SYS_MOVE (svc #3), never here. But the AAE ports derive intensity
+    // from an abstracted "colour" that can floor to 0 for perfectly visible content
+    // (Speed Freak's whole TIME/SCORE HUD comes through at colour 0; on the real
+    // monochrome Cinematronics monitor every drawn vector lights uniformly). Colour
+    // 0 would render as a pure-black line → invisible AND it erases crossings. So
+    // clamp any lit vector to a minimum visible intensity instead of dropping it.
+    if (x0 === x1 && y0 === y1) return;            // zero-length: nothing to draw
+    if (color === 0) color = DIRECT_MIN_INTENSITY; // only pure-0 (→black) needs the floor
+    this.addLine(x0, y0, x1, y1, color);
   }
 
   /** VECTREX_COLORS constant exposed so Canvas can check sentinel value. */

@@ -40,6 +40,15 @@ void     v_WaitRecal(void);
 void     v_directDraw32(int32_t xStart, int32_t yStart,
                         int32_t xEnd,  int32_t yEnd, uint8_t brightness);
 
+/* Colour for subsequent draws, 0x00RRGGBB. 0 = the display's own default, which is what
+ * a monochrome Vectrex always uses and what every existing game gets for free.
+ *
+ * Kept because colour vector hardware is coming (Masteroids drives colour arcade
+ * monitors) and because a half-finished port needs its untraced RASTER art tellable
+ * apart. Vectors stay monochrome unless a port asks otherwise. Backends without colour
+ * ignore this. */
+void     v_setColour(uint32_t rgb);
+
 /* Input */
 uint8_t  v_readButtons(void);          /* also stores into currentButtonState */
 void     v_readJoystick1Analog(void);  /* stores into currentJoy1X / currentJoy1Y */
@@ -50,6 +59,14 @@ uint32_t v_millis(void);
 /* Audio — one AY-3-8910 register write. */
 void     v_setSoundAY(uint8_t reg, uint8_t val);   /* legacy name (some games use it) */
 void     v_writePSG(uint8_t reg, uint8_t val);     /* real PiTrex SDK name — libvpy uses this */
+
+/* Digitised-sample audio (e.g. AAE Sega-G80 arcade sound). A game with sampled
+ * SFX plays voice `voice` (a mixing channel) with sample bank index `idx`,
+ * `loop`=1 to repeat. The sim mixes voices in Web Audio; on RP2350 these are
+ * no-ops for now (HW needs a software mixer → PSG DAC stream). */
+void     v_playSample(int idx, int voice, int loop);
+void     v_stopSample(int voice);
+int      v_samplePlaying(int voice);
 
 #ifdef __cplusplus
 }
