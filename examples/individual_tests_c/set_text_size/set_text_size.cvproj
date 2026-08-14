@@ -1,0 +1,14 @@
+[project]
+name = "set_text_size"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["set_text_size_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["set_text_size_wasm"]
+module = "build_wasm/set_text_size.js"

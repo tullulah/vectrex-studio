@@ -1,0 +1,14 @@
+[project]
+name = "draw_move"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["draw_move_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["draw_move_wasm"]
+module = "build_wasm/draw_move.js"

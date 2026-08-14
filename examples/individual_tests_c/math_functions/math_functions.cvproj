@@ -1,0 +1,14 @@
+[project]
+name = "math_functions"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["math_functions_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["math_functions_wasm"]
+module = "build_wasm/math_functions.js"

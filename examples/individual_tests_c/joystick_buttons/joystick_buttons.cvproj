@@ -1,0 +1,14 @@
+[project]
+name = "joystick_buttons"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["joystick_buttons_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["joystick_buttons_wasm"]
+module = "build_wasm/joystick_buttons.js"

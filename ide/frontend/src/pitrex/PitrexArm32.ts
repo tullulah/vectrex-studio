@@ -112,15 +112,18 @@ function memWrite32(s: PitrexArm32State, addr: number, val: number): void {
   s.mem.set(addr & ~3, val | 0);
 }
 function memRead16(s: PitrexArm32State, addr: number): number {
-  const word  = memRead32(s, addr);
-  const shift = (addr & 2) * 8;
-  return (word >>> shift) & 0xFFFF;
+  // Byte-granular so UNALIGNED (odd-address) ldrh/ldrsh read the correct two
+  // bytes. gcc emits `ldrh [rn, #odd] @ unaligned` for libvpy's packed enemy
+  // image (u16 sprite-index fields at odd offsets); the old (addr&2)-shift form
+  // only handled 2-byte alignment and returned the wrong halfword at odd
+  // addresses (e.g. a wander walk_sprite_index read 0xFF00 instead of 0xFFFF,
+  // corrupting the drawn sprite).
+  return (memRead8(s, addr) | (memRead8(s, addr + 1) << 8)) & 0xFFFF;
 }
 function memWrite16(s: PitrexArm32State, addr: number, val: number): void {
-  const aligned = addr & ~3;
-  const shift   = (addr & 2) * 8;
-  const word    = memRead32(s, aligned);
-  memWrite32(s, aligned, (word & ~(0xFFFF << shift)) | ((val & 0xFFFF) << shift));
+  // Byte-granular so UNALIGNED strh writes the correct two bytes (see memRead16).
+  memWrite8(s, addr, val & 0xFF);
+  memWrite8(s, addr + 1, (val >>> 8) & 0xFF);
 }
 function memRead8(s: PitrexArm32State, addr: number): number {
   const word  = memRead32(s, addr);
@@ -222,8 +225,9 @@ function regIdx(s: string): number {
   if (t === 'sp')  return 13;
   if (t === 'lr')  return 14;
   if (t === 'pc')  return 15;
-  if (t === 'r12') return 12; // also called 'ip'
-  if (t === 'ip')  return 12;
+  if (t === 'r12' || t === 'ip') return 12; // r12 = intra-procedure scratch (ip)
+  if (t === 'r11' || t === 'fp') return 11; // r11 = frame pointer (fp) in gcc output
+  if (t === 'r10' || t === 'sl') return 10; // r10 = stack limit (sl)
   if (t.startsWith('r')) {
     const n = parseInt(t.slice(1), 10);
     if (!isNaN(n)) return n;
@@ -311,12 +315,38 @@ function parseMemOp(
     const inc = incStr.startsWith('0x') ? parseInt(incStr.slice(2), 16) : parseInt(incStr, 10);
     return { addr: getReg(s, rn), postIncReg: rn, postIncVal: inc };
   }
-  // Offset: "[r1, #8]"
-  const offMatch = tok.match(/^\[(\w+)\s*,\s*#(-?(?:0x[\da-fA-F]+|\d+))\]/);
+  // Offset: "[r1, #8]", with optional PRE-INDEX WRITEBACK "[r1, #8]!".
+  // Writeback: effective address = rn+imm AND rn is updated to rn+imm. gcc emits
+  // this for pointer-advance loops — libvpy's font renderer walks the glyph
+  // stream with `ldrsb r3, [r4, #3]!` and the string with `ldrb r3, [r7, #1]!`,
+  // and pushes with `str rX, [sp, #-4]!`. Reuse the post-inc machinery (applied
+  // to the OLD rn) so rn ends at rn+imm. Without the writeback the pointers never
+  // advance and font_draw_string spins forever (~2.4M segments/frame).
+  const offMatch = tok.match(/^\[(\w+)\s*,\s*#(-?(?:0x[\da-fA-F]+|\d+))\](!?)/);
   if (offMatch) {
     const rn  = regIdx(offMatch[1]);
     const off = offMatch[2].startsWith('0x') ? parseInt(offMatch[2].slice(2), 16) : parseInt(offMatch[2], 10);
-    return { addr: (getReg(s, rn) + off) | 0, postIncReg: -1, postIncVal: 0 };
+    const addr = (getReg(s, rn) + off) | 0;
+    if (offMatch[3] === '!') return { addr, postIncReg: rn, postIncVal: off };
+    return { addr, postIncReg: -1, postIncVal: 0 };
+  }
+  // Scaled register offset: "[r3, r2, lsl #1]" (also lsr/asr). gcc emits this
+  // for indexed byte/word array access (e.g. libvpy's music sequencer next-delay
+  // read `ldrb r3, [r3, r2, lsl #1]` and level/font table indexing). Must be
+  // tried BEFORE the plain register-offset case, whose regex would otherwise
+  // match the "[rn, rm" prefix and silently drop the shift.
+  const scaledMatch = tok.match(/^\[(\w+)\s*,\s*(\w+)\s*,\s*(lsl|lsr|asr)\s*#(\d+)\]/i);
+  if (scaledMatch) {
+    const rn = regIdx(scaledMatch[1]);
+    const rm = regIdx(scaledMatch[2]);
+    const shOp = scaledMatch[3].toLowerCase();
+    const shAmt = parseInt(scaledMatch[4], 10);
+    const rmVal = getReg(s, rm);
+    let idx: number;
+    if (shOp === 'lsl') idx = (rmVal << shAmt) | 0;
+    else if (shOp === 'lsr') idx = (rmVal >>> shAmt) | 0;
+    else idx = (rmVal >> shAmt) | 0;   // asr
+    return { addr: (getReg(s, rn) + idx) | 0, postIncReg: -1, postIncVal: 0 };
   }
   // Register offset: "[r4, r5]"
   const regOffMatch = tok.match(/^\[(\w+)\s*,\s*(\w+)\]/);
@@ -443,6 +473,33 @@ function resolveLdrLiteral(s: PitrexArm32State, operand: string): number {
 
   console.warn(`[PitrexArm32] unresolved ldr literal: ${inner}`);
   return 0;
+}
+
+/**
+ * Resolve a movw/movt operand to its 16-bit half-word value.
+ *
+ * gcc builds 32-bit constants and symbol addresses with a movw/movt pair:
+ *   movw rd, #imm16                 → low half is imm16
+ *   movt rd, #imm16                 → high half is imm16 (note: no `#` sometimes)
+ *   movw rd, #:lower16:SYMBOL       → low half is (addr(SYMBOL) & 0xFFFF)
+ *   movt rd, #:upper16:SYMBOL       → high half is ((addr(SYMBOL) >> 16) & 0xFFFF)
+ * This returns the already-extracted 16-bit half for whichever form is present,
+ * so the caller just places it in the low (movw) or high (movt) half of rd.
+ */
+function resolveMovHalf(s: PitrexArm32State, tokRaw: string): number {
+  const tok = tokRaw.trim().replace(/^#/, '');
+  const lower = tok.match(/^:lower16:(.+)$/);
+  if (lower) {
+    const v = resolveSymbol(lower[1].trim(), s.parsed);
+    return (v === null ? 0 : v) & 0xFFFF;
+  }
+  const upper = tok.match(/^:upper16:(.+)$/);
+  if (upper) {
+    const v = resolveSymbol(upper[1].trim(), s.parsed);
+    return ((v === null ? 0 : v) >>> 16) & 0xFFFF;
+  }
+  // Plain immediate (gcc writes movw with `#`, movt sometimes without).
+  return parseImm('#' + tok) & 0xFFFF;
 }
 
 // ---------------------------------------------------------------------------
@@ -818,6 +875,18 @@ function executeOne(s: PitrexArm32State): boolean {
       break;
 
     // ── MOV ─────────────────────────────────────────────────────────────
+    case 'clz': {
+      // Count leading zeros (32-bit). gcc emits `clz rd,rm; lsr rd,#5` as a
+      // branchless (rm==0)?1:0 (clz(0)=32→1, clz(nonzero)<32→0) — used by
+      // libvpy's enemy waypoint "reached" test. Without this case the op was a
+      // no-op, leaving garbage that spuriously flipped the reached flag at
+      // certain values (an early waypoint advance in vpy_update_enemies).
+      const rd = regIdx(operands[0] ?? '');
+      const rm = regIdx(operands[1] ?? '');
+      if (rd < 0 || rm < 0) break;
+      setReg(s, rd, Math.clz32(getReg(s, rm) >>> 0));
+      break;
+    }
     case 'mov': case 'movs': {
       const rd = regIdx(operands[0] ?? '');
       if (rd < 0) break;
@@ -850,6 +919,110 @@ function executeOne(s: PitrexArm32State): boolean {
       break;
     }
 
+    // ── MOVW (load 16-bit immediate / :lower16: of a symbol) ─────────────
+    case 'movw': {
+      const rd = regIdx(operands[0] ?? '');
+      if (rd < 0) break;
+      // movw clears the top 16 bits (rd = imm16 or lower16 of a symbol addr).
+      setReg(s, rd, resolveMovHalf(s, operands[1] ?? '#0'));
+      break;
+    }
+
+    // ── MOVT (set top 16 bits / :upper16: of a symbol) ──────────────────
+    case 'movt': {
+      const rd = regIdx(operands[0] ?? '');
+      if (rd < 0) break;
+      const hi = resolveMovHalf(s, operands[1] ?? '#0');
+      setReg(s, rd, ((getReg(s, rd) & 0xFFFF) | (hi << 16)) | 0);
+      break;
+    }
+
+    // ── SMULL / UMULL (32×32 → 64-bit multiply into RdLo:RdHi) ──────────
+    case 'smull': case 'umull': {
+      const rdLo = regIdx(operands[0] ?? '');
+      const rdHi = regIdx(operands[1] ?? '');
+      const rn   = regIdx(operands[2] ?? '');
+      const rm   = regIdx(operands[3] ?? '');
+      if (rdLo < 0 || rdHi < 0 || rn < 0 || rm < 0) break;
+      // BigInt gives an exact 64-bit product; signed vs unsigned differ only in
+      // how the 32-bit register values are reinterpreted before multiplying.
+      const a = op === 'smull' ? BigInt(getReg(s, rn)) : BigInt(getReg(s, rn) >>> 0);
+      const b = op === 'smull' ? BigInt(getReg(s, rm)) : BigInt(getReg(s, rm) >>> 0);
+      const prod = a * b;
+      setReg(s, rdLo, Number(prod & 0xFFFFFFFFn) | 0);
+      setReg(s, rdHi, Number((prod >> 32n) & 0xFFFFFFFFn) | 0);
+      break;
+    }
+
+    // ── MLS (multiply-subtract: rd = ra - rn*rm) ────────────────────────
+    case 'mls': {
+      const rd = regIdx(operands[0] ?? '');
+      const rn = regIdx(operands[1] ?? '');
+      const rm = regIdx(operands[2] ?? '');
+      const ra = regIdx(operands[3] ?? '');
+      if (rd < 0 || rn < 0 || rm < 0 || ra < 0) break;
+      setReg(s, rd, (getReg(s, ra) - Math.imul(getReg(s, rn), getReg(s, rm))) | 0);
+      break;
+    }
+
+    // ── UBFX (unsigned bitfield extract: rd = (rn >> lsb) & mask) ───────
+    case 'ubfx': {
+      const rd  = regIdx(operands[0] ?? '');
+      const rn  = regIdx(operands[1] ?? '');
+      if (rd < 0 || rn < 0) break;
+      const lsb   = parseImm(operands[2] ?? '#0') & 0x1F;
+      const width = parseImm(operands[3] ?? '#1') & 0x3F;
+      const mask  = width >= 32 ? 0xFFFFFFFF : ((1 << width) - 1);
+      setReg(s, rd, ((getReg(s, rn) >>> lsb) & mask) | 0);
+      break;
+    }
+
+    // ── SDIV / UDIV (hardware integer divide, armv8) ────────────────────
+    case 'sdiv': case 'udiv': {
+      const rd = regIdx(operands[0] ?? '');
+      const rn = regIdx(operands[1] ?? '');
+      const rm = regIdx(operands[2] ?? '');
+      if (rd < 0 || rn < 0 || rm < 0) break;
+      const divisor = getReg(s, rm);
+      if (divisor === 0) { setReg(s, rd, 0); break; }  // ARMv8: divide-by-zero → 0
+      if (op === 'sdiv') {
+        setReg(s, rd, Math.trunc(getReg(s, rn) / divisor) | 0);
+      } else {
+        setReg(s, rd, Math.floor((getReg(s, rn) >>> 0) / (divisor >>> 0)) | 0);
+      }
+      break;
+    }
+
+    // ── LDRD / STRD (load/store two consecutive registers) ──────────────
+    // Syntax used by gcc: "ldrd r2, [r4, #8]" → r2 = [addr], r3 = [addr+4]
+    // (the second register is implicitly Rt+1). The optional explicit-Rt2
+    // form "ldrd r2, r3, [r4, #8]" is handled by detecting a bare register in
+    // operands[1].
+    case 'ldrd': case 'strd': {
+      const rt = regIdx(operands[0] ?? '');
+      if (rt < 0) break;
+      let memTok = operands[1] ?? '';
+      let extra  = operands[2];
+      let rt2 = rt + 1;
+      if (!memTok.trim().startsWith('[')) {
+        // Explicit second register form.
+        const r2 = regIdx(memTok);
+        if (r2 >= 0) rt2 = r2;
+        memTok = operands[2] ?? '';
+        extra  = operands[3];
+      }
+      const { addr, postIncReg, postIncVal } = parseMemOp(s, memTok, extra);
+      if (op === 'ldrd') {
+        setReg(s, rt,  memRead32(s, addr));
+        setReg(s, rt2, memRead32(s, (addr + 4) | 0));
+      } else {
+        memWrite32(s, addr,        getReg(s, rt));
+        memWrite32(s, (addr + 4) | 0, getReg(s, rt2));
+      }
+      if (postIncReg >= 0) s.regs[postIncReg] = (s.regs[postIncReg] + postIncVal) | 0;
+      break;
+    }
+
     // ── LDR (various forms) ─────────────────────────────────────────────
     case 'ldr': case 'ldrs': {
       const rd   = regIdx(operands[0] ?? '');
@@ -857,11 +1030,17 @@ function executeOne(s: PitrexArm32State): boolean {
       const src  = (operands[1] ?? '').trim();
       if (src.startsWith('=')) {
         // Literal pool load
-        setReg(s, rd, resolveLdrLiteral(s, src));
+        const v = resolveLdrLiteral(s, src);
+        if (rd === 15) s.pc = v; else setReg(s, rd, v);
       } else if (src.startsWith('[')) {
         const { addr, postIncReg, postIncVal } = parseMemOp(s, src, operands[2]);
-        setReg(s, rd, memRead32(s, addr));
+        const v = memRead32(s, addr);
         if (postIncReg >= 0) s.regs[postIncReg] = (s.regs[postIncReg] + postIncVal) | 0;
+        // `ldr pc, [...]` is a branch/return: gcc emits it (e.g. vpy_rand_range's
+        // `ldr pc, [sp], #4`). The PC is s.pc, not regs[15], so it must be routed
+        // there — otherwise the return falls through into the next (dead)
+        // function and jumps to garbage (black screen, e.g. SnowBros ball launch).
+        if (rd === 15) s.pc = v; else setReg(s, rd, v);
       }
       break;
     }
@@ -1009,6 +1188,34 @@ function executeOne(s: PitrexArm32State): boolean {
       const mlaRes = (Math.imul(getReg(s, rn), getReg(s, rm)) + getReg(s, ra)) | 0;
       setReg(s, rd, mlaRes);
       if (op === 'mlas') setNZFlags(s, mlaRes);
+      break;
+    }
+    case 'smlabb': {
+      // smlabb rd, rn, rm, ra → rd = sext16(rn.lo) * sext16(rm.lo) + ra.
+      // gcc emits this for libvpy's wander area-snap cost (flag*1024 + base).
+      // Missing before, it was a no-op and the spawn snap silently broke.
+      const rd = regIdx(operands[0] ?? '');
+      const rn = regIdx(operands[1] ?? '');
+      const rm = regIdx(operands[2] ?? '');
+      const ra = regIdx(operands[3] ?? '');
+      if (rd < 0 || rn < 0 || rm < 0 || ra < 0) break;
+      const lo = (v: number) => (v << 16) >> 16;
+      setReg(s, rd, (Math.imul(lo(getReg(s, rn)), lo(getReg(s, rm))) + getReg(s, ra)) | 0);
+      break;
+    }
+    case 'ldm': case 'ldmia': {
+      // Load multiple, increment-after: r[list[0]] = [rn], next = [rn+4], …
+      // (ascending address / ascending register). Optional `!` writeback on rn.
+      // gcc emits `ldm sp, {r1, r3}` to reload stashed area-snap temporaries.
+      let baseTok = (operands[0] ?? '').trim();
+      const wb = baseTok.includes('!');
+      baseTok = baseTok.replace('!', '').trim();
+      const rn = regIdx(baseTok);
+      if (rn < 0) break;
+      const list = parseRegList(operands.slice(1).join(','));
+      let addr = getReg(s, rn);
+      for (const r of list) { setReg(s, r, memRead32(s, addr)); addr = (addr + 4) | 0; }
+      if (wb) setReg(s, rn, addr);
       break;
     }
 
@@ -1160,22 +1367,20 @@ function executeOne(s: PitrexArm32State): boolean {
       setReg(s, rd, ((v & 0xFF) << 24) >> 24);
       break;
     }
-
-    // ── LDMIA (load multiple, increment after) ───────────────────────────
-    case 'ldmia': {
-      // Syntax: ldmia Rn, {regs}  or  ldmia Rn!, {regs}  (! = writeback)
-      const base0 = operands[0] ?? '';
-      const writeback = base0.endsWith('!');
-      const bnStr = writeback ? base0.slice(0, -1) : base0;
-      const bn = regIdx(bnStr);
-      if (bn < 0) break;
-      const regList = parseRegList(operands[1] ?? '');
-      let addr = getReg(s, bn);
-      for (const r of regList) {
-        setReg(s, r, memRead32(s, addr));
-        addr += 4;
-      }
-      if (writeback) setReg(s, bn, addr);
+    // ── SXTAH / UXTAH (extend halfword and add) ──────────────────────────
+    // rd = rn + {sign,zero}_extend16(ror(rm, n)). gcc emits sxtah for the
+    // collision wall-boundary math (world_y_max = obj_y + mesh_y_max); a silent
+    // no-op here drops the rn addend and mis-gates walls (bridged LEVEL_COLLISION_X).
+    case 'sxtah':
+    case 'uxtah': {
+      const rd = regIdx(operands[0] ?? '');
+      if (rd < 0) break;
+      const rn = getReg(s, regIdx(operands[1] ?? ''));
+      let rm = getReg(s, regIdx(operands[2] ?? ''));
+      const rot = operands[3] ? (parseInt(String(operands[3]).replace(/[^0-9]/g, ''), 10) || 0) : 0;
+      if (rot) rm = ((rm >>> rot) | (rm << (32 - rot))) >>> 0;
+      const ext = op === 'sxtah' ? (((rm & 0xFFFF) << 16) >> 16) : (rm & 0xFFFF);
+      setReg(s, rd, (rn + ext) | 0);
       break;
     }
 
@@ -1267,6 +1472,19 @@ function executeOne(s: PitrexArm32State): boolean {
     // ── B (unconditional/conditional branch) ────────────────────────────
     case 'b': {
       const target = (operands[0] ?? '').trim();
+      // Tail call to an SDK builtin: gcc's tail-call optimisation emits a plain
+      // `b <fn>` (instead of `bl <fn>` + `bx lr`) for the last call in a leaf
+      // function — e.g. libvpy's vpy_draw_rect ends with `b v_directDraw32`.
+      // Run the stub, then return to the current LR: the callee's return is
+      // this function's return. Without this the branch fell through into the
+      // next function's code and corrupted execution (only the loop-based
+      // vpy_draw_circle/ellipse, whose last raw_line is not a tail call, worked).
+      const stub = SDK_STUBS[target];
+      if (stub) {
+        stub(s);
+        s.pc = s.regs[LR];
+        break;
+      }
       const idx    = resolveBranchTarget(s, target);
       if (idx !== null) {
         s.pc = idx;

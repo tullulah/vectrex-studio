@@ -1,0 +1,14 @@
+[project]
+name = "moving_vectors"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["moving_vectors_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["moving_vectors_wasm"]
+module = "build_wasm/moving_vectors.js"

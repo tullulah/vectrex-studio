@@ -1,0 +1,14 @@
+[project]
+name = "draw_rect"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["draw_rect_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["draw_rect_wasm"]
+module = "build_wasm/draw_rect.js"

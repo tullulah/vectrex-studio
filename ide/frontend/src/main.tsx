@@ -9,7 +9,7 @@ import './i18n.js';
 import './global.css';
 import { useTranslation } from 'react-i18next';
 // (import eliminado duplicado) 
-import { initLsp, lspClient } from './lspClient.js';
+import { initLsp, lspClient, getLspClient } from './lspClient.js';
 import { DockWorkspace } from './components/DockWorkspace.js';
 import { restoreEditorState, ensureEditorPersistence } from './state/editorPersistence.js';
 import { deriveBinaryName } from './utils/index.js';
@@ -29,6 +29,7 @@ import { SettingsPanel } from './components/panels/SettingsPanel.js';
 import { EpromProgrammerDialog } from './components/dialogs/EpromProgrammerDialog.js';
 import { useSettings } from './state/settingsStore.js';
 import { useEmulatorSettings } from './state/emulatorSettings.js';
+import { useEmulatorStore } from './state/emulatorStore.js';
 
 // Initialize store reference for cross-store access
 setEditorStoreRef(useEditorStore);
@@ -117,6 +118,27 @@ function App() {
       }
     };
     lspClient.onNotification(handler);
+  }, [setDiagnosticsBySource, documents]);
+
+  // Same, but for clangd (C/C++). Populates the Errors tab for C/C++ files so the
+  // panel reflects clangd diagnostics even when the editor isn't mounted.
+  useEffect(() => {
+    const handler = (method: string, params: any) => {
+      if (method !== 'textDocument/publishDiagnostics') return;
+      const { uri, diagnostics } = params || {};
+      if (!uri) return;
+      let decodedUri: string;
+      try { decodedUri = decodeURIComponent(uri); } catch { decodedUri = uri; }
+      const mapped = (diagnostics || []).map((d: any) => ({
+        message: d.message,
+        severity: (d.severity === 1 ? 'error' : d.severity === 2 ? 'warning' : 'info'),
+        line: d.range?.start?.line || 0,
+        column: d.range?.start?.character || 0
+      }));
+      try { setDiagnosticsBySource(decodedUri, 'clangd', mapped as any); }
+      catch (error) { logger.error('LSP', '[clangd] Error calling setDiagnosticsBySource:', error); }
+    };
+    getLspClient('clangd').onNotification(handler);
   }, [setDiagnosticsBySource, documents]);
 
   // Listen for compilation diagnostics from Electron backend (run://diagnostics)
@@ -428,7 +450,85 @@ function App() {
 
       const editorState = useEditorStore.getState();
       const projectState = useProjectStore.getState();
-    
+
+      // External C/C++ project: run its own build command (make, etc.) instead
+      // of the VPy compiler. Output streams over the same run://stdout/stderr
+      // channels the Build Output panel already subscribes to. Never load a
+      // .bin into the emulator or start the VPy debugger for these.
+      if (projectState.vpyProject?.isExternal) {
+        const manifestPath =
+          projectState.vpyProject.manifestPath || projectState.vpyProject.projectFile;
+        const projName = projectState.vpyProject.config.project.name;
+
+        // RP2350 binary preview: when the rp2350 target is selected (and not the
+        // "Build for SD" action), build the RAM-linked .bin and run the ACTUAL
+        // ARM machine code in Rp2350System (svc dispatcher) — not the WASM sim
+        // (which is the same C compiled natively against the host shim). The
+        // electron side pushes the .bin via emu://compiledBin; handleCompiledBin
+        // loads it. Clear the WASM sim module so its view doesn't overlay.
+        if (!forSd && buildTarget === 'rp2350') {
+          if (!electronAPI?.runBuildExternal) {
+            logger.error('Build', 'electronAPI.runBuildExternal not available');
+            return;
+          }
+          useEmulatorStore.getState().setSimModule(null);
+          logger.info('Build', `Building + previewing RP2350 binary: ${projName}`);
+          const pv = await electronAPI.runBuildExternal({ manifestPath, target: 'rp2350', preview: true });
+          if (pv?.error) logger.error('Build', 'RP2350 preview build failed:', pv.error, pv.detail || '');
+          return;
+        }
+
+        // Both Build (F7) and Build & Run (F5) build the [simulate] WASM module
+        // and run it in the emulator panel — consistent with every other target,
+        // where F7/F5 land the game in the emulator. The bare-metal hardware
+        // kernel is a separate action: "Build for SD" (forSd) below.
+        if (!forSd) {
+          if (!electronAPI?.runBuildSim) {
+            logger.error('Build', 'electronAPI.runBuildSim not available');
+            return;
+          }
+          logger.info('Build', `Building simulator for external project: ${projName}`);
+          const simResult = await electronAPI.runBuildSim({ manifestPath });
+          if (simResult?.ok && simResult.modulePath) {
+            logger.info('Build', 'Simulator module ready:', simResult.modulePath);
+            // Hand the module to the emulator panel (PitrexSimView loads it).
+            // setSimModule bumps a nonce so a rebuilt same-path module reloads.
+            useEmulatorStore.getState().setSimModule(simResult.modulePath);
+            return;
+          }
+          // No [simulate] target: fall through to the hardware build so Build
+          // still does something useful. Any other error surfaces.
+          if (simResult?.error && simResult.error !== 'no_simulate_target') {
+            logger.error('Build', 'Simulator build failed:', simResult.error, simResult.detail || '');
+            return;
+          }
+          logger.warn('Build', `No [simulate] target for ${projName} — building the hardware kernel instead.`);
+        }
+
+        if (!electronAPI?.runBuildExternal) {
+          logger.error('Build', 'electronAPI.runBuildExternal not available');
+          return;
+        }
+        // Route to the compiler for the SELECTED target (previously a C project
+        // always built pitrex). "Build for SD" (forSd) is always an rp2350 game
+        // (matches the VPy path); otherwise follow the selected target. rp2350 →
+        // the RAM-linked SD game + copy to the card; else → the pitrex kernel.
+        const extTarget: 'pitrex' | 'rp2350' = (forSd || buildTarget === 'rp2350') ? 'rp2350' : 'pitrex';
+        logger.info('Build', `Building external project (${extTarget}): ${projName}`);
+        const extResult = await electronAPI.runBuildExternal({
+          manifestPath,
+          target: extTarget,
+          deploy: extTarget === 'rp2350' ? !!rp2350SdPath : pitrexCopyToSD,
+          sdPath: extTarget === 'rp2350' ? rp2350SdPath : pitrexSdPath,
+        });
+        if (extResult?.error) {
+          logger.error('Build', 'External build failed:', extResult.error, extResult.detail || '');
+        } else {
+          logger.info('Build', 'External build complete:', extResult?.artifactPath || '');
+        }
+        return;
+      }
+
     // If we have a project, use project entry point
     let activeDoc;
     let buildFromProject = false;
@@ -699,7 +799,9 @@ def loop():
             logger.debug('File', 'Opening file with path:', path, 'normPath:', normPath, 'uri:', uri);
             openDocument({ uri, language: 'vpy', content, dirty: false, diagnostics: [], diskPath: path, mtime, lastSavedContent: content });
             // If already initialized, notify didOpen immediately; else init effect will do first doc.
-            try { if ((window as any)._lspInit) { lspClient.didOpen(uri, 'vpy', content); } } catch {}
+            // Only VPy files go to the VPy server here; C/C++ files are opened against
+            // clangd by MonacoEditorWrapper when their model binds.
+            try { if ((window as any)._lspInit && uri.toLowerCase().endsWith('.vpy')) { lspClient.didOpen(uri, 'vpy', content); } } catch {}
         });
         break; }
       case 'file.save': {
@@ -1088,6 +1190,36 @@ def loop():
         setShowNewProjectDialog(true);
         break;
       }
+      case 'project.importC': {
+        // Import & scaffold an external C/C++ project (.cvproj manifest), then
+        // load it as the active project via the same path used for .vpyproj.
+        const electronAPI: any = (window as any).electronAPI;
+        if (!electronAPI?.importCProject) {
+          logger.error('Project', 'electronAPI.importCProject not available');
+          break;
+        }
+        try {
+          const result = await electronAPI.importCProject();
+          if (result?.canceled) break;
+          if (result?.error) {
+            logger.error('Project', 'Import C/C++ project failed:', result.error);
+            break;
+          }
+          if (result?.ok && result.manifestPath) {
+            // openVpyProject detects config.project.type === 'c-external',
+            // sets isExternal on the store and adds it to recents.
+            const success = await openVpyProject(result.manifestPath);
+            if (success) {
+              logger.info('Project', 'Imported external C/C++ project:', result.manifestPath);
+            } else {
+              logger.error('Project', 'Failed to load imported manifest:', result.manifestPath);
+            }
+          }
+        } catch (e: any) {
+          logger.error('Project', 'Import C/C++ project error:', e?.message || e);
+        }
+        break;
+      }
       case 'project.open': {
         const projectAPI = (window as any).project;
         if (!projectAPI) {
@@ -1394,6 +1526,16 @@ def loop():
     return () => window.removeEventListener('keydown', handler, { capture: true } as any);
   }, [commandExec]);
 
+  // F5 on an external C/C++ project routes here (via EmulatorPanel) → Build & Run
+  // the WASM simulator instead of continuing the 6809 emulator.
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === 'vpy-run-external') handleBuild(true);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [handleBuild]);
+
   // Listen for vpy-command events from WelcomeView and other components
   useEffect(() => {
     const handler = (e: CustomEvent) => {
@@ -1453,7 +1595,12 @@ def loop():
     if (!(window as any).electronAPI) return; // no backend in web build
     if ((window as any)._lspInit) return;
     if (documents.length === 0) return;
-    const first = documents[0];
+    // Initialize the VPy server against the first .vpy document. C/C++ files are
+    // handled separately by clangd (started lazily in MonacoEditorWrapper), so
+    // never hand one to the VPy server. If only non-VPy files are open yet, wait
+    // until a .vpy document appears (this effect re-runs on documents.length).
+    const first = documents.find(d => d.uri.toLowerCase().endsWith('.vpy'));
+    if (!first) return;
     (async () => {
       try {
         await initLsp(i18n.language || 'en', first.uri, first.content);
@@ -1488,6 +1635,7 @@ def loop():
             </SubMenu>
             <SubMenu label={t('file.open', 'Open')}>
               <MenuItem label={`${t('project.open', 'Project...')}	Ctrl+Shift+O`} onClick={()=>{ commandExec('project.open'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('project.importC', 'Import C/C++ Project…')}`} onClick={()=>{ commandExec('project.importC'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.openFile', 'File...')}	Ctrl+O`} onClick={()=>{ commandExec('file.open'); setOpenMenu(null); }} />
             </SubMenu>
             <MenuSeparator />

@@ -123,7 +123,10 @@ interface LspChild {
   proc: ReturnType<typeof spawn>;
   stdin: NodeJS.WritableStream;
 }
-let lsp: LspChild | null = null;
+// Multiple concurrent language servers keyed by a serverId ('vpy', 'clangd', …).
+// Each speaks LSP over stdio with Content-Length framing; messages are tagged
+// with the serverId so the renderer can route them to the right client.
+const lspServers = new Map<string, LspChild>();
 
 // macOS auto-injects Writing Tools / AutoFill / Dictation / Emoji items into any
 // menu labeled "Edit". Suppress them via NSUserDefaults so AppKit skips the injection
@@ -185,6 +188,7 @@ async function createWindow() {
             label: 'Open',
             submenu: [
               { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow?.webContents.send('command', 'project.open') },
+              { label: 'Import C/C++ Project...', click: () => mainWindow?.webContents.send('command', 'project.importC') },
               { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('command', 'file.open') }
             ]
           },
@@ -589,10 +593,36 @@ function resolveLspPath(): string | null {
   }
   if (!lspPathWarned) {
     lspPathWarned = true;
-    mainWindow?.webContents.send('lsp://stderr', `[LSP] CWD=${cwd}`);
-    mainWindow?.webContents.send('lsp://stderr', `LSP binary not found. Tried paths:\n${candidates.join('\n')}\nCompile with: cargo build -p vectrex_lang --bin vpy_lsp`);
+    mainWindow?.webContents.send('lsp://stderr', { serverId: 'vpy', line: `[LSP] CWD=${cwd}` });
+    mainWindow?.webContents.send('lsp://stderr', { serverId: 'vpy', line: `LSP binary not found. Tried paths:\n${candidates.join('\n')}\nCompile with: cargo build -p vectrex_lang --bin vpy_lsp` });
   }
   return null;
+}
+
+// Locate clangd (C/C++ IntelliSense). Prefer $CLANGD, then a bundled copy, then
+// common system locations; finally fall back to bare 'clangd' resolved via PATH.
+function resolveClangd(): string {
+  const exe = process.platform === 'win32' ? 'clangd.exe' : 'clangd';
+  const candidates = [
+    process.env.CLANGD || '',
+    join(process.resourcesPath, exe),
+    '/usr/bin/clangd',
+    '/usr/local/bin/clangd',
+    '/opt/homebrew/bin/clangd',
+    '/Library/Developer/CommandLineTools/usr/bin/clangd',
+  ].filter(Boolean);
+  for (const p of candidates) { try { if (existsSync(p)) return p; } catch {} }
+  return exe; // rely on PATH
+}
+
+// Resolve the command + args for a given language server id.
+function resolveServerCommand(serverId: string): { cmd: string; args: string[] } | null {
+  if (serverId === 'clangd') {
+    return { cmd: resolveClangd(), args: ['--background-index', '--clang-tidy=false', '--header-insertion=never'] };
+  }
+  // default: the VPy language server
+  const p = resolveLspPath();
+  return p ? { cmd: p, args: [] } : null;
 }
 
 // Enumerate .vpy and .asm under examples/ and working directory (non-recursive + shallow recursive examples)
@@ -644,6 +674,7 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
           label: 'Open',
           submenu: [
             { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow?.webContents.send('command', 'project.open') },
+            { label: 'Import C/C++ Project...', click: () => mainWindow?.webContents.send('command', 'project.importC') },
             { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('command', 'file.open') }
           ]
         },
@@ -773,19 +804,32 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
   return { ok:true, sources: uniq.slice(0, limit) };
 });
 
-ipcMain.handle('lsp_start', async () => {
+// Start a language server. serverId selects the binary ('vpy' | 'clangd'); cwd
+// should be the project root (clangd discovers compile_flags.txt / compile_commands.json
+// there). Messages are emitted on 'lsp://message' as { serverId, body }.
+ipcMain.handle('lsp_start', async (_e, args?: { serverId?: string; cwd?: string }) => {
   const verbose = process.env.VPY_IDE_VERBOSE_LSP === '1';
-  if (lsp) return;
-  if (verbose) console.log('[LSP] start request');
-  const path = resolveLspPath();
-  if (!path) return; // mensaje detallado ya emitido en resolveLspPath (una sola vez)
-  if (verbose) console.log('[LSP] spawning', path);
-  const child = spawn(path, [], { stdio: ['pipe', 'pipe', 'pipe'] });
-  lsp = { proc: child, stdin: child.stdin! };
+  const serverId = args?.serverId || 'vpy';
+  if (lspServers.has(serverId)) return { ok: true, already: true };
+  const resolved = resolveServerCommand(serverId);
+  if (!resolved) {
+    mainWindow?.webContents.send('lsp://stderr', { serverId, line: `[LSP:${serverId}] server binary not found` });
+    return { ok: false, error: 'binary_not_found' };
+  }
+  if (verbose) console.log(`[LSP:${serverId}] spawning`, resolved.cmd, resolved.args, 'cwd=', args?.cwd);
+  let child;
+  try {
+    child = spawn(resolved.cmd, resolved.args, { stdio: ['pipe', 'pipe', 'pipe'], cwd: args?.cwd || undefined, env: process.env });
+  } catch (e: any) {
+    mainWindow?.webContents.send('lsp://stderr', { serverId, line: `[LSP:${serverId}] spawn failed: ${e?.message || e}` });
+    return { ok: false, error: 'spawn_failed' };
+  }
+  const entry: LspChild = { proc: child, stdin: child.stdin! };
+  lspServers.set(serverId, entry);
 
   let buffer = '';
   let expected: number | null = null;
-  child.stdout.on('data', (chunk: Buffer) => {
+  child.stdout!.on('data', (chunk: Buffer) => {
     buffer += chunk.toString('utf8');
     while (true) {
       if (expected === null) {
@@ -793,10 +837,7 @@ ipcMain.handle('lsp_start', async () => {
         if (headerEnd === -1) break;
         const header = buffer.slice(0, headerEnd);
         const match = /Content-Length: *([0-9]+)/i.exec(header);
-        if (!match) {
-          buffer = buffer.slice(headerEnd + 4);
-          continue;
-        }
+        if (!match) { buffer = buffer.slice(headerEnd + 4); continue; }
         expected = parseInt(match[1], 10);
         buffer = buffer.slice(headerEnd + 4);
       }
@@ -804,30 +845,41 @@ ipcMain.handle('lsp_start', async () => {
         const body = buffer.slice(0, expected);
         buffer = buffer.slice(expected);
         expected = null;
-        mainWindow?.webContents.send('lsp://message', body);
-        mainWindow?.webContents.send('lsp://stdout', body);
-        if (verbose) console.log('[LSP<-] message len', body.length);
+        mainWindow?.webContents.send('lsp://message', { serverId, body });
         continue;
       }
       break;
     }
   });
 
-  const rlErr = createInterface({ input: child.stderr });
-  rlErr.on('line', line => mainWindow?.webContents.send('lsp://stderr', line));
+  const rlErr = createInterface({ input: child.stderr! });
+  rlErr.on('line', line => mainWindow?.webContents.send('lsp://stderr', { serverId, line }));
   child.on('exit', code => {
-    mainWindow?.webContents.send('lsp://stderr', `[LSP exited ${code}]`);
-    if (verbose) console.log('[LSP] exited', code);
-    lsp = null;
+    mainWindow?.webContents.send('lsp://stderr', { serverId, line: `[LSP:${serverId} exited ${code}]` });
+    if (verbose) console.log(`[LSP:${serverId}] exited`, code);
+    lspServers.delete(serverId);
   });
+  return { ok: true };
 });
 
-ipcMain.handle('lsp_send', async (_e, payload: string) => {
-  if (!lsp) return;
+// Send a framed LSP message to a server. Accepts { serverId, payload } or a bare
+// string (back-compat → the default 'vpy' server).
+ipcMain.handle('lsp_send', async (_e, args: { serverId?: string; payload: string } | string) => {
+  const serverId = typeof args === 'string' ? 'vpy' : (args?.serverId || 'vpy');
+  const payload = typeof args === 'string' ? args : args?.payload;
+  const entry = lspServers.get(serverId);
+  if (!entry || typeof payload !== 'string') return;
   const bytes = Buffer.from(payload, 'utf8');
-  const header = `Content-Length: ${bytes.length}\r\n\r\n`;
-  lsp.stdin.write(header);
-  lsp.stdin.write(bytes);
+  entry.stdin.write(`Content-Length: ${bytes.length}\r\n\r\n`);
+  entry.stdin.write(bytes);
+});
+
+// Stop a language server (e.g. when closing a project).
+ipcMain.handle('lsp_stop', async (_e, args?: { serverId?: string }) => {
+  const serverId = args?.serverId || 'vpy';
+  const entry = lspServers.get(serverId);
+  if (entry) { try { entry.proc.kill(); } catch {} lspServers.delete(serverId); }
+  return { ok: true };
 });
 
 // MCP Server handler - Handle JSON-RPC requests from AI agents
@@ -1010,7 +1062,7 @@ function parseCompilerDiagnostics(output: string, sourceFile: string): Array<{ f
 }
 
 
-async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserWindow | null): Promise<void> {
+async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserWindow | null, extraFiles: string[] = []): Promise<void> {
   const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
   const sdBundlePath = join(resourcesDir, 'pitrex-sd');
 
@@ -1060,12 +1112,24 @@ async function copyPitrexToSDCard(imgPath: string, sdPath: string, win: BrowserW
   const kernelDst = join(sdMount, 'kernel7l.img');
   try {
     await fs.copyFile(imgPath, kernelDst);
-    win?.webContents.send('run://stdout', `[SD]   + kernel7.img\n`);
-    win?.webContents.send('run://status', `Copied to SD: ${sdMount}`);
-    win?.webContents.send('run://stdout', `[SD] Done.\n`);
+    win?.webContents.send('run://stdout', `[SD]   + kernel7l.img\n`);
   } catch (e: any) {
-    win?.webContents.send('run://stderr', `[SD] Failed to copy kernel7.img: ${e.message}\n`);
+    win?.webContents.send('run://stderr', `[SD] Failed to copy kernel7l.img: ${e.message}\n`);
+    return;
   }
+
+  // Extra payload files (e.g. a DOOM .wad) copied to the SD root by basename.
+  for (const extra of extraFiles) {
+    try {
+      await fs.copyFile(extra, join(sdMount, basename(extra)));
+      win?.webContents.send('run://stdout', `[SD]   + ${basename(extra)}\n`);
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[SD] Failed to copy ${basename(extra)}: ${e.message}\n`);
+    }
+  }
+
+  win?.webContents.send('run://status', `Copied to SD: ${sdMount}`);
+  win?.webContents.send('run://stdout', `[SD] Done.\n`);
 }
 
 async function copyUvm2ToSDCard(um2Path: string, sdPath: string, win: BrowserWindow | null): Promise<void> {
@@ -1112,26 +1176,33 @@ async function copyUvm2ToSDCard(um2Path: string, sdPath: string, win: BrowserWin
 
 // Run a subprocess and stream its stdout/stderr to the build/run output panel.
 // Resolves with the numeric exit code (or -1 if the process failed to spawn).
+//
+// `opts.label` prefixes the streamed lines (default 'RP2350'); `opts.env`
+// overrides the child environment (default the IDE's own env). Both let the
+// generic external-build path (C/C++ projects) reuse this without inheriting
+// the RP2350-flavoured logging.
 function runFlashCommand(
   cmd: string,
   cmdArgs: string[],
   cwd: string | undefined,
   win: BrowserWindow | null,
+  opts?: { env?: NodeJS.ProcessEnv; label?: string },
 ): Promise<number> {
+  const label = opts?.label ?? 'RP2350';
   return new Promise((resolve) => {
-    win?.webContents.send('run://stdout', `[RP2350] $ ${cmd} ${cmdArgs.join(' ')}\n`);
+    win?.webContents.send('run://stdout', `[${label}] $ ${cmd} ${cmdArgs.join(' ')}\n`);
     let child;
     try {
-      child = spawn(cmd, cmdArgs, { cwd, env: process.env });
+      child = spawn(cmd, cmdArgs, { cwd, env: opts?.env ?? process.env });
     } catch (e: any) {
-      win?.webContents.send('run://stderr', `[RP2350] Failed to spawn ${cmd}: ${e?.message || e}\n`);
+      win?.webContents.send('run://stderr', `[${label}] Failed to spawn ${cmd}: ${e?.message || e}\n`);
       resolve(-1);
       return;
     }
     child.stdout?.on('data', (d) => win?.webContents.send('run://stdout', d.toString()));
     child.stderr?.on('data', (d) => win?.webContents.send('run://stderr', d.toString()));
     child.on('error', (err) => {
-      win?.webContents.send('run://stderr', `[RP2350] ${cmd} error: ${err.message}\n`);
+      win?.webContents.send('run://stderr', `[${label}] ${cmd} error: ${err.message}\n`);
       resolve(-1);
     });
     child.on('close', (code) => resolve(code ?? -1));
@@ -1302,6 +1373,227 @@ async function flashRp2350(
     win?.webContents.send('run://status', 'RP2350 flashed via USB');
     return;
   }
+}
+
+// ---------------------------------------------------------------------------
+// External C/C++ projects (imported, built by their own make/cmake toolchain)
+// ---------------------------------------------------------------------------
+//
+// Unlike VPy projects (compiled by vpy_cli), an external project is described
+// by a `.cvproj` TOML manifest at its root and built by running its own build
+// command. For the `pitrex` target the produced bare-metal kernel image is
+// deployed to the SD card via the same copyPitrexToSDCard() path a VPy pitrex
+// build uses — same artifact (`kernel7l.img`), same SD bundle.
+interface ExternalProjectManifest {
+  project: { name: string; type: string; target?: 'pitrex' | 'rp2350' };
+  build: { command: string; args?: string[]; artifact: string; deploy_extra?: string[] };
+  // Per-hardware-target build overrides. When the IDE builds for a selected
+  // target (e.g. rp2350), these replace the default [build] command/args/
+  // artifact so a C project uses the CORRECT compiler per target instead of
+  // always the pitrex one. Declared in the .cvproj as `[targets.rp2350]` etc.
+  targets?: Record<string, { command?: string; args?: string[]; artifact?: string; deploy_extra?: string[] }>;
+  // Optional simulator build: compiles the project to a WASM module (via
+  // emscripten) that runs in the IDE emulator panel against the host SDK shim.
+  // `module` is the emitted MODULARIZE loader (.js) with sibling .wasm/.data.
+  simulate?: { command: string; args?: string[]; module: string };
+  toolchain?: { path?: string };
+  env?: Record<string, string>;
+}
+
+// Resolve the emscripten bin dir (contains emcc) for the sim build. Checks
+// $EMSDK and the conventional ~/emsdk layout; returns null to fall back to PATH.
+function resolveEmscriptenDir(): string | null {
+  const candidates: string[] = [];
+  if (process.env.EMSDK) candidates.push(join(process.env.EMSDK, 'upstream', 'emscripten'));
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  if (home) candidates.push(join(home, 'emsdk', 'upstream', 'emscripten'));
+  for (const c of candidates) {
+    try { require('fs').accessSync(join(c, process.platform === 'win32' ? 'emcc.bat' : 'emcc')); return c; } catch {}
+  }
+  return null;
+}
+
+function isExternalManifest(parsed: any): parsed is ExternalProjectManifest {
+  return parsed?.project?.type === 'c-external'
+    && typeof parsed?.build?.command === 'string'
+    && typeof parsed?.build?.artifact === 'string';
+}
+
+// Build (and optionally deploy) an imported external C/C++ project.
+// Returns { ok, artifactPath } on success or { error } on failure.
+export async function executeExternalBuild(args: {
+  manifestPath: string;
+  deploy?: boolean;
+  sdPath?: string;
+  target?: 'pitrex' | 'rp2350';
+  preview?: boolean;   // rp2350: after building, push the .bin to the emulator panel
+}): Promise<{ ok: true; artifactPath: string } | { error: string; detail?: string }> {
+  const win = mainWindow ?? null;
+  const { manifestPath, deploy = false, sdPath = '', target, preview = false } = args || ({} as any);
+
+  let manifest: ExternalProjectManifest;
+  let rootDir: string;
+  try {
+    const content = await fs.readFile(manifestPath, 'utf-8');
+    const toml = await import('toml');
+    const parsed = toml.parse(content);
+    if (!isExternalManifest(parsed)) {
+      win?.webContents.send('run://stderr', `[C] Not a valid c-external manifest: ${manifestPath}\n`);
+      return { error: 'invalid_manifest' };
+    }
+    manifest = parsed;
+    rootDir = join(manifestPath, '..');
+  } catch (e: any) {
+    win?.webContents.send('run://stderr', `[C] Failed to read manifest: ${e?.message || e}\n`);
+    return { error: 'manifest_read_failed', detail: e?.message };
+  }
+
+  // Compose the child env: IDE env + optional toolchain PATH prefix + overrides.
+  const env: NodeJS.ProcessEnv = { ...process.env, ...(manifest.env || {}) };
+  if (manifest.toolchain?.path) {
+    env.PATH = `${manifest.toolchain.path}${require('path').delimiter}${env.PATH || ''}`;
+  }
+
+  // Pick the build recipe for the selected hardware target. Default = the
+  // [build] table (pitrex, back-compat); a [targets.<target>] table overrides
+  // command/args/artifact so each target uses its OWN compiler/make target
+  // (previously ANY target for a C project ran the pitrex build).
+  const effectiveTarget = target || manifest.project.target || 'pitrex';
+  const override = manifest.targets?.[effectiveTarget] || {};
+  const buildCommand  = override.command  ?? manifest.build.command;
+  const buildArgs     = override.args     ?? manifest.build.args ?? [];
+  const buildArtifact = override.artifact ?? manifest.build.artifact;
+
+  win?.webContents.send('run://status', `Building ${manifest.project.name} (${effectiveTarget})...`);
+  const code = await runFlashCommand(buildCommand, buildArgs, rootDir, win, { env, label: 'C' });
+  if (code !== 0) {
+    win?.webContents.send('run://stderr', `[C] Build failed (exit ${code}).\n`);
+    win?.webContents.send('run://status', `Build failed: ${manifest.project.name}`);
+    return { error: 'build_failed' };
+  }
+
+  // Resolve the artifact relative to the project root.
+  const artifactPath = join(rootDir, buildArtifact);
+  try {
+    await fs.access(artifactPath);
+  } catch {
+    win?.webContents.send('run://stderr', `[C] Build reported success but artifact not found: ${artifactPath}\n`);
+    return { error: 'artifact_not_found', detail: artifactPath };
+  }
+  win?.webContents.send('run://stdout', `[C] Built: ${artifactPath}\n`);
+  win?.webContents.send('run://status', `Built ${manifest.project.name}`);
+
+  // Preview the RP2350 binary in the emulator panel: push the RAM-linked .bin
+  // to the renderer via the SAME `emu://compiledBin` event the VPy path uses.
+  // handleCompiledBin routes target=rp2350 to Rp2350System, and jsvecxCore
+  // loadArm detects the RAM-linked 'VPy2' entry (0x2004xxxx) → initRamGame → the
+  // svc dispatcher. So the actual RP2350 machine code runs in-panel (vs the WASM
+  // sim, which is the same C compiled natively against the host shim).
+  if (preview && effectiveTarget === 'rp2350') {
+    try {
+      const buf = await fs.readFile(artifactPath);
+      win?.webContents.send('emu://compiledBin', {
+        base64: buf.toString('base64'),
+        size: buf.length,
+        binPath: artifactPath,
+        target: 'rp2350',
+        elfBase64: null,
+      });
+      win?.webContents.send('run://status', `Previewing RP2350 binary: ${manifest.project.name}`);
+    } catch (e: any) {
+      win?.webContents.send('run://stderr', `[C] rp2350 preview: could not read ${artifactPath}: ${e?.message || e}\n`);
+    }
+  }
+
+  // Deploy: pitrex → SD (kernel image, reusing the VPy pitrex path); rp2350 →
+  // copy the RAM-linked game .bin onto the SD card so the cart launcher lists +
+  // launches it (same as the VPy "Build for SD"). The launcher lists `.BIN`
+  // files, so strip the internal `_sd` suffix for the on-card name.
+  if (deploy) {
+    if (effectiveTarget === 'pitrex') {
+      const extra = ((override.deploy_extra ?? manifest.build.deploy_extra) || []).map((f) => join(rootDir, f));
+      await copyPitrexToSDCard(artifactPath, sdPath, win, extra);
+    } else if (effectiveTarget === 'rp2350') {
+      if (!sdPath) {
+        win?.webContents.send('run://stderr', `[C] rp2350 deploy: no SD path set — copy ${basename(artifactPath)} to the card manually.\n`);
+      } else {
+        const sdName = basename(artifactPath).replace(/_sd\.bin$/i, '.bin');
+        try {
+          await fs.copyFile(artifactPath, join(sdPath, sdName));
+          win?.webContents.send('run://stdout', `[C] Copied ${sdName} to SD card (${sdPath}).\n`);
+        } catch (e: any) {
+          win?.webContents.send('run://stderr', `[C] rp2350 SD copy failed: ${e?.message || e}\n`);
+        }
+      }
+    } else {
+      win?.webContents.send('run://stderr', `[C] Deploy not supported for target=${effectiveTarget}.\n`);
+    }
+  }
+
+  return { ok: true, artifactPath };
+}
+
+// Build the simulator (WASM) module for an external project so it can run in
+// the IDE emulator panel. Injects the host SDK shim (PITREX_SIM_SDK) + emcc on
+// PATH; the project's declared [simulate] command links its C against the shim.
+// Returns { ok, modulePath } — the emitted MODULARIZE .js (with sibling
+// .wasm/.data) — or { error }.
+export async function executeSimBuild(args: {
+  manifestPath: string;
+}): Promise<{ ok: true; modulePath: string } | { error: string; detail?: string }> {
+  const win = mainWindow ?? null;
+  const { manifestPath } = args || ({} as any);
+
+  let manifest: ExternalProjectManifest;
+  let rootDir: string;
+  try {
+    const content = await fs.readFile(manifestPath, 'utf-8');
+    const toml = await import('toml');
+    const parsed = toml.parse(content);
+    if (!isExternalManifest(parsed)) return { error: 'invalid_manifest' };
+    manifest = parsed;
+    rootDir = join(manifestPath, '..');
+  } catch (e: any) {
+    win?.webContents.send('run://stderr', `[SIM] Failed to read manifest: ${e?.message || e}\n`);
+    return { error: 'manifest_read_failed', detail: e?.message };
+  }
+
+  if (!manifest.simulate?.command || !manifest.simulate?.module) {
+    win?.webContents.send('run://stderr', `[SIM] No [simulate] section in manifest — nothing to run in the panel.\n`);
+    return { error: 'no_simulate_target' };
+  }
+
+  // Host SDK shim + the C VPy runtime ship in the app resources.
+  const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
+  const shimDir = join(resourcesDir, 'pitrex-sim');
+  const vpyCDir = join(resourcesDir, 'vpy-c');
+
+  const env: NodeJS.ProcessEnv = { ...process.env, ...(manifest.env || {}), PITREX_SIM_SDK: shimDir, VPY_C_SDK: vpyCDir };
+  const emDir = resolveEmscriptenDir();
+  if (emDir) {
+    env.PATH = `${emDir}${require('path').delimiter}${env.PATH || ''}`;
+  } else {
+    win?.webContents.send('run://stdout', `[SIM] emscripten not found in $EMSDK or ~/emsdk — relying on emcc being on PATH.\n`);
+  }
+
+  win?.webContents.send('run://status', `Building simulator: ${manifest.project.name}...`);
+  const code = await runFlashCommand(manifest.simulate.command, manifest.simulate.args || [], rootDir, win, { env, label: 'SIM' });
+  if (code !== 0) {
+    win?.webContents.send('run://stderr', `[SIM] Simulator build failed (exit ${code}).\n`);
+    win?.webContents.send('run://status', `Simulator build failed: ${manifest.project.name}`);
+    return { error: 'sim_build_failed' };
+  }
+
+  const modulePath = join(rootDir, manifest.simulate.module);
+  try {
+    await fs.access(modulePath);
+  } catch {
+    win?.webContents.send('run://stderr', `[SIM] Build succeeded but module not found: ${modulePath}\n`);
+    return { error: 'module_not_found', detail: modulePath };
+  }
+  win?.webContents.send('run://stdout', `[SIM] Built simulator module: ${modulePath}\n`);
+  win?.webContents.send('run://status', `Simulator ready: ${manifest.project.name}`);
+  return { ok: true, modulePath };
 }
 
 // Exported function for direct invocation (e.g. from MCP server)
@@ -1525,44 +1817,51 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
       // Use finalBinPath which accounts for project output path
       const binPath = finalBinPath;
       
-      // Phase 1: Check if ASM was generated
-      mainWindow?.webContents.send('run://status', `✓ Compilation Phase 1: Checking ASM generation...`);
-      try {
-        const asmExists = await fs.access(outAsm).then(() => true).catch(() => false);
-        if (!asmExists) {
-          mainWindow?.webContents.send('run://stderr', `ERROR: ASM file not generated: ${outAsm}`);
-          mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: ASM generation failed`);
-          
-          // Parse semantic errors from stdout/stderr even when ASM is not generated
-          const allOutput = stdoutBuf + '\n' + stderrBuf;
-          const diags = parseCompilerDiagnostics(allOutput, fsPath);
-          if (diags.length) {
-            mainWindow?.webContents.send('run://diagnostics', diags);
+      // Phase 1: Check if ASM was generated.
+      // Only m6809 writes a sibling `<name>.asm`; the ARM backends (pitrex/rp2350)
+      // write `build/<name>.s` instead, so the `.asm` existence check does not
+      // apply to them — the Phase 2 binary check (which validates the real
+      // .img/.bin artifact) is the authoritative success signal for ARM targets.
+      const isArmTarget = target === 'pitrex' || target === 'rp2350';
+      if (!isArmTarget) {
+        mainWindow?.webContents.send('run://status', `✓ Compilation Phase 1: Checking ASM generation...`);
+        try {
+          const asmExists = await fs.access(outAsm).then(() => true).catch(() => false);
+          if (!asmExists) {
+            mainWindow?.webContents.send('run://stderr', `ERROR: ASM file not generated: ${outAsm}`);
+            mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: ASM generation failed`);
+
+            // Parse semantic errors from stdout/stderr even when ASM is not generated
+            const allOutput = stdoutBuf + '\n' + stderrBuf;
+            const diags = parseCompilerDiagnostics(allOutput, fsPath);
+            if (diags.length) {
+              mainWindow?.webContents.send('run://diagnostics', diags);
+            }
+
+            return resolvePromise({ error: 'asm_not_generated', detail: `Expected ASM file: ${outAsm}` });
           }
-          
-          return resolvePromise({ error: 'asm_not_generated', detail: `Expected ASM file: ${outAsm}` });
-        }
-        
-        const asmStats = await fs.stat(outAsm);
-        if (asmStats.size === 0) {
-          mainWindow?.webContents.send('run://stderr', `ERROR: ASM file is empty: ${outAsm}`);
-          mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: Empty ASM file generated`);
-          
-          // Parse semantic errors from stdout/stderr even when compilation "succeeds" but generates empty ASM
-          const allOutput = stdoutBuf + '\n' + stderrBuf;
-          const diags = parseCompilerDiagnostics(allOutput, fsPath);
-          if (diags.length) {
-            mainWindow?.webContents.send('run://diagnostics', diags);
+
+          const asmStats = await fs.stat(outAsm);
+          if (asmStats.size === 0) {
+            mainWindow?.webContents.send('run://stderr', `ERROR: ASM file is empty: ${outAsm}`);
+            mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: Empty ASM file generated`);
+
+            // Parse semantic errors from stdout/stderr even when compilation "succeeds" but generates empty ASM
+            const allOutput = stdoutBuf + '\n' + stderrBuf;
+            const diags = parseCompilerDiagnostics(allOutput, fsPath);
+            if (diags.length) {
+              mainWindow?.webContents.send('run://diagnostics', diags);
+            }
+
+            return resolvePromise({ error: 'empty_asm_file', detail: `ASM file exists but is empty: ${outAsm}` });
           }
-          
-          return resolvePromise({ error: 'empty_asm_file', detail: `ASM file exists but is empty: ${outAsm}` });
+
+          mainWindow?.webContents.send('run://status', `✓ Phase 1 SUCCESS: ASM generated (${asmStats.size} bytes)`);
+        } catch (e: any) {
+          mainWindow?.webContents.send('run://stderr', `ERROR checking ASM file: ${e.message}`);
+          mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: Error checking ASM file`);
+          return resolvePromise({ error: 'asm_check_failed', detail: e.message });
         }
-        
-        mainWindow?.webContents.send('run://status', `✓ Phase 1 SUCCESS: ASM generated (${asmStats.size} bytes)`);
-      } catch (e: any) {
-        mainWindow?.webContents.send('run://stderr', `ERROR checking ASM file: ${e.message}`);
-        mainWindow?.webContents.send('run://status', `❌ Phase 1 FAILED: Error checking ASM file`);
-        return resolvePromise({ error: 'asm_check_failed', detail: e.message });
       }
       
       // Phase 2: Check if binary was assembled
@@ -1654,27 +1953,60 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           mainWindow?.webContents.send('run://stderr', `⚠ Warning: Failed to load .pdb: ${e.message}`);
         }
         
+        // The compiler writes the .s/.elf/etc. into the project's build/ dir, which
+        // is NOT necessarily next to the output binary (a .vpyproj without an
+        // explicit `[build] output = "build/…"` sends the .bin/.img to the project
+        // root while the .s/.elf still land in build/). Resolve an artifact by
+        // trying the sibling-of-binary path first, then build/<name>.<ext>.
+        const resolveArtifact = async (ext: string): Promise<string | null> => {
+          const sibling = binPath.replace(/\.[^.]+$/, ext);
+          if (await fs.access(sibling).then(() => true).catch(() => false)) return sibling;
+          const inBuild = join(dirname(binPath), 'build', basename(binPath).replace(/\.[^.]+$/, '') + ext);
+          if (await fs.access(inBuild).then(() => true).catch(() => false)) return inBuild;
+          return null;
+        };
+
         // For rp2350 builds, also load the .elf for symbol extraction in Rp2350System
         let elfBase64: string | null = null;
         if (target === 'rp2350') {
-          const elfPath = binPath.replace(/\.[^.]+$/, '.elf');
-          try {
-            const elfBuf = await fs.readFile(elfPath);
-            elfBase64 = Buffer.from(elfBuf).toString('base64');
-          } catch (_e) { /* elf not available */ }
+          const elfPath = await resolveArtifact('.elf');
+          if (elfPath) {
+            try {
+              const elfBuf = await fs.readFile(elfPath);
+              elfBase64 = Buffer.from(elfBuf).toString('base64');
+            } catch (_e) { /* elf not available */ }
+          } else {
+            console.warn('[main] rp2350: could not find .elf next to', binPath, 'or in build/');
+          }
         }
 
         // For pitrex builds, also read the .s assembly file for the in-browser ARM32 interpreter
         let sFileText: string | null = null;
+        let libvpyAsm: string | null = null;
         if (target === 'pitrex') {
-          // Derive .s path from binary path — handle .img, .bin, .elf, or any extension
-          const sPath = binPath.replace(/\.[^.]+$/, '.s');
-          try {
-            sFileText = await fs.readFile(sPath, 'utf8');
-            mainWindow?.webContents.send('run://status', `✅ pitrex .s file loaded (${sFileText.length} chars)`);
-          } catch (_e) {
-            // .s file not found at derived path — try sibling with project name
-            console.warn('[main] pitrex: could not load .s from', sPath);
+          // Resolve the .s (sibling-of-binary, else build/<name>.s) for the
+          // in-browser ARM32 interpreter.
+          const sPath = await resolveArtifact('.s');
+          if (sPath) {
+            try {
+              sFileText = await fs.readFile(sPath, 'utf8');
+              mainWindow?.webContents.send('run://status', `✅ pitrex .s file loaded (${sFileText.length} chars)`);
+              // Also read the sibling libvpy .s (vpy.c compiled at build time) so
+              // the sim can resolve bridged builtins (e.g. `bl vpy_draw_circle`).
+              // Absent for programs that use no bridged builtin — that's fine, the
+              // renderer just parses the program .s on its own.
+              const libvpyPath = sPath.replace(/\.s$/, '_libvpy.s');
+              try {
+                libvpyAsm = await fs.readFile(libvpyPath, 'utf8');
+                mainWindow?.webContents.send('run://status', `✅ pitrex libvpy .s loaded (${libvpyAsm.length} chars)`);
+              } catch (_e) {
+                // No libvpy .s — program uses no bridged builtin, or vpy-c absent.
+              }
+            } catch (_e) {
+              console.warn('[main] pitrex: could not read .s from', sPath);
+            }
+          } else {
+            console.warn('[main] pitrex: could not find .s next to', binPath, 'or in build/');
           }
         }
 
@@ -1718,6 +2050,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           target: target || 'm6809',
           elfBase64,
           sFileText,
+          libvpyAsm,
         });
 
         // Copy to SD card if requested (pitrex target only)
@@ -1758,6 +2091,18 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
 // IPC handler wraps the exported function
 ipcMain.handle('run:compile', async (_e, args) => {
   return executeCompilation(args);
+});
+
+// Build (and optionally deploy) an imported external C/C++ project.
+// `args.target` (pitrex | rp2350) selects the per-target build recipe so the
+// correct compiler runs; omitted → the manifest default ([build], pitrex).
+ipcMain.handle('run:buildExternal', async (_e, args) => {
+  return executeExternalBuild(args);
+});
+
+// Build the WASM simulator module for an external project (for the panel).
+ipcMain.handle('run:buildSim', async (_e, args) => {
+  return executeSimBuild(args);
 });
 
 // Emulator: run until next frame (or max steps)
@@ -2574,6 +2919,7 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
           label: 'Open',
           submenu: [
             { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow?.webContents.send('command', 'project.open') },
+            { label: 'Import C/C++ Project...', click: () => mainWindow?.webContents.send('command', 'project.importC') },
             { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('command', 'file.open') }
           ]
         },
@@ -2907,6 +3253,97 @@ def loop():
     };
   } catch (e: any) {
     return { error: e.message || 'Failed to create project' };
+  }
+});
+
+// Import an external C/C++ project: pick a folder with a Makefile, scaffold a
+// `.cvproj` manifest (prefilled by sniffing the Makefile for a pitrex target),
+// and return its path. The user can tweak the manifest afterwards.
+ipcMain.handle('project:importC', async (_e, args?: { dir?: string }) => {
+  try {
+    let projectDir = args?.dir?.trim() || '';
+    if (!projectDir) {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        title: 'Import C/C++ Project (select folder with a Makefile)',
+        properties: ['openDirectory'],
+      });
+      if (result.canceled || result.filePaths.length === 0) return { canceled: true };
+      projectDir = result.filePaths[0];
+    }
+
+    const name = basename(projectDir);
+    const manifestPath = join(projectDir, `${name}.cvproj`);
+
+    // Don't clobber an existing manifest — just open it.
+    try {
+      await fs.access(manifestPath);
+      return { ok: true, manifestPath, existed: true };
+    } catch { /* no manifest yet, scaffold one */ }
+
+    // Sniff the Makefile for per-target build rules (pitrex + rp2350).
+    let buildArg = '';
+    let rp2350Arg = '';
+    try {
+      const mk = await fs.readFile(join(projectDir, 'Makefile'), 'utf-8');
+      const mp = mk.match(/^([A-Za-z0-9_.-]*pitrex[A-Za-z0-9_.-]*)\s*:/m);
+      if (mp) buildArg = mp[1];
+      const mr = mk.match(/^([A-Za-z0-9_.-]*rp2350[A-Za-z0-9_.-]*)\s*:/m);
+      if (mr) rp2350Arg = mr[1];
+    } catch { /* no Makefile / unreadable — leave build arg blank for the user */ }
+
+    // Any .wad in the project root is a likely deploy payload (e.g. DOOM).
+    let deployExtra: string[] = [];
+    try {
+      const entries = await fs.readdir(projectDir);
+      deployExtra = entries.filter((e) => e.toLowerCase().endsWith('.wad'));
+    } catch {}
+
+    const argsToml = buildArg ? `["${buildArg}"]` : `[]`;
+    const extraToml = deployExtra.length ? `[${deployExtra.map((f) => `"${f}"`).join(', ')}]` : `[]`;
+    // If the Makefile has an rp2350 rule, declare a per-target override so the
+    // IDE builds the RAM-linked SD game when the rp2350 target is selected
+    // (otherwise a C project would build pitrex for every target).
+    const rp2350Toml = rp2350Arg
+      ? `
+# rp2350 override: RAM-linked game .bin the cart launcher loads off the SD card.
+[targets.rp2350]
+args = ["${rp2350Arg}"]
+artifact = "build_rp2350/${name}_sd.bin"
+`
+      : '';
+    const manifest = `# External C/C++ project imported into Vectrex Studio.
+# Built by running the command below; deployed to the PiTrex SD card.
+[project]
+name = "${name}"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ${argsToml}          # Makefile target(s) to build
+artifact = "kernel7l.img"    # produced image, relative to this folder
+deploy_extra = ${extraToml}  # extra files copied to the SD root
+${rp2350Toml}
+# Optional: a WASM build that runs in the IDE emulator panel (compiled against
+# the host SDK shim via emscripten). Declare a make target that emits a
+# MODULARIZE loader; the IDE injects $PITREX_SIM_SDK + emcc.
+# [simulate]
+# command = "make"
+# args = ["sim"]
+# module = "build_wasm/game.js"
+
+# Optional: prepend a toolchain bin dir to PATH for the build.
+# [toolchain]
+# path = "/opt/arm-toolchain/bin"
+
+# Optional: environment overrides passed to the build.
+# [env]
+# PITREX_SDK = "/Users/you/projects/pitrex-baremetal"
+`;
+    await fs.writeFile(manifestPath, manifest, 'utf-8');
+    return { ok: true, manifestPath, existed: false, detectedTarget: buildArg || null };
+  } catch (e: any) {
+    return { error: e.message || 'Failed to import C project' };
   }
 });
 

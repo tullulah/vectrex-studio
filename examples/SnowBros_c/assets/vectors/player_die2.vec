@@ -1,0 +1,138 @@
+{
+  "version": "1.0",
+  "name": "player_die2",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "path_1",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x": 4, "y": 7, "z": 0},
+            {"x": 7, "y": 5, "z": 0},
+            {"x": 5, "y": 7, "z": 0}
+          ]
+        },
+        {
+          "name": "path_2",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x": 5, "y": 6, "z": 0},
+            {"x": 6, "y": 7, "z": 0}
+          ]
+        },
+        {
+          "name": "path_3",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x": 4, "y": 6, "z": 0},
+            {"x": 1, "y": 8, "z": 0},
+            {"x": -1, "y": 9, "z": 0}
+          ]
+        },
+        {
+          "name": "path_4",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x": 4, "y": 5, "z": 0},
+            {"x": 6, "y": 4, "z": 0},
+            {"x": 1, "y": -1, "z": 0},
+            {"x": -2, "y": -4, "z": 0}
+          ]
+        },
+        {
+          "name": "path_5",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x": 6, "y": 3, "z": 0},
+            {"x": 7, "y": 1, "z": 0},
+            {"x": 3, "y": -2, "z": 0},
+            {"x": 0, "y": -5, "z": 0}
+          ]
+        },
+        {
+          "name": "path_6",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x": 2, "y": 4, "z": 0},
+            {"x": 4, "y": 2, "z": 0},
+            {"x": 3, "y": 5, "z": 0}
+          ]
+        },
+        {
+          "name": "path_7",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x": 5, "y": 1, "z": 0},
+            {"x": 9, "y": -1, "z": 0},
+            {"x": 10, "y": 1, "z": 0}
+          ]
+        },
+        {
+          "name": "path_8",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x": 1, "y": 6, "z": 0},
+            {"x": -2, "y": 9, "z": 0},
+            {"x": -1, "y": 10, "z": 0}
+          ]
+        },
+        {
+          "name": "path_9",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x": -2, "y": -3, "z": 0},
+            {"x": -5, "y": -7, "z": 0},
+            {"x": -4, "y": -9, "z": 0}
+          ]
+        },
+        {
+          "name": "path_10",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x": -5, "y": -7, "z": 0},
+            {"x": -8, "y": -6, "z": 0},
+            {"x": -7, "y": -8, "z": 0}
+          ]
+        },
+        {
+          "name": "path_11",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x": 0, "y": -5, "z": 0},
+            {"x": 2, "y": -8, "z": 0},
+            {"x": 4, "y": -9, "z": 0}
+          ]
+        },
+        {
+          "name": "path_12",
+          "intensity": 65,
+          "closed": false,
+          "points": [
+            {"x": 2, "y": -8, "z": 0},
+            {"x": 0, "y": -10, "z": 0},
+            {"x": 3, "y": -9, "z": 0}
+          ]
+        }
+      ]
+    }
+  ]
+}

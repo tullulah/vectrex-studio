@@ -1,0 +1,14 @@
+[project]
+name = "vplay_test"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["vplay_test_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["vplay_test_wasm"]
+module = "build_wasm/vplay_test.js"

@@ -536,8 +536,19 @@ fn emit_game_main(module: &Module, var_addrs: &HashMap<String, u32>) -> Result<S
     s.push_str("    bl      v_readButtons\n");
     s.push_str("    bl      v_readJoystick1Analog\n");
     s.push_str("    bl      v_readJoystick2Analog\n");
-    s.push_str("    bl      pitrex_music_update\n");
-    s.push_str("    bl      pitrex_sfx_update\n");
+    // Per-frame sequencer advance. When the MUSIC/SFX group is bridged to
+    // libvpy (BLOCK 6), call the C runtime's sequencer so the music/SFX state
+    // lives in exactly one place (libvpy s_mus_*/s_sfx_*); otherwise use the
+    // inline BCM-CLO/frame-counter helpers. MUSIC_UPDATE/SFX_UPDATE are not
+    // user builtins, so this call site is remapped here rather than in
+    // expressions.rs.
+    if crate::pitrex::libvpy::music_group_bridged() {
+        s.push_str("    bl      vpy_music_update\n");
+        s.push_str("    bl      vpy_sfx_update\n");
+    } else {
+        s.push_str("    bl      pitrex_music_update\n");
+        s.push_str("    bl      pitrex_sfx_update\n");
+    }
     if has_note_calls(module) {
         s.push_str("    bl      pitrex_note_update\n");
     }

@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "name": "tile",
+  "canvas": { "width": 256, "height": 256, "origin": "center" },
+  "layers": [{
+    "name": "default",
+    "visible": true,
+    "paths": [{
+      "name": "box",
+      "intensity": 100,
+      "closed": true,
+      "points": [{"x": -10, "y": -10}, {"x": 10, "y": -10}, {"x": 10, "y": 10}, {"x": -10, "y": 10}]
+    }]
+  }],
+  "center_x": 0,
+  "center_y": 0
+}

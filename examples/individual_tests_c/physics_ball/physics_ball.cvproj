@@ -1,0 +1,14 @@
+[project]
+name = "physics_ball"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["physics_ball_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["physics_ball_wasm"]
+module = "build_wasm/physics_ball.js"

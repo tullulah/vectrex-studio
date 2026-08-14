@@ -37,6 +37,7 @@ pub mod expressions;
 pub mod builtins;
 pub mod assets;
 pub mod analysis;
+pub mod libvpy;
 
 use vpy_parser::Module;
 use crate::AssetInfo;

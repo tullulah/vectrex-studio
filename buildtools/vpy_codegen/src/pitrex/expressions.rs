@@ -272,6 +272,18 @@ pub fn emit_call(
     if info.name.to_uppercase() == "SPAWN_ENEMIES" {
         if let Some(Expr::StringLit(level_name)) = info.args.first() {
             let sym = level_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            // BLOCK 8 bridge: libvpy vpy_spawn_enemies(img=_NAME_ENEMIES_C,
+            // sprites=_NAME_ENEMY_SPRITES) — the position-independent enemy image
+            // + sprite-index table (the inline path used _NAME_PITREX_ENEMIES +
+            // a count word).
+            if crate::pitrex::libvpy::level_group_bridged() {
+                return Ok(format!(
+                    "    @ SPAWN_ENEMIES(\"{level_name}\") -> libvpy\n\
+                     \x20   ldr     r0, =_{sym}_ENEMIES_C\n\
+                     \x20   ldr     r1, =_{sym}_ENEMY_SPRITES\n\
+                     \x20   bl      vpy_spawn_enemies\n"
+                ));
+            }
             return Ok(format!(
                 "    @ SPAWN_ENEMIES(\"{level_name}\")\n\
                  \x20   ldr     r0, =_{sym}_PITREX_ENEMIES\n\
@@ -283,16 +295,37 @@ pub fn emit_call(
         return Ok(format!("    @ SPAWN_ENEMIES — missing level name arg\n"));
     }
     if info.name.to_uppercase() == "UPDATE_ENEMIES" {
-        return Ok("    @ UPDATE_ENEMIES\n    bl      pitrex_update_enemies\n".to_string());
+        let f = if crate::pitrex::libvpy::level_group_bridged() { "vpy_update_enemies" } else { "pitrex_update_enemies" };
+        return Ok(format!("    @ UPDATE_ENEMIES\n    bl      {f}\n"));
     }
     if info.name.to_uppercase() == "DRAW_ENEMIES" {
-        return Ok("    @ DRAW_ENEMIES\n    bl      pitrex_draw_enemies\n".to_string());
+        let f = if crate::pitrex::libvpy::level_group_bridged() { "vpy_draw_enemies" } else { "pitrex_draw_enemies" };
+        return Ok(format!("    @ DRAW_ENEMIES\n    bl      {f}\n"));
+    }
+    // BLOCK 8 bridge: LOAD_LEVEL("name") → vpy_load_level(level=_NAME_LEVEL_C,
+    // sprites=_NAME_level_sprites) — the position-independent level image + its
+    // sprite-index table (the inline pitrex_load_level took the non-PI
+    // _NAME_LEVEL with link-time pointers). Special-cased here because the generic
+    // asset path only sets r0; vpy_load_level needs the sprite table in r1.
+    if info.name.to_uppercase() == "LOAD_LEVEL" && crate::pitrex::libvpy::level_group_bridged() {
+        if let Some(Expr::StringLit(level_name)) = info.args.first() {
+            let sym = level_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            return Ok(format!(
+                "    @ LOAD_LEVEL(\"{level_name}\") -> libvpy\n\
+                 \x20   ldr     r0, =_{sym}_LEVEL_C\n\
+                 \x20   ldr     r1, =_{sym}_level_sprites\n\
+                 \x20   bl      vpy_load_level\n"
+            ));
+        }
     }
 
     // ── Enemy query/command builtins — ARM32 pool access ───────────────────
     // Pool layout: stride=32, active@+12, x@+4(i16), y@+6(i16), sm_state@+18
     if info.name.to_uppercase() == "GET_ENEMY_ACTIVE" {
         let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_ACTIVE: missing arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!("    @ GET_ENEMY_ACTIVE(idx) -> libvpy\n{idx_s}    bl      vpy_get_enemy_active\n"));
+        }
         return Ok(format!(
             "    @ GET_ENEMY_ACTIVE(idx)\n\
              {idx_s}\
@@ -305,6 +338,9 @@ pub fn emit_call(
     }
     if info.name.to_uppercase() == "GET_ENEMY_X" {
         let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_X: missing arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!("    @ GET_ENEMY_X(idx) -> libvpy\n{idx_s}    bl      vpy_get_enemy_x\n"));
+        }
         return Ok(format!(
             "    @ GET_ENEMY_X(idx)\n\
              {idx_s}\
@@ -317,6 +353,9 @@ pub fn emit_call(
     }
     if info.name.to_uppercase() == "GET_ENEMY_Y" {
         let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_Y: missing arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!("    @ GET_ENEMY_Y(idx) -> libvpy\n{idx_s}    bl      vpy_get_enemy_y\n"));
+        }
         return Ok(format!(
             "    @ GET_ENEMY_Y(idx)\n\
              {idx_s}\
@@ -330,6 +369,10 @@ pub fn emit_call(
     if info.name.to_uppercase() == "SET_ENEMY_X" {
         let idx_s = emit_expr(info.args.first().ok_or("SET_ENEMY_X: missing idx arg")?, var_addrs)?;
         let val_s = emit_expr(info.args.get(1).ok_or("SET_ENEMY_X: missing x arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!(
+                "    @ SET_ENEMY_X(idx, x) -> libvpy\n{idx_s}    push    {{r0}}\n{val_s}    mov     r1, r0\n    pop     {{r0}}\n    bl      vpy_set_enemy_x\n"));
+        }
         return Ok(format!(
             "    @ SET_ENEMY_X(idx, x)\n\
              {idx_s}\
@@ -346,6 +389,10 @@ pub fn emit_call(
     if info.name.to_uppercase() == "SET_ENEMY_Y" {
         let idx_s = emit_expr(info.args.first().ok_or("SET_ENEMY_Y: missing idx arg")?, var_addrs)?;
         let val_s = emit_expr(info.args.get(1).ok_or("SET_ENEMY_Y: missing y arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!(
+                "    @ SET_ENEMY_Y(idx, y) -> libvpy\n{idx_s}    push    {{r0}}\n{val_s}    mov     r1, r0\n    pop     {{r0}}\n    bl      vpy_set_enemy_y\n"));
+        }
         return Ok(format!(
             "    @ SET_ENEMY_Y(idx, y)\n\
              {idx_s}\
@@ -364,6 +411,10 @@ pub fn emit_call(
         // and default_facing, draw_enemies decides whether to flip the sprite.
         let idx_s = emit_expr(info.args.first().ok_or("SET_ENEMY_DIR: missing idx arg")?, var_addrs)?;
         let val_s = emit_expr(info.args.get(1).ok_or("SET_ENEMY_DIR: missing dir arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!(
+                "    @ SET_ENEMY_DIR(idx, dir) -> libvpy\n{idx_s}    push    {{r0}}\n{val_s}    mov     r1, r0\n    pop     {{r0}}\n    bl      vpy_set_enemy_dir\n"));
+        }
         return Ok(format!(
             "    @ SET_ENEMY_DIR(idx, dir)  ; 0=left, 1=right\n\
              {idx_s}\
@@ -399,6 +450,9 @@ pub fn emit_call(
     }
     if info.name.to_uppercase() == "GET_ENEMY_STATE" {
         let idx_s = emit_expr(info.args.first().ok_or("GET_ENEMY_STATE: missing arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!("    @ GET_ENEMY_STATE(idx) -> libvpy\n{idx_s}    bl      vpy_get_enemy_state\n"));
+        }
         return Ok(format!(
             "    @ GET_ENEMY_STATE(idx)\n\
              {idx_s}\
@@ -412,6 +466,10 @@ pub fn emit_call(
     if info.name.to_uppercase() == "SET_ENEMY_STATE" {
         let idx_s = emit_expr(info.args.first().ok_or("SET_ENEMY_STATE: missing idx arg")?, var_addrs)?;
         let val_s = emit_expr(info.args.get(1).ok_or("SET_ENEMY_STATE: missing state arg")?, var_addrs)?;
+        if crate::pitrex::libvpy::level_group_bridged() {
+            return Ok(format!(
+                "    @ SET_ENEMY_STATE(idx, state) -> libvpy\n{idx_s}    push    {{r0}}\n{val_s}    mov     r1, r0\n    pop     {{r0}}\n    bl      vpy_set_enemy_state\n"));
+        }
         return Ok(format!(
             "    @ SET_ENEMY_STATE(idx, state)\n\
              {idx_s}\
@@ -427,10 +485,11 @@ pub fn emit_call(
     }
     if info.name.to_uppercase() == "KILL_ENEMY" {
         let idx_s = emit_expr(info.args.first().ok_or("KILL_ENEMY: missing arg")?, var_addrs)?;
+        let f = if crate::pitrex::libvpy::level_group_bridged() { "vpy_kill_enemy" } else { "pitrex_kill_enemy" };
         return Ok(format!(
             "    @ KILL_ENEMY(idx)\n\
              {idx_s}\
-             \x20   bl      pitrex_kill_enemy\n"
+             \x20   bl      {f}\n"
         ));
     }
     if info.name.to_uppercase() == "ENEMY_FIRE_EVENT" {
@@ -442,11 +501,12 @@ pub fn emit_call(
             for b in ev.bytes() { h = h.wrapping_mul(16777619) ^ (b as u32); }
             (h & 0xFF) as u8
         } else { 0 };
+        let f = if crate::pitrex::libvpy::level_group_bridged() { "vpy_enemy_fire_event" } else { "pitrex_enemy_fire_event" };
         return Ok(format!(
             "    @ ENEMY_FIRE_EVENT(idx, hash=0x{hash:02X})\n\
              {idx_s}\
              \x20   mov     r1, #{hash}\n\
-             \x20   bl      pitrex_enemy_fire_event\n"
+             \x20   bl      {f}\n"
         ));
     }
 
@@ -536,6 +596,31 @@ pub fn emit_call(
         "DRAW_ANIM"       => "pitrex_draw_anim",
         other             => other,
     };
+
+    // libvpy bridge (POC): if this builtin has been migrated to the C runtime
+    // (vpy.c), call `vpy_<name>` instead of the inline `pitrex_<name>` body.
+    // AAPCS argument passing (r0-r3 + stack) is identical, so only the callee
+    // symbol changes — the generic emit path below is reused unchanged.
+    let fn_name = crate::pitrex::libvpy::libvpy_symbol(info.name.as_str())
+        .unwrap_or(fn_name);
+
+    // libvpy J1-button bridge: J1_BUTTON_n / J1_BTNn are NAME-BAKED (no runtime
+    // arg), but the C runtime's vpy_j1_button(int n) takes the button number in
+    // r0. Emit the constant then call. Bit numbering matches the inline
+    // pitrex_j1_btnN exactly (n=1 -> bit0 … n=4 -> bit3).
+    if fn_name == "vpy_j1_button" {
+        let n = match info.name.as_str() {
+            "J1_BTN1" | "J1_BUTTON_1" => 1,
+            "J1_BTN2" | "J1_BUTTON_2" => 2,
+            "J1_BTN3" | "J1_BUTTON_3" => 3,
+            "J1_BTN4" | "J1_BUTTON_4" => 4,
+            _ => 0,
+        };
+        return Ok(format!(
+            "    @ {} -> vpy_j1_button({n})\n    mov     r0, #{n}\n    bl      vpy_j1_button\n",
+            info.name
+        ));
+    }
 
     let mut s = String::new();
     let args = &info.args;
@@ -689,6 +774,39 @@ pub fn emit_call(
                 s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
                 s.push_str("    bl      pitrex_draw_vector_ex\n");
                 s.push_str("    add     sp, sp, #4\n"); // discard intensity
+            } else if crate::pitrex::libvpy::vector_group_bridged() {
+                // BLOCK 7 bridge: libvpy vpy_draw_vector_ex(data, x, y, mirror=0,
+                // override). Uses the position-independent `_NAME_VEC` image; the
+                // brightness override is read from PITREX_BRIGHTNESS_OVERRIDE (the
+                // SAME global SET_INTENSITY writes — brightness stays in one place,
+                // SET_INTENSITY is NOT bridged) and passed as the 5th arg so
+                // draw_vec_stream applies `override>0 ? override : path_intensity`,
+                // identical to the inline pitrex_draw_vector. ABI: r0=data, r1=x,
+                // r2=y, r3=mirror, [sp]=override. Push override first so it sits at
+                // [sp] after the four pops (mirror pattern).
+                let vec_symbol = format!("_{sym_base}_VEC");
+                s.push_str("    ldr     r0, =PITREX_BRIGHTNESS_OVERRIDE\n");
+                s.push_str("    ldrb    r0, [r0]           @ brightness override (0=use .vec intensity)\n");
+                s.push_str("    push    {r0}\n");
+                s.push_str(&format!("    ldr     r0, ={vec_symbol}    @ asset '{asset_name}' (libvpy image)\n"));
+                s.push_str("    push    {r0}\n");
+                if let Some(ox) = runtime.first() {
+                    s.push_str(&emit_arg(ox, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                s.push_str("    push    {r0}\n");
+                if let Some(oy) = runtime.get(1) {
+                    s.push_str(&emit_arg(oy, var_addrs)?);
+                } else {
+                    s.push_str("    mov     r0, #0\n");
+                }
+                s.push_str("    push    {r0}\n");
+                s.push_str("    mov     r0, #0             @ mirror=0\n");
+                s.push_str("    push    {r0}\n");
+                s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+                s.push_str("    bl      vpy_draw_vector_ex\n");
+                s.push_str("    add     sp, sp, #4         @ discard override\n");
             } else {
                 // No mirror → simple pitrex_draw_vector(r0=asset, r1=ox, r2=oy)
                 s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
@@ -1073,6 +1191,152 @@ mod tests {
         let asm = emit_call(&info, &var_addrs).unwrap();
         assert!(asm.contains("bl      pitrex_sample_pos"),
             "SAMPLE_POS must call pitrex_sample_pos (got: {asm:?})");
+    }
+
+    /// libvpy bridge (POC): DRAW_CIRCLE must be routed to the C runtime symbol
+    /// `vpy_draw_circle` (not the inline `pitrex_draw_circle`), with the 4 args
+    /// marshalled into AAPCS r0-r3. Every OTHER builtin stays inline.
+    #[test]
+    fn test_libvpy_bridge_draw_circle() {
+        let var_addrs = std::collections::HashMap::new();
+        let info = CallInfo {
+            name: "DRAW_CIRCLE".to_string(),
+            source_line: 0, col: 0,
+            args: vec![Expr::Number(0), Expr::Number(0), Expr::Number(15), Expr::Number(80)],
+        };
+        let asm = emit_call(&info, &var_addrs).unwrap();
+        assert!(asm.contains("bl      vpy_draw_circle"),
+            "DRAW_CIRCLE must call the libvpy C symbol (got: {asm:?})");
+        assert!(!asm.contains("pitrex_draw_circle"),
+            "DRAW_CIRCLE must NOT call the inline pitrex helper (got: {asm:?})");
+        // r0-r3 marshalling: 4 args pushed, then popped into r3..r0 before the call.
+        assert!(asm.contains("pop     {r0}") && asm.contains("pop     {r3}"),
+            "must marshal 4 args into AAPCS registers (got: {asm:?})");
+    }
+
+    /// A non-bridged builtin (pow — no C counterpart) must still target its
+    /// inline helper: the two mechanisms coexist during the migration.
+    #[test]
+    fn test_libvpy_bridge_leaves_others_inline() {
+        let var_addrs = std::collections::HashMap::new();
+        let info = CallInfo {
+            name: "pow".to_string(),
+            source_line: 0, col: 0,
+            args: vec![Expr::Number(2), Expr::Number(8)],
+        };
+        let asm = emit_call(&info, &var_addrs).unwrap();
+        assert!(asm.contains("bl      pitrex_pow"),
+            "pow must stay on the inline helper (got: {asm:?})");
+    }
+
+    /// BLOCK 2: the MOVE + DRAW_LINE state-pair must route to their libvpy C
+    /// symbols (never the inline `pitrex_move` / `pitrex_draw_line`). They share
+    /// the beam origin so both are bridged together.
+    #[test]
+    fn test_libvpy_block2_move_draw_line_bridges() {
+        let var_addrs = std::collections::HashMap::new();
+
+        let move_info = CallInfo {
+            name: "MOVE".to_string(),
+            source_line: 0, col: 0,
+            args: vec![Expr::Number(-60), Expr::Number(60)],
+        };
+        let move_asm = emit_call(&move_info, &var_addrs).unwrap();
+        assert!(move_asm.contains("bl      vpy_move"),
+            "MOVE must bridge to vpy_move (got: {move_asm:?})");
+        assert!(!move_asm.contains("pitrex_move"),
+            "MOVE must NOT reference the inline pitrex helper (got: {move_asm:?})");
+
+        let line_info = CallInfo {
+            name: "DRAW_LINE".to_string(),
+            source_line: 0, col: 0,
+            args: vec![Expr::Number(0), Expr::Number(0), Expr::Number(40), Expr::Number(-40), Expr::Number(80)],
+        };
+        let line_asm = emit_call(&line_info, &var_addrs).unwrap();
+        assert!(line_asm.contains("bl      vpy_draw_line"),
+            "DRAW_LINE must bridge to vpy_draw_line (got: {line_asm:?})");
+        assert!(!line_asm.contains("pitrex_draw_line"),
+            "DRAW_LINE must NOT reference the inline pitrex helper (got: {line_asm:?})");
+        // 5-arg marshalling: 4 endpoints into r0-r3, brightness left at [sp+0].
+        assert!(line_asm.contains("pop     {r0}") && line_asm.contains("pop     {r3}"),
+            "DRAW_LINE must marshal 4 args into AAPCS registers (got: {line_asm:?})");
+        assert!(line_asm.contains("add     sp, sp, #4"),
+            "DRAW_LINE must clean up the stacked 5th arg (got: {line_asm:?})");
+    }
+
+    /// BLOCK 1: the stateless draws and pure-math builtins must route to their
+    /// libvpy C symbols (never the inline `pitrex_*` helper).
+    #[test]
+    fn test_libvpy_block1_bridges() {
+        let var_addrs = std::collections::HashMap::new();
+        let cases: &[(&str, &[i32], &str)] = &[
+            ("DRAW_RECT",        &[0, 0, 10, 10, 80], "vpy_draw_rect"),
+            ("DRAW_FILLED_RECT", &[0, 0, 10, 10, 80], "vpy_draw_filled_rect"),
+            ("DRAW_ELLIPSE",     &[0, 0, 12, 8, 80],  "vpy_draw_ellipse"),
+            ("abs",              &[-5],               "vpy_abs"),
+            ("min",              &[3, 7],             "vpy_min"),
+            ("max",              &[3, 7],             "vpy_max"),
+            ("clamp",            &[9, 0, 5],          "vpy_clamp"),
+            ("sin",              &[32],               "vpy_sin"),
+            ("cos",              &[32],               "vpy_cos"),
+            ("sqrt",             &[144],              "vpy_sqrt"),
+        ];
+        for (name, args, sym) in cases {
+            let info = CallInfo {
+                name: name.to_string(),
+                source_line: 0, col: 0,
+                args: args.iter().map(|n| Expr::Number(*n)).collect(),
+            };
+            let asm = emit_call(&info, &var_addrs).unwrap();
+            assert!(asm.contains(&format!("bl      {sym}")),
+                "{name} must bridge to {sym} (got: {asm:?})");
+            assert!(!asm.contains("pitrex_"),
+                "{name} must NOT reference the inline pitrex helper (got: {asm:?})");
+        }
+    }
+
+    /// BLOCK 3: the reconciled divergent builtins (atan2, rand, rand_range) now
+    /// route to their libvpy C symbols. Their inline `pitrex_*` bodies stay
+    /// emitted (shared code) but the CALL SITE targets the bridged symbol.
+    #[test]
+    fn test_libvpy_block3_bridges() {
+        let var_addrs = std::collections::HashMap::new();
+        let cases: &[(&str, &[i32], &str)] = &[
+            ("atan2",      &[3, 4],  "vpy_atan2"),
+            ("rand",       &[],      "vpy_rand"),
+            ("rand_range", &[1, 6],  "vpy_rand_range"),
+        ];
+        for (name, args, sym) in cases {
+            let info = CallInfo {
+                name: name.to_string(),
+                source_line: 0, col: 0,
+                args: args.iter().map(|n| Expr::Number(*n)).collect(),
+            };
+            let asm = emit_call(&info, &var_addrs).unwrap();
+            assert!(asm.contains(&format!("bl      {sym}")),
+                "{name} must bridge to {sym} (got: {asm:?})");
+        }
+    }
+
+    /// Builtins with no C counterpart (pow, tan) or a no-op inline stub (beep)
+    /// must remain on their inline `pitrex_*` helpers.
+    #[test]
+    fn test_libvpy_defers_remaining() {
+        let var_addrs = std::collections::HashMap::new();
+        let cases: &[(&str, &[i32], &str)] = &[
+            ("pow",  &[2, 8],  "pitrex_pow"),
+            ("beep", &[1],     "pitrex_beep"),
+        ];
+        for (name, args, sym) in cases {
+            let info = CallInfo {
+                name: name.to_string(),
+                source_line: 0, col: 0,
+                args: args.iter().map(|n| Expr::Number(*n)).collect(),
+            };
+            let asm = emit_call(&info, &var_addrs).unwrap();
+            assert!(asm.contains(&format!("bl      {sym}")),
+                "{name} must stay on inline {sym} (got: {asm:?})");
+        }
     }
 
     /// PLAY_SAMPLE("name") resolves the string to _<NAME>_SMP and calls the

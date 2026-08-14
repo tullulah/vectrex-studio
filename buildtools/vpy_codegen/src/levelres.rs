@@ -509,16 +509,118 @@ impl VPlayLevel {
             out.push_str("\n");
         }
 
-        // Phase 2 wander: precompute the level-wide AREAS + TRANS tables (shared by
-        // all wander enemies in this level). Areas pool: level walkable_areas plus
-        // per-vec walkable_areas translated to world coords.
-        let level_areas_input = self.walkable_areas.as_deref().unwrap_or(&[]);
-        let level_areas_world = Self::collect_all_walk_areas_world(&self.layers, vec_walk_areas, level_areas_input);
-        let level_transitions = Self::derive_transitions_m6809(
-            &level_areas_world,
-            self.isolate_screens,
-            self.world_bounds.y_max,
-        );
+        // Phase 2 wander: resolve each enemy's walkable AREAS + inter-area
+        // TRANSITIONS using the SAME shared derivation the ARM/pitrex backend
+        // uses (`derive_enemy_areas_and_transitions`), so the two targets emit
+        // identical areas/transitions for a given level. Each wander enemy gets
+        // its own `_{name}_ENEMY{i}_AREAS` header (mirroring ARM's per-enemy
+        // table) that the M6809 runtime reads via wp_ptr (pool +11..12) /
+        // wp_count (pool +16). Indexed parallel to `enemy_objects`.
+        // M6809-only ROM-budget cap on the number of inter-area transitions a
+        // single wander enemy's table may hold. The derivation itself is shared
+        // with ARM/pitrex (identical areas + transition set + tuning), so for
+        // any level within budget (e.g. wander_test's single transition) the
+        // M6809 table is byte-identical to pitrex. Only pathological levels
+        // (SnowBros derives 124 transitions across 59 platform areas) are
+        // truncated so the level bank stays under the 16 KB multibank limit;
+        // ARM/pitrex have no such limit and keep the full set. This preserves
+        // the historical M6809 transition budget (previously MAX_TRANS in the
+        // now-removed derive_transitions_m6809).
+        const M6809_MAX_TRANS: usize = 24;
+        let enemy_areas_trans: Vec<(Vec<WalkableArea>, Vec<AreaTransition>)> = enemy_objects
+            .iter()
+            .map(|obj| {
+                if obj.ai_type.as_deref() == Some("wander") {
+                    let (areas, mut trans) =
+                        self.derive_enemy_areas_and_transitions(obj, vec_walk_areas);
+                    trans.truncate(M6809_MAX_TRANS);
+                    (areas, trans)
+                } else {
+                    (Vec::new(), Vec::new())
+                }
+            })
+            .collect();
+
+        // Build each wander enemy's AREAS-header body, then DEDUPLICATE by body
+        // content: wander enemies that inherit the same level/vec areas (e.g.
+        // every enemy in a level with no per-enemy walkable_areas) produce the
+        // byte-identical table and share a single label, so we emit one table
+        // for the level instead of one per enemy. This keeps the M6809 ROM the
+        // same size as the pre-fix single shared table while still supporting
+        // enemies that define their own distinct areas. `enemy_area_label[i]`
+        // is the label wander enemy i points at (None → no table / area_count 0).
+        let vy0_for_jump_up = |dy: i16| -> i8 {
+            for v in 4i16..=16 {
+                if v * (v + 1) / 2 >= dy { return v as i8; }
+            }
+            16
+        };
+        // Produce the deterministic table BODY (everything after the label line)
+        // for one enemy's areas + transitions. Identical (areas, trans) → identical body.
+        let build_area_body = |areas: &[WalkableArea], trans: &[AreaTransition]| -> String {
+            let center_of = |idx: u8| -> i16 {
+                areas
+                    .get(idx as usize)
+                    .map(|a| ((a.x_min as i32 + a.x_max as i32) / 2) as i16)
+                    .unwrap_or(0)
+            };
+            let mut b = String::new();
+            b.push_str(&format!("    FCB {}    ; area_count\n", areas.len()));
+            b.push_str(&format!("    FCB {}    ; trans_count\n", trans.len()));
+            b.push_str("; Areas (8 bytes each): FDB y, FDB x_min, FDB x_max, FCB 0, FCB 0\n");
+            for (idx, a) in areas.iter().enumerate() {
+                b.push_str(&format!("    FDB {}  ; area[{}].y\n", a.y, idx));
+                b.push_str(&format!("    FDB {}  ; area[{}].x_min\n", a.x_min, idx));
+                b.push_str(&format!("    FDB {}  ; area[{}].x_max\n", a.x_max, idx));
+                b.push_str("    FCB 0,0      ; pad\n");
+            }
+            if !trans.is_empty() {
+                b.push_str("; Transitions (8 bytes each): FCB from, FCB to, FCB type, FCB vy0, FDB from_x, FDB to_x\n");
+                b.push_str("; type: 1=jump_up, 2=drop, 3=jump_across; vy0 = signed initial velocity\n");
+                for (idx, t) in trans.iter().enumerate() {
+                    let ttype: u8 = match t.ttype.as_str() {
+                        "jump_up" => 1,
+                        "drop" => 2,
+                        "jump_across" => 3,
+                        _ => 0,
+                    };
+                    let to_y = areas.get(t.to as usize).map(|a| a.y).unwrap_or(0);
+                    let from_y = areas.get(t.from as usize).map(|a| a.y).unwrap_or(0);
+                    let dy = to_y - from_y;
+                    let vy0: i8 = match ttype {
+                        1 => vy0_for_jump_up(dy.max(0)),
+                        2 => -1,
+                        3 => 3,
+                        _ => 0,
+                    };
+                    let from_x = t.from_x.unwrap_or_else(|| center_of(t.from));
+                    let to_x = t.to_x.unwrap_or_else(|| center_of(t.to));
+                    b.push_str(&format!("    FCB {},{},{},${:02X}  ; trans[{}] from,to,type,vy0\n",
+                        t.from, t.to, ttype, vy0 as u8, idx));
+                    b.push_str(&format!("    FDB {}     ; from_x\n", from_x));
+                    b.push_str(&format!("    FDB {}     ; to_x\n", to_x));
+                }
+            }
+            b
+        };
+        let mut enemy_area_label: Vec<Option<String>> = vec![None; enemy_objects.len()];
+        let mut area_tables: Vec<(String, String)> = Vec::new(); // (label, body) in emit order
+        let mut body_to_label: HashMap<String, String> = HashMap::new();
+        for (i, obj) in enemy_objects.iter().enumerate() {
+            let is_wander = obj.ai_type.as_deref() == Some("wander");
+            let (areas, trans) = &enemy_areas_trans[i];
+            if !is_wander || areas.is_empty() { continue; }
+            let body = build_area_body(areas, trans);
+            let label = if let Some(l) = body_to_label.get(&body) {
+                l.clone()
+            } else {
+                let l = format!("_{}_ENEMY{}_AREAS", name, i);
+                body_to_label.insert(body.clone(), l.clone());
+                area_tables.push((l.clone(), body));
+                l
+            };
+            enemy_area_label[i] = Some(label);
+        }
 
         // Emit enemy instances (separate section — enemy_objects computed at top of fn)
 
@@ -559,9 +661,11 @@ impl VPlayLevel {
                     0
                 };
 
+                let enemy_areas = &enemy_areas_trans[i].0;
+
                 // Initial area index: find best area for spawn (x,y). Min |dy| with X-in-range bias.
-                let init_area_idx = if is_wander && !level_areas_world.is_empty() {
-                    level_areas_world
+                let init_area_idx = if is_wander && !enemy_areas.is_empty() {
+                    enemy_areas
                         .iter()
                         .enumerate()
                         .min_by_key(|(_, a)| {
@@ -576,10 +680,10 @@ impl VPlayLevel {
                 };
 
                 // For wander enemies, wp_count becomes area_count and wp_ptr
-                // becomes areas_header_ptr (the level-wide shared table).
-                let (ai_byte, wp_count, wp_label) = if is_wander && !level_areas_world.is_empty() {
-                    let area_count = level_areas_world.len();
-                    (4u8, area_count, format!("_{}_AREAS_HEADER", name))
+                // becomes areas_header_ptr (this enemy's areas table, possibly
+                // shared with other enemies via dedup).
+                let (ai_byte, wp_count, wp_label) = if let Some(lbl) = &enemy_area_label[i] {
+                    (4u8, enemy_areas.len(), lbl.clone())
                 } else if is_wander {
                     // No areas at all — wander degenerates to no-op
                     (4u8, 0usize, "0".to_string())
@@ -618,103 +722,24 @@ impl VPlayLevel {
                 }
             }
 
-            // Emit shared Phase 2 wander AREAS + TRANS tables (level-wide)
-            if !level_areas_world.is_empty() {
-                let area_count = level_areas_world.len();
-                let trans_count = level_transitions.len();
-                out.push_str(&format!("; ---- Phase 2 wander: level-wide areas ({} areas, {} transitions) ----\n",
-                    area_count, trans_count));
-                out.push_str(&format!("_{}_AREAS_HEADER:\n", name));
-                out.push_str(&format!("    FCB {}    ; area_count\n", area_count));
-                out.push_str(&format!("    FCB {}    ; trans_count\n", trans_count));
-                out.push_str(&format!("; Areas (8 bytes each): FDB y, FDB x_min, FDB x_max, FCB 0, FCB 0\n"));
-                for (idx, a) in level_areas_world.iter().enumerate() {
-                    out.push_str(&format!("    FDB {}  ; area[{}].y\n", a.y, idx));
-                    out.push_str(&format!("    FDB {}  ; area[{}].x_min\n", a.x_min, idx));
-                    out.push_str(&format!("    FDB {}  ; area[{}].x_max\n", a.x_max, idx));
-                    out.push_str(&format!("    FCB 0,0      ; pad\n"));
-                }
-                if trans_count > 0 {
-                    out.push_str(&format!("; Transitions (8 bytes each): FCB from, FCB to, FCB type, FCB vy0, FDB from_x, FDB to_x\n"));
-                    out.push_str(&format!("; type: 1=jump_up, 2=drop, 3=jump_across; vy0 = signed initial velocity\n"));
-                    for (idx, t) in level_transitions.iter().enumerate() {
-                        let (from, to, ttype, vy0, from_x, to_x) = t;
-                        // vy0 is i8; emit as unsigned byte by reinterpreting
-                        let vy0_byte = *vy0 as u8;
-                        out.push_str(&format!("    FCB {},{},{},${:02X}  ; trans[{}] from,to,type,vy0\n",
-                            from, to, ttype, vy0_byte, idx));
-                        out.push_str(&format!("    FDB {}     ; from_x\n", from_x));
-                        out.push_str(&format!("    FDB {}     ; to_x\n", to_x));
-                    }
-                }
+            // Emit the (deduplicated) Phase 2 wander AREAS + TRANS tables. Each
+            // table mirrors ARM's `_{name}_ENEMY{i}_AREAS`; the M6809 runtime
+            // reads it at areas_ptr (= wp_ptr, pool +11..12). Layout must match
+            // helpers.rs (~3046):
+            //   +0  FCB area_count
+            //   +1  FCB trans_count
+            //   +2  area[k]: FDB y, FDB x_min, FDB x_max, FCB 0, FCB 0 (8 bytes)
+            //   trans[k]: FCB from, FCB to, FCB type, FCB vy0, FDB from_x, FDB to_x (8 bytes)
+            // Unlike ARM (which computes vy0 at runtime), the M6809 runtime uses
+            // a compiler-precomputed vy0 (vy0_stash), derived in build_area_body.
+            for (label, body) in &area_tables {
+                out.push_str(&format!("; ---- Phase 2 wander: areas table {} ----\n", label));
+                out.push_str(&format!("{}:\n", label));
+                out.push_str(body);
                 out.push_str("\n");
             }
         }
 
-        out
-    }
-
-    /// Auto-derive transitions between walkable areas based on geometry.
-    /// Filters cross-screen pairs when isolate_screens is set (256-unit Y screen partition).
-    /// Returns Vec<(from, to, type, vy0, from_x, to_x)>.
-    fn derive_transitions_m6809(
-        areas: &[WalkableArea],
-        isolate_screens: bool,
-        world_y_max: i16,
-    ) -> Vec<(u8, u8, u8, i8, i16, i16)> {
-        let mut out = Vec::new();
-        const MAX_TRANS: usize = 24;
-        const MAX_JUMP_DY: i16 = 100;          // max height for jump_up reach
-        const MAX_ACROSS_GAP: i16 = 60;        // max horizontal gap for jump_across
-        const MAX_ACROSS_DY: i16 = 40;         // max vertical delta for jump_across
-
-        // Screen partition aligned to worldBounds.yMax (256-unit Y bands).
-        let screen_of = |y: i16| -> i32 {
-            (world_y_max as i32 - y as i32).div_euclid(256)
-        };
-
-        // Compute jump_up vy0 such that vy0*(vy0+1)/2 >= dy (peak height covers dy).
-        // Cap at 16 to fit in i8. Matches PiTrex iterative formula.
-        let vy0_for_jump_up = |dy: i16| -> i8 {
-            for v in 4i16..=16 {
-                if v * (v + 1) / 2 >= dy { return v as i8; }
-            }
-            16
-        };
-
-        for (i, a) in areas.iter().enumerate() {
-            for (j, b) in areas.iter().enumerate() {
-                if i == j { continue; }
-                if out.len() >= MAX_TRANS { return out; }
-                if isolate_screens && screen_of(a.y) != screen_of(b.y) { continue; }
-                let ov_min = a.x_min.max(b.x_min);
-                let ov_max = a.x_max.min(b.x_max);
-                let overlap = ov_max - ov_min;
-                let dy = b.y - a.y;
-                if overlap > 0 {
-                    let from_x = (ov_min + ov_max) / 2;
-                    let to_x = from_x;
-                    if dy > 0 && dy <= MAX_JUMP_DY {
-                        // jump_up: target higher than source
-                        let vy0 = vy0_for_jump_up(dy);
-                        out.push((i as u8, j as u8, 1u8, vy0, from_x, to_x));
-                    } else if dy < 0 && (-dy) <= MAX_JUMP_DY {
-                        // drop: target lower
-                        out.push((i as u8, j as u8, 2u8, -1i8, from_x, to_x));
-                    }
-                } else {
-                    let gap = (-overlap).max(0);
-                    if gap > 0 && gap <= MAX_ACROSS_GAP && dy.abs() <= MAX_ACROSS_DY {
-                        let (from_x, to_x) = if a.x_max < b.x_min {
-                            (a.x_max, b.x_min)
-                        } else {
-                            (a.x_min, b.x_max)
-                        };
-                        out.push((i as u8, j as u8, 3u8, 3i8, from_x, to_x));
-                    }
-                }
-            }
-        }
         out
     }
 
@@ -788,6 +813,146 @@ impl VPlayLevel {
         }
     }
 
+    /// For an anim enemy: load the `.vanim` referenced by the enemy's patrol/idle
+    /// action and return its frames as `(duration_ticks, first_vec_ref_name)`.
+    /// Mirrors what the inline vanim draw ticks (frame duration + the frame's
+    /// first vec_ref). The `.vanim` path in the action is project-root-relative
+    /// (project root = `{venemy_dir}/../..`). None if the action sprite isn't a
+    /// `.vanim` or the file can't be read.
+    fn lookup_venemy_anim(enemy_type: &str, venemy_dir: Option<&Path>) -> Option<Vec<(u8, String)>> {
+        let dir = venemy_dir?;
+        let vtext = std::fs::read_to_string(dir.join(format!("{}.venemy", enemy_type))).ok()?;
+        let vval: serde_json::Value = serde_json::from_str(&vtext).ok()?;
+        let patrol_action = vval["behavior"]["patrol"]["patrolAction"].as_str().unwrap_or("");
+        let actions = vval["actions"].as_array()?;
+        let action = if !patrol_action.is_empty() {
+            actions.iter().find(|a| a["name"].as_str() == Some(patrol_action))?
+        } else {
+            actions.iter().find(|a| a["name"].as_str() == Some("idle")).or_else(|| actions.first())?
+        };
+        let sprite_path = action["sprite"].as_str().unwrap_or("");
+        if !sprite_path.ends_with(".vanim") { return None; }
+        let proj_root = dir.parent()?.parent()?;
+        let atext = std::fs::read_to_string(proj_root.join(sprite_path)).ok()?;
+        let aval: serde_json::Value = serde_json::from_str(&atext).ok()?;
+        let frames = aval["frames"].as_array()?;
+        let mut out = Vec::new();
+        for f in frames {
+            let dur = f["duration_ticks"].as_u64().unwrap_or(1) as u8;
+            let vec_ref = f["vec_refs"].as_array()
+                .and_then(|v| v.first()).and_then(|s| s.as_str()).unwrap_or("");
+            if !vec_ref.is_empty() { out.push((dur, vec_ref.to_string())); }
+        }
+        if out.is_empty() { None } else { Some(out) }
+    }
+
+    /// FNV-1a 8-bit hash of an event name — matches the inline
+    /// `pitrex_enemy_fire_event` dispatch (expressions.rs computes the same hash
+    /// at each ENEMY_FIRE_EVENT call site).
+    fn fnv1a_u8(s: &str) -> u8 {
+        let mut h: u32 = 2166136261;
+        for b in s.bytes() { h = h.wrapping_mul(16777619) ^ (b as u32); }
+        (h & 0xFF) as u8
+    }
+
+    /// Load an enemy type's state machine for the libvpy PI state-machine blob.
+    /// Returns `(states, events)`:
+    ///   states[i] = (is_anim, frames) where frames = [(dur_ticks, vec_ref)]
+    ///     (a single (0, vec_stem) entry for a static .vec action; the .vanim
+    ///     frame list for an animated action). Indexed by sm_state.
+    ///   events[i] = [(fnv1a_hash, target_state_idx)] for state i's on_event list.
+    /// Mirrors emit_enemy_data_for_pitrex (pitrex/assets.rs): the SAME
+    /// state→sprite + event dispatch data, but position-independent (sprite
+    /// refs become indices, event table is bytes). None if no state machine.
+    fn lookup_venemy_smdata(
+        enemy_type: &str,
+        venemy_dir: Option<&Path>,
+    ) -> Option<(Vec<(u8, Vec<(u8, String)>)>, Vec<Vec<(u8, u8)>>)> {
+        let dir = venemy_dir?;
+        let vtext = std::fs::read_to_string(dir.join(format!("{}.venemy", enemy_type))).ok()?;
+        let vval: serde_json::Value = serde_json::from_str(&vtext).ok()?;
+        let actions = vval["actions"].as_array()?;
+        let states_json = vval["state_machine"]["states"].as_array()?;
+        let state_names: Vec<String> = states_json.iter()
+            .filter_map(|s| s["name"].as_str().map(|x| x.to_string())).collect();
+        let proj_root = dir.parent()?.parent()?;
+        let mut states: Vec<(u8, Vec<(u8, String)>)> = Vec::new();
+        let mut events: Vec<Vec<(u8, u8)>> = Vec::new();
+        for st in states_json.iter().take(8) {
+            let action_name = st["action"].as_str().unwrap_or("");
+            let action = actions.iter().find(|a| a["name"].as_str() == Some(action_name));
+            let sprite_path = action.and_then(|a| a["sprite"].as_str()).unwrap_or("");
+            let sprite = if sprite_path.ends_with(".vanim") {
+                let mut fr = Vec::new();
+                if let Ok(atext) = std::fs::read_to_string(proj_root.join(sprite_path)) {
+                    if let Ok(aval) = serde_json::from_str::<serde_json::Value>(&atext) {
+                        if let Some(frs) = aval["frames"].as_array() {
+                            for f in frs {
+                                let dur = f["duration_ticks"].as_u64().unwrap_or(1) as u8;
+                                let vr = f["vec_refs"].as_array()
+                                    .and_then(|v| v.first()).and_then(|s| s.as_str()).unwrap_or("");
+                                if !vr.is_empty() { fr.push((dur, vr.to_string())); }
+                            }
+                        }
+                    }
+                }
+                (1u8, fr)
+            } else if sprite_path.ends_with(".vec") {
+                let stem = Path::new(sprite_path).file_stem()
+                    .and_then(|s| s.to_str()).unwrap_or("").to_string();
+                (0u8, if stem.is_empty() { vec![] } else { vec![(0u8, stem)] })
+            } else {
+                (0u8, vec![])
+            };
+            states.push(sprite);
+            let mut evs = Vec::new();
+            if let Some(oe) = st["on_event"].as_array() {
+                for e in oe.iter().take(4) {
+                    let name = e["event"].as_str().unwrap_or("");
+                    let to = e["to"].as_str().unwrap_or("");
+                    let target = state_names.iter().position(|n| n == to).unwrap_or(0) as u8;
+                    if !name.is_empty() { evs.push((Self::fnv1a_u8(name), target)); }
+                }
+            }
+            events.push(evs);
+        }
+        Some((states, events))
+    }
+
+    /// Resolve the enemy's IDLE-sprite (wander IDLE sub-state swap target),
+    /// returning `(is_anim, frames)` like a state sprite. Priority mirrors the
+    /// inline emit_enemy_data_for_pitrex idle pick: action named "idle" > first
+    /// static (.vec) action > first action. None if unresolvable.
+    fn lookup_venemy_idle(
+        enemy_type: &str,
+        venemy_dir: Option<&Path>,
+    ) -> Option<(u8, Vec<(u8, String)>)> {
+        let dir = venemy_dir?;
+        let vtext = std::fs::read_to_string(dir.join(format!("{}.venemy", enemy_type))).ok()?;
+        let vval: serde_json::Value = serde_json::from_str(&vtext).ok()?;
+        let actions = vval["actions"].as_array()?;
+        let action = actions.iter().find(|a| a["name"].as_str() == Some("idle"))
+            .or_else(|| actions.iter().find(|a| a["sprite"].as_str().map_or(false, |s| s.ends_with(".vec"))))
+            .or_else(|| actions.first())?;
+        let sprite_path = action["sprite"].as_str().unwrap_or("");
+        if sprite_path.ends_with(".vec") {
+            let stem = Path::new(sprite_path).file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+            if stem.is_empty() { return None; }
+            Some((0u8, vec![(0u8, stem)]))
+        } else if sprite_path.ends_with(".vanim") {
+            let proj_root = dir.parent()?.parent()?;
+            let atext = std::fs::read_to_string(proj_root.join(sprite_path)).ok()?;
+            let aval: serde_json::Value = serde_json::from_str(&atext).ok()?;
+            let mut fr = Vec::new();
+            for f in aval["frames"].as_array()? {
+                let dur = f["duration_ticks"].as_u64().unwrap_or(1) as u8;
+                let vr = f["vec_refs"].as_array().and_then(|v| v.first()).and_then(|s| s.as_str()).unwrap_or("");
+                if !vr.is_empty() { fr.push((dur, vr.to_string())); }
+            }
+            if fr.is_empty() { None } else { Some((1u8, fr)) }
+        } else { None }
+    }
+
     /// Look up mirror_on_patrol and default_facing for an enemy type.
     /// Searches for `{venemy_dir}/{enemy_type}.venemy`. Returns (mirror, facing_byte).
     fn lookup_venemy_mirror(enemy_type: &str, venemy_dir: Option<&Path>) -> (u8, u8) {
@@ -805,7 +970,7 @@ impl VPlayLevel {
     }
 
     pub fn compile_to_arm_asm_with_venemy(&self, dims: &HashMap<String, (i32, i32)>, venemy_dir: Option<&Path>) -> String {
-        self.compile_to_arm_asm_with_venemy_and_meshes(dims, venemy_dir, &HashMap::new(), &HashMap::new())
+        self.compile_to_arm_asm_with_venemy_and_meshes(dims, venemy_dir, &HashMap::new(), &HashMap::new(), &HashMap::new())
     }
 
     pub fn compile_to_arm_asm_with_venemy_and_meshes(
@@ -814,6 +979,7 @@ impl VPlayLevel {
         venemy_dir: Option<&Path>,
         vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
         vec_walk_areas: &HashMap<String, Vec<crate::vecres::VecWalkableArea>>,
+        vec_min_y: &HashMap<String, i16>,   // for the PI enemy feet_offset (= -min_y)
     ) -> String {
         let mut out = String::new();
         let name = self.metadata.name.to_uppercase().replace('-', "_").replace(' ', "_");
@@ -928,6 +1094,21 @@ impl VPlayLevel {
             // Per-enemy walkable-area tables are appended after the enemies array.
             let mut areas_tables = String::new();
 
+            // Position-independent enemy image for libvpy (Phase 2 of the LEVELS
+            // bridge — NEW, tree-shaken until the group is wired). Built from the
+            // SAME derived data as the inline table below; sprite refs become
+            // INDICES into `_NAME_ENEMY_SPRITES` (-> `_{SPRITE}_VEC`), no absolute
+            // pointers. Layout matches libvpy vpy_spawn_enemies (see vpy.c).
+            let mut pi_bytes: Vec<u8> = Vec::new();
+            pi_bytes.extend_from_slice(&(ec as u16).to_le_bytes());
+            let mut enemy_sprite_syms: Vec<String> = Vec::new();
+            // PI anim descriptors `_{ANIM}_ANIMC`-style blobs for anim enemies,
+            // emitted after the sprite table. Each entry: (symbol, bytes).
+            let mut anim_descriptors: Vec<(String, Vec<u8>)> = Vec::new();
+            // PI state-machine blobs `_{NAME}_ENEMY_SM{idx}` (state→sprite + event
+            // table) for enemies with a state machine (SnowBros freeze states).
+            let mut smdata_blobs: Vec<(String, Vec<u8>)> = Vec::new();
+
             for (idx, obj) in enemy_objs.iter().enumerate() {
                 let et = obj.enemy_type.as_deref().unwrap_or("").to_uppercase();
                 let ai = ai_type_byte(&obj.ai_type);
@@ -982,51 +1163,210 @@ impl VPlayLevel {
                 // This lets platform .vec files define where enemies walk and
                 // those areas are automatically inherited by enemies that don't
                 // specify their own walkable_areas.
-                let (vec_areas, vec_sources) = Self::collect_vec_walkable_areas_with_sources(&self.layers, vec_walk_areas);
-                let (level_areas, level_sources): (Vec<WalkableArea>, Option<Vec<usize>>) =
-                    if !vec_areas.is_empty() {
-                        (vec_areas, Some(vec_sources))
-                    } else {
-                        match self.walkable_areas.as_deref() {
-                            Some(a) if !a.is_empty() => (a.to_vec(), None),
-                            _ => (Vec::new(), None),
-                        }
+                // Resolve areas + transitions via the shared helper (same
+                // precedence + auto-derivation used by the M6809 backend, so
+                // both targets stay in lockstep).
+                let (areas, trans_vec) = self.derive_enemy_areas_and_transitions(obj, vec_walk_areas);
+                let trans: &[AreaTransition] = &trans_vec;
+                // ── Position-independent enemy record for libvpy ─────────────
+                // Same derived fields as the inline table; sprite ref -> index.
+                {
+                    let push_sprite = |syms: &mut Vec<String>, sym: String| -> u16 {
+                        syms.iter().position(|s| s == &sym)
+                            .unwrap_or_else(|| { syms.push(sym); syms.len() - 1 }) as u16
                     };
-                let areas = Self::derive_walkable_areas(obj, Some(level_areas.as_slice()));
-                // Only pass sources when the resolved area list IS the level one
-                // (so indices match). If derive picked enemy-own or waypoints,
-                // sources don't apply.
-                let sources_for_derive: Option<&[usize]> =
-                    if obj.walkable_areas.as_ref().map_or(true, |v| v.is_empty()) && areas.len() == level_areas.len() {
-                        level_sources.as_deref()
-                    } else { None };
-                // Transitions: explicit override on the enemy → use as-is.
-                // Else explicit override at level → use as-is. Else auto-derive
-                // from the area geometry (immediate neighbors only).
-                // Treat an empty `transitions` list the same as None: it means
-                // "no explicit override, please auto-derive". The IDE often
-                // saves `"transitions": []` even when the designer hasn't
-                // touched them, and that empty list would otherwise suppress
-                // auto-derive entirely.
-                let derived_trans;
-                let obj_trans = obj.transitions.as_deref().filter(|t| !t.is_empty());
-                let self_trans = self.transitions.as_deref().filter(|t| !t.is_empty());
-                let trans: &[AreaTransition] = if let Some(t) = obj_trans {
-                    t
-                } else if let Some(t) = self_trans {
-                    t
-                } else {
-                    derived_trans = Self::derive_transitions(
-                        &areas,
-                        self.isolate_screens,
-                        self.world_bounds.y_max as i16,
-                        self.transition_min_x_overlap.unwrap_or(4),
-                        self.transition_lateral_y.unwrap_or(8),
-                        self.transition_lateral_gap.unwrap_or(60),
-                        sources_for_derive,
-                    );
-                    &derived_trans
-                };
+                    // sprite_index -> either a static `_{X}_VEC` or (for an anim
+                    // enemy) a PI anim descriptor `_{NAME}_ENEMY_ANIM{idx}` that
+                    // the libvpy reader decodes: [frame_count, per frame
+                    // (dur u8, vec_index u16)] with vec_index into this same table.
+                    let sprite_index: u16 = if is_anim_byte == 1 {
+                        match Self::lookup_venemy_anim(&et.to_lowercase(), venemy_dir) {
+                            Some(frames) if !frames.is_empty() => {
+                                let mut desc: Vec<u8> = Vec::new();
+                                desc.push(frames.len().min(255) as u8);
+                                for (dur, vec_ref) in &frames {
+                                    let vsym = format!("_{}_VEC",
+                                        vec_ref.to_uppercase().replace('-', "_").replace(' ', "_"));
+                                    let vidx = push_sprite(&mut enemy_sprite_syms, vsym);
+                                    desc.push(*dur);
+                                    desc.extend_from_slice(&vidx.to_le_bytes());
+                                }
+                                let dsym = format!("_{name}_ENEMY_ANIM{idx}");
+                                anim_descriptors.push((dsym.clone(), desc));
+                                push_sprite(&mut enemy_sprite_syms, dsym)
+                            }
+                            // No frames -> fall back to a static `_VEC` of the anim stem.
+                            _ => {
+                                let base = sprite_sym.trim_start_matches("_ANIM_");
+                                push_sprite(&mut enemy_sprite_syms, format!("_{base}_VEC"))
+                            }
+                        }
+                    } else {
+                        let vec_sym = if sprite_sym.ends_with("_VECTORS") {
+                            format!("{}_VEC", &sprite_sym[..sprite_sym.len() - 8])
+                        } else {
+                            sprite_sym.clone()
+                        };
+                        push_sprite(&mut enemy_sprite_syms, vec_sym)
+                    };
+                    pi_bytes.extend_from_slice(&sprite_index.to_le_bytes());
+                    pi_bytes.extend_from_slice(&obj.x.to_le_bytes());
+                    pi_bytes.extend_from_slice(&obj.y.to_le_bytes());
+                    pi_bytes.push(ai);
+                    pi_bytes.push(wpc);
+                    pi_bytes.push(mirror_byte);
+                    pi_bytes.push(facing_byte);
+                    pi_bytes.push(is_anim_byte);
+                    // feet_offset = -(min_y across EVERY sprite of this enemy type,
+                    // i.e. `{type}` or `{type}_*`), matching the inline
+                    // compute_enemy_feet_offset that fills _DATA[209]. Looking up
+                    // only the exact-name vec diverged the spawn area-snap Y by the
+                    // feet delta (e.g. SnowBros enemies drawn 8 units off).
+                    let et_lc = et.to_lowercase();
+                    let et_prefix = format!("{et_lc}_");
+                    let mut acc_my: Option<i16> = None;
+                    for (n, &my) in vec_min_y {
+                        if n == &et_lc || n.starts_with(&et_prefix) {
+                            acc_my = Some(acc_my.map_or(my, |a| a.min(my)));
+                        }
+                    }
+                    let feet_pi: i8 = acc_my.map(|my| (-my).clamp(-127, 127) as i8).unwrap_or(0);
+                    pi_bytes.push(feet_pi as u8);
+                    // Wander sprite-swap slots (used by vpy_update_enemies'
+                    // WANDER sub-state transitions via enemy_set_sprite):
+                    //   walk sprite = the enemy's default/state-0 sprite (the
+                    //     patrol/walk action — same as sprite_index),
+                    //   idle sprite = the IDLE action sprite (inline type_data[204]).
+                    // Matches the inline wander swap (WALK -> state-0 sprite,
+                    // IDLE -> idle action). Emitting these correctly (vs the old
+                    // walk=NONE/idle=default no-op) makes a wander enemy with a
+                    // distinct idle sprite (e.g. SnowBros: walk vanim, idle .vec)
+                    // draw the right sprite per sub-state.
+                    let (idle_idx, idle_anim): (u16, u8) =
+                        match Self::lookup_venemy_idle(&et.to_lowercase(), venemy_dir) {
+                            Some((is_anim, frames)) if !frames.is_empty() => {
+                                if is_anim == 1 {
+                                    let mut desc: Vec<u8> = Vec::new();
+                                    desc.push(frames.len().min(255) as u8);
+                                    for (dur, vec_ref) in &frames {
+                                        let vsym = format!("_{}_VEC",
+                                            vec_ref.to_uppercase().replace('-', "_").replace(' ', "_"));
+                                        let vidx = push_sprite(&mut enemy_sprite_syms, vsym);
+                                        desc.push(*dur);
+                                        desc.extend_from_slice(&vidx.to_le_bytes());
+                                    }
+                                    let dsym = format!("_{name}_ENEMY_IDLE{idx}");
+                                    anim_descriptors.push((dsym.clone(), desc));
+                                    (push_sprite(&mut enemy_sprite_syms, dsym), 1u8)
+                                } else {
+                                    let vsym = format!("_{}_VEC",
+                                        frames[0].1.to_uppercase().replace('-', "_").replace(' ', "_"));
+                                    (push_sprite(&mut enemy_sprite_syms, vsym), 0u8)
+                                }
+                            }
+                            // No idle action -> idle == default (swap is a no-op).
+                            _ => (sprite_index, is_anim_byte),
+                        };
+                    pi_bytes.extend_from_slice(&idle_idx.to_le_bytes());     // idle_sprite_index
+                    pi_bytes.push(idle_anim);                                // idle_is_anim
+                    pi_bytes.extend_from_slice(&sprite_index.to_le_bytes()); // walk_sprite_index = default
+                    pi_bytes.push(is_anim_byte);                             // walk_is_anim
+                    // ── PI state-machine blob index (offset +18) ─────────────
+                    // sm_index -> a `_{name}_ENEMY_SM{idx}` blob in the sprite
+                    // table (state→sprite + event table), or 0xFFFF if the enemy
+                    // type has no state machine. Consumed by vpy_enemy_fire_event
+                    // (event dispatch) and vpy_draw_enemies (state-sprite swap).
+                    let sm_index: u16 = match Self::lookup_venemy_smdata(&et.to_lowercase(), venemy_dir) {
+                        Some((states, events)) if !states.is_empty() => {
+                            let mut blob: Vec<u8> = Vec::new();
+                            blob.push(states.len().min(8) as u8);      // [0] state_count
+                            blob.extend_from_slice(&[0u8; 3]);         // [1..4] pad
+                            let mut sanim = [0u8; 8];
+                            // [4..20] 8 x u16 state sprite_index (state 0 uses the
+                            // enemy's default sprite in draw, so leave it NONE).
+                            for i in 0..8 {
+                                let sidx: u16 = if i == 0 {
+                                    0xFFFFu16
+                                } else if let Some((is_anim, frames)) = states.get(i) {
+                                    sanim[i] = *is_anim;
+                                    if frames.is_empty() {
+                                        0xFFFFu16
+                                    } else if *is_anim == 1 {
+                                        let mut desc: Vec<u8> = Vec::new();
+                                        desc.push(frames.len().min(255) as u8);
+                                        for (dur, vec_ref) in frames {
+                                            let vsym = format!("_{}_VEC",
+                                                vec_ref.to_uppercase().replace('-', "_").replace(' ', "_"));
+                                            let vidx = push_sprite(&mut enemy_sprite_syms, vsym);
+                                            desc.push(*dur);
+                                            desc.extend_from_slice(&vidx.to_le_bytes());
+                                        }
+                                        let dsym = format!("_{name}_ENEMY_SM{idx}_S{i}");
+                                        anim_descriptors.push((dsym.clone(), desc));
+                                        push_sprite(&mut enemy_sprite_syms, dsym)
+                                    } else {
+                                        let vsym = format!("_{}_VEC",
+                                            frames[0].1.to_uppercase().replace('-', "_").replace(' ', "_"));
+                                        push_sprite(&mut enemy_sprite_syms, vsym)
+                                    }
+                                } else { 0xFFFFu16 };
+                                blob.extend_from_slice(&sidx.to_le_bytes());
+                            }
+                            // [20..28] 8 x u8 is_anim
+                            blob.extend_from_slice(&sanim);
+                            // [28 + state*20] event table: 8 blocks x 20 bytes.
+                            // Per block: event_count(u8), 3 pad, 4 x (hash, target, 2 pad).
+                            for i in 0..8 {
+                                let evs = events.get(i).cloned().unwrap_or_default();
+                                blob.push(evs.len().min(4) as u8);
+                                blob.extend_from_slice(&[0u8; 3]);
+                                for e in 0..4 {
+                                    if let Some((hash, target)) = evs.get(e) {
+                                        blob.push(*hash);
+                                        blob.push(*target);
+                                        blob.extend_from_slice(&[0u8; 2]);
+                                    } else {
+                                        blob.extend_from_slice(&[0u8; 4]);
+                                    }
+                                }
+                            }
+                            let smsym = format!("_{name}_ENEMY_SM{idx}");
+                            smdata_blobs.push((smsym.clone(), blob));
+                            push_sprite(&mut enemy_sprite_syms, smsym)
+                        }
+                        _ => 0xFFFFu16,
+                    };
+                    pi_bytes.extend_from_slice(&sm_index.to_le_bytes());     // [18] sm_index
+                    for wp in wps {
+                        pi_bytes.extend_from_slice(&wp.x.to_le_bytes());
+                        pi_bytes.extend_from_slice(&wp.y.to_le_bytes());
+                    }
+                    pi_bytes.extend_from_slice(&(areas.len() as u16).to_le_bytes());
+                    for a in &areas {
+                        pi_bytes.extend_from_slice(&a.y.to_le_bytes());
+                        pi_bytes.extend_from_slice(&a.x_min.to_le_bytes());
+                        pi_bytes.extend_from_slice(&a.x_max.to_le_bytes());
+                    }
+                    pi_bytes.extend_from_slice(&(trans.len() as u16).to_le_bytes());
+                    let center_of = |ci: u8| -> i16 {
+                        let a = areas.get(ci as usize).unwrap_or(&WalkableArea { y: 0, x_min: 0, x_max: 0 });
+                        ((a.x_min as i32 + a.x_max as i32) / 2) as i16
+                    };
+                    for t in trans {
+                        let ttype = match t.ttype.as_str() {
+                            "jump_up" => 1u8, "drop" => 2u8, "jump_across" => 3u8, _ => 0u8,
+                        };
+                        let fx = t.from_x.unwrap_or_else(|| center_of(t.from));
+                        let tx = t.to_x.unwrap_or_else(|| center_of(t.to));
+                        pi_bytes.push(t.from);
+                        pi_bytes.push(t.to);
+                        pi_bytes.push(ttype);
+                        pi_bytes.push(0u8);
+                        pi_bytes.extend_from_slice(&fx.to_le_bytes());
+                        pi_bytes.extend_from_slice(&tx.to_le_bytes());
+                    }
+                }
+
                 if !areas.is_empty() {
                     let alabel = format!("_{name}_ENEMY{idx}_AREAS");
                     out.push_str(&format!("    .word {alabel}   @ areas_ptr\n"));
@@ -1073,6 +1413,52 @@ impl VPlayLevel {
                 out.push_str(&areas_tables);
                 out.push_str("\n");
             }
+
+            // ── libvpy position-independent enemy image + sprite table ───────
+            // NEW, tree-shaken until the LEVELS group is wired (own .rodata,
+            // .balign 4, --gc-sections). Consumed by vpy_spawn_enemies.
+            out.push_str(&format!("@ --- {name}_ENEMY_SPRITES (libvpy enemy sprite-index table) ---\n"));
+            out.push_str(&format!(".section .rodata._{name}_ENEMY_SPRITES,\"a\",%progbits\n"));
+            out.push_str("    .balign 4\n");
+            out.push_str(&format!(".global _{name}_ENEMY_SPRITES\n_{name}_ENEMY_SPRITES:\n"));
+            if enemy_sprite_syms.is_empty() {
+                out.push_str("    .word 0\n");
+            } else {
+                for sp in &enemy_sprite_syms {
+                    out.push_str(&format!("    .word {sp}\n"));
+                }
+            }
+            // PI anim descriptors (referenced by `.word` in the sprite table above).
+            for (dsym, bytes) in &anim_descriptors {
+                out.push_str(&format!("@ --- {dsym} (libvpy PI anim descriptor) ---\n"));
+                out.push_str(&format!(".section .rodata.{dsym},\"a\",%progbits\n"));
+                out.push_str("    .balign 4\n");
+                out.push_str(&format!(".global {dsym}\n{dsym}:\n"));
+                for chunk in bytes.chunks(16) {
+                    let vals: Vec<String> = chunk.iter().map(|b| format!("0x{b:02X}")).collect();
+                    out.push_str(&format!("    .byte   {}\n", vals.join(", ")));
+                }
+            }
+            // PI state-machine blobs (referenced by `.word` in the sprite table).
+            for (smsym, bytes) in &smdata_blobs {
+                out.push_str(&format!("@ --- {smsym} (libvpy PI state-machine: state sprites + event table) ---\n"));
+                out.push_str(&format!(".section .rodata.{smsym},\"a\",%progbits\n"));
+                out.push_str("    .balign 4\n");
+                out.push_str(&format!(".global {smsym}\n{smsym}:\n"));
+                for chunk in bytes.chunks(16) {
+                    let vals: Vec<String> = chunk.iter().map(|b| format!("0x{b:02X}")).collect();
+                    out.push_str(&format!("    .byte   {}\n", vals.join(", ")));
+                }
+            }
+            out.push_str(&format!("@ --- {name}_ENEMIES_C (libvpy position-independent enemy image) ---\n"));
+            out.push_str(&format!(".section .rodata._{name}_ENEMIES_C,\"a\",%progbits\n"));
+            out.push_str("    .balign 4\n");
+            out.push_str(&format!(".global _{name}_ENEMIES_C\n_{name}_ENEMIES_C:\n"));
+            for chunk in pi_bytes.chunks(16) {
+                let vals: Vec<String> = chunk.iter().map(|b| format!("0x{b:02X}")).collect();
+                out.push_str(&format!("    .byte   {}\n", vals.join(", ")));
+            }
+            out.push_str(".section .text\n\n");
         }
 
         out
@@ -1290,6 +1676,7 @@ impl VPlayLevel {
     /// object's (x, y). Returns a flat Vec usable as a candidate set for
     /// wander-enemy patrol-bound derivation on the M6809 target (matches
     /// ARM's `collect_vec_walkable_areas_with_sources` plus level pool).
+    #[allow(dead_code)]
     fn collect_all_walk_areas_world(
         layers: &VPlayLayers,
         vec_walk_areas: &HashMap<String, Vec<crate::vecres::VecWalkableArea>>,
@@ -1353,6 +1740,68 @@ impl VPlayLevel {
         } else {
             vec![]
         }
+    }
+
+    /// Resolve the effective walkable AREAS and inter-area TRANSITIONS for a
+    /// single enemy, applying the exact same precedence + auto-derivation the
+    /// ARM/pitrex backend uses. Shared by both `compile_arm` (per-enemy areas
+    /// table) and `compile_m6809_inner` (per-enemy m6809 areas header) so the
+    /// two targets never drift.
+    ///
+    /// Areas precedence (via `derive_walkable_areas`):
+    ///   1. enemy's own `walkable_areas`
+    ///   2. .vec-derived areas (placed platforms) or level-wide `walkable_areas`
+    ///   3. single area from patrol waypoints
+    /// Transitions precedence:
+    ///   1. enemy's own non-empty `transitions`
+    ///   2. level-wide non-empty `transitions`
+    ///   3. auto-derived from area geometry (`derive_transitions`)
+    fn derive_enemy_areas_and_transitions(
+        &self,
+        obj: &VPlayObject,
+        vec_walk_areas: &HashMap<String, Vec<crate::vecres::VecWalkableArea>>,
+    ) -> (Vec<WalkableArea>, Vec<AreaTransition>) {
+        let (vec_areas, vec_sources) =
+            Self::collect_vec_walkable_areas_with_sources(&self.layers, vec_walk_areas);
+        let (level_areas, level_sources): (Vec<WalkableArea>, Option<Vec<usize>>) =
+            if !vec_areas.is_empty() {
+                (vec_areas, Some(vec_sources))
+            } else {
+                match self.walkable_areas.as_deref() {
+                    Some(a) if !a.is_empty() => (a.to_vec(), None),
+                    _ => (Vec::new(), None),
+                }
+            };
+        let areas = Self::derive_walkable_areas(obj, Some(level_areas.as_slice()));
+        // Only pass sources when the resolved area list IS the level one (so
+        // indices match). If derive picked enemy-own or waypoints, sources
+        // don't apply.
+        let sources_for_derive: Option<&[usize]> =
+            if obj.walkable_areas.as_ref().map_or(true, |v| v.is_empty())
+                && areas.len() == level_areas.len()
+            {
+                level_sources.as_deref()
+            } else {
+                None
+            };
+        let obj_trans = obj.transitions.as_deref().filter(|t| !t.is_empty());
+        let self_trans = self.transitions.as_deref().filter(|t| !t.is_empty());
+        let trans: Vec<AreaTransition> = if let Some(t) = obj_trans {
+            t.to_vec()
+        } else if let Some(t) = self_trans {
+            t.to_vec()
+        } else {
+            Self::derive_transitions(
+                &areas,
+                self.isolate_screens,
+                self.world_bounds.y_max as i16,
+                self.transition_min_x_overlap.unwrap_or(4),
+                self.transition_lateral_y.unwrap_or(8),
+                self.transition_lateral_gap.unwrap_or(60),
+                sources_for_derive,
+            )
+        };
+        (areas, trans)
     }
 
     /// Compile a single object for the ARM binary format (20 bytes).
@@ -1724,6 +2173,394 @@ impl VPlayLevel {
         out.push_str("\n");
         (mesh, out)
     }
+
+    /// Serialize this level into the position-independent **C byte image**
+    /// consumed by the vpy.h runtime (`vpy_load_level` / `vpy_show_level` /
+    /// `vpy_update_level`).
+    ///
+    /// The layout deliberately mirrors the ARM/PiTrex level format
+    /// (`compile_to_arm_asm_*`) byte-for-byte at the OBJECT level (20-byte
+    /// stride, identical field offsets) so the C interpreter is a direct port
+    /// of the ARM runtime. The two link-time-resolved pointers are the only
+    /// thing that changes, because a static C array cannot hold absolute
+    /// addresses:
+    ///   * header layer pointers  → byte OFFSETS from the image base (u32 LE)
+    ///   * object `vector_ptr`    → SPRITE INDEX (u32 LE) into a companion
+    ///                              sprite-pointer table the C side supplies.
+    ///     `0xFFFFFFFF` = no sprite (empty vectorName or enemy marker).
+    ///   * object `coll_mesh_ptr` → always 0 (collision queries are deferred
+    ///                              in the C runtime — see report).
+    ///
+    /// Returns `(bytes, sprite_names)` where `sprite_names[i]` is the lowercase
+    /// `vectorName` bound to sprite index `i` (in first-reference order). The
+    /// caller emits `#include "<name>.h"` + a `{NAME}_vec` entry per sprite.
+    ///
+    /// Header (36 bytes):
+    ///   +0  xMin i16   +2 xMax i16   +4 yMin i16   +6 yMax i16
+    ///   +8  bgCount u8 +9 gpCount u8 +10 fgCount u8 +11 pad
+    ///   +12 bgObjectsOff u32  +16 gpObjectsOff u32  +20 fgObjectsOff u32
+    ///   +24 scrollLeft i16 +26 scrollRight i16 +28 scrollTop i16 +30 scrollBottom i16
+    ///   +32 groundBottomOffset i16  +34 pad u16
+    pub fn compile_to_c_bytes(&self) -> (Vec<u8>, Vec<String>) {
+        self.compile_to_c_bytes_with_meshes(&HashMap::new(), &HashMap::new())
+    }
+
+    /// As `compile_to_c_bytes`, but also emits per-object COLLISION MESHES
+    /// position-independently: each object's `coll_mesh_ptr` (+16) becomes a byte
+    /// OFFSET from the image base to a mesh block appended after the object
+    /// arrays (0 = AABB fallback / no mesh). Mesh block (LE), identical layout to
+    /// the inline `_COLMESH_*`:
+    ///   u32 floor_count; per floor: i16 x1, y1, x2, y2  (y1==y2, horizontal)
+    ///   u32 wall_count;  per wall:  i16 x, y_min, x, y_max
+    /// `vpy_level_collision_x/y` read it via `s_level + coll_mesh_off`.
+    pub fn compile_to_c_bytes_with_meshes(
+        &self,
+        vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
+        dims: &HashMap<String, (i32, i32)>,
+    ) -> (Vec<u8>, Vec<String>) {
+        let mut sprite_names: Vec<String> = Vec::new();
+        let mut sprite_index = |name: &str| -> u32 {
+            let key = name.to_lowercase();
+            if let Some(i) = sprite_names.iter().position(|n| n == &key) {
+                i as u32
+            } else {
+                sprite_names.push(key);
+                (sprite_names.len() - 1) as u32
+            }
+        };
+
+        // Serialize one 20-byte object record.
+        let emit_obj = |out: &mut Vec<u8>, obj: &VPlayObject, idx_fn: &mut dyn FnMut(&str) -> u32| {
+            out.extend_from_slice(&obj.x.to_le_bytes());
+            out.extend_from_slice(&obj.y.to_le_bytes());
+
+            let scale_u8 = (obj.scale * 8.0).round().clamp(1.0, 255.0) as u8;
+            out.push(scale_u8);
+
+            // intensity 0 => vpy_show_level's level_draw_obj passes override_b=0
+            // so draw_vec_stream uses the .vec's own per-path brightness — matching
+            // the inline pitrex_show_level (which clears PITREX_BRIGHTNESS_OVERRIDE
+            // and lets pitrex_draw_vector_ex read per-path). (>0 would force a flat
+            // override and diverge, e.g. SnowBros' 85-brightness level art.)
+            out.push(obj.intensity.unwrap_or(0));
+
+            // flags — identical semantics to compile_arm_object
+            let mut flags: u8 = 0;
+            let collidable = obj.collidable || obj.collision.as_ref().map_or(false, |c| c.enabled);
+            if collidable { flags |= 0x10; }
+            if obj.physics_enabled {
+                let has_physics = obj.physics.as_ref().map_or(true, |p| p.physics_type == "dynamic");
+                if has_physics { flags |= 0x01; }
+                let has_gravity = obj.gravity != 0.0
+                    || obj.physics.as_ref().map_or(false, |p| p.gravity != 0.0)
+                    || obj.physics_type.as_ref().map_or(false, |t| t == "gravity" || t == "projectile");
+                if has_gravity { flags |= 0x02; }
+                let bounce = obj.bounce_damping != 0.0
+                    || obj.physics_type.as_ref().map_or(false, |t| t == "bounce" || t == "gravity")
+                    || obj.collision.as_ref().map_or(false, |c| c.bounce_walls);
+                if bounce { flags |= 0x20; }
+            }
+            out.push(flags);
+
+            let type_byte = match obj.obj_type.as_str() {
+                "player_start" => 0u8,
+                "enemy"        => 1,
+                "obstacle"     => 2,
+                "collectible"  => 3,
+                "background"   => 4,
+                "trigger"      => 5,
+                _              => 255,
+            };
+            out.push(type_byte);
+
+            // sprite index (replaces the ARM absolute vector_ptr)
+            let is_enemy = obj.enemy_type.as_ref().map_or(false, |t| !t.is_empty());
+            let sidx: u32 = if obj.vector_name.is_empty() || is_enemy {
+                0xFFFF_FFFF
+            } else {
+                idx_fn(&obj.vector_name)
+            };
+            out.extend_from_slice(&sidx.to_le_bytes());
+
+            // half_w / half_h — explicit collision.width/height, else the vec's
+            // natural bounding-box half-size from `dims` (matching the inline ARM
+            // object at compile_arm_object). half_w is the collision_y/x
+            // X-broadphase gate: a 16 placeholder clipped wide platforms to a
+            // 32-wide walkable strip (only the center was walkable); the vec
+            // half-width covers the full authored platform, like inline.
+            let dkey = obj.vector_name.to_lowercase();
+            let (nat_hw, nat_hh) = dims.get(&dkey).copied().unwrap_or((16, 16));
+            let hw = obj.collision.as_ref().and_then(|c| c.width).map(|v| v as i32)
+                .unwrap_or(nat_hw).clamp(1, 127) as u8;
+            let hh = obj.collision.as_ref().and_then(|c| c.height).map(|v| v as i32)
+                .unwrap_or(nat_hh).clamp(1, 127) as u8;
+            out.push(hw);
+            out.push(hh);
+
+            out.push(obj.velocity.x.clamp(-128.0, 127.0) as i8 as u8);
+            out.push(obj.velocity.y.clamp(-128.0, 127.0) as i8 as u8);
+
+            // coll_mesh_ptr — deferred, always 0 (AABB/no collision)
+            out.extend_from_slice(&0u32.to_le_bytes());
+        };
+
+        // Header (36 bytes). Layer offsets are patched once we know where each
+        // object array lands (BG right after the header, then GP, then FG).
+        let mut bytes: Vec<u8> = Vec::new();
+        bytes.extend_from_slice(&self.world_bounds.x_min.to_le_bytes());
+        bytes.extend_from_slice(&self.world_bounds.x_max.to_le_bytes());
+        bytes.extend_from_slice(&self.world_bounds.y_min.to_le_bytes());
+        bytes.extend_from_slice(&self.world_bounds.y_max.to_le_bytes());
+        bytes.push(self.layers.background.len().min(255) as u8);
+        bytes.push(self.layers.gameplay.len().min(255) as u8);
+        bytes.push(self.layers.foreground.len().min(255) as u8);
+        bytes.push(0); // pad
+
+        const HEADER_LEN: u32 = 36;
+        let bg_len = self.layers.background.len() as u32 * 20;
+        let gp_len = self.layers.gameplay.len() as u32 * 20;
+        let bg_off = HEADER_LEN;
+        let gp_off = bg_off + bg_len;
+        let fg_off = gp_off + gp_len;
+        bytes.extend_from_slice(&bg_off.to_le_bytes());
+        bytes.extend_from_slice(&gp_off.to_le_bytes());
+        bytes.extend_from_slice(&fg_off.to_le_bytes());
+
+        let sl_left   = self.scroll_limits.left.unwrap_or(self.world_bounds.x_min);
+        let sl_right  = self.scroll_limits.right.unwrap_or(self.world_bounds.x_max);
+        let sl_top    = self.scroll_limits.top.unwrap_or(self.world_bounds.y_max);
+        let sl_bottom = self.scroll_limits.bottom.unwrap_or(self.world_bounds.y_min);
+        bytes.extend_from_slice(&sl_left.to_le_bytes());
+        bytes.extend_from_slice(&sl_right.to_le_bytes());
+        bytes.extend_from_slice(&sl_top.to_le_bytes());
+        bytes.extend_from_slice(&sl_bottom.to_le_bytes());
+        bytes.extend_from_slice(&self.editor_meta.ground_bottom_offset.to_le_bytes());
+        bytes.extend_from_slice(&0u16.to_le_bytes()); // pad → 36 bytes total
+
+        debug_assert_eq!(bytes.len() as u32, HEADER_LEN);
+
+        for obj in &self.layers.background { emit_obj(&mut bytes, obj, &mut sprite_index); }
+        for obj in &self.layers.gameplay   { emit_obj(&mut bytes, obj, &mut sprite_index); }
+        for obj in &self.layers.foreground { emit_obj(&mut bytes, obj, &mut sprite_index); }
+
+        // ── Collision meshes (position-independent) ─────────────────────────
+        // Objects are 36-byte header + contiguous 20-byte records (bg, gp, fg),
+        // so object i's +16 coll_mesh field is at 36 + i*20 + 16. Append each
+        // non-empty mesh block and patch that field with its image-base offset.
+        let all_objs = self.layers.background.iter()
+            .chain(self.layers.gameplay.iter())
+            .chain(self.layers.foreground.iter());
+        for (i, obj) in all_objs.enumerate() {
+            let (floors, walls) = self.collision_segments(obj, vec_meshes);
+            if floors.is_empty() && walls.is_empty() { continue; }
+            let mesh_off = bytes.len() as u32;
+            bytes.extend_from_slice(&(floors.len() as u32).to_le_bytes());
+            for &(x_min, x_max, y) in &floors {
+                for v in [x_min, y, x_max, y] { bytes.extend_from_slice(&v.to_le_bytes()); }
+            }
+            bytes.extend_from_slice(&(walls.len() as u32).to_le_bytes());
+            for &(x, y_min, y_max) in &walls {
+                for v in [x, y_min, x, y_max] { bytes.extend_from_slice(&v.to_le_bytes()); }
+            }
+            let fld = HEADER_LEN as usize + i * 20 + 16;
+            bytes[fld..fld + 4].copy_from_slice(&mesh_off.to_le_bytes());
+        }
+
+        (bytes, sprite_names)
+    }
+}
+
+/// Load a `.vplay` file and serialize it into the C byte image + its ordered
+/// sprite-name list. Reuses the exact object layout of the ARM/PiTrex level
+/// compiler (see `VPlayLevel::compile_to_c_bytes`).
+pub fn compile_vplay_file_to_c_bytes(path: &Path) -> Result<(Vec<u8>, Vec<String>)> {
+    let level = VPlayLevel::load(path)?;
+
+    // Collect collision meshes + natural dims from the sibling assets/vectors/ dir,
+    // exactly like the ARM/PiTrex full build (pitrex/assets.rs). Without this the
+    // C level image carries EMPTY meshes, so every platform falls back to a solid
+    // AABB box (mesh_off=0) — the player collides with a platform's whole box and
+    // can't walk under it, whereas a mesh-backed platform is a thin one-way floor.
+    // The .vplay lives at <proj>/assets/playground/<name>.vplay; vecs at
+    // <proj>/assets/vectors/*.vec (keyed by file stem = the level's vectorName).
+    let mut vec_meshes: std::collections::HashMap<String, Vec<crate::vecres::VecMeshSegment>> =
+        std::collections::HashMap::new();
+    let mut dims: std::collections::HashMap<String, (i32, i32)> = std::collections::HashMap::new();
+    if let Some(vectors_dir) = path.parent().and_then(|p| p.parent()).map(|p| p.join("vectors")) {
+        if let Ok(entries) = std::fs::read_dir(&vectors_dir) {
+            for entry in entries.flatten() {
+                let vp = entry.path();
+                if vp.extension().and_then(|e| e.to_str()) != Some("vec") { continue; }
+                let Ok(text) = std::fs::read_to_string(&vp) else { continue; };
+                let Ok(res) = serde_json::from_str::<crate::vecres::VecResource>(&text) else { continue; };
+                let name = vp.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+                let (min_x, max_x) = res.calculate_x_bounds();
+                let (_min_y, max_y) = res.calculate_y_bounds();
+                let hw = ((max_x - min_x) as i32) / 2;
+                let hh = (max_y as i32).max(1);
+                dims.insert(name.clone(), (hw, hh));
+                if let Some(mesh) = &res.collision_mesh {
+                    if !mesh.segments.is_empty() {
+                        vec_meshes.insert(name.clone(), mesh.segments.clone());
+                    }
+                }
+            }
+        }
+    }
+    Ok(level.compile_to_c_bytes_with_meshes(&vec_meshes, &dims))
+}
+
+/// Compile a `.vplay` level's ENEMY runtime into position-independent C data.
+///
+/// Returns `(enemy_image_bytes, sprite_syms, extra_blobs)`:
+///   * `enemy_image_bytes` — the `_NAME_ENEMIES_C` byte image consumed by
+///     `vpy_spawn_enemies` (count u16, then per-enemy records).
+///   * `sprite_syms` — the ordered assembly symbols the image indexes into
+///     (`_NAME_ENEMY_SPRITES`), e.g. `_ENEMY_VEC` for a static `.vec`, or an
+///     anim-descriptor / state-machine blob symbol.
+///   * `extra_blobs` — `(symbol, bytes)` for any anim/SM blob the sprite table
+///     references, so the C header can emit those inline arrays too.
+///
+/// This REUSES the real backend emitter
+/// (`compile_to_arm_asm_with_venemy_and_meshes`) and text-extracts the enemy
+/// section, so the bytes are byte-identical to the VPy pitrex build and to what
+/// `vpy.c`'s `vpy_spawn_enemies` reads. The `.venemy` directory is derived from
+/// the level path (`{level_dir}/../enemies`) exactly like the pitrex build.
+pub fn compile_enemies_to_c_bytes(
+    path: &Path,
+) -> Result<(Vec<u8>, Vec<String>, Vec<(String, Vec<u8>)>)> {
+    let level = VPlayLevel::load(path)?;
+    let name = level.metadata.name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let assets_dir = path.parent().and_then(|p| p.parent());
+    let venemy_dir = assets_dir.map(|p| p.join("enemies"));
+
+    // Load the level's sibling `vectors/` directory so the C enemy image carries
+    // the SAME auto-derived walkable AREAS + inter-area transitions the m6809/ARM
+    // game build derives (emit_pitrex_assets builds these maps from the placed
+    // platforms' .vec `walkableAreas`). Without them every wander enemy's
+    // area_count is 0 and libvpy's UPDATE_ENEMIES leaves them stationary — the C
+    // build would diverge from the VPy, whose enemies wander the platforms.
+    let mut dims: HashMap<String, (i32, i32)> = HashMap::new();
+    let mut vec_walk_areas: HashMap<String, Vec<crate::vecres::VecWalkableArea>> = HashMap::new();
+    let mut vec_meshes: HashMap<String, Vec<crate::vecres::VecMeshSegment>> = HashMap::new();
+    let mut vec_min_y: HashMap<String, i16> = HashMap::new();
+    if let Some(vectors_dir) = assets_dir.map(|p| p.join("vectors")) {
+        if let Ok(entries) = std::fs::read_dir(&vectors_dir) {
+            for entry in entries.flatten() {
+                let vp = entry.path();
+                if vp.extension().and_then(|e| e.to_str()) != Some("vec") { continue; }
+                let Ok(text) = std::fs::read_to_string(&vp) else { continue };
+                let Ok(res) = serde_json::from_str::<crate::vecres::VecResource>(&text) else { continue };
+                // Key by the FILE STEM, not the .vec's internal `name` field:
+                // placed objects reference platforms by file name (their
+                // `vectorName`), and some .vec files carry a stale/duplicate
+                // `name` (e.g. platform1.vec + platform3.vec both name themselves
+                // "platform2"). The m6809/ARM game build keys these maps by the
+                // asset file stem for exactly this reason; mirror it so the C
+                // enemy image derives the SAME per-platform walkable areas.
+                let key = match vp.file_stem().and_then(|s| s.to_str()) {
+                    Some(s) => s.to_lowercase(),
+                    None => continue,
+                };
+                let (min_x, max_x) = res.calculate_x_bounds();
+                let (my, max_y) = res.calculate_y_bounds();
+                dims.insert(key.clone(), (((max_x - min_x) as i32) / 2, (max_y as i32).max(1)));
+                vec_min_y.insert(key.clone(), my);
+                if let Some(mesh) = &res.collision_mesh {
+                    if !mesh.segments.is_empty() {
+                        vec_meshes.insert(key.clone(), mesh.segments.clone());
+                    }
+                }
+                if !res.walkable_areas.is_empty() {
+                    vec_walk_areas.insert(key, res.walkable_areas.clone());
+                }
+            }
+        }
+    }
+
+    let asm = level.compile_to_arm_asm_with_venemy_and_meshes(
+        &dims,
+        venemy_dir.as_deref(),
+        &vec_meshes,
+        &vec_walk_areas,
+        &vec_min_y,
+    );
+
+    let bytes = extract_asm_byte_section(&asm, &format!("_{name}_ENEMIES_C:"));
+    let sprite_syms = extract_asm_word_section(&asm, &format!("_{name}_ENEMY_SPRITES:"));
+    // Any sprite-table entry that is not a `_..._VEC` is an anim/SM blob whose
+    // bytes live in its own `.rodata.<sym>` section — pull those out too so the
+    // C header is self-contained (anim/SM is out of scope for enemy_test but the
+    // extraction is general for a future SnowBros-C).
+    let mut extra_blobs = Vec::new();
+    for sym in &sprite_syms {
+        if !sym.ends_with("_VEC") {
+            let b = extract_asm_byte_section(&asm, &format!("{sym}:"));
+            if !b.is_empty() {
+                extra_blobs.push((sym.clone(), b));
+            }
+        }
+    }
+    Ok((bytes, sprite_syms, extra_blobs))
+}
+
+/// Collect the little-endian bytes of a `.byte`-run that follows `label`
+/// (a line equal to e.g. `_LEVEL1_ENEMIES_C:`), stopping at the first line that
+/// is not a `.byte` directive.
+fn extract_asm_byte_section(asm: &str, label: &str) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut in_section = false;
+    for line in asm.lines() {
+        let t = line.trim();
+        if !in_section {
+            if t == label {
+                in_section = true;
+            }
+            continue;
+        }
+        if let Some(rest) = t.strip_prefix(".byte") {
+            // Drop any trailing `@ comment`, then parse the hex tokens.
+            let data = rest.split('@').next().unwrap_or("");
+            for tok in data.split(',') {
+                let tok = tok.trim();
+                if tok.is_empty() { continue; }
+                let hex = tok.trim_start_matches("0x").trim_start_matches("0X");
+                if let Ok(v) = u8::from_str_radix(hex, 16) {
+                    out.push(v);
+                } else if let Ok(v) = tok.parse::<i16>() {
+                    out.push((v & 0xff) as u8);
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    out
+}
+
+/// Collect the `.word <symbol>` operands that follow `label`, stopping at the
+/// first non-`.word` line. A lone `.word 0` (placeholder for "no sprites")
+/// yields an empty list.
+fn extract_asm_word_section(asm: &str, label: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut in_section = false;
+    for line in asm.lines() {
+        let t = line.trim();
+        if !in_section {
+            if t == label {
+                in_section = true;
+            }
+            continue;
+        }
+        if let Some(rest) = t.strip_prefix(".word") {
+            let sym = rest.split('@').next().unwrap_or("").trim().to_string();
+            if sym == "0" { continue; }
+            if !sym.is_empty() { out.push(sym); }
+        } else {
+            break;
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -1771,6 +2608,32 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_enemy_asm_sections() {
+        // Mirrors the emitter shape: a `.word` sprite table and a `.byte` image,
+        // each terminated by a non-directive line.
+        let asm = concat!(
+            ".global _L1_ENEMY_SPRITES\n",
+            "_L1_ENEMY_SPRITES:\n",
+            "    .word _ENEMY_VEC\n",
+            "    .word _FOO_VEC   @ second sprite\n",
+            "@ --- image ---\n",
+            ".section .rodata._L1_ENEMIES_C,\"a\",%progbits\n",
+            "_L1_ENEMIES_C:\n",
+            "    .byte   0x01, 0x00, 0xFF  @ count, hi\n",
+            "    .byte   0x10\n",
+            ".section .text\n",
+        );
+        let bytes = extract_asm_byte_section(asm, "_L1_ENEMIES_C:");
+        assert_eq!(bytes, vec![0x01, 0x00, 0xFF, 0x10]);
+        let syms = extract_asm_word_section(asm, "_L1_ENEMY_SPRITES:");
+        assert_eq!(syms, vec!["_ENEMY_VEC".to_string(), "_FOO_VEC".to_string()]);
+
+        // A lone `.word 0` placeholder ("no sprites") yields an empty list.
+        let empty = "_X_ENEMY_SPRITES:\n    .word 0\n.section .text\n";
+        assert!(extract_asm_word_section(empty, "_X_ENEMY_SPRITES:").is_empty());
+    }
+
+    #[test]
     fn test_compile_empty_level() {
         let level = VPlayLevel {
             version: "2.0".to_string(),
@@ -1807,5 +2670,72 @@ mod tests {
         let asm = level.compile_to_asm();
         assert!(asm.contains("_EMPTY_LEVEL:"));
         assert!(asm.contains("; Background object count"));
+    }
+
+    fn obj(vector_name: &str, x: i16, y: i16) -> VPlayObject {
+        VPlayObject {
+            id: format!("o_{vector_name}_{x}_{y}"),
+            obj_type: "background".to_string(),
+            vector_name: vector_name.to_string(),
+            x, y, scale: 1.0, rotation: 0,
+            intensity: None, layer: "gameplay".to_string(), visible: true,
+            velocity: Vec2::default(), physics: None, collision: None, properties: None,
+            spawn_delay: 0, destroy_offscreen: false,
+            physics_enabled: false, physics_type: None, collidable: true,
+            gravity: 0.0, bounce_damping: 0.0,
+            enemy_type: None, ai_type: None, patrol_waypoints: None,
+            wave: 0, respawn: false, mirror_on_patrol: false, default_facing: String::new(),
+            walkable_areas: None, transitions: None,
+        }
+    }
+
+    #[test]
+    fn test_compile_c_bytes_layout() {
+        let level = VPlayLevel {
+            version: "2.0".to_string(),
+            level_type: "level".to_string(),
+            metadata: VPlayMetadata {
+                name: "world".to_string(), author: String::new(), difficulty: String::new(),
+                time_limit: 0, target_score: 0, description: String::new(),
+            },
+            world_bounds: VPlayWorldBounds { x_min: -96, x_max: 479, y_min: -384, y_max: 127 },
+            layers: VPlayLayers {
+                background: vec![],
+                // ground reused → index 0 for both; marker → index 1
+                gameplay: vec![obj("ground", -1, -65), obj("marker", 0, 75), obj("ground", 193, -65)],
+                foreground: vec![],
+            },
+            scroll_limits: VPlayScrollLimits::default(),
+            editor_meta: VPlayEditorMeta { ground_bottom_offset: 42 },
+            walkable_areas: None, transitions: None, isolate_screens: false,
+            transition_min_x_overlap: None, transition_lateral_y: None, transition_lateral_gap: None,
+        };
+
+        let (bytes, sprites) = level.compile_to_c_bytes();
+
+        // Header (36) + 3 objects × 20 = 96 bytes.
+        assert_eq!(bytes.len(), 36 + 3 * 20);
+        // counts
+        assert_eq!(bytes[8], 0);  // bgCount
+        assert_eq!(bytes[9], 3);  // gpCount
+        assert_eq!(bytes[10], 0); // fgCount
+        // gpObjectsOff == 36 (right after header, bg empty)
+        let gp_off = u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
+        assert_eq!(gp_off, 36);
+        // groundBottomOffset at +32
+        assert_eq!(i16::from_le_bytes([bytes[32], bytes[33]]), 42);
+
+        // Sprite de-dup: ground+marker → 2 names, ground first.
+        assert_eq!(sprites, vec!["ground".to_string(), "marker".to_string()]);
+
+        // Object 0 (ground) sprite index at +8 == 0; object 1 (marker) == 1;
+        // object 2 (ground) == 0 again.
+        let sidx = |obj_i: usize| -> u32 {
+            let base = 36 + obj_i * 20 + 8;
+            u32::from_le_bytes([bytes[base], bytes[base+1], bytes[base+2], bytes[base+3]])
+        };
+        assert_eq!(sidx(0), 0);
+        assert_eq!(sidx(1), 1);
+        assert_eq!(sidx(2), 0);
     }
 }

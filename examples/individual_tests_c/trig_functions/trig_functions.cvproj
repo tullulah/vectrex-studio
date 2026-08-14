@@ -1,0 +1,14 @@
+[project]
+name = "trig_functions"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["trig_functions_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["trig_functions_wasm"]
+module = "build_wasm/trig_functions.js"

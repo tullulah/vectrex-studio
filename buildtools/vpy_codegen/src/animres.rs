@@ -89,6 +89,94 @@ impl VanimResource {
         Ok(resource)
     }
 
+    /// Compile this animation into a position-independent C descriptor + the
+    /// ordered list of `.vec` sprite names it references (base refs first as they
+    /// appear, then per-frame refs). The descriptor mirrors the structure the
+    /// inline `pitrex_draw_anim` reads, but sprite POINTERS become INDICES into a
+    /// companion table (so it can live in a C `const` array), and the frame table
+    /// stores byte OFFSETS instead of absolute pointers. Layout (little-endian):
+    ///
+    ///   [0] frame_count  [1] loop_flag  [2] base_ref_count  [3] pad
+    ///   base_ref_count × u16 vec_index        (drawn every call)
+    ///   frame_count    × u16 frame_offset     (byte offset to each frame block)
+    ///   per frame block: [0] duration_ticks [1] vec_ref_count,
+    ///                    then vec_ref_count × u16 vec_index
+    ///
+    /// Consumed by libvpy `vpy_draw_anim`. Inline per-frame paths are NOT
+    /// supported for the C target (they have no compiled `.vec` header to index);
+    /// such an animation is rejected with an error so the caller can convert the
+    /// inline paths to named `.vec` refs.
+    pub fn compile_to_c_bytes(&self) -> Result<(Vec<u8>, Vec<String>)> {
+        for f in &self.frames {
+            if !f.paths.is_empty() {
+                anyhow::bail!(
+                    "inline paths in .vanim '{}' are not supported for the C target; \
+                     use named .vec refs (vec_refs)",
+                    self.name
+                );
+            }
+        }
+
+        let mut sprite_names: Vec<String> = Vec::new();
+        let index_of = |name: &str, names: &mut Vec<String>| -> u16 {
+            let key = name.to_lowercase();
+            if let Some(i) = names.iter().position(|n| n == &key) {
+                i as u16
+            } else {
+                names.push(key);
+                (names.len() - 1) as u16
+            }
+        };
+
+        let base: Vec<u16> = self
+            .base_refs
+            .iter()
+            .map(|n| index_of(n, &mut sprite_names))
+            .collect();
+        let frames: Vec<(u8, Vec<u16>)> = self
+            .frames
+            .iter()
+            .map(|f| {
+                let vis: Vec<u16> = f
+                    .vec_refs
+                    .iter()
+                    .map(|n| index_of(n, &mut sprite_names))
+                    .collect();
+                (f.duration_ticks, vis)
+            })
+            .collect();
+
+        let frame_count = frames.len();
+        let base_ref_count = base.len();
+        let header_len = 4 + base_ref_count * 2 + frame_count * 2;
+
+        let mut frame_blocks: Vec<u8> = Vec::new();
+        let mut frame_offs: Vec<u16> = Vec::new();
+        for (dur, vis) in &frames {
+            frame_offs.push((header_len + frame_blocks.len()) as u16);
+            frame_blocks.push(*dur);
+            frame_blocks.push(vis.len().min(255) as u8);
+            for v in vis {
+                frame_blocks.extend_from_slice(&v.to_le_bytes());
+            }
+        }
+
+        let mut out: Vec<u8> = Vec::new();
+        out.push(frame_count.min(255) as u8);
+        out.push(if self.r#loop { 1 } else { 0 });
+        out.push(base_ref_count.min(255) as u8);
+        out.push(0); // pad
+        for b in &base {
+            out.extend_from_slice(&b.to_le_bytes());
+        }
+        for o in &frame_offs {
+            out.extend_from_slice(&o.to_le_bytes());
+        }
+        out.extend_from_slice(&frame_blocks);
+
+        Ok((out, sprite_names))
+    }
+
     /// Estimate ROM bytes for size calculations (rough)
     pub fn estimate_binary_size(&self) -> usize {
         // Header: 4 bytes (frame_count + loop + base_ref_count + frame_table_offset)
@@ -297,4 +385,56 @@ pub fn compile_vanim_to_asm(resource: &VanimResource, asset_name: &str) -> Strin
     }
 
     asm
+}
+
+#[cfg(test)]
+mod c_bytes_tests {
+    use super::*;
+
+    fn frame(index: u32, dur: u8, refs: &[&str]) -> VanimFrame {
+        VanimFrame {
+            index,
+            duration_ticks: dur,
+            vec_refs: refs.iter().map(|s| s.to_string()).collect(),
+            paths: vec![],
+            events: vec![],
+        }
+    }
+
+    #[test]
+    fn compile_to_c_bytes_layout() {
+        let res = VanimResource {
+            version: "1.0".to_string(),
+            name: "walk".to_string(),
+            r#loop: true,
+            base_refs: vec![],
+            frames: vec![frame(0, 5, &["a"]), frame(1, 6, &["b"])],
+        };
+        let (bytes, names) = res.compile_to_c_bytes().unwrap();
+        // header(4) + frame_off_tbl(2*2) + 2 frame blocks(4 each)
+        assert_eq!(
+            bytes,
+            vec![
+                0x02, 0x01, 0x00, 0x00, // frame_count, loop, base_ref_count, pad
+                0x08, 0x00, 0x0C, 0x00, // frame offsets (8, 12)
+                0x05, 0x01, 0x00, 0x00, // frame 0: dur=5, count=1, vec_index=0
+                0x06, 0x01, 0x01, 0x00, // frame 1: dur=6, count=1, vec_index=1
+            ]
+        );
+        assert_eq!(names, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn compile_to_c_bytes_rejects_inline_paths() {
+        let mut f = frame(0, 4, &[]);
+        f.paths = vec![VanimPath { name: String::new(), intensity: 127, points: vec![] }];
+        let res = VanimResource {
+            version: "1.0".to_string(),
+            name: "inl".to_string(),
+            r#loop: false,
+            base_refs: vec![],
+            frames: vec![f],
+        };
+        assert!(res.compile_to_c_bytes().is_err());
+    }
 }

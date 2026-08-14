@@ -1,0 +1,14 @@
+[project]
+name = "screen_border"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["screen_border_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["screen_border_wasm"]
+module = "build_wasm/screen_border.js"

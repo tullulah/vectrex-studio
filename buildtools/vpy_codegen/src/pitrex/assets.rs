@@ -545,6 +545,9 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                     .get(&asset.name.to_lowercase())
                     .copied();
                 s.push_str(&emit_vec_resource(&resource, &asset.name, override_center));
+                // libvpy position-independent .vec image for the bridged
+                // DRAW_VECTOR path (tree-shaken away when DRAW_VECTOR is unused).
+                s.push_str(&emit_vec_resource_c_bytes(&resource, &asset.name, override_center));
                 s.push_str(&emit_3d_resource(&resource, &asset.name));
             }
             AssetType::Music => {
@@ -605,7 +608,11 @@ pub fn emit_pitrex_assets(assets: &[AssetInfo]) -> String {
                     .parent()
                     .and_then(|p| p.parent())
                     .map(|p| p.join("enemies"));
-                s.push_str(&level.compile_to_arm_asm_with_venemy_and_meshes(&dims_map, venemy_dir.as_deref(), &vec_meshes, &vec_walk_areas));
+                s.push_str(&level.compile_to_arm_asm_with_venemy_and_meshes(&dims_map, venemy_dir.as_deref(), &vec_meshes, &vec_walk_areas, &vec_min_y));
+                // libvpy position-independent level image + sprite-pointer table
+                // for the bridged LOAD/SHOW/UPDATE_LEVEL path (Phase 1 of the
+                // LEVELS bridge — NEW, tree-shaken until the group is wired).
+                s.push_str(&emit_level_c_bytes(&level, &asset.name, &vec_meshes, &dims_map));
             }
             AssetType::Animation => {
                 let text = match fs::read_to_string(&asset.path) {
@@ -1018,9 +1025,84 @@ fn build_center_overrides(
 //   when 0 it fires the event at PSG_MUSIC_PTR, then reads delay from NEXT event.
 //   So delay_byte D means "N+1 frames after current event, fire next event".
 
+/// One event (or terminator) in a compiled PSG stream.
+struct CompiledEvent {
+    delay: u8,
+    num_writes_byte: u8,      // real event = writes.len(); 0xFF = loop marker; 0 = end
+    writes: Vec<(u8, u8)>,    // empty for terminators
+    comment: String,
+}
+
+/// A compiled PSG event stream (music or SFX). This is the SINGLE shared
+/// artifact behind BOTH the ARM/PiTrex `.byte`/`.word` asm emission AND the
+/// C-header / raw-byte emission used by the C (vpy.h) runtime. `header_words`
+/// are little-endian `.word`s (4 bytes each); events are `.byte`s. `to_bytes()`
+/// and `to_asm()` are two views of the exact same data.
+struct CompiledStream {
+    header_words: Vec<(u32, String)>,   // (value, comment)
+    events: Vec<CompiledEvent>,
+}
+
+impl CompiledStream {
+    /// Little-endian byte image (header words expanded LE), exactly what the
+    /// runtime sequencer reads at run time.
+    fn to_bytes(&self) -> Vec<u8> {
+        let mut b = Vec::new();
+        for (w, _) in &self.header_words {
+            b.extend_from_slice(&w.to_le_bytes());
+        }
+        for e in &self.events {
+            b.push(e.delay);
+            b.push(e.num_writes_byte);
+            for (r, v) in &e.writes {
+                b.push(*r);
+                b.push(*v);
+            }
+        }
+        b
+    }
+
+    /// ARM/PiTrex assembly view (`.word` header + `.byte` events). Byte-identical
+    /// to `to_bytes()` once assembled.
+    fn to_asm(&self, global_label: &str) -> String {
+        let mut s = String::new();
+        s.push_str(&format!(".global {global_label}\n{global_label}:\n"));
+        for (w, comment) in &self.header_words {
+            s.push_str(&format!("    .word   {}           @ {}\n", w, comment));
+        }
+        for e in &self.events {
+            s.push_str(&format!("    .byte   {}, {}  @ {}\n", e.delay, e.num_writes_byte, e.comment));
+            for (reg, val) in &e.writes {
+                s.push_str(&format!("    .byte   {}, {}  @ PSG r{}\n", reg, val, reg));
+            }
+        }
+        s.push('\n');
+        s
+    }
+}
+
+/// Parse a `.vmus` file and return its compiled little-endian PSG byte stream.
+/// Reuses the exact notes→PSG compiler used for the ARM/PiTrex asm backend, so
+/// the C runtime plays byte-for-byte the same music the hardware does.
+pub fn compile_vmus_file_to_bytes(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let vmus: VmusResource = serde_json::from_str(&text)
+        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    Ok(vmus_stream(&vmus).to_bytes())
+}
+
 fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let stream = vmus_stream(vmus);
+    let num_events = stream.header_words.first().map(|(w, _)| *w).unwrap_or(0);
+    let mut s = String::new();
+    s.push_str(&format!("@ --- {} MUSIC ({} events) ---\n", override_name, num_events));
+    s.push_str(&stream.to_asm(&format!("_{sym}_MUSIC")));
+    s
+}
 
+/// Compile a parsed `.vmus` into a `CompiledStream` (notes → PSG event bytes).
+fn vmus_stream(vmus: &VmusResource) -> CompiledStream {
     // Timing conversion: ticks → frames @ 50 fps
     // PiTrex hardware refreshes at 50 Hz (v_setRefresh(50)).
     let ticks_per_sec = vmus.tempo / 60.0 * vmus.ticks_per_beat;
@@ -1157,14 +1239,8 @@ fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
         loop_byte_offset += 2 + 2 * writes.len() as u32; // delay + num_writes + N×(reg,val)
     }
 
-    // ── Emit assembly ────────────────────────────────────────────────────────
-    let mut s = String::new();
-    s.push_str(&format!("@ --- {} MUSIC ({} events, loop@{}) ---\n",
-        override_name, events.len(), loop_start_frame));
-    s.push_str(&format!(".global _{sym}_MUSIC\n_{sym}_MUSIC:\n"));
-    s.push_str(&format!("    .word   {}           @ num_events\n", events.len()));
-    s.push_str(&format!("    .word   {}           @ loop_event_byte_offset from base\n", loop_byte_offset));
-
+    // ── Build CompiledStream (shared asm + byte serialization) ───────────────
+    let mut cevents: Vec<CompiledEvent> = Vec::new();
     let mut prev_frame: u32 = 0;
     for (i, (frame, writes)) in events.iter().enumerate() {
         // delay_byte: read by previous event handler to set PSG_DELAY_FRAMES.
@@ -1176,29 +1252,46 @@ fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
         } else {
             (*frame - prev_frame).saturating_sub(1).min(255) as u8
         };
-        s.push_str(&format!("    .byte   {}, {}  @ frame={} delay={} writes={}\n",
-            delay_byte, writes.len(), frame, delay_byte, writes.len()));
-        for (reg, val) in writes {
-            s.push_str(&format!("    .byte   {}, {}  @ PSG r{}\n", reg, val, reg));
-        }
+        cevents.push(CompiledEvent {
+            delay: delay_byte,
+            num_writes_byte: writes.len() as u8,
+            writes: writes.clone(),
+            comment: format!("frame={} delay={} writes={}", frame, delay_byte, writes.len()),
+        });
         prev_frame = *frame;
     }
 
     // Terminator: loop marker (0xFF) if the track loops, else end marker (num_writes=0).
-    // The end marker mirrors the SFX terminator (".byte 0, 0"); the runtime stops
-    // playback on num_writes=0, leaving the PSG silent (note-off frames already
-    // wrote volume=0 before the terminator).
+    // The end marker mirrors the SFX terminator; the runtime stops playback on
+    // num_writes=0, leaving the PSG silent (note-off frames already wrote
+    // volume=0 before the terminator).
     if vmus.r#loop {
         // Loop marker: fires at loopEnd, jumps back to loop_event_byte_offset
         let last_event_frame = events.last().map(|(f, _)| *f).unwrap_or(0);
         let loop_marker_delay = loop_end_frame.saturating_sub(last_event_frame).saturating_sub(1).min(255) as u8;
-        s.push_str(&format!("    .byte   {}, 0xFF   @ loop back (fires frame ~{})\n",
-            loop_marker_delay, loop_end_frame));
+        cevents.push(CompiledEvent {
+            delay: loop_marker_delay,
+            num_writes_byte: 0xFF,
+            writes: Vec::new(),
+            comment: format!("loop back (fires frame ~{})", loop_end_frame),
+        });
     } else {
-        s.push_str("    .byte   0, 0   @ end (no loop)\n");
+        cevents.push(CompiledEvent {
+            delay: 0,
+            num_writes_byte: 0,
+            writes: Vec::new(),
+            comment: "end (no loop)".to_string(),
+        });
     }
-    s.push('\n');
-    s
+
+    let _ = loop_start_frame;
+    CompiledStream {
+        header_words: vec![
+            (events.len() as u32, "num_events".to_string()),
+            (loop_byte_offset, "loop_event_byte_offset from base".to_string()),
+        ],
+        events: cevents,
+    }
 }
 
 // ============================================================
@@ -1212,9 +1305,27 @@ fn compile_vmus(vmus: &VmusResource, override_name: &str) -> String {
 // Same per-event format as music. No loop marker; ends with num_writes=0.
 // Per-frame events: delay=0 between consecutive frames.
 
+/// Parse a `.vsfx` file and return its compiled little-endian PSG byte stream.
+/// Reuses the exact ADSR/arpeggio→PSG compiler used for the ARM/PiTrex backend.
+pub fn compile_vsfx_file_to_bytes(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let vsfx: VsfxResource = serde_json::from_str(&text)
+        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    Ok(vsfx_stream(&vsfx).to_bytes())
+}
+
 fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let stream = vsfx_stream(vsfx);
+    let num_events = stream.header_words.first().map(|(w, _)| *w).unwrap_or(0);
+    let mut s = String::new();
+    s.push_str(&format!("@ --- {} SFX ({} events) ---\n", override_name, num_events));
+    s.push_str(&stream.to_asm(&format!("_{sym}_SFX")));
+    s
+}
 
+/// Compile a parsed `.vsfx` into a `CompiledStream` (ADSR/arpeggio → PSG bytes).
+fn vsfx_stream(vsfx: &VsfxResource) -> CompiledStream {
     // Force SFX onto channel C (regs 4/5 period, 10 volume) so it cannot
     // overwrite music playing on channels A/B. Matches M6809 sfx_doframe.
     let _ = vsfx.oscillator.channel;
@@ -1356,13 +1467,8 @@ fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
         frame_events.push((mute_frame, mute));
     }
 
-    // ── Emit ─────────────────────────────────────────────────────────────────
-    let mut s = String::new();
-    s.push_str(&format!("@ --- {} SFX ({} frames, {} events) ---\n",
-        override_name, total_frames, frame_events.len()));
-    s.push_str(&format!(".global _{sym}_SFX\n_{sym}_SFX:\n"));
-    s.push_str(&format!("    .word   {}  @ num_events\n", frame_events.len()));
-
+    // ── Build CompiledStream (shared asm + byte serialization) ───────────────
+    let mut cevents: Vec<CompiledEvent> = Vec::new();
     let mut prev_frame: u32 = 0;
     for (i, (frame, writes)) in frame_events.iter().enumerate() {
         let delay_byte: u8 = if i == 0 {
@@ -1370,16 +1476,27 @@ fn compile_vsfx(vsfx: &VsfxResource, override_name: &str) -> String {
         } else {
             (*frame - prev_frame).saturating_sub(1).min(255) as u8
         };
-        s.push_str(&format!("    .byte   {}, {}  @ frame={}\n",
-            delay_byte, writes.len(), frame));
-        for (reg, val) in writes {
-            s.push_str(&format!("    .byte   {}, {}  @ PSG r{}\n", reg, val, reg));
-        }
+        cevents.push(CompiledEvent {
+            delay: delay_byte,
+            num_writes_byte: writes.len() as u8,
+            writes: writes.clone(),
+            comment: format!("frame={}", frame),
+        });
         prev_frame = *frame;
     }
     // End marker
-    s.push_str("    .byte   0, 0  @ end\n\n");
-    s
+    cevents.push(CompiledEvent {
+        delay: 0,
+        num_writes_byte: 0,
+        writes: Vec::new(),
+        comment: "end".to_string(),
+    });
+
+    let _ = total_frames;
+    CompiledStream {
+        header_words: vec![(frame_events.len() as u32, "num_events".to_string())],
+        events: cevents,
+    }
 }
 
 // ============================================================
@@ -1519,6 +1636,206 @@ fn emit_vec_resource(
     s
 }
 
+/// Parse a `.vec` file and return a self-contained little-endian byte image of
+/// its paths, for the C (vpy.h) runtime.
+///
+/// This reuses the EXACT geometry compiler behind the ARM/PiTrex asm backend
+/// (`VecResource::visible_paths` / `calculate_center` for centering, and
+/// `split_segment_pairs` for <=127-unit segment splitting), so the C runtime
+/// draws the same sprite the hardware does.
+///
+/// Unlike the ARM `emit_vec_resource` — whose header holds link-time absolute
+/// `.word` path pointers — the C image is fully position-independent: paths are
+/// laid out back-to-back and the interpreter walks them sequentially, each
+/// terminated by `0x02`. Layout:
+/// ```text
+///   [0..2]  path_count            (u16 LE)
+///   per path (repeated path_count times):
+///     intensity   (u8)
+///     y0, x0      (i8, i8)        center-relative move-to header
+///     0x00, 0x00                  2 padding bytes (parity with the ARM header)
+///     segments:
+///       0xFF, dy, dx              line delta (i8, i8)
+///       0xFE, ax,ay,c1x,c1y,c2x,c2y,bx,by   cubic bezier (8×i8), center-relative
+///     0x02                        end-of-path marker
+/// ```
+pub fn compile_vec_file_to_bytes(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let res: VecResource = serde_json::from_str(&text)
+        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    Ok(vec_resource_to_bytes(&res, None))
+}
+
+/// Emit the position-independent C `.vec` byte image (`vec_resource_to_bytes`)
+/// as an ARM `.byte` blob under the symbol `_NAME_VEC`, for libvpy's
+/// `vpy_draw_vector`/`vpy_draw_vector_ex` (the bridged DRAW_VECTOR path).
+///
+/// This is the DRAW_VECTOR analogue of how the music/SFX bytes stayed shared:
+/// the SAME `vec_resource_to_bytes` behind the C `compile-asset` produces these
+/// bytes, so the bridged libvpy sprite is byte-identical to what hardware draws.
+/// It coexists with the inline `_NAME_VECTORS` (link-time pointer-table format)
+/// which the still-inline level/enemy/anim/DRAW_VECTOR_EX runtimes need.
+///
+/// `.balign 4` (ARMv6 `ldr` of the u16 header via byte loads is fine, but keep
+/// parity with the 3D/level blobs — cf. rp2350 unaligned-embed hazard). Emitted
+/// in its OWN `.rodata._NAME_VEC` section so `--gc-sections` drops it when
+/// DRAW_VECTOR isn't used for this asset; restores `.text` afterwards because
+/// the surrounding asset loop emits into `.text`.
+pub(crate) fn emit_vec_resource_c_bytes(
+    res: &VecResource,
+    override_name: &str,
+    override_center: Option<(i16, i16)>,
+) -> String {
+    let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let bytes = vec_resource_to_bytes(res, override_center);
+    let mut s = String::new();
+    s.push_str(&format!("@ --- {sym}_VEC (libvpy position-independent .vec image) ---\n"));
+    s.push_str(&format!(".section .rodata._{sym}_VEC,\"a\",%progbits\n"));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_VEC\n_{sym}_VEC:\n"));
+    for chunk in bytes.chunks(16) {
+        let vals: Vec<String> = chunk.iter().map(|b| format!("0x{b:02X}")).collect();
+        s.push_str(&format!("    .byte   {}\n", vals.join(", ")));
+    }
+    s.push_str(".section .text\n\n");
+    s
+}
+
+/// Emit the position-independent C level image (`VPlayLevel::compile_to_c_bytes`)
+/// as `_NAME_LEVEL_C`, plus the companion `{NAME}_level_sprites` pointer table
+/// that libvpy's `vpy_load_level(level, sprites)` indexes. Each sprite slot is
+/// the sprite's libvpy-format `_{SPRITE}_VEC` image (drawn by `vpy_draw_vector_ex`
+/// in `vpy_show_level`), so the sprite table + level image are wholly
+/// position-independent. Own `.rodata` sections + `.balign 4` + `--gc-sections`
+/// so both drop out when the level group isn't bridged (the `_NAME_VEC` pattern).
+///
+/// Phase 1: NEW, unused symbols — the LOAD/SHOW/UPDATE_LEVEL call sites still
+/// route inline until the whole level+enemy group flips atomically.
+fn emit_level_c_bytes(
+    level: &crate::levelres::VPlayLevel,
+    name: &str,
+    vec_meshes: &HashMap<String, Vec<crate::vecres::VecMeshSegment>>,
+    dims: &HashMap<String, (i32, i32)>,
+) -> String {
+    let sym = name.to_uppercase().replace('-', "_").replace(' ', "_");
+    let (bytes, sprite_names) = level.compile_to_c_bytes_with_meshes(vec_meshes, dims);
+    let mut s = String::new();
+    // Sprite-pointer table (index → _{SPRITE}_VEC). Emitted first, in its own
+    // section; the level image references it only via vpy_load_level's 2nd arg.
+    s.push_str(&format!("@ --- {sym}_level_sprites (libvpy sprite-index table) ---\n"));
+    s.push_str(&format!(".section .rodata._{sym}_LEVEL_SPRITES,\"a\",%progbits\n"));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_level_sprites\n_{sym}_level_sprites:\n"));
+    if sprite_names.is_empty() {
+        s.push_str("    .word 0\n");
+    } else {
+        for sp in &sprite_names {
+            let ssym = sp.to_uppercase().replace('-', "_").replace(' ', "_");
+            s.push_str(&format!("    .word _{ssym}_VEC\n"));
+        }
+    }
+    // Position-independent level byte image.
+    s.push_str(&format!("@ --- {sym}_LEVEL_C (libvpy position-independent level image) ---\n"));
+    s.push_str(&format!(".section .rodata._{sym}_LEVEL_C,\"a\",%progbits\n"));
+    s.push_str("    .balign 4\n");
+    s.push_str(&format!(".global _{sym}_LEVEL_C\n_{sym}_LEVEL_C:\n"));
+    for chunk in bytes.chunks(16) {
+        let vals: Vec<String> = chunk.iter().map(|b| format!("0x{b:02X}")).collect();
+        s.push_str(&format!("    .byte   {}\n", vals.join(", ")));
+    }
+    s.push_str(".section .text\n\n");
+    s
+}
+
+/// Serialize a `VecResource` into the position-independent C byte image
+/// documented on `compile_vec_file_to_bytes`. `override_center` mirrors
+/// `emit_vec_resource`: vanim/venemy group members share a group center so the
+/// `_NAME_VEC` image centers identically to the inline `_NAME_VECTORS` (else a
+/// grouped sprite drawn via DRAW_VECTOR would shift vs the inline path).
+fn vec_resource_to_bytes(res: &VecResource, override_center: Option<(i16, i16)>) -> Vec<u8> {
+    let (center_x, center_y) = override_center.unwrap_or_else(|| res.calculate_center());
+
+    let paths: Vec<_> = res.visible_paths()
+        .into_iter()
+        .filter(|p| p.points.len() >= 2)
+        .collect();
+
+    let mut out: Vec<u8> = Vec::new();
+    out.extend_from_slice(&(paths.len() as u16).to_le_bytes());
+
+    if paths.is_empty() {
+        out.push(0x02); // end marker (empty asset)
+        return out;
+    }
+
+    let clamp8 = |v: i16| v.clamp(-127, 127) as i8 as u8;
+
+    for path in &paths {
+        // Bezier paths: emit 0xFE cubic segments (center-relative control pts),
+        // mirroring emit_vec_resource. The C runtime tessellates them.
+        if path.path_type.as_deref() == Some("bezier") {
+            let pts = &path.points;
+            if pts.len() < 4 {
+                out.push(0x02); // degenerate bezier
+                continue;
+            }
+            out.push(path.intensity);
+            out.push(clamp8(pts[0].y - center_y)); // y0
+            out.push(clamp8(pts[0].x - center_x)); // x0
+            out.push(0x00);
+            out.push(0x00);
+            let mut i = 0;
+            while i + 3 < pts.len() {
+                out.push(0xFE);
+                out.push(clamp8(pts[i    ].x - center_x)); // ax
+                out.push(clamp8(pts[i    ].y - center_y)); // ay
+                out.push(clamp8(pts[i + 1].x - center_x)); // c1x
+                out.push(clamp8(pts[i + 1].y - center_y)); // c1y
+                out.push(clamp8(pts[i + 2].x - center_x)); // c2x
+                out.push(clamp8(pts[i + 2].y - center_y)); // c2y
+                out.push(clamp8(pts[i + 3].x - center_x)); // bx
+                out.push(clamp8(pts[i + 3].y - center_y)); // by
+                i += 3;
+            }
+            out.push(0x02);
+            continue;
+        }
+
+        // Polyline path: bake points to 0xFF delta segments.
+        let baked: Vec<(i16, i16)> = path.points.iter().map(|p| (p.x, p.y)).collect();
+        let (x0_raw, y0_raw) = baked[0];
+        out.push(path.intensity);
+        out.push(clamp8(y0_raw - center_y)); // y0
+        out.push(clamp8(x0_raw - center_x)); // x0
+        out.push(0x00);
+        out.push(0x00);
+
+        for j in 0..baked.len() - 1 {
+            let (fx, fy) = baked[j];
+            let (tx, ty) = baked[j + 1];
+            for (sub_dy, sub_dx) in split_segment_pairs(tx - fx, ty - fy) {
+                out.push(0xFF);
+                out.push(sub_dy as u8);
+                out.push(sub_dx as u8);
+            }
+        }
+
+        if path.closed && baked.len() > 2 {
+            let (fx, fy) = baked[baked.len() - 1];
+            let (tx, ty) = baked[0];
+            for (sub_dy, sub_dx) in split_segment_pairs(tx - fx, ty - fy) {
+                out.push(0xFF);
+                out.push(sub_dy as u8);
+                out.push(sub_dx as u8);
+            }
+        }
+
+        out.push(0x02);
+    }
+
+    out
+}
+
 fn emit_3d_resource(res: &VecResource, override_name: &str) -> String {
     let mut s = String::new();
     let sym = override_name.to_uppercase().replace('-', "_").replace(' ', "_");
@@ -1587,21 +1904,34 @@ fn emit_3d_resource(res: &VecResource, override_name: &str) -> String {
     s
 }
 
-fn emit_split_segment_arm(s: &mut String, dx: i16, dy: i16) {
+/// Split a delta segment into <=127-unit steps, returning the (dy, dx) i8 pairs
+/// that follow each `0xFF` line marker. This is the SINGLE geometry source used
+/// by BOTH the ARM `.byte` emitter (`emit_split_segment_arm`) and the raw
+/// byte-image emitter (`vec_resource_to_bytes`) behind the C runtime, so the two
+/// views stay byte-identical.
+fn split_segment_pairs(dx: i16, dy: i16) -> Vec<(i8, i8)> {
     let n = {
         let max_d = dx.abs().max(dy.abs()) as usize;
-        if max_d == 0 { return; }
+        if max_d == 0 { return Vec::new(); }
         (max_d + 126) / 127
     };
 
     let mut rem_dx = dx;
     let mut rem_dy = dy;
+    let mut out = Vec::with_capacity(n);
     for step in 0..n {
         let steps_left = (n - step) as i16;
         let sub_dx = rem_dx / steps_left;
         let sub_dy = rem_dy / steps_left;
         rem_dx -= sub_dx;
         rem_dy -= sub_dy;
+        out.push((sub_dy as i8, sub_dx as i8));
+    }
+    out
+}
+
+fn emit_split_segment_arm(s: &mut String, dx: i16, dy: i16) {
+    for (sub_dy, sub_dx) in split_segment_pairs(dx, dy) {
         s.push_str(&format!(
             "    .byte   0xFF, 0x{:02X}, 0x{:02X}  @ line dy={}, dx={}\n",
             sub_dy as u8, sub_dx as u8, sub_dy, sub_dx
@@ -1718,10 +2048,27 @@ fn compile_vanim_for_arm(resource: &VanimResource, asset_name: &str) -> String {
 // ============================================================
 //
 // FNV-1a hash truncated to 8 bits — must match the hash in pitrex/expressions.rs
+// AND libvpy's vpy_fnv1a_u8 (vpy.c), so ENEMY_FIRE_EVENT(idx, "name") from C
+// hashes to the same value baked into the SM event table here.
 fn fnv1a_u8(s: &str) -> u8 {
     let mut h: u32 = 2166136261;
     for b in s.bytes() { h = h.wrapping_mul(16777619) ^ (b as u32); }
     (h & 0xFF) as u8
+}
+
+#[cfg(test)]
+mod fnv_tests {
+    use super::fnv1a_u8;
+    #[test]
+    fn fnv1a_u8_matches_libvpy_runtime_hash() {
+        // Ground-truth values the libvpy C runtime (vpy_fnv1a_u8) must produce;
+        // a mismatch means ENEMY_FIRE_EVENT from C never fires the SM transition.
+        assert_eq!(fnv1a_u8("onSnowHit"), 0xAE);
+        assert_eq!(fnv1a_u8("onKick"), 0xEC);
+        assert_eq!(fnv1a_u8("onHit"), 0x19);
+        assert_eq!(fnv1a_u8("onStomp"), 0x01);
+        assert_eq!(fnv1a_u8("onThaw"), 0xD2);
+    }
 }
 
 /// Compute the per-enemy-type feet_offset baked into _DATA[209]. Scans the

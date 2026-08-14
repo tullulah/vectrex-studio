@@ -1,0 +1,14 @@
+[project]
+name = "scrolling_level"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["scrolling_level_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["scrolling_level_wasm"]
+module = "build_wasm/scrolling_level.js"

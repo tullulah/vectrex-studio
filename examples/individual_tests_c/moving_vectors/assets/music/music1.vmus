@@ -1,0 +1,286 @@
+{
+  "version": "1.0",
+  "name": "Space Groove",
+  "author": "VPy Demo",
+  "tempo": 140,
+  "ticksPerBeat": 24,
+  "totalTicks": 192,
+  "notes": [
+    {
+      "id": "melodyA1",
+      "note": 72,
+      "start": 0,
+      "duration": 12,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "melodyA2",
+      "note": 74,
+      "start": 12,
+      "duration": 12,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "melodyA3",
+      "note": 76,
+      "start": 24,
+      "duration": 12,
+      "velocity": 14,
+      "channel": 0
+    },
+    {
+      "id": "melodyA4",
+      "note": 74,
+      "start": 36,
+      "duration": 12,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "melodyA5",
+      "note": 72,
+      "start": 48,
+      "duration": 24,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "melodyA6",
+      "note": 69,
+      "start": 72,
+      "duration": 12,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "melodyA7",
+      "note": 67,
+      "start": 84,
+      "duration": 12,
+      "velocity": 11,
+      "channel": 0
+    },
+    {
+      "id": "melodyA8",
+      "note": 72,
+      "start": 96,
+      "duration": 12,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "melodyA9",
+      "note": 76,
+      "start": 108,
+      "duration": 12,
+      "velocity": 14,
+      "channel": 0
+    },
+    {
+      "id": "melodyA10",
+      "note": 79,
+      "start": 120,
+      "duration": 24,
+      "velocity": 15,
+      "channel": 0
+    },
+    {
+      "id": "melodyA11",
+      "note": 76,
+      "start": 144,
+      "duration": 24,
+      "velocity": 13,
+      "channel": 0
+    },
+    {
+      "id": "melodyA12",
+      "note": 72,
+      "start": 168,
+      "duration": 24,
+      "velocity": 12,
+      "channel": 0
+    },
+    {
+      "id": "bassB1",
+      "note": 48,
+      "start": 0,
+      "duration": 24,
+      "velocity": 11,
+      "channel": 1
+    },
+    {
+      "id": "bassB2",
+      "note": 48,
+      "start": 48,
+      "duration": 24,
+      "velocity": 11,
+      "channel": 1
+    },
+    {
+      "id": "bassB3",
+      "note": 55,
+      "start": 96,
+      "duration": 24,
+      "velocity": 11,
+      "channel": 1
+    },
+    {
+      "id": "bassB4",
+      "note": 55,
+      "start": 144,
+      "duration": 24,
+      "velocity": 11,
+      "channel": 1
+    },
+    {
+      "id": "chordC1",
+      "note": 60,
+      "start": 0,
+      "duration": 48,
+      "velocity": 9,
+      "channel": 2
+    },
+    {
+      "id": "chordC2",
+      "note": 64,
+      "start": 48,
+      "duration": 48,
+      "velocity": 9,
+      "channel": 2
+    },
+    {
+      "id": "chordC3",
+      "note": 67,
+      "start": 96,
+      "duration": 48,
+      "velocity": 9,
+      "channel": 2
+    },
+    {
+      "id": "chordC4",
+      "note": 64,
+      "start": 144,
+      "duration": 48,
+      "velocity": 9,
+      "channel": 2
+    }
+  ],
+  "noise": [
+    {
+      "id": "kick1",
+      "start": 0,
+      "duration": 6,
+      "period": 20,
+      "channels": 1
+    },
+    {
+      "id": "kick2",
+      "start": 48,
+      "duration": 6,
+      "period": 20,
+      "channels": 1
+    },
+    {
+      "id": "kick3",
+      "start": 96,
+      "duration": 6,
+      "period": 20,
+      "channels": 1
+    },
+    {
+      "id": "kick4",
+      "start": 144,
+      "duration": 6,
+      "period": 20,
+      "channels": 1
+    },
+    {
+      "id": "hihat1",
+      "start": 12,
+      "duration": 3,
+      "period": 3,
+      "channels": 1
+    },
+    {
+      "id": "hihat2",
+      "start": 24,
+      "duration": 3,
+      "period": 3,
+      "channels": 1
+    },
+    {
+      "id": "hihat3",
+      "start": 36,
+      "duration": 3,
+      "period": 3,
+      "channels": 1
+    },
+    {
+      "id": "hihat4",
+      "start": 60,
+      "duration": 3,
+      "period": 3,
+      "channels": 1
+    },
+    {
+      "id": "hihat5",
+      "start": 72,
+      "duration": 3,
+      "period": 3,
+      "channels": 1
+    },
+    {
+      "id": "hihat6",
+      "start": 84,
+      "duration": 3,
+      "period": 3,
+      "channels": 1
+    },
+    {
+      "id": "hihat7",
+      "start": 108,
+      "duration": 3,
+      "period": 3,
+      "channels": 1
+    },
+    {
+      "id": "hihat8",
+      "start": 120,
+      "duration": 3,
+      "period": 3,
+      "channels": 1
+    },
+    {
+      "id": "hihat9",
+      "start": 132,
+      "duration": 3,
+      "period": 3,
+      "channels": 1
+    },
+    {
+      "id": "hihat10",
+      "start": 156,
+      "duration": 3,
+      "period": 3,
+      "channels": 1
+    },
+    {
+      "id": "hihat11",
+      "start": 168,
+      "duration": 3,
+      "period": 3,
+      "channels": 1
+    },
+    {
+      "id": "hihat12",
+      "start": 180,
+      "duration": 3,
+      "period": 3,
+      "channels": 1
+    }
+  ],
+  "loopStart": 0,
+  "loopEnd": 192
+}

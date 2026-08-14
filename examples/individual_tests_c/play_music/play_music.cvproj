@@ -1,0 +1,14 @@
+[project]
+name = "play_music"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["play_music_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["play_music_wasm"]
+module = "build_wasm/play_music.js"

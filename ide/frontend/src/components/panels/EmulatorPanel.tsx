@@ -15,6 +15,7 @@ import { emuCore } from '../../emulatorCoreSingleton';
 import { VectorRecorder, serializeVrec, defaultRecordingName, MAX_RECORD_SECONDS, type RawSegment } from '../../emulator/recorder/VectorRecorder';
 import { VideoRecorder, defaultVideoName } from '../../emulator/recorder/VideoRecorder';
 import { getRunningContextOutputs } from '../../emulator/recorder/audioGraphTracker';
+import { PitrexSimView } from '../PitrexSimView';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -276,6 +277,11 @@ const EmulatorOutputInfo: React.FC = () => {
 export const EmulatorPanel: React.FC = () => {
   const status = useEmulatorStore(s => s.status);
   const setStatus = useEmulatorStore(s => s.setStatus);
+  // External-project WASM simulator (PiTrex host SDK). When set, PitrexSimView
+  // runs the module in the canvas area instead of a Vectrex backend.
+  const simModulePath = useEmulatorStore(s => s.simModulePath);
+  const simModuleNonce = useEmulatorStore(s => s.simModuleNonce);
+  const setSimModule = useEmulatorStore(s => s.setSimModule);
   const { setConfigOpen, loadConfig } = useJoystickStore();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   
@@ -346,6 +352,7 @@ export const EmulatorPanel: React.FC = () => {
   const pitrexCoreRef = useRef<import('../../pitrex/PitrexCore.js').PitrexCore | null>(null);
   // Last assembly text loaded into PitrexCore — needed for reset (re-parse + restart loop)
   const pitrexSFileRef = useRef<string | null>(null);
+  const pitrexLibvpyRef = useRef<string | null>(null);
   
   // Hook editor store para documentos activos
   const editorActive = useEditorStore(s => s.active);
@@ -368,6 +375,29 @@ export const EmulatorPanel: React.FC = () => {
       videoRecorderRef.current?.discard();
     };
   }, []);
+
+  // When an external-project WASM simulator becomes active, stop every Vectrex
+  // backend (JSVecX / PiTrex interpreter / rp2350) so they don't fight over the
+  // canvas or audio. PitrexSimView owns its own canvas + lifecycle.
+  useEffect(() => {
+    if (!simModulePath) return;
+    try { (window as any).vecx?.stop?.(); } catch {}
+    if (pitrexLoopRef.current !== null) {
+      cancelAnimationFrame(pitrexLoopRef.current);
+      pitrexLoopRef.current = null;
+    }
+    if (pitrexCoreRef.current) {
+      try { pitrexCoreRef.current.stopAudio?.(); } catch {}
+      pitrexCoreRef.current = null;
+    }
+    if (rp2350LoopRef.current !== null) {
+      cancelAnimationFrame(rp2350LoopRef.current);
+      rp2350LoopRef.current = null;
+    }
+    try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
+    setShowPitrexOverlay(false);
+    console.log('[EmulatorPanel] PiTrex simulator active — Vectrex backends stopped');
+  }, [simModulePath]);
 
   // ── Vector recorder (.vrec) ─────────────────────────────────────────────
   // Samples the most recent completed frame's draw list from whichever
@@ -2014,6 +2044,14 @@ export const EmulatorPanel: React.FC = () => {
     if (!electronAPI?.ipcRenderer) return;
     
     const handleF5Continue = () => {
+      // For an imported external C/C++ project, F5 = Build & Run the WASM
+      // simulator, NOT "continue" on the 6809 emulator (which would boot the
+      // BIOS / Minestorm). Route it to the build-run path instead.
+      if (useProjectStore.getState().vpyProject?.isExternal) {
+        console.log('[EmulatorPanel] 🎮 F5 (external project) - triggering simulator build & run');
+        window.postMessage({ type: 'vpy-run-external' }, '*');
+        return;
+      }
       console.log('[EmulatorPanel] 🎮 F5 pressed - triggering debug continue');
       window.postMessage({ type: 'debug-continue' }, '*');
     };
@@ -2469,7 +2507,7 @@ export const EmulatorPanel: React.FC = () => {
       // Re-parse assembly into a fresh core
       import('../../pitrex/PitrexCore.js').then(({ PitrexCore }) => {
         const core = new PitrexCore();
-        core.loadAssembly(pitrexSFileRef.current!);
+        core.loadAssembly(pitrexSFileRef.current!, pitrexLibvpyRef.current);
         pitrexCoreRef.current = core;
 
         if (!core.isReady()) {
@@ -2903,8 +2941,12 @@ export const EmulatorPanel: React.FC = () => {
     const electronAPI: any = (window as any).electronAPI;
     if (!electronAPI?.onCompiledBin) return;
 
-    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null }) => {
+    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null; libvpyAsm?: string | null }) => {
       console.log(`[EmulatorPanel] Loading compiled binary: ${payload.binPath} (${payload.size} bytes) target=${payload.target ?? 'm6809'}`);
+
+      // A VPy / hardware binary is loading — tear down any external-project WASM
+      // simulator that was running so the Vectrex backend owns the panel again.
+      setSimModule(null);
       
       // Guardar última ROM compilada con su proyecto
       const projectState = (window as any).__projectStore__?.getState?.();
@@ -2997,9 +3039,10 @@ export const EmulatorPanel: React.FC = () => {
           // Dynamically import PitrexCore to avoid bundling it unless needed
           const { PitrexCore } = await import('../../pitrex/PitrexCore.js');
           const core = new PitrexCore();
-          core.loadAssembly(payload.sFileText);
+          core.loadAssembly(payload.sFileText, payload.libvpyAsm);
           pitrexCoreRef.current = core;
           pitrexSFileRef.current = payload.sFileText; // persist for reset
+          pitrexLibvpyRef.current = payload.libvpyAsm ?? null; // persist for reset
 
           if (!core.isReady()) {
             console.error('[EmulatorPanel] PitrexCore failed to load assembly');
@@ -3329,8 +3372,21 @@ export const EmulatorPanel: React.FC = () => {
         }}
       >
         <div style={{ position: 'relative', display: 'inline-block' }}>
+          {/* External-project WASM simulator (runs any module speaking the
+              PiTrex host SDK contract). Overlays the Vectrex canvas. */}
+          {simModulePath && (
+            <div style={{ position: 'absolute', top: 0, left: 0, zIndex: 20 }}>
+              <PitrexSimView
+                key={simModuleNonce}
+                modulePath={simModulePath}
+                width={canvasSize.width}
+                height={canvasSize.height}
+                onLog={(line) => console.log(line)}
+              />
+            </div>
+          )}
           {/* PiTrex hardware-only overlay */}
-          {showPitrexOverlay && (
+          {showPitrexOverlay && !simModulePath && (
             <div style={{
               position: 'absolute',
               top: 0,

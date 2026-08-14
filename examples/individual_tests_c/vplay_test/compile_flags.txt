@@ -1,0 +1,4 @@
+-I/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/vpy-c/include
+-I/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/pitrex-sim/include
+-Isrc
+-Igen

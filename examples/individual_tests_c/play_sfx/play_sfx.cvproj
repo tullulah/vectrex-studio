@@ -1,0 +1,14 @@
+[project]
+name = "play_sfx"
+type = "c-external"
+target = "pitrex"
+
+[build]
+command = "make"
+args = ["play_sfx_pitrex"]
+artifact = "kernel7l.img"
+
+[simulate]
+command = "make"
+args = ["play_sfx_wasm"]
+module = "build_wasm/play_sfx.js"

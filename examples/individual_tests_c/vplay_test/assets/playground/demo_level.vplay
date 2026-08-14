@@ -1,0 +1,50 @@
+{
+  "version": "2.0",
+  "type": "level",
+  "metadata": {
+    "name": "demo_level",
+    "author": "",
+    "difficulty": "medium",
+    "timeLimit": 0,
+    "targetScore": 0,
+    "description": "Created in Playground - 2026-05-10"
+  },
+  "worldBounds": {
+    "xMin": -96,
+    "xMax": 95,
+    "yMin": -128,
+    "yMax": 127
+  },
+  "layers": {
+    "background": [],
+    "gameplay": [
+      {
+        "id": "obj_1778358719583",
+        "type": "background",
+        "vectorName": "platform",
+        "layer": "gameplay",
+        "x": 0,
+        "y": 0,
+        "rotation": 0,
+        "scale": 1,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        },
+        "physicsEnabled": false,
+        "collidable": true,
+        "gravity": 1,
+        "bounceDamping": 0.85,
+        "physicsType": "gravity"
+      }
+    ],
+    "foreground": []
+  },
+  "spawnPoints": {
+    "player": {
+      "x": 0,
+      "y": -100
+    }
+  },
+  "hotspots": []
+}
