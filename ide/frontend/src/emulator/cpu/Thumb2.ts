@@ -121,6 +121,59 @@ export class Thumb2 implements ICpu {
   /** Write general-purpose register n (0–15). */
   setReg(n: number, v: number): void { this.regs[n] = v >>> 0; }
 
+  // ─── Registros de sistema del perfil M (MRS / MSR) ─────────────────────
+  //
+  // Este nucleo es FUNCIONAL: no tiene modelo de excepciones, ni pila dual, ni
+  // niveles de privilegio. Los enmascaramientos se guardan para que un
+  // `mrs r0, primask` devuelva lo que el propio programa escribio antes —
+  // patron habitual para guardar y restaurar el estado en una seccion critica—
+  // pero NO deshabilitan nada, porque aqui no hay nada que interrumpa.
+  //
+  // Si algun dia este nucleo toma excepciones de verdad, IPSR deja de ser 0 y
+  // hay que revisar esto entero.
+  private primask = 0;
+  private basepri = 0;
+  private faultmask = 0;
+  private control = 0;
+
+  /** Numeros SYSm segun ARMv7-M B5.1.1. */
+  private readSysReg(sysm: number, pc: number): number {
+    switch (sysm) {
+      // APSR / IAPSR / EAPSR / XPSR. Solo mantenemos NZCV; el numero de
+      // excepcion (IPSR) vale 0 y EPSR se lee siempre como 0 en un MRS.
+      case 0: case 1: case 2: case 3:
+        return this.cpsr & 0xf8000000;
+      case 5:  return 0;              // IPSR: modo hilo, ninguna excepcion activa
+      case 6:  return 0;              // EPSR: se lee como 0
+      case 7:  return 0;              // IEPSR
+      case 8:  case 9:  return this.SP >>> 0;   // MSP / PSP — pila unica aqui
+      case 16: return this.primask;
+      case 17: case 18: return this.basepri;    // BASEPRI / BASEPRI_MAX
+      case 19: return this.faultmask;
+      case 20: return this.control;
+      default:
+        throw new Error(`MRS de un registro de sistema no soportado: SYSm=${sysm} at PC=0x${pc.toString(16)}`);
+    }
+  }
+
+  private writeSysReg(sysm: number, mask: number, value: number, pc: number): void {
+    switch (sysm) {
+      case 0: case 1: case 2: case 3:
+        // mask bit1 = escribe las banderas (APSR_nzcvq). bit0 seria GE, que no
+        // existe en este perfil.
+        if (mask & 2) this.cpsr = (this.cpsr & ~0xf8000000) | (value & 0xf8000000);
+        return;
+      case 5: case 6: case 7: return;           // IPSR/EPSR/IEPSR: solo lectura
+      case 8: case 9: this.SP = value >>> 0; return;
+      case 16: this.primask   = value & 1; return;
+      case 17: case 18: this.basepri = value & 0xff; return;
+      case 19: this.faultmask = value & 1; return;
+      case 20: this.control   = value & 3; return;
+      default:
+        throw new Error(`MSR a un registro de sistema no soportado: SYSm=${sysm} at PC=0x${pc.toString(16)}`);
+    }
+  }
+
   irq(_line: number): void {
     // Interrupts not required for VPy emulation — treat as no-op.
   }
@@ -1096,6 +1149,26 @@ export class Thumb2 implements ICpu {
           // 0x3b = CLREX/DSB/DMB/ISB, 0x3a = hint space (NOP/YIELD/WFE/SEV/WFI/DBG).
           // All are no-ops in this functional core (no caches, no real 2nd core).
           if (op === 0x3b || op === 0x3a) return 1;
+
+          // MRS Rd, <sysreg>   —  hw0 = 0xF3EF, hw1 = 1000 Rd(4) SYSm(8)
+          //
+          // Sin esto el arranque del UVM2 se caia en la SEGUNDA instruccion: el SDK
+          // hace `mrs r0, ipsr` en 0x20000110 y el nucleo lanzaba
+          // "Unimplemented 32-bit misc-control: hw0=0xf3ef hw1=0x8005", que no dice
+          // en ningun sitio que se trate de un MRS.
+          if (op === 0x3e) {
+            const Rd = (hw1 >>> 8) & 0xf;
+            this.setReg(Rd, this.readSysReg(hw1 & 0xff, pc));
+            return 2;
+          }
+
+          // MSR <sysreg>, Rn   —  hw0 = 1111 0011 1000 Rn, hw1 = 1000 00 mask(2) 00 SYSm(8)
+          if (op === 0x38) {
+            const Rn = hw0 & 0xf;
+            this.writeSysReg(hw1 & 0xff, (hw1 >>> 10) & 3, this.getReg(Rn), pc);
+            return 2;
+          }
+
           throw new Error(`Unimplemented 32-bit misc-control: hw0=0x${hw0.toString(16)} hw1=0x${hw1.toString(16)} at PC=0x${pc.toString(16)}`);
         }
         // B.W conditional: hw1[11]=J2 used as J2, cond in hw0[9:6]
