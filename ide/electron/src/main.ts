@@ -1728,6 +1728,11 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
   mainWindow?.webContents.send('run://stdout', `[Compiler] Using: ${compiler} (${compilerBackend})\n`);
   
   const verbose = process.env.VPY_IDE_VERBOSE_RUN === '1';
+  // Marca de arranque, para la comprobacion de frescura de los artefactos derivados
+  // (.um2, .elf). Se toma ANTES de lanzar el compilador: cualquier fichero anterior a
+  // este instante es de otra compilacion, sin depender del orden en que la build
+  // escriba .bin, .elf y .um2. Ver resolveFreshArtifact mas abajo.
+  const compilacionIniciadaEn = Date.now();
   if (verbose) console.log('[RUN] spawning compiler', compiler, fsPath);
   mainWindow?.webContents.send('run://status', `Starting compilation: ${targetDisplay}`);
   return new Promise(async (resolvePromise) => {
@@ -1994,30 +1999,90 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           return null;
         };
 
+        // COMPROBACION DE FRESCURA — un artefacto derivado tiene que ser de ESTA
+        // compilacion, no "el que hubiera por ahi".
+        //
+        // resolveArtifact() busca por nombre y nada mas. Si una compilacion anterior
+        // dejo un .um2 o un .elf en build/ y la de ahora no los ha regenerado, se
+        // cargaba el viejo SIN DECIR NADA. Costo una tarde: un .um2 rancio de otro
+        // target se cargaba en el simulador de UVM2 y "no arrancaba", sin ningun
+        // mensaje que apuntara al fichero. Es la misma familia que aquel "Build for
+        // SD" que copiaba a la tarjeta el game.js del simulador.
+        //
+        // La regla: el derivado tiene que haberse escrito DESPUES de que arrancara
+        // esta compilacion (`compilacionIniciadaEn`, tomado antes de lanzar el
+        // compilador). Compararlo contra el instante de arranque y no contra la fecha
+        // del .bin es deliberado: asi da igual en que orden escriba la build sus
+        // ficheros, y no hay que adivinar un margen de tolerancia.
+        //
+        // Se descuenta 1 s por el redondeo de mtime de algunos sistemas de ficheros.
+        const FRESCURA_DESDE = compilacionIniciadaEn - 1000;
+        type Artefacto =
+          | { path: string }
+          | { rancio: string; atrasoMs: number }
+          | null;
+        const resolveFreshArtifact = async (ext: string): Promise<Artefacto> => {
+          const p = await resolveArtifact(ext);
+          if (!p) return null;
+          try {
+            const st = await fs.stat(p);
+            if (st.mtimeMs < FRESCURA_DESDE) {
+              return { rancio: p, atrasoMs: compilacionIniciadaEn - st.mtimeMs };
+            }
+          } catch (_e) {
+            // Sin stat no se puede juzgar; se usa, que es el comportamiento de antes.
+          }
+          return { path: p };
+        };
+        const avisarRancio = (ext: string, r: { rancio: string; atrasoMs: number }) => {
+          const seg = Math.round(r.atrasoMs / 1000);
+          const cuanto = seg < 120 ? `${seg} s` : `${Math.round(seg / 60)} min`;
+          mainWindow?.webContents.send('run://stderr',
+            `[build] ${r.rancio} es de una compilacion ANTERIOR (${cuanto} antes de ` +
+            `que esta empezara). NO se usa: un ${ext} rancio se comporta como un fallo ` +
+            `del JUEGO y no como un fallo de la BUILD, que es lo que lo hace caro. ` +
+            `Borralo y vuelve a compilar.\n`);
+          console.warn(`[main] ${ext} rancio, descartado:`, r.rancio);
+        };
+
         // uvm2 ships a `.um2` (20-byte header + the RAM image the cartridge
         // loads), not the raw `.bin`. The simulator and the SD card both want
         // that file, so send it in place of the binary.
         let payloadBase64 = base64;
+        let um2Fresco: string | null = null;
         if (target === 'uvm2') {
-          const um2Path = await resolveArtifact('.um2');
-          if (um2Path) {
+          const r = await resolveFreshArtifact('.um2');
+          if (r && 'path' in r) {
             try {
-              payloadBase64 = Buffer.from(await fs.readFile(um2Path)).toString('base64');
+              payloadBase64 = Buffer.from(await fs.readFile(r.path)).toString('base64');
+              um2Fresco = r.path;
             } catch (_e) { /* fall back to the .bin */ }
+          } else if (r) {
+            avisarRancio('.um2', r);
           } else {
+            mainWindow?.webContents.send('run://stderr',
+              `[build] No hay ningun .um2 junto a ${binPath} ni en build/. El ` +
+              `simulador de UVM2 no puede cargar un .bin crudo: le falta la ` +
+              `cabecera '2CMU'.\n`);
             console.warn('[main] uvm2: no .um2 next to', binPath, 'or in build/');
           }
         }
 
-        // For rp2350 builds, also load the .elf for symbol extraction in Rp2350System
+        // For rp2350 builds, also load the .elf for symbol extraction in Rp2350System.
+        // Aqui la frescura importa MAS que en el .um2: Rp2350System engancha sus
+        // trampas por DIRECCION de simbolo (psg_write, psg_read, ...). Un .elf viejo
+        // da direcciones que ya no son las del binario cargado, y el sintoma es que
+        // el juego corre pero sin sonido o sin mandos — parece un fallo del juego.
         let elfBase64: string | null = null;
         if (target === 'rp2350') {
-          const elfPath = await resolveArtifact('.elf');
-          if (elfPath) {
+          const r = await resolveFreshArtifact('.elf');
+          if (r && 'path' in r) {
             try {
-              const elfBuf = await fs.readFile(elfPath);
+              const elfBuf = await fs.readFile(r.path);
               elfBase64 = Buffer.from(elfBuf).toString('base64');
             } catch (_e) { /* elf not available */ }
+          } else if (r) {
+            avisarRancio('.elf', r);
           } else {
             console.warn('[main] rp2350: could not find .elf next to', binPath, 'or in build/');
           }
@@ -2105,14 +2170,24 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         // The cartridge reads `.um2` — a 20-byte header plus the RAM image. The
         // raw `.bin` has no '2CMU' magic, so copying that produces a card the
         // firmware silently refuses to load.
+        //
+        // Aqui la frescura se comprueba IGUAL que para el simulador, y con mas razon:
+        // una imagen vieja en la tarjeta se descubre delante de la consola, con el
+        // cartucho fuera y el cable a medio poner. Se reutiliza el .um2 que ya se
+        // valido arriba; si no se valido (porque no se iba a simular), se revalida.
         if (target === 'uvm2' && uvm2CopyToSD) {
-          const um2ForSd = await resolveArtifact('.um2');
+          let um2ForSd = um2Fresco;
+          if (!um2ForSd) {
+            const r = await resolveFreshArtifact('.um2');
+            if (r && 'path' in r) um2ForSd = r.path;
+            else if (r) avisarRancio('.um2', r);
+          }
           if (um2ForSd) {
             await copyUvm2ToSDCard(um2ForSd, uvm2SdPath, mainWindow ?? null);
           } else {
             mainWindow?.webContents.send('run://stderr',
-              `[SD] No .um2 found next to ${binPath} — nothing copied. ` +
-              `The cartridge cannot load a raw .bin.\n`);
+              `[SD] No se ha copiado nada: no hay un .um2 de esta compilacion junto a ` +
+              `${binPath} ni en build/. El cartucho no puede cargar un .bin crudo.\n`);
           }
         }
 
