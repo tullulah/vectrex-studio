@@ -60,6 +60,34 @@ const SALTO_HIST = 24;
  *  ejecutar ahi es siempre un error, y detectarlo en el acto ahorra rastrear el
  *  choque que ocurre unas instrucciones despues. */
 const VECTORES_FIN = SRAM_BASE + 64 * 4;
+
+// ─── La ROM de arranque del RP2350 ────────────────────────────────────────────
+//
+// El runtime del pico-sdk llama a la bootrom durante la inicializacion estatica:
+//
+//     movs r3, #0
+//     ldrh r3, [r3, #22]     @ el puntero a rom_table_lookup vive en 0x00000016
+//     tt   r2, r2            @ seguro o no seguro -> elige la mascara
+//     movs r1, #16 / #4      @ RT_FLAG_FUNC_ARM_NONSEC / _SEC
+//     bx   r3
+//
+// Sin nada mapeado ahi, ese ldrh devuelve 0 y el `bx r3` salta a la direccion 0.
+// El PC se pierde, recorre la tabla de vectores como si fuera codigo y acaba
+// estrellandose contra el manejador por defecto — que en el log aparece como
+// "Unimplemented 16-bit misc: 0xbe00" y no se parece en nada a la causa.
+//
+// En hardware la bootrom esta, asi que la imagen es correcta: esto es un agujero
+// del emulador, no del juego.
+//
+// Se sintetiza lo minimo: el puntero de 0x16, un rom_table_lookup que se atiende
+// de forma nativa, y una funcion que no hace nada y devuelve 0.
+const BOOTROM_SIZE   = 0x4000;
+const ROM_LOOKUP     = 0x00000100;   // rom_table_lookup sintetica (se intercepta)
+const ROM_NOOP       = 0x00000110;   // funcion que no hace nada y devuelve 0
+/** ROM_TABLE_CODE(c1,c2) = c1 | c2<<8. Los codigos que sabemos ignorar sin dañar. */
+const ROM_IGNORABLES: Record<number, string> = {
+  0x5253: "bootrom_state_reset('S','R')",
+};
 const SRAM_SIZE = 0x00082000;          // 520 KB, as on the real RP2350
 const SIO_BASE  = 0xD0000000;
 
@@ -107,6 +135,45 @@ export class Uvm2System implements ISystem, IBus {
   private gpioInLatch = 0;             // 32-bit GPIO_IN snapshot, see read8
 
   private vtor = SRAM_BASE;
+
+  /** ROM de arranque sintetica (ver arriba). */
+  private readonly bootrom = new Uint8Array(BOOTROM_SIZE);
+  private montarBootrom(): void {
+    this.bootrom.fill(0);
+    // 0x16: puntero de 16 bits a rom_table_lookup, con el bit Thumb.
+    const lk = ROM_LOOKUP | 1;
+    this.bootrom[0x16] = lk & 0xff;
+    this.bootrom[0x17] = (lk >>> 8) & 0xff;
+    // Las dos rutinas llevan `bx lr` de verdad por si alguna vez se ejecutan;
+    // rom_table_lookup se intercepta antes, y la no-op se ejecuta tal cual.
+    const bxlr = [0x70, 0x47];                       // bx lr
+    const movs0 = [0x00, 0x20];                      // movs r0, #0
+    this.bootrom.set(bxlr, ROM_LOOKUP);
+    this.bootrom.set(movs0, ROM_NOOP);
+    this.bootrom.set(bxlr, ROM_NOOP + 2);
+  }
+
+  /**
+   * rom_table_lookup(r0 = codigo, r1 = mascara) -> r0 = puntero a la funcion.
+   *
+   * Se atiende aqui y no con codigo ARM sintetico porque la tabla real de la
+   * bootrom no existe: lo unico que se puede hacer es decidir, por codigo, si la
+   * llamada se puede ignorar. Las que no conocemos se NOMBRAN en el log con sus
+   * dos letras ASCII, que es como las llama el pico-sdk, para que la siguiente
+   * laguna se identifique de un vistazo en vez de volver a rastrear un PC perdido.
+   */
+  private romTableLookup(): void {
+    const code = this.cpu.getReg(0) & 0xffff;
+    const c1 = String.fromCharCode(code & 0xff), c2 = String.fromCharCode(code >>> 8);
+    if (!(code in ROM_IGNORABLES)) {
+      console.warn(
+        `[Uvm2System] rom_table_lookup('${c1}','${c2}') (0x${code.toString(16)}) no esta ` +
+        `modelada; se devuelve una funcion que no hace nada. Si el juego se comporta ` +
+        `raro a partir de aqui, esta es la razon.`);
+    }
+    this.cpu.setReg(0, ROM_NOOP | 1);
+    this.cpu.setReg(15, this.cpu.getReg(14) & ~1);
+  }
 
   /** Anillo de los ultimos PCs ejecutados; se vuelca si la CPU falla. */
   private readonly pcHist = new Uint32Array(PC_HIST);
@@ -187,6 +254,7 @@ export class Uvm2System implements ISystem, IBus {
 
     this.sram.fill(0);
     this.sram.set(payload, (loadAddr - SRAM_BASE) >>> 0);
+    this.montarBootrom();
     this.reset();
   }
 
@@ -349,6 +417,8 @@ export class Uvm2System implements ISystem, IBus {
       return this.sram[addr - SRAM_BASE];
     }
 
+    if (addr < BOOTROM_SIZE) return this.bootrom[addr];
+
     // SIO. Only GPIO_IN and GPIO_OUT are readable; the SET/CLR/XOR aliases are
     // write-only on real silicon too.
     // The `>>> 0` is load-bearing: JS bitwise ops yield a SIGNED 32-bit result,
@@ -489,6 +559,8 @@ export class Uvm2System implements ISystem, IBus {
       // manejador de excepciones por defecto" — que se parecen mucho en el log y
       // se arreglan en sitios opuestos.
       this.pcHist[this.pcHistN++ & (PC_HIST - 1)] = pc;
+
+      if (pc === ROM_LOOKUP) { this.romTableLookup(); continue; }
 
       // Ejecutar la tabla de vectores es siempre un PC perdido. Se corta aqui, con
       // el salto que llevo hasta ahi todavia en el anillo, en vez de dejar que
