@@ -108,6 +108,12 @@ export class Thumb2 implements ICpu {
     this.itState = 0;
     this._cycles = 0;
     this.hitWfi = false;
+    // Registros de sistema: se arranca en modo hilo y sin nada enmascarado.
+    this.ipsr = 0;
+    this.primask = 0;
+    this.basepri = 0;
+    this.faultmask = 0;
+    this.control = 0;
   }
 
   get pc(): number { return this.regs[15]; }
@@ -128,24 +134,46 @@ export class Thumb2 implements ICpu {
   // `mrs r0, primask` devuelva lo que el propio programa escribio antes —
   // patron habitual para guardar y restaurar el estado en una seccion critica—
   // pero NO deshabilitan nada, porque aqui no hay nada que interrumpa.
-  //
-  // Si algun dia este nucleo toma excepciones de verdad, IPSR deja de ser 0 y
-  // hay que revisar esto entero.
   private primask = 0;
   private basepri = 0;
   private faultmask = 0;
   private control = 0;
 
+  /**
+   * Numero de excepcion activa, el que devuelve `MRS Rd, IPSR`. 0 = modo hilo.
+   *
+   * Este nucleo no VECTORIZA excepciones por su cuenta, pero los sistemas de
+   * arriba las fingen: Uvm2System atiende un `svc` apilando la trama de
+   * Cortex-M a mano y saltando al vector de SVCall. Si el IPSR no acompaña a ese
+   * salto, el manejador pregunta "en que excepcion estoy" y se le contesta 0 —
+   * o sea "en ninguna" — y se va por la rama de error.
+   *
+   * Eso costo un arranque de UVM2: el manejador de SnowBros hacia
+   *
+   *     0x20000110  mrs r0, ipsr
+   *     0x20000114  <comprobacion>
+   *     0x20000116  bkpt #0        <- caia aqui
+   *
+   * Asi que quien finge la excepcion TIENE que anunciarla con setException(), y
+   * devolverla a 0 al retornar. La alternativa —cablear 11 aqui dentro— seria
+   * mentir en el nucleo para tapar una omision del sistema.
+   */
+  private ipsr = 0;
+  setException(n: number): void { this.ipsr = n & 0x1ff; }
+  getException(): number { return this.ipsr; }
+
   /** Numeros SYSm segun ARMv7-M B5.1.1. */
   private readSysReg(sysm: number, pc: number): number {
     switch (sysm) {
-      // APSR / IAPSR / EAPSR / XPSR. Solo mantenemos NZCV; el numero de
-      // excepcion (IPSR) vale 0 y EPSR se lee siempre como 0 en un MRS.
-      case 0: case 1: case 2: case 3:
-        return this.cpsr & 0xf8000000;
-      case 5:  return 0;              // IPSR: modo hilo, ninguna excepcion activa
-      case 6:  return 0;              // EPSR: se lee como 0
-      case 7:  return 0;              // IEPSR
+      // Solo mantenemos NZCV. EPSR se lee siempre como 0 en un MRS; el numero de
+      // excepcion se suma en las variantes que incluyen el IPSR.
+      case 0:  return this.cpsr & 0xf8000000;                  // APSR
+      case 1:  return (this.cpsr & 0xf8000000) | this.ipsr;    // IAPSR
+      case 2:  return this.cpsr & 0xf8000000;                  // EAPSR
+      case 3:  return (this.cpsr & 0xf8000000) | this.ipsr;    // XPSR
+      case 5:  return this.ipsr;     // IPSR
+      case 6:  return 0;             // EPSR: se lee como 0
+      case 7:  return this.ipsr;     // IEPSR
       case 8:  case 9:  return this.SP >>> 0;   // MSP / PSP — pila unica aqui
       case 16: return this.primask;
       case 17: case 18: return this.basepri;    // BASEPRI / BASEPRI_MAX

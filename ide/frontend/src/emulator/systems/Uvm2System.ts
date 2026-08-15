@@ -49,6 +49,9 @@ function vectorsToSegments(
 
 // ── Memory map ──────────────────────────────────────────────────────────────
 const SRAM_BASE = 0x20000000;
+
+/** Profundidad del historial de PCs del informe de fallo. Potencia de dos. */
+const PC_HIST = 32;
 const SRAM_SIZE = 0x00082000;          // 520 KB, as on the real RP2350
 const SIO_BASE  = 0xD0000000;
 
@@ -96,6 +99,36 @@ export class Uvm2System implements ISystem, IBus {
   private gpioInLatch = 0;             // 32-bit GPIO_IN snapshot, see read8
 
   private vtor = SRAM_BASE;
+
+  /** Anillo de los ultimos PCs ejecutados; se vuelca si la CPU falla. */
+  private readonly pcHist = new Uint32Array(PC_HIST);
+  private pcHistN = 0;
+  /**
+   * Que vectores apuntan a esta direccion. Las imagenes de UVM2 llenan la tabla
+   * con un manejador por defecto —un muro de bkpt, uno por vector— asi que caer
+   * en el se lee en el log como "instruccion no implementada: 0xbe00" y parece
+   * un fallo del emulador cuando es el juego rindiendose.
+   */
+  private vectoresQueApuntanA(pc: number): string[] {
+    const NOMBRE: Record<number, string> = {
+      2: 'NMI', 3: 'HardFault', 4: 'MemManage', 5: 'BusFault', 6: 'UsageFault',
+      7: 'SecureFault', 11: 'SVCall', 12: 'DebugMon', 14: 'PendSV', 15: 'SysTick',
+    };
+    const out: string[] = [];
+    for (let i = 2; i < 64; i++) {
+      if (((this.read32(this.vtor + i * 4) & ~1) >>> 0) === (pc >>> 0)) {
+        out.push(NOMBRE[i] ?? (i >= 16 ? `IRQ ${i - 16}` : `vector ${i}`));
+      }
+    }
+    return out;
+  }
+
+  private historialPC(): number[] {
+    const n = Math.min(this.pcHistN, PC_HIST);
+    const out: number[] = [];
+    for (let i = n; i > 0; i--) out.push(this.pcHist[(this.pcHistN - i) & (PC_HIST - 1)]);
+    return out;
+  }
   private frameCounter = 0;
   private halted = false;
 
@@ -370,7 +403,8 @@ export class Uvm2System implements ISystem, IBus {
    * handler we vector to is the image's own, which is the whole point of
    * simulating this target at all.
    */
-  onSvc(_imm: number, cpu: { getReg(i: number): number; setReg(i: number, v: number): void }): void {
+  onSvc(_imm: number, cpu: { getReg(i: number): number; setReg(i: number, v: number): void;
+                            setException?(n: number): void }): void {
     const sp = (cpu.getReg(13) - 32) >>> 0;
     const put = (i: number, v: number) => {
       const a = sp + i * 4;
@@ -388,6 +422,10 @@ export class Uvm2System implements ISystem, IBus {
     cpu.setReg(13, sp);
     cpu.setReg(14, EXC_RETURN);
     cpu.setReg(15, this.read32(this.vtor + 11 * 4) & ~1);   // SVCall vector
+    // Y hay que ANUNCIAR la excepcion, no solo saltar a su vector: el manejador
+    // pregunta `mrs r0, ipsr` para saber en cual esta. Sin esto se le contesta 0
+    // ("modo hilo") y se va por la rama de error — un bkpt, en el SDK de UVM2.
+    cpu.setException?.(11);   // SVCall
   }
 
   /** Undo the above when the handler returns to EXC_RETURN. */
@@ -399,6 +437,7 @@ export class Uvm2System implements ISystem, IBus {
     this.cpu.setReg(12, get(4)); this.cpu.setReg(14, get(5));
     this.cpu.setReg(15, get(6) & ~1);
     this.cpu.setReg(13, (sp + 32) >>> 0);
+    this.cpu.setException(0);   // de vuelta a modo hilo
   }
 
   // ─── Frame ────────────────────────────────────────────────────────────────
@@ -424,11 +463,27 @@ export class Uvm2System implements ISystem, IBus {
         continue;
       }
 
+      // Historial de PCs, solo para el informe de fallo. Un fallo en este nucleo
+      // dice DONDE se paro pero no COMO se llego, y sin el "como" no se puede
+      // distinguir "instruccion no implementada" de "el juego ha saltado a su
+      // manejador de excepciones por defecto" — que se parecen mucho en el log y
+      // se arreglan en sitios opuestos.
+      this.pcHist[this.pcHistN++ & (PC_HIST - 1)] = pc;
+
       let c: number;
       try {
         c = this.cpu.step(this);
       } catch (e) {
         console.error(`[Uvm2System] CPU fault at 0x${pc.toString(16)}:`, e);
+        console.error('[Uvm2System] PCs anteriores (del mas antiguo al fallo):',
+          this.historialPC().map(v => '0x' + v.toString(16)).join(' -> '));
+        const vec = this.vectoresQueApuntanA(pc);
+        if (vec.length) {
+          console.error(
+            `[Uvm2System] 0x${pc.toString(16)} ES el manejador de: ${vec.join(', ')}. ` +
+            `O sea que el juego ha VECTORIZADO ahi; el fallo no es la instruccion, ` +
+            `es lo que provoco la excepcion.`);
+        }
         this.halted = true;
         break;
       }
