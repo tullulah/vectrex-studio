@@ -87,6 +87,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     LDA #$F8
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
@@ -112,8 +113,10 @@ MAIN:
     ; Prime BIOS button state at startup
     JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
     ; Call main() for initialization
+; VPy_LINE:12
     LDD #0
     STD VAR_JX
+; VPy_LINE:13
     LDD #0
     STD VAR_JY
     CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
@@ -125,6 +128,12 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+    JSR $F1AA    ; DP_to_D0 (Joy_Analog requires DP=$D0)
+    JSR $F1F5    ; Joy_Analog: poll all 4 axes once → $C81B-$C81E
+    JSR Reset0Ref ; Restore beam state after Joy_Analog
+    JSR $F1AF    ; DP_to_C8 (restore DP for RAM access)
+; VPy_LINE:16
+; NATIVE_CALL: PRINT_TEXT at line 16
     ; PRINT_TEXT: Print text at position
     LDD #-50
     STD >VAR_ARG0
@@ -135,6 +144,7 @@ LOOP_BODY:
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:19
     JSR J2X_BUILTIN
     STD RESULT
     PSHS D              ; save LEFT on stack (nested RIGHT)
@@ -145,6 +155,7 @@ LOOP_BODY:
     LDD TMPVAL          ; D = RIGHT (divisor)
     JSR DIV16           ; D = X / D
     STD VAR_JX
+; VPy_LINE:20
     JSR J2Y_BUILTIN
     STD RESULT
     PSHS D              ; save LEFT on stack (nested RIGHT)
@@ -155,6 +166,8 @@ LOOP_BODY:
     LDD TMPVAL          ; D = RIGHT (divisor)
     JSR DIV16           ; D = X / D
     STD VAR_JY
+; VPy_LINE:23
+; NATIVE_CALL: DRAW_LINE at line 23
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #8
     STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
@@ -175,6 +188,8 @@ LOOP_BODY:
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
+; VPy_LINE:24
+; NATIVE_CALL: DRAW_LINE at line 24
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD >VAR_JX
     STD DRAW_LINE_ARGS+0    ; x0
@@ -195,6 +210,7 @@ LOOP_BODY:
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
+; VPy_LINE:27
     LDA >$C80F   ; Vec_Btns: bit4=1 means P2 btn1 pressed
     BITA #$10
     BNE .J2B1_0_ON
@@ -205,6 +221,7 @@ LOOP_BODY:
 .J2B1_0_END:
     STD RESULT
     LBEQ IF_NEXT_1
+; VPy_LINE:28
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -213,70 +230,70 @@ LOOP_BODY:
     LDA #$64
     JSR Intensity_a
     LDA #$C4
-    LDB #$D6
+    LDB #$D9
     JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$FF
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$00
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$FE
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$01
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$00
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$02
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     LDA #$C8
@@ -286,6 +303,7 @@ LOOP_BODY:
     LBRA IF_END_0
 IF_NEXT_1:
 IF_END_0:
+; VPy_LINE:29
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -294,76 +312,77 @@ IF_END_0:
     LDA #$1E
     JSR Intensity_a
     LDA #$C4
-    LDB #$D6
+    LDB #$D9
     JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$FF
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$00
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$FE
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$01
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$00
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$02
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     LDA #$C8
     TFR A,DP    ; Restore DP=$C8 after circle drawing
     LDD #0
     STD RESULT
+; VPy_LINE:31
     LDA >$C80F   ; Vec_Btns: bit5=1 means P2 btn2 pressed
     BITA #$20
     BNE .J2B2_1_ON
@@ -374,6 +393,7 @@ IF_END_0:
 .J2B2_1_END:
     STD RESULT
     LBEQ IF_NEXT_3
+; VPy_LINE:32
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -382,70 +402,70 @@ IF_END_0:
     LDA #$64
     JSR Intensity_a
     LDA #$C4
-    LDB #$F4
+    LDB #$F7
     JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$FF
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$00
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$FE
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$01
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$00
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$02
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     LDA #$C8
@@ -455,6 +475,7 @@ IF_END_0:
     LBRA IF_END_2
 IF_NEXT_3:
 IF_END_2:
+; VPy_LINE:33
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -463,76 +484,77 @@ IF_END_2:
     LDA #$1E
     JSR Intensity_a
     LDA #$C4
-    LDB #$F4
+    LDB #$F7
     JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$FF
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$00
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$FE
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$01
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$00
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$02
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     LDA #$C8
     TFR A,DP    ; Restore DP=$C8 after circle drawing
     LDD #0
     STD RESULT
+; VPy_LINE:35
     LDA >$C80F   ; Vec_Btns: bit6=1 means P2 btn3 pressed
     BITA #$40
     BNE .J2B3_2_ON
@@ -543,6 +565,7 @@ IF_END_2:
 .J2B3_2_END:
     STD RESULT
     LBEQ IF_NEXT_5
+; VPy_LINE:36
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -551,70 +574,70 @@ IF_END_2:
     LDA #$64
     JSR Intensity_a
     LDA #$C4
-    LDB #$12
+    LDB #$15
     JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$FF
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$00
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$FE
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$01
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$00
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$02
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     LDA #$C8
@@ -624,6 +647,7 @@ IF_END_2:
     LBRA IF_END_4
 IF_NEXT_5:
 IF_END_4:
+; VPy_LINE:37
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -632,76 +656,77 @@ IF_END_4:
     LDA #$1E
     JSR Intensity_a
     LDA #$C4
-    LDB #$12
+    LDB #$15
     JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$FF
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$00
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$FE
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$01
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$00
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$02
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     LDA #$C8
     TFR A,DP    ; Restore DP=$C8 after circle drawing
     LDD #0
     STD RESULT
+; VPy_LINE:39
     LDA >$C80F   ; Vec_Btns: bit7=1 means P2 btn4 pressed
     BITA #$80
     BNE .J2B4_3_ON
@@ -712,6 +737,7 @@ IF_END_4:
 .J2B4_3_END:
     STD RESULT
     LBEQ IF_NEXT_7
+; VPy_LINE:40
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -720,70 +746,70 @@ IF_END_4:
     LDA #$64
     JSR Intensity_a
     LDA #$C4
-    LDB #$30
+    LDB #$33
     JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$FF
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$00
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$FE
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$01
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$00
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$02
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     LDA #$C8
@@ -793,6 +819,7 @@ IF_END_4:
     LBRA IF_END_6
 IF_NEXT_7:
 IF_END_6:
+; VPy_LINE:41
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -801,76 +828,78 @@ IF_END_6:
     LDA #$1E
     JSR Intensity_a
     LDA #$C4
-    LDB #$30
+    LDB #$33
     JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$FF
+    LDA #$02
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$FF
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$00
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
+    LDA #$FE
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$01
+    LDA #$FE
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$01
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$00
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$01
+    LDA #$02
+    LDB #$02
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     LDA #$C8
     TFR A,DP    ; Restore DP=$C8 after circle drawing
     LDD #0
     STD RESULT
+; VPy_LINE:44
+; NATIVE_CALL: PRINT_TEXT at line 44
     ; PRINT_TEXT: Print text at position
     LDD #-52
     STD >VAR_ARG0
@@ -890,30 +919,27 @@ IF_END_6:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
-    ;       causing integrators to drift toward joystick DAC value.
-    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref   ; Reset beam to center before positioning text
-    LDU VAR_ARG2   ; string pointer
-    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
-    STA >$C82A      ; Vec_Text_Height: controls character Y scale
-    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
-    STA >$C82B      ; Vec_Text_Width: controls character X spacing
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
-    LDX >$C82C      ; Save Vec_Str_Ptr (BIOS may dereference between frames)
+    TFR A,DP
+    JSR Intensity_5F
+    JSR Reset0Ref
+    LDU >VAR_ARG2
+    LDA >TEXT_SCALE_H
+    STA >$C82A          ; Vec_Text_Height
+    LDA >TEXT_SCALE_W
+    STA >$C82B          ; Vec_Text_Width
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    LDX >$C82C
     PSHS X
     JSR Print_Str_d
     PULS X
-    STX >$C82C      ; Restore Vec_Str_Ptr to safe ROM value
+    STX >$C82C
     LDA #$F8
-    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    STA >$C82A
     LDA #$48
-    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    STA >$C82B
+    JSR $F1AF
     RTS
 
 DIV16:
@@ -1008,28 +1034,18 @@ MOD16:
 .M16_DONE:
     RTS
 
-; J2_X() - Read Joystick 2 X axis (BIOS Joy_Analog)
+; J2_X() - Read Joystick 2 X axis from cached BIOS value at $C81D
 J2X_BUILTIN:
-    PSHS X       ; Save X
-    JSR $F1AA    ; DP_to_D0
-    JSR $F1F5    ; Joy_Analog
-    JSR $F1AF    ; DP_to_C8
-    LDB $C81D    ; Vec_Joy_2_X
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
+    LDB >$C81D   ; Vec_Joy_2_X
+    SEX
+    ADDD #2
     RTS
 
-; J2_Y() - Read Joystick 2 Y axis (BIOS Joy_Analog)
+; J2_Y() - Read Joystick 2 Y axis from cached BIOS value at $C81E
 J2Y_BUILTIN:
-    PSHS X       ; Save X
-    JSR $F1AA    ; DP_to_D0
-    JSR $F1F5    ; Joy_Analog
-    JSR $F1AF    ; DP_to_C8
-    LDB $C81E    ; Vec_Joy_2_Y
-    SEX          ; Sign-extend B to D
-    ADDD #2      ; Calibrate center offset
-    PULS X       ; Restore X
+    LDB >$C81E   ; Vec_Joy_2_Y
+    SEX
+    ADDD #2
     RTS
 
 ; ============================================================================
@@ -1039,11 +1055,11 @@ J2Y_BUILTIN:
 ; Inputs: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY (bytes in RAM)
 ; Uses 16-segment polygon (same as constant path) via MUL scaling of fixed fractions
 ; 4 unique delta fractions of radius r (16-gon, vertices at k*22.5 deg):
-;   a = 0.3827*r (sin22.5) via MUL #98 /256, stored at DRAW_CIRCLE_TEMP+2
-;   b = 0.3244*r (sin45-sin22.5) via MUL #83 /256, stored at DRAW_CIRCLE_TEMP+3
-;   c = 0.2168*r via MUL #56 /256, stored at DRAW_CIRCLE_TEMP+4
-;   d = 0.0761*r via MUL #19 /256, stored at DRAW_CIRCLE_TEMP+5
-; DRAW_CIRCLE_TEMP layout: [radius16][a][b][c][d][--][--]
+;   a = 0.3827*r (sin22.5) via MUL #98 /256, stored at >DRAW_CIRCLE_TEMP+2
+;   b = 0.3244*r (sin45-sin22.5) via MUL #83 /256, stored at >DRAW_CIRCLE_TEMP+3
+;   c = 0.2168*r via MUL #56 /256, stored at >DRAW_CIRCLE_TEMP+4
+;   d = 0.0761*r via MUL #19 /256, stored at >DRAW_CIRCLE_TEMP+5
+; >DRAW_CIRCLE_TEMP layout: [radius16][a][b][c][d][--][--]
 DRAW_CIRCLE_RUNTIME:
 ; Read ALL parameters into registers/stack BEFORE changing DP (critical!)
 ; (These are byte variables, use LDB not LDD)
@@ -1051,20 +1067,18 @@ LDB DRAW_CIRCLE_INTENSITY
 PSHS B                 ; Save intensity on stack
 
 LDB DRAW_CIRCLE_DIAM
-SEX                    ; Sign-extend to 16-bit (diameter is unsigned 0..255)
-LSRA                   ; Divide by 2 to get radius
-RORB
-STD DRAW_CIRCLE_TEMP   ; DRAW_CIRCLE_TEMP = radius (16-bit, big-endian: +0=hi, +1=lo)
+SEX                    ; Sign-extend to 16-bit (radius is the arg, 0..127)
+STD >DRAW_CIRCLE_TEMP   ; >DRAW_CIRCLE_TEMP = radius (the 3rd arg IS the radius; was diameter/2)
 
 LDB DRAW_CIRCLE_XC     ; xc (signed -128..127)
 SEX
-STD DRAW_CIRCLE_TEMP+2 ; Save xc (16-bit, reused for 'a' after Moveto)
+STD >DRAW_CIRCLE_TEMP+2 ; Save xc (16-bit, reused for 'a' after Moveto)
 
 LDB DRAW_CIRCLE_YC     ; yc (signed -128..127)
 SEX
-STD DRAW_CIRCLE_TEMP+4 ; Save yc (16-bit, reused for 'c' after Moveto)
+STD >DRAW_CIRCLE_TEMP+4 ; Save yc (16-bit, reused for 'c' after Moveto)
 
-; NOW safe to setup BIOS (all params are in DRAW_CIRCLE_TEMP+stack)
+; NOW safe to setup BIOS (all params are in >DRAW_CIRCLE_TEMP+stack)
 LDA #$D0
 TFR A,DP
 JSR Reset0Ref
@@ -1082,36 +1096,40 @@ JSR Intensity_5F
 DCR_after_intensity:
 
 ; Move to start position: (xc + radius, yc)  [vertex 0 of 16-gon = rightmost]
-; radius = DRAW_CIRCLE_TEMP, xc = DRAW_CIRCLE_TEMP+2, yc = DRAW_CIRCLE_TEMP+4
-LDD DRAW_CIRCLE_TEMP   ; D = radius (16-bit)
-ADDD DRAW_CIRCLE_TEMP+2 ; D = xc + radius
+; radius = >DRAW_CIRCLE_TEMP, xc = >DRAW_CIRCLE_TEMP+2, yc = >DRAW_CIRCLE_TEMP+4
+LDD >DRAW_CIRCLE_TEMP   ; D = radius (16-bit)
+ADDD >DRAW_CIRCLE_TEMP+2 ; D = xc + radius
 TFR B,B                ; Keep X in B (low byte)
 PSHS B                 ; Save X on stack
-LDD DRAW_CIRCLE_TEMP+4 ; Load yc
+LDD >DRAW_CIRCLE_TEMP+4 ; Load yc
 TFR B,A                ; Y to A
 PULS B                 ; X to B
 JSR Moveto_d
 
 ; Precompute 4 delta fractions using MUL (same fractions as constant 16-gon path)
-; radius is at DRAW_CIRCLE_TEMP+1 (low byte, 0..127)
-; DRAW_CIRCLE_TEMP+2..5 now free to reuse for a,b,c,d
-; MUL: A * B -> D (unsigned); A_after = floor(frac * r) when frac byte = round(frac*256)
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+; radius is at >DRAW_CIRCLE_TEMP+1 (low byte, 0..127)
+; >DRAW_CIRCLE_TEMP+2..5 now free to reuse for a,b,c,d
+; MUL: A * B -> D (unsigned); ADDD #128 then A = round(frac * r) (avoids floor-to-0 for small radii)
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #98                ; 98/256 = 0.3828 ~ sin(22.5 deg) = 0.3827
-MUL                    ; A = floor(0.3828 * r) = a
-STA DRAW_CIRCLE_TEMP+2 ; Store a
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+MUL                    ; D = 98 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+2 ; Store a = round(0.3828 * r)
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #83                ; 83/256 = 0.3242 ~ 0.3244
-MUL                    ; A = b
-STA DRAW_CIRCLE_TEMP+3 ; Store b
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+MUL                    ; D = 83 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+3 ; Store b
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #56                ; 56/256 = 0.2188 ~ 0.2168
-MUL                    ; A = c
-STA DRAW_CIRCLE_TEMP+4 ; Store c
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+MUL                    ; D = 56 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+4 ; Store c
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #19                ; 19/256 = 0.0742 ~ 0.0761
-MUL                    ; A = d
-STA DRAW_CIRCLE_TEMP+5 ; Store d
+MUL                    ; D = 19 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+5 ; Store d
 
 ; Draw 16 unrolled segments - 16-gon counterclockwise from (xc+r, yc)
 ; Draw_Line_d(A=dy, B=dx). Symmetry pattern by quadrant:
@@ -1123,105 +1141,105 @@ STA DRAW_CIRCLE_TEMP+5 ; Store d
 ; --- Q1 ---
 ; Seg 0: dy=+a, dx=-d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a
-LDB DRAW_CIRCLE_TEMP+5  ; d
+LDA >DRAW_CIRCLE_TEMP+2  ; a
+LDB >DRAW_CIRCLE_TEMP+5  ; d
 NEGB
 JSR Draw_Line_d
 ; Seg 1: dy=+b, dx=-c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b
-LDB DRAW_CIRCLE_TEMP+4  ; c
+LDA >DRAW_CIRCLE_TEMP+3  ; b
+LDB >DRAW_CIRCLE_TEMP+4  ; c
 NEGB
 JSR Draw_Line_d
 ; Seg 2: dy=+c, dx=-b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c
-LDB DRAW_CIRCLE_TEMP+3  ; b
+LDA >DRAW_CIRCLE_TEMP+4  ; c
+LDB >DRAW_CIRCLE_TEMP+3  ; b
 NEGB
 JSR Draw_Line_d
 ; Seg 3: dy=+d, dx=-a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d
-LDB DRAW_CIRCLE_TEMP+2  ; a
+LDA >DRAW_CIRCLE_TEMP+5  ; d
+LDB >DRAW_CIRCLE_TEMP+2  ; a
 NEGB
 JSR Draw_Line_d
 
 ; --- Q2 ---
 ; Seg 4: dy=-d, dx=-a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d
+LDA >DRAW_CIRCLE_TEMP+5  ; d
 NEGA
-LDB DRAW_CIRCLE_TEMP+2  ; a
+LDB >DRAW_CIRCLE_TEMP+2  ; a
 NEGB
 JSR Draw_Line_d
 ; Seg 5: dy=-c, dx=-b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c
+LDA >DRAW_CIRCLE_TEMP+4  ; c
 NEGA
-LDB DRAW_CIRCLE_TEMP+3  ; b
+LDB >DRAW_CIRCLE_TEMP+3  ; b
 NEGB
 JSR Draw_Line_d
 ; Seg 6: dy=-b, dx=-c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b
+LDA >DRAW_CIRCLE_TEMP+3  ; b
 NEGA
-LDB DRAW_CIRCLE_TEMP+4  ; c
+LDB >DRAW_CIRCLE_TEMP+4  ; c
 NEGB
 JSR Draw_Line_d
 ; Seg 7: dy=-a, dx=-d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a
+LDA >DRAW_CIRCLE_TEMP+2  ; a
 NEGA
-LDB DRAW_CIRCLE_TEMP+5  ; d
+LDB >DRAW_CIRCLE_TEMP+5  ; d
 NEGB
 JSR Draw_Line_d
 
 ; --- Q3 ---
 ; Seg 8: dy=-a, dx=+d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a
+LDA >DRAW_CIRCLE_TEMP+2  ; a
 NEGA
-LDB DRAW_CIRCLE_TEMP+5  ; d (positive)
+LDB >DRAW_CIRCLE_TEMP+5  ; d (positive)
 JSR Draw_Line_d
 ; Seg 9: dy=-b, dx=+c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b
+LDA >DRAW_CIRCLE_TEMP+3  ; b
 NEGA
-LDB DRAW_CIRCLE_TEMP+4  ; c (positive)
+LDB >DRAW_CIRCLE_TEMP+4  ; c (positive)
 JSR Draw_Line_d
 ; Seg 10: dy=-c, dx=+b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c
+LDA >DRAW_CIRCLE_TEMP+4  ; c
 NEGA
-LDB DRAW_CIRCLE_TEMP+3  ; b (positive)
+LDB >DRAW_CIRCLE_TEMP+3  ; b (positive)
 JSR Draw_Line_d
 ; Seg 11: dy=-d, dx=+a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d
+LDA >DRAW_CIRCLE_TEMP+5  ; d
 NEGA
-LDB DRAW_CIRCLE_TEMP+2  ; a (positive)
+LDB >DRAW_CIRCLE_TEMP+2  ; a (positive)
 JSR Draw_Line_d
 
 ; --- Q4 ---
 ; Seg 12: dy=+d, dx=+a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d (positive)
-LDB DRAW_CIRCLE_TEMP+2  ; a (positive)
+LDA >DRAW_CIRCLE_TEMP+5  ; d (positive)
+LDB >DRAW_CIRCLE_TEMP+2  ; a (positive)
 JSR Draw_Line_d
 ; Seg 13: dy=+c, dx=+b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c (positive)
-LDB DRAW_CIRCLE_TEMP+3  ; b (positive)
+LDA >DRAW_CIRCLE_TEMP+4  ; c (positive)
+LDB >DRAW_CIRCLE_TEMP+3  ; b (positive)
 JSR Draw_Line_d
 ; Seg 14: dy=+b, dx=+c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b (positive)
-LDB DRAW_CIRCLE_TEMP+4  ; c (positive)
+LDA >DRAW_CIRCLE_TEMP+3  ; b (positive)
+LDB >DRAW_CIRCLE_TEMP+4  ; c (positive)
 JSR Draw_Line_d
 ; Seg 15: dy=+a, dx=+d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a (positive)
-LDB DRAW_CIRCLE_TEMP+5  ; d (positive)
+LDA >DRAW_CIRCLE_TEMP+2  ; a (positive)
+LDB >DRAW_CIRCLE_TEMP+5  ; d (positive)
 JSR Draw_Line_d
 
 LDA #$C8

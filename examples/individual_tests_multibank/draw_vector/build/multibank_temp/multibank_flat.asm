@@ -46,6 +46,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -57,10 +59,13 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     LDA #$F8
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
     STA TEXT_SCALE_W      ; Default width = 72 (normal size)
+    LDA #$7F
+    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
     CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
@@ -76,6 +81,7 @@ MAIN:
     ; Mux configured - J1_X()/J1_Y() can now be called
 
     ; Call main() for initialization
+; VPy_LINE:12
     ; TODO: Statement Pass { source_line: 12 }
 
 .MAIN_LOOP:
@@ -85,32 +91,48 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+; VPy_LINE:16
+; NATIVE_CALL: DRAW_VECTOR at line 16
     ; DRAW_VECTOR: Draw vector asset at position
     ; Asset: vec (index=0, 1 paths)
     LDD #0
-    TFR B,A       ; X position (low byte) — B already holds it
-    STA TMPPTR    ; Save X to temporary storage
+    STA TMPPTR2      ; save high byte of 16-bit screen_x
+    TFR B,A
+    SEX              ; A = sign-extend of B (0x00 or 0xFF)
+    CMPA TMPPTR2     ; vs actual high byte
+    LBNE DRVEC_SKIP_0          ; out of 8-bit range — skip draw
+    TFR B,A
+    STA TMPPTR       ; save 8-bit x
     LDD #0
-    TFR B,A       ; Y position (low byte) — B already holds it
-    STA TMPPTR+1  ; Save Y to temporary storage
-    LDA TMPPTR    ; X position
+    TFR B,A          ; Y position (8-bit signed in A)
+    STA TMPPTR+1     ; Save Y to temporary storage
+    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)
     STA DRAW_VEC_X
-    LDA TMPPTR+1  ; Y position
+    LDB #0
+    TSTA
+    BPL .sx_pos_0
+    LDB #$FF
+.sx_pos_0:
+    STB DRAW_VEC_X_HI
+    LDA TMPPTR+1     ; Y position
     STA DRAW_VEC_Y
     CLR MIRROR_X
     CLR MIRROR_Y
+    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities
     LDX #0        ; Asset index for lookup
     JSR DRAW_VECTOR_BANKED  ; Draw with automatic bank switching
-    CLR DRAW_VEC_INTENSITY  ; Reset: next DRAW_VECTOR uses .vec intensities
+DRVEC_SKIP_0:
     LDD #0
     STD RESULT
+; VPy_LINE:17
+; NATIVE_CALL: PRINT_TEXT at line 17
     ; PRINT_TEXT: Print text at position
     LDD #0
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #0
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2223292      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
@@ -135,16 +157,18 @@ LOOP_BODY:
 
 _VEC_WIDTH EQU 30
 _VEC_HALF_WIDTH EQU 15
+_VEC_HEIGHT EQU 30
+_VEC_HALF_HEIGHT EQU 15
 _VEC_CENTER_X EQU 0
 _VEC_CENTER_Y EQU 5
 
 _VEC_VECTORS:  ; Main entry (header + 1 path(s))
-    FCB 1               ; path_count (runtime metadata)
+    FDB 1               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _VEC_PATH0        ; pointer to path 0
 
 _VEC_PATH0:    ; Path 0
     FCB 127              ; path0: intensity
-    FCB $0F,$00,0,0        ; path0: header (y=15, x=0, relative to center)
+    FCB $0F,$00,0,0        ; path0: header (y=15, x=0)
     FCB $FF,$E2,$F1          ; flag=-1, dy=-30, dx=-15
     FCB $FF,$00,$1E          ; flag=-1, dy=0, dx=30
     FCB $FF,$1E,$F1          ; flag=-1, dy=30, dx=-15
@@ -183,8 +207,10 @@ ASSET_ADDR_TABLE:
 ;***************************************************************************
 ; DRAW_VECTOR_BANKED - Draw vector asset with automatic bank switching
 ; Input: X = asset index (0-based), DRAW_VEC_X/Y set for position
-; Uses: A, B, X, Y
+;        MIRROR_X, MIRROR_Y, DRAW_VEC_INTENSITY must be set by caller
+; Uses: A, B, D, X, Y, U
 ; Preserves: CURRENT_ROM_BANK (restored after drawing)
+; Note: DSWM handles beam positioning internally via DRAW_VEC_X/Y
 ;***************************************************************************
 DRAW_VECTOR_BANKED:
     ; Save index to U register (avoid stack order issues)
@@ -207,16 +233,46 @@ DRAW_VECTOR_BANKED:
     LDX #VECTOR_ADDR_TABLE
     LEAX D,X             ; X points to address entry
     LDX ,X               ; X = _VEC_VECTORS header address in banked ROM
-    LDX 1,X              ; Follow FDB at header+1 -> X = path 0 address
 
-    ; Set up for drawing
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    CLR DRAW_VEC_INTENSITY
+    ; Set DP=$D0 for DSWM / VIA access (caller set MIRROR_X/Y/INTENSITY)
     JSR $F1AA            ; DP_to_D0
 
-    ; Draw the vector (X already has address)
+    ; Set DRAW_T1_SCALED to BIOS default ($7F) — SLR_DRAW_CLIPPED_PATH reads it
+    ; when the fallback path is taken.
+    LDA #$7F
+    STA >DRAW_T1_SCALED
+    ; Loop over all paths (header: FDB path_count, then FDB table)
+    LDD ,X               ; D = path_count (16-bit FDB at header start)
+    CMPD #0
+    LBEQ DVB_DONE        ; No paths
+    LEAY 2,X             ; Y = pointer to first FDB entry (after 2-byte header)
+DVB_PATH_LOOP:
+    PSHS D               ; Save remaining path count (2 bytes)
+    LDX ,Y               ; X = path data address (FDB entry)
+    ; Hybrid clip decision: fast DSWM if screen_x deep inside, slow SDCP near edges.
+    LDA >DRAW_VEC_X_HI
+    BEQ DVB_CHECK_POS
+    INCA
+    BNE DVB_USE_SDCP
+    LDA >DRAW_VEC_X
+    CMPA #$B0            ; -80
+    BHS DVB_USE_DSWM
+    BRA DVB_USE_SDCP
+DVB_CHECK_POS:
+    LDA >DRAW_VEC_X
+    CMPA #80
+    BLS DVB_USE_DSWM
+DVB_USE_SDCP:
+    JSR SLR_DRAW_CLIPPED_PATH
+    BRA DVB_PATH_AFTER
+DVB_USE_DSWM:
     JSR Draw_Sync_List_At_With_Mirrors
+DVB_PATH_AFTER:
+    LEAY 2,Y             ; Advance to next FDB entry
+    PULS D               ; Restore count
+    SUBD #1
+    BNE DVB_PATH_LOOP
+DVB_DONE:
 
     JSR $F1AF            ; DP_to_C8
 
@@ -234,26 +290,27 @@ DRAW_VECTOR_BANKED:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
-    ;       causing integrators to drift toward joystick DAC value.
-    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref   ; Reset beam to center before positioning text
-    LDU VAR_ARG2   ; string pointer
-    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
-    STA >$C82A      ; Vec_Text_Height: controls character Y scale
-    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
-    STA >$C82B      ; Vec_Text_Width: controls character X spacing
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
+    TFR A,DP
+    JSR Intensity_5F
+    JSR Reset0Ref
+    LDU >VAR_ARG2
+    LDA >TEXT_SCALE_H
+    STA >$C82A          ; Vec_Text_Height
+    LDA >TEXT_SCALE_W
+    STA >$C82B          ; Vec_Text_Width
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    LDX >$C82C
+    PSHS X
     JSR Print_Str_d
+    PULS X
+    STX >$C82C
     LDA #$F8
-    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    STA >$C82A
     LDA #$48
-    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    STA >$C82B
+    JSR $F1AF
     RTS
 
 MOD16:
@@ -301,19 +358,15 @@ MOD16:
 Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller must ensure DP=$D0 for VIA access
-; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates
-; VIA Port B through states $05->$04->$01 which resets the analog hardware
-; (zero-reference sequence) and would disrupt the beam position mid-drawing.
-; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.
-LDA ,X+                 ; Read per-path intensity from vector data
+; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
+BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_SET_INTENSITY
+DSWM_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_SET_INTENSITY:
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
-LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
-LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
 TST >MIRROR_Y
@@ -353,7 +406,7 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore X
 STA VIA_port_a          ; X to DAC
-; T1 fixed at $7F (constant scale; brightness is set via $C832 above, independently)
+; Timing setup (match core: hardcoded $7F)
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
@@ -400,14 +453,20 @@ DSWM_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W2
+CLR VIA_port_a          ; stop X integrator drift between segments
 CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
 LBRA DSWM_LOOP          ; Long branch
 ; Next path: repeat mirror logic for new path header
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
-; Read per-path intensity from vector data
-LDA ,X+                 ; Read intensity from vector data
+; Check intensity override (same logic as start)
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
+BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_NEXT_SET_INTENSITY
+DSWM_NEXT_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_NEXT_SET_INTENSITY:
 PSHS A
 LDB ,X+                 ; y_start
@@ -424,12 +483,7 @@ DSWM_NEXT_NO_NEGATE_X:
 ADDA >DRAW_VEC_X        ; Add X offset
 STD >TEMP_YX
 PULS A                  ; Get intensity back
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
-LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
-LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe)
 PULS D
 ADDD #3
 TFR D,X
@@ -457,7 +511,7 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
 STA VIA_port_a          ; X to DAC
-; T1 fixed at $7F (constant scale; brightness set via $C832 above)
+; Timing setup (match core: hardcoded $7F)
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
@@ -471,6 +525,180 @@ BEQ DSWM_W3
 LBRA DSWM_LOOP          ; Long branch
 DSWM_DONE:
 RTS
+; === SLR_DRAW_CLIPPED_PATH ===
+SLR_DRAW_CLIPPED_PATH:
+    LDA >DRAW_VEC_INTENSITY ; check override
+    BNE SDCP_USE_OVERRIDE
+    LDA ,X+                 ; read intensity from path data
+    BRA SDCP_SET_INTENS
+SDCP_USE_OVERRIDE:
+    LEAX 1,X                ; skip intensity byte
+SDCP_SET_INTENS:
+    STA >$C832              ; Vec_Misc_Count (DDRB-safe, no JSR)
+    LDB ,X+                 ; B = y_start (relative to center)
+    LDA ,X+                 ; A = x_start (relative to center)
+    ADDB >DRAW_VEC_Y        ; B = abs_y
+    STB >SDCP_ABS_Y         ; save abs_y for moveto (NOT TMPVAL — SHOW_LEVEL's top_screen lives there)
+    TFR A,B                 ; B = x_start (SEX extends B, not A)
+    SEX                      ; sign-extend B→D (A=sign, B=x_start)
+    ADDD >DRAW_VEC_X_HI     ; D = abs_x_16 = SEX(x_start) + screen_x_16
+    ; D = abs_x_16. Save it in 16-bit tracker SLR_TRUE_X (unclamped).
+    STD >SLR_TRUE_X
+    ; Compute clamped beam position for hardware Moveto.
+    TSTA
+    BEQ SDCP_INIT_POS
+    INCA
+    BEQ SDCP_INIT_NEG_OK    ; A was $FF (small negative)
+    ; Way off — clamp to nearest edge by sign of original A (now in INCA result)
+    LDB #$80                ; default to left edge
+    LDA >SLR_TRUE_X         ; original hi byte
+    BMI SDCP_USE_CLAMPED    ; negative → -128 (left)
+    LDB #$7F                ; positive way off → +127 (right)
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_NEG_OK:
+    CMPB #$80
+    BHS SDCP_USE_CLAMPED    ; -128..-1, valid
+    LDB #$80                ; clamp
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_POS:
+    CMPB #$7F
+    BLS SDCP_USE_CLAMPED
+    LDB #$7F                ; clamp positive
+SDCP_USE_CLAMPED:
+    TFR B,A                  ; A = clamped beam x
+    STA >SLR_CUR_X          ; clamped value goes to integrator
+    CLR VIA_shift_reg
+    LDA #$CC
+    STA VIA_cntl
+    CLR VIA_port_a
+    LDA #$03
+    STA VIA_port_b
+    LDA #$02
+    STA VIA_port_b
+    LDA #$02
+    STA VIA_port_b
+    LDA #$01
+    STA VIA_port_b
+    LDB >SDCP_ABS_Y         ; B = abs_y
+    STB VIA_port_a          ; DY → DAC (PB=1: hold)
+    CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
+    LDA >SLR_CUR_X          ; abs_x (load = settling for Y)
+    PSHS A                  ; ~4 more settling cycles
+    LDA #$CE
+    STA VIA_cntl            ; PCR=$CE: /ZERO high
+    CLR VIA_shift_reg       ; SR=0: beam off
+    INC VIA_port_b          ; PB=1: lock Y direction
+    PULS A                  ; restore abs_x
+    STA VIA_port_a          ; DX → DAC
+    LDA >DRAW_T1_SCALED     ; effective T1 for this object (scale * 127)
+    STA VIA_t1_cnt_lo       ; load T1 latch
+    LEAX 2,X                ; skip next_y, next_x (the 0,0)
+    CLR VIA_t1_cnt_hi       ; start T1 → ramp
+SDCP_MOVETO_W:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_MOVETO_W
+    ; PB=1 on exit — draw loop ready
+SDCP_SEG_LOOP:
+    LDA ,X+                 ; flags
+    CMPA #2
+    LBEQ SDCP_DONE
+    LDB ,X+                 ; B = dy
+    STB >TMPPTR2            ; save dy
+    LDA ,X+                 ; A = dx (8-bit signed)
+    ; --- 16-bit add: true_new_x_16 = SLR_TRUE_X + SEX(dx) ---
+    TFR A,B                 ; B = dx
+    SEX                      ; D = sign-extended dx (A=sign, B=dx)
+    ADDD >SLR_TRUE_X        ; D = new true_x_16
+    STD >SLR_TRUE_X         ; update 16-bit tracker
+    ; --- Clamp D to [-128, +127] → 8-bit clamped_new_x in B ---
+    TSTA
+    BEQ SDCP_SEG_POS
+    INCA
+    BEQ SDCP_SEG_NEG_OK     ; A was $FF
+    ; Way off — clamp by sign of original D
+    LDA >SLR_TRUE_X         ; reload hi byte
+    BMI SDCP_SEG_CLAMP_LEFT
+    LDB #$7F                ; positive way off → +127
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_CLAMP_LEFT:
+    LDB #$80                ; negative way off → -128
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_NEG_OK:
+    CMPB #$80
+    BHS SDCP_SEG_CLAMPED
+    LDB #$80
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_POS:
+    CMPB #$7F
+    BLS SDCP_SEG_CLAMPED
+    LDB #$7F
+SDCP_SEG_CLAMPED:
+    ; B = clamped_new_x. Compute beam_dx = B - SLR_CUR_X (8-bit signed).
+    LDA >SLR_CUR_X
+    PSHS B                  ; save clamped_new_x
+    NEGA                    ; A = -cur_x
+    ADDA ,S                 ; A = clamped_new_x - cur_x = beam_dx
+    PULS B                  ; B = clamped_new_x
+    ; Update SLR_CUR_X to new clamped position
+    STB >SLR_CUR_X
+    ; Decide beam ON/OFF/skip:
+    ; - beam_dx != 0                       → beam ON,  ramp(beam_dx, dy)
+    ; - beam_dx == 0 AND cur at edge AND dy==0 → skip (zero motion)
+    ; - beam_dx == 0 AND cur at edge AND dy!=0 → beam OFF ramp(0, dy)
+    ;   (Y must track logical position so subsequent segments draw at correct Y)
+    ; - beam_dx == 0 AND not at edge       → beam ON,  ramp(0, dy) — vertical
+    TSTA
+    BNE SDCP_SEG_DRAW       ; non-zero beam_dx → draw
+    CMPB #$80               ; at left edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen left
+    CMPB #$7F               ; at right edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen right
+SDCP_SEG_DRAW:
+    LDB >TMPPTR2            ; restore dy
+    ; A = beam_dx (visible X delta), B = dy. Beam ON ramp.
+    STB VIA_port_a          ; DY → DAC (PB=1: hold)
+    CLR VIA_port_b          ; PB=0: mux for DY
+    NOP
+    NOP
+    NOP
+    INC VIA_port_b          ; PB=1: lock DY
+    STA VIA_port_a          ; DX → DAC
+    LDA #$FF
+    STA VIA_shift_reg       ; beam ON
+    CLR VIA_t1_cnt_hi       ; start T1
+SDCP_W_DRAW:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_W_DRAW
+    CLR VIA_shift_reg       ; beam OFF
+    LBRA SDCP_SEG_LOOP
+
+    ; --- Off-screen-X path: dx contribution is invisible, but Y must track ---
+SDCP_SEG_OFF_X:
+    LDB >TMPPTR2            ; B = dy
+    TSTB                     ; dy == 0?
+    LBEQ SDCP_SEG_LOOP      ; no Y motion either → skip entire segment
+    ; Ramp(0, dy) with beam OFF. A is already 0 (beam_dx).
+    CLRA                     ; defensive: ensure dx=0
+    STB VIA_port_a          ; DY → DAC
+    CLR VIA_port_b
+    NOP
+    NOP
+    NOP
+    INC VIA_port_b
+    STA VIA_port_a          ; DX = 0
+    ; beam stays OFF (no STA VIA_shift_reg)
+    CLR VIA_t1_cnt_hi       ; start T1 (ramp, beam off)
+SDCP_W_OFF_X:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ SDCP_W_OFF_X
+    LBRA SDCP_SEG_LOOP
+
+SDCP_DONE:
+    RTS
+
 ;**** PRINT_TEXT String Data ****
 PRINT_TEXT_STR_116628:
     FCC "vec"

@@ -1,5236 +1,2006 @@
 {
-  "version": "1.0",
-  "source": "main.vpy",
-  "asm": "play_sfx.asm",
-  "binary": "play_sfx.bin",
-  "entryPoint": "0x039C",
-  "symbols": {
-    "AU_MUSIC_LOOP": "0x019C",
-    "IF_END_2": "0x0636",
-    "AU_MUSIC_DONE": "0x0192",
-    "AU_MUSIC_HAS_DELAY": "0x0173",
-    "AU_MUSIC_PROCESS_WRITES": "0x017C",
-    "J1B3_BUILTIN": "0x006C",
-    "J1X_BUILTIN": "0x001E",
-    "SFX_UPDATE": "0x01BC",
-    "sfx_m_write": "0x021D",
-    "PSG_music_ended": "0x0104",
-    "J1B4_BUILTIN.J1B4_OFF": "0x0086",
-    "noay": "0x01C4",
-    "AU_MUSIC_WRITE_LOOP": "0x017E",
-    "PLAY_MUSIC_RUNTIME": "0x00A9",
-    "IF_END_0": "0x0559",
-    "J1B4_BUILTIN": "0x007B",
-    "J1B2_BUILTIN.J1B2_OFF": "0x0068",
-    "sfx_endofeffect": "0x022A",
-    "PSG_update_done": "0x0110",
-    "sfx_m_noise": "0x0213",
-    "sfx_checknoisefreq": "0x01EC",
-    "MAIN": "0x03BF",
-    "STR_1": "0x076E",
-    "IF_NEXT_3": "0x0636",
-    "_JUMP_SFX": "0x06FB",
-    "PSG_write_loop": "0x00D1",
-    "J1B3_BUILTIN.J1B3_OFF": "0x0077",
-    "J1B1_BUILTIN": "0x004E",
-    "__Moveto_d": "0x0250",
-    "DRAW_CIRCLE_RUNTIME": "0x025A",
-    "AU_MUSIC_READ_COUNT": "0x0169",
-    "AU_MUSIC_READ": "0x015A",
-    "sfx_checkvolume": "0x01FB",
-    "DCR_intensity_5F": "0x028C",
-    "AU_MUSIC_NO_DELAY": "0x0169",
-    "IF_NEXT_1": "0x0559",
-    "STOP_MUSIC_RUNTIME": "0x0114",
-    "PSG_frame_done": "0x00FF",
-    "LOOP_BODY": "0x03EC",
-    "sfx_updatemixer": "0x0204",
-    "__Draw_Line_d": "0x0255",
-    "AUDIO_UPDATE": "0x013B",
-    "J1B1_BUILTIN.J1B1_OFF": "0x0059",
-    "sfx_checktonefreq": "0x01D4",
-    "AU_SKIP_MUSIC": "0x01A6",
-    "_EXPLOSION_SFX": "0x071E",
-    "sfx_nextframe": "0x0225",
-    "J1Y_BUILTIN": "0x0036",
-    "START": "0x039C",
-    "AU_MUSIC_ENDED": "0x0197",
-    "sfx_m_noisedis": "0x021B",
-    "sfx_m_tonedis": "0x0211",
-    "J1B2_BUILTIN": "0x005D",
-    "STR_0": "0x0764",
-    "sfx_doframe": "0x01C5",
-    "STR_2": "0x0778",
-    "PLAY_SFX_RUNTIME": "0x01B3",
-    "UPDATE_MUSIC_PSG": "0x00B8",
-    "VECTREX_PRINT_TEXT": "0x008A",
-    "AU_UPDATE_SFX": "0x01A8",
-    "AU_DONE": "0x01B0",
-    "__Reset0Ref": "0x024D",
-    "DCR_after_intensity": "0x028F",
-    "__Intensity_a": "0x0248",
-    "PSG_music_loop": "0x0109"
+  "asm": "multibank_temp/bank_00_full.asm",
+  "asmAddressMap": {},
+  "asmBankAddr": {
+    "0:0000": 627,
+    "0:000A": 628,
+    "0:000B": 629,
+    "0:0010": 630,
+    "0:0011": 631,
+    "0:0019": 632,
+    "0:001A": 633,
+    "0:001B": 640,
+    "0:001D": 641,
+    "0:001F": 642,
+    "0:0022": 643,
+    "0:0024": 644,
+    "0:0027": 645,
+    "0:002A": 646,
+    "0:002C": 647,
+    "0:002F": 648,
+    "0:0033": 651,
+    "0:0035": 652,
+    "0:0038": 654,
+    "0:003B": 655,
+    "0:003E": 656,
+    "0:0041": 657,
+    "0:0044": 658,
+    "0:0047": 659,
+    "0:004A": 660,
+    "0:004D": 661,
+    "0:0050": 662,
+    "0:0053": 664,
+    "0:0056": 719,
+    "0:0059": 720,
+    "0:005C": 721,
+    "0:005F": 722,
+    "0:0061": 723,
+    "0:0064": 724,
+    "0:0066": 725,
+    "0:0069": 727,
+    "0:006C": 728,
+    "0:006F": 729,
+    "0:0071": 730,
+    "0:0074": 731,
+    "0:0076": 732,
+    "0:0079": 733,
+    "0:007B": 734,
+    "0:007E": 735,
+    "0:0080": 736,
+    "0:0083": 737,
+    "0:0086": 745,
+    "0:008C": 749,
+    "0:008F": 750,
+    "0:0092": 754,
+    "0:0095": 755,
+    "0:0098": 756,
+    "0:009B": 757,
+    "0:009E": 758,
+    "0:00A1": 759,
+    "0:00A4": 760,
+    "0:00A7": 761,
+    "0:00AA": 762,
+    "0:00AD": 766,
+    "0:00B0": 767,
+    "0:00B3": 768,
+    "0:00B6": 769,
+    "0:00B9": 770,
+    "0:00BC": 771,
+    "0:00BF": 772,
+    "0:00C2": 773,
+    "0:00C5": 774,
+    "0:00C8": 778,
+    "0:00CB": 779,
+    "0:00CE": 780,
+    "0:00D1": 781,
+    "0:00D4": 782,
+    "0:00D7": 783,
+    "0:00DA": 784,
+    "0:00DD": 785,
+    "0:00E0": 786,
+    "0:00E3": 788,
+    "0:00E6": 789,
+    "0:00EC": 791,
+    "0:00F2": 794,
+    "0:00F5": 796,
+    "0:00FC": 801,
+    "0:00FF": 802,
+    "0:0102": 803,
+    "0:0105": 804,
+    "0:0108": 806,
+    "0:010A": 807,
+    "0:010C": 808,
+    "0:010F": 809,
+    "0:0111": 810,
+    "0:0113": 811,
+    "0:0115": 812,
+    "0:0118": 813,
+    "0:011A": 814,
+    "0:011C": 815,
+    "0:011F": 816,
+    "0:0122": 817,
+    "0:0124": 818,
+    "0:0126": 819,
+    "0:0129": 820,
+    "0:012C": 821,
+    "0:012E": 822,
+    "0:0130": 823,
+    "0:0133": 824,
+    "0:0136": 825,
+    "0:0138": 826,
+    "0:013A": 827,
+    "0:013D": 828,
+    "0:0140": 829,
+    "0:0142": 830,
+    "0:0144": 831,
+    "0:0147": 832,
+    "0:014A": 833,
+    "0:014C": 834,
+    "0:014E": 835,
+    "0:0151": 836,
+    "0:0154": 837,
+    "0:0156": 838,
+    "0:0158": 839,
+    "0:015B": 840,
+    "0:015E": 841,
+    "0:0160": 842,
+    "0:0162": 843,
+    "0:0165": 844,
+    "0:0168": 845,
+    "0:016A": 846,
+    "0:016C": 847,
+    "0:016F": 848,
+    "0:0172": 849,
+    "0:0174": 850,
+    "0:0176": 851,
+    "0:0179": 852,
+    "0:017C": 853,
+    "0:017E": 854,
+    "0:0180": 855,
+    "0:0183": 856,
+    "0:0186": 857,
+    "0:0188": 858,
+    "0:018A": 859,
+    "0:018D": 860,
+    "0:0190": 861,
+    "0:0192": 862,
+    "0:0194": 863,
+    "0:0197": 864,
+    "0:019A": 865,
+    "0:019C": 866,
+    "0:019E": 867,
+    "0:01A1": 868,
+    "0:01A4": 869,
+    "0:01A6": 870,
+    "0:01A8": 871,
+    "0:01AB": 872,
+    "0:01AE": 873,
+    "0:01B0": 874,
+    "0:01B2": 875,
+    "0:01B5": 876,
+    "0:01B8": 877,
+    "0:01BA": 878,
+    "0:01BC": 879,
+    "0:01BF": 880,
+    "0:01C1": 881,
+    "0:01C3": 882,
+    "0:01C6": 883,
+    "0:01CC": 888,
+    "0:01CF": 889,
+    "0:01D5": 891,
+    "0:01DB": 894,
+    "0:01DE": 896,
+    "0:01E5": 901,
+    "0:01E8": 902,
+    "0:01EB": 903,
+    "0:01EE": 904,
+    "0:01F1": 906,
+    "0:01F3": 907,
+    "0:01F5": 908,
+    "0:01F8": 909,
+    "0:01FA": 910,
+    "0:01FC": 911,
+    "0:01FE": 912,
+    "0:0201": 913,
+    "0:0203": 914,
+    "0:0205": 915,
+    "0:0208": 916,
+    "0:020B": 917,
+    "0:020D": 918,
+    "0:020F": 919,
+    "0:0212": 920,
+    "0:0215": 921,
+    "0:0217": 922,
+    "0:0219": 923,
+    "0:021C": 924,
+    "0:021F": 925,
+    "0:0221": 926,
+    "0:0223": 927,
+    "0:0226": 928,
+    "0:0229": 929,
+    "0:022B": 930,
+    "0:022D": 931,
+    "0:0230": 932,
+    "0:0233": 933,
+    "0:0235": 934,
+    "0:0237": 935,
+    "0:023A": 936,
+    "0:023D": 937,
+    "0:023F": 938,
+    "0:0241": 939,
+    "0:0244": 940,
+    "0:0247": 941,
+    "0:0249": 942,
+    "0:024B": 943,
+    "0:024E": 944,
+    "0:0251": 945,
+    "0:0253": 946,
+    "0:0255": 947,
+    "0:0258": 948,
+    "0:025B": 949,
+    "0:025D": 950,
+    "0:025F": 951,
+    "0:0262": 952,
+    "0:0265": 953,
+    "0:0267": 954,
+    "0:0269": 955,
+    "0:026C": 956,
+    "0:026F": 957,
+    "0:0271": 958,
+    "0:0273": 959,
+    "0:0276": 960,
+    "0:0279": 961,
+    "0:027B": 962,
+    "0:027D": 963,
+    "0:0280": 964,
+    "0:0283": 965,
+    "0:0285": 966,
+    "0:0287": 967,
+    "0:028A": 968,
+    "0:028D": 969,
+    "0:028F": 970,
+    "0:0291": 971,
+    "0:0294": 972,
+    "0:0297": 973,
+    "0:0299": 974,
+    "0:029B": 975,
+    "0:029E": 976,
+    "0:02A1": 977,
+    "0:02A3": 978,
+    "0:02A5": 979,
+    "0:02A8": 980,
+    "0:02AA": 981,
+    "0:02AC": 982,
+    "0:02AF": 983,
+    "0:02B5": 988,
+    "0:02B7": 989,
+    "0:02B9": 990,
+    "0:02BC": 991,
+    "0:02BE": 992,
+    "0:02C0": 993,
+    "0:02C2": 994,
+    "0:02C5": 995,
+    "0:02C7": 996,
+    "0:02C9": 997,
+    "0:02CC": 998,
+    "0:02CF": 999,
+    "0:02D1": 1000,
+    "0:02D3": 1001,
+    "0:02D6": 1002,
+    "0:02D9": 1003,
+    "0:02DB": 1004,
+    "0:02DD": 1005,
+    "0:02E0": 1006,
+    "0:02E3": 1007,
+    "0:02E5": 1008,
+    "0:02E7": 1009,
+    "0:02EA": 1010,
+    "0:02ED": 1011,
+    "0:02EF": 1012,
+    "0:02F1": 1013,
+    "0:02F4": 1014,
+    "0:02F7": 1015,
+    "0:02F9": 1016,
+    "0:02FB": 1017,
+    "0:02FE": 1018,
+    "0:0301": 1019,
+    "0:0303": 1020,
+    "0:0305": 1021,
+    "0:0308": 1022,
+    "0:030B": 1023,
+    "0:030D": 1024,
+    "0:030F": 1025,
+    "0:0312": 1026,
+    "0:0315": 1027,
+    "0:0317": 1028,
+    "0:0319": 1029,
+    "0:031C": 1030,
+    "0:031F": 1031,
+    "0:0321": 1032,
+    "0:0323": 1033,
+    "0:0326": 1034,
+    "0:0329": 1035,
+    "0:032B": 1036,
+    "0:032D": 1037,
+    "0:0330": 1038,
+    "0:0333": 1039,
+    "0:0335": 1040,
+    "0:0337": 1041,
+    "0:033A": 1042,
+    "0:033D": 1043,
+    "0:033F": 1044,
+    "0:0341": 1045,
+    "0:0344": 1046,
+    "0:0347": 1047,
+    "0:0349": 1048,
+    "0:034B": 1049,
+    "0:034E": 1050,
+    "0:0351": 1051,
+    "0:0353": 1052,
+    "0:0355": 1053,
+    "0:0358": 1054,
+    "0:035B": 1055,
+    "0:035D": 1056,
+    "0:035F": 1057,
+    "0:0362": 1058,
+    "0:0365": 1059,
+    "0:0367": 1060,
+    "0:0369": 1061,
+    "0:036C": 1062,
+    "0:036E": 1063,
+    "0:0370": 1064,
+    "0:0373": 1065,
+    "0:0376": 1066,
+    "0:0379": 1067,
+    "1:0000": 611,
+    "1:0002": 612,
+    "1:0003": 613,
+    "1:0004": 614,
+    "1:0006": 615,
+    "1:0007": 616,
+    "1:0008": 617,
+    "1:000A": 618,
+    "1:000B": 619,
+    "1:000C": 620,
+    "1:000E": 621,
+    "1:000F": 622,
+    "1:0010": 623,
+    "1:0012": 624,
+    "1:0013": 625,
+    "1:0014": 626,
+    "1:0016": 627,
+    "1:0017": 628,
+    "1:0018": 629,
+    "1:001A": 630,
+    "1:001B": 631,
+    "1:001C": 632,
+    "1:001E": 633,
+    "1:001F": 634,
+    "1:0020": 635,
+    "1:0022": 636,
+    "1:0023": 637,
+    "1:0024": 638,
+    "1:0026": 639,
+    "1:0027": 640,
+    "1:0028": 641,
+    "1:002A": 642,
+    "1:002B": 643,
+    "1:002C": 644,
+    "1:002E": 645,
+    "1:002F": 646,
+    "1:0030": 647,
+    "1:0032": 648,
+    "1:0033": 649,
+    "1:0034": 650,
+    "1:0036": 651,
+    "1:0037": 652,
+    "1:0038": 653,
+    "1:003A": 654,
+    "1:003B": 655,
+    "1:003C": 656,
+    "1:003E": 657,
+    "1:003F": 658,
+    "1:0040": 659,
+    "1:0042": 660,
+    "1:0043": 661,
+    "1:0045": 662,
+    "1:0046": 668,
+    "1:0048": 669,
+    "1:0049": 670,
+    "1:004B": 671,
+    "1:004C": 672,
+    "1:004E": 673,
+    "1:004F": 674,
+    "1:0051": 675,
+    "1:0052": 676,
+    "1:0054": 677,
+    "1:0055": 678,
+    "1:0057": 679,
+    "1:0058": 680,
+    "1:005A": 681,
+    "1:005B": 682,
+    "1:005D": 683,
+    "1:005E": 684,
+    "1:0060": 685,
+    "1:0061": 686,
+    "1:0063": 687,
+    "1:0064": 688,
+    "1:0066": 689,
+    "1:0068": 690
+  },
+  "asmBankFiles": {
+    "0": "multibank_temp/bank_00_full.asm",
+    "1": "multibank_temp/bank_01_full.asm",
+    "2": "multibank_temp/bank_02_full.asm"
+  },
+  "asmFunctions": {},
+  "asmLineMap": {},
+  "binary": "main.bin",
+  "bios_symbols": {
+    "Abs_a_b": "0xF584",
+    "Abs_b": "0xF58B",
+    "Add_Score_a": "0xF85E",
+    "Add_Score_d": "0xF87C",
+    "Bitmask_a": "0xF57E",
+    "Check0Ref": "0xF34F",
+    "Clear_C8_RAM": "0xF542",
+    "Clear_Score": "0xF84F",
+    "Clear_Sound": "0xF272",
+    "Clear_x_256": "0xF545",
+    "Clear_x_b": "0xF53F",
+    "Clear_x_b_80": "0xF550",
+    "Clear_x_b_a": "0xF552",
+    "Clear_x_d": "0xF548",
+    "Cold_Start": "0xF000",
+    "Compare_Score": "0xF8C7",
+    "DP_to_C8": "0xF1AF",
+    "DP_to_D0": "0xF1AA",
+    "Dec_3_Counters": "0xF55A",
+    "Dec_6_Counters": "0xF55E",
+    "Dec_Counters": "0xF563",
+    "Delay_0": "0xF579",
+    "Delay_1": "0xF575",
+    "Delay_2": "0xF571",
+    "Delay_3": "0xF56D",
+    "Delay_RTS": "0xF57D",
+    "Delay_b": "0xF57A",
+    "Do_Sound": "0xF289",
+    "Do_Sound_x": "0xF28C",
+    "Dot_List": "0xF2D5",
+    "Dot_List_Reset": "0xF2DE",
+    "Dot_d": "0xF2C3",
+    "Dot_here": "0xF2C5",
+    "Dot_ix": "0xF2C1",
+    "Dot_ix_b": "0xF2BE",
+    "Draw_Grid_VL": "0xFF9F",
+    "Draw_Line_d": "0xF3DF",
+    "Draw_Pat_VL": "0xF437",
+    "Draw_Pat_VL_a": "0xF434",
+    "Draw_Pat_VL_d": "0xF439",
+    "Draw_VL": "0xF3DD",
+    "Draw_VL_a": "0xF3DA",
+    "Draw_VL_ab": "0xF3D8",
+    "Draw_VL_b": "0xF3D2",
+    "Draw_VL_mode": "0xF46E",
+    "Draw_VLc": "0xF3CE",
+    "Draw_VLcs": "0xF3D6",
+    "Draw_VLp": "0xF410",
+    "Draw_VLp_7F": "0xF408",
+    "Draw_VLp_FF": "0xF404",
+    "Draw_VLp_b": "0xF40E",
+    "Draw_VLp_scale": "0xF40C",
+    "Explosion_Snd": "0xF92E",
+    "Get_Rise_Idx": "0xF5D9",
+    "Get_Rise_Run": "0xF5EF",
+    "Get_Run_Idx": "0xF5DB",
+    "Init_Music": "0xF68D",
+    "Init_Music_Buf": "0xF533",
+    "Init_Music_chk": "0xF687",
+    "Init_Music_x": "0xF692",
+    "Init_OS": "0xF18B",
+    "Init_OS_RAM": "0xF164",
+    "Init_VIA": "0xF14C",
+    "Intensity_1F": "0xF29D",
+    "Intensity_3F": "0xF2A1",
+    "Intensity_5F": "0xF2A5",
+    "Intensity_7F": "0xF2A9",
+    "Intensity_a": "0xF2AB",
+    "Joy_Analog": "0xF1F5",
+    "Joy_Digital": "0xF1F8",
+    "Mov_Draw_VL": "0xF3BC",
+    "Mov_Draw_VL_a": "0xF3B9",
+    "Mov_Draw_VL_ab": "0xF3B7",
+    "Mov_Draw_VL_b": "0xF3B1",
+    "Mov_Draw_VL_d": "0xF3BE",
+    "Mov_Draw_VLc_a": "0xF3AD",
+    "Mov_Draw_VLcs": "0xF3B5",
+    "Move_Mem_a": "0xF683",
+    "Move_Mem_a_1": "0xF67F",
+    "Moveto_d": "0xF312",
+    "Moveto_d_7F": "0xF2FC",
+    "Moveto_ix": "0xF310",
+    "Moveto_ix_7F": "0xF30C",
+    "Moveto_ix_FF": "0xF308",
+    "Moveto_ix_a": "0xF30E",
+    "Moveto_x_7F": "0xF2F2",
+    "New_High_Score": "0xF8D8",
+    "Obj_Hit": "0xF8FF",
+    "Obj_Will_Hit": "0xF8F3",
+    "Obj_Will_Hit_u": "0xF8E5",
+    "Print_List": "0xF38A",
+    "Print_List_chk": "0xF38C",
+    "Print_List_hw": "0xF385",
+    "Print_Ships": "0xF393",
+    "Print_Ships_x": "0xF391",
+    "Print_Str": "0xF495",
+    "Print_Str_d": "0xF37A",
+    "Print_Str_hwyx": "0xF373",
+    "Print_Str_yx": "0xF378",
+    "Random": "0xF517",
+    "Random_3": "0xF511",
+    "Read_Btns": "0xF1BA",
+    "Read_Btns_Mask": "0xF1B4",
+    "Recalibrate": "0xF2E6",
+    "Reset0Int": "0xF36B",
+    "Reset0Ref": "0xF354",
+    "Reset0Ref_D0": "0xF34A",
+    "Reset_Pen": "0xF35B",
+    "Rise_Run_Angle": "0xF593",
+    "Rise_Run_Len": "0xF603",
+    "Rise_Run_X": "0xF5FF",
+    "Rise_Run_Y": "0xF601",
+    "Rot_VL": "0xF616",
+    "Rot_VL_Mode": "0xF62B",
+    "Rot_VL_Mode_a": "0xF61F",
+    "Rot_VL_ab": "0xF610",
+    "Rot_VL_dft": "0xF637",
+    "Select_Game": "0xF7A9",
+    "Set_Refresh": "0xF1A2",
+    "Sound_Byte": "0xF256",
+    "Sound_Byte_raw": "0xF25B",
+    "Sound_Byte_x": "0xF259",
+    "Sound_Bytes": "0xF27D",
+    "Sound_Bytes_x": "0xF284",
+    "Strip_Zeros": "0xF8B7",
+    "VIA_DDR_a": "0xD003",
+    "VIA_DDR_b": "0xD002",
+    "VIA_aux_cntl": "0xD00B",
+    "VIA_cntl": "0xD00C",
+    "VIA_int_enable": "0xD00E",
+    "VIA_int_flags": "0xD00D",
+    "VIA_port_a": "0xD001",
+    "VIA_port_a_nohs": "0xD00F",
+    "VIA_port_b": "0xD000",
+    "VIA_shift_reg": "0xD00A",
+    "VIA_t1_cnt_hi": "0xD005",
+    "VIA_t1_cnt_lo": "0xD004",
+    "VIA_t1_lch_hi": "0xD007",
+    "VIA_t1_lch_lo": "0xD006",
+    "VIA_t2_hi": "0xD009",
+    "VIA_t2_lo": "0xD008",
+    "Vec_0Ref_Enable": "0xC824",
+    "Vec_ADSR_Table": "0xC84F",
+    "Vec_ADSR_Timers": "0xC85E",
+    "Vec_Angle": "0xC836",
+    "Vec_Brightness": "0xC827",
+    "Vec_Btn_State": "0xC80F",
+    "Vec_Button_1_1": "0xC812",
+    "Vec_Button_1_2": "0xC813",
+    "Vec_Button_1_3": "0xC814",
+    "Vec_Button_1_4": "0xC815",
+    "Vec_Button_2_1": "0xC816",
+    "Vec_Button_2_2": "0xC817",
+    "Vec_Button_2_3": "0xC818",
+    "Vec_Button_2_4": "0xC819",
+    "Vec_Buttons": "0xC811",
+    "Vec_Cold_Flag": "0xCBFE",
+    "Vec_Counter_1": "0xC82E",
+    "Vec_Counter_2": "0xC82F",
+    "Vec_Counter_3": "0xC830",
+    "Vec_Counter_4": "0xC831",
+    "Vec_Counter_5": "0xC832",
+    "Vec_Counter_6": "0xC833",
+    "Vec_Counters": "0xC82E",
+    "Vec_Default_Stk": "0xCBEA",
+    "Vec_Dot_Dwell": "0xC828",
+    "Vec_Duration": "0xC857",
+    "Vec_Expl_1": "0xC858",
+    "Vec_Expl_2": "0xC859",
+    "Vec_Expl_3": "0xC85A",
+    "Vec_Expl_4": "0xC85B",
+    "Vec_Expl_Chan": "0xC85C",
+    "Vec_Expl_ChanA": "0xC853",
+    "Vec_Expl_ChanB": "0xC85D",
+    "Vec_Expl_Chans": "0xC854",
+    "Vec_Expl_Flag": "0xC867",
+    "Vec_Expl_Timer": "0xC877",
+    "Vec_FIRQ_Vector": "0xCBF5",
+    "Vec_Freq_Table": "0xC84D",
+    "Vec_High_Score": "0xCBEB",
+    "Vec_IRQ_Vector": "0xCBF8",
+    "Vec_Joy_1_X": "0xC81B",
+    "Vec_Joy_1_Y": "0xC81C",
+    "Vec_Joy_2_X": "0xC81D",
+    "Vec_Joy_2_Y": "0xC81E",
+    "Vec_Joy_Mux": "0xC81F",
+    "Vec_Joy_Mux_1_X": "0xC81F",
+    "Vec_Joy_Mux_1_Y": "0xC820",
+    "Vec_Joy_Mux_2_X": "0xC821",
+    "Vec_Joy_Mux_2_Y": "0xC822",
+    "Vec_Joy_Resltn": "0xC81A",
+    "Vec_Loop_Count": "0xC825",
+    "Vec_Max_Games": "0xC850",
+    "Vec_Max_Players": "0xC84F",
+    "Vec_Misc_Count": "0xC823",
+    "Vec_Music_Chan": "0xC855",
+    "Vec_Music_Flag": "0xC856",
+    "Vec_Music_Freq": "0xC861",
+    "Vec_Music_Ptr": "0xC853",
+    "Vec_Music_Twang": "0xC858",
+    "Vec_Music_Wk_1": "0xC84B",
+    "Vec_Music_Wk_5": "0xC847",
+    "Vec_Music_Wk_6": "0xC846",
+    "Vec_Music_Wk_7": "0xC845",
+    "Vec_Music_Wk_A": "0xC842",
+    "Vec_Music_Work": "0xC83F",
+    "Vec_NMI_Vector": "0xCBFB",
+    "Vec_Num_Game": "0xC87A",
+    "Vec_Num_Players": "0xC879",
+    "Vec_Pattern": "0xC829",
+    "Vec_Prev_Btns": "0xC810",
+    "Vec_Random_Seed": "0xC87D",
+    "Vec_Rfrsh": "0xC83D",
+    "Vec_Rfrsh_hi": "0xC83E",
+    "Vec_Rfrsh_lo": "0xC83D",
+    "Vec_RiseRun_Len": "0xC83B",
+    "Vec_RiseRun_Tmp": "0xC834",
+    "Vec_Rise_Index": "0xC839",
+    "Vec_Run_Index": "0xC837",
+    "Vec_SWI2_Vector": "0xCBF2",
+    "Vec_SWI3_Vector": "0xCBF2",
+    "Vec_SWI_Vector": "0xCBFB",
+    "Vec_Seed_Ptr": "0xC87B",
+    "Vec_Snd_Shadow": "0xC800",
+    "Vec_Str_Ptr": "0xC82C",
+    "Vec_Text_HW": "0xC82A",
+    "Vec_Text_Height": "0xC82A",
+    "Vec_Text_Width": "0xC82B",
+    "Vec_Twang_Table": "0xC851",
+    "Wait_Recal": "0xF192",
+    "Warm_Start": "0xF06C",
+    "Xform_Rise": "0xF663",
+    "Xform_Rise_a": "0xF661",
+    "Xform_Run": "0xF65D",
+    "Xform_Run_a": "0xF65B",
+    "music1": "0xFD0D",
+    "music2": "0xFD1D",
+    "music3": "0xFD81",
+    "music4": "0xFDD3",
+    "music5": "0xFE38",
+    "music6": "0xFE76",
+    "music7": "0xFEC6",
+    "music8": "0xFEF8",
+    "music9": "0xFF26",
+    "musica": "0xFF44",
+    "musicb": "0xFF62",
+    "musicc": "0xFF7A",
+    "musicd": "0xFF8F"
+  },
+  "entry_point": "0x0022",
+  "functions": {
+    "LOOP": {
+      "address": "0x008C",
+      "endLine": 14,
+      "startLine": 13,
+      "type": "vpy"
+    },
+    "MAIN": {
+      "address": "0x0056",
+      "endLine": 12,
+      "startLine": 10,
+      "type": "vpy"
+    }
+  },
+  "labels": {
+    "ABS_A_B": 62852,
+    "ABS_B": 62859,
+    "ADD_SCORE_A": 63582,
+    "ADD_SCORE_D": 63612,
+    "ASSET_ADDR_TABLE": 16392,
+    "ASSET_BANK_TABLE": 16390,
+    "AUDIO_UPDATE": 17205,
+    "AU_BANK_OK": 17231,
+    "AU_DONE": 17395,
+    "AU_MUSIC_DONE": 17350,
+    "AU_MUSIC_ENDED": 17356,
+    "AU_MUSIC_HAS_DELAY": 17293,
+    "AU_MUSIC_LOOP": 17362,
+    "AU_MUSIC_NO_DELAY": 17278,
+    "AU_MUSIC_PROCESS_WRITES": 17307,
+    "AU_MUSIC_READ": 17261,
+    "AU_MUSIC_READ_COUNT": 17278,
+    "AU_MUSIC_WRITE_LOOP": 17309,
+    "AU_SKIP_MUSIC": 17373,
+    "AU_UPDATE_SFX": 17376,
+    "Abs_a_b": 62852,
+    "Abs_b": 62859,
+    "Add_Score_a": 63582,
+    "Add_Score_d": 63612,
+    "BITMASK_A": 62846,
+    "BTN_PREV_STATE": 51340,
+    "BTN_RAW": 51341,
+    "Bitmask_a": 62846,
+    "CHECK0REF": 62287,
+    "CLEAR_C8_RAM": 62786,
+    "CLEAR_SCORE": 63567,
+    "CLEAR_SOUND": 62066,
+    "CLEAR_X_256": 62789,
+    "CLEAR_X_B": 62783,
+    "CLEAR_X_B_80": 62800,
+    "CLEAR_X_B_A": 62802,
+    "CLEAR_X_D": 62792,
+    "COLD_START": 61440,
+    "COMPARE_SCORE": 63687,
+    "CURRENT_ROM_BANK": 51394,
+    "Check0Ref": 62287,
+    "Clear_C8_RAM": 62786,
+    "Clear_Score": 63567,
+    "Clear_Sound": 62066,
+    "Clear_x_256": 62789,
+    "Clear_x_b": 62783,
+    "Clear_x_b_80": 62800,
+    "Clear_x_b_a": 62802,
+    "Clear_x_d": 62792,
+    "Cold_Start": 61440,
+    "Compare_Score": 63687,
+    "DCR_AFTER_INTENSITY": 16638,
+    "DCR_INTENSITY_5F": 16635,
+    "DCR_after_intensity": 16638,
+    "DCR_intensity_5F": 16635,
+    "DEC_3_COUNTERS": 62810,
+    "DEC_6_COUNTERS": 62814,
+    "DEC_COUNTERS": 62819,
+    "DELAY_0": 62841,
+    "DELAY_1": 62837,
+    "DELAY_2": 62833,
+    "DELAY_3": 62829,
+    "DELAY_B": 62842,
+    "DELAY_RTS": 62845,
+    "DOT_D": 62147,
+    "DOT_HERE": 62149,
+    "DOT_IX": 62145,
+    "DOT_IX_B": 62142,
+    "DOT_LIST": 62165,
+    "DOT_LIST_RESET": 62174,
+    "DO_SOUND": 62089,
+    "DO_SOUND_X": 62092,
+    "DP_TO_C8": 61871,
+    "DP_TO_D0": 61866,
+    "DP_to_C8": 61871,
+    "DP_to_D0": 61866,
+    "DRAW_CIRCLE_DIAM": 51344,
+    "DRAW_CIRCLE_INTENSITY": 51345,
+    "DRAW_CIRCLE_RADIUS": 51346,
+    "DRAW_CIRCLE_RUNTIME": 16584,
+    "DRAW_CIRCLE_TEMP": 51347,
+    "DRAW_CIRCLE_XC": 51342,
+    "DRAW_CIRCLE_YC": 51343,
+    "DRAW_GRID_VL": 65439,
+    "DRAW_LINE_ARGS": 51356,
+    "DRAW_LINE_D": 62431,
+    "DRAW_PAT_VL": 62519,
+    "DRAW_PAT_VL_A": 62516,
+    "DRAW_PAT_VL_D": 62521,
+    "DRAW_VEC_INTENSITY": 51355,
+    "DRAW_VL": 62429,
+    "DRAW_VLC": 62414,
+    "DRAW_VLCS": 62422,
+    "DRAW_VLP": 62480,
+    "DRAW_VLP_7F": 62472,
+    "DRAW_VLP_B": 62478,
+    "DRAW_VLP_FF": 62468,
+    "DRAW_VLP_SCALE": 62476,
+    "DRAW_VL_A": 62426,
+    "DRAW_VL_AB": 62424,
+    "DRAW_VL_B": 62418,
+    "DRAW_VL_MODE": 62574,
+    "Dec_3_Counters": 62810,
+    "Dec_6_Counters": 62814,
+    "Dec_Counters": 62819,
+    "Delay_0": 62841,
+    "Delay_1": 62837,
+    "Delay_2": 62833,
+    "Delay_3": 62829,
+    "Delay_RTS": 62845,
+    "Delay_b": 62842,
+    "Do_Sound": 62089,
+    "Do_Sound_x": 62092,
+    "Dot_List": 62165,
+    "Dot_List_Reset": 62174,
+    "Dot_d": 62147,
+    "Dot_here": 62149,
+    "Dot_ix": 62145,
+    "Dot_ix_b": 62142,
+    "Draw_Grid_VL": 65439,
+    "Draw_Line_d": 62431,
+    "Draw_Pat_VL": 62519,
+    "Draw_Pat_VL_a": 62516,
+    "Draw_Pat_VL_d": 62521,
+    "Draw_VL": 62429,
+    "Draw_VL_a": 62426,
+    "Draw_VL_ab": 62424,
+    "Draw_VL_b": 62418,
+    "Draw_VL_mode": 62574,
+    "Draw_VLc": 62414,
+    "Draw_VLcs": 62422,
+    "Draw_VLp": 62480,
+    "Draw_VLp_7F": 62472,
+    "Draw_VLp_FF": 62468,
+    "Draw_VLp_b": 62478,
+    "Draw_VLp_scale": 62476,
+    "EXPLOSION_SND": 63790,
+    "Explosion_Snd": 63790,
+    "GET_RISE_IDX": 62937,
+    "GET_RISE_RUN": 62959,
+    "GET_RUN_IDX": 62939,
+    "Get_Rise_Idx": 62937,
+    "Get_Rise_Run": 62959,
+    "Get_Run_Idx": 62939,
+    "INIT_MUSIC": 63117,
+    "INIT_MUSIC_BUF": 62771,
+    "INIT_MUSIC_CHK": 63111,
+    "INIT_MUSIC_X": 63122,
+    "INIT_OS": 61835,
+    "INIT_OS_RAM": 61796,
+    "INIT_VIA": 61772,
+    "INTENSITY_1F": 62109,
+    "INTENSITY_3F": 62113,
+    "INTENSITY_5F": 62117,
+    "INTENSITY_7F": 62121,
+    "INTENSITY_A": 62123,
+    "Init_Music": 63117,
+    "Init_Music_Buf": 62771,
+    "Init_Music_chk": 63111,
+    "Init_Music_x": 63122,
+    "Init_OS": 61835,
+    "Init_OS_RAM": 61796,
+    "Init_VIA": 61772,
+    "Intensity_1F": 62109,
+    "Intensity_3F": 62113,
+    "Intensity_5F": 62117,
+    "Intensity_7F": 62121,
+    "Intensity_a": 62123,
+    "JOY_ANALOG": 61941,
+    "JOY_DIGITAL": 61944,
+    "Joy_Analog": 61941,
+    "Joy_Digital": 61944,
+    "MOD16": 16500,
+    "MOD16.M16_DONE": 16583,
+    "MOD16.M16_DPOS": 16529,
+    "MOD16.M16_END": 16568,
+    "MOD16.M16_LOOP": 16552,
+    "MOD16.M16_RCHECK": 16537,
+    "MOD16.M16_RPOS": 16552,
+    "MOVETO_D": 62226,
+    "MOVETO_D_7F": 62204,
+    "MOVETO_IX": 62224,
+    "MOVETO_IX_7F": 62220,
+    "MOVETO_IX_A": 62222,
+    "MOVETO_IX_FF": 62216,
+    "MOVETO_X_7F": 62194,
+    "MOVE_MEM_A": 63107,
+    "MOVE_MEM_A_1": 63103,
+    "MOV_DRAW_VL": 62396,
+    "MOV_DRAW_VLCS": 62389,
+    "MOV_DRAW_VLC_A": 62381,
+    "MOV_DRAW_VL_A": 62393,
+    "MOV_DRAW_VL_AB": 62391,
+    "MOV_DRAW_VL_B": 62385,
+    "MOV_DRAW_VL_D": 62398,
+    "MUSIC1": 64781,
+    "MUSIC2": 64797,
+    "MUSIC3": 64897,
+    "MUSIC4": 64979,
+    "MUSIC5": 65080,
+    "MUSIC6": 65142,
+    "MUSIC7": 65222,
+    "MUSIC8": 65272,
+    "MUSIC9": 65318,
+    "MUSICA": 65348,
+    "MUSICB": 65378,
+    "MUSICC": 65402,
+    "MUSICD": 65423,
+    "Mov_Draw_VL": 62396,
+    "Mov_Draw_VL_a": 62393,
+    "Mov_Draw_VL_ab": 62391,
+    "Mov_Draw_VL_b": 62385,
+    "Mov_Draw_VL_d": 62398,
+    "Mov_Draw_VLc_a": 62381,
+    "Mov_Draw_VLcs": 62389,
+    "Move_Mem_a": 63107,
+    "Move_Mem_a_1": 63103,
+    "Moveto_d": 62226,
+    "Moveto_d_7F": 62204,
+    "Moveto_ix": 62224,
+    "Moveto_ix_7F": 62220,
+    "Moveto_ix_FF": 62216,
+    "Moveto_ix_a": 62222,
+    "Moveto_x_7F": 62194,
+    "NEW_HIGH_SCORE": 63704,
+    "NOAY": 17425,
+    "New_High_Score": 63704,
+    "OBJ_HIT": 63743,
+    "OBJ_WILL_HIT": 63731,
+    "OBJ_WILL_HIT_U": 63717,
+    "Obj_Hit": 63743,
+    "Obj_Will_Hit": 63731,
+    "Obj_Will_Hit_u": 63717,
+    "PLAY_MUSIC_RUNTIME": 16919,
+    "PLAY_SFX_BANKED": 16396,
+    "PLAY_SFX_RUNTIME": 17406,
+    "PMR_DONE": 16983,
+    "PMR_START_NEW": 16933,
+    "PMr_done": 16983,
+    "PMr_start_new": 16933,
+    "PRINT_LIST": 62346,
+    "PRINT_LIST_CHK": 62348,
+    "PRINT_LIST_HW": 62341,
+    "PRINT_SHIPS": 62355,
+    "PRINT_SHIPS_X": 62353,
+    "PRINT_STR": 62613,
+    "PRINT_STR_D": 62330,
+    "PRINT_STR_HWYX": 62323,
+    "PRINT_STR_YX": 62328,
+    "PRINT_TEXT_STR_2348223718253": 17576,
+    "PRINT_TEXT_STR_3273774": 17571,
+    "PRINT_TEXT_STR_58672554795414": 17585,
+    "PRINT_TEXT_STR_58672583180530": 17595,
+    "PRINT_TEXT_STR_89546106876693": 17605,
+    "PSG_DELAY_FRAMES": 51401,
+    "PSG_EVENT_DONE": 17107,
+    "PSG_IS_PLAYING": 51400,
+    "PSG_MUSIC_ACTIVE": 51399,
+    "PSG_MUSIC_BANK": 51402,
+    "PSG_MUSIC_ENDED": 17116,
+    "PSG_MUSIC_LOOP": 17143,
+    "PSG_MUSIC_LOOP_D": 17154,
+    "PSG_MUSIC_PTR": 51395,
+    "PSG_MUSIC_START": 51397,
+    "PSG_PROCESS_EVENT": 17041,
+    "PSG_READ_DELAY": 17014,
+    "PSG_UPDATE_DONE": 17162,
+    "PSG_WRITE_LOOP": 17058,
+    "PSG_event_done": 17107,
+    "PSG_music_ended": 17116,
+    "PSG_music_loop": 17143,
+    "PSG_music_loop_d": 17154,
+    "PSG_process_event": 17041,
+    "PSG_read_delay": 17014,
+    "PSG_update_done": 17162,
+    "PSG_write_loop": 17058,
+    "Print_List": 62346,
+    "Print_List_chk": 62348,
+    "Print_List_hw": 62341,
+    "Print_Ships": 62355,
+    "Print_Ships_x": 62353,
+    "Print_Str": 62613,
+    "Print_Str_d": 62330,
+    "Print_Str_hwyx": 62323,
+    "Print_Str_yx": 62328,
+    "RANDOM": 62743,
+    "RANDOM_3": 62737,
+    "READ_BTNS": 61882,
+    "READ_BTNS_MASK": 61876,
+    "RECALIBRATE": 62182,
+    "RESET0INT": 62315,
+    "RESET0REF": 62292,
+    "RESET0REF_D0": 62282,
+    "RESET_PEN": 62299,
+    "RESULT": 51328,
+    "RISE_RUN_ANGLE": 62867,
+    "RISE_RUN_LEN": 62979,
+    "RISE_RUN_X": 62975,
+    "RISE_RUN_Y": 62977,
+    "ROT_VL": 62998,
+    "ROT_VL_AB": 62992,
+    "ROT_VL_DFT": 63031,
+    "ROT_VL_MODE": 63019,
+    "ROT_VL_MODE_A": 63007,
+    "Random": 62743,
+    "Random_3": 62737,
+    "Read_Btns": 61882,
+    "Read_Btns_Mask": 61876,
+    "Recalibrate": 62182,
+    "Reset0Int": 62315,
+    "Reset0Ref": 62292,
+    "Reset0Ref_D0": 62282,
+    "Reset_Pen": 62299,
+    "Rise_Run_Angle": 62867,
+    "Rise_Run_Len": 62979,
+    "Rise_Run_X": 62975,
+    "Rise_Run_Y": 62977,
+    "Rot_VL": 62998,
+    "Rot_VL_Mode": 63019,
+    "Rot_VL_Mode_a": 63007,
+    "Rot_VL_ab": 62992,
+    "Rot_VL_dft": 63031,
+    "SELECT_GAME": 63401,
+    "SET_REFRESH": 61858,
+    "SFX_ACTIVE": 51405,
+    "SFX_ADDR_TABLE": 16386,
+    "SFX_BANK": 51406,
+    "SFX_BANK_TABLE": 16384,
+    "SFX_CHECKNOISEFREQ": 17471,
+    "SFX_CHECKTONEFREQ": 17445,
+    "SFX_CHECKVOLUME": 17488,
+    "SFX_DOFRAME": 17426,
+    "SFX_ENDOFEFFECT": 17541,
+    "SFX_M_NOISE": 17515,
+    "SFX_M_NOISEDIS": 17526,
+    "SFX_M_TONEDIS": 17513,
+    "SFX_M_WRITE": 17528,
+    "SFX_NEXTFRAME": 17536,
+    "SFX_PTR": 51403,
+    "SFX_UPDATE": 17415,
+    "SFX_UPDATEMIXER": 17497,
+    "SOUND_BYTE": 62038,
+    "SOUND_BYTES": 62077,
+    "SOUND_BYTES_X": 62084,
+    "SOUND_BYTE_RAW": 62043,
+    "SOUND_BYTE_X": 62041,
+    "STOP_MUSIC_RUNTIME": 17166,
+    "STRIP_ZEROS": 63671,
+    "Select_Game": 63401,
+    "Set_Refresh": 61858,
+    "Sound_Byte": 62038,
+    "Sound_Byte_raw": 62043,
+    "Sound_Byte_x": 62041,
+    "Sound_Bytes": 62077,
+    "Sound_Bytes_x": 62084,
+    "Strip_Zeros": 63671,
+    "TEMP_YX": 51338,
+    "TEXT_SCALE_H": 51376,
+    "TEXT_SCALE_W": 51377,
+    "TMPPTR": 51332,
+    "TMPPTR2": 51334,
+    "TMPVAL": 51330,
+    "UPDATE_MUSIC_PSG": 16984,
+    "VECTREX_PRINT_TEXT": 16442,
+    "VEC_0REF_ENABLE": 51236,
+    "VEC_ADSR_TABLE": 51279,
+    "VEC_ADSR_TIMERS": 51294,
+    "VEC_ANGLE": 51254,
+    "VEC_BRIGHTNESS": 51239,
+    "VEC_BTN_STATE": 51215,
+    "VEC_BUTTONS": 51217,
+    "VEC_BUTTON_1_1": 51218,
+    "VEC_BUTTON_1_2": 51219,
+    "VEC_BUTTON_1_3": 51220,
+    "VEC_BUTTON_1_4": 51221,
+    "VEC_BUTTON_2_1": 51222,
+    "VEC_BUTTON_2_2": 51223,
+    "VEC_BUTTON_2_3": 51224,
+    "VEC_BUTTON_2_4": 51225,
+    "VEC_COLD_FLAG": 52222,
+    "VEC_COUNTERS": 51246,
+    "VEC_COUNTER_1": 51246,
+    "VEC_COUNTER_2": 51247,
+    "VEC_COUNTER_3": 51248,
+    "VEC_COUNTER_4": 51249,
+    "VEC_COUNTER_5": 51250,
+    "VEC_COUNTER_6": 51251,
+    "VEC_DEFAULT_STK": 52202,
+    "VEC_DOT_DWELL": 51240,
+    "VEC_DURATION": 51287,
+    "VEC_EXPL_1": 51288,
+    "VEC_EXPL_2": 51289,
+    "VEC_EXPL_3": 51290,
+    "VEC_EXPL_4": 51291,
+    "VEC_EXPL_CHAN": 51292,
+    "VEC_EXPL_CHANA": 51283,
+    "VEC_EXPL_CHANB": 51293,
+    "VEC_EXPL_CHANS": 51284,
+    "VEC_EXPL_FLAG": 51303,
+    "VEC_EXPL_TIMER": 51319,
+    "VEC_FIRQ_VECTOR": 52213,
+    "VEC_FREQ_TABLE": 51277,
+    "VEC_HIGH_SCORE": 52203,
+    "VEC_IRQ_VECTOR": 52216,
+    "VEC_JOY_1_X": 51227,
+    "VEC_JOY_1_Y": 51228,
+    "VEC_JOY_2_X": 51229,
+    "VEC_JOY_2_Y": 51230,
+    "VEC_JOY_MUX": 51231,
+    "VEC_JOY_MUX_1_X": 51231,
+    "VEC_JOY_MUX_1_Y": 51232,
+    "VEC_JOY_MUX_2_X": 51233,
+    "VEC_JOY_MUX_2_Y": 51234,
+    "VEC_JOY_RESLTN": 51226,
+    "VEC_LOOP_COUNT": 51237,
+    "VEC_MAX_GAMES": 51280,
+    "VEC_MAX_PLAYERS": 51279,
+    "VEC_MISC_COUNT": 51235,
+    "VEC_MUSIC_CHAN": 51285,
+    "VEC_MUSIC_FLAG": 51286,
+    "VEC_MUSIC_FREQ": 51297,
+    "VEC_MUSIC_PTR": 51283,
+    "VEC_MUSIC_TWANG": 51288,
+    "VEC_MUSIC_WK_1": 51275,
+    "VEC_MUSIC_WK_5": 51271,
+    "VEC_MUSIC_WK_6": 51270,
+    "VEC_MUSIC_WK_7": 51269,
+    "VEC_MUSIC_WK_A": 51266,
+    "VEC_MUSIC_WORK": 51263,
+    "VEC_NMI_VECTOR": 52219,
+    "VEC_NUM_GAME": 51322,
+    "VEC_NUM_PLAYERS": 51321,
+    "VEC_PATTERN": 51241,
+    "VEC_PREV_BTNS": 51216,
+    "VEC_RANDOM_SEED": 51325,
+    "VEC_RFRSH": 51261,
+    "VEC_RFRSH_HI": 51262,
+    "VEC_RFRSH_LO": 51261,
+    "VEC_RISERUN_LEN": 51259,
+    "VEC_RISERUN_TMP": 51252,
+    "VEC_RISE_INDEX": 51257,
+    "VEC_RUN_INDEX": 51255,
+    "VEC_SEED_PTR": 51323,
+    "VEC_SND_SHADOW": 51200,
+    "VEC_STR_PTR": 51244,
+    "VEC_SWI2_VECTOR": 52210,
+    "VEC_SWI3_VECTOR": 52210,
+    "VEC_SWI_VECTOR": 52219,
+    "VEC_TEXT_HEIGHT": 51242,
+    "VEC_TEXT_HW": 51242,
+    "VEC_TEXT_WIDTH": 51243,
+    "VEC_TWANG_TABLE": 51281,
+    "VLINE_DX": 51370,
+    "VLINE_DX_16": 51366,
+    "VLINE_DX_REMAINING": 51374,
+    "VLINE_DY": 51371,
+    "VLINE_DY_16": 51368,
+    "VLINE_DY_REMAINING": 51372,
+    "VPY_MOVE_X": 51336,
+    "VPY_MOVE_Y": 51337,
+    "Vec_0Ref_Enable": 51236,
+    "Vec_ADSR_Table": 51279,
+    "Vec_ADSR_Timers": 51294,
+    "Vec_Angle": 51254,
+    "Vec_Brightness": 51239,
+    "Vec_Btn_State": 51215,
+    "Vec_Button_1_1": 51218,
+    "Vec_Button_1_2": 51219,
+    "Vec_Button_1_3": 51220,
+    "Vec_Button_1_4": 51221,
+    "Vec_Button_2_1": 51222,
+    "Vec_Button_2_2": 51223,
+    "Vec_Button_2_3": 51224,
+    "Vec_Button_2_4": 51225,
+    "Vec_Buttons": 51217,
+    "Vec_Cold_Flag": 52222,
+    "Vec_Counter_1": 51246,
+    "Vec_Counter_2": 51247,
+    "Vec_Counter_3": 51248,
+    "Vec_Counter_4": 51249,
+    "Vec_Counter_5": 51250,
+    "Vec_Counter_6": 51251,
+    "Vec_Counters": 51246,
+    "Vec_Default_Stk": 52202,
+    "Vec_Dot_Dwell": 51240,
+    "Vec_Duration": 51287,
+    "Vec_Expl_1": 51288,
+    "Vec_Expl_2": 51289,
+    "Vec_Expl_3": 51290,
+    "Vec_Expl_4": 51291,
+    "Vec_Expl_Chan": 51292,
+    "Vec_Expl_ChanA": 51283,
+    "Vec_Expl_ChanB": 51293,
+    "Vec_Expl_Chans": 51284,
+    "Vec_Expl_Flag": 51303,
+    "Vec_Expl_Timer": 51319,
+    "Vec_FIRQ_Vector": 52213,
+    "Vec_Freq_Table": 51277,
+    "Vec_High_Score": 52203,
+    "Vec_IRQ_Vector": 52216,
+    "Vec_Joy_1_X": 51227,
+    "Vec_Joy_1_Y": 51228,
+    "Vec_Joy_2_X": 51229,
+    "Vec_Joy_2_Y": 51230,
+    "Vec_Joy_Mux": 51231,
+    "Vec_Joy_Mux_1_X": 51231,
+    "Vec_Joy_Mux_1_Y": 51232,
+    "Vec_Joy_Mux_2_X": 51233,
+    "Vec_Joy_Mux_2_Y": 51234,
+    "Vec_Joy_Resltn": 51226,
+    "Vec_Loop_Count": 51237,
+    "Vec_Max_Games": 51280,
+    "Vec_Max_Players": 51279,
+    "Vec_Misc_Count": 51235,
+    "Vec_Music_Chan": 51285,
+    "Vec_Music_Flag": 51286,
+    "Vec_Music_Freq": 51297,
+    "Vec_Music_Ptr": 51283,
+    "Vec_Music_Twang": 51288,
+    "Vec_Music_Wk_1": 51275,
+    "Vec_Music_Wk_5": 51271,
+    "Vec_Music_Wk_6": 51270,
+    "Vec_Music_Wk_7": 51269,
+    "Vec_Music_Wk_A": 51266,
+    "Vec_Music_Work": 51263,
+    "Vec_NMI_Vector": 52219,
+    "Vec_Num_Game": 51322,
+    "Vec_Num_Players": 51321,
+    "Vec_Pattern": 51241,
+    "Vec_Prev_Btns": 51216,
+    "Vec_Random_Seed": 51325,
+    "Vec_Rfrsh": 51261,
+    "Vec_Rfrsh_hi": 51262,
+    "Vec_Rfrsh_lo": 51261,
+    "Vec_RiseRun_Len": 51259,
+    "Vec_RiseRun_Tmp": 51252,
+    "Vec_Rise_Index": 51257,
+    "Vec_Run_Index": 51255,
+    "Vec_SWI2_Vector": 52210,
+    "Vec_SWI3_Vector": 52210,
+    "Vec_SWI_Vector": 52219,
+    "Vec_Seed_Ptr": 51323,
+    "Vec_Snd_Shadow": 51200,
+    "Vec_Str_Ptr": 51244,
+    "Vec_Text_HW": 51242,
+    "Vec_Text_Height": 51242,
+    "Vec_Text_Width": 51243,
+    "Vec_Twang_Table": 51281,
+    "WAIT_RECAL": 61842,
+    "WARM_START": 61548,
+    "Wait_Recal": 61842,
+    "Warm_Start": 61548,
+    "XFORM_RISE": 63075,
+    "XFORM_RISE_A": 63073,
+    "XFORM_RUN": 63069,
+    "XFORM_RUN_A": 63067,
+    "Xform_Rise": 63075,
+    "Xform_Rise_a": 63073,
+    "Xform_Run": 63069,
+    "Xform_Run_a": 63067,
+    "music1": 64781,
+    "music2": 64797,
+    "music3": 64897,
+    "music4": 64979,
+    "music5": 65080,
+    "music6": 65142,
+    "music7": 65222,
+    "music8": 65272,
+    "music9": 65318,
+    "musica": 65348,
+    "musicb": 65378,
+    "musicc": 65402,
+    "musicd": 65423,
+    "noay": 17425,
+    "sfx_checknoisefreq": 17471,
+    "sfx_checktonefreq": 17445,
+    "sfx_checkvolume": 17488,
+    "sfx_doframe": 17426,
+    "sfx_endofeffect": 17541,
+    "sfx_m_noise": 17515,
+    "sfx_m_noisedis": 17526,
+    "sfx_m_tonedis": 17513,
+    "sfx_m_write": 17528,
+    "sfx_nextframe": 17536,
+    "sfx_updatemixer": 17497
   },
   "lineMap": {
-    "12": "0x03F8",
-    "16": "0x047C",
-    "18": "0x0492",
-    "21": "0x0565",
-    "20": "0x0559",
-    "13": "0x0424",
-    "14": "0x0450",
-    "25": "0x0636",
-    "17": "0x0488",
-    "22": "0x056F"
+    "11": "0x0086",
+    "14": "0x0092",
+    "15": "0x00AD",
+    "16": "0x00C8",
+    "18": "0x00E3",
+    "19": "0x00FC",
+    "20": "0x0108",
+    "22": "0x01CC",
+    "23": "0x01E5",
+    "24": "0x01F1",
+    "27": "0x02B5"
   },
-  "vpyLineMap": {
-    "0x03F8": {
-      "file": "main.vpy",
-      "address": "0x03F8",
-      "line": 12
-    },
-    "0x0636": {
-      "file": "main.vpy",
-      "address": "0x0636",
-      "line": 25
-    },
-    "0x0492": {
-      "file": "main.vpy",
-      "address": "0x0492",
-      "line": 18
-    },
-    "0x056F": {
-      "file": "main.vpy",
-      "address": "0x056F",
-      "line": 22
-    },
-    "0x0488": {
-      "file": "main.vpy",
-      "address": "0x0488",
-      "line": 17
-    },
-    "0x0424": {
-      "file": "main.vpy",
-      "address": "0x0424",
-      "line": 13
-    },
-    "0x047C": {
-      "file": "main.vpy",
-      "address": "0x047C",
-      "line": 16
-    },
-    "0x0450": {
-      "file": "main.vpy",
-      "address": "0x0450",
-      "line": 14
-    },
-    "0x0559": {
-      "file": "main.vpy",
-      "address": "0x0559",
-      "line": 20
-    },
-    "0x0565": {
-      "file": "main.vpy",
-      "address": "0x0565",
-      "line": 21
-    }
-  },
-  "asmLineMap": {
-    "0x04BD": {
-      "file": "play_sfx.asm",
-      "address": "0x04BD",
-      "line": 862
-    },
-    "0x0257": {
-      "file": "play_sfx.asm",
-      "address": "0x0257",
-      "line": 521
-    },
-    "0x06E6": {
-      "file": "play_sfx.asm",
-      "address": "0x06E6",
-      "line": 1093
-    },
-    "0x0598": {
-      "file": "play_sfx.asm",
-      "address": "0x0598",
-      "line": 956
-    },
-    "0x02F4": {
-      "file": "play_sfx.asm",
-      "address": "0x02F4",
-      "line": 634
-    },
-    "0x0488": {
-      "file": "play_sfx.asm",
-      "address": "0x0488",
-      "line": 838
-    },
-    "0x02F8": {
-      "file": "play_sfx.asm",
-      "address": "0x02F8",
-      "line": 639
-    },
-    "0x05DC": {
-      "file": "play_sfx.asm",
-      "address": "0x05DC",
-      "line": 983
-    },
-    "0x01D4": {
-      "file": "play_sfx.asm",
-      "address": "0x01D4",
-      "line": 438
-    },
-    "0x06CF": {
-      "file": "play_sfx.asm",
-      "address": "0x06CF",
-      "line": 1084
-    },
-    "0x0664": {
-      "file": "play_sfx.asm",
-      "address": "0x0664",
-      "line": 1041
-    },
-    "0x0222": {
-      "file": "play_sfx.asm",
-      "address": "0x0222",
-      "line": 488
-    },
-    "0x0200": {
-      "file": "play_sfx.asm",
-      "address": "0x0200",
-      "line": 464
-    },
-    "0x0397": {
-      "file": "play_sfx.asm",
-      "address": "0x0397",
-      "line": 716
-    },
-    "0x0180": {
-      "file": "play_sfx.asm",
-      "address": "0x0180",
-      "line": 361
-    },
-    "0x0740": {
-      "file": "play_sfx.asm",
-      "address": "0x0740",
-      "line": 1170
-    },
-    "0x01D6": {
-      "file": "play_sfx.asm",
-      "address": "0x01D6",
-      "line": 440
-    },
-    "0x02DE": {
-      "file": "play_sfx.asm",
-      "address": "0x02DE",
-      "line": 625
-    },
-    "0x03E4": {
-      "file": "play_sfx.asm",
-      "address": "0x03E4",
-      "line": 758
-    },
-    "0x06C5": {
-      "file": "play_sfx.asm",
-      "address": "0x06C5",
-      "line": 1080
-    },
-    "0x0749": {
-      "file": "play_sfx.asm",
-      "address": "0x0749",
-      "line": 1176
-    },
-    "0x043C": {
-      "file": "play_sfx.asm",
-      "address": "0x043C",
-      "line": 800
-    },
-    "0x0768": {
-      "file": "play_sfx.asm",
-      "address": "0x0768",
-      "line": 1198
-    },
-    "0x0220": {
-      "file": "play_sfx.asm",
-      "address": "0x0220",
-      "line": 487
-    },
-    "0x01F2": {
-      "file": "play_sfx.asm",
-      "address": "0x01F2",
-      "line": 456
-    },
-    "0x05ED": {
-      "file": "play_sfx.asm",
-      "address": "0x05ED",
-      "line": 990
-    },
-    "0x0456": {
-      "file": "play_sfx.asm",
-      "address": "0x0456",
-      "line": 814
-    },
-    "0x0719": {
-      "file": "play_sfx.asm",
-      "address": "0x0719",
-      "line": 1135
-    },
-    "0x01D5": {
-      "file": "play_sfx.asm",
-      "address": "0x01D5",
-      "line": 439
-    },
-    "0x066B": {
-      "file": "play_sfx.asm",
-      "address": "0x066B",
-      "line": 1044
-    },
-    "0x00BA": {
-      "file": "play_sfx.asm",
-      "address": "0x00BA",
-      "line": 206
-    },
-    "0x0204": {
-      "file": "play_sfx.asm",
-      "address": "0x0204",
-      "line": 468
-    },
-    "0x0068": {
-      "file": "play_sfx.asm",
-      "address": "0x0068",
-      "line": 123
-    },
-    "0x05E6": {
-      "file": "play_sfx.asm",
-      "address": "0x05E6",
-      "line": 987
-    },
-    "0x038B": {
-      "file": "play_sfx.asm",
-      "address": "0x038B",
-      "line": 711
-    },
-    "0x02D1": {
-      "file": "play_sfx.asm",
-      "address": "0x02D1",
-      "line": 619
-    },
-    "0x076E": {
-      "file": "play_sfx.asm",
-      "address": "0x076E",
-      "line": 1207
-    },
-    "0x02E4": {
-      "file": "play_sfx.asm",
-      "address": "0x02E4",
-      "line": 627
-    },
-    "0x0698": {
-      "file": "play_sfx.asm",
-      "address": "0x0698",
-      "line": 1062
-    },
-    "0x0734": {
-      "file": "play_sfx.asm",
-      "address": "0x0734",
-      "line": 1161
-    },
-    "0x0672": {
-      "file": "play_sfx.asm",
-      "address": "0x0672",
-      "line": 1047
-    },
-    "0x0778": {
-      "file": "play_sfx.asm",
-      "address": "0x0778",
-      "line": 1210
-    },
-    "0x0107": {
-      "file": "play_sfx.asm",
-      "address": "0x0107",
-      "line": 258
-    },
-    "0x0718": {
-      "file": "play_sfx.asm",
-      "address": "0x0718",
-      "line": 1134
-    },
-    "0x065C": {
-      "file": "play_sfx.asm",
-      "address": "0x065C",
-      "line": 1038
-    },
-    "0x0689": {
-      "file": "play_sfx.asm",
-      "address": "0x0689",
-      "line": 1056
-    },
-    "0x051D": {
-      "file": "play_sfx.asm",
-      "address": "0x051D",
-      "line": 900
-    },
-    "0x0268": {
-      "file": "play_sfx.asm",
-      "address": "0x0268",
-      "line": 546
-    },
-    "0x0322": {
-      "file": "play_sfx.asm",
-      "address": "0x0322",
-      "line": 660
-    },
-    "0x0529": {
-      "file": "play_sfx.asm",
-      "address": "0x0529",
-      "line": 905
-    },
-    "0x04E5": {
-      "file": "play_sfx.asm",
-      "address": "0x04E5",
-      "line": 878
-    },
-    "0x01A8": {
-      "file": "play_sfx.asm",
-      "address": "0x01A8",
-      "line": 390
-    },
-    "0x0336": {
-      "file": "play_sfx.asm",
-      "address": "0x0336",
-      "line": 671
-    },
-    "0x0760": {
-      "file": "play_sfx.asm",
-      "address": "0x0760",
-      "line": 1191
-    },
-    "0x0314": {
-      "file": "play_sfx.asm",
-      "address": "0x0314",
-      "line": 653
-    },
-    "0x028C": {
-      "file": "play_sfx.asm",
-      "address": "0x028C",
-      "line": 568
-    },
-    "0x026B": {
-      "file": "play_sfx.asm",
-      "address": "0x026B",
-      "line": 547
-    },
-    "0x0641": {
-      "file": "play_sfx.asm",
-      "address": "0x0641",
-      "line": 1027
-    },
-    "0x0272": {
-      "file": "play_sfx.asm",
-      "address": "0x0272",
-      "line": 551
-    },
-    "0x0133": {
-      "file": "play_sfx.asm",
-      "address": "0x0133",
-      "line": 290
-    },
-    "0x0606": {
-      "file": "play_sfx.asm",
-      "address": "0x0606",
-      "line": 1000
-    },
-    "0x04C7": {
-      "file": "play_sfx.asm",
-      "address": "0x04C7",
-      "line": 866
-    },
-    "0x06C8": {
-      "file": "play_sfx.asm",
-      "address": "0x06C8",
-      "line": 1081
-    },
-    "0x04DB": {
-      "file": "play_sfx.asm",
-      "address": "0x04DB",
-      "line": 874
-    },
-    "0x0294": {
-      "file": "play_sfx.asm",
-      "address": "0x0294",
-      "line": 576
-    },
-    "0x0361": {
-      "file": "play_sfx.asm",
-      "address": "0x0361",
-      "line": 694
-    },
-    "0x06AC": {
-      "file": "play_sfx.asm",
-      "address": "0x06AC",
-      "line": 1070
-    },
-    "0x0234": {
-      "file": "play_sfx.asm",
-      "address": "0x0234",
-      "line": 501
-    },
-    "0x039E": {
-      "file": "play_sfx.asm",
-      "address": "0x039E",
-      "line": 11
-    },
-    "0x06A4": {
-      "file": "play_sfx.asm",
-      "address": "0x06A4",
-      "line": 1067
-    },
-    "0x070C": {
-      "file": "play_sfx.asm",
-      "address": "0x070C",
-      "line": 1126
-    },
-    "0x04D9": {
-      "file": "play_sfx.asm",
-      "address": "0x04D9",
-      "line": 873
-    },
-    "0x043F": {
-      "file": "play_sfx.asm",
-      "address": "0x043F",
-      "line": 801
-    },
-    "0x047C": {
-      "file": "play_sfx.asm",
-      "address": "0x047C",
-      "line": 832
-    },
-    "0x0722": {
-      "file": "play_sfx.asm",
-      "address": "0x0722",
-      "line": 1151
-    },
-    "0x057F": {
-      "file": "play_sfx.asm",
-      "address": "0x057F",
-      "line": 946
-    },
-    "0x0151": {
-      "file": "play_sfx.asm",
-      "address": "0x0151",
-      "line": 321
-    },
-    "0x00D3": {
-      "file": "play_sfx.asm",
-      "address": "0x00D3",
-      "line": 225
-    },
-    "0x0721": {
-      "file": "play_sfx.asm",
-      "address": "0x0721",
-      "line": 1150
-    },
-    "0x070B": {
-      "file": "play_sfx.asm",
-      "address": "0x070B",
-      "line": 1125
-    },
-    "0x05C8": {
-      "file": "play_sfx.asm",
-      "address": "0x05C8",
-      "line": 975
-    },
-    "0x0328": {
-      "file": "play_sfx.asm",
-      "address": "0x0328",
-      "line": 662
-    },
-    "0x03FB": {
-      "file": "play_sfx.asm",
-      "address": "0x03FB",
-      "line": 773
-    },
-    "0x01E3": {
-      "file": "play_sfx.asm",
-      "address": "0x01E3",
-      "line": 447
-    },
-    "0x03FE": {
-      "file": "play_sfx.asm",
-      "address": "0x03FE",
-      "line": 54
-    },
-    "0x06A2": {
-      "file": "play_sfx.asm",
-      "address": "0x06A2",
-      "line": 1066
-    },
-    "0x0572": {
-      "file": "play_sfx.asm",
-      "address": "0x0572",
-      "line": 939
-    },
-    "0x05CF": {
-      "file": "play_sfx.asm",
-      "address": "0x05CF",
-      "line": 978
-    },
-    "0x0062": {
-      "file": "play_sfx.asm",
-      "address": "0x0062",
-      "line": 119
-    },
-    "0x0754": {
-      "file": "play_sfx.asm",
-      "address": "0x0754",
-      "line": 1183
-    },
-    "0x0618": {
-      "file": "play_sfx.asm",
-      "address": "0x0618",
-      "line": 1007
-    },
-    "0x0712": {
-      "file": "play_sfx.asm",
-      "address": "0x0712",
-      "line": 1130
-    },
-    "0x06B8": {
-      "file": "play_sfx.asm",
-      "address": "0x06B8",
-      "line": 1075
-    },
-    "0x067F": {
-      "file": "play_sfx.asm",
-      "address": "0x067F",
-      "line": 1052
-    },
-    "0x004A": {
-      "file": "play_sfx.asm",
-      "address": "0x004A",
-      "line": 97
-    },
-    "0x0478": {
-      "file": "play_sfx.asm",
-      "address": "0x0478",
-      "line": 827
-    },
-    "0x03E1": {
-      "file": "play_sfx.asm",
-      "address": "0x03E1",
-      "line": 757
-    },
-    "0x05FC": {
-      "file": "play_sfx.asm",
-      "address": "0x05FC",
-      "line": 996
-    },
-    "0x030C": {
-      "file": "play_sfx.asm",
-      "address": "0x030C",
-      "line": 648
-    },
-    "0x0064": {
-      "file": "play_sfx.asm",
-      "address": "0x0064",
-      "line": 120
-    },
-    "0x04C5": {
-      "file": "play_sfx.asm",
-      "address": "0x04C5",
-      "line": 865
-    },
-    "0x00C2": {
-      "file": "play_sfx.asm",
-      "address": "0x00C2",
-      "line": 210
-    },
-    "0x06EF": {
-      "file": "play_sfx.asm",
-      "address": "0x06EF",
-      "line": 1097
-    },
-    "0x03C7": {
-      "file": "play_sfx.asm",
-      "address": "0x03C7",
-      "line": 744
-    },
-    "0x0542": {
-      "file": "play_sfx.asm",
-      "address": "0x0542",
-      "line": 915
-    },
-    "0x0187": {
-      "file": "play_sfx.asm",
-      "address": "0x0187",
-      "line": 364
-    },
-    "0x064A": {
-      "file": "play_sfx.asm",
-      "address": "0x064A",
-      "line": 1031
-    },
-    "0x019E": {
-      "file": "play_sfx.asm",
-      "address": "0x019E",
-      "line": 381
-    },
-    "0x0404": {
-      "file": "play_sfx.asm",
-      "address": "0x0404",
-      "line": 56
-    },
-    "0x01EF": {
-      "file": "play_sfx.asm",
-      "address": "0x01EF",
-      "line": 454
-    },
-    "0x049C": {
-      "file": "play_sfx.asm",
-      "address": "0x049C",
-      "line": 847
-    },
-    "0x068E": {
-      "file": "play_sfx.asm",
-      "address": "0x068E",
-      "line": 1058
-    },
-    "0x05BB": {
-      "file": "play_sfx.asm",
-      "address": "0x05BB",
-      "line": 970
-    },
-    "0x0255": {
-      "file": "play_sfx.asm",
-      "address": "0x0255",
-      "line": 520
-    },
-    "0x0601": {
-      "file": "play_sfx.asm",
-      "address": "0x0601",
-      "line": 998
-    },
-    "0x057D": {
-      "file": "play_sfx.asm",
-      "address": "0x057D",
-      "line": 945
-    },
-    "0x0741": {
-      "file": "play_sfx.asm",
-      "address": "0x0741",
-      "line": 1171
-    },
-    "0x0086": {
-      "file": "play_sfx.asm",
-      "address": "0x0086",
-      "line": 143
-    },
-    "0x01A6": {
-      "file": "play_sfx.asm",
-      "address": "0x01A6",
-      "line": 386
-    },
-    "0x0347": {
-      "file": "play_sfx.asm",
-      "address": "0x0347",
-      "line": 680
-    },
-    "0x041C": {
-      "file": "play_sfx.asm",
-      "address": "0x041C",
-      "line": 64
-    },
-    "0x00B7": {
-      "file": "play_sfx.asm",
-      "address": "0x00B7",
-      "line": 195
-    },
-    "0x0565": {
-      "file": "play_sfx.asm",
-      "address": "0x0565",
-      "line": 933
-    },
-    "0x03CF": {
-      "file": "play_sfx.asm",
-      "address": "0x03CF",
-      "line": 37
-    },
-    "0x035D": {
-      "file": "play_sfx.asm",
-      "address": "0x035D",
-      "line": 689
-    },
-    "0x0263": {
-      "file": "play_sfx.asm",
-      "address": "0x0263",
-      "line": 542
-    },
-    "0x0264": {
-      "file": "play_sfx.asm",
-      "address": "0x0264",
-      "line": 543
-    },
-    "0x04D1": {
-      "file": "play_sfx.asm",
-      "address": "0x04D1",
-      "line": 870
-    },
-    "0x0276": {
-      "file": "play_sfx.asm",
-      "address": "0x0276",
-      "line": 555
-    },
-    "0x061C": {
-      "file": "play_sfx.asm",
-      "address": "0x061C",
-      "line": 1009
-    },
-    "0x0114": {
-      "file": "play_sfx.asm",
-      "address": "0x0114",
-      "line": 276
-    },
-    "0x05D4": {
-      "file": "play_sfx.asm",
-      "address": "0x05D4",
-      "line": 980
-    },
-    "0x01FD": {
-      "file": "play_sfx.asm",
-      "address": "0x01FD",
-      "line": 462
-    },
-    "0x04EF": {
-      "file": "play_sfx.asm",
-      "address": "0x04EF",
-      "line": 882
-    },
-    "0x009A": {
-      "file": "play_sfx.asm",
-      "address": "0x009A",
-      "line": 155
-    },
-    "0x0744": {
-      "file": "play_sfx.asm",
-      "address": "0x0744",
-      "line": 1173
-    },
-    "0x0364": {
-      "file": "play_sfx.asm",
-      "address": "0x0364",
-      "line": 695
-    },
-    "0x051A": {
-      "file": "play_sfx.asm",
-      "address": "0x051A",
-      "line": 899
-    },
-    "0x06FD": {
-      "file": "play_sfx.asm",
-      "address": "0x06FD",
-      "line": 1118
-    },
-    "0x04E3": {
-      "file": "play_sfx.asm",
-      "address": "0x04E3",
-      "line": 877
-    },
-    "0x0231": {
-      "file": "play_sfx.asm",
-      "address": "0x0231",
-      "line": 499
-    },
-    "0x0085": {
-      "file": "play_sfx.asm",
-      "address": "0x0085",
-      "line": 142
-    },
-    "0x00DA": {
-      "file": "play_sfx.asm",
-      "address": "0x00DA",
-      "line": 230
-    },
-    "0x02E7": {
-      "file": "play_sfx.asm",
-      "address": "0x02E7",
-      "line": 628
-    },
-    "0x0082": {
-      "file": "play_sfx.asm",
-      "address": "0x0082",
-      "line": 140
-    },
-    "0x0756": {
-      "file": "play_sfx.asm",
-      "address": "0x0756",
-      "line": 1185
-    },
-    "0x0184": {
-      "file": "play_sfx.asm",
-      "address": "0x0184",
-      "line": 363
-    },
-    "0x00C7": {
-      "file": "play_sfx.asm",
-      "address": "0x00C7",
-      "line": 214
-    },
-    "0x06ED": {
-      "file": "play_sfx.asm",
-      "address": "0x06ED",
-      "line": 1096
-    },
-    "0x0309": {
-      "file": "play_sfx.asm",
-      "address": "0x0309",
-      "line": 647
-    },
-    "0x0559": {
-      "file": "play_sfx.asm",
-      "address": "0x0559",
-      "line": 927
-    },
-    "0x0217": {
-      "file": "play_sfx.asm",
-      "address": "0x0217",
-      "line": 482
-    },
-    "0x0121": {
-      "file": "play_sfx.asm",
-      "address": "0x0121",
-      "line": 282
-    },
-    "0x05D2": {
-      "file": "play_sfx.asm",
-      "address": "0x05D2",
-      "line": 979
-    },
-    "0x03A3": {
-      "file": "play_sfx.asm",
-      "address": "0x03A3",
-      "line": 722
-    },
-    "0x00F4": {
-      "file": "play_sfx.asm",
-      "address": "0x00F4",
-      "line": 241
-    },
-    "0x015D": {
-      "file": "play_sfx.asm",
-      "address": "0x015D",
-      "line": 327
-    },
-    "0x06D6": {
-      "file": "play_sfx.asm",
-      "address": "0x06D6",
-      "line": 1087
-    },
-    "0x0123": {
-      "file": "play_sfx.asm",
-      "address": "0x0123",
-      "line": 283
-    },
-    "0x0761": {
-      "file": "play_sfx.asm",
-      "address": "0x0761",
-      "line": 1192
-    },
-    "0x00FF": {
-      "file": "play_sfx.asm",
-      "address": "0x00FF",
-      "line": 251
-    },
-    "0x02D4": {
-      "file": "play_sfx.asm",
-      "address": "0x02D4",
-      "line": 620
-    },
-    "0x0023": {
-      "file": "play_sfx.asm",
-      "address": "0x0023",
-      "line": 76
-    },
-    "0x009D": {
-      "file": "play_sfx.asm",
-      "address": "0x009D",
-      "line": 156
-    },
-    "0x037F": {
-      "file": "play_sfx.asm",
-      "address": "0x037F",
-      "line": 706
-    },
-    "0x02D0": {
-      "file": "play_sfx.asm",
-      "address": "0x02D0",
-      "line": 618
-    },
-    "0x03AB": {
-      "file": "play_sfx.asm",
-      "address": "0x03AB",
-      "line": 725
-    },
-    "0x06BE": {
-      "file": "play_sfx.asm",
-      "address": "0x06BE",
-      "line": 1077
-    },
-    "0x039C": {
-      "file": "play_sfx.asm",
-      "address": "0x039C",
-      "line": 2
-    },
-    "0x0076": {
-      "file": "play_sfx.asm",
-      "address": "0x0076",
-      "line": 132
-    },
-    "0x0353": {
-      "file": "play_sfx.asm",
-      "address": "0x0353",
-      "line": 684
-    },
-    "0x0515": {
-      "file": "play_sfx.asm",
-      "address": "0x0515",
-      "line": 897
-    },
-    "0x007E": {
-      "file": "play_sfx.asm",
-      "address": "0x007E",
-      "line": 137
-    },
-    "0x01A1": {
-      "file": "play_sfx.asm",
-      "address": "0x01A1",
-      "line": 382
-    },
-    "0x02BE": {
-      "file": "play_sfx.asm",
-      "address": "0x02BE",
-      "line": 600
-    },
-    "0x0730": {
-      "file": "play_sfx.asm",
-      "address": "0x0730",
-      "line": 1159
-    },
-    "0x06FB": {
-      "file": "play_sfx.asm",
-      "address": "0x06FB",
-      "line": 1117
-    },
-    "0x02D7": {
-      "file": "play_sfx.asm",
-      "address": "0x02D7",
-      "line": 621
-    },
-    "0x0492": {
-      "file": "play_sfx.asm",
-      "address": "0x0492",
-      "line": 843
-    },
-    "0x0610": {
-      "file": "play_sfx.asm",
-      "address": "0x0610",
-      "line": 1004
-    },
-    "0x00A0": {
-      "file": "play_sfx.asm",
-      "address": "0x00A0",
-      "line": 157
-    },
-    "0x0471": {
-      "file": "play_sfx.asm",
-      "address": "0x0471",
-      "line": 823
-    },
-    "0x0020": {
-      "file": "play_sfx.asm",
-      "address": "0x0020",
-      "line": 75
-    },
-    "0x005D": {
-      "file": "play_sfx.asm",
-      "address": "0x005D",
-      "line": 116
-    },
-    "0x04A0": {
-      "file": "play_sfx.asm",
-      "address": "0x04A0",
-      "line": 850
-    },
-    "0x05F0": {
-      "file": "play_sfx.asm",
-      "address": "0x05F0",
-      "line": 991
-    },
-    "0x072A": {
-      "file": "play_sfx.asm",
-      "address": "0x072A",
-      "line": 1156
-    },
-    "0x006C": {
-      "file": "play_sfx.asm",
-      "address": "0x006C",
-      "line": 126
-    },
-    "0x02B2": {
-      "file": "play_sfx.asm",
-      "address": "0x02B2",
-      "line": 595
-    },
-    "0x071E": {
-      "file": "play_sfx.asm",
-      "address": "0x071E",
-      "line": 1137
-    },
-    "0x0715": {
-      "file": "play_sfx.asm",
-      "address": "0x0715",
-      "line": 1132
-    },
-    "0x0436": {
-      "file": "play_sfx.asm",
-      "address": "0x0436",
-      "line": 798
-    },
-    "0x013F": {
-      "file": "play_sfx.asm",
-      "address": "0x013F",
-      "line": 306
-    },
-    "0x02A9": {
-      "file": "play_sfx.asm",
-      "address": "0x02A9",
-      "line": 591
-    },
-    "0x04AF": {
-      "file": "play_sfx.asm",
-      "address": "0x04AF",
-      "line": 856
-    },
-    "0x0214": {
-      "file": "play_sfx.asm",
-      "address": "0x0214",
-      "line": 480
-    },
-    "0x01F6": {
-      "file": "play_sfx.asm",
-      "address": "0x01F6",
-      "line": 458
-    },
-    "0x03F2": {
-      "file": "play_sfx.asm",
-      "address": "0x03F2",
-      "line": 767
-    },
-    "0x05F7": {
-      "file": "play_sfx.asm",
-      "address": "0x05F7",
-      "line": 994
-    },
-    "0x038E": {
-      "file": "play_sfx.asm",
-      "address": "0x038E",
-      "line": 712
-    },
-    "0x045F": {
-      "file": "play_sfx.asm",
-      "address": "0x045F",
-      "line": 817
-    },
-    "0x06DE": {
-      "file": "play_sfx.asm",
-      "address": "0x06DE",
-      "line": 1090
-    },
-    "0x00D1": {
-      "file": "play_sfx.asm",
-      "address": "0x00D1",
-      "line": 224
-    },
-    "0x06A7": {
-      "file": "play_sfx.asm",
-      "address": "0x06A7",
-      "line": 1068
-    },
-    "0x0442": {
-      "file": "play_sfx.asm",
-      "address": "0x0442",
-      "line": 802
-    },
-    "0x032B": {
-      "file": "play_sfx.asm",
-      "address": "0x032B",
-      "line": 663
-    },
-    "0x071B": {
-      "file": "play_sfx.asm",
-      "address": "0x071B",
-      "line": 1136
-    },
-    "0x00C0": {
-      "file": "play_sfx.asm",
-      "address": "0x00C0",
-      "line": 208
-    },
-    "0x0041": {
-      "file": "play_sfx.asm",
-      "address": "0x0041",
-      "line": 92
-    },
-    "0x0354": {
-      "file": "play_sfx.asm",
-      "address": "0x0354",
-      "line": 686
-    },
-    "0x072C": {
-      "file": "play_sfx.asm",
-      "address": "0x072C",
-      "line": 1157
-    },
-    "0x00F9": {
-      "file": "play_sfx.asm",
-      "address": "0x00F9",
-      "line": 244
-    },
-    "0x0701": {
-      "file": "play_sfx.asm",
-      "address": "0x0701",
-      "line": 1121
-    },
-    "0x018C": {
-      "file": "play_sfx.asm",
-      "address": "0x018C",
-      "line": 367
-    },
-    "0x05FA": {
-      "file": "play_sfx.asm",
-      "address": "0x05FA",
-      "line": 995
-    },
-    "0x01B3": {
-      "file": "play_sfx.asm",
-      "address": "0x01B3",
-      "line": 413
-    },
-    "0x069A": {
-      "file": "play_sfx.asm",
-      "address": "0x069A",
-      "line": 1063
-    },
-    "0x033D": {
-      "file": "play_sfx.asm",
-      "address": "0x033D",
-      "line": 675
-    },
-    "0x0524": {
-      "file": "play_sfx.asm",
-      "address": "0x0524",
-      "line": 903
-    },
-    "0x04E8": {
-      "file": "play_sfx.asm",
-      "address": "0x04E8",
-      "line": 879
-    },
-    "0x00A9": {
-      "file": "play_sfx.asm",
-      "address": "0x00A9",
-      "line": 190
-    },
-    "0x0693": {
-      "file": "play_sfx.asm",
-      "address": "0x0693",
-      "line": 1060
-    },
-    "0x02C7": {
-      "file": "play_sfx.asm",
-      "address": "0x02C7",
-      "line": 614
-    },
-    "0x0350": {
-      "file": "play_sfx.asm",
-      "address": "0x0350",
-      "line": 683
-    },
-    "0x0373": {
-      "file": "play_sfx.asm",
-      "address": "0x0373",
-      "line": 701
-    },
-    "0x05A2": {
-      "file": "play_sfx.asm",
-      "address": "0x05A2",
-      "line": 960
-    },
-    "0x04F7": {
-      "file": "play_sfx.asm",
-      "address": "0x04F7",
-      "line": 885
-    },
-    "0x04A7": {
-      "file": "play_sfx.asm",
-      "address": "0x04A7",
-      "line": 853
-    },
-    "0x0574": {
-      "file": "play_sfx.asm",
-      "address": "0x0574",
-      "line": 940
-    },
-    "0x0657": {
-      "file": "play_sfx.asm",
-      "address": "0x0657",
-      "line": 1036
-    },
-    "0x01FE": {
-      "file": "play_sfx.asm",
-      "address": "0x01FE",
-      "line": 463
-    },
-    "0x02C1": {
-      "file": "play_sfx.asm",
-      "address": "0x02C1",
-      "line": 601
-    },
-    "0x0643": {
-      "file": "play_sfx.asm",
-      "address": "0x0643",
-      "line": 1028
-    },
-    "0x0238": {
-      "file": "play_sfx.asm",
-      "address": "0x0238",
-      "line": 503
-    },
-    "0x0077": {
-      "file": "play_sfx.asm",
-      "address": "0x0077",
-      "line": 133
-    },
-    "0x06F7": {
-      "file": "play_sfx.asm",
-      "address": "0x06F7",
-      "line": 1100
-    },
-    "0x076F": {
-      "file": "play_sfx.asm",
-      "address": "0x076F",
-      "line": 1208
-    },
-    "0x06B1": {
-      "file": "play_sfx.asm",
-      "address": "0x06B1",
-      "line": 1072
-    },
-    "0x02AC": {
-      "file": "play_sfx.asm",
-      "address": "0x02AC",
-      "line": 592
-    },
-    "0x074A": {
-      "file": "play_sfx.asm",
-      "address": "0x074A",
-      "line": 1177
-    },
-    "0x0376": {
-      "file": "play_sfx.asm",
-      "address": "0x0376",
-      "line": 702
-    },
-    "0x0700": {
-      "file": "play_sfx.asm",
-      "address": "0x0700",
-      "line": 1120
-    },
-    "0x04B6": {
-      "file": "play_sfx.asm",
-      "address": "0x04B6",
-      "line": 859
-    },
-    "0x0367": {
-      "file": "play_sfx.asm",
-      "address": "0x0367",
-      "line": 696
-    },
-    "0x020E": {
-      "file": "play_sfx.asm",
-      "address": "0x020E",
-      "line": 474
-    },
-    "0x0047": {
-      "file": "play_sfx.asm",
-      "address": "0x0047",
-      "line": 94
-    },
-    "0x0061": {
-      "file": "play_sfx.asm",
-      "address": "0x0061",
-      "line": 118
-    },
-    "0x0517": {
-      "file": "play_sfx.asm",
-      "address": "0x0517",
-      "line": 898
-    },
-    "0x03AD": {
-      "file": "play_sfx.asm",
-      "address": "0x03AD",
-      "line": 727
-    },
-    "0x04F5": {
-      "file": "play_sfx.asm",
-      "address": "0x04F5",
-      "line": 884
-    },
-    "0x0748": {
-      "file": "play_sfx.asm",
-      "address": "0x0748",
-      "line": 1175
-    },
-    "0x06C2": {
-      "file": "play_sfx.asm",
-      "address": "0x06C2",
-      "line": 1079
-    },
-    "0x05E8": {
-      "file": "play_sfx.asm",
-      "address": "0x05E8",
-      "line": 988
-    },
-    "0x05A0": {
-      "file": "play_sfx.asm",
-      "address": "0x05A0",
-      "line": 959
-    },
-    "0x06B4": {
-      "file": "play_sfx.asm",
-      "address": "0x06B4",
-      "line": 1073
-    },
-    "0x01F0": {
-      "file": "play_sfx.asm",
-      "address": "0x01F0",
-      "line": 455
-    },
-    "0x02F1": {
-      "file": "play_sfx.asm",
-      "address": "0x02F1",
-      "line": 633
-    },
-    "0x0248": {
-      "file": "play_sfx.asm",
-      "address": "0x0248",
-      "line": 512
-    },
-    "0x0070": {
-      "file": "play_sfx.asm",
-      "address": "0x0070",
-      "line": 128
-    },
-    "0x0102": {
-      "file": "play_sfx.asm",
-      "address": "0x0102",
-      "line": 252
-    },
-    "0x0763": {
-      "file": "play_sfx.asm",
-      "address": "0x0763",
-      "line": 1194
-    },
-    "0x016B": {
-      "file": "play_sfx.asm",
-      "address": "0x016B",
-      "line": 341
-    },
-    "0x0547": {
-      "file": "play_sfx.asm",
-      "address": "0x0547",
-      "line": 917
-    },
-    "0x06E8": {
-      "file": "play_sfx.asm",
-      "address": "0x06E8",
-      "line": 1094
-    },
-    "0x01EE": {
-      "file": "play_sfx.asm",
-      "address": "0x01EE",
-      "line": 453
-    },
-    "0x0622": {
-      "file": "play_sfx.asm",
-      "address": "0x0622",
-      "line": 1011
-    },
-    "0x03C5": {
-      "file": "play_sfx.asm",
-      "address": "0x03C5",
-      "line": 33
-    },
-    "0x0648": {
-      "file": "play_sfx.asm",
-      "address": "0x0648",
-      "line": 1030
-    },
-    "0x02BB": {
-      "file": "play_sfx.asm",
-      "address": "0x02BB",
-      "line": 599
-    },
-    "0x075C": {
-      "file": "play_sfx.asm",
-      "address": "0x075C",
-      "line": 1189
-    },
-    "0x0767": {
-      "file": "play_sfx.asm",
-      "address": "0x0767",
-      "line": 1197
-    },
-    "0x0150": {
-      "file": "play_sfx.asm",
-      "address": "0x0150",
-      "line": 318
-    },
-    "0x03B6": {
-      "file": "play_sfx.asm",
-      "address": "0x03B6",
-      "line": 20
-    },
-    "0x0459": {
-      "file": "play_sfx.asm",
-      "address": "0x0459",
-      "line": 815
-    },
-    "0x04D7": {
-      "file": "play_sfx.asm",
-      "address": "0x04D7",
-      "line": 872
-    },
-    "0x0682": {
-      "file": "play_sfx.asm",
-      "address": "0x0682",
-      "line": 1053
-    },
-    "0x0207": {
-      "file": "play_sfx.asm",
-      "address": "0x0207",
-      "line": 469
-    },
-    "0x05DE": {
-      "file": "play_sfx.asm",
-      "address": "0x05DE",
-      "line": 984
-    },
-    "0x0612": {
-      "file": "play_sfx.asm",
-      "address": "0x0612",
-      "line": 1005
-    },
-    "0x023A": {
-      "file": "play_sfx.asm",
-      "address": "0x023A",
-      "line": 504
-    },
-    "0x01B0": {
-      "file": "play_sfx.asm",
-      "address": "0x01B0",
-      "line": 396
-    },
-    "0x0569": {
-      "file": "play_sfx.asm",
-      "address": "0x0569",
-      "line": 935
-    },
-    "0x02EA": {
-      "file": "play_sfx.asm",
-      "address": "0x02EA",
-      "line": 630
-    },
-    "0x0161": {
-      "file": "play_sfx.asm",
-      "address": "0x0161",
-      "line": 332
-    },
-    "0x059A": {
-      "file": "play_sfx.asm",
-      "address": "0x059A",
-      "line": 957
-    },
-    "0x0732": {
-      "file": "play_sfx.asm",
-      "address": "0x0732",
-      "line": 1160
-    },
-    "0x0135": {
-      "file": "play_sfx.asm",
-      "address": "0x0135",
-      "line": 291
-    },
-    "0x003B": {
-      "file": "play_sfx.asm",
-      "address": "0x003B",
-      "line": 90
-    },
-    "0x0509": {
-      "file": "play_sfx.asm",
-      "address": "0x0509",
-      "line": 892
-    },
-    "0x0146": {
-      "file": "play_sfx.asm",
-      "address": "0x0146",
-      "line": 313
-    },
-    "0x0285": {
-      "file": "play_sfx.asm",
-      "address": "0x0285",
-      "line": 566
-    },
-    "0x023B": {
-      "file": "play_sfx.asm",
-      "address": "0x023B",
-      "line": 505
-    },
-    "0x017C": {
-      "file": "play_sfx.asm",
-      "address": "0x017C",
-      "line": 354
-    },
-    "0x008C": {
-      "file": "play_sfx.asm",
-      "address": "0x008C",
-      "line": 150
-    },
-    "0x05F2": {
-      "file": "play_sfx.asm",
-      "address": "0x05F2",
-      "line": 992
-    },
-    "0x0703": {
-      "file": "play_sfx.asm",
-      "address": "0x0703",
-      "line": 1122
-    },
-    "0x0295": {
-      "file": "play_sfx.asm",
-      "address": "0x0295",
-      "line": 577
-    },
-    "0x06FE": {
-      "file": "play_sfx.asm",
-      "address": "0x06FE",
-      "line": 1119
-    },
-    "0x0445": {
-      "file": "play_sfx.asm",
-      "address": "0x0445",
-      "line": 803
-    },
-    "0x0497": {
-      "file": "play_sfx.asm",
-      "address": "0x0497",
-      "line": 845
-    },
-    "0x06AE": {
-      "file": "play_sfx.asm",
-      "address": "0x06AE",
-      "line": 1071
-    },
-    "0x01C4": {
-      "file": "play_sfx.asm",
-      "address": "0x01C4",
-      "line": 424
-    },
-    "0x058E": {
-      "file": "play_sfx.asm",
-      "address": "0x058E",
-      "line": 952
-    },
-    "0x0652": {
-      "file": "play_sfx.asm",
-      "address": "0x0652",
-      "line": 1034
-    },
-    "0x0031": {
-      "file": "play_sfx.asm",
-      "address": "0x0031",
-      "line": 82
-    },
-    "0x05C0": {
-      "file": "play_sfx.asm",
-      "address": "0x05C0",
-      "line": 972
-    },
-    "0x0430": {
-      "file": "play_sfx.asm",
-      "address": "0x0430",
-      "line": 796
-    },
-    "0x00F6": {
-      "file": "play_sfx.asm",
-      "address": "0x00F6",
-      "line": 242
-    },
-    "0x019A": {
-      "file": "play_sfx.asm",
-      "address": "0x019A",
-      "line": 377
-    },
-    "0x0317": {
-      "file": "play_sfx.asm",
-      "address": "0x0317",
-      "line": 654
-    },
-    "0x040D": {
-      "file": "play_sfx.asm",
-      "address": "0x040D",
-      "line": 59
-    },
-    "0x045C": {
-      "file": "play_sfx.asm",
-      "address": "0x045C",
-      "line": 816
-    },
-    "0x0310": {
-      "file": "play_sfx.asm",
-      "address": "0x0310",
-      "line": 650
-    },
-    "0x033A": {
-      "file": "play_sfx.asm",
-      "address": "0x033A",
-      "line": 674
-    },
-    "0x037C": {
-      "file": "play_sfx.asm",
-      "address": "0x037C",
-      "line": 705
-    },
-    "0x008E": {
-      "file": "play_sfx.asm",
-      "address": "0x008E",
-      "line": 151
-    },
-    "0x06CA": {
-      "file": "play_sfx.asm",
-      "address": "0x06CA",
-      "line": 1082
-    },
-    "0x05B1": {
-      "file": "play_sfx.asm",
-      "address": "0x05B1",
-      "line": 966
-    },
-    "0x0138": {
-      "file": "play_sfx.asm",
-      "address": "0x0138",
-      "line": 292
-    },
-    "0x0503": {
-      "file": "play_sfx.asm",
-      "address": "0x0503",
-      "line": 890
-    },
-    "0x05B4": {
-      "file": "play_sfx.asm",
-      "address": "0x05B4",
-      "line": 967
-    },
-    "0x044B": {
-      "file": "play_sfx.asm",
-      "address": "0x044B",
-      "line": 806
-    },
-    "0x0661": {
-      "file": "play_sfx.asm",
-      "address": "0x0661",
-      "line": 1040
-    },
-    "0x0049": {
-      "file": "play_sfx.asm",
-      "address": "0x0049",
-      "line": 96
-    },
-    "0x02DA": {
-      "file": "play_sfx.asm",
-      "address": "0x02DA",
-      "line": 622
-    },
-    "0x061F": {
-      "file": "play_sfx.asm",
-      "address": "0x061F",
-      "line": 1010
-    },
-    "0x0527": {
-      "file": "play_sfx.asm",
-      "address": "0x0527",
-      "line": 904
-    },
-    "0x0283": {
-      "file": "play_sfx.asm",
-      "address": "0x0283",
-      "line": 564
-    },
-    "0x042A": {
-      "file": "play_sfx.asm",
-      "address": "0x042A",
-      "line": 794
-    },
-    "0x025F": {
-      "file": "play_sfx.asm",
-      "address": "0x025F",
-      "line": 540
-    },
-    "0x0453": {
-      "file": "play_sfx.asm",
-      "address": "0x0453",
-      "line": 813
-    },
-    "0x03DE": {
-      "file": "play_sfx.asm",
-      "address": "0x03DE",
-      "line": 43
-    },
-    "0x058C": {
-      "file": "play_sfx.asm",
-      "address": "0x058C",
-      "line": 951
-    },
-    "0x056C": {
-      "file": "play_sfx.asm",
-      "address": "0x056C",
-      "line": 936
-    },
-    "0x0166": {
-      "file": "play_sfx.asm",
-      "address": "0x0166",
-      "line": 335
-    },
-    "0x03A0": {
-      "file": "play_sfx.asm",
-      "address": "0x03A0",
-      "line": 721
-    },
-    "0x01DE": {
-      "file": "play_sfx.asm",
-      "address": "0x01DE",
-      "line": 445
-    },
-    "0x04F9": {
-      "file": "play_sfx.asm",
-      "address": "0x04F9",
-      "line": 886
-    },
-    "0x0262": {
-      "file": "play_sfx.asm",
-      "address": "0x0262",
-      "line": 541
-    },
-    "0x0566": {
-      "file": "play_sfx.asm",
-      "address": "0x0566",
-      "line": 934
-    },
-    "0x04B1": {
-      "file": "play_sfx.asm",
-      "address": "0x04B1",
-      "line": 857
-    },
-    "0x02AF": {
-      "file": "play_sfx.asm",
-      "address": "0x02AF",
-      "line": 593
-    },
-    "0x0297": {
-      "file": "play_sfx.asm",
-      "address": "0x0297",
-      "line": 578
-    },
-    "0x00EC": {
-      "file": "play_sfx.asm",
-      "address": "0x00EC",
-      "line": 237
-    },
-    "0x0479": {
-      "file": "play_sfx.asm",
-      "address": "0x0479",
-      "line": 828
-    },
-    "0x0153": {
-      "file": "play_sfx.asm",
-      "address": "0x0153",
-      "line": 322
-    },
-    "0x063D": {
-      "file": "play_sfx.asm",
-      "address": "0x063D",
-      "line": 1024
-    },
-    "0x00F1": {
-      "file": "play_sfx.asm",
-      "address": "0x00F1",
-      "line": 239
-    },
-    "0x01E7": {
-      "file": "play_sfx.asm",
-      "address": "0x01E7",
-      "line": 449
-    },
-    "0x0686": {
-      "file": "play_sfx.asm",
-      "address": "0x0686",
-      "line": 1055
-    },
-    "0x012E": {
-      "file": "play_sfx.asm",
-      "address": "0x012E",
-      "line": 288
-    },
-    "0x0305": {
-      "file": "play_sfx.asm",
-      "address": "0x0305",
-      "line": 645
-    },
-    "0x0640": {
-      "file": "play_sfx.asm",
-      "address": "0x0640",
-      "line": 1026
-    },
-    "0x040A": {
-      "file": "play_sfx.asm",
-      "address": "0x040A",
-      "line": 58
-    },
-    "0x014F": {
-      "file": "play_sfx.asm",
-      "address": "0x014F",
-      "line": 317
-    },
-    "0x02B1": {
-      "file": "play_sfx.asm",
-      "address": "0x02B1",
-      "line": 594
-    },
-    "0x04AC": {
-      "file": "play_sfx.asm",
-      "address": "0x04AC",
-      "line": 855
-    },
-    "0x0385": {
-      "file": "play_sfx.asm",
-      "address": "0x0385",
-      "line": 709
-    },
-    "0x053D": {
-      "file": "play_sfx.asm",
-      "address": "0x053D",
-      "line": 913
-    },
-    "0x061A": {
-      "file": "play_sfx.asm",
-      "address": "0x061A",
-      "line": 1008
-    },
-    "0x0044": {
-      "file": "play_sfx.asm",
-      "address": "0x0044",
-      "line": 93
-    },
-    "0x04ED": {
-      "file": "play_sfx.asm",
-      "address": "0x04ED",
-      "line": 881
-    },
-    "0x0333": {
-      "file": "play_sfx.asm",
-      "address": "0x0333",
-      "line": 670
-    },
-    "0x03CA": {
-      "file": "play_sfx.asm",
-      "address": "0x03CA",
-      "line": 35
-    },
-    "0x063A": {
-      "file": "play_sfx.asm",
-      "address": "0x063A",
-      "line": 1023
-    },
-    "0x0301": {
-      "file": "play_sfx.asm",
-      "address": "0x0301",
-      "line": 642
-    },
-    "0x01A4": {
-      "file": "play_sfx.asm",
-      "address": "0x01A4",
-      "line": 383
-    },
-    "0x02FB": {
-      "file": "play_sfx.asm",
-      "address": "0x02FB",
-      "line": 640
-    },
-    "0x020A": {
-      "file": "play_sfx.asm",
-      "address": "0x020A",
-      "line": 472
-    },
-    "0x03BC": {
-      "file": "play_sfx.asm",
-      "address": "0x03BC",
-      "line": 732
-    },
-    "0x0513": {
-      "file": "play_sfx.asm",
-      "address": "0x0513",
-      "line": 896
-    },
-    "0x0416": {
-      "file": "play_sfx.asm",
-      "address": "0x0416",
-      "line": 62
-    },
-    "0x057B": {
-      "file": "play_sfx.asm",
-      "address": "0x057B",
-      "line": 943
-    },
-    "0x06EA": {
-      "file": "play_sfx.asm",
-      "address": "0x06EA",
-      "line": 1095
-    },
-    "0x0182": {
-      "file": "play_sfx.asm",
-      "address": "0x0182",
-      "line": 362
-    },
-    "0x0273": {
-      "file": "play_sfx.asm",
-      "address": "0x0273",
-      "line": 552
-    },
-    "0x00FD": {
-      "file": "play_sfx.asm",
-      "address": "0x00FD",
-      "line": 246
-    },
-    "0x0038": {
-      "file": "play_sfx.asm",
-      "address": "0x0038",
-      "line": 89
-    },
-    "0x03B9": {
-      "file": "play_sfx.asm",
-      "address": "0x03B9",
-      "line": 29
-    },
-    "0x02A3": {
-      "file": "play_sfx.asm",
-      "address": "0x02A3",
-      "line": 588
-    },
-    "0x0506": {
-      "file": "play_sfx.asm",
-      "address": "0x0506",
-      "line": 891
-    },
-    "0x0765": {
-      "file": "play_sfx.asm",
-      "address": "0x0765",
-      "line": 1195
-    },
-    "0x0424": {
-      "file": "play_sfx.asm",
-      "address": "0x0424",
-      "line": 792
-    },
-    "0x00EF": {
-      "file": "play_sfx.asm",
-      "address": "0x00EF",
-      "line": 238
-    },
-    "0x011F": {
-      "file": "play_sfx.asm",
-      "address": "0x011F",
-      "line": 281
-    },
-    "0x025A": {
-      "file": "play_sfx.asm",
-      "address": "0x025A",
-      "line": 537
-    },
-    "0x02C3": {
-      "file": "play_sfx.asm",
-      "address": "0x02C3",
-      "line": 612
-    },
-    "0x0169": {
-      "file": "play_sfx.asm",
-      "address": "0x0169",
-      "line": 340
-    },
-    "0x0388": {
-      "file": "play_sfx.asm",
-      "address": "0x0388",
-      "line": 710
-    },
-    "0x04A9": {
-      "file": "play_sfx.asm",
-      "address": "0x04A9",
-      "line": 854
-    },
-    "0x00F8": {
-      "file": "play_sfx.asm",
-      "address": "0x00F8",
-      "line": 243
-    },
-    "0x0615": {
-      "file": "play_sfx.asm",
-      "address": "0x0615",
-      "line": 1006
-    },
-    "0x03CC": {
-      "file": "play_sfx.asm",
-      "address": "0x03CC",
-      "line": 36
-    },
-    "0x00C9": {
-      "file": "play_sfx.asm",
-      "address": "0x00C9",
-      "line": 215
-    },
-    "0x075E": {
-      "file": "play_sfx.asm",
-      "address": "0x075E",
-      "line": 1190
-    },
-    "0x02A0": {
-      "file": "play_sfx.asm",
-      "address": "0x02A0",
-      "line": 587
-    },
-    "0x0144": {
-      "file": "play_sfx.asm",
-      "address": "0x0144",
-      "line": 310
-    },
-    "0x0030": {
-      "file": "play_sfx.asm",
-      "address": "0x0030",
-      "line": 81
-    },
-    "0x0127": {
-      "file": "play_sfx.asm",
-      "address": "0x0127",
-      "line": 285
-    },
-    "0x0109": {
-      "file": "play_sfx.asm",
-      "address": "0x0109",
-      "line": 263
-    },
-    "0x00FB": {
-      "file": "play_sfx.asm",
-      "address": "0x00FB",
-      "line": 245
-    },
-    "0x0666": {
-      "file": "play_sfx.asm",
-      "address": "0x0666",
-      "line": 1042
-    },
-    "0x0413": {
-      "file": "play_sfx.asm",
-      "address": "0x0413",
-      "line": 61
-    },
-    "0x018E": {
-      "file": "play_sfx.asm",
-      "address": "0x018E",
-      "line": 368
-    },
-    "0x008A": {
-      "file": "play_sfx.asm",
-      "address": "0x008A",
-      "line": 149
-    },
-    "0x0032": {
-      "file": "play_sfx.asm",
-      "address": "0x0032",
-      "line": 83
-    },
-    "0x0094": {
-      "file": "play_sfx.asm",
-      "address": "0x0094",
-      "line": 153
-    },
-    "0x0026": {
-      "file": "play_sfx.asm",
-      "address": "0x0026",
-      "line": 77
-    },
-    "0x00CB": {
-      "file": "play_sfx.asm",
-      "address": "0x00CB",
-      "line": 216
-    },
-    "0x0048": {
-      "file": "play_sfx.asm",
-      "address": "0x0048",
-      "line": 95
-    },
-    "0x0067": {
-      "file": "play_sfx.asm",
-      "address": "0x0067",
-      "line": 122
-    },
-    "0x019C": {
-      "file": "play_sfx.asm",
-      "address": "0x019C",
-      "line": 380
-    },
-    "0x053F": {
-      "file": "play_sfx.asm",
-      "address": "0x053F",
-      "line": 914
-    },
-    "0x0624": {
-      "file": "play_sfx.asm",
-      "address": "0x0624",
-      "line": 1012
-    },
-    "0x02A8": {
-      "file": "play_sfx.asm",
-      "address": "0x02A8",
-      "line": 590
-    },
-    "0x0339": {
-      "file": "play_sfx.asm",
-      "address": "0x0339",
-      "line": 672
-    },
-    "0x0343": {
-      "file": "play_sfx.asm",
-      "address": "0x0343",
-      "line": 677
-    },
-    "0x042D": {
-      "file": "play_sfx.asm",
-      "address": "0x042D",
-      "line": 795
-    },
-    "0x0650": {
-      "file": "play_sfx.asm",
-      "address": "0x0650",
-      "line": 1033
-    },
-    "0x0421": {
-      "file": "play_sfx.asm",
-      "address": "0x0421",
-      "line": 788
-    },
-    "0x065A": {
-      "file": "play_sfx.asm",
-      "address": "0x065A",
-      "line": 1037
-    },
-    "0x0576": {
-      "file": "play_sfx.asm",
-      "address": "0x0576",
-      "line": 941
-    },
-    "0x06C0": {
-      "file": "play_sfx.asm",
-      "address": "0x06C0",
-      "line": 1078
-    },
-    "0x0284": {
-      "file": "play_sfx.asm",
-      "address": "0x0284",
-      "line": 565
-    },
-    "0x03F5": {
-      "file": "play_sfx.asm",
-      "address": "0x03F5",
-      "line": 51
-    },
-    "0x05A7": {
-      "file": "play_sfx.asm",
-      "address": "0x05A7",
-      "line": 962
-    },
-    "0x031D": {
-      "file": "play_sfx.asm",
-      "address": "0x031D",
-      "line": 656
-    },
-    "0x06F1": {
-      "file": "play_sfx.asm",
-      "address": "0x06F1",
-      "line": 1098
-    },
-    "0x03EA": {
-      "file": "play_sfx.asm",
-      "address": "0x03EA",
-      "line": 761
-    },
-    "0x03D4": {
-      "file": "play_sfx.asm",
-      "address": "0x03D4",
-      "line": 39
-    },
-    "0x04F2": {
-      "file": "play_sfx.asm",
-      "address": "0x04F2",
-      "line": 883
-    },
-    "0x03EC": {
-      "file": "play_sfx.asm",
-      "address": "0x03EC",
-      "line": 765
-    },
-    "0x00CC": {
-      "file": "play_sfx.asm",
-      "address": "0x00CC",
-      "line": 217
-    },
-    "0x007B": {
-      "file": "play_sfx.asm",
-      "address": "0x007B",
-      "line": 136
-    },
-    "0x0562": {
-      "file": "play_sfx.asm",
-      "address": "0x0562",
-      "line": 930
-    },
-    "0x0195": {
-      "file": "play_sfx.asm",
-      "address": "0x0195",
-      "line": 373
-    },
-    "0x02B8": {
-      "file": "play_sfx.asm",
-      "address": "0x02B8",
-      "line": 597
-    },
-    "0x0736": {
-      "file": "play_sfx.asm",
-      "address": "0x0736",
-      "line": 1163
-    },
-    "0x06D2": {
-      "file": "play_sfx.asm",
-      "address": "0x06D2",
-      "line": 1085
-    },
-    "0x026C": {
-      "file": "play_sfx.asm",
-      "address": "0x026C",
-      "line": 548
-    },
-    "0x049E": {
-      "file": "play_sfx.asm",
-      "address": "0x049E",
-      "line": 848
-    },
-    "0x0117": {
-      "file": "play_sfx.asm",
-      "address": "0x0117",
-      "line": 277
-    },
-    "0x0762": {
-      "file": "play_sfx.asm",
-      "address": "0x0762",
-      "line": 1193
-    },
-    "0x0477": {
-      "file": "play_sfx.asm",
-      "address": "0x0477",
-      "line": 826
-    },
-    "0x066E": {
-      "file": "play_sfx.asm",
-      "address": "0x066E",
-      "line": 1045
-    },
-    "0x05AC": {
-      "file": "play_sfx.asm",
-      "address": "0x05AC",
-      "line": 964
-    },
-    "0x0604": {
-      "file": "play_sfx.asm",
-      "address": "0x0604",
-      "line": 999
-    },
-    "0x0535": {
-      "file": "play_sfx.asm",
-      "address": "0x0535",
-      "line": 910
-    },
-    "0x02FE": {
-      "file": "play_sfx.asm",
-      "address": "0x02FE",
-      "line": 641
-    },
-    "0x011D": {
-      "file": "play_sfx.asm",
-      "address": "0x011D",
-      "line": 280
-    },
-    "0x0174": {
-      "file": "play_sfx.asm",
-      "address": "0x0174",
-      "line": 349
-    },
-    "0x030F": {
-      "file": "play_sfx.asm",
-      "address": "0x030F",
-      "line": 649
-    },
-    "0x0450": {
-      "file": "play_sfx.asm",
-      "address": "0x0450",
-      "line": 812
-    },
-    "0x010E": {
-      "file": "play_sfx.asm",
-      "address": "0x010E",
-      "line": 266
-    },
-    "0x0531": {
-      "file": "play_sfx.asm",
-      "address": "0x0531",
-      "line": 908
-    },
-    "0x04D4": {
-      "file": "play_sfx.asm",
-      "address": "0x04D4",
-      "line": 871
-    },
-    "0x03B0": {
-      "file": "play_sfx.asm",
-      "address": "0x03B0",
-      "line": 728
-    },
-    "0x01DB": {
-      "file": "play_sfx.asm",
-      "address": "0x01DB",
-      "line": 444
-    },
-    "0x014B": {
-      "file": "play_sfx.asm",
-      "address": "0x014B",
-      "line": 315
-    },
-    "0x0097": {
-      "file": "play_sfx.asm",
-      "address": "0x0097",
-      "line": 154
-    },
-    "0x022F": {
-      "file": "play_sfx.asm",
-      "address": "0x022F",
-      "line": 498
-    },
-    "0x06DC": {
-      "file": "play_sfx.asm",
-      "address": "0x06DC",
-      "line": 1089
-    },
-    "0x013B": {
-      "file": "play_sfx.asm",
-      "address": "0x013B",
-      "line": 304
-    },
-    "0x0055": {
-      "file": "play_sfx.asm",
-      "address": "0x0055",
-      "line": 110
-    },
-    "0x00EA": {
-      "file": "play_sfx.asm",
-      "address": "0x00EA",
-      "line": 236
-    },
-    "0x0550": {
-      "file": "play_sfx.asm",
-      "address": "0x0550",
-      "line": 921
-    },
-    "0x06A0": {
-      "file": "play_sfx.asm",
-      "address": "0x06A0",
-      "line": 1065
-    },
-    "0x027D": {
-      "file": "play_sfx.asm",
-      "address": "0x027D",
-      "line": 558
-    },
-    "0x036A": {
-      "file": "play_sfx.asm",
-      "address": "0x036A",
-      "line": 697
-    },
-    "0x0538": {
-      "file": "play_sfx.asm",
-      "address": "0x0538",
-      "line": 911
-    },
-    "0x072F": {
-      "file": "play_sfx.asm",
-      "address": "0x072F",
-      "line": 1158
-    },
-    "0x0433": {
-      "file": "play_sfx.asm",
-      "address": "0x0433",
-      "line": 797
-    },
-    "0x02E1": {
-      "file": "play_sfx.asm",
-      "address": "0x02E1",
-      "line": 626
-    },
-    "0x04E1": {
-      "file": "play_sfx.asm",
-      "address": "0x04E1",
-      "line": 876
-    },
-    "0x050B": {
-      "file": "play_sfx.asm",
-      "address": "0x050B",
-      "line": 893
-    },
-    "0x0549": {
-      "file": "play_sfx.asm",
-      "address": "0x0549",
-      "line": 918
-    },
-    "0x01B8": {
-      "file": "play_sfx.asm",
-      "address": "0x01B8",
-      "line": 415
-    },
-    "0x0726": {
-      "file": "play_sfx.asm",
-      "address": "0x0726",
-      "line": 1153
-    },
-    "0x069D": {
-      "file": "play_sfx.asm",
-      "address": "0x069D",
-      "line": 1064
-    },
-    "0x0156": {
-      "file": "play_sfx.asm",
-      "address": "0x0156",
-      "line": 323
-    },
-    "0x013D": {
-      "file": "play_sfx.asm",
-      "address": "0x013D",
-      "line": 305
-    },
-    "0x0750": {
-      "file": "play_sfx.asm",
-      "address": "0x0750",
-      "line": 1181
-    },
-    "0x02EB": {
-      "file": "play_sfx.asm",
-      "address": "0x02EB",
-      "line": 631
-    },
-    "0x04FC": {
-      "file": "play_sfx.asm",
-      "address": "0x04FC",
-      "line": 887
-    },
-    "0x00E4": {
-      "file": "play_sfx.asm",
-      "address": "0x00E4",
-      "line": 234
-    },
-    "0x022A": {
-      "file": "play_sfx.asm",
-      "address": "0x022A",
-      "line": 496
-    },
-    "0x03D9": {
-      "file": "play_sfx.asm",
-      "address": "0x03D9",
-      "line": 41
-    },
-    "0x01C5": {
-      "file": "play_sfx.asm",
-      "address": "0x01C5",
-      "line": 429
-    },
-    "0x0071": {
-      "file": "play_sfx.asm",
-      "address": "0x0071",
-      "line": 129
-    },
-    "0x0325": {
-      "file": "play_sfx.asm",
-      "address": "0x0325",
-      "line": 661
-    },
-    "0x0462": {
-      "file": "play_sfx.asm",
-      "address": "0x0462",
-      "line": 818
-    },
-    "0x03C2": {
-      "file": "play_sfx.asm",
-      "address": "0x03C2",
-      "line": 32
-    },
-    "0x056F": {
-      "file": "play_sfx.asm",
-      "address": "0x056F",
-      "line": 938
-    },
-    "0x0292": {
-      "file": "play_sfx.asm",
-      "address": "0x0292",
-      "line": 574
-    },
-    "0x06E3": {
-      "file": "play_sfx.asm",
-      "address": "0x06E3",
-      "line": 1092
-    },
-    "0x06E0": {
-      "file": "play_sfx.asm",
-      "address": "0x06E0",
-      "line": 1091
-    },
-    "0x0211": {
-      "file": "play_sfx.asm",
-      "address": "0x0211",
-      "line": 476
-    },
-    "0x06B6": {
-      "file": "play_sfx.asm",
-      "address": "0x06B6",
-      "line": 1074
-    },
-    "0x057C": {
-      "file": "play_sfx.asm",
-      "address": "0x057C",
-      "line": 944
-    },
-    "0x0690": {
-      "file": "play_sfx.asm",
-      "address": "0x0690",
-      "line": 1059
-    },
-    "0x04B9": {
-      "file": "play_sfx.asm",
-      "address": "0x04B9",
-      "line": 860
-    },
-    "0x0029": {
-      "file": "play_sfx.asm",
-      "address": "0x0029",
-      "line": 78
-    },
-    "0x04C3": {
-      "file": "play_sfx.asm",
-      "address": "0x04C3",
-      "line": 864
-    },
-    "0x03D6": {
-      "file": "play_sfx.asm",
-      "address": "0x03D6",
-      "line": 750
-    },
-    "0x032C": {
-      "file": "play_sfx.asm",
-      "address": "0x032C",
-      "line": 664
-    },
-    "0x006F": {
-      "file": "play_sfx.asm",
-      "address": "0x006F",
-      "line": 127
-    },
-    "0x0582": {
-      "file": "play_sfx.asm",
-      "address": "0x0582",
-      "line": 947
-    },
-    "0x047F": {
-      "file": "play_sfx.asm",
-      "address": "0x047F",
-      "line": 833
-    },
-    "0x0499": {
-      "file": "play_sfx.asm",
-      "address": "0x0499",
-      "line": 846
-    },
-    "0x0654": {
-      "file": "play_sfx.asm",
-      "address": "0x0654",
-      "line": 1035
-    },
-    "0x031A": {
-      "file": "play_sfx.asm",
-      "address": "0x031A",
-      "line": 655
-    },
-    "0x03DC": {
-      "file": "play_sfx.asm",
-      "address": "0x03DC",
-      "line": 755
-    },
-    "0x00D5": {
-      "file": "play_sfx.asm",
-      "address": "0x00D5",
-      "line": 226
-    },
-    "0x05EA": {
-      "file": "play_sfx.asm",
-      "address": "0x05EA",
-      "line": 989
-    },
-    "0x0501": {
-      "file": "play_sfx.asm",
-      "address": "0x0501",
-      "line": 889
-    },
-    "0x02EE": {
-      "file": "play_sfx.asm",
-      "address": "0x02EE",
-      "line": 632
-    },
-    "0x00C5": {
-      "file": "play_sfx.asm",
-      "address": "0x00C5",
-      "line": 211
-    },
-    "0x01C8": {
-      "file": "play_sfx.asm",
-      "address": "0x01C8",
-      "line": 430
-    },
-    "0x004E": {
-      "file": "play_sfx.asm",
-      "address": "0x004E",
-      "line": 106
-    },
-    "0x05E0": {
-      "file": "play_sfx.asm",
-      "address": "0x05E0",
-      "line": 985
-    },
-    "0x0764": {
-      "file": "play_sfx.asm",
-      "address": "0x0764",
-      "line": 1204
-    },
-    "0x00BD": {
-      "file": "play_sfx.asm",
-      "address": "0x00BD",
-      "line": 207
-    },
-    "0x060B": {
-      "file": "play_sfx.asm",
-      "address": "0x060B",
-      "line": 1002
-    },
-    "0x0758": {
-      "file": "play_sfx.asm",
-      "address": "0x0758",
-      "line": 1186
-    },
-    "0x055F": {
-      "file": "play_sfx.asm",
-      "address": "0x055F",
-      "line": 929
-    },
-    "0x0278": {
-      "file": "play_sfx.asm",
-      "address": "0x0278",
-      "line": 556
-    },
-    "0x023C": {
-      "file": "play_sfx.asm",
-      "address": "0x023C",
-      "line": 506
-    },
-    "0x0113": {
-      "file": "play_sfx.asm",
-      "address": "0x0113",
-      "line": 270
-    },
-    "0x023E": {
-      "file": "play_sfx.asm",
-      "address": "0x023E",
-      "line": 507
-    },
-    "0x0596": {
-      "file": "play_sfx.asm",
-      "address": "0x0596",
-      "line": 955
-    },
-    "0x0330": {
-      "file": "play_sfx.asm",
-      "address": "0x0330",
-      "line": 669
-    },
-    "0x0141": {
-      "file": "play_sfx.asm",
-      "address": "0x0141",
-      "line": 309
-    },
-    "0x026F": {
-      "file": "play_sfx.asm",
-      "address": "0x026F",
-      "line": 550
-    },
-    "0x0280": {
-      "file": "play_sfx.asm",
-      "address": "0x0280",
-      "line": 562
-    },
-    "0x0110": {
-      "file": "play_sfx.asm",
-      "address": "0x0110",
-      "line": 269
-    },
-    "0x064D": {
-      "file": "play_sfx.asm",
-      "address": "0x064D",
-      "line": 1032
-    },
-    "0x03A8": {
-      "file": "play_sfx.asm",
-      "address": "0x03A8",
-      "line": 15
-    },
-    "0x0391": {
-      "file": "play_sfx.asm",
-      "address": "0x0391",
-      "line": 714
-    },
-    "0x0626": {
-      "file": "play_sfx.asm",
-      "address": "0x0626",
-      "line": 1013
-    },
-    "0x06D9": {
-      "file": "play_sfx.asm",
-      "address": "0x06D9",
-      "line": 1088
-    },
-    "0x029C": {
-      "file": "play_sfx.asm",
-      "address": "0x029C",
-      "line": 580
-    },
-    "0x0533": {
-      "file": "play_sfx.asm",
-      "address": "0x0533",
-      "line": 909
-    },
-    "0x0407": {
-      "file": "play_sfx.asm",
-      "address": "0x0407",
-      "line": 777
-    },
-    "0x01AB": {
-      "file": "play_sfx.asm",
-      "address": "0x01AB",
-      "line": 391
-    },
-    "0x02C4": {
-      "file": "play_sfx.asm",
-      "address": "0x02C4",
-      "line": 613
-    },
-    "0x0340": {
-      "file": "play_sfx.asm",
-      "address": "0x0340",
-      "line": 676
-    },
-    "0x05C2": {
-      "file": "play_sfx.asm",
-      "address": "0x05C2",
-      "line": 973
-    },
-    "0x0608": {
-      "file": "play_sfx.asm",
-      "address": "0x0608",
-      "line": 1001
-    },
-    "0x0545": {
-      "file": "play_sfx.asm",
-      "address": "0x0545",
-      "line": 916
-    },
-    "0x035A": {
-      "file": "play_sfx.asm",
-      "address": "0x035A",
-      "line": 688
-    },
-    "0x06D4": {
-      "file": "play_sfx.asm",
-      "address": "0x06D4",
-      "line": 1086
-    },
-    "0x0769": {
-      "file": "play_sfx.asm",
-      "address": "0x0769",
-      "line": 1199
-    },
-    "0x073D": {
-      "file": "play_sfx.asm",
-      "address": "0x073D",
-      "line": 1168
-    },
-    "0x00AF": {
-      "file": "play_sfx.asm",
-      "address": "0x00AF",
-      "line": 192
-    },
-    "0x01CC": {
-      "file": "play_sfx.asm",
-      "address": "0x01CC",
-      "line": 433
-    },
-    "0x0589": {
-      "file": "play_sfx.asm",
-      "address": "0x0589",
-      "line": 950
-    },
-    "0x0149": {
-      "file": "play_sfx.asm",
-      "address": "0x0149",
-      "line": 314
-    },
-    "0x022D": {
-      "file": "play_sfx.asm",
-      "address": "0x022D",
-      "line": 497
-    },
-    "0x0646": {
-      "file": "play_sfx.asm",
-      "address": "0x0646",
-      "line": 1029
-    },
-    "0x044D": {
-      "file": "play_sfx.asm",
-      "address": "0x044D",
-      "line": 808
-    },
-    "0x002C": {
-      "file": "play_sfx.asm",
-      "address": "0x002C",
-      "line": 79
-    },
-    "0x020D": {
-      "file": "play_sfx.asm",
-      "address": "0x020D",
-      "line": 473
-    },
-    "0x01D9": {
-      "file": "play_sfx.asm",
-      "address": "0x01D9",
-      "line": 443
-    },
-    "0x01C1": {
-      "file": "play_sfx.asm",
-      "address": "0x01C1",
-      "line": 422
-    },
-    "0x073E": {
-      "file": "play_sfx.asm",
-      "address": "0x073E",
-      "line": 1169
-    },
-    "0x0738": {
-      "file": "play_sfx.asm",
-      "address": "0x0738",
-      "line": 1164
-    },
-    "0x02DD": {
-      "file": "play_sfx.asm",
-      "address": "0x02DD",
-      "line": 624
-    },
-    "0x04A5": {
-      "file": "play_sfx.asm",
-      "address": "0x04A5",
-      "line": 852
-    },
-    "0x04FF": {
-      "file": "play_sfx.asm",
-      "address": "0x04FF",
-      "line": 888
-    },
-    "0x0746": {
-      "file": "play_sfx.asm",
-      "address": "0x0746",
-      "line": 1174
-    },
-    "0x0162": {
-      "file": "play_sfx.asm",
-      "address": "0x0162",
-      "line": 333
-    },
-    "0x06F4": {
-      "file": "play_sfx.asm",
-      "address": "0x06F4",
-      "line": 1099
-    },
-    "0x0670": {
-      "file": "play_sfx.asm",
-      "address": "0x0670",
-      "line": 1046
-    },
-    "0x0190": {
-      "file": "play_sfx.asm",
-      "address": "0x0190",
-      "line": 369
-    },
-    "0x011A": {
-      "file": "play_sfx.asm",
-      "address": "0x011A",
-      "line": 278
-    },
-    "0x0419": {
-      "file": "play_sfx.asm",
-      "address": "0x0419",
-      "line": 783
-    },
-    "0x0709": {
-      "file": "play_sfx.asm",
-      "address": "0x0709",
-      "line": 1124
-    },
-    "0x0696": {
-      "file": "play_sfx.asm",
-      "address": "0x0696",
-      "line": 1061
-    },
-    "0x021B": {
-      "file": "play_sfx.asm",
-      "address": "0x021B",
-      "line": 484
-    },
-    "0x0752": {
-      "file": "play_sfx.asm",
-      "address": "0x0752",
-      "line": 1182
-    },
-    "0x00DF": {
-      "file": "play_sfx.asm",
-      "address": "0x00DF",
-      "line": 232
-    },
-    "0x0485": {
-      "file": "play_sfx.asm",
-      "address": "0x0485",
-      "line": 835
-    },
-    "0x073C": {
-      "file": "play_sfx.asm",
-      "address": "0x073C",
-      "line": 1167
-    },
-    "0x02F7": {
-      "file": "play_sfx.asm",
-      "address": "0x02F7",
-      "line": 638
-    },
-    "0x00D7": {
-      "file": "play_sfx.asm",
-      "address": "0x00D7",
-      "line": 229
-    },
-    "0x0521": {
-      "file": "play_sfx.asm",
-      "address": "0x0521",
-      "line": 902
-    },
-    "0x0197": {
-      "file": "play_sfx.asm",
-      "address": "0x0197",
-      "line": 376
-    },
-    "0x03A5": {
-      "file": "play_sfx.asm",
-      "address": "0x03A5",
-      "line": 14
-    },
-    "0x0299": {
-      "file": "play_sfx.asm",
-      "address": "0x0299",
-      "line": 579
-    },
-    "0x06AA": {
-      "file": "play_sfx.asm",
-      "address": "0x06AA",
-      "line": 1069
-    },
-    "0x04DE": {
-      "file": "play_sfx.asm",
-      "address": "0x04DE",
-      "line": 875
-    },
-    "0x074D": {
-      "file": "play_sfx.asm",
-      "address": "0x074D",
-      "line": 1179
-    },
-    "0x00E7": {
-      "file": "play_sfx.asm",
-      "address": "0x00E7",
-      "line": 235
-    },
-    "0x0053": {
-      "file": "play_sfx.asm",
-      "address": "0x0053",
-      "line": 109
-    },
-    "0x0590": {
-      "file": "play_sfx.asm",
-      "address": "0x0590",
-      "line": 953
-    },
-    "0x070F": {
-      "file": "play_sfx.asm",
-      "address": "0x070F",
-      "line": 1128
-    },
-    "0x0104": {
-      "file": "play_sfx.asm",
-      "address": "0x0104",
-      "line": 255
-    },
-    "0x01B2": {
-      "file": "play_sfx.asm",
-      "address": "0x01B2",
-      "line": 397
-    },
-    "0x054E": {
-      "file": "play_sfx.asm",
-      "address": "0x054E",
-      "line": 920
-    },
-    "0x04A2": {
-      "file": "play_sfx.asm",
-      "address": "0x04A2",
-      "line": 851
-    },
-    "0x04CD": {
-      "file": "play_sfx.asm",
-      "address": "0x04CD",
-      "line": 868
-    },
-    "0x0638": {
-      "file": "play_sfx.asm",
-      "address": "0x0638",
-      "line": 1022
-    },
-    "0x05B8": {
-      "file": "play_sfx.asm",
-      "address": "0x05B8",
-      "line": 969
-    },
-    "0x0171": {
-      "file": "play_sfx.asm",
-      "address": "0x0171",
-      "line": 344
-    },
-    "0x0293": {
-      "file": "play_sfx.asm",
-      "address": "0x0293",
-      "line": 575
-    },
-    "0x0177": {
-      "file": "play_sfx.asm",
-      "address": "0x0177",
-      "line": 350
-    },
-    "0x065E": {
-      "file": "play_sfx.asm",
-      "address": "0x065E",
-      "line": 1039
-    },
-    "0x03B3": {
-      "file": "play_sfx.asm",
-      "address": "0x03B3",
-      "line": 19
-    },
-    "0x02B5": {
-      "file": "play_sfx.asm",
-      "address": "0x02B5",
-      "line": 596
-    },
-    "0x00B2": {
-      "file": "play_sfx.asm",
-      "address": "0x00B2",
-      "line": 193
-    },
-    "0x0586": {
-      "file": "play_sfx.asm",
-      "address": "0x0586",
-      "line": 949
-    },
-    "0x052E": {
-      "file": "play_sfx.asm",
-      "address": "0x052E",
-      "line": 907
-    },
-    "0x0052": {
-      "file": "play_sfx.asm",
-      "address": "0x0052",
-      "line": 108
-    },
-    "0x010B": {
-      "file": "play_sfx.asm",
-      "address": "0x010B",
-      "line": 264
-    },
-    "0x0711": {
-      "file": "play_sfx.asm",
-      "address": "0x0711",
-      "line": 1129
-    },
-    "0x028F": {
-      "file": "play_sfx.asm",
-      "address": "0x028F",
-      "line": 573
-    },
-    "0x021D": {
-      "file": "play_sfx.asm",
-      "address": "0x021D",
-      "line": 486
-    },
-    "0x027A": {
-      "file": "play_sfx.asm",
-      "address": "0x027A",
-      "line": 557
-    },
-    "0x0131": {
-      "file": "play_sfx.asm",
-      "address": "0x0131",
-      "line": 289
-    },
-    "0x05D9": {
-      "file": "play_sfx.asm",
-      "address": "0x05D9",
-      "line": 982
-    },
-    "0x0213": {
-      "file": "play_sfx.asm",
-      "address": "0x0213",
-      "line": 479
-    },
-    "0x0382": {
-      "file": "play_sfx.asm",
-      "address": "0x0382",
-      "line": 707
-    },
-    "0x01E0": {
-      "file": "play_sfx.asm",
-      "address": "0x01E0",
-      "line": 446
-    },
-    "0x0357": {
-      "file": "play_sfx.asm",
-      "address": "0x0357",
-      "line": 687
-    },
-    "0x0410": {
-      "file": "play_sfx.asm",
-      "address": "0x0410",
-      "line": 780
-    },
-    "0x016D": {
-      "file": "play_sfx.asm",
-      "address": "0x016D",
-      "line": 342
-    },
-    "0x0636": {
-      "file": "play_sfx.asm",
-      "address": "0x0636",
-      "line": 1021
-    },
-    "0x025D": {
-      "file": "play_sfx.asm",
-      "address": "0x025D",
-      "line": 538
-    },
-    "0x0346": {
-      "file": "play_sfx.asm",
-      "address": "0x0346",
-      "line": 678
-    },
-    "0x0755": {
-      "file": "play_sfx.asm",
-      "address": "0x0755",
-      "line": 1184
-    },
-    "0x0192": {
-      "file": "play_sfx.asm",
-      "address": "0x0192",
-      "line": 372
-    },
-    "0x018B": {
-      "file": "play_sfx.asm",
-      "address": "0x018B",
-      "line": 366
-    },
-    "0x0302": {
-      "file": "play_sfx.asm",
-      "address": "0x0302",
-      "line": 643
-    },
-    "0x05BE": {
-      "file": "play_sfx.asm",
-      "address": "0x05BE",
-      "line": 971
-    },
-    "0x03E7": {
-      "file": "play_sfx.asm",
-      "address": "0x03E7",
-      "line": 760
-    },
-    "0x0228": {
-      "file": "play_sfx.asm",
-      "address": "0x0228",
-      "line": 492
-    },
-    "0x0495": {
-      "file": "play_sfx.asm",
-      "address": "0x0495",
-      "line": 844
-    },
-    "0x054C": {
-      "file": "play_sfx.asm",
-      "address": "0x054C",
-      "line": 919
-    },
-    "0x04B3": {
-      "file": "play_sfx.asm",
-      "address": "0x04B3",
-      "line": 858
-    },
-    "0x036D": {
-      "file": "play_sfx.asm",
-      "address": "0x036D",
-      "line": 699
-    },
-    "0x0401": {
-      "file": "play_sfx.asm",
-      "address": "0x0401",
-      "line": 775
-    },
-    "0x0091": {
-      "file": "play_sfx.asm",
-      "address": "0x0091",
-      "line": 152
-    },
-    "0x003E": {
-      "file": "play_sfx.asm",
-      "address": "0x003E",
-      "line": 91
-    },
-    "0x0474": {
-      "file": "play_sfx.asm",
-      "address": "0x0474",
-      "line": 825
-    },
-    "0x0360": {
-      "file": "play_sfx.asm",
-      "address": "0x0360",
-      "line": 690
-    },
-    "0x0735": {
-      "file": "play_sfx.asm",
-      "address": "0x0735",
-      "line": 1162
-    },
-    "0x0739": {
-      "file": "play_sfx.asm",
-      "address": "0x0739",
-      "line": 1165
-    },
-    "0x0427": {
-      "file": "play_sfx.asm",
-      "address": "0x0427",
-      "line": 793
-    },
-    "0x062D": {
-      "file": "play_sfx.asm",
-      "address": "0x062D",
-      "line": 1016
-    },
-    "0x051F": {
-      "file": "play_sfx.asm",
-      "address": "0x051F",
-      "line": 901
-    },
-    "0x0252": {
-      "file": "play_sfx.asm",
-      "address": "0x0252",
-      "line": 518
-    },
-    "0x032F": {
-      "file": "play_sfx.asm",
-      "address": "0x032F",
-      "line": 668
-    },
-    "0x0759": {
-      "file": "play_sfx.asm",
-      "address": "0x0759",
-      "line": 1187
-    },
-    "0x044C": {
-      "file": "play_sfx.asm",
-      "address": "0x044C",
-      "line": 807
-    },
-    "0x00E1": {
-      "file": "play_sfx.asm",
-      "address": "0x00E1",
-      "line": 233
-    },
-    "0x0684": {
-      "file": "play_sfx.asm",
-      "address": "0x0684",
-      "line": 1054
-    },
-    "0x0766": {
-      "file": "play_sfx.asm",
-      "address": "0x0766",
-      "line": 1196
-    },
-    "0x01AD": {
-      "file": "play_sfx.asm",
-      "address": "0x01AD",
-      "line": 393
-    },
-    "0x00B4": {
-      "file": "play_sfx.asm",
-      "address": "0x00B4",
-      "line": 194
-    },
-    "0x055C": {
-      "file": "play_sfx.asm",
-      "address": "0x055C",
-      "line": 928
-    },
-    "0x060E": {
-      "file": "play_sfx.asm",
-      "address": "0x060E",
-      "line": 1003
-    },
-    "0x0173": {
-      "file": "play_sfx.asm",
-      "address": "0x0173",
-      "line": 348
-    },
-    "0x0073": {
-      "file": "play_sfx.asm",
-      "address": "0x0073",
-      "line": 130
-    },
-    "0x0675": {
-      "file": "play_sfx.asm",
-      "address": "0x0675",
-      "line": 1048
-    },
-    "0x0779": {
-      "file": "play_sfx.asm",
-      "address": "0x0779",
-      "line": 1211
-    },
-    "0x013A": {
-      "file": "play_sfx.asm",
-      "address": "0x013A",
-      "line": 293
-    },
-    "0x0668": {
-      "file": "play_sfx.asm",
-      "address": "0x0668",
-      "line": 1043
-    },
-    "0x00DC": {
-      "file": "play_sfx.asm",
-      "address": "0x00DC",
-      "line": 231
-    },
-    "0x063F": {
-      "file": "play_sfx.asm",
-      "address": "0x063F",
-      "line": 1025
-    },
-    "0x074C": {
-      "file": "play_sfx.asm",
-      "address": "0x074C",
-      "line": 1178
-    },
-    "0x06CC": {
-      "file": "play_sfx.asm",
-      "address": "0x06CC",
-      "line": 1083
-    },
-    "0x05B6": {
-      "file": "play_sfx.asm",
-      "address": "0x05B6",
-      "line": 968
-    },
-    "0x017E": {
-      "file": "play_sfx.asm",
-      "address": "0x017E",
-      "line": 360
-    },
-    "0x007F": {
-      "file": "play_sfx.asm",
-      "address": "0x007F",
-      "line": 138
-    },
-    "0x01E5": {
-      "file": "play_sfx.asm",
-      "address": "0x01E5",
-      "line": 448
-    },
-    "0x029E": {
-      "file": "play_sfx.asm",
-      "address": "0x029E",
-      "line": 586
-    },
-    "0x0448": {
-      "file": "play_sfx.asm",
-      "address": "0x0448",
-      "line": 805
-    },
-    "0x050D": {
-      "file": "play_sfx.asm",
-      "address": "0x050D",
-      "line": 894
-    },
-    "0x053B": {
-      "file": "play_sfx.asm",
-      "address": "0x053B",
-      "line": 912
-    },
-    "0x015A": {
-      "file": "play_sfx.asm",
-      "address": "0x015A",
-      "line": 326
-    },
-    "0x04CF": {
-      "file": "play_sfx.asm",
-      "address": "0x04CF",
-      "line": 869
-    },
-    "0x0706": {
-      "file": "play_sfx.asm",
-      "address": "0x0706",
-      "line": 1123
-    },
-    "0x00CF": {
-      "file": "play_sfx.asm",
-      "address": "0x00CF",
-      "line": 220
-    },
-    "0x06BB": {
-      "file": "play_sfx.asm",
-      "address": "0x06BB",
-      "line": 1076
-    },
-    "0x03BF": {
-      "file": "play_sfx.asm",
-      "address": "0x03BF",
-      "line": 740
-    },
-    "0x00B8": {
-      "file": "play_sfx.asm",
-      "address": "0x00B8",
-      "line": 205
-    },
-    "0x01D8": {
-      "file": "play_sfx.asm",
-      "address": "0x01D8",
-      "line": 441
-    },
-    "0x0678": {
-      "file": "play_sfx.asm",
-      "address": "0x0678",
-      "line": 1049
-    },
-    "0x070E": {
-      "file": "play_sfx.asm",
-      "address": "0x070E",
-      "line": 1127
-    },
-    "0x048F": {
-      "file": "play_sfx.asm",
-      "address": "0x048F",
-      "line": 841
-    },
-    "0x01CE": {
-      "file": "play_sfx.asm",
-      "address": "0x01CE",
-      "line": 434
-    },
-    "0x031E": {
-      "file": "play_sfx.asm",
-      "address": "0x031E",
-      "line": 657
-    },
-    "0x05CA": {
-      "file": "play_sfx.asm",
-      "address": "0x05CA",
-      "line": 976
-    },
-    "0x0059": {
-      "file": "play_sfx.asm",
-      "address": "0x0059",
-      "line": 113
-    },
-    "0x03F8": {
-      "file": "play_sfx.asm",
-      "address": "0x03F8",
-      "line": 52
-    },
-    "0x0468": {
-      "file": "play_sfx.asm",
-      "address": "0x0468",
-      "line": 820
-    },
-    "0x0420": {
-      "file": "play_sfx.asm",
-      "address": "0x0420",
-      "line": 787
-    },
-    "0x014C": {
-      "file": "play_sfx.asm",
-      "address": "0x014C",
-      "line": 316
-    },
-    "0x0058": {
-      "file": "play_sfx.asm",
-      "address": "0x0058",
-      "line": 112
-    },
-    "0x05AA": {
-      "file": "play_sfx.asm",
-      "address": "0x05AA",
-      "line": 963
-    },
-    "0x0379": {
-      "file": "play_sfx.asm",
-      "address": "0x0379",
-      "line": 704
-    },
-    "0x04BB": {
-      "file": "play_sfx.asm",
-      "address": "0x04BB",
-      "line": 861
-    },
-    "0x0189": {
-      "file": "play_sfx.asm",
-      "address": "0x0189",
-      "line": 365
-    },
-    "0x0370": {
-      "file": "play_sfx.asm",
-      "address": "0x0370",
-      "line": 700
-    },
-    "0x0482": {
-      "file": "play_sfx.asm",
-      "address": "0x0482",
-      "line": 834
-    },
-    "0x01EC": {
-      "file": "play_sfx.asm",
-      "address": "0x01EC",
-      "line": 452
-    },
-    "0x012A": {
-      "file": "play_sfx.asm",
-      "address": "0x012A",
-      "line": 286
-    },
-    "0x00A8": {
-      "file": "play_sfx.asm",
-      "address": "0x00A8",
-      "line": 160
-    },
-    "0x02A6": {
-      "file": "play_sfx.asm",
-      "address": "0x02A6",
-      "line": 589
-    },
-    "0x0724": {
-      "file": "play_sfx.asm",
-      "address": "0x0724",
-      "line": 1152
-    },
-    "0x0209": {
-      "file": "play_sfx.asm",
-      "address": "0x0209",
-      "line": 471
-    },
-    "0x0060": {
-      "file": "play_sfx.asm",
-      "address": "0x0060",
-      "line": 117
-    },
-    "0x01F4": {
-      "file": "play_sfx.asm",
-      "address": "0x01F4",
-      "line": 457
-    },
-    "0x062B": {
-      "file": "play_sfx.asm",
-      "address": "0x062B",
-      "line": 1015
-    },
-    "0x05CC": {
-      "file": "play_sfx.asm",
-      "address": "0x05CC",
-      "line": 977
-    },
-    "0x0250": {
-      "file": "play_sfx.asm",
-      "address": "0x0250",
-      "line": 517
-    },
-    "0x0714": {
-      "file": "play_sfx.asm",
-      "address": "0x0714",
-      "line": 1131
-    },
-    "0x0125": {
-      "file": "play_sfx.asm",
-      "address": "0x0125",
-      "line": 284
-    },
-    "0x0629": {
-      "file": "play_sfx.asm",
-      "address": "0x0629",
-      "line": 1014
-    },
-    "0x067A": {
-      "file": "play_sfx.asm",
-      "address": "0x067A",
-      "line": 1050
-    },
-    "0x0265": {
-      "file": "play_sfx.asm",
-      "address": "0x0265",
-      "line": 544
-    },
-    "0x067C": {
-      "file": "play_sfx.asm",
-      "address": "0x067C",
-      "line": 1051
-    },
-    "0x0313": {
-      "file": "play_sfx.asm",
-      "address": "0x0313",
-      "line": 652
-    },
-    "0x001E": {
-      "file": "play_sfx.asm",
-      "address": "0x001E",
-      "line": 74
-    },
-    "0x012C": {
-      "file": "play_sfx.asm",
-      "address": "0x012C",
-      "line": 287
-    },
-    "0x03D1": {
-      "file": "play_sfx.asm",
-      "address": "0x03D1",
-      "line": 748
-    },
-    "0x05A4": {
-      "file": "play_sfx.asm",
-      "address": "0x05A4",
-      "line": 961
-    },
-    "0x05E3": {
-      "file": "play_sfx.asm",
-      "address": "0x05E3",
-      "line": 986
-    },
-    "0x0051": {
-      "file": "play_sfx.asm",
-      "address": "0x0051",
-      "line": 107
-    },
-    "0x046E": {
-      "file": "play_sfx.asm",
-      "address": "0x046E",
-      "line": 822
-    },
-    "0x073A": {
-      "file": "play_sfx.asm",
-      "address": "0x073A",
-      "line": 1166
-    },
-    "0x02CA": {
-      "file": "play_sfx.asm",
-      "address": "0x02CA",
-      "line": 615
-    },
-    "0x0241": {
-      "file": "play_sfx.asm",
-      "address": "0x0241",
-      "line": 508
-    },
-    "0x015F": {
-      "file": "play_sfx.asm",
-      "address": "0x015F",
-      "line": 331
-    },
-    "0x075A": {
-      "file": "play_sfx.asm",
-      "address": "0x075A",
-      "line": 1188
-    },
-    "0x027F": {
-      "file": "play_sfx.asm",
-      "address": "0x027F",
-      "line": 559
-    },
-    "0x034D": {
-      "file": "play_sfx.asm",
-      "address": "0x034D",
-      "line": 682
-    },
-    "0x0742": {
-      "file": "play_sfx.asm",
-      "address": "0x0742",
-      "line": 1172
-    },
-    "0x04EB": {
-      "file": "play_sfx.asm",
-      "address": "0x04EB",
-      "line": 880
-    },
-    "0x0584": {
-      "file": "play_sfx.asm",
-      "address": "0x0584",
-      "line": 948
-    },
-    "0x0215": {
-      "file": "play_sfx.asm",
-      "address": "0x0215",
-      "line": 481
-    },
-    "0x01BB": {
-      "file": "play_sfx.asm",
-      "address": "0x01BB",
-      "line": 416
-    },
-    "0x00A2": {
-      "file": "play_sfx.asm",
-      "address": "0x00A2",
-      "line": 158
-    },
-    "0x0593": {
-      "file": "play_sfx.asm",
-      "address": "0x0593",
-      "line": 954
-    },
-    "0x052B": {
-      "file": "play_sfx.asm",
-      "address": "0x052B",
-      "line": 906
-    },
-    "0x024D": {
-      "file": "play_sfx.asm",
-      "address": "0x024D",
-      "line": 515
-    },
-    "0x02CD": {
-      "file": "play_sfx.asm",
-      "address": "0x02CD",
-      "line": 616
-    },
-    "0x0237": {
-      "file": "play_sfx.asm",
-      "address": "0x0237",
-      "line": 502
-    },
-    "0x0306": {
-      "file": "play_sfx.asm",
-      "address": "0x0306",
-      "line": 646
-    },
-    "0x0225": {
-      "file": "play_sfx.asm",
-      "address": "0x0225",
-      "line": 491
-    },
-    "0x01CA": {
-      "file": "play_sfx.asm",
-      "address": "0x01CA",
-      "line": 431
-    },
-    "0x05C5": {
-      "file": "play_sfx.asm",
-      "address": "0x05C5",
-      "line": 974
-    },
-    "0x0165": {
-      "file": "play_sfx.asm",
-      "address": "0x0165",
-      "line": 334
-    },
-    "0x04C0": {
-      "file": "play_sfx.asm",
-      "address": "0x04C0",
-      "line": 863
-    },
-    "0x05D6": {
-      "file": "play_sfx.asm",
-      "address": "0x05D6",
-      "line": 981
-    },
-    "0x016E": {
-      "file": "play_sfx.asm",
-      "address": "0x016E",
-      "line": 343
-    },
-    "0x041F": {
-      "file": "play_sfx.asm",
-      "address": "0x041F",
-      "line": 66
-    },
-    "0x0036": {
-      "file": "play_sfx.asm",
-      "address": "0x0036",
-      "line": 88
-    },
-    "0x017A": {
-      "file": "play_sfx.asm",
-      "address": "0x017A",
-      "line": 351
-    },
-    "0x0281": {
-      "file": "play_sfx.asm",
-      "address": "0x0281",
-      "line": 563
-    },
-    "0x048C": {
-      "file": "play_sfx.asm",
-      "address": "0x048C",
-      "line": 840
-    },
-    "0x01FB": {
-      "file": "play_sfx.asm",
-      "address": "0x01FB",
-      "line": 461
-    },
-    "0x068C": {
-      "file": "play_sfx.asm",
-      "address": "0x068C",
-      "line": 1057
-    },
-    "0x0394": {
-      "file": "play_sfx.asm",
-      "address": "0x0394",
-      "line": 715
-    },
-    "0x059D": {
-      "file": "play_sfx.asm",
-      "address": "0x059D",
-      "line": 958
-    },
-    "0x0465": {
-      "file": "play_sfx.asm",
-      "address": "0x0465",
-      "line": 819
-    },
-    "0x0579": {
-      "file": "play_sfx.asm",
-      "address": "0x0579",
-      "line": 942
-    },
-    "0x0729": {
-      "file": "play_sfx.asm",
-      "address": "0x0729",
-      "line": 1155
-    },
-    "0x00A5": {
-      "file": "play_sfx.asm",
-      "address": "0x00A5",
-      "line": 159
-    },
-    "0x03EF": {
-      "file": "play_sfx.asm",
-      "address": "0x03EF",
-      "line": 49
-    },
-    "0x0720": {
-      "file": "play_sfx.asm",
-      "address": "0x0720",
-      "line": 1138
-    },
-    "0x002F": {
-      "file": "play_sfx.asm",
-      "address": "0x002F",
-      "line": 80
-    },
-    "0x01B6": {
-      "file": "play_sfx.asm",
-      "address": "0x01B6",
-      "line": 414
-    },
-    "0x05AE": {
-      "file": "play_sfx.asm",
-      "address": "0x05AE",
-      "line": 965
-    },
-    "0x0728": {
-      "file": "play_sfx.asm",
-      "address": "0x0728",
-      "line": 1154
-    },
-    "0x0510": {
-      "file": "play_sfx.asm",
-      "address": "0x0510",
-      "line": 895
-    },
-    "0x0080": {
-      "file": "play_sfx.asm",
-      "address": "0x0080",
-      "line": 139
-    },
-    "0x0716": {
-      "file": "play_sfx.asm",
-      "address": "0x0716",
-      "line": 1133
-    },
-    "0x00AC": {
-      "file": "play_sfx.asm",
-      "address": "0x00AC",
-      "line": 191
-    },
-    "0x04CA": {
-      "file": "play_sfx.asm",
-      "address": "0x04CA",
-      "line": 867
-    },
-    "0x0489": {
-      "file": "play_sfx.asm",
-      "address": "0x0489",
-      "line": 839
-    },
-    "0x0439": {
-      "file": "play_sfx.asm",
-      "address": "0x0439",
-      "line": 799
-    },
-    "0x01BF": {
-      "file": "play_sfx.asm",
-      "address": "0x01BF",
-      "line": 421
-    },
-    "0x05F4": {
-      "file": "play_sfx.asm",
-      "address": "0x05F4",
-      "line": 993
-    },
-    "0x05FE": {
-      "file": "play_sfx.asm",
-      "address": "0x05FE",
-      "line": 997
-    },
-    "0x046B": {
-      "file": "play_sfx.asm",
-      "address": "0x046B",
-      "line": 821
-    },
-    "0x01D0": {
-      "file": "play_sfx.asm",
-      "address": "0x01D0",
-      "line": 435
-    },
-    "0x049F": {
-      "file": "play_sfx.asm",
-      "address": "0x049F",
-      "line": 849
-    },
-    "0x02BA": {
-      "file": "play_sfx.asm",
-      "address": "0x02BA",
-      "line": 598
-    },
-    "0x01BC": {
-      "file": "play_sfx.asm",
-      "address": "0x01BC",
-      "line": 420
-    },
-    "0x074E": {
-      "file": "play_sfx.asm",
-      "address": "0x074E",
-      "line": 1180
-    },
-    "0x0321": {
-      "file": "play_sfx.asm",
-      "address": "0x0321",
-      "line": 659
-    },
-    "0x024A": {
-      "file": "play_sfx.asm",
-      "address": "0x024A",
-      "line": 513
-    },
-    "0x034A": {
-      "file": "play_sfx.asm",
-      "address": "0x034A",
-      "line": 681
-    },
-    "0x01CB": {
-      "file": "play_sfx.asm",
-      "address": "0x01CB",
-      "line": 432
-    }
-  },
-  "functions": {},
   "nativeCalls": {
-    "13": "VECTREX_PRINT_TEXT",
-    "14": "VECTREX_PRINT_TEXT",
-    "12": "VECTREX_PRINT_TEXT",
-    "16": "J1_BUTTON_1",
-    "20": "J1_BUTTON_2"
+    "14": "PRINT_TEXT",
+    "15": "PRINT_TEXT",
+    "16": "PRINT_TEXT",
+    "19": "PLAY_SFX",
+    "23": "PLAY_SFX"
   },
-  "asmFunctions": {
-    "VECTREX_PRINT_TEXT": {
-      "name": "VECTREX_PRINT_TEXT",
-      "file": "play_sfx.asm",
-      "startLine": 145,
-      "endLine": 160,
-      "type": "native"
-    }
-  },
-  "asmAddressMap": {
-    "643": "0x0302",
-    "941": "0x0576",
-    "283": "0x0123",
-    "1043": "0x0668",
-    "862": "0x04BD",
-    "969": "0x05B8",
-    "557": "0x027A",
-    "316": "0x014C",
-    "48": "0x03EC",
-    "293": "0x013A",
-    "1045": "0x066E",
-    "136": "0x007B",
-    "689": "0x035D",
-    "1087": "0x06D6",
-    "846": "0x0499",
-    "343": "0x016E",
-    "1199": "0x0769",
-    "724": "0x03A8",
-    "799": "0x0439",
-    "815": "0x0459",
-    "282": "0x0121",
-    "117": "0x0060",
-    "122": "0x0067",
-    "6": "0x039C",
-    "210": "0x00C2",
-    "1197": "0x0767",
-    "613": "0x02C4",
-    "277": "0x0117",
-    "1006": "0x0615",
-    "362": "0x0182",
-    "544": "0x0265",
-    "1156": "0x072A",
-    "1177": "0x074A",
-    "1181": "0x0750",
-    "245": "0x00FB",
-    "918": "0x0549",
-    "782": "0x0416",
-    "317": "0x014F",
-    "1149": "0x0720",
-    "1164": "0x0738",
-    "447": "0x01E3",
-    "235": "0x00E7",
-    "1191": "0x0760",
-    "1155": "0x0729",
-    "835": "0x0485",
-    "845": "0x0497",
-    "540": "0x025F",
-    "449": "0x01E7",
-    "803": "0x0445",
-    "866": "0x04C7",
-    "1064": "0x069D",
-    "946": "0x057F",
-    "31": "0x03BF",
-    "1063": "0x069A",
-    "700": "0x0370",
-    "60": "0x0410",
-    "1092": "0x06E3",
-    "512": "0x0248",
-    "238": "0x00EF",
-    "237": "0x00EC",
-    "537": "0x025A",
-    "88": "0x0036",
-    "334": "0x0165",
-    "1059": "0x0690",
-    "95": "0x0048",
-    "914": "0x053F",
-    "1057": "0x068C",
-    "1040": "0x0661",
-    "1042": "0x0666",
-    "127": "0x006F",
-    "113": "0x0059",
-    "1039": "0x065E",
-    "878": "0x04E5",
-    "920": "0x054E",
-    "547": "0x026B",
-    "641": "0x02FE",
-    "453": "0x01EE",
-    "224": "0x00D1",
-    "441": "0x01D8",
-    "421": "0x01BF",
-    "860": "0x04B9",
-    "792": "0x0424",
-    "1081": "0x06C8",
-    "206": "0x00BA",
-    "354": "0x017C",
-    "1211": "0x0779",
-    "907": "0x052E",
-    "191": "0x00AC",
-    "1117": "0x06FB",
-    "391": "0x01AB",
-    "772": "0x03F8",
-    "598": "0x02BA",
-    "333": "0x0162",
-    "702": "0x0376",
-    "91": "0x003E",
-    "1131": "0x0714",
-    "214": "0x00C7",
-    "621": "0x02D7",
-    "574": "0x0292",
-    "675": "0x033D",
-    "664": "0x032C",
-    "230": "0x00DA",
-    "774": "0x03FE",
-    "263": "0x0109",
-    "1034": "0x0652",
-    "367": "0x018C",
-    "576": "0x0294",
-    "430": "0x01C8",
-    "142": "0x0085",
-    "874": "0x04DB",
-    "241": "0x00F4",
-    "382": "0x01A1",
-    "1035": "0x0654",
-    "630": "0x02EA",
-    "44": "0x03E1",
-    "628": "0x02E7",
-    "335": "0x0166",
-    "90": "0x003B",
-    "745": "0x03CA",
-    "497": "0x022D",
-    "50": "0x03F2",
-    "433": "0x01CC",
-    "40": "0x03D6",
-    "386": "0x01A6",
-    "17": "0x03AD",
-    "1051": "0x067C",
-    "601": "0x02C1",
-    "899": "0x051A",
-    "1001": "0x0608",
-    "486": "0x021D",
-    "655": "0x031A",
-    "445": "0x01DE",
-    "123": "0x0068",
-    "855": "0x04AC",
-    "234": "0x00E4",
-    "904": "0x0527",
-    "715": "0x0394",
-    "517": "0x0250",
-    "119": "0x0062",
-    "1077": "0x06BE",
-    "414": "0x01B6",
-    "1099": "0x06F4",
-    "1183": "0x0754",
-    "997": "0x05FE",
-    "720": "0x039E",
-    "318": "0x0150",
-    "373": "0x0195",
-    "30": "0x03BC",
-    "457": "0x01F4",
-    "731": "0x03B9",
-    "989": "0x05EA",
-    "506": "0x023C",
-    "79": "0x002C",
-    "859": "0x04B6",
-    "747": "0x03CF",
-    "1129": "0x0711",
-    "150": "0x008C",
-    "541": "0x0262",
-    "482": "0x0217",
-    "270": "0x0113",
-    "781": "0x0413",
-    "139": "0x0080",
-    "496": "0x022A",
-    "913": "0x053D",
-    "468": "0x0204",
-    "140": "0x0082",
-    "793": "0x0427",
-    "672": "0x0339",
-    "1182": "0x0752",
-    "674": "0x033A",
-    "443": "0x01D9",
-    "966": "0x05B1",
-    "947": "0x0582",
-    "1024": "0x063D",
-    "881": "0x04ED",
-    "952": "0x058E",
-    "563": "0x0281",
-    "776": "0x0404",
-    "652": "0x0313",
-    "1075": "0x06B8",
-    "1056": "0x0689",
-    "332": "0x0161",
-    "1123": "0x0706",
-    "1120": "0x0700",
-    "766": "0x03EF",
-    "543": "0x0264",
-    "1038": "0x065C",
-    "695": "0x0364",
-    "342": "0x016D",
-    "331": "0x015F",
-    "548": "0x026C",
-    "1187": "0x0759",
-    "948": "0x0584",
-    "1134": "0x0718",
-    "1207": "0x076E",
-    "996": "0x05FC",
-    "813": "0x0453",
-    "130": "0x0073",
-    "1012": "0x0624",
-    "915": "0x0542",
-    "1174": "0x0746",
-    "292": "0x0138",
-    "106": "0x004E",
-    "507": "0x023E",
-    "696": "0x0367",
-    "481": "0x0215",
-    "18": "0x03B0",
-    "896": "0x0513",
-    "15": "0x03A8",
-    "901": "0x051F",
-    "1167": "0x073C",
-    "349": "0x0174",
-    "709": "0x0385",
-    "564": "0x0283",
-    "474": "0x020E",
-    "1176": "0x0749",
-    "444": "0x01DB",
-    "816": "0x045C",
-    "906": "0x052B",
-    "415": "0x01B8",
-    "950": "0x0589",
-    "1050": "0x067A",
-    "429": "0x01C5",
-    "559": "0x027F",
-    "1138": "0x0720",
-    "288": "0x012E",
-    "620": "0x02D4",
-    "856": "0x04AF",
-    "1094": "0x06E8",
-    "858": "0x04B3",
-    "786": "0x041F",
-    "971": "0x05BE",
-    "1173": "0x0744",
-    "455": "0x01F0",
-    "89": "0x0038",
-    "687": "0x0357",
-    "843": "0x0492",
-    "49": "0x03EF",
-    "968": "0x05B6",
-    "542": "0x0263",
-    "850": "0x04A0",
-    "883": "0x04F2",
-    "78": "0x0029",
-    "730": "0x03B6",
-    "632": "0x02EE",
-    "573": "0x028F",
-    "1118": "0x06FD",
-    "992": "0x05F2",
-    "244": "0x00F9",
-    "220": "0x00CF",
-    "849": "0x049F",
-    "42": "0x03DC",
-    "12": "0x03A0",
-    "62": "0x0416",
-    "53": "0x03FB",
-    "1041": "0x0664",
-    "590": "0x02A8",
-    "159": "0x00A5",
-    "817": "0x045F",
-    "780": "0x0410",
-    "1015": "0x062B",
-    "479": "0x0213",
-    "128": "0x0070",
-    "1054": "0x0684",
-    "863": "0x04C0",
-    "368": "0x018E",
-    "990": "0x05ED",
-    "1196": "0x0766",
-    "1170": "0x0740",
-    "393": "0x01AD",
-    "1030": "0x0648",
-    "361": "0x0180",
-    "721": "0x03A0",
-    "432": "0x01CB",
-    "280": "0x011D",
-    "454": "0x01EF",
-    "756": "0x03DE",
-    "1185": "0x0756",
-    "597": "0x02B8",
-    "116": "0x005D",
-    "994": "0x05F7",
-    "63": "0x0419",
-    "1037": "0x065A",
-    "1021": "0x0636",
-    "1194": "0x0763",
-    "794": "0x042A",
-    "638": "0x02F7",
-    "518": "0x0252",
-    "152": "0x0091",
-    "983": "0x05DC",
-    "877": "0x04E3",
-    "1158": "0x072F",
-    "160": "0x00A8",
-    "618": "0x02D0",
-    "600": "0x02BE",
-    "1159": "0x0730",
-    "867": "0x04CA",
-    "670": "0x0333",
-    "884": "0x04F5",
-    "795": "0x042D",
-    "1130": "0x0712",
-    "390": "0x01A8",
-    "340": "0x0169",
-    "927": "0x0559",
-    "1062": "0x0698",
-    "487": "0x0220",
-    "515": "0x024D",
-    "642": "0x0301",
-    "963": "0x05AA",
-    "1023": "0x063A",
-    "1189": "0x075C",
-    "820": "0x0468",
-    "631": "0x02EB",
-    "462": "0x01FD",
-    "886": "0x04F9",
-    "1122": "0x0703",
-    "694": "0x0361",
-    "416": "0x01BB",
-    "1007": "0x0618",
-    "1052": "0x067F",
-    "13": "0x03A3",
-    "284": "0x0125",
-    "1066": "0x06A2",
-    "944": "0x057C",
-    "1004": "0x0610",
-    "16": "0x03AB",
-    "226": "0x00D5",
-    "360": "0x017E",
-    "1078": "0x06C0",
-    "650": "0x0310",
-    "380": "0x019C",
-    "1091": "0x06E0",
-    "157": "0x00A0",
-    "1072": "0x06B1",
-    "1162": "0x0735",
-    "469": "0x0207",
-    "231": "0x00DC",
-    "645": "0x0305",
-    "434": "0x01CE",
-    "158": "0x00A2",
-    "77": "0x0026",
-    "688": "0x035A",
-    "1071": "0x06AE",
-    "707": "0x0382",
-    "452": "0x01EC",
-    "1027": "0x0641",
-    "832": "0x047C",
-    "981": "0x05D6",
-    "96": "0x0049",
-    "1139": "0x0721",
-    "1016": "0x062D",
-    "825": "0x0474",
-    "903": "0x0524",
-    "431": "0x01CA",
-    "499": "0x0231",
-    "800": "0x043C",
-    "132": "0x0076",
-    "1025": "0x063F",
-    "439": "0x01D5",
-    "962": "0x05A7",
-    "38": "0x03D1",
-    "653": "0x0314",
-    "281": "0x011F",
-    "987": "0x05E6",
-    "193": "0x00B2",
-    "889": "0x0501",
-    "1011": "0x0622",
-    "97": "0x004A",
-    "729": "0x03B3",
-    "839": "0x0489",
-    "646": "0x0306",
-    "742": "0x03C2",
-    "787": "0x0420",
-    "714": "0x0391",
-    "1148": "0x071E",
-    "1150": "0x0721",
-    "934": "0x0566",
-    "743": "0x03C5",
-    "677": "0x0343",
-    "942": "0x0579",
-    "1186": "0x0758",
-    "290": "0x0133",
-    "1044": "0x066B",
-    "305": "0x013D",
-    "94": "0x0047",
-    "217": "0x00CC",
-    "939": "0x0572",
-    "864": "0x04C3",
-    "565": "0x0284",
-    "34": "0x03C7",
-    "1029": "0x0646",
-    "1000": "0x0606",
-    "258": "0x0107",
-    "377": "0x019A",
-    "33": "0x03C5",
-    "911": "0x0538",
-    "993": "0x05F4",
-    "440": "0x01D6",
-    "291": "0x0135",
-    "208": "0x00C0",
-    "1010": "0x061F",
-    "211": "0x00C5",
-    "81": "0x0030",
-    "74": "0x001E",
-    "498": "0x022F",
-    "834": "0x0482",
-    "773": "0x03FB",
-    "870": "0x04D1",
-    "972": "0x05C0",
-    "929": "0x055F",
-    "11": "0x039E",
-    "902": "0x0521",
-    "1085": "0x06D2",
-    "928": "0x055C",
-    "930": "0x0562",
-    "505": "0x023B",
-    "1152": "0x0724",
-    "1125": "0x070B",
-    "1157": "0x072C",
-    "422": "0x01C1",
-    "472": "0x020A",
-    "501": "0x0234",
-    "783": "0x0419",
-    "19": "0x03B3",
-    "577": "0x0295",
-    "562": "0x0280",
-    "57": "0x0407",
-    "341": "0x016B",
-    "232": "0x00DF",
-    "627": "0x02E4",
-    "229": "0x00D7",
-    "746": "0x03CC",
-    "757": "0x03E1",
-    "1067": "0x06A4",
-    "649": "0x030F",
-    "1005": "0x0612",
-    "1128": "0x070F",
-    "458": "0x01F6",
-    "446": "0x01E0",
-    "955": "0x0596",
-    "1033": "0x0650",
-    "748": "0x03D1",
-    "905": "0x0529",
-    "413": "0x01B3",
-    "314": "0x0149",
-    "1093": "0x06E6",
-    "1084": "0x06CF",
-    "555": "0x0276",
-    "768": "0x03F5",
-    "285": "0x0127",
-    "55": "0x0401",
-    "943": "0x057B",
-    "612": "0x02C3",
-    "480": "0x0214",
-    "376": "0x0197",
-    "938": "0x056F",
-    "798": "0x0436",
-    "659": "0x0321",
-    "827": "0x0478",
-    "252": "0x0102",
-    "80": "0x002F",
-    "556": "0x0278",
-    "363": "0x0184",
-    "491": "0x0225",
-    "732": "0x03BC",
-    "880": "0x04EB",
-    "1058": "0x068E",
-    "107": "0x0051",
-    "958": "0x059D",
-    "788": "0x0421",
-    "552": "0x0273",
-    "765": "0x03EC",
-    "838": "0x0488",
-    "895": "0x0510",
-    "348": "0x0173",
-    "1179": "0x074D",
-    "814": "0x0456",
-    "750": "0x03D6",
-    "956": "0x0598",
-    "669": "0x0330",
-    "740": "0x03BF",
-    "43": "0x03DE",
-    "1032": "0x064D",
-    "1008": "0x061A",
-    "661": "0x0325",
-    "861": "0x04BB",
-    "242": "0x00F6",
-    "614": "0x02C7",
-    "321": "0x0151",
-    "46": "0x03E7",
-    "725": "0x03AB",
-    "1036": "0x0657",
-    "66": "0x041F",
-    "818": "0x0462",
-    "315": "0x014B",
-    "640": "0x02FB",
-    "1055": "0x0686",
-    "940": "0x0574",
-    "710": "0x0388",
-    "82": "0x0031",
-    "853": "0x04A7",
-    "207": "0x00BD",
-    "47": "0x03EA",
-    "917": "0x0547",
-    "1188": "0x075A",
-    "76": "0x0023",
-    "690": "0x0360",
-    "32": "0x03C2",
-    "775": "0x0401",
-    "110": "0x0055",
-    "995": "0x05FA",
-    "255": "0x0104",
-    "900": "0x051D",
-    "882": "0x04EF",
-    "778": "0x040A",
-    "1126": "0x070C",
-    "812": "0x0450",
-    "289": "0x0131",
-    "701": "0x0373",
-    "716": "0x0397",
-    "364": "0x0187",
-    "488": "0x0222",
-    "1178": "0x074C",
-    "785": "0x041C",
-    "965": "0x05AE",
-    "588": "0x02A3",
-    "648": "0x030C",
-    "823": "0x0471",
-    "951": "0x058C",
-    "37": "0x03CF",
-    "149": "0x008A",
-    "711": "0x038B",
-    "705": "0x037C",
-    "1193": "0x0762",
-    "1127": "0x070E",
-    "873": "0x04D9",
-    "879": "0x04E8",
-    "671": "0x0336",
-    "138": "0x007F",
-    "656": "0x031D",
-    "369": "0x0190",
-    "520": "0x0255",
-    "513": "0x024A",
-    "957": "0x059A",
-    "1096": "0x06ED",
-    "840": "0x048C",
-    "586": "0x029E",
-    "1210": "0x0778",
-    "1065": "0x06A0",
-    "326": "0x015A",
-    "133": "0x0077",
-    "118": "0x0061",
-    "647": "0x0309",
-    "964": "0x05AC",
-    "633": "0x02F1",
-    "1028": "0x0643",
-    "365": "0x0189",
-    "979": "0x05D2",
-    "719": "0x039C",
-    "93": "0x0044",
-    "828": "0x0479",
-    "1119": "0x06FE",
-    "622": "0x02DA",
-    "266": "0x010E",
-    "558": "0x027D",
-    "808": "0x044D",
-    "233": "0x00E1",
-    "686": "0x0354",
-    "1153": "0x0726",
-    "1074": "0x06B6",
-    "287": "0x012C",
-    "1163": "0x0736",
-    "619": "0x02D1",
-    "626": "0x02E1",
-    "751": "0x03D9",
-    "75": "0x0020",
-    "351": "0x017A",
-    "1083": "0x06CC",
-    "492": "0x0228",
-    "959": "0x05A0",
-    "1169": "0x073E",
-    "847": "0x049C",
-    "912": "0x053B",
-    "599": "0x02BB",
-    "1013": "0x0626",
-    "508": "0x0241",
-    "1031": "0x064A",
-    "264": "0x010B",
-    "848": "0x049E",
-    "872": "0x04D7",
-    "991": "0x05F0",
-    "960": "0x05A2",
-    "868": "0x04CD",
-    "974": "0x05C5",
-    "916": "0x0545",
-    "1049": "0x0678",
-    "844": "0x0495",
-    "484": "0x021B",
-    "681": "0x034A",
-    "538": "0x025D",
-    "225": "0x00D3",
-    "676": "0x0340",
-    "192": "0x00AF",
-    "970": "0x05BB",
-    "898": "0x0517",
-    "154": "0x0097",
-    "897": "0x0515",
-    "1061": "0x0696",
-    "126": "0x006C",
-    "885": "0x04F7",
-    "723": "0x03A5",
-    "14": "0x03A5",
-    "1076": "0x06BB",
-    "998": "0x0601",
-    "1151": "0x0722",
-    "894": "0x050D",
-    "985": "0x05E0",
-    "826": "0x0477",
-    "851": "0x04A2",
-    "366": "0x018B",
-    "909": "0x0533",
-    "1090": "0x06DE",
-    "999": "0x0604",
-    "448": "0x01E5",
-    "236": "0x00EA",
-    "1022": "0x0638",
-    "1026": "0x0640",
-    "728": "0x03B0",
-    "982": "0x05D9",
-    "662": "0x0328",
-    "1165": "0x0739",
-    "1088": "0x06D9",
-    "833": "0x047F",
-    "684": "0x0353",
-    "246": "0x00FD",
-    "424": "0x01C4",
-    "639": "0x02F8",
-    "327": "0x015D",
-    "1098": "0x06F1",
-    "683": "0x0350",
-    "1175": "0x0748",
-    "1009": "0x061C",
-    "1136": "0x071B",
-    "56": "0x0404",
-    "1133": "0x0716",
-    "35": "0x03CA",
-    "461": "0x01FB",
-    "153": "0x0094",
-    "120": "0x0064",
-    "36": "0x03CC",
-    "712": "0x038E",
-    "805": "0x0448",
-    "20": "0x03B6",
-    "194": "0x00B4",
-    "435": "0x01D0",
-    "1073": "0x06B4",
-    "977": "0x05CC",
-    "821": "0x046B",
-    "1003": "0x060E",
-    "857": "0x04B1",
-    "216": "0x00CB",
-    "592": "0x02AC",
-    "1048": "0x0675",
-    "797": "0x0433",
-    "888": "0x04FF",
-    "309": "0x0141",
-    "269": "0x0110",
-    "722": "0x03A3",
-    "760": "0x03E7",
-    "463": "0x01FE",
-    "875": "0x04DE",
-    "205": "0x00B8",
-    "580": "0x029C",
-    "476": "0x0211",
-    "397": "0x01B2",
-    "1192": "0x0761",
-    "383": "0x01A4",
-    "807": "0x044C",
-    "663": "0x032B",
-    "869": "0x04CF",
-    "961": "0x05A4",
-    "551": "0x0272",
-    "41": "0x03D9",
-    "550": "0x026F",
-    "2": "0x039C",
-    "438": "0x01D4",
-    "546": "0x0268",
-    "660": "0x0322",
-    "1095": "0x06EA",
-    "83": "0x0032",
-    "593": "0x02AF",
-    "908": "0x0531",
-    "595": "0x02B2",
-    "251": "0x00FF",
-    "1053": "0x0682",
-    "1204": "0x0764",
-    "420": "0x01BC",
-    "156": "0x009D",
-    "624": "0x02DD",
-    "568": "0x028C",
-    "749": "0x03D4",
-    "986": "0x05E3",
-    "1089": "0x06DC",
-    "129": "0x0071",
-    "1208": "0x076F",
-    "1154": "0x0728",
-    "1002": "0x060B",
-    "854": "0x04A9",
-    "1014": "0x0629",
-    "1137": "0x071E",
-    "949": "0x0586",
-    "678": "0x0346",
-    "578": "0x0297",
-    "243": "0x00F8",
-    "954": "0x0593",
-    "978": "0x05CF",
-    "344": "0x0171",
-    "29": "0x03B9",
-    "456": "0x01F2",
-    "64": "0x041C",
-    "323": "0x0156",
-    "45": "0x03E4",
-    "1132": "0x0715",
-    "108": "0x0052",
-    "945": "0x057D",
-    "758": "0x03E4",
-    "616": "0x02CD",
-    "473": "0x020D",
-    "657": "0x031E",
-    "155": "0x009A",
-    "503": "0x0238",
-    "589": "0x02A6",
-    "921": "0x0550",
-    "1160": "0x0732",
-    "744": "0x03C7",
-    "58": "0x040A",
-    "306": "0x013F",
-    "1184": "0x0755",
-    "1161": "0x0734",
-    "276": "0x0114",
-    "910": "0x0535",
-    "984": "0x05DE",
-    "195": "0x00B7",
-    "61": "0x0413",
-    "876": "0x04E1",
-    "1100": "0x06F7",
-    "215": "0x00C9",
-    "579": "0x0299",
-    "654": "0x0317",
-    "1198": "0x0768",
-    "190": "0x00A9",
-    "819": "0x0465",
-    "801": "0x043F",
-    "1190": "0x075E",
-    "1068": "0x06A7",
-    "1180": "0x074E",
-    "112": "0x0058",
-    "1047": "0x0672",
-    "919": "0x054C",
-    "706": "0x037F",
-    "699": "0x036D",
-    "871": "0x04D4",
-    "1079": "0x06C2",
-    "1080": "0x06C5",
-    "1046": "0x0670",
-    "504": "0x023A",
-    "682": "0x034D",
-    "936": "0x056C",
-    "893": "0x050B",
-    "396": "0x01B0",
-    "587": "0x02A0",
-    "727": "0x03AD",
-    "575": "0x0293",
-    "777": "0x0407",
-    "767": "0x03F2",
-    "892": "0x0509",
-    "471": "0x0209",
-    "313": "0x0146",
-    "92": "0x0041",
-    "322": "0x0153",
-    "802": "0x0442",
-    "988": "0x05E8",
-    "841": "0x048F",
-    "286": "0x012A",
-    "239": "0x00F1",
-    "634": "0x02F4",
-    "566": "0x0285",
-    "796": "0x0430",
-    "594": "0x02B1",
-    "521": "0x0257",
-    "1135": "0x0719",
-    "953": "0x0590",
-    "1172": "0x0742",
-    "1086": "0x06D4",
-    "976": "0x05CA",
-    "591": "0x02A9",
-    "980": "0x05D4",
-    "278": "0x011A",
-    "1069": "0x06AA",
-    "464": "0x0200",
-    "779": "0x040D",
-    "865": "0x04C5",
-    "704": "0x0379",
-    "1171": "0x0741",
-    "890": "0x0503",
-    "1060": "0x0693",
-    "109": "0x0053",
-    "1205": "0x0765",
-    "137": "0x007E",
-    "1082": "0x06CA",
-    "822": "0x046E",
-    "1097": "0x06EF",
-    "372": "0x0192",
-    "381": "0x019E",
-    "806": "0x044B",
-    "1124": "0x0709",
-    "1121": "0x0701",
-    "39": "0x03D4",
-    "1195": "0x0765",
-    "761": "0x03EA",
-    "967": "0x05B4",
-    "350": "0x0177",
-    "668": "0x032F",
-    "935": "0x0569",
-    "304": "0x013B",
-    "1070": "0x06AC",
-    "887": "0x04FC",
-    "975": "0x05C8",
-    "59": "0x040D",
-    "1168": "0x073D",
-    "54": "0x03FE",
-    "1166": "0x073A",
-    "625": "0x02DE",
-    "973": "0x05C2",
-    "596": "0x02B5",
-    "51": "0x03F5",
-    "933": "0x0565",
-    "697": "0x036A",
-    "143": "0x0086",
-    "852": "0x04A5",
-    "52": "0x03F8",
-    "680": "0x0347",
-    "755": "0x03DC",
-    "891": "0x0506",
-    "502": "0x0237",
-    "151": "0x008E",
-    "310": "0x0144",
-    "615": "0x02CA"
+  "source": "main.vpy",
+  "symbols": {
+    "ABS_A_B": "0xF584",
+    "ABS_B": "0xF58B",
+    "ADD_SCORE_A": "0xF85E",
+    "ADD_SCORE_D": "0xF87C",
+    "ASSET_ADDR_TABLE": "0x4008",
+    "ASSET_BANK_TABLE": "0x4006",
+    "AUDIO_UPDATE": "0x4335",
+    "AU_BANK_OK": "0x434F",
+    "AU_DONE": "0x43F3",
+    "AU_MUSIC_DONE": "0x43C6",
+    "AU_MUSIC_ENDED": "0x43CC",
+    "AU_MUSIC_HAS_DELAY": "0x438D",
+    "AU_MUSIC_LOOP": "0x43D2",
+    "AU_MUSIC_NO_DELAY": "0x437E",
+    "AU_MUSIC_PROCESS_WRITES": "0x439B",
+    "AU_MUSIC_READ": "0x436D",
+    "AU_MUSIC_READ_COUNT": "0x437E",
+    "AU_MUSIC_WRITE_LOOP": "0x439D",
+    "AU_SKIP_MUSIC": "0x43DD",
+    "AU_UPDATE_SFX": "0x43E0",
+    "Abs_a_b": "0xF584",
+    "Abs_b": "0xF58B",
+    "Add_Score_a": "0xF85E",
+    "Add_Score_d": "0xF87C",
+    "BITMASK_A": "0xF57E",
+    "Bitmask_a": "0xF57E",
+    "CHECK0REF": "0xF34F",
+    "CLEAR_C8_RAM": "0xF542",
+    "CLEAR_SCORE": "0xF84F",
+    "CLEAR_SOUND": "0xF272",
+    "CLEAR_X_256": "0xF545",
+    "CLEAR_X_B": "0xF53F",
+    "CLEAR_X_B_80": "0xF550",
+    "CLEAR_X_B_A": "0xF552",
+    "CLEAR_X_D": "0xF548",
+    "COLD_START": "0xF000",
+    "COMPARE_SCORE": "0xF8C7",
+    "Check0Ref": "0xF34F",
+    "Clear_C8_RAM": "0xF542",
+    "Clear_Score": "0xF84F",
+    "Clear_Sound": "0xF272",
+    "Clear_x_256": "0xF545",
+    "Clear_x_b": "0xF53F",
+    "Clear_x_b_80": "0xF550",
+    "Clear_x_b_a": "0xF552",
+    "Clear_x_d": "0xF548",
+    "Cold_Start": "0xF000",
+    "Compare_Score": "0xF8C7",
+    "DCR_AFTER_INTENSITY": "0x40FE",
+    "DCR_INTENSITY_5F": "0x40FB",
+    "DCR_after_intensity": "0x40FE",
+    "DCR_intensity_5F": "0x40FB",
+    "DEC_3_COUNTERS": "0xF55A",
+    "DEC_6_COUNTERS": "0xF55E",
+    "DEC_COUNTERS": "0xF563",
+    "DELAY_0": "0xF579",
+    "DELAY_1": "0xF575",
+    "DELAY_2": "0xF571",
+    "DELAY_3": "0xF56D",
+    "DELAY_B": "0xF57A",
+    "DELAY_RTS": "0xF57D",
+    "DOT_D": "0xF2C3",
+    "DOT_HERE": "0xF2C5",
+    "DOT_IX": "0xF2C1",
+    "DOT_IX_B": "0xF2BE",
+    "DOT_LIST": "0xF2D5",
+    "DOT_LIST_RESET": "0xF2DE",
+    "DO_SOUND": "0xF289",
+    "DO_SOUND_X": "0xF28C",
+    "DP_TO_C8": "0xF1AF",
+    "DP_TO_D0": "0xF1AA",
+    "DP_to_C8": "0xF1AF",
+    "DP_to_D0": "0xF1AA",
+    "DRAW_CIRCLE_RUNTIME": "0x40C8",
+    "DRAW_GRID_VL": "0xFF9F",
+    "DRAW_LINE_D": "0xF3DF",
+    "DRAW_PAT_VL": "0xF437",
+    "DRAW_PAT_VL_A": "0xF434",
+    "DRAW_PAT_VL_D": "0xF439",
+    "DRAW_VL": "0xF3DD",
+    "DRAW_VLC": "0xF3CE",
+    "DRAW_VLCS": "0xF3D6",
+    "DRAW_VLP": "0xF410",
+    "DRAW_VLP_7F": "0xF408",
+    "DRAW_VLP_B": "0xF40E",
+    "DRAW_VLP_FF": "0xF404",
+    "DRAW_VLP_SCALE": "0xF40C",
+    "DRAW_VL_A": "0xF3DA",
+    "DRAW_VL_AB": "0xF3D8",
+    "DRAW_VL_B": "0xF3D2",
+    "DRAW_VL_MODE": "0xF46E",
+    "Dec_3_Counters": "0xF55A",
+    "Dec_6_Counters": "0xF55E",
+    "Dec_Counters": "0xF563",
+    "Delay_0": "0xF579",
+    "Delay_1": "0xF575",
+    "Delay_2": "0xF571",
+    "Delay_3": "0xF56D",
+    "Delay_RTS": "0xF57D",
+    "Delay_b": "0xF57A",
+    "Do_Sound": "0xF289",
+    "Do_Sound_x": "0xF28C",
+    "Dot_List": "0xF2D5",
+    "Dot_List_Reset": "0xF2DE",
+    "Dot_d": "0xF2C3",
+    "Dot_here": "0xF2C5",
+    "Dot_ix": "0xF2C1",
+    "Dot_ix_b": "0xF2BE",
+    "Draw_Grid_VL": "0xFF9F",
+    "Draw_Line_d": "0xF3DF",
+    "Draw_Pat_VL": "0xF437",
+    "Draw_Pat_VL_a": "0xF434",
+    "Draw_Pat_VL_d": "0xF439",
+    "Draw_VL": "0xF3DD",
+    "Draw_VL_a": "0xF3DA",
+    "Draw_VL_ab": "0xF3D8",
+    "Draw_VL_b": "0xF3D2",
+    "Draw_VL_mode": "0xF46E",
+    "Draw_VLc": "0xF3CE",
+    "Draw_VLcs": "0xF3D6",
+    "Draw_VLp": "0xF410",
+    "Draw_VLp_7F": "0xF408",
+    "Draw_VLp_FF": "0xF404",
+    "Draw_VLp_b": "0xF40E",
+    "Draw_VLp_scale": "0xF40C",
+    "EXPLOSION_SND": "0xF92E",
+    "Explosion_Snd": "0xF92E",
+    "GET_RISE_IDX": "0xF5D9",
+    "GET_RISE_RUN": "0xF5EF",
+    "GET_RUN_IDX": "0xF5DB",
+    "Get_Rise_Idx": "0xF5D9",
+    "Get_Rise_Run": "0xF5EF",
+    "Get_Run_Idx": "0xF5DB",
+    "IF_END_0": "0x01CC",
+    "IF_END_0.J1B2_1_END": "0x01DE",
+    "IF_END_0.J1B2_1_ON": "0x01DB",
+    "IF_END_2": "0x02B5",
+    "IF_NEXT_1": "0x01CC",
+    "IF_NEXT_3": "0x02B5",
+    "INIT_MUSIC": "0xF68D",
+    "INIT_MUSIC_BUF": "0xF533",
+    "INIT_MUSIC_CHK": "0xF687",
+    "INIT_MUSIC_X": "0xF692",
+    "INIT_OS": "0xF18B",
+    "INIT_OS_RAM": "0xF164",
+    "INIT_VIA": "0xF14C",
+    "INTENSITY_1F": "0xF29D",
+    "INTENSITY_3F": "0xF2A1",
+    "INTENSITY_5F": "0xF2A5",
+    "INTENSITY_7F": "0xF2A9",
+    "INTENSITY_A": "0xF2AB",
+    "Init_Music": "0xF68D",
+    "Init_Music_Buf": "0xF533",
+    "Init_Music_chk": "0xF687",
+    "Init_Music_x": "0xF692",
+    "Init_OS": "0xF18B",
+    "Init_OS_RAM": "0xF164",
+    "Init_VIA": "0xF14C",
+    "Intensity_1F": "0xF29D",
+    "Intensity_3F": "0xF2A1",
+    "Intensity_5F": "0xF2A5",
+    "Intensity_7F": "0xF2A9",
+    "Intensity_a": "0xF2AB",
+    "JOY_ANALOG": "0xF1F5",
+    "JOY_DIGITAL": "0xF1F8",
+    "Joy_Analog": "0xF1F5",
+    "Joy_Digital": "0xF1F8",
+    "LOOP_BODY": "0x008C",
+    "LOOP_BODY.J1B1_0_END": "0x00F5",
+    "LOOP_BODY.J1B1_0_ON": "0x00F2",
+    "MAIN": "0x0056",
+    "MAIN.MAIN_LOOP": "0x0086",
+    "MOD16": "0x4074",
+    "MOD16.M16_DONE": "0x40C7",
+    "MOD16.M16_DPOS": "0x4091",
+    "MOD16.M16_END": "0x40B8",
+    "MOD16.M16_LOOP": "0x40A8",
+    "MOD16.M16_RCHECK": "0x4099",
+    "MOD16.M16_RPOS": "0x40A8",
+    "MOVETO_D": "0xF312",
+    "MOVETO_D_7F": "0xF2FC",
+    "MOVETO_IX": "0xF310",
+    "MOVETO_IX_7F": "0xF30C",
+    "MOVETO_IX_A": "0xF30E",
+    "MOVETO_IX_FF": "0xF308",
+    "MOVETO_X_7F": "0xF2F2",
+    "MOVE_MEM_A": "0xF683",
+    "MOVE_MEM_A_1": "0xF67F",
+    "MOV_DRAW_VL": "0xF3BC",
+    "MOV_DRAW_VLCS": "0xF3B5",
+    "MOV_DRAW_VLC_A": "0xF3AD",
+    "MOV_DRAW_VL_A": "0xF3B9",
+    "MOV_DRAW_VL_AB": "0xF3B7",
+    "MOV_DRAW_VL_B": "0xF3B1",
+    "MOV_DRAW_VL_D": "0xF3BE",
+    "MUSIC1": "0xFD0D",
+    "MUSIC2": "0xFD1D",
+    "MUSIC3": "0xFD81",
+    "MUSIC4": "0xFDD3",
+    "MUSIC5": "0xFE38",
+    "MUSIC6": "0xFE76",
+    "MUSIC7": "0xFEC6",
+    "MUSIC8": "0xFEF8",
+    "MUSIC9": "0xFF26",
+    "MUSICA": "0xFF44",
+    "MUSICB": "0xFF62",
+    "MUSICC": "0xFF7A",
+    "MUSICD": "0xFF8F",
+    "Mov_Draw_VL": "0xF3BC",
+    "Mov_Draw_VL_a": "0xF3B9",
+    "Mov_Draw_VL_ab": "0xF3B7",
+    "Mov_Draw_VL_b": "0xF3B1",
+    "Mov_Draw_VL_d": "0xF3BE",
+    "Mov_Draw_VLc_a": "0xF3AD",
+    "Mov_Draw_VLcs": "0xF3B5",
+    "Move_Mem_a": "0xF683",
+    "Move_Mem_a_1": "0xF67F",
+    "Moveto_d": "0xF312",
+    "Moveto_d_7F": "0xF2FC",
+    "Moveto_ix": "0xF310",
+    "Moveto_ix_7F": "0xF30C",
+    "Moveto_ix_FF": "0xF308",
+    "Moveto_ix_a": "0xF30E",
+    "Moveto_x_7F": "0xF2F2",
+    "NEW_HIGH_SCORE": "0xF8D8",
+    "NOAY": "0x4411",
+    "New_High_Score": "0xF8D8",
+    "OBJ_HIT": "0xF8FF",
+    "OBJ_WILL_HIT": "0xF8F3",
+    "OBJ_WILL_HIT_U": "0xF8E5",
+    "Obj_Hit": "0xF8FF",
+    "Obj_Will_Hit": "0xF8F3",
+    "Obj_Will_Hit_u": "0xF8E5",
+    "PLAY_MUSIC_RUNTIME": "0x4217",
+    "PLAY_SFX_BANKED": "0x400C",
+    "PLAY_SFX_RUNTIME": "0x43FE",
+    "PMR_DONE": "0x4257",
+    "PMR_START_NEW": "0x4225",
+    "PMr_done": "0x4257",
+    "PMr_start_new": "0x4225",
+    "PRINT_LIST": "0xF38A",
+    "PRINT_LIST_CHK": "0xF38C",
+    "PRINT_LIST_HW": "0xF385",
+    "PRINT_SHIPS": "0xF393",
+    "PRINT_SHIPS_X": "0xF391",
+    "PRINT_STR": "0xF495",
+    "PRINT_STR_D": "0xF37A",
+    "PRINT_STR_HWYX": "0xF373",
+    "PRINT_STR_YX": "0xF378",
+    "PRINT_TEXT_STR_2348223718253": "0x44A8",
+    "PRINT_TEXT_STR_3273774": "0x44A3",
+    "PRINT_TEXT_STR_58672554795414": "0x44B1",
+    "PRINT_TEXT_STR_58672583180530": "0x44BB",
+    "PRINT_TEXT_STR_89546106876693": "0x44C5",
+    "PSG_EVENT_DONE": "0x42D3",
+    "PSG_MUSIC_ENDED": "0x42DC",
+    "PSG_MUSIC_LOOP": "0x42F7",
+    "PSG_MUSIC_LOOP_D": "0x4302",
+    "PSG_PROCESS_EVENT": "0x4291",
+    "PSG_READ_DELAY": "0x4276",
+    "PSG_UPDATE_DONE": "0x430A",
+    "PSG_WRITE_LOOP": "0x42A2",
+    "PSG_event_done": "0x42D3",
+    "PSG_music_ended": "0x42DC",
+    "PSG_music_loop": "0x42F7",
+    "PSG_music_loop_d": "0x4302",
+    "PSG_process_event": "0x4291",
+    "PSG_read_delay": "0x4276",
+    "PSG_update_done": "0x430A",
+    "PSG_write_loop": "0x42A2",
+    "Print_List": "0xF38A",
+    "Print_List_chk": "0xF38C",
+    "Print_List_hw": "0xF385",
+    "Print_Ships": "0xF393",
+    "Print_Ships_x": "0xF391",
+    "Print_Str": "0xF495",
+    "Print_Str_d": "0xF37A",
+    "Print_Str_hwyx": "0xF373",
+    "Print_Str_yx": "0xF378",
+    "RANDOM": "0xF517",
+    "RANDOM_3": "0xF511",
+    "READ_BTNS": "0xF1BA",
+    "READ_BTNS_MASK": "0xF1B4",
+    "RECALIBRATE": "0xF2E6",
+    "RESET0INT": "0xF36B",
+    "RESET0REF": "0xF354",
+    "RESET0REF_D0": "0xF34A",
+    "RESET_PEN": "0xF35B",
+    "RISE_RUN_ANGLE": "0xF593",
+    "RISE_RUN_LEN": "0xF603",
+    "RISE_RUN_X": "0xF5FF",
+    "RISE_RUN_Y": "0xF601",
+    "ROT_VL": "0xF616",
+    "ROT_VL_AB": "0xF610",
+    "ROT_VL_DFT": "0xF637",
+    "ROT_VL_MODE": "0xF62B",
+    "ROT_VL_MODE_A": "0xF61F",
+    "Random": "0xF517",
+    "Random_3": "0xF511",
+    "Read_Btns": "0xF1BA",
+    "Read_Btns_Mask": "0xF1B4",
+    "Recalibrate": "0xF2E6",
+    "Reset0Int": "0xF36B",
+    "Reset0Ref": "0xF354",
+    "Reset0Ref_D0": "0xF34A",
+    "Reset_Pen": "0xF35B",
+    "Rise_Run_Angle": "0xF593",
+    "Rise_Run_Len": "0xF603",
+    "Rise_Run_X": "0xF5FF",
+    "Rise_Run_Y": "0xF601",
+    "Rot_VL": "0xF616",
+    "Rot_VL_Mode": "0xF62B",
+    "Rot_VL_Mode_a": "0xF61F",
+    "Rot_VL_ab": "0xF610",
+    "Rot_VL_dft": "0xF637",
+    "SELECT_GAME": "0xF7A9",
+    "SET_REFRESH": "0xF1A2",
+    "SFX_ADDR_TABLE": "0x4002",
+    "SFX_BANK_TABLE": "0x4000",
+    "SFX_CHECKNOISEFREQ": "0x443F",
+    "SFX_CHECKTONEFREQ": "0x4425",
+    "SFX_CHECKVOLUME": "0x4450",
+    "SFX_DOFRAME": "0x4412",
+    "SFX_ENDOFEFFECT": "0x4485",
+    "SFX_M_NOISE": "0x446B",
+    "SFX_M_NOISEDIS": "0x4476",
+    "SFX_M_TONEDIS": "0x4469",
+    "SFX_M_WRITE": "0x4478",
+    "SFX_NEXTFRAME": "0x4480",
+    "SFX_UPDATE": "0x4407",
+    "SFX_UPDATEMIXER": "0x4459",
+    "SOUND_BYTE": "0xF256",
+    "SOUND_BYTES": "0xF27D",
+    "SOUND_BYTES_X": "0xF284",
+    "SOUND_BYTE_RAW": "0xF25B",
+    "SOUND_BYTE_X": "0xF259",
+    "START": "0x0022",
+    "STOP_MUSIC_RUNTIME": "0x430E",
+    "STRIP_ZEROS": "0xF8B7",
+    "Select_Game": "0xF7A9",
+    "Set_Refresh": "0xF1A2",
+    "Sound_Byte": "0xF256",
+    "Sound_Byte_raw": "0xF25B",
+    "Sound_Byte_x": "0xF259",
+    "Sound_Bytes": "0xF27D",
+    "Sound_Bytes_x": "0xF284",
+    "Strip_Zeros": "0xF8B7",
+    "UPDATE_MUSIC_PSG": "0x4258",
+    "VECTREX_PRINT_TEXT": "0x403A",
+    "VEC_0REF_ENABLE": "0xC824",
+    "VEC_ADSR_TABLE": "0xC84F",
+    "VEC_ADSR_TIMERS": "0xC85E",
+    "VEC_ANGLE": "0xC836",
+    "VEC_BRIGHTNESS": "0xC827",
+    "VEC_BTN_STATE": "0xC80F",
+    "VEC_BUTTONS": "0xC811",
+    "VEC_BUTTON_1_1": "0xC812",
+    "VEC_BUTTON_1_2": "0xC813",
+    "VEC_BUTTON_1_3": "0xC814",
+    "VEC_BUTTON_1_4": "0xC815",
+    "VEC_BUTTON_2_1": "0xC816",
+    "VEC_BUTTON_2_2": "0xC817",
+    "VEC_BUTTON_2_3": "0xC818",
+    "VEC_BUTTON_2_4": "0xC819",
+    "VEC_COLD_FLAG": "0xCBFE",
+    "VEC_COUNTERS": "0xC82E",
+    "VEC_COUNTER_1": "0xC82E",
+    "VEC_COUNTER_2": "0xC82F",
+    "VEC_COUNTER_3": "0xC830",
+    "VEC_COUNTER_4": "0xC831",
+    "VEC_COUNTER_5": "0xC832",
+    "VEC_COUNTER_6": "0xC833",
+    "VEC_DEFAULT_STK": "0xCBEA",
+    "VEC_DOT_DWELL": "0xC828",
+    "VEC_DURATION": "0xC857",
+    "VEC_EXPL_1": "0xC858",
+    "VEC_EXPL_2": "0xC859",
+    "VEC_EXPL_3": "0xC85A",
+    "VEC_EXPL_4": "0xC85B",
+    "VEC_EXPL_CHAN": "0xC85C",
+    "VEC_EXPL_CHANA": "0xC853",
+    "VEC_EXPL_CHANB": "0xC85D",
+    "VEC_EXPL_CHANS": "0xC854",
+    "VEC_EXPL_FLAG": "0xC867",
+    "VEC_EXPL_TIMER": "0xC877",
+    "VEC_FIRQ_VECTOR": "0xCBF5",
+    "VEC_FREQ_TABLE": "0xC84D",
+    "VEC_HIGH_SCORE": "0xCBEB",
+    "VEC_IRQ_VECTOR": "0xCBF8",
+    "VEC_JOY_1_X": "0xC81B",
+    "VEC_JOY_1_Y": "0xC81C",
+    "VEC_JOY_2_X": "0xC81D",
+    "VEC_JOY_2_Y": "0xC81E",
+    "VEC_JOY_MUX": "0xC81F",
+    "VEC_JOY_MUX_1_X": "0xC81F",
+    "VEC_JOY_MUX_1_Y": "0xC820",
+    "VEC_JOY_MUX_2_X": "0xC821",
+    "VEC_JOY_MUX_2_Y": "0xC822",
+    "VEC_JOY_RESLTN": "0xC81A",
+    "VEC_LOOP_COUNT": "0xC825",
+    "VEC_MAX_GAMES": "0xC850",
+    "VEC_MAX_PLAYERS": "0xC84F",
+    "VEC_MISC_COUNT": "0xC823",
+    "VEC_MUSIC_CHAN": "0xC855",
+    "VEC_MUSIC_FLAG": "0xC856",
+    "VEC_MUSIC_FREQ": "0xC861",
+    "VEC_MUSIC_PTR": "0xC853",
+    "VEC_MUSIC_TWANG": "0xC858",
+    "VEC_MUSIC_WK_1": "0xC84B",
+    "VEC_MUSIC_WK_5": "0xC847",
+    "VEC_MUSIC_WK_6": "0xC846",
+    "VEC_MUSIC_WK_7": "0xC845",
+    "VEC_MUSIC_WK_A": "0xC842",
+    "VEC_MUSIC_WORK": "0xC83F",
+    "VEC_NMI_VECTOR": "0xCBFB",
+    "VEC_NUM_GAME": "0xC87A",
+    "VEC_NUM_PLAYERS": "0xC879",
+    "VEC_PATTERN": "0xC829",
+    "VEC_PREV_BTNS": "0xC810",
+    "VEC_RANDOM_SEED": "0xC87D",
+    "VEC_RFRSH": "0xC83D",
+    "VEC_RFRSH_HI": "0xC83E",
+    "VEC_RFRSH_LO": "0xC83D",
+    "VEC_RISERUN_LEN": "0xC83B",
+    "VEC_RISERUN_TMP": "0xC834",
+    "VEC_RISE_INDEX": "0xC839",
+    "VEC_RUN_INDEX": "0xC837",
+    "VEC_SEED_PTR": "0xC87B",
+    "VEC_SND_SHADOW": "0xC800",
+    "VEC_STR_PTR": "0xC82C",
+    "VEC_SWI2_VECTOR": "0xCBF2",
+    "VEC_SWI3_VECTOR": "0xCBF2",
+    "VEC_SWI_VECTOR": "0xCBFB",
+    "VEC_TEXT_HEIGHT": "0xC82A",
+    "VEC_TEXT_HW": "0xC82A",
+    "VEC_TEXT_WIDTH": "0xC82B",
+    "VEC_TWANG_TABLE": "0xC851",
+    "VIA_AUX_CNTL": "0xD00B",
+    "VIA_CNTL": "0xD00C",
+    "VIA_DDR_A": "0xD003",
+    "VIA_DDR_B": "0xD002",
+    "VIA_DDR_a": "0xD003",
+    "VIA_DDR_b": "0xD002",
+    "VIA_INT_ENABLE": "0xD00E",
+    "VIA_INT_FLAGS": "0xD00D",
+    "VIA_PORT_A": "0xD001",
+    "VIA_PORT_A_NOHS": "0xD00F",
+    "VIA_PORT_B": "0xD000",
+    "VIA_SHIFT_REG": "0xD00A",
+    "VIA_T1_CNT_HI": "0xD005",
+    "VIA_T1_CNT_LO": "0xD004",
+    "VIA_T1_LCH_HI": "0xD007",
+    "VIA_T1_LCH_LO": "0xD006",
+    "VIA_T2_HI": "0xD009",
+    "VIA_T2_LO": "0xD008",
+    "VIA_aux_cntl": "0xD00B",
+    "VIA_cntl": "0xD00C",
+    "VIA_int_enable": "0xD00E",
+    "VIA_int_flags": "0xD00D",
+    "VIA_port_a": "0xD001",
+    "VIA_port_a_nohs": "0xD00F",
+    "VIA_port_b": "0xD000",
+    "VIA_shift_reg": "0xD00A",
+    "VIA_t1_cnt_hi": "0xD005",
+    "VIA_t1_cnt_lo": "0xD004",
+    "VIA_t1_lch_hi": "0xD007",
+    "VIA_t1_lch_lo": "0xD006",
+    "VIA_t2_hi": "0xD009",
+    "VIA_t2_lo": "0xD008",
+    "Vec_0Ref_Enable": "0xC824",
+    "Vec_ADSR_Table": "0xC84F",
+    "Vec_ADSR_Timers": "0xC85E",
+    "Vec_Angle": "0xC836",
+    "Vec_Brightness": "0xC827",
+    "Vec_Btn_State": "0xC80F",
+    "Vec_Button_1_1": "0xC812",
+    "Vec_Button_1_2": "0xC813",
+    "Vec_Button_1_3": "0xC814",
+    "Vec_Button_1_4": "0xC815",
+    "Vec_Button_2_1": "0xC816",
+    "Vec_Button_2_2": "0xC817",
+    "Vec_Button_2_3": "0xC818",
+    "Vec_Button_2_4": "0xC819",
+    "Vec_Buttons": "0xC811",
+    "Vec_Cold_Flag": "0xCBFE",
+    "Vec_Counter_1": "0xC82E",
+    "Vec_Counter_2": "0xC82F",
+    "Vec_Counter_3": "0xC830",
+    "Vec_Counter_4": "0xC831",
+    "Vec_Counter_5": "0xC832",
+    "Vec_Counter_6": "0xC833",
+    "Vec_Counters": "0xC82E",
+    "Vec_Default_Stk": "0xCBEA",
+    "Vec_Dot_Dwell": "0xC828",
+    "Vec_Duration": "0xC857",
+    "Vec_Expl_1": "0xC858",
+    "Vec_Expl_2": "0xC859",
+    "Vec_Expl_3": "0xC85A",
+    "Vec_Expl_4": "0xC85B",
+    "Vec_Expl_Chan": "0xC85C",
+    "Vec_Expl_ChanA": "0xC853",
+    "Vec_Expl_ChanB": "0xC85D",
+    "Vec_Expl_Chans": "0xC854",
+    "Vec_Expl_Flag": "0xC867",
+    "Vec_Expl_Timer": "0xC877",
+    "Vec_FIRQ_Vector": "0xCBF5",
+    "Vec_Freq_Table": "0xC84D",
+    "Vec_High_Score": "0xCBEB",
+    "Vec_IRQ_Vector": "0xCBF8",
+    "Vec_Joy_1_X": "0xC81B",
+    "Vec_Joy_1_Y": "0xC81C",
+    "Vec_Joy_2_X": "0xC81D",
+    "Vec_Joy_2_Y": "0xC81E",
+    "Vec_Joy_Mux": "0xC81F",
+    "Vec_Joy_Mux_1_X": "0xC81F",
+    "Vec_Joy_Mux_1_Y": "0xC820",
+    "Vec_Joy_Mux_2_X": "0xC821",
+    "Vec_Joy_Mux_2_Y": "0xC822",
+    "Vec_Joy_Resltn": "0xC81A",
+    "Vec_Loop_Count": "0xC825",
+    "Vec_Max_Games": "0xC850",
+    "Vec_Max_Players": "0xC84F",
+    "Vec_Misc_Count": "0xC823",
+    "Vec_Music_Chan": "0xC855",
+    "Vec_Music_Flag": "0xC856",
+    "Vec_Music_Freq": "0xC861",
+    "Vec_Music_Ptr": "0xC853",
+    "Vec_Music_Twang": "0xC858",
+    "Vec_Music_Wk_1": "0xC84B",
+    "Vec_Music_Wk_5": "0xC847",
+    "Vec_Music_Wk_6": "0xC846",
+    "Vec_Music_Wk_7": "0xC845",
+    "Vec_Music_Wk_A": "0xC842",
+    "Vec_Music_Work": "0xC83F",
+    "Vec_NMI_Vector": "0xCBFB",
+    "Vec_Num_Game": "0xC87A",
+    "Vec_Num_Players": "0xC879",
+    "Vec_Pattern": "0xC829",
+    "Vec_Prev_Btns": "0xC810",
+    "Vec_Random_Seed": "0xC87D",
+    "Vec_Rfrsh": "0xC83D",
+    "Vec_Rfrsh_hi": "0xC83E",
+    "Vec_Rfrsh_lo": "0xC83D",
+    "Vec_RiseRun_Len": "0xC83B",
+    "Vec_RiseRun_Tmp": "0xC834",
+    "Vec_Rise_Index": "0xC839",
+    "Vec_Run_Index": "0xC837",
+    "Vec_SWI2_Vector": "0xCBF2",
+    "Vec_SWI3_Vector": "0xCBF2",
+    "Vec_SWI_Vector": "0xCBFB",
+    "Vec_Seed_Ptr": "0xC87B",
+    "Vec_Snd_Shadow": "0xC800",
+    "Vec_Str_Ptr": "0xC82C",
+    "Vec_Text_HW": "0xC82A",
+    "Vec_Text_Height": "0xC82A",
+    "Vec_Text_Width": "0xC82B",
+    "Vec_Twang_Table": "0xC851",
+    "WAIT_RECAL": "0xF192",
+    "WARM_START": "0xF06C",
+    "Wait_Recal": "0xF192",
+    "Warm_Start": "0xF06C",
+    "XFORM_RISE": "0xF663",
+    "XFORM_RISE_A": "0xF661",
+    "XFORM_RUN": "0xF65D",
+    "XFORM_RUN_A": "0xF65B",
+    "Xform_Rise": "0xF663",
+    "Xform_Rise_a": "0xF661",
+    "Xform_Run": "0xF65D",
+    "Xform_Run_a": "0xF65B",
+    "_EXPLOSION_SFX": "0x0000",
+    "_JUMP_SFX": "0x0046",
+    "music1": "0xFD0D",
+    "music2": "0xFD1D",
+    "music3": "0xFD81",
+    "music4": "0xFDD3",
+    "music5": "0xFE38",
+    "music6": "0xFE76",
+    "music7": "0xFEC6",
+    "music8": "0xFEF8",
+    "music9": "0xFF26",
+    "musica": "0xFF44",
+    "musicb": "0xFF62",
+    "musicc": "0xFF7A",
+    "musicd": "0xFF8F",
+    "noay": "0x4411",
+    "sfx_checknoisefreq": "0x443F",
+    "sfx_checktonefreq": "0x4425",
+    "sfx_checkvolume": "0x4450",
+    "sfx_doframe": "0x4412",
+    "sfx_endofeffect": "0x4485",
+    "sfx_m_noise": "0x446B",
+    "sfx_m_noisedis": "0x4476",
+    "sfx_m_tonedis": "0x4469",
+    "sfx_m_write": "0x4478",
+    "sfx_nextframe": "0x4480",
+    "sfx_updatemixer": "0x4459"
   },
   "variables": {
-    "DRAW_CIRCLE_YC": {
-      "name": "DRAW_CIRCLE_YC",
-      "address": "0xC8AC",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
+    "arg0": {
+      "address": "0xC8B2",
+      "declLine": null,
+      "name": "arg0",
+      "size": 2,
+      "type": "unknown"
     },
     "arg1": {
+      "address": "0xC8B4",
+      "declLine": null,
       "name": "arg1",
-      "address": "0xC8B9",
       "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "VPY_MOVE_Y": {
-      "name": "VPY_MOVE_Y",
-      "address": "0xC88B",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "RESULT": {
-      "name": "RESULT",
-      "address": "0xC880",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_TEMP": {
-      "name": "DRAW_CIRCLE_TEMP",
-      "address": "0xC8AF",
-      "size": 8,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg0": {
-      "name": "arg0",
-      "address": "0xC8B7",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TEMP_YX": {
-      "name": "TEMP_YX",
-      "address": "0xC886",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg4": {
-      "name": "arg4",
-      "address": "0xC8BF",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TEMP_X": {
-      "name": "TEMP_X",
-      "address": "0xC888",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "PSG_MUSIC_START": {
-      "name": "PSG_MUSIC_START",
-      "address": "0xC898",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "SFX_PTR_DP": {
-      "name": "SFX_PTR_DP",
-      "address": "0x001E",
-      "size": 2,
-      "type": "audio",
-      "declLine": null
-    },
-    "TMPPTR": {
-      "name": "TMPPTR",
-      "address": "0xC882",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_LINE_ARGS": {
-      "name": "DRAW_LINE_ARGS",
-      "address": "0xC88C",
-      "size": 10,
-      "type": "unknown",
-      "declLine": null
-    },
-    "SFX_ACTIVE": {
-      "name": "SFX_ACTIVE",
-      "address": "0xC8A2",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "PSG_MUSIC_ACTIVE": {
-      "name": "PSG_MUSIC_ACTIVE",
-      "address": "0xC89B",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "PSG_DELAY_FRAMES": {
-      "name": "PSG_DELAY_FRAMES",
-      "address": "0xC89D",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "VPY_MOVE_X": {
-      "name": "VPY_MOVE_X",
-      "address": "0xC88A",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "PSG_MUSIC_PTR": {
-      "name": "PSG_MUSIC_PTR",
-      "address": "0xC896",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "SFX_TICK": {
-      "name": "SFX_TICK",
-      "address": "0xC8A0",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_DIAM": {
-      "name": "DRAW_CIRCLE_DIAM",
-      "address": "0xC8AD",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
+      "type": "unknown"
     },
     "arg2": {
+      "address": "0xC8B6",
+      "declLine": null,
       "name": "arg2",
-      "address": "0xC8BB",
       "size": 2,
-      "type": "unknown",
-      "declLine": null
+      "type": "unknown"
     },
     "arg3": {
+      "address": "0xC8B8",
+      "declLine": null,
       "name": "arg3",
-      "address": "0xC8BD",
       "size": 2,
-      "type": "unknown",
-      "declLine": null
+      "type": "unknown"
     },
-    "NUM_STR": {
-      "name": "NUM_STR",
-      "address": "0xC8A5",
-      "size": 6,
-      "type": "unknown",
-      "declLine": null
-    },
-    "SFX_PTR": {
-      "name": "SFX_PTR",
-      "address": "0xC89E",
+    "arg4": {
+      "address": "0xC8BA",
+      "declLine": null,
+      "name": "arg4",
       "size": 2,
-      "type": "unknown",
-      "declLine": null
+      "type": "unknown"
     },
-    "DRAW_CIRCLE_INTENSITY": {
-      "name": "DRAW_CIRCLE_INTENSITY",
-      "address": "0xC8AE",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPPTR2": {
-      "name": "TMPPTR2",
-      "address": "0xC884",
+    "arg5": {
+      "address": "0xC8BC",
+      "declLine": null,
+      "name": "arg5",
       "size": 2,
-      "type": "unknown",
-      "declLine": null
+      "type": "unknown"
     },
-    "SFX_PHASE_DP": {
-      "name": "SFX_PHASE_DP",
-      "address": "0x0023",
+    "arg6": {
+      "address": "0xC8BE",
+      "declLine": null,
+      "name": "arg6",
       "size": 2,
-      "type": "audio",
-      "declLine": null
+      "type": "unknown"
     },
-    "TEMP_Y": {
-      "name": "TEMP_Y",
-      "address": "0xC889",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "PSG_FRAME_COUNT": {
-      "name": "PSG_FRAME_COUNT",
-      "address": "0xC89C",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_XC": {
-      "name": "DRAW_CIRCLE_XC",
-      "address": "0xC8AB",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "SFX_VOL_DP": {
-      "name": "SFX_VOL_DP",
-      "address": "0x0024",
+    "arg7": {
+      "address": "0xC8C0",
+      "declLine": null,
+      "name": "arg7",
       "size": 2,
-      "type": "audio",
-      "declLine": null
+      "type": "unknown"
+    }
+  },
+  "version": "2.0",
+  "vpyLineMap": {
+    "134": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 11
     },
-    "SFX_VOL": {
-      "name": "SFX_VOL",
-      "address": "0xC8A4",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
+    "146": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 14
     },
-    "PSG_IS_PLAYING": {
-      "name": "PSG_IS_PLAYING",
-      "address": "0xC89A",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
+    "173": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 15
     },
-    "SFX_ACTIVE_DP": {
-      "name": "SFX_ACTIVE_DP",
-      "address": "0x0022",
-      "size": 2,
-      "type": "audio",
-      "declLine": null
+    "200": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 16
     },
-    "SFX_PHASE": {
-      "name": "SFX_PHASE",
-      "address": "0xC8A3",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
+    "227": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 18
     },
-    "SFX_TICK_DP": {
-      "name": "SFX_TICK_DP",
-      "address": "0x0020",
-      "size": 2,
-      "type": "audio",
-      "declLine": null
+    "252": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 19
+    },
+    "264": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 20
+    },
+    "460": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 22
+    },
+    "485": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 23
+    },
+    "497": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 24
+    },
+    "693": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 27
     }
   }
 }

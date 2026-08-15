@@ -844,25 +844,17 @@ Xform_Rise EQU $F663
 Xform_Rise_a EQU $F661
 Xform_Run EQU $F65D
 Xform_Run_a EQU $F65B
-_CARETAKER_PATH0 EQU $299A
-_CARETAKER_PATH1 EQU $29A3
-_CARETAKER_PATH2 EQU $29AC
-_CARETAKER_PATH3 EQU $29B8
-_CARETAKER_PATH4 EQU $29CA
-_CARETAKER_PATH5 EQU $29D3
-_CARETAKER_PATH6 EQU $29DC
-_CARETAKER_VECTORS EQU $298A
-_CONSERVATORY_PATH0 EQU $2336
-_CONSERVATORY_PATH1 EQU $2345
-_CONSERVATORY_PATH2 EQU $235A
-_CONSERVATORY_PATH3 EQU $2363
-_CONSERVATORY_PATH4 EQU $236C
-_CONSERVATORY_PATH5 EQU $2375
-_CONSERVATORY_PATH6 EQU $2387
-_CONSERVATORY_PATH7 EQU $2393
-_CONSERVATORY_PATH8 EQU $23A5
-_CONSERVATORY_PATH9 EQU $23B1
-_CONSERVATORY_VECTORS EQU $2320
+_CONSERVATORY_PATH0 EQU $231C
+_CONSERVATORY_PATH1 EQU $232B
+_CONSERVATORY_PATH2 EQU $2340
+_CONSERVATORY_PATH3 EQU $2349
+_CONSERVATORY_PATH4 EQU $2352
+_CONSERVATORY_PATH5 EQU $235B
+_CONSERVATORY_PATH6 EQU $236D
+_CONSERVATORY_PATH7 EQU $2379
+_CONSERVATORY_PATH8 EQU $238B
+_CONSERVATORY_PATH9 EQU $2397
+_CONSERVATORY_VECTORS EQU $2306
 _CRYPT_LOGO_PATH0 EQU $1646
 _CRYPT_LOGO_PATH1 EQU $164F
 _CRYPT_LOGO_PATH10 EQU $16FD
@@ -878,25 +870,25 @@ _CRYPT_LOGO_PATH19 EQU $1775
 _CRYPT_LOGO_PATH2 EQU $1658
 _CRYPT_LOGO_PATH20 EQU $1799
 _CRYPT_LOGO_PATH21 EQU $17B7
-_CRYPT_LOGO_PATH22 EQU $17D2
-_CRYPT_LOGO_PATH23 EQU $17DB
-_CRYPT_LOGO_PATH24 EQU $17E7
-_CRYPT_LOGO_PATH25 EQU $17F3
-_CRYPT_LOGO_PATH26 EQU $17FC
-_CRYPT_LOGO_PATH27 EQU $1814
-_CRYPT_LOGO_PATH28 EQU $182C
-_CRYPT_LOGO_PATH29 EQU $1835
+_CRYPT_LOGO_PATH22 EQU $17CF
+_CRYPT_LOGO_PATH23 EQU $17D8
+_CRYPT_LOGO_PATH24 EQU $17E4
+_CRYPT_LOGO_PATH25 EQU $17F0
+_CRYPT_LOGO_PATH26 EQU $17F9
+_CRYPT_LOGO_PATH27 EQU $1811
+_CRYPT_LOGO_PATH28 EQU $1829
+_CRYPT_LOGO_PATH29 EQU $1832
 _CRYPT_LOGO_PATH3 EQU $1670
-_CRYPT_LOGO_PATH30 EQU $183E
-_CRYPT_LOGO_PATH31 EQU $1847
-_CRYPT_LOGO_PATH32 EQU $1853
-_CRYPT_LOGO_PATH33 EQU $185C
-_CRYPT_LOGO_PATH34 EQU $1865
-_CRYPT_LOGO_PATH35 EQU $186E
-_CRYPT_LOGO_PATH36 EQU $1880
-_CRYPT_LOGO_PATH37 EQU $1892
-_CRYPT_LOGO_PATH38 EQU $189B
-_CRYPT_LOGO_PATH39 EQU $18C5
+_CRYPT_LOGO_PATH30 EQU $183B
+_CRYPT_LOGO_PATH31 EQU $1844
+_CRYPT_LOGO_PATH32 EQU $1850
+_CRYPT_LOGO_PATH33 EQU $1859
+_CRYPT_LOGO_PATH34 EQU $1862
+_CRYPT_LOGO_PATH35 EQU $186B
+_CRYPT_LOGO_PATH36 EQU $187D
+_CRYPT_LOGO_PATH37 EQU $188F
+_CRYPT_LOGO_PATH38 EQU $1898
+_CRYPT_LOGO_PATH39 EQU $18C2
 _CRYPT_LOGO_PATH4 EQU $168B
 _CRYPT_LOGO_PATH5 EQU $16A0
 _CRYPT_LOGO_PATH6 EQU $16A9
@@ -904,103 +896,112 @@ _CRYPT_LOGO_PATH7 EQU $16B2
 _CRYPT_LOGO_PATH8 EQU $16D6
 _CRYPT_LOGO_PATH9 EQU $16F1
 _CRYPT_LOGO_VECTORS EQU $15F4
-_CRYSTAL_APPRENTICE_PATH0 EQU $23CD
-_CRYSTAL_APPRENTICE_PATH1 EQU $23D6
-_CRYSTAL_APPRENTICE_PATH2 EQU $23E8
-_CRYSTAL_APPRENTICE_PATH3 EQU $2406
-_CRYSTAL_APPRENTICE_PATH4 EQU $2418
-_CRYSTAL_APPRENTICE_PATH5 EQU $242A
-_CRYSTAL_APPRENTICE_PATH6 EQU $243C
-_CRYSTAL_APPRENTICE_VECTORS EQU $23BD
-_DESK_PATH0 EQU $24D9
-_DESK_PATH1 EQU $24E2
-_DESK_PATH2 EQU $24EB
-_DESK_PATH3 EQU $24F4
-_DESK_PATH4 EQU $24FD
-_DESK_PATH5 EQU $2506
-_DESK_PATH6 EQU $2515
-_DESK_PATH7 EQU $251E
-_DESK_PATH8 EQU $2527
-_DESK_PATH9 EQU $2530
-_DESK_VECTORS EQU $24C3
-_DOOR_LOCKED_PATH0 EQU $1F2E
-_DOOR_LOCKED_PATH1 EQU $1F40
-_DOOR_LOCKED_PATH10 EQU $1FDC
-_DOOR_LOCKED_PATH11 EQU $1FF1
-_DOOR_LOCKED_PATH12 EQU $2003
-_DOOR_LOCKED_PATH2 EQU $1F52
-_DOOR_LOCKED_PATH3 EQU $1F64
-_DOOR_LOCKED_PATH4 EQU $1F76
-_DOOR_LOCKED_PATH5 EQU $1F88
-_DOOR_LOCKED_PATH6 EQU $1F9A
-_DOOR_LOCKED_PATH7 EQU $1FA9
-_DOOR_LOCKED_PATH8 EQU $1FB2
-_DOOR_LOCKED_PATH9 EQU $1FC4
-_DOOR_LOCKED_VECTORS EQU $1F12
-_ENTRANCE_ARC_PATH0 EQU $27B6
-_ENTRANCE_ARC_PATH1 EQU $27CE
-_ENTRANCE_ARC_PATH2 EQU $27E6
-_ENTRANCE_ARC_PATH3 EQU $27F8
-_ENTRANCE_ARC_VECTORS EQU $27AC
-_EXPLORATION_MUSIC EQU $18CE
-_HANS_AUTOMATA_PATH0 EQU $2457
-_HANS_AUTOMATA_PATH1 EQU $2460
-_HANS_AUTOMATA_PATH2 EQU $2469
-_HANS_AUTOMATA_PATH3 EQU $2472
-_HANS_AUTOMATA_PATH4 EQU $2484
-_HANS_AUTOMATA_PATH5 EQU $2496
-_HANS_AUTOMATA_PATH6 EQU $249F
-_HANS_AUTOMATA_PATH7 EQU $24B1
-_HANS_AUTOMATA_VECTORS EQU $2445
-_INTRO_MUSIC EQU $1C14
-_LAMP_PATH0 EQU $28DE
-_LAMP_PATH1 EQU $28E7
-_LAMP_PATH2 EQU $28F9
-_LAMP_PATH3 EQU $2905
-_LAMP_PATH4 EQU $290E
-_LAMP_PATH5 EQU $2917
-_LAMP_PATH6 EQU $2920
-_LAMP_VECTORS EQU $28CE
-_PAINTING_PATH0 EQU $2028
-_PAINTING_PATH1 EQU $2031
-_PAINTING_PATH2 EQU $203A
-_PAINTING_PATH3 EQU $2046
-_PAINTING_PATH4 EQU $2064
-_PAINTING_PATH5 EQU $2076
-_PAINTING_PATH6 EQU $2088
-_PAINTING_PATH7 EQU $2097
-_PAINTING_PATH8 EQU $20A6
-_PAINTING_PATH9 EQU $20B5
-_PAINTING_VECTORS EQU $2012
-_PLATFORM_DOWN_PATH0 EQU $293C
-_PLATFORM_DOWN_PATH1 EQU $2948
-_PLATFORM_DOWN_PATH2 EQU $2951
-_PLATFORM_DOWN_PATH3 EQU $295A
-_PLATFORM_DOWN_PATH4 EQU $2963
-_PLATFORM_DOWN_PATH5 EQU $296F
-_PLATFORM_DOWN_PATH6 EQU $2978
-_PLATFORM_DOWN_VECTORS EQU $292C
-_PLAYER_PATH0 EQU $26FC
-_PLAYER_PATH1 EQU $2705
-_PLAYER_PATH2 EQU $270E
-_PLAYER_PATH3 EQU $2717
-_PLAYER_PATH4 EQU $2720
-_PLAYER_PATH5 EQU $2732
-_PLAYER_PATH6 EQU $2750
-_PLAYER_VECTORS EQU $26EC
-_VAULT_CORRIDOR_PATH0 EQU $2284
-_VAULT_CORRIDOR_PATH1 EQU $22A2
-_VAULT_CORRIDOR_PATH10 EQU $230E
-_VAULT_CORRIDOR_PATH11 EQU $2317
-_VAULT_CORRIDOR_PATH2 EQU $22AB
-_VAULT_CORRIDOR_PATH3 EQU $22B4
-_VAULT_CORRIDOR_PATH4 EQU $22C0
-_VAULT_CORRIDOR_PATH5 EQU $22CC
-_VAULT_CORRIDOR_PATH6 EQU $22D8
-_VAULT_CORRIDOR_PATH7 EQU $22E4
-_VAULT_CORRIDOR_PATH8 EQU $22FC
-_VAULT_CORRIDOR_PATH9 EQU $2305
-_VAULT_CORRIDOR_VECTORS EQU $226A
+_CRYSTAL_APPRENTICE_PATH0 EQU $23B3
+_CRYSTAL_APPRENTICE_PATH1 EQU $23BC
+_CRYSTAL_APPRENTICE_PATH2 EQU $23CB
+_CRYSTAL_APPRENTICE_PATH3 EQU $23E3
+_CRYSTAL_APPRENTICE_PATH4 EQU $23F5
+_CRYSTAL_APPRENTICE_PATH5 EQU $2407
+_CRYSTAL_APPRENTICE_PATH6 EQU $2419
+_CRYSTAL_APPRENTICE_VECTORS EQU $23A3
+_DESK_PATH0 EQU $24B6
+_DESK_PATH1 EQU $24BF
+_DESK_PATH2 EQU $24C8
+_DESK_PATH3 EQU $24D1
+_DESK_PATH4 EQU $24DA
+_DESK_PATH5 EQU $24E3
+_DESK_PATH6 EQU $24F2
+_DESK_PATH7 EQU $24FB
+_DESK_PATH8 EQU $2504
+_DESK_PATH9 EQU $250D
+_DESK_VECTORS EQU $24A0
+_DOOR_LOCKED_PATH0 EQU $1F29
+_DOOR_LOCKED_PATH1 EQU $1F38
+_DOOR_LOCKED_PATH10 EQU $1FD1
+_DOOR_LOCKED_PATH11 EQU $1FE9
+_DOOR_LOCKED_PATH2 EQU $1F47
+_DOOR_LOCKED_PATH3 EQU $1F59
+_DOOR_LOCKED_PATH4 EQU $1F6B
+_DOOR_LOCKED_PATH5 EQU $1F7D
+_DOOR_LOCKED_PATH6 EQU $1F8F
+_DOOR_LOCKED_PATH7 EQU $1F9E
+_DOOR_LOCKED_PATH8 EQU $1FA7
+_DOOR_LOCKED_PATH9 EQU $1FB9
+_DOOR_LOCKED_VECTORS EQU $1F0F
+_ENTRANCE_ARC_PATH0 EQU $278D
+_ENTRANCE_ARC_PATH1 EQU $27A5
+_ENTRANCE_ARC_PATH2 EQU $27BD
+_ENTRANCE_ARC_PATH3 EQU $27CF
+_ENTRANCE_ARC_VECTORS EQU $2783
+_EXPLORATION_MUSIC EQU $18CB
+_HANS_AUTOMATA_PATH0 EQU $2434
+_HANS_AUTOMATA_PATH1 EQU $243D
+_HANS_AUTOMATA_PATH2 EQU $2446
+_HANS_AUTOMATA_PATH3 EQU $244F
+_HANS_AUTOMATA_PATH4 EQU $2461
+_HANS_AUTOMATA_PATH5 EQU $2473
+_HANS_AUTOMATA_PATH6 EQU $247C
+_HANS_AUTOMATA_PATH7 EQU $248E
+_HANS_AUTOMATA_VECTORS EQU $2422
+_INTRO_MUSIC EQU $1C11
+_LAMP_PATH0 EQU $28B5
+_LAMP_PATH1 EQU $28BE
+_LAMP_PATH2 EQU $28D0
+_LAMP_PATH3 EQU $28DC
+_LAMP_PATH4 EQU $28E5
+_LAMP_PATH5 EQU $28EE
+_LAMP_PATH6 EQU $28F7
+_LAMP_VECTORS EQU $28A5
+_LOCKED_DOOR_PATH0 EQU $296B
+_LOCKED_DOOR_PATH1 EQU $297D
+_LOCKED_DOOR_PATH2 EQU $2989
+_LOCKED_DOOR_PATH3 EQU $299B
+_LOCKED_DOOR_VECTORS EQU $2961
+_OPTICS_PEDESTAL_PATH0 EQU $29B7
+_OPTICS_PEDESTAL_PATH1 EQU $29C9
+_OPTICS_PEDESTAL_PATH2 EQU $29D8
+_OPTICS_PEDESTAL_PATH3 EQU $29E7
+_OPTICS_PEDESTAL_VECTORS EQU $29AD
+_PAINTING_PATH0 EQU $200E
+_PAINTING_PATH1 EQU $2017
+_PAINTING_PATH2 EQU $2020
+_PAINTING_PATH3 EQU $202C
+_PAINTING_PATH4 EQU $204A
+_PAINTING_PATH5 EQU $205C
+_PAINTING_PATH6 EQU $206E
+_PAINTING_PATH7 EQU $207D
+_PAINTING_PATH8 EQU $208C
+_PAINTING_PATH9 EQU $209B
+_PAINTING_VECTORS EQU $1FF8
+_PLATFORM_DOWN_PATH0 EQU $2913
+_PLATFORM_DOWN_PATH1 EQU $291F
+_PLATFORM_DOWN_PATH2 EQU $2928
+_PLATFORM_DOWN_PATH3 EQU $2931
+_PLATFORM_DOWN_PATH4 EQU $293A
+_PLATFORM_DOWN_PATH5 EQU $2946
+_PLATFORM_DOWN_PATH6 EQU $294F
+_PLATFORM_DOWN_VECTORS EQU $2903
+_PLAYER_PATH0 EQU $26D9
+_PLAYER_PATH1 EQU $26E2
+_PLAYER_PATH2 EQU $26EB
+_PLAYER_PATH3 EQU $26F4
+_PLAYER_PATH4 EQU $26FD
+_PLAYER_PATH5 EQU $270F
+_PLAYER_PATH6 EQU $2727
+_PLAYER_VECTORS EQU $26C9
+_VAULT_CORRIDOR_PATH0 EQU $226A
+_VAULT_CORRIDOR_PATH1 EQU $2288
+_VAULT_CORRIDOR_PATH10 EQU $22F4
+_VAULT_CORRIDOR_PATH11 EQU $22FD
+_VAULT_CORRIDOR_PATH2 EQU $2291
+_VAULT_CORRIDOR_PATH3 EQU $229A
+_VAULT_CORRIDOR_PATH4 EQU $22A6
+_VAULT_CORRIDOR_PATH5 EQU $22B2
+_VAULT_CORRIDOR_PATH6 EQU $22BE
+_VAULT_CORRIDOR_PATH7 EQU $22CA
+_VAULT_CORRIDOR_PATH8 EQU $22E2
+_VAULT_CORRIDOR_PATH9 EQU $22EB
+_VAULT_CORRIDOR_VECTORS EQU $2250
 music1 EQU $FD0D
 music2 EQU $FD1D
 music3 EQU $FD81
@@ -1251,112 +1252,6 @@ ARRAY_INV_ITEMS_LEN         EQU 8   ; 8 elements
 ; ASSETS IN BANK #2 (9 assets)
 ;***************************************************************************
 
-; Generated from locked_door.vec (Malban Draw_Sync_List format)
-; Total paths: 4, points: 15
-; X bounds: min=-30, max=30, width=60
-; Center: (0, 0)
-
-_LOCKED_DOOR_WIDTH EQU 60
-_LOCKED_DOOR_HALF_WIDTH EQU 30
-_LOCKED_DOOR_HEIGHT EQU 110
-_LOCKED_DOOR_HALF_HEIGHT EQU 55
-_LOCKED_DOOR_CENTER_X EQU 0
-_LOCKED_DOOR_CENTER_Y EQU 0
-
-_LOCKED_DOOR_VECTORS:  ; Main entry (header + 4 path(s))
-    FDB 4               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _LOCKED_DOOR_PATH0        ; pointer to path 0
-    FDB _LOCKED_DOOR_PATH1        ; pointer to path 1
-    FDB _LOCKED_DOOR_PATH2        ; pointer to path 2
-    FDB _LOCKED_DOOR_PATH3        ; pointer to path 3
-
-_LOCKED_DOOR_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $F9,$FC,0,0        ; path0: header (y=-7, x=-4)
-    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB 2                ; End marker (path complete)
-
-_LOCKED_DOOR_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $F9,$FC,0,0        ; path1: header (y=-7, x=-4)
-    FCB $FF,$06,$04          ; flag=-1, dy=6, dx=4
-    FCB $FF,$FA,$04          ; flag=-1, dy=-6, dx=4
-    FCB 2                ; End marker (path complete)
-
-_LOCKED_DOOR_PATH2:    ; Path 2
-    FCB 90              ; path2: intensity
-    FCB $15,$EA,0,0        ; path2: header (y=21, x=-22)
-    FCB $FF,$00,$2C          ; flag=-1, dy=0, dx=44
-    FCB $FF,$BC,$00          ; flag=-1, dy=-68, dx=0
-    FCB $FF,$00,$D4          ; flag=-1, dy=0, dx=-44
-    FCB $FF,$44,$00          ; flag=-1, dy=68, dx=0
-    FCB 2                ; End marker (path complete)
-
-_LOCKED_DOOR_PATH3:    ; Path 3
-    FCB 127              ; path3: intensity
-    FCB $C9,$E2,0,0        ; path3: header (y=-55, x=-30)
-    FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
-    FCB $FF,$6E,$00          ; flag=-1, dy=110, dx=0
-    FCB $FF,$00,$C4          ; flag=-1, dy=0, dx=-60
-    FCB $FF,$92,$00          ; flag=-1, dy=-110, dx=0
-    FCB 2                ; End marker (path complete)
-
-; Generated from optics_pedestal.vec (Malban Draw_Sync_List format)
-; Total paths: 4, points: 18
-; X bounds: min=-16, max=16, width=32
-; Center: (0, -6)
-
-_OPTICS_PEDESTAL_WIDTH EQU 32
-_OPTICS_PEDESTAL_HALF_WIDTH EQU 16
-_OPTICS_PEDESTAL_HEIGHT EQU 68
-_OPTICS_PEDESTAL_HALF_HEIGHT EQU 34
-_OPTICS_PEDESTAL_CENTER_X EQU 0
-_OPTICS_PEDESTAL_CENTER_Y EQU -6
-
-_OPTICS_PEDESTAL_VECTORS:  ; Main entry (header + 4 path(s))
-    FDB 4               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _OPTICS_PEDESTAL_PATH0        ; pointer to path 0
-    FDB _OPTICS_PEDESTAL_PATH1        ; pointer to path 1
-    FDB _OPTICS_PEDESTAL_PATH2        ; pointer to path 2
-    FDB _OPTICS_PEDESTAL_PATH3        ; pointer to path 3
-
-_OPTICS_PEDESTAL_PATH0:    ; Path 0
-    FCB 100              ; path0: intensity
-    FCB $1A,$F0,0,0        ; path0: header (y=26, x=-16)
-    FCB $FF,$00,$20          ; flag=-1, dy=0, dx=32
-    FCB $FF,$08,$00          ; flag=-1, dy=8, dx=0
-    FCB $FF,$00,$E0          ; flag=-1, dy=0, dx=-32
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB 2                ; End marker (path complete)
-
-_OPTICS_PEDESTAL_PATH1:    ; Path 1
-    FCB 90              ; path1: intensity
-    FCB $EE,$F7,0,0        ; path1: header (y=-18, x=-9)
-    FCB $FF,$2C,$00          ; flag=-1, dy=44, dx=0
-    FCB $FF,$00,$12          ; flag=-1, dy=0, dx=18
-    FCB $FF,$D4,$00          ; flag=-1, dy=-44, dx=0
-    FCB 2                ; End marker (path complete)
-
-_OPTICS_PEDESTAL_PATH2:    ; Path 2
-    FCB 110              ; path2: intensity
-    FCB $DE,$00,0,0        ; path2: header (y=-34, x=0)
-    FCB $FF,$0A,$F6          ; flag=-1, dy=10, dx=-10
-    FCB $FF,$00,$14          ; flag=-1, dy=0, dx=20
-    FCB $FF,$F6,$F6          ; flag=-1, dy=-10, dx=-10
-    FCB 2                ; End marker (path complete)
-
-_OPTICS_PEDESTAL_PATH3:    ; Path 3
-    FCB 100              ; path3: intensity
-    FCB $E8,$F2,0,0        ; path3: header (y=-24, x=-14)
-    FCB $FF,$00,$1C          ; flag=-1, dy=0, dx=28
-    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
-    FCB $FF,$00,$E4          ; flag=-1, dy=0, dx=-28
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
-    FCB 2                ; End marker (path complete)
-
 ; Generated from wall_compartment.vec (Malban Draw_Sync_List format)
 ; Total paths: 4, points: 16
 ; X bounds: min=-20, max=20, width=40
@@ -1408,6 +1303,67 @@ _WALL_COMPARTMENT_PATH3:    ; Path 3
     FCB $FF,$1E,$00          ; flag=-1, dy=30, dx=0
     FCB $FF,$00,$D8          ; flag=-1, dy=0, dx=-40
     FCB $FF,$E2,$00          ; flag=-1, dy=-30, dx=0
+    FCB 2                ; End marker (path complete)
+
+; Generated from caretaker.vec (Malban Draw_Sync_List format)
+; Total paths: 7, points: 17
+; X bounds: min=-7, max=10, width=17
+; Center: (1, 2)
+
+_CARETAKER_WIDTH EQU 17
+_CARETAKER_HALF_WIDTH EQU 8
+_CARETAKER_HEIGHT EQU 33
+_CARETAKER_HALF_HEIGHT EQU 16
+_CARETAKER_CENTER_X EQU 1
+_CARETAKER_CENTER_Y EQU 2
+
+_CARETAKER_VECTORS:  ; Main entry (header + 6 path(s))
+    FDB 6               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
+    FDB _CARETAKER_PATH0        ; pointer to path 0
+    FDB _CARETAKER_PATH1        ; pointer to path 1
+    FDB _CARETAKER_PATH2        ; pointer to path 2
+    FDB _CARETAKER_PATH3        ; pointer to path 3
+    FDB _CARETAKER_PATH4        ; pointer to path 4
+    FDB _CARETAKER_PATH5        ; pointer to path 5
+
+_CARETAKER_PATH0:    ; Path 0
+    FCB 80              ; path0: intensity
+    FCB $FA,$00,0,0        ; path0: header (y=-6, x=0)
+    FCB $FF,$F6,$FE          ; flag=-1, dy=-10, dx=-2
+    FCB 2                ; End marker (path complete)
+
+_CARETAKER_PATH1:    ; Path 1
+    FCB 80              ; path1: intensity
+    FCB $F0,$04,0,0        ; path1: header (y=-16, x=4)
+    FCB $FF,$14,$FD          ; flag=-1, dy=20, dx=-3
+    FCB $FF,$08,$FD          ; flag=-1, dy=8, dx=-3
+    FCB 2                ; End marker (path complete)
+
+_CARETAKER_PATH2:    ; Path 2
+    FCB 80              ; path2: intensity
+    FCB $0C,$FA,0,0        ; path2: header (y=12, x=-6)
+    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
+    FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
+    FCB $FF,$00,$F9          ; flag=-1, dy=0, dx=-7
+    FCB $FF,$FB,$00          ; flag=-1, dy=-5, dx=0
+    FCB 2                ; End marker (path complete)
+
+_CARETAKER_PATH3:    ; Path 3
+    FCB 75              ; path3: intensity
+    FCB $08,$00,0,0        ; path3: header (y=8, x=0)
+    FCB $FF,$FA,$F8          ; flag=-1, dy=-6, dx=-8
+    FCB 2                ; End marker (path complete)
+
+_CARETAKER_PATH4:    ; Path 4
+    FCB 75              ; path4: intensity
+    FCB $06,$01,0,0        ; path4: header (y=6, x=1)
+    FCB $FF,$F9,$03          ; flag=-1, dy=-7, dx=3
+    FCB 2                ; End marker (path complete)
+
+_CARETAKER_PATH5:    ; Path 5
+    FCB 70              ; path5: intensity
+    FCB $FF,$04,0,0        ; path5: header (y=-1, x=4)
+    FCB $FF,$F2,$05          ; flag=-1, dy=-14, dx=5
     FCB 2                ; End marker (path complete)
 
 ; ==== Level: OPTICS_LAB ====
@@ -1476,7 +1432,7 @@ _OPTICS_LAB_GAMEPLAY_OBJECTS_S0:
     FCB 0  ; collision_flags
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
-    FCB 2   ; vector_bank (ROM+16)
+    FCB 1   ; vector_bank (ROM+16)
     FDB _OPTICS_PEDESTAL_VECTORS  ; vector_ptr (ROM+17)
     FCB 16  ; half_width (1.00x, ROM+19)
     FCB 34  ; half_height (1.00x, ROM+20)
@@ -1649,25 +1605,50 @@ _ITEM_PICKUP_SFX:
     ; SFX: item_pickup (coin)
     ; Duration: 200ms (10fr), Freq: 880Hz, Channel: 0
     FCB $AF         ; Frame 0 - flags (vol=15, noisevol=0, tone=Y, noise=N)
-    FCB $00, $64  ; Tone period = 100 (big-endian)
+    FCB $00, $6B  ; Tone period = 107 (big-endian)
     FCB $AB         ; Frame 1 - flags (vol=11, noisevol=0, tone=Y, noise=N)
-    FCB $00, $64  ; Tone period = 100 (big-endian)
+    FCB $00, $6B  ; Tone period = 107 (big-endian)
     FCB $AB         ; Frame 2 - flags (vol=11, noisevol=0, tone=Y, noise=N)
-    FCB $00, $64  ; Tone period = 100 (big-endian)
+    FCB $00, $6B  ; Tone period = 107 (big-endian)
     FCB $AB         ; Frame 3 - flags (vol=11, noisevol=0, tone=Y, noise=N)
-    FCB $00, $64  ; Tone period = 100 (big-endian)
+    FCB $00, $6B  ; Tone period = 107 (big-endian)
     FCB $AB         ; Frame 4 - flags (vol=11, noisevol=0, tone=Y, noise=N)
-    FCB $00, $32  ; Tone period = 50 (big-endian)
+    FCB $00, $35  ; Tone period = 53 (big-endian)
     FCB $A9         ; Frame 5 - flags (vol=9, noisevol=0, tone=Y, noise=N)
-    FCB $00, $32  ; Tone period = 50 (big-endian)
+    FCB $00, $35  ; Tone period = 53 (big-endian)
     FCB $A7         ; Frame 6 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $32  ; Tone period = 50 (big-endian)
+    FCB $00, $35  ; Tone period = 53 (big-endian)
     FCB $A5         ; Frame 7 - flags (vol=5, noisevol=0, tone=Y, noise=N)
-    FCB $00, $32  ; Tone period = 50 (big-endian)
+    FCB $00, $35  ; Tone period = 53 (big-endian)
     FCB $A3         ; Frame 8 - flags (vol=3, noisevol=0, tone=Y, noise=N)
-    FCB $00, $64  ; Tone period = 100 (big-endian)
+    FCB $00, $6B  ; Tone period = 107 (big-endian)
     FCB $A1         ; Frame 9 - flags (vol=1, noisevol=0, tone=Y, noise=N)
-    FCB $00, $64  ; Tone period = 100 (big-endian)
+    FCB $00, $6B  ; Tone period = 107 (big-endian)
+    FCB $D0, $20    ; End of effect marker
+
+
+_PUZZLE_FAIL_SFX:
+    ; SFX: puzzle_fail (hit)
+    ; Duration: 150ms (7fr), Freq: 196Hz, Channel: 0
+    FCB $6E         ; Frame 0 - flags (vol=14, noisevol=11, tone=Y, noise=Y)
+    FCB $01, $DE  ; Tone period = 478 (big-endian)
+    FCB $12         ; Noise period
+    FCB $69         ; Frame 1 - flags (vol=9, noisevol=9, tone=Y, noise=Y)
+    FCB $01, $F7  ; Tone period = 503 (big-endian)
+    FCB $12         ; Noise period
+    FCB $67         ; Frame 2 - flags (vol=7, noisevol=7, tone=Y, noise=Y)
+    FCB $02, $13  ; Tone period = 531 (big-endian)
+    FCB $12         ; Noise period
+    FCB $65         ; Frame 3 - flags (vol=5, noisevol=4, tone=Y, noise=Y)
+    FCB $02, $33  ; Tone period = 563 (big-endian)
+    FCB $12         ; Noise period
+    FCB $63         ; Frame 4 - flags (vol=3, noisevol=2, tone=Y, noise=Y)
+    FCB $02, $56  ; Tone period = 598 (big-endian)
+    FCB $12         ; Noise period
+    FCB $A2         ; Frame 5 - flags (vol=2, noisevol=0, tone=Y, noise=N)
+    FCB $02, $7E  ; Tone period = 638 (big-endian)
+    FCB $A1         ; Frame 6 - flags (vol=1, noisevol=0, tone=Y, noise=N)
+    FCB $02, $AB  ; Tone period = 683 (big-endian)
     FCB $D0, $20    ; End of effect marker
 
 

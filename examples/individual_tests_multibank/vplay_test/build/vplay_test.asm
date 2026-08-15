@@ -37,6 +37,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -82,31 +84,60 @@ LEVEL_BG_COUNT       EQU $C880+$41   ; BG object count (1 bytes)
 LEVEL_GP_COUNT       EQU $C880+$42   ; GP object count (1 bytes)
 LEVEL_FG_COUNT       EQU $C880+$43   ; FG object count (1 bytes)
 CAMERA_X             EQU $C880+$44   ; Camera X scroll offset (16-bit signed world units) (2 bytes)
-LEVEL_BG_ROM_PTR     EQU $C880+$46   ; BG layer ROM pointer (2 bytes)
-LEVEL_GP_ROM_PTR     EQU $C880+$48   ; GP layer ROM pointer (2 bytes)
-LEVEL_FG_ROM_PTR     EQU $C880+$4A   ; FG layer ROM pointer (2 bytes)
-LEVEL_GP_PTR         EQU $C880+$4C   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
-LEVEL_BANK           EQU $C880+$4E   ; Bank ID for current level (for multibank) (1 bytes)
-SLR_CUR_X            EQU $C880+$4F   ; SHOW_LEVEL: tracked beam X for per-segment clipping (1 bytes)
-LEVEL_GP_BUFFER      EQU $C880+$50   ; GP objects RAM buffer (max 8 objects × 15 bytes) (120 bytes)
-UGPC_OUTER_IDX       EQU $C880+$C8   ; GP-GP outer loop index (1 bytes)
-UGPC_OUTER_MAX       EQU $C880+$C9   ; GP-GP outer loop max (count-1) (1 bytes)
-UGPC_INNER_IDX       EQU $C880+$CA   ; GP-GP inner loop index (1 bytes)
-UGPC_DX              EQU $C880+$CB   ; GP-GP |dx| (16-bit) (2 bytes)
-UGPC_DIST            EQU $C880+$CD   ; GP-GP Manhattan distance (16-bit) (2 bytes)
-UGFC_GP_IDX          EQU $C880+$CF   ; GP-FG outer loop GP index (1 bytes)
-UGFC_FG_COUNT        EQU $C880+$D0   ; GP-FG inner loop FG count (1 bytes)
-UGFC_DX              EQU $C880+$D1   ; GP-FG |dx| (1 bytes)
-UGFC_DY              EQU $C880+$D2   ; GP-FG |dy| (1 bytes)
-TEXT_SCALE_H         EQU $C880+$D3   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$D4   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-
+CAMERA_Y             EQU $C880+$46   ; Camera Y scroll offset (16-bit signed world units) (2 bytes)
+SCROLL_LIMIT_LEFT    EQU $C880+$48   ; Camera scroll limit: left world X (2 bytes)
+SCROLL_LIMIT_RIGHT   EQU $C880+$4A   ; Camera scroll limit: right world X (2 bytes)
+SCROLL_LIMIT_TOP     EQU $C880+$4C   ; Camera scroll limit: top world Y (2 bytes)
+SCROLL_LIMIT_BOTTOM  EQU $C880+$4E   ; Camera scroll limit: bottom world Y (2 bytes)
+LEVEL_BG_ROM_PTR     EQU $C880+$50   ; BG layer ROM pointer (2 bytes)
+LEVEL_GP_ROM_PTR     EQU $C880+$52   ; GP layer ROM pointer (2 bytes)
+LEVEL_FG_ROM_PTR     EQU $C880+$54   ; FG layer ROM pointer (2 bytes)
+LEVEL_GP_PTR         EQU $C880+$56   ; GP active pointer (RAM buffer after LOAD_LEVEL) (2 bytes)
+LEVEL_BANK           EQU $C880+$58   ; Bank ID for current level (for multibank) (1 bytes)
+LEVEL_ENEMY_COUNT    EQU $C880+$59   ; Enemy count from current level header (1 bytes)
+LEVEL_ENEMY_INSTANCES_PTR EQU $C880+$5A   ; Ptr to enemy instances table in level bank (2 bytes)
+LEVEL_SCREEN_COUNT   EQU $C880+$5C   ; Total Y screens partitioning the level (1 bytes)
+LEVEL_BG_SCREENS_PTR EQU $C880+$5D   ; Per-screen BG index ptr (3 bytes per screen) (2 bytes)
+LEVEL_GP_SCREENS_PTR EQU $C880+$5F   ; Per-screen GP index ptr (2 bytes)
+LEVEL_FG_SCREENS_PTR EQU $C880+$61   ; Per-screen FG index ptr (2 bytes)
+SLR_CUR_X            EQU $C880+$63   ; SHOW_LEVEL: clamped (visible) beam X — actually written to integrator (1 bytes)
+SLR_TRUE_X           EQU $C880+$64   ; SHOW_LEVEL: 16-bit unclamped abs_x for per-segment line clipping (2 bytes)
+DRAW_T1_SCALED       EQU $C880+$66   ; SHOW_LEVEL: effective T1 for current object (DRAW_SCALE * object_scale) (1 bytes)
+SDCP_ABS_Y           EQU $C880+$67   ; SHOW_LEVEL: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt top_screen between layers) (1 bytes)
+SLR_TOP_SCREEN       EQU $C880+$68   ; SHOW_LEVEL: top Y screen idx (lives across all 3 layers — must not be in TMPVAL) (1 bytes)
+SLR_BOT_SCREEN       EQU $C880+$69   ; SHOW_LEVEL: bot Y screen idx (lives across all 3 layers) (1 bytes)
+LEVEL_GP_BUFFER      EQU $C880+$6A   ; GP objects RAM buffer (max 32 objects × 15 bytes) (480 bytes)
+LCOL_PX              EQU $C880+$24A   ; LEVEL_COLLISION player world_x input (16-bit) (2 bytes)
+LCOL_BEST_Y          EQU $C880+$24C   ; LEVEL_COLLISION_Y best floor y found (16-bit signed) (2 bytes)
+LCOL_PY              EQU $C880+$24E   ; LEVEL_COLLISION player_top (16-bit signed) (2 bytes)
+LCOL_PHH             EQU $C880+$250   ; LEVEL_COLLISION player half_height (1 bytes)
+LCOL_PHW             EQU $C880+$251   ; LEVEL_COLLISION_X player half_width (1 bytes)
+LCOL_THW             EQU $C880+$252   ; LEVEL_COLLISION_X total half_width (player_hw + obj_hw scratch) (1 bytes)
+LCOL_OBJ_Y           EQU $C880+$253   ; LEVEL_COLLISION_Y current object world_y (16-bit) (2 bytes)
+LCOL_LOCAL_PX        EQU $C880+$255   ; LEVEL_COLLISION_Y player_x in object-local coords (16-bit) (2 bytes)
+LCOL_OBJ_CNT         EQU $C880+$257   ; LEVEL_COLLISION_Y GP objects remaining (1 bytes)
+LCOL_SEG_CNT         EQU $C880+$258   ; LEVEL_COLLISION_Y mesh floor segments remaining (1 bytes)
+UGPC_OUTER_IDX       EQU $C880+$259   ; GP-GP outer loop index (1 bytes)
+UGPC_OUTER_MAX       EQU $C880+$25A   ; GP-GP outer loop max (count-1) (1 bytes)
+UGPC_INNER_IDX       EQU $C880+$25B   ; GP-GP inner loop index (1 bytes)
+UGPC_DX              EQU $C880+$25C   ; GP-GP |dx| (16-bit) (2 bytes)
+UGPC_DIST            EQU $C880+$25E   ; GP-GP Manhattan distance (16-bit) (2 bytes)
+UGFC_GP_IDX          EQU $C880+$260   ; GP-FG outer loop GP index (1 bytes)
+UGFC_FG_COUNT        EQU $C880+$261   ; GP-FG inner loop FG count (1 bytes)
+UGFC_DX              EQU $C880+$262   ; GP-FG |dx| (1 bytes)
+UGFC_DY              EQU $C880+$263   ; GP-FG |dy| (1 bytes)
+TEXT_SCALE_H         EQU $C880+$264   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
+TEXT_SCALE_W         EQU $C880+$265   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
+DRAW_SCALE           EQU $C880+$266   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
+VAR_ARG0             EQU $C880+$267   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$269   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$26B   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$26D   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$26F   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$271   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$273   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$275   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$277   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM (Bank #0)
@@ -116,10 +147,19 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
+    ; Init camera ONCE at boot (RAM not zero-init). LOAD_LEVEL must NOT
+    ; reset it (matches pitrex): the game sets it via SET_CAMERA_Y before
+    ; LOAD_LEVEL/SPAWN, and GET_LEVEL_FLOOR_Y / the spawn Y-filter read it.
+    LDD #0
+    STD >CAMERA_X
+    STD >CAMERA_Y
     LDA #$F8
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
     STA TEXT_SCALE_W      ; Default width = 72 (normal size)
+    LDA #$7F
+    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
     CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
@@ -135,6 +175,7 @@ MAIN:
     ; Mux configured - J1_X()/J1_Y() can now be called
 
     ; Call main() for initialization
+; VPy_LINE:11
     ; ===== LOAD_LEVEL builtin =====
     ; Load level: 'test2'
     ; Level asset index: 0 (multibank)
@@ -148,20 +189,24 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+; VPy_LINE:14
+; NATIVE_CALL: PRINT_TEXT at line 14
     ; PRINT_TEXT: Print text at position
     LDD #-55
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #120
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2344190015343208      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:15
     ; ===== UPDATE_LEVEL builtin =====
     JSR UPDATE_LEVEL_RUNTIME
     LDD #0
     STD RESULT
+; VPy_LINE:16
     ; ===== SHOW_LEVEL builtin =====
     JSR SHOW_LEVEL_RUNTIME
     LDD #0
@@ -195,13 +240,25 @@ _TEST2_LEVEL:
     FDB _TEST2_BG_OBJECTS
     FDB _TEST2_GAMEPLAY_OBJECTS
     FDB _TEST2_FG_OBJECTS
+    FDB -96  ; scrollLimit left (camera left cannot go below this)
+    FDB 95  ; scrollLimit right (camera right cannot exceed this)
+    FDB 127  ; scrollLimit top
+    FDB -128  ; scrollLimit bottom
+    FCB 0  ; enemy_count
+    FDB 0  ; enemy_instances_ptr (0 if none)
+    FDB 0  ; groundBottomOffset (floor surface offset from screen bottom)
+    FCB 1    ; +34 screen_count
+    FDB _TEST2_BG_SCREENS  ; +35 BG screens index
+    FDB _TEST2_GP_SCREENS  ; +37 GP screens index
+    FDB _TEST2_FG_SCREENS  ; +39 FG screens index
 
 _TEST2_BG_OBJECTS:
+_TEST2_BG_OBJECTS_S0:
 ; Object: obj_1773126779239 (enemy)
     FCB 1  ; type
     FDB -55  ; x
     FDB 59  ; y
-    FDB 256  ; scale (8.8 fixed)
+    FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -210,15 +267,17 @@ _TEST2_BG_OBJECTS:
     FCB 1  ; collision_flags
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
-    FDB _PLATFORM_VECTORS  ; vector_ptr
-    FCB _PLATFORM_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB 1   ; vector_bank (ROM+16)
+    FDB _PLATFORM_VECTORS  ; vector_ptr (ROM+17)
+    FCB 30  ; half_width (1.00x, ROM+19)
+    FCB 2  ; half_height (1.00x, ROM+20)
+    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
 
 ; Object: obj_1773126781390 (enemy)
     FCB 1  ; type
     FDB 50  ; x
     FDB -51  ; y
-    FDB 256  ; scale (8.8 fixed)
+    FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
     FCB 0  ; velocity_x
@@ -227,14 +286,32 @@ _TEST2_BG_OBJECTS:
     FCB 1  ; collision_flags
     FCB 10  ; collision_size
     FDB 0  ; spawn_delay
-    FDB _PLATFORM_VECTORS  ; vector_ptr
-    FCB _PLATFORM_HALF_WIDTH  ; half_width (visual cull margin, ROM+18)
-    FCB 0  ; reserved (ROM+19)
+    FCB 1   ; vector_bank (ROM+16)
+    FDB _PLATFORM_VECTORS  ; vector_ptr (ROM+17)
+    FCB 30  ; half_width (1.00x, ROM+19)
+    FCB 2  ; half_height (1.00x, ROM+20)
+    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
 
 
 _TEST2_GAMEPLAY_OBJECTS:
+_TEST2_GAMEPLAY_OBJECTS_S0:
 
 _TEST2_FG_OBJECTS:
+_TEST2_FG_OBJECTS_S0:
+
+_TEST2_BG_SCREENS:
+    FCB 2  ; screen 0 count
+    FDB _TEST2_BG_OBJECTS_S0  ; screen 0 ptr
+
+_TEST2_GP_SCREENS:
+    FCB 0  ; screen 0 count
+    FDB _TEST2_GAMEPLAY_OBJECTS_S0  ; screen 0 ptr
+
+_TEST2_FG_SCREENS:
+    FCB 0  ; screen 0 count
+    FDB _TEST2_FG_OBJECTS_S0  ; screen 0 ptr
+
+_TEST2_ENEMY_COUNT EQU 0
 
 
 ; Generated from platform.vec (Malban Draw_Sync_List format)
@@ -244,16 +321,18 @@ _TEST2_FG_OBJECTS:
 
 _PLATFORM_WIDTH EQU 60
 _PLATFORM_HALF_WIDTH EQU 30
+_PLATFORM_HEIGHT EQU 5
+_PLATFORM_HALF_HEIGHT EQU 2
 _PLATFORM_CENTER_X EQU 0
 _PLATFORM_CENTER_Y EQU 2
 
 _PLATFORM_VECTORS:  ; Main entry (header + 1 path(s))
-    FCB 1               ; path_count (runtime metadata)
+    FDB 1               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
     FDB _PLATFORM_PATH0        ; pointer to path 0
 
 _PLATFORM_PATH0:    ; Path 0
     FCB 100              ; path0: intensity
-    FCB $FE,$E2,0,0        ; path0: header (y=-2, x=-30, relative to center)
+    FCB $FE,$E2,0,0        ; path0: header (y=-2, x=-30)
     FCB $FF,$00,$3C          ; flag=-1, dy=0, dx=60
     FCB $FF,$05,$00          ; flag=-1, dy=5, dx=0
     FCB $FF,$00,$C4          ; flag=-1, dy=0, dx=-60
@@ -276,7 +355,7 @@ _PLATFORM_PATH0:    ; Path 0
 
 ;***************************************************************************
 ; ASSET LOOKUP TABLES (for banked asset access)
-; Total: 1 vectors, 0 music, 0 sfx, 1 levels
+; Total: 1 vectors, 0 music, 0 sfx, 1 levels, 0 animations, 0 instruments, 0 enemies
 ;***************************************************************************
 
 ; Vector Asset Index Mapping:
@@ -309,8 +388,10 @@ ASSET_ADDR_TABLE:
 ;***************************************************************************
 ; DRAW_VECTOR_BANKED - Draw vector asset with automatic bank switching
 ; Input: X = asset index (0-based), DRAW_VEC_X/Y set for position
-; Uses: A, B, X, Y
+;        MIRROR_X, MIRROR_Y, DRAW_VEC_INTENSITY must be set by caller
+; Uses: A, B, D, X, Y, U
 ; Preserves: CURRENT_ROM_BANK (restored after drawing)
+; Note: DSWM handles beam positioning internally via DRAW_VEC_X/Y
 ;***************************************************************************
 DRAW_VECTOR_BANKED:
     ; Save index to U register (avoid stack order issues)
@@ -334,23 +415,43 @@ DRAW_VECTOR_BANKED:
     LEAX D,X             ; X points to address entry
     LDX ,X               ; X = _VEC_VECTORS header address in banked ROM
 
-    ; Set up for drawing
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    CLR DRAW_VEC_INTENSITY
+    ; Set DP=$D0 for DSWM / VIA access (caller set MIRROR_X/Y/INTENSITY)
     JSR $F1AA            ; DP_to_D0
 
-    ; Loop over all paths (header byte 0 = path_count, +1.. = FDB table)
-    LDB ,X               ; B = path_count
+    ; Set DRAW_T1_SCALED to BIOS default ($7F) — SLR_DRAW_CLIPPED_PATH reads it
+    ; when the fallback path is taken.
+    LDA #$7F
+    STA >DRAW_T1_SCALED
+    ; Loop over all paths (header: FDB path_count, then FDB table)
+    LDD ,X               ; D = path_count (16-bit FDB at header start)
+    CMPD #0
     LBEQ DVB_DONE        ; No paths
-    LEAY 1,X             ; Y = pointer to first FDB entry
+    LEAY 2,X             ; Y = pointer to first FDB entry (after 2-byte header)
 DVB_PATH_LOOP:
-    PSHS B               ; Save remaining path count
+    PSHS D               ; Save remaining path count (2 bytes)
     LDX ,Y               ; X = path data address (FDB entry)
+    ; Hybrid clip decision: fast DSWM if screen_x deep inside, slow SDCP near edges.
+    LDA >DRAW_VEC_X_HI
+    BEQ DVB_CHECK_POS
+    INCA
+    BNE DVB_USE_SDCP
+    LDA >DRAW_VEC_X
+    CMPA #$B0            ; -80
+    BHS DVB_USE_DSWM
+    BRA DVB_USE_SDCP
+DVB_CHECK_POS:
+    LDA >DRAW_VEC_X
+    CMPA #80
+    BLS DVB_USE_DSWM
+DVB_USE_SDCP:
+    JSR SLR_DRAW_CLIPPED_PATH
+    BRA DVB_PATH_AFTER
+DVB_USE_DSWM:
     JSR Draw_Sync_List_At_With_Mirrors
+DVB_PATH_AFTER:
     LEAY 2,Y             ; Advance to next FDB entry
-    PULS B               ; Restore count
-    DECB
+    PULS D               ; Restore count
+    SUBD #1
     BNE DVB_PATH_LOOP
 DVB_DONE:
 
@@ -412,26 +513,27 @@ LOAD_LEVEL_BANKED:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
-    ;       causing integrators to drift toward joystick DAC value.
-    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref   ; Reset beam to center before positioning text
-    LDU VAR_ARG2   ; string pointer
-    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
-    STA >$C82A      ; Vec_Text_Height: controls character Y scale
-    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
-    STA >$C82B      ; Vec_Text_Width: controls character X spacing
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
+    TFR A,DP
+    JSR Intensity_5F
+    JSR Reset0Ref
+    LDU >VAR_ARG2
+    LDA >TEXT_SCALE_H
+    STA >$C82A          ; Vec_Text_Height
+    LDA >TEXT_SCALE_W
+    STA >$C82B          ; Vec_Text_Width
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    LDX >$C82C
+    PSHS X
     JSR Print_Str_d
+    PULS X
+    STX >$C82C
     LDA #$F8
-    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    STA >$C82A
     LDA #$48
-    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    STA >$C82B
+    JSR $F1AF
     RTS
 
 MOD16:
@@ -479,19 +581,15 @@ MOD16:
 Draw_Sync_List_At_With_Mirrors:
 ; Unified mirror support using flags: MIRROR_X and MIRROR_Y
 ; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller must ensure DP=$D0 for VIA access
-; CRITICAL: Do NOT call JSR $F2AB (Intensity_a) here! Intensity_a manipulates
-; VIA Port B through states $05->$04->$01 which resets the analog hardware
-; (zero-reference sequence) and would disrupt the beam position mid-drawing.
-; Instead we replicate only the VIA Port A write + Port B Z-axis strobe inline.
-LDA ,X+                 ; Read per-path intensity from vector data
+; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
+BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_SET_INTENSITY
+DSWM_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_SET_INTENSITY:
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
-LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
-LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)
 LDB ,X+                 ; y_start from .vec (already relative to center)
 ; Check if Y mirroring is enabled
 TST >MIRROR_Y
@@ -531,7 +629,7 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A                  ; Restore X
 STA VIA_port_a          ; X to DAC
-; T1 fixed at $7F (constant scale; brightness is set via $C832 above, independently)
+; Timing setup (match core: hardcoded $7F)
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
@@ -578,14 +676,20 @@ DSWM_W2:
 LDA VIA_int_flags
 ANDA #$40
 BEQ DSWM_W2
+CLR VIA_port_a          ; stop X integrator drift between segments
 CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
 LBRA DSWM_LOOP          ; Long branch
 ; Next path: repeat mirror logic for new path header
 DSWM_NEXT_PATH:
 TFR X,D
 PSHS D
-; Read per-path intensity from vector data
-LDA ,X+                 ; Read intensity from vector data
+; Check intensity override (same logic as start)
+LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
+BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
+LDA ,X+                 ; Otherwise, read intensity from vector data
+BRA DSWM_NEXT_SET_INTENSITY
+DSWM_NEXT_USE_OVERRIDE:
+LEAX 1,X                ; Skip intensity byte in vector data
 DSWM_NEXT_SET_INTENSITY:
 PSHS A
 LDB ,X+                 ; y_start
@@ -602,12 +706,7 @@ DSWM_NEXT_NO_NEGATE_X:
 ADDA >DRAW_VEC_X        ; Add X offset
 STD >TEMP_YX
 PULS A                  ; Get intensity back
-STA >$C832              ; Update BIOS variable (Vec_Misc_Count)
-STA >$D001              ; Port A = intensity (alg_xsh = intensity XOR $80)
-LDA #$04
-STA >$D000              ; Port B=$04: Z-axis mux enabled -> alg_zsh updated
-LDA #$01
-STA >$D000              ; Port B=$01: restore normal mux
+STA >$C832              ; Vec_Misc_Count (direct, DP-safe)
 PULS D
 ADDD #3
 TFR D,X
@@ -635,7 +734,7 @@ CLR VIA_shift_reg       ; SR=0: no draw during moveto
 INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
 PULS A
 STA VIA_port_a          ; X to DAC
-; T1 fixed at $7F (constant scale; brightness set via $C832 above)
+; Timing setup (match core: hardcoded $7F)
 LDA #$7F
 STA VIA_t1_cnt_lo
 CLR VIA_t1_cnt_hi
@@ -664,9 +763,9 @@ LOAD_LEVEL_RUNTIME:
     LDA #1
     STA >LEVEL_LOADED    ; Mark level as loaded
     
-    ; Reset camera to world origin — JSVecX RAM is NOT zero-initialized
-    LDD #0
-    STD >CAMERA_X
+    ; Camera is NOT reset here (matches pitrex/rp2350). It is initialised once
+    ; at boot in MAIN; the game sets it via SET_CAMERA_Y before LOAD_LEVEL, and
+    ; GET_LEVEL_FLOOR_Y / the SPAWN_ENEMIES Y-filter read it after this call.
     
     ; Skip world bounds (8 bytes) + time/score (4 bytes)
     LEAX 12,X        ; X now points to object counts (+12)
@@ -687,29 +786,40 @@ LOAD_LEVEL_RUNTIME:
     LDD ,X++         ; D = fgObjectsPtr
     STD >LEVEL_FG_ROM_PTR
     
-    ; === Copy GP objects from ROM to RAM buffer ===
+    ; Read scroll limits from ROM header (+21..+28)
+    ; X is now at +21 (right after the 3 FDB layer pointers)
+    LDD ,X++         ; D = scrollLimit left
+    STD >SCROLL_LIMIT_LEFT
+    LDD ,X++         ; D = scrollLimit right
+    STD >SCROLL_LIMIT_RIGHT
+    LDD ,X++         ; D = scrollLimit top
+    STD >SCROLL_LIMIT_TOP
+    LDD ,X++         ; D = scrollLimit bottom
+    STD >SCROLL_LIMIT_BOTTOM
+    
+    ; Read enemy data from header (+29: count, +30,+31: instances_ptr)
+    LDB ,X+         ; B = enemy_count
+    STB >LEVEL_ENEMY_COUNT
+    LDD ,X++        ; D = enemy_instances_ptr (advance past +30..+31)
+    STD >LEVEL_ENEMY_INSTANCES_PTR
+    LEAX 2,X        ; skip groundBottomOffset (+32..+33)
+    
+    ; Per-screen object index (+34..+40)
+    LDB ,X+         ; B = screen_count
+    STB >LEVEL_SCREEN_COUNT
+    LDD ,X++        ; D = bg_screens_ptr
+    STD >LEVEL_BG_SCREENS_PTR
+    LDD ,X++        ; D = gp_screens_ptr
+    STD >LEVEL_GP_SCREENS_PTR
+    LDD ,X          ; D = fg_screens_ptr
+    STD >LEVEL_FG_SCREENS_PTR
+    
+    ; === Setup GP pointer: point directly to ROM (matches core) ===
+    ; GP objects are read from ROM with stride=21 (stride-21 format), same as BG/FG
     LDB >LEVEL_GP_COUNT
     BEQ LLR_SKIP_GP  ; Skip if no GP objects
-    
-    ; Clear GP buffer with $FF marker (empty sentinel)
-    LDA #$FF
-    LDU #LEVEL_GP_BUFFER
-    LDB #8           ; Max 8 objects
-LLR_CLR_GP_LOOP:
-    STA ,U           ; Write $FF to first byte of object slot
-    LEAU 15,U        ; Advance by 15 bytes (RAM object stride)
-    DECB
-    BNE LLR_CLR_GP_LOOP
-    
-    ; Copy GP objects: ROM (20 bytes each) → RAM buffer (14 bytes each)
-    LDB >LEVEL_GP_COUNT   ; Reload count after clear loop
-    LDX >LEVEL_GP_ROM_PTR ; X = source (ROM)
-    LDU #LEVEL_GP_BUFFER  ; U = destination (RAM)
-    PSHS U               ; Save buffer start
-    JSR LLR_COPY_OBJECTS  ; Copy B objects from X(ROM) to U(RAM)
-    PULS D               ; Restore buffer start into D
-    STD >LEVEL_GP_PTR    ; LEVEL_GP_PTR → RAM buffer
-    BRA LLR_GP_DONE
+    LDD >LEVEL_GP_ROM_PTR ; Just point to ROM
+    STD >LEVEL_GP_PTR    ; Store ROM pointer
     
 LLR_GP_DONE:
 LLR_SKIP_GP:
@@ -720,17 +830,18 @@ LLR_SKIP_GP:
     
     PULS D,X,Y,U,PC  ; Restore and return
     
-; === LLR_COPY_OBJECTS - Copy N ROM objects to RAM buffer ===
-; Input:  B = count, X = source (ROM, 20 bytes/obj), U = dest (RAM, 15 bytes/obj)
-; ROM object layout (20 bytes):
+; === LLR_COPY_OBJECTS - LEGACY (not called; GP objects read from ROM directly)
+; Input:  B = count, X = source (ROM, 21 bytes/obj stride-21), U = dest (RAM)
+; ROM object layout (21 bytes, stride-21):
 ;   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),
 ;   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,
 ;   +11: physics_flags, +12: collision_flags, +13: collision_size,
-;   +14-15: spawn_delay(FDB), +16-17: vector_ptr(FDB), +18: half_width, +19: reserved
+;   +14-15: spawn_delay(FDB), +16: vector_bank(FCB), +17-18: vector_ptr(FDB),
+;   +19: half_width, +20: half_height
 ; RAM object layout (15 bytes):
 ;   +0-1: world_x(FDB i16), +2: y(i8), +3: scale(low), +4: rotation,
 ;   +5: velocity_x, +6: velocity_y, +7: physics_flags, +8: collision_flags,
-;   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: reserved
+;   +9: collision_size, +10: spawn_delay(low), +11-12: vector_ptr, +13: half_width, +14: half_height
 ; Clobbers: A, B, X, U
 LLR_COPY_OBJECTS:
 LLR_COPY_LOOP:
@@ -775,21 +886,21 @@ LLR_COPY_LOOP:
     ; RAM +10: spawn_delay low byte (ROM +15, skip high at ROM +14)
     LDA 1,X          ; ROM +15 = low byte of spawn_delay FDB
     STA ,U+
-    LEAX 2,X         ; Skip spawn_delay FDB (2 bytes), X now at ROM +16
-    ; RAM +11-12: vector_ptr FDB (ROM +16-17)
-    LDD ,X++         ; ROM +16-17
+    LEAX 3,X         ; Skip spawn_delay FDB (2 bytes) + vector_bank (1), X now at ROM+17
+    ; RAM +11-12: vector_ptr FDB (ROM +17-18, stride-21)
+    LDD ,X++         ; ROM +17-18 = vector_ptr FDB
     STD ,U++
-    ; RAM +13-14: properties_ptr FDB (ROM +18-19)
-    LDD ,X++         ; ROM +18-19
+    ; RAM +13-14: half_width + half_height (ROM +19-20, stride-21)
+    LDD ,X++         ; ROM +19-20
     STD ,U++
-    ; X is now past end of this ROM object (ROM +1 + 8 + 5 + 2 + 2 + 2 = +20 total)
+    ; X is now past end of this ROM object (ROM+1 + 8 + 5 + 3 + 2 + 2 = +21 total)
     ; NOTE: We started at ROM+1 (after LEAX 1,X), walked:
     ;   ,X and 1,X and 3,X and 5,X and 6,X via indexed → X unchanged
     ;   then LEAX 8,X (X now at ROM+9)
     ;   then 5 post-increment ,X+ → X at ROM+14
-    ;   then LEAX 2,X (X at ROM+16)
-    ;   then 2x LDD ,X++ → X at ROM+20
-    ;   ROM+20 from original ROM+0 = next object start
+    ;   then LEAX 3,X (X at ROM+17)
+    ;   then 2x LDD ,X++ → X at ROM+21
+    ;   ROM+21 from original ROM+0 = next object start (stride-21)
     
     PULS B           ; Restore counter
     DECB
@@ -800,8 +911,14 @@ LLR_COPY_DONE:
 ; === SHOW_LEVEL_RUNTIME ===
 ; Draw all level objects from all layers
 ; Input:  LEVEL_PTR = pointer to level header
-; Layers: BG (ROM stride 20), GP (RAM stride 15), FG (ROM stride 20)
-; Each object: load intensity, x, y, vector_ptr, call SLR_DRAW_OBJECTS
+; Layers: BG (ROM stride 21), GP (ROM stride 21), FG (ROM stride 21)
+; ROM object layout (21 bytes, stride-21):
+;   +0: type, +1-2: x(FDB), +3-4: y(FDB), +5-6: scale(FDB),
+;   +7: rotation, +8: intensity, +9: velocity_x, +10: velocity_y,
+;   +11: physics_flags, +12: collision_flags, +13: collision_size,
+;   +14-15: spawn_delay(FDB), +16: vector_bank(FCB, $FF=null),
+;   +17-18: vector_ptr(FDB), +19: half_width(FCB), +20: half_height(FCB)
+; Each object: load intensity, x, y, vector_bank, vector_ptr, call SLR_DRAW_OBJECTS
 SHOW_LEVEL_RUNTIME:
     PSHS D,X,Y,U     ; Preserve registers
     JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
@@ -817,7 +934,7 @@ SHOW_LEVEL_RUNTIME:
     BEQ SLR_DONE     ; No level loaded, skip
     LDX >LEVEL_PTR
     
-    ; Re-read object counts from header
+    ; Re-read object counts from header (legacy: kept for any caller that reads RAM vars)
     LEAX 12,X        ; X points to counts (+12)
     LDB ,X+          ; B = bgCount
     STB >LEVEL_BG_COUNT
@@ -826,37 +943,60 @@ SHOW_LEVEL_RUNTIME:
     LDB ,X+          ; B = fgCount
     STB >LEVEL_FG_COUNT
     
-    ; === Draw Background Layer (ROM, stride=20) ===
-SLR_BG_COUNT:
-    CLRB
-    LDB >LEVEL_BG_COUNT
-    CMPB #0
-    BEQ SLR_GAMEPLAY
-    LDA #20          ; ROM object stride
-    LDX >LEVEL_BG_ROM_PTR
-    JSR SLR_DRAW_OBJECTS
+    ; ── PER-SCREEN VISIBLE RANGE ─────────────────────────────────────
+    ; Compute top_screen, bot_screen — only iterate objects whose screen
+    ; band overlaps the camera's ±128 Y window. For SnowBros (1 screen
+    ; visible) this is normally 1 screen, occasionally 2 during scroll.
+    LDX >LEVEL_PTR
+    LDD 6,X          ; D = yMax
+    STD >TMPPTR      ; cache yMax
+    LDD >CAMERA_Y
+    ADDD #128        ; D = top_y (camera_y + 128, higher Y = top of screen)
+    PSHS D
+    LDD >TMPPTR      ; yMax
+    SUBD ,S++        ; D = yMax - top_y
+    TSTA             ; sign byte
+    BPL SLR_TOP_OK   ; positive → A is the screen idx (D / 256)
+    CLRA             ; negative → clamp top_screen to 0
+SLR_TOP_OK:
+    STA >SLR_TOP_SCREEN  ; top_screen (separate from TMPVAL — survives per-object cull)
+    LDD >CAMERA_Y
+    SUBD #128        ; D = bot_y (camera_y - 128)
+    PSHS D
+    LDD >TMPPTR      ; yMax
+    SUBD ,S++        ; D = yMax - bot_y
+    TSTA
+    BPL SLR_BOT_OK
+    CLRA
+SLR_BOT_OK:
+    ; Clamp bot_screen to (LEVEL_SCREEN_COUNT - 1) max
+    LDB >LEVEL_SCREEN_COUNT
+    LBEQ SLR_DONE    ; no screens → nothing to draw
+    DECB             ; B = max_idx = screen_count - 1
+    STB >SLR_BOT_SCREEN  ; stash max_idx for compare
+    CMPA >SLR_BOT_SCREEN ; A (bot_screen) vs max_idx
+    BLS SLR_BOT_NOCLAMP
+    LDA >SLR_BOT_SCREEN  ; clamp bot_screen = max_idx
+SLR_BOT_NOCLAMP:
+    STA >SLR_BOT_SCREEN  ; bot_screen
     
-    ; === Draw Gameplay Layer (RAM, stride=15) ===
+    ; === Draw Background Layer ===
+SLR_BG_LAYER:
+    LDD >LEVEL_BG_SCREENS_PTR
+    STD >TMPPTR      ; TMPPTR = table base for this layer
+    JSR SLR_DRAW_SCREEN_RANGE
+    
+    ; === Draw Gameplay Layer ===
 SLR_GAMEPLAY:
-SLR_GP_COUNT:
-    CLRB
-    LDB >LEVEL_GP_COUNT
-    CMPB #0
-    BEQ SLR_FOREGROUND
-    LDA #15          ; RAM object stride (15 bytes)
-    LDX >LEVEL_GP_PTR
-    JSR SLR_DRAW_OBJECTS
+    LDD >LEVEL_GP_SCREENS_PTR
+    STD >TMPPTR
+    JSR SLR_DRAW_SCREEN_RANGE
     
-    ; === Draw Foreground Layer (ROM, stride=20) ===
+    ; === Draw Foreground Layer ===
 SLR_FOREGROUND:
-SLR_FG_COUNT:
-    CLRB
-    LDB >LEVEL_FG_COUNT
-    CMPB #0
-    BEQ SLR_DONE
-    LDA #20          ; ROM object stride
-    LDX >LEVEL_FG_ROM_PTR
-    JSR SLR_DRAW_OBJECTS
+    LDD >LEVEL_FG_SCREENS_PTR
+    STD >TMPPTR
+    JSR SLR_DRAW_SCREEN_RANGE
     
 SLR_DONE:
     ; MULTIBANK: Restore original bank
@@ -866,11 +1006,37 @@ SLR_DONE:
     JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
     PULS D,X,Y,U,PC  ; Restore and return
     
+; === SLR_DRAW_SCREEN_RANGE — iterate screens in visible camera range ===
+SLR_DRAW_SCREEN_RANGE:
+    LDA >SLR_TOP_SCREEN  ; A = current screen idx (start at top)
+SLR_SR_LOOP:
+    CMPA >SLR_BOT_SCREEN
+    BHI SLR_SR_DONE      ; current > bot → finished
+    CMPA >LEVEL_SCREEN_COUNT
+    BHS SLR_SR_DONE      ; defensive: don't index past table
+    ; Compute &table[s] = TMPPTR + s*3
+    PSHS A               ; save loop var
+    LDB #3
+    MUL                  ; D = s*3 (A=0 since s < 256/3, B = offset)
+    LDX >TMPPTR          ; X = screens table base
+    LEAX D,X             ; X = &table[s]
+    LDB ,X               ; B = count for this screen
+    BEQ SLR_SR_NEXT      ; empty screen → skip
+    LDX 1,X              ; X = ptr to first object in this screen
+    LDA #23              ; ROM object stride
+    JSR SLR_DRAW_OBJECTS
+SLR_SR_NEXT:
+    PULS A
+    INCA
+    BRA SLR_SR_LOOP
+SLR_SR_DONE:
+    RTS
+    
 ; === SLR_DRAW_OBJECTS - Draw N objects from a layer ===
-; Input:  A = stride (15=RAM, 20=ROM), B = count, X = objects ptr
-; For ROM objects (stride=20): intensity at +8, y FDB at +3, x FDB at +1, vector_ptr FDB at +16
-; For RAM objects (stride=15): look up intensity from ROM via LEVEL_GP_ROM_PTR,
-;   world_x at +0-1 (16-bit), y at +2, vector_ptr FDB at +11
+; Input:  A = stride (21=ROM), B = count, X = objects ptr
+; For ROM objects (stride=21, stride-21 format):
+;   intensity at +8, y FDB at +3, x FDB at +1, half_width at +19
+;   vector_bank at +16 ($FF=null), vector_ptr FDB at +17
 ; Camera: SUBD >CAMERA_X applied to world_x; objects outside i8 range are culled
 SLR_DRAW_OBJECTS:
     PSHS A           ; Save stride on stack (A=stride)
@@ -880,84 +1046,42 @@ SLR_OBJ_LOOP:
     
     PSHS B           ; Save counter (LDD clobbers B)
     
-    ; Determine ROM vs RAM offsets via stride
-    LDA 1,S          ; Peek stride from stack (+1 because B is on top)
-    CMPA #20
-    BEQ SLR_ROM_OFFSETS
-    
-    ; === RAM object (stride=15) ===
-    ; Need to look up intensity from ROM counterpart
-    ; objIndex = LEVEL_GP_COUNT - currentCount
-    PSHS X           ; Save RAM object pointer
-    LDB >LEVEL_GP_COUNT
-    SUBB 2,S         ; B = objIndex = totalCount - currentCounter
-    LDX >LEVEL_GP_ROM_PTR  ; X = ROM base
-SLR_ROM_ADDR_LOOP:
-    BEQ SLR_INTENSITY_READ ; Done if index=0
-    LEAX 20,X        ; Advance by ROM stride
-    DECB
-    BRA SLR_ROM_ADDR_LOOP
-SLR_INTENSITY_READ:
-    LDA 8,X          ; intensity at ROM +8
-    STA >DRAW_VEC_INTENSITY  ; DP=$D0, must use extended addressing
-    PULS X           ; Restore RAM object pointer
-    
-    CLR >MIRROR_X    ; DP=$D0, must use extended addressing
-    CLR >MIRROR_Y
-    ; Load world_x (16-bit), subtract CAMERA_X, check visibility
-    LDD 0,X          ; RAM +0-1 = world_x (16-bit)
-    SUBD >CAMERA_X   ; screen_x = world_x - camera_x
-    STD >TMPVAL      ; save screen_x (overwritten by CMPB below)
-    ; Per-object cull using half_width from RAM+13
-    ; Wider culling: object stays until fully off-screen
-    ; Visible range: [-(128+hw), 127+hw]
-    ; right_limit = 127 + hw  (A=$00, B <= right_limit)
-    ; left_limit  = 128 - hw  (A=$FF, B >= left_limit)
-    LDB 13,X         ; B = half_width (RAM+13)
-    STB >TMPPTR2     ; save hw
-    LDA #127
-    ADDA >TMPPTR2    ; A = 127 + hw (right boundary)
-    STA >TMPPTR
-    LDA #128
-    SUBA >TMPPTR2    ; A = 128 - hw (left boundary, unsigned)
-    STA >TMPPTR+1
-    LDD >TMPVAL      ; restore screen_x into D
-    TSTA
-    BEQ SLR_RAM_A_ZERO
-    INCA
-    LBNE SLR_OBJ_NEXT        ; A not $FF: too far
-    ; A=$FF: visible if B >= left_limit (128-hw)
-    CMPB >TMPPTR+1
-    BHS SLR_RAM_VISIBLE       ; unsigned >=
-    LBRA SLR_OBJ_NEXT
-SLR_RAM_A_ZERO:
-    ; A=0: visible if B <= right_limit (127+hw)
-    CMPB >TMPPTR
-    BLS SLR_RAM_VISIBLE       ; unsigned <=
-    LBRA SLR_OBJ_NEXT
-SLR_RAM_VISIBLE:
-    LDD >TMPVAL      ; reload full 16-bit screen_x (INCA corrupted A)
-    STD >DRAW_VEC_X_HI ; store full 16-bit screen_x (A=hi, B=lo)
-    LDB 2,X          ; y at RAM +2
-    STB >DRAW_VEC_Y
-    LDU 11,X         ; vector_ptr at RAM +11
-    BRA SLR_DRAW_VECTOR
+    ; All layers use stride-21 ROM format — fall straight through
     
 SLR_ROM_OFFSETS:
-    ; === ROM object (stride=20) ===
+    ; === ROM object (stride=21, stride-21 format) ===
+    ; Skip enemy spawn markers (type==1): drawn by DRAW_ENEMIES, not SHOW_LEVEL
+    LDA ,X           ; type byte at ROM+0
+    CMPA #1
+    LBEQ SLR_OBJ_NEXT ; enemy marker: skip, handle via DRAW_ENEMIES
     CLR >MIRROR_X    ; DP=$D0, must use extended addressing
     CLR >MIRROR_Y
     LDA 8,X          ; intensity at ROM +8
     STA >DRAW_VEC_INTENSITY
-    LDD 3,X          ; y FDB at ROM +3; low byte into B
+    ; Apply CAMERA_Y: load world_y FDB at ROM +3, subtract CAMERA_Y, cull
+    LDD 3,X          ; world_y FDB at ROM +3 (16-bit signed)
+    SUBD >CAMERA_Y   ; screen_y = world_y - camera_y
+    TSTA
+    BEQ SLR_ROM_Y_ZERO
+    INCA
+    LBNE SLR_OBJ_NEXT    ; A not $FF: too far above
+    ; A=$FF: visible if B >= 128 (i.e. >= -128 signed)
+    CMPB #128
+    BHS SLR_ROM_Y_VISIBLE
+    LBRA SLR_OBJ_NEXT
+SLR_ROM_Y_ZERO:
+    ; A=0: visible if B <= 127
+    CMPB #127
+    BLS SLR_ROM_Y_VISIBLE
+    LBRA SLR_OBJ_NEXT
+SLR_ROM_Y_VISIBLE:
     STB >DRAW_VEC_Y  ; DP=$D0, must use extended addressing
     ; Load world_x (16-bit), subtract CAMERA_X, check visibility
     LDD 1,X          ; x FDB at ROM +1
     SUBD >CAMERA_X   ; screen_x = world_x - camera_x
     STD >TMPVAL
-    ; Per-object cull: half_width at ROM+18
-    ; Wider culling: object stays until fully off-screen
-    LDB 18,X         ; B = half_width (ROM+18)
+    ; Wide cull at ±(127+hw): partial-edge objects still render via SDCP.
+    LDB 19,X         ; B = half_width (ROM+19)
     STB >TMPPTR2     ; save hw
     LDA #127
     ADDA >TMPPTR2    ; A = 127 + hw (right boundary)
@@ -980,14 +1104,27 @@ SLR_ROM_A_ZERO:
 SLR_ROM_VISIBLE:
     LDD >TMPVAL      ; reload full 16-bit screen_x (INCA corrupted A)
     STD >DRAW_VEC_X_HI ; store full 16-bit screen_x (A=hi, B=lo)
-    LDU 16,X         ; vector_ptr FDB at ROM +16
+    ; Stride-21: vector_bank at ROM+16 ($FF=null), vector_ptr FDB at ROM+17
+    ; CRITICAL: read ALL level-bank data BEFORE switching to vector bank.
+    LDA 16,X         ; A = vector_bank (LEVEL BANK ACTIVE)
+    CMPA #$FF        ; $FF = null (no visual for this object)
+    LBEQ SLR_OBJ_NEXT ; null bank → skip draw
+    LDU 17,X         ; vector_ptr FDB at ROM+17 (STILL IN LEVEL BANK)
+    LDA 6,X          ; scale_t1 at ROM+6 (STILL IN LEVEL BANK)
+    STA >DRAW_T1_SCALED
+    ; MULTIBANK: NOW switch to the vector's bank.
+    ; U = vector address valid in that bank; level data fully read above.
+    ; Level bank is restored in SLR_PATH_DONE after all paths are drawn.
+    LDA 16,X         ; reload vector_bank (LDA 6,X clobbered A)
+    STA >CURRENT_ROM_BANK
+    STA $DF00        ; switch to vector bank
     
 SLR_DRAW_VECTOR:
     PSHS X           ; Save object pointer
     TFR U,X          ; X = vector data pointer (header)
     
-    ; Read path_count from vector header byte 0
-    LDB ,X+          ; B = path_count, X now at pointer table
+    ; Read path_count from vector header (FDB = 2 bytes, high byte ignored)
+    LDD ,X++         ; D = path_count FDB; B = low byte = actual count, X now at pointer table
     
     ; DP is already $D0 (set by SHOW_LEVEL_RUNTIME at entry)
 SLR_PATH_LOOP:
@@ -998,13 +1135,35 @@ SLR_PATH_LOOP:
     LDU ,X++         ; U = path pointer, X advances to next entry
     PSHS X           ; Save pointer table position
     TFR U,X          ; X = actual path data
+    LDA >DRAW_VEC_X_HI
+    BEQ SLR_PATH_CHECK_POS
+    INCA
+    BNE SLR_PATH_USE_SDCP
+    LDA >DRAW_VEC_X
+    CMPA #$B0
+    BHS SLR_PATH_USE_DSWM
+    BRA SLR_PATH_USE_SDCP
+SLR_PATH_CHECK_POS:
+    LDA >DRAW_VEC_X
+    CMPA #80
+    BLS SLR_PATH_USE_DSWM
+SLR_PATH_USE_SDCP:
     JSR SLR_DRAW_CLIPPED_PATH
+    BRA SLR_PATH_AFTER
+SLR_PATH_USE_DSWM:
+    JSR Draw_Sync_List_At_With_Mirrors
+SLR_PATH_AFTER:
     PULS X           ; Restore pointer table position
     PULS B           ; Restore count
     BRA SLR_PATH_LOOP
     
 SLR_PATH_DONE:
     PULS X           ; Restore object pointer
+    ; MULTIBANK: Restore level bank now that all vector paths are drawn.
+    ; SLR_OBJ_NEXT needs the level bank active to advance X through level objects.
+    LDA >LEVEL_BANK
+    STA >CURRENT_ROM_BANK
+    STA $DF00        ; switch back to level bank
     
 SLR_OBJ_NEXT:
     ; Advance to next object using stride
@@ -1023,11 +1182,6 @@ SLR_OBJ_DONE:
     RTS
 
 ; === SLR_DRAW_CLIPPED_PATH ===
-; Per-segment X-axis clipping using direct VIA register writes.
-; Mirrors the DSWM VIA pattern — no BIOS calls (Intensity_a corrupts
-; DDRB with DP=$D0; Draw_Line_d / Moveto_d are BIOS-only).
-; Segments whose new_x = cur_x+dx overflows a signed byte are moved
-; with beam OFF, preventing screen-wrap at left/right edges.
 SLR_DRAW_CLIPPED_PATH:
     LDA >DRAW_VEC_INTENSITY ; check override
     BNE SDCP_USE_OVERRIDE
@@ -1040,32 +1194,35 @@ SDCP_SET_INTENS:
     LDB ,X+                 ; B = y_start (relative to center)
     LDA ,X+                 ; A = x_start (relative to center)
     ADDB >DRAW_VEC_Y        ; B = abs_y
-    STB >TMPVAL             ; save abs_y for moveto
+    STB >SDCP_ABS_Y         ; save abs_y for moveto (NOT TMPVAL — SHOW_LEVEL's top_screen lives there)
     TFR A,B                 ; B = x_start (SEX extends B, not A)
     SEX                      ; sign-extend B→D (A=sign, B=x_start)
     ADDD >DRAW_VEC_X_HI     ; D = abs_x_16 = SEX(x_start) + screen_x_16
-    ; Range check: abs_x must fit in signed byte [-128, +127]
-    ; If out of range, skip this path (can't position beam correctly).
-    ; Progressive clipping works because paths starting on-screen are
-    ; drawn normally, and their segments get clipped at the edge.
+    ; D = abs_x_16. Save it in 16-bit tracker SLR_TRUE_X (unclamped).
+    STD >SLR_TRUE_X
+    ; Compute clamped beam position for hardware Moveto.
     TSTA
-    BEQ SDCP_CHECK_POS       ; A=$00 → check positive range
-    INCA                      ; was A=$FF?
-    BNE SDCP_SKIP_PATH        ; A was not $00 or $FF → way off
-    ; A was $FF: valid if B >= $80 (negative signed byte)
+    BEQ SDCP_INIT_POS
+    INCA
+    BEQ SDCP_INIT_NEG_OK    ; A was $FF (small negative)
+    ; Way off — clamp to nearest edge by sign of original A (now in INCA result)
+    LDB #$80                ; default to left edge
+    LDA >SLR_TRUE_X         ; original hi byte
+    BMI SDCP_USE_CLAMPED    ; negative → -128 (left)
+    LDB #$7F                ; positive way off → +127 (right)
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_NEG_OK:
     CMPB #$80
-    BHS SDCP_ABS_OK
-    BRA SDCP_SKIP_PATH
-SDCP_CHECK_POS:
-    ; A=$00: valid if B <= $7F
+    BHS SDCP_USE_CLAMPED    ; -128..-1, valid
+    LDB #$80                ; clamp
+    BRA SDCP_USE_CLAMPED
+SDCP_INIT_POS:
     CMPB #$7F
-    BLS SDCP_ABS_OK
-SDCP_SKIP_PATH:
-    RTS
-SDCP_ABS_OK:
-    ; B = abs_x (valid signed byte)
-    TFR B,A                  ; A = abs_x for moveto
-    STA >SLR_CUR_X          ; init beam-x tracker
+    BLS SDCP_USE_CLAMPED
+    LDB #$7F                ; clamp positive
+SDCP_USE_CLAMPED:
+    TFR B,A                  ; A = clamped beam x
+    STA >SLR_CUR_X          ; clamped value goes to integrator
     CLR VIA_shift_reg
     LDA #$CC
     STA VIA_cntl
@@ -1078,7 +1235,7 @@ SDCP_ABS_OK:
     STA VIA_port_b
     LDA #$01
     STA VIA_port_b
-    LDB >TMPVAL             ; B = abs_y
+    LDB >SDCP_ABS_Y         ; B = abs_y
     STB VIA_port_a          ; DY → DAC (PB=1: hold)
     CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
     LDA >SLR_CUR_X          ; abs_x (load = settling for Y)
@@ -1089,7 +1246,7 @@ SDCP_ABS_OK:
     INC VIA_port_b          ; PB=1: lock Y direction
     PULS A                  ; restore abs_x
     STA VIA_port_a          ; DX → DAC
-    LDA #$7F
+    LDA >DRAW_T1_SCALED     ; effective T1 for this object (scale * 127)
     STA VIA_t1_cnt_lo       ; load T1 latch
     LEAX 2,X                ; skip next_y, next_x (the 0,0)
     CLR VIA_t1_cnt_hi       ; start T1 → ramp
@@ -1101,19 +1258,61 @@ SDCP_MOVETO_W:
 SDCP_SEG_LOOP:
     LDA ,X+                 ; flags
     CMPA #2
-    BEQ SDCP_DONE
-    ; Read dy → B, dx → A (DSWM order)
+    LBEQ SDCP_DONE
     LDB ,X+                 ; B = dy
-    LDA ,X+                 ; A = dx
-    ; --- X-axis clip check: new_x = cur_x + dx ---
     STB >TMPPTR2            ; save dy
-    PSHS A                  ; push dx
+    LDA ,X+                 ; A = dx (8-bit signed)
+    ; --- 16-bit add: true_new_x_16 = SLR_TRUE_X + SEX(dx) ---
+    TFR A,B                 ; B = dx
+    SEX                      ; D = sign-extended dx (A=sign, B=dx)
+    ADDD >SLR_TRUE_X        ; D = new true_x_16
+    STD >SLR_TRUE_X         ; update 16-bit tracker
+    ; --- Clamp D to [-128, +127] → 8-bit clamped_new_x in B ---
+    TSTA
+    BEQ SDCP_SEG_POS
+    INCA
+    BEQ SDCP_SEG_NEG_OK     ; A was $FF
+    ; Way off — clamp by sign of original D
+    LDA >SLR_TRUE_X         ; reload hi byte
+    BMI SDCP_SEG_CLAMP_LEFT
+    LDB #$7F                ; positive way off → +127
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_CLAMP_LEFT:
+    LDB #$80                ; negative way off → -128
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_NEG_OK:
+    CMPB #$80
+    BHS SDCP_SEG_CLAMPED
+    LDB #$80
+    BRA SDCP_SEG_CLAMPED
+SDCP_SEG_POS:
+    CMPB #$7F
+    BLS SDCP_SEG_CLAMPED
+    LDB #$7F
+SDCP_SEG_CLAMPED:
+    ; B = clamped_new_x. Compute beam_dx = B - SLR_CUR_X (8-bit signed).
     LDA >SLR_CUR_X
-    ADDA ,S                 ; A = cur_x + dx; V set on overflow
-    BVS SDCP_CLIP           ; overflow → clip
-    STA >SLR_CUR_X          ; update tracker
-    PULS A                  ; restore dx
+    PSHS B                  ; save clamped_new_x
+    NEGA                    ; A = -cur_x
+    ADDA ,S                 ; A = clamped_new_x - cur_x = beam_dx
+    PULS B                  ; B = clamped_new_x
+    ; Update SLR_CUR_X to new clamped position
+    STB >SLR_CUR_X
+    ; Decide beam ON/OFF/skip:
+    ; - beam_dx != 0                       → beam ON,  ramp(beam_dx, dy)
+    ; - beam_dx == 0 AND cur at edge AND dy==0 → skip (zero motion)
+    ; - beam_dx == 0 AND cur at edge AND dy!=0 → beam OFF ramp(0, dy)
+    ;   (Y must track logical position so subsequent segments draw at correct Y)
+    ; - beam_dx == 0 AND not at edge       → beam ON,  ramp(0, dy) — vertical
+    TSTA
+    BNE SDCP_SEG_DRAW       ; non-zero beam_dx → draw
+    CMPB #$80               ; at left edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen left
+    CMPB #$7F               ; at right edge?
+    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen right
+SDCP_SEG_DRAW:
     LDB >TMPPTR2            ; restore dy
+    ; A = beam_dx (visible X delta), B = dy. Beam ON ramp.
     STB VIA_port_a          ; DY → DAC (PB=1: hold)
     CLR VIA_port_b          ; PB=0: mux for DY
     NOP
@@ -1129,25 +1328,30 @@ SDCP_W_DRAW:
     ANDA #$40
     BEQ SDCP_W_DRAW
     CLR VIA_shift_reg       ; beam OFF
-    BRA SDCP_SEG_LOOP
-SDCP_CLIP:
-    STA >SLR_CUR_X          ; store wrapped x (approx)
-    PULS A                  ; restore dx
-    LDB >TMPPTR2            ; restore dy
+    LBRA SDCP_SEG_LOOP
+
+    ; --- Off-screen-X path: dx contribution is invisible, but Y must track ---
+SDCP_SEG_OFF_X:
+    LDB >TMPPTR2            ; B = dy
+    TSTB                     ; dy == 0?
+    LBEQ SDCP_SEG_LOOP      ; no Y motion either → skip entire segment
+    ; Ramp(0, dy) with beam OFF. A is already 0 (beam_dx).
+    CLRA                     ; defensive: ensure dx=0
     STB VIA_port_a          ; DY → DAC
     CLR VIA_port_b
     NOP
     NOP
     NOP
     INC VIA_port_b
-    STA VIA_port_a          ; DX → DAC
+    STA VIA_port_a          ; DX = 0
     ; beam stays OFF (no STA VIA_shift_reg)
     CLR VIA_t1_cnt_hi       ; start T1 (ramp, beam off)
-SDCP_W_MOVE:
+SDCP_W_OFF_X:
     LDA VIA_int_flags
     ANDA #$40
-    BEQ SDCP_W_MOVE
-    BRA SDCP_SEG_LOOP
+    BEQ SDCP_W_OFF_X
+    LBRA SDCP_SEG_LOOP
+
 SDCP_DONE:
     RTS
 
@@ -1605,7 +1809,7 @@ UGFC_PUSH_DOWN:
     STA 2,U          ; store back y (RAM +2)
     
 UGFC_NEXT_FG:
-    LEAX 20,X        ; Next FG object (ROM stride 20)
+    LEAX 23,X        ; Next FG object (ROM stride 23)
     DECB
     LBRA UGFC_FG_LOOP
     

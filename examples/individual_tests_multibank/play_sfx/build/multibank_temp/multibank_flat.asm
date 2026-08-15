@@ -47,6 +47,8 @@ START:
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
     JSR $F533        ; Init_Music_Buf: init BIOS sound work buffer at Vec_Default_Stk
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -68,6 +70,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     LDA #$F8
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
@@ -87,6 +90,7 @@ MAIN:
     ; Mux configured - J1_X()/J1_Y() can now be called
 
     ; Call main() for initialization
+; VPy_LINE:11
     ; TODO: Statement Pass { source_line: 11 }
 
 .MAIN_LOOP:
@@ -96,36 +100,43 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+; VPy_LINE:14
+; NATIVE_CALL: PRINT_TEXT at line 14
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #80
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2348223718253      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:15
+; NATIVE_CALL: PRINT_TEXT at line 15
     ; PRINT_TEXT: Print text at position
     LDD #-80
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #50
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_58672554795414      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:16
+; NATIVE_CALL: PRINT_TEXT at line 16
     ; PRINT_TEXT: Print text at position
     LDD #-80
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #30
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_58672583180530      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:18
     LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
     BITA #$01
     BNE .J1B1_0_ON
@@ -136,107 +147,14 @@ LOOP_BODY:
 .J1B1_0_END:
     STD RESULT
     LBEQ IF_NEXT_1
+; VPy_LINE:19
+; NATIVE_CALL: PLAY_SFX at line 19
     ; PLAY_SFX("jump") - play SFX asset (index=1)
     LDX #1        ; SFX asset index for lookup
     JSR PLAY_SFX_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
-    LDA #$D0
-    TFR A,DP
-    JSR Reset0Ref
-    LDA #$80
-    STA <$04
-    LDA #$64
-    JSR Intensity_a
-    LDA #$EC
-    LDB #$08
-    JSR Moveto_d
-    CLR Vec_Misc_Count
-    LDA #$03
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$02
-    LDB #$FE
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$02
-    LDB #$FE
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$FD
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$FD
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FE
-    LDB #$FE
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FE
-    LDB #$FE
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FD
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FD
-    LDB #$01
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FE
-    LDB #$02
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FE
-    LDB #$02
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$03
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$03
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$02
-    LDB #$02
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$02
-    LDB #$02
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$03
-    LDB #$01
-    JSR Draw_Line_d
-    LDA #$C8
-    TFR A,DP    ; Restore DP=$C8 after circle drawing
-    LDD #0
-    STD RESULT
-    LBRA IF_END_0
-IF_NEXT_1:
-IF_END_0:
-    LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
-    BITA #$02
-    BNE .J1B2_1_ON
-    LDD #0
-    BRA .J1B2_1_END
-.J1B2_1_ON:
-    LDD #1
-.J1B2_1_END:
-    STD RESULT
-    LBEQ IF_NEXT_3
-    ; PLAY_SFX("explosion") - play SFX asset (index=0)
-    LDX #0        ; SFX asset index for lookup
-    JSR PLAY_SFX_BANKED  ; Play with automatic bank switching
-    LDD #0
-    STD RESULT
+; VPy_LINE:20
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -315,9 +233,110 @@ IF_END_0:
     TFR A,DP    ; Restore DP=$C8 after circle drawing
     LDD #0
     STD RESULT
+    LBRA IF_END_0
+IF_NEXT_1:
+IF_END_0:
+; VPy_LINE:22
+    LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
+    BITA #$02
+    BNE .J1B2_1_ON
+    LDD #0
+    BRA .J1B2_1_END
+.J1B2_1_ON:
+    LDD #1
+.J1B2_1_END:
+    STD RESULT
+    LBEQ IF_NEXT_3
+; VPy_LINE:23
+; NATIVE_CALL: PLAY_SFX at line 23
+    ; PLAY_SFX("explosion") - play SFX asset (index=0)
+    LDX #0        ; SFX asset index for lookup
+    JSR PLAY_SFX_BANKED  ; Play with automatic bank switching
+    LDD #0
+    STD RESULT
+; VPy_LINE:24
+    LDA #$D0
+    TFR A,DP
+    JSR Reset0Ref
+    LDA #$80
+    STA <$04
+    LDA #$64
+    JSR Intensity_a
+    LDA #$EC
+    LDB #$1E
+    JSR Moveto_d
+    CLR Vec_Misc_Count
+    LDA #$0B
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$0A
+    LDB #$F9
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$07
+    LDB #$F6
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$F5
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$F5
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$F9
+    LDB #$F6
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$F6
+    LDB #$F9
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$F5
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$F5
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$F6
+    LDB #$07
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$F9
+    LDB #$0A
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$0B
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$0B
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$07
+    LDB #$0A
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$0A
+    LDB #$07
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$0B
+    LDB #$02
+    JSR Draw_Line_d
+    LDA #$C8
+    TFR A,DP    ; Restore DP=$C8 after circle drawing
+    LDD #0
+    STD RESULT
     LBRA IF_END_2
 IF_NEXT_3:
 IF_END_2:
+; VPy_LINE:27
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -326,71 +345,71 @@ IF_END_2:
     LDA #$28
     JSR Intensity_a
     LDA #$EC
-    LDB #$03
+    LDB #$05
     JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$01
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$00
+    LDA #$02
     LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$00
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$FF
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$00
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
-    LDB #$01
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$FF
-    LDB #$01
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$01
-    LDB #$01
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
-    LDB #$01
+    LDB #$FE
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$00
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
+    LDB #$FF
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$FE
+    LDB #$00
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
     LDB #$01
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$01
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$01
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$02
+    LDB #$00
     JSR Draw_Line_d
     LDA #$C8
     TFR A,DP    ; Restore DP=$C8 after circle drawing
@@ -415,55 +434,55 @@ _EXPLOSION_SFX:
     ; SFX: explosion (explosion)
     ; Duration: 350ms (17fr), Freq: 136Hz, Channel: 0
     FCB $6F         ; Frame 0 - flags (vol=15, noisevol=15, tone=Y, noise=Y)
-    FCB $02, $C8  ; Tone period = 712 (big-endian)
+    FCB $02, $73  ; Tone period = 627 (big-endian)
     FCB $09         ; Noise period
     FCB $6F         ; Frame 1 - flags (vol=15, noisevol=15, tone=Y, noise=Y)
-    FCB $02, $E1  ; Tone period = 737 (big-endian)
+    FCB $02, $5E  ; Tone period = 606 (big-endian)
     FCB $09         ; Noise period
     FCB $6E         ; Frame 2 - flags (vol=14, noisevol=14, tone=Y, noise=Y)
-    FCB $02, $F9  ; Tone period = 761 (big-endian)
+    FCB $02, $4B  ; Tone period = 587 (big-endian)
     FCB $09         ; Noise period
     FCB $6E         ; Frame 3 - flags (vol=14, noisevol=14, tone=Y, noise=Y)
-    FCB $03, $11  ; Tone period = 785 (big-endian)
+    FCB $02, $39  ; Tone period = 569 (big-endian)
     FCB $09         ; Noise period
     FCB $6F         ; Frame 4 - flags (vol=15, noisevol=13, tone=Y, noise=Y)
-    FCB $03, $2A  ; Tone period = 810 (big-endian)
+    FCB $02, $27  ; Tone period = 551 (big-endian)
     FCB $09         ; Noise period
     FCB $6D         ; Frame 5 - flags (vol=13, noisevol=13, tone=Y, noise=Y)
-    FCB $03, $42  ; Tone period = 834 (big-endian)
+    FCB $02, $17  ; Tone period = 535 (big-endian)
     FCB $09         ; Noise period
     FCB $6C         ; Frame 6 - flags (vol=12, noisevol=12, tone=Y, noise=Y)
-    FCB $03, $5A  ; Tone period = 858 (big-endian)
+    FCB $02, $08  ; Tone period = 520 (big-endian)
     FCB $09         ; Noise period
     FCB $6C         ; Frame 7 - flags (vol=12, noisevol=12, tone=Y, noise=Y)
-    FCB $03, $72  ; Tone period = 882 (big-endian)
+    FCB $01, $FA  ; Tone period = 506 (big-endian)
     FCB $09         ; Noise period
     FCB $6B         ; Frame 8 - flags (vol=11, noisevol=11, tone=Y, noise=Y)
-    FCB $03, $8B  ; Tone period = 907 (big-endian)
+    FCB $01, $EC  ; Tone period = 492 (big-endian)
     FCB $09         ; Noise period
     FCB $6B         ; Frame 9 - flags (vol=11, noisevol=11, tone=Y, noise=Y)
-    FCB $03, $A3  ; Tone period = 931 (big-endian)
+    FCB $01, $E0  ; Tone period = 480 (big-endian)
     FCB $09         ; Noise period
     FCB $6A         ; Frame 10 - flags (vol=10, noisevol=10, tone=Y, noise=Y)
-    FCB $03, $BB  ; Tone period = 955 (big-endian)
+    FCB $01, $D3  ; Tone period = 467 (big-endian)
     FCB $09         ; Noise period
     FCB $6A         ; Frame 11 - flags (vol=10, noisevol=10, tone=Y, noise=Y)
-    FCB $03, $D4  ; Tone period = 980 (big-endian)
+    FCB $01, $C8  ; Tone period = 456 (big-endian)
     FCB $09         ; Noise period
     FCB $69         ; Frame 12 - flags (vol=9, noisevol=9, tone=Y, noise=Y)
-    FCB $03, $EC  ; Tone period = 1004 (big-endian)
+    FCB $01, $BD  ; Tone period = 445 (big-endian)
     FCB $09         ; Noise period
     FCB $69         ; Frame 13 - flags (vol=9, noisevol=9, tone=Y, noise=Y)
-    FCB $04, $04  ; Tone period = 1028 (big-endian)
+    FCB $01, $B2  ; Tone period = 434 (big-endian)
     FCB $09         ; Noise period
     FCB $68         ; Frame 14 - flags (vol=8, noisevol=8, tone=Y, noise=Y)
-    FCB $04, $1D  ; Tone period = 1053 (big-endian)
+    FCB $01, $A8  ; Tone period = 424 (big-endian)
     FCB $09         ; Noise period
     FCB $68         ; Frame 15 - flags (vol=8, noisevol=8, tone=Y, noise=Y)
-    FCB $04, $35  ; Tone period = 1077 (big-endian)
+    FCB $01, $9F  ; Tone period = 415 (big-endian)
     FCB $09         ; Noise period
     FCB $68         ; Frame 16 - flags (vol=8, noisevol=8, tone=Y, noise=Y)
-    FCB $04, $4D  ; Tone period = 1101 (big-endian)
+    FCB $01, $95  ; Tone period = 405 (big-endian)
     FCB $09         ; Noise period
     FCB $D0, $20    ; End of effect marker
 
@@ -472,27 +491,27 @@ _JUMP_SFX:
     ; SFX: powerup (powerup)
     ; Duration: 230ms (11fr), Freq: 440Hz, Channel: 0
     FCB $AF         ; Frame 0 - flags (vol=15, noisevol=0, tone=Y, noise=N)
-    FCB $00, $C8  ; Tone period = 200 (big-endian)
+    FCB $00, $D5  ; Tone period = 213 (big-endian)
     FCB $AA         ; Frame 1 - flags (vol=10, noisevol=0, tone=Y, noise=N)
-    FCB $00, $C8  ; Tone period = 200 (big-endian)
+    FCB $00, $D5  ; Tone period = 213 (big-endian)
     FCB $AA         ; Frame 2 - flags (vol=10, noisevol=0, tone=Y, noise=N)
-    FCB $00, $9F  ; Tone period = 159 (big-endian)
+    FCB $00, $A9  ; Tone period = 169 (big-endian)
     FCB $AA         ; Frame 3 - flags (vol=10, noisevol=0, tone=Y, noise=N)
-    FCB $00, $9F  ; Tone period = 159 (big-endian)
+    FCB $00, $A9  ; Tone period = 169 (big-endian)
     FCB $AA         ; Frame 4 - flags (vol=10, noisevol=0, tone=Y, noise=N)
-    FCB $00, $86  ; Tone period = 134 (big-endian)
+    FCB $00, $8E  ; Tone period = 142 (big-endian)
     FCB $AA         ; Frame 5 - flags (vol=10, noisevol=0, tone=Y, noise=N)
-    FCB $00, $86  ; Tone period = 134 (big-endian)
+    FCB $00, $8E  ; Tone period = 142 (big-endian)
     FCB $AA         ; Frame 6 - flags (vol=10, noisevol=0, tone=Y, noise=N)
-    FCB $00, $64  ; Tone period = 100 (big-endian)
-    FCB $AA         ; Frame 7 - flags (vol=10, noisevol=0, tone=Y, noise=N)
-    FCB $00, $64  ; Tone period = 100 (big-endian)
-    FCB $AA         ; Frame 8 - flags (vol=10, noisevol=0, tone=Y, noise=N)
-    FCB $00, $C8  ; Tone period = 200 (big-endian)
-    FCB $A6         ; Frame 9 - flags (vol=6, noisevol=0, tone=Y, noise=N)
-    FCB $00, $C8  ; Tone period = 200 (big-endian)
-    FCB $A3         ; Frame 10 - flags (vol=3, noisevol=0, tone=Y, noise=N)
-    FCB $00, $9F  ; Tone period = 159 (big-endian)
+    FCB $00, $6B  ; Tone period = 107 (big-endian)
+    FCB $A8         ; Frame 7 - flags (vol=8, noisevol=0, tone=Y, noise=N)
+    FCB $00, $6B  ; Tone period = 107 (big-endian)
+    FCB $A6         ; Frame 8 - flags (vol=6, noisevol=0, tone=Y, noise=N)
+    FCB $00, $D5  ; Tone period = 213 (big-endian)
+    FCB $A3         ; Frame 9 - flags (vol=3, noisevol=0, tone=Y, noise=N)
+    FCB $00, $D5  ; Tone period = 213 (big-endian)
+    FCB $A1         ; Frame 10 - flags (vol=1, noisevol=0, tone=Y, noise=N)
+    FCB $00, $A9  ; Tone period = 169 (big-endian)
     FCB $D0, $20    ; End of effect marker
 
 
@@ -575,26 +594,27 @@ PLAY_SFX_BANKED:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
-    ;       causing integrators to drift toward joystick DAC value.
-    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref   ; Reset beam to center before positioning text
-    LDU VAR_ARG2   ; string pointer
-    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
-    STA >$C82A      ; Vec_Text_Height: controls character Y scale
-    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
-    STA >$C82B      ; Vec_Text_Width: controls character X spacing
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
+    TFR A,DP
+    JSR Intensity_5F
+    JSR Reset0Ref
+    LDU >VAR_ARG2
+    LDA >TEXT_SCALE_H
+    STA >$C82A          ; Vec_Text_Height
+    LDA >TEXT_SCALE_W
+    STA >$C82B          ; Vec_Text_Width
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    LDX >$C82C
+    PSHS X
     JSR Print_Str_d
+    PULS X
+    STX >$C82C
     LDA #$F8
-    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    STA >$C82A
     LDA #$48
-    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    STA >$C82B
+    JSR $F1AF
     RTS
 
 MOD16:
@@ -646,11 +666,11 @@ MOD16:
 ; Inputs: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY (bytes in RAM)
 ; Uses 16-segment polygon (same as constant path) via MUL scaling of fixed fractions
 ; 4 unique delta fractions of radius r (16-gon, vertices at k*22.5 deg):
-;   a = 0.3827*r (sin22.5) via MUL #98 /256, stored at DRAW_CIRCLE_TEMP+2
-;   b = 0.3244*r (sin45-sin22.5) via MUL #83 /256, stored at DRAW_CIRCLE_TEMP+3
-;   c = 0.2168*r via MUL #56 /256, stored at DRAW_CIRCLE_TEMP+4
-;   d = 0.0761*r via MUL #19 /256, stored at DRAW_CIRCLE_TEMP+5
-; DRAW_CIRCLE_TEMP layout: [radius16][a][b][c][d][--][--]
+;   a = 0.3827*r (sin22.5) via MUL #98 /256, stored at >DRAW_CIRCLE_TEMP+2
+;   b = 0.3244*r (sin45-sin22.5) via MUL #83 /256, stored at >DRAW_CIRCLE_TEMP+3
+;   c = 0.2168*r via MUL #56 /256, stored at >DRAW_CIRCLE_TEMP+4
+;   d = 0.0761*r via MUL #19 /256, stored at >DRAW_CIRCLE_TEMP+5
+; >DRAW_CIRCLE_TEMP layout: [radius16][a][b][c][d][--][--]
 DRAW_CIRCLE_RUNTIME:
 ; Read ALL parameters into registers/stack BEFORE changing DP (critical!)
 ; (These are byte variables, use LDB not LDD)
@@ -658,20 +678,18 @@ LDB DRAW_CIRCLE_INTENSITY
 PSHS B                 ; Save intensity on stack
 
 LDB DRAW_CIRCLE_DIAM
-SEX                    ; Sign-extend to 16-bit (diameter is unsigned 0..255)
-LSRA                   ; Divide by 2 to get radius
-RORB
-STD DRAW_CIRCLE_TEMP   ; DRAW_CIRCLE_TEMP = radius (16-bit, big-endian: +0=hi, +1=lo)
+SEX                    ; Sign-extend to 16-bit (radius is the arg, 0..127)
+STD >DRAW_CIRCLE_TEMP   ; >DRAW_CIRCLE_TEMP = radius (the 3rd arg IS the radius; was diameter/2)
 
 LDB DRAW_CIRCLE_XC     ; xc (signed -128..127)
 SEX
-STD DRAW_CIRCLE_TEMP+2 ; Save xc (16-bit, reused for 'a' after Moveto)
+STD >DRAW_CIRCLE_TEMP+2 ; Save xc (16-bit, reused for 'a' after Moveto)
 
 LDB DRAW_CIRCLE_YC     ; yc (signed -128..127)
 SEX
-STD DRAW_CIRCLE_TEMP+4 ; Save yc (16-bit, reused for 'c' after Moveto)
+STD >DRAW_CIRCLE_TEMP+4 ; Save yc (16-bit, reused for 'c' after Moveto)
 
-; NOW safe to setup BIOS (all params are in DRAW_CIRCLE_TEMP+stack)
+; NOW safe to setup BIOS (all params are in >DRAW_CIRCLE_TEMP+stack)
 LDA #$D0
 TFR A,DP
 JSR Reset0Ref
@@ -689,36 +707,40 @@ JSR Intensity_5F
 DCR_after_intensity:
 
 ; Move to start position: (xc + radius, yc)  [vertex 0 of 16-gon = rightmost]
-; radius = DRAW_CIRCLE_TEMP, xc = DRAW_CIRCLE_TEMP+2, yc = DRAW_CIRCLE_TEMP+4
-LDD DRAW_CIRCLE_TEMP   ; D = radius (16-bit)
-ADDD DRAW_CIRCLE_TEMP+2 ; D = xc + radius
+; radius = >DRAW_CIRCLE_TEMP, xc = >DRAW_CIRCLE_TEMP+2, yc = >DRAW_CIRCLE_TEMP+4
+LDD >DRAW_CIRCLE_TEMP   ; D = radius (16-bit)
+ADDD >DRAW_CIRCLE_TEMP+2 ; D = xc + radius
 TFR B,B                ; Keep X in B (low byte)
 PSHS B                 ; Save X on stack
-LDD DRAW_CIRCLE_TEMP+4 ; Load yc
+LDD >DRAW_CIRCLE_TEMP+4 ; Load yc
 TFR B,A                ; Y to A
 PULS B                 ; X to B
 JSR Moveto_d
 
 ; Precompute 4 delta fractions using MUL (same fractions as constant 16-gon path)
-; radius is at DRAW_CIRCLE_TEMP+1 (low byte, 0..127)
-; DRAW_CIRCLE_TEMP+2..5 now free to reuse for a,b,c,d
-; MUL: A * B -> D (unsigned); A_after = floor(frac * r) when frac byte = round(frac*256)
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+; radius is at >DRAW_CIRCLE_TEMP+1 (low byte, 0..127)
+; >DRAW_CIRCLE_TEMP+2..5 now free to reuse for a,b,c,d
+; MUL: A * B -> D (unsigned); ADDD #128 then A = round(frac * r) (avoids floor-to-0 for small radii)
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #98                ; 98/256 = 0.3828 ~ sin(22.5 deg) = 0.3827
-MUL                    ; A = floor(0.3828 * r) = a
-STA DRAW_CIRCLE_TEMP+2 ; Store a
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+MUL                    ; D = 98 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+2 ; Store a = round(0.3828 * r)
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #83                ; 83/256 = 0.3242 ~ 0.3244
-MUL                    ; A = b
-STA DRAW_CIRCLE_TEMP+3 ; Store b
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+MUL                    ; D = 83 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+3 ; Store b
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #56                ; 56/256 = 0.2188 ~ 0.2168
-MUL                    ; A = c
-STA DRAW_CIRCLE_TEMP+4 ; Store c
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+MUL                    ; D = 56 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+4 ; Store c
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #19                ; 19/256 = 0.0742 ~ 0.0761
-MUL                    ; A = d
-STA DRAW_CIRCLE_TEMP+5 ; Store d
+MUL                    ; D = 19 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+5 ; Store d
 
 ; Draw 16 unrolled segments - 16-gon counterclockwise from (xc+r, yc)
 ; Draw_Line_d(A=dy, B=dx). Symmetry pattern by quadrant:
@@ -730,105 +752,105 @@ STA DRAW_CIRCLE_TEMP+5 ; Store d
 ; --- Q1 ---
 ; Seg 0: dy=+a, dx=-d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a
-LDB DRAW_CIRCLE_TEMP+5  ; d
+LDA >DRAW_CIRCLE_TEMP+2  ; a
+LDB >DRAW_CIRCLE_TEMP+5  ; d
 NEGB
 JSR Draw_Line_d
 ; Seg 1: dy=+b, dx=-c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b
-LDB DRAW_CIRCLE_TEMP+4  ; c
+LDA >DRAW_CIRCLE_TEMP+3  ; b
+LDB >DRAW_CIRCLE_TEMP+4  ; c
 NEGB
 JSR Draw_Line_d
 ; Seg 2: dy=+c, dx=-b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c
-LDB DRAW_CIRCLE_TEMP+3  ; b
+LDA >DRAW_CIRCLE_TEMP+4  ; c
+LDB >DRAW_CIRCLE_TEMP+3  ; b
 NEGB
 JSR Draw_Line_d
 ; Seg 3: dy=+d, dx=-a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d
-LDB DRAW_CIRCLE_TEMP+2  ; a
+LDA >DRAW_CIRCLE_TEMP+5  ; d
+LDB >DRAW_CIRCLE_TEMP+2  ; a
 NEGB
 JSR Draw_Line_d
 
 ; --- Q2 ---
 ; Seg 4: dy=-d, dx=-a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d
+LDA >DRAW_CIRCLE_TEMP+5  ; d
 NEGA
-LDB DRAW_CIRCLE_TEMP+2  ; a
+LDB >DRAW_CIRCLE_TEMP+2  ; a
 NEGB
 JSR Draw_Line_d
 ; Seg 5: dy=-c, dx=-b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c
+LDA >DRAW_CIRCLE_TEMP+4  ; c
 NEGA
-LDB DRAW_CIRCLE_TEMP+3  ; b
+LDB >DRAW_CIRCLE_TEMP+3  ; b
 NEGB
 JSR Draw_Line_d
 ; Seg 6: dy=-b, dx=-c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b
+LDA >DRAW_CIRCLE_TEMP+3  ; b
 NEGA
-LDB DRAW_CIRCLE_TEMP+4  ; c
+LDB >DRAW_CIRCLE_TEMP+4  ; c
 NEGB
 JSR Draw_Line_d
 ; Seg 7: dy=-a, dx=-d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a
+LDA >DRAW_CIRCLE_TEMP+2  ; a
 NEGA
-LDB DRAW_CIRCLE_TEMP+5  ; d
+LDB >DRAW_CIRCLE_TEMP+5  ; d
 NEGB
 JSR Draw_Line_d
 
 ; --- Q3 ---
 ; Seg 8: dy=-a, dx=+d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a
+LDA >DRAW_CIRCLE_TEMP+2  ; a
 NEGA
-LDB DRAW_CIRCLE_TEMP+5  ; d (positive)
+LDB >DRAW_CIRCLE_TEMP+5  ; d (positive)
 JSR Draw_Line_d
 ; Seg 9: dy=-b, dx=+c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b
+LDA >DRAW_CIRCLE_TEMP+3  ; b
 NEGA
-LDB DRAW_CIRCLE_TEMP+4  ; c (positive)
+LDB >DRAW_CIRCLE_TEMP+4  ; c (positive)
 JSR Draw_Line_d
 ; Seg 10: dy=-c, dx=+b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c
+LDA >DRAW_CIRCLE_TEMP+4  ; c
 NEGA
-LDB DRAW_CIRCLE_TEMP+3  ; b (positive)
+LDB >DRAW_CIRCLE_TEMP+3  ; b (positive)
 JSR Draw_Line_d
 ; Seg 11: dy=-d, dx=+a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d
+LDA >DRAW_CIRCLE_TEMP+5  ; d
 NEGA
-LDB DRAW_CIRCLE_TEMP+2  ; a (positive)
+LDB >DRAW_CIRCLE_TEMP+2  ; a (positive)
 JSR Draw_Line_d
 
 ; --- Q4 ---
 ; Seg 12: dy=+d, dx=+a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d (positive)
-LDB DRAW_CIRCLE_TEMP+2  ; a (positive)
+LDA >DRAW_CIRCLE_TEMP+5  ; d (positive)
+LDB >DRAW_CIRCLE_TEMP+2  ; a (positive)
 JSR Draw_Line_d
 ; Seg 13: dy=+c, dx=+b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c (positive)
-LDB DRAW_CIRCLE_TEMP+3  ; b (positive)
+LDA >DRAW_CIRCLE_TEMP+4  ; c (positive)
+LDB >DRAW_CIRCLE_TEMP+3  ; b (positive)
 JSR Draw_Line_d
 ; Seg 14: dy=+b, dx=+c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b (positive)
-LDB DRAW_CIRCLE_TEMP+4  ; c (positive)
+LDA >DRAW_CIRCLE_TEMP+3  ; b (positive)
+LDB >DRAW_CIRCLE_TEMP+4  ; c (positive)
 JSR Draw_Line_d
 ; Seg 15: dy=+a, dx=+d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a (positive)
-LDB DRAW_CIRCLE_TEMP+5  ; d (positive)
+LDA >DRAW_CIRCLE_TEMP+2  ; a (positive)
+LDB >DRAW_CIRCLE_TEMP+5  ; d (positive)
 JSR Draw_Line_d
 
 LDA #$C8
@@ -896,35 +918,52 @@ RTS
 
 ; ============================================================================
 ; UPDATE_MUSIC_PSG - Update PSG (call every frame)
+; Data format per event: FCB delay, FCB count, (FCB reg, FCB val)*N
+; delay = frames since previous event (0 = apply immediately)
+; End marker: FCB 0 after last event's count
+; Loop marker: delay=$FF is treated as loop; OR count=$FF followed by FDB addr
+; PSG_DELAY_FRAMES counts down to the next event fire point.
+; PSG_MUSIC_PTR always points to delay byte of next pending event.
 ; ============================================================================
 UPDATE_MUSIC_PSG:
-; CRITICAL: Set VIA to PSG mode BEFORE accessing PSG (don't assume state)
-; DISABLED: Conflicts with SFX which uses Sound_Byte (HANDSHAKE mode)
-; LDA #$00       ; VIA_cntl = $00 (PSG mode)
-; STA >$D00C     ; VIA_cntl
 LDA #$01
-STA >PSG_MUSIC_ACTIVE   ; Mark music system active (for PSG logging)
-LDA >PSG_IS_PLAYING     ; Check if playing (extended - var at 0xC8A0)
-BEQ PSG_update_done     ; Not playing, exit
+STA >PSG_MUSIC_ACTIVE   ; Mark music system active
+LDA >PSG_IS_PLAYING
+LBEQ PSG_update_done    ; Not playing
 
-LDX >PSG_MUSIC_PTR      ; Load pointer (force extended - LDX has no DP mode)
+; Check if delay counter is running
+LDA >PSG_DELAY_FRAMES
+BEQ PSG_read_delay      ; Counter=0: time to read next delay byte
+DECA
+STA >PSG_DELAY_FRAMES
+LBNE PSG_update_done    ; Still waiting
+BRA PSG_process_event   ; Counter just hit 0: apply the event
 
-; Read frame count byte (number of register writes)
+PSG_read_delay:
+LDX >PSG_MUSIC_PTR      ; PTR → delay byte of current event
+LDB ,X+                 ; Consume delay byte, X → count byte
+CMPB #$FF
+LBEQ PSG_music_loop_d   ; $FF as delay = loop command
+STB >PSG_DELAY_FRAMES   ; Store delay count
+STX >PSG_MUSIC_PTR      ; Advance PTR past delay byte (now at count byte)
+BEQ PSG_process_event   ; delay=0: apply immediately
+DEC >PSG_DELAY_FRAMES   ; Decrement once (fires after delay-1 more frames)
+LBRA PSG_update_done    ; Wait
+
+PSG_process_event:
+LDX >PSG_MUSIC_PTR      ; PTR is at count byte
 LDB ,X+
-BEQ PSG_music_ended     ; Count=0 means end (no loop)
-CMPB #$FF               ; Check for loop command
-BEQ PSG_music_loop      ; $FF means loop (never valid as count)
+LBEQ PSG_music_ended    ; Count=0 means end
+CMPB #$FF
+LBEQ PSG_music_loop     ; Count=$FF means loop
 
-; Process frame - push counter to stack
 PSHS B                  ; Save count on stack
-
-; Write register/value pairs to PSG
 PSG_write_loop:
 LDA ,X+                 ; Load register number
 LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer (after reads)
+PSHS X                  ; Save pointer
 
-; WRITE_PSG sequence
+; WRITE_PSG sequence (direct VIA access)
 STA VIA_port_a          ; Store register number
 LDA #$19                ; BDIR=1, BC1=1 (LATCH)
 STA VIA_port_b
@@ -939,30 +978,43 @@ STB VIA_port_b
 
 PULS X                  ; Restore pointer
 PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ PSG_frame_done      ; Done with this frame
+DECB
+BEQ PSG_event_done      ; Done with this event
 PSHS B                  ; Save counter back
 BRA PSG_write_loop
 
-PSG_frame_done:
-
-; Frame complete - update pointer and done
-STX >PSG_MUSIC_PTR      ; Update pointer (force extended)
-BRA PSG_update_done
+PSG_event_done:
+STX >PSG_MUSIC_PTR      ; PTR → delay byte of next event
+CLR >PSG_DELAY_FRAMES   ; Trigger PSG_read_delay next frame
+LBRA PSG_update_done
 
 PSG_music_ended:
-CLR >PSG_IS_PLAYING     ; Stop playback (extended - var at 0xC8A0)
-; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing
-; Music will fade naturally as frame data stops updating
-BRA PSG_update_done
+CLR >PSG_IS_PLAYING
+; Silence all 3 PSG channels so the last note doesn't keep ringing
+; until the next PLAY_MUSIC. DP is already $D0 (set by AUDIO_UPDATE).
+LDA #8                  ; PSG reg 8 = Volume Channel A
+LDB #0
+JSR Sound_Byte
+LDA #9                  ; PSG reg 9 = Volume Channel B
+LDB #0
+JSR Sound_Byte
+LDA #10                 ; PSG reg 10 = Volume Channel C
+LDB #0
+JSR Sound_Byte
+LBRA PSG_update_done
 
 PSG_music_loop:
-; Loop command: $FF followed by 2-byte address (FDB)
-; X points past $FF, read the target address
-LDD ,X                  ; Load 2-byte loop target address
-STD >PSG_MUSIC_PTR      ; Update pointer to loop start
-; Exit - next frame will start from loop target
-BRA PSG_update_done
+; count=$FF: X points after $FF, at FDB loop address
+LDD ,X
+STD >PSG_MUSIC_PTR
+CLR >PSG_DELAY_FRAMES
+LBRA PSG_update_done
+
+PSG_music_loop_d:
+; delay=$FF: X points after $FF, at FDB loop address
+LDD ,X
+STD >PSG_MUSIC_PTR
+CLR >PSG_DELAY_FRAMES
 
 PSG_update_done:
 CLR >PSG_MUSIC_ACTIVE   ; Clear flag (music system done)
@@ -1051,24 +1103,42 @@ BRA AU_MUSIC_PROCESS_WRITES
 AU_MUSIC_HAS_DELAY:
 ; B has delay > 0, store it and skip to next frame
 DECB                    ; Delay-1 (we consume this frame)
+BEQ AU_MUSIC_READ_COUNT ; delay was 1: X already at count byte, process immediately
 STB >PSG_DELAY_FRAMES   ; Save delay counter
 STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)
 BRA AU_UPDATE_SFX       ; Skip reading data this frame
 
 AU_MUSIC_PROCESS_WRITES:
-PSHS B                  ; Save count
-
+; Per-event write loop. Inlined PSG protocol instead of JSR Sound_Byte
+; (~35 cycles vs ~92 incl JSR/RTS overhead — saves ~57 cycles per
+; register write). For theme-style music with 8-10 writes per event,
+; saves ~500-600 cycles per event frame → frees enough budget that the
+; music event no longer pushes the frame over vsync. Mirrors the BIOS
+; Sound_Byte protocol exactly (Vectrex VIA bits: BC1=bit3, BDIR=bit4).
+PSHS B                  ; save register-write count on stack for in-place DEC
 AU_MUSIC_WRITE_LOOP:
-LDA ,X+                 ; Load register number
-LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer
-JSR Sound_Byte          ; Write to PSG using BIOS (DP=$D0)
-PULS X                  ; Restore pointer
-PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ AU_MUSIC_DONE       ; Done if count=0
-PSHS B                  ; Save counter
-BRA AU_MUSIC_WRITE_LOOP ; Continue
+LDA ,X+                 ; A = register number
+LDB ,X+                 ; B = register value
+STA VIA_port_a          ; data bus = reg num
+LDA #$19                ; BC1=1, BDIR=1 → LATCH ADDR
+STA VIA_port_b
+LDA #$01                ; back to INACTIVE (BC1=0, BDIR=0)
+STA VIA_port_b
+LDA VIA_port_a          ; READ STATUS — settling delay so PSG finishes
+; latching the register address before we drive
+; the value. Without this, the PSG occasionally
+; writes the new value into the PREVIOUS register
+; (audible as glitchy pitch / 'noisy' music,
+; especially when other CPU activity perturbs
+; the timing between this loop and adjacent code).
+STB VIA_port_a          ; data bus = value
+LDA #$11                ; BC1=0, BDIR=1 → WRITE DATA
+STA VIA_port_b
+LDA #$01                ; back to INACTIVE
+STA VIA_port_b
+DEC ,S                  ; decrement count on stack (in-place; no PSHS/PULS per iter)
+BNE AU_MUSIC_WRITE_LOOP
+LEAS 1,S                ; discard saved count
 
 AU_MUSIC_DONE:
 STX >PSG_MUSIC_PTR      ; Update music pointer

@@ -228,7 +228,7 @@ ARRAY_INV_ITEMS_LEN         EQU 8   ; 8 elements
 
 ; Vector Asset Index Mapping:
 ;   0 = canvas (Bank #2)
-;   1 = caretaker (Bank #1)
+;   1 = caretaker (Bank #2)
 ;   2 = conservatory (Bank #1)
 ;   3 = crypt_logo (Bank #1)
 ;   4 = crystal_apprentice (Bank #1)
@@ -239,8 +239,8 @@ ARRAY_INV_ITEMS_LEN         EQU 8   ; 8 elements
 ;   9 = floor (Bank #2)
 ;   10 = hans_automata (Bank #1)
 ;   11 = lamp (Bank #1)
-;   12 = locked_door (Bank #2)
-;   13 = optics_pedestal (Bank #2)
+;   12 = locked_door (Bank #1)
+;   13 = optics_pedestal (Bank #1)
 ;   14 = painting (Bank #1)
 ;   15 = platform_down (Bank #1)
 ;   16 = platform_up (Bank #2)
@@ -250,7 +250,7 @@ ARRAY_INV_ITEMS_LEN         EQU 8   ; 8 elements
 
 VECTOR_BANK_TABLE:
     FCB 2              ; Bank ID
-    FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
@@ -261,8 +261,8 @@ VECTOR_BANK_TABLE:
     FCB 2              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
-    FCB 2              ; Bank ID
-    FCB 2              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 1              ; Bank ID
     FCB 2              ; Bank ID
@@ -307,13 +307,13 @@ MUSIC_ADDR_TABLE:
 ; SFX Asset Index Mapping:
 ;   0 = door_unlock (Bank #1)
 ;   1 = item_pickup (Bank #2)
-;   2 = puzzle_fail (Bank #1)
+;   2 = puzzle_fail (Bank #2)
 ;   3 = puzzle_success (Bank #1)
 
 SFX_BANK_TABLE:
     FCB 1              ; Bank ID
     FCB 2              ; Bank ID
-    FCB 1              ; Bank ID
+    FCB 2              ; Bank ID
     FCB 1              ; Bank ID
 
 SFX_ADDR_TABLE:
@@ -351,6 +351,30 @@ LEVEL_ADDR_TABLE:
 
 ; Legacy unified tables (all assets)
 ASSET_BANK_TABLE:
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
+    FCB 1              ; Bank ID
     FCB 2              ; Bank ID
     FCB 2              ; Bank ID
     FCB 2              ; Bank ID
@@ -360,41 +384,8 @@ ASSET_BANK_TABLE:
     FCB 2              ; Bank ID
     FCB 2              ; Bank ID
     FCB 2              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
-    FCB 1              ; Bank ID
 
 ASSET_ADDR_TABLE:
-    FDB _LOCKED_DOOR_VECTORS    ; locked_door
-    FDB _OPTICS_PEDESTAL_VECTORS    ; optics_pedestal
-    FDB _WALL_COMPARTMENT_VECTORS    ; wall_compartment
-    FDB _OPTICS_LAB_LEVEL    ; optics_lab
-    FDB _CANVAS_VECTORS    ; canvas
-    FDB _PLATFORM_UP_VECTORS    ; platform_up
-    FDB _ELISA_GHOST_VECTORS    ; elisa_ghost
-    FDB _ITEM_PICKUP_SFX    ; item_pickup
-    FDB _FLOOR_VECTORS    ; floor
     FDB _CRYPT_LOGO_VECTORS    ; crypt_logo
     FDB _EXPLORATION_MUSIC    ; exploration
     FDB _INTRO_MUSIC    ; intro
@@ -417,8 +408,17 @@ ASSET_ADDR_TABLE:
     FDB _DOOR_UNLOCK_SFX    ; door_unlock
     FDB _LAMP_VECTORS    ; lamp
     FDB _PLATFORM_DOWN_VECTORS    ; platform_down
+    FDB _LOCKED_DOOR_VECTORS    ; locked_door
+    FDB _OPTICS_PEDESTAL_VECTORS    ; optics_pedestal
+    FDB _WALL_COMPARTMENT_VECTORS    ; wall_compartment
     FDB _CARETAKER_VECTORS    ; caretaker
+    FDB _OPTICS_LAB_LEVEL    ; optics_lab
+    FDB _CANVAS_VECTORS    ; canvas
+    FDB _PLATFORM_UP_VECTORS    ; platform_up
+    FDB _ELISA_GHOST_VECTORS    ; elisa_ghost
+    FDB _ITEM_PICKUP_SFX    ; item_pickup
     FDB _PUZZLE_FAIL_SFX    ; puzzle_fail
+    FDB _FLOOR_VECTORS    ; floor
 
 ;***************************************************************************
 ; DRAW_VECTOR_BANKED - Draw vector asset with automatic bank switching

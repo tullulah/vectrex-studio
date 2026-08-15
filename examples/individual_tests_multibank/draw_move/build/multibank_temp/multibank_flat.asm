@@ -46,6 +46,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -57,6 +59,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
     CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
@@ -72,6 +75,7 @@ MAIN:
     ; Mux configured - J1_X()/J1_Y() can now be called
 
     ; Call main() for initialization
+; VPy_LINE:11
     ; TODO: Statement Pass { source_line: 11 }
 
 .MAIN_LOOP:
@@ -81,6 +85,7 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+; VPy_LINE:15
     ; ===== MOVE builtin =====
     LDA #$C4                ; X coordinate
     STA VPY_MOVE_X
@@ -88,6 +93,8 @@ LOOP_BODY:
     STA VPY_MOVE_Y
     LDD #0
     STD RESULT
+; VPy_LINE:16
+; NATIVE_CALL: DRAW_LINE at line 16
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #0
     STD DRAW_LINE_ARGS+0    ; x0
@@ -102,6 +109,7 @@ LOOP_BODY:
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
+; VPy_LINE:19
     ; ===== MOVE builtin =====
     LDA #$3C                ; X coordinate
     STA VPY_MOVE_X
@@ -109,6 +117,8 @@ LOOP_BODY:
     STA VPY_MOVE_Y
     LDD #0
     STD RESULT
+; VPy_LINE:20
+; NATIVE_CALL: DRAW_LINE at line 20
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #0
     STD DRAW_LINE_ARGS+0    ; x0
@@ -123,6 +133,7 @@ LOOP_BODY:
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
+; VPy_LINE:23
     ; ===== MOVE builtin =====
     LDA #$00                ; X coordinate
     STA VPY_MOVE_X
@@ -130,6 +141,8 @@ LOOP_BODY:
     STA VPY_MOVE_Y
     LDD #0
     STD RESULT
+; VPy_LINE:24
+; NATIVE_CALL: DRAW_LINE at line 24
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #-30
     STD DRAW_LINE_ARGS+0    ; x0

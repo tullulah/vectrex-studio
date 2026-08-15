@@ -37,6 +37,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -65,13 +67,15 @@ VLINE_DY_REMAINING   EQU $C880+$1F   ; DRAW_LINE remaining dy for segment 2 (16-
 VLINE_DX_REMAINING   EQU $C880+$21   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
 TEXT_SCALE_H         EQU $C880+$23   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
 TEXT_SCALE_W         EQU $C880+$24   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-
+VAR_ARG0             EQU $C880+$25   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$27   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$29   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$2B   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$2D   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$2F   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$31   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$33   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$35   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM (Bank #0)
@@ -81,6 +85,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     LDA #$F8
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
@@ -100,11 +105,12 @@ MAIN:
     ; Mux configured - J1_X()/J1_Y() can now be called
 
     ; Call main() for initialization
+; VPy_LINE:10
+; NATIVE_CALL: SET_INTENSITY at line 10
     ; SET_INTENSITY: Set drawing intensity
     LDD #100
     TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; Save for DRAW_VECTOR (BIOS Intensity_a will NOT touch this)
-    JSR Intensity_a
+    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
     LDD #0
     STD RESULT
 
@@ -115,11 +121,14 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+; VPy_LINE:26
     JSR DRAW_SCALES
     RTS
 
 ; Function: DRAW_SCALES (Bank #0)
 DRAW_SCALES:
+; VPy_LINE:13
+; NATIVE_CALL: SET_TEXT_SIZE at line 13
     LDD #8
     STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
     NEGB            ; B = -n -> TEXT_SCALE_H
@@ -130,16 +139,20 @@ DRAW_SCALES:
     ASLB            ; n*8
     ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
     STB >TEXT_SCALE_W
+; VPy_LINE:14
+; NATIVE_CALL: PRINT_TEXT at line 14
     ; PRINT_TEXT: Print text at position
     LDD #-80
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #80
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_11966217390444143374      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:15
+; NATIVE_CALL: SET_TEXT_SIZE at line 15
     LDD #6
     STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
     NEGB            ; B = -n -> TEXT_SCALE_H
@@ -150,16 +163,20 @@ DRAW_SCALES:
     ASLB            ; n*8
     ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
     STB >TEXT_SCALE_W
+; VPy_LINE:16
+; NATIVE_CALL: PRINT_TEXT at line 16
     ; PRINT_TEXT: Print text at position
     LDD #-80
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #40
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2446385111      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:17
+; NATIVE_CALL: SET_TEXT_SIZE at line 17
     LDD #4
     STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
     NEGB            ; B = -n -> TEXT_SCALE_H
@@ -170,16 +187,20 @@ DRAW_SCALES:
     ASLB            ; n*8
     ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
     STB >TEXT_SCALE_W
+; VPy_LINE:18
+; NATIVE_CALL: PRINT_TEXT at line 18
     ; PRINT_TEXT: Print text at position
     LDD #-80
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #5
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2446385109      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:19
+; NATIVE_CALL: SET_TEXT_SIZE at line 19
     LDD #2
     STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
     NEGB            ; B = -n -> TEXT_SCALE_H
@@ -190,16 +211,20 @@ DRAW_SCALES:
     ASLB            ; n*8
     ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
     STB >TEXT_SCALE_W
+; VPy_LINE:20
+; NATIVE_CALL: PRINT_TEXT at line 20
     ; PRINT_TEXT: Print text at position
     LDD #-80
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #-30
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2446385107      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:21
+; NATIVE_CALL: SET_TEXT_SIZE at line 21
     LDD #1
     STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
     NEGB            ; B = -n -> TEXT_SCALE_H
@@ -210,16 +235,20 @@ DRAW_SCALES:
     ASLB            ; n*8
     ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
     STB >TEXT_SCALE_W
+; VPy_LINE:22
+; NATIVE_CALL: PRINT_TEXT at line 22
     ; PRINT_TEXT: Print text at position
     LDD #-80
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #-60
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_2171175787713719065      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:23
+; NATIVE_CALL: SET_TEXT_SIZE at line 23
     LDD #8
     STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
     NEGB            ; B = -n -> TEXT_SCALE_H
@@ -260,26 +289,27 @@ DRAW_SCALES:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
-    ;       causing integrators to drift toward joystick DAC value.
-    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref   ; Reset beam to center before positioning text
-    LDU VAR_ARG2   ; string pointer
-    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
-    STA >$C82A      ; Vec_Text_Height: controls character Y scale
-    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
-    STA >$C82B      ; Vec_Text_Width: controls character X spacing
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
+    TFR A,DP
+    JSR Intensity_5F
+    JSR Reset0Ref
+    LDU >VAR_ARG2
+    LDA >TEXT_SCALE_H
+    STA >$C82A          ; Vec_Text_Height
+    LDA >TEXT_SCALE_W
+    STA >$C82B          ; Vec_Text_Width
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    LDX >$C82C
+    PSHS X
     JSR Print_Str_d
+    PULS X
+    STX >$C82C
     LDA #$F8
-    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    STA >$C82A
     LDA #$48
-    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    STA >$C82B
+    JSR $F1AF
     RTS
 
 MOD16:

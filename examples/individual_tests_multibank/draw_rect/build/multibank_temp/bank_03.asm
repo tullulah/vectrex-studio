@@ -17,19 +17,23 @@ DRAW_RECT_Y          EQU $C880+$0F   ; Rectangle Y (1 bytes)
 DRAW_RECT_WIDTH      EQU $C880+$10   ; Rectangle width (1 bytes)
 DRAW_RECT_HEIGHT     EQU $C880+$11   ; Rectangle height (1 bytes)
 DRAW_RECT_INTENSITY  EQU $C880+$12   ; Rectangle intensity (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$13   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$1D   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$1F   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$21   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$22   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$23   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$25   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
+DRAW_VEC_INTENSITY   EQU $C880+$13   ; Vector intensity override (0=use vector data) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$14   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$1E   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$20   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$22   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$23   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$24   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$26   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_ARG0             EQU $C880+$28   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$2A   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$2C   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$2E   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$30   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$32   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$34   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$36   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$38   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 
 
@@ -134,10 +138,9 @@ DRAW_RECT_RUNTIME:
     NEGB                ; -width
     JSR Draw_Line_d
     
-    ; Draw up side
+    ; Draw up side (close rectangle: +height closes the -height of down side)
     CLR Vec_Misc_Count
-    LDA 2,S             ; height
-    NEGA                ; -height
+    LDA 3,S             ; +height
     LDB #0
     JSR Draw_Line_d
     
