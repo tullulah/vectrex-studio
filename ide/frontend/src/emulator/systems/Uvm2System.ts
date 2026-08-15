@@ -50,8 +50,16 @@ function vectorsToSegments(
 // ── Memory map ──────────────────────────────────────────────────────────────
 const SRAM_BASE = 0x20000000;
 
-/** Profundidad del historial de PCs del informe de fallo. Potencia de dos. */
+/** Profundidad de los historiales del informe de fallo. Potencias de dos. */
 const PC_HIST = 32;
+/** Historial de SALTOS (origen -> destino). Vale mucho mas que el de PCs seguidos:
+ *  cuando el PC se va, los 32 PCs previos son la caida en linea recta y el salto
+ *  culpable ya se ha ido del anillo. */
+const SALTO_HIST = 24;
+/** La tabla de vectores ocupa los primeros 64*4 bytes de la imagen. Son DATOS:
+ *  ejecutar ahi es siempre un error, y detectarlo en el acto ahorra rastrear el
+ *  choque que ocurre unas instrucciones despues. */
+const VECTORES_FIN = SRAM_BASE + 64 * 4;
 const SRAM_SIZE = 0x00082000;          // 520 KB, as on the real RP2350
 const SIO_BASE  = 0xD0000000;
 
@@ -103,6 +111,18 @@ export class Uvm2System implements ISystem, IBus {
   /** Anillo de los ultimos PCs ejecutados; se vuelca si la CPU falla. */
   private readonly pcHist = new Uint32Array(PC_HIST);
   private pcHistN = 0;
+  private readonly saltoDe = new Uint32Array(SALTO_HIST);
+  private readonly saltoA  = new Uint32Array(SALTO_HIST);
+  private saltoN = 0;
+  private historialSaltos(): string[] {
+    const n = Math.min(this.saltoN, SALTO_HIST);
+    const out: string[] = [];
+    for (let i = n; i > 0; i--) {
+      const k = (this.saltoN - i) & (SALTO_HIST - 1);
+      out.push(`0x${this.saltoDe[k].toString(16)}->0x${this.saltoA[k].toString(16)}`);
+    }
+    return out;
+  }
   /**
    * Que vectores apuntan a esta direccion. Las imagenes de UVM2 llenan la tabla
    * con un manejador por defecto —un muro de bkpt, uno por vector— asi que caer
@@ -470,6 +490,19 @@ export class Uvm2System implements ISystem, IBus {
       // se arreglan en sitios opuestos.
       this.pcHist[this.pcHistN++ & (PC_HIST - 1)] = pc;
 
+      // Ejecutar la tabla de vectores es siempre un PC perdido. Se corta aqui, con
+      // el salto que llevo hasta ahi todavia en el anillo, en vez de dejar que
+      // avance por los datos y choque contra el manejador por defecto — que en el
+      // log se lee como "instruccion no implementada 0xbe00" y despista.
+      if (pc >= SRAM_BASE && pc < VECTORES_FIN) {
+        console.error(
+          `[Uvm2System] PC PERDIDO: 0x${pc.toString(16)} esta DENTRO de la tabla de ` +
+          `vectores (0x${SRAM_BASE.toString(16)}-0x${(VECTORES_FIN - 1).toString(16)}), ` +
+          `que son datos, no codigo. Ultimos saltos: ${this.historialSaltos().join(' ')}`);
+        this.halted = true;
+        break;
+      }
+
       let c: number;
       try {
         c = this.cpu.step(this);
@@ -477,6 +510,8 @@ export class Uvm2System implements ISystem, IBus {
         console.error(`[Uvm2System] CPU fault at 0x${pc.toString(16)}:`, e);
         console.error('[Uvm2System] PCs anteriores (del mas antiguo al fallo):',
           this.historialPC().map(v => '0x' + v.toString(16)).join(' -> '));
+        console.error('[Uvm2System] Ultimos saltos (origen->destino):',
+          this.historialSaltos().join(' '));
         const vec = this.vectoresQueApuntanA(pc);
         if (vec.length) {
           console.error(
@@ -487,6 +522,13 @@ export class Uvm2System implements ISystem, IBus {
         this.halted = true;
         break;
       }
+      // Un PC que no continua al siguiente opcode es un salto: se apunta el par.
+      const sig = this.cpu.getReg(15) >>> 0;
+      if (sig !== ((pc + 2) >>> 0) && sig !== ((pc + 4) >>> 0)) {
+        const k = this.saltoN++ & (SALTO_HIST - 1);
+        this.saltoDe[k] = pc; this.saltoA[k] = sig;
+      }
+
       spent += c;
       this.advanceBus(c);
     }
