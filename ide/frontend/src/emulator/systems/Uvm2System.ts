@@ -511,6 +511,16 @@ export class Uvm2System implements ISystem, IBus {
 
     if (addr < BOOTROM_SIZE) return this.bootrom[addr];
 
+    // SCB->VTOR, TAMBIÉN EN LECTURA.
+    //
+    // Sólo estaba la escritura, y el pico-sdk lo LEE para localizar la tabla de
+    // vectores: irq_set_exclusive_handler() comprueba que la ranura siga con el
+    // manejador por defecto antes de instalar el suyo. Devolviendo 0, buscaba la
+    // tabla en la dirección 0, leía ceros y disparaba `hard_assert` -> panic ->
+    // bkpt, a un mundo de distancia de la causa.
+    if (addr >= 0xE000ED08 && addr <= 0xE000ED0B)
+      return (this.vtor >>> ((addr & 3) * 8)) & 0xFF;
+
     {
       const sh = (addr & 3) * 8;
       // RESETS: un periférico está "hecho" justo cuando no está en reset.

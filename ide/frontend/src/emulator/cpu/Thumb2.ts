@@ -1933,6 +1933,41 @@ export class Thumb2 implements ICpu {
       return 2;
     }
 
+    // ── Coprocesadores (MCR/MRC y MCRR/MRRC) ─────────────────────────────
+    //
+    // El RP2350 lleva coprocesadores propios: GPIO rapido, DCP y el RCP de
+    // redundancia. El runtime del pico-sdk habilita CPACR y acto seguido toca uno
+    // para inicializarlo:
+    //
+    //     str  r3, [r2, #0xd88]     @ CPACR |= 0x00300303
+    //     mrc  p4, ...              @ despertar el coprocesador
+    //     bx   lr                   @ y el resultado NI SE USA
+    //
+    // Aqui no hay coprocesadores que emular, y para lo que el arranque necesita
+    // tampoco hacen falta: se aceptan y se ignoran, devolviendo cero.
+    //
+    // La FPU (p10/p11) queda FUERA a proposito: no-opear una instruccion de coma
+    // flotante no da un fallo, da un resultado equivocado, y eso es peor. Que
+    // siga avisando hasta que alguien la implemente de verdad.
+    {
+      const esMcrMrc  = (hw0 & 0xFF00) === 0xEE00 && (hw1 & 0x10) !== 0;
+      const esMcrrMrrc = (hw0 & 0xFFE0) === 0xEC40;
+      if (esMcrMrc || esMcrrMrrc) {
+        const cp = (hw1 >>> 8) & 0xF;
+        if (cp !== 10 && cp !== 11) {
+          const carga = (hw0 >>> 4) & 1;          // L: 1 = MRC / MRRC
+          if (carga) {
+            const rt = (hw1 >>> 12) & 0xF;
+            // Rt = 15 significa "a las banderas" (APSR_nzcv), no al PC.
+            if (rt === 15) this.cpsr &= ~0xF0000000;
+            else           this.regs[rt] = 0;
+            if (esMcrrMrrc) this.regs[hw0 & 0xF] = 0;   // el segundo destino
+          }
+          return 1;
+        }
+      }
+    }
+
     throw new Error(`Unimplemented 32-bit LD/ST: hw0=0x${hw0.toString(16).padStart(4,'0')} hw1=0x${hw1.toString(16).padStart(4,'0')} at PC=0x${pc.toString(16)}`);
   }
 
