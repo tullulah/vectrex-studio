@@ -171,6 +171,37 @@ export class Uvm2System implements ISystem, IBus {
 
   private vtor = SRAM_BASE;
 
+  /**
+   * Diagnóstico de "corre pero no dibuja".
+   *
+   * Una CPU que no falla y una pantalla en negro no dan ninguna pista: puede ser
+   * un bucle de espera, puede ser que el juego no toque el bus, o puede que lo
+   * toque y el haz no se mueva. Estas tres cuentas separan los tres casos, y el
+   * perfil dice DÓNDE está si es lo primero.
+   *
+   * El perfil se muestrea uno de cada 64 pasos: para localizar un bucle sobra, y
+   * no cuesta nada medible.
+   */
+  private readonly perfil = new Map<number, number>();
+  private muestra = 0;
+  private escriturasVia = 0;
+  private framesSinDibujo = 0;
+  private avisadoSinDibujo = false;
+
+  private informeSinDibujo(): void {
+    const top = [...this.perfil.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const tot = [...this.perfil.values()].reduce((a, b) => a + b, 0) || 1;
+    console.warn(
+      `[Uvm2System] ${this.framesSinDibujo} frames sin un solo vector. ` +
+      `Escrituras a la VIA en todo ese rato: ${this.escriturasVia}. ` +
+      (this.escriturasVia === 0
+        ? 'CERO: el juego no esta tocando el bus, asi que el problema es ANTERIOR al dibujo.'
+        : 'El juego SI escribe la VIA, asi que mira el haz, no la CPU.'));
+    console.warn('[Uvm2System] Donde pasa el tiempo:\n' + top
+      .map(([pc, c]) => `  0x${pc.toString(16)}  ${(100 * c / tot).toFixed(1)}%`).join('\n'));
+    console.warn('[Uvm2System] Ultimos saltos:', this.historialSaltos().join(' '));
+  }
+
   /** BOOTRAM y sus cerrojos. */
   private readonly bootram = new Uint8Array(BOOTRAM_SIZE_);
   private bootlocks = 0;
@@ -432,6 +463,7 @@ export class Uvm2System implements ISystem, IBus {
     if (this.gpioOut & RW_MASK)   return;      // read cycle
     if (!this.addressesVia())     return;      // parked, or not the VIA
 
+    this.escriturasVia++;
     this.via.write(this.busAddress() & 0xF, this.gpioOut & DATA_MASK,
                    (xsh) => { this.beam.alg_xsh = xsh; });
   }
@@ -678,6 +710,7 @@ export class Uvm2System implements ISystem, IBus {
       // manejador de excepciones por defecto" — que se parecen mucho en el log y
       // se arreglan en sitios opuestos.
       this.pcHist[this.pcHistN++ & (PC_HIST - 1)] = pc;
+      if ((this.muestra++ & 63) === 0) this.perfil.set(pc, (this.perfil.get(pc) ?? 0) + 1);
 
       if (pc === ROM_LOOKUP) { this.romTableLookup(); continue; }
 
@@ -726,6 +759,16 @@ export class Uvm2System implements ISystem, IBus {
 
     this.lastFrameBusCycles = BUS_PER_FRAME;
     const { draw, drawCnt, erse, erseCnt } = this.beam.swapBuffers();
+
+    if (drawCnt === 0) {
+      // 120 frames son ~2,4 s: bastante para no gritar en una pantalla de carga.
+      if (++this.framesSinDibujo === 120 && !this.avisadoSinDibujo) {
+        this.avisadoSinDibujo = true;
+        this.informeSinDibujo();
+      }
+    } else {
+      this.framesSinDibujo = 0;
+    }
     this.canvas.renderFrame(draw, drawCnt, erse, erseCnt);
     const segments = vectorsToSegments(draw, drawCnt, this.frameCounter);
     this.frameCounter++;

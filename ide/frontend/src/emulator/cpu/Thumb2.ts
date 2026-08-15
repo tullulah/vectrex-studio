@@ -1503,11 +1503,89 @@ export class Thumb2 implements ICpu {
       return 2;
     }
 
+    // ── LDREX / STREX de palabra, con desplazamiento inmediato ───────────
+    //   STREX Rd, Rt, [Rn, #imm8*4]   hw0 = 0xE840|Rn, hw1 = Rt Rd imm8
+    //   LDREX Rt,     [Rn, #imm8*4]   hw0 = 0xE850|Rn, hw1 = Rt 1111 imm8
+    // Como arriba: un nucleo, sin excepciones, luego el almacen no puede fallar.
+    if (((hw0 & 0xFFF0) === 0xE840 || (hw0 & 0xFFF0) === 0xE850)
+        && ((hw1 >>> 12) & 0xF) !== 0xF) {
+      const rn   = hw0 & 0xF;
+      const rt   = (hw1 >>> 12) & 0xF;
+      const addr = u32(this.regs[rn] + (hw1 & 0xff) * 4);
+      if ((hw0 >>> 4) & 1) {
+        this.regs[rt] = this.read32(bus, addr);          // LDREX
+      } else {
+        this.write32(bus, addr, this.regs[rt]);          // STREX
+        this.regs[(hw1 >>> 8) & 0xF] = 0;                // exito
+      }
+      return 2;
+    }
+
+    // ── TT (Test Target) — hw0 = 0xE840|Rn, hw1 = 1111 Rd ...  ───────────
+    //
+    // Consulta los atributos de seguridad y de MPU de una direccion. Aqui no hay
+    // ni MPU ni estados de seguridad, asi que se contesta lo unico coherente con
+    // eso: todo accesible y en estado SEGURO — que es donde corre una imagen del
+    // RP2350, porque la bootrom arranca segura.
+    //
+    // El pico-sdk lo usa justo para eso: `tt` y luego mira el bit S para elegir
+    // entre RT_FLAG_FUNC_ARM_SEC y _NONSEC al buscar una funcion de la bootrom.
+    if ((hw0 & 0xFFF0) === 0xE840 && ((hw1 >>> 12) & 0xF) === 0xF) {
+      // R(18) RW(19) NPRIV_R(20) NPRIV_RW(21) S(22)
+      this.regs[(hw1 >>> 8) & 0xF] = 0x007C0000;
+      return 1;
+    }
+
+    // ── Accesos EXCLUSIVOS y con adquisicion/liberacion ──────────────────
+    //
+    //   hw0 = 1110 1000 110 L Rn   (L=0 almacena, L=1 carga)
+    //   hw1 = Rt 1111 op(4) Rd/1111
+    //
+    //   op 4,5     STREXB/H, LDREXB/H
+    //   op 8,9,A   STLB/H/STL, LDAB/H/LDA        (no exclusivos)
+    //   op C,D,E   STLEXB/H/STLEX, LDAEXB/H/LDAEX
+    //
+    // ESTO TIENE QUE IR ANTES DE LDRD/STRD. Sin ello, `ldaexb r2, [lr]`
+    // (0xe8de 0x2fcf) caia en la rama de LDRD, cuyo campo Rt2 vale 0xF — o sea
+    // que CARGABA EL PC DESDE MEMORIA. No lanzaba ninguna excepcion: se llevaba
+    // el PC a cero y el fallo aparecia miles de instrucciones despues, en otro
+    // sitio. Los mutex del pico-sdk se toman asi, con lo cual ningun juego suyo
+    // podia pasar de su primera seccion critica.
+    //
+    // Aqui no hay un monitor exclusivo de verdad y no hace falta: un solo nucleo
+    // y sin excepciones significa que nadie puede robar la reserva entre el LDREX
+    // y el STREX, asi que el almacen SIEMPRE tiene exito (Rd = 0).
+    if ((hw0 & 0xFFE0) === 0xE8C0 && ((hw1 >>> 8) & 0xF) === 0xF) {
+      const rn   = hw0 & 0xF;
+      const carga = (hw0 >>> 4) & 1;
+      const op   = (hw1 >>> 4) & 0xF;
+      const rt   = (hw1 >>> 12) & 0xF;
+      const addr = this.regs[rn];
+      const tam  = (op & 3) === 0 ? 1 : (op & 3) === 1 ? 2 : 4;
+      const exclusivo = op === 0x4 || op === 0x5 || op >= 0xC;
+      if (carga) {
+        this.regs[rt] = tam === 1 ? bus.read8(addr) >>> 0
+                      : tam === 2 ? this.read16(bus, addr)
+                      :             this.read32(bus, addr);
+      } else {
+        const v = this.regs[rt];
+        if (tam === 1)      bus.write8(addr, v & 0xff);
+        else if (tam === 2) this.write16(bus, addr, v & 0xffff);
+        else                this.write32(bus, addr, v);
+        // Rd solo existe en las variantes exclusivas; en STL* ese campo vale
+        // 0xF y escribirlo seria machacar el PC.
+        if (exclusivo) this.regs[hw1 & 0xF] = 0;   // 0 = el almacen tuvo exito
+      }
+      return 2;
+    }
+
     // ── STRD / LDRD (store/load register dual, immediate T1) ─────────────
     // hw0 = 1110 100P U1WL Rn (bit4 L: 0=STRD, 1=LDRD). hw1 = Rt Rt2 imm8.
     // addr = Rn +/- imm8*4 (pre/post per P, optional writeback W). C compilers
     // use this to spill/reload register pairs (frame setup); VPy codegen didn't.
-    if ((hw0 & 0xFE40) === 0xE840) {
+    // P=0 y W=0 NO es LDRD/STRD: ese hueco es el de los accesos exclusivos de
+    // arriba y el de TBB/TBH. Sin esta condicion, ldaexb entraba aqui.
+    if ((hw0 & 0xFE40) === 0xE840 && (((hw0 >>> 8) & 1) || ((hw0 >>> 5) & 1))) {
       const P    = (hw0 >>> 8) & 1;
       const U    = (hw0 >>> 7) & 1;
       const W    = (hw0 >>> 5) & 1;
