@@ -113,6 +113,16 @@ const XOSC_BASE   = 0x40048000;   // CTRL(0) STATUS(4): bit31 STABLE
 const PLL_BASES    = [0x40050000, 0x40058000];   // PLL_SYS / PLL_USB, CS(0) bit31 LOCK
 const CLOCKS_BASE = 0x40010000;   // CTRL/DIV/SELECTED por reloj + alias atómicos
 const ATOM_SIZE   = 0x4000;       // el bloque y sus tres alias XOR/SET/CLR
+// BOOTRAM: memoria normal, salvo los BOOT LOCKS de +0x800, que son cerrojos —
+// leerlos INTENTA adquirir (devuelve != 0 si se logra, 0 si estaba tomado) y
+// escribirlos suelta. El arranque del pico-sdk toma uno y espera:
+//     ldr r3, [r2, #0x828] ; cmp r3, #0 ; beq . ; dmb sy
+// Sin modelarlos, esa lectura da 0 para siempre. Como memoria normal TAMPOCO
+// funciona: nadie escribe ese valor antes: lo pone el hardware al conceder.
+const BOOTRAM_BASE  = 0x400E0000;
+const BOOTRAM_SIZE_ = 0x1000;
+const BOOTLOCK_OFF  = 0x800;
+const BOOTLOCK_N    = 16;
 const SRAM_SIZE = 0x00082000;          // 520 KB, as on the real RP2350
 const SIO_BASE  = 0xD0000000;
 
@@ -160,6 +170,11 @@ export class Uvm2System implements ISystem, IBus {
   private gpioInLatch = 0;             // 32-bit GPIO_IN snapshot, see read8
 
   private vtor = SRAM_BASE;
+
+  /** BOOTRAM y sus cerrojos. */
+  private readonly bootram = new Uint8Array(BOOTRAM_SIZE_);
+  private bootlocks = 0;
+  private ultimoCerrojo = 0;
 
   /** Máscara de periféricos en reset. RESET_DONE es su complemento. */
   private resets = 0;
@@ -284,6 +299,8 @@ export class Uvm2System implements ISystem, IBus {
   init(um2: Uint8Array): void {
     this.resets = 0;
     this.clocks.fill(0);
+    this.bootram.fill(0);
+    this.bootlocks = 0;
     const rd32 = (o: number) =>
       (um2[o] | (um2[o + 1] << 8) | (um2[o + 2] << 16) | (um2[o + 3] << 24)) >>> 0;
 
@@ -479,6 +496,20 @@ export class Uvm2System implements ISystem, IBus {
           return ((((addr & 0x1C) === 0x0 ? 0x80000000 : 0) >>> sh) & 0xFF);
       if (addr >= CLOCKS_BASE && addr < CLOCKS_BASE + 0x100)
         return ((this.leerClocks(addr & 0xFC) >>> sh) & 0xFF);
+      if (addr >= BOOTRAM_BASE && addr < BOOTRAM_BASE + BOOTRAM_SIZE_) {
+        const off = addr - BOOTRAM_BASE;
+        if (off >= BOOTLOCK_OFF && off < BOOTLOCK_OFF + BOOTLOCK_N * 4) {
+          const n = (off - BOOTLOCK_OFF) >> 2;
+          // El intento se resuelve al leer el primer byte; los otros tres sirven
+          // el mismo resultado, o una carga de 32 bits adquiriria cuatro veces.
+          if ((addr & 3) === 0) {
+            this.ultimoCerrojo = (this.bootlocks >>> n) & 1
+              ? 0 : ((this.bootlocks |= 1 << n), (1 << n) >>> 0);
+          }
+          return (this.ultimoCerrojo >>> sh) & 0xFF;
+        }
+        return this.bootram[off];
+      }
     }
 
     // SIO. Only GPIO_IN and GPIO_OUT are readable; the SET/CLR/XOR aliases are
@@ -533,6 +564,15 @@ export class Uvm2System implements ISystem, IBus {
       if (addr >= CLOCKS_BASE && addr < CLOCKS_BASE + ATOM_SIZE) {
         const i = (addr & 0xFC) >> 2;
         this.clocks[i] = atomico(this.clocks[i], (addr - CLOCKS_BASE) >>> 12, bits, mask);
+        return;
+      }
+      if (addr >= BOOTRAM_BASE && addr < BOOTRAM_BASE + BOOTRAM_SIZE_) {
+        const off = addr - BOOTRAM_BASE;
+        if (off >= BOOTLOCK_OFF && off < BOOTLOCK_OFF + BOOTLOCK_N * 4) {
+          this.bootlocks &= ~(1 << ((off - BOOTLOCK_OFF) >> 2));   // soltar
+        } else {
+          this.bootram[off] = data;
+        }
         return;
       }
       // XOSC y PLL sólo se leen; lo que se les escribe no cambia nada aquí.

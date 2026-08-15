@@ -1090,6 +1090,23 @@ export class Thumb2 implements ICpu {
       return 1;
     }
 
+    // ── CPS — `1011 0110 011 im 0 a i f`  (CPSIE/CPSID)
+    //
+    // Enmascarar interrupciones. Aqui no hay ninguna que enmascarar, pero el valor
+    // SI se guarda: el patron de una seccion critica es
+    //
+    //     mrs r0, primask ; cpsid i ; ...trabajo... ; msr primask, r0
+    //
+    // y si el `mrs` no devuelve lo que el `cpsid` puso, el restaurar deja el estado
+    // equivocado. Lanzar una excepcion aqui paraba el arranque del pico-sdk en
+    // 0xb672 = `cpsid i`.
+    if ((hw & 0xffe8) === 0xb660) {
+      const deshabilita = (hw >>> 4) & 1;
+      if (hw & 2) this.primask   = deshabilita;   // i
+      if (hw & 1) this.faultmask = deshabilita;   // f
+      return 1;
+    }
+
     throw new Error(`Unimplemented 16-bit misc: 0x${hw.toString(16).padStart(4,'0')}`);
   }
 
