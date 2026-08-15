@@ -356,8 +356,8 @@ function getProjectDocs(topic) {
 - PLAY_MUSIC("name") - plays .vmus file embedded in ROM
 - AUDIO_UPDATE auto-injected at END of loop() by compiler
 - PSG player updates every frame (50Hz)
-- MIDI to PSG: period = 1_500_000 / (32 * freq). freq = 440 * 2^((note-69)/12)
-- note 60 (C4) → PSG period 179, note 69 (A4) → period 106
+- MIDI to PSG: period = 1_500_000 / (16 * freq). freq = 440 * 2^((note-69)/12)
+- note 60 (C4) → PSG period 358, note 69 (A4) → period 213 (= Freq_Table[26] de la BIOS)
 - PSG channels: 0=A, 1=B, 2=C. Velocity: 0-15. Noise period: 0-31.
 - Source: core/src/musres.rs (MusicResource), core/src/backend/m6809/mod.rs (injection)`,
 

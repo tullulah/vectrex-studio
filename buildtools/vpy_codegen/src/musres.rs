@@ -137,21 +137,13 @@ impl MusicResource {
         }
     }
     
-    /// MIDI note to PSG frequency (calibrated for JSVecX emulator)
-    /// Formula: Period = 44100 / freq_hz
+    /// Nota MIDI -> periodo de tono del PSG.
+    ///
+    /// Antes esto usaba 1_411_200 Hz, un "reloj virtual" deducido del buffer de audio
+    /// del emulador JSVecX. El reloj real son 1,5 MHz (IC208 pin 15 <- E) y la
+    /// diferencia se oia: todo sonaba 1,06 semitonos alto. Ver `crate::psg`.
     pub fn midi_to_psg_period(midi: u8) -> u16 {
-        // MIDI note to Hz: 440 * 2^((note - 69) / 12)
-        let note = midi as f64;
-        let freq_hz = 440.0 * 2.0_f64.powf((note - 69.0) / 12.0);
-
-        // AY-3-8910 PSG formula: Freq_out = Clock / (16 * Period)
-        // JSVecX emulator: buffer=512 samples, length<<1=1024 outer iterations, left=2 ticks each,
-        //   but output written only every other iteration → 4 PSG ticks per output sample
-        //   tick_rate = 4 * 44100 = 176400 Hz
-        //   freq = tick_rate / (2 * period)  =>  period = 88200 / freq
-        //   Virtual PSG clock = 16 * 88200 = 1411200 Hz
-        let period = (1_411_200.0 / (16.0 * freq_hz)) as u16;
-        period.clamp(1, 4095) // 12-bit period, min 1
+        crate::psg::midi_to_period(midi as f64)
     }
     
     /// Compile to direct PSG format (inspired by Christman2024/malbanGit)

@@ -3186,7 +3186,7 @@ fn emit_pitrex_note_engine() -> String {
     let mut s = String::new();
 
     // ── NOTE_PERIOD_TABLE in .rodata ────────────────────────────────────────
-    // 84 entries (MIDI 24-107).  period = round(88200 / (440 * 2^((n-69)/12)))
+    // 84 entradas (MIDI 24-107). period = clk / (16 * f), clk = 1,5 MHz. Ver crate::psg.
     s.push_str("@ --- NOTE_PERIOD_TABLE: MIDI 24-107 → AY period (84 hwords) ---\n");
     s.push_str(".section .rodata\n");
     s.push_str(".balign 2\n");
@@ -3194,9 +3194,7 @@ fn emit_pitrex_note_engine() -> String {
     s.push_str("NOTE_PERIOD_TABLE:\n");
     let mut periods: Vec<u16> = Vec::new();
     for n in 24u32..=107 {
-        let freq = 440.0 * 2f64.powf((n as f64 - 69.0) / 12.0);
-        let period = (88200.0 / freq).round() as u16;
-        let period = period.max(1).min(4095);
+        let period = crate::psg::midi_to_period(n as f64);
         periods.push(period);
     }
     // Emit 8 per line for readability

@@ -11,6 +11,7 @@ pub mod arm;
 pub mod pitrex;
 pub mod uvm2;
 pub mod vecres;
+pub mod psg;
 pub mod musres;
 pub mod levelres;
 pub mod sfxres;

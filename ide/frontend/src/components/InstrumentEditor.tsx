@@ -13,6 +13,7 @@
  */
 
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { hzToPeriod, periodToHz } from '../psgClock';
 
 // ============================================
 // Types
@@ -156,9 +157,9 @@ function playNotePreview(note: number, instr: InstrResource) {
     }
 
     if (instr.pitch_sweep_duration_frames > 0 && f < instr.pitch_sweep_duration_frames) {
-      const initPeriod = Math.round(88200 / freq);
+      const initPeriod = hzToPeriod(freq);
       const currentPeriod = Math.max(1, initPeriod + instr.pitch_sweep_delta * f);
-      freq = 88200 / currentPeriod;
+      freq = periodToHz(currentPeriod);
     }
 
     events.push({ freq, startTime: f * frameDuration });
@@ -309,8 +310,8 @@ async function analyzeRegion(
     pitchDriftSemitones = 12 * Math.log2(hzEnd / Math.max(hzStart, 1));
     if (Math.abs(pitchDriftSemitones) > 0.3) {
       // Convert to AY period delta per frame
-      const p0 = Math.round(88200 / Math.max(hzStart, 1));
-      const p1 = Math.round(88200 / Math.max(hzEnd, 1));
+      const p0 = hzToPeriod(Math.max(hzStart, 1));
+      const p1 = hzToPeriod(Math.max(hzEnd, 1));
       pitch_sweep_delta = Math.max(-127, Math.min(127, Math.round((p1 - p0) / Math.max(1, durationFrames))));
       pitch_sweep_duration_frames = durationFrames;
     }
