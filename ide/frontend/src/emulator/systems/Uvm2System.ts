@@ -81,6 +81,14 @@ const VECTORES_FIN = SRAM_BASE + 64 * 4;
 //
 // Se sintetiza lo minimo: el puntero de 0x16, un rom_table_lookup que se atiende
 // de forma nativa, y una funcion que no hace nada y devuelve 0.
+/** Escritura a un bloque y sus alias: 0 normal, 1 XOR, 2 SET, 3 CLR. */
+function atomico(prev: number, alias: number, bits: number, mask: number): number {
+  return (alias === 1 ? (prev ^ bits)
+        : alias === 2 ? (prev | bits)
+        : alias === 3 ? (prev & ~bits)
+        : ((prev & ~mask) | bits)) >>> 0;
+}
+
 const BOOTROM_SIZE   = 0x4000;
 const ROM_LOOKUP     = 0x00000100;   // rom_table_lookup sintetica (se intercepta)
 const ROM_NOOP       = 0x00000110;   // funcion que no hace nada y devuelve 0
@@ -88,6 +96,23 @@ const ROM_NOOP       = 0x00000110;   // funcion que no hace nada y devuelve 0
 const ROM_IGNORABLES: Record<number, string> = {
   0x5253: "bootrom_state_reset('S','R')",
 };
+
+// ─── El arranque del pico-sdk ─────────────────────────────────────────────────
+//
+// Una imagen UVM2 construida por el camino del pico-sdk (build_uvm2.sh) NO salta
+// directa a game_main: antes corre el runtime_init entero, que saca periféricos
+// del reset, arranca el cristal, engancha los PLL y conmuta el árbol de relojes
+// — y en cada paso ESPERA un bit de "listo". Un registro que lee 0 no da error:
+// deja el juego girando para siempre, y en pantalla eso es "no hace nada".
+//
+// Lo que sigue es el mínimo para que esas esperas terminen. No pretende ser un
+// modelo del reloj: aquí no hay frecuencias que respetar, sólo un protocolo que
+// contestar. Cada dirección viene de desensamblar la imagen y verla girar.
+const RESETS_BASE = 0x40020000;   // RESET(0) WDSEL(4) RESET_DONE(8) + alias atómicos
+const XOSC_BASE   = 0x40048000;   // CTRL(0) STATUS(4): bit31 STABLE
+const PLL_BASES    = [0x40050000, 0x40058000];   // PLL_SYS / PLL_USB, CS(0) bit31 LOCK
+const CLOCKS_BASE = 0x40010000;   // CTRL/DIV/SELECTED por reloj + alias atómicos
+const ATOM_SIZE   = 0x4000;       // el bloque y sus tres alias XOR/SET/CLR
 const SRAM_SIZE = 0x00082000;          // 520 KB, as on the real RP2350
 const SIO_BASE  = 0xD0000000;
 
@@ -135,6 +160,22 @@ export class Uvm2System implements ISystem, IBus {
   private gpioInLatch = 0;             // 32-bit GPIO_IN snapshot, see read8
 
   private vtor = SRAM_BASE;
+
+  /** Máscara de periféricos en reset. RESET_DONE es su complemento. */
+  private resets = 0;
+  /** Fichero de registros de CLOCKS, en palabras. */
+  private readonly clocks = new Uint32Array(0x40);
+  /**
+   * SELECTED es el one-hot de la fuente elegida en CTRL, y el runtime lo compara
+   * por IGUALDAD, no por máscara — devolver "todos los bits" no vale. clk_ref usa
+   * dos bits de SRC y clk_sys uno; los demás muxes no son glitchless y leen 1.
+   */
+  private leerClocks(off: number): number {
+    if (off === 0x38) return (1 << (this.clocks[0x30 >> 2] & 3)) >>> 0;  // CLK_REF_SELECTED
+    if (off === 0x44) return (1 << (this.clocks[0x3C >> 2] & 1)) >>> 0;  // CLK_SYS_SELECTED
+    if (off >= 0x30 && ((off - 0x38) % 12) === 0) return 1;
+    return this.clocks[off >> 2];
+  }
 
   /** ROM de arranque sintetica (ver arriba). */
   private readonly bootrom = new Uint8Array(BOOTROM_SIZE);
@@ -241,6 +282,8 @@ export class Uvm2System implements ISystem, IBus {
    * is a WORD count, not a byte count.
    */
   init(um2: Uint8Array): void {
+    this.resets = 0;
+    this.clocks.fill(0);
     const rd32 = (o: number) =>
       (um2[o] | (um2[o + 1] << 8) | (um2[o + 2] << 16) | (um2[o + 3] << 24)) >>> 0;
 
@@ -419,6 +462,25 @@ export class Uvm2System implements ISystem, IBus {
 
     if (addr < BOOTROM_SIZE) return this.bootrom[addr];
 
+    {
+      const sh = (addr & 3) * 8;
+      // RESETS: un periférico está "hecho" justo cuando no está en reset.
+      if (addr >= RESETS_BASE && addr < RESETS_BASE + 0x10) {
+        const off = addr & 0xC;
+        const w = off === 0x0 ? this.resets : off === 0x8 ? (~this.resets >>> 0) : 0;
+        return (w >>> sh) & 0xFF;
+      }
+      // XOSC: el cristal se declara estable desde el primer instante.
+      if (addr >= XOSC_BASE && addr < XOSC_BASE + 0x20)
+        return ((((addr & 0x1C) === 0x4 ? 0x80000000 : 0) >>> sh) & 0xFF);
+      // PLL: enganchado desde el primer instante.
+      for (const p of PLL_BASES)
+        if (addr >= p && addr < p + 0x20)
+          return ((((addr & 0x1C) === 0x0 ? 0x80000000 : 0) >>> sh) & 0xFF);
+      if (addr >= CLOCKS_BASE && addr < CLOCKS_BASE + 0x100)
+        return ((this.leerClocks(addr & 0xFC) >>> sh) & 0xFF);
+    }
+
     // SIO. Only GPIO_IN and GPIO_OUT are readable; the SET/CLR/XOR aliases are
     // write-only on real silicon too.
     // The `>>> 0` is load-bearing: JS bitwise ops yield a SIGNED 32-bit result,
@@ -459,6 +521,23 @@ export class Uvm2System implements ISystem, IBus {
     if (addr >= SRAM_BASE && addr < SRAM_BASE + SRAM_SIZE) {
       this.sram[addr - SRAM_BASE] = data;
       return;
+    }
+
+    {
+      const sh = (addr & 3) * 8, bits = data << sh, mask = 0xFF << sh;
+      if (addr >= RESETS_BASE && addr < RESETS_BASE + ATOM_SIZE) {
+        if ((addr & 0xC) === 0)
+          this.resets = atomico(this.resets, (addr - RESETS_BASE) >>> 12, bits, mask);
+        return;
+      }
+      if (addr >= CLOCKS_BASE && addr < CLOCKS_BASE + ATOM_SIZE) {
+        const i = (addr & 0xFC) >> 2;
+        this.clocks[i] = atomico(this.clocks[i], (addr - CLOCKS_BASE) >>> 12, bits, mask);
+        return;
+      }
+      // XOSC y PLL sólo se leen; lo que se les escribe no cambia nada aquí.
+      if (addr >= XOSC_BASE && addr < XOSC_BASE + ATOM_SIZE) return;
+      for (const p of PLL_BASES) if (addr >= p && addr < p + ATOM_SIZE) return;
     }
 
     if (((addr & 0xFFFFF000) >>> 0) === SIO_BASE) {
