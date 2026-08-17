@@ -535,6 +535,37 @@ volatile int uvm2_t1_vcap       = 127;   /* VCAP                                
 volatile int uvm2_t1_vcap_slow  = 30;    /* VCAP_SLOW: tope para el zigzag            */
 volatile int uvm2_t1_vcap_dv    = 32;    /* VCAP_DV: longitud maxima que cuenta corta */
 volatile int uvm2_t1_extra_q8   = 0;     /* T1_EXTRA_Q8: el 6522 cuenta t1 + 1,5      */
+
+/* LOS DOS RETARDOS DEL HAZ, en nuestros valores y en ciclos de E.
+ *
+ * Conversion, sin inventarse el factor: el firmware los lleva en ciclos de CPU y
+ * define CPU_PER_ECYCLE = 100 (un periodo de E, 666 ns a 1,5 MHz, son ~100 ciclos a
+ * 150 MHz). Ademas tiene escrito BLANK_SETTLE_REFERENCE = 16 * CPU_PER_ECYCLE, que
+ * es literalmente el c_BlankOnDelay de Ralf en nuestras unidades, asi que la
+ * equivalencia esta comprobada en los dos sentidos.
+ *
+ *     BEAM_ON_DELAY_CYC  =  200 ciclos de CPU  ->  2 ciclos de E   (aqui habia 3)
+ *     BLANK_SETTLE_CYC   = 1100 ciclos de CPU  -> 11 ciclos de E   (aqui habia 16)
+ *
+ * NO SON LA MISMA CANTIDAD, y por eso son dos knobs y no uno. MEDIDO por biseccion
+ * en nuestra consola el 2026-08-07, en el menu (estatico, vectores cortos), mirando
+ * cuando se abren las esquinas del recuadro: encender pide el codo entre 50 y 60
+ * ciclos, apagar entre 125 y 150. Encender necesita 2,5 veces menos, y tiene sentido
+ * fisico — arrancar el haz desde parado y frenarlo contra la inductancia del yugo no
+ * son el mismo transitorio. Ralf apunta en la misma direccion con su 3 / 16, aunque
+ * su razon sea 5:1.
+ *
+ * OJO CON EL 11: los valores enviados NO son el codo. Por debajo de ~200 ciclos de
+ * CPU el dibujo TIEMBLA cada vez mas, mucho antes del codo, porque al encender antes
+ * la parte iluminada incluye el arranque del haz y ahi la posicion depende de CUANDO
+ * exactamente encendimos — jitter NUESTRO. En el UVM2 el retardo lo cuenta el
+ * ejecutor de comandos, que es otro reloj y otro jitter: puede que aqui aguante
+ * menos, o mas. Son el punto de partida para barrer, no un resultado importado.
+ *
+ * Se dejan como variables del MODELO T1 y no se tocan los #define de arriba: asi el
+ * modelo 0 sigue siendo el de Ralf integro y la comparacion A/B sigue valiendo. */
+volatile int uvm2_t1_beam_on      = 2;   /* BEAM_ON_DELAY_CYC 200 / 100 */
+volatile int uvm2_t1_blank_settle = 11;  /* BLANK_SETTLE_CYC 1100 / 100 */
 volatile uint32_t uvm2_t1_vcap_slow_hits;
 
 /* vy del vector anterior, para el disparador del tope selectivo. Bit 8 = valido,
@@ -627,7 +658,7 @@ static void uvm2_draw_move_t1(int dx, int dy)
     set_x(vx, UVM2_HOLD_DELAY);
     /* El haz sigue apagado: un movimiento no enciende nada. La rampa corre t1
      * cuentas y para sola. */
-    t1_start_ramp(t1, t1 + UVM2_BLANK_ON_DELAY);
+    t1_start_ramp(t1, t1 + (uint32_t)uvm2_t1_blank_settle);
 
     uvm2_stats.moves++;
     uvm2_stats.ramp_cycles += t1;
@@ -652,14 +683,17 @@ static void uvm2_draw_delta_t1(int dx, int dy)
      * rampa deja el punto quieto e iluminado durante una escritura entera: un punto
      * brillante en el vertice de SALIDA. Se arranca la rampa y se enciende cuando el
      * haz ya viaja — que es tambien lo que hace Ralf con su c_BlankOffDelay. */
-    t1_start_ramp(t1, UVM2_BLANK_OFF_DELAY);
+    t1_start_ramp(t1, (uint32_t)uvm2_t1_beam_on);
     /* Iluminado el resto de la rampa, mas el tiempo que el haz tarda en LLEGAR
      * despues de que los integradores paren. Los dos retardos NO son la misma
      * cantidad: medido por biseccion en nuestra consola, encender pide 2,5 veces
      * menos que apagar. Aqui se reutilizan las constantes de ESTA placa, que estan
      * en sus unidades y medidas aqui; son el primer sitio donde barrer. */
-    emit(UVM2_VIA_PCR, lit,
-         (t1 > UVM2_BLANK_OFF_DELAY ? t1 - UVM2_BLANK_OFF_DELAY : 0) + UVM2_BLANK_ON_DELAY);
+    {
+        uint32_t on = (uint32_t)uvm2_t1_beam_on;
+        emit(UVM2_VIA_PCR, lit,
+             (t1 > on ? t1 - on : 0) + (uint32_t)uvm2_t1_blank_settle);
+    }
     emit(UVM2_VIA_PCR, s_pcr, 0);
 
     uvm2_stats.vectors++;
@@ -769,7 +803,7 @@ static void recal_move(int dx, int dy)
     s_y_held = 0x100 | (dy & 0xFF);
     set_x(dx, UVM2_HOLD_DELAY);
     if (uvm2_beam_model) {
-        t1_start_ramp(255u, 255u + UVM2_BLANK_ON_DELAY);
+        t1_start_ramp(255u, 255u + (uint32_t)uvm2_t1_blank_settle);
     } else {
         set_ramp(1, s_scale);
         set_ramp(0, UVM2_HOLD_DELAY);
