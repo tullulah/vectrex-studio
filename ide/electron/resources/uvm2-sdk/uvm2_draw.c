@@ -537,6 +537,60 @@ void uvm2_draw_move_abs(int x, int y)
 
 /* ── Frame ────────────────────────────────────────────────────────────────── */
 
+/* ---- Recalibrate ($F2E6) — LA RUTINA QUE ESTE SDK TAMPOCO TENIA -------------
+ *
+ * La BIOS original la llama CADA FRAME desde `Wait_Recal` ($F192), y no es un cero
+ * pasivo:
+ *
+ *     Recalibrate:  LDX #Recal_Points   ; $7F7F,$8080
+ *                   BSR Moveto_ix_FF    ; escala $FF, mover a (+127,+127)
+ *                   JSR Reset0Int       ; integradores a cero
+ *                   BSR Moveto_ix       ; mover a (-128,-128), MISMA escala $FF
+ *                   BRA Reset0Ref
+ *
+ * Barre los integradores a los DOS railes y los anula en medio. Este SDK solo hacia
+ * el equivalente de `Reset0Ref` (`uvm2_draw_reset`), que pone a cero la REFERENCIA
+ * pero no drena nada: si queda carga residual, ahi se queda.
+ *
+ * POR QUE SE TRANSCRIBE AQUI. En el cartucho propio esto mismo, el 2026-08-17, era
+ * la causa de que TODO se fuera acumulando: el dibujo colapsaba hacia Y = 0 y
+ * perdia intensidad, y los 33 tests VPy eran inservibles. Con la consola una hora
+ * apagada el primer arranque salia limpio y los siguientes no — una hora sin
+ * corriente era el unico drenaje que teniamos. Con `Recalibrate` puesta, resuelto.
+ *
+ * Este SDK no tenia ni una referencia a $7F7F ni a Recalibrate, asi que arrastra el
+ * mismo agujero. Y encaja con el parpadeo del UVM2 que sigue sin explicarse.
+ *
+ * ESCALA MAXIMA A PROPOSITO. La BIOS pide $FF y no vale usar la escala en curso:
+ * una rampa mas corta no lleva el integrador hasta el rail, que es justo el punto
+ * del ejercicio. Por eso se guarda `s_scale`, se fuerza 255 y se restaura.
+ *
+ * Cuesta dos movimientos a escala maxima por frame. Si hiciera falta medirlo,
+ * -DUVM2_NO_RECALIBRATE lo quita.
+ */
+#ifndef UVM2_NO_RECALIBRATE
+static void uvm2_recalibrate(void)
+{
+    const uint32_t escala = s_scale;
+    s_scale = 255u;                       /* Moveto_ix_FF: LDB #$FF / STB t1_cnt_lo */
+
+    /* Los dos puntos son ABSOLUTOS en la BIOS ($7F7F y $8080), y aqui los
+     * movimientos son relativos: se va al rail y se cruza al contrario, que es el
+     * mismo recorrido — la ida completa y la vuelta completa. */
+    uvm2_draw_move(127, 127);             /* -> (+127, +127) */
+
+    /* Reset0Int ($F36C): LDD #$00CC / STB cntl / STA shift. Aqui es la pinza de
+     * cero, que es lo que ese 0xCC enciende. */
+    set_zero(1, UVM2_HOLD_DELAY);
+    set_zero(0, UVM2_HOLD_DELAY);
+
+    uvm2_draw_move(-128, -128);           /* -> (-128, -128), misma escala */
+
+    s_scale = escala;
+    uvm2_draw_reset();                    /* Reset0Ref */
+}
+#endif
+
 void uvm2_frame_begin(void)
 {
     s_count = 0;
@@ -582,6 +636,13 @@ void uvm2_frame_end(void)
      * Cuesta un comando. */
     s_pcr = (uint8_t)(s_pcr & ~UVM2_PCR_BLANK_OFF);
     emit(UVM2_VIA_PCR, s_pcr, 0);
+
+    /* RECALIBRAR, con el haz ya apagado y antes de pinzar. Es donde la BIOS la
+     * tiene: `Recalibrate` es lo ultimo de `Wait_Recal`, o sea trabajo del CIERRE
+     * del frame. Ver el bloque de uvm2_recalibrate. */
+#ifndef UVM2_NO_RECALIBRATE
+    uvm2_recalibrate();
+#endif
 
     /* Y ahora si, pinzar el haz en el centro: un integrador parado deriva, y un
      * haz que deriva es un punto brillante quemado en mitad de la pantalla. */
