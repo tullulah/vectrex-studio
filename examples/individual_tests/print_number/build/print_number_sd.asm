@@ -64,6 +64,7 @@
 .equ ENEMY_STATE_ARM,     0x2007F41C  @ enemy state per slot: 8 × i32
 .equ VPY_PLAYER_ANIM_STATE, 0x2007F43C  @ player animation state: frame_idx(u8)+ticks_left(u8)
 .equ VPY_BRIGHTNESS_OVERRIDE, 0x2007F43E  @ SET_INTENSITY override: 0=.vec intensity, >0=override (1 byte)
+.equ VPY_DRAW_SCALE,      0x2007F43F  @ escala del proximo DRAW_VECTOR_EX (x32; 0/32 = 1:1, 1 byte)
 .equ WANDER_SCRATCH_ARM,  0x2007F440  @ wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)
 .equ USER_RAM_START,      0x2007F460  @ user variables begin here
 
@@ -171,6 +172,7 @@ dv_move_to:
     mov     r5, r1                  @ remaining dy
     mov     r6, #127
     rsb     r7, r6, #0              @ r7 = -127
+    mov     r3, #8                  @ max split steps (anti-hang guard)
 dvmt_loop:
     mov     r0, r4                  @ step_x = clamp(remaining_x, -127, 127)
     cmp     r0, r6
@@ -192,7 +194,10 @@ dvmt_loop:
     subs    r4, r4, r0              @ remaining -= step
     subs    r5, r5, r1
     orrs    r2, r4, r5              @ both zero? → done
+    beq     dvmt_done
+    subs    r3, r3, #1              @ else step, until the cap
     bne     dvmt_loop
+dvmt_done:
     pop     {r2, r3, r4, r5, r6, r7, pc}
 
 @ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA
