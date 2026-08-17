@@ -519,7 +519,15 @@ static int drift_fix(int d, int32_t *acc, int32_t cte)
  *
  * SIN PROBAR EN ESTA CONSOLA. Compila; nadie lo ha encendido con model = 1.
  */
-volatile int uvm2_beam_model = 0;
+/* El valor de ARRANQUE tambien por compilacion, no solo por SWD. Si la sonda no
+ * aparece —y hoy no aparece— se puede al menos cargar dos .um2 y comparar cambiando
+ * de fichero en la SD. Es peor (hay un reset entre medidas, y una medida de fps entre
+ * resets no vale), pero responde "¿dibuja siquiera?" sin depender del cable.
+ *     ./build_uvm2.sh dkong dkt1_m1 -DUVM2_BEAM_MODEL_DEFAULT=1  */
+#ifndef UVM2_BEAM_MODEL_DEFAULT
+#define UVM2_BEAM_MODEL_DEFAULT 0
+#endif
+volatile int uvm2_beam_model = UVM2_BEAM_MODEL_DEFAULT;
 
 /* Los knobs de `ramp_params`, con los valores que quedaron por defecto en el
  * cartucho propio el 2026-08-17 tras medirlos en pantalla. Variables y no defines
