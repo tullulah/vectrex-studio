@@ -17,7 +17,11 @@ extern "C" {
  * devuelve el codigo de OTRO juego, y un `probed` distinto de cero se lee como
  * "la sonda corrio". Paso: dio un "ya esta mapeada" que era basura. Una palabra
  * improbable es la diferencia entre un dato y una casualidad. */
-#define UVM2_PSRAM_MAGIC 0x50535231u   /* "PSR1" */
+/* PSR2, no PSR1: la estructura ha crecido con la sonda del bootrom. Si se
+ * quedara en PSR1, una imagen ANTERIOR que siguiera en la RAM del cartucho
+ * pasaria el centinela y sus campos viejos se leerian en los sitios nuevos.
+ * El centinela sube con el formato o no es un centinela. */
+#define UVM2_PSRAM_MAGIC 0x50535233u   /* "PSR3" */
 
 typedef struct {
     uint32_t magic;         /* UVM2_PSRAM_MAGIC si la sonda escribio esto   */
@@ -62,12 +66,82 @@ typedef struct {
     uint32_t rx_timeouts;
     uint32_t csr_after_cmd; /* DIRECT_CSR tras sacar el primer byte */
     uint32_t already_mapped;/* 1 = CS1 venia configurado: NO tocamos el chip  */
+
+    /* ---- LA SONDA DEL BOOTROM (uvm2_psram_probe_bootrom) -------------------
+     *
+     * La primera sonda le habla al chip por modo directo, a mano. Esta le deja
+     * hablar al BOOTROM, que es la unica pieza que sabe sacar de XIP a un
+     * dispositivo de CS1 — y solo lo hace si FLASH_DEVINFO dice que CS1 mide
+     * algo. Por defecto mide NONE, asi que esa secuencia NO SE HA MANDADO NUNCA.
+     * Ver el comentario de flash_devinfo_set_cs_size() en hardware/flash.h. */
+    uint32_t bootrom_probe_run;   /* 1 = esta sonda llego a ejecutarse         */
+    /* CONTROL POSITIVO. El mismo READ_ID a la FLASH (CS0), que sabemos buena
+     * porque de ella arranca el firmware. Un W25Q128 contesta EF 40 18. Si esto
+     * sale mal, el camino de lectura esta roto y lo que diga CS1 no vale nada:
+     * es la regla de "referencia antes que sospechoso, mismo montaje", solo que
+     * en software y gratis. */
+    uint32_t flash_jedec;
+    uint32_t flash_jedec_tras_cs1; /* el mismo, despues de armar CS1           */
+    uint32_t devinfo_cs1_before;  /* lo que decia FLASH_DEVINFO de CS1 al entrar */
+    /* Y el chip, tras la secuencia de salida del bootrom. */
+    uint32_t mf_id_bootrom;       /* byte 4: 0x0D = AP Memory                  */
+    uint32_t kgd_bootrom;         /* byte 5: 0x5D = known good die             */
+    uint32_t eid_bootrom;         /* byte 6: de aqui sale el tamaño            */
+    uint32_t found_bootrom;       /* 1 = KGD correcto, que es lo que mira el SDK */
+    uint32_t tam_bootrom;         /* bytes deducidos del EID, 0 si no contesta  */
+    /* MIGAS. La primera version de esta sonda se colgo dentro de do_cmd_cs y lo
+     * unico que se sabia era "no llego a escribir flash_jedec" — que abarca seis
+     * llamadas. Esto se escribe ANTES de cada paso, asi que el ultimo valor que
+     * sobreviva ES el paso que no volvio. Vale mas que cualquier hipotesis:
+     * un cuelgue no deja traza, salvo la que le dejes puesta de antemano.
+     * Codigo: llamada*100 + paso. Ver PASO_* en uvm2_psram.c. */
+    uint32_t paso_bootrom;
+
+    /* ---- HABLARLE EN QPI (uvm2_psram_probe_qpi) ---------------------------
+     *
+     * La hipotesis que ninguna sonda habia probado. Un APS6404 en QPI ignora
+     * las ordenes de UNA linea, y el cartucho lleva USB-C: no se queda sin
+     * corriente al apagar la consola, asi que puede llevar en QPI desde
+     * nuestras propias sondas. Bajar el reloj no destapa eso — no es un
+     * problema de velocidad, es de idioma.
+     *
+     * Y el driver oficial del pico-sdk 2.3.0 lo confirma por el otro lado: su
+     * psram_initialize_internal() manda 0x35 (QUAD ENABLE), o sea que QUIERE el
+     * chip en QPI. Si ya lo esta, no hay que sacarlo: hay que hablarle asi.
+     *
+     * Se guardan los OCHO bytes crudos de cada intento, sin decidir donde cae
+     * el ID. Los ciclos de espera del 0x9F en QPI no los tenemos medidos, y
+     * suponer una posicion convierte un desfase de un byte en "chip mudo" —
+     * que es exactamente el error que ya cometimos con MF_ID contra KGD.
+     * Busca 0d 5d en la tira y ya veras donde cae. */
+    uint32_t qpi_probe_run;
+    uint32_t qpi_directo[2];   /* READ_ID en QPI, tal cual esta el chip       */
+    uint32_t qpi_tras_35[2];   /* ...y tras mandarle 0x35 en una linea        */
+    /* EL RELOJ, APUNTADO. La primera version heredaba el CLKDIV = 120 que deja
+     * uvm2_psram_probe() al acabar su barrido y no restaura — y a 1,25 MHz la
+     * transaccion en quad tiene el select bajo ~19 us, contra un **tCEM de 8 us**
+     * del APS6404. La prueba corria fuera de especificacion sin que se viera.
+     * Guardar el divisor cuesta una palabra y evita deducirlo nunca mas. */
+    uint32_t qpi_clkdiv;        /* 6 = 25 MHz                                  */
+    uint32_t qpi_clkdiv_lento;  /* 30 = 5 MHz                                  */
+    uint32_t qpi_lento[2];      /* el mismo READ_ID en quad, mas despacio      */
 } uvm2_psram_result_t;
 
 extern volatile uvm2_psram_result_t uvm2_psram_result;
 
 /* Sondea. NO arma la ventana XIP ni escribe: primero saber que hay. */
 int uvm2_psram_probe(void);
+
+/* La misma pregunta, hablandole en QPI. Sin bootrom: no se puede colgar. */
+int uvm2_psram_probe_qpi(void);
+
+/* La misma pregunta por el camino del bootrom.
+ *
+ * OJO: MEDIDO 2026-08-17, rom_flash_exit_xip() NO VUELVE en este cartucho — y
+ * ya en la primera llamada, la de CS0, antes de tocar CS1. Por eso vive detras
+ * de -DUVM2_PSRAM_BOOTROM y por defecto no se compila: una sonda que cuelga
+ * cuesta un viaje de tarjeta entero y devuelve un solo bit. */
+int uvm2_psram_probe_bootrom(void);
 
 #ifdef __cplusplus
 }

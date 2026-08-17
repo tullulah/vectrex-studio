@@ -130,7 +130,23 @@ void uvm2_runtime_init(void)
      * multicart: en un arranque normal no hay ninguna razon para meterse ahi.
      * Resultado en uvm2_psram_result, legible por SWD. */
 #ifdef UVM2_PSRAM_PROBE
+    /* En este orden, y el orden es la medida. uvm2_psram_probe() lo primero
+     * porque lo unico que solo puede leer ELLA es el QMI virgen: en cuanto la
+     * otra sonda llama al bootrom, los M1 y DIRECT_CSR ya no dicen "como me
+     * encontre" sino "como me dejaron". Y la del bootrom despues porque manda
+     * la secuencia de salida de XIP a CS1, que puede sacar al chip de QPI: si
+     * fuera al reves, la sonda de siempre encontraria un chip ya despierto y no
+     * sabriamos cual de las dos lo consiguio. */
     uvm2_psram_probe();
+    /* MEDIDO 2026-08-17: rom_flash_exit_xip() no vuelve en este cartucho, y ya
+     * en la llamada de CS0 — antes de tocar CS1. Lo dijo la miga paso_bootrom =
+     * 103. Asi que este camino queda detras de su propio interruptor: una sonda
+     * que cuelga cuesta un viaje de tarjeta entero y devuelve un solo bit, y lo
+     * de abajo no llegaba a correr. */
+#ifdef UVM2_PSRAM_BOOTROM
+    uvm2_psram_probe_bootrom();
+#endif
+    uvm2_psram_probe_qpi();
 #endif
     uvm2_frame_begin();
     uvm2_led_status(UVM2_STATUS_RUNNING);

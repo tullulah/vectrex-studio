@@ -123,7 +123,11 @@ if(UVM2_GAME_PREINC)
 endif()
 
 target_include_directories(${UVM2_NAME} PRIVATE ${UVM2_SDK_DIR})
-target_link_libraries(${UVM2_NAME} pico_stdlib pico_multicore hardware_dma hardware_pio ${UVM2_GAME_LIBS})
+# hardware_flash: NO es para escribir en la flash — de ahi no se toca nada. Es
+# para flash_devinfo_set_cs_size() y flash_do_cmd(), que son la unica forma de
+# pedirle al BOOTROM la secuencia de salida de XIP hacia CS1, o sea hacia la
+# PSRAM. Ver el bloque de uvm2_psram_probe_bootrom(). pico_stdlib no lo arrastra.
+target_link_libraries(${UVM2_NAME} pico_stdlib pico_multicore hardware_dma hardware_pio hardware_flash ${UVM2_GAME_LIBS})
 
 # Keep the SVC handler alive. Nothing in C calls uvm2_svc_handler — it is reached
 # only through the vector table — so --gc-sections drops its section, and the

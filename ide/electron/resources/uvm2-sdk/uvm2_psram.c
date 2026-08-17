@@ -23,6 +23,9 @@
  */
 
 #include <stdint.h>
+#include "hardware/address_mapped.h"
+#include "hardware/flash.h"
+#include "pico/bootrom.h"
 #include "hardware/structs/qmi.h"
 #include "hardware/structs/pads_bank0.h"
 #include "hardware/structs/io_bank0.h"
@@ -130,6 +133,337 @@ static void cs1_xfer(const uint8_t *cmd, uint32_t n_cmd, uint8_t *rx_buf, uint32
     }
     for (uint32_t i = 0; i < n_rx;  i++) { tx(0x00);   rx_buf[i] = rx(); }
     qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_ASSERT_CS1N_BITS;
+}
+
+/* ---- LA SONDA DEL BOOTROM ---------------------------------------------------
+ *
+ * QUE LE FALTABA A LA OTRA. La sonda de abajo le habla al chip por modo directo,
+ * a mano, y midio que el QMI SI transfiere (rx_timeouts = 0, CS1 y BUSY
+ * correctos) y que el chip calla — a 25, 12,5, 5 y 1,25 MHz. De ahi salio
+ * "software agotado, toca osciloscopio". Era falso, y lo dice nuestro propio
+ * SDK en hardware/flash.h:
+ *
+ *   "The ROM uses this device information to control some low-level flash API
+ *    behaviour, such as issuing an XIP exit sequence to CS 1 IF ITS SIZE IS
+ *    NONZERO."
+ *
+ * FLASH_DEVINFO da NONE a CS1 mientras la OTP no diga otra cosa, asi que **esa
+ * secuencia no se le ha mandado nunca a la PSRAM**: ni el bootrom, ni el
+ * firmware del multicart (Ralf: "I actually never used it so far"), ni nosotros.
+ * Y encaja con lo que la otra sonda ya sospechaba: un APS6404 en QPI ignora las
+ * ordenes de una linea, el cartucho lleva USB-C y no se queda sin corriente al
+ * apagar la consola, asi que puede llevar en QPI desde nuestras propias sondas.
+ * Bajar el reloj no destapa eso: no es un problema de velocidad, es de idioma.
+ *
+ * Asi que aqui no inventamos nada. Se le dice a FLASH_DEVINFO que CS1 mide algo
+ * y se deja que el bootrom haga SU secuencia. Es la pieza que el hardware_psram
+ * del pico-sdk 2.3.0 usa para lo mismo (psram_detect_size), portada a nuestro
+ * 2.2.0 con API publica y sin tocar el SDK.
+ *
+ * NO ESCRIBE NADA EN LA FLASH. Las dos ordenes que salen de aqui son 0x9F,
+ * lecturas de identificador; flash_do_cmd deja el XIP como estaba al terminar.
+ */
+#define AP_KGD_ID  0x5Du   /* known good die; es lo que mira el SDK, no el MF ID */
+
+/* Del EID al tamaño, igual que psram_eid_to_size() del 2.3.0. */
+static uint32_t eid_a_tam(uint8_t kgd, uint8_t eid)
+{
+    if (kgd != AP_KGD_ID) return 0;
+    uint32_t mb = 1u << 20;
+    uint8_t  s  = (uint8_t)(eid >> 5);
+    if (s == 4)                          return mb * 16u;
+    if (eid == 0x26 || s == 2 || s == 3) return mb * 8u;
+    if (s == 1)                          return mb * 4u;
+    return mb * 2u;
+}
+
+/* flash_do_cmd() del SDK, con el chip select como parametro.
+ *
+ * NO ES UNA COPIA POR GUSTO. Hacen falta dos cosas que el SDK no da aqui:
+ *   - CS1. flash_do_cmd fija CS0 a pelo; la version con parametro es
+ *     flash_do_cmd_cs, y esa no llega hasta el pico-sdk 2.3.0.
+ *   - Que exista. Todo el bloque vive dentro de `#if !PICO_NO_FLASH` y nuestras
+ *     imagenes son no_flash, asi que el enlace no lo encuentra — comprobado.
+ * Lo que se copia es la secuencia, y solo usa API publica de pico/bootrom.h.
+ *
+ * El paso que importa es rom_flash_exit_xip(), y su documentacion en
+ * pico/bootrom.h dice ademas que rom_connect_internal_flash() inicializa el GPIO
+ * del segundo chip select "si se ha configurado por OTP o ESCRIBIENDO LA COPIA
+ * EN BOOTRAM DE FLASH_DEVINFO". O sea que el bootrom nos pone hasta el pad. */
+/* Migas: el ultimo valor que sobreviva en paso_bootrom es el paso que no volvio.
+ * Un cuelgue no deja traza salvo la que le dejes puesta de antemano — esta sonda
+ * ya se colgo una vez y lo unico que se supo fue "en alguna de seis llamadas". */
+#define PASO_ENTRA        1
+#define PASO_CONNECT      2   /* va a llamar a rom_connect_internal_flash */
+#define PASO_EXIT_XIP     3   /* va a llamar a rom_flash_exit_xip         */
+#define PASO_BUCLE        4   /* va a mover los bytes                     */
+#define PASO_FLUSH        5   /* va a llamar a rom_flash_flush_cache      */
+#define PASO_ENTER_XIP    6   /* va a llamar a rom_flash_enter_cmd_xip    */
+#define PASO_SALE         7
+static uint32_t n_llamada = 0;
+#define MIGA(p) (uvm2_psram_result.paso_bootrom = n_llamada * 100u + (p))
+
+static void do_cmd_cs(const uint8_t *tx, uint8_t *rx, uint32_t count, int cs)
+{
+    const uint32_t cs_bit = cs ? QMI_DIRECT_CSR_ASSERT_CS1N_BITS
+                               : QMI_DIRECT_CSR_ASSERT_CS0N_BITS;
+    uint32_t txr = count, rxr = count, spins = 0;
+
+    n_llamada++;
+    MIGA(PASO_ENTRA);
+
+    MIGA(PASO_CONNECT);
+    rom_connect_internal_flash();
+    MIGA(PASO_EXIT_XIP);
+    rom_flash_exit_xip();
+    MIGA(PASO_BUCLE);
+
+    hw_set_bits(&qmi_hw->direct_csr, cs_bit);
+    hw_set_bits(&qmi_hw->direct_csr, QMI_DIRECT_CSR_EN_BITS);
+    /* El QMI se atasca solo cuando DIRECT_RX se llena, asi que no hay que contar
+     * cuantos van en vuelo — pero el limite de vueltas se queda: un dispositivo
+     * que no contesta no puede colgar el cartucho. */
+    while ((txr || rxr) && ++spins < QMI_SPIN_LIMIT) {
+        uint32_t f = qmi_hw->direct_csr;
+        if (txr && !(f & QMI_DIRECT_CSR_TXFULL_BITS))  { qmi_hw->direct_tx = *tx++; txr--; }
+        if (rxr && !(f & QMI_DIRECT_CSR_RXEMPTY_BITS)) { *rx++ = (uint8_t)qmi_hw->direct_rx; rxr--; }
+    }
+    if (spins >= QMI_SPIN_LIMIT) uvm2_psram_result.rx_timeouts++;
+    /* Soltar el select ANTES de apagar, por lo mismo que direct_end(). */
+    hw_clear_bits(&qmi_hw->direct_csr, cs_bit);
+    hw_clear_bits(&qmi_hw->direct_csr, QMI_DIRECT_CSR_EN_BITS);
+
+    MIGA(PASO_FLUSH);
+    rom_flash_flush_cache();
+    MIGA(PASO_ENTER_XIP);
+    rom_flash_enter_cmd_xip();
+    MIGA(PASO_SALE);
+}
+
+/* READ_ID por CS0, a la flash. Es el control positivo: si esto no contesta
+ * EF 40 18, el que esta roto es el camino y no el chip de CS1. */
+static uint32_t jedec_de_la_flash(void)
+{
+    const uint8_t tx[4] = { CMD_READ_ID, 0x00, 0x00, 0x00 };
+    uint8_t       rx[4] = { 0, 0, 0, 0 };
+    do_cmd_cs(tx, rx, 4, 0);
+    /* El 0x9F de una flash NO lleva direccion: contesta ya en el byte 1. */
+    return ((uint32_t)rx[1] << 16) | ((uint32_t)rx[2] << 8) | rx[3];
+}
+
+/* ---- HABLARLE EN QPI --------------------------------------------------------
+ *
+ * Una transaccion ENTERA en cuatro lineas, con el select puesto de principio a
+ * fin. Es lo que faltaba: cs1_xfer_quad1() mandaba UN byte suelto y volvia a una
+ * linea, asi que nunca se le ha leido nada al chip en su propio idioma.
+ *
+ * La fase de mando lleva OE puesto (nosotros conducimos las cuatro lineas); la
+ * de datos lo quita, para que conduzca el chip. En una linea no hacia falta
+ * porque SD0 es salida siempre — de ahi que la sonda vieja se apañara sin ello.
+ */
+#define CMD_ENTER_QPI    0x35u
+
+/* CLKDIV vive en DIRECT_CSR, asi que se cambia con el modo directo APAGADO.
+ * Ponerlo con EN puesto no da error: se queda el de antes, en silencio. */
+static void reloj_directo(uint32_t div)
+{
+    uint32_t csr = qmi_hw->direct_csr & ~QMI_DIRECT_CSR_EN_BITS;
+    csr = (csr & ~QMI_DIRECT_CSR_CLKDIV_BITS)
+        | (div << QMI_DIRECT_CSR_CLKDIV_LSB);
+    qmi_hw->direct_csr = csr;
+}
+
+static void cs1_qpi(const uint8_t *cmd, uint32_t n_cmd, uint8_t *rx, uint32_t n_rx)
+{
+    const uint32_t Q = QMI_DIRECT_TX_IWIDTH_VALUE_Q << QMI_DIRECT_TX_IWIDTH_LSB;
+    uint32_t spins;
+
+    qmi_hw->direct_csr |= QMI_DIRECT_CSR_ASSERT_CS1N_BITS;
+
+    for (uint32_t i = 0; i < n_cmd; i++) {
+        spins = 0;
+        while ((qmi_hw->direct_csr & QMI_DIRECT_CSR_TXFULL_BITS) && ++spins < QMI_SPIN_LIMIT) { }
+        /* NOPUSH: la fase de mando no produce dato que valga, y sin esto llena
+         * el FIFO de recepcion y desalinea todo lo que viene detras. */
+        qmi_hw->direct_tx = QMI_DIRECT_TX_OE_BITS | QMI_DIRECT_TX_NOPUSH_BITS | Q | cmd[i];
+    }
+    for (uint32_t i = 0; i < n_rx; i++) {
+        spins = 0;
+        while ((qmi_hw->direct_csr & QMI_DIRECT_CSR_TXFULL_BITS) && ++spins < QMI_SPIN_LIMIT) { }
+        qmi_hw->direct_tx = Q | 0xffu;          /* sin OE: ahora conduce el chip */
+        spins = 0;
+        while ((qmi_hw->direct_csr & QMI_DIRECT_CSR_RXEMPTY_BITS) && ++spins < QMI_SPIN_LIMIT) { }
+        if (spins >= QMI_SPIN_LIMIT) uvm2_psram_result.rx_timeouts++;
+        rx[i] = (uint8_t)qmi_hw->direct_rx;
+    }
+
+    spins = 0;
+    while ((qmi_hw->direct_csr & QMI_DIRECT_CSR_BUSY_BITS) && ++spins < QMI_SPIN_LIMIT) { }
+    qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_ASSERT_CS1N_BITS;
+}
+
+static void empaqueta(uint8_t *b, volatile uint32_t *dst)
+{
+    dst[0] = ((uint32_t)b[0] << 24) | ((uint32_t)b[1] << 16) | ((uint32_t)b[2] << 8) | b[3];
+    dst[1] = ((uint32_t)b[4] << 24) | ((uint32_t)b[5] << 16) | ((uint32_t)b[6] << 8) | b[7];
+}
+
+int uvm2_psram_probe_qpi(void)
+{
+    volatile uvm2_psram_result_t *r = &uvm2_psram_result;
+    /* 0x9F + 24 bits de direccion, todo en quad. Se leen OCHO bytes y se
+     * guardan crudos: los ciclos de espera del 0x9F en QPI no los tenemos
+     * medidos, y suponer una posicion convierte un desfase de un byte en un
+     * "chip mudo". Que aparezca 0d 5d en la tira ya es la respuesta. */
+    const uint8_t c_id[4] = { CMD_READ_ID, 0x00, 0x00, 0x00 };
+    uint8_t       b[8];
+
+    /* Abajo el centinela: esta corre la ULTIMA, asi que si se colgara aqui, el
+     * que dejo puesto uvm2_psram_probe() daria la estructura por completa. */
+    r->magic = 0;
+
+    /* EL RELOJ, A MANO Y APUNTADO.
+     *
+     * La primera version de esta sonda no lo tocaba, y heredaba el CLKDIV = 120
+     * con el que uvm2_psram_probe() termina su barrido y no restaura. A 1,25 MHz
+     * los doce bytes de la transaccion en quad son ~19 us con el select BAJO, y
+     * el **tCEM del APS6404 son 8 us**: el chip tiene derecho a abandonar a
+     * mitad. O sea que la unica prueba que ataca la hipotesis del idioma la
+     * estaba corriendo fuera de especificacion.
+     *
+     * CLKDIV 6 = 25 MHz: 12 bytes en quad son 24 relojes ~= 1 us, holgado. Y se
+     * guarda el divisor en el resultado, para no volver a deducirlo nunca. */
+    r->qpi_clkdiv = 6;
+    reloj_directo(6);
+
+    configure_cs1_pad();
+
+    /* A. Tal cual esta. Si lleva en QPI desde una sonda anterior, contesta. */
+    for (int i = 0; i < 8; i++) b[i] = 0;
+    direct_begin();
+    cs1_qpi(c_id, 4, b, 8);
+    direct_end();
+    empaqueta(b, r->qpi_directo);
+
+    /* B. Y si estaba en SPI: se le mete en QPI con 0x35 —en UNA linea, que es
+     *    donde se escucha ese mando— y se vuelve a preguntar en quad. Entre A y
+     *    B queda cubierto el idioma en los dos sentidos. */
+    {
+        const uint8_t c35[1] = { CMD_ENTER_QPI };
+        direct_begin();
+        cs1_xfer(c35, 1, 0, 0);
+        direct_end();
+        spin(30000);
+    }
+    for (int i = 0; i < 8; i++) b[i] = 0;
+    direct_begin();
+    cs1_qpi(c_id, 4, b, 8);
+    direct_end();
+    empaqueta(b, r->qpi_tras_35);
+
+    /* C. Y otra vez a 5 MHz (12 bytes ~= 5 us, todavia por debajo de tCEM).
+     *    Dos velocidades separan "no me oye" de "no me da tiempo", que a estas
+     *    alturas es la unica distincion que queda por hacer sin instrumentos. */
+    r->qpi_clkdiv_lento = 30;
+    reloj_directo(30);
+    for (int i = 0; i < 8; i++) b[i] = 0;
+    direct_begin();
+    cs1_qpi(c_id, 4, b, 8);
+    direct_end();
+    empaqueta(b, r->qpi_lento);
+
+    r->qpi_probe_run = 1;
+
+    /* ---- MODO SONDA PARA EL OSCILOSCOPIO (-DUVM2_PSRAM_BUCLE) --------------
+     *
+     * Todo lo de arriba dura ~1 us y pasa UNA vez en el arranque. En un
+     * osciloscopio de dos canales eso no se captura: no hay con que disparar.
+     * Con esto la misma transaccion se repite para siempre, con un hueco entre
+     * ráfagas, y el disparo por flanco de /CS es trivial.
+     *
+     * El juego NO arranca en este modo, a proposito: la imagen es un
+     * instrumento, no un cartucho. Que la pantalla se quede negra es la señal
+     * de que estas en el modo correcto.
+     *
+     * Que se mide, y en este orden (referencia antes que sospechoso, mismo
+     * montaje, misma sonda):
+     *   1. SCK en U6 pata 6 — la flash, que funciona. Es la regla.
+     *   2. SCK en U3 pata 6 — ¿llega el mismo reloj al chip mudo?
+     *   3. /CS en U3 pata 1 — ¿se asierta? Si U3 es dificil de pinchar, el pad
+     *      de R6 esta en la MISMA red y es mucho mas grande; sirve de
+     *      referencia, pero NO sustituye a la pata: lo que esta en duda es
+     *      justo el ultimo salto.
+     */
+#ifdef UVM2_PSRAM_BUCLE
+    for (;;) {
+        direct_begin();
+        cs1_qpi(c_id, 4, b, 8);
+        direct_end();
+        /* Hueco largo y limpio entre ráfagas: separa una de otra en pantalla y
+         * deja que el disparo se rearme sin cazar el final de la anterior. */
+        spin(200000);
+    }
+#endif
+    r->magic = UVM2_PSRAM_MAGIC;   /* esta es la ultima que corre */
+    return (r->qpi_directo[0] || r->qpi_tras_35[0]) ? 1 : 0;
+}
+
+int uvm2_psram_probe_bootrom(void)
+{
+    volatile uvm2_psram_result_t *r = &uvm2_psram_result;
+    /* Esta sonda corre la SEGUNDA, y por eso el centinela se baja aqui y se
+     * vuelve a subir al final: si no, uvm2_psram_probe() lo habria dejado
+     * puesto con la mitad nueva de la estructura todavia sin escribir, y una
+     * lectura por SWD entre medias pasaria por buena. */
+    r->magic = 0;
+
+    /* 1. El control, ANTES de tocar CS1: asi su valor no depende de nada que
+     *    hagamos despues. Un control que se mide al final no es un control. */
+    r->flash_jedec = jedec_de_la_flash();
+
+    /* 2. Declarar CS1. El tamaño da igual mientras no sea NONE — el bootrom solo
+     *    mira si es cero para decidir si manda la secuencia. */
+    r->devinfo_cs1_before = flash_devinfo_get_cs_size(1);
+    flash_devinfo_set_cs_gpio(1, PSRAM_CS_GPIO);
+    flash_devinfo_set_cs_size(1, FLASH_DEVINFO_SIZE_8M);
+
+    /* 3. El pad, o el CS1 no conduce por mucho FUNCSEL que tenga. */
+    configure_cs1_pad();
+
+    /* 4. Y ahora una orden cualquiera. LO QUE IMPORTA NO ES LA ORDEN: es que
+     *    flash_do_cmd llama a connect_internal_flash() + flash_exit_xip() del
+     *    bootrom, y esa salida de XIP alcanza AHORA tambien a CS1. De paso
+     *    vuelve a leer el control, que debe salir igual que en el paso 1. */
+    r->flash_jedec_tras_cs1 = jedec_de_la_flash();
+
+    /* 5. Al chip, en una linea, por el MISMO camino que acaba de contestar bien
+     *    en CS0. Si estaba en QPI, la salida de XIP del bootrom ya lo ha sacado.
+     *
+     *    Ocho bytes y no seis, igual que psram_detect_size() del 2.3.0: el 0x9F
+     *    del APS6404 SI lleva tres bytes de direccion, asi que los datos empiezan
+     *    en el 4 — MF_ID, KGD, EID. Contar mal esas posiciones da un cero que
+     *    parece un chip mudo. */
+    {
+        const uint8_t c_id[8] = { CMD_READ_ID, 0xff, 0xff, 0xff,
+                                  0xff, 0xff, 0xff, 0xff };
+        uint8_t       id[8]   = { 0 };
+        do_cmd_cs(c_id, id, 8, 1);
+        r->mf_id_bootrom = id[4];
+        r->kgd_bootrom   = id[5];
+        r->eid_bootrom   = id[6];
+        /* El SDK mira el KGD, no el fabricante. Nosotros mirabamos el MF_ID. */
+        r->found_bootrom = (id[5] == AP_KGD_ID);
+        r->tam_bootrom   = eid_a_tam(id[5], id[6]);
+    }
+
+    /* 6. FLASH_DEVINFO, como estaba. Esto es una SONDA: contesta la pregunta y
+     *    devuelve la maquina al estado en que la encontro. Quien quiera montar
+     *    la ventana lo hara a proposito y con el resultado delante. */
+    flash_devinfo_set_cs_size(1, (flash_devinfo_size_t)r->devinfo_cs1_before);
+
+    r->bootrom_probe_run = 1;
+    r->magic = UVM2_PSRAM_MAGIC;   /* al final, con todo escrito */
+    return (int)r->found_bootrom;
 }
 
 int uvm2_psram_probe(void)
