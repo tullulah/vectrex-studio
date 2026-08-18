@@ -510,13 +510,18 @@ static int drift_fix(int d, int32_t *acc, int32_t cte)
 struct vx_sink {
     void *ctx;
     void (*emit)(void *, uint32_t, uint32_t, uint32_t);
-    void (*emit_ramp)(void *, uint32_t, uint32_t, uint32_t, uint32_t);
+    void (*wait_ramp)(void *, uint32_t, uint32_t);
     void (*beam_blanked)(void *);
     void (*y_held)(void *, int32_t);
 };
-struct vx_timings { uint32_t e6809_q8, y_mux_q8, moveto_settle_q8; };
+struct vx_sink_extra { int (*y_can_skip)(void *, int32_t); int (*beam_is_lit)(void *);
+                       void (*beam_lit)(void *); };
+struct vx_timings { uint32_t e6809_q8, y_mux_q8, moveto_settle_q8,
+                    beam_on_q8, blank_settle_q8, keep_lit; };
 void vx_moveto_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
                    const struct vx_timings *);
+void vx_draw_line_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
+                      const struct vx_timings *);
 void vx_ramp_params(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
 
 /* El retardo llega en Q8 de ciclo de E; el campo de comando es entero. Se redondea al
@@ -537,11 +542,17 @@ static void vxs_emit(void *ctx, uint32_t reg, uint32_t data, uint32_t delay_q8)
  * BIOS; aqui la lista la reproduce un ejecutor que no lee, y leer la VIA a mitad de
  * lista mientras conducimos el bus de datos es lo que causaba los vectores fantasma.
  * Se cuenta la rampa y punto — y esa diferencia esta ESCRITA en el trait, no escondida. */
-static void vxs_emit_ramp(void *ctx, uint32_t reg, uint32_t data, uint32_t t1,
-                          uint32_t extra_q8)
+static void vxs_wait_ramp(void *ctx, uint32_t t1, uint32_t extra_q8)
 {
     (void)ctx;
-    emit(reg, data, t1 + (extra_q8 + 128u) / 256u);
+    /* EL RETARDO SE SUMA AL COMANDO ANTERIOR, que es donde vive en esta lista. Emitir
+     * un comando extra solo para esperar seria escribir a la VIA sin motivo. */
+    if (s_count > 0) {
+        uint32_t c = s_cmds[s_buf][s_count - 1];
+        uint32_t d = (c >> 20) + t1 + (extra_q8 + 128u) / 256u;
+        if (d > 4095u) d = 4095u;      /* el campo son 12 bits */
+        s_cmds[s_buf][s_count - 1] = (c & 0x000FFFFFu) | (d << 20);
+    }
 }
 
 static void vxs_y_held(void *ctx, int32_t vy) { (void)ctx; s_y = (int)vy; }
@@ -550,7 +561,7 @@ static struct vx_sink vx_cart_sink(void)
 {
     struct vx_sink s = { 0 };
     s.emit = vxs_emit;
-    s.emit_ramp = vxs_emit_ramp;
+    s.wait_ramp = vxs_wait_ramp;
     s.y_held = vxs_y_held;
     return s;
 }
@@ -564,6 +575,9 @@ static struct vx_timings vx_cart_timings(void)
     k.e6809_q8 = 256u;
     k.y_mux_q8 = UVM2_HOLD_MAX * 256u;
     k.moveto_settle_q8 = 0u;
+    k.beam_on_q8 = UVM2_BLANK_OFF_DELAY * 256u;
+    k.blank_settle_q8 = UVM2_BLANK_ON_DELAY * 256u;
+    k.keep_lit = 0u;
     return k;
 }
 #endif /* UVM2_VECTREX_DRAW */
@@ -604,6 +618,20 @@ void uvm2_draw_move(int dx, int dy)
 
 void uvm2_draw_delta(int dx, int dy)
 {
+#ifdef UVM2_VECTREX_DRAW
+    {
+        int32_t vx, vy; uint32_t t1;
+        s_pos_x += dx;
+        s_pos_y += dy;
+        vx_ramp_params(dx, dy, &vx, &vy, &t1);
+        struct vx_sink sink = vx_cart_sink();
+        struct vx_timings k = vx_cart_timings();
+        vx_draw_line_seq(&sink, vx, vy, t1, &k);
+        uvm2_stats.vectors++;
+        uvm2_stats.ramp_cycles += t1;
+        return;
+    }
+#endif
     uint32_t s = s_scale;
     uint8_t  lit;
 
