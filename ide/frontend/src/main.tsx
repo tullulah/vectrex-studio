@@ -585,7 +585,7 @@ function App() {
         const extSdPath = extTarget === 'rp2350' ? rp2350SdPath
                         : extTarget === 'uvm2'   ? uvm2SdPath
                         : pitrexSdPath;
-        const extDeploy = extTarget === 'rp2350' ? !!rp2350SdPath
+        const extDeploy = extTarget === 'rp2350' ? (rp2350BuildMode === 'sd' && !!rp2350SdPath)
                         : extTarget === 'uvm2'   ? uvm2CopyToSD
                         : pitrexCopyToSD;
         logger.info('Build', `Building external project (${extTarget}): ${projName}`);
