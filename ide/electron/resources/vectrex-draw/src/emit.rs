@@ -145,22 +145,20 @@ impl Timings {
 /// imagen del UVM2 use ESTE codigo y no una copia suya.
 pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings) {
     sink.emit(REG_PORT_A, vy as u8, k.e(2)); // STA — Y velocity into D/A
-    // LA VENTANA DEL S&H, NO UN HUECO DE CPU. Aqui habia `k.e(9)`: los 9 ciclos del 6809
-    // de la BIOS (PSHS D + LDA #$CE) pasados por `e6809_q8`. Y ese descuento —64/256, o
-    // sea a la cuarta parte— se midio POR FRAME RATE en nuestra consola, sobre huecos que
-    // solo existen porque el 6809 tardaba en ejecutar una instruccion. Este no es de esos:
-    // es un CONDENSADOR CARGANDOSE.
+    // VENTANA DE Y: se probo alargarla de `e(9)` a `y_mux_q8` (2 -> 14 ciclos de E),
+    // razonando que un condensador no admite el descuento de `e6809_q8`, que se midio por
+    // frame rate. La fisica respaldaba el cambio: tau = 1,8 us = 2,7 ciclos, asi que 2
+    // ciclos cargan al 52%.
     //
-    // La fisica, del propio SDK de la otra placa: tau = Ron(4052) x 10 nF = 1,8 us = 2,7
-    // ciclos de E. Con 9 escalados a 2 ciclos el condensador llega al 52% de su valor;
-    // con 14 llega al 99,4%. O sea que el trazo cargaba Y bien (usa y_mux_q8) y el
-    // MOVIMIENTO lo cargaba a medias — y un movimiento con la Y a medias deja todo lo que
-    // venga detras desplazado, con la forma correcta y en el sitio equivocado.
+    // MEDIDO EN CONSOLA el 2026-08-18 y REVERTIDO: bus_cycles 29529 -> 30333, exactamente
+    // los +804 que predice 67 movimientos x 12 ciclos, con overrun pasando de 0 a 1295. El
+    // mecanismo se confirmo al digito Y EL DIBUJO NO CAMBIO NADA. Asi que la ventana corta
+    // no era la causa, y alargarla solo saca del presupuesto de frame.
     //
-    // MEDIDO en la UVM2 el 2026-08-18: descartados antes por contador el presupuesto de
-    // frame (29529 de 30000, overrun 0), la perdida de comandos (dropped 0) y que
-    // Recalibrate no corriera (recals 653). Lo que quedaba era posicion.
-    sink.emit(REG_PORT_B, 0x00, k.y_mux_q8); // CLR — enable mux ch0 (Y sampling STARTS)
+    // Se queda como estaba, con la nota, para que nadie vuelva a "arreglarlo" leyendo la
+    // fisica sin mirar la medida.
+    sink.emit(REG_PORT_B, 0x00, k.e(9)); // CLR — enable mux ch0 (Y sampling STARTS)
+                                         // PSHS D (7) + LDA #$CE (2) — Y S&H charging
     sink.emit(REG_CNTL, 0xCE, k.e(2)); // STA — blank low, zero high (can move)
     sink.beam_blanked();
     sink.emit(REG_SHIFT, 0x00, k.e(4)); // CLR shift — beam off
@@ -286,7 +284,7 @@ mod prueba {
             p.v,
             std::vec![
                 (REG_PORT_A, (-20i8) as u8, 2 * E),  // STA — Y al D/A
-                (REG_PORT_B, 0x00, 14 * E),          // CLR — mux ch0, ventana del S&H
+                (REG_PORT_B, 0x00, 9 * E),           // CLR — mux ch0, empieza a cargar Y
                 (REG_CNTL, 0xCE, 2 * E),             // STA — blank low, zero high
                 (REG_SHIFT, 0x00, 4 * E),            // CLR shift — haz apagado
                 (REG_PORT_B, 0x01, 4 * E),           // INC — mux off, Y retenido
