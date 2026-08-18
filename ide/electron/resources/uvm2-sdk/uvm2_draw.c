@@ -521,14 +521,14 @@ static int drift_fix(int d, int32_t *acc, int32_t cte)
 struct vx_sink {
     void *ctx;
     void (*emit)(void *, uint32_t, uint32_t, uint32_t);
-    void (*wait_ramp)(void *, uint32_t, uint32_t);
+    void (*wait_ramp)(void *, uint32_t, int32_t);
     void (*beam_blanked)(void *);
     void (*y_held)(void *, int32_t);
 };
 struct vx_sink_extra { int (*y_can_skip)(void *, int32_t); int (*beam_is_lit)(void *);
                        void (*beam_lit)(void *); };
-struct vx_timings { uint32_t e6809_q8, y_mux_q8, moveto_settle_q8,
-                    beam_on_q8, blank_settle_q8, keep_lit; };
+struct vx_timings { uint32_t e6809_q8, y_mux_q8, moveto_settle_q8, beam_on_q8;
+                    int32_t blank_settle_q8; uint32_t keep_lit; };
 void vx_moveto_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
                    const struct vx_timings *);
 void vx_draw_line_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
@@ -555,7 +555,14 @@ static void vxs_emit(void *ctx, uint32_t reg, uint32_t data, uint32_t delay_q8)
      * siguiente escritura — un fallo que solo aparece de vez en cuando, que es el peor
      * tipo. */
     if (reg == UVM2_VIA_PORTA) { s_porta = (uint8_t)data; s_porta_stale = 0; }
-    emit(reg, data, delay_q8 / 256u);
+    /* ACOTAR ANTES DE EMPAQUETAR. El comando mete el retardo en `delay << 20`, asi que un
+     * valor de mas de 12 bits se derrama en los campos de registro y dato: comandos
+     * corruptos y pantalla negra, sin un solo aviso. Lo destapo un beam_on negativo que
+     * daba la vuelta en un uint32_t. Es la misma familia que el tope de 8192 que tiraba
+     * comandos en silencio — un limite callado no es un limite. */
+    uint32_t d = delay_q8 / 256u;
+    if (d > 4095u) d = 4095u;
+    emit(reg, data, d);
 }
 
 /* AQUI NO SE SONDEA. En el cartucho propio esto pregunta al flag T1 de la VIA, como la
@@ -586,12 +593,16 @@ static void vxs_emit(void *ctx, uint32_t reg, uint32_t data, uint32_t delay_q8)
  * de la parte baja) con el mismo valor: escribirlo no toca la cuenta en curso ni recarga
  * nada en modo un disparo, asi que repetirlo 95 veces no hace absolutamente nada. Cuesta
  * un comando por vector. */
-static void vxs_wait_ramp(void *ctx, uint32_t t1, uint32_t extra_q8)
+static void vxs_wait_ramp(void *ctx, uint32_t t1, int32_t extra_q8)
 {
     (void)ctx;
-    uint32_t d = t1 + extra_q8 / 256u;
-    if (d > 4095u) d = 4095u;      /* el campo son 12 bits */
-    emit(UVM2_VIA_T1LL, t1 & 0xFFu, d);
+    /* CON SIGNO: negativo = apagar ANTES de que la rampa termine. Hace falta de verdad —
+     * medido en consola, subir el retardo ENSANCHA el hueco de los vertices, o sea que el
+     * codo esta por debajo de cero. */
+    int32_t d = (int32_t)t1 + extra_q8 / 256;
+    if (d < 0) d = 0;
+    if (d > 4095) d = 4095;        /* el campo son 12 bits */
+    emit(UVM2_VIA_T1LL, t1 & 0xFFu, (uint32_t)d);
 }
 
 static void vxs_y_held(void *ctx, int32_t vy) { (void)ctx; s_y = (int)vy; }
@@ -623,14 +634,44 @@ static struct vx_sink vx_cart_sink(void)
  * SIGUEN SIENDO DE OTRA CONSOLA. `una-consola-no-es-evidencia`: se midieron en la
  * nuestra, contra nuestro camino de bus. Son el punto de partida del barrido, no el
  * final — pero al menos ahora es UNA configuracion coherente. */
+/* AJUSTABLES EN CALIENTE, no defines. En esta placa no se pueden tocar por SWD —una
+ * escritura para el nucleo y no vuelve, y resetear te devuelve al menu— asi que el camino
+ * es el MANDO, igual que hizo `hardware/uvm2/drift` con la deriva. Ver hardware/uvm2/
+ * beamtune. Volatiles y no static: tienen que sobrevivir al enlazador y ser visibles. */
+/* MEDIDOS EN ESTA CONSOLA el 2026-08-18 con hardware/uvm2/beamtune, ajustando desde el
+ * mando y mirando los vertices del pentagono. Con 16 y 2 las esquinas se abrian; con
+ * 12 y 0 cierran. Queda un espolon pequeño en el vertice de arriba.
+ *
+ * Y NO son los del cartucho propio (11 y 2), lo cual es el punto: esto es calibracion de
+ * MAQUINA. Los 11/2 salieron de una biseccion en NUESTRA consola, con otro camino de bus
+ * y otro amplificador de deflexion. Aqui manda lo que se ve aqui.
+ *
+ * `beam_on = 0` merece una nota: encender el haz A LA VEZ que arranca la rampa. En
+ * nuestra consola eso deja un punto brillante en el vertice de salida y por eso hay 2;
+ * aqui el transporte ya mete su propio periodo de E entre las dos escrituras, asi que el
+ * retardo explicito sobra. La misma cantidad fisica, pagada por otro. */
+volatile int32_t uvm2_beam_on_e = 0;        /* ciclos de E entre arrancar y encender */
+volatile int32_t uvm2_blank_settle_e = 12;  /* ciclos de E que sigue encendido al parar */
+
 static struct vx_timings vx_cart_timings(void)
 {
     struct vx_timings k;
     k.e6809_q8 = 64u;
     k.y_mux_q8 = 14u * 256u;
     k.moveto_settle_q8 = 0u;
-    k.beam_on_q8 = 2u * 256u;
-    k.blank_settle_q8 = 11u * 256u;
+    /* Sin signo: un beam_on negativo no significa nada (no se puede encender el haz
+     * antes de arrancar la rampa), y dejarlo pasar daba la vuelta a ~4.000 millones. */
+    k.beam_on_q8 = uvm2_beam_on_e > 0 ? (uint32_t)uvm2_beam_on_e * 256u : 0u;
+    /* 16, NO los 11 del cartucho propio. AQUI SI hay calibracion por placa, y esta vez
+     * con una medida detras: con 11 las esquinas del pentagono salen un poco abiertas —
+     * el haz se apaga ANTES de terminar de llegar. 16 es el valor que Ralf midio para
+     * ESTA placa (c_BlankOnDelay), y los 11 nuestros salieron de una biseccion en NUESTRA
+     * consola, con otro camino de bus y otro amplificador.
+     *
+     * Es el termino que convierte los puntos brillantes en los vertices y las esquinas
+     * abiertas en los dos extremos de un mismo knob. Se sube el grande primero y de uno
+     * en uno; `beam_on` sigue en 2 (el suyo es 3) hasta que haga falta. */
+    k.blank_settle_q8 = uvm2_blank_settle_e * 256;
     k.keep_lit = 0u;
     return k;
 }

@@ -76,7 +76,13 @@ pub trait BusSink {
     /// encender el haz, dos escrituras mas tarde. Si esperar fuera un parametro de
     /// escribir, esa rama no se podria expresar sin mentir. En una lista de comandos el
     /// retardo se suma al comando ANTERIOR, que es exactamente donde vive.
-    fn wait_ramp(&mut self, t1: u16, extra_q8: u32);
+    /// `extra_q8` va CON SIGNO a proposito. Negativo = apagar el haz ANTES de que la
+    /// rampa termine, que es fisicamente lo que hace falta si la rampa dura mas que sus
+    /// `t1` cuentas (el 6522 cuenta t1 + 1,5, y el transporte añade lo suyo). Con el tipo
+    /// sin signo ese lado del ajuste no se podia ni expresar — medido en la UVM2 el
+    /// 2026-08-18: subir el retardo ENSANCHA el hueco de los vertices, o sea que el codo
+    /// esta por debajo de cero.
+    fn wait_ramp(&mut self, t1: u16, extra_q8: i32);
 
     /// El haz ha quedado apagado. Contabilidad de quien quiera llevarla.
     fn beam_blanked(&mut self) {}
@@ -123,7 +129,7 @@ pub struct Timings {
     /// medido por biseccion en consola el 2026-08-07, apagar pide 2,5 veces mas, y tiene
     /// sentido fisico: arrancar desde parado y frenar contra la inductancia del yugo no
     /// son el mismo transitorio.
-    pub blank_settle_q8: u32,
+    pub blank_settle_q8: i32,
     /// Encadenar trazos iluminados sin apagar entre medias. Ahorra la costura de cada
     /// vertice; a cambio, un frame que acabe iluminado deja el haz encendido.
     pub keep_lit: bool,
@@ -170,7 +176,7 @@ pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings
     // EL BYTE ALTO, DE VERDAD. Estuvo cocido a 0, y eso techaba la rampa en 255 aunque
     // el contador T1 de la VIA sea de 16 bits — 8 bits de recorrido tirados.
     sink.emit(REG_T1_HI, (t1 >> 8) as u8, 0);
-    sink.wait_ramp(t1, k.moveto_settle_q8);
+    sink.wait_ramp(t1, k.moveto_settle_q8 as i32);
 }
 
 /// `Draw_Line_d` — el trazo iluminado. El grueso del camino de dibujo.
@@ -215,7 +221,7 @@ pub fn draw_line_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timi
     // sigue llegando. Se espera un tiempo fijo y se apaga. Es el termino que convierte los
     // puntos brillantes en los vertices y las esquinas abiertas en los dos extremos de un
     // mismo knob, en vez de en dos fallos distintos.
-    sink.wait_ramp(t1, k.e(4) + k.blank_settle_q8);
+    sink.wait_ramp(t1, k.e(4) as i32 + k.blank_settle_q8);
 
     if !k.keep_lit {
         sink.emit(REG_CNTL, 0xCE, 0); // haz OFF (BIOS: STA shift 0x00)
@@ -249,10 +255,10 @@ mod prueba {
         fn emit(&mut self, r: u8, d: u8, q: u32) {
             self.v.push((r, d, q));
         }
-        fn wait_ramp(&mut self, t1: u16, extra: u32) {
+        fn wait_ramp(&mut self, t1: u16, extra: i32) {
             // Se apunta como un pseudo-comando para poder afirmar DONDE cae la espera.
             self.v.push((0xFF, 0, 0x8000_0000 | t1 as u32));
-            self.v.push((0xFE, 0, extra));
+            self.v.push((0xFE, 0, extra as u32));
         }
         fn y_can_skip(&mut self, vy: i8) -> bool {
             self.saltar_y == Some(vy)
@@ -299,7 +305,7 @@ mod prueba {
         assert_eq!(p.y, std::vec![-20i8], "el S&H queda con SU vy tras cerrar el mux");
     }
 
-    fn tiempos(beam_on_q8: u32, blank_settle_q8: u32) -> Timings {
+    fn tiempos(beam_on_q8: u32, blank_settle_q8: i32) -> Timings {
         Timings {
             e6809_q8: 256,
             y_mux_q8: 14 * 256,
@@ -315,7 +321,7 @@ mod prueba {
     /// de salida. Estuvo asi.
     #[test]
     fn draw_line_arranca_la_rampa_antes_de_encender() {
-        let k = tiempos(2 * E, 11 * E);
+        let k = tiempos(2 * E, 11 * E as i32);
         let mut p = Papel::default();
         draw_line_seq(&mut p, 30, -10, 0x3E, &k);
         assert_eq!(
@@ -375,7 +381,7 @@ use core::ffi::c_void;
 pub struct CSink {
     pub ctx: *mut c_void,
     pub emit: extern "C" fn(*mut c_void, u32, u32, u32),
-    pub wait_ramp: extern "C" fn(*mut c_void, u32, u32),
+    pub wait_ramp: extern "C" fn(*mut c_void, u32, i32),
     /// Opcionales: la placa que no lleve esa contabilidad pasa null.
     pub beam_blanked: Option<extern "C" fn(*mut c_void)>,
     pub y_held: Option<extern "C" fn(*mut c_void, i32)>,
@@ -385,7 +391,7 @@ impl BusSink for CSink {
     fn emit(&mut self, reg: u8, data: u8, delay_q8: u32) {
         (self.emit)(self.ctx, reg as u32, data as u32, delay_q8);
     }
-    fn wait_ramp(&mut self, t1: u16, extra_q8: u32) {
+    fn wait_ramp(&mut self, t1: u16, extra_q8: i32) {
         (self.wait_ramp)(self.ctx, t1 as u32, extra_q8);
     }
     fn beam_blanked(&mut self) {
@@ -407,7 +413,7 @@ pub struct CTimings {
     pub y_mux_q8: u32,
     pub moveto_settle_q8: u32,
     pub beam_on_q8: u32,
-    pub blank_settle_q8: u32,
+    pub blank_settle_q8: i32,
     pub keep_lit: u32,
 }
 
