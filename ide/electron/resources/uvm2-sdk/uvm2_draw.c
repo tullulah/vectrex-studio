@@ -192,6 +192,9 @@ static void set_x(int x, uint32_t delay)
     set_porta((uint8_t)x, delay);
 }
 
+/* Con que modelo se programo el ACR por ultima vez. -1 = todavia con ninguno. */
+static int s_acr_model = -1;
+
 static int32_t s_drift_ax, s_drift_ay;   /* ver la compensacion de deriva, abajo */
 
 static void set_zero(int active, uint32_t delay)
@@ -266,6 +269,7 @@ static void via_setup(void)
      *           programa la BIOS original y lo que hace nuestro firmware.
      * Con 0x80 los bits de PORTB que tocan PB7 dejan de llegar al pin, asi que
      * `set_ramp` no hace nada — por eso el camino T1 no lo llama. */
+    s_acr_model = uvm2_beam_model;
     emit(UVM2_VIA_ACR,   uvm2_beam_model ? 0x80 : 0x60, 0);
 
     /* Prime each sample/hold channel from a DAC value of 0: zero reference,
@@ -857,6 +861,19 @@ void uvm2_frame_begin(void)
      * once at boot, for A/B testing. */
 #ifndef UVM2_NO_FRAME_SETUP
     via_setup();
+#else
+    /* SIN via_setup POR FRAME, el ACR se queda como lo dejo el arranque. Y el ACR es
+     * parte del modelo de haz (0x60 = /RAMP a mano, 0x80 = lo gobierna T1), asi que
+     * conmutar `uvm2_beam_model` en caliente con este define puesto dejaria al camino
+     * T1 escribiendo T1CH sin que PB7 haga nada: la rampa no arrancaria y el modelo
+     * pareceria roto cuando lo que esta viejo es un registro.
+     *
+     * Un fallo asi no se ve, se DEDUCE mal — y la deduccion que invita es "el modelo
+     * T1 no sirve". Cuesta una comparacion por frame evitarlo. */
+    if (s_acr_model != uvm2_beam_model) {
+        s_acr_model = uvm2_beam_model;
+        emit(UVM2_VIA_ACR, uvm2_beam_model ? 0x80 : 0x60, 0);
+    }
 #endif
 
     /* Reponer la intensidad ANTES de soltar la pinza, como el escritor de Ralf:
