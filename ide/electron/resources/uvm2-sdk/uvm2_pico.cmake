@@ -129,6 +129,30 @@ target_include_directories(${UVM2_NAME} PRIVATE ${UVM2_SDK_DIR})
 # PSRAM. Ver el bloque de uvm2_psram_probe_bootrom(). pico_stdlib no lo arrastra.
 target_link_libraries(${UVM2_NAME} pico_stdlib pico_multicore hardware_dma hardware_pio hardware_flash ${UVM2_GAME_LIBS})
 
+# ── La capa de dibujo COMPARTIDA con el cartucho propio ──────────────────────
+#
+# Una sola implementacion del modelo de haz para las dos placas, compilada como
+# staticlib de Rust. Hasta ahora habia dos —vinterface.rs y uvm2_draw.c— y eso
+# garantiza que cada hallazgo haya que descubrirlo dos veces.
+#
+# CON GUARDA `EXISTS` A PROPOSITO: la caja vive en el repositorio PRIVADO, y este
+# arbol tiene que seguir compilando sin el. Sin la libreria, la imagen sale con la
+# capa de dibujo de siempre.
+#
+# La ABI esta medida, no supuesta: esta imagen se compila -mfloat-abi=softfp, asi
+# que la caja se compila para thumbv8m.main-none-eabi (coma flotante software) y su
+# API es entera pura. El enlazador compara Tag_ABI_VFP_args y protesta aunque no
+# cruce ni un flotante.
+set(VECTREX_DRAW_LIB "$ENV{HOME}/projects/vectrex-arcade-private/hardware/vectrex-draw/target/thumbv8m.main-none-eabi/release/libvectrex_draw.a"
+    CACHE FILEPATH "libvectrex_draw.a — la capa de dibujo compartida")
+if(EXISTS ${VECTREX_DRAW_LIB})
+    message(STATUS "capa de dibujo compartida: ${VECTREX_DRAW_LIB}")
+    target_link_libraries(${UVM2_NAME} ${VECTREX_DRAW_LIB})
+    target_compile_definitions(${UVM2_NAME} PRIVATE UVM2_VECTREX_DRAW=1)
+else()
+    message(STATUS "sin libvectrex_draw.a — capa de dibujo local")
+endif()
+
 # Keep the SVC handler alive. Nothing in C calls uvm2_svc_handler — it is reached
 # only through the vector table — so --gc-sections drops its section, and the
 # .thumb_set alias to it disappears with it, silently leaving crt0's weak

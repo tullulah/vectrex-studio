@@ -18,6 +18,16 @@
 #include "uvm2_led.h"
 #include "uvm2_text.h"
 #include "uvm2_audio.h"
+
+/* ── Sonda de la capa de dibujo compartida (paso 1 de la unificacion) ────────
+ * Volatiles y NO static: se leen por SWD, y un simbolo que solo se escribe se lo
+ * lleva el enlazador — ya nos paso con sf_build_tag en speedfrk. */
+volatile uint32_t uvm2_vx_probe;
+volatile int32_t  uvm2_vx_probe_div;
+#ifdef UVM2_VECTREX_DRAW
+uint32_t vx_probe(void);
+int32_t  vx_probe_div(int32_t num, int32_t den);
+#endif
 #include "uvm2_psram.h"
 
 enum {
@@ -148,6 +158,18 @@ void uvm2_runtime_init(void)
 #endif
     uvm2_psram_probe_qpi();
 #endif
+    /* SONDA DEL PASO 1: ¿enlaza y CORRE una staticlib de Rust dentro de esta imagen?
+     * Es la incognita que puede matar el plan de unificar el SDK, asi que se responde
+     * antes de mover una sola linea de dibujo. Legible por SWD en uvm2_vx_probe:
+     *   0x56580001 = la libreria esta y se ejecuta
+     *   0          = la libreria no se enlazo (sin UVM2_VECTREX_DRAW)
+     * La division va aparte porque los intrinsecos son justo lo que falta en enlaces
+     * bare-metal: hoy mismo `__aeabi_ldivmod` tumbo el camino VPy. */
+#ifdef UVM2_VECTREX_DRAW
+    uvm2_vx_probe     = vx_probe();
+    uvm2_vx_probe_div = vx_probe_div(1000, 7);   /* 142 */
+#endif
+
     uvm2_frame_begin();
     uvm2_led_status(UVM2_STATUS_RUNNING);
 }
