@@ -132,6 +132,12 @@ extern volatile uvm2_psram_result_t uvm2_psram_result;
 /* Sondea. NO arma la ventana XIP ni escribe: primero saber que hay. */
 int uvm2_psram_probe(void);
 
+/* Mantiene CS1 asertado (o suelto) INDEFINIDAMENTE, para medir la pata 1 de U3
+ * con un polimetro. Responde a lo que ninguna otra prueba ha mirado: si el QMI
+ * conduce de verdad la pata, o solo lo dicen sus registros. No vuelve al estado
+ * anterior — se sale reseteando. Ver el comentario largo en el .c. */
+void uvm2_psram_hold_cs(int asertado);
+
 /* La misma pregunta, hablandole en QPI. Sin bootrom: no se puede colgar. */
 int uvm2_psram_probe_qpi(void);
 

@@ -135,6 +135,41 @@ static void cs1_xfer(const uint8_t *cmd, uint32_t n_cmd, uint8_t *rx_buf, uint32
     qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_ASSERT_CS1N_BITS;
 }
 
+/* ---- CS EN CONTINUA, PARA EL POLIMETRO -------------------------------------
+ *
+ * QUE HUECO TAPA. La tabla del 2026-08-12 da por bueno que el QMI conduce CS1
+ * porque durante la transaccion se leen EN=1, ASSERT_CS1N=1 y BUSY=1 — pero eso
+ * son REGISTROS INTERNOS, no la pata. Y la comprobacion de continuidad de la
+ * linea se hizo manejandola como GPIO, que prueba la PISTA, no el camino del
+ * QMI hasta ella. Nadie ha medido nunca la pata 1 de U3 mientras el QMI la
+ * conduce, y esa es la primera bifurcacion del arbol que queda.
+ *
+ * POR QUE EN CONTINUA. Un CS que conmuta durante 2 us no lo ve un polimetro, y
+ * el osciloscopio en esta placa exige desmontar y UNA SOLA pinza de masa (dos en
+ * nodos distintos ya destrozaron una consola). Manteniendolo asertado
+ * indefinidamente la medida es de continua y la hace cualquier polimetro:
+ *
+ *     asertado    -> pata 1 de U3 a ~0 V   : el QMI SI llega al chip. Lo que
+ *                                            queda es el chip o su die.
+ *     asertado    -> pata 1 a ~3,3 V       : el QMI NO conduce la pata pese a
+ *                                            que los registros digan que si.
+ *                                            El fallo esta antes del chip.
+ *     sin asertar -> pata 1 a ~3,3 V       : control, por el pull-up R6.
+ *
+ * NO SE PUEDE VOLVER de aqui: deja CS1 asertado a proposito, que es lo que hace
+ * medible la prueba. Se sale reseteando.
+ */
+void uvm2_psram_hold_cs(int asertado)
+{
+    configure_cs1_pad();
+    qmi_hw->direct_csr |= QMI_DIRECT_CSR_EN_BITS;
+    uint32_t spins = 0;
+    while ((qmi_hw->direct_csr & QMI_DIRECT_CSR_BUSY_BITS) && ++spins < QMI_SPIN_LIMIT) { }
+    if (asertado) qmi_hw->direct_csr |=  QMI_DIRECT_CSR_ASSERT_CS1N_BITS;
+    else          qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_ASSERT_CS1N_BITS;
+    uvm2_psram_result.csr_after_cmd = qmi_hw->direct_csr;   /* releido, no supuesto */
+}
+
 /* ---- LA SONDA DEL BOOTROM ---------------------------------------------------
  *
  * QUE LE FALTABA A LA OTRA. La sonda de abajo le habla al chip por modo directo,
