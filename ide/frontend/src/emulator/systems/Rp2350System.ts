@@ -1309,6 +1309,58 @@ export class Rp2350System implements ISystem, IBus {
    * only on `svc`, dispatched by onSvc(). The BIOS runs a game on the firmware
    * stack below GAME_RAM, so SP is parked at the GAME_RAM base (grows down).
    */
+  /* ── ROM sets (MAME model) ─────────────────────────────────────────────────
+   * Ports no longer embed the ROM: they read `ROMS/<STEM>.ZIP` off the card and the
+   * firmware publishes where it landed. Give the emulator the same zip and the game
+   * takes the SAME code path here as on hardware — see placeRomZip.
+   */
+  private romZip: Uint8Array | null = null;
+
+  setRomZip(bytes: Uint8Array | null): void {
+    this.romZip = bytes;
+  }
+
+  /* Publish the romset the way the cartridge firmware does (sd.rs load_rom):
+   *
+   *   - the raw .zip grows DOWN from the top of the window, so nothing is reserved
+   *     and no constant has to be kept in sync with image sizes;
+   *   - a 16-byte descriptor [magic][base][size][rsv] sits just below it;
+   *   - the game's own VPy2 header word at +12 points at that descriptor.
+   *
+   * The pointer-through-the-header part is what makes one game binary work in all
+   * three places: this emulator has NO PSRAM window (flat SRAM, game at 0x20010000),
+   * so the cartridge's fixed 0x117FFFF0 simply does not exist here. Reading its own
+   * header, the game never has to know which machine it is on.
+   *
+   * The header word is written LAST: if anything above fails, the game sees "no
+   * romset" instead of following a half-written pointer.
+   */
+  private placeRomZip(gameLoadAddr: number): void {
+    const hdrOff = gameLoadAddr - SRAM_BASE + 12;
+    this.sram[hdrOff] = 0; this.sram[hdrOff + 1] = 0;
+    this.sram[hdrOff + 2] = 0; this.sram[hdrOff + 3] = 0;
+    if (!this.romZip || this.romZip.length === 0) return;
+
+    const TOP = SRAM_END - 0x10;
+    const base = (TOP - this.romZip.length) & ~3;
+    const desc = base - 16;
+    if (desc <= gameLoadAddr) {
+      console.warn('[Rp2350System] romset does not fit below the game image — ignored');
+      return;
+    }
+    this.sram.set(this.romZip, base - SRAM_BASE);
+    const put32 = (addr: number, v: number) => {
+      const o = addr - SRAM_BASE;
+      this.sram[o] = v & 0xff; this.sram[o + 1] = (v >>> 8) & 0xff;
+      this.sram[o + 2] = (v >>> 16) & 0xff; this.sram[o + 3] = (v >>> 24) & 0xff;
+    };
+    put32(desc + 4, base);
+    put32(desc + 8, this.romZip.length);
+    put32(desc, 0x315A4D52);          // 'RMZ1' — must match sd.rs ROM_DESC_MAGIC
+    put32(gameLoadAddr + 12, desc);   // last, on purpose
+    console.log(`[Rp2350System] romset: ${this.romZip.length}b @ 0x${base.toString(16)}, desc @ 0x${desc.toString(16)}`);
+  }
+
   initRamGame(bin: Uint8Array): void {
     this.reset();               // clears SRAM + hw; PC/SP set below for this image
     this.traps.clear();         // svc games use the svc dispatcher, not PC-traps
@@ -1321,6 +1373,9 @@ export class Rp2350System implements ISystem, IBus {
     const gameOff = GAME_LOAD_ADDR - SRAM_BASE;   // GAME_RAM offset into SRAM
     const len = Math.min(bin.length, this.sram.length - gameOff);
     this.sram.set(bin.subarray(0, len), gameOff);
+
+    // Publish the romset before the game runs — same point as SYS_LAUNCH on HW.
+    this.placeRomZip(GAME_LOAD_ADDR);
 
     let entry = GAME_LOAD_ADDR;     // 'VPy2' header: [magic][game_main][rsv][rsv]
     if (bin.length >= 8 && bin[0] === 0x56 && bin[1] === 0x50 && bin[2] === 0x79 && bin[3] === 0x32) {
