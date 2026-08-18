@@ -524,3 +524,42 @@ mod pentagono {
                  ex as f64 / s as f64, ey as f64 / s as f64);
     }
 }
+
+#[cfg(test)]
+mod velocidad {
+    use crate::ramp::{ramp_params, VCAP};
+    use core::sync::atomic::Ordering;
+    use std::println;
+
+    fn ralf(dx: i32, dy: i32) -> (i32, u32) {
+        let (mut x, mut y, mut s) = (dx, dy, 160u32);
+        while x.abs() < 64 && y.abs() < 64 && s > 32 { x *= 2; y *= 2; s /= 2; }
+        (x.abs().max(y.abs()), s)
+    }
+
+    /// QUE VCAP hace que nuestra velocidad de pico NO pase de la suya.
+    ///
+    /// La distancia la conservan los dos, pero el REPARTO entre velocidad y tiempo no:
+    /// nosotros vamos mas rapido durante menos tiempo. Y el amplificador de deflexion
+    /// tiene velocidad de respuesta finita — pedirle mas de la que sigue deja el trazo
+    /// corto, que es el hueco en los vertices.
+    #[test]
+    fn cual_es_el_vcap_que_iguala_a_ralf() {
+        let v = [(0i32, 60i32), (-57, 19), (-35, -49), (35, -49), (57, 19), (0, 60)];
+        for cap in [127u32, 96, 80, 70, 64] {
+            VCAP.store(cap, Ordering::Relaxed);
+            let (mut peor, mut suyo_peor) = (0i32, 0i32);
+            for i in 0..5 {
+                let (dx, dy) = (v[i + 1].0 - v[i].0, v[i + 1].1 - v[i].1);
+                let (vx, vy, _) = ramp_params(dx as i8, dy as i8);
+                let n = (vx as i32).abs().max((vy as i32).abs());
+                let (r, _) = ralf(dx, dy);
+                if n > peor { peor = n; }
+                if r > suyo_peor { suyo_peor = r; }
+            }
+            println!("  VCAP {cap:3} -> pico nuestro {peor:4}   pico de Ralf {suyo_peor:4}   {}",
+                     if peor <= suyo_peor { "OK, no lo pasamos" } else { "MAS RAPIDO QUE EL" });
+        }
+        VCAP.store(127, Ordering::Relaxed);
+    }
+}

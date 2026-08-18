@@ -574,20 +574,39 @@ static void vxs_emit(void *ctx, uint32_t reg, uint32_t data, uint32_t delay_q8)
 }
 
 /* AQUI NO SE SONDEA. En el cartucho propio esto pregunta al flag T1 de la VIA, como la
- * BIOS; aqui la lista la reproduce un ejecutor que no lee, y leer la VIA a mitad de
- * lista mientras conducimos el bus de datos es lo que causaba los vectores fantasma.
- * Se cuenta la rampa y punto — y esa diferencia esta ESCRITA en el trait, no escondida. */
+ * BIOS; aqui la lista la reproduce un ejecutor que no lee, y leer la VIA a mitad de lista
+ * mientras conducimos el bus de datos es lo que causaba los vectores fantasma. Se cuenta
+ * la rampa y punto — y esa diferencia esta ESCRITA en el trait, no escondida.
+ *
+ * ── Y AQUI ESTA EL FALLO QUE COSTO LA TARDE DEL 2026-08-18 ──────────────────
+ *
+ * El retardo NO puede colgarse del comando anterior cuando ese comando es T1CH.
+ *
+ * El ejecutor de esta placa mantiene R/W BAJO durante todos los ciclos de retardo, con
+ * la direccion y el dato puestos. Su propio comentario dice por que se permite:
+ *
+ *     "every register we write (PORTA, PORTB, PCR, ACR, DDRx) takes the same value
+ *      IDEMPOTENTLY, which is why Ralf's executor holds R/W low for the whole command"
+ *
+ * Esa lista es la SUYA. Su modelo nunca escribe T1: conmuta /RAMP por PORTB. El nuestro
+ * escribe T1CH — y escribir T1C-H **rearranca el temporizador**. No es idempotente.
+ *
+ * Colgando el retardo de esa escritura, la VIA re-dispara T1 en CADA ciclo de E: PB7 se
+ * queda abajo, el integrador no para donde debe, y el ultimo re-disparo arranca una
+ * cuenta entera que sigue mas alla del retardo. De ahi los trazos que se pasan, el dibujo
+ * mas grande de lo que toca y los vertices que no se encuentran — con la aritmetica
+ * saliendo perfecta, que es lo que despisto seis hipotesis seguidas.
+ *
+ * SOLUCION: el retardo lo lleva un comando INOCUO detras. Se reescribe T1LL (el cerrojo
+ * de la parte baja) con el mismo valor: escribirlo no toca la cuenta en curso ni recarga
+ * nada en modo un disparo, asi que repetirlo 95 veces no hace absolutamente nada. Cuesta
+ * un comando por vector. */
 static void vxs_wait_ramp(void *ctx, uint32_t t1, uint32_t extra_q8)
 {
     (void)ctx;
-    /* EL RETARDO SE SUMA AL COMANDO ANTERIOR, que es donde vive en esta lista. Emitir
-     * un comando extra solo para esperar seria escribir a la VIA sin motivo. */
-    if (s_count > 0) {
-        uint32_t c = s_cmds[s_buf][s_count - 1];
-        uint32_t d = (c >> 20) + t1 + extra_q8 / 256u;
-        if (d > 4095u) d = 4095u;      /* el campo son 12 bits */
-        s_cmds[s_buf][s_count - 1] = (c & 0x000FFFFFu) | (d << 20);
-    }
+    uint32_t d = t1 + extra_q8 / 256u;
+    if (d > 4095u) d = 4095u;      /* el campo son 12 bits */
+    emit(UVM2_VIA_T1LL, t1 & 0xFFu, d);
 }
 
 static void vxs_y_held(void *ctx, int32_t vy) { (void)ctx; s_y = (int)vy; }
