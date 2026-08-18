@@ -160,6 +160,14 @@ typedef struct {
      * 2026-08-18 con el modelo T1, que llegaba justo a las 8192 y perdia el resto del
      * frame. Si esto no es cero, NADA de lo que se ve en pantalla es concluyente. */
     uint32_t dropped;
+    /* Cuantas veces se ha recalibrado, ACUMULADO. Si esto no sube, Recalibrate NO SE
+     * ESTA LLAMANDO — y "no funciona" y "no se ejecuta" son dos investigaciones
+     * distintas. El firmware del cartucho propio lleva el mismo contador (RECALS) por
+     * esta misma razon. */
+    uint32_t recals;
+    /* Ciclos de bus del ultimo frame, contados por el ejecutor. Repetido aparte de
+     * bus_cycles porque ese lo pisa el camino de un solo nucleo. */
+    uint32_t exec_cycles;
 
     /* Snapshots of the three above, taken in uvm2_frame_end and never cleared.
      *

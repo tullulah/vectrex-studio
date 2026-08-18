@@ -685,6 +685,22 @@ static void recal_move(int dx, int dy)
 
 static void uvm2_recalibrate(void)
 {
+    /* INVALIDAR LAS CACHES ANTES DE BARRER, y esto no es precaucion: es un fallo medido.
+     *
+     * `set_y` y `set_porta` se saltan la escritura si creen que el DAC ya tiene ese
+     * valor. Con el modelo compartido lo que se escribe al DAC es una VELOCIDAD, y esa
+     * se satura en +-127 continuamente —todo vector con |delta| >= 32 da vx = 127—, asi
+     * que la cache cree muy a menudo que ya vale 127 y SE SALTA el movimiento al rail.
+     *
+     * Y el movimiento al rail es TODO el ejercicio de Recalibrate. Sin el, la referencia
+     * de cero no se restablece y el error se acumula frame a frame: el dibujo se va
+     * descolocando, que es exactamente el sintoma que llevamos toda la tarde viendo.
+     *
+     * La cache es de la placa; la saturacion es del modelo. Ninguna de las dos esta mal
+     * sola — juntas se comen la recalibracion. */
+    uvm2_draw_invalidate();
+    uvm2_stats.recals++;
+
     const uint32_t escala = s_scale;
     /* $FF EXPLICITO, y por eso NO puede pasar por `uvm2_draw_move`: con el modelo T1
      * activo ese camino calcularia su propia t1 a partir de la longitud, y una rampa

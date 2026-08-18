@@ -145,8 +145,22 @@ impl Timings {
 /// imagen del UVM2 use ESTE codigo y no una copia suya.
 pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings) {
     sink.emit(REG_PORT_A, vy as u8, k.e(2)); // STA — Y velocity into D/A
-    sink.emit(REG_PORT_B, 0x00, k.e(9)); // CLR — enable mux ch0 (Y sampling STARTS)
-                                         // PSHS D (7) + LDA #$CE (2) — Y S&H charging
+    // LA VENTANA DEL S&H, NO UN HUECO DE CPU. Aqui habia `k.e(9)`: los 9 ciclos del 6809
+    // de la BIOS (PSHS D + LDA #$CE) pasados por `e6809_q8`. Y ese descuento —64/256, o
+    // sea a la cuarta parte— se midio POR FRAME RATE en nuestra consola, sobre huecos que
+    // solo existen porque el 6809 tardaba en ejecutar una instruccion. Este no es de esos:
+    // es un CONDENSADOR CARGANDOSE.
+    //
+    // La fisica, del propio SDK de la otra placa: tau = Ron(4052) x 10 nF = 1,8 us = 2,7
+    // ciclos de E. Con 9 escalados a 2 ciclos el condensador llega al 52% de su valor;
+    // con 14 llega al 99,4%. O sea que el trazo cargaba Y bien (usa y_mux_q8) y el
+    // MOVIMIENTO lo cargaba a medias — y un movimiento con la Y a medias deja todo lo que
+    // venga detras desplazado, con la forma correcta y en el sitio equivocado.
+    //
+    // MEDIDO en la UVM2 el 2026-08-18: descartados antes por contador el presupuesto de
+    // frame (29529 de 30000, overrun 0), la perdida de comandos (dropped 0) y que
+    // Recalibrate no corriera (recals 653). Lo que quedaba era posicion.
+    sink.emit(REG_PORT_B, 0x00, k.y_mux_q8); // CLR — enable mux ch0 (Y sampling STARTS)
     sink.emit(REG_CNTL, 0xCE, k.e(2)); // STA — blank low, zero high (can move)
     sink.beam_blanked();
     sink.emit(REG_SHIFT, 0x00, k.e(4)); // CLR shift — beam off
@@ -272,7 +286,7 @@ mod prueba {
             p.v,
             std::vec![
                 (REG_PORT_A, (-20i8) as u8, 2 * E),  // STA — Y al D/A
-                (REG_PORT_B, 0x00, 9 * E),           // CLR — mux ch0, empieza a cargar Y
+                (REG_PORT_B, 0x00, 14 * E),          // CLR — mux ch0, ventana del S&H
                 (REG_CNTL, 0xCE, 2 * E),             // STA — blank low, zero high
                 (REG_SHIFT, 0x00, 4 * E),            // CLR shift — haz apagado
                 (REG_PORT_B, 0x01, 4 * E),           // INC — mux off, Y retenido
@@ -434,4 +448,46 @@ pub extern "C" fn vx_moveto_seq(sink: *mut CSink, vx: i32, vy: i32, t1: u32, k: 
     let (s, kk) = unsafe { (&mut *sink, &*k) };
     let t = kk.a_timings();
     moveto_seq(s, vx.clamp(-128, 127) as i8, vy.clamp(-128, 127) as i8, t1 as u16, &t);
+}
+
+#[cfg(test)]
+mod comparativa {
+    use crate::ramp::ramp_params;
+    use std::println;
+
+    /// El `fixup` de Ralf, transcrito de uvm2_draw.c: mientras los dos deltas quepan en
+    /// medio DAC y quede rampa, DOBLA el delta y PARTE la duracion. Conserva la distancia
+    /// (delta x tiempo) y usa mas recorrido del DAC, que es su forma de acortar el trazo.
+    fn ralf(dx: i32, dy: i32) -> (i32, i32, u32) {
+        let (mut x, mut y, mut s) = (dx, dy, 160u32);
+        while x.abs() < 64 && y.abs() < 64 && s > 32 {
+            x *= 2;
+            y *= 2;
+            s /= 2;
+        }
+        (x, y, s)
+    }
+
+    /// LA PREGUNTA: ¿los dos modelos mueven el haz LO MISMO?
+    ///
+    /// La distancia es velocidad x tiempo en los dos. Si no coinciden, la geometria sale
+    /// mal y no hay knob de tiempo que lo arregle — que es justo lo que la consola lleva
+    /// diciendo toda la tarde.
+    #[test]
+    fn recorrido_de_los_dos_modelos() {
+        println!("\n  dx  dy |    Ralf: dac x t = dist |   T1: v x t1 = dist |  error");
+        println!("  -------+-------------------------+---------------------+-------");
+        let mut peor = 0i64;
+        for &(dx, dy) in &[(1, 0), (2, 0), (3, 1), (5, 0), (8, 3), (12, 0), (20, 7),
+                           (32, 0), (48, 16), (64, 0), (100, 40), (127, 0)] {
+            let (rx, _ry, rs) = ralf(dx, dy);
+            let dr = rx as i64 * rs as i64;
+            let (vx, _vy, t1) = ramp_params(dx as i8, dy as i8);
+            let dt = vx as i64 * t1 as i64;
+            let err = if dr != 0 { (dt - dr) * 100 / dr } else { 0 };
+            if err.abs() > peor.abs() { peor = err; }
+            println!("  {dx:3} {dy:3} | {rx:6} x {rs:3} = {dr:7} | {vx:5} x {t1:3} = {dt:7} | {err:4}%");
+        }
+        println!("\n  peor desviacion: {peor}%\n");
+    }
 }
