@@ -277,8 +277,43 @@ static void via_setup(void)
     s_y = 0; s_z = 0; s_pos_x = 0; s_pos_y = 0;
 }
 
+
+/* ── Calibracion de ESTA placa ───────────────────────────────────────────────
+ *
+ * Los knobs del modelo son COMPARTIDOS —el mismo simbolo que usa el firmware del
+ * cartucho propio— pero su VALOR no tiene por que serlo. Esta escrito desde hace
+ * tiempo y hasta ahora no se aplicaba: "VCAP no es una constante del repositorio, es
+ * una calibracion de MAQUINA". Dos consolas quieren valores distintos; dos cartuchos,
+ * con electronica y camino de bus distintos, tambien.
+ *
+ * Se escriben aqui, en el arranque, en vez de forkear el codigo. Son AtomicU32 con
+ * orden Relaxed, o sea cargas y almacenamientos normales: desde C son un uint32_t
+ * volatil en la misma direccion. Es lo mismo que hace el panel de knobs por SWD.
+ *
+ * POR QUE VCAP, y no es un barrido a ciegas. Calculado en el host para el pentagono de
+ * individual_tests/draw_line: CUATRO de sus cinco trazos saturan el DAC a +-128 con
+ * VCAP = 127 (que es el tope apagado). El modelo de Ralf NUNCA satura — su `fixup`
+ * deja de doblar en cuanto un delta pasa de 64, y para esos mismos vectores usa 114.
+ *
+ * Y lo que pasa al saturar lo tenemos escrito: "at the full +-127 swing the integrator
+ * op-amp OVERSHOOTS the endpoint -> vectors stretch". Que es la razon de que VCAP
+ * exista. En nuestra consola quedo en 127 porque alli los espolones resultaron ser de
+ * la maquina; en esta no se ha comprobado nunca.
+ *
+ * 96 es el valor que hace que ningun trazo del pentagono llegue al rail. Es un punto de
+ * partida con un porque, no un numero afinado — se barre en cuanto haya con que. */
+extern volatile uint32_t VCAP;
+
+#define UVM2_VCAP 96u
+
+static void uvm2_calibracion_de_placa(void)
+{
+    VCAP = UVM2_VCAP;
+}
+
 void uvm2_draw_init(void)
 {
+    uvm2_calibracion_de_placa();
     s_count = 0;
     via_setup();
 

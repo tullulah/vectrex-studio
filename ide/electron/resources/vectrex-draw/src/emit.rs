@@ -489,3 +489,38 @@ mod comparativa {
         println!("\n  peor desviacion: {peor}%\n");
     }
 }
+
+#[cfg(test)]
+mod pentagono {
+    use crate::ramp::{ramp_params, DRAW_SCALE};
+    use std::println;
+
+    /// EL PENTAGONO DE `individual_tests/draw_line`, que en la UVM2 sale con los vertices
+    /// abiertos. Coordenadas del fuente .vpy; el SDK manda DELTAS relativos y lleva el la
+    /// posicion, asi que es una polilinea: un movimiento y cinco trazos encadenados.
+    ///
+    /// Si cada trazo recorriera su delta exacto, los vertices cerrarian por construccion.
+    /// Aqui se comprueba cuanto se desvia cada uno, en unidades de dispositivo
+    /// (distancia = velocidad x tiempo, contra el delta x DRAW_SCALE que se pedia).
+    #[test]
+    fn cierra_el_pentagono() {
+        let v = [(0i32, 60i32), (-57, 19), (-35, -49), (35, -49), (57, 19), (0, 60)];
+        let s = DRAW_SCALE as i64;
+        println!("\n  trazo |   delta   |  vx  vy  t1 | recorrido    | pedido      | error");
+        println!("  ------+-----------+-------------+--------------+-------------+-------");
+        let (mut ex, mut ey) = (0i64, 0i64);
+        for i in 0..5 {
+            let (dx, dy) = (v[i + 1].0 - v[i].0, v[i + 1].1 - v[i].1);
+            let (vx, vy, t1) = ramp_params(dx as i8, dy as i8);
+            let (rx, ry) = (vx as i64 * t1 as i64, vy as i64 * t1 as i64);
+            let (px, py) = (dx as i64 * s, dy as i64 * s);
+            ex += rx - px;
+            ey += ry - py;
+            println!("  {i:5} | {dx:4},{dy:4} | {vx:4}{vy:4}{t1:4} | {rx:6},{ry:6} | {px:5},{py:5} | {:3},{:3}",
+                     rx - px, ry - py);
+        }
+        println!("\n  DESVIACION ACUMULADA al cerrar: {ex}, {ey} unidades de dispositivo");
+        println!("  (un delta de 1 son {s} unidades, asi que son {:.2}, {:.2} unidades de pantalla)\n",
+                 ex as f64 / s as f64, ey as f64 / s as f64);
+    }
+}
