@@ -1578,9 +1578,37 @@ export async function executeExternalBuild(args: {
 // PATH; the project's declared [simulate] command links its C against the shim.
 // Returns { ok, modulePath } — the emitted MODULARIZE .js (with sibling
 // .wasm/.data) — or { error }.
+/* El romset del proyecto, por la MISMA convencion que la tarjeta: se llama como el
+ * binario del cartucho. El .cvproj ya dice cual es ([targets.rp2350] artifact =
+ * build_sd/REDALARM.BIN), asi que el nombre sale de ahi y no hay una segunda regla que
+ * aprender ni que mantener en sincronia. Sin seccion rp2350 se cae al nombre del
+ * proyecto. Devuelve null cuando no hay: eso no es un error — un puerto que aun
+ * incrusta su ROM no usa nada de esto. */
+async function romZipForManifest(manifest: ExternalProjectManifest): Promise<string | null> {
+  const artefacto = (manifest as any).targets?.rp2350?.artifact as string | undefined;
+  const stem = (artefacto ? basename(artefacto).replace(/\.[^.]+$/, '') : manifest.project.name);
+  try {
+    const dir = join(os.homedir(), 'VectrexStudio', 'sd', 'roms');
+    const want = stem.toLowerCase() + '.zip';
+    const entries = await fs.readdir(dir);
+    const hit = entries.find(f => f.toLowerCase() === want);
+    if (!hit) {
+      mainWindow?.webContents.send('run://stderr',
+        `[SIM] sin romset para "${stem}" en ${dir}` +
+        (entries.length ? ` — hay: ${entries.join(', ')}` : ' (carpeta vacia)') + `\n`);
+      return null;
+    }
+    const buf = await fs.readFile(join(dir, hit));
+    mainWindow?.webContents.send('run://stdout', `[SIM] romset ${hit} (${buf.length} b)\n`);
+    return buf.toString('base64');
+  } catch {
+    return null;   // no hay carpeta roms/: normal en un proyecto que no la necesita
+  }
+}
+
 export async function executeSimBuild(args: {
   manifestPath: string;
-}): Promise<{ ok: true; modulePath: string } | { error: string; detail?: string }> {
+}): Promise<{ ok: true; modulePath: string; romZipBase64: string | null } | { error: string; detail?: string }> {
   const win = mainWindow ?? null;
   const { manifestPath } = args || ({} as any);
 
@@ -1633,7 +1661,7 @@ export async function executeSimBuild(args: {
   }
   win?.webContents.send('run://stdout', `[SIM] Built simulator module: ${modulePath}\n`);
   win?.webContents.send('run://status', `Simulator ready: ${manifest.project.name}`);
-  return { ok: true, modulePath };
+  return { ok: true, modulePath, romZipBase64: await romZipForManifest(manifest) };
 }
 
 // Exported function for direct invocation (e.g. from MCP server)

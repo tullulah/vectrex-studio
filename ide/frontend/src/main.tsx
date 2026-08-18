@@ -550,7 +550,10 @@ function App() {
             logger.info('Build', 'Simulator module ready:', simResult.modulePath);
             // Hand the module to the emulator panel (PitrexSimView loads it).
             // setSimModule bumps a nonce so a rebuilt same-path module reloads.
-            useEmulatorStore.getState().setSimModule(simResult.modulePath);
+            const romZip = simResult.romZipBase64
+              ? Uint8Array.from(atob(simResult.romZipBase64), c => c.charCodeAt(0))
+              : null;
+            useEmulatorStore.getState().setSimModule(simResult.modulePath, romZip);
             return;
           }
           // No [simulate] target: fall through to the hardware build so Build

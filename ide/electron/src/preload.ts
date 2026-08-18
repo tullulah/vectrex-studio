@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // External C/C++ projects: build (and optionally deploy) via their own toolchain.
   runBuildExternal: (args: { manifestPath: string; deploy?: boolean; sdPath?: string; target?: 'pitrex' | 'rp2350' | 'uvm2'; preview?: boolean }) => ipcRenderer.invoke('run:buildExternal', args) as Promise<{ ok?: boolean; artifactPath?: string; error?: string; detail?: string }>,
   // Build the WASM simulator module (for the emulator panel) of an external project.
-  runBuildSim: (args: { manifestPath: string }) => ipcRenderer.invoke('run:buildSim', args) as Promise<{ ok?: boolean; modulePath?: string; error?: string; detail?: string }>,
+  runBuildSim: (args: { manifestPath: string }) => ipcRenderer.invoke('run:buildSim', args) as Promise<{ ok?: boolean; modulePath?: string; romZipBase64?: string | null; error?: string; detail?: string }>,
   importCProject: (args?: { dir?: string }) => ipcRenderer.invoke('project:importC', args) as Promise<{ ok?: boolean; manifestPath?: string; existed?: boolean; detectedTarget?: string | null; canceled?: boolean; error?: string }>,
   onRunStdout: (cb: (chunk: string) => void) => ipcRenderer.on('run://stdout', (_e: IpcRendererEvent, data: string) => cb(data)),
   onRunStderr: (cb: (chunk: string) => void) => ipcRenderer.on('run://stderr', (_e: IpcRendererEvent, data: string) => cb(data)),

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useJoystickStore } from '../state/joystickStore';
+import { useEmulatorStore } from '../state/emulatorStore';
 
 /*
  * PitrexSimView — runs an external project's WASM "simulator" module in the
@@ -57,6 +58,7 @@ export interface PitrexSimViewProps {
 }
 
 export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width, height, onLog }) => {
+  const simRomZip = useEmulatorStore(s => s.simRomZip);
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [state, setState] = useState<'loading' | 'running' | 'error'>('loading');
@@ -388,6 +390,20 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         const instance = await factory(moduleArg);
         if (cancelled || disposedRef.current) return;
         moduleRef.current = instance;
+
+        // El romset, en el FS de emscripten y ANTES de main(): el juego lo abre por
+        // stdio nada mas arrancar (ra_rom_file.c), igual que el cartucho lo lee de la
+        // SD. Esta carpeta es la "tarjeta" del simulador. Si no hay zip no se escribe
+        // nada y el juego dibuja su cartel NO ROMSET, que es la respuesta correcta.
+        if (simRomZip && instance.FS) {
+          try {
+            try { instance.FS.mkdir('/roms'); } catch { /* ya existe */ }
+            instance.FS.writeFile('/roms/game.zip', simRomZip);
+            log.current?.(`[PiTrex simulator] romset montado: ${simRomZip.length} bytes`);
+          } catch (e: any) {
+            log.current?.(`[PiTrex simulator] no pude montar el romset: ${e?.message || e}`);
+          }
+        }
         setState('running');
         log.current?.('[PiTrex simulator] module ready — starting main()');
 
