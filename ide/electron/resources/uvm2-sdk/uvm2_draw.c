@@ -259,7 +259,18 @@ static void via_setup(void)
     emit(UVM2_VIA_PORTB, s_portb, 0);
     emit(UVM2_VIA_DDRB,  0x9F,    0);
     emit(UVM2_VIA_PCR,   s_pcr,   0);
+    /* ACR ES PARTE DEL MODELO DE HAZ, no un valor suelto:
+     *   0x60 -> T1 libre con PB7 DESACTIVADO; /RAMP lo conmuta el software por PORTB.
+     *   0x80 -> T1 en un disparo CON salida por PB7: escribir T1CH baja /RAMP y el
+     *           agotarse la cuenta lo sube. La rampa la termina el 6522, que es lo que
+     *           programa la BIOS y lo que asume la capa compartida.
+     * Con 0x80 los bits de PORTB que tocan PB7 dejan de llegar al pin, asi que
+     * `set_ramp` no hace nada — por eso el camino compartido no lo llama. */
+#ifdef UVM2_VECTREX_DRAW
+    emit(UVM2_VIA_ACR,   0x80,    0);
+#else
     emit(UVM2_VIA_ACR,   0x60,    0);
+#endif
 
     /* Prime each sample/hold channel from a DAC value of 0: zero reference,
      * then Y, then Z.  Without this the integrators start wherever the analog
@@ -483,8 +494,96 @@ static int drift_fix(int d, int32_t *acc, int32_t cte)
     return (d > 0) ? (int)entero : -(int)entero;    /* con el signo del salto */
 }
 
+
+#ifdef UVM2_VECTREX_DRAW
+/* ── Sumidero hacia la capa de dibujo COMPARTIDA ─────────────────────────────
+ *
+ * El modelo de haz ya no vive aqui: vive en `vectrex-draw`, la misma caja que enlaza
+ * el firmware del cartucho propio. Lo que queda de este lado es apilar los comandos
+ * que el modelo emite — que es lo unico que de verdad cambia entre las dos placas.
+ *
+ * EL `#ifdef` ES ANDAMIO DE MIGRACION, no un segundo modelo: existe porque la caja
+ * vive en el repositorio privado y este arbol tiene que seguir compilando sin ella
+ * (ver la guarda EXISTS en uvm2_pico.cmake). El paso 4 borra el camino de abajo y
+ * con el este guardia. */
+
+struct vx_sink {
+    void *ctx;
+    void (*emit)(void *, uint32_t, uint32_t, uint32_t);
+    void (*emit_ramp)(void *, uint32_t, uint32_t, uint32_t, uint32_t);
+    void (*beam_blanked)(void *);
+    void (*y_held)(void *, int32_t);
+};
+struct vx_timings { uint32_t e6809_q8, y_mux_q8, moveto_settle_q8; };
+void vx_moveto_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
+                   const struct vx_timings *);
+void vx_ramp_params(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
+
+/* El retardo llega en Q8 de ciclo de E; el campo de comando es entero. Se redondea al
+ * MAS CERCANO, no truncando: truncar sesga todos los huecos hacia abajo y eso es
+ * exactamente como se pierde medio ciclo por escritura. */
+static void vxs_emit(void *ctx, uint32_t reg, uint32_t data, uint32_t delay_q8)
+{
+    (void)ctx;
+    /* La cache de Port A la lleva set_porta, y el modelo escribe PORTA por su cuenta.
+     * Sin esto la cache creeria un valor que ya no esta en el DAC y se saltaria la
+     * siguiente escritura — un fallo que solo aparece de vez en cuando, que es el peor
+     * tipo. */
+    if (reg == UVM2_VIA_PORTA) { s_porta = (uint8_t)data; s_porta_stale = 0; }
+    emit(reg, data, (delay_q8 + 128u) / 256u);
+}
+
+/* AQUI NO SE SONDEA. En el cartucho propio esto pregunta al flag T1 de la VIA, como la
+ * BIOS; aqui la lista la reproduce un ejecutor que no lee, y leer la VIA a mitad de
+ * lista mientras conducimos el bus de datos es lo que causaba los vectores fantasma.
+ * Se cuenta la rampa y punto — y esa diferencia esta ESCRITA en el trait, no escondida. */
+static void vxs_emit_ramp(void *ctx, uint32_t reg, uint32_t data, uint32_t t1,
+                          uint32_t extra_q8)
+{
+    (void)ctx;
+    emit(reg, data, t1 + (extra_q8 + 128u) / 256u);
+}
+
+static void vxs_y_held(void *ctx, int32_t vy) { (void)ctx; s_y = (int)vy; }
+
+static struct vx_sink vx_cart_sink(void)
+{
+    struct vx_sink s = { 0 };
+    s.emit = vxs_emit;
+    s.emit_ramp = vxs_emit_ramp;
+    s.y_held = vxs_y_held;
+    return s;
+}
+
+/* Los huecos de ESTA placa. `e6809_q8` a 256 = sin descuento: el knob que lo recorta
+ * (E6809_SCALE_Q8 = 64) se midio en NUESTRA consola y contra NUESTRO camino de bus, asi
+ * que importarlo aqui seria afinar a ciegas. Ver `una-consola-no-es-evidencia`. */
+static struct vx_timings vx_cart_timings(void)
+{
+    struct vx_timings k;
+    k.e6809_q8 = 256u;
+    k.y_mux_q8 = UVM2_HOLD_MAX * 256u;
+    k.moveto_settle_q8 = 0u;
+    return k;
+}
+#endif /* UVM2_VECTREX_DRAW */
+
 void uvm2_draw_move(int dx, int dy)
 {
+#ifdef UVM2_VECTREX_DRAW
+    {
+        int32_t vx, vy; uint32_t t1;
+        s_pos_x += dx;
+        s_pos_y += dy;
+        vx_ramp_params(dx, dy, &vx, &vy, &t1);
+        struct vx_sink sink = vx_cart_sink();
+        struct vx_timings k = vx_cart_timings();
+        vx_moveto_seq(&sink, vx, vy, t1, &k);
+        uvm2_stats.moves++;
+        uvm2_stats.ramp_cycles += t1;
+        return;
+    }
+#endif
     dx += drift_fix(dx, &s_drift_ax, uvm2_drift_x);
     dy += drift_fix(dy, &s_drift_ay, uvm2_drift_y);
     uint32_t s = s_scale;
