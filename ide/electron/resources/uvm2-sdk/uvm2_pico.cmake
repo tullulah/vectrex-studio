@@ -143,8 +143,15 @@ target_link_libraries(${UVM2_NAME} pico_stdlib pico_multicore hardware_dma hardw
 # que la caja se compila para thumbv8m.main-none-eabi (coma flotante software) y su
 # API es entera pura. El enlazador compara Tag_ABI_VFP_args y protesta aunque no
 # cruce ni un flotante.
-set(VECTREX_DRAW_LIB "$ENV{HOME}/projects/vectrex-arcade-private/hardware/vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a"
-    CACHE FILEPATH "libvectrex_draw.a — la capa de dibujo compartida")
+# NO va en la CACHE. Una entrada de cache SOBREVIVE al reconfigure, asi que cuando la
+# ruta de la libreria cambio (al separar cabi/) los arboles de build existentes siguieron
+# apuntando a la vieja — y el sintoma fue `undefined reference to vx_moveto_seq` en el
+# camino VPy mientras el de pico-sdk enlazaba bien, porque ese borra su build dir. Media
+# hora para algo que no estaba en el codigo. Con `if(NOT DEFINED)` un -D del usuario
+# sigue mandando, pero el valor por defecto se recalcula siempre.
+if(NOT DEFINED VECTREX_DRAW_LIB)
+    set(VECTREX_DRAW_LIB "$ENV{HOME}/projects/vectrex-arcade-private/hardware/vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a")
+endif()
 if(EXISTS ${VECTREX_DRAW_LIB})
     message(STATUS "capa de dibujo compartida: ${VECTREX_DRAW_LIB}")
     target_link_libraries(${UVM2_NAME} ${VECTREX_DRAW_LIB})
