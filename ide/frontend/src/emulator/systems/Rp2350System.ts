@@ -63,6 +63,20 @@ const FLASH_END   = 0x14000000;
 /** Flash array size: 4 MB. */
 const FLASH_SIZE  = 4 * 1024 * 1024;
 
+/** PSRAM (XIP CS1) window: donde el lanzador del cartucho carga los juegos de la
+ *  SD. NO es una ficcion del emulador — es lo que dicen rp2350_game_ram.ld
+ *  (GAME_RAM ORIGIN) y sd.rs (GAME_LOAD_ADDR), y por tanto donde enlaza TODO juego
+ *  C de rp2350: su cabecera VPy2 apunta a 0x11000011.
+ *
+ *  Se comprueba ANTES que la flash a proposito: la ventana de flash de aqui llega
+ *  hasta 0x14000000 y se traga esta, asi que un juego en PSRAM leia bytes del array
+ *  de flash — no fallaba, devolvia basura, y la pantalla se quedaba negra. */
+const PSRAM_BASE  = 0x11000000;
+/** PSRAM size: 8 MB (el mismo LENGTH que declara GAME_RAM en el .ld). */
+const PSRAM_SIZE  = 8 * 1024 * 1024;
+/** PSRAM end (exclusive) — 0x11800000. */
+const PSRAM_END   = PSRAM_BASE + PSRAM_SIZE;
+
 /** SRAM base address. */
 const SRAM_BASE   = 0x20000000;
 /** SRAM end (exclusive). */
@@ -262,6 +276,7 @@ export class Rp2350System implements ISystem, IBus {
   // Memory
   private readonly flash: Uint8Array = new Uint8Array(FLASH_SIZE);
   private readonly sram:  Uint8Array = new Uint8Array(SRAM_SIZE);
+  private readonly psram: Uint8Array = new Uint8Array(PSRAM_SIZE);
 
   /** Simulated SD game list (the emulator has no real card). Injected by the
    *  renderer from the ~/VectrexStudio/sd folder; backs SD_FILE_COUNT/NAME. */
@@ -425,6 +440,7 @@ export class Rp2350System implements ISystem, IBus {
   reset(entryPoint?: number): void;
   reset(entryPoint: number = DEFAULT_ENTRY_POINT): void {
     this.sram.fill(0);
+    this.psram.fill(0);   // si no, el juego anterior deja su imagen en la ventana
     this.frameCounter = 0;
     this.joyButtonState = 0xF0;  // default: no buttons pressed (active-low)
 
@@ -557,6 +573,11 @@ export class Rp2350System implements ISystem, IBus {
   read8(addr: number): number {
     addr = addr >>> 0;
 
+    // PSRAM: 0x11000000–0x117FFFFF. ANTES que la flash, que la solapa.
+    if (addr >= PSRAM_BASE && addr < PSRAM_END) {
+      return this.psram[addr - PSRAM_BASE] ?? 0;
+    }
+
     // Flash: 0x10000000–0x13FFFFFF
     if (addr >= FLASH_BASE && addr < FLASH_END) {
       return this.flash[(addr - FLASH_BASE) & (FLASH_SIZE - 1)] ?? 0xFF;
@@ -583,6 +604,12 @@ export class Rp2350System implements ISystem, IBus {
   write8(addr: number, data: number): void {
     addr = addr >>> 0;
     data &= 0xFF;
+
+    // PSRAM: 0x11000000–0x117FFFFF (juegos de la SD).
+    if (addr >= PSRAM_BASE && addr < PSRAM_END) {
+      this.psram[addr - PSRAM_BASE] = data;
+      return;
+    }
 
     // SRAM: 0x20000000–0x2007FFFF
     if (addr >= SRAM_BASE && addr < SRAM_END) {
@@ -1328,31 +1355,32 @@ export class Rp2350System implements ISystem, IBus {
    *   - the game's own VPy2 header word at +12 points at that descriptor.
    *
    * The pointer-through-the-header part is what makes one game binary work in all
-   * three places: this emulator has NO PSRAM window (flat SRAM, game at 0x20010000),
-   * so the cartridge's fixed 0x117FFFF0 simply does not exist here. Reading its own
-   * header, the game never has to know which machine it is on.
+   * three places, whichever window it lives in. Un juego de la SD enlaza en PSRAM y
+   * aqui aterriza en la misma ventana, asi que el tope sale 0x117FFFF0 — el mismo
+   * que sd.rs — por construccion, no por copiarlo. Leyendo su propia cabecera, el
+   * juego nunca tiene que saber en que maquina esta.
    *
    * The header word is written LAST: if anything above fails, the game sees "no
    * romset" instead of following a half-written pointer.
    */
-  private placeRomZip(gameLoadAddr: number): void {
-    const hdrOff = gameLoadAddr - SRAM_BASE + 12;
-    this.sram[hdrOff] = 0; this.sram[hdrOff + 1] = 0;
-    this.sram[hdrOff + 2] = 0; this.sram[hdrOff + 3] = 0;
+  private placeRomZip(gameLoadAddr: number, mem: Uint8Array, memBase: number, memEnd: number): void {
+    const hdrOff = gameLoadAddr - memBase + 12;
+    mem[hdrOff] = 0; mem[hdrOff + 1] = 0;
+    mem[hdrOff + 2] = 0; mem[hdrOff + 3] = 0;
     if (!this.romZip || this.romZip.length === 0) return;
 
-    const TOP = SRAM_END - 0x10;
+    const TOP = memEnd - 0x10;
     const base = (TOP - this.romZip.length) & ~3;
     const desc = base - 16;
     if (desc <= gameLoadAddr) {
       console.warn('[Rp2350System] romset does not fit below the game image — ignored');
       return;
     }
-    this.sram.set(this.romZip, base - SRAM_BASE);
+    mem.set(this.romZip, base - memBase);
     const put32 = (addr: number, v: number) => {
-      const o = addr - SRAM_BASE;
-      this.sram[o] = v & 0xff; this.sram[o + 1] = (v >>> 8) & 0xff;
-      this.sram[o + 2] = (v >>> 16) & 0xff; this.sram[o + 3] = (v >>> 24) & 0xff;
+      const o = addr - memBase;
+      mem[o] = v & 0xff; mem[o + 1] = (v >>> 8) & 0xff;
+      mem[o + 2] = (v >>> 16) & 0xff; mem[o + 3] = (v >>> 24) & 0xff;
     };
     put32(desc + 4, base);
     put32(desc + 8, this.romZip.length);
@@ -1365,23 +1393,32 @@ export class Rp2350System implements ISystem, IBus {
     this.reset();               // clears SRAM + hw; PC/SP set below for this image
     this.traps.clear();         // svc games use the svc dispatcher, not PC-traps
 
-    // GAME_RAM origin lowered from 0x20040000 to 0x20010000 (444 KB) — the BIOS
-    // only uses ~4 B of static RAM, so the old 252 KB cap was mostly wasted; large
-    // C ports (Major Havoc = 200 KB of dual-6502 images) need the room. Must match
-    // rp2350_game_ram.ld ORIGIN + the firmware sd.rs GAME_LOAD_ADDR.
-    const GAME_LOAD_ADDR = 0x20010000;
-    const gameOff = GAME_LOAD_ADDR - SRAM_BASE;   // GAME_RAM offset into SRAM
-    const len = Math.min(bin.length, this.sram.length - gameOff);
-    this.sram.set(bin.subarray(0, len), gameOff);
+    // LA VENTANA LA DICE LA CABECERA, no una constante de aqui. Los juegos C de
+    // rp2350 enlazan en PSRAM (rp2350_game_ram.ld GAME_RAM ORIGIN = 0x11000000, =
+    // sd.rs GAME_LOAD_ADDR); las imagenes VPy antiguas enlazadas en SRAM siguen
+    // entrando por 0x20010000. Cargar en un sitio y saltar al otro es exactamente
+    // lo que dejaba la pantalla en negro: el PC caia en la ventana de flash.
+    let entry = 0;                  // 'VPy2' header: [magic][game_main][rsv][rsv]
+    if (bin.length >= 8 && bin[0] === 0x56 && bin[1] === 0x50 && bin[2] === 0x79 && bin[3] === 0x32) {
+      entry = (bin[4] | (bin[5] << 8) | (bin[6] << 16) | (bin[7] << 24)) >>> 0;
+    }
+    const inPsram = entry >= PSRAM_BASE && entry < PSRAM_END;
+    const mem     = inPsram ? this.psram : this.sram;
+    const memBase = inPsram ? PSRAM_BASE : SRAM_BASE;
+    const memEnd  = inPsram ? PSRAM_END  : SRAM_END;
+    const GAME_LOAD_ADDR = inPsram ? PSRAM_BASE : 0x20010000;
+    if (entry === 0) entry = GAME_LOAD_ADDR;
+
+    const gameOff = GAME_LOAD_ADDR - memBase;
+    const len = Math.min(bin.length, mem.length - gameOff);
+    mem.set(bin.subarray(0, len), gameOff);
+
+    // Ejecutar desde donde esta: la region rapida es una sola, y si apunta a la
+    // ventana equivocada el nucleo cae al bus (correcto, pero lento por instruccion).
+    this.cpu.setFetchRegion(mem, memBase);
 
     // Publish the romset before the game runs — same point as SYS_LAUNCH on HW.
-    this.placeRomZip(GAME_LOAD_ADDR);
-
-    let entry = GAME_LOAD_ADDR;     // 'VPy2' header: [magic][game_main][rsv][rsv]
-    if (bin.length >= 8 && bin[0] === 0x56 && bin[1] === 0x50 && bin[2] === 0x79 && bin[3] === 0x32) {
-      const e = (bin[4] | (bin[5] << 8) | (bin[6] << 16) | (bin[7] << 24)) >>> 0;
-      if (e !== 0) entry = e;
-    }
+    this.placeRomZip(GAME_LOAD_ADDR, mem, memBase, memEnd);
     // DUAL-CORE game? header reserved[0] (offset 8) == 0x44430001. On HW the game
     // runs on core 1 and records draws to a shared RAM buffer (no svc) while the
     // firmware materialises them on core 0. This single-core emulator plays BOTH
@@ -1390,10 +1427,11 @@ export class Rp2350System implements ISystem, IBus {
     // the game's stack can't clobber the shared buffer.
     this.dcActive = bin.length >= 12 &&
       ((bin[8] | (bin[9] << 8) | (bin[10] << 16) | (bin[11] << 24)) >>> 0) === 0x44430001;
-    this.cpu.setReg(13, this.dcActive ? 0x2007CF00 : GAME_LOAD_ADDR); // SP
+    const SP_TOP = inPsram ? 0x2007F000 : GAME_LOAD_ADDR;
+    this.cpu.setReg(13, this.dcActive ? 0x2007CF00 : SP_TOP); // SP
     this.cpu.setReg(15, entry & ~1);   // PC = game_main (thumb bit stripped)
     this.cpu.setReg(14, 0xFFFFFFFE);   // LR sentinel (halt if game_main returns)
-    console.log(`[Rp2350System.initRamGame] loaded ${len}b @ 0x${GAME_LOAD_ADDR.toString(16)}, entry=0x${entry.toString(16)}${this.dcActive ? ' (DUAL-CORE)' : ''}`);
+    console.log(`[Rp2350System.initRamGame] loaded ${len}b @ 0x${GAME_LOAD_ADDR.toString(16)} (${inPsram ? 'PSRAM' : 'SRAM'}), entry=0x${entry.toString(16)}${this.dcActive ? ' (DUAL-CORE)' : ''}`);
   }
 
   private dcActive = false;
@@ -1664,6 +1702,9 @@ export class Rp2350System implements ISystem, IBus {
   /** Read a byte from SRAM by absolute address (for debugger/memory inspector). */
   peekSram(addr: number): number {
     addr = addr >>> 0;
+    if (addr >= PSRAM_BASE && addr < PSRAM_END) {
+      return this.psram[addr - PSRAM_BASE] & 0xFF;
+    }
     if (addr >= SRAM_BASE && addr < SRAM_END) {
       return this.sram[addr - SRAM_BASE] & 0xFF;
     }

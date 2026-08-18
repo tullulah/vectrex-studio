@@ -571,9 +571,13 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     const hasMagic = bin.length >= 8 &&
       bin[0] === 0x56 && bin[1] === 0x50 && bin[2] === 0x79 && bin[3] === 0x32;
     const entry = hasMagic ? ((bin[4] | (bin[5] << 8) | (bin[6] << 16) | (bin[7] << 24)) >>> 0) : 0;
-    // GAME_RAM origin was lowered 0x20040000 -> 0x20010000 (444 KB); RAM-linked
-    // entries now start at 0x2001xxxx. Must match rp2350_game_ram.ld + Rp2350System.
-    const ramLinked = entry >= 0x20010000 && entry < 0x20080000;
+    // Dos ventanas, porque hay dos generaciones de imagen: los juegos C de rp2350
+    // enlazan en la PSRAM (rp2350_game_ram.ld GAME_RAM ORIGIN = 0x11000000, que es
+    // GAME_LOAD_ADDR de sd.rs) y las imagenes VPy antiguas en SRAM (0x2001xxxx).
+    // Solo se miraba la segunda, asi que TODO juego C caia al camino de flash/XIP y
+    // se quedaba negro. Debe cuadrar con el .ld y con Rp2350System.
+    const ramLinked = (entry >= 0x20010000 && entry < 0x20080000)
+                   || (entry >= 0x11000000 && entry < 0x11800000);
     if (ramLinked && typeof this._rp2350System.initRamGame === 'function') {
       console.log('[loadArm] RAM-linked svc image (entry 0x' + entry.toString(16) + ') → initRamGame');
       this._rp2350System.initRamGame(bin);
