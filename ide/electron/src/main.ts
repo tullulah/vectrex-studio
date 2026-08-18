@@ -1507,12 +1507,24 @@ export async function executeExternalBuild(args: {
   if (preview && effectiveTarget === 'rp2350') {
     try {
       const buf = await fs.readFile(artifactPath);
+      // El ELF hermano, si el proyecto lo deja al lado con el mismo nombre
+      // (REDALARM.BIN -> REDALARM.elf). Con el, las trampas se registran por
+      // direccion de simbolo en vez de por heuristica de prologo. Sin el se
+      // arranca igual, solo que a ciegas — asi que es opcional, no un fallo.
+      const elfPath = artifactPath.replace(/\.bin$/i, '.elf');
+      let elfBase64: string | null = null;
+      if (elfPath !== artifactPath) {
+        try {
+          elfBase64 = (await fs.readFile(elfPath)).toString('base64');
+          win?.webContents.send('run://stdout', `[C] ELF hermano: ${basename(elfPath)}\n`);
+        } catch { /* sin ELF: escaneo de prologos */ }
+      }
       win?.webContents.send('emu://compiledBin', {
         base64: buf.toString('base64'),
         size: buf.length,
         binPath: artifactPath,
         target: 'rp2350',
-        elfBase64: null,
+        elfBase64,
       });
       win?.webContents.send('run://status', `Previewing RP2350 binary: ${manifest.project.name}`);
     } catch (e: any) {

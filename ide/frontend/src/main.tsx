@@ -594,6 +594,11 @@ function App() {
           target: extTarget,
           deploy: extDeploy,
           sdPath: extSdPath,
+          // Y previsualizar, que para rp2350 el panel es la UNICA forma de ver
+          // correr esto: un proyecto C externo sin seccion [simulate] no tiene
+          // WASM, asi que sin esto "Build for SD" con la tarjeta desconectada no
+          // deja nada que probar. Es el mismo binario que se acaba de desplegar.
+          preview: extTarget === 'rp2350',
         });
         if (extResult?.error) {
           logger.error('Build', 'External build failed:', extResult.error, extResult.detail || '');
