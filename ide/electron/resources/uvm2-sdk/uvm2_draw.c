@@ -210,12 +210,10 @@ static void set_zero(int active, uint32_t delay)
     emit(UVM2_VIA_PCR, s_pcr, delay);
 }
 
-static void set_ramp(int running, uint32_t delay)
-{
-    s_portb = (uint8_t)((s_portb & ~UVM2_PB_RAMP_OFF) | (running ? 0u : UVM2_PB_RAMP_OFF));
-    emit(UVM2_VIA_PORTB, s_portb, delay);
-}
-
+/* `set_ramp` SE HA IDO. Conmutaba /RAMP escribiendo PB7 por PORTB, que es el modelo de
+ * haz de Ralf; ahora la rampa la termina T1 (ACR = 0x80) y esos bits ni llegan al pin.
+ * Dejarla habria sido peor que borrarla: una funcion que compila, se puede llamar y no
+ * hace absolutamente nada. */
 /* ── Public API ───────────────────────────────────────────────────────────── */
 
 void uvm2_draw_set_scale(uint32_t cycles)
