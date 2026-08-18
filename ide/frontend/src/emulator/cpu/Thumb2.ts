@@ -2004,8 +2004,17 @@ export class Thumb2 implements ICpu {
         const r = u32(a + imm12);
         this.regs[rd] = r;
         if (s) this.setNZCV_add(a, imm12);
-      } else if ((op & 0xd) === 0x4) {
+      } else if ((op & 0xd) === 0x5) {
         // SUBW Rd, Rn, #imm12  (or ADR T2: Rn=PC, subtract)
+        // op es hw0[8:5], y SUBW es 01010 en hw0[8:4] -> 0101 = 5, NO 4. Con el 4 esta
+        // rama no la cogia NADIE (el 4 solo alcanzaba a MOVT, ya interceptado antes), y
+        // SUBW se caia por el final del if sin ejecutarse ni avisar.
+        //
+        // Solo muerde en funciones con marco de pila grande y no codificable como
+        // inmediato modificado: gcc emite `sub sp,#imm` para lo normal y `subw` para el
+        // resto. puff() reserva 2140 bytes asi, no los reservaba, y devolvia por un
+        // marco que no era suyo: PC = 0. Medido antes/despues del prologo (SP bajaba 36
+        // bytes, justo el push, en vez de 36 + 2140).
         const a = rn === 0xf ? u32(_pc + 4) : this.regs[rn];
         const r = u32(a - imm12);
         this.regs[rd] = r;
