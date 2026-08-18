@@ -143,7 +143,7 @@ target_link_libraries(${UVM2_NAME} pico_stdlib pico_multicore hardware_dma hardw
 # que la caja se compila para thumbv8m.main-none-eabi (coma flotante software) y su
 # API es entera pura. El enlazador compara Tag_ABI_VFP_args y protesta aunque no
 # cruce ni un flotante.
-set(VECTREX_DRAW_LIB "$ENV{HOME}/projects/vectrex-arcade-private/hardware/vectrex-draw/target/thumbv8m.main-none-eabi/release/libvectrex_draw.a"
+set(VECTREX_DRAW_LIB "$ENV{HOME}/projects/vectrex-arcade-private/hardware/vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a"
     CACHE FILEPATH "libvectrex_draw.a — la capa de dibujo compartida")
 if(EXISTS ${VECTREX_DRAW_LIB})
     message(STATUS "capa de dibujo compartida: ${VECTREX_DRAW_LIB}")
