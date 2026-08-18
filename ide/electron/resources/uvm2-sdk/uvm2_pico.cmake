@@ -55,6 +55,20 @@ add_executable(${UVM2_NAME}
 # also what makes crt0 emit the VECTOR_TABLE item the launch path looks for.
 pico_set_binary_type(${UVM2_NAME} no_flash)
 
+# EXPERIMENTO: enlazar en la PSRAM EXTERNA (0x11000000) en vez de en la SRAM interna.
+#
+# Se enciende con la variable de entorno UVM2_LOAD_PSRAM=1. La imagen resultante hay que
+# empaquetarla con `vpy_cli package-um2 --load-addr 0x11000000`, porque la cabecera .um2
+# es lo que le dice al cargador del multicart donde copiar.
+#
+# LA PREGUNTA: ¿honra su cargador una direccion fuera de la SRAM? Medimos esa PSRAM muda,
+# pero DESDE DENTRO de un juego ya cargado — si su firmware la inicializa solo cuando la
+# necesita, esa medida no lo habria visto. Pedirle que cargue ahi es la unica prueba.
+if(DEFINED ENV{UVM2_LOAD_PSRAM} AND NOT "$ENV{UVM2_LOAD_PSRAM}" STREQUAL "0")
+    message(STATUS "UVM2_LOAD_PSRAM: enlazando en la PSRAM externa (0x11000000)")
+    pico_set_linker_script(${UVM2_NAME} ${CMAKE_CURRENT_LIST_DIR}/memmap_psram.ld)
+endif()
+
 # The game keeps its own `main`; rename it so uvm2_pico_main.c can wrap it with
 # the runtime init. Scoped to the GAME sources only — as a global flag it also
 # renames the `main` in CMake's compiler-probe program and configuration fails.
