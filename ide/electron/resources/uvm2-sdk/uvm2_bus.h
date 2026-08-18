@@ -155,6 +155,11 @@ typedef struct {
     uint32_t overrun;       /* frames whose stream exceeded the 50 Hz budget  */
     uint32_t moves;         /* blanked repositions last frame (beam travel)   */
     uint32_t ramp_cycles;   /* cycles spent with the integrators running      */
+    /* Comandos TIRADOS por lista llena, del ultimo frame. Un tope silencioso se lee
+     * como "el dibujo esta roto" y manda a depurar el sitio equivocado: paso el
+     * 2026-08-18 con el modelo T1, que llegaba justo a las 8192 y perdia el resto del
+     * frame. Si esto no es cero, NADA de lo que se ve en pantalla es concluyente. */
+    uint32_t dropped;
 
     /* Snapshots of the three above, taken in uvm2_frame_end and never cleared.
      *

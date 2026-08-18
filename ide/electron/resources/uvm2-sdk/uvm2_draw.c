@@ -119,9 +119,14 @@ static int      s_fixup = 0;
  * y esta antes del bloque que lo define. Ver "MODELO DE HAZ POR T1", mas abajo. */
 extern volatile int uvm2_beam_model;
 
+/* Comandos perdidos en el frame en curso, por lista llena. Se vuelca a stats en
+ * frame_end. Declarada aqui y no abajo porque emit() es quien la incrementa. */
+static uint32_t s_dropped;
+
 static inline void emit(uint32_t reg, uint32_t data, uint32_t delay)
 {
     if (s_count < UVM2_CMD_CAPACITY) s_cmds[s_buf][s_count++] = UVM2_CMD(reg, data, delay);
+    else                             s_dropped++;   /* NUNCA en silencio: ver stats.dropped */
 }
 
 /* ── Primitive register writes ────────────────────────────────────────────── */
@@ -852,6 +857,7 @@ static void uvm2_recalibrate(void)
 void uvm2_frame_begin(void)
 {
     s_count = 0;
+    s_dropped              = 0;
     uvm2_stats.vectors     = 0;
     uvm2_stats.moves       = 0;
     uvm2_stats.ramp_cycles = 0;
@@ -928,6 +934,7 @@ void uvm2_frame_end(void)
      * still drawing this one. */
     s_len[s_buf]        = s_count;
     uvm2_stats.commands = s_count;
+    uvm2_stats.dropped  = s_dropped;
 
     uvm2_stats.vectors_last     = uvm2_stats.vectors;
     uvm2_stats.moves_last       = uvm2_stats.moves;
@@ -961,6 +968,7 @@ void uvm2_frame_end(void)
 
     uvm2_stats.commands   = s_count;
     uvm2_stats.bus_cycles = cycles;
+    uvm2_stats.dropped    = s_dropped;
 #endif
 
     /* Freeze this frame's per-frame counters where a debugger can still read them
