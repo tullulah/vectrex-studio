@@ -589,10 +589,25 @@ volatile uint32_t uvm2_t1_vcap_slow_hits;
  * igual que `Y_HELD` en el firmware. */
 static int s_y_held = 0;
 
-static int t1_round_div(int num, long long den)
+/* ARITMETICA DE 32 BITS A PROPOSITO, aunque el original en Rust use i64.
+ *
+ * El camino de enlace VPy->UVM2 (buildtools/vpy_codegen/src/uvm2/) NO enlaza libgcc,
+ * asi que una division de 64 bits deja `__aeabi_ldivmod` sin resolver y el enlazado
+ * muere con "dangerous relocation". En Rust los intrinsecos vienen puestos y el i64
+ * era gratis; transcribirlo literalmente no lo era. MEDIDO al compilar SnowBros
+ * (VPy) para uvm2 el 2026-08-18 — con dkong (camino pico-sdk, que si trae libgcc)
+ * enlazaba sin rechistar, asi que el fallo solo aparece en el otro camino.
+ *
+ * Y no hace falta: el peor caso cabe de sobra en int32.
+ *   num = d * s   con |d| <= 127 (va al DAC) y s <= 255  ->  32.385
+ *   num * 256                                            ->  8,3 millones
+ *   den = t1 * 256 + extra  con t1 <= 255                ->  65.535
+ * Contra los 2.147 millones de un int32 hay cuatro ordenes de margen. Aun con deltas
+ * de 10.000 —que no existen— seguiria cabiendo. */
+static int t1_round_div(int num, int32_t den)
 {
-    long long n = (long long)num * 256;
-    return (int)((n >= 0 ? (n + den / 2) / den : (n - den / 2) / den));
+    int32_t n = (int32_t)num * 256;
+    return (int)(n >= 0 ? (n + den / 2) / den : (n - den / 2) / den);
 }
 
 /* Transcripcion de `ramp_params` (vinterface.rs). Se mantiene la aritmetica ENTERA
@@ -642,7 +657,7 @@ static void t1_ramp_params(int dx, int dy, int *out_vx, int *out_vy, unsigned *o
     /* El divisor es la duracion REAL de la rampa, no `t1` a secas: el 6522 cuenta
      * t1 + 1,5 en un disparo. Con uvm2_t1_extra_q8 = 0 esto es la aritmetica de
      * siempre. */
-    long long den = (long long)t1 * 256 + uvm2_t1_extra_q8;
+    int32_t den = (int32_t)t1 * 256 + uvm2_t1_extra_q8;
     int vx = t1_round_div(dx * s, den);
     int vy = t1_round_div(dy * s, den);
     if (vx >  127) vx =  127;
