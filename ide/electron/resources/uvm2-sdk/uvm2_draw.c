@@ -115,10 +115,6 @@ static int      s_fixup = 0;
 #define UVM2_BLANK_ON_DELAY  16u    /* beam stays lit after the ramp stops     */
 #define UVM2_ZERO_BASE       45u    /* centring cost, plus scale/4             */
 
-/* El conmutador de modelo de haz se declara aqui porque `via_setup` elige ACR con el,
- * y esta antes del bloque que lo define. Ver "MODELO DE HAZ POR T1", mas abajo. */
-extern volatile int uvm2_beam_model;
-
 /* Comandos perdidos en el frame en curso, por lista llena. Se vuelca a stats en
  * frame_end. Declarada aqui y no abajo porque emit() es quien la incrementa. */
 static uint32_t s_dropped;
@@ -197,9 +193,6 @@ static void set_x(int x, uint32_t delay)
     set_porta((uint8_t)x, delay);
 }
 
-/* Con que modelo se programo el ACR por ultima vez. -1 = todavia con ninguno. */
-static int s_acr_model = -1;
-
 static int32_t s_drift_ax, s_drift_ay;   /* ver la compensacion de deriva, abajo */
 
 static void set_zero(int active, uint32_t delay)
@@ -266,16 +259,7 @@ static void via_setup(void)
     emit(UVM2_VIA_PORTB, s_portb, 0);
     emit(UVM2_VIA_DDRB,  0x9F,    0);
     emit(UVM2_VIA_PCR,   s_pcr,   0);
-    /* ACR ES PARTE DEL MODELO DE HAZ, no un valor fijo:
-     *   0x60 -> T1 en carrera libre con PB7 DESACTIVADO. /RAMP lo conmuta el
-     *           software escribiendo PORTB bit 7 (el camino de Ralf).
-     *   0x80 -> T1 en un disparo CON salida por PB7. Escribir T1CH baja /RAMP y el
-     *           agotarse la cuenta lo sube: la rampa la termina el 6522. Es lo que
-     *           programa la BIOS original y lo que hace nuestro firmware.
-     * Con 0x80 los bits de PORTB que tocan PB7 dejan de llegar al pin, asi que
-     * `set_ramp` no hace nada — por eso el camino T1 no lo llama. */
-    s_acr_model = uvm2_beam_model;
-    emit(UVM2_VIA_ACR,   uvm2_beam_model ? 0x80 : 0x60, 0);
+    emit(UVM2_VIA_ACR,   0x60,    0);
 
     /* Prime each sample/hold channel from a DAC value of 0: zero reference,
      * then Y, then Z.  Without this the integrators start wherever the analog
@@ -499,242 +483,8 @@ static int drift_fix(int d, int32_t *acc, int32_t cte)
     return (d > 0) ? (int)entero : -(int)entero;    /* con el signo del salto */
 }
 
-/* ── MODELO DE HAZ POR T1, transcrito de nuestro firmware ───────────────────
- *
- * Los dos cartuchos NO dibujan igual, y hasta ahora eso estaba sin escribir:
- *
- *   Ralf (arriba):  /RAMP se conmuta A MANO por PORTB bit 7, y la longitud del
- *                   trazo la mide un retardo contado en la propia cadena de
- *                   comandos (`s_scale`). ACR = 0x60: T1 con PB7 DESACTIVADO.
- *
- *   Nuestro:        se calcula por vector la velocidad (vx, vy) y un contador t1,
- *                   se cargan en T1 de la VIA y **es el 6522 quien termina la
- *                   rampa**, por hardware, a traves de PB7. ACR = 0x80. Es como
- *                   lo hace la BIOS original.
- *
- * POR QUE PUEDE IMPORTAR AQUI. Con T1 la duracion de la rampa la marca el reloj
- * del 6522, no la exactitud con la que nuestro ejecutor de comandos cuente el
- * retardo. Todo jitter del lado del RP2350 deja de traducirse en longitud de
- * trazo. Dado que el UVM2 parpadea y que `uvm2-frame-budget` dice que la rampa se
- * lleva el 51% del presupuesto, es la hipotesis que merece medirse.
- *
- * PERO NO SE REEMPLAZA NADA. Los dos modelos conviven y se elige en caliente con
- * `uvm2_beam_model`, para poder ir cambiando poco a poco y, sobre todo, para poder
- * comparar A/B en la MISMA consola sin reflashear. Ver
- * `debug_cart/UVM2_UNIFICACION.md`.
- *
- *   uvm2_beam_model = 0  -> el de siempre (Ralf). POR DEFECTO: nada cambia.
- *                     1  -> el nuestro, por T1.
- *
- * SIN PROBAR EN ESTA CONSOLA. Compila; nadie lo ha encendido con model = 1.
- */
-/* El valor de ARRANQUE tambien por compilacion, no solo por SWD. Si la sonda no
- * aparece —y hoy no aparece— se puede al menos cargar dos .um2 y comparar cambiando
- * de fichero en la SD. Es peor (hay un reset entre medidas, y una medida de fps entre
- * resets no vale), pero responde "¿dibuja siquiera?" sin depender del cable.
- *     ./build_uvm2.sh dkong dkt1_m1 -DUVM2_BEAM_MODEL_DEFAULT=1  */
-#ifndef UVM2_BEAM_MODEL_DEFAULT
-#define UVM2_BEAM_MODEL_DEFAULT 0
-#endif
-volatile int uvm2_beam_model = UVM2_BEAM_MODEL_DEFAULT;
-
-/* Los knobs de `ramp_params`, con los valores que quedaron por defecto en el
- * cartucho propio el 2026-08-17 tras medirlos en pantalla. Variables y no defines
- * a proposito: se barren por SWD sin recompilar, que es la regla 3 de `hw-debug`.
- *
- * NO son constantes universales. `una-consola-no-es-evidencia`: VCAP se afino
- * contra una consola quemada y otra maquina quiere otro valor. Aqui llegan como
- * PUNTO DE PARTIDA, no como verdad. */
-volatile int uvm2_t1_draw_scale = 0xA0;  /* DRAW_SCALE: gobierna longitud Y velocidad */
-volatile int uvm2_t1_min        = 31;    /* MIN_T1                                    */
-volatile int uvm2_t1_ceiling    = 0xA0;  /* T1_CEILING                                */
-volatile int uvm2_t1_vcap       = 127;   /* VCAP                                      */
-volatile int uvm2_t1_vcap_slow  = 30;    /* VCAP_SLOW: tope para el zigzag            */
-volatile int uvm2_t1_vcap_dv    = 32;    /* VCAP_DV: longitud maxima que cuenta corta */
-volatile int uvm2_t1_extra_q8   = 0;     /* T1_EXTRA_Q8: el 6522 cuenta t1 + 1,5      */
-
-/* LOS DOS RETARDOS DEL HAZ, en nuestros valores y en ciclos de E.
- *
- * Conversion, sin inventarse el factor: el firmware los lleva en ciclos de CPU y
- * define CPU_PER_ECYCLE = 100 (un periodo de E, 666 ns a 1,5 MHz, son ~100 ciclos a
- * 150 MHz). Ademas tiene escrito BLANK_SETTLE_REFERENCE = 16 * CPU_PER_ECYCLE, que
- * es literalmente el c_BlankOnDelay de Ralf en nuestras unidades, asi que la
- * equivalencia esta comprobada en los dos sentidos.
- *
- *     BEAM_ON_DELAY_CYC  =  200 ciclos de CPU  ->  2 ciclos de E   (aqui habia 3)
- *     BLANK_SETTLE_CYC   = 1100 ciclos de CPU  -> 11 ciclos de E   (aqui habia 16)
- *
- * NO SON LA MISMA CANTIDAD, y por eso son dos knobs y no uno. MEDIDO por biseccion
- * en nuestra consola el 2026-08-07, en el menu (estatico, vectores cortos), mirando
- * cuando se abren las esquinas del recuadro: encender pide el codo entre 50 y 60
- * ciclos, apagar entre 125 y 150. Encender necesita 2,5 veces menos, y tiene sentido
- * fisico — arrancar el haz desde parado y frenarlo contra la inductancia del yugo no
- * son el mismo transitorio. Ralf apunta en la misma direccion con su 3 / 16, aunque
- * su razon sea 5:1.
- *
- * OJO CON EL 11: los valores enviados NO son el codo. Por debajo de ~200 ciclos de
- * CPU el dibujo TIEMBLA cada vez mas, mucho antes del codo, porque al encender antes
- * la parte iluminada incluye el arranque del haz y ahi la posicion depende de CUANDO
- * exactamente encendimos — jitter NUESTRO. En el UVM2 el retardo lo cuenta el
- * ejecutor de comandos, que es otro reloj y otro jitter: puede que aqui aguante
- * menos, o mas. Son el punto de partida para barrer, no un resultado importado.
- *
- * Se dejan como variables del MODELO T1 y no se tocan los #define de arriba: asi el
- * modelo 0 sigue siendo el de Ralf integro y la comparacion A/B sigue valiendo. */
-volatile int uvm2_t1_beam_on      = 2;   /* BEAM_ON_DELAY_CYC 200 / 100 */
-volatile int uvm2_t1_blank_settle = 11;  /* BLANK_SETTLE_CYC 1100 / 100 */
-volatile uint32_t uvm2_t1_vcap_slow_hits;
-
-/* vy del vector anterior, para el disparador del tope selectivo. Bit 8 = valido,
- * igual que `Y_HELD` en el firmware. */
-static int s_y_held = 0;
-
-/* ARITMETICA DE 32 BITS A PROPOSITO, aunque el original en Rust use i64.
- *
- * El camino de enlace VPy->UVM2 (buildtools/vpy_codegen/src/uvm2/) NO enlaza libgcc,
- * asi que una division de 64 bits deja `__aeabi_ldivmod` sin resolver y el enlazado
- * muere con "dangerous relocation". En Rust los intrinsecos vienen puestos y el i64
- * era gratis; transcribirlo literalmente no lo era. MEDIDO al compilar SnowBros
- * (VPy) para uvm2 el 2026-08-18 — con dkong (camino pico-sdk, que si trae libgcc)
- * enlazaba sin rechistar, asi que el fallo solo aparece en el otro camino.
- *
- * Y no hace falta: el peor caso cabe de sobra en int32.
- *   num = d * s   con |d| <= 127 (va al DAC) y s <= 255  ->  32.385
- *   num * 256                                            ->  8,3 millones
- *   den = t1 * 256 + extra  con t1 <= 255                ->  65.535
- * Contra los 2.147 millones de un int32 hay cuatro ordenes de margen. Aun con deltas
- * de 10.000 —que no existen— seguiria cabiendo. */
-static int t1_round_div(int num, int32_t den)
-{
-    int32_t n = (int32_t)num * 256;
-    return (int)(n >= 0 ? (n + den / 2) / den : (n - den / 2) / den);
-}
-
-/* Transcripcion de `ramp_params` (vinterface.rs). Se mantiene la aritmetica ENTERA
- * exacta, incluido el redondeo al mas cercano: truncar hace que `vx * t1` deje de
- * ser proporcional a `dx * s` y las letras salgan escalonadas — medido en consola
- * el 2026-08-05, y el error no es monotono en el suelo, asi que ningun MIN_T1 lo
- * arregla. */
-static void t1_ramp_params(int dx, int dy, int *out_vx, int *out_vy, unsigned *out_t1)
-{
-    int adx = dx < 0 ? -dx : dx;
-    int ady = dy < 0 ? -dy : dy;
-    int m    = adx > ady ? adx : ady;
-    int vcap = uvm2_t1_vcap;
-
-    /* TOPE SELECTIVO. El disparador es el CAMBIO DE SIGNO de dy respecto al vector
-     * anterior Y que el vector sea corto — no la magnitud del salto.
-     *
-     * La primera version disparaba por "salto grande de vy" y MEDIDO en hardware
-     * salto 218.591 veces en 2.767 frames: 79 vectores por frame, o sea casi todos.
-     * No seleccionaba nada. La firma real del zigzag es que el signo de dy se
-     * invierte en CADA trazo, cosa que el resto del dibujo no hace. */
-    if (uvm2_t1_vcap_slow != 0 && dy != 0 && m <= uvm2_t1_vcap_dv && (s_y_held & 0x100)) {
-        int prev = (signed char)(s_y_held & 0xFF);
-        if (prev != 0 && ((prev < 0) != (dy < 0))) {
-            vcap = uvm2_t1_vcap_slow;
-            uvm2_t1_vcap_slow_hits++;
-        }
-    }
-
-    if (m == 0) { *out_vx = 0; *out_vy = 0; *out_t1 = (unsigned)uvm2_t1_min; return; }
-
-    int s = uvm2_t1_draw_scale;
-    /* Suelo de permanencia, proporcional a la longitud. */
-    int t1_floor = s * m / 127;
-    if (t1_floor < uvm2_t1_min) t1_floor = uvm2_t1_min;
-    if (t1_floor > s)           t1_floor = s;
-    /* TOPE DE VELOCIDAD: si la velocidad dominante (m*s/t1) pasaria de VCAP, se sube
-     * t1 hasta que caiga justo en VCAP. La DISTANCIA se conserva, porque es
-     * velocidad x tiempo; lo que baja es el pico de corriente que inyectamos en el
-     * integrador — que es de donde salen los espolones. */
-    int t1_vcap = m * s / (vcap > 0 ? vcap : 1);
-    if (t1_vcap < 1) t1_vcap = 1;
-
-    int t1 = t1_floor > t1_vcap ? t1_floor : t1_vcap;
-    if (t1 > uvm2_t1_ceiling) t1 = uvm2_t1_ceiling;
-
-    /* El divisor es la duracion REAL de la rampa, no `t1` a secas: el 6522 cuenta
-     * t1 + 1,5 en un disparo. Con uvm2_t1_extra_q8 = 0 esto es la aritmetica de
-     * siempre. */
-    int32_t den = (int32_t)t1 * 256 + uvm2_t1_extra_q8;
-    int vx = t1_round_div(dx * s, den);
-    int vy = t1_round_div(dy * s, den);
-    if (vx >  127) vx =  127;
-    if (vx < -128) vx = -128;
-    if (vy >  127) vy =  127;
-    if (vy < -128) vy = -128;
-
-    *out_vx = vx; *out_vy = vy; *out_t1 = (unsigned)t1;
-}
-
-/* Carga T1 y arranca la rampa. Con ACR = 0x80 el 6522 baja PB7 (= /RAMP) al
- * escribir T1CH y lo vuelve a subir al agotar la cuenta: la rampa se termina SOLA.
- * Por eso aqui no hay ningun `set_ramp(0, ...)` — seria escribir un pin que en este
- * modo no controlamos nosotros. */
-static void t1_start_ramp(unsigned t1, uint32_t delay)
-{
-    emit(UVM2_VIA_T1CL, t1 & 0xFFu, 0);
-    emit(UVM2_VIA_T1CH, (t1 >> 8) & 0xFFu, delay);
-}
-
-static void uvm2_draw_move_t1(int dx, int dy)
-{
-    int vx, vy; unsigned t1;
-    s_pos_x += dx;
-    s_pos_y += dy;
-    t1_ramp_params(dx, dy, &vx, &vy, &t1);
-
-    set_y(vy, UVM2_HOLD_DELAY);
-    s_y_held = 0x100 | (vy & 0xFF);
-    set_x(vx, UVM2_HOLD_DELAY);
-    /* El haz sigue apagado: un movimiento no enciende nada. La rampa corre t1
-     * cuentas y para sola. */
-    t1_start_ramp(t1, t1 + (uint32_t)uvm2_t1_blank_settle);
-
-    uvm2_stats.moves++;
-    uvm2_stats.ramp_cycles += t1;
-}
-
-static void uvm2_draw_delta_t1(int dx, int dy)
-{
-    int vx, vy; unsigned t1;
-    uint8_t lit;
-
-    s_pos_x += dx;
-    s_pos_y += dy;
-    t1_ramp_params(dx, dy, &vx, &vy, &t1);
-
-    set_y(vy, UVM2_HOLD_DELAY);
-    s_y_held = 0x100 | (vy & 0xFF);
-    set_x(vx, UVM2_HOLD_DELAY);
-
-    lit = (uint8_t)(s_pcr | UVM2_PCR_BLANK_OFF);
-
-    /* EL ORDEN IMPORTA, y en su dia estaba al reves. Encender ANTES de arrancar la
-     * rampa deja el punto quieto e iluminado durante una escritura entera: un punto
-     * brillante en el vertice de SALIDA. Se arranca la rampa y se enciende cuando el
-     * haz ya viaja — que es tambien lo que hace Ralf con su c_BlankOffDelay. */
-    t1_start_ramp(t1, (uint32_t)uvm2_t1_beam_on);
-    /* Iluminado el resto de la rampa, mas el tiempo que el haz tarda en LLEGAR
-     * despues de que los integradores paren. Los dos retardos NO son la misma
-     * cantidad: medido por biseccion en nuestra consola, encender pide 2,5 veces
-     * menos que apagar. Aqui se reutilizan las constantes de ESTA placa, que estan
-     * en sus unidades y medidas aqui; son el primer sitio donde barrer. */
-    {
-        uint32_t on = (uint32_t)uvm2_t1_beam_on;
-        emit(UVM2_VIA_PCR, lit,
-             (t1 > on ? t1 - on : 0) + (uint32_t)uvm2_t1_blank_settle);
-    }
-    emit(UVM2_VIA_PCR, s_pcr, 0);
-
-    uvm2_stats.vectors++;
-    uvm2_stats.ramp_cycles += t1;
-}
-
 void uvm2_draw_move(int dx, int dy)
 {
-    if (uvm2_beam_model) { uvm2_draw_move_t1(dx, dy); return; }
     dx += drift_fix(dx, &s_drift_ax, uvm2_drift_x);
     dy += drift_fix(dy, &s_drift_ay, uvm2_drift_y);
     uint32_t s = s_scale;
@@ -755,7 +505,6 @@ void uvm2_draw_move(int dx, int dy)
 
 void uvm2_draw_delta(int dx, int dy)
 {
-    if (uvm2_beam_model) { uvm2_draw_delta_t1(dx, dy); return; }
     uint32_t s = s_scale;
     uint8_t  lit;
 
@@ -832,14 +581,9 @@ void uvm2_draw_move_abs(int x, int y)
 static void recal_move(int dx, int dy)
 {
     set_y(dy, UVM2_HOLD_DELAY);
-    s_y_held = 0x100 | (dy & 0xFF);
     set_x(dx, UVM2_HOLD_DELAY);
-    if (uvm2_beam_model) {
-        t1_start_ramp(255u, 255u + (uint32_t)uvm2_t1_blank_settle);
-    } else {
-        set_ramp(1, s_scale);
-        set_ramp(0, UVM2_HOLD_DELAY);
-    }
+    set_ramp(1, s_scale);
+    set_ramp(0, UVM2_HOLD_DELAY);
 }
 
 static void uvm2_recalibrate(void)
@@ -882,19 +626,6 @@ void uvm2_frame_begin(void)
      * once at boot, for A/B testing. */
 #ifndef UVM2_NO_FRAME_SETUP
     via_setup();
-#else
-    /* SIN via_setup POR FRAME, el ACR se queda como lo dejo el arranque. Y el ACR es
-     * parte del modelo de haz (0x60 = /RAMP a mano, 0x80 = lo gobierna T1), asi que
-     * conmutar `uvm2_beam_model` en caliente con este define puesto dejaria al camino
-     * T1 escribiendo T1CH sin que PB7 haga nada: la rampa no arrancaria y el modelo
-     * pareceria roto cuando lo que esta viejo es un registro.
-     *
-     * Un fallo asi no se ve, se DEDUCE mal — y la deduccion que invita es "el modelo
-     * T1 no sirve". Cuesta una comparacion por frame evitarlo. */
-    if (s_acr_model != uvm2_beam_model) {
-        s_acr_model = uvm2_beam_model;
-        emit(UVM2_VIA_ACR, uvm2_beam_model ? 0x80 : 0x60, 0);
-    }
 #endif
 
     /* Reponer la intensidad ANTES de soltar la pinza, como el escritor de Ralf:
