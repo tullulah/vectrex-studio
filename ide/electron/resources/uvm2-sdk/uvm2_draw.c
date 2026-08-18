@@ -266,11 +266,7 @@ static void via_setup(void)
      *           programa la BIOS y lo que asume la capa compartida.
      * Con 0x80 los bits de PORTB que tocan PB7 dejan de llegar al pin, asi que
      * `set_ramp` no hace nada — por eso el camino compartido no lo llama. */
-#ifdef UVM2_VECTREX_DRAW
     emit(UVM2_VIA_ACR,   0x80,    0);
-#else
-    emit(UVM2_VIA_ACR,   0x60,    0);
-#endif
 
     /* Prime each sample/hold channel from a DAC value of 0: zero reference,
      * then Y, then Z.  Without this the integrators start wherever the analog
@@ -495,17 +491,14 @@ static int drift_fix(int d, int32_t *acc, int32_t cte)
 }
 
 
-#ifdef UVM2_VECTREX_DRAW
 /* ── Sumidero hacia la capa de dibujo COMPARTIDA ─────────────────────────────
  *
  * El modelo de haz ya no vive aqui: vive en `vectrex-draw`, la misma caja que enlaza
  * el firmware del cartucho propio. Lo que queda de este lado es apilar los comandos
  * que el modelo emite — que es lo unico que de verdad cambia entre las dos placas.
  *
- * EL `#ifdef` ES ANDAMIO DE MIGRACION, no un segundo modelo: existe porque la caja
- * vive en el repositorio privado y este arbol tiene que seguir compilando sin ella
- * (ver la guarda EXISTS en uvm2_pico.cmake). El paso 4 borra el camino de abajo y
- * con el este guardia. */
+ * Ya no hay segundo camino: la capa vive en `../vectrex-draw`, en este mismo arbol, y
+ * CMake la construye. El modelo de haz es UNO. */
 
 struct vx_sink {
     void *ctx;
@@ -580,11 +573,9 @@ static struct vx_timings vx_cart_timings(void)
     k.keep_lit = 0u;
     return k;
 }
-#endif /* UVM2_VECTREX_DRAW */
 
 void uvm2_draw_move(int dx, int dy)
 {
-#ifdef UVM2_VECTREX_DRAW
     {
         int32_t vx, vy; uint32_t t1;
         s_pos_x += dx;
@@ -595,30 +586,11 @@ void uvm2_draw_move(int dx, int dy)
         vx_moveto_seq(&sink, vx, vy, t1, &k);
         uvm2_stats.moves++;
         uvm2_stats.ramp_cycles += t1;
-        return;
     }
-#endif
-    dx += drift_fix(dx, &s_drift_ax, uvm2_drift_x);
-    dy += drift_fix(dy, &s_drift_ay, uvm2_drift_y);
-    uint32_t s = s_scale;
-
-    s_pos_x += dx;
-    s_pos_y += dy;
-    fixup(&dx, &dy, &s);
-
-    set_y(dy, UVM2_HOLD_DELAY);
-    set_x(dx, UVM2_HOLD_DELAY);
-
-    set_ramp(1, s);                       /* integrators run for s cycles */
-    set_ramp(0, UVM2_HOLD_DELAY);         /* and settle                   */
-
-    uvm2_stats.moves++;
-    uvm2_stats.ramp_cycles += s;
 }
 
 void uvm2_draw_delta(int dx, int dy)
 {
-#ifdef UVM2_VECTREX_DRAW
     {
         int32_t vx, vy; uint32_t t1;
         s_pos_x += dx;
@@ -629,34 +601,7 @@ void uvm2_draw_delta(int dx, int dy)
         vx_draw_line_seq(&sink, vx, vy, t1, &k);
         uvm2_stats.vectors++;
         uvm2_stats.ramp_cycles += t1;
-        return;
     }
-#endif
-    uint32_t s = s_scale;
-    uint8_t  lit;
-
-    s_pos_x += dx;
-    s_pos_y += dy;
-    fixup(&dx, &dy, &s);
-
-    set_y(dy, UVM2_HOLD_DELAY);
-    set_x(dx, UVM2_HOLD_DELAY);
-
-    lit = (uint8_t)(s_pcr | UVM2_PCR_BLANK_OFF);
-
-    /* Start the ramp, light the beam a few cycles later so the integrators are
-     * already moving, ramp for the rest, then stop and blank.  The beam stays
-     * lit briefly after the ramp stops — that trailing window is what makes the
-     * segment end cleanly instead of fading early. */
-    s_portb = (uint8_t)(s_portb & ~UVM2_PB_RAMP_OFF);
-    emit(UVM2_VIA_PORTB, s_portb, UVM2_BLANK_OFF_DELAY);
-    emit(UVM2_VIA_PCR,   lit,     s - UVM2_BLANK_OFF_DELAY);
-    s_portb = (uint8_t)(s_portb | UVM2_PB_RAMP_OFF);
-    emit(UVM2_VIA_PORTB, s_portb, UVM2_BLANK_ON_DELAY);
-    emit(UVM2_VIA_PCR,   s_pcr,   0);
-
-    uvm2_stats.vectors++;
-    uvm2_stats.ramp_cycles += s;
 }
 
 void uvm2_draw_move_abs(int x, int y)
@@ -709,8 +654,11 @@ static void recal_move(int dx, int dy)
 {
     set_y(dy, UVM2_HOLD_DELAY);
     set_x(dx, UVM2_HOLD_DELAY);
-    set_ramp(1, s_scale);
-    set_ramp(0, UVM2_HOLD_DELAY);
+    /* La rampa la termina T1, no PORTB: con ACR = 0x80 los bits de PORTB que tocan PB7
+     * ya no llegan al pin, asi que un `set_ramp` aqui seria un no-op silencioso y el
+     * barrido a los railes —que es TODO el ejercicio de Recalibrate— no ocurriria. */
+    emit(UVM2_VIA_T1CL, 255u, 0);
+    emit(UVM2_VIA_T1CH, 0u, 255u + UVM2_BLANK_ON_DELAY);
 }
 
 static void uvm2_recalibrate(void)

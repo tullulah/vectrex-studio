@@ -1,0 +1,36 @@
+# La capa de dibujo COMPARTIDA por los dos cartuchos.
+#
+# Existe para que haya UNA sola implementacion del modelo de haz. Hasta ahora habia dos:
+# la de vinterface.rs (Rust, firmware del cartucho propio) y la de uvm2_draw.c (C, dentro
+# de la imagen del multicart de Ralf). Duplicarlas garantiza que cada hallazgo haya que
+# descubrirlo dos veces — la `Recalibrate` de la BIOS hubo que transcribirla literalmente
+# dos veces el mismo dia.
+#
+# Se compila de DOS maneras desde el mismo codigo:
+#   rlib      -> lo enlaza el firmware, como una dependencia normal
+#   staticlib -> libvectrex_draw.a, que CMake mete en la imagen .um2
+#
+# El firmware de Ralf NO se toca: la .um2 sigue siendo una imagen autocontenida que carga
+# su menu; solo que enlaza esto en vez de tener su propia capa de dibujo.
+# INDEPENDIENTE del workspace del repositorio. Sin esto cargo la da por miembro del
+# workspace raiz y se niega a compilarla ("believes it's in a workspace when it's not").
+# Es una caja bare-metal con su propio objetivo; no tiene por que compartir perfil ni
+# lockfile con las herramientas del IDE.
+[workspace]
+
+[package]
+name = "vectrex-draw"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+# SOLO rlib. El envoltorio C y el manejador de panico viven en `cabi/`, porque una
+# staticlib EXIGE manejador y eso choca con el panic-probe del firmware al enlazar el
+# rlib. Separarlos es lo que permite que las dos placas usen el mismo modelo.
+crate-type = ["rlib"]
+
+[profile.release]
+# Sin desenrollado: no hay a quien propagar un panico dentro de una imagen bare-metal, y
+# el andamiaje de unwinding arrastra simbolos que el enlace en C no sabe resolver.
+panic = "abort"
+opt-level = "s"

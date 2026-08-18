@@ -129,36 +129,40 @@ target_include_directories(${UVM2_NAME} PRIVATE ${UVM2_SDK_DIR})
 # PSRAM. Ver el bloque de uvm2_psram_probe_bootrom(). pico_stdlib no lo arrastra.
 target_link_libraries(${UVM2_NAME} pico_stdlib pico_multicore hardware_dma hardware_pio hardware_flash ${UVM2_GAME_LIBS})
 
-# ── La capa de dibujo COMPARTIDA con el cartucho propio ──────────────────────
+# ── La capa de dibujo COMPARTIDA por los dos cartuchos ───────────────────────
 #
-# Una sola implementacion del modelo de haz para las dos placas, compilada como
-# staticlib de Rust. Hasta ahora habia dos —vinterface.rs y uvm2_draw.c— y eso
-# garantiza que cada hallazgo haya que descubrirlo dos veces.
+# UNA sola implementacion del modelo de haz: la misma caja Rust que enlaza el firmware
+# del cartucho propio, aqui como staticlib dentro de la imagen. Antes vivia en el
+# repositorio privado y esto llevaba una guarda `EXISTS` para que el arbol publico
+# siguiera compilando sin ella — pero esa guarda dejaba VIVA una segunda capa de dibujo,
+# que es justo lo que se estaba quitando. Con la caja aqui, el arbol compila solo y no
+# hay segunda implementacion que mantener.
 #
-# CON GUARDA `EXISTS` A PROPOSITO: la caja vive en el repositorio PRIVADO, y este
-# arbol tiene que seguir compilando sin el. Sin la libreria, la imagen sale con la
-# capa de dibujo de siempre.
-#
-# La ABI esta medida, no supuesta: esta imagen se compila -mfloat-abi=softfp, asi
-# que la caja se compila para thumbv8m.main-none-eabi (coma flotante software) y su
-# API es entera pura. El enlazador compara Tag_ABI_VFP_args y protesta aunque no
-# cruce ni un flotante.
-# NO va en la CACHE. Una entrada de cache SOBREVIVE al reconfigure, asi que cuando la
-# ruta de la libreria cambio (al separar cabi/) los arboles de build existentes siguieron
-# apuntando a la vieja — y el sintoma fue `undefined reference to vx_moveto_seq` en el
-# camino VPy mientras el de pico-sdk enlazaba bien, porque ese borra su build dir. Media
-# hora para algo que no estaba en el codigo. Con `if(NOT DEFINED)` un -D del usuario
-# sigue mandando, pero el valor por defecto se recalcula siempre.
-if(NOT DEFINED VECTREX_DRAW_LIB)
-    set(VECTREX_DRAW_LIB "$ENV{HOME}/projects/vectrex-arcade-private/hardware/vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a")
+# CMake la CONSTRUYE, no la busca hecha: un .a que hay que acordarse de recompilar a mano
+# se queda viejo en silencio, y un binario viejo ya nos costo una tarde entera.
+set(VECTREX_DRAW_DIR "${CMAKE_CURRENT_LIST_DIR}/../vectrex-draw")
+set(VECTREX_DRAW_TARGET thumbv8m.main-none-eabi)   # coma flotante SOFTWARE: esta imagen
+                                                   # se compila -mfloat-abi=softfp y el
+                                                   # enlazador compara Tag_ABI_VFP_args
+                                                   # aunque no cruce ningun flotante
+set(VECTREX_DRAW_LIB
+    "${VECTREX_DRAW_DIR}/cabi/target/${VECTREX_DRAW_TARGET}/release/libvectrex_draw_cabi.a")
+
+find_program(CARGO_EXE cargo)
+if(NOT CARGO_EXE)
+    message(FATAL_ERROR
+        "No encuentro `cargo`. La capa de dibujo compartida es Rust: "
+        "instala rustup y `rustup target add ${VECTREX_DRAW_TARGET}`.")
 endif()
-if(EXISTS ${VECTREX_DRAW_LIB})
-    message(STATUS "capa de dibujo compartida: ${VECTREX_DRAW_LIB}")
-    target_link_libraries(${UVM2_NAME} ${VECTREX_DRAW_LIB})
-    target_compile_definitions(${UVM2_NAME} PRIVATE UVM2_VECTREX_DRAW=1)
-else()
-    message(STATUS "sin libvectrex_draw.a — capa de dibujo local")
-endif()
+
+add_custom_target(vectrex_draw_lib ALL
+    COMMAND ${CARGO_EXE} build --release --target ${VECTREX_DRAW_TARGET}
+            --manifest-path "${VECTREX_DRAW_DIR}/cabi/Cargo.toml"
+    BYPRODUCTS ${VECTREX_DRAW_LIB}
+    COMMENT "capa de dibujo compartida (vectrex-draw)")
+add_dependencies(${UVM2_NAME} vectrex_draw_lib)
+target_link_libraries(${UVM2_NAME} ${VECTREX_DRAW_LIB})
+target_compile_definitions(${UVM2_NAME} PRIVATE UVM2_VECTREX_DRAW=1)
 
 # Keep the SVC handler alive. Nothing in C calls uvm2_svc_handler — it is reached
 # only through the vector table — so --gc-sections drops its section, and the
