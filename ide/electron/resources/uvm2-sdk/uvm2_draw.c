@@ -515,9 +515,18 @@ void vx_draw_line_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
                       const struct vx_timings *);
 void vx_ramp_params(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
 
-/* El retardo llega en Q8 de ciclo de E; el campo de comando es entero. Se redondea al
- * MAS CERCANO, no truncando: truncar sesga todos los huecos hacia abajo y eso es
- * exactamente como se pierde medio ciclo por escritura. */
+/* El retardo llega en Q8 de ciclo de E; el campo de comando es entero, asi que hay que
+ * bajar de resolucion. SE TRUNCA, no se redondea.
+ *
+ * Redondear al mas cercano parece lo correcto —truncar sesga los huecos hacia abajo— y
+ * por eso lo puse asi. Pero NUESTRO CARTUCHO TRUNCA: `e6809_raw` hace `cycles / 256` y
+ * `stream_park(n - 1)`, asi que con E6809_SCALE_Q8 = 64 un hueco `e(2)` vale 128 Q8 y
+ * alli espera CERO. Redondeando, aqui esperaba UNO. Son ~6 huecos por vector: con 300
+ * vectores, unos 1.800 ciclos de E por frame de mas — un 6% del presupuesto de 30.000,
+ * y en una placa que ya no llegaba.
+ *
+ * Entre "lo correcto en abstracto" y "lo que hace la otra placa", manda lo segundo: dos
+ * implementaciones del mismo modelo que redondean distinto son dos modelos. */
 static void vxs_emit(void *ctx, uint32_t reg, uint32_t data, uint32_t delay_q8)
 {
     (void)ctx;
@@ -526,7 +535,7 @@ static void vxs_emit(void *ctx, uint32_t reg, uint32_t data, uint32_t delay_q8)
      * siguiente escritura — un fallo que solo aparece de vez en cuando, que es el peor
      * tipo. */
     if (reg == UVM2_VIA_PORTA) { s_porta = (uint8_t)data; s_porta_stale = 0; }
-    emit(reg, data, (delay_q8 + 128u) / 256u);
+    emit(reg, data, delay_q8 / 256u);
 }
 
 /* AQUI NO SE SONDEA. En el cartucho propio esto pregunta al flag T1 de la VIA, como la
@@ -540,7 +549,7 @@ static void vxs_wait_ramp(void *ctx, uint32_t t1, uint32_t extra_q8)
      * un comando extra solo para esperar seria escribir a la VIA sin motivo. */
     if (s_count > 0) {
         uint32_t c = s_cmds[s_buf][s_count - 1];
-        uint32_t d = (c >> 20) + t1 + (extra_q8 + 128u) / 256u;
+        uint32_t d = (c >> 20) + t1 + extra_q8 / 256u;
         if (d > 4095u) d = 4095u;      /* el campo son 12 bits */
         s_cmds[s_buf][s_count - 1] = (c & 0x000FFFFFu) | (d << 20);
     }
@@ -557,17 +566,32 @@ static struct vx_sink vx_cart_sink(void)
     return s;
 }
 
-/* Los huecos de ESTA placa. `e6809_q8` a 256 = sin descuento: el knob que lo recorta
- * (E6809_SCALE_Q8 = 64) se midio en NUESTRA consola y contra NUESTRO camino de bus, asi
- * que importarlo aqui seria afinar a ciegas. Ver `una-consola-no-es-evidencia`. */
+/* Los huecos, con los MISMOS valores que el cartucho propio.
+ *
+ * Antes estaban puestos a los de Ralf (e6809 sin descuento, 3 y 16 ciclos de E) con el
+ * razonamiento de que importar los nuestros seria afinar a ciegas. El resultado fue peor
+ * que cualquiera de las dos opciones: NUESTRO modelo de velocidad con SUS tiempos, una
+ * combinacion que no habia probado nadie. Si se unifica, se unifica entero — y si luego
+ * hay que separar algo, se separa con una medida delante.
+ *
+ * Equivalencias, del firmware:
+ *   E6809_SCALE_Q8    = 64        -> tal cual, ya es Q8
+ *   Y_MUX_ECYC        = 14 E
+ *   BEAM_ON_DELAY_CYC = 200 CPU   -> 2 ciclos de E   (CPU_PER_ECYCLE = 100)
+ *   BLANK_SETTLE_CYC  = 1100 CPU  -> 11 ciclos de E
+ *   BEAM_KEEP_LIT     = 0
+ *
+ * SIGUEN SIENDO DE OTRA CONSOLA. `una-consola-no-es-evidencia`: se midieron en la
+ * nuestra, contra nuestro camino de bus. Son el punto de partida del barrido, no el
+ * final — pero al menos ahora es UNA configuracion coherente. */
 static struct vx_timings vx_cart_timings(void)
 {
     struct vx_timings k;
-    k.e6809_q8 = 256u;
-    k.y_mux_q8 = UVM2_HOLD_MAX * 256u;
+    k.e6809_q8 = 64u;
+    k.y_mux_q8 = 14u * 256u;
     k.moveto_settle_q8 = 0u;
-    k.beam_on_q8 = UVM2_BLANK_OFF_DELAY * 256u;
-    k.blank_settle_q8 = UVM2_BLANK_ON_DELAY * 256u;
+    k.beam_on_q8 = 2u * 256u;
+    k.blank_settle_q8 = 11u * 256u;
     k.keep_lit = 0u;
     return k;
 }
