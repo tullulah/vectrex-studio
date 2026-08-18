@@ -38,6 +38,23 @@ SECTIONS {
         *(.text.*)
         *(.rodata)
         *(.rodata.*)
+
+        /* C++ static constructors. A freestanding image has no C runtime to run
+         * these, so rp2350_start.s walks the array before main(). Without it a
+         * C++ game whose globals have constructors starts with them unbuilt —
+         * it links and boots, then misbehaves far from the cause. KEEP, or
+         * --gc-sections drops the array entirely.
+         *
+         * FALTABA AQUI, y la cabecera de rp2350_game_ram.ld ya afirmaba que los dos
+         * scripts eran identicos. No lo eran: rp2350_start.s referencia estos dos
+         * simbolos siempre, asi que todo juego enlazado con este script moria con
+         * "undefined reference to __init_array_start" — un mensaje que no habla de
+         * memoria y manda a buscar el fallo donde no esta. */
+        . = ALIGN(4);
+        __init_array_start = .;
+        KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
+        KEEP(*(.init_array))
+        __init_array_end = .;
         . = ALIGN(4);
     } > GAME_RAM
 
