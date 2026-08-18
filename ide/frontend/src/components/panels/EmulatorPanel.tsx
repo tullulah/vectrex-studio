@@ -274,6 +274,28 @@ const EmulatorOutputInfo: React.FC = () => {
   );
 };
 
+// Romset for the simulated card. The ports read `roms/<STEM>.ZIP` off the SD at
+// boot instead of embedding the ROM (MAME model), so the emulator has to hand the
+// same bytes over — otherwise the game boots, finds no romset and says so, which is
+// correct behaviour but looks like a bug.
+//
+// Returns undefined when there is no romset: that is not an error here. A port that
+// still embeds its ROM ignores this entirely.
+async function loadSimRomZip(binPath?: string | null): Promise<Uint8Array | undefined> {
+  if (!binPath) return undefined;
+  const stem = binPath.split(/[/\\]/).pop()?.replace(/\.bin$/i, '');
+  if (!stem) return undefined;
+  const res = await (window as any).electronAPI?.sdRomZip?.(stem).catch(() => null);
+  if (!res?.ok || !res.base64) {
+    console.log(`[EmulatorPanel] No romset for "${stem}" (${res?.error ?? 'no ipc'})` +
+      (res?.have?.length ? ` — roms/ has: ${res.have.join(', ')}` : '') +
+      ` — the game will report it if it needs one.`);
+    return undefined;
+  }
+  console.log(`[EmulatorPanel] \u2713 Romset ${res.name} (${res.size}b) from ${res.dir}`);
+  return Uint8Array.from(atob(res.base64), c => c.charCodeAt(0));
+}
+
 export const EmulatorPanel: React.FC = () => {
   const status = useEmulatorStore(s => s.status);
   const setStatus = useEmulatorStore(s => s.setStatus);
@@ -2728,7 +2750,8 @@ export const EmulatorPanel: React.FC = () => {
         }
 
         const sdSim1 = await (window as any).electronAPI?.sdSimList?.().catch(() => null);
-        emuCore.loadArm(romData, elfData, canvasRef.current ?? undefined, sdSim1?.files ?? [], sdSim1?.previews ?? {});
+        const romZip1 = await loadSimRomZip(romPath);
+        emuCore.loadArm(romData, elfData, canvasRef.current ?? undefined, sdSim1?.files ?? [], sdSim1?.previews ?? {}, romZip1);
         console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
 
         // Clear the canvas before first rp2350 frame
@@ -3145,7 +3168,8 @@ export const EmulatorPanel: React.FC = () => {
             } else {
               // Pass the shared canvas so Rp2350System renders directly to it
               const sdSim2 = await (electronAPI as any)?.sdSimList?.().catch(() => null);
-              emuCore.loadArm!(bin, elf, canvasRef.current ?? undefined, sdSim2?.files ?? [], sdSim2?.previews ?? {});
+              const romZip2 = await loadSimRomZip(payload.binPath);
+              emuCore.loadArm!(bin, elf, canvasRef.current ?? undefined, sdSim2?.files ?? [], sdSim2?.previews ?? {}, romZip2);
               console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
             }
 

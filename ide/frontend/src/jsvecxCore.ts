@@ -548,7 +548,7 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
   }
 
   /** Load an ARM binary (rp2350 target). Switches the active emulation system to Rp2350System. */
-  loadArm(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement, simSdFiles?: string[], simSdPreviews?: Record<string, string>): void {
+  loadArm(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement, simSdFiles?: string[], simSdPreviews?: Record<string, string>, simRomZip?: Uint8Array): void {
     console.log(`[loadArm] START bin=${bin.length}b elf=${elf?.length ?? 0}b canvas=${canvas ? `${canvas.width}x${canvas.height}` : 'none'} sdFiles=${simSdFiles?.length ?? 0} previews=${simSdPreviews ? Object.keys(simSdPreviews).length : 0}`);
     if (!this._rp2350System) {
       this._rp2350System = new Rp2350System();
@@ -557,6 +557,11 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     // before init so the SD_FILE_* / DRAW_SD_PREVIEW traps see them.
     if (simSdFiles) this._rp2350System.setSimSdFiles(simSdFiles);
     if (simSdPreviews) this._rp2350System.setSimSdPreviews(simSdPreviews);
+    // Romset (MAME model): ports no longer embed the ROM, they read
+    // `roms/<STEM>.ZIP` off the card. The simulated card already lives in
+    // ~/VectrexStudio/sd, so the zip belongs in ~/VectrexStudio/sd/roms/ —
+    // same layout as the real one, nothing new to learn.
+    this._rp2350System.setRomZip(simRomZip ?? null);
     // Two rp2350 image kinds, told apart by the 'VPy2' header entry pointer:
     //   • flash/XIP-linked (VPy inline mode): entry in flash 0x1020xxxx → init()
     //     runs it with PC-symbol traps.

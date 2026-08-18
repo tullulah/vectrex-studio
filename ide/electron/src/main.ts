@@ -2331,6 +2331,37 @@ ipcMain.handle('sd:simList', async () => {
   }
 });
 
+// Romset for the simulated SD (MAME model): ports no longer embed the ROM, they
+// read `roms/<STEM>.ZIP` off the card at boot. The layout mirrors the real card
+// exactly — ~/VectrexStudio/sd/roms/redalarm.zip is /Volumes/<SD>/roms/redalarm.zip
+// — so there is one convention to learn, not two.
+//
+// The match is by STEM, the same rule sd.rs uses on hardware (REDALARM.BIN looks
+// for REDALARM.ZIP). Case-insensitive here because macOS filenames are, and the
+// card's FAT names are uppercase; matching case-sensitively would find nothing and
+// look like a missing romset.
+ipcMain.handle('sd:romZip', async (_e, stem: string) => {
+  if (!stem) return { ok: false, error: 'no_stem' };
+  try {
+    const dir = join(os.homedir(), 'VectrexStudio', 'sd', 'roms');
+    const want = stem.toLowerCase() + '.zip';
+    let entries: string[];
+    try {
+      entries = await fs.readdir(dir);
+    } catch {
+      return { ok: false, error: 'no_roms_dir', dir };
+    }
+    const hit = entries.find(f => f.toLowerCase() === want);
+    // Report what IS there when the match fails: "no romset" and "the romset is
+    // named something else" are different problems and look identical otherwise.
+    if (!hit) return { ok: false, error: 'not_found', dir, want, have: entries.filter(f => f.toLowerCase().endsWith('.zip')) };
+    const buf = await fs.readFile(join(dir, hit));
+    return { ok: true, dir, name: hit, size: buf.length, base64: buf.toString('base64') };
+  } catch (e:any) {
+    return { ok: false, error: e?.message || 'romzip_failed' };
+  }
+});
+
 // Get file info (mtime, size) without reading content
 ipcMain.handle('file:getInfo', async (_e, path: string) => {
   if (!path) return { error: 'no_path' };

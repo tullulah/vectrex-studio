@@ -43,7 +43,7 @@ export interface IEmulatorCore {
   getLastDebugOutput?(): string;
 
   /** Load an ARM binary (rp2350 target). Switches the active backend to Rp2350System. */
-  loadArm?(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement, simSdFiles?: string[], simSdPreviews?: Record<string, string>): void;
+  loadArm?(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement, simSdFiles?: string[], simSdPreviews?: Record<string, string>, simRomZip?: Uint8Array): void;
 
   /** Load a `.um2` image (uvm2 target). Switches the active backend to Uvm2System. */
   loadUvm2?(um2: Uint8Array, canvas?: HTMLCanvasElement): void;

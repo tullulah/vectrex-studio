@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // setVectorMode legacy removed
   listSources: (args?: { limit?: number }) => ipcRenderer.invoke('list:sources', args) as Promise<{ ok?:boolean; sources?: Array<{ path:string; kind:'vpy'|'asm'; size:number; mtime:number }> }> ,
   sdSimList: () => ipcRenderer.invoke('sd:simList') as Promise<{ ok?: boolean; dir?: string; files?: string[]; previews?: Record<string, string>; error?: string }>,
+  sdRomZip: (stem: string) => ipcRenderer.invoke('sd:romZip', stem) as Promise<{ ok?: boolean; dir?: string; name?: string; size?: number; base64?: string; error?: string; want?: string; have?: string[] }>,
   vrecCompile: (vrecPath: string) => ipcRenderer.invoke('vrec:compile', vrecPath) as Promise<{ ok?: boolean; vrbPath?: string; error?: string }>,
   // Disassemble a ROM snapshot (base64) using buildtools/vpy_disasm
   disassembleSnapshot: (args: { base64: string; startHex?: string; binPath?: string }) => ipcRenderer.invoke('tools:disassembleSnapshot', args) as Promise<{ ok: boolean; output?: string; error?: string; snapshotPath?: string; dissPath?: string; message?: string; stderr?: string }>,
