@@ -138,6 +138,11 @@ int uvm2_psram_probe(void);
  * anterior — se sale reseteando. Ver el comentario largo en el .c. */
 void uvm2_psram_hold_cs(int asertado);
 
+/* Repite READ_ID SIN PARAR para que el reloj se pueda medir en continua en la pata 6
+ * de U3: ~1,6 V = conmuta; 0 o 3,3 V fijos = el QMI no releojea. No vuelve ni dibuja
+ * (la pantalla en negro ES la señal); se sale reseteando. */
+void uvm2_psram_hammer(void);
+
 /* La misma pregunta, hablandole en QPI. Sin bootrom: no se puede colgar. */
 int uvm2_psram_probe_qpi(void);
 

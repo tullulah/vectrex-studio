@@ -170,6 +170,41 @@ void uvm2_psram_hold_cs(int asertado)
     uvm2_psram_result.csr_after_cmd = qmi_hw->direct_csr;   /* releido, no supuesto */
 }
 
+/* ---- EL RELOJ, TAMBIEN PARA EL POLIMETRO ----------------------------------
+ *
+ * Sabemos (2026-08-19) que el QMI conduce CS1 hasta la pata 1 de U3: asertado da 0 V
+ * y suelto 3,3 V. Lo que NADIE ha mirado es si el RELOJ llega mientras tanto. Si SCK
+ * no conmuta, el chip no puede contestar por muy bien que le llegue el select — y eso
+ * explicaria todo sin necesidad de que el chip este muerto.
+ *
+ * TAMBIEN CON POLIMETRO, y sin osciloscopio: una transaccion suelta dura microsegundos
+ * y no la ve un tester, pero repitiendola SIN PARAR el reloj pasa la mitad del tiempo
+ * alto, y en continua eso se lee como ~1,65 V. Parado se lee un nivel fijo (0 o 3,3).
+ *
+ *     ~1,6 V en la pata 6 de U3  -> el reloj SI le llega. El chip recibe select y
+ *                                   reloj y aun asi calla: el sospechoso es U3.
+ *     0 o 3,3 V fijos            -> el QMI no esta relojeando. El fallo es de
+ *                                   configuracion del QMI, no del chip.
+ *
+ * NO DIBUJA NADA a proposito: la pantalla se queda negra, y eso es la señal de que
+ * esta martilleando. Se sale reseteando.
+ */
+void uvm2_psram_hammer(void)
+{
+    const uint8_t cmd[4] = { CMD_READ_ID, 0, 0, 0 };
+    uint8_t id[2];
+
+    configure_cs1_pad();
+    for (;;) {
+        qmi_hw->direct_csr |= QMI_DIRECT_CSR_EN_BITS;
+        uint32_t spins = 0;
+        while ((qmi_hw->direct_csr & QMI_DIRECT_CSR_BUSY_BITS) && ++spins < QMI_SPIN_LIMIT) { }
+        cs1_xfer(cmd, 4, id, 2);
+        qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_ASSERT_CS1N_BITS;
+        qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_EN_BITS;
+    }
+}
+
 /* ---- LA SONDA DEL BOOTROM ---------------------------------------------------
  *
  * QUE LE FALTABA A LA OTRA. La sonda de abajo le habla al chip por modo directo,
