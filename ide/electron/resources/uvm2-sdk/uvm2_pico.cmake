@@ -98,8 +98,18 @@ target_compile_definitions(${UVM2_NAME} PRIVATE UVM2_PICO_RUNTIME=1)
 # declarar y falla en aae-src/cpuintrf.c. Como opcion cruda llega intacto, y
 # ademas cada define es un unico elemento de argv, asi que las llaves y los
 # parentesis no pasan por ningun shell.
+# SOLO PARA C. El target lleva ficheros en ensamblador (uvm2_svc_entry.s), y el
+# ensamblador se atraganta: con `-include cabecera.h` se pone a leer C y suelta
+# "bad instruction: typedef signed char __int8_t". Lo mismo con un define que lleve
+# parentesis.
 foreach(def ${UVM2_GAME_DEFS})
-    target_compile_options(${UVM2_NAME} PRIVATE "-D${def}")
+    target_compile_options(${UVM2_NAME} PRIVATE "$<$<COMPILE_LANGUAGE:C>:-D${def}>")
+endforeach()
+
+# Opciones CRUDAS del juego (no defines): `-include algo.h`, avisos que hay que callar...
+# Los puertos AAE necesitan `-include src/aae_compat.h`, que no cabe como define.
+foreach(opt ${UVM2_GAME_OPTS})
+    target_compile_options(${UVM2_NAME} PRIVATE "$<$<COMPILE_LANGUAGE:C>:${opt}>")
 endforeach()
 
 # DESACTUALIZADO EN UN PUNTO: lo de "nunca escribimos el consumidor de core 1"

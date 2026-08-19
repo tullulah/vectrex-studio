@@ -49,11 +49,30 @@ MEMORY
      * salta a la direccion cero — HardFault con INVSTATE. Ese era el "PC 11000199 y luego
      * negro" de toda la tarde.
      *
-     * Aqui abajo la SRAM empieza en 0x20040000 y no en 0x20000000: el CARGADOR sigue
-     * residente en la parte baja, y su manejador de fallos es lo unico que puede contar
-     * que ha pasado. Machacarlo con el .bss del payload nos dejaria otra vez a oscuras. */
-    SRAM(rwx) : ORIGIN = 0x20040000, LENGTH = 256k
-    /* OJO CON QUE SE MUEVE AQUI Y QUE NO.
+     * DONDE EMPIEZA ESTA REGION IMPORTA. El cargador sigue residente en la parte baja de
+     * la SRAM y lleva el payload EMPOTRADO dentro: con 280 KB de juego, su imagen llega
+     * hasta ~0x20049000. Si .data cayera en 0x20040000, el cargador se estaria pisando a si
+     * mismo mientras copia — leyendo de un array que acaba de machacar.
+     *
+     * 0x20060000 deja 384 KB para el cargador y 128 KB aqui, y por arriba se para en
+     * 0x20080000, donde empiezan los scratch y la pila. */
+    SRAM(rwx) : ORIGIN = 0x20060000, LENGTH = 128k
+    /* .bss VUELVE A PSRAM, y .data se queda en SRAM. Ojo con el porque, que cambio.
+     *
+     * Anoche mande .bss a SRAM creyendo que el borrado del crt0 —decenas de KB escritos en
+     * el chip del que se ejecuta— era lo que dejaba muda la PSRAM. Despues resulto que la
+     * causa era OTRA: el chip select es un GPIO del banco 0 y runtime_init_early_resets lo
+     * borraba. Corregido eso, el .bss en PSRAM no tiene por que molestar; ayudaba solo
+     * porque reducia el trafico y asi tardaba mas en notarse.
+     *
+     * Y no es opcional: el .bss de aztarac son ~830 KB. En los 520 KB de SRAM del RP2350 no
+     * cabe de ninguna manera ("region SRAM overflowed by 576712 bytes"), asi que para los
+     * juegos que motivaron todo esto la unica opcion es la PSRAM.
+     *
+     * .data SI se queda en SRAM, y esa razon no ha cambiado: los mutex del SDK se toman con
+     * ldaexb/strexb y los accesos exclusivos NO funcionan sobre memoria XIP.
+     *
+     * OJO CON QUE SE MUEVE AQUI Y QUE NO.
      *
      * .bss SI: el crt0 lo pone a cero el mismo, no lo copia de ningun sitio.
      * .data NO: el crt0 de una imagen `no_flash` NO TIENE bucle de copia — va del CPUID
@@ -224,7 +243,7 @@ SECTIONS
     .uninitialized_data (NOLOAD): {
         . = ALIGN(4);
         *(.uninitialized_data*)
-    } > SRAM
+    } > RAM
     /* __etext is (for backwards compatibility) the name of the .data init source pointer (...) */
     __etext = LOADADDR(.data);
 
@@ -236,7 +255,7 @@ SECTIONS
         *(.tcommon)
 
         __tls_end = .;
-    } > SRAM
+    } > RAM
 
     .bss (NOLOAD) : {
         . = ALIGN(4);
@@ -248,14 +267,14 @@ SECTIONS
         *(.sbss*)
         . = ALIGN(4);
         __bss_end__ = .;
-    } > SRAM
+    } > RAM
 
     .heap (NOLOAD):
     {
         __end__ = .;
         end = __end__;
         KEEP(*(.heap*))
-    } > SRAM
+    } > RAM
     /* historically on GCC sbrk was growing past __HeapLimit to __StackLimit, however
        to be more compatible, we now set __HeapLimit explicitly to where the end of the heap is */
     /* El monton y la pila viven en SRAM desde que .data/.bss se mudaron; calcular estos
