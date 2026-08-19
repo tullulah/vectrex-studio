@@ -929,6 +929,40 @@ void uvm2_frame_end(void)
         uvm2_stats.overrun++;
         s_frame_cycles = cycles;
     }
+
+    /* EL PERIODO REAL DEL FRAME, en microsegundos de reloj de pared.
+     *
+     * Se toma al FINAL, de un frame_end al siguiente, para que incluya lo unico que no mide
+     * nadie: el tiempo que el juego pasa emulando entre frames. Ver el comentario de
+     * us_frame_* en uvm2_bus.h.
+     *
+     * TIMELR del TIMER0 en crudo (0x400B000C): 32 bits de microsegundos, de sobra para una
+     * diferencia entre frames, y sin arrastrar pico/time.h a un fichero que vive en SRAM.
+     *
+     * Los 60 primeros frames NO cuentan: al arrancar hay carga de ROM, pantallas de
+     * atencion y el propio cargador, y esa basura se queda en el minimo y el maximo para
+     * siempre. Ya paso una vez con las estadisticas sembradas desde el arranque. */
+    {
+        static uint32_t s_us_prev;
+        static uint32_t s_calentando = 60;
+        const uint32_t ahora = *(volatile uint32_t *)0x400B000Cu;
+
+        if (s_calentando) {
+            s_calentando--;
+            uvm2_stats.us_frame_min = 0xFFFFFFFFu;
+        } else {
+            const uint32_t d = ahora - s_us_prev;
+            uvm2_stats.us_frame_last = d;
+            uvm2_stats.frames_medidos++;
+            if (d < uvm2_stats.us_frame_min) uvm2_stats.us_frame_min = d;
+            if (d > uvm2_stats.us_frame_max) {
+                uvm2_stats.us_frame_max     = d;
+                uvm2_stats.vectores_en_max  = uvm2_stats.vectors_last;
+            }
+            if (d > 20500u) uvm2_stats.frames_lentos++;
+        }
+        s_us_prev = ahora;
+    }
 }
 
 uint32_t uvm2_frame_bus_cycles(void) { return s_frame_cycles; }

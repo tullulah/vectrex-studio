@@ -189,6 +189,29 @@ typedef struct {
     uint32_t us_input;      /* core 1: leyendo mandos y ejes               */
     uint32_t us_rest;       /* core 1: todo lo demas del bucle             */
     uint32_t us_wait;       /* core 1: esperando a que core 0 publique     */
+
+    /* ── TIEMPO REAL POR FRAME ───────────────────────────────────────────────
+     *
+     * PARA QUE. El relleno de uvm2_frame_end se calcula con los CICLOS DE BUS DEL DIBUJO,
+     * asi que lo que tarda la emulacion del juego NO entra en la cuenta: el periodo del
+     * frame acaba siendo `emulacion + 20 ms` en vez de `maximo(20 ms, todo)`. Lo que cuesta
+     * la CPU emulada se SUMA al frame en lugar de absorberse.
+     *
+     * Consecuencia: el refresco real baja de 50 Hz y ademas VARIA con la escena — pocas
+     * rocas, frame corto; muchas rocas, frame largo. Eso son tirones, y ningun contador de
+     * los que hay lo ve: `overrun` mide solo el flujo de bus (13 de 3677 con la pantalla
+     * temblando), y `bus_cycles` tampoco, porque la emulacion ocurre ENTRE frames.
+     *
+     * us_frame_* es el periodo COMPLETO, medido de un frame_end al siguiente. Si el modelo
+     * es correcto: min ~20000 en escenas vacias, max muy por encima con muchos vectores, y
+     * vectores_en_max alto. Si sale todo clavado a 20000, el modelo es falso y hay que
+     * buscar en otro sitio. */
+    uint32_t us_frame_last;
+    uint32_t us_frame_min;
+    uint32_t us_frame_max;
+    uint32_t vectores_en_max;   /* vectores del frame mas lento: liga tiempo con escena */
+    uint32_t frames_lentos;     /* periodos por encima de 20,5 ms */
+    uint32_t frames_medidos;
 } uvm2_stats_t;
 
 extern uvm2_stats_t uvm2_stats;
@@ -197,7 +220,24 @@ extern uvm2_stats_t uvm2_stats;
  * frame pacing must subtract these or it overshoots by whatever they cost. */
 extern uint32_t uvm2_single_cycles;
 
-#define UVM2_CYCLES_PER_FRAME  30000u   /* 1.5 MHz / 50 Hz */
+/* EL REFRESCO NO ES UNA LEY, ES UNA COSTUMBRE.
+ *
+ * El Vectrex no tiene vsync: es un monitor VECTORIAL y se redibuja cuando se le manda. Los
+ * 50 Hz salen de que la BIOS hace eso, no de la electronica. Y las recreativas vectoriales
+ * no tenian refresco fijo — Asteroids redibujaba en cuanto terminaba su lista, asi que se
+ * apagaba un poco cuando la pantalla se llenaba de rocas.
+ *
+ * Aqui se puede cambiar: 25000 = 60 Hz, 30000 = 50 Hz. Con el dibujo de asteroids en 11745
+ * ciclos, a 60 sigue sobrando sitio. Y es la prueba directa de si el problema es que
+ * FRENAMOS: si a 60 va mejor, lo era.
+ *
+ * OJO al cambiarlo: refrescar mas a menudo tambien ILUMINA MAS (mas pasadas por segundo
+ * sobre el mismo fosforo), asi que la intensidad puede necesitar ajuste, y ese ajuste no
+ * debe confundirse con el resultado de la prueba. */
+#ifndef UVM2_HZ
+#define UVM2_HZ 50u
+#endif
+#define UVM2_CYCLES_PER_FRAME  (1500000u / UVM2_HZ)
 
 #ifdef __cplusplus
 }
