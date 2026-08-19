@@ -235,9 +235,17 @@ extern uint32_t uvm2_single_cycles;
  * sobre el mismo fosforo), asi que la intensidad puede necesitar ajuste, y ese ajuste no
  * debe confundirse con el resultado de la prueba. */
 #ifndef UVM2_HZ
-#define UVM2_HZ 50u
+#define UVM2_HZ 50
 #endif
-#define UVM2_CYCLES_PER_FRAME  (1500000u / UVM2_HZ)
+
+/* UVM2_HZ = 0 significa SIN LIMITE: se presenta en cuanto la lista esta hecha, como la
+ * recreativa. Entonces no hay periodo fijo que definir, y el 1 es solo para que la division
+ * no reviente en tiempo de compilacion; nadie lo usa, porque el relleno se compila fuera. */
+#if UVM2_HZ == 0
+#define UVM2_CYCLES_PER_FRAME  (1500000u / 1u)
+#else
+#define UVM2_CYCLES_PER_FRAME  (1500000u / (unsigned)UVM2_HZ)
+#endif
 
 #ifdef __cplusplus
 }

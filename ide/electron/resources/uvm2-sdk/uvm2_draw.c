@@ -922,6 +922,12 @@ void uvm2_frame_end(void)
     /* Lock the frame to the Vectrex clock rather than to an RP2350 timer:
      * 1.5 MHz / 50 Hz = 30000 bus cycles exactly.  The clamp stays asserted
      * through the wait; uvm2_frame_begin() releases it. */
+#if UVM2_HZ == 0
+    /* SIN LIMITE. Ni se espera ni se cuenta overrun: no hay presupuesto que pasarse.
+     * Es lo que hacian las recreativas vectoriales — Asteroids redibujaba en cuanto
+     * terminaba su lista, y por eso se apagaba un poco al llenarse de rocas. */
+    s_frame_cycles = cycles;
+#else
     if (cycles < UVM2_CYCLES_PER_FRAME) {
         uvm2_bus_delay(UVM2_CYCLES_PER_FRAME - cycles);
         s_frame_cycles = UVM2_CYCLES_PER_FRAME;
@@ -929,6 +935,7 @@ void uvm2_frame_end(void)
         uvm2_stats.overrun++;
         s_frame_cycles = cycles;
     }
+#endif
 
     /* EL PERIODO REAL DEL FRAME, en microsegundos de reloj de pared.
      *

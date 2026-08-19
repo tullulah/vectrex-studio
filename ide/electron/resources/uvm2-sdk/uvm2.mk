@@ -44,6 +44,26 @@ UVM2_BUILD   ?= build_uvm2
 # The UVM2 is single-core: core 1 is free, but the draw path is not split yet,
 # and a game built for the cartridge's dual-core mode would record its draws to
 # a buffer nobody drains. Drop the flag rather than let it fail at runtime.
+# ---- REFRESCO, POR JUEGO ---------------------------------------------------
+#
+#   make uvm2                 50 Hz (por defecto, lo que hace la BIOS del Vectrex)
+#   make uvm2 UVM2_HZ=60      60 Hz
+#   make uvm2 UVM2_HZ=0       SIN LIMITE: presenta en cuanto la lista esta hecha
+#
+# POR QUE ES POR JUEGO Y NO GLOBAL. El Vectrex no tiene vsync —es un monitor
+# vectorial, se redibuja cuando se le manda— y las recreativas vectoriales tampoco
+# tenian refresco fijo: Asteroids redibujaba al terminar su lista y por eso se
+# apagaba un poco al llenarse de rocas. Clavar 50 Hz FRENA al juego, pero solo
+# cuando va sobrado: en una escena cargada el juego ya tarda mas y el limite ni
+# aparece. O sea que la velocidad cambia con la escena, y el umbral donde cambia es
+# distinto en cada juego. Eso no se decide de una vez para todos: se prueba.
+#
+# OJO al comparar: refrescar mas a menudo tambien ILUMINA MAS, porque son mas
+# pasadas por segundo sobre el mismo fosforo. Si al subir a 60 se ve mejor, parte
+# puede ser brillo y no fluidez — no confundir una cosa con la otra.
+UVM2_HZ ?= 50
+UVM2_CFLAGS += -DUVM2_HZ=$(UVM2_HZ)
+
 UVM2_CFLAGS_CLEAN = $(filter-out -DVPY_DUAL_CORE -Wa$(,)--defsym$(,)DUAL_CORE_FLAG=0x44430001,\
                       $(UVM2_CFLAGS)) -I$(UVM2_SDK)
 
