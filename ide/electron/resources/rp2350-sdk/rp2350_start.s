@@ -28,7 +28,21 @@ game_header:
     .word 0x32795056        @ GAME_MAGIC 'VPy2' (little-endian)
     .word game_main         @ entry point (linker sets the thumb bit)
     .word DUAL_CORE_FLAG    @ reserved[0] = dual-core flag (see above)
-    .word 0x00000000        @ reserved
+    .word 0x00000000        @ reserved[1]: el LANZADOR escribe aqui el descriptor del
+                            @ romset ('RMZ1'), asi que el juego no puede usarlo.
+
+@ --- de que romset viene este juego -----------------------------------------
+@ El lanzador buscaba el zip por el nombre del .BIN, y eso solo acierta por
+@ casualidad: aae_asteroids_sd.bin necesita asteroid.zip. Asi que el juego DICE
+@ como se llama su romset, y el lanzador lee ese nombre.
+@
+@ Va detras de la cabecera y con MAGIA PROPIA para no romper las imagenes que no
+@ lo declaran: quien no traiga 'RSET' aqui tendra codigo, y el lanzador vuelve a
+@ deducirlo del nombre del fichero. Un juego lo declara definiendo el simbolo
+@ game_romset_name; es DEBIL, asi que sin el vale cero.
+    .word 0x54455352        @ 'RSET'
+    .weak game_romset_name
+    .word game_romset_name  @ -> cadena terminada en NUL, o 0 si no se declara
     .size game_header, . - game_header
 
 @ --- C entry point the BIOS jumps to ---

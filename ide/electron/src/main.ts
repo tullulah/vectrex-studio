@@ -1584,12 +1584,15 @@ export async function executeExternalBuild(args: {
  * aprender ni que mantener en sincronia. Sin seccion rp2350 se cae al nombre del
  * proyecto. Devuelve null cuando no hay: eso no es un error — un puerto que aun
  * incrusta su ROM no usa nada de esto. */
-async function romZipForManifest(manifest: ExternalProjectManifest): Promise<string | null> {
+async function romZipForManifest(manifest: ExternalProjectManifest, rootDir: string): Promise<string | null> {
   const artefacto = (manifest as any).targets?.rp2350?.artifact as string | undefined;
   const stem = (artefacto ? basename(artefacto).replace(/\.[^.]+$/, '') : manifest.project.name);
+  // Si el .bin de rp2350 ya esta construido, EL MANDA: lleva declarado el nombre real
+  // del romset. El stem es solo el ultimo recurso, y acierta por casualidad.
+  const declarado = artefacto ? await romsetDeclarado(join(rootDir, artefacto)) : null;
   try {
     const dir = join(os.homedir(), 'VectrexStudio', 'sd', 'roms');
-    const want = stem.toLowerCase() + '.zip';
+    const want = (declarado ?? (stem.toLowerCase() + '.zip')).toLowerCase();
     const entries = await fs.readdir(dir);
     const hit = entries.find(f => f.toLowerCase() === want);
     if (!hit) {
@@ -1661,7 +1664,7 @@ export async function executeSimBuild(args: {
   }
   win?.webContents.send('run://stdout', `[SIM] Built simulator module: ${modulePath}\n`);
   win?.webContents.send('run://status', `Simulator ready: ${manifest.project.name}`);
-  return { ok: true, modulePath, romZipBase64: await romZipForManifest(manifest) };
+  return { ok: true, modulePath, romZipBase64: await romZipForManifest(manifest, rootDir) };
 }
 
 // Exported function for direct invocation (e.g. from MCP server)
@@ -2380,11 +2383,28 @@ ipcMain.handle('sd:simList', async () => {
 // for REDALARM.ZIP). Case-insensitive here because macOS filenames are, and the
 // card's FAT names are uppercase; matching case-sensitively would find nothing and
 // look like a missing romset.
-ipcMain.handle('sd:romZip', async (_e, stem: string) => {
-  if (!stem) return { ok: false, error: 'no_stem' };
+/* EL NOMBRE DEL ROMSET SALE DEL BINARIO, no del nombre del fichero. Deducirlo del
+ * .bin solo acierta por casualidad: aae_asteroids_sd.bin necesita asteroid.zip. El
+ * juego lo declara en el bloque 'RSET' que va detras de su cabecera VPy2, y el
+ * firmware del cartucho lo lee de ahi — aqui se hace igual, o el simulador y la
+ * consola buscarian ficheros distintos. */
+async function romsetDeclarado(binPath: string): Promise<string | null> {
+  try {
+    const b = await fs.readFile(binPath);
+    if (b.length < 24 || b.readUInt32LE(16) !== 0x54455352) return null;   // 'RSET'
+    const off = b.readUInt32LE(20) - 0x11000000;
+    if (off < 0 || off >= b.length) return null;
+    const fin = b.indexOf(0, off);
+    return b.toString('latin1', off, fin < 0 ? b.length : fin) || null;
+  } catch { return null; }
+}
+
+ipcMain.handle('sd:romZip', async (_e, stem: string, binPath?: string) => {
+  if (!stem && !binPath) return { ok: false, error: 'no_stem' };
   try {
     const dir = join(os.homedir(), 'VectrexStudio', 'sd', 'roms');
-    const want = stem.toLowerCase() + '.zip';
+    const declarado = binPath ? await romsetDeclarado(binPath) : null;
+    const want = (declarado ?? (stem.toLowerCase() + '.zip')).toLowerCase();
     let entries: string[];
     try {
       entries = await fs.readdir(dir);

@@ -285,7 +285,9 @@ async function loadSimRomZip(binPath?: string | null): Promise<Uint8Array | unde
   if (!binPath) return undefined;
   const stem = binPath.split(/[/\\]/).pop()?.replace(/\.bin$/i, '');
   if (!stem) return undefined;
-  const res = await (window as any).electronAPI?.sdRomZip?.(stem).catch(() => null);
+  // Se le pasa el .bin: el nombre del romset lo declara EL JUEGO (bloque RSET),
+  // no se deduce del nombre del fichero.
+  const res = await (window as any).electronAPI?.sdRomZip?.(stem, binPath).catch(() => null);
   if (!res?.ok || !res.base64) {
     console.log(`[EmulatorPanel] No romset for "${stem}" (${res?.error ?? 'no ipc'})` +
       (res?.have?.length ? ` — roms/ has: ${res.have.join(', ')}` : '') +
