@@ -33,6 +33,19 @@ endif()
 set(PICO_BOARD olimex_rp2350_xxl CACHE STRING "Board type")
 include(pico_sdk_import.cmake)
 project(${UVM2_NAME} C CXX ASM)
+# EL PANICO, LEGIBLE. Antes de pico_sdk_init() para que llegue tambien a panic.c, que se
+# compila dentro de la libreria del SDK: pasarlo como define del juego NO basta — lo probe
+# y el simbolo ni aparecia en el ELF.
+#
+# Con esto `panic` deja de imprimir y llama a uvm2_panic_stash, que guarda el puntero al
+# mensaje en 0x20080234 y para. Imprimir aqui es peor que inutil: no hay consola y vsnprintf
+# se sale de la pila (medido: BFAR = 0x20082000, el techo justo), asi que lo unico que se
+# ve es el fallo del mensajero y el motivo se pierde.
+if(DEFINED ENV{UVM2_PANIC_STASH} AND NOT "$ENV{UVM2_PANIC_STASH}" STREQUAL "0")
+    message(STATUS "UVM2_PANIC_STASH: panic guarda el motivo en 0x20080230 en vez de imprimirlo")
+    add_compile_definitions(PICO_PANIC_FUNCTION=uvm2_panic_stash)
+endif()
+
 pico_sdk_init()
 
 add_executable(${UVM2_NAME}
@@ -67,6 +80,7 @@ pico_set_binary_type(${UVM2_NAME} no_flash)
 if(DEFINED ENV{UVM2_LOAD_PSRAM} AND NOT "$ENV{UVM2_LOAD_PSRAM}" STREQUAL "0")
     message(STATUS "UVM2_LOAD_PSRAM: enlazando en la PSRAM externa (0x11000000)")
     pico_set_linker_script(${UVM2_NAME} ${CMAKE_CURRENT_LIST_DIR}/memmap_psram.ld)
+    target_compile_definitions(${UVM2_NAME} PRIVATE UVM2_PSRAM_IMAGE=1)
 endif()
 
 # The game keeps its own `main`; rename it so uvm2_pico_main.c can wrap it with
@@ -206,11 +220,23 @@ pico_enable_stdio_usb(${UVM2_NAME} 0)
 # the target so we do not depend on where in the include order that happens.
 set_target_properties(${UVM2_NAME} PROPERTIES SUFFIX ".elf")
 
-pico_add_extra_outputs(${UVM2_NAME})
+# El .uf2 solo tiene sentido para una imagen que arranque la bootrom. Un payload
+# enlazado en la PSRAM lo carga NUESTRO cargador, y ademas elf2uf2 lo rechaza: para un
+# binario `no_flash` espera direcciones de SRAM y 0x11000000 no lo es ("entry point is
+# not in mapped part of file"). Peor aun, al fallar BORRA el .elf, que es justo lo que
+# necesitamos. Asi que ahi nos quedamos con el ELF y hacemos el .bin nosotros.
+if(DEFINED ENV{UVM2_LOAD_PSRAM} AND NOT "$ENV{UVM2_LOAD_PSRAM}" STREQUAL "0")
+    message(STATUS "UVM2_LOAD_PSRAM: solo .bin (lo carga nuestro cargador, no la bootrom)")
+    pico_add_bin_output(${UVM2_NAME})
+else()
+    pico_add_extra_outputs(${UVM2_NAME})
+endif()
 
 # Wrap the flat image in the .um2 header the multicart reads.
+# Un payload de PSRAM no es un modulo: no lo carga el multicart, lo carga nuestro
+# cargador. Empaquetarlo como .um2 solo serviria para confundir en la tarjeta.
 find_program(VPY_CLI vpy_cli PATHS ${VPY_CLI_DIR} NO_DEFAULT_PATH)
-if(VPY_CLI)
+if(VPY_CLI AND NOT (DEFINED ENV{UVM2_LOAD_PSRAM} AND NOT "$ENV{UVM2_LOAD_PSRAM}" STREQUAL "0"))
     add_custom_command(TARGET ${UVM2_NAME} POST_BUILD
         COMMAND ${VPY_CLI} package-um2 $<TARGET_FILE_DIR:${UVM2_NAME}>/${UVM2_NAME}.bin
                 --out $<TARGET_FILE_DIR:${UVM2_NAME}>/${UVM2_NAME}.um2

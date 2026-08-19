@@ -42,6 +42,9 @@
 #define CMD_RESET_ENABLE 0x66u
 #define CMD_RESET        0x99u
 #define CMD_READ_ID      0x9Fu
+/* Comandos quad, para la ventana XIP (no hacian falta en la sonda). */
+#define CMD_QUAD_READ  0xEBu
+#define CMD_QUAD_WRITE 0x38u
 /* APS6404: 0x35 entra en QPI, 0xF5 sale. En QPI el chip IGNORA los comandos de
  * una linea, que es exactamente lo que veiamos: transferencia real (rx_timeouts
  * = 0, BUSY y CS1 correctos) y respuesta 0x00. Y el cartucho lleva USB-C, asi
@@ -224,6 +227,283 @@ void uvm2_psram_hold_cs(int asertado)
  * Devuelve los tres bytes del ID empaquetados: (b0<<16)|(b1<<8)|b2. Una W25Q128 da
  * 0xEF4018; 0x000000 o 0xFFFFFF es "no contesta".
  */
+/* Dejar la FLASH en un estado conocido: salir de lectura continua y resetearla.
+ *
+ * POR QUE IMPORTA PARA LA PSRAM. El codigo de la sonda es correcto —probado en nuestro
+ * cartucho: mf_id 0x0D, kgd 0x5D— asi que lo que cambia en el UVM2 es el ENTORNO: la
+ * imagen .um2 arranca sobre una maquina que configuro el firmware de Ralf, con su flash
+ * en XIP y el QMI montado a su manera, en vez de poseerla desde el reset. Esto es el
+ * primer intento de llegar al mismo punto de partida.
+ *
+ * Es seguro: la imagen corre entera desde SRAM, nadie esta leyendo de la flash, y al
+ * reiniciar la bootrom la reinicializa. */
+/* EL ESTADO QUE HEREDAMOS, tal cual, sin tocar nada.
+ *
+ * BUSY no se baja nunca en el UVM2 y si se baja en nuestro cartucho, con el MISMO
+ * codigo. El QMI no se puede resetear (de el se arranca, no esta en el bloque de
+ * resets) y el contador de stream del RP2040 no existe en el RP2350, asi que no hay
+ * forma de desatascarlo a la fuerza. Lo que si se puede es MIRAR en que estado nos lo
+ * dejan en cada placa y restar: eso ha resuelto dos cosas hoy.
+ *
+ * Se llama lo PRIMERO, antes de tocar nada, o se mide nuestro propio efecto. */
+/* ENTRAR EN MODO DIRECTO SIN ENCALLAR EL QMI.
+ *
+ * En el UVM2 BUSY entra a CERO y se queda arriba EN CUANTO pedimos el modo directo:
+ * no heredamos un QMI encallado, lo encallamos nosotros. La explicacion que encaja con
+ * el volcado de las dos placas: al poner EN el QMI deja de servir XIP, y una lectura
+ * XIP EN VUELO ya no puede terminar — el bus que la atenderia esta ocupado por el modo
+ * directo. Bloqueo mutuo. Ralf lee la flash en 03h de UNA LINEA, que es lento, o sea
+ * una ventana mucho mas ancha para pillar una lectura a medias; nuestro firmware hace
+ * la init desde `.data` con el XIP en reposo y por eso nunca nos paso.
+ *
+ * `apagar_cache`: ademas de las barreras, apaga la cache del XIP antes de entrar, por
+ * si lo que hay en vuelo es un relleno de linea y no una lectura del programa.
+ *
+ * Devuelve las vueltas que tardo BUSY en bajarse; el limite significa que no bajo.
+ */
+uint32_t uvm2_qmi_entrar_directo(int apagar_cache)
+{
+    volatile uint32_t *xip_ctrl = (volatile uint32_t *)0x400C8000u;
+    uint32_t guardado = *xip_ctrl;
+    uint32_t vueltas = 0;
+
+    /* Sin interrupciones: una rutina de atencion que lea de la flash volveria a meter
+     * una transferencia justo en el hueco que estamos intentando cerrar. */
+    __asm volatile ("cpsid i" ::: "memory");
+
+    if (apagar_cache) {
+        *xip_ctrl = guardado & ~0x3u;      /* EN_SECURE | EN_NONSECURE */
+        __asm volatile ("dsb" ::: "memory");
+    }
+
+    /* Que no quede NADA en vuelo antes de tomar el bus. */
+    __asm volatile ("dsb" ::: "memory");
+    __asm volatile ("isb" ::: "memory");
+
+    qmi_hw->direct_csr |= QMI_DIRECT_CSR_EN_BITS;
+    while ((qmi_hw->direct_csr & QMI_DIRECT_CSR_BUSY_BITS) && ++vueltas < 100000u) { }
+
+    if (apagar_cache) *xip_ctrl = guardado;
+    __asm volatile ("cpsie i" ::: "memory");
+    return vueltas;
+}
+
+/* LEVANTAR EL QMI NOSOTROS. No hay entorno que heredar: el lanzador de Ralf copia la
+ * imagen a SRAM y llama a rom_reboot(RAM_IMAGE) — venimos de un RESET, y la bootrom,
+ * arrancando una imagen en RAM, no necesita XIP para nada y deja el QMI en minimos.
+ * (Medido: M0_TIMING 40000004 y M0_RFMT 00001000, practicamente valores de reset,
+ * contra 60007203 y 000492A8 en nuestro cartucho, que arranca de flash.)
+ *
+ * Lo que falta son los PADS del bus QSPI. En el RP2350 los pads arrancan AISLADOS, y
+ * poner la funcion sin quitar ISO deja un pin mudo — ya nos costo una sesion con el
+ * select de la PSRAM. Aqui son seis: reloj, cuatro datos y el select de la flash.
+ *
+ * Es exactamente el sintoma: el QMI acepta la transferencia y no sale nada por las
+ * patas, porque conduce contra un aislamiento.
+ */
+/* ARMAR LA VENTANA XIP DE LA PSRAM (M1).
+ *
+ * Que el chip conteste su ID prueba el modo directo, NO la ventana: son dos caminos
+ * distintos del QMI. Sin M1 configurado y sin WRITABLE_M1, las escrituras a 0x11000000
+ * se descartan EN SILENCIO — el peor fallo posible, porque parece que funciona.
+ *
+ * Transcrito de firmware/src/psram.rs, que lleva 8 MB funcionando en nuestro cartucho.
+ * Las dos constantes de temporizacion son las suyas: MAX_SELECT limita cuanto puede
+ * estar bajo el select (el APS6404 es DRAM y necesita refrescarse) y MIN_DESELECT el
+ * hueco entre transacciones. */
+/* LA SECUENCIA MINIMA, la misma que psram.rs — que lleva 8 MB funcionando.
+ *
+ * El cargador usaba `uvm2_psram_probe()`, que es una SONDA DE DIAGNOSTICO: prueba
+ * varios idiomas (SPI, QPI, entrar y salir de QPI) y no promete devolver el chip a un
+ * estado concreto. Si lo deja en QPI, la ventana —que manda el comando por UNA linea—
+ * lee basura. Y eso es justo lo que se veia: READ_ID correcto en modo directo, y la
+ * lectura sin cache devolviendo un patron 0/4/8/C, o sea nadie conduciendo los datos.
+ *
+ * Para arrancar no hace falta diagnosticar: reset, comprobar el ID, y armar la ventana.
+ */
+int uvm2_psram_init(void)
+{
+    const uint8_t c_rsten[1] = { CMD_RESET_ENABLE };
+    const uint8_t c_rst[1]   = { CMD_RESET };
+    const uint8_t c_id[4]    = { CMD_READ_ID, 0x00, 0x00, 0x00 };
+    uint8_t id[2] = { 0, 0 };
+
+    reloj_directo(RELOJ_DIRECTO_DIV);
+    configure_cs1_pad();
+
+    direct_begin();
+    cs1_xfer(c_rsten, 1, 0, 0);
+    cs1_xfer(c_rst,   1, 0, 0);
+    direct_end();
+    spin(30000);                    /* tRST */
+
+    direct_begin();
+    cs1_xfer(c_id, 4, id, 2);
+    direct_end();
+
+    if (id[0] != 0x0D) return 0;
+    uvm2_psram_enable_xip();
+    return 1;
+}
+
+void uvm2_psram_enable_xip(void)
+{
+    const uint32_t Q = 2u;   /* ancho quad  */
+    const uint32_t S = 0u;   /* ancho serie */
+
+    *(volatile uint32_t *)0x400C8000u |= (1u << 11);   /* XIP_CTRL.WRITABLE_M1 */
+
+    qmi_hw->m[1].timing =
+/* EL DIVISOR ES AJUSTABLE, y por una razon: el 2 viene de nuestro cartucho, que corre
+ * a 150 MHz porque su firmware lo fija. Aqui venimos de un reboot de la bootrom y NADIE
+ * ha comprobado a que frecuencia arranca — un divisor pensado para otro reloj rompe las
+ * LECTURAS (que exigen temporizacion de ida y vuelta) y no las escrituras, que es
+ * exactamente el sintoma: la copia se verifica bien por cache y el codigo no se puede
+ * ejecutar. */
+/* MAX_SELECT acota cuanto puede estar CS bajo seguido, y de eso depende que la DRAM se
+ * refresque. El APS6404L da tCEM = 8 us como maximo absoluto.
+ *
+ * A 150 MHz cada unidad son 64 ciclos = 427 ns, y un acceso ya en vuelo cuando salta el
+ * limite TERMINA (unos 1,1 us mas). Con 15: 6,4 + 1,1 = 7,5 us de 8 — cabe, pero con 0,5
+ * us de margen, y ese margen solo se pone a prueba en una copia LARGA: dos escrituras
+ * sueltas nunca mantienen CS bajo el tiempo suficiente. Por eso la PSRAM parecia buena.
+ * 8 unidades: 3,4 + 1,1 = 4,5 us, la mitad del limite. */
+#ifndef UVM2_PSRAM_MAX_SELECT
+#define UVM2_PSRAM_MAX_SELECT 15u
+#endif
+
+#ifndef UVM2_PSRAM_CLKDIV
+#define UVM2_PSRAM_CLKDIV 2u
+#endif
+          (UVM2_PSRAM_CLKDIV << QMI_M1_TIMING_CLKDIV_LSB)
+        | (1u  << QMI_M1_TIMING_RXDELAY_LSB)
+        | (UVM2_PSRAM_MAX_SELECT << QMI_M1_TIMING_MAX_SELECT_LSB)   /* refresco: VER ABAJO */
+        | (4u  << QMI_M1_TIMING_MIN_DESELECT_LSB)
+        | (1u  << QMI_M1_TIMING_COOLDOWN_LSB);
+    /* SIN PAGEBREAK Y CON MAX_SELECT=15, IGUAL QUE psram.rs.
+     *
+     * Llegue a poner PAGEBREAK=1024 y MAX_SELECT=8 por dos medidas que despues resultaron
+     * viciadas: la copia se verificaba leyendo la CACHE, asi que ni el "COPIA FIN" ni los
+     * offsets del barrido decian nada del chip. Nuestro cartucho lleva meses leyendo y
+     * escribiendo este mismo APS6404L con 15 y sin trocear —su variante `R` cruza el borde
+     * de fila en rafaga lineal— y es la unica configuracion con horas de vuelo detras.
+     * Apartarse de ella exige una medida buena, y no la habia.
+     *
+     * (Lo que sigue abajo se conserva porque el razonamiento sobre el tCEM es correcto y
+     * habra que volver a el si aparece una medida limpia que lo pida.)
+     *
+     * PAGEBREAK NO ES OPCIONAL EN ESTE CHIP -- SI la variante no cruza filas.
+     *
+     * El APS6404L tiene paginas de 1024 bytes: una rafaga lineal que cruza ese limite da
+     * la vuelta DENTRO de la pagina en vez de seguir en la siguiente. Sin trocear ahi, una
+     * copia larga escribe los primeros 1024 bytes donde toca y machaca esa misma pagina
+     * con todo lo demas.
+     *
+     * Se nos escapo porque la prueba que dio la PSRAM por buena escribia dos palabras en
+     * direcciones separadas 4 MB: dos transacciones cortas, ninguna cruzaba una pagina.
+     * El sintoma solo aparece copiando de verdad — el cargador veia bien la PRIMERA
+     * palabra del payload y mal la ULTIMA, que es exactamente esta forma. */
+
+    qmi_hw->m[1].rcmd = CMD_QUAD_READ;               /* 0xEB, sufijo 0 */
+    qmi_hw->m[1].rfmt =
+          (S  << QMI_M1_RFMT_PREFIX_WIDTH_LSB)
+        | (Q  << QMI_M1_RFMT_ADDR_WIDTH_LSB)
+        | (Q  << QMI_M1_RFMT_SUFFIX_WIDTH_LSB)
+        | (Q  << QMI_M1_RFMT_DUMMY_WIDTH_LSB)
+        | (Q  << QMI_M1_RFMT_DATA_WIDTH_LSB)
+        | (1u << QMI_M1_RFMT_PREFIX_LEN_LSB)         /* 8 bits */
+        | (0u << QMI_M1_RFMT_SUFFIX_LEN_LSB)
+        | (6u << QMI_M1_RFMT_DUMMY_LEN_LSB);         /* 24 bits = 6 ciclos quad */
+
+    qmi_hw->m[1].wcmd = CMD_QUAD_WRITE;              /* 0x38 */
+    qmi_hw->m[1].wfmt =
+          (S  << QMI_M1_WFMT_PREFIX_WIDTH_LSB)
+        | (Q  << QMI_M1_WFMT_ADDR_WIDTH_LSB)
+        | (Q  << QMI_M1_WFMT_SUFFIX_WIDTH_LSB)
+        | (Q  << QMI_M1_WFMT_DUMMY_WIDTH_LSB)
+        | (Q  << QMI_M1_WFMT_DATA_WIDTH_LSB)
+        | (1u << QMI_M1_WFMT_PREFIX_LEN_LSB)
+        | (0u << QMI_M1_WFMT_SUFFIX_LEN_LSB)
+        | (0u << QMI_M1_WFMT_DUMMY_LEN_LSB);
+}
+
+void uvm2_qmi_levantar(void)
+{
+    /* DOS BLOQUES, no uno. El pad (PADS_QSPI) dice como es electricamente el pin; el
+     * FUNCSEL (IO_QSPI) dice QUIEN LO CONDUCE. Configurar el pad y no la funcion deja
+     * un pin mudo — es exactamente el error que ya nos costo una sesion con el select
+     * de la PSRAM, y lo acabo de repetir: los pads salieron 0x56 (sin aislamiento, IE
+     * puesto) antes y despues, o sea que ese lado ya estaba bien.
+     *
+     * CTRL de cada pin en IO_QSPI, y FUNCSEL 0 = XIP (lo conduce el QMI). */
+    {
+        volatile uint32_t *io = (volatile uint32_t *)0x40030000u;
+        static const unsigned ctrl[6] = { 0x14, 0x1C, 0x24, 0x2C, 0x34, 0x3C };
+        int k;
+        for (k = 0; k < 6; k++) {
+            volatile uint32_t *r = (volatile uint32_t *)((char *)io + ctrl[k]);
+            *r = (*r & ~0x1Fu) | 0u;      /* FUNCSEL = 0: XIP */
+        }
+    }
+
+    {
+    volatile uint32_t *pq = (volatile uint32_t *)0x40040000u;
+    int i;
+    /* [1]=SCLK [2..5]=SD0..SD3 [6]=SS. El [0] es VOLTAGE_SELECT, no se toca. */
+    for (i = 1; i <= 6; i++) {
+        uint32_t v = pq[i];
+        v &= ~(1u << 8);      /* ISO: fuera el aislamiento */
+        v &= ~(1u << 7);      /* OD: salida NO deshabilitada */
+        v |=  (1u << 6);      /* IE: entrada habilitada (el QMI tiene que leer) */
+        pq[i] = v;
+    }
+    }
+}
+
+void uvm2_qmi_snapshot(uvm2_qmi_estado *e)
+{
+    /* LOS PADS QSPI, que viven en SU PROPIO bloque (0x40040000) y no en el de los GPIO
+     * normales. Nunca los hemos mirado: configuramos a mano el del select (GPIO47, que
+     * si es un pad normal) y dimos por hecho que los del bus estaban bien porque de esa
+     * flash arranca el firmware. Pero nuestra imagen corre desde SRAM: desde que
+     * arranca, NADIE usa la flash, asi que un pad aislado no se notaria.
+     *
+     * MOSI clavado en 3,3 V y SCK quieto, con el QMI dando la transferencia por buena,
+     * es exactamente lo que se ve si la salida esta deshabilitada. */
+    {
+        volatile uint32_t *pq = (volatile uint32_t *)0x40040000u;
+        e->pad_sclk = pq[1];   /* GPIO_QSPI_SCLK */
+        e->pad_sd0  = pq[2];   /* GPIO_QSPI_SD0  */
+        e->pad_ss   = pq[6];   /* GPIO_QSPI_SS   */
+        e->fn_sclk  = *(volatile uint32_t *)0x40030014u;   /* SCLK_CTRL */
+        e->fn_sd0   = *(volatile uint32_t *)0x40030024u;   /* SD0_CTRL  */
+    }
+    e->direct_csr = qmi_hw->direct_csr;
+    e->xip_ctrl   = *(volatile uint32_t *)0x400C8000u;   /* XIP_CTRL */
+    e->m0_timing  = qmi_hw->m[0].timing;
+    e->m0_rfmt    = qmi_hw->m[0].rfmt;
+    e->m0_rcmd    = qmi_hw->m[0].rcmd;
+    e->m1_timing  = qmi_hw->m[1].timing;
+}
+
+void uvm2_flash_exit_xip(void)
+{
+    const uint8_t salida[3] = { 0xFFu, 0x66u, 0x99u };
+    int k;
+    reloj_directo(RELOJ_DIRECTO_DIV);
+    qmi_hw->direct_csr |= QMI_DIRECT_CSR_EN_BITS;
+    {
+        uint32_t spins = 0;
+        while ((qmi_hw->direct_csr & QMI_DIRECT_CSR_BUSY_BITS) && ++spins < QMI_SPIN_LIMIT) { }
+    }
+    for (k = 0; k < 3; k++) {
+        qmi_hw->direct_csr |= QMI_DIRECT_CSR_ASSERT_CS0N_BITS;
+        tx(salida[k]); (void)rx();
+        qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_ASSERT_CS0N_BITS;
+    }
+    qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_EN_BITS;
+}
+
 uint32_t uvm2_flash_id(void)
 {
     reloj_directo(RELOJ_DIRECTO_DIV);   /* sin esto no hay reloj */
@@ -243,15 +523,7 @@ uint32_t uvm2_flash_id(void)
      *   0x66  habilitar reset      0x99  reset
      * Es seguro: esta imagen corre entera desde SRAM, nadie esta leyendo de la flash,
      * y al reiniciar la bootrom la reinicializa. */
-    {
-        const uint8_t salida[3] = { 0xFFu, 0x66u, 0x99u };
-        int k;
-        for (k = 0; k < 3; k++) {
-            qmi_hw->direct_csr |= QMI_DIRECT_CSR_ASSERT_CS0N_BITS;
-            tx(salida[k]); (void)rx();
-            qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_ASSERT_CS0N_BITS;
-        }
-    }
+    uvm2_flash_exit_xip();
 
     qmi_hw->direct_csr |= QMI_DIRECT_CSR_ASSERT_CS0N_BITS;
     tx(cmd); (void)rx();
@@ -332,6 +604,9 @@ uint32_t uvm2_psram_cs_low_ns(void)
  * en vez de la ausencia de imagen — que es indistinguible de un cuelgue, y era el
  * eslabon debil de la medida con osciloscopio. Al osciloscopio le basta con rafagas:
  * dispara por flanco, no por nivel medio. */
+/* DIRECT_CSR justo despues de escribir un byte en la cola. */
+volatile uint32_t uvm2_csr_tras_tx = 0;
+
 void uvm2_psram_rafaga(unsigned n)
 {
     const uint8_t cmd[4] = { CMD_READ_ID, 0, 0, 0 };
@@ -344,6 +619,13 @@ void uvm2_psram_rafaga(unsigned n)
         qmi_hw->direct_csr |= QMI_DIRECT_CSR_EN_BITS;
         uint32_t spins = 0;
         while ((qmi_hw->direct_csr & QMI_DIRECT_CSR_BUSY_BITS) && ++spins < QMI_SPIN_LIMIT) { }
+        /* LA FOTO QUE FALTA. CS se mueve —lo movemos nosotros con un bit— pero ni
+         * reloj ni dato salen. Falta saber si la escritura llega a la cola y no se
+         * vacia, o si no llega: TXEMPTY (bit 11) y TXLEVEL (bits 12-14) lo dicen. */
+        qmi_hw->direct_csr |= QMI_DIRECT_CSR_ASSERT_CS1N_BITS;
+        qmi_hw->direct_tx = 0x9Fu;
+        uvm2_csr_tras_tx = qmi_hw->direct_csr;
+        qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_ASSERT_CS1N_BITS;
         cs1_xfer(cmd, 4, id, 2);
         qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_EN_BITS;
     }

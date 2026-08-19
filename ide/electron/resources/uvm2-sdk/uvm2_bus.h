@@ -128,21 +128,26 @@ void uvm2_bus_init(void);
 
 /* ── Command stream ────────────────────────────────────────────────────────── */
 
+/* EN SRAM SIEMPRE. Ver el comentario de .time_critical en memmap_psram.ld: ejecutando
+ * desde PSRAM, un fallo de cache dentro de la ventana de E manda la escritura al periodo
+ * siguiente y el dibujo tiembla. En las imagenes normales (SRAM) no cambia nada. */
+#define UVM2_RAMFUNC __attribute__((section(".time_critical.uvm2"), noinline))
+
 /* Replay `count` commands back-to-back, one bus cycle each plus their delays.
  * R/W is held low for the whole batch (as in the reference executor) and the
  * bus is parked at $8000 on exit.  Returns the bus cycles consumed. */
-uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count);
+UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count);
 
 /* Idle for `cycles` Vectrex bus cycles (667 ns each) — clock-independent, which
  * is what beam/integrator timing needs. */
-void uvm2_bus_delay(uint32_t cycles);
+UVM2_RAMFUNC void uvm2_bus_delay(uint32_t cycles);
 
 /* ── Single accesses (outside the command stream) ───────────────────────────
  * Reads cannot be recorded — they need the data bus turned around mid-cycle —
  * so input polling runs directly, exactly as the reference does after replaying
  * its frame.  uvm2_via_write is the one-off equivalent of a single command. */
-void    uvm2_via_write(uint32_t reg, uint32_t data);
-uint8_t uvm2_via_read(uint32_t reg);
+UVM2_RAMFUNC void    uvm2_via_write(uint32_t reg, uint32_t data);
+UVM2_RAMFUNC uint8_t uvm2_via_read(uint32_t reg);
 
 /* ── Instrumentation ───────────────────────────────────────────────────────
  * A 50 Hz frame is 30000 bus cycles.  These let a game (or the IDE) report how

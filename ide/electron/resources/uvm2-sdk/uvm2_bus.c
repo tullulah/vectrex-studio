@@ -124,7 +124,7 @@ void uvm2_bus_init(void)
  * batch and the address' high bits stay at $D000 throughout, so each command is
  * a single 12-bit update landing on GPIO0-11.  One command = one bus cycle. */
 
-uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
+UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
 {
     uint32_t cycles = 0;
 
@@ -221,7 +221,7 @@ uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
     return cycles;
 }
 
-void uvm2_bus_delay(uint32_t cycles)
+UVM2_RAMFUNC void uvm2_bus_delay(uint32_t cycles)
 {
     while (cycles--) {
         UVM2_WAIT_CLK_HIGH();
@@ -238,7 +238,7 @@ void uvm2_bus_delay(uint32_t cycles)
  * assumed: an input read's cost depends on how many SAR steps an axis needs. */
 uint32_t uvm2_single_cycles;
 
-void uvm2_via_write(uint32_t reg, uint32_t data)
+UVM2_RAMFUNC void uvm2_via_write(uint32_t reg, uint32_t data)
 {
     uint32_t out = UVM2_VIA_BASE_BITS
                  | ((reg & 0x0Fu) << 8)          /* register → A0-A3 */
@@ -260,7 +260,7 @@ void uvm2_via_write(uint32_t reg, uint32_t data)
     uvm2_single_cycles += 2;
 }
 
-uint8_t uvm2_via_read(uint32_t reg)
+UVM2_RAMFUNC uint8_t uvm2_via_read(uint32_t reg)
 {
     uint32_t out = UVM2_VIA_BASE_BITS | UVM2_RW_MASK | ((reg & 0x0Fu) << 8);
     uint32_t addr_mask = UVM2_BUS_MASK & ~UVM2_DATA_MASK;

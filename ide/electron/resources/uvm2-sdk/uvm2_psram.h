@@ -148,6 +148,9 @@ void uvm2_psram_hammer(void);
  * se ve cuando el programa se cuelga. */
 void uvm2_psram_rafaga(unsigned n);
 
+/* DIRECT_CSR justo despues de escribir un byte: dice si la cola acepta y se vacia. */
+extern volatile uint32_t uvm2_csr_tras_tx;
+
 /* Cuanto tiempo se queda /CS ABAJO en una transaccion, en nanosegundos. El tCEM del
  * APS6404 son 8000 ns: por encima de eso el chip tiene derecho a abandonar, y callaria
  * igual que el nuestro. Medido con el contador de ciclos del nucleo, no estimado
@@ -158,6 +161,38 @@ uint32_t uvm2_psram_cs_low_ns(void);
  * comparte reloj y datos con la PSRAM y sabemos que funciona. Si contesta, el camino es
  * bueno y el sospechoso es U3; si calla, el fallo es nuestro. Sin bootrom: aqui
  * rom_flash_exit_xip() no vuelve. Devuelve (b0<<16)|(b1<<8)|b2. */
+/* Saca la flash de lectura continua y la resetea, para partir de un estado
+ * conocido antes de hablarle a CS1. Ver la nota larga en el .c. */
+/* El estado del QMI/XIP tal como nos lo deja el firmware de turno. Se toma ANTES de
+ * tocar nada; comparar el de las dos placas es lo unico que queda cuando el QMI no se
+ * puede resetear y el codigo ya esta exonerado. */
+typedef struct {
+    uint32_t direct_csr, xip_ctrl, m0_timing, m0_rfmt, m0_rcmd, m1_timing;
+    uint32_t pad_sclk, pad_sd0, pad_ss;   /* bloque PADS_QSPI, 0x40040000 */
+    uint32_t fn_sclk, fn_sd0;             /* FUNCSEL, bloque IO_QSPI 0x40030000 */
+} uvm2_qmi_estado;
+
+/* Quita el aislamiento de los pads del bus QSPI. Hace falta porque la imagen la
+ * lanza la bootrom tras un reset y, siendo imagen en RAM, no los prepara. */
+void uvm2_qmi_levantar(void);
+
+/* Arma la ventana XIP de la PSRAM (M1) y permite escribir en ella. Sin esto, las
+ * escrituras a 0x11000000 se descartan en silencio. */
+/* Arranque MINIMO, como psram.rs: reset, ID y ventana. Devuelve 1 si el chip esta.
+ * Para arrancar no hace falta la sonda de diagnostico, que puede dejar el chip en QPI. */
+int uvm2_psram_init(void);
+
+void uvm2_psram_enable_xip(void);
+
+void uvm2_qmi_snapshot(uvm2_qmi_estado *e);
+
+/* Entra en modo directo cerrando el hueco por el que se encalla: interrupciones fuera,
+ * barreras, y opcionalmente la cache del XIP apagada. Devuelve las vueltas que tardo
+ * BUSY en bajarse (100000 = no bajo). */
+uint32_t uvm2_qmi_entrar_directo(int apagar_cache);
+
+void uvm2_flash_exit_xip(void);
+
 uint32_t uvm2_flash_id(void);
 
 /* 1 = enciende OE al transmitir en UNA linea (por defecto). Existe para comparar A/B
