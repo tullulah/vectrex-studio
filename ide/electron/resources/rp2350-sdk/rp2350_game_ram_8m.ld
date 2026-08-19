@@ -73,6 +73,18 @@ SECTIONS {
         _bss_end = .;
     } > GAME_RAM
 
+    /* Tabla de unwind VACIA, pero con sus simbolos.
+     *
+     * Las secciones se descartan (abajo) porque un programa freestanding no desenrolla
+     * nada, pero el unwinder de libgcc referencia __exidx_start/__exidx_end igualmente si
+     * algo lo arrastra. Los juegos que enlazan con -nostdlib nunca lo ven; dkong usa
+     * --specs=nosys.specs y ahi si aparece: "undefined reference to __exidx_start" al
+     * añadirle el cargador de ROM. Declararlos vacios es la solucion estandar: el
+     * unwinder encuentra una tabla de cero entradas y no desenrolla, que es lo correcto.
+     * PROVIDE para no pisar a nadie que los defina por su cuenta. */
+    PROVIDE(__exidx_start = .);
+    PROVIDE(__exidx_end   = .);
+
     /DISCARD/ : {
         *(.ARM.exidx*)
         *(.ARM.extab*)
