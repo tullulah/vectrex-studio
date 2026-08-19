@@ -143,6 +143,30 @@ void uvm2_psram_hold_cs(int asertado);
  * (la pantalla en negro ES la señal); se sale reseteando. */
 void uvm2_psram_hammer(void);
 
+/* `n` transacciones y VUELVE, para poder seguir dibujando. La señal de que esta
+ * martilleando pasa a ser algo que se VE, no la falta de imagen — que es lo mismo que
+ * se ve cuando el programa se cuelga. */
+void uvm2_psram_rafaga(unsigned n);
+
+/* Cuanto tiempo se queda /CS ABAJO en una transaccion, en nanosegundos. El tCEM del
+ * APS6404 son 8000 ns: por encima de eso el chip tiene derecho a abandonar, y callaria
+ * igual que el nuestro. Medido con el contador de ciclos del nucleo, no estimado
+ * contando relojes — que es lo que se hacia y no incluye el sondeo entre bytes. */
+uint32_t uvm2_psram_cs_low_ns(void);
+
+/* LA REFERENCIA. El mismo READ_ID por el mismo modo directo pero a la FLASH (CS0), que
+ * comparte reloj y datos con la PSRAM y sabemos que funciona. Si contesta, el camino es
+ * bueno y el sospechoso es U3; si calla, el fallo es nuestro. Sin bootrom: aqui
+ * rom_flash_exit_xip() no vuelve. Devuelve (b0<<16)|(b1<<8)|b2. */
+uint32_t uvm2_flash_id(void);
+
+/* 1 = enciende OE al transmitir en UNA linea (por defecto). Existe para comparar A/B
+ * sin recompilar: el codigo daba por hecho que en una linea SD0 se conduce solo. */
+extern int uvm2_tx_oe;
+
+/* 1 = no tomar el atajo de "ya esta mapeada": hacer el READ_ID igualmente. */
+extern int uvm2_psram_forzar;
+
 /* La misma pregunta, hablandole en QPI. Sin bootrom: no se puede colgar. */
 int uvm2_psram_probe_qpi(void);
 

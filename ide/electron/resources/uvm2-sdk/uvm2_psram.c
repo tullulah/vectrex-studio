@@ -31,6 +31,7 @@
 #include "hardware/structs/io_bank0.h"
 #include "hardware/regs/qmi.h"
 #include "hardware/structs/sio.h"
+#include "hardware/clocks.h"
 #include "uvm2_psram.h"
 
 /* GPIO47 = PSRAM_CS en el UVM2 (pin 58). En nuestro cartucho es el 0. */
@@ -90,11 +91,44 @@ static void direct_end(void)
     qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_EN_BITS;
 }
 
+/* OE ENCENDIDO TAMBIEN EN UNA LINEA.
+ *
+ * Aqui habia una SUPOSICION escrita como si fuera un hecho: "en una sola linea SD0 es
+ * salida siempre y por eso no hacia falta". Si es falsa, nunca hemos conducido MOSI —
+ * y entonces ningun chip recibe nada y leemos el bus en reposo: 0x00 en una linea,
+ * 0xcc en quad. Que es EXACTAMENTE lo que llevamos viendo.
+ *
+ * Lo que la delato: la misma transaccion contra la FLASH, que sabemos buena porque el
+ * firmware arranca de ella, tambien devuelve cero. Con los dos chips mudos por el mismo
+ * camino, el sospechoso deja de ser el chip.
+ *
+ * `uvm2_tx_oe` permite apagarlo para comparar A/B sin recompilar. */
+/* EL DIVISOR DEL RELOJ DEL MODO DIRECTO. Sin fijarlo, DIRECT_CSR conserva lo que
+ * tuviera, y con CLKDIV a cero NO HAY RELOJ: el QMI no transfiere nada, ningun chip
+ * recibe nada, y todo el mundo parece mudo.
+ *
+ * MEDIDO CON OSCILOSCOPIO el 2026-08-19: con el martilleo corriendo, SCK y MOSI
+ * PLANOS, milivoltios de ruido. Ni reloj ni dato. Y lo grave: la sonda original
+ * (uvm2_psram_probe) TAMPOCO lo fijaba, asi que el diagnostico del 12 de agosto —"el
+ * chip esta y no contesta"— se apoyaba en transacciones que quiza nunca se emitieron.
+ * Solo las sondas QPI lo ponian, y son las unicas que llegaron a ver algo distinto
+ * de cero (0xcc).
+ *
+ * 6 = 25 MHz a 150 MHz de reloj de sistema. */
+#define RELOJ_DIRECTO_DIV 6u
+static void reloj_directo(uint32_t div);
+
+int uvm2_tx_oe = 1;
+
+/* 1 = interroga al chip aunque la ventana ya este mapeada. Para poder correr el
+ * camino completo donde el hardware SI funciona y comparar. */
+int uvm2_psram_forzar = 0;
+
 static void tx(uint8_t byte)
 {
     uint32_t spins = 0;
     while ((qmi_hw->direct_csr & QMI_DIRECT_CSR_TXFULL_BITS) && ++spins < QMI_SPIN_LIMIT) { }
-    qmi_hw->direct_tx = byte;
+    qmi_hw->direct_tx = uvm2_tx_oe ? (QMI_DIRECT_TX_OE_BITS | byte) : (uint32_t)byte;
 }
 
 static uint8_t rx(void)
@@ -161,6 +195,7 @@ static void cs1_xfer(const uint8_t *cmd, uint32_t n_cmd, uint8_t *rx_buf, uint32
  */
 void uvm2_psram_hold_cs(int asertado)
 {
+    reloj_directo(RELOJ_DIRECTO_DIV);   /* sin esto no hay reloj */
     configure_cs1_pad();
     qmi_hw->direct_csr |= QMI_DIRECT_CSR_EN_BITS;
     uint32_t spins = 0;
@@ -168,6 +203,109 @@ void uvm2_psram_hold_cs(int asertado)
     if (asertado) qmi_hw->direct_csr |=  QMI_DIRECT_CSR_ASSERT_CS1N_BITS;
     else          qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_ASSERT_CS1N_BITS;
     uvm2_psram_result.csr_after_cmd = qmi_hw->direct_csr;   /* releido, no supuesto */
+}
+
+/* ---- LA REFERENCIA: LA MISMA PREGUNTA, A LA FLASH ------------------------
+ *
+ * REFERENCIA ANTES QUE SOSPECHOSO, MISMO MONTAJE. La flash U6 comparte SCK, MOSI y
+ * MISO con la PSRAM y funciona — de ella arranca el firmware. Asi que si le pedimos su
+ * JEDEC ID por EL MISMO modo directo, el mismo codigo y las mismas patas, cambiando
+ * solo cual de los dos selects se aserta, el resultado parte el problema en dos:
+ *
+ *   la flash CONTESTA  -> el camino (reloj, MOSI, muestreo de MISO, modo directo) es
+ *                         bueno. Lo que falla esta en U3 o en sus soldaduras.
+ *   la flash CALLA     -> nuestro modo directo esta mal, y U3 lleva todo este tiempo
+ *                         acusado por un fallo que es nuestro.
+ *
+ * NO PASA POR EL BOOTROM. do_cmd_cs() de abajo si, y rom_flash_exit_xip() NO VUELVE en
+ * este cartucho (medido el 2026-08-17). Esta imagen corre entera desde SRAM, asi que
+ * tomar el bus no molesta a nadie y no hace falta salir del XIP.
+ *
+ * Devuelve los tres bytes del ID empaquetados: (b0<<16)|(b1<<8)|b2. Una W25Q128 da
+ * 0xEF4018; 0x000000 o 0xFFFFFF es "no contesta".
+ */
+uint32_t uvm2_flash_id(void)
+{
+    reloj_directo(RELOJ_DIRECTO_DIV);   /* sin esto no hay reloj */
+    const uint8_t cmd = 0x9Fu;          /* JEDEC ID: sin direccion, tres bytes */
+    uint8_t id[3] = { 0, 0, 0 };
+    uint32_t spins = 0;
+    int i;
+
+    qmi_hw->direct_csr |= QMI_DIRECT_CSR_EN_BITS;
+    while ((qmi_hw->direct_csr & QMI_DIRECT_CSR_BUSY_BITS) && ++spins < QMI_SPIN_LIMIT) { }
+
+    /* SACARLA DEL MODO XIP PRIMERO. El firmware de Ralf arranca desde esta flash, y
+     * una flash en `continuous read` NO contesta a comandos normales: se queda
+     * esperando direcciones. Por eso existe rom_flash_exit_xip() — que aqui no vuelve.
+     * Se hace a mano, que son tres bytes sueltos, cada uno en su propia seleccion:
+     *   0xFF  reset del modo de lectura continua
+     *   0x66  habilitar reset      0x99  reset
+     * Es seguro: esta imagen corre entera desde SRAM, nadie esta leyendo de la flash,
+     * y al reiniciar la bootrom la reinicializa. */
+    {
+        const uint8_t salida[3] = { 0xFFu, 0x66u, 0x99u };
+        int k;
+        for (k = 0; k < 3; k++) {
+            qmi_hw->direct_csr |= QMI_DIRECT_CSR_ASSERT_CS0N_BITS;
+            tx(salida[k]); (void)rx();
+            qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_ASSERT_CS0N_BITS;
+        }
+    }
+
+    qmi_hw->direct_csr |= QMI_DIRECT_CSR_ASSERT_CS0N_BITS;
+    tx(cmd); (void)rx();
+    for (i = 0; i < 3; i++) { tx(0x00); id[i] = rx(); }
+    qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_ASSERT_CS0N_BITS;
+    qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_EN_BITS;
+
+    return ((uint32_t)id[0] << 16) | ((uint32_t)id[1] << 8) | id[2];
+}
+
+/* ---- CUANTO TIEMPO SE QUEDA /CS ABAJO ------------------------------------
+ *
+ * EL APS6404 ES DRAM POR DENTRO y exige refrescarse: su **tCEM son 8 us**, o sea que
+ * tiene derecho a abandonar una transaccion que mantenga /CS bajo mas que eso. Un chip
+ * que aborta por tCEM calla EXACTAMENTE como el nuestro.
+ *
+ * El codigo de aqui ya razonaba sobre tCEM, pero contando RELOJES: "12 bytes en quad a
+ * 25 MHz son ~1 us, holgado". Eso ignora lo que tarda el software entre byte y byte —
+ * y en modo directo cada byte lleva un sondeo de TXFULL/RXEMPTY, que son accesos a
+ * registro, con el select BAJO todo el rato. La estimacion puede quedarse corta por un
+ * orden de magnitud y nadie lo ha medido.
+ *
+ * Se mide con el contador de ciclos del nucleo (DWT), que da 6,7 ns de resolucion a
+ * 150 MHz — un `time_us_32()` no vale para distinguir 2 us de 8.
+ */
+uint32_t uvm2_psram_cs_low_ns(void)
+{
+    reloj_directo(RELOJ_DIRECTO_DIV);   /* sin esto no hay reloj */
+    const uint8_t cmd[4] = { CMD_READ_ID, 0, 0, 0 };
+    uint8_t id[2];
+    uint32_t t0, t1;
+
+    /* DWT: habilitar la traza y el contador de ciclos. */
+    *(volatile uint32_t *)0xE000EDFC |= (1u << 24);   /* DEMCR.TRCENA  */
+    *(volatile uint32_t *)0xE0001000 |= 1u;           /* DWT_CTRL.CYCCNTENA */
+
+    configure_cs1_pad();
+    qmi_hw->direct_csr |= QMI_DIRECT_CSR_EN_BITS;
+    uint32_t spins = 0;
+    while ((qmi_hw->direct_csr & QMI_DIRECT_CSR_BUSY_BITS) && ++spins < QMI_SPIN_LIMIT) { }
+
+    t0 = *(volatile uint32_t *)0xE0001004;            /* DWT_CYCCNT */
+    cs1_xfer(cmd, 4, id, 2);                          /* asserta, transfiere, suelta */
+    t1 = *(volatile uint32_t *)0xE0001004;
+
+    qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_EN_BITS;
+
+    {
+        uint32_t ciclos = t1 - t0;
+        uint32_t hz = clock_get_hz(clk_sys);
+        if (!hz) return 0;
+        /* ns, sin flotantes y sin desbordar: ciclos * (1e9/hz). */
+        return (uint32_t)((unsigned long long)ciclos * 1000000000ull / hz);
+    }
 }
 
 /* ---- EL RELOJ, TAMBIEN PARA EL POLIMETRO ----------------------------------
@@ -189,8 +327,31 @@ void uvm2_psram_hold_cs(int asertado)
  * NO DIBUJA NADA a proposito: la pantalla se queda negra, y eso es la señal de que
  * esta martilleando. Se sale reseteando.
  */
+/* Una RAFAGA de transacciones, no un bucle infinito. Devuelve el control para que el
+ * programa siga dibujando: asi "esta martilleando" tiene una señal POSITIVA en pantalla
+ * en vez de la ausencia de imagen — que es indistinguible de un cuelgue, y era el
+ * eslabon debil de la medida con osciloscopio. Al osciloscopio le basta con rafagas:
+ * dispara por flanco, no por nivel medio. */
+void uvm2_psram_rafaga(unsigned n)
+{
+    const uint8_t cmd[4] = { CMD_READ_ID, 0, 0, 0 };
+    uint8_t id[2];
+    unsigned i;
+
+    reloj_directo(RELOJ_DIRECTO_DIV);
+    configure_cs1_pad();
+    for (i = 0; i < n; i++) {
+        qmi_hw->direct_csr |= QMI_DIRECT_CSR_EN_BITS;
+        uint32_t spins = 0;
+        while ((qmi_hw->direct_csr & QMI_DIRECT_CSR_BUSY_BITS) && ++spins < QMI_SPIN_LIMIT) { }
+        cs1_xfer(cmd, 4, id, 2);
+        qmi_hw->direct_csr &= ~QMI_DIRECT_CSR_EN_BITS;
+    }
+}
+
 void uvm2_psram_hammer(void)
 {
+    reloj_directo(RELOJ_DIRECTO_DIV);   /* sin esto no hay reloj */
     const uint8_t cmd[4] = { CMD_READ_ID, 0, 0, 0 };
     uint8_t id[2];
 
@@ -538,6 +699,7 @@ int uvm2_psram_probe_bootrom(void)
 
 int uvm2_psram_probe(void)
 {
+    reloj_directo(RELOJ_DIRECTO_DIV);   /* NO lo hacia: ver la nota de arriba */
     volatile uvm2_psram_result_t *r = &uvm2_psram_result;
     r->magic = 0;   /* se pone AL FINAL: una estructura a medio llenar no vale */
 
@@ -572,7 +734,13 @@ int uvm2_psram_probe(void)
         r->already_mapped = 1;
         r->probed = 1;
         r->magic  = UVM2_PSRAM_MAGIC;
-        return 1;
+        /* SALIDA TEMPRANA, y hay que poder saltarsela. Si alguien ya levanto la
+         * ventana no hace falta interrogar al chip... salvo cuando lo que se quiere
+         * probar es precisamente el interrogatorio. Paso justo eso: en nuestro
+         * cartucho el firmware levanta la PSRAM antes de lanzar el juego, la sonda
+         * salio por aqui devolviendo 1, y ese 1 se leyo como "el chip contesta"
+         * cuando significaba "ya estaba montada". READ_ID no llego a ejecutarse. */
+        if (!uvm2_psram_forzar) return 1;
     }
 
     /* 4. Nadie la ha levantado: la levantamos nosotros. */
