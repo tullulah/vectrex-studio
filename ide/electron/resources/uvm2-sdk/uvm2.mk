@@ -68,6 +68,7 @@ UVM2_CFLAGS_CLEAN = $(filter-out -DVPY_DUAL_CORE -Wa$(,)--defsym$(,)DUAL_CORE_FL
                       $(UVM2_CFLAGS)) -I$(UVM2_SDK)
 
 UVM2_SDK_SRCS = uvm2_bus.c uvm2_draw.c uvm2_input.c uvm2_led.c uvm2_text.c \
+                uvm2_sd.c uvm2_romzip.c \
                 uvm2_audio.c uvm2_svc.c
 UVM2_SDK_OBJS = $(addprefix $(UVM2_BUILD)/sdk_,$(UVM2_SDK_SRCS:.c=.o))
 

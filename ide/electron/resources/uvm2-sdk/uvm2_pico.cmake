@@ -51,6 +51,8 @@ pico_sdk_init()
 add_executable(${UVM2_NAME}
     ${UVM2_GAME_SRCS}
     ${UVM2_SDK_DIR}/uvm2_bus.c
+    ${UVM2_SDK_DIR}/uvm2_sd.c
+    ${UVM2_SDK_DIR}/uvm2_romzip.c
     ${UVM2_SDK_DIR}/uvm2_draw.c
     ${UVM2_SDK_DIR}/uvm2_input.c
     ${UVM2_SDK_DIR}/uvm2_led.c

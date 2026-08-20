@@ -18,6 +18,7 @@
 
 int uvm2_game_main(void);          /* the game's own main(), renamed at compile time */
 void uvm2_runtime_init(void);      /* uvm2_svc.c */
+void uvm2_romzip_cargar(void);     /* uvm2_romzip.c: lee roms/<juego>.zip de la SD */
 #ifdef UVM2_DUAL_CORE
 void uvm2_core1_start(void);       /* uvm2_core1.c */
 #endif
@@ -78,6 +79,10 @@ int main(void)
 {
 #ifndef UVM2_STEP_OWNS_INIT
     uvm2_runtime_init();
+    /* El romset, ANTES del juego: su main() llama a aae_load_roms() de lo primero. En el
+     * cartucho propio esto lo hace el firmware; aqui el UVM2 no lo hace y hay que leerlo
+     * nosotros. Si falla, el juego pinta su cartel de "sin romset" y no se cuelga. */
+    uvm2_romzip_cargar();
 #  ifdef UVM2_DUAL_CORE
     /* After the runtime init, never before: core 1 takes the bus from here on,
      * and it must not start until the VIA has been programmed and the 6809 is
