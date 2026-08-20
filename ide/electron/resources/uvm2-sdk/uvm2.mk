@@ -89,6 +89,11 @@ ifeq ($(UVM2_PIO_STREAM),1)
 export UVM2_PIO_STREAM := 1
 endif
 
+# Enciende la PSRAM sin usarla. Aisla "el chip activo" de "la lista vive alli".
+ifeq ($(UVM2_PSRAM_ARRANCA),1)
+UVM2_CFLAGS += -DUVM2_PSRAM_ARRANCA=1
+endif
+
 # EL BUFFER DEL ROMSET SE DERIVA DEL ZIP. No se escribe a mano en 43 Makefiles.
 #
 # uvm2_romzip.c lee roms/<juego>.zip de la SD a un array ESTATICO en SRAM, y la imagen del

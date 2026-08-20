@@ -94,7 +94,12 @@ int main(void)
      * tiene sentido arrancarla antes de que el reloj este ahi. */
     uvm2_stream_start();
 #endif
-#  ifdef UVM2_CMDS_IN_PSRAM
+#  if defined(UVM2_CMDS_IN_PSRAM) || defined(UVM2_PSRAM_ARRANCA)
+    /* UVM2_PSRAM_ARRANCA: enciende la PSRAM SIN usarla, para poder probar por separado
+     * "la lista vive alli" y "el chip esta activo". El stream por PIO funciona con el chip
+     * apagado y colapsa a una diagonal con la lista en PSRAM — incluso copiandola a SRAM
+     * antes de reproducir, o sea que no es leerla lo que rompe. Esta perilla aisla la
+     * unica variable que quedaba compartida: el QMI en marcha. */
     /* LA PSRAM, ANTES DE QUE NADIE EMITA UN COMANDO, y despues de uvm2_runtime_init.
      *
      * Ese orden no es cosmetico: el chip select de la PSRAM del UVM2 es un GPIO del banco

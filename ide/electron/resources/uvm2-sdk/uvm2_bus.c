@@ -213,6 +213,8 @@ void uvm2_bus_init(void)
  * a single 12-bit update landing on GPIO0-11.  One command = one bus cycle. */
 
 #ifdef UVM2_PIO_STREAM
+void uvm2_bus_devolver_al_stream(void);   /* definida con las primitivas sueltas, abajo */
+
 /* ── EL MISMO EJECUTOR, PERO ENCOLANDO ────────────────────────────────────────
  *
  * La lista y su formato NO CAMBIAN: se decodifica igual (reg+dato ya desplazados en los
@@ -233,6 +235,9 @@ void uvm2_bus_init(void)
 UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
 {
     uint32_t cycles = 0;
+
+    /* Reclamar el bus si un acceso suelto se lo llevo a SIO entre frames. */
+    uvm2_bus_devolver_al_stream();
 
     while (count--) {
         uint32_t c     = *cmds++;
@@ -371,11 +376,86 @@ UVM2_RAMFUNC void uvm2_bus_delay(uint32_t cycles)
  * assumed: an input read's cost depends on how many SAR steps an axis needs. */
 uint32_t uvm2_single_cycles;
 
+#ifdef UVM2_PIO_STREAM
+/* ── ACCESOS SUELTOS MIENTRAS EL STREAM TIENE EL BUS ──────────────────────────
+ *
+ * Con el stream, GP0..GP26 son del PIO. uvm2_via_write y uvm2_via_read siguen hablando por
+ * SIO —es su forma correcta y unica de leer, porque el ejecutor no puede leer a mitad de
+ * lista— asi que escriben en registros que YA NO CONDUCEN esos pines.
+ *
+ * EL SINTOMA NO SE PARECE A UN FALLO DE BUS. Leer un mando es *escribir la columna en
+ * Port B y luego leer Port A*, y los botones son activos BAJOS: si la columna no sale, se
+ * lee "pulsado" en todo. En asteroids eso es la nave girando, disparando y saltando al
+ * hiperespacio a la vez y al azar. En el otro cartucho la misma familia de fallo dejo los
+ * botones 1 y 2 pulsados desde el arranque, y tampoco parecio un problema del bus.
+ *
+ * Dos cosas, y las dos hacen falta:
+ *   1. VACIAR el stream. Una lectura puede adelantar a hasta 63 escrituras encoladas
+ *      (~42 us), y entonces lee el bus de antes.
+ *   2. Devolver los pines a SIO durante el acceso, y al PIO al salir.
+ *
+ * Cuesta 27 escrituras de FUNCSEL por acceso, y se puede permitir: esto ocurre ENTRE
+ * frames (mandos, ejes, PSG), nunca dentro del bucle de dibujo. La SM se queda aparcando
+ * mientras tanto, que es su estado de reposo por diseño.
+ *
+ * El valor y la direccion de SIO no se pierden al ceder los pines: GPIO_OUT y GPIO_OE son
+ * del SIO y siguen ahi; solo cambia quien conduce el pad. */
+#define UVM2_FUNC_SIO 5u
+#define UVM2_FUNC_PIO 6u
+
+static void pines_a(uint32_t funcsel)
+{
+    for (uint32_t i = 0; i < UVM2_STREAM_OUT_COUNT; i++)
+        if (UVM2_STREAM_OUT_DIRS & (1u << i))
+            *(volatile uint32_t *)(uintptr_t)
+                (0x40028000u + 8u * (UVM2_STREAM_OUT_BASE + i) + 4u) = funcsel;
+}
+
+/* SE TOMA UNA VEZ Y SE SUELTA AL VOLVER A DIBUJAR, no por acceso.
+ *
+ * Tomarlo y soltarlo en cada uvm2_via_write era el arreglo obvio y esta MAL: leer los
+ * botones son OCHO accesos seguidos (DDRA, el numero de registro, el latch, inactivo,
+ * DDRA a entrada, leer, inactivo) y esa secuencia son ESTROBOS del PSG, con orden y
+ * tiempos. Rebotando los pines PIO->SIO->PIO entre cada uno se mete un hueco largo en
+ * mitad de la secuencia, y el resultado no es ruido: es un valor ESTABLE Y EQUIVOCADO.
+ * Medido con el test `mandos`: 0x76 en vez de 0xFF con nada pulsado, congelado en tres
+ * lecturas. Un valor que baila y un valor fijo pero falso son averias distintas.
+ *
+ * Asi que el bus se queda en SIO desde el primer acceso suelto hasta que el dibujo lo
+ * reclama. uvm2_exec lo pide al empezar; entre frames no lo pide nadie, que es justo
+ * cuando se leen mandos, ejes y PSG. */
+static int s_bus_en_sio;
+
+static void bus_tomar(void)
+{
+    if (s_bus_en_sio) return;
+    vbus_drain();
+    pines_a(UVM2_FUNC_SIO);
+    s_bus_en_sio = 1;
+}
+
+void uvm2_bus_devolver_al_stream(void)
+{
+    if (!s_bus_en_sio) return;
+    pines_a(UVM2_FUNC_PIO);
+    s_bus_en_sio = 0;
+}
+
+#define UVM2_BUS_TOMAR()  bus_tomar()
+#define UVM2_BUS_SOLTAR() do { } while (0)
+#else
+#define UVM2_BUS_TOMAR()  do { } while (0)
+#define UVM2_BUS_SOLTAR() do { } while (0)
+#define uvm2_bus_devolver_al_stream() do { } while (0)
+#endif
+
 UVM2_RAMFUNC void uvm2_via_write(uint32_t reg, uint32_t data)
 {
     uint32_t out = UVM2_VIA_BASE_BITS
                  | ((reg & 0x0Fu) << 8)          /* register → A0-A3 */
                  | (data & 0xFFu);               /* data     → D0-D7 */
+
+    UVM2_BUS_TOMAR();
 
     UVM2_WAIT_CLK_HIGH();
     uvm2_put_masked(out, UVM2_BUS_MASK);          /* R/W low = write */
@@ -391,6 +471,8 @@ UVM2_RAMFUNC void uvm2_via_write(uint32_t reg, uint32_t data)
     UVM2_WAIT_CLK_HIGH();
     uvm2_put_masked(UVM2_PARK_BITS, UVM2_BUS_MASK & ~UVM2_DATA_MASK);
     uvm2_single_cycles += 2;
+
+    UVM2_BUS_SOLTAR();
 }
 
 UVM2_RAMFUNC uint8_t uvm2_via_read(uint32_t reg)
@@ -398,6 +480,8 @@ UVM2_RAMFUNC uint8_t uvm2_via_read(uint32_t reg)
     uint32_t out = UVM2_VIA_BASE_BITS | UVM2_RW_MASK | ((reg & 0x0Fu) << 8);
     uint32_t addr_mask = UVM2_BUS_MASK & ~UVM2_DATA_MASK;
     uint32_t state;
+
+    UVM2_BUS_TOMAR();
 
     UVM2_GPIO_OE_CLR = UVM2_DATA_MASK;            /* let the VIA drive D0-D7 */
 
@@ -420,5 +504,7 @@ UVM2_RAMFUNC uint8_t uvm2_via_read(uint32_t reg)
      * the same known phase. */
     UVM2_WAIT_CLK_LOW();
     uvm2_single_cycles += 2u;      /* one to address, one to sample */
+
+    UVM2_BUS_SOLTAR();
     return (uint8_t)(state & 0xFFu);
 }
