@@ -20,6 +20,13 @@ crate-type = ["staticlib"]
 
 [dependencies]
 vectrex-draw = { path = ".." }
+# Opcional: el stream de bus por PIO+DMA. Va en ESTE envoltorio y no en el suyo porque una
+# staticlib exige manejador de panico y dos manejadores no pueden coexistir en un enlace.
+vectrex-bus  = { path = "../../vectrex-bus", optional = true }
+
+[features]
+default = []
+bus = ["dep:vectrex-bus"]
 
 [profile.release]
 panic = "abort"

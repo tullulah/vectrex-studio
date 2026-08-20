@@ -123,8 +123,29 @@ static void core1_main(void)
         served++;
         __asm volatile ("dmb" ::: "memory");       /* the buffer before the count */
 
+#ifdef UVM2_CMDS_STAGE_SRAM
+        /* CONTROL: la lista vive en la PSRAM pero se REPRODUCE desde SRAM.
+         *
+         * La hipotesis que prueba: un fallo de la cache del XIP (16 KB) contra la PSRAM
+         * tarda mas que un periodo E, asi que la escritura pierde su fase — y la regla del
+         * bus 6800 es de FASE, no de tiempo de establecimiento: no degrada, falla. De ahi
+         * garabatos mezclados con vectores buenos en vez de un dibujo borroso.
+         *
+         * Copiar entero antes de empezar quita TODOS los fallos de la ventana con el haz
+         * encendido. Si con esto se limpia, la causa es la busqueda y el arreglo de verdad
+         * es traerla por DMA a un anillo pequeño mientras se dibuja. Si NO se limpia, el
+         * dato esta mal y la busqueda no tenia nada que ver.
+         *
+         * Es un CONTROL, no la solucion: gasta en SRAM lo mismo que se queria ahorrar. */
+        static uint32_t s_stage[UVM2_CMD_CAPACITY];
+        const uint32_t *origen = uvm2_frame_buffer(served);
+        const uint32_t  n      = uvm2_frame_length(served);
+        for (uint32_t i = 0; i < n && i < UVM2_CMD_CAPACITY; i++) s_stage[i] = origen[i];
+        uint32_t cycles = uvm2_exec(s_stage, n);
+#else
         uint32_t cycles = uvm2_exec(uvm2_frame_buffer(served),
                                     uvm2_frame_length(served));
+#endif
         uint32_t t1 = time_us_32();
         uvm2_stats.us_exec = t1 - t0;
 
@@ -150,8 +171,8 @@ static void core1_main(void)
          * sigue abierto: es que los dos caminos tenian semanticas distintas para
          * lo mismo, y eso hay que igualarlo antes de comparar nada. */
         s_audio_acc += cycles;
-        while (s_audio_acc >= UVM2_CYCLES_PER_FRAME) {
-            s_audio_acc -= UVM2_CYCLES_PER_FRAME;
+        while (s_audio_acc >= UVM2_AUDIO_CYCLES) {
+            s_audio_acc -= UVM2_AUDIO_CYCLES;
             uvm2_audio_tick();
         }
 #endif
@@ -163,6 +184,12 @@ static void core1_main(void)
          * joystick conversion lands in the beam's own sample-and-holds. */
         uvm2_draw_invalidate();
 
+#if UVM2_HZ == 0
+        /* SIN LIMITE, igual que en uvm2_draw.c. Esta guarda FALTABA aqui, y el resultado
+         * era que un juego de doble nucleo con UVM2_HZ=0 esperaba UVM2_CYCLES_PER_FRAME =
+         * 1500000/1 ciclos, o sea UN SEGUNDO por frame: 1 fps, medido en asteroids. */
+        uvm2_stats.bus_cycles = cycles;
+#else
         if (cycles < UVM2_CYCLES_PER_FRAME) {
             uvm2_bus_delay(UVM2_CYCLES_PER_FRAME - cycles);
             uvm2_stats.bus_cycles = UVM2_CYCLES_PER_FRAME;
@@ -170,6 +197,7 @@ static void core1_main(void)
             uvm2_stats.overrun++;
             uvm2_stats.bus_cycles = cycles;
         }
+#endif
 
         uvm2_stats.us_rest = time_us_32() - t2;
         __asm volatile ("dmb" ::: "memory");       /* the work before the flag */

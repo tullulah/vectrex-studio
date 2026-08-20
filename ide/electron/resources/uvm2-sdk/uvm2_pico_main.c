@@ -14,6 +14,10 @@
  * detected (uvm2_clock_calibrate). Keeping it here means one place gets it right.
  */
 #include "uvm2_bus.h"
+#include "uvm2_psram.h"
+#ifdef UVM2_PIO_STREAM
+#include "uvm2_bus_stream.h"
+#endif
 #include "uvm2_led.h"
 
 int uvm2_game_main(void);          /* the game's own main(), renamed at compile time */
@@ -75,10 +79,43 @@ void runtime_init_early_resets(void)
 }
 #endif
 
+int uvm2_psram_listo = -1;   /* 1 = la PSRAM contesto, 0 = no, -1 = ni se intento */
+
 int main(void)
 {
 #ifndef UVM2_STEP_OWNS_INIT
     uvm2_runtime_init();
+    /* Con el bus ya tomado: 256 periodos de E, unos 170 us. Deja en
+     * uvm2_ciclos_por_e_q8 la relacion reloj/E, que es lo que decide si la calibracion
+     * de fase del stream por PIO vale en esta placa. */
+    uvm2_medir_e();
+#ifdef UVM2_PIO_STREAM
+    /* Despues de medir E y con el bus ya tomado: la SM sincroniza contra ~E, asi que no
+     * tiene sentido arrancarla antes de que el reloj este ahi. */
+    uvm2_stream_start();
+#endif
+#  ifdef UVM2_CMDS_IN_PSRAM
+    /* LA PSRAM, ANTES DE QUE NADIE EMITA UN COMANDO, y despues de uvm2_runtime_init.
+     *
+     * Ese orden no es cosmetico: el chip select de la PSRAM del UVM2 es un GPIO del banco
+     * 0, y runtime_init_early_resets resetea IO_BANK0 y PADS_BANK0. Configurarla antes es
+     * configurarla para que la borren — la averia que costo el cargador de dos etapas.
+     *
+     * Y va AQUI y no en uvm2_bus_init() porque en el camino del pico-sdk esa funcion NO
+     * SE LLAMA: main() invoca los tres pasos por separado. Ponerla alli compilaba, no
+     * enlazaba nada y dejaba la PSRAM sin inicializar; el sintoma fue una lista de
+     * comandos que se leia entera a cero, o sea pantalla negra con el contador de frames
+     * subiendo. Se vio comparando commands con bus_cycles: 1 ciclo por comando en vez de
+     * ~7, porque un comando a cero no lleva retardo. */
+    /* PRIMERO LOS PINES DEL BUS QSPI, que no son nuestros todavia.
+     *
+     * El lanzador de Ralf no salta al modulo: reinicia por la bootrom con RAM_IMAGE. Y la
+     * bootrom, sabiendo que no va a ejecutar desde flash, deja los seis pines del QSPI en
+     * FUNCSEL = NULL. El QMI acepta las transferencias, BUSY se comporta, CS se mueve — y
+     * no conduce ni un pin. Dos semanas de "el chip esta muerto" fueron esto. */
+    uvm2_qmi_levantar();
+    uvm2_psram_listo = uvm2_psram_init();
+#  endif
     /* El romset, ANTES del juego: su main() llama a aae_load_roms() de lo primero. En el
      * cartucho propio esto lo hace el firmware; aqui el UVM2 no lo hace y hay que leerlo
      * nosotros. Si falla, el juego pinta su cartel de "sin romset" y no se cuelga. */

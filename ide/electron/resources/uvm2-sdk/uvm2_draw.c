@@ -17,9 +17,25 @@
 #include <limits.h>
 #include "uvm2_draw.h"
 
-/* His buffer is 8K words per frame; a full screen of vectors is far below that
- * (a vector is ~8 commands, and a 50 Hz frame only affords ~220 vectors). */
+/* CUANTOS COMANDOS CABEN EN UN FRAME. Perilla por juego, no una constante.
+ *
+ * El 8192 venia de Ralf y de una cuenta que ya no vale: "un vector son ~8 comandos y un
+ * frame de 50 Hz solo da para ~220 vectores". Eso era cierto MIENTRAS EL PACER FRENABA a
+ * 50 Hz. Sin limite (UVM2_HZ=0) el juego dibuja todo lo que le cabe, y asteroids llega a
+ * 744 vectores: 8751 comandos, de los que 559 se caian por el borde — medido, stats.dropped.
+ *
+ * Y un tope que se pasa NO se ve como un error, se ve como un dibujo incompleto, que es el
+ * sintoma de otras diez cosas. De ahi el aviso del contador: si dropped no es cero, nada de
+ * lo que se ve en pantalla es concluyente.
+ *
+ * Cuesta 4 bytes por comando y por buffer (dos buffers en doble nucleo), asi que subirlo no
+ * es gratis: 12288 son 48 KB por buffer. Se sube por juego, con el contador delante:
+ *
+ *     make uvm2 UVM2_CMD_CAPACITY=12288      # y comprobar que stats.dropped queda en 0
+ */
+#ifndef UVM2_CMD_CAPACITY
 #define UVM2_CMD_CAPACITY  8192u
+#endif
 
 /* One buffer single-core, two when core 1 replays: core 0 fills the buffer for
  * frame n while core 1 is still replaying frame n-1.  Single-core builds keep
@@ -29,7 +45,35 @@
 #else
 #  define UVM2_NBUF 1u
 #endif
+/* LA LISTA, EN SRAM O EN LA PSRAM EXTERNA.
+ *
+ * En SRAM la lista compite con el juego: dkong deja 3788 bytes libres de los 496 KB, asi
+ * que subir el tope de 8192 no cabe (pedir 16384 desborda por 61748). La PSRAM del UVM2
+ * son 8 MB y en una imagen de SRAM no la usa nadie, asi que ahi el tope deja de ser un
+ * problema de memoria.
+ *
+ * POR QUE SE PUEDE PERMITIR LA LATENCIA. La lista se REPRODUCE al ritmo del bus del
+ * Vectrex: un comando es un ciclo de bus, 667 ns. Una lectura secuencial por la cache del
+ * XIP esta muy por debajo, asi que del lado de core 1 la latencia se esconde entera.
+ * Donde puede doler es al ESCRIBIRLA —core 0, a toda velocidad y sin pacer— y eso no se
+ * supone: se compara us_exec y el periodo de frame con la perilla y sin ella.
+ *
+ * No lleva script de enlazado: es un puntero a una direccion fija. La PSRAM esta vacia en
+ * una imagen de SRAM, y asi esto no toca el memmap del pico-sdk.
+ */
+#if defined(UVM2_CMDS_IN_PSRAM) && defined(UVM2_PSRAM_IMAGE)
+#  error "UVM2_CMDS_IN_PSRAM con la imagen YA en PSRAM: la lista pisaria el propio codigo"
+#endif
+
+#ifdef UVM2_CMDS_IN_PSRAM
+#  ifndef UVM2_PSRAM_CMDS_BASE
+#    define UVM2_PSRAM_CMDS_BASE 0x11000000u
+#  endif
+typedef uint32_t uvm2_cmd_buf[UVM2_CMD_CAPACITY];
+static uvm2_cmd_buf *const s_cmds = (uvm2_cmd_buf *)(uintptr_t)UVM2_PSRAM_CMDS_BASE;
+#else
 static uint32_t s_cmds[UVM2_NBUF][UVM2_CMD_CAPACITY];
+#endif
 static uint32_t s_count;
 static uint32_t s_buf;                  /* buffer being filled; always 0 single-core */
 

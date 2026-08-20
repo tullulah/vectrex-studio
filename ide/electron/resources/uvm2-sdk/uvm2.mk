@@ -64,6 +64,31 @@ UVM2_BUILD   ?= build_uvm2
 UVM2_HZ ?= 50
 UVM2_CFLAGS += -DUVM2_HZ=$(UVM2_HZ)
 
+# Tope de la lista de comandos, por juego. Ver el comentario en uvm2_draw.c: sin pacer, un
+# juego dibuja mas por frame y el 8192 de Ralf se queda corto. Vigilar stats.dropped.
+ifneq ($(UVM2_CMD_CAPACITY),)
+UVM2_CFLAGS += -DUVM2_CMD_CAPACITY=$(UVM2_CMD_CAPACITY)u
+endif
+
+# La lista de comandos, en la PSRAM externa en vez de en la SRAM. Ver uvm2_draw.c: en SRAM
+# compite con el juego (dkong deja 3788 bytes libres), en la PSRAM sobran 8 MB.
+#   make uvm2 UVM2_CMDS_IN_PSRAM=1 UVM2_CMD_CAPACITY=32768
+ifeq ($(UVM2_CMDS_IN_PSRAM),1)
+UVM2_CFLAGS += -DUVM2_CMDS_IN_PSRAM=1
+endif
+
+# CONTROL del experimento: lista en PSRAM, reproducida desde una copia en SRAM. Gasta en
+# SRAM lo que se queria ahorrar; sirve para saber si la culpa es la busqueda o el dato.
+ifeq ($(UVM2_CMDS_STAGE_SRAM),1)
+UVM2_CFLAGS += -DUVM2_CMDS_STAGE_SRAM=1
+endif
+
+# El stream de bus por PIO+DMA (caja compartida vectrex-bus). Va por el ENTORNO porque
+# quien lo lee es uvm2_pico.cmake, no el compilador.
+ifeq ($(UVM2_PIO_STREAM),1)
+export UVM2_PIO_STREAM := 1
+endif
+
 # EL BUFFER DEL ROMSET SE DERIVA DEL ZIP. No se escribe a mano en 43 Makefiles.
 #
 # uvm2_romzip.c lee roms/<juego>.zip de la SD a un array ESTATICO en SRAM, y la imagen del

@@ -223,8 +223,8 @@ void uvm2_svc_dispatch(uint32_t *frame)
          * this for free by sequencing on core 1; here we count the cycles. */
 #ifndef UVM2_NO_AUDIO
         s_audio_acc += uvm2_frame_bus_cycles();
-        while (s_audio_acc >= UVM2_CYCLES_PER_FRAME) {
-            s_audio_acc -= UVM2_CYCLES_PER_FRAME;
+        while (s_audio_acc >= UVM2_AUDIO_CYCLES) {
+            s_audio_acc -= UVM2_AUDIO_CYCLES;
             uvm2_audio_tick();
         }
 #endif

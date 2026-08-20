@@ -17,6 +17,9 @@
  */
 
 #include "uvm2_bus.h"
+#ifdef UVM2_PIO_STREAM
+#include "uvm2_bus_stream.h"
+#endif
 
 uvm2_stats_t uvm2_stats;
 
@@ -98,6 +101,28 @@ void uvm2_bus_pads(void)
 /* Step 3 — take the bus and keep it.  /HALT stays asserted for the life of the
  * program: releasing it between accesses lets the 6809 resume BIOS execution
  * and fight us for the bus. */
+#ifdef UVM2_PIO_STREAM
+/* Arranca el stream con el reparto de campos de ESTA placa.
+ *
+ * out_dirs deja fuera GP22 (PB6, que es una ENTRADA aqui) y GP23 (que no existe). Van
+ * dentro del rango del `out` porque la direccion esta partida —A14/A15 saltan sobre
+ * ellos— pero con su bit de direccion a 0 el pad no conduce y el `out pins` es inocuo.
+ * Es el mismo mecanismo del preambulo, sin una sola rama en el camino caliente.
+ *
+ * El park es $8000 con R/W ALTO: sin mapear en el Vectrex, asi que un periodo aparcado no
+ * alcanza a ningun dispositivo. Aparcar en $D00x volveria a ejecutar la ultima escritura
+ * a la VIA en CADA bajada de E. */
+#define UVM2_STREAM_OUT_BASE   0u
+#define UVM2_STREAM_OUT_COUNT  27u                       /* GP0..GP26: datos, A0-A15, R/W */
+#define UVM2_STREAM_OUT_DIRS   (((1u << UVM2_STREAM_OUT_COUNT) - 1u) \
+                                & ~(1u << 22) & ~(1u << 23))
+void uvm2_stream_start(void)
+{
+    vbus_install(UVM2_STREAM_OUT_BASE, UVM2_STREAM_OUT_COUNT, UVM2_STREAM_OUT_DIRS,
+                 UVM2_PARK_BITS | UVM2_RW_MASK);
+}
+#endif
+
 void uvm2_bus_halt(void)
 {
     /* Values go into GPIO_OUT *before* the drivers are enabled, so the pins
@@ -109,12 +134,52 @@ void uvm2_bus_halt(void)
     /* Let the 6809 finish its instruction and tri-state.  The reference sleeps
      * 20 ms; counting bus cycles instead keeps this independent of whatever
      * core clock the firmware left configured — 30000 cycles is 20 ms exactly. */
-    uvm2_bus_delay(UVM2_CYCLES_PER_FRAME);
+    uvm2_bus_delay(UVM2_CYCLES_20MS);
+}
+
+/* CUANTOS CICLOS DE CPU DURA UN PERIODO E, medido contra el reloj del propio Vectrex.
+ *
+ * POR QUE ESTE NUMERO Y NO "cuantos MHz". La calibracion de fase del stream por PIO
+ * (`nop [14]` en bus_stream.pio) esta expresada en ciclos de PIO, y el PIO va al reloj del
+ * sistema. Lo que decide si esa calibracion se traslada de una placa a otra no es la
+ * frecuencia nominal, es la RELACION entre el reloj del sistema y el periodo de E. En
+ * nuestro cartucho son 100,0 ciclos por periodo (T1_CYCLES_Q8 = 25602).
+ *
+ * Y E es la mejor regla que hay: 1,5 MHz por definicion del Vectrex, independiente de que
+ * cristal lleve la placa y de lo que dejara configurado la bootrom. Leer PLL_SYS da 150
+ * MHz, pero SUPONIENDO un cristal de 12 MHz que nadie ha medido; esto no supone nada.
+ *
+ * Se toma sobre UVM2_E_MUESTRAS periodos para que el coste de detectar el flanco (unos
+ * pocos ciclos) se reparta y no sesgue el resultado. En Q8 para no arrastrar coma
+ * flotante: 100,0 ciclos se leen como 25600. */
+#define UVM2_E_MUESTRAS 256u
+uint32_t uvm2_ciclos_por_e_q8;
+
+void uvm2_medir_e(void)
+{
+    uint32_t t0, t1, i;
+
+    *(volatile uint32_t *)0xE000EDFC |= (1u << 24);   /* DEMCR.TRCENA        */
+    *(volatile uint32_t *)0xE0001000 |= 1u;           /* DWT_CTRL.CYCCNTENA  */
+
+    /* Empezar EN un flanco, no en medio de un periodo: si no, la primera muestra vale
+     * una fraccion y el promedio sale corto. */
+    UVM2_WAIT_CLK_LOW();
+    UVM2_WAIT_CLK_HIGH();
+    t0 = *(volatile uint32_t *)0xE0001004;
+    for (i = 0; i < UVM2_E_MUESTRAS; i++) {
+        UVM2_WAIT_CLK_LOW();
+        UVM2_WAIT_CLK_HIGH();
+    }
+    t1 = *(volatile uint32_t *)0xE0001004;
+
+    uvm2_ciclos_por_e_q8 = ((t1 - t0) << 8) / UVM2_E_MUESTRAS;
 }
 
 void uvm2_bus_init(void)
 {
     uvm2_cpu_init();
+
     uvm2_bus_pads();
     uvm2_bus_halt();
 }
@@ -124,6 +189,50 @@ void uvm2_bus_init(void)
  * batch and the address' high bits stay at $D000 throughout, so each command is
  * a single 12-bit update landing on GPIO0-11.  One command = one bus cycle. */
 
+#ifdef UVM2_PIO_STREAM
+/* ── EL MISMO EJECUTOR, PERO ENCOLANDO ────────────────────────────────────────
+ *
+ * La lista y su formato NO CAMBIAN: se decodifica igual (reg+dato ya desplazados en los
+ * bits 8..19, retardo en 20..31). Lo que cambia es quien pone los bits en el bus y quien
+ * cuenta los periodos: aqui la maquina de estados del PIO, que sincroniza contra ~E por
+ * hardware. Esa es la diferencia que importa — una palabra que llega tarde le cuesta un
+ * periodo, no una escritura en la fase equivocada.
+ *
+ * Y por eso esto tolera que la lista viva en la PSRAM: un fallo de cache retrasa al DMA,
+ * que reponde llenando el FIFO un poco despues; la SM mientras tanto APARCA. Con el
+ * ejecutor en CPU el mismo fallo caia dentro de la ventana de una escritura y rompia la
+ * fase, que es lo que dibujaba garabatos.
+ *
+ * EL RETARDO SE ENCOLA, NO SE ESPERA. `vbus_repeat(n)` es UNA palabra que hace aparcar n
+ * periodos; empujar n palabras de park costaba ~8400 escrituras al FIFO por frame para
+ * producir exactamente lo mismo.
+ */
+UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
+{
+    uint32_t cycles = 0;
+
+    while (count--) {
+        uint32_t c     = *cmds++;
+        uint32_t out   = (c >> 8) & UVM2_CMD_GPIO_MASK;
+        uint32_t delay = c >> 20;
+
+        /* R/W queda BAJO por omision en la palabra: es una escritura. */
+        vbus_push(vbus_word(UVM2_VIA_BASE_BITS | out));
+        cycles++;
+
+        if (delay) {
+            vbus_push(vbus_repeat(delay));
+            cycles += delay;
+        }
+    }
+
+    /* VACIAR ANTES DE QUE NADIE LEA. El resto del SDK lee la VIA entre frames (mandos,
+     * PSG), y una lectura que adelante al lote pendiente ve el bus de antes. Es la misma
+     * avaria que dejo los botones 1 y 2 pulsados desde el arranque en el otro cartucho. */
+    vbus_flush();
+    return cycles;
+}
+#else
 UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
 {
     uint32_t cycles = 0;
@@ -220,6 +329,7 @@ UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
     uvm2_put_masked(UVM2_RW_MASK, UVM2_BUS_MASK);
     return cycles;
 }
+#endif /* UVM2_PIO_STREAM */
 
 UVM2_RAMFUNC void uvm2_bus_delay(uint32_t cycles)
 {

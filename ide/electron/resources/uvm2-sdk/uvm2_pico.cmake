@@ -185,6 +185,14 @@ set(VECTREX_DRAW_TARGET thumbv8m.main-none-eabi)   # coma flotante SOFTWARE: est
                                                    # se compila -mfloat-abi=softfp y el
                                                    # enlazador compara Tag_ABI_VFP_args
                                                    # aunque no cruce ningun flotante
+if(DEFINED ENV{UVM2_PIO_STREAM} AND NOT "$ENV{UVM2_PIO_STREAM}" STREQUAL "0")
+    # No hay segunda .a: el ABI del stream sale del MISMO envoltorio que la capa de dibujo,
+    # porque una staticlib exige manejador de panico y dos no caben en un enlace. Ver
+    # vectrex-draw/cabi/src/lib.rs.
+    set(VECTREX_CABI_FEATURES --features bus)
+    target_compile_definitions(${UVM2_NAME} PRIVATE UVM2_PIO_STREAM=1)
+endif()
+
 set(VECTREX_DRAW_LIB
     "${VECTREX_DRAW_DIR}/cabi/target/${VECTREX_DRAW_TARGET}/release/libvectrex_draw_cabi.a")
 
@@ -198,11 +206,25 @@ endif()
 add_custom_target(vectrex_draw_lib ALL
     COMMAND ${CARGO_EXE} build --release --target ${VECTREX_DRAW_TARGET}
             --manifest-path "${VECTREX_DRAW_DIR}/cabi/Cargo.toml"
+            ${VECTREX_CABI_FEATURES}
     BYPRODUCTS ${VECTREX_DRAW_LIB}
     COMMENT "capa de dibujo compartida (vectrex-draw)")
 add_dependencies(${UVM2_NAME} vectrex_draw_lib)
 target_link_libraries(${UVM2_NAME} ${VECTREX_DRAW_LIB})
 target_compile_definitions(${UVM2_NAME} PRIVATE UVM2_VECTREX_DRAW=1)
+
+# ── EL STREAM DE BUS POR PIO+DMA, COMPARTIDO ─────────────────────────────────
+#
+# Misma caja que usa el firmware del cartucho propio (vectrex-bus), enlazada aqui como
+# staticlib. No es un puerto ni una transcripcion: es EL MISMO conductor y EL MISMO
+# programa de PIO ya ensamblado, con el ancho del `out` parcheado al instalar (25 pines
+# alli, 27 aqui). Lo unico propio de esta placa es como se arma la palabra de bus, que ya
+# vivia en uvm2_bus.h porque aqui la direccion esta partida.
+#
+# Detras de perilla porque hay que compararlo contra el camino SIO con la misma escena,
+# que es como se midio el 1,21x en el otro cartucho:
+#
+#     make uvm2 UVM2_PIO_STREAM=1
 
 # Keep the SVC handler alive. Nothing in C calls uvm2_svc_handler — it is reached
 # only through the vector table — so --gc-sections drops its section, and the

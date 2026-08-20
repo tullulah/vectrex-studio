@@ -138,6 +138,12 @@ void uvm2_bus_init(void);
  * bus is parked at $8000 on exit.  Returns the bus cycles consumed. */
 UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count);
 
+/* Ciclos de CPU por periodo de E, en Q8 (100,0 ciclos = 25600). Lo llena uvm2_medir_e(),
+ * que hay que llamar con el bus ya tomado. Es la relacion que decide si la calibracion de
+ * fase del stream por PIO se traslada entre placas — ver uvm2_bus.c. */
+extern uint32_t uvm2_ciclos_por_e_q8;
+void uvm2_medir_e(void);
+
 /* Idle for `cycles` Vectrex bus cycles (667 ns each) — clock-independent, which
  * is what beam/integrator timing needs. */
 UVM2_RAMFUNC void uvm2_bus_delay(uint32_t cycles);
@@ -246,6 +252,15 @@ extern uint32_t uvm2_single_cycles;
 #else
 #define UVM2_CYCLES_PER_FRAME  (1500000u / (unsigned)UVM2_HZ)
 #endif
+
+/* DOS COSAS QUE NO SON EL PERIODO DE FRAME, y que lo usaban porque a 50 Hz coinciden.
+ *
+ * A 50 Hz UVM2_CYCLES_PER_FRAME vale 30000 y todo el mundo escribio 30000 donde queria
+ * decir "20 ms" o "un tick de musica". Al mover UVM2_HZ, esas dos se movieron con el:
+ * a 60 Hz la musica se acelera un 20%, y con UVM2_HZ=0 el asentamiento de /HALT pasa de
+ * 20 ms a UN SEGUNDO. Coincidir no es ser lo mismo. */
+#define UVM2_CYCLES_20MS   (1500000u / 50u)   /* asentamiento tras asertar /HALT */
+#define UVM2_AUDIO_CYCLES  (1500000u / 50u)   /* el tempo de .vmus es 50 Hz, no el refresco */
 
 #ifdef __cplusplus
 }
