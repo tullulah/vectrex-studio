@@ -850,6 +850,28 @@ static void uvm2_recalibrate(void)
 }
 #endif
 
+/* RETARDO ARTIFICIAL ENTRE FRAMES, para separar el TIEMPO de la PSRAM.
+ *
+ * Con la lista en la PSRAM el dibujo colapsa a x=y, y ya esta descartado todo lo demas: el
+ * dato es identico byte a byte (firmado en los dos extremos), el tiempo por vector es el
+ * mismo, la fase es correcta, los dos nucleos son inocentes y durante el dibujo no hay ni
+ * un acceso al chip. Lo UNICO que cambia es que escribir la lista alli cuesta ~6,9 ms por
+ * frame — medido: periodo 20097 us contra 13200 de bus.
+ *
+ * Asi que se reproduce ese hueco SIN PSRAM. Si colapsa igual, la PSRAM es inocente y la
+ * causa es el hueco entre frames; si dibuja, el hueco es inocente y hay que volver al chip.
+ * Una imagen, una lectura, y una rama entera cerrada.
+ *
+ *     make uvm2 UVM2_RETARDO_US=6900
+ */
+#ifdef UVM2_RETARDO_US
+static void retardo_artificial(void)
+{
+    const uint32_t t0 = *(volatile uint32_t *)0x400B000Cu;   /* TIMER0 TIMELR */
+    while ((*(volatile uint32_t *)0x400B000Cu - t0) < (uint32_t)UVM2_RETARDO_US) { }
+}
+#endif
+
 void uvm2_frame_begin(void)
 {
     s_count = 0;
@@ -884,6 +906,11 @@ void uvm2_frame_begin(void)
 #endif
 }
 
+/* Por BUFFER, no una sola: con doble buffer core 0 firma el frame que acaba de
+ * construir y core 1 reproduce el ANTERIOR. Comparar las dos sin indexar es
+ * comparar frames distintos, que nunca coinciden y no dice nada. */
+uint32_t uvm2_firma_escrita[2], uvm2_firma_n[2];
+
 void uvm2_frame_end(void)
 {
     uint32_t cycles = 0;
@@ -915,6 +942,21 @@ void uvm2_frame_end(void)
      * replay, the input, the audio and the 50 Hz pacing all happen over there
      * now (uvm2_core1.c), so the game's next frame of logic overlaps the beam
      * still drawing this one. */
+    /* SUMA DE COMPROBACION EN LOS DOS EXTREMOS, para no tener que adivinar.
+     *
+     * Con la lista en la PSRAM el dibujo colapsa a una diagonal x=y, y la lista es correcta
+     * en contenido y en tiempos (7,6 ciclos de bus por comando, la misma proporcion que la
+     * version que dibuja bien). Quedan dos causas opuestas: que lo que LEE core 1 no sea lo
+     * que ESCRIBIO core 0 —coherencia— o que el dato sea bueno y el problema sea cuando
+     * llega. Aqui se firma lo escrito; en uvm2_core1.c se firma lo leido justo antes de
+     * reproducirlo. Si las firmas coinciden, la coherencia queda descartada de una vez. */
+    {
+        uint32_t h = 2166136261u;
+        for (uint32_t i = 0; i < s_count; i++) { h ^= s_cmds[s_buf][i]; h *= 16777619u; }
+        uvm2_firma_escrita[s_buf & 1u] = h;
+        uvm2_firma_n[s_buf & 1u]       = s_count;
+    }
+
     s_len[s_buf]        = s_count;
     uvm2_stats.commands = s_count;
     uvm2_stats.dropped  = s_dropped;
@@ -947,7 +989,21 @@ void uvm2_frame_end(void)
     (void)cycles;
     return;
 #else
+#ifdef UVM2_CMDS_STAGE_SRAM
+    /* CONTROL, tambien en un solo nucleo. La copia estaba SOLO en uvm2_core1.c, que no se
+     * compila sin doble nucleo — asi que la perilla no hacia nada y una prueba entera se
+     * fue en comparar una imagen consigo misma. Aqui la lista vive en la PSRAM pero se
+     * reproduce desde SRAM, sin un solo acceso al chip externo durante el dibujo y sin otro
+     * nucleo escribiendo por detras. */
+    {
+        static uint32_t s_stage[UVM2_CMD_CAPACITY];
+        for (uint32_t i = 0; i < s_count && i < UVM2_CMD_CAPACITY; i++)
+            s_stage[i] = s_cmds[s_buf][i];
+        cycles = uvm2_exec(s_stage, s_count);
+    }
+#else
     cycles = uvm2_exec(s_cmds[s_buf], s_count);
+#endif
 
     uvm2_stats.commands   = s_count;
     uvm2_stats.bus_cycles = cycles;
@@ -1014,7 +1070,15 @@ void uvm2_frame_end(void)
         }
         s_us_prev = ahora;
     }
+
+#ifdef UVM2_RETARDO_US
+    retardo_artificial();
+#endif
 }
+
+#ifdef UVM2_RETARDO_US
+/* Al final del cierre de frame, que es donde cae el coste de escribir en la PSRAM. */
+#endif
 
 uint32_t uvm2_frame_bus_cycles(void) { return s_frame_cycles; }
 

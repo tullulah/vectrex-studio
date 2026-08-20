@@ -90,6 +90,11 @@ export UVM2_PIO_STREAM := 1
 endif
 
 # Enciende la PSRAM sin usarla. Aisla "el chip activo" de "la lista vive alli".
+# Retardo artificial entre frames, en us. Separa el TIEMPO de la PSRAM. Ver uvm2_draw.c.
+ifneq ($(UVM2_RETARDO_US),)
+UVM2_CFLAGS += -DUVM2_RETARDO_US=$(UVM2_RETARDO_US)
+endif
+
 # BISECCION: instala el stream pero dibuja por SIO. Ver uvm2_bus.c.
 ifeq ($(UVM2_STREAM_SOLO_INSTALA),1)
 UVM2_CFLAGS += -DUVM2_STREAM_SOLO_INSTALA=1

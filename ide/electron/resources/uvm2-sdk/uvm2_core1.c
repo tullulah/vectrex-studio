@@ -40,6 +40,12 @@
  */
 
 #include "uvm2_bus.h"
+
+extern uint32_t uvm2_firma_escrita[2], uvm2_firma_n[2];
+
+/* Desacuerdos entre lo que core 0 escribio y lo que core 1 lee del MISMO buffer. Si esto
+ * no sube, la coherencia entre nucleos queda descartada y el fallo es de tiempo. */
+uint32_t uvm2_firma_fallos, uvm2_firma_comparadas, uvm2_firma_leida, uvm2_firma_ultima_ok;
 #include "uvm2_draw.h"
 #include "uvm2_input.h"
 #include "uvm2_audio.h"
@@ -143,6 +149,17 @@ static void core1_main(void)
         for (uint32_t i = 0; i < n && i < UVM2_CMD_CAPACITY; i++) s_stage[i] = origen[i];
         uint32_t cycles = uvm2_exec(s_stage, n);
 #else
+        {   /* La otra mitad de la firma: lo que core 1 va a reproducir DE VERDAD. */
+            const uint32_t *b = uvm2_frame_buffer(served);
+            uint32_t n = uvm2_frame_length(served), h = 2166136261u;
+            for (uint32_t i = 0; i < n; i++) { h ^= b[i]; h *= 16777619u; }
+            uvm2_firma_leida = h;
+            if (n == uvm2_firma_n[served & 1u]) {
+                uvm2_firma_comparadas++;
+                if (h != uvm2_firma_escrita[served & 1u]) uvm2_firma_fallos++;
+                else                                     uvm2_firma_ultima_ok = h;
+            }
+        }
         uint32_t cycles = uvm2_exec(uvm2_frame_buffer(served),
                                     uvm2_frame_length(served));
 #endif
