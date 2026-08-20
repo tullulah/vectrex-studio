@@ -465,6 +465,8 @@ void uvm2_bus_devolver_al_stream(void)
 #define uvm2_bus_devolver_al_stream() do { } while (0)
 #endif
 
+uint32_t uvm2_escritura_out, uvm2_escritura_in, uvm2_escritura_oe;
+
 UVM2_RAMFUNC void uvm2_via_write(uint32_t reg, uint32_t data)
 {
     uint32_t out = UVM2_VIA_BASE_BITS
@@ -473,8 +475,46 @@ UVM2_RAMFUNC void uvm2_via_write(uint32_t reg, uint32_t data)
 
     UVM2_BUS_TOMAR();
 
+    /* ESPERAR UN FLANCO COMPLETO, no "a que este alto".
+     *
+     * Con solo UVM2_WAIT_CLK_HIGH(), si el reloj YA estaba alto al entrar no se espera
+     * nada y se presenta al FINAL de esa mitad — a un pelo del cambio. Eso es una
+     * violacion de fase, y en este bus una violacion de fase no degrada: falla en seco.
+     *
+     * MEDIDO, comparando los mismos testigos en la imagen que funciona y en la del stream,
+     * en el instante de presentar la escritura de Port A: la direccion, el dato, R/W,
+     * /HALT y la OE son IDENTICOS, y solo difiere el bit 31 — el reloj. Alto en SIO, bajo
+     * con el stream. De ahi que las lecturas funcionaran y las escrituras no, y que el
+     * mando leyera siempre el mismo valor equivocado.
+     *
+     * En SIO colaba por el ritmo con el que se encadenan las llamadas; en cuanto
+     * bus_tomar() las deja en otra fase, se caen fuera. uvm2_exec ya lo hace bien —
+     * WAIT_CLK_LOW y luego WAIT_CLK_HIGH— y estas dos no. */
+    UVM2_WAIT_CLK_LOW();
     UVM2_WAIT_CLK_HIGH();
     uvm2_put_masked(out, UVM2_BUS_MASK);          /* R/W low = write */
+
+    /* QUE LLEGA DE VERDAD A LOS PADS AL PRESENTAR.
+     *
+     * Las lecturas funcionan —medido: la VIA queda seleccionada en $D001, R/W alto, /HALT
+     * bajo y contesta— y aun asi el PSG esta en el estado equivocado, o sea que lo que no
+     * llega son las ESCRITURAS. Esto captura los tres testigos en el instante de presentar,
+     * para poder comparar la imagen con stream contra la que funciona:
+     *
+     *   _out  lo que QUERIAMOS poner
+     *   _in   lo que los pads muestran de verdad (nos leemos a nosotros mismos: si no
+     *         coincide con _out en la mascara del bus, la escritura no sale al pad)
+     *   _oe   quien conduce
+     *
+     * Se toma solo en la escritura de PORT A (reg 1), que es donde va el numero de registro
+     * del PSG: la que decide que se lee despues, y por tanto la que explica un valor
+     * equivocado y repetible. Capturar todas dejaria la ultima, que no es comparable. */
+    if ((reg & 0x0Fu) == 1u) {
+        uvm2_escritura_out = out;
+        uvm2_escritura_in  = UVM2_GPIO_IN;
+        uvm2_escritura_oe  = *(volatile uint32_t *)(uintptr_t)(0xD0000000u + 0x030u);
+    }
+
     UVM2_WAIT_CLK_LOW();
 
     /* El aparcado va con CLK ALTO, no aqui. Estaba justo detras del WAIT_CLK_LOW,
@@ -491,6 +531,9 @@ UVM2_RAMFUNC void uvm2_via_write(uint32_t reg, uint32_t data)
     UVM2_BUS_SOLTAR();
 }
 
+uint32_t uvm2_lectura_oe;       /* SIO GPIO_OE en el muestreo: bits 0-7 = conducimos */
+uint32_t uvm2_lectura_estado;   /* GPIO_IN entero en el muestreo */
+
 UVM2_RAMFUNC uint8_t uvm2_via_read(uint32_t reg)
 {
     uint32_t out = UVM2_VIA_BASE_BITS | UVM2_RW_MASK | ((reg & 0x0Fu) << 8);
@@ -501,6 +544,8 @@ UVM2_RAMFUNC uint8_t uvm2_via_read(uint32_t reg)
 
     UVM2_GPIO_OE_CLR = UVM2_DATA_MASK;            /* let the VIA drive D0-D7 */
 
+    /* El mismo flanco completo que en uvm2_via_write, y por la misma razon. */
+    UVM2_WAIT_CLK_LOW();
     UVM2_WAIT_CLK_HIGH();
     uvm2_put_masked(out, addr_mask);
     UVM2_WAIT_CLK_LOW();
@@ -508,6 +553,19 @@ UVM2_RAMFUNC uint8_t uvm2_via_read(uint32_t reg)
     /* Sample on the next rising edge — the address has had a whole cycle by
      * then.  Edge-for-edge the same as VectrexCart::ReadVia. */
     do { state = UVM2_GPIO_IN; } while ((state & UVM2_CLK_MASK) == 0);
+
+    /* EL ESTADO EN EL INSTANTE DEL MUESTREO, que es lo unico que no se puede deducir desde
+     * fuera. Las tres lecturas del PSG devuelven el MISMO valor (0x89) den igual el
+     * registro que se pida, asi que no se esta leyendo el chip: se esta leyendo el bus. Y
+     * un valor constante lo da o quien lo conduce o una resistencia.
+     *
+     * uvm2_lectura_oe guarda la habilitacion de salida de SIO justo aqui. Si sus bits 0-7
+     * estan puestos, estamos CONDUCIENDO D0-D7 mientras intentamos leerlos — o sea que
+     * leemos nuestro propio dibujo, y ese es el fallo entero. Si estan a cero, nadie los
+     * conduce y 0x89 es la resistencia de los pads, lo que acusa a la seleccion de la VIA
+     * (la direccion) y no al dato. */
+    uvm2_lectura_oe    = *(volatile uint32_t *)(uintptr_t)(0xD0000000u + 0x030u);
+    uvm2_lectura_estado = state;
 
     uvm2_put_masked(UVM2_PARK_BITS, addr_mask);
     UVM2_GPIO_OE_SET = UVM2_DATA_MASK;
