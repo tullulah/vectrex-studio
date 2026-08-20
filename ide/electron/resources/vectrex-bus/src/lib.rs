@@ -145,6 +145,23 @@ pub static RING_OVERRUNS:  AtomicU32 = AtomicU32::new(0);
 pub static STREAM_PUSHES:  AtomicU32 = AtomicU32::new(0);
 pub static STREAM_STALLS:  AtomicU32 = AtomicU32::new(0);
 
+/// La mascara de pines que CONDUCEN, leida justo despues de ponerla desde la CPU y ANTES
+/// de que el preambulo del .pio corra. Separa "mi bucle no hizo nada" de "el preambulo la
+/// pisa despues": son dos averias opuestas con la misma pantalla negra.
+pub static DIRS_TRAS_SET: AtomicU32 = AtomicU32::new(0);
+
+/// Los pines que conducen ahora mismo, alineados a `out_base`. OETOPAD del IO_BANK0.
+unsafe fn lee_oe(l: &Layout) -> u32 {
+    let mut m = 0u32;
+    let mut i = 0u32;
+    while i < l.out_count {
+        let st = r(0x4002_8000 + 8 * (l.out_base + i) as usize);
+        if st & (1 << 13) != 0 { m |= 1 << i; }
+        i += 1;
+    }
+    m
+}
+
 
 /// Dispara el lote acumulado. Espera a que el DMA anterior termine: el canal es uno solo.
 #[inline(always)]
@@ -257,6 +274,8 @@ const EXECCTRL_WRAP_BOTTOM_LSB: u32 = 7;   // pio.h ..._WRAP_BOTTOM_LSB 7
 const EXECCTRL_WRAP_TOP_LSB: u32 = 12;     // pio.h ..._WRAP_TOP_LSB 12
 const SHIFTCTRL_OUT_SHIFTDIR: u32 = 1 << 19;
 const PINCTRL_OUT_COUNT_LSB: u32 = 20;     // pio.h ..._OUT_COUNT_LSB 20
+const PINCTRL_SET_BASE_LSB: u32 = 5;       // pio.h ..._SET_BASE_LSB 5
+const PINCTRL_SET_COUNT_LSB: u32 = 26;     // pio.h ..._SET_COUNT_LSB 26
 
 const IO_BANK0_BASE: usize = 0x4002_8000;
 const PADS_BANK0_BASE: usize = 0x4003_8000;
@@ -347,9 +366,47 @@ pub unsafe fn install(l: &Layout, programa: &[u16], wrap_target: u8, wrap: u8) {
         p += 1;
     }
 
-    // Arrancar, y darle su preambulo.
+    // Arrancar. Se queda bloqueada en su primer `pull block`, que es inofensivo — y es
+    // ESTANDO HABILITADA cuando SM_INSTR ejecuta lo que se le escribe. Con la maquina
+    // parada, las 27 escrituras de `set pindirs` no hicieron nada: medido en la consola,
+    // salio EXACTAMENTE el mismo 0x06200201 que sin ellas, por dos caminos distintos.
     w(PIO0_BASE + PIO_SM0_INSTR, 0);        // jmp 0
     w(PIO0_BASE + PIO_CTRL, 1);             // SM_ENABLE bit 0
+
+    // LAS DIRECCIONES DE PIN, DESDE LA CPU Y CON LA MAQUINA YA HABILITADA.
+    //
+    // El preambulo del .pio las pone con `out pindirs` leyendo una palabra de la FIFO, y
+    // eso es lo que hace el firmware del otro cartucho. Aqui NO FUNCIONO: medido en la
+    // consola, tras instalar solo conducian 5 de los 27 pines (0x06200201 en vez de
+    // 0x073FFFFF), y ya en el momento de instalar — o sea que no era que la maquina se
+    // reiniciara mas tarde, es que la mascara no llegaba a aplicarse entera.
+    //
+    // Esta forma es la del propio pico-sdk (`pio_sm_set_pindirs_with_mask`): pin a pin,
+    // moviendo el grupo SET y ejecutando `set pindirs, 0/1` por SM_INSTR. No pasa por
+    // ninguna FIFO, no depende de que el programa haya llegado a su segunda instruccion, y
+    // se puede COMPROBAR leyendo IO_BANK0 justo despues — que es lo que hace
+    // uvm2_stream_dirs_tras_install.
+    //
+    // El preambulo se queda igual y consume su palabra: aplica la misma mascara otra vez,
+    // asi que es idempotente. No se toca el .pio, que lo comparte la placa que funciona.
+    {
+        let guardado = r(PIO0_BASE + PIO_SM0_PINCTRL);
+        let mut i = 0u32;
+        while i < l.out_count {
+            let gpio = l.out_base + i;
+            let dir = (l.out_dirs >> i) & 1;
+            w(PIO0_BASE + PIO_SM0_PINCTRL,
+                (1u32 << PINCTRL_SET_COUNT_LSB) | (gpio << PINCTRL_SET_BASE_LSB));
+            // SET: opcode 111, destino PINDIRS = 4, dato en los bits 0..4.
+            w(PIO0_BASE + PIO_SM0_INSTR, 0xE000 | (4u32 << 5) | dir);
+            i += 1;
+        }
+        w(PIO0_BASE + PIO_SM0_PINCTRL, guardado);
+    }
+
+    DIRS_TRAS_SET.store(lee_oe(l), Ordering::Relaxed);
+
+
 
     // 1a palabra: las DIRECCIONES de pin. Las pone la propia SM con `out pindirs`, usando
     // por construccion la misma base y cuenta que el `out pins` de abajo — asi no pueden

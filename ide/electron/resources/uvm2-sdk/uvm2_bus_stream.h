@@ -30,4 +30,8 @@ uint32_t vbus_stat(uint32_t idx);
 
 void uvm2_stream_start(void);
 
+/* Las direcciones de pin leidas JUSTO DESPUES de instalar. Comparar con la misma lectura
+ * hecha mas tarde por SWD: si aqui sale bien y luego mal, el SM se ha reiniciado. */
+extern uint32_t uvm2_stream_dirs_tras_install;
+
 #endif

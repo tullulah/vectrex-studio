@@ -116,10 +116,33 @@ void uvm2_bus_pads(void)
 #define UVM2_STREAM_OUT_COUNT  27u                       /* GP0..GP26: datos, A0-A15, R/W */
 #define UVM2_STREAM_OUT_DIRS   (((1u << UVM2_STREAM_OUT_COUNT) - 1u) \
                                 & ~(1u << 22) & ~(1u << 23))
+/* Las direcciones de pin que el SM tiene puestas, leidas de IO_BANK0.
+ *
+ * POR QUE HACE FALTA: si estas salen mal, el SM corre, consume la FIFO y el pad no conduce
+ * — pantalla negra sin un solo contador que se queje. Ya paso en el otro cartucho. Y hay
+ * DOS causas opuestas que se ven igual desde fuera: que la mascara nunca llegara al
+ * preambulo, o que el SM REINICIARA despues y volviera a correr el preambulo con la
+ * primera palabra que hubiera en la FIFO (una palabra de dibujo).
+ *
+ * Se toma justo despues de instalar. Comparada con la misma lectura hecha mas tarde por
+ * SWD, separa las dos: si aqui sale bien y luego mal, el SM se reinicia. */
+uint32_t uvm2_stream_dirs_tras_install;
+
+static uint32_t lee_dirs(void)
+{
+    uint32_t m = 0;
+    for (uint32_t i = 0; i < UVM2_STREAM_OUT_COUNT; i++) {
+        uint32_t st = *(volatile uint32_t *)(uintptr_t)(0x40028000u + 8u * i);
+        if (st & (1u << 13)) m |= (1u << i);      /* OETOPAD: el pad conduce */
+    }
+    return m;
+}
+
 void uvm2_stream_start(void)
 {
     vbus_install(UVM2_STREAM_OUT_BASE, UVM2_STREAM_OUT_COUNT, UVM2_STREAM_OUT_DIRS,
                  UVM2_PARK_BITS | UVM2_RW_MASK);
+    uvm2_stream_dirs_tras_install = lee_dirs();
 }
 #endif
 
