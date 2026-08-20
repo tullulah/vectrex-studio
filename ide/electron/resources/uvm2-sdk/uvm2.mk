@@ -64,6 +64,29 @@ UVM2_BUILD   ?= build_uvm2
 UVM2_HZ ?= 50
 UVM2_CFLAGS += -DUVM2_HZ=$(UVM2_HZ)
 
+# EL BUFFER DEL ROMSET SE DERIVA DEL ZIP. No se escribe a mano en 43 Makefiles.
+#
+# uvm2_romzip.c lee roms/<juego>.zip de la SD a un array ESTATICO en SRAM, y la imagen del
+# UVM2 vive en 496 KB: "grande por si acaso" no cabe (con 64 KB, dkong no enlazaba). Pero
+# el numero bueno ya existe —es el tamaño del propio zip—, asi que se lee de ahi en vez de
+# ponerlo a ojo juego por juego. El nombre del romset lo declara el juego en su tabla de
+# ROM (game_romset_name), que es el mismo que busca en la tarjeta.
+#
+# Margen: se redondea al KB y se suma 1 KB. Si el zip cambia de tamaño, basta reconstruir.
+UVM2_ROMSET_NAME ?= $(shell grep -hoE 'game_romset_name[[:space:]]*\[\][[:space:]]*=[[:space:]]*"[^"]+"' \
+                        $(wildcard src/*.h src/*.c) 2>/dev/null | head -1 | sed -E 's/.*"(.*)"/\1/')
+UVM2_ROMSET_DIR  ?= $(firstword $(wildcard ../../arcade/roms ../arcade/roms arcade/roms))
+UVM2_ROMSET_ZIP  := $(if $(UVM2_ROMSET_NAME),$(wildcard $(UVM2_ROMSET_DIR)/$(UVM2_ROMSET_NAME)))
+
+ifneq ($(UVM2_ROMSET_NAME),)
+ifeq ($(UVM2_ROMSET_ZIP),)
+$(warning uvm2: no encuentro $(UVM2_ROMSET_DIR)/$(UVM2_ROMSET_NAME) — el buffer del romset se queda en el valor por defecto, y si el zip es mayor la consola dara "sin romset")
+else
+UVM2_ROMZIP_MAX := $(shell echo $$(( ($$(wc -c < '$(UVM2_ROMSET_ZIP)') / 1024 + 2) * 1024 )))
+UVM2_CFLAGS += -DUVM2_ROMZIP_MAX=$(UVM2_ROMZIP_MAX)
+endif
+endif
+
 UVM2_CFLAGS_CLEAN = $(filter-out -DVPY_DUAL_CORE -Wa$(,)--defsym$(,)DUAL_CORE_FLAG=0x44430001,\
                       $(UVM2_CFLAGS)) -I$(UVM2_SDK)
 
