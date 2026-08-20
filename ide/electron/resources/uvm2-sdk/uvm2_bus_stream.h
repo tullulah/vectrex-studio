@@ -18,6 +18,8 @@ uint32_t vbus_silence(void);
 void     vbus_push(uint32_t word);
 void     vbus_flush(void);
 void     vbus_drain(void);
+void     vbus_sm_parar(void);
+void     vbus_sm_arrancar(void);
 
 /* Contadores por indice. EL ORDEN LO FIJA cabi/src/lib.rs y los dos se mueven juntos. */
 #define VBUS_PUSHES     0u

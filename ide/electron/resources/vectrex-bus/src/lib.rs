@@ -59,6 +59,7 @@ const PIO0_BASE: usize = 0x5020_0000;     // addressmap.h
 const PIO_FSTAT: usize = 0x04;            // pio.h PIO_FSTAT_OFFSET
 pub const PIO_TXF0: u32 = 0x5020_0010;    // pio.h PIO_TXF0_OFFSET 0x10
 const PIO_FSTAT_TXEMPTY_LSB: u32 = 24;    // pio.h PIO_FSTAT_TXEMPTY_LSB
+const SIO_GPIO_IN: usize = 0xD000_0004;   // sio.h SIO_GPIO_IN_OFFSET; E en el bit 31
 
 #[inline(always)]
 unsafe fn r(a: usize) -> u32 { (a as *const u32).read_volatile() }
@@ -211,6 +212,15 @@ fn dsb() {
 
 /// Encola una palabra. Dispara el lote al llenarse, o si el DMA esta parado.
 pub unsafe fn push(word: u32) {
+    /* Un aparcado repetido: bit0 = 0 (sin escritura) y bit1 = 1. La cuenta va en 2..25 y
+     * es N-1, igual que en el .pio. Se recuerda el mayor para poder drenarlo despues. */
+    if word & 1 == 0 && word & 2 != 0 {
+        let n = (word >> 2) + 1;
+        if n > PARK_MAX.load(Ordering::Relaxed) {
+            PARK_MAX.store(n, Ordering::Relaxed);
+        }
+    }
+
     let mut fill = BATCH_FILL.load(Ordering::Relaxed) as usize;
     if fill >= BATCH {
         RING_FULL_SEEN.fetch_add(1, Ordering::Relaxed);
@@ -241,9 +251,30 @@ pub unsafe fn flush() {
     batch_flush();
 }
 
-/// Espera a que el bus se quede sin trabajo pendiente.
+/// El aparcado mas largo empujado desde el ultimo `drain`, en periodos de E.
+///
+/// LA FIFO VACIA NO SIGNIFICA BUS LIBRE, y esa confusion ya costo una averia: una sola
+/// palabra de park repetido tiene a la SM ocupando N periodos de E mucho despues de que la
+/// FIFO se haya quedado sin nada. Quien lea el bus justo entonces lo lee ocupado.
+static PARK_MAX: AtomicU32 = AtomicU32::new(0);
+
+/// Espera a que el bus se quede sin trabajo pendiente. DE VERDAD.
+///
+/// Tres etapas, y las tres hacen falta:
+///   1. vaciar el lote parcial (si no, una lectura adelanta a hasta 63 escrituras);
+///   2. esperar a que la FIFO se vacie;
+///   3. esperar los periodos de E que la ULTIMA palabra pueda seguir consumiendo.
+///
+/// El firmware del otro cartucho hace la tercera con un plazo en microsegundos
+/// (STREAM_BUS_UNTIL). Aqui se cuentan periodos de E directamente, que es la unidad en la
+/// que la maquina cuenta y no depende de ningun reloj: E entra por el bit 31 del SIO en LAS
+/// DOS placas, asi que esto se traslada sin tocar un numero.
+///
+/// Se espera el mayor aparcado visto desde el ultimo drenaje, mas dos de margen: cuando la
+/// FIFO se vacia, como mucho hay una palabra en vuelo.
 pub unsafe fn drain() {
     flush();
+
     let mut n = 0u32;
     while r(PIO0_BASE + PIO_FSTAT) & (1 << PIO_FSTAT_TXEMPTY_LSB) == 0 {
         n += 1;
@@ -251,6 +282,16 @@ pub unsafe fn drain() {
             STREAM_STALLS.fetch_add(1, Ordering::Relaxed);
             break;
         }
+    }
+
+    let periodos = PARK_MAX.swap(0, Ordering::Relaxed) + 2;
+    let mut i = 0u32;
+    while i < periodos {
+        let mut g = 0u32;
+        while r(SIO_GPIO_IN) & (1 << 31) != 0 { g += 1; if g > 100_000 { return; } }
+        let mut g = 0u32;
+        while r(SIO_GPIO_IN) & (1 << 31) == 0 { g += 1; if g > 100_000 { return; } }
+        i += 1;
     }
 }
 
@@ -348,24 +389,16 @@ pub unsafe fn install(l: &Layout, programa: &[u16], wrap_target: u8, wrap: u8) {
     w(PIO0_BASE + PIO_SM0_PINCTRL,
         l.out_base | ((l.out_count & 0x1F) << PINCTRL_OUT_COUNT_LSB));
 
-    // LOS PADS, ANTES DE LA FUNCION Y SIN OLVIDAR EL AISLAMIENTO.
+    // ORDEN: ARRANCAR, PONER DIRECCIONES, Y SOLO ENTONCES CEDER LOS PINES.
     //
-    // En el RP2350 el pad arranca en 0x0116: ISO=1, IE=0. Un pad aislado NO CONDUCE NADA
-    // por correcto que sea el FUNCSEL, y no da error, ni contador, ni sintoma propio —
-    // solo pantalla negra, que es tambien el sintoma de otras seis cosas. Ya costo el
-    // arranque del stream una vez, por GP19 (A15).
-    let mut p = 0u32;
-    while p < l.out_count {
-        let gpio = (l.out_base + p) as usize;
-        if l.out_dirs & (1 << p) != 0 {
-            let pad = PADS_BANK0_BASE + 4 + 4 * gpio;
-            let v = r(pad);
-            w(pad, (v & !((1 << 8) | (1 << 7))) | (1 << 6));   // ISO=0, OD=0, IE=1
-            w(IO_BANK0_BASE + 8 * gpio + 4, FUNCSEL_PIO0);
-        }
-        p += 1;
-    }
-
+    // Al reves —que es como estaba— hay una ventana en la que FUNCSEL ya es PIO y la
+    // maquina todavia no tiene direcciones de pin: los 27 pines del bus quedan como
+    // ENTRADAS y el bus entero flota. Eso no da pantalla negra ni ruido; deja un estado
+    // que NADIE vuelve a poner, y el sintoma aparece lejos — el mando leyendo 0x89 en vez
+    // de 0xFF, estable, con el stream meramente INSTALADO y todo el dibujo por SIO.
+    //
+    // Con este orden la maquina ya conduce lo que debe en el instante en que se le dan los
+    // pines, y no hay ventana que cerrar.
     // Arrancar. Se queda bloqueada en su primer `pull block`, que es inofensivo — y es
     // ESTANDO HABILITADA cuando SM_INSTR ejecuta lo que se le escribe. Con la maquina
     // parada, las 27 escrituras de `set pindirs` no hicieron nada: medido en la consola,
@@ -404,7 +437,27 @@ pub unsafe fn install(l: &Layout, programa: &[u16], wrap_target: u8, wrap: u8) {
         w(PIO0_BASE + PIO_SM0_PINCTRL, guardado);
     }
 
+
+    // LOS PADS, ANTES DE LA FUNCION Y SIN OLVIDAR EL AISLAMIENTO.
+    //
+    // En el RP2350 el pad arranca en 0x0116: ISO=1, IE=0. Un pad aislado NO CONDUCE NADA
+    // por correcto que sea el FUNCSEL, y no da error, ni contador, ni sintoma propio —
+    // solo pantalla negra, que es tambien el sintoma de otras seis cosas. Ya costo el
+    // arranque del stream una vez, por GP19 (A15).
+    let mut p = 0u32;
+    while p < l.out_count {
+        let gpio = (l.out_base + p) as usize;
+        if l.out_dirs & (1 << p) != 0 {
+            let pad = PADS_BANK0_BASE + 4 + 4 * gpio;
+            let v = r(pad);
+            w(pad, (v & !((1 << 8) | (1 << 7))) | (1 << 6));   // ISO=0, OD=0, IE=1
+            w(IO_BANK0_BASE + 8 * gpio + 4, FUNCSEL_PIO0);
+        }
+        p += 1;
+    }
+
     DIRS_TRAS_SET.store(lee_oe(l), Ordering::Relaxed);
+
 
 
 
@@ -460,4 +513,19 @@ pub fn programa() -> (&'static [u16], u8, u8) {
 pub fn reset() {
     BATCH_IDX.store(0, Ordering::Relaxed);
     BATCH_FILL.store(0, Ordering::Relaxed);
+}
+
+/// Parar y arrancar la maquina de estados.
+///
+/// POR QUE HACE FALTA PARARLA, y no basta con quitarle los pines: con el bus cedido a SIO
+/// la SM no conduce nada, pero SIGUE VIVA — consumiendo palabras, sincronizando contra E y
+/// aparcando. Dejarla corriendo mientras otro habla por el mismo bus es tener dos maquinas
+/// con opinion sobre el mismo ciclo, y el sintoma no es ruido: es un byte equivocado y
+/// REPETIBLE, porque la secuencia de estrobos del PSG sale distinta pero igual cada vez.
+pub unsafe fn sm_parar() {
+    w(PIO0_BASE + PIO_CTRL, 0);
+}
+
+pub unsafe fn sm_arrancar() {
+    w(PIO0_BASE + PIO_CTRL, 1);
 }

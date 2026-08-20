@@ -92,6 +92,16 @@ mod bus_c {
     pub unsafe extern "C" fn vbus_drain() {
         bus::drain()
     }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn vbus_sm_parar() {
+        bus::sm_parar()
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn vbus_sm_arrancar() {
+        bus::sm_arrancar()
+    }
     
     /// Los contadores, por indice, para poder leerlos por SWD desde C sin exportar simbolos
     /// Rust uno a uno. El orden lo fija `uvm2_bus.h`; LOS DOS SE MUEVEN JUNTOS.

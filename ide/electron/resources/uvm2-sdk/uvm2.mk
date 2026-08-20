@@ -90,6 +90,11 @@ export UVM2_PIO_STREAM := 1
 endif
 
 # Enciende la PSRAM sin usarla. Aisla "el chip activo" de "la lista vive alli".
+# BISECCION: instala el stream pero dibuja por SIO. Ver uvm2_bus.c.
+ifeq ($(UVM2_STREAM_SOLO_INSTALA),1)
+UVM2_CFLAGS += -DUVM2_STREAM_SOLO_INSTALA=1
+endif
+
 ifeq ($(UVM2_PSRAM_ARRANCA),1)
 UVM2_CFLAGS += -DUVM2_PSRAM_ARRANCA=1
 endif

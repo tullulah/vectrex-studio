@@ -265,6 +265,20 @@ UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
 {
     uint32_t cycles = 0;
 
+#ifdef UVM2_STREAM_SOLO_INSTALA
+    /* BISECCION: el stream se INSTALA pero no se usa; se dibuja por SIO.
+     *
+     * Separa dos cosas que hasta ahora iban juntas: lo que `install()` deja hecho al
+     * arrancar —pads, FUNCSEL, PIO y DMA fuera del reset, direcciones de pin— y como el
+     * stream deja la VIA al cerrar cada frame. Con el mando dando 0x89 en vez de 0xFF con
+     * los pines cedidos, la SM parada y el bus drenado, el sospechoso ya solo puede ser
+     * uno de esos dos.
+     *
+     * Hay que tomar el bus porque install se llevo los pines al PIO. Es pegajoso: se queda
+     * en SIO y nadie lo reclama, que es justo lo que se quiere medir. */
+    bus_tomar();
+#endif
+
     /* Select $D000 on a clean edge, with R/W HIGH — a READ, not a write.
      *
      * This used to leave R/W low, and UVM2_BUS_MASK covers R/W as well as the
@@ -430,6 +444,7 @@ static void bus_tomar(void)
 {
     if (s_bus_en_sio) return;
     vbus_drain();
+    vbus_sm_parar();               /* viva pero sin pines sigue opinando sobre el ciclo */
     pines_a(UVM2_FUNC_SIO);
     s_bus_en_sio = 1;
 }
@@ -438,6 +453,7 @@ void uvm2_bus_devolver_al_stream(void)
 {
     if (!s_bus_en_sio) return;
     pines_a(UVM2_FUNC_PIO);
+    vbus_sm_arrancar();
     s_bus_en_sio = 0;
 }
 
