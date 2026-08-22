@@ -2847,15 +2847,21 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   /* LOS SEGMENTOS SELECCIONADOS del path actual: un tramo cuenta cuando sus DOS extremos
    * estan marcados. No hay modo nuevo ni herramienta nueva, se marcan los dos puntos. */
   const segmentosSeleccionados = React.useMemo(() => {
-    const out: number[] = [];
+    const out = new Set<number>();
     const path = resource.layers[currentLayerIndex]?.paths[currentPathIndex];
-    if (!path || currentPathIndex < 0) return out;
+    if (!path || currentPathIndex < 0) return [] as number[];
+    /* `selectedEdge` ES la seleccion de segmento del editor: se pone al pulsar la LINEA
+     * (no un punto) y es lo que se pinta en naranja. Yo lo habia montado sobre
+     * `selectedPoints`, que ese mismo manejador VACIA — asi que pulsar el tramo, escribir
+     * un valor y dar a Apply se llevaba el path entero por delante. */
+    if (selectedEdge && selectedEdge.pathIdx === currentPathIndex) out.add(selectedEdge.edgeIdx);
+    /* y ademas, dos puntos contiguos marcados (seleccion por caja o con shift) */
     for (let i = 0; i + 1 < path.points.length; i++) {
       if (selectedPoints.has(`${currentPathIndex}-${i}`) &&
-          selectedPoints.has(`${currentPathIndex}-${i + 1}`)) out.push(i);
+          selectedPoints.has(`${currentPathIndex}-${i + 1}`)) out.add(i);
     }
-    return out;
-  }, [resource, currentLayerIndex, currentPathIndex, selectedPoints]);
+    return [...out].sort((a, b) => a - b);
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPoints, selectedEdge]);
 
   /* La intensidad que hay que ENSEÑAR: la del tramo si hay uno solo seleccionado, y si no
    * la del path. Antes siempre enseñaba la del path, asi que un tramo apagado se leia como
@@ -4955,7 +4961,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             style={{ flex: 1, padding: '4px 6px', background: hasPathSel ? '#2a5a7e' : '#2a2a3e', border: '1px solid ' + (hasPathSel ? '#4a8aae' : '#3a3a5e'), color: hasPathSel ? '#7cf' : '#556', borderRadius: '3px', cursor: hasPathSel ? 'pointer' : 'not-allowed', fontSize: '11px', fontWeight: 'bold' }}
             title={hasPathSel ? `Apply to ${selCount} path${selCount !== 1 ? 's' : ''}` : 'Select paths first'}
           >
-            Apply{hasPathSel ? ` (${selCount})` : ''}
+            {segmentosSeleccionados.length === 1
+              ? `Apply · tramo ${segmentosSeleccionados[0] + 1}`
+              : segmentosSeleccionados.length > 1
+                ? `Apply · ${segmentosSeleccionados.length} tramos`
+                : `Apply${hasPathSel ? ` · path (${selCount})` : ''}`}
           </button>
         </div>
         <button
