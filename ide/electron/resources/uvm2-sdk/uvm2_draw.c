@@ -16,6 +16,9 @@
 #include "uvm2_bus.h"
 #include <limits.h>
 #include "uvm2_draw.h"
+#ifdef UVM2_CMDS_IN_PSRAM
+#include "uvm2_psram.h"
+#endif
 
 /* CUANTOS COMANDOS CABEN EN UN FRAME. Perilla por juego, no una constante.
  *
@@ -66,13 +69,27 @@
 #endif
 
 #ifdef UVM2_CMDS_IN_PSRAM
+/* POR EL ALIAS SIN CACHE (0x15000000), NO POR LA VENTANA NORMAL (0x11000000).
+ *
+ * MEDIDO, escribiendo 16 KB y comprobandolos por el alias: por la ventana con cache fallan
+ * 2512 palabras de 4096; por el alias, CERO. La PSRAM esta sana — lo que corrompe el dato
+ * es pasar por la cache del XIP al escribir, que rellena linea leyendo del chip lo que
+ * todavia no se ha escrito, lo mezcla y devuelve esa mezcla.
+ *
+ * Y ES LA MISMA TRAMPA QUE YA ESTABA DOCUMENTADA: verificar por la cache no dice nada del
+ * chip. Por eso el cargador de dos etapas "funcionaba" (payloads de 12 KB que caben en los
+ * 16 KB de cache), asteroids desde PSRAM "arrancaba pero temblaba", y la lista de comandos
+ * colapsaba el dibujo a una diagonal. Un solo fallo, no tres.
+ *
+ * Aqui ademas es lo correcto por diseño: la lista se escribe una vez y se lee una vez, asi
+ * que la cache no puede aportar nada — solo estorbar. */
 #  ifndef UVM2_PSRAM_CMDS_BASE
-#    define UVM2_PSRAM_CMDS_BASE 0x11000000u
+#    define UVM2_PSRAM_CMDS_BASE 0x15000000u
 #  endif
-typedef uint32_t uvm2_cmd_buf[UVM2_CMD_CAPACITY];
+typedef uint8_t uvm2_cmd_buf[UVM2_CMD_CAPACITY * 3u];
 static uvm2_cmd_buf *const s_cmds = (uvm2_cmd_buf *)(uintptr_t)UVM2_PSRAM_CMDS_BASE;
 #else
-static uint32_t s_cmds[UVM2_NBUF][UVM2_CMD_CAPACITY];
+static uint8_t s_cmds[UVM2_NBUF][UVM2_CMD_CAPACITY * 3u];
 #endif
 static uint32_t s_count;
 static uint32_t s_buf;                  /* buffer being filled; always 0 single-core */
@@ -86,7 +103,7 @@ volatile uint32_t uvm2_frame_done;      /* frames core 1 has finished replaying 
 static volatile uint32_t s_len[2];
 static uint32_t s_frame_no = 1;
 
-const uint32_t *uvm2_frame_buffer(uint32_t frame) { return s_cmds[frame & 1u]; }
+const uint8_t *uvm2_frame_buffer(uint32_t frame) { return s_cmds[frame & 1u]; }
 uint32_t        uvm2_frame_length(uint32_t frame) { return s_len[frame & 1u]; }
 #endif
 static uint32_t s_frames;
@@ -161,11 +178,33 @@ static int      s_fixup = 0;
 
 /* Comandos perdidos en el frame en curso, por lista llena. Se vuelca a stats en
  * frame_end. Declarada aqui y no abajo porque emit() es quien la incrementa. */
+/* Firma de lo que emit() manda escribir, contra lo que el chip devuelve al releerlo. */
+uint32_t uvm2_firma_emitida = 2166136261u, uvm2_firma_releida, uvm2_firma_malas, uvm2_firma_vueltas;
+uint32_t uvm2_firma_copia, uvm2_firma_copia_malas, uvm2_firma_copia_vueltas;
+
 static uint32_t s_dropped;
 
 static inline void emit(uint32_t reg, uint32_t data, uint32_t delay)
 {
-    if (s_count < UVM2_CMD_CAPACITY) s_cmds[s_buf][s_count++] = UVM2_CMD(reg, data, delay);
+    if (s_count < UVM2_CMD_CAPACITY) {
+        const uint32_t w = UVM2_CMD(reg, data, delay);
+        const uint32_t v = UVM2_CMD_EMPAQUETA(w);
+        uint8_t *d = &s_cmds[s_buf][s_count * 3u];
+        d[0] = (uint8_t)v; d[1] = (uint8_t)(v >> 8); d[2] = (uint8_t)(v >> 16);
+        s_count++;
+#ifdef UVM2_CMDS_IN_PSRAM
+        /* LO QUE SE MANDA ESCRIBIR, firmado aqui — antes de que salga al bus.
+         *
+         * El test psramrw escribe por el alias sin cache y da CERO fallos en 4096 palabras,
+         * pero lo hace con la maquina EN SILENCIO: sin stream, sin DMA y sin el bus del
+         * cartucho moviendose. El juego no. Comparando esta firma con la de releer la lista
+         * del chip se sabe si las escrituras aguantan BAJO CARGA, que es la unica diferencia
+         * que queda entre el test que pasa y el juego que colapsa. */
+        uvm2_firma_emitida ^= d[0]; uvm2_firma_emitida *= 16777619u;
+        uvm2_firma_emitida ^= d[1]; uvm2_firma_emitida *= 16777619u;
+        uvm2_firma_emitida ^= d[2]; uvm2_firma_emitida *= 16777619u;
+#endif
+    }
     else                             s_dropped++;   /* NUNCA en silencio: ver stats.dropped */
 }
 
@@ -575,6 +614,8 @@ struct vx_timings { uint32_t e6809_q8, y_mux_q8, moveto_settle_q8, beam_on_q8;
                     int32_t blank_settle_q8; uint32_t keep_lit; };
 void vx_moveto_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
                    const struct vx_timings *);
+void vx_draw_line_patterned_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
+                                const struct vx_timings *, const uint16_t *huecos, uint32_t n);
 void vx_draw_line_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
                       const struct vx_timings *);
 void vx_ramp_params(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
@@ -748,6 +789,42 @@ void uvm2_draw_delta(int dx, int dy)
         uvm2_stats.vectors++;
         uvm2_stats.ramp_cycles += t1;
     }
+}
+
+/* UNA RECTA CON HUECOS, EN UNA SOLA RAMPA.
+ *
+ * `huecos` son pares (inicio, fin) en FRACCIONES 0..255 del vector, no en cuentas de T1:
+ * quien llama sabe donde empieza y acaba un tramo tapado a lo largo de la recta, y no
+ * tiene por que saber nada de T1. La conversion es de aqui.
+ *
+ * Partir la recta en trozos cuesta una rampa por trozo —dos DAC, la cuenta de T1, abrir y
+ * cerrar—; esto la programa UNA vez y solo conmuta el BLANK por el camino.
+ */
+void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int n)
+{
+    int32_t vx, vy; uint32_t t1;
+    s_pos_x += dx;
+    s_pos_y += dy;
+    vx_ramp_params(dx, dy, &vx, &vy, &t1);
+    struct vx_sink sink = vx_cart_sink();
+    struct vx_timings k = vx_cart_timings();
+
+    /* fracciones -> cuentas de T1. Un hueco que al redondear se queda en cero no se emite:
+     * costaria dos escrituras de bus y no apagaria nada. */
+    enum { MAX = 16 };
+    uint16_t cuentas[MAX * 2];
+    int m = 0;
+    for (int i = 0; i < n && m < MAX; i++){
+        uint32_t a = ((uint32_t)huecos[i*2]     * t1) >> 8;
+        uint32_t b = ((uint32_t)huecos[i*2 + 1] * t1) >> 8;
+        if (b > t1) b = t1;
+        if (b <= a) continue;
+        cuentas[m*2] = (uint16_t)a; cuentas[m*2 + 1] = (uint16_t)b; m++;
+    }
+    if (m == 0) vx_draw_line_seq(&sink, vx, vy, t1, &k);
+    else        vx_draw_line_patterned_seq(&sink, vx, vy, t1, &k, cuentas, (uint32_t)m);
+    uvm2_stats.vectors++;
+    uvm2_stats.ramp_cycles += t1;
 }
 
 void uvm2_draw_move_abs(int x, int y)
@@ -951,10 +1028,27 @@ void uvm2_frame_end(void)
      * llega. Aqui se firma lo escrito; en uvm2_core1.c se firma lo leido justo antes de
      * reproducirlo. Si las firmas coinciden, la coherencia queda descartada de una vez. */
     {
+        /* POR EL ALIAS SIN CACHE. Firmar por la ventana normal lee la cache del XIP, que
+         * acaba de escribirse: la firma sale bien SIEMPRE y no dice nada del chip. Son 16
+         * KB de cache contra una lista de 64-128 KB, asi que lo que se reproduce despues
+         * viene en su mayoria de la PSRAM y puede ser otra cosa. Esa confusion ya invalido
+         * una prueba entera aqui, y antes la del cargador. */
+        /* Sin traducir: la lista ya vive en el alias sin cache. */
+        const volatile uint8_t *lista = (const volatile uint8_t *)&s_cmds[s_buf][0];
         uint32_t h = 2166136261u;
-        for (uint32_t i = 0; i < s_count; i++) { h ^= s_cmds[s_buf][i]; h *= 16777619u; }
+        for (uint32_t i = 0; i < s_count * 3u; i++) { h ^= lista[i]; h *= 16777619u; }
         uvm2_firma_escrita[s_buf & 1u] = h;
         uvm2_firma_n[s_buf & 1u]       = s_count;
+#ifdef UVM2_CMDS_IN_PSRAM
+        /* LA MISMA CUENTA, LOS DOS LADOS. `h` es lo que el CHIP devuelve al releer la lista
+         * por el alias sin cache; uvm2_firma_emitida es lo que emit() mando escribir. Si no
+         * coinciden, las escrituras no aguantan con el stream, el DMA y el bus en marcha —
+         * que es la unica diferencia entre el test psramrw (CERO fallos, maquina en
+         * silencio) y el juego (que colapsa). */
+        uvm2_firma_releida = h;
+        uvm2_firma_vueltas++;
+        if (h != uvm2_firma_emitida) uvm2_firma_malas++;
+#endif
     }
 
     s_len[s_buf]        = s_count;
@@ -966,7 +1060,13 @@ void uvm2_frame_end(void)
     uvm2_stats.ramp_cycles_last = uvm2_stats.ramp_cycles;
 
     s_count = 0;
+#ifdef UVM2_CMDS_IN_PSRAM
+    uvm2_firma_emitida = 2166136261u;
+#endif
     s_frames++;
+#ifdef UVM2_CMDS_IN_PSRAM
+    uvm2_firma_emitida = 2166136261u;
+#endif
 
     __asm volatile ("dmb" ::: "memory");   /* the buffer and its length, then the flag */
     uvm2_frame_request = s_frame_no;
@@ -996,9 +1096,22 @@ void uvm2_frame_end(void)
      * reproduce desde SRAM, sin un solo acceso al chip externo durante el dibujo y sin otro
      * nucleo escribiendo por detras. */
     {
-        static uint32_t s_stage[UVM2_CMD_CAPACITY];
-        for (uint32_t i = 0; i < s_count && i < UVM2_CMD_CAPACITY; i++)
+        static uint8_t s_stage[UVM2_CMD_CAPACITY * 3u];
+        for (uint32_t i = 0; i < s_count * 3u && i < UVM2_CMD_CAPACITY * 3u; i++)
             s_stage[i] = s_cmds[s_buf][i];
+#ifdef UVM2_CMDS_IN_PSRAM
+        /* EL ULTIMO ESLABON SIN COMPROBAR. Ya sabemos que emit() -> PSRAM llega bien (4890
+         * de 4891 frames). Falta PSRAM -> copia, que es lo que de verdad alimenta al
+         * ejecutor en esta imagen. Si la copia no coincide con lo emitido, la lectura del
+         * chip se estropea aunque la escritura sea buena — y eso es otra averia distinta. */
+        {
+            uint32_t h = 2166136261u;
+            for (uint32_t i = 0; i < s_count * 3u; i++) { h ^= s_stage[i]; h *= 16777619u; }
+            uvm2_firma_copia = h;
+            uvm2_firma_copia_vueltas++;
+            if (h != uvm2_firma_emitida) uvm2_firma_copia_malas++;
+        }
+#endif
         cycles = uvm2_exec(s_stage, s_count);
     }
 #else
@@ -1017,7 +1130,13 @@ void uvm2_frame_end(void)
     uvm2_stats.ramp_cycles_last = uvm2_stats.ramp_cycles;
 
     s_count = 0;
+#ifdef UVM2_CMDS_IN_PSRAM
+    uvm2_firma_emitida = 2166136261u;
+#endif
     s_frames++;
+#ifdef UVM2_CMDS_IN_PSRAM
+    uvm2_firma_emitida = 2166136261u;
+#endif
 
     /* Lock the frame to the Vectrex clock rather than to an RP2350 timer:
      * 1.5 MHz / 50 Hz = 30000 bus cycles exactly.  The clamp stays asserted

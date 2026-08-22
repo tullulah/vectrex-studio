@@ -539,6 +539,37 @@ pub extern "C" fn vx_draw_line_seq(sink: *mut CSink, vx: i32, vy: i32, t1: u32,
                   &kk.a_timings());
 }
 
+/// La recta con huecos, para quien llama desde C.
+///
+/// `huecos` apunta a `n` pares (inicio, fin) en cuentas de T1, ordenados y sin solapar.
+/// Un puntero nulo o `n == 0` es exactamente una recta normal, asi que el llamante no
+/// necesita dos caminos.
+#[no_mangle]
+pub extern "C" fn vx_draw_line_patterned_seq(sink: *mut CSink, vx: i32, vy: i32, t1: u32,
+                                             k: *const CTimings,
+                                             huecos: *const u16, n: u32) {
+    if sink.is_null() || k.is_null() {
+        return;
+    }
+    let (s, kk) = unsafe { (&mut *sink, &*k) };
+    let t = kk.a_timings();
+    let vx8 = vx.clamp(-128, 127) as i8;
+    let vy8 = vy.clamp(-128, 127) as i8;
+    if huecos.is_null() || n == 0 {
+        return draw_line_seq(s, vx8, vy8, t1 as u16, &t);
+    }
+    // Tope fijo a proposito: esto corre en una imagen bare-metal, sin asignador. Un hueco
+    // de mas se pierde —el tramo sale encendido— y eso se ve; una reserva dinamica aqui
+    // seria un fallo que no se ve.
+    const MAX: usize = 16;
+    let cuantos = (n as usize).min(MAX);
+    let mut buf = [(0u16, 0u16); MAX];
+    for i in 0..cuantos {
+        buf[i] = unsafe { (*huecos.add(i * 2), *huecos.add(i * 2 + 1)) };
+    }
+    draw_line_patterned_seq(s, vx8, vy8, t1 as u16, &t, &buf[..cuantos]);
+}
+
 /// `Moveto_d` para quien llama desde C. La MISMA funcion que usa el firmware: eso es
 /// todo el objetivo de este fichero.
 #[no_mangle]

@@ -35,6 +35,9 @@ void uvm2_draw_intensity(int brightness);
 /* SYS_MOVE / SYS_DRAW_DELTA — relative, blanked and lit respectively. */
 void uvm2_draw_move(int dx, int dy);
 void uvm2_draw_delta(int dx, int dy);
+/* La misma recta pero con tramos apagados, en UNA rampa. `huecos` son pares
+ * (inicio, fin) en fracciones 0..255 de la recta. n = cuantos pares. */
+void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int n);
 
 /* SYS_MOVE_ABS — absolute position, measured from centre. */
 void uvm2_draw_move_abs(int x, int y);

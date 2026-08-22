@@ -8,7 +8,7 @@
 
 // Sin esto el enlazador descarta la caja entera: nada en este fichero la referencia, y
 // los `#[no_mangle]` de una dependencia no arrastran por si solos.
-pub use vectrex_draw::emit::{vx_draw_line_seq, vx_moveto_seq};
+pub use vectrex_draw::emit::{vx_draw_line_patterned_seq, vx_draw_line_seq, vx_moveto_seq};
 pub use vectrex_draw::ramp::vx_ramp_params;
 pub use vectrex_draw::{vx_probe, vx_probe_div};
 
