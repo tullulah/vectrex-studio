@@ -96,6 +96,20 @@ struct dc_ctrl {
 #define DC_OP_RASTER 4   /* header cmd: a=x, b=y, _pad=len; then ceil(len/4) cmds
                           * of raw string bytes. core 0 draws it with the BIOS
                           * shift-register raster font (one sweep per pixel row). */
+#define DC_OP_DRAW_PAT 5 /* UNA RECTA CON HUECOS, EN UNA SOLA RAMPA. Cabecera: a=dx, b=dy,
+                          * _pad = cuantos huecos; luego ceil(n*2/4) comandos con los pares
+                          * (inicio,fin) en fracciones 0..255 del recorrido.
+                          *
+                          * Por que existe: partir una recta en trozos cuesta una operacion
+                          * por trozo —dos DAC, la cuenta de T1, abrir y cerrar rampa, unos
+                          * 40 us— y la velocidad del haz la fijan los DAC, asi que mientras
+                          * no se toquen sigue recorriendo LA MISMA RECTA. Solo hay que
+                          * conmutar el BLANK por el camino. Medido en el 25m de Donkey
+                          * Kong: 26 tiradas colineales que funden 55 operaciones, ~2.2 ms
+                          * de un frame de 18.5.
+                          *
+                          * Mismo formato que RASTER a proposito: cabecera + datos en los
+                          * comandos siguientes, que es un patron ya probado en esta cola. */
 static int s_dc_w = 0;   /* current write buffer (0/1) */
 static int s_dc_n = 0;   /* commands recorded into it so far */
 static inline void dc_push(unsigned char op, signed char a, signed char b) {
@@ -107,6 +121,24 @@ static inline void dc_push(unsigned char op, signed char a, signed char b) {
 }
 /* Record a raster-text run: a header cmd (x,y,len) followed by the string bytes
  * packed 4 per cmd. core0_materialize replays it via the shift-register font. */
+/* La recta con huecos, a la cola de comandos. `huecos` son pares (inicio,fin) en
+ * fracciones 0..255 del recorrido; n como mucho DC_PAT_MAX. */
+#define DC_PAT_MAX 8
+static void dc_push_pat(signed char dx, signed char dy, const unsigned char *huecos, int n) {
+    if (n < 0) n = 0;
+    if (n > DC_PAT_MAX) n = DC_PAT_MAX;
+    int ndata = (n * 2 + 3) / 4;
+    if (s_dc_n + 1 + ndata > DC_CMDS_MAX) return;
+    struct dc_cmd *buf = s_dc_w ? DC_BUF1 : DC_BUF0;
+    buf[s_dc_n].op = DC_OP_DRAW_PAT; buf[s_dc_n].a = dx; buf[s_dc_n].b = dy;
+    buf[s_dc_n]._pad = (unsigned char)n; s_dc_n++;
+    for (int i = 0; i < n * 2; i += 4) {
+        unsigned char *q = (unsigned char *)&buf[s_dc_n];
+        for (int k = 0; k < 4; k++) q[k] = (i + k < n * 2) ? huecos[i + k] : 0;
+        s_dc_n++;
+    }
+}
+
 static void dc_push_raster(signed char x, signed char y, const unsigned char *s, int len) {
     if (len < 0) len = 0;
     if (len > 255) len = 255;
@@ -129,12 +161,18 @@ static void dc_push_raster(signed char x, signed char y, const unsigned char *s,
 #define BEAM_MOVE(x,y)    dc_push(DC_OP_MOVE, (signed char)(x), (signed char)(y))
 #define BEAM_DRAW(x,y)    dc_push(DC_OP_DRAW, (signed char)(x), (signed char)(y))
 #define BEAM_RASTER(x,y,s,n) dc_push_raster((signed char)(x),(signed char)(y),(s),(n))
+#define BEAM_DRAW_PAT(x,y,h,n) dc_push_pat((signed char)(x),(signed char)(y),(h),(n))
+#define TIENE_RAMPA_CON_HUECOS 1
 #else
 #define BEAM_ZERO()       sys_reset0ref()
 #define BEAM_INTENSITY(b) sys_set_intensity(b)
 #define BEAM_MOVE(x,y)    sys_move((x),(y))
 #define BEAM_DRAW(x,y)    sys_draw_delta((x),(y))
 #define BEAM_RASTER(x,y,s,n) sys_raster_text((x),(y),(s),(n)) /* SYS #26 */
+/* El camino de svc no tiene la rampa con huecos: los juegos usan el de doble nucleo (ver
+ * dc.rs: "the dual-core game never svc's"), asi que la optimizacion va donde se usa y aqui
+ * se cae al comportamiento de siempre — un trazo por trozo. */
+#define TIENE_RAMPA_CON_HUECOS 0
 #endif
 
 /* Draw a raster-font string at device coords (x,y) (i8, ±127). Dual-core records
@@ -492,17 +530,77 @@ static void flush_frame(void)
         }
         int a = rr_off[best], n = rr_len[best], b = rr_b[best];
         rr_len[best] = -1;
-        if (!rev) {
-            for (int i = 0; i < n-1; i++)
-                beam_seg(rr_x[a+i], rr_y[a+i], rr_x[a+i+1], rr_y[a+i+1],
-                         rr_dark[a+i+1] ? 0 : b);
-            by = rr_y[a+n-1]; bx = rr_x[a+n-1];
-        } else {
-            for (int i = n-1; i > 0; i--)
-                beam_seg(rr_x[a+i], rr_y[a+i], rr_x[a+i-1], rr_y[a+i-1],
-                         rr_dark[a+i] ? 0 : b);
-            by = rr_y[a]; bx = rr_x[a];
+        /* UNA RAMPA POR TIRADA COLINEAL, no por segmento.
+         *
+         * Partir una recta en trozos cuesta una operacion por trozo: dos DAC, la cuenta de
+         * T1, abrir y cerrar rampa. Con DRAW_SCALE=160 y MIN_T1=31 son ~21 us de rampa
+         * MINIMA aunque el trozo mida dos unidades, mas ~16-27 us de escrituras de bus. Y
+         * no hace falta: la velocidad del haz la fijan los DAC, asi que mientras no se
+         * toquen el haz sigue recorriendo LA MISMA RECTA.
+         *
+         * Se buscan las tiradas de segmentos colineales y en el mismo sentido. Si todos van
+         * encendidos salen como UN trazo —eso vale en las dos placas y no necesita nada
+         * nuevo—; si mezclan encendido y apagado, van con la rampa de huecos, que conmuta
+         * el BLANK por el camino. Medido en el 25m: 26 tiradas que funden 55 operaciones,
+         * ~2.2 ms de un frame de 18.5.
+         *
+         * El tope de +-127 es del delta i8 del comando: una tirada mas larga se parte, que
+         * es lo que beam_draw_to hacia igualmente. */
+        #define PY(k) (rev ? rr_y[a+n-1-(k)] : rr_y[a+(k)])
+        #define PX(k) (rev ? rr_x[a+n-1-(k)] : rr_x[a+(k)])
+        /* la marca es del SEGMENTO: el k une los puntos k y k+1 */
+        #define OSC(k) (rev ? rr_dark[a+n-1-(k)] : rr_dark[a+(k)+1])
+        for (int k = 0; k < n-1; ) {
+            long ux = PX(k+1)-PX(k), uy = PY(k+1)-PY(k);
+            int j = k + 1;
+            while (j < n-1) {
+                long vx = PX(j+1)-PX(j), vy = PY(j+1)-PY(j);
+                if (ux*vy != vx*uy || ux*vx + uy*vy <= 0) break;   /* gira o retrocede */
+                int tx = PX(j+1)-PX(k), ty = PY(j+1)-PY(k);
+                if (tx > 127 || tx < -127 || ty > 127 || ty < -127) break;
+                j++;
+            }
+            int nseg = j - k, oscuros = 0;
+            for (int m = k; m < j; m++) if (OSC(m)) oscuros++;
+            if (nseg == 1 || (oscuros && oscuros != nseg && !TIENE_RAMPA_CON_HUECOS)) {
+                for (int m = k; m < j; m++)
+                    beam_seg(PX(m), PY(m), PX(m+1), PY(m+1), OSC(m) ? 0 : b);
+            } else if (oscuros == 0) {
+                beam_seg(PX(k), PY(k), PX(j), PY(j), b);
+            } else if (oscuros == nseg) {
+                beam_seg(PX(k), PY(k), PX(j), PY(j), 0);
+            }
+#if TIENE_RAMPA_CON_HUECOS
+            else {
+                /* los huecos en fracciones 0..255: la rampa avanza con el eje dominante,
+                 * asi que la fraccion se mide en ese eje. */
+                int TX = PX(j)-PX(k), TY = PY(j)-PY(k);
+                long aX = TX < 0 ? -TX : TX, aY = TY < 0 ? -TY : TY;
+                long total = aX > aY ? aX : aY; if (!total) total = 1;
+                unsigned char h[DC_PAT_MAX*2]; int nh = 0; long acc = 0;
+                for (int m = k; m < j; m++) {
+                    int sx = PX(m+1)-PX(m), sy = PY(m+1)-PY(m);
+                    long bx2 = sx < 0 ? -sx : sx, by2 = sy < 0 ? -sy : sy;
+                    long len = bx2 > by2 ? bx2 : by2;
+                    if (OSC(m)) {
+                        int ini = (int)(acc * 255 / total);
+                        int fin = (int)((acc + len) * 255 / total);
+                        if (nh && h[nh*2-1] >= ini) h[nh*2-1] = (unsigned char)fin;
+                        else if (nh < DC_PAT_MAX) {
+                            h[nh*2] = (unsigned char)ini; h[nh*2+1] = (unsigned char)fin; nh++;
+                        }
+                    }
+                    acc += len;
+                }
+                beam_seg_pat(PX(k), PY(k), PX(j), PY(j), b, h, nh);
+            }
+#endif
+            k = j;
         }
+        by = PY(n-1); bx = PX(n-1);
+        #undef PY
+        #undef PX
+        #undef OSC
     }
     vpy_strokes_last = rr_nst;
     rr_npts = 0; rr_nst = 0;
