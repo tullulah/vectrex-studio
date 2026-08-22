@@ -2835,6 +2835,40 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   }, [resource, selectedTreePathKey, selectedTreePathKeys, updateResource]);
 
   // Set intensity on all selected paths (from tree selection OR from canvas point selection)
+  /* LOS SEGMENTOS SELECCIONADOS del path actual: un tramo cuenta cuando sus DOS extremos
+   * estan marcados. No hay modo nuevo ni herramienta nueva, se marcan los dos puntos. */
+  const segmentosSeleccionados = React.useMemo(() => {
+    const out: number[] = [];
+    const path = resource.layers[currentLayerIndex]?.paths[currentPathIndex];
+    if (!path || currentPathIndex < 0) return out;
+    for (let i = 0; i + 1 < path.points.length; i++) {
+      if (selectedPoints.has(`${currentPathIndex}-${i}`) &&
+          selectedPoints.has(`${currentPathIndex}-${i + 1}`)) out.push(i);
+    }
+    return out;
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPoints]);
+
+  /* La intensidad que hay que ENSEÑAR: la del tramo si hay uno solo seleccionado, y si no
+   * la del path. Antes siempre enseñaba la del path, asi que un tramo apagado se leia como
+   * "127" y al pulsar Apply se lo llevaba por delante. */
+  const intensidadMostrada = (() => {
+    const path = resource.layers[currentLayerIndex]?.paths[currentPathIndex];
+    if (!path) return null;
+    if (segmentosSeleccionados.length === 1) {
+      const k = segmentosSeleccionados[0];
+      return Array.isArray(path.intensities) ? (path.intensities[k] ?? path.intensity) : path.intensity;
+    }
+    return path.intensity;
+  })();
+
+  const claveSeleccion = `${currentLayerIndex}:${currentPathIndex}:${segmentosSeleccionados.join(",")}`;
+  useEffect(() => {
+    /* Solo al cambiar la SELECCION. Si dependiera del valor, se pisaria lo que estas
+     * tecleando en cuanto el recurso se actualice. */
+    if (intensidadMostrada != null) setSetIntensityInput(String(intensidadMostrada));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claveSeleccion]);
+
   const handleSetIntensitySelected = useCallback((intensity: number) => {
     // Build set of "layerIdx-pathIdx" keys from tree selection
     const keysFromTree = selectedTreePathKeys.size > 0 ? selectedTreePathKeys
@@ -2849,6 +2883,23 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     } else if (selectedPointIndex >= 0 && currentPathIndex >= 0) {
       keysFromPoints.add(`${currentLayerIndex}-${currentPathIndex}`);
     }
+    /* CON UN TRAMO SELECCIONADO, EL APPLY VA AL TRAMO. Antes iba siempre al path entero:
+     * marcabas un segmento, escribias 0 y se apagaba el path completo — o peor, ponias
+     * 127, 0, 127... en orden y el ultimo valor arrasaba con todos los anteriores. */
+    if (segmentosSeleccionados.length > 0) {
+      const nr = JSON.parse(JSON.stringify(resource)) as VecResource;
+      const p2 = nr.layers[currentLayerIndex]?.paths[currentPathIndex];
+      if (!p2) return;
+      const ints = Array.isArray(p2.intensities) && p2.intensities.length === p2.points.length - 1
+        ? p2.intensities.slice()
+        : new Array(Math.max(0, p2.points.length - 1)).fill(p2.intensity);
+      segmentosSeleccionados.forEach(k => { ints[k] = intensity; });
+      /* Se queda aunque todos coincidan con la del path: si se borrase, el usuario veria
+       * su marca desaparecer al igualar los valores y no sabria si guardo o no. */
+      p2.intensities = ints;
+      updateResource(resource, nr);
+      return;
+    }
     const allKeys = new Set([...keysFromTree, ...keysFromPoints]);
     if (allKeys.size === 0) return;
     const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
@@ -2859,7 +2910,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       }
     });
     updateResource(resource, newResource);
-  }, [resource, selectedTreePathKey, selectedTreePathKeys, selectedPoints, selectedPointIndex, currentPathIndex, currentLayerIndex, updateResource]);
+  }, [resource, selectedTreePathKey, selectedTreePathKeys, selectedPoints, selectedPointIndex, currentPathIndex, currentLayerIndex, updateResource, segmentosSeleccionados]);
 
   // Clean orphan paths: remove paths with <=1 point and fix incomplete bezier structures
   const handleCleanOrphans = useCallback(() => {
@@ -4251,30 +4302,12 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     const path = (currentPathIndex >= 0 && activeLayer && activeLayer.paths[currentPathIndex])
       ? activeLayer.paths[currentPathIndex] : null;
     
-    /* INTENSIDAD DE LOS SEGMENTOS SELECCIONADOS. Un segmento cuenta como seleccionado
-     * cuando sus DOS extremos lo estan, que es como se selecciona un tramo sin inventar
-     * un modo nuevo: se marcan los dos puntos que lo cierran y se pulsa aqui.
-     *
-     * Para que sirve: trazar una recta que cruza media pantalla y apagar el aire entre
-     * escaleras, en vez de dejar ocho trazos sueltos. El haz recorre el hueco igual —en
-     * la Vectrex un salto en blanco cuesta lo mismo que dibujarlo—, pero asi la recta se
-     * recorre UNA vez y el reordenador no reparte los trozos por el frame. */
-    const handleSegmentIntensity = (valor: number) => {
-      const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
-      const p2 = newResource.layers[currentLayerIndex]?.paths[currentPathIndex];
-      if (!p2) return;
-      const ints = Array.isArray(p2.intensities) && p2.intensities.length === p2.points.length - 1
-        ? p2.intensities.slice()
-        : new Array(Math.max(0, p2.points.length - 1)).fill(p2.intensity);
-      let tocados = 0;
-      for (let i = 0; i + 1 < p2.points.length; i++) {
-        if (selectedPoints.has(`${currentPathIndex}-${i}`) &&
-            selectedPoints.has(`${currentPathIndex}-${i + 1}`)) { ints[i] = valor; tocados++; }
-      }
-      if (!tocados) return;                       // sin dos puntos contiguos no hay tramo
-      p2.intensities = ints.every(v => v === p2.intensity) ? undefined : ints;
-      updateResource(resource, newResource);
-    };
+    /* Los atajos de apagar/encender usan EL MISMO camino que el Apply. Antes tenian su
+     * propia copia de la logica y divergieron: aquella borraba el array cuando todos los
+     * tramos coincidian con la intensidad del path, asi que poner 127 en el ultimo tramo
+     * se llevaba por delante los ceros anteriores. Dos caminos para lo mismo es como se
+     * llega ahi. */
+    const handleSegmentIntensity = (valor: number) => handleSetIntensitySelected(valor);
 
     const handleIntensityChange = (newIntensity: number) => {
       const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
@@ -4844,7 +4877,14 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       />
       {/* Set Intensity + Clean Orphans — always at top */}
       <div style={{ background: '#1e2230', border: '1px solid #3a3a5e', borderRadius: '4px', padding: '8px' }}>
-        <div style={{ color: '#aaa', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px' }}>Intensity</div>
+        <div style={{ color: '#aaa', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px' }}>
+          Intensity
+          {segmentosSeleccionados.length === 1
+            ? <span style={{ color: '#6af', fontWeight: 'normal' }}> · tramo {segmentosSeleccionados[0] + 1}</span>
+            : segmentosSeleccionados.length > 1
+              ? <span style={{ color: '#6af', fontWeight: 'normal' }}> · {segmentosSeleccionados.length} tramos</span>
+              : <span style={{ color: '#666', fontWeight: 'normal' }}> · path</span>}
+        </div>
         <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
           <input
             type="number" min="0" max="127"
