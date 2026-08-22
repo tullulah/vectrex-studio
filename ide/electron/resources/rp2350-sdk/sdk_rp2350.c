@@ -407,6 +407,12 @@ static void beam_seg(int ax0, int ay0, int ax1, int ay1, int b)
          * its whole allowance getting back out there, which is the "walks off" failure
          * the comment above describes. */
     }
+    /* INTENSIDAD 0 = SALTO EN BLANCO, no un trazo a oscuras. El haz tiene que
+     * recorrer el tramo de todas formas —los integradores corren igual—, asi que
+     * apagarlo con BEAM_INTENSITY y dibujarlo cuesta una escritura de bus de mas y
+     * no pinta nada. Un MOVE hace lo mismo y ademas no toca la intensidad cacheada,
+     * asi que el tramo encendido de al lado no tiene que volver a ponerla. */
+    if (b == 0) { beam_move_to(ax0, ay0); beam_move_to(ax1, ay1); return; }
     if (b != s_last_intensity) { BEAM_INTENSITY(b); s_last_intensity = b; }
     beam_move_to(ax0, ay0);
     beam_draw_to(ax1, ay1);   /* splits >127 i8 chunks (DP long vectors) */
@@ -432,6 +438,12 @@ static void beam_seg(int ax0, int ay0, int ax1, int ay1, int b)
 #define VPY_REORDER_MAX_STROKE 1024
 #endif
 static short  rr_y[VPY_REORDER_MAX_PTS], rr_x[VPY_REORDER_MAX_PTS];
+/* rr_dark[k] = el segmento que ACABA en el punto k va apagado. Antes la intensidad
+ * era por TRAZO, asi que un tramo a oscuras partia el trazo en dos y el reordenador
+ * los repartia por el frame: cada trozo se re-aproximaba con un salto en blanco desde
+ * donde estuviera el haz. Con esto una recta con huecos —los peldanos de dos escaleras
+ * y el aire entre ellas— se recorre UNA vez de punta a punta. */
+static unsigned char rr_dark[VPY_REORDER_MAX_PTS];
 static int    rr_off[VPY_REORDER_MAX_STROKE], rr_len[VPY_REORDER_MAX_STROKE], rr_b[VPY_REORDER_MAX_STROKE];
 static int    rr_npts = 0, rr_nst = 0;
 /* Last frame's stroke count, kept after the reset so it can be read live. */
@@ -440,17 +452,22 @@ volatile int  vpy_strokes_last = 0;
 /* record a segment; extend the open stroke iff it connects and shares brightness */
 static void emit_seg(int ax0, int ay0, int ax1, int ay1, int b)
 {
+    /* un tramo apagado se une SIEMPRE (no trae intensidad propia que respetar), y un
+     * tramo encendido se une si el trazo aun no tiene intensidad o coincide con la suya */
     if (rr_nst > 0 && rr_npts > 0 && rr_npts < VPY_REORDER_MAX_PTS &&
-        rr_y[rr_npts-1] == ay0 && rr_x[rr_npts-1] == ax0 && rr_b[rr_nst-1] == b) {
-        rr_y[rr_npts] = ay1; rr_x[rr_npts] = ax1; rr_npts++;
+        rr_y[rr_npts-1] == ay0 && rr_x[rr_npts-1] == ax0 &&
+        (b == 0 || rr_b[rr_nst-1] == 0 || rr_b[rr_nst-1] == b)) {
+        rr_y[rr_npts] = ay1; rr_x[rr_npts] = ax1; rr_dark[rr_npts] = (b == 0);
+        rr_npts++;
         rr_len[rr_nst-1]++;
+        if (b) rr_b[rr_nst-1] = b;
         return;
     }
     if (rr_nst < VPY_REORDER_MAX_STROKE && rr_npts + 2 <= VPY_REORDER_MAX_PTS) {
         rr_off[rr_nst] = rr_npts; rr_len[rr_nst] = 2; rr_b[rr_nst] = b;
         rr_nst++;
-        rr_y[rr_npts] = ay0; rr_x[rr_npts] = ax0; rr_npts++;
-        rr_y[rr_npts] = ay1; rr_x[rr_npts] = ax1; rr_npts++;
+        rr_y[rr_npts] = ay0; rr_x[rr_npts] = ax0; rr_dark[rr_npts] = 0; rr_npts++;
+        rr_y[rr_npts] = ay1; rr_x[rr_npts] = ax1; rr_dark[rr_npts] = (b == 0); rr_npts++;
         return;
     }
     beam_seg(ax0, ay0, ax1, ay1, b);   /* buffer full → emit directly (no reorder) */
@@ -476,10 +493,14 @@ static void flush_frame(void)
         int a = rr_off[best], n = rr_len[best], b = rr_b[best];
         rr_len[best] = -1;
         if (!rev) {
-            for (int i = 0; i < n-1; i++) beam_seg(rr_x[a+i], rr_y[a+i], rr_x[a+i+1], rr_y[a+i+1], b);
+            for (int i = 0; i < n-1; i++)
+                beam_seg(rr_x[a+i], rr_y[a+i], rr_x[a+i+1], rr_y[a+i+1],
+                         rr_dark[a+i+1] ? 0 : b);
             by = rr_y[a+n-1]; bx = rr_x[a+n-1];
         } else {
-            for (int i = n-1; i > 0; i--) beam_seg(rr_x[a+i], rr_y[a+i], rr_x[a+i-1], rr_y[a+i-1], b);
+            for (int i = n-1; i > 0; i--)
+                beam_seg(rr_x[a+i], rr_y[a+i], rr_x[a+i-1], rr_y[a+i-1],
+                         rr_dark[a+i] ? 0 : b);
             by = rr_y[a]; bx = rr_x[a];
         }
     }

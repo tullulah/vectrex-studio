@@ -28,6 +28,14 @@ interface VecPath {
   closed: boolean;
   type?: 'polyline' | 'bezier';
   points: Point[];
+  /* INTENSIDAD POR SEGMENTO, uno por cada tramo (o sea points.length - 1). Sirve para
+   * trazar una recta larga y apagar los tramos que sobran —el aire entre dos escaleras—
+   * en vez de soltar ocho trazos sueltos. En la Vectrex el haz recorre el hueco igual,
+   * asi que apagarlo no cuesta tiempo de haz y en cambio evita que el reordenador
+   * reparta los trozos por el frame y se re-aproxime a cada uno.
+   * Ausente = toda la ruta con `intensity`. El valor es RELATIVO: 127 es el brillo
+   * normal del juego, 0 apagado. */
+  intensities?: number[];
 }
 
 interface Layer {
@@ -1406,6 +1414,25 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         ctx.strokeStyle = `rgb(${Math.floor(100 * intensity)}, ${green}, ${Math.floor(100 * intensity)})`;
         ctx.lineWidth = 2;
 
+        // Con intensidad por segmento hay que pintar tramo a tramo: un solo trazo no
+        // puede tener dos brillos. Los apagados se dejan marcados en gris oscuro para
+        // poder EDITARLOS — en el juego no se ven, pero aqui tienen que verse.
+        if (path.type !== 'bezier' && Array.isArray(path.intensities)) {
+          for (let i = 1; i < path.points.length; i++) {
+            const a = path.points[i - 1], b2 = path.points[i];
+            if (!a || !b2) continue;
+            const vi = path.intensities[i - 1] ?? path.intensity;
+            const f = vi / 127;
+            ctx.strokeStyle = vi === 0
+              ? '#404040'
+              : `rgb(${Math.floor(100 * f)}, ${Math.floor(200 + 55 * f)}, ${Math.floor(100 * f)})`;
+            ctx.setLineDash(vi === 0 ? [3, 3] : []);
+            ctx.beginPath();
+            const pa = resourceToCanvas(a), pb = resourceToCanvas(b2);
+            ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+          }
+          ctx.setLineDash([]);
+        } else {
         ctx.beginPath();
         if (path.type === 'bezier') {
           renderBezierPath(path.points, ctx);
@@ -1423,6 +1450,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           if (path.closed) ctx.closePath();
         }
         ctx.stroke();
+        }
 
         // For selected bezier path: draw handle lines on top
         if (path.type === 'bezier' && layerIdx === currentLayerIndex && pathIdx === currentPathIndex) {
@@ -4213,6 +4241,31 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     const path = (currentPathIndex >= 0 && activeLayer && activeLayer.paths[currentPathIndex])
       ? activeLayer.paths[currentPathIndex] : null;
     
+    /* INTENSIDAD DE LOS SEGMENTOS SELECCIONADOS. Un segmento cuenta como seleccionado
+     * cuando sus DOS extremos lo estan, que es como se selecciona un tramo sin inventar
+     * un modo nuevo: se marcan los dos puntos que lo cierran y se pulsa aqui.
+     *
+     * Para que sirve: trazar una recta que cruza media pantalla y apagar el aire entre
+     * escaleras, en vez de dejar ocho trazos sueltos. El haz recorre el hueco igual —en
+     * la Vectrex un salto en blanco cuesta lo mismo que dibujarlo—, pero asi la recta se
+     * recorre UNA vez y el reordenador no reparte los trozos por el frame. */
+    const handleSegmentIntensity = (valor: number) => {
+      const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+      const p2 = newResource.layers[currentLayerIndex]?.paths[currentPathIndex];
+      if (!p2) return;
+      const ints = Array.isArray(p2.intensities) && p2.intensities.length === p2.points.length - 1
+        ? p2.intensities.slice()
+        : new Array(Math.max(0, p2.points.length - 1)).fill(p2.intensity);
+      let tocados = 0;
+      for (let i = 0; i + 1 < p2.points.length; i++) {
+        if (selectedPoints.has(`${currentPathIndex}-${i}`) &&
+            selectedPoints.has(`${currentPathIndex}-${i + 1}`)) { ints[i] = valor; tocados++; }
+      }
+      if (!tocados) return;                       // sin dos puntos contiguos no hay tramo
+      p2.intensities = ints.every(v => v === p2.intensity) ? undefined : ints;
+      updateResource(resource, newResource);
+    };
+
     const handleIntensityChange = (newIntensity: number) => {
       const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
       if (newResource.layers[currentLayerIndex] && newResource.layers[currentLayerIndex].paths[currentPathIndex]) {
@@ -4244,6 +4297,28 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             }}
             title="Adjust path intensity (brightness)"
           />
+          <div style={{ color: '#aaa', fontSize: '11px', margin: '8px 0 4px' }}>
+            Segmento seleccionado
+            {Array.isArray(path.intensities) && <span style={{ color: '#6af' }}> · por tramo</span>}
+          </div>
+          <div style={{ display: 'flex', gap: '4px', fontSize: '10px' }}>
+            <button
+              onClick={() => handleSegmentIntensity(0)}
+              title="Apagar los tramos cuyos DOS extremos estan seleccionados. El haz los recorre igual, sin encenderse."
+              style={{ flex: 1, padding: '4px', background: '#5a3a3a', border: '1px solid #8a5a5a',
+                       color: '#ddd', borderRadius: '3px', cursor: 'pointer' }}
+            >
+              apagar
+            </button>
+            <button
+              onClick={() => handleSegmentIntensity(127)}
+              title="Devolver los tramos seleccionados al brillo normal"
+              style={{ flex: 1, padding: '4px', background: '#3a5a3a', border: '1px solid #5a8a5a',
+                       color: '#ddd', borderRadius: '3px', cursor: 'pointer' }}
+            >
+              encender
+            </button>
+          </div>
           <div style={{ display: 'flex', gap: '4px', marginTop: '4px', fontSize: '10px' }}>
             <button
               onClick={() => handleIntensityChange(Math.max(0, path.intensity - 10))}
