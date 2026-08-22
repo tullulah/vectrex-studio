@@ -4263,16 +4263,27 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                                   setCurrentLayerIndex(layerIdx);
                                   setCurrentPathIndex(pathIdx);
                                   setSelectedPointIndex(ptIdx);
-                                  setSelectedPoints(new Set());
+                                  /* PULSAR UN PUNTO EN EL ARBOL LO SELECCIONA. Antes VACIABA
+                                   * `selectedPoints`, asi que quien seleccionaba por el arbol
+                                   * —que es lo natural cuando ves la lista de puntos— no podia
+                                   * formar nunca un tramo: el Apply se iba al path entero y
+                                   * apagaba el dibujo completo. Con shift/cmd se añade, igual
+                                   * que en el lienzo. */
+                                  const key = `${pathIdx}-${ptIdx}`;
+                                  setSelectedPoints(prev => (e.shiftKey || e.metaKey || e.ctrlKey)
+                                    ? new Set([...prev, key])
+                                    : new Set([key]));
                                   setSelectedTreePathKey(treeKey);
                                 }}
                                 style={{
                                   padding: '2px 4px',
                                   fontSize: '10px',
-                                  color: selectedPointIndex === ptIdx && currentPathIndex === pathIdx ? '#ffff00' : '#667',
+                                  color: (selectedPoints.has(`${pathIdx}-${ptIdx}`) ||
+                                          (selectedPointIndex === ptIdx && currentPathIndex === pathIdx)) ? '#ffff00' : '#667',
                                   cursor: 'pointer',
                                   borderRadius: '2px',
-                                  background: selectedPointIndex === ptIdx && currentPathIndex === pathIdx ? '#3a3a1a' : 'transparent',
+                                  background: (selectedPoints.has(`${pathIdx}-${ptIdx}`) ||
+                                               (selectedPointIndex === ptIdx && currentPathIndex === pathIdx)) ? '#3a3a1a' : 'transparent',
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
