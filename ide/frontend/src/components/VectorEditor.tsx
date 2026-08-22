@@ -1409,9 +1409,17 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         const path = layer.paths[pathIdx];
         if (!path || !Array.isArray(path.points) || path.points.length < 2) continue;
 
+        /* UN PATH APAGADO SE SIGUE VIENDO AQUI. Con intensity 0 se pintaba en negro sobre
+         * negro: invisible en el editor, o sea imposible de seleccionar y de corregir. En
+         * el juego no se ve —esa es la idea— pero aqui hay que poder trabajarlo, asi que
+         * va en gris discontinuo, igual que los tramos apagados. */
+        const apagado = path.intensity === 0;
         const intensity = path.intensity / 127;
         const green = Math.floor(200 + 55 * intensity);
-        ctx.strokeStyle = `rgb(${Math.floor(100 * intensity)}, ${green}, ${Math.floor(100 * intensity)})`;
+        ctx.strokeStyle = apagado
+          ? '#404040'
+          : `rgb(${Math.floor(100 * intensity)}, ${green}, ${Math.floor(100 * intensity)})`;
+        ctx.setLineDash(apagado ? [3, 3] : []);
         ctx.lineWidth = 2;
 
         // Con intensidad por segmento hay que pintar tramo a tramo: un solo trazo no
@@ -1451,6 +1459,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         }
         ctx.stroke();
         }
+        ctx.setLineDash([]);
 
         // For selected bezier path: draw handle lines on top
         if (path.type === 'bezier' && layerIdx === currentLayerIndex && pathIdx === currentPathIndex) {
@@ -4340,28 +4349,56 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             }}
             title="Adjust path intensity (brightness)"
           />
-          <div style={{ color: '#aaa', fontSize: '11px', margin: '8px 0 4px' }}>
-            Segmento seleccionado
-            {Array.isArray(path.intensities) && <span style={{ color: '#6af' }}> · por tramo</span>}
-          </div>
-          <div style={{ display: 'flex', gap: '4px', fontSize: '10px' }}>
-            <button
-              onClick={() => handleSegmentIntensity(0)}
-              title="Apagar los tramos cuyos DOS extremos estan seleccionados. El haz los recorre igual, sin encenderse."
-              style={{ flex: 1, padding: '4px', background: '#5a3a3a', border: '1px solid #8a5a5a',
-                       color: '#ddd', borderRadius: '3px', cursor: 'pointer' }}
-            >
-              apagar
-            </button>
-            <button
-              onClick={() => handleSegmentIntensity(127)}
-              title="Devolver los tramos seleccionados al brillo normal"
-              style={{ flex: 1, padding: '4px', background: '#3a5a3a', border: '1px solid #5a8a5a',
-                       color: '#ddd', borderRadius: '3px', cursor: 'pointer' }}
-            >
-              encender
-            </button>
-          </div>
+          {/* LOS TRAMOS, UNO POR UNO. Los botones anteriores dependian de que estuvieran
+              marcados los dos extremos del tramo, y segun como selecciones los puntos eso
+              no siempre llena `selectedPoints` — el Apply se iba entonces al path entero y
+              apagaba el dibujo completo sin decir por que. Esta lista no depende de
+              ninguna seleccion: cada tramo tiene su valor y se toca ahi. */}
+          {path.points.length > 1 && (
+            <div style={{ marginTop: '10px' }}>
+              <div style={{ color: '#aaa', fontSize: '11px', marginBottom: '4px' }}>
+                Tramos <span style={{ color: '#666' }}>· 0 = apagado</span>
+              </div>
+              <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {path.points.slice(0, -1).map((_, k) => {
+                  const v = Array.isArray(path.intensities) ? (path.intensities[k] ?? path.intensity) : path.intensity;
+                  const ponTramo = (nv: number) => {
+                    const nr = JSON.parse(JSON.stringify(resource)) as VecResource;
+                    const p2 = nr.layers[currentLayerIndex]?.paths[currentPathIndex];
+                    if (!p2) return;
+                    const ints = Array.isArray(p2.intensities) && p2.intensities.length === p2.points.length - 1
+                      ? p2.intensities.slice()
+                      : new Array(p2.points.length - 1).fill(p2.intensity);
+                    ints[k] = Math.max(0, Math.min(127, nv));
+                    p2.intensities = ints;
+                    /* Si el path entero estaba a 0, con tramos encendidos ya no tiene
+                       sentido: el VK_INT de apertura los apagaria a todos. */
+                    if (p2.intensity === 0 && ints.some(x => x > 0)) p2.intensity = 127;
+                    updateResource(resource, nr);
+                  };
+                  return (
+                    <div key={k} style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 10 }}>
+                      <span style={{ color: '#778', width: 28 }}>{k + 1}→{k + 2}</span>
+                      <input
+                        type="number" min="0" max="127" value={v}
+                        onChange={(e) => ponTramo(parseInt(e.target.value) || 0)}
+                        style={{ width: 46, padding: '2px 4px', background: '#0e1e2e', color: '#fff',
+                                 border: '1px solid #4a6a8a', borderRadius: 3, fontSize: 11 }}
+                      />
+                      <button
+                        onClick={() => ponTramo(v === 0 ? 127 : 0)}
+                        style={{ flex: 1, padding: '2px 4px', borderRadius: 3, cursor: 'pointer', fontSize: 10,
+                                 background: v === 0 ? '#5a3a3a' : '#3a5a3a',
+                                 border: '1px solid ' + (v === 0 ? '#8a5a5a' : '#5a8a5a'), color: '#ddd' }}
+                      >
+                        {v === 0 ? 'apagado' : 'encendido'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '4px', marginTop: '4px', fontSize: '10px' }}>
             <button
               onClick={() => handleIntensityChange(Math.max(0, path.intensity - 10))}
