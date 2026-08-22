@@ -1426,8 +1426,13 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         // puede tener dos brillos. Los apagados se dejan marcados en gris oscuro para
         // poder EDITARLOS — en el juego no se ven, pero aqui tienen que verse.
         if (path.type !== 'bezier' && Array.isArray(path.intensities)) {
-          for (let i = 1; i < path.points.length; i++) {
-            const a = path.points[i - 1], b2 = path.points[i];
+          /* UN PATH CERRADO TIENE UN TRAMO MAS: el de cierre, del ultimo punto al
+           * primero. Sin contarlo, la figura se pinta ABIERTA — y justo las vigas del
+           * escenario son paths cerrados, asi que el fallo salia en la primera que se
+           * tocaba. */
+          const nseg = path.closed ? path.points.length : path.points.length - 1;
+          for (let i = 1; i <= nseg; i++) {
+            const a = path.points[i - 1], b2 = path.points[i % path.points.length];
             if (!a || !b2) continue;
             const vi = path.intensities[i - 1] ?? path.intensity;
             const f = vi / 127;
@@ -2856,9 +2861,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
      * un valor y dar a Apply se llevaba el path entero por delante. */
     if (selectedEdge && selectedEdge.pathIdx === currentPathIndex) out.add(selectedEdge.edgeIdx);
     /* y ademas, dos puntos contiguos marcados (seleccion por caja o con shift) */
-    for (let i = 0; i + 1 < path.points.length; i++) {
+    const nseg = path.closed ? path.points.length : path.points.length - 1;
+    for (let i = 0; i < nseg; i++) {
       if (selectedPoints.has(`${currentPathIndex}-${i}`) &&
-          selectedPoints.has(`${currentPathIndex}-${i + 1}`)) out.add(i);
+          selectedPoints.has(`${currentPathIndex}-${(i + 1) % path.points.length}`)) out.add(i);
     }
     return [...out].sort((a, b) => a - b);
   }, [resource, currentLayerIndex, currentPathIndex, selectedPoints, selectedEdge]);
@@ -2905,9 +2911,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       const nr = JSON.parse(JSON.stringify(resource)) as VecResource;
       const p2 = nr.layers[currentLayerIndex]?.paths[currentPathIndex];
       if (!p2) return;
-      const ints = Array.isArray(p2.intensities) && p2.intensities.length === p2.points.length - 1
+      const nseg = p2.closed ? p2.points.length : p2.points.length - 1;
+      const ints = Array.isArray(p2.intensities) && p2.intensities.length === nseg
         ? p2.intensities.slice()
-        : new Array(Math.max(0, p2.points.length - 1)).fill(p2.intensity);
+        : new Array(Math.max(0, nseg)).fill(p2.intensity);
       segmentosSeleccionados.forEach(k => { ints[k] = intensity; });
       /* Se queda aunque todos coincidan con la del path: si se borrase, el usuario veria
        * su marca desaparecer al igualar los valores y no sabria si guardo o no. */
@@ -4377,15 +4384,16 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                 Tramos <span style={{ color: '#666' }}>· 0 = apagado</span>
               </div>
               <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {path.points.slice(0, -1).map((_, k) => {
+                {path.points.slice(0, path.closed ? undefined : -1).map((_, k) => {
                   const v = Array.isArray(path.intensities) ? (path.intensities[k] ?? path.intensity) : path.intensity;
                   const ponTramo = (nv: number) => {
                     const nr = JSON.parse(JSON.stringify(resource)) as VecResource;
                     const p2 = nr.layers[currentLayerIndex]?.paths[currentPathIndex];
                     if (!p2) return;
-                    const ints = Array.isArray(p2.intensities) && p2.intensities.length === p2.points.length - 1
+                    const nseg2 = p2.closed ? p2.points.length : p2.points.length - 1;
+                    const ints = Array.isArray(p2.intensities) && p2.intensities.length === nseg2
                       ? p2.intensities.slice()
-                      : new Array(p2.points.length - 1).fill(p2.intensity);
+                      : new Array(nseg2).fill(p2.intensity);
                     ints[k] = Math.max(0, Math.min(127, nv));
                     p2.intensities = ints;
                     /* Si el path entero estaba a 0, con tramos encendidos ya no tiene
