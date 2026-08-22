@@ -15,7 +15,7 @@ import { emuCore } from '../../emulatorCoreSingleton';
 import { VectorRecorder, serializeVrec, defaultRecordingName, MAX_RECORD_SECONDS, type RawSegment } from '../../emulator/recorder/VectorRecorder';
 import { VideoRecorder, defaultVideoName } from '../../emulator/recorder/VideoRecorder';
 import { getRunningContextOutputs } from '../../emulator/recorder/audioGraphTracker';
-import { PitrexSimView } from '../PitrexSimView';
+import { PitrexSimView, PITREX_RANGE, type Segment as PitrexSegment } from '../PitrexSimView';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -369,6 +369,17 @@ export const EmulatorPanel: React.FC = () => {
   // Gameplay video recorder (real pixels + audio → WebM → MP4 via ffmpeg).
   // Separate from the .vrec vector recorder above.
   const videoRecorderRef = useRef<VideoRecorder | null>(null);
+  /* El canvas de PitrexSimView, que se superpone al del emulador cuando corre un
+   * simulador WASM de proyecto externo. Grabar el de abajo daba "Nothing captured"
+   * sin un solo error: no fallaba nada, es que ese canvas ya no lo pinta nadie. */
+  const simCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  /* Lector del ultimo frame del simulador externo, para el .vrec (mismo punto ciego
+   * que el video: emuCore y window.vecx estan parados mientras corre). */
+  const simSegmentsRef = useRef<(() => PitrexSegment[] | null) | null>(null);
+  /* Estables a proposito: una funcion en linea cambia de identidad en cada render y
+   * React la vuelve a invocar con null antes de reasignarla. */
+  const onSimCanvasReady = useCallback((el: HTMLCanvasElement | null) => { simCanvasRef.current = el; }, []);
+  const onSimCaptureReady = useCallback((leer: (() => PitrexSegment[] | null) | null) => { simSegmentsRef.current = leer; }, []);
   const [isVideoRecording, setIsVideoRecording] = useState<boolean>(false);
   const [videoElapsed, setVideoElapsed] = useState<number>(0);
   // idle | recording | transcoding | saved | error
@@ -433,6 +444,23 @@ export const EmulatorPanel: React.FC = () => {
   // ALG integrator space (x 0..33000, y 0..41000, Y down); conversion to
   // Vectrex space (-127..127, Y up) happens inside VectorRecorder.
   const captureCurrentSegments = useCallback((): RawSegment[] | null => {
+    // Simulador WASM de proyecto externo: tiene su propio bucle y su propio espacio
+    // de coordenadas, y mientras corre los otros backends estan parados. Se convierte
+    // de espacio PiTrex (x +-18000, y +-24000, Y arriba) al espacio ALG que espera el
+    // grabador (centro 16500/20500, 127 unidades por coordenada Vectrex, Y abajo), de
+    // forma que los extremos caigan justo en +-127.
+    const leerSim = simSegmentsRef.current;
+    if (simModulePath && leerSim) {
+      const segs = leerSim();
+      if (!segs) return null;
+      const kx = (127 * 127) / PITREX_RANGE.x;
+      const ky = (127 * 127) / PITREX_RANGE.y;
+      return segs.map(v => ({
+        x0: 16500 + v.x0 * kx, y0: 20500 - v.y0 * ky,
+        x1: 16500 + v.x1 * kx, y1: 20500 - v.y1 * ky,
+        intensity: v.b,
+      }));
+    }
     // rp2350 path (Rp2350System): emuCore.runFrame() stores each completed
     // frame in lastFrameSegments, exposed via getSegmentsShared().
     if ((emuCore as any)?._activeTarget === 'rp2350') {
@@ -454,7 +482,7 @@ export const EmulatorPanel: React.FC = () => {
     // Fallback: VectrexSystem path (useVectrexSystem flag) also updates
     // lastFrameSegments through emuCore.runFrame().
     return emuCore.getSegmentsShared() ?? null;
-  }, []);
+  }, [simModulePath]);
 
   const finishRecording = useCallback(async () => {
     const rec = recorderRef.current;
@@ -479,7 +507,15 @@ export const EmulatorPanel: React.FC = () => {
 
     const vrec = rec.stop(name);
     if (vrec.frames.length === 0) {
-      console.warn('[EmulatorPanel] Vector recording empty — nothing saved');
+      // Que no se pierda en la consola: una grabacion vacia es un fallo, y el motivo
+      // casi siempre es que se estaba leyendo un backend que no era el que corria.
+      const motivo = simModulePath
+        ? 'el simulador externo no entrego ningun frame'
+        : 'el emulador no entrego ningun frame';
+      console.warn(`[EmulatorPanel] Vector recording empty — ${motivo}`);
+      setVideoStatus('error');
+      setVideoMessage(`Vector recording empty — ${motivo}`);
+      setTimeout(() => setVideoStatus('idle'), 6000);
       return;
     }
 
@@ -505,7 +541,7 @@ export const EmulatorPanel: React.FC = () => {
     } catch (e) {
       console.error('[EmulatorPanel] Failed to save recording:', e);
     }
-  }, []);
+  }, [simModulePath]);
 
   const onToggleRecording = useCallback(() => {
     let rec = recorderRef.current;
@@ -565,7 +601,9 @@ export const EmulatorPanel: React.FC = () => {
     const blob = await rec.stop();
     if (!blob || blob.size === 0) {
       setVideoStatus('error');
-      setVideoMessage('Nothing captured');
+      const porque = rec.lastDiagnostic;
+      setVideoMessage(porque ? `Nothing captured — ${porque}` : 'Nothing captured');
+      console.error('[EmulatorPanel] grabacion vacia:', porque || '(sin diagnostico)');
       setTimeout(() => setVideoStatus('idle'), 4000);
       return;
     }
@@ -615,7 +653,8 @@ export const EmulatorPanel: React.FC = () => {
       void finishVideoRecording();
       return;
     }
-    const canvas = canvasRef.current;
+    // el que se VE: si hay simulador externo, el suyo; si no, el del emulador
+    const canvas = (simModulePath && simCanvasRef.current) || canvasRef.current;
     if (!canvas) {
       setVideoStatus('error');
       setVideoMessage('No display canvas');
@@ -631,8 +670,9 @@ export const EmulatorPanel: React.FC = () => {
     // can hit Record before the game boots (e.g. the intro) and still get sound.
     // Vectrex/6809 render at ~50 Hz; capture at 60 so no frame is dropped.
     rec.start(canvas, 60, getActiveAudio);
-    console.log('[EmulatorPanel] Gameplay video recording started (audio bridges when it appears)');
-  }, [finishVideoRecording, getActiveAudio]);
+    console.log(`[EmulatorPanel] Gameplay video recording started — canvas ${canvas.width}x${canvas.height}`
+      + `${simModulePath ? ' (simulador externo)' : ''} (audio bridges when it appears)`);
+  }, [finishVideoRecording, getActiveAudio, simModulePath]);
 
   useEffect(() => {
     // Lista basada en las ROMs que vimos en la carpeta public/roms/
@@ -3490,6 +3530,8 @@ export const EmulatorPanel: React.FC = () => {
                 width={canvasSize.width}
                 height={canvasSize.height}
                 onLog={(line) => console.log(line)}
+                onCanvasReady={onSimCanvasReady}
+                onCaptureReady={onSimCaptureReady}
               />
             </div>
           )}

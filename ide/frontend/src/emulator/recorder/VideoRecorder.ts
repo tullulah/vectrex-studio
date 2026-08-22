@@ -70,6 +70,11 @@ export class VideoRecorder {
   isRecording = false;
   /** True if audio was successfully tapped; false = video-only capture. */
   hasAudio = false;
+  /* POR QUE SE FUE VACIA. Un fallo silencioso costo una sesion: se grababa el canvas
+   * equivocado —el del emulador, tapado por el del simulador externo—, no llegaba ni un
+   * frame, MediaRecorder no emitia nada y la UI decia solo "Nothing captured", sin un solo
+   * error en consola. Que la grabacion vacia diga QUE vio. */
+  lastDiagnostic = '';
 
   /** Fires ~10×/s with elapsed seconds so the UI can show a live timer. */
   onTick: ((elapsedSeconds: number) => void) | null = null;
@@ -134,6 +139,10 @@ export class VideoRecorder {
     this.recorder.ondataavailable = (ev: BlobEvent) => {
       if (ev.data && ev.data.size > 0) this.chunks.push(ev.data);
     };
+    this.lastDiagnostic = '';
+    if (!this.videoTrack) {
+      console.warn('[VideoRecorder] canvas.captureStream() dio 0 pistas de video');
+    }
 
     this.recorder.start(1000); // flush a chunk each second
     this.isRecording = true;
@@ -213,6 +222,7 @@ export class VideoRecorder {
         const blob = this.chunks.length
           ? new Blob(this.chunks, { type: this.mimeType || 'video/webm' })
           : null;
+        if (!blob) this.lastDiagnostic = this.porQueVacia();
         this.cleanup();
         resolve(blob);
       };
@@ -225,6 +235,21 @@ export class VideoRecorder {
       }
       this.isRecording = false;
     });
+  }
+
+  /**
+   * Que se vio, cuando no se capturo nada. Lo mas probable es que el canvas no se
+   * dibujase: MediaRecorder con una pista de video que nunca produce un frame no
+   * emite NADA, ni siquiera el audio, y no lanza ningun error.
+   */
+  private porQueVacia(): string {
+    const t = this.videoTrack;
+    if (!t) return 'el canvas no dio pista de video';
+    const s = t.getSettings?.() ?? ({} as MediaTrackSettings);
+    const tam = `${s.width ?? '?'}x${s.height ?? '?'}`;
+    if (t.readyState !== 'live') return `la pista de video estaba "${t.readyState}"`;
+    return `el canvas (${tam}) no dibujo ni un frame mientras grababa`
+      + `${this.hasAudio ? '' : ' y tampoco se engancho audio'}`;
   }
 
   /** Abort without producing a blob (e.g. component unmount). */

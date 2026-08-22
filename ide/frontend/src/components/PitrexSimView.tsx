@@ -29,7 +29,10 @@ const INTERNAL_H = 440;
 const DEBUG_INPUT = false;    // draw a live controller-state readout (diagnostic)
 
 /* rgb: 0x00RRGGBB, 0 = the display's own monochrome look (the Vectrex default). */
-interface Segment { x0: number; y0: number; x1: number; y1: number; b: number; rgb: number; }
+export interface Segment { x0: number; y0: number; x1: number; y1: number; b: number; rgb: number; }
+
+/* El espacio del PiTrex, para que quien grabe pueda convertirlo sin adivinarlo. */
+export const PITREX_RANGE = { x: PITREX_X_RANGE, y: PITREX_Y_RANGE };
 
 // Vectrex controller state fed back to the WASM via Module.pitrex hooks.
 interface ControllerState {
@@ -55,9 +58,17 @@ export interface PitrexSimViewProps {
   height: number;
   /** Optional stdout/stderr sink (build/runtime log lines). */
   onLog?: (line: string) => void;
+  /** Publica un lector del ULTIMO frame dibujado, para la grabacion de vectores
+   *  (.vrec). Sin esto el grabador lee de emuCore/window.vecx, que con el
+   *  simulador externo corriendo estan parados: salia un .vrec vacio. */
+  onCaptureReady?: (leer: (() => Segment[] | null) | null) => void;
+  /** Se avisa con el <canvas> real en cuanto existe (y con null al desmontar).
+   *  Esta vista TAPA el canvas del emulador, asi que quien quiera grabar video
+   *  tiene que apuntar a este; si no, graba el de debajo, que ya no pinta nadie. */
+  onCanvasReady?: (el: HTMLCanvasElement | null) => void;
 }
 
-export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width, height, onLog }) => {
+export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width, height, onLog, onCanvasReady, onCaptureReady }) => {
   const simRomZip = useEmulatorStore(s => s.simRomZip);
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -116,6 +127,9 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
     controllerRef.current = { joyX: x, joyY: y, buttons };
   }, []);
   const segmentsRef = useRef<Segment[]>([]);
+  /* El frame COMPLETO mas reciente. `segmentsRef` se vacia al principio de cada
+   * present(), asi que no sirve para que lo lea nadie de fuera a su propio ritmo. */
+  const ultimoFrameRef = useRef<Segment[]>([]);
   const disposedRef = useRef<boolean>(false);
   const startMsRef = useRef<number>(Date.now());
   const moduleRef = useRef<any>(null);
@@ -161,6 +175,12 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       window.removeEventListener('keyup', up, { capture: true } as any);
     };
   }, [pollInput]);
+
+  // Publicar el lector del ultimo frame mientras esta vista este viva.
+  useEffect(() => {
+    onCaptureReady?.(() => (disposedRef.current ? null : ultimoFrameRef.current));
+    return () => onCaptureReady?.(null);
+  }, [onCaptureReady]);
 
   // ── Load + instantiate the WASM module ────────────────────────────────────
   useEffect(() => {
@@ -225,6 +245,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         pollInput();   // poll the physical gamepad once per frame (live)
         const segs = segmentsRef.current;
         segmentsRef.current = [];
+        ultimoFrameRef.current = segs;
         draw(segs);
       },
       readButtons: () => controllerRef.current.buttons,
@@ -453,7 +474,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
       <canvas
-        ref={canvasRef}
+        ref={(el) => { canvasRef.current = el; onCanvasReady?.(el); }}
         width={INTERNAL_W}
         height={INTERNAL_H}
         style={{
