@@ -229,6 +229,71 @@ pub fn draw_line_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timi
     }
 }
 
+/// Una recta CON HUECOS, en UNA SOLA RAMPA.
+///
+/// El algoritmo del pintor en un display vectorial no puede ser un orden de dibujo —aqui
+/// nada tapa a nada— sino quitar geometria. Pero partir una viga en trozos cuesta una
+/// rampa por trozo: fijar los dos DAC, la cuenta de T1, abrir y cerrar. Y no hace falta:
+/// la velocidad del haz la fijan los DAC, asi que mientras no se toquen el haz sigue
+/// recorriendo LA MISMA RECTA. Lo unico que cambia por el camino es el BLANK.
+///
+/// `huecos` son tramos apagados en CUENTAS DE T1 dentro de 0..t1, ordenados y sin solapar.
+/// Una cuenta de T1 es un periodo de E (los dos van a phi2), asi que el retardo de cada
+/// tramo es `k.e(cuentas)` y la resolucion es una escritura de bus: para un vector de 62
+/// cuentas, 62 puntos de conmutacion posibles. De sobra para un hueco.
+///
+/// LAS CONMUTACIONES INTERMEDIAS VAN CONTADAS, no sondeadas, y eso es deliberado: el
+/// `trait` ya dice que sondear el flag T1 es lo unico que separa a las dos placas, y que
+/// la imagen del UVM2 NO puede leer la VIA a mitad de lista sin sacar vectores fantasma.
+/// Contar por dentro y sondear solo al final deja el asentamiento —que es donde se nota—
+/// exactamente igual que en `draw_line_seq`, y hace que esto valga en las dos placas.
+pub fn draw_line_patterned_seq<S: BusSink>(
+    sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings, huecos: &[(u16, u16)],
+) {
+    if huecos.is_empty() {
+        return draw_line_seq(sink, vx, vy, t1, k);
+    }
+    if !sink.y_can_skip(vy) {
+        sink.emit(REG_PORT_A, vy as u8, k.e(2));
+        sink.emit(REG_PORT_B, 0x00, k.y_mux_q8);
+        sink.emit(REG_PORT_B, 0x01, k.e(4));
+        sink.y_held(vy);
+    }
+    sink.emit(REG_PORT_A, vx as u8, k.e(3));
+    sink.emit(REG_T1_LO, (t1 & 0xff) as u8, 0);
+    // La rampa arranca ANTES de encender, igual que en draw_line_seq: encender con el
+    // punto quieto deja un punto brillante en el vertice de salida.
+    sink.emit(REG_T1_HI, (t1 >> 8) as u8, k.beam_on_q8);
+
+    let mut cur: u16 = 0;
+    // Encendido hasta el primer hueco. Si el primer hueco empieza en 0, no se enciende.
+    if huecos[0].0 > 0 {
+        sink.emit(REG_CNTL, 0xEE, k.e(huecos[0].0 as u32));
+        sink.beam_lit();
+        cur = huecos[0].0;
+    }
+    for (i, &(a, b)) in huecos.iter().enumerate() {
+        let _ = a;                       // ya se llego hasta `a` con el retardo anterior
+        let fin = b.min(t1);
+        let siguiente = huecos.get(i + 1).map(|g| g.0).unwrap_or(t1);
+        // apagado durante el hueco
+        sink.emit(REG_CNTL, 0xCE, k.e((fin.saturating_sub(cur)) as u32));
+        sink.beam_blanked();
+        cur = fin;
+        // y encendido hasta el siguiente hueco (o hasta el final)
+        if siguiente > cur {
+            sink.emit(REG_CNTL, 0xEE, k.e((siguiente - cur) as u32));
+            sink.beam_lit();
+            cur = siguiente;
+        }
+    }
+    // Lo que quede de rampa, sondeando como siempre: el asentamiento del final es lo que
+    // convierte los puntos brillantes en los vertices, y ahi no se cuenta, se pregunta.
+    sink.wait_ramp(t1.saturating_sub(cur), k.e(4) as i32 + k.blank_settle_q8);
+    sink.emit(REG_CNTL, 0xCE, 0);
+    sink.beam_blanked();
+}
+
 /// Los dos valores que `moveto` usa cuando `VARIABLE_T1` esta apagado, para que el
 /// llamante no tenga que conocer `DRAW_SCALE`.
 pub fn fixed_ramp(dx: i8, dy: i8) -> (i8, i8, u16) {
@@ -341,6 +406,38 @@ mod prueba {
         );
         assert!(p.encendido, "beam_lit tiene que haberse llamado");
         assert_eq!(p.apagados, 1);
+    }
+
+    /// UNA RECTA CON UN HUECO, EN UNA SOLA RAMPA. Lo que hay que ver: los DAC y T1 se
+    /// programan UNA vez —no hay una segunda cabecera a mitad—, el haz se apaga y se
+    /// vuelve a encender mientras la rampa corre, y la espera final es por el RESTO,
+    /// no por `t1` entero: si no, en la placa que cuenta el retardo se esperaria dos veces.
+    #[test]
+    fn una_rampa_con_un_hueco() {
+        let k = tiempos(2 * E, 11 * E as i32);
+        let mut p = Papel::default();
+        // 62 cuentas de rampa, apagado de la 20 a la 30
+        draw_line_patterned_seq(&mut p, 30, -10, 0x3E, &k, &[(20, 30)]);
+        assert_eq!(
+            p.v,
+            std::vec![
+                (REG_PORT_A, (-10i8) as u8, 2 * E), // STA — Y
+                (REG_PORT_B, 0x00, 14 * E),         // CLR — mux ch0
+                (REG_PORT_B, 0x01, 4 * E),          // INC — mux off
+                (REG_PORT_A, 30u8, 3 * E),          // STB — X
+                (REG_T1_LO, 0x3E, 0),               // T1CL
+                (REG_T1_HI, 0x00, 2 * E),           // la rampa arranca, y solo aqui
+                (REG_CNTL, 0xEE, 20 * E),           // encendido las primeras 20 cuentas
+                (REG_CNTL, 0xCE, 10 * E),           // apagado 10 cuentas — EL HUECO
+                (REG_CNTL, 0xEE, 32 * E),           // encendido hasta el final
+                (0xFF, 0, 0x8000_0000),             // esperar el RESTO (ya no queda)
+                (0xFE, 0, 4 * E + 11 * E),          // + latencia y asentamiento
+                (REG_CNTL, 0xCE, 0),                // apagar
+            ]
+        );
+        // dos programaciones de DAC/T1 costaria partir la recta en dos; aqui hay UNA
+        assert_eq!(p.v.iter().filter(|c| c.0 == REG_T1_HI).count(), 1);
+        assert_eq!(p.v.iter().filter(|c| c.0 == REG_PORT_A).count(), 2); // vy y vx
     }
 
     /// Con el S&H de Y ya cargado, el muestreo entero se salta: cuatro escrituras menos.
