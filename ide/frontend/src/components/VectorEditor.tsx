@@ -3668,6 +3668,16 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     </div>
   );
 
+  /* ESTOS PANELES SE LLAMAN, NO SE MONTAN: {Panel()} y no <Panel />.
+   *
+   * Estan declarados aqui dentro, asi que cada render crea un TIPO de componente nuevo.
+   * Usados como <Panel /> React ve un tipo distinto en cada render, desmonta el arbol
+   * entero y monta otro: el input de intensidad pierde el foco a cada tecla y el panel
+   * derecho se rebobina al principio cada vez que tocas algo. Llamandolos, el JSX que
+   * devuelven se cuela en el arbol del padre y los nodos del DOM son los mismos de antes.
+   *
+   * ViewCube se queda como <ViewCube /> a proposito: ese SI usa hooks, y llamarlo los
+   * meteria en el padre. Ademas va sobre el lienzo, no en el panel que se rebobinaba. */
   const ToolRail = () => {
     const railTools: { id: Tool; icon: string; title: string; active: string; idle: string }[] = [
       { id: 'select', icon: '⬚', title: 'Select — click to select, drag to box-select', active: '#4a4a8e', idle: '#3a3a5e' },
@@ -4803,6 +4813,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     const pathsFromPoints = new Set<string>();
     selectedPoints.forEach(key => pathsFromPoints.add(`${currentLayerIndex}-${key.split('-')[0]}`));
     if (selectedPointIndex >= 0 && currentPathIndex >= 0) pathsFromPoints.add(`${currentLayerIndex}-${currentPathIndex}`);
+    /* EL PATH QUE SE ESTA EDITANDO CUENTA. El panel de abajo dice "Path N Properties" y
+     * te deja tocarle la intensidad, pero Apply solo miraba la seleccion del arbol y los
+     * puntos marcados: escribias un valor y el boton seguia apagado sin explicar por que.
+     * Si hay un path actual, es lo que Apply tiene delante. */
+    if (currentPathIndex >= 0 && currentLayerIndex >= 0) pathsFromPoints.add(`${currentLayerIndex}-${currentPathIndex}`);
     const keysFromTree = selectedTreePathKeys.size > 0 ? selectedTreePathKeys
       : (selectedTreePathKey ? new Set([selectedTreePathKey]) : new Set<string>());
     const allSelKeys = new Set([...keysFromTree, ...pathsFromPoints]);
@@ -4863,9 +4878,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           🧹 Clean Orphans
         </button>
       </div>
-      <LayersPanel />
-      <PathPropertiesPanel />
-      <EdgeSettingsPanel />
+      {LayersPanel()}
+      {PathPropertiesPanel()}
+      {EdgeSettingsPanel()}
     </div>
     );
   };
@@ -4873,9 +4888,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden', height: '100%' }}>
       <Toolbar />
-      <CircleArcSettings />
+      {CircleArcSettings()}
       <div style={{ display: 'flex', gap: '8px', overflow: 'hidden', flex: 1 }}>
-        <ToolRail />
+        {ToolRail()}
         {/* Centering wrapper — takes all remaining horizontal space */}
         <div ref={canvasContainerRef} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         {/* Inner div sized to the square canvas — no wasted black area */}
@@ -4916,7 +4931,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           <ViewCube />
         </div>
         </div>
-        <RightPanel />
+        {RightPanel()}
       </div>
       <div style={{ color: '#888', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>
