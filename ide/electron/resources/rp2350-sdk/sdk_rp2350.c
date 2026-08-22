@@ -96,20 +96,20 @@ struct dc_ctrl {
 #define DC_OP_RASTER 4   /* header cmd: a=x, b=y, _pad=len; then ceil(len/4) cmds
                           * of raw string bytes. core 0 draws it with the BIOS
                           * shift-register raster font (one sweep per pixel row). */
-#define DC_OP_DRAW_PAT 5 /* UNA RECTA CON HUECOS, EN UNA SOLA RAMPA. Cabecera: a=dx, b=dy,
-                          * _pad = cuantos huecos; luego ceil(n*2/4) comandos con los pares
-                          * (inicio,fin) en fracciones 0..255 del recorrido.
+#define DC_OP_DRAW_GAPPED 5 /* ONE STRAIGHT LINE WITH GAPS, IN A SINGLE RAMP. Header:
+                          * a=dx, b=dy, _pad = gap count; then ceil(n*2/4) commands holding
+                          * the (start,end) pairs as 0..255 fractions of the run.
                           *
-                          * Por que existe: partir una recta en trozos cuesta una operacion
-                          * por trozo —dos DAC, la cuenta de T1, abrir y cerrar rampa, unos
-                          * 40 us— y la velocidad del haz la fijan los DAC, asi que mientras
-                          * no se toquen sigue recorriendo LA MISMA RECTA. Solo hay que
-                          * conmutar el BLANK por el camino. Medido en el 25m de Donkey
-                          * Kong: 26 tiradas colineales que funden 55 operaciones, ~2.2 ms
-                          * de un frame de 18.5.
+                          * Why it exists: splitting a line into pieces costs one operation
+                          * per piece — two DACs, the T1 count, open and close the ramp,
+                          * about 40 us — and the beam's velocity is set by the DACs, so as
+                          * long as they are left alone the beam keeps travelling THE SAME
+                          * LINE. All that changes along the way is BLANK. Measured on
+                          * Donkey Kong's 25m: 26 collinear runs merging 55 operations,
+                          * ~2.2 ms out of an 18.5 ms frame.
                           *
-                          * Mismo formato que RASTER a proposito: cabecera + datos en los
-                          * comandos siguientes, que es un patron ya probado en esta cola. */
+                          * Same shape as RASTER on purpose: header plus data in the
+                          * following commands, a pattern already proven in this queue. */
 static int s_dc_w = 0;   /* current write buffer (0/1) */
 static int s_dc_n = 0;   /* commands recorded into it so far */
 static inline void dc_push(unsigned char op, signed char a, signed char b) {
@@ -121,20 +121,20 @@ static inline void dc_push(unsigned char op, signed char a, signed char b) {
 }
 /* Record a raster-text run: a header cmd (x,y,len) followed by the string bytes
  * packed 4 per cmd. core0_materialize replays it via the shift-register font. */
-/* La recta con huecos, a la cola de comandos. `huecos` son pares (inicio,fin) en
- * fracciones 0..255 del recorrido; n como mucho DC_PAT_MAX. */
-#define DC_PAT_MAX 8
-static void dc_push_pat(signed char dx, signed char dy, const unsigned char *huecos, int n) {
+/* The gapped line, pushed to the command queue. `gaps` are (start,end) pairs as
+ * 0..255 fractions of the run; n is capped at DC_GAPS_MAX. */
+#define DC_GAPS_MAX 8
+static void dc_push_gapped(signed char dx, signed char dy, const unsigned char *gaps, int n) {
     if (n < 0) n = 0;
-    if (n > DC_PAT_MAX) n = DC_PAT_MAX;
+    if (n > DC_GAPS_MAX) n = DC_GAPS_MAX;
     int ndata = (n * 2 + 3) / 4;
     if (s_dc_n + 1 + ndata > DC_CMDS_MAX) return;
     struct dc_cmd *buf = s_dc_w ? DC_BUF1 : DC_BUF0;
-    buf[s_dc_n].op = DC_OP_DRAW_PAT; buf[s_dc_n].a = dx; buf[s_dc_n].b = dy;
+    buf[s_dc_n].op = DC_OP_DRAW_GAPPED; buf[s_dc_n].a = dx; buf[s_dc_n].b = dy;
     buf[s_dc_n]._pad = (unsigned char)n; s_dc_n++;
     for (int i = 0; i < n * 2; i += 4) {
         unsigned char *q = (unsigned char *)&buf[s_dc_n];
-        for (int k = 0; k < 4; k++) q[k] = (i + k < n * 2) ? huecos[i + k] : 0;
+        for (int k = 0; k < 4; k++) q[k] = (i + k < n * 2) ? gaps[i + k] : 0;
         s_dc_n++;
     }
 }
@@ -161,18 +161,18 @@ static void dc_push_raster(signed char x, signed char y, const unsigned char *s,
 #define BEAM_MOVE(x,y)    dc_push(DC_OP_MOVE, (signed char)(x), (signed char)(y))
 #define BEAM_DRAW(x,y)    dc_push(DC_OP_DRAW, (signed char)(x), (signed char)(y))
 #define BEAM_RASTER(x,y,s,n) dc_push_raster((signed char)(x),(signed char)(y),(s),(n))
-#define BEAM_DRAW_PAT(x,y,h,n) dc_push_pat((signed char)(x),(signed char)(y),(h),(n))
-#define TIENE_RAMPA_CON_HUECOS 1
+#define BEAM_DRAW_GAPPED(x,y,h,n) dc_push_gapped((signed char)(x),(signed char)(y),(h),(n))
+#define HAS_GAPPED_RAMP 1
 #else
 #define BEAM_ZERO()       sys_reset0ref()
 #define BEAM_INTENSITY(b) sys_set_intensity(b)
 #define BEAM_MOVE(x,y)    sys_move((x),(y))
 #define BEAM_DRAW(x,y)    sys_draw_delta((x),(y))
 #define BEAM_RASTER(x,y,s,n) sys_raster_text((x),(y),(s),(n)) /* SYS #26 */
-/* El camino de svc no tiene la rampa con huecos: los juegos usan el de doble nucleo (ver
- * dc.rs: "the dual-core game never svc's"), asi que la optimizacion va donde se usa y aqui
- * se cae al comportamiento de siempre — un trazo por trozo. */
-#define TIENE_RAMPA_CON_HUECOS 0
+/* The svc path has no gapped ramp: games use the dual-core one (see dc.rs, "the
+ * dual-core game never svc's"), so the optimisation goes where it is used and this
+ * path falls back to the old behaviour — one stroke per piece. */
+#define HAS_GAPPED_RAMP 0
 #endif
 
 /* Draw a raster-font string at device coords (x,y) (i8, ±127). Dual-core records
@@ -479,7 +479,7 @@ static short  rr_y[VPY_REORDER_MAX_PTS], rr_x[VPY_REORDER_MAX_PTS];
 /* rr_dark[k] = el segmento que ACABA en el punto k va apagado. Antes la intensidad
  * era por TRAZO, asi que un tramo a oscuras partia el trazo en dos y el reordenador
  * los repartia por el frame: cada trozo se re-aproximaba con un salto en blanco desde
- * donde estuviera el haz. Con esto una recta con huecos —los peldanos de dos escaleras
+ * donde estuviera el haz. Con esto una recta con gaps —los peldanos de dos escaleras
  * y el aire entre ellas— se recorre UNA vez de punta a punta. */
 static unsigned char rr_dark[VPY_REORDER_MAX_PTS];
 static int    rr_off[VPY_REORDER_MAX_STROKE], rr_len[VPY_REORDER_MAX_STROKE], rr_b[VPY_REORDER_MAX_STROKE];
@@ -530,22 +530,22 @@ static void flush_frame(void)
         }
         int a = rr_off[best], n = rr_len[best], b = rr_b[best];
         rr_len[best] = -1;
-        /* UNA RAMPA POR TIRADA COLINEAL, no por segmento.
+        /* ONE RAMP PER COLLINEAR RUN, not per segment.
          *
-         * Partir una recta en trozos cuesta una operacion por trozo: dos DAC, la cuenta de
-         * T1, abrir y cerrar rampa. Con DRAW_SCALE=160 y MIN_T1=31 son ~21 us de rampa
-         * MINIMA aunque el trozo mida dos unidades, mas ~16-27 us de escrituras de bus. Y
-         * no hace falta: la velocidad del haz la fijan los DAC, asi que mientras no se
-         * toquen el haz sigue recorriendo LA MISMA RECTA.
+         * Splitting a line into pieces costs one operation per piece: two DACs, the T1
+         * count, open and close the ramp. With DRAW_SCALE=160 and MIN_T1=31 that is ~21
+         * us of MINIMUM ramp even for a two-unit piece, plus ~16-27 us of bus writes.
+         * And it is not needed: the beam's velocity is set by the DACs, so while they
+         * are left alone the beam keeps travelling THE SAME LINE.
          *
-         * Se buscan las tiradas de segmentos colineales y en el mismo sentido. Si todos van
-         * encendidos salen como UN trazo —eso vale en las dos placas y no necesita nada
-         * nuevo—; si mezclan encendido y apagado, van con la rampa de huecos, que conmuta
-         * el BLANK por el camino. Medido en el 25m: 26 tiradas que funden 55 operaciones,
-         * ~2.2 ms de un frame de 18.5.
+         * So look for runs of collinear, same-direction segments. All lit means ONE
+         * stroke — that works on both boards and needs nothing new; a mix of lit and
+         * dark goes through the gapped ramp, which toggles BLANK along the way.
+         * Measured on the 25m: 26 runs merging 55 operations, ~2.2 ms of an 18.5 ms
+         * frame.
          *
-         * El tope de +-127 es del delta i8 del comando: una tirada mas larga se parte, que
-         * es lo que beam_draw_to hacia igualmente. */
+         * The +-127 cap is the command's i8 delta: a longer run is split, which is what
+         * beam_draw_to did anyway. */
         #define PY(k) (rev ? rr_y[a+n-1-(k)] : rr_y[a+(k)])
         #define PX(k) (rev ? rr_x[a+n-1-(k)] : rr_x[a+(k)])
         /* la marca es del SEGMENTO: el k une los puntos k y k+1 */
@@ -560,24 +560,24 @@ static void flush_frame(void)
                 if (tx > 127 || tx < -127 || ty > 127 || ty < -127) break;
                 j++;
             }
-            int nseg = j - k, oscuros = 0;
-            for (int m = k; m < j; m++) if (OSC(m)) oscuros++;
-            if (nseg == 1 || (oscuros && oscuros != nseg && !TIENE_RAMPA_CON_HUECOS)) {
+            int nsegs = j - k, dark = 0;
+            for (int m = k; m < j; m++) if (OSC(m)) dark++;
+            if (nsegs == 1 || (dark && dark != nsegs && !HAS_GAPPED_RAMP)) {
                 for (int m = k; m < j; m++)
                     beam_seg(PX(m), PY(m), PX(m+1), PY(m+1), OSC(m) ? 0 : b);
-            } else if (oscuros == 0) {
+            } else if (dark == 0) {
                 beam_seg(PX(k), PY(k), PX(j), PY(j), b);
-            } else if (oscuros == nseg) {
+            } else if (dark == nsegs) {
                 beam_seg(PX(k), PY(k), PX(j), PY(j), 0);
             }
-#if TIENE_RAMPA_CON_HUECOS
+#if HAS_GAPPED_RAMP
             else {
-                /* los huecos en fracciones 0..255: la rampa avanza con el eje dominante,
+                /* los gaps en fracciones 0..255: la rampa avanza con el eje dominante,
                  * asi que la fraccion se mide en ese eje. */
                 int TX = PX(j)-PX(k), TY = PY(j)-PY(k);
                 long aX = TX < 0 ? -TX : TX, aY = TY < 0 ? -TY : TY;
                 long total = aX > aY ? aX : aY; if (!total) total = 1;
-                unsigned char h[DC_PAT_MAX*2]; int nh = 0; long acc = 0;
+                unsigned char h[DC_GAPS_MAX*2]; int nh = 0; long acc = 0;
                 for (int m = k; m < j; m++) {
                     int sx = PX(m+1)-PX(m), sy = PY(m+1)-PY(m);
                     long bx2 = sx < 0 ? -sx : sx, by2 = sy < 0 ? -sy : sy;
@@ -586,13 +586,13 @@ static void flush_frame(void)
                         int ini = (int)(acc * 255 / total);
                         int fin = (int)((acc + len) * 255 / total);
                         if (nh && h[nh*2-1] >= ini) h[nh*2-1] = (unsigned char)fin;
-                        else if (nh < DC_PAT_MAX) {
+                        else if (nh < DC_GAPS_MAX) {
                             h[nh*2] = (unsigned char)ini; h[nh*2+1] = (unsigned char)fin; nh++;
                         }
                     }
                     acc += len;
                 }
-                beam_seg_pat(PX(k), PY(k), PX(j), PY(j), b, h, nh);
+                beam_seg_gapped(PX(k), PY(k), PX(j), PY(j), b, h, nh);
             }
 #endif
             k = j;
