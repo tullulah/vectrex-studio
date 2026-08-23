@@ -50,6 +50,8 @@ int8_t  currentJoy1Y = 0;
  * deflection units; the BIOS draw model wants raw i8 (±127) screen coords, so we
  * divide the scaled coords back down. The multiply was exact, so this is lossless. */
 #define VPY_SCALE 127
+/* caller units -> device units, rounded to nearest and symmetric about zero */
+#define VS_RND(v) ((int)(((v) < 0 ? (v) - VPY_SCALE/2 : (v) + VPY_SCALE/2) / VPY_SCALE))
 
 /* ── Lifecycle (BIOS already did clocks/pins/VIA init; nothing to do here). ── */
 void vectrexinit(int mode) { (void)mode; }
@@ -729,8 +731,14 @@ void v_textEnd(void)   { s_in_text = 0; }
 
 void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
 {
-    int ax0 = (int)x0 / VPY_SCALE, ay0 = (int)y0 / VPY_SCALE;
-    int ax1 = (int)x1 / VPY_SCALE, ay1 = (int)y1 / VPY_SCALE;
+    /* ROUND, DO NOT TRUNCATE. C division truncates TOWARDS ZERO, so this snapped the two
+     * halves of the screen in opposite directions and carried a whole unit of error
+     * instead of half. On a long vector nobody sees it; on a vector CUT INTO PIECES — an
+     * occluded girder — each piece rounds its own ends and the pieces stop sharing a
+     * slope. Measured on a 25m girder: pieces at -0.0641, -0.0562, -0.0549 and -0.0556
+     * where the line is -0.056, which is the staircase you can see. */
+    int ax0 = VS_RND(x0), ay0 = VS_RND(y0);
+    int ax1 = VS_RND(x1), ay1 = VS_RND(y1);
 #if CULL_MIN_AX > 0
     if (!s_in_text) {
         int cdx = ax1 - ax0, cdy = ay1 - ay0;
