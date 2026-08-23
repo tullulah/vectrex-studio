@@ -97,112 +97,58 @@ export class Canvas {
     return y * this.lPitch + x * BYTES_PER_PIXEL;
   }
 
-  /** Slope [0,1]: x drives, y0 < y1, x0 < x1 */
-  private linep01(x0: number, y0: number, x1: number, y1: number, color: number): void {
-    if (!this.data) return;
-    const { data, scl_factor, lPitch, color_set } = this;
-    const [cr, cg, cb] = color_set[color] ?? [0, 0, 0];
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    let i0   = (x0 / scl_factor) | 0;
-    const i1 = (x1 / scl_factor) | 0;
-    let j    = (y0 / scl_factor) | 0;
-    let e    = dy * (scl_factor - (x0 % scl_factor)) - dx * (scl_factor - (y0 % scl_factor));
-    const dxs = dx * scl_factor;
-    const dys = dy * scl_factor;
-    let idx  = this.pixelIndex(i0, j);
-    for (; i0 <= i1; i0++) {
-      data[idx] = cr; data[idx + 1] = cg; data[idx + 2] = cb;
-      if (e >= 0) { idx += lPitch; e -= dxs; }
-      e += dys;
-      idx += BYTES_PER_PIXEL;
-    }
-  }
-
-  /** Slope [1,∞): y drives, y0 < y1, x0 < x1 */
-  private linep1n(x0: number, y0: number, x1: number, y1: number, color: number): void {
-    if (!this.data) return;
-    const { data, scl_factor, lPitch, color_set } = this;
-    const [cr, cg, cb] = color_set[color] ?? [0, 0, 0];
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    let i0   = (y0 / scl_factor) | 0;
-    const i1 = (y1 / scl_factor) | 0;
-    let j    = (x0 / scl_factor) | 0;
-    let e    = dx * (scl_factor - (y0 % scl_factor)) - dy * (scl_factor - (x0 % scl_factor));
-    const dxs = dx * scl_factor;
-    const dys = dy * scl_factor;
-    let idx  = this.pixelIndex(j, i0);
-    for (; i0 <= i1; i0++) {
-      data[idx] = cr; data[idx + 1] = cg; data[idx + 2] = cb;
-      if (e >= 0) { idx += BYTES_PER_PIXEL; e -= dys; }
-      e += dxs;
-      idx += lPitch;
-    }
-  }
-
-  /** Slope [0,-1]: x drives, y1 < y0, x0 < x1 */
-  private linen01(x0: number, y0: number, x1: number, y1: number, color: number): void {
-    if (!this.data) return;
-    const { data, scl_factor, lPitch, color_set } = this;
-    const [cr, cg, cb] = color_set[color] ?? [0, 0, 0];
-    const dx = x1 - x0;
-    const dy = y0 - y1;
-    let i0   = (x0 / scl_factor) | 0;
-    const i1 = (x1 / scl_factor) | 0;
-    let j    = (y0 / scl_factor) | 0;
-    let e    = dy * (scl_factor - (x0 % scl_factor)) - dx * (y0 % scl_factor);
-    const dxs = dx * scl_factor;
-    const dys = dy * scl_factor;
-    let idx  = this.pixelIndex(i0, j);
-    for (; i0 <= i1; i0++) {
-      data[idx] = cr; data[idx + 1] = cg; data[idx + 2] = cb;
-      if (e >= 0) { idx -= lPitch; e -= dxs; }
-      e += dys;
-      idx += BYTES_PER_PIXEL;
-    }
-  }
-
-  /** Slope (-∞,-1]: y drives, y0 < y1, x1 < x0 */
-  private linen1n(x0: number, y0: number, x1: number, y1: number, color: number): void {
-    if (!this.data) return;
-    const { data, scl_factor, lPitch, color_set } = this;
-    const [cr, cg, cb] = color_set[color] ?? [0, 0, 0];
-    const dx = x0 - x1;
-    const dy = y1 - y0;
-    let i0   = (y0 / scl_factor) | 0;
-    const i1 = (y1 / scl_factor) | 0;
-    let j    = (x0 / scl_factor) | 0;
-    let e    = dx * (scl_factor - (y0 % scl_factor)) - dy * (x0 % scl_factor);
-    const dxs = dx * scl_factor;
-    const dys = dy * scl_factor;
-    let idx  = this.pixelIndex(j, i0);
-    for (; i0 <= i1; i0++) {
-      data[idx] = cr; data[idx + 1] = cg; data[idx + 2] = cb;
-      if (e >= 0) { idx -= BYTES_PER_PIXEL; e -= dys; }
-      e += dxs;
-      idx += lPitch;
-    }
-  }
-
-  /** General line dispatcher — mirrors osint_line in vecx_full.js */
+  /**
+   * One vector, with the BEAM GIVEN A WIDTH.
+   *
+   * It used to be four Bresenham variants writing single hard pixels, inherited from vecx.
+   * A vector display has no pixels, and a real beam is about a millimetre across on a 20 cm
+   * screen: it smooths anything finer than itself. This renderer did the opposite — a
+   * zero-width beam on a 736-pixel canvas, where one device unit is nearly three pixels, so
+   * a shallow diagonal came out as a visible staircase that the console does not show.
+   * Daniel checked the same level on hardware: straight and clean.
+   *
+   * So the line is antialiased (Xiaolin Wu): each step lights the two pixels straddling the
+   * true position, weighted by how far between them it falls. That IS the beam spot, at the
+   * cheapest useful fidelity, and it applies to every system that draws here.
+   *
+   * The erase pass calls this with colour 0 and therefore blackens exactly the same pixels
+   * it lit, which is what keeps a persistent canvas from silting up.
+   */
   private drawLine(x0: number, y0: number, x1: number, y1: number, color: number): void {
-    if (x1 > x0) {
-      if (y1 > y0) {
-        if ((x1 - x0) > (y1 - y0)) this.linep01(x0, y0, x1, y1, color);
-        else                         this.linep1n(x0, y0, x1, y1, color);
-      } else {
-        if ((x1 - x0) > (y0 - y1)) this.linen01(x0, y0, x1, y1, color);
-        else                         this.linen1n(x1, y1, x0, y0, color);
-      }
-    } else {
-      if (y1 > y0) {
-        if ((x0 - x1) > (y1 - y0)) this.linen01(x1, y1, x0, y0, color);
-        else                         this.linen1n(x0, y0, x1, y1, color);
-      } else {
-        if ((x0 - x1) > (y0 - y1)) this.linep01(x1, y1, x0, y0, color);
-        else                         this.linep1n(x1, y1, x0, y0, color);
-      }
+    if (!this.data) return;
+    const { data, scl_factor, lPitch, color_set } = this;
+    const [cr, cg, cb] = color_set[color] ?? [0, 0, 0];
+
+    let ax = x0 / scl_factor, ay = y0 / scl_factor;
+    let bx = x1 / scl_factor, by = y1 / scl_factor;
+    const steep = Math.abs(by - ay) > Math.abs(bx - ax);
+    if (steep) { let t = ax; ax = ay; ay = t; t = bx; bx = by; by = t; }
+    if (ax > bx) { let t = ax; ax = bx; bx = t; t = ay; ay = by; by = t; }
+
+    const dx = bx - ax, dy = by - ay;
+    const grad = dx === 0 ? 0 : dy / dx;
+    const iMax = (steep ? this.screen_y : this.screen_x) - 1;
+    const jMax = (steep ? this.screen_x : this.screen_y) - 1;
+
+    const plot = (i: number, j: number, w: number) => {
+      if (i < 0 || j < 0 || i > iMax || j > jMax) return;
+      const idx = steep ? this.pixelIndex(j, i) : this.pixelIndex(i, j);
+      /* Take the brighter of what is there and what we are adding, so two vectors crossing
+       * do not dim each other. Erasing (colour 0) still wins, because w scales to 0. */
+      const r = (cr * w) | 0, g = (cg * w) | 0, b = (cb * w) | 0;
+      if (color === 0) { data[idx] = 0; data[idx + 1] = 0; data[idx + 2] = 0; return; }
+      if (r > data[idx])     data[idx]     = r;
+      if (g > data[idx + 1]) data[idx + 1] = g;
+      if (b > data[idx + 2]) data[idx + 2] = b;
+    };
+
+    const i0 = Math.round(ax), i1 = Math.round(bx);
+    let y = ay + (i0 - ax) * grad;
+    for (let i = i0; i <= i1; i++) {
+      const j = Math.floor(y), f = y - j;
+      plot(i, j, 1 - f);
+      plot(i, j + 1, f);
+      y += grad;
     }
   }
 
