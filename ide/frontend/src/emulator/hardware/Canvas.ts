@@ -22,7 +22,11 @@ const VECTREX_COLORS    = 128;
 // gamma-2.2 monitor (mid intensities — the AAE ccpu games sit ~0x40 — looked
 // washed-out vs real hardware, where the phosphor lights brightly at mid DAC).
 // Gamma < 1 boosts the low/mid range; 0 stays black, max stays white. Tune here.
-const VECTREX_GAMMA     = 0.55;
+/* Exported so the WASM view uses the SAME curve. They had drifted: this applies the tube's
+ * gamma and PitrexSimView mapped intensity to alpha linearly, so the same segment came out
+ * at 119 here and 64 there and the two views disagreed about how visible a dimmed vector
+ * is. One number, one place. */
+export const VECTREX_GAMMA = 0.55;
 const BYTES_PER_PIXEL   = 4;
 const ALG_MAX_X         = 33000;
 const ALG_MAX_Y         = 41000;

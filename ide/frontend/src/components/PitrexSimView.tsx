@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useJoystickStore } from '../state/joystickStore';
 import { useEmulatorStore } from '../state/emulatorStore';
+import { VECTREX_GAMMA } from '../emulator/hardware/Canvas';
 
 /*
  * PitrexSimView — runs an external project's WASM "simulator" module in the
@@ -205,7 +206,11 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       const sx = (x: number) => (x + PITREX_X_RANGE) / (2 * PITREX_X_RANGE) * W;
       const sy = (y: number) => (PITREX_Y_RANGE - y) / (2 * PITREX_Y_RANGE) * H; // Y flipped
       for (const s of segs) {
-        const alpha = Math.max(0, Math.min(1, s.b / 127));
+        /* THE TUBE'S GAMMA, the same curve Canvas.ts uses for the ARM view — see
+         * VECTREX_GAMMA there. This was a linear b/127, which is not what a phosphor does
+         * and, more to the point, is not what the other view does: a segment at intensity
+         * 32 came out at 64 here and 119 there. */
+        const alpha = Math.pow(Math.max(0, Math.min(1, s.b / 127)), VECTREX_GAMMA);
         if (alpha <= 0) continue;
         // Monochrome unless the game asked for a colour; brightness scales either way.
         if (s.rgb) {
