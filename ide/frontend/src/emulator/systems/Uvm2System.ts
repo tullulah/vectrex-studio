@@ -576,6 +576,28 @@ export class Uvm2System implements ISystem, IBus {
       }
       else if (off === 0x010) word = this.gpioOut;
       else if (off === 0x030) word = this.gpioOe;
+      // FIFO_ST at +0x50. THERE IS NO SECOND CORE HERE, and without an answer the image
+      // never gets past multicore_launch_core1_raw: pico-sdk pushes the entry point to
+      // core 1 and spins on RDY, which stayed 0 for ever. Measured: a dual-core .um2 sat
+      // in a three-instruction loop at multicore.h:186 and drew nothing, with no error —
+      // "the emulator does nothing". Answering RDY|VLD lets core 0 carry on; whatever the
+      // game delegated to core 1 simply does not happen, which is a visible half-game
+      // rather than a black screen. Build with UVM2_DUAL_CORE=0 to emulate the whole game.
+      //
+      // Answering RDY alone only moves the hang twenty instructions on: the launch is a
+      // six-word HANDSHAKE and core 0 pops each word back and compares. So FIFO_RD echoes
+      // whatever was last written to FIFO_WR, the comparison passes, and the launch
+      // returns instead of restarting for ever.
+      else if (off === 0x050) {
+        if (!this.avisoMulticore) {
+          this.avisoMulticore = true;
+          console.warn('[Uvm2System] la imagen arranca el nucleo 1 y aqui no hay segundo ' +
+                       'nucleo: se responde al FIFO para que no se cuelgue, pero lo que ' +
+                       'corra en el core 1 no se ejecuta. Compila con UVM2_DUAL_CORE=0.');
+        }
+        word = 0x3;   // RDY | VLD
+      }
+      else if (off === 0x058) word = this.fifoEco;   // FIFO_RD: echo, see above
       return (word >>> shift) & 0xFF;
     }
 
@@ -635,6 +657,8 @@ export class Uvm2System implements ISystem, IBus {
         case 0x030: this.gpioOe  = ((this.gpioOe & keep) | bits) >>> 0; break;
         case 0x038: this.gpioOe  = (this.gpioOe  |  bits) >>> 0; break;
         case 0x040: this.gpioOe  = (this.gpioOe  & ~bits) >>> 0; break;
+        /* FIFO_WR: keep it so FIFO_RD can echo it back — see the note at FIFO_ST. */
+        case 0x054: this.fifoEco = ((this.fifoEco & keep) | bits) >>> 0; break;
         default: break;
       }
       return;
@@ -700,6 +724,9 @@ export class Uvm2System implements ISystem, IBus {
    * clock, exactly as it will on hardware, so the frame boundary is simply
    * 30000 bus cycles of elapsed Vectrex time.
    */
+  private avisoMulticore = false;
+  private fifoEco = 0;   /* last word written to FIFO_WR, echoed back on FIFO_RD */
+
   runFrame(): Segment[] {
     const until = this.busCycle + BUS_PER_FRAME;
     let spent = 0;
