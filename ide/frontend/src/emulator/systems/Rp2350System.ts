@@ -1505,6 +1505,13 @@ export class Rp2350System implements ISystem, IBus {
         // commands that follow. Skipping only the header would feed string bytes and gap
         // fractions back in as opcodes, so the rest of the frame decodes into noise —
         // silently, because every byte is a valid opcode to something.
+        case 6: // OP_PSG — a=register, b=value
+          /* SOUND HAS NO OTHER ROUTE IN DUAL CORE: the game cannot touch the VIA (core 0
+           * owns the bus while it draws) and cannot svc (nothing services core 1), so the
+           * write rides the command queue. Without this case the queue swallowed every
+           * note and the cartridge was silent in here. */
+          this.psg.writeReg(a & 0x0f, b & 0xff);
+          break;
         case 4: { // OP_RASTER — header a=x, b=y, _pad=len, then ceil(len/4) data cmds
           const len = this.sram[o + 3];
           k += Math.ceil(len / 4);
