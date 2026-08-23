@@ -83,10 +83,14 @@ const SRAM_BASE   = 0x20000000;
 const SRAM_END    = 0x20810000;  /* 8MB+ model for big 68000/Musashi games (emulator only; real HW is 520KB SRAM + rev3 PSRAM) */
 /** SRAM size: 512 KB. */
 const SRAM_SIZE   = 0x810000;     /* 8.06 MB: fits Musashi's ~580KB tables past the 444KB budget */
-/** Scratch SRAM region where the simulated SD names are written (below the
- *  0x2007F000 VPy game-RAM area, so it never collides). SD_FILE_NAME returns
- *  pointers here for PRINT_TEXT to read. */
-const SD_NAMES_BASE = 0x2007E000;
+/** Scratch SRAM region where the simulated SD names are written. SD_FILE_NAME returns
+ *  pointers here for PRINT_TEXT to read.
+ *
+ *  IT USED TO BE 0x2007E000, which stopped being free: DC_BUF1 now runs 0x2007B000..
+ *  0x2007F000, so a dual-core game listing SD files scribbled filenames straight into its
+ *  own command buffer. Parked above the buffers instead, in the page the single-core
+ *  stack top (0x2007F000) leaves alone. */
+const SD_NAMES_BASE = 0x2007F400;
 
 /**
  * Offset within the flash array at which the game binary is loaded.
@@ -263,6 +267,12 @@ type TrapFn = (cpu: Thumb2) => number;
  * Also implements IBus so the Thumb2 CPU can call `this.read8` / `this.write8`
  * directly without an extra wrapper object.
  */
+/** Dual-core shared block — MUST MATCH sdk_rp2350.c (DC_CTRL / DC_BUF0 / DC_BUF1). */
+const DC_CTRL_ADDR = 0x20076F00;
+const DC_BUF0_ADDR = 0x20077000;
+const DC_BUF1_ADDR = 0x2007B000;
+const DC_CMDS_MAX  = 4096;
+
 export class Rp2350System implements ISystem, IBus {
   readonly cpuName = 'ARM Cortex-M33 (RP2350)';
 
@@ -1428,12 +1438,14 @@ export class Rp2350System implements ISystem, IBus {
     this.dcActive = bin.length >= 12 &&
       ((bin[8] | (bin[9] << 8) | (bin[10] << 16) | (bin[11] << 24)) >>> 0) === 0x44430001;
     const SP_TOP = inPsram ? 0x2007F000 : GAME_LOAD_ADDR;
-    this.cpu.setReg(13, this.dcActive ? 0x2007CF00 : SP_TOP); // SP
+    this.cpu.setReg(13, this.dcActive ? DC_CTRL_ADDR : SP_TOP); // SP: grows down from below the shared block
     this.cpu.setReg(15, entry & ~1);   // PC = game_main (thumb bit stripped)
     this.cpu.setReg(14, 0xFFFFFFFE);   // LR sentinel (halt if game_main returns)
     console.log(`[Rp2350System.initRamGame] loaded ${len}b @ 0x${GAME_LOAD_ADDR.toString(16)} (${inPsram ? 'PSRAM' : 'SRAM'}), entry=0x${entry.toString(16)}${this.dcActive ? ' (DUAL-CORE)' : ''}`);
   }
 
+  // Shared block with the game, from sdk_rp2350.c. Keep them in step.
+  private static readonly _dcDoc = 1;
   private dcActive = false;
 
   /** DUAL-CORE frame: the game (would-be core 1) records its draws into a shared
@@ -1441,8 +1453,13 @@ export class Rp2350System implements ISystem, IBus {
    * until it SEALS a buffer, then drain that buffer into segments and free it so
    * the game's v_WaitRecal spin exits. Fixed addresses match sdk_rp2350.c/dc.rs. */
   private runFrameDualCore(): Segment[] {
-    const CTRL = 0x2007CF00 - SRAM_BASE;
-    const BUF = [0x2007D000 - SRAM_BASE, 0x2007E000 - SRAM_BASE];
+    // THESE MUST TRACK sdk_rp2350.c. They did not: the SDK moved the block to make room
+    // for 4096-command buffers (DC_CTRL 0x20076F00, DC_BUF0 0x20077000, DC_BUF1
+    // 0x2007B000) and this stayed on the old 0x2007CF00/D000/E000. Core 0's stand-in then
+    // watched a seal flag nobody ever set, so every dual-core game span forever inside
+    // v_WaitRecal and drew zero segments — with no error anywhere.
+    const CTRL = DC_CTRL_ADDR - SRAM_BASE;
+    const BUF = [DC_BUF0_ADDR - SRAM_BASE, DC_BUF1_ADDR - SRAM_BASE];
     // Publish input the game reads from DC_CTRL (axes @+8, buttons @+12).
     const axes = (((this.joyJ1X & 0xff) << 24) | ((this.joyJ1Y & 0xff) << 16) |
                   ((this.joyJ2X & 0xff) << 8) | (this.joyJ2Y & 0xff)) >>> 0;
@@ -1459,7 +1476,7 @@ export class Rp2350System implements ISystem, IBus {
   }
 
   private dcDrain(w: number, ctrl: number, bufOff: number): Segment[] {
-    const count = Math.min(this.sram[ctrl + 4 + w * 2] | (this.sram[ctrl + 5 + w * 2] << 8), 1024);
+    const count = Math.min(this.sram[ctrl + 4 + w * 2] | (this.sram[ctrl + 5 + w * 2] << 8), DC_CMDS_MAX);
     this.armBeamX = ALG_CENTER_X; this.armBeamY = ALG_CENTER_Y; this.armIntensity = 0;
     for (let k = 0; k < count; k++) {
       const o = bufOff + k * 4;
@@ -1481,6 +1498,37 @@ export class Rp2350System implements ISystem, IBus {
           const nx = this.armBeamX + a * ARM_ALG_SCALE, ny = this.armBeamY - b * ARM_ALG_SCALE;
           const cl = clipSegment(this.armBeamX, this.armBeamY, nx, ny);
           if (cl !== null) this.beam.addSegmentDirect(cl[0], cl[1], cl[2], cl[3], this.armIntensity);
+          this.armBeamX = nx; this.armBeamY = ny;
+          break;
+        }
+        // OP_RASTER and OP_DRAW_GAPPED are HEADER + DATA: their payload rides in the
+        // commands that follow. Skipping only the header would feed string bytes and gap
+        // fractions back in as opcodes, so the rest of the frame decodes into noise —
+        // silently, because every byte is a valid opcode to something.
+        case 4: { // OP_RASTER — header a=x, b=y, _pad=len, then ceil(len/4) data cmds
+          const len = this.sram[o + 3];
+          k += Math.ceil(len / 4);
+          break;      // not drawn: it needs the BIOS shift-register font
+        }
+        case 5: { // OP_DRAW_GAPPED — one ramp, BLANK toggled along the way
+          const n = this.sram[o + 3];
+          const g: number[] = [];
+          for (let i = 0; i < n * 2; i++) g.push(this.sram[o + 4 + i]);
+          k += Math.ceil((n * 2) / 4);
+          const nx = this.armBeamX + a * ARM_ALG_SCALE, ny = this.armBeamY - b * ARM_ALG_SCALE;
+          // the gaps are (start,end) in 0..255 of the run; draw what is left between them
+          let t = 0;
+          const at = (f: number) => [this.armBeamX + (nx - this.armBeamX) * f,
+                                     this.armBeamY + (ny - this.armBeamY) * f] as const;
+          for (let i = 0; i <= n; i++) {
+            const s0 = i < n ? g[i * 2] / 255 : 1;
+            if (s0 > t) {
+              const [px, py] = at(t), [qx, qy] = at(s0);
+              const cl = clipSegment(px, py, qx, qy);
+              if (cl !== null) this.beam.addSegmentDirect(cl[0], cl[1], cl[2], cl[3], this.armIntensity);
+            }
+            if (i < n) t = Math.max(t, g[i * 2 + 1] / 255);
+          }
           this.armBeamX = nx; this.armBeamY = ny;
           break;
         }

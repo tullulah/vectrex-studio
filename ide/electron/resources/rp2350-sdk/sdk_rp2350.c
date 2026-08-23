@@ -103,6 +103,14 @@ struct dc_ctrl {
 #define DC_OP_RASTER 4   /* header cmd: a=x, b=y, _pad=len; then ceil(len/4) cmds
                           * of raw string bytes. core 0 draws it with the BIOS
                           * shift-register raster font (one sweep per pixel row). */
+#define DC_OP_PSG 6      /* a=register, b=value. THE DUAL-CORE GAME HAS NO OTHER WAY TO
+                          * MAKE A SOUND. v_writePSG used to svc unconditionally, and the
+                          * firmware's own note says it plainly: "the dual-core game never
+                          * svc's" (dc.rs). So the write went nowhere and the cartridge was
+                          * silent — not a broken note, no path at all. It cannot be done
+                          * directly either: core 0 owns the bus while it draws, and two
+                          * writers on the VIA with no arbitration is the fault that shipped
+                          * once already. It travels in the queue like everything else. */
 #define DC_OP_DRAW_GAPPED 5 /* ONE STRAIGHT LINE WITH GAPS, IN A SINGLE RAMP. Header:
                           * a=dx, b=dy, _pad = gap count; then ceil(n*2/4) commands holding
                           * the (start,end) pairs as 0..255 fractions of the run.
@@ -852,7 +860,14 @@ __attribute__((weak)) void v_readJoystick2Analog(void)
     currentJoy2Y = (int8_t)a;
 }
 
-void v_writePSG(uint8_t reg, uint8_t val) { sys_psg_write(reg, val); }
+void v_writePSG(uint8_t reg, uint8_t val)
+{
+#ifdef VPY_DUAL_CORE
+    dc_push(DC_OP_PSG, (signed char)reg, (signed char)val);
+#else
+    sys_psg_write(reg, val);
+#endif
+}
 
 /* Digitised-sample audio (AAE Sega-G80). No-op on RP2350 for now: HW needs a
  * software voice mixer feeding the PSG volume-DAC streamer (see the .vsmp path).
