@@ -1171,7 +1171,11 @@ void uvm2_frame_end(void)
     {
         static uint32_t s_us_prev;
         static uint32_t s_calentando = 60;
+#ifdef UVM2_HOST
+        const uint32_t ahora = 0;   /* no TIMER0 in a host harness — see tools/ */
+#else
         const uint32_t ahora = *(volatile uint32_t *)0x400B000Cu;
+#endif
 
         if (s_calentando) {
             s_calentando--;

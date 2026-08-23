@@ -131,7 +131,13 @@ void uvm2_bus_init(void);
 /* EN SRAM SIEMPRE. Ver el comentario de .time_critical en memmap_psram.ld: ejecutando
  * desde PSRAM, un fallo de cache dentro de la ventana de E manda la escritura al periodo
  * siguiente y el dibujo tiembla. En las imagenes normales (SRAM) no cambia nada. */
+/* UVM2_HOST builds this file into a host harness (tools/), where the section name is not
+ * a valid mach-o specifier and there is no SRAM to pin anything to. */
+#ifdef UVM2_HOST
+#define UVM2_RAMFUNC
+#else
 #define UVM2_RAMFUNC __attribute__((section(".time_critical.uvm2"), noinline))
+#endif
 
 /* Replay `count` commands back-to-back, one bus cycle each plus their delays.
  * R/W is held low for the whole batch (as in the reference executor) and the

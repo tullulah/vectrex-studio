@@ -37,6 +37,9 @@ static inline void sys_stop_music(void)      { __asm__ volatile("svc #22" ::: "r
  * because BEAM_RASTER records into the shared buffer instead of trapping, which is
  * why it stayed hidden. 26 is the first free number after SET_TEXT_METRICS (25). */
 static inline void sys_raster_text(int x,int y,const unsigned char*s,int n){ register int r0 __asm__("r0")=x; register int r1 __asm__("r1")=y; register const unsigned char* r2 __asm__("r2")=s; register int r3 __asm__("r3")=n; __asm__ volatile("svc #26" :: "r"(r0),"r"(r1),"r"(r2),"r"(r3) : "memory"); }
+/* SYS_DRAW_GAPPED = 27, the first free number after RASTER_TEXT (26). r0=dx, r1=dy,
+ * r2 = (start,end) pairs as 0..255 fractions of the run, r3 = how many pairs. */
+static inline void sys_draw_gapped(int dx,int dy,const unsigned char*g,int n){ register int r0 __asm__("r0")=dx; register int r1 __asm__("r1")=dy; register const unsigned char* r2 __asm__("r2")=g; register int r3 __asm__("r3")=n; __asm__ volatile("svc #27" :: "r"(r0),"r"(r1),"r"(r2),"r"(r3) : "memory"); }
 
 /* ── Input snapshot owned by the SDK layer (libvpy reads these as externs). ── */
 uint8_t currentButtonState = 0;
@@ -71,6 +74,10 @@ static int s_beam_x = 0, s_beam_y = 0;
  * (stretched vectors / broken E-sync). Fixed shared addresses — MUST match the
  * firmware (hardware/debug_cart/firmware/src/dc.rs). VPy games don't define
  * VPY_DUAL_CORE and keep the unchanged single-core svc path below. ══════════ */
+/* Most gaps one run may carry. The dual-core queue packs them 4 per command and the
+ * UVM2 primitive caps at 16; 8 is what both transports accept, and a run needing more
+ * than eight dark stretches is beyond what one ramp should be asked to draw. */
+#define DC_GAPS_MAX 8
 #ifdef VPY_DUAL_CORE
 struct dc_cmd  { unsigned char op; signed char a; signed char b; unsigned char _pad; };
 struct dc_ctrl {
@@ -122,8 +129,8 @@ static inline void dc_push(unsigned char op, signed char a, signed char b) {
 /* Record a raster-text run: a header cmd (x,y,len) followed by the string bytes
  * packed 4 per cmd. core0_materialize replays it via the shift-register font. */
 /* The gapped line, pushed to the command queue. `gaps` are (start,end) pairs as
- * 0..255 fractions of the run; n is capped at DC_GAPS_MAX. */
-#define DC_GAPS_MAX 8
+ * 0..255 fractions of the run; n is capped at DC_GAPS_MAX (hoisted above both transports,
+ * since flush_frame builds the array before it knows which one it is talking to). */
 static void dc_push_gapped(signed char dx, signed char dy, const unsigned char *gaps, int n) {
     if (n < 0) n = 0;
     if (n > DC_GAPS_MAX) n = DC_GAPS_MAX;
@@ -162,17 +169,35 @@ static void dc_push_raster(signed char x, signed char y, const unsigned char *s,
 #define BEAM_DRAW(x,y)    dc_push(DC_OP_DRAW, (signed char)(x), (signed char)(y))
 #define BEAM_RASTER(x,y,s,n) dc_push_raster((signed char)(x),(signed char)(y),(s),(n))
 #define BEAM_DRAW_GAPPED(x,y,h,n) dc_push_gapped((signed char)(x),(signed char)(y),(h),(n))
+/* Overridable so the gapped ramp can be MEASURED: -DHAS_GAPPED_RAMP=0 falls back to one
+ * stroke per piece, everything else identical, which is the only way to get a two-build
+ * comparison with a single variable in it. */
+#ifndef HAS_GAPPED_RAMP
 #define HAS_GAPPED_RAMP 1
+#endif
 #else
 #define BEAM_ZERO()       sys_reset0ref()
 #define BEAM_INTENSITY(b) sys_set_intensity(b)
 #define BEAM_MOVE(x,y)    sys_move((x),(y))
 #define BEAM_DRAW(x,y)    sys_draw_delta((x),(y))
 #define BEAM_RASTER(x,y,s,n) sys_raster_text((x),(y),(s),(n)) /* SYS #26 */
-/* The svc path has no gapped ramp: games use the dual-core one (see dc.rs, "the
- * dual-core game never svc's"), so the optimisation goes where it is used and this
- * path falls back to the old behaviour — one stroke per piece. */
+/* THE SVC PATH HAS IT ONLY ON THE UVM2, and the asymmetry is not an oversight.
+ *
+ * The gapped ramp needs someone on the other side of the call to toggle BLANK inside the
+ * ramp. On the UVM2 that is uvm2_draw_delta_patterned(), in the same image. On the games
+ * cart the other side is the firmware's SVC handler, which has no such syscall — cart
+ * games take the dual-core path, where the command travels through the queue as
+ * DC_OP_DRAW_GAPPED instead. Turning this on for a single-core CART build would trap into
+ * a handler that does not know the number, so it is gated on the UVM2 runtime, not on the
+ * board being an RP2350. */
+#ifdef UVM2_PICO_RUNTIME
+#define BEAM_DRAW_GAPPED(x,y,h,n) sys_draw_gapped((x),(y),(h),(n))
+#ifndef HAS_GAPPED_RAMP
+#define HAS_GAPPED_RAMP 1
+#endif
+#else
 #define HAS_GAPPED_RAMP 0
+#endif
 #endif
 
 /* Draw a raster-font string at device coords (x,y) (i8, ±127). Dual-core records
@@ -456,6 +481,38 @@ static void beam_seg(int ax0, int ay0, int ax1, int ay1, int b)
     beam_draw_to(ax1, ay1);   /* splits >127 i8 chunks (DP long vectors) */
     s_draws_since_zero++;
 }
+
+#if HAS_GAPPED_RAMP
+/* The gapped twin of beam_seg: ONE ramp for a whole collinear run, with BLANK toggled
+ * along the way. Same bookkeeping — the run is a draw like any other, so it re-zeroes on
+ * the same budget and leaves the beam at its end.
+ *
+ * `gaps` are (start,end) pairs in 0..255 fractions of the run, already merged and
+ * clamped by the caller. The run is guaranteed to fit the command's i8 delta because
+ * flush_frame() caps it at +-127; the guard below is there so a future caller that
+ * forgets cannot emit a wrapped delta, which would draw a line to somewhere else.
+ */
+static void beam_seg_gapped(int ax0, int ay0, int ax1, int ay1, int b,
+                            const unsigned char *gaps, int ngaps)
+{
+    int dx = ax1 - ax0, dy = ay1 - ay0;
+    if (dx > 127 || dx < -127 || dy > 127 || dy < -127 || ngaps <= 0) {
+        beam_seg(ax0, ay0, ax1, ay1, b);   /* cannot be one command: draw it plain */
+        return;
+    }
+    int need_move = (ax0 != s_beam_x || ay0 != s_beam_y);
+    if (need_move && s_draws_since_zero >= VPY_MAX_CONSECUTIVE_DRAWS) {
+        BEAM_ZERO();
+        s_beam_x = 0; s_beam_y = 0;
+        s_draws_since_zero = 0;
+    }
+    if (b != s_last_intensity) { BEAM_INTENSITY(b); s_last_intensity = b; }
+    beam_move_to(ax0, ay0);
+    BEAM_DRAW_GAPPED(dx, dy, gaps, ngaps);
+    s_beam_x = ax1; s_beam_y = ay1;
+    s_draws_since_zero++;
+}
+#endif
 
 /* ── Frame-level stroke reorder (nearest-neighbour) ─────────────────────────
  * On this HW the beam's per-vector time is ∝ travel, so drawing shapes in the

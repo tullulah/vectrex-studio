@@ -50,6 +50,7 @@ enum {
     SYS_STOP_MUSIC    = 22,
     SYS_PLAY_SFX      = 23,
     SYS_RASTER_TEXT   = 26,   /* (r0:x, r1:y, r2:str, r3:len) — see sdk_rp2350.c */
+    SYS_DRAW_GAPPED   = 27,   /* (r0:dx, r1:dy, r2:gaps, r3:n) — one ramp, BLANK toggled inside */
 };
 
 /* Input is sampled once per frame in SYS_WAIT_RECAL and cached here: the read
@@ -274,6 +275,17 @@ void uvm2_svc_dispatch(uint32_t *frame)
 
     case SYS_MOVE_ABS:
         uvm2_draw_move_abs((int)(int32_t)r0, (int)(int32_t)r1);
+        break;
+
+    /* ONE RAMP FOR A WHOLE COLLINEAR RUN. The emitter (sdk_rp2350.c flush_frame) has
+     * already merged the run and expressed the dark stretches as 0..255 fractions of it;
+     * uvm2_draw_delta_patterned turns those into T1 counts and drops the ones that round
+     * to nothing. r2/r3 are not unpacked at the top of this function, so they come
+     * straight out of the stacked exception frame, same as SYS_RASTER_TEXT. */
+    case SYS_DRAW_GAPPED:
+        uvm2_draw_delta_patterned((int)(int32_t)r0, (int)(int32_t)r1,
+                                  (const unsigned char *)(uintptr_t)frame[2],
+                                  (int)frame[3]);
         break;
 
     /* r0=x, r1=y (both i8), r2=string, r3 = scale | (intensity << 8).
