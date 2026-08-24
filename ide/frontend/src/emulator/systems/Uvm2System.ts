@@ -181,6 +181,19 @@ export class Uvm2System implements ISystem, IBus {
 
   private sram = new Uint8Array(SRAM_SIZE);
   private cpu  = new Thumb2();
+  /** EL SEGUNDO NUCLEO, DE VERDAD.
+   *
+   * Antes se falseaba el saludo del arranque para que core 0 siguiera, y lo que corriera en
+   * core 1 simplemente no pasaba. Para un juego de doble nucleo eso no es "medio juego": en
+   * el UVM2 core 1 es QUIEN DIBUJA (uvm2_core1.c llama a uvm2_exec), asi que la pantalla se
+   * quedaba negra y core 0 acababa girando en la espera de uvm2_frame_end.
+   *
+   * Arranca cuando el pico-sdk termina su secuencia {0, 0, 1, vector_table, sp, entry}: las
+   * dos ultimas palabras son la pila y el punto de entrada, y con eso ya se puede correr. */
+  private cpu1: Thumb2 | null = null;
+  private lanzamiento: number[] = [];
+  private rastro1: number[] = [];
+  private cpu1Perdido = false;
   private via: Via6522;
   private beam = new Beam();
   private psg  = new Psg();
@@ -282,8 +295,12 @@ export class Uvm2System implements ISystem, IBus {
    * dos letras ASCII, que es como las llama el pico-sdk, para que la siguiente
    * laguna se identifique de un vistazo en vez de volver a rastrear un PC perdido.
    */
-  private romTableLookup(): void {
-    const code = this.cpu.getReg(0) & 0xffff;
+  /* PARAMETRIZADA POR NUCLEO. Estaba atada a `this.cpu`, asi que la trampa de la bootrom
+   * solo funcionaba para el nucleo 0. El nucleo 1 pasa por el MISMO camino al arrancar
+   * —core1_wrapper -> runtime_init -> rom_func_lookup— y sin interceptarla saltaba a
+   * 0x100, que en el emulador no es codigo: se perdia en la primera decena de pasos. */
+  private romTableLookup(cpu: Thumb2 = this.cpu): void {
+    const code = cpu.getReg(0) & 0xffff;
     const c1 = String.fromCharCode(code & 0xff), c2 = String.fromCharCode(code >>> 8);
     if (!(code in ROM_IGNORABLES)) {
       console.warn(
@@ -291,8 +308,8 @@ export class Uvm2System implements ISystem, IBus {
         `modelada; se devuelve una funcion que no hace nada. Si el juego se comporta ` +
         `raro a partir de aqui, esta es la razon.`);
     }
-    this.cpu.setReg(0, ROM_NOOP | 1);
-    this.cpu.setReg(15, this.cpu.getReg(14) & ~1);
+    cpu.setReg(0, ROM_NOOP | 1);
+    cpu.setReg(15, cpu.getReg(14) & ~1);
   }
 
   /** Anillo de los ultimos PCs ejecutados; se vuelca si la CPU falla. */
@@ -479,6 +496,39 @@ export class Uvm2System implements ISystem, IBus {
     } else {
       this.lastPollPc = pc;
     }
+  }
+
+  /** ¿Ha terminado el pico-sdk su secuencia de arranque del nucleo 1? Entonces se arranca.
+   *
+   * La secuencia es {0, 0, 1, vector_table, sp, entry} (multicore.c:189), empujada palabra a
+   * palabra y con cada una devuelta por eco — que es lo que este emulador ya hacia. Aqui solo
+   * se mira la ventana de las ultimas seis: si empieza por 0,0,1 y acaba en una direccion de
+   * SRAM, las dos ultimas son la pila y el punto de entrada.
+   *
+   * Se comprueba la FORMA, no un contador de posicion: si el saludo se reinicia a mitad
+   * —el propio sdk lo hace cuando una respuesta no coincide— un contador se quedaria
+   * desfasado y la ventana no. */
+  private quizaLanzarCore1(palabra: number): void {
+    this.lanzamiento.push(palabra);
+    if (this.lanzamiento.length > 6) this.lanzamiento.shift();
+    if (this.cpu1 || this.lanzamiento.length < 6) return;
+    const [a, b, c, , sp, entry] = this.lanzamiento;
+    if (a !== 0 || b !== 0 || c !== 1) return;
+    if ((entry >>> 0) < SRAM_BASE || (sp >>> 0) < SRAM_BASE) return;
+
+    this.cpu1 = new Thumb2();
+    this.cpu1.reset();
+    this.cpu1.setFetchRegion(this.sram, SRAM_BASE);
+    this.cpu1.setReg(13, sp >>> 0);
+    this.cpu1.setReg(15, (entry >>> 0) & ~1);
+    this.cpu1.setReg(14, 0xFFFFFFFE);
+    /* core1_trampoline es `pop {r0, r1, pc}`: las tres palabras de la cima de la pila son
+     * la funcion de entrada, la base de la pila y core1_wrapper. Se imprimen porque si
+     * alguna es basura, el nucleo salta a ninguna parte y el sintoma —un PC absurdo— no
+     * dice de donde vino. */
+    const w = [this.read32(sp >>> 0), this.read32((sp >>> 0) + 4), this.read32((sp >>> 0) + 8)];
+    console.log(`[Uvm2System] NUCLEO 1 ARRANCADO: pc=0x${(entry >>> 0).toString(16)} ` +
+                `sp=0x${(sp >>> 0).toString(16)}  pila=[${w.map(x => '0x' + (x >>> 0).toString(16)).join(', ')}]`);
   }
 
   /** Address currently on the bus, assembled from the GPIO pins. */
@@ -754,7 +804,10 @@ export class Uvm2System implements ISystem, IBus {
         /* FIFO_WR: keep it so FIFO_RD can echo it back — see the note at FIFO_ST. */
         case 0x054:
           this.fifoEco = ((this.fifoEco & keep) | bits) >>> 0;
-          if ((addr & 3) === 3) this.fifoPendiente = true;   // dato listo tras el ultimo byte
+          if ((addr & 3) === 3) {
+            this.fifoPendiente = true;                      // dato listo tras el ultimo byte
+            this.quizaLanzarCore1(this.fifoEco >>> 0);
+          }
           break;
         default: break;
       }
@@ -866,6 +919,31 @@ export class Uvm2System implements ISystem, IBus {
       let c: number;
       try {
         c = this.cpu.step(this);
+        /* EL NUCLEO 1 CORRE A LA PAR. Un paso por paso es lo mas parecido a dos nucleos al
+         * mismo reloj, y es lo que hace que core 0 salga de su espera: quien avanza
+         * `uvm2_frame_done` es core 1. Sin esto, core 0 giraba ahi para siempre. */
+        if (this.cpu1) {
+          const pc1 = this.cpu1.getReg(15) >>> 0;
+          if (((pc1 & 0xFFFFFFF0) >>> 0) === 0xFFFFFFF0) this.cpu1 = null;   // volvio: se acabo
+          else {
+            /* SU PROPIO RASTRO. Los primeros pasos del nucleo 1 son los que deciden si
+             * llega a su bucle o se pierde, y sin guardarlos un PC absurdo no dice de
+             * donde vino — que es exactamente lo que paso la primera vez. */
+            if (this.rastro1.length < 64) this.rastro1.push(pc1);
+            if (pc1 === ROM_LOOKUP) { this.romTableLookup(this.cpu1); }
+            else if (((pc1 & 0xFFFFFFF0) >>> 0) === ROM_NOOP) {
+              this.cpu1.setReg(15, this.cpu1.getReg(14) & ~1);   // la funcion vacia: volver
+            }
+            else if (pc1 < SRAM_BASE || pc1 > 0x20090000) {
+              if (!this.cpu1Perdido) {
+                this.cpu1Perdido = true;
+                console.error(`[Uvm2System] NUCLEO 1 PERDIDO en 0x${pc1.toString(16)}. ` +
+                  `Camino: ${this.rastro1.map(x => '0x' + x.toString(16)).join(' ')}`);
+              }
+              this.cpu1 = null;
+            } else this.cpu1.step(this);
+          }
+        }
       } catch (e) {
         console.error(`[Uvm2System] CPU fault at 0x${pc.toString(16)}:`, e);
         console.error('[Uvm2System] PCs anteriores (del mas antiguo al fallo):',
