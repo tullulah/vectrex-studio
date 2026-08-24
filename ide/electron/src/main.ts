@@ -1504,14 +1504,25 @@ export async function executeExternalBuild(args: {
   // loadArm detects the RAM-linked 'VPy2' entry (0x2004xxxx) → initRamGame → the
   // svc dispatcher. So the actual RP2350 machine code runs in-panel (vs the WASM
   // sim, which is the same C compiled natively against the host shim).
-  if (preview && effectiveTarget === 'rp2350') {
+  // TAMBIEN uvm2, Y ESTE ERA EL FALLO. La condicion decia solo 'rp2350', asi que un
+  // proyecto en C compilado para UVM2 generaba su .um2 correctamente... y NADIE se lo
+  // mandaba al panel: el emulador no se enteraba de nada.
+  //
+  // El sintoma era el peor posible: el build imprime "Build OK", el artefacto existe, y el
+  // emulador se queda en negro. Toda la cadena de aguas abajo ya estaba instrumentada
+  // —seis trazas entre handleCompiledBin y Uvm2System.init— y ninguna salia, porque el
+  // problema estaba ANTES de la primera. Un dia entero depurando el emulador que no se
+  // estaba ejecutando.
+  if (preview && (effectiveTarget === 'rp2350' || effectiveTarget === 'uvm2')) {
     try {
       const buf = await fs.readFile(artifactPath);
       // El ELF hermano, si el proyecto lo deja al lado con el mismo nombre
       // (REDALARM.BIN -> REDALARM.elf). Con el, las trampas se registran por
       // direccion de simbolo en vez de por heuristica de prologo. Sin el se
       // arranca igual, solo que a ciegas — asi que es opcional, no un fallo.
-      const elfPath = artifactPath.replace(/\.bin$/i, '.elf');
+      // .bin -> .elf y .um2 -> .elf: el artefacto del UVM2 no es un .bin, asi que la
+      // sustitucion de antes no casaba y se perdia el ELF hermano en silencio.
+      const elfPath = artifactPath.replace(/\.(bin|um2)$/i, '.elf');
       let elfBase64: string | null = null;
       if (elfPath !== artifactPath) {
         try {
@@ -1523,10 +1534,11 @@ export async function executeExternalBuild(args: {
         base64: buf.toString('base64'),
         size: buf.length,
         binPath: artifactPath,
-        target: 'rp2350',
+        target: effectiveTarget,
         elfBase64,
       });
-      win?.webContents.send('run://status', `Previewing RP2350 binary: ${manifest.project.name}`);
+      win?.webContents.send('run://status',
+        `Previewing ${effectiveTarget} binary: ${manifest.project.name}`);
     } catch (e: any) {
       win?.webContents.send('run://stderr', `[C] rp2350 preview: could not read ${artifactPath}: ${e?.message || e}\n`);
     }
