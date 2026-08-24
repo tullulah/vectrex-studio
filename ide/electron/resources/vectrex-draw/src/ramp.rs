@@ -74,7 +74,12 @@ pub static VCAP: AtomicU32 = AtomicU32::new(127);
 /// forma; si alguna lo hace mas estrecho, bajarlo aqui es todo lo que hace falta.
 #[used]
 #[no_mangle]
-pub static T1_TRANSPORT: AtomicU32 = AtomicU32::new(4095);
+/// POR DEFECTO 160, NO 4095, y eso es una RETIRADA con motivo. 4095 es el limite real del
+/// transporte y el analisis sigue siendo correcto; pero soltar el techo a la vez que se
+/// desperto VCAP_SLOW dejo que los vectores frenados pasaran de 160 a 677, y en consola el
+/// dibujo se rompio en los dos cartuchos. 160 reproduce el T1_CEILING de siempre.
+/// Subirlo es un experimento, y se hace con UNA variable y midiendo.
+pub static T1_TRANSPORT: AtomicU32 = AtomicU32::new(160);
 
 /// Map a vector delta to (velocity_x, velocity_y, t1_scale) for the variable-T1
 /// model. Preserves the exact displacement of the fixed model (delta·0x7F):

@@ -175,6 +175,15 @@ pub fn y_hold_lost() {
     crate::ramp::Y_HELD.store(0, Ordering::Relaxed);
 }
 
+/* REVERTIDO 2026-08-24. Esto lo escribia el emisor para que VCAP_SLOW pudiera dispararse
+ * tambien en el UVM2, donde llevaba muerto desde siempre. El diagnostico era correcto —
+ * `Y_HELD` lo escribia cada backend y el del UVM2 no lo hacia— pero ACTIVARLO cambia como
+ * se dibuja el 37% de los vectores en TODOS los juegos de los dos cartuchos, y en consola
+ * salio mucho peor: dkong y SnowBros rotos.
+ *
+ * Reactivarlo es un cambio de comportamiento y merece su propia prueba, no venir de gorra
+ * con un arreglo de contabilidad. La contabilidad vuelve al backend. */
+#[allow(dead_code)]
 #[inline(always)]
 fn y_hold_is(vy: i8) {
     crate::ramp::Y_HELD.store(0x100 | (vy as u8 as u32), Ordering::Relaxed);
@@ -201,7 +210,7 @@ pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings
     sink.emit(REG_SHIFT, 0x00, k.e(4)); // CLR shift — beam off
                                         // (CLR = 6 cyc; Y S&H still charging)
     sink.emit(REG_PORT_B, 0x01, k.e(4)); // INC — disable mux (Y sampled + held)
-    sink.y_held(vy); y_hold_is(vy); // deja el S&H cargado con SU vy: un draw_line que lo repita se lo salta
+    sink.y_held(vy); // deja el S&H cargado con SU vy: un draw_line que lo repita se lo salta
     sink.emit(REG_PORT_A, vx as u8, k.e(4)); // STB — X velocity into D/A (direct, no mux)
     sink.emit(REG_T1_LO, (t1 & 0xff) as u8, 0); // T1CL = escala (∝ longitud)
     // EL BYTE ALTO, DE VERDAD. Estuvo cocido a 0, y eso techaba la rampa en 255 aunque
@@ -225,7 +234,7 @@ pub fn draw_line_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timi
         sink.emit(REG_PORT_A, vy as u8, k.e(2)); // STA — Y velocity
         sink.emit(REG_PORT_B, 0x00, k.y_mux_q8); // CLR — mux ch0 (empieza a cargar Y)
         sink.emit(REG_PORT_B, 0x01, k.e(4)); // INC — mux off (Y muestreado y retenido)
-        sink.y_held(vy); y_hold_is(vy);
+        sink.y_held(vy);
     }
     sink.emit(REG_PORT_A, vx as u8, k.e(3)); // STB — X velocity / LDD #$FF00
     sink.emit(REG_T1_LO, (t1 & 0xff) as u8, 0); // T1CL = escala (∝ longitud)
@@ -288,7 +297,7 @@ pub fn draw_line_patterned_seq<S: BusSink>(
         sink.emit(REG_PORT_A, vy as u8, k.e(2));
         sink.emit(REG_PORT_B, 0x00, k.y_mux_q8);
         sink.emit(REG_PORT_B, 0x01, k.e(4));
-        sink.y_held(vy); y_hold_is(vy);
+        sink.y_held(vy);
     }
     sink.emit(REG_PORT_A, vx as u8, k.e(3));
     sink.emit(REG_T1_LO, (t1 & 0xff) as u8, 0);
@@ -768,58 +777,61 @@ mod velocidad {
         assert_eq!(cuantos, 0, "a VCAP=127 nadie deberia pasar de DRAW_SCALE");
         assert_eq!(peor, s, "el maximo geometrico ES DRAW_SCALE, ni mas ni menos");
 
-        // (c) el mismo VCAP, dos vectores, dos respuestas
+        // (c) EL TRANSPORTE MANDA SOBRE LA GEOMETRIA, y por defecto vale 160.
+        //
+        // Este trozo afirmaba lo contrario: que a VCAP=8 el diagonal llegaba a 2540. Es
+        // cierto con T1_TRANSPORT=4095, y asi lo deje esta mañana — pero soltar el techo a
+        // la vez que se desperto VCAP_SLOW rompio el dibujo en los dos cartuchos, asi que
+        // el valor por defecto volvio a 160. El test sigue al codigo, no al reves.
+        use crate::ramp::T1_TRANSPORT;
         VCAP.store(8, Ordering::Relaxed);
-        let (_, _, diagonal) = ramp_params(127, 127);
         let (_, vy_plano, plano) = ramp_params(127, 1);
-        println!("  VCAP=8 -> diagonal (127,127) t1={diagonal}   alargado (127,1) t1={plano}");
-        assert!(diagonal as i32 > s,
-                "el diagonal tiene eje menor de sobra: deberia poder frenarse mucho mas alla de {s}");
-        assert_eq!(plano as i32, s,
-                   "el alargado no puede frenarse mas sin aplanarse contra la horizontal");
-        assert_ne!(vy_plano, 0, "y por eso mismo su Y sigue viva");
+        let (_, _, diagonal) = ramp_params(127, 127);
+        let tope = T1_TRANSPORT.load(Ordering::Relaxed) as i32;
+        println!("  VCAP=8, transporte {tope} -> diagonal {diagonal}  alargado {plano}");
+        assert!(diagonal as i32 <= tope && plano as i32 <= tope,
+                "nadie puede pasar del tope de transporte");
+        assert_ne!(vy_plano, 0, "y ningun eje con delta se queda parado");
+
+        // y que la LEY por vector sigue viva: con el transporte suelto, dos vectores
+        // reciben techos distintos, que es lo que una constante global no podia dar.
+        T1_TRANSPORT.store(4095, Ordering::Relaxed);
+        let (_, _, d2) = ramp_params(127, 127);
+        let (_, _, p2) = ramp_params(127, 1);
+        T1_TRANSPORT.store(tope as u32, Ordering::Relaxed);
+        assert!(d2 as i32 > s && p2 as i32 == s,
+                "con el transporte suelto el diagonal puede frenarse y el alargado no");
 
         VCAP.store(127, Ordering::Relaxed);
         VCAP_SLOW.store(lento, Ordering::Relaxed);
     }
 
-    /// EL TOPE SELECTIVO TIENE QUE DISPARARSE. Un contador a cero se lee igual que "no
-    /// hace falta", y asi paso desapercibido en el UVM2 desde siempre: su backend nunca
-    /// escribia `Y_HELD`, `ramp_params` no veia el bit 8 y la regla no salto NUNCA.
+    /// EL TOPE SELECTIVO SOLO SALTA SI EL BACKEND LLEVA `Y_HELD`, y esto lo fija.
     ///
-    /// Este test dibuja un zigzag por el emisor —el camino de verdad, con su sumidero— y
-    /// exige que el contador suba. Es lo unico que distingue "la regla no hace falta" de
-    /// "la regla esta muerta".
+    /// Estuvo escrito al reves: exigia que saltara con un sumidero que NO implementa
+    /// y_held, porque el emisor le llevaba la cuenta. Eso se REVIRTIO — activarlo cambiaba
+    /// el dibujo del 37% de los vectores en los dos cartuchos y rompio dkong y SnowBros.
+    ///
+    /// Lo que queda fijado es el CONTRATO, que es lo util: quien no escriba `Y_HELD` no
+    /// tiene tope selectivo, y eso es hoy el caso del UVM2. Si alguien lo despierta, este
+    /// test le recuerda que la decision es suya y no un efecto colateral.
     #[test]
-    fn el_tope_selectivo_se_dispara_de_verdad() {
-        use crate::emit::{draw_line_seq, BusSink, Timings};
-        use crate::ramp::VCAP_SLOW_HITS;
+    fn el_tope_selectivo_depende_del_backend() {
+        use crate::ramp::{Y_HELD, VCAP_SLOW_HITS};
         let _t = TURNO.lock().unwrap_or_else(|e| e.into_inner());
-
-        /// Un sumidero que NO implementa y_held ni beam_blanked, como el del UVM2: si la
-        /// contabilidad dependiera del backend, este no la llevaria y el test fallaria.
-        struct Mudo;
-        impl BusSink for Mudo {
-            fn emit(&mut self, _r: u8, _d: u8, _e: u32) {}
-            fn wait_ramp(&mut self, _t1: u16, _e: i32) {}
-        }
-
         VCAP.store(127, Ordering::Relaxed);
         VCAP_SLOW.store(30, Ordering::Relaxed);
-        let antes = VCAP_SLOW_HITS.load(Ordering::Relaxed);
 
-        // zigzag: cortos y con el signo de dy invertido en cada trazo, que es su firma
-        let mut s = Mudo;
-        let k = Timings { e6809_q8: 256, y_mux_q8: 256 * 14, moveto_settle_q8: 0,
-                          beam_on_q8: 0, blank_settle_q8: 256 * 12, keep_lit: false };
-        for i in 0..8 {
-            let dy = if i % 2 == 0 { -7 } else { 9 };
-            let (vx, vy, t1) = ramp_params(5, dy);
-            draw_line_seq(&mut s, vx, vy, t1, &k);
-        }
-        let saltos = VCAP_SLOW_HITS.load(Ordering::Relaxed) - antes;
-        println!("  el tope selectivo salto {saltos} veces en 8 trazos de zigzag");
-        assert!(saltos > 0,
-                "VCAP_SLOW no se disparo ni una vez: la regla esta MUERTA, no es que no haga falta");
+        Y_HELD.store(0, Ordering::Relaxed);            // backend que no lleva la cuenta
+        let antes = VCAP_SLOW_HITS.load(Ordering::Relaxed);
+        for i in 0..8 { ramp_params(5, if i % 2 == 0 { -7 } else { 9 }); }
+        assert_eq!(VCAP_SLOW_HITS.load(Ordering::Relaxed), antes,
+                   "sin Y_HELD el tope selectivo no puede saltar");
+
+        Y_HELD.store(0x100 | (200u32 & 0xff), Ordering::Relaxed);   // vy negativo sostenido
+        ramp_params(5, 9);                                          // dy invierte el signo
+        assert!(VCAP_SLOW_HITS.load(Ordering::Relaxed) > antes,
+                "con Y_HELD valido y el signo invertido TIENE que saltar");
+        Y_HELD.store(0, Ordering::Relaxed);
     }
 }

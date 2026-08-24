@@ -736,13 +736,24 @@ static struct vx_sink vx_cart_sink(void)
  * aqui el transporte ya mete su propio periodo de E entre las dos escrituras, asi que el
  * retardo explicito sobra. La misma cantidad fisica, pagada por otro. */
 volatile int32_t uvm2_beam_on_e = 0;        /* ciclos de E entre arrancar y encender */
+/* KNOBS EN TIEMPO DE EJECUCION, no constantes. En esta placa no se puede leer por SWD —el
+ * nucleo conduce el bus con la fase de E pegada al reloj y pararlo es una violacion de
+ * fase— asi que barrer una constante costaba un flasheo por valor. Estas se ajustan desde
+ * el menu de servicio con el mando, viendo los fps al lado.
+ *
+ * y_mux: la ventana del mux de Y. Estaba en 2 y alguien la subio a 14 (ver emit.rs:154).
+ * Son 12 ciclos de E en CADA operacion que cambia Y: ~5400 por frame, 3,6 ms.
+ * keep_lit: mantener el haz encendido entre segmentos encadenados, que se ahorra el par
+ * de escrituras de BLANK y sus asentamientos. Aqui nunca se ha probado. */
+volatile int32_t uvm2_y_mux_e   = 14;
+volatile int32_t uvm2_keep_lit  = 0;
 volatile int32_t uvm2_blank_settle_e = 12;  /* ciclos de E que sigue encendido al parar */
 
 static struct vx_timings vx_cart_timings(void)
 {
     struct vx_timings k;
     k.e6809_q8 = 64u;
-    k.y_mux_q8 = 14u * 256u;
+    k.y_mux_q8 = (uint32_t)(uvm2_y_mux_e > 0 ? uvm2_y_mux_e : 0) * 256u;
     k.moveto_settle_q8 = 0u;
     /* Sin signo: un beam_on negativo no significa nada (no se puede encender el haz
      * antes de arrancar la rampa), y dejarlo pasar daba la vuelta a ~4.000 millones. */
@@ -757,11 +768,48 @@ static struct vx_timings vx_cart_timings(void)
      * abiertas en los dos extremos de un mismo knob. Se sube el grande primero y de uno
      * en uno; `beam_on` sigue en 2 (el suyo es 3) hasta que haga falta. */
     k.blank_settle_q8 = uvm2_blank_settle_e * 256;
-    k.keep_lit = 0u;
+    k.keep_lit = (uint32_t)(uvm2_keep_lit ? 1 : 0);
     return k;
 }
 
-void uvm2_draw_move(int dx, int dy)
+/* TROCEAR LO QUE NO CABE EN UNA RAMPA — y esto faltaba entero.
+ *
+ * Una rampa expresa como mucho +-127 (vx_ramp_params hace clamp(-128,127)), pero
+ * uvm2_draw_move/delta pasaban el delta CRUDO y ademas actualizaban s_pos con el valor
+ * ENTERO. Resultado: todo movimiento o trazo de mas de 127 unidades se recortaba EN
+ * SILENCIO y el modelo creia al haz en un sitio donde no estaba, para siempre.
+ *
+ * MEDIDO en el host el 2026-08-24 con hardware/uvm2/rejilla: una cuadricula escrita para
+ * ocupar [-100..100] generaba un flujo de comandos que llevaba el haz a [-100..444] —
+ * cuatro veces fuera de pantalla. En consola eso se ve como "dibuja la mitad, y pegado al
+ * borde", que es lo que era.
+ *
+ * El SDK del RP2350 SI lo hacia ("splits >127 i8 chunks" en beam_draw_to). Este no: otra
+ * divergencia entre los dos cartuchos que ningun numero delataba.
+ *
+ * EL REPARTO ES EXACTO. Los trozos suman el delta original al ultimo bit: se acumula la
+ * posicion ideal y cada trozo es la diferencia contra lo ya emitido, asi que el error de
+ * division no se acumula — que es justo lo que estabamos persiguiendo en el juego. */
+#define UVM2_MAX_PASO 127
+
+static void trocear(int dx, int dy, void (*emite)(int, int))
+{
+    int m = (dx < 0 ? -dx : dx);
+    int my = (dy < 0 ? -dy : dy);
+    if (my > m) m = my;
+    if (m <= UVM2_MAX_PASO){ emite(dx, dy); return; }
+
+    int n = (m + UVM2_MAX_PASO - 1) / UVM2_MAX_PASO;
+    int hx = 0, hy = 0;                       /* lo ya emitido */
+    for (int i = 1; i <= n; i++){
+        int ox = (int)(((long long)dx * i) / n);   /* posicion ideal tras i trozos */
+        int oy = (int)(((long long)dy * i) / n);
+        emite(ox - hx, oy - hy);
+        hx = ox; hy = oy;
+    }
+}
+
+static void move_una(int dx, int dy)
 {
     {
         int32_t vx, vy; uint32_t t1;
@@ -776,7 +824,9 @@ void uvm2_draw_move(int dx, int dy)
     }
 }
 
-void uvm2_draw_delta(int dx, int dy)
+void uvm2_draw_move(int dx, int dy){ trocear(dx, dy, move_una); }
+
+static void delta_una(int dx, int dy)
 {
     {
         int32_t vx, vy; uint32_t t1;
@@ -790,6 +840,8 @@ void uvm2_draw_delta(int dx, int dy)
         uvm2_stats.ramp_cycles += t1;
     }
 }
+
+void uvm2_draw_delta(int dx, int dy){ trocear(dx, dy, delta_una); }
 
 /* UNA RECTA CON HUECOS, EN UNA SOLA RAMPA.
  *
