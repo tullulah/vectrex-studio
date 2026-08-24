@@ -619,6 +619,10 @@ void vx_draw_line_patterned_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32
 void vx_draw_line_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
                       const struct vx_timings *);
 void vx_ramp_params(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
+/* La version CON DEUDA, para trazos encadenados, y el olvido de la deuda en cada salto.
+ * Viven en vectrex-draw para que no haya tres copias de la misma regla. */
+void vx_ramp_params_chain(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
+void vx_chain_reset(void);
 
 /* El retardo llega en Q8 de ciclo de E; el campo de comando es entero, asi que hay que
  * bajar de resolucion. SE TRUNCA, no se redondea.
@@ -809,16 +813,6 @@ static struct vx_timings vx_cart_timings(void)
  * division no se acumula — que es justo lo que estabamos persiguiendo en el juego. */
 #define UVM2_MAX_PASO 127
 
-/* Lo que se le debe al dibujo, en MILESIMAS de unidad. Ver delta_una(). */
-static int32_t s_res_x, s_res_y;
-
-/* LO QUE LA RAMPA VA A RECORRER DE VERDAD, en milesimas: vx * t1 / DRAW_SCALE. Ni `dx` ni
- * `vx*t1/160` redondeado — el valor exacto con su fraccion, que es lo unico que permite
- * saber cuanto se debe. */
-static int32_t recorrido_mil(int32_t v, uint32_t t1)
-{
-    return (int32_t)(((int64_t)v * (int64_t)t1 * 1000) / 160);
-}
 
 
 static void trocear(int dx, int dy, void (*emite)(int, int))
@@ -840,10 +834,7 @@ static void trocear(int dx, int dy, void (*emite)(int, int))
 
 static void move_una(int dx, int dy)
 {
-    /* LA DEUDA MUERE AQUI. Un salto reestablece la posicion por su cuenta, asi que
-     * arrastrarle el residuo de la cadena anterior seria corregir un error que ya no
-     * existe — el mismo fallo que el acumulador de deriva que sobrevivia a un re-cero. */
-    s_res_x = 0; s_res_y = 0;
+    vx_chain_reset();   /* un salto reestablece la posicion: la deuda muere aqui */
 
     {
         int32_t vx, vy; uint32_t t1;
@@ -861,47 +852,17 @@ static void move_una(int dx, int dy)
 void uvm2_draw_move(int dx, int dy){ trocear(dx, dy, move_una); }
 
 
-/* DIFUNDIR EL RESIDUO AL VECTOR SIGUIENTE, que es lo que hace exacta una CADENA aunque
- * cada trazo suelto no pueda serlo.
- *
- * `ramp_params` reparte un delta entre velocidad y tiempo, y las dos son ENTERAS: la
- * distancia real casi nunca es la pedida. El error de un trazo es despreciable, pero tiene
- * SIGNO CONSTANTE, asi que en una cadena se suma. MEDIDO en el host el 2026-08-24, 84
- * trazos encadenados de 33 unidades:
- *
- *     VCAP=127  +6,30 u de deriva (+2,5% de pantalla)     VCAP=32   0,00
- *     VCAP= 64 +16,80 u          (+6,6%)                  VCAP=21   0,00
- *
- * Y ESO EXPLICA LO QUE SE VEIA. A VCAP bajo `t1` topa en T1_TRANSPORT y vx*t1/160 sale
- * clavado; a VCAP alto no, y la cadena deriva. O sea que "a VCAP alto dibuja mal y rapido,
- * a VCAP bajo dibuja bien y lento" NO era el amplificador sin poder seguir al haz: era
- * nuestro redondeo, y bajar VCAP lo tapaba pagando 3,8 veces mas ciclos de rampa.
- *
- * Llevando la cuenta de lo que se debe y sumandoselo al siguiente, la cadena queda exacta
- * a cualquier VCAP y no cuesta un solo ciclo. Se pide `dx + debido`, se mira lo que la
- * rampa dara, y la diferencia queda anotada. */
+/* LA DIFUSION VIVE EN LA CAJA COMPARTIDA. Estuvo aqui unas horas, y en el emulador habia
+ * otra copia, y el firmware del cartucho propio no la tenia — tres decisiones distintas
+ * sobre la misma regla, que es la forma de divergencia que llevamos el dia entero pagando.
+ * Ahora es `vx_ramp_params_chain` en vectrex-draw, y los tres la usan. */
 static void delta_una(int dx, int dy)
 {
     int32_t vx, vy; uint32_t t1;
     s_pos_x += dx;
     s_pos_y += dy;
 
-    /* Se pide el delta MAS lo que se debia del anterior. El redondeo a entero es a la
-     * proxima, no truncando: truncar reintroduce el sesgo que esto viene a quitar. */
-    int px = dx + ((s_res_x >= 0 ? s_res_x + 500 : s_res_x - 500) / 1000);
-    int py = dy + ((s_res_y >= 0 ? s_res_y + 500 : s_res_y - 500) / 1000);
-    if (px > 127) px = 127; else if (px < -128) px = -128;
-    if (py > 127) py = 127; else if (py < -128) py = -128;
-
-    vx_ramp_params(px, py, &vx, &vy, &t1);
-
-    /* Lo que se debe = lo que se queria menos lo que la rampa dara. Se acumula en
-     * milesimas, y se acota: si un trazo se recorta (px saturado) la deuda no puede
-     * crecer sin freno o el siguiente saldria disparado. */
-    s_res_x += (int32_t)dx * 1000 - recorrido_mil(vx, t1);
-    s_res_y += (int32_t)dy * 1000 - recorrido_mil(vy, t1);
-    if (s_res_x >  4000) s_res_x =  4000; else if (s_res_x < -4000) s_res_x = -4000;
-    if (s_res_y >  4000) s_res_y =  4000; else if (s_res_y < -4000) s_res_y = -4000;
+    vx_ramp_params_chain(dx, dy, &vx, &vy, &t1);
 
     struct vx_sink sink = vx_cart_sink();
     struct vx_timings k = vx_cart_timings();

@@ -63,9 +63,12 @@ static uintptr_t s_desc[4];                    /* [0]=magia [1]=base [2]=tamaño
  *
  * Publicandolo con nombre propio nadie se disputa nada: el juego VPy conserva SU cabecera
  * y romzip.c mira aqui primero. */
-/* La declara romzip.c como variable normal y aqui se RELLENA al arrancar. Ver su nota:
- * las dos versiones con simbolos debiles fallaron, una al enlazar y otra en silencio. */
-extern unsigned long uvm2_romzip_desc;
+/* SE DEFINE AQUI, que es donde se rellena. Estuvo un rato definido en romzip.c y declarado
+ * aqui, y eso rompia cualquier imagen que enlace el SDK SIN romzip.c — el banco de pruebas,
+ * por ejemplo. Al reves funciona siempre: el SDK del UVM2 va en todas las imagenes del
+ * UVM2, y quien no lo enlaza tampoco enlaza esto. Ver la nota de romzip.c para las dos
+ * versiones con simbolos debiles que fallaron antes. */
+unsigned long uvm2_romzip_desc = 0;
 
 uint32_t uvm2_romzip_bytes = 0;                /* para diagnosticar desde fuera */
 int      uvm2_romzip_error = 0;

@@ -685,6 +685,15 @@ mod comparativa {
     }
 }
 
+/// UN SOLO TURNO PARA TODOS LOS TESTS QUE MUEVEN KNOBS.
+///
+/// VCAP y MIN_T1 son GLOBALES y cargo corre los tests en paralelo. Habia un mutex POR
+/// MODULO, y dos candados distintos no se serializan entre si: `el_techo_de_t1_es_por_vector`
+/// fallaba solo cuando corria a la vez que los de `pentagono`, y pasaba al ejecutarlo suelto
+/// — el peor fallo posible, porque invita a culpar al codigo que acabas de tocar.
+#[cfg(test)]
+static TURNO: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod pentagono {
     use crate::ramp::{ramp_params, DRAW_SCALE, MIN_T1, VCAP, VCAP_SLOW};
@@ -717,7 +726,7 @@ mod pentagono {
         (ex as f64 / s as f64, ey as f64 / s as f64)
     }
 
-    static TURNO: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    use super::TURNO;
 
     #[test]
     fn las_figuras_cerradas_cierran() {
@@ -808,9 +817,7 @@ mod velocidad {
     use core::sync::atomic::Ordering;
     use std::println;
 
-    /// VCAP es un GLOBAL y cargo corre los tests en paralelo: sin turno, el que barre
-    /// valores se los cambia al otro por debajo y el fallo aparece una vez de cada diez.
-    static TURNO: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    use super::TURNO;
 
     fn ralf(dx: i32, dy: i32) -> (i32, u32) {
         let (mut x, mut y, mut s) = (dx, dy, 160u32);

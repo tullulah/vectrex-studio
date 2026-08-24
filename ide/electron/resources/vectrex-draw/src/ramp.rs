@@ -11,7 +11,7 @@
 //! Los knobs van `#[no_mangle]` para que el panel (`knobs/knobs.py`) los siga
 //! resolviendo por nombre corto ahora que no estan en el modulo `vinterface`.
 
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 
 pub const DRAW_SCALE: u8 = 0xA0; // T1CL scale factor (line length ∝ delta × scale).
 
@@ -347,6 +347,75 @@ pub static T1_EXTRA_Q8: AtomicU32 = AtomicU32::new(0);
 pub extern "C" fn vx_ramp_params(dx: i32, dy: i32, out_vx: *mut i32, out_vy: *mut i32,
                                  out_t1: *mut u32) {
     let (vx, vy, t1) = ramp_params(dx.clamp(-128, 127) as i8, dy.clamp(-128, 127) as i8);
+    unsafe {
+        if !out_vx.is_null() { *out_vx = vx as i32; }
+        if !out_vy.is_null() { *out_vy = vy as i32; }
+        if !out_t1.is_null() { *out_t1 = t1 as u32; }
+    }
+}
+
+
+/* ── LA CADENA, CON SU DEUDA ────────────────────────────────────────────────────────
+ *
+ * UNA sola implementacion para los tres consumidores. El 2026-08-24 habia tres decisiones
+ * distintas sobre lo mismo: la imagen del UVM2 difundia el residuo, el emulador tambien
+ * (por su cuenta) y el firmware del cartucho propio no lo hacia. Tres copias de una regla
+ * es la forma exacta de divergencia que costo la tarde entera.
+ *
+ * POR QUE HACE FALTA. `ramp_params` reparte un delta entre velocidad y tiempo, los dos
+ * ENTEROS, asi que un trazo suelto NO puede ser exacto. Su error vale como mucho media
+ * unidad y eso es inevitable. Lo evitable es que se SUME: llevando la cuenta de lo que se
+ * debe y pidiendoselo al trazo siguiente, la cadena queda exacta y no cuesta un ciclo.
+ *
+ * MEDIDO por el camino real, 84 trazos de 33 unidades: +6,30 unidades de deriva (2,5% de
+ * pantalla) sin esto, +0,04 con esto.
+ *
+ * LA DEUDA MUERE EN CADA SALTO. Un `moveto` reestablece la posicion por su cuenta, asi que
+ * arrastrarle el residuo de la cadena anterior seria corregir un error que ya no existe —
+ * el mismo fallo que el acumulador de deriva que sobrevivia a un re-cero. */
+
+/// Lo que se le debe al dibujo, en MILESIMAS de unidad, por eje.
+static DEUDA_X: AtomicI32 = AtomicI32::new(0);
+static DEUDA_Y: AtomicI32 = AtomicI32::new(0);
+
+/// Se olvida la deuda. Lo llama quien reposicione el haz: un salto o un re-cero.
+#[no_mangle]
+pub extern "C" fn vx_chain_reset() {
+    DEUDA_X.store(0, Ordering::Relaxed);
+    DEUDA_Y.store(0, Ordering::Relaxed);
+}
+
+/// Lo que la rampa recorre DE VERDAD, en milesimas: v * t1 / DRAW_SCALE con su fraccion.
+#[inline(always)]
+fn recorrido_mil(v: i32, t1: u16) -> i32 {
+    ((v as i64 * t1 as i64 * 1000) / DRAW_SCALE as i64) as i32
+}
+
+/// `ramp_params` para un trazo DENTRO DE UNA CADENA: pide el delta mas lo que se debia y
+/// anota lo que queda debiendo.
+pub fn ramp_params_chain(dx: i8, dy: i8) -> (i8, i8, u16) {
+    let (rx, ry) = (DEUDA_X.load(Ordering::Relaxed), DEUDA_Y.load(Ordering::Relaxed));
+    /* Al mas cercano, no truncando: truncar reintroduce el sesgo que esto viene a quitar. */
+    let redondea = |r: i32| if r >= 0 { (r + 500) / 1000 } else { (r - 500) / 1000 };
+    let px = (dx as i32 + redondea(rx)).clamp(-128, 127) as i8;
+    let py = (dy as i32 + redondea(ry)).clamp(-128, 127) as i8;
+
+    let (vx, vy, t1) = ramp_params(px, py);
+
+    /* Acotada: si un trazo se recorta, la deuda no puede crecer sin freno o el siguiente
+     * saldria disparado. Cuatro unidades es mucho mas de lo que un redondeo puede deber. */
+    DEUDA_X.store((rx + dx as i32 * 1000 - recorrido_mil(vx as i32, t1)).clamp(-4000, 4000),
+                  Ordering::Relaxed);
+    DEUDA_Y.store((ry + dy as i32 * 1000 - recorrido_mil(vy as i32, t1)).clamp(-4000, 4000),
+                  Ordering::Relaxed);
+    (vx, vy, t1)
+}
+
+/// La misma, para quien llama desde C. Ver `vx_ramp_params`.
+#[no_mangle]
+pub extern "C" fn vx_ramp_params_chain(dx: i32, dy: i32, out_vx: *mut i32, out_vy: *mut i32,
+                                       out_t1: *mut u32) {
+    let (vx, vy, t1) = ramp_params_chain(dx.clamp(-128, 127) as i8, dy.clamp(-128, 127) as i8);
     unsafe {
         if !out_vx.is_null() { *out_vx = vx as i32; }
         if !out_vy.is_null() { *out_vy = vy as i32; }
