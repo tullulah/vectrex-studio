@@ -1518,10 +1518,17 @@ export class Rp2350System implements ISystem, IBus {
           const py = Math.max(-128, Math.min(127, b + Math.round(this.rampResY)));
           const [vx, vy, t1] = rampParams(px, py);
           const rx = recorrido(vx, t1), ry = recorrido(vy, t1);
-          this.rampResX = Math.max(-4, Math.min(4, this.rampResX + a - rx));
-          this.rampResY = Math.max(-4, Math.min(4, this.rampResY + b - ry));
-          const nx = this.armBeamX + rx * ARM_ALG_SCALE;
-          const ny = this.armBeamY - ry * ARM_ALG_SCALE;
+          /* LA FRACCION VIVE EN LA DEUDA, NO EN LA POSICION. `recorrido` devuelve un valor
+           * con parte fraccionaria, y sumarselo a armBeamX lo convertia en un float — algo
+           * que este emulador nunca habia tenido: todo el resto del camino de dibujo lo
+           * trata como entero. Se redondea para la posicion y la fraccion se queda en la
+           * deuda, que es donde tiene sentido: asi la deriva sigue apareciendo (en cuanto
+           * la deuda pasa de una unidad) sin cambiarle el tipo a nada. */
+          const rxi = Math.round(rx), ryi = Math.round(ry);
+          this.rampResX = Math.max(-4, Math.min(4, this.rampResX + a - rxi));
+          this.rampResY = Math.max(-4, Math.min(4, this.rampResY + b - ryi));
+          const nx = this.armBeamX + rxi * ARM_ALG_SCALE;
+          const ny = this.armBeamY - ryi * ARM_ALG_SCALE;
           const cl = clipSegment(this.armBeamX, this.armBeamY, nx, ny);
           if (cl !== null) this.beam.addSegmentDirect(cl[0], cl[1], cl[2], cl[3], this.armIntensity);
           this.armBeamX = nx; this.armBeamY = ny;
