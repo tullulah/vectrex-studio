@@ -151,6 +151,8 @@ const PSM_FRCE_OFF = 0x004;
  * tanto NUNCA coincidia con PSM_BASE: el manejador no se ejecutaba jamas y el sintoma era
  * identico a no haberlo escrito. Se ve con una resta, sin encender nada. */
 const PSM_MASK = 0xFFFFC000;
+/** El bit del nucleo 1 dentro de FRCE_OFF. */
+const PSM_PROC1 = 0x01000000;
 
 // ── Timing ──────────────────────────────────────────────────────────────────
 /** RP2350 core cycles per Vectrex bus cycle (150 MHz / 1.5 MHz). */
@@ -709,10 +711,25 @@ export class Uvm2System implements ISystem, IBus {
         if (off === PSM_FRCE_OFF) {
           const bits = (data << shift) >>> 0;
           const alias = (addr >>> 12) & 3;    // 0 normal, 1 XOR, 2 SET, 3 CLR
+          const antes = this.psmFrceOff;
           if (alias === 1)      this.psmFrceOff = (this.psmFrceOff ^ bits) >>> 0;
           else if (alias === 2) this.psmFrceOff = (this.psmFrceOff | bits) >>> 0;
           else if (alias === 3) this.psmFrceOff = (this.psmFrceOff & ~bits) >>> 0;
           else this.psmFrceOff = ((this.psmFrceOff & ~(0xFF << shift)) | bits) >>> 0;
+
+          /* SOLTAR EL RESET DEL NUCLEO 1 -> EL NUCLEO 1 CONTESTA. Lo dice el pico-sdk al
+           * lado de la linea: "Bring core 1 back out of reset. It will drain its own
+           * mailbox FIFO, then push a 0 to our mailbox to tell us it has done this", y
+           * acto seguido hace un pop BLOQUEANTE esperando ese 0.
+           *
+           * Aqui no hay nucleo 1, asi que si nadie empuja ese 0 el reset no vuelve nunca.
+           * Es el otro extremo del mismo saludo: con VLD clavado a 1 se colgaba el DRENAJE
+           * (que lee mientras haya dato) y con VLD honesto se colgaba esta ESPERA. Las dos
+           * se resuelven modelando quien pone y quien quita el dato, no forzando el bit. */
+          if ((antes & PSM_PROC1) && !(this.psmFrceOff & PSM_PROC1)) {
+            this.fifoEco = 0;
+            this.fifoPendiente = true;
+          }
         }
         return;
       }
