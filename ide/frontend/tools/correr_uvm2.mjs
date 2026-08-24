@@ -24,6 +24,34 @@ for (let f = 0; f < Number(nFrames); f++) {
   if (segs.length) conVectores++;
 }
 console.log(`  ${nFrames} frames: ${total} segmentos, ${conVectores} frames con dibujo`);
+/* Los contadores internos: sin ellos "no dibuja" no distingue "no escribe a la VIA" de
+ * "escribe y el haz no se mueve", que se arreglan en sitios opuestos. */
+const q = (sys /** @type {any} */);
+console.log(`  escrituras a la VIA: ${q.viaWrites ?? '?'}   ciclos de bus: ${q.busCycle}` +
+            `   palabras del stream: ${q.pioPalabras ?? '?'}`);
+
+/* LOS CONTADORES DEL PROPIO JUEGO, leidos de su memoria por el simbolo del ELF. Dicen si
+ * el juego CREE que dibuja: si el emite 600 vectores y en pantalla salen 2, el problema
+ * esta en el camino; si el emite 2, esta en el juego. Son dos sitios opuestos. */
+if (elf) {
+  try {
+    const nm = execFileSync("arm-none-eabi-nm", [elf]).toString();
+    const l = nm.split("\n").find(x => x.endsWith(" uvm2_stats"));
+    if (l) {
+      const base = parseInt(l.split(" ")[0], 16);
+      const q = (sys /** @type {any} */);
+      const rd = (i) => q.read32(base + i * 4) >>> 0;
+      console.log(`  el juego dice: comandos=${rd(0)} bus=${rd(1)} vectores=${rd(9)} ` +
+                  `saltos=${rd(10)} descartados=${rd(6)} recals=${rd(7)}`);
+      /* Y POR QUE dibuja poco: si falta el romset, el juego pinta una X y nada mas. Esa
+       * es una respuesta completamente distinta de "el camino de dibujo esta roto". */
+      for (const sim of ["dk_rom_error", "uvm2_romzip_error", "uvm2_romzip_bytes"]) {
+        const ln = nm.split("\n").find(x => x.endsWith(" " + sim));
+        if (ln) console.log(`    ${sim} = ${q.read32(parseInt(ln.split(" ")[0], 16)) >>> 0}`);
+      }
+    }
+  } catch (e) { console.log("  (sin contadores:", String(e).slice(0, 60), ")"); }
+}
 
 /* DONDE ESTA EL NUCLEO 1. Saber que arranco no basta: si core 0 sigue esperandole, lo que
  * hace falta es donde se quedo EL. */

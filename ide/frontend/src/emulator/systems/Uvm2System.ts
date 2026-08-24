@@ -154,6 +154,41 @@ const PSM_MASK = 0xFFFFC000;
 /** El bit del nucleo 1 dentro de FRCE_OFF. */
 const PSM_PROC1 = 0x01000000;
 
+/* PIO0 — el flujo de bus por PIO+DMA (vectrex-bus). NO es una emulacion del PIO: es un
+ * modelo de LO QUE EL PROGRAMA HACE, que para dibujar es lo unico que importa.
+ *
+ * `bus_stream.pio` es un bucle de una escritura por periodo de E, alimentado por el TX
+ * FIFO. Cada palabra la arma `Layout::word(bus) = (bus >> out_base) << 1 | 1`, y el UVM2
+ * instala out_base = 0 con 27 pines (GP0..GP26) — o sea EXACTAMENTE el mapa que este
+ * emulador ya modela: datos 0-7, A0-A13 en 8-21, A14/A15 en 24/25, R/W en 26.
+ *
+ *     bit 0 = 1   escritura: los 27 bits siguientes van a los pines
+ *     bit 0 = 0, bit 1 = 1   aparcar N periodos (N-1 en los bits 2..25)
+ *     bit 0 = 0, bit 1 = 0   un periodo en silencio
+ *
+ * Sin esto el nucleo 1 se quedaba en `vectrex_bus::drain` para siempre: espera a que el
+ * FIFO se vacie, y un FIFO que nadie consume no se vacia nunca. */
+/* DMA canal 0 — QUIEN LLEVA DE VERDAD LAS PALABRAS AL PIO.
+ *
+ * La CPU no escribe el TX FIFO: `vbus_push` acumula en un lote en RAM y `batch_flush`
+ * programa el canal 0 (origen = el lote, destino = PIO_TXF0, cuenta = n) y lo dispara
+ * escribiendo CTRL_TRIG. Modelar solo TXF0 no veia NADA — medido: "palabras del stream: 0"
+ * con el juego dibujando por ese camino.
+ *
+ * Aqui la transferencia es SINCRONA: al disparar se consumen las n palabras de golpe. Por
+ * eso BUSY se lee siempre a cero, y `batch_flush` —que espera a que se libere— no gira. */
+const DMA_BASE       = 0x50000000;
+const DMA_CH_STRIDE  = 0x40;
+const DMA_READ_ADDR  = 0x00;
+const DMA_TRANS_COUNT = 0x08;
+const DMA_CTRL_TRIG  = 0x0C;
+const DMA_EN         = 1 << 0;
+
+const PIO0_TXF0  = 0x50200010;
+const PIO0_FSTAT = 0x50200004;
+const PIO0_BASE  = 0x50200000;
+const PIO_TXEMPTY_SM0 = 1 << 24;   // pio.h: FSTAT TXEMPTY empieza en el bit 24
+
 // ── Timing ──────────────────────────────────────────────────────────────────
 /** RP2350 core cycles per Vectrex bus cycle (150 MHz / 1.5 MHz). */
 const CPU_PER_BUS   = 100;
@@ -194,6 +229,14 @@ export class Uvm2System implements ISystem, IBus {
   private lanzamiento: number[] = [];
   private rastro1: number[] = [];
   private cpu1Perdido = false;
+  /** Media palabra del stream mientras llegan sus cuatro bytes. */
+  private pioLatch = 0;
+  /** Palabras de preambulo que quedan por tirar. Ver pioPalabra. */
+  private pioPreambulo = 2;
+  /** Registros del canal 0 del DMA, por indice de palabra. */
+  private dmaRegs = new Uint32Array(16);
+  /** Cuantas palabras del stream se han consumido. Solo para diagnostico. */
+  pioPalabras = 0;
   private via: Via6522;
   private beam = new Beam();
   private psg  = new Psg();
@@ -531,6 +574,44 @@ export class Uvm2System implements ISystem, IBus {
                 `sp=0x${(sp >>> 0).toString(16)}  pila=[${w.map(x => '0x' + (x >>> 0).toString(16)).join(', ')}]`);
   }
 
+  /** La transferencia del canal 0: n palabras del lote al TX FIFO, de golpe. */
+  private dmaTransferencia(): void {
+    const src = this.dmaRegs[DMA_READ_ADDR >>> 2] >>> 0;
+    const n   = this.dmaRegs[DMA_TRANS_COUNT >>> 2] & 0x0FFFFFFF;   // 31:28 = MODE
+    for (let i = 0; i < n && i < 65536; i++) {
+      this.pioPalabra(this.read32((src + i * 4) >>> 0) >>> 0);
+    }
+    this.dmaRegs[DMA_TRANS_COUNT >>> 2] = 0;
+  }
+
+  /** Una palabra del stream: se presenta en los pines y se corre su periodo de E.
+   *
+   * LAS DOS PRIMERAS SE TIRAN. El preambulo del .pio hace dos `pull block`: la primera
+   * palabra son 27 unos para `out pindirs` y la segunda el patron de PARK que va a X. Las
+   * dos tienen el bit 0 a uno, asi que sin saltarlas se leerian como escrituras y
+   * mandarian basura a la VIA en el primer frame. */
+  private pioPalabra(w: number): void {
+    if (this.pioPreambulo > 0) { this.pioPreambulo--; return; }
+    this.pioPalabras++;
+
+    const PINES = (1 << 27) - 1;
+    if (w & 1) {
+      this.gpioOut = ((this.gpioOut & ~PINES) | ((w >>> 1) & PINES)) >>> 0;
+      this.correPeriodoE();
+    } else if (w & 2) {
+      const n = ((w >>> 2) & 0xFFFFFF) + 1;      // la cuenta va como N-1, ver el .pio
+      for (let i = 0; i < n && i < 4096; i++) this.correPeriodoE();
+    } else {
+      this.correPeriodoE();                       // silencio: un periodo sin escribir
+    }
+  }
+
+  /** Un periodo de E completo, que es donde la VIA engancha (en el flanco de bajada). */
+  private correPeriodoE(): void {
+    if (!this.clkHigh) this.halfStep();   // subir
+    this.halfStep();                      // bajar: aqui se latchea
+  }
+
   /** Address currently on the bus, assembled from the GPIO pins. */
   private busAddress(): number {
     return (((this.gpioOut & ADDR_MASK) >>> 8)
@@ -637,6 +718,22 @@ export class Uvm2System implements ISystem, IBus {
         }
         return this.bootram[off];
       }
+    }
+
+    /* DMA: se lee lo ultimo escrito, y CTRL_TRIG SIN el bit BUSY — la transferencia ya
+     * ocurrio en el disparo, asi que nunca esta ocupado. */
+    if (((addr & 0xFFFFF000) >>> 0) === DMA_BASE) {
+      const off = addr & 0xFFC, shift = (addr & 3) * 8;
+      const word = this.dmaRegs[off >>> 2] ?? 0;
+      return (word >>> shift) & 0xFF;
+    }
+
+    /* PIO0.FSTAT: el TX FIFO SIEMPRE esta vacio porque cada palabra se consume en el acto,
+     * en la propia escritura. `drain` gira hasta ver TXEMPTY, asi que sin esto no sale. */
+    if (((addr & 0xFFFFF000) >>> 0) === PIO0_BASE) {
+      const off = addr & 0xFFC, shift = (addr & 3) * 8;
+      const word = off === (PIO0_FSTAT & 0xFFF) ? (PIO_TXEMPTY_SM0 | 0x0F) : 0;
+      return (word >>> shift) & 0xFF;
     }
 
     // PSM: solo FRCE_OFF, y solo para que multicore_reset_core1() pueda leer de vuelta
@@ -753,6 +850,29 @@ export class Uvm2System implements ISystem, IBus {
         }
         return;
       }
+      if (((addr & 0xFFFFF000) >>> 0) === DMA_BASE) {
+        const off = addr & 0xFFC, shift = (addr & 3) * 8;
+        const i = off >>> 2;
+        this.dmaRegs[i] = (((this.dmaRegs[i] ?? 0) & ~(0xFF << shift)) | (data << shift)) >>> 0;
+        // Solo el canal 0, que es el unico que usa el stream.
+        if (off === DMA_CTRL_TRIG && (addr & 3) === 3 &&
+            (this.dmaRegs[i] & DMA_EN) && off < DMA_CH_STRIDE) {
+          this.dmaTransferencia();
+        }
+        return;
+      }
+
+      /* PIO0.TXF0: la palabra del stream. Se consume EN EL ACTO — un periodo de E por
+       * escritura, que es lo que hace el programa del PIO. */
+      if (((addr & 0xFFFFF000) >>> 0) === PIO0_BASE) {
+        if ((addr & 0xFFC) === (PIO0_TXF0 & 0xFFF)) {
+          const shift = (addr & 3) * 8;
+          this.pioLatch = ((this.pioLatch & ~(0xFF << shift)) | (data << shift)) >>> 0;
+          if ((addr & 3) === 3) this.pioPalabra(this.pioLatch);
+        }
+        return;
+      }
+
       // PSM: FRCE_OFF con sus alias atomicos. Aqui no hay segundo nucleo que apagar; lo
       // unico que hace falta es que el registro RECUERDE, porque multicore_reset_core1()
       // gira leyendolo. Ver la nota de PSM_BASE.
