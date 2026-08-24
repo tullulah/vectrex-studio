@@ -149,6 +149,37 @@ impl Timings {
 /// sus comentarios son los que estaban. Lo unico que cambia es que las escrituras salen
 /// por el sumidero en vez de por `bus_write` directamente, que es lo que permite que la
 /// imagen del UVM2 use ESTE codigo y no una copia suya.
+/// LA CONTABILIDAD DE `Y_HELD` LA LLEVA EL EMISOR, no el backend.
+///
+/// `ramp_params` exige el bit 8 de `Y_HELD` para aplicar el tope selectivo, pero el
+/// estatico lo escribia CADA BACKEND por su cuenta — y el del UVM2 no lo hacia: guardaba
+/// su propio `s_y` para decidir el salto del mux y dejaba el de `ramp` a cero. Resultado:
+/// **VCAP_SLOW no salto NUNCA en ese cartucho**. Medido en consola el 2026-08-24, con
+/// VCAP_SLOW en 30, 16 y 8: VCAP_SLOW_HITS = 0 en los tres, y Y_HELD = 0 por la sonda.
+///
+/// Era un contrato invisible entre dos cajas: una lee un estatico que la otra tenia que
+/// acordarse de escribir. Y NO SIRVE ponerlo de valor por defecto del trait, que fue mi
+/// primer intento: `CSink` y el firmware SOBRESCRIBEN los dos metodos, asi que el defecto
+/// no correria justo en los que fallan. Va en los puntos de llamada, donde no se esquiva.
+///
+/// El callback del sumidero se queda: cada backend lo sigue usando para SU cache.
+/// QUIEN INVALIDA NO ES EL EMISOR. Apagar el haz NO descarga el S&H de Y: lo que lo
+/// pierde es que alguien toque el canal 0 del mux, y eso pasa al leer el JOYSTICK, que
+/// comparte el CD4052 con el haz. Es cosa de cada placa, asi que se expone y ya.
+///
+/// Casi lo llamo desde `beam_blanked`, que habria dejado `y_can_skip` en falso para
+/// siempre: cuatro escrituras y la ventana de carga de mas POR VECTOR, el 25% de su
+/// coste. Lo cazo el test del tope selectivo al salir a cero.
+#[inline(always)]
+pub fn y_hold_lost() {
+    crate::ramp::Y_HELD.store(0, Ordering::Relaxed);
+}
+
+#[inline(always)]
+fn y_hold_is(vy: i8) {
+    crate::ramp::Y_HELD.store(0x100 | (vy as u8 as u32), Ordering::Relaxed);
+}
+
 pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings) {
     sink.emit(REG_PORT_A, vy as u8, k.e(2)); // STA — Y velocity into D/A
     // VENTANA DE Y: se probo alargarla de `e(9)` a `y_mux_q8` (2 -> 14 ciclos de E),
@@ -170,7 +201,7 @@ pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings
     sink.emit(REG_SHIFT, 0x00, k.e(4)); // CLR shift — beam off
                                         // (CLR = 6 cyc; Y S&H still charging)
     sink.emit(REG_PORT_B, 0x01, k.e(4)); // INC — disable mux (Y sampled + held)
-    sink.y_held(vy); // deja el S&H cargado con SU vy: un draw_line que lo repita se lo salta
+    sink.y_held(vy); y_hold_is(vy); // deja el S&H cargado con SU vy: un draw_line que lo repita se lo salta
     sink.emit(REG_PORT_A, vx as u8, k.e(4)); // STB — X velocity into D/A (direct, no mux)
     sink.emit(REG_T1_LO, (t1 & 0xff) as u8, 0); // T1CL = escala (∝ longitud)
     // EL BYTE ALTO, DE VERDAD. Estuvo cocido a 0, y eso techaba la rampa en 255 aunque
@@ -194,7 +225,7 @@ pub fn draw_line_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timi
         sink.emit(REG_PORT_A, vy as u8, k.e(2)); // STA — Y velocity
         sink.emit(REG_PORT_B, 0x00, k.y_mux_q8); // CLR — mux ch0 (empieza a cargar Y)
         sink.emit(REG_PORT_B, 0x01, k.e(4)); // INC — mux off (Y muestreado y retenido)
-        sink.y_held(vy);
+        sink.y_held(vy); y_hold_is(vy);
     }
     sink.emit(REG_PORT_A, vx as u8, k.e(3)); // STB — X velocity / LDD #$FF00
     sink.emit(REG_T1_LO, (t1 & 0xff) as u8, 0); // T1CL = escala (∝ longitud)
@@ -257,7 +288,7 @@ pub fn draw_line_patterned_seq<S: BusSink>(
         sink.emit(REG_PORT_A, vy as u8, k.e(2));
         sink.emit(REG_PORT_B, 0x00, k.y_mux_q8);
         sink.emit(REG_PORT_B, 0x01, k.e(4));
-        sink.y_held(vy);
+        sink.y_held(vy); y_hold_is(vy);
     }
     sink.emit(REG_PORT_A, vx as u8, k.e(3));
     sink.emit(REG_T1_LO, (t1 & 0xff) as u8, 0);
@@ -750,5 +781,45 @@ mod velocidad {
 
         VCAP.store(127, Ordering::Relaxed);
         VCAP_SLOW.store(lento, Ordering::Relaxed);
+    }
+
+    /// EL TOPE SELECTIVO TIENE QUE DISPARARSE. Un contador a cero se lee igual que "no
+    /// hace falta", y asi paso desapercibido en el UVM2 desde siempre: su backend nunca
+    /// escribia `Y_HELD`, `ramp_params` no veia el bit 8 y la regla no salto NUNCA.
+    ///
+    /// Este test dibuja un zigzag por el emisor —el camino de verdad, con su sumidero— y
+    /// exige que el contador suba. Es lo unico que distingue "la regla no hace falta" de
+    /// "la regla esta muerta".
+    #[test]
+    fn el_tope_selectivo_se_dispara_de_verdad() {
+        use crate::emit::{draw_line_seq, BusSink, Timings};
+        use crate::ramp::VCAP_SLOW_HITS;
+        let _t = TURNO.lock().unwrap_or_else(|e| e.into_inner());
+
+        /// Un sumidero que NO implementa y_held ni beam_blanked, como el del UVM2: si la
+        /// contabilidad dependiera del backend, este no la llevaria y el test fallaria.
+        struct Mudo;
+        impl BusSink for Mudo {
+            fn emit(&mut self, _r: u8, _d: u8, _e: u32) {}
+            fn wait_ramp(&mut self, _t1: u16, _e: i32) {}
+        }
+
+        VCAP.store(127, Ordering::Relaxed);
+        VCAP_SLOW.store(30, Ordering::Relaxed);
+        let antes = VCAP_SLOW_HITS.load(Ordering::Relaxed);
+
+        // zigzag: cortos y con el signo de dy invertido en cada trazo, que es su firma
+        let mut s = Mudo;
+        let k = Timings { e6809_q8: 256, y_mux_q8: 256 * 14, moveto_settle_q8: 0,
+                          beam_on_q8: 0, blank_settle_q8: 256 * 12, keep_lit: false };
+        for i in 0..8 {
+            let dy = if i % 2 == 0 { -7 } else { 9 };
+            let (vx, vy, t1) = ramp_params(5, dy);
+            draw_line_seq(&mut s, vx, vy, t1, &k);
+        }
+        let saltos = VCAP_SLOW_HITS.load(Ordering::Relaxed) - antes;
+        println!("  el tope selectivo salto {saltos} veces en 8 trazos de zigzag");
+        assert!(saltos > 0,
+                "VCAP_SLOW no se disparo ni una vez: la regla esta MUERTA, no es que no haga falta");
     }
 }
