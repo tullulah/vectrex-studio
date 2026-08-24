@@ -46,6 +46,24 @@ if(DEFINED ENV{UVM2_PANIC_STASH} AND NOT "$ENV{UVM2_PANIC_STASH}" STREQUAL "0")
     add_compile_definitions(PICO_PANIC_FUNCTION=uvm2_panic_stash)
 endif()
 
+# EL HEAP, QUE POR DEFECTO SON 2 KB DE NADA.
+#
+# El pico-sdk reserva PICO_HEAP_SIZE = 2048 en una seccion `.heap` (crt0.S), y una imagen
+# del UVM2 no reserva memoria dinamica: ni el juego ni este SDK llaman a malloc. Con la
+# RAM al borde eso son 2 KB tirados — dkong se pasaba por 900 bytes solo por ellos.
+#
+# NO SE PONE A CERO PARA TODOS. Son 44 puertos y no puedo probar que ninguno reserve; un
+# malloc que devuelve NULL falla en silencio y lejos de aqui. Asi que es OPT-IN, y quien
+# lo encienda tiene una comprobacion que lo demuestra para SU imagen:
+#
+#     arm-none-eabi-nm imagen.elf | grep -E ' (malloc|_sbrk|_malloc_r)$'
+#
+# si eso no imprime nada, no hay quien pueda reservar y el heap sobra de verdad.
+if(DEFINED ENV{UVM2_HEAP})
+    message(STATUS "UVM2_HEAP: heap de $ENV{UVM2_HEAP} bytes (el pico-sdk pone 2048)")
+    add_compile_definitions(PICO_HEAP_SIZE=$ENV{UVM2_HEAP})
+endif()
+
 pico_sdk_init()
 
 add_executable(${UVM2_NAME}

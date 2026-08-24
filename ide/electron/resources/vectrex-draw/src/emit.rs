@@ -661,9 +661,13 @@ mod pentagono {
 
 #[cfg(test)]
 mod velocidad {
-    use crate::ramp::{ramp_params, VCAP};
+    use crate::ramp::{ramp_params, DRAW_SCALE, MIN_T1, VCAP, VCAP_SLOW};
     use core::sync::atomic::Ordering;
     use std::println;
+
+    /// VCAP es un GLOBAL y cargo corre los tests en paralelo: sin turno, el que barre
+    /// valores se los cambia al otro por debajo y el fallo aparece una vez de cada diez.
+    static TURNO: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn ralf(dx: i32, dy: i32) -> (i32, u32) {
         let (mut x, mut y, mut s) = (dx, dy, 160u32);
@@ -679,6 +683,7 @@ mod velocidad {
     /// corto, que es el hueco en los vertices.
     #[test]
     fn cual_es_el_vcap_que_iguala_a_ralf() {
+        let _t = TURNO.lock().unwrap_or_else(|e| e.into_inner());
         let v = [(0i32, 60i32), (-57, 19), (-35, -49), (35, -49), (57, 19), (0, 60)];
         for cap in [127u32, 96, 80, 70, 64] {
             VCAP.store(cap, Ordering::Relaxed);
@@ -695,5 +700,55 @@ mod velocidad {
                      if peor <= suyo_peor { "OK, no lo pasamos" } else { "MAS RAPIDO QUE EL" });
         }
         VCAP.store(127, Ordering::Relaxed);
+    }
+
+    /// EL TECHO DE t1 SE CALCULA POR VECTOR. Tres cosas, y las tres son comprobables:
+    ///
+    ///   a) a valores de fabrica no cambia nada — ningun delta pasa de DRAW_SCALE
+    ///   b) el eje menor NUNCA se redondea a cero, que es el limite que define el techo
+    ///   c) bajar VCAP le da recorrido de verdad al vector que puede frenarse, y NO se lo
+    ///      da al que se aplanaria — que es justo lo que una constante global no podia
+    ///
+    /// El (c) es el que justifica el cambio: con el techo fijo en 160 los dos recibian
+    /// 160 y VCAP quedaba saturado.
+    #[test]
+    fn el_techo_de_t1_es_por_vector() {
+        let _t = TURNO.lock().unwrap_or_else(|e| e.into_inner());
+        let s = DRAW_SCALE as i32;
+        let piso = MIN_T1.load(Ordering::Relaxed) as i32;
+        let lento = VCAP_SLOW.swap(0, Ordering::Relaxed);   // la regla del zigzag, aparte
+
+        // (a) y (b), sobre los 65.024 deltas posibles
+        VCAP.store(127, Ordering::Relaxed);
+        let (mut peor, mut cuantos) = (0i32, 0u32);
+        for dx in -127i32..=127 {
+            for dy in -127i32..=127 {
+                if dx == 0 && dy == 0 { continue; }
+                let (vx, vy, t1) = ramp_params(dx as i8, dy as i8);
+                let t1 = t1 as i32;
+                assert!(t1 >= piso, "t1 {t1} por debajo del suelo en ({dx},{dy})");
+                if t1 > peor { peor = t1; }
+                if t1 > s { cuantos += 1; }
+                // (b) ningun eje con delta se queda parado
+                if dx != 0 { assert_ne!(vx, 0, "eje X muerto en ({dx},{dy}) con t1={t1}"); }
+                if dy != 0 { assert_ne!(vy, 0, "eje Y muerto en ({dx},{dy}) con t1={t1}"); }
+            }
+        }
+        assert_eq!(cuantos, 0, "a VCAP=127 nadie deberia pasar de DRAW_SCALE");
+        assert_eq!(peor, s, "el maximo geometrico ES DRAW_SCALE, ni mas ni menos");
+
+        // (c) el mismo VCAP, dos vectores, dos respuestas
+        VCAP.store(8, Ordering::Relaxed);
+        let (_, _, diagonal) = ramp_params(127, 127);
+        let (_, vy_plano, plano) = ramp_params(127, 1);
+        println!("  VCAP=8 -> diagonal (127,127) t1={diagonal}   alargado (127,1) t1={plano}");
+        assert!(diagonal as i32 > s,
+                "el diagonal tiene eje menor de sobra: deberia poder frenarse mucho mas alla de {s}");
+        assert_eq!(plano as i32, s,
+                   "el alargado no puede frenarse mas sin aplanarse contra la horizontal");
+        assert_ne!(vy_plano, 0, "y por eso mismo su Y sigue viva");
+
+        VCAP.store(127, Ordering::Relaxed);
+        VCAP_SLOW.store(lento, Ordering::Relaxed);
     }
 }

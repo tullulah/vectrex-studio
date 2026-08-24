@@ -55,12 +55,26 @@ pub static MIN_T1: AtomicU32 = AtomicU32::new(31);
 #[no_mangle]
 pub static VCAP: AtomicU32 = AtomicU32::new(127);
 
-/// Techo de t1. 160 = DRAW_SCALE, que es donde estaba cocido; 255 = el maximo
-/// fisico del contador de 8 bits de la VIA. Subirlo alarga la rampa maxima y es
-/// lo que le devuelve recorrido a VCAP — ver el comentario en `ramp_params`.
+/// TOPE DE TRANSPORTE — no es una preferencia, es el ancho de un campo.
+///
+/// Sustituye a `T1_CEILING`, que valia 160 (o sea DRAW_SCALE: el sitio donde estaba
+/// cocido) con una justificacion FALSA escrita al lado. Decia que el contador T1 de la VIA
+/// es de 8 bits y que 255 era su tope fisico: el T1 del 6522 cuenta **16 bits** y `emit`
+/// escribe las dos mitades (T1CL y T1CH, ver `emit.rs`), asi que ni 160 ni 255 limitaban
+/// nada. El techo de verdad se calcula por vector en `ramp_params`.
+///
+/// Lo unico que queda como constante es esto, y por una razon comprobable: el retardo
+/// viaja en un campo de 12 BITS del comando del UVM2 (retardo 12 + registro 4 + dato 8 =
+/// 24 bits, 3 bytes por comando), asi que 4095 cuentas es lo maximo que el ejecutor puede
+/// esperar. Por encima el valor SE DERRAMA en los campos de registro y dato: comandos
+/// corruptos y pantalla negra sin un aviso.
+///
+/// En ciclos de E son 2,73 ms, un 13,7% de un frame, contra un t1 geometrico que no pasa
+/// de 160 — 25x de holgura. Runtime porque otra placa puede transportar el retardo de otra
+/// forma; si alguna lo hace mas estrecho, bajarlo aqui es todo lo que hace falta.
 #[used]
 #[no_mangle]
-pub static T1_CEILING: AtomicU32 = AtomicU32::new(DRAW_SCALE as u32);
+pub static T1_TRANSPORT: AtomicU32 = AtomicU32::new(4095);
 
 /// Map a vector delta to (velocity_x, velocity_y, t1_scale) for the variable-T1
 /// model. Preserves the exact displacement of the fixed model (delta·0x7F):
@@ -165,15 +179,41 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
     // preserved: velocity·t1 stays). Short vectors are already below VCAP → their
     // short dwell (the flicker win) is untouched. t1 is capped at 0x7F.
     let t1_vcap = (m * s / vcap.max(1)).max(1);
-    // EL TECHO, COMO KNOB. Estaba fijo en `s` (DRAW_SCALE = 160) y eso hacia que
-    // VCAP se quedara sin recorrido: con VCAP = 8 el calculo pide m*160/8 —2540 para
-    // un vector largo— y el recorte lo aplastaba a 160, asi que bajar mas VCAP ya no
-    // hacia nada. MEDIDO en pantalla el 2026-08-17: a VCAP = 8 el espolon casi se
-    // cierra y no termina de irse, que es exactamente la firma de un knob saturado.
+    // EL TECHO SE CALCULA POR VECTOR, NO SE FIJA.
     //
-    // t1 va al contador T1 de la VIA, que es de 8 bits: el techo fisico es 255, no
-    // 160. Los 95 que faltan son el recorrido que le devolvemos a VCAP.
-    let t1 = t1_floor.max(t1_vcap).min(T1_CEILING.load(Ordering::Relaxed) as i32);
+    // `t1` y la velocidad son las dos mitades del mismo producto —v = d*s/t1— asi que
+    // alargar la rampa hunde la velocidad, y el primero en morir es el EJE MENOR: cuando su
+    // v se redondea a cero el vector se aplasta contra su eje mayor. Exigiendo solo que se
+    // mueva, |v| >= 1:
+    //
+    //     t1 <= d_menor * s
+    //
+    // NO PUEDE CONTRADECIR AL SUELO: d_menor >= 1 da un techo >= s, y `t1_floor` ya esta
+    // acotado a s, asi que el intervalo nunca se invierte. Y NO SE PUEDE EXIGIR MAS: con
+    // |v| >= 2 el techo baja a d_menor*s/2, que para un (127,1) da 80 cuando su geometria
+    // pide 160 — le robaria longitud al eje mayor para salvarle precision al menor. Un
+    // vector muy alargado TIENE el eje menor casi parado; eso no es un defecto que
+    // arreglar, es lo que significa alargado.
+    //
+    // LO QUE ESTO ARREGLA. Con el techo fijo en 160, `t1_vcap` se aplastaba y VCAP se
+    // quedaba sin recorrido: a VCAP = 8 pedia 2540 y recibia 160, un knob saturado — que es
+    // exactamente lo que se veia en pantalla el 2026-08-17, el espolon casi cerrado sin
+    // terminar de irse. Ahora un diagonal largo llega a sus 2540, y en cambio el (127,1) se
+    // queda en 160, que es la respuesta CORRECTA para EL y la que una constante global no
+    // puede dar: frenarlo mas lo aplanaria contra la horizontal.
+    //
+    // A VALORES DE FABRICA NO CAMBIA NADA. Con VCAP = 127 ningun vector pasa de t1 = 160
+    // (barrido sobre los 65.024 deltas: 0,0% lo rebasan), asi que esto abre rango solo
+    // cuando se baja VCAP a proposito.
+    let d_menor = match ((dx as i32).abs(), (dy as i32).abs()) {
+        (0, b) => b,                  // sin eje X que perder
+        (a, 0) => a,
+        (a, b) => a.min(b),
+    };
+    let techo = (d_menor * s)
+        .min(T1_TRANSPORT.load(Ordering::Relaxed) as i32)
+        .max(min_t1);                 // por si el transporte se deja por debajo del suelo
+    let t1 = t1_floor.max(t1_vcap).min(techo);
     // ROUND, DO NOT TRUNCATE. Distance is velocity x time, so `vx * t1` has to stay
     // proportional to `dx * s` — but integer division always rounds DOWN, and the loss
     // is the fractional part of `s / t1`, which lands wherever it lands:
