@@ -195,6 +195,9 @@ export class Uvm2System implements ISystem, IBus {
   private lastPollPc = -1;             // spin detection, see maybeCollapseSpin
   /** PSM.FRCE_OFF: solo tiene que recordar. Ver la nota de PSM_BASE. */
   private psmFrceOff = 0;
+  /** Frames seguidos sin un solo vector, y si ya se aviso. Ver runFrame. */
+  private framesMudos = 0;
+  private avisoMudo = false;
   private gpioInLatch = 0;             // 32-bit GPIO_IN snapshot, see read8
 
   private vtor = SRAM_BASE;
@@ -858,6 +861,30 @@ export class Uvm2System implements ISystem, IBus {
       this.framesSinDibujo = 0;
     }
     this.canvas.renderFrame(draw, drawCnt, erse, erseCnt);
+    /* SI NO DIBUJA, DECIR DONDE SE QUEDO. Un emulador mudo no distingue "la imagen esta
+     * colgada" de "el emulador no arranca" ni de "no se llamo al emulador", y hoy me ha
+     * costado tres intentos en el fichero equivocado por no tener esto.
+     *
+     * Se informa UNA vez, tras varios frames seguidos sin un solo vector, con el PC mas
+     * visitado del perfil de muestreo — que es donde esta girando— y los ultimos saltos.
+     * Con eso, `addr2line` sobre el .elf da la funcion exacta. */
+    if (drawCnt === 0) {
+      if (++this.framesMudos === 30 && !this.avisoMudo) {
+        this.avisoMudo = true;
+        let peorPc = 0, peorN = 0;
+        for (const [pc, n] of this.perfil) if (n > peorN) { peorN = n; peorPc = pc; }
+        console.error(
+          `[Uvm2System] 30 frames SIN UN SOLO VECTOR. La imagen corre pero no dibuja.\n` +
+          `  gira sobre todo en pc=0x${peorPc.toString(16)} (${peorN} muestras de ` +
+          `${this.muestra >> 6})\n` +
+          `  ultimos saltos: ${this.historialSaltos().join(' ')}\n` +
+          `  para saber que funcion es:  arm-none-eabi-addr2line -f -e <juego>.elf ` +
+          `0x${peorPc.toString(16)}`);
+      }
+    } else {
+      this.framesMudos = 0;
+    }
+
     const segments = vectorsToSegments(draw, drawCnt, this.frameCounter);
     this.frameCounter++;
     return segments;
