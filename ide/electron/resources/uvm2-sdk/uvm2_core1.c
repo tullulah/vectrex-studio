@@ -62,7 +62,7 @@ uint32_t uvm2_firma_fallos, uvm2_firma_comparadas, uvm2_firma_leida, uvm2_firma_
  * the barrier core 0 issues before publishing. */
 extern volatile uint32_t uvm2_frame_request;
 extern volatile uint32_t uvm2_frame_done;
-extern const uint32_t   *uvm2_frame_buffer(uint32_t frame);
+extern const uint8_t    *uvm2_frame_buffer(uint32_t frame);
 extern uint32_t          uvm2_frame_length(uint32_t frame);
 
 /* PSG writes the game issued mid-frame, drained between frames.
@@ -143,16 +143,16 @@ static void core1_main(void)
          * dato esta mal y la busqueda no tenia nada que ver.
          *
          * Es un CONTROL, no la solucion: gasta en SRAM lo mismo que se queria ahorrar. */
-        static uint32_t s_stage[UVM2_CMD_CAPACITY];
-        const uint32_t *origen = uvm2_frame_buffer(served);
+        static uint8_t s_stage[UVM2_CMD_CAPACITY * 3u];
+        const uint8_t  *origen = uvm2_frame_buffer(served);
         const uint32_t  n      = uvm2_frame_length(served);
-        for (uint32_t i = 0; i < n && i < UVM2_CMD_CAPACITY; i++) s_stage[i] = origen[i];
+        for (uint32_t i = 0; i < n * 3u && i < UVM2_CMD_CAPACITY * 3u; i++) s_stage[i] = origen[i];
         uint32_t cycles = uvm2_exec(s_stage, n);
 #else
         {   /* La otra mitad de la firma: lo que core 1 va a reproducir DE VERDAD. */
-            const uint32_t *b = uvm2_frame_buffer(served);
+            const uint8_t *b = uvm2_frame_buffer(served);
             uint32_t n = uvm2_frame_length(served), h = 2166136261u;
-            for (uint32_t i = 0; i < n; i++) { h ^= b[i]; h *= 16777619u; }
+            for (uint32_t i = 0; i < n * 3u; i++) { h ^= b[i]; h *= 16777619u; }
             uvm2_firma_leida = h;
             if (n == uvm2_firma_n[served & 1u]) {
                 uvm2_firma_comparadas++;
@@ -201,20 +201,23 @@ static void core1_main(void)
          * joystick conversion lands in the beam's own sample-and-holds. */
         uvm2_draw_invalidate();
 
-#if UVM2_HZ == 0
-        /* SIN LIMITE, igual que en uvm2_draw.c. Esta guarda FALTABA aqui, y el resultado
-         * era que un juego de doble nucleo con UVM2_HZ=0 esperaba UVM2_CYCLES_PER_FRAME =
-         * 1500000/1 ciclos, o sea UN SEGUNDO por frame: 1 fps, medido en asteroids. */
+        /* EL ENGANCHE, EN TIEMPO DE EJECUCION. AQUI ES DONDE MANDA de verdad: con doble
+         * nucleo, uvm2_frame_end retorna antes de llegar a su propio pacer, asi que el que
+         * cuenta es este. (Lo descubri porque el simbolo del knob ni siquiera llegaba al
+         * ELF: nadie referenciaba el otro.)
+         *
+         * `cycles` SIEMPRE en bus_cycles, pase lo que pase. Antes, en la rama con enganche,
+         * se hacia `bus_cycles = UVM2_CYCLES_PER_FRAME`: el contador se PISABA con el
+         * presupuesto y marcaba 30000 aunque el dibujo costara la mitad o el doble. Por eso
+         * no se movia al barrer VCAP, y por eso publique un "CABE" que era falso.
+         *
+         * 0 = libre (Asteroids redibujaba en cuanto acababa su lista). != 0 = periodo fijo
+         * en ciclos de bus; 30000 = 50 Hz. */
         uvm2_stats.bus_cycles = cycles;
-#else
-        if (cycles < UVM2_CYCLES_PER_FRAME) {
-            uvm2_bus_delay(UVM2_CYCLES_PER_FRAME - cycles);
-            uvm2_stats.bus_cycles = UVM2_CYCLES_PER_FRAME;
-        } else {
-            uvm2_stats.overrun++;
-            uvm2_stats.bus_cycles = cycles;
+        if (uvm2_pacer_cycles != 0) {
+            if (cycles < uvm2_pacer_cycles) uvm2_bus_delay(uvm2_pacer_cycles - cycles);
+            else                            uvm2_stats.overrun++;
         }
-#endif
 
         uvm2_stats.us_rest = time_us_32() - t2;
         __asm volatile ("dmb" ::: "memory");       /* the work before the flag */
@@ -224,6 +227,20 @@ static void core1_main(void)
 
 void uvm2_core1_start(void)
 {
+    /* RESETEAR ANTES DE LANZAR, y esto es lo que hace posible cargar por SWD.
+     *
+     * `multicore_launch_core1` da por hecho que el nucleo 1 esta parado. En un arranque
+     * frio lo esta; cargando una imagen nueva por SWD encima de otra que ya corre, NO — el
+     * nucleo 1 sigue en el bucle de la imagen ANTERIOR, el saludo por la FIFO no llega
+     * nunca y la imagen nueva se queda colgada ahi. Localizado el 2026-08-24 con
+     * tools/sonda.sh: pc en multicore_fifo_rvalid, lr en multicore_launch_core1_raw. El
+     * sintoma es "no dibuja", o sea indistinguible de un fallo del programa.
+     *
+     * Intente resolverlo desde fuera apagando el nucleo por el PSM y colgue la consola
+     * entera. Desde dentro es una linea, la pone el propio pico-sdk y en arranque frio no
+     * hace nada. Con esto, tools/cargar.sh sirve tambien para imagenes de doble nucleo y el
+     * ciclo de prueba pasa de un minuto (sacar la SD, copiar, menu) a unos segundos. */
+    multicore_reset_core1();
     multicore_launch_core1(core1_main);
 }
 

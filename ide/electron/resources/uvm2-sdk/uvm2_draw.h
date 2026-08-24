@@ -42,6 +42,12 @@ void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int 
 /* SYS_MOVE_ABS — absolute position, measured from centre. */
 void uvm2_draw_move_abs(int x, int y);
 
+/* Periodo del frame en CICLOS DE BUS. 0 = libre: se redibuja en cuanto la lista esta
+ * hecha, como las recreativas. 30000 = enganchado a 50 Hz. Arranca en lo que diga UVM2_HZ.
+ * Es variable y no #define para poder conmutarlo con el juego en marcha: la pregunta
+ * "¿el temblor es un batido contra la red?" se contesta en segundos o no se contesta. */
+extern volatile uint32_t uvm2_pacer_cycles;
+
 /* Frame boundary.  uvm2_frame_end() blanks, re-centres, replays the stream and
  * then pads the frame out to exactly 30000 bus cycles (50 Hz), locked to the
  * Vectrex clock rather than to any RP2350 timer. */

@@ -611,7 +611,7 @@ struct vx_sink {
 struct vx_sink_extra { int (*y_can_skip)(void *, int32_t); int (*beam_is_lit)(void *);
                        void (*beam_lit)(void *); };
 struct vx_timings { uint32_t e6809_q8, y_mux_q8, moveto_settle_q8, beam_on_q8;
-                    int32_t blank_settle_q8; uint32_t keep_lit; };
+                    int32_t blank_settle_q8; uint32_t keep_lit; uint32_t x_settle_q8; };
 void vx_moveto_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
                    const struct vx_timings *);
 void vx_draw_line_patterned_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
@@ -748,6 +748,22 @@ volatile int32_t uvm2_beam_on_e = 0;        /* ciclos de E entre arrancar y ence
 volatile int32_t uvm2_y_mux_e   = 14;
 volatile int32_t uvm2_keep_lit  = 0;
 volatile int32_t uvm2_blank_settle_e = 12;  /* ciclos de E que sigue encendido al parar */
+/* ASENTAMIENTO DEL DAC EN X, antes de arrancar la rampa. Ver x_settle_q8 en emit.rs: la Y
+ * llega muestreada y retenida tras `y_mux` ciclos de ventana, y la X va directa al DAC con
+ * la rampa arrancando tres comandos despues. 0 = como siempre. */
+volatile int32_t uvm2_x_settle_e = 0;
+/* Periodo del frame en CICLOS DE BUS, 0 = libre. Arranca en lo que diga UVM2_HZ para no
+ * cambiarle el comportamiento a nadie; el panel lo mueve en caliente. 30000 = 50 Hz. */
+/* `used`: sin esto --gc-sections se lo lleva y el panel no lo encuentra. Le paso a este
+ * y no a los otros knobs porque a aquellos los referencia vx_cart_timings; a este solo lo
+ * mira uvm2_frame_end, y el enlazador decidio que sobraba. Un knob que no esta en el ELF
+ * no se puede tocar en caliente, que es todo el punto. */
+__attribute__((used)) volatile uint32_t uvm2_pacer_cycles =
+#if UVM2_HZ == 0
+    0u;
+#else
+    UVM2_CYCLES_PER_FRAME;
+#endif
 
 static struct vx_timings vx_cart_timings(void)
 {
@@ -769,6 +785,7 @@ static struct vx_timings vx_cart_timings(void)
      * en uno; `beam_on` sigue en 2 (el suyo es 3) hasta que haga falta. */
     k.blank_settle_q8 = uvm2_blank_settle_e * 256;
     k.keep_lit = (uint32_t)(uvm2_keep_lit ? 1 : 0);
+    k.x_settle_q8 = (uint32_t)(uvm2_x_settle_e > 0 ? uvm2_x_settle_e : 0) * 256u;
     return k;
 }
 
@@ -792,6 +809,18 @@ static struct vx_timings vx_cart_timings(void)
  * division no se acumula — que es justo lo que estabamos persiguiendo en el juego. */
 #define UVM2_MAX_PASO 127
 
+/* Lo que se le debe al dibujo, en MILESIMAS de unidad. Ver delta_una(). */
+static int32_t s_res_x, s_res_y;
+
+/* LO QUE LA RAMPA VA A RECORRER DE VERDAD, en milesimas: vx * t1 / DRAW_SCALE. Ni `dx` ni
+ * `vx*t1/160` redondeado — el valor exacto con su fraccion, que es lo unico que permite
+ * saber cuanto se debe. */
+static int32_t recorrido_mil(int32_t v, uint32_t t1)
+{
+    return (int32_t)(((int64_t)v * (int64_t)t1 * 1000) / 160);
+}
+
+
 static void trocear(int dx, int dy, void (*emite)(int, int))
 {
     int m = (dx < 0 ? -dx : dx);
@@ -811,6 +840,11 @@ static void trocear(int dx, int dy, void (*emite)(int, int))
 
 static void move_una(int dx, int dy)
 {
+    /* LA DEUDA MUERE AQUI. Un salto reestablece la posicion por su cuenta, asi que
+     * arrastrarle el residuo de la cadena anterior seria corregir un error que ya no
+     * existe — el mismo fallo que el acumulador de deriva que sobrevivia a un re-cero. */
+    s_res_x = 0; s_res_y = 0;
+
     {
         int32_t vx, vy; uint32_t t1;
         s_pos_x += dx;
@@ -826,19 +860,54 @@ static void move_una(int dx, int dy)
 
 void uvm2_draw_move(int dx, int dy){ trocear(dx, dy, move_una); }
 
+
+/* DIFUNDIR EL RESIDUO AL VECTOR SIGUIENTE, que es lo que hace exacta una CADENA aunque
+ * cada trazo suelto no pueda serlo.
+ *
+ * `ramp_params` reparte un delta entre velocidad y tiempo, y las dos son ENTERAS: la
+ * distancia real casi nunca es la pedida. El error de un trazo es despreciable, pero tiene
+ * SIGNO CONSTANTE, asi que en una cadena se suma. MEDIDO en el host el 2026-08-24, 84
+ * trazos encadenados de 33 unidades:
+ *
+ *     VCAP=127  +6,30 u de deriva (+2,5% de pantalla)     VCAP=32   0,00
+ *     VCAP= 64 +16,80 u          (+6,6%)                  VCAP=21   0,00
+ *
+ * Y ESO EXPLICA LO QUE SE VEIA. A VCAP bajo `t1` topa en T1_TRANSPORT y vx*t1/160 sale
+ * clavado; a VCAP alto no, y la cadena deriva. O sea que "a VCAP alto dibuja mal y rapido,
+ * a VCAP bajo dibuja bien y lento" NO era el amplificador sin poder seguir al haz: era
+ * nuestro redondeo, y bajar VCAP lo tapaba pagando 3,8 veces mas ciclos de rampa.
+ *
+ * Llevando la cuenta de lo que se debe y sumandoselo al siguiente, la cadena queda exacta
+ * a cualquier VCAP y no cuesta un solo ciclo. Se pide `dx + debido`, se mira lo que la
+ * rampa dara, y la diferencia queda anotada. */
 static void delta_una(int dx, int dy)
 {
-    {
-        int32_t vx, vy; uint32_t t1;
-        s_pos_x += dx;
-        s_pos_y += dy;
-        vx_ramp_params(dx, dy, &vx, &vy, &t1);
-        struct vx_sink sink = vx_cart_sink();
-        struct vx_timings k = vx_cart_timings();
-        vx_draw_line_seq(&sink, vx, vy, t1, &k);
-        uvm2_stats.vectors++;
-        uvm2_stats.ramp_cycles += t1;
-    }
+    int32_t vx, vy; uint32_t t1;
+    s_pos_x += dx;
+    s_pos_y += dy;
+
+    /* Se pide el delta MAS lo que se debia del anterior. El redondeo a entero es a la
+     * proxima, no truncando: truncar reintroduce el sesgo que esto viene a quitar. */
+    int px = dx + ((s_res_x >= 0 ? s_res_x + 500 : s_res_x - 500) / 1000);
+    int py = dy + ((s_res_y >= 0 ? s_res_y + 500 : s_res_y - 500) / 1000);
+    if (px > 127) px = 127; else if (px < -128) px = -128;
+    if (py > 127) py = 127; else if (py < -128) py = -128;
+
+    vx_ramp_params(px, py, &vx, &vy, &t1);
+
+    /* Lo que se debe = lo que se queria menos lo que la rampa dara. Se acumula en
+     * milesimas, y se acota: si un trazo se recorta (px saturado) la deuda no puede
+     * crecer sin freno o el siguiente saldria disparado. */
+    s_res_x += (int32_t)dx * 1000 - recorrido_mil(vx, t1);
+    s_res_y += (int32_t)dy * 1000 - recorrido_mil(vy, t1);
+    if (s_res_x >  4000) s_res_x =  4000; else if (s_res_x < -4000) s_res_x = -4000;
+    if (s_res_y >  4000) s_res_y =  4000; else if (s_res_y < -4000) s_res_y = -4000;
+
+    struct vx_sink sink = vx_cart_sink();
+    struct vx_timings k = vx_cart_timings();
+    vx_draw_line_seq(&sink, vx, vy, t1, &k);
+    uvm2_stats.vectors++;
+    uvm2_stats.ramp_cycles += t1;
 }
 
 void uvm2_draw_delta(int dx, int dy){ trocear(dx, dy, delta_una); }
@@ -1193,20 +1262,31 @@ void uvm2_frame_end(void)
     /* Lock the frame to the Vectrex clock rather than to an RP2350 timer:
      * 1.5 MHz / 50 Hz = 30000 bus cycles exactly.  The clamp stays asserted
      * through the wait; uvm2_frame_begin() releases it. */
-#if UVM2_HZ == 0
-    /* SIN LIMITE. Ni se espera ni se cuenta overrun: no hay presupuesto que pasarse.
-     * Es lo que hacian las recreativas vectoriales — Asteroids redibujaba en cuanto
-     * terminaba su lista, y por eso se apagaba un poco al llenarse de rocas. */
-    s_frame_cycles = cycles;
-#else
-    if (cycles < UVM2_CYCLES_PER_FRAME) {
-        uvm2_bus_delay(UVM2_CYCLES_PER_FRAME - cycles);
-        s_frame_cycles = UVM2_CYCLES_PER_FRAME;
+    /* EL ENGANCHE, EN TIEMPO DE EJECUCION. Era `#if UVM2_HZ`, o sea un flasheo por valor
+     * para responder a una pregunta de segundos.
+     *
+     * Y LA PREGUNTA IMPORTA. Observado en consola el 2026-08-24 sobre la rejilla, con la
+     * geometria QUIETA: subiendo X_SETTLE —que solo cambia TIEMPOS— el temblor se hace mas
+     * RAPIDO. Eso no es temblor, es un BATIDO: la imagen se redibuja a F y algo periodico
+     * pasa a G fija, y lo que se ve moverse es |F - G|. El sospechoso de G son los 50 Hz de
+     * la red sobre la fuente y el amplificador de deflexion — encaja ademas con que sea
+     * casi todo horizontal, porque el rizado no acopla igual en los dos ejes.
+     *
+     * Si es eso, ENGANCHAR el dibujo a 50 Hz deja el rizado en la misma fase cada frame y
+     * el desplazamiento pasa de moverse a ser un sesgo fijo, o sea invisible. Con el
+     * enganche puesto hay que asegurarse ademas de que el dibujo CABE: un frame que se pasa
+     * pierde el enganche y dura 40 ms, y alternar 20 y 40 ms tiembla por otro camino.
+     *
+     * 0 = libre (Asteroids). != 0 = enganchado a ese periodo en ciclos de bus. */
+    if (uvm2_pacer_cycles == 0) {
+        s_frame_cycles = cycles;
+    } else if (cycles < uvm2_pacer_cycles) {
+        uvm2_bus_delay(uvm2_pacer_cycles - cycles);
+        s_frame_cycles = uvm2_pacer_cycles;
     } else {
         uvm2_stats.overrun++;
         s_frame_cycles = cycles;
     }
-#endif
 
     /* EL PERIODO REAL DEL FRAME, en microsegundos de reloj de pared.
      *

@@ -235,6 +235,23 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
         .min(T1_TRANSPORT.load(Ordering::Relaxed) as i32)
         .max(min_t1);                 // por si el transporte se deja por debajo del suelo
     let t1 = t1_floor.max(t1_vcap).min(techo);
+    // COMPENSAR EL ARRANQUE EN VEZ DE FRENAR EL HAZ.
+    //
+    // OBSERVADO en consola el 2026-08-24 sobre la rejilla: con VCAP alto el dibujo "se va"
+    // —se queda corto— pero NO tiembla, o sea que el error es ESTATICO. Con VCAP bajo la
+    // geometria sale bien y lo que tiembla es el framerate, porque t1 se dispara.
+    //
+    // Un error estatico no se arregla frenando: se compensa. Si el amplificador tarda un
+    // tiempo FIJO en coger velocidad, el haz recorre v*(t1 - T) en vez de v*t1. Alargar t1
+    // en T devuelve la distancia SIN tocar la velocidad, y cuesta T ciclos por vector en
+    // vez de multiplicar t1 por 2,5 como hace bajar VCAP.
+    //
+    // T es un TIEMPO, asi que su peso relativo es mayor en los vectores cortos — que es
+    // exactamente la firma de "el dibujo se va" cuando el haz corre rapido.
+    //
+    // 0 = como siempre. Se ajusta en caliente desde el panel; el valor bueno es el que
+    // hace que la rejilla mida lo que dice medir.
+    let t1 = t1 + T1_LAG.load(Ordering::Relaxed) as i32;
     // ROUND, DO NOT TRUNCATE. Distance is velocity x time, so `vx * t1` has to stay
     // proportional to `dx * s` — but integer division always rounds DOWN, and the loss
     // is the fractional part of `s / t1`, which lands wherever it lands:
@@ -260,6 +277,12 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
     let vy = round_div(dy as i32 * s).clamp(-128, 127) as i8;
     (vx, vy, t1 as u16)
 }
+
+/// Cuentas que se le suman a t1 para compensar lo que el amplificador tarda en coger
+/// velocidad. Ver el bloque en `ramp_params`. 0 = comportamiento de siempre.
+#[used]
+#[no_mangle]
+pub static T1_LAG: AtomicU32 = AtomicU32::new(0);
 
 /// 0 = no se sabe que hay en el S&H. Si no, 0x100 | vy.
 #[used]

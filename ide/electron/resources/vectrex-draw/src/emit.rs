@@ -133,6 +133,22 @@ pub struct Timings {
     /// Encadenar trazos iluminados sin apagar entre medias. Ahorra la costura de cada
     /// vertice; a cambio, un frame que acabe iluminado deja el haz encendido.
     pub keep_lit: bool,
+    /// LO QUE SE LE DEJA AL DAC PARA ASENTAR LA VELOCIDAD EN X, antes de arrancar la rampa.
+    ///
+    /// LOS DOS EJES NO ESTAN EN IGUALDAD, y esto lo iguala. La Y se MUESTREA: se escribe al
+    /// DAC, se abre el mux `y_mux_q8` ciclos para que cargue el sample-and-hold, y se
+    /// cierra — o sea que llega asentada. La X va DIRECTA al DAC y la rampa arranca tres
+    /// comandos despues, sin ventana ninguna. Si el DAC no ha llegado, la velocidad en X
+    /// del principio del trazo es la que sea.
+    ///
+    /// OBSERVADO en consola el 2026-08-24 sobre la rejilla, geometria QUIETA: las lineas
+    /// VERTICALES se mueven unos 5 mm en horizontal y las horizontales estan bastante mas
+    /// quietas. Una vertical se dibuja con vx = 0 y su X la fija el salto anterior; una
+    /// horizontal lleva la X en la rampa. Que tiemble justo el eje sin ventana de
+    /// asentamiento es la firma que hay que comprobar.
+    ///
+    /// 0 = como siempre. Es un knob para poder refutarlo en un minuto y sin recompilar.
+    pub x_settle_q8: u32,
 }
 
 impl Timings {
@@ -211,7 +227,7 @@ pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings
                                         // (CLR = 6 cyc; Y S&H still charging)
     sink.emit(REG_PORT_B, 0x01, k.e(4)); // INC — disable mux (Y sampled + held)
     sink.y_held(vy); // deja el S&H cargado con SU vy: un draw_line que lo repita se lo salta
-    sink.emit(REG_PORT_A, vx as u8, k.e(4)); // STB — X velocity into D/A (direct, no mux)
+    sink.emit(REG_PORT_A, vx as u8, k.e(4) + k.x_settle_q8); // STB — X velocity (directo, sin mux)
     sink.emit(REG_T1_LO, (t1 & 0xff) as u8, 0); // T1CL = escala (∝ longitud)
     // EL BYTE ALTO, DE VERDAD. Estuvo cocido a 0, y eso techaba la rampa en 255 aunque
     // el contador T1 de la VIA sea de 16 bits — 8 bits de recorrido tirados.
@@ -236,7 +252,7 @@ pub fn draw_line_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timi
         sink.emit(REG_PORT_B, 0x01, k.e(4)); // INC — mux off (Y muestreado y retenido)
         sink.y_held(vy);
     }
-    sink.emit(REG_PORT_A, vx as u8, k.e(3)); // STB — X velocity / LDD #$FF00
+    sink.emit(REG_PORT_A, vx as u8, k.e(3) + k.x_settle_q8); // STB — X velocity
     sink.emit(REG_T1_LO, (t1 & 0xff) as u8, 0); // T1CL = escala (∝ longitud)
 
     // EL ORDEN IMPORTA, y en su dia estaba al reves. Encender ANTES de arrancar la rampa
@@ -418,6 +434,7 @@ mod prueba {
             beam_on_q8,
             blank_settle_q8,
             keep_lit: false,
+            x_settle_q8: 0,
         }
     }
 
@@ -552,6 +569,9 @@ pub struct CTimings {
     pub beam_on_q8: u32,
     pub blank_settle_q8: i32,
     pub keep_lit: u32,
+    /* AL FINAL A PROPOSITO: este struct cruza la caja hacia C, asi que un campo nuevo va
+     * detras para no mover los que ya estaban. Ver x_settle_q8 en Timings. */
+    pub x_settle_q8: u32,
 }
 
 impl CTimings {
@@ -563,6 +583,7 @@ impl CTimings {
             beam_on_q8: self.beam_on_q8,
             blank_settle_q8: self.blank_settle_q8,
             keep_lit: self.keep_lit != 0,
+            x_settle_q8: self.x_settle_q8,
         }
     }
 }
