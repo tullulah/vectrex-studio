@@ -3064,6 +3064,13 @@ export const EmulatorPanel: React.FC = () => {
     if (!electronAPI?.onCompiledBin) return;
 
     const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null; libvpyAsm?: string | null }) => {
+    /* LA PRIMERA TRAZA DE LA CADENA. Todo lo que hay de aqui en adelante ya estaba
+     * instrumentado —"uvm2: bin=…", "✓ .um2 image loaded", "[loadUvm2] START"— asi que si
+     * no sale NINGUNA, el problema no esta en el emulador sino en que este manejador no se
+     * llama, o llega con otro `target`. Distinguir esas dos cosas es lo unico que falta, y
+     * sin ella hoy he depurado tres veces el fichero equivocado. */
+    console.log('[EmulatorPanel] handleCompiledBin: target=', payload?.target,
+                'bytes=', payload?.base64?.length ?? 0, 'bin=', payload?.binPath);
       // Clear the run-mode badge first: only the branch that handles THIS build
       // may set it. Without this it survives into the next build and a project
       // compiled for m6809 keeps claiming it is emulating whatever ran last.

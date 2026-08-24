@@ -358,7 +358,9 @@ export class Uvm2System implements ISystem, IBus {
    * first two words are the initial SP and the entry point. The length field
    * is a WORD count, not a byte count.
    */
+  /** ARRANCADO: si esta traza sale, el emulador del UVM2 tiene la imagen y ha empezado. */
   init(um2: Uint8Array): void {
+    console.log('[Uvm2System] ARRANCANDO con una imagen de', um2.length, 'bytes');
     this.resets = 0;
     this.clocks.fill(0);
     this.bootram.fill(0);
