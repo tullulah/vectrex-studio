@@ -63,13 +63,17 @@ static uintptr_t s_desc[4];                    /* [0]=magia [1]=base [2]=tamaño
  *
  * Publicandolo con nombre propio nadie se disputa nada: el juego VPy conserva SU cabecera
  * y romzip.c mira aqui primero. */
-const uintptr_t uvm2_romzip_desc = (uintptr_t)s_desc;
+/* La declara romzip.c como variable normal y aqui se RELLENA al arrancar. Ver su nota:
+ * las dos versiones con simbolos debiles fallaron, una al enlazar y otra en silencio. */
+extern unsigned long uvm2_romzip_desc;
 
 uint32_t uvm2_romzip_bytes = 0;                /* para diagnosticar desde fuera */
 int      uvm2_romzip_error = 0;
 
 void uvm2_romzip_cargar(void)
 {
+    uvm2_romzip_desc = (unsigned long)(uintptr_t)s_desc;
+
     if (!&game_romset_name || !game_romset_name[0]) return;   /* juego sin romset */
 
     char ruta[80];

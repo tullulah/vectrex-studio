@@ -687,36 +687,118 @@ mod comparativa {
 
 #[cfg(test)]
 mod pentagono {
-    use crate::ramp::{ramp_params, DRAW_SCALE};
-    use std::println;
+    use crate::ramp::{ramp_params, DRAW_SCALE, MIN_T1, VCAP, VCAP_SLOW};
+    use core::sync::atomic::Ordering;
+    use std::{format, println, vec, vec::Vec};
 
-    /// EL PENTAGONO DE `individual_tests/draw_line`, que en la UVM2 sale con los vertices
-    /// abiertos. Coordenadas del fuente .vpy; el SDK manda DELTAS relativos y lleva el la
-    /// posicion, asi que es una polilinea: un movimiento y cinco trazos encadenados.
+    /// UNA FIGURA CERRADA TIENE QUE CERRAR. Es la propiedad que caza esta familia entera
+    /// de fallos, y por eso se comprueba sobre varias formas y varios ajustes en vez de
+    /// sobre un pentagono suelto.
     ///
-    /// Si cada trazo recorriera su delta exacto, los vertices cerrarian por construccion.
-    /// Aqui se comprueba cuanto se desvia cada uno, en unidades de dispositivo
-    /// (distancia = velocidad x tiempo, contra el delta x DRAW_SCALE que se pedia).
-    #[test]
-    fn cierra_el_pentagono() {
-        let v = [(0i32, 60i32), (-57, 19), (-35, -49), (35, -49), (57, 19), (0, 60)];
+    /// ESTE TEST YA EXISTIA Y NO PODIA FALLAR. Media la desviacion acumulada al cerrar, la
+    /// IMPRIMIA, y no tenia un solo assert: un informe disfrazado de test, que sale "ok" en
+    /// cada `cargo test` mientras la cifra crece. El error de +6,30 unidades que se encontro
+    /// el 2026-08-24 —y que costo una tarde de knobs en la consola— estaba ahi desde el
+    /// principio, impreso, sin que nadie lo leyera.
+    ///
+    /// POR QUE ESTA PROPIEDAD BASTA: `ramp_params` reparte un delta entre velocidad y
+    /// tiempo, los dos enteros, asi que un trazo suelto NO puede ser exacto. El error de
+    /// uno solo es invisible; lo que se ve es que tiene SIGNO CONSTANTE y se suma. Un
+    /// poligono cerrado convierte esa suma en una cifra: si el sesgo existe, no cierra.
+    fn desvio_al_cerrar(v: &[(i32, i32)]) -> (f64, f64) {
         let s = DRAW_SCALE as i64;
-        println!("\n  trazo |   delta   |  vx  vy  t1 | recorrido    | pedido      | error");
-        println!("  ------+-----------+-------------+--------------+-------------+-------");
         let (mut ex, mut ey) = (0i64, 0i64);
-        for i in 0..5 {
+        for i in 0..v.len() - 1 {
             let (dx, dy) = (v[i + 1].0 - v[i].0, v[i + 1].1 - v[i].1);
             let (vx, vy, t1) = ramp_params(dx as i8, dy as i8);
-            let (rx, ry) = (vx as i64 * t1 as i64, vy as i64 * t1 as i64);
-            let (px, py) = (dx as i64 * s, dy as i64 * s);
-            ex += rx - px;
-            ey += ry - py;
-            println!("  {i:5} | {dx:4},{dy:4} | {vx:4}{vy:4}{t1:4} | {rx:6},{ry:6} | {px:5},{py:5} | {:3},{:3}",
-                     rx - px, ry - py);
+            ex += vx as i64 * t1 as i64 - dx as i64 * s;
+            ey += vy as i64 * t1 as i64 - dy as i64 * s;
         }
-        println!("\n  DESVIACION ACUMULADA al cerrar: {ex}, {ey} unidades de dispositivo");
-        println!("  (un delta de 1 son {s} unidades, asi que son {:.2}, {:.2} unidades de pantalla)\n",
-                 ex as f64 / s as f64, ey as f64 / s as f64);
+        (ex as f64 / s as f64, ey as f64 / s as f64)
+    }
+
+    static TURNO: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn las_figuras_cerradas_cierran() {
+        let _t = TURNO.lock().unwrap_or_else(|e| e.into_inner());
+        let lento = VCAP_SLOW.swap(0, Ordering::Relaxed);   // una cosa cada vez
+
+        // pentagono, cuadrado grande, cuadrado pequeño, zigzag que vuelve, diagonal larga
+        let figuras: [(&str, Vec<(i32, i32)>); 5] = [
+            ("pentagono", vec![(0,60),(-57,19),(-35,-49),(35,-49),(57,19),(0,60)]),
+            ("cuadrado grande", vec![(-100,-100),(100,-100),(100,100),(-100,100),(-100,-100)]),
+            ("cuadrado pequeño", vec![(-6,-6),(6,-6),(6,6),(-6,6),(-6,-6)]),
+            // el zigzag vuelve EN PASOS: cerrarlo de un trazo pedia -180 unidades y una
+            // rampa solo expresa +-127, asi que se recortaba y el test acusaba al modelo de
+            // un fallo que era de la figura. Lo caz el propio test.
+            ("zigzag", { let mut v = vec![(-90,0)];
+                         for i in 1..=12 { v.push((-90 + i*15, if i % 2 == 0 { 0 } else { 9 })); }
+                         for i in 1..=12 { v.push((90 - i*15, 0)); }
+                         v }),
+            ("diagonal", vec![(-120,-120),(120,120),(-120,-120)]),
+        ];
+
+        // TOLERANCIA POR TRAZO, no absoluta: un trazo no puede ser exacto, pero el error no
+        // puede CRECER con la longitud de la cadena. Media unidad por trazo es generoso —
+        // el redondeo de una rampa vale como mucho eso— y aun asi el sesgo lo rompe.
+        let mut mal = Vec::new();
+        for (cap, piso) in [(127u32, 31u32), (64, 31), (21, 31), (127, 8), (127, 60)] {
+            VCAP.store(cap, Ordering::Relaxed);
+            MIN_T1.store(piso, Ordering::Relaxed);
+            for (nombre, v) in figuras.iter() {
+                let (ex, ey) = desvio_al_cerrar(v);
+                let n = (v.len() - 1) as f64;
+                let tope = 0.5 * n;
+                println!("  VCAP {cap:3} MIN_T1 {piso:3}  {nombre:16} cierra a {ex:+7.2},{ey:+7.2}  (tope +-{tope:.1})");
+                if ex.abs() > tope || ey.abs() > tope {
+                    mal.push(format!("{nombre} a VCAP={cap} MIN_T1={piso}: {ex:+.2},{ey:+.2}"));
+                }
+            }
+        }
+        VCAP.store(127, Ordering::Relaxed);
+        MIN_T1.store(31, Ordering::Relaxed);
+        VCAP_SLOW.store(lento, Ordering::Relaxed);
+        assert!(mal.is_empty(), "figuras que no cierran:\n  {}", mal.join("\n  "));
+    }
+
+    /// EL SESGO SE DETECTA EN LA MEDIA, NO EN EL TAMAÑO, y esto es lo que habria cazado el
+    /// fallo del 2026-08-24 cuando se introdujo.
+    ///
+    /// Un trazo suelto NO puede ser exacto: velocidad y tiempo son enteros. Su error vale
+    /// como mucho media unidad y eso es inevitable. Lo que NO es inevitable es que el error
+    /// tenga siempre el MISMO SIGNO — entonces deja de ser ruido y pasa a ser una deuda que
+    /// se suma trazo a trazo. El fallo real eran +0,075 unidades por trazo: invisible en
+    /// cualquier tope por trazo, y +6,30 al cabo de 84.
+    ///
+    /// Asi que se mide la MEDIA sobre todos los deltas. Ruido honesto promedia a cero;
+    /// un sesgo, no.
+    #[test]
+    fn el_error_de_la_rampa_no_tiene_sesgo() {
+        let _t = TURNO.lock().unwrap_or_else(|e| e.into_inner());
+        let lento = VCAP_SLOW.swap(0, Ordering::Relaxed);
+        let s = DRAW_SCALE as f64;
+        let mut mal = Vec::new();
+        for cap in [127u32, 96, 64, 32, 21] {
+            VCAP.store(cap, Ordering::Relaxed);
+            let (mut suma, mut n) = (0f64, 0f64);
+            for d in 1..=127i32 {
+                let (vx, _, t1) = ramp_params(d as i8, 0);
+                suma += (vx as f64 * t1 as f64 - d as f64 * s) / s;
+                n += 1.0;
+            }
+            let media = suma / n;
+            println!("  VCAP {cap:3}  error medio por trazo: {media:+.4} unidades");
+            // 0,02 unidades por trazo son 1,7 al cabo de 84 — ya visible. El listen tiene
+            // que estar por debajo de lo que se ve, no por debajo de lo que molesta.
+            if media.abs() > 0.02 {
+                mal.push(format!("VCAP={cap}: sesgo de {media:+.4} por trazo"));
+            }
+        }
+        VCAP.store(127, Ordering::Relaxed);
+        VCAP_SLOW.store(lento, Ordering::Relaxed);
+        assert!(mal.is_empty(), "la rampa tiene SESGO, y un sesgo se acumula:\n  {}",
+                mal.join("\n  "));
     }
 }
 

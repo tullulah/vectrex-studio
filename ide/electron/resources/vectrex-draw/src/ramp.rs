@@ -252,6 +252,28 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
     // 0 = como siempre. Se ajusta en caliente desde el panel; el valor bueno es el que
     // hace que la rejilla mida lo que dice medir.
     let t1 = t1 + T1_LAG.load(Ordering::Relaxed) as i32;
+
+    // ELEGIR EL t1 QUE MENOS SE DESVIA, entre el calculado y el siguiente.
+    //
+    // Redondear `vx` al mas cercano acota el error de UN trazo, pero no lo centra: segun
+    // donde caiga s/t1, el redondeo tira casi siempre para el mismo lado y entonces deja de
+    // ser ruido y pasa a ser una DEUDA que se suma. MEDIDO con el test `el_error_de_la_
+    // rampa_no_tiene_sesgo`: +0,028 unidades por trazo a VCAP=96, o sea 2,4 al cabo de 84.
+    //
+    // t1 y t1+1 dan dos productos vx*t1 distintos y uno de los dos cae mas cerca. Cuesta
+    // una division mas y un ciclo de rampa como mucho, y el error deja de tener direccion
+    // preferida — que es lo unico que hace que se acumule.
+    let error_de = |t: i32| -> i64 {
+        if t <= 0 { return i64::MAX; }
+        let v = {
+            let den = (t as i64) * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i64;
+            let n = (m as i64) * (s as i64) * 256;
+            let q = if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den };
+            q.clamp(-128, 127)
+        };
+        ((v * t as i64) - (m as i64) * (s as i64)).abs()
+    };
+    let t1 = if t1 < techo && error_de(t1 + 1) < error_de(t1) { t1 + 1 } else { t1 };
     // ROUND, DO NOT TRUNCATE. Distance is velocity x time, so `vx * t1` has to stay
     // proportional to `dx * s` — but integer division always rounds DOWN, and the loss
     // is the fractional part of `s / t1`, which lands wherever it lands:
