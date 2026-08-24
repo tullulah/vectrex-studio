@@ -183,7 +183,23 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
     // (m·0x7F / t1) would exceed VCAP, raise t1 so it lands at VCAP (distance is
     // preserved: velocity·t1 stays). Short vectors are already below VCAP → their
     // short dwell (the flicker win) is untouched. t1 is capped at 0x7F.
-    let t1_vcap = (m * s / vcap.max(1)).max(1);
+    // DIVISION HACIA ARRIBA, y aqui vivia un sesgo SISTEMATICO de -0,79 unidades por
+    // vector. `t1_vcap` es un SUELO: el tiempo minimo para que la velocidad no pase de
+    // VCAP. Truncando hacia abajo el suelo se queda corto, la velocidad se pasa, el DAC la
+    // recorta a +-127 y el vector sale CORTO — siempre en el mismo sentido, asi que se
+    // acumula LINEALMENTE con el numero de trazos.
+    //
+    //   m=50, VCAP=127:  50*160/127 = 62,99 -> 62    vx = round(8000/62) = 129 -> 127
+    //                    recorrido = 127*62/160 = 49,2                        -> -0,79
+    //   con techo:                          -> 63    vx = round(8000/63) = 127
+    //                    recorrido = 127*63/160 = 50,006                      -> +0,006
+    //
+    // MEDIDO en el host el 2026-08-24 sobre los 127 deltas: peor caso -0,788 antes, y una
+    // fila de cuatro trazos acumulaba -3,15. Es el sesgo que describe el comentario de
+    // VPY_MAX_CONSECUTIVE_DRAWS en el SDK ("fixed per movement, accumulates by count") y
+    // que se estaba tapando re-cerando el haz cada pocos trazos.
+    let vc = vcap.max(1);
+    let t1_vcap = ((m * s + vc - 1) / vc).max(1);
     // EL TECHO SE CALCULA POR VECTOR, NO SE FIJA.
     //
     // `t1` y la velocidad son las dos mitades del mismo producto —v = d*s/t1— asi que
