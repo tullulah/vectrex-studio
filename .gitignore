@@ -80,7 +80,13 @@ VRelease_2017_04_29/
 # WIP projects (local only, not ready for version control)
 examples/clockmakers_crypt/
 examples/clockmakers_crypt_web/
-hardware/
+# CON BARRA DELANTE: solo el hardware/ DE LA RAIZ. Sin anclar, esta regla se comia
+# cualquier directorio llamado hardware a cualquier profundidad — y el emulador tiene uno
+# (ide/frontend/src/emulator/hardware). Los ficheros que ya estaban versionados seguian
+# apareciendo, asi que el problema era invisible: solo los NUEVOS se ignoraban, en
+# silencio. Ramp.ts se quedo fuera de su propio commit y solo se noto porque git avisa al
+# hacer `add` explicito.
+/hardware/
 
 # Vector-movie SOURCE videos (dev-only, copyrighted — NOT part of the distributed
 # IDE and never committed). Regenerate/download with tools/fetch/url2vmov.sh.
