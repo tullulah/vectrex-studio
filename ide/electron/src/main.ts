@@ -1513,7 +1513,13 @@ export async function executeExternalBuild(args: {
   // —seis trazas entre handleCompiledBin y Uvm2System.init— y ninguna salia, porque el
   // problema estaba ANTES de la primera. Un dia entero depurando el emulador que no se
   // estaba ejecutando.
+  /* EN LA TERMINAL, no en DevTools. Las trazas del frontend van a la consola del
+   * renderer y las de aqui a la terminal donde corre run-ide.sh — son dos sitios
+   * distintos, y hoy hemos perdido un rato mirando el que no era. Esta linea sale junto a
+   * las de [FileWatcher], que es donde el usuario ya esta mirando. */
+  console.log(`[build] artefacto=${artifactPath} target=${effectiveTarget} preview=${preview}`);
   if (preview && (effectiveTarget === 'rp2350' || effectiveTarget === 'uvm2')) {
+    console.log(`[build] -> enviando emu://compiledBin al panel (${effectiveTarget})`);
     try {
       const buf = await fs.readFile(artifactPath);
       // El ELF hermano, si el proyecto lo deja al lado con el mismo nombre
@@ -1539,6 +1545,7 @@ export async function executeExternalBuild(args: {
       });
       win?.webContents.send('run://status',
         `Previewing ${effectiveTarget} binary: ${manifest.project.name}`);
+      console.log(`[build] emu://compiledBin ENVIADO: ${buf.length} bytes, elf=${elfBase64 ? 'si' : 'no'}`);
     } catch (e: any) {
       win?.webContents.send('run://stderr', `[C] rp2350 preview: could not read ${artifactPath}: ${e?.message || e}\n`);
     }
