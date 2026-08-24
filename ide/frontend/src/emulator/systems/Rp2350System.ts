@@ -41,6 +41,7 @@ import { Canvas }         from '../hardware/Canvas.js';
 import { Thumb2 }         from '../cpu/Thumb2.js';
 import { extractElf32Symbols, readElf32Entry, loadElf32IntoFlash } from '../util/Elf32Symbols.js';
 import { glyphStrokes } from './vectorFont.js';
+import { rampParams, recorrido } from "../hardware/Ramp";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -323,6 +324,9 @@ export class Rp2350System implements ISystem, IBus {
   // Tracks beam position for the direct-inject drawing path.
   // Updated by dv_reset / dv_move_to / dv_draw_delta traps so the ARM
   // drawing engine bypasses the VIA simulation entirely.
+  /* Lo que se le debe al dibujo, en unidades del haz. Ver el caso OP_DRAW. */
+  rampResX = 0;
+  rampResY = 0;
   private armBeamX: number    = ALG_CENTER_X;
   private armBeamY: number    = ALG_CENTER_Y;
   private armIntensity: number = 0;
@@ -1492,10 +1496,32 @@ export class Rp2350System implements ISystem, IBus {
           this.armIntensity = a & 0x7f; this.beam.alg_zsh = this.armIntensity;
           break;
         case 2: // OP_MOVE
+          /* Un salto reestablece la posicion, asi que la deuda de la cadena anterior muere
+           * aqui — arrastrarla seria corregir un error que ya no existe. */
+          this.rampResX = 0; this.rampResY = 0;
           this.armBeamX += a * ARM_ALG_SCALE; this.armBeamY -= b * ARM_ALG_SCALE;
           break;
         case 3: { // OP_DRAW
-          const nx = this.armBeamX + a * ARM_ALG_SCALE, ny = this.armBeamY - b * ARM_ALG_SCALE;
+          /* POR LA RAMPA, NO POR EL DELTA. Esto sumaba `a` y `b` directamente, o sea que
+           * dibujaba lo que el juego QUISO decir. El hardware no mueve el haz un delta:
+           * programa velocidad y tiempo, los dos ENTEROS, y recorre vx*t1/DRAW_SCALE — que
+           * casi nunca es el delta, y cuyo resto tiene signo constante y SE ACUMULA.
+           *
+           * Con la version vieja este emulador no podia enseñar esa deriva ni queriendo:
+           * +6,30 unidades en 84 trazos (2,5% de pantalla) que hubo que encontrar en la
+           * consola a base de knobs. Ver hardware/Ramp.ts. */
+          /* Se pide el delta MAS lo que se debia, igual que uvm2_draw.c. Sin esto el
+           * emulador enseñaria MAS deriva que la consola, que es un error tan malo como
+           * enseñar menos: el emulador tiene que reproducir el cartucho, no una version
+           * suya sin arreglar. */
+          const px = Math.max(-128, Math.min(127, a + Math.round(this.rampResX)));
+          const py = Math.max(-128, Math.min(127, b + Math.round(this.rampResY)));
+          const [vx, vy, t1] = rampParams(px, py);
+          const rx = recorrido(vx, t1), ry = recorrido(vy, t1);
+          this.rampResX = Math.max(-4, Math.min(4, this.rampResX + a - rx));
+          this.rampResY = Math.max(-4, Math.min(4, this.rampResY + b - ry));
+          const nx = this.armBeamX + rx * ARM_ALG_SCALE;
+          const ny = this.armBeamY - ry * ARM_ALG_SCALE;
           const cl = clipSegment(this.armBeamX, this.armBeamY, nx, ny);
           if (cl !== null) this.beam.addSegmentDirect(cl[0], cl[1], cl[2], cl[3], this.armIntensity);
           this.armBeamX = nx; this.armBeamY = ny;
