@@ -126,6 +126,25 @@ const BOOTLOCK_N    = 16;
 const SRAM_SIZE = 0x00082000;          // 520 KB, as on the real RP2350
 const SIO_BASE  = 0xD0000000;
 
+/* PSM — el "power state machine", que es por donde se resetea el nucleo 1.
+ *
+ * HIZO FALTA EL 2026-08-24. La imagen empezo a llamar a `multicore_reset_core1()` antes de
+ * lanzar el nucleo 1 (hace falta para poder cargar por SWD encima de una imagen que ya
+ * corre: si no, el nucleo 1 sigue en el bucle de la anterior y el saludo no llega nunca).
+ * Y esa funcion no pasa por la FIFO —que aqui ya estaba falseada— sino que escribe el bit
+ * de proc1 en FRCE_OFF y GIRA hasta leerlo de vuelta:
+ *
+ *     *power_off_set = PSM_FRCE_OFF_PROC1_BITS;
+ *     while (!(*power_off & PSM_FRCE_OFF_PROC1_BITS)) tight_loop_contents();
+ *
+ * Sin modelarlo la lectura devolvia 0, el bucle no salia y el emulador se quedaba MUDO —
+ * sin error, sin traza, sin dibujar. Indistinguible de "no arranca".
+ *
+ * Basta con que el registro RECUERDE lo que se le escribe, con sus alias atomicos. Aqui no
+ * hay segundo nucleo que apagar, asi que apagarlo no tiene que hacer nada mas. */
+const PSM_BASE = 0x40018000;
+const PSM_FRCE_OFF = 0x004;
+
 // ── Timing ──────────────────────────────────────────────────────────────────
 /** RP2350 core cycles per Vectrex bus cycle (150 MHz / 1.5 MHz). */
 const CPU_PER_BUS   = 100;
@@ -167,6 +186,8 @@ export class Uvm2System implements ISystem, IBus {
   private cpuAcc   = 0;
   private cycleCount = 0;              // DWT_CYCCNT
   private lastPollPc = -1;             // spin detection, see maybeCollapseSpin
+  /** PSM.FRCE_OFF: solo tiene que recordar. Ver la nota de PSM_BASE. */
+  private psmFrceOff = 0;
   private gpioInLatch = 0;             // 32-bit GPIO_IN snapshot, see read8
 
   private vtor = SRAM_BASE;
@@ -554,6 +575,14 @@ export class Uvm2System implements ISystem, IBus {
       }
     }
 
+    // PSM: solo FRCE_OFF, y solo para que multicore_reset_core1() pueda leer de vuelta
+    // el bit que acaba de escribir. Ver la nota de PSM_BASE.
+    if (((addr & 0xFFFF0000) >>> 0) === PSM_BASE) {
+      const off = addr & 0xFFC, shift = (addr & 3) * 8;
+      const word = off === PSM_FRCE_OFF ? this.psmFrceOff : 0;
+      return (word >>> shift) & 0xFF;
+    }
+
     // SIO. Only GPIO_IN and GPIO_OUT are readable; the SET/CLR/XOR aliases are
     // write-only on real silicon too.
     // The `>>> 0` is load-bearing: JS bitwise ops yield a SIGNED 32-bit result,
@@ -636,6 +665,21 @@ export class Uvm2System implements ISystem, IBus {
           this.bootlocks &= ~(1 << ((off - BOOTLOCK_OFF) >> 2));   // soltar
         } else {
           this.bootram[off] = data;
+        }
+        return;
+      }
+      // PSM: FRCE_OFF con sus alias atomicos. Aqui no hay segundo nucleo que apagar; lo
+      // unico que hace falta es que el registro RECUERDE, porque multicore_reset_core1()
+      // gira leyendolo. Ver la nota de PSM_BASE.
+      if (((addr & 0xFFFF0000) >>> 0) === PSM_BASE) {
+        const off = addr & 0xFFC, shift = (addr & 3) * 8;
+        if (off === PSM_FRCE_OFF) {
+          const bits = (data << shift) >>> 0;
+          const alias = (addr >>> 12) & 3;    // 0 normal, 1 XOR, 2 SET, 3 CLR
+          if (alias === 1)      this.psmFrceOff = (this.psmFrceOff ^ bits) >>> 0;
+          else if (alias === 2) this.psmFrceOff = (this.psmFrceOff | bits) >>> 0;
+          else if (alias === 3) this.psmFrceOff = (this.psmFrceOff & ~bits) >>> 0;
+          else this.psmFrceOff = ((this.psmFrceOff & ~(0xFF << shift)) | bits) >>> 0;
         }
         return;
       }
