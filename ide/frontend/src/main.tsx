@@ -510,13 +510,21 @@ function App() {
             else logger.info('Build', 'PiTrex kernel ready:', kr?.artifactPath || '');
             return;
           }
-          // UVM2: builds a .um2 SD image. There is no in-panel preview for it
-          // yet (Uvm2System loads .um2 files, but nothing wires a C project's
-          // artifact into it), so this is the hardware action, like PiTrex.
+          // UVM2: construye el .um2 Y LO PREVISUALIZA en el panel, como rp2350.
+          //
+          // El comentario que habia aqui decia "nothing wires a C project's artifact into
+          // it", y era cierto: faltaban las DOS mitades. Esta —pedir `preview`— y la del
+          // proceso principal, cuya condicion solo miraba 'rp2350' y por tanto nunca
+          // emitia `emu://compiledBin` para un .um2. Con una sola de las dos seguia sin
+          // llegar nada, que es lo que costo una tarde: seis trazas instrumentadas aguas
+          // abajo y ninguna se imprimia, porque la cadena no empezaba.
+          //
+          // `deploy` sigue siendo la accion de hardware (copiar a la SD) y es
+          // independiente: se puede previsualizar sin tarjeta puesta.
           if (buildTarget === 'uvm2') {
             logger.info('Build', `Building UVM2 image: ${projName}`);
             const ur = await electronAPI.runBuildExternal({
-              manifestPath, target: 'uvm2',
+              manifestPath, target: 'uvm2', preview: true,
               deploy: uvm2CopyToSD, sdPath: uvm2SdPath,
             });
             if (ur?.error) logger.error('Build', 'UVM2 build failed:', ur.error, ur.detail || '');
