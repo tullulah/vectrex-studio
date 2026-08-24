@@ -144,6 +144,13 @@ const SIO_BASE  = 0xD0000000;
  * hay segundo nucleo que apagar, asi que apagarlo no tiene que hacer nada mas. */
 const PSM_BASE = 0x40018000;
 const PSM_FRCE_OFF = 0x004;
+/* LA MASCARA CUBRE LOS CUATRO ALIAS y nada mas: 0x40018000..0x4001BFFF son el registro y
+ * sus alias XOR/SET/CLR (+0x1000 cada uno).
+ *
+ * Primero puse 0xFFFF0000, que da 0x40010000 para cualquier direccion de esa pagina y por
+ * tanto NUNCA coincidia con PSM_BASE: el manejador no se ejecutaba jamas y el sintoma era
+ * identico a no haberlo escrito. Se ve con una resta, sin encender nada. */
+const PSM_MASK = 0xFFFFC000;
 
 // ── Timing ──────────────────────────────────────────────────────────────────
 /** RP2350 core cycles per Vectrex bus cycle (150 MHz / 1.5 MHz). */
@@ -577,7 +584,7 @@ export class Uvm2System implements ISystem, IBus {
 
     // PSM: solo FRCE_OFF, y solo para que multicore_reset_core1() pueda leer de vuelta
     // el bit que acaba de escribir. Ver la nota de PSM_BASE.
-    if (((addr & 0xFFFF0000) >>> 0) === PSM_BASE) {
+    if (((addr & PSM_MASK) >>> 0) === PSM_BASE) {
       const off = addr & 0xFFC, shift = (addr & 3) * 8;
       const word = off === PSM_FRCE_OFF ? this.psmFrceOff : 0;
       return (word >>> shift) & 0xFF;
@@ -671,7 +678,7 @@ export class Uvm2System implements ISystem, IBus {
       // PSM: FRCE_OFF con sus alias atomicos. Aqui no hay segundo nucleo que apagar; lo
       // unico que hace falta es que el registro RECUERDE, porque multicore_reset_core1()
       // gira leyendolo. Ver la nota de PSM_BASE.
-      if (((addr & 0xFFFF0000) >>> 0) === PSM_BASE) {
+      if (((addr & PSM_MASK) >>> 0) === PSM_BASE) {
         const off = addr & 0xFFC, shift = (addr & 3) * 8;
         if (off === PSM_FRCE_OFF) {
           const bits = (data << shift) >>> 0;
