@@ -636,9 +636,30 @@ export class Uvm2System implements ISystem, IBus {
                        'nucleo: se responde al FIFO para que no se cuelgue, pero lo que ' +
                        'corra en el core 1 no se ejecuta. Compila con UVM2_DUAL_CORE=0.');
         }
-        word = 0x3;   // RDY | VLD
+        // VLD SOLO SI HAY DATO PENDIENTE, y esto NO es un detalle.
+        //
+        // Estaba fijo en RDY|VLD, o sea "siempre hay algo que leer". `multicore_fifo_drain`
+        // vacia la FIFO leyendo MIENTRAS VLD siga puesto:
+        //
+        //     ldr r2,[r3,#0x58]   ; FIFO_RD
+        //     ldr r2,[r3,#0x50]   ; FIFO_ST
+        //     lsls r2, r2, #31    ; probar VLD
+        //     bmi  <atras>        ; repetir mientras haya dato
+        //
+        // Con VLD clavado ese bucle no termina JAMAS. Aparecio el 2026-08-24 al anadir
+        // `multicore_reset_core1()` a la imagen —que llama a drain antes del saludo— y el
+        // sintoma fue el de siempre: la imagen corre, no dibuja, y no hay error. El perfil
+        // de PCs lo canto: 99,7% del tiempo en 0x200329a2, multicore.h:260.
+        //
+        // Modelarlo bien es una linea: el dato lo pone FIFO_WR y lo quita FIFO_RD.
+        word = 0x2 | (this.fifoPendiente ? 0x1 : 0);   // RDY siempre, VLD si hay dato
       }
-      else if (off === 0x058) word = this.fifoEco;   // FIFO_RD: echo, see above
+      else if (off === 0x058) {
+        word = this.fifoEco;                          // FIFO_RD: eco, ver arriba
+        // Se consume en el ULTIMO byte: la lectura de 32 bits se descompone en cuatro, y
+        // limpiar en el primero le daria a los otros tres una FIFO ya vacia.
+        if ((addr & 3) === 3) this.fifoPendiente = false;
+      }
       return (word >>> shift) & 0xFF;
     }
 
@@ -714,7 +735,10 @@ export class Uvm2System implements ISystem, IBus {
         case 0x038: this.gpioOe  = (this.gpioOe  |  bits) >>> 0; break;
         case 0x040: this.gpioOe  = (this.gpioOe  & ~bits) >>> 0; break;
         /* FIFO_WR: keep it so FIFO_RD can echo it back — see the note at FIFO_ST. */
-        case 0x054: this.fifoEco = ((this.fifoEco & keep) | bits) >>> 0; break;
+        case 0x054:
+          this.fifoEco = ((this.fifoEco & keep) | bits) >>> 0;
+          if ((addr & 3) === 3) this.fifoPendiente = true;   // dato listo tras el ultimo byte
+          break;
         default: break;
       }
       return;
@@ -782,6 +806,8 @@ export class Uvm2System implements ISystem, IBus {
    */
   private avisoMulticore = false;
   private fifoEco = 0;   /* last word written to FIFO_WR, echoed back on FIFO_RD */
+  /** ¿Hay una palabra sin leer? Es el bit VLD de FIFO_ST. Ver la nota alli. */
+  private fifoPendiente = false;
 
   runFrame(): Segment[] {
     const until = this.busCycle + BUS_PER_FRAME;
