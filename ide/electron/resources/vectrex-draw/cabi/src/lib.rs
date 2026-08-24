@@ -38,6 +38,14 @@ mod bus_c {
     /// El reparto de campos de ESTA placa. Lo pone el llamante en C, porque el mapa de pines es
     /// suyo: en la UVM2 la direccion esta partida (A14/A15 saltan sobre PB6) y esa cuenta la
     /// hace `uvm2_bus.h`, no esta caja.
+    /// PUNTERO CRUDO, no `&`. Rust 2024 avisa de que una referencia compartida a un
+    /// `static mut` es comportamiento indefinido si alguien lo muta mientras vive — y aqui
+    /// `vbus_install` lo muta. El aviso no era cosmetico: describe exactamente lo que este
+    /// codigo hace.
+    ///
+    /// Se lee con `&raw const` / copia por valor, que es lo que el propio compilador
+    /// sugiere. El mapa lo escribe UNA vez el arranque y despues solo se lee, asi que
+    /// copiarlo no cuesta nada y quita la referencia viva.
     static mut LAYOUT: bus::Layout = bus::Layout {
         out_base: 0,
         out_count: 0,
@@ -54,13 +62,14 @@ mod bus_c {
     pub unsafe extern "C" fn vbus_install(out_base: u32, out_count: u32, out_dirs: u32, park: u32) {
         LAYOUT = bus::Layout { out_base, out_count, out_dirs, park };
         let (codigo, wt, wr) = bus::programa();
-        bus::install(&LAYOUT, codigo, wt, wr);
+        bus::install(&*(&raw const LAYOUT), codigo, wt, wr);
     }
     
     /// Una escritura: la palabra de bus YA armada con el mapa de la placa.
     #[no_mangle]
     pub unsafe extern "C" fn vbus_word(bus_word: u32) -> u32 {
-        LAYOUT.word(bus_word)
+        let l = *(&raw const LAYOUT);   /* copia: no deja una referencia viva */
+        l.word(bus_word)
     }
     
     /// Aparcar `n` periodos de E con una sola palabra.
@@ -72,7 +81,8 @@ mod bus_c {
     /// Un periodo en silencio: ni conduce ni aparca.
     #[no_mangle]
     pub unsafe extern "C" fn vbus_silence() -> u32 {
-        LAYOUT.silence()
+        let l = *(&raw const LAYOUT);
+        l.silence()
     }
     
     #[no_mangle]
