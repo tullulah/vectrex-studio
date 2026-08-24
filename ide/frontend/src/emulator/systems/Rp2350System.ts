@@ -41,7 +41,7 @@ import { Canvas }         from '../hardware/Canvas.js';
 import { Thumb2 }         from '../cpu/Thumb2.js';
 import { extractElf32Symbols, readElf32Entry, loadElf32IntoFlash } from '../util/Elf32Symbols.js';
 import { glyphStrokes } from './vectorFont.js';
-import { rampParams, recorrido } from "../hardware/Ramp";
+import { rampParams, recorrido } from '../hardware/Ramp.js';
 
 // ---------------------------------------------------------------------------
 // Constants
