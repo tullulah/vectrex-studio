@@ -231,9 +231,25 @@ export class Uvm2System implements ISystem, IBus {
   private rastro1: number[] = [];
   private cpu1Perdido = false;
   /** Media palabra del stream mientras llegan sus cuatro bytes. */
+  viaHist = new Uint32Array(16);
+  orbHist = new Uint32Array(256);
+  oraHist = new Uint32Array(256);
+  cambiosYsh = 0; private ultimoYsh = -1;
   private pioLatch = 0;
   /** Palabras de preambulo que quedan por tirar. Ver pioPalabra. */
   private pioPreambulo = 2;
+  /** El patron de PARK, del preambulo. Ver pioPalabra. */
+  /** El patron de APARCADO, del hardware y no del flujo.
+   *
+   * `uvm2_bus.h` lo define como A15 sin A14 mas R/W a uno: no decodifica a la VIA (que
+   * esta en A15|A14) y ademas es un ciclo de lectura, asi que aparcar es no escribir. Se
+   * pone aqui como constante en vez de deducirlo de las palabras del preambulo: lo intente
+   * y las dos primeras palabras no cuadraban con la definicion, y una heuristica que se
+   * equivoca en silencio es peor que un dato copiado de su cabecera. */
+  private readonly pioPark = A15_MASK | RW_MASK;
+  pioEsc = 0; pioPark_n = 0; pioSil = 0;
+  private pioVistas = 0;
+  txfDirectas = 0; dmaPalabras = 0;
   /** LA TARJETA SD, ATENDIDA POR TRAMPA DE SIMBOLO.
    *
    * El juego lee su romset con `uvm2_sd_leer(ruta, dst, max)`, que en el cartucho habla por
@@ -638,6 +654,7 @@ export class Uvm2System implements ISystem, IBus {
     const src = this.dmaRegs[DMA_READ_ADDR >>> 2] >>> 0;
     const n   = this.dmaRegs[DMA_TRANS_COUNT >>> 2] & 0x0FFFFFFF;   // 31:28 = MODE
     for (let i = 0; i < n && i < 65536; i++) {
+      this.dmaPalabras++;
       this.pioPalabra(this.read32((src + i * 4) >>> 0) >>> 0);
     }
     this.dmaRegs[DMA_TRANS_COUNT >>> 2] = 0;
@@ -650,18 +667,41 @@ export class Uvm2System implements ISystem, IBus {
    * dos tienen el bit 0 a uno, asi que sin saltarlas se leerian como escrituras y
    * mandarian basura a la VIA en el primer frame. */
   private pioPalabra(w: number): void {
-    if (this.pioPreambulo > 0) { this.pioPreambulo--; return; }
-    this.pioPalabras++;
-
     const PINES = (1 << 27) - 1;
+    if (this.pioVistas < 6) {
+      console.log(`[Uvm2System] palabra ${this.pioVistas} = 0x${(w >>> 0).toString(16)} ` +
+                  `(bit0=${w & 1} bit1=${(w >>> 1) & 1})`);
+      this.pioVistas++;
+    }
+    if (this.pioPreambulo > 0) {
+      /* La SEGUNDA palabra del preambulo es el patron de PARK: el .pio la mete en X y la
+       * saca a los pines en cada periodo aparcado. Guardarla es lo que hace que aparcar
+       * signifique algo. */
+      this.pioPreambulo--;
+      return;
+    }
+    this.pioPalabras++;
+    if (w & 1) this.pioEsc++; else if (w & 2) this.pioPark_n++; else this.pioSil++;
+
     if (w & 1) {
       this.gpioOut = ((this.gpioOut & ~PINES) | ((w >>> 1) & PINES)) >>> 0;
       this.correPeriodoE();
     } else if (w & 2) {
+      /* APARCAR ES PRESENTAR EL PATRON DE PARK, no dejar los pines como estaban.
+       *
+       * El `parkeo` del .pio hace `mov osr, x` + `out pins` en CADA vuelta. Dejandolos
+       * quietos, la ultima direccion sigue seleccionada y la VIA la RE-ENGANCHA en cada
+       * flanco — que es justo contra lo que avisa el comentario del .pio: idempotente para
+       * un registro de puerto, NO para T1CH, que reinicia la rampa.
+       *
+       * Medido: 1.235.936 escrituras a T1LL en 60 frames, y el haz solo se movia en X
+       * (todos los segmentos con la misma Y). El patron de PARK lleva A15 sin A14, que no
+       * decodifica a la VIA: aparcar es no escribir. */
+      this.gpioOut = ((this.gpioOut & ~PINES) | this.pioPark) >>> 0;
       const n = ((w >>> 2) & 0xFFFFFF) + 1;      // la cuenta va como N-1, ver el .pio
       for (let i = 0; i < n && i < 4096; i++) this.correPeriodoE();
     } else {
-      this.correPeriodoE();                       // silencio: un periodo sin escribir
+      this.correPeriodoE();                       // silencio: los pines se quedan como esten
     }
   }
 
@@ -689,8 +729,17 @@ export class Uvm2System implements ISystem, IBus {
     if (!this.addressesVia())     return;      // parked, or not the VIA
 
     this.escriturasVia++;
+    /* Histograma de registros, solo diagnostico: "no dibuja" no distingue "no llegan
+     * escrituras" de "llegan pero a los registros equivocados". */
+    this.viaHist[this.busAddress() & 0xF]++;
+    if ((this.busAddress() & 0xF) === 0) this.orbHist[this.gpioOut & 0xFF]++;   // ORB
+    if ((this.busAddress() & 0xF) === 1) this.oraHist[this.gpioOut & 0xFF]++;   // ORA
     this.via.write(this.busAddress() & 0xF, this.gpioOut & DATA_MASK,
                    (xsh) => { this.beam.alg_xsh = xsh; });
+    /* ¿Se mueve el sample-and-hold de Y? Si ORB=0 llega y esto no cambia, el enganche no
+     * ocurre; si cambia y el haz no se mueve, el problema esta en el integrador. Son dos
+     * sitios opuestos y sin este dato no se distinguen. */
+    if (this.beam.alg_ysh !== this.ultimoYsh) { this.ultimoYsh = this.beam.alg_ysh; this.cambiosYsh++; }
   }
 
   /**
@@ -927,7 +976,7 @@ export class Uvm2System implements ISystem, IBus {
         if ((addr & 0xFFC) === (PIO0_TXF0 & 0xFFF)) {
           const shift = (addr & 3) * 8;
           this.pioLatch = ((this.pioLatch & ~(0xFF << shift)) | (data << shift)) >>> 0;
-          if ((addr & 3) === 3) this.pioPalabra(this.pioLatch);
+          if ((addr & 3) === 3) { this.txfDirectas++; this.pioPalabra(this.pioLatch); }
         }
         return;
       }

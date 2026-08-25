@@ -44,10 +44,44 @@ let total = 0, conVectores = 0;
 /* Avance cada 500 frames: un juego que arranca despacio y uno colgado se distinguen por
  * si los contadores SE MUEVEN, no por el total al final. */
 const t0 = Date.now();
+const caja = { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 };
 for (let f = 0; f < Number(nFrames); f++) {
   const segs = sys.runFrame();
   total += segs.length;
   if (segs.length) conVectores++;
+  /* LA CAJA DE TODOS LOS FRAMES, no la del ultimo: un eje que se mueve DE VEZ EN CUANDO se
+   * lee como "clavado" si solo miras una instantanea. */
+  for (const g of segs) {
+    caja.x0 = Math.min(caja.x0, g.x0, g.x1); caja.x1 = Math.max(caja.x1, g.x0, g.x1);
+    caja.y0 = Math.min(caja.y0, g.y0, g.y1); caja.y1 = Math.max(caja.y1, g.y0, g.y1);
+  }
+  /* MIRAR LOS SEGMENTOS, no solo contarlos. 42 por frame puede ser un dibujo o la misma
+   * raya 42 veces, y eso no se distingue con un total. */
+  if (f === Number(nFrames) - 1 && segs.length) {
+    const caja = segs.reduce((a, s) => ({
+      x0: Math.min(a.x0, s.x0, s.x1), x1: Math.max(a.x1, s.x0, s.x1),
+      y0: Math.min(a.y0, s.y0, s.y1), y1: Math.max(a.y1, s.y0, s.y1),
+    }), { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 });
+    const unicos = new Set(segs.map(s => `${s.x0},${s.y0},${s.x1},${s.y1}`)).size;
+    console.log(`  ultimo frame: ${segs.length} segmentos, ${unicos} distintos, ` +
+                `caja x[${caja.x0.toFixed(0)}..${caja.x1.toFixed(0)}] ` +
+                `y[${caja.y0.toFixed(0)}..${caja.y1.toFixed(0)}]`);
+    const h = (sys /** @type {any} */).viaHist;
+    const nom = ["ORB","ORA","DDRB","DDRA","T1CL","T1CH","T1LL","T1LH","T2CL","T2CH","SR","ACR","PCR","IFR","IER","ORAnh"];
+    const qq = (sys /** @type {any} */);
+    console.log(`  entradas: TXF0 directo=${qq.txfDirectas} por DMA=${qq.dmaPalabras}`);
+    console.log(`  palabras: escritura=${qq.pioEsc} park=${qq.pioPark_n} silencio=${qq.pioSil}`);
+    const oh = [...(sys /** @type {any} */).orbHist].map((n, v) => [v, n]).filter(x => x[1])
+                 .sort((a, b) => b[1] - a[1]).slice(0, 6);
+    console.log("  valores escritos a ORB: " + oh.map(([v, n]) => `0x${v.toString(16)}=${n}`).join("  "));
+    const ah = [...(sys /** @type {any} */).oraHist].map((n, v) => [v, n]).filter(x => x[1]);
+    console.log(`  ORA: ${ah.length} valores distintos, ` +
+                `cambios del S&H de Y: ${(sys /** @type {any} */).cambiosYsh}`);
+    console.log("  escrituras por registro: " +
+      [...h].map((n, i) => n ? `${nom[i]}=${n}` : "").filter(Boolean).join("  "));
+    for (const s of segs.slice(0, 5))
+      console.log(`    (${s.x0.toFixed(0)},${s.y0.toFixed(0)}) -> (${s.x1.toFixed(0)},${s.y1.toFixed(0)}) z=${s.z ?? s.intensity ?? '?'}`);
+  }
   if ((f + 1) % 500 === 0) {
     const q = (sys /** @type {any} */);
     console.log(`    frame ${f + 1}: ${total} segmentos, bus=${q.busCycle}, ` +
@@ -55,6 +89,8 @@ for (let f = 0; f < Number(nFrames); f++) {
   }
 }
 console.log(`  ${nFrames} frames: ${total} segmentos, ${conVectores} frames con dibujo`);
+console.log(`  caja de TODOS los frames: x[${caja.x0.toFixed(0)}..${caja.x1.toFixed(0)}] ` +
+            `y[${caja.y0.toFixed(0)}..${caja.y1.toFixed(0)}]`);
 /* Los contadores internos: sin ellos "no dibuja" no distingue "no escribe a la VIA" de
  * "escribe y el haz no se mueve", que se arreglan en sitios opuestos. */
 const q = (sys /** @type {any} */);
