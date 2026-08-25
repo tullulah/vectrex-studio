@@ -3063,7 +3063,7 @@ export const EmulatorPanel: React.FC = () => {
     const electronAPI: any = (window as any).electronAPI;
     if (!electronAPI?.onCompiledBin) return;
 
-    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null; libvpyAsm?: string | null }) => {
+    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null; libvpyAsm?: string | null; sdFiles?: Record<string, string> }) => {
     /* LA PRIMERA TRAZA DE LA CADENA. Todo lo que hay de aqui en adelante ya estaba
      * instrumentado —"uvm2: bin=…", "✓ .um2 image loaded", "[loadUvm2] START"— asi que si
      * no sale NINGUNA, el problema no esta en el emulador sino en que este manejador no se
@@ -3212,7 +3212,13 @@ export const EmulatorPanel: React.FC = () => {
             : typeof emuCore.loadArm === 'function';
           if (loaderAvailable) {
             if (isUvm2) {
-              emuCore.loadUvm2!(bin, canvasRef.current ?? undefined);
+              /* La SD simulada llega en base64 desde el proceso principal; se decodifica
+               * aqui porque el emulador quiere bytes. Ver leerSdSimulada en main.ts. */
+              const sdBytes: Record<string, Uint8Array> = {};
+              for (const [k, v] of Object.entries(payload.sdFiles ?? {})) {
+                sdBytes[k] = Uint8Array.from(atob(v), c => c.charCodeAt(0));
+              }
+              emuCore.loadUvm2!(bin, canvasRef.current ?? undefined, elf, sdBytes);
               console.log('[EmulatorPanel] ✓ .um2 image loaded into Uvm2System');
             } else {
               // Pass the shared canvas so Rp2350System renders directly to it

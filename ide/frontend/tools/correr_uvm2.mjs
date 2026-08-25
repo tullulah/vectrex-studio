@@ -7,7 +7,9 @@
  * donde gira si no dibuja— y ademas resuelve el PC contra el ELF si se le pasa. Todo el
  * ciclo de hoy (cambiar el emulador, probar, leer el PC, repetir) cabe aqui en segundos.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { Uvm2System } from "../src/emulator/systems/Uvm2System.ts";
 
@@ -15,13 +17,42 @@ const [img, nFrames = "180", elf] = process.argv.slice(2);
 if (!img) { console.error("uso: correr_uvm2.mjs <imagen.um2> [frames] [elf]"); process.exit(2); }
 
 const sys = new Uvm2System();
+
+/* EL ELF Y LA SD, igual que hara el IDE. Sin ELF no hay simbolos que atrapar y el juego
+ * pinta su X de "falta el romset"; con ellos, el emulador atiende uvm2_sd_leer desde
+ * ~/VectrexStudio/sd, que es la MISMA carpeta que usa el simulador. */
+if (elf) sys.setElf(new Uint8Array(readFileSync(elf)));
+{
+  const raiz = join(homedir(), "VectrexStudio", "sd");
+  const files = {};
+  const anda = (dir, rel) => {
+    let ent = []; try { ent = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of ent) {
+      if (e.name.startsWith(".")) continue;
+      const p = join(dir, e.name), r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) anda(p, r);
+      else try { if (statSync(p).size <= 2 << 20) files[r.toLowerCase()] = new Uint8Array(readFileSync(p)); } catch {}
+    }
+  };
+  anda(raiz, "");
+  sys.setSdFiles(files);
+}
+
 sys.init(new Uint8Array(readFileSync(img)));
 
 let total = 0, conVectores = 0;
+/* Avance cada 500 frames: un juego que arranca despacio y uno colgado se distinguen por
+ * si los contadores SE MUEVEN, no por el total al final. */
+const t0 = Date.now();
 for (let f = 0; f < Number(nFrames); f++) {
   const segs = sys.runFrame();
   total += segs.length;
   if (segs.length) conVectores++;
+  if ((f + 1) % 500 === 0) {
+    const q = (sys /** @type {any} */);
+    console.log(`    frame ${f + 1}: ${total} segmentos, bus=${q.busCycle}, ` +
+                `${((Date.now() - t0) / 1000).toFixed(0)}s`);
+  }
 }
 console.log(`  ${nFrames} frames: ${total} segmentos, ${conVectores} frames con dibujo`);
 /* Los contadores internos: sin ellos "no dibuja" no distingue "no escribe a la VIA" de

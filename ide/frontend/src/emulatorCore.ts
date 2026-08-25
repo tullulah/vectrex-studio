@@ -46,7 +46,8 @@ export interface IEmulatorCore {
   loadArm?(bin: Uint8Array, elf?: Uint8Array, canvas?: HTMLCanvasElement, simSdFiles?: string[], simSdPreviews?: Record<string, string>, simRomZip?: Uint8Array): void;
 
   /** Load a `.um2` image (uvm2 target). Switches the active backend to Uvm2System. */
-  loadUvm2?(um2: Uint8Array, canvas?: HTMLCanvasElement): void;
+  loadUvm2?(um2: Uint8Array, canvas?: HTMLCanvasElement,
+            elf?: Uint8Array, sdFiles?: Record<string, Uint8Array>): void;
 
   /** Set joystick J1 axis values for RP2350 backend (-128..127, 0=center). */
   setJoyAxis?(x: number, y: number): void;

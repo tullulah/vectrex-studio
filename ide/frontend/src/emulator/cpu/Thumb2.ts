@@ -427,6 +427,10 @@ export class Thumb2 implements ICpu {
 
   // ─── Memory helpers ───────────────────────────────────────────────────
 
+  /** Los 32 registros dobles del VFP, como 64 palabras. Solo se guardan y se restauran:
+   *  ver la nota de VLDM/VSTM. */
+  private vfp = new Uint32Array(64);
+
   private read16(bus: IBus, addr: number): number {
     return bus.read8(addr) | (bus.read8(addr + 1) << 8);
   }
@@ -1966,6 +1970,40 @@ export class Thumb2 implements ICpu {
           return 1;
         }
       }
+    }
+
+    /* VLDM / VSTM — los registros del coprocesador de coma flotante.
+     *
+     * HACEN FALTA AUNQUE EL JUEGO NO USE FLOTANTES: `setjmp` de newlib guarda d8-d15 con
+     * `vstmia r0, {d8-d15}` y `longjmp` los restaura, y el descompresor del zip (puff) usa
+     * setjmp/longjmp para sus errores. Sin esto la imagen del UVM2 moria con "Unimplemented
+     * 32-bit LD/ST" nada mas cargar el romset, y el emulador se quedaba detenido en seco.
+     *
+     * No hay unidad de coma flotante que emular: basta con que el banco RECUERDE, porque lo
+     * unico que se hace con el es guardarlo y volverlo a poner. Si algun dia se ejecuta
+     * aritmetica VFP de verdad, fallara en otra instruccion y se vera.
+     *
+     *   hw0: 110 P U D W L  Rn      hw1: Vd  101 x  imm8
+     *   coproc 1010 = simple (una palabra por registro), 1011 = doble (dos)
+     */
+    if ((hw0 & 0xFE00) === 0xEC00 && ((hw1 >>> 8) & 0xE) === 0xA) {
+      const P = (hw0 >>> 8) & 1, U = (hw0 >>> 7) & 1, W = (hw0 >>> 5) & 1;
+      const L = (hw0 >>> 4) & 1, rn = hw0 & 0xF;
+      const doble = ((hw1 >>> 8) & 1) === 1;
+      const vd = doble ? (((hw1 >>> 12) & 0xF) | (((hw0 >>> 6) & 1) << 4))
+                       : ((((hw1 >>> 12) & 0xF) << 1) | ((hw0 >>> 6) & 1));
+      const palabras = hw1 & 0xFF;                    // imm8 = palabras a mover
+      const base = this.regs[rn] >>> 0;
+      let dir = (U ? base : base - palabras * 4) >>> 0;
+      if (P && U) dir = (base + 4) >>> 0;             // el modo "IB", que aqui no se usa
+      for (let i = 0; i < palabras; i++) {
+        const idx = (vd * (doble ? 2 : 1) + i) & 63;
+        if (L) this.vfp[idx] = this.read32(bus, dir) >>> 0;
+        else   this.write32(bus, dir, this.vfp[idx] >>> 0);
+        dir = (dir + 4) >>> 0;
+      }
+      if (W) this.regs[rn] = (U ? base + palabras * 4 : base - palabras * 4) >>> 0;
+      return 1;
     }
 
     throw new Error(`Unimplemented 32-bit LD/ST: hw0=0x${hw0.toString(16).padStart(4,'0')} hw1=0x${hw1.toString(16).padStart(4,'0')} at PC=0x${pc.toString(16)}`);

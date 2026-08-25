@@ -31,6 +31,7 @@ import { Beam }    from '../hardware/Beam.js';
 import { Psg }     from '../hardware/Psg.js';
 import { Canvas }  from '../hardware/Canvas.js';
 import { Thumb2 }  from '../cpu/Thumb2.js';
+import { extractElf32Symbols } from '../util/Elf32Symbols.js';
 
 /** Beam vector list → the IDE's Segment shape (same mapping the other systems use). */
 function vectorsToSegments(
@@ -233,6 +234,19 @@ export class Uvm2System implements ISystem, IBus {
   private pioLatch = 0;
   /** Palabras de preambulo que quedan por tirar. Ver pioPalabra. */
   private pioPreambulo = 2;
+  /** LA TARJETA SD, ATENDIDA POR TRAMPA DE SIMBOLO.
+   *
+   * El juego lee su romset con `uvm2_sd_leer(ruta, dst, max)`, que en el cartucho habla por
+   * SPI con una SD de verdad. Emular el SPI seria emular el protocolo entero para acabar
+   * copiando unos bytes; en su lugar se atrapa la FUNCION por su direccion del ELF y se
+   * hace lo que hace: copiar el fichero al buffer y devolver cuantos bytes.
+   *
+   * Es el mismo criterio con el que ya se atrapa `rom_table_lookup` de la bootrom. Y hace
+   * falta el ELF: sin simbolos no hay a que direccion atrapar, y el juego pinta su X de
+   * "falta el romset" sin que nada explique por que. */
+  private sdArchivos: Record<string, Uint8Array> = {};
+  private sdLeerAddr = 0;
+  private sdErrorAddr = 0;
   /** Registros del canal 0 del DMA, por indice de palabra. */
   private dmaRegs = new Uint32Array(16);
   /** Cuantas palabras del stream se han consumido. Solo para diagnostico. */
@@ -421,6 +435,51 @@ export class Uvm2System implements ISystem, IBus {
    * is a WORD count, not a byte count.
    */
   /** ARRANCADO: si esta traza sale, el emulador del UVM2 tiene la imagen y ha empezado. */
+  /** Los simbolos de la imagen, para poder atrapar por nombre. Opcional: sin ELF todo
+   *  sigue funcionando, solo que la SD no se atiende y el juego lo dira a su manera. */
+  setElf(elf: Uint8Array): void {
+    const sim = extractElf32Symbols(elf);
+    this.sdLeerAddr  = (sim.get('uvm2_sd_leer')  ?? 0) & ~1;
+    this.sdErrorAddr = (sim.get('uvm2_sd_error') ?? 0) >>> 0;
+    console.log(`[Uvm2System] simbolos: uvm2_sd_leer=0x${this.sdLeerAddr.toString(16)} ` +
+                `uvm2_sd_error=0x${this.sdErrorAddr.toString(16)}`);
+  }
+
+  /** Los ficheros de la SD simulada, por ruta relativa en minusculas. */
+  setSdFiles(files: Record<string, Uint8Array>): void {
+    this.sdArchivos = files;
+    console.log(`[Uvm2System] SD simulada: ${Object.keys(files).length} ficheros`);
+  }
+
+  /** `uvm2_sd_leer(ruta, dst, max)`: copiar el fichero y devolver los bytes. */
+  private atiendeSdLeer(cpu: Thumb2): void {
+    let ruta = '';
+    for (let a = cpu.getReg(0) >>> 0, i = 0; i < 128; i++) {
+      const c = this.read8(a + i);
+      if (!c) break;
+      ruta += String.fromCharCode(c);
+    }
+    const dst = cpu.getReg(1) >>> 0, max = cpu.getReg(2) >>> 0;
+    const f = this.sdArchivos[ruta.toLowerCase()];
+    let n = 0;
+    if (f) {
+      n = Math.min(f.length, max);
+      for (let i = 0; i < n; i++) this.write8((dst + i) >>> 0, f[i]);
+    } else {
+      console.warn(`[Uvm2System] la SD simulada no tiene "${ruta}". Ponlo en ` +
+                   `~/VectrexStudio/sd/${ruta} y vuelve a compilar.`);
+    }
+    /* uvm2_sd_error: 0 = bien. Se escribe aqui porque el juego lo mira despues, y dejarlo
+     * con lo que hubiera haria que una lectura buena pareciera fallida. */
+    if (this.sdErrorAddr) {
+      const e = f ? 0 : 1;
+      for (let i = 0; i < 4; i++) this.write8(this.sdErrorAddr + i, (e >>> (i * 8)) & 0xFF);
+    }
+    cpu.setReg(0, n >>> 0);
+    cpu.setReg(15, cpu.getReg(14) & ~1);
+    console.log(`[Uvm2System] SD: "${ruta}" -> ${n} bytes`);
+  }
+
   init(um2: Uint8Array): void {
     console.log('[Uvm2System] ARRANCANDO con una imagen de', um2.length, 'bytes');
     this.resets = 0;
@@ -1022,6 +1081,7 @@ export class Uvm2System implements ISystem, IBus {
       if ((this.muestra++ & 63) === 0) this.perfil.set(pc, (this.perfil.get(pc) ?? 0) + 1);
 
       if (pc === ROM_LOOKUP) { this.romTableLookup(); continue; }
+      if (this.sdLeerAddr && pc === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu); continue; }
 
       // Ejecutar la tabla de vectores es siempre un PC perdido. Se corta aqui, con
       // el salto que llevo hasta ahi todavia en el anillo, en vez de dejar que
@@ -1050,7 +1110,8 @@ export class Uvm2System implements ISystem, IBus {
              * llega a su bucle o se pierde, y sin guardarlos un PC absurdo no dice de
              * donde vino — que es exactamente lo que paso la primera vez. */
             if (this.rastro1.length < 64) this.rastro1.push(pc1);
-            if (pc1 === ROM_LOOKUP) { this.romTableLookup(this.cpu1); }
+            if (this.sdLeerAddr && pc1 === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu1); }
+            else if (pc1 === ROM_LOOKUP) { this.romTableLookup(this.cpu1); }
             else if (((pc1 & 0xFFFFFFF0) >>> 0) === ROM_NOOP) {
               this.cpu1.setReg(15, this.cpu1.getReg(14) & ~1);   // la funcion vacia: volver
             }

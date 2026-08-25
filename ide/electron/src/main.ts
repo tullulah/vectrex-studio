@@ -1528,7 +1528,16 @@ export async function executeExternalBuild(args: {
       // arranca igual, solo que a ciegas — asi que es opcional, no un fallo.
       // .bin -> .elf y .um2 -> .elf: el artefacto del UVM2 no es un .bin, asi que la
       // sustitucion de antes no casaba y se perdia el ELF hermano en silencio.
-      const elfPath = artifactPath.replace(/\.(bin|um2)$/i, '.elf');
+      // .bin -> .elf, .um2 -> .elf, Y TAMBIEN en el subdirectorio del build. El .um2 del
+      // UVM2 se copia a build_uvm2/ mientras su ELF se queda en build_uvm2/pico/, asi que
+      // buscar solo al lado no lo encontraba y el emulador se quedaba sin simbolos —
+      // "elf=0b" en la consola, en silencio.
+      const candidatos = [
+        artifactPath.replace(/\.(bin|um2)$/i, '.elf'),
+        join(dirname(artifactPath), 'pico', basename(artifactPath).replace(/\.(bin|um2)$/i, '.elf')),
+      ];
+      let elfPath = candidatos[0];
+      for (const c of candidatos) { try { await fs.access(c); elfPath = c; break; } catch {} }
       let elfBase64: string | null = null;
       if (elfPath !== artifactPath) {
         try {
@@ -1536,12 +1545,27 @@ export async function executeExternalBuild(args: {
           win?.webContents.send('run://stdout', `[C] ELF hermano: ${basename(elfPath)}\n`);
         } catch { /* sin ELF: escaneo de prologos */ }
       }
+      /* LA TARJETA SD SIMULADA, para el UVM2. Un juego del UVM2 lee su romset de la SD
+       * (uvm2_romzip_cargar -> uvm2_sd_leer "roms/<nombre>.zip"), asi que sin ella el
+       * emulador corre pero el juego pinta su X de "falta el romset" — que es exactamente
+       * lo que pasaba: dk_rom_error=1, uvm2_romzip_bytes=0.
+       *
+       * Se usa la MISMA carpeta que el simulador, ~/VectrexStudio/sd, para no inventar un
+       * segundo sitio donde poner las cosas. Solo se mandan ficheros pequenos: el romset de
+       * un juego cabe de sobra en el tope, y mandar la carpeta entera puede ser cientos de
+       * megas. */
+      let sdFiles: Record<string, string> | undefined;
+      if (effectiveTarget === 'uvm2') {
+        sdFiles = await leerSdSimulada();
+        console.log(`[build] SD simulada: ${Object.keys(sdFiles).length} ficheros`);
+      }
       win?.webContents.send('emu://compiledBin', {
         base64: buf.toString('base64'),
         size: buf.length,
         binPath: artifactPath,
         target: effectiveTarget,
         elfBase64,
+        sdFiles,
       });
       win?.webContents.send('run://status',
         `Previewing ${effectiveTarget} binary: ${manifest.project.name}`);
@@ -2351,6 +2375,38 @@ ipcMain.handle('vrec:compile', async (_e, vrecPath: string) => {
 // Simulated SD card for the rp2350 emulator preview: a folder in the user's
 // home (`~/VectrexStudio/sd`, created if missing). Returns the uppercase stems
 // of its *.bin files — the game list the SD_FILE_COUNT/NAME traps serve.
+/** Los ficheros de ~/VectrexStudio/sd, por ruta relativa en minusculas, en base64.
+ *
+ * Recorre subdirectorios porque el UVM2 pide "roms/<juego>.zip". El tope por fichero y el
+ * total existen para que mandar la carpeta no bloquee el IPC: una SD de verdad puede tener
+ * gigas y aqui solo hacen falta los romsets. Lo que se pase se anuncia en la terminal, para
+ * que "falta el romset" nunca sea una sorpresa muda. */
+async function leerSdSimulada(): Promise<Record<string, string>> {
+  const raiz = join(os.homedir(), 'VectrexStudio', 'sd');
+  const MAX_FICHERO = 2 * 1024 * 1024;
+  const MAX_TOTAL   = 24 * 1024 * 1024;
+  const out: Record<string, string> = {};
+  let total = 0;
+  const anda = async (dir: string, rel: string): Promise<void> => {
+    let entradas: any[];
+    try { entradas = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entradas) {
+      if (e.name.startsWith('.')) continue;
+      const p = join(dir, e.name);
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) { await anda(p, r); continue; }
+      try {
+        const st = await fs.stat(p);
+        if (st.size > MAX_FICHERO || total + st.size > MAX_TOTAL) continue;
+        out[r.toLowerCase()] = (await fs.readFile(p)).toString('base64');
+        total += st.size;
+      } catch { /* un fichero ilegible no puede tumbar la lista entera */ }
+    }
+  };
+  await anda(raiz, '');
+  return out;
+}
+
 ipcMain.handle('sd:simList', async () => {
   try {
     const dir = join(os.homedir(), 'VectrexStudio', 'sd');
