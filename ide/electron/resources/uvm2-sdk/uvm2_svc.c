@@ -55,7 +55,7 @@ enum {
 
 /* Input is sampled once per frame in SYS_WAIT_RECAL and cached here: the read
  * sequences disturb Port B, so they may only run between frames. */
-static uint8_t  s_buttons;
+static uint8_t  s_buttons = 0xFFu;   /* released; active low, see uvm2_core1.c */
 static uint32_t s_axes;
 
 /* Where the controls come from.  Single-core, this file reads them itself at the
@@ -85,6 +85,13 @@ static uint32_t s_audio_acc;
  *   amber → clock found, bus taken, VIA being primed
  *   green → frames are going out
  */
+#ifdef UVM2_STEP_OWNS_INIT
+/* Declared here rather than pulled in: uvm2_stream_start lives in uvm2_bus_stream.h and
+ * uvm2_core1_start has no header at all (uvm2_pico_main.c declares it the same way). */
+void uvm2_stream_start(void);
+void uvm2_core1_start(void);
+#endif
+
 void uvm2_runtime_init(void)
 {
     /* First, before anything with state: .bss is still whatever was in SRAM. */
@@ -173,6 +180,37 @@ void uvm2_runtime_init(void)
 
     uvm2_frame_begin();
     uvm2_led_status(UVM2_STATUS_RUNNING);
+
+#ifdef UVM2_STEP_OWNS_INIT
+    /* THE REST OF THE BRING-UP, FOR THE VPy PATH ONLY.
+     *
+     * On the C-port path main() calls runtime_init and then, in this order, medir_e,
+     * stream_start and core1_start. The VPy path never reaches that main(): the codegen
+     * injects ONE call — `bl uvm2_runtime_init` as the first instruction of game_main —
+     * and uvm2_pico_main.c skips the whole block under UVM2_STEP_OWNS_INIT. So the two
+     * switches that matter were defines with no startup behind them:
+     *
+     *   UVM2_PIO_STREAM  changed the emit path but nobody started the state machine.
+     *   UVM2_DUAL_CORE   made uvm2_frame_end hand the list to core 1 and return — and
+     *                    core 1 was never launched, so NOTHING replayed the list.
+     *
+     * The symptom of the second one is the nastiest kind: the game runs, the frame
+     * counter climbs, the host reports fps, and the screen stays black. Found on
+     * SnowBros 2026-08-25, whose ELF had -DUVM2_DUAL_CORE and not one core-1 symbol —
+     * the launch was unreferenced and the linker collected it.
+     *
+     * Same order as main(), so both paths bring the machine up identically. */
+    uvm2_medir_e();
+#  ifdef UVM2_PIO_STREAM
+    /* After measuring E and with the bus already taken: the SM syncs against ~E. */
+    uvm2_stream_start();
+#  endif
+#  ifdef UVM2_DUAL_CORE
+    /* Last, never before: core 1 owns the bus from here on, and must not start
+     * until the VIA has been programmed and the 6809 is halted. */
+    uvm2_core1_start();
+#  endif
+#endif
 }
 
 /* r0-r3 of the interrupted code sit at frame[0..3]; frame[6] is the stacked PC,

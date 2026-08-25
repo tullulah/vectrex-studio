@@ -106,8 +106,16 @@ static void psg_drain(void)
 }
 
 /* Cached controls, served to the game by SYS_READ_BUTTONS / SYS_READ_AXES.
- * Defined here in dual-core builds because this is the core that fills them. */
-volatile uint8_t  uvm2_cached_buttons;
+ * Defined here in dual-core builds because this is the core that fills them.
+ *
+ * RELEASED IS 0xFF, AND THE INITIAL VALUE IS NOT COSMETIC. These are active low —
+ * SYS_READ_BUTTONS answers `~uvm2_cached_buttons`, so a zero bit means PRESSED. Left in
+ * .bss they start at 0, i.e. all four buttons held, and every game that waits for a
+ * button starts by itself before core 1 gets to fill the cache at the end of frame one.
+ * Single-core never showed it because core 0 fills s_buttons inside the same syscall path
+ * the game polls from; dual-core fills it asynchronously, so the game can read first.
+ * Seen on SnowBros 2026-08-25, the first VPy game to actually launch core 1. */
+volatile uint8_t  uvm2_cached_buttons = 0xFFu;
 volatile uint32_t uvm2_cached_axes;
 
 /* Tiempo Vectrex no entregado aun al secuenciador, en ciclos de bus. */
