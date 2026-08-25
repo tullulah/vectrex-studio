@@ -276,17 +276,24 @@ async function createWindow() {
       {
         label: 'Build',
         submenu: [
-          { label: 'Build', accelerator: 'CmdOrCtrl+F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
-          { label: 'Build & Run', accelerator: 'CmdOrCtrl+F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
-          { label: 'Run on RP2350 Emulator', accelerator: 'CmdOrCtrl+Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.rp2350emu') },
+          // THE SAME FOUR KEYS THE RENDERER BINDS, and they have to stay in step: on macOS
+          // the native menu takes the key BEFORE the renderer sees it, so an accelerator
+          // that disagrees here silently wins. Bare = the selected target, Shift = the
+          // simulator; F5 runs it, F7 only builds.
+          { label: 'Build && Run on emulator', accelerator: 'F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
+          { label: 'Build && Run on simulator (fast)', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.simulate') },
+          { type: 'separator' },
+          { label: 'Build (no run)', accelerator: 'F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
+          { label: 'Build simulator (no run)', accelerator: 'Shift+F7', click: () => mainWindow?.webContents.send('command', 'build.buildSim') },
+          { type: 'separator' },
           { label: 'Clean', click: () => mainWindow?.webContents.send('command', 'build.clean') }
         ]
       },
       {
         label: 'Debug',
         submenu: [
-          { label: 'Start Debugging', accelerator: 'CmdOrCtrl+F5', click: () => mainWindow?.webContents.send('command', 'debug.start') },
-          { label: 'Stop Debugging', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'debug.stop') },
+          { label: 'Start Debugging', accelerator: 'CmdOrCtrl+D', click: () => mainWindow?.webContents.send('command', 'debug.start') },
+          { label: 'Stop Debugging', click: () => mainWindow?.webContents.send('command', 'debug.stop') },
           { type: 'separator' },
           { label: 'Step Over', accelerator: 'F10', click: () => mainWindow?.webContents.send('command', 'debug.stepOver') },
           { label: 'Step Into', accelerator: 'F11', click: () => mainWindow?.webContents.send('command', 'debug.stepInto') },
@@ -438,12 +445,24 @@ async function createWindow() {
   mainWindow.webContents.on('before-input-event', (event, input) => {
     const ctrl = input.control || input.meta; // Ctrl on Windows/Linux, Cmd on macOS
     
-    // F5 triggers debug-continue (not reload)
-    if (input.type === 'keyDown' && input.key === 'F5' && !ctrl && !input.shift) {
-      console.log('[IDE] 🟢 F5 pressed - sending debug-continue to frontend');
-      if (mainWindow) {
-        mainWindow.webContents.send('debug-continue-hotkey');
-      }
+    // THE FOUR BUILD KEYS, INTERCEPTED HERE SO THEY NEVER REACH THE PAGE AS A RELOAD.
+    //
+    // This hook runs BEFORE the renderer sees the key, and it preventDefaults — so
+    // whatever it routes to is what the key does, and any binding in the renderer for the
+    // same key is dead code. F5 used to be routed to `debug-continue-hotkey`, which on a
+    // VPy project continues the 6809 emulator with no cartridge: it boots the BIOS, and
+    // the BIOS is Minestorm. That is the whole of "I press F5 and Minestorm appears".
+    //
+    // Bare = the selected target, Shift = the simulator; F5 runs it, F7 only builds. Same
+    // four keys as the native menus and the renderer — on macOS the menu accelerator gets
+    // there first and this never fires, on Linux/Windows there is no native menu and this
+    // is the only thing that fires. Both roads have to lead to the same command.
+    if (input.type === 'keyDown' && !ctrl && (input.key === 'F5' || input.key === 'F7')) {
+      const cmd = input.key === 'F5'
+        ? (input.shift ? 'build.simulate' : 'build.run')
+        : (input.shift ? 'build.buildSim' : 'build.build');
+      console.log(`[IDE] ${input.shift ? 'Shift+' : ''}${input.key} -> ${cmd}`);
+      mainWindow?.webContents.send('command', cmd);
       event.preventDefault();
       return;
     }
@@ -718,21 +737,24 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
     {
       label: 'Build',
       submenu: [
-        { label: 'Build', accelerator: 'F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
-        { label: 'Build & Run', accelerator: 'F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
-        // Follows the SELECTED build target: rp2350 -> the slow HW-accurate emulator,
-        // pitrex -> build the bare-metal kernel image (nothing to emulate there).
-        // The native menu is static, so the label stays target-neutral; the in-app
-        // Build menu shows the specific action.
-        { label: 'Build for Hardware Target', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.rp2350emu') },
+        // THE SAME FOUR KEYS THE RENDERER BINDS, and they have to stay in step: on macOS
+        // the native menu takes the key BEFORE the renderer sees it, so an accelerator
+        // that disagrees here silently wins. Bare = the selected target, Shift = the
+        // simulator; F5 runs it, F7 only builds.
+        { label: 'Build && Run on emulator', accelerator: 'F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
+        { label: 'Build && Run on simulator (fast)', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.simulate') },
+        { type: 'separator' },
+        { label: 'Build (no run)', accelerator: 'F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
+        { label: 'Build simulator (no run)', accelerator: 'Shift+F7', click: () => mainWindow?.webContents.send('command', 'build.buildSim') },
+        { type: 'separator' },
         { label: 'Clean', click: () => mainWindow?.webContents.send('command', 'build.clean') }
       ]
-    },
+      },
     {
       label: 'Debug',
       submenu: [
-        { label: 'Start Debugging', accelerator: 'CmdOrCtrl+F5', click: () => mainWindow?.webContents.send('command', 'debug.start') },
-        { label: 'Stop Debugging', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'debug.stop') },
+        { label: 'Start Debugging', accelerator: 'CmdOrCtrl+D', click: () => mainWindow?.webContents.send('command', 'debug.start') },
+        { label: 'Stop Debugging', click: () => mainWindow?.webContents.send('command', 'debug.stop') },
         { type: 'separator' },
         { label: 'Step Over', accelerator: 'F10', click: () => mainWindow?.webContents.send('command', 'debug.stepOver') },
         { label: 'Step Into', accelerator: 'F11', click: () => mainWindow?.webContents.send('command', 'debug.stepInto') },
@@ -1433,9 +1455,13 @@ export async function executeExternalBuild(args: {
   sdPath?: string;
   target?: 'pitrex' | 'rp2350' | 'uvm2';
   preview?: boolean;   // rp2350: after building, push the .bin to the emulator panel
+  /* Variables de `make` extra, solo para uvm2: las pone el panel Advanced para poder
+   * compilar VARIAS versiones (un nucleo / dos, PIO / SIO, otro refresco) y compararlas
+   * en la CONSOLA, que es donde se decide. */
+  uvm2Flags?: string;
 }): Promise<{ ok: true; artifactPath: string } | { error: string; detail?: string }> {
   const win = mainWindow ?? null;
-  const { manifestPath, deploy = false, sdPath = '', target, preview = false } = args || ({} as any);
+  const { manifestPath, deploy = false, sdPath = '', target, preview = false, uvm2Flags = '' } = args || ({} as any);
 
   let manifest: ExternalProjectManifest;
   let rootDir: string;
@@ -1471,13 +1497,55 @@ export async function executeExternalBuild(args: {
   // back to the [build] table — so asking for uvm2 quietly built pitrex, and the
   // log gave no hint. Say so instead.
   if (manifest.targets && !manifest.targets[effectiveTarget]) {
+    // FOR A HARDWARE TARGET, REFUSE — do not build something else.
+    //
+    // The warning below was already here and it was not enough: the build still ran the
+    // default recipe, so asking for uvm2 produced an rp2350 .bin, the emulator had no
+    // .um2 to load, and the whole thing read as "the shortcut does not work for this
+    // project". Measured on aae_aztarac 2026-08-25. Failing here beats failing on the
+    // screen — the same rule uvm2_pico.cmake applies to VPY_DUAL_CORE.
+    if (effectiveTarget === 'uvm2' || effectiveTarget === 'pitrex' || effectiveTarget === 'rp2350') {
+      // NAME WHAT THE MANIFEST DOES HAVE. "Add [targets.pitrex]" reads like the recipe
+      // exists and is merely undeclared, and for the AAE ports it does not: their
+      // Makefiles have no rule that builds a PiTrex kernel at all (PITREX_SIM_SDK there
+      // is only the host shim the WASM `sim` build links against). Listing the declared
+      // targets answers "so what CAN I build?" in the same line.
+      const declarados = Object.keys(manifest.targets).sort().join(', ') || '(none)';
+      const msg = `${manifest.project.name} has no [targets.${effectiveTarget}] recipe, so ` +
+                  `nothing was built — the default [build] one would produce a different ` +
+                  `artifact. It declares: ${declarados}. To add ${effectiveTarget}, the ` +
+                  `Makefile needs a rule that produces it first, then declare it here.`;
+      win?.webContents.send('run://stderr', `[C] ${msg}\n`);
+      return { error: 'no_target_recipe', detail: msg };
+    }
     win?.webContents.send('run://stderr',
       `[C] ${manifest.project.name} has no [targets.${effectiveTarget}] recipe — ` +
       `falling back to the default [build] one. Add it to the .cvproj to build for ${effectiveTarget}.\n`);
   }
   const buildCommand  = override.command  ?? manifest.build.command;
-  const buildArgs     = override.args     ?? manifest.build.args ?? [];
+  let   buildArgs     = override.args     ?? manifest.build.args ?? [];
   const buildArtifact = override.artifact ?? manifest.build.artifact;
+
+  /* LAS PERILLAS DEL PANEL, AL FINAL DE LA ORDEN. Van despues de los argumentos del
+   * manifiesto porque en `make` gana la ULTIMA asignacion de la linea de ordenes, asi que
+   * asi se puede sobreescribir lo que el proyecto trae por defecto.
+   *
+   * Y SE IMPRIME LO QUE SE VA A EJECUTAR. Una perilla que no llega al compilador compila
+   * sin un aviso y produce un binario identico — ya paso en este proyecto, y la unica
+   * defensa barata es ver la orden. */
+  const extraUvm2 = (effectiveTarget === 'uvm2' ? (uvm2Flags || '') : '').trim();
+  if (extraUvm2) {
+    buildArgs = [...buildArgs, ...extraUvm2.split(/\s+/)];
+  } else if (effectiveTarget === 'uvm2') {
+    /* DECIRLO CUANDO NO HAY NINGUNA. Sin este aviso, "compilo tres veces y salen del mismo
+     * tamano" no tiene explicacion en pantalla: una perilla que no llega y una perilla en
+     * su valor de fabrica producen el MISMO binario, y se leen igual. */
+    win?.webContents.send('run://stderr',
+      `[build] uvm2: sin flags del panel — se compila el DEFECTO ` +
+      `(doble nucleo + PIO/DMA). Settings -> UVM2 -> Advanced para cambiarlo.\n`);
+  }
+  win?.webContents.send('run://stderr',
+    `[build] ${buildCommand} ${buildArgs.join(' ')}   (cwd ${rootDir})\n`);
 
   win?.webContents.send('run://status', `Building ${manifest.project.name} (${effectiveTarget})...`);
   const code = await runFlashCommand(buildCommand, buildArgs, rootDir, win, { env, label: 'C' });
@@ -1495,7 +1563,14 @@ export async function executeExternalBuild(args: {
     win?.webContents.send('run://stderr', `[C] Build reported success but artifact not found: ${artifactPath}\n`);
     return { error: 'artifact_not_found', detail: artifactPath };
   }
-  win?.webContents.send('run://stdout', `[C] Built: ${artifactPath}\n`);
+  /* EL TAMANO, JUNTO A LOS FLAGS. Dos builds del mismo tamano son la MISMA imagen, y verlo
+   * aqui evita la pregunta cara: "he compilado tres veces y salen iguales". Si el tamano no
+   * se mueve al cambiar una perilla, la perilla no llego o no cambia nada — y eso es una
+   * respuesta, no un misterio. */
+  let tam = '';
+  try { tam = ` (${(await fs.stat(artifactPath)).size} bytes)`; } catch { /* ya se comprobo */ }
+  win?.webContents.send('run://stdout',
+    `[C] Built: ${artifactPath}${tam}${extraUvm2 ? `   flags: ${extraUvm2}` : ''}\n`);
   win?.webContents.send('run://status', `Built ${manifest.project.name}`);
 
   // Preview the RP2350 binary in the emulator panel: push the RAM-linked .bin
@@ -1711,11 +1786,11 @@ export async function executeSimBuild(args: {
 }
 
 // Exported function for direct invocation (e.g. from MCP server)
-export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string }) {
+export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; uvm2Flags?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string }) {
   // CRITICAL: Log received args to debug compiler selection
   console.log('[RUN] executeCompilation received args:', JSON.stringify({ ...args, saveIfDirty: args?.saveIfDirty ? '...' : undefined }));
   
-  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '', rp2350FlashMethod = 'none', rp2350FirmwareDir = '', rp2350Ram = false, rp2350SdPath = '' } = args || {} as any;
+  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '', uvm2Flags = '', rp2350FlashMethod = 'none', rp2350FirmwareDir = '', rp2350Ram = false, rp2350SdPath = '' } = args || {} as any;
   
   console.log('[RUN] Extracted compilerBackend:', compilerBackend);
   // Surface pitrex SD flags to the output panel so they're always visible
@@ -1858,6 +1933,19 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
       // _sd.bin output stem — not the plain <name>.asm (which never gets written).
       outAsm = outAsm.replace(/\.asm$/, '_sd.asm');
     }
+
+    // SAME REASON, FOR UVM2: its raw .bin is an ARM image, and the project's
+    // [build] output is the path the SIMULATOR loads. Building for uvm2 used to
+    // copy the ARM image straight over it, so the simulator was then handed a
+    // Cortex-M33 vector table where it expected the 'VPy2' magic — and the only
+    // symptom was "the simulator stopped working, only the emulator runs".
+    // The deliverable here is the .um2 anyway; the .bin is a by-product.
+    // Same trick as above: rename it, and keep outAsm in step because vpy_cli
+    // derives the .S/.asm name from the output stem.
+    if (target === 'uvm2') {
+      finalBinPath = finalBinPath.replace(/\.bin$/, '_uvm2.bin');
+      outAsm = outAsm.replace(/\.asm$/, '_uvm2.asm');
+    }
     
     // Build compiler arguments based on backend
     let argsv: string[];
@@ -1915,7 +2003,26 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
     mainWindow?.webContents.send('run://stdout', `[Compiler] Working dir: ${workspaceRoot}\n`);
     mainWindow?.webContents.send('run://stdout', `[Compiler] Mode: ${isProjectMode ? 'PROJECT (.vpyproj)' : 'FILE (.vpy)'}\n`);
     
-    const child = spawn(compiler, argsv, { stdio: ['ignore','pipe','pipe'], cwd: workspaceRoot });
+    /* LAS PERILLAS DEL UVM2 VAN POR EL ENTORNO EN ESTE CAMINO.
+     *
+     * `vpy_cli` no acepta argumentos para esto: configura su propio CMake y lee
+     * UVM2_DUAL_CORE / UVM2_PIO_STREAM / UVM2_EXTRA_DEFS del ENTORNO. Y sus defectos son
+     * los CONTRARIOS que los de `make uvm2`: un nucleo y SIO. Por eso el panel emite
+     * siempre el 0 o el 1 explicito, en vez de "solo lo que cambia".
+     *
+     * Sin esto, cuatro builds con nombres distintos salian con el MISMO md5 — comprobado
+     * sobre los .um2 de la tarjeta el 2026-08-25. */
+    const envHijo: NodeJS.ProcessEnv = { ...process.env };
+    const flagsUvm2 = (target === 'uvm2' ? (uvm2Flags || '') : '').trim();
+    if (flagsUvm2) {
+      for (const par of flagsUvm2.split(/\s+/)) {
+        const i = par.indexOf('=');
+        if (i > 0) envHijo[par.slice(0, i)] = par.slice(i + 1);
+      }
+      mainWindow?.webContents.send('run://stderr', `[build] uvm2 (vpy_cli) entorno: ${flagsUvm2}\n`);
+    }
+    if (verbose) console.log('[RUN] env uvm2:', flagsUvm2);
+    const child = spawn(compiler, argsv, { stdio: ['ignore','pipe','pipe'], cwd: workspaceRoot, env: envHijo });
     let stdoutBuf = '';
     let stderrBuf = '';
     child.stdout.on('data', (c: Buffer) => { const txt = c.toString('utf8'); stdoutBuf += txt; mainWindow?.webContents.send('run://stdout', txt); });
@@ -3172,159 +3279,13 @@ ipcMain.handle('recents:write', async (_e, list: any[]) => {
 });
 
 // Update native macOS menu with recent projects
-ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: string; path: string}>) => {
-  if (process.platform !== 'darwin' || !mainWindow) return;
-  
-  const template: Electron.MenuItemConstructorOptions[] = [
-    {
-      label: 'Vectrex Studio',
-      submenu: [
-        { role: 'about' },
-        { type: 'separator' },
-        { role: 'services' },
-        { type: 'separator' },
-        { role: 'hide' },
-        { role: 'hideOthers' },
-        { role: 'unhide' },
-        { type: 'separator' },
-        { role: 'quit' }
-      ]
-    },
-    {
-      label: 'File',
-      submenu: [
-        {
-          label: 'New',
-          submenu: [
-            { label: 'Project...', click: () => mainWindow?.webContents.send('command', 'project.new') },
-            { type: 'separator' },
-            { label: 'VPy File', accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('command', 'file.new.vpy') },
-            { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
-            { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
-            { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
-            { label: 'Vector Movie (.vmov)', click: () => mainWindow?.webContents.send('command', 'file.new.vmov') },
-            { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
-            { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
-            { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
-            { label: 'Enemy (.venemy)', click: () => mainWindow?.webContents.send('command', 'file.new.venemy') }
-          ]
-        },
-        {
-          label: 'Open',
-          submenu: [
-            { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow?.webContents.send('command', 'project.open') },
-            { label: 'Import C/C++ Project...', click: () => mainWindow?.webContents.send('command', 'project.importC') },
-            { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('command', 'file.open') }
-          ]
-        },
-        { type: 'separator' },
-        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => mainWindow?.webContents.send('command', 'file.save') },
-        { label: 'Save As...', accelerator: 'CmdOrCtrl+Shift+S', click: () => mainWindow?.webContents.send('command', 'file.saveAs') },
-        { type: 'separator' },
-        { label: 'Close File', click: () => mainWindow?.webContents.send('command', 'file.close') },
-        { label: 'Close Project', click: () => mainWindow?.webContents.send('command', 'project.close') },
-        { type: 'separator' },
-        {
-          label: 'Recent Projects',
-          submenu: recents.length > 0 
-            ? recents.map(r => ({
-                label: r.name,
-                click: () => {
-                  // Send project path as payload
-                  mainWindow?.webContents.send('command', 'project.openRecent', r.path);
-                }
-              }))
-            : [{ label: 'No recent projects', enabled: false }]
-        },
-        { type: 'separator' },
-        { label: 'Reset Layout', click: () => mainWindow?.webContents.send('command', 'layout.reset') }
-      ]
-    },
-    {
-      label: 'Edit',
-      submenu: [
-        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', role: 'undo' },
-        { label: 'Redo', accelerator: 'CmdOrCtrl+Y', role: 'redo' },
-        { type: 'separator' },
-        { label: 'Cut', accelerator: 'CmdOrCtrl+X', role: 'cut' },
-        { label: 'Copy', accelerator: 'CmdOrCtrl+C', role: 'copy' },
-        { label: 'Paste', accelerator: 'CmdOrCtrl+V', role: 'paste' },
-        { type: 'separator' },
-        { label: 'Select All', accelerator: 'CmdOrCtrl+A', role: 'selectAll' },
-        { type: 'separator' },
-        { label: 'Toggle Comment', accelerator: 'CmdOrCtrl+/', enabled: false },
-        { label: 'Format Document', accelerator: 'Shift+Alt+F', enabled: false }
-      ]
-    },
-    {
-      label: 'Build',
-      submenu: [
-        { label: 'Build', accelerator: 'F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
-        { label: 'Build & Run', accelerator: 'F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
-        // Follows the SELECTED build target: rp2350 -> the slow HW-accurate emulator,
-        // pitrex -> build the bare-metal kernel image (nothing to emulate there).
-        // The native menu is static, so the label stays target-neutral; the in-app
-        // Build menu shows the specific action.
-        { label: 'Build for Hardware Target', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.rp2350emu') },
-        { label: 'Clean', click: () => mainWindow?.webContents.send('command', 'build.clean') }
-      ]
-    },
-    {
-      label: 'Debug',
-      submenu: [
-        { label: 'Start Debugging', accelerator: 'CmdOrCtrl+F5', click: () => mainWindow?.webContents.send('command', 'debug.start') },
-        { label: 'Stop Debugging', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'debug.stop') },
-        { type: 'separator' },
-        { label: 'Step Over', accelerator: 'F10', click: () => mainWindow?.webContents.send('command', 'debug.stepOver') },
-        { label: 'Step Into', accelerator: 'F11', click: () => mainWindow?.webContents.send('command', 'debug.stepInto') },
-        { label: 'Step Out', accelerator: 'Shift+F11', click: () => mainWindow?.webContents.send('command', 'debug.stepOut') },
-        { type: 'separator' },
-        { label: 'Toggle Breakpoint', accelerator: 'F9', click: () => mainWindow?.webContents.send('command', 'debug.toggleBreakpoint') }
-      ]
-    },
-    {
-      label: 'View',
-      submenu: [
-        { label: 'Emulator', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.emulator') },
-        { label: 'Dual Test', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.dual-emulator') },
-        { label: 'Debug', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.debug') },
-        { label: 'Errors', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.errors') },
-        { label: 'Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.output') },
-        { label: 'Build Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.build-output') },
-        { label: 'Compiler Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.compiler-output') },
-        { label: 'Memory', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.memory') },
-        { label: 'Trace', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.trace') },
-        { label: 'PSG Log', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.psglog') },
-        { label: 'PyPilot', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.ai-assistant') },
-        { type: 'separator' },
-        { label: 'Hide Active Panel', click: () => mainWindow?.webContents.send('command', 'view.hideActivePanel') },
-        { label: 'Pin/Unpin Active Panel', click: () => mainWindow?.webContents.send('command', 'view.togglePinActivePanel') },
-        { type: 'separator' },
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' }
-      ]
-    },
-    {
-      label: 'Window',
-      submenu: [
-        { role: 'minimize' },
-        { role: 'zoom' },
-        { type: 'separator' },
-        { role: 'front' },
-        { role: 'close' }
-      ]
-    }
-  ];
-  
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
-});
+// EL SEGUNDO `menu:updateRecentProjects` VIVIA AQUI Y ESTABA MUERTO.
+//
+// Era una copia casi literal del de mas arriba (solo cambiaba el comando del click de un
+// proyecto reciente: project.openRecent en vez de project.openPath). `ipcMain.handle`
+// LANZA al registrar un segundo manejador para el mismo canal, asi que este no llegaba a
+// existir nunca — pero su plantilla si divergia de la otra, y quien leyera esta se llevaba
+// una idea equivocada de que aceleradores tiene la aplicacion. Borrado 2026-08-25.
 
 // ============================================
 // Shell Command Execution (for Ollama installation)

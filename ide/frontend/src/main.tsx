@@ -27,7 +27,7 @@ import { FileTreePanel } from './components/panels/FileTreePanel.js';
 import { PlaygroundPanel } from './components/panels/PlaygroundPanel.js';
 import { SettingsPanel } from './components/panels/SettingsPanel.js';
 import { EpromProgrammerDialog } from './components/dialogs/EpromProgrammerDialog.js';
-import { useSettings } from './state/settingsStore.js';
+import { useSettings, uvm2MakeFlags } from './state/settingsStore.js';
 import { useEmulatorSettings } from './state/emulatorSettings.js';
 import { useEmulatorStore } from './state/emulatorStore.js';
 
@@ -58,6 +58,12 @@ function App() {
   const pitrexSdPath = useSettings(s => s.pitrexSdPath);
   const uvm2CopyToSD = useSettings(s => s.uvm2CopyToSD);
   const uvm2SdPath = useSettings(s => s.uvm2SdPath);
+  /* Las perillas de build del UVM2, compuestas por la MISMA funcion que las enseña el
+   * panel: si se compusieran por separado, el panel diria una cosa y la build haria otra. */
+  const uvm2DualCore = useSettings(s => s.uvm2DualCore);
+  const uvm2PioStream = useSettings(s => s.uvm2PioStream);
+  const uvm2Hz = useSettings(s => s.uvm2Hz);
+  const uvm2ExtraFlags = useSettings(s => s.uvm2ExtraFlags);
   const rp2350FlashMethod = useSettings(s => s.rp2350FlashMethod);
   const rp2350FirmwareDir = useSettings(s => s.rp2350FirmwareDir);
   const rp2350SdPath = useSettings(s => s.rp2350SdPath);
@@ -403,7 +409,7 @@ function App() {
   const buildDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Función para manejar build y run
-  const handleBuild = useCallback(async (autoRun: boolean = false, opts?: { forSd?: boolean; rp2350Emu?: boolean }) => {
+  const handleBuild = useCallback(async (autoRun: boolean = false, opts?: { forSd?: boolean; sim?: boolean }) => {
     // "Build for SD": produce a RAM-linked rp2350 game for the cart's SD launcher.
     // Triggered either explicitly (Build menu item) or by selecting the rp2350
     // "SD card" build mode in Settings so a normal Build/Run makes the SD binary.
@@ -460,14 +466,26 @@ function App() {
           projectState.vpyProject.manifestPath || projectState.vpyProject.projectFile;
         const projName = projectState.vpyProject.config.project.name;
 
+        // F5 = BUILD AND EMULATE THE SELECTED TARGET. Shift+F5 = build and simulate,
+        // and where the project has no simulator Shift does exactly what F5 does.
+        //
+        // The switch is by TARGET, not by project language. It used to be the other way
+        // round and split by language: a C project ran the WASM simulator on F5 whatever
+        // the target selector said, while a VPy project built the selected target — so
+        // the same two keys meant different things depending on which project was open,
+        // and the target selector was ignored half the time.
+        const quiereSim = !!opts?.sim;
+
+        // Shift: the WASM [simulate] module. Falls through to the target build below when
+        // the project has none, which is the "acts like F5" half of the rule.
         // The WASM preview is ONE build that runs against the host SDK shim, so
         // it is the same picture whichever hardware target is selected. Say so:
         // otherwise F5 looks like it is ignoring the target selector, which is
         // exactly how it reads when three targets produce identical output.
-        if (!forSd && !opts?.rp2350Emu) {
+        if (!forSd && quiereSim) {
           logger.info('Build',
             `Simulator preview (WASM) — the same build for every target; ` +
-            `use Shift+F5 to build for ${buildTarget}.`);
+            `press F5 to build and emulate ${buildTarget} instead.`);
           if (buildTarget === 'm6809') {
             logger.warn('Build',
               `${projName} is a C/C++ project and has no 6809 build path, so ` +
@@ -475,26 +493,42 @@ function App() {
           }
         }
 
-        // RP2350 binary preview (fidelity): run the ACTUAL ARM machine code in
-        // Rp2350System (svc dispatcher / Thumb2 interpreter).  This is the HW
-        // oracle but it's SLOW (triple emulation: JS interprets ARM, ARM runs the
-        // game's own CPU-emulator, that runs the game) — brutal for 68000/Musashi
-        // games.  So it is ONLY entered on an EXPLICIT request (Shift+F5 → "Run on
-        // RP2350 Emulator", opts.rp2350Emu).  Plain F5 / Build & Run always takes
-        // the fast WASM simulator below, regardless of the build target — the user
-        // opts into hardware-accurate emulation deliberately.  (Previously plain F5
-        // auto-ran the emulator whenever target==rp2350, so F5 and Shift+F5 were
-        // indistinguishable and there was no way to reach the fast sim.)
+        if (!forSd && quiereSim) {
+          if (!electronAPI?.runBuildSim) {
+            logger.error('Build', 'electronAPI.runBuildSim not available');
+            return;
+          }
+          logger.info('Build', `Building simulator for external project: ${projName}`);
+          const simResult = await electronAPI.runBuildSim({ manifestPath });
+          if (simResult?.ok && simResult.modulePath) {
+            logger.info('Build', 'Simulator module ready:', simResult.modulePath);
+            // Hand the module to the emulator panel (PitrexSimView loads it).
+            // setSimModule bumps a nonce so a rebuilt same-path module reloads.
+            const romZip = simResult.romZipBase64
+              ? Uint8Array.from(atob(simResult.romZipBase64), c => c.charCodeAt(0))
+              : null;
+            useEmulatorStore.getState().setSimModule(simResult.modulePath, romZip);
+            return;
+          }
+          // No [simulate] target: fall through to the target build below, so Shift+F5
+          // behaves like F5 on a project with no simulator. Any other error surfaces.
+          if (simResult?.error && simResult.error !== 'no_simulate_target') {
+            logger.error('Build', 'Simulator build failed:', simResult.error, simResult.detail || '');
+            return;
+          }
+          logger.info('Build', `No [simulate] target for ${projName} — building for ${buildTarget}, same as F5.`);
+        }
+        // THE TARGET BUILD — what F5 does, and what Shift+F5 falls back to.
         //
-        // Shift+F5 follows the SELECTED TARGET, like the VPy path below does with
-        // `target: forSd ? 'rp2350' : buildTarget`. It used to be hardcoded to
-        // rp2350, so a C project with target=pitrex had NO way to build its
-        // bare-metal kernel from the IDE: F5/F7 went to the WASM sim and Shift+F5
-        // built an rp2350 binary instead. There is no PiTrex emulator to preview
-        // in, so for that target this builds the kernel image (and copies it to
-        // the SD when "Copy to SD" is on) — the hardware action, which is the
-        // point of asking for hardware from the keyboard.
-        if (!forSd && opts?.rp2350Emu) {
+        // Runs the ACTUAL machine code of the selected target on its emulator: uvm2 in
+        // Uvm2System, rp2350 in Rp2350System (svc dispatcher / Thumb2 interpreter). That is
+        // the hardware oracle, and it is SLOW — triple emulation for a port, since JS
+        // interprets ARM, the ARM code runs the game's own CPU emulator, and that runs the
+        // game. Shift+F5 is the fast way out, not the other way round.
+        //
+        // pitrex has no emulator to preview in, so there this builds the kernel image (and
+        // copies it to the SD when "Copy to SD" is on) — the hardware action.
+        if (!forSd) {
           if (!electronAPI?.runBuildExternal) {
             logger.error('Build', 'electronAPI.runBuildExternal not available');
             return;
@@ -526,6 +560,7 @@ function App() {
             const ur = await electronAPI.runBuildExternal({
               manifestPath, target: 'uvm2', preview: true,
               deploy: uvm2CopyToSD, sdPath: uvm2SdPath,
+              uvm2Flags: uvm2MakeFlags({ uvm2DualCore, uvm2PioStream, uvm2Hz, uvm2ExtraFlags }),
             });
             if (ur?.error) logger.error('Build', 'UVM2 build failed:', ur.error, ur.detail || '');
             else logger.info('Build', 'UVM2 image ready:', ur?.artifactPath || '');
@@ -543,35 +578,6 @@ function App() {
           return;
         }
 
-        // Both Build (F7) and Build & Run (F5) build the [simulate] WASM module
-        // and run it in the emulator panel — consistent with every other target,
-        // where F7/F5 land the game in the emulator. The bare-metal hardware
-        // kernel is a separate action: "Build for SD" (forSd) below.
-        if (!forSd) {
-          if (!electronAPI?.runBuildSim) {
-            logger.error('Build', 'electronAPI.runBuildSim not available');
-            return;
-          }
-          logger.info('Build', `Building simulator for external project: ${projName}`);
-          const simResult = await electronAPI.runBuildSim({ manifestPath });
-          if (simResult?.ok && simResult.modulePath) {
-            logger.info('Build', 'Simulator module ready:', simResult.modulePath);
-            // Hand the module to the emulator panel (PitrexSimView loads it).
-            // setSimModule bumps a nonce so a rebuilt same-path module reloads.
-            const romZip = simResult.romZipBase64
-              ? Uint8Array.from(atob(simResult.romZipBase64), c => c.charCodeAt(0))
-              : null;
-            useEmulatorStore.getState().setSimModule(simResult.modulePath, romZip);
-            return;
-          }
-          // No [simulate] target: fall through to the hardware build so Build
-          // still does something useful. Any other error surfaces.
-          if (simResult?.error && simResult.error !== 'no_simulate_target') {
-            logger.error('Build', 'Simulator build failed:', simResult.error, simResult.detail || '');
-            return;
-          }
-          logger.warn('Build', `No [simulate] target for ${projName} — building the hardware kernel instead.`);
-        }
 
         if (!electronAPI?.runBuildExternal) {
           logger.error('Build', 'electronAPI.runBuildExternal not available');
@@ -671,6 +677,14 @@ function App() {
       
       logger.debug('Build', 'Using file path:', filePath);
       
+      // A VPy project declares no simulator, so Shift+F5 does what F5 does — the second
+      // half of the rule. Said out loud: a key that silently does something else is how
+      // the two paths drifted apart in the first place.
+      if (opts?.sim) {
+        logger.info('Build',
+          `VPy projects have no separate simulator — building and emulating ${buildTarget}, same as F5.`);
+      }
+
       const args: any = {
         path: filePath,
         autoStart: forSd ? false : autoRun,
@@ -680,6 +694,7 @@ function App() {
         pitrexSdPath,
         uvm2CopyToSD,
         uvm2SdPath,
+        uvm2Flags: uvm2MakeFlags({ uvm2DualCore, uvm2PioStream, uvm2Hz, uvm2ExtraFlags }),
         rp2350FlashMethod: forSd ? 'none' : rp2350FlashMethod,
         rp2350FirmwareDir,
         rp2350Ram: forSd,
@@ -958,6 +973,15 @@ def loop():
           buildDebounceTimerRef.current = null;
         }, 0);
         break;
+      case 'build.buildSim':
+        // Shift+F7: build the simulator without running it. Same fall-back as Shift+F5 —
+        // a project with no simulator gets the target build instead.
+        if (buildDebounceTimerRef.current) clearTimeout(buildDebounceTimerRef.current);
+        buildDebounceTimerRef.current = setTimeout(() => {
+          handleBuild(false, { sim: true });
+          buildDebounceTimerRef.current = null;
+        }, 0);
+        break;
       case 'build.run':
         // Debounce build requests - ignore if one already triggered in last 100ms
         if (buildDebounceTimerRef.current) {
@@ -980,15 +1004,16 @@ def loop():
           buildDebounceTimerRef.current = null;
         }, 0);
         break;
-      case 'build.rp2350emu':
-        // Build & run the REAL rp2350 ARM binary in the Thumb2 emulator (fidelity
-        // check). Faithful but slow — plain F5 uses the fast WASM sim instead.
+      case 'build.simulate':
+        // Shift+F5: build & run the fast WASM simulator. Plain F5 builds the selected
+        // target and runs it on the faithful emulator; a project with no simulator gets
+        // the same thing from both keys.
         if (buildDebounceTimerRef.current) {
           logger.debug('Build', 'RP2350-emu request debounced (already queued)');
           clearTimeout(buildDebounceTimerRef.current);
         }
         buildDebounceTimerRef.current = setTimeout(() => {
-          handleBuild(true, { rp2350Emu: true });
+          handleBuild(true, { sim: true });
           buildDebounceTimerRef.current = null;
         }, 0);
         break;
@@ -1596,12 +1621,25 @@ def loop():
       else if (ctrl && e.key.toLowerCase() === 'o' && e.shiftKey) { e.preventDefault(); commandExec('project.open'); }
       else if (ctrl && e.key.toLowerCase() === 'n') { e.preventDefault(); commandExec('file.new.vpy'); }
       // Build / Run (Cmd/Ctrl+F7 and Cmd/Ctrl+F5 for macOS compatibility)
-      else if (ctrl && e.key === 'F7') { e.preventDefault(); commandExec('build.build'); }
-      else if (ctrl && e.key === 'F5' && !e.shiftKey) { 
-        e.preventDefault(); 
-        // Smart Cmd/Ctrl+F5: If in debug session, start debugging. Otherwise, build and run.
+      // BARE F5 AND F7, and Shift for the simulator half. Ctrl/Cmd is accepted as an
+      // alias so the old habit keeps working, but it must not be REQUIRED: plain F5 was
+      // not bound at all, so it fell through to the host's own F5 — RELOAD THE APP. The
+      // reload boots JSVecx with no cartridge, which runs the BIOS, which is Minestorm.
+      // That is the whole of "only F7 compiles, F5 gives me Minestorm": F5 was never
+      // reaching this handler. preventDefault below is what stops the reload.
+      else if (e.key === 'F7' && !e.shiftKey) { e.preventDefault(); commandExec('build.build'); }
+      else if (e.key === 'F7' && e.shiftKey) { e.preventDefault(); commandExec('build.buildSim'); }
+      else if (e.key === 'F5' && !e.shiftKey) {
+        e.preventDefault();
+        // Resume a PAUSED debug session; otherwise build and run.
+        //
+        // The test used to be `state !== 'stopped'`, and that is not "am I debugging" —
+        // `state` means THE EMULATOR IS RUNNING, and every backend sets it: the uvm2 and
+        // rp2350 rAF loops, the WASM sim, the 6809. So once anything had run, F5 would
+        // have started the 6809 debugger instead of building. A session waiting for the
+        // user is 'paused'; 'running' is not one.
         const debugState = useDebugStore.getState().state;
-        if (debugState !== 'stopped') {
+        if (debugState === 'paused') {
           commandExec('debug.start');
         } else {
           commandExec('build.run');
@@ -1616,11 +1654,13 @@ def loop():
       else if (e.key === 'F12') { e.preventDefault(); commandExec('debug.continue'); }
       else if (e.key === 'F5' && e.shiftKey) {
         e.preventDefault();
-        // Shift+F5: stop the debug session if one is running; otherwise run the
-        // real cartridge binary on the faithful RP2350 Thumb2 emulator. (Was
-        // hard-wired to debug.stop, which shadowed "Run on RP2350 Emulator".)
-        if (useDebugStore.getState().state !== 'stopped') commandExec('debug.stop');
-        else commandExec('build.rp2350emu');
+        // Shift+F5: end a PAUSED debug session; otherwise build and run the simulator.
+        //
+        // Same trap as F5 above: testing `state !== 'stopped'` meant that once any
+        // emulator had run, this key stopped the debugger instead of simulating, and it
+        // never worked twice in a row.
+        if (useDebugStore.getState().state === 'paused') commandExec('debug.stop');
+        else commandExec('build.simulate');
       }
       // Git
       else if (ctrl && e.key.toLowerCase() === 'g' && !e.shiftKey) { e.preventDefault(); commandExec('git.checkout'); } // Ctrl+G = Git checkout branch
@@ -1667,12 +1707,13 @@ def loop():
         logger.error('App', '🚨 Hard refresh blocked! This would clear ALL settings and API keys.');
         logger.info('App', '💡 To reload the IDE, close and reopen the window instead.');
         alert('⚠️ Hard Refresh Blocked!\n\nCmd+Shift+R would delete all your settings, API keys, and chat history.\n\nTo reload the IDE properly, close and reopen the window instead.');
-      } else if (id === 'project.openRecent' && payload) {
-        // Handle recent project with payload
-        commandExec(id, payload);
       } else {
-        // Execute any command from native menu
-        commandExec(id);
+        // FORWARD THE PAYLOAD WHENEVER THERE IS ONE. This used to name a single command,
+        // `project.openRecent`, and everything else lost its argument on the way in: the
+        // native menu sends `project.openPath` for a recent project, which then reached
+        // commandExec with no path and logged "No path provided for openPath". A
+        // whitelist of one is a trap for the next command that carries an argument.
+        commandExec(id, payload);
       }
     };
     
@@ -1784,13 +1825,19 @@ def loop():
           </MenuRoot>
           {/* Build menu */}
           <MenuRoot label={t('menu.build', 'Build')} open={openMenu==='build'} setOpen={()=>setOpenMenu(openMenu==='build'?null:'build')}>
-            <MenuItem label={`${t('build.build', 'Build')}	⌘F7`} onClick={()=>{ commandExec('build.build'); setOpenMenu(null); }} />
-            <MenuItem label={`${t('build.buildAndRun', 'Build && Run (Simulate)')}	F5`} onClick={()=>{ commandExec('build.run'); setOpenMenu(null); }} />
-            {/* Follows the selected target: rp2350 → the slow HW-accurate emulator,
-                pitrex → build the bare-metal kernel image (there is nothing to emulate). */}
+            {/* THE FOUR SHORTCUTS, IN THE ORDER THEY PAIR UP. Bare = the selected target,
+                Shift = the simulator; F5 runs it, F7 only builds. Same four keys for every
+                project, C or VPy — the TARGET decides, not the language. The labels must
+                match the handler exactly: this menu used to advertise ⌘F7 while the code
+                also wanted Ctrl for F5, so the keys the menu named did not all exist. */}
             <MenuItem label={`${buildTarget === 'pitrex'
-              ? t('build.buildPitrexKernel', 'Build PiTrex kernel (real hardware)')
-              : t('build.runRp2350Emu', 'Run on RP2350 Emulator (slow, HW-accurate)')}	Shift+F5`} onClick={()=>{ commandExec('build.rp2350emu'); setOpenMenu(null); }} />
+              ? t('build.buildPitrexKernel', 'Build && Deploy PiTrex kernel (real hardware)')
+              : t('build.buildAndEmulate', `Build && Run on ${buildTarget.toUpperCase()} emulator`)}	F5`} onClick={()=>{ commandExec('build.run'); setOpenMenu(null); }} />
+            <MenuItem label={`${t('build.buildAndSimulate', 'Build && Run on simulator (fast)')}	Shift+F5`} onClick={()=>{ commandExec('build.simulate'); setOpenMenu(null); }} />
+            <MenuSeparator />
+            <MenuItem label={`${t('build.build', `Build for ${buildTarget.toUpperCase()} (no run)`)}	F7`} onClick={()=>{ commandExec('build.build'); setOpenMenu(null); }} />
+            <MenuItem label={`${t('build.buildSim', 'Build simulator (no run)')}	Shift+F7`} onClick={()=>{ commandExec('build.buildSim'); setOpenMenu(null); }} />
+            <MenuSeparator />
             <MenuItem label={t('build.buildForSd', 'Build for SD (RP2350)')} onClick={()=>{ commandExec('build.sd'); setOpenMenu(null); }} />
             <MenuItem label={t('build.clean', 'Clean')} onClick={()=>{ commandExec('build.clean'); setOpenMenu(null); }} />
             <MenuSeparator />
@@ -1798,8 +1845,11 @@ def loop():
           </MenuRoot>
           {/* Debug menu */}
             <MenuRoot label={t('menu.debug', 'Debug')} open={openMenu==='debug'} setOpen={()=>setOpenMenu(openMenu==='debug'?null:'debug')}>
-              <MenuItem label={`${t('debug.start', 'Start Debugging')}	Ctrl+F5`} onClick={()=>{ commandExec('debug.start'); setOpenMenu(null); }} />
-              <MenuItem label={`${t('debug.stop', 'Stop Debugging')}	Shift+F5`} onClick={()=>{ commandExec('debug.stop'); setOpenMenu(null); }} />
+              {/* Ctrl+D is what the handler actually binds. The label said Ctrl+F5, which
+                  is not a shortcut this IDE has: F5 only reaches the debugger when a
+                  session is already PAUSED, and then it resumes rather than starts. */}
+              <MenuItem label={`${t('debug.start', 'Start Debugging')}	Ctrl+D`} onClick={()=>{ commandExec('debug.start'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('debug.stop', 'Stop Debugging')}	Shift+F5 (while paused)`} onClick={()=>{ commandExec('debug.stop'); setOpenMenu(null); }} />
               <MenuSeparator />
               <MenuItem label={`${t('debug.stepOver', 'Step Over')}	F10`} onClick={()=>{ commandExec('debug.stepOver'); setOpenMenu(null); }} />
               <MenuItem label={`${t('debug.stepInto', 'Step Into')}	F11`} onClick={()=>{ commandExec('debug.stepInto'); setOpenMenu(null); }} />
