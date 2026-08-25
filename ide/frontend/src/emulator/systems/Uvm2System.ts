@@ -120,6 +120,7 @@ const ATOM_SIZE   = 0x4000;       // el bloque y sus tres alias XOR/SET/CLR
 //     ldr r3, [r2, #0x828] ; cmp r3, #0 ; beq . ; dmb sy
 // Sin modelarlos, esa lectura da 0 para siempre. Como memoria normal TAMPOCO
 // funciona: nadie escribe ese valor antes: lo pone el hardware al conceder.
+const TIMER0_BASE = 0x400B0000;   // TIMEHR(8) TIMELR(C) TIMERAWH(24) TIMERAWL(28)
 const BOOTRAM_BASE  = 0x400E0000;
 const BOOTRAM_SIZE_ = 0x1000;
 const BOOTLOCK_OFF  = 0x800;
@@ -195,6 +196,10 @@ const PIO_TXEMPTY_SM0 = 1 << 24;   // pio.h: FSTAT TXEMPTY empieza en el bit 24
 const CPU_PER_BUS   = 100;
 /** A 50 Hz Vectrex frame. Matches UVM2_CYCLES_PER_FRAME in the SDK. */
 const BUS_PER_FRAME = 30000;
+/** El refresco que la BIOS acostumbra, del que sale todo lo demas. */
+const VECTREX_HZ = 50;
+/** Microsegundos de CPU emulada por ciclo de CPU: 30000 x 50 x 100 = 150 MHz. */
+const CPU_POR_US = (BUS_PER_FRAME * VECTREX_HZ * CPU_PER_BUS) / 1_000_000;
 /** Escape hatch: an image that never advances the bus must not hang the IDE. */
 const MAX_CPU_CYCLES_PER_FRAME = 40_000_000;
 
@@ -235,6 +240,9 @@ export class Uvm2System implements ISystem, IBus {
   orbHist = new Uint32Array(256);
   oraHist = new Uint32Array(256);
   cambiosYsh = 0; private ultimoYsh = -1;
+  traza: string[] = [];
+  yshHist = new Uint32Array(256);
+  trazaPio: string[] = [];
   private pioLatch = 0;
   /** Palabras de preambulo que quedan por tirar. Ver pioPalabra. */
   private pioPreambulo = 2;
@@ -278,6 +286,25 @@ export class Uvm2System implements ISystem, IBus {
   private clkHigh  = false;
   private dataIn   = 0xFF;             // what the VIA drives back at us
   private busCycle = 0;
+  /** Ciclos de CPU emulada desde el reset, sin truncar. La base del TIMER0. */
+  private cpuCiclos = 0;
+  /** La parte alta que TIMELR dejo enganchada en su ultima lectura. */
+  private timerAlta = 0;
+
+  /* ── LO QUE COSTO EL ULTIMO FRAME COMPLETO ────────────────────────────────
+   *
+   * En ciclos de bus del Vectrex, que es lo unico de aqui que se puede comparar con la
+   * consola: la lista de comandos se reproduce a un ciclo por comando igual en los dos
+   * sitios. El tiempo de CPU NO vale — este emulador no modela esperas de memoria y sale
+   * unas veinte veces optimista. */
+  private frameBeginAddr = 0;
+  private statsAddr = 0;
+  /** Ciclos de bus del ultimo frame completo, o 0 si aun no se sabe. */
+  ciclosDeBus = 0;
+  /** Vectores iluminados de ese mismo frame. */
+  vectoresDeBus = 0;
+  /** Frames que el juego ha cerrado desde el reset. */
+  framesDelJuego = 0;
   private cpuAcc   = 0;
   private cycleCount = 0;              // DWT_CYCCNT
   private lastPollPc = -1;             // spin detection, see maybeCollapseSpin
@@ -457,6 +484,13 @@ export class Uvm2System implements ISystem, IBus {
     const sim = extractElf32Symbols(elf);
     this.sdLeerAddr  = (sim.get('uvm2_sd_leer')  ?? 0) & ~1;
     this.sdErrorAddr = (sim.get('uvm2_sd_error') ?? 0) >>> 0;
+    /* EL PRINCIPIO DEL FRAME ES DONDE SE MIRAN LAS CUENTAS DEL ANTERIOR. Los contadores
+     * vivos los pone a cero `uvm2_frame_begin`, asi que leerlos en cualquier otro momento
+     * los pilla a medio llenar — un juego que emula 40 ms y dibuja 2 esta casi siempre en
+     * la ventana "reciennacido". Justo al ENTRAR ahi todavia valen los del frame que
+     * acaba de terminar. */
+    this.frameBeginAddr = (sim.get('uvm2_frame_begin') ?? 0) & ~1;
+    this.statsAddr      = (sim.get('uvm2_stats') ?? 0) >>> 0;
     console.log(`[Uvm2System] simbolos: uvm2_sd_leer=0x${this.sdLeerAddr.toString(16)} ` +
                 `uvm2_sd_error=0x${this.sdErrorAddr.toString(16)}`);
   }
@@ -522,6 +556,11 @@ export class Uvm2System implements ISystem, IBus {
   reset(): void {
     this.frameCounter = 0;
     this.busCycle = 0;
+    this.cpuCiclos = 0;
+    this.framesDelJuego = 0;
+    this.ciclosDeBus = 0;
+    this.vectoresDeBus = 0;
+    this.timerAlta = 0;
     this.cpuAcc = 0;
     this.cycleCount = 0;
     this.clkHigh = false;
@@ -559,6 +598,10 @@ export class Uvm2System implements ISystem, IBus {
    */
   private advanceBus(cpuCycles: number): void {
     this.cycleCount = (this.cycleCount + cpuCycles) >>> 0;
+    /* APARTE DE cycleCount, que se trunca a 32 bits. El TIMER cuenta microsegundos y a
+     * 150 MHz los 32 bits de ciclos se dan la vuelta cada 28 s: bastante menos que una
+     * partida, y un reloj que retrocede da restas negativas enormes. */
+    this.cpuCiclos += cpuCycles;
     this.cpuAcc += cpuCycles;
 
     while (this.cpuAcc >= CPU_PER_BUS / 2) {
@@ -681,11 +724,25 @@ export class Uvm2System implements ISystem, IBus {
       return;
     }
     this.pioPalabras++;
+    /* La palabra CRUDA junto al registro y dato que produce. Si el flujo lleva vy y aqui
+     * sale 0, el fallo esta en la decodificacion, no en el juego. */
+    if (this.trazaPio.length < 24 && this.busCycle > 200000 && (w & 1)) {
+      const g = (w >>> 1) & ((1 << 27) - 1);
+      const dir = ((g & 0x003FFF00) >>> 8) | ((g & 0x01000000) ? 0x4000 : 0) | ((g & 0x02000000) ? 0x8000 : 0);
+      this.trazaPio.push(`w=0x${(w >>> 0).toString(16)} dir=0x${dir.toString(16)} reg=${dir & 0xF} dato=0x${(g & 0xFF).toString(16)}`);
+    }
     if (w & 1) this.pioEsc++; else if (w & 2) this.pioPark_n++; else this.pioSil++;
 
     if (w & 1) {
       this.gpioOut = ((this.gpioOut & ~PINES) | ((w >>> 1) & PINES)) >>> 0;
       this.correPeriodoE();
+      /* Y SE APARCA EN CUANTO SE ENGANCHA. En el hardware la SM del PIO ocupa cada periodo
+       * de E; aqui el reloj avanza TAMBIEN con la CPU, asi que unos pines que se quedan
+       * puestos los vuelve a enganchar la VIA en el siguiente flanco. Medido en la traza:
+       * cada escritura aparecia DOS O TRES veces seguidas —"ORB=0x81 ORB=0x81",
+       * "DDRB=0x9f" tres veces— y una repeticion es inocua para un puerto pero NO para
+       * T1CH, que reinicia la rampa. */
+      this.gpioOut = ((this.gpioOut & ~PINES) | this.pioPark) >>> 0;
     } else if (w & 2) {
       /* APARCAR ES PRESENTAR EL PATRON DE PARK, no dejar los pines como estaban.
        *
@@ -734,12 +791,22 @@ export class Uvm2System implements ISystem, IBus {
     this.viaHist[this.busAddress() & 0xF]++;
     if ((this.busAddress() & 0xF) === 0) this.orbHist[this.gpioOut & 0xFF]++;   // ORB
     if ((this.busAddress() & 0xF) === 1) this.oraHist[this.gpioOut & 0xFF]++;   // ORA
+    /* LA SECUENCIA TAL CUAL LLEGA. Los histogramas dicen CUANTAS y de QUE, nunca EN QUE
+     * ORDEN — y el enganche del S&H de Y depende de que ORA lleve la velocidad cuando se
+     * escribe ORB. Eso solo se ve en la traza. */
+    if (this.traza.length < 40 && this.busCycle > 200000)
+      this.traza.push(`${['ORB','ORA','DDRB','DDRA','T1CL','T1CH','T1LL','T1LH','T2CL','T2CH','SR','ACR','PCR','IFR','IER','ORAnh'][this.busAddress() & 0xF]}=0x${(this.gpioOut & 0xFF).toString(16)}`);
     this.via.write(this.busAddress() & 0xF, this.gpioOut & DATA_MASK,
                    (xsh) => { this.beam.alg_xsh = xsh; });
     /* ¿Se mueve el sample-and-hold de Y? Si ORB=0 llega y esto no cambia, el enganche no
      * ocurre; si cambia y el haz no se mueve, el problema esta en el integrador. Son dos
      * sitios opuestos y sin este dato no se distinguen. */
     if (this.beam.alg_ysh !== this.ultimoYsh) { this.ultimoYsh = this.beam.alg_ysh; this.cambiosYsh++; }
+    /* SOLO LOS ENGANCHES, no el valor retenido. Contar en cada escritura medía cuanto
+     * tiempo pasa la Y en cada valor, que esta dominado por el reposo — y me hizo leer
+     * "siempre 0x80" cuando la pregunta era otra. */
+    if ((this.busAddress() & 0xF) === 0 && (this.gpioOut & 0x07) === 0x00)
+      this.yshHist[this.via.via_ora & 0xFF]++;
   }
 
   /**
@@ -810,6 +877,26 @@ export class Uvm2System implements ISystem, IBus {
       for (const p of PLL_BASES)
         if (addr >= p && addr < p + 0x20)
           return ((((addr & 0x1C) === 0x0 ? 0x80000000 : 0) >>> sh) & 0xFF);
+      /* TIMER0. SIN ESTO `time_us_32()` DEVUELVE SIEMPRE LO MISMO, y todo lo que el juego
+       * mide en microsegundos —us_exec, us_input, us_wait y el periodo del frame— sale
+       * CERO dentro del emulador. Un contador a cero se lee igual que "no hace falta".
+       *
+       * La base de tiempo es la del propio emulador: sus ciclos de CPU a 150 MHz. Fiel a
+       * lo que el emulador cree que cuesta cada instruccion, que no es lo mismo que lo que
+       * cuesta en silicio; sirve para comparar escenas entre si, no para dar un fps
+       * absoluto de consola. */
+      if (addr >= TIMER0_BASE && addr < TIMER0_BASE + 0x30) {
+        const off = addr & 0xFC;
+        const us  = Math.floor(this.cpuCiclos / CPU_POR_US);
+        const alta = Math.floor(us / 4294967296);
+        let w = 0;
+        // Leer TIMELR ENGANCHA la parte alta; las RAW no enganchan nada.
+        if      (off === 0x0C) { this.timerAlta = alta; w = us >>> 0; }
+        else if (off === 0x08) { w = this.timerAlta; }
+        else if (off === 0x28) { w = us >>> 0; }
+        else if (off === 0x24) { w = alta; }
+        return (w >>> sh) & 0xFF;
+      }
       if (addr >= CLOCKS_BASE && addr < CLOCKS_BASE + 0x100)
         return ((this.leerClocks(addr & 0xFC) >>> sh) & 0xFF);
       if (addr >= BOOTRAM_BASE && addr < BOOTRAM_BASE + BOOTRAM_SIZE_) {
@@ -878,9 +965,14 @@ export class Uvm2System implements ISystem, IBus {
       // never gets past multicore_launch_core1_raw: pico-sdk pushes the entry point to
       // core 1 and spins on RDY, which stayed 0 for ever. Measured: a dual-core .um2 sat
       // in a three-instruction loop at multicore.h:186 and drew nothing, with no error —
-      // "the emulator does nothing". Answering RDY|VLD lets core 0 carry on; whatever the
-      // game delegated to core 1 simply does not happen, which is a visible half-game
-      // rather than a black screen. Build with UVM2_DUAL_CORE=0 to emulate the whole game.
+      // "the emulator does nothing". Answering RDY|VLD lets core 0 carry on.
+      //
+      // HISTORY, AND WHY THIS COMMENT IS WORTH READING TO THE END: back then whatever the
+      // game delegated to core 1 did not happen, and the advice was to build with
+      // UVM2_DUAL_CORE=0. THAT IS NO LONGER TRUE — `arrancaCore1` builds a real second
+      // Thumb2 and `cpu1.step(this)` runs it interleaved with core 0. The handshake below
+      // is only what gets the launch through; the delegated work does run. A stale warning
+      // here once cost a whole round of wrong conclusions about a dual-core image.
       //
       // Answering RDY alone only moves the hang twenty instructions on: the launch is a
       // six-word HANDSHAKE and core 0 pops each word back and compares. So FIFO_RD echoes
@@ -889,9 +981,8 @@ export class Uvm2System implements ISystem, IBus {
       else if (off === 0x050) {
         if (!this.avisoMulticore) {
           this.avisoMulticore = true;
-          console.warn('[Uvm2System] la imagen arranca el nucleo 1 y aqui no hay segundo ' +
-                       'nucleo: se responde al FIFO para que no se cuelgue, pero lo que ' +
-                       'corra en el core 1 no se ejecuta. Compila con UVM2_DUAL_CORE=0.');
+          console.log('[Uvm2System] dual-core image: answering the launch handshake; core 1 ' +
+                      'runs for real (see arrancaCore1 / cpu1.step).');
         }
         // VLD SOLO SI HAY DATO PENDIENTE, y esto NO es un detalle.
         //
@@ -1131,6 +1222,12 @@ export class Uvm2System implements ISystem, IBus {
 
       if (pc === ROM_LOOKUP) { this.romTableLookup(); continue; }
       if (this.sdLeerAddr && pc === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu); continue; }
+      /* Mirar y dejar pasar: no se atrapa la llamada, solo se le hace la foto. */
+      if (this.frameBeginAddr && pc === this.frameBeginAddr && this.statsAddr) {
+        this.ciclosDeBus    = this.read32(this.statsAddr + 4);   // bus_cycles
+        this.vectoresDeBus  = this.read32(this.statsAddr + 8);   // vectors
+        this.framesDelJuego++;
+      }
 
       // Ejecutar la tabla de vectores es siempre un PC perdido. Se corta aqui, con
       // el salto que llevo hasta ahi todavia en el anillo, en vez de dejar que

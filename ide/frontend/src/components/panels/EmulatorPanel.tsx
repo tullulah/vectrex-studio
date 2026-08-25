@@ -165,15 +165,23 @@ const getCurrentVpyLineForPC = (pc: number, pdbData: any): number | null => {
 };
 
 // Componente para mostrar información técnica del emulador (métricas reales)
-const EmulatorOutputInfo: React.FC = () => {
+/* `backend` = which emulator is running RIGHT NOW. Without it this panel always read
+  * `window.vecx` — the 6809 — so with UVM2 running it showed zeroed registers and a red
+  * "JSVecx: STOPPED / MISMATCH": a panel that looks broken when in fact it is reading the
+  * wrong machine. */
+const EmulatorOutputInfo: React.FC<{ backend: 'rp2350' | 'uvm2' | null }> = ({ backend }) => {
   const [metrics, setMetrics] = useState<VecxMetrics | null>(null);
   const [regs, setRegs] = useState<VecxRegs | null>(null);
   const [vecxRunning, setVecxRunning] = useState<boolean>(false);
-  
+  const [statsArm, setStatsArm] = useState<{ ciclos: number; vectores: number; frames: number } | null>(null);
+
   // Get debug state from debugStore
   const debugState = useDebugStore(s => s.state);
+  const emuFps = useDebugStore(s => s.currentFps);
+  const emuDrawFps = useDebugStore(s => s.drawFps);
 
   const fetchStats = () => {
+    try { setStatsArm((emuCore as any).uvm2FrameStats ?? null); } catch { setStatsArm(null); }
     try {
       const vecx = (window as any).vecx;
       if (!vecx) {
@@ -228,9 +236,41 @@ const EmulatorOutputInfo: React.FC = () => {
         letterSpacing: '0.5px',
         fontFamily: 'system-ui'
       }}>
-        Emulator Output
+        Emulator Output{backend ? ` — ${backend.toUpperCase()}` : ''}
       </div>
 
+      {/* With UVM2 (or the ARM core) running, the 6809 registers MEAN NOTHING: the 6809 is
+          stopped, everything reads zero, and the red MISMATCH is not a fault. Show the
+          counters of the backend that is actually running. */}
+      {backend ? (
+        <>
+          <div style={{ marginBottom: '2px' }}>
+            State: <span style={{
+              color: debugState === 'running' ? '#0f0' : debugState === 'paused' ? '#ff0' : '#f00',
+              fontWeight: 'bold'
+            }}>{debugState.toUpperCase()}</span>
+          </div>
+          <div style={{ marginBottom: '2px' }}>
+            Host FPS: {emuFps > 0 ? emuFps.toFixed(1) : '--'}
+          </div>
+          <div style={{ marginBottom: '2px' }}>
+            {/* What the frame's bus cycles would allow on the real console: this is the
+                number that matters, and it is NOT the one above (that one depends on this
+                machine). */}
+            Console refresh: {emuDrawFps > 0 ? `${emuDrawFps.toFixed(1)} Hz` : '--'}
+          </div>
+          <div style={{ marginBottom: '2px' }}>
+            Bus cycles/frame: {statsArm?.ciclos ? statsArm.ciclos : '--'}
+          </div>
+          <div style={{ marginBottom: '2px' }}>
+            Vectors/frame: {statsArm?.vectores ? statsArm.vectores : '--'}
+          </div>
+          <div>
+            Frames: {statsArm?.frames ?? 0}
+          </div>
+        </>
+      ) : (
+      <>
       <div style={{ marginBottom: '2px' }}>
         PC: {hex16(regs?.PC)}
         {' | '}BANK: {typeof regs?.BANK === 'number' ? regs.BANK.toString(16).toUpperCase() : '--'}
@@ -270,6 +310,8 @@ const EmulatorOutputInfo: React.FC = () => {
       <div>
         Avg Cycles/frame: {avgCyclesPerFrame > 0 ? avgCyclesPerFrame : '--'}
       </div>
+      </>
+      )}
     </div>
   );
 };
@@ -356,6 +398,12 @@ export const EmulatorPanel: React.FC = () => {
   const [breakpoints, setBreakpoints] = useState<Set<number>>(new Set());
   const debugState = useDebugStore(s => s.state);
   const pdbData = useDebugStore(s => s.pdbData);
+  /* FRAME COUNTER. The emulator loop already wrote this to the store, but the only
+   * component that rendered it (DebugToolbar) is not mounted anywhere, so the number was
+   * computed and thrown away. Shown here, next to the backend badge. */
+  const emuFps = useDebugStore(s => s.currentFps);
+  const emuDrawFps = useDebugStore(s => s.drawFps);
+  const emuCiclos = useDebugStore(s => s.cycles);
   const breakpointCheckIntervalRef = useRef<number | null>(null);
 
   // rp2350 requestAnimationFrame loop handle
@@ -2106,27 +2154,17 @@ export const EmulatorPanel: React.FC = () => {
     };
   }, [addBreakpoint, removeBreakpoint, pdbData]);
 
-  // Listen for F5 hotkey from Electron (continue debugging)
-  useEffect(() => {
-    const electronAPI = (window as any).electronAPI;
-    if (!electronAPI?.ipcRenderer) return;
-    
-    const handleF5Continue = () => {
-      // For an imported external C/C++ project, F5 = Build & Run the WASM
-      // simulator, NOT "continue" on the 6809 emulator (which would boot the
-      // BIOS / Minestorm). Route it to the build-run path instead.
-      if (useProjectStore.getState().vpyProject?.isExternal) {
-        console.log('[EmulatorPanel] 🎮 F5 (external project) - triggering simulator build & run');
-        window.postMessage({ type: 'vpy-run-external' }, '*');
-        return;
-      }
-      console.log('[EmulatorPanel] 🎮 F5 pressed - triggering debug continue');
-      window.postMessage({ type: 'debug-continue' }, '*');
-    };
-    
-    electronAPI.ipcRenderer.on('debug-continue-hotkey', handleF5Continue);
-    return () => electronAPI.ipcRenderer.removeListener('debug-continue-hotkey', handleF5Continue);
-  }, []);
+  /* THE `debug-continue-hotkey` LISTENER LIVED HERE AND IT OWNED F5.
+   *
+   * main.ts intercepted bare F5 in `before-input-event` and sent this event, so F5 meant
+   * "continue the 6809 emulator" — and on a project with no 6809 cartridge loaded that
+   * boots the BIOS, which is Minestorm. It had already been patched once, for external C
+   * projects only, which is why the fault survived: it looked handled.
+   *
+   * F5 now routes to build.run from main.ts like every other build key. Continuing a
+   * paused debug session is F12 (debug.continue) — it has its own key and does not need
+   * to borrow this one. Removed 2026-08-25.
+   */
 
   // Función para cargar ROM desde dropdown (definida antes de useEffects que la usan)
   const loadROMFromDropdown = useCallback(async (romName: string) => {
@@ -2738,6 +2776,10 @@ export const EmulatorPanel: React.FC = () => {
         {
           const TARGET_MS = 1000 / 50;
           let lastFrameTs = 0;
+          /* CONTADOR DE FRAMES, sobre una ventana de un segundo. Se cuentan los frames que
+           * el emulador SACA, no los que pide el rAF: con la imagen corriendo despacio el
+           * bucle se salta turnos y contar peticiones daria siempre 50. */
+          let ventana = 0, desde = 0;
           const uvm2Loop = (ts: number) => {
             rp2350LoopRef.current = requestAnimationFrame(uvm2Loop);
             const elapsed = ts - lastFrameTs;
@@ -2745,6 +2787,18 @@ export const EmulatorPanel: React.FC = () => {
             lastFrameTs = ts - (elapsed % TARGET_MS);
             if (useDebugStore.getState().state !== 'running') return;
             emuCore.runFrame();
+            ventana++;
+            if (!desde) desde = ts;
+            else if (ts - desde >= 1000) {
+              const fps = (ventana * 1000) / (ts - desde);
+              const st = emuCore.uvm2FrameStats;
+              /* Frame bus cycles -> the refresh the drawing would allow on the console.
+               * The UVM2 bus clock is 1.5 MHz (30000 cycles x 50 Hz). */
+              const BUS_HZ = 30000 * 50;
+              useDebugStore.getState().updateStats(
+                st?.ciclos ?? 0, fps, st?.ciclos ? BUS_HZ / st.ciclos : 0);
+              ventana = 0; desde = ts;
+            }
           };
           useDebugStore.getState().setState('running');
           rp2350LoopRef.current = requestAnimationFrame(uvm2Loop);
@@ -3244,6 +3298,11 @@ export const EmulatorPanel: React.FC = () => {
             const TARGET_MS = 1000 / 50;  // 20 ms per frame (Vectrex PAL; music compiled at 50 Hz)
             let rp2350FrameCount = 0;
             let lastFrameTs = 0;
+            /* FRAME COUNTER, same as the "open a standalone .um2" loop. There are TWO
+             * paths that start the emulator, and this one — run what was just compiled —
+             * is the one the IDE uses. Wiring the counter to the other one alone left the
+             * readout at zero with nothing reporting a failure. */
+            let ventana = 0, desde = 0;
             const loop = (ts: number) => {
               rp2350LoopRef.current = requestAnimationFrame(loop);
               const elapsed = ts - lastFrameTs;
@@ -3256,6 +3315,18 @@ export const EmulatorPanel: React.FC = () => {
                 console.log(`[EmulatorPanel] rp2350 rAF loop frame ${rp2350FrameCount}`);
               }
               emuCore.runFrame();
+              ventana++;
+              if (!desde) desde = ts;
+              else if (ts - desde >= 1000) {
+                const fps = (ventana * 1000) / (ts - desde);
+                /* Frame bus cycles -> the refresh the drawing would allow on the console.
+                 * The UVM2 bus clock is 1.5 MHz (30000 cycles x 50 Hz). */
+                const BUS_HZ = 30000 * 50;
+                const st = (emuCore as any).uvm2FrameStats;
+                useDebugStore.getState().updateStats(
+                  st?.ciclos ?? 0, fps, st?.ciclos ? BUS_HZ / st.ciclos : 0);
+                ventana = 0; desde = ts;
+              }
             };
             // Mark as running so the RAF loop doesn't bail on the first check.
             useDebugStore.getState().setState('running');
@@ -3533,6 +3604,21 @@ export const EmulatorPanel: React.FC = () => {
                   : '🎯 EMULATING RP2350 (ARM · slow)'}
             </div>
           )}
+          {/* Frames per second. `emuFps` is what the HOST manages to render (depends on
+              this machine); `emuDrawFps` is the refresh the frame's bus cycles would allow
+              on the real console, which is the number that actually matters. */}
+          {(runMode === 'rp2350' || runMode === 'uvm2') && emuFps > 0 && (
+            <div style={{
+              position: 'absolute', top: 24, right: 4, zIndex: 30,
+              padding: '2px 7px', borderRadius: 4, pointerEvents: 'none',
+              fontFamily: 'monospace', fontSize: 10,
+              background: 'rgba(20,20,20,0.85)', color: '#9cf', border: '1px solid #468',
+            }}>
+              {`host ${emuFps.toFixed(1)} fps`}
+              {emuDrawFps > 0 && ` · console ${emuDrawFps.toFixed(1)} Hz`}
+              {emuCiclos > 0 && ` · ${emuCiclos} cycles`}
+            </div>
+          )}
           {/* External-project WASM simulator (runs any module speaking the
               PiTrex host SDK contract). Overlays the Vectrex canvas. */}
           {simModulePath && (
@@ -3652,7 +3738,7 @@ export const EmulatorPanel: React.FC = () => {
       </div>
 
       {/* Emulator Output - Información técnica del emulador */}
-      <EmulatorOutputInfo />
+      <EmulatorOutputInfo backend={runMode} />
 
       {/* Controles principales debajo del canvas - Estilo homogéneo */}
       <div style={{
