@@ -389,10 +389,36 @@ static void via_setup(void)
  * tiempo de rampa por trazo.
  *
  * Se deja escrito y no se deja una funcion vacia llamandose: una linea que dice que algo
- * esta encendido cuando no existe es peor que no tenerla. */
+ * esta encendido cuando no existe es peor que no tenerla.
+ *
+ * ── Y DESDE EL 2026-08-27 SI HAY UNA. Medida en consola, en el 25m de dkong ────────
+ *
+ * El modelo de rampa pasa a ser PROPORCIONAL —t1 = longitud * DRAW_SCALE / VCAP, sin
+ * suelo— porque el suelo atrapaba al 96% de los trazos: la longitud MEDIANA de un trazo
+ * del 25m son 3 unidades de dispositivo y el suelo valia 31. `VCAP` es, de hecho, los
+ * ciclos de espera POR UNIDAD de longitud.
+ *
+ *     MIN_T1 = 1   MIN_T1_ARRANQUE = 1   VCAP = 24
+ *     -> 87 ciclos por operacion con geometria correcta, contra 109 con los dos suelos
+ *
+ * Mesetas, y se coge el CENTRO, no el ultimo valor que sobrevive:
+ *     VCAP: 20 y 26 bien, 32 flojea, 40 regular  -> 24
+ *
+ * POR QUE AQUI Y NO EN vectrex-draw: `MIN_T1` y `VCAP` son el mismo simbolo que usa el
+ * firmware del cartucho propio, y alli la geometria se afino con 31/127 sin medir nada de
+ * esto. Cambiar el valor compartido seria cambiarle el dibujo a la otra placa sin una sola
+ * medida suya — la divergencia que este repositorio tiene un guardian para evitar.
+ *
+ * Y NO ES UNA CONSTANTE DEL REPOSITORIO, ES UNA CALIBRACION DE MAQUINA: si otra consola
+ * pide otro numero, se cambia aqui y se anota con su medida, como esta. */
+extern volatile uint32_t MIN_T1, MIN_T1_ARRANQUE, VCAP;
 
 void uvm2_draw_init(void)
 {
+    MIN_T1          = 1u;   /* sin suelo: la duracion sale de la longitud */
+    MIN_T1_ARRANQUE = 1u;   /* idem para las rampas que arrancan paradas */
+    VCAP            = 24u;  /* 6,7 ciclos de espera por unidad de longitud */
+
     s_count = 0;
     via_setup();
 
@@ -796,7 +822,11 @@ volatile int32_t uvm2_beam_on_e = 0;        /* ciclos de E entre arrancar y ence
  * Son 12 ciclos de E en CADA operacion que cambia Y: ~5400 por frame, 3,6 ms.
  * keep_lit: mantener el haz encendido entre segmentos encadenados, que se ahorra el par
  * de escrituras de BLANK y sus asentamientos. Aqui nunca se ha probado. */
-volatile int32_t uvm2_y_mux_e = 11;  /* hueco 12 del 6809 (3 NOP + INC dp) menos el ciclo de la escritura */
+/* 4, MEDIDO EN ESTA CONSOLA el 2026-08-27 y no heredado. Meseta: 11 (que es lo que venia
+ * del cartucho propio), 8, 6, 4 y 2 dibujan bien JUGANDO —con saltos grandes de Y, que es
+ * cuando el sample-and-hold lo pasa peor— y 0 ROMPE. Centro de la meseta: 4. Vale 5 de los
+ * 93 ciclos por operacion. Era el hueco 12 del 6809 menos el ciclo de la escritura. */
+volatile int32_t uvm2_y_mux_e = 4;
 volatile int32_t uvm2_keep_lit  = 0;
 volatile int32_t uvm2_blank_settle_e = 12;  /* ciclos de E que sigue encendido al parar */
 /* ASENTAMIENTO DEL DAC EN X, antes de arrancar la rampa. Ver x_settle_q8 en emit.rs: la Y
