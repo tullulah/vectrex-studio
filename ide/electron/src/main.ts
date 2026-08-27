@@ -652,6 +652,40 @@ ipcMain.handle('list:sources', async (_e, args: { limit?: number } = {}) => {
   const exDir = join(cwd, 'examples');
   const results: Array<{ path:string; kind:'vpy'|'asm'; size:number; mtime:number }> = [];
 
+  async function scanDir(dir:string, depth:number){
+    if (results.length >= limit) return;
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const ent of entries){
+        if (results.length >= limit) break;
+        const full = join(dir, ent.name);
+        if (ent.isDirectory()) { if (depth<1) await scanDir(full, depth+1); continue; }
+        if (/\.(vpy|asm)$/i.test(ent.name)) {
+          try {
+            const st = await fs.stat(full);
+            results.push({ path: full, kind: /\.vpy$/i.test(ent.name)?'vpy':'asm', size: st.size, mtime: st.mtimeMs });
+          } catch {}
+        }
+      }
+    } catch {}
+  }
+  await scanDir(cwd, 0);
+  await scanDir(exDir, 0);
+  // De-dupe by path
+  const seen = new Set<string>();
+  const uniq = results.filter(r => { if (seen.has(r.path)) return false; seen.add(r.path); return true; });
+  uniq.sort((a,b)=> a.path.localeCompare(b.path));
+  return { ok:true, sources: uniq.slice(0, limit) };
+});
+
+/* FUERA DE `list:sources`, QUE ES DONDE ESTABA. Este handler se habia quedado ANIDADO
+ * dentro del cuerpo de `list:sources`, asi que solo se registraba cuando alguien invocaba
+ * list:sources — y al arrancar no lo invoca nadie. El renderer llamaba y Electron
+ * contestaba `No handler registered for 'menu:updateRecentProjects'`, y la lista de
+ * proyectos recientes desaparecia del menu nativo.
+ *
+ * Compilaba y no daba un solo aviso: anidar un `ipcMain.handle` dentro de otro es sintaxis
+ * valida. Lo unico que lo delata es que el registro no ocurre. */
 // Update native menu with recent projects
 ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: string; path: string}>) => {
   if (process.platform !== 'darwin' || !mainWindow) return;
@@ -805,31 +839,6 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
   
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
-});
-  async function scanDir(dir:string, depth:number){
-    if (results.length >= limit) return;
-    try {
-      const entries = await fs.readdir(dir, { withFileTypes: true });
-      for (const ent of entries){
-        if (results.length >= limit) break;
-        const full = join(dir, ent.name);
-        if (ent.isDirectory()) { if (depth<1) await scanDir(full, depth+1); continue; }
-        if (/\.(vpy|asm)$/i.test(ent.name)) {
-          try {
-            const st = await fs.stat(full);
-            results.push({ path: full, kind: /\.vpy$/i.test(ent.name)?'vpy':'asm', size: st.size, mtime: st.mtimeMs });
-          } catch {}
-        }
-      }
-    } catch {}
-  }
-  await scanDir(cwd, 0);
-  await scanDir(exDir, 0);
-  // De-dupe by path
-  const seen = new Set<string>();
-  const uniq = results.filter(r => { if (seen.has(r.path)) return false; seen.add(r.path); return true; });
-  uniq.sort((a,b)=> a.path.localeCompare(b.path));
-  return { ok:true, sources: uniq.slice(0, limit) };
 });
 
 // Start a language server. serverId selects the binary ('vpy' | 'clangd'); cwd
