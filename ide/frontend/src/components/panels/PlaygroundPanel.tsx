@@ -7,6 +7,10 @@ interface VecPath {
   name: string;
   points: { x: number; y: number }[];
   intensity: number;
+  /** Una intensidad por SEGMENTO (len(points)-1), cuando el .vec la trae. Es como se
+   *  escriben los escenarios fusionados: un solo camino que cruza la pantalla con los
+   *  huecos entre figuras a 0. Sin esto el campo existia en el fichero y aqui no. */
+  intensities?: number[];
   closed: boolean;
 }
 
@@ -1904,8 +1908,11 @@ export function PlaygroundPanel() {
           
           return layer.paths.map((path, pathIdx) => {
             const points = path.points.map(p => `${p.x},${-p.y}`).join(' ');
-            // Map intensity to opacity with a minimum floor so dim vecs stay visible
-            const opacity = 0.5 + (path.intensity / 255) * 0.5;
+            // INTENSITY IS 0..127, NOT 0..255. This used to divide by 255 on top of a
+            // 0.5 floor, which squeezed every path into opacity 0.50..0.75 — a blanked
+            // path at intensity 0 came out at 0.50 and a full-brightness one at 0.75, so
+            // the whole scene looked flat and the dark hops looked like real lines.
+            const dim = (i: number) => Math.max(0, Math.min(1, i / 127));
             // Color coding: green=selected, blue=collidable, cyan=non-collidable
             let color = '#00ffff'; // default cyan (non-collidable)
             if (isSelected) {
@@ -1913,7 +1920,35 @@ export function PlaygroundPanel() {
             } else if (obj.collidable === true) {
               color = '#6699ff'; // blue for collidable
             }
+            // ONE SCREEN PIXEL, whatever the zoom. The viewBox is 192 units wide, so a
+            // strokeWidth of 1.5 was ~6px on a normal panel: thick enough to hide which
+            // side of a girder a ladder lands on, which is exactly what this view is for.
+            const trazo = { strokeWidth: 1, vectorEffect: 'non-scaling-stroke' as const };
 
+            // PER-SEGMENT INTENSITY. A fused piece is ONE path that crosses the whole
+            // screen with the gaps between shapes carried as intensity-0 segments (see
+            // tools/dk_fusiona_paths.py). Drawing the path with a single opacity paints
+            // those dark hops as if they were lines. Each segment gets its own.
+            if (path.intensities && path.intensities.length === path.points.length - 1) {
+              return path.points.slice(0, -1).map((p, i) => {
+                const q = path.points[i + 1];
+                const v = dim(path.intensities![i]);
+                return (
+                  <line
+                    key={`${layerIdx}-${pathIdx}-${i}`}
+                    x1={p.x} y1={-p.y} x2={q.x} y2={-q.y}
+                    stroke={color}
+                    {...trazo}
+                    // un tramo apagado se recorre pero no se dibuja: se ve, para saber
+                    // por donde va el haz, pero no se puede confundir con un trazo
+                    strokeDasharray={v === 0 ? '2 3' : undefined}
+                    opacity={v === 0 ? 0.15 : 0.35 + v * 0.65}
+                  />
+                );
+              });
+            }
+
+            const opacity = 0.35 + dim(path.intensity ?? 127) * 0.65;
             if (path.closed) {
               // Closed polygon
               return (
@@ -1922,7 +1957,7 @@ export function PlaygroundPanel() {
                   points={points}
                   fill="none"
                   stroke={color}
-                  strokeWidth="1.5"
+                  {...trazo}
                   opacity={opacity}
                 />
               );
@@ -1934,7 +1969,7 @@ export function PlaygroundPanel() {
                   points={points}
                   fill="none"
                   stroke={color}
-                  strokeWidth="1.5"
+                  {...trazo}
                   opacity={opacity}
                 />
               );
