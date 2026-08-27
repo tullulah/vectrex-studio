@@ -234,6 +234,16 @@ void v_setIntensity(int b) { BEAM_INTENSITY((signed char)b); }
  * (-DVPY_MAX_CONSECUTIVE_DRAWS=N): games whose runtime MERGES segments emit fewer
  * but LONGER vectors that drift more per vector, so they want a lower cap (more
  * frequent re-zeros) to keep glyphs/shapes landing where they belong. */
+/* KNOB EN TIEMPO DE EJECUCION en el UVM2. Esta cadencia es lo unico que ACOTA la deriva
+ * del integrador: cada N dibujos con un salto de por medio, el haz vuelve al origen y el
+ * error acumulado se borra. Bajarla endereza el dibujo y cuesta operaciones; subirla lo
+ * contrario. En esa placa no se puede leer ni escribir por SWD —parar el nucleo es una
+ * violacion de fase— asi que probar un valor costaba un flasheo; ahora se barre desde el
+ * menu de servicio viendo el dibujo. */
+#ifdef UVM2_PICO_RUNTIME
+volatile int uvm2_max_draws = 6;
+#define VPY_MAX_CONSECUTIVE_DRAWS uvm2_max_draws
+#endif
 #ifndef VPY_MAX_CONSECUTIVE_DRAWS
 #define VPY_MAX_CONSECUTIVE_DRAWS 4
 #endif
@@ -475,6 +485,20 @@ static void beam_seg(int ax0, int ay0, int ax1, int ay1, int b)
         BEAM_ZERO();
         s_beam_x = 0; s_beam_y = 0;
         s_draws_since_zero = 0;
+        /* LA INTENSIDAD CACHEADA MUERE CON EL CERO. zero_beam() del firmware escribe
+         * PORT_A=0 y borra el registro de desplazamiento, asi que tras un re-cero el
+         * haz ya NO tiene la intensidad que `s_last_intensity` dice que tiene. Sin
+         * invalidar la cache, el `if (b != s_last_intensity)` de abajo se salta la
+         * escritura y TODO lo que se dibuja despues del primer re-cero del frame sale
+         * a la intensidad que deje el cero.
+         *
+         * MEDIDO en el emulador ARM con el .bin real, dkong 25m y SnowBros titulo: de
+         * 453 y 251 segmentos, SOLO LOS 6 PRIMEROS —justo hasta el primer re-cero, que
+         * llega a los VPY_MAX_CONSECUTIVE_DRAWS trazos— salian con la intensidad del
+         * juego. Y encaja con la consola: lo unico que se ve brillante es aquello cuya
+         * intensidad CAMBIA respecto al trazo anterior (que fuerza la escritura); todo
+         * lo que comparte intensidad con su vecino sale apagado. */
+        s_last_intensity = -1;
         /* The approach from the origin is itself travel, and it is billed to the new
          * budget — otherwise a shape far from centre re-zeroes and immediately spends
          * its whole allowance getting back out there, which is the "walks off" failure
@@ -515,6 +539,7 @@ static void beam_seg_gapped(int ax0, int ay0, int ax1, int ay1, int b,
         BEAM_ZERO();
         s_beam_x = 0; s_beam_y = 0;
         s_draws_since_zero = 0;
+        s_last_intensity = -1;   /* ver la nota de beam_seg */
     }
     if (b != s_last_intensity) { BEAM_INTENSITY(b); s_last_intensity = b; }
     beam_move_to(ax0, ay0);
@@ -819,6 +844,7 @@ void v_beamNewStroke(void)
     BEAM_ZERO();
     s_beam_x = 0; s_beam_y = 0;
     s_draws_since_zero = 0;
+    s_last_intensity = -1;   /* el cero se lleva la intensidad; ver la nota de beam_seg */
 }
 
 uint8_t v_readButtons(void)
