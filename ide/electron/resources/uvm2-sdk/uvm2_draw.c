@@ -475,6 +475,9 @@ void uvm2_draw_prime_holds(void)
     s_z = 0;
 }
 
+/* Definida abajo con las demas perillas; se usa aqui arriba. */
+extern volatile int32_t uvm2_zero_settle_e;
+
 void uvm2_draw_reset(void)
 {
     /* RE-CEBAR LA REFERENCIA DE CERO, COMO HACE LA BIOS.
@@ -507,7 +510,8 @@ void uvm2_draw_reset(void)
     if (s_pos_x == 0 && s_pos_y == 0 && (s_pcr & UVM2_PCR_ZERO_OFF) != 0)
         return;
 
-    set_zero(1, UVM2_ZERO_BASE + s_scale / 4u);
+    set_zero(1, uvm2_zero_settle_e >= 0 ? (uint32_t)uvm2_zero_settle_e
+                                       : UVM2_ZERO_BASE + s_scale / 4u);
     set_zero(0, 0);
     s_pos_x = 0;
     s_pos_y = 0;
@@ -826,6 +830,31 @@ volatile int32_t uvm2_beam_on_e = 0;        /* ciclos de E entre arrancar y ence
  * del cartucho propio), 8, 6, 4 y 2 dibujan bien JUGANDO —con saltos grandes de Y, que es
  * cuando el sample-and-hold lo pasa peor— y 0 ROMPE. Centro de la meseta: 4. Vale 5 de los
  * 93 ciclos por operacion. Era el hueco 12 del 6809 menos el ciclo de la escritura. */
+/* LA PINZA DE CERO, que hasta hoy era una constante de peor caso.
+ *
+ * `UVM2_ZERO_BASE + s_scale/4` da 85 ciclos de E y se pagan ENTEROS en cada re-cero,
+ * este el haz donde este. MEDIDO el 2026-08-27 leyendo por SWD la lista de comandos que
+ * el cartucho estaba reproduciendo: 73 re-ceros por frame a 85 = 6205 ciclos, el 9,5%
+ * del frame y el segundo gasto despues de la rampa.
+ *
+ * Y el 45 no sale de ningun sitio: su comentario dice "centring cost" y nada mas. La
+ * BIOS no ayuda, porque NO ESPERA — `Reset0Ref` ($F354) pone /ZERO baja, hace el ciclo
+ * de mux de Reset_Pen y RTS. En el Vectrex el cero se queda puesto mientras el 6809 se
+ * va a hacer otra cosa, asi que alli la duracion la fija el programa, no la rutina, y no
+ * hay un numero que copiar.
+ *
+ * Como no hay de donde derivarlo, se barre en consola con el dibujo delante, igual que
+ * se hizo con y_mux. Cada ciclo que se le quite vale 73 ciclos de frame. Con 0 tiene que
+ * ROMPER: es la prueba de que la perilla llega al dibujo.
+ *
+ * SOLO EL RE-CERO POR OBJETO. La pinza de fin de frame (uvm2_frame_end) se queda con la
+ * constante: ocurre una vez, no pesa, y acortarla solo arriesga quemar un punto. */
+/* El juego puede fijarlo en su Makefile (-DUVM2_ZERO_SETTLE_E=N) tras medirlo en su
+ * consola; sin eso vale -1 y no cambia nada para nadie. */
+#ifndef UVM2_ZERO_SETTLE_E
+#define UVM2_ZERO_SETTLE_E (-1)
+#endif
+volatile int32_t uvm2_zero_settle_e = UVM2_ZERO_SETTLE_E;   /* <0 = ZERO_BASE + scale/4 */
 volatile int32_t uvm2_y_mux_e = 4;
 volatile int32_t uvm2_keep_lit  = 0;
 volatile int32_t uvm2_blank_settle_e = 12;  /* ciclos de E que sigue encendido al parar */

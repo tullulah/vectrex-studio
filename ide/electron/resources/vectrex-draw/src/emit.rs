@@ -379,11 +379,29 @@ pub fn draw_line_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timi
         /* EL ORDEN DE LA REFERENCIA: primero `CLR VIA_port_a`, DESPUES `CLR VIA_shift_reg`.
          * Lo teniamos al reves. */
         if crate::ramp::DAC_CERO.load(Orden::Relaxed) != 0 {
-            /* SIN RETARDO. Darle los 6 ciclos del `CLR dp` de la referencia alarga el
-             * tiempo con el haz encendido despues de la rampa, y el emulador saca rayas
-             * sueltas en los vertices. El asentamiento tras la rampa ya lo gobierna
-             * `blank_settle_q8`; esto solo tiene que dejar el DAC a cero. */
-            sink.emit(REG_PORT_A, 0, 0); // CLR — DAC a 0 antes de apagar, como la referencia
+            /* "COMO LA REFERENCIA" ERA FALSO. Esta linea decia que la referencia pone el
+             * DAC a cero antes de apagar el haz en cada vector. NO LO HACE, y lo dice su
+             * propio bucle interior — `Draw_VLp` ($F41B):
+             *
+             *     STA <VIA_shift_reg   ; haz OFF
+             *     LDA ,X
+             *     BLE Draw_VLp         ; y al siguiente vector, sin tocar PORT A
+             *
+             * El `CLR <VIA_port_a` de la BIOS esta en `Reset_Pen` ($F35B), o sea en el
+             * RE-CERO, que es donde nosotros tambien lo hacemos (uvm2_draw_reset). Y el
+             * escritor de Ralf tampoco lo emite por trazo: comprobado con
+             * hardware/uvm2/compare el 2026-08-27.
+             *
+             * MEDIDO: 1 comando y 1 ciclo de E por trazo ENCENDIDO — unos 550 ciclos por
+             * frame en dkong, el 0,84%. Se queda encendido por defecto hasta que se mire
+             * en consola, porque lo unico que puede justificarlo es una fuga del
+             * interruptor de rampa con el DAC en un valor distinto de cero, y eso no se
+             * decide leyendo codigo. El knob es DAC_CERO, en el panel.
+             *
+             * SIN RETARDO. Darle los 6 ciclos del `CLR dp` alarga el tiempo con el haz
+             * encendido despues de la rampa y el emulador saca rayas sueltas en los
+             * vertices. El asentamiento ya lo gobierna `blank_settle_q8`. */
+            sink.emit(REG_PORT_A, 0, 0);
         }
         haz(sink, false, 0); // haz OFF (BIOS: STA shift 0x00)
         sink.beam_blanked();
