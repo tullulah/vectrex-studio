@@ -13,7 +13,34 @@
 
 use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 
-pub const DRAW_SCALE: u8 = 0xA0; // T1CL scale factor (line length ∝ delta × scale).
+/// LA ESCALA DEL DIBUJO — y es un NUMERO MAGICO, dicho por su propio comentario mas abajo:
+/// "vale 0xA0 = 160 y es empirico". Nadie lo derivo de nada; se subio hasta que las figuras
+/// salieron del tamano que parecio bien. La implementacion de Ralf, que dibuja bien en esta
+/// misma consola, usa 128 — otro numero magico, sólo que el suyo funciona.
+///
+/// EN TIEMPO DE EJECUCION desde el 2026-08-25, para poder barrerlo desde el panel en vez de
+/// recompilar por cada valor. Eso no lo convierte en derivado: sigue siendo empirico, y lo
+/// que hace falta es explicar de donde sale, no encontrar el que mejor quede.
+#[used]
+#[no_mangle]
+pub static DRAW_SCALE: AtomicU32 = AtomicU32::new(0xA0);
+
+/// El valor actual. Se lee una vez por vector, no en bucle cerrado.
+///
+/// CON RAMPA FIJA, LA ESCALA ES LA DURACION. La distancia es `vx*t1/s`, asi que solo con
+/// `s = t1` sale `vx = dx` exacto — y eso es lo que hace que `s_pos` (lo que el dibujante
+/// CREE que ha avanzado) coincida con el recorrido real. Con s=160 y t1=127 divergen un 21%
+/// por vector y cada `move_abs` parte de una posicion equivocada: MEDIDO en el emulador el
+/// 2026-08-25, el Kong salia deformado hasta atar las dos.
+///
+/// Se ata aqui y no en quien llama, porque "acuerdate de poner las dos" es exactamente la
+/// clase de divergencia que este proyecto lleva pagando. Y explica de paso por que el 128
+/// de Ralf ES su escala: en el modelo de tiempo fijo son el mismo numero.
+#[inline]
+pub fn escala() -> i32 {
+    let fija = RAMPA_FIJA.load(Ordering::Relaxed);
+    if fija > 0 { fija as i32 } else { DRAW_SCALE.load(Ordering::Relaxed) as i32 }
+}
 
 /// Dwell floor, RUNTIME since 2026-08-05 so it can be swept against glyph shape.
 ///
@@ -41,6 +68,28 @@ pub const DRAW_SCALE: u8 = 0xA0; // T1CL scale factor (line length ∝ delta × 
 #[used]
 #[no_mangle]
 pub static MIN_T1: AtomicU32 = AtomicU32::new(31);
+
+/// Suelo de rampa SOLO para las que arrancan paradas (el salto y el primer trazo tras el).
+/// Ver el bloque largo de `ramp_params`. De fabrica igual que MIN_T1 = inerte.
+#[used]
+#[no_mangle]
+pub static MIN_T1_ARRANQUE: AtomicU32 = AtomicU32::new(31);
+
+/// `T1_LAG` para esas mismas rampas. De fabrica igual que T1_LAG = inerte.
+#[used]
+#[no_mangle]
+pub static T1_LAG_ARRANQUE: AtomicU32 = AtomicU32::new(0);
+
+/// Cuantas rampas cobraron el suelo de arranque. UN CONTADOR, porque una rama que se
+/// dispara en silencio ya ha costado sesiones en este proyecto: si esto no sube, el
+/// knob no esta haciendo nada y no hay que creerse la medida.
+#[used]
+#[no_mangle]
+pub static ARRANQUE_HITS: AtomicU32 = AtomicU32::new(0);
+
+/// 1 = la proxima rampa arranca parada. La pone `vx_chain_reset` (o sea: un salto o un
+/// re-cero) y la consume el primer trazo ENCADENADO que venga detras.
+static ARRANQUE: AtomicU32 = AtomicU32::new(1);
 
                        // brightness the studio intro was validated with. Glitch-
                        // safe (HW-tested). Vector geometry is unchanged (distance =
@@ -133,7 +182,38 @@ pub static VCAP_SLOW_HITS: AtomicU32 = AtomicU32::new(0);
 #[inline(always)]
 pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
     let m = core::cmp::max((dx as i32).abs(), (dy as i32).abs());
-    let min_t1 = MIN_T1.load(Ordering::Relaxed) as i32;
+    /* ── DOS SUELOS, SEGUN SI LA RAMPA ARRANCA PARADA ────────────────────────────────
+     *
+     * Un trazo que CONTINUA al anterior entra con los integradores ya moviendose; el
+     * primero despues de un salto en blanco tiene que acelerar desde el reposo, y esa es
+     * la distancia que se pierde. Los dos pagaban el mismo suelo, asi que subirlo para
+     * salvar al segundo se lo cobraba tambien al primero.
+     *
+     * MEDIDO EN CONSOLA (2026-08-26, dkong en el UVM2): con MIN_T1 = 31 los travesaños
+     * sueltos de las escaleras salen desplazados y las vigas encadenadas salen bien; con
+     * 94 sale TODO bien y el framerate cae de 23 a 14,3 fps. La cuenta dice por que:
+     *
+     *     23 -> 14,3 fps son 26,4 ms/frame; a 1,5 MHz, 39.700 ciclos
+     *     39.700 / (94-31) = 630 operaciones pagando el suelo
+     *     y el cartucho declara 549 vectores + 179 saltos = 728
+     *
+     * O sea que el 86% de lo dibujado estaba en el suelo: MIN_T1 no rescataba a unos
+     * pocos trazos cortos, fijaba la duracion de casi todo. Con el suelo separado, solo
+     * lo pagan las rampas que arrancan paradas — los saltos y el primer trazo de cada
+     * figura— y no los cientos de tramos interiores.
+     *
+     * QUIEN ES QUIEN, y no hace falta ningun dato nuevo: `vx_chain_reset()` lo llama
+     * quien reposiciona el haz (un salto o un re-cero), asi que "arranca parada" es
+     * exactamente "es la primera rampa despues de un reset". El salto LEE la bandera sin
+     * consumirla y el primer trazo iluminado la consume, de modo que los dos —el salto y
+     * el trazo que lo sigue, que tambien parte del reposo— cobran el suelo de arranque.
+     *
+     * DE FABRICA VALEN LO MISMO QUE LOS DE SIEMPRE: mientras no se barran, el
+     * comportamiento es identico al anterior, byte a byte. */
+    let arranque = ARRANQUE.load(Ordering::Relaxed) != 0;
+    if arranque { ARRANQUE_HITS.fetch_add(1, Ordering::Relaxed); }
+    let min_t1 = if arranque { MIN_T1_ARRANQUE.load(Ordering::Relaxed) }
+                 else        { MIN_T1.load(Ordering::Relaxed) } as i32;
     let mut vcap = VCAP.load(Ordering::Relaxed) as i32;
 
     // ¿Este vector pide un salto grande de velocidad en Y respecto al anterior?
@@ -169,12 +249,39 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
     if m == 0 {
         return (0, 0, min_t1 as u16); // degenerate (dot); minimal ramp
     }
+
+    /* ── EL MODELO DE TIEMPO FIJO, COMO LA BIOS Y COMO RALF ──────────────────────
+     *
+     * RAMPA_FIJA = 0 -> el modelo de siempre (tiempo variable). >0 -> ese valor es la
+     * duracion de TODAS las rampas, y la longitud sale entera del DAC: vx = dx.
+     *
+     * POR QUE. El asm de 6809 que dibuja bien esta misma figura en esta misma consola
+     * carga `T1CL = $7F` UNA VEZ y despues, por cada vector, solo hace `CLR T1CH` para
+     * dispararla. Todos los vectores duran 127 cuentas. Ralf hace lo mismo con
+     * m_Scale = 128. Nosotros repartimos la distancia entre `vx` Y `t1`, con t1 de 31 a
+     * 160 — y eso hace que CUALQUIER error en el modelo de DURACION (el +1,5 del
+     * contador, el asentamiento, la fase de E) se convierta en error de distancia
+     * dividido por t1: 1% en un trazo largo, 5% en uno corto, 19% con MIN_T1=8.
+     *
+     * Eso es exactamente el sintoma medido el 2026-08-25: perimetro de Kong perfecto y
+     * detalle interior desplazado, la misma recta en 8 rampas mas larga que en 1, y el
+     * 6809 dibujando bien lo que nosotros torcemos.
+     *
+     * Con tiempo fijo no hay reparto, asi que no hay donde concentrar el error — y
+     * ademas vx = dx exacto, o sea que el residuo de redondeo desaparece y la cadena de
+     * deuda se queda sin trabajo. El coste es el otro lado de la moneda: un trazo corto
+     * dura lo mismo que uno largo, que es justo el ahorro que perseguia MIN_T1. Por eso
+     * es una perilla y no una sustitucion: hay que MEDIR las dos en la misma consola. */
+    let fija = RAMPA_FIJA.load(Ordering::Relaxed) as i32;
+    if fija > 0 {
+        return (dx.clamp(-128, 127) as i8, dy.clamp(-128, 127) as i8, fija as u16);
+    }
     // 0xA0 = 160, NO 0x7F: el comentario que habia aqui decia 0x7F y llevaba tiempo
     // mintiendo. `s` gobierna la longitud Y la velocidad de todos los vectores
     // (vx = dx*s/t1, y t1 se acota a s), asi que razonar sobre ramp_params con 127 en la
     // cabeza da numeros mal. Se detecto porque el histograma de t1 tenia un cubo de >=128
     // que con s=127 no puede existir.
-    let s = DRAW_SCALE as i32;
+    let s = escala();
     let t1_floor = (s * m / 127).clamp(min_t1, s); // dwell floor (∝ length)
     // VELOCITY CAP: at MIN_T1=24 mid-length segments (24 < m ≤ 110) run at the full
     // ±127 swing, and the integrator op-amp overshoots the endpoint → platform
@@ -251,7 +358,14 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
     //
     // 0 = como siempre. Se ajusta en caliente desde el panel; el valor bueno es el que
     // hace que la rejilla mida lo que dice medir.
-    let t1 = t1 + T1_LAG.load(Ordering::Relaxed) as i32;
+    // SE APLICA AL FINAL, NO AQUI — ver el final de la funcion.
+    //
+    // Estuvo aqui, sumado a `t1` ANTES de calcular `vx`, y eso lo anulaba exactamente: la
+    // distancia mandada es `vx*t1/s`, asi que al recalcular `vx` con el `t1` ya alargado el
+    // resultado vuelve a ser `dx`. El knob solo hacia la rampa mas lenta y mas larga, sin
+    // devolver una sola unidad de distancia. MEDIDO en consola el 2026-08-25: T1_LAG=8 no
+    // cambio el dibujo NADA, y por eso se descarto una hipotesis que en realidad no se
+    // habia llegado a probar.
 
     // ELEGIR EL t1 QUE MENOS SE DESVIA, entre el calculado y el siguiente.
     //
@@ -297,6 +411,12 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
     };
     let vx = round_div(dx as i32 * s).clamp(-128, 127) as i8;
     let vy = round_div(dy as i32 * s).clamp(-128, 127) as i8;
+    // Y AHORA SI, EL RETARDO DE ARRANQUE. Con `vx` ya elegido, alargar la rampa en T hace
+    // que el haz recorra `vx*(t1+T)/s` — mas de lo pedido, que es justo la distancia que
+    // pierde mientras coge velocidad. Es un TIEMPO, asi que pesa mas en los trazos cortos:
+    // la firma de "el dibujo se va" cuando el haz corre rapido.
+    let t1 = t1 + if arranque { T1_LAG_ARRANQUE.load(Ordering::Relaxed) }
+                  else        { T1_LAG.load(Ordering::Relaxed) } as i32;
     (vx, vy, t1 as u16)
 }
 
@@ -339,6 +459,36 @@ pub static Y_HELD: AtomicU32 = AtomicU32::new(0);
 #[used]
 #[no_mangle]
 pub static T1_EXTRA_Q8: AtomicU32 = AtomicU32::new(0);
+
+/// Encender el haz por el REGISTRO DE DESPLAZAMIENTO ($FF/$00), como la BIOS y como el asm
+/// de 6809 que dibuja bien, en vez de por PCR ($EE/$CE). Exige ACR = 0x98 en el arranque,
+/// que lo pone `via_setup` mirando esta misma perilla. 0 = por PCR, como hasta ahora.
+///
+/// El comentario de `draw_line_seq` dice que el camino del SR "no llego a dibujar nada en
+/// este hardware" — pero eso se probo con el resto del emisor como estaba, y desde entonces
+/// han cambiado cosas. Se vuelve a probar porque es UNA de las cuatro diferencias medidas
+/// contra una implementacion que si funciona.
+#[used]
+#[no_mangle]
+pub static HAZ_POR_SR: AtomicU32 = AtomicU32::new(0);
+
+/// No reescribir T1CL si no ha cambiado, como hace el 6809 (lo carga una vez y luego solo
+/// dispara con `CLR T1CH`). Ahorra una escritura de bus por vector.
+#[used]
+#[no_mangle]
+pub static T1CL_CACHE: AtomicU32 = AtomicU32::new(1);  // por defecto SI: el 6809 carga T1CL una vez
+
+/// Poner el DAC a cero al acabar cada rampa, como hace el 6809 (`CLR VIA_port_a`).
+/// 0 = como hasta ahora (se queda `vx` puesto todo el hueco). Ver el bloque en emit.rs.
+#[used]
+#[no_mangle]
+pub static DAC_CERO: AtomicU32 = AtomicU32::new(1);   // por defecto SI: la referencia lo hace
+
+/// Duracion FIJA de la rampa, como la BIOS ($7F) y Ralf (128). 0 = modelo de tiempo
+/// variable, el de siempre. Ver el bloque en `ramp_params` para el porque.
+#[used]
+#[no_mangle]
+pub static RAMPA_FIJA: AtomicU32 = AtomicU32::new(0);
 
 /// La misma funcion para quien llama desde C (la imagen del UVM2). Punteros porque una
 /// tupla de Rust no tiene representacion C — y ENTEROS, que es la regla de la caja: la
@@ -383,12 +533,14 @@ static DEUDA_Y: AtomicI32 = AtomicI32::new(0);
 pub extern "C" fn vx_chain_reset() {
     DEUDA_X.store(0, Ordering::Relaxed);
     DEUDA_Y.store(0, Ordering::Relaxed);
+    /* El haz se reposiciona: la proxima rampa parte del reposo. Ver `ramp_params`. */
+    ARRANQUE.store(1, Ordering::Relaxed);
 }
 
 /// Lo que la rampa recorre DE VERDAD, en milesimas: v * t1 / DRAW_SCALE con su fraccion.
 #[inline(always)]
 fn recorrido_mil(v: i32, t1: u16) -> i32 {
-    ((v as i64 * t1 as i64 * 1000) / DRAW_SCALE as i64) as i32
+    ((v as i64 * t1 as i64 * 1000) / escala() as i64) as i32
 }
 
 /// `ramp_params` para un trazo DENTRO DE UNA CADENA: pide el delta mas lo que se debia y
@@ -401,6 +553,9 @@ pub fn ramp_params_chain(dx: i8, dy: i8) -> (i8, i8, u16) {
     let py = (dy as i32 + redondea(ry)).clamp(-128, 127) as i8;
 
     let (vx, vy, t1) = ramp_params(px, py);
+    /* Consumida AQUI y no en el salto: el salto y el trazo que lo sigue arrancan los dos
+     * parados, asi que los dos tienen que cobrar el suelo de arranque. */
+    ARRANQUE.store(0, Ordering::Relaxed);
 
     /* Acotada: si un trazo se recorta, la deuda no puede crecer sin freno o el siguiente
      * saldria disparado. Cuatro unidades es mucho mas de lo que un redondeo puede deber. */

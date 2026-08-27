@@ -38,7 +38,20 @@
 //! frame rate. Con Q8 el sumidero del UVM2 redondea a entero para su campo de
 //! comando y el nuestro convierte a ciclos de CPU sin perder nada.
 
-use crate::ramp::{DRAW_SCALE, MIN_T1};
+use crate::ramp::{escala, MIN_T1};
+use core::sync::atomic::Ordering as Orden;
+
+/// Escribe el encendido/apagado del haz por donde diga la perilla: por PCR (lo nuestro) o
+/// por el registro de desplazamiento (la BIOS y el 6809). Un solo sitio para las dos formas,
+/// para que no puedan divergir.
+#[inline]
+fn haz<S: BusSink>(sink: &mut S, encendido: bool, retardo: u32) {
+    if crate::ramp::HAZ_POR_SR.load(Orden::Relaxed) != 0 {
+        sink.emit(REG_SHIFT, if encendido { 0xFF } else { 0x00 }, retardo);
+    } else {
+        sink.emit(REG_CNTL, if encendido { 0xEE } else { 0xCE }, retardo);
+    }
+}
 use core::sync::atomic::Ordering;
 
 /// Registros de la VIA como DESPLAZAMIENTO (0..15), no como direccion absoluta.
@@ -49,6 +62,29 @@ pub const REG_PORT_A: u8 = 0x1;
 pub const REG_T1_LO: u8 = 0x4;
 pub const REG_T1_HI: u8 = 0x5;
 pub const REG_SHIFT: u8 = 0xA;
+
+/// Ultimo T1CL escrito (bit 8 = valido), para no repetirlo. Ver T1CL_CACHE.
+static T1CL_ULTIMO: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// Olvidar el ultimo T1CL. Lo necesita quien vuelva a empezar una lista desde cero —y los
+/// tests, porque el cache hace que la secuencia EMITIDA dependa del historial: el mismo
+/// vector sale con o sin la escritura de T1CL segun lo que se dibujara antes. El TIEMPO no
+/// cambia (el hueco anterior lo compensa), pero la lista si.
+#[no_mangle]
+pub extern "C" fn vx_t1cl_olvidar() { T1CL_ULTIMO.store(0, core::sync::atomic::Ordering::Relaxed); }
+
+/// Escribe T1CL Y APUNTA lo que queda en el latch. TODO el que escriba T1CL tiene que pasar
+/// por aqui.
+///
+/// El cache se actualizaba SOLO en `draw_line_seq`, pero el SALTO tambien escribe T1CL —con
+/// su propio t1—, asi que tras cada salto el cache creia que la VIA tenia un valor que ya no
+/// tenia y el trazo siguiente se saltaba una escritura que si hacia falta. `UNVEC` no lo
+/// destapo porque tiene 9 saltos contra 56 trazos; dkong tiene 168 y salia destrozado.
+#[inline]
+fn emitir_t1cl<S: BusSink>(sink: &mut S, t1: u16, retardo: u32) {
+    T1CL_ULTIMO.store((t1 & 0xff) as u32 | 0x100, Orden::Relaxed);
+    sink.emit(REG_T1_LO, (t1 & 0xff) as u8, retardo);
+}
 pub const REG_CNTL: u8 = 0xC;
 
 /// Un ciclo de E en las unidades de la costura.
@@ -105,6 +141,12 @@ pub trait BusSink {
 
     /// El haz ha quedado ENCENDIDO.
     fn beam_lit(&mut self) {}
+
+    /// ¿El DAC sostiene YA este `vx`? X es el DAC VIVO (sin sample-and-hold), asi que esto
+    /// es "lo ultimo escrito en PORT_A es vx". Es la MITAD QUE FALTABA de `keep_lit`.
+    fn x_can_skip(&mut self, _vx: i8) -> bool {
+        false
+    }
 }
 
 /// Los huecos del camino, todos en Q8 de ciclo de E.
@@ -206,7 +248,7 @@ fn y_hold_is(vy: i8) {
 }
 
 pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings) {
-    sink.emit(REG_PORT_A, vy as u8, k.e(2)); // STA — Y velocity into D/A
+    sink.emit(REG_PORT_A, vy as u8, k.e(5)); // STA — Y al DAC; hueco 6 (CLR dp)
     // VENTANA DE Y: se probo alargarla de `e(9)` a `y_mux_q8` (2 -> 14 ciclos de E),
     // razonando que un condensador no admite el descuento de `e6809_q8`, que se midio por
     // frame rate. La fisica respaldaba el cambio: tau = 1,8 us = 2,7 ciclos, asi que 2
@@ -219,16 +261,27 @@ pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings
     //
     // Se queda como estaba, con la nota, para que nadie vuelva a "arreglarlo" leyendo la
     // fisica sin mirar la medida.
-    sink.emit(REG_PORT_B, 0x00, k.e(9)); // CLR — enable mux ch0 (Y sampling STARTS)
-                                         // PSHS D (7) + LDA #$CE (2) — Y S&H charging
-    sink.emit(REG_CNTL, 0xCE, k.e(2)); // STA — blank low, zero high (can move)
+    /* HUECOS EXACTOS DEL SALTO DEL 6809 (BIOS Moveto_d), contados de su asm en pagina
+     * directa; su ciclo es un ciclo de E, asi que son nuestros retardos menos el ciclo de
+     * la escritura:
+     *     CLR VIA_port_b   (6) abrir mux;  PSHS A (5) + LDA# (2) + STA VIA_cntl (4) -> 11
+     *     STA VIA_cntl     (4) PCR;        CLR VIA_shift_reg (6)                    ->  6
+     *     CLR VIA_shift_reg(6) SR=0;       INC VIA_port_b (6)                       ->  6
+     *     INC VIA_port_b   (6) cierra mux; PULS A (5) + STA VIA_port_a (4)          ->  9
+     *     STA VIA_port_a   (4) X al DAC;   LDA# (2) + STA VIA_t1_cnt_lo (4)         ->  6
+     *     STA VIA_t1_cnt_lo(4) T1CL;       CLR VIA_t1_cnt_hi (6)                    ->  6
+     *
+     * Arrancabamos la rampa del salto NUEVE ciclos antes, con el DAC de X aun llegando. Y
+     * como todo lo que se dibuja despues parte de donde aterrice el salto, eso desplazaba
+     * los trazos interiores — el sintoma que quedaba tras hacer ciclo-exacto solo el trazo. */
+    sink.emit(REG_PORT_B, 0x00, k.e(10)); // CLR — abre mux; hueco 11
+    sink.emit(REG_CNTL, 0xCE, k.e(5)); // STA — PCR; hueco 6
     sink.beam_blanked();
-    sink.emit(REG_SHIFT, 0x00, k.e(4)); // CLR shift — beam off
-                                        // (CLR = 6 cyc; Y S&H still charging)
-    sink.emit(REG_PORT_B, 0x01, k.e(4)); // INC — disable mux (Y sampled + held)
+    sink.emit(REG_SHIFT, 0x00, k.e(5)); // CLR shift — haz off; hueco 6
+    sink.emit(REG_PORT_B, 0x01, k.e(8)); // INC — cierra mux; hueco 9
     sink.y_held(vy); // deja el S&H cargado con SU vy: un draw_line que lo repita se lo salta
-    sink.emit(REG_PORT_A, vx as u8, k.e(4) + k.x_settle_q8); // STB — X velocity (directo, sin mux)
-    sink.emit(REG_T1_LO, (t1 & 0xff) as u8, 0); // T1CL = escala (∝ longitud)
+    sink.emit(REG_PORT_A, vx as u8, k.e(5) + k.x_settle_q8); // STB — X al DAC; hueco 6
+    emitir_t1cl(sink, t1, k.e(5)); // T1CL; hueco 6 (CLR T1CH dp)
     // EL BYTE ALTO, DE VERDAD. Estuvo cocido a 0, y eso techaba la rampa en 255 aunque
     // el contador T1 de la VIA sea de 16 bits — 8 bits de recorrido tirados.
     sink.emit(REG_T1_HI, (t1 >> 8) as u8, 0);
@@ -246,29 +299,72 @@ pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings
 pub fn draw_line_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings) {
     // Si el S&H de Y ya sostiene este vy, todo el muestreo sobra: cuatro escrituras y la
     // ventana de carga, el 25% del coste del vector.
-    if !sink.y_can_skip(vy) {
-        sink.emit(REG_PORT_A, vy as u8, k.e(2)); // STA — Y velocity
-        sink.emit(REG_PORT_B, 0x00, k.y_mux_q8); // CLR — mux ch0 (empieza a cargar Y)
-        sink.emit(REG_PORT_B, 0x01, k.e(4)); // INC — mux off (Y muestreado y retenido)
+    let y_saltada = sink.y_can_skip(vy);
+    if !y_saltada {
+        /* LOS HUECOS SON LOS DEL 6809, CONTADOS DE SU ASM. Con DP=$D0 las escrituras son
+         * de pagina directa y el 6809 va a 1,5 MHz, o sea UN ciclo suyo es UN ciclo de E:
+         * sus tiempos son directamente nuestros retardos. De su bucle de dibujo:
+         *
+         *     STB VIA_port_a   (4)  Y al DAC
+         *     CLR VIA_port_b   (6)  abrir mux      -> hueco 6
+         *     NOP NOP NOP      (6)
+         *     INC VIA_port_b   (6)  cerrar mux     -> hueco 12
+         *     STA VIA_port_a   (4)  X al DAC       -> hueco 4
+         *
+         * Nuestro `emit` gasta 1 ciclo en la escritura mas su retardo, asi que el retardo
+         * es el hueco menos 1. */
+        sink.emit(REG_PORT_A, vy as u8, k.e(5)); // STA — Y al DAC; hueco 6 (CLR dp)
+        sink.emit(REG_PORT_B, 0x00, k.y_mux_q8); // CLR — abre mux; hueco 12 (3 NOP + INC dp)
+        sink.emit(REG_PORT_B, 0x01, k.e(3)); // INC — cierra mux; hueco 4 (STA dp)
         sink.y_held(vy);
     }
-    sink.emit(REG_PORT_A, vx as u8, k.e(3) + k.x_settle_q8); // STB — X velocity
-    sink.emit(REG_T1_LO, (t1 & 0xff) as u8, 0); // T1CL = escala (∝ longitud)
+    /*     STA VIA_port_a   (4)  X al DAC
+     *     LDA #$FF         (2)
+     *     STA VIA_shift_reg(4)  haz ON          -> hueco 6
+     *     CLR VIA_t1_cnt_hi(6)  arranca rampa   -> hueco 6
+     *
+     * O sea 12 ciclos desde que X llega al DAC hasta que arranca la rampa. Nosotros
+     * teniamos 8: la rampa arrancaba CUATRO ciclos antes de tiempo, con el DAC todavia
+     * llegando — un error de tiempo FIJO por vector, o sea nada en un trazo largo y la
+     * mitad de uno corto. Es la divergencia que buscabamos. */
+    /* EL HUECO ES 6 SE ESCRIBA T1CL O NO. Si el cache se salta la escritura, el ciclo que
+     * esa escritura ocupaba lo pone este retardo. Sin la compensacion, encender el cache
+     * desplazaba el dibujo — que es exactamente lo que se midio en consola. */
+    let escribe_t1cl = crate::ramp::T1CL_CACHE.load(Orden::Relaxed) == 0
+        || T1CL_ULTIMO.load(Orden::Relaxed) != ((t1 & 0xff) as u32 | 0x100);
+    /* X ES EL DAC VIVO: si ya sostiene este valor la escritura sobra, igual que sobra el
+     * muestreo de Y. Y hace falta para algo mas que ahorrar bus: con `keep_lit` el haz
+     * sigue ENCENDIDO aqui, asi que escribir PORT_A cambia su velocidad en pleno trazo y
+     * pinta una raya que no esta en la lista. MEDIDO en consola el 2026-08-26: con
+     * keep_lit=1 y sin esto, "se ven trazos que no se deberian ver". */
+    let x_saltada = sink.x_can_skip(vx);
+    if !x_saltada {
+    sink.emit(REG_PORT_A, vx as u8,
+        k.e(if escribe_t1cl { 4 } else { 5 }) + k.x_settle_q8); // STB — X al DAC; hueco 6
+    }
+    /* T1CL SOLO SI CAMBIA — el 6809 lo carga UNA VEZ y despues cada vector es solo
+     * `CLR T1CH`. El hueco anterior ya compensa que esta escritura este o no. */
+    if escribe_t1cl {
+        emitir_t1cl(sink, t1, 0);
+    }
 
     // EL ORDEN IMPORTA, y en su dia estaba al reves. Encender ANTES de arrancar la rampa
     // deja el punto quieto e iluminado durante una escritura entera: un punto brillante
     // en el vertice de SALIDA, el espejo del que arregla `blank_settle_q8` al final.
-    if k.keep_lit && sink.beam_is_lit() {
+    /* LA CONDICION ES "NO SE HA ESCRITO NADA ENTRE LAS DOS RAMPAS", no solo "el haz sigue
+     * encendido": solo PORT_A y PORT_B mueven el haz, asi que basta con que se hayan
+     * saltado las dos, la Y por su S&H y la X por el DAC vivo. */
+    if k.keep_lit && sink.beam_is_lit() && y_saltada && x_saltada {
         // Continuacion de una tirada iluminada: el haz ya esta encendido Y ya se mueve,
         // asi que no necesita ni la escritura ni el hueco para arrancar. Esta es la
         // costura que perdia cuatro ciclos de E de recorrido en cada vertice.
         sink.emit(REG_T1_HI, (t1 >> 8) as u8, 0);
     } else if k.beam_on_q8 != 0 {
         sink.emit(REG_T1_HI, (t1 >> 8) as u8, k.beam_on_q8); // arranca la rampa PRIMERO
-        sink.emit(REG_CNTL, 0xEE, 0); // haz ON — ya viajando
+        haz(sink, true, 0); // haz ON — ya viajando
         sink.beam_lit();
     } else {
-        sink.emit(REG_CNTL, 0xEE, k.e(2)); // haz ON (BIOS: STA shift 0xFF)
+        haz(sink, true, k.e(5)); // haz ON; hueco 6 hasta la rampa (CLR T1CH dp)
         sink.beam_lit();
         sink.emit(REG_T1_HI, (t1 >> 8) as u8, 0); // STB — arranca la rampa
     }
@@ -280,7 +376,16 @@ pub fn draw_line_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timi
     sink.wait_ramp(t1, k.e(4) as i32 + k.blank_settle_q8);
 
     if !k.keep_lit {
-        sink.emit(REG_CNTL, 0xCE, 0); // haz OFF (BIOS: STA shift 0x00)
+        /* EL ORDEN DE LA REFERENCIA: primero `CLR VIA_port_a`, DESPUES `CLR VIA_shift_reg`.
+         * Lo teniamos al reves. */
+        if crate::ramp::DAC_CERO.load(Orden::Relaxed) != 0 {
+            /* SIN RETARDO. Darle los 6 ciclos del `CLR dp` de la referencia alarga el
+             * tiempo con el haz encendido despues de la rampa, y el emulador saca rayas
+             * sueltas en los vertices. El asentamiento tras la rampa ya lo gobierna
+             * `blank_settle_q8`; esto solo tiene que dejar el DAC a cero. */
+            sink.emit(REG_PORT_A, 0, 0); // CLR — DAC a 0 antes de apagar, como la referencia
+        }
+        haz(sink, false, 0); // haz OFF (BIOS: STA shift 0x00)
         sink.beam_blanked();
     }
 }
@@ -316,7 +421,7 @@ pub fn draw_line_patterned_seq<S: BusSink>(
         sink.y_held(vy);
     }
     sink.emit(REG_PORT_A, vx as u8, k.e(3));
-    sink.emit(REG_T1_LO, (t1 & 0xff) as u8, 0);
+    emitir_t1cl(sink, t1, 0);
     // La rampa arranca ANTES de encender, igual que en draw_line_seq: encender con el
     // punto quieto deja un punto brillante en el vertice de salida.
     sink.emit(REG_T1_HI, (t1 >> 8) as u8, k.beam_on_q8);
@@ -354,7 +459,7 @@ pub fn draw_line_patterned_seq<S: BusSink>(
 /// llamante no tenga que conocer `DRAW_SCALE`.
 pub fn fixed_ramp(dx: i8, dy: i8) -> (i8, i8, u16) {
     let _ = MIN_T1.load(Ordering::Relaxed);
-    (dx, dy, DRAW_SCALE as u16)
+    (dx, dy, escala() as u16)
 }
 
 #[cfg(test)]
@@ -410,13 +515,15 @@ mod prueba {
         assert_eq!(
             p.v,
             std::vec![
-                (REG_PORT_A, (-20i8) as u8, 2 * E),  // STA — Y al D/A
-                (REG_PORT_B, 0x00, 9 * E),           // CLR — mux ch0, empieza a cargar Y
-                (REG_CNTL, 0xCE, 2 * E),             // STA — blank low, zero high
-                (REG_SHIFT, 0x00, 4 * E),            // CLR shift — haz apagado
-                (REG_PORT_B, 0x01, 4 * E),           // INC — mux off, Y retenido
-                (REG_PORT_A, 40u8, 4 * E),           // STB — X al D/A, directo
-                (REG_T1_LO, 0x5A, 0),                // T1CL
+                // LOS HUECOS SON LOS DEL 6809 (BIOS Moveto_d), contados de su asm en
+                // pagina directa: retardo = hueco - 1, porque la escritura gasta un ciclo.
+                (REG_PORT_A, (-20i8) as u8, 5 * E),  // Y al D/A;     hueco 6
+                (REG_PORT_B, 0x00, 10 * E),          // abre mux;     hueco 11
+                (REG_CNTL, 0xCE, 5 * E),             // PCR;          hueco 6
+                (REG_SHIFT, 0x00, 5 * E),            // SR=0;         hueco 6
+                (REG_PORT_B, 0x01, 8 * E),           // cierra mux;   hueco 9
+                (REG_PORT_A, 40u8, 5 * E),           // X al D/A;     hueco 6
+                (REG_T1_LO, 0x5A, 5 * E),            // T1CL;         hueco 6
                 (REG_T1_HI, 0x00, 0),                // T1CH arranca la rampa
                 (0xFF, 0, 0x8000_005A),              // y se espera a que termine
                 (0xFE, 0, 0),                        // mas el asentamiento de Moveto_d
@@ -443,21 +550,30 @@ mod prueba {
     /// de salida. Estuvo asi.
     #[test]
     fn draw_line_arranca_la_rampa_antes_de_encender() {
+        vx_t1cl_olvidar(); // el cache de T1CL es estado global entre tests
         let k = tiempos(2 * E, 11 * E as i32);
         let mut p = Papel::default();
         draw_line_seq(&mut p, 30, -10, 0x3E, &k);
         assert_eq!(
             p.v,
             std::vec![
-                (REG_PORT_A, (-10i8) as u8, 2 * E), // STA — Y
-                (REG_PORT_B, 0x00, 14 * E),         // CLR — mux ch0
-                (REG_PORT_B, 0x01, 4 * E),          // INC — mux off
-                (REG_PORT_A, 30u8, 3 * E),          // STB — X
+                // HUECOS DEL 6809 (retardo = hueco - 1, la escritura gasta un ciclo):
+                //   STB port_a (4) Y; CLR port_b (6) abre mux              -> 6
+                //   3 NOP (6) + INC port_b (6) cierra mux                  -> 12
+                //   STA port_a (4) X                                       -> 4
+                //   LDA# (2) + STA shift (4) haz ON                        -> 6
+                //   CLR t1_cnt_hi (6) arranca la rampa                     -> 6
+                (REG_PORT_A, (-10i8) as u8, 5 * E), // Y;          hueco 6
+                (REG_PORT_B, 0x00, 14 * E),         // abre mux;   lo fija el test
+                (REG_PORT_B, 0x01, 3 * E),          // cierra mux; hueco 4
+                (REG_PORT_A, 30u8, 4 * E),          // X;          hueco 6 con T1CL detras
                 (REG_T1_LO, 0x3E, 0),               // T1CL
                 (REG_T1_HI, 0x00, 2 * E),           // rampa PRIMERO, luego el hueco
                 (REG_CNTL, 0xEE, 0),                // y ahora si, el haz
                 (0xFF, 0, 0x8000_003E),             // esperar la rampa
                 (0xFE, 0, 4 * E + 11 * E),          // + latencia y asentamiento
+                // El DAC a 0 ANTES de apagar, como `CLR VIA_port_a` en la referencia.
+                (REG_PORT_A, 0, 0),                 // CLR — para la deriva de X
                 (REG_CNTL, 0xCE, 0),                // apagar
             ]
         );
@@ -500,10 +616,11 @@ mod prueba {
     /// Con el S&H de Y ya cargado, el muestreo entero se salta: cuatro escrituras menos.
     #[test]
     fn draw_line_se_salta_el_muestreo_de_y() {
+        vx_t1cl_olvidar(); // el cache de T1CL es estado global entre tests
         let k = tiempos(2 * E, 0);
         let mut p = Papel { saltar_y: Some(-10), ..Default::default() };
         draw_line_seq(&mut p, 30, -10, 0x3E, &k);
-        assert_eq!(p.v[0], (REG_PORT_A, 30u8, 3 * E), "deberia empezar ya por la X");
+        assert_eq!(p.v[0], (REG_PORT_A, 30u8, 4 * E), "deberia empezar ya por la X");
         assert!(p.y.is_empty(), "si se salta el muestreo, el S&H no cambia de valor");
     }
 
@@ -514,7 +631,7 @@ mod prueba {
         let k = tiempos(0, 0);
         let mut p = Papel::default();
         moveto_seq(&mut p, 1, 1, 0x0123, &k);
-        assert_eq!(p.v[6], (REG_T1_LO, 0x23, 0));
+        assert_eq!(p.v[6], (REG_T1_LO, 0x23, 5 * E), "T1CL del salto; hueco 6 (CLR T1CH dp)");
         assert_eq!(p.v[7].1, 0x01, "el byte alto se pierde otra vez");
     }
 }
@@ -539,6 +656,21 @@ pub struct CSink {
     /// Opcionales: la placa que no lleve esa contabilidad pasa null.
     pub beam_blanked: Option<extern "C" fn(*mut c_void)>,
     pub y_held: Option<extern "C" fn(*mut c_void, i32)>,
+    /* AL FINAL, Y OPCIONALES, a proposito. El consumidor de C construye su sumidero con
+     * `struct vx_sink s = { 0 }`, asi que una placa que no rellene estas tres se queda
+     * exactamente con el comportamiento de antes en vez de leer basura.
+     *
+     * POR QUE APARECEN AHORA. El emisor pregunta por ellas desde hace tiempo
+     * (`y_can_skip`, `beam_is_lit`), pero `CSink` no las tenia: cualquier llamador desde C
+     * caia en los valores por defecto del trait —falso y falso— sin que nada lo dijera. El
+     * firmware del cartucho propio SI las implementa, porque usa la caja como rlib y el
+     * trait directamente. Resultado: las dos placas compartian emisor y sólo una tenia las
+     * optimizaciones. Medido el 2026-08-26 en el UVM2: `Y_HELD` a 0 todo el tiempo y
+     * `VCAP_SLOW_HITS` a 0, que fue lo que lo destapó. */
+    pub y_can_skip: Option<extern "C" fn(*mut c_void, i32) -> i32>,
+    pub beam_is_lit: Option<extern "C" fn(*mut c_void) -> i32>,
+    pub beam_lit: Option<extern "C" fn(*mut c_void)>,
+    pub x_can_skip: Option<extern "C" fn(*mut c_void, i32) -> i32>,
 }
 
 impl BusSink for CSink {
@@ -556,6 +688,29 @@ impl BusSink for CSink {
     fn y_held(&mut self, vy: i8) {
         if let Some(f) = self.y_held {
             f(self.ctx, vy as i32);
+        }
+    }
+    fn y_can_skip(&mut self, vy: i8) -> bool {
+        match self.y_can_skip {
+            Some(f) => f(self.ctx, vy as i32) != 0,
+            None => false,
+        }
+    }
+    fn beam_is_lit(&self) -> bool {
+        match self.beam_is_lit {
+            Some(f) => f(self.ctx) != 0,
+            None => false,
+        }
+    }
+    fn beam_lit(&mut self) {
+        if let Some(f) = self.beam_lit {
+            f(self.ctx);
+        }
+    }
+    fn x_can_skip(&mut self, vx: i8) -> bool {
+        match self.x_can_skip {
+            Some(f) => f(self.ctx, vx as i32) != 0,
+            None => false,
         }
     }
 }
@@ -696,7 +851,7 @@ static TURNO: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(test)]
 mod pentagono {
-    use crate::ramp::{ramp_params, DRAW_SCALE, MIN_T1, VCAP, VCAP_SLOW};
+    use crate::ramp::{ramp_params, escala, MIN_T1, VCAP, VCAP_SLOW};
     use core::sync::atomic::Ordering;
     use std::{format, println, vec, vec::Vec};
 
@@ -715,7 +870,7 @@ mod pentagono {
     /// uno solo es invisible; lo que se ve es que tiene SIGNO CONSTANTE y se suma. Un
     /// poligono cerrado convierte esa suma en una cifra: si el sesgo existe, no cierra.
     fn desvio_al_cerrar(v: &[(i32, i32)]) -> (f64, f64) {
-        let s = DRAW_SCALE as i64;
+        let s = escala() as i64;
         let (mut ex, mut ey) = (0i64, 0i64);
         for i in 0..v.len() - 1 {
             let (dx, dy) = (v[i + 1].0 - v[i].0, v[i + 1].1 - v[i].1);
@@ -786,7 +941,7 @@ mod pentagono {
     fn el_error_de_la_rampa_no_tiene_sesgo() {
         let _t = TURNO.lock().unwrap_or_else(|e| e.into_inner());
         let lento = VCAP_SLOW.swap(0, Ordering::Relaxed);
-        let s = DRAW_SCALE as f64;
+        let s = escala() as f64;
         let mut mal = Vec::new();
         for cap in [127u32, 96, 64, 32, 21] {
             VCAP.store(cap, Ordering::Relaxed);
@@ -813,7 +968,7 @@ mod pentagono {
 
 #[cfg(test)]
 mod velocidad {
-    use crate::ramp::{ramp_params, DRAW_SCALE, MIN_T1, VCAP, VCAP_SLOW};
+    use crate::ramp::{ramp_params, escala, MIN_T1, VCAP, VCAP_SLOW};
     use core::sync::atomic::Ordering;
     use std::println;
 
@@ -864,7 +1019,7 @@ mod velocidad {
     #[test]
     fn el_techo_de_t1_es_por_vector() {
         let _t = TURNO.lock().unwrap_or_else(|e| e.into_inner());
-        let s = DRAW_SCALE as i32;
+        let s = escala();
         let piso = MIN_T1.load(Ordering::Relaxed) as i32;
         let lento = VCAP_SLOW.swap(0, Ordering::Relaxed);   // la regla del zigzag, aparte
 

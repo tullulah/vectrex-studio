@@ -278,6 +278,12 @@ static void set_x(int x, uint32_t delay)
 
 static int32_t s_drift_ax, s_drift_ay;   /* ver la compensacion de deriva, abajo */
 
+/* La version CON DEUDA, para trazos encadenados, y el olvido de la deuda en cada salto.
+ * Viven en vectrex-draw para que no haya tres copias de la misma regla. */
+void vx_ramp_params_chain(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
+void vx_chain_reset(void);
+extern volatile uint32_t HAZ_POR_SR;   /* en vectrex-draw; ver via_setup */
+
 static void set_zero(int active, uint32_t delay)
 {
     /* CADA re-cero borra la deriva acumulada, porque devuelve el haz al centro.
@@ -347,7 +353,12 @@ static void via_setup(void)
      *           programa la BIOS y lo que asume la capa compartida.
      * Con 0x80 los bits de PORTB que tocan PB7 dejan de llegar al pin, asi que
      * `set_ramp` no hace nada — por eso el camino compartido no lo llama. */
-    emit(UVM2_VIA_ACR,   0x80,    0);
+    /* ACR SEGUN QUIEN ENCIENDA EL HAZ. Con el modelo nuestro (haz por PCR) la rampa la
+     * termina T1 y basta 0x80. Con el de la BIOS (haz por el registro de desplazamiento)
+     * hace falta 0x98, que ademas pone el SR bajo control de fase 2 — es lo que hace que
+     * escribir $FF/$00 ahi encienda y apague CB2. Las dos formas van atadas a la MISMA
+     * perilla para que no puedan quedar a medias. */
+    emit(UVM2_VIA_ACR,   HAZ_POR_SR ? 0x98 : 0x80,    0);
 
     /* Prime each sample/hold channel from a DAC value of 0: zero reference,
      * then Y, then Z.  Without this the integrators start wherever the analog
@@ -607,9 +618,18 @@ struct vx_sink {
     void (*wait_ramp)(void *, uint32_t, int32_t);
     void (*beam_blanked)(void *);
     void (*y_held)(void *, int32_t);
+    /* EL ORDEN Y EL NUMERO TIENEN QUE CUADRAR CON `CSink` de vectrex-draw/src/emit.rs.
+     * Estas tres estaban declaradas aparte, en un `vx_sink_extra` que NO CONSUMIA NADIE:
+     * el emisor las pregunta, pero el `CSink` de Rust no las tenia, asi que devolvian
+     * siempre el valor por defecto del trait (falso) y el UVM2 pagaba el muestreo de Y y
+     * el par apagar/encender en TODOS los vectores. El firmware del cartucho propio si
+     * las implementa —usa la caja como rlib— y por eso sólo una de las dos placas tenia
+     * las optimizaciones del emisor que comparten. */
+    int  (*y_can_skip)(void *, int32_t);
+    int  (*beam_is_lit)(void *);
+    void (*beam_lit)(void *);
+    int  (*x_can_skip)(void *, int32_t);
 };
-struct vx_sink_extra { int (*y_can_skip)(void *, int32_t); int (*beam_is_lit)(void *);
-                       void (*beam_lit)(void *); };
 struct vx_timings { uint32_t e6809_q8, y_mux_q8, moveto_settle_q8, beam_on_q8;
                     int32_t blank_settle_q8; uint32_t keep_lit; uint32_t x_settle_q8; };
 void vx_moveto_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
@@ -619,10 +639,6 @@ void vx_draw_line_patterned_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32
 void vx_draw_line_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
                       const struct vx_timings *);
 void vx_ramp_params(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
-/* La version CON DEUDA, para trazos encadenados, y el olvido de la deuda en cada salto.
- * Viven en vectrex-draw para que no haya tres copias de la misma regla. */
-void vx_ramp_params_chain(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
-void vx_chain_reset(void);
 
 /* El retardo llega en Q8 de ciclo de E; el campo de comando es entero, asi que hay que
  * bajar de resolucion. SE TRUNCA, no se redondea.
@@ -696,12 +712,43 @@ static void vxs_wait_ramp(void *ctx, uint32_t t1, int32_t extra_q8)
 
 static void vxs_y_held(void *ctx, int32_t vy) { (void)ctx; s_y = (int)vy; }
 
+/* ¿El S&H de Y ya sostiene este valor? El dato ya se llevaba —`set_y` hace el mismo
+ * `if (s_y == y) return;`— pero el emisor no podia consultarlo y volvia a emitir las tres
+ * escrituras del muestreo y su ventana de carga. MEDIDO en dkong: la Y cambia en el 91% de
+ * los vectores, asi que esto se dispara en el 9% restante; no es la palanca grande, pero
+ * es exacta y no cuesta nada. */
+static int vxs_y_can_skip(void *ctx, int32_t vy) { (void)ctx; return s_y == (int)vy; }
+
+/* EL HAZ, PARA `keep_lit`. Sin estas dos el emisor cree SIEMPRE que el haz esta apagado:
+ * con `uvm2_keep_lit = 1` tomaria la rama de "encender" en cada vector y no apagaria
+ * nunca, o sea que el haz se quedaria encendido mientras se preparan los DAC del vector
+ * siguiente y emborronaria la pantalla. Por eso van con el knob, no antes. */
+static int s_haz_encendido = 0;
+static int  vxs_beam_is_lit(void *ctx)  { (void)ctx; return s_haz_encendido; }
+static void vxs_beam_lit(void *ctx)     { (void)ctx; s_haz_encendido = 1; }
+static void vxs_beam_blanked(void *ctx) { (void)ctx; s_haz_encendido = 0; }
+
+/* X no tiene sample-and-hold: el DAC sostiene lo ULTIMO que se escribio en PORT_A, y de eso
+ * ya lleva cuenta `s_porta` (lo actualiza `vxs_emit` en cada escritura, incluidas las del
+ * muestreo de Y y el CLR a cero). Asi que no hace falta cache nueva: preguntarle a el es
+ * exactamente la pregunta correcta, y se invalida solo. */
+static int vxs_x_can_skip(void *ctx, int32_t vx)
+{
+    (void)ctx;
+    return !s_porta_stale && s_porta == (uint8_t)(int8_t)vx;
+}
+
 static struct vx_sink vx_cart_sink(void)
 {
     struct vx_sink s = { 0 };
     s.emit = vxs_emit;
     s.wait_ramp = vxs_wait_ramp;
     s.y_held = vxs_y_held;
+    s.y_can_skip = vxs_y_can_skip;
+    s.beam_is_lit = vxs_beam_is_lit;
+    s.beam_lit = vxs_beam_lit;
+    s.beam_blanked = vxs_beam_blanked;
+    s.x_can_skip = vxs_x_can_skip;
     return s;
 }
 
@@ -749,13 +796,26 @@ volatile int32_t uvm2_beam_on_e = 0;        /* ciclos de E entre arrancar y ence
  * Son 12 ciclos de E en CADA operacion que cambia Y: ~5400 por frame, 3,6 ms.
  * keep_lit: mantener el haz encendido entre segmentos encadenados, que se ahorra el par
  * de escrituras de BLANK y sus asentamientos. Aqui nunca se ha probado. */
-volatile int32_t uvm2_y_mux_e   = 14;
+volatile int32_t uvm2_y_mux_e = 11;  /* hueco 12 del 6809 (3 NOP + INC dp) menos el ciclo de la escritura */
 volatile int32_t uvm2_keep_lit  = 0;
 volatile int32_t uvm2_blank_settle_e = 12;  /* ciclos de E que sigue encendido al parar */
 /* ASENTAMIENTO DEL DAC EN X, antes de arrancar la rampa. Ver x_settle_q8 en emit.rs: la Y
  * llega muestreada y retenida tras `y_mux` ciclos de ventana, y la X va directa al DAC con
  * la rampa arrancando tres comandos despues. 0 = como siempre. */
 volatile int32_t uvm2_x_settle_e = 0;
+
+/* EL ASENTAMIENTO DEL SALTO. Era `k.moveto_settle_q8 = 0u` a fuego, el UNICO de los seis
+ * terminos de vx_timings que no salia de una perilla — y sin una medida detras.
+ *
+ * Lo que hace: un salto apagado termina su rampa y el amplificador todavia esta llegando.
+ * Con 0 no se compensa nada, asi que el haz aterriza CORTO y todo lo que se dibuje despues
+ * arranca del sitio equivocado. En un dibujo cuyo contorno es una polilinea continua (sin
+ * saltos) y cuyo detalle interior son trazos sueltos (con salto delante), el sintoma es
+ * exactamente el que se ve en consola: contorno perfecto, interior desplazado.
+ *
+ * Se deja en 0 —el valor que habia— para no cambiar nada al introducirlo: lo que cambia es
+ * que ahora SE PUEDE MEDIR, con el banco `unvec` y el panel, en vez de discutirlo. */
+volatile int32_t uvm2_moveto_settle_e = 0;
 /* Periodo del frame en CICLOS DE BUS, 0 = libre. Arranca en lo que diga UVM2_HZ para no
  * cambiarle el comportamiento a nadie; el panel lo mueve en caliente. 30000 = 50 Hz. */
 /* `used`: sin esto --gc-sections se lo lleva y el panel no lo encuentra. Le paso a este
@@ -774,7 +834,7 @@ static struct vx_timings vx_cart_timings(void)
     struct vx_timings k;
     k.e6809_q8 = 64u;
     k.y_mux_q8 = (uint32_t)(uvm2_y_mux_e > 0 ? uvm2_y_mux_e : 0) * 256u;
-    k.moveto_settle_q8 = 0u;
+    k.moveto_settle_q8 = (uint32_t)(uvm2_moveto_settle_e > 0 ? uvm2_moveto_settle_e : 0) * 256u;
     /* Sin signo: un beam_on negativo no significa nada (no se puede encender el haz
      * antes de arrancar la rampa), y dejarlo pasar daba la vuelta a ~4.000 millones. */
     k.beam_on_q8 = uvm2_beam_on_e > 0 ? (uint32_t)uvm2_beam_on_e * 256u : 0u;
@@ -834,7 +894,21 @@ static void trocear(int dx, int dy, void (*emite)(int, int))
 
 static void move_una(int dx, int dy)
 {
-    vx_chain_reset();   /* un salto reestablece la posicion: la deuda muere aqui */
+    /* EL SALTO NO LLEVA DEUDA — Y ESO DEJA UNA DERIVA CONOCIDA, SIN CERRAR.
+     *
+     * Medido sobre los deltas reales de dkong (60 frames, 1416 saltos): la posicion se va
+     * -47,2 unidades en X y -88,7 en Y, porque el salto tambien es una rampa que redondea
+     * y aqui su error se TIRA. Los trazos, que si van encadenados, se quedan en +0,4.
+     *
+     * Se probo lo evidente —encadenar tambien los saltos— y SALE PEOR: la deuda que el
+     * salto no consigue absorber la acaba pagando el siguiente trazo ILUMINADO, que se
+     * dobla. En la rejilla las filas pasaron de planas (desvio 0, exactas) a empezar 378
+     * unidades mas arriba y caer 189 a lo largo. Una linea recta torcida se ve mucho mas
+     * que un origen desplazado.
+     *
+     * Lo que hace falta es que el salto ABSORBA la deuda entero durante el tramo apagado
+     * —donde corregir no se ve— y no que la reparta. Eso no esta hecho. */
+    vx_chain_reset();
 
     {
         int32_t vx, vy; uint32_t t1;
@@ -887,7 +961,9 @@ void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int 
     int32_t vx, vy; uint32_t t1;
     s_pos_x += dx;
     s_pos_y += dy;
-    vx_ramp_params(dx, dy, &vx, &vy, &t1);
+    /* Con cadena como cualquier otro trazo: que lleve huecos no cambia que es una rampa
+     * que redondea. Quedaba con la plana porque dkong no pasa por aqui y nadie lo miro. */
+    vx_ramp_params_chain(dx, dy, &vx, &vy, &t1);
     struct vx_sink sink = vx_cart_sink();
     struct vx_timings k = vx_cart_timings();
 
@@ -1070,6 +1146,53 @@ void uvm2_frame_begin(void)
  * comparar frames distintos, que nunca coinciden y no dice nada. */
 uint32_t uvm2_firma_escrita[2], uvm2_firma_n[2];
 
+/* EL PERIODO DEL FRAME SE MIDE EN LOS DOS CAMINOS.
+ *
+ * Estaba al final de uvm2_frame_end, y el camino de DOBLE NUCLEO vuelve mucho antes:
+ * asi que en todo build de doble nucleo —o sea, en el que corre de verdad— us_frame_last,
+ * us_frame_min/max y frames_lentos se quedaban a cero PARA SIEMPRE. Y un contador a cero
+ * se lee igual que "no hace falta". Se saco aqui para que lo llamen los dos. */
+static void mide_periodo(void)
+{
+/* EL PERIODO REAL DEL FRAME, en microsegundos de reloj de pared.
+ *
+ * Se toma al FINAL, de un frame_end al siguiente, para que incluya lo unico que no mide
+ * nadie: el tiempo que el juego pasa emulando entre frames. Ver el comentario de
+ * us_frame_* en uvm2_bus.h.
+ *
+ * TIMELR del TIMER0 en crudo (0x400B000C): 32 bits de microsegundos, de sobra para una
+ * diferencia entre frames, y sin arrastrar pico/time.h a un fichero que vive en SRAM.
+ *
+ * Los 60 primeros frames NO cuentan: al arrancar hay carga de ROM, pantallas de
+ * atencion y el propio cargador, y esa basura se queda en el minimo y el maximo para
+ * siempre. Ya paso una vez con las estadisticas sembradas desde el arranque. */
+{
+    static uint32_t s_us_prev;
+    static uint32_t s_calentando = 60;
+#ifdef UVM2_HOST
+    const uint32_t ahora = 0;   /* no TIMER0 in a host harness — see tools/ */
+#else
+    const uint32_t ahora = *(volatile uint32_t *)0x400B000Cu;
+#endif
+
+    if (s_calentando) {
+        s_calentando--;
+        uvm2_stats.us_frame_min = 0xFFFFFFFFu;
+    } else {
+        const uint32_t d = ahora - s_us_prev;
+        uvm2_stats.us_frame_last = d;
+        uvm2_stats.frames_medidos++;
+        if (d < uvm2_stats.us_frame_min) uvm2_stats.us_frame_min = d;
+        if (d > uvm2_stats.us_frame_max) {
+            uvm2_stats.us_frame_max     = d;
+            uvm2_stats.vectores_en_max  = uvm2_stats.vectors_last;
+        }
+        if (d > 20500u) uvm2_stats.frames_lentos++;
+    }
+    s_us_prev = ahora;
+}
+}
+
 void uvm2_frame_end(void)
 {
     uint32_t cycles = 0;
@@ -1169,6 +1292,7 @@ void uvm2_frame_end(void)
     s_frame_no++;
     s_buf = s_frame_no & 1u;
     (void)cycles;
+    mide_periodo();
     return;
 #else
 #ifdef UVM2_CMDS_STAGE_SRAM
@@ -1249,43 +1373,7 @@ void uvm2_frame_end(void)
         s_frame_cycles = cycles;
     }
 
-    /* EL PERIODO REAL DEL FRAME, en microsegundos de reloj de pared.
-     *
-     * Se toma al FINAL, de un frame_end al siguiente, para que incluya lo unico que no mide
-     * nadie: el tiempo que el juego pasa emulando entre frames. Ver el comentario de
-     * us_frame_* en uvm2_bus.h.
-     *
-     * TIMELR del TIMER0 en crudo (0x400B000C): 32 bits de microsegundos, de sobra para una
-     * diferencia entre frames, y sin arrastrar pico/time.h a un fichero que vive en SRAM.
-     *
-     * Los 60 primeros frames NO cuentan: al arrancar hay carga de ROM, pantallas de
-     * atencion y el propio cargador, y esa basura se queda en el minimo y el maximo para
-     * siempre. Ya paso una vez con las estadisticas sembradas desde el arranque. */
-    {
-        static uint32_t s_us_prev;
-        static uint32_t s_calentando = 60;
-#ifdef UVM2_HOST
-        const uint32_t ahora = 0;   /* no TIMER0 in a host harness — see tools/ */
-#else
-        const uint32_t ahora = *(volatile uint32_t *)0x400B000Cu;
-#endif
-
-        if (s_calentando) {
-            s_calentando--;
-            uvm2_stats.us_frame_min = 0xFFFFFFFFu;
-        } else {
-            const uint32_t d = ahora - s_us_prev;
-            uvm2_stats.us_frame_last = d;
-            uvm2_stats.frames_medidos++;
-            if (d < uvm2_stats.us_frame_min) uvm2_stats.us_frame_min = d;
-            if (d > uvm2_stats.us_frame_max) {
-                uvm2_stats.us_frame_max     = d;
-                uvm2_stats.vectores_en_max  = uvm2_stats.vectors_last;
-            }
-            if (d > 20500u) uvm2_stats.frames_lentos++;
-        }
-        s_us_prev = ahora;
-    }
+    mide_periodo();
 
 #ifdef UVM2_RETARDO_US
     retardo_artificial();
