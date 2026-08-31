@@ -184,9 +184,23 @@ uint32_t uvm2_firma_copia, uvm2_firma_copia_malas, uvm2_firma_copia_vueltas;
 
 static uint32_t s_dropped;
 
+/* EL CIERRE DEL FRAME TIENE SITIO RESERVADO. Si la lista se llena a mitad del juego, lo
+ * que se tira es la COLA — y la cola es el cierre de frame_end: el apagado del haz, la
+ * recalibracion y la pinza de cero. Pasaban tambien por emit() y se tiraban igual, asi
+ * que un frame lleno dejaba el haz ENCENDIDO donde estuviera durante el hueco entre
+ * frames y el preambulo del siguiente. En pantalla: trazos brillantisimos en el HUD
+ * (que se dibuja el ultimo y es lo primero que se pierde) y el HUD a medias. Lo
+ * describio Daniel el 2026-08-31 en 25m con barriles; ese mismo dia se leyo un frame de
+ * 8192 comandos justos, o sea tocando el techo.
+ *
+ * El juego solo puede llenar hasta UVM2_CMD_RESERVA del final; frame_end levanta el
+ * limite para su cierre. Un frame truncado sigue acabando apagado y pinzado. */
+#define UVM2_CMD_RESERVA 64u
+static uint32_t s_limite = UVM2_CMD_CAPACITY - UVM2_CMD_RESERVA;
+
 static inline void emit(uint32_t reg, uint32_t data, uint32_t delay)
 {
-    if (s_count < UVM2_CMD_CAPACITY) {
+    if (s_count < s_limite) {
         const uint32_t w = UVM2_CMD(reg, data, delay);
         const uint32_t v = UVM2_CMD_EMPAQUETA(w);
         uint8_t *d = &s_cmds[s_buf][s_count * 3u];
@@ -411,13 +425,30 @@ static void via_setup(void)
  *
  * Y NO ES UNA CONSTANTE DEL REPOSITORIO, ES UNA CALIBRACION DE MAQUINA: si otra consola
  * pide otro numero, se cambia aqui y se anota con su medida, como esta. */
-extern volatile uint32_t MIN_T1, MIN_T1_ARRANQUE, VCAP;
+extern volatile uint32_t MIN_T1, MIN_T1_ARRANQUE, VCAP, DAC_CERO, DRAW_SCALE, T1_TRANSPORT;
+
+/* DAC_CERO: poner PORT A a cero tras cada trazo, antes de apagar el haz. Es un comando y
+ * un ciclo de E por trazo ENCENDIDO. Un juego lo fija con -DUVM2_DAC_CERO=0 tras medirlo
+ * en SU consola; sin eso vale 1 y no cambia nada para nadie. */
+#ifndef UVM2_DAC_CERO
+#define UVM2_DAC_CERO 1
+#endif
 
 void uvm2_draw_init(void)
 {
     MIN_T1          = 1u;   /* sin suelo: la duracion sale de la longitud */
     MIN_T1_ARRANQUE = 1u;   /* idem para las rampas que arrancan paradas */
     VCAP            = 24u;  /* 6,7 ciclos de espera por unidad de longitud */
+    DAC_CERO        = UVM2_DAC_CERO;
+    /* LA ESCALA, si el juego la fija (-DUVM2_DRAW_SCALE / -DUVM2_T1_TRANSPORT). Sin eso se
+     * queda la de siempre. Existe porque la escala buena se encontro desde el panel y se
+     * EVAPORO en el primer reboot: una perilla viva no es una decision hasta que se compila. */
+#ifdef UVM2_DRAW_SCALE
+    DRAW_SCALE      = UVM2_DRAW_SCALE;
+#endif
+#ifdef UVM2_T1_TRANSPORT
+    T1_TRANSPORT    = UVM2_T1_TRANSPORT;
+#endif
 
     s_count = 0;
     via_setup();
@@ -475,8 +506,9 @@ void uvm2_draw_prime_holds(void)
     s_z = 0;
 }
 
-/* Definida abajo con las demas perillas; se usa aqui arriba. */
+/* Definidas abajo con las demas perillas; se usan aqui arriba. */
 extern volatile int32_t uvm2_zero_settle_e;
+extern volatile int32_t uvm2_hueco_minimo;
 
 void uvm2_draw_reset(void)
 {
@@ -696,6 +728,23 @@ static void vxs_emit(void *ctx, uint32_t reg, uint32_t data, uint32_t delay_q8)
      * daba la vuelta en un uint32_t. Es la misma familia que el tope de 8192 que tiraba
      * comandos en silencio — un limite callado no es un limite. */
     uint32_t d = delay_q8 / 256u;
+    /* SI EL MODELO PIDE UN HUECO, QUE HAYA AL MENOS UN CICLO.
+     *
+     * El truncado es a proposito —lo hace el cartucho propio y dos implementaciones que
+     * redondean distinto son dos modelos— pero AQUI e6809_q8 vale 64, no 256. Con esa
+     * unidad la rejilla es de cuatro: e(1), e(2) y e(3) valen 0,25, 0,50 y 0,75 ciclos y
+     * DESAPARECEN ENTEROS. En el cartucho propio, con 256, e(1) si vale un ciclo. O sea
+     * que las dos placas NO estan igualadas: al UVM2 se le pierden huecos que la otra si
+     * tiene.
+     *
+     * Consecuencia medida en la lista real: 593 escrituras seguidas a ORA/ORB con hueco
+     * cero, el 9% de los comandos, y 438 de ellas ORB->ORA — inhibir el mux y escribir el
+     * DAC de X en el periodo de E siguiente. Malban avisa por su cuenta de justo eso:
+     * "it can sometimes be problematic to have ORB / ORA be set too fast without a delay",
+     * y que depende de la consola.
+     *
+     * uvm2_hueco_minimo = 1 pone el suelo; 0 deja el truncado de siempre. */
+    if (uvm2_hueco_minimo && delay_q8 && d == 0u) d = 1u;
     if (d > 4095u) d = 4095u;
     emit(reg, data, d);
 }
@@ -854,6 +903,7 @@ volatile int32_t uvm2_beam_on_e = 0;        /* ciclos de E entre arrancar y ence
 #ifndef UVM2_ZERO_SETTLE_E
 #define UVM2_ZERO_SETTLE_E (-1)
 #endif
+volatile int32_t uvm2_hueco_minimo = 0;   /* ver la nota de vxs_emit */
 volatile int32_t uvm2_zero_settle_e = UVM2_ZERO_SETTLE_E;   /* <0 = ZERO_BASE + scale/4 */
 volatile int32_t uvm2_y_mux_e = 4;
 volatile int32_t uvm2_keep_lit  = 0;
@@ -1169,6 +1219,7 @@ static void retardo_artificial(void)
 void uvm2_frame_begin(void)
 {
     s_count = 0;
+    s_limite = UVM2_CMD_CAPACITY - UVM2_CMD_RESERVA;
     s_dropped              = 0;
     uvm2_stats.vectors     = 0;
     uvm2_stats.moves       = 0;
@@ -1263,6 +1314,7 @@ void uvm2_frame_end(void)
      * estuviera. Ralf no lo supone: emite SetBlank(true) al cerrar cada frame.
      * Cuesta un comando. */
     s_pcr = (uint8_t)(s_pcr & ~UVM2_PCR_BLANK_OFF);
+    s_limite = UVM2_CMD_CAPACITY;   /* el cierre entra SIEMPRE, ver UVM2_CMD_RESERVA */
     emit(UVM2_VIA_PCR, s_pcr, 0);
 
     /* RECALIBRAR, con el haz ya apagado y antes de pinzar. Es donde la BIOS la
