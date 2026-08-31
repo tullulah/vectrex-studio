@@ -907,7 +907,11 @@ volatile int32_t uvm2_hueco_minimo = 0;   /* ver la nota de vxs_emit */
 volatile int32_t uvm2_zero_settle_e = UVM2_ZERO_SETTLE_E;   /* <0 = ZERO_BASE + scale/4 */
 volatile int32_t uvm2_y_mux_e = 4;
 volatile int32_t uvm2_keep_lit  = 0;
-volatile int32_t uvm2_blank_settle_e = 12;  /* ciclos de E que sigue encendido al parar */
+/* El juego puede fijarlo (-DUVM2_BLANK_SETTLE_E=N) tras barrerlo en su consola. */
+#ifndef UVM2_BLANK_SETTLE_E
+#define UVM2_BLANK_SETTLE_E 12
+#endif
+volatile int32_t uvm2_blank_settle_e = UVM2_BLANK_SETTLE_E;  /* ciclos de E encendido tras parar */
 /* ASENTAMIENTO DEL DAC EN X, antes de arrancar la rampa. Ver x_settle_q8 en emit.rs: la Y
  * llega muestreada y retenida tras `y_mux` ciclos de ventana, y la X va directa al DAC con
  * la rampa arrancando tres comandos despues. 0 = como siempre. */
