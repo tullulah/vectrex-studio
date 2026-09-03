@@ -116,6 +116,7 @@ static uint8_t  s_porta = 0x00;
 static int      s_porta_stale = 1;
 static uint8_t  s_portb = UVM2_PB_IDLE;
 static uint8_t  s_pcr   = UVM2_PCR_IDLE;
+static int s_haz_encendido = 0;  /* estado del haz (SR), para keep-lit del idioma VecFever */
 static int      s_y     = 0;        /* value currently held by the Y S/H  */
 static int      s_z     = 0;        /* value currently held by the Z S/H  */
 static int      s_pos_x = 0;        /* beam position since the last centre */
@@ -512,6 +513,12 @@ extern volatile int32_t uvm2_hueco_minimo;
 
 void uvm2_draw_reset(void)
 {
+    /* APAGAR ANTES DE PINZAR EL CERO. Con keep-lit (idioma VecFever) el haz llega
+     * ENCENDIDO al re-cero; si no se apaga, set_zero(1) lo arrastra al centro dibujando
+     * una linea = la ESTRELLA de rayos al centro vista en consola. El VecFever apaga en
+     * cada pen-up/re-centro. */
+    if (s_haz_encendido) { emit(UVM2_VIA_SR, 0x00, 0); s_haz_encendido = 0; }
+
     /* RE-CEBAR LA REFERENCIA DE CERO, COMO HACE LA BIOS.
      *
      * Reset0Ref ($F354) cae en Reset_Pen ($F35B), que en CADA re-cero pone el DAC
@@ -802,7 +809,6 @@ static int vxs_y_can_skip(void *ctx, int32_t vy) { (void)ctx; return s_y == (int
  * con `uvm2_keep_lit = 1` tomaria la rama de "encender" en cada vector y no apagaria
  * nunca, o sea que el haz se quedaria encendido mientras se preparan los DAC del vector
  * siguiente y emborronaria la pantalla. Por eso van con el knob, no antes. */
-static int s_haz_encendido = 0;
 static int  vxs_beam_is_lit(void *ctx)  { (void)ctx; return s_haz_encendido; }
 static void vxs_beam_lit(void *ctx)     { (void)ctx; s_haz_encendido = 1; }
 static void vxs_beam_blanked(void *ctx) { (void)ctx; s_haz_encendido = 0; }

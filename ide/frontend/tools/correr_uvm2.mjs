@@ -7,6 +7,7 @@
  * donde gira si no dibuja— y ademas resuelve el PC contra el ELF si se le pasa. Todo el
  * ciclo de hoy (cambiar el emulador, probar, leer el PC, repetir) cabe aqui en segundos.
  */
+if (process.env.VIADUMP) globalThis.__VIADUMP = 1;
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -290,4 +291,32 @@ if (elf) {
     console.log(malo.length ? "  RAMPA MAL EN LA CPU EMULADA: " + malo.join("; ")
                             : "  rampa: la CPU emulada la calcula bien");
   } catch (e) { console.log("  (sonda de rampa fallida)", e && e.stack ? e.stack.split("\n").slice(0, 5).join("\n      ") : String(e)); }
+}
+
+if (process.env.VIADUMP) {
+  const v = (sys /** @type {any} */).viaFull;
+  const N=['ORB','ORA','DDRB','DDRA','T1CL','T1CH','T1LL','T1LH','T2CL','T2CH','SR','ACR','PCR','IFR','IER','ORAnh'];
+  let o='cycle\treg\tname\tdata\n';
+  for (let i=0;i<v.length;i+=3) o+=`${v[i]}\t${v[i+1].toString(16)}\t${N[v[i+1]]}\t${v[i+2].toString(16).padStart(2,'0')}\n`;
+  writeFileSync(process.env.VIADUMP, o);
+  console.log(`  VIA volcado: ${v.length/3} escrituras -> ${process.env.VIADUMP}`);
+}
+
+if (process.env.CMDDUMP) {
+  // Lee la lista de comandos EXACTA del SDK (s_cmds) de la RAM del emulador: 3 bytes/cmd,
+  // packed24 = (delay<<12)|(reg<<8)|data. Es la vara buena (ciclos de E), sin el PIO.
+  const S = (sys /** @type {any} */);
+  const ram = S.sram; const BASE = 0x20000000;
+  const rd32 = (a) => ram[a-BASE] | (ram[a-BASE+1]<<8) | (ram[a-BASE+2]<<16) | (ram[a-BASE+3]<<24);
+  const S_CMDS = 0x2004c4e8, S_COUNT = 0x200524e8;
+  const cnt = rd32(S_COUNT) >>> 0;
+  const N = ['ORB','ORA','DDRB','DDRA','T1CL','T1CH','T1LL','T1LH','T2CL','T2CH','SR','ACR','PCR','IFR','IER','ORAnh'];
+  let o = 'i\treg\tname\tdata\tdelay\n';
+  for (let i=0;i<cnt && i<20000;i++) {
+    const b0=ram[S_CMDS-BASE+i*3], b1=ram[S_CMDS-BASE+i*3+1], b2=ram[S_CMDS-BASE+i*3+2];
+    const w=b0|(b1<<8)|(b2<<16); const data=w&0xFF, reg=(w>>8)&0xF, delay=w>>12;
+    o+=`${i}\t${reg.toString(16)}\t${N[reg]}\t${data.toString(16).padStart(2,'0')}\t${delay}\n`;
+  }
+  writeFileSync(process.env.CMDDUMP, o);
+  console.log(`  s_cmds volcado: ${cnt} comandos -> ${process.env.CMDDUMP}`);
 }

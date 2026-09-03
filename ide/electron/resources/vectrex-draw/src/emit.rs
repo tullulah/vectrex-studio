@@ -248,6 +248,13 @@ fn y_hold_is(vy: i8) {
 }
 
 pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings) {
+    // APAGAR LO PRIMERO (SR=0x00). Con keep-lit el haz llega ENCENDIDO al salto; si se
+    // toca Y/mux antes de apagar, la travesia al destino se dibuja iluminada. Blanquear
+    // antes de mover nada es lo que hace el VecFever en un pen-up.
+    if sink.beam_is_lit() {
+        sink.emit(REG_SHIFT, 0x00, 0);
+        sink.beam_blanked();
+    }
     sink.emit(REG_PORT_A, vy as u8, k.e(5)); // STA — Y al DAC; hueco 6 (CLR dp)
     // VENTANA DE Y: se probo alargarla de `e(9)` a `y_mux_q8` (2 -> 14 ciclos de E),
     // razonando que un condensador no admite el descuento de `e6809_q8`, que se midio por
@@ -297,135 +304,38 @@ pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings
 /// y no por el registro de desplazamiento con ACR = 0x98. El camino del SR no llego a
 /// dibujar nada en este hardware; el de CNTL esta probado.
 pub fn draw_line_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings) {
-    // Si el S&H de Y ya sostiene este vy, todo el muestreo sobra: cuatro escrituras y la
-    // ventana de carga, el 25% del coste del vector.
-    let y_saltada = sink.y_can_skip(vy);
-    if !y_saltada {
-        /* LOS HUECOS SON LOS DEL 6809, CONTADOS DE SU ASM. Con DP=$D0 las escrituras son
-         * de pagina directa y el 6809 va a 1,5 MHz, o sea UN ciclo suyo es UN ciclo de E:
-         * sus tiempos son directamente nuestros retardos. De su bucle de dibujo:
-         *
-         *     STB VIA_port_a   (4)  Y al DAC
-         *     CLR VIA_port_b   (6)  abrir mux      -> hueco 6
-         *     NOP NOP NOP      (6)
-         *     INC VIA_port_b   (6)  cerrar mux     -> hueco 12
-         *     STA VIA_port_a   (4)  X al DAC       -> hueco 4
-         *
-         * Nuestro `emit` gasta 1 ciclo en la escritura mas su retardo, asi que el retardo
-         * es el hueco menos 1. */
-        sink.emit(REG_PORT_A, vy as u8, k.e(5)); // STA — Y al DAC; hueco 6 (CLR dp)
-        sink.emit(REG_PORT_B, 0x00, k.y_mux_q8); // CLR — abre mux; hueco 12 (3 NOP + INC dp)
-        sink.emit(REG_PORT_B, 0x01, k.e(3)); // INC — cierra mux; hueco 4 (STA dp)
-        sink.y_held(vy);
-    }
-    /*     STA VIA_port_a   (4)  X al DAC
-     *     LDA #$FF         (2)
-     *     STA VIA_shift_reg(4)  haz ON          -> hueco 6
-     *     CLR VIA_t1_cnt_hi(6)  arranca rampa   -> hueco 6
-     *
-     * O sea 12 ciclos desde que X llega al DAC hasta que arranca la rampa. Nosotros
-     * teniamos 8: la rampa arrancaba CUATRO ciclos antes de tiempo, con el DAC todavia
-     * llegando — un error de tiempo FIJO por vector, o sea nada en un trazo largo y la
-     * mitad de uno corto. Es la divergencia que buscabamos. */
-    /* EL HUECO ES 6 SE ESCRIBA T1CL O NO. Si el cache se salta la escritura, el ciclo que
-     * esa escritura ocupaba lo pone este retardo. Sin la compensacion, encender el cache
-     * desplazaba el dibujo — que es exactamente lo que se midio en consola. */
-    let escribe_t1cl = crate::ramp::T1CL_CACHE.load(Orden::Relaxed) == 0
-        || T1CL_ULTIMO.load(Orden::Relaxed) != ((t1 & 0xff) as u32 | 0x100);
-    /* X ES EL DAC VIVO: si ya sostiene este valor la escritura sobra, igual que sobra el
-     * muestreo de Y. Y hace falta para algo mas que ahorrar bus: con `keep_lit` el haz
-     * sigue ENCENDIDO aqui, asi que escribir PORT_A cambia su velocidad en pleno trazo y
-     * pinta una raya que no esta en la lista. MEDIDO en consola el 2026-08-26: con
-     * keep_lit=1 y sin esto, "se ven trazos que no se deberian ver". */
-    let x_saltada = sink.x_can_skip(vx);
-    if !x_saltada {
-    sink.emit(REG_PORT_A, vx as u8,
-        k.e(if escribe_t1cl { 4 } else { 5 }) + k.x_settle_q8); // STB — X al DAC; hueco 6
-    }
-    /* T1CL SOLO SI CAMBIA — el 6809 lo carga UNA VEZ y despues cada vector es solo
-     * `CLR T1CH`. El hueco anterior ya compensa que esta escritura este o no. */
-    if escribe_t1cl {
-        emitir_t1cl(sink, t1, 0);
-    }
-
-    // EL ORDEN IMPORTA, y en su dia estaba al reves. Encender ANTES de arrancar la rampa
-    // deja el punto quieto e iluminado durante una escritura entera: un punto brillante
-    // en el vertice de SALIDA, el espejo del que arregla `blank_settle_q8` al final.
-    /* LA CONDICION ES "NO SE HA ESCRITO NADA ENTRE LAS DOS RAMPAS", no solo "el haz sigue
-     * encendido": solo PORT_A y PORT_B mueven el haz, asi que basta con que se hayan
-     * saltado las dos, la Y por su S&H y la X por el DAC vivo. */
-    if k.keep_lit && sink.beam_is_lit() && y_saltada && x_saltada {
-        // Continuacion de una tirada iluminada: el haz ya esta encendido Y ya se mueve,
-        // asi que no necesita ni la escritura ni el hueco para arrancar. Esta es la
-        // costura que perdia cuatro ciclos de E de recorrido en cada vertice.
-        sink.emit(REG_T1_HI, (t1 >> 8) as u8, 0);
-    } else if k.beam_on_q8 != 0 {
-        sink.emit(REG_T1_HI, (t1 >> 8) as u8, k.beam_on_q8); // arranca la rampa PRIMERO
-        haz(sink, true, 0); // haz ON — ya viajando
-        sink.beam_lit();
-    } else {
-        haz(sink, true, k.e(5)); // haz ON; hueco 6 hasta la rampa (CLR T1CH dp)
-        sink.beam_lit();
-        sink.emit(REG_T1_HI, (t1 >> 8) as u8, 0); // STB — arranca la rampa
-    }
-
-    // Asentamiento de la deflexion: la rampa acabo (T1 paro los integradores) pero el HAZ
-    // sigue llegando. Se espera un tiempo fijo y se apaga. Es el termino que convierte los
-    // puntos brillantes en los vertices y las esquinas abiertas en los dos extremos de un
-    // mismo knob, en vez de en dos fallos distintos.
-    sink.wait_ramp(t1, k.e(4) as i32 + k.blank_settle_q8);
-
-    if !k.keep_lit {
-        /* EL ORDEN DE LA REFERENCIA: primero `CLR VIA_port_a`, DESPUES `CLR VIA_shift_reg`.
-         * Lo teniamos al reves. */
-        if crate::ramp::DAC_CERO.load(Orden::Relaxed) != 0 {
-            /* "COMO LA REFERENCIA" ERA FALSO. Esta linea decia que la referencia pone el
-             * DAC a cero antes de apagar el haz en cada vector. NO LO HACE, y lo dice su
-             * propio bucle interior — `Draw_VLp` ($F41B):
-             *
-             *     STA <VIA_shift_reg   ; haz OFF
-             *     LDA ,X
-             *     BLE Draw_VLp         ; y al siguiente vector, sin tocar PORT A
-             *
-             * El `CLR <VIA_port_a` de la BIOS esta en `Reset_Pen` ($F35B), o sea en el
-             * RE-CERO, que es donde nosotros tambien lo hacemos (uvm2_draw_reset). Y el
-             * escritor de Ralf tampoco lo emite por trazo: comprobado con
-             * hardware/uvm2/compare el 2026-08-27.
-             *
-             * MEDIDO: 1 comando y 1 ciclo de E por trazo ENCENDIDO — unos 550 ciclos por
-             * frame en dkong, el 0,84%. Se queda encendido por defecto hasta que se mire
-             * en consola, porque lo unico que puede justificarlo es una fuga del
-             * interruptor de rampa con el DAC en un valor distinto de cero, y eso no se
-             * decide leyendo codigo. El knob es DAC_CERO, en el panel.
-             *
-             * SIN RETARDO. Darle los 6 ciclos del `CLR dp` alarga el tiempo con el haz
-             * encendido despues de la rampa y el emulador saca rayas sueltas en los
-             * vertices. El asentamiento ya lo gobierna `blank_settle_q8`. */
-            sink.emit(REG_PORT_A, 0, 0);
+    // ── PLOTTER DEL VECFEVER, VERBATIM ($CA51) ───────────────────────────────────
+    //
+    // Cada vector es una serie de microtramos T1=8, misma tasa (vx,vy). El haz se
+    // enciende UNA vez (SR=0x01, su valor exacto) cuando no lo estaba, y NO se apaga
+    // entre trazos encadenados — solo un salto (moveto) o el re-cero apagan. Cadencia en
+    // CICLOS DE E CRUDOS, medida de vecfever-asterock-bus.csv (no por k.e(), que escala
+    // por el 6809 y partia los huecos a la mitad):
+    //   ORA(Y) -6-> ORB=0 -8-> ORB=1 -1-> ORA(X) -4-> T1CL=8 -1-> T1CH=0 -12-> siguiente
+    // El hueco de 12 tras T1CH deja terminar la rampa de 8 antes del siguiente microtramo.
+    const T1M: u16 = 8;
+    let n = core::cmp::max(1, ((t1 as u32) + (T1M as u32) / 2) / (T1M as u32));
+    for i in 0..n {
+        sink.emit(REG_PORT_A, vy as u8, 5 * E); // ORA=Y ; hueco 6
+        if !sink.beam_is_lit() {
+            sink.emit(REG_PORT_B, 0x00, 5 * E); // ORB=0 mux abre, late Y ; hueco 6
+            sink.emit(REG_SHIFT, 0x01, 3 * E);  // SR=0x01 haz ON (una vez) ; hueco 4
+            sink.beam_lit();
+        } else {
+            sink.emit(REG_PORT_B, 0x00, 7 * E); // ORB=0 mux abre, late Y ; hueco 8
         }
-        haz(sink, false, 0); // haz OFF (BIOS: STA shift 0x00)
-        sink.beam_blanked();
+        sink.emit(REG_PORT_B, 0x01, 0);         // ORB=1 mux cierra ; hueco 1
+        sink.emit(REG_PORT_A, vx as u8, 3 * E); // ORA=X ; hueco 4
+        sink.emit(REG_T1_LO, T1M as u8, 0);     // T1CL=8 ; hueco 1
+        sink.emit(REG_T1_HI, 0x00, 11 * E);     // T1CH=0 arma ; hueco 12
+        let _ = i;
     }
+    sink.y_held(vy);
+    // SIN apagar: keep-lit entre trazos encadenados, como el VecFever. Apagan moveto_seq
+    // (salto) y el re-cero.
 }
 
-/// Una recta CON HUECOS, en UNA SOLA RAMPA.
-///
-/// El algoritmo del pintor en un display vectorial no puede ser un orden de dibujo —aqui
-/// nada tapa a nada— sino quitar geometria. Pero partir una viga en trozos cuesta una
-/// rampa por trozo: fijar los dos DAC, la cuenta de T1, abrir y cerrar. Y no hace falta:
-/// la velocidad del haz la fijan los DAC, asi que mientras no se toquen el haz sigue
-/// recorriendo LA MISMA RECTA. Lo unico que cambia por el camino es el BLANK.
-///
-/// `huecos` son tramos apagados en CUENTAS DE T1 dentro de 0..t1, ordenados y sin solapar.
-/// Una cuenta de T1 es un periodo de E (los dos van a phi2), asi que el retardo de cada
-/// tramo es `k.e(cuentas)` y la resolucion es una escritura de bus: para un vector de 62
-/// cuentas, 62 puntos de conmutacion posibles. De sobra para un hueco.
-///
-/// LAS CONMUTACIONES INTERMEDIAS VAN CONTADAS, no sondeadas, y eso es deliberado: el
-/// `trait` ya dice que sondear el flag T1 es lo unico que separa a las dos placas, y que
-/// la imagen del UVM2 NO puede leer la VIA a mitad de lista sin sacar vectores fantasma.
-/// Contar por dentro y sondear solo al final deja el asentamiento —que es donde se nota—
-/// exactamente igual que en `draw_line_seq`, y hace que esto valga en las dos placas.
+
 pub fn draw_line_patterned_seq<S: BusSink>(
     sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings, huecos: &[(u16, u16)],
 ) {
