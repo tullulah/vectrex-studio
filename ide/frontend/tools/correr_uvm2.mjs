@@ -47,6 +47,7 @@ if (elf) sys.setElf(new Uint8Array(readFileSync(elf)));
 sys.init(new Uint8Array(readFileSync(img)));
 
 let total = 0, conVectores = 0;
+const porFrame = [];
 /* Avance cada 500 frames: un juego que arranca despacio y uno colgado se distinguen por
  * si los contadores SE MUEVEN, no por el total al final. */
 const t0 = Date.now();
@@ -70,6 +71,10 @@ for (let f = 0; f < Number(nFrames); f++) {
   const segs = sys.runFrame();
   total += segs.length;
   if (segs.length) conVectores++;
+  /* SEGMENTOS POR FRAME. Un total y un "frames con dibujo" no distinguen "arranca mudo y
+   * luego va" de "parpadea": la primera es normal y la segunda es el defecto. PORFRAME=1
+   * imprime la serie. */
+  porFrame.push(segs.length);
   /* LA CAJA DE TODOS LOS FRAMES, no la del ultimo: un eje que se mueve DE VEZ EN CUANDO se
    * lee como "clavado" si solo miras una instantanea. */
   for (const g of segs) {
@@ -152,6 +157,22 @@ for (let f = 0; f < Number(nFrames); f++) {
   }
 }
 console.log(`  ${nFrames} frames: ${total} segmentos, ${conVectores} frames con dibujo`);
+if (process.env.PORFRAME) {
+  const mudos = [];
+  let i = 0;
+  while (i < porFrame.length) {
+    if (porFrame[i] === 0) { const a = i; while (i < porFrame.length && porFrame[i] === 0) i++;
+                             mudos.push(`${a}-${i-1} (${i-a})`); }
+    else i++;
+  }
+  console.log(`  rachas mudas: ${mudos.length ? mudos.join('  ') : 'ninguna'}`);
+  const conD = porFrame.filter(n => n > 0);
+  if (conD.length) {
+    const or = [...conD].sort((a,b) => a-b);
+    console.log(`  segmentos por frame CON dibujo: min ${or[0]}  mediana ` +
+                `${or[or.length>>1]}  max ${or[or.length-1]}`);
+  }
+}
 {
   const yh = [...(sys /** @type {any} */).yshHist].map((n, v) => [v, n]).filter(x => x[1])
                .sort((a, b) => b[1] - a[1]).slice(0, 8);
