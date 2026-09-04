@@ -353,6 +353,26 @@ void uvm2_psram_enable_xip(void)
 
     *(volatile uint32_t *)0x400C8000u |= (1u << 11);   /* XIP_CTRL.WRITABLE_M1 */
 
+/* PAGEBREAK: TROCEAR LAS RAFAGAS EN EL BORDE DE PAGINA.
+ *
+ * El APS6404L tiene paginas de 1024 bytes y una rafaga lineal que cruza ese limite DA LA
+ * VUELTA DENTRO DE LA PAGINA en vez de seguir en la siguiente. El sintoma solo aparece
+ * copiando de verdad: con dos palabras sueltas en direcciones lejanas ninguna transaccion
+ * cruza una pagina, y el chip parece perfecto.
+ *
+ * Estuvo a 0 porque nuestro cartucho lleva meses asi — pero alli el uso es otro. Aqui la
+ * lista de comandos son 64-128 KB escritos y releidos en rafaga cada frame, que es
+ * exactamente la forma que lo destapa.
+ *
+ * Y la trampa que lo mantuvo escondido: una verificacion que lee por la CACHE no dice nada
+ * del chip. La cache del XIP son 16 KB; una lista de 64 KB se firma bien recien escrita
+ * (cache caliente) y se reproduce mal despues (lineas ya desalojadas, que vienen del chip).
+ * Las dos observaciones encajan sin contradecirse, y por eso la firma parecia exonerarlo.
+ * Para comprobar el CHIP hay que leer por el alias sin cache: 0x15000000. */
+#ifndef UVM2_PSRAM_PAGEBREAK
+#define UVM2_PSRAM_PAGEBREAK 2u        /* qmi.h: 0=NONE 1=256 2=1024 3=4096 */
+#endif
+
     qmi_hw->m[1].timing =
 /* EL DIVISOR ES AJUSTABLE, y por una razon: el 2 viene de nuestro cartucho, que corre
  * a 150 MHz porque su firmware lo fija. Aqui venimos de un reboot de la bootrom y NADIE
@@ -375,7 +395,8 @@ void uvm2_psram_enable_xip(void)
 #ifndef UVM2_PSRAM_CLKDIV
 #define UVM2_PSRAM_CLKDIV 2u
 #endif
-          (UVM2_PSRAM_CLKDIV << QMI_M1_TIMING_CLKDIV_LSB)
+          (UVM2_PSRAM_PAGEBREAK << QMI_M1_TIMING_PAGEBREAK_LSB)
+        | (UVM2_PSRAM_CLKDIV << QMI_M1_TIMING_CLKDIV_LSB)
         | (1u  << QMI_M1_TIMING_RXDELAY_LSB)
         | (UVM2_PSRAM_MAX_SELECT << QMI_M1_TIMING_MAX_SELECT_LSB)   /* refresco: VER ABAJO */
         | (4u  << QMI_M1_TIMING_MIN_DESELECT_LSB)

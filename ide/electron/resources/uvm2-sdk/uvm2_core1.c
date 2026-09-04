@@ -233,6 +233,15 @@ static void core1_main(void)
     }
 }
 
+/* PARAR CORE 1, para lo que no se puede hacer con el corriendo: escribir en la flash.
+ * Borrar o programar flash cuelga a cualquier nucleo que ejecute o lea desde XIP, y aqui
+ * vive el ejecutor de la lista. `multicore_reset_core1` lo deja parado de verdad; para
+ * volver, `uvm2_core1_start`, que ya empieza reseteandolo. */
+void uvm2_core1_stop(void)
+{
+    multicore_reset_core1();
+}
+
 void uvm2_core1_start(void)
 {
     /* RESETEAR ANTES DE LANZAR, y esto es lo que hace posible cargar por SWD.

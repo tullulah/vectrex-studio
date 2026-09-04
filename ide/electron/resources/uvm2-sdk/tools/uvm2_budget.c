@@ -34,9 +34,9 @@ static void vpy_line(int x0, int y0, int x1, int y1, int b)
 
 static void measure(const char *label, uint32_t scale, int fixup, int len)
 {
+    (void)fixup;   /* el fixup se retiro del SDK: no lo llamaba nadie */
     g_cycles = 0; g_commands = 0;
     uvm2_draw_set_scale(scale);
-    uvm2_draw_set_fixup(fixup);
     uvm2_draw_init();
 
     g_cycles = 0; g_commands = 0;
@@ -58,10 +58,10 @@ static void measure(const char *label, uint32_t scale, int fixup, int len)
  * segments. No re-zero, no re-move, no intensity change per segment. */
 static void measure_chained(const char *label, uint32_t scale, int fixup, int len)
 {
+    (void)fixup;   /* idem */
     const int SEGS = 20;
 
     uvm2_draw_set_scale(scale);
-    uvm2_draw_set_fixup(fixup);
     uvm2_draw_init();
 
     g_cycles = 0; g_commands = 0;

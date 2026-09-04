@@ -232,7 +232,7 @@ void uvm2_bus_devolver_al_stream(void);   /* definida con las primitivas sueltas
  * periodos; empujar n palabras de park costaba ~8400 escrituras al FIFO por frame para
  * producir exactamente lo mismo.
  */
-UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
+UVM2_RAMFUNC uint32_t uvm2_exec(const uint8_t *cmds, uint32_t count)
 {
     uint32_t cycles = 0;
 
@@ -240,9 +240,10 @@ UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
     uvm2_bus_devolver_al_stream();
 
     while (count--) {
-        uint32_t c     = *cmds++;
-        uint32_t out   = (c >> 8) & UVM2_CMD_GPIO_MASK;
-        uint32_t delay = c >> 20;
+        uint32_t v     = (uint32_t)cmds[0] | ((uint32_t)cmds[1] << 8) | ((uint32_t)cmds[2] << 16);
+        uint32_t out   = UVM2_CMD_REG_DATO(v);
+        uint32_t delay = UVM2_CMD_RETARDO(v);
+        cmds += 3;
 
         /* R/W queda BAJO por omision en la palabra: es una escritura. */
         vbus_push(vbus_word(UVM2_VIA_BASE_BITS | out));
@@ -261,7 +262,7 @@ UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
     return cycles;
 }
 #else
-UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
+UVM2_RAMFUNC uint32_t uvm2_exec(const uint8_t *cmds, uint32_t count)
 {
     uint32_t cycles = 0;
 
@@ -327,9 +328,10 @@ UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count)
     UVM2_WAIT_CLK_LOW();
 
     while (count--) {
-        uint32_t c     = *cmds++;
-        uint32_t out   = (c >> 8) & UVM2_CMD_GPIO_MASK;   /* reg + data, pre-shifted */
-        uint32_t delay = c >> 20;
+        uint32_t v     = (uint32_t)cmds[0] | ((uint32_t)cmds[1] << 8) | ((uint32_t)cmds[2] << 16);
+        uint32_t out   = UVM2_CMD_REG_DATO(v);
+        uint32_t delay = UVM2_CMD_RETARDO(v);
+        cmds += 3;
 
         UVM2_WAIT_CLK_HIGH();
         uvm2_put_masked(out, UVM2_CMD_GPIO_MASK);

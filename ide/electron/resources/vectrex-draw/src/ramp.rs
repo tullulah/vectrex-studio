@@ -67,7 +67,10 @@ pub fn escala() -> i32 {
 /// measurement in the task list before lowering it for speed.
 #[used]
 #[no_mangle]
-pub static MIN_T1: AtomicU32 = AtomicU32::new(31);
+pub static MIN_T1: AtomicU32 = AtomicU32::new(8);
+/* ^ 8 Y NO 31, POR DEFECTO DESDE 2026-09-04: es lo que mide el VecFever en TODOS sus trazos
+ * iluminados cortos (1861 de ~1900 en 8 frames), y lo que ya ponian a mano los puertos
+ * afinados. Ver el-no-parte-los-trazos. */
 
 /// Suelo de rampa SOLO para las que arrancan paradas (el salto y el primer trazo tras el).
 /// Ver el bloque largo de `ramp_params`. De fabrica igual que MIN_T1 = inerte.
@@ -102,7 +105,48 @@ static ARRANQUE: AtomicU32 = AtomicU32::new(1);
 /// floors), so sweeping one without the other cannot find the optimum.
 #[used]
 #[no_mangle]
-pub static VCAP: AtomicU32 = AtomicU32::new(127);
+pub static VCAP: AtomicU32 = AtomicU32::new(48);
+/* ^ 48 Y NO 127, POR DEFECTO DESDE 2026-09-04.
+ *
+ * 127 no es un tope: es "sin tope", y con el TODO trazo corre a la velocidad maxima, que es
+ * el MINIMO de carga por unidad de longitud — o sea el minimo brillo. Los puertos afinados
+ * lo ponian a mano (mhavoc 42, asterock 48) y los que no lo listaban —dkong, asteroids,
+ * snowbros_c— se quedaban con el 127 y salian apagados en consola.
+ *
+ * El 48 sale de SU captura, no de copiarle el numero a otro puerto: la tasa de sus 2028
+ * trazos iluminados en 8 frames tiene mediana 48 y p90 51. O sea que ESA es la velocidad a
+ * la que el VecFever dibuja de verdad. (Tiene una cola del 1% a 126, asi que el no clampea;
+ * lo que reproducimos es su velocidad TIPICA, que es lo que fija el brillo.)
+ *
+ * Cuesta framerate: un trazo mas lento dura mas. Un juego que no llegue lo sube con
+ * -DUVM2_VCAP=N, que es justo lo que hacen mhavoc y asterock. */
+
+/* ── VCAP DE LOS SALTOS, APARTE DEL DE LOS TRAZOS ───────────────────────────────────
+ *
+ * VCAP acota la VELOCIDAD del haz, y frenarlo es lo que da brillo: el fosforo se carga
+ * con intensidad x TIEMPO, asi que un trazo rapido sale oscuro. Pero eso **solo cuenta
+ * con el haz encendido**. Un salto va a oscuras: frenarlo no ilumina nada y solo gasta
+ * frame.
+ *
+ * MEDIDO en la captura del VecFever (816 frames de asterock), separando sus unidades de
+ * rampa por el estado del haz:
+ *
+ *     ENCENDIDO (dibuja) : tasa mediana 35    1.403 ciclos/frame  (175 unidades)
+ *     APAGADO   (salta)  : tasa mediana 64   10.232 ciclos/frame  (317 unidades)
+ *     -> SALTA A 1,8x LA VELOCIDAD A LA QUE DIBUJA
+ *
+ * Nosotros usabamos UN SOLO VCAP para las dos cosas, y eso obliga a elegir entre trazos
+ * brillantes y saltos rapidos cuando no hay que elegir. El coste medido en asterock: para
+ * igualar su carga de fosforo (3,27 ciclos encendido por unidad de longitud) haciamos
+ * falta VCAP=48, y con el el frame pasaba de 33.205 a 72.578 ciclos —de 45 a 20,7 Hz—
+ * porque los ~266 saltos por frame se alargaban con los trazos: ~267 ciclos por salto
+ * contra los ~32 del VecFever.
+ *
+ * CERO = USAR EL MISMO QUE LOS TRAZOS, y es el defecto a proposito: mientras nadie le
+ * ponga valor, ningun puerto cambia de comportamiento. */
+#[used]
+#[no_mangle]
+pub static VCAP_SALTO: AtomicU32 = AtomicU32::new(0);
 
 /// TOPE DE TRANSPORTE — no es una preferencia, es el ancho de un campo.
 ///
@@ -161,6 +205,23 @@ pub static T1_TRANSPORT: AtomicU32 = AtomicU32::new(160);
 // Una consola sana no lo necesita y paga esos 2,3 fps para nada: se apaga poniendolo
 // a 0. Cuando VCAP salga del codigo y pase a ser calibracion de usuario (ESTADO.md
 // #31), este valor viaja con el, no con el binario.
+/// 1 = el TECHO del eje menor manda sobre el tope de velocidad. ES EL POR DEFECTO, y no
+/// por inercia: `el_techo_de_t1_es_por_vector` afirma que ningun eje con delta se queda
+/// parado, y soltarlo ya se probo una vez y rompio el dibujo en los dos cartuchos.
+///
+/// 0 hace ganar al tope de velocidad. Lo que compra y lo que cuesta esta en la nota de
+/// `ramp_params_q`; se compara en consola con la imagen MHAVOCT.
+#[no_mangle]
+pub static TECHO_MANDA: AtomicU32 = AtomicU32::new(1);
+
+/// 1 = la cadena corrige con la deuda (por defecto). 0 = no la aplica (la sigue apuntando).
+///
+/// Existe para poder MEDIR que aporta. Con la geometria de entrada en 1/16 la deuda es
+/// necesaria —el redondeo de la entrada se acumula—, pero con 1/256 la entrada ya es casi
+/// exacta y la correccion puede estar METIENDO el +-1 en vez de quitarlo.
+#[no_mangle]
+pub static DEUDA_ON: AtomicU32 = AtomicU32::new(1);
+
 #[no_mangle]
 pub static VCAP_SLOW: AtomicU32 = AtomicU32::new(30);
 
@@ -179,9 +240,99 @@ pub static VCAP_DV: AtomicU32 = AtomicU32::new(32);
 #[no_mangle]
 pub static VCAP_SLOW_HITS: AtomicU32 = AtomicU32::new(0);
 
+/// SALTO A TIEMPO FIJO, COMO EL VECFEVER. 0 = el modelo de siempre (tiempo variable).
+///
+/// MEDIDO en la captura de Major Havoc (`via.csv`, un frame de 20 ms, 593 unidades):
+///
+/// ```text
+/// T1=8  microtramos : 501 unidades, haz ENCENDIDO en el 79%   -> dibujo
+/// T1=31 saltos      :  72 unidades, haz APAGADO   en el 99%   -> mover
+///                      |vx| mediana 64, maximo 126
+/// otros             :  20 unidades, T1 hasta 191, |vx| mediana 113 -> saltos LARGOS
+/// ```
+///
+/// O sea que su idioma de salto es **tiempo fijo y tasa variable**, justo al reves que el
+/// nuestro (tasa fija a `VCAP_SALTO`, tiempo variable). La diferencia es de coste: su
+/// salto cuesta ~40 ciclos SIEMPRE; el nuestro 53, con T1 mediana 9 y maximo 160.
+///
+/// El tiempo solo se alarga cuando la tasa se desbordaria del DAC — que es exactamente de
+/// donde salen sus 20 unidades largas: a s=160 un salto de mas de 127*31/160 = 24 unidades
+/// ya no cabe en +-127 con t1=31, y entonces el tiempo minimo es `m*s/127`.
+///
+/// CERO DE FABRICA a proposito: mientras nadie le ponga valor, ningun puerto cambia.
+#[used]
+#[no_mangle]
+pub static T1_SALTO: AtomicU32 = AtomicU32::new(0);
+
 #[inline(always)]
-pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
+/// `ramp_params` para un SALTO: igual que el de los trazos pero con `VCAP_SALTO`, porque
+/// el haz va apagado y el brillo no cuenta. Ver el bloque de VCAP_SALTO.
+pub fn ramp_params_salto(dx: i8, dy: i8) -> (i8, i8, u16) {
+    let fijo = T1_SALTO.load(Ordering::Relaxed) as i32;
+    if fijo > 0 {
+        return salto_tiempo_fijo(dx, dy, fijo);
+    }
+    let v = VCAP_SALTO.load(Ordering::Relaxed);
+    ramp_params_con(dx, dy, if v != 0 { v } else { VCAP.load(Ordering::Relaxed) })
+}
+
+/// El modelo de salto del VecFever: `t1` fijo, y la tasa es lo que salga.
+///
+/// No comparte cuerpo con `ramp_params_con` porque los dos suelos de aquel (`t1_floor`
+/// proporcional a la longitud y `t1_vcap` por el tope de velocidad) existen para REPARTIR
+/// la distancia entre velocidad y tiempo — y aqui no hay reparto que hacer: el tiempo esta
+/// dado. Lo unico que se conserva es el redondeo, que tiene que ser el MISMO (misma
+/// division con `T1_EXTRA_Q8`) o los saltos dejarian de casar con los trazos.
+fn salto_tiempo_fijo(dx: i8, dy: i8, fijo: i32) -> (i8, i8, u16) {
+    let s = escala();
     let m = core::cmp::max((dx as i32).abs(), (dy as i32).abs());
+    if m == 0 {
+        return (0, 0, MIN_T1.load(Ordering::Relaxed) as u16);
+    }
+    // El tiempo minimo para que la tasa quepa en el DAC, hacia ARRIBA: truncando, la tasa
+    // se pasa, el DAC la recorta a +-127 y el salto se queda CORTO siempre en el mismo
+    // sentido — el sesgo sistematico que documenta `t1_vcap` en el modelo de los trazos.
+    let t1_cabe = (m * s + 126) / 127;
+    let t1 = fijo.max(t1_cabe).min(T1_TRANSPORT.load(Ordering::Relaxed) as i32).max(1);
+    let den = (t1 as i64) * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i64;
+    let round_div = |num: i32| -> i32 {
+        let n = num as i64 * 256;
+        (if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den }) as i32
+    };
+    let vx = round_div(dx as i32 * s).clamp(-128, 127) as i8;
+    let vy = round_div(dy as i32 * s).clamp(-128, 127) as i8;
+    (vx, vy, t1 as u16)
+}
+
+pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
+    ramp_params_con(dx, dy, VCAP.load(Ordering::Relaxed))
+}
+
+/// El modelo, con el tope de velocidad que le pase quien llame. Los trazos usan `VCAP` y
+/// los saltos `VCAP_SALTO`: es el MISMO reparto de distancia entre velocidad y tiempo,
+/// con distinto techo de velocidad.
+fn ramp_params_con(dx: i8, dy: i8, vcap_in: u32) -> (i8, i8, u16) {
+    ramp_params_q(dx as i32, dy as i32, vcap_in, 0)
+}
+
+/* EL MISMO MODELO CON SUB-UNIDADES. `dx`/`dy` vienen en 1/2^q unidades de dispositivo;
+ * q = 0 es exactamente el comportamiento de siempre.
+ *
+ * POR QUE. La API de dibujo tomaba enteros de dispositivo, y esa rejilla es DIEZ VECES mas
+ * basta que la del VecFever: el coloca puntos con la granularidad de la tasa (1/20 de
+ * unidad a t1=8) y nosotros solo en el entero. MEDIDO en mhavoc sobre 81.552 vectores:
+ * 0,22 unidades de error por eje —el maximo teorico es 0,5, o sea redondeo uniforme sin
+ * sesgo pero con todo el ruido—, el 3,6% de los vectores enteramente sub-unidad y el 0,26%
+ * DESAPARECIENDO porque sus dos extremos caen en el mismo punto. Con movimientos de 2
+ * unidades de mediana y glifos de 2-3 unidades de alto, eso es la deformacion que se ve.
+ *
+ * El hardware no lo impedia: la distancia es v*t1/s y con t1 libre las distancias
+ * fraccionarias se expresan solas (el pide v=51,t1=8 = 2,55 unidades). Lo imponia nuestra
+ * aritmetica. Aqui se arregla dividiendo por 2^q en cada sitio donde una LONGITUD se
+ * multiplica por la escala. */
+fn ramp_params_q(dx: i32, dy: i32, vcap_in: u32, q: u32) -> (i8, i8, u16) {
+    let f = 1i32 << q;
+    let m = core::cmp::max(dx.abs(), dy.abs());
     /* ── DOS SUELOS, SEGUN SI LA RAMPA ARRANCA PARADA ────────────────────────────────
      *
      * Un trazo que CONTINUA al anterior entra con los integradores ya moviendose; el
@@ -214,7 +365,7 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
     if arranque { ARRANQUE_HITS.fetch_add(1, Ordering::Relaxed); }
     let min_t1 = if arranque { MIN_T1_ARRANQUE.load(Ordering::Relaxed) }
                  else        { MIN_T1.load(Ordering::Relaxed) } as i32;
-    let mut vcap = VCAP.load(Ordering::Relaxed) as i32;
+    let mut vcap = vcap_in as i32;
 
     // ¿Este vector pide un salto grande de velocidad en Y respecto al anterior?
     // Se estima con la velocidad que TENDRIA al tope normal; no hace falta que sea
@@ -236,11 +387,11 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
     // mas. `Y_HELD` guarda el vy anterior (bit 8 = valido) y su signo es el de dy,
     // porque vy = dy * s / t1 con s y t1 positivos.
     let lento = VCAP_SLOW.load(Ordering::Relaxed) as i32;
-    if lento != 0 && dy != 0 && m <= VCAP_DV.load(Ordering::Relaxed) as i32 {
+    if lento != 0 && dy != 0 && m / f <= VCAP_DV.load(Ordering::Relaxed) as i32 {
         let held = Y_HELD.load(Ordering::Relaxed);
         if held & 0x100 != 0 {
             let prev = (held & 0xff) as u8 as i8 as i32;
-            if prev != 0 && (prev < 0) != ((dy as i32) < 0) {
+            if prev != 0 && (prev < 0) != (dy < 0) {
                 vcap = lento;
                 VCAP_SLOW_HITS.fetch_add(1, Ordering::Relaxed);
             }
@@ -274,7 +425,7 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
      * es una perilla y no una sustitucion: hay que MEDIR las dos en la misma consola. */
     let fija = RAMPA_FIJA.load(Ordering::Relaxed) as i32;
     if fija > 0 {
-        return (dx.clamp(-128, 127) as i8, dy.clamp(-128, 127) as i8, fija as u16);
+        return ((dx / f).clamp(-128, 127) as i8, (dy / f).clamp(-128, 127) as i8, fija as u16);
     }
     // 0xA0 = 160, NO 0x7F: el comentario que habia aqui decia 0x7F y llevaba tiempo
     // mintiendo. `s` gobierna la longitud Y la velocidad de todos los vectores
@@ -282,7 +433,7 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
     // cabeza da numeros mal. Se detecto porque el histograma de t1 tenia un cubo de >=128
     // que con s=127 no puede existir.
     let s = escala();
-    let t1_floor = (s * m / 127).clamp(min_t1, s); // dwell floor (∝ length)
+    let t1_floor = (s * m / (127 * f)).clamp(min_t1, s); // dwell floor (∝ length)
     // VELOCITY CAP: at MIN_T1=24 mid-length segments (24 < m ≤ 110) run at the full
     // ±127 swing, and the integrator op-amp overshoots the endpoint → platform
     // vectors "stretch". MIN_T1=110 avoided it by throttling their velocity (long
@@ -306,7 +457,7 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
     // VPY_MAX_CONSECUTIVE_DRAWS en el SDK ("fixed per movement, accumulates by count") y
     // que se estaba tapando re-cerando el haz cada pocos trazos.
     let vc = vcap.max(1);
-    let t1_vcap = ((m * s + vc - 1) / vc).max(1);
+    let t1_vcap = ((m * s + vc * f - 1) / (vc * f)).max(1);
     // EL TECHO SE CALCULA POR VECTOR, NO SE FIJA.
     //
     // `t1` y la velocidad son las dos mitades del mismo producto —v = d*s/t1— asi que
@@ -333,15 +484,43 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
     // A VALORES DE FABRICA NO CAMBIA NADA. Con VCAP = 127 ningun vector pasa de t1 = 160
     // (barrido sobre los 65.024 deltas: 0,0% lo rebasan), asi que esto abre rango solo
     // cuando se baja VCAP a proposito.
-    let d_menor = match ((dx as i32).abs(), (dy as i32).abs()) {
+    let d_menor = match (dx.abs(), dy.abs()) {
         (0, b) => b,                  // sin eje X que perder
         (a, 0) => a,
         (a, b) => a.min(b),
     };
-    let techo = (d_menor * s)
+    let techo = (d_menor * s / f)
         .min(T1_TRANSPORT.load(Ordering::Relaxed) as i32)
         .max(min_t1);                 // por si el transporte se deja por debajo del suelo
-    let t1 = t1_floor.max(t1_vcap).min(techo);
+    /* QUIEN MANDA CUANDO EL TECHO Y EL TOPE SE CONTRADICEN.
+     *
+     * `techo` protege la pendiente: pasado el, la tasa del eje MENOR redondea a 0 y la
+     * diagonal se endereza. `t1_vcap` protege la velocidad. En una diagonal tumbada los dos
+     * no caben, y hasta ahora ganaba el techo — con lo que la tasa se salta el tope.
+     *
+     * MEDIDO en un frame de nuestro Major Havoc: 341 de 754 trazos iluminados (45%) salen
+     * por encima de 51, y algunos a 125. A esa velocidad el trazo reparte 2,5 veces menos
+     * carga por unidad de longitud que uno a 51, mientras la junta entre microtramos sigue
+     * quemando sus 22-24 ciclos QUIETO: linea tenue con un punto brillante en cada extremo,
+     * que es el sintoma de "se ven todos los puntos de los microtramos".
+     *
+     * (Y OJO CON LA COMPARACION FACIL: el VecFever no pasa de 51 en su captura, pero eso NO
+     * es un tope suyo — su frame es 85% trazos rectos de texto y su diagonal mas tumbada
+     * tiene pendiente 0,48. Nunca se encuentra con este caso. Ver puntos-no-estan-en-la-lista.)
+     *
+     * Con el tope mandando, el eje menor se pierde en UN microtramo pero NO se pierde: la
+     * deuda lo apunta y lo cobra en el siguiente, que es justo para lo que esta. Esa deuda
+     * no existia cuando se escribio el techo.
+     *
+     * TECHO_MANDA = 0 hace ganar al tope. NO es el por defecto: el invariante "ningun eje
+     * con delta se queda parado" esta afirmado en `el_techo_de_t1_es_por_vector`, y soltar
+     * el techo ya se probo una vez y rompio el dibujo en los DOS cartuchos. Se compara en
+     * consola antes de decidir, no aqui. */
+    let t1 = if TECHO_MANDA.load(Ordering::Relaxed) != 0 {
+        t1_floor.max(t1_vcap).min(techo)
+    } else {
+        t1_floor.max(t1_vcap).min(techo.max(t1_vcap))
+    };
     // COMPENSAR EL ARRANQUE EN VEZ DE FRENAR EL HAZ.
     //
     // OBSERVADO en consola el 2026-08-24 sobre la rejilla: con VCAP alto el dibujo "se va"
@@ -381,11 +560,11 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
         if t <= 0 { return i64::MAX; }
         let v = {
             let den = (t as i64) * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i64;
-            let n = (m as i64) * (s as i64) * 256;
+            let n = (m as i64) * (s as i64) * 256 / (f as i64);
             let q = if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den };
             q.clamp(-128, 127)
         };
-        ((v * t as i64) - (m as i64) * (s as i64)).abs()
+        ((v * t as i64) - (m as i64) * (s as i64) / (f as i64)).abs()
     };
     let t1 = if t1 < techo && error_de(t1 + 1) < error_de(t1) { t1 + 1 } else { t1 };
     // ROUND, DO NOT TRUNCATE. Distance is velocity x time, so `vx * t1` has to stay
@@ -409,8 +588,8 @@ pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
         let n = num as i64 * 256;
         (if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den }) as i32
     };
-    let vx = round_div(dx as i32 * s).clamp(-128, 127) as i8;
-    let vy = round_div(dy as i32 * s).clamp(-128, 127) as i8;
+    let vx = round_div(dx * s / f).clamp(-128, 127) as i8;
+    let vy = round_div(dy * s / f).clamp(-128, 127) as i8;
     // Y AHORA SI, EL RETARDO DE ARRANQUE. Con `vx` ya elegido, alargar la rampa en T hace
     // que el haz recorra `vx*(t1+T)/s` — mas de lo pedido, que es justo la distancia que
     // pierde mientras coge velocidad. Es un TIEMPO, asi que pesa mas en los trazos cortos:
@@ -470,7 +649,18 @@ pub static T1_EXTRA_Q8: AtomicU32 = AtomicU32::new(0);
 /// contra una implementacion que si funciona.
 #[used]
 #[no_mangle]
-pub static HAZ_POR_SR: AtomicU32 = AtomicU32::new(0);
+pub static HAZ_POR_SR: AtomicU32 = AtomicU32::new(1);
+/* ^ EL IDIOMA DE HAZ DEL VECFEVER, POR DEFECTO DESDE 2026-09-04.
+ *
+ * Estaba a 0, y encenderlo era cosa de que CADA juego pusiera `-DUVM2_HAZ_POR_SR` en su
+ * lista de defines. Resultado medido: de los objetivos de build_uvm2.sh, `dkong`,
+ * `asteroids` y `snowbros_c` NO lo pedian — y son exactamente los que Daniel reporta "sin
+ * brillo" en consola, mientras mhavoc y asterock, que si lo piden, se ven.
+ *
+ * Un puerto que no listaba el define corria con blanking por PCR, MIN_T1 = 31 y VCAP = 127:
+ * un camino DISTINTO al que llevamos toda la sesion midiendo contra su captura. El
+ * conocimiento no puede vivir en 44 listas de defines; vive aqui, y quien necesite lo
+ * anterior lo apaga con `-DUVM2_HAZ_POR_PCR`. */
 
 /// No reescribir T1CL si no ha cambiado, como hace el 6809 (lo carga una vez y luego solo
 /// dispara con `CLR T1CH`). Ahorra una escritura de bus por vector.
@@ -504,6 +694,128 @@ pub extern "C" fn vx_ramp_params(dx: i32, dy: i32, out_vx: *mut i32, out_vy: *mu
     }
 }
 
+/// `vx_ramp_params` CON SUB-UNIDADES: `dx`/`dy` en 1/16 de unidad de dispositivo.
+///
+/// Existe porque la rejilla entera es diez veces mas basta que la del VecFever y eso es lo
+/// que deforma los glifos — ver el bloque de `ramp_params_q`. El puente ya tomaba `i32`, asi
+/// que lo unico que cambiaba era que aqui se recortaba a `i8` y se perdia la fraccion.
+///
+/// Q4 y no mas: con 1/16 el paso de posicion es 160/16 = 10 cuentas de tasa a t1=8, o sea
+/// mas fino que las ~20 con las que el VecFever coloca sus puntos. Mas bits no compran nada
+/// que el DAC pueda expresar.
+#[no_mangle]
+pub extern "C" fn vx_ramp_params_q4(dx_q4: i32, dy_q4: i32, out_vx: *mut i32,
+                                    out_vy: *mut i32, out_t1: *mut u32) {
+    let v = VCAP.load(Ordering::Relaxed);
+    let (vx, vy, t1) = ramp_params_salto_con_deuda(dx_q4, dy_q4, v, 4);
+    unsafe {
+        if !out_vx.is_null() { *out_vx = vx as i32; }
+        if !out_vy.is_null() { *out_vy = vy as i32; }
+        if !out_t1.is_null() { *out_t1 = t1 as u32; }
+    }
+}
+
+/// La gemela para los SALTOS, con su propio tope de velocidad.
+/// EL SALTO ABSORBE LA DEUDA ENTERA, que es donde corregir no se ve.
+///
+/// La deuda es `pedido - recorrido` acumulado sobre TODO — trazos y saltos. El trazo solo
+/// la apunta; el salto pide `d + deuda` y con eso la posicion vuelve a cuadrar, porque el
+/// haz va apagado y ese trozo de mas nadie lo ve.
+///
+/// LO QUE ESTO ARREGLA, medido integrando nuestro stream contra la geometria de entrada:
+/// la posicion al empezar cada trazo se iba +8,45 unidades de mediana en X y crecia a lo
+/// largo del frame (+2,64 -> +13,29 por tercios). La del VecFever es +0,00.
+///
+/// Y POR QUE NO ESTABA: el intento anterior encadeno tambien los saltos REPARTIENDO la
+/// deuda, y salio peor — lo que el salto no absorbia lo pagaba el siguiente trazo
+/// iluminado, que se doblaba. La diferencia es absorber entero, no repartir. El comentario
+/// de `move_una` en el SDK ya lo pedia asi y no estaba hecho.
+fn ramp_params_salto_con_deuda(dx_q4: i32, dy_q4: i32, vcap: u32, q: u32) -> (i8, i8, u16) {
+    let (rx, ry) = (DEUDA_X.load(Ordering::Relaxed), DEUDA_Y.load(Ordering::Relaxed));
+    let f = 1i32 << q;
+    let a_q4 = |r: i32| if r >= 0 { (r * f + 500) / 1000 } else { (r * f - 500) / 1000 };
+    /* UN EJE QUE NO SE PIDE NO SE MUEVE — TAMPOCO EN EL SALTO. La guarda estaba solo en el
+     * trazo, y aqui faltaba: un salto con dx = 0 salia con vx = 1 porque la deuda se colaba
+     * como movimiento. MEDIDO en los comandos crudos del frame — el salto entre el segmento
+     * 0 y el 1 tiene dx = 0 y emite ORA=0x01, o sea 1*8/160 = 0,05 unidades de deriva. Por
+     * 187 saltos son 9,3 unidades, del orden de la deriva que se estaba persiguiendo.
+     *
+     * La deuda de ese eje NO se pierde: se queda para el proximo salto que si lo mueva. */
+    let px = if dx_q4 == 0 { 0 } else { dx_q4 + a_q4(rx) };
+    let py = if dy_q4 == 0 { 0 } else { dy_q4 + a_q4(ry) };
+    let (vx, vy, t1) = ramp_params_q(px, py, vcap, q);
+    /* La deuda queda con lo que el salto NO ha llegado a absorber: pedido (con la
+     * correccion dentro) menos recorrido. Si el salto la absorbe entera, queda en cero. */
+    if dx_q4 != 0 {
+        DEUDA_X.store((rx + dx_q4 * 1000 / f - recorrido_mil(vx as i32, t1)).clamp(-4000, 4000),
+                      Ordering::Relaxed);
+    }
+    if dy_q4 != 0 {
+        DEUDA_Y.store((ry + dy_q4 * 1000 / f - recorrido_mil(vy as i32, t1)).clamp(-4000, 4000),
+                      Ordering::Relaxed);
+    }
+    (vx, vy, t1)
+}
+
+/// LAS TASAS PARA UN t1 DADO, sin elegirlo.
+///
+/// Hace falta porque el VecFever no calcula la duracion del salto: la ELIGE de una escalera
+/// corta. Medido en sus 1041 saltos que siguen a un trazo, la escalera {8, 18, 31} con tope
+/// de tasa 120 explica 1008 (97%) — y en su frame 120 los explica TODOS. Nuestro modelo
+/// derivaba t1 del tope de velocidad y daba valores continuos (9, 13, 15) donde el pone 18.
+#[no_mangle]
+pub extern "C" fn vx_ramp_params_con_t1(dx: i32, dy: i32, f: i32, t1: u32,
+                                        out_vx: *mut i32, out_vy: *mut i32) {
+    /* TOMA EL DIVISOR YA HECHO, no los bits. Con `q` y `1 << q` la placa devolvia
+     * `f = 0` donde el host da 256 — un desplazamiento en tiempo de ejecucion, que es la
+     * misma familia que el RRX que costo media sesion. Aqui no hace falta: el llamante tiene
+     * `UVM2_Q` como constante de compilacion. */
+    let f = if f > 0 { f } else { 1 };
+    let s = escala();
+    /* TODO EN 32 BITS, A PROPOSITO. La version con i64 daba en la placa `vy = 127` para
+     * `dy = 0` —aritmeticamente imposible— mientras el host daba el valor correcto. La unica
+     * operacion de 64 bits era `t1 * 256`, o sea un desplazamiento de 64 bits: la misma
+     * familia que el RRX que costo media sesion. Y no hace falta ninguno: con t1 <= 255 el
+     * divisor no pasa de 65.280, y el numerador de 5,2 millones. Ver emulador-sin-rrx. */
+    let den = (t1 as i32) * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i32;
+    let den = if den > 0 { den } else { 1 };
+    let r = |p: i32| -> i32 {
+        let n = (p / f) * s * 256 + ((p % f) * s * 256) / f;
+        let v = if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den };
+        v.clamp(-128, 127)
+    };
+    unsafe {
+        if !out_vx.is_null() { *out_vx = r(dx); }
+        if !out_vy.is_null() { *out_vy = r(dy); }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn vx_ramp_params_salto_qn(dx: i32, dy: i32, q: u32, out_vx: *mut i32,
+                                          out_vy: *mut i32, out_t1: *mut u32) {
+    let v = VCAP_SALTO.load(Ordering::Relaxed);
+    let v = if v != 0 { v } else { VCAP.load(Ordering::Relaxed) };
+    let (vx, vy, t1) = ramp_params_q(dx, dy, v, q);
+    unsafe {
+        if !out_vx.is_null() { *out_vx = vx as i32; }
+        if !out_vy.is_null() { *out_vy = vy as i32; }
+        if !out_t1.is_null() { *out_t1 = t1 as u32; }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn vx_ramp_params_salto_q4(dx_q4: i32, dy_q4: i32, out_vx: *mut i32,
+                                          out_vy: *mut i32, out_t1: *mut u32) {
+    let v = VCAP_SALTO.load(Ordering::Relaxed);
+    let v = if v != 0 { v } else { VCAP.load(Ordering::Relaxed) };
+    let (vx, vy, t1) = ramp_params_q(dx_q4, dy_q4, v, 4);
+    unsafe {
+        if !out_vx.is_null() { *out_vx = vx as i32; }
+        if !out_vy.is_null() { *out_vy = vy as i32; }
+        if !out_t1.is_null() { *out_t1 = t1 as u32; }
+    }
+}
+
 
 /* ── LA CADENA, CON SU DEUDA ────────────────────────────────────────────────────────
  *
@@ -525,16 +837,57 @@ pub extern "C" fn vx_ramp_params(dx: i32, dy: i32, out_vx: *mut i32, out_vy: *mu
  * el mismo fallo que el acumulador de deriva que sobrevivia a un re-cero. */
 
 /// Lo que se le debe al dibujo, en MILESIMAS de unidad, por eje.
-static DEUDA_X: AtomicI32 = AtomicI32::new(0);
-static DEUDA_Y: AtomicI32 = AtomicI32::new(0);
+#[used]
+#[no_mangle]
+pub static DEUDA_X: AtomicI32 = AtomicI32::new(0);
+#[used]
+#[no_mangle]
+pub static DEUDA_Y: AtomicI32 = AtomicI32::new(0);
 
 /// Se olvida la deuda. Lo llama quien reposicione el haz: un salto o un re-cero.
 #[no_mangle]
 pub extern "C" fn vx_chain_reset() {
+    /* LA DEUDA YA NO SE TIRA AQUI, Y ERA EL FALLO.
+     *
+     * Esto ponia DEUDA_X/Y a cero, y lo llama `move_una` en CADA salto. Con un `move_abs`
+     * por segmento —que es lo que hace cualquier dibujante que no encadene— la deuda se
+     * borraba entre vector y vector y NUNCA acumulaba: se calculaba al final de cada trazo
+     * y el salto siguiente la tiraba antes de que nadie la corrigiera.
+     *
+     * El sintoma, medido integrando nuestro stream contra la geometria de entrada: la
+     * posicion al empezar cada trazo se iba +8,45 unidades de mediana en X, creciendo de
+     * +2,64 en el primer tercio del frame a +13,29 en el ultimo. La del VecFever es +0,00
+     * con un peor caso de 0,03 en los 427 trazos del frame.
+     *
+     * Y explica por que tres arreglos seguidos de la contabilidad de la deuda no movieron
+     * la salida NI UN BYTE: no habia deuda que corregir.
+     *
+     * La deuda es "donde esta el haz de verdad menos donde creemos que esta". Un salto no
+     * arregla eso — es justo el sitio donde corregirlo sin que se vea, porque va a
+     * oscuras. Lo absorbe `ramp_params_salto_con_deuda`.
+     *
+     * Lo que si se reinicia es el ARRANQUE: el haz se reposiciona, asi que la proxima
+     * rampa parte del reposo. Eso no tiene nada que ver con la deuda y son dos cosas que
+     * estaban juntas por costumbre.
+     *
+     * PROBADO Y REVERTIDO (2026-09-04): conservar la deuda entre saltos + que el salto la
+     * absorbiera entera dejo la **Y practicamente perfecta** (+0,01 de mediana contra el
+     * +0,00 del VecFever, viniendo de -0,52) y **disparo la X a +705** — la correccion en X
+     * entra en realimentacion positiva. La asimetria no esta explicada: el codigo trata los
+     * dos ejes igual, pero 145 de los 427 segmentos del frame tienen dx=0 y casi ninguno
+     * dy=0, asi que la X pasa por el camino de "eje que no se pide" muchas mas veces.
+     * Sospechoso principal: el tope de +-4000 milesimas esta pensado para la rejilla
+     * ENTERA (4 unidades), y en 1/16 son 64 cuantos — una correccion enorme para un delta
+     * pequeño. Ahi es por donde hay que seguir. */
+    ARRANQUE.store(1, Ordering::Relaxed);
+}
+
+/// Tirar la deuda de verdad. La usa el RE-CERO, que si devuelve el haz a un punto conocido:
+/// ahi lo que creiamos y lo que hay vuelven a coincidir y no queda nada que deber.
+#[no_mangle]
+pub extern "C" fn vx_deuda_reset() {
     DEUDA_X.store(0, Ordering::Relaxed);
     DEUDA_Y.store(0, Ordering::Relaxed);
-    /* El haz se reposiciona: la proxima rampa parte del reposo. Ver `ramp_params`. */
-    ARRANQUE.store(1, Ordering::Relaxed);
 }
 
 /// Lo que la rampa recorre DE VERDAD, en milesimas: v * t1 / DRAW_SCALE con su fraccion.
@@ -566,6 +919,176 @@ pub fn ramp_params_chain(dx: i8, dy: i8) -> (i8, i8, u16) {
     (vx, vy, t1)
 }
 
+/// `ramp_params_chain` CON SUB-UNIDADES: `dx`/`dy` en 1/16 de unidad.
+///
+/// LAS DOS COSAS SON COMPLEMENTARIAS Y CONVIENE NO CONFUNDIRLAS. La deuda de la cadena
+/// corrige el residuo que comete LA RAMPA al redondear `v` — pero recibia `i8`, asi que no
+/// podia corregir lo que la API ya habia tirado antes: `VS_RND` divide las coordenadas del
+/// juego por 127 y redondea a entero ANTES de que la cadena vea nada. MEDIDO en mhavoc:
+/// 0,22 unidades de error por eje ahi, con el 3,6% de los vectores enteramente sub-unidad.
+///
+/// La deuda se sigue guardando en MILESIMAS DE UNIDAD, sin cambiar su semantica ni sus
+/// topes: solo se convierte a 1/16 al entrar y desde 1/16 al salir.
+pub fn ramp_params_chain_q4(dx_q4: i32, dy_q4: i32) -> (i8, i8, u16) {
+    ramp_params_chain_qn(dx_q4, dy_q4, 4)
+}
+
+/* LA PRECISION DE LA ENTRADA ES UN PARAMETRO, y no un detalle del banco.
+ *
+ * MEDIDO contra los 210 vectores de un frame suyo de Major Havoc: con la geometria en 1/16
+ * de unidad, 22 de sus tasas (10,5%) NO se pueden reproducir — no por como redondeamos,
+ * sino porque a esa rejilla no cabe lo que el pide. Su vector de tasa 32 con t1 = 8 mide
+ * 32*8/160 = 1,6 unidades exactas, y 1/16 solo sabe decir 1,5625 o 1,625. Con 1/64 o mas
+ * fino salen las 210 EXACTAS.
+ *
+ * `dx * s / f` TRUNCA antes de que `round_div` redondee, y esa es la unica division que
+ * pierde: por eso subir la precision de la entrada arregla el 10,5% entero. */
+pub fn ramp_params_chain_qn(dx_q4: i32, dy_q4: i32, q: u32) -> (i8, i8, u16) {
+    let (rx, ry) = (DEUDA_X.load(Ordering::Relaxed), DEUDA_Y.load(Ordering::Relaxed));
+    let f = 1i32 << q;
+    /* Al mas cercano, no truncando: truncar reintroduce el sesgo que esto viene a quitar. */
+    let a_q4 = |r: i32| if r >= 0 { (r * f + 500) / 1000 } else { (r * f - 500) / 1000 };
+    /* UN EJE QUE NO SE PIDE NO SE MUEVE, NI POR LA DEUDA.
+     *
+     * La deuda existe para corregir el residuo del redondeo, pero sumandola a ciegas mete
+     * movimiento en un eje cuyo delta es CERO — y eso no es corregir, es inventar. MEDIDO
+     * con la geometria del VecFever de entrada: de sus 189 vectores verticales puros, los
+     * 189 salen con vx = 0 en su stream y NINGUNO en el nuestro (vx en {-2, 1, 2}), con
+     * suma +81, o sea +4 unidades de deriva a la derecha por frame que se acumulan hasta
+     * el siguiente re-cero. Es la deriva diagonal vista en consola.
+     *
+     * `un_vertical_no_mueve_la_x` ya cubria esto para `ramp_params`, pero no para la
+     * version con cadena, que es la que usan los trazos.
+     *
+     * La deuda NO se pierde: se queda para el proximo vector que si mueva ese eje. */
+    let usa = DEUDA_ON.load(Ordering::Relaxed) != 0;
+    let px = if dx_q4 == 0 || !usa { dx_q4 } else { dx_q4 + a_q4(rx) };
+    let py = if dy_q4 == 0 || !usa { dy_q4 } else { dy_q4 + a_q4(ry) };
+
+    let (vx, vy, t1) = ramp_params_q(px, py, VCAP.load(Ordering::Relaxed), q);
+    /* EL REDONDEO A MICROTRAMOS, AQUI Y NO EN EL EMISOR — SI NO, LA DEUDA NO LO VE.
+     *
+     * `draw_line_seq` parte el trazo en n microtramos de 8 cuentas y reescala la tasa para
+     * el tiempo que de verdad va a correr. Esa reescala REDONDEA, y su residuo quedaba
+     * fuera de la contabilidad: la deuda se calculaba con el (vx, t1) de antes, veia
+     * `pedido - recorrido = 0` y no corregia nada.
+     *
+     * MEDIDO integrando nuestro stream contra la geometria de entrada: la posicion al
+     * empezar cada trazo se iba +8,45 unidades de mediana en X, creciendo de +2,64 en el
+     * primer tercio del frame a +13,29 en el ultimo, con la deuda constantemente a cero.
+     * La del VecFever es +0,00 con un peor caso de 0,03 en los 427 trazos.
+     *
+     * Devolviendo ya el t1 redondeado y la tasa calculada PARA EL, la deuda mide lo que se
+     * emite y el emisor no tiene nada que reescalar.
+     *
+     * EL 8 ES EL MISMO QUE `T1M` en emit.rs. Si uno cambia, cambia el otro: son la misma
+     * decision (el microtramo del idioma del VecFever) escrita en dos sitios. */
+    const MICRO: i32 = 8;
+    let n = core::cmp::max(1, (t1 as i32 + MICRO / 2) / MICRO);
+    let corridos = n * MICRO;
+    /* AQUI SE REDONDEA DOS VECES, Y SE SABE. `ramp_params_q` calculo la tasa para SU t1 y
+     * esto la reescala al t1 que de verdad corre. MEDIDO en el unico trazo que quedaba
+     * distinto del VecFever en su frame 120: pide 1,3477 unidades; el emite 27
+     * (1,3477*160/8 = 26,95); a nosotros nos sale 22 para t1 = 10 y al reescalar a 8 da
+     * 22*10/8 = 27,5 -> 28.
+     *
+     * INTENTO FALLIDO (2026-09-04): calcularla directa para `corridos`, con el mismo
+     * divisor que `ramp_params_q`. En el HOST da exactamente su 27; en el CARTUCHO satura a
+     * 127 casi todos los trazos y el parecido cae del 99,8% al 2,1%. El test
+     * `tasa_directa::el_trazo_391` deja la version del host, que es correcta — la causa de
+     * la divergencia entre las dos maquinas NO esta encontrada, y hasta que lo este esto se
+     * queda como estaba. No es un knob: es una trampa a la que ya se cayo. */
+    /* LA TASA, CALCULADA UNA VEZ PARA EL t1 QUE DE VERDAD CORRE — Y EN 32 BITS.
+     *
+     * Reescalar la tasa que `ramp_params_q` calculo para OTRO t1 redondea dos veces. En su
+     * frame 120 quedaba un trazo distinto por eso: pide 1,3477 unidades, el emite 27
+     * (1,3477*160/8 = 26,95) y a nosotros nos salia 22 para t1 = 10 que al reescalar a 8
+     * daba 27,5 -> 28.
+     *
+     * ESTE MISMO CAMBIO SE INTENTO POR LA MAÑANA Y SATURABA EN LA PLACA dando 127 en casi
+     * todos los trazos, con el host correcto. La causa era la aritmetica de 64 bits, no la
+     * formula: reescrita en 32 bits, la placa coincide con el host. Ver emulador-sin-rrx —
+     * el RRX arreglado no era el unico camino de 64 bits roto. */
+    let sc = escala();
+    let den32 = corridos * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i32;
+    let den32 = if den32 > 0 { den32 } else { 1 };
+    let fq = 1i32 << q;
+    let directo = |p: i32| -> i8 {
+        let n = (p / fq) * sc * 256 + ((p % fq) * sc * 256) / fq;
+        let v = if n >= 0 { (n + den32 / 2) / den32 } else { (n - den32 / 2) / den32 };
+        v.clamp(-128, 127) as i8
+    };
+    let (vx, vy, t1) = (directo(px), directo(py), corridos as u16);
+    ARRANQUE.store(0, Ordering::Relaxed);
+
+    /* Y la deuda solo se toca en el eje que se ha movido: si no se pidio nada, no hay
+     * residuo nuevo que apuntar, y el que ya habia sigue esperando su turno. */
+    if dx_q4 != 0 {
+        DEUDA_X.store((rx + dx_q4 * 1000 / f - recorrido_mil(vx as i32, t1)).clamp(-4000, 4000),
+                      Ordering::Relaxed);
+    }
+    if dy_q4 != 0 {
+        DEUDA_Y.store((ry + dy_q4 * 1000 / f - recorrido_mil(vy as i32, t1)).clamp(-4000, 4000),
+                      Ordering::Relaxed);
+    }
+    (vx, vy, t1)
+}
+
+#[no_mangle]
+pub extern "C" fn vx_ramp_params_chain_qn(dx: i32, dy: i32, q: u32, out_vx: *mut i32,
+                                          out_vy: *mut i32, out_t1: *mut u32) {
+    let (vx, vy, t1) = ramp_params_chain_qn(dx, dy, q);
+    unsafe {
+        if !out_vx.is_null() { *out_vx = vx as i32; }
+        if !out_vy.is_null() { *out_vy = vy as i32; }
+        if !out_t1.is_null() { *out_t1 = t1 as u32; }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn vx_ramp_params_chain_q4(dx_q4: i32, dy_q4: i32, out_vx: *mut i32,
+                                          out_vy: *mut i32, out_t1: *mut u32) {
+    let (vx, vy, t1) = ramp_params_chain_q4(dx_q4, dy_q4);
+    unsafe {
+        if !out_vx.is_null() { *out_vx = vx as i32; }
+        if !out_vy.is_null() { *out_vy = vy as i32; }
+        if !out_t1.is_null() { *out_t1 = t1 as u32; }
+    }
+}
+
+/* ── LA DEUDA DE LOS SALTOS: PROBADA Y DESCARTADA (2026-09-03) ──────────────────────
+ *
+ * Aqui vivio `ramp_params_salto`, con su propio par de acumuladores para que el residuo
+ * de un salto se lo cobrara a OTRO salto —donde el haz va apagado y corregir no se ve—
+ * en vez de contaminar el siguiente trazo iluminado, que es lo que la nota de `move_una`
+ * pedia y por lo que el intento anterior (meterlos en la misma cadena) habia fallado.
+ *
+ * MEDIDO sobre los 255 saltos reales de un frame de asterock: el error acumulado SUBE de
+ * 86,8 a 99,8 unidades en X y de 91,6 a 100,6 en Y. Empeora. Se retira en vez de dejarla
+ * sin llamar: una funcion que compila y no usa nadie es la trampa que este fichero ya
+ * pago con `set_ramp` y con `fixup`.
+ *
+ * Y UNA ADVERTENCIA SOBRE COMO SE MIDIO ESO. La cifra viene de una copia del modelo en
+ * Python, y en la misma sesion escribi TRES medidas del sesgo de la rampa y las TRES
+ * salieron artefacto: una clampaba a -127 en vez de -128, otra no simulaba `error_de`
+ * ni T1_EXTRA_Q8, y la tercera —un arnes que llamaba a la funcion de verdad dentro de la
+ * CPU emulada— devolvia 0,0,0 para toda entrada, asi que estaba midiendo el propio delta.
+ * Antes de volver a tocar esto: el arnes bueno es el que ya vive en `correr_uvm2.mjs`
+ * (imprime "vx_ramp_params EN LA CPU EMULADA" con casos cuyo resultado se conoce del
+ * host), y lo primero que hay que comprobar es que NO devuelve ceros. */
+
+/// El salto, desde C. Lo llama quien reposicione el haz (moveto).
+#[no_mangle]
+pub extern "C" fn vx_ramp_params_salto(dx: i32, dy: i32, out_vx: *mut i32, out_vy: *mut i32,
+                                       out_t1: *mut u32) {
+    let (vx, vy, t1) = ramp_params_salto(dx.clamp(-128, 127) as i8, dy.clamp(-128, 127) as i8);
+    unsafe {
+        if !out_vx.is_null() { *out_vx = vx as i32; }
+        if !out_vy.is_null() { *out_vy = vy as i32; }
+        if !out_t1.is_null() { *out_t1 = t1 as u32; }
+    }
+}
+
 /// La misma, para quien llama desde C. Ver `vx_ramp_params`.
 #[no_mangle]
 pub extern "C" fn vx_ramp_params_chain(dx: i32, dy: i32, out_vx: *mut i32, out_vy: *mut i32,
@@ -575,5 +1098,339 @@ pub extern "C" fn vx_ramp_params_chain(dx: i32, dy: i32, out_vx: *mut i32, out_v
         if !out_vx.is_null() { *out_vx = vx as i32; }
         if !out_vy.is_null() { *out_vy = vy as i32; }
         if !out_t1.is_null() { *out_t1 = t1 as u32; }
+    }
+}
+
+#[cfg(test)]
+mod sesgo_vertical {
+    use super::*;
+    /// UN VECTOR VERTICAL NO PUEDE MOVER LA X. La sonda de la CPU emulada devolvia
+    /// `(0,50) -> vx=1`, y en la lista real de asterock TODOS los trazos verticales
+    /// salian con vx=1 (351 de ellos con `vx=1 vy=24`): 0,39 unidades de desplazamiento
+    /// por trazo, siempre al mismo lado, que es la deriva horizontal vista en consola.
+    /// Este test dice si el sesgo esta en el MODELO o en el emulador.
+    /// Imprime lo que da el HOST para los mismos casos que la sonda de la CPU emulada,
+    /// para poder poner los dos lados uno al lado del otro. `cargo test -- --nocapture`.
+    #[test]
+    fn imprime_los_casos_de_la_sonda() {
+        /* EL TURNO, como los demas tests de este fichero: estos knobs son ESTADO
+         * GLOBAL y sin serializar se pisan entre tests (rompi
+         * `el_techo_de_t1_es_por_vector` al añadirlos sin el lock). */
+        let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
+        MIN_T1.store(8, Ordering::Relaxed);
+        MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
+        VCAP.store(127, Ordering::Relaxed);
+        DRAW_SCALE.store(160, Ordering::Relaxed);
+        T1_TRANSPORT.store(160, Ordering::Relaxed);
+        /* IGUALADO AL CARTUCHO. Sin esto el test corre con los DEFECTOS de la caja y el
+         * cartucho con lo que le pone uvm2_draw_init: comparar los dos era comparar dos
+         * configuraciones, no dos implementaciones. */
+        T1_EXTRA_Q8.store(0, Ordering::Relaxed);
+        T1_LAG.store(0, Ordering::Relaxed);
+        T1_LAG_ARRANQUE.store(0, Ordering::Relaxed);
+        for (dx, dy) in [(0i8, 50i8), (50, 0), (68, 0), (-46, 0), (6, 0)] {
+            let (vx, vy, t1) = ramp_params(dx, dy);
+            std::println!("  HOST ({dx},{dy}) -> vx={vx} vy={vy} t1={t1}");
+        }
+    }
+
+    #[test]
+    fn un_vertical_no_mueve_la_x() {
+        /* EL TURNO, como los demas tests de este fichero: estos knobs son ESTADO
+         * GLOBAL y sin serializar se pisan entre tests (rompi
+         * `el_techo_de_t1_es_por_vector` al añadirlos sin el lock). */
+        let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
+        MIN_T1.store(8, Ordering::Relaxed);
+        MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
+        VCAP.store(127, Ordering::Relaxed);
+        DRAW_SCALE.store(160, Ordering::Relaxed);
+        for dy in [3i8, 7, 24, 50, 60, 120, -24, -60] {
+            let (vx, _vy, _t1) = ramp_params(0, dy);
+            assert_eq!(vx, 0, "dx=0 dy={dy} deberia dar vx=0 y da vx={vx}");
+        }
+    }
+
+    #[test]
+    fn el_salto_a_tiempo_fijo_solo_se_alarga_cuando_no_cabe() {
+        let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
+        MIN_T1.store(8, Ordering::Relaxed);
+        MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
+        DRAW_SCALE.store(160, Ordering::Relaxed);
+        T1_TRANSPORT.store(160, Ordering::Relaxed);
+        T1_EXTRA_Q8.store(0, Ordering::Relaxed);
+        T1_SALTO.store(31, Ordering::Relaxed);
+
+        // A s=160 y t1=31 la tasa cabe en +-127 hasta 127*31/160 = 24 unidades.
+        for m in [1i8, 5, 12, 24] {
+            let (vx, _vy, t1) = ramp_params_salto(m, 0);
+            assert_eq!(t1, 31, "m={m} deberia caber en el tiempo fijo y da t1={t1}");
+            assert!(vx.abs() as i32 <= 127);
+        }
+        // Y a partir de ahi se alarga LO JUSTO, en vez de recortar la tasa: si se quedara
+        // en 31 el DAC saturaria y el salto saldria corto siempre en el mismo sentido.
+        for m in [40i8, 80, 127] {
+            let (vx, _vy, t1) = ramp_params_salto(m, 0);
+            assert!(t1 > 31, "m={m} no cabe en t1=31 y deberia alargarse; da t1={t1}");
+            let recorrido = (vx as i32) * (t1 as i32) / 160;
+            assert!((recorrido - m as i32).abs() <= 1,
+                    "m={m}: pedido {m}, recorrido {recorrido} (vx={vx} t1={t1})");
+        }
+        // El eje menor no se pierde: un salto casi horizontal conserva su dy.
+        let (_vx, vy, _t1) = ramp_params_salto(24, 3);
+        assert!(vy != 0, "el eje menor de un salto no puede redondearse a cero");
+
+        T1_SALTO.store(0, Ordering::Relaxed); // no contaminar a los demas tests
+    }
+
+    #[test]
+    fn la_deuda_no_mueve_un_eje_que_no_se_pide() {
+        let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
+        MIN_T1.store(8, Ordering::Relaxed);
+        MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
+        VCAP.store(42, Ordering::Relaxed);
+        DRAW_SCALE.store(160, Ordering::Relaxed);
+        T1_TRANSPORT.store(160, Ordering::Relaxed);
+        T1_EXTRA_Q8.store(0, Ordering::Relaxed);
+        T1_SALTO.store(0, Ordering::Relaxed);
+        DEUDA_X.store(0, Ordering::Relaxed);
+        DEUDA_Y.store(0, Ordering::Relaxed);
+
+        /* Diagonales que dejan deuda, y verticales puros intercalados: los verticales NO
+         * pueden llevarse esa deuda a la X. Es el caso real — 189 verticales en un frame
+         * del VecFever, todos con vx = 0. */
+        let mut suma_vx = 0i32;
+        for k in 0..40 {
+            ramp_params_chain_q4(37 + k % 5, 23 + k % 7, );
+            let (vx, _vy, _t1) = ramp_params_chain_q4(0, 40 + k % 3);
+            assert_eq!(vx, 0, "un vertical con dx=0 no puede salir con vx={vx}");
+            suma_vx += vx as i32;
+        }
+        assert_eq!(suma_vx, 0, "y sin deriva acumulada en X");
+    }
+
+    #[test]
+    fn las_subunidades_dan_posiciones_que_el_entero_no_puede() {
+        let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
+        MIN_T1.store(8, Ordering::Relaxed);
+        MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
+        VCAP.store(42, Ordering::Relaxed);
+        DRAW_SCALE.store(160, Ordering::Relaxed);
+        T1_TRANSPORT.store(160, Ordering::Relaxed);
+        T1_EXTRA_Q8.store(0, Ordering::Relaxed);
+        T1_SALTO.store(0, Ordering::Relaxed);
+
+        // 2,5 unidades no se puede pedir en enteros: o 2 o 3. En Q4 son 40 dieciseisavos.
+        let (vx_e, _, t1_e) = ramp_params(2, 0);
+        let (vx_q, _, t1_q) = ramp_params_q(40, 0, 42, 4);
+        let rec = |v: i8, t: u16| v as f64 * t as f64 / 160.0;
+        let d_e = (rec(vx_e, t1_e) - 2.5).abs();
+        let d_q = (rec(vx_q, t1_q) - 2.5).abs();
+        assert!(d_q < d_e / 2.0,
+                "Q4 deberia acercarse mucho mas a 2,5: entero {:.3} (err {:.3}), \
+                 Q4 {:.3} (err {:.3})", rec(vx_e, t1_e), d_e, rec(vx_q, t1_q), d_q);
+
+        // Y un vector SUB-UNIDAD, que en enteros ni existe: 0,5 unidades = 8 dieciseisavos.
+        let (vx0, vy0, _) = ramp_params(0, 0);
+        assert_eq!((vx0, vy0), (0, 0), "en enteros medio pixel se pierde entero");
+        let (vxh, _, t1h) = ramp_params_q(8, 0, 42, 4);
+        assert!(rec(vxh, t1h) > 0.3 && rec(vxh, t1h) < 0.7,
+                "media unidad deberia salir ~0,5 y sale {:.3}", rec(vxh, t1h));
+
+        // Q4 con valores ya enteros no puede cambiar lo que hacia antes.
+        for d in [1i8, 3, 7, 20, 60, -5, -33] {
+            assert_eq!(ramp_params(d, 0), ramp_params_q(d as i32 * 16, 0, 42, 4),
+                       "d={d}: un entero exacto tiene que dar lo mismo por los dos caminos");
+        }
+    }
+}
+
+#[cfg(test)]
+mod sesgo_x_2026_09_04 {
+    use super::*;
+    /// LOS CASOS REALES DEL FRAME. Con la geometria del VecFever de entrada, su vx y la
+    /// nuestra difieren en 1-2 en el 88% de los microtramos mientras la vy coincide. Esto
+    /// pregunta al MODELO por esos mismos casos, sin cartucho de por medio.
+    #[test]
+    fn imprime_el_sesgo_de_x() {
+        let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
+        MIN_T1.store(8, Ordering::Relaxed);
+        MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
+        VCAP.store(42, Ordering::Relaxed);
+        DRAW_SCALE.store(160, Ordering::Relaxed);
+        T1_TRANSPORT.store(160, Ordering::Relaxed);
+        T1_EXTRA_Q8.store(0, Ordering::Relaxed);
+        DEUDA_X.store(0, Ordering::Relaxed);
+        DEUDA_Y.store(0, Ordering::Relaxed);
+        // (dx_q4, dy_q4) -> lo que el emite
+        let casos = [((0, 40), (50, 0)), ((41, 0), (0, 51)), ((0, -40), (-50, 0)),
+                     ((-11, 20), (25, -13)), ((11, 20), (25, 13)), ((21, 0), (0, 26))];
+        for ((dx, dy), (svy, svx)) in casos {
+            let (vx, vy, t1) = ramp_params_chain_q4(dx, dy);
+            std::println!("  dx_q4={dx:4} dy_q4={dy:4} -> nuestro vy={vy:4} vx={vx:4} t1={t1:3} | suyo vy={svy:4} vx={svx:4}");
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod deriva {
+    use super::*;
+    /// REPRODUCE EL FRAME ENTERO EN EL HOST y sigue la deuda vector a vector.
+    ///
+    /// Existe porque medir esto en el cartucho cuesta un build y una corrida del emulador
+    /// por intento, y porque un build que falla en silencio se lee igual que un cambio sin
+    /// efecto — ya paso. Aqui la geometria es la misma (el frame 120 de Major Havoc, leido
+    /// del header que genera sdkplay) y el modelo es el que se compila, asi que lo que
+    /// diga esto es lo que hara la placa.
+    /// LA PRECISION LA DICE EL FICHERO. Estaba escrita a mano como 16 en cinco sitios, y
+    /// al regenerar la tabla en 1/256 el banco reventaba por desbordamiento en vez de
+    /// avisar de que estaba leyendo otra unidad.
+    fn qbits() -> u32 {
+        let t = std::fs::read_to_string(
+            "/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/sdkplay/src/vf_geom_mh.h")
+            .unwrap_or_default();
+        t.lines()
+            .find_map(|l| l.trim().strip_prefix("#define VF_GEOM_QBITS "))
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(4)
+    }
+
+    fn geometria() -> std::vec::Vec<(i32, i32, i32, i32)> {
+        let t = std::fs::read_to_string(
+            "/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/sdkplay/src/vf_geom_mh.h")
+            .unwrap_or_default();
+        let mut v = std::vec::Vec::new();
+        for l in t.lines() {
+            let l = l.trim();
+            if !l.starts_with('{') { continue; }
+            let n: std::vec::Vec<i32> = l.trim_matches(|c| c=='{'||c=='}'||c==',')
+                .split(',').filter_map(|x| x.trim().parse().ok()).collect();
+            if n.len() >= 4 { v.push((n[0], n[1], n[2], n[3])); }
+        }
+        v
+    }
+
+    #[test]
+    fn la_deuda_no_se_desboca() {
+        let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
+        MIN_T1.store(8, Ordering::Relaxed);
+        MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
+        VCAP.store(42, Ordering::Relaxed);
+        VCAP_SALTO.store(127, Ordering::Relaxed);
+        DRAW_SCALE.store(160, Ordering::Relaxed);
+        T1_TRANSPORT.store(160, Ordering::Relaxed);
+        T1_EXTRA_Q8.store(0, Ordering::Relaxed);
+        T1_SALTO.store(0, Ordering::Relaxed);
+        DEUDA_X.store(0, Ordering::Relaxed); DEUDA_Y.store(0, Ordering::Relaxed);
+        knobs_como_el_cartucho();
+        let q = qbits();
+        let f = (1u32 << q) as f64;
+
+        let g = geometria();
+        if g.is_empty() { return; }                 // sin header, no hay nada que probar
+        let (mut bx, mut by) = (0.0f64, 0.0f64);    // donde esta el haz, en unidades
+        let (mut px_, mut py_) = (0.0f64, 0.0f64);  // donde CREE el dibujante que esta
+        let mut errores: std::vec::Vec<f64> = std::vec::Vec::new();
+        let mut peor_x = 0.0f64; let mut peor_deuda = 0i32;
+        let mut satur = 0usize; let mut saltos = 0usize;
+        for (i, (x0, y0, x1, y1)) in g.iter().enumerate() {
+            /* EL SALTO SOLO SI HACE FALTA, COMO EL CARTUCHO. `uvm2_draw_move_abs` no emite
+             * nada si el haz ya esta donde toca, asi que DENTRO DE UNA CADENA no hay salto
+             * — y por tanto no hay quien absorba la deuda. Llamandolo siempre, la replica
+             * absorbia en cada segmento y daba -0,18 donde la placa da +4,70. */
+            let (jx4, jy4) = (*x0 - (px_*f).round() as i32,
+                              *y0 - (py_*f).round() as i32);
+            if jx4 != 0 || jy4 != 0 {
+                let (vx, vy, t1) = ramp_params_salto_con_deuda(
+                    jx4, jy4, VCAP_SALTO.load(Ordering::Relaxed), q);
+                if vx.abs() == 127 || vy.abs() == 127 { satur += 1; }
+                bx += vx as f64 * t1 as f64 / 160.0; by += vy as f64 * t1 as f64 / 160.0;
+                saltos += 1;
+            }
+            px_ = *x0 as f64/f; py_ = *y0 as f64/f;
+            // el trazo
+            let (vx, vy, t1) = ramp_params_chain_qn(x1 - x0, y1 - y0, q);
+            if vx.abs() == 127 || vy.abs() == 127 { satur += 1; }
+            bx += vx as f64 * t1 as f64 / 160.0; by += vy as f64 * t1 as f64 / 160.0;
+            px_ = *x1 as f64/f; py_ = *y1 as f64/f;
+            let e = bx - px_;
+            errores.push(e);
+            if e.abs() > peor_x.abs() { peor_x = e; }
+            let d = DEUDA_X.load(Ordering::Relaxed);
+            if d.abs() > peor_deuda.abs() { peor_deuda = d; }
+            if i < 10 {
+                std::println!("  HOST seg {i:3}: vy={vy:4} vx={vx:4} t1={t1:3}   haz X {bx:8.3}  error {e:+7.3}  deuda {d:+5}");
+            }
+        }
+        let mediana = { let mut v: std::vec::Vec<f64> = errores.clone(); v.sort_by(|a,b| a.partial_cmp(b).unwrap()); v[v.len()/2] };
+        std::println!("  X mediana {mediana:+.2}  peor {peor_x:+.2}   deuda peor {peor_deuda:+}   saltos {saltos}  saturadas {satur}");
+    }
+}
+
+/* Los knobs son atomicas GLOBALES y `cargo test` corre los tests en paralelo dentro del
+ * mismo proceso: un test que toca VCAP se lo cambia a otro a media medida. Todo banco que
+ * compare contra el cartucho tiene que fijar la configuracion ENTERA, y correr con
+ * --test-threads=1. Estos valores estan leidos de la imagen que corre en la consola
+ * (`correr_uvm2.mjs ... sdkplaymh.elf`), no elegidos aqui. */
+#[cfg(test)]
+pub(crate) fn knobs_como_el_cartucho() {
+    T1_EXTRA_Q8.store(0, Ordering::Relaxed);
+    T1_LAG.store(0, Ordering::Relaxed);
+    T1_LAG_ARRANQUE.store(0, Ordering::Relaxed);
+    MIN_T1.store(8, Ordering::Relaxed);
+    MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
+    VCAP.store(42, Ordering::Relaxed);
+    VCAP_SALTO.store(127, Ordering::Relaxed);
+    VCAP_SLOW.store(30, Ordering::Relaxed);
+    VCAP_DV.store(32, Ordering::Relaxed);
+    T1_SALTO.store(0, Ordering::Relaxed);
+    T1_TRANSPORT.store(160, Ordering::Relaxed);
+    DRAW_SCALE.store(160, Ordering::Relaxed);
+    RAMPA_FIJA.store(0, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+mod primera_llamada {
+    use super::*;
+    /* El mismo delta que sonde en el cartucho (dx_q4=0, dy_q4=40, primera llamada del
+     * arranque). Si aqui sale otro (vx,vy,t1) que en la placa, la diferencia es un knob. */
+    #[test]
+    fn el_primer_delta_del_frame() {
+        knobs_como_el_cartucho();
+        vx_chain_reset(); vx_deuda_reset();
+        let (vx, vy, t1) = ramp_params_chain_q4(0, 40);
+        std::println!("HOST:     vy={vy}  t1={t1}  vx={vx}");
+    }
+}
+
+#[cfg(test)]
+mod tasa_directa {
+    use super::*;
+    #[test]
+    fn el_trazo_391() {
+        knobs_como_el_cartucho();
+        DEUDA_ON.store(0, Ordering::Relaxed);
+        vx_chain_reset(); vx_deuda_reset();
+        // la geometria pide dx=1,3477 dy=-2,4023 unidades, o sea 345 y -615 en Q8
+        let (vx, vy, t1) = ramp_params_chain_qn(345, -615, 8);
+        std::println!("  chain_qn(345,-615,q=8) -> vx={vx} vy={vy} t1={t1}   (el suyo: 27, -48, 8)");
+        let (ax, ay, at1) = ramp_params_q(345, -615, VCAP.load(Ordering::Relaxed), 8);
+        std::println!("  ramp_params_q crudo    -> vx={ax} vy={ay} t1={at1}");
+        std::println!("  escala()={}  T1_EXTRA_Q8={}", escala(), T1_EXTRA_Q8.load(Ordering::Relaxed));
+    }
+}
+
+#[cfg(test)]
+mod escalera {
+    use super::*;
+    /// Las tasas para un t1 dado. Su transporte #156 pide 11,81 unidades en +X y el emite
+    /// (105, 0) con t1 = 18.
+    #[test]
+    fn tasas_para_un_t1_dado() {
+        knobs_como_el_cartucho();
+        let dx = (11.8125 * 256.0) as i32;      // 11,81 unidades en Q8
+        let mut vx = 0i32; let mut vy = 0i32;
+        vx_ramp_params_con_t1(dx, 0, 256, 18, &mut vx, &mut vy);
+        std::println!("  HOST: dx={dx} q=8 t1=18  ->  vx={vx} vy={vy}   (el suyo: 105, 0)");
     }
 }

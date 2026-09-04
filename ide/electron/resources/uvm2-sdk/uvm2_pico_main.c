@@ -94,7 +94,7 @@ int main(void)
      * tiene sentido arrancarla antes de que el reloj este ahi. */
     uvm2_stream_start();
 #endif
-#  if defined(UVM2_CMDS_IN_PSRAM) || defined(UVM2_PSRAM_ARRANCA)
+#  if defined(UVM2_CMDS_IN_PSRAM) || defined(UVM2_PSRAM_ARRANCA) || defined(UVM2_ROMZIP_IN_PSRAM)
     /* UVM2_PSRAM_ARRANCA: enciende la PSRAM SIN usarla, para poder probar por separado
      * "la lista vive alli" y "el chip esta activo". El stream por PIO funciona con el chip
      * apagado y colapsa a una diagonal con la lista en PSRAM — incluso copiandola a SRAM

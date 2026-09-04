@@ -35,6 +35,13 @@ void uvm2_draw_intensity(int brightness);
 /* SYS_MOVE / SYS_DRAW_DELTA — relative, blanked and lit respectively. */
 void uvm2_draw_move(int dx, int dy);
 void uvm2_draw_delta(int dx, int dy);
+
+/* LAS MISMAS EN 1/16 DE UNIDAD DE DISPOSITIVO. La rejilla entera es ~10 veces mas basta que
+ * la del VecFever y eso deforma los glifos: 0,22 unidades de error por eje medidas en
+ * mhavoc, con el 3,6% de los vectores enteramente sub-unidad. Requieren -DUVM2_SUBUNIDAD
+ * para tener efecto; sin el redondean y se comportan como las enteras. */
+void uvm2_draw_delta_q4(int dx_q4, int dy_q4);
+void uvm2_draw_move_abs_q4(int x_q4, int y_q4);
 /* La misma recta pero con tramos apagados, en UNA rampa. `huecos` son pares
  * (inicio, fin) en fracciones 0..255 de la recta. n = cuantos pares. */
 void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int n);
@@ -47,6 +54,36 @@ void uvm2_draw_move_abs(int x, int y);
  * Es variable y no #define para poder conmutarlo con el juego en marcha: la pregunta
  * "¿el temblor es un batido contra la red?" se contesta en segundos o no se contesta. */
 extern volatile uint32_t uvm2_pacer_cycles;
+
+/* ── EL REFRESCO, EN HERCIOS ─────────────────────────────────────────────────────────
+ *
+ * Y POR QUE ES UNA OPCION DEL JUEGO Y NO UNA CONSTANTE: el rizado de la red mueve el haz,
+ * y solo queda ESTACIONARIO —o sea invisible— si el dibujo se repite a la MISMA frecuencia
+ * que la toma de corriente. 50 Hz en Europa, 60 en America. Una consola de 60 Hz corriendo
+ * un dibujo enganchado a 50 ve un batido de 10 Hz: una oscilacion lenta y bien visible.
+ * Con el enganche puesto a SU frecuencia, el rizado cae en la misma fase cada frame y pasa
+ * de moverse a ser un sesgo fijo.
+ *
+ * `hz` = 0 deja el frame libre: se presenta en cuanto la lista esta hecha, como la
+ * recreativa. Va mas rapido y tiembla con la red; es lo que quiere un banco de medida.
+ *
+ * ENGANCHAR SOLO SIRVE SI EL DIBUJO CABE. Un frame que se pasa del periodo pierde el
+ * enganche y dura el doble, y alternar 20 y 40 ms tiembla PEOR que no enganchar. Por eso
+ * esta `uvm2_refresco_cabe()`: preguntarlo despues de un frame tipico dice si el juego se
+ * puede permitir esa frecuencia. Tambien lo cuenta `uvm2_stats.overrun`.
+ *
+ * Es la primera entrada de la superficie de AJUSTES DEL JUEGO. Lo que venga detras (escala,
+ * brillo, region) va aqui y con la misma forma: una funcion con nombre y unidades de
+ * verdad, no una variable global en ciclos que cada juego interprete a su manera. */
+int      uvm2_draw_intensity_actual(void);
+/** Levantar el lapiz sin moverse: se llama ANTES de un `uvm2_draw_move_abs` y solo tiene
+ *  efecto si ese salto mide cero. Ver la nota de `s_penup_pendiente`. */
+void     uvm2_draw_penup(void);
+
+void     uvm2_refresco(unsigned hz);
+unsigned uvm2_refresco_actual(void);
+/** 1 si el ultimo frame cupo en el periodo (o si el refresco es libre). */
+int      uvm2_refresco_cabe(void);
 
 /* Frame boundary.  uvm2_frame_end() blanks, re-centres, replays the stream and
  * then pads the frame out to exactly 30000 bus cycles (50 Hz), locked to the
@@ -72,7 +109,6 @@ uint32_t uvm2_frame_bus_cycles(void);
  * fewer cycles at the same length on screen.  Off by default so measurements
  * are directly comparable to his; turn it on to see the difference. */
 void uvm2_draw_set_scale(uint32_t cycles);
-void uvm2_draw_set_fixup(int enable);
 
 #ifdef __cplusplus
 }

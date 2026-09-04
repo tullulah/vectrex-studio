@@ -34,6 +34,12 @@ int uvm2_sd_error = UVM2_SD_OK;
  * 38 estan nulos en su menu), asi que SD_DETECT no existe en este cableado. Antes se leia
  * el GPIO38: un pad sin dueño con pull-down interno, que devuelve 0 siempre — o sea "hay
  * tarjeta" pasara lo que pase. Un diagnostico que no puede fallar no diagnostica nada. */
+/* ── EL LADO HARDWARE ─────────────────────────────────────────────────────────────────
+ * Con -DUVM2_SD_HOST se compila el mismo FAT contra un FICHERO en vez de contra la tarjeta.
+ * Existe para poder probar la ESCRITURA —crear un fichero toca la FAT y el directorio— sin
+ * arriesgar la tarjeta de nadie, y contra imagenes FAT16 y FAT32 reales que despues valida
+ * `fsck_msdos`. Ver hardware/uvm2/tools/prueba_fat.c. */
+#ifndef UVM2_SD_HOST
 #define PIN_SCK   34
 #define PIN_MOSI  35
 #define PIN_MISO  36
@@ -166,6 +172,16 @@ int uvm2_sd_init(void)
     return 1;
 }
 
+#else   /* UVM2_SD_HOST */
+int uvm2_host_lee(uint32_t lba, unsigned char *b);
+int uvm2_host_escribe(uint32_t lba, const unsigned char *b);
+int uvm2_sd_init(void) { return 1; }
+#endif
+
+#ifdef UVM2_SD_HOST
+static int lee_bloque(uint32_t lba, unsigned char *buf) { return uvm2_host_lee(lba, buf); }
+static int escribe_bloque(uint32_t lba, const unsigned char *buf) { return uvm2_host_escribe(lba, buf); }
+#else
 static int lee_bloque(uint32_t lba, unsigned char *buf)
 {
     cs(1);
@@ -179,7 +195,33 @@ static int lee_bloque(uint32_t lba, unsigned char *buf)
     return 1;
 }
 
-/* ── FAT16/FAT32, solo lectura y lo justo ──────────────────────────────────── */
+/* ESCRIBIR UN BLOQUE (CMD24). El unico camino de escritura del driver, y a proposito: se
+ * usa SOLO para sobrescribir EN SITIO un fichero que ya existe, sin tocar la FAT ni el
+ * directorio. Crear o redimensionar pide asignar clusters y reescribir las DOS copias de la
+ * FAT, y equivocarse ahi corrompe la tarjeta del usuario — que no es nuestra. */
+static int escribe_bloque(uint32_t lba, const unsigned char *buf)
+{
+    cs(1);
+    if (comando(24, s_sdhc ? lba : lba * 512u, 0xFF) != 0x00) { cs(0); return 0; }
+    xfer(0xFF);                                /* un byte de guarda antes del token */
+    xfer(0xFE);                                /* token de inicio de bloque */
+    for (int i = 0; i < 512; i++) xfer(buf[i]);
+    xfer(0xFF); xfer(0xFF);                    /* CRC, que la tarjeta ignora en SPI */
+    /* La respuesta de datos: xxx00101 = aceptado. Cualquier otra cosa es un fallo, y hay
+     * que verlo aqui y no descubrirlo al releer. */
+    uint8_t r = 0xFF;
+    for (int i = 0; i < 1000 && (r & 0x11) != 0x01; i++) r = xfer(0xFF);
+    if ((r & 0x1F) != 0x05) { cs(0); return 0; }
+    /* Y ESPERAR A QUE SUELTE EL BUSY. La tarjeta mantiene MISO a 0 mientras programa; irse
+     * antes deja la escritura a medias y el siguiente comando falla sin decir por que. */
+    for (int i = 0; i < 500000; i++) if (xfer(0xFF) != 0x00) break;
+    cs(0);
+    return 1;
+}
+
+#endif  /* UVM2_SD_HOST */
+
+/* ── FAT16/FAT32 ────────────────────────────────────────────────────────────── */
 static uint16_t u16(const unsigned char *b, int o) { return (uint16_t)(b[o] | (b[o+1] << 8)); }
 static uint32_t u32(const unsigned char *b, int o) {
     return (uint32_t)b[o] | ((uint32_t)b[o+1] << 8) | ((uint32_t)b[o+2] << 16) | ((uint32_t)b[o+3] << 24);
@@ -189,6 +231,10 @@ static struct {
     uint32_t inicio, fat, datos, raiz_cluster;
     uint16_t raiz_entradas; uint32_t raiz_sector;
     uint8_t  spc; int es32;
+    /* Para ESCRIBIR hace falta saber cuantas copias de la FAT hay y cuanto mide cada una:
+     * una FAT actualizada en una sola copia es una tarjeta que el PC ve corrupta. */
+    uint8_t  nfats; uint32_t spf; uint32_t total_clusters;
+    uint32_t fsinfo;            /* sector del FSInfo (FAT32); 0 si no hay */
 } V;
 
 /* Un BPB de verdad, no "los dos bytes que mire no son cero".
@@ -244,10 +290,20 @@ static int monta(unsigned char *b)
     V.raiz_entradas = u16(b, 17);
     uint32_t spf = u16(b, 22);
     V.es32 = (spf == 0);
-    if (V.es32) { spf = u32(b, 36); V.raiz_cluster = u32(b, 44); }
+    if (V.es32) { spf = u32(b, 36); V.raiz_cluster = u32(b, 44); V.fsinfo = V.inicio + u16(b, 48); }
+    else        { V.fsinfo = 0; }
     V.fat = part + reservados;
+    V.nfats = nfats; V.spf = spf;
     V.raiz_sector = V.fat + (uint32_t)nfats * spf;
     V.datos = V.raiz_sector + (V.raiz_entradas * 32u + 511u) / 512u;
+    /* CUANTOS CLUSTERS TIENE EL VOLUMEN. Sin este tope, buscar uno libre se sale de la FAT
+     * y "encuentra" basura fuera del sistema de ficheros. */
+    {
+        uint32_t tot = u16(b, 19);
+        if (tot == 0) tot = u32(b, 32);
+        V.total_clusters = (tot > (V.datos - V.inicio))
+                         ? (tot - (V.datos - V.inicio)) / (V.spc ? V.spc : 1u) + 2u : 0u;
+    }
 
     uvm2_sd_diag.inicio        = V.inicio;
     uvm2_sd_diag.spc           = V.spc;
@@ -258,6 +314,70 @@ static int monta(unsigned char *b)
     uvm2_sd_diag.datos         = V.datos;
     uvm2_sd_diag.raiz_entradas = V.raiz_entradas;
     return V.spc != 0;
+}
+
+/* ── ESCRITURA: crear un fichero de UN cluster ────────────────────────────────────────
+ *
+ * Solo AÑADE: coge un cluster que la FAT marca libre y una entrada de directorio libre. No
+ * mueve, no borra y no toca nada que ya estuviera en uso. Si algo no cuadra, aborta ANTES de
+ * escribir — mas vale no guardar la calibracion que dejar la tarjeta del usuario tocada.
+ *
+ * Un cluster basta: el fichero de configuracion son cuatro lineas. Ficheros mayores pedirian
+ * encadenar clusters, y eso no hace falta para esto. */
+
+/* Escribe una entrada de la FAT en TODAS sus copias. Una FAT actualizada en una sola copia
+ * es una tarjeta que el PC ve corrupta — y eso lo nota el usuario, no nosotros. */
+static int fat_pon(uint32_t c, uint32_t valor, unsigned char *b)
+{
+    const uint32_t off = V.es32 ? c * 4u : c * 2u;
+    const uint32_t sec = off / 512u, dentro = off % 512u;
+    for (uint8_t f = 0; f < V.nfats; f++) {
+        const uint32_t lba = V.fat + (uint32_t)f * V.spf + sec;
+        if (!lee_bloque(lba, b)) return 0;
+        if (V.es32) {
+            uint32_t v = u32(b, (int)dentro);
+            v = (v & 0xF0000000u) | (valor & 0x0FFFFFFFu);   /* los 4 bits altos son reservados */
+            b[dentro] = (uint8_t)v; b[dentro+1] = (uint8_t)(v >> 8);
+            b[dentro+2] = (uint8_t)(v >> 16); b[dentro+3] = (uint8_t)(v >> 24);
+        } else {
+            b[dentro] = (uint8_t)valor; b[dentro+1] = (uint8_t)(valor >> 8);
+        }
+        if (!escribe_bloque(lba, b)) return 0;
+    }
+    return 1;
+}
+
+/* El primer cluster LIBRE (entrada de FAT a 0), marcado ya como fin de cadena. 0 si no hay. */
+static uint32_t asigna_cluster(unsigned char *b)
+{
+    const uint32_t fin = V.total_clusters ? V.total_clusters : 0xFFFFFFu;
+    for (uint32_t c = 2; c < fin; c++) {
+        const uint32_t off = V.es32 ? c * 4u : c * 2u;
+        if (!lee_bloque(V.fat + off / 512u, b)) return 0;
+        const uint32_t v = V.es32 ? (u32(b, (int)(off % 512)) & 0x0FFFFFFFu)
+                                  : u16(b, (int)(off % 512));
+        if (v != 0) continue;
+        if (!fat_pon(c, V.es32 ? 0x0FFFFFFFu : 0xFFFFu, b)) return 0;
+        /* EL FSInfo DE FAT32, que lleva la cuenta del espacio libre. Es solo una PISTA —el
+         * sistema puede recalcularla— pero dejarla desfasada hace que `fsck_msdos` avise, y
+         * un aviso en la tarjeta del usuario es nuestro aunque no rompa nada. Medido: sin
+         * esto, "Free space in FSInfo block (258077) not correct (258076)". */
+        if (V.fsinfo) {
+            if (lee_bloque(V.fsinfo, b) && u32(b, 0) == 0x41615252u && u32(b, 484) == 0x61417272u) {
+                uint32_t libres = u32(b, 488);
+                if (libres != 0xFFFFFFFFu && libres > 0) {
+                    libres--;
+                    b[488] = (uint8_t)libres; b[489] = (uint8_t)(libres >> 8);
+                    b[490] = (uint8_t)(libres >> 16); b[491] = (uint8_t)(libres >> 24);
+                }
+                b[492] = (uint8_t)(c + 1); b[493] = (uint8_t)((c + 1) >> 8);      /* pista */
+                b[494] = (uint8_t)((c + 1) >> 16); b[495] = (uint8_t)((c + 1) >> 24);
+                escribe_bloque(V.fsinfo, b);      /* si falla, solo queda la pista vieja */
+            }
+        }
+        return c;
+    }
+    return 0;
 }
 
 static uint32_t siguiente(uint32_t c, unsigned char *b)
@@ -314,7 +434,19 @@ static void a83(const char *s, int n, char *out)
     }
 }
 
-uint32_t uvm2_sd_leer(const char *ruta, unsigned char *dst, uint32_t max)
+/* LEER UN TROZO, NO EL FICHERO ENTERO.
+ *
+ * `uvm2_sd_leer` lee el fichero completo y falla con NO_CABE si no entra en el buffer, lo
+ * cual basta para un romset de 68 KB y no para una captura de 20 segundos (unos 14 MB de
+ * comandos). Con un desplazamiento, la RAM que hace falta deja de depender de lo largo que
+ * sea el fichero: se leen dos frames y se va pidiendo el siguiente.
+ *
+ * `desde` es una posicion en BYTES dentro del fichero. Devuelve lo copiado, que puede ser
+ * menos que `max` si el fichero se acaba antes. La busqueda del fichero es la misma, asi
+ * que un lector que avance frame a frame vuelve a recorrer el directorio en cada llamada —
+ * a 50 Hz eso es barato comparado con leer los datos, pero conviene saberlo. */
+static uint32_t leer_rango(const char *ruta, unsigned char *dst, uint32_t max,
+                           uint32_t desde, uint32_t *len_out)
 {
     static unsigned char b[512];
     uvm2_sd_error = UVM2_SD_OK;
@@ -340,18 +472,221 @@ uint32_t uvm2_sd_leer(const char *ruta, unsigned char *dst, uint32_t max)
     a83(ruta, 64, n83);
     uvm2_sd_diag.paso = 2;                        /* buscando el fichero */
     if (!busca(dir, n83, &c, &len, b)) { uvm2_sd_error = UVM2_SD_NO_ESTA; return 0; }
-    if (len > max) { uvm2_sd_error = UVM2_SD_NO_CABE; return 0; }
+    if (len_out) *len_out = len;
+    if (desde >= len) return 0;                   /* pasado el final: cero, sin error */
+    uint32_t queda = len - desde;
+    if (queda > max) queda = max;                 /* lo que quepa; NO es un fallo */
 
-    uint32_t escrito = 0;
-    while (c >= 2 && c < 0x0FFFFFF8u && escrito < len) {
+    uint32_t pos = 0, escrito = 0;
+    while (c >= 2 && c < 0x0FFFFFF8u && escrito < queda) {
         uint32_t sec = sector_de(c);
-        for (uint32_t s = 0; s < V.spc && escrito < len; s++) {
+        for (uint32_t s = 0; s < V.spc && escrito < queda; s++) {
+            /* SALTAR SECTORES ENTEROS SIN LEERLOS. Un desplazamiento grande no puede
+             * costar una lectura de bloque por cada 512 bytes que nos saltamos. */
+            if (pos + 512u <= desde) { pos += 512u; continue; }
             if (!lee_bloque(sec + s, b)) return 0;
-            uint32_t n = (len - escrito < 512u) ? (len - escrito) : 512u;
-            for (uint32_t i = 0; i < n; i++) dst[escrito + i] = b[i];
-            escrito += n;
+            uint32_t ini = (desde > pos) ? (desde - pos) : 0;   /* dentro de este bloque */
+            uint32_t n   = 512u - ini;
+            if (n > queda - escrito) n = queda - escrito;
+            for (uint32_t i = 0; i < n; i++) dst[escrito + i] = b[ini + i];
+            escrito += n; pos += 512u;
         }
         c = siguiente(c, b);
     }
     return escrito;
+}
+
+/* Un trozo desde `desde`: lo que quepa, y quedarse corto NO es un fallo. */
+uint32_t uvm2_sd_leer_desde(const char *ruta, unsigned char *dst, uint32_t max, uint32_t desde)
+{
+    return leer_rango(ruta, dst, max, desde, 0);
+}
+
+/* El fichero ENTERO, con la semantica de siempre: si no cabe es un FALLO. Es lo que espera
+ * el cargador de romsets — un romset a medias no es un romset — y por eso se comprueba
+ * aqui y no dentro, donde el lector por trozos necesita justo lo contrario. */
+uint32_t uvm2_sd_leer(const char *ruta, unsigned char *dst, uint32_t max)
+{
+    uint32_t len = 0;
+    uint32_t n = leer_rango(ruta, dst, max, 0, &len);
+    if (len > max) { uvm2_sd_error = UVM2_SD_NO_CABE; return 0; }
+    return n;
+}
+
+/* SOBRESCRIBIR EN SITIO EL PRIMER SECTOR DE UN FICHERO QUE YA EXISTE.
+ *
+ * Lo unico que se puede hacer sin riesgo con un lector de solo lectura: no toca la FAT ni la
+ * entrada de directorio, asi que ni el tamaño ni la cadena de clusters cambian. Por eso NO
+ * crea el fichero: si no esta, devuelve 0 y quien llame que lo diga en pantalla.
+ *
+ * `n` tiene que caber en 512 y el fichero medir al menos eso. El sector se lee primero y se
+ * rellena el resto con espacios y un salto de linea, para que el fichero siga siendo texto
+ * legible desde el PC y no arrastre lo que hubiera antes.
+ */
+int uvm2_sd_sobrescribir(const char *ruta, const unsigned char *datos, uint32_t n)
+{
+    static unsigned char b[512];
+    uvm2_sd_error = UVM2_SD_OK;
+    if (n == 0 || n > 512) { uvm2_sd_error = UVM2_SD_NO_CABE; return 0; }
+    if (!uvm2_sd_init()) return 0;
+    if (!monta(b)) { uvm2_sd_error = UVM2_SD_SIN_FAT; return 0; }
+
+    const char *barra = 0;
+    for (const char *p = ruta; *p; p++) if (*p == '/') barra = p;
+    uint32_t dir = V.es32 ? V.raiz_cluster : 0;
+    char n83[11];
+    if (barra) {
+        uint32_t len;
+        a83(ruta, (int)(barra - ruta), n83);
+        if (!busca(dir, n83, &dir, &len, b)) { uvm2_sd_error = UVM2_SD_NO_ESTA; return 0; }
+        ruta = barra + 1;
+    }
+    uint32_t c, len;
+    a83(ruta, 64, n83);
+    if (!busca(dir, n83, &c, &len, b)) { uvm2_sd_error = UVM2_SD_NO_ESTA; return 0; }
+    if (len < 512) { uvm2_sd_error = UVM2_SD_NO_CABE; return 0; }
+
+    const uint32_t lba = sector_de(c);
+    if (!lee_bloque(lba, b)) return 0;
+    for (uint32_t i = 0; i < n; i++) b[i] = datos[i];
+    for (uint32_t i = n; i < 512; i++) b[i] = ' ';
+    b[511] = '\n';
+    return escribe_bloque(lba, b);
+}
+
+static int crea_entrada_attr(uint32_t dir, const char *n83, uint32_t cluster, uint32_t len,
+                             unsigned char attr, unsigned char *b);
+
+/* Añade una entrada de directorio en el primer hueco (borrada 0xE5 o fin 0x00). Devuelve 0
+ * si el directorio esta lleno — no lo extiende: extender el directorio raiz de FAT16 es
+ * IMPOSIBLE (es de tamaño fijo) y extender uno de FAT32 pediria encadenar clusters. Con un
+ * directorio lleno, mejor no guardar que inventar. */
+static int crea_entrada_attr(uint32_t dir, const char *n83, uint32_t cluster, uint32_t len,
+                             unsigned char attr, unsigned char *b)
+{
+    uint32_t sec, quedan;
+    if (dir == 0 && !V.es32) { sec = V.raiz_sector; quedan = (V.raiz_entradas * 32u + 511u) / 512u; }
+    else                     { sec = sector_de(dir); quedan = V.spc; }
+    for (;;) {
+        for (uint32_t s = 0; s < quedan; s++) {
+            if (!lee_bloque(sec + s, b)) return 0;
+            for (int e = 0; e < 512; e += 32) {
+                if (b[e] != 0x00 && b[e] != 0xE5) continue;
+                const int era_fin = (b[e] == 0x00);
+                for (int i = 0; i < 32; i++) b[e + i] = 0;
+                for (int i = 0; i < 11; i++) b[e + i] = (unsigned char)n83[i];
+                b[e + 11] = attr;                                  /* 0x20 fichero, 0x10 directorio */
+                b[e + 26] = (unsigned char)cluster;                /* cluster bajo */
+                b[e + 27] = (unsigned char)(cluster >> 8);
+                if (V.es32) {
+                    b[e + 20] = (unsigned char)(cluster >> 16);    /* cluster alto */
+                    b[e + 21] = (unsigned char)(cluster >> 24);
+                }
+                b[e + 28] = (unsigned char)len;
+                b[e + 29] = (unsigned char)(len >> 8);
+                b[e + 30] = (unsigned char)(len >> 16);
+                b[e + 31] = (unsigned char)(len >> 24);
+                /* SI OCUPABAMOS EL FIN DE DIRECTORIO, HAY QUE PONER UNO NUEVO DETRAS. Sin
+                 * esto el recorrido no sabe donde parar y lee basura como entradas. */
+                if (era_fin && e + 32 < 512) b[e + 32] = 0x00;
+                return escribe_bloque(sec + s, b);
+            }
+        }
+        if (dir == 0 && !V.es32) return 0;          /* raiz de FAT16: no se puede extender */
+        dir = siguiente(dir, b);
+        if (dir < 2 || dir >= 0x0FFFFFF8u) return 0;
+        sec = sector_de(dir); quedan = V.spc;
+    }
+}
+
+static int crea_entrada(uint32_t dir, const char *n83, uint32_t cluster, uint32_t len,
+                        unsigned char *b)
+{
+    return crea_entrada_attr(dir, n83, cluster, len, 0x20, b);
+}
+
+/* CREA UN SUBDIRECTORIO VACIO y devuelve su cluster (0 si no se pudo).
+ *
+ * Un directorio es un fichero cuyo contenido son entradas, con dos obligatorias al
+ * principio: `.` que apunta a si mismo y `..` al padre — y en `..` la RAIZ se escribe como
+ * cluster 0 aunque en FAT32 la raiz tenga cluster de verdad. Ese detalle es de la norma y
+ * saltarselo hace que el PC no sepa subir. */
+static uint32_t crea_directorio(uint32_t padre, const char *n83, unsigned char *b)
+{
+    const uint32_t c = asigna_cluster(b);
+    if (c == 0) return 0;
+
+    for (int i = 0; i < 512; i++) b[i] = 0;
+    static const char punto[11]  = { '.',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ' };
+    static const char dosp[11]   = { '.','.',' ',' ',' ',' ',' ',' ',' ',' ',' ' };
+    for (int i = 0; i < 11; i++) b[i] = (unsigned char)punto[i];
+    b[11] = 0x10;                                   /* DIRECTORY */
+    b[26] = (unsigned char)c; b[27] = (unsigned char)(c >> 8);
+    b[20] = (unsigned char)(c >> 16); b[21] = (unsigned char)(c >> 24);
+    for (int i = 0; i < 11; i++) b[32 + i] = (unsigned char)dosp[i];
+    b[32 + 11] = 0x10;
+    /* `..` a la raiz se escribe SIEMPRE como cluster 0, tambien en FAT32. */
+    const uint32_t pc = (padre == V.raiz_cluster && V.es32) ? 0u : padre;
+    b[32 + 26] = (unsigned char)pc;       b[32 + 27] = (unsigned char)(pc >> 8);
+    b[32 + 20] = (unsigned char)(pc >> 16); b[32 + 21] = (unsigned char)(pc >> 24);
+    if (!escribe_bloque(sector_de(c), b)) return 0;
+    for (uint32_t sx = 1; sx < V.spc; sx++) {
+        static unsigned char z[512];
+        for (int i = 0; i < 512; i++) z[i] = 0;
+        if (!escribe_bloque(sector_de(c) + sx, z)) return 0;
+    }
+    if (!crea_entrada_attr(padre, n83, c, 0u, 0x10, b)) return 0;
+    return c;
+}
+
+/* CREA UN FICHERO DE UN CLUSTER Y LE ESCRIBE `datos`.
+ *
+ * Si la ruta lleva subdirectorio y ese subdirectorio NO existe, el fichero se crea en la
+ * RAIZ con el mismo nombre. Crear directorios pediria escribir sus entradas '.' y '..' y
+ * duplica la superficie de fallo por muy poco: con la raiz, cualquier tarjeta vale.
+ */
+int uvm2_sd_crear(const char *ruta, const unsigned char *datos, uint32_t n)
+{
+    static unsigned char b[512];
+    uvm2_sd_error = UVM2_SD_OK;
+    if (n == 0 || n > 512) { uvm2_sd_error = UVM2_SD_NO_CABE; return 0; }
+    if (!uvm2_sd_init()) return 0;
+    if (!monta(b)) { uvm2_sd_error = UVM2_SD_SIN_FAT; return 0; }
+
+    const char *barra = 0;
+    for (const char *p = ruta; *p; p++) if (*p == '/') barra = p;
+    uint32_t dir = V.es32 ? V.raiz_cluster : 0;
+    char n83[11];
+    if (barra) {
+        uint32_t c, len;
+        a83(ruta, (int)(barra - ruta), n83);
+        if (busca(dir, n83, &c, &len, b)) dir = c;
+        else {
+            /* NO EXISTE: SE CREA. Antes esto caia a la raiz con el mismo nombre, y era un
+             * apaño: el lector busca en `config/` y no lo habria encontrado nunca. */
+            const uint32_t nd = crea_directorio(dir, n83, b);
+            if (nd == 0) { uvm2_sd_error = UVM2_SD_NO_CABE; return 0; }
+            dir = nd;
+        }
+        ruta = barra + 1;
+    }
+    a83(ruta, 64, n83);
+
+    const uint32_t c = asigna_cluster(b);
+    if (c == 0) { uvm2_sd_error = UVM2_SD_NO_CABE; return 0; }
+
+    /* El dato ANTES que la entrada: si algo falla, queda un cluster marcado en uso y nada
+     * que apunte a el — se pierde espacio, que es reparable con un chkdsk. Al reves quedaria
+     * una entrada apuntando a basura, que el PC lee como fichero corrupto. */
+    for (uint32_t i = 0; i < n; i++) b[i] = datos[i];
+    for (uint32_t i = n; i < 512; i++) b[i] = ' ';
+    b[511] = '\n';
+    if (!escribe_bloque(sector_de(c), b)) return 0;
+    /* El resto del cluster, a cero: lo que hubiera antes no es nuestro y confunde al leerlo. */
+    for (uint32_t s = 1; s < V.spc; s++) {
+        static unsigned char z[512];
+        for (int i = 0; i < 512; i++) z[i] = 0;
+        if (!escribe_bloque(sector_de(c) + s, z)) return 0;
+    }
+    return crea_entrada(dir, n83, c, 512u, b);
 }

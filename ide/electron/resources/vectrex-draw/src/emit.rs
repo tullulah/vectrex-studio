@@ -90,10 +90,56 @@ pub const REG_CNTL: u8 = 0xC;
 /// Un ciclo de E en las unidades de la costura.
 pub const E: u32 = 256;
 
+/* ── LOS HUECOS DEL MICROTRAMO, COMO GLOBALES Y NO EN EL STRUCT ──────────────────────
+ *
+ * Empezaron como campos de `Timings`/`CTimings`, que es donde conceptualmente van. NO
+ * FUNCIONO: con los tamaños de los dos structs comprobados en compilacion (44 bytes en los
+ * dos, `_Static_assert` en C y `assert!` en Rust) y el valor correcto en el lado C
+ * (sondeado: 4), leerlos desde Rust hacia que UN comando por vector saliera con el hueco
+ * saturado a 4095 y el frame se fuera de 23.831 a 788.661 ciclos. Y pasaba con CUALQUIERA
+ * de los cuatro por separado, incluso con el que visiblemente producia su hueco correcto.
+ * O sea que el tamaño cuadra y algo del paso por el ABI no.
+ *
+ * Los demas knobs de esta capa (VCAP, DRAW_SCALE, MIN_T1...) van por globales
+ * `#[no_mangle]` y llevan meses funcionando. Se hace igual: es el camino probado, y de paso
+ * el panel los puede tocar en caliente como a los otros.
+ *
+ * Son GAPS (lo que separa una escritura de la siguiente). 0 = el valor de siempre, que es
+ * la cadencia medida de SU asterock. */
+#[used] #[no_mangle]
+pub static MT_ORA_Y: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[used] #[no_mangle]
+pub static MT_ORB_KEEP: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[used] #[no_mangle]
+pub static MT_SR_ON: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[used] #[no_mangle]
+pub static MT_ORA_X_ON: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/* SONDA: el campo tal como lo ve RUST, y el hueco que sale de el. El lado C dice 4 y el
+ * comando emitido sale saturado a 4095, asi que hay que ver el valor AQUI. */
+#[used] #[no_mangle]
+pub static DBGX_CAMPO: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[used] #[no_mangle]
+pub static DBGX_HUECO: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[inline(never)]
+fn vx_dbg_x(campo: u32, hueco: u32) {
+    DBGX_CAMPO.store(campo, core::sync::atomic::Ordering::Relaxed);
+    DBGX_HUECO.store(hueco, core::sync::atomic::Ordering::Relaxed);
+}
+
+
 /// Por donde salen las escrituras. Lo implementa cada cartucho.
 pub trait BusSink {
     /// Escribe `data` en el registro `reg` y espera `delay_q8` DESPUES.
     fn emit(&mut self, reg: u8, data: u8, delay_q8: u32);
+
+    /// Alarga el hueco del ULTIMO comando ya emitido. Por defecto no hace nada.
+    ///
+    /// Existe porque quien apaga el haz es la llamada siguiente, no la que emitio la
+    /// rampa: sin esto no hay forma de darle a la ultima rampa iluminada el tiempo de
+    /// terminar. MEDIDO en su frame de Major Havoc — hueco 11 si el microtramo continua,
+    /// 16 si lo que viene apaga, y la separacion es 175 de 175.
+    fn alargar_ultimo(&mut self, _extra_q8: u32) {}
 
     /// Espera a que termine la rampa de `t1` cuentas, mas `extra_q8`. SIN escribir.
     ///
@@ -191,6 +237,7 @@ pub struct Timings {
     ///
     /// 0 = como siempre. Es un knob para poder refutarlo en un minuto y sin recompilar.
     pub x_settle_q8: u32,
+
 }
 
 impl Timings {
@@ -247,13 +294,177 @@ fn y_hold_is(vy: i8) {
     crate::ramp::Y_HELD.store(0x100 | (vy as u8 as u32), Ordering::Relaxed);
 }
 
+/* EL HUECO TRAS `T1CH`, SEGUN LO QUE VENGA DESPUES.
+ *
+ * MEDIDO en su frame 120 de Major Havoc, sobre sus 623 rampas de t1 = 8: deja 11 ciclos de
+ * E cuando el microtramo CONTINUA (424 casos) y 16 cuando lo siguiente APAGA el haz (175),
+ * sin un solo caso cruzado — clasificado por si hay una escritura al SR antes del proximo
+ * T1CH. Es fisico y no una manía suya: la ultima rampa de un trazo iluminado tiene que
+ * terminar ANTES de cerrar el haz, y cortandola sale un trazo corto.
+ *
+ * Se aplica alargando el hueco YA emitido (`alargar_ultimo`), porque quien apaga es la
+ * llamada siguiente y el emisor del trazo no puede saberlo cuando emite. */
+/// 1 = un trazo iluminado se emite como UNA rampa con su t1 entero, como el VecFever.
+/// **ES EL POR DEFECTO desde 2026-09-04**, confirmado en consola: con microtramos Major
+/// Havoc salia punteado y con el trazo entero sale LIMPIO. 0 vuelve a la serie de
+/// microtramos de T1=8 (`-DUVM2_MICROTRAMOS`).
+///
+/// MEDIDO en su captura de Major Havoc (8 frames repartidos por los 20 s): **no parte un
+/// trazo iluminado NI UNA VEZ** —cero rachas de microtramos iguales seguidos— y usa t1 de 8
+/// hasta 252, con trazos de hasta 200 unidades en UNA rampa. Nosotros emitimos t1 = 8 en
+/// todos, sin excepcion (427 de 427 en el banco, 754 de 754 en mhavoc), asi que un trazo
+/// que no cabe en una rampa de 8 se parte — y cada junta son 22-24 ciclos con el haz
+/// ENCENDIDO Y QUIETO, o sea un punto. Encaja con la consola: el banco (texto, trazos
+/// cortos) nunca parte y sale limpio; mhavoc (diagonales largas) parte casi todo y puntea.
+///
+/// El comentario de abajo tomo la serie de microtramos de la captura de ASTEROCK. Las dos
+/// capturas no dicen lo mismo — ver `vecfever-no-hay-una-cadencia`.
+#[no_mangle]
+pub static TRAZO_ENTERO: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(1);
+
+const H_T1CH_SIGUE:  u32 = 11;
+const H_T1CH_CIERRA: u32 = 16;
+/* Y CUANDO EL SR VA JUSTO DETRAS DEL T1CH, 29 — no 16. Misma captura: 21 casos, y en los
+ * 175 de hueco 16 el comando siguiente es SIEMPRE ORA, nunca SR. El hueco no lo fija el
+ * apagado, lo fija CUANTO se tarda en llegar a el. */
+const H_T1CH_APAGA:  u32 = 29;
+/* El hueco DESPUES de SR=00: 3 si le sigue ORB (175 casos suyos, y ya lo haciamos) y 15 si
+ * le sigue ORA (13 suyos; nosotros poniamos 0 en 24). */
+const H_SR_OFF_A_ORA: u32 = 15;
+
+/// 1 = detras de esta unidad ciega viene OTRA antes del proximo trazo iluminado.
+///
+/// DECIDE DONDE SE APAGA EL HAZ, y la regla es suya, medida en su frame 120. De sus 199
+/// apagados (uno por trazo, exactamente):
+///
+///   * 178 caen DENTRO de la ventana del mux de la unidad ciega — y en los 178 esa unidad
+///     es la UNICA que hay hasta el proximo trazo.
+///   * 21 caen ANTES, pegados al T1CH — y en los 21 vienen DOS unidades (cebado + salto) o
+///     el bloque de re-cero.
+///
+/// Ni un caso cruzado. Y es fisico: con una sola unidad no hay viaje que dibujar, asi que
+/// el apagado puede ir dentro; en cuanto hay transporte de verdad el haz tiene que estar
+/// muerto ANTES de moverse o la travesia sale pintada.
+///
+/// Nosotros deciamos `t1 <= 8`, que acierta en las 178 y falla en las 21: la unidad de
+/// cebado tambien lleva t1 = 8, asi que apagabamos dentro de su ventana y el salto que
+/// venia detras se dibujaba. Es la clase de artefacto de la "estrella de rayos al centro".
+/// 1 = permite omitir la recarga del sample-and-hold de Y cuando ya sostiene el valor.
+/// **Apagado por defecto**: ver la medida en `moveto_seq`.
+#[no_mangle]
+pub static SALTAR_Y: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+#[no_mangle]
+pub static SIGUEN_UNIDADES: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
+
 pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings) {
+    let sr = crate::ramp::HAZ_POR_SR.load(Orden::Relaxed) != 0;
+    // QUE LA ULTIMA RAMPA ILUMINADA TERMINE. El cuanto depende de si el SR va JUSTO
+    // detras del T1CH (rama de abajo) o si antes van ORA y ORB (salto corto del idioma SR).
+    let encendido = sink.beam_is_lit();
+    let solo_esta = SIGUEN_UNIDADES.load(Orden::Relaxed) == 0;
+    /* EL t1 NO ENTRA EN LA REGLA: solo el recuento. Lo tuvimos como `t1 <= 8` y fallaba en
+     * los dos sentidos — apagabamos fuera en sus 3 unidades solitarias de t1 = 18, y dentro
+     * en las 21 de cebado+salto. Ver SIGUEN_UNIDADES. */
+    let apaga_ya = encendido && !(sr && solo_esta);
+    if encendido {
+        let h = if apaga_ya { H_T1CH_APAGA } else { H_T1CH_CIERRA };
+        sink.alargar_ultimo((h - H_T1CH_SIGUE) * E);
+    }
     // APAGAR LO PRIMERO (SR=0x00). Con keep-lit el haz llega ENCENDIDO al salto; si se
-    // toca Y/mux antes de apagar, la travesia al destino se dibuja iluminada. Blanquear
-    // antes de mover nada es lo que hace el VecFever en un pen-up.
-    if sink.beam_is_lit() {
-        sink.emit(REG_SHIFT, 0x00, 0);
+    // toca Y/mux antes de apagar, la travesia al destino se dibuja iluminada. El salto
+    // CORTO del idioma SR es la excepcion: su unidad pen-up apaga DENTRO de la ventana
+    // del mux, como el VecFever, asi que ahi el apagado no se adelanta.
+    if apaga_ya {
+        sink.emit(REG_SHIFT, 0x00, H_SR_OFF_A_ORA * E);
         sink.beam_blanked();
+    }
+    if sr {
+        if t1 <= 8 {
+            // SALTO CORTO = unidad PEN-UP del VecFever, verbatim: con el haz encendido
+            // apaga DENTRO de la ventana del mux (x18.1/frame: ORA+4 ORB=00+9 SR=00+4
+            // ORB=01+1 ORA+4 T1CL+1 T1CH+12); ya apagado, la unidad sin SR
+            // (x27.9/frame: ORA+6 ORB=00+11 ORB=01+1 ORA+4 T1CL+1 T1CH+12).
+            if sink.beam_is_lit() {
+                sink.emit(REG_PORT_A, vy as u8, 3 * E);  // Y; hueco 4
+                sink.emit(REG_PORT_B, 0x00, 8 * E);      // abre mux; hueco 9
+                sink.emit(REG_SHIFT, 0x00, 3 * E);       // haz OFF en la ventana; hueco 4
+                sink.beam_blanked();
+            } else {
+                sink.emit(REG_PORT_A, vy as u8, 5 * E);  // Y; hueco 6
+                sink.emit(REG_PORT_B, 0x00, 10 * E);     // abre mux; hueco 11
+            }
+            sink.emit(REG_PORT_B, 0x01, 0);              // cierra mux; hueco 1
+            sink.y_held(vy);
+            sink.emit(REG_PORT_A, vx as u8, 3 * E + k.x_settle_q8); // X; hueco 4
+            emitir_t1cl(sink, t1, 0);                    // T1CL; hueco 1
+            sink.emit(REG_T1_HI, 0x00, H_T1CH_SIGUE * E);          // T1CH arma; hueco 12
+            return;
+        }
+        // SALTO LARGO del VecFever, VERBATIM de la captura (su clase de "vectores
+        // largos", x2475: ORA+4 ORB=00+11 ORB=01+1 ORA+9 T1CL+1 T1CH+t1+17). Sin PCR,
+        // sin SR dentro de la unidad (el apagado ya salio arriba), T1 con la cuenta real.
+        // CICLOS DE E CRUDOS, como el microtramo: k.e() escala por e6809_q8 (64 en
+        // el UVM2) y deja los huecos a la mitad — medido: la cadencia salia 1/3/1/3.
+        /* SI EL S&H DE Y YA SOSTIENE ESTE VALOR, EL MUESTREO ENTERO SOBRA — y el VecFever
+         * se lo salta. Es su clase de salto MAS COMUN: `ORA+7 T1CL+1 T1CH+42`, tres
+         * escrituras, 70 de sus 96 saltos en el frame. Nosotros haciamos las seis siempre.
+         *
+         * Las tres que se ahorran son ORA(Y), abrir el mux y cerrarlo: escribir el mismo
+         * valor en un condensador que ya lo tiene no cambia nada y cuesta la ventana de
+         * carga entera. `y_can_skip` es la misma pregunta que ya usa el camino con huecos.
+         *
+         * El hueco del ORA(X) pasa a 7 cuando se salta (su patron de tres) y sigue en 9
+         * cuando no (su patron de seis, que es identico al nuestro). */
+        /* MEDIDO OTRA VEZ, Y SALE LO CONTRARIO. En su frame 120 de Major Havoc el
+         * VecFever carga la Y en **647 de 647** unidades, saltos incluidos, y 98 de esas
+         * cargas son REDUNDANTES (el mismo valor que ya sostenia). No se la salta nunca.
+         *
+         * El "70 de sus 96 saltos" del parrafo de arriba salio de la captura de ASTEROCK, y
+         * las dos capturas no dicen lo mismo ([[vecfever-no-hay-una-cadencia]]). Entre las
+         * dos gana la fisica: el canal 0 es C304, 10 nF, y un condensador se descarga —
+         * saltarse la recarga es apostar a que no ha derivado. Por eso la deriva medida era
+         * 7 veces mayor en Y que en X, que es el DAC vivo y no retiene nada.
+         *
+         * Se deja el mecanismo detras de un knob por si alguna consola necesita los ciclos,
+         * pero apagado: `SALTAR_Y=1` lo devuelve. */
+        /* UNIDAD LARGA QUE ES LA UNICA CIEGA: el apagado va DENTRO de su ventana de mux,
+         * igual que en la corta pero con el SR en el otro extremo de la ventana. Suyo,
+         * verbatim (x3 en el frame 120, todas t1 = 18):
+         *
+         *     ORA(y)+3  ORB=00+3  SR=00+8  ORB=01+0  ORA(x)+6  T1CL+0  T1CH+34
+         *
+         * La ventana del mux mide 11 ciclos en las DOS formas (3+8 aqui, 8+3 en la corta):
+         * lo que cambia es donde cae el SR dentro de ella, no cuanto carga C304. Y el hueco
+         * del ORA(x) baja de 9 a 7 porque la escritura del SR ya se comio bus. */
+        if sink.beam_is_lit() {
+            sink.emit(REG_PORT_A, vy as u8, 3 * E);   // Y; hueco 4
+            sink.emit(REG_PORT_B, 0x00, 3 * E);       // abre mux; hueco 4
+            sink.emit(REG_SHIFT, 0x00, 8 * E);        // haz OFF en la ventana; hueco 9
+            sink.beam_blanked();
+            sink.emit(REG_PORT_B, 0x01, 0);           // cierra mux; hueco 1
+            sink.y_held(vy);
+            sink.emit(REG_PORT_A, vx as u8, 6 * E + k.x_settle_q8); // X; hueco 7
+            emitir_t1cl(sink, t1, 0);
+            sink.emit(REG_T1_HI, (t1 >> 8) as u8, 0);
+            return;
+        }
+        let saltar_y = SALTAR_Y.load(Orden::Relaxed) != 0 && sink.y_can_skip(vy);
+        if !saltar_y {
+            sink.emit(REG_PORT_A, vy as u8, 3 * E);   // Y al DAC; hueco 4
+            sink.emit(REG_PORT_B, 0x00, 10 * E);      // abre mux; ventana 11
+            sink.emit(REG_PORT_B, 0x01, 0);           // cierra mux; hueco 1
+            sink.y_held(vy);
+        }
+        sink.emit(REG_PORT_A, vx as u8,
+                  (if saltar_y { 6 * E } else { 8 * E }) + k.x_settle_q8); // X; hueco 7 o 9
+        emitir_t1cl(sink, t1, 0);                 // T1CL; hueco 1
+        sink.emit(REG_T1_HI, (t1 >> 8) as u8, 0);
+        // La espera del VecFever tras armar: t1 + 16 (medido: +141 para t1=124,
+        // +78 para t1=64 — o sea t1 + 14..17; se toma 16 y es barrible).
+        sink.wait_ramp(t1, k.moveto_settle_q8 as i32 + 16 * E as i32);
+        return;
     }
     sink.emit(REG_PORT_A, vy as u8, k.e(5)); // STA — Y al DAC; hueco 6 (CLR dp)
     // VENTANA DE Y: se probo alargarla de `e(9)` a `y_mux_q8` (2 -> 14 ciclos de E),
@@ -284,6 +495,8 @@ pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings
     sink.emit(REG_PORT_B, 0x00, k.e(10)); // CLR — abre mux; hueco 11
     sink.emit(REG_CNTL, 0xCE, k.e(5)); // STA — PCR; hueco 6
     sink.beam_blanked();
+    /* AQUI NO VA `alargar_ultimo`: el comando ya emitido es el PCR, no el T1CH del trazo.
+     * Lo hace el principio de `moveto_seq`, que es donde el ultimo emitido si es el T1CH. */
     sink.emit(REG_SHIFT, 0x00, k.e(5)); // CLR shift — haz off; hueco 6
     sink.emit(REG_PORT_B, 0x01, k.e(8)); // INC — cierra mux; hueco 9
     sink.y_held(vy); // deja el S&H cargado con SU vy: un draw_line que lo repita se lo salta
@@ -313,22 +526,101 @@ pub fn draw_line_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timi
     // por el 6809 y partia los huecos a la mitad):
     //   ORA(Y) -6-> ORB=0 -8-> ORB=1 -1-> ORA(X) -4-> T1CL=8 -1-> T1CH=0 -12-> siguiente
     // El hueco de 12 tras T1CH deja terminar la rampa de 8 antes del siguiente microtramo.
+    // t1 SE REDONDEA A MULTIPLOS DE 8: nada de microtramo de resto.
+    //
+    // Aqui emiti un dia la cola con la cuenta que quedara (T1CL = t1 % 8), justificandolo
+    // con que el VecFever tiene T1CL=4/6/7 en su captura. LO MEDI MAL: son 1,11 por FRAME
+    // contra sus 230,2 de T1=8, o sea el 0,5%. Con la cola, nosotros emitiamos 71 de 308
+    // unidades por frame con T1 entre 1 y 6 — el 23%.
+    //
+    // Y una rampa de 1 a 6 cuentas no dibuja: el haz apenas se mueve, pero la unidad
+    // cuesta sus ~32 ciclos de bus CON EL HAZ ENCENDIDO, asi que es un PUNTO entero. Eran
+    // los puntos que se veian en cada vertice en consola.
+    //
+    // El precio del redondeo son hasta 4 cuentas de t1 por trazo, que a la tasa tipica
+    // (48) es ~1,2 unidades de dispositivo — y la cadena de deuda se lo cobra al trazo
+    // siguiente, asi que no se acumula.
     const T1M: u16 = 8;
     let n = core::cmp::max(1, ((t1 as u32) + (T1M as u32) / 2) / (T1M as u32));
+
+    /* LA TASA SE RECALCULA PARA EL TIEMPO QUE DE VERDAD SE VA A CORRER.
+     *
+     * `ramp_params` reparte la distancia entre velocidad y tiempo y devuelve un `t1`
+     * cualquiera; aqui ese tiempo se redondea a n microtramos de 8 — y hasta hoy la TASA se
+     * dejaba como estaba. La distancia es `v*t1/s`, asi que cambiar el tiempo sin tocar la
+     * velocidad cambia lo que se dibuja.
+     *
+     * MEDIDO con la geometria del VecFever de entrada, su primer segmento pide 2,5
+     * unidades: `ramp_params` daba `t1=10, vy=40` (correcto: 40*10/160 = 2,5), esto lo
+     * corria en `t1=8` con la misma tasa y salian **2,0 unidades — un 20% corto**. El
+     * VecFever dibuja ese mismo segmento con `t1=8, vy=50`: elige la tasa PARA el tiempo,
+     * que es lo que faltaba aqui.
+     *
+     * El error no es aleatorio: depende de donde caiga t1 respecto al multiplo de 8, asi
+     * que trazos parecidos se acortan parecido y la figura sale deformada de forma
+     * sistematica, no ruidosa. */
+    /* LOS CUATRO HUECOS, RESUELTOS UNA VEZ. Son GAPS (lo que separa una escritura de la
+     * siguiente); el emisor quiere gap-1 escalado por E. Fuera del bucle y sin clausura:
+     * asi se ve el valor que se usa y no hay dudas de captura. */
+    let hueco = |v: u32, def: u32| -> u32 {
+        let gap = if v > 0 { v } else { def };
+        (gap.max(1) - 1) * E
+    };
+    use core::sync::atomic::Ordering as O;
+    /* LOS CUATRO HUECOS POR DEFECTO SON LOS MEDIDOS, DESDE 2026-09-04. Eran 6/8/4/9, de la
+     * captura de asterock, y los puertos afinados los pisaban a mano con 4/10/9/4 — que son
+     * los que hemos validado todo el dia contra su captura de Major Havoc (el banco sale al
+     * 99,8% de sus trazos con ellos). Un valor medido que hay que recordar poner en cada
+     * juego no es un valor por defecto, es una trampa. */
+    let h_ora_y    = hueco(MT_ORA_Y.load(O::Relaxed), 4);
+    let h_orb_keep = hueco(MT_ORB_KEEP.load(O::Relaxed), 10);
+    let h_sr_on    = hueco(MT_SR_ON.load(O::Relaxed), 9);
+    let h_ora_x    = hueco(MT_ORA_X_ON.load(O::Relaxed), 4);
+
+    /* AQUI YA NO SE REESCALA. Lo hace `ramp_params_chain_q4`, que devuelve el t1 ya
+     * redondeado a n microtramos y la tasa calculada para el — y asi la DEUDA ve ese
+     * redondeo. Cuando se hacia aqui, su residuo quedaba fuera de la contabilidad y la
+     * posicion se iba +8,45 unidades en X a lo largo del frame con la deuda a cero.
+     *
+     * Se conserva para el camino ENTERO (sin sub-unidades), donde la rampa no redondea a
+     * multiplos de 8 y este ajuste sigue haciendo falta: sin el, un trazo que pide 2,5
+     * unidades sale de 2,0 (medido con la geometria del VecFever). */
+    let entero = TRAZO_ENTERO.load(O::Relaxed) != 0;
+    let (n, t1u) = if entero { (1u32, t1) } else { (n, T1M) };
+    let corridos = if entero { t1 as i32 } else { (n as i32) * (T1M as i32) };
+    let (vx, vy) = if corridos as u16 == t1 {
+        (vx, vy)                                  // ya viene ajustado
+    } else {
+        let reescala = |v: i8| -> i8 {
+            let num = (v as i32) * (t1 as i32);
+            let q = if num >= 0 { (num + corridos / 2) / corridos }
+                    else        { (num - corridos / 2) / corridos };
+            q.clamp(-128, 127) as i8
+        };
+        (reescala(vx), reescala(vy))
+    };
+
     for i in 0..n {
-        sink.emit(REG_PORT_A, vy as u8, 5 * E); // ORA=Y ; hueco 6
-        if !sink.beam_is_lit() {
+        sink.emit(REG_PORT_A, vy as u8, h_ora_y); // ORA=Y
+        let encender = !sink.beam_is_lit();
+        if encender {
             sink.emit(REG_PORT_B, 0x00, 5 * E); // ORB=0 mux abre, late Y ; hueco 6
-            sink.emit(REG_SHIFT, 0x01, 3 * E);  // SR=0x01 haz ON (una vez) ; hueco 4
+            sink.emit(REG_SHIFT, 0x01, h_sr_on);  // SR=0x01 haz ON (una vez)
             sink.beam_lit();
         } else {
-            sink.emit(REG_PORT_B, 0x00, 7 * E); // ORB=0 mux abre, late Y ; hueco 8
+            sink.emit(REG_PORT_B, 0x00, h_orb_keep); // ORB=0 mux abre, late Y
         }
         sink.emit(REG_PORT_B, 0x01, 0);         // ORB=1 mux cierra ; hueco 1
-        sink.emit(REG_PORT_A, vx as u8, 3 * E); // ORA=X ; hueco 4
-        sink.emit(REG_T1_LO, T1M as u8, 0);     // T1CL=8 ; hueco 1
-        sink.emit(REG_T1_HI, 0x00, 11 * E);     // T1CH=0 arma ; hueco 12
-        let _ = i;
+        // En la unidad que ENCIENDE, el VecFever deja hueco 9 tras la X (su patron
+        // SR=01 mas comun: ORA+6 ORB+6 SR=01+4 ORB+1 ORA+9 T1CL+1 T1CH+12): el patron
+        // 0x01 tarda 7 ciclos en llegar al bit encendido y ese hueco pone la rampa ya
+        // corriendo cuando el haz aparece. En las encadenadas, hueco 4.
+        sink.emit(REG_PORT_A, vx as u8,
+                  if encender { h_ora_x } else { 3 * E }); // ORA=X
+        emitir_t1cl(sink, t1u, 0);              // la duracion de ESTA rampa ; hueco 1
+        /* El hueco tras T1CH deja terminar la rampa: con microtramos son los 8 fijos mas 3;
+         * con el trazo entero, su duracion mas los mismos 3. */
+        sink.emit(REG_T1_HI, 0x00, (H_T1CH_SIGUE - T1M as u32 + t1u as u32) * E);
     }
     sink.y_held(vy);
     // SIN apagar: keep-lit entre trazos encadenados, como el VecFever. Apagan moveto_seq
@@ -436,6 +728,19 @@ mod prueba {
     /// nada — solo diria que la funcion es igual a si misma.
     #[test]
     fn moveto_emite_la_secuencia_de_la_bios() {
+        /* ESTE TEST PRUEBA EL BLANKING POR PCR, que desde 2026-09-04 ya no es el de serie
+         * (`HAZ_POR_SR` arranca en 1). Sigue siendo un camino vivo —`-DUVM2_HAZ_POR_PCR`—
+         * asi que se fija aqui en vez de borrar el test. */
+        crate::ramp::HAZ_POR_SR.store(0, core::sync::atomic::Ordering::Relaxed);
+        /* LA CADENCIA QUE ESTE TEST AFIRMA ES LA DE ASTEROCK (6/8/4/9). Desde 2026-09-04 los
+         * valores por defecto son los de MAJOR HAVOC (4/10/9/4), que son los validados
+         * contra su captura; las dos son suyas y reales — ver `vecfever-no-hay-una-cadencia`.
+         * Se fijan aqui para que el test pruebe UNA cadencia concreta y no lo que traiga el
+         * defecto del dia. */
+        MT_ORA_Y.store(6, core::sync::atomic::Ordering::Relaxed);
+        MT_ORB_KEEP.store(8, core::sync::atomic::Ordering::Relaxed);
+        MT_SR_ON.store(4, core::sync::atomic::Ordering::Relaxed);
+        MT_ORA_X_ON.store(9, core::sync::atomic::Ordering::Relaxed);
         let k = tiempos(0, 0);
         let mut p = Papel::default();
         moveto_seq(&mut p, 40, -20, 0x5A, &k);
@@ -473,40 +778,59 @@ mod prueba {
         }
     }
 
-    /// El orden de `draw_line`: arrancar la rampa y encender DESPUES. Al reves deja el
-    /// punto quieto e iluminado una escritura entera — un punto brillante en el vertice
-    /// de salida. Estuvo asi.
+    /// EL PLOTTER DEL VECFEVER, que es la especificacion desde el 2026-09-03: el trazo
+    /// es una serie de microtramos T1=8 con la MISMA tasa, cadencia cruda 6/8/1/4/1/12
+    /// (ciclos de E, medida de vecfever-asterock-bus.csv), el haz se enciende UNA vez
+    /// por SR=0x01 (el patron tarda 7 ciclos en llegar al bit encendido: la rampa ya
+    /// corre cuando el haz aparece) y NO se apaga al final — keep-lit; apagan el salto
+    /// y el re-cero.
     #[test]
     fn draw_line_arranca_la_rampa_antes_de_encender() {
+        /* LA CADENCIA QUE ESTE TEST AFIRMA ES LA DE ASTEROCK (6/8/4/9). Desde 2026-09-04 los
+         * valores por defecto son los de MAJOR HAVOC (4/10/9/4), que son los validados
+         * contra su captura; las dos son suyas y reales — ver `vecfever-no-hay-una-cadencia`.
+         * Se fijan aqui para que el test pruebe UNA cadencia concreta y no lo que traiga el
+         * defecto del dia. */
+        MT_ORA_Y.store(6, core::sync::atomic::Ordering::Relaxed);
+        MT_ORB_KEEP.store(8, core::sync::atomic::Ordering::Relaxed);
+        MT_SR_ON.store(4, core::sync::atomic::Ordering::Relaxed);
+        MT_ORA_X_ON.store(9, core::sync::atomic::Ordering::Relaxed);
+        /* ESTE TEST CUBRE EL CAMINO DE MICROTRAMOS, que desde 2026-09-04 ya no es el por
+         * defecto pero sigue existiendo tras `-DUVM2_MICROTRAMOS`. El del trazo entero es
+         * `un_trazo_es_una_rampa`. */
+        TRAZO_ENTERO.store(0, core::sync::atomic::Ordering::Relaxed);
         vx_t1cl_olvidar(); // el cache de T1CL es estado global entre tests
         let k = tiempos(2 * E, 11 * E as i32);
         let mut p = Papel::default();
         draw_line_seq(&mut p, 30, -10, 0x3E, &k);
+        /* 0x3E = 62 cuentas -> 8 microtramos de 8, o sea 64 cuentas de verdad. El PRIMERO,
+         * literal.
+         *
+         * LA X SALE 29 Y NO LOS 30 QUE SE PIDEN, Y ES LO CORRECTO: la distancia es v*t1/s,
+         * asi que 30 durante las 62 pedidas son 11,6 unidades, y en las 64 que realmente se
+         * corren hace falta v = 29. Antes se dejaba la tasa como venia y se dibujaban 12,0
+         * — un 3% de mas aqui, y hasta un 20% en los trazos cortos. Ver el bloque de
+         * `reescala` arriba. */
         assert_eq!(
-            p.v,
-            std::vec![
-                // HUECOS DEL 6809 (retardo = hueco - 1, la escritura gasta un ciclo):
-                //   STB port_a (4) Y; CLR port_b (6) abre mux              -> 6
-                //   3 NOP (6) + INC port_b (6) cierra mux                  -> 12
-                //   STA port_a (4) X                                       -> 4
-                //   LDA# (2) + STA shift (4) haz ON                        -> 6
-                //   CLR t1_cnt_hi (6) arranca la rampa                     -> 6
-                (REG_PORT_A, (-10i8) as u8, 5 * E), // Y;          hueco 6
-                (REG_PORT_B, 0x00, 14 * E),         // abre mux;   lo fija el test
-                (REG_PORT_B, 0x01, 3 * E),          // cierra mux; hueco 4
-                (REG_PORT_A, 30u8, 4 * E),          // X;          hueco 6 con T1CL detras
-                (REG_T1_LO, 0x3E, 0),               // T1CL
-                (REG_T1_HI, 0x00, 2 * E),           // rampa PRIMERO, luego el hueco
-                (REG_CNTL, 0xEE, 0),                // y ahora si, el haz
-                (0xFF, 0, 0x8000_003E),             // esperar la rampa
-                (0xFE, 0, 4 * E + 11 * E),          // + latencia y asentamiento
-                // El DAC a 0 ANTES de apagar, como `CLR VIA_port_a` en la referencia.
-                (REG_PORT_A, 0, 0),                 // CLR — para la deriva de X
-                (REG_CNTL, 0xCE, 0),                // apagar
+            &p.v[..7],
+            &[
+                (REG_PORT_A, (-10i8) as u8, 5 * E), // Y al DAC;   hueco 6
+                (REG_PORT_B, 0x00, 5 * E),          // abre mux;   hueco 6
+                (REG_SHIFT, 0x01, 3 * E),           // haz ON (una vez); hueco 4
+                (REG_PORT_B, 0x01, 0),              // cierra mux; hueco 1
+                (REG_PORT_A, 29u8, 8 * E),          // X al DAC (reescalada);   hueco 9
+                (REG_T1_LO, 8, 0),                  // T1CL=8;     hueco 1
+                (REG_T1_HI, 0x00, H_T1CH_SIGUE * E),          // T1CH arma;  hueco 12
             ]
         );
+        // Los invariantes del idioma, sobre la lista entera:
+        assert_eq!(p.v.iter().filter(|c| c.0 == REG_T1_HI).count(), 8, "62 -> round(62/8) = 8 microtramos");
+        assert!(p.v.iter().filter(|c| c.0 == REG_T1_LO).all(|c| c.1 == 8),
+                "TODOS los microtramos son T1=8: una rampa mas corta no dibuja, quema un punto");
+        assert_eq!(p.v.iter().filter(|c| c.0 == REG_SHIFT).count(), 1, "SR=0x01 UNA vez");
+        assert!(p.v.iter().all(|c| c.0 != REG_CNTL), "el PCR no pinta nada en este idioma");
         assert!(p.encendido, "beam_lit tiene que haberse llamado");
-        assert_eq!(p.apagados, 1);
+        assert_eq!(p.apagados, 0, "keep-lit: draw_line NO apaga; apagan salto y re-cero");
     }
 
     /// UNA RECTA CON UN HUECO, EN UNA SOLA RAMPA. Lo que hay que ver: los DAC y T1 se
@@ -541,26 +865,71 @@ mod prueba {
         assert_eq!(p.v.iter().filter(|c| c.0 == REG_PORT_A).count(), 2); // vy y vx
     }
 
-    /// Con el S&H de Y ya cargado, el muestreo entero se salta: cuatro escrituras menos.
+    /// El muestreo de Y NO se salta nunca en el idioma microtramo: el VecFever re-latchea
+    /// la Y en CADA unidad (medido en la captura: ORB=00/01 en los 187.850 microtramos),
+    /// porque el condensador del S&H derrama y la unidad es la que lo refresca. La
+    /// optimizacion de saltarse el muestreo era del modelo de una-rampa-por-vector.
     #[test]
     fn draw_line_se_salta_el_muestreo_de_y() {
+        /* LA CADENCIA QUE ESTE TEST AFIRMA ES LA DE ASTEROCK (6/8/4/9). Desde 2026-09-04 los
+         * valores por defecto son los de MAJOR HAVOC (4/10/9/4), que son los validados
+         * contra su captura; las dos son suyas y reales — ver `vecfever-no-hay-una-cadencia`.
+         * Se fijan aqui para que el test pruebe UNA cadencia concreta y no lo que traiga el
+         * defecto del dia. */
+        MT_ORA_Y.store(6, core::sync::atomic::Ordering::Relaxed);
+        MT_ORB_KEEP.store(8, core::sync::atomic::Ordering::Relaxed);
+        MT_SR_ON.store(4, core::sync::atomic::Ordering::Relaxed);
+        MT_ORA_X_ON.store(9, core::sync::atomic::Ordering::Relaxed);
+        /* ESTE TEST CUBRE EL CAMINO DE MICROTRAMOS, que desde 2026-09-04 ya no es el por
+         * defecto pero sigue existiendo tras `-DUVM2_MICROTRAMOS`. El del trazo entero es
+         * `un_trazo_es_una_rampa`. */
+        TRAZO_ENTERO.store(0, core::sync::atomic::Ordering::Relaxed);
         vx_t1cl_olvidar(); // el cache de T1CL es estado global entre tests
         let k = tiempos(2 * E, 0);
         let mut p = Papel { saltar_y: Some(-10), ..Default::default() };
         draw_line_seq(&mut p, 30, -10, 0x3E, &k);
-        assert_eq!(p.v[0], (REG_PORT_A, 30u8, 4 * E), "deberia empezar ya por la X");
-        assert!(p.y.is_empty(), "si se salta el muestreo, el S&H no cambia de valor");
+        assert_eq!(p.v[0], (REG_PORT_A, (-10i8) as u8, 5 * E),
+                   "empieza por la Y aunque el S&H diga que ya la tiene");
+        let ventanas = p.v.iter().filter(|c| c.0 == REG_PORT_B && c.1 == 0x00).count();
+        assert_eq!(ventanas, 8, "una ventana de mux por microtramo, como el VecFever");
     }
 
     /// El byte alto de T1 tiene que VIAJAR. Estuvo cocido a 0 y eso techaba la rampa en
     /// 255 aunque el contador sea de 16 bits, dejando a VCAP sin recorrido.
     #[test]
     fn t1_lleva_los_dos_bytes() {
+        /* ESTE TEST PRUEBA EL BLANKING POR PCR, que desde 2026-09-04 ya no es el de serie
+         * (`HAZ_POR_SR` arranca en 1). Sigue siendo un camino vivo —`-DUVM2_HAZ_POR_PCR`—
+         * asi que se fija aqui en vez de borrar el test. */
+        crate::ramp::HAZ_POR_SR.store(0, core::sync::atomic::Ordering::Relaxed);
         let k = tiempos(0, 0);
         let mut p = Papel::default();
         moveto_seq(&mut p, 1, 1, 0x0123, &k);
         assert_eq!(p.v[6], (REG_T1_LO, 0x23, 5 * E), "T1CL del salto; hueco 6 (CLR T1CH dp)");
         assert_eq!(p.v[7].1, 0x01, "el byte alto se pierde otra vez");
+    }
+
+    /// UN TRAZO ILUMINADO ES UNA SOLA RAMPA, con su t1 entero — como el VecFever.
+    ///
+    /// MEDIDO en 8 frames de su captura de Major Havoc: no parte un trazo NI UNA VEZ, y sus
+    /// t1 iluminados van de 8 a 252. Nosotros emitiamos t1 = 8 SIEMPRE y partiamos el
+    /// resto; cada junta deja el haz encendido y quieto 22-24 ciclos, o sea un punto.
+    /// Confirmado en consola: con microtramos Major Havoc puntea, con el trazo entero no.
+    #[test]
+    fn un_trazo_es_una_rampa() {
+        vx_t1cl_olvidar();
+        TRAZO_ENTERO.store(1, core::sync::atomic::Ordering::Relaxed);
+        let k = tiempos(2 * E, 11 * E as i32);
+        let mut p = Papel::default();
+        draw_line_seq(&mut p, 30, -10, 0x3E, &k);
+        let t1cl: std::vec::Vec<_> = p.v.iter().filter(|(r, _, _)| *r == REG_T1_LO).collect();
+        assert_eq!(t1cl.len(), 1, "una sola rampa, no ocho microtramos");
+        assert_eq!(t1cl[0].1, 62, "y con el t1 que se pidio, no con 8");
+        /* Y LA TASA NO SE REESCALA, porque ya no hace falta: la rampa corre exactamente las
+         * 62 cuentas pedidas, asi que los 30 de entrada son los 30 que se emiten. Con
+         * microtramos corrian 64 y habia que bajarla a 29. */
+        let ora: std::vec::Vec<_> = p.v.iter().filter(|(r, _, _)| *r == REG_PORT_A).collect();
+        assert_eq!(ora[1].1, 30u8, "la tasa se emite tal cual");
     }
 }
 
@@ -599,6 +968,7 @@ pub struct CSink {
     pub beam_is_lit: Option<extern "C" fn(*mut c_void) -> i32>,
     pub beam_lit: Option<extern "C" fn(*mut c_void)>,
     pub x_can_skip: Option<extern "C" fn(*mut c_void, i32) -> i32>,
+    pub alargar_ultimo: Option<extern "C" fn(*mut c_void, u32)>,
 }
 
 impl BusSink for CSink {
@@ -607,6 +977,11 @@ impl BusSink for CSink {
     }
     fn wait_ramp(&mut self, t1: u16, extra_q8: i32) {
         (self.wait_ramp)(self.ctx, t1 as u32, extra_q8);
+    }
+    fn alargar_ultimo(&mut self, extra_q8: u32) {
+        if let Some(f) = self.alargar_ultimo {
+            f(self.ctx, extra_q8);
+        }
     }
     fn beam_blanked(&mut self) {
         if let Some(f) = self.beam_blanked {
@@ -775,7 +1150,7 @@ mod comparativa {
 /// fallaba solo cuando corria a la vez que los de `pentagono`, y pasaba al ejecutarlo suelto
 /// — el peor fallo posible, porque invita a culpar al codigo que acabas de tocar.
 #[cfg(test)]
-static TURNO: std::sync::Mutex<()> = std::sync::Mutex::new(());
+pub(crate) static TURNO: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(test)]
 mod pentagono {
@@ -1027,4 +1402,6 @@ mod velocidad {
                 "con Y_HELD valido y el signo invertido TIENE que saltar");
         Y_HELD.store(0, Ordering::Relaxed);
     }
+
+
 }

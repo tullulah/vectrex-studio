@@ -85,6 +85,22 @@ export function getRunningAudioTap(): { ctx: AudioContext; outputNode: AudioNode
 }
 
 /**
+ * Every tracked node feeding the speakers OF ONE GIVEN CONTEXT.
+ *
+ * Use this when the caller already knows WHICH context it wants (the active
+ * emulation target's). `getRunningContextOutputs()` picks the first running
+ * context it finds, which after switching targets can be a stale one that is
+ * still 'running' but silent — the recorder then taps it, captures nothing, and
+ * reports success. Pinning the context first and asking for its outputs here
+ * keeps the full-mix behaviour without that failure mode.
+ */
+export function getOutputsForContext(ctx: BaseAudioContext | null | undefined): AudioNode[] {
+  if (!ctx) return [];
+  const t = tracked.find(x => x.ctx === ctx);
+  return t ? Array.from(t.outputs) : [];
+}
+
+/**
  * The running context and ALL nodes feeding its speakers. The video recorder
  * connects every one to its tap (and re-checks for newly-added nodes each tick),
  * so it captures the FULL mix — PSG music AND late-arriving BufferSources like a

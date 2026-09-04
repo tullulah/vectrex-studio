@@ -95,6 +95,12 @@ ifneq ($(UVM2_RETARDO_US),)
 UVM2_CFLAGS += -DUVM2_RETARDO_US=$(UVM2_RETARDO_US)
 endif
 
+# El romset en la PSRAM en vez de en SRAM: 23 KB que solo se usan al arrancar. Ver
+# uvm2_romzip.c — va por el alias SIN CACHE, que es lo unico que no corrompe el dato.
+ifeq ($(UVM2_ROMZIP_IN_PSRAM),1)
+UVM2_CFLAGS += -DUVM2_ROMZIP_IN_PSRAM=1
+endif
+
 # BISECCION: instala el stream pero dibuja por SIO. Ver uvm2_bus.c.
 ifeq ($(UVM2_STREAM_SOLO_INSTALA),1)
 UVM2_CFLAGS += -DUVM2_STREAM_SOLO_INSTALA=1
@@ -247,8 +253,15 @@ uvm2: $(UVM2_DEPS) | $(UVM2_BUILD)
 	    -DUVM2_GAME_PREINC="$(call list,$(UVM2_GAME_PREINC))" \
 	    -DUVM2_GAME_LIBS="$(call list,$(UVM2_GAME_LIBS))" > $(UVM2_CMAKE_BUILD).log
 	cmake --build $(UVM2_CMAKE_BUILD) -j8
+ifeq ($(filter 0,$(UVM2_LOAD_PSRAM)),$(UVM2_LOAD_PSRAM))
 	cp $(UVM2_CMAKE_BUILD)/$(UVM2_NAME).um2 $(UVM2_BUILD)/$(UVM2_NAME).um2
 	@echo "=== Build OK (uvm2 SD game): $(UVM2_BUILD)/$(UVM2_NAME).um2 ==="
+else
+# A PSRAM-linked payload is deliberately NOT wrapped as .um2 (the multicart
+# menu cannot load it; our PSRAM loader takes the flat .bin instead).
+	cp $(UVM2_CMAKE_BUILD)/$(UVM2_NAME).bin $(UVM2_BUILD)/$(UVM2_NAME).bin
+	@echo "=== Build OK (uvm2 PSRAM payload): $(UVM2_BUILD)/$(UVM2_NAME).bin ==="
+endif
 
 $(UVM2_BUILD):
 	mkdir -p $(UVM2_BUILD)

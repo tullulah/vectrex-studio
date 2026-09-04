@@ -111,6 +111,22 @@ enum {
      (((uint32_t)(data) & 0xFFu) << 8))
 #define UVM2_CMD_MAX_DELAY  4095u
 
+/* LA LISTA SE GUARDA EN 3 BYTES POR COMANDO, no en 4.
+ *
+ * UVM2_CMD deja los bits 0-7 SIN USAR: la informacion son 24 bits justos (retardo 12,
+ * registro 4, dato 8). Guardar cuatro bytes por comando es tirar uno de cada cuatro, y en
+ * el UVM2 eso se paga en SRAM — la imagen vive en 496 KB y la lista de dkong son 64 KB con
+ * el juego a 3788 bytes del techo.
+ *
+ * Con 3 bytes, los mismos 64 KB dan 21845 comandos en vez de 16384, o los 8192 de ahora
+ * ocupan 24 KB en vez de 32. Y no se pierde nada: es el mismo valor desplazado.
+ *
+ * El coste es leerlo byte a byte en el ejecutor, y ahi sobra tiempo: cada comando es un
+ * ciclo de bus del Vectrex, 667 ns, contra unos pocos ciclos de CPU a 150 MHz. */
+#define UVM2_CMD_EMPAQUETA(w)  ((w) >> 8)          /* 32 bits -> los 24 que valen */
+#define UVM2_CMD_REG_DATO(v)   ((v) & UVM2_CMD_GPIO_MASK)
+#define UVM2_CMD_RETARDO(v)    ((v) >> 12)
+
 /* ── Lifecycle ─────────────────────────────────────────────────────────────── */
 
 /* Bring-up, in three steps because their order is load-bearing:
@@ -142,7 +158,7 @@ void uvm2_bus_init(void);
 /* Replay `count` commands back-to-back, one bus cycle each plus their delays.
  * R/W is held low for the whole batch (as in the reference executor) and the
  * bus is parked at $8000 on exit.  Returns the bus cycles consumed. */
-UVM2_RAMFUNC uint32_t uvm2_exec(const uint32_t *cmds, uint32_t count);
+UVM2_RAMFUNC uint32_t uvm2_exec(const uint8_t *cmds, uint32_t count);
 
 /* Ciclos de CPU por periodo de E, en Q8 (100,0 ciclos = 25600). Lo llena uvm2_medir_e(),
  * que hay que llamar con el bus ya tomado. Es la relacion que decide si la calibracion de
@@ -250,13 +266,17 @@ extern uint32_t uvm2_single_cycles;
 #define UVM2_HZ 50
 #endif
 
+/* EL RELOJ DEL BUS, con nombre. Estaba escrito a mano como 1500000 en los cuatro sitios de
+ * abajo; con nombre se ve que las cuatro derivan del MISMO reloj y no son cuatro numeros. */
+#define UVM2_BUS_HZ  1500000u
+
 /* UVM2_HZ = 0 significa SIN LIMITE: se presenta en cuanto la lista esta hecha, como la
  * recreativa. Entonces no hay periodo fijo que definir, y el 1 es solo para que la division
  * no reviente en tiempo de compilacion; nadie lo usa, porque el relleno se compila fuera. */
 #if UVM2_HZ == 0
-#define UVM2_CYCLES_PER_FRAME  (1500000u / 1u)
+#define UVM2_CYCLES_PER_FRAME  (UVM2_BUS_HZ / 1u)
 #else
-#define UVM2_CYCLES_PER_FRAME  (1500000u / (unsigned)UVM2_HZ)
+#define UVM2_CYCLES_PER_FRAME  (UVM2_BUS_HZ / (unsigned)UVM2_HZ)
 #endif
 
 /* DOS COSAS QUE NO SON EL PERIODO DE FRAME, y que lo usaban porque a 50 Hz coinciden.
@@ -265,8 +285,8 @@ extern uint32_t uvm2_single_cycles;
  * decir "20 ms" o "un tick de musica". Al mover UVM2_HZ, esas dos se movieron con el:
  * a 60 Hz la musica se acelera un 20%, y con UVM2_HZ=0 el asentamiento de /HALT pasa de
  * 20 ms a UN SEGUNDO. Coincidir no es ser lo mismo. */
-#define UVM2_CYCLES_20MS   (1500000u / 50u)   /* asentamiento tras asertar /HALT */
-#define UVM2_AUDIO_CYCLES  (1500000u / 50u)   /* el tempo de .vmus es 50 Hz, no el refresco */
+#define UVM2_CYCLES_20MS   (UVM2_BUS_HZ / 50u)   /* asentamiento tras asertar /HALT */
+#define UVM2_AUDIO_CYCLES  (UVM2_BUS_HZ / 50u)   /* el tempo de .vmus es 50 Hz, no el refresco */
 
 #ifdef __cplusplus
 }

@@ -7,6 +7,11 @@
 #ifndef UVM2_PSRAM_H
 #define UVM2_PSRAM_H
 
+/* El MISMO chip, leido SIN pasar por la cache del XIP. Una verificacion que lee por la
+ * cache no dice nada de lo que hay en la PSRAM — ya paso con el cargador, y volvio a pasar
+ * con la lista de comandos. addressmap.h: XIP_NOCACHE_NOALLOC_BASE = 0x14000000. */
+#define UVM2_PSRAM_SIN_CACHE 0x15000000u
+
 #include <stdint.h>
 
 #ifdef __cplusplus

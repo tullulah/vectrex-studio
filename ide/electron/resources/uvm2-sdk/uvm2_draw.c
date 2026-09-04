@@ -16,6 +16,7 @@
 #include "uvm2_bus.h"
 #include <limits.h>
 #include "uvm2_draw.h"
+#include "uvm2_config.h"
 #ifdef UVM2_CMDS_IN_PSRAM
 #include "uvm2_psram.h"
 #endif
@@ -146,7 +147,6 @@ static uint32_t s_frame_cycles;     /* bus cycles the last frame really took */
  * menos rato encendidos. No se vio empeorar en dkong; es lo que hay que mirar si
  * un juego con detalle fino sale apagado. */
 static uint32_t s_scale = 160;
-static int      s_fixup = 0;
 
 /* Timings, in bus cycles.  Named because they are exactly the knobs to turn
  * when the picture is right but the frame is too expensive. */
@@ -173,6 +173,13 @@ static int      s_fixup = 0;
 #define UVM2_HOLD_MIN        4u     /* saltos diminutos: no piden mas          */
 #define UVM2_HOLD_MAX        15u    /* fondo de escala: 5,5 tau, 1 LSB de error */
 #define UVM2_HOLD_DELAY      UVM2_HOLD_MAX   /* cuando no se sabe de donde venimos */
+/* Con que valor se ceba el hold del BRILLO al montar la VIA. El VecFever usa 0x7F (fondo
+ * de escala) en su preambulo de frame; los otros dos canales —referencia de cero y Y— van
+ * a cero en los dos. Un juego lo cambia con -DUVM2_Z_CEBADO=N si mide otra cosa en SU
+ * consola. */
+#ifndef UVM2_Z_CEBADO
+#define UVM2_Z_CEBADO 0x7F
+#endif
 #define UVM2_BLANK_OFF_DELAY 3u     /* ramp starts this early, before lighting */
 #define UVM2_BLANK_ON_DELAY  16u    /* beam stays lit after the ramp stops     */
 #define UVM2_ZERO_BASE       45u    /* centring cost, plus scale/4             */
@@ -225,6 +232,8 @@ static inline void emit(uint32_t reg, uint32_t data, uint32_t delay)
 
 /* ── Primitive register writes ────────────────────────────────────────────── */
 
+extern volatile uint32_t HAZ_POR_SR;   /* en vectrex-draw; ver via_setup */
+
 static void set_porta(uint8_t v, uint32_t delay)
 {
     if (s_porta == v && !s_porta_stale) return;
@@ -269,18 +278,54 @@ static uint32_t hold_for(int from, int to)
 
 static void set_y(int y, uint32_t delay)
 {
-    if (s_y == y) return;                 /* the S/H still holds it */
+    /* LA Y NO SE CACHEA. NUNCA.
+     *
+     * "El S/H todavia lo tiene" era una suposicion, y es la clase de suposicion que este
+     * proyecto ya paga cara: el canal 0 del mux es C304, un condensador de 10 nF (netlist,
+     * ver la skill logic-board), y un condensador SE DESCARGA. La X no tiene ese problema
+     * porque es el DAC vivo, sin retencion — que es exactamente por que la deriva medida
+     * era 7 veces mayor en Y que en X ([[beam-drift-jumps]]).
+     *
+     * Y no es teoria: en su frame 120 el VecFever abre el canal 0 en el 100,0% de las
+     * rampas (647 de 647), pase lo que pase con el valor. Nosotros lo saltabamos en 12 y
+     * nos quedabamos en el 98,2%. Z si la cachea (recarga C306 solo 4 veces por frame), asi
+     * que la regla no es "no cachear nada": es no cachear la Y. */
     delay = hold_for(s_y, y);
     s_y = y;
     set_porta((uint8_t)y, 0);
     mux_sample(UVM2_MUX_Y, delay);
 }
 
+static void haz_apagar_y_esperar(void);
+
 static void set_z(int z, uint32_t delay)
 {
     if (s_z == z) return;
     delay = hold_for(s_z, z);
     s_z = z;
+    if (HAZ_POR_SR) {
+        /* LOTE DE BRILLO DEL VECFEVER, verbatim de la captura (x1229/frame-clase:
+         * ORA=z+4 ORB=84+9 ORB=81): DOS escrituras de ORB, sin el paso de "deshabilitar
+         * primero" — el VecFever cambia seleccion y habilitacion en UNA escritura y
+         * dibuja limpio, o sea que el paso extra era sobre-cautela nuestra. La ventana
+         * del hold es fija (9 ciclos), la del VecFever. */
+        /* APAGAR ANTES DE MOVER Z, QUE ES SU ORDEN.
+         *
+         * En la captura el SR=00 va PEGADO al lote de brillo y ANTES de el:
+         *     4:08 5:00 | a:00 | 1:78 0:84 0:81
+         * y nosotros lo teniamos despues:
+         *     4:08 5:00 | 1:78 0:84 0:81 | a:00
+         * O sea que cambiabamos la intensidad CON EL HAZ TODAVIA ENCENDIDO — y con el SR
+         * en modo 110 el haz sigue vivo 8 ciclos mas, asi que el trazo que acaba de
+         * terminar se lleva un tramo final con el brillo del SIGUIENTE. Ver
+         * [[t2-el-reloj-del-blanking]] para por que SR=00 no apaga en el acto. */
+        haz_apagar_y_esperar();
+        set_porta((uint8_t)z, 3u);
+        emit(UVM2_VIA_PORTB, 0x84u, 8u);            /* mux ON canal 2, un solo paso */
+        emit(UVM2_VIA_PORTB, UVM2_PB_IDLE, 12u);    /* y aparca en 81, como el VF */
+        s_portb = UVM2_PB_IDLE;
+        return;
+    }
     set_porta((uint8_t)z, 0);
     mux_sample(UVM2_MUX_Z, delay);
 }
@@ -297,10 +342,64 @@ static int32_t s_drift_ax, s_drift_ay;   /* ver la compensacion de deriva, abajo
  * Viven en vectrex-draw para que no haya tres copias de la misma regla. */
 void vx_ramp_params_chain(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
 void vx_chain_reset(void);
+void vx_deuda_reset(void);
+/* El SALTO usa su propio tope de velocidad (VCAP_SALTO): va a oscuras, asi que frenarlo
+ * no ilumina nada. Ver el bloque de VCAP_SALTO en ramp.rs. */
+void vx_ramp_params_salto(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
+void vx_ramp_params_chain_q4(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
+void vx_ramp_params_salto_q4(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
+void vx_ramp_params_chain_qn(int32_t dx, int32_t dy, uint32_t q,
+                             int32_t *vx, int32_t *vy, uint32_t *t1);
+void vx_ramp_params_salto_qn(int32_t dx, int32_t dy, uint32_t q,
+                             int32_t *vx, int32_t *vy, uint32_t *t1);
+void vx_ramp_params_con_t1(int32_t dx, int32_t dy, int32_t f, uint32_t t1,
+                           int32_t *vx, int32_t *vy);
+
 extern volatile uint32_t HAZ_POR_SR;   /* en vectrex-draw; ver via_setup */
+
+/* Apagar el haz por SR si esta encendido. Con keep-lit (idioma VecFever) el PCR NO apaga
+ * nada: TODO camino que mueva el haz fuera de un trazo —re-cero, recalibrado, cierre de
+ * frame— tiene que pasar por aqui ANTES de mover, o la travesia sale dibujada (la
+ * ESTRELLA de rayos al centro vista en consola el 2026-09-03). */
+/* CUANTO TARDA EL HAZ EN APAGARSE DE VERDAD TRAS PEDIRLO.
+ *
+ * Con ACR = 0x98 el registro de desplazamiento va en modo 110: saca 8 bits al ritmo de Phi2
+ * y para, y CB2 (~BLANK) se queda con el ULTIMO. O sea que escribir SR = 0x00 no apaga:
+ * apaga OCHO CICLOS DESPUES. Ver t2-el-reloj-del-blanking.
+ *
+ * El VecFever deja 12-13 ciclos entre su SR=00 y el PCR=CC que muerde la pinza de cero
+ * (medido: 10 de sus 15 pinzas). Nosotros dejabamos CERO —`SR=00+0 PCR=cc`, en 6 de 10— asi
+ * que la pinza empezaba a arrastrar el haz al centro CON EL HAZ TODAVIA ENCENDIDO y dibujaba
+ * el camino: una linea larga cruzando la pantalla desde el objeto hasta el centro, que es
+ * justo lo que se veia en consola en las dos fotos del 2026-09-04.
+ *
+ * El 8 es fisica (los 8 desplazamientos); el 12 es el suyo, con margen. */
+#define UVM2_SR_APAGA_CICLOS  12
+
+static void haz_apagar(void)
+{
+    if (s_haz_encendido) { emit(UVM2_VIA_SR, 0x00, 0); s_haz_encendido = 0; }
+}
+
+/* Como `haz_apagar`, pero dejando que el SR termine de desplazar antes de que el llamante
+ * haga algo que MUEVA el haz (la pinza de cero, un salto). */
+static void haz_apagar_y_esperar(void)
+{
+    if (s_haz_encendido) {
+        emit(UVM2_VIA_SR, 0x00, UVM2_SR_APAGA_CICLOS);
+        s_haz_encendido = 0;
+    }
+}
+
+/* Rampas desde el ultimo re-cero. Declarado aqui arriba porque lo pone a cero ,
+ * que va antes que el knob. Ver uvm2_cero_cada. */
+static uint32_t s_rampas_desde_cero;
 
 static void set_zero(int active, uint32_t delay)
 {
+    /* La pinza arrastra el haz al centro: si llega encendido, dibuja la travesia. Y no
+     * basta con PEDIR el apagado: el SR tarda 8 ciclos en sacarlo. Ver haz_apagar_y_esperar. */
+    if (active) haz_apagar_y_esperar();
     /* CADA re-cero borra la deriva acumulada, porque devuelve el haz al centro.
      * Si el acumulador sobrevive, se sigue corrigiendo un error que ya no existe
      * — y como los re-ceros caen en sitios distintos segun la escena, ese sobrante
@@ -308,7 +407,7 @@ static void set_zero(int active, uint32_t delay)
      *
      * Aqui y no en frame_begin: los re-ceros ocurren muchas veces dentro de un
      * frame (uno por objeto, mas los que mete el tope de trazos). */
-    if (active) { s_drift_ax = 0; s_drift_ay = 0; }
+    if (active) { s_drift_ax = 0; s_drift_ay = 0; s_rampas_desde_cero = 0; }
 
     s_pcr = (uint8_t)((s_pcr & ~UVM2_PCR_ZERO_OFF) | (active ? 0u : UVM2_PCR_ZERO_OFF));
     emit(UVM2_VIA_PCR, s_pcr, delay);
@@ -327,7 +426,6 @@ void uvm2_draw_set_scale(uint32_t cycles)
     s_scale = cycles;
 }
 
-void uvm2_draw_set_fixup(int enable) { s_fixup = enable; }
 
 /* The VIA bring-up and the sample-and-hold priming, as one unit.
  *
@@ -373,17 +471,66 @@ static void via_setup(void)
      * hace falta 0x98, que ademas pone el SR bajo control de fase 2 — es lo que hace que
      * escribir $FF/$00 ahi encienda y apague CB2. Las dos formas van atadas a la MISMA
      * perilla para que no puedan quedar a medias. */
+    /* T2 NO INTERVIENE EN EL BLANKING, Y AQUI LLEGUE A ESCRIBIRLO POR LEER MAL EL MODO.
+     *
+     * Puse T2 = 0x7530 copiandoselo al VecFever, creyendo que con ACR = 0x98 el registro de
+     * desplazamiento iba en modo LIBRE a ritmo de T2. Es falso: los bits 4-2 de 0x98 son
+     * **110 = shift out bajo control de Phi2**, que desplaza 8 bits y PARA; el free-running
+     * a ritmo de T2 es el modo 100. En 110 CB2 se queda con el ultimo bit desplazado, asi
+     * que 0x01 deja el haz encendido y 0x00 apagado — es un CIERRE, no un ciclo de trabajo,
+     * y T2 no pinta nada. Escribirlo no rompia nada y tampoco arreglaba nada: los puntos de
+     * los microtramos seguian igual en consola.
+     *
+     * El VecFever si lo escribe, pero por otro motivo: T2 es SU temporizador de frame (su
+     * bucle espera a T2, y por eso T2CH sirve de marca de frame al analizar la captura).
+     * Nosotros marcamos el frame de otra forma, asi que no nos hace falta.
+     *
+     * COMO SE APAGA EL HAZ DE VERDAD, leido del netlist y no de la memoria: CB2 (`~BLANK`,
+     * IC207 pin 19) no es una puerta digital — tira del nodo Z por R315 (2,2k) contra el
+     * diodo D302, cuyo catodo es la salida del amplificador de brillo (IC303C). CB2 bajo
+     * hunde Z y apaga; CB2 alto deja Z al valor que sostiene el sample-and-hold. */
     emit(UVM2_VIA_ACR,   HAZ_POR_SR ? 0x98 : 0x80,    0);
 
     /* Prime each sample/hold channel from a DAC value of 0: zero reference,
      * then Y, then Z.  Without this the integrators start wherever the analog
      * section powered up. */
+    if (HAZ_POR_SR) {
+        /* SU PROLOGO DE FRAME, VERBATIM (frame 120, las 5 escrituras que van justo detras
+         * del ACR=0x98):
+         *
+         *     PCR=CC  pinza ON
+         *     ORB=03  mux cerrado, seleccion en 1
+         *     ORA=00  DAC a cero
+         *     ORB=E2  canal 1 (referencia de cero) abierto: se ceba a CERO
+         *     ORB=E1  cerrado
+         *
+         * Y NADA MAS: no ceba Y ni Z aqui. Nosotros haciamos catorce escrituras -cebado de
+         * Y, cebado de Z a 0x7F y un set_z de reposicion- antes de la Z que pide el juego,
+         * o sea TRES cargas de C306 por frame donde el hace una. La Y y el centro los deja
+         * en manos del bloque de cero, que viene justo despues de la Z y suelta la pinza el
+         * mismo. Ver uvm2_frame_begin. */
+        emit(UVM2_VIA_PCR,   0xCC, 0);
+        emit(UVM2_VIA_PORTB, 0x03, 0);
+        emit(UVM2_VIA_PORTA, 0x00, 0);
+        emit(UVM2_VIA_PORTB, 0xE2, UVM2_HOLD_DELAY);
+        emit(UVM2_VIA_PORTB, 0xE1, 0);
+        s_pcr = 0xCC; s_portb = 0xE1; s_porta = 0x00; s_porta_stale = 0;
+        s_pos_x = 0; s_pos_y = 0;
+        return;
+    }
     set_porta(0x00, 0);
     mux_sample(UVM2_MUX_ZEROREF, UVM2_HOLD_DELAY);
     mux_sample(UVM2_MUX_Y,       UVM2_HOLD_DELAY);
+    /* EL CANAL Z SE CEBA A FONDO DE ESCALA, COMO EL VECFEVER. Su preambulo de frame es
+     * `ORA=7F, ORB=84 (canal 2), ORB=81` — ceba el hold del brillo con 0x7F, no con cero
+     * como los otros dos. Nosotros lo cebabamos a 0 con los demas, o sea que entre el
+     * cebado y el primer SET_INTENSITY del juego el haz corria con el brillo al MINIMO.
+     * El de la referencia arranca al maximo, y bajar es barato: un `set_z` lo cambia en
+     * cuanto el juego pide otra cosa. */
+    set_porta(UVM2_Z_CEBADO, 0);
     mux_sample(UVM2_MUX_Z,       UVM2_HOLD_DELAY);
 
-    s_y = 0; s_z = 0; s_pos_x = 0; s_pos_y = 0;
+    s_y = 0; s_z = UVM2_Z_CEBADO; s_pos_x = 0; s_pos_y = 0;
 }
 
 
@@ -426,7 +573,14 @@ static void via_setup(void)
  *
  * Y NO ES UNA CONSTANTE DEL REPOSITORIO, ES UNA CALIBRACION DE MAQUINA: si otra consola
  * pide otro numero, se cambia aqui y se anota con su medida, como esta. */
-extern volatile uint32_t MIN_T1, MIN_T1_ARRANQUE, VCAP, DAC_CERO, DRAW_SCALE, T1_TRANSPORT;
+extern volatile uint32_t MIN_T1, MIN_T1_ARRANQUE, VCAP, VCAP_SALTO, DAC_CERO, DRAW_SCALE, T1_TRANSPORT;
+extern volatile uint32_t T1_SALTO;
+/* LOS HUECOS DEL MICROTRAMO, por globales como el resto de knobs de la capa de dibujo.
+ * Estuvieron como campos de vx_timings y NO funcionaba: con los dos structs del mismo
+ * tamaño y el valor correcto en C, Rust sacaba un hueco saturado a 4095 por vector y el
+ * frame se iba 30x. Ver el bloque de MT_ORA_Y en emit.rs. */
+extern volatile uint32_t MT_ORA_Y, MT_ORB_KEEP, MT_SR_ON, MT_ORA_X_ON;
+extern volatile uint32_t TECHO_MANDA, DEUDA_ON, TRAZO_ENTERO;
 
 /* DAC_CERO: poner PORT A a cero tras cada trazo, antes de apagar el haz. Es un comando y
  * un ciclo de E por trazo ENCENDIDO. Un juego lo fija con -DUVM2_DAC_CERO=0 tras medirlo
@@ -437,9 +591,115 @@ extern volatile uint32_t MIN_T1, MIN_T1_ARRANQUE, VCAP, DAC_CERO, DRAW_SCALE, T1
 
 void uvm2_draw_init(void)
 {
+    /* LA CALIBRACION DE LA CONSOLA, ANTES DE NADA. Los knobs que toca —escala, termino fijo
+     * de la rampa, referencia de cero y brillo— describen ESTE tubo, no este juego, asi que
+     * se cargan aqui y los 44 puertos los heredan sin tocar 44 ficheros. Si no hay ninguna
+     * guardada no cambia nada: `uvm2_config_cargar` devuelve 0 y el juego se queda con lo
+     * que traiga compilado, que es lo de siempre.
+     *
+     * El ASISTENTE no se abre desde aqui a proposito: quien manda en el bucle de frame es el
+     * juego, y arrancar una interfaz desde una funcion de init seria un efecto lateral
+     * escondido. El juego hace `if (!uvm2_config_cargar()) uvm2_config_asistente();`. */
+    uvm2_hay_calibracion = uvm2_config_cargar();
+
+    /* LA SALIDA: el blanking por PCR sigue vivo para quien lo necesite. Desde 2026-09-04 el
+     * idioma SR es el de serie (HAZ_POR_SR arranca en 1), asi que lo que hace falta es poder
+     * APAGARLO, no encenderlo. */
+#ifdef UVM2_HAZ_POR_PCR
+    HAZ_POR_SR = 0u;
+#endif
+#ifdef UVM2_HAZ_POR_SR
+    /* LA PERILLA DEL BUILD TIENE QUE ATERRIZAR EN EL SIMBOLO VIVO. build_uvm2.sh define
+     * UVM2_HAZ_POR_SR desde el 2026-09-03, pero nadie lo consumia: HAZ_POR_SR quedaba en
+     * su 0 por defecto, via_setup emitia ACR=0x80 y el idioma SR entero era un no-op —
+     * CB2 se queda bajo por PCR (0xCC/0xCE) y no se enciende JAMAS. En el emulador:
+     * pantalla negra con la lista entera correcta. [[defines-sin-arranque-vpy]]. */
+    HAZ_POR_SR      = 1u;
+#endif
+    /* El VecFever no dibuja unidades de menos de 8 cuentas: su plotter fija t1 =
+     * max(8, len*escala/127) y reparte en microtramos de 8 con un RESTO final (T1CL=4/6/7
+     * en la captura). MIN_T1=8 + VCAP=127 reproduce exactamente ese modelo en el nuestro.
+     * Por juego: -DUVM2_MIN_T1=N; sin define quedan los 1 de dkong. */
+#ifdef UVM2_MIN_T1
+    MIN_T1          = UVM2_MIN_T1;
+    MIN_T1_ARRANQUE = UVM2_MIN_T1;
+#else
     MIN_T1          = 1u;   /* sin suelo: la duracion sale de la longitud */
     MIN_T1_ARRANQUE = 1u;   /* idem para las rampas que arrancan paradas */
+#endif
+    /* VCAP era 24 A SECAS: la calibracion del 25m de dkong (2026-08-27) sangraba a
+     * TODOS los juegos del UVM2 — el mismo overfitting contra el que avisa la nota de
+     * arriba, pero al reves. Un juego lo fija con -DUVM2_VCAP=N; sin define, quedan
+     * los 24 de dkong. asterock lleva 127: la captura del VecFever dibuja este juego
+     * con tasas a fondo de escala, y vfplay ya reprodujo ese stream EN NUESTRA consola
+     * (peldano b) — no es un numero a ojo. Con 24, cada trazo salia con t1 ~6x mas
+     * largo y el frame a 90k ciclos (3x el presupuesto). */
+    /* EL TOPE DE VELOCIDAD DE LOS SALTOS. 0 = el mismo que los trazos, o sea el
+     * comportamiento de siempre para quien no lo fije. Un juego lo pone con
+     * -DUVM2_VCAP_SALTO=N tras medirlo en SU consola. */
+    /* SALTO A TIEMPO FIJO (el idioma del VecFever: t1 dado, tasa variable). Con esto
+     * VCAP_SALTO deja de intervenir — son dos modelos alternativos del mismo salto, no
+     * dos ajustes que se sumen. Medido en Major Havoc: t1=31 en el 99% de sus saltos.
+     * Ver el bloque de T1_SALTO en ramp.rs. */
+#ifdef UVM2_T1_SALTO
+    T1_SALTO        = UVM2_T1_SALTO;
+#endif
+#ifdef UVM2_MT_ORA_Y
+    MT_ORA_Y        = UVM2_MT_ORA_Y;
+#endif
+#ifdef UVM2_MT_ORB_KEEP
+    MT_ORB_KEEP     = UVM2_MT_ORB_KEEP;
+#endif
+#ifdef UVM2_MT_SR_ON
+    MT_SR_ON        = UVM2_MT_SR_ON;
+#endif
+#ifdef UVM2_MT_ORA_X_ON
+    MT_ORA_X_ON     = UVM2_MT_ORA_X_ON;
+#endif
+#ifdef UVM2_VCAP_SALTO
+    VCAP_SALTO      = UVM2_VCAP_SALTO;
+#endif
+    /* QUIEN MANDA EN LAS DIAGONALES TUMBADAS: el techo del eje menor (1, el de siempre) o
+     * el tope de velocidad (0). Ver la nota de `ramp_params_q` en ramp.rs. Se compara en
+     * consola con MHAVOCT antes de mover el por defecto. */
+#ifdef UVM2_TECHO_CEDE
+    TECHO_MANDA     = 0u;
+#endif
+    /* LA DEUDA SE APAGA SOLA CUANDO LA ENTRADA ES PRECISA.
+     *
+     * Existe para compensar el redondeo de la ENTRADA: con la geometria en 1/16 el residuo
+     * se acumula y hay que cobrarlo. Con 1/64 o mas fino la entrada ya es casi exacta y la
+     * correccion deja de quitar error y pasa a METERLO.
+     *
+     * MEDIDO contra su frame 120 de Major Havoc, misma geometria de entrada, comparando la
+     * secuencia de trazos iluminados EN ORDEN:
+     *
+     *     con deuda   418 de 427 identicos a los suyos   (97,9%)
+     *     sin deuda   426 de 427                          (99,8%)
+     *
+     * Los 8 que se van son todos +-1 en una tasa, y todos los mete la correccion. El umbral
+     * es el mismo 6 con el que la entrada deja de perder tasas suyas: ver la nota de
+     * UVM2_Q_BITS. -DUVM2_SIN_DEUDA / -DUVM2_CON_DEUDA fuerzan cualquiera de los dos. */
+#if UVM2_Q_BITS >= 6
+    DEUDA_ON        = 0u;
+#endif
+#ifdef UVM2_CON_DEUDA
+    DEUDA_ON        = 1u;
+#endif
+#ifdef UVM2_SIN_DEUDA
+    DEUDA_ON        = 0u;
+#endif
+    /* UN TRAZO = UNA RAMPA, como el VecFever, y es lo de serie: confirmado en consola el
+     * 2026-09-04 (con microtramos, Major Havoc punteaba; con el trazo entero sale limpio).
+     * Ver la nota de TRAZO_ENTERO en emit.rs. */
+#ifdef UVM2_MICROTRAMOS
+    TRAZO_ENTERO    = 0u;
+#endif
+#ifdef UVM2_VCAP
+    VCAP            = UVM2_VCAP;
+#else
     VCAP            = 24u;  /* 6,7 ciclos de espera por unidad de longitud */
+#endif
     DAC_CERO        = UVM2_DAC_CERO;
     /* LA ESCALA, si el juego la fija (-DUVM2_DRAW_SCALE / -DUVM2_T1_TRANSPORT). Sin eso se
      * queda la de siempre. Existe porque la escala buena se encontro desde el panel y se
@@ -453,6 +713,11 @@ void uvm2_draw_init(void)
 
     s_count = 0;
     via_setup();
+    /* EL CEBADO DE Z, UNA VEZ Y AL ARRANCAR. Vivia en via_setup, o sea una vez POR FRAME,
+     * y ahora el prologo de frame es el suyo y no ceba Z. Aqui sigue haciendo falta por si
+     * un juego dibuja antes de su primer SET_INTENSITY: sin esto el haz correria con lo que
+     * tuviera C306 al encender. Fondo de escala, como el. */
+    if (HAZ_POR_SR) set_z(UVM2_Z_CEBADO, UVM2_HOLD_DELAY);   /* s_z_last ya arranca ahi */
 
     uvm2_stats.bus_cycles = uvm2_exec(s_cmds[s_buf], s_count);
     uvm2_stats.commands   = s_count;
@@ -502,22 +767,85 @@ void uvm2_draw_prime_holds(void)
     set_porta(0x00, 0);
     mux_sample(UVM2_MUX_ZEROREF, UVM2_HOLD_DELAY);
     mux_sample(UVM2_MUX_Y,       UVM2_HOLD_DELAY);
+    set_porta(UVM2_Z_CEBADO, 0);          /* fondo de escala, como via_setup */
     mux_sample(UVM2_MUX_Z,       UVM2_HOLD_DELAY);
     s_y = 0;
-    s_z = 0;
+    s_z = UVM2_Z_CEBADO;
 }
 
 /* Definidas abajo con las demas perillas; se usan aqui arriba. */
 extern volatile int32_t uvm2_zero_settle_e;
+extern volatile int32_t uvm2_cero_offset;
 extern volatile int32_t uvm2_hueco_minimo;
 
 void uvm2_draw_reset(void)
 {
     /* APAGAR ANTES DE PINZAR EL CERO. Con keep-lit (idioma VecFever) el haz llega
-     * ENCENDIDO al re-cero; si no se apaga, set_zero(1) lo arrastra al centro dibujando
-     * una linea = la ESTRELLA de rayos al centro vista en consola. El VecFever apaga en
-     * cada pen-up/re-centro. */
-    if (s_haz_encendido) { emit(UVM2_VIA_SR, 0x00, 0); s_haz_encendido = 0; }
+     * ENCENDIDO al re-cero; el apagado vive en haz_apagar() y set_zero(1) tambien lo
+     * llama, pero aqui ademas hay que apagar ANTES de re-cebar la referencia (mux). */
+    haz_apagar_y_esperar();   /* el SR necesita sus 8 ciclos ANTES de que la pinza mueva el haz */
+
+    if (HAZ_POR_SR) {
+        /* EL BLOQUE DE CERO DEL VECFEVER, VERBATIM (x10.517 en la captura, 43 ciclos):
+         *
+         *     PCR=CC +7  pinza ON
+         *     ORB=81 +1  mux aparcado
+         *     ORA=00 +6  DAC a cero
+         *     ORB=C0 +11 canal 0 (Y) abierto: la Y se re-ceba DENTRO de la pinza
+         *     ORB=82 +1  canal 1 (referencia de cero) abierto
+         *     ORA=of +7  el OFFSET calibrado por consola (la del VecFever: 0x07)
+         *     ORA=FF +4  el toque final de $FF (su significado sigue ABIERTO; se
+         *                reproduce tal cual — la consigna es copiar, no inventar)
+         *     ORB=83 +6  mux cerrado
+         *     PCR=CE +9  pinza suelta
+         *
+         * Cebar CONTRA la pinza es lo que este fichero ya defendia en via_setup; el
+         * VecFever lo hace en CADA re-cero y en 43 ciclos, no en nuestros ~86. El
+         * offset es calibracion DE MAQUINA ([[zero-reference-calibration]]): 0 deja
+         * nuestra calibracion actual; se barre en consola. */
+        if (s_pos_x == 0 && s_pos_y == 0 && (s_pcr & UVM2_PCR_ZERO_OFF) != 0)
+            return;                     /* ya centrado y suelto: no repetir el bloque */
+        s_drift_ax = 0; s_drift_ay = 0;   /* lo que set_zero(1) hacia */
+        s_rampas_desde_cero = 0;
+        /* Y LA DEUDA, QUE AQUI SI SE TIRA. El re-cero devuelve el haz al centro por
+         * hardware: lo que creiamos y lo que hay vuelven a coincidir, asi que no queda
+         * nada que deber. El SALTO no la tira (ver vx_chain_reset): ahi el haz sigue
+         * donde estaba, solo que en otro sitio del que creemos. */
+        vx_deuda_reset();
+        emit(UVM2_VIA_PCR,   0xCC, 6);
+        emit(UVM2_VIA_PORTB, 0x81, 0);
+        emit(UVM2_VIA_PORTA, 0x00, 5);
+        emit(UVM2_VIA_PORTB, 0xC0, 10);
+        emit(UVM2_VIA_PORTB, 0x82, 0);
+        emit(UVM2_VIA_PORTA, (uint8_t)uvm2_cero_offset, 6);
+        /* EL `ORA=0xFF` VA ANTES DE CERRAR EL MUX, COMO EL. Y AQUI ME EQUIVOQUE.
+         *
+         * Lo tuve invertido a proposito, razonando que con el canal de referencia ABIERTO
+         * ese 0xFF carga el condensador de la REFERENCIA DE CERO a 127 en vez de al offset
+         * — y esa referencia es el ORIGEN del haz (dx = xsh - rsh, dy = rsh - ysh), asi que
+         * descolocaria todos los vectores. Lo achaque a unos "vectores abiertos y temblor"
+         * que aparecieron por esas fechas.
+         *
+         * LO REFUTA `vfcap`: reproduce SU stream byte a byte en nuestra placa, con este
+         * mismo orden, y el dibujo sale limpio y sin vectores abiertos. Si en el suyo
+         * funciona, el mecanismo que yo temia no ocurre, o algo mas lo compensa — y lo que
+         * yo estaba arreglando estaba en otro sitio.
+         *
+         * Sigue sin saberse PARA QUE sirve ese 0xFF (anotado como abierto en
+         * [[vecfever-como-dibuja]]). Pero no saber para que sirve no es razon para hacerlo
+         * distinto: la referencia dice que asi va. */
+        emit(UVM2_VIA_PORTA, 0xFF, 3);
+        emit(UVM2_VIA_PORTB, 0x83, 5);
+        emit(UVM2_VIA_PCR,   0xCE, 8);
+        /* Las caches, con lo ULTIMO que se ha escrito de verdad: ahora el orden es
+         * ORA=FF y luego ORB=83, asi que Port B queda en 0x83 y Port A en 0xFF igual,
+         * pero el que cierra la secuencia es el ORB. */
+        s_pcr = 0xCE; s_portb = 0x83;
+        s_porta = 0xFF; s_porta_stale = 0;
+        s_y = 0;                        /* el canal 0 quedo cebado a cero */
+        s_pos_x = 0; s_pos_y = 0;
+        return;
+    }
 
     /* RE-CEBAR LA REFERENCIA DE CERO, COMO HACE LA BIOS.
      *
@@ -560,7 +888,11 @@ void uvm2_draw_reset(void)
  * frame, asi que sin esto el hueco entre soltar la pinza y el primer SET_INTENSITY
  * del juego se recorre con Z desconocido. Ralf no tiene ese hueco: pone Z y
  * DESPUES suelta la pinza (SetZ(0x5F); SetZero(false);). */
-static int s_z_last = 0;
+static int s_z_last = UVM2_Z_CEBADO;   /* si no, frame_begin deshace el cebado de Z */
+
+/** El brillo que se pidio por ultima vez. Lo necesita `uvm2_config_actual`, que tiene que
+ *  poder LEER los knobs y no solo escribirlos. */
+int uvm2_draw_intensity_actual(void) { return s_z_last; }
 
 void uvm2_draw_intensity(int brightness)
 {
@@ -599,15 +931,16 @@ void uvm2_draw_intensity(int brightness)
 #define UVM2_RAMP_FLOOR 32u
 #endif
 
-static void fixup(int *x, int *y, uint32_t *scale)
-{
-    if (!s_fixup) return;
-    int ax = *x < 0 ? -*x : *x;
-    int ay = *y < 0 ? -*y : *y;
-    while (ax < UVM2_DAC_HALF && ay < UVM2_DAC_HALF && *scale > UVM2_RAMP_FLOOR) {
-        *x *= 2; *y *= 2; ax *= 2; ay *= 2; *scale /= 2u;
-    }
-}
+/* `fixup` SE HA IDO, y no por opinion: NADIE LA LLAMABA. Doblaba el delta y halvaba la
+ * rampa mientras el DAC tuviera holgura, y su justificacion medida —"128 de los ~169
+ * ciclos por vector eran la rampa FIJA"— describe un modelo de rampa que este SDK ya no
+ * tiene: desde el 2026-08-27 la duracion sale de la longitud (t1 = len*DRAW_SCALE/VCAP),
+ * asi que un trazo corto ya no paga una rampa de rango completo y no hay nada que
+ * arreglar. Se quedo definida, sin una sola llamada, y `uvm2_draw_set_fixup(1)` en
+ * uvm2_svc.c encendia un flag que nadie leia — una linea que dice que algo esta
+ * encendido cuando no existe, que es peor que no tenerla (el mismo argumento con el que
+ * se borro `set_ramp` unas lineas mas arriba). El VecFever tampoco hace nada parecido:
+ * su plotter reparte la longitud en microtramos de 8, no en escala. */
 
 /* ── Compensacion de deriva ────────────────────────────────────────────────
  *
@@ -698,9 +1031,17 @@ struct vx_sink {
     int  (*beam_is_lit)(void *);
     void (*beam_lit)(void *);
     int  (*x_can_skip)(void *, int32_t);
+    /* AL FINAL, como los demas opcionales: quien no lo rellene se queda como antes. */
+    void (*alargar_ultimo)(void *, uint32_t);
 };
 struct vx_timings { uint32_t e6809_q8, y_mux_q8, moveto_settle_q8, beam_on_q8;
-                    int32_t blank_settle_q8; uint32_t keep_lit; uint32_t x_settle_q8; };
+                    int32_t blank_settle_q8; uint32_t keep_lit; uint32_t x_settle_q8;
+                    /* Los huecos del microtramo, en ciclos de E. 0 = el valor de siempre
+                     * (la cadencia medida de SU asterock). Se parametrizan porque el
+                     * VecFever NO tiene una sola cadencia: le monta un plotter distinto a
+                     * cada titulo. Ver el bloque en emit.rs. */
+                    uint32_t mt_ora_y, mt_orb_keep, mt_sr_on, mt_ora_x_on; };
+extern volatile uint32_t SIGUEN_UNIDADES;   /* en emit.rs */
 void vx_moveto_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
                    const struct vx_timings *);
 void vx_draw_line_patterned_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
@@ -721,6 +1062,32 @@ void vx_ramp_params(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *
  *
  * Entre "lo correcto en abstracto" y "lo que hace la otra placa", manda lo segundo: dos
  * implementaciones del mismo modelo que redondean distinto son dos modelos. */
+/* ALARGAR EL HUECO DEL ULTIMO COMANDO YA EMITIDO.
+ *
+ * POR QUE HACE FALTA. MEDIDO en su frame 120 de Major Havoc: el hueco que el VecFever deja
+ * tras `T1CH` vale 11 ciclos de E cuando el microtramo CONTINUA, y 16 cuando el siguiente
+ * paso apaga el haz — la separacion es perfecta, 175 de 175. Es fisico: la ultima rampa de
+ * un trazo iluminado tiene que TERMINAR antes de cerrar el haz; cortandola a 11 el trazo
+ * sale corto, que es la firma de los puntos.
+ *
+ * Y va aqui, y no en `draw_line_seq`, porque quien apaga es la llamada SIGUIENTE
+ * (`moveto_seq` o el re-cero): el emisor del trazo no puede saberlo cuando emite. */
+static void vxs_alargar_ultimo(void *ctx, uint32_t extra_q8)
+{
+    (void)ctx;
+    if (s_count == 0u) return;
+    uint32_t d = extra_q8 / 256u;
+    if (d == 0u) return;
+    /* Los 24 bits ya empaquetados: dato en 0-7, registro en 8-11, hueco de 12 arriba.
+     * Se toca SOLO el hueco; el dato y el registro se copian tal cual. */
+    uint8_t *p = &s_cmds[s_buf][(s_count - 1u) * 3u];
+    uint32_t v = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
+    uint32_t hueco = (v >> 12) + d;
+    if (hueco > 4095u) hueco = 4095u;
+    v = (v & 0xFFFu) | (hueco << 12);
+    p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16);
+}
+
 static void vxs_emit(void *ctx, uint32_t reg, uint32_t data, uint32_t delay_q8)
 {
     (void)ctx;
@@ -792,8 +1159,35 @@ static void vxs_wait_ramp(void *ctx, uint32_t t1, int32_t extra_q8)
      * codo esta por debajo de cero. */
     int32_t d = (int32_t)t1 + extra_q8 / 256;
     if (d < 0) d = 0;
+#if defined(UVM2_PIO_STREAM) && !defined(UVM2_CMDS_IN_PSRAM)
+    /* SIN PORTADOR: el retardo se PLIEGA en el comando anterior. El T1LL re-escrito era
+     * el transporte del retardo para el ejecutor SIO, que sostiene la escritura durante
+     * la espera y no puede colgar el retardo de T1CH ([[t1ch-no-es-idempotente]]). El
+     * stream PIO aparca con el patron de PARK entre comandos — no re-escribe nada — asi
+     * que ahi el retardo puede vivir en el campo del comando que ya esta en la lista.
+     * El VecFever no escribe T1LL jamas (226 vs 0 por frame era el resto gordo de la
+     * comparacion); esto lo deja en 0.
+     * Solo en SRAM: parchear la lista a posteriori rompe la firma de PSRAM, y el camino
+     * SIO conserva el portador porque para el si es necesario. */
+    if (s_count > 0u && d > 0) {
+        uint8_t *p = &s_cmds[s_buf][(s_count - 1u) * 3u];
+        uint32_t v = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
+        uint32_t cur  = v >> 12;
+        uint32_t room = UVM2_CMD_MAX_DELAY - cur;
+        uint32_t take = (uint32_t)d < room ? (uint32_t)d : room;
+        v = (v & 0x0FFFu) | ((cur + take) << 12);
+        p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16);
+        d -= (int32_t)take;
+    }
+    while (d > 0) {                /* resto rarisimo (>4095): portadores encadenados */
+        uint32_t chunk = d > (int32_t)UVM2_CMD_MAX_DELAY ? UVM2_CMD_MAX_DELAY : (uint32_t)d;
+        emit(UVM2_VIA_T1LL, t1 & 0xFFu, chunk);
+        d -= (int32_t)chunk;
+    }
+#else
     if (d > 4095) d = 4095;        /* el campo son 12 bits */
     emit(UVM2_VIA_T1LL, t1 & 0xFFu, (uint32_t)d);
+#endif
 }
 
 static void vxs_y_held(void *ctx, int32_t vy) { (void)ctx; s_y = (int)vy; }
@@ -803,7 +1197,25 @@ static void vxs_y_held(void *ctx, int32_t vy) { (void)ctx; s_y = (int)vy; }
  * escrituras del muestreo y su ventana de carga. MEDIDO en dkong: la Y cambia en el 91% de
  * los vectores, asi que esto se dispara en el 9% restante; no es la palanca grande, pero
  * es exacta y no cuesta nada. */
-static int vxs_y_can_skip(void *ctx, int32_t vy) { (void)ctx; return s_y == (int)vy; }
+static int vxs_y_can_skip(void *ctx, int32_t vy)
+{
+    (void)ctx;
+#ifdef UVM2_SIN_ATAJO_Y
+    /* PERILLA DE DIAGNOSTICO: nunca saltar el muestreo de Y. Existe porque este atajo es
+     * la UNICA asimetria entre los dos ejes (X lee el DAC vivo, que se invalida solo; Y
+     * cree recordar lo que sostiene un condensador), y el sintoma medido tambien es
+     * asimetrico: en un frame, nuestra lista integra X 168 / Y 173 y el haz dibuja
+     * X 207 / Y 45. Encenderla y volver a medir separa "el S&H no sostiene lo que
+     * creemos" de cualquier otra causa, con una sola variable. */
+    (void)vy; return 0;
+#else
+#ifdef VPY_MIDE_REDONDEO
+    { extern volatile int sonda_a, sonda_b, sonda_c;
+      sonda_a++; if (s_y == (int)vy) sonda_b++; sonda_c = s_y; }
+#endif
+    return s_y == (int)vy;
+#endif
+}
 
 /* EL HAZ, PARA `keep_lit`. Sin estas dos el emisor cree SIEMPRE que el haz esta apagado:
  * con `uvm2_keep_lit = 1` tomaria la rama de "encender" en cada vector y no apagaria
@@ -834,6 +1246,7 @@ static struct vx_sink vx_cart_sink(void)
     s.beam_lit = vxs_beam_lit;
     s.beam_blanked = vxs_beam_blanked;
     s.x_can_skip = vxs_x_can_skip;
+    s.alargar_ultimo = vxs_alargar_ultimo;
     return s;
 }
 
@@ -911,6 +1324,110 @@ volatile int32_t uvm2_beam_on_e = 0;        /* ciclos de E entre arrancar y ence
 #endif
 volatile int32_t uvm2_hueco_minimo = 0;   /* ver la nota de vxs_emit */
 volatile int32_t uvm2_zero_settle_e = UVM2_ZERO_SETTLE_E;   /* <0 = ZERO_BASE + scale/4 */
+/* El OFFSET del canal de referencia en el bloque de cero (idioma SR). Calibracion DE
+ * MAQUINA, no constante del repo: la consola de la captura VecFever llevaba 0x07; 0
+ * deja nuestra calibracion de siempre. Se barre en consola con el panel. */
+/* LA REFERENCIA DE CERO. El bloque de cero carga este valor en el canal de referencia, y
+ * ese canal es el ORIGEN del haz (dx = xsh - rsh, dy = rsh - ysh): si no es el que la
+ * maquina espera, TODO el frame sale desplazado.
+ *
+ * 7, MEDIDO EN SU BLOQUE DE CERO. Comparando el nuestro con el suyo en el mismo frame de
+ * Major Havoc, las nueve escrituras coinciden registro a registro y hueco a hueco salvo
+ * esta: el escribe ORA=07 donde nosotros poniamos ORA=00. Encaja con lo que ya estaba
+ * anotado — Vectorblade y PiTrex tambien escriben un valor NO CERO ahi, y la BIOS pone 0.
+ *
+ * Se puede sobreescribir por juego con -DUVM2_CERO_OFFSET si alguna consola pide otro:
+ * esto es calibracion de maquina, no una constante universal. */
+/* CADA CUANTAS RAMPAS SE VUELVE A PINZAR EL CERO.
+ *
+ * MEDIDO en su frame 120 de Major Havoc: el VecFever mete 12 bloques de cero en el CUERPO
+ * del frame, separados 72, 66, 55, 73, 67, 57, 52, 55, 52, 61 y 59 rampas — mediana 59, y
+ * mucho mas apretado por numero de rampas (12% de dispersion) que por tiempo (20%).
+ *
+ * NOSOTROS PINZABAMOS UNA VEZ POR FRAME, y el error de posicion se acumulaba durante las
+ * 616 rampas sin que nada lo borrara: en consola, cada fila de la lista de records salia
+ * mas a la derecha y mas abajo que la anterior, en escalera. La lista es correcta —
+ * integrada como haz termina a 1,4 unidades de lo pedido— asi que lo que derivaba era el
+ * INTEGRADOR, y contra eso lo unico que vale es volver al cero.
+ *
+ * ESTO ESTABA, PERO EN LA CAPA DE ARRIBA: `VPY_MAX_CONSECUTIVE_DRAWS` vive en
+ * sdk_rp2350.c, o sea que solo lo tienen los puertos SBT. Un banco (o un juego) que llame
+ * al SDK directamente no re-centraba NUNCA. Acotar la deriva no es una optimizacion de una
+ * capa opcional: va aqui, y actua de SUELO — el contador lo pone a cero cualquier re-cero,
+ * venga de donde venga, asi que si la capa de arriba ya pincha mas a menudo, este no salta.
+ *
+ * 0 lo apaga. */
+#ifndef UVM2_CERO_CADA
+#define UVM2_CERO_CADA 0   /* la red por CUENTA: apagada, la manda la distancia (UVM2_CERO_SALTO) */
+#endif
+volatile int32_t uvm2_cero_cada = UVM2_CERO_CADA;
+
+/* RE-CENTRAR CUANDO EL SALTO ES LARGO — SU CRITERIO, MEDIDO.
+ *
+ * Emparejando cada transporte en blanco de sus capturas con si lleva bloque de cero
+ * delante, sobre 2020 transportes de 8 frames:
+ *
+ *     los 66 que re-centra:  minimo 20,1  mediana 42,0  maximo 82,0 unidades
+ *     los 1954 que no:       p90 3,5   p99 20,2   maximo 37,1
+ *
+ * O sea: **re-centra cuando el haz va a viajar lejos**, no cada N rampas. Con el umbral en
+ * 20 aciertan los 66 de 66 y solo 22 de 1954 (1,1%) serian de mas. Y tiene sentido fisico:
+ * un salto largo es donde mas pesa el error acumulado y donde el re-cero sale gratis,
+ * porque el haz va a cruzar la pantalla de todas formas.
+ *
+ * NOSOTROS re-centrabamos por CUENTA DE RAMPAS, y eso deja pasar los saltos largos: medido
+ * en mhavoc, transportes de hasta 102 unidades sin re-centrar. En consola se veia como
+ * objetos que se descolocan de un frame a otro — "latidos".
+ *
+ * 0 lo apaga; `uvm2_cero_cada` sigue de red de seguridad por si una escena no tiene saltos
+ * largos. */
+#ifndef UVM2_CERO_SALTO
+#define UVM2_CERO_SALTO 20
+#endif
+volatile int32_t uvm2_cero_salto = UVM2_CERO_SALTO;
+
+/* Emitir el pen-up cuando el salto pedido mide CERO. Ver move_abs_interno. */
+#ifndef UVM2_PENUP_CERO
+/* 0 POR DEFECTO, Y NO POR PRUDENCIA: con la geometria del banco no se puede saber cuando
+ * toca. Sus 12 pen-ups llevan SR=00/SR=01 alrededor, pero `vf_geom_mh.h` solo guarda los
+ * segmentos ILUMINADOS — donde el levanto el lapiz no esta en el fichero. Encendido dispara
+ * en los 240 encadenados (contra sus 12) y hunde el parecido del transporte del 91,6% al
+ * 41,7%. Se queda para cuando la entrada traiga esa informacion. */
+#define UVM2_PENUP_CERO 0
+#endif
+volatile int32_t uvm2_penup_cero = UVM2_PENUP_CERO;
+
+/* La escalera de duraciones del salto y su tope de tasa. Ver move_una. 0 la apaga. */
+#ifndef UVM2_ESCALERA_SALTO
+#define UVM2_ESCALERA_SALTO 1
+#endif
+volatile int32_t uvm2_escalera_salto = UVM2_ESCALERA_SALTO;
+volatile int32_t uvm2_escalera_tope  = 120;
+
+/* EL JUEGO AVISA DE QUE VA A LEVANTAR EL LAPIZ. Lo pone antes de un `move_abs`, y solo se
+ * consume si ese salto resulta medir CERO — si mueve, el propio salto ya apaga. Hace falta
+ * porque "apago y volvi a encender" y "segui encendido" dan la MISMA geometria: sin este
+ * aviso, dos trazos contiguos se unen con una esquina que el no dibuja. */
+static int s_penup_pendiente;
+void uvm2_draw_penup(void) { s_penup_pendiente = 1; }
+
+/* Cuantos "pasos de arranque" tiene que medir un salto para merecer el arranque suave.
+ * Su umbral medido esta en tasa >= 100, o sea unas 20 veces el paso. 0 lo apaga. */
+#ifndef UVM2_ARRANQUE_SUAVE
+#define UVM2_ARRANQUE_SUAVE 124
+#endif
+/* La TASA a partir de la cual el salto lleva unidad diminuta delante. 124 es su minimo
+ * medido; por debajo de 124 el no ceba NUNCA (0 de 179). 0 lo apaga. */
+volatile int32_t uvm2_arranque_suave = 124;
+
+#ifndef UVM2_CERO_OFFSET
+/* EL VALOR QUE SE CEBA EN LA REFERENCIA DE CERO. 0x23 (35) es el de fabrica de Vectorblade
+ * para su texto (`calibrationValue16`); para trazos largos el usa 0x56 (86). Estaba en 7, o
+ * sea practicamente en el 0 de la BIOS, que es lo que [[zero-reference-calibration]] ya
+ * decia que estaba mal. Se calibra por consola, que para eso esta el asistente. */
+#define UVM2_CERO_OFFSET 0x23
+#endif
+volatile int32_t uvm2_cero_offset = UVM2_CERO_OFFSET;
 volatile int32_t uvm2_y_mux_e = 4;
 volatile int32_t uvm2_keep_lit  = 0;
 /* El juego puede fijarlo (-DUVM2_BLANK_SETTLE_E=N) tras barrerlo en su consola. */
@@ -941,6 +1458,29 @@ volatile int32_t uvm2_moveto_settle_e = 0;
  * y no a los otros knobs porque a aquellos los referencia vx_cart_timings; a este solo lo
  * mira uvm2_frame_end, y el enlazador decidio que sobraba. Un knob que no esta en el ELF
  * no se puede tocar en caliente, que es todo el punto. */
+/* Lo que tardo en dibujarse el ultimo frame, SIN el relleno del enganche. Separado de
+ * `s_frame_cycles` a proposito: aquel vale el periodo cuando el frame cupo, asi que no
+ * sirve para saber si cabe. */
+static uint32_t s_dibujo_cycles;
+
+/* EL REFRESCO EN HERCIOS. Ver la nota de uvm2_draw.h: es una opcion del JUEGO porque tiene
+ * que coincidir con la frecuencia de la TOMA DE CORRIENTE, no con ninguna preferencia
+ * nuestra. La division se hace aqui una vez y no en cada juego. */
+void uvm2_refresco(unsigned hz)
+{
+    uvm2_pacer_cycles = hz ? (UVM2_BUS_HZ / hz) : 0u;
+}
+
+unsigned uvm2_refresco_actual(void)
+{
+    return uvm2_pacer_cycles ? (UVM2_BUS_HZ / uvm2_pacer_cycles) : 0u;
+}
+
+int uvm2_refresco_cabe(void)
+{
+    return uvm2_pacer_cycles == 0u || s_dibujo_cycles <= uvm2_pacer_cycles;
+}
+
 __attribute__((used)) volatile uint32_t uvm2_pacer_cycles =
 #if UVM2_HZ == 0
     0u;
@@ -950,7 +1490,10 @@ __attribute__((used)) volatile uint32_t uvm2_pacer_cycles =
 
 static struct vx_timings vx_cart_timings(void)
 {
-    struct vx_timings k;
+    /* A CERO DE ENTRADA. Se llenaba campo a campo y un campo nuevo que se olvidara sale
+     * con basura de pila — y un hueco basura satura el campo de 12 bits del comando y
+     * dispara el frame (paso: 788.661 ciclos con un ORA+4096). */
+    struct vx_timings k = (struct vx_timings){0};
     k.e6809_q8 = 64u;
     k.y_mux_q8 = (uint32_t)(uvm2_y_mux_e > 0 ? uvm2_y_mux_e : 0) * 256u;
     k.moveto_settle_q8 = (uint32_t)(uvm2_moveto_settle_e > 0 ? uvm2_moveto_settle_e : 0) * 256u;
@@ -990,9 +1533,38 @@ static struct vx_timings vx_cart_timings(void)
  * EL REPARTO ES EXACTO. Los trozos suman el delta original al ultimo bit: se acumula la
  * posicion ideal y cada trozo es la diferencia contra lo ya emitido, asi que el error de
  * division no se acumula — que es justo lo que estabamos persiguiendo en el juego. */
-#define UVM2_MAX_PASO 127
+/* LA UNIDAD INTERNA DEL DIBUJANTE. Con -DUVM2_SUBUNIDAD las posiciones y los deltas van
+ * en 1/16 de unidad de dispositivo en TODO el camino; sin el, en enteros, exactamente como
+ * antes (y `ramp_params_q` con valores enteros exactos da lo mismo bit a bit que el camino
+ * viejo — hay un test que lo comprueba).
+ *
+ * POR QUE. `VS_RND` en sdk_rp2350.c divide las coordenadas del juego por 127 y REDONDEA A
+ * ENTERO antes de que nadie las vea. MEDIDO en mhavoc sobre 81.552 vectores: 0,22 unidades
+ * de error por eje, el 3,6% de los vectores enteramente sub-unidad y el 0,26%
+ * desapareciendo porque sus dos extremos caen en el mismo punto. La rejilla del VecFever es
+ * ~1/20 de unidad (la granularidad de la tasa a t1=8): eramos diez veces mas bastos.
+ *
+ * La deuda de la cadena NO tapaba esto: corrige el residuo de la RAMPA, y recibia i8, o sea
+ * ya redondeado. Son dos perdidas distintas. */
+/* CUANTOS BITS DE FRACCION lleva la entrada. 4 (1/16) es lo que usan los puertos; el banco
+ * de comparacion con el VecFever pide 8 porque a 1/16 el 10,5% de sus tasas no se pueden
+ * reproducir — su vector de tasa 32 con t1 = 8 mide 1,6 unidades exactas y 1/16 solo sabe
+ * decir 1,5625 o 1,625. Con 1/64 o mas fino salen las 210 del frame EXACTAS. */
+#ifdef UVM2_SUBUNIDAD
+#ifndef UVM2_Q_BITS
+#define UVM2_Q_BITS 4
+#endif
+#define UVM2_Q (1 << UVM2_Q_BITS)
+#else
+#define UVM2_Q_BITS 0
+#define UVM2_Q 1
+#endif
+
+#define UVM2_MAX_PASO (127 * UVM2_Q)
 
 
+
+static void move_abs_interno(int x, int y);
 
 static void trocear(int dx, int dy, void (*emite)(int, int))
 {
@@ -1009,6 +1581,14 @@ static void trocear(int dx, int dy, void (*emite)(int, int))
         emite(ox - hx, oy - hy);
         hx = ox; hy = oy;
     }
+}
+
+/* CUANTO CORRE UNA RAMPA DE ARRANQUE, en unidades internas: tasa 1 durante 8 cuentas de
+ * T1. No es un numero elegido — sale de las mismas constantes que el resto del dibujo. */
+static int paso_arranque(void)
+{
+    int q = (8 * (1 << UVM2_Q_BITS)) / (int)DRAW_SCALE;
+    return q > 0 ? q : 1;
 }
 
 static void move_una(int dx, int dy)
@@ -1029,14 +1609,159 @@ static void move_una(int dx, int dy)
      * —donde corregir no se ve— y no que la reparta. Eso no esta hecho. */
     vx_chain_reset();
 
+    /* EL ARRANQUE SUAVE DE LOS SALTOS RAPIDOS.
+     *
+     * MEDIDO en su frame 120 de Major Havoc: 20 de sus 26 saltos de tasa >= 100 (77%) van
+     * precedidos de una unidad DIMINUTA — t1 = 8 en las 20, tasa |v| <= 4 (casi siempre
+     * +-1) y en el MISMO SENTIDO que el salto (X: 20 de 20, Y: 17 de 20). Y 10 de sus 12
+     * salidas de re-cero empiezan asi. Nosotros no lo haciamos NUNCA, ni una vez.
+     *
+     * Fisicamente es lo que parece: tras la pinza de cero los integradores estan parados, y
+     * una rampa que arranca del reposo a tasa 124 recorre de menos. La unidad previa los
+     * pone en movimiento. El sintoma en consola era el banco con las filas APELOTONADAS
+     * hacia el centro —cada objeto caia corto— con la lista geometricamente CORRECTA:
+     * error de posicion por trazo, mediana 0,01 en X y 0,06 en Y, peor caso 0,42.
+     *
+     * Su recorrido se DESCUENTA del salto, asi que la posicion final no cambia. */
+    int forzada = 0;
+    int32_t px_ = 0, py_ = 0; uint32_t pt1_ = 0;   /* la rampa larga, para emitirla tal cual */
+    if (uvm2_arranque_suave > 0) {
+        /* SU CRITERIO ES LA TASA DEL SALTO, NO SU DISTANCIA. Medido sobre sus 198
+         * transportes que mueven algo: los 19 que llevan unidad diminuta delante tienen
+         * tasa 124..126, y de los 179 que no la llevan **ninguno** llega a 124. Separacion
+         * perfecta, sin solape.
+         *
+         * Antes esto disparaba por distancia y lo hacia en 41 de 43 saltos, contra sus 19 de
+         * 198 — por eso en consola salio peor. El error era el umbral, no la idea. */
+#if UVM2_Q_BITS > 0
+        vx_ramp_params_salto_qn(dx, dy, UVM2_Q_BITS, &px_, &py_, &pt1_);
+#else
+        vx_ramp_params_salto(dx, dy, &px_, &py_, &pt1_);
+#endif
+        const int tasa = (px_ < 0 ? -px_ : px_) > (py_ < 0 ? -py_ : py_)
+                       ? (px_ < 0 ? -px_ : px_) : (py_ < 0 ? -py_ : py_);
+        if (tasa >= uvm2_arranque_suave) {
+            /* LA UNIDAD DIMINUTA LLEVA EL RESIDUO, no un paso fijo.
+             *
+             * Comprobado en su aritmetica: en su transporte #45 el salto pide -20,25
+             * unidades en X; su rampa principal (-124, t1=26) recorre -20,15; el residuo es
+             * -0,10, que a t1 = 8 son -2 — y -2 es exactamente lo que emite. En Y, igual.
+             * O sea que primero elige la rampa larga y lo que le sobra lo mete delante.
+             *
+             * Poniendo +-1 fijo aciertan 5 de 22; con el residuo, la unidad diminuta sale
+             * con SU valor. */
+            const int t1p = 8;
+            /* EL SALTO PRINCIPAL SE TRUNCA, NO SE REDONDEA, cuando lleva cebado delante.
+             *
+             * `vx_ramp_params_salto` redondea al mas cercano, asi que la rampa larga puede
+             * PASARSE y dejar un residuo del signo contrario — y entonces la unidad diminuta
+             * empuja hacia atras. El VecFever se queda corto y el residuo va en el mismo
+             * sentido que el salto.
+             *
+             * MEDIDO en su #45: pide -20,25 unidades; a t1 = 26 la tasa exacta es -124,6.
+             * Redondeando sale -125 (lo nuestro), truncando -124 (lo suyo), y con -124 el
+             * residuo es -0,10, que a t1 = 8 son los -2 que el emite. */
+            {
+                const long rec = ((long)px_ * (long)pt1_ * (1L << UVM2_Q_BITS)) / (long)DRAW_SCALE;
+                if ((dx > 0 && rec > dx) || (dx < 0 && rec < dx)) px_ += (px_ > 0 ? -1 : 1);
+                const long rey = ((long)py_ * (long)pt1_ * (1L << UVM2_Q_BITS)) / (long)DRAW_SCALE;
+                if ((dy > 0 && rey > dy) || (dy < 0 && rey < dy)) py_ += (py_ > 0 ? -1 : 1);
+            }
+            /* Lo que recorre la rampa principal, en unidades internas (mismo redondeo que
+             * `recorrido_mil` del modelo: v * t1 / DRAW_SCALE). */
+            const int rec_x = (int)(((long)px_ * (long)pt1_ * (1L << UVM2_Q_BITS)) / (long)DRAW_SCALE);
+            const int rec_y = (int)(((long)py_ * (long)pt1_ * (1L << UVM2_Q_BITS)) / (long)DRAW_SCALE);
+            const int res_x = dx - rec_x, res_y = dy - rec_y;
+            if (res_x || res_y) {
+                int32_t ax, ay; uint32_t at1;
+#if UVM2_Q_BITS > 0
+                vx_ramp_params_salto_qn(res_x, res_y, UVM2_Q_BITS, &ax, &ay, &at1);
+#else
+                vx_ramp_params_salto(res_x, res_y, &ax, &ay, &at1);
+#endif
+                if (at1 > (uint32_t)t1p) at1 = (uint32_t)t1p;   /* el suyo es SIEMPRE t1 = 8 */
+                struct vx_sink s0 = vx_cart_sink();
+                struct vx_timings k0 = vx_cart_timings();
+                /* DETRAS DE ESTA VIENE LA RAMPA LARGA, asi que el haz se apaga ANTES de
+                 * esta unidad y no dentro de su ventana de mux. Ver SIGUEN_UNIDADES. */
+                SIGUEN_UNIDADES = 1;
+                vx_moveto_seq(&s0, ax, ay, at1, &k0);
+                SIGUEN_UNIDADES = 0;
+                s_pos_x += res_x; s_pos_y += res_y;
+                dx -= res_x; dy -= res_y;
+                s_rampas_desde_cero++;
+                uvm2_stats.moves++;
+                uvm2_stats.ramp_cycles += at1;
+                vx_chain_reset();
+                /* Y LA RAMPA LARGA SE EMITE TAL COMO SE CALCULO, no recalculada sobre el
+                 * delta ya reducido: quitarle el residuo la acorta un t1 y la tasa se va a
+                 * 127-128. Medido en su #45 —el emite (-124, t1=26) y a nosotros nos salia
+                 * (-128, t1=25)— y en su #393. El VecFever elige la rampa PRIMERO y lo que
+                 * le sobra lo mete delante; no al reves. */
+                forzada = 1;
+            }
+        }
+    }
+
     {
         int32_t vx, vy; uint32_t t1;
         s_pos_x += dx;
         s_pos_y += dy;
-        vx_ramp_params(dx, dy, &vx, &vy, &t1);
+        /* SIN DEUDA, Y AHORA CON EL NUMERO DE POR QUE. Se probo darle a los saltos su
+         * PROPIA deuda (separada de la de los trazos, para no contaminarlos, que es lo
+         * que esta nota pedia) y MEDIDO sobre los 255 saltos reales de un frame de
+         * asterock: el error acumulado sube de 86,8 a 99,8 unidades en X y de 91,6 a
+         * 100,6 en Y. EMPEORA, y por una razon que ahora se ve: el error del salto NO
+         * es un residuo fraccionario que otro pueda absorber —es un SESGO POR SIGNO del
+         * modelo de rampa (delta X negativo se queda 1,3 unidades corto, delta Y
+         * positivo se pasa 3,9; las otras dos direcciones son exactas)— y pedir
+         * "delta + deuda" solo lo mueve a otro delta con otro sesgo. Arreglar el sesgo
+         * es lo que hay que hacer; repartirlo, no. */
+        /* CON EL TOPE DE VELOCIDAD DE LOS SALTOS, no el de los trazos. El haz va apagado:
+         * frenarlo no da brillo, solo gasta frame. Medido en la captura del VecFever: el
+         * salta a 1,8x la velocidad a la que dibuja (tasa mediana 64 contra 35), y a
+         * nosotros un salto nos costaba ~267 ciclos contra sus ~32. */
+if (forzada) { vx = px_; vy = py_; t1 = pt1_; } else {
+#if UVM2_Q_BITS > 0
+        vx_ramp_params_salto_qn(dx, dy, UVM2_Q_BITS, &vx, &vy, &t1);
+#else
+        vx_ramp_params_salto(dx, dy, &vx, &vy, &t1);
+#endif
+        /* LA ESCALERA DE DURACIONES DEL SALTO.
+         *
+         * El VecFever no CALCULA el t1 de un salto: lo ELIGE de {8, 18, 31}, el primer
+         * peldaño cuya tasa no pase de 120. Medido en sus 1041 saltos que siguen a un trazo,
+         * esa regla explica 1008 (97%), y en su frame 120 los explica TODOS — incluidos los
+         * tres que se resistian, donde el pone 18 y a nosotros nos salia 9, 13 y 15.
+         *
+         * Solo actua si algun peldaño CABE: en los saltos largos manda el calculo de antes. */
+        if (uvm2_escalera_salto) {
+            static const uint32_t PELDANOS[3] = { 8u, 18u, 31u };
+            /* LA DISTANCIA SALE DEL DELTA, NO DE LA RAMPA.
+             *
+             * Sacarla de (tasa x t1) parece equivalente y no lo es: si esa rampa SATURO en
+             * +-127, no cubre el delta entero y la distancia sale corta — con lo que la
+             * escalera elegia un peldaño que no cabe y las tasas volvian a saturar. El
+             * sintoma era (127,127) en un salto de X puro, con vy = 127 donde dy = 0. */
+            const int adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
+            const long m_q = adx > ady ? adx : ady;          /* en unidades internas */
+            for (unsigned e = 0; e < 3u; e++) {
+                /* cabe si  m_q * escala / (Q * peldaño)  <=  tope */
+                if (m_q * (long)DRAW_SCALE
+                    <= (long)uvm2_escalera_tope * (long)UVM2_Q * (long)PELDANOS[e]) {
+                    if (PELDANOS[e] != t1) {
+                        t1 = PELDANOS[e];
+                        vx_ramp_params_con_t1(dx, dy, UVM2_Q, t1, &vx, &vy);
+                    }
+                    break;
+                }
+            }
+        }
+        }
         struct vx_sink sink = vx_cart_sink();
         struct vx_timings k = vx_cart_timings();
         vx_moveto_seq(&sink, vx, vy, t1, &k);
+        s_rampas_desde_cero++;
         uvm2_stats.moves++;
         uvm2_stats.ramp_cycles += t1;
     }
@@ -1052,19 +1777,42 @@ void uvm2_draw_move(int dx, int dy){ trocear(dx, dy, move_una); }
 static void delta_una(int dx, int dy)
 {
     int32_t vx, vy; uint32_t t1;
+#ifdef VPY_MIDE_REDONDEO
+    /* SONDA: el delta que de verdad le llega a la rampa, y lo que devuelve. Por el lado C
+     * porque un static de Rust se lo lleva --gc-sections aunque sea #[no_mangle]. */
+    { extern volatile unsigned vpy_red_n, vpy_red_err_c, vpy_red_subunidad, vpy_red_cero;
+       }
+#endif
     s_pos_x += dx;
     s_pos_y += dy;
 
+#if UVM2_Q_BITS > 0
+    vx_ramp_params_chain_qn(dx, dy, UVM2_Q_BITS, &vx, &vy, &t1);
+#else
     vx_ramp_params_chain(dx, dy, &vx, &vy, &t1);
+#endif
 
     struct vx_sink sink = vx_cart_sink();
     struct vx_timings k = vx_cart_timings();
     vx_draw_line_seq(&sink, vx, vy, t1, &k);
+    s_rampas_desde_cero++;
     uvm2_stats.vectors++;
     uvm2_stats.ramp_cycles += t1;
 }
 
-void uvm2_draw_delta(int dx, int dy){ trocear(dx, dy, delta_una); }
+void uvm2_draw_delta(int dx, int dy){ trocear(dx * UVM2_Q, dy * UVM2_Q, delta_una); }
+
+/* LA MISMA EN 1/16 DE UNIDAD. Es la que deja pedir lo que el entero no puede — un trazo de
+ * 2,5 unidades, o uno de media, que en enteros DESAPARECE. Sin -DUVM2_SUBUNIDAD redondea a
+ * entero y se comporta como la de arriba, para que un juego pueda llamarla siempre. */
+void uvm2_draw_delta_q4(int dx_q4, int dy_q4)
+{
+#if UVM2_Q_BITS > 0   /* la unidad de la API es la INTERNA; ver UVM2_Q_BITS */
+    trocear(dx_q4, dy_q4, delta_una);
+#else
+    trocear((dx_q4 + (dx_q4 < 0 ? -8 : 8)) / 16, (dy_q4 + (dy_q4 < 0 ? -8 : 8)) / 16, delta_una);
+#endif
+}
 
 /* UNA RECTA CON HUECOS, EN UNA SOLA RAMPA.
  *
@@ -1082,7 +1830,11 @@ void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int 
     s_pos_y += dy;
     /* Con cadena como cualquier otro trazo: que lleve huecos no cambia que es una rampa
      * que redondea. Quedaba con la plana porque dkong no pasa por aqui y nadie lo miro. */
+#if UVM2_Q_BITS > 0   /* la unidad de la API es la INTERNA; ver UVM2_Q_BITS */
+    vx_ramp_params_chain_q4(dx, dy, &vx, &vy, &t1);
+#else
     vx_ramp_params_chain(dx, dy, &vx, &vy, &t1);
+#endif
     struct vx_sink sink = vx_cart_sink();
     struct vx_timings k = vx_cart_timings();
 
@@ -1104,11 +1856,111 @@ void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int 
     uvm2_stats.ramp_cycles += t1;
 }
 
-void uvm2_draw_move_abs(int x, int y)
+/* ── AQUI HUBO UNA "CAPA DE TASAS" (uvm2_draw_rate / uvm2_draw_raw), Y ERA UN ERROR ───
+ *
+ * La escribi para que un banco de pruebas pudiera reproducir el stream del VecFever sin
+ * redondear posiciones: le pasabas (vy, vx, t1, sr, hueco) y emitia el microtramo. Daniel
+ * lo corto en cuanto lo vio, y con razon: **eso convierte al SDK en un tubo**. Si el banco
+ * le da las tasas, los tiempos y los huecos ya hechos, lo que se comprueba es que el tubo
+ * transporta lo que se le mete — no que NUESTRO modelo genere las llamadas correctas. Para
+ * reproducir un stream ajeno tal cual ya existe `vfplay`, que usa `uvm2_exec` y no finge
+ * ser otra cosa.
+ *
+ * Lo que se compara tiene que entrar por la puerta de un juego: `uvm2_draw_intensity`,
+ * `_move_abs`, `_delta`. Que el SDK elija tasa, tiempo, troceado y re-ceros es
+ * PRECISAMENTE lo que esta a prueba.
+ *
+ * El motivo tecnico por el que la escribi sigue siendo cierto y queda anotado: las
+ * posiciones que alcanza el haz son fraccionarias (v*t1/DRAW_SCALE: 127*8/160 = 6,35) y la
+ * API toma enteros, asi que la distancia de un salto puede diferir menos de una unidad y
+ * mover su t1 en 1-2 cuentas. Eso es un limite de dar coordenadas, y un juego da
+ * coordenadas: es el comportamiento correcto, no un defecto que tapar. */
+
+/* LAS DOS PUBLICAS CONVIERTEN A LA UNIDAD INTERNA; EL CUERPO VIVE ABAJO.
+ *
+ * Aqui metí la pata la primera vez encadenandolas —la entera llamaba a la de 1/16 tras
+ * multiplicar por UVM2_Q— y sin el define eso multiplicaba por 1 y dividia por 16: el
+ * dibujo se encogia y los saltos pasaban de 180 a 406 por frame. La conversion tiene que
+ * estar en CADA entrada, no en cadena. */
+void uvm2_draw_move_abs(int x, int y) { move_abs_interno(x * UVM2_Q, y * UVM2_Q); }
+
+void uvm2_draw_move_abs_q4(int x_q4, int y_q4)
 {
+#if UVM2_Q_BITS > 0   /* la unidad de la API es la INTERNA; ver UVM2_Q_BITS */
+    move_abs_interno(x_q4, y_q4);
+#else
+    move_abs_interno((x_q4 + (x_q4 < 0 ? -8 : 8)) / 16,
+                     (y_q4 + (y_q4 < 0 ? -8 : 8)) / 16);
+#endif
+}
+
+/* El cuerpo, en la unidad interna: `s_pos_*` va en esa misma unidad, asi que la resta es
+ * directa y no hay ninguna conversion escondida aqui dentro. */
+static void move_abs_interno(int x, int y)
+{
+    /* EL SUELO DE DERIVA. Va en el salto y no en el trazo a proposito: pinzar el cero
+     * arrastra el haz al centro, asi que solo puede hacerse donde el dibujo ya iba a
+     * saltar. `uvm2_draw_reset` deja `s_pos` en (0,0), de modo que el salto de abajo se
+     * recalcula solo desde el origen. Ver uvm2_cero_cada. */
+    {
+        /* La distancia del transporte, en unidades de dispositivo. Se mide ANTES de saltar
+         * porque el re-cero deja `s_pos` en el origen y despues ya no se sabe. */
+        const int dx = x - s_pos_x, dy = y - s_pos_y;
+        const int ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
+        const int m = (ax > ay ? ax : ay) >> UVM2_Q_BITS;
+        /* EL SENTIDO, NO SOLO LA DISTANCIA.
+         *
+         * Medido en su frame 120: las distancias de los transportes donde re-centra y donde
+         * no SE SOLAPAN (20,3 contra 20,2), asi que el umbral solo no separa. Lo que separa
+         * es el signo de X: en los 10 que re-centra va NEGATIVO (-20,2 ... -25,4) y en los 9
+         * que no, POSITIVO (+20,2 ... +24,6). Es el retorno de carro —el salto que vuelve al
+         * principio de la fila siguiente— frente al que avanza dentro de la fila.
+         *
+         * Sin esto disparabamos 20 veces contra sus 11, y los 9 de mas dejaban el haz en
+         * otro sitio: sus saltos siguientes iban +X y los nuestros -Y, con el t1 creciendo
+         * fila a fila (14, 21, 29, ... 67).
+         *
+         * LA REGLA ESTA INCOMPLETA Y SE SABE: sobre sus 11 frames acierta 56 de 87 re-ceros
+         * con solo 4 falsos positivos. O sea que nunca sobra, pero le falta un segundo
+         * criterio que en otras pantallas si dispara — probablemente "uno por objeto", que
+         * la geometria no trae. */
+        const int largo = uvm2_cero_salto > 0 && m >= uvm2_cero_salto && dx < 0;
+        const int muchas = uvm2_cero_cada > 0 && s_rampas_desde_cero >= (uint32_t)uvm2_cero_cada;
+        if (largo || muchas) uvm2_draw_reset();
+    }
     int dx = x - s_pos_x;
     int dy = y - s_pos_y;
-    if (dx == 0 && dy == 0) return;
+    if (dx != 0 || dy != 0) s_penup_pendiente = 0;   /* el salto ya apaga por su cuenta */
+    if (dx == 0 && dy == 0) {
+        /* LEVANTAR EL LAPIZ AUNQUE NO HAYA QUE MOVERSE.
+         *
+         * El juego pide un salto de distancia CERO: el trazo siguiente empieza donde acabo
+         * el anterior. Aqui se volvia sin emitir nada, y con keep-lit eso deja el haz
+         * ENCENDIDO entre los dos — o sea que dibujamos la esquina que los une. El juego
+         * pidio un salto: queria separarlos.
+         *
+         * MEDIDO en su frame 120: el emite 12 unidades `(0, 0, t1=8)` —rampa de 8 ciclos
+         * sin mover, con el haz apagado— y las DOCE llevan `SR=00` y `SR=01` alrededor. Los
+         * 228 encadenados de verdad no tienen ninguna escritura al SR. O sea que esa unidad
+         * ES el pen-up de distancia cero, y nosotros emitiamos cero de 12. */
+        const int avisado = s_penup_pendiente;
+        s_penup_pendiente = 0;
+        if ((uvm2_penup_cero || avisado) && s_haz_encendido) {
+            int32_t vx, vy; uint32_t t1;
+#if UVM2_Q_BITS > 0
+            vx_ramp_params_salto_qn(0, 0, UVM2_Q_BITS, &vx, &vy, &t1);
+#else
+            vx_ramp_params_salto(0, 0, &vx, &vy, &t1);
+#endif
+            struct vx_sink sink = vx_cart_sink();
+            struct vx_timings k = vx_cart_timings();
+            vx_moveto_seq(&sink, 0, 0, t1, &k);   /* tasas a cero: no mueve, solo separa */
+            s_rampas_desde_cero++;
+            uvm2_stats.moves++;
+            vx_chain_reset();
+        }
+        return;
+    }
     uvm2_draw_move(dx, dy);
 }
 
@@ -1178,6 +2030,11 @@ static void uvm2_recalibrate(void)
      * sola — juntas se comen la recalibracion. */
     uvm2_draw_invalidate();
     uvm2_stats.recals++;
+
+    /* El barrido a los railes es el movimiento mas largo del frame: encendido, es la
+     * diagonal mas brillante de la pantalla. Apagar aqui y no confiar en que el frame
+     * llego apagado. */
+    haz_apagar();
 
     const uint32_t escala = s_scale;
     /* $FF EXPLICITO, y por eso NO puede pasar por `uvm2_draw_move`: con el modelo T1
@@ -1250,14 +2107,26 @@ void uvm2_frame_begin(void)
      * via_setup() acaba de cebar Z a 0, y el juego no pondra la suya hasta su
      * primer SET_INTENSITY. Entre esas dos cosas hay comandos que corren con la
      * pinza ya suelta y con Z en un valor que no eligio nadie. */
-    set_z(s_z_last, UVM2_HOLD_DELAY);
+    /* LA Z DE REPOSICION SOBRA EN EL CAMINO DEL VECFEVER. Estaba para que el haz no
+     * corriera con una Z indefinida entre soltar la pinza y el primer SET_INTENSITY del
+     * juego; ahora la pinza la suelta el bloque de cero, que va DESPUES de esa Z, asi que
+     * el hueco que tapaba ya no existe. En su frame no hay ninguna: escribiendola cargabamos
+     * C306 dos veces por frame — la nuestra y la del juego — para el mismo valor. */
+    if (!HAZ_POR_SR) set_z(s_z_last, UVM2_HOLD_DELAY);
 
     /* Only now release the clamp that has held the beam at centre since the
      * last frame ended.  The clamp covers the whole inter-frame gap and the
      * priming above, so no drift reaches the screen and the holds are charged
      * against a beam that is actually at zero. */
 #ifndef UVM2_HOLD_ZERO
-    set_zero(0, 0);
+    /* LA PINZA LA SUELTA EL BLOQUE DE CERO, COMO EL. En su frame la secuencia es
+     * prologo -> Z del juego -> bloque de cero (que acaba en PCR=CE), y no hay ningun
+     * PCR=CE suelto antes. Soltarla aqui tenia ademas un efecto que no se buscaba: dejaba
+     * `s_pcr` con el bit de suelta puesto, y con eso el primer `uvm2_draw_reset` del frame
+     * se creia "ya centrado y suelto" y se SALTABA el bloque entero - o sea que el frame
+     * empezaba sin re-cero, confiando en que el centro seguia donde lo dejo el frame
+     * anterior. Con la pinza puesta, ese mismo `if` deja pasar el bloque. */
+    if (!HAZ_POR_SR) set_zero(0, 0);
 #endif
 }
 
@@ -1326,6 +2195,8 @@ void uvm2_frame_end(void)
     s_pcr = (uint8_t)(s_pcr & ~UVM2_PCR_BLANK_OFF);
     s_limite = UVM2_CMD_CAPACITY;   /* el cierre entra SIEMPRE, ver UVM2_CMD_RESERVA */
     emit(UVM2_VIA_PCR, s_pcr, 0);
+    /* Y por SR: en el idioma VecFever el PCR de arriba no apaga nada. */
+    haz_apagar();
 
     /* RECALIBRAR, con el haz ya apagado y antes de pinzar. Es donde la BIOS la
      * tiene: `Recalibrate` es lo ultimo de `Wait_Recal`, o sea trabajo del CIERRE
@@ -1484,6 +2355,7 @@ void uvm2_frame_end(void)
      * pierde el enganche y dura 40 ms, y alternar 20 y 40 ms tiembla por otro camino.
      *
      * 0 = libre (Asteroids). != 0 = enganchado a ese periodo en ciclos de bus. */
+    s_dibujo_cycles = cycles;              /* lo que tardo en DIBUJARSE, sin el relleno */
     if (uvm2_pacer_cycles == 0) {
         s_frame_cycles = cycles;
     } else if (cycles < uvm2_pacer_cycles) {

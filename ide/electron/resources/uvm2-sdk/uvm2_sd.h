@@ -21,6 +21,20 @@ int uvm2_sd_init(void);
  * La ruta admite UN subdirectorio, que es lo que necesita roms/<juego>.zip. */
 uint32_t uvm2_sd_leer(const char *ruta, unsigned char *dst, uint32_t max);
 
+/* Un TROZO del fichero, desde `desde` bytes. Devuelve lo copiado, que puede ser menos que
+ * `max` sin que eso sea un fallo (a diferencia de uvm2_sd_leer, donde no caber SI lo es).
+ * Existe para reproducir capturas largas sin meterlas enteras en RAM. */
+/** Crea un fichero de UN cluster (max 512 bytes de contenido) y lo escribe. Si la ruta
+ *  lleva subdirectorio y no existe, lo crea en la RAIZ. 1 si se creo. */
+int uvm2_sd_crear(const char *ruta, const unsigned char *datos, uint32_t n);
+
+/** Sobrescribe EN SITIO el primer sector de un fichero que YA EXISTE (max 512 bytes).
+ *  No crea, no redimensiona y no toca la FAT: es lo unico seguro con un lector de solo
+ *  lectura. 1 si se escribio. Ver el bloque de uvm2_sd.c. */
+int uvm2_sd_sobrescribir(const char *ruta, const unsigned char *datos, uint32_t n);
+
+uint32_t uvm2_sd_leer_desde(const char *ruta, unsigned char *dst, uint32_t max, uint32_t desde);
+
 /* Lo que el montaje entendio del disco, para poder mirarlo por SWD sin adivinar. Un
  * NO_ESTA puede ser un fichero ausente o un volumen mal interpretado, y desde fuera se
  * ven igual; esto los separa. Se lee de un tiron:

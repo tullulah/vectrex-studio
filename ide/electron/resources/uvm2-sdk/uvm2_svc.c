@@ -57,6 +57,17 @@ enum {
  * sequences disturb Port B, so they may only run between frames. */
 static uint8_t  s_buttons = 0xFFu;   /* released; active low, see uvm2_core1.c */
 static uint32_t s_axes;
+/* TIMER0 TIMELR en crudo: microsegundos, y sin arrastrar pico/time.h a un fichero que
+ * vive en SRAM. Es el mismo reloj que usa mide_periodo() en uvm2_draw.c. */
+static inline uint32_t uvm2_us(void)
+{
+#ifdef UVM2_HOST
+    return 0;
+#else
+    return *(volatile uint32_t *)0x400B000Cu;
+#endif
+}
+static uint32_t s_us_recal_prev;
 
 /* Where the controls come from.  Single-core, this file reads them itself at the
  * frame boundary; dual-core, core 1 does and leaves them here.  Either way the
@@ -114,21 +125,8 @@ void uvm2_runtime_init(void)
     uvm2_led_status(UVM2_STATUS_HALTING);
     uvm2_bus_halt();
     uvm2_draw_init();
-    /* Short vectors: double the velocity and halve the ramp while the DAC has
-     * headroom, so a 4-unit glyph stroke stops paying a full-range 128-cycle ramp.
-     * MEASURED on hardware 2026-08-04 before enabling this: dkong spent 140911 bus
-     * cycles a frame against a 30000 budget (469%) — ~10.6 Hz refresh, which is the
-     * flicker — and 128 of the ~169 cycles per vector were the fixed ramp.
-     * The trade is real: distance is preserved (velocity x time) but the beam is lit
-     * for less of it, so short vectors come out dimmer. Same bargain as the cart's
-     * MIN_T1 floor. Turn it back off with uvm2_draw_set_fixup(0) if that costs more
-     * than the refresh rate buys. */
-    /* El "sale grande y luego encoge" NO era esto: era el prime_holds cebando contra
-     * integradores libres (ver el WAIT_RECAL de abajo). Se probo con fixup=0 y el
-     * fantasma seguia, asi que vuelve a 1: lo que compra esta MEDIDO —dkong gastaba
-     * 140911 ciclos de bus por frame contra un presupuesto de 30000— y Ralf lo tenga
-     * comentado no es razon para pagar eso. */
-    uvm2_draw_set_fixup(1);
+    /* `uvm2_draw_set_fixup(1)` ESTABA AQUI y encendia un flag que nadie leia: la
+     * funcion existia sin una sola llamada. Retirada con su nota en uvm2_draw.c. */
     /* Analog stick. It was implemented all along (read_axis_analog is the BIOS
      * SAR) but s_analog defaulted to 0 and nobody turned it on, so every game got
      * a -1/0/1 verdict. Asteroids and the rest are analog games on real hardware
@@ -229,7 +227,28 @@ void uvm2_svc_dispatch(uint32_t *frame)
         break;
 
     case SYS_WAIT_RECAL:
+    {
+        /* DONDE SE VA EL FRAME, EN EL CAMINO DE UN SOLO NUCLEO.
+         *
+         * us_exec/us_input/us_rest/us_wait existian pero SOLO se escriben en
+         * uvm2_core1.c, o sea en doble nucleo: en un juego single-core —asterock,
+         * asteroids, todos los AAE— se leian CERO por SWD y no decian nada. Medido en
+         * consola el 2026-09-03: el frame duraba 24.204 us y el dibujo (8.768 ciclos de
+         * bus a 1,5 MHz) solo 5.845, o sea el 24%. El 76% restante no tenia desglose, y
+         * sin el, "optimizar el dibujo" es apostar. Cuatro lecturas de TIMER0 por frame.
+         *
+         * us_exec  = reproducir la lista al haz (el dibujo de verdad)
+         * us_input = botones + ejes (el SAR analogico son 8 sondeos por eje)
+         * us_rest  = audio y el cierre del frame
+         * us_wait  = lo que tardo EL JUEGO desde el WAIT_RECAL anterior: su logica, que
+         *            en un puerto SBT es el 6502 traducido. Es el numero que dice si el
+         *            techo de refresco es nuestro o suyo.
+         */
+        const uint32_t t_e0 = uvm2_us();
+        uvm2_stats.us_wait = t_e0 - s_us_recal_prev;
         uvm2_frame_end();
+        const uint32_t t_e1 = uvm2_us();
+        uvm2_stats.us_exec = t_e1 - t_e0;
 #ifdef UVM2_DUAL_CORE
         /* Core 1 owns the bus now: the replay, the control reads, the PSG queue,
          * the audio tick and the 50 Hz pacing all happen there (uvm2_core1.c).
@@ -249,6 +268,7 @@ void uvm2_svc_dispatch(uint32_t *frame)
         s_buttons = uvm2_read_buttons();
         s_axes    = uvm2_read_axes();
 #endif
+        uvm2_stats.us_input = uvm2_us() - t_e1;
         /* Both of those drove Port A/B for the PSG and the analog mux, which the
          * draw path's cached DAC/S-H state does not know about. Drop the cache so
          * the next frame re-establishes Y, Z and the DAC instead of trusting a
@@ -270,6 +290,17 @@ void uvm2_svc_dispatch(uint32_t *frame)
 #endif /* UVM2_DUAL_CORE */
 
         uvm2_frame_begin();
+        {   /* lo que queda del bloque, y la marca desde la que se mide EL JUEGO */
+            const uint32_t t_fin = uvm2_us();
+            /* us_rest NO ES DE FIAR EN DOBLE NUCLEO: lo escribe TAMBIEN uvm2_core1.c
+             * (`us_rest = time_us_32() - t2`), asi que los dos nucleos se pisan el mismo
+             * contador y esta resta cruza dos relojes distintos. Medido en consola con
+             * mhavoc: us_rest = 4294966253, o sea -1043. Los us_frame_* si valen (los mide
+             * mide_periodo() con reloj de pared y un solo escritor). Arreglarlo es darle un
+             * contador a cada nucleo, no tocar la formula. */
+            uvm2_stats.us_rest = t_fin - t_e1 - uvm2_stats.us_input;
+            s_us_recal_prev = t_fin;
+        }
         /* AQUI HABIA UN uvm2_draw_prime_holds(), y era un SEGUNDO cebado hecho
          * al lado equivocado de la pinza de cero.
          *
@@ -288,6 +319,7 @@ void uvm2_svc_dispatch(uint32_t *frame)
          * Asi que esto no solo estaba mal colocado: sobraba. De paso ponia
          * s_z = 0, tirando la intensidad que frame_begin acababa de reponer. */
         break;
+    }
 
 #ifdef UVM2_NO_DRAW
     /* Bisection build: swallow every drawing syscall so the stream carries only

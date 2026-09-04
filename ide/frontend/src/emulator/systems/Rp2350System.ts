@@ -353,6 +353,22 @@ export class Rp2350System implements ISystem, IBus {
   private sampleStartTime = 0;   // audioCtx.currentTime when the sample started
   private sampleRateHz = 0;      // the playing sample's rate
   private sampleDurationSec = 0; // the playing sample's length (for loop wrap)
+  // ---- Core-1 music/SFX sequencer (svc #21/#22/#23) ----
+  //
+  // On the cartridge these three syscalls hand a .vmus/.vsfx table to the
+  // core-1 player in `firmware/src/music.rs`; core 1 sequences into a 14-byte
+  // PSG shadow and core 0 flushes regs 0-10 once per frame from WAIT_RECAL.
+  // This mirrors that player exactly — same table layout, same per-frame tick,
+  // same mixer read-modify-write — so what you hear here is what the hardware
+  // does. Table layout, from the compiler's emission:
+  //   .vmus  [num_events u32][loop_byte_offset u32] then events
+  //   .vsfx  [num_events u32]                       then events
+  //   event  [delay u8][num_writes u8] then num_writes x [reg u8][val u8]
+  //          num_writes 0 = end, 0xFF = loop (music only)
+  private psgShadow = new Uint8Array(14);
+  private musBase = 0; private musPtr = 0; private musDelay = 0; private musPlaying = false;
+  private sfxPtr  = 0; private sfxDelay = 0; private sfxActive  = false;
+
   static readonly AUDIO_SAMPLE_RATE = 44100;
   static readonly AUDIO_BUFFER_SIZE = 512;
 
@@ -833,6 +849,32 @@ export class Rp2350System implements ISystem, IBus {
       console.log(`[Rp2350System] psg_write trap @ 0x${(psgWriteAddr & ~1).toString(16)}`);
     }
 
+    // vpy_play_music / vpy_stop_music / vpy_play_sfx.
+    //
+    // WHY HERE AS WELL as the svc dispatcher: a VPy game reaches this emulator
+    // by one of TWO paths, chosen in jsvecxCore.loadArm() from the image's entry
+    // address — RAM-linked (`--ram`) goes through `svc`, and the DEFAULT
+    // XIP-linked build goes through these PC-symbol traps. Wiring only the svc
+    // side left every default-built game silent, which is exactly how this was
+    // found. Both paths drive the same sequencer.
+    for (const [sym, run] of [
+      ['vpy_play_music', (cpu: Thumb2) => {
+        const ptr = cpu.getReg(0) >>> 0;
+        if (ptr === 0) this.musStop(); else this.musStart(ptr);
+      }],
+      ['vpy_stop_music', (_cpu: Thumb2) => { this.musStop(); }],
+      ['vpy_play_sfx',   (cpu: Thumb2) => {
+        const ptr = cpu.getReg(0) >>> 0;
+        if (ptr !== 0) this.sfxStart(ptr);
+      }],
+    ] as [string, (cpu: Thumb2) => void][]) {
+      const addr = symbols.get(sym);
+      if (addr !== undefined) {
+        this.traps.set(addr & ~1, (cpu: Thumb2): number => { run(cpu); return 30; });
+        console.log(`[Rp2350System] ${sym} trap @ 0x${(addr & ~1).toString(16)}`);
+      }
+    }
+
     // psg_read(r0=reg) → r0 — svc #12. Buttons (reg 14) come from the trapped
     // vpy_update_buttons path, so this is only a safe register echo.
     const psgReadAddr = symbols.get('psg_read');
@@ -1157,6 +1199,9 @@ export class Rp2350System implements ISystem, IBus {
    */
   private makeWaitRecalTrap(): TrapFn {
     return (cpu: Thumb2): number => {
+      // Same per-frame point as the svc path (`case 1`) and as the cartridge
+      // BIOS: advance the music/SFX sequencer once per frame.
+      this.audioFrame();
       cpu.hitWfi = true;
       return 128;
     };
@@ -1250,6 +1295,104 @@ export class Rp2350System implements ISystem, IBus {
   }
 
   // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // Music / SFX sequencer — mirrors firmware/src/music.rs
+  // -------------------------------------------------------------------------
+
+  private read32le(a: number): number {
+    return ((this.read8(a) | (this.read8(a + 1) << 8) |
+             (this.read8(a + 2) << 16) | (this.read8(a + 3) << 24)) >>> 0);
+  }
+
+  /** volumes off, mixer all-disabled — the player's own silence(). */
+  private musSilence(): void {
+    this.psgShadow[8] = 0; this.psgShadow[9] = 0; this.psgShadow[10] = 0;
+    this.psgShadow[7] = 0x3F;
+  }
+
+  private musStart(base: number): void {
+    this.musBase = base >>> 0;
+    this.musPtr = (base + 8) >>> 0;   // events start after [num_events][loop_offset]
+    this.musDelay = 0;                // fire the first event immediately
+    this.musPlaying = true;
+    this.musSilence();
+  }
+
+  private musStop(): void {
+    this.musPlaying = false;
+    this.musSilence();
+  }
+
+  private sfxStart(base: number): void {
+    this.sfxPtr = (base + 4) >>> 0;   // events start after [num_events]
+    this.sfxDelay = 0;
+    this.sfxActive = true;
+  }
+
+  /** One 20 ms music tick. */
+  private musTick(): void {
+    if (!this.musPlaying) return;
+    if (this.musDelay > 0) { this.musDelay--; return; }
+
+    const nWrites = this.read8(this.musPtr + 1) & 0xff;
+    if (nWrites === 0) { this.musPlaying = false; this.musSilence(); return; }
+    if (nWrites === 0xFF) {                       // loop marker
+      this.musPtr = (this.musBase + this.read32le(this.musBase + 4)) >>> 0;
+      this.musDelay = this.read8(this.musPtr) & 0xff;
+      return;
+    }
+
+    let p = (this.musPtr + 2) >>> 0;
+    for (let i = 0; i < nWrites; i++) {
+      const reg = this.read8(p) & 0xff, val = this.read8(p + 1) & 0xff;
+      if (reg === 7) {
+        // Music owns tone/noise A+B; KEEP the SFX C bits (tone C = bit2, noise
+        // C = bit5) or the effect cuts out between its own events.
+        this.psgShadow[7] = (this.psgShadow[7] & 0x24) | (val & 0xDB);
+      } else if (reg < this.psgShadow.length) {
+        this.psgShadow[reg] = val;
+      }
+      p = (p + 2) >>> 0;
+    }
+    this.musPtr = p;                              // byte 0 of the next event is its delay
+    this.musDelay = this.read8(p) & 0xff;
+  }
+
+  /** One 20 ms SFX tick, overlaying channel C on top of the music. */
+  private sfxTick(): void {
+    if (!this.sfxActive) return;
+    if (this.sfxDelay > 0) { this.sfxDelay--; return; }
+
+    const nWrites = this.read8(this.sfxPtr + 1) & 0xff;
+    if (nWrites === 0) { this.sfxActive = false; return; }   // done; C keeps its released value
+
+    let p = (this.sfxPtr + 2) >>> 0;
+    for (let i = 0; i < nWrites; i++) {
+      const reg = this.read8(p) & 0xff, val = this.read8(p + 1) & 0xff;
+      if (reg === 7) {
+        this.psgShadow[7] = (this.psgShadow[7] & 0xDB) | (val & 0x24);
+      } else if (reg < this.psgShadow.length) {
+        this.psgShadow[reg] = val;
+      }
+      p = (p + 2) >>> 0;
+    }
+    this.sfxPtr = p;
+    this.sfxDelay = this.read8(p) & 0xff;
+  }
+
+  /**
+   * Once per frame from WAIT_RECAL — the same point core 0 flushes on hardware.
+   * Music first, then SFX overlays channel C on top of it, then the whole shadow
+   * goes to the synth. No-op while nothing is playing, so a game that never
+   * calls PLAY_MUSIC costs nothing.
+   */
+  private audioFrame(): void {
+    if (!this.musPlaying && !this.sfxActive) return;
+    this.musTick();
+    this.sfxTick();
+    for (let reg = 0; reg <= 10; reg++) this.psg.writeReg(reg, this.psgShadow[reg]);
+  }
+
   // IBus.onSvc — BIOS syscall dispatcher (Cortex-M `svc #N`)
   // -------------------------------------------------------------------------
   //
@@ -1269,6 +1412,8 @@ export class Rp2350System implements ISystem, IBus {
         this.beam.alg_vectoring = 0; this.beam.alg_zsh = 0;
         break;
       case 1: // SYS_WAIT_RECAL — end the frame + zero-ref (beam back to centre)
+        // Same place the cartridge flushes: post-zero, before the game draws.
+        this.audioFrame();
         this.cpu.hitWfi = true;
         this.armBeamX = ALG_CENTER_X;
         this.armBeamY = ALG_CENTER_Y;
@@ -1321,8 +1466,27 @@ export class Rp2350System implements ISystem, IBus {
         break;
       }
       // #16 PRINT_TEXT: libvpy renders text via v_directDraw32, not this call.
-      // #21/#22/#23 core-1 music/sfx: the C runtime sequences music on core 0
-      //   via SYS_PSG_WRITE, so these are unused by libvpy games. All no-ops.
+      //
+      // #21/#22/#23 — core-1 music/SFX. These were no-ops on the premise that
+      // "the C runtime sequences music on core 0 via SYS_PSG_WRITE, so they are
+      // unused by libvpy games". That is true of the hand-written C ports, but
+      // NOT of VPy: the ARM backend emits `svc #21` from vpy_play_music (see
+      // vpy_play_music/vpy_play_sfx in the generated .S), so every VPy game was
+      // silent here while sounding fine on hardware. Now they drive the same
+      // sequencer the cartridge BIOS runs on core 1.
+      case 21: { // SYS_PLAY_MUSIC(r0 = .vmus table ptr; 0 = stop)
+        const ptr = cpu.getReg(0) >>> 0;
+        if (ptr === 0) this.musStop(); else this.musStart(ptr);
+        break;
+      }
+      case 22: // SYS_STOP_MUSIC
+        this.musStop();
+        break;
+      case 23: { // SYS_PLAY_SFX(r0 = .vsfx table ptr)
+        const ptr = cpu.getReg(0) >>> 0;
+        if (ptr !== 0) this.sfxStart(ptr);
+        break;
+      }
       default:
         break;
     }

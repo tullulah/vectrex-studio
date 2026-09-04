@@ -72,6 +72,8 @@ add_executable(${UVM2_NAME}
     ${UVM2_SDK_DIR}/uvm2_sd.c
     ${UVM2_SDK_DIR}/uvm2_romzip.c
     ${UVM2_SDK_DIR}/uvm2_draw.c
+    ${UVM2_SDK_DIR}/uvm2_config.c
+    ${UVM2_SDK_DIR}/uvm2_asistente.c
     ${UVM2_SDK_DIR}/uvm2_input.c
     ${UVM2_SDK_DIR}/uvm2_led.c
     ${UVM2_SDK_DIR}/uvm2_text.c
@@ -87,6 +89,20 @@ add_executable(${UVM2_NAME}
 # A RAM image: the UVM2 firmware copies it to 0x20000000 and launches it. This is
 # also what makes crt0 emit the VECTOR_TABLE item the launch path looks for.
 pico_set_binary_type(${UVM2_NAME} no_flash)
+
+# DOBLES POR SOFTWARE, NO POR EL COPROCESADOR. Por defecto el pico-sdk sustituye
+# __aeabi_i2d y compañia por envoltorios que usan el DCP del RP2350 (mrc2/mcrr sobre p4).
+# Funciona en la placa, pero el EMULADOR no tiene coprocesadores —lo dice su propio codigo
+# en Thumb2.ts— asi que `mrc2 p4` deja el flag N puesto y el `bmi` que va detras gira para
+# siempre. Sintoma: el juego se queda en el primer frame (recals=1 tras 1200 frames) y no
+# dibuja nada, sin ningun error. Localizado en mhavoc, que usa `double` en el calc_sweep de
+# AAE; los puertos que no tocan dobles nunca llegaban a esas rutinas y por eso no se veia.
+#
+# `compiler` deja las de libgcc, que son puro Thumb. Cuesta ciclos solo a quien use dobles
+# —en AAE, una multiplicacion por frame— y a cambio TODOS los juegos se pueden depurar en
+# el emulador, que es donde se itera.
+pico_set_double_implementation(${UVM2_NAME} compiler)
+pico_set_float_implementation(${UVM2_NAME} compiler)
 
 # EXPERIMENTO: enlazar en la PSRAM EXTERNA (0x11000000) en vez de en la SRAM interna.
 #

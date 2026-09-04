@@ -35,7 +35,7 @@ import { extractElf32Symbols } from '../util/Elf32Symbols.js';
 
 /** Beam vector list → the IDE's Segment shape (same mapping the other systems use). */
 function vectorsToSegments(
-  draw: readonly { x0: number; y0: number; x1: number; y1: number; color: number }[],
+  draw: readonly { x0: number; y0: number; x1: number; y1: number; color: number; ticks: number }[],
   drawCnt: number,
   frameCounter: number,
 ): Segment[] {
@@ -43,7 +43,7 @@ function vectorsToSegments(
   for (let i = 0; i < drawCnt; i++) {
     const v = draw[i];
     segments.push({ x0: v.x0, y0: v.y0, x1: v.x1, y1: v.y1,
-                    intensity: v.color, frame: frameCounter });
+                    intensity: v.color, frame: frameCounter, ticks: v.ticks });
   }
   return segments;
 }
@@ -241,6 +241,7 @@ export class Uvm2System implements ISystem, IBus {
   oraHist = new Uint32Array(256);
   cambiosYsh = 0; private ultimoYsh = -1;
   traza: string[] = [];
+  viaFull: number[] = [];   // volcado completo (ciclo,reg,dato) x N para comparar con la captura VecFever
   yshHist = new Uint32Array(256);
   trazaPio: string[] = [];
   private pioLatch = 0;
@@ -270,6 +271,7 @@ export class Uvm2System implements ISystem, IBus {
    * "falta el romset" sin que nada explique por que. */
   private sdArchivos: Record<string, Uint8Array> = {};
   private sdLeerAddr = 0;
+  private sdLeerDesdeAddr = 0;
   private sdErrorAddr = 0;
   /** Registros del canal 0 del DMA, por indice de palabra. */
   private dmaRegs = new Uint32Array(16);
@@ -483,6 +485,7 @@ export class Uvm2System implements ISystem, IBus {
   setElf(elf: Uint8Array): void {
     const sim = extractElf32Symbols(elf);
     this.sdLeerAddr  = (sim.get('uvm2_sd_leer')  ?? 0) & ~1;
+    this.sdLeerDesdeAddr = (sim.get('uvm2_sd_leer_desde') ?? 0) & ~1;
     this.sdErrorAddr = (sim.get('uvm2_sd_error') ?? 0) >>> 0;
     /* EL PRINCIPIO DEL FRAME ES DONDE SE MIRAN LAS CUENTAS DEL ANTERIOR. Los contadores
      * vivos los pone a cero `uvm2_frame_begin`, asi que leerlos en cualquier otro momento
@@ -528,6 +531,39 @@ export class Uvm2System implements ISystem, IBus {
     cpu.setReg(0, n >>> 0);
     cpu.setReg(15, cpu.getReg(14) & ~1);
     console.log(`[Uvm2System] SD: "${ruta}" -> ${n} bytes`);
+  }
+
+  /** `uvm2_sd_leer_desde(ruta, dst, max, desde)`: un TROZO del fichero.
+   *
+   * Hacia falta porque el emulador atrapa la SD POR SIMBOLO, y una funcion nueva que el no
+   * conozca se ejecuta de verdad: el codigo FAT contra un lector que aqui no existe, y el
+   * juego ve un fallo que en la consola no ocurre. `vfcap` se quedaba en su error 1 por
+   * esto, no por el fichero.
+   *
+   * Sin traza por llamada A PROPOSITO: esto se llama una vez por frame y a 50 Hz llenaria
+   * la consola de lineas iguales. */
+  private atiendeSdLeerDesde(cpu: Thumb2): void {
+    let ruta = '';
+    for (let a = cpu.getReg(0) >>> 0, i = 0; i < 128; i++) {
+      const c = this.read8(a + i);
+      if (!c) break;
+      ruta += String.fromCharCode(c);
+    }
+    const dst   = cpu.getReg(1) >>> 0;
+    const max   = cpu.getReg(2) >>> 0;
+    const desde = cpu.getReg(3) >>> 0;
+    const f = this.sdArchivos[ruta.toLowerCase()];
+    let n = 0;
+    if (f && desde < f.length) {
+      n = Math.min(f.length - desde, max);
+      for (let i = 0; i < n; i++) this.write8((dst + i) >>> 0, f[desde + i]);
+    }
+    if (this.sdErrorAddr) {
+      const e = f ? 0 : 1;
+      for (let i = 0; i < 4; i++) this.write8(this.sdErrorAddr + i, (e >>> (i * 8)) & 0xFF);
+    }
+    cpu.setReg(0, n >>> 0);
+    cpu.setReg(15, cpu.getReg(14) & ~1);
   }
 
   init(um2: Uint8Array): void {
@@ -796,6 +832,7 @@ export class Uvm2System implements ISystem, IBus {
      * escribe ORB. Eso solo se ve en la traza. */
     if (this.traza.length < 40 && this.busCycle > 200000)
       this.traza.push(`${['ORB','ORA','DDRB','DDRA','T1CL','T1CH','T1LL','T1LH','T2CL','T2CH','SR','ACR','PCR','IFR','IER','ORAnh'][this.busAddress() & 0xF]}=0x${(this.gpioOut & 0xFF).toString(16)}`);
+    if ((globalThis as any).__VIADUMP) this.viaFull.push(this.busCycle, this.busAddress() & 0xF, this.gpioOut & 0xFF);
     this.via.write(this.busAddress() & 0xF, this.gpioOut & DATA_MASK,
                    (xsh) => { this.beam.alg_xsh = xsh; });
     /* ¿Se mueve el sample-and-hold de Y? Si ORB=0 llega y esto no cambia, el enganche no
@@ -1222,6 +1259,7 @@ export class Uvm2System implements ISystem, IBus {
 
       if (pc === ROM_LOOKUP) { this.romTableLookup(); continue; }
       if (this.sdLeerAddr && pc === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu); continue; }
+      if (this.sdLeerDesdeAddr && pc === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu); continue; }
       /* Mirar y dejar pasar: no se atrapa la llamada, solo se le hace la foto. */
       if (this.frameBeginAddr && pc === this.frameBeginAddr && this.statsAddr) {
         this.ciclosDeBus    = this.read32(this.statsAddr + 4);   // bus_cycles
@@ -1257,6 +1295,7 @@ export class Uvm2System implements ISystem, IBus {
              * donde vino — que es exactamente lo que paso la primera vez. */
             if (this.rastro1.length < 64) this.rastro1.push(pc1);
             if (this.sdLeerAddr && pc1 === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu1); }
+            if (this.sdLeerDesdeAddr && pc1 === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu1); }
             else if (pc1 === ROM_LOOKUP) { this.romTableLookup(this.cpu1); }
             else if (((pc1 & 0xFFFFFFF0) >>> 0) === ROM_NOOP) {
               this.cpu1.setReg(15, this.cpu1.getReg(14) & ~1);   // la funcion vacia: volver

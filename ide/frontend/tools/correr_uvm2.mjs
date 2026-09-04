@@ -54,11 +54,19 @@ const caja = { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 };
 /* PULSACIONES SIN MANOS. PULSA="40:1,120:2" = en el frame 40 el boton 1, en el 120 el 2;
  * cada una dura seis frames, que es mas que el antirrebote de cualquier menu. Sin esto el
  * emulador se queda en la pantalla de titulo y no se prueba NADA del juego. */
+/* VARIOS BOTONES A LA VEZ: "100:12" = en el frame 100, los botones 1 Y 2 juntos. Hacia
+ * falta porque las combinaciones son acciones de verdad — en asterock la MONEDA es 1+2 y
+ * START es 3+4 — y con un solo boton no se llega al juego. */
 const guion = (process.env.PULSA || "").split(",").filter(Boolean)
-  .map(x => ({ f: Number(x.split(":")[0]), b: Number(x.split(":")[1] || 1) }));
+  .map(x => ({ f: Number(x.split(":")[0]),
+               bs: (x.split(":")[1] || "1").split("").map(Number) }));
 for (let f = 0; f < Number(nFrames); f++) {
   const pulsa = guion.find(g => f >= g.f && f < g.f + 6);
-  if (guion.length) sys.setJoyButtons(pulsa ? (0xF0 & ~(1 << (3 + pulsa.b))) : 0xF0);
+  if (guion.length) {
+    let m = 0xF0;
+    if (pulsa) for (const b of pulsa.bs) m &= ~(1 << (3 + b));
+    sys.setJoyButtons(m);
+  }
   const segs = sys.runFrame();
   total += segs.length;
   if (segs.length) conVectores++;
@@ -106,11 +114,34 @@ for (let f = 0; f < Number(nFrames); f++) {
       /* SIN GIRAR NINGUN EJE. Se comprobo rindiendo las cuatro orientaciones de la
        * pantalla de titulo de dkong y leyendo cual dice "DONKEY KONG": esta. */
       const px = (v, o) => ((v - o) * e).toFixed(1);
+      /* EL BRILLO ES Z, Y PUNTO. Aqui hubo un modelo de "fosforo = intensidad x tiempo"
+       * que atenuaba cada trazo por su velocidad (z * 130 / (long/ticks) / 4): TRES
+       * numeros que no salen de ninguna medida, y el efecto era que los trazos rapidos
+       * —los nuestros, que van a tasas altas— desaparecian mientras los puntos se
+       * pintaban a brillo pleno. Me hizo leer "letras a puntos" en un dibujo cuyos
+       * trazos estaban ahi. El frame de la CAPTURA del VecFever pintado con esa misma
+       * regla sale igual de punteado (56% de sus segmentos son de longitud cero contra
+       * nuestro 60%), asi que el punto por vertice es del idioma, no del puerto.
+       *
+       * Lo que el dwell SI dice, y es lo unico que se usa: si un segmento de longitud
+       * cero estuvo iluminado (ticks>0) es un PUNTO de verdad y hay que pintarlo; si no,
+       * no existe. */
+      const luz = (s) => Math.max(0.15, (s.intensity ?? 127) / 127);
       writeFileSync(process.env.SVG,
         `<svg xmlns="http://www.w3.org/2000/svg" width="820" height="820" style="background:#000">` +
-        segs.map(s => `<line x1="${px(s.x0, caja.x0)}" y1="${px(s.y0, caja.y0)}" ` +
-                      `x2="${px(s.x1, caja.x0)}" y2="${px(s.y1, caja.y0)}" ` +
-                      `stroke="#0f0" stroke-width="1.5"/>`).join("") + `</svg>`);
+        segs.map(s => {
+          const dot = Math.abs(s.x1 - s.x0) < 1 && Math.abs(s.y1 - s.y0) < 1;
+          if (dot && s.ticks) {
+            /* Radio FIJO: el punto es un punto. Escalarlo con el dwell era la otra
+             * mitad de la invencion — hacia gordos justo los vertices y tapaba el trazo. */
+            return `<circle cx="${px(s.x0, caja.x0)}" cy="${px(s.y0, caja.y0)}" ` +
+                   `r="1.5" fill="#0f0" fill-opacity="${luz(s).toFixed(2)}"/>`;
+          }
+          if (dot) return "";
+          return `<line x1="${px(s.x0, caja.x0)}" y1="${px(s.y0, caja.y0)}" ` +
+                 `x2="${px(s.x1, caja.x0)}" y2="${px(s.y1, caja.y0)}" ` +
+                 `stroke="#0f0" stroke-opacity="${luz(s).toFixed(2)}" stroke-width="1.5"/>`;
+        }).join("") + `</svg>`);
       console.log(`  dibujo escrito en ${process.env.SVG}`);
     }
   }
@@ -151,9 +182,17 @@ if (elf) {
                   `saltos=${rd(10)} descartados=${rd(6)} recals=${rd(7)}`);
       /* Y POR QUE dibuja poco: si falta el romset, el juego pinta una X y nada mas. Esa
        * es una respuesta completamente distinta de "el camino de dibujo esta roto". */
-      for (const sim of ["dk_rom_error", "uvm2_romzip_error", "uvm2_romzip_bytes", "figura", "densidad", "MIN_T1", "VCAP", "T1_TRANSPORT", "DRAW_SCALE", "T1_LAG"]) {
+      for (const sim of ["dk_rom_error", "uvm2_romzip_error", "uvm2_romzip_bytes", "mh_env_x0", "mh_env_x1", "mh_env_y0", "mh_env_y1", "figura", "densidad", "T1_EXTRA_Q8", "T1_LAG_ARRANQUE", "MIN_T1_ARRANQUE", "VCAP_SALTO", "RAMPA_FIJA", "VCAP_SLOW", "VCAP_DV", "T1_SALTO", "MIN_T1", "VCAP", "T1_TRANSPORT", "DRAW_SCALE", "T1_LAG",
+                         /* La ENTRADA tal como la ve el juego. Sin esto, "el emulador no
+                          * reacciona a los botones" no distingue "no llegan" de "llegan y
+                          * el juego no los usa", que se arreglan en sitios opuestos. */
+                         "currentButtonState", "currentJoy1X", "currentJoy1Y", "vfcap_frames", "vfcap_saltados", "vfcap_error", "vfcap_bytes", "vfcap_psram_ok", "vfcap_copiado", "vfcap_nframes", "dbg_mt", "DBG_MT_X", "DBG_H_X", "DEUDA_X", "DEUDA_Y", "vpy_red_n", "vpy_red_err_c", "vpy_red_subunidad", "vpy_red_cero", "sonda_lista", "sonda_a", "sonda_b", "sonda_c", "sonda_d", "sonda_e", "sonda_f", "uvm2_pacer_cycles", "uvm2_cero_cada"]) {
         const ln = nm.split("\n").find(x => x.endsWith(" " + sim));
-        if (ln) console.log(`    ${sim} = ${q.read32(parseInt(ln.split(" ")[0], 16)) >>> 0}`);
+        if (!ln) continue;
+        const v = q.read32(parseInt(ln.split(" ")[0], 16));
+        /* Las sondas llevan valores CON SIGNO. Imprimirlas sin signo daba 4294967063 por
+         * -233, que se lee como basura y manda a buscar un fallo que no existe. */
+        console.log(`    ${sim} = ${sim.startsWith("sonda_") && sim !== "sonda_lista" ? (v | 0) : (v >>> 0)}`);
       }
     }
   } catch (e) { console.log("  (sin contadores:", String(e).slice(0, 60), ")"); }
@@ -208,8 +247,22 @@ if (elf) {
   } catch (e) { console.log("  (sin listado)", String(e).slice(0, 50)); }
 }
 
-/* DONDE ESTA EL NUCLEO 1. Saber que arranco no basta: si core 0 sigue esperandole, lo que
- * hace falta es donde se quedo EL. */
+/* DONDE ESTAN LOS DOS NUCLEOS. Esto imprimia SOLO el nucleo 1 — y su propio comentario
+ * decia que lo que hace falta es donde se quedo el 0. Con mhavoc colgado en el primer
+ * frame (recals=1 tras 1200 frames) la unica pregunta era esa, y no habia forma de
+ * responderla sin parchear la herramienta. */
+{
+  const c0 = (sys /** @type {any} */).cpu;
+  if (c0) {
+    const pc0 = c0.getReg(15) >>> 0;
+    let quien = "";
+    if (elf) { try {
+      quien = execFileSync("arm-none-eabi-addr2line", ["-f", "-e", elf, "0x" + pc0.toString(16)])
+                .toString().trim().split("\n").join("  ");
+    } catch {} }
+    console.log(`  nucleo 0 en 0x${pc0.toString(16)}  ${quien}`);
+  }
+}
 const c1 = (sys /** @type {any} */).cpu1;
 if (c1) {
   const pc1 = c1.getReg(15) >>> 0;
@@ -260,7 +313,12 @@ if (elf) {
     const w32 = (a, v) => { for (let i = 0; i < 4; i++) q3.write8((a + i) >>> 0, (v >>> (i * 8)) & 0xFF); };
     const SCR = 0x20060000, PILA = 0x20061000;
     const salida = [];
-    const casos = [[50, 0], [0, 50], [68, 0], [-46, 0], [6, 0]];
+    /* (0,50) VA PRIMERO Y ES EL QUE MAS DICE: un vector VERTICAL no puede mover la X, y
+     * la CPU emulada devolvia vx=1 donde el host devuelve 0 (test `un_vertical_no_mueve_
+     * la_x` en vectrex-draw). Son 0,39 unidades de desplazamiento por trazo SIEMPRE AL
+     * MISMO LADO, y en la lista de asterock salian 351 trazos con `vx=1 vy=24`: es una
+     * deriva horizontal entera fabricada por el emulador. */
+    const casos = [[0, 50], [50, 0], [68, 0], [-46, 0], [6, 0]];
     console.log("  vx_ramp_params EN LA CPU EMULADA (host: 50->vx=125 t1=64, 68->vx=125 t1=87, -46->vx=-127 t1=58):");
     for (const [dx, dy] of casos) {
       cpu.setReg(0, dx >>> 0); cpu.setReg(1, dy >>> 0);
@@ -288,6 +346,11 @@ if (elf) {
     const malo = [];
     if (t1s.size === 1) malo.push(`t1 vale ${[...t1s][0]} para todas las entradas`);
     if (vert && Math.abs(vert.vy) <= Math.abs(vert.vx)) malo.push(`(0,${vert.dy}) no mueve la Y`);
+    /* EL EJE QUE NO SE PIDE TIENE QUE QUEDARSE QUIETO. Este invariante faltaba y por eso
+     * la sonda decia "la rampa: la CPU emulada la calcula bien" mientras devolvia vx=1
+     * para dx=0 — un sesgo que falsea CUALQUIER medida de geometria hecha en el emulador. */
+    if (vert && vert.vx !== 0) malo.push(`(0,${vert.dy}) mueve la X: vx=${vert.vx} (el host da 0)`);
+    if (salida.every(r => r.vx === 0 && r.vy === 0)) malo.push("devuelve 0,0 para TODO: la sonda no esta ejecutando la funcion");
     console.log(malo.length ? "  RAMPA MAL EN LA CPU EMULADA: " + malo.join("; ")
                             : "  rampa: la CPU emulada la calcula bien");
   } catch (e) { console.log("  (sonda de rampa fallida)", e && e.stack ? e.stack.split("\n").slice(0, 5).join("\n      ") : String(e)); }
@@ -302,18 +365,79 @@ if (process.env.VIADUMP) {
   console.log(`  VIA volcado: ${v.length/3} escrituras -> ${process.env.VIADUMP}`);
 }
 
+function capacidadCmds(nmLines, elfPath) {
+  /* La capacidad se lee del ELF (nm -S), no se supone: cada juego compila la suya y un
+   * desplazamiento de mas apunta a bss vacia, que se lee como una lista de ceros
+   * perfectamente creible. */
+  try {
+    const l = execFileSync("arm-none-eabi-nm", ["-S", elfPath]).toString()
+      .split("\n").find(x => x.endsWith(" s_cmds"));
+    return parseInt(l.split(/\s+/)[1], 16) / 2;
+  } catch { return 0; }
+}
+
 if (process.env.CMDDUMP) {
   // Lee la lista de comandos EXACTA del SDK (s_cmds) de la RAM del emulador: 3 bytes/cmd,
   // packed24 = (delay<<12)|(reg<<8)|data. Es la vara buena (ciclos de E), sin el PIO.
   const S = (sys /** @type {any} */);
   const ram = S.sram; const BASE = 0x20000000;
   const rd32 = (a) => ram[a-BASE] | (ram[a-BASE+1]<<8) | (ram[a-BASE+2]<<16) | (ram[a-BASE+3]<<24);
-  const S_CMDS = 0x2004c4e8, S_COUNT = 0x200524e8;
-  const cnt = rd32(S_COUNT) >>> 0;
+  // Las direcciones SE RESUELVEN DEL ELF, no se cuecen: estuvieron fijas y el primer
+  // rebuild las dejo apuntando a otra cosa — s_count leyo 16,8M y el volcado era basura.
+  const nmc = execFileSync("arm-none-eabi-nm", [elf]).toString().split("\n");
+  const dir = (n) => { const l = nmc.find(x => x.endsWith(" " + n)); return l ? parseInt(l.split(" ")[0], 16) : 0; };
+  const S_CMDS = dir("s_cmds"), S_COUNT = dir("s_count");
+  if (!S_CMDS || !S_COUNT) { console.log("  CMDDUMP: sin simbolos s_cmds/s_count en el ELF"); process.exit(0); }
+  /* CON DOBLE NUCLEO HAY DOS BUFFERS y `s_count` es el del que core 0 esta LLENANDO —
+   * si el emulador para justo tras frame_begin, vale 0 y el volcado sale vacio (paso con
+   * sdkplay). `s_len[i]` guarda la longitud del frame ya PUBLICADO de cada buffer, asi
+   * que se coge el que tenga contenido. Sin esto, "0 comandos" se lee como "el juego no
+   * dibuja" cuando lo que pasa es que se miro el buffer equivocado. */
+  const S_LEN = dir("s_len"), S_BUF = dir("s_buf");
+  let cnt = rd32(S_COUNT) >>> 0, base_off = 0;
+
+  /* EL BUFFER PUBLICADO, NUNCA EL QUE SE ESTA LLENANDO.
+   *
+   * Esto usaba `s_count` salvo que valiera cero, y `s_count` es el contador VIVO: si el
+   * emulador para a mitad de frame —que es lo normal— se volcaba un frame a medio
+   * construir. Sintoma: el juego decia 4115 comandos y el volcado traia 2941, y con eso
+   * cualquier comparacion contra la captura compara media lista contra una entera. Me
+   * costo dar dos veces por buena una divergencia que era mia.
+   *
+   * `s_len[i]` es la longitud del frame ya PUBLICADO y `uvm2_frame_done` dice cual fue el
+   * ultimo servido. Se prefiere siempre eso; `s_count` solo si no hay `s_len`. */
+  if (S_LEN) {
+    const l0 = rd32(S_LEN) >>> 0, l1 = rd32(S_LEN + 4) >>> 0;
+    if (l0 || l1) {
+      const D = dir("uvm2_frame_done");
+      let usa1 = l1 >= l0;
+      if (D) { const d = rd32(D) >>> 0; if (l0 && l1) usa1 = (d & 1) === 1; }
+      cnt = usa1 ? l1 : l0;
+      base_off = usa1 ? 1 : 0;
+    }
+  } else if (S_BUF) {
+    base_off = rd32(S_BUF) & 1;
+  }
+  /* Y SE COTEJA CON EL CONTADOR DEL JUEGO. Si no cuadran, el volcado NO es el frame que
+   * las estadisticas describen, y hay que decirlo en vez de dejar que se compare. */
+  {
+    const ST = dir("uvm2_stats");
+    if (ST) {
+      const dice = rd32(ST) >>> 0;                     /* commands es el primer campo */
+      if (dice && cnt !== dice)
+        console.log(`  CMDDUMP: OJO, el juego dice ${dice} comandos y el buffer publicado ` +
+                    `tiene ${cnt}. El volcado es de OTRO frame: no lo compares con las ` +
+                    `estadisticas de arriba.`);
+      else if (dice)
+        console.log(`  CMDDUMP: buffer publicado s_len[${base_off}]=${cnt}, cuadra con las estadisticas`);
+    }
+  }
   const N = ['ORB','ORA','DDRB','DDRA','T1CL','T1CH','T1LL','T1LH','T2CL','T2CH','SR','ACR','PCR','IFR','IER','ORAnh'];
   let o = 'i\treg\tname\tdata\tdelay\n';
   for (let i=0;i<cnt && i<20000;i++) {
-    const b0=ram[S_CMDS-BASE+i*3], b1=ram[S_CMDS-BASE+i*3+1], b2=ram[S_CMDS-BASE+i*3+2];
+    const CAPB = capacidadCmds(nmc, elf);
+    const B = S_CMDS + base_off * CAPB;
+    const b0=ram[B-BASE+i*3], b1=ram[B-BASE+i*3+1], b2=ram[B-BASE+i*3+2];
     const w=b0|(b1<<8)|(b2<<16); const data=w&0xFF, reg=(w>>8)&0xF, delay=w>>12;
     o+=`${i}\t${reg.toString(16)}\t${N[reg]}\t${data.toString(16).padStart(2,'0')}\t${delay}\n`;
   }
