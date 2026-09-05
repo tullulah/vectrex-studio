@@ -447,6 +447,24 @@ function capacidadCmds(nmLines, elfPath) {
  *
  *     AVGPERFIL=1 node tools/correr_uvm2.mjs juego.um2 N juego.elf
  */
+/* DUMPSYM=simbolo:n — leer N palabras de un simbolo de la RAM emulada. Generico, para no
+ * tener que anadir un volcado a medida cada vez que se instrumenta algo. */
+if (process.env.DUMPSYM) {
+  const S = (sys /** @type {any} */);
+  const ram = S.sram, BASE = 0x20000000;
+  const rd32 = (a) => (ram[a-BASE] | (ram[a-BASE+1]<<8) | (ram[a-BASE+2]<<16) | (ram[a-BASE+3]<<24)) >>> 0;
+  const nmc = execFileSync("arm-none-eabi-nm", [elf]).toString().split("\n");
+  for (const spec of process.env.DUMPSYM.split(",")) {
+    const [nom, cnt] = spec.split(":");
+    const l = nmc.find(x => x.endsWith(" " + nom));
+    if (!l) { console.log(`  DUMPSYM: ${nom} no esta en el ELF`); continue; }
+    const a = parseInt(l.split(" ")[0], 16), n = parseInt(cnt || "1", 10);
+    const v = [];
+    for (let i = 0; i < n; i++) v.push(rd32(a + i*4));
+    console.log(`  ${nom} = ${v.join(" ")}`);
+  }
+}
+
 if (process.env.AVGPERFIL) {
   const S = (sys /** @type {any} */);
   const ram = S.sram, BASE = 0x20000000;

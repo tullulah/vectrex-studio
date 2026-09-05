@@ -110,6 +110,7 @@ static volatile uint32_t s_ciclos_pub[2];
 /* La caja del frame que se esta construyendo, en unidades de dispositivo. */
 static int32_t s_caja_x0 = 32767, s_caja_y0 = 32767, s_caja_x1 = -32768, s_caja_y1 = -32768;
 static int32_t s_caja_w_ant;
+static uint32_t s_pico_i, s_pico_k, s_pico_n;
 static uint32_t s_frame_no = 1;
 
 const uint8_t *uvm2_frame_buffer(uint32_t frame) { return s_cmds[frame & 1u]; }
@@ -2487,10 +2488,32 @@ void uvm2_frame_end(void)
             if (r > uvm2_stats.caja_razon_max) uvm2_stats.caja_razon_max = r;
             if (uvm2_stats.caja_razon_min == 0u || r < uvm2_stats.caja_razon_min)
                 uvm2_stats.caja_razon_min = r;
-            if (r > 115u || r < 87u) uvm2_stats.caja_saltos++;
+            if (r > 115u || r < 87u) {
+                uvm2_stats.caja_saltos++;
+                /* LAS RAZONES DE ALREDEDOR, para ver la FORMA del salto: un fallo sube y
+                 * VUELVE al frame siguiente; una animacion sube y se QUEDA. Sin esto un
+                 * contador no distingue un defecto de un zoom legitimo. Se guardan las
+                 * cuatro razones a partir del salto, y de los 6 ultimos saltos. */
+                s_pico_n = 4u;
+                s_pico_i = (s_pico_i + 1u) % 6u;
+                uvm2_stats.caja_pico[s_pico_i][0] = r;
+                uvm2_stats.caja_pico[s_pico_i][1] = 0;
+                uvm2_stats.caja_pico[s_pico_i][2] = 0;
+                uvm2_stats.caja_pico[s_pico_i][3] = 0;
+                s_pico_k = 1u;
+            } else if (s_pico_n && s_pico_k < 4u) {
+                uvm2_stats.caja_pico[s_pico_i][s_pico_k++] = r;
+                if (s_pico_k >= 4u) s_pico_n = 0u;
+            }
         }
         s_caja_w_ant = w;
         s_caja_x0 = s_caja_y0 = 32767; s_caja_x1 = s_caja_y1 = -32768;
+    }
+    /* El reparto de disparos de avg_mgo del frame que se cierra. >1 = geometria duplicada. */
+    {
+        uint32_t m = uvm2_stats.mgo_por_frame;
+        uvm2_stats.mgo_hist[m < 3u ? m : 3u]++;
+        uvm2_stats.mgo_por_frame = 0;
     }
     s_len[s_buf]        = s_count;
     s_ciclos_pub[s_buf] = s_ciclos;

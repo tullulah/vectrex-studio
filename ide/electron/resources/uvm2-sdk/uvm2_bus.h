@@ -277,6 +277,13 @@ typedef struct {
      * frame dibujado con otra ESCALA salta aqui y no lo ve ninguna metrica de conteo. */
     uint32_t caja_w, caja_h;
     uint32_t caja_razon_ult, caja_razon_min, caja_razon_max, caja_saltos;
+    /* Los 6 ultimos saltos, con las 3 razones que vienen DETRAS de cada uno: distingue un
+     * fallo (sube y vuelve) de una animacion (sube y se queda). */
+    uint32_t caja_pico[6][4];
+    /* Disparos de avg_mgo (generacion de la lista del AVG) en el frame en curso, y el
+     * reparto: >1 significa que la geometria se acumula DOS VECES en la misma lista. */
+    uint32_t mgo_por_frame;
+    uint32_t mgo_hist[4];       /* 0, 1, 2, 3 o mas disparos por frame */
 } uvm2_stats_t;
 
 extern uvm2_stats_t uvm2_stats;
