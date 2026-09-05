@@ -1492,10 +1492,17 @@ volatile int32_t uvm2_cierre_vecfever = UVM2_CIERRE_VECFEVER;
  * es que uno los gasta con 220 comandos y el otro callado), asi que el coste no esta en el
  * bus sino en construir y reproducir esos comandos.
  *
- * Y ahi el emulador puede estar cobrando de mas: reproduce el bucle de core 1 instruccion a
- * instruccion, mientras que en la placa son 220 comandos mas en la MISMA lista y el MISMO
- * DMA. No se ha podido comprobar en consola. Se deja encendido —es su metodo y hace que el
- * frame cadencie como el suyo— con el knob a mano para el A/B. */
+ * Y el emulador COBRABA DE MAS: reproduce el bucle de core 1 instruccion a instruccion,
+ * mientras que en la placa son 220 comandos mas en la MISMA lista y el MISMO DMA.
+ *
+ * COMPROBADO EN CONSOLA el 2026-09-05 con los dos binarios (mhavoc / mhavocb, mismo codigo
+ * y solo este knob de diferencia): van IGUAL de fluidos, o sea que el 26% del emulador no
+ * existe en la placa. Y el relleno ademas SE NOTA: sin el "apelotona un poco las lineas de
+ * texto". Un silencio no refresca un condensador, y los ~3500 ciclos de hueco entre frames
+ * bastan para que el dibujo se comprima.
+ *
+ * Se queda encendido. El knob se queda por si algun puerto necesita esos comandos para
+ * otra cosa, no porque haya duda. */
 #ifndef UVM2_RITMO_VECFEVER
 #define UVM2_RITMO_VECFEVER 1
 #endif
