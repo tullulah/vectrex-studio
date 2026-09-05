@@ -2390,6 +2390,17 @@ void uvm2_frame_end(void)
 {
     uint32_t cycles = 0;
 
+    /* NO PUBLICAR UN FRAME VACIO.
+     *
+     * Un juego puede cerrar su imagen antes de que el bucle llegue aqui — el puerto de
+     * Major Havoc publica en cada avg_mgo, que es donde de verdad acaba una imagen — y
+     * entonces esta llamada encuentra la lista recien abierta, con el prologo y nada mas.
+     * Publicarla es un FRAME NEGRO intercalado, o sea parpadeo del bueno.
+     *
+     * Si nadie ha dibujado desde `uvm2_frame_begin`, no hay nada que enseñar: se vuelve sin
+     * tocar el haz, que ya quedo pinzado por la publicacion anterior. */
+    if (uvm2_stats.vectors == 0u && uvm2_stats.moves == 0u) return;
+
     /* APAGAR EXPLICITAMENTE, no darlo por hecho. Aqui decia "blanked already
      * (every lit segment restores the PCR)", que es una SUPOSICION: solo se
      * cumple si el frame termino en un segmento iluminado. Un frame sin dibujo,
