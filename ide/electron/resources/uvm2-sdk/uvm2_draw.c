@@ -2308,6 +2308,20 @@ static void ritmo_vecfever(void)
         emit(UVM2_VIA_T1CL,  0x1F, 0);
         emit(UVM2_VIA_T1CH,  0x00, 41);
     }
+    /* Y EL RESTO, QUE SI NO SE QUEDA FUERA. Las alternancias van de 50 en 50 ciclos, asi
+     * que siempre sobran menos de 50 al final: se cierran con una unidad mas cuyo hueco es
+     * exactamente lo que falta. Sin esto el frame se quedaba a 29985 de 30000 — poco, pero
+     * es la misma clase de descuadre que hemos estado persiguiendo toda la noche. */
+    uint32_t resto = objetivo > s_ciclos ? objetivo - s_ciclos : 0u;
+    if (resto >= 3u + 1u + 0u + 1u + 1u + 1u) {
+        const uint32_t hueco = resto - (6u + 1u + 0u + 1u + 1u);
+        uint32_t t1 = hueco > 10u ? hueco - 10u : 1u;   /* su hueco es t1 + 10 */
+        if (t1 > 255u) t1 = 255u;
+        emit(UVM2_VIA_PORTA, (n & 1u) ? 0x40 : 0xC0, 6);
+        emit(UVM2_VIA_T1CL,  (uint8_t)t1, 0);
+        emit(UVM2_VIA_T1CH,  0x00, hueco);
+        n++;
+    }
     /* Las caches, con lo ultimo que salio de verdad. El ACR y el PCR los repone
      * via_setup en el frame siguiente. */
     s_porta = (uint8_t)((n & 1u) ? 0x40 : 0xC0); s_porta_stale = 0;
