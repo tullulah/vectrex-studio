@@ -240,6 +240,31 @@ typedef struct {
     uint32_t vectores_en_max;   /* vectores del frame mas lento: liga tiempo con escena */
     uint32_t frames_lentos;     /* periodos por encima de 20,5 ms */
     uint32_t frames_medidos;
+
+    /* ── EL LATIDO ───────────────────────────────────────────────────────────
+     *
+     * `frames_lentos` dice CUANTOS y `us_frame_max` dice CUANTO, pero lo que se ve en
+     * pantalla es un ritmo: "parpadea una vez por segundo, a veces dos". Un contador no
+     * distingue 50 frames flojos seguidos de uno flojo cada 50, y son defectos distintos.
+     *
+     * `hueco_lento_*` mide los FRAMES ENTRE dos lentos consecutivos: si sale ~50, el latido
+     * es de 1 Hz y hay que buscar algo con periodo de un segundo; si sale 5, es otra cosa.
+     * `hist_frame` da la forma entera de la distribucion, que es lo que separa "todos un
+     * poco largos" de "casi todos clavados y uno larguisimo".
+     *
+     * Y `en_max_*` es la foto del frame MAS LENTO: dice si se fue en reproducir la lista
+     * (us_exec), en leer los mandos (us_input), esperando a core 0 (us_wait) o en el resto
+     * del bucle. Sin eso solo se sabe QUE hubo un tiron, no DE QUIEN. */
+    uint32_t hist_frame[8];     /* <20,5 <21 <22 <24 <28 <36 <52 y el resto, en ms */
+    uint32_t hueco_lento_ult;   /* frames desde el lento anterior */
+    uint32_t hueco_lento_min;
+    uint32_t hueco_lento_max;
+    uint32_t en_max_us_exec;
+    uint32_t en_max_us_input;
+    uint32_t en_max_us_rest;
+    uint32_t en_max_us_wait;
+    uint32_t en_max_dropped;
+    uint32_t en_max_commands;
 } uvm2_stats_t;
 
 extern uvm2_stats_t uvm2_stats;

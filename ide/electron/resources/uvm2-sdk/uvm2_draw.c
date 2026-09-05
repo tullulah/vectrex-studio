@@ -2265,6 +2265,36 @@ static void mide_periodo(void)
         if (d > uvm2_stats.us_frame_max) {
             uvm2_stats.us_frame_max     = d;
             uvm2_stats.vectores_en_max  = uvm2_stats.vectors_last;
+            /* LA FOTO DEL PEOR FRAME: de quien fue el tiron, no solo que lo hubo. */
+            uvm2_stats.en_max_us_exec   = uvm2_stats.us_exec;
+            uvm2_stats.en_max_us_input  = uvm2_stats.us_input;
+            uvm2_stats.en_max_us_rest   = uvm2_stats.us_rest;
+            uvm2_stats.en_max_us_wait   = uvm2_stats.us_wait;
+            uvm2_stats.en_max_dropped   = uvm2_stats.dropped;
+            uvm2_stats.en_max_commands  = uvm2_stats.commands;
+        }
+        /* LA FORMA DE LA DISTRIBUCION, en tramos de milisegundos. */
+        {
+            static const uint32_t TOPE[7] = { 20500u, 21000u, 22000u, 24000u,
+                                              28000u, 36000u, 52000u };
+            unsigned b = 7u;
+            for (unsigned i = 0; i < 7u; i++) if (d < TOPE[i]) { b = i; break; }
+            uvm2_stats.hist_frame[b]++;
+        }
+        /* Y EL RITMO: cuantos frames pasan entre dos lentos. Un latido de 1 Hz da ~50. */
+        {
+            static uint32_t desde_lento;
+            desde_lento++;
+            if (d > 20500u) {
+                uvm2_stats.hueco_lento_ult = desde_lento;
+                if (uvm2_stats.hueco_lento_max == 0u ||
+                    desde_lento > uvm2_stats.hueco_lento_max)
+                    uvm2_stats.hueco_lento_max = desde_lento;
+                if (uvm2_stats.hueco_lento_min == 0u ||
+                    desde_lento < uvm2_stats.hueco_lento_min)
+                    uvm2_stats.hueco_lento_min = desde_lento;
+                desde_lento = 0u;
+            }
         }
         if (d > 20500u) uvm2_stats.frames_lentos++;
     }

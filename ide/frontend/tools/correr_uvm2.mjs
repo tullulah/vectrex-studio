@@ -166,6 +166,21 @@ if (process.env.PORFRAME) {
     else i++;
   }
   console.log(`  rachas mudas: ${mudos.length ? mudos.join('  ') : 'ninguna'}`);
+  /* EL PERIODO entre frames flojos, que es lo que se ve como latido. Un frame "flojo" es
+   * el que dibuja mucho menos que la mediana, no solo el que dibuja cero: en consola un
+   * frame a medias tambien parpadea. */
+  const orden = porFrame.filter(n => n > 0).sort((a, b) => a - b);
+  if (orden.length) {
+    const med = orden[orden.length >> 1];
+    const flojos = [];
+    porFrame.forEach((n, i) => { if (n < med * 0.6) flojos.push(i); });
+    const per = flojos.slice(1).map((v, i) => v - flojos[i]).filter(d => d > 0);
+    const c = {};
+    per.forEach(d => { c[d] = (c[d] || 0) + 1; });
+    const top = Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    console.log(`  frames flojos (<60% de la mediana ${med}): ${flojos.length} de ${porFrame.length}`);
+    console.log(`  periodos entre ellos: ${top.map(([d, n]) => `${d}x${n}`).join('  ')}`);
+  }
   const conD = porFrame.filter(n => n > 0);
   if (conD.length) {
     const or = [...conD].sort((a,b) => a-b);
