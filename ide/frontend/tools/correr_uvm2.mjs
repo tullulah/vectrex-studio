@@ -412,6 +412,75 @@ function capacidadCmds(nmLines, elfPath) {
   } catch { return 0; }
 }
 
+/* PERFIL DEL DISPLAY LIST DEL AVG, leido de la RAM emulada.
+ *
+ * El arnes de host NO SIRVE para esto: mhavoc da 0 llamadas de dibujo ahi
+ * ([[emulador-sin-fpu-ni-dcp]]). El testigo es este emulador, que corre el firmware de
+ * verdad, asi que el perfil se lee de su RAM.
+ *
+ *     AVGPERFIL=1 node tools/correr_uvm2.mjs juego.um2 N juego.elf
+ */
+if (process.env.AVGPERFIL) {
+  const S = (sys /** @type {any} */);
+  const ram = S.sram, BASE = 0x20000000;
+  const rd32 = (a) => (ram[a-BASE] | (ram[a-BASE+1]<<8) | (ram[a-BASE+2]<<16) | (ram[a-BASE+3]<<24)) >>> 0;
+  const nmc = execFileSync("arm-none-eabi-nm", [elf]).toString().split("\n");
+  const dir = (n) => { const l = nmc.find(x => x.endsWith(" " + n)); return l ? parseInt(l.split(" ")[0], 16) : 0; };
+  const P = dir("avg_perfil"), N = dir("avg_perfil_n"), TOT = dir("avg_perfil_vec_total");
+  if (!P || !N) { console.log("  AVGPERFIL: sin simbolos — ¿compilado con -DAVG_PERFIL?"); }
+  else {
+    const n = rd32(N), tot = rd32(TOT) || 1;
+    const e = [];
+    for (let i = 0; i < n && i < 512; i++)
+      e.push({ addr: rd32(P + i*12), llam: rd32(P + i*12 + 4), vec: rd32(P + i*12 + 8) });
+    const e2 = e.slice();          // orden ORIGINAL: avg_perfil_prog va por indice de tabla
+    e.sort((a, b) => b.vec - a.vec);
+    console.log(`\n  === PERFIL AVG: ${n} subrutinas, ${tot} vectores dibujados ===`);
+    console.log("   addr   llamadas  vectores  vec/llam   % del total");
+    let acum = 0;
+    for (const x of e.slice(0, 30)) {
+      if (!x.vec) break;
+      acum += x.vec;
+      console.log(`  ${x.addr.toString(16).toUpperCase().padStart(5,"0")}  ${String(x.llam).padStart(8)}`
+        + `  ${String(x.vec).padStart(8)}  ${(x.vec/(x.llam||1)).toFixed(2).padStart(8)}`
+        + `   ${(100*x.vec/tot).toFixed(1).padStart(5)}%`);
+    }
+    console.log(`  (las mostradas suman ${(100*acum/tot).toFixed(1)}%)`);
+    /* Y LOS GLIFOS EN CRUDO, decodificados del display list. VCTR = 2 palabras:
+     * la 1a lleva dy y el brillo, la 2a dx. SVEC = 1 palabra, deltas cortos. */
+    const PR = dir("avg_perfil_prog"), PN = dir("avg_perfil_prog_n");
+    if (PR && PN && process.env.AVGPERFIL === "glifos") {
+      const rd16 = (a) => (ram[a-BASE] | (ram[a-BASE+1]<<8)) >>> 0;
+      const rd8  = (a) => ram[a-BASE];
+      const sx = (v, b) => { const m = 1 << (b-1); return (v & (m-1)) - (v & m); };
+      console.log("\n  === GLIFOS (deltas del display list) ===");
+      for (let i = 0; i < Math.min(n, 40); i++) {
+        const nw = rd8(PN + i);
+        if (!nw) continue;
+        const w = [];
+        for (let k = 0; k < nw; k++) w.push(rd16(PR + (i*24 + k)*2));
+        const trazos = [];
+        for (let k = 0; k < w.length; ) {
+          const op = w[k] >> 13;
+          // aae_avg.h: VCTR=0 HALT=1 SVEC=2 STAT=3 CNTR=4 JSRL=5 RTSL=6 JMPL=7
+          if (op === 0) {                       // VCTR: dos palabras
+            const dy = sx(w[k] & 0x1fff, 13), z = (w[k+1] >> 12) & 0xf, dx = sx(w[k+1] & 0x1fff, 13);
+            trazos.push(`${z ? "" : "·"}(${dx},${dy})`); k += 2;
+          } else if (op === 2) {                // SVEC: una palabra, deltas cortos
+            const dx = sx(w[k] & 0x1f, 5) << 1, dy = sx((w[k] >> 8) & 0x1f, 5) << 1;
+            const z = (w[k] >> 4) & 0x0e;   // mhavoc.c: z = ((firstwd >> 4) & 0x0e)
+            trazos.push(`${z ? "" : "·"}s(${dx},${dy})`); k += 1;
+          } else if (op === 6 || op === 1) { break; }
+          else k += 1;
+        }
+        const e = e2[i];
+        console.log(`  ${e.addr.toString(16).toUpperCase().padStart(5,"0")}  ${String(e.llam).padStart(5)} llam  `
+                    + trazos.join(" "));
+      }
+    }
+  }
+}
+
 if (process.env.CMDDUMP) {
   // Lee la lista de comandos EXACTA del SDK (s_cmds) de la RAM del emulador: 3 bytes/cmd,
   // packed24 = (delay<<12)|(reg<<8)|data. Es la vara buena (ciclos de E), sin el PIO.
