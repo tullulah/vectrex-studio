@@ -328,6 +328,14 @@ const H_T1CH_CIERRA: u32 = 16;
  * 175 de hueco 16 el comando siguiente es SIEMPRE ORA, nunca SR. El hueco no lo fija el
  * apagado, lo fija CUANTO se tarda en llegar a el. */
 const H_T1CH_APAGA:  u32 = 29;
+/* Y 21 CUANDO LO QUE VIENE ES LA UNIDAD LARGA QUE APAGA EN SU VENTANA. Cuarto valor de la
+ * misma regla, medido igual que los otros tres: con t1 = 8 sus huecos de T1CH son 11 (sigue
+ * el microtramo, x424), 16 (x175), 21 (x3) y 29 (apaga ya, x21). Los 3 de 21 son justo los
+ * que llevan detras `ORA ORB=00+3 SR=00+8`, o sea la forma larga en ventana. */
+const H_T1CH_CIERRA_LARGO: u32 = 21;
+/* La rejilla del hueco tras el T1CH de un trazo iluminado, y su base. Ver draw_line_seq. */
+const CUANTO_T1CH: u32 = 7;
+const BASE_T1CH:   u32 = 13;
 /* El hueco DESPUES de SR=00: 3 si le sigue ORB (175 casos suyos, y ya lo haciamos) y 15 si
  * le sigue ORA (13 suyos; nosotros poniamos 0 en 24). */
 const H_SR_OFF_A_ORA: u32 = 15;
@@ -369,7 +377,9 @@ pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings
      * en las 21 de cebado+salto. Ver SIGUEN_UNIDADES. */
     let apaga_ya = encendido && !(sr && solo_esta);
     if encendido {
-        let h = if apaga_ya { H_T1CH_APAGA } else { H_T1CH_CIERRA };
+        let h = if apaga_ya { H_T1CH_APAGA }
+                else if sr && t1 > 8 { H_T1CH_CIERRA_LARGO }
+                else { H_T1CH_CIERRA };
         sink.alargar_ultimo((h - H_T1CH_SIGUE) * E);
     }
     // APAGAR LO PRIMERO (SR=0x00). Con keep-lit el haz llega ENCENDIDO al salto; si se
@@ -392,7 +402,12 @@ pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings
                 sink.emit(REG_SHIFT, 0x00, 3 * E);       // haz OFF en la ventana; hueco 4
                 sink.beam_blanked();
             } else {
-                sink.emit(REG_PORT_A, vy as u8, 5 * E);  // Y; hueco 6
+                /* EL HUECO DEL ORA(Y) ES 3, TAMBIEN CON EL HAZ YA APAGADO. Medido en su
+                 * frame 120: de sus 270 unidades sin SR dentro, las 270 llevan hueco 3 —
+                 * (3,9) x228 y (3,10) x42, o sea que lo que cambia con el estado del haz
+                 * es la VENTANA DEL MUX, no el ORA. El 5 salio de la captura de asterock,
+                 * que no dice lo mismo ([[vecfever-no-hay-una-cadencia]]). */
+                sink.emit(REG_PORT_A, vy as u8, 3 * E);  // Y; hueco 4
                 sink.emit(REG_PORT_B, 0x00, 10 * E);     // abre mux; hueco 11
             }
             sink.emit(REG_PORT_B, 0x01, 0);              // cierra mux; hueco 1
@@ -448,6 +463,10 @@ pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings
             sink.emit(REG_PORT_A, vx as u8, 6 * E + k.x_settle_q8); // X; hueco 7
             emitir_t1cl(sink, t1, 0);
             sink.emit(REG_T1_HI, (t1 >> 8) as u8, 0);
+            // Y LA ESPERA DE LA RAMPA, que aqui se me quedo en cero: el T1CH salia con
+            // hueco 0 contra sus 34 (t1 = 18), o sea que la unidad no llegaba a recorrer
+            // lo que pedia. Misma cuenta que el salto largo de abajo: t1 + 16.
+            sink.wait_ramp(t1, k.moveto_settle_q8 as i32 + 16 * E as i32);
             return;
         }
         let saltar_y = SALTAR_Y.load(Orden::Relaxed) != 0 && sink.y_can_skip(vy);
@@ -463,7 +482,22 @@ pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings
         sink.emit(REG_T1_HI, (t1 >> 8) as u8, 0);
         // La espera del VecFever tras armar: t1 + 16 (medido: +141 para t1=124,
         // +78 para t1=64 — o sea t1 + 14..17; se toma 16 y es barrible).
-        sink.wait_ramp(t1, k.moveto_settle_q8 as i32 + 16 * E as i32);
+        /* EL HUECO TRAS EL T1CH ES MULTIPLO DE 7.
+         *
+         * En su frame 120 los de esta clase son 35, 42, 49, 56, 70 y 77 — todos 7*n, sin
+         * excepcion — y con `hueco = 7 * techo((t1 + 13) / 7)` salen los NUEVE t1 distintos
+         * clavados (22, 26, 28, 29, 31, 37, 41, 52, 56, 60). Es una ley y no un ajuste: el
+         * 13 es el UNICO entero que satisface las nueve desigualdades a la vez. El 7 sera
+         * su bucle de sondeo.
+         *
+         * Poniamos `t1 + 16`, que es la media de eso y falla por +-3 en la mitad: cada
+         * error es rampa de mas o de menos, o sea un vector que se pasa o se queda corto.
+         *
+         * La unidad LARGA QUE APAGA EN VENTANA (la rama de arriba) NO va en esta rejilla:
+         * sus tres casos de t1 = 18 dan 34, y 7*techo(31/7) seria 35. Por eso el cambio va
+         * solo aqui y no en `wait_ramp`. */
+        let hueco = CUANTO_T1CH * ((t1 as u32 + BASE_T1CH + CUANTO_T1CH - 1) / CUANTO_T1CH);
+        sink.wait_ramp(t1, (hueco as i32 - t1 as i32) * E as i32 + k.moveto_settle_q8 as i32);
         return;
     }
     sink.emit(REG_PORT_A, vy as u8, k.e(5)); // STA — Y al DAC; hueco 6 (CLR dp)

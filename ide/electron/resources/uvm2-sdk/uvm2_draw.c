@@ -296,7 +296,12 @@ static void set_y(int y, uint32_t delay)
     mux_sample(UVM2_MUX_Y, delay);
 }
 
-static void haz_apagar_y_esperar(void);
+/* EL HUECO DESPUES DEL SR=00 LO FIJA LO QUE VIENE DETRAS, no el apagado. Medido en su
+ * frame: 15 ciclos si le sigue ORA (el lote de brillo) y 12 si le sigue el PCR de la pinza.
+ * El 8 de la fisica —los 8 desplazamientos del SR— cabe en los dos. Poniamos 12 en ambos. */
+#define UVM2_SR_A_ORA  15u
+#define UVM2_SR_A_PCR  12u
+static void haz_apagar_y_esperar_h(uint32_t hueco);
 
 static void set_z(int z, uint32_t delay)
 {
@@ -319,7 +324,7 @@ static void set_z(int z, uint32_t delay)
          * en modo 110 el haz sigue vivo 8 ciclos mas, asi que el trazo que acaba de
          * terminar se lleva un tramo final con el brillo del SIGUIENTE. Ver
          * [[t2-el-reloj-del-blanking]] para por que SR=00 no apaga en el acto. */
-        haz_apagar_y_esperar();
+        haz_apagar_y_esperar_h(UVM2_SR_A_ORA);   /* detras va el ORA del brillo */
         set_porta((uint8_t)z, 3u);
         emit(UVM2_VIA_PORTB, 0x84u, 8u);            /* mux ON canal 2, un solo paso */
         emit(UVM2_VIA_PORTB, UVM2_PB_IDLE, 12u);    /* y aparca en 81, como el VF */
@@ -376,20 +381,52 @@ extern volatile uint32_t HAZ_POR_SR;   /* en vectrex-draw; ver via_setup */
  * El 8 es fisica (los 8 desplazamientos); el 12 es el suyo, con margen. */
 #define UVM2_SR_APAGA_CICLOS  12
 
+/* QUE LA ULTIMA RAMPA ILUMINADA TERMINE ANTES DE CERRAR EL HAZ.
+ *
+ * `moveto_seq` ya lo hace (H_T1CH_APAGA = 29 contra los 11 de "el microtramo sigue"), pero
+ * ahi solo cubre los apagados que emite EL. Los que salen de este fichero —el de `set_z`,
+ * el de la pinza de cero— dejaban el T1CH en 11, o sea 18 ciclos menos que el: 29 casos por
+ * frame en su frame 120, y cada uno es una rampa cortada, o sea un trazo corto.
+ *
+ * El 29 es SUYO, medido: 21 casos con el SR justo detras del T1CH, contra 175 de hueco 16
+ * en los que lo siguiente es siempre ORA. El hueco no lo fija el apagado, lo fija cuanto se
+ * tarda en llegar a el. Ver los mismos numeros en emit.rs. */
+#define UVM2_H_T1CH_SIGUE  11u
+#define UVM2_H_T1CH_APAGA  29u
+
+static void alarga_t1ch_del_trazo(void)
+{
+    if (s_count == 0u) return;
+    uint8_t *p = &s_cmds[s_buf][(s_count - 1u) * 3u];
+    uint32_t v = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
+    if (((v >> 8) & 0xFu) != (uint32_t)UVM2_VIA_T1CH) return;   /* no cerramos una rampa */
+    uint32_t hueco = (v >> 12) + (UVM2_H_T1CH_APAGA - UVM2_H_T1CH_SIGUE);
+    if (hueco > 4095u) hueco = 4095u;
+    v = (v & 0xFFFu) | (hueco << 12);
+    p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16);
+}
+
 static void haz_apagar(void)
 {
-    if (s_haz_encendido) { emit(UVM2_VIA_SR, 0x00, 0); s_haz_encendido = 0; }
+    if (s_haz_encendido) {
+        alarga_t1ch_del_trazo();
+        emit(UVM2_VIA_SR, 0x00, 0);
+        s_haz_encendido = 0;
+    }
 }
 
 /* Como `haz_apagar`, pero dejando que el SR termine de desplazar antes de que el llamante
  * haga algo que MUEVA el haz (la pinza de cero, un salto). */
-static void haz_apagar_y_esperar(void)
+static void haz_apagar_y_esperar_h(uint32_t hueco)
 {
     if (s_haz_encendido) {
-        emit(UVM2_VIA_SR, 0x00, UVM2_SR_APAGA_CICLOS);
+        alarga_t1ch_del_trazo();
+        emit(UVM2_VIA_SR, 0x00, hueco);
         s_haz_encendido = 0;
     }
 }
+
+static void haz_apagar_y_esperar(void) { haz_apagar_y_esperar_h(UVM2_SR_A_PCR); }
 
 /* Rampas desde el ultimo re-cero. Declarado aqui arriba porque lo pone a cero ,
  * que va antes que el knob. Ver uvm2_cero_cada. */
@@ -489,7 +526,7 @@ static void via_setup(void)
      * IC207 pin 19) no es una puerta digital — tira del nodo Z por R315 (2,2k) contra el
      * diodo D302, cuyo catodo es la salida del amplificador de brillo (IC303C). CB2 bajo
      * hunde Z y apaga; CB2 alto deja Z al valor que sostiene el sample-and-hold. */
-    emit(UVM2_VIA_ACR,   HAZ_POR_SR ? 0x98 : 0x80,    0);
+    emit(UVM2_VIA_ACR,   HAZ_POR_SR ? 0x98 : 0x80,    HAZ_POR_SR ? 23u : 0u);
 
     /* Prime each sample/hold channel from a DAC value of 0: zero reference,
      * then Y, then Z.  Without this the integrators start wherever the analog
@@ -509,11 +546,13 @@ static void via_setup(void)
          * o sea TRES cargas de C306 por frame donde el hace una. La Y y el centro los deja
          * en manos del bloque de cero, que viene justo despues de la Z y suelta la pinza el
          * mismo. Ver uvm2_frame_begin. */
-        emit(UVM2_VIA_PCR,   0xCC, 0);
+        /* Los huecos son los SUYOS, medidos en la misma captura: el prologo no es solo
+         * la lista de escrituras, tambien el ritmo al que salen. Los teniamos a cero. */
+        emit(UVM2_VIA_PCR,   0xCC, 6);
         emit(UVM2_VIA_PORTB, 0x03, 0);
-        emit(UVM2_VIA_PORTA, 0x00, 0);
-        emit(UVM2_VIA_PORTB, 0xE2, UVM2_HOLD_DELAY);
-        emit(UVM2_VIA_PORTB, 0xE1, 0);
+        emit(UVM2_VIA_PORTA, 0x00, 5);
+        emit(UVM2_VIA_PORTB, 0xE2, 9);    /* ventana del canal 1 */
+        emit(UVM2_VIA_PORTB, 0xE1, 58);   /* y su asentamiento antes de la Z */
         s_pcr = 0xCC; s_portb = 0xE1; s_porta = 0x00; s_porta_stale = 0;
         s_pos_x = 0; s_pos_y = 0;
         return;
@@ -2194,9 +2233,12 @@ void uvm2_frame_end(void)
      * Cuesta un comando. */
     s_pcr = (uint8_t)(s_pcr & ~UVM2_PCR_BLANK_OFF);
     s_limite = UVM2_CMD_CAPACITY;   /* el cierre entra SIEMPRE, ver UVM2_CMD_RESERVA */
+    /* EL APAGADO VA ANTES DEL PCR, COMO EL. Su cierre de frame es `T1CH+29 SR=00+14`, y
+     * nosotros poniamos el PCR en medio: con el PCR delante, el ultimo comando emitido ya
+     * no es el T1CH del trazo y `alarga_t1ch_del_trazo` no podia cerrarlo, asi que el
+     * ultimo trazo de CADA frame salia cortado 18 ciclos. */
+    haz_apagar_y_esperar_h(14u);
     emit(UVM2_VIA_PCR, s_pcr, 0);
-    /* Y por SR: en el idioma VecFever el PCR de arriba no apaga nada. */
-    haz_apagar();
 
     /* RECALIBRAR, con el haz ya apagado y antes de pinzar. Es donde la BIOS la
      * tiene: `Recalibrate` es lo ultimo de `Wait_Recal`, o sea trabajo del CIERRE
