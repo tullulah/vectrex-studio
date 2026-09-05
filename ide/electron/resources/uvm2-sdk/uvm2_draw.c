@@ -95,6 +95,17 @@ static uint8_t s_cmds[UVM2_NBUF][UVM2_CMD_CAPACITY * 3u];
 static uint32_t s_count;
 static uint32_t s_buf;                  /* buffer being filled; always 0 single-core */
 
+/* FUERA DEL #ifdef UVM2_DUAL_CORE: lo usa codigo INCONDICIONAL.
+ *
+ * Estaban dentro, junto a `s_len[2]`, y con eso TODO objetivo de un solo nucleo dejaba de
+ * compilar — no solo vfmh. Un `#ifdef` no es solo una opcion: es la frontera de lo que
+ * existe, y meter ahi una variable que se usa fuera rompe builds que nadie mira a diario. */
+static volatile uint32_t s_ciclos_pub[2];
+/* La caja del frame que se esta construyendo, en unidades de dispositivo. */
+static int32_t s_caja_x0 = 32767, s_caja_y0 = 32767, s_caja_x1 = -32768, s_caja_y1 = -32768;
+static int32_t s_caja_w_ant;
+static uint32_t s_pico_i, s_pico_k, s_pico_n;
+
 #ifdef UVM2_DUAL_CORE
 /* The handshake, and the only shared state between the cores besides the
  * buffers themselves.  Both only ever count up, so a 32-bit load can never tear
@@ -102,15 +113,6 @@ static uint32_t s_buf;                  /* buffer being filled; always 0 single-
 volatile uint32_t uvm2_frame_request;   /* frames core 0 has finished building */
 volatile uint32_t uvm2_frame_done;      /* frames core 1 has finished replaying */
 static volatile uint32_t s_len[2];
-/* Y LOS CICLOS QUE PIDE CADA BUFFER, publicados con su longitud. `s_ciclos` es el contador
- * VIVO del que core 0 esta llenando: preguntarselo desde core 1 devuelve el frame
- * equivocado — la misma trampa que costo comparar media lista contra una entera con
- * `s_count` contra `s_len`. */
-static volatile uint32_t s_ciclos_pub[2];
-/* La caja del frame que se esta construyendo, en unidades de dispositivo. */
-static int32_t s_caja_x0 = 32767, s_caja_y0 = 32767, s_caja_x1 = -32768, s_caja_y1 = -32768;
-static int32_t s_caja_w_ant;
-static uint32_t s_pico_i, s_pico_k, s_pico_n;
 static uint32_t s_frame_no = 1;
 
 const uint8_t *uvm2_frame_buffer(uint32_t frame) { return s_cmds[frame & 1u]; }
