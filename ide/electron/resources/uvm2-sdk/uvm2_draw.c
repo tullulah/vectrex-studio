@@ -107,6 +107,9 @@ static volatile uint32_t s_len[2];
  * equivocado — la misma trampa que costo comparar media lista contra una entera con
  * `s_count` contra `s_len`. */
 static volatile uint32_t s_ciclos_pub[2];
+/* La caja del frame que se esta construyendo, en unidades de dispositivo. */
+static int32_t s_caja_x0 = 32767, s_caja_y0 = 32767, s_caja_x1 = -32768, s_caja_y1 = -32768;
+static int32_t s_caja_w_ant;
 static uint32_t s_frame_no = 1;
 
 const uint8_t *uvm2_frame_buffer(uint32_t frame) { return s_cmds[frame & 1u]; }
@@ -1881,6 +1884,14 @@ static void delta_una(int dx, int dy)
 #endif
     s_pos_x += dx;
     s_pos_y += dy;
+    /* Alimentar la caja del frame con la posicion ya en unidades de dispositivo. */
+    {
+        const int32_t ux = s_pos_x / (int32_t)UVM2_Q, uy = s_pos_y / (int32_t)UVM2_Q;
+        if (ux < s_caja_x0) s_caja_x0 = ux;
+        if (ux > s_caja_x1) s_caja_x1 = ux;
+        if (uy < s_caja_y0) s_caja_y0 = uy;
+        if (uy > s_caja_y1) s_caja_y1 = uy;
+    }
 
 #if UVM2_Q_BITS > 0
     vx_ramp_params_chain_qn(dx, dy, UVM2_Q_BITS, &vx, &vy, &t1);
@@ -1924,6 +1935,14 @@ void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int 
     int32_t vx, vy; uint32_t t1;
     s_pos_x += dx;
     s_pos_y += dy;
+    /* Alimentar la caja del frame con la posicion ya en unidades de dispositivo. */
+    {
+        const int32_t ux = s_pos_x / (int32_t)UVM2_Q, uy = s_pos_y / (int32_t)UVM2_Q;
+        if (ux < s_caja_x0) s_caja_x0 = ux;
+        if (ux > s_caja_x1) s_caja_x1 = ux;
+        if (uy < s_caja_y0) s_caja_y0 = uy;
+        if (uy > s_caja_y1) s_caja_y1 = uy;
+    }
     /* Con cadena como cualquier otro trazo: que lleve huecos no cambia que es una rampa
      * que redondea. Quedaba con la plana porque dkong no pasa por aqui y nadie lo miro. */
 #if UVM2_Q_BITS > 0   /* la unidad de la API es la INTERNA; ver UVM2_Q_BITS */
@@ -2448,6 +2467,31 @@ void uvm2_frame_end(void)
 #endif
     }
 
+    /* LA CAJA DEL FRAME, Y SU SALTO RESPECTO AL ANTERIOR.
+     *
+     * Daniel ve que durante los parpadeos "el logo se hace mas grande por un instante". Si
+     * un frame se dibuja con otra ESCALA su caja salta, y eso no lo ve ninguna metrica de
+     * conteo — ni la de comandos, ni la de trazos, ni la de ciclos.
+     *
+     * Se mide AQUI, sobre el frame COMPLETO que se acaba de construir. En el emulador no se
+     * puede: su ranura de 20 ms parte nuestros frames de 28 y da saltos de x3 que son suyos,
+     * no del juego. */
+    {
+        const int32_t w = s_caja_x1 - s_caja_x0, h = s_caja_y1 - s_caja_y0;
+        uvm2_stats.caja_w = (uint32_t)(w > 0 ? w : 0);
+        uvm2_stats.caja_h = (uint32_t)(h > 0 ? h : 0);
+        if (s_caja_w_ant > 0 && w > 0) {
+            /* razon en centesimas contra el frame anterior; 100 = misma anchura */
+            uint32_t r = (uint32_t)(((int64_t)w * 100) / s_caja_w_ant);
+            uvm2_stats.caja_razon_ult = r;
+            if (r > uvm2_stats.caja_razon_max) uvm2_stats.caja_razon_max = r;
+            if (uvm2_stats.caja_razon_min == 0u || r < uvm2_stats.caja_razon_min)
+                uvm2_stats.caja_razon_min = r;
+            if (r > 115u || r < 87u) uvm2_stats.caja_saltos++;
+        }
+        s_caja_w_ant = w;
+        s_caja_x0 = s_caja_y0 = 32767; s_caja_x1 = s_caja_y1 = -32768;
+    }
     s_len[s_buf]        = s_count;
     s_ciclos_pub[s_buf] = s_ciclos;
     uvm2_stats.commands = s_count;

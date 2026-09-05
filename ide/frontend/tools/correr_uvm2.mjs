@@ -48,6 +48,7 @@ sys.init(new Uint8Array(readFileSync(img)));
 
 let total = 0, conVectores = 0;
 const porFrame = [];
+const cajaFrame = [];
 /* Avance cada 500 frames: un juego que arranca despacio y uno colgado se distinguen por
  * si los contadores SE MUEVEN, no por el total al final. */
 const t0 = Date.now();
@@ -75,6 +76,17 @@ for (let f = 0; f < Number(nFrames); f++) {
    * luego va" de "parpadea": la primera es normal y la segunda es el defecto. PORFRAME=1
    * imprime la serie. */
   porFrame.push(segs.length);
+  /* LA CAJA DE CADA FRAME. Daniel ve que "el logo se hace mas grande por un instante"
+   * durante los parpadeos: si un frame se dibuja con otra ESCALA, su caja salta respecto a
+   * la de sus vecinos. Un salto asi no lo ve ninguna metrica de conteo. */
+  if (segs.length) {
+    let a = 1e9, b = -1e9, c = 1e9, d = -1e9;
+    for (const g of segs) {
+      a = Math.min(a, g.x0, g.x1); b = Math.max(b, g.x0, g.x1);
+      c = Math.min(c, g.y0, g.y1); d = Math.max(d, g.y0, g.y1);
+    }
+    cajaFrame.push({ f, w: b - a, h: d - c, n: segs.length });
+  }
   /* LA CAJA DE TODOS LOS FRAMES, no la del ultimo: un eje que se mueve DE VEZ EN CUANDO se
    * lee como "clavado" si solo miras una instantanea. */
   for (const g of segs) {
@@ -157,6 +169,21 @@ for (let f = 0; f < Number(nFrames); f++) {
   }
 }
 console.log(`  ${nFrames} frames: ${total} segmentos, ${conVectores} frames con dibujo`);
+if (process.env.PORFRAME && cajaFrame.length > 2) {
+  /* saltos de tamaño: un frame cuya caja se sale >15% de la media de sus dos vecinos */
+  const saltos = [];
+  for (let i = 1; i < cajaFrame.length - 1; i++) {
+    const p = cajaFrame[i-1], q = cajaFrame[i], r = cajaFrame[i+1];
+    const mw = (p.w + r.w) / 2, mh = (p.h + r.h) / 2;
+    if (mw > 0 && mh > 0) {
+      const rw = q.w / mw, rh = q.h / mh;
+      if (rw > 1.15 || rh > 1.15 || rw < 0.87 || rh < 0.87)
+        saltos.push(`f${q.f}(x${rw.toFixed(2)},y${rh.toFixed(2)},n${q.n})`);
+    }
+  }
+  console.log(`  saltos de TAMAÑO de la caja: ${saltos.length} de ${cajaFrame.length}`
+              + (saltos.length ? "  " + saltos.slice(0, 12).join(" ") : ""));
+}
 if (process.env.PORFRAME) {
   const mudos = [];
   let i = 0;
@@ -458,7 +485,7 @@ if (process.env.AVGPERFIL) {
         const nw = rd8(PN + i);
         if (!nw) continue;
         const w = [];
-        for (let k = 0; k < nw; k++) w.push(rd16(PR + (i*24 + k)*2));
+        for (let k = 0; k < nw; k++) w.push(rd16(PR + (i*80 + k)*2));   // AVG_PERFIL_PALS
         const trazos = [];
         for (let k = 0; k < w.length; ) {
           const op = w[k] >> 13;
@@ -474,8 +501,12 @@ if (process.env.AVGPERFIL) {
           else k += 1;
         }
         const e = e2[i];
-        console.log(`  ${e.addr.toString(16).toUpperCase().padStart(5,"0")}  ${String(e.llam).padStart(5)} llam  `
-                    + trazos.join(" "));
+        if (process.env.AVGRAW)
+          console.log(`RAW ${e.addr.toString(16).toUpperCase().padStart(5,"0")} ${e.llam} `
+                      + w.map(v => v.toString(16).padStart(4,"0")).join(" "));
+        else
+          console.log(`  ${e.addr.toString(16).toUpperCase().padStart(5,"0")}  ${String(e.llam).padStart(5)} llam  `
+                      + trazos.join(" "));
       }
     }
   }

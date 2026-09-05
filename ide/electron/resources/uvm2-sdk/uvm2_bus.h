@@ -272,6 +272,11 @@ typedef struct {
      * distinguian. Ver uvm2_core1.c. */
     uint32_t exec_razon_ult, exec_razon_min, exec_razon_max;
     uint32_t hist_razon[8];     /* <50 <70 <85 <95 <105 <130 <200 y el resto */
+
+    /* LA CAJA DEL FRAME y su salto respecto al anterior, en centesimas (100 = igual). Un
+     * frame dibujado con otra ESCALA salta aqui y no lo ve ninguna metrica de conteo. */
+    uint32_t caja_w, caja_h;
+    uint32_t caja_razon_ult, caja_razon_min, caja_razon_max, caja_saltos;
 } uvm2_stats_t;
 
 extern uvm2_stats_t uvm2_stats;
