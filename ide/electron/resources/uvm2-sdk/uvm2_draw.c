@@ -102,6 +102,11 @@ static uint32_t s_buf;                  /* buffer being filled; always 0 single-
 volatile uint32_t uvm2_frame_request;   /* frames core 0 has finished building */
 volatile uint32_t uvm2_frame_done;      /* frames core 1 has finished replaying */
 static volatile uint32_t s_len[2];
+/* Y LOS CICLOS QUE PIDE CADA BUFFER, publicados con su longitud. `s_ciclos` es el contador
+ * VIVO del que core 0 esta llenando: preguntarselo desde core 1 devuelve el frame
+ * equivocado — la misma trampa que costo comparar media lista contra una entera con
+ * `s_count` contra `s_len`. */
+static volatile uint32_t s_ciclos_pub[2];
 static uint32_t s_frame_no = 1;
 
 const uint8_t *uvm2_frame_buffer(uint32_t frame) { return s_cmds[frame & 1u]; }
@@ -215,6 +220,8 @@ static uint32_t s_limite = UVM2_CMD_CAPACITY - UVM2_CMD_RESERVA;
 static uint32_t s_ciclos;
 
 uint32_t uvm2_ciclos_lista(void) { return s_ciclos; }
+/* Los del frame ya PUBLICADO, que es el que core 1 reproduce. */
+uint32_t uvm2_ciclos_frame(uint32_t frame) { return s_ciclos_pub[frame & 1u]; }
 
 static inline void emit(uint32_t reg, uint32_t data, uint32_t delay)
 {
@@ -2442,6 +2449,7 @@ void uvm2_frame_end(void)
     }
 
     s_len[s_buf]        = s_count;
+    s_ciclos_pub[s_buf] = s_ciclos;
     uvm2_stats.commands = s_count;
     uvm2_stats.dropped  = s_dropped;
 

@@ -174,6 +174,42 @@ static void core1_main(void)
         uint32_t t1 = time_us_32();
         uvm2_stats.us_exec = t1 - t0;
 
+        /* CUANTO TARDA LA LISTA CONTRA LO QUE PIDE, que es la unica cifra que separa dos
+         * defectos opuestos y que no teniamos.
+         *
+         * `exec_cycles` estaba DECLARADO Y SIN ESCRIBIR — un contador muerto que se lee
+         * igual que "no hace falta" ([[una-cadena-de-contrato-invisible]]). El ejecutor si
+         * devuelve los ciclos; nadie los guardaba.
+         *
+         * La lista sabe lo que deberia costar (uvm2_ciclos_lista, contado al construirla) y
+         * el reloj de pared dice lo que costo. A 1,5 MHz, 1000 ciclos son 667 us: si la
+         * razon sale ~1,0 el bus va a su ritmo y el problema es el TAMAÑO de la lista; si
+         * sale 2,0 la lista cabe y algo esta FRENANDO al ejecutor — y el sospechoso es core
+         * 0 emulando el 6502 contra la misma memoria.
+         *
+         * Y esto lo pide la biseccion de Daniel: sdkplaymh (misma geometria fija, sin
+         * emulacion) NO parpadea y el juego SI. La diferencia entre los dos es justo la
+         * carga de core 0. */
+        uvm2_stats.exec_cycles = cycles;
+        {
+            extern uint32_t uvm2_ciclos_frame(uint32_t);
+            const uint32_t pedidos = uvm2_ciclos_frame(served);   /* el que se acaba de reproducir */
+            const uint32_t us = t1 - t0;
+            if (pedidos && us) {
+                /* razon en centesimas: 100 = el bus va a su ritmo nominal */
+                uint32_t r = (uint32_t)(((uint64_t)pedidos * 100u * 100u) / ((uint64_t)us * 150u));
+                uvm2_stats.exec_razon_ult = r;
+                if (r > uvm2_stats.exec_razon_max) uvm2_stats.exec_razon_max = r;
+                if (uvm2_stats.exec_razon_min == 0u || r < uvm2_stats.exec_razon_min)
+                    uvm2_stats.exec_razon_min = r;
+                /* la forma entera: 100 = nominal, 50 = la mitad de rapido */
+                static const uint32_t T[7] = { 50u, 70u, 85u, 95u, 105u, 130u, 200u };
+                unsigned b = 7u;
+                for (unsigned i = 0; i < 7u; i++) if (r < T[i]) { b = i; break; }
+                uvm2_stats.hist_razon[b]++;
+            }
+        }
+
         /* Between frames, with the beam clamped at centre by the last command of
          * the stream — the only window in which anything else may drive Port A
          * or Port B. Same window the single-core path used, same order. */

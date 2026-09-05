@@ -265,6 +265,13 @@ typedef struct {
     uint32_t en_max_us_wait;
     uint32_t en_max_dropped;
     uint32_t en_max_commands;
+
+    /* LA RAZON ENTRE LO QUE LA LISTA PIDE Y LO QUE TARDA, en centesimas: 100 = el bus va a
+     * su ritmo nominal de 1,5 MHz, 50 = a la mitad. Separa "la lista es demasiado grande"
+     * de "algo esta frenando al ejecutor", que son defectos opuestos y hasta ahora no se
+     * distinguian. Ver uvm2_core1.c. */
+    uint32_t exec_razon_ult, exec_razon_min, exec_razon_max;
+    uint32_t hist_razon[8];     /* <50 <70 <85 <95 <105 <130 <200 y el resto */
 } uvm2_stats_t;
 
 extern uvm2_stats_t uvm2_stats;
