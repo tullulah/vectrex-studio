@@ -206,9 +206,20 @@ static uint32_t s_dropped;
 #define UVM2_CMD_RESERVA 64u
 static uint32_t s_limite = UVM2_CMD_CAPACITY - UVM2_CMD_RESERVA;
 
+/* LO QUE VA A COSTAR LA LISTA, en ciclos de E y mientras se construye.
+ *
+ * Hace falta para cerrar el frame donde lo cierra el: su frame mide 30023 ciclos CLAVADOS
+ * y el sobrante lo gasta con comandos, no callado ([[preambulo-vecfever-es-el-ritmo]]).
+ * Para saber cuanto sobra hay que saber cuanto llevamos, y eso nadie lo contaba: solo
+ * habia `bus_cycles`, que se mide DESPUES de reproducir. */
+static uint32_t s_ciclos;
+
+uint32_t uvm2_ciclos_lista(void) { return s_ciclos; }
+
 static inline void emit(uint32_t reg, uint32_t data, uint32_t delay)
 {
     if (s_count < s_limite) {
+        s_ciclos += delay + 1u;   /* la escritura ocupa su periodo de E, y el hueco va detras */
         const uint32_t w = UVM2_CMD(reg, data, delay);
         const uint32_t v = UVM2_CMD_EMPAQUETA(w);
         uint8_t *d = &s_cmds[s_buf][s_count * 3u];
@@ -402,6 +413,7 @@ static void alarga_t1ch_del_trazo(void)
     if (((v >> 8) & 0xFu) != (uint32_t)UVM2_VIA_T1CH) return;   /* no cerramos una rampa */
     uint32_t hueco = (v >> 12) + (UVM2_H_T1CH_APAGA - UVM2_H_T1CH_SIGUE);
     if (hueco > 4095u) hueco = 4095u;
+    s_ciclos += hueco - (v >> 12);
     v = (v & 0xFFFu) | (hueco << 12);
     p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16);
 }
@@ -1123,6 +1135,7 @@ static void vxs_alargar_ultimo(void *ctx, uint32_t extra_q8)
     uint32_t v = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
     uint32_t hueco = (v >> 12) + d;
     if (hueco > 4095u) hueco = 4095u;
+    s_ciclos += hueco - (v >> 12);
     v = (v & 0xFFFu) | (hueco << 12);
     p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16);
 }
@@ -1216,6 +1229,7 @@ static void vxs_wait_ramp(void *ctx, uint32_t t1, int32_t extra_q8)
         uint32_t take = (uint32_t)d < room ? (uint32_t)d : room;
         v = (v & 0x0FFFu) | ((cur + take) << 12);
         p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16);
+        s_ciclos += take;          /* este camino no pasa por emit: se cuenta a mano */
         d -= (int32_t)take;
     }
     while (d > 0) {                /* resto rarisimo (>4095): portadores encadenados */
@@ -1458,6 +1472,35 @@ void uvm2_draw_penup(void) { s_penup_pendiente = 1; }
 /* La TASA a partir de la cual el salto lleva unidad diminuta delante. 124 es su minimo
  * medido; por debajo de 124 el no ceba NUNCA (0 de 179). 0 lo apaga. */
 volatile int32_t uvm2_arranque_suave = 124;
+
+/* EL CIERRE DE FRAME DEL VECFEVER: ni recalibracion a los railes ni silencio al final.
+ *
+ * Va con el idioma del SR porque es su metodo, no una perilla suelta. A 0 vuelve el cierre
+ * de la BIOS que teniamos —dos barridos a los railes por frame y `uvm2_bus_delay` para el
+ * resto—, que es a lo que hay que volver si apareciera deriva frame a frame. */
+#ifndef UVM2_CIERRE_VECFEVER
+#define UVM2_CIERRE_VECFEVER 1
+#endif
+volatile int32_t uvm2_cierre_vecfever = UVM2_CIERRE_VECFEVER;
+#define CIERRE_VECFEVER (HAZ_POR_SR && uvm2_cierre_vecfever)
+
+/* EL RELLENO VA APARTE DEL CIERRE, porque las dos mitades no cuestan lo mismo.
+ *
+ * Medido en el emulador con mhavoc, 199 frames: quitar la recalibracion sale GRATIS (117
+ * frames dibujados contra 114 con ella), pero anadir el relleno baja a 86 — un 26%. El bus
+ * tarda lo mismo en los dos casos (los dos cierran el frame en 30000 ciclos; lo que cambia
+ * es que uno los gasta con 220 comandos y el otro callado), asi que el coste no esta en el
+ * bus sino en construir y reproducir esos comandos.
+ *
+ * Y ahi el emulador puede estar cobrando de mas: reproduce el bucle de core 1 instruccion a
+ * instruccion, mientras que en la placa son 220 comandos mas en la MISMA lista y el MISMO
+ * DMA. No se ha podido comprobar en consola. Se deja encendido —es su metodo y hace que el
+ * frame cadencie como el suyo— con el knob a mano para el A/B. */
+#ifndef UVM2_RITMO_VECFEVER
+#define UVM2_RITMO_VECFEVER 1
+#endif
+volatile int32_t uvm2_ritmo_vecfever = UVM2_RITMO_VECFEVER;
+#define RITMO_VECFEVER (HAZ_POR_SR && uvm2_ritmo_vecfever)
 
 #ifndef UVM2_CERO_OFFSET
 /* EL VALOR QUE SE CEBA EN LA REFERENCIA DE CERO. 0x23 (35) es el de fabrica de Vectorblade
@@ -2125,6 +2168,7 @@ static void retardo_artificial(void)
 void uvm2_frame_begin(void)
 {
     s_count = 0;
+    s_ciclos = 0;
     s_limite = UVM2_CMD_CAPACITY - UVM2_CMD_RESERVA;
     s_dropped              = 0;
     uvm2_stats.vectors     = 0;
@@ -2221,6 +2265,49 @@ static void mide_periodo(void)
 }
 }
 
+/* SU RELLENO DE FRAME, VERBATIM.
+ *
+ * El frame del VecFever mide 30023 ciclos CLAVADOS, y lo que le sobra tras dibujar lo
+ * quema con comandos: ORA a +-64 alternando con la rampa ABIERTA (ORB=0x00 -> PB0=0 mux en
+ * el canal 0, PB7=0 rampa activa) y ACR=0x18, que quita PB7 de las manos de T1. Medido en
+ * los 1061 frames de la captura: 246 alternancias cuando dibuja 1621 escrituras y 70 cuando
+ * dibuja 3348 — mas dibujo, menos relleno, y el total siempre 30023
+ * ([[preambulo-vecfever-es-el-ritmo]]).
+ *
+ * Como alterna en tramos iguales el desplazamiento neto es cero, y el haz va apagado (el SR
+ * quedo en 0 y con ACR = 0x18 los bits de modo siguen en 110, asi que CB2 conserva el
+ * ultimo bit). O sea: aparca el haz y mantiene los integradores y los condensadores vivos
+ * durante el hueco entre frames, donde nosotros nos quedabamos en silencio con
+ * `uvm2_bus_delay`. Un silencio no refresca un condensador.
+ *
+ * Los ciclos son suyos: cabecera 3/6/3/6/0/212 y cada alternancia 6/0/41. */
+static void ritmo_vecfever(void)
+{
+    const uint32_t objetivo = uvm2_pacer_cycles;
+    if (objetivo == 0u) return;                 /* sin ritmo fijado, no hay sobrante */
+    const uint32_t CAB = 3u+1u + 6u+1u + 3u+1u + 6u+1u + 0u+1u + 212u+1u;   /* 236 */
+    const uint32_t ALT = 6u+1u + 0u+1u + 41u+1u;                            /*  50 */
+    if (s_ciclos + CAB + ALT > objetivo) return;   /* no cabe ni una: se deja el silencio */
+
+    emit(UVM2_VIA_PORTA, 0x40, 3);
+    emit(UVM2_VIA_PORTB, 0x00, 6);    /* canal 0, rampa abierta */
+    emit(UVM2_VIA_PCR,   0xCE, 3);
+    emit(UVM2_VIA_ACR,   0x18, 6);    /* PB7 fuera de T1: la rampa la manda PORTB */
+    emit(UVM2_VIA_T1CL,  0xBF, 0);
+    emit(UVM2_VIA_T1CH,  0x00, 212);
+    unsigned n = (objetivo - s_ciclos) / ALT;
+    for (unsigned i = 0; i < n; i++) {
+        emit(UVM2_VIA_PORTA, (i & 1u) ? 0x40 : 0xC0, 6);
+        emit(UVM2_VIA_T1CL,  0x1F, 0);
+        emit(UVM2_VIA_T1CH,  0x00, 41);
+    }
+    /* Las caches, con lo ultimo que salio de verdad. El ACR y el PCR los repone
+     * via_setup en el frame siguiente. */
+    s_porta = (uint8_t)((n & 1u) ? 0x40 : 0xC0); s_porta_stale = 0;
+    s_portb = 0x00; s_pcr = 0xCE;
+    uvm2_draw_invalidate();
+}
+
 void uvm2_frame_end(void)
 {
     uint32_t cycles = 0;
@@ -2242,9 +2329,19 @@ void uvm2_frame_end(void)
 
     /* RECALIBRAR, con el haz ya apagado y antes de pinzar. Es donde la BIOS la
      * tiene: `Recalibrate` es lo ultimo de `Wait_Recal`, o sea trabajo del CIERRE
-     * del frame. Ver el bloque de uvm2_recalibrate. */
+     * del frame. Ver el bloque de uvm2_recalibrate.
+     *
+     * EL VECFEVER NO LO HACE. Su cierre de frame entero es `T1CH+29 SR=00+14` — una
+     * escritura — y no barre a los railes ni una vez. Puede permitirselo porque su bloque
+     * de cero corre 12 veces POR FRAME re-cebando C305 con el offset calibrado, que es la
+     * referencia que el barrido venia a restablecer; y desde hoy nosotros emitimos ese
+     * mismo bloque, con sus mismos ciclos.
+     *
+     * Se apaga con el resto del cierre suyo (UVM2_CIERRE_VECFEVER=0 devuelve los dos), y
+     * el sintoma a vigilar si hiciera falta volver es el de siempre: el dibujo
+     * descolocandose frame a frame. */
 #ifndef UVM2_NO_RECALIBRATE
-    uvm2_recalibrate();
+    if (!CIERRE_VECFEVER) uvm2_recalibrate();
 #endif
 
     /* Y ahora si, pinzar el haz en el centro: un integrador parado deriva, y un
@@ -2252,6 +2349,9 @@ void uvm2_frame_end(void)
     set_zero(1, UVM2_ZERO_BASE + s_scale / 4u);
     s_pos_x = 0;
     s_pos_y = 0;
+
+    /* Y EL SOBRANTE DEL FRAME SE GASTA COMO EL: con comandos, no callado. */
+    if (RITMO_VECFEVER) ritmo_vecfever();
 
 #ifdef UVM2_DUAL_CORE
     /* Hand the finished list to core 1 and go straight back to the game.  The
