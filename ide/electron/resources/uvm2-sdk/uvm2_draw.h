@@ -89,6 +89,9 @@ int      uvm2_refresco_cabe(void);
  * then pads the frame out to exactly 30000 bus cycles (50 Hz), locked to the
  * Vectrex clock rather than to any RP2350 timer. */
 void uvm2_frame_begin(void);
+/* Un comando crudo en la lista. Solo para bancos de medida — ver uvm2_draw.c. */
+void uvm2_emit_raw(uint32_t reg, uint32_t data, uint32_t hueco);
+uint32_t uvm2_ciclos_lista(void);
 void uvm2_frame_end(void);
 
 /* Frames completed since boot — the only clock a halted Vectrex gives us. */

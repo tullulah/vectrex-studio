@@ -284,6 +284,19 @@ typedef struct {
      * reparto: >1 significa que la geometria se acumula DOS VECES en la misma lista. */
     uint32_t mgo_por_frame;
     uint32_t mgo_hist[4];       /* 0, 1, 2, 3 o mas disparos por frame */
+
+    /* EL TIEMPO DE CORE 0, PARTIDO EN DOS. Son ataques distintos: `us_emul` es el 6502 y
+     * el AVG (codigo del puerto) y `us_lista` es construir la lista de comandos (nuestro
+     * SDK). Sin separarlos, optimizar es a ciegas. Acumulados en microsegundos y con su
+     * contador, para poder sacar la media sin sondear. */
+    uint32_t us_emul_acum, us_emul_n;     /* 6502 + AVG, sin la lista */
+    uint32_t us_lista_acum, us_lista_n;   /* CONSTRUIR la lista */
+    uint32_t us_pub_acum,   us_pub_n;     /* publicarla — INCLUYE esperar a core 1 */
+    /* EL TIEMPO DE CORE 1, con UN SOLO ESCRITOR. `us_exec` lo escriben core 1 Y
+     * uvm2_svc.c, asi que leerlo no dice de quien es — y sobre ese numero montamos un
+     * diagnostico entero. Estos son de core 1 y de nadie mas. */
+    uint32_t us_c1_exec_acum, us_c1_exec_n;
+    uint32_t us_c1_wait_acum;             /* lo que core 1 espera a core 0 */
 } uvm2_stats_t;
 
 extern uvm2_stats_t uvm2_stats;

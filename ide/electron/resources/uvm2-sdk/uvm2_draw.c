@@ -104,6 +104,9 @@ static volatile uint32_t s_ciclos_pub[2];
 /* La caja del frame que se esta construyendo, en unidades de dispositivo. */
 static int32_t s_caja_x0 = 32767, s_caja_y0 = 32767, s_caja_x1 = -32768, s_caja_y1 = -32768;
 static int32_t s_caja_w_ant;
+/* Comandos que hay en la lista JUSTO DESPUES de abrir el frame (el prologo). Lo que
+ * pase de ahi es contenido de verdad. */
+static uint32_t s_count_tras_begin;
 static uint32_t s_pico_i, s_pico_k, s_pico_n;
 
 #ifdef UVM2_DUAL_CORE
@@ -226,6 +229,7 @@ static uint32_t s_limite = UVM2_CMD_CAPACITY - UVM2_CMD_RESERVA;
 static uint32_t s_ciclos;
 
 uint32_t uvm2_ciclos_lista(void) { return s_ciclos; }
+
 /* Los del frame ya PUBLICADO, que es el que core 1 reproduce. */
 uint32_t uvm2_ciclos_frame(uint32_t frame) { return s_ciclos_pub[frame & 1u]; }
 
@@ -253,6 +257,14 @@ static inline void emit(uint32_t reg, uint32_t data, uint32_t delay)
     }
     else                             s_dropped++;   /* NUNCA en silencio: ver stats.dropped */
 }
+/* UN COMANDO CRUDO EN LA LISTA. Solo para bancos de medida: el juego dibuja por la API
+ * geometrica, no por aqui. Existe porque medir el EJECUTOR pide listas de hueco conocido, y
+ * fabricarlas con draw_line es fabricar tambien el modelo de haz encima. */
+void uvm2_emit_raw(uint32_t reg, uint32_t data, uint32_t hueco)
+{
+    emit(reg, data, hueco);
+}
+
 
 /* ── Primitive register writes ────────────────────────────────────────────── */
 
@@ -2247,6 +2259,9 @@ void uvm2_frame_begin(void)
      * anterior. Con la pinza puesta, ese mismo `if` deja pasar el bloque. */
     if (!HAZ_POR_SR) set_zero(0, 0);
 #endif
+    /* Lo que el prologo dejo en la lista: el listón contra el que frame_end decide si hay
+     * algo que publicar. */
+    s_count_tras_begin = s_count;
 }
 
 /* Por BUFFER, no una sola: con doble buffer core 0 firma el frame que acaba de
@@ -2399,9 +2414,14 @@ void uvm2_frame_end(void)
      * entonces esta llamada encuentra la lista recien abierta, con el prologo y nada mas.
      * Publicarla es un FRAME NEGRO intercalado, o sea parpadeo del bueno.
      *
-     * Si nadie ha dibujado desde `uvm2_frame_begin`, no hay nada que enseñar: se vuelve sin
-     * tocar el haz, que ya quedo pinzado por la publicacion anterior. */
-    if (uvm2_stats.vectors == 0u && uvm2_stats.moves == 0u) return;
+     * Si nadie ha metido NADA en la lista desde `uvm2_frame_begin`, no hay nada que enseñar:
+     * se vuelve sin tocar el haz, que ya quedo pinzado por la publicacion anterior.
+     *
+     * SE MIRA LA LISTA, NO LOS CONTADORES DE GEOMETRIA. La primera version preguntaba por
+     * `vectors`/`moves`, que es un INDICIO y no la cosa: un banco que emite comandos crudos
+     * no los toca, asi que todos sus frames parecian vacios y no se publicaba ninguno —
+     * core 1 se quedaba sin nada que dibujar y `uvm2_frame_request` en cero. */
+    if (s_count <= s_count_tras_begin) return;
 
     /* APAGAR EXPLICITAMENTE, no darlo por hecho. Aqui decia "blanked already
      * (every lit segment restores the PCR)", que es una SUPOSICION: solo se

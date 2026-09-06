@@ -134,6 +134,7 @@ static void core1_main(void)
         while (uvm2_frame_request == served) { }   /* nothing published yet */
         uint32_t t0 = time_us_32();
         uvm2_stats.us_wait = t0 - t_w0;
+        uvm2_stats.us_c1_wait_acum += t0 - t_w0;   /* lo que core 1 espera a core 0 */
         served++;
         __asm volatile ("dmb" ::: "memory");       /* the buffer before the count */
 
@@ -173,6 +174,10 @@ static void core1_main(void)
 #endif
         uint32_t t1 = time_us_32();
         uvm2_stats.us_exec = t1 - t0;
+        /* Y EL MISMO NUMERO EN UN CAMPO QUE NO COMPARTE ESCRITOR. `us_exec` tambien lo
+         * escribe uvm2_svc.c con OTRA cosa, asi que leerlo no dice de quien es. */
+        uvm2_stats.us_c1_exec_acum += t1 - t0;
+        uvm2_stats.us_c1_exec_n++;
 
         /* CUANTO TARDA LA LISTA CONTRA LO QUE PIDE, que es la unica cifra que separa dos
          * defectos opuestos y que no teniamos.
