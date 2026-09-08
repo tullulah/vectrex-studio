@@ -384,8 +384,8 @@ static int32_t s_drift_ax, s_drift_ay;   /* ver la compensacion de deriva, abajo
 void vx_ramp_params_chain(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
 void vx_chain_reset(void);
 void vx_deuda_reset(void);
-/* El SALTO usa su propio tope de velocidad (VCAP_SALTO): va a oscuras, asi que frenarlo
- * no ilumina nada. Ver el bloque de VCAP_SALTO en ramp.rs. */
+/* El SALTO va a oscuras: no hay nada que frenar, asi que corre al fondo de escala del
+ * DAC como el resto. Ver `TOPE_DAC` en ramp.rs. */
 void vx_ramp_params_salto(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
 void vx_ramp_params_chain_q4(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
 void vx_ramp_params_salto_q4(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
@@ -613,43 +613,32 @@ static void via_setup(void)
 /* ── Calibracion por placa: DONDE iria, y por que ahora no hay ninguna ──────
  *
  * Los knobs del modelo son el MISMO simbolo que usa el firmware del cartucho propio, pero
- * su valor no tiene por que serlo: "VCAP no es una constante del repositorio, es una
- * calibracion de MAQUINA". Si esta placa necesita valores propios, se escriben aqui en el
- * arranque —son AtomicU32 Relaxed, o sea un uint32_t volatil desde C— en vez de forkear
- * el codigo.
+ * su valor no tiene por que serlo: no son constantes del repositorio, son calibraciones de
+ * MAQUINA. Si esta placa necesita valores propios, se escriben aqui en el arranque —son
+ * AtomicU32 Relaxed, o sea un uint32_t volatil desde C— en vez de forkear el codigo.
  *
- * HOY NO HACE FALTA NINGUNA, y eso es un resultado, no un descuido. Estuvo VCAP = 96
- * porque cuatro de los cinco trazos del pentagono saturaban el DAC a +-128 y el modelo de
- * Ralf nunca satura. La hipotesis era que el amplificador de deflexion no seguia. MEDIDO
- * y FALSA: con 96 ya ibamos mas despacio que el (pico 97 contra 114) y el dibujo seguia
- * igual de mal. La causa real era otra —T1CH re-disparandose durante el retardo, ver
- * `vxs_wait_ramp`— y con eso arreglado, 127 es el valor compartido y va mejor: menos
- * tiempo de rampa por trazo.
+ * HOY NO HACE FALTA NINGUNA, y eso es un resultado, no un descuido.
  *
- * Se deja escrito y no se deja una funcion vacia llamandose: una linea que dice que algo
- * esta encendido cuando no existe es peor que no tenerla.
+ * ── EL TOPE DE VELOCIDAD SE RETIRO EL 2026-09-09 ───────────────────────────
  *
- * ── Y DESDE EL 2026-08-27 SI HAY UNA. Medida en consola, en el 25m de dkong ────────
+ * Fue `VCAP` (y `VCAP_SALTO`, y la regla `VCAP_SLOW`), y llego a valer 24: "6,7 ciclos de
+ * espera por unidad de longitud", medido en el 25m de dkong el 2026-08-27 con mesetas
+ * limpias (20 y 26 bien, 32 flojea, 40 regular -> 24) y 87 ciclos por operacion contra 109.
+ * La medida era buena y el knob estaba mal: afinar una constante GLOBAL de render contra
+ * UN juego es overfitting [[tune-on-one-game-is-overfitting]], y aqui se pago dos veces —
+ * con 24, asterock salia a 90k ciclos de frame, 3x el presupuesto.
  *
- * El modelo de rampa pasa a ser PROPORCIONAL —t1 = longitud * DRAW_SCALE / VCAP, sin
- * suelo— porque el suelo atrapaba al 96% de los trazos: la longitud MEDIANA de un trazo
- * del 25m son 3 unidades de dispositivo y el suelo valia 31. `VCAP` es, de hecho, los
- * ciclos de espera POR UNIDAD de longitud.
+ * Y el defecto era ademas el defecto EQUIVOCADO. Acotar la velocidad por debajo del DAC
+ * obliga a alargar t1, y una rampa larga NO recorre lo que dos cortas: en la tabla de
+ * puntuaciones de Major Havoc, VCAP=42 doblaba t1 a 16 en 109 de 424 trazos iluminados
+ * (tasa 29-31) donde sus 427 van todos con t1=8 a tasa 49-51 — y esas filas salian
+ * apiladas en consola. Su regla es mas simple: t1 es el MENOR que deja la tasa dentro del
+ * rango del DAC. Eso es lo que hace hoy `TOPE_DAC` en ramp.rs, que no es un ajuste sino el
+ * fondo de escala del conversor.
  *
- *     MIN_T1 = 1   MIN_T1_ARRANQUE = 1   VCAP = 24
- *     -> 87 ciclos por operacion con geometria correcta, contra 109 con los dos suelos
- *
- * Mesetas, y se coge el CENTRO, no el ultimo valor que sobrevive:
- *     VCAP: 20 y 26 bien, 32 flojea, 40 regular  -> 24
- *
- * POR QUE AQUI Y NO EN vectrex-draw: `MIN_T1` y `VCAP` son el mismo simbolo que usa el
- * firmware del cartucho propio, y alli la geometria se afino con 31/127 sin medir nada de
- * esto. Cambiar el valor compartido seria cambiarle el dibujo a la otra placa sin una sola
- * medida suya — la divergencia que este repositorio tiene un guardian para evitar.
- *
- * Y NO ES UNA CONSTANTE DEL REPOSITORIO, ES UNA CALIBRACION DE MAQUINA: si otra consola
- * pide otro numero, se cambia aqui y se anota con su medida, como esta. */
-extern volatile uint32_t MIN_T1, MIN_T1_ARRANQUE, VCAP, VCAP_SALTO, DAC_CERO, DRAW_SCALE, T1_TRANSPORT;
+ * Se anota aqui porque la medida del 25m sigue siendo valida como medida; lo que no era
+ * valido es tener un mando para ella. [[no-magic-numbers]] */
+extern volatile uint32_t MIN_T1, MIN_T1_ARRANQUE, DAC_CERO, DRAW_SCALE, T1_TRANSPORT;
 extern volatile uint32_t T1_SALTO;
 /* LOS HUECOS DEL MICROTRAMO, por globales como el resto de knobs de la capa de dibujo.
  * Estuvieron como campos de vx_timings y NO funcionaba: con los dos structs del mismo
@@ -694,7 +683,8 @@ void uvm2_draw_init(void)
 #endif
     /* El VecFever no dibuja unidades de menos de 8 cuentas: su plotter fija t1 =
      * max(8, len*escala/127) y reparte en microtramos de 8 con un RESTO final (T1CL=4/6/7
-     * en la captura). MIN_T1=8 + VCAP=127 reproduce exactamente ese modelo en el nuestro.
+     * en la captura). Con MIN_T1=8 y el tope en el fondo de escala del DAC (`TOPE_DAC`,
+     * ramp.rs) reproducimos exactamente ese modelo.
      * Por juego: -DUVM2_MIN_T1=N; sin define quedan los 1 de dkong. */
 #ifdef UVM2_MIN_T1
     MIN_T1          = UVM2_MIN_T1;
@@ -703,18 +693,9 @@ void uvm2_draw_init(void)
     MIN_T1          = 1u;   /* sin suelo: la duracion sale de la longitud */
     MIN_T1_ARRANQUE = 1u;   /* idem para las rampas que arrancan paradas */
 #endif
-    /* VCAP era 24 A SECAS: la calibracion del 25m de dkong (2026-08-27) sangraba a
-     * TODOS los juegos del UVM2 — el mismo overfitting contra el que avisa la nota de
-     * arriba, pero al reves. Un juego lo fija con -DUVM2_VCAP=N; sin define, quedan
-     * los 24 de dkong. asterock lleva 127: la captura del VecFever dibuja este juego
-     * con tasas a fondo de escala, y vfplay ya reprodujo ese stream EN NUESTRA consola
-     * (peldano b) — no es un numero a ojo. Con 24, cada trazo salia con t1 ~6x mas
-     * largo y el frame a 90k ciclos (3x el presupuesto). */
-    /* EL TOPE DE VELOCIDAD DE LOS SALTOS. 0 = el mismo que los trazos, o sea el
-     * comportamiento de siempre para quien no lo fije. Un juego lo pone con
-     * -DUVM2_VCAP_SALTO=N tras medirlo en SU consola. */
     /* SALTO A TIEMPO FIJO (el idioma del VecFever: t1 dado, tasa variable). Con esto
-     * VCAP_SALTO deja de intervenir — son dos modelos alternativos del mismo salto, no
+     * el tope del DAC deja de decidir la duracion — son dos modelos alternativos del
+     * mismo salto (tasa fija / tiempo fijo), no
      * dos ajustes que se sumen. Medido en Major Havoc: t1=31 en el 99% de sus saltos.
      * Ver el bloque de T1_SALTO en ramp.rs. */
 #ifdef UVM2_T1_SALTO
@@ -731,9 +712,6 @@ void uvm2_draw_init(void)
 #endif
 #ifdef UVM2_MT_ORA_X_ON
     MT_ORA_X_ON     = UVM2_MT_ORA_X_ON;
-#endif
-#ifdef UVM2_VCAP_SALTO
-    VCAP_SALTO      = UVM2_VCAP_SALTO;
 #endif
     /* QUIEN MANDA EN LAS DIAGONALES TUMBADAS: el techo del eje menor (1, el de siempre) o
      * el tope de velocidad (0). Ver la nota de `ramp_params_q` en ramp.rs. Se compara en
@@ -770,11 +748,6 @@ void uvm2_draw_init(void)
      * Ver la nota de TRAZO_ENTERO en emit.rs. */
 #ifdef UVM2_MICROTRAMOS
     TRAZO_ENTERO    = 0u;
-#endif
-#ifdef UVM2_VCAP
-    VCAP            = UVM2_VCAP;
-#else
-    VCAP            = 24u;  /* 6,7 ciclos de espera por unidad de longitud */
 #endif
     DAC_CERO        = UVM2_DAC_CERO;
     /* LA ESCALA, si el juego la fija (-DUVM2_DRAW_SCALE / -DUVM2_T1_TRANSPORT). Sin eso se
@@ -1010,7 +983,7 @@ void uvm2_draw_intensity(int brightness)
 /* `fixup` SE HA IDO, y no por opinion: NADIE LA LLAMABA. Doblaba el delta y halvaba la
  * rampa mientras el DAC tuviera holgura, y su justificacion medida —"128 de los ~169
  * ciclos por vector eran la rampa FIJA"— describe un modelo de rampa que este SDK ya no
- * tiene: desde el 2026-08-27 la duracion sale de la longitud (t1 = len*DRAW_SCALE/VCAP),
+ * tiene: desde el 2026-08-27 la duracion sale de la longitud (t1 = len*DRAW_SCALE/TOPE_DAC),
  * asi que un trazo corto ya no paga una rampa de rango completo y no hay nada que
  * arreglar. Se quedo definida, sin una sola llamada, y `uvm2_draw_set_fixup(1)` en
  * uvm2_svc.c encendia un flag que nadie leia — una linea que dice que algo esta
@@ -1664,13 +1637,25 @@ static struct vx_timings vx_cart_timings(void)
  * de comparacion con el VecFever pide 8 porque a 1/16 el 10,5% de sus tasas no se pueden
  * reproducir — su vector de tasa 32 con t1 = 8 mide 1,6 unidades exactas y 1/16 solo sabe
  * decir 1,5625 o 1,625. Con 1/64 o mas fino salen las 210 del frame EXACTAS. */
+/* PEDIR LA PRECISION YA ES PEDIR EL MODO. Hasta el 2026-09-09 el `#else` de aqui abajo
+ * REDEFINIA a 0 un UVM2_Q_BITS que venia de la linea de ordenes, y lo hacia en silencio:
+ * sdkplaymh se compilaba con -DUVM2_Q_BITS=8 y sin UVM2_SUBUNIDAD, asi que main.c leia 8
+ * (su `#error` de contrato daba por bueno), el camino de dibujo leia 0, y la tabla en 1/256
+ * se dibujaba como si fueran unidades enteras. El banco caia del 94,2% al 5,3% de comandos
+ * identicos a los suyos y todo lo medido con el era ruido. El compilador SI lo dijo —dos
+ * avisos de macro-redefined en el log— y nadie los miraba. [[una-cadena-de-contrato-invisible]] */
+#if defined(UVM2_Q_BITS) && (UVM2_Q_BITS > 0) && !defined(UVM2_SUBUNIDAD)
+#define UVM2_SUBUNIDAD 1
+#endif
 #ifdef UVM2_SUBUNIDAD
 #ifndef UVM2_Q_BITS
 #define UVM2_Q_BITS 4
 #endif
 #define UVM2_Q (1 << UVM2_Q_BITS)
 #else
+#ifndef UVM2_Q_BITS
 #define UVM2_Q_BITS 0
+#endif
 #define UVM2_Q 1
 #endif
 

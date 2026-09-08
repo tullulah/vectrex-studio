@@ -1188,7 +1188,7 @@ pub(crate) static TURNO: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(test)]
 mod pentagono {
-    use crate::ramp::{ramp_params, escala, MIN_T1, VCAP, VCAP_SLOW};
+    use crate::ramp::{ramp_params, escala, MIN_T1};
     use core::sync::atomic::Ordering;
     use std::{format, println, vec, vec::Vec};
 
@@ -1223,7 +1223,6 @@ mod pentagono {
     #[test]
     fn las_figuras_cerradas_cierran() {
         let _t = TURNO.lock().unwrap_or_else(|e| e.into_inner());
-        let lento = VCAP_SLOW.swap(0, Ordering::Relaxed);   // una cosa cada vez
 
         // pentagono, cuadrado grande, cuadrado pequeño, zigzag que vuelve, diagonal larga
         let figuras: [(&str, Vec<(i32, i32)>); 5] = [
@@ -1244,22 +1243,23 @@ mod pentagono {
         // puede CRECER con la longitud de la cadena. Media unidad por trazo es generoso —
         // el redondeo de una rampa vale como mucho eso— y aun asi el sesgo lo rompe.
         let mut mal = Vec::new();
-        for (cap, piso) in [(127u32, 31u32), (64, 31), (21, 31), (127, 8), (127, 60)] {
-            VCAP.store(cap, Ordering::Relaxed);
+        // SIN LA DIMENSION DE VCAP: el tope de velocidad ya no es un ajuste, es el limite
+        // del DAC (ver TOPE_DAC en ramp.rs). Se conserva el barrido de MIN_T1, que es el
+        // otro suelo del reparto y sigue existiendo — la propiedad que caza este test
+        // (una figura cerrada CIERRA) no dependia del knob.
+        for piso in [31u32, 8, 60] {
             MIN_T1.store(piso, Ordering::Relaxed);
             for (nombre, v) in figuras.iter() {
                 let (ex, ey) = desvio_al_cerrar(v);
                 let n = (v.len() - 1) as f64;
                 let tope = 0.5 * n;
-                println!("  VCAP {cap:3} MIN_T1 {piso:3}  {nombre:16} cierra a {ex:+7.2},{ey:+7.2}  (tope +-{tope:.1})");
+                println!("  MIN_T1 {piso:3}  {nombre:16} cierra a {ex:+7.2},{ey:+7.2}  (tope +-{tope:.1})");
                 if ex.abs() > tope || ey.abs() > tope {
-                    mal.push(format!("{nombre} a VCAP={cap} MIN_T1={piso}: {ex:+.2},{ey:+.2}"));
+                    mal.push(format!("{nombre} a MIN_T1={piso}: {ex:+.2},{ey:+.2}"));
                 }
             }
         }
-        VCAP.store(127, Ordering::Relaxed);
         MIN_T1.store(31, Ordering::Relaxed);
-        VCAP_SLOW.store(lento, Ordering::Relaxed);
         assert!(mal.is_empty(), "figuras que no cierran:\n  {}", mal.join("\n  "));
     }
 
@@ -1277,11 +1277,12 @@ mod pentagono {
     #[test]
     fn el_error_de_la_rampa_no_tiene_sesgo() {
         let _t = TURNO.lock().unwrap_or_else(|e| e.into_inner());
-        let lento = VCAP_SLOW.swap(0, Ordering::Relaxed);
         let s = escala() as f64;
         let mut mal = Vec::new();
-        for cap in [127u32, 96, 64, 32, 21] {
-            VCAP.store(cap, Ordering::Relaxed);
+        // SIN BARRER VCAP: ya no existe. La propiedad —que el error de la rampa promedie a
+        // cero y no sea una deuda con signo— no dependia del tope de velocidad, y se
+        // comprueba en la unica configuracion que hay.
+        {
             let (mut suma, mut n) = (0f64, 0f64);
             for d in 1..=127i32 {
                 let (vx, _, t1) = ramp_params(d as i8, 0);
@@ -1289,15 +1290,13 @@ mod pentagono {
                 n += 1.0;
             }
             let media = suma / n;
-            println!("  VCAP {cap:3}  error medio por trazo: {media:+.4} unidades");
+            println!("  error medio por trazo: {media:+.4} unidades");
             // 0,02 unidades por trazo son 1,7 al cabo de 84 — ya visible. El listen tiene
             // que estar por debajo de lo que se ve, no por debajo de lo que molesta.
             if media.abs() > 0.02 {
-                mal.push(format!("VCAP={cap}: sesgo de {media:+.4} por trazo"));
+                mal.push(format!("sesgo de {media:+.4} por trazo"));
             }
         }
-        VCAP.store(127, Ordering::Relaxed);
-        VCAP_SLOW.store(lento, Ordering::Relaxed);
         assert!(mal.is_empty(), "la rampa tiene SESGO, y un sesgo se acumula:\n  {}",
                 mal.join("\n  "));
     }
@@ -1305,7 +1304,7 @@ mod pentagono {
 
 #[cfg(test)]
 mod velocidad {
-    use crate::ramp::{ramp_params, escala, MIN_T1, VCAP, VCAP_SLOW};
+    use crate::ramp::{ramp_params, escala, MIN_T1};
     use core::sync::atomic::Ordering;
     use std::println;
 
@@ -1324,25 +1323,10 @@ mod velocidad {
     /// tiene velocidad de respuesta finita — pedirle mas de la que sigue deja el trazo
     /// corto, que es el hueco en los vertices.
     #[test]
-    fn cual_es_el_vcap_que_iguala_a_ralf() {
-        let _t = TURNO.lock().unwrap_or_else(|e| e.into_inner());
-        let v = [(0i32, 60i32), (-57, 19), (-35, -49), (35, -49), (57, 19), (0, 60)];
-        for cap in [127u32, 96, 80, 70, 64] {
-            VCAP.store(cap, Ordering::Relaxed);
-            let (mut peor, mut suyo_peor) = (0i32, 0i32);
-            for i in 0..5 {
-                let (dx, dy) = (v[i + 1].0 - v[i].0, v[i + 1].1 - v[i].1);
-                let (vx, vy, _) = ramp_params(dx as i8, dy as i8);
-                let n = (vx as i32).abs().max((vy as i32).abs());
-                let (r, _) = ralf(dx, dy);
-                if n > peor { peor = n; }
-                if r > suyo_peor { suyo_peor = r; }
-            }
-            println!("  VCAP {cap:3} -> pico nuestro {peor:4}   pico de Ralf {suyo_peor:4}   {}",
-                     if peor <= suyo_peor { "OK, no lo pasamos" } else { "MAS RAPIDO QUE EL" });
-        }
-        VCAP.store(127, Ordering::Relaxed);
-    }
+        /* `cual_es_el_vcap_que_iguala_a_ralf` RETIRADO (2026-09-09). Barria VCAP buscando el
+     * valor que igualaba las velocidades de Ralf, y VCAP ya no existe: el tope es el del
+     * DAC. Un test de un knob se va con el knob. */
+
 
     /// EL TECHO DE t1 SE CALCULA POR VECTOR. Tres cosas, y las tres son comprobables:
     ///
@@ -1358,10 +1342,8 @@ mod velocidad {
         let _t = TURNO.lock().unwrap_or_else(|e| e.into_inner());
         let s = escala();
         let piso = MIN_T1.load(Ordering::Relaxed) as i32;
-        let lento = VCAP_SLOW.swap(0, Ordering::Relaxed);   // la regla del zigzag, aparte
 
         // (a) y (b), sobre los 65.024 deltas posibles
-        VCAP.store(127, Ordering::Relaxed);
         let (mut peor, mut cuantos) = (0i32, 0u32);
         for dx in -127i32..=127 {
             for dy in -127i32..=127 {
@@ -1376,7 +1358,7 @@ mod velocidad {
                 if dy != 0 { assert_ne!(vy, 0, "eje Y muerto en ({dx},{dy}) con t1={t1}"); }
             }
         }
-        assert_eq!(cuantos, 0, "a VCAP=127 nadie deberia pasar de DRAW_SCALE");
+        assert_eq!(cuantos, 0, "nadie deberia pasar de DRAW_SCALE");
         assert_eq!(peor, s, "el maximo geometrico ES DRAW_SCALE, ni mas ni menos");
 
         // (c) EL TRANSPORTE MANDA SOBRE LA GEOMETRIA, y por defecto vale 160.
@@ -1386,56 +1368,39 @@ mod velocidad {
         // la vez que se desperto VCAP_SLOW rompio el dibujo en los dos cartuchos, asi que
         // el valor por defecto volvio a 160. El test sigue al codigo, no al reves.
         use crate::ramp::T1_TRANSPORT;
-        VCAP.store(8, Ordering::Relaxed);
+        // La parte que forzaba t1 con VCAP=8 se retira con el knob; lo que se conserva
+        // es que el techo se calcula POR VECTOR, que es lo que este test caza.
         let (_, vy_plano, plano) = ramp_params(127, 1);
         let (_, _, diagonal) = ramp_params(127, 127);
         let tope = T1_TRANSPORT.load(Ordering::Relaxed) as i32;
-        println!("  VCAP=8, transporte {tope} -> diagonal {diagonal}  alargado {plano}");
         assert!(diagonal as i32 <= tope && plano as i32 <= tope,
                 "nadie puede pasar del tope de transporte");
         assert_ne!(vy_plano, 0, "y ningun eje con delta se queda parado");
 
-        // y que la LEY por vector sigue viva: con el transporte suelto, dos vectores
-        // reciben techos distintos, que es lo que una constante global no podia dar.
+        // Y LA LEY POR VECTOR, comprobada sobre el techo y no sobre t1.
+        //
+        // Antes se observaba indirectamente: con VCAP forzando t1 hacia arriba, dos
+        // vectores acababan en t1 distintos y eso delataba que sus techos eran distintos.
+        // Sin tope de velocidad t1 no llega al techo, asi que hay que mirar el techo — que
+        // es `d_menor * DRAW_SCALE` y sigue siendo por vector.
         T1_TRANSPORT.store(4095, Ordering::Relaxed);
-        let (_, _, d2) = ramp_params(127, 127);
-        let (_, _, p2) = ramp_params(127, 1);
+        for (dx, dy) in [(127i8, 127i8), (127, 1), (60, 20), (5, 5)] {
+            let (_, _, t) = ramp_params(dx, dy);
+            let menor = (dx as i32).abs().min((dy as i32).abs()).max(1);
+            assert!(t as i32 <= menor * s,
+                    "({dx},{dy}): t1={t} pasa de su techo por vector {}", menor * s);
+        }
         T1_TRANSPORT.store(tope as u32, Ordering::Relaxed);
-        assert!(d2 as i32 > s && p2 as i32 == s,
-                "con el transporte suelto el diagonal puede frenarse y el alargado no");
 
-        VCAP.store(127, Ordering::Relaxed);
-        VCAP_SLOW.store(lento, Ordering::Relaxed);
     }
 
-    /// EL TOPE SELECTIVO SOLO SALTA SI EL BACKEND LLEVA `Y_HELD`, y esto lo fija.
-    ///
-    /// Estuvo escrito al reves: exigia que saltara con un sumidero que NO implementa
-    /// y_held, porque el emisor le llevaba la cuenta. Eso se REVIRTIO — activarlo cambiaba
-    /// el dibujo del 37% de los vectores en los dos cartuchos y rompio dkong y SnowBros.
-    ///
-    /// Lo que queda fijado es el CONTRATO, que es lo util: quien no escriba `Y_HELD` no
-    /// tiene tope selectivo, y eso es hoy el caso del UVM2. Si alguien lo despierta, este
-    /// test le recuerda que la decision es suya y no un efecto colateral.
-    #[test]
-    fn el_tope_selectivo_depende_del_backend() {
-        use crate::ramp::{Y_HELD, VCAP_SLOW_HITS};
-        let _t = TURNO.lock().unwrap_or_else(|e| e.into_inner());
-        VCAP.store(127, Ordering::Relaxed);
-        VCAP_SLOW.store(30, Ordering::Relaxed);
+    /* `el_tope_selectivo_depende_del_backend` RETIRADO (2026-09-09) junto con VCAP_SLOW.
+     *
+     * Fijaba un CONTRATO que vale la pena no perder de vista: quien no escriba `Y_HELD` no
+     * tenia tope selectivo. Ya no hay tope selectivo para nadie — la regla bajaba el tope a
+     * los vectores CORTOS, que son los glifos del texto, y eso les alargaba t1. */
 
-        Y_HELD.store(0, Ordering::Relaxed);            // backend que no lleva la cuenta
-        let antes = VCAP_SLOW_HITS.load(Ordering::Relaxed);
-        for i in 0..8 { ramp_params(5, if i % 2 == 0 { -7 } else { 9 }); }
-        assert_eq!(VCAP_SLOW_HITS.load(Ordering::Relaxed), antes,
-                   "sin Y_HELD el tope selectivo no puede saltar");
 
-        Y_HELD.store(0x100 | (200u32 & 0xff), Ordering::Relaxed);   // vy negativo sostenido
-        ramp_params(5, 9);                                          // dy invierte el signo
-        assert!(VCAP_SLOW_HITS.load(Ordering::Relaxed) > antes,
-                "con Y_HELD valido y el signo invertido TIENE que saltar");
-        Y_HELD.store(0, Ordering::Relaxed);
-    }
 
 
 }

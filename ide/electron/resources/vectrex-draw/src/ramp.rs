@@ -103,9 +103,32 @@ static ARRANQUE: AtomicU32 = AtomicU32::new(1);
 // ramp_params raises t1 to hold velocity ≤ VCAP; short vectors are already under it.
 /// Velocity cap, RUNTIME alongside MIN_T1 — the two interact (t1 is the max of both
 /// floors), so sweeping one without the other cannot find the optimum.
-#[used]
-#[no_mangle]
-pub static VCAP: AtomicU32 = AtomicU32::new(48);
+/* EL TOPE DE VELOCIDAD ES EL DEL DAC, Y NO ES UN AJUSTE.
+ *
+ * Aqui habia `VCAP`, un knob que acotaba la VELOCIDAD del haz porque frenarlo carga mas el
+ * fosforo: mas brillo. El precio no se vio hasta el 2026-09-09, comparando comando a
+ * comando nuestra lista contra su captura del MISMO cuadro (la pantalla de records):
+ *
+ *   sus 427 trazos iluminados van TODOS a t1 = 8, con tasas de mediana 49 y maximo 51.
+ *   Los nuestros salian 315 a t1 = 8 y 109 a t1 = 16, y esos 109 con tasa 29-31: el
+ *   elector veia que hacia falta ~50, la prohibia por VCAP = 42 y DOBLABA t1 para bajar
+ *   la tasa a la mitad.
+ *
+ * Y UNA RAMPA DE t1 = 16 NO RECORRE LO QUE DOS DE t1 = 8. En consola la tabla salia con
+ * las filas apiladas, y con -DUVM2_MICROTRAMOS —que parte esos trazos en tramos de 8— se
+ * ENDEREZA. Ese fue el experimento que lo cerro.
+ *
+ * SU REGLA es la que queda: t1 es el mas pequeño que mantenga la tasa dentro del DAC. El
+ * tope no es una preferencia, es el limite del convertidor. El brillo el lo saca de Z, no
+ * de frenar el haz — y su permanencia por unidad (3,2 ciclos) le sale sola porque el trazo
+ * es corto.
+ *
+ * LO QUE SE PIERDE AL QUITARLO, para que conste: un barrido a frame fijo daba VCAP = 42 a
+ * un 2% de sus ciclos por unidad y un 4% de su carga de fosforo (VCAP 29/34/38/42 ->
+ * cic/ud 5,54/4,85/4,26/3,93 contra sus 4,00). Ese ajuste igualaba la MEDIA del frame
+ * frenando el texto por debajo de lo que su geometria admite: un solo numero no puede
+ * servir a los vectores largos y a los glifos. */
+const TOPE_DAC: u32 = 127;
 /* ^ 48 Y NO 127, POR DEFECTO DESDE 2026-09-04.
  *
  * 127 no es un tope: es "sin tope", y con el TODO trazo corre a la velocidad maxima, que es
@@ -146,7 +169,9 @@ pub static VCAP: AtomicU32 = AtomicU32::new(48);
  * ponga valor, ningun puerto cambia de comportamiento. */
 #[used]
 #[no_mangle]
-pub static VCAP_SALTO: AtomicU32 = AtomicU32::new(0);
+/* `VCAP_SALTO` tambien se va. Existia para no frenar los saltos (van a oscuras, frenarlos
+ * no ilumina nada) mientras VCAP frenaba los trazos; los cuatro objetivos que lo fijaban lo
+ * ponian a 127, o sea que ya era el tope del DAC. Sin VCAP no hay nada de lo que eximirlos. */
 
 /// TOPE DE TRANSPORTE — no es una preferencia, es el ancho de un campo.
 ///
@@ -223,22 +248,13 @@ pub static TECHO_MANDA: AtomicU32 = AtomicU32::new(1);
 pub static DEUDA_ON: AtomicU32 = AtomicU32::new(1);
 
 #[no_mangle]
-pub static VCAP_SLOW: AtomicU32 = AtomicU32::new(30);
+/* `VCAP_SLOW` / `VCAP_DV` / `VCAP_SLOW_HITS` RETIRADOS con VCAP (2026-09-09).
+ *
+ * Bajaban el tope para los vectores frenados, y su condicion era `m <= VCAP_DV` — o sea que
+ * se aplicaban a los CORTOS, que son justo los glifos del texto. Con el tope ya en el limite
+ * del DAC no hay nada que bajar, y bajarlo reintroduciria el t1 largo por otra puerta.
+ * Ningun objetivo los fijaba nunca. */
 
-#[used]
-// LONGITUD MAXIMA del vector para que la regla aplique (no un salto de velocidad;
-// ver la nota del disparador). Los segmentos del zigzag miden 7..9, asi que 32 los
-// cubre con holgura. 16 tambien, y quedo sin decidir cual es mejor: el barrido que
-// lo comparaba se perdio con un reinicio a mitad.
-#[no_mangle]
-pub static VCAP_DV: AtomicU32 = AtomicU32::new(32);
-
-/// Cuantos vectores han caido en el tope lento. Si esto es 0 el umbral no salta;
-/// si se parece al total de vectores, el selectivo no esta seleccionando nada y
-/// estas pagando el 22% igual.
-#[used]
-#[no_mangle]
-pub static VCAP_SLOW_HITS: AtomicU32 = AtomicU32::new(0);
 
 /// SALTO A TIEMPO FIJO, COMO EL VECFEVER. 0 = el modelo de siempre (tiempo variable).
 ///
@@ -272,8 +288,7 @@ pub fn ramp_params_salto(dx: i8, dy: i8) -> (i8, i8, u16) {
     if fijo > 0 {
         return salto_tiempo_fijo(dx, dy, fijo);
     }
-    let v = VCAP_SALTO.load(Ordering::Relaxed);
-    ramp_params_con(dx, dy, if v != 0 { v } else { VCAP.load(Ordering::Relaxed) })
+    ramp_params_con(dx, dy, TOPE_DAC)
 }
 
 /// El modelo de salto del VecFever: `t1` fijo, y la tasa es lo que salga.
@@ -305,7 +320,7 @@ fn salto_tiempo_fijo(dx: i8, dy: i8, fijo: i32) -> (i8, i8, u16) {
 }
 
 pub fn ramp_params(dx: i8, dy: i8) -> (i8, i8, u16) {
-    ramp_params_con(dx, dy, VCAP.load(Ordering::Relaxed))
+    ramp_params_con(dx, dy, TOPE_DAC)
 }
 
 /// El modelo, con el tope de velocidad que le pase quien llame. Los trazos usan `VCAP` y
@@ -386,17 +401,6 @@ fn ramp_params_q(dx: i32, dy: i32, vcap_in: u32, q: u32) -> (i8, i8, u16) {
     // Y ademas son CORTOS. Las dos condiciones juntas describen el zigzag y casi nada
     // mas. `Y_HELD` guarda el vy anterior (bit 8 = valido) y su signo es el de dy,
     // porque vy = dy * s / t1 con s y t1 positivos.
-    let lento = VCAP_SLOW.load(Ordering::Relaxed) as i32;
-    if lento != 0 && dy != 0 && m / f <= VCAP_DV.load(Ordering::Relaxed) as i32 {
-        let held = Y_HELD.load(Ordering::Relaxed);
-        if held & 0x100 != 0 {
-            let prev = (held & 0xff) as u8 as i8 as i32;
-            if prev != 0 && (prev < 0) != (dy < 0) {
-                vcap = lento;
-                VCAP_SLOW_HITS.fetch_add(1, Ordering::Relaxed);
-            }
-        }
-    }
     if m == 0 {
         return (0, 0, min_t1 as u16); // degenerate (dot); minimal ramp
     }
@@ -706,7 +710,7 @@ pub extern "C" fn vx_ramp_params(dx: i32, dy: i32, out_vx: *mut i32, out_vy: *mu
 #[no_mangle]
 pub extern "C" fn vx_ramp_params_q4(dx_q4: i32, dy_q4: i32, out_vx: *mut i32,
                                     out_vy: *mut i32, out_t1: *mut u32) {
-    let v = VCAP.load(Ordering::Relaxed);
+    let v = TOPE_DAC;
     let (vx, vy, t1) = ramp_params_salto_con_deuda(dx_q4, dy_q4, v, 4);
     unsafe {
         if !out_vx.is_null() { *out_vx = vx as i32; }
@@ -793,8 +797,7 @@ pub extern "C" fn vx_ramp_params_con_t1(dx: i32, dy: i32, f: i32, t1: u32,
 #[no_mangle]
 pub extern "C" fn vx_ramp_params_salto_qn(dx: i32, dy: i32, q: u32, out_vx: *mut i32,
                                           out_vy: *mut i32, out_t1: *mut u32) {
-    let v = VCAP_SALTO.load(Ordering::Relaxed);
-    let v = if v != 0 { v } else { VCAP.load(Ordering::Relaxed) };
+    let v = TOPE_DAC;
     let (vx, vy, t1) = ramp_params_q(dx, dy, v, q);
     unsafe {
         if !out_vx.is_null() { *out_vx = vx as i32; }
@@ -806,8 +809,7 @@ pub extern "C" fn vx_ramp_params_salto_qn(dx: i32, dy: i32, q: u32, out_vx: *mut
 #[no_mangle]
 pub extern "C" fn vx_ramp_params_salto_q4(dx_q4: i32, dy_q4: i32, out_vx: *mut i32,
                                           out_vy: *mut i32, out_t1: *mut u32) {
-    let v = VCAP_SALTO.load(Ordering::Relaxed);
-    let v = if v != 0 { v } else { VCAP.load(Ordering::Relaxed) };
+    let v = TOPE_DAC;
     let (vx, vy, t1) = ramp_params_q(dx_q4, dy_q4, v, 4);
     unsafe {
         if !out_vx.is_null() { *out_vx = vx as i32; }
@@ -965,7 +967,7 @@ pub fn ramp_params_chain_qn(dx_q4: i32, dy_q4: i32, q: u32) -> (i8, i8, u16) {
     let px = if dx_q4 == 0 || !usa { dx_q4 } else { dx_q4 + a_q4(rx) };
     let py = if dy_q4 == 0 || !usa { dy_q4 } else { dy_q4 + a_q4(ry) };
 
-    let (vx, vy, t1) = ramp_params_q(px, py, VCAP.load(Ordering::Relaxed), q);
+    let (vx, vy, t1) = ramp_params_q(px, py, TOPE_DAC, q);
     /* EL REDONDEO A MICROTRAMOS, AQUI Y NO EN EL EMISOR — SI NO, LA DEUDA NO LO VE.
      *
      * `draw_line_seq` parte el trazo en n microtramos de 8 cuentas y reescala la tasa para
@@ -1119,7 +1121,6 @@ mod sesgo_vertical {
         let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
         MIN_T1.store(8, Ordering::Relaxed);
         MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
-        VCAP.store(127, Ordering::Relaxed);
         DRAW_SCALE.store(160, Ordering::Relaxed);
         T1_TRANSPORT.store(160, Ordering::Relaxed);
         /* IGUALADO AL CARTUCHO. Sin esto el test corre con los DEFECTOS de la caja y el
@@ -1142,7 +1143,6 @@ mod sesgo_vertical {
         let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
         MIN_T1.store(8, Ordering::Relaxed);
         MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
-        VCAP.store(127, Ordering::Relaxed);
         DRAW_SCALE.store(160, Ordering::Relaxed);
         for dy in [3i8, 7, 24, 50, 60, 120, -24, -60] {
             let (vx, _vy, _t1) = ramp_params(0, dy);
@@ -1187,7 +1187,6 @@ mod sesgo_vertical {
         let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
         MIN_T1.store(8, Ordering::Relaxed);
         MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
-        VCAP.store(42, Ordering::Relaxed);
         DRAW_SCALE.store(160, Ordering::Relaxed);
         T1_TRANSPORT.store(160, Ordering::Relaxed);
         T1_EXTRA_Q8.store(0, Ordering::Relaxed);
@@ -1213,7 +1212,6 @@ mod sesgo_vertical {
         let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
         MIN_T1.store(8, Ordering::Relaxed);
         MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
-        VCAP.store(42, Ordering::Relaxed);
         DRAW_SCALE.store(160, Ordering::Relaxed);
         T1_TRANSPORT.store(160, Ordering::Relaxed);
         T1_EXTRA_Q8.store(0, Ordering::Relaxed);
@@ -1232,13 +1230,13 @@ mod sesgo_vertical {
         // Y un vector SUB-UNIDAD, que en enteros ni existe: 0,5 unidades = 8 dieciseisavos.
         let (vx0, vy0, _) = ramp_params(0, 0);
         assert_eq!((vx0, vy0), (0, 0), "en enteros medio pixel se pierde entero");
-        let (vxh, _, t1h) = ramp_params_q(8, 0, 42, 4);
+        let (vxh, _, t1h) = ramp_params_q(8, 0, TOPE_DAC, 4);
         assert!(rec(vxh, t1h) > 0.3 && rec(vxh, t1h) < 0.7,
                 "media unidad deberia salir ~0,5 y sale {:.3}", rec(vxh, t1h));
 
         // Q4 con valores ya enteros no puede cambiar lo que hacia antes.
         for d in [1i8, 3, 7, 20, 60, -5, -33] {
-            assert_eq!(ramp_params(d, 0), ramp_params_q(d as i32 * 16, 0, 42, 4),
+            assert_eq!(ramp_params(d, 0), ramp_params_q(d as i32 * 16, 0, TOPE_DAC, 4),
                        "d={d}: un entero exacto tiene que dar lo mismo por los dos caminos");
         }
     }
@@ -1255,7 +1253,6 @@ mod sesgo_x_2026_09_04 {
         let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
         MIN_T1.store(8, Ordering::Relaxed);
         MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
-        VCAP.store(42, Ordering::Relaxed);
         DRAW_SCALE.store(160, Ordering::Relaxed);
         T1_TRANSPORT.store(160, Ordering::Relaxed);
         T1_EXTRA_Q8.store(0, Ordering::Relaxed);
@@ -1315,8 +1312,6 @@ mod deriva {
         let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
         MIN_T1.store(8, Ordering::Relaxed);
         MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
-        VCAP.store(42, Ordering::Relaxed);
-        VCAP_SALTO.store(127, Ordering::Relaxed);
         DRAW_SCALE.store(160, Ordering::Relaxed);
         T1_TRANSPORT.store(160, Ordering::Relaxed);
         T1_EXTRA_Q8.store(0, Ordering::Relaxed);
@@ -1342,7 +1337,7 @@ mod deriva {
                               *y0 - (py_*f).round() as i32);
             if jx4 != 0 || jy4 != 0 {
                 let (vx, vy, t1) = ramp_params_salto_con_deuda(
-                    jx4, jy4, VCAP_SALTO.load(Ordering::Relaxed), q);
+                    jx4, jy4, TOPE_DAC, q);
                 if vx.abs() == 127 || vy.abs() == 127 { satur += 1; }
                 bx += vx as f64 * t1 as f64 / 160.0; by += vy as f64 * t1 as f64 / 160.0;
                 saltos += 1;
@@ -1379,10 +1374,6 @@ pub(crate) fn knobs_como_el_cartucho() {
     T1_LAG_ARRANQUE.store(0, Ordering::Relaxed);
     MIN_T1.store(8, Ordering::Relaxed);
     MIN_T1_ARRANQUE.store(8, Ordering::Relaxed);
-    VCAP.store(42, Ordering::Relaxed);
-    VCAP_SALTO.store(127, Ordering::Relaxed);
-    VCAP_SLOW.store(30, Ordering::Relaxed);
-    VCAP_DV.store(32, Ordering::Relaxed);
     T1_SALTO.store(0, Ordering::Relaxed);
     T1_TRANSPORT.store(160, Ordering::Relaxed);
     DRAW_SCALE.store(160, Ordering::Relaxed);
@@ -1414,7 +1405,7 @@ mod tasa_directa {
         // la geometria pide dx=1,3477 dy=-2,4023 unidades, o sea 345 y -615 en Q8
         let (vx, vy, t1) = ramp_params_chain_qn(345, -615, 8);
         std::println!("  chain_qn(345,-615,q=8) -> vx={vx} vy={vy} t1={t1}   (el suyo: 27, -48, 8)");
-        let (ax, ay, at1) = ramp_params_q(345, -615, VCAP.load(Ordering::Relaxed), 8);
+        let (ax, ay, at1) = ramp_params_q(345, -615, TOPE_DAC, 8);
         std::println!("  ramp_params_q crudo    -> vx={ax} vy={ay} t1={at1}");
         std::println!("  escala()={}  T1_EXTRA_Q8={}", escala(), T1_EXTRA_Q8.load(Ordering::Relaxed));
     }
