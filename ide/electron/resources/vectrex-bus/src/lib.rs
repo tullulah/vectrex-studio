@@ -141,6 +141,9 @@ static BATCH_FILL: AtomicU32 = AtomicU32::new(0);
 
 pub static BATCH_SENT:     AtomicU32 = AtomicU32::new(0);
 pub static BATCH_WAITS:    AtomicU32 = AtomicU32::new(0);
+/* Indice del `nop` del bucle de retardo en la memoria de instrucciones del PIO, para poder
+ * barrer su calibracion de fase desde un banco. 0xFFFF_FFFF = no encontrado. */
+pub static VBUS_NOP_PARKEO: AtomicU32 = AtomicU32::new(0xFFFF_FFFF);
 pub static RING_FULL_SEEN: AtomicU32 = AtomicU32::new(0);
 pub static RING_OVERRUNS:  AtomicU32 = AtomicU32::new(0);
 pub static STREAM_PUSHES:  AtomicU32 = AtomicU32::new(0);
@@ -366,9 +369,23 @@ pub unsafe fn install(l: &Layout, programa: &[u16], wrap_target: u8, wrap: u8) {
     w(PIO0_BASE + PIO_CTRL, 0);
 
     // El programa, en el origen 0 y con el ancho de esta placa.
+    //
+    // Y DE PASO, DONDE ESTA EL `nop` DEL BUCLE DE RETARDO. Su retardo esta calibrado contra
+    // la fase de E y es un candidato a explicar por que un ciclo de hueco cuesta 1,0 us en
+    // vez de los 0,667 del periodo de E. Barrerlo pide saber su indice, y quien tiene el
+    // programa delante es esto — buscarlo desde fuera leyendo la memoria de instrucciones no
+    // vale: el emulador la modela como solo-escritura y devuelve cero.
+    //
+    // `nop` es `mov y, y` = 0xA042, con el retardo en los bits 12:8. El PRIMERO esta en el
+    // camino de escritura y el SEGUNDO en `parkeo`, que es el que ejecuta los huecos.
+    let mut vistos = 0u32;
     let mut i = 0usize;
     while i < programa.len() && i < 32 {
         w(PIO0_BASE + PIO_INSTR_MEM0 + 4 * i, parchea_ancho(programa[i], l.out_count) as u32);
+        if programa[i] & 0xE0FF == 0xA042 {
+            vistos += 1;
+            if vistos == 2 { VBUS_NOP_PARKEO.store(i as u32, Ordering::Relaxed); }
+        }
         i += 1;
     }
 

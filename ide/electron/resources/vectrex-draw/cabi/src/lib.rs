@@ -115,6 +115,13 @@ mod bus_c {
     
     /// Los contadores, por indice, para poder leerlos por SWD desde C sin exportar simbolos
     /// Rust uno a uno. El orden lo fija `uvm2_bus.h`; LOS DOS SE MUEVEN JUNTOS.
+    /// Donde esta el `nop` del bucle de retardo en la memoria de instrucciones del PIO.
+    /// Lo publica `install`; sirve para barrer su calibracion de fase desde un banco.
+    #[no_mangle]
+    pub extern "C" fn vbus_nop_parkeo() -> u32 {
+        bus::VBUS_NOP_PARKEO.load(core::sync::atomic::Ordering::Relaxed)
+    }
+
     #[no_mangle]
     pub extern "C" fn vbus_stat(idx: u32) -> u32 {
         use core::sync::atomic::Ordering::Relaxed;
