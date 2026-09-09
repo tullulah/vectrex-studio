@@ -240,12 +240,44 @@ void v_setIntensity(int b) { BEAM_INTENSITY((signed char)b); }
  * contrario. En esa placa no se puede leer ni escribir por SWD —parar el nucleo es una
  * violacion de fase— asi que probar un valor costaba un flasheo; ahora se barre desde el
  * menu de servicio viendo el dibujo. */
+/* ── UNA PERILLA QUE NO LLEGABA. Estaba asi:
+ *
+ *     volatile int uvm2_max_draws = 6;
+ *     #define VPY_MAX_CONSECUTIVE_DRAWS uvm2_max_draws
+ *
+ * sin `#undef`, o sea que el `-DVPY_MAX_CONSECUTIVE_DRAWS=N` del Makefile del juego se
+ * REDEFINIA aqui y el numero que corria en consola era el 6 de esta linea, pasara lo que
+ * pasara en el build. Medido en asterock el 2026-09-03: 76 re-ceros por frame, que es
+ * 498 vectores / 6 — el juego pedia 32 y corria 6. El sintoma en pantalla son trazos
+ * DESPLAZADOS y solapados, porque cada re-cero vuelve al centro y la reaproximacion
+ * redondea ([[la-deriva-esta-en-los-saltos]]: -47/-89 unidades por salto).
+ *
+ * Ahora el valor del juego SIEMBRA la variable y el `#undef` es explicito, asi que
+ * seguir barriendola desde el menu de servicio sigue funcionando pero el punto de
+ * partida es el que compilo el juego.
+ *
+ * EL DEFECTO SALE DE LA CAPTURA, no de una prueba a ojo: el VecFever dibuja ESTE juego
+ * con 12-16 pulsos de cero por frame (vecfever-asterock-bus.csv, histograma sobre 816
+ * frames), y 498 vectores / 32 = 15,6. El 32 que ya estaba documentado como validado en
+ * hardware es el que reproduce su cadencia. ── */
+/* El orden importa: hay que preguntar si el JUEGO lo definio ANTES de poner cualquier
+ * defecto, o los dos casos se vuelven indistinguibles. Y los defectos se dejan donde
+ * estaban a proposito — 6 en el UVM2 y 4 en el cartucho propio son lo que estaba
+ * corriendo, y subirlos les cambiaria el dibujo a dkong y a los demas puertos sin una
+ * sola medida suya ([[tune-on-one-game-is-overfitting]]). Lo que se arregla aqui es que
+ * el juego PUEDA decidir, no lo que decide por el. */
 #ifdef UVM2_PICO_RUNTIME
-volatile int uvm2_max_draws = 6;
-#define VPY_MAX_CONSECUTIVE_DRAWS uvm2_max_draws
+#  ifdef VPY_MAX_CONSECUTIVE_DRAWS
+/* KNOB EN TIEMPO DE EJECUCION, sembrado con el valor QUE COMPILO EL JUEGO. */
+volatile int uvm2_max_draws = VPY_MAX_CONSECUTIVE_DRAWS;
+#    undef VPY_MAX_CONSECUTIVE_DRAWS
+#  else
+volatile int uvm2_max_draws = 6;      /* lo que corria de facto en esta placa */
+#  endif
+#  define VPY_MAX_CONSECUTIVE_DRAWS uvm2_max_draws
 #endif
 #ifndef VPY_MAX_CONSECUTIVE_DRAWS
-#define VPY_MAX_CONSECUTIVE_DRAWS 4
+#define VPY_MAX_CONSECUTIVE_DRAWS 4   /* el cartucho propio, sin tocar */
 #endif
 
 /* ── 1 -> 4 EL 2026-08-11, y la clave es que el 1 estaba compensando OTRA COSA ──
@@ -732,13 +764,27 @@ static void flush_run(void)
 #endif
 }
 
-/* Drop lit segments whose device delta is below CULL_MIN_AX (in ±127 space) on
- * BOTH axes: sub-visible short vectors that still cost a full beam settle. For
- * pseudo-3D / ray-cast games (Speed Freak) these are the far-distance detail that
- * clusters near the vanishing point — invisible-but-expensive now, and re-drawn at
- * full size as the camera nears. Per-game (-DCULL_MIN_AX=N); default 0 = keep all. */
-#ifndef CULL_MIN_AX
-#define CULL_MIN_AX 0
+/* EL RECORTE DE TRAZOS CORTOS SE RETIRO EL 2026-09-09, Y NO VUELVE.
+ *
+ * Fue `CULL_MIN_AX`: tiraba los trazos iluminados con menos de N unidades de dispositivo
+ * EN LOS DOS EJES. Se escribio para pseudo-3D (Speed Freak), donde el detalle lejano se
+ * agolpa en el punto de fuga y se vuelve a dibujar a tamaño completo cuando la camara se
+ * acerca. En un juego de escenario no hay punto de fuga: lo que tira es el dibujo.
+ *
+ * MEDIDO en Donkey Kong, un frame del 25m sacado del arnes de host (639 trazos):
+ *     N=1     7 tirados  ( 1%)
+ *     N=2   116 tirados  (18%)   <- lo que llevaba dkong
+ *     N=3   191 tirados  (30%)
+ * Y 639 - 116 = 523 contra los 520 que se leyeron POR SWD del cartucho dibujando esa
+ * pantalla: cuadraba a tres trazos. Era exactamente la geometria que faltaba en la foto.
+ *
+ * NO SE DEJA APAGADO POR DEFECTO, SE QUITA. Un knob a cero es un knob que alguien vuelve a
+ * encender, y este ya sobrevivio a que lo dieran por retirado. Ademas era invisible desde
+ * el arnes de host —el recorte vive AQUI, y el host no pasa por esta capa—, asi que medir
+ * su efecto exigia leer el cartucho por SWD. Si algun dia hace falta recortar detalle
+ * lejano, que lo haga el JUEGO que sabe donde esta su punto de fuga, no el SDK de todos. */
+#ifdef CULL_MIN_AX
+#error "CULL_MIN_AX se retiro el 2026-09-09: tiraba el 18% del dibujo de dkong. Ver la nota de arriba."
 #endif
 
 /* TEXT opts OUT of the sub-visible cull AND of the collinear merge: glyph strokes
@@ -751,9 +797,53 @@ static void flush_run(void)
  * — platforms, floor — drawn as a chain of separate short dashes. No-op for games
  * that never call it (s_in_text stays 0) or that build with both off. */
 static int s_in_text = 0;
+#ifdef VPY_MIDE_REDONDEO
+volatile unsigned vpy_red_n, vpy_red_err_c, vpy_red_subunidad, vpy_red_cero;
+/* SONDAS PROPIAS de la comparacion con el VecFever. Separadas de vpy_red_* a proposito:
+ * aquellas son CONTADORES que el SDK incrementa en cada vector, asi que una sonda que se
+ * apoye en ellas lee el contador, no lo que escribio. Me costo media sesion de medidas
+ * falsas. `sonda_lista` distingue "sin escribir" de "escribio un cero". */
+#ifdef VPY_MIDE_REDONDEO
+volatile int sonda_a, sonda_b, sonda_c, sonda_d, sonda_e, sonda_f;
+volatile unsigned sonda_lista;
+#endif
+#endif
 void v_textBegin(void) { s_in_text = 1; }
 void v_textEnd(void)   { s_in_text = 0; }
 
+#ifdef UVM2_SUBUNIDAD
+/* CAMINO DE SUB-UNIDADES: DEL JUEGO AL SDK SIN PASAR POR LA REJILLA ENTERA.
+ *
+ * `VS_RND` divide las coordenadas del juego por 127 y REDONDEA A ENTERO. Medido en mhavoc
+ * sobre 81.552 vectores: 0,22 unidades de error por eje, el 3,6% de los vectores
+ * enteramente sub-unidad y el 0,26% desapareciendo porque sus dos extremos caen en el mismo
+ * punto. Con la geometria del VecFever de entrada, ese redondeo hacia PERDER las entradas 1
+ * a 4 de su tabla de records y el resto salia en diagonal; en 1/16 sale la lista completa.
+ *
+ * POR QUE SE SALTA beam_seg Y LA FUSION. `BEAM_MOVE`/`BEAM_DRAW` castean el delta a
+ * `signed char`, o sea +-127 — que en 1/16 son +-7,9 unidades. Llevar ese camino entero a
+ * sub-unidades obliga a cambiar la codificacion de comandos del doble nucleo, que es otra
+ * cosa y mas grande. Aqui se va directo a la API del SDK, que ya toma 1/16.
+ *
+ * LO QUE SE PIERDE, y no es gratis: la fusion de colineales, la simplificacion
+ * Douglas-Peucker y el culling trabajan en enteros y se quedan fuera. Para mhavoc eso es
+ * SIMPLIFY_EPS=2: sin ella salen mas vectores y el frame cuesta mas. Es un intercambio
+ * medible; si duele, lo que hay que hacer es llevar esas tres a 1/16 tambien. */
+void uvm2_draw_move_abs_q4(int x_q4, int y_q4);
+void uvm2_draw_delta_q4(int dx_q4, int dy_q4);
+void uvm2_draw_intensity(int z);
+
+#define VS_Q4(v) ((int)(((v) < 0 ? (long)(v) * 16 - VPY_SCALE / 2 \
+                                 : (long)(v) * 16 + VPY_SCALE / 2) / VPY_SCALE))
+
+void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
+{
+    if (b == 0) return;                       /* z=0 es un salto en blanco, no un trazo */
+    uvm2_draw_intensity((int)b);
+    uvm2_draw_move_abs_q4(VS_Q4(x0), VS_Q4(y0));
+    uvm2_draw_delta_q4(VS_Q4(x1) - VS_Q4(x0), VS_Q4(y1) - VS_Q4(y0));
+}
+#else
 void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
 {
     /* ROUND, DO NOT TRUNCATE. C division truncates TOWARDS ZERO, so this snapped the two
@@ -764,12 +854,21 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
      * where the line is -0.056, which is the staircase you can see. */
     int ax0 = VS_RND(x0), ay0 = VS_RND(y0);
     int ax1 = VS_RND(x1), ay1 = VS_RND(y1);
-#if CULL_MIN_AX > 0
-    if (!s_in_text) {
-        int cdx = ax1 - ax0, cdy = ay1 - ay0;
-        if (cdx < CULL_MIN_AX && cdx > -CULL_MIN_AX &&
-            cdy < CULL_MIN_AX && cdy > -CULL_MIN_AX)
-            return;   /* too small to see; the next lit seg's move_to repositions */
+#ifdef VPY_MIDE_REDONDEO
+    /* CUANTA PRECISION SE TIRA AQUI. El juego entrega coordenadas finas (del orden de
+     * +-16000) y VS_RND las redondea a las +-127 enteras del DAC, o sea 1/127 de lo que
+     * traia. La pregunta es si eso importa: se cuenta el error en centesimas de unidad y
+     * cuantos vectores quedan por debajo de UNA unidad, que son los que no se pueden ni
+     * expresar. Solo con -DVPY_MIDE_REDONDEO; fuera de eso no cuesta nada. */
+    {
+        extern volatile unsigned vpy_red_n, vpy_red_err_c, vpy_red_subunidad, vpy_red_cero;
+        #define VPY_ABS(v) ((v) < 0 ? -(v) : (v))
+        long ex = (long)x0 - (long)ax0 * VPY_SCALE, ey = (long)y0 - (long)ay0 * VPY_SCALE;
+        vpy_red_n++;
+        vpy_red_err_c += (unsigned)((VPY_ABS(ex) + VPY_ABS(ey)) * 100 / VPY_SCALE);
+        long dxf = (long)x1 - (long)x0, dyf = (long)y1 - (long)y0;
+        if (VPY_ABS(dxf) < VPY_SCALE && VPY_ABS(dyf) < VPY_SCALE) vpy_red_subunidad++;
+        if (ax0 == ax1 && ay0 == ay1) vpy_red_cero++;   /* el vector desaparece al redondear */
     }
 #endif
 #if SIMPLIFY_EPS > 0
@@ -807,6 +906,7 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
     emit_seg(ax0, ay0, ax1, ay1, (int)b);
 #endif
 }
+#endif /* UVM2_SUBUNIDAD */
 
 /* ── Frame pace + input. vpy_frame_begin() calls v_WaitRecal then the two input
  * refreshers, so v_WaitRecal only paces + re-zeros our tracked beam. ── */
