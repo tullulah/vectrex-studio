@@ -2211,8 +2211,19 @@ static void retardo_artificial(void)
 }
 #endif
 
+#ifdef UVM2_CUENTA_ENTRADA
+/* DIAGNOSTICO: cuantas llamadas de dibujo ENTRAN al SDK, contra las rampas que SALEN.
+ * Es la unica forma de saber si un trazo se trocea ANTES o DESPUES de uvm2_draw. Se
+ * publica en `recals`, que en estos juegos lee 0, para no tocar el formato del informe. */
+extern unsigned uvm2_cuenta_entrada;
+#endif
+
 void uvm2_frame_begin(void)
 {
+#ifdef UVM2_CUENTA_ENTRADA
+    uvm2_stats.recals = uvm2_cuenta_entrada;   /* lo del frame que acaba */
+    uvm2_cuenta_entrada = 0;
+#endif
     s_count = 0;
     s_ciclos = 0;
     s_limite = UVM2_CMD_CAPACITY - UVM2_CMD_RESERVA;

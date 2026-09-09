@@ -276,6 +276,9 @@ volatile int uvm2_max_draws = 6;      /* lo que corria de facto en esta placa */
 #  endif
 #  define VPY_MAX_CONSECUTIVE_DRAWS uvm2_max_draws
 #endif
+#ifdef UVM2_CUENTA_ENTRADA
+unsigned uvm2_cuenta_entrada;   /* DIAGNOSTICO, ver uvm2_frame_end */
+#endif
 #ifndef VPY_MAX_CONSECUTIVE_DRAWS
 #define VPY_MAX_CONSECUTIVE_DRAWS 4   /* el cartucho propio, sin tocar */
 #endif
@@ -839,6 +842,9 @@ void uvm2_draw_intensity(int z);
 void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
 {
     if (b == 0) return;                       /* z=0 es un salto en blanco, no un trazo */
+#ifdef UVM2_CUENTA_ENTRADA
+    uvm2_cuenta_entrada++;   /* DIAGNOSTICO: cuantas llamadas de dibujo ENTRAN al SDK */
+#endif
     uvm2_draw_intensity((int)b);
     uvm2_draw_move_abs_q4(VS_Q4(x0), VS_Q4(y0));
     uvm2_draw_delta_q4(VS_Q4(x1) - VS_Q4(x0), VS_Q4(y1) - VS_Q4(y0));
@@ -846,6 +852,9 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
 #else
 void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
 {
+#ifdef UVM2_CUENTA_ENTRADA
+    if (b) uvm2_cuenta_entrada++;   /* DIAGNOSTICO: llamadas de dibujo que ENTRAN */
+#endif
     /* ROUND, DO NOT TRUNCATE. C division truncates TOWARDS ZERO, so this snapped the two
      * halves of the screen in opposite directions and carried a whole unit of error
      * instead of half. On a long vector nobody sees it; on a vector CUT INTO PIECES — an
