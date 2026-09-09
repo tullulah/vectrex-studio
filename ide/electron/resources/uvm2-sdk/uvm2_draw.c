@@ -1672,7 +1672,26 @@ static struct vx_timings vx_cart_timings(void)
 #define UVM2_Q 1
 #endif
 
-#define UVM2_MAX_PASO (127 * UVM2_Q)
+/* CUANTO RECORRE UNA SOLA RAMPA, DERIVADO Y NO ELEGIDO.
+ *
+ * Una rampa avanza `v * t1 / DRAW_SCALE`, y sus dos factores tienen tope:
+ *   |v| <= 127   la tasa es un byte con signo en el DAC de posicion
+ *    t1 <= 255   el VecFever escribe T1CH = 0 en todos sus frames, o sea t1 en un byte;
+ *                medido, usa desde 8 hasta 252 y NO PARTE NI UN TRAZO [[el-no-parte-los-trazos]]
+ *
+ * Asi que el maximo es 127 * 255 / DRAW_SCALE — con la escala de serie (160), 202 unidades.
+ * Aqui estaba puesto 127 A SECAS, que no sale de ningun sitio: partia trazos que caben de
+ * una pasada. MEDIDO en dkong, frame del 25m congelado: 16 trazos de 276 salian partidos,
+ * de 179 unidades de mediana y 193 el mas largo — TODOS caben en una rampa con el tope de
+ * verdad, y ninguno con 127.
+ *
+ * Se calcula en tiempo de ejecucion porque DRAW_SCALE es una variable viva. */
+static inline int uvm2_paso_max(void)
+{
+    int p = (127 * 255) / (int)DRAW_SCALE;
+    return (p > 0 ? p : 1) * UVM2_Q;
+}
+#define UVM2_MAX_PASO uvm2_paso_max()
 
 
 

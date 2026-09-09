@@ -177,6 +177,7 @@ static void dc_push_raster(signed char x, signed char y, const unsigned char *s,
 #define BEAM_INTENSITY(b) dc_push(DC_OP_INTENSITY, (signed char)(b), 0)
 #define BEAM_MOVE(x,y)    dc_push(DC_OP_MOVE, (signed char)(x), (signed char)(y))
 #define BEAM_DRAW(x,y)    dc_push(DC_OP_DRAW, (signed char)(x), (signed char)(y))
+#define BEAM_DELTA_ES_I8  1   /* el comando lleva el delta en un byte con signo */
 #define BEAM_RASTER(x,y,s,n) dc_push_raster((signed char)(x),(signed char)(y),(s),(n))
 #define BEAM_DRAW_GAPPED(x,y,h,n) dc_push_gapped((signed char)(x),(signed char)(y),(h),(n))
 /* Overridable so the gapped ramp can be MEASURED: -DHAS_GAPPED_RAMP=0 falls back to one
@@ -190,6 +191,11 @@ static void dc_push_raster(signed char x, signed char y, const unsigned char *s,
 #define BEAM_INTENSITY(b) sys_set_intensity(b)
 #define BEAM_MOVE(x,y)    sys_move((x),(y))
 #define BEAM_DRAW(x,y)    sys_draw_delta((x),(y))
+/* EN EL UVM2 EL DELTA NO ES UN BYTE. `uvm2_draw_delta` recibe enteros y trocea el sola
+ * por el limite de VERDAD (127*255/DRAW_SCALE, ~202 unidades). Partir aqui a 127 es
+ * trocear para un formato de comando que no es el nuestro — y era el 100% del troceo:
+ * medido en dkong, un trazo de 179 unidades salia en dos de 89. */
+#define BEAM_DELTA_ES_I8  0
 #define BEAM_RASTER(x,y,s,n) sys_raster_text((x),(y),(s),(n)) /* SYS #26 */
 /* THE SVC PATH HAS IT ONLY ON THE UVM2, and the asymmetry is not an oversight.
  *
@@ -410,7 +416,11 @@ static void beam_draw_to(int x, int y)
     int sx0 = s_beam_x, sy0 = s_beam_y;
     int dx = x - sx0, dy = y - sy0;
     int adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
+#if BEAM_DELTA_ES_I8
     int n = ((adx > ady ? adx : ady) + 126) / 127;   /* ceil(max/127) */
+#else
+    int n = 1;   /* el backend acepta el delta entero y trocea por el limite real */
+#endif
     if (n < 1) n = 1;
     for (int i = 1; i <= n; i++) {
         int tx = sx0 + (int)((long)dx * i / n);
