@@ -297,6 +297,18 @@ typedef struct {
      * diagnostico entero. Estos son de core 1 y de nadie mas. */
     uint32_t us_c1_exec_acum, us_c1_exec_n;
     uint32_t us_c1_wait_acum;             /* lo que core 1 espera a core 0 */
+    /* EN CRUDO, SIN RESTAR NADA. `us_emul` sale de restarle a la vuelta del 6502 lo que
+     * crecieron `us_lista`/`us_pub` dentro, y esa resta daba 0,00 ms de media — o sea que
+     * lo descontado igualaba o superaba a lo transcurrido y el acotado lo tapaba. Un
+     * numero que se calcula restando acumuladores que escribe OTRO no es una medida: si
+     * sale absurdo no sabes cual de los tres miente. Estos dos son el bruto y el descuento
+     * por separado, cada uno con un solo escritor, y `us_emul` se queda como derivado. */
+    uint32_t us_cpu_bruto_acum, us_cpu_bruto_n;   /* la vuelta entera del 6502 */
+    uint32_t us_cpu_desc_acum;                    /* lo que se le descuenta (lista+pub) */
+    /* EL CIERRE DE FRAME EN CORE 0. En doble nucleo `uvm2_svc.c` escribia esto en
+     * `us_exec`, el mismo campo que core 1 usa para el dibujo de verdad: gana el ultimo
+     * que pase y el lector no sabe de quien es. Ahora cada uno tiene el suyo. */
+    uint32_t us_fin_frame;
 } uvm2_stats_t;
 
 extern uvm2_stats_t uvm2_stats;

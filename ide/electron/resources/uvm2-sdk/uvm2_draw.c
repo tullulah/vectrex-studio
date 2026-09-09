@@ -686,13 +686,26 @@ void uvm2_draw_init(void)
      * en la captura). Con MIN_T1=8 y el tope en el fondo de escala del DAC (`TOPE_DAC`,
      * ramp.rs) reproducimos exactamente ese modelo.
      * Por juego: -DUVM2_MIN_T1=N; sin define quedan los 1 de dkong. */
-#ifdef UVM2_MIN_T1
+    /* EL SUELO ES DE SERIE, PORQUE ES LA OTRA MITAD DE SU REGLA.
+     *
+     * Estuvo en 1 por defecto —"los 1 de dkong"—, o sea otra constante global afinada
+     * contra un juego, igual que el tope de velocidad que se retiro el mismo dia. Mientras
+     * el tope valia 24 no se notaba: ningun trazo bajaba de 8 porque la velocidad estaba
+     * acotada. Al soltar el tope, el suelo pasa a ser lo unico que impide una rampa de 3
+     * cuentas, y eso no existe en su captura.
+     *
+     * MEDIDO en snowbros, misma escena, solo cambiando el tope:
+     *     tope 24, suelo 1     251 trazos, NINGUNO por debajo de t1 = 8
+     *     tope 127, suelo 1    251 trazos, 68 (27%) con t1 de 3, 4, 6 y 7  -> dibujo roto
+     * Y en consola, Daniel: "snowbros menos roto, pero roto tambien. el framerate es bueno"
+     * — que es exactamente la firma: rampas mas cortas (frame mas barato) y geometria mal.
+     *
+     * Un juego lo baja con -DUVM2_MIN_T1=N si tiene una medida SUYA que lo justifique. */
+#ifndef UVM2_MIN_T1
+#define UVM2_MIN_T1 8
+#endif
     MIN_T1          = UVM2_MIN_T1;
     MIN_T1_ARRANQUE = UVM2_MIN_T1;
-#else
-    MIN_T1          = 1u;   /* sin suelo: la duracion sale de la longitud */
-    MIN_T1_ARRANQUE = 1u;   /* idem para las rampas que arrancan paradas */
-#endif
     /* SALTO A TIEMPO FIJO (el idioma del VecFever: t1 dado, tasa variable). Con esto
      * el tope del DAC deja de decidir la duracion — son dos modelos alternativos del
      * mismo salto (tasa fija / tiempo fijo), no

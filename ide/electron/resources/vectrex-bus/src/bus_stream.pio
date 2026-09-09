@@ -184,6 +184,7 @@ inicio:
     ;
     ; El -1 es porque `jmp y--` salta MIENTRAS Y no es cero y decrementa despues, asi que
     ; con Y = N-1 el cuerpo corre N veces. Lo encapsula `stream_repeat_word` en Rust.
+presenta:
     pull noblock                ; la siguiente escritura, o PARK si nos han matado de hambre
     out y, 1                    ; centinela
     jmp !y, no_escritura
@@ -228,7 +229,28 @@ parkeo:
     wait 1 gpio 31
     nop [14]                    ; la MISMA calibracion de fase que arriba
     jmp y--, parkeo
-    jmp inicio
+    ; ── SALIR DEL PARK SIN QUEMAR UN PERIODO ──────────────────────────────────
+    ; Aqui habia `jmp inicio`, y costaba UN PERIODO DE E POR CADA `vbus_repeat`.
+    ;
+    ; La ultima vuelta del park ya ha hecho su `wait 0 / wait 1 / nop [14]`, o sea que la
+    ; SM esta sincronizada y en fase, lista para presentar. `inicio` empieza con OTRO par
+    ; de esperas: E sube, E baja, y no se conduce nada en medio. Un periodo entero tirado
+    ; en cada retardo de la lista.
+    ;
+    ; MEDIDO en mhavoc, consola, 2026-09-09: la lista pide 30000 ciclos (20,01 ms) y core
+    ; 1 tardaba 22,27 ms. De sus 4146 comandos, 2882 llevan retardo — y 30000 + 2882 =
+    ; 32882 ciclos = 21,93 ms. Es decir, este salto solo explica 9,6 de los 11,3 puntos
+    ; que faltaban para los 50 Hz.
+    ;
+    ; `presenta` es la etiqueta justo antes del `pull`, o sea despues de las esperas de
+    ; `inicio`. Cuesta 2 ciclos de PIO mas que el camino normal (el `jmp y--` fallido y
+    ; este salto), 13,3 ns a 150 MHz sobre una presentacion que cae a ~245 ns del flanco
+    ; en una mitad de 333: dentro de la ventana con margen, y del orden del ajuste que ya
+    ; se hizo al recalibrar el `nop` de [16] a [14].
+    ;
+    ; Y NO ES UNA ETIQUETA AL FINAL DEL PROGRAMA: `presenta` esta en medio, no en la
+    ; ranura siguiente a la ultima instruccion. Ver la nota de `jmp fin` mas arriba.
+    jmp presenta
 silencio:
     out null, 25                ; consumir la carga sin conducir el bus
     nop                         ; IGUALAR LOS CAMINOS. El que conduce gasta `out pins` +

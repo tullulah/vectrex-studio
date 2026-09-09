@@ -248,7 +248,15 @@ void uvm2_svc_dispatch(uint32_t *frame)
         uvm2_stats.us_wait = t_e0 - s_us_recal_prev;
         uvm2_frame_end();
         const uint32_t t_e1 = uvm2_us();
+        /* UN SOLO ESCRITOR POR CAMPO. En doble nucleo el dibujo lo hace core 1 y `us_exec`
+         * es SUYO; aqui lo que se mide es el cierre de frame en core 0, que es otra cosa.
+         * Escribiendo los dos en el mismo sitio, el lector veia el que pasara ultimo — y
+         * por SWD salia 0,00 ms para el dibujo entero. */
+#ifdef UVM2_DUAL_CORE
+        uvm2_stats.us_fin_frame = t_e1 - t_e0;
+#else
         uvm2_stats.us_exec = t_e1 - t_e0;
+#endif
 #ifdef UVM2_DUAL_CORE
         /* Core 1 owns the bus now: the replay, the control reads, the PSG queue,
          * the audio tick and the 50 Hz pacing all happen there (uvm2_core1.c).
