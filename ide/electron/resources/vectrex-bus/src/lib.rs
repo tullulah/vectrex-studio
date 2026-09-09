@@ -506,6 +506,22 @@ unsafe fn empuja_crudo(word: u32) {
 /// cuenta bastaria que una quedase apuntando a una copia vieja del `.pio` para que las dos
 /// calibraciones se separaran en silencio. El proc-macro corre en el anfitrion; no entra
 /// nada de el en la imagen.
+/* QUE CARGO SE ENTERE DE QUE EL .pio CAMBIO.
+ *
+ * `pio_proc::pio_file!` es una macro de procedimiento: lee el fichero al compilar, pero NO
+ * lo declara como dependencia, y aqui no hay `build.rs` con `rerun-if-changed`. O sea que
+ * editar `bus_stream.pio` NO invalida el rlib: cargo reutiliza el cacheado y sigue
+ * ensamblando el programa VIEJO, sin decir nada.
+ *
+ * Paso el 2026-09-09 y costo una conclusion falsa entera: arregle el periodo que quemaba
+ * el bucle de park, lo di por comprobado con un A/B de las escrituras a la VIA en el
+ * emulador —41923 identicas— y las dos ramas del A/B eran EL MISMO BINARIO. En consola
+ * seguia midiendo el 10% de siempre.
+ *
+ * `include_bytes!` SI queda registrado en el dep-info que escribe rustc, asi que cargo
+ * reconstruye. No cuesta nada: el `const _` se descarta. [[build-que-no-corre-en-silencio]] */
+const _: &[u8] = include_bytes!("bus_stream.pio");
+
 pub fn programa() -> (&'static [u16], u8, u8) {
     static mut CODIGO: [u16; 32] = [0; 32];
     static mut LARGO: usize = 0;
