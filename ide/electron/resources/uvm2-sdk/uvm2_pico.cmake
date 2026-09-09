@@ -219,7 +219,11 @@ set(VECTREX_DRAW_TARGET thumbv8m.main-none-eabi)   # coma flotante SOFTWARE: est
                                                    # se compila -mfloat-abi=softfp y el
                                                    # enlazador compara Tag_ABI_VFP_args
                                                    # aunque no cruce ningun flotante
-if(DEFINED ENV{UVM2_PIO_STREAM} AND NOT "$ENV{UVM2_PIO_STREAM}" STREQUAL "0")
+# EL STREAM ES DE SERIE. Era opt-in por variable de entorno, y una variable de entorno se
+# olvida: quien construyera sin ella se llevaba el ejecutor por SIO en silencio, que es lo
+# que le pasaba a dkong, asteroids y al Snow Bros de VPy. Ahora hay que APAGARLO a mano
+# (UVM2_PIO_STREAM=0), y entonces `uvm2_bus.h` rompe la build si no eres un banco.
+if(NOT DEFINED ENV{UVM2_PIO_STREAM} OR NOT "$ENV{UVM2_PIO_STREAM}" STREQUAL "0")
     # No hay segunda .a: el ABI del stream sale del MISMO envoltorio que la capa de dibujo,
     # porque una staticlib exige manejador de panico y dos no caben en un enlace. Ver
     # vectrex-draw/cabi/src/lib.rs.

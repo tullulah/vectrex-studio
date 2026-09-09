@@ -29,6 +29,36 @@
 #ifndef UVM2_BUS_H
 #define UVM2_BUS_H
 
+/* ── LA BASE NO SE NEGOCIA: DOBLE NUCLEO + PIO + DMA ──────────────────────────
+ *
+ * Un juego del UVM2 se dibuja con core 1 reproduciendo la lista por el stream de PIO, que
+ * el DMA alimenta. No es una optimizacion ni una variante: es contra lo que se ha medido
+ * TODO lo que hay escrito en este SDK, y comparar cualquier otra cosa con esos numeros da
+ * conclusiones falsas. [[siempre-pio-dualcore-dma]]
+ *
+ * POR QUE ES UN #error Y NO UN DEFECTO. Un defecto se puede pisar sin enterarse, y se
+ * piso: el 2026-09-09, con todo el SDK afinado contra la captura del VecFever, dkong,
+ * asteroids y el Snow Bros de VPy —los tres juegos que se prueban a diario— se compilaban
+ * SIN NINGUNO de los dos. Snow Bros iba por SIO y un solo nucleo, y nadie lo sabia porque
+ * el build no decia nada. Medido en dkong ese mismo dia, en consola: 51 ms dibujando y 46
+ * ms de logica del juego EN SERIE, o sea 13 Hz por no tener core 1.
+ *
+ * `UVM2_PIO_STREAM` trae el PIO y el DMA juntos: es la feature `bus` del crate compartido,
+ * y no hay sub-interruptor para quedarse solo con uno.
+ *
+ * LA SALIDA, PARA BANCOS QUE NO SON JUEGOS. vfplay, vfmh y vfcap reproducen una captura y
+ * miden el ejecutor aislado: ahi core 1 es justo lo que NO se quiere. Esos declaran
+ * `UVM2_BANCO_SIN_NUCLEO1` en su bloque del build, que es un sitio donde se lee y se
+ * justifica — no un olvido. Un JUEGO que lo declare esta mintiendo. */
+#if !defined(UVM2_BANCO_SIN_NUCLEO1)
+#  if !defined(UVM2_DUAL_CORE)
+#    error "UVM2: falta UVM2_DUAL_CORE. Un juego dibuja con core 1; si esto es un banco que mide el ejecutor aislado, declara UVM2_BANCO_SIN_NUCLEO1 en su bloque de build_uvm2.sh y di por que."
+#  endif
+#  if !defined(UVM2_PIO_STREAM)
+#    error "UVM2: falta UVM2_PIO_STREAM (trae PIO y DMA). El camino SIO existe para bisecar, no para jugar; si esto es un banco, declara UVM2_BANCO_SIN_NUCLEO1."
+#  endif
+#endif
+
 #include <stdint.h>
 
 #ifdef __cplusplus
