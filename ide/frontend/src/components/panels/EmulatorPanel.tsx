@@ -14,7 +14,7 @@ import { asmAddressToVpyLine, formatAddress } from '../../utils/debugHelpers';
 import { emuCore } from '../../emulatorCoreSingleton';
 import { VectorRecorder, serializeVrec, defaultRecordingName, MAX_RECORD_SECONDS, type RawSegment } from '../../emulator/recorder/VectorRecorder';
 import { VideoRecorder, defaultVideoName } from '../../emulator/recorder/VideoRecorder';
-import { getRunningContextOutputs } from '../../emulator/recorder/audioGraphTracker';
+import { getRunningContextOutputs, getOutputsForContext } from '../../emulator/recorder/audioGraphTracker';
 import { PitrexSimView, PITREX_RANGE, type Segment as PitrexSegment } from '../PitrexSimView';
 
 // Helper: Get line->address map for both single-bank and multibank formats
@@ -619,23 +619,36 @@ export const EmulatorPanel: React.FC = () => {
   // through emuCore's active system (m6809 → VectrexSystem, rp2350 → Rp2350System).
   const getActiveAudio = useCallback((): { ctx: AudioContext; outputs: AudioNode[] } | null => {
     try {
-      // Universal tap: the graph tracker knows every live AudioContext and ALL
-      // the nodes feeding its speakers (PSG music AND late sources like a
-      // PLAY_SAMPLE BufferSource). Prefer it — the recorder connects every
-      // output, so it captures the full mix regardless of which subsystem plays.
-      const tracked = getRunningContextOutputs();
-      if (tracked) return tracked;
-      // Fallbacks (wrap a single output node): PiTrex, emuCore systems, legacy
-      // psgAudio, and window.vecx's internal ctx (m6809 sound).
+      // WHICH CONTEXT FIRST, then its nodes.
+      //
+      // This used to prefer getRunningContextOutputs(), which returns the FIRST
+      // tracked context that is 'running' with outputs. After switching targets
+      // in one session (m6809 → uvm2 → rp2350) that is often a STALE context:
+      // still running, still with an output node, and completely silent. The
+      // recorder tapped it, set hasAudio = true, and produced a mute video with
+      // no warning. So: pin the ACTIVE target's context, then ask the tracker
+      // for every node feeding THAT context — which keeps the full-mix capture
+      // (late PLAY_SAMPLE BufferSources included) without the wrong-context bug.
       const pit = (pitrexCoreRef.current as any)?.getAudioContextAndOutputNode?.();
       const core = (emuCore as any)?.getAudioContextAndOutputNode?.();
       const legacy = psgAudio.getAudioContextAndOutputNode?.();
       const vx = (window as any).vecx;
       const vecxAudio = (vx?.ctx && vx?.node) ? { ctx: vx.ctx as AudioContext, outputNode: vx.node as AudioNode } : null;
-      const one = [pit, core, legacy, vecxAudio]
+      const activo = [pit, core, legacy, vecxAudio]
         .find((c): c is { ctx: AudioContext; outputNode: AudioNode } =>
-          !!c?.ctx && !!c?.outputNode && c.ctx.state === 'running');
-      return one ? { ctx: one.ctx, outputs: [one.outputNode] } : null;
+          !!c?.ctx && !!c?.outputNode && c.ctx.state !== 'closed');
+      if (activo) {
+        const todos = getOutputsForContext(activo.ctx);
+        const cual = activo === pit ? 'pitrex' : activo === core ? 'emuCore'
+                   : activo === legacy ? 'psgAudio' : 'window.vecx';
+        console.log(`[EmulatorPanel] audio tap → ${cual} ctx state=${activo.ctx.state}`,
+                    `nodos=${todos.length || 1}`);
+        return { ctx: activo.ctx, outputs: todos.length ? todos : [activo.outputNode] };
+      }
+      // No active system claims an audio context (e.g. a subsystem that plays
+      // through a path none of the accessors know): fall back to the universal
+      // tap rather than recording silence.
+      return getRunningContextOutputs();
     } catch {
       return null;
     }
@@ -671,8 +684,15 @@ export const EmulatorPanel: React.FC = () => {
       const res = await api.saveMp4({ webmBytes, name: defaultVideoName() });
       if (res?.path) {
         setVideoStatus('saved');
-        setVideoMessage(`Saved to ${res.path}`);
-        console.log(`[EmulatorPanel] ✓ Gameplay MP4 saved: ${res.path}`);
+        // A recording that came out MUTE used to be saved with a plain "Saved
+        // to ..." and no hint that anything was wrong. `hasAudio` is what the
+        // tap managed to connect; `inputHadAudio` is what ffmpeg actually found
+        // in the WebM — if they disagree the problem is the encoder, not the tap.
+        const mudo = !rec.hasAudio || res.inputHadAudio === false;
+        setVideoMessage(mudo ? `Saved (NO AUDIO) to ${res.path}` : `Saved to ${res.path}`);
+        console.log(`[EmulatorPanel] ✓ Gameplay MP4 saved: ${res.path}`,
+                    `| tap hasAudio=${rec.hasAudio} inputHadAudio=${res.inputHadAudio}`,
+                    res.streams ?? '');
         setTimeout(() => setVideoStatus('idle'), 6000);
       } else if (res?.canceled) {
         setVideoStatus('idle');

@@ -1235,7 +1235,7 @@ draw_line.elf: CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-pri
 draw_line.elf: CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_xip_cache/xip_cache.c.obj
 draw_line.elf: CMakeFiles/draw_line.dir/build.make
 draw_line.elf: /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a
-draw_line.elf: /Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_crt0/rp2350/memmap_no_flash.ld
+draw_line.elf: /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/memmap_psram.ld
 draw_line.elf: CMakeFiles/draw_line.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/daniel/projects/vectrex-pseudo-python/examples/individual_tests/draw_line/build/uvm2/CMakeFiles --progress-num=$(CMAKE_PROGRESS_74) "Linking CXX executable draw_line.elf"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/draw_line.dir/link.txt --verbose=$(VERBOSE)

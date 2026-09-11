@@ -1,0 +1,223 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy1_02a4",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 4,
+       "y": 14
+      },
+      {
+       "x": 5,
+       "y": 9
+      },
+      {
+       "x": 10,
+       "y": 13
+      },
+      {
+       "x": 8,
+       "y": 2
+      },
+      {
+       "x": 9,
+       "y": 0
+      },
+      {
+       "x": 16,
+       "y": -1
+      },
+      {
+       "x": 16,
+       "y": -5
+      },
+      {
+       "x": 9,
+       "y": -6
+      },
+      {
+       "x": 9,
+       "y": -9
+      },
+      {
+       "x": 7,
+       "y": -10
+      },
+      {
+       "x": 9,
+       "y": -15
+      },
+      {
+       "x": 5,
+       "y": -16
+      },
+      {
+       "x": 3,
+       "y": -12
+      },
+      {
+       "x": -3,
+       "y": -12
+      },
+      {
+       "x": -5,
+       "y": -16
+      },
+      {
+       "x": -9,
+       "y": -15
+      },
+      {
+       "x": -9,
+       "y": -12
+      },
+      {
+       "x": -7,
+       "y": -11
+      },
+      {
+       "x": -9,
+       "y": -6
+      },
+      {
+       "x": -16,
+       "y": -5
+      },
+      {
+       "x": -16,
+       "y": -1
+      },
+      {
+       "x": -9,
+       "y": 0
+      },
+      {
+       "x": -8,
+       "y": 2
+      },
+      {
+       "x": -10,
+       "y": 13
+      },
+      {
+       "x": -6,
+       "y": 9
+      },
+      {
+       "x": -5,
+       "y": 14
+      },
+      {
+       "x": -3,
+       "y": 14
+      },
+      {
+       "x": -3,
+       "y": 12
+      },
+      {
+       "x": -2,
+       "y": 15
+      },
+      {
+       "x": 2,
+       "y": 15
+      },
+      {
+       "x": 2,
+       "y": 13
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 5,
+       "y": 4
+      },
+      {
+       "x": 3,
+       "y": 5
+      },
+      {
+       "x": 4,
+       "y": 7
+      },
+      {
+       "x": 6,
+       "y": 6
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -4,
+       "y": 4
+      },
+      {
+       "x": -6,
+       "y": 5
+      },
+      {
+       "x": -5,
+       "y": 7
+      },
+      {
+       "x": -3,
+       "y": 6
+      }
+     ]
+    },
+    {
+     "name": "det2",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -2,
+       "y": -11
+      },
+      {
+       "x": -2,
+       "y": -10
+      },
+      {
+       "x": 2,
+       "y": -10
+      },
+      {
+       "x": 2,
+       "y": -11
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAADMUlEQVR4nNVWIZDaQBT9ZE5UXh0nI4MDdycjK8GBbB111F1kcD13SCS44K5yJXXEEYkE13OV6byf/cmSJsse7Uynbyazm+zf/97u/v0/RP8rVlPK82OYoy/tNfDeYrxfVaT9ByLqhkyeKUXXCvHaBvqP40ZnQpZuieikWAST53Er+TBpH/Ns6mb7JDdXjzYIw5JMxDAMMXUfh92erhIwCPpnInjVmmz8HJfvwTimpmPAXPiwwbMNJpt12QeZyopVMxlWrMXIeLaOrD6a0LENIg78QY/7g2/Ft8MhojDQQaiPBPg0UeT7cTl390Hb7/aUztetPDfkAJA/fpzptxnNl0/Up0gfgaKnJTF5ZUNsk3Tbz975Gg4M8ruhzy3eN6parUlu2oxOvT8TkBpbJ46lBRATWL3Nxrb9FwWYOG4OZy2wux/zY7P5q5nw6OD4LeROAhDNCCgTeF/+SGjVW/ODfpON3AQbbmyDko5BQMZZ++8iehlVV/CFFKXblOaGDeb0acQ+rr6G/qBHfhCQH0e0jIqoj+9SzgFMrlNvwI0i2kYUHYvMN4yrpJS6HsFeVzs8kvuRSvH0J6PzmWbeN/q3QcDkMq/ut14xb7BFoXaeLtAqzu1ot9NnfoCHxedzAWbxkbRMRK9ZRocso1U4rWwRHrA9KVrHqqwvapWQh20WpUkYlzl9sq+uFwAhP7dHvvtAWQ9OujbovAAbES1gX5r8623hF5xYOMfALktZDcQIgR/26Lg0yq3Gy75L4fak34x/Az3WBPhdx+vC932xcpoUY166SnjLgPeLotBIEflt2zVmSZedgViqJL41AT7kfwC+B9+r6gje1uvhD/s5Agrq61vqCiHnuNikjVwdmwOIMKPfVYi5c7zDLeTAxXKMFcg/wUQteNvahGCc52DFlt8w5x1YTSlHYsFRANhKSTDmrxaCWLCJ4jN7JK7Jop2nc0khREgfVwhOARwNsqSsGFsNgPzLaxVoNnInAUAcUu7r21EXIqgTHzKiSF3233Ehf/SJ5rrKmkKaAGJA5lwS0XEhF4iINqewF3Jzjk2ER/8YnqvhpdWbY2LrAqcYqBO4znGx/wXRi9TI3jO79AAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

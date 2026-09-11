@@ -616,6 +616,15 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     console.log('[loadUvm2] DONE — activeTarget=uvm2');
   }
 
+  /** Lo que costo el ultimo frame COMPLETO del juego, en ciclos de bus del Vectrex, y los
+   *  vectores que dibujo. Vacio mientras no haya ELF: sale de los contadores del juego. */
+  get uvm2FrameStats(): { ciclos: number; vectores: number; frames: number } | null {
+    return this._uvm2System
+      ? { ciclos: this._uvm2System.ciclosDeBus, vectores: this._uvm2System.vectoresDeBus,
+          frames: this._uvm2System.framesDelJuego }
+      : null;
+  }
+
   private _runFrameUvm2(): { stepsRun: number; vectors: Segment[] } {
     if (!this._uvm2System) return { stepsRun: 0, vectors: [] };
     try {

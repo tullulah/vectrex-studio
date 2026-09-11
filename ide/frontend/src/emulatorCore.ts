@@ -3,9 +3,15 @@
 
 export interface RegistersSnapshot { a:number;b:number;dp:number;x:number;y:number;u:number;s:number;pc:number;cycles:number;frame_count:number;cycle_frame?:number;bios_frame?:number;last_intensity:number;draw_vl_count?:number; }
 export interface MetricsSnapshot { total:number;unimplemented:number;frames:number;cycle_frame?:number;bios_frame?:number;draw_vl:number;last_intensity:number;unique_unimplemented:number[];cycles:number;avg_cycles_per_frame?:number;top_opcodes:[number,number][];first_unimpl?:number;via_t1?:number;via_irq_count?:number;via_irq_line?:boolean;via_ifr?:number;via_ier?:number; }
-export interface Segment { x0:number;y0:number;x1:number;y1:number;intensity:number;frame:number; }
+export interface Segment { x0:number;y0:number;x1:number;y1:number;intensity:number;frame:number;
+  /** Bus cycles the beam spent lit on this segment (dwell); 0 = no data. A zero-length
+   *  segment with ticks>0 is a real DOT (beam parked lit) — render it, don't drop it. */
+  ticks?:number; }
 
 export interface IEmulatorCore {
+  /** Coste del ultimo frame completo, solo en el objetivo uvm2. Opcional: los demas
+   *  nucleos no llevan contadores de bus del Vectrex y devuelven undefined. */
+  readonly uvm2FrameStats?: { ciclos: number; vectores: number; frames: number } | null;
   init(wasmUrl?: string): Promise<void> | void;
   ensureBios?(opts?: { bytes?: Uint8Array; urlCandidates?: string[] }): Promise<boolean>;
   loadBios(bytes: Uint8Array): void;

@@ -1,0 +1,225 @@
+{
+ "version": "1.0",
+ "name": "auto_nick_03d4",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 13,
+       "y": 4
+      },
+      {
+       "x": 13,
+       "y": -7
+      },
+      {
+       "x": 8,
+       "y": -13
+      },
+      {
+       "x": -6,
+       "y": -13
+      },
+      {
+       "x": -2,
+       "y": -8
+      },
+      {
+       "x": -12,
+       "y": 5
+      },
+      {
+       "x": -8,
+       "y": 8
+      },
+      {
+       "x": -8,
+       "y": 14
+      },
+      {
+       "x": -4,
+       "y": 16
+      },
+      {
+       "x": 2,
+       "y": 14
+      },
+      {
+       "x": 5,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 7
+      },
+      {
+       "x": 5,
+       "y": 0
+      },
+      {
+       "x": 9,
+       "y": 2
+      },
+      {
+       "x": 11,
+       "y": 7
+      }
+     ]
+    },
+    {
+     "name": "sil1",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 10,
+       "y": -6
+      },
+      {
+       "x": 6,
+       "y": -6
+      },
+      {
+       "x": 4,
+       "y": -8
+      },
+      {
+       "x": 5,
+       "y": -9
+      },
+      {
+       "x": 10,
+       "y": -10
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 0,
+       "y": 6
+      },
+      {
+       "x": 4,
+       "y": 6
+      },
+      {
+       "x": 3,
+       "y": 4
+      },
+      {
+       "x": 0,
+       "y": 5
+      },
+      {
+       "x": -4,
+       "y": 6
+      },
+      {
+       "x": -4,
+       "y": 7
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 8,
+       "y": 0
+      },
+      {
+       "x": 9,
+       "y": 1
+      },
+      {
+       "x": 9,
+       "y": -3
+      },
+      {
+       "x": 7,
+       "y": -1
+      },
+      {
+       "x": 6,
+       "y": -2
+      },
+      {
+       "x": 4,
+       "y": -1
+      }
+     ]
+    },
+    {
+     "name": "det2",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -6,
+       "y": 5
+      },
+      {
+       "x": -8,
+       "y": 6
+      },
+      {
+       "x": -8,
+       "y": 8
+      },
+      {
+       "x": -6,
+       "y": 7
+      }
+     ]
+    },
+    {
+     "name": "det3",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -1,
+       "y": 9
+      },
+      {
+       "x": 1,
+       "y": 10
+      },
+      {
+       "x": 1,
+       "y": 8
+      },
+      {
+       "x": -1,
+       "y": 7
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACuElEQVR4nO1XIXSjQBAd7iFyLpWViSMuspE517rEEYkkrnFBUkdcTiKLA9e6Q/ZkXHBBVgbXur03s9kFkiWhhLr77+1jswv7//6ZHQJAfbBDaxVabfL9jvdu+k3XUEKvRe4+UsdcLGCwXlLfMAYQBiEEfsTaEHJJANkf/nlm248d2zMmG46Z1uRbwiNAi7vrpRQgRIgrjuN8ExF6nZtMa0JXY3Qnx94/U3kdj00ACKAJftS5aTA0KOYn4z/71BDTXzNweX6w1gUIJG9/oW3oZ+bkTrabhK7oghChCkfBpdonQ6siRzuROPAjGsDfSJAuZvKmnvdcEhL5vuwXni1ysGNOXUWOSYdkE8ui+DvzJ1oQxz6tJSzTJ7pxtZgB3ztHB4DmVfkii9lNvyRCr7ImSba0O9t2uZBDsjlrDxKwqP/o5FVxFefk+KwI23Exq5OEmrAd443xve30YPuxg00nBHe+kFYn7o5a5jEejgK5wn4l9KoJmXijOyki9FKYLkII5vm66E4cB8Vj2BoYlliscKL6YcOqZ9hMVD1ZhrvjF7pXUZZ5Kce2351US/2MAAwFJST4Pu1U4D15BcNm5Ahiak4BIAMnciHxyR3tpCDZtpoE6jlRqoYYZy8awa1xD+4kkEcRc8aJTEh+a9Adv8gFsnGcC+Cv88unQOnEAcVjhoRu4T2A7iA5ihO/r34ZIV5TrAlvyjOOIgTR/YQTl0/h9QK0LH5gHuS2ih0ikFxFjONk/7mF4WvAbC8JGBr5pCAv2p7FDyCLUJ4H2tUCjl0QEOREzFE+EbwcNxZQKeJk16q1eR24WgCCFioKuUguBBTIEbVPwRHI1izdlEdT5zz5tf+IzqHbG4pu9V+yo90jmoeg4vVKcFZ5P/+g0dpygFXOiGOG4pCYZ3wlOeIrDjT98Pi2L6b/gDbwD2qMiGsOgKC0AAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

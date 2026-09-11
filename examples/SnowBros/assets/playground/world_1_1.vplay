@@ -7,7 +7,7 @@
     "difficulty": "medium",
     "timeLimit": 0,
     "targetScore": 0,
-    "description": "Created in Playground - 2026-07-20"
+    "description": "Created in Playground - 2026-08-31"
   },
   "worldBounds": {
     "xMin": -96,
@@ -26,7 +26,7 @@
         "vectorName": "platform1",
         "layer": "gameplay",
         "x": -71,
-        "y": -2388,
+        "y": -2373,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -44,8 +44,8 @@
         "type": "obstacle",
         "vectorName": "platform1",
         "layer": "gameplay",
-        "x": 73,
-        "y": -2387,
+        "x": 72,
+        "y": -2373,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -63,8 +63,8 @@
         "type": "obstacle",
         "vectorName": "platform1",
         "layer": "gameplay",
-        "x": 1,
-        "y": -2388,
+        "x": 2,
+        "y": -2372,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -83,7 +83,7 @@
         "vectorName": "platform2",
         "layer": "gameplay",
         "x": 0,
-        "y": -2351,
+        "y": -2337,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -101,8 +101,8 @@
         "type": "obstacle",
         "vectorName": "platform3",
         "layer": "gameplay",
-        "x": -54,
-        "y": -2316,
+        "x": -53,
+        "y": -2300,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -120,8 +120,8 @@
         "type": "obstacle",
         "vectorName": "platform3",
         "layer": "gameplay",
-        "x": 55,
-        "y": -2316,
+        "x": 53,
+        "y": -2300,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -140,7 +140,7 @@
         "vectorName": "platform4",
         "layer": "gameplay",
         "x": -2,
-        "y": -2264,
+        "y": -2256,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -188,7 +188,7 @@
         "vectorName": "titchi_walk",
         "layer": "gameplay",
         "x": -42,
-        "y": -2232,
+        "y": -2228,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -210,7 +210,7 @@
         "vectorName": "titchi_walk",
         "layer": "gameplay",
         "x": 43,
-        "y": -2232,
+        "y": -2228,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -231,7 +231,7 @@
         "vectorName": "titchi_walk",
         "layer": "gameplay",
         "x": -86,
-        "y": -2295,
+        "y": -2283,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -252,7 +252,7 @@
         "vectorName": "titchi_walk",
         "layer": "gameplay",
         "x": 86,
-        "y": -2295,
+        "y": -2283,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -272,8 +272,8 @@
         "type": "enemy",
         "vectorName": "titchi_walk",
         "layer": "gameplay",
-        "x": -52,
-        "y": -2331,
+        "x": -53,
+        "y": -2319,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -542,7 +542,7 @@
         "vectorName": "platform2",
         "layer": "gameplay",
         "x": 1,
-        "y": -1702,
+        "y": -1718,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -599,7 +599,7 @@
         "vectorName": "platform8",
         "layer": "gameplay",
         "x": -47,
-        "y": -1795,
+        "y": -1811,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -618,7 +618,7 @@
         "vectorName": "platform8",
         "layer": "gameplay",
         "x": 46,
-        "y": -1795,
+        "y": -1811,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -637,7 +637,7 @@
         "vectorName": "platform9",
         "layer": "gameplay",
         "x": 0,
-        "y": -1779,
+        "y": -1795,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -656,7 +656,7 @@
         "vectorName": "platform9",
         "layer": "gameplay",
         "x": 0,
-        "y": -1815,
+        "y": -1831,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -675,7 +675,7 @@
         "vectorName": "platform10",
         "layer": "gameplay",
         "x": -89,
-        "y": -1778,
+        "y": -1794,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -693,8 +693,8 @@
         "type": "background",
         "vectorName": "platform10",
         "layer": "gameplay",
-        "x": -91,
-        "y": -1815,
+        "x": -89,
+        "y": -1831,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -713,7 +713,7 @@
         "vectorName": "platform10",
         "layer": "gameplay",
         "x": 88,
-        "y": -1813,
+        "y": -1829,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -731,8 +731,8 @@
         "type": "background",
         "vectorName": "platform10",
         "layer": "gameplay",
-        "x": 89,
-        "y": -1777,
+        "x": 88,
+        "y": -1793,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -751,7 +751,7 @@
         "vectorName": "platform12",
         "layer": "gameplay",
         "x": -77,
-        "y": -1852,
+        "y": -1868,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -770,7 +770,7 @@
         "vectorName": "platform11",
         "layer": "gameplay",
         "x": 0,
-        "y": -1852,
+        "y": -1868,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -789,7 +789,7 @@
         "vectorName": "platform12",
         "layer": "gameplay",
         "x": 77,
-        "y": -1852,
+        "y": -1868,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -808,7 +808,7 @@
         "vectorName": "platform13",
         "layer": "gameplay",
         "x": -84,
-        "y": -1741,
+        "y": -1757,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -827,7 +827,7 @@
         "vectorName": "platform13",
         "layer": "gameplay",
         "x": 83,
-        "y": -1741,
+        "y": -1757,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -846,7 +846,7 @@
         "vectorName": "platform14",
         "layer": "gameplay",
         "x": 0,
-        "y": -1741,
+        "y": -1757,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -927,8 +927,8 @@
         "type": "background",
         "vectorName": "platform7",
         "layer": "gameplay",
-        "x": -38,
-        "y": -2111,
+        "x": -27,
+        "y": -2095,
         "rotation": 0,
         "scale": 1,
         "velocity": {
@@ -1148,7 +1148,7 @@
         "vectorName": "titchi_idle",
         "layer": "gameplay",
         "x": -88,
-        "y": -1831,
+        "y": -1847,
         "rotation": 0,
         "scale": 1,
         "enemyType": "titchi",
@@ -1461,6 +1461,104 @@
           "x": 0,
           "y": 0
         }
+      },
+      {
+        "id": "enemy_1788210823233",
+        "type": "enemy",
+        "vectorName": "titchi_idle",
+        "layer": "gameplay",
+        "x": -50,
+        "y": -1776,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "titchi",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1788210826192",
+        "type": "enemy",
+        "vectorName": "titchi_idle",
+        "layer": "gameplay",
+        "x": 47,
+        "y": -1776,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "titchi",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "defaultFacing": "left",
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1788210829706",
+        "type": "enemy",
+        "vectorName": "titchi_idle",
+        "layer": "gameplay",
+        "x": 76,
+        "y": -1847,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "titchi",
+        "aiType": "wander",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "defaultFacing": "left",
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1788210864834",
+        "type": "enemy",
+        "vectorName": "frog_idle",
+        "layer": "gameplay",
+        "x": -86,
+        "y": -1737,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "frog",
+        "aiType": "patrol",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      {
+        "id": "enemy_1788210866688",
+        "type": "enemy",
+        "vectorName": "frog_idle",
+        "layer": "gameplay",
+        "x": 83,
+        "y": -1737,
+        "rotation": 0,
+        "scale": 1,
+        "enemyType": "frog",
+        "aiType": "patrol",
+        "patrolWaypoints": [],
+        "wave": 0,
+        "respawn": false,
+        "defaultFacing": "left",
+        "velocity": {
+          "x": 0,
+          "y": 0
+        }
       }
     ],
     "foreground": []
@@ -1477,17 +1575,20 @@
       {
         "screenIndex": 0,
         "imagePath": "assets/backgrounds/floor1.png",
-        "offsetY": -14
+        "offsetY": -14,
+        "keepAspect": true
       },
       {
         "screenIndex": 1,
         "imagePath": "assets/backgrounds/floor2.png",
-        "offsetY": -10
+        "offsetY": -10,
+        "keepAspect": true
       },
       {
         "screenIndex": 2,
         "imagePath": "assets/backgrounds/floor3.png",
-        "offsetY": -13
+        "offsetY": -6,
+        "keepAspect": true
       },
       {
         "screenIndex": 3,
@@ -1525,6 +1626,6 @@
         "offsetY": -12
       }
     ],
-    "groundBottomOffset": 12
+    "groundBottomOffset": 31
   }
 }

@@ -1,0 +1,39 @@
+# External C/C++ project imported into Vectrex Studio.
+[project]
+name = "snowbros_sbt"
+type = "c-external"
+target = "uvm2"
+
+# Default build = the UVM2 image. The game (1.5MB with the 68000 ROM and
+# Musashi tables) does NOT fit the 496K GAME_RAM, so it links into external
+# PSRAM (UVM2_LOAD_PSRAM=1). A PSRAM payload is not a .um2 module — the
+# multicart menu can't load it, our PSRAM loader does — hence the artifact is
+# the flat .bin, not a .um2. HW validation of that loader is still pending.
+[build]
+command = "make"
+args = ["uvm2"]
+artifact = "build_uvm2/snowbros_sbt.bin"
+deploy_extra = []
+
+[targets.uvm2]
+command = "make"
+args = ["uvm2"]
+artifact = "build_uvm2/snowbros_sbt.bin"
+
+[env]
+UVM2_LOAD_PSRAM = "1"
+
+# WASM build that runs in the IDE emulator panel (compiled against the host
+# SDK shim via emscripten). The IDE injects $PITREX_SIM_SDK + emcc.
+[simulate]
+command = "make"
+args = ["sim", "CHEATS=1"]   # invulnerability dip ON in the IDE build; drop CHEATS=1 to play honest
+module = "build_wasm/game.js"
+
+# Optional: prepend a toolchain bin dir to PATH for the build.
+# [toolchain]
+# path = "/opt/arm-toolchain/bin"
+
+# Optional: environment overrides passed to the build.
+# [env]
+# PITREX_SDK = "/Users/you/projects/pitrex-baremetal"

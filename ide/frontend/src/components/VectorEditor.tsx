@@ -80,8 +80,15 @@ interface VecResource {
    *  the origin. Stretching suits a photo or a full-screen mock-up; natural size suits
    *  a sprite ripped at its real dimensions, which would otherwise be blown up to fill
    *  the screen and be useless to trace over. Absent = stretch, so files written before
-   *  this existed keep looking the way they did. */
+   *  this existed keep looking the way they did. Superseded by backgroundFit; kept so
+   *  older files load with the mode they were saved with. */
   backgroundStretch?: boolean;
+  /** How the background image is placed on the screen rect. 'stretch' fills the whole
+   *  Vectrex screen (may deform); 'fitWidth' fills the screen width and scales the
+   *  height by the same ratio (no deformation — for tracing scenery from a photo whose
+   *  aspect differs from 3:4); 'natural' is one image pixel = one resource unit.
+   *  Absent → fall back to backgroundStretch. */
+  backgroundFit?: 'stretch' | 'fitWidth' | 'natural' | 'naturalCenter';
   collisionMesh?: {
     segments: CollisionSegment[];
   };
@@ -1082,7 +1089,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [backgroundImage, setBackgroundImage] = useState<HTMLImageElement | null>(null);
   const [backgroundOpacity, setBackgroundOpacity] = useState(0.5);
   const [showBackground, setShowBackground] = useState(true);
-  const [backgroundStretch, setBackgroundStretch] = useState(true);
+  const [backgroundFit, setBackgroundFit] = useState<'stretch' | 'fitWidth' | 'natural' | 'naturalCenter'>('stretch');
   const [backgroundOffset, setBackgroundOffset] = useState({ x: 0, y: 0 });
   const [isBackgroundSelected, setIsBackgroundSelected] = useState(false);
   
@@ -1288,22 +1295,39 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.save();
       ctx.globalAlpha = backgroundOpacity;
 
-      // Two placements. STRETCHED fills the Vectrex screen rect, which is what a photo
-      // or a full-screen mock-up wants. NATURAL maps one image pixel to one resource
-      // unit with the image's bottom-left corner on the origin, which is what a sprite
-      // ripped at its real size wants: shapes here are authored in a small box off the
-      // origin (a 16x16 sprite is x 0..15, y 0..15), so a 43x36 sprite stretched across
-      // 191x255 units is five times too big to trace over.
+      // Three placements. STRETCH fills the Vectrex screen rect, which is what a
+      // full-screen mock-up already at 3:4 wants. FIT WIDTH fills the screen width and
+      // scales the height by the same ratio, so a photo whose aspect isn't 3:4 keeps
+      // its proportions instead of deforming the scenery being traced. NATURAL maps one
+      // image pixel to one resource unit with the image's bottom-left corner on the
+      // origin, which is what a sprite ripped at its real size wants: shapes here are
+      // authored in a small box off the origin (a 16x16 sprite is x 0..15, y 0..15), so
+      // a 43x36 sprite stretched across 191x255 units is five times too big to trace over.
       let drawX: number, drawY: number, drawWidth: number, drawHeight: number;
-      if (backgroundStretch) {
+      if (backgroundFit === 'stretch' || backgroundFit === 'fitWidth') {
         const screenL = resourceToCanvas({ x: -96, y: 0 });
         const screenR = resourceToCanvas({ x: 95, y: 0 });
         const screenT = resourceToCanvas({ x: 0, y: 127 });
         const screenB = resourceToCanvas({ x: 0, y: -128 });
         drawX = screenL.x + backgroundOffset.x;
-        drawY = screenT.y + backgroundOffset.y;
         drawWidth = screenR.x - screenL.x;
-        drawHeight = screenB.y - screenT.y;
+        if (backgroundFit === 'fitWidth') {
+          drawHeight = drawWidth * (backgroundImage.height / backgroundImage.width);
+          // Vertically centered on the screen rect; the offset drag moves it from there.
+          drawY = (screenT.y + screenB.y - drawHeight) / 2 + backgroundOffset.y;
+        } else {
+          drawY = screenT.y + backgroundOffset.y;
+          drawHeight = screenB.y - screenT.y;
+        }
+      } else if (backgroundFit === 'naturalCenter') {
+        // one pixel = one unit with the image CENTRE on the origin — for
+        // sprites authored centred (the whole snowbros_sbt catalogue)
+        const tl = resourceToCanvas({ x: -backgroundImage.width / 2, y: backgroundImage.height / 2 });
+        const br = resourceToCanvas({ x: backgroundImage.width / 2, y: -backgroundImage.height / 2 });
+        drawX = tl.x + backgroundOffset.x;
+        drawY = tl.y + backgroundOffset.y;
+        drawWidth = br.x - tl.x;
+        drawHeight = br.y - tl.y;
       } else {
         const tl = resourceToCanvas({ x: 0, y: backgroundImage.height });
         const br = resourceToCanvas({ x: backgroundImage.width, y: 0 });
@@ -1929,7 +1953,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.stroke();
       ctx.restore();
     }
-  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, backgroundStretch, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge, walkAreaPreview, selectedWalkAreaIdx]);
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, backgroundFit, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge, walkAreaPreview, selectedWalkAreaIdx]);
 
   useEffect(() => {
     draw();
@@ -2177,7 +2201,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       };
       img.src = resource.backgroundImage;
       setBackgroundOffset(resource.backgroundOffset ?? { x: 0, y: 0 });
-      setBackgroundStretch(resource.backgroundStretch ?? true);
+      setBackgroundFit(resource.backgroundFit ?? ((resource.backgroundStretch ?? true) ? 'stretch' : 'natural'));
     } else {
       setBackgroundImage(null);
       setShowBackground(false);
@@ -4114,21 +4138,25 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               >✕</button>
             </div>
             <label
-              title="Off: one image pixel = one unit, bottom-left on the origin. Use this for a sprite ripped at its real size — stretched, it fills the whole screen and is useless to trace over."
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', cursor: 'pointer' }}
+              title="Stretch: fill the whole screen (may deform). Fit width: fill the screen width, height keeps the image's aspect ratio — use this to trace scenery from a photo. 1:1: one image pixel = one unit, bottom-left on the origin — use this for a sprite ripped at its real size."
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}
             >
-              <input
-                type="checkbox"
-                checked={backgroundStretch}
+              <select
+                value={backgroundFit}
                 onChange={(e) => {
-                  const v = e.target.checked;
-                  setBackgroundStretch(v);
-                  updateResource(resource, { ...resource, backgroundStretch: v });
+                  const v = e.target.value as 'stretch' | 'fitWidth' | 'natural' | 'naturalCenter';
+                  setBackgroundFit(v);
+                  updateResource(resource, { ...resource, backgroundFit: v, backgroundStretch: v === 'stretch' });
                 }}
-                style={{ margin: 0 }}
-              />
+                style={{ background: '#2a3a2e', color: '#8f8', border: '1px solid #5a8a5a', borderRadius: '3px', fontSize: '11px', padding: '1px 2px' }}
+              >
+                <option value="stretch">stretch to screen</option>
+                <option value="fitWidth">fit width (keep aspect)</option>
+                <option value="natural">1:1 pixels</option>
+                <option value="naturalCenter">1:1 centered</option>
+              </select>
               <span style={{ opacity: 0.85 }}>
-                stretch to screen{backgroundStretch ? '' : ` (${backgroundImage.width}×${backgroundImage.height} units)`}
+                {backgroundFit === 'natural' || backgroundFit === 'naturalCenter' ? `${backgroundImage.width}×${backgroundImage.height} units` : ''}
               </span>
             </label>
           </div>

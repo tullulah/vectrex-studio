@@ -1,0 +1,62 @@
+{
+ "version": "1.0",
+ "name": "auto_fx_0120",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -5,
+       "y": -5
+      },
+      {
+       "x": -7,
+       "y": -2
+      },
+      {
+       "x": -6,
+       "y": 4
+      },
+      {
+       "x": -2,
+       "y": 7
+      },
+      {
+       "x": 5,
+       "y": 5
+      },
+      {
+       "x": 7,
+       "y": 2
+      },
+      {
+       "x": 6,
+       "y": -4
+      },
+      {
+       "x": 2,
+       "y": -7
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAkElEQVR4nLWS0Q2AIAxEr52CGRjDVfx1RsdgBrfAQEABi5aol9CE5F6vhAK/ycEb5+OZAd+zkQjCY1sF90SArRkqLyFNBFstdHBcJqvg5L00MP1nXrWeXh5Ob6bg4fSkzDBeikPZhN98UmY4Vgsykx6O3rQP3HYcSa8aQDlFmR6kXuUAxuS7VZYaHSM34GfaAbRaMoDM05rbAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

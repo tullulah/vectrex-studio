@@ -1,0 +1,174 @@
+{
+ "version": "1.0",
+ "name": "auto_boss1_0e58",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -6,
+       "y": -5
+      },
+      {
+       "x": -8,
+       "y": -5
+      },
+      {
+       "x": -8,
+       "y": 5
+      },
+      {
+       "x": -5,
+       "y": 5
+      },
+      {
+       "x": -6,
+       "y": 4
+      }
+     ]
+    },
+    {
+     "name": "sil1",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -6
+      },
+      {
+       "x": 8,
+       "y": -6
+      }
+     ]
+    },
+    {
+     "name": "sil2",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 7,
+       "y": -3
+      },
+      {
+       "x": 4,
+       "y": -5
+      },
+      {
+       "x": 4,
+       "y": -2
+      },
+      {
+       "x": 4,
+       "y": -4
+      },
+      {
+       "x": 6,
+       "y": -4
+      },
+      {
+       "x": 6,
+       "y": -1
+      }
+     ]
+    },
+    {
+     "name": "sil3",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 4,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 6
+      },
+      {
+       "x": -4,
+       "y": 6
+      },
+      {
+       "x": -8,
+       "y": 6
+      },
+      {
+       "x": -8,
+       "y": 8
+      }
+     ]
+    },
+    {
+     "name": "sil4",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -4,
+       "y": -5
+      },
+      {
+       "x": -4,
+       "y": 5
+      },
+      {
+       "x": -1,
+       "y": 4
+      },
+      {
+       "x": -3,
+       "y": 4
+      },
+      {
+       "x": -3,
+       "y": 0
+      },
+      {
+       "x": -1,
+       "y": 0
+      },
+      {
+       "x": -1,
+       "y": -2
+      },
+      {
+       "x": -3,
+       "y": -1
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAYElEQVR4nMWSwQrAMAhDY9j//7K7jFIynRYPe5dSIiUmNQCOAcTfmKwQ3RVXzZOBlsZjz+KOGMLNTqdOzSjds3pwaUwGovRVL0O0ooVPB22u53x9joTdVTXbI6zlhHEGNxzQFwyoQ7VOAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

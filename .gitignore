@@ -102,3 +102,23 @@ tools/**/__pycache__/
 *.dmg
 *.AppImage
 *.exe
+
+# Arbol de cargo del bus del cartucho: 522 MB de objetos intermedios.
+ide/electron/resources/vectrex-bus/target/
+
+# snowbros_sbt: se versionan fuente, assets y el .um2; NO los volcados de depuracion
+# (13 MB de ramdumps, 6,8 MB de dumps) ni los arboles de build.
+examples/snowbros_sbt/ramdumps/
+examples/snowbros_sbt/dumps/
+examples/snowbros_sbt/build/
+examples/snowbros_sbt/build_wasm/
+examples/snowbros_sbt/build_uvm2/pico/
+examples/*/build/uvm2/
+
+# LA ROM ARCADE NO ENTRA AQUI. Este repositorio es PUBLICO
+# (github.com/tullulah/vectrex-studio, comprobado con `gh repo view`), y el estandar del
+# proyecto es que el romset viva FUERA de la imagen y lo lea el juego de la SD, modelo
+# MAME. `sb_rom.h` es la misma ROM en una cabecera C: mismo material, otro envoltorio.
+examples/*/rom/*.zip
+examples/*/src/sb_rom.h
+examples/*/rom/palette_table.bin

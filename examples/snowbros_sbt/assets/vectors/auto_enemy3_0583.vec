@@ -1,0 +1,133 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy3_0583",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 11,
+       "y": -11
+      },
+      {
+       "x": 5,
+       "y": -13
+      },
+      {
+       "x": -10,
+       "y": -12
+      },
+      {
+       "x": -7,
+       "y": -11
+      },
+      {
+       "x": -11,
+       "y": -5
+      },
+      {
+       "x": -11,
+       "y": -3
+      },
+      {
+       "x": -8,
+       "y": -5
+      },
+      {
+       "x": -10,
+       "y": 1
+      },
+      {
+       "x": -7,
+       "y": -1
+      },
+      {
+       "x": -6,
+       "y": 1
+      },
+      {
+       "x": -6,
+       "y": 3
+      },
+      {
+       "x": -2,
+       "y": 1
+      },
+      {
+       "x": 0,
+       "y": 6
+      },
+      {
+       "x": 2,
+       "y": 5
+      },
+      {
+       "x": 2,
+       "y": 2
+      },
+      {
+       "x": 6,
+       "y": 5
+      },
+      {
+       "x": 7,
+       "y": 0
+      },
+      {
+       "x": 10,
+       "y": 2
+      },
+      {
+       "x": 6,
+       "y": -11
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 2,
+       "y": -12
+      },
+      {
+       "x": 1,
+       "y": -11
+      },
+      {
+       "x": 5,
+       "y": -9
+      },
+      {
+       "x": 6,
+       "y": -9
+      },
+      {
+       "x": 5,
+       "y": -12
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAYAAABU1PscAAABeUlEQVR4nO2VoVLEMBRFXzsIfgGJ7DokyOUPqCsSyx+AhD/AVlLX/gErQeIaBxKJBBfmdniZN9mGzjRpltnJMbtNk+bdd29aokQikUgkEnvMp9Z6yefnFIH26VEvJSqnBRkrNLQjeagH/VVYcXY66sS/AgKkCBTLY/3Xm5bXY3MptgPV1YW+e7gxG282zfDLxbrWfXy/m7khXPGOkBQBjg6PTWTsMRQP1uvKiCUiKs8vs52eAVsEwwW7UM8v3nvPFtDUXda/quF/Uay2Ou4qkO+xOKV6ii7A1XGJHaMluu8dIekCOikPp517XHP3MQ/zlerp9vo+iy4Am8IFHMKyKp3zuGAbjk3/K35nDnR1baLCxUgXxg4z37fPTXQB0nqIgBNTuefogLZphwiSJ96vUbggDyZETLkQktxnMbsgo8RvF/nFxRgLRdRCZJ/xttB+rdrZdh3YEPEBBzSfrW+B7O7qpDBiMNbU3eR6mtHQIF1wFBNj30SCPPkBFuX1DZpIRBgAAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

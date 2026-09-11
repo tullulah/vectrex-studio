@@ -1,0 +1,93 @@
+{
+ "version": "1.0",
+ "name": "platform_s26",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "outline",
+     "intensity": 85,
+     "closed": true,
+     "points": [
+      {
+       "x": -13,
+       "y": 6
+      },
+      {
+       "x": 13,
+       "y": 6
+      },
+      {
+       "x": 13,
+       "y": -6
+      },
+      {
+       "x": -13,
+       "y": -6
+      }
+     ]
+    },
+    {
+     "name": "mid",
+     "intensity": 70,
+     "closed": false,
+     "points": [
+      {
+       "x": -13,
+       "y": 0
+      },
+      {
+       "x": 13,
+       "y": 0
+      }
+     ]
+    },
+    {
+     "name": "t-1",
+     "intensity": 70,
+     "closed": false,
+     "points": [
+      {
+       "x": -1,
+       "y": 0
+      },
+      {
+       "x": -1,
+       "y": -6
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "walkableAreas": [
+  {
+   "y": 6,
+   "x_min": -13,
+   "x_max": 13
+  }
+ ],
+ "collisionMesh": {
+  "segments": [
+   {
+    "x1": -13,
+    "y1": 6,
+    "x2": 13,
+    "y2": 6
+   }
+  ]
+ },
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABoAAAAMCAYAAAB8xa1IAAABL0lEQVR4nLWSr1rDMBTFT/n6AEVWRoKjElkccnOzrZtFVha3R2jlcEXiFonsHHNURvII4bvJbpt26UBsx9z8+eXce5ME67LSRZbhGvrqOhOLdY5AKa158V4IuGOOjZS4EwKHrsMyTc2cROMpT4wrmqfRMZELkCEDbD49yOsUz/HbzSuS5com2n1+a3fTZz6qDjkkqpMEPHbVNm8mvmQSQVPCXJ0SuxOYDOLuyZtUosJPkeO2rEbrVEivyIZNnSKkA7TZG9Y2JA+Acgzi1kaVDIbxAmjrfOCTMa/sExqFpm2nYzrgGk5lDJKBmcH6TvjqQt/hqTGr3dtC/sMTy1dnOvJVOpdkLpmP5064s5tz4F+KZ3guylWwAvSj/Z0X1zZy3kgunoH3j+tkOn6swx74Ba9GqCoy9Ut+AAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

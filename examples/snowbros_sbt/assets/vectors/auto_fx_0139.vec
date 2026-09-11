@@ -1,0 +1,22 @@
+{
+ "version": "1.0",
+ "name": "auto_fx_0139",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": []
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAVElEQVR4nK2TOQ7AIAwEV/n/nycNShEIjAMrubFnXfhIetHC5h9NiyuWgll7sDCFzkOWhYHTs0Aw+VpjpyuHxR+G3SFSbGjZ6ENSgPFsPdO7qN/5BgnJKdmA8ePhAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

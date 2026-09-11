@@ -1,0 +1,233 @@
+{
+ "version": "2.0",
+ "type": "level",
+ "metadata": {
+  "name": "world_1_1",
+  "author": "",
+  "difficulty": "medium",
+  "timeLimit": 0,
+  "targetScore": 0,
+  "description": "Level 1 traced from the arcade (snowbros_sbt)"
+ },
+ "worldBounds": {
+  "xMin": -96,
+  "xMax": 95,
+  "yMin": -2432,
+  "yMax": 127
+ },
+ "isolateScreens": true,
+ "transitionLateralGap": 45,
+ "layers": {
+  "background": [],
+  "gameplay": [
+   {
+    "id": "plat_0",
+    "type": "obstacle",
+    "vectorName": "floor_full",
+    "layer": "gameplay",
+    "x": 0,
+    "y": -2418,
+    "rotation": 0,
+    "scale": 1,
+    "velocity": {
+     "x": 0,
+     "y": 0
+    },
+    "physicsEnabled": false,
+    "collidable": true,
+    "gravity": 0,
+    "bounceDamping": 0,
+    "physicsType": "static"
+   },
+   {
+    "id": "plat_1",
+    "type": "obstacle",
+    "vectorName": "platform_m47",
+    "layer": "gameplay",
+    "x": -72,
+    "y": -2379,
+    "rotation": 0,
+    "scale": 1,
+    "velocity": {
+     "x": 0,
+     "y": 0
+    },
+    "physicsEnabled": false,
+    "collidable": true,
+    "gravity": 0,
+    "bounceDamping": 0,
+    "physicsType": "static"
+   },
+   {
+    "id": "plat_2",
+    "type": "obstacle",
+    "vectorName": "platform_m47",
+    "layer": "gameplay",
+    "x": 0,
+    "y": -2379,
+    "rotation": 0,
+    "scale": 1,
+    "velocity": {
+     "x": 0,
+     "y": 0
+    },
+    "physicsEnabled": false,
+    "collidable": true,
+    "gravity": 0,
+    "bounceDamping": 0,
+    "physicsType": "static"
+   },
+   {
+    "id": "plat_3",
+    "type": "obstacle",
+    "vectorName": "platform_m47",
+    "layer": "gameplay",
+    "x": 72,
+    "y": -2379,
+    "rotation": 0,
+    "scale": 1,
+    "velocity": {
+     "x": 0,
+     "y": 0
+    },
+    "physicsEnabled": false,
+    "collidable": true,
+    "gravity": 0,
+    "bounceDamping": 0,
+    "physicsType": "static"
+   },
+   {
+    "id": "plat_4",
+    "type": "obstacle",
+    "vectorName": "platform_c118",
+    "layer": "gameplay",
+    "x": 0,
+    "y": -2340,
+    "rotation": 0,
+    "scale": 1,
+    "velocity": {
+     "x": 0,
+     "y": 0
+    },
+    "physicsEnabled": false,
+    "collidable": true,
+    "gravity": 0,
+    "bounceDamping": 0,
+    "physicsType": "static"
+   },
+   {
+    "id": "plat_5",
+    "type": "obstacle",
+    "vectorName": "platform_l81",
+    "layer": "gameplay",
+    "x": -56,
+    "y": -2300,
+    "rotation": 0,
+    "scale": 1,
+    "velocity": {
+     "x": 0,
+     "y": 0
+    },
+    "physicsEnabled": false,
+    "collidable": true,
+    "gravity": 0,
+    "bounceDamping": 0,
+    "physicsType": "static"
+   },
+   {
+    "id": "plat_6",
+    "type": "obstacle",
+    "vectorName": "platform_l81",
+    "layer": "gameplay",
+    "x": 55,
+    "y": -2300,
+    "rotation": 0,
+    "scale": 1,
+    "velocity": {
+     "x": 0,
+     "y": 0
+    },
+    "physicsEnabled": false,
+    "collidable": true,
+    "gravity": 0,
+    "bounceDamping": 0,
+    "physicsType": "static"
+   },
+   {
+    "id": "plat_7",
+    "type": "obstacle",
+    "vectorName": "platform_s26",
+    "layer": "gameplay",
+    "x": -59,
+    "y": -2261,
+    "rotation": 0,
+    "scale": 1,
+    "velocity": {
+     "x": 0,
+     "y": 0
+    },
+    "physicsEnabled": false,
+    "collidable": true,
+    "gravity": 0,
+    "bounceDamping": 0,
+    "physicsType": "static"
+   },
+   {
+    "id": "plat_8",
+    "type": "obstacle",
+    "vectorName": "platform_s26",
+    "layer": "gameplay",
+    "x": 58,
+    "y": -2261,
+    "rotation": 0,
+    "scale": 1,
+    "velocity": {
+     "x": 0,
+     "y": 0
+    },
+    "physicsEnabled": false,
+    "collidable": true,
+    "gravity": 0,
+    "bounceDamping": 0,
+    "physicsType": "static"
+   },
+   {
+    "id": "plat_9",
+    "type": "obstacle",
+    "vectorName": "platform_c95",
+    "layer": "gameplay",
+    "x": 0,
+    "y": -2241,
+    "rotation": 0,
+    "scale": 1,
+    "velocity": {
+     "x": 0,
+     "y": 0
+    },
+    "physicsEnabled": false,
+    "collidable": true,
+    "gravity": 0,
+    "bounceDamping": 0,
+    "physicsType": "static"
+   }
+  ],
+  "foreground": []
+ },
+ "spawnPoints": {
+  "player": {
+   "x": -20,
+   "y": -2400
+  }
+ },
+ "hotspots": [],
+ "_editorMeta": {
+  "screenBackgrounds": [
+   {
+    "screenIndex": 0,
+    "imagePath": "assets/backgrounds/floor1.png",
+    "offsetY": 0,
+    "keepAspect": false
+   }
+  ]
+ }
+}

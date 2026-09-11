@@ -10,6 +10,7 @@ const START_FLOOR       = 0 # piso inicial (0=normal floor 1, 2=floor 2, etc.)
 
 # ── States ──────────────────────────────────────────────────────────────────
 const STATE_TITLE       = 0  # título + "press a button"
+
 const STATE_GAME_START  = 1  # "ROUND N" antes de empezar
 const STATE_PLAYING     = 2  # gameplay activo
 const STATE_PLAYER_DEAD = 3  # animación de muerte + delay

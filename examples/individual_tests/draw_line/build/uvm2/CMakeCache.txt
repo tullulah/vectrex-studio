@@ -242,8 +242,8 @@ CMAKE_STRIP:FILEPATH=/Applications/ArmGNUToolchain/15.2.rel1/arm-none-eabi/bin/a
 //Path to a program.
 CMAKE_TAPI:FILEPATH=CMAKE_TAPI-NOTFOUND
 
-//The CMake toolchain file
-CMAKE_TOOLCHAIN_FILE:FILEPATH=/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/cmake/preload/toolchains/pico_arm_cortex_m33_gcc.cmake
+//No help, variable specified on the command line.
+CMAKE_TOOLCHAIN_FILE:UNINITIALIZED=/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/cmake/preload/toolchains/pico_arm_cortex_m33_gcc.cmake
 
 //If this value is on, makefiles will be generated without the
 // .SILENT directive, and all commands will be echoed to the console

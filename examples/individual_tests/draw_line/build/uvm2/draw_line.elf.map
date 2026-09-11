@@ -6502,7 +6502,7 @@ Discarded input sections
 Memory Configuration
 
 Name             Origin             Length             Attributes
-RAM              0x20000000         0x00080000         xrw
+RAM              0x11000000         0x00800000         xrw
 SCRATCH_X        0x20080000         0x00001000         xrw
 SCRATCH_Y        0x20081000         0x00001000         xrw
 *default*        0x00000000         0xffffffff
@@ -6511,419 +6511,419 @@ Linker script and memory map
 
 Address of section .vpyram set to 0x2007c000
 
-.text           0x20000000     0x321c
-                0x20000000                        __logical_binary_start = .
+.text           0x11000000     0x321c
+                0x11000000                        __logical_binary_start = .
  *(.vectors)
- .vectors       0x20000000      0x124 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_crt0/crt0.S.obj
-                0x20000000                __VECTOR_TABLE
-                0x20000000                __vectors
-                0x20000110                __unhandled_user_irq
-                0x20000110                isr_irq49
-                0x20000110                isr_irq13
-                0x20000110                isr_irq43
-                0x20000110                isr_irq45
-                0x20000110                isr_irq27
-                0x20000110                isr_irq32
-                0x20000110                isr_irq31
-                0x20000110                isr_irq5
-                0x20000110                isr_irq11
-                0x20000110                isr_irq23
-                0x20000110                isr_usagefault
-                0x20000110                isr_irq48
-                0x20000110                isr_irq35
-                0x20000110                isr_irq18
-                0x20000110                isr_irq50
-                0x20000110                isr_irq9
-                0x20000110                isr_irq30
-                0x20000110                isr_irq44
-                0x20000110                isr_irq29
-                0x20000110                isr_irq26
-                0x20000110                isr_irq33
-                0x20000110                isr_irq3
-                0x20000110                isr_irq12
-                0x20000110                isr_securefault
-                0x20000110                isr_irq40
-                0x20000110                isr_irq28
-                0x20000110                isr_irq19
-                0x20000110                isr_irq36
-                0x20000110                isr_irq41
-                0x20000110                isr_irq0
-                0x20000110                isr_irq6
-                0x20000110                isr_memmanage
-                0x20000110                isr_irq37
-                0x20000110                isr_irq42
-                0x20000110                isr_irq22
-                0x20000110                isr_irq17
-                0x20000110                isr_irq38
-                0x20000110                isr_irq14
-                0x20000110                __vectors_end
-                0x20000110                __default_isrs_start
-                0x20000110                isr_irq2
-                0x20000110                isr_irq10
-                0x20000110                isr_irq8
-                0x20000110                isr_debugmonitor
-                0x20000110                isr_irq24
-                0x20000110                isr_irq46
-                0x20000110                isr_irq1
-                0x20000110                isr_irq47
-                0x20000110                isr_irq51
-                0x20000110                isr_irq7
-                0x20000110                isr_irq21
-                0x20000110                isr_irq39
-                0x20000110                isr_irq20
-                0x20000110                isr_irq15
-                0x20000110                isr_irq25
-                0x20000110                isr_irq34
-                0x20000110                isr_irq4
-                0x20000110                isr_busfault
-                0x20000110                isr_irq16
-                0x20000116                unhandled_user_irq_num_in_r0
-                0x20000118                isr_invalid
-                0x2000011a                isr_nmi
-                0x2000011c                isr_hardfault
-                0x20000120                isr_pendsv
-                0x20000122                isr_systick
-                0x20000124                __default_isrs_end
+ .vectors       0x11000000      0x124 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_crt0/crt0.S.obj
+                0x11000000                __VECTOR_TABLE
+                0x11000000                __vectors
+                0x11000110                __unhandled_user_irq
+                0x11000110                isr_irq49
+                0x11000110                isr_irq13
+                0x11000110                isr_irq43
+                0x11000110                isr_irq45
+                0x11000110                isr_irq27
+                0x11000110                isr_irq32
+                0x11000110                isr_irq31
+                0x11000110                isr_irq5
+                0x11000110                isr_irq11
+                0x11000110                isr_irq23
+                0x11000110                isr_usagefault
+                0x11000110                isr_irq48
+                0x11000110                isr_irq35
+                0x11000110                isr_irq18
+                0x11000110                isr_irq50
+                0x11000110                isr_irq9
+                0x11000110                isr_irq30
+                0x11000110                isr_irq44
+                0x11000110                isr_irq29
+                0x11000110                isr_irq26
+                0x11000110                isr_irq33
+                0x11000110                isr_irq3
+                0x11000110                isr_irq12
+                0x11000110                isr_securefault
+                0x11000110                isr_irq40
+                0x11000110                isr_irq28
+                0x11000110                isr_irq19
+                0x11000110                isr_irq36
+                0x11000110                isr_irq41
+                0x11000110                isr_irq0
+                0x11000110                isr_irq6
+                0x11000110                isr_memmanage
+                0x11000110                isr_irq37
+                0x11000110                isr_irq42
+                0x11000110                isr_irq22
+                0x11000110                isr_irq17
+                0x11000110                isr_irq38
+                0x11000110                isr_irq14
+                0x11000110                __vectors_end
+                0x11000110                __default_isrs_start
+                0x11000110                isr_irq2
+                0x11000110                isr_irq10
+                0x11000110                isr_irq8
+                0x11000110                isr_debugmonitor
+                0x11000110                isr_irq24
+                0x11000110                isr_irq46
+                0x11000110                isr_irq1
+                0x11000110                isr_irq47
+                0x11000110                isr_irq51
+                0x11000110                isr_irq7
+                0x11000110                isr_irq21
+                0x11000110                isr_irq39
+                0x11000110                isr_irq20
+                0x11000110                isr_irq15
+                0x11000110                isr_irq25
+                0x11000110                isr_irq34
+                0x11000110                isr_irq4
+                0x11000110                isr_busfault
+                0x11000110                isr_irq16
+                0x11000116                unhandled_user_irq_num_in_r0
+                0x11000118                isr_invalid
+                0x1100011a                isr_nmi
+                0x1100011c                isr_hardfault
+                0x11000120                isr_pendsv
+                0x11000122                isr_systick
+                0x11000124                __default_isrs_end
  *(.binary_info_header)
  .binary_info_header
-                0x20000124       0x24 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
+                0x11000124       0x24 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
  .binary_info_header
-                0x20000148       0x14 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_crt0/crt0.S.obj
-                0x2000015c                        __binary_info_header_end = .
+                0x11000148       0x14 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_crt0/crt0.S.obj
+                0x1100015c                        __binary_info_header_end = .
  *(.embedded_block)
  .embedded_block
-                0x2000015c       0x1c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_crt0/crt0.S.obj
-                0x20000178                        __embedded_block_end = .
-                0x20000178                        __reset_start = .
+                0x1100015c       0x1c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_crt0/crt0.S.obj
+                0x11000178                        __embedded_block_end = .
+                0x11000178                        __reset_start = .
  *(.reset)
- .reset         0x20000178       0xa4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_crt0/crt0.S.obj
-                0x20000178                _entry_point
-                0x2000021c                        __reset_end = .
+ .reset         0x11000178       0xa4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_crt0/crt0.S.obj
+                0x11000178                _entry_point
+                0x1100021c                        __reset_end = .
  *(.time_critical*)
  .time_critical.mutex_enter_block_until
-                0x2000021c       0x6c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_sync/mutex.c.obj
-                0x2000021c                mutex_enter_block_until
+                0x1100021c       0x6c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_sync/mutex.c.obj
+                0x1100021c                mutex_enter_block_until
  .time_critical.mutex_try_enter_block_until
-                0x20000288       0x68 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_sync/mutex.c.obj
-                0x20000288                mutex_try_enter_block_until
+                0x11000288       0x68 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_sync/mutex.c.obj
+                0x11000288                mutex_try_enter_block_until
  .time_critical.mutex_exit
-                0x200002f0       0x3c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_sync/mutex.c.obj
-                0x200002f0                mutex_exit
+                0x110002f0       0x3c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_sync/mutex.c.obj
+                0x110002f0                mutex_exit
  *(.text*)
  .text.uvm2_cpu_init
-                0x2000032c       0x30 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
-                0x2000032c                uvm2_cpu_init
+                0x1100032c       0x30 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
+                0x1100032c                uvm2_cpu_init
  .text.uvm2_bus_pads
-                0x2000035c       0x48 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
-                0x2000035c                uvm2_bus_pads
+                0x1100035c       0x48 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
+                0x1100035c                uvm2_bus_pads
  .text.uvm2_bus_halt
-                0x200003a4       0x34 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
-                0x200003a4                uvm2_bus_halt
+                0x110003a4       0x34 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
+                0x110003a4                uvm2_bus_halt
  .text.uvm2_exec
-                0x200003d8       0xb4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
-                0x200003d8                uvm2_exec
+                0x110003d8       0xb4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
+                0x110003d8                uvm2_exec
  .text.uvm2_bus_delay
-                0x2000048c       0x1c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
-                0x2000048c                uvm2_bus_delay
+                0x1100048c       0x1c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
+                0x1100048c                uvm2_bus_delay
  .text.uvm2_via_write
-                0x200004a8       0x58 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
-                0x200004a8                uvm2_via_write
+                0x110004a8       0x58 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
+                0x110004a8                uvm2_via_write
  .text.uvm2_via_read
-                0x20000500       0x74 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
-                0x20000500                uvm2_via_read
+                0x11000500       0x74 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
+                0x11000500                uvm2_via_read
  .text.vxs_y_held
-                0x20000574        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11000574        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
  .text.vxs_wait_ramp
-                0x20000580       0x4c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11000580       0x4c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
  .text.vxs_emit
-                0x200005cc       0x68 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x110005cc       0x68 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
  .text.mux_sample
-                0x20000634       0x90 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11000634       0x90 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
  .text.recal_move
-                0x200006c4      0x130 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x110006c4      0x130 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
  .text.via_setup
-                0x200007f4      0x14c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x110007f4      0x14c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
  .text.uvm2_draw_set_fixup
-                0x20000940        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
-                0x20000940                uvm2_draw_set_fixup
+                0x11000940        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11000940                uvm2_draw_set_fixup
  .text.uvm2_draw_init
-                0x20000944       0x2c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
-                0x20000944                uvm2_draw_init
+                0x11000944       0x2c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11000944                uvm2_draw_init
  .text.uvm2_draw_invalidate
-                0x20000970       0x24 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
-                0x20000970                uvm2_draw_invalidate
+                0x11000970       0x24 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11000970                uvm2_draw_invalidate
  .text.uvm2_draw_reset
-                0x20000994      0x150 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
-                0x20000994                uvm2_draw_reset
+                0x11000994      0x150 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11000994                uvm2_draw_reset
  .text.uvm2_draw_intensity
-                0x20000ae4      0x11c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
-                0x20000ae4                uvm2_draw_intensity
+                0x11000ae4      0x11c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11000ae4                uvm2_draw_intensity
  .text.uvm2_draw_move
-                0x20000c00       0xb8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
-                0x20000c00                uvm2_draw_move
+                0x11000c00       0xb8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11000c00                uvm2_draw_move
  .text.uvm2_draw_delta
-                0x20000cb8       0xb8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
-                0x20000cb8                uvm2_draw_delta
+                0x11000cb8       0xb8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11000cb8                uvm2_draw_delta
  .text.uvm2_draw_move_abs
-                0x20000d70       0x20 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
-                0x20000d70                uvm2_draw_move_abs
+                0x11000d70       0x20 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11000d70                uvm2_draw_move_abs
  .text.uvm2_frame_begin
-                0x20000d90       0xf0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
-                0x20000d90                uvm2_frame_begin
+                0x11000d90       0xf0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11000d90                uvm2_frame_begin
  .text.uvm2_frame_end
-                0x20000e80      0x194 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
-                0x20000e80                uvm2_frame_end
+                0x11000e80      0x194 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11000e80                uvm2_frame_end
  .text.uvm2_frame_bus_cycles
-                0x20001014        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
-                0x20001014                uvm2_frame_bus_cycles
+                0x11001014        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11001014                uvm2_frame_bus_cycles
  .text.read_axis_analog
-                0x20001020       0x84 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
+                0x11001020       0x84 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
  .text.read_axis_digital
-                0x200010a4       0x7c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
+                0x110010a4       0x7c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
  .text.uvm2_input_set_analog
-                0x20001120        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
-                0x20001120                uvm2_input_set_analog
+                0x11001120        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
+                0x11001120                uvm2_input_set_analog
  .text.uvm2_read_buttons
-                0x2000112c       0x58 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
-                0x2000112c                uvm2_read_buttons
+                0x1100112c       0x58 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
+                0x1100112c                uvm2_read_buttons
  .text.uvm2_read_axes
-                0x20001184       0x44 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
-                0x20001184                uvm2_read_axes
+                0x11001184       0x44 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
+                0x11001184                uvm2_read_axes
  .text.uvm2_psg_write
-                0x200011c8       0x4c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
-                0x200011c8                uvm2_psg_write
+                0x110011c8       0x4c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
+                0x110011c8                uvm2_psg_write
  .text.uvm2_psg_read
-                0x20001214       0x5c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
-                0x20001214                uvm2_psg_read
+                0x11001214       0x5c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
+                0x11001214                uvm2_psg_read
  .text.uvm2_clock_calibrate
-                0x20001270       0x9c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_led.c.obj
-                0x20001270                uvm2_clock_calibrate
+                0x11001270       0x9c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_led.c.obj
+                0x11001270                uvm2_clock_calibrate
  .text.uvm2_led_init
-                0x2000130c       0x58 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_led.c.obj
-                0x2000130c                uvm2_led_init
+                0x1100130c       0x58 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_led.c.obj
+                0x1100130c                uvm2_led_init
  .text.uvm2_led_rgb
-                0x20001364       0xa4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_led.c.obj
-                0x20001364                uvm2_led_rgb
+                0x11001364       0xa4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_led.c.obj
+                0x11001364                uvm2_led_rgb
  .text.uvm2_led_status
-                0x20001408       0x4c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_led.c.obj
-                0x20001408                uvm2_led_status
+                0x11001408       0x4c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_led.c.obj
+                0x11001408                uvm2_led_status
  .text.uvm2_print_text
-                0x20001454      0x104 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_text.c.obj
-                0x20001454                uvm2_print_text
+                0x11001454      0x104 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_text.c.obj
+                0x11001454                uvm2_print_text
  .text.uvm2_play_music
-                0x20001558       0x3c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
-                0x20001558                uvm2_play_music
+                0x11001558       0x3c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
+                0x11001558                uvm2_play_music
  .text.uvm2_stop_music
-                0x20001594       0x40 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
-                0x20001594                uvm2_stop_music
+                0x11001594       0x40 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
+                0x11001594                uvm2_stop_music
  .text.uvm2_play_sfx
-                0x200015d4       0x28 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
-                0x200015d4                uvm2_play_sfx
+                0x110015d4       0x28 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
+                0x110015d4                uvm2_play_sfx
  .text.uvm2_audio_tick
-                0x200015fc      0x158 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
-                0x200015fc                uvm2_audio_tick
+                0x110015fc      0x158 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
+                0x110015fc                uvm2_audio_tick
  .text.uvm2_runtime_init
-                0x20001754       0x70 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
-                0x20001754                uvm2_runtime_init
+                0x11001754       0x70 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
+                0x11001754                uvm2_runtime_init
  .text.uvm2_svc_dispatch
-                0x200017c4      0x188 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
-                0x200017c4                uvm2_svc_dispatch
+                0x110017c4      0x188 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
+                0x110017c4                uvm2_svc_dispatch
  .text.uvm2_svc_handler
-                0x2000194c        0xa CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc_entry.s.obj
-                0x2000194c                uvm2_svc_handler
- *fill*         0x20001956        0x2 
+                0x1100194c        0xa CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc_entry.s.obj
+                0x1100194c                uvm2_svc_handler
+ *fill*         0x11001956        0x2 
  .text.startup.main
-                0x20001958        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_pico_main.c.obj
-                0x20001958                main
+                0x11001958        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_pico_main.c.obj
+                0x11001958                main
  .text.isr_svcall
-                0x2000195c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_pico_svc.S.obj
-                0x2000195c                isr_svcall
- .text.panic    0x20001960       0x30 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_platform_panic/panic.c.obj
-                0x20001960                panic
+                0x1100195c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_pico_svc.S.obj
+                0x1100195c                isr_svcall
+ .text.panic    0x11001960       0x30 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_platform_panic/panic.c.obj
+                0x11001960                panic
  .text.hw_claim_or_assert
-                0x20001990       0x58 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/hardware_claim/claim.c.obj
-                0x20001990                hw_claim_or_assert
+                0x11001990       0x58 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/hardware_claim/claim.c.obj
+                0x11001990                hw_claim_or_assert
  .text.next_striped_spin_lock_num
-                0x200019e8       0x18 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_sync/sync.c.obj
-                0x200019e8                next_striped_spin_lock_num
+                0x110019e8       0x18 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_sync/sync.c.obj
+                0x110019e8                next_striped_spin_lock_num
  .text.spinlock_set_extexclall
-                0x20001a00       0x10 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_sync_spin_lock/sync_spin_lock.c.obj
+                0x11001a00       0x10 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_sync_spin_lock/sync_spin_lock.c.obj
  .text.spin_locks_reset
-                0x20001a10       0x18 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_sync_spin_lock/sync_spin_lock.c.obj
-                0x20001a10                spin_locks_reset
+                0x11001a10       0x18 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_sync_spin_lock/sync_spin_lock.c.obj
+                0x11001a10                spin_locks_reset
  .text.runtime_init_per_core_irq_priorities
-                0x20001a28       0x40 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_irq/irq.c.obj
-                0x20001a28                runtime_init_per_core_irq_priorities
+                0x11001a28       0x40 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_irq/irq.c.obj
+                0x11001a28                runtime_init_per_core_irq_priorities
  .text.irq_set_enabled
-                0x20001a68       0x2c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_irq/irq.c.obj
-                0x20001a68                irq_set_enabled
+                0x11001a68       0x2c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_irq/irq.c.obj
+                0x11001a68                irq_set_enabled
  .text.irq_set_exclusive_handler
-                0x20001a94       0x70 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_irq/irq.c.obj
-                0x20001a94                irq_set_exclusive_handler
+                0x11001a94       0x70 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_irq/irq.c.obj
+                0x11001a94                irq_set_exclusive_handler
  .text.lock_init
-                0x20001b04        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_sync/lock_core.c.obj
-                0x20001b04                lock_init
+                0x11001b04        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_sync/lock_core.c.obj
+                0x11001b04                lock_init
  .text.runtime_init_mutex
-                0x20001b10       0x4c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_sync/mutex.c.obj
-                0x20001b10                runtime_init_mutex
+                0x11001b10       0x4c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_sync/mutex.c.obj
+                0x11001b10                runtime_init_mutex
  .text.sleep_until_callback
-                0x20001b5c       0x3c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
+                0x11001b5c       0x3c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
  .text.alarm_pool_irq_handler
-                0x20001b98      0x2ec CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
+                0x11001b98      0x2ec CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
  .text.runtime_init_default_alarm_pool
-                0x20001e84      0x104 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
-                0x20001e84                runtime_init_default_alarm_pool
+                0x11001e84      0x104 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
+                0x11001e84                runtime_init_default_alarm_pool
  .text.alarm_pool_add_alarm_at_force_in_context
-                0x20001f88       0xcc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
-                0x20001f88                alarm_pool_add_alarm_at_force_in_context
+                0x11001f88       0xcc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
+                0x11001f88                alarm_pool_add_alarm_at_force_in_context
  .text.alarm_pool_cancel_alarm
-                0x20002054       0x84 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
-                0x20002054                alarm_pool_cancel_alarm
+                0x11002054       0x84 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
+                0x11002054                alarm_pool_cancel_alarm
  .text.best_effort_wfe_or_timeout
-                0x200020d8       0xf8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
-                0x200020d8                best_effort_wfe_or_timeout
+                0x110020d8       0xf8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
+                0x110020d8                best_effort_wfe_or_timeout
  .text.timer_hardware_alarm_claim
-                0x200021d0       0x24 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_timer/timer.c.obj
-                0x200021d0                timer_hardware_alarm_claim
+                0x110021d0       0x24 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_timer/timer.c.obj
+                0x110021d0                timer_hardware_alarm_claim
  .text.timer_time_us_64
-                0x200021f4       0x10 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_timer/timer.c.obj
-                0x200021f4                timer_time_us_64
+                0x110021f4       0x10 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_timer/timer.c.obj
+                0x110021f4                timer_time_us_64
  .text.time_us_64
-                0x20002204       0x14 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_timer/timer.c.obj
-                0x20002204                time_us_64
+                0x11002204       0x14 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_timer/timer.c.obj
+                0x11002204                time_us_64
  .text.clock_configure_undivided
-                0x20002218       0xdc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_clocks/clocks.c.obj
-                0x20002218                clock_configure_undivided
+                0x11002218       0xdc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_clocks/clocks.c.obj
+                0x11002218                clock_configure_undivided
  .text.clock_get_hz
-                0x200022f4        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_clocks/clocks.c.obj
-                0x200022f4                clock_get_hz
+                0x110022f4        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_clocks/clocks.c.obj
+                0x110022f4                clock_get_hz
  .text.pll_init
-                0x20002300       0x90 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_pll/pll.c.obj
-                0x20002300                pll_init
+                0x11002300       0x90 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_pll/pll.c.obj
+                0x11002300                pll_init
  .text.tick_start
-                0x20002390       0x18 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_ticks/ticks.c.obj
-                0x20002390                tick_start
+                0x11002390       0x18 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_ticks/ticks.c.obj
+                0x11002390                tick_start
  .text.rom_func_lookup
-                0x200023a8       0x18 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_bootrom/bootrom.c.obj
-                0x200023a8                rom_func_lookup
+                0x110023a8       0x18 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_bootrom/bootrom.c.obj
+                0x110023a8                rom_func_lookup
  .text.runtime_init_bootrom_locking_enable
-                0x200023c0       0x14 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_bootrom/bootrom_lock.c.obj
-                0x200023c0                runtime_init_bootrom_locking_enable
+                0x110023c0       0x14 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_bootrom/bootrom_lock.c.obj
+                0x110023c0                runtime_init_bootrom_locking_enable
  .text.runtime_init_boot_locks_reset
-                0x200023d4       0x1c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_boot_lock/boot_lock.c.obj
-                0x200023d4                runtime_init_boot_locks_reset
+                0x110023d4       0x1c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_boot_lock/boot_lock.c.obj
+                0x110023d4                runtime_init_boot_locks_reset
  .text.xosc_init
-                0x200023f0       0x2c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_xosc/xosc.c.obj
-                0x200023f0                xosc_init
+                0x110023f0       0x2c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_xosc/xosc.c.obj
+                0x110023f0                xosc_init
  .text.first_per_core_initializer
-                0x2000241c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime/runtime.c.obj
+                0x1100241c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime/runtime.c.obj
  .text.hard_assertion_failure
-                0x20002420        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime/runtime.c.obj
-                0x20002420                hard_assertion_failure
+                0x11002420        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime/runtime.c.obj
+                0x11002420                hard_assertion_failure
  .text.runtime_run_initializers
-                0x2000242c       0x20 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime/runtime.c.obj
-                0x2000242c                runtime_run_initializers
+                0x1100242c       0x20 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime/runtime.c.obj
+                0x1100242c                runtime_run_initializers
  .text.runtime_init_early_resets
-                0x2000244c       0x30 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x2000244c                runtime_init_early_resets
+                0x1100244c       0x30 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x1100244c                runtime_init_early_resets
  .text.runtime_init_usb_power_down
-                0x2000247c       0x1c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x2000247c                runtime_init_usb_power_down
+                0x1100247c       0x1c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x1100247c                runtime_init_usb_power_down
  .text.runtime_init_per_core_enable_coprocessors
-                0x20002498       0x1c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x20002498                runtime_init_per_core_enable_coprocessors
+                0x11002498       0x1c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x11002498                runtime_init_per_core_enable_coprocessors
  .text.runtime_init_post_clock_resets
-                0x200024b4       0x20 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x200024b4                runtime_init_post_clock_resets
+                0x110024b4       0x20 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x110024b4                runtime_init_post_clock_resets
  .text.runtime_init_bootrom_reset
-                0x200024d4       0x14 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x200024d4                runtime_init_bootrom_reset
+                0x110024d4       0x14 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x110024d4                runtime_init_bootrom_reset
  .text.runtime_init_per_core_bootrom_reset
-                0x200024e8       0x14 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x200024e8                runtime_init_per_core_bootrom_reset
+                0x110024e8       0x14 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x110024e8                runtime_init_per_core_bootrom_reset
  .text.runtime_init_spin_locks_reset
-                0x200024fc        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x200024fc                runtime_init_spin_locks_reset
+                0x110024fc        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x110024fc                runtime_init_spin_locks_reset
  .text.runtime_init_clocks
-                0x20002500       0xdc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init_clocks.c.obj
-                0x20002500                runtime_init_clocks
+                0x11002500       0xdc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init_clocks.c.obj
+                0x11002500                runtime_init_clocks
  .text._out_char
-                0x200025dc        0x8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_printf/printf.c.obj
+                0x110025dc        0x8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_printf/printf.c.obj
  .text.weak_raw_vprintf
-                0x200025e4       0x30 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_printf/printf.c.obj
-                0x200025e4                weak_raw_vprintf
- .text._exit    0x20002614        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_clib_interface/newlib_interface.c.obj
-                0x20002614                _exit
- .text.exit     0x20002618        0x8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_clib_interface/newlib_interface.c.obj
-                0x20002618                exit
+                0x110025e4       0x30 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_printf/printf.c.obj
+                0x110025e4                weak_raw_vprintf
+ .text._exit    0x11002614        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_clib_interface/newlib_interface.c.obj
+                0x11002614                _exit
+ .text.exit     0x11002618        0x8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_clib_interface/newlib_interface.c.obj
+                0x11002618                exit
  .text.runtime_init
-                0x20002620       0x24 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_clib_interface/newlib_interface.c.obj
-                0x20002620                runtime_init
+                0x11002620       0x24 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_clib_interface/newlib_interface.c.obj
+                0x11002620                runtime_init
  .text.stdio_out_chars_no_crlf
-                0x20002644        0x8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
+                0x11002644        0x8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
  .text.stdio_out_chars_crlf
-                0x2000264c       0xc0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
+                0x1100264c       0xc0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
  .text.stdio_put_string
-                0x2000270c       0xec CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
-                0x2000270c                stdio_put_string
+                0x1100270c       0xec CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
+                0x1100270c                stdio_put_string
  .text.__wrap_putchar
-                0x200027f8       0x84 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
-                0x200027f8                stdio_putchar
-                0x200027f8                __wrap_putchar
+                0x110027f8       0x84 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
+                0x110027f8                stdio_putchar
+                0x110027f8                __wrap_putchar
  .text.__wrap_puts
-                0x2000287c       0x3c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
-                0x2000287c                __wrap_puts
-                0x2000287c                stdio_puts
+                0x1100287c       0x3c CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
+                0x1100287c                __wrap_puts
+                0x1100287c                stdio_puts
  .text._ZN12vectrex_draw4emit10moveto_seq17h0cd35b40a44fe08aE
-                0x200028b8       0xaa /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x200028b8                vectrex_draw::emit::moveto_seq
+                0x110028b8       0xaa /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x110028b8                vectrex_draw::emit::moveto_seq
  .text._ZN12vectrex_draw4emit13draw_line_seq17h52aa9481e92d4310E
-                0x20002962       0xd6 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20002962                vectrex_draw::emit::draw_line_seq
+                0x11002962       0xd6 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11002962                vectrex_draw::emit::draw_line_seq
  .text.vx_draw_line_seq
-                0x20002a38       0x52 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20002a38                vx_draw_line_seq
+                0x11002a38       0x52 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11002a38                vx_draw_line_seq
  .text.vx_moveto_seq
-                0x20002a8a       0x52 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20002a8a                vx_moveto_seq
+                0x11002a8a       0x52 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11002a8a                vx_moveto_seq
  .text.vx_probe
-                0x20002adc        0xc /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20002adc                vx_probe
+                0x11002adc        0xc /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11002adc                vx_probe
  .text.vx_probe_div
-                0x20002ae8       0x28 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20002ae8                vx_probe_div
+                0x11002ae8       0x28 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11002ae8                vx_probe_div
  .text.vx_ramp_params
-                0x20002b10      0x22a /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20002b10                vx_ramp_params
+                0x11002b10      0x22a /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11002b10                vx_ramp_params
  .text.unlikely._ZN4core9panicking11panic_const23panic_const_div_by_zero17h0d3910d88a82d395E
-                0x20002d3a       0x26 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
-                0x20002d3a                core::panicking::panic_const::panic_const_div_by_zero
+                0x11002d3a       0x26 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
+                0x11002d3a                core::panicking::panic_const::panic_const_div_by_zero
  .text.unlikely._ZN4core9panicking11panic_const24panic_const_div_overflow17h921a301cd05c2316E
-                0x20002d60       0x26 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
-                0x20002d60                core::panicking::panic_const::panic_const_div_overflow
+                0x11002d60       0x26 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
+                0x11002d60                core::panicking::panic_const::panic_const_div_overflow
  .text.unlikely._ZN4core9panicking5panic17h055d907b6d81afc1E
-                0x20002d86       0x26 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
-                0x20002d86                core::panicking::panic
+                0x11002d86       0x26 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
+                0x11002d86                core::panicking::panic
  .text.unlikely._ZN4core9panicking9panic_fmt17h187051cef162c982E
-                0x20002dac       0x16 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
-                0x20002dac                core::panicking::panic_fmt
- .text.strlen   0x20002dc2       0x34 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.120.rcgu.o)
-                0x20002dc2                strlen
- *fill*         0x20002df6        0x2 
+                0x11002dac       0x16 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
+                0x11002dac                core::panicking::panic_fmt
+ .text.strlen   0x11002dc2       0x34 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.120.rcgu.o)
+                0x11002dc2                strlen
+ *fill*         0x11002df6        0x2 
  .text.__aeabi_ldivmod
-                0x20002df8       0x14 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.418.rcgu.o)
-                0x20002df8                __aeabi_ldivmod
+                0x11002df8       0x14 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.418.rcgu.o)
+                0x11002df8                __aeabi_ldivmod
  .text._RNvCskdKJRKLKjqM_7___rustc17rust_begin_unwind
-                0x20002e0c        0x8 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw_cabi-edc338173d3cf6ca.vectrex_draw_cabi.c9a9bce26dab3ed5-cgu.0.rcgu.o)
-                0x20002e0c                __rustc::rust_begin_unwind
+                0x11002e0c        0x8 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw_cabi-edc338173d3cf6ca.vectrex_draw_cabi.c9a9bce26dab3ed5-cgu.0.rcgu.o)
+                0x11002e0c                __rustc::rust_begin_unwind
  .text.__divmoddi4
-                0x20002e14       0xa4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.231.rcgu.o)
-                0x20002e14                __divmoddi4
+                0x11002e14       0xa4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.231.rcgu.o)
+                0x11002e14                __divmoddi4
  .text._ZN17compiler_builtins3int19specialized_div_rem11u64_div_rem17h16afac3fec93da87E
-                0x20002eb8      0x362 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.008.rcgu.o)
-                0x20002eb8                compiler_builtins::int::specialized_div_rem::u64_div_rem
-                0x2000321c                        . = ALIGN (0x4)
- *fill*         0x2000321a        0x2 
+                0x11002eb8      0x362 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.008.rcgu.o)
+                0x11002eb8                compiler_builtins::int::specialized_div_rem::u64_div_rem
+                0x1100321c                        . = ALIGN (0x4)
+ *fill*         0x1100321a        0x2 
  *(.init)
  *(.fini)
  *crtbegin.o(.ctors)
@@ -6938,388 +6938,388 @@ Address of section .vpyram set to 0x2007c000
  *(.dtors)
  *(.eh_frame*)
 
-.glue_7         0x2000321c        0x0
- .glue_7        0x2000321c        0x0 linker stubs
+.glue_7         0x1100321c        0x0
+ .glue_7        0x1100321c        0x0 linker stubs
 
-.glue_7t        0x2000321c        0x0
- .glue_7t       0x2000321c        0x0 linker stubs
+.glue_7t        0x1100321c        0x0
+ .glue_7t       0x1100321c        0x0 linker stubs
 
-.vfp11_veneer   0x2000321c        0x0
- .vfp11_veneer  0x2000321c        0x0 linker stubs
+.vfp11_veneer   0x1100321c        0x0
+ .vfp11_veneer  0x1100321c        0x0 linker stubs
 
-.v4_bx          0x2000321c        0x0
- .v4_bx         0x2000321c        0x0 linker stubs
+.v4_bx          0x1100321c        0x0
+ .v4_bx         0x1100321c        0x0 linker stubs
 
-.game_rom       0x2000321c      0x384
- .game_rom      0x2000321c      0x384 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/examples/individual_tests/draw_line/build/draw_line.S.obj
-                0x2000321c                game_header
-                0x2000322c                bus_write
-                0x20003230                bus_read
-                0x20003234                dv_reset
-                0x20003238                dv_move_to
-                0x2000327c                dv_draw_delta
-                0x20003280                vpy_wait_recal
-                0x20003284                vpy_set_intensity
-                0x20003288                vpy_draw_line
-                0x20003310                vpy_print_text
-                0x2000333c                vpy_print_number
-                0x20003406                vpy_set_text_size
-                0x20003424                uvm2_game_main
-                0x20003424                game_main
+.game_rom       0x1100321c      0x384
+ .game_rom      0x1100321c      0x384 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/examples/individual_tests/draw_line/build/draw_line.S.obj
+                0x1100321c                game_header
+                0x1100322c                bus_write
+                0x11003230                bus_read
+                0x11003234                dv_reset
+                0x11003238                dv_move_to
+                0x1100327c                dv_draw_delta
+                0x11003280                vpy_wait_recal
+                0x11003284                vpy_set_intensity
+                0x11003288                vpy_draw_line
+                0x11003310                vpy_print_text
+                0x1100333c                vpy_print_number
+                0x11003406                vpy_set_text_size
+                0x11003424                uvm2_game_main
+                0x11003424                game_main
 
-.iplt           0x200035a0        0x0
- .iplt          0x200035a0        0x0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/examples/individual_tests/draw_line/build/draw_line.S.obj
+.iplt           0x110035a0        0x0
+ .iplt          0x110035a0        0x0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/examples/individual_tests/draw_line/build/draw_line.S.obj
 
-.rodata         0x200035a0      0x5dc
-                0x200035a0                        . = ALIGN (0x4)
+.rodata         0x110035a0      0x5dc
+                0x110035a0                        . = ALIGN (0x4)
  *(.rodata*)
  .rodata.uvm2_font_length
-                0x200035a0       0x3b CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_text.c.obj
- *fill*         0x200035db        0x1 
+                0x110035a0       0x3b CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_text.c.obj
+ *fill*         0x110035db        0x1 
  .rodata.uvm2_font_offset
-                0x200035dc       0x76 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_text.c.obj
- *fill*         0x20003652        0x2 
+                0x110035dc       0x76 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_text.c.obj
+ *fill*         0x11003652        0x2 
  .rodata.uvm2_font_data
-                0x20003654      0x2be CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_text.c.obj
- *fill*         0x20003912        0x2 
+                0x11003654      0x2be CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_text.c.obj
+ *fill*         0x11003912        0x2 
  .rodata.panic.str1.4
-                0x20003914       0x80 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_platform_panic/panic.c.obj
+                0x11003914       0x80 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_platform_panic/panic.c.obj
                                  0x12 (size before relaxing)
  .rodata.timer_hardware_alarm_claim.str1.4
-                0x20003994        0x0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_timer/timer.c.obj
+                0x11003994        0x0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_timer/timer.c.obj
                                  0x22 (size before relaxing)
  .rodata.hard_assertion_failure.str1.4
-                0x20003994        0x0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime/runtime.c.obj
+                0x11003994        0x0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime/runtime.c.obj
                                   0xc (size before relaxing)
  .rodata.str1.4
-                0x20003994        0x0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
+                0x11003994        0x0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
                                  0x3c (size before relaxing)
  .rodata.__bi_84
-                0x20003994        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
+                0x11003994        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
  .rodata.__bi_48
-                0x200039a0        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
+                0x110039a0        0xc CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
  .rodata.crlf_str.0
-                0x200039ac        0x2 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
+                0x110039ac        0x2 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
  .rodata.str1.1
-                0x200039ae      0x123 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
- *fill*         0x20003ad1        0x3 
+                0x110039ae      0x123 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+ *fill*         0x11003ad1        0x3 
  .rodata..Lanon.8f1136fc6cfe52db6deab270c294e71c.1
-                0x20003ad4       0x10 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003ad4       0x10 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
  .rodata..Lanon.8f1136fc6cfe52db6deab270c294e71c.2
-                0x20003ae4       0x10 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003ae4       0x10 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
  .rodata..Lanon.8f1136fc6cfe52db6deab270c294e71c.3
-                0x20003af4       0x1c /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003af4       0x1c /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
  .rodata..Lanon.8f1136fc6cfe52db6deab270c294e71c.5
-                0x20003b10       0x10 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003b10       0x10 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
  .rodata..Lanon.8f1136fc6cfe52db6deab270c294e71c.7
-                0x20003b20       0x10 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003b20       0x10 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
  .rodata..Lanon.f1cc95b6b083f5a8851f78740618ac68.85
-                0x20003b30       0x1f /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
- *fill*         0x20003b4f        0x1 
+                0x11003b30       0x1f /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
+ *fill*         0x11003b4f        0x1 
  .rodata..Lanon.f1cc95b6b083f5a8851f78740618ac68.86
-                0x20003b50        0x8 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
+                0x11003b50        0x8 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
  .rodata..Lanon.f1cc95b6b083f5a8851f78740618ac68.312
-                0x20003b58       0x19 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
- *fill*         0x20003b71        0x3 
+                0x11003b58       0x19 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
+ *fill*         0x11003b71        0x3 
  .rodata..Lanon.f1cc95b6b083f5a8851f78740618ac68.313
-                0x20003b74        0x8 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
+                0x11003b74        0x8 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
  *(.srodata*)
-                0x20003b7c                        . = ALIGN (0x4)
+                0x11003b7c                        . = ALIGN (0x4)
  *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.flashdata*)))
-                0x20003b7c                        . = ALIGN (0x4)
+                0x11003b7c                        . = ALIGN (0x4)
 
 .ARM.extab
  *(.ARM.extab* .gnu.linkonce.armextab.*)
-                0x20003b7c                        __exidx_start = .
+                0x11003b7c                        __exidx_start = .
 
-.ARM.exidx      0x20003b7c        0x8
+.ARM.exidx      0x11003b7c        0x8
  *(.ARM.exidx* .gnu.linkonce.armexidx.*)
  .ARM.exidx.text._ZN12vectrex_draw4emit10moveto_seq17h0cd35b40a44fe08aE
-                0x20003b7c        0x8 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003b7c        0x8 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
  .ARM.exidx.text._ZN12vectrex_draw4emit13draw_line_seq17h52aa9481e92d4310E
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text.vx_draw_line_seq
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text.vx_moveto_seq
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text.vx_probe
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text.vx_probe_div
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text.vx_ramp_params
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text.unlikely._ZN4core9panicking11panic_const23panic_const_div_by_zero17h0d3910d88a82d395E
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text.unlikely._ZN4core9panicking11panic_const24panic_const_div_overflow17h921a301cd05c2316E
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text.unlikely._ZN4core9panicking5panic17h055d907b6d81afc1E
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text.unlikely._ZN4core9panicking9panic_fmt17h187051cef162c982E
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(core-ebe9ccd419f81f09.core.8c2717936ac5d38-cgu.0.rcgu.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text.strlen
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.120.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.120.rcgu.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text._RNvCskdKJRKLKjqM_7___rustc17rust_begin_unwind
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw_cabi-edc338173d3cf6ca.vectrex_draw_cabi.c9a9bce26dab3ed5-cgu.0.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw_cabi-edc338173d3cf6ca.vectrex_draw_cabi.c9a9bce26dab3ed5-cgu.0.rcgu.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text.__divmoddi4
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.231.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.231.rcgu.o)
                                   0x8 (size before relaxing)
  .ARM.exidx.text._ZN17compiler_builtins3int19specialized_div_rem11u64_div_rem17h16afac3fec93da87E
-                0x20003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.008.rcgu.o)
+                0x11003b84        0x0 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(compiler_builtins-c4a86ce18d2705a0.compiler_builtins.3ac555b103c3819e-cgu.008.rcgu.o)
                                   0x8 (size before relaxing)
-                0x20003b84                        __exidx_end = .
-                0x20003b84                        . = ALIGN (0x4)
-                0x20003b84                        __binary_info_start = .
+                0x11003b84                        __exidx_end = .
+                0x11003b84                        . = ALIGN (0x4)
+                0x11003b84                        __binary_info_start = .
 
-.binary_info    0x20003b84       0x14
+.binary_info    0x11003b84       0x14
  *(.binary_info.keep.*)
  .binary_info.keep.__bi_ptr84
-                0x20003b84        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
+                0x11003b84        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
  .binary_info.keep.__bi_ptr54
-                0x20003b88        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
+                0x11003b88        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
  .binary_info.keep.__bi_ptr48
-                0x20003b8c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
+                0x11003b8c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
  .binary_info.keep.__bi_ptr42
-                0x20003b90        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
+                0x11003b90        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
  .binary_info.keep.__bi_ptr34
-                0x20003b94        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
+                0x11003b94        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_standard_binary_info/standard_binary_info.c.obj
  *(.binary_info.*)
-                0x20003b98                        __binary_info_end = .
-                0x20003b98                        . = ALIGN (0x4)
+                0x11003b98                        __binary_info_end = .
+                0x11003b98                        . = ALIGN (0x4)
 
-.data           0x20003b98       0x90
-                0x20003b98                        __data_start__ = .
+.data           0x11003b98       0x90
+                0x11003b98                        __data_start__ = .
  *(vtable)
  *(.data*)
  .data.uvm2_blank_settle_e
-                0x20003b98        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
-                0x20003b98                uvm2_blank_settle_e
- .data.s_scale  0x20003b9c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
- .data.s_pcr    0x20003ba0        0x1 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
- .data.s_portb  0x20003ba1        0x1 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
- *fill*         0x20003ba2        0x2 
+                0x11003b98        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11003b98                uvm2_blank_settle_e
+ .data.s_scale  0x11003b9c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+ .data.s_pcr    0x11003ba0        0x1 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+ .data.s_portb  0x11003ba1        0x1 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+ *fill*         0x11003ba2        0x2 
  .data.s_porta_stale
-                0x20003ba4        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11003ba4        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
  .data.s_cyc_per_us
-                0x20003ba8        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_led.c.obj
+                0x11003ba8        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_led.c.obj
  .data.s_psg_mixer
-                0x20003bac        0x1 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
+                0x11003bac        0x1 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
  .data.striped_spin_lock_num
-                0x20003bad        0x1 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_sync/sync.c.obj
- *fill*         0x20003bae        0x2 
+                0x11003bad        0x1 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_sync/sync.c.obj
+ *fill*         0x11003bae        0x2 
  .data.default_alarm_pool
-                0x20003bb0       0x18 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
- .data.MIN_T1   0x20003bc8        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20003bc8                MIN_T1
+                0x11003bb0       0x18 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
+ .data.MIN_T1   0x11003bc8        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003bc8                MIN_T1
  .data.T1_CEILING
-                0x20003bcc        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20003bcc                T1_CEILING
- .data.VCAP     0x20003bd0        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20003bd0                VCAP
- .data.VCAP_DV  0x20003bd4        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20003bd4                VCAP_DV
+                0x11003bcc        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003bcc                T1_CEILING
+ .data.VCAP     0x11003bd0        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003bd0                VCAP
+ .data.VCAP_DV  0x11003bd4        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003bd4                VCAP_DV
  .data.VCAP_SLOW
-                0x20003bd8        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20003bd8                VCAP_SLOW
+                0x11003bd8        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003bd8                VCAP_SLOW
  *(.sdata*)
-                0x20003bdc                        . = ALIGN (0x4)
+                0x11003bdc                        . = ALIGN (0x4)
  *(.after_data.*)
-                0x20003bdc                        . = ALIGN (0x4)
-                0x20003bdc                        PROVIDE (__mutex_array_start = .)
+                0x11003bdc                        . = ALIGN (0x4)
+                0x11003bdc                        PROVIDE (__mutex_array_start = .)
  *(SORT_BY_NAME(.mutex_array.*))
  *(.mutex_array)
- .mutex_array   0x20003bdc        0x8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_malloc/malloc.c.obj
- .mutex_array   0x20003be4        0x8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
-                0x20003bec                        PROVIDE (__mutex_array_end = .)
-                0x20003bec                        . = ALIGN (0x4)
-                0x20003bec                        PROVIDE (__preinit_array_start = .)
+ .mutex_array   0x11003bdc        0x8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_malloc/malloc.c.obj
+ .mutex_array   0x11003be4        0x8 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
+                0x11003bec                        PROVIDE (__mutex_array_end = .)
+                0x11003bec                        . = ALIGN (0x4)
+                0x11003bec                        PROVIDE (__preinit_array_start = .)
  *(SORT_BY_NAME(.preinit_array.*))
  .preinit_array.00050
-                0x20003bec        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x20003bec                __pre_init_runtime_init_bootrom_reset
+                0x11003bec        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x11003bec                __pre_init_runtime_init_bootrom_reset
  .preinit_array.00100
-                0x20003bf0        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x20003bf0                __pre_init_runtime_init_early_resets
+                0x11003bf0        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x11003bf0                __pre_init_runtime_init_early_resets
  .preinit_array.00101
-                0x20003bf4        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x20003bf4                __pre_init_runtime_init_usb_power_down
+                0x11003bf4        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x11003bf4                __pre_init_runtime_init_usb_power_down
  .preinit_array.00500
-                0x20003bf8        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x20003bf8                __pre_init_runtime_init_clocks
+                0x11003bf8        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x11003bf8                __pre_init_runtime_init_clocks
  .preinit_array.00600
-                0x20003bfc        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x20003bfc                __pre_init_runtime_init_post_clock_resets
+                0x11003bfc        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x11003bfc                __pre_init_runtime_init_post_clock_resets
  .preinit_array.01000
-                0x20003c00        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_boot_lock/boot_lock.c.obj
-                0x20003c00                __pre_init_runtime_init_boot_locks_reset
+                0x11003c00        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_boot_lock/boot_lock.c.obj
+                0x11003c00                __pre_init_runtime_init_boot_locks_reset
  .preinit_array.01000
-                0x20003c04        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x20003c04                __pre_init_runtime_init_spin_locks_reset
+                0x11003c04        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x11003c04                __pre_init_runtime_init_spin_locks_reset
  .preinit_array.01010
-                0x20003c08        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_bootrom/bootrom_lock.c.obj
-                0x20003c08                __pre_init_runtime_init_bootrom_locking_enable
+                0x11003c08        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_bootrom/bootrom_lock.c.obj
+                0x11003c08                __pre_init_runtime_init_bootrom_locking_enable
  .preinit_array.01100
-                0x20003c0c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_sync/mutex.c.obj
-                0x20003c0c                __pre_init_runtime_init_mutex
+                0x11003c0c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_sync/mutex.c.obj
+                0x11003c0c                __pre_init_runtime_init_mutex
  .preinit_array.11000
-                0x20003c10        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
-                0x20003c10                __pre_init_runtime_init_default_alarm_pool
+                0x11003c10        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
+                0x11003c10                __pre_init_runtime_init_default_alarm_pool
  .preinit_array.YYYYY
-                0x20003c14        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime/runtime.c.obj
-                0x20003c14                __pre_init_first_per_core_initializer
+                0x11003c14        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime/runtime.c.obj
+                0x11003c14                __pre_init_first_per_core_initializer
  .preinit_array.ZZZZZ.00051
-                0x20003c18        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x20003c18                __pre_init_runtime_init_per_core_bootrom_reset
+                0x11003c18        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x11003c18                __pre_init_runtime_init_per_core_bootrom_reset
  .preinit_array.ZZZZZ.00200
-                0x20003c1c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
-                0x20003c1c                __pre_init_runtime_init_per_core_enable_coprocessors
+                0x11003c1c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_runtime_init/runtime_init.c.obj
+                0x11003c1c                __pre_init_runtime_init_per_core_enable_coprocessors
  .preinit_array.ZZZZZ.01000
-                0x20003c20        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_sync_spin_lock/sync_spin_lock.c.obj
-                0x20003c20                __pre_init_spinlock_set_extexclall
+                0x11003c20        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_sync_spin_lock/sync_spin_lock.c.obj
+                0x11003c20                __pre_init_spinlock_set_extexclall
  .preinit_array.ZZZZZ.01200
-                0x20003c24        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_irq/irq.c.obj
-                0x20003c24                __pre_init_runtime_init_per_core_irq_priorities
+                0x11003c24        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_irq/irq.c.obj
+                0x11003c24                __pre_init_runtime_init_per_core_irq_priorities
  *(.preinit_array)
-                0x20003c28                        PROVIDE (__preinit_array_end = .)
-                0x20003c28                        . = ALIGN (0x4)
-                0x20003c28                        PROVIDE (__init_array_start = .)
+                0x11003c28                        PROVIDE (__preinit_array_end = .)
+                0x11003c28                        . = ALIGN (0x4)
+                0x11003c28                        PROVIDE (__init_array_start = .)
  *(SORT_BY_NAME(.init_array.*))
  *(.init_array)
-                0x20003c28                        PROVIDE (__init_array_end = .)
-                0x20003c28                        . = ALIGN (0x4)
+                0x11003c28                        PROVIDE (__init_array_end = .)
+                0x11003c28                        . = ALIGN (0x4)
                 [!provide]                        PROVIDE (__fini_array_start = .)
  *(SORT_BY_NAME(.fini_array.*))
  *(.fini_array)
                 [!provide]                        PROVIDE (__fini_array_end = .)
  *(.jcr)
-                0x20003c28                        . = ALIGN (0x4)
+                0x11003c28                        . = ALIGN (0x4)
 
-.igot.plt       0x20003c28        0x0
- .igot.plt      0x20003c28        0x0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/examples/individual_tests/draw_line/build/draw_line.S.obj
+.igot.plt       0x11003c28        0x0
+ .igot.plt      0x11003c28        0x0 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/examples/individual_tests/draw_line/build/draw_line.S.obj
 
-.tdata          0x20003c28        0x0
-                0x20003c28                        . = ALIGN (0x4)
+.tdata          0x11003c28        0x0
+                0x11003c28                        . = ALIGN (0x4)
  *(.tdata .tdata.* .gnu.linkonce.td.*)
-                0x20003c28                        __tdata_end = .
-                0x20003c28                        PROVIDE (__data_end__ = .)
+                0x11003c28                        __tdata_end = .
+                0x11003c28                        PROVIDE (__data_end__ = .)
 
 .uninitialized_data
-                0x20003c28        0x0
-                0x20003c28                        . = ALIGN (0x4)
+                0x11003c28        0x0
+                0x11003c28                        . = ALIGN (0x4)
  *(.uninitialized_data*)
-                0x20003b98                        __etext = LOADADDR (.data)
+                0x11003b98                        __etext = LOADADDR (.data)
 
-.tbss           0x20003c28        0x0
-                0x20003c28                        . = ALIGN (0x4)
-                0x20003c28                        __bss_start__ = .
-                0x20003c28                        __tls_base = .
+.tbss           0x11003c28        0x0
+                0x11003c28                        . = ALIGN (0x4)
+                0x11003c28                        __bss_start__ = .
+                0x11003c28                        __tls_base = .
  *(.tbss .tbss.* .gnu.linkonce.tb.*)
  *(.tcommon)
-                0x20003c28                        __tls_end = .
+                0x11003c28                        __tls_end = .
 
-.bss            0x20003c28     0x82b4
-                0x20003c28                        . = ALIGN (0x4)
-                0x20003c28                        __tbss_end = .
+.bss            0x11003c28     0x82b4
+                0x11003c28                        . = ALIGN (0x4)
+                0x11003c28                        __tbss_end = .
  *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.bss*)))
  .bss.default_alarm_pool_entries
-                0x20003c28      0x180 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
+                0x11003c28      0x180 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
  .bss.T1_EXTRA_Q8
-                0x20003da8        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20003da8                T1_EXTRA_Q8
+                0x11003da8        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003da8                T1_EXTRA_Q8
  .bss.VCAP_SLOW_HITS
-                0x20003dac        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20003dac                VCAP_SLOW_HITS
- .bss.Y_HELD    0x20003db0        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
-                0x20003db0                Y_HELD
+                0x11003dac        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003dac                VCAP_SLOW_HITS
+ .bss.Y_HELD    0x11003db0        0x4 /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/../vectrex-draw/cabi/target/thumbv8m.main-none-eabi/release/libvectrex_draw_cabi.a(vectrex_draw-2af582ddd0c17070.vectrex_draw.d0af2d129e8fd1b0-cgu.0.rcgu.o)
+                0x11003db0                Y_HELD
  .bss._sw_spin_locks
-                0x20003db4       0x20 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_sync_spin_lock/sync_spin_lock.c.obj
-                0x20003db4                _sw_spin_locks
- .bss.claimed   0x20003dd4        0x2 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_timer/timer.c.obj
- *fill*         0x20003dd6        0x2 
+                0x11003db4       0x20 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_sync_spin_lock/sync_spin_lock.c.obj
+                0x11003db4                _sw_spin_locks
+ .bss.claimed   0x11003dd4        0x2 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_timer/timer.c.obj
+ *fill*         0x11003dd6        0x2 
  .bss.configured_freq
-                0x20003dd8       0x28 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_clocks/clocks.c.obj
- .bss.drivers   0x20003e00        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
- .bss.filter    0x20003e04        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
+                0x11003dd8       0x28 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/hardware_clocks/clocks.c.obj
+ .bss.drivers   0x11003e00        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
+ .bss.filter    0x11003e04        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_stdio/stdio.c.obj
  .bss.lazy_vsnprintf
-                0x20003e08        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_printf/printf.c.obj
- .bss.pools     0x20003e0c       0x20 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
- .bss.s_analog  0x20003e2c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
+                0x11003e08        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_printf/printf.c.obj
+ .bss.pools     0x11003e0c       0x20 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
+ .bss.s_analog  0x11003e2c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_input.c.obj
  .bss.s_audio_acc
-                0x20003e30        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
- .bss.s_axes    0x20003e34        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
- .bss.s_cmds    0x20003e38     0x8000 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
- .bss.s_count   0x2000be38        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x11003e30        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
+ .bss.s_axes    0x11003e34        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
+ .bss.s_cmds    0x11003e38     0x8000 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+ .bss.s_count   0x1100be38        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
  .bss.s_dropped
-                0x2000be3c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x1100be3c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
  .bss.s_frame_cycles
-                0x2000be40        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
- .bss.s_frames  0x2000be44        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x1100be40        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+ .bss.s_frames  0x1100be44        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
  .bss.s_mus_base
-                0x2000be48        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
+                0x1100be48        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
  .bss.s_mus_delay
-                0x2000be4c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
+                0x1100be4c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
  .bss.s_mus_playing
-                0x2000be50        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
+                0x1100be50        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
  .bss.s_mus_primed
-                0x2000be54        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
+                0x1100be54        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
  .bss.s_mus_ptr
-                0x2000be58        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
- .bss.s_pos_x   0x2000be5c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
- .bss.s_pos_y   0x2000be60        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
- .bss.s_ready   0x2000be64        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_led.c.obj
+                0x1100be58        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
+ .bss.s_pos_x   0x1100be5c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+ .bss.s_pos_y   0x1100be60        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+ .bss.s_ready   0x1100be64        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_led.c.obj
  .bss.s_sfx_active
-                0x2000be68        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
+                0x1100be68        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
  .bss.s_sfx_delay
-                0x2000be6c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
+                0x1100be6c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
  .bss.s_sfx_ptr
-                0x2000be70        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
- .bss.s_y       0x2000be74        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
- .bss.s_z       0x2000be78        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
- .bss.s_z_last  0x2000be7c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x1100be70        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_audio.c.obj
+ .bss.s_y       0x1100be74        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+ .bss.s_z       0x1100be78        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+ .bss.s_z_last  0x1100be7c        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
  .bss.sleep_notifier
-                0x2000be80        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
+                0x1100be80        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/common/pico_time/time.c.obj
  .bss.uvm2_beam_on_e
-                0x2000be84        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
-                0x2000be84                uvm2_beam_on_e
+                0x1100be84        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x1100be84                uvm2_beam_on_e
  .bss.uvm2_single_cycles
-                0x2000be88        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
-                0x2000be88                uvm2_single_cycles
+                0x1100be88        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
+                0x1100be88                uvm2_single_cycles
  .bss.uvm2_stats
-                0x2000be8c       0x44 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
-                0x2000be8c                uvm2_stats
+                0x1100be8c       0x44 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_bus.c.obj
+                0x1100be8c                uvm2_stats
  .bss.uvm2_vx_probe
-                0x2000bed0        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
-                0x2000bed0                uvm2_vx_probe
+                0x1100bed0        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
+                0x1100bed0                uvm2_vx_probe
  .bss.uvm2_vx_probe_div
-                0x2000bed4        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
-                0x2000bed4                uvm2_vx_probe_div
+                0x1100bed4        0x4 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
+                0x1100bed4                uvm2_vx_probe_div
  .bss.s_buttons
-                0x2000bed8        0x1 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
- .bss.s_porta   0x2000bed9        0x1 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
+                0x1100bed8        0x1 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_svc.c.obj
+ .bss.s_porta   0x1100bed9        0x1 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2_draw.c.obj
  *(COMMON)
                 [!provide]                        PROVIDE (__global_pointer$ = (. + 0x800))
  *(.sbss*)
-                0x2000bedc                        . = ALIGN (0x4)
- *fill*         0x2000beda        0x2 
-                0x2000bedc                        __bss_end__ = .
+                0x1100bedc                        . = ALIGN (0x4)
+ *fill*         0x1100beda        0x2 
+                0x1100bedc                        __bss_end__ = .
 
-.heap           0x2000bedc      0x800
-                0x2000bedc                        __end__ = .
-                0x2000bedc                        end = __end__
+.heap           0x1100bedc      0x800
+                0x1100bedc                        __end__ = .
+                0x1100bedc                        end = __end__
  *(.heap*)
- .heap          0x2000bedc      0x800 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_crt0/crt0.S.obj
-                0x20080000                        __HeapLimit = (ORIGIN (RAM) + LENGTH (RAM))
+ .heap          0x1100bedc      0x800 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_crt0/crt0.S.obj
+                0x11800000                        __HeapLimit = (ORIGIN (RAM) + LENGTH (RAM))
 
 .scratch_x      0x20080000        0x0
                 0x20080000                        __scratch_x_start__ = .
@@ -7342,7 +7342,7 @@ Address of section .vpyram set to 0x2007c000
 .stack_dummy    0x20081000      0x800
  *(.stack*)
  .stack         0x20081000      0x800 CMakeFiles/draw_line.dir/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk/src/rp2_common/pico_crt0/crt0.S.obj
-                0x20080000                        __StackLimit = (ORIGIN (RAM) + LENGTH (RAM))
+                0x11800000                        __StackLimit = (ORIGIN (RAM) + LENGTH (RAM))
                 0x20081000                        __StackOneTop = (ORIGIN (SCRATCH_X) + LENGTH (SCRATCH_X))
                 0x20082000                        __StackTop = (ORIGIN (SCRATCH_Y) + LENGTH (SCRATCH_Y))
                 0x20080800                        __StackOneBottom = (__StackOneTop - SIZEOF (.stack1_dummy))

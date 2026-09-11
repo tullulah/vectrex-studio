@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSettings } from '../../state/settingsStore';
+import { useSettings, uvm2MakeFlags } from '../../state/settingsStore';
 import './SettingsPanel.css';
 
 export const SettingsPanel: React.FC = () => {
@@ -12,11 +12,19 @@ export const SettingsPanel: React.FC = () => {
     pitrexSdPath, setPitrexSdPath,
     uvm2CopyToSD, setUvm2CopyToSD,
     uvm2SdPath, setUvm2SdPath,
+    uvm2DualCore, setUvm2DualCore,
+    uvm2PioStream, setUvm2PioStream,
+    uvm2Hz, setUvm2Hz,
+    uvm2ExtraFlags, setUvm2ExtraFlags,
     rp2350FlashMethod, setRp2350FlashMethod,
     rp2350FirmwareDir, setRp2350FirmwareDir,
     rp2350SdPath, setRp2350SdPath,
     rp2350BuildMode, setRp2350BuildMode,
   } = useSettings();
+
+  /* Colapsada por defecto: son perillas de experimento, no de uso diario. */
+  const [uvm2Adv, setUvm2Adv] = useState(false);
+  const uvm2FlagsResumen = uvm2MakeFlags({ uvm2DualCore, uvm2PioStream, uvm2Hz, uvm2ExtraFlags });
 
   const handleBrowseSD = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -343,6 +351,73 @@ export const SettingsPanel: React.FC = () => {
                     </button>
                   </div>
                 )}
+
+                {/* AVANZADO: las perillas de compilacion, para hacer VARIAS builds y
+                    compararlas EN LA CONSOLA. El emulador no basta — hay cosas que se ven
+                    bien ahi y mal en el tubo, y por eso esto existe.
+
+                    Se pasan como variables de `make` al final de la orden, asi que valen
+                    para cualquier proyecto uvm2 con Makefile. Los valores POR DEFECTO son
+                    la base de medida del proyecto: doble nucleo + PIO + DMA. Cambiarlos es
+                    un experimento, no una configuracion. */}
+                <div className="uvm2-advanced">
+                  <button
+                    type="button"
+                    className="uvm2-advanced-toggle"
+                    aria-expanded={uvm2Adv}
+                    onClick={() => setUvm2Adv(v => !v)}
+                  >
+                    {uvm2Adv ? '\u25be' : '\u25b8'}{' '}
+                    {t('settings.target.uvm2.advanced', 'Advanced (build flags)')}
+                    {!uvm2Adv && uvm2FlagsResumen && (
+                      <span className="uvm2-advanced-badge">{uvm2FlagsResumen}</span>
+                    )}
+                  </button>
+
+                  {uvm2Adv && (
+                    <div className="uvm2-advanced-body">
+                      <label className="settings-checkbox">
+                        <input type="checkbox" checked={uvm2DualCore}
+                               onChange={e => setUvm2DualCore(e.target.checked)} />
+                        <span>{t('settings.target.uvm2.dualCore', 'Dual core')}
+                          <small> — UVM2_DUAL_CORE. Off = one core does everything.</small>
+                        </span>
+                      </label>
+
+                      <label className="settings-checkbox">
+                        <input type="checkbox" checked={uvm2PioStream}
+                               onChange={e => setUvm2PioStream(e.target.checked)} />
+                        <span>{t('settings.target.uvm2.pioStream', 'PIO + DMA bus stream')}
+                          <small> — UVM2_PIO_STREAM. Off = the CPU drives the bus through SIO.</small>
+                        </span>
+                      </label>
+
+                      <label className="uvm2-advanced-field">
+                        <span>{t('settings.target.uvm2.hz', 'Refresh (UVM2_HZ)')}</span>
+                        <input type="text" placeholder="50 = default,  0 = no cap,  60"
+                               value={uvm2Hz} onChange={e => setUvm2Hz(e.target.value)}
+                               spellCheck={false} />
+                      </label>
+
+                      <label className="uvm2-advanced-field">
+                        <span>{t('settings.target.uvm2.extra', 'Extra make variables')}</span>
+                        <input type="text"
+                               placeholder="e.g.  MERGE=0 DK_OCLUSION=0 UVM2_CMD_CAPACITY=12288"
+                               value={uvm2ExtraFlags}
+                               onChange={e => setUvm2ExtraFlags(e.target.value)}
+                               spellCheck={false} />
+                      </label>
+
+                      <p className="uvm2-advanced-note">
+                        {t('settings.target.uvm2.advNote',
+                           'Appended to the build command as make variables. Defaults (dual core + PIO/DMA) are the project baseline — change them to compare builds on the console, not as a permanent setting.')}
+                      </p>
+                      {uvm2FlagsResumen && (
+                        <code className="uvm2-advanced-preview">make ... {uvm2FlagsResumen}</code>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

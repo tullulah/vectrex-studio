@@ -1,0 +1,2 @@
+# unmatched sprite frames — cumulative; regenerate vecs with
+# tools/autotrace.py --catalog after capturing them in dumps/

@@ -1,0 +1,54 @@
+{
+ "version": "1.0",
+ "name": "auto_nick_0348",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 0,
+       "y": 1
+      },
+      {
+       "x": 0,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -5
+      },
+      {
+       "x": -8,
+       "y": 5
+      },
+      {
+       "x": -4,
+       "y": 5
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAoklEQVR4nNWTyw2EMAxEJ2iLSA0pgytl0BJXWtkyXANdGI2ThSDCYo6M5Ciy7JfJD3i9AgBt5NzqOIwcZMtpA/rHgUAjFMs3J2IPDClgdrrp2FyLoPno5n4Lv5UZNmffDvEBai0pAKmczY2LEEW1CaDoIuW6K8Dn1PBYAi0u9pAco/NKlYUnyIP3YIUGaLnxAg5OpgzzAOwvlOuy11fPq5pLrfLLUAojQgyqAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

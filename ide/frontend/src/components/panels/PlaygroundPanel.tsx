@@ -136,7 +136,7 @@ export function PlaygroundPanel() {
   const [draggingLevelTransitionEndpoint, setDraggingLevelTransitionEndpoint] = useState<
     { transIdx: number; endpoint: 'from' | 'to' } | null
   >(null);
-  const [screenBackgrounds, setScreenBackgrounds] = useState<{ screenIndex: number; imagePath: string; offsetY?: number }[]>([]);
+  const [screenBackgrounds, setScreenBackgrounds] = useState<{ screenIndex: number; imagePath: string; offsetY?: number; keepAspect?: boolean }[]>([]);
   const [availableImages, setAvailableImages] = useState<string[]>([]);
   // Level-wide walkable areas + transitions. Enemies whose own `walkable_areas`
   // is `undefined` inherit these at codegen time (and at preview time via the
@@ -1929,10 +1929,21 @@ export function PlaygroundPanel() {
             // screen with the gaps between shapes carried as intensity-0 segments (see
             // tools/dk_fusiona_paths.py). Drawing the path with a single opacity paints
             // those dark hops as if they were lines. Each segment gets its own.
-            if (path.intensities && path.intensities.length === path.points.length - 1) {
+            // LA MISMA REGLA QUE EL COMPILADOR, no una parecida. Esto exigia que la lista
+            // midiese EXACTAMENTE points-1 y seis caminos del 100m traen dos entradas de
+            // mas: se caian al camino de una sola opacidad y sus saltos a oscuras salian
+            // solidos, que es justo donde la intensidad por segmento importaba. La cadena
+            // de compilacion siempre fue tolerante — recorta a los tramos que hay y
+            // rellena lo que falte con la intensidad del camino. Dos implementaciones del
+            // mismo modelo que no coinciden son dos modelos, y aqui el dibujo del editor
+            // mentia sobre lo que la consola iba a hacer.
+            if (path.intensities && path.intensities.length > 0) {
+              const seg = path.points.length - 1;
+              const ints = path.intensities.slice(0, seg);
+              while (ints.length < seg) ints.push(path.intensity ?? 127);
               return path.points.slice(0, -1).map((p, i) => {
                 const q = path.points[i + 1];
-                const v = dim(path.intensities![i]);
+                const v = dim(ints[i]);
                 return (
                   <line
                     key={`${layerIdx}-${pathIdx}-${i}`}
@@ -2602,7 +2613,7 @@ export function PlaygroundPanel() {
                   width={192 * widthScreens}
                   height={256}
                   opacity={0.25}
-                  preserveAspectRatio="none"
+                  preserveAspectRatio={sb.keepAspect ? 'xMidYMid meet' : 'none'}
                   clipPath={`url(#sbgclip_${sb.screenIndex})`}
                   style={{ pointerEvents: 'none' }}
                 />
@@ -4141,6 +4152,23 @@ export function PlaygroundPanel() {
                               title="Reset offset"
                               style={{ background: 'none', border: 'none', color: '#446644', cursor: 'pointer', fontSize: '10px', padding: '0 2px' }}
                             >↺</button>
+                            <label
+                              title="Keep image aspect ratio (don't stretch to fill the screen)"
+                              style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '9px', color: '#556655', cursor: 'pointer', flexShrink: 0 }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={sb.keepAspect ?? false}
+                                onChange={e => {
+                                  const checked = e.target.checked;
+                                  setScreenBackgrounds(prev => prev.map(s =>
+                                    s.screenIndex === i ? { ...s, keepAspect: checked } : s
+                                  ));
+                                }}
+                                style={{ accentColor: '#446644', width: '10px', height: '10px' }}
+                              />
+                              aspect
+                            </label>
                           </div>
                         )}
                       </div>

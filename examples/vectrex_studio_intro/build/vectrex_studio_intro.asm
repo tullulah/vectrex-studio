@@ -1,3666 +1,2019 @@
-; VPy M6809 Assembly (Vectrex)
-; ROM: 32768 bytes
-
-
-    ORG $0000
-
-;***************************************************************************
-; DEFINE SECTION
-;***************************************************************************
-    INCLUDE "VECTREX.I"
-
-;***************************************************************************
-; CARTRIDGE HEADER
-;***************************************************************************
-    FCC "g GCE 2025"
-    FCB $80                 ; String terminator
-    FDB music1              ; Music pointer
-    FCB $F8,$50,$20,$BB     ; Height, Width, Rel Y, Rel X
-    FCC "VECTREX STUDIO"
-    FCB $80                 ; String terminator
-    FCB 0                   ; End of header
-
-;***************************************************************************
-; CODE SECTION
-;***************************************************************************
-
-START:
-    LDA #$D0
-    TFR A,DP        ; Set Direct Page for BIOS
-    CLR $C80E        ; Initialize Vec_Prev_Btns
-    LDA #$80
-    STA VIA_t1_cnt_lo
-    LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
-    TFR X,S
-    JSR $F533        ; Init_Music_Buf: init BIOS sound work buffer at Vec_Default_Stk
-    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
-
-    ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
-    LDA #0
-    STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
-    ; Initialize audio system variables to prevent random noise on startup
-    CLR >SFX_ACTIVE         ; Mark SFX as inactive (0=off)
-    LDD #$0000
-    STD >SFX_PTR            ; Clear SFX pointer
-    STA >PSG_MUSIC_BANK     ; Bank 0 for music (prevents garbage bank switch in emulator)
-    STA >SFX_BANK           ; Bank 0 for SFX (prevents garbage bank switch in emulator)
-    CLR >PSG_IS_PLAYING     ; No music playing at startup
-    CLR >PSG_DELAY_FRAMES   ; Clear delay counter
-    STD >PSG_MUSIC_PTR      ; Clear music pointer (D is already 0)
-    STD >PSG_MUSIC_START    ; Clear loop pointer
-    JMP MAIN
-
-;***************************************************************************
-; === RAM VARIABLE DEFINITIONS ===
-;***************************************************************************
-RESULT               EQU $C880+$00   ; Main result temporary (2 bytes)
-TMPVAL               EQU $C880+$02   ; Temporary value storage (alias for RESULT) (2 bytes)
-TMPPTR               EQU $C880+$04   ; Temporary pointer (2 bytes)
-TMPPTR2              EQU $C880+$06   ; Temporary pointer 2 (2 bytes)
-VPY_MOVE_X           EQU $C880+$08   ; MOVE() current X offset (signed byte, 0 by default) (1 bytes)
-VPY_MOVE_Y           EQU $C880+$09   ; MOVE() current Y offset (signed byte, 0 by default) (1 bytes)
-TEMP_YX              EQU $C880+$0A   ; Temporary Y/X coordinate storage (2 bytes)
-BTN_PREV_STATE       EQU $C880+$0C   ; Button edge-detection: holds bit 7,6,5,4 = prev press state for btn 1,2,3,4 (1 bytes)
-BTN_RAW              EQU $C880+$0D   ; Raw PSG reg 14 (active-LOW: 0=pressed, 1=released) - Vectorblade pattern (1 bytes)
-DRAW_VEC_INTENSITY   EQU $C880+$0E   ; Vector intensity override (0=use vector data) (1 bytes)
-DRAW_VEC_X_HI        EQU $C880+$0F   ; Vector draw X high byte (16-bit screen_x) (1 bytes)
-DRAW_VEC_X           EQU $C880+$10   ; Vector draw X offset (1 bytes)
-DRAW_VEC_Y           EQU $C880+$11   ; Vector draw Y offset (1 bytes)
-MIRROR_PAD           EQU $C880+$12   ; Safety padding to prevent MIRROR flag corruption (16 bytes)
-MIRROR_X             EQU $C880+$22   ; X mirror flag (0=normal, 1=flip) (1 bytes)
-MIRROR_Y             EQU $C880+$23   ; Y mirror flag (0=normal, 1=flip) (1 bytes)
-SLR_CUR_X            EQU $C880+$24   ; DRAW_VECTOR: clamped (visible) beam X for clipping (1 bytes)
-SLR_TRUE_X           EQU $C880+$25   ; DRAW_VECTOR: 16-bit unclamped abs_x for line clipping (2 bytes)
-DRAW_T1_SCALED       EQU $C880+$27   ; DRAW_VECTOR: T1 scale ($7F default for non-SHOW_LEVEL) (1 bytes)
-SDCP_ABS_Y           EQU $C880+$28   ; DRAW_VECTOR: abs_y temporary for SDCP (cannot share TMPVAL — would corrupt SHOW_LEVEL's top_screen between layers) (1 bytes)
-ROT3D_AX             EQU $C880+$29   ; 3D raw angle X (0-127) (1 bytes)
-ROT3D_AY             EQU $C880+$2A   ; 3D raw angle Y (0-127) (1 bytes)
-ROT3D_AZ             EQU $C880+$2B   ; 3D raw angle Z (0-127) (1 bytes)
-ROT3D_COS_X          EQU $C880+$2C   ; 3D cos angle offset for X axis: (AX+32)&0x7F (1 bytes)
-ROT3D_COS_Y          EQU $C880+$2D   ; 3D cos angle offset for Y axis: (AY+32)&0x7F (1 bytes)
-ROT3D_COS_Z          EQU $C880+$2E   ; 3D cos angle offset for Z axis: (AZ+32)&0x7F (1 bytes)
-ROT3D_OX             EQU $C880+$2F   ; 3D draw X offset (1 bytes)
-ROT3D_OY             EQU $C880+$30   ; 3D draw Y offset (1 bytes)
-ROT3D_PC             EQU $C880+$31   ; 3D path/vertex count remaining (1 bytes)
-ROT3D_PT_REM         EQU $C880+$32   ; 3D remaining points in current path (1 bytes)
-ROT3D_CLOSED         EQU $C880+$33   ; 3D path closed flag (1 bytes)
-ROT3D_RX             EQU $C880+$34   ; 3D raw x (1 bytes)
-ROT3D_RY             EQU $C880+$35   ; 3D raw y (1 bytes)
-ROT3D_RZ             EQU $C880+$36   ; 3D raw z (1 bytes)
-ROT3D_Y1             EQU $C880+$37   ; 3D intermediate y after X-axis rotation (1 bytes)
-ROT3D_Z1             EQU $C880+$38   ; 3D intermediate z after X-axis rotation (1 bytes)
-ROT3D_X2             EQU $C880+$39   ; 3D intermediate x after Y-axis rotation (1 bytes)
-ROT3D_SCR_X          EQU $C880+$3A   ; 3D final screen x (1 bytes)
-ROT3D_SCR_Y          EQU $C880+$3B   ; 3D final screen y (1 bytes)
-ROT3D_PREV_X         EQU $C880+$3C   ; 3D previous screen x (1 bytes)
-ROT3D_PREV_Y         EQU $C880+$3D   ; 3D previous screen y (1 bytes)
-ROT3D_FIRST_X        EQU $C880+$3E   ; 3D first screen x (for closed path) (1 bytes)
-ROT3D_FIRST_Y        EQU $C880+$3F   ; 3D first screen y (for closed path) (1 bytes)
-ROT3D_TEMP           EQU $C880+$40   ; 3D rotation temp 1 (1 bytes)
-ROT3D_TEMP2          EQU $C880+$41   ; 3D rotation temp 2 (1 bytes)
-ROT3D_VBUF           EQU $C880+$42   ; 3D rotated vertex cache (127 verts × 2 bytes: x',y') (254 bytes)
-DRAW_LINE_ARGS       EQU $C880+$140   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$14A   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$14C   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$14E   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$14F   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$150   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$152   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-TEXT_SCALE_H         EQU $C880+$154   ; Character height for Print_Str_d (default $F8 = -8, normal) (1 bytes)
-TEXT_SCALE_W         EQU $C880+$155   ; Character width for Print_Str_d (default $48 = 72, normal) (1 bytes)
-DRAW_SCALE           EQU $C880+$156   ; Current T1 scale for Draw_Sync_List_At_With_Mirrors ($7F=normal) (1 bytes)
-VAR_ARG0             EQU $C880+$157   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $C880+$159   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $C880+$15B   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $C880+$15D   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $C880+$15F   ; Function argument 4 (16-bit) (2 bytes)
-VAR_ARG5             EQU $C880+$161   ; Function argument 5 (16-bit) (2 bytes)
-VAR_ARG6             EQU $C880+$163   ; Function argument 6 (16-bit) (2 bytes)
-VAR_ARG7             EQU $C880+$165   ; Function argument 7 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $C880+$167   ; Current ROM bank ID (multibank tracking) (1 bytes)
-VAR_STATE            EQU $C880+$168   ; User variable: STATE (2 bytes)
-VAR_MUSIC_ON         EQU $C880+$16A   ; User variable: MUSIC_ON (2 bytes)
-VAR_FADE             EQU $C880+$16C   ; User variable: FADE (2 bytes)
-VAR_LOGO_ROT         EQU $C880+$16E   ; User variable: LOGO_ROT (2 bytes)
-VAR_T                EQU $C880+$170   ; User variable: T (2 bytes)
-VAR_SEL              EQU $C880+$172   ; User variable: SEL (2 bytes)
-VAR_NAV_LATCH        EQU $C880+$174   ; User variable: NAV_LATCH (2 bytes)
-VAR_FADE_MAX         EQU $C880+$176   ; User variable: FADE_MAX (2 bytes)
-VAR_SPIN_FRAMES      EQU $C880+$178   ; User variable: SPIN_FRAMES (2 bytes)
-VAR_MENU_START       EQU $C880+$17A   ; User variable: MENU_START (2 bytes)
-VAR_N                EQU $C880+$17C   ; User variable: N (2 bytes)
-VAR_TOP              EQU $C880+$17E   ; User variable: TOP (2 bytes)
-VAR_ROW              EQU $C880+$180   ; User variable: ROW (2 bytes)
-VAR_I                EQU $C880+$182   ; User variable: I (2 bytes)
-VAR_Y                EQU $C880+$184   ; User variable: Y (2 bytes)
-VAR_BRIGHT           EQU $C880+$186   ; User variable: BRIGHT (2 bytes)
-PSG_MUSIC_PTR        EQU $C880+$188   ; PSG music data pointer (2 bytes)
-PSG_MUSIC_START      EQU $C880+$18A   ; PSG music start pointer (for loops) (2 bytes)
-PSG_MUSIC_ACTIVE     EQU $C880+$18C   ; PSG music active flag (1 bytes)
-PSG_IS_PLAYING       EQU $C880+$18D   ; PSG playing flag (1 bytes)
-PSG_DELAY_FRAMES     EQU $C880+$18E   ; PSG frame delay counter (1 bytes)
-PSG_MUSIC_BANK       EQU $C880+$18F   ; PSG music bank ID (for multibank) (1 bytes)
-SFX_PTR              EQU $C880+$190   ; SFX data pointer (2 bytes)
-SFX_ACTIVE           EQU $C880+$192   ; SFX active flag (1 bytes)
-SFX_BANK             EQU $C880+$193   ; SFX bank ID (for multibank) (1 bytes)
-
-;***************************************************************************
-; MAIN PROGRAM
-;***************************************************************************
-
-MAIN:
-    ; Initialize global variables
-    CLR VPY_MOVE_X        ; MOVE offset defaults to 0
-    CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
-    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
-    LDA #$F8
-    STA TEXT_SCALE_H      ; Default height = -8 (normal size)
-    LDA #$48
-    STA TEXT_SCALE_W      ; Default width = 72 (normal size)
-    LDA #$7F
-    STA DRAW_SCALE        ; Default T1 scale = $7F (127 = full BIOS scale)
-    LDD #0
-    STD VAR_STATE
-    LDD #0
-    STD VAR_MUSIC_ON
-    LDD #0
-    STD VAR_FADE
-    LDD #0
-    STD VAR_LOGO_ROT
-    LDD #0
-    STD VAR_T
-    LDD #0
-    STD VAR_SEL
-    LDD #0
-    STD VAR_NAV_LATCH
-    LDD #80
-    STD VAR_FADE_MAX
-    LDD #128
-    STD VAR_SPIN_FRAMES
-    LDD #250
-    STD VAR_MENU_START
-    ; === Initialize Joystick (one-time setup) ===
-    JSR $F1AF    ; DP_to_C8 (required for RAM access)
-    CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
-    LDA #$01     ; CRITICAL: Resolution threshold (power of 2: $40=fast, $01=accurate)
-    STA $C81A    ; Vec_Joy_Resltn (loop terminates when B=this value after LSRBs)
-    LDA #$01
-    STA $C81F    ; Vec_Joy_Mux_1_X (enable X axis reading)
-    LDA #$03
-    STA $C820    ; Vec_Joy_Mux_1_Y (enable Y axis reading)
-    LDA #$00
-    STA $C821    ; Vec_Joy_Mux_2_X (disable joystick 2 - CRITICAL!)
-    STA $C822    ; Vec_Joy_Mux_2_Y (disable joystick 2 - saves cycles)
-    ; Mux configured - J1_X()/J1_Y() can now be called
-
-    ; Prime BIOS button state at startup
-    JSR $F1BA    ; Read_Btns: reads PSG reg14 -> $C80F, $C811, $C80E
-    ; Call main() for initialization
-; VPy_LINE:30
-    ; TODO: Statement Pass { source_line: 30 }
-    CLR >$C811  ; Force-clear Vec_Buttons before first loop() frame
-
-.MAIN_LOOP:
-    JSR LOOP_BODY
-    LBRA .MAIN_LOOP   ; Use long branch for multibank support
-
-LOOP_BODY:
-    JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
-    JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
-; VPy_LINE:34
-    LDD #1
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_T
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_T
-; VPy_LINE:37
-    LDD >VAR_MUSIC_ON
-    CMPD #0
-    LBNE IF_NEXT_1
-; VPy_LINE:38
-    LDD #1
-    STD VAR_MUSIC_ON
-; VPy_LINE:39
-; NATIVE_CALL: PLAY_MUSIC at line 39
-    ; PLAY_MUSIC("jingle") - play music asset (index=0)
-    LDX #_JINGLE_MUSIC  ; Load music data pointer
-    JSR PLAY_MUSIC_RUNTIME
-    LDD #0
-    STD RESULT
-    LBRA IF_END_0
-IF_NEXT_1:
-IF_END_0:
-; VPy_LINE:42
-    LDD >VAR_STATE
-    CMPD #0
-    LBNE IF_NEXT_3
-; VPy_LINE:44
-    LDD >VAR_FADE_MAX
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_FADE
-    CMPD TMPVAL
-    LBLT .CMP_0_TRUE
-    LDD #0
-    LBRA .CMP_0_END
-.CMP_0_TRUE:
-    LDD #1
-.CMP_0_END:
-    LBEQ IF_NEXT_5
-; VPy_LINE:45
-    LDD #2
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_FADE
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_FADE
-    LBRA IF_END_4
-IF_NEXT_5:
-IF_END_4:
-; VPy_LINE:48
-    LDD >VAR_SPIN_FRAMES
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_T
-    CMPD TMPVAL
-    LBLT .CMP_1_TRUE
-    LDD #0
-    LBRA .CMP_1_END
-.CMP_1_TRUE:
-    LDD #1
-.CMP_1_END:
-    LBEQ IF_NEXT_7
-; VPy_LINE:49
-    LDD #2
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_LOGO_ROT
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_LOGO_ROT
-; VPy_LINE:50
-    LDD #128
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_LOGO_ROT
-    CMPD TMPVAL
-    LBGE .CMP_2_TRUE
-    LDD #0
-    LBRA .CMP_2_END
-.CMP_2_TRUE:
-    LDD #1
-.CMP_2_END:
-    LBEQ IF_NEXT_9
-; VPy_LINE:51
-    LDD #128
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_LOGO_ROT
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD VAR_LOGO_ROT
-    LBRA IF_END_8
-IF_NEXT_9:
-IF_END_8:
-    LBRA IF_END_6
-IF_NEXT_7:
-; VPy_LINE:53
-    LDD #0
-    STD VAR_LOGO_ROT
-IF_END_6:
-; VPy_LINE:55
-; NATIVE_CALL: SET_INTENSITY at line 55
-    ; SET_INTENSITY: Set drawing intensity
-    LDD >VAR_FADE
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-; VPy_LINE:56
-; NATIVE_CALL: PRINT_TEXT at line 56
-    ; PRINT_TEXT: Print text at position
-    LDD #-25
-    STD >VAR_ARG0
-    LDD #-50
-    STD >VAR_ARG1
-    LDX #PRINT_TEXT_STR_2456395222      ; Pointer to string in helpers bank
-    STX >VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-; VPy_LINE:59
-; NATIVE_CALL: SET_INTENSITY at line 59
-    ; SET_INTENSITY: Set drawing intensity
-    LDD >VAR_FADE
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-; VPy_LINE:60
-; NATIVE_CALL: DRAW_VECTOR_3D at line 60
-    ; DRAW_VECTOR_3D: Draw vector asset with 3D rotation
-    ; Asset: logo (3D rotation)
-    LDD #0
-    STB >ROT3D_AX       ; angle X (0-127)
-    LDD >VAR_LOGO_ROT
-    STB >ROT3D_AY       ; angle Y (0-127)
-    LDD #0
-    STB >ROT3D_AZ       ; angle Z (0-127)
-    LDD #0
-    STB >ROT3D_OX       ; screen X offset
-    LDD #34
-    STB >ROT3D_OY       ; screen Y offset
-    LDX #_LOGO_3D_DATA  ; pointer to 3D data table
-    JSR DRAW_VECTOR_3D_RUNTIME
-    LDD #0
-    STD RESULT
-; VPy_LINE:63
-; NATIVE_CALL: SET_INTENSITY at line 63
-    ; SET_INTENSITY: Set drawing intensity
-    LDD >VAR_FADE
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-; VPy_LINE:64
-; NATIVE_CALL: DRAW_VECTOR at line 64
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: text (index=2, 13 paths)
-    LDD #0
-    STA TMPPTR2      ; save high byte of 16-bit screen_x
-    TFR B,A
-    SEX              ; A = sign-extend of B (0x00 or 0xFF)
-    CMPA TMPPTR2     ; vs actual high byte
-    LBNE DRVEC_SKIP_0          ; out of 8-bit range — skip draw
-    TFR B,A
-    STA TMPPTR       ; save 8-bit x
-    LDD #-40
-    TFR B,A          ; Y position (8-bit signed in A)
-    STA TMPPTR+1     ; Save Y to temporary storage
-    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)
-    STA DRAW_VEC_X
-    LDB #0
-    TSTA
-    BPL .sx_pos_0
-    LDB #$FF
-.sx_pos_0:
-    STB DRAW_VEC_X_HI
-    LDA TMPPTR+1     ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)
-    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDX #_TEXT_PATH0  ; Load path 0
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH1  ; Load path 1
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH2  ; Load path 2
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH3  ; Load path 3
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH4  ; Load path 4
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH5  ; Load path 5
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH6  ; Load path 6
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH7  ; Load path 7
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH8  ; Load path 8
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH9  ; Load path 9
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH10  ; Load path 10
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH11  ; Load path 11
-    JSR Draw_Sync_List_At_With_Mirrors
-    LDX #_TEXT_PATH12  ; Load path 12
-    JSR Draw_Sync_List_At_With_Mirrors
-    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-DRVEC_SKIP_0:
-    LDD #0
-    STD RESULT
-; VPy_LINE:69
-    LDD >VAR_MENU_START
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_T
-    CMPD TMPVAL
-    LBGE .CMP_3_TRUE
-    LDD #0
-    LBRA .CMP_3_END
-.CMP_3_TRUE:
-    LDD #1
-.CMP_3_END:
-    LBEQ IF_NEXT_11
-; VPy_LINE:70
-    LDD #1
-    STD VAR_STATE
-    LBRA IF_END_10
-IF_NEXT_11:
-IF_END_10:
-    LBRA IF_END_2
-IF_NEXT_3:
-    LDD >VAR_STATE
-    CMPD #1
-    LBNE IF_END_2
-; VPy_LINE:83
-; NATIVE_CALL: SET_INTENSITY at line 83
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #80
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-; VPy_LINE:84
-; NATIVE_CALL: SET_TEXT_SIZE at line 84
-    LDD #4
-    STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
-    NEGB            ; B = -n -> TEXT_SCALE_H
-    STB >TEXT_SCALE_H
-    LDB TMPPTR2+1   ; Reload n (from TMPPTR2, not RESULT)
-    ASLB            ; n*2
-    ASLB            ; n*4
-    ASLB            ; n*8
-    ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
-    STB >TEXT_SCALE_W
-; VPy_LINE:85
-; NATIVE_CALL: PRINT_TEXT at line 85
-    ; PRINT_TEXT: Print text at position
-    LDD #-10
-    STD >VAR_ARG0
-    LDD #100
-    STD >VAR_ARG1
-    LDX #PRINT_TEXT_STR_67582625      ; Pointer to string in helpers bank
-    STX >VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-; VPy_LINE:90
-; NATIVE_CALL: SD_FILE_COUNT at line 90
-    LDD #24          ; SD_FILE_COUNT (sim: 24 file(s))
-    STD RESULT
-    STD VAR_N
-; VPy_LINE:91
-    LDD >VAR_N
-    CMPD #0
-    LBNE IF_NEXT_13
-; VPy_LINE:95
-; NATIVE_CALL: SET_INTENSITY at line 95
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #80
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-; VPy_LINE:96
-; NATIVE_CALL: SET_TEXT_SIZE at line 96
-    LDD #4
-    STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
-    NEGB            ; B = -n -> TEXT_SCALE_H
-    STB >TEXT_SCALE_H
-    LDB TMPPTR2+1   ; Reload n (from TMPPTR2, not RESULT)
-    ASLB            ; n*2
-    ASLB            ; n*4
-    ASLB            ; n*8
-    ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
-    STB >TEXT_SCALE_W
-; VPy_LINE:97
-; NATIVE_CALL: PRINT_TEXT at line 97
-    ; PRINT_TEXT: Print text at position
-    LDD #-70
-    STD >VAR_ARG0
-    LDD #0
-    STD >VAR_ARG1
-    LDX #PRINT_TEXT_STR_74421520      ; Pointer to string in helpers bank
-    STX >VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-    LBRA IF_END_12
-IF_NEXT_13:
-; VPy_LINE:103
-    LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
-    BITA #$01
-    BNE .J1B1_1_ON
-    LDD #0
-    BRA .J1B1_1_END
-.J1B1_1_ON:
-    LDD #1
-.J1B1_1_END:
-    STD RESULT
-    CMPD #1
-    LBNE IF_NEXT_15
-; VPy_LINE:104
-    LDD >VAR_NAV_LATCH
-    CMPD #0
-    LBNE IF_NEXT_17
-; VPy_LINE:105
-    LDD #1
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_SEL
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD VAR_SEL
-; VPy_LINE:106
-    LDD #1
-    STD VAR_NAV_LATCH
-    LBRA IF_END_16
-IF_NEXT_17:
-IF_END_16:
-    LBRA IF_END_14
-IF_NEXT_15:
-    LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
-    BITA #$02
-    BNE .J1B2_2_ON
-    LDD #0
-    BRA .J1B2_2_END
-.J1B2_2_ON:
-    LDD #1
-.J1B2_2_END:
-    STD RESULT
-    CMPD #1
-    LBNE IF_NEXT_18
-; VPy_LINE:108
-    LDD >VAR_NAV_LATCH
-    CMPD #0
-    LBNE IF_NEXT_20
-; VPy_LINE:109
-    LDD #1
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_SEL
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_SEL
-; VPy_LINE:110
-    LDD #1
-    STD VAR_NAV_LATCH
-    LBRA IF_END_19
-IF_NEXT_20:
-IF_END_19:
-    LBRA IF_END_14
-IF_NEXT_18:
-; VPy_LINE:112
-    LDD #0
-    STD VAR_NAV_LATCH
-IF_END_14:
-; VPy_LINE:113
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SEL
-    CMPD TMPVAL
-    LBLT .CMP_4_TRUE
-    LDD #0
-    LBRA .CMP_4_END
-.CMP_4_TRUE:
-    LDD #1
-.CMP_4_END:
-    LBEQ IF_NEXT_22
-; VPy_LINE:114
-    LDD #0
-    STD VAR_SEL
-    LBRA IF_END_21
-IF_NEXT_22:
-IF_END_21:
-; VPy_LINE:115
-    LDD >VAR_N
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_SEL
-    CMPD TMPVAL
-    LBGE .CMP_5_TRUE
-    LDD #0
-    LBRA .CMP_5_END
-.CMP_5_TRUE:
-    LDD #1
-.CMP_5_END:
-    LBEQ IF_NEXT_24
-; VPy_LINE:116
-    LDD #1
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_N
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD VAR_SEL
-    LBRA IF_END_23
-IF_NEXT_24:
-IF_END_23:
-; VPy_LINE:121
-    LDA >$C80F   ; Vec_Btns_1: bit3=1 means btn4 pressed
-    BITA #$08
-    BNE .J1B4_3_ON
-    LDD #0
-    BRA .J1B4_3_END
-.J1B4_3_ON:
-    LDD #1
-.J1B4_3_END:
-    STD RESULT
-    CMPD #1
-    LBNE IF_NEXT_26
-; VPy_LINE:122
-    LDD >VAR_SEL
-    STD VAR_ARG0
-    JSR LAUNCH_GAME
-    LBRA IF_END_25
-IF_NEXT_26:
-IF_END_25:
-; VPy_LINE:125
-    LDD #0
-    STD VAR_TOP
-; VPy_LINE:126
-    LDD #5
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_N
-    CMPD TMPVAL
-    LBGT .CMP_6_TRUE
-    LDD #0
-    LBRA .CMP_6_END
-.CMP_6_TRUE:
-    LDD #1
-.CMP_6_END:
-    LBEQ IF_NEXT_28
-; VPy_LINE:127
-    LDD #2
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_SEL
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD VAR_TOP
-; VPy_LINE:128
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_TOP
-    CMPD TMPVAL
-    LBLT .CMP_7_TRUE
-    LDD #0
-    LBRA .CMP_7_END
-.CMP_7_TRUE:
-    LDD #1
-.CMP_7_END:
-    LBEQ IF_NEXT_30
-; VPy_LINE:129
-    LDD #0
-    STD VAR_TOP
-    LBRA IF_END_29
-IF_NEXT_30:
-IF_END_29:
-; VPy_LINE:130
-    LDD #5
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_N
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_TOP
-    CMPD TMPVAL
-    LBGT .CMP_8_TRUE
-    LDD #0
-    LBRA .CMP_8_END
-.CMP_8_TRUE:
-    LDD #1
-.CMP_8_END:
-    LBEQ IF_NEXT_32
-; VPy_LINE:131
-    LDD #5
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_N
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD VAR_TOP
-    LBRA IF_END_31
-IF_NEXT_32:
-IF_END_31:
-    LBRA IF_END_27
-IF_NEXT_28:
-IF_END_27:
-; VPy_LINE:134
-; NATIVE_CALL: SET_TEXT_SIZE at line 134
-    LDD #4
-    STD TMPPTR2     ; Save n (TMPPTR2+1 = n)
-    NEGB            ; B = -n -> TEXT_SCALE_H
-    STB >TEXT_SCALE_H
-    LDB TMPPTR2+1   ; Reload n (from TMPPTR2, not RESULT)
-    ASLB            ; n*2
-    ASLB            ; n*4
-    ASLB            ; n*8
-    ADDB TMPPTR2+1  ; n*8 + n = n*9 -> TEXT_SCALE_W
-    STB >TEXT_SCALE_W
-; VPy_LINE:135
-    LDD #0
-    STD VAR_ROW
-; VPy_LINE:136
-    LDD >VAR_TOP
-    STD VAR_I
-; VPy_LINE:137
-WH_33: ; while start
-    LDD >VAR_N
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_I
-    CMPD TMPVAL
-    LBLT .CMP_10_TRUE
-    LDD #0
-    LBRA .CMP_10_END
-.CMP_10_TRUE:
-    LDD #1
-.CMP_10_END:
-    LBEQ .LOGIC_9_FALSE
-    LDD #5
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_ROW
-    CMPD TMPVAL
-    LBLT .CMP_11_TRUE
-    LDD #0
-    LBRA .CMP_11_END
-.CMP_11_TRUE:
-    LDD #1
-.CMP_11_END:
-    LBEQ .LOGIC_9_FALSE
-    LDD #1
-    LBRA .LOGIC_9_END
-.LOGIC_9_FALSE:
-    LDD #0
-.LOGIC_9_END:
-    LBEQ WH_END_34
-; VPy_LINE:138
-    LDD #26
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_ROW
-    TFR D,X             ; X = LEFT
-    LDD TMPVAL          ; D = RIGHT
-    JSR MUL16           ; D = X * D
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD #55
-    SUBD TMPVAL         ; D = LEFT - RIGHT
-    STD VAR_Y
-; VPy_LINE:139
-    LDD #40
-    STD VAR_BRIGHT
-; VPy_LINE:140
-    LDD >VAR_SEL
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_I
-    CMPD TMPVAL
-    LBEQ .CMP_12_TRUE
-    LDD #0
-    LBRA .CMP_12_END
-.CMP_12_TRUE:
-    LDD #1
-.CMP_12_END:
-    LBEQ IF_NEXT_36
-; VPy_LINE:141
-    LDD #80
-    STD VAR_BRIGHT
-    LBRA IF_END_35
-IF_NEXT_36:
-IF_END_35:
-; VPy_LINE:142
-; NATIVE_CALL: SET_INTENSITY at line 142
-    ; SET_INTENSITY: Set drawing intensity
-    LDD >VAR_BRIGHT
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-; VPy_LINE:143
-; NATIVE_CALL: PRINT_TEXT at line 143
-    ; PRINT_TEXT: Print text at position
-    LDD #-85
-    STD >VAR_ARG0
-    LDD >VAR_Y
-    STD >VAR_ARG1
-    LDD >VAR_I
-    ASLB
-    ROLA            ; D = i*2 (16-bit ptr stride)
-    LDX #SD_NAME_TABLE
-    LEAX D,X        ; X = &SD_NAME_TABLE[i]
-    LDD ,X          ; D = ptr to name[i]
-    STD RESULT
-    STD >VAR_ARG2
-    JSR VECTREX_PRINT_TEXT
-    LDD #0
-    STD RESULT
-; VPy_LINE:144
-    LDD #1
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_I
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_I
-; VPy_LINE:145
-    LDD #1
-    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
-    LDD >VAR_ROW
-    ADDD TMPVAL         ; D = LEFT + RIGHT
-    STD VAR_ROW
-    LBRA WH_33
-WH_END_34: ; while end
-IF_END_12:
-; VPy_LINE:148
-; NATIVE_CALL: SET_INTENSITY at line 148
-    ; SET_INTENSITY: Set drawing intensity
-    LDD #80
-    TFR B,A         ; Intensity (8-bit) — B already holds low byte
-    STA DRAW_VEC_INTENSITY  ; DSWM reads this for every path drawn
-    LDD #0
-    STD RESULT
-; VPy_LINE:149
-; NATIVE_CALL: DRAW_VECTOR at line 149
-    ; DRAW_VECTOR: Draw vector asset at position
-    ; Asset: frame (index=0, 1 paths)
-    LDD #55
-    STA TMPPTR2      ; save high byte of 16-bit screen_x
-    TFR B,A
-    SEX              ; A = sign-extend of B (0x00 or 0xFF)
-    CMPA TMPPTR2     ; vs actual high byte
-    LBNE DRVEC_SKIP_4          ; out of 8-bit range — skip draw
-    TFR B,A
-    STA TMPPTR       ; save 8-bit x
-    LDD #20
-    TFR B,A          ; Y position (8-bit signed in A)
-    STA TMPPTR+1     ; Save Y to temporary storage
-    LDA TMPPTR       ; X position (8-bit signed, was cull-checked)
-    STA DRAW_VEC_X
-    LDB #0
-    TSTA
-    BPL .sx_pos_4
-    LDB #$FF
-.sx_pos_4:
-    STB DRAW_VEC_X_HI
-    LDA TMPPTR+1     ; Y position
-    STA DRAW_VEC_Y
-    CLR MIRROR_X
-    CLR MIRROR_Y
-    CLR DRAW_VEC_INTENSITY  ; Reset: use .vec intensities (not SHOW_LEVEL leftovers)
-    JSR $F1AA        ; DP_to_D0 (set DP=$D0 for VIA access)
-    LDX #_FRAME_PATH0  ; Load path 0
-    JSR Draw_Sync_List_At_With_Mirrors
-    JSR $F1AF        ; DP_to_C8 (restore DP for RAM access)
-DRVEC_SKIP_4:
-    LDD #0
-    STD RESULT
-; VPy_LINE:154
-    LDD #0
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
-    LDD >VAR_N
-    CMPD TMPVAL
-    LBGT .CMP_13_TRUE
-    LDD #0
-    LBRA .CMP_13_END
-.CMP_13_TRUE:
-    LDD #1
-.CMP_13_END:
-    LBEQ IF_NEXT_38
-; VPy_LINE:155
-    LDD >VAR_SEL
-    STD VAR_ARG0
-    LDD #52
-    STD VAR_ARG1
-    LDD #20
-    STD VAR_ARG2
-    LDD #40
-    STD VAR_ARG3
-    JSR DRAW_SD_PREVIEW
-    LBRA IF_END_37
-IF_NEXT_38:
-IF_END_37:
-    LBRA IF_END_2
-IF_END_2:
-    JSR AUDIO_UPDATE  ; Auto-injected: update music + SFX
-    RTS
-
-;***************************************************************************
-; EMBEDDED ASSETS (vectors, music, levels, SFX)
-;***************************************************************************
-
-; Generated from frame.vec (Malban Draw_Sync_List format)
-; Total paths: 1, points: 4
-; X bounds: min=-42, max=46, width=88
-; Center: (2, 0)
-
-_FRAME_WIDTH EQU 88
-_FRAME_HALF_WIDTH EQU 44
-_FRAME_HEIGHT EQU 78
-_FRAME_HALF_HEIGHT EQU 39
-_FRAME_CENTER_X EQU 2
-_FRAME_CENTER_Y EQU 0
-
-_FRAME_VECTORS:  ; Main entry (header + 1 path(s))
-    FDB 1               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _FRAME_PATH0        ; pointer to path 0
-
-_FRAME_PATH0:    ; Path 0
-    FCB 100              ; path0: intensity
-    FCB $D9,$2C,0,0        ; path0: header (y=-39, x=44)
-    FCB $FF,$4D,$00          ; flag=-1, dy=77, dx=0
-    FCB $FF,$01,$A8          ; flag=-1, dy=1, dx=-88
-    FCB $FF,$B2,$00          ; flag=-1, dy=-78, dx=0
-    FCB $FF,$00,$58          ; flag=-1, dy=0, dx=88
-    FCB 2                ; End marker (path complete)
-; Generated from logo.vec (Malban Draw_Sync_List format)
-; Total paths: 4, points: 36
-; X bounds: min=-34, max=33, width=67
-; Center: (0, 0)
-
-_LOGO_WIDTH EQU 67
-_LOGO_HALF_WIDTH EQU 33
-_LOGO_HEIGHT EQU 99
-_LOGO_HALF_HEIGHT EQU 49
-_LOGO_CENTER_X EQU 0
-_LOGO_CENTER_Y EQU 0
-
-_LOGO_VECTORS:  ; Main entry (header + 4 path(s))
-    FDB 4               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _LOGO_PATH0        ; pointer to path 0
-    FDB _LOGO_PATH1        ; pointer to path 1
-    FDB _LOGO_PATH2        ; pointer to path 2
-    FDB _LOGO_PATH3        ; pointer to path 3
-
-_LOGO_PATH0:    ; Path 0
-    FCB 85              ; path0: intensity
-    FCB $D6,$11,0,0        ; path0: header (y=-42, x=17)
-    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
-    FCB $FF,$00,$F8          ; flag=-1, dy=0, dx=-8
-    FCB $FF,$F7,$00          ; flag=-1, dy=-9, dx=0
-    FCB $FF,$00,$08          ; flag=-1, dy=0, dx=8
-    FCB 2                ; End marker (path complete)
-
-_LOGO_PATH1:    ; Path 1
-    FCB 85              ; path1: intensity
-    FCB $CE,$17,0,0        ; path1: header (y=-50, x=23)
-    FCB $FF,$14,$00          ; flag=-1, dy=20, dx=0
-    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
-    FCB $FF,$24,$00          ; flag=-1, dy=36, dx=0
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB $FF,$00,$E6          ; flag=-1, dy=0, dx=-26
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB $FF,$DC,$00          ; flag=-1, dy=-36, dx=0
-    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
-    FCB $FF,$EC,$00          ; flag=-1, dy=-20, dx=0
-    FCB $FF,$00,$1A          ; flag=-1, dy=0, dx=26
-    FCB 2                ; End marker (path complete)
-
-_LOGO_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $2B,$F0,0,0        ; path2: header (y=43, x=-16)
-    FCB $FF,$F4,$00          ; flag=-1, dy=-12, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$0C,$00          ; flag=-1, dy=12, dx=0
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB 2                ; End marker (path complete)
-
-_LOGO_PATH3:    ; Path 3
-    FCB 85              ; path3: intensity
-    FCB $31,$E8,0,0        ; path3: header (y=49, x=-24)
-    FCB $FF,$EE,$00          ; flag=-1, dy=-18, dx=0
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB $FF,$DB,$00          ; flag=-1, dy=-37, dx=0
-    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
-    FCB $FF,$F5,$00          ; flag=-1, dy=-11, dx=0
-    FCB $FF,$00,$18          ; flag=-1, dy=0, dx=24
-    FCB $FF,$09,$00          ; flag=-1, dy=9, dx=0
-    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
-    FCB $FF,$27,$00          ; flag=-1, dy=39, dx=0
-    FCB $FF,$00,$F6          ; flag=-1, dy=0, dx=-10
-    FCB $FF,$12,$00          ; flag=-1, dy=18, dx=0
-    FCB $FF,$00,$E6          ; flag=-1, dy=0, dx=-26
-    FCB 2                ; End marker (path complete)
-; Generated from text.vec (Malban Draw_Sync_List format)
-; Total paths: 13, points: 98
-; X bounds: min=-85, max=83, width=168
-; Center: (-1, 0)
-
-_TEXT_WIDTH EQU 168
-_TEXT_HALF_WIDTH EQU 84
-_TEXT_HEIGHT EQU 36
-_TEXT_HALF_HEIGHT EQU 18
-_TEXT_CENTER_X EQU -1
-_TEXT_CENTER_Y EQU 0
-
-_TEXT_VECTORS:  ; Main entry (header + 13 path(s))
-    FDB 13               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _TEXT_PATH0        ; pointer to path 0
-    FDB _TEXT_PATH1        ; pointer to path 1
-    FDB _TEXT_PATH2        ; pointer to path 2
-    FDB _TEXT_PATH3        ; pointer to path 3
-    FDB _TEXT_PATH4        ; pointer to path 4
-    FDB _TEXT_PATH5        ; pointer to path 5
-    FDB _TEXT_PATH6        ; pointer to path 6
-    FDB _TEXT_PATH7        ; pointer to path 7
-    FDB _TEXT_PATH8        ; pointer to path 8
-    FDB _TEXT_PATH9        ; pointer to path 9
-    FDB _TEXT_PATH10        ; pointer to path 10
-    FDB _TEXT_PATH11        ; pointer to path 11
-    FDB _TEXT_PATH12        ; pointer to path 12
-
-_TEXT_PATH0:    ; Path 0
-    FCB 85              ; path0: intensity
-    FCB $12,$FA,0,0        ; path0: header (y=18, x=-6)
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$EF,$00          ; flag=-1, dy=-17, dx=0
-    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
-    FCB $FF,$11,$00          ; flag=-1, dy=17, dx=0
-    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
-    FCB $FF,$04,$02          ; flag=-1, dy=4, dx=2
-    FCB $FF,$00,$EE          ; flag=-1, dy=0, dx=-18
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH1:    ; Path 1
-    FCB 85              ; path1: intensity
-    FCB $12,$F4,0,0        ; path1: header (y=18, x=-12)
-    FCB $FF,$00,$F1          ; flag=-1, dy=0, dx=-15
-    FCB $FF,$F6,$FA          ; flag=-1, dy=-10, dx=-6
-    FCB $FF,$F8,$03          ; flag=-1, dy=-8, dx=3
-    FCB $FF,$FD,$04          ; flag=-1, dy=-3, dx=4
-    FCB $FF,$00,$0E          ; flag=-1, dy=0, dx=14
-    FCB $FF,$03,$FD          ; flag=-1, dy=3, dx=-3
-    FCB $FF,$00,$F7          ; flag=-1, dy=0, dx=-9
-    FCB $FF,$02,$FD          ; flag=-1, dy=2, dx=-3
-    FCB $FF,$06,$FE          ; flag=-1, dy=6, dx=-2
-    FCB $FF,$04,$02          ; flag=-1, dy=4, dx=2
-    FCB $FF,$02,$03          ; flag=-1, dy=2, dx=3
-    FCB $FF,$00,$0A          ; flag=-1, dy=0, dx=10
-    FCB $FF,$04,$02          ; flag=-1, dy=4, dx=2
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH2:    ; Path 2
-    FCB 85              ; path2: intensity
-    FCB $0E,$12,0,0        ; path2: header (y=14, x=18)
-    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
-    FCB $FF,$00,$0F          ; flag=-1, dy=0, dx=15
-    FCB $FF,$FD,$03          ; flag=-1, dy=-3, dx=3
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB $FF,$FB,$FE          ; flag=-1, dy=-5, dx=-2
-    FCB $FF,$FF,$FD          ; flag=-1, dy=-1, dx=-3
-    FCB $FF,$F8,$05          ; flag=-1, dy=-8, dx=5
-    FCB $FF,$00,$FB          ; flag=-1, dy=0, dx=-5
-    FCB $FF,$08,$FC          ; flag=-1, dy=8, dx=-4
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$F8,$00          ; flag=-1, dy=-8, dx=0
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
-    FCB $FF,$0C,$00          ; flag=-1, dy=12, dx=0
-    FCB $FF,$00,$0C          ; flag=-1, dy=0, dx=12
-    FCB $FF,$02,$03          ; flag=-1, dy=2, dx=3
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$F1          ; flag=-1, dy=0, dx=-15
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH3:    ; Path 3
-    FCB 85              ; path3: intensity
-    FCB $0B,$2A,0,0        ; path3: header (y=11, x=42)
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
-    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
-    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH4:    ; Path 4
-    FCB 85              ; path4: intensity
-    FCB $12,$2A,0,0        ; path4: header (y=18, x=42)
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
-    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
-    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH5:    ; Path 5
-    FCB 85              ; path5: intensity
-    FCB $00,$2A,0,0        ; path5: header (y=0, x=42)
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$10          ; flag=-1, dy=0, dx=16
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$F0          ; flag=-1, dy=0, dx=-16
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH6:    ; Path 6
-    FCB 85              ; path6: intensity
-    FCB $EE,$37,0,0        ; path6: header (y=-18, x=55)
-    FCB $FF,$00,$12          ; flag=-1, dy=0, dx=18
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH7:    ; Path 7
-    FCB 85              ; path7: intensity
-    FCB $12,$3D,0,0        ; path7: header (y=18, x=61)
-    FCB $FF,$00,$07          ; flag=-1, dy=0, dx=7
-    FCB $FF,$F8,$05          ; flag=-1, dy=-8, dx=5
-    FCB $FF,$08,$05          ; flag=-1, dy=8, dx=5
-    FCB $FF,$00,$06          ; flag=-1, dy=0, dx=6
-    FCB $FF,$F5,$F7          ; flag=-1, dy=-11, dx=-9
-    FCB $FF,$F6,$08          ; flag=-1, dy=-10, dx=8
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$07,$FC          ; flag=-1, dy=7, dx=-4
-    FCB $FF,$F9,$FB          ; flag=-1, dy=-7, dx=-5
-    FCB $FF,$00,$FA          ; flag=-1, dy=0, dx=-6
-    FCB $FF,$0A,$09          ; flag=-1, dy=10, dx=9
-    FCB $FF,$0B,$F6          ; flag=-1, dy=11, dx=-10
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH8:    ; Path 8
-    FCB 85              ; path8: intensity
-    FCB $12,$C8,0,0        ; path8: header (y=18, x=-56)
-    FCB $FF,$FC,$00          ; flag=-1, dy=-4, dx=0
-    FCB $FF,$00,$11          ; flag=-1, dy=0, dx=17
-    FCB $FF,$04,$00          ; flag=-1, dy=4, dx=0
-    FCB $FF,$00,$EF          ; flag=-1, dy=0, dx=-17
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH9:    ; Path 9
-    FCB 85              ; path9: intensity
-    FCB $0B,$C8,0,0        ; path9: header (y=11, x=-56)
-    FCB $FF,$FA,$00          ; flag=-1, dy=-6, dx=0
-    FCB $FF,$00,$11          ; flag=-1, dy=0, dx=17
-    FCB $FF,$06,$00          ; flag=-1, dy=6, dx=0
-    FCB $FF,$00,$EF          ; flag=-1, dy=0, dx=-17
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH10:    ; Path 10
-    FCB 85              ; path10: intensity
-    FCB $00,$C8,0,0        ; path10: header (y=0, x=-56)
-    FCB $FF,$FD,$00          ; flag=-1, dy=-3, dx=0
-    FCB $FF,$00,$11          ; flag=-1, dy=0, dx=17
-    FCB $FF,$03,$00          ; flag=-1, dy=3, dx=0
-    FCB $FF,$00,$EF          ; flag=-1, dy=0, dx=-17
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH11:    ; Path 11
-    FCB 85              ; path11: intensity
-    FCB $EE,$CB,0,0        ; path11: header (y=-18, x=-53)
-    FCB $FF,$00,$EE          ; flag=-1, dy=0, dx=-18
-    FCB 2                ; End marker (path complete)
-
-_TEXT_PATH12:    ; Path 12
-    FCB 85              ; path12: intensity
-    FCB $12,$AC,0,0        ; path12: header (y=18, x=-84)
-    FCB $FF,$00,$04          ; flag=-1, dy=0, dx=4
-    FCB $FF,$F0,$08          ; flag=-1, dy=-16, dx=8
-    FCB $FF,$10,$07          ; flag=-1, dy=16, dx=7
-    FCB $FF,$00,$03          ; flag=-1, dy=0, dx=3
-    FCB $FF,$EB,$F7          ; flag=-1, dy=-21, dx=-9
-    FCB $FF,$00,$FD          ; flag=-1, dy=0, dx=-3
-    FCB $FF,$15,$F6          ; flag=-1, dy=21, dx=-10
-    FCB 2                ; End marker (path complete)
-; Generated from jingle.vmus (internal name: Vectrex Studio - Boot Jingle)
-; Tempo: 150 BPM, Total events: 17 (PSG Direct format)
-; Format: FCB count, FCB reg, val, ... (per frame), FCB 0 (end)
-
-_JINGLE_MUSIC:
-    ; Frame-based PSG register writes
-    FCB     0              ; Delay 0 frames (maintain previous state)
-    FCB     8              ; Frame 0 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $2C             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $01             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0B             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3C             ; Reg 7 value
-    FCB     10              ; Delay 10 frames (maintain previous state)
-    FCB     8              ; Frame 10 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $EE             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3C             ; Reg 7 value
-    FCB     10              ; Delay 10 frames (maintain previous state)
-    FCB     8              ; Frame 20 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $C8             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0C             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $90             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $09             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3C             ; Reg 7 value
-    FCB     10              ; Delay 10 frames (maintain previous state)
-    FCB     8              ; Frame 30 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $90             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $09             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3C             ; Reg 7 value
-    FCB     10              ; Delay 10 frames (maintain previous state)
-    FCB     8              ; Frame 40 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3C             ; Reg 7 value
-    FCB     10              ; Delay 10 frames (maintain previous state)
-    FCB     8              ; Frame 50 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $64             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0E             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $58             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $02             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0A             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3C             ; Reg 7 value
-    FCB     10              ; Delay 10 frames (maintain previous state)
-    FCB     8              ; Frame 60 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $77             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0D             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $90             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $09             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3C             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     8              ; Frame 65 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $64             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0E             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $90             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $09             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3C             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     8              ; Frame 70 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $59             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0E             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $90             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $09             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3C             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     8              ; Frame 75 - 8 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $64             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0E             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $90             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $09             ; Reg 9 value
-    FCB     10               ; Reg 10 number
-    FCB     $00             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $3C             ; Reg 7 value
-    FCB     5              ; Delay 5 frames (maintain previous state)
-    FCB     10              ; Frame 80 - 10 register writes
-    FCB     0               ; Reg 0 number
-    FCB     $64             ; Reg 0 value
-    FCB     1               ; Reg 1 number
-    FCB     $00             ; Reg 1 value
-    FCB     8               ; Reg 8 number
-    FCB     $0F             ; Reg 8 value
-    FCB     2               ; Reg 2 number
-    FCB     $2C             ; Reg 2 value
-    FCB     3               ; Reg 3 number
-    FCB     $01             ; Reg 3 value
-    FCB     9               ; Reg 9 number
-    FCB     $0D             ; Reg 9 value
-    FCB     4               ; Reg 4 number
-    FCB     $77             ; Reg 4 value
-    FCB     5               ; Reg 5 number
-    FCB     $00             ; Reg 5 value
-    FCB     10               ; Reg 10 number
-    FCB     $0D             ; Reg 10 value
-    FCB     7               ; Reg 7 number
-    FCB     $38             ; Reg 7 value
-    FCB     0               ; End of music (no loop)
-
-;***************************************************************************
-; RUNTIME HELPERS
-;***************************************************************************
-
-VECTREX_PRINT_TEXT:
-    ; VPy signature: PRINT_TEXT(x, y, string)
-    ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    LDA #$D0
-    TFR A,DP
-    JSR Intensity_5F
-    JSR Reset0Ref
-    LDU >VAR_ARG2
-    LDA >TEXT_SCALE_H
-    STA >$C82A          ; Vec_Text_Height
-    LDA >TEXT_SCALE_W
-    STA >$C82B          ; Vec_Text_Width
-    LDA >VAR_ARG1+1
-    LDB >VAR_ARG0+1
-    LDX >$C82C
-    PSHS X
-    JSR Print_Str_d
-    PULS X
-    STX >$C82C
-    LDA #$F8
-    STA >$C82A
-    LDA #$48
-    STA >$C82B
-    JSR $F1AF
-    RTS
-
-MUL16:
-    ; Signed 16x16->16 multiply: D = X * D (lower 16 bits, sign-correct)
-    ; Uses 6809 MUL (8x8->16) for constant-time execution.
-    ; Stack after PSHS X,B,A: [SP+0]=A=D_hi=b_hi, [SP+1]=B=D_lo=b_lo,
-    ;                         [SP+2]=X_hi=a_hi,  [SP+3]=X_lo=a_lo
-    ; Result = a_lo*b_lo + (a_hi*b_lo + a_lo*b_hi)*256  (mod 65536)
-    PSHS X,B,A
-    ; Step 1: a_lo * b_lo -> 16-bit partial product
-    LDA 3,S         ; A = a_lo (X low byte)
-    LDB 1,S         ; B = b_lo (D low byte)
-    MUL             ; D = a_lo * b_lo (unsigned 16-bit)
-    STA TMPPTR      ; TMPPTR   = P0_hi (carry into result bits [15:8])
-    STB TMPPTR+1    ; TMPPTR+1 = P0_lo (result bits [7:0])
-    ; Step 2: a_hi * b_lo -> only low byte adds to result[15:8]
-    LDA 2,S         ; A = a_hi (X high byte)
-    LDB 1,S         ; B = b_lo (D low byte)
-    MUL             ; D = a_hi * b_lo
-    ADDB TMPPTR     ; B += P0_hi (ignore carry = mod 256)
-    STB TMPPTR      ; TMPPTR = accumulated result[15:8]
-    ; Step 3: a_lo * b_hi -> only low byte adds to result[15:8]
-    LDA 3,S         ; A = a_lo (X low byte)
-    LDB 0,S         ; B = b_hi (D high byte)
-    MUL             ; D = a_lo * b_hi
-    ADDB TMPPTR     ; B += accumulated result[15:8] (mod 256)
-    TFR B,A         ; A = result_hi
-    LDB TMPPTR+1    ; B = result_lo
-    LEAS 4,S        ; restore stack
-    RTS
-
-MOD16:
-    ; Signed 16-bit modulo: D = X % D (result has same sign as dividend)
-    ; X = dividend (i16), D = divisor (i16) -> D = remainder
-    STD TMPPTR          ; Save divisor
-    TFR X,D             ; D = dividend (TFR does NOT set flags!)
-    CMPD #0             ; Set flags from FULL D BEFORE any LDA corrupts high byte
-    BPL .M16_DPOS       ; if dividend >= 0, skip negation
-    COMA
-    COMB
-    ADDD #1             ; D = |dividend|
-    STD TMPVAL          ; store |dividend| BEFORE LDA corrupts A (high byte of D)
-    LDA #1
-    STA TMPPTR2         ; sign_flag = 1
-    BRA .M16_RCHECK
-.M16_DPOS:
-    STD TMPVAL          ; dividend is positive, store as-is
-    LDA #0
-    STA TMPPTR2         ; sign_flag = 0 (positive result)
-.M16_RCHECK:
-    LDD TMPPTR          ; D = divisor
-    BPL .M16_RPOS       ; if divisor >= 0, skip negation
-    COMA
-    COMB
-    ADDD #1             ; D = |divisor|
-    STD TMPPTR          ; TMPPTR = |divisor|
-.M16_RPOS:
-.M16_LOOP:
-    LDD TMPVAL
-    SUBD TMPPTR         ; |dividend| - |divisor|
-    BLO .M16_END        ; if |dividend| < |divisor|, done
-    STD TMPVAL          ; update remainder
-    BRA .M16_LOOP
-.M16_END:
-    LDD TMPVAL          ; D = |remainder|
-    LDA TMPPTR2
-    BEQ .M16_DONE       ; zero = positive result
-    COMA
-    COMB
-    ADDD #1             ; negate (same sign as dividend)
-.M16_DONE:
-    RTS
-
-Draw_Sync_List_At_With_Mirrors:
-; Unified mirror support using flags: MIRROR_X and MIRROR_Y
-; Conditionally negates X and/or Y coordinates and deltas
-; NOTE: Caller has DP=$D0 for VIA access — RAM vars need '>' extended addressing
-LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
-BNE DSWM_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_SET_INTENSITY
-DSWM_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
-DSWM_SET_INTENSITY:
-STA >$C832              ; Vec_Misc_Count (direct, DP-safe — JSR Intensity_a corrupts DDRB with DP=$D0)
-LDB ,X+                 ; y_start from .vec (already relative to center)
-; Check if Y mirroring is enabled
-TST >MIRROR_Y
-BEQ DSWM_NO_NEGATE_Y
-NEGB                    ; ← Negate Y if flag set
-DSWM_NO_NEGATE_Y:
-ADDB >DRAW_VEC_Y        ; Add Y offset
-LDA ,X+                 ; x_start from .vec (already relative to center)
-; Check if X mirroring is enabled
-TST >MIRROR_X
-BEQ DSWM_NO_NEGATE_X
-NEGA                    ; ← Negate X if flag set
-DSWM_NO_NEGATE_X:
-ADDA >DRAW_VEC_X        ; Add X offset
-STD >TEMP_YX            ; Save adjusted position
-; Reset completo
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$03
-STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
-LDA #$02
-STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
-LDA #$02
-STA VIA_port_b          ; repeat
-LDA #$01
-STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
-; Moveto (BIOS Moveto_d: Y->PA, CLR PB, settle, #CE, CLR SR, INC PB, X->PA)
-LDD >TEMP_YX
-STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
-CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
-PSHS A                  ; ~4 cycle settling delay for Y
-LDA #$CE
-STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
-CLR VIA_shift_reg       ; SR=0: no draw during moveto
-INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
-PULS A                  ; Restore X
-STA VIA_port_a          ; X to DAC
-; Timing setup (match core: hardcoded $7F)
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X                ; Skip next_y, next_x
-; Wait for move to complete (PB=1 on exit)
-DSWM_W1:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W1
-; PB stays 1 — draw loop begins with PB=1
-; Loop de dibujo (conditional mirrors)
-DSWM_LOOP:
-LDA ,X+                 ; Read flag
-CMPA #2                 ; Check end marker
-LBEQ DSWM_DONE
-CMPA #1                 ; Check next path marker
-LBEQ DSWM_NEXT_PATH
-; Draw line with conditional negations
-LDB ,X+                 ; dy
-; Check if Y mirroring is enabled
-TST >MIRROR_Y
-BEQ DSWM_NO_NEGATE_DY
-NEGB                    ; ← Negate dy if flag set
-DSWM_NO_NEGATE_DY:
-LDA ,X+                 ; dx
-; Check if X mirroring is enabled
-TST >MIRROR_X
-BEQ DSWM_NO_NEGATE_DX
-NEGA                    ; ← Negate dx if flag set
-DSWM_NO_NEGATE_DX:
-; B=DY_final, A=DX_final, PB=1 on entry (from moveto or previous segment)
-STB VIA_port_a          ; DY to DAC (PB=1: integrators hold position)
-CLR VIA_port_b          ; PB=0: enable mux, beam tracks DY direction
-NOP                     ; settling 1 (per BIOS Draw_Line_d: LEAX+NOP = ~7 cycles)
-NOP                     ; settling 2
-NOP                     ; settling 3
-INC VIA_port_b          ; PB=1: disable mux, lock direction at DY
-STA VIA_port_a          ; DX to DAC
-LDA #$FF
-STA VIA_shift_reg       ; beam ON first (ramp still off from T1PB7)
-CLR VIA_t1_cnt_hi       ; THEN start T1 -> ramp ON (BIOS order)
-; Wait for line draw
-DSWM_W2:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W2
-CLR VIA_port_a          ; stop X integrator drift between segments
-CLR VIA_shift_reg       ; beam off (PB stays 1 for next segment)
-LBRA DSWM_LOOP          ; Long branch
-; Next path: repeat mirror logic for new path header
-DSWM_NEXT_PATH:
-TFR X,D
-PSHS D
-; Check intensity override (same logic as start)
-LDA >DRAW_VEC_INTENSITY ; Check if intensity override is set
-BNE DSWM_NEXT_USE_OVERRIDE   ; If non-zero, use override
-LDA ,X+                 ; Otherwise, read intensity from vector data
-BRA DSWM_NEXT_SET_INTENSITY
-DSWM_NEXT_USE_OVERRIDE:
-LEAX 1,X                ; Skip intensity byte in vector data
-DSWM_NEXT_SET_INTENSITY:
-PSHS A
-LDB ,X+                 ; y_start
-TST >MIRROR_Y
-BEQ DSWM_NEXT_NO_NEGATE_Y
-NEGB
-DSWM_NEXT_NO_NEGATE_Y:
-ADDB >DRAW_VEC_Y        ; Add Y offset
-LDA ,X+                 ; x_start
-TST >MIRROR_X
-BEQ DSWM_NEXT_NO_NEGATE_X
-NEGA
-DSWM_NEXT_NO_NEGATE_X:
-ADDA >DRAW_VEC_X        ; Add X offset
-STD >TEMP_YX
-PULS A                  ; Get intensity back
-STA >$C832              ; Vec_Misc_Count (direct, DP-safe)
-PULS D
-ADDD #3
-TFR D,X
-; Reset to zero
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$03
-STA VIA_port_b          ; PB=$03: disable mux (Reset_Pen step 1)
-LDA #$02
-STA VIA_port_b          ; PB=$02: enable mux (Reset_Pen step 2)
-LDA #$02
-STA VIA_port_b          ; repeat
-LDA #$01
-STA VIA_port_b          ; PB=$01: disable mux (integrators zeroed)
-; Moveto new start position (BIOS Moveto_d order)
-LDD >TEMP_YX
-STB VIA_port_a          ; Y to DAC (PB=1: integrators hold)
-CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
-PSHS A                  ; ~4 cycle settling delay for Y
-LDA #$CE
-STA VIA_cntl            ; PCR=$CE: /ZERO high, integrators active
-CLR VIA_shift_reg       ; SR=0: no draw during moveto
-INC VIA_port_b          ; PB=1: disable mux, lock direction at Y
-PULS A
-STA VIA_port_a          ; X to DAC
-; Timing setup (match core: hardcoded $7F)
-LDA #$7F
-STA VIA_t1_cnt_lo
-CLR VIA_t1_cnt_hi
-LEAX 2,X
-; Wait for move (PB=1 on exit)
-DSWM_W3:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DSWM_W3
-; PB stays 1 — draw loop continues with PB=1
-LBRA DSWM_LOOP          ; Long branch
-DSWM_DONE:
-RTS
-; === SLR_DRAW_CLIPPED_PATH ===
-SLR_DRAW_CLIPPED_PATH:
-    LDA >DRAW_VEC_INTENSITY ; check override
-    BNE SDCP_USE_OVERRIDE
-    LDA ,X+                 ; read intensity from path data
-    BRA SDCP_SET_INTENS
-SDCP_USE_OVERRIDE:
-    LEAX 1,X                ; skip intensity byte
-SDCP_SET_INTENS:
-    STA >$C832              ; Vec_Misc_Count (DDRB-safe, no JSR)
-    LDB ,X+                 ; B = y_start (relative to center)
-    LDA ,X+                 ; A = x_start (relative to center)
-    ADDB >DRAW_VEC_Y        ; B = abs_y
-    STB >SDCP_ABS_Y         ; save abs_y for moveto (NOT TMPVAL — SHOW_LEVEL's top_screen lives there)
-    TFR A,B                 ; B = x_start (SEX extends B, not A)
-    SEX                      ; sign-extend B→D (A=sign, B=x_start)
-    ADDD >DRAW_VEC_X_HI     ; D = abs_x_16 = SEX(x_start) + screen_x_16
-    ; D = abs_x_16. Save it in 16-bit tracker SLR_TRUE_X (unclamped).
-    STD >SLR_TRUE_X
-    ; Compute clamped beam position for hardware Moveto.
-    TSTA
-    BEQ SDCP_INIT_POS
-    INCA
-    BEQ SDCP_INIT_NEG_OK    ; A was $FF (small negative)
-    ; Way off — clamp to nearest edge by sign of original A (now in INCA result)
-    LDB #$80                ; default to left edge
-    LDA >SLR_TRUE_X         ; original hi byte
-    BMI SDCP_USE_CLAMPED    ; negative → -128 (left)
-    LDB #$7F                ; positive way off → +127 (right)
-    BRA SDCP_USE_CLAMPED
-SDCP_INIT_NEG_OK:
-    CMPB #$80
-    BHS SDCP_USE_CLAMPED    ; -128..-1, valid
-    LDB #$80                ; clamp
-    BRA SDCP_USE_CLAMPED
-SDCP_INIT_POS:
-    CMPB #$7F
-    BLS SDCP_USE_CLAMPED
-    LDB #$7F                ; clamp positive
-SDCP_USE_CLAMPED:
-    TFR B,A                  ; A = clamped beam x
-    STA >SLR_CUR_X          ; clamped value goes to integrator
-    CLR VIA_shift_reg
-    LDA #$CC
-    STA VIA_cntl
-    CLR VIA_port_a
-    LDA #$03
-    STA VIA_port_b
-    LDA #$02
-    STA VIA_port_b
-    LDA #$02
-    STA VIA_port_b
-    LDA #$01
-    STA VIA_port_b
-    LDB >SDCP_ABS_Y         ; B = abs_y
-    STB VIA_port_a          ; DY → DAC (PB=1: hold)
-    CLR VIA_port_b          ; PB=0: enable mux, beam tracks Y
-    LDA >SLR_CUR_X          ; abs_x (load = settling for Y)
-    PSHS A                  ; ~4 more settling cycles
-    LDA #$CE
-    STA VIA_cntl            ; PCR=$CE: /ZERO high
-    CLR VIA_shift_reg       ; SR=0: beam off
-    INC VIA_port_b          ; PB=1: lock Y direction
-    PULS A                  ; restore abs_x
-    STA VIA_port_a          ; DX → DAC
-    LDA >DRAW_T1_SCALED     ; effective T1 for this object (scale * 127)
-    STA VIA_t1_cnt_lo       ; load T1 latch
-    LEAX 2,X                ; skip next_y, next_x (the 0,0)
-    CLR VIA_t1_cnt_hi       ; start T1 → ramp
-SDCP_MOVETO_W:
-    LDA VIA_int_flags
-    ANDA #$40
-    BEQ SDCP_MOVETO_W
-    ; PB=1 on exit — draw loop ready
-SDCP_SEG_LOOP:
-    LDA ,X+                 ; flags
-    CMPA #2
-    LBEQ SDCP_DONE
-    LDB ,X+                 ; B = dy
-    STB >TMPPTR2            ; save dy
-    LDA ,X+                 ; A = dx (8-bit signed)
-    ; --- 16-bit add: true_new_x_16 = SLR_TRUE_X + SEX(dx) ---
-    TFR A,B                 ; B = dx
-    SEX                      ; D = sign-extended dx (A=sign, B=dx)
-    ADDD >SLR_TRUE_X        ; D = new true_x_16
-    STD >SLR_TRUE_X         ; update 16-bit tracker
-    ; --- Clamp D to [-128, +127] → 8-bit clamped_new_x in B ---
-    TSTA
-    BEQ SDCP_SEG_POS
-    INCA
-    BEQ SDCP_SEG_NEG_OK     ; A was $FF
-    ; Way off — clamp by sign of original D
-    LDA >SLR_TRUE_X         ; reload hi byte
-    BMI SDCP_SEG_CLAMP_LEFT
-    LDB #$7F                ; positive way off → +127
-    BRA SDCP_SEG_CLAMPED
-SDCP_SEG_CLAMP_LEFT:
-    LDB #$80                ; negative way off → -128
-    BRA SDCP_SEG_CLAMPED
-SDCP_SEG_NEG_OK:
-    CMPB #$80
-    BHS SDCP_SEG_CLAMPED
-    LDB #$80
-    BRA SDCP_SEG_CLAMPED
-SDCP_SEG_POS:
-    CMPB #$7F
-    BLS SDCP_SEG_CLAMPED
-    LDB #$7F
-SDCP_SEG_CLAMPED:
-    ; B = clamped_new_x. Compute beam_dx = B - SLR_CUR_X (8-bit signed).
-    LDA >SLR_CUR_X
-    PSHS B                  ; save clamped_new_x
-    NEGA                    ; A = -cur_x
-    ADDA ,S                 ; A = clamped_new_x - cur_x = beam_dx
-    PULS B                  ; B = clamped_new_x
-    ; Update SLR_CUR_X to new clamped position
-    STB >SLR_CUR_X
-    ; Decide beam ON/OFF/skip:
-    ; - beam_dx != 0                       → beam ON,  ramp(beam_dx, dy)
-    ; - beam_dx == 0 AND cur at edge AND dy==0 → skip (zero motion)
-    ; - beam_dx == 0 AND cur at edge AND dy!=0 → beam OFF ramp(0, dy)
-    ;   (Y must track logical position so subsequent segments draw at correct Y)
-    ; - beam_dx == 0 AND not at edge       → beam ON,  ramp(0, dy) — vertical
-    TSTA
-    BNE SDCP_SEG_DRAW       ; non-zero beam_dx → draw
-    CMPB #$80               ; at left edge?
-    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen left
-    CMPB #$7F               ; at right edge?
-    BEQ SDCP_SEG_OFF_X      ; yes → fully off-screen right
-SDCP_SEG_DRAW:
-    LDB >TMPPTR2            ; restore dy
-    ; A = beam_dx (visible X delta), B = dy. Beam ON ramp.
-    STB VIA_port_a          ; DY → DAC (PB=1: hold)
-    CLR VIA_port_b          ; PB=0: mux for DY
-    NOP
-    NOP
-    NOP
-    INC VIA_port_b          ; PB=1: lock DY
-    STA VIA_port_a          ; DX → DAC
-    LDA #$FF
-    STA VIA_shift_reg       ; beam ON
-    CLR VIA_t1_cnt_hi       ; start T1
-SDCP_W_DRAW:
-    LDA VIA_int_flags
-    ANDA #$40
-    BEQ SDCP_W_DRAW
-    CLR VIA_shift_reg       ; beam OFF
-    LBRA SDCP_SEG_LOOP
-
-    ; --- Off-screen-X path: dx contribution is invisible, but Y must track ---
-SDCP_SEG_OFF_X:
-    LDB >TMPPTR2            ; B = dy
-    TSTB                     ; dy == 0?
-    LBEQ SDCP_SEG_LOOP      ; no Y motion either → skip entire segment
-    ; Ramp(0, dy) with beam OFF. A is already 0 (beam_dx).
-    CLRA                     ; defensive: ensure dx=0
-    STB VIA_port_a          ; DY → DAC
-    CLR VIA_port_b
-    NOP
-    NOP
-    NOP
-    INC VIA_port_b
-    STA VIA_port_a          ; DX = 0
-    ; beam stays OFF (no STA VIA_shift_reg)
-    CLR VIA_t1_cnt_hi       ; start T1 (ramp, beam off)
-SDCP_W_OFF_X:
-    LDA VIA_int_flags
-    ANDA #$40
-    BEQ SDCP_W_OFF_X
-    LBRA SDCP_SEG_LOOP
-
-SDCP_DONE:
-    RTS
-
-; ============================================================================
-; PSG DIRECT MUSIC PLAYER (inspired by Christman2024/malbanGit)
-; ============================================================================
-; Writes directly to PSG chip using WRITE_PSG sequence
-;
-; Music data format (frame-based):
-;   FCB count           ; Number of register writes this frame
-;   FCB reg, val        ; PSG register/value pairs
-;   ...                 ; Repeat for each register
-;   FCB $FF             ; End marker
-;
-; PSG Registers:
-;   0-1: Channel A frequency (12-bit)
-;   2-3: Channel B frequency
-;   4-5: Channel C frequency
-;   6:   Noise period
-;   7:   Mixer control (enable/disable channels)
-;   8-10: Channel A/B/C volume
-;   11-12: Envelope period
-;   13:  Envelope shape
-; ============================================================================
-
-; RAM variables (defined in SYSTEM RAM VARIABLES section):
-; PSG_MUSIC_PTR, PSG_MUSIC_START, PSG_IS_PLAYING,
-; PSG_MUSIC_ACTIVE, PSG_DELAY_FRAMES
-
-; PLAY_MUSIC_RUNTIME - Start PSG music playback
-; Input: X = pointer to PSG music data
-PLAY_MUSIC_RUNTIME:
-CMPX >PSG_MUSIC_START   ; Check if already playing this music
-BNE PMr_start_new       ; If different, start fresh
-LDA >PSG_IS_PLAYING     ; Check if currently playing
-BNE PMr_done            ; If playing same song, ignore
-PMr_start_new:
-; Silence PSG before switching tracks (prevents noise bleed-through)
-PSHS X,DP               ; Save music pointer and DP
-LDA #$D0
-TFR A,DP                ; Set DP=$D0 for Sound_Byte
-LDA #7                  ; PSG reg 7 = Mixer
-LDB #$3F                ; All channels disabled (bits 0-5 only; bits 6-7=0=IOA/IOB input!)
-JSR Sound_Byte
-LDA #8                  ; PSG reg 8 = Volume channel A
-LDB #0
-JSR Sound_Byte
-LDA #9                  ; PSG reg 9 = Volume channel B
-LDB #0
-JSR Sound_Byte
-LDA #10                 ; PSG reg 10 = Volume channel C
-LDB #0
-JSR Sound_Byte
-PULS X,DP               ; Restore music pointer and DP
-STX >PSG_MUSIC_PTR      ; Store current music pointer (force extended)
-STX >PSG_MUSIC_START    ; Store start pointer for loops (force extended)
-CLR >PSG_DELAY_FRAMES   ; Clear delay counter
-LDA #$01
-STA >PSG_IS_PLAYING     ; Mark as playing (extended - var at 0xC8A0)
-PMr_done:
-RTS
-
-; ============================================================================
-; UPDATE_MUSIC_PSG - Update PSG (call every frame)
-; Data format per event: FCB delay, FCB count, (FCB reg, FCB val)*N
-; delay = frames since previous event (0 = apply immediately)
-; End marker: FCB 0 after last event's count
-; Loop marker: delay=$FF is treated as loop; OR count=$FF followed by FDB addr
-; PSG_DELAY_FRAMES counts down to the next event fire point.
-; PSG_MUSIC_PTR always points to delay byte of next pending event.
-; ============================================================================
-UPDATE_MUSIC_PSG:
-LDA #$01
-STA >PSG_MUSIC_ACTIVE   ; Mark music system active
-LDA >PSG_IS_PLAYING
-LBEQ PSG_update_done    ; Not playing
-
-; Check if delay counter is running
-LDA >PSG_DELAY_FRAMES
-BEQ PSG_read_delay      ; Counter=0: time to read next delay byte
-DECA
-STA >PSG_DELAY_FRAMES
-LBNE PSG_update_done    ; Still waiting
-BRA PSG_process_event   ; Counter just hit 0: apply the event
-
-PSG_read_delay:
-LDX >PSG_MUSIC_PTR      ; PTR → delay byte of current event
-LDB ,X+                 ; Consume delay byte, X → count byte
-CMPB #$FF
-LBEQ PSG_music_loop_d   ; $FF as delay = loop command
-STB >PSG_DELAY_FRAMES   ; Store delay count
-STX >PSG_MUSIC_PTR      ; Advance PTR past delay byte (now at count byte)
-BEQ PSG_process_event   ; delay=0: apply immediately
-DEC >PSG_DELAY_FRAMES   ; Decrement once (fires after delay-1 more frames)
-LBRA PSG_update_done    ; Wait
-
-PSG_process_event:
-LDX >PSG_MUSIC_PTR      ; PTR is at count byte
-LDB ,X+
-LBEQ PSG_music_ended    ; Count=0 means end
-CMPB #$FF
-LBEQ PSG_music_loop     ; Count=$FF means loop
-
-PSHS B                  ; Save count on stack
-PSG_write_loop:
-LDA ,X+                 ; Load register number
-LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer
-
-; WRITE_PSG sequence (direct VIA access)
-STA VIA_port_a          ; Store register number
-LDA #$19                ; BDIR=1, BC1=1 (LATCH)
-STA VIA_port_b
-LDA #$01                ; BDIR=0, BC1=0 (INACTIVE)
-STA VIA_port_b
-LDA VIA_port_a          ; Read status
-STB VIA_port_a          ; Store data
-LDB #$11                ; BDIR=1, BC1=0 (WRITE)
-STB VIA_port_b
-LDB #$01                ; BDIR=0, BC1=0 (INACTIVE)
-STB VIA_port_b
-
-PULS X                  ; Restore pointer
-PULS B                  ; Get counter
-DECB
-BEQ PSG_event_done      ; Done with this event
-PSHS B                  ; Save counter back
-BRA PSG_write_loop
-
-PSG_event_done:
-STX >PSG_MUSIC_PTR      ; PTR → delay byte of next event
-CLR >PSG_DELAY_FRAMES   ; Trigger PSG_read_delay next frame
-LBRA PSG_update_done
-
-PSG_music_ended:
-CLR >PSG_IS_PLAYING
-; Silence all 3 PSG channels so the last note doesn't keep ringing
-; until the next PLAY_MUSIC. DP is already $D0 (set by AUDIO_UPDATE).
-LDA #8                  ; PSG reg 8 = Volume Channel A
-LDB #0
-JSR Sound_Byte
-LDA #9                  ; PSG reg 9 = Volume Channel B
-LDB #0
-JSR Sound_Byte
-LDA #10                 ; PSG reg 10 = Volume Channel C
-LDB #0
-JSR Sound_Byte
-LBRA PSG_update_done
-
-PSG_music_loop:
-; count=$FF: X points after $FF, at FDB loop address
-LDD ,X
-STD >PSG_MUSIC_PTR
-CLR >PSG_DELAY_FRAMES
-LBRA PSG_update_done
-
-PSG_music_loop_d:
-; delay=$FF: X points after $FF, at FDB loop address
-LDD ,X
-STD >PSG_MUSIC_PTR
-CLR >PSG_DELAY_FRAMES
-
-PSG_update_done:
-CLR >PSG_MUSIC_ACTIVE   ; Clear flag (music system done)
-RTS
-
-; ============================================================================
-; STOP_MUSIC_RUNTIME - Stop music playback
-; ============================================================================
-STOP_MUSIC_RUNTIME:
-CLR >PSG_IS_PLAYING     ; Clear playing flag
-CLR >PSG_MUSIC_PTR      ; Clear pointer high byte
-CLR >PSG_MUSIC_PTR+1    ; Clear pointer low byte
-; Mute all PSG channels so the last note doesn't keep sounding
-PSHS DP
-LDA #$D0
-TFR A,DP                ; Set DP=$D0 for Sound_Byte
-LDA #8                  ; PSG reg 8 = Volume Channel A
-LDB #0
-JSR Sound_Byte
-LDA #9                  ; PSG reg 9 = Volume Channel B
-LDB #0
-JSR Sound_Byte
-LDA #10                 ; PSG reg 10 = Volume Channel C
-LDB #0
-JSR Sound_Byte
-PULS DP
-RTS
-
-; ============================================================================
-; AUDIO_UPDATE - Unified music + SFX update (auto-injected after WAIT_RECAL)
-; ============================================================================
-; Uses Sound_Byte (BIOS) for PSG writes - compatible with both systems
-; Sets DP=$D0 once at entry, restores at exit
-
-AUDIO_UPDATE:
-PSHS DP                 ; Save current DP
-LDA #$D0                ; Set DP=$D0 (Sound_Byte requirement)
-TFR A,DP
-
-        ; UPDATE MUSIC
-LDA >PSG_IS_PLAYING     ; Check if music is playing
-BEQ AU_SKIP_MUSIC       ; Skip if not
-
-; Check delay counter first
-LDA >PSG_DELAY_FRAMES   ; Load delay counter
-BEQ AU_MUSIC_READ       ; If zero, read next frame data
-DECA                    ; Decrement delay
-STA >PSG_DELAY_FRAMES   ; Store back
-CMPA #0                 ; Check if it just reached zero
-BNE AU_UPDATE_SFX       ; If not zero yet, skip this frame
-
-; Delay just reached zero, X points to count byte already
-LDX >PSG_MUSIC_PTR      ; Load music pointer (points to count)
-BRA AU_MUSIC_READ_COUNT ; Skip delay read, go straight to count
-
-AU_MUSIC_READ:
-LDX >PSG_MUSIC_PTR      ; Load music pointer
-
-; Check if we need to read delay or we're ready for count
-; PSG_DELAY_FRAMES just reached 0, so we read delay byte first
-LDB ,X+                 ; Read delay counter (X now points to count byte)
-CMPB #$FF               ; Check for loop marker
-BEQ AU_MUSIC_LOOP       ; Handle loop
-CMPB #0                 ; Check if delay is 0
-BNE AU_MUSIC_HAS_DELAY  ; If not 0, process delay
-
-; Delay is 0, read count immediately
-AU_MUSIC_NO_DELAY:
-AU_MUSIC_READ_COUNT:
-LDB ,X+                 ; Read count (number of register writes)
-BEQ AU_MUSIC_ENDED      ; If 0, end of music
-CMPB #$FF               ; Check for loop marker (can appear after delay)
-BEQ AU_MUSIC_LOOP       ; Handle loop
-BRA AU_MUSIC_PROCESS_WRITES
-
-AU_MUSIC_HAS_DELAY:
-; B has delay > 0, store it and skip to next frame
-DECB                    ; Delay-1 (we consume this frame)
-BEQ AU_MUSIC_READ_COUNT ; delay was 1: X already at count byte, process immediately
-STB >PSG_DELAY_FRAMES   ; Save delay counter
-STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)
-BRA AU_UPDATE_SFX       ; Skip reading data this frame
-
-AU_MUSIC_PROCESS_WRITES:
-; Per-event write loop. Inlined PSG protocol instead of JSR Sound_Byte
-; (~35 cycles vs ~92 incl JSR/RTS overhead — saves ~57 cycles per
-; register write). For theme-style music with 8-10 writes per event,
-; saves ~500-600 cycles per event frame → frees enough budget that the
-; music event no longer pushes the frame over vsync. Mirrors the BIOS
-; Sound_Byte protocol exactly (Vectrex VIA bits: BC1=bit3, BDIR=bit4).
-PSHS B                  ; save register-write count on stack for in-place DEC
-AU_MUSIC_WRITE_LOOP:
-LDA ,X+                 ; A = register number
-LDB ,X+                 ; B = register value
-STA VIA_port_a          ; data bus = reg num
-LDA #$19                ; BC1=1, BDIR=1 → LATCH ADDR
-STA VIA_port_b
-LDA #$01                ; back to INACTIVE (BC1=0, BDIR=0)
-STA VIA_port_b
-LDA VIA_port_a          ; READ STATUS — settling delay so PSG finishes
-; latching the register address before we drive
-; the value. Without this, the PSG occasionally
-; writes the new value into the PREVIOUS register
-; (audible as glitchy pitch / 'noisy' music,
-; especially when other CPU activity perturbs
-; the timing between this loop and adjacent code).
-STB VIA_port_a          ; data bus = value
-LDA #$11                ; BC1=0, BDIR=1 → WRITE DATA
-STA VIA_port_b
-LDA #$01                ; back to INACTIVE
-STA VIA_port_b
-DEC ,S                  ; decrement count on stack (in-place; no PSHS/PULS per iter)
-BNE AU_MUSIC_WRITE_LOOP
-LEAS 1,S                ; discard saved count
-
-AU_MUSIC_DONE:
-STX >PSG_MUSIC_PTR      ; Update music pointer
-BRA AU_UPDATE_SFX       ; Now update SFX
-
-AU_MUSIC_ENDED:
-CLR >PSG_IS_PLAYING     ; Stop music
-BRA AU_UPDATE_SFX       ; Continue to SFX
-
-AU_MUSIC_LOOP:
-LDD ,X                  ; Load loop target
-STD >PSG_MUSIC_PTR      ; Set music pointer to loop
-CLR >PSG_DELAY_FRAMES   ; Clear delay on loop
-BRA AU_UPDATE_SFX       ; Continue to SFX
-
-AU_SKIP_MUSIC:
-BRA AU_UPDATE_SFX       ; Skip music, go to SFX
-
-; UPDATE SFX (channel C: registers 4/5=tone, 6=noise, 10=volume, 7=mixer)
-AU_UPDATE_SFX:
-LDA >SFX_ACTIVE         ; Check if SFX is active
-BEQ AU_DONE             ; Skip if not active
-
-        JSR sfx_doframe         ; Process one SFX frame (uses Sound_Byte internally)
-
-AU_DONE:
-        PULS DP                 ; Restore original DP
-RTS
-
-; ============================================================================
-; AYFX SOUND EFFECTS PLAYER (Richard Chadd original system)
-; ============================================================================
-; Uses channel C (registers 4/5=tone, 6=noise, 10=volume, 7=mixer bit2/bit5)
-; RAM variables: SFX_PTR (16-bit), SFX_ACTIVE (8-bit)
-; AYFX format: flag byte + optional data per frame, end marker $D0 $20
-; Flag bits: 0-3=volume, 4=disable tone, 5=tone data present,
-;            6=noise data present, 7=disable noise
-; ============================================================================
-
-; PLAY_SFX_RUNTIME - Start SFX playback
-; Input: X = pointer to AYFX data
-PLAY_SFX_RUNTIME:
-STX >SFX_PTR           ; Store pointer (force extended addressing)
-LDA #$01
-STA >SFX_ACTIVE        ; Mark as active
-RTS
-
-; SFX_UPDATE - Process one AYFX frame (call once per frame in loop)
-SFX_UPDATE:
-LDA >SFX_ACTIVE        ; Check if active
-BEQ noay               ; Not active, skip
-JSR sfx_doframe        ; Process one frame
-noay:
-RTS
-
-; sfx_doframe - AYFX frame parser (Richard Chadd original)
-sfx_doframe:
-LDU >SFX_PTR           ; Get current frame pointer
-LDB ,U                 ; Read flag byte (NO auto-increment)
-CMPB #$D0              ; Check end marker (first byte)
-BNE sfx_checktonefreq  ; Not end, continue
-LDB 1,U                ; Check second byte at offset 1
-CMPB #$20              ; End marker $D0 $20?
-BEQ sfx_endofeffect    ; Yes, stop
-
-sfx_checktonefreq:
-LEAY 1,U               ; Y = pointer to tone/noise data
-LDB ,U                 ; Reload flag byte (Sound_Byte corrupts B)
-BITB #$20              ; Bit 5: tone data present?
-BEQ sfx_checknoisefreq ; No, skip tone
-; Set tone frequency (channel C = reg 4/5)
-LDB 2,U                ; Get LOW byte (fine tune)
-LDA #$04               ; Register 4
-JSR Sound_Byte         ; Write to PSG
-LDB 1,U                ; Get HIGH byte (coarse tune)
-LDA #$05               ; Register 5
-JSR Sound_Byte         ; Write to PSG
-LEAY 2,Y               ; Skip 2 tone bytes
-
-sfx_checknoisefreq:
-LDB ,U                 ; Reload flag byte
-BITB #$40              ; Bit 6: noise data present?
-BEQ sfx_checkvolume    ; No, skip noise
-LDB ,Y                 ; Get noise period
-LDA #$06               ; Register 6
-JSR Sound_Byte         ; Write to PSG
-LEAY 1,Y               ; Skip 1 noise byte
-
-sfx_checkvolume:
-LDB ,U                 ; Reload flag byte
-ANDB #$0F              ; Get volume from bits 0-3
-LDA #$0A               ; Register 10 (volume C)
-JSR Sound_Byte         ; Write to PSG
-
-; Combined mixer update: read shadow once, apply tone+noise, write once
-sfx_updatemixer:
-LDB $C807              ; Read mixer shadow ONCE
-LDA ,U                 ; Load flag byte into A
-; Handle tone (flag bit 4 → mixer bit 2)
-BITA #$10              ; Bit 4: disable tone?
-BNE sfx_m_tonedis
-ANDB #$FB              ; Clear bit 2 (enable tone C)
-BRA sfx_m_noise
-sfx_m_tonedis:
-ORB #$04               ; Set bit 2 (disable tone C)
-sfx_m_noise:
-; Handle noise (flag bit 7 → mixer bit 5)
-BITA #$80              ; Bit 7: disable noise?
-BNE sfx_m_noisedis
-ANDB #$DF              ; Clear bit 5 (enable noise C)
-BRA sfx_m_write
-sfx_m_noisedis:
-ORB #$20               ; Set bit 5 (disable noise C)
-sfx_m_write:
-STB $C807              ; Update mixer shadow
-LDA #$07               ; Register 7 (mixer)
-JSR Sound_Byte         ; Single write to PSG
-
-sfx_nextframe:
-STY >SFX_PTR            ; Update pointer for next frame
-RTS
-
-sfx_endofeffect:
-; Stop SFX - silence channel C and restore mixer
-CLR >SFX_ACTIVE         ; Mark as inactive
-LDA #$0A                ; Register 10 (volume C)
-LDB #$00                ; Volume = 0
-JSR Sound_Byte
-; Restore mixer: disable tone+noise on channel C
-LDB $C807              ; Read mixer shadow
-ORB #$24               ; Set bits 2+5 (disable tone C + noise C)
-STB $C807              ; Update shadow
-LDA #$07               ; Register 7
-JSR Sound_Byte         ; Write mixer
-LDD #$0000
-STD >SFX_PTR            ; Clear pointer
-RTS
-
-; ============================================================================
-; SMUL_PROD - Product lookup table for SMUL_LUT
-; SMUL_PROD[val][angle] = (val * sin(angle*2π/128)) >> 7  (i8)
-; val=row (0-63, stride=128), angle=col (0-127) — 8KB total
-; For cos: use angle=(ax+32)&0x7F — same table, shifted column
-; Vertex coords must be ≤63 (clamped at data emit time)
-SMUL_PROD:
-    FCB $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00  ; val=0
-    FCB $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00  ; val=1
-    FCB $00,$00,$00,$00,$00,$00,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$00,$00,$00,$00,$00  ; val=2
-    FCB $00,$00,$00,$00,$01,$01,$01,$01,$01,$01,$01,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$01,$01,$01,$01,$01,$01,$01,$00,$00,$00,$00,$00,$00,$00,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FE,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$00,$00,$00  ; val=3
-    FCB $00,$00,$00,$01,$01,$01,$01,$01,$02,$02,$02,$02,$02,$02,$03,$03,$03,$03,$03,$03,$03,$03,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$04,$03,$03,$03,$03,$03,$03,$03,$03,$02,$02,$02,$02,$02,$02,$01,$01,$01,$01,$01,$00,$00,$00,$00,$00,$FF,$FF,$FF,$FF,$FF,$FE,$FE,$FE,$FE,$FE,$FE,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FD,$FE,$FE,$FE,$FE,$FE,$FE,$FF,$FF,$FF,$FF,$FF,$00,$00  ; val=4
-    FCB $00,$00,$00,$01,$01,$01,$01,$02,$02,$02,$02,$03,$03,$03,$03,$03,$04,$04,$04,$04,$04,$04,$04,$04,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$05,$04,$04,$04,$04,$04,$04,$04,$04,$03,$03,$03,$03,$03,$02,$02,$02,$02,$01,$01,$01,$01,$00,$00,$00,$00,$00,$FF,$FF,$FF,$FF,$FE,$FE,$FE,$FE,$FD,$FD,$FD,$FD,$FD,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FC,$FD,$FD,$FD,$FD,$FD,$FE,$FE,$FE,$FE,$FF,$FF,$FF,$FF,$00,$00  ; val=5
-    FCB $00,$00,$01,$01,$01,$01,$02,$02,$02,$03,$03,$03,$03,$04,$04,$04,$04,$04,$05,$05,$05,$05,$05,$05,$05,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$06,$05,$05,$05,$05,$05,$05,$05,$04,$04,$04,$04,$04,$03,$03,$03,$03,$02,$02,$02,$01,$01,$01,$01,$00,$00,$00,$FF,$FF,$FF,$FF,$FE,$FE,$FE,$FD,$FD,$FD,$FD,$FC,$FC,$FC,$FC,$FC,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FA,$FB,$FB,$FB,$FB,$FB,$FB,$FB,$FC,$FC,$FC,$FC,$FC,$FD,$FD,$FD,$FD,$FE,$FE,$FE,$FF,$FF,$FF,$FF,$00  ; val=6
-    FCB $00,$00,$01,$01,$01,$02,$02,$02,$03,$03,$03,$04,$04,$04,$04,$05,$05,$05,$05,$06,$06,$06,$06,$06,$06,$07,$07,$07,$07,$07,$07,$07,$07,$07,$07,$07,$07,$07,$07,$07,$06,$06,$06,$06,$06,$06,$05,$05,$05,$05,$04,$04,$04,$04,$03,$03,$03,$02,$02,$02,$01,$01,$01,$00,$00,$00,$FF,$FF,$FF,$FE,$FE,$FE,$FD,$FD,$FD,$FC,$FC,$FC,$FC,$FB,$FB,$FB,$FB,$FA,$FA,$FA,$FA,$FA,$FA,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$F9,$FA,$FA,$FA,$FA,$FA,$FA,$FB,$FB,$FB,$FB,$FC,$FC,$FC,$FC,$FD,$FD,$FD,$FE,$FE,$FE,$FF,$FF,$FF,$00  ; val=7
-    FCB $00,$00,$01,$01,$02,$02,$02,$03,$03,$03,$04,$04,$04,$05,$05,$05,$06,$06,$06,$06,$07,$07,$07,$07,$07,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$08,$07,$07,$07,$07,$07,$06,$06,$06,$06,$05,$05,$05,$04,$04,$04,$03,$03,$03,$02,$02,$02,$01,$01,$00,$00,$00,$FF,$FF,$FE,$FE,$FE,$FD,$FD,$FD,$FC,$FC,$FC,$FB,$FB,$FB,$FA,$FA,$FA,$FA,$F9,$F9,$F9,$F9,$F9,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F8,$F9,$F9,$F9,$F9,$F9,$FA,$FA,$FA,$FA,$FB,$FB,$FB,$FC,$FC,$FC,$FD,$FD,$FD,$FE,$FE,$FE,$FF,$FF,$00  ; val=8
-    FCB $00,$00,$01,$01,$02,$02,$03,$03,$03,$04,$04,$05,$05,$05,$06,$06,$06,$07,$07,$07,$07,$08,$08,$08,$08,$08,$09,$09,$09,$09,$09,$09,$09,$09,$09,$09,$09,$09,$09,$08,$08,$08,$08,$08,$07,$07,$07,$07,$06,$06,$06,$05,$05,$05,$04,$04,$03,$03,$03,$02,$02,$01,$01,$00,$00,$00,$FF,$FF,$FE,$FE,$FD,$FD,$FD,$FC,$FC,$FB,$FB,$FB,$FA,$FA,$FA,$F9,$F9,$F9,$F9,$F8,$F8,$F8,$F8,$F8,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F7,$F8,$F8,$F8,$F8,$F8,$F9,$F9,$F9,$F9,$FA,$FA,$FA,$FB,$FB,$FB,$FC,$FC,$FD,$FD,$FD,$FE,$FE,$FF,$FF,$00  ; val=9
-    FCB $00,$00,$01,$01,$02,$02,$03,$03,$04,$04,$05,$05,$06,$06,$06,$07,$07,$07,$08,$08,$08,$09,$09,$09,$09,$09,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$0A,$09,$09,$09,$09,$09,$08,$08,$08,$07,$07,$07,$06,$06,$06,$05,$05,$04,$04,$03,$03,$02,$02,$01,$01,$00,$00,$00,$FF,$FF,$FE,$FE,$FD,$FD,$FC,$FC,$FB,$FB,$FA,$FA,$FA,$F9,$F9,$F9,$F8,$F8,$F8,$F7,$F7,$F7,$F7,$F7,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F6,$F7,$F7,$F7,$F7,$F7,$F8,$F8,$F8,$F9,$F9,$F9,$FA,$FA,$FA,$FB,$FB,$FC,$FC,$FD,$FD,$FE,$FE,$FF,$FF,$00  ; val=10
-    FCB $00,$01,$01,$02,$02,$03,$03,$04,$04,$05,$05,$06,$06,$07,$07,$07,$08,$08,$08,$09,$09,$09,$0A,$0A,$0A,$0A,$0A,$0B,$0B,$0B,$0B,$0B,$0B,$0B,$0B,$0B,$0B,$0B,$0A,$0A,$0A,$0A,$0A,$09,$09,$09,$08,$08,$08,$07,$07,$07,$06,$06,$05,$05,$04,$04,$03,$03,$02,$02,$01,$01,$00,$FF,$FF,$FE,$FE,$FD,$FD,$FC,$FC,$FB,$FB,$FA,$FA,$F9,$F9,$F9,$F8,$F8,$F8,$F7,$F7,$F7,$F6,$F6,$F6,$F6,$F6,$F5,$F5,$F5,$F5,$F5,$F5,$F5,$F5,$F5,$F5,$F5,$F6,$F6,$F6,$F6,$F6,$F7,$F7,$F7,$F8,$F8,$F8,$F9,$F9,$F9,$FA,$FA,$FB,$FB,$FC,$FC,$FD,$FD,$FE,$FE,$FF,$FF  ; val=11
-    FCB $00,$01,$01,$02,$02,$03,$03,$04,$05,$05,$06,$06,$07,$07,$08,$08,$08,$09,$09,$0A,$0A,$0A,$0B,$0B,$0B,$0B,$0B,$0C,$0C,$0C,$0C,$0C,$0C,$0C,$0C,$0C,$0C,$0C,$0B,$0B,$0B,$0B,$0B,$0A,$0A,$0A,$09,$09,$08,$08,$08,$07,$07,$06,$06,$05,$05,$04,$03,$03,$02,$02,$01,$01,$00,$FF,$FF,$FE,$FE,$FD,$FD,$FC,$FB,$FB,$FA,$FA,$F9,$F9,$F8,$F8,$F8,$F7,$F7,$F6,$F6,$F6,$F5,$F5,$F5,$F5,$F5,$F4,$F4,$F4,$F4,$F4,$F4,$F4,$F4,$F4,$F4,$F4,$F5,$F5,$F5,$F5,$F5,$F6,$F6,$F6,$F7,$F7,$F8,$F8,$F8,$F9,$F9,$FA,$FA,$FB,$FB,$FC,$FD,$FD,$FE,$FE,$FF,$FF  ; val=12
-    FCB $00,$01,$01,$02,$03,$03,$04,$04,$05,$05,$06,$07,$07,$08,$08,$09,$09,$0A,$0A,$0A,$0B,$0B,$0B,$0C,$0C,$0C,$0C,$0C,$0D,$0D,$0D,$0D,$0D,$0D,$0D,$0D,$0D,$0C,$0C,$0C,$0C,$0C,$0B,$0B,$0B,$0A,$0A,$0A,$09,$09,$08,$08,$07,$07,$06,$05,$05,$04,$04,$03,$03,$02,$01,$01,$00,$FF,$FF,$FE,$FD,$FD,$FC,$FC,$FB,$FB,$FA,$F9,$F9,$F8,$F8,$F7,$F7,$F6,$F6,$F6,$F5,$F5,$F5,$F4,$F4,$F4,$F4,$F4,$F3,$F3,$F3,$F3,$F3,$F3,$F3,$F3,$F3,$F4,$F4,$F4,$F4,$F4,$F5,$F5,$F5,$F6,$F6,$F6,$F7,$F7,$F8,$F8,$F9,$F9,$FA,$FB,$FB,$FC,$FC,$FD,$FD,$FE,$FF,$FF  ; val=13
-    FCB $00,$01,$01,$02,$03,$03,$04,$05,$05,$06,$07,$07,$08,$08,$09,$09,$0A,$0A,$0B,$0B,$0C,$0C,$0C,$0D,$0D,$0D,$0D,$0D,$0E,$0E,$0E,$0E,$0E,$0E,$0E,$0E,$0E,$0D,$0D,$0D,$0D,$0D,$0C,$0C,$0C,$0B,$0B,$0A,$0A,$09,$09,$08,$08,$07,$07,$06,$05,$05,$04,$03,$03,$02,$01,$01,$00,$FF,$FF,$FE,$FD,$FD,$FC,$FB,$FB,$FA,$F9,$F9,$F8,$F8,$F7,$F7,$F6,$F6,$F5,$F5,$F4,$F4,$F4,$F3,$F3,$F3,$F3,$F3,$F2,$F2,$F2,$F2,$F2,$F2,$F2,$F2,$F2,$F3,$F3,$F3,$F3,$F3,$F4,$F4,$F4,$F5,$F5,$F6,$F6,$F7,$F7,$F8,$F8,$F9,$F9,$FA,$FB,$FB,$FC,$FD,$FD,$FE,$FF,$FF  ; val=14
-    FCB $00,$01,$01,$02,$03,$04,$04,$05,$06,$06,$07,$08,$08,$09,$09,$0A,$0B,$0B,$0B,$0C,$0C,$0D,$0D,$0D,$0E,$0E,$0E,$0E,$0F,$0F,$0F,$0F,$0F,$0F,$0F,$0F,$0F,$0E,$0E,$0E,$0E,$0D,$0D,$0D,$0C,$0C,$0B,$0B,$0B,$0A,$09,$09,$08,$08,$07,$06,$06,$05,$04,$04,$03,$02,$01,$01,$00,$FF,$FF,$FE,$FD,$FC,$FC,$FB,$FA,$FA,$F9,$F8,$F8,$F7,$F7,$F6,$F5,$F5,$F5,$F4,$F4,$F3,$F3,$F3,$F2,$F2,$F2,$F2,$F1,$F1,$F1,$F1,$F1,$F1,$F1,$F1,$F1,$F2,$F2,$F2,$F2,$F3,$F3,$F3,$F4,$F4,$F5,$F5,$F5,$F6,$F7,$F7,$F8,$F8,$F9,$FA,$FA,$FB,$FC,$FC,$FD,$FE,$FF,$FF  ; val=15
-    FCB $00,$01,$02,$02,$03,$04,$05,$05,$06,$07,$08,$08,$09,$0A,$0A,$0B,$0B,$0C,$0C,$0D,$0D,$0E,$0E,$0E,$0F,$0F,$0F,$0F,$10,$10,$10,$10,$10,$10,$10,$10,$10,$0F,$0F,$0F,$0F,$0E,$0E,$0E,$0D,$0D,$0C,$0C,$0B,$0B,$0A,$0A,$09,$08,$08,$07,$06,$05,$05,$04,$03,$02,$02,$01,$00,$FF,$FE,$FE,$FD,$FC,$FB,$FB,$FA,$F9,$F8,$F8,$F7,$F6,$F6,$F5,$F5,$F4,$F4,$F3,$F3,$F2,$F2,$F2,$F1,$F1,$F1,$F1,$F0,$F0,$F0,$F0,$F0,$F0,$F0,$F0,$F0,$F1,$F1,$F1,$F1,$F2,$F2,$F2,$F3,$F3,$F4,$F4,$F5,$F5,$F6,$F6,$F7,$F8,$F8,$F9,$FA,$FB,$FB,$FC,$FD,$FE,$FE,$FF  ; val=16
-    FCB $00,$01,$02,$03,$03,$04,$05,$06,$07,$07,$08,$09,$09,$0A,$0B,$0B,$0C,$0C,$0D,$0E,$0E,$0E,$0F,$0F,$10,$10,$10,$10,$11,$11,$11,$11,$11,$11,$11,$11,$11,$10,$10,$10,$10,$0F,$0F,$0E,$0E,$0E,$0D,$0C,$0C,$0B,$0B,$0A,$09,$09,$08,$07,$07,$06,$05,$04,$03,$03,$02,$01,$00,$FF,$FE,$FD,$FD,$FC,$FB,$FA,$F9,$F9,$F8,$F7,$F7,$F6,$F5,$F5,$F4,$F4,$F3,$F2,$F2,$F2,$F1,$F1,$F0,$F0,$F0,$F0,$EF,$EF,$EF,$EF,$EF,$EF,$EF,$EF,$EF,$F0,$F0,$F0,$F0,$F1,$F1,$F2,$F2,$F2,$F3,$F4,$F4,$F5,$F5,$F6,$F7,$F7,$F8,$F9,$F9,$FA,$FB,$FC,$FD,$FD,$FE,$FF  ; val=17
-    FCB $00,$01,$02,$03,$04,$04,$05,$06,$07,$08,$08,$09,$0A,$0B,$0B,$0C,$0D,$0D,$0E,$0E,$0F,$0F,$10,$10,$10,$11,$11,$11,$12,$12,$12,$12,$12,$12,$12,$12,$12,$11,$11,$11,$10,$10,$10,$0F,$0F,$0E,$0E,$0D,$0D,$0C,$0B,$0B,$0A,$09,$08,$08,$07,$06,$05,$04,$04,$03,$02,$01,$00,$FF,$FE,$FD,$FC,$FC,$FB,$FA,$F9,$F8,$F8,$F7,$F6,$F5,$F5,$F4,$F3,$F3,$F2,$F2,$F1,$F1,$F0,$F0,$F0,$EF,$EF,$EF,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EE,$EF,$EF,$EF,$F0,$F0,$F0,$F1,$F1,$F2,$F2,$F3,$F3,$F4,$F5,$F5,$F6,$F7,$F8,$F8,$F9,$FA,$FB,$FC,$FC,$FD,$FE,$FF  ; val=18
-    FCB $00,$01,$02,$03,$04,$05,$05,$06,$07,$08,$09,$0A,$0B,$0B,$0C,$0D,$0D,$0E,$0F,$0F,$10,$10,$11,$11,$11,$12,$12,$12,$13,$13,$13,$13,$13,$13,$13,$13,$13,$12,$12,$12,$11,$11,$11,$10,$10,$0F,$0F,$0E,$0D,$0D,$0C,$0B,$0B,$0A,$09,$08,$07,$06,$05,$05,$04,$03,$02,$01,$00,$FF,$FE,$FD,$FC,$FB,$FB,$FA,$F9,$F8,$F7,$F6,$F5,$F5,$F4,$F3,$F3,$F2,$F1,$F1,$F0,$F0,$EF,$EF,$EF,$EE,$EE,$EE,$ED,$ED,$ED,$ED,$ED,$ED,$ED,$ED,$ED,$EE,$EE,$EE,$EF,$EF,$EF,$F0,$F0,$F1,$F1,$F2,$F3,$F3,$F4,$F5,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FB,$FC,$FD,$FE,$FF  ; val=19
-    FCB $00,$01,$02,$03,$04,$05,$06,$07,$08,$08,$09,$0A,$0B,$0C,$0D,$0D,$0E,$0F,$0F,$10,$11,$11,$12,$12,$12,$13,$13,$13,$14,$14,$14,$14,$14,$14,$14,$14,$14,$13,$13,$13,$12,$12,$12,$11,$11,$10,$0F,$0F,$0E,$0D,$0D,$0C,$0B,$0A,$09,$08,$08,$07,$06,$05,$04,$03,$02,$01,$00,$FF,$FE,$FD,$FC,$FB,$FA,$F9,$F8,$F8,$F7,$F6,$F5,$F4,$F3,$F3,$F2,$F1,$F1,$F0,$EF,$EF,$EE,$EE,$EE,$ED,$ED,$ED,$EC,$EC,$EC,$EC,$EC,$EC,$EC,$EC,$EC,$ED,$ED,$ED,$EE,$EE,$EE,$EF,$EF,$F0,$F1,$F1,$F2,$F3,$F3,$F4,$F5,$F6,$F7,$F8,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; val=20
-    FCB $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0C,$0D,$0E,$0F,$0F,$10,$11,$11,$12,$12,$13,$13,$14,$14,$14,$15,$15,$15,$15,$15,$15,$15,$15,$15,$14,$14,$14,$13,$13,$12,$12,$11,$11,$10,$0F,$0F,$0E,$0D,$0C,$0C,$0B,$0A,$09,$08,$07,$06,$05,$04,$03,$02,$01,$00,$FF,$FE,$FD,$FC,$FB,$FA,$F9,$F8,$F7,$F6,$F5,$F4,$F4,$F3,$F2,$F1,$F1,$F0,$EF,$EF,$EE,$EE,$ED,$ED,$EC,$EC,$EC,$EB,$EB,$EB,$EB,$EB,$EB,$EB,$EB,$EB,$EC,$EC,$EC,$ED,$ED,$EE,$EE,$EF,$EF,$F0,$F1,$F1,$F2,$F3,$F4,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; val=21
-    FCB $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F,$0F,$10,$11,$12,$12,$13,$13,$14,$14,$15,$15,$15,$15,$16,$16,$16,$16,$16,$16,$16,$15,$15,$15,$15,$14,$14,$13,$13,$12,$12,$11,$10,$0F,$0F,$0E,$0D,$0C,$0B,$0A,$09,$08,$07,$06,$05,$04,$03,$02,$01,$00,$FF,$FE,$FD,$FC,$FB,$FA,$F9,$F8,$F7,$F6,$F5,$F4,$F3,$F2,$F1,$F1,$F0,$EF,$EE,$EE,$ED,$ED,$EC,$EC,$EB,$EB,$EB,$EB,$EA,$EA,$EA,$EA,$EA,$EA,$EA,$EB,$EB,$EB,$EB,$EC,$EC,$ED,$ED,$EE,$EE,$EF,$F0,$F1,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; val=22
-    FCB $00,$01,$02,$03,$04,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F,$0F,$10,$11,$12,$12,$13,$14,$14,$15,$15,$16,$16,$16,$16,$17,$17,$17,$17,$17,$17,$17,$16,$16,$16,$16,$15,$15,$14,$14,$13,$12,$12,$11,$10,$0F,$0F,$0E,$0D,$0C,$0B,$0A,$09,$08,$07,$06,$04,$03,$02,$01,$00,$FF,$FE,$FD,$FC,$FA,$F9,$F8,$F7,$F6,$F5,$F4,$F3,$F2,$F1,$F1,$F0,$EF,$EE,$EE,$ED,$EC,$EC,$EB,$EB,$EA,$EA,$EA,$EA,$E9,$E9,$E9,$E9,$E9,$E9,$E9,$EA,$EA,$EA,$EA,$EB,$EB,$EC,$EC,$ED,$EE,$EE,$EF,$F0,$F1,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FC,$FD,$FE,$FF  ; val=23
-    FCB $00,$01,$02,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F,$10,$11,$12,$12,$13,$14,$14,$15,$16,$16,$17,$17,$17,$17,$18,$18,$18,$18,$18,$18,$18,$17,$17,$17,$17,$16,$16,$15,$14,$14,$13,$12,$12,$11,$10,$0F,$0E,$0D,$0C,$0B,$0A,$09,$08,$07,$06,$05,$04,$02,$01,$00,$FF,$FE,$FC,$FB,$FA,$F9,$F8,$F7,$F6,$F5,$F4,$F3,$F2,$F1,$F0,$EF,$EE,$EE,$ED,$EC,$EC,$EB,$EA,$EA,$E9,$E9,$E9,$E9,$E8,$E8,$E8,$E8,$E8,$E8,$E8,$E9,$E9,$E9,$E9,$EA,$EA,$EB,$EC,$EC,$ED,$EE,$EE,$EF,$F0,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FE,$FF  ; val=24
-    FCB $00,$01,$02,$04,$05,$06,$07,$08,$0A,$0B,$0C,$0D,$0E,$0F,$10,$11,$12,$12,$13,$14,$15,$15,$16,$16,$17,$17,$18,$18,$18,$19,$19,$19,$19,$19,$19,$19,$18,$18,$18,$17,$17,$16,$16,$15,$15,$14,$13,$12,$12,$11,$10,$0F,$0E,$0D,$0C,$0B,$0A,$08,$07,$06,$05,$04,$02,$01,$00,$FF,$FE,$FC,$FB,$FA,$F9,$F8,$F6,$F5,$F4,$F3,$F2,$F1,$F0,$EF,$EE,$EE,$ED,$EC,$EB,$EB,$EA,$EA,$E9,$E9,$E8,$E8,$E8,$E7,$E7,$E7,$E7,$E7,$E7,$E7,$E8,$E8,$E8,$E9,$E9,$EA,$EA,$EB,$EB,$EC,$ED,$EE,$EE,$EF,$F0,$F1,$F2,$F3,$F4,$F5,$F6,$F8,$F9,$FA,$FB,$FC,$FE,$FF  ; val=25
-    FCB $00,$01,$02,$04,$05,$06,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F,$10,$11,$12,$13,$14,$15,$16,$16,$17,$17,$18,$18,$19,$19,$19,$1A,$1A,$1A,$1A,$1A,$1A,$1A,$19,$19,$19,$18,$18,$17,$17,$16,$16,$15,$14,$13,$12,$11,$10,$0F,$0E,$0D,$0C,$0B,$0A,$09,$08,$06,$05,$04,$02,$01,$00,$FF,$FE,$FC,$FB,$FA,$F8,$F7,$F6,$F5,$F4,$F3,$F2,$F1,$F0,$EF,$EE,$ED,$EC,$EB,$EA,$EA,$E9,$E9,$E8,$E8,$E7,$E7,$E7,$E6,$E6,$E6,$E6,$E6,$E6,$E6,$E7,$E7,$E7,$E8,$E8,$E9,$E9,$EA,$EA,$EB,$EC,$ED,$EE,$EF,$F0,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$FA,$FB,$FC,$FE,$FF  ; val=26
-    FCB $00,$01,$03,$04,$05,$07,$08,$09,$0A,$0B,$0D,$0E,$0F,$10,$11,$12,$13,$14,$15,$16,$16,$17,$18,$18,$19,$19,$1A,$1A,$1A,$1B,$1B,$1B,$1B,$1B,$1B,$1B,$1A,$1A,$1A,$19,$19,$18,$18,$17,$16,$16,$15,$14,$13,$12,$11,$10,$0F,$0E,$0D,$0B,$0A,$09,$08,$07,$05,$04,$03,$01,$00,$FF,$FD,$FC,$FB,$F9,$F8,$F7,$F6,$F5,$F3,$F2,$F1,$F0,$EF,$EE,$ED,$EC,$EB,$EA,$EA,$E9,$E8,$E8,$E7,$E7,$E6,$E6,$E6,$E5,$E5,$E5,$E5,$E5,$E5,$E5,$E6,$E6,$E6,$E7,$E7,$E8,$E8,$E9,$EA,$EA,$EB,$EC,$ED,$EE,$EF,$F0,$F1,$F2,$F3,$F5,$F6,$F7,$F8,$F9,$FB,$FC,$FD,$FF  ; val=27
-    FCB $00,$01,$03,$04,$05,$07,$08,$09,$0B,$0C,$0D,$0E,$10,$11,$12,$13,$14,$15,$15,$16,$17,$18,$19,$19,$1A,$1A,$1B,$1B,$1B,$1C,$1C,$1C,$1C,$1C,$1C,$1C,$1B,$1B,$1B,$1A,$1A,$19,$19,$18,$17,$16,$15,$15,$14,$13,$12,$11,$10,$0E,$0D,$0C,$0B,$09,$08,$07,$05,$04,$03,$01,$00,$FF,$FD,$FC,$FB,$F9,$F8,$F7,$F5,$F4,$F3,$F2,$F0,$EF,$EE,$ED,$EC,$EB,$EB,$EA,$E9,$E8,$E7,$E7,$E6,$E6,$E5,$E5,$E5,$E4,$E4,$E4,$E4,$E4,$E4,$E4,$E5,$E5,$E5,$E6,$E6,$E7,$E7,$E8,$E9,$EA,$EB,$EB,$EC,$ED,$EE,$EF,$F0,$F2,$F3,$F4,$F5,$F7,$F8,$F9,$FB,$FC,$FD,$FF  ; val=28
-    FCB $00,$01,$03,$04,$06,$07,$08,$0A,$0B,$0C,$0E,$0F,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19,$1A,$1B,$1B,$1C,$1C,$1C,$1D,$1D,$1D,$1D,$1D,$1D,$1D,$1C,$1C,$1C,$1B,$1B,$1A,$19,$19,$18,$17,$16,$15,$14,$13,$12,$11,$10,$0F,$0E,$0C,$0B,$0A,$08,$07,$06,$04,$03,$01,$00,$FF,$FD,$FC,$FA,$F9,$F8,$F6,$F5,$F4,$F2,$F1,$F0,$EF,$EE,$ED,$EC,$EB,$EA,$E9,$E8,$E7,$E7,$E6,$E5,$E5,$E4,$E4,$E4,$E3,$E3,$E3,$E3,$E3,$E3,$E3,$E4,$E4,$E4,$E5,$E5,$E6,$E7,$E7,$E8,$E9,$EA,$EB,$EC,$ED,$EE,$EF,$F0,$F1,$F2,$F4,$F5,$F6,$F8,$F9,$FA,$FC,$FD,$FF  ; val=29
-    FCB $00,$01,$03,$04,$06,$07,$09,$0A,$0B,$0D,$0E,$0F,$11,$12,$13,$14,$15,$16,$17,$18,$19,$1A,$1A,$1B,$1B,$1C,$1D,$1D,$1D,$1E,$1E,$1E,$1E,$1E,$1E,$1E,$1D,$1D,$1D,$1C,$1B,$1B,$1A,$1A,$19,$18,$17,$16,$15,$14,$13,$12,$11,$0F,$0E,$0D,$0B,$0A,$09,$07,$06,$04,$03,$01,$00,$FF,$FD,$FC,$FA,$F9,$F7,$F6,$F5,$F3,$F2,$F1,$EF,$EE,$ED,$EC,$EB,$EA,$E9,$E8,$E7,$E6,$E6,$E5,$E5,$E4,$E3,$E3,$E3,$E2,$E2,$E2,$E2,$E2,$E2,$E2,$E3,$E3,$E3,$E4,$E5,$E5,$E6,$E6,$E7,$E8,$E9,$EA,$EB,$EC,$ED,$EE,$EF,$F1,$F2,$F3,$F5,$F6,$F7,$F9,$FA,$FC,$FD,$FF  ; val=30
-    FCB $00,$01,$03,$05,$06,$08,$09,$0A,$0C,$0D,$0F,$10,$11,$12,$14,$15,$16,$17,$18,$19,$1A,$1A,$1B,$1C,$1C,$1D,$1E,$1E,$1E,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1E,$1E,$1E,$1D,$1C,$1C,$1B,$1A,$1A,$19,$18,$17,$16,$15,$14,$12,$11,$10,$0F,$0D,$0C,$0A,$09,$08,$06,$05,$03,$01,$00,$FF,$FD,$FB,$FA,$F8,$F7,$F6,$F4,$F3,$F1,$F0,$EF,$EE,$EC,$EB,$EA,$E9,$E8,$E7,$E6,$E6,$E5,$E4,$E4,$E3,$E2,$E2,$E2,$E1,$E1,$E1,$E1,$E1,$E1,$E1,$E2,$E2,$E2,$E3,$E4,$E4,$E5,$E6,$E6,$E7,$E8,$E9,$EA,$EB,$EC,$EE,$EF,$F0,$F1,$F3,$F4,$F6,$F7,$F8,$FA,$FB,$FD,$FF  ; val=31
-    FCB $00,$02,$03,$05,$06,$08,$09,$0B,$0C,$0E,$0F,$10,$12,$13,$14,$15,$17,$18,$19,$1A,$1B,$1B,$1C,$1D,$1D,$1E,$1F,$1F,$1F,$20,$20,$20,$20,$20,$20,$20,$1F,$1F,$1F,$1E,$1D,$1D,$1C,$1B,$1B,$1A,$19,$18,$17,$15,$14,$13,$12,$10,$0F,$0E,$0C,$0B,$09,$08,$06,$05,$03,$02,$00,$FE,$FD,$FB,$FA,$F8,$F7,$F5,$F4,$F2,$F1,$F0,$EE,$ED,$EC,$EB,$E9,$E8,$E7,$E6,$E5,$E5,$E4,$E3,$E3,$E2,$E1,$E1,$E1,$E0,$E0,$E0,$E0,$E0,$E0,$E0,$E1,$E1,$E1,$E2,$E3,$E3,$E4,$E5,$E5,$E6,$E7,$E8,$E9,$EB,$EC,$ED,$EE,$F0,$F1,$F2,$F4,$F5,$F7,$F8,$FA,$FB,$FD,$FE  ; val=32
-    FCB $00,$02,$03,$05,$06,$08,$0A,$0B,$0D,$0E,$0F,$11,$12,$14,$15,$16,$17,$18,$19,$1A,$1B,$1C,$1D,$1E,$1E,$1F,$1F,$20,$20,$20,$20,$21,$21,$21,$20,$20,$20,$20,$1F,$1F,$1E,$1E,$1D,$1C,$1B,$1A,$19,$18,$17,$16,$15,$14,$12,$11,$0F,$0E,$0D,$0B,$0A,$08,$06,$05,$03,$02,$00,$FE,$FD,$FB,$FA,$F8,$F6,$F5,$F3,$F2,$F1,$EF,$EE,$EC,$EB,$EA,$E9,$E8,$E7,$E6,$E5,$E4,$E3,$E2,$E2,$E1,$E1,$E0,$E0,$E0,$E0,$DF,$DF,$DF,$E0,$E0,$E0,$E0,$E1,$E1,$E2,$E2,$E3,$E4,$E5,$E6,$E7,$E8,$E9,$EA,$EB,$EC,$EE,$EF,$F1,$F2,$F3,$F5,$F6,$F8,$FA,$FB,$FD,$FE  ; val=33
-    FCB $00,$02,$03,$05,$07,$08,$0A,$0B,$0D,$0E,$10,$11,$13,$14,$16,$17,$18,$19,$1A,$1B,$1C,$1D,$1E,$1F,$1F,$20,$20,$21,$21,$21,$21,$22,$22,$22,$21,$21,$21,$21,$20,$20,$1F,$1F,$1E,$1D,$1C,$1B,$1A,$19,$18,$17,$16,$14,$13,$11,$10,$0E,$0D,$0B,$0A,$08,$07,$05,$03,$02,$00,$FE,$FD,$FB,$F9,$F8,$F6,$F5,$F3,$F2,$F0,$EF,$ED,$EC,$EA,$E9,$E8,$E7,$E6,$E5,$E4,$E3,$E2,$E1,$E1,$E0,$E0,$DF,$DF,$DF,$DF,$DE,$DE,$DE,$DF,$DF,$DF,$DF,$E0,$E0,$E1,$E1,$E2,$E3,$E4,$E5,$E6,$E7,$E8,$E9,$EA,$EC,$ED,$EF,$F0,$F2,$F3,$F5,$F6,$F8,$F9,$FB,$FD,$FE  ; val=34
-    FCB $00,$02,$03,$05,$07,$08,$0A,$0C,$0D,$0F,$10,$12,$13,$15,$16,$17,$19,$1A,$1B,$1C,$1D,$1E,$1F,$1F,$20,$21,$21,$22,$22,$22,$22,$23,$23,$23,$22,$22,$22,$22,$21,$21,$20,$1F,$1F,$1E,$1D,$1C,$1B,$1A,$19,$17,$16,$15,$13,$12,$10,$0F,$0D,$0C,$0A,$08,$07,$05,$03,$02,$00,$FE,$FD,$FB,$F9,$F8,$F6,$F4,$F3,$F1,$F0,$EE,$ED,$EB,$EA,$E9,$E7,$E6,$E5,$E4,$E3,$E2,$E1,$E1,$E0,$DF,$DF,$DE,$DE,$DE,$DE,$DD,$DD,$DD,$DE,$DE,$DE,$DE,$DF,$DF,$E0,$E1,$E1,$E2,$E3,$E4,$E5,$E6,$E7,$E9,$EA,$EB,$ED,$EE,$F0,$F1,$F3,$F4,$F6,$F8,$F9,$FB,$FD,$FE  ; val=35
-    FCB $00,$02,$03,$05,$07,$09,$0A,$0C,$0E,$0F,$11,$12,$14,$15,$17,$18,$19,$1A,$1C,$1D,$1E,$1F,$20,$20,$21,$22,$22,$23,$23,$23,$23,$24,$24,$24,$23,$23,$23,$23,$22,$22,$21,$20,$20,$1F,$1E,$1D,$1C,$1A,$19,$18,$17,$15,$14,$12,$11,$0F,$0E,$0C,$0A,$09,$07,$05,$03,$02,$00,$FE,$FD,$FB,$F9,$F7,$F6,$F4,$F2,$F1,$EF,$EE,$EC,$EB,$E9,$E8,$E7,$E6,$E4,$E3,$E2,$E1,$E0,$E0,$DF,$DE,$DE,$DD,$DD,$DD,$DD,$DC,$DC,$DC,$DD,$DD,$DD,$DD,$DE,$DE,$DF,$E0,$E0,$E1,$E2,$E3,$E4,$E6,$E7,$E8,$E9,$EB,$EC,$EE,$EF,$F1,$F2,$F4,$F6,$F7,$F9,$FB,$FD,$FE  ; val=36
-    FCB $00,$02,$03,$05,$07,$09,$0B,$0C,$0E,$10,$11,$13,$15,$16,$17,$19,$1A,$1B,$1C,$1D,$1F,$20,$20,$21,$22,$23,$23,$24,$24,$24,$24,$25,$25,$25,$24,$24,$24,$24,$23,$23,$22,$21,$20,$20,$1F,$1D,$1C,$1B,$1A,$19,$17,$16,$15,$13,$11,$10,$0E,$0C,$0B,$09,$07,$05,$03,$02,$00,$FE,$FD,$FB,$F9,$F7,$F5,$F4,$F2,$F0,$EF,$ED,$EB,$EA,$E9,$E7,$E6,$E5,$E4,$E3,$E1,$E0,$E0,$DF,$DE,$DD,$DD,$DC,$DC,$DC,$DC,$DB,$DB,$DB,$DC,$DC,$DC,$DC,$DD,$DD,$DE,$DF,$E0,$E0,$E1,$E3,$E4,$E5,$E6,$E7,$E9,$EA,$EB,$ED,$EF,$F0,$F2,$F4,$F5,$F7,$F9,$FB,$FD,$FE  ; val=37
-    FCB $00,$02,$04,$06,$07,$09,$0B,$0D,$0F,$10,$12,$13,$15,$17,$18,$19,$1B,$1C,$1D,$1E,$1F,$20,$21,$22,$23,$24,$24,$25,$25,$25,$25,$26,$26,$26,$25,$25,$25,$25,$24,$24,$23,$22,$21,$20,$1F,$1E,$1D,$1C,$1B,$19,$18,$17,$15,$13,$12,$10,$0F,$0D,$0B,$09,$07,$06,$04,$02,$00,$FE,$FC,$FA,$F9,$F7,$F5,$F3,$F1,$F0,$EE,$ED,$EB,$E9,$E8,$E7,$E5,$E4,$E3,$E2,$E1,$E0,$DF,$DE,$DD,$DC,$DC,$DB,$DB,$DB,$DB,$DA,$DA,$DA,$DB,$DB,$DB,$DB,$DC,$DC,$DD,$DE,$DF,$E0,$E1,$E2,$E3,$E4,$E5,$E7,$E8,$E9,$EB,$ED,$EE,$F0,$F1,$F3,$F5,$F7,$F9,$FA,$FC,$FE  ; val=38
-    FCB $00,$02,$04,$06,$08,$09,$0B,$0D,$0F,$10,$12,$14,$16,$17,$19,$1A,$1B,$1D,$1E,$1F,$20,$21,$22,$23,$24,$25,$25,$25,$26,$26,$26,$27,$27,$27,$26,$26,$26,$25,$25,$25,$24,$23,$22,$21,$20,$1F,$1E,$1D,$1B,$1A,$19,$17,$16,$14,$12,$10,$0F,$0D,$0B,$09,$08,$06,$04,$02,$00,$FE,$FC,$FA,$F8,$F7,$F5,$F3,$F1,$F0,$EE,$EC,$EA,$E9,$E7,$E6,$E5,$E3,$E2,$E1,$E0,$DF,$DE,$DD,$DC,$DB,$DB,$DB,$DA,$DA,$DA,$D9,$D9,$D9,$DA,$DA,$DA,$DB,$DB,$DB,$DC,$DD,$DE,$DF,$E0,$E1,$E2,$E3,$E5,$E6,$E7,$E9,$EA,$EC,$EE,$F0,$F1,$F3,$F5,$F7,$F8,$FA,$FC,$FE  ; val=39
-    FCB $00,$02,$04,$06,$08,$0A,$0C,$0D,$0F,$11,$13,$14,$16,$18,$19,$1B,$1C,$1D,$1F,$20,$21,$22,$23,$24,$25,$26,$26,$26,$27,$27,$27,$28,$28,$28,$27,$27,$27,$26,$26,$26,$25,$24,$23,$22,$21,$20,$1F,$1D,$1C,$1B,$19,$18,$16,$14,$13,$11,$0F,$0D,$0C,$0A,$08,$06,$04,$02,$00,$FE,$FC,$FA,$F8,$F6,$F4,$F3,$F1,$EF,$ED,$EC,$EA,$E8,$E7,$E5,$E4,$E3,$E1,$E0,$DF,$DE,$DD,$DC,$DB,$DA,$DA,$DA,$D9,$D9,$D9,$D8,$D8,$D8,$D9,$D9,$D9,$DA,$DA,$DA,$DB,$DC,$DD,$DE,$DF,$E0,$E1,$E3,$E4,$E5,$E7,$E8,$EA,$EC,$ED,$EF,$F1,$F3,$F4,$F6,$F8,$FA,$FC,$FE  ; val=40
-    FCB $00,$02,$04,$06,$08,$0A,$0C,$0E,$10,$11,$13,$15,$17,$18,$1A,$1B,$1D,$1E,$1F,$21,$22,$23,$24,$25,$25,$26,$27,$27,$28,$28,$28,$29,$29,$29,$28,$28,$28,$27,$27,$26,$25,$25,$24,$23,$22,$21,$1F,$1E,$1D,$1B,$1A,$18,$17,$15,$13,$11,$10,$0E,$0C,$0A,$08,$06,$04,$02,$00,$FE,$FC,$FA,$F8,$F6,$F4,$F2,$F0,$EF,$ED,$EB,$E9,$E8,$E6,$E5,$E3,$E2,$E1,$DF,$DE,$DD,$DC,$DB,$DB,$DA,$D9,$D9,$D8,$D8,$D8,$D7,$D7,$D7,$D8,$D8,$D8,$D9,$D9,$DA,$DB,$DB,$DC,$DD,$DE,$DF,$E1,$E2,$E3,$E5,$E6,$E8,$E9,$EB,$ED,$EF,$F0,$F2,$F4,$F6,$F8,$FA,$FC,$FE  ; val=41
-    FCB $00,$02,$04,$06,$08,$0A,$0C,$0E,$10,$12,$14,$15,$17,$19,$1B,$1C,$1E,$1F,$20,$21,$23,$24,$25,$26,$26,$27,$28,$28,$29,$29,$29,$2A,$2A,$2A,$29,$29,$29,$28,$28,$27,$26,$26,$25,$24,$23,$21,$20,$1F,$1E,$1C,$1B,$19,$17,$15,$14,$12,$10,$0E,$0C,$0A,$08,$06,$04,$02,$00,$FE,$FC,$FA,$F8,$F6,$F4,$F2,$F0,$EE,$EC,$EB,$E9,$E7,$E5,$E4,$E2,$E1,$E0,$DF,$DD,$DC,$DB,$DA,$DA,$D9,$D8,$D8,$D7,$D7,$D7,$D6,$D6,$D6,$D7,$D7,$D7,$D8,$D8,$D9,$DA,$DA,$DB,$DC,$DD,$DF,$E0,$E1,$E2,$E4,$E5,$E7,$E9,$EB,$EC,$EE,$F0,$F2,$F4,$F6,$F8,$FA,$FC,$FE  ; val=42
-    FCB $00,$02,$04,$06,$08,$0A,$0C,$0E,$10,$12,$14,$16,$18,$1A,$1B,$1D,$1E,$20,$21,$22,$24,$25,$26,$27,$27,$28,$29,$29,$2A,$2A,$2A,$2B,$2B,$2B,$2A,$2A,$2A,$29,$29,$28,$27,$27,$26,$25,$24,$22,$21,$20,$1E,$1D,$1B,$1A,$18,$16,$14,$12,$10,$0E,$0C,$0A,$08,$06,$04,$02,$00,$FE,$FC,$FA,$F8,$F6,$F4,$F2,$F0,$EE,$EC,$EA,$E8,$E6,$E5,$E3,$E2,$E0,$DF,$DE,$DC,$DB,$DA,$D9,$D9,$D8,$D7,$D7,$D6,$D6,$D6,$D5,$D5,$D5,$D6,$D6,$D6,$D7,$D7,$D8,$D9,$D9,$DA,$DB,$DC,$DE,$DF,$E0,$E2,$E3,$E5,$E6,$E8,$EA,$EC,$EE,$F0,$F2,$F4,$F6,$F8,$FA,$FC,$FE  ; val=43
-    FCB $00,$02,$04,$07,$09,$0B,$0D,$0F,$11,$13,$15,$16,$18,$1A,$1C,$1D,$1F,$20,$22,$23,$24,$25,$27,$28,$28,$29,$2A,$2A,$2B,$2B,$2B,$2C,$2C,$2C,$2B,$2B,$2B,$2A,$2A,$29,$28,$28,$27,$25,$24,$23,$22,$20,$1F,$1D,$1C,$1A,$18,$16,$15,$13,$11,$0F,$0D,$0B,$09,$07,$04,$02,$00,$FE,$FC,$F9,$F7,$F5,$F3,$F1,$EF,$ED,$EB,$EA,$E8,$E6,$E4,$E3,$E1,$E0,$DE,$DD,$DC,$DB,$D9,$D8,$D8,$D7,$D6,$D6,$D5,$D5,$D5,$D4,$D4,$D4,$D5,$D5,$D5,$D6,$D6,$D7,$D8,$D8,$D9,$DB,$DC,$DD,$DE,$E0,$E1,$E3,$E4,$E6,$E8,$EA,$EB,$ED,$EF,$F1,$F3,$F5,$F7,$F9,$FC,$FE  ; val=44
-    FCB $00,$02,$04,$07,$09,$0B,$0D,$0F,$11,$13,$15,$17,$19,$1B,$1C,$1E,$20,$21,$22,$24,$25,$26,$27,$28,$29,$2A,$2B,$2B,$2C,$2C,$2C,$2D,$2D,$2D,$2C,$2C,$2C,$2B,$2B,$2A,$29,$28,$27,$26,$25,$24,$22,$21,$20,$1E,$1C,$1B,$19,$17,$15,$13,$11,$0F,$0D,$0B,$09,$07,$04,$02,$00,$FE,$FC,$F9,$F7,$F5,$F3,$F1,$EF,$ED,$EB,$E9,$E7,$E5,$E4,$E2,$E0,$DF,$DE,$DC,$DB,$DA,$D9,$D8,$D7,$D6,$D5,$D5,$D4,$D4,$D4,$D3,$D3,$D3,$D4,$D4,$D4,$D5,$D5,$D6,$D7,$D8,$D9,$DA,$DB,$DC,$DE,$DF,$E0,$E2,$E4,$E5,$E7,$E9,$EB,$ED,$EF,$F1,$F3,$F5,$F7,$F9,$FC,$FE  ; val=45
-    FCB $00,$02,$04,$07,$09,$0B,$0D,$0F,$12,$13,$16,$17,$1A,$1B,$1D,$1F,$20,$22,$23,$25,$26,$27,$28,$29,$2A,$2B,$2C,$2C,$2D,$2D,$2D,$2E,$2E,$2E,$2D,$2D,$2D,$2C,$2C,$2B,$2A,$29,$28,$27,$26,$25,$23,$22,$20,$1F,$1D,$1B,$1A,$17,$16,$13,$12,$0F,$0D,$0B,$09,$07,$04,$02,$00,$FE,$FC,$F9,$F7,$F5,$F3,$F1,$EE,$ED,$EA,$E9,$E6,$E5,$E3,$E1,$E0,$DE,$DD,$DB,$DA,$D9,$D8,$D7,$D6,$D5,$D4,$D4,$D3,$D3,$D3,$D2,$D2,$D2,$D3,$D3,$D3,$D4,$D4,$D5,$D6,$D7,$D8,$D9,$DA,$DB,$DD,$DE,$E0,$E1,$E3,$E5,$E6,$E9,$EA,$ED,$EE,$F1,$F3,$F5,$F7,$F9,$FC,$FE  ; val=46
-    FCB $00,$02,$04,$07,$09,$0B,$0E,$10,$12,$14,$16,$18,$1A,$1C,$1E,$1F,$21,$23,$24,$25,$27,$28,$29,$2A,$2B,$2C,$2D,$2D,$2E,$2E,$2E,$2F,$2F,$2F,$2E,$2E,$2E,$2D,$2D,$2C,$2B,$2A,$29,$28,$27,$25,$24,$23,$21,$1F,$1E,$1C,$1A,$18,$16,$14,$12,$10,$0E,$0B,$09,$07,$04,$02,$00,$FE,$FC,$F9,$F7,$F5,$F2,$F0,$EE,$EC,$EA,$E8,$E6,$E4,$E2,$E1,$DF,$DD,$DC,$DB,$D9,$D8,$D7,$D6,$D5,$D4,$D3,$D3,$D2,$D2,$D2,$D1,$D1,$D1,$D2,$D2,$D2,$D3,$D3,$D4,$D5,$D6,$D7,$D8,$D9,$DB,$DC,$DD,$DF,$E1,$E2,$E4,$E6,$E8,$EA,$EC,$EE,$F0,$F2,$F5,$F7,$F9,$FC,$FE  ; val=47
-    FCB $00,$02,$05,$07,$09,$0C,$0E,$10,$12,$14,$17,$18,$1B,$1D,$1E,$20,$22,$23,$25,$26,$28,$29,$2A,$2B,$2C,$2D,$2E,$2E,$2F,$2F,$2F,$30,$30,$30,$2F,$2F,$2F,$2E,$2E,$2D,$2C,$2B,$2A,$29,$28,$26,$25,$23,$22,$20,$1E,$1D,$1B,$18,$17,$14,$12,$10,$0E,$0C,$09,$07,$05,$02,$00,$FE,$FB,$F9,$F7,$F4,$F2,$F0,$EE,$EC,$E9,$E8,$E5,$E3,$E2,$E0,$DE,$DD,$DB,$DA,$D8,$D7,$D6,$D5,$D4,$D3,$D2,$D2,$D1,$D1,$D1,$D0,$D0,$D0,$D1,$D1,$D1,$D2,$D2,$D3,$D4,$D5,$D6,$D7,$D8,$DA,$DB,$DD,$DE,$E0,$E2,$E3,$E5,$E8,$E9,$EC,$EE,$F0,$F2,$F4,$F7,$F9,$FB,$FE  ; val=48
-    FCB $00,$02,$05,$07,$0A,$0C,$0E,$10,$13,$15,$17,$19,$1B,$1D,$1F,$21,$22,$24,$26,$27,$29,$2A,$2B,$2C,$2D,$2E,$2F,$2F,$30,$30,$30,$31,$31,$31,$30,$30,$30,$2F,$2F,$2E,$2D,$2C,$2B,$2A,$29,$27,$26,$24,$22,$21,$1F,$1D,$1B,$19,$17,$15,$13,$10,$0E,$0C,$0A,$07,$05,$02,$00,$FE,$FB,$F9,$F6,$F4,$F2,$F0,$ED,$EB,$E9,$E7,$E5,$E3,$E1,$DF,$DE,$DC,$DA,$D9,$D7,$D6,$D5,$D4,$D3,$D2,$D1,$D1,$D0,$D0,$D0,$CF,$CF,$CF,$D0,$D0,$D0,$D1,$D1,$D2,$D3,$D4,$D5,$D6,$D7,$D9,$DA,$DC,$DE,$DF,$E1,$E3,$E5,$E7,$E9,$EB,$ED,$F0,$F2,$F4,$F6,$F9,$FB,$FE  ; val=49
-    FCB $00,$02,$05,$07,$0A,$0C,$0E,$11,$13,$15,$17,$19,$1C,$1E,$20,$21,$23,$25,$26,$28,$29,$2B,$2C,$2D,$2E,$2F,$30,$30,$31,$31,$31,$32,$32,$32,$31,$31,$31,$30,$30,$2F,$2E,$2D,$2C,$2B,$29,$28,$26,$25,$23,$21,$20,$1E,$1C,$19,$17,$15,$13,$11,$0E,$0C,$0A,$07,$05,$02,$00,$FE,$FB,$F9,$F6,$F4,$F2,$EF,$ED,$EB,$E9,$E7,$E4,$E2,$E0,$DF,$DD,$DB,$DA,$D8,$D7,$D5,$D4,$D3,$D2,$D1,$D0,$D0,$CF,$CF,$CF,$CE,$CE,$CE,$CF,$CF,$CF,$D0,$D0,$D1,$D2,$D3,$D4,$D5,$D7,$D8,$DA,$DB,$DD,$DF,$E0,$E2,$E4,$E7,$E9,$EB,$ED,$EF,$F2,$F4,$F6,$F9,$FB,$FE  ; val=50
-    FCB $00,$02,$05,$08,$0A,$0C,$0F,$11,$14,$16,$18,$1A,$1C,$1E,$20,$22,$24,$25,$27,$29,$2A,$2B,$2D,$2E,$2F,$30,$31,$31,$32,$32,$32,$33,$33,$33,$32,$32,$32,$31,$31,$30,$2F,$2E,$2D,$2B,$2A,$29,$27,$25,$24,$22,$20,$1E,$1C,$1A,$18,$16,$14,$11,$0F,$0C,$0A,$08,$05,$02,$00,$FE,$FB,$F8,$F6,$F4,$F1,$EF,$EC,$EA,$E8,$E6,$E4,$E2,$E0,$DE,$DC,$DB,$D9,$D7,$D6,$D5,$D3,$D2,$D1,$D0,$CF,$CF,$CE,$CE,$CE,$CD,$CD,$CD,$CE,$CE,$CE,$CF,$CF,$D0,$D1,$D2,$D3,$D5,$D6,$D7,$D9,$DB,$DC,$DE,$E0,$E2,$E4,$E6,$E8,$EA,$EC,$EF,$F1,$F4,$F6,$F8,$FB,$FE  ; val=51
-    FCB $00,$02,$05,$08,$0A,$0D,$0F,$11,$14,$16,$18,$1A,$1D,$1F,$21,$23,$25,$26,$28,$29,$2B,$2C,$2E,$2F,$30,$31,$32,$32,$33,$33,$33,$34,$34,$34,$33,$33,$33,$32,$32,$31,$30,$2F,$2E,$2C,$2B,$29,$28,$26,$25,$23,$21,$1F,$1D,$1A,$18,$16,$14,$11,$0F,$0D,$0A,$08,$05,$02,$00,$FE,$FB,$F8,$F6,$F3,$F1,$EF,$EC,$EA,$E8,$E6,$E3,$E1,$DF,$DD,$DB,$DA,$D8,$D7,$D5,$D4,$D2,$D1,$D0,$CF,$CE,$CE,$CD,$CD,$CD,$CC,$CC,$CC,$CD,$CD,$CD,$CE,$CE,$CF,$D0,$D1,$D2,$D4,$D5,$D7,$D8,$DA,$DB,$DD,$DF,$E1,$E3,$E6,$E8,$EA,$EC,$EF,$F1,$F3,$F6,$F8,$FB,$FE  ; val=52
-    FCB $00,$02,$05,$08,$0A,$0D,$0F,$12,$14,$16,$19,$1B,$1D,$1F,$22,$23,$25,$27,$29,$2A,$2C,$2D,$2E,$30,$30,$32,$33,$33,$34,$34,$34,$35,$35,$35,$34,$34,$34,$33,$33,$32,$30,$30,$2E,$2D,$2C,$2A,$29,$27,$25,$23,$22,$1F,$1D,$1B,$19,$16,$14,$12,$0F,$0D,$0A,$08,$05,$02,$00,$FE,$FB,$F8,$F6,$F3,$F1,$EE,$EC,$EA,$E7,$E5,$E3,$E1,$DE,$DD,$DB,$D9,$D7,$D6,$D4,$D3,$D2,$D0,$D0,$CE,$CD,$CD,$CC,$CC,$CC,$CB,$CB,$CB,$CC,$CC,$CC,$CD,$CD,$CE,$D0,$D0,$D2,$D3,$D4,$D6,$D7,$D9,$DB,$DD,$DE,$E1,$E3,$E5,$E7,$EA,$EC,$EE,$F1,$F3,$F6,$F8,$FB,$FE  ; val=53
-    FCB $00,$03,$05,$08,$0B,$0D,$10,$12,$15,$17,$19,$1B,$1E,$20,$22,$24,$26,$28,$29,$2B,$2D,$2E,$2F,$31,$31,$33,$33,$34,$35,$35,$35,$36,$36,$36,$35,$35,$35,$34,$33,$33,$31,$31,$2F,$2E,$2D,$2B,$29,$28,$26,$24,$22,$20,$1E,$1B,$19,$17,$15,$12,$10,$0D,$0B,$08,$05,$03,$00,$FD,$FB,$F8,$F5,$F3,$F0,$EE,$EB,$E9,$E7,$E5,$E2,$E0,$DE,$DC,$DA,$D8,$D7,$D5,$D3,$D2,$D1,$CF,$CF,$CD,$CD,$CC,$CB,$CB,$CB,$CA,$CA,$CA,$CB,$CB,$CB,$CC,$CD,$CD,$CF,$CF,$D1,$D2,$D3,$D5,$D7,$D8,$DA,$DC,$DE,$E0,$E2,$E5,$E7,$E9,$EB,$EE,$F0,$F3,$F5,$F8,$FB,$FD  ; val=54
-    FCB $00,$03,$05,$08,$0B,$0D,$10,$12,$15,$17,$1A,$1C,$1F,$21,$23,$25,$27,$28,$2A,$2C,$2E,$2F,$30,$31,$32,$34,$34,$35,$36,$36,$36,$37,$37,$37,$36,$36,$36,$35,$34,$34,$32,$31,$30,$2F,$2E,$2C,$2A,$28,$27,$25,$23,$21,$1F,$1C,$1A,$17,$15,$12,$10,$0D,$0B,$08,$05,$03,$00,$FD,$FB,$F8,$F5,$F3,$F0,$EE,$EB,$E9,$E6,$E4,$E1,$DF,$DD,$DB,$D9,$D8,$D6,$D4,$D2,$D1,$D0,$CF,$CE,$CC,$CC,$CB,$CA,$CA,$CA,$C9,$C9,$C9,$CA,$CA,$CA,$CB,$CC,$CC,$CE,$CF,$D0,$D1,$D2,$D4,$D6,$D8,$D9,$DB,$DD,$DF,$E1,$E4,$E6,$E9,$EB,$EE,$F0,$F3,$F5,$F8,$FB,$FD  ; val=55
-    FCB $00,$03,$05,$08,$0B,$0E,$10,$13,$15,$18,$1A,$1C,$1F,$21,$23,$25,$27,$29,$2B,$2D,$2E,$30,$31,$32,$33,$35,$35,$36,$37,$37,$37,$38,$38,$38,$37,$37,$37,$36,$35,$35,$33,$32,$31,$30,$2E,$2D,$2B,$29,$27,$25,$23,$21,$1F,$1C,$1A,$18,$15,$13,$10,$0E,$0B,$08,$05,$03,$00,$FD,$FB,$F8,$F5,$F2,$F0,$ED,$EB,$E8,$E6,$E4,$E1,$DF,$DD,$DB,$D9,$D7,$D5,$D3,$D2,$D0,$CF,$CE,$CD,$CB,$CB,$CA,$C9,$C9,$C9,$C8,$C8,$C8,$C9,$C9,$C9,$CA,$CB,$CB,$CD,$CE,$CF,$D0,$D2,$D3,$D5,$D7,$D9,$DB,$DD,$DF,$E1,$E4,$E6,$E8,$EB,$ED,$F0,$F2,$F5,$F8,$FB,$FD  ; val=56
-    FCB $00,$03,$05,$08,$0B,$0E,$10,$13,$16,$18,$1B,$1D,$20,$22,$24,$26,$28,$2A,$2C,$2D,$2F,$31,$32,$33,$34,$35,$36,$37,$38,$38,$38,$39,$39,$39,$38,$38,$38,$37,$36,$35,$34,$33,$32,$31,$2F,$2D,$2C,$2A,$28,$26,$24,$22,$20,$1D,$1B,$18,$16,$13,$10,$0E,$0B,$08,$05,$03,$00,$FD,$FB,$F8,$F5,$F2,$F0,$ED,$EA,$E8,$E5,$E3,$E0,$DE,$DC,$DA,$D8,$D6,$D4,$D3,$D1,$CF,$CE,$CD,$CC,$CB,$CA,$C9,$C8,$C8,$C8,$C7,$C7,$C7,$C8,$C8,$C8,$C9,$CA,$CB,$CC,$CD,$CE,$CF,$D1,$D3,$D4,$D6,$D8,$DA,$DC,$DE,$E0,$E3,$E5,$E8,$EA,$ED,$F0,$F2,$F5,$F8,$FB,$FD  ; val=57
-    FCB $00,$03,$05,$09,$0B,$0E,$11,$13,$16,$18,$1B,$1D,$20,$22,$25,$27,$29,$2B,$2C,$2E,$30,$31,$33,$34,$35,$36,$37,$38,$39,$39,$39,$3A,$3A,$3A,$39,$39,$39,$38,$37,$36,$35,$34,$33,$31,$30,$2E,$2C,$2B,$29,$27,$25,$22,$20,$1D,$1B,$18,$16,$13,$11,$0E,$0B,$09,$05,$03,$00,$FD,$FB,$F7,$F5,$F2,$EF,$ED,$EA,$E8,$E5,$E3,$E0,$DE,$DB,$D9,$D7,$D5,$D4,$D2,$D0,$CF,$CD,$CC,$CB,$CA,$C9,$C8,$C7,$C7,$C7,$C6,$C6,$C6,$C7,$C7,$C7,$C8,$C9,$CA,$CB,$CC,$CD,$CF,$D0,$D2,$D4,$D5,$D7,$D9,$DB,$DE,$E0,$E3,$E5,$E8,$EA,$ED,$EF,$F2,$F5,$F7,$FB,$FD  ; val=58
-    FCB $00,$03,$06,$09,$0C,$0E,$11,$14,$17,$19,$1C,$1E,$21,$23,$25,$27,$29,$2B,$2D,$2F,$31,$32,$34,$35,$36,$37,$38,$39,$3A,$3A,$3A,$3B,$3B,$3B,$3A,$3A,$3A,$39,$38,$37,$36,$35,$34,$32,$31,$2F,$2D,$2B,$29,$27,$25,$23,$21,$1E,$1C,$19,$17,$14,$11,$0E,$0C,$09,$06,$03,$00,$FD,$FA,$F7,$F4,$F2,$EF,$EC,$E9,$E7,$E4,$E2,$DF,$DD,$DB,$D9,$D7,$D5,$D3,$D1,$CF,$CE,$CC,$CB,$CA,$C9,$C8,$C7,$C6,$C6,$C6,$C5,$C5,$C5,$C6,$C6,$C6,$C7,$C8,$C9,$CA,$CB,$CC,$CE,$CF,$D1,$D3,$D5,$D7,$D9,$DB,$DD,$DF,$E2,$E4,$E7,$E9,$EC,$EF,$F2,$F4,$F7,$FA,$FD  ; val=59
-    FCB $00,$03,$06,$09,$0C,$0F,$11,$14,$17,$19,$1C,$1E,$21,$24,$26,$28,$2A,$2C,$2E,$30,$32,$33,$35,$36,$37,$38,$39,$3A,$3B,$3B,$3B,$3C,$3C,$3C,$3B,$3B,$3B,$3A,$39,$38,$37,$36,$35,$33,$32,$30,$2E,$2C,$2A,$28,$26,$24,$21,$1E,$1C,$19,$17,$14,$11,$0F,$0C,$09,$06,$03,$00,$FD,$FA,$F7,$F4,$F1,$EF,$EC,$E9,$E7,$E4,$E2,$DF,$DC,$DA,$D8,$D6,$D4,$D2,$D0,$CE,$CD,$CB,$CA,$C9,$C8,$C7,$C6,$C5,$C5,$C5,$C4,$C4,$C4,$C5,$C5,$C5,$C6,$C7,$C8,$C9,$CA,$CB,$CD,$CE,$D0,$D2,$D4,$D6,$D8,$DA,$DC,$DF,$E2,$E4,$E7,$E9,$EC,$EF,$F1,$F4,$F7,$FA,$FD  ; val=60
-    FCB $00,$03,$06,$09,$0C,$0F,$12,$14,$17,$1A,$1D,$1F,$22,$24,$27,$29,$2B,$2D,$2F,$31,$33,$34,$35,$37,$38,$39,$3A,$3B,$3C,$3C,$3C,$3D,$3D,$3D,$3C,$3C,$3C,$3B,$3A,$39,$38,$37,$35,$34,$33,$31,$2F,$2D,$2B,$29,$27,$24,$22,$1F,$1D,$1A,$17,$14,$12,$0F,$0C,$09,$06,$03,$00,$FD,$FA,$F7,$F4,$F1,$EE,$EC,$E9,$E6,$E3,$E1,$DE,$DC,$D9,$D7,$D5,$D3,$D1,$CF,$CD,$CC,$CB,$C9,$C8,$C7,$C6,$C5,$C4,$C4,$C4,$C3,$C3,$C3,$C4,$C4,$C4,$C5,$C6,$C7,$C8,$C9,$CB,$CC,$CD,$CF,$D1,$D3,$D5,$D7,$D9,$DC,$DE,$E1,$E3,$E6,$E9,$EC,$EE,$F1,$F4,$F7,$FA,$FD  ; val=61
-    FCB $00,$03,$06,$09,$0C,$0F,$12,$15,$18,$1A,$1D,$1F,$22,$25,$27,$29,$2C,$2E,$2F,$31,$33,$35,$36,$38,$39,$3A,$3B,$3C,$3D,$3D,$3D,$3E,$3E,$3E,$3D,$3D,$3D,$3C,$3B,$3A,$39,$38,$36,$35,$33,$31,$2F,$2E,$2C,$29,$27,$25,$22,$1F,$1D,$1A,$18,$15,$12,$0F,$0C,$09,$06,$03,$00,$FD,$FA,$F7,$F4,$F1,$EE,$EB,$E8,$E6,$E3,$E1,$DE,$DB,$D9,$D7,$D4,$D2,$D1,$CF,$CD,$CB,$CA,$C8,$C7,$C6,$C5,$C4,$C3,$C3,$C3,$C2,$C2,$C2,$C3,$C3,$C3,$C4,$C5,$C6,$C7,$C8,$CA,$CB,$CD,$CF,$D1,$D2,$D4,$D7,$D9,$DB,$DE,$E1,$E3,$E6,$E8,$EB,$EE,$F1,$F4,$F7,$FA,$FD  ; val=62
-    FCB $00,$03,$06,$09,$0C,$0F,$12,$15,$18,$1B,$1E,$20,$23,$25,$28,$2A,$2C,$2E,$30,$32,$34,$36,$37,$39,$3A,$3B,$3C,$3D,$3E,$3E,$3E,$3F,$3F,$3F,$3E,$3E,$3E,$3D,$3C,$3B,$3A,$39,$37,$36,$34,$32,$30,$2E,$2C,$2A,$28,$25,$23,$20,$1E,$1B,$18,$15,$12,$0F,$0C,$09,$06,$03,$00,$FD,$FA,$F7,$F4,$F1,$EE,$EB,$E8,$E5,$E2,$E0,$DD,$DB,$D8,$D6,$D4,$D2,$D0,$CE,$CC,$CA,$C9,$C7,$C6,$C5,$C4,$C3,$C2,$C2,$C2,$C1,$C1,$C1,$C2,$C2,$C2,$C3,$C4,$C5,$C6,$C7,$C9,$CA,$CC,$CE,$D0,$D2,$D4,$D6,$D8,$DB,$DD,$E0,$E2,$E5,$E8,$EB,$EE,$F1,$F4,$F7,$FA,$FD  ; val=63
-
-; ============================================================================
-; SMUL8 - Signed 8x8 multiply, result = (A * B) / 128  (i8)  [kept for compat]
-; ============================================================================
-; Input:  A = op1 (i8), B = op2 (i8)
-; Output: A = result (i8)
-; Destroys: B  (no RAM touched — sign tracked with branches)
-SMUL8:
-TSTA
-BPL SMUL8_AP        ; A >= 0?
-NEGA
-TSTB
-BPL SMUL8_NEGNEG    ; A<0, B: check sign
-NEGB                ; A<0, B<0 -> result positive
-MUL
-ASLB
-ROLA
-RTS
-SMUL8_NEGNEG:           ; A<0, B>=0 -> result negative
-MUL
-ASLB
-ROLA
-NEGA
-RTS
-SMUL8_AP:               ; A >= 0
-TSTB
-BPL SMUL8_POSPOS    ; A>=0, B>=0 -> result positive
-NEGB                ; A>=0, B<0 -> result negative
-MUL
-ASLB
-ROLA
-NEGA
-RTS
-SMUL8_POSPOS:
-MUL
-ASLB
-ROLA
-RTS
-
-; ============================================================================
-; SMUL_LUT - LUT-based signed 8×8 multiply, result = (A * sin(B*2π/128)) / 128
-; ============================================================================
-; Input:  A = val (i8, |val|≤63), B = angle index (0-127)
-;         Y = SMUL_PROD base address (caller pre-loads: LDY #SMUL_PROD)
-; Output: A = result (i8)
-; Strategy: LSRA trick — D = (|val|/2)*256 + (angle | (bit0*128)) → table offset
-;           LDA D,Y — 7 cycles vs LDX+LEAX+LDA = 12 cycles. Saves 5c per call.
-; Destroys: B  (Y preserved)
-SMUL_LUT:
-TSTA
-BPL SMUL_LUT_P      ; A >= 0 ?
-; --- negative val ---
-NEGA                ; A = |val|
-LSRA                ; A = |val|/2,  C = |val| bit0
-BCC SMUL_LUT_N1
-ORB #$80
-SMUL_LUT_N1:
-LDA D,Y             ; table[|val|/2][angle]
-NEGA
-RTS
-SMUL_LUT_P:
-LSRA                ; A = val/2,  C = val bit0
-BCC SMUL_LUT_P1
-ORB #$80
-SMUL_LUT_P1:
-LDA D,Y
-RTS
-
-; ============================================================================
-; DV3D_ROTATE - Apply X/Y/Z Euler rotation to a single point (inlined LUT)
-; ============================================================================
-; Input:  ROT3D_RX, ROT3D_RY, ROT3D_RZ (i8 world coords, |val|≤63)
-;         ROT3D_AX/AY/AZ = raw sin angle indices (0-127)
-;         ROT3D_COS_X/Y/Z = cos angle offsets: (angle+32)&0x7F
-;         ROT3D_OX, ROT3D_OY (i8 screen offsets)
-; Output: ROT3D_SCR_X, ROT3D_SCR_Y
-; Destroys: A, B, X, Y, ROT3D_TEMP, ROT3D_TEMP2, ROT3D_Y1, ROT3D_Z1, ROT3D_X2
-DV3D_ROTATE:
-LDY #SMUL_PROD      ; Y = table base — shared by all inlined SMUL_LUT calls
-; -- X-axis rotation: y1 = y*cX - z*sX,  z1 = y*sX + z*cX --
-LDA >ROT3D_RY
-LDB >ROT3D_COS_X
-    TSTA
-BPL SL_P_0
-NEGA
-LSRA
-BCC SL_N1_0
-ORB #$80
-SL_N1_0:
-LDA D,Y
-NEGA
-BRA SL_END_0
-SL_P_0:
-LSRA
-BCC SL_P1_0
-ORB #$80
-SL_P1_0:
-LDA D,Y
-SL_END_0:
-    STA >ROT3D_TEMP
-LDA >ROT3D_RZ
-LDB >ROT3D_AX
-    TSTA
-BPL SL_P_1
-NEGA
-LSRA
-BCC SL_N1_1
-ORB #$80
-SL_N1_1:
-LDA D,Y
-NEGA
-BRA SL_END_1
-SL_P_1:
-LSRA
-BCC SL_P1_1
-ORB #$80
-SL_P1_1:
-LDA D,Y
-SL_END_1:
-    STA >ROT3D_TEMP2
-LDA >ROT3D_TEMP
-SUBA >ROT3D_TEMP2
-STA >ROT3D_Y1
-
-LDA >ROT3D_RY
-LDB >ROT3D_AX
-    TSTA
-BPL SL_P_2
-NEGA
-LSRA
-BCC SL_N1_2
-ORB #$80
-SL_N1_2:
-LDA D,Y
-NEGA
-BRA SL_END_2
-SL_P_2:
-LSRA
-BCC SL_P1_2
-ORB #$80
-SL_P1_2:
-LDA D,Y
-SL_END_2:
-    STA >ROT3D_TEMP
-LDA >ROT3D_RZ
-LDB >ROT3D_COS_X
-    TSTA
-BPL SL_P_3
-NEGA
-LSRA
-BCC SL_N1_3
-ORB #$80
-SL_N1_3:
-LDA D,Y
-NEGA
-BRA SL_END_3
-SL_P_3:
-LSRA
-BCC SL_P1_3
-ORB #$80
-SL_P1_3:
-LDA D,Y
-SL_END_3:
-    ADDA >ROT3D_TEMP
-STA >ROT3D_Z1
-
-; -- Y-axis rotation: x2 = x*cY + z1*sY --
-LDA >ROT3D_RX
-LDB >ROT3D_COS_Y
-    TSTA
-BPL SL_P_4
-NEGA
-LSRA
-BCC SL_N1_4
-ORB #$80
-SL_N1_4:
-LDA D,Y
-NEGA
-BRA SL_END_4
-SL_P_4:
-LSRA
-BCC SL_P1_4
-ORB #$80
-SL_P1_4:
-LDA D,Y
-SL_END_4:
-    STA >ROT3D_TEMP
-LDA >ROT3D_Z1
-LDB >ROT3D_AY
-    TSTA
-BPL SL_P_5
-NEGA
-LSRA
-BCC SL_N1_5
-ORB #$80
-SL_N1_5:
-LDA D,Y
-NEGA
-BRA SL_END_5
-SL_P_5:
-LSRA
-BCC SL_P1_5
-ORB #$80
-SL_P1_5:
-LDA D,Y
-SL_END_5:
-    ADDA >ROT3D_TEMP
-STA >ROT3D_X2
-
-; -- Z-axis rotation: sx = x2*cZ - y1*sZ + OX,  sy = x2*sZ + y1*cZ + OY --
-LDA >ROT3D_X2
-LDB >ROT3D_COS_Z
-    TSTA
-BPL SL_P_6
-NEGA
-LSRA
-BCC SL_N1_6
-ORB #$80
-SL_N1_6:
-LDA D,Y
-NEGA
-BRA SL_END_6
-SL_P_6:
-LSRA
-BCC SL_P1_6
-ORB #$80
-SL_P1_6:
-LDA D,Y
-SL_END_6:
-    STA >ROT3D_TEMP
-LDA >ROT3D_Y1
-LDB >ROT3D_AZ
-    TSTA
-BPL SL_P_7
-NEGA
-LSRA
-BCC SL_N1_7
-ORB #$80
-SL_N1_7:
-LDA D,Y
-NEGA
-BRA SL_END_7
-SL_P_7:
-LSRA
-BCC SL_P1_7
-ORB #$80
-SL_P1_7:
-LDA D,Y
-SL_END_7:
-    STA >ROT3D_TEMP2
-LDA >ROT3D_TEMP
-SUBA >ROT3D_TEMP2
-ADDA >ROT3D_OX
-STA >ROT3D_SCR_X
-
-LDA >ROT3D_X2
-LDB >ROT3D_AZ
-    TSTA
-BPL SL_P_8
-NEGA
-LSRA
-BCC SL_N1_8
-ORB #$80
-SL_N1_8:
-LDA D,Y
-NEGA
-BRA SL_END_8
-SL_P_8:
-LSRA
-BCC SL_P1_8
-ORB #$80
-SL_P1_8:
-LDA D,Y
-SL_END_8:
-    STA >ROT3D_TEMP
-LDA >ROT3D_Y1
-LDB >ROT3D_COS_Z
-    TSTA
-BPL SL_P_9
-NEGA
-LSRA
-BCC SL_N1_9
-ORB #$80
-SL_N1_9:
-LDA D,Y
-NEGA
-BRA SL_END_9
-SL_P_9:
-LSRA
-BCC SL_P1_9
-ORB #$80
-SL_P1_9:
-LDA D,Y
-SL_END_9:
-    ADDA >ROT3D_TEMP
-ADDA >ROT3D_OY
-STA >ROT3D_SCR_Y
-RTS
-
-; ============================================================================
-; DV3D_MOVETO - Move beam to absolute (X,Y) using direct VIA (same as DSWM)
-; ============================================================================
-; Input:  ROT3D_TEMP=dy, ROT3D_TEMP2=dx (delta from current beam pos)
-;         DP must be $D0 on entry
-; Destroys: A
-; On exit: PB=1 (ready for draw loop)
-DV3D_MOVETO:
-LDA >ROT3D_TEMP     ; dy
-STA VIA_port_a      ; Y to DAC
-CLR VIA_port_b      ; PB=0: enable mux, beam tracks Y
-NOP                 ; settling
-LDA #$CE
-STA VIA_cntl        ; PCR=$CE: /ZERO high, integrators active
-CLR VIA_shift_reg   ; SR=0: beam off during move
-INC VIA_port_b      ; PB=1: lock direction
-LDA >ROT3D_TEMP2    ; dx
-STA VIA_port_a      ; X to DAC
-LDA #$7F
-STA VIA_t1_cnt_lo   ; T1=$7F — same scale as DSWM
-CLR VIA_t1_cnt_hi   ; start timer (ramp)
-DV3D_MOVETO_WAIT:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DV3D_MOVETO_WAIT
-RTS
-
-; ============================================================================
-; DV3D_DRAWLINE - Draw line with delta (dy,dx) using direct VIA (same as DSWM)
-; ============================================================================
-; Input:  ROT3D_TEMP=dy, ROT3D_TEMP2=dx
-;         PB=1 on entry (left by previous moveto or drawline)
-;         DP must be $D0 on entry
-; Destroys: A
-; On exit: PB=1
-DV3D_DRAWLINE:
-LDA >ROT3D_TEMP     ; dy
-STA VIA_port_a      ; DY to DAC (PB=1: integrators hold)
-CLR VIA_port_b      ; PB=0: enable mux, set direction
-NOP
-NOP
-NOP                 ; settling (~same as DSWM)
-INC VIA_port_b      ; PB=1: lock direction
-LDA >ROT3D_TEMP2    ; dx
-STA VIA_port_a      ; DX to DAC
-LDA #$FF
-STA VIA_shift_reg   ; SR=$FF: beam ON
-CLR VIA_t1_cnt_hi   ; start T1 ramp (lo already $7F from moveto — reuse)
-DV3D_DRAWLINE_WAIT:
-LDA VIA_int_flags
-ANDA #$40
-BEQ DV3D_DRAWLINE_WAIT
-CLR VIA_shift_reg   ; beam OFF
-RTS
-
-; ============================================================================
-; DRAW_VECTOR_3D_RUNTIME - Draw 3D-rotated vector (vertex-dedup + LUT version)
-; ============================================================================
-; Input:  X = pointer to _NAME_3D_DATA (vertex-indexed format)
-;         ROT3D_AX, ROT3D_AY, ROT3D_AZ = raw angles (0-127)
-;         ROT3D_OX, ROT3D_OY = screen offsets
-; Data format:
-;   FDB vertex_count         ; unique vertex count (high byte skipped)
-;   FCB x,y,z × count        ; vertex table (coords ±63)
-;   FDB path_count           ; path count (high byte skipped)
-;   per path: FCB pt_count, closed, idx0, idx1, ...
-; Uses direct VIA access (DP=$D0 required) — same scale as DRAW_VECTOR/DSWM.
-; Destroys: A, B, X, U, all ROT3D_* vars
-DRAW_VECTOR_3D_RUNTIME:
-TFR X,U             ; U = ROM data pointer
-
-; --- Compute cos angle offsets: ROT3D_COS_X = (AX+32)&0x7F, etc. ---
-LDA >ROT3D_AX
-ADDA #32
-ANDA #$7F
-STA >ROT3D_COS_X
-LDA >ROT3D_AY
-ADDA #32
-ANDA #$7F
-STA >ROT3D_COS_Y
-LDA >ROT3D_AZ
-ADDA #32
-ANDA #$7F
-STA >ROT3D_COS_Z
-
-; --- Phase 1: rotate unique vertices → ROT3D_VBUF ---
-LDA ,U+             ; skip high byte of FDB vertex_count
-LDB ,U+             ; B = vertex count
-STB >ROT3D_PC
-LDX #ROT3D_VBUF     ; X = write ptr into RAM cache
-
-DV3D_VERT_LOOP:
-TST >ROT3D_PC
-BEQ DV3D_VERTS_DONE
-DEC >ROT3D_PC
-LDA ,U+
-STA >ROT3D_RX
-LDA ,U+
-STA >ROT3D_RY
-LDA ,U+
-STA >ROT3D_RZ
-PSHS X,U            ; save VBUF write ptr and ROM data ptr (DV3D_ROTATE uses X,Y)
-JSR DV3D_ROTATE     ; -> ROT3D_SCR_X, ROT3D_SCR_Y
-PULS X,U            ; Y was clobbered but not needed outside DV3D_ROTATE
-LDA >ROT3D_SCR_X
-STA ,X+
-LDA >ROT3D_SCR_Y
-STA ,X+
-BRA DV3D_VERT_LOOP
-
-DV3D_VERTS_DONE:
-; U now points to FDB path_count in ROM
-; Switch to DP=$D0 for direct VIA access (same as DSWM)
-LDA #$D0
-TFR A,DP
-
-; --- Reset integrators (DSWM-style: PB sequence + PCR) ---
-CLR VIA_shift_reg
-LDA #$CC
-STA VIA_cntl
-CLR VIA_port_a
-LDA #$03
-STA VIA_port_b
-LDA #$02
-STA VIA_port_b
-LDA #$02
-STA VIA_port_b
-LDA #$01
-STA VIA_port_b
-
-; Set intensity ($7F) via Port A + Z-axis strobe (DSWM-style)
-LDA #$7F
-STA VIA_port_a
-LDA #$04
-STA VIA_port_b
-LDA #$01
-STA VIA_port_b
-
-; Beam at (0,0) after reset — PREV tracks beam position
-CLR >ROT3D_PREV_X
-CLR >ROT3D_PREV_Y
-; T1 lo pre-loaded — reused by DV3D_DRAWLINE
-LDA #$7F
-STA VIA_t1_cnt_lo
-
-; --- Phase 2: draw paths using VBUF lookup ---
-LDA ,U+             ; skip high byte of FDB path_count
-LDB ,U+             ; B = path count
-STB >ROT3D_PC
-
-DV3D_PATH_LOOP:
-TST >ROT3D_PC
-LBEQ DV3D_ALL_DONE
-DEC >ROT3D_PC
-
-LDB ,U+             ; B = point count for this path
-STB >ROT3D_PT_REM
-LDA ,U+             ; A = closed flag
-STA >ROT3D_CLOSED
-
-; Look up first vertex from VBUF
-LDB ,U+             ; B = vertex index
-ASLB                ; B = index*2 (VBUF stride = 2 bytes: x', y')
-LDX #ROT3D_VBUF
-ABX                 ; X = &VBUF[idx*2]
-LDA ,X
-STA >ROT3D_FIRST_X
-LDA 1,X
-STA >ROT3D_FIRST_Y
-
-; Moveto: delta from current beam position (PREV)
-LDA >ROT3D_FIRST_Y
-SUBA >ROT3D_PREV_Y
-STA >ROT3D_TEMP     ; dy
-LDA >ROT3D_FIRST_X
-SUBA >ROT3D_PREV_X
-STA >ROT3D_TEMP2    ; dx
-JSR DV3D_MOVETO     ; direct VIA move (T1=$7F, same scale as DSWM)
-
-LDA >ROT3D_FIRST_X
-STA >ROT3D_PREV_X
-LDA >ROT3D_FIRST_Y
-STA >ROT3D_PREV_Y
-DEC >ROT3D_PT_REM
-
-DV3D_SEG_LOOP:
-TST >ROT3D_PT_REM
-BEQ DV3D_CLOSE_CHECK
-DEC >ROT3D_PT_REM
-
-LDB ,U+             ; B = vertex index
-ASLB
-LDX #ROT3D_VBUF
-ABX                 ; X = &VBUF[idx*2]
-; Compute dx, update PREV_X: new_X - PREV_X = dx; new_X = dx + PREV_X
-LDA ,X              ; new_X
-SUBA >ROT3D_PREV_X  ; A = dx
-STA >ROT3D_TEMP2    ; save dx
-ADDA >ROT3D_PREV_X  ; A = new_X again
-STA >ROT3D_PREV_X
-; Compute dy, update PREV_Y
-LDA 1,X             ; new_Y
-SUBA >ROT3D_PREV_Y  ; A = dy
-STA >ROT3D_TEMP     ; save dy
-ADDA >ROT3D_PREV_Y  ; A = new_Y again
-STA >ROT3D_PREV_Y
-JSR DV3D_DRAWLINE
-BRA DV3D_SEG_LOOP
-
-DV3D_CLOSE_CHECK:
-TST >ROT3D_CLOSED
-BEQ DV3D_NEXT_PATH
-
-LDA >ROT3D_FIRST_Y
-SUBA >ROT3D_PREV_Y
-STA >ROT3D_TEMP
-LDA >ROT3D_FIRST_X
-SUBA >ROT3D_PREV_X
-STA >ROT3D_TEMP2
-JSR DV3D_DRAWLINE
-LDA >ROT3D_FIRST_X
-STA >ROT3D_PREV_X
-LDA >ROT3D_FIRST_Y
-STA >ROT3D_PREV_Y
-
-DV3D_NEXT_PATH:
-LBRA DV3D_PATH_LOOP
-
-DV3D_ALL_DONE:
-; Restore DP=$C8 for normal RAM access
-JSR $F1AF
-RTS
-
-;***************************************************************************
-; TRIGONOMETRY LOOKUP TABLES (128 entries each)
-;***************************************************************************
-SIN_TABLE:
-    FDB 0    ; angle 0
-    FDB 6    ; angle 1
-    FDB 12    ; angle 2
-    FDB 19    ; angle 3
-    FDB 25    ; angle 4
-    FDB 31    ; angle 5
-    FDB 37    ; angle 6
-    FDB 43    ; angle 7
-    FDB 49    ; angle 8
-    FDB 54    ; angle 9
-    FDB 60    ; angle 10
-    FDB 65    ; angle 11
-    FDB 71    ; angle 12
-    FDB 76    ; angle 13
-    FDB 81    ; angle 14
-    FDB 85    ; angle 15
-    FDB 90    ; angle 16
-    FDB 94    ; angle 17
-    FDB 98    ; angle 18
-    FDB 102    ; angle 19
-    FDB 106    ; angle 20
-    FDB 109    ; angle 21
-    FDB 112    ; angle 22
-    FDB 115    ; angle 23
-    FDB 117    ; angle 24
-    FDB 120    ; angle 25
-    FDB 122    ; angle 26
-    FDB 123    ; angle 27
-    FDB 125    ; angle 28
-    FDB 126    ; angle 29
-    FDB 126    ; angle 30
-    FDB 127    ; angle 31
-    FDB 127    ; angle 32
-    FDB 127    ; angle 33
-    FDB 126    ; angle 34
-    FDB 126    ; angle 35
-    FDB 125    ; angle 36
-    FDB 123    ; angle 37
-    FDB 122    ; angle 38
-    FDB 120    ; angle 39
-    FDB 117    ; angle 40
-    FDB 115    ; angle 41
-    FDB 112    ; angle 42
-    FDB 109    ; angle 43
-    FDB 106    ; angle 44
-    FDB 102    ; angle 45
-    FDB 98    ; angle 46
-    FDB 94    ; angle 47
-    FDB 90    ; angle 48
-    FDB 85    ; angle 49
-    FDB 81    ; angle 50
-    FDB 76    ; angle 51
-    FDB 71    ; angle 52
-    FDB 65    ; angle 53
-    FDB 60    ; angle 54
-    FDB 54    ; angle 55
-    FDB 49    ; angle 56
-    FDB 43    ; angle 57
-    FDB 37    ; angle 58
-    FDB 31    ; angle 59
-    FDB 25    ; angle 60
-    FDB 19    ; angle 61
-    FDB 12    ; angle 62
-    FDB 6    ; angle 63
-    FDB 0    ; angle 64
-    FDB -6    ; angle 65
-    FDB -12    ; angle 66
-    FDB -19    ; angle 67
-    FDB -25    ; angle 68
-    FDB -31    ; angle 69
-    FDB -37    ; angle 70
-    FDB -43    ; angle 71
-    FDB -49    ; angle 72
-    FDB -54    ; angle 73
-    FDB -60    ; angle 74
-    FDB -65    ; angle 75
-    FDB -71    ; angle 76
-    FDB -76    ; angle 77
-    FDB -81    ; angle 78
-    FDB -85    ; angle 79
-    FDB -90    ; angle 80
-    FDB -94    ; angle 81
-    FDB -98    ; angle 82
-    FDB -102    ; angle 83
-    FDB -106    ; angle 84
-    FDB -109    ; angle 85
-    FDB -112    ; angle 86
-    FDB -115    ; angle 87
-    FDB -117    ; angle 88
-    FDB -120    ; angle 89
-    FDB -122    ; angle 90
-    FDB -123    ; angle 91
-    FDB -125    ; angle 92
-    FDB -126    ; angle 93
-    FDB -126    ; angle 94
-    FDB -127    ; angle 95
-    FDB -127    ; angle 96
-    FDB -127    ; angle 97
-    FDB -126    ; angle 98
-    FDB -126    ; angle 99
-    FDB -125    ; angle 100
-    FDB -123    ; angle 101
-    FDB -122    ; angle 102
-    FDB -120    ; angle 103
-    FDB -117    ; angle 104
-    FDB -115    ; angle 105
-    FDB -112    ; angle 106
-    FDB -109    ; angle 107
-    FDB -106    ; angle 108
-    FDB -102    ; angle 109
-    FDB -98    ; angle 110
-    FDB -94    ; angle 111
-    FDB -90    ; angle 112
-    FDB -85    ; angle 113
-    FDB -81    ; angle 114
-    FDB -76    ; angle 115
-    FDB -71    ; angle 116
-    FDB -65    ; angle 117
-    FDB -60    ; angle 118
-    FDB -54    ; angle 119
-    FDB -49    ; angle 120
-    FDB -43    ; angle 121
-    FDB -37    ; angle 122
-    FDB -31    ; angle 123
-    FDB -25    ; angle 124
-    FDB -19    ; angle 125
-    FDB -12    ; angle 126
-    FDB -6    ; angle 127
-
-COS_TABLE:
-    FDB 127    ; angle 0
-    FDB 127    ; angle 1
-    FDB 126    ; angle 2
-    FDB 126    ; angle 3
-    FDB 125    ; angle 4
-    FDB 123    ; angle 5
-    FDB 122    ; angle 6
-    FDB 120    ; angle 7
-    FDB 117    ; angle 8
-    FDB 115    ; angle 9
-    FDB 112    ; angle 10
-    FDB 109    ; angle 11
-    FDB 106    ; angle 12
-    FDB 102    ; angle 13
-    FDB 98    ; angle 14
-    FDB 94    ; angle 15
-    FDB 90    ; angle 16
-    FDB 85    ; angle 17
-    FDB 81    ; angle 18
-    FDB 76    ; angle 19
-    FDB 71    ; angle 20
-    FDB 65    ; angle 21
-    FDB 60    ; angle 22
-    FDB 54    ; angle 23
-    FDB 49    ; angle 24
-    FDB 43    ; angle 25
-    FDB 37    ; angle 26
-    FDB 31    ; angle 27
-    FDB 25    ; angle 28
-    FDB 19    ; angle 29
-    FDB 12    ; angle 30
-    FDB 6    ; angle 31
-    FDB 0    ; angle 32
-    FDB -6    ; angle 33
-    FDB -12    ; angle 34
-    FDB -19    ; angle 35
-    FDB -25    ; angle 36
-    FDB -31    ; angle 37
-    FDB -37    ; angle 38
-    FDB -43    ; angle 39
-    FDB -49    ; angle 40
-    FDB -54    ; angle 41
-    FDB -60    ; angle 42
-    FDB -65    ; angle 43
-    FDB -71    ; angle 44
-    FDB -76    ; angle 45
-    FDB -81    ; angle 46
-    FDB -85    ; angle 47
-    FDB -90    ; angle 48
-    FDB -94    ; angle 49
-    FDB -98    ; angle 50
-    FDB -102    ; angle 51
-    FDB -106    ; angle 52
-    FDB -109    ; angle 53
-    FDB -112    ; angle 54
-    FDB -115    ; angle 55
-    FDB -117    ; angle 56
-    FDB -120    ; angle 57
-    FDB -122    ; angle 58
-    FDB -123    ; angle 59
-    FDB -125    ; angle 60
-    FDB -126    ; angle 61
-    FDB -126    ; angle 62
-    FDB -127    ; angle 63
-    FDB -127    ; angle 64
-    FDB -127    ; angle 65
-    FDB -126    ; angle 66
-    FDB -126    ; angle 67
-    FDB -125    ; angle 68
-    FDB -123    ; angle 69
-    FDB -122    ; angle 70
-    FDB -120    ; angle 71
-    FDB -117    ; angle 72
-    FDB -115    ; angle 73
-    FDB -112    ; angle 74
-    FDB -109    ; angle 75
-    FDB -106    ; angle 76
-    FDB -102    ; angle 77
-    FDB -98    ; angle 78
-    FDB -94    ; angle 79
-    FDB -90    ; angle 80
-    FDB -85    ; angle 81
-    FDB -81    ; angle 82
-    FDB -76    ; angle 83
-    FDB -71    ; angle 84
-    FDB -65    ; angle 85
-    FDB -60    ; angle 86
-    FDB -54    ; angle 87
-    FDB -49    ; angle 88
-    FDB -43    ; angle 89
-    FDB -37    ; angle 90
-    FDB -31    ; angle 91
-    FDB -25    ; angle 92
-    FDB -19    ; angle 93
-    FDB -12    ; angle 94
-    FDB -6    ; angle 95
-    FDB 0    ; angle 96
-    FDB 6    ; angle 97
-    FDB 12    ; angle 98
-    FDB 19    ; angle 99
-    FDB 25    ; angle 100
-    FDB 31    ; angle 101
-    FDB 37    ; angle 102
-    FDB 43    ; angle 103
-    FDB 49    ; angle 104
-    FDB 54    ; angle 105
-    FDB 60    ; angle 106
-    FDB 65    ; angle 107
-    FDB 71    ; angle 108
-    FDB 76    ; angle 109
-    FDB 81    ; angle 110
-    FDB 85    ; angle 111
-    FDB 90    ; angle 112
-    FDB 94    ; angle 113
-    FDB 98    ; angle 114
-    FDB 102    ; angle 115
-    FDB 106    ; angle 116
-    FDB 109    ; angle 117
-    FDB 112    ; angle 118
-    FDB 115    ; angle 119
-    FDB 117    ; angle 120
-    FDB 120    ; angle 121
-    FDB 122    ; angle 122
-    FDB 123    ; angle 123
-    FDB 125    ; angle 124
-    FDB 126    ; angle 125
-    FDB 126    ; angle 126
-    FDB 127    ; angle 127
-
-TAN_TABLE:
-    FDB 0    ; angle 0
-    FDB 1    ; angle 1
-    FDB 2    ; angle 2
-    FDB 3    ; angle 3
-    FDB 4    ; angle 4
-    FDB 5    ; angle 5
-    FDB 6    ; angle 6
-    FDB 7    ; angle 7
-    FDB 8    ; angle 8
-    FDB 9    ; angle 9
-    FDB 11    ; angle 10
-    FDB 12    ; angle 11
-    FDB 13    ; angle 12
-    FDB 15    ; angle 13
-    FDB 16    ; angle 14
-    FDB 18    ; angle 15
-    FDB 20    ; angle 16
-    FDB 22    ; angle 17
-    FDB 24    ; angle 18
-    FDB 27    ; angle 19
-    FDB 30    ; angle 20
-    FDB 33    ; angle 21
-    FDB 37    ; angle 22
-    FDB 42    ; angle 23
-    FDB 48    ; angle 24
-    FDB 56    ; angle 25
-    FDB 66    ; angle 26
-    FDB 80    ; angle 27
-    FDB 101    ; angle 28
-    FDB 120    ; angle 29
-    FDB 120    ; angle 30
-    FDB 120    ; angle 31
-    FDB -120    ; angle 32
-    FDB -120    ; angle 33
-    FDB -120    ; angle 34
-    FDB -120    ; angle 35
-    FDB -101    ; angle 36
-    FDB -80    ; angle 37
-    FDB -66    ; angle 38
-    FDB -56    ; angle 39
-    FDB -48    ; angle 40
-    FDB -42    ; angle 41
-    FDB -37    ; angle 42
-    FDB -33    ; angle 43
-    FDB -30    ; angle 44
-    FDB -27    ; angle 45
-    FDB -24    ; angle 46
-    FDB -22    ; angle 47
-    FDB -20    ; angle 48
-    FDB -18    ; angle 49
-    FDB -16    ; angle 50
-    FDB -15    ; angle 51
-    FDB -13    ; angle 52
-    FDB -12    ; angle 53
-    FDB -11    ; angle 54
-    FDB -9    ; angle 55
-    FDB -8    ; angle 56
-    FDB -7    ; angle 57
-    FDB -6    ; angle 58
-    FDB -5    ; angle 59
-    FDB -4    ; angle 60
-    FDB -3    ; angle 61
-    FDB -2    ; angle 62
-    FDB -1    ; angle 63
-    FDB 0    ; angle 64
-    FDB 1    ; angle 65
-    FDB 2    ; angle 66
-    FDB 3    ; angle 67
-    FDB 4    ; angle 68
-    FDB 5    ; angle 69
-    FDB 6    ; angle 70
-    FDB 7    ; angle 71
-    FDB 8    ; angle 72
-    FDB 9    ; angle 73
-    FDB 11    ; angle 74
-    FDB 12    ; angle 75
-    FDB 13    ; angle 76
-    FDB 15    ; angle 77
-    FDB 16    ; angle 78
-    FDB 18    ; angle 79
-    FDB 20    ; angle 80
-    FDB 22    ; angle 81
-    FDB 24    ; angle 82
-    FDB 27    ; angle 83
-    FDB 30    ; angle 84
-    FDB 33    ; angle 85
-    FDB 37    ; angle 86
-    FDB 42    ; angle 87
-    FDB 48    ; angle 88
-    FDB 56    ; angle 89
-    FDB 66    ; angle 90
-    FDB 80    ; angle 91
-    FDB 101    ; angle 92
-    FDB 120    ; angle 93
-    FDB 120    ; angle 94
-    FDB 120    ; angle 95
-    FDB -120    ; angle 96
-    FDB -120    ; angle 97
-    FDB -120    ; angle 98
-    FDB -120    ; angle 99
-    FDB -101    ; angle 100
-    FDB -80    ; angle 101
-    FDB -66    ; angle 102
-    FDB -56    ; angle 103
-    FDB -48    ; angle 104
-    FDB -42    ; angle 105
-    FDB -37    ; angle 106
-    FDB -33    ; angle 107
-    FDB -30    ; angle 108
-    FDB -27    ; angle 109
-    FDB -24    ; angle 110
-    FDB -22    ; angle 111
-    FDB -20    ; angle 112
-    FDB -18    ; angle 113
-    FDB -16    ; angle 114
-    FDB -15    ; angle 115
-    FDB -13    ; angle 116
-    FDB -12    ; angle 117
-    FDB -11    ; angle 118
-    FDB -9    ; angle 119
-    FDB -8    ; angle 120
-    FDB -7    ; angle 121
-    FDB -6    ; angle 122
-    FDB -5    ; angle 123
-    FDB -4    ; angle 124
-    FDB -3    ; angle 125
-    FDB -2    ; angle 126
-    FDB -1    ; angle 127
-
-;**** PRINT_TEXT String Data ****
-PRINT_TEXT_STR_3327403:
-    FCC "logo"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_3556653:
-    FCC "text"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_67582625:
-    FCC "GAMES"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_74421520:
-    FCC "NO SD"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_97692013:
-    FCC "frame"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_2456395222:
-    FCC "STUDIO"
-    FCB $80          ; Vectrex string terminator
-
-PRINT_TEXT_STR_3135039153:
-    FCC "jingle"
-    FCB $80          ; Vectrex string terminator
-
-;**** Simulated SD game list (m6809 preview; ~/VectrexStudio/sd) ****
-SD_NAME_TABLE:
-    FDB SD_NAME_0
-    FDB SD_NAME_1
-    FDB SD_NAME_2
-    FDB SD_NAME_3
-    FDB SD_NAME_4
-    FDB SD_NAME_5
-    FDB SD_NAME_6
-    FDB SD_NAME_7
-    FDB SD_NAME_8
-    FDB SD_NAME_9
-    FDB SD_NAME_10
-    FDB SD_NAME_11
-    FDB SD_NAME_12
-    FDB SD_NAME_13
-    FDB SD_NAME_14
-    FDB SD_NAME_15
-    FDB SD_NAME_16
-    FDB SD_NAME_17
-    FDB SD_NAME_18
-    FDB SD_NAME_19
-    FDB SD_NAME_20
-    FDB SD_NAME_21
-    FDB SD_NAME_22
-    FDB SD_NAME_23
-SD_NAME_0:
-    FCC "ARRAYS_AND_C"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_1:
-    FCC "CASTLEVANIA_"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_2:
-    FCC "CLOCKMAKERS_"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_3:
-    FCC "DRAW_CIRCLE"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_4:
-    FCC "DRAW_LINE"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_5:
-    FCC "DRAW_MOVE"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_6:
-    FCC "DRAW_RECT"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_7:
-    FCC "DRAW_SHAPES"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_8:
-    FCC "DRAW_VECTOR"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_9:
-    FCC "FADE_EFFECTS"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_10:
-    FCC "JOYSTICKS_AL"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_11:
-    FCC "JOYSTICK_2"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_12:
-    FCC "JOYSTICK_BUT"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_13:
-    FCC "JOYSTICK_POS"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_14:
-    FCC "MARIO_POC"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_15:
-    FCC "MATH_FUNCTIO"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_16:
-    FCC "MOVING_VECTO"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_17:
-    FCC "MUSIC_SFX_MI"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_18:
-    FCC "PANG"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_19:
-    FCC "PHYSICS_BALL"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_20:
-    FCC "PLAY_MUSIC"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_21:
-    FCC "PLAY_SFX"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_22:
-    FCC "PRINT_NUMBER"
-    FCB $80          ; Vectrex string terminator
-SD_NAME_23:
-    FCC "PRINT_TEXT"
-    FCB $80          ; Vectrex string terminator
-
-;***************************************************************************
-; 3D COMPACT DATA TABLES (for DRAW_VECTOR_3D)
-;***************************************************************************
-
-
-; 3D vertex-indexed data for DRAW_VECTOR_3D (4 unique verts, 1 paths, 4 total point refs)
+@ VPy — ARM Thumb2 target (RP2350 / Cortex-M33)
+@ Game: VECTREX STUDIO
+@ Generated by vpy_codegen arm backend
+@ Assemble with: arm-none-eabi-as -mthumb -mcpu=cortex-m33 game.s -o game.o
+
+.syntax unified
+.cpu cortex-m33
+.fpu fpv5-sp-d16
+.thumb
+
+@ --- VPy runtime RAM (RP2350 SRAM) ---
+.equ TMPVAL,              0x2007F000  @ 32-bit arithmetic temporary
+.equ TMPPTR,              0x2007F004  @ pointer temporary
+.equ TMPPTR2,             0x2007F008  @ second pointer temporary
+.equ VAR_ARG0,            0x2007F00C  @ function argument 0
+.equ VAR_ARG1,            0x2007F010  @ function argument 1
+.equ VAR_ARG2,            0x2007F014  @ function argument 2
+.equ VAR_ARG3,            0x2007F018  @ function argument 3
+.equ VAR_ARG4,            0x2007F01C  @ function argument 4
+.equ RESULT,              0x2007F020  @ function return value
+.equ BEEP_FRAMES_LEFT,    0x2007F024  @ non-blocking beep counter
+.equ VIA_WRITE_ADDR,      0x2007F028  @ scratch for bus_write address
+.equ VIA_WRITE_DATA,      0x2007F02C  @ scratch for bus_write data
+.equ _dv3d_cos,           0x2007F030  @ 3D cos offsets: cos_ax, cos_ay, cos_az (3 bytes)
+.equ _dv3d_tmp,           0x2007F034  @ 3D vertex raw coords: rx, ry, rz (3 bytes)
+.equ _dv3d_sm,            0x2007F038  @ 3D rotation intermediates: t0, y1, z1, x2 (4 bytes)
+.equ _dv3d_cur,           0x2007F03C  @ 3D current beam pos: cur_x, cur_y (2 bytes)
+.equ _dv3d_fst,           0x2007F03E  @ 3D first vertex of path: first_x, first_y (2 bytes)
+.equ _dv3d_vbuf,          0x2007F040  @ 3D rotated vertex cache: sx,sy pairs (254 bytes max)
+.equ VPY_ANIM_STATE_BUF,  0x2007F13E  @ animation frame_idx(u8) at +0, ticks_left(u8) at +1
+.equ RAND_SEED,           0x2007F140  @ LCG random number seed
+.equ BTN_STATE_J1,        0x2007F144  @ cached VIA Port B (J1 buttons, bits 4-7 active-low)
+.equ BTN_STATE_J2,        0x2007F148  @ cached PSG reg 14 (J2 buttons, bits 0-3 active-low)
+.equ CAMERA_X,            0x2007F14C  @ camera X offset (used by show_level)
+.equ CAMERA_Y,            0x2007F150  @ camera Y offset
+.equ TEXT_SIZE,           0x2007F154  @ text scale factor (1=normal, 2=double, ...)
+.equ LEVEL_DATA_PTR,      0x2007F15C  @ pointer to loaded level ROM data
+.equ DBGVAL,              0x2007F160  @ debug_print last written value
+.equ PRINT_BEAM_X,        0x2007F164  @ beam X shadow during print_text
+.equ PRINT_BEAM_Y,        0x2007F168  @ beam Y shadow during print_text
+.equ PSG_MUSIC_PTR,       0x2007F16C  @ pointer to current music event in ROM
+.equ PSG_MUSIC_START,     0x2007F170  @ pointer to loop-start event
+.equ PSG_IS_PLAYING,      0x2007F174  @ 1 = music playing
+.equ PSG_DELAY_FRAMES,    0x2007F178  @ frames remaining before next music event
+.equ PSG_SFX_PTR,         0x2007F17C  @ pointer to current SFX event in ROM
+.equ PSG_SFX_ACTIVE,      0x2007F180  @ 1 = SFX playing
+.equ PSG_SFX_DELAY,       0x2007F184  @ frames remaining before next SFX event
+.equ LEVEL_GP_COUNT,      0x2007F188  @ number of active GP objects
+.equ LEVEL_GP_BUF,        0x2007F18C  @ level GP mutable buffer (32 obj × 8 bytes = 256 bytes)
+.equ SCROLL_LIMIT_LEFT,   0x2007F28C  @ camera scroll limit: left world X
+.equ SCROLL_LIMIT_RIGHT,  0x2007F290  @ camera scroll limit: right world X
+.equ SCROLL_LIMIT_TOP,    0x2007F294  @ camera scroll limit: top world Y
+.equ SCROLL_LIMIT_BOTTOM, 0x2007F298  @ camera scroll limit: bottom world Y
+.equ NOTE_STATE,          0x2007F29C  @ note engine state: 3 channels × 32 bytes each
+.equ PSG_MIXER_SHADOW,    0x2007F2FC  @ shadow of AY R7 mixer register (0x3F = all disabled)
+.equ VPY_MOVE_X,          0x2007F300  @ last MOVE X position (added to DRAW_LINE x0/x1)
+.equ VPY_MOVE_Y,          0x2007F304  @ last MOVE Y position (added to DRAW_LINE y0/y1)
+.equ ENEMY_COUNT_ARM,     0x2007F308  @ active enemy count
+.equ ENEMY_POOL_ARM,      0x2007F30C  @ enemy pool: 8 slots × 32 bytes
+.equ J1_AXIS_X,           0x2007F40C  @ cached J1 X axis (-127..127), updated each WAIT_RECAL
+.equ J1_AXIS_Y,           0x2007F410  @ cached J1 Y axis (-127..127), updated each WAIT_RECAL
+.equ J2_AXIS_X,           0x2007F414  @ cached J2 X axis (-127..127), updated each WAIT_RECAL
+.equ J2_AXIS_Y,           0x2007F418  @ cached J2 Y axis (-127..127), updated each WAIT_RECAL
+.equ ENEMY_STATE_ARM,     0x2007F41C  @ enemy state per slot: 8 × i32
+.equ VPY_PLAYER_ANIM_STATE, 0x2007F43C  @ player animation state: frame_idx(u8)+ticks_left(u8)
+.equ VPY_BRIGHTNESS_OVERRIDE, 0x2007F43E  @ SET_INTENSITY override: 0=.vec intensity, >0=override (1 byte)
+.equ VPY_DRAW_SCALE,      0x2007F43F  @ escala del proximo DRAW_VECTOR_EX (x32; 0/32 = 1:1, 1 byte)
+.equ WANDER_SCRATCH_ARM,  0x2007F440  @ wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)
+.equ USER_RAM_START,      0x2007F460  @ user variables begin here
+
+@ --- VIA 6522 registers (Vectrex bus addresses) ---
+.equ VIA_BASE,       0xD000
+.equ VIA_PORT_B,     0xD000   @ Port B data (MUX, beam, z-pulse)
+.equ VIA_PORT_A,     0xD001   @ Port A data (DAC / joystick)
+.equ VIA_DDR_B,      0xD002   @ Port B direction
+.equ VIA_DDR_A,      0xD003   @ Port A direction
+.equ VIA_T1C_L,      0xD004   @ Timer 1 counter low
+.equ VIA_T1C_H,      0xD005   @ Timer 1 counter high
+.equ VIA_T1L_L,      0xD006   @ Timer 1 latch low
+.equ VIA_T1L_H,      0xD007   @ Timer 1 latch high
+.equ VIA_SR,         0xD00A   @ Shift register (beam on/off via CB2)
+.equ VIA_ACR,        0xD00B   @ Auxiliary control register
+.equ VIA_PCR,        0xD00C   @ Peripheral control register
+.equ VIA_IFR,        0xD00D   @ Interrupt flag register
+.equ VIA_IER,        0xD00E   @ Interrupt enable register
+
+@ VIA Port B bits
+.equ PB_MUX,         0x01     @ PSG BDIR (bit 0)
+.equ PB_BEAM,        0x08     @ Beam on/off
+.equ PB_ZPULSE,      0x10     @ Z-axis pulse
+
+@ VIA ACR / PCR values
+.equ ACR_SR_SHIFT,   0x18     @ SR = shift out under PHI2
+.equ PCR_BEAM_OFF,   0xCE
+.equ PCR_BEAM_ON,    0xDE
+.equ T1_STANDARD,    0x7F     @ Timer 1 value for standard vector scale
+
+@ --- RP2350 SIO (GPIO bit-bang) ---
+.equ SIO_BASE,       0xD0000000
+.equ SIO_GPIO_OUT,   0xD0000010  @ GPIO output value
+.equ SIO_GPIO_SET,   0xD0000014  @ GPIO output set (atomic)
+.equ SIO_GPIO_CLR,   0xD0000018  @ GPIO output clear (atomic)
+.equ SIO_GPIO_OE_SET,0xD0000024  @ GPIO OE set
+.equ SIO_GPIO_OE_CLR,0xD0000028  @ GPIO OE clear
+.equ SIO_GPIO_IN,    0xD0000004  @ GPIO input value
+
+@ GPIO pin masks (from pins.rs)
+.equ ADDR_MASK,      0x00007FFF  @ GP0-GP14 (A0-A14)
+.equ DATA_MASK,      0x007F8000  @ GP15-GP22 (D0-D7)
+.equ PIN_NCE,        23
+.equ PIN_RW,         24
+.equ PIN_NOE,        25
+.equ PIN_NHALT,      27
+.equ PIN_DIR_CTRL,   29
+
+.section .game_rom, "ax"
+.align 2
+
+@ --- Game ROM image header (offset 0 of game ROM slot) ---
+@ Firmware checks GAME_MAGIC before calling game_main.
+
+.global game_header
+.type game_header, %object
+game_header:
+    .word 0x32795056      @ GAME_MAGIC 'VPy2'
+    .word game_main         @ entry point (thumb bit set by linker)
+    .word 0x00000000        @ reserved
+    .word 0x00000000        @ reserved
+
+@ bus_write(r0=vectrex addr, r1=data) — BIOS trap: SYS_BUS_WRITE
+.global bus_write
+.type bus_write, %function
+.thumb_func
+bus_write:
+    svc     #8                      @ SYS_BUS_WRITE
+    bx      lr
+
+@ bus_read(r0=addr) -> r0=data — BIOS trap: SYS_BUS_READ
+.global bus_read
+.type bus_read, %function
+.thumb_func
+bus_read:
+    svc     #11                     @ SYS_BUS_READ
+    bx      lr
+
+@ ============================================================
+@ Drawing engine — ARM Thumb2 / RP2350 bus master
+@ ============================================================
+
+@ SIN_TABLE[128]: sin(i*2π/128)*127 as i8
+.global _SIN_TABLE
+_SIN_TABLE:
+    .byte   0x00, 0x06, 0x0C, 0x13, 0x19, 0x1F, 0x25, 0x2B, 0x31, 0x36, 0x3C, 0x41, 0x47, 0x4C, 0x51, 0x55
+    .byte   0x5A, 0x5E, 0x62, 0x66, 0x6A, 0x6D, 0x70, 0x73, 0x75, 0x78, 0x7A, 0x7B, 0x7D, 0x7E, 0x7E, 0x7F
+    .byte   0x7F, 0x7F, 0x7E, 0x7E, 0x7D, 0x7B, 0x7A, 0x78, 0x75, 0x73, 0x70, 0x6D, 0x6A, 0x66, 0x62, 0x5E
+    .byte   0x5A, 0x55, 0x51, 0x4C, 0x47, 0x41, 0x3C, 0x36, 0x31, 0x2B, 0x25, 0x1F, 0x19, 0x13, 0x0C, 0x06
+    .byte   0x00, 0xFA, 0xF4, 0xED, 0xE7, 0xE1, 0xDB, 0xD5, 0xCF, 0xCA, 0xC4, 0xBF, 0xB9, 0xB4, 0xAF, 0xAB
+    .byte   0xA6, 0xA2, 0x9E, 0x9A, 0x96, 0x93, 0x90, 0x8D, 0x8B, 0x88, 0x86, 0x85, 0x83, 0x82, 0x82, 0x81
+    .byte   0x81, 0x81, 0x82, 0x82, 0x83, 0x85, 0x86, 0x88, 0x8B, 0x8D, 0x90, 0x93, 0x96, 0x9A, 0x9E, 0xA2
+    .byte   0xA6, 0xAB, 0xAF, 0xB4, 0xB9, 0xBF, 0xC4, 0xCA, 0xCF, 0xD5, 0xDB, 0xE1, 0xE7, 0xED, 0xF4, 0xFA
+
+@ smul_lut(r0=val i8, r1=angle 0-127) → r0=(val*sin)>>7
+.global smul_lut
+.type smul_lut, %function
+.thumb_func
+smul_lut:
+    ldr     r2, =_SIN_TABLE
+    and     r1, r1, #0x7F
+    ldrb    r2, [r2, r1]
+    sxtb    r2, r2
+    sxtb    r0, r0
+    mul     r0, r0, r2
+    asr     r0, r0, #7
+    bx      lr
+
+@ dv_reset() — BIOS trap: SYS_RESET0REF
+.global dv_reset
+.type dv_reset, %function
+.thumb_func
+dv_reset:
+    svc     #0                      @ SYS_RESET0REF
+    bx      lr
+
+@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (a ramped delta after a
+@ reset). Split into <=127-per-axis steps: a scrolled origin can land far
+@ past the i8 DAC range, and SYS_MOVE casts to i8 → the whole shape WRAPS to
+@ the wrong side of the screen (mario_poc floor tiles). SYS_MOVE ramps the
+@ INTEGRATORS (velocity×time), not an absolute DAC, so stepping accumulates
+@ to the true (off-screen) origin — the visible part draws in place and the
+@ physical screen clips the rest. A move already within +/-127 does one step
+@ (unchanged).
+.global dv_move_to
+.type dv_move_to, %function
+.thumb_func
+dv_move_to:
+    push    {r2, r3, r4, r5, r6, r7, lr}  @ callers assume traps preserve regs
+    mov     r4, r0                  @ remaining dx
+    mov     r5, r1                  @ remaining dy
+    mov     r6, #127
+    rsb     r7, r6, #0              @ r7 = -127
+    mov     r3, #8                  @ max split steps (anti-hang guard)
+dvmt_loop:
+    mov     r0, r4                  @ step_x = clamp(remaining_x, -127, 127)
+    cmp     r0, r6
+    it      gt
+    movgt   r0, r6
+    cmp     r0, r7
+    it      lt
+    movlt   r0, r7
+    mov     r1, r5                  @ step_y = clamp(remaining_y, -127, 127)
+    cmp     r1, r6
+    it      gt
+    movgt   r1, r6
+    cmp     r1, r7
+    it      lt
+    movlt   r1, r7
+    push    {r0, r1}                @ svc clobbers r0; keep the steps
+    svc     #3                      @ SYS_MOVE (this step)
+    pop     {r0, r1}
+    subs    r4, r4, r0              @ remaining -= step
+    subs    r5, r5, r1
+    orrs    r2, r4, r5              @ both zero? → done
+    beq     dvmt_done
+    subs    r3, r3, #1              @ else step, until the cap
+    bne     dvmt_loop
+dvmt_done:
+    pop     {r2, r3, r4, r5, r6, r7, pc}
+
+@ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA
+.global dv_draw_delta
+.type dv_draw_delta, %function
+.thumb_func
+dv_draw_delta:
+    svc     #4                      @ SYS_DRAW_DELTA
+    bx      lr
+
+@ vpy_draw_vector(r0=asset_ptr, r1=ox, r2=oy)
+@ Draws asset at screen position (ox, oy). ox=0, oy=0 = screen centre.
+.global vpy_draw_vector
+.type vpy_draw_vector, %function
+.thumb_func
+vpy_draw_vector:
+    push    {r4, r5, r6, r7, r8, r9, r10, lr}
+    mov     r4, r0              @ asset_ptr
+    mov     r9, r1              @ ox
+    mov     r10, r2             @ oy
+    ldr     r5, [r4]            @ path_count
+    mov     r6, #0              @ path index
+dvv_pl:
+    cmp     r6, r5
+    bge     dvv_done
+    lsl     r7, r6, #2
+    add     r7, r7, #4
+    ldr     r7, [r4, r7]
+    bl      dv_reset
+    ldrb    r0, [r7]            @ per-path .vec intensity
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    ldrb    r1, [r1]
+    cmp     r1, #0
+    it      ne
+    movne   r0, r1  @ SET_INTENSITY override wins
+    bl      vpy_set_intensity
+    ldrsb   r0, [r7, #2]
+    add     r0, r0, r9
+    ldrsb   r1, [r7, #1]
+    add     r1, r1, r10
+    bl      dv_move_to
+    add     r8, r7, #5
+dvv_cl:
+    ldrb    r0, [r8]
+    cmp     r0, #0x02
+    beq     dvv_cend
+    cmp     r0, #0xFF
+    bne     dvv_cskip
+    ldrsb   r0, [r8, #2]
+    ldrsb   r1, [r8, #1]
+    bl      dv_draw_delta
+    add     r8, r8, #3
+    b       dvv_cl
+dvv_cskip:
+    add     r8, r8, #1
+    b       dvv_cl
+dvv_cend:
+    add     r6, r6, #1
+    b       dvv_pl
+dvv_done:
+    pop     {r4, r5, r6, r7, r8, r9, r10, pc}
+    .ltorg
+
+@ vpy_draw_vector_3d(r0,r1=ax,r2=ay,r3=az,[sp+36]=ox,[sp+40]=oy)
+.global vpy_draw_vector_3d
+.type vpy_draw_vector_3d, %function
+.thumb_func
+vpy_draw_vector_3d:
+    push    {r4,r5,r6,r7,r8,r9,r10,r11,lr}
+    mov     r4, r0
+    mov     r5, r1               @ ax
+    mov     r6, r2               @ ay
+    mov     r7, r3               @ az
+    ldrsb   r8, [sp, #36]        @ ox (sign-extend)
+    ldrsb   r9, [sp, #40]        @ oy
+    ldr     r0, =_dv3d_cos
+    add     r1, r5, #32
+    and r1,r1,#0x7F
+    strb r1,[r0]
+    add     r1, r6, #32
+    and r1,r1,#0x7F
+    strb r1,[r0,#1]
+    add     r1, r7, #32
+    and r1,r1,#0x7F
+    strb r1,[r0,#2]
+    ldr     r10, [r4]
+    add r4,r4,#4
+    ldr     r11, =_dv3d_vbuf
+dv3_vl:
+    cmp r10,#0
+    beq dv3_vd
+    sub r10,r10,#1
+    ldr     r0, =_dv3d_tmp
+    ldrsb   r1, [r4]
+    strb r1,[r0]
+    ldrsb   r1, [r4,#1]
+  strb r1,[r0,#1]
+    ldrsb   r1, [r4,#2]
+  strb r1,[r0,#2]
+    add     r4, r4, #3
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#1]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#0]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#2]
+    mov     r1,r5
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    sub r0,r3,r0
+    strb r0,[r2,#1]
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#1]
+    mov     r1,r5
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#2]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#0]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    add r0,r0,r3
+    strb r0,[r2,#2]
+    ldr     r0,=_dv3d_tmp
+    ldrsb   r0,[r0,#0]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#1]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#2]
+    mov     r1,r6
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    add r0,r0,r3
+    strb r0,[r2,#3]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#3]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#2]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#1]
+    mov     r1,r7
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    sub r0,r3,r0
+    add r0,r0,r8
+    strb    r0,[r11]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#3]
+    mov     r1,r7
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    strb r0,[r2]
+    ldr     r0,=_dv3d_sm
+    ldrsb   r0,[r0,#1]
+    ldr     r2,=_dv3d_cos
+    ldrb    r1,[r2,#2]
+    bl      smul_lut
+    ldr     r2,=_dv3d_sm
+    ldrsb r3,[r2]
+    add r0,r0,r3
+    add r0,r0,r9
+    strb    r0,[r11,#1]
+    add     r11,r11,#2
+    b dv3_vl
+dv3_vd:
+    add     r4, r4, #3
+    bic r4, r4, #3
+    ldr     r10,[r4]
+    add r4,r4,#4
+    ldr     r11,=_dv3d_vbuf
+dv3_pl:
+    cmp r10,#0
+    beq dv3_pd
+    sub r10,r10,#1
+    bl      dv_reset
+    mov     r0, #127            @ default 3D intensity
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    ldrb    r1, [r1]
+    cmp     r1, #0
+    it      ne
+    movne   r0, r1  @ SET_INTENSITY override wins
+    bl      vpy_set_intensity
+    ldr     r0,=_dv3d_cur
+    mov r1,#0
+    strh r1,[r0]
+    ldrb    r5,[r4]              @ pt_count
+    ldrb    r6,[r4,#1]           @ closed
+    add     r4,r4,#2
+    cmp     r5,#0
+    beq dv3_pnext_emp
+    mov     r7, r4
+    ldrb    r0,[r7]
+    lsl r2,r0,#1
+    ldrsb   r0,[r11,r2]
+    add     r2,r2,#1
+    ldrsb r1,[r11,r2]
+    ldr     r2,=_dv3d_cur
+    ldrsb   r3,[r2,#0]
+    sub r0,r0,r3
+    ldrsb   r3,[r2,#1]
+    sub r1,r1,r3
+    push    {r0,r1}
+    ldrb    r0,[r7]
+    lsl r2,r0,#1
+    ldrsb   r8,[r11,r2]
+    add     r2,r2,#1
+    ldrsb r9,[r11,r2]
+    ldr     r2,=_dv3d_cur
+    strb r8,[r2]
+    strb r9,[r2,#1]
+    pop     {r0,r1}
+    bl      dv_move_to
+    sub     r5,r5,#1
+    add r7,r7,#1
+dv3_vxtx:
+    cmp     r5,#0
+    beq dv3_close
+    sub r5,r5,#1
+    ldrb    r0,[r7]
+    lsl r2,r0,#1
+    ldrsb   r0,[r11,r2]
+    add     r2,r2,#1
+    ldrsb r1,[r11,r2]
+    push    {r0,r1}
+    ldr     r2,=_dv3d_cur
+    ldrsb   r3,[r2,#0]
+    sub r0,r0,r3
+    ldrsb   r3,[r2,#1]
+    sub r1,r1,r3
+    bl      dv_draw_delta
+    pop     {r0,r1}
+    ldr     r2,=_dv3d_cur
+    strb r0,[r2]
+    strb r1,[r2,#1]
+    add     r7,r7,#1
+    b dv3_vxtx
+dv3_close:
+    cmp     r6,#0
+    beq dv3_pnext
+    ldr     r2,=_dv3d_cur
+    ldrsb   r3,[r2,#0]
+    sub r0,r8,r3
+    ldrsb   r3,[r2,#1]
+    sub r1,r9,r3
+    bl      dv_draw_delta
+    ldr     r2,=_dv3d_cur
+    strb r8,[r2]
+    strb r9,[r2,#1]
+dv3_pnext:
+    mov     r4,r7
+    b dv3_pl
+dv3_pnext_emp:
+    b       dv3_pl
+dv3_pd:
+    pop     {r4,r5,r6,r7,r8,r9,r10,r11,pc}
+    .ltorg
+
+@ ============================================================
+@ VPy Builtins — ARM Thumb2 / RP2350
+@ ============================================================
+
+@ vpy_wait_recal() — BIOS trap: SYS_WAIT_RECAL
+.global vpy_wait_recal
+.type vpy_wait_recal, %function
+.thumb_func
+vpy_wait_recal:
+    svc     #1                      @ SYS_WAIT_RECAL
+    bx      lr
+
+@ vpy_set_intensity(r0=intensity 0-127) — BIOS trap: SYS_SET_INTENSITY
+.global vpy_set_intensity
+.type vpy_set_intensity, %function
+.thumb_func
+vpy_set_intensity:
+    svc     #2                      @ SYS_SET_INTENSITY
+    bx      lr
+
+@ vpy_print_text(r0=x, r1=y, r2=str_ptr) -> BIOS trap SYS_PRINT_TEXT
+.global vpy_print_text
+.type vpy_print_text, %function
+.thumb_func
+vpy_print_text:
+    ldr     r3, =TEXT_SIZE
+    ldr     r3, [r3]
+    cmp     r3, #0
+    it      eq
+    moveq   r3, #3
+    ldr     r12, =VPY_BRIGHTNESS_OVERRIDE
+    ldrb    r12, [r12]
+    cmp     r12, #0
+    it      eq
+    moveq   r12, #100
+    orr     r3, r3, r12, lsl #8
+    svc     #16                     @ SYS_PRINT_TEXT
+    bx      lr
+    .ltorg
+
+@ vpy_j1_x() → r0 = cached J1 X axis (-127..127)
+.global vpy_j1_x
+.type vpy_j1_x, %function
+.thumb_func
+vpy_j1_x:
+    ldr     r0, =J1_AXIS_X
+    ldr     r0, [r0]
+    bx      lr
+
+@ vpy_j1_y() → r0 = cached J1 Y axis (-127..127)
+.global vpy_j1_y
+.type vpy_j1_y, %function
+.thumb_func
+vpy_j1_y:
+    ldr     r0, =J1_AXIS_Y
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_j1_btn1
+.type vpy_j1_btn1, %function
+.thumb_func
+vpy_j1_btn1:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #4, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn2
+.type vpy_j1_btn2, %function
+.thumb_func
+vpy_j1_btn2:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #5, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn3
+.type vpy_j1_btn3, %function
+.thumb_func
+vpy_j1_btn3:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #6, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j1_btn4
+.type vpy_j1_btn4, %function
+.thumb_func
+vpy_j1_btn4:
+    ldr     r0, =BTN_STATE_J1
+    ldr     r0, [r0]
+    ubfx    r0, r0, #7, #1
+    eor     r0, r0, #1
+    bx      lr
+
+@ vpy_j2_x() → r0 = cached J2 X axis (-127..127)
+.global vpy_j2_x
+.type vpy_j2_x, %function
+.thumb_func
+vpy_j2_x:
+    ldr     r0, =J2_AXIS_X
+    ldr     r0, [r0]
+    bx      lr
+
+@ vpy_j2_y() → r0 = cached J2 Y axis (-127..127)
+.global vpy_j2_y
+.type vpy_j2_y, %function
+.thumb_func
+vpy_j2_y:
+    ldr     r0, =J2_AXIS_Y
+    ldr     r0, [r0]
+    bx      lr
+
+.global vpy_j2_btn1
+.type vpy_j2_btn1, %function
+.thumb_func
+vpy_j2_btn1:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #0, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn2
+.type vpy_j2_btn2, %function
+.thumb_func
+vpy_j2_btn2:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #1, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn3
+.type vpy_j2_btn3, %function
+.thumb_func
+vpy_j2_btn3:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #2, #1
+    eor     r0, r0, #1
+    bx      lr
+
+.global vpy_j2_btn4
+.type vpy_j2_btn4, %function
+.thumb_func
+vpy_j2_btn4:
+    ldr     r0, =BTN_STATE_J2
+    ldr     r0, [r0]
+    ubfx    r0, r0, #3, #1
+    eor     r0, r0, #1
+    bx      lr
+
+@ vpy_update_buttons() — cache buttons (+axes if analog is used)
+.global vpy_update_buttons
+.type vpy_update_buttons, %function
+.thumb_func
+vpy_update_buttons:
+    push    {r4, lr}
+    svc     #14                     @ SYS_READ_BUTTONS_RAW
+    mov     r4, r0
+    ubfx    r0, r4, #8, #8
+    ldr     r1, =BTN_STATE_J1
+    str     r0, [r1]
+    and     r0, r4, #0xFF
+    ldr     r1, =BTN_STATE_J2
+    str     r0, [r1]
+    pop     {r4, pc}
+    .ltorg
+
+@ psg_write(r0=reg, r1=data) — BIOS trap: SYS_PSG_WRITE
+.global psg_write
+.type psg_write, %function
+.thumb_func
+psg_write:
+    svc     #5                      @ SYS_PSG_WRITE
+    bx      lr
+
+@ psg_read(r0=reg) -> r0=data — BIOS trap: SYS_PSG_READ
+.global psg_read
+.type psg_read, %function
+.thumb_func
+psg_read:
+    svc     #12                     @ SYS_PSG_READ
+    bx      lr
+
+@ vpy_play_music(r0=music_data_ptr) — BIOS trap: SYS_PLAY_MUSIC
+.global vpy_play_music
+.type vpy_play_music, %function
+.thumb_func
+vpy_play_music:
+    svc     #21                     @ SYS_PLAY_MUSIC
+    bx      lr
+
+@ vpy_stop_music() — BIOS trap: SYS_STOP_MUSIC
+.global vpy_stop_music
+.type vpy_stop_music, %function
+.thumb_func
+vpy_stop_music:
+    svc     #22                     @ SYS_STOP_MUSIC
+    bx      lr
+
+@ vpy_music_update() — no-op: core 1 advances the sequencer, the
+@ BIOS flushes it each frame from WAIT_RECAL. Kept so the auto-
+@ injected per-frame call still links.
+.global vpy_music_update
+.type vpy_music_update, %function
+.thumb_func
+vpy_music_update:
+    bx      lr
+
+.global vpy_set_text_size
+.type vpy_set_text_size, %function
+.thumb_func
+vpy_set_text_size:
+    lsl     r1, r0, #1
+    add     r1, r1, r0
+    add     r1, r1, #4
+    lsr     r1, r1, #3
+    cmp     r1, #1
+    bhs     vsts_ok
+    mov     r1, #1
+vsts_ok:
+    ldr     r0, =TEXT_SIZE
+    str     r1, [r0]
+    bx      lr
+
+@ vpy_sd_count() → r0 = number of SD games — BIOS trap: SYS_SD_COUNT
+.global vpy_sd_count
+.type vpy_sd_count, %function
+.thumb_func
+vpy_sd_count:
+    svc     #17                     @ SYS_SD_COUNT
+    bx      lr
+
+@ vpy_sd_name(r0=index) → r0 = ptr to name — BIOS trap: SYS_SD_NAME
+.global vpy_sd_name
+.type vpy_sd_name, %function
+.thumb_func
+vpy_sd_name:
+    svc     #18                     @ SYS_SD_NAME
+    bx      lr
+
+@ vpy_draw_sd_preview(r0=index, r1=x, r2=y, r3=scale) — BIOS trap: SYS_SD_PREVIEW
+.global vpy_draw_sd_preview
+.type vpy_draw_sd_preview, %function
+.thumb_func
+vpy_draw_sd_preview:
+    svc     #19                     @ SYS_SD_PREVIEW
+    bx      lr
+
+@ vpy_launch_game(r0=index) — BIOS trap: SYS_LAUNCH (does not return)
+.global vpy_launch_game
+.type vpy_launch_game, %function
+.thumb_func
+vpy_launch_game:
+    svc     #20                     @ SYS_LAUNCH
+    bx      lr
+
+@ --- User variables (RAM) ---
+.equ VAR_STATE, 0x2007F460
+.equ VAR_MUSIC_ON, 0x2007F464
+.equ VAR_FADE, 0x2007F468
+.equ VAR_LOGO_ROT, 0x2007F46C
+.equ VAR_T, 0x2007F470
+.equ VAR_SEL, 0x2007F474
+.equ VAR_NAV_LATCH, 0x2007F478
+.equ VAR_FADE_MAX, 0x2007F47C
+.equ VAR_SPIN_FRAMES, 0x2007F480
+.equ VAR_MENU_START, 0x2007F484
+.equ VAR_N, 0x2007F488  @ implicit
+.equ VAR_TOP, 0x2007F48C  @ implicit
+.equ VAR_ROW, 0x2007F490  @ implicit
+.equ VAR_I, 0x2007F494  @ implicit
+.equ VAR_Y, 0x2007F498  @ implicit
+.equ VAR_BRIGHT, 0x2007F49C  @ implicit
+
+@ --- Const array ROM data ---
+
+@ --- game_main (firmware entry point) ---
+.align 2
+.global game_main
+.type game_main, %function
+.thumb_func
+game_main:
+    push    {r4, r5, r6, r7, lr}
+    @ zero runtime RAM (RP2350 SRAM is not zero-initialised)
+    ldr     r0, =TMPVAL              @ runtime RAM base
+    ldr     r1, =USER_RAM_START      @ end of system RAM (exclusive)
+    mov     r2, #0
+gm_zero_loop:
+    str     r2, [r0], #4
+    cmp     r0, r1
+    blo     gm_zero_loop
+    @ default drawing state (SRAM is not zero-initialised)
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    mov     r0, #0
+    strb    r0, [r1]
+    ldr     r1, =TEXT_SIZE
+    mov     r0, #3
+    str     r0, [r1]
+    @ initialize globals
+    ldr     r1, =0x2007F460
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F464
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F468
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F46C
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F470
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F474
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F478
+    mov     r0, #0
+    str     r0, [r1]
+    ldr     r1, =0x2007F47C
+    mov     r0, #80
+    str     r0, [r1]
+    ldr     r1, =0x2007F480
+    mov     r0, #128
+    str     r0, [r1]
+    ldr     r1, =0x2007F484
+    mov     r0, #250
+    str     r0, [r1]
+    @ init PSG_MIXER_SHADOW (all channels disabled)
+    ldr     r1, =PSG_MIXER_SHADOW
+    mov     r0, #0x3F
+    str     r0, [r1]
+    @ zero ENEMY_COUNT_ARM (guard against warm-reset SRAM)
+    ldr     r1, =ENEMY_COUNT_ARM
+    mov     r0, #0
+    str     r0, [r1]
+    @ main() body
+game_main_loop:
+    bl      vpy_wait_recal
+    bl      vpy_update_buttons
+    bl      vpy_music_update
+    ldr     r0, =VPY_BRIGHTNESS_OVERRIDE
+    mov     r1, #0
+    strb    r1, [r0]
+    ldr     r1, =0x2007F470    @ T
+    ldr     r0, [r1]
+    mov     r1, #1
+    add     r0, r0, r1
+    ldr     r1, =0x2007F470    @ T
+    str     r0, [r1]
+    ldr     r1, =0x2007F464    @ MUSIC_ON
+    ldr     r0, [r1]
+    mov     r1, #0
+    cmp     r0, r1
+    bne     if_else_0
+    mov     r0, #1
+    ldr     r1, =0x2007F464    @ MUSIC_ON
+    str     r0, [r1]
+    ldr     r0, =_JINGLE_MUSIC    @ asset 'jingle'
+    bl      vpy_play_music
+    b       if_end_0
+if_else_0:
+if_end_0:
+    ldr     r1, =0x2007F460    @ STATE
+    ldr     r0, [r1]
+    mov     r1, #0
+    cmp     r0, r1
+    bne     if_else_1
+    ldr     r1, =0x2007F468    @ FADE
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F47C    @ FADE_MAX
+    ldr     r1, [r1]
+    cmp     r0, r1
+    bge     if_else_2
+    ldr     r1, =0x2007F468    @ FADE
+    ldr     r0, [r1]
+    mov     r1, #2
+    add     r0, r0, r1
+    ldr     r1, =0x2007F468    @ FADE
+    str     r0, [r1]
+    b       if_end_2
+if_else_2:
+if_end_2:
+    ldr     r1, =0x2007F470    @ T
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F480    @ SPIN_FRAMES
+    ldr     r1, [r1]
+    cmp     r0, r1
+    bge     if_else_3
+    ldr     r1, =0x2007F46C    @ LOGO_ROT
+    ldr     r0, [r1]
+    mov     r1, #2
+    add     r0, r0, r1
+    ldr     r1, =0x2007F46C    @ LOGO_ROT
+    str     r0, [r1]
+    ldr     r1, =0x2007F46C    @ LOGO_ROT
+    ldr     r0, [r1]
+    mov     r1, #128
+    cmp     r0, r1
+    blt     if_else_4
+    ldr     r1, =0x2007F46C    @ LOGO_ROT
+    ldr     r0, [r1]
+    mov     r1, #128
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F46C    @ LOGO_ROT
+    str     r0, [r1]
+    b       if_end_4
+if_else_4:
+if_end_4:
+    b       if_end_3
+if_else_3:
+    mov     r0, #0
+    ldr     r1, =0x2007F46C    @ LOGO_ROT
+    str     r0, [r1]
+if_end_3:
+    ldr     r1, =0x2007F468    @ FADE
+    ldr     r0, [r1]
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    ldr     r0, =-25
+    push    {r0}
+    ldr     r0, =-50
+    push    {r0}
+    b       _str_0_after
+_str_0:
+    .asciz  "STUDIO\x80"
+    .align  2
+_str_0_after:
+    ldr     r0, =_str_0
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    ldr     r1, =0x2007F468    @ FADE
+    ldr     r0, [r1]
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    mov     r0, #34
+    push    {r0}
+    mov     r0, #0
+    push    {r0}
+    mov     r0, #0
+    push    {r0}
+    ldr     r1, =0x2007F46C    @ LOGO_ROT
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #0
+    push    {r0}
+    ldr     r0, =_LOGO_3D_DATA    @ 3D data for 'logo'
+    pop     {r1}
+    pop     {r2}
+    pop     {r3}
+    bl      vpy_draw_vector_3d
+    add     sp, sp, #8          @ discard ox, oy
+    ldr     r1, =0x2007F468    @ FADE
+    ldr     r0, [r1]
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    ldr     r0, =_TEXT_VECTORS    @ asset 'text'
+    push    {r0}
+    mov     r0, #0
+    push    {r0}
+    ldr     r0, =-40
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_vector
+    ldr     r1, =0x2007F470    @ T
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F484    @ MENU_START
+    ldr     r1, [r1]
+    cmp     r0, r1
+    blt     if_else_5
+    mov     r0, #1
+    ldr     r1, =0x2007F460    @ STATE
+    str     r0, [r1]
+    b       if_end_5
+if_else_5:
+if_end_5:
+    b       if_end_1
+if_else_1:
+    ldr     r1, =0x2007F460    @ STATE
+    ldr     r0, [r1]
+    mov     r1, #1
+    cmp     r0, r1
+    bne     elif_end_6
+    mov     r0, #80
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    mov     r0, #4
+    bl      vpy_set_text_size
+    ldr     r0, =-10
+    push    {r0}
+    mov     r0, #100
+    push    {r0}
+    b       _str_1_after
+_str_1:
+    .asciz  "GAMES\x80"
+    .align  2
+_str_1_after:
+    ldr     r0, =_str_1
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    bl      vpy_sd_count
+    ldr     r1, =0x2007F488    @ N
+    str     r0, [r1]
+    ldr     r1, =0x2007F488    @ N
+    ldr     r0, [r1]
+    mov     r1, #0
+    cmp     r0, r1
+    bne     if_else_7
+    mov     r0, #80
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    mov     r0, #4
+    bl      vpy_set_text_size
+    ldr     r0, =-70
+    push    {r0}
+    mov     r0, #0
+    push    {r0}
+    b       _str_2_after
+_str_2:
+    .asciz  "NO SD\x80"
+    .align  2
+_str_2_after:
+    ldr     r0, =_str_2
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    b       if_end_7
+if_else_7:
+    bl      vpy_j1_btn1
+    mov     r1, #1
+    cmp     r0, r1
+    bne     if_else_8
+    ldr     r1, =0x2007F478    @ NAV_LATCH
+    ldr     r0, [r1]
+    mov     r1, #0
+    cmp     r0, r1
+    bne     if_else_9
+    ldr     r1, =0x2007F474    @ SEL
+    ldr     r0, [r1]
+    mov     r1, #1
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F474    @ SEL
+    str     r0, [r1]
+    mov     r0, #1
+    ldr     r1, =0x2007F478    @ NAV_LATCH
+    str     r0, [r1]
+    b       if_end_9
+if_else_9:
+if_end_9:
+    b       if_end_8
+if_else_8:
+    bl      vpy_j1_btn2
+    mov     r1, #1
+    cmp     r0, r1
+    bne     elif_end_10
+    ldr     r1, =0x2007F478    @ NAV_LATCH
+    ldr     r0, [r1]
+    mov     r1, #0
+    cmp     r0, r1
+    bne     if_else_11
+    ldr     r1, =0x2007F474    @ SEL
+    ldr     r0, [r1]
+    mov     r1, #1
+    add     r0, r0, r1
+    ldr     r1, =0x2007F474    @ SEL
+    str     r0, [r1]
+    mov     r0, #1
+    ldr     r1, =0x2007F478    @ NAV_LATCH
+    str     r0, [r1]
+    b       if_end_11
+if_else_11:
+if_end_11:
+    b       if_end_8
+elif_end_10:
+    mov     r0, #0
+    ldr     r1, =0x2007F478    @ NAV_LATCH
+    str     r0, [r1]
+if_end_8:
+    ldr     r1, =0x2007F474    @ SEL
+    ldr     r0, [r1]
+    mov     r1, #0
+    cmp     r0, r1
+    bge     if_else_12
+    mov     r0, #0
+    ldr     r1, =0x2007F474    @ SEL
+    str     r0, [r1]
+    b       if_end_12
+if_else_12:
+if_end_12:
+    ldr     r1, =0x2007F474    @ SEL
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F488    @ N
+    ldr     r1, [r1]
+    cmp     r0, r1
+    blt     if_else_13
+    ldr     r1, =0x2007F488    @ N
+    ldr     r0, [r1]
+    mov     r1, #1
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F474    @ SEL
+    str     r0, [r1]
+    b       if_end_13
+if_else_13:
+if_end_13:
+    bl      vpy_j1_btn4
+    mov     r1, #1
+    cmp     r0, r1
+    bne     if_else_14
+    ldr     r1, =0x2007F474    @ SEL
+    ldr     r0, [r1]
+    bl      vpy_launch_game
+    b       if_end_14
+if_else_14:
+if_end_14:
+    mov     r0, #0
+    ldr     r1, =0x2007F48C    @ TOP
+    str     r0, [r1]
+    ldr     r1, =0x2007F488    @ N
+    ldr     r0, [r1]
+    mov     r1, #5
+    cmp     r0, r1
+    ble     if_else_15
+    ldr     r1, =0x2007F474    @ SEL
+    ldr     r0, [r1]
+    mov     r1, #2
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F48C    @ TOP
+    str     r0, [r1]
+    ldr     r1, =0x2007F48C    @ TOP
+    ldr     r0, [r1]
+    mov     r1, #0
+    cmp     r0, r1
+    bge     if_else_16
+    mov     r0, #0
+    ldr     r1, =0x2007F48C    @ TOP
+    str     r0, [r1]
+    b       if_end_16
+if_else_16:
+if_end_16:
+    ldr     r1, =0x2007F48C    @ TOP
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F488    @ N
+    ldr     r0, [r1]
+    mov     r1, #5
+    sub     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+    ble     if_else_17
+    ldr     r1, =0x2007F488    @ N
+    ldr     r0, [r1]
+    mov     r1, #5
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F48C    @ TOP
+    str     r0, [r1]
+    b       if_end_17
+if_else_17:
+if_end_17:
+    b       if_end_15
+if_else_15:
+if_end_15:
+    mov     r0, #4
+    bl      vpy_set_text_size
+    mov     r0, #0
+    ldr     r1, =0x2007F490    @ ROW
+    str     r0, [r1]
+    ldr     r1, =0x2007F48C    @ TOP
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F494    @ I
+    str     r0, [r1]
+while_top_18:
+    ldr     r1, =0x2007F494    @ I
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F488    @ N
+    ldr     r1, [r1]
+    cmp     r0, r1
+    bge     1f
+    ldr     r1, =0x2007F490    @ ROW
+    ldr     r0, [r1]
+    mov     r1, #5
+    cmp     r0, r1
+    bge     .Lcf20
+    movs    r0, #1
+    b       .Lcf20e
+.Lcf20:
+    movs    r0, #0
+.Lcf20e:
+    b       2f
+1:  mov     r0, #0
+2:
+    cmp     r0, #0
+    beq     while_end_18
+    mov     r0, #55
+    push    {r0}
+    ldr     r1, =0x2007F490    @ ROW
+    ldr     r0, [r1]
+    mov     r1, #26
+    mul     r0, r0, r1
+    mov     r1, r0
+    pop     {r0}
+    sub     r0, r0, r1
+    ldr     r1, =0x2007F498    @ Y
+    str     r0, [r1]
+    mov     r0, #40
+    ldr     r1, =0x2007F49C    @ BRIGHT
+    str     r0, [r1]
+    ldr     r1, =0x2007F494    @ I
+    ldr     r0, [r1]
+    ldr     r1, =0x2007F474    @ SEL
+    ldr     r1, [r1]
+    cmp     r0, r1
+    bne     if_else_19
+    mov     r0, #80
+    ldr     r1, =0x2007F49C    @ BRIGHT
+    str     r0, [r1]
+    b       if_end_19
+if_else_19:
+if_end_19:
+    ldr     r1, =0x2007F49C    @ BRIGHT
+    ldr     r0, [r1]
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    ldr     r0, =-85
+    push    {r0}
+    ldr     r1, =0x2007F498    @ Y
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F494    @ I
+    ldr     r0, [r1]
+    bl      vpy_sd_name
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_print_text
+    ldr     r1, =0x2007F494    @ I
+    ldr     r0, [r1]
+    mov     r1, #1
+    add     r0, r0, r1
+    ldr     r1, =0x2007F494    @ I
+    str     r0, [r1]
+    ldr     r1, =0x2007F490    @ ROW
+    ldr     r0, [r1]
+    mov     r1, #1
+    add     r0, r0, r1
+    ldr     r1, =0x2007F490    @ ROW
+    str     r0, [r1]
+    b       while_top_18
+while_end_18:
+if_end_7:
+    mov     r0, #80
+    and     r0, r0, #0x7F
+    ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
+    strb    r0, [r1]            @ record override for DRAW_VECTOR*
+    bl      vpy_set_intensity   @ writes the DAC (r0 preserved)
+    ldr     r0, =_FRAME_VECTORS    @ asset 'frame'
+    push    {r0}
+    mov     r0, #55
+    push    {r0}
+    mov     r0, #20
+    push    {r0}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_vector
+    ldr     r1, =0x2007F488    @ N
+    ldr     r0, [r1]
+    mov     r1, #0
+    cmp     r0, r1
+    ble     if_else_20
+    ldr     r1, =0x2007F474    @ SEL
+    ldr     r0, [r1]
+    push    {r0}
+    mov     r0, #52
+    push    {r0}
+    mov     r0, #20
+    push    {r0}
+    mov     r0, #40
+    push    {r0}
+    pop     {r3}
+    pop     {r2}
+    pop     {r1}
+    pop     {r0}
+    bl      vpy_draw_sd_preview
+    b       if_end_20
+if_else_20:
+if_end_20:
+    b       if_end_1
+elif_end_6:
+if_end_1:
+    b       game_main_loop
+    .ltorg
+
+@ ============================================================
+@ Asset data
+@ ============================================================
+
+@ --- frame (1 path(s)) ---
+.global _FRAME_VECTORS
+_FRAME_VECTORS:
+    .word   1               @ path_count
+    .word   _FRAME_PATH0      @ ptr path 0
+
+_FRAME_PATH0:
+    .byte   100               @ intensity
+    .byte   0xD9, 0x2C, 0x00, 0x00  @ y=-39, x=44, hdr
+    .byte   0xFF, 0x4D, 0x00  @ line dy=77, dx=0
+    .byte   0xFF, 0x01, 0xA8  @ line dy=1, dx=-88
+    .byte   0xFF, 0xB2, 0x00  @ line dy=-78, dx=0
+    .byte   0xFF, 0x00, 0x58  @ line dy=0, dx=88
+    .byte   0x02            @ end marker
+
+@ --- FRAME_VEC (libvpy position-independent .vec image) ---
+.section .rodata._FRAME_VEC,"a",%progbits
+    .balign 4
+.global _FRAME_VEC
+_FRAME_VEC:
+    .byte   0x01, 0x00, 0x64, 0xD9, 0x2C, 0x00, 0x00, 0xFF, 0x4D, 0x00, 0xFF, 0x01, 0xA8, 0xFF, 0xB2, 0x00
+    .byte   0xFF, 0x00, 0x58, 0x02
+.section .text
+
+@ --- FRAME_3D_DATA (1 path(s)) ---
+    .balign 4
+.global _FRAME_3D_DATA
 _FRAME_3D_DATA:
-    FDB 4               ; vertex count (unique)
-    FCB $2E,$D9,$00          ; vert 0: x=46,y=-39,z=0
-    FCB $2E,$26,$00          ; vert 1: x=46,y=38,z=0
-    FCB $D6,$27,$00          ; vert 2: x=-42,y=39,z=0
-    FCB $D6,$D9,$00          ; vert 3: x=-42,y=-39,z=0
-    FDB 1               ; path count
-    FCB 4               ; path 0: point count
-    FCB 1               ; path 0: closed flag
-    FCB 0               ; vertex index
-    FCB 1               ; vertex index
-    FCB 2               ; vertex index
-    FCB 3               ; vertex index
+    .word   4               @ vertex_count
+    .byte   0x2E, 0xD9, 0x00  @ vert 0: x=46,y=-39,z=0
+    .byte   0x2E, 0x26, 0x00  @ vert 1: x=46,y=38,z=0
+    .byte   0xD6, 0x27, 0x00  @ vert 2: x=-42,y=39,z=0
+    .byte   0xD6, 0xD9, 0x00  @ vert 3: x=-42,y=-39,z=0
+    .balign 4
+    .word   1               @ path_count
+    .byte   4               @ path 0: pt_count
+    .byte   1               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .balign 4
 
+@ --- jingle MUSIC (12 events, loop@0) ---
+.global _JINGLE_MUSIC
+_JINGLE_MUSIC:
+    .word   12           @ num_events
+    .word   8           @ loop_event_byte_offset from base
+    .byte   0, 7  @ frame=0 delay=0 writes=7
+    .byte   0, 63  @ PSG r0
+    .byte   1, 1  @ PSG r1
+    .byte   8, 11  @ PSG r8
+    .byte   2, 126  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 10  @ PSG r9
+    .byte   7, 60  @ PSG r7
+    .byte   9, 4  @ frame=10 delay=9 writes=4
+    .byte   0, 253  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   7, 60  @ PSG r7
+    .byte   9, 7  @ frame=20 delay=9 writes=7
+    .byte   0, 213  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 12  @ PSG r8
+    .byte   2, 170  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 9  @ PSG r9
+    .byte   7, 60  @ PSG r7
+    .byte   9, 4  @ frame=30 delay=9 writes=4
+    .byte   0, 160  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   7, 60  @ PSG r7
+    .byte   9, 7  @ frame=40 delay=9 writes=7
+    .byte   0, 127  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 126  @ PSG r2
+    .byte   3, 2  @ PSG r3
+    .byte   9, 10  @ PSG r9
+    .byte   7, 60  @ PSG r7
+    .byte   9, 4  @ frame=50 delay=9 writes=4
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   7, 60  @ PSG r7
+    .byte   9, 7  @ frame=60 delay=9 writes=7
+    .byte   0, 127  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 13  @ PSG r8
+    .byte   2, 170  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 9  @ PSG r9
+    .byte   7, 60  @ PSG r7
+    .byte   4, 4  @ frame=65 delay=4 writes=4
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   7, 60  @ PSG r7
+    .byte   4, 4  @ frame=70 delay=4 writes=4
+    .byte   0, 95  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   7, 60  @ PSG r7
+    .byte   4, 4  @ frame=75 delay=4 writes=4
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 14  @ PSG r8
+    .byte   7, 60  @ PSG r7
+    .byte   4, 10  @ frame=80 delay=4 writes=10
+    .byte   0, 107  @ PSG r0
+    .byte   1, 0  @ PSG r1
+    .byte   8, 15  @ PSG r8
+    .byte   2, 63  @ PSG r2
+    .byte   3, 1  @ PSG r3
+    .byte   9, 13  @ PSG r9
+    .byte   4, 127  @ PSG r4
+    .byte   5, 0  @ PSG r5
+    .byte   10, 13  @ PSG r10
+    .byte   7, 56  @ PSG r7
+    .byte   69, 4  @ frame=150 delay=69 writes=4
+    .byte   8, 0  @ PSG r8
+    .byte   9, 0  @ PSG r9
+    .byte   10, 0  @ PSG r10
+    .byte   7, 63  @ PSG r7
+    .byte   0, 0   @ end (no loop)
 
-; 3D vertex-indexed data for DRAW_VECTOR_3D (32 unique verts, 4 paths, 36 total point refs)
+@ --- logo (4 path(s)) ---
+.global _LOGO_VECTORS
+_LOGO_VECTORS:
+    .word   4               @ path_count
+    .word   _LOGO_PATH0      @ ptr path 0
+    .word   _LOGO_PATH1      @ ptr path 1
+    .word   _LOGO_PATH2      @ ptr path 2
+    .word   _LOGO_PATH3      @ ptr path 3
+
+_LOGO_PATH0:
+    .byte   85               @ intensity
+    .byte   0xD6, 0x11, 0x00, 0x00  @ y=-42, x=17, hdr
+    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
+    .byte   0xFF, 0x00, 0xF8  @ line dy=0, dx=-8
+    .byte   0xFF, 0xF7, 0x00  @ line dy=-9, dx=0
+    .byte   0xFF, 0x00, 0x08  @ line dy=0, dx=8
+    .byte   0x02            @ end marker
+
+_LOGO_PATH1:
+    .byte   85               @ intensity
+    .byte   0xCE, 0x17, 0x00, 0x00  @ y=-50, x=23, hdr
+    .byte   0xFF, 0x14, 0x00  @ line dy=20, dx=0
+    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
+    .byte   0xFF, 0x24, 0x00  @ line dy=36, dx=0
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0x0A, 0x00  @ line dy=10, dx=0
+    .byte   0xFF, 0x00, 0xE6  @ line dy=0, dx=-26
+    .byte   0xFF, 0xF6, 0x00  @ line dy=-10, dx=0
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0xDC, 0x00  @ line dy=-36, dx=0
+    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
+    .byte   0xFF, 0xEC, 0x00  @ line dy=-20, dx=0
+    .byte   0xFF, 0x00, 0x1A  @ line dy=0, dx=26
+    .byte   0x02            @ end marker
+
+_LOGO_PATH2:
+    .byte   85               @ intensity
+    .byte   0x2B, 0xF0, 0x00, 0x00  @ y=43, x=-16, hdr
+    .byte   0xFF, 0xF4, 0x00  @ line dy=-12, dx=0
+    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0xFF, 0x0C, 0x00  @ line dy=12, dx=0
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0x02            @ end marker
+
+_LOGO_PATH3:
+    .byte   85               @ intensity
+    .byte   0x31, 0xE8, 0x00, 0x00  @ y=49, x=-24, hdr
+    .byte   0xFF, 0xEE, 0x00  @ line dy=-18, dx=0
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0xDB, 0x00  @ line dy=-37, dx=0
+    .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
+    .byte   0xFF, 0xF5, 0x00  @ line dy=-11, dx=0
+    .byte   0xFF, 0x00, 0x18  @ line dy=0, dx=24
+    .byte   0xFF, 0x09, 0x00  @ line dy=9, dx=0
+    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
+    .byte   0xFF, 0x27, 0x00  @ line dy=39, dx=0
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0x12, 0x00  @ line dy=18, dx=0
+    .byte   0xFF, 0x00, 0xE6  @ line dy=0, dx=-26
+    .byte   0x02            @ end marker
+
+@ --- LOGO_VEC (libvpy position-independent .vec image) ---
+.section .rodata._LOGO_VEC,"a",%progbits
+    .balign 4
+.global _LOGO_VEC
+_LOGO_VEC:
+    .byte   0x04, 0x00, 0x55, 0xD6, 0x11, 0x00, 0x00, 0xFF, 0x09, 0x00, 0xFF, 0x00, 0xF8, 0xFF, 0xF7, 0x00
+    .byte   0xFF, 0x00, 0x08, 0x02, 0x55, 0xCE, 0x17, 0x00, 0x00, 0xFF, 0x14, 0x00, 0xFF, 0x00, 0x0A, 0xFF
+    .byte   0x24, 0x00, 0xFF, 0x00, 0xF6, 0xFF, 0x0A, 0x00, 0xFF, 0x00, 0xE6, 0xFF, 0xF6, 0x00, 0xFF, 0x00
+    .byte   0xF6, 0xFF, 0xDC, 0x00, 0xFF, 0x00, 0x0A, 0xFF, 0xEC, 0x00, 0xFF, 0x00, 0x1A, 0x02, 0x55, 0x2B
+    .byte   0xF0, 0x00, 0x00, 0xFF, 0xF4, 0x00, 0xFF, 0x00, 0x06, 0xFF, 0x0C, 0x00, 0xFF, 0x00, 0xFA, 0x02
+    .byte   0x55, 0x31, 0xE8, 0x00, 0x00, 0xFF, 0xEE, 0x00, 0xFF, 0x00, 0xF6, 0xFF, 0xDB, 0x00, 0xFF, 0x00
+    .byte   0x0C, 0xFF, 0xF5, 0x00, 0xFF, 0x00, 0x18, 0xFF, 0x09, 0x00, 0xFF, 0x00, 0x0A, 0xFF, 0x27, 0x00
+    .byte   0xFF, 0x00, 0xF6, 0xFF, 0x12, 0x00, 0xFF, 0x00, 0xE6, 0x02
+.section .text
+
+@ --- LOGO_3D_DATA (4 path(s)) ---
+    .balign 4
+.global _LOGO_3D_DATA
 _LOGO_3D_DATA:
-    FDB 32               ; vertex count (unique)
-    FCB $E8,$31,$00          ; vert 0: x=-24,y=49,z=0
-    FCB $E8,$1F,$00          ; vert 1: x=-24,y=31,z=0
-    FCB $DE,$1F,$00          ; vert 2: x=-34,y=31,z=0
-    FCB $DE,$FA,$00          ; vert 3: x=-34,y=-6,z=0
-    FCB $EA,$FA,$00          ; vert 4: x=-22,y=-6,z=0
-    FCB $EA,$EF,$00          ; vert 5: x=-22,y=-17,z=0
-    FCB $02,$EF,$00          ; vert 6: x=2,y=-17,z=0
-    FCB $02,$F8,$00          ; vert 7: x=2,y=-8,z=0
-    FCB $0C,$F8,$00          ; vert 8: x=12,y=-8,z=0
-    FCB $0C,$1F,$00          ; vert 9: x=12,y=31,z=0
-    FCB $02,$1F,$00          ; vert 10: x=2,y=31,z=0
-    FCB $02,$31,$00          ; vert 11: x=2,y=49,z=0
-    FCB $F0,$2B,$00          ; vert 12: x=-16,y=43,z=0
-    FCB $F0,$1F,$00          ; vert 13: x=-16,y=31,z=0
-    FCB $F6,$1F,$00          ; vert 14: x=-10,y=31,z=0
-    FCB $F6,$2B,$00          ; vert 15: x=-10,y=43,z=0
-    FCB $17,$CE,$00          ; vert 16: x=23,y=-50,z=0
-    FCB $17,$E2,$00          ; vert 17: x=23,y=-30,z=0
-    FCB $21,$E2,$00          ; vert 18: x=33,y=-30,z=0
-    FCB $21,$06,$00          ; vert 19: x=33,y=6,z=0
-    FCB $17,$06,$00          ; vert 20: x=23,y=6,z=0
-    FCB $17,$10,$00          ; vert 21: x=23,y=16,z=0
-    FCB $FD,$10,$00          ; vert 22: x=-3,y=16,z=0
-    FCB $FD,$06,$00          ; vert 23: x=-3,y=6,z=0
-    FCB $F3,$06,$00          ; vert 24: x=-13,y=6,z=0
-    FCB $F3,$E2,$00          ; vert 25: x=-13,y=-30,z=0
-    FCB $FD,$E2,$00          ; vert 26: x=-3,y=-30,z=0
-    FCB $FD,$CE,$00          ; vert 27: x=-3,y=-50,z=0
-    FCB $11,$D6,$00          ; vert 28: x=17,y=-42,z=0
-    FCB $11,$DF,$00          ; vert 29: x=17,y=-33,z=0
-    FCB $09,$DF,$00          ; vert 30: x=9,y=-33,z=0
-    FCB $09,$D6,$00          ; vert 31: x=9,y=-42,z=0
-    FDB 4               ; path count
-    FCB 13               ; path 0: point count
-    FCB 0               ; path 0: closed flag
-    FCB 0               ; vertex index
-    FCB 1               ; vertex index
-    FCB 2               ; vertex index
-    FCB 3               ; vertex index
-    FCB 4               ; vertex index
-    FCB 5               ; vertex index
-    FCB 6               ; vertex index
-    FCB 7               ; vertex index
-    FCB 8               ; vertex index
-    FCB 9               ; vertex index
-    FCB 10               ; vertex index
-    FCB 11               ; vertex index
-    FCB 0               ; vertex index
-    FCB 5               ; path 1: point count
-    FCB 0               ; path 1: closed flag
-    FCB 12               ; vertex index
-    FCB 13               ; vertex index
-    FCB 14               ; vertex index
-    FCB 15               ; vertex index
-    FCB 12               ; vertex index
-    FCB 13               ; path 2: point count
-    FCB 0               ; path 2: closed flag
-    FCB 16               ; vertex index
-    FCB 17               ; vertex index
-    FCB 18               ; vertex index
-    FCB 19               ; vertex index
-    FCB 20               ; vertex index
-    FCB 21               ; vertex index
-    FCB 22               ; vertex index
-    FCB 23               ; vertex index
-    FCB 24               ; vertex index
-    FCB 25               ; vertex index
-    FCB 26               ; vertex index
-    FCB 27               ; vertex index
-    FCB 16               ; vertex index
-    FCB 5               ; path 3: point count
-    FCB 0               ; path 3: closed flag
-    FCB 28               ; vertex index
-    FCB 29               ; vertex index
-    FCB 30               ; vertex index
-    FCB 31               ; vertex index
-    FCB 28               ; vertex index
+    .word   32               @ vertex_count
+    .byte   0xE8, 0x31, 0x00  @ vert 0: x=-24,y=49,z=0
+    .byte   0xE8, 0x1F, 0x00  @ vert 1: x=-24,y=31,z=0
+    .byte   0xDE, 0x1F, 0x00  @ vert 2: x=-34,y=31,z=0
+    .byte   0xDE, 0xFA, 0x00  @ vert 3: x=-34,y=-6,z=0
+    .byte   0xEA, 0xFA, 0x00  @ vert 4: x=-22,y=-6,z=0
+    .byte   0xEA, 0xEF, 0x00  @ vert 5: x=-22,y=-17,z=0
+    .byte   0x02, 0xEF, 0x00  @ vert 6: x=2,y=-17,z=0
+    .byte   0x02, 0xF8, 0x00  @ vert 7: x=2,y=-8,z=0
+    .byte   0x0C, 0xF8, 0x00  @ vert 8: x=12,y=-8,z=0
+    .byte   0x0C, 0x1F, 0x00  @ vert 9: x=12,y=31,z=0
+    .byte   0x02, 0x1F, 0x00  @ vert 10: x=2,y=31,z=0
+    .byte   0x02, 0x31, 0x00  @ vert 11: x=2,y=49,z=0
+    .byte   0xF0, 0x2B, 0x00  @ vert 12: x=-16,y=43,z=0
+    .byte   0xF0, 0x1F, 0x00  @ vert 13: x=-16,y=31,z=0
+    .byte   0xF6, 0x1F, 0x00  @ vert 14: x=-10,y=31,z=0
+    .byte   0xF6, 0x2B, 0x00  @ vert 15: x=-10,y=43,z=0
+    .byte   0x17, 0xCE, 0x00  @ vert 16: x=23,y=-50,z=0
+    .byte   0x17, 0xE2, 0x00  @ vert 17: x=23,y=-30,z=0
+    .byte   0x21, 0xE2, 0x00  @ vert 18: x=33,y=-30,z=0
+    .byte   0x21, 0x06, 0x00  @ vert 19: x=33,y=6,z=0
+    .byte   0x17, 0x06, 0x00  @ vert 20: x=23,y=6,z=0
+    .byte   0x17, 0x10, 0x00  @ vert 21: x=23,y=16,z=0
+    .byte   0xFD, 0x10, 0x00  @ vert 22: x=-3,y=16,z=0
+    .byte   0xFD, 0x06, 0x00  @ vert 23: x=-3,y=6,z=0
+    .byte   0xF3, 0x06, 0x00  @ vert 24: x=-13,y=6,z=0
+    .byte   0xF3, 0xE2, 0x00  @ vert 25: x=-13,y=-30,z=0
+    .byte   0xFD, 0xE2, 0x00  @ vert 26: x=-3,y=-30,z=0
+    .byte   0xFD, 0xCE, 0x00  @ vert 27: x=-3,y=-50,z=0
+    .byte   0x11, 0xD6, 0x00  @ vert 28: x=17,y=-42,z=0
+    .byte   0x11, 0xDF, 0x00  @ vert 29: x=17,y=-33,z=0
+    .byte   0x09, 0xDF, 0x00  @ vert 30: x=9,y=-33,z=0
+    .byte   0x09, 0xD6, 0x00  @ vert 31: x=9,y=-42,z=0
+    .balign 4
+    .word   4               @ path_count
+    .byte   13               @ path 0: pt_count
+    .byte   0               @ path 0: closed
+    .byte   0
+    .byte   1
+    .byte   2
+    .byte   3
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   10
+    .byte   11
+    .byte   0
+    .byte   5               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   12
+    .byte   13
+    .byte   14
+    .byte   15
+    .byte   12
+    .byte   13               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   16
+    .byte   17
+    .byte   18
+    .byte   19
+    .byte   20
+    .byte   21
+    .byte   22
+    .byte   23
+    .byte   24
+    .byte   25
+    .byte   26
+    .byte   27
+    .byte   16
+    .byte   5               @ path 3: pt_count
+    .byte   0               @ path 3: closed
+    .byte   28
+    .byte   29
+    .byte   30
+    .byte   31
+    .byte   28
+    .balign 4
 
+@ --- text (13 path(s)) ---
+.global _TEXT_VECTORS
+_TEXT_VECTORS:
+    .word   13               @ path_count
+    .word   _TEXT_PATH0      @ ptr path 0
+    .word   _TEXT_PATH1      @ ptr path 1
+    .word   _TEXT_PATH2      @ ptr path 2
+    .word   _TEXT_PATH3      @ ptr path 3
+    .word   _TEXT_PATH4      @ ptr path 4
+    .word   _TEXT_PATH5      @ ptr path 5
+    .word   _TEXT_PATH6      @ ptr path 6
+    .word   _TEXT_PATH7      @ ptr path 7
+    .word   _TEXT_PATH8      @ ptr path 8
+    .word   _TEXT_PATH9      @ ptr path 9
+    .word   _TEXT_PATH10      @ ptr path 10
+    .word   _TEXT_PATH11      @ ptr path 11
+    .word   _TEXT_PATH12      @ ptr path 12
 
-; 3D vertex-indexed data for DRAW_VECTOR_3D (78 unique verts, 13 paths, 98 total point refs)
+_TEXT_PATH0:
+    .byte   85               @ intensity
+    .byte   0x12, 0xFA, 0x00, 0x00  @ y=18, x=-6, hdr
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0xFF, 0xEF, 0x00  @ line dy=-17, dx=0
+    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
+    .byte   0xFF, 0x11, 0x00  @ line dy=17, dx=0
+    .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
+    .byte   0xFF, 0x04, 0x02  @ line dy=4, dx=2
+    .byte   0xFF, 0x00, 0xEE  @ line dy=0, dx=-18
+    .byte   0x02            @ end marker
+
+_TEXT_PATH1:
+    .byte   85               @ intensity
+    .byte   0x12, 0xF4, 0x00, 0x00  @ y=18, x=-12, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x00, 0xF1  @ line dy=0, dx=-15
+    .byte   0xFF, 0xF6, 0xFA  @ line dy=-10, dx=-6
+    .byte   0xFF, 0xF8, 0x03  @ line dy=-8, dx=3
+    .byte   0xFF, 0xFD, 0x04  @ line dy=-3, dx=4
+    .byte   0xFF, 0x00, 0x0E  @ line dy=0, dx=14
+    .byte   0xFF, 0x03, 0xFD  @ line dy=3, dx=-3
+    .byte   0xFF, 0x00, 0xF7  @ line dy=0, dx=-9
+    .byte   0xFF, 0x02, 0xFD  @ line dy=2, dx=-3
+    .byte   0xFF, 0x06, 0xFE  @ line dy=6, dx=-2
+    .byte   0xFF, 0x04, 0x02  @ line dy=4, dx=2
+    .byte   0xFF, 0x02, 0x03  @ line dy=2, dx=3
+    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
+    .byte   0xFF, 0x04, 0x02  @ line dy=4, dx=2
+    .byte   0x02            @ end marker
+
+_TEXT_PATH2:
+    .byte   85               @ intensity
+    .byte   0x0E, 0x12, 0x00, 0x00  @ y=14, x=18, hdr (simplified: -1 pts)
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0xFF, 0x00, 0x0F  @ line dy=0, dx=15
+    .byte   0xFF, 0xFD, 0x03  @ line dy=-3, dx=3
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xFF, 0xFB, 0xFE  @ line dy=-5, dx=-2
+    .byte   0xFF, 0xFF, 0xFD  @ line dy=-1, dx=-3
+    .byte   0xFF, 0xF8, 0x05  @ line dy=-8, dx=5
+    .byte   0xFF, 0x00, 0xFB  @ line dy=0, dx=-5
+    .byte   0xFF, 0x08, 0xFC  @ line dy=8, dx=-4
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0xF8, 0x00  @ line dy=-8, dx=0
+    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
+    .byte   0xFF, 0x0C, 0x00  @ line dy=12, dx=0
+    .byte   0xFF, 0x00, 0x0C  @ line dy=0, dx=12
+    .byte   0xFF, 0x02, 0x03  @ line dy=2, dx=3
+    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
+    .byte   0xFF, 0x00, 0xF1  @ line dy=0, dx=-15
+    .byte   0x02            @ end marker
+
+_TEXT_PATH3:
+    .byte   85               @ intensity
+    .byte   0x0B, 0x2A, 0x00, 0x00  @ y=11, x=42, hdr
+    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0xFF, 0x00, 0x10  @ line dy=0, dx=16
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0xFF, 0x00, 0xF0  @ line dy=0, dx=-16
+    .byte   0x02            @ end marker
+
+_TEXT_PATH4:
+    .byte   85               @ intensity
+    .byte   0x12, 0x2A, 0x00, 0x00  @ y=18, x=42, hdr
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xFF, 0x00, 0x10  @ line dy=0, dx=16
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0xFF, 0x00, 0xF0  @ line dy=0, dx=-16
+    .byte   0x02            @ end marker
+
+_TEXT_PATH5:
+    .byte   85               @ intensity
+    .byte   0x00, 0x2A, 0x00, 0x00  @ y=0, x=42, hdr
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
+    .byte   0xFF, 0x00, 0x10  @ line dy=0, dx=16
+    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
+    .byte   0xFF, 0x00, 0xF0  @ line dy=0, dx=-16
+    .byte   0x02            @ end marker
+
+_TEXT_PATH6:
+    .byte   85               @ intensity
+    .byte   0xEE, 0x37, 0x00, 0x00  @ y=-18, x=55, hdr
+    .byte   0xFF, 0x00, 0x12  @ line dy=0, dx=18
+    .byte   0x02            @ end marker
+
+_TEXT_PATH7:
+    .byte   85               @ intensity
+    .byte   0x12, 0x3D, 0x00, 0x00  @ y=18, x=61, hdr
+    .byte   0xFF, 0x00, 0x07  @ line dy=0, dx=7
+    .byte   0xFF, 0xF8, 0x05  @ line dy=-8, dx=5
+    .byte   0xFF, 0x08, 0x05  @ line dy=8, dx=5
+    .byte   0xFF, 0x00, 0x06  @ line dy=0, dx=6
+    .byte   0xFF, 0xF5, 0xF7  @ line dy=-11, dx=-9
+    .byte   0xFF, 0xF6, 0x08  @ line dy=-10, dx=8
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0x07, 0xFC  @ line dy=7, dx=-4
+    .byte   0xFF, 0xF9, 0xFB  @ line dy=-7, dx=-5
+    .byte   0xFF, 0x00, 0xFA  @ line dy=0, dx=-6
+    .byte   0xFF, 0x0A, 0x09  @ line dy=10, dx=9
+    .byte   0xFF, 0x0B, 0xF6  @ line dy=11, dx=-10
+    .byte   0x02            @ end marker
+
+_TEXT_PATH8:
+    .byte   85               @ intensity
+    .byte   0x12, 0xC8, 0x00, 0x00  @ y=18, x=-56, hdr
+    .byte   0xFF, 0xFC, 0x00  @ line dy=-4, dx=0
+    .byte   0xFF, 0x00, 0x11  @ line dy=0, dx=17
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
+    .byte   0xFF, 0x00, 0xEF  @ line dy=0, dx=-17
+    .byte   0x02            @ end marker
+
+_TEXT_PATH9:
+    .byte   85               @ intensity
+    .byte   0x0B, 0xC8, 0x00, 0x00  @ y=11, x=-56, hdr
+    .byte   0xFF, 0xFA, 0x00  @ line dy=-6, dx=0
+    .byte   0xFF, 0x00, 0x11  @ line dy=0, dx=17
+    .byte   0xFF, 0x06, 0x00  @ line dy=6, dx=0
+    .byte   0xFF, 0x00, 0xEF  @ line dy=0, dx=-17
+    .byte   0x02            @ end marker
+
+_TEXT_PATH10:
+    .byte   85               @ intensity
+    .byte   0x00, 0xC8, 0x00, 0x00  @ y=0, x=-56, hdr
+    .byte   0xFF, 0xFD, 0x00  @ line dy=-3, dx=0
+    .byte   0xFF, 0x00, 0x11  @ line dy=0, dx=17
+    .byte   0xFF, 0x03, 0x00  @ line dy=3, dx=0
+    .byte   0xFF, 0x00, 0xEF  @ line dy=0, dx=-17
+    .byte   0x02            @ end marker
+
+_TEXT_PATH11:
+    .byte   85               @ intensity
+    .byte   0xEE, 0xCB, 0x00, 0x00  @ y=-18, x=-53, hdr
+    .byte   0xFF, 0x00, 0xEE  @ line dy=0, dx=-18
+    .byte   0x02            @ end marker
+
+_TEXT_PATH12:
+    .byte   85               @ intensity
+    .byte   0x12, 0xAC, 0x00, 0x00  @ y=18, x=-84, hdr
+    .byte   0xFF, 0x00, 0x04  @ line dy=0, dx=4
+    .byte   0xFF, 0xF0, 0x08  @ line dy=-16, dx=8
+    .byte   0xFF, 0x10, 0x07  @ line dy=16, dx=7
+    .byte   0xFF, 0x00, 0x03  @ line dy=0, dx=3
+    .byte   0xFF, 0xEB, 0xF7  @ line dy=-21, dx=-9
+    .byte   0xFF, 0x00, 0xFD  @ line dy=0, dx=-3
+    .byte   0xFF, 0x15, 0xF6  @ line dy=21, dx=-10
+    .byte   0x02            @ end marker
+
+@ --- TEXT_VEC (libvpy position-independent .vec image) ---
+.section .rodata._TEXT_VEC,"a",%progbits
+    .balign 4
+.global _TEXT_VEC
+_TEXT_VEC:
+    .byte   0x0D, 0x00, 0x55, 0x12, 0xFA, 0x00, 0x00, 0xFF, 0xFC, 0x00, 0xFF, 0x00, 0x06, 0xFF, 0xEF, 0x00
+    .byte   0xFF, 0x00, 0x03, 0xFF, 0x11, 0x00, 0xFF, 0x00, 0x07, 0xFF, 0x04, 0x02, 0xFF, 0x00, 0xEE, 0x02
+    .byte   0x55, 0x12, 0xF4, 0x00, 0x00, 0xFF, 0x00, 0xF1, 0xFF, 0xF6, 0xFA, 0xFF, 0xF8, 0x03, 0xFF, 0xFD
+    .byte   0x04, 0xFF, 0x00, 0x0E, 0xFF, 0x03, 0xFD, 0xFF, 0x00, 0xF7, 0xFF, 0x02, 0xFD, 0xFF, 0x06, 0xFE
+    .byte   0xFF, 0x04, 0x02, 0xFF, 0x02, 0x03, 0xFF, 0x00, 0x0A, 0xFF, 0x04, 0x02, 0x02, 0x55, 0x0E, 0x12
+    .byte   0x00, 0x00, 0xFF, 0x04, 0x00, 0xFF, 0x00, 0x0F, 0xFF, 0xFD, 0x03, 0xFF, 0xFC, 0x00, 0xFF, 0xFB
+    .byte   0xFE, 0xFF, 0xFF, 0xFD, 0xFF, 0xF8, 0x05, 0xFF, 0x00, 0xFB, 0xFF, 0x08, 0xFC, 0xFF, 0x00, 0xFA
+    .byte   0xFF, 0xF8, 0x00, 0xFF, 0x00, 0xFD, 0xFF, 0x0C, 0x00, 0xFF, 0x00, 0x0C, 0xFF, 0x02, 0x03, 0xFF
+    .byte   0x03, 0x00, 0xFF, 0x00, 0xF1, 0x02, 0x55, 0x0B, 0x2A, 0x00, 0x00, 0xFF, 0xFA, 0x00, 0xFF, 0x00
+    .byte   0x10, 0xFF, 0x06, 0x00, 0xFF, 0x00, 0xF0, 0x02, 0x55, 0x12, 0x2A, 0x00, 0x00, 0xFF, 0xFC, 0x00
+    .byte   0xFF, 0x00, 0x10, 0xFF, 0x04, 0x00, 0xFF, 0x00, 0xF0, 0x02, 0x55, 0x00, 0x2A, 0x00, 0x00, 0xFF
+    .byte   0xFD, 0x00, 0xFF, 0x00, 0x10, 0xFF, 0x03, 0x00, 0xFF, 0x00, 0xF0, 0x02, 0x55, 0xEE, 0x37, 0x00
+    .byte   0x00, 0xFF, 0x00, 0x12, 0x02, 0x55, 0x12, 0x3D, 0x00, 0x00, 0xFF, 0x00, 0x07, 0xFF, 0xF8, 0x05
+    .byte   0xFF, 0x08, 0x05, 0xFF, 0x00, 0x06, 0xFF, 0xF5, 0xF7, 0xFF, 0xF6, 0x08, 0xFF, 0x00, 0xFA, 0xFF
+    .byte   0x07, 0xFC, 0xFF, 0xF9, 0xFB, 0xFF, 0x00, 0xFA, 0xFF, 0x0A, 0x09, 0xFF, 0x0B, 0xF6, 0x02, 0x55
+    .byte   0x12, 0xC8, 0x00, 0x00, 0xFF, 0xFC, 0x00, 0xFF, 0x00, 0x11, 0xFF, 0x04, 0x00, 0xFF, 0x00, 0xEF
+    .byte   0x02, 0x55, 0x0B, 0xC8, 0x00, 0x00, 0xFF, 0xFA, 0x00, 0xFF, 0x00, 0x11, 0xFF, 0x06, 0x00, 0xFF
+    .byte   0x00, 0xEF, 0x02, 0x55, 0x00, 0xC8, 0x00, 0x00, 0xFF, 0xFD, 0x00, 0xFF, 0x00, 0x11, 0xFF, 0x03
+    .byte   0x00, 0xFF, 0x00, 0xEF, 0x02, 0x55, 0xEE, 0xCB, 0x00, 0x00, 0xFF, 0x00, 0xEE, 0x02, 0x55, 0x12
+    .byte   0xAC, 0x00, 0x00, 0xFF, 0x00, 0x04, 0xFF, 0xF0, 0x08, 0xFF, 0x10, 0x07, 0xFF, 0x00, 0x03, 0xFF
+    .byte   0xEB, 0xF7, 0xFF, 0x00, 0xFD, 0xFF, 0x15, 0xF6, 0x02
+.section .text
+
+@ --- TEXT_3D_DATA (13 path(s)) ---
+    .balign 4
+.global _TEXT_3D_DATA
 _TEXT_3D_DATA:
-    FDB 78               ; vertex count (unique)
-    FCB $C1,$12,$00          ; vert 0: x=-63,y=18,z=0
-    FCB $C1,$02,$00          ; vert 1: x=-63,y=2,z=0
-    FCB $C1,$FD,$00          ; vert 2: x=-63,y=-3,z=0
-    FCB $C7,$12,$00          ; vert 3: x=-57,y=18,z=0
-    FCB $C7,$0E,$00          ; vert 4: x=-57,y=14,z=0
-    FCB $D8,$0E,$00          ; vert 5: x=-40,y=14,z=0
-    FCB $D8,$12,$00          ; vert 6: x=-40,y=18,z=0
-    FCB $C7,$0B,$00          ; vert 7: x=-57,y=11,z=0
-    FCB $C7,$05,$00          ; vert 8: x=-57,y=5,z=0
-    FCB $D8,$05,$00          ; vert 9: x=-40,y=5,z=0
-    FCB $D8,$0B,$00          ; vert 10: x=-40,y=11,z=0
-    FCB $C7,$00,$00          ; vert 11: x=-57,y=0,z=0
-    FCB $C7,$FD,$00          ; vert 12: x=-57,y=-3,z=0
-    FCB $D8,$FD,$00          ; vert 13: x=-40,y=-3,z=0
-    FCB $D8,$00,$00          ; vert 14: x=-40,y=0,z=0
-    FCB $F3,$12,$00          ; vert 15: x=-13,y=18,z=0
-    FCB $E4,$12,$00          ; vert 16: x=-28,y=18,z=0
-    FCB $E1,$0E,$00          ; vert 17: x=-31,y=14,z=0
-    FCB $DE,$08,$00          ; vert 18: x=-34,y=8,z=0
-    FCB $E1,$00,$00          ; vert 19: x=-31,y=0,z=0
-    FCB $E5,$FD,$00          ; vert 20: x=-27,y=-3,z=0
-    FCB $F3,$FD,$00          ; vert 21: x=-13,y=-3,z=0
-    FCB $F0,$00,$00          ; vert 22: x=-16,y=0,z=0
-    FCB $E7,$00,$00          ; vert 23: x=-25,y=0,z=0
-    FCB $E4,$02,$00          ; vert 24: x=-28,y=2,z=0
-    FCB $E2,$08,$00          ; vert 25: x=-30,y=8,z=0
-    FCB $E4,$0C,$00          ; vert 26: x=-28,y=12,z=0
-    FCB $E7,$0E,$00          ; vert 27: x=-25,y=14,z=0
-    FCB $F1,$0E,$00          ; vert 28: x=-15,y=14,z=0
-    FCB $F9,$12,$00          ; vert 29: x=-7,y=18,z=0
-    FCB $F9,$0E,$00          ; vert 30: x=-7,y=14,z=0
-    FCB $FF,$0E,$00          ; vert 31: x=-1,y=14,z=0
-    FCB $FF,$FD,$00          ; vert 32: x=-1,y=-3,z=0
-    FCB $02,$FD,$00          ; vert 33: x=2,y=-3,z=0
-    FCB $02,$0E,$00          ; vert 34: x=2,y=14,z=0
-    FCB $09,$0E,$00          ; vert 35: x=9,y=14,z=0
-    FCB $0B,$12,$00          ; vert 36: x=11,y=18,z=0
-    FCB $11,$0E,$00          ; vert 37: x=17,y=14,z=0
-    FCB $11,$12,$00          ; vert 38: x=17,y=18,z=0
-    FCB $20,$12,$00          ; vert 39: x=32,y=18,z=0
-    FCB $23,$0F,$00          ; vert 40: x=35,y=15,z=0
-    FCB $23,$0B,$00          ; vert 41: x=35,y=11,z=0
-    FCB $21,$06,$00          ; vert 42: x=33,y=6,z=0
-    FCB $1E,$05,$00          ; vert 43: x=30,y=5,z=0
-    FCB $23,$FD,$00          ; vert 44: x=35,y=-3,z=0
-    FCB $1E,$FD,$00          ; vert 45: x=30,y=-3,z=0
-    FCB $1A,$05,$00          ; vert 46: x=26,y=5,z=0
-    FCB $14,$05,$00          ; vert 47: x=20,y=5,z=0
-    FCB $14,$FD,$00          ; vert 48: x=20,y=-3,z=0
-    FCB $11,$FD,$00          ; vert 49: x=17,y=-3,z=0
-    FCB $11,$09,$00          ; vert 50: x=17,y=9,z=0
-    FCB $1D,$09,$00          ; vert 51: x=29,y=9,z=0
-    FCB $20,$0B,$00          ; vert 52: x=32,y=11,z=0
-    FCB $20,$0E,$00          ; vert 53: x=32,y=14,z=0
-    FCB $1D,$0E,$00          ; vert 54: x=29,y=14,z=0
-    FCB $29,$12,$00          ; vert 55: x=41,y=18,z=0
-    FCB $29,$0E,$00          ; vert 56: x=41,y=14,z=0
-    FCB $39,$0E,$00          ; vert 57: x=57,y=14,z=0
-    FCB $39,$12,$00          ; vert 58: x=57,y=18,z=0
-    FCB $29,$0B,$00          ; vert 59: x=41,y=11,z=0
-    FCB $29,$05,$00          ; vert 60: x=41,y=5,z=0
-    FCB $39,$05,$00          ; vert 61: x=57,y=5,z=0
-    FCB $39,$0B,$00          ; vert 62: x=57,y=11,z=0
-    FCB $29,$00,$00          ; vert 63: x=41,y=0,z=0
-    FCB $29,$FD,$00          ; vert 64: x=41,y=-3,z=0
-    FCB $39,$FD,$00          ; vert 65: x=57,y=-3,z=0
-    FCB $39,$00,$00          ; vert 66: x=57,y=0,z=0
-    FCB $C1,$EE,$00          ; vert 67: x=-63,y=-18,z=0
-    FCB $CA,$EE,$00          ; vert 68: x=-54,y=-18,z=0
-    FCB $36,$EE,$00          ; vert 69: x=54,y=-18,z=0
-    FCB $3F,$EE,$00          ; vert 70: x=63,y=-18,z=0
-    FCB $3C,$12,$00          ; vert 71: x=60,y=18,z=0
-    FCB $3F,$12,$00          ; vert 72: x=63,y=18,z=0
-    FCB $3F,$0A,$00          ; vert 73: x=63,y=10,z=0
-    FCB $3F,$07,$00          ; vert 74: x=63,y=7,z=0
-    FCB $3F,$FD,$00          ; vert 75: x=63,y=-3,z=0
-    FCB $3F,$04,$00          ; vert 76: x=63,y=4,z=0
-    FCB $3D,$FD,$00          ; vert 77: x=61,y=-3,z=0
-    FDB 13               ; path count
-    FCB 8               ; path 0: point count
-    FCB 0               ; path 0: closed flag
-    FCB 0               ; vertex index
-    FCB 0               ; vertex index
-    FCB 1               ; vertex index
-    FCB 0               ; vertex index
-    FCB 0               ; vertex index
-    FCB 2               ; vertex index
-    FCB 2               ; vertex index
-    FCB 0               ; vertex index
-    FCB 5               ; path 1: point count
-    FCB 0               ; path 1: closed flag
-    FCB 3               ; vertex index
-    FCB 4               ; vertex index
-    FCB 5               ; vertex index
-    FCB 6               ; vertex index
-    FCB 3               ; vertex index
-    FCB 5               ; path 2: point count
-    FCB 0               ; path 2: closed flag
-    FCB 7               ; vertex index
-    FCB 8               ; vertex index
-    FCB 9               ; vertex index
-    FCB 10               ; vertex index
-    FCB 7               ; vertex index
-    FCB 5               ; path 3: point count
-    FCB 0               ; path 3: closed flag
-    FCB 11               ; vertex index
-    FCB 12               ; vertex index
-    FCB 13               ; vertex index
-    FCB 14               ; vertex index
-    FCB 11               ; vertex index
-    FCB 15               ; path 4: point count
-    FCB 0               ; path 4: closed flag
-    FCB 15               ; vertex index
-    FCB 16               ; vertex index
-    FCB 17               ; vertex index
-    FCB 18               ; vertex index
-    FCB 19               ; vertex index
-    FCB 20               ; vertex index
-    FCB 21               ; vertex index
-    FCB 22               ; vertex index
-    FCB 23               ; vertex index
-    FCB 24               ; vertex index
-    FCB 25               ; vertex index
-    FCB 26               ; vertex index
-    FCB 27               ; vertex index
-    FCB 28               ; vertex index
-    FCB 15               ; vertex index
-    FCB 9               ; path 5: point count
-    FCB 0               ; path 5: closed flag
-    FCB 29               ; vertex index
-    FCB 30               ; vertex index
-    FCB 31               ; vertex index
-    FCB 32               ; vertex index
-    FCB 33               ; vertex index
-    FCB 34               ; vertex index
-    FCB 35               ; vertex index
-    FCB 36               ; vertex index
-    FCB 29               ; vertex index
-    FCB 19               ; path 6: point count
-    FCB 0               ; path 6: closed flag
-    FCB 37               ; vertex index
-    FCB 38               ; vertex index
-    FCB 39               ; vertex index
-    FCB 40               ; vertex index
-    FCB 41               ; vertex index
-    FCB 42               ; vertex index
-    FCB 43               ; vertex index
-    FCB 44               ; vertex index
-    FCB 45               ; vertex index
-    FCB 46               ; vertex index
-    FCB 47               ; vertex index
-    FCB 48               ; vertex index
-    FCB 49               ; vertex index
-    FCB 50               ; vertex index
-    FCB 51               ; vertex index
-    FCB 52               ; vertex index
-    FCB 53               ; vertex index
-    FCB 54               ; vertex index
-    FCB 37               ; vertex index
-    FCB 5               ; path 7: point count
-    FCB 0               ; path 7: closed flag
-    FCB 55               ; vertex index
-    FCB 56               ; vertex index
-    FCB 57               ; vertex index
-    FCB 58               ; vertex index
-    FCB 55               ; vertex index
-    FCB 5               ; path 8: point count
-    FCB 0               ; path 8: closed flag
-    FCB 59               ; vertex index
-    FCB 60               ; vertex index
-    FCB 61               ; vertex index
-    FCB 62               ; vertex index
-    FCB 59               ; vertex index
-    FCB 5               ; path 9: point count
-    FCB 0               ; path 9: closed flag
-    FCB 63               ; vertex index
-    FCB 64               ; vertex index
-    FCB 65               ; vertex index
-    FCB 66               ; vertex index
-    FCB 63               ; vertex index
-    FCB 2               ; path 10: point count
-    FCB 0               ; path 10: closed flag
-    FCB 67               ; vertex index
-    FCB 68               ; vertex index
-    FCB 2               ; path 11: point count
-    FCB 0               ; path 11: closed flag
-    FCB 69               ; vertex index
-    FCB 70               ; vertex index
-    FCB 13               ; path 12: point count
-    FCB 0               ; path 12: closed flag
-    FCB 71               ; vertex index
-    FCB 72               ; vertex index
-    FCB 73               ; vertex index
-    FCB 72               ; vertex index
-    FCB 72               ; vertex index
-    FCB 74               ; vertex index
-    FCB 75               ; vertex index
-    FCB 75               ; vertex index
-    FCB 76               ; vertex index
-    FCB 75               ; vertex index
-    FCB 77               ; vertex index
-    FCB 74               ; vertex index
-    FCB 71               ; vertex index
+    .word   78               @ vertex_count
+    .byte   0xC1, 0x12, 0x00  @ vert 0: x=-63,y=18,z=0
+    .byte   0xC1, 0x02, 0x00  @ vert 1: x=-63,y=2,z=0
+    .byte   0xC1, 0xFD, 0x00  @ vert 2: x=-63,y=-3,z=0
+    .byte   0xC7, 0x12, 0x00  @ vert 3: x=-57,y=18,z=0
+    .byte   0xC7, 0x0E, 0x00  @ vert 4: x=-57,y=14,z=0
+    .byte   0xD8, 0x0E, 0x00  @ vert 5: x=-40,y=14,z=0
+    .byte   0xD8, 0x12, 0x00  @ vert 6: x=-40,y=18,z=0
+    .byte   0xC7, 0x0B, 0x00  @ vert 7: x=-57,y=11,z=0
+    .byte   0xC7, 0x05, 0x00  @ vert 8: x=-57,y=5,z=0
+    .byte   0xD8, 0x05, 0x00  @ vert 9: x=-40,y=5,z=0
+    .byte   0xD8, 0x0B, 0x00  @ vert 10: x=-40,y=11,z=0
+    .byte   0xC7, 0x00, 0x00  @ vert 11: x=-57,y=0,z=0
+    .byte   0xC7, 0xFD, 0x00  @ vert 12: x=-57,y=-3,z=0
+    .byte   0xD8, 0xFD, 0x00  @ vert 13: x=-40,y=-3,z=0
+    .byte   0xD8, 0x00, 0x00  @ vert 14: x=-40,y=0,z=0
+    .byte   0xF3, 0x12, 0x00  @ vert 15: x=-13,y=18,z=0
+    .byte   0xE4, 0x12, 0x00  @ vert 16: x=-28,y=18,z=0
+    .byte   0xE1, 0x0E, 0x00  @ vert 17: x=-31,y=14,z=0
+    .byte   0xDE, 0x08, 0x00  @ vert 18: x=-34,y=8,z=0
+    .byte   0xE1, 0x00, 0x00  @ vert 19: x=-31,y=0,z=0
+    .byte   0xE5, 0xFD, 0x00  @ vert 20: x=-27,y=-3,z=0
+    .byte   0xF3, 0xFD, 0x00  @ vert 21: x=-13,y=-3,z=0
+    .byte   0xF0, 0x00, 0x00  @ vert 22: x=-16,y=0,z=0
+    .byte   0xE7, 0x00, 0x00  @ vert 23: x=-25,y=0,z=0
+    .byte   0xE4, 0x02, 0x00  @ vert 24: x=-28,y=2,z=0
+    .byte   0xE2, 0x08, 0x00  @ vert 25: x=-30,y=8,z=0
+    .byte   0xE4, 0x0C, 0x00  @ vert 26: x=-28,y=12,z=0
+    .byte   0xE7, 0x0E, 0x00  @ vert 27: x=-25,y=14,z=0
+    .byte   0xF1, 0x0E, 0x00  @ vert 28: x=-15,y=14,z=0
+    .byte   0xF9, 0x12, 0x00  @ vert 29: x=-7,y=18,z=0
+    .byte   0xF9, 0x0E, 0x00  @ vert 30: x=-7,y=14,z=0
+    .byte   0xFF, 0x0E, 0x00  @ vert 31: x=-1,y=14,z=0
+    .byte   0xFF, 0xFD, 0x00  @ vert 32: x=-1,y=-3,z=0
+    .byte   0x02, 0xFD, 0x00  @ vert 33: x=2,y=-3,z=0
+    .byte   0x02, 0x0E, 0x00  @ vert 34: x=2,y=14,z=0
+    .byte   0x09, 0x0E, 0x00  @ vert 35: x=9,y=14,z=0
+    .byte   0x0B, 0x12, 0x00  @ vert 36: x=11,y=18,z=0
+    .byte   0x11, 0x0E, 0x00  @ vert 37: x=17,y=14,z=0
+    .byte   0x11, 0x12, 0x00  @ vert 38: x=17,y=18,z=0
+    .byte   0x20, 0x12, 0x00  @ vert 39: x=32,y=18,z=0
+    .byte   0x23, 0x0F, 0x00  @ vert 40: x=35,y=15,z=0
+    .byte   0x23, 0x0B, 0x00  @ vert 41: x=35,y=11,z=0
+    .byte   0x21, 0x06, 0x00  @ vert 42: x=33,y=6,z=0
+    .byte   0x1E, 0x05, 0x00  @ vert 43: x=30,y=5,z=0
+    .byte   0x23, 0xFD, 0x00  @ vert 44: x=35,y=-3,z=0
+    .byte   0x1E, 0xFD, 0x00  @ vert 45: x=30,y=-3,z=0
+    .byte   0x1A, 0x05, 0x00  @ vert 46: x=26,y=5,z=0
+    .byte   0x14, 0x05, 0x00  @ vert 47: x=20,y=5,z=0
+    .byte   0x14, 0xFD, 0x00  @ vert 48: x=20,y=-3,z=0
+    .byte   0x11, 0xFD, 0x00  @ vert 49: x=17,y=-3,z=0
+    .byte   0x11, 0x09, 0x00  @ vert 50: x=17,y=9,z=0
+    .byte   0x1D, 0x09, 0x00  @ vert 51: x=29,y=9,z=0
+    .byte   0x20, 0x0B, 0x00  @ vert 52: x=32,y=11,z=0
+    .byte   0x20, 0x0E, 0x00  @ vert 53: x=32,y=14,z=0
+    .byte   0x1D, 0x0E, 0x00  @ vert 54: x=29,y=14,z=0
+    .byte   0x29, 0x12, 0x00  @ vert 55: x=41,y=18,z=0
+    .byte   0x29, 0x0E, 0x00  @ vert 56: x=41,y=14,z=0
+    .byte   0x39, 0x0E, 0x00  @ vert 57: x=57,y=14,z=0
+    .byte   0x39, 0x12, 0x00  @ vert 58: x=57,y=18,z=0
+    .byte   0x29, 0x0B, 0x00  @ vert 59: x=41,y=11,z=0
+    .byte   0x29, 0x05, 0x00  @ vert 60: x=41,y=5,z=0
+    .byte   0x39, 0x05, 0x00  @ vert 61: x=57,y=5,z=0
+    .byte   0x39, 0x0B, 0x00  @ vert 62: x=57,y=11,z=0
+    .byte   0x29, 0x00, 0x00  @ vert 63: x=41,y=0,z=0
+    .byte   0x29, 0xFD, 0x00  @ vert 64: x=41,y=-3,z=0
+    .byte   0x39, 0xFD, 0x00  @ vert 65: x=57,y=-3,z=0
+    .byte   0x39, 0x00, 0x00  @ vert 66: x=57,y=0,z=0
+    .byte   0xC1, 0xEE, 0x00  @ vert 67: x=-63,y=-18,z=0
+    .byte   0xCA, 0xEE, 0x00  @ vert 68: x=-54,y=-18,z=0
+    .byte   0x36, 0xEE, 0x00  @ vert 69: x=54,y=-18,z=0
+    .byte   0x3F, 0xEE, 0x00  @ vert 70: x=63,y=-18,z=0
+    .byte   0x3C, 0x12, 0x00  @ vert 71: x=60,y=18,z=0
+    .byte   0x3F, 0x12, 0x00  @ vert 72: x=63,y=18,z=0
+    .byte   0x3F, 0x0A, 0x00  @ vert 73: x=63,y=10,z=0
+    .byte   0x3F, 0x07, 0x00  @ vert 74: x=63,y=7,z=0
+    .byte   0x3F, 0xFD, 0x00  @ vert 75: x=63,y=-3,z=0
+    .byte   0x3F, 0x04, 0x00  @ vert 76: x=63,y=4,z=0
+    .byte   0x3D, 0xFD, 0x00  @ vert 77: x=61,y=-3,z=0
+    .balign 4
+    .word   13               @ path_count
+    .byte   8               @ path 0: pt_count
+    .byte   0               @ path 0: closed
+    .byte   0
+    .byte   0
+    .byte   1
+    .byte   0
+    .byte   0
+    .byte   2
+    .byte   2
+    .byte   0
+    .byte   5               @ path 1: pt_count
+    .byte   0               @ path 1: closed
+    .byte   3
+    .byte   4
+    .byte   5
+    .byte   6
+    .byte   3
+    .byte   5               @ path 2: pt_count
+    .byte   0               @ path 2: closed
+    .byte   7
+    .byte   8
+    .byte   9
+    .byte   10
+    .byte   7
+    .byte   5               @ path 3: pt_count
+    .byte   0               @ path 3: closed
+    .byte   11
+    .byte   12
+    .byte   13
+    .byte   14
+    .byte   11
+    .byte   15               @ path 4: pt_count
+    .byte   0               @ path 4: closed
+    .byte   15
+    .byte   16
+    .byte   17
+    .byte   18
+    .byte   19
+    .byte   20
+    .byte   21
+    .byte   22
+    .byte   23
+    .byte   24
+    .byte   25
+    .byte   26
+    .byte   27
+    .byte   28
+    .byte   15
+    .byte   9               @ path 5: pt_count
+    .byte   0               @ path 5: closed
+    .byte   29
+    .byte   30
+    .byte   31
+    .byte   32
+    .byte   33
+    .byte   34
+    .byte   35
+    .byte   36
+    .byte   29
+    .byte   19               @ path 6: pt_count
+    .byte   0               @ path 6: closed
+    .byte   37
+    .byte   38
+    .byte   39
+    .byte   40
+    .byte   41
+    .byte   42
+    .byte   43
+    .byte   44
+    .byte   45
+    .byte   46
+    .byte   47
+    .byte   48
+    .byte   49
+    .byte   50
+    .byte   51
+    .byte   52
+    .byte   53
+    .byte   54
+    .byte   37
+    .byte   5               @ path 7: pt_count
+    .byte   0               @ path 7: closed
+    .byte   55
+    .byte   56
+    .byte   57
+    .byte   58
+    .byte   55
+    .byte   5               @ path 8: pt_count
+    .byte   0               @ path 8: closed
+    .byte   59
+    .byte   60
+    .byte   61
+    .byte   62
+    .byte   59
+    .byte   5               @ path 9: pt_count
+    .byte   0               @ path 9: closed
+    .byte   63
+    .byte   64
+    .byte   65
+    .byte   66
+    .byte   63
+    .byte   2               @ path 10: pt_count
+    .byte   0               @ path 10: closed
+    .byte   67
+    .byte   68
+    .byte   2               @ path 11: pt_count
+    .byte   0               @ path 11: closed
+    .byte   69
+    .byte   70
+    .byte   13               @ path 12: pt_count
+    .byte   0               @ path 12: closed
+    .byte   71
+    .byte   72
+    .byte   73
+    .byte   72
+    .byte   72
+    .byte   74
+    .byte   75
+    .byte   75
+    .byte   76
+    .byte   75
+    .byte   77
+    .byte   74
+    .byte   71
+    .balign 4
 
