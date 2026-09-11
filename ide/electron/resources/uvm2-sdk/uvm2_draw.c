@@ -1481,8 +1481,13 @@ void uvm2_draw_penup(void) { s_penup_pendiente = 1; }
 #define UVM2_ARRANQUE_SUAVE 124
 #endif
 /* La TASA a partir de la cual el salto lleva unidad diminuta delante. 124 es su minimo
- * medido; por debajo de 124 el no ceba NUNCA (0 de 179). 0 lo apaga. */
-volatile int32_t uvm2_arranque_suave = 124;
+ * medido; por debajo de 124 el no ceba NUNCA (0 de 179). 0 lo apaga.
+ *
+ * SE SIEMBRA CON LA MACRO. Estaba con el literal 124 y `UVM2_ARRANQUE_SUAVE` no se usaba en
+ * ninguna parte: se definia arriba y ya. O sea que `-DUVM2_ARRANQUE_SUAVE=N` compilaba sin
+ * avisar y el umbral seguia siendo 124 pasara lo que pasara — un barrido entero midiendo el
+ * mismo valor. Es el mismo fallo que ya costo VK_RUNG_STEP y la escala de dibujo. */
+volatile int32_t uvm2_arranque_suave = UVM2_ARRANQUE_SUAVE;
 
 /* EL CIERRE DE FRAME DEL VECFEVER: ni recalibracion a los railes ni silencio al final.
  *
@@ -1688,7 +1693,27 @@ static struct vx_timings vx_cart_timings(void)
  * Se calcula en tiempo de ejecucion porque DRAW_SCALE es una variable viva. */
 static inline int uvm2_paso_max(void)
 {
-    int p = (127 * 255) / (int)DRAW_SCALE;
+    /* EL TOPE DE t1 ES DRAW_SCALE, NO 255 — Y ASI LA ESCALA SE CANCELA.
+     *
+     * Aqui ponia (127 * 255) / DRAW_SCALE, dando 202 con la escala 160 y 255 con la 127.
+     * Pero `ramp_params_q` acota el tiempo con `.clamp(min_t1, s)`, donde `s` ES DRAW_SCALE
+     * (y la doc del modelo lo dice: "T1 clamped to [MIN_T1, 0x7F]"). Con los dos factores
+     * en su tope:
+     *
+     *     v * t1 / DRAW_SCALE  =  127 * DRAW_SCALE / DRAW_SCALE  =  127
+     *
+     * O sea que una rampa alcanza 127 unidades de dispositivo, SEA CUAL SEA la escala. El
+     * 255 era el tope del contador de 16 bits del 6522, no el que usa el modelo, y por eso
+     * `trocear` no partia los trazos de 128 a 255: salian recortados y las plataformas
+     * quedaban ABIERTAS por un extremo (Daniel en consola, 2026-09-11).
+     *
+     * Esto sustituye a un `if (p > 127) p = 127;` que puse bajo `#if UVM2_Q_BITS == 0`.
+     * Tapaba el sintoma solo en el camino entero, asi que al pasar dkong a subunidad el
+     * recorte volvio intacto. Un tope derivado no necesita saber por que camino se entra. */
+    /* `ramp_params_q` acota t1 a [MIN_T1, s] con s = DRAW_SCALE. Se deja el factor a la
+     * vista —no reducido a 127— para que siga saliendo bien si ese tope cambiase. */
+    const int t1_max = (int)DRAW_SCALE;
+    int p = (127 * t1_max) / (int)DRAW_SCALE;
     return (p > 0 ? p : 1) * UVM2_Q;
 }
 #define UVM2_MAX_PASO uvm2_paso_max()
