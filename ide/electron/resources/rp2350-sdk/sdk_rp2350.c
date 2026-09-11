@@ -957,6 +957,36 @@ void v_WaitRecal(void)
  * across shape/path boundaries (mirrors the native ARM backend's per-path
  * re-zero). libvpy calls this at each path start on RP2350. The MAX_CONSECUTIVE
  * cap in v_directDraw32 still bounds a single very long path on top of this. */
+/* ── EL RE-CERO POR OBJETO, POR PRESUPUESTO: PROBADO EN CONSOLA Y DESCARTADO ──
+ *
+ * Se probo hacer que el limite de objeto fuera una OPORTUNIDAD de pinzar el cero y no una
+ * obligacion —pinzar solo tras VPY_MAX_CONSECUTIVE_DRAWS trazos— porque el VecFever dibuja
+ * Major Havoc con 12,6 pinzas por frame y 27 trazos entre ellas, y dkong hacia 55 pinzas
+ * con 8 trazos entre ellas: 5,5 veces mas. Barrido en el emulador (dkong 25m, frame
+ * congelado, ~498 trazos):
+ *
+ *     por objeto  55 pinzas  8,0 entre pinzas  11625 ciclos (32%)  bus 37006
+ *     16          23         22,7               4730 (13%)         35435
+ *     24          19         27,7               3870 (11%)         35119   <- el de su cadencia
+ *     32          15         35,6               2938 ( 8%)         35154
+ *
+ * **EN LA CONSOLA, CON 24, EL DIBUJO SE ROMPE ENTERO** (Daniel, 2026-09-10: *"dk24 rompe
+ * todo"*). Y el emulador no lo veia venir: las cajas de los cinco barridos salian iguales
+ * a dos unidades (202x214 .. 204x215) y el dibujo se veia limpio en los renders.
+ *
+ * POR QUE no se ve aqui: el re-cero por objeto esta tapando la DERIVA ANALOGICA de los
+ * integradores, y eso no esta modelado. La nota de VK_NO_OBJECT en vk_render.c ya lo decia
+ * —sin asentar el cero la Y deriva 7 veces mas que la X— y el ahorro de frame era del 5%,
+ * no del 30% que estime al principio (los 211 ciclos por pinza incluyen la reaproximacion
+ * desde el centro, y ese viaje no desaparece al quitar la pinza).
+ *
+ * Se retira en vez de dejarlo tras un #ifdef apagado: un knob a cero es un knob que alguien
+ * vuelve a encender. Si se reintenta, el criterio es la CONSOLA y hay que empezar por
+ * entender por que su cadencia le vale a el y a nosotros no — probablemente porque nuestra
+ * reaproximacion redondea peor. Lo que NO sirve es el emulador.
+ *
+ * Start a new stroke/path with a fresh zero-ref, so integrator drift can't carry
+ * across shape/path boundaries (mirrors the native ARM backend's per-path re-zero). */
 void v_beamNewStroke(void)
 {
     flush_run();   /* finish the pending run before this stroke's re-zero */
