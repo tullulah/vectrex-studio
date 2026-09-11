@@ -17,3 +17,9 @@ animations = ["assets/animations/**/*.vanim"]
 music = ["assets/music/**/*.vmus"]
 sfx = ["assets/sfx/**/*.vsfx"]
 playground = ["assets/playground/**/*.vplay"]
+
+# LA ESCALA DE DIBUJO, MEDIDA EN LA CONSOLA (2026-09-10). Es la conversion de longitud a
+# tiempo de rampa del SDK: con el defecto (160) el dibujo sale un 26% mas grande y se sale
+# de la pantalla. No es una preferencia de arte, es calibracion — el mismo 127 que usa dkong.
+[uvm2]
+defs = "UVM2_DRAW_SCALE=127"

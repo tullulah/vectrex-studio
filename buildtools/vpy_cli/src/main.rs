@@ -1956,6 +1956,12 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
             if std::env::var("UVM2_DUAL_CORE").as_deref() == Ok("1") {
                 defs.push_str(";UVM2_DUAL_CORE");
             }
+            // Los del PROYECTO ([uvm2] defs), que es donde vive lo medido y lo que
+            // viaja con el .vpyproj. Van antes del entorno para que una prueba suelta
+            // desde la linea de ordenes siga pudiendo pisarlos (en cmake gana el ultimo).
+            if let Some(pd) = vpyproj_uvm2_defs(input) {
+                defs.push(';'); defs.push_str(&pd);
+            }
             // Escotilla para experimentos que no merecen una bandera propia,
             // como UVM2_PSRAM_PROBE. Separados por ';', que es lo que come cmake.
             if let Ok(extra) = std::env::var("UVM2_EXTRA_DEFS") {
@@ -2151,6 +2157,36 @@ fn write_bundled_rp2350_ram_ld(build_dir: &Path) -> anyhow::Result<PathBuf> {
     std::fs::write(&path, BUNDLED_LD)
         .with_context(|| format!("Failed to write bundled linker script {}", path.display()))?;
     Ok(path)
+}
+
+/// Los defines de compilacion del proyecto, de su seccion `[uvm2]`:
+///
+///     [uvm2]
+///     defs = "UVM2_DRAW_SCALE=127"
+///
+/// EXISTE PORQUE UNA CONSTANTE MEDIDA NECESITA DONDE VIVIR. La escala de dibujo se
+/// encontraba desde el panel del IDE y se evaporaba en el primer reinicio: el .vpyproj no
+/// tenia ningun sitio donde apuntarla, asi que TODO proyecto VPy compilaba con el defecto
+/// del SDK (160) y salia un 26% mas grande de lo medido — SnowBros se salia de la pantalla.
+/// La escotilla `UVM2_EXTRA_DEFS` del entorno no sirve para esto: no viaja con el proyecto.
+fn vpyproj_uvm2_defs(vpyproj: &Path) -> Option<String> {
+    let content = std::fs::read_to_string(vpyproj).ok()?;
+    let mut en_uvm2 = false;
+    for line in content.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            en_uvm2 = t == "[uvm2]";
+            continue;
+        }
+        if !en_uvm2 { continue; }
+        if t.starts_with("defs") {
+            if let Some(val) = t.splitn(2, '=').nth(1) {
+                let val = val.trim().trim_matches('"').trim().to_string();
+                if !val.is_empty() { return Some(val); }
+            }
+        }
+    }
+    None
 }
 
 /// Extract project name from a .vpyproj file without pulling in the full toml crate.
