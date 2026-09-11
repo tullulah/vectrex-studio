@@ -1710,9 +1710,29 @@ static inline int uvm2_paso_max(void)
      * Esto sustituye a un `if (p > 127) p = 127;` que puse bajo `#if UVM2_Q_BITS == 0`.
      * Tapaba el sintoma solo en el camino entero, asi que al pasar dkong a subunidad el
      * recorte volvio intacto. Un tope derivado no necesita saber por que camino se entra. */
-    /* `ramp_params_q` acota t1 a [MIN_T1, s] con s = DRAW_SCALE. Se deja el factor a la
-     * vista —no reducido a 127— para que siga saliendo bien si ese tope cambiase. */
-    const int t1_max = (int)DRAW_SCALE;
+    /* ── Y EL TECHO NO ES SOLO DRAW_SCALE: T1_TRANSPORT ES MENOR ────────────────
+     *
+     * Aqui ponia `t1_max = DRAW_SCALE`, y eso daba 127 unidades de alcance. Pero
+     * `ramp_params_q` no acota t1 a [MIN_T1, s] a secas: tambien le aplica
+     * `.min(T1_TRANSPORT)`, y eso vale 110 en dkong. Con el tope del DAC en 127:
+     *
+     *     alcance real = 127 * min(DRAW_SCALE, T1_TRANSPORT) / DRAW_SCALE = 110
+     *
+     * Asi que todo trazo —o SALTO, que `uvm2_draw_move` trocea con este mismo limite— de
+     * entre 110 y 127 unidades salia en UNA rampa que no puede llegar: t1 se clava en 110,
+     * la tasa que hace falta se pasa de 127, el DAC la recorta y el haz aterriza CORTO.
+     *
+     * MEDIDO en el frame del titulo: 33 de 331 saltos con t1 clavado en 110 y 29 con |v|
+     * en 128 (el tope del i8). Cada uno coloca su figura en el sitio equivocado, y como el
+     * error depende de la distancia del salto, cada letra caia a una Y distinta — la Y
+     * irregular del texto en consola. Los trazos iluminados de dkong no llegan a 110 (el
+     * mas largo mide 49), asi que esto lo pagaban los saltos casi en exclusiva.
+     *
+     * Es el mismo fallo que dejaba las plataformas abiertas —un limite de troceo que no
+     * era el limite de verdad— y se arreglo a medias: se cambio el 255 por DRAW_SCALE y se
+     * quedo sin mirar el otro factor del mismo `.min()`. */
+    const int t1_techo = (int)T1_TRANSPORT;
+    const int t1_max = (t1_techo > 0 && t1_techo < (int)DRAW_SCALE) ? t1_techo : (int)DRAW_SCALE;
     int p = (127 * t1_max) / (int)DRAW_SCALE;
     return (p > 0 ? p : 1) * UVM2_Q;
 }
