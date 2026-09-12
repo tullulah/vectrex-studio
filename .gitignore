@@ -103,11 +103,11 @@ tools/**/__pycache__/
 *.AppImage
 *.exe
 
-# Arbol de cargo del bus del cartucho: 522 MB de objetos intermedios.
+# Cargo tree of the cartridge bus: 522 MB of intermediate objects.
 ide/electron/resources/vectrex-bus/target/
 
-# snowbros_sbt: se versionan fuente, assets y el .um2; NO los volcados de depuracion
-# (13 MB de ramdumps, 6,8 MB de dumps) ni los arboles de build.
+# snowbros_sbt: source, assets and the .um2 are versioned; NOT the debug dumps (13 MB of
+# ramdumps, 6.8 MB of dumps) nor the build trees.
 examples/snowbros_sbt/ramdumps/
 examples/snowbros_sbt/dumps/
 examples/snowbros_sbt/build/
@@ -115,10 +115,10 @@ examples/snowbros_sbt/build_wasm/
 examples/snowbros_sbt/build_uvm2/pico/
 examples/*/build/uvm2/
 
-# LA ROM ARCADE NO ENTRA AQUI. Este repositorio es PUBLICO
-# (github.com/tullulah/vectrex-studio, comprobado con `gh repo view`), y el estandar del
-# proyecto es que el romset viva FUERA de la imagen y lo lea el juego de la SD, modelo
-# MAME. `sb_rom.h` es la misma ROM en una cabecera C: mismo material, otro envoltorio.
+# THE ARCADE ROM DOES NOT GO IN HERE. This repository is PUBLIC
+# (github.com/tullulah/vectrex-studio, checked with `gh repo view`), and the project's
+# standard is that the romset lives OUTSIDE the image and the game reads it from the SD,
+# MAME model. `sb_rom.h` is the same ROM in a C header: same material, different wrapper.
 examples/*/rom/*.zip
 examples/*/src/sb_rom.h
 examples/*/rom/palette_table.bin

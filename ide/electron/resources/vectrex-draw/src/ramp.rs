@@ -1425,3 +1425,61 @@ mod escalera {
         std::println!("  HOST: dx={dx} q=8 t1=18  ->  vx={vx} vy={vy}   (el suyo: 105, 0)");
     }
 }
+
+#[cfg(test)]
+mod sesgo_del_salto {
+    use super::*;
+    /// IS THE JUMP'S ERROR A BIAS THAT DEPENDS ON THE SIGN? `move_una` says so, measured on
+    /// asterock BEFORE sub-unit precision: "negative delta X falls 1.3 units short, positive
+    /// delta Y overshoots by 3.9, the other two directions are exact". If that survives in
+    /// Q4 it is what makes reordering unsafe -- change the order, change the mix of signs,
+    /// change the frame's accumulated error, and THAT flickers. Not a fractional residue
+    /// another ramp can absorb: a bias, so it adds up linearly.
+    ///
+    /// dkong's configuration, not the crate's defaults.  `cargo test -- --nocapture
+    /// --test-threads=1 sesgo_del_salto`
+    #[test]
+    fn el_sesgo_por_signo_del_salto() {
+        let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
+        MIN_T1.store(8, Ordering::Relaxed);
+        MIN_T1_ARRANQUE.store(31, Ordering::Relaxed);
+        DRAW_SCALE.store(127, Ordering::Relaxed);
+        T1_TRANSPORT.store(110, Ordering::Relaxed);
+        T1_EXTRA_Q8.store(0, Ordering::Relaxed);
+        T1_LAG.store(0, Ordering::Relaxed);
+        T1_LAG_ARRANQUE.store(0, Ordering::Relaxed);
+        TECHO_MANDA.store(1, Ordering::Relaxed);
+        RAMPA_FIJA.store(0, Ordering::Relaxed);
+        let s = DRAW_SCALE.load(Ordering::Relaxed) as i64;
+        let q: i64 = 16;                       // Q4
+        // Every jump dkong actually makes: 1..120 units, both signs, both axes.
+        for (nom, sx, sy) in [("dx>0 dy=0", 1i64, 0i64), ("dx<0 dy=0", -1, 0),
+                              ("dx=0 dy>0", 0, 1),      ("dx=0 dy<0", 0, -1),
+                              ("dx>0 dy>0", 1, 1),      ("dx<0 dy<0", -1, -1),
+                              ("dx<0 dy>0", -1, 1),     ("dx>0 dy<0", 1, -1)] {
+            let (mut sx_e, mut sy_e, mut n) = (0.0f64, 0.0f64, 0i64);
+            let (mut px, mut py) = (0.0f64, 0.0f64);
+            // Only as far as ONE ramp reaches: 127 * min(DRAW_SCALE, T1_TRANSPORT)
+            // / DRAW_SCALE. Past that `trocear` splits, and what would be measured here is
+            // the clipping, not the bias.
+            let alcance = 127 * T1_TRANSPORT.load(Ordering::Relaxed).min(s as u32) as i64 / s;
+            for u in 1..=alcance {
+                let dx = (sx * u * q) as i32;
+                let dy = (sy * u * q) as i32;
+                let (vx, vy, t1) = ramp_params_q(dx, dy, TOPE_DAC, 4);
+                // what the ramp actually covers, in the same internal units
+                let rx = (vx as i64) * (t1 as i64) * q / s;
+                let ry = (vy as i64) * (t1 as i64) * q / s;
+                // SIGNED, PER AXIS. Taking the magnitude and guessing a sign says nothing
+                // in the mixed quadrants, where the two axes can err in opposite ways.
+                let ex = (rx - dx as i64) as f64 / q as f64;
+                let ey = (ry - dy as i64) as f64 / q as f64;
+                sx_e += ex; sy_e += ey; n += 1;
+                if ex.abs() > px.abs() { px = ex; }
+                if ey.abs() > py.abs() { py = ey; }
+            }
+            std::println!("  {nom}   X {:+.3} (peor {:+.2})   Y {:+.3} (peor {:+.2})   {n} saltos",
+                          sx_e / n as f64, px, sy_e / n as f64, py);
+        }
+    }
+}

@@ -1710,27 +1710,27 @@ static inline int uvm2_paso_max(void)
      * Esto sustituye a un `if (p > 127) p = 127;` que puse bajo `#if UVM2_Q_BITS == 0`.
      * Tapaba el sintoma solo en el camino entero, asi que al pasar dkong a subunidad el
      * recorte volvio intacto. Un tope derivado no necesita saber por que camino se entra. */
-    /* ── Y EL TECHO NO ES SOLO DRAW_SCALE: T1_TRANSPORT ES MENOR ────────────────
+    /* -- AND THE CEILING IS NOT ONLY DRAW_SCALE: T1_TRANSPORT IS SMALLER ---------
      *
-     * Aqui ponia `t1_max = DRAW_SCALE`, y eso daba 127 unidades de alcance. Pero
-     * `ramp_params_q` no acota t1 a [MIN_T1, s] a secas: tambien le aplica
-     * `.min(T1_TRANSPORT)`, y eso vale 110 en dkong. Con el tope del DAC en 127:
+     * This said `t1_max = DRAW_SCALE`, giving 127 units of reach. But `ramp_params_q` does
+     * not clamp t1 to [MIN_T1, s] and leave it there: it also applies `.min(T1_TRANSPORT)`,
+     * which is 110 in dkong. With the DAC's limit at 127:
      *
-     *     alcance real = 127 * min(DRAW_SCALE, T1_TRANSPORT) / DRAW_SCALE = 110
+     *     real reach = 127 * min(DRAW_SCALE, T1_TRANSPORT) / DRAW_SCALE = 110
      *
-     * Asi que todo trazo —o SALTO, que `uvm2_draw_move` trocea con este mismo limite— de
-     * entre 110 y 127 unidades salia en UNA rampa que no puede llegar: t1 se clava en 110,
-     * la tasa que hace falta se pasa de 127, el DAC la recorta y el haz aterriza CORTO.
+     * So every stroke -- or JUMP, which `uvm2_draw_move` splits with this same limit -- of
+     * between 110 and 127 units came out as ONE ramp that cannot get there: t1 pins at 110,
+     * the rate it needs exceeds 127, the DAC clips it and the beam lands SHORT.
      *
-     * MEDIDO en el frame del titulo: 33 de 331 saltos con t1 clavado en 110 y 29 con |v|
-     * en 128 (el tope del i8). Cada uno coloca su figura en el sitio equivocado, y como el
-     * error depende de la distancia del salto, cada letra caia a una Y distinta — la Y
-     * irregular del texto en consola. Los trazos iluminados de dkong no llegan a 110 (el
-     * mas largo mide 49), asi que esto lo pagaban los saltos casi en exclusiva.
+     * MEASURED on the title frame: 33 of 331 jumps with t1 pinned at 110 and 29 with |v| at
+     * 128 (the i8 limit). Each one places its figure in the wrong spot, and since the error
+     * depends on the jump's distance, every letter fell at a different Y -- the ragged Y of
+     * the text on hardware. dkong's lit strokes never reach 110 (the longest is 49), so the
+     * jumps paid for this almost alone.
      *
-     * Es el mismo fallo que dejaba las plataformas abiertas —un limite de troceo que no
-     * era el limite de verdad— y se arreglo a medias: se cambio el 255 por DRAW_SCALE y se
-     * quedo sin mirar el otro factor del mismo `.min()`. */
+     * Same fault that left the platforms open -- a split limit that was not the real limit
+     * -- and it was fixed halfway: the 255 became DRAW_SCALE and nobody looked at the other
+     * factor of the same `.min()`. */
     const int t1_techo = (int)T1_TRANSPORT;
     const int t1_max = (t1_techo > 0 && t1_techo < (int)DRAW_SCALE) ? t1_techo : (int)DRAW_SCALE;
     int p = (127 * t1_max) / (int)DRAW_SCALE;
@@ -1883,16 +1883,37 @@ static void move_una(int dx, int dy)
         int32_t vx, vy; uint32_t t1;
         s_pos_x += dx;
         s_pos_y += dy;
-        /* SIN DEUDA, Y AHORA CON EL NUMERO DE POR QUE. Se probo darle a los saltos su
-         * PROPIA deuda (separada de la de los trazos, para no contaminarlos, que es lo
-         * que esta nota pedia) y MEDIDO sobre los 255 saltos reales de un frame de
-         * asterock: el error acumulado sube de 86,8 a 99,8 unidades en X y de 91,6 a
-         * 100,6 en Y. EMPEORA, y por una razon que ahora se ve: el error del salto NO
-         * es un residuo fraccionario que otro pueda absorber —es un SESGO POR SIGNO del
-         * modelo de rampa (delta X negativo se queda 1,3 unidades corto, delta Y
-         * positivo se pasa 3,9; las otras dos direcciones son exactas)— y pedir
-         * "delta + deuda" solo lo mueve a otro delta con otro sesgo. Arreglar el sesgo
-         * es lo que hay que hacer; repartirlo, no. */
+        /* NO DEBT, AND THE SIGN BIAS THAT JUSTIFIED IT IS GONE (2026-09-12).
+         *
+         * Giving jumps their OWN debt was tried and measured worse: over the 255 real jumps
+         * of an asterock frame the accumulated error rose from 86.8 to 99.8 units in X and
+         * from 91.6 to 100.6 in Y. The reason recorded here was that the jump's error is not
+         * a fractional residue another ramp can absorb but a SIGN BIAS of the ramp model --
+         * "negative delta X falls 1.3 units short, positive delta Y overshoots by 3.9, the
+         * other two directions are exact" -- so asking for "delta + debt" only moves it to
+         * another delta with another bias.
+         *
+         * THAT MEASUREMENT WAS TAKEN IN WHOLE UNITS, BEFORE UVM2_SUBUNIDAD. Re-measured in
+         * Q4 with dkong's configuration (test `sesgo_del_salto` in ramp.rs, which ships so
+         * this can be re-run):
+         *
+         *     dx>0 dy=0   X -0.009 (worst -0.12)     dx<0 dy=0   X +0.009 (worst +0.12)
+         *     dx=0 dy>0   Y -0.009                   dx=0 dy<0   Y +0.009
+         *     ...and the four mixed quadrants the same magnitude
+         *
+         * No privileged direction is left: all eight are 0.009 units and PERFECTLY
+         * ANTISYMMETRIC, which is truncation towards zero and cancels itself along a route
+         * with mixed signs. 1.3-3.9 units per jump became 0.009 -- ~150x -- and sub-unit
+         * precision did it, not a debt chain.
+         *
+         * WHAT THIS UNLOCKS: the sign bias is what made reordering unsafe (change the order,
+         * change the mix of signs, change the frame's accumulated error, and THAT is what
+         * flickers -- see VPY_NO_REORDER in dkong's Makefile). That objection no longer
+         * holds on this arithmetic and the reordering is worth retrying.
+         *
+         * It is still not proof that adding debt would now help: this measures the MODEL's
+         * error, and the physical error of the beam (integrator and amplifier) is a separate
+         * thing that only the console can measure. */
         /* CON EL TOPE DE VELOCIDAD DE LOS SALTOS, no el de los trazos. El haz va apagado:
          * frenarlo no da brillo, solo gasta frame. Medido en la captura del VecFever: el
          * salta a 1,8x la velocidad a la que dibuja (tasa mediana 64 contra 35), y a
