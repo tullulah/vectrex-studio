@@ -640,32 +640,6 @@ static void via_setup(void)
  * valido es tener un mando para ella. [[no-magic-numbers]] */
 extern volatile uint32_t MIN_T1, MIN_T1_ARRANQUE, DAC_CERO, DRAW_SCALE, T1_TRANSPORT;
 extern volatile uint32_t T1_SALTO;
-/* RAMPA_FIJA: LA PERILLA QUE ESTABA ESCRITA Y NO LLEGABA AL COMPILADOR.
- *
- * `vectrex-draw` la exporta desde 2026-08-25 con un bloque largo explicando POR QUE hace
- * falta, y NADIE la ponia nunca a otra cosa que 0 — los dos unicos `store` estan en
- * funciones de test. O sea que el modelo de tiempo fijo existia y era inalcanzable desde un
- * juego. Es el mismo fallo que ya tenemos anotado dos veces: una perilla que no llega al
- * compilador no es un knob, es codigo muerto que parece una opcion.
- *
- * QUE ARREGLA, dicho por el comentario de ramp_params: repartir la distancia entre `vx` Y
- * `t1` convierte cualquier error del modelo de DURACION en error de DISTANCIA dividido por
- * t1 — 1% en un trazo largo, 5% en uno corto y 19% con MIN_T1=8. Con tiempo fijo no hay
- * reparto: la longitud sale entera del DAC y no hay donde concentrar el error. Es lo que
- * hace el asm de 6809 de la BIOS (T1CL=$7F una vez, CLR T1CH por vector) y lo que hace
- * Ralf con m_Scale=128.
- *
- * Y ES EL SINTOMA QUE SE VE HOY EN CONSOLA: el logo de dkong con letras que se tocan, la S
- * del cuadro de BONUS rellena, y el logo de snowbros —un juego de VPy, otro codigo, EL
- * MISMO SDK— con los trazos apelotonados. Las vigas, que son trazos de mas de 100 unidades,
- * salen perfectas. Un error por trazo se come uno de 2 unidades y no se nota en uno de 100.
- *
- * SIN DEFINE SE QUEDA EN 0, o sea exactamente como hasta ahora: esto no cambia ninguna
- * imagen por si solo, solo hace medible lo que ya estaba escrito. Se enciende con
- * -DUVM2_RAMPA_FIJA=127 (la duracion de la BIOS) y se MIDE en la consola contra el modelo
- * de siempre, que es lo que el propio comentario de ramp.rs pide: "hay que MEDIR las dos en
- * la misma consola". */
-extern volatile uint32_t RAMPA_FIJA;
 /* LOS HUECOS DEL MICROTRAMO, por globales como el resto de knobs de la capa de dibujo.
  * Estuvieron como campos de vx_timings y NO funcionaba: con los dos structs del mismo
  * tamaño y el valor correcto en C, Rust sacaba un hueco saturado a 4095 por vector y el
@@ -732,10 +706,6 @@ void uvm2_draw_init(void)
 #endif
     MIN_T1          = UVM2_MIN_T1;
     MIN_T1_ARRANQUE = UVM2_MIN_T1;
-#ifndef UVM2_RAMPA_FIJA
-#define UVM2_RAMPA_FIJA 0        /* 0 = el modelo de siempre; 127 = el de la BIOS */
-#endif
-    RAMPA_FIJA      = UVM2_RAMPA_FIJA;
     /* SALTO A TIEMPO FIJO (el idioma del VecFever: t1 dado, tasa variable). Con esto
      * el tope del DAC deja de decidir la duracion — son dos modelos alternativos del
      * mismo salto (tasa fija / tiempo fijo), no
