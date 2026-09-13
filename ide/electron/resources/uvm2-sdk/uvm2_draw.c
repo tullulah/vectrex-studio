@@ -1446,7 +1446,7 @@ volatile int32_t uvm2_cero_cada = UVM2_CERO_CADA;
  * 0 lo apaga; `uvm2_cero_cada` sigue de red de seguridad por si una escena no tiene saltos
  * largos. */
 #ifndef UVM2_CERO_SALTO
-#define UVM2_CERO_SALTO 20
+#define UVM2_CERO_SALTO 24   /* the floor both his captures share; see move_abs_interno */
 #endif
 volatile int32_t uvm2_cero_salto = UVM2_CERO_SALTO;
 
@@ -2137,7 +2137,37 @@ static void move_abs_interno(int x, int y)
          * con solo 4 falsos positivos. O sea que nunca sobra, pero le falta un segundo
          * criterio que en otras pantallas si dispara — probablemente "uno por objeto", que
          * la geometria no trae. */
-        const int largo = uvm2_cero_salto > 0 && m >= uvm2_cero_salto && dx < 0;
+        /* NEITHER THE SIGN NOR THE 20: BOTH HALVES OF THIS RULE WERE MEASURED AND FALSE.
+         *
+         * The block above was written off frame 120 of HIS MAJOR HAVOC and claimed two
+         * things: re-centre from 20 units up, and only when the jump goes LEFT (the
+         * "carriage return"). Re-measured transport by transport over BOTH of his bus
+         * captures -- 7 frames of each, cut on his own $3FFE frame marker:
+         *
+         *                       never pinches below   pinches going right / left
+         *     his Vector Kong         28.9 u                  126 / 63
+         *     his Major Havoc         23.7 u                   35 / 42
+         *
+         * THE SIGN DOES NOT EXIST. In Vector Kong TWO OUT OF THREE of his re-zeros go
+         * RIGHT -- exactly what this condition threw away. In Major Havoc it is 35/42, an
+         * even split. It is not a direction rule; it looked like one in his mhavoc because
+         * that scene is rows of text, so every long jump in it happened to go the same way.
+         *
+         * AND 20 IS BELOW THE FLOOR OF BOTH. He never re-centres a transport shorter than
+         * 23.7 units. We did, and that is where it hurts: the jumps between the letters of
+         * dkong's logo measure 20 and 22 units, so we put two pinches INSIDE one figure.
+         * Each drags the beam to the centre and forces a flight back, and whatever is drawn
+         * after it lands displaced relative to what came before -- the overlapping letters
+         * Daniel sees on the console.
+         *
+         * 24 IS THE FLOOR THE TWO CAPTURES SHARE, and no more than that: above it they
+         * disagree (Vector Kong has 28 transports between 24 and 29 that he does NOT pinch,
+         * and Major Havoc has none in that band). So distance alone does NOT close the
+         * rule, and the second criterion is not in these captures. The floor is, and the
+         * floor is all that goes here.
+         *
+         * To re-measure: hardware/uvm2/tools/pinzas.py over either capture's bus.csv. */
+        const int largo = uvm2_cero_salto > 0 && m >= uvm2_cero_salto;
         const int muchas = uvm2_cero_cada > 0 && s_rampas_desde_cero >= (uint32_t)uvm2_cero_cada;
         if (largo || muchas) uvm2_draw_reset();
     }
