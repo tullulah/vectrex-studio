@@ -308,6 +308,26 @@ export class Uvm2System implements ISystem, IBus {
   /** Frames que el juego ha cerrado desde el reset. */
   framesDelJuego = 0;
   private cpuAcc   = 0;
+  /* ── DOS NUCLEOS, UN RELOJ ───────────────────────────────────────────────────
+   *
+   * Cada nucleo lleva SU tiempo en ciclos de CPU y el bus avanza con el MENOR de los dos,
+   * que es el instante que los dos han alcanzado ya. Antes se daba un paso de core 1 por
+   * cada paso de core 0 y el bus se alimentaba SOLO de los ciclos de core 0 — o sea que
+   * los dos nucleos corrian a la misma tasa de INSTRUCCIONES en vez de a la misma tasa de
+   * CICLOS, y el reloj del bus lo marcaba el nucleo que no dibuja. En el UVM2 quien saca
+   * el stream es core 1.
+   *
+   * Se ve en el frame del propio juego, medido entre sus escrituras de ACR=0x98:
+   *     emulador, un paso cada uno   61490 ciclos de bus   (24 Hz)
+   *     consola (su HUD de fps)      ~32600                (46 Hz)
+   * casi el doble, y en la misma direccion que el sesgo del intercalado.
+   *
+   * Con dos relojes no hay bloqueo mutuo: avanzar CUALQUIERA de los dos mueve el minimo en
+   * cuanto el otro le alcanza, asi que un nucleo girando a la espera del reloj de bus deja
+   * correr al otro igual. */
+  private relojCore0 = 0;
+  private relojCore1 = 0;
+  private relojBus   = 0;
   private cycleCount = 0;              // DWT_CYCCNT
   private lastPollPc = -1;             // spin detection, see maybeCollapseSpin
   /** PSM.FRCE_OFF: solo tiene que recordar. Ver la nota de PSM_BASE. */
@@ -593,6 +613,7 @@ export class Uvm2System implements ISystem, IBus {
     this.frameCounter = 0;
     this.busCycle = 0;
     this.cpuCiclos = 0;
+    this.relojCore0 = this.relojCore1 = this.relojBus = 0;
     this.framesDelJuego = 0;
     this.ciclosDeBus = 0;
     this.vectoresDeBus = 0;
@@ -632,6 +653,46 @@ export class Uvm2System implements ISystem, IBus {
    * integrators are ticked once per bus cycle so a ramp of N cycles moves the
    * beam the distance N cycles of ramp actually would.
    */
+
+  /* UN PASO DE CORE 1, con sus mismas trampas, devolviendo lo que ha costado.
+   *
+   * Estaba metido dentro del `try` de core 0 y se daba UNO por cada paso de core 0,
+   * tirando su coste. Ahora lo llama el planificador de `runFrame` cuando el reloj de
+   * core 1 va por detras, que es lo que pone a los dos nucleos a la misma tasa de
+   * ciclos. El cuerpo no cambia. */
+  private pasoCore1(): number {
+    if (!this.cpu1) return 0;
+    const pc1 = this.cpu1.getReg(15) >>> 0;
+    if (((pc1 & 0xFFFFFFF0) >>> 0) === 0xFFFFFFF0) { this.cpu1 = null; return 0; }  // volvio: se acabo
+    /* SU PROPIO RASTRO. Los primeros pasos del nucleo 1 son los que deciden si llega a su
+     * bucle o se pierde, y sin guardarlos un PC absurdo no dice de donde vino. */
+    if (this.rastro1.length < 64) this.rastro1.push(pc1);
+    if (this.sdLeerAddr && pc1 === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu1); return 1; }
+    if (this.sdLeerDesdeAddr && pc1 === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu1); return 1; }
+    if (pc1 === ROM_LOOKUP) { this.romTableLookup(this.cpu1); return 1; }
+    if (((pc1 & 0xFFFFFFF0) >>> 0) === ROM_NOOP) {
+      this.cpu1.setReg(15, this.cpu1.getReg(14) & ~1);   // la funcion vacia: volver
+      return 1;
+    }
+    if (pc1 < SRAM_BASE || pc1 > 0x20090000) {
+      if (!this.cpu1Perdido) {
+        this.cpu1Perdido = true;
+        console.error(`[Uvm2System] NUCLEO 1 PERDIDO en 0x${pc1.toString(16)}. ` +
+          `Camino: ${this.rastro1.map(x => '0x' + x.toString(16)).join(' ')}`);
+      }
+      this.cpu1 = null;
+      return 0;
+    }
+    return this.cpu1.step(this);
+  }
+
+  /* El bus, hasta el instante que LOS DOS nucleos han alcanzado ya. */
+  private sincronizaBus(): void {
+    const ahora = this.cpu1 ? Math.min(this.relojCore0, this.relojCore1) : this.relojCore0;
+    const d = ahora - this.relojBus;
+    if (d > 0) { this.relojBus = ahora; this.advanceBus(d); }
+  }
+
   private advanceBus(cpuCycles: number): void {
     this.cycleCount = (this.cycleCount + cpuCycles) >>> 0;
     /* APARTE DE cycleCount, que se trunca a 32 bits. El TIMER cuenta microsegundos y a
@@ -714,6 +775,9 @@ export class Uvm2System implements ISystem, IBus {
     if ((entry >>> 0) < SRAM_BASE || (sp >>> 0) < SRAM_BASE) return;
 
     this.cpu1 = new Thumb2();
+    /* EN HORA. Su reloj arranca donde va el de core 0: dejarlo en 0 congela el minimo
+     * —y con el, el bus— hasta que core 1 recupere los millones de ciclos del arranque. */
+    this.relojCore1 = this.relojCore0;
     this.cpu1.reset();
     this.cpu1.setFetchRegion(this.sram, SRAM_BASE);
     this.cpu1.setReg(13, sp >>> 0);
@@ -1240,6 +1304,16 @@ export class Uvm2System implements ISystem, IBus {
     let spent = 0;
 
     while (!this.halted && this.busCycle < until && spent < MAX_CPU_CYCLES_PER_FRAME) {
+      /* ANDA EL QUE VA POR DETRAS. Es lo unico que hace falta para que los dos nucleos
+       * corran a la misma tasa de CICLOS en vez de a la misma de instrucciones: se mira
+       * que reloj esta mas atrasado y se le da un paso. El bus va detras del minimo. */
+      if (this.cpu1 && this.relojCore1 < this.relojCore0) {
+        const c1 = this.pasoCore1();
+        this.relojCore1 += c1 > 0 ? c1 : 1;
+        spent += c1;
+        this.sincronizaBus();
+        continue;
+      }
       const pc = this.cpu.getReg(15) >>> 0;
       // `>>> 0` again: without it the masked value is negative and never
       // matches, so the handler "returns" by executing address 0xFFFFFFF9.
@@ -1283,33 +1357,6 @@ export class Uvm2System implements ISystem, IBus {
       let c: number;
       try {
         c = this.cpu.step(this);
-        /* EL NUCLEO 1 CORRE A LA PAR. Un paso por paso es lo mas parecido a dos nucleos al
-         * mismo reloj, y es lo que hace que core 0 salga de su espera: quien avanza
-         * `uvm2_frame_done` es core 1. Sin esto, core 0 giraba ahi para siempre. */
-        if (this.cpu1) {
-          const pc1 = this.cpu1.getReg(15) >>> 0;
-          if (((pc1 & 0xFFFFFFF0) >>> 0) === 0xFFFFFFF0) this.cpu1 = null;   // volvio: se acabo
-          else {
-            /* SU PROPIO RASTRO. Los primeros pasos del nucleo 1 son los que deciden si
-             * llega a su bucle o se pierde, y sin guardarlos un PC absurdo no dice de
-             * donde vino — que es exactamente lo que paso la primera vez. */
-            if (this.rastro1.length < 64) this.rastro1.push(pc1);
-            if (this.sdLeerAddr && pc1 === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu1); }
-            if (this.sdLeerDesdeAddr && pc1 === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu1); }
-            else if (pc1 === ROM_LOOKUP) { this.romTableLookup(this.cpu1); }
-            else if (((pc1 & 0xFFFFFFF0) >>> 0) === ROM_NOOP) {
-              this.cpu1.setReg(15, this.cpu1.getReg(14) & ~1);   // la funcion vacia: volver
-            }
-            else if (pc1 < SRAM_BASE || pc1 > 0x20090000) {
-              if (!this.cpu1Perdido) {
-                this.cpu1Perdido = true;
-                console.error(`[Uvm2System] NUCLEO 1 PERDIDO en 0x${pc1.toString(16)}. ` +
-                  `Camino: ${this.rastro1.map(x => '0x' + x.toString(16)).join(' ')}`);
-              }
-              this.cpu1 = null;
-            } else this.cpu1.step(this);
-          }
-        }
       } catch (e) {
         console.error(`[Uvm2System] CPU fault at 0x${pc.toString(16)}:`, e);
         console.error('[Uvm2System] PCs anteriores (del mas antiguo al fallo):',
@@ -1334,7 +1381,8 @@ export class Uvm2System implements ISystem, IBus {
       }
 
       spent += c;
-      this.advanceBus(c);
+      this.relojCore0 += c;
+      this.sincronizaBus();
     }
 
     this.lastFrameBusCycles = BUS_PER_FRAME;
