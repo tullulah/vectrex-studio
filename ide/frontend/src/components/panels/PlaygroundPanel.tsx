@@ -137,6 +137,14 @@ export function PlaygroundPanel() {
     { transIdx: number; endpoint: 'from' | 'to' } | null
   >(null);
   const [screenBackgrounds, setScreenBackgrounds] = useState<{ screenIndex: number; imagePath: string; offsetY?: number; keepAspect?: boolean }[]>([]);
+  /* EL MARCADOR DE UNIDADES SE CONSERVA, y esto no es cosmetico.
+   *
+   * El guardado reconstruye la escena entera desde cero, asi que cualquier campo que este
+   * panel no conozca DESAPARECE al guardar. `units: "beam"` dice que las piezas estan en
+   * unidades de haz, y sin el `dk_vplay.py` se niega a componer. Abriendo y guardando un
+   * .vplay migrado se perdia el marcador y con el la migracion entera — 40 puntos de
+   * 25m-vigas.vec y los desplazamientos de los 18 objetos, revertidos en silencio. */
+  const [units, setUnits] = useState<string | undefined>(undefined);
   const [availableImages, setAvailableImages] = useState<string[]>([]);
   // Level-wide walkable areas + transitions. Enemies whose own `walkable_areas`
   // is `undefined` inherit these at codegen time (and at preview time via the
@@ -1037,6 +1045,7 @@ export function PlaygroundPanel() {
         ...(Object.keys(scrollLimits).some(k => (scrollLimits as any)[k] !== undefined)
           ? { scrollLimits }
           : {}),
+        ...(units ? { units } : {}),
         _editorMeta: {
           ...(screenBackgrounds.length > 0 ? { screenBackgrounds } : {}),
           groundBottomOffset,
@@ -1124,6 +1133,7 @@ export function PlaygroundPanel() {
       setHotspots(sceneData.hotspots || []);
       setScrollLimits(sceneData.scrollLimits || {});
       setScreenBackgrounds((sceneData._editorMeta?.screenBackgrounds) || []);
+      setUnits((sceneData as any).units);
       // Level-wide walkable areas / transitions (Phase 2 inheritance source).
       setLevelWalkableAreas((sceneData as any).walkable_areas ?? []);
       setLevelTransitions((sceneData as any).transitions ?? []);
@@ -2605,13 +2615,29 @@ export function PlaygroundPanel() {
               const svgScreenIdx = heightScreens - 1 - sb.screenIndex;
               const offsetY = sb.offsetY ?? 0;
               return (
+                /* EL FONDO VA DONDE EL JUEGO LO VA A PONER, NO A LLENAR LA PANTALLA.
+                 *
+                 * Estirado a 192x256 la imagen llena el rectangulo de PANTALLA, y con las
+                 * piezas en unidades de haz eso no cuadra: una captura de arcade mide
+                 * 224x256 unidades DE JUEGO y el puerto la lleva al haz multiplicando por
+                 * 110/127 en los dos ejes — 194x222 de haz. O sea que el dibujo del juego
+                 * no llena la pantalla del Vectrex: llena el ancho y se queda en el 87%
+                 * del alto.
+                 *
+                 * Con el fondo estirado y las piezas en haz, el mismo .vec que en el
+                 * editor de vectores cuadra clavado aqui salia ESTIRADO. Es el mismo
+                 * encaje 'playfield' que usa VectorEditor; aqui hay que repetirlo porque
+                 * este panel dibuja el fondo por su cuenta.
+                 *
+                 * Solo para escenas en unidades de haz: las de antes siguen estirandose. */
                 <image
                   key={`sbg_${sb.screenIndex}`}
                   href={dataUrl}
-                  x={0}
-                  y={svgScreenIdx * 256 + offsetY}
-                  width={192 * widthScreens}
-                  height={256}
+                  x={units === 'beam' ? (192 - 224 * 110 / 127) / 2 : 0}
+                  y={svgScreenIdx * 256 + offsetY
+                     + (units === 'beam' ? (256 - 256 * 110 / 127) / 2 : 0)}
+                  width={units === 'beam' ? 224 * 110 / 127 : 192 * widthScreens}
+                  height={units === 'beam' ? 256 * 110 / 127 : 256}
                   opacity={0.25}
                   preserveAspectRatio={sb.keepAspect ? 'xMidYMid meet' : 'none'}
                   clipPath={`url(#sbgclip_${sb.screenIndex})`}
