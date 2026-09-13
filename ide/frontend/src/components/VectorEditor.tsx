@@ -87,8 +87,10 @@ interface VecResource {
    *  Vectrex screen (may deform); 'fitWidth' fills the screen width and scales the
    *  height by the same ratio (no deformation — for tracing scenery from a photo whose
    *  aspect differs from 3:4); 'natural' is one image pixel = one resource unit.
+   *  'playfield' puts the image on the ARCADE PLAYFIELD instead of the screen rect — see
+   *  the draw code for why that is a different rectangle and when you want it.
    *  Absent → fall back to backgroundStretch. */
-  backgroundFit?: 'stretch' | 'fitWidth' | 'natural' | 'naturalCenter';
+  backgroundFit?: 'stretch' | 'fitWidth' | 'natural' | 'naturalCenter' | 'playfield';
   collisionMesh?: {
     segments: CollisionSegment[];
   };
@@ -1089,7 +1091,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [backgroundImage, setBackgroundImage] = useState<HTMLImageElement | null>(null);
   const [backgroundOpacity, setBackgroundOpacity] = useState(0.5);
   const [showBackground, setShowBackground] = useState(true);
-  const [backgroundFit, setBackgroundFit] = useState<'stretch' | 'fitWidth' | 'natural' | 'naturalCenter'>('stretch');
+  const [backgroundFit, setBackgroundFit] = useState<'stretch' | 'fitWidth' | 'natural' | 'naturalCenter' | 'playfield'>('stretch');
   const [backgroundOffset, setBackgroundOffset] = useState({ x: 0, y: 0 });
   const [isBackgroundSelected, setIsBackgroundSelected] = useState(false);
   
@@ -1319,6 +1321,26 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           drawY = screenT.y + backgroundOffset.y;
           drawHeight = screenB.y - screenT.y;
         }
+      } else if (backgroundFit === 'playfield') {
+        // EL CAMPO DE JUEGO, QUE NO ES LA PANTALLA — y esta es la diferencia que hacia que
+        // lo dibujado no fuese lo que sale en la consola.
+        //
+        // Las capturas de arcade que se calcan (Donkey Kong) miden 224x256 unidades DE
+        // JUEGO, y el puerto las lleva al haz multiplicando por 110/127 en LOS DOS ejes:
+        // 194x222 unidades de haz. O sea que el dibujo del juego NO llena la pantalla del
+        // Vectrex — llena el ancho y se queda en el 87% del alto, y eso es correcto.
+        //
+        // 'stretch' metia la foto en el rectangulo de PANTALLA (192x256), asi que se
+        // calcaba sobre una imagen 15% mas alta de lo que iba a salir. El compositor
+        // compensaba esa diferencia solo en la horizontal, y la vertical se perdia.
+        // Poniendo la foto donde el juego la va a poner, lo que calcas es lo que sale.
+        const W = 224 * 110 / 127, H = 256 * 110 / 127;
+        const tl = resourceToCanvas({ x: -W / 2, y: H / 2 });
+        const br = resourceToCanvas({ x: W / 2, y: -H / 2 });
+        drawX = tl.x + backgroundOffset.x;
+        drawY = tl.y + backgroundOffset.y;
+        drawWidth = br.x - tl.x;
+        drawHeight = br.y - tl.y;
       } else if (backgroundFit === 'naturalCenter') {
         // one pixel = one unit with the image CENTRE on the origin — for
         // sprites authored centred (the whole snowbros_sbt catalogue)
@@ -4154,6 +4176,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                 <option value="fitWidth">fit width (keep aspect)</option>
                 <option value="natural">1:1 pixels</option>
                 <option value="naturalCenter">1:1 centered</option>
+                <option value="playfield">arcade playfield (224x256)</option>
               </select>
               <span style={{ opacity: 0.85 }}>
                 {backgroundFit === 'natural' || backgroundFit === 'naturalCenter' ? `${backgroundImage.width}×${backgroundImage.height} units` : ''}
