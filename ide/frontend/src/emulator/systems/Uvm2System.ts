@@ -289,7 +289,9 @@ export class Uvm2System implements ISystem, IBus {
   private dataIn   = 0xFF;             // what the VIA drives back at us
   private busCycle = 0;
   /** Ciclos de CPU emulada desde el reset, sin truncar. La base del TIMER0. */
-  private cpuCiclos = 0;
+  /* PUBLICO: `tools/contadores.mjs` lo lee para comprobar la relacion entre el reloj del
+   * bus y el TIMER del juego, que tiene que ser 1,5 ciclos por microsegundo. */
+  cpuCiclos = 0;
   /** La parte alta que TIMELR dejo enganchada en su ultima lectura. */
   private timerAlta = 0;
 
