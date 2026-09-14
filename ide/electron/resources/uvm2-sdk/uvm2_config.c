@@ -205,6 +205,23 @@ static int pon_campo(char *d, const char *nombre, int32_t v)
  * ninguna de las dos, y macOS monta las imagenes y lee el fichero. Sin esa prueba no habria
  * tenido derecho a escribir en la tarjeta de nadie.
  */
+/* CREAR EL FICHERO ES EL CAMINO CARO Y EL MENOS RODADO, Y AHORA HAY QUE PEDIRLO.
+ *
+ * Sobrescribir en sitio no toca ni la FAT ni el directorio: escribe los sectores que ya
+ * tiene el fichero y se acabo. CREARLO asigna clusters, reescribe las DOS copias de la FAT y
+ * anade la entrada de directorio — y si hace falta, la carpeta entera.
+ *
+ * El 2026-09-14 dkong se colgo al terminar la calibracion con la tarjeta sin `config/`: por
+ * SWD, el PC clavado en `uvm2_sd.c:108` en TRES muestras seguidas, o sea dando vueltas
+ * leyendo bloques dentro de ese camino. La prueba que tenia (`tools/prueba_fat.c` contra
+ * imagenes FAT16 y FAT32 con fsck_msdos) es del HOST, no de una tarjeta real.
+ *
+ * Una escritura de FAT a medias puede dejar la tarjeta del usuario inconsistente, asi que
+ * esto deja de pasar por defecto: quien quiera crear lo pide explicitamente. Guardar sobre
+ * un fichero que ya existe sigue siendo lo de siempre y es seguro. */
+static int s_permite_crear = 0;
+void uvm2_config_permitir_crear(int si) { s_permite_crear = si != 0; }
+
 int uvm2_config_guardar(void)
 {
     struct uvm2_config c;
@@ -215,6 +232,7 @@ int uvm2_config_guardar(void)
         p += pon_campo(txt + p, CAMPOS[k].n, *campo_de(&c, k));
     if (uvm2_sd_sobrescribir(RUTA_SD, (const unsigned char *)txt, (uint32_t)p)) return 1;
     if (uvm2_sd_error != UVM2_SD_NO_ESTA && uvm2_sd_error != UVM2_SD_NO_CABE) return 0;
+    if (!s_permite_crear) return 0;
     return uvm2_sd_crear(RUTA_SD, (const unsigned char *)txt, (uint32_t)p);
 }
 
