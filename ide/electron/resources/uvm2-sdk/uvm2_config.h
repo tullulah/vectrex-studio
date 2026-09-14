@@ -68,6 +68,13 @@ int  uvm2_config_cargar(void);
  *  que se abra dice cual de los dos terminos del error hay que mover. Ver uvm2_asistente.c. */
 int  uvm2_config_asistente(void);
 
+/** La misma pantalla, pero dibujando LA FIGURA DEL JUEGO en vez del patron del SDK.
+ *
+ *  Calibrar contra el dibujo que molesta vale mas que contra una figura de laboratorio: el
+ *  juego pasa su propia figura, ya centrada y a su escala, y el asistente no sabe nada de
+ *  ella. Con `figura` a cero es exactamente `uvm2_config_asistente()`. */
+int  uvm2_config_asistente_con(void (*figura)(void));
+
 /** Guarda la calibracion actual en la flash. 1 si se pudo. */
 int  uvm2_config_guardar(void);
 

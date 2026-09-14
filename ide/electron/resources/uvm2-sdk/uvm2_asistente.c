@@ -100,7 +100,17 @@ static void cuadrado(int cx, int cy, int n)
 
 struct campo { const char *nombre; int32_t *valor; int32_t min, max, paso; };
 
-int uvm2_config_asistente(void)
+/* LA FIGURA LA PUEDE PONER EL JUEGO.
+ *
+ * El patron del SDK (la figura de Vectorblade y los dos cuadrados) separa bien los dos
+ * terminos del error, pero calibrar contra el no es lo mismo que calibrar contra LO QUE
+ * SALE MAL. Daniel: "ponlo de momento para calibrar el logo en dkong" — y tiene razon en
+ * que el arbitro es el dibujo que molesta, no una figura de laboratorio.
+ *
+ * Con `figura` a cero se dibuja el patron de siempre. Con una funcion, se dibuja esa EN SU
+ * LUGAR y el resto de la pantalla —los cuatro valores, el mando, el guardado— es identico.
+ * El juego la pasa ya centrada y a su escala: el asistente no sabe nada de ella. */
+int uvm2_config_asistente_con(void (*figura)(void))
 {
     struct uvm2_config c;
     uvm2_config_actual(&c);
@@ -142,12 +152,16 @@ int uvm2_config_asistente(void)
         uvm2_frame_begin();
         uvm2_draw_intensity(c.brillo);
 
-        /* La figura de Vectorblade con su linea de referencia al lado, y debajo los dos
-         * cuadrados —4 trazos contra 40— que siguen sirviendo para ver el termino fijo. */
-        linea_referencia(-100, 20);
-        figura_vectorblade(-40, 38);
-        cuadrado( 70, 60,  1);
-        cuadrado( 70, 10, 10);
+        if (figura) {
+            figura();                     /* la del juego, ver arriba */
+        } else {
+            /* La figura de Vectorblade con su linea de referencia al lado, y debajo los dos
+             * cuadrados —4 trazos contra 40— que siguen sirviendo para ver el termino fijo. */
+            linea_referencia(-100, 20);
+            figura_vectorblade(-40, 38);
+            cuadrado( 70, 60,  1);
+            cuadrado( 70, 10, 10);
+        }
 
         for (int i = 0; i < n; i++) {
             char linea[24];
@@ -210,3 +224,5 @@ int uvm2_config_asistente(void)
     }
     return guardado;
 }
+
+int uvm2_config_asistente(void) { return uvm2_config_asistente_con(0); }
