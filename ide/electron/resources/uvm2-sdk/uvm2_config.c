@@ -31,7 +31,8 @@ struct guardado { uint32_t firma; struct uvm2_config c; uint32_t suma; };
 static uint32_t suma_de(const struct uvm2_config *c)
 {
     return (uint32_t)c->escala * 2654435761u ^ (uint32_t)c->fijo_q8 * 40503u
-         ^ (uint32_t)c->cero  * 2246822519u ^ (uint32_t)c->brillo * 374761393u;
+         ^ (uint32_t)c->cero  * 2246822519u ^ (uint32_t)c->brillo * 374761393u
+         ^ (uint32_t)c->hold_y_min * 668265263u ^ (uint32_t)c->hold_y_max * 3266489917u;
 }
 
 void uvm2_config_actual(struct uvm2_config *c)
@@ -40,6 +41,8 @@ void uvm2_config_actual(struct uvm2_config *c)
     c->fijo_q8 = (int32_t)T1_EXTRA_Q8;
     c->cero    = uvm2_cero_offset;
     c->brillo  = uvm2_draw_intensity_actual();
+    c->hold_y_min = uvm2_hold_y_min;
+    c->hold_y_max = uvm2_hold_y_max;
 }
 
 void uvm2_config_aplicar(const struct uvm2_config *c)
@@ -48,6 +51,12 @@ void uvm2_config_aplicar(const struct uvm2_config *c)
     T1_EXTRA_Q8     = (uint32_t)c->fijo_q8;
     uvm2_cero_offset = c->cero;
     if (c->brillo >= 0) uvm2_draw_intensity(c->brillo);
+    /* UN CERO AQUI ES "el fichero es viejo", no "sin retencion". Una calibracion guardada
+     * antes de que estos dos campos existieran los trae a cero, y muestrear cero ciclos
+     * dejaria la Y sin cargar: se ignoran y se quedan los de siempre. Es la trampa de
+     * una-cadena-de-contrato-invisible, y aqui se ve venir. */
+    if (c->hold_y_min > 0) uvm2_hold_y_min = c->hold_y_min;
+    if (c->hold_y_max > 0) uvm2_hold_y_max = c->hold_y_max;
 }
 
 /* ── EL FICHERO DE TEXTO DE LA SD ────────────────────────────────────────────────────
@@ -88,6 +97,8 @@ static int cargar_de_sd(struct uvm2_config *c)
         else if (!strcmp((char *)ln, "fijo_q8")) { c->fijo_q8 = x; visto = 1; }
         else if (!strcmp((char *)ln, "cero"))    { c->cero    = x; visto = 1; }
         else if (!strcmp((char *)ln, "brillo"))  { c->brillo  = x; visto = 1; }
+        else if (!strcmp((char *)ln, "hold_y_min")) { c->hold_y_min = x; visto = 1; }
+        else if (!strcmp((char *)ln, "hold_y_max")) { c->hold_y_max = x; visto = 1; }
     }
     return visto;
 }
@@ -172,6 +183,8 @@ int uvm2_config_guardar(void)
     p += pon_campo(txt + p, "fijo_q8", c.fijo_q8);
     p += pon_campo(txt + p, "cero",    c.cero);
     p += pon_campo(txt + p, "brillo",  c.brillo);
+    p += pon_campo(txt + p, "hold_y_min", c.hold_y_min);
+    p += pon_campo(txt + p, "hold_y_max", c.hold_y_max);
     if (uvm2_sd_sobrescribir(RUTA_SD, (const unsigned char *)txt, (uint32_t)p)) return 1;
     if (uvm2_sd_error != UVM2_SD_NO_ESTA && uvm2_sd_error != UVM2_SD_NO_CABE) return 0;
     return uvm2_sd_crear(RUTA_SD, (const unsigned char *)txt, (uint32_t)p);

@@ -44,6 +44,13 @@ struct uvm2_config {
                           * no es 0; se mide cerrando un poligono de trazos cortos. */
     int32_t cero;        /* uvm2_cero_offset: el valor que se ceba en la referencia de cero. */
     int32_t brillo;      /* Z por defecto, 0..127. */
+    /* MUESTREO DE LA RETENCION DE Y, en ciclos de E: el minimo para un salto diminuto y el
+     * tope para uno de fondo de escala. Es de la CONSOLA —el condensador es C304 y su Ron
+     * es el del 4052 que lleve dentro— y es el unico de los tres canales que cambia
+     * GEOMETRIA: si la Y no se muestrea bastante, un trazo que solo pide X sale inclinado.
+     * PiTrex calibra cuatro tiempos de retencion por lo mismo. Defecto 4 y 15. */
+    int32_t hold_y_min;
+    int32_t hold_y_max;
 };
 
 /** Rellena `c` con lo que valen los knobs AHORA. */

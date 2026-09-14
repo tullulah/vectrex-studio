@@ -301,15 +301,43 @@ static void mux_sample(uint8_t channel, uint32_t delay)
  *
  * ln(d) = log2(d) * 0,693, y log2 entero es la posicion del bit mas alto, que el
  * micro da con una instruccion. tau * ln2 = 1,87 ciclos por bit. */
+/* CADA CANAL SU TIEMPO, Y ESO NO ES SIMETRIA: SON CONDENSADORES DISTINTOS.
+ *
+ * El 4 y el 15 salieron de un tau calculado sobre C304 (10 nF) y valian para los tres
+ * canales por igual. Pero por el mux pasan TRES retenciones —Y, Z y la referencia de cero—
+ * con su propio condensador cada una, y PiTrex tiene cuatro tiempos separados (YSH_A/B,
+ * XSH_A/B) precisamente porque un numero no le vale a todos. Vectorblade llega al mismo
+ * sitio por otro lado: cinco valores de cero, uno por escala.
+ *
+ * Y hace falta AQUI, no en abstracto: con el trio de `caminos` en consola, un trazo que solo
+ * pide X sale INCLINADO, o sea que la Y se mueve donde la lista pide vy = 0 exacto. Si la Y
+ * no se muestrea el tiempo suficiente, el valor retenido se queda a medio camino y el error
+ * depende del salto — que es justo lo que se ve.
+ *
+ * Perillas VIVAS y separadas por canal, con los valores de siempre de defecto: mover la de Y
+ * no puede cambiar el brillo, y dejarlas quietas no cambia nada de lo ya medido. */
+volatile int32_t uvm2_hold_y_min = (int32_t)UVM2_HOLD_MIN;
+volatile int32_t uvm2_hold_y_max = (int32_t)UVM2_HOLD_MAX;
+volatile int32_t uvm2_hold_z_min = (int32_t)UVM2_HOLD_MIN;
+volatile int32_t uvm2_hold_z_max = (int32_t)UVM2_HOLD_MAX;
+
+static uint32_t hold_entre(int from, int to, int32_t lo, int32_t hi)
+{
+    if (lo < 1) lo = 1;
+    if (hi < lo) hi = lo;
+    uint32_t d = (uint32_t)(to > from ? to - from : from - to);
+    if (d == 0) return (uint32_t)lo;
+    uint32_t bits = 32u - (uint32_t)__builtin_clz(d);      /* ~log2(d) + 1 */
+    int32_t  t    = (int32_t)((bits * 187u) / 100u);       /* tau * ln2    */
+    if (t < lo) t = lo;
+    if (t > hi) t = hi;
+    return (uint32_t)t;
+}
+
+/* el de siempre, para los sitios que no son un canal concreto (la pinza de cero) */
 static uint32_t hold_for(int from, int to)
 {
-    uint32_t d = (uint32_t)(to > from ? to - from : from - to);
-    if (d == 0) return UVM2_HOLD_MIN;
-    uint32_t bits = 32u - (uint32_t)__builtin_clz(d);      /* ~log2(d) + 1 */
-    uint32_t t    = (bits * 187u) / 100u;                  /* tau * ln2    */
-    if (t < UVM2_HOLD_MIN) t = UVM2_HOLD_MIN;
-    if (t > UVM2_HOLD_MAX) t = UVM2_HOLD_MAX;
-    return t;
+    return hold_entre(from, to, (int32_t)UVM2_HOLD_MIN, (int32_t)UVM2_HOLD_MAX);
 }
 
 static void set_y(int y, uint32_t delay)
@@ -326,7 +354,7 @@ static void set_y(int y, uint32_t delay)
      * rampas (647 de 647), pase lo que pase con el valor. Nosotros lo saltabamos en 12 y
      * nos quedabamos en el 98,2%. Z si la cachea (recarga C306 solo 4 veces por frame), asi
      * que la regla no es "no cachear nada": es no cachear la Y. */
-    delay = hold_for(s_y, y);
+    delay = hold_entre(s_y, y, uvm2_hold_y_min, uvm2_hold_y_max);
     s_y = y;
     set_porta((uint8_t)y, 0);
     mux_sample(UVM2_MUX_Y, delay);
@@ -342,7 +370,7 @@ static void haz_apagar_y_esperar_h(uint32_t hueco);
 static void set_z(int z, uint32_t delay)
 {
     if (s_z == z) return;
-    delay = hold_for(s_z, z);
+    delay = hold_entre(s_z, z, uvm2_hold_z_min, uvm2_hold_z_max);
     s_z = z;
     if (HAZ_POR_SR) {
         /* LOTE DE BRILLO DEL VECFEVER, verbatim de la captura (x1229/frame-clase:

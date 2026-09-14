@@ -117,4 +117,20 @@ void uvm2_draw_set_scale(uint32_t cycles);
 }
 #endif
 
+/* TIEMPO DE MUESTREO DE CADA RETENCION, en ciclos de E, POR CANAL.
+ *
+ * Por el mux pasan tres retenciones —Y, Z y la referencia de cero— con su propio
+ * condensador cada una, y un solo par de numeros no le vale a las tres. PiTrex tiene cuatro
+ * tiempos separados (YSH_A/B, XSH_A/B) por exactamente esa razon.
+ *
+ * El minimo es lo que se le da a un salto diminuto y el maximo el tope para uno de fondo de
+ * escala; entre medias la ley sigue siendo logaritmica (tau*ln2 por bit). Defecto 4 y 15,
+ * los de siempre, asi que no tocarlas no cambia nada.
+ *
+ * PARA QUE SIRVE LA DE Y: con el trio de `caminos` en consola, un trazo que solo pide X sale
+ * INCLINADO — la Y se mueve donde la lista pide vy = 0 exacto. Si no se muestrea el tiempo
+ * suficiente, el valor retenido se queda a medio camino. */
+extern volatile int32_t uvm2_hold_y_min, uvm2_hold_y_max;
+extern volatile int32_t uvm2_hold_z_min, uvm2_hold_z_max;
+
 #endif /* UVM2_DRAW_H */
