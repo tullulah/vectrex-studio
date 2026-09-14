@@ -91,6 +91,22 @@ interface VecResource {
    *  the draw code for why that is a different rectangle and when you want it.
    *  Absent → fall back to backgroundStretch. */
   backgroundFit?: 'stretch' | 'fitWidth' | 'natural' | 'naturalCenter' | 'playfield';
+  /** EN QUE REJILLA ESTAN LAS COORDENADAS.
+   *
+   *  'beam' (o ausente) = unidades del haz del Vectrex, que es lo que la consola dibuja.
+   *  'game' = UNIDADES DE LA RECREATIVA, un pixel del arcade por unidad. El puerto lleva
+   *  unas a otras multiplicando por 110/127, asi que una unidad de juego son 0,866 de haz.
+   *
+   *  Por que existe 'game': el escenario de Donkey Kong vive en la rejilla del ARCADE —
+   *  las vigas caen en multiplos de 8 y los peldanos cada 4— y esa rejilla NO se puede
+   *  escribir en enteros de haz: el paso de 4 son 3,465. Guardando el .vec en unidades de
+   *  haz, 34 de las 256 alturas no sobreviven la ida y vuelta, y una escalera dibujada con
+   *  el paso regular salia en la consola con pasos de 3, 5, 4, 4... Con 'game' lo que
+   *  dibujas es exactamente lo que tiene la ROM, y la conversion ocurre UNA vez, al final.
+   *
+   *  El editor lo pinta multiplicando por 110/127, asi que en pantalla sigue viendose 1:1
+   *  con lo que sale en la consola: cambia la rejilla en la que editas, no el tamaño. */
+  units?: 'beam' | 'game';
   collisionMesh?: {
     segments: CollisionSegment[];
   };
@@ -1142,11 +1158,21 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     };
   }, [edgeOptions, backgroundImage, showEdgeSettings, width, height, resource.canvas.width, resource.canvas.height]);
 
+  /* CUANTAS UNIDADES DE HAZ MIDE UNA UNIDAD DEL RECURSO. Ver `units` arriba: con 'game'
+   * el .vec esta en la rejilla de la recreativa y hay que pintarlo a 110/127 para que en
+   * pantalla siga siendo 1:1 con la consola. Metiendo el factor AQUI —en las tres
+   * conversiones y en ningun sitio mas— lo heredan el dibujo, el raton, el arrastre y el
+   * enganche de vertices sin tocarlos. */
+  const HAZ_POR_JUEGO = 110 / 127;
+  const escalaUnidad = resource.units === 'game' ? HAZ_POR_JUEGO : 1;
+  /** una medida en unidades de HAZ, expresada en las del recurso */
+  const enUnidades = useCallback((v: number) => v / escalaUnidad, [escalaUnidad]);
+
   // Convert canvas coordinates to resource coordinates (2D projection)
   const canvasToResource = useCallback((canvasX: number, canvasY: number): Point => {
     const centerX = width / 2;
     const centerY = height / 2;
-    const scale = Math.min(width, height) / resource.canvas.width;
+    const scale = Math.min(width, height) / resource.canvas.width * escalaUnidad;
     
     const x = (canvasX - centerX - pan.x) / (scale * zoom);
     const y = (centerY - canvasY + pan.y) / (scale * zoom);
@@ -1162,7 +1188,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       // 3D view - not editable directly
       return { x: Math.round(x), y: Math.round(y), z: 0 };
     }
-  }, [width, height, resource.canvas.width, pan, zoom, viewMode]);
+  }, [width, height, resource.canvas.width, pan, zoom, viewMode, escalaUnidad]);
 
   // Project 3D point to 2D based on current view
   const project3DTo2D = useCallback((point: Point): { x: number; y: number; z: number } => {
@@ -1197,7 +1223,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const resourceToCanvas = useCallback((point: Point): { x: number; y: number } => {
     const centerX = width / 2;
     const centerY = height / 2;
-    const scale = Math.min(width, height) / resource.canvas.width;
+    const scale = Math.min(width, height) / resource.canvas.width * escalaUnidad;
     
     const projected = project3DTo2D(point);
     
@@ -1205,20 +1231,20 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       x: centerX + projected.x * scale * zoom + pan.x,
       y: centerY - projected.y * scale * zoom + pan.y,
     };
-  }, [width, height, resource.canvas.width, pan, zoom, project3DTo2D]);
+  }, [width, height, resource.canvas.width, pan, zoom, project3DTo2D, escalaUnidad]);
 
   // Like resourceToCanvas but also returns z depth (for 3D hit-testing)
   const resourceToCanvasWithDepth = useCallback((point: Point): { x: number; y: number; z: number } => {
     const centerX = width / 2;
     const centerY = height / 2;
-    const scale = Math.min(width, height) / resource.canvas.width;
+    const scale = Math.min(width, height) / resource.canvas.width * escalaUnidad;
     const projected = project3DTo2D(point);
     return {
       x: centerX + projected.x * scale * zoom + pan.x,
       y: centerY - projected.y * scale * zoom + pan.y,
       z: projected.z,
     };
-  }, [width, height, resource.canvas.width, pan, zoom, project3DTo2D]);
+  }, [width, height, resource.canvas.width, pan, zoom, project3DTo2D, escalaUnidad]);
 
   // Find the nearest vertex (across all layers) within snapRadius canvas pixels.
   // Returns the 3D resource point and its projected canvas position, or null.
@@ -1307,10 +1333,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       // a 43x36 sprite stretched across 191x255 units is five times too big to trace over.
       let drawX: number, drawY: number, drawWidth: number, drawHeight: number;
       if (backgroundFit === 'stretch' || backgroundFit === 'fitWidth') {
-        const screenL = resourceToCanvas({ x: -96, y: 0 });
-        const screenR = resourceToCanvas({ x: 95, y: 0 });
-        const screenT = resourceToCanvas({ x: 0, y: 127 });
-        const screenB = resourceToCanvas({ x: 0, y: -128 });
+        const screenL = resourceToCanvas({ x: enUnidades(-96), y: 0 });
+        const screenR = resourceToCanvas({ x: enUnidades(95), y: 0 });
+        const screenT = resourceToCanvas({ x: 0, y: enUnidades(127) });
+        const screenB = resourceToCanvas({ x: 0, y: enUnidades(-128) });
         drawX = screenL.x + backgroundOffset.x;
         drawWidth = screenR.x - screenL.x;
         if (backgroundFit === 'fitWidth') {
@@ -1334,7 +1360,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         // calcaba sobre una imagen 15% mas alta de lo que iba a salir. El compositor
         // compensaba esa diferencia solo en la horizontal, y la vertical se perdia.
         // Poniendo la foto donde el juego la va a poner, lo que calcas es lo que sale.
-        const W = 224 * 110 / 127, H = 256 * 110 / 127;
+        const W = enUnidades(224 * 110 / 127), H = enUnidades(256 * 110 / 127);
         const tl = resourceToCanvas({ x: -W / 2, y: H / 2 });
         const br = resourceToCanvas({ x: W / 2, y: -H / 2 });
         drawX = tl.x + backgroundOffset.x;
@@ -1425,10 +1451,10 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.setLineDash([4, 4]); // Dashed line
       
       // Vectrex screen: 3:4 portrait — X: -96 to +95 (192 units), Y: -128 to +127 (256 units)
-      const screenLeft = resourceToCanvas({ x: -96, y: 0 });
-      const screenRight = resourceToCanvas({ x: 95, y: 0 });
-      const screenTop = resourceToCanvas({ x: 0, y: 127 });
-      const screenBottom = resourceToCanvas({ x: 0, y: -128 });
+      const screenLeft = resourceToCanvas({ x: enUnidades(-96), y: 0 });
+      const screenRight = resourceToCanvas({ x: enUnidades(95), y: 0 });
+      const screenTop = resourceToCanvas({ x: 0, y: enUnidades(127) });
+      const screenBottom = resourceToCanvas({ x: 0, y: enUnidades(-128) });
       
       ctx.beginPath();
       ctx.rect(

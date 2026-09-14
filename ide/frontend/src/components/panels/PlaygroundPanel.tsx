@@ -1818,6 +1818,12 @@ export function PlaygroundPanel() {
   };
 
   // Render a vector sprite from loaded .vec data
+  /* UNA UNIDAD DE JUEGO NO ES UNA UNIDAD DE HAZ. Con `units: "game"` las piezas estan en
+   * la rejilla de la recreativa —que es donde vive el escenario del arcade, y la unica en
+   * la que un paso de peldano de 4 es entero— y hay que pintarlas a 110/127 para que en
+   * este panel midan lo mismo que en la consola. Ver el campo `units` de VectorEditor. */
+  const escalaPieza = units === 'game' ? 110 / 127 : 1;
+
   const renderVector = (obj: SceneObject) => {
     // Enemy objects: try to render their sprite vector, fall back to diamond marker
     if (obj.type === 'enemy') {
@@ -1837,7 +1843,7 @@ export function PlaygroundPanel() {
         return (
           <g
             key={obj.id}
-            transform={`translate(${svgPos.x}, ${svgPos.y}) scale(${scaleX}, ${obj.scale}) rotate(${obj.rotation})`}
+            transform={`translate(${svgPos.x}, ${svgPos.y}) scale(${scaleX * escalaPieza}, ${obj.scale * escalaPieza}) rotate(${obj.rotation})`}
             onMouseDown={(e) => handleObjectMouseDown(e, obj.id)}
             style={{ cursor: draggingObjectId === obj.id ? 'grabbing' : 'grab' }}
           >
@@ -1909,7 +1915,7 @@ export function PlaygroundPanel() {
     return (
       <g
         key={obj.id}
-        transform={`translate(${svgPos.x}, ${svgPos.y}) scale(${obj.scale}) rotate(${obj.rotation})`}
+        transform={`translate(${svgPos.x}, ${svgPos.y}) scale(${obj.scale * escalaPieza}) rotate(${obj.rotation})`}
         onMouseDown={(e) => handleObjectMouseDown(e, obj.id)}
         style={{ cursor: draggingObjectId === obj.id ? 'grabbing' : 'grab' }}
       >
@@ -2633,11 +2639,11 @@ export function PlaygroundPanel() {
                 <image
                   key={`sbg_${sb.screenIndex}`}
                   href={dataUrl}
-                  x={units === 'beam' ? (192 - 224 * 110 / 127) / 2 : 0}
+                  x={units === 'beam' || units === 'game' ? (192 - 224 * 110 / 127) / 2 : 0}
                   y={svgScreenIdx * 256 + offsetY
-                     + (units === 'beam' ? (256 - 256 * 110 / 127) / 2 : 0)}
-                  width={units === 'beam' ? 224 * 110 / 127 : 192 * widthScreens}
-                  height={units === 'beam' ? 256 * 110 / 127 : 256}
+                     + (units === 'beam' || units === 'game' ? (256 - 256 * 110 / 127) / 2 : 0)}
+                  width={units === 'beam' || units === 'game' ? 224 * 110 / 127 : 192 * widthScreens}
+                  height={units === 'beam' || units === 'game' ? 256 * 110 / 127 : 256}
                   opacity={0.25}
                   preserveAspectRatio={sb.keepAspect ? 'xMidYMid meet' : 'none'}
                   clipPath={`url(#sbgclip_${sb.screenIndex})`}
