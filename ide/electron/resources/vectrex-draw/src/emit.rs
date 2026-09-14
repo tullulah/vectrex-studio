@@ -367,6 +367,7 @@ pub static SIGUEN_UNIDADES: core::sync::atomic::AtomicU32 =
     core::sync::atomic::AtomicU32::new(0);
 
 pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings) {
+    let (vx, vy) = crate::ramp::trim_dac(vx, vy);   /* ver trim_dac: va aqui y no en la rampa */
     let sr = crate::ramp::HAZ_POR_SR.load(Orden::Relaxed) != 0;
     // QUE LA ULTIMA RAMPA ILUMINADA TERMINE. El cuanto depende de si el SR va JUSTO
     // detras del T1CH (rama de abajo) o si antes van ORA y ORB (salto corto del idioma SR).
@@ -551,6 +552,7 @@ pub fn moveto_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings
 /// y no por el registro de desplazamiento con ACR = 0x98. El camino del SR no llego a
 /// dibujar nada en este hardware; el de CNTL esta probado.
 pub fn draw_line_seq<S: BusSink>(sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings) {
+    let (vx, vy) = crate::ramp::trim_dac(vx, vy);   /* ver trim_dac: va aqui y no en la rampa */
     // ── PLOTTER DEL VECFEVER, VERBATIM ($CA51) ───────────────────────────────────
     //
     // Cada vector es una serie de microtramos T1=8, misma tasa (vx,vy). El haz se

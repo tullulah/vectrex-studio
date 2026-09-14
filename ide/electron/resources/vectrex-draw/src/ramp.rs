@@ -50,6 +50,22 @@ fn trim_neg(v: i32, k: i32) -> i32 {
     (v * (256 + k) / 256).clamp(-128, 127)
 }
 
+/// SE APLICA AL ESCRIBIR EN EL DAC, NO AL CALCULAR LA RAMPA. Y esto no es un detalle:
+/// estuvo en `ramp_params_q` y NO HACIA NADA en las figuras.
+///
+/// Los trazos van por `ramp_params_chain`, que lleva una DEUDA acumulada: lo que un trazo se
+/// pasa se le resta al siguiente. En un brazo de la estrella —ida y vuelta— la deuda cancela
+/// el trim y la figura sale igual; los saltos no llevan deuda, asi que lo unico que se movia
+/// era DONDE cae lo siguiente. Daniel lo vio exactamente asi: "diagx solo mueve el texto en
+/// X, la estrella ni se inmuta".
+///
+/// Puesto aqui, el modelo —la rampa, la deuda, la geometria— se queda con la `v` ideal y lo
+/// unico que cambia es el numero que ve el DAC, que es justo lo que se quiere compensar.
+pub fn trim_dac(vx: i8, vy: i8) -> (i8, i8) {
+    (trim_neg(vx as i32, TASA_NEG_X.load(Ordering::Relaxed)) as i8,
+     trim_neg(vy as i32, TASA_NEG_Y.load(Ordering::Relaxed)) as i8)
+}
+
 /// El valor actual. Se lee una vez por vector, no en bucle cerrado.
 ///
 /// CON RAMPA FIJA, LA ESCALA ES LA DURACION. La distancia es `vx*t1/s`, asi que solo con
@@ -339,10 +355,8 @@ fn salto_tiempo_fijo(dx: i8, dy: i8, fijo: i32) -> (i8, i8, u16) {
         let n = num as i64 * 256;
         (if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den }) as i32
     };
-    let vx = trim_neg(round_div(dx as i32 * s).clamp(-128, 127),
-                      TASA_NEG_X.load(Ordering::Relaxed)) as i8;
-    let vy = trim_neg(round_div(dy as i32 * s).clamp(-128, 127),
-                      TASA_NEG_Y.load(Ordering::Relaxed)) as i8;
+    let vx = round_div(dx as i32 * s).clamp(-128, 127) as i8;
+    let vy = round_div(dy as i32 * s).clamp(-128, 127) as i8;
     (vx, vy, t1 as u16)
 }
 
@@ -619,10 +633,8 @@ fn ramp_params_q(dx: i32, dy: i32, vcap_in: u32, q: u32) -> (i8, i8, u16) {
         let n = num as i64 * 256;
         (if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den }) as i32
     };
-    let vx = trim_neg(round_div(dx * s / f).clamp(-128, 127),
-                      TASA_NEG_X.load(Ordering::Relaxed)) as i8;
-    let vy = trim_neg(round_div(dy * s / f).clamp(-128, 127),
-                      TASA_NEG_Y.load(Ordering::Relaxed)) as i8;
+    let vx = round_div(dx * s / f).clamp(-128, 127) as i8;
+    let vy = round_div(dy * s / f).clamp(-128, 127) as i8;
     // Y AHORA SI, EL RETARDO DE ARRANQUE. Con `vx` ya elegido, alargar la rampa en T hace
     // que el haz recorra `vx*(t1+T)/s` — mas de lo pedido, que es justo la distancia que
     // pierde mientras coge velocidad. Es un TIEMPO, asi que pesa mas en los trazos cortos:
