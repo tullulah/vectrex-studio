@@ -216,21 +216,23 @@ static int pon_campo(char *d, const char *nombre, int32_t v)
  * ninguna de las dos, y macOS monta las imagenes y lee el fichero. Sin esa prueba no habria
  * tenido derecho a escribir en la tarjeta de nadie.
  */
-/* CREAR EL FICHERO ES EL CAMINO CARO Y EL MENOS RODADO, Y AHORA HAY QUE PEDIRLO.
- *
- * Sobrescribir en sitio no toca ni la FAT ni el directorio: escribe los sectores que ya
- * tiene el fichero y se acabo. CREARLO asigna clusters, reescribe las DOS copias de la FAT y
- * anade la entrada de directorio — y si hace falta, la carpeta entera.
+/* CREAR EL FICHERO VUELVE A SER LO NORMAL, Y ESTUVO APAGADO UNAS HORAS.
  *
  * El 2026-09-14 dkong se colgo al terminar la calibracion con la tarjeta sin `config/`: por
- * SWD, el PC clavado en `uvm2_sd.c:108` en TRES muestras seguidas, o sea dando vueltas
- * leyendo bloques dentro de ese camino. La prueba que tenia (`tools/prueba_fat.c` contra
- * imagenes FAT16 y FAT32 con fsck_msdos) es del HOST, no de una tarjeta real.
+ * SWD, el PC clavado en `uvm2_sd.c:108` en TRES muestras seguidas. Lo apague mientras se
+ * buscaba la causa, y Daniel lo puso en su sitio: "no podemos depender de que exista y lo
+ * machaquemos solo en ese caso. deberia poder crearse. fat32 no es un sistema de archivos
+ * desconocido".
  *
- * Una escritura de FAT a medias puede dejar la tarjeta del usuario inconsistente, asi que
- * esto deja de pasar por defecto: quien quiera crear lo pide explicitamente. Guardar sobre
- * un fichero que ya existe sigue siendo lo de siempre y es seguro. */
-static int s_permite_crear = 0;
+ * Y no era un cuelgue, era `asigna_cluster` leyendo un SECTOR de la tarjeta por cada cluster
+ * que miraba. Medido en el host con una FAT32 del tamaño de su tarjeta y el primer hueco a
+ * 40.000 clusters:
+ *
+ *     antes   80.009 lecturas, 136 escrituras
+ *     ahora      326 lecturas,  73 escrituras
+ *
+ * 245 veces menos, y `fsck_msdos` sale limpio en las tres fases. */
+static int s_permite_crear = 1;
 void uvm2_config_permitir_crear(int si) { s_permite_crear = si != 0; }
 
 int uvm2_config_guardar(void)

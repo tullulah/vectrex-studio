@@ -348,15 +348,54 @@ static int fat_pon(uint32_t c, uint32_t valor, unsigned char *b)
 }
 
 /* El primer cluster LIBRE (entrada de FAT a 0), marcado ya como fin de cadena. 0 si no hay. */
+static uint32_t asigna_este(uint32_t c, unsigned char *b);
+
+/* UN SECTOR DE FAT SE LEE UNA VEZ, NO UNA VEZ POR CLUSTER.
+ *
+ * Esto recorria cluster a cluster y en CADA uno leia el sector entero de la tarjeta: en
+ * FAT32 caben 128 entradas por sector, asi que hacia 128 veces las lecturas necesarias (256
+ * en FAT16). En una tarjeta de 16 GB con el primer hueco lejos eso son decenas de miles de
+ * lecturas por SPI a pedal — y en consola se ve como un cuelgue, que es lo que le pasaba a
+ * Daniel al terminar la calibracion.
+ *
+ * Y SE EMPIEZA POR LA PISTA DEL FSInfo, que existe justo para esto: FAT32 guarda "el
+ * siguiente cluster libre" y lo mantenemos al asignar. Si la pista miente —puede, es solo
+ * una pista— se vuelve a barrer desde el principio. */
 static uint32_t asigna_cluster(unsigned char *b)
 {
     const uint32_t fin = V.total_clusters ? V.total_clusters : 0xFFFFFFu;
-    for (uint32_t c = 2; c < fin; c++) {
-        const uint32_t off = V.es32 ? c * 4u : c * 2u;
-        if (!lee_bloque(V.fat + off / 512u, b)) return 0;
-        const uint32_t v = V.es32 ? (u32(b, (int)(off % 512)) & 0x0FFFFFFFu)
-                                  : u16(b, (int)(off % 512));
-        if (v != 0) continue;
+    uint32_t desde = 2;
+    if (V.es32 && V.fsinfo && lee_bloque(V.fsinfo, b)
+        && u32(b, 0) == 0x41615252u && u32(b, 484) == 0x61417272u) {
+        const uint32_t pista = u32(b, 492);
+        if (pista >= 2 && pista < fin) desde = pista;
+    }
+    for (int vuelta = 0; vuelta < 2; vuelta++) {
+        const uint32_t c0 = vuelta ? 2u : desde;
+        const uint32_t c1 = vuelta ? desde : fin;
+        const uint32_t por_sector = V.es32 ? 128u : 256u;
+        for (uint32_t base = c0 - (c0 % por_sector); base < c1; base += por_sector) {
+            const uint32_t off = V.es32 ? base * 4u : base * 2u;
+            if (!lee_bloque(V.fat + off / 512u, b)) return 0;
+            for (uint32_t k = 0; k < por_sector; k++) {
+                const uint32_t c = base + k;
+                if (c < c0 || c >= c1 || c < 2) continue;
+                const uint32_t dentro = V.es32 ? k * 4u : k * 2u;
+                const uint32_t v = V.es32 ? (u32(b, (int)dentro) & 0x0FFFFFFFu)
+                                          : u16(b, (int)dentro);
+                if (v != 0) continue;
+                return asigna_este(c, b);
+            }
+        }
+    }
+    return 0;
+}
+
+/* Marca `c` como fin de cadena y actualiza el FSInfo. Separado para que el barrido de arriba
+ * no tenga que salir de dos bucles anidados. */
+static uint32_t asigna_este(uint32_t c, unsigned char *b)
+{
+    {
         if (!fat_pon(c, V.es32 ? 0x0FFFFFFFu : 0xFFFFu, b)) return 0;
         /* EL FSInfo DE FAT32, que lleva la cuenta del espacio libre. Es solo una PISTA —el
          * sistema puede recalcularla— pero dejarla desfasada hace que `fsck_msdos` avise, y
@@ -682,11 +721,17 @@ int uvm2_sd_crear(const char *ruta, const unsigned char *datos, uint32_t n)
     for (uint32_t i = n; i < 512; i++) b[i] = ' ';
     b[511] = '\n';
     if (!escribe_bloque(sector_de(c), b)) return 0;
-    /* El resto del cluster, a cero: lo que hubiera antes no es nuestro y confunde al leerlo. */
-    for (uint32_t s = 1; s < V.spc; s++) {
-        static unsigned char z[512];
-        for (int i = 0; i < 512; i++) z[i] = 0;
-        if (!escribe_bloque(sector_de(c) + s, z)) return 0;
-    }
+    /* EL RESTO DEL CLUSTER NO SE PONE A CERO, Y ANTES SI.
+     *
+     * Decia "lo que hubiera antes no es nuestro y confunde al leerlo", y no: el fichero mide
+     * 512 bytes y NADIE lee mas alla de su longitud — eso es hueco de cluster, y ningun
+     * sistema de ficheros lo mira. Lo que si costaba era tiempo: en una tarjeta de 16 GB el
+     * cluster son 32 o 64 KB, o sea entre 63 y 127 escrituras de UN sector cada una, y una
+     * escritura suelta en una SD barata puede irse a decenas de milisegundos porque obliga a
+     * borrar un bloque entero. Eso son SEGUNDOS por fichero, y en consola se ve como un
+     * cuelgue.
+     *
+     * Un directorio SI hay que ponerlo a cero —sus entradas vacias tienen que valer 0x00
+     * para que el recorrido pare— y `crea_directorio` lo sigue haciendo. */
     return crea_entrada(dir, n83, c, 512u, b);
 }

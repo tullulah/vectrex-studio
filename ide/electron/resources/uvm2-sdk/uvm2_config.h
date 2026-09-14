@@ -97,14 +97,12 @@ int  uvm2_config_asistente_con(void (*figura)(void));
 
 /** Guarda la calibracion actual. 1 si se pudo.
  *
- *  Escribe `config/uvm2.cfg` EN SITIO, que no toca ni la FAT ni el directorio. Si el fichero
- *  no existe devuelve 0 y no lo crea: crearlo asigna clusters y reescribe las dos copias de
- *  la FAT, y eso colgo a dkong en consola el 2026-09-14 con una tarjeta sin `config/`. Para
- *  permitirlo hay que pedirlo con `uvm2_config_permitir_crear(1)`. */
+ *  Intenta primero escribir `config/uvm2.cfg` EN SITIO, que no toca ni la FAT ni el
+ *  directorio y es lo mas barato. Si no existe, LO CREA — con su carpeta si hace falta. */
 int  uvm2_config_guardar(void);
 
-/** Deja (o no) que `uvm2_config_guardar` CREE el fichero si no existe. Apagado de serie: ver
- *  la nota de arriba. Crear toca la FAT, y una escritura a medias es la tarjeta del usuario. */
+/** Deja (o no) que `uvm2_config_guardar` CREE el fichero si no existe. ENCENDIDO de serie.
+ *  Se apaga para una tarjeta que no se quiera tocar bajo ningun concepto. */
 void uvm2_config_permitir_crear(int si);
 
 #ifdef __cplusplus
