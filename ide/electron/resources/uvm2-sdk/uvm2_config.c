@@ -10,6 +10,7 @@
 /* Los knobs del modelo viven en Rust y salen como simbolos; los del SDK, aqui. */
 extern volatile uint32_t DRAW_SCALE, T1_EXTRA_Q8;
 extern volatile int32_t  TASA_NEG_X, TASA_NEG_Y;   /* vectrex-draw, ver uvm2_config.h */
+extern volatile int32_t  uvm2_drift_x, uvm2_drift_y;
 extern volatile int32_t  uvm2_cero_offset;
 void uvm2_draw_intensity(int brightness);
 
@@ -29,12 +30,36 @@ volatile int uvm2_hay_calibracion = 0;
 
 struct guardado { uint32_t firma; struct uvm2_config c; uint32_t suma; };
 
+/* LOS CAMPOS, EN UNA TABLA, Y NO UNA CADENA DE strcmp.
+ *
+ * Cada campo nuevo costaba su `strcmp` en el lector y su `pon_campo` en el escritor, y con
+ * seis mas este fichero paso de 1215 a 1981 bytes de codigo — lo bastante para que dkong,
+ * que corre ENTERO desde SRAM, no enlazara. Con la tabla, anadir un campo cuesta UNA linea
+ * y cero codigo, que es lo que hace falta si esto va a seguir creciendo.
+ *
+ * El orden es el del fichero de texto y el del struct; el offset lo pone el compilador. */
+#define CAMPO(n) { #n, (uint16_t)((unsigned char *)&((struct uvm2_config *)0)->n - (unsigned char *)0) }
+static const struct { const char *n; uint16_t off; } CAMPOS[] = {
+    CAMPO(escala), CAMPO(fijo_q8), CAMPO(cero), CAMPO(brillo),
+    CAMPO(hold_y_min), CAMPO(hold_y_max),
+    CAMPO(tasa_neg_x), CAMPO(tasa_neg_y),
+    CAMPO(deriva_x), CAMPO(deriva_y),
+};
+#define N_CAMPOS ((int)(sizeof CAMPOS / sizeof CAMPOS[0]))
+static int32_t *campo_de(struct uvm2_config *c, int i)
+{
+    return (int32_t *)((unsigned char *)c + CAMPOS[i].off);
+}
+
+/* LA SUMA, TAMBIEN SOBRE LA TABLA. Antes era una linea por campo con su primo, y cada
+ * campo nuevo se podia olvidar ahi sin que nada avisara: una calibracion guardada pasaria
+ * la comprobacion con un campo a medias. Recorriendo la tabla, un campo nuevo entra solo. */
 static uint32_t suma_de(const struct uvm2_config *c)
 {
-    return (uint32_t)c->escala * 2654435761u ^ (uint32_t)c->fijo_q8 * 40503u
-         ^ (uint32_t)c->cero  * 2246822519u ^ (uint32_t)c->brillo * 374761393u
-         ^ (uint32_t)c->hold_y_min * 668265263u ^ (uint32_t)c->hold_y_max * 3266489917u
-         ^ (uint32_t)c->tasa_neg_x * 2654435769u ^ (uint32_t)c->tasa_neg_y * 40499u;
+    uint32_t h = 0x9E3779B9u;
+    for (int k = 0; k < N_CAMPOS; k++)
+        h = h * 16777619u ^ (uint32_t)*campo_de((struct uvm2_config *)c, k);
+    return h;
 }
 
 void uvm2_config_actual(struct uvm2_config *c)
@@ -47,6 +72,8 @@ void uvm2_config_actual(struct uvm2_config *c)
     c->hold_y_max = uvm2_hold_y_max;
     c->tasa_neg_x = TASA_NEG_X;
     c->tasa_neg_y = TASA_NEG_Y;
+    c->deriva_x = uvm2_drift_x;
+    c->deriva_y = uvm2_drift_y;
 }
 
 void uvm2_config_aplicar(const struct uvm2_config *c)
@@ -64,6 +91,8 @@ void uvm2_config_aplicar(const struct uvm2_config *c)
     /* Estos SI pueden ser cero: cero es "sin correccion", que es el defecto honesto. */
     TASA_NEG_X = c->tasa_neg_x;
     TASA_NEG_Y = c->tasa_neg_y;
+    uvm2_drift_x = c->deriva_x;
+    uvm2_drift_y = c->deriva_y;
 }
 
 /* ── EL FICHERO DE TEXTO DE LA SD ────────────────────────────────────────────────────
@@ -100,14 +129,8 @@ static int cargar_de_sd(struct uvm2_config *c)
         while (*v == ' ' || *v == '\t') v++;
         int32_t x;
         if (!lee_entero(v, &x)) continue;
-        if      (!strcmp((char *)ln, "escala"))  { c->escala  = x; visto = 1; }
-        else if (!strcmp((char *)ln, "fijo_q8")) { c->fijo_q8 = x; visto = 1; }
-        else if (!strcmp((char *)ln, "cero"))    { c->cero    = x; visto = 1; }
-        else if (!strcmp((char *)ln, "brillo"))  { c->brillo  = x; visto = 1; }
-        else if (!strcmp((char *)ln, "hold_y_min")) { c->hold_y_min = x; visto = 1; }
-        else if (!strcmp((char *)ln, "hold_y_max")) { c->hold_y_max = x; visto = 1; }
-        else if (!strcmp((char *)ln, "tasa_neg_x")) { c->tasa_neg_x = x; visto = 1; }
-        else if (!strcmp((char *)ln, "tasa_neg_y")) { c->tasa_neg_y = x; visto = 1; }
+        for (int k = 0; k < N_CAMPOS; k++)
+            if (!strcmp((char *)ln, CAMPOS[k].n)) { *campo_de(c, k) = x; visto = 1; break; }
     }
     return visto;
 }
@@ -188,14 +211,8 @@ int uvm2_config_guardar(void)
     uvm2_config_actual(&c);
     char txt[256];
     int p = 0;
-    p += pon_campo(txt + p, "escala",  c.escala);
-    p += pon_campo(txt + p, "fijo_q8", c.fijo_q8);
-    p += pon_campo(txt + p, "cero",    c.cero);
-    p += pon_campo(txt + p, "brillo",  c.brillo);
-    p += pon_campo(txt + p, "hold_y_min", c.hold_y_min);
-    p += pon_campo(txt + p, "hold_y_max", c.hold_y_max);
-    p += pon_campo(txt + p, "tasa_neg_x", c.tasa_neg_x);
-    p += pon_campo(txt + p, "tasa_neg_y", c.tasa_neg_y);
+    for (int k = 0; k < N_CAMPOS; k++)
+        p += pon_campo(txt + p, CAMPOS[k].n, *campo_de(&c, k));
     if (uvm2_sd_sobrescribir(RUTA_SD, (const unsigned char *)txt, (uint32_t)p)) return 1;
     if (uvm2_sd_error != UVM2_SD_NO_ESTA && uvm2_sd_error != UVM2_SD_NO_CABE) return 0;
     return uvm2_sd_crear(RUTA_SD, (const unsigned char *)txt, (uint32_t)p);

@@ -1813,6 +1813,30 @@ static void move_una(int dx, int dy)
      * —donde corregir no se ve— y no que la reparta. Eso no esta hecho. */
     vx_chain_reset();
 
+    /* LA COMPENSACION DE DERIVA, DE VUELTA. Estaba aqui —en el salto, que es donde se
+     * midio— y se quedo MUERTA en el commit que metio vectrex-draw: el `return` del camino
+     * nuevo subio por encima y estas dos lineas se quedaron debajo, sin que nadie las
+     * llamara. `drift_fix` seguia compilando, definido y sin usar en todo el arbol.
+     *
+     * No es una decision que alguien tomara: es una regresion, y con ella se perdio una
+     * medida de consola del 2026-08-12 (X -16/256, Y -112/256, con hardware/uvm2/drift).
+     *
+     * EL SINTOMA, visto por Daniel el 2026-09-14: el menu de dkong DERIVA A LA DERECHA
+     * segun baja. JUGAR, TEST, KNOBS y CALIBRA se piden todos en la MISMA x —VK_MENU_X— y
+     * cada uno sale mas a la derecha que el anterior, en el orden en que se dibujan. Es
+     * exactamente la cascada en diagonal que describe la nota de abajo.
+     *
+     * Los dos valores siguen a 0 de defecto, asi que reconectarlo no cambia nada hasta que
+     * se calibren: lo que se arregla hoy es que el knob EXISTA de verdad.
+     *
+     * NO CABIA EN DKONG, Y ESO RESULTO SER OTRA PERILLA PERDIDA. Esa imagen corre entera
+     * desde SRAM y estaba al 100%; al buscar los bytes aparecio que el buffer del romset
+     * —23 KB ocupados TODA la partida por algo que solo se usa al arrancar— podia irse a la
+     * PSRAM desde hacia tiempo y nadie definia el simbolo. Repuesto en uvm2.mk, dkong tiene
+     * 18 KB libres y esto entra sin discusion. */
+    dx += drift_fix(dx, &s_drift_ax, uvm2_drift_x);
+    dy += drift_fix(dy, &s_drift_ay, uvm2_drift_y);
+
     /* EL ARRANQUE SUAVE DE LOS SALTOS RAPIDOS.
      *
      * MEDIDO en su frame 120 de Major Havoc: 20 de sus 26 saltos de tasa >= 100 (77%) van

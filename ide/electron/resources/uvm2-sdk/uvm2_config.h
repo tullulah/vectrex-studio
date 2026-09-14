@@ -57,6 +57,13 @@ struct uvm2_config {
      * ni la escala (simetrica) lo alcanzan. Ver TASA_NEG_X/Y en vectrex-draw. Defecto 0. */
     int32_t tasa_neg_x;
     int32_t tasa_neg_y;
+    /* DERIVA POR SALTO, por eje, en 1/256. El haz no acaba donde se le manda y el error se
+     * acumula salto a salto: sin compensar, una columna de lineas pedidas en la MISMA x sale
+     * en cascada hacia un lado. Medido en consola el 2026-08-12 con hardware/uvm2/drift:
+     * X -16/256 y Y -112/256, siete veces mas en Y porque Y pasa por el sample-and-hold y X
+     * va directa al DAC. Defecto 0 = sin compensar. */
+    int32_t deriva_x;
+    int32_t deriva_y;
 };
 
 /** Rellena `c` con lo que valen los knobs AHORA. */

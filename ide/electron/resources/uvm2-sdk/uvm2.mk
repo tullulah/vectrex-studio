@@ -130,6 +130,15 @@ $(warning uvm2: no encuentro $(UVM2_ROMSET_DIR)/$(UVM2_ROMSET_NAME) — el buffe
 else
 UVM2_ROMZIP_MAX := $(shell echo $$(( ($$(wc -c < '$(UVM2_ROMSET_ZIP)') / 1024 + 2) * 1024 )))
 UVM2_CFLAGS += -DUVM2_ROMZIP_MAX=$(UVM2_ROMZIP_MAX)
+# Y EL BUFFER, EN LA PSRAM. Son 23 KB de SRAM ocupados TODA la partida por algo que solo se
+# usa al arrancar: se lee de la tarjeta, se descomprime en las tablas de ROM del juego, y no
+# vuelve a hacer falta. uvm2_romzip.c ya lo soportaba —y su comentario decia "en dkong eso es
+# mas de lo que le queda libre"— pero NADIE definia el simbolo: estaba en una cache de build
+# vieja (build_uvm2_pio/CMakeCache.txt lo lleva) y se perdio por el camino.
+#
+# Aqui la PSRAM esta en su mejor caso: se escribe una vez y se lee una vez, sin nada que
+# dependa del tiempo — justo lo contrario de la lista de comandos, que por eso no se mueve.
+UVM2_CFLAGS += -DUVM2_ROMZIP_IN_PSRAM=1
 endif
 endif
 
