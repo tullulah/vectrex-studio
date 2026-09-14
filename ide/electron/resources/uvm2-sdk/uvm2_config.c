@@ -111,9 +111,20 @@ static int lee_entero(const char *s, int32_t *out)
 
 static int cargar_de_sd(struct uvm2_config *c)
 {
-    static unsigned char buf[512];
-    uint32_t n = uvm2_sd_leer(RUTA_SD, buf, sizeof buf - 1);
-    if (n == 0 || n >= sizeof buf) return 0;
+    /* LOS DOS EXTREMOS DE ESTE FICHERO SE CONTRADECIAN, Y NO HABIA TAMAÑO QUE LOS CONTENTARA.
+     *
+     * `uvm2_sd_sobrescribir` reescribe el SECTOR entero y exige que el fichero mida 512 o
+     * mas (uvm2_sd.c:547). Esto pedia `uvm2_sd_leer(..., 511)`, y ESE lector falla si el
+     * fichero no cabe ENTERO en el maximo — su semantica es la del cargador de romsets, "un
+     * romset a medias no es un romset". Con 512 el escritor lo acepta y el lector lo tira;
+     * con 511, al reves. Guardaba bien y no cargaba nunca, que es lo que se vio en consola.
+     *
+     * `uvm2_sd_leer_desde` es el lector por TROZOS y no tiene esa regla: lee lo que quepa
+     * desde el offset que se le pida. Aqui solo interesa el primer sector, que es
+     * exactamente lo que el escritor toca. */
+    static unsigned char buf[520];
+    uint32_t n = uvm2_sd_leer_desde(RUTA_SD, buf, 512, 0);
+    if (n == 0) return 0;
     buf[n] = 0;
     int visto = 0;
     for (unsigned char *p = buf; *p; ) {
