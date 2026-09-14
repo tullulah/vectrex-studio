@@ -213,12 +213,19 @@ int uvm2_config_asistente_con(void (*figura)(void))
         }
 
         if (nuevo & 0x08) {               /* boton 4: guardar y salir */
-            /* PARAR CORE 1 ANTES DE TOCAR LA FLASH. `uvm2_config_guardar` lo exige y no lo
-             * hace por su cuenta: borrar flash cuelga a cualquier nucleo que ejecute desde
-             * XIP, y el ejecutor de la lista vive ahi. */
-            uvm2_core1_stop();
+            /* AQUI NO SE PARA CORE 1, Y ESTE COMENTARIO ESTABA MINTIENDO.
+             *
+             * Decia "parar core 1 antes de tocar la flash", y era cierto cuando
+             * `uvm2_config_guardar` escribia en flash. Ya no: ese camino esta desactivado
+             * (`guardar_en_flash_NO_USAR`, y la razon esta ahi) y ahora escribe en la SD.
+             * El comentario se quedo y la llamada tambien.
+             *
+             * Y no es inofensivo: `uvm2_frame_end` tiene la UNICA espera de core 0
+             * —`while (uvm2_frame_done - (s_frame_no-1) < 0)`— y quien avanza ese contador
+             * es core 1. Reseteandolo, core 0 se queda ahi para siempre. Colgo dkong en
+             * consola el 2026-09-14; por SWD, pc clavado en uvm2_draw.c:2757 en tres
+             * muestras, y la pantalla NO en negro porque core 1 repetia la ultima lista. */
             guardado = uvm2_config_guardar();
-            uvm2_core1_start();
             break;
         }
     }
