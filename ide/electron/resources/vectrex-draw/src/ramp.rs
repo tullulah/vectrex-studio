@@ -25,6 +25,31 @@ use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 #[no_mangle]
 pub static DRAW_SCALE: AtomicU32 = AtomicU32::new(0xA0);
 
+/// AJUSTE FINO DE LAS TASAS NEGATIVAS, POR EJE, EN 1/256.
+///
+/// El DAC no se desvia igual en `+k` que en `-k`: son patrones de bits distintos, y eso ya
+/// esta medido en este proyecto — el error depende del VALOR, no de la distancia. En un
+/// trazo donde los dos ejes piden el MISMO numero (una diagonal a 45 grados hacia el noreste)
+/// la desviacion es la misma en los dos y la direccion sale limpia; donde piden numeros
+/// OPUESTOS (la diagonal noroeste-sureste) `|vx|` y `|vy|` dejan de ser iguales de verdad, la
+/// ida y la vuelta se inclinan en sentidos contrarios y se ven DOS lineas.
+///
+/// Daniel lo vio asi en la estrella de calibracion: con el cero ajustado cierran siete
+/// brazos, los cuatro rectos y la diagonal noreste-suroeste, y queda abierta SOLO la
+/// noroeste-sureste. Eso no lo arregla ningun cero —mueve los dos ejes a la vez— ni ninguna
+/// escala —`abs()`, simetrica—: pide corregir el signo.
+///
+/// `v' = v * (256 + k) / 256` para v < 0. Con k = 0 no hace nada, que es el defecto.
+#[no_mangle]
+pub static TASA_NEG_X: AtomicI32 = AtomicI32::new(0);
+#[no_mangle]
+pub static TASA_NEG_Y: AtomicI32 = AtomicI32::new(0);
+
+fn trim_neg(v: i32, k: i32) -> i32 {
+    if v >= 0 || k == 0 { return v; }
+    (v * (256 + k) / 256).clamp(-128, 127)
+}
+
 /// El valor actual. Se lee una vez por vector, no en bucle cerrado.
 ///
 /// CON RAMPA FIJA, LA ESCALA ES LA DURACION. La distancia es `vx*t1/s`, asi que solo con
@@ -314,8 +339,10 @@ fn salto_tiempo_fijo(dx: i8, dy: i8, fijo: i32) -> (i8, i8, u16) {
         let n = num as i64 * 256;
         (if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den }) as i32
     };
-    let vx = round_div(dx as i32 * s).clamp(-128, 127) as i8;
-    let vy = round_div(dy as i32 * s).clamp(-128, 127) as i8;
+    let vx = trim_neg(round_div(dx as i32 * s).clamp(-128, 127),
+                      TASA_NEG_X.load(Ordering::Relaxed)) as i8;
+    let vy = trim_neg(round_div(dy as i32 * s).clamp(-128, 127),
+                      TASA_NEG_Y.load(Ordering::Relaxed)) as i8;
     (vx, vy, t1 as u16)
 }
 
@@ -592,8 +619,10 @@ fn ramp_params_q(dx: i32, dy: i32, vcap_in: u32, q: u32) -> (i8, i8, u16) {
         let n = num as i64 * 256;
         (if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den }) as i32
     };
-    let vx = round_div(dx * s / f).clamp(-128, 127) as i8;
-    let vy = round_div(dy * s / f).clamp(-128, 127) as i8;
+    let vx = trim_neg(round_div(dx * s / f).clamp(-128, 127),
+                      TASA_NEG_X.load(Ordering::Relaxed)) as i8;
+    let vy = trim_neg(round_div(dy * s / f).clamp(-128, 127),
+                      TASA_NEG_Y.load(Ordering::Relaxed)) as i8;
     // Y AHORA SI, EL RETARDO DE ARRANQUE. Con `vx` ya elegido, alargar la rampa en T hace
     // que el haz recorra `vx*(t1+T)/s` — mas de lo pedido, que es justo la distancia que
     // pierde mientras coge velocidad. Es un TIEMPO, asi que pesa mas en los trazos cortos:

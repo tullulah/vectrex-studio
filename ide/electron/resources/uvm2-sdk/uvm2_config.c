@@ -9,6 +9,7 @@
 
 /* Los knobs del modelo viven en Rust y salen como simbolos; los del SDK, aqui. */
 extern volatile uint32_t DRAW_SCALE, T1_EXTRA_Q8;
+extern volatile int32_t  TASA_NEG_X, TASA_NEG_Y;   /* vectrex-draw, ver uvm2_config.h */
 extern volatile int32_t  uvm2_cero_offset;
 void uvm2_draw_intensity(int brightness);
 
@@ -32,7 +33,8 @@ static uint32_t suma_de(const struct uvm2_config *c)
 {
     return (uint32_t)c->escala * 2654435761u ^ (uint32_t)c->fijo_q8 * 40503u
          ^ (uint32_t)c->cero  * 2246822519u ^ (uint32_t)c->brillo * 374761393u
-         ^ (uint32_t)c->hold_y_min * 668265263u ^ (uint32_t)c->hold_y_max * 3266489917u;
+         ^ (uint32_t)c->hold_y_min * 668265263u ^ (uint32_t)c->hold_y_max * 3266489917u
+         ^ (uint32_t)c->tasa_neg_x * 2654435769u ^ (uint32_t)c->tasa_neg_y * 40499u;
 }
 
 void uvm2_config_actual(struct uvm2_config *c)
@@ -43,6 +45,8 @@ void uvm2_config_actual(struct uvm2_config *c)
     c->brillo  = uvm2_draw_intensity_actual();
     c->hold_y_min = uvm2_hold_y_min;
     c->hold_y_max = uvm2_hold_y_max;
+    c->tasa_neg_x = TASA_NEG_X;
+    c->tasa_neg_y = TASA_NEG_Y;
 }
 
 void uvm2_config_aplicar(const struct uvm2_config *c)
@@ -57,6 +61,9 @@ void uvm2_config_aplicar(const struct uvm2_config *c)
      * una-cadena-de-contrato-invisible, y aqui se ve venir. */
     if (c->hold_y_min > 0) uvm2_hold_y_min = c->hold_y_min;
     if (c->hold_y_max > 0) uvm2_hold_y_max = c->hold_y_max;
+    /* Estos SI pueden ser cero: cero es "sin correccion", que es el defecto honesto. */
+    TASA_NEG_X = c->tasa_neg_x;
+    TASA_NEG_Y = c->tasa_neg_y;
 }
 
 /* ── EL FICHERO DE TEXTO DE LA SD ────────────────────────────────────────────────────
@@ -99,6 +106,8 @@ static int cargar_de_sd(struct uvm2_config *c)
         else if (!strcmp((char *)ln, "brillo"))  { c->brillo  = x; visto = 1; }
         else if (!strcmp((char *)ln, "hold_y_min")) { c->hold_y_min = x; visto = 1; }
         else if (!strcmp((char *)ln, "hold_y_max")) { c->hold_y_max = x; visto = 1; }
+        else if (!strcmp((char *)ln, "tasa_neg_x")) { c->tasa_neg_x = x; visto = 1; }
+        else if (!strcmp((char *)ln, "tasa_neg_y")) { c->tasa_neg_y = x; visto = 1; }
     }
     return visto;
 }
@@ -185,6 +194,8 @@ int uvm2_config_guardar(void)
     p += pon_campo(txt + p, "brillo",  c.brillo);
     p += pon_campo(txt + p, "hold_y_min", c.hold_y_min);
     p += pon_campo(txt + p, "hold_y_max", c.hold_y_max);
+    p += pon_campo(txt + p, "tasa_neg_x", c.tasa_neg_x);
+    p += pon_campo(txt + p, "tasa_neg_y", c.tasa_neg_y);
     if (uvm2_sd_sobrescribir(RUTA_SD, (const unsigned char *)txt, (uint32_t)p)) return 1;
     if (uvm2_sd_error != UVM2_SD_NO_ESTA && uvm2_sd_error != UVM2_SD_NO_CABE) return 0;
     return uvm2_sd_crear(RUTA_SD, (const unsigned char *)txt, (uint32_t)p);

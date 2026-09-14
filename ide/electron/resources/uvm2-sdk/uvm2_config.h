@@ -51,6 +51,12 @@ struct uvm2_config {
      * PiTrex calibra cuatro tiempos de retencion por lo mismo. Defecto 4 y 15. */
     int32_t hold_y_min;
     int32_t hold_y_max;
+    /* AJUSTE FINO DE LAS TASAS NEGATIVAS, por eje, en 1/256. El DAC no se desvia igual en
+     * +k que en -k, asi que una diagonal donde los dos ejes piden numeros OPUESTOS no sale
+     * a 45 grados y la ida y la vuelta se separan. Ni el cero (mueve los dos ejes a la vez)
+     * ni la escala (simetrica) lo alcanzan. Ver TASA_NEG_X/Y en vectrex-draw. Defecto 0. */
+    int32_t tasa_neg_x;
+    int32_t tasa_neg_y;
 };
 
 /** Rellena `c` con lo que valen los knobs AHORA. */
