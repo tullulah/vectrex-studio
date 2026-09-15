@@ -38,12 +38,12 @@ extern "C" {
 #endif
 
 struct uvm2_config {
-    int32_t escala;      /* DRAW_SCALE: el divisor. MAS grande = trazos MAS cortos. */
-    int32_t fijo_q8;     /* T1_EXTRA_Q8: la duracion REAL de la rampa, en 1/256 de cuenta.
+    int32_t scale;      /* DRAW_SCALE: el divisor. MAS grande = trazos MAS cortos. */
+    int32_t t1_tail_q8;     /* T1_EXTRA_Q8: la duracion REAL de la rampa, en 1/256 de cuenta.
                           * El 6522 cuenta t1 + 1,5 en un disparo, asi que el valor honesto
                           * no es 0; se mide cerrando un poligono de trazos cortos. */
-    int32_t cero;        /* uvm2_cero_offset: el valor que se ceba en la referencia de cero. */
-    int32_t brillo;      /* Z por defecto, 0..127. */
+    int32_t zero;        /* uvm2_cero_offset: el valor que se ceba en la referencia de cero. */
+    int32_t bright;      /* Z por defecto, 0..127. */
     /* MUESTREO DE LA RETENCION DE Y, en ciclos de E: el minimo para un salto diminuto y el
      * tope para uno de fondo de escala. Es de la CONSOLA —el condensador es C304 y su Ron
      * es el del 4052 que lleve dentro— y es el unico de los tres canales que cambia
@@ -55,16 +55,21 @@ struct uvm2_config {
      * +k que en -k, asi que una diagonal donde los dos ejes piden numeros OPUESTOS no sale
      * a 45 grados y la ida y la vuelta se separan. Ni el cero (mueve los dos ejes a la vez)
      * ni la escala (simetrica) lo alcanzan. Ver TASA_NEG_X/Y en vectrex-draw. Defecto 0. */
-    int32_t tasa_neg_x;
-    int32_t tasa_neg_y;
+    int32_t neg_rate_x;
+    int32_t neg_rate_y;
     /* DERIVA POR SALTO, por eje, en 1/256. El haz no acaba donde se le manda y el error se
      * acumula salto a salto: sin compensar, una columna de lineas pedidas en la MISMA x sale
      * en cascada hacia un lado. Medido en consola el 2026-08-12 con hardware/uvm2/drift:
      * X -16/256 y Y -112/256, siete veces mas en Y porque Y pasa por el sample-and-hold y X
      * va directa al DAC. Defecto 0 = sin compensar. */
-    int32_t deriva_x;
-    int32_t deriva_y;
+    int32_t drift_x;
+    int32_t drift_y;
+    /* DOS AJUSTES DEL JUEGO, no del haz. Van en el mismo fichero porque es el que ya se lee
+     * y se guarda; un fichero viejo sin estas lineas se queda con los valores de serie. */
+    int32_t hz;          /* refresco tope: 50 o 60 (la red), o 0 = a tope, sin enganche. */
+    int32_t start_menu;    /* 1 = menu al encender; 0 = directo al juego (boton 4 fuerza el menu) */
 };
+extern volatile int32_t uvm2_ajuste_hz, uvm2_ajuste_menu;
 
 /** Rellena `c` con lo que valen los knobs AHORA. */
 void uvm2_config_actual(struct uvm2_config *c);

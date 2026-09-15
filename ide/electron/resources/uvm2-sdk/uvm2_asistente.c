@@ -7,8 +7,8 @@
  * lo mismo, cualquier diferencia entre ellos es del NUMERO de trazos y no de la longitud, y
  * eso separa los dos terminos del error:
  *
- *     se abre el de 40 y el de 4 no   -> es el termino FIJO por trazo   (fijo_q8)
- *     se abren los dos en proporcion  -> es la ESCALA                   (escala)
+ *     se abre el de 40 y el de 4 no   -> es el termino FIJO por trazo   (t1_tail_q8)
+ *     se abren los dos en proporcion  -> es la ESCALA                   (scale)
  *
  * Un poligono cerrado que se abre acumula N veces la perdida fija; un error de escala lo
  * haria mas pequeño pero seguiria cerrado. Por eso el VecFever tiene una pantalla para
@@ -132,13 +132,13 @@ int uvm2_config_asistente_con(void (*figura)(void))
      * ("separate ones for vectors and text"), y no dos terminos de un modelo de error como
      * yo habia supuesto.
      *
-     * `escala` y `fijo_q8` se quedan porque son knobs REALES del dibujo, pero al final: no
+     * `scale` y `t1_tail_q8` se quedan porque son knobs REALES del dibujo, pero al final: no
      * son lo que calibra una consola. */
     struct campo campos[] = {
-        { "CERO",    &c.cero,       0, 255, 1 },
-        { "BRILLO",  &c.brillo,     0, 127, 1 },
-        { "ESCALA",  &c.escala,   80, 400, 1 },
-        { "FIJO",    &c.fijo_q8, -512, 512, 8 },
+        { "CERO",    &c.zero,       0, 255, 1 },
+        { "BRILLO",  &c.bright,     0, 127, 1 },
+        { "ESCALA",  &c.scale,   80, 400, 1 },
+        { "FIJO",    &c.t1_tail_q8, -512, 512, 8 },
     };
     const int n = (int)(sizeof campos / sizeof campos[0]);
     int sel = 0, guardado = 0;
@@ -150,7 +150,7 @@ int uvm2_config_asistente_con(void (*figura)(void))
     for (;;) {
         uvm2_config_aplicar(&c);          /* se ve el efecto MIENTRAS se mueve */
         uvm2_frame_begin();
-        uvm2_draw_intensity(c.brillo);
+        uvm2_draw_intensity(c.bright);
 
         if (figura) {
             figura();                     /* la del juego, ver arriba */
@@ -177,7 +177,7 @@ int uvm2_config_asistente_con(void (*figura)(void))
             do { d[k++] = (char)('0' + v % 10); v /= 10; } while (v && k < 7);
             while (k) linea[p++] = d[--k];
             linea[p] = 0;
-            uvm2_print_text(-112, -18 - i * 26, linea, TEXTO, c.brillo);
+            uvm2_print_text(-112, -18 - i * 26, linea, TEXTO, c.bright);
         }
         uvm2_frame_end();
 

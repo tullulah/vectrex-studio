@@ -40,11 +40,13 @@ struct guardado { uint32_t firma; struct uvm2_config c; uint32_t suma; };
  * El orden es el del fichero de texto y el del struct; el offset lo pone el compilador. */
 #define CAMPO(n) { #n, (uint16_t)((unsigned char *)&((struct uvm2_config *)0)->n - (unsigned char *)0) }
 static const struct { const char *n; uint16_t off; } CAMPOS[] = {
-    CAMPO(escala), CAMPO(fijo_q8), CAMPO(cero), CAMPO(brillo),
+    CAMPO(scale), CAMPO(t1_tail_q8), CAMPO(zero), CAMPO(bright),
     CAMPO(hold_y_min), CAMPO(hold_y_max),
-    CAMPO(tasa_neg_x), CAMPO(tasa_neg_y),
-    CAMPO(deriva_x), CAMPO(deriva_y),
+    CAMPO(neg_rate_x), CAMPO(neg_rate_y),
+    CAMPO(drift_x), CAMPO(drift_y),
+    CAMPO(hz), CAMPO(start_menu),
 };
+volatile int32_t uvm2_ajuste_hz = 50, uvm2_ajuste_menu = 1;
 #define N_CAMPOS ((int)(sizeof CAMPOS / sizeof CAMPOS[0]))
 static int32_t *campo_de(struct uvm2_config *c, int i)
 {
@@ -64,24 +66,26 @@ static uint32_t suma_de(const struct uvm2_config *c)
 
 void uvm2_config_actual(struct uvm2_config *c)
 {
-    c->escala  = (int32_t)DRAW_SCALE;
-    c->fijo_q8 = (int32_t)T1_EXTRA_Q8;
-    c->cero    = uvm2_cero_offset;
-    c->brillo  = uvm2_draw_intensity_actual();
+    c->scale  = (int32_t)DRAW_SCALE;
+    c->t1_tail_q8 = (int32_t)T1_EXTRA_Q8;
+    c->zero    = uvm2_cero_offset;
+    c->bright  = uvm2_draw_intensity_actual();
     c->hold_y_min = uvm2_hold_y_min;
     c->hold_y_max = uvm2_hold_y_max;
-    c->tasa_neg_x = TASA_NEG_X;
-    c->tasa_neg_y = TASA_NEG_Y;
-    c->deriva_x = uvm2_drift_x;
-    c->deriva_y = uvm2_drift_y;
+    c->neg_rate_x = TASA_NEG_X;
+    c->neg_rate_y = TASA_NEG_Y;
+    c->drift_x = uvm2_drift_x;
+    c->drift_y = uvm2_drift_y;
+    c->hz       = uvm2_ajuste_hz;
+    c->start_menu = uvm2_ajuste_menu;
 }
 
 void uvm2_config_aplicar(const struct uvm2_config *c)
 {
-    if (c->escala > 0)  DRAW_SCALE  = (uint32_t)c->escala;
-    T1_EXTRA_Q8     = (uint32_t)c->fijo_q8;
-    uvm2_cero_offset = c->cero;
-    if (c->brillo >= 0) uvm2_draw_intensity(c->brillo);
+    if (c->scale > 0)  DRAW_SCALE  = (uint32_t)c->scale;
+    T1_EXTRA_Q8     = (uint32_t)c->t1_tail_q8;
+    uvm2_cero_offset = c->zero;
+    if (c->bright >= 0) uvm2_draw_intensity(c->bright);
     /* UN CERO AQUI ES "el fichero es viejo", no "sin retencion". Una calibracion guardada
      * antes de que estos dos campos existieran los trae a cero, y muestrear cero ciclos
      * dejaria la Y sin cargar: se ignoran y se quedan los de siempre. Es la trampa de
@@ -89,10 +93,12 @@ void uvm2_config_aplicar(const struct uvm2_config *c)
     if (c->hold_y_min > 0) uvm2_hold_y_min = c->hold_y_min;
     if (c->hold_y_max > 0) uvm2_hold_y_max = c->hold_y_max;
     /* Estos SI pueden ser cero: cero es "sin correccion", que es el defecto honesto. */
-    TASA_NEG_X = c->tasa_neg_x;
-    TASA_NEG_Y = c->tasa_neg_y;
-    uvm2_drift_x = c->deriva_x;
-    uvm2_drift_y = c->deriva_y;
+    TASA_NEG_X = c->neg_rate_x;
+    TASA_NEG_Y = c->neg_rate_y;
+    uvm2_drift_x = c->drift_x;
+    uvm2_drift_y = c->drift_y;
+    uvm2_ajuste_hz   = (c->hz == 60) ? 60 : (c->hz == 0) ? 0 : 50;   /* 50, 60 o 0 = a tope (sin enganche) */
+    uvm2_ajuste_menu = c->start_menu ? 1 : 0;
 }
 
 /* ── EL FICHERO DE TEXTO DE LA SD ────────────────────────────────────────────────────
