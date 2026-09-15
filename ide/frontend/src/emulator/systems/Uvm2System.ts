@@ -328,6 +328,7 @@ export class Uvm2System implements ISystem, IBus {
   private sdImagen: Uint8Array | null = null;
   private sdHwInitAddr = 0;
   private sdHwReadBlockAddr = 0;
+  private sdHwWriteBlockAddr = 0;
   private qmiCsr = 0;
   private qmiCs1 = false;
   private qmiCmd: number[] = [];
@@ -507,6 +508,18 @@ export class Uvm2System implements ISystem, IBus {
     cpu.setReg(0, this.sdImagen ? (1 | 2 | 4) : 0);   // presente, inicializada, SDHC (lba)
     cpu.setReg(15, cpu.getReg(14) & ~1);
   }
+  /* sd_hw_write_block(lba, sdhc, buf): escribe en la imagen en memoria (no en el disco). */
+  private atiendeSdHwWriteBlock(cpu: Thumb2): void {
+    const lba = cpu.getReg(0) >>> 0, buf = cpu.getReg(2) >>> 0;
+    let ok = 0;
+    if (this.sdImagen && (lba + 1) * 512 <= this.sdImagen.length) {
+      for (let i = 0; i < 512; i++) this.sdImagen[lba * 512 + i] = this.read8((buf + i) >>> 0);
+      ok = 1;
+      console.log(`[Uvm2System] SD ESCRITO bloque ${lba} (en la imagen en memoria)`);
+    }
+    cpu.setReg(0, ok);
+    cpu.setReg(15, cpu.getReg(14) & ~1);
+  }
   private atiendeSdHwReadBlock(cpu: Thumb2): void {
     const lba = cpu.getReg(0) >>> 0, buf = cpu.getReg(2) >>> 0;
     let ok = 0;
@@ -659,6 +672,7 @@ export class Uvm2System implements ISystem, IBus {
      * BIOS, asi que el origen PIO/SIO no separaba el dibujo. */
     this.execAddr = (sim.get('uvm2_exec') ?? 0) & ~1;
     this.sdHwReadBlockAddr = (sim.get('sd_hw_read_block') ?? 0) & ~1;
+    this.sdHwWriteBlockAddr = (sim.get('sd_hw_write_block') ?? 0) & ~1;
     console.log(`[Uvm2System] simbolos: uvm2_sd_leer=0x${this.sdLeerAddr.toString(16)} ` +
                 `uvm2_sd_error=0x${this.sdErrorAddr.toString(16)}`);
   }
@@ -864,6 +878,7 @@ export class Uvm2System implements ISystem, IBus {
     else if (this.execVuelta[1] && pc1 === this.execVuelta[1]) { this.execVuelta[1] = 0; this.enLista--; }
     if (this.sdHwInitAddr && pc1 === this.sdHwInitAddr) { this.atiendeSdHwInit(this.cpu1); return 1; }
     if (this.sdHwReadBlockAddr && pc1 === this.sdHwReadBlockAddr) { this.atiendeSdHwReadBlock(this.cpu1); return 1; }
+    if (this.sdHwWriteBlockAddr && pc1 === this.sdHwWriteBlockAddr) { this.atiendeSdHwWriteBlock(this.cpu1); return 1; }
     /* En la BIOS, core 1 salta al JUEGO, que vive en PSRAM: que lo busque alli deprisa. */
     if (psramOff(pc1) >= 0 && this.cpu1FetchEnSram) {
       this.cpu1.setFetchRegion(this.psram, PSRAM_BASE); this.cpu1FetchEnSram = false;
@@ -1592,6 +1607,7 @@ export class Uvm2System implements ISystem, IBus {
       else if (this.execVuelta[0] && pc === this.execVuelta[0]) { this.execVuelta[0] = 0; this.enLista--; }
       if (this.sdHwInitAddr && pc === this.sdHwInitAddr) { this.atiendeSdHwInit(this.cpu); continue; }
       if (this.sdHwReadBlockAddr && pc === this.sdHwReadBlockAddr) { this.atiendeSdHwReadBlock(this.cpu); continue; }
+      if (this.sdHwWriteBlockAddr && pc === this.sdHwWriteBlockAddr) { this.atiendeSdHwWriteBlock(this.cpu); continue; }
       /* Mirar y dejar pasar: no se atrapa la llamada, solo se le hace la foto. */
       if (this.frameBeginAddr && pc === this.frameBeginAddr && this.statsAddr) {
         this.ciclosDeBus    = this.read32(this.statsAddr + 4);   // bus_cycles
