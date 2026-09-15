@@ -86,188 +86,76 @@ static int s_beam_x = 0, s_beam_y = 0;
  * than eight dark stretches is beyond what one ramp should be asked to draw. */
 #define DC_GAPS_MAX 8
 #ifdef VPY_DUAL_CORE
-struct dc_cmd  { unsigned char op; signed char a; signed char b; unsigned char _pad; };
-struct dc_ctrl {
-    volatile unsigned char  state[2];  /* 0=FREE (game may write), 1=SEALED (core 0 draws) */
-    unsigned char           _p0[2];
-    volatile unsigned short count[2];  /* # commands in each buffer */
-    volatile unsigned int   axes;      /* SYS_READ_AXES snapshot, published by core 0 */
-    volatile unsigned int   buttons;   /* SYS_READ_BUTTONS snapshot (P1 bits 0-3) */
-    /* LA CALIBRACION DE LA CONSOLA, COMPARTIDA CON LA BIOS. La BIOS publica aqui lo que
-     * vale ahora (uvm2_config_actual, al lanzar y tras cada aplicar/guardar) y el juego la
-     * lee/escribe con la misma API que en la .um2 (uvm2_config_actual/aplicar/guardar,
-     * uvm2_refresco): las tres ops de abajo le dicen a la BIOS que la aplique, la guarde o
-     * cambie el tope de refresco. Es lo que hace que el menu de dkong tenga CALIBRATE /
-     * REFRESH / START IN MENU tambien en este cartucho. Campos en el orden de
-     * `struct uvm2_config` (uvm2_config.h), como int32 crudos: mismo layout en Rust. */
-    volatile unsigned int   cfg_ver;   /* la BIOS lo incrementa cada vez que publica */
-    volatile int            guardado;  /* resultado del ultimo guardar: 1 ok, 0 fallo */
-    volatile int            cfg[16];
-};
-/* MUST match the firmware dc.rs. 4096 cmds (was 1024): DK's title/intro emit
- * >1024 beam ops; the overflow was dropped, and vk_render draws text/logo LAST,
- * so the title/letters vanished. Buffers moved down into the game-stack gap. */
-#define DC_CTRL   ((struct dc_ctrl *)0x20076F00u)
-#define DC_BUF0   ((struct dc_cmd  *)0x20077000u)
-#define DC_BUF1   ((struct dc_cmd  *)0x2007B000u)
-#define DC_CMDS_MAX 4096
-#define DC_FREE 0
-#define DC_SEALED 1
-#define DC_OP_ZERO 0
-#define DC_OP_INTENSITY 1
-#define DC_OP_MOVE 2
-#define DC_OP_DRAW 3
-#define DC_OP_RASTER 4   /* header cmd: a=x, b=y, _pad=len; then ceil(len/4) cmds
-                          * of raw string bytes. core 0 draws it with the BIOS
-                          * shift-register raster font (one sweep per pixel row). */
-#define DC_OP_PSG 6      /* a=register, b=value. THE DUAL-CORE GAME HAS NO OTHER WAY TO
-                          * MAKE A SOUND. v_writePSG used to svc unconditionally, and the
-                          * firmware's own note says it plainly: "the dual-core game never
-                          * svc's" (dc.rs). So the write went nowhere and the cartridge was
-                          * silent — not a broken note, no path at all. It cannot be done
-                          * directly either: core 0 owns the bus while it draws, and two
-                          * writers on the VIA with no arbitration is the fault that shipped
-                          * once already. It travels in the queue like everything else. */
-/* LAS DOS OPS EN CUARTOS DE UNIDAD, para que la BIOS reciba EXACTAMENTE lo que en la .um2
- * recibe uvm2_draw.c: v_directDraw32 en la UVM2 es intensity + move_abs_q4 + delta_q4, sin
- * redondear a i8 ni fusionar tramos (esa es la rama UVM2_SUBUNIDAD de abajo). Con el anillo
- * en i8 la lista de la BIOS salia distinta de la de la .um2 (632 rampas contra 617, y mas
- * pinzas de cero por la cadencia VPY_MAX_CONSECUTIVE_DRAWS) — y el objetivo es que salga
- * IGUAL, que se mide en el emulador (VIADUMP de las dos). 12 bits con signo por eje: a =
- * x[7:0], b = y[7:0], _pad = x[11:8] | y[11:8] << 4. VS_Q4(±16129) = ±2032, cabe. */
-#define DC_OP_MOVE_ABS_Q4 7
-#define DC_OP_DELTA_Q4    8
-#define DC_OP_REFRESCO        9   /* a = hz & 0xFF, b = hz >> 8 (0 = a tope) */
-#define DC_OP_CONFIG_APLICAR 10   /* la BIOS aplica DC_CTRL->cfg */
-#define DC_OP_CONFIG_GUARDAR 11   /* ... y la guarda; resultado en DC_CTRL->guardado */
-#define DC_OP_DRAW_GAPPED 5 /* ONE STRAIGHT LINE WITH GAPS, IN A SINGLE RAMP. Header:
-                          * a=dx, b=dy, _pad = gap count; then ceil(n*2/4) commands holding
-                          * the (start,end) pairs as 0..255 fractions of the run.
-                          *
-                          * Why it exists: splitting a line into pieces costs one operation
-                          * per piece — two DACs, the T1 count, open and close the ramp,
-                          * about 40 us — and the beam's velocity is set by the DACs, so as
-                          * long as they are left alone the beam keeps travelling THE SAME
-                          * LINE. All that changes along the way is BLANK. Measured on
-                          * Donkey Kong's 25m: 26 collinear runs merging 55 operations,
-                          * ~2.2 ms out of an 18.5 ms frame.
-                          *
-                          * Same shape as RASTER on purpose: header plus data in the
-                          * following commands, a pattern already proven in this queue. */
-static int s_dc_w = 0;   /* current write buffer (0/1) */
-static int s_dc_n = 0;   /* commands recorded into it so far */
-static inline void dc_push(unsigned char op, signed char a, signed char b) {
-    if (s_dc_n < DC_CMDS_MAX) {
-        struct dc_cmd *buf = s_dc_w ? DC_BUF1 : DC_BUF0;
-        buf[s_dc_n].op = op; buf[s_dc_n].a = a; buf[s_dc_n].b = b;
-        s_dc_n++;
-    }
-}
-/* Record a raster-text run: a header cmd (x,y,len) followed by the string bytes
- * packed 4 per cmd. core0_materialize replays it via the shift-register font. */
-/* The gapped line, pushed to the command queue. `gaps` are (start,end) pairs as
- * 0..255 fractions of the run; n is capped at DC_GAPS_MAX (hoisted above both transports,
- * since flush_frame builds the array before it knows which one it is talking to). */
-static inline void dc_push_q4(unsigned char op, int x, int y) {
-    if (s_dc_n < DC_CMDS_MAX) {
-        struct dc_cmd *buf = s_dc_w ? DC_BUF1 : DC_BUF0;
-        buf[s_dc_n].op = op;
-        buf[s_dc_n].a = (signed char)(x & 0xFF);
-        buf[s_dc_n].b = (signed char)(y & 0xFF);
-        buf[s_dc_n]._pad = (unsigned char)(((x >> 8) & 0x0F) | (((y >> 8) & 0x0F) << 4));
-        s_dc_n++;
-    }
-}
-#ifndef UVM2_PICO_RUNTIME
-/* LA API DE CONFIGURACION DEL SDK, PARA EL JUEGO DE ESTE CARTUCHO. En la .um2 la da
- * uvm2_config.c dentro de la imagen; aqui la BIOS es la que tiene el SDK, y el juego habla
- * con ella por DC_CTRL->cfg y tres ops del anillo. Misma firma que uvm2_config.h. */
+/* EL MODELO DE LA UVM2 EN EL CARTUCHO DE VECTREX STUDIO (2026-09-15). El juego corre en
+ * core 1 y construye la lista llamando al SDK que vive en la BIOS -las MISMAS funciones y
+ * los mismos enteros de 32 bits que uvm2_draw.c recibe en la .um2- a traves de una tabla
+ * de funciones que la BIOS publica en una direccion fija (uvm2c.rs, `Uvm2Api`). Core 0
+ * es el ejecutor (uvm2_core1.c): reproduce las listas por PIO+DMA, lee los mandos y vacia
+ * el PSG entre listas. Sin svc por vector y sin anillo de ops: lo que hubo aqui antes
+ * (DC_OP_*, deltas en i8 y luego en cuartos empaquetados) era una segunda codificacion y
+ * sus limites se veian (vigas de lado a lado invertidas). El orden de los campos es el
+ * contrato con la BIOS; solo se anade al final. */
 #include "uvm2_config.h"
+struct uvm2_api {
+    unsigned magic, version;
+    void (*draw_intensity)(int);
+    void (*draw_reset)(void);
+    void (*draw_move)(int, int);
+    void (*draw_delta)(int, int);
+    void (*draw_move_abs_q4)(int, int);
+    void (*draw_delta_q4)(int, int);
+    void (*draw_delta_patterned)(int, int, const unsigned char *, int);
+    void (*print_text)(int, int, const char *, int, int);
+    void (*wait_recal)(void);
+    unsigned (*read_buttons)(void);
+    unsigned (*read_axes)(void);
+    void (*psg_queue)(unsigned, unsigned);
+    void (*config_actual)(int32_t *);
+    void (*config_aplicar)(const int32_t *);
+    int  (*config_guardar)(void);
+    void (*refresco)(unsigned);
+};
+#define UVM2_API        ((const struct uvm2_api *)0x20077000u)
+#define UVM2_API_MAGIC  0x50415356u   /* 'VSAP' */
+#define BEAM_ZERO()       UVM2_API->draw_reset()
+#define BEAM_INTENSITY(b) UVM2_API->draw_intensity((int)(signed char)(b) & 0x7F)
+#define BEAM_MOVE(x,y)    UVM2_API->draw_move((int)(signed char)(x), (int)(signed char)(y))
+#define BEAM_DRAW(x,y)    UVM2_API->draw_delta((int)(signed char)(x), (int)(signed char)(y))
+#define BEAM_DELTA_ES_I8  1
+static void api_raster(int x, int y, const unsigned char *s, int n) {
+    char t[97]; int k = 0;
+    while (k < n && k < 96) { t[k] = (char)s[k]; k++; }
+    t[k] = 0;
+    UVM2_API->print_text(x, y, t, 1, 0x5F);   /* como SYS_RASTER_TEXT en uvm2_svc.c */
+}
+#define BEAM_RASTER(x,y,s,n) api_raster((x),(y),(s),(n))
+#define BEAM_DRAW_GAPPED(x,y,h,n) UVM2_API->draw_delta_patterned((int)(signed char)(x),(int)(signed char)(y),(h),(n))
+#ifndef HAS_GAPPED_RAMP
+#define HAS_GAPPED_RAMP 1
+#endif
+/* LA API DE CONFIGURACION DEL SDK, la misma firma que uvm2_config.h, sobre la tabla. */
 volatile int32_t uvm2_ajuste_hz = 50, uvm2_ajuste_menu = 1;
-static void dc_cfg_de(struct uvm2_config *c) {
-    const volatile int *v = DC_CTRL->cfg;
-    c->scale = v[0]; c->t1_tail_q8 = v[1]; c->zero = v[2]; c->bright = v[3];
-    c->hold_y_min = v[4]; c->hold_y_max = v[5]; c->neg_rate_x = v[6]; c->neg_rate_y = v[7];
-    c->drift_x = v[8]; c->drift_y = v[9]; c->hz = v[10]; c->start_menu = v[11];
-}
-static void dc_cfg_a(const struct uvm2_config *c) {
-    volatile int *v = DC_CTRL->cfg;
-    v[0] = c->scale; v[1] = c->t1_tail_q8; v[2] = c->zero; v[3] = c->bright;
-    v[4] = c->hold_y_min; v[5] = c->hold_y_max; v[6] = c->neg_rate_x; v[7] = c->neg_rate_y;
-    v[8] = c->drift_x; v[9] = c->drift_y; v[10] = c->hz; v[11] = c->start_menu;
-    __asm__ volatile("dmb 0xf" ::: "memory");
-}
 void uvm2_config_actual(struct uvm2_config *c) {
-    dc_cfg_de(c);
+    UVM2_API->config_actual((int32_t *)c);
     c->hz = uvm2_ajuste_hz; c->start_menu = uvm2_ajuste_menu;
 }
 void uvm2_config_aplicar(const struct uvm2_config *c) {
     uvm2_ajuste_hz = (c->hz == 60) ? 60 : (c->hz == 0) ? 0 : 50;
     uvm2_ajuste_menu = c->start_menu ? 1 : 0;
-    dc_cfg_a(c);
-    dc_push(DC_OP_CONFIG_APLICAR, 0, 0);
+    UVM2_API->config_aplicar((const int32_t *)c);
 }
-/* El guardado lo hace la BIOS al reproducir el frame, asi que lo que se devuelve es el
- * resultado del ULTIMO guardado completado (1 al arrancar): el asistente lo lee al salir,
- * y si la tarjeta no admite escritura lo ve en el siguiente intento. */
 int uvm2_config_guardar(void) {
-    struct uvm2_config c; dc_cfg_de(&c);
+    struct uvm2_config c; UVM2_API->config_actual((int32_t *)&c);
     c.hz = uvm2_ajuste_hz; c.start_menu = uvm2_ajuste_menu;
-    dc_cfg_a(&c);
-    dc_push(DC_OP_CONFIG_GUARDAR, 0, 0);
-    return DC_CTRL->guardado;
+    UVM2_API->config_aplicar((const int32_t *)&c);
+    return UVM2_API->config_guardar();
 }
-void uvm2_refresco(unsigned hz) { dc_push(DC_OP_REFRESCO, (signed char)(hz & 0xFF), (signed char)(hz >> 8)); }
+void uvm2_refresco(unsigned hz) { UVM2_API->refresco(hz); }
 /* Al arrancar el juego: los ajustes con los que la BIOS lo lanzo. */
 static void dc_cfg_init(void) {
-    uvm2_ajuste_hz = DC_CTRL->cfg[10]; uvm2_ajuste_menu = DC_CTRL->cfg[11];
+    struct uvm2_config c; UVM2_API->config_actual((int32_t *)&c);
+    uvm2_ajuste_hz = c.hz; uvm2_ajuste_menu = c.start_menu;
 }
-#endif
-static void dc_push_gapped(signed char dx, signed char dy, const unsigned char *gaps, int n) {
-    if (n < 0) n = 0;
-    if (n > DC_GAPS_MAX) n = DC_GAPS_MAX;
-    int ndata = (n * 2 + 3) / 4;
-    if (s_dc_n + 1 + ndata > DC_CMDS_MAX) return;
-    struct dc_cmd *buf = s_dc_w ? DC_BUF1 : DC_BUF0;
-    buf[s_dc_n].op = DC_OP_DRAW_GAPPED; buf[s_dc_n].a = dx; buf[s_dc_n].b = dy;
-    buf[s_dc_n]._pad = (unsigned char)n; s_dc_n++;
-    for (int i = 0; i < n * 2; i += 4) {
-        unsigned char *q = (unsigned char *)&buf[s_dc_n];
-        for (int k = 0; k < 4; k++) q[k] = (i + k < n * 2) ? gaps[i + k] : 0;
-        s_dc_n++;
-    }
-}
-
-static void dc_push_raster(signed char x, signed char y, const unsigned char *s, int len) {
-    if (len < 0) len = 0;
-    if (len > 255) len = 255;
-    int ndata = (len + 3) / 4;
-    if (s_dc_n + 1 + ndata > DC_CMDS_MAX) return;   /* no room this frame */
-    struct dc_cmd *buf = s_dc_w ? DC_BUF1 : DC_BUF0;
-    buf[s_dc_n].op = DC_OP_RASTER; buf[s_dc_n].a = x; buf[s_dc_n].b = y;
-    buf[s_dc_n]._pad = (unsigned char)len; s_dc_n++;
-    for (int i = 0; i < len; i += 4) {
-        unsigned char *p = (unsigned char *)&buf[s_dc_n];
-        p[0] = s[i];
-        p[1] = (i + 1 < len) ? s[i + 1] : 0;
-        p[2] = (i + 2 < len) ? s[i + 2] : 0;
-        p[3] = (i + 3 < len) ? s[i + 3] : 0;
-        s_dc_n++;
-    }
-}
-#define BEAM_ZERO()       dc_push(DC_OP_ZERO, 0, 0)
-#define BEAM_INTENSITY(b) dc_push(DC_OP_INTENSITY, (signed char)(b), 0)
-#define BEAM_MOVE(x,y)    dc_push(DC_OP_MOVE, (signed char)(x), (signed char)(y))
-#define BEAM_DRAW(x,y)    dc_push(DC_OP_DRAW, (signed char)(x), (signed char)(y))
-#define BEAM_DELTA_ES_I8  1   /* el comando lleva el delta en un byte con signo */
-#define BEAM_RASTER(x,y,s,n) dc_push_raster((signed char)(x),(signed char)(y),(s),(n))
-#define BEAM_DRAW_GAPPED(x,y,h,n) dc_push_gapped((signed char)(x),(signed char)(y),(h),(n))
-/* Overridable so the gapped ramp can be MEASURED: -DHAS_GAPPED_RAMP=0 falls back to one
- * stroke per piece, everything else identical, which is the only way to get a two-build
- * comparison with a single variable in it. */
-#ifndef HAS_GAPPED_RAMP
-#define HAS_GAPPED_RAMP 1
-#endif
 #else
 #define BEAM_ZERO()       sys_reset0ref()
 #define BEAM_INTENSITY(b) sys_set_intensity(b)
@@ -938,11 +826,10 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
     uvm2_cuenta_entrada++;   /* DIAGNOSTICO: cuantas llamadas de dibujo ENTRAN al SDK */
 #endif
 #ifdef VPY_DUAL_CORE
-    /* El cartucho propio: las mismas tres llamadas, pero grabadas en el anillo para que las
-     * haga la BIOS (dc.rs), que las pasa a uvm2_draw.c tal cual. */
-    BEAM_INTENSITY((signed char)b);
-    dc_push_q4(DC_OP_MOVE_ABS_Q4, VS_Q4(x0), VS_Q4(y0));
-    dc_push_q4(DC_OP_DELTA_Q4, VS_Q4(x1) - VS_Q4(x0), VS_Q4(y1) - VS_Q4(y0));
+    /* El cartucho propio: las mismas tres llamadas, al SDK de la BIOS por la tabla. */
+    UVM2_API->draw_intensity((int)b);
+    UVM2_API->draw_move_abs_q4(VS_Q4(x0), VS_Q4(y0));
+    UVM2_API->draw_delta_q4(VS_Q4(x1) - VS_Q4(x0), VS_Q4(y1) - VS_Q4(y0));
 #else
     uvm2_draw_intensity((int)b);
     uvm2_draw_move_abs_q4(VS_Q4(x0), VS_Q4(y0));
@@ -1024,17 +911,7 @@ void v_WaitRecal(void)
     flush_run();    /* push the frame's last pending merged run into the buffer  */
     flush_frame();  /* reorder the frame's strokes nearest-first, then emit them */
 #ifdef VPY_DUAL_CORE
-    /* Seal the frame we just recorded for core 0, then spin (in RAM, no svc/flash)
-     * until the OTHER buffer is free so we never overwrite one core 0 is drawing.
-     * Pipeline: core 0 draws buffer A while we record buffer B → frame = max(). */
-    DC_CTRL->count[s_dc_w] = (unsigned short)s_dc_n;
-    __asm__ volatile("dmb 0xf" ::: "memory");
-    DC_CTRL->state[s_dc_w] = DC_SEALED;
-    __asm__ volatile("sev" ::: "memory");           /* wake core 0 if it's waiting */
-    int n = 1 - s_dc_w;
-    while (DC_CTRL->state[n] != DC_FREE) { __asm__ volatile("" ::: "memory"); }
-    __asm__ volatile("dmb 0xf" ::: "memory");
-    s_dc_w = n; s_dc_n = 0;
+    UVM2_API->wait_recal();     /* cierra la lista, se la entrega al ejecutor, abre la siguiente */
 #else
     sys_wait_recal();
 #endif
@@ -1092,7 +969,7 @@ uint8_t v_readButtons(void)
      * reads bit N-1 of currentButtonState, so this maps 1:1. In dual-core, core 0
      * owns the bus and publishes the snapshot (no svc / bus access from core 1). */
 #ifdef VPY_DUAL_CORE
-    currentButtonState = (uint8_t)DC_CTRL->buttons;
+    currentButtonState = (uint8_t)UVM2_API->read_buttons();
 #else
     currentButtonState = (uint8_t)sys_read_buttons();
 #endif
@@ -1103,7 +980,7 @@ void v_readJoystick1Analog(void)
 {
     /* SYS_READ_AXES: (J1X<<24)|(J1Y<<16)|(J2X<<8)|J2Y, each a raw i8. */
 #ifdef VPY_DUAL_CORE
-    unsigned int a = DC_CTRL->axes;
+    unsigned int a = UVM2_API->read_axes();
 #else
     unsigned int a = (unsigned int)sys_read_axes();
 #endif
@@ -1125,7 +1002,7 @@ __attribute__((weak)) int8_t currentJoy2Y = 0;
 __attribute__((weak)) void v_readJoystick2Analog(void)
 {
 #ifdef VPY_DUAL_CORE
-    unsigned int a = DC_CTRL->axes;
+    unsigned int a = UVM2_API->read_axes();
 #else
     unsigned int a = (unsigned int)sys_read_axes();
 #endif
@@ -1136,7 +1013,7 @@ __attribute__((weak)) void v_readJoystick2Analog(void)
 void v_writePSG(uint8_t reg, uint8_t val)
 {
 #ifdef VPY_DUAL_CORE
-    dc_push(DC_OP_PSG, (signed char)reg, (signed char)val);
+    UVM2_API->psg_queue(reg, val);
 #else
     sys_psg_write(reg, val);
 #endif

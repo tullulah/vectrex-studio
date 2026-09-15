@@ -121,6 +121,7 @@ volatile uint32_t uvm2_cached_axes;
 /* Tiempo Vectrex no entregado aun al secuenciador, en ciclos de bus. */
 static uint32_t s_audio_acc;
 
+void uvm2_core1_hueco(void);   /* gancho por vuelta; debil, abajo */
 static void core1_main(void)
 {
     uint32_t served = 0;
@@ -226,6 +227,7 @@ static void core1_main(void)
         uint32_t t2 = time_us_32();
         uvm2_stats.us_input = t2 - t1;
         psg_drain();
+        uvm2_core1_hueco();
 #ifndef UVM2_NO_AUDIO
         /* Avanzar el secuenciador por TIEMPO VECTREX TRANSCURRIDO, no una vez por
          * frame. Es lo que hace el camino monocore, y por una razon medida: un
@@ -278,6 +280,13 @@ static void core1_main(void)
  * Borrar o programar flash cuelga a cualquier nucleo que ejecute o lea desde XIP, y aqui
  * vive el ejecutor de la lista. `multicore_reset_core1` lo deja parado de verdad; para
  * volver, `uvm2_core1_start`, que ya empieza reseteandolo. */
+/* LA BIOS DEL CARTUCHO PROPIO corre este mismo bucle EN CORE 0 (alli el programa va en
+ * core 1 y core 0 reproduce; es el espejo de la UVM2 con los nucleos cambiados). Se
+ * expone el bucle y un gancho por vuelta para lo que la BIOS hace entre listas ademas de
+ * los mandos y el PSG: su reproductor de musica y el trabajo de la SD. */
+__attribute__((weak)) void uvm2_core1_hueco(void) { }
+void uvm2_core1_bucle(void) { core1_main(); }
+
 void uvm2_core1_stop(void)
 {
     multicore_reset_core1();

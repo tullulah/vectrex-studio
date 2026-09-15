@@ -303,6 +303,7 @@ export class Uvm2System implements ISystem, IBus {
   private rastro1: number[] = [];
   private cpu1Perdido = false;
   private cpu1FetchEnSram = true;
+  private ultimos1 = new Uint32Array(64); private ultimos1N = 0;
   /** Media palabra del stream mientras llegan sus cuatro bytes. */
   viaHist = new Uint32Array(16);
   orbHist = new Uint32Array(256);
@@ -868,10 +869,19 @@ export class Uvm2System implements ISystem, IBus {
   private pasoCore1(): number {
     if (!this.cpu1) return 0;
     const pc1 = this.cpu1.getReg(15) >>> 0;
-    if (((pc1 & 0xFFFFFFF0) >>> 0) === 0xFFFFFFF0) { this.cpu1 = null; return 0; }  // volvio: se acabo
+    if (((pc1 & 0xFFFFFFF0) >>> 0) === 0xFFFFFFF0) {
+      if (pc1 === 0xFFFFFFFE) { this.cpu1 = null; return 0; }   // volvio: se acabo
+      /* EN LA BIOS EL PROGRAMA CORRE EN CORE 1 y sus `svc` entran por onSvc como los de
+       * core 0 (Thumb2 pasa la CPU que lo ejecuta): la vuelta tambien tiene que ser suya.
+       * Antes cualquier 0xFFFFFFFx aqui era "core 1 ha terminado" y el intro moria en su
+       * primer svc, en silencio. */
+      this.exceptionReturn(this.cpu1);
+      return 1;
+    }
     /* SU PROPIO RASTRO. Los primeros pasos del nucleo 1 son los que deciden si llega a su
      * bucle o se pierde, y sin guardarlos un PC absurdo no dice de donde vino. */
     if (this.rastro1.length < 64) this.rastro1.push(pc1);
+    this.ultimos1[this.ultimos1N++ & 63] = pc1;   /* y los ULTIMOS: el choque ocurre lejos del arranque */
     if (this.sdLeerAddr && pc1 === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu1); return 1; }
     if (this.sdLeerDesdeAddr && pc1 === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu1); return 1; }
     if (this.execAddr && pc1 === this.execAddr) { this.execVuelta[1] = this.cpu1.getReg(14) & ~1; this.enLista++; }
@@ -889,11 +899,18 @@ export class Uvm2System implements ISystem, IBus {
       this.cpu1.setReg(15, this.cpu1.getReg(14) & ~1);   // la funcion vacia: volver
       return 1;
     }
-    if ((pc1 < SRAM_BASE || pc1 > 0x20090000) && psramOff(pc1) < 0) {
+    /* En la BIOS el programa de core 1 (intro, menu, lanzador) vive en la FLASH y solo el
+     * juego en PSRAM; la flash se busca por el bus (read8), sin region rapida. */
+    const enFlash1 = this.flash !== null && pc1 >= FLASH_BASE && pc1 < FLASH_BASE + FLASH_SIZE;
+    if ((pc1 < SRAM_BASE || pc1 > 0x20090000) && psramOff(pc1) < 0 && !enFlash1) {
       if (!this.cpu1Perdido) {
         this.cpu1Perdido = true;
+        const ult = []; for (let i = 1; i <= 64 && i <= this.ultimos1N; i++) ult.unshift(this.ultimos1[(this.ultimos1N - i) & 63]);
         console.error(`[Uvm2System] NUCLEO 1 PERDIDO en 0x${pc1.toString(16)}. ` +
-          `Camino: ${this.rastro1.map(x => '0x' + x.toString(16)).join(' ')}`);
+          `Camino: ${this.rastro1.map(x => '0x' + x.toString(16)).join(' ')}\n` +
+          `  ultimos PCs: ${ult.map(x => '0x' + x.toString(16)).join(' ')}\n` +
+          `  r0-r3=${[0,1,2,3].map(i => '0x' + (this.cpu1!.getReg(i) >>> 0).toString(16)).join(' ')} ` +
+          `lr=0x${(this.cpu1!.getReg(14) >>> 0).toString(16)} sp=0x${(this.cpu1!.getReg(13) >>> 0).toString(16)}`);
       }
       this.cpu1 = null;
       return 0;
@@ -1531,15 +1548,15 @@ export class Uvm2System implements ISystem, IBus {
   }
 
   /** Undo the above when the handler returns to EXC_RETURN. */
-  private exceptionReturn(): void {
-    const sp = this.cpu.getReg(13) >>> 0;
+  private exceptionReturn(cpu: Thumb2 = this.cpu): void {
+    const sp = cpu.getReg(13) >>> 0;
     const get = (i: number) => this.read32(sp + i * 4);
-    this.cpu.setReg(0, get(0)); this.cpu.setReg(1, get(1));
-    this.cpu.setReg(2, get(2)); this.cpu.setReg(3, get(3));
-    this.cpu.setReg(12, get(4)); this.cpu.setReg(14, get(5));
-    this.cpu.setReg(15, get(6) & ~1);
-    this.cpu.setReg(13, (sp + 32) >>> 0);
-    this.cpu.setException(0);   // de vuelta a modo hilo
+    cpu.setReg(0, get(0)); cpu.setReg(1, get(1));
+    cpu.setReg(2, get(2)); cpu.setReg(3, get(3));
+    cpu.setReg(12, get(4)); cpu.setReg(14, get(5));
+    cpu.setReg(15, get(6) & ~1);
+    cpu.setReg(13, (sp + 32) >>> 0);
+    cpu.setException(0);   // de vuelta a modo hilo
   }
 
   // ─── Frame ────────────────────────────────────────────────────────────────

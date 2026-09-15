@@ -473,6 +473,10 @@ void uvm2_bus_devolver_al_stream(void)
 
 uint32_t uvm2_escritura_out, uvm2_escritura_in, uvm2_escritura_oe;
 
+/* EN LA BIOS DEL CARTUCHO PROPIO estas dos las da el firmware (uvm2c.rs) sobre su propio
+ * acceso al bus: la escritura como palabra del stream y la lectura con el bus libre. Lo de
+ * aqui abajo es el camino por SIO de la UVM2 (sus pines, sus mascaras). */
+#ifndef UVM2_BIOS
 UVM2_RAMFUNC void uvm2_via_write(uint32_t reg, uint32_t data)
 {
     uint32_t out = UVM2_VIA_BASE_BITS
@@ -588,3 +592,4 @@ UVM2_RAMFUNC uint8_t uvm2_via_read(uint32_t reg)
     UVM2_BUS_SOLTAR();
     return (uint8_t)(state & 0xFFu);
 }
+#endif /* !UVM2_BIOS */
