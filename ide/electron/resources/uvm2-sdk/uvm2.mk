@@ -63,6 +63,13 @@ UVM2_BUILD   ?= build_uvm2
 # puede ser brillo y no fluidez — no confundir una cosa con la otra.
 UVM2_HZ ?= 50
 UVM2_CFLAGS += -DUVM2_HZ=$(UVM2_HZ)
+# SUBUNIDADES PARA TODOS (2026-09-16). La geometria va en 1/16 de unidad de punta a punta:
+# v_directDraw32 (sdk_rp2350.c) llama a uvm2_draw_move_abs_q4/delta_q4 y el SDK
+# (uvm2_draw.c, UVM2_Q_BITS=4) trocea, re-cera y calibra en esa unidad. Es lo que se
+# validó como optimo en dkong contra la captura del VecFever, y es el UNICO camino: los
+# knobs de enteros (fusion, Douglas-Peucker, reordenado, recorte) ya no existen. La BIOS
+# del cartucho propio lo compila igual (build.rs). Daniel: "hay que unificarlo todo".
+UVM2_CFLAGS += -DUVM2_SUBUNIDAD
 
 # Tope de la lista de comandos, por juego. Ver el comentario en uvm2_draw.c: sin pacer, un
 # juego dibuja mas por frame y el 8192 de Ralf se queda corto. Vigilar stats.dropped.
