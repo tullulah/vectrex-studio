@@ -434,6 +434,13 @@ export class Uvm2System implements ISystem, IBus {
    */
   private readonly perfil = new Map<number, number>();
   private muestra = 0;
+  /** El mismo muestreo para CORE 1 (en la BIOS el juego vive alli): PERFIL1=1 lo imprime. */
+  private readonly perfil1 = new Map<number, number>();
+  private muestra1 = 0;
+  perfilCore1(n = 12): [number, number][] {
+    return [...this.perfil1.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
+  }
+  perfilCore1Total(): number { let t = 0; for (const c of this.perfil1.values()) t += c; return t; }
   private escriturasVia = 0;
   private framesSinDibujo = 0;
   private avisadoSinDibujo = false;
@@ -895,6 +902,7 @@ export class Uvm2System implements ISystem, IBus {
     /* SU PROPIO RASTRO. Los primeros pasos del nucleo 1 son los que deciden si llega a su
      * bucle o se pierde, y sin guardarlos un PC absurdo no dice de donde vino. */
     if (this.rastro1.length < 64) this.rastro1.push(pc1);
+    if ((this.muestra1++ & 63) === 0) this.perfil1.set(pc1, (this.perfil1.get(pc1) ?? 0) + 1);
     if (this.volcarLista.size && this.volcarLista.has(pc1)) this.volcar(this.cpu1, pc1, 1);
     this.ultimos1[this.ultimos1N++ & 63] = pc1;   /* y los ULTIMOS: el choque ocurre lejos del arranque */
     if (this.sdLeerAddr && pc1 === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu1); return 1; }

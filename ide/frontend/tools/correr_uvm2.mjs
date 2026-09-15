@@ -633,6 +633,11 @@ if (process.env.CMDDUMP) {
   writeFileSync(process.env.CMDDUMP, o);
   console.log(`  s_cmds volcado: ${cnt} comandos -> ${process.env.CMDDUMP}`);
 }
+/* PERFIL1=1: donde pasa el tiempo CORE 1 (el juego, en la BIOS), muestreado cada 64 pasos. */
+if (process.env.PERFIL1 && typeof sys.perfilCore1 === "function") {
+  const tot = sys.perfilCore1Total() || 1;
+  console.log("  core 1, donde pasa el tiempo:\n" + sys.perfilCore1(16).map(([pc, c]) => `    0x${pc.toString(16)}  ${(100 * c / tot).toFixed(1)}%`).join("\n"));
+}
 /* LEER=0x2000d3f8:2,0x20010b84 : palabras de la RAM al acabar, como `probe-rs read` en la
  * placa, para comparar el emulador con la consola con la misma lectura. */
 for (const it of (process.env.LEER || "").split(",").filter(Boolean)) {
