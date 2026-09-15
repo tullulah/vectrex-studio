@@ -544,6 +544,15 @@ export class Uvm2System implements ISystem, IBus {
   private enLista = 0;
   private volcarEn = Number((globalThis as any).__VOLCAR ?? 0) >>> 0;
   private volcados = 0;
+  /** VOLCAR="0x...,0x..." — varios PCs, y en LOS DOS nucleos (en la BIOS el juego corre en core 1). */
+  private volcarLista: Set<number> = new Set(String((globalThis as any).__VOLCAR_LISTA ?? '').split(',').filter(Boolean).map(x => Number(x) >>> 0));
+  private volcadosPorPc = new Map<number, number>();
+  private volcar(cpu: Thumb2, pc: number, nucleo: number): void {
+    const n = this.volcadosPorPc.get(pc) ?? 0; if (n >= 6) return; this.volcadosPorPc.set(pc, n + 1);
+    const r = []; for (let i = 0; i <= 12; i++) r.push(`r${i}=0x${(cpu.getReg(i) >>> 0).toString(16)}`);
+    r.push(`lr=0x${(cpu.getReg(14) >>> 0).toString(16)}`);
+    console.log(`[Uvm2System] VOLCAR core${nucleo} frame ${this.frameCounter} pc=0x${pc.toString(16)} ${r.join(' ')}`);
+  }
   private qmiIdVisto = false;
   private leidoEnCiclo = -1;
   trazaLecturas: string[] = [];
@@ -886,6 +895,7 @@ export class Uvm2System implements ISystem, IBus {
     /* SU PROPIO RASTRO. Los primeros pasos del nucleo 1 son los que deciden si llega a su
      * bucle o se pierde, y sin guardarlos un PC absurdo no dice de donde vino. */
     if (this.rastro1.length < 64) this.rastro1.push(pc1);
+    if (this.volcarLista.size && this.volcarLista.has(pc1)) this.volcar(this.cpu1, pc1, 1);
     this.ultimos1[this.ultimos1N++ & 63] = pc1;   /* y los ULTIMOS: el choque ocurre lejos del arranque */
     if (this.sdLeerAddr && pc1 === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu1); return 1; }
     if (this.sdLeerDesdeAddr && pc1 === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu1); return 1; }
@@ -1616,6 +1626,7 @@ export class Uvm2System implements ISystem, IBus {
       /* VOLCADO DE REGISTROS EN UN PC (depuracion): VOLCAR=0x2000362c imprime r0-r12, lr y
        * 40 bytes en [r8] las primeras 4 veces que core 0 pasa por ahi. Sin esto, saber que
        * calculo se tuerce dentro del emulador es adivinar sobre el desensamblado. */
+      if (this.volcarLista.size && this.volcarLista.has(pc)) this.volcar(this.cpu, pc, 0);
       if (this.volcarEn && pc === this.volcarEn && this.volcados < 4) {
         this.volcados++;
         const r = []; for (let i = 0; i <= 12; i++) r.push(`r${i}=0x${(this.cpu.getReg(i) >>> 0).toString(16)}`);

@@ -9,6 +9,7 @@
  */
 if (process.env.VIADUMP) globalThis.__VIADUMP = 1;
 if (process.env.VOLCAR) globalThis.__VOLCAR = Number(process.env.VOLCAR);
+if (process.env.VOLCAR_LISTA) globalThis.__VOLCAR_LISTA = process.env.VOLCAR_LISTA;   /* "0x..,0x..": varios PCs, los dos nucleos */
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -83,14 +84,15 @@ const caja = { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 };
  * START es 3+4 — y con un solo boton no se llega al juego. */
 const guion = (process.env.PULSA || "").split(",").filter(Boolean)
   .map(x => ({ f: Number(x.split(":")[0]),
-               bs: (x.split(":")[1] || "1").split("").map(Number) }));
+               bs: (x.split(":")[1] || "1").split("").map(Number),
+               d: Number(x.split(":")[2] || "6") }));   /* "760:4:60" = mantenido 60 frames */
 /* EL STICK, IGUAL: JOY="920:-100,935:-100" = en el frame 920 la Y del mando 1 a -100 durante
  * seis frames y luego al centro; los menus que se navegan con el stick (dkong) piden un
  * paso por gesto y que vuelva al centro entre dos. */
 const guionJoy = (process.env.JOY || "").split(",").filter(Boolean)
   .map(x => ({ f: Number(x.split(":")[0]), y: Number(x.split(":")[1] || "0") }));
 for (let f = 0; f < Number(nFrames); f++) {
-  const pulsa = guion.find(g => f >= g.f && f < g.f + 6);
+  const pulsa = guion.find(g => f >= g.f && f < g.f + g.d);
   if (guionJoy.length) {
     const j = guionJoy.find(g => f >= g.f && f < g.f + 6);
     sys.setJoyAxis(0, j ? j.y : 0);
