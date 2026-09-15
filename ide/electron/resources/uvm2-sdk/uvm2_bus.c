@@ -62,6 +62,7 @@ static inline void uvm2_put_masked(uint32_t value, uint32_t mask)
 /* Step 1 — must run before ANY other C in the image: .bss still holds whatever
  * was in SRAM (the .um2 carries no zero-fill and the firmware copies the file
  * verbatim), so every static below is garbage until this returns. */
+#ifndef UVM2_BIOS   /* la BIOS tiene su propio arranque; y _bss_start no existe alli */
 void uvm2_cpu_init(void)
 {
 #ifdef UVM2_PICO_RUNTIME
@@ -84,6 +85,7 @@ void uvm2_cpu_init(void)
     SYST_CSR = 0;
     for (int i = 0; i < 4; i++) { NVIC_ICER(i) = 0xFFFFFFFFu; NVIC_ICPR(i) = 0xFFFFFFFFu; }
 }
+#endif
 
 /* Step 2 — pads and function select.  Separate from the halt because CLK has to
  * be readable before we commit to anything: everything downstream blocks on its
@@ -201,7 +203,9 @@ void uvm2_medir_e(void)
 
 void uvm2_bus_init(void)
 {
+#ifndef UVM2_BIOS
     uvm2_cpu_init();
+#endif
 
     uvm2_bus_pads();
     uvm2_bus_halt();
@@ -246,7 +250,7 @@ UVM2_RAMFUNC uint32_t uvm2_exec(const uint8_t *cmds, uint32_t count)
         cmds += 3;
 
         /* R/W queda BAJO por omision en la palabra: es una escritura. */
-        vbus_push(vbus_word(UVM2_VIA_BASE_BITS | out));
+        vbus_push(vbus_word(UVM2_PALABRA_VIA(out)));
         cycles++;
 
         if (delay) {

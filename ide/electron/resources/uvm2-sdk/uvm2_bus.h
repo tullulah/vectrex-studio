@@ -50,7 +50,13 @@
  * miden el ejecutor aislado: ahi core 1 es justo lo que NO se quiere. Esos declaran
  * `UVM2_BANCO_SIN_NUCLEO1` en su bloque del build, que es un sitio donde se lee y se
  * justifica — no un olvido. Un JUEGO que lo declare esta mintiendo. */
-#if !defined(UVM2_BANCO_SIN_NUCLEO1)
+/* LA OTRA SALIDA ES LA BIOS DEL CARTUCHO DE VECTREX STUDIO (`UVM2_BIOS`). Alli el juego
+ * corre en core 1 y graba ops en un anillo; core 0 —la BIOS— construye la lista con este
+ * mismo uvm2_draw.c y la ejecuta el mismo, asi que no hay core 1 del SDK ni hace falta.
+ * Es el modelo BIOS+svc de ese cartucho, que se conserva a proposito (Daniel, 2026-09-15:
+ * "no quiero incrustar el sdk al .bin"). Lo unico de placa que cambia en este fichero es
+ * la palabra de bus, UVM2_PALABRA_VIA. */
+#if !defined(UVM2_BANCO_SIN_NUCLEO1) && !defined(UVM2_BIOS)
 #  if !defined(UVM2_DUAL_CORE)
 #    error "UVM2: falta UVM2_DUAL_CORE. Un juego dibuja con core 1; si esto es un banco que mide el ejecutor aislado, declara UVM2_BANCO_SIN_NUCLEO1 en su bloque de build_uvm2.sh y di por que."
 #  endif
@@ -103,6 +109,16 @@ extern "C" {
  * reaches no device.  Parking at $D00x instead would re-run the last VIA write
  * (or, with R/W high, keep clearing IFR flags) for as long as the bus idles. */
 #define UVM2_PARK_BITS      UVM2_A15_MASK
+/* La palabra de bus de UNA escritura a la VIA, a partir de los 12 bits (reg<<8 | dato)
+ * de un comando de la lista. La LISTA es la misma en las dos placas; solo esto cambia.
+ *   UVM2:               datos en GP0-7, A0-A13 en GP8-21, A14/A15 en GP24/25.
+ *   Vectrex Studio cart: A0-A14 en GP4-18, A15 en GP19, datos en GP21-28 (board.rs). */
+#ifdef UVM2_BIOS
+#define UVM2_PALABRA_VIA(out) \
+    (((0xD000u | (((out) >> 8) & 0xFu)) << 4) | (((out) & 0xFFu) << 21))
+#else
+#define UVM2_PALABRA_VIA(out) (UVM2_VIA_BASE_BITS | (out))
+#endif
 
 /* The 12 bits of a command that map onto GPIO0-11. */
 #define UVM2_CMD_GPIO_MASK  0x00000FFFu
