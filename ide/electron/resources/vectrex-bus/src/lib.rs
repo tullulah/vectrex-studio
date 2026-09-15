@@ -224,6 +224,20 @@ pub unsafe fn push(word: u32) {
         }
     }
 
+    if EN_LISTA.load(Ordering::Relaxed) != 0 {
+        let f = LISTA_FILL.load(Ordering::Relaxed) as usize;
+        if f >= LISTA_MAX {
+            /* No cabe: se dispara lo acumulado (bloqueando como antes) y se sigue. */
+            LISTA_DESBORDES.fetch_add(1, Ordering::Relaxed);
+            lista_disparar();
+        }
+        let f = LISTA_FILL.load(Ordering::Relaxed) as usize;
+        let idx = LISTA_IDX.load(Ordering::Relaxed) as usize & 1;
+        (&raw mut LISTA_BUF[idx][f]).write_volatile(word);
+        LISTA_FILL.store(f as u32 + 1, Ordering::Relaxed);
+        STREAM_PUSHES.fetch_add(1, Ordering::Relaxed);
+        return;
+    }
     let mut fill = BATCH_FILL.load(Ordering::Relaxed) as usize;
     if fill >= BATCH {
         RING_FULL_SEEN.fetch_add(1, Ordering::Relaxed);
@@ -244,6 +258,56 @@ pub unsafe fn push(word: u32) {
     }
 }
 
+// ── La LISTA de un frame, un solo DMA ───────────────────────────────────────────────
+//
+// Los lotes de 64 palabras atan la CPU al bus: `batch_flush` espera al DMA anterior, asi
+// que quien empuja una lista de 20 ms no vuelve hasta que casi se ha dibujado. En la UVM2
+// eso lo sufre core 1 y da igual; en la BIOS del cartucho propio lo sufria core 0, que
+// ademas construye el frame, y construir y dibujar quedaban en serie (medido: 40 fps en
+// el menu con una lista de 20 ms). Aqui la lista entera se acumula en RAM y se dispara con
+// UN DMA que el PIO consume a su ritmo (DREQ): `lista_disparar` vuelve en el acto y la CPU
+// construye el frame siguiente mientras el anterior sale por el bus. Dos buferes: el que
+// se llena y el que el DMA esta leyendo. Lo que se empuja FUERA de una lista (mandos, PSG)
+// sigue por los lotes pequenos, en el momento.
+pub const LISTA_MAX: usize = 12288;
+static mut LISTA_BUF: [[u32; LISTA_MAX]; 2] = [[0; LISTA_MAX]; 2];
+static LISTA_IDX:  AtomicU32 = AtomicU32::new(0);
+static LISTA_FILL: AtomicU32 = AtomicU32::new(0);
+static EN_LISTA:   AtomicU32 = AtomicU32::new(0);
+pub static LISTA_DESBORDES: AtomicU32 = AtomicU32::new(0);
+/// A partir de aqui `push` acumula en la lista en vez de en los lotes.
+pub unsafe fn lista_begin() {
+    LISTA_FILL.store(0, Ordering::Relaxed);
+    EN_LISTA.store(1, Ordering::Relaxed);
+}
+/// Deja de acumular; la lista queda lista para `lista_disparar`.
+pub unsafe fn lista_fin() { EN_LISTA.store(0, Ordering::Relaxed); }
+/// Espera a que el bus haya acabado con TODO lo anterior (el DMA de la lista previa, la
+/// FIFO y el ultimo aparcado). Sin el tope corto de `drain`: aqui se espera un frame.
+pub unsafe fn lista_esperar() {
+    let mut n = 0u32;
+    while r(ch(0, DMA_CTRL_TRIG)) & DMA_BUSY != 0 { n += 1; if n > 50_000_000 { STREAM_STALLS.fetch_add(1, Ordering::Relaxed); break; } }
+    n = 0;
+    while r(PIO0_BASE + PIO_FSTAT) & (1 << PIO_FSTAT_TXEMPTY_LSB) == 0 { n += 1; if n > 50_000_000 { STREAM_STALLS.fetch_add(1, Ordering::Relaxed); break; } }
+    drain();
+}
+/// Dispara la lista acumulada como un solo DMA. Espera al canal si aun esta ocupado.
+pub unsafe fn lista_disparar() {
+    let n = LISTA_FILL.load(Ordering::Relaxed);
+    if n == 0 { return; }
+    batch_flush();                                   // lo pequeno pendiente, antes
+    let mut e = 0u32;
+    while r(ch(0, DMA_CTRL_TRIG)) & DMA_BUSY != 0 { e += 1; if e > 50_000_000 { STREAM_STALLS.fetch_add(1, Ordering::Relaxed); break; } }
+    dsb();
+    let idx = LISTA_IDX.load(Ordering::Relaxed) as usize & 1;
+    w(ch(0, DMA_READ_ADDR), &raw const LISTA_BUF[idx] as *const u32 as u32);
+    w(ch(0, DMA_WRITE_ADDR), PIO_TXF0);
+    w(ch(0, DMA_TRANS_COUNT), n);
+    w(ch(0, DMA_CTRL_TRIG), DMA_EN | DMA_SIZE_WORD | DMA_INCR_READ | (0 << DMA_CHAIN_LSB) | (DREQ_PIO0_TX0 << DMA_TREQ_LSB));
+    LISTA_IDX.store(LISTA_IDX.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+    LISTA_FILL.store(0, Ordering::Relaxed);
+    BATCH_SENT.fetch_add(1, Ordering::Relaxed);
+}
 /// Vacia el lote parcial.
 ///
 /// NO QUITAR POR VELOCIDAD. Sin esto, una LECTURA puede adelantar a 63 escrituras
@@ -251,6 +315,7 @@ pub unsafe fn push(word: u32) {
 /// PORT_A*, y los botones son activos BAJOS: una lectura adelantada = "pulsado". El
 /// sintoma fue botones 1 y 2 pulsados desde el arranque.
 pub unsafe fn flush() {
+    if EN_LISTA.load(Ordering::Relaxed) != 0 { return; }   // la lista se dispara entera, en lista_disparar
     batch_flush();
 }
 

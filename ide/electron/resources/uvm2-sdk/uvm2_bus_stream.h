@@ -20,6 +20,12 @@ void     vbus_flush(void);
 void     vbus_drain(void);
 void     vbus_sm_parar(void);
 void     vbus_sm_arrancar(void);
+/* La lista de un frame como un solo DMA (ver vectrex-bus): entre begin y fin los push se
+ * acumulan; esperar = el bus ha acabado con lo anterior; disparar = vuelve en el acto. */
+void     vbus_lista_begin(void);
+void     vbus_lista_fin(void);
+void     vbus_lista_esperar(void);
+void     vbus_lista_disparar(void);
 
 /* Contadores por indice. EL ORDEN LO FIJA cabi/src/lib.rs y los dos se mueven juntos. */
 #define VBUS_PUSHES     0u

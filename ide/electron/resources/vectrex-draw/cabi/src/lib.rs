@@ -118,6 +118,14 @@ mod bus_c {
     /// Donde esta el `nop` del bucle de retardo en la memoria de instrucciones del PIO.
     /// Lo publica `install`; sirve para barrer su calibracion de fase desde un banco.
     #[no_mangle]
+    pub unsafe extern "C" fn vbus_lista_begin() { bus::lista_begin() }
+    #[no_mangle]
+    pub unsafe extern "C" fn vbus_lista_fin() { bus::lista_fin() }
+    #[no_mangle]
+    pub unsafe extern "C" fn vbus_lista_esperar() { bus::lista_esperar() }
+    #[no_mangle]
+    pub unsafe extern "C" fn vbus_lista_disparar() { bus::lista_disparar() }
+    #[no_mangle]
     pub extern "C" fn vbus_nop_parkeo() -> u32 {
         bus::VBUS_NOP_PARKEO.load(core::sync::atomic::Ordering::Relaxed)
     }

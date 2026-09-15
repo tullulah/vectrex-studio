@@ -17,6 +17,9 @@
 #include <limits.h>
 #include "uvm2_draw.h"
 #include "uvm2_config.h"
+#ifdef UVM2_PIO_STREAM
+#include "uvm2_bus_stream.h"   /* vbus_lista_*: la lista de un frame como un solo DMA */
+#endif
 #ifdef UVM2_CMDS_IN_PSRAM
 #include "uvm2_psram.h"
 #endif
@@ -681,6 +684,10 @@ extern volatile uint32_t TECHO_MANDA, DEUDA_ON, TRAZO_ENTERO;
 #ifndef UVM2_DAC_CERO
 #define UVM2_DAC_CERO 1
 #endif
+
+/* Entre lista y lista, con el bus libre: la BIOS del cartucho propio lo define (mandos,
+ * PSG). En la .um2 no hace falta: core 1 lo hace en su bucle. */
+__attribute__((weak)) void uvm2_frame_hueco(void) { }
 
 void uvm2_draw_init(void)
 {
@@ -2772,6 +2779,17 @@ void uvm2_frame_end(void)
     mide_periodo();
     return;
 #else
+    /* UN SOLO NUCLEO: LA LISTA SALE COMO UN DMA Y ESTE NUCLEO SIGUE. Antes uvm2_exec no
+     * volvia hasta que el bus casi habia dibujado el frame (lotes de 64 palabras que esperan
+     * al DMA anterior), asi que construir y dibujar iban en serie en el mismo nucleo: en la
+     * BIOS del cartucho propio, 40 fps con una lista de 20 ms. Ahora: (1) se acumula la
+     * lista entera; (2) se espera a que el bus acabe con la ANTERIOR; (3) el gancho
+     * uvm2_frame_hueco, con el bus libre, es donde la BIOS lee los mandos y vacia el PSG (lo
+     * que en la UVM2 hace core 1 entre listas); (4) el paso del pacer; (5) se dispara y se
+     * vuelve: el frame siguiente se construye mientras este sale. */
+#if defined(UVM2_PIO_STREAM) && !defined(UVM2_HOST)
+    vbus_lista_begin();
+#endif
 #ifdef UVM2_CMDS_STAGE_SRAM
     /* CONTROL, tambien en un solo nucleo. La copia estaba SOLO en uvm2_core1.c, que no se
      * compila sin doble nucleo — asi que la perilla no hacia nada y una prueba entera se
@@ -2799,6 +2817,11 @@ void uvm2_frame_end(void)
     }
 #else
     cycles = uvm2_exec(s_cmds[s_buf], s_count);
+#endif
+#if defined(UVM2_PIO_STREAM) && !defined(UVM2_HOST)
+    vbus_lista_fin();
+    vbus_lista_esperar();      /* el frame ANTERIOR ha acabado en el bus */
+    uvm2_frame_hueco();        /* con el bus libre: mandos, PSG (la BIOS lo define) */
 #endif
 
     uvm2_stats.commands   = s_count;
@@ -2841,6 +2864,8 @@ void uvm2_frame_end(void)
      *
      * 0 = libre (Asteroids). != 0 = enganchado a ese periodo en ciclos de bus. */
     s_dibujo_cycles = cycles;              /* lo que tardo en DIBUJARSE, sin el relleno */
+#if defined(UVM2_HOST)
+    /* Sin TIMER0 en el arnes de host: el relleno de siempre, por ciclos de la lista. */
     if (uvm2_pacer_cycles == 0) {
         s_frame_cycles = cycles;
     } else if (cycles < uvm2_pacer_cycles) {
@@ -2850,6 +2875,41 @@ void uvm2_frame_end(void)
         uvm2_stats.overrun++;
         s_frame_cycles = cycles;
     }
+#else
+    /* EL RELLENO SE MIDE CONTRA EL RELOJ, NO CONTRA LA LISTA. Rellenar `pacer - cycles`
+     * supone que entre el fin de un frame y el del siguiente solo ha pasado la lista, y eso
+     * es verdad cuando la reproduce core 1 en bucle (la .um2, que no pasa por aqui) y falso
+     * en un solo nucleo: la BIOS del cartucho propio construye la lista, lee los mandos y
+     * atiende svc ENTRE frame y frame, y todo eso se sumaba al periodo. Medido por SWD en su
+     * menu: lista rellenada a 30000 ciclos clavados y frames de 20,5 a 26,5 ms (40-48 fps,
+     * sin enganche, y la red se veia batir). Aqui el objetivo es "el frame anterior acabo
+     * en T, este acaba en T + periodo": lo que sobre se espera con TIMER0, y si ya nos hemos
+     * pasado es un overrun de verdad y se re-engancha desde ahora. */
+    {
+        static uint32_t s_fin_us;
+        const uint32_t ahora = *(volatile uint32_t *)0x400B000Cu;   /* TIMER0 TIMELR */
+        if (uvm2_pacer_cycles == 0) {
+            s_frame_cycles = cycles;
+            s_fin_us = ahora;
+        } else {
+            const uint32_t periodo_us = (uvm2_pacer_cycles * 2u) / 3u;   /* 1,5 MHz de bus */
+            const uint32_t objetivo = s_fin_us + periodo_us;
+            const int32_t falta = (int32_t)(objetivo - ahora);
+            if (falta > 0 && (uint32_t)falta <= periodo_us) {
+                while ((int32_t)(objetivo - *(volatile uint32_t *)0x400B000Cu) > 0) { }
+                s_frame_cycles = uvm2_pacer_cycles;
+                s_fin_us = objetivo;
+            } else {
+                uvm2_stats.overrun++;
+                s_frame_cycles = cycles;
+                s_fin_us = ahora;
+            }
+        }
+    }
+#if defined(UVM2_PIO_STREAM)
+    vbus_lista_disparar();     /* y este nucleo sigue: el frame sale por DMA */
+#endif
+#endif
 
     mide_periodo();
 
