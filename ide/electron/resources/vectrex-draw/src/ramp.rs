@@ -682,7 +682,13 @@ pub static Y_HELD: AtomicU32 = AtomicU32::new(0);
 /// de t1: hoy los vectores cortos salen proporcionalmente mas largos que los largos.
 #[used]
 #[no_mangle]
-pub static T1_EXTRA_Q8: AtomicU32 = AtomicU32::new(0);
+/* LA COLA DE LA RAMPA, MEDIDA: 2,5 ciclos de E = 640 en Q8. En consola (2026-09-15, banco
+ * hardware/uvm2/rampas en modo ojo, filas de control al 1%) cada rampa recorre
+ * v * (t1 + 2,5): la rampa sigue ~2,5 ciclos despues de expirar T1. Con 0 aqui, un trozo
+ * de t1=8 salia un 31% largo y una viga de t1~90 un 2,7%, y por eso los peldanos (cortos)
+ * se salian del larguero (largo). Este es el numero; la calibracion de consola lo llama
+ * TEXTO / fijo_q8 y lo puede afinar por tubo. [[la-rampa-sigue-2-5-ciclos]] */
+pub static T1_EXTRA_Q8: AtomicU32 = AtomicU32::new(640);
 
 /// Encender el haz por el REGISTRO DE DESPLAZAMIENTO ($FF/$00), como la BIOS y como el asm
 /// de 6809 que dibuja bien, en vez de por PCR ($EE/$CE). Exige ACR = 0x98 en el arranque,
@@ -936,7 +942,13 @@ pub extern "C" fn vx_deuda_reset() {
 /// Lo que la rampa recorre DE VERDAD, en milesimas: v * t1 / DRAW_SCALE con su fraccion.
 #[inline(always)]
 fn recorrido_mil(v: i32, t1: u16) -> i32 {
-    ((v as i64 * t1 as i64 * 1000) / escala() as i64) as i32
+    /* CON LA COLA. La tasa se calcula para (t1 + T1_EXTRA_Q8/256) y el recorrido REAL es
+     * ese: contabilizar aqui v*t1 a secas hacia que la deuda viera cada trazo un 24% corto
+     * (t1=8) y se lo cargara al siguiente — con T1_EXTRA_Q8=640 en consola "todo se veia
+     * muchisimo peor" (Daniel, 2026-09-15). La cola es fisica, no una decision del emisor:
+     * el haz recorre v*(t1+2,5) pida lo que pida la tasa. [[la-rampa-sigue-2-5-ciclos]] */
+    let t_q8 = t1 as i64 * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i64;
+    ((v as i64 * t_q8 * 1000) / (escala() as i64 * 256)) as i32
 }
 
 /// `ramp_params` para un trazo DENTRO DE UNA CADENA: pide el delta mas lo que se debia y

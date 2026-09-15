@@ -138,7 +138,11 @@ UVM2_CFLAGS += -DUVM2_ROMZIP_MAX=$(UVM2_ROMZIP_MAX)
 #
 # Aqui la PSRAM esta en su mejor caso: se escribe una vez y se lee una vez, sin nada que
 # dependa del tiempo — justo lo contrario de la lista de comandos, que por eso no se mueve.
+# Salvo que el build diga UVM2_ROMZIP_IN_PSRAM=0: el EMULADOR no tiene PSRAM, y con el zip
+# alli el juego arranca con dk_rom_error=1 y pinta la X de 'falta el romset' (medido).
+ifneq ($(UVM2_ROMZIP_IN_PSRAM),0)
 UVM2_CFLAGS += -DUVM2_ROMZIP_IN_PSRAM=1
+endif
 endif
 endif
 

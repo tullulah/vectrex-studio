@@ -125,7 +125,22 @@ const BOOTRAM_BASE  = 0x400E0000;
 const BOOTRAM_SIZE_ = 0x1000;
 const BOOTLOCK_OFF  = 0x800;
 const BOOTLOCK_N    = 16;
-const SRAM_SIZE = 0x00082000;          // 520 KB, as on the real RP2350
+const SRAM_SIZE = 0x00082000;
+/* LA PSRAM DEL UVM2, 8 MB por la ventana XIP de CS1 (0x11000000) y por su alias sin cache
+ * (0x15000000). Sin ella, cualquier imagen que la use falla EN SILENCIO: dkong con el romset
+ * en PSRAM arrancaba con dk_rom_error=1 y pintaba la X de "falta el romset", y una tarde de
+ * medidas se hizo sobre esa X creyendo que era la partida. Medido en placa: 8 MB R/W en
+ * 0x11000000 [[rp2350-psram-xip]]; el alias 0x15000000 es el que usa uvm2_romzip.c
+ * (UVM2_ROMZIP_PSRAM_BASE = 0x15400000). Los registros del QMI que la configuran caen en la
+ * zona "desconocida" del mapa y se ignoran, que es lo que ya hacia. */
+const PSRAM_BASE  = 0x11000000;
+const PSRAM_ALIAS = 0x15000000;
+const PSRAM_SIZE  = 0x00800000;
+function psramOff(addr: number): number {
+  if (addr >= PSRAM_BASE  && addr < PSRAM_BASE  + PSRAM_SIZE) return addr - PSRAM_BASE;
+  if (addr >= PSRAM_ALIAS && addr < PSRAM_ALIAS + PSRAM_SIZE) return addr - PSRAM_ALIAS;
+  return -1;
+}          // 520 KB, as on the real RP2350
 const SIO_BASE  = 0xD0000000;
 
 /* PSM — el "power state machine", que es por donde se resetea el nucleo 1.
@@ -221,6 +236,8 @@ export class Uvm2System implements ISystem, IBus {
   readonly cpuName = 'Cortex-M33 (UVM2 halt mode)';
 
   private sram = new Uint8Array(SRAM_SIZE);
+  private psram = new Uint8Array(PSRAM_SIZE);
+  private cargaEnPsram = false;
   private cpu  = new Thumb2();
   /** EL SEGUNDO NUCLEO, DE VERDAD.
    *
@@ -606,7 +623,10 @@ export class Uvm2System implements ISystem, IBus {
     }
 
     this.sram.fill(0);
-    this.sram.set(payload, (loadAddr - SRAM_BASE) >>> 0);
+    this.psram.fill(0);
+    if (psramOff(loadAddr) >= 0) this.psram.set(payload, psramOff(loadAddr));
+    else                         this.sram.set(payload, (loadAddr - SRAM_BASE) >>> 0);
+    this.cargaEnPsram = psramOff(loadAddr) >= 0;
     this.montarBootrom();
     this.reset();
   }
@@ -636,12 +656,14 @@ export class Uvm2System implements ISystem, IBus {
     // read and would hold it high. Buttons reach the image via the PSG instead.
     this.via.joyButtons = 0x00;
     this.cpu.reset();
-    this.cpu.setFetchRegion(this.sram, SRAM_BASE);
+    if (this.cargaEnPsram) this.cpu.setFetchRegion(this.psram, PSRAM_BASE);
+    else                   this.cpu.setFetchRegion(this.sram, SRAM_BASE);
 
     // The firmware loads MSP and the entry point from the image's own vector
     // table — word 0 and word 1 — exactly as a Cortex-M reset would.
-    this.cpu.setReg(13, this.read32(SRAM_BASE));
-    this.cpu.setReg(15, this.read32(SRAM_BASE + 4) & ~1);
+    { const base = this.cargaEnPsram ? PSRAM_BASE : SRAM_BASE;
+      this.cpu.setReg(13, this.read32(base));
+      this.cpu.setReg(15, this.read32(base + 4) & ~1); }
     this.cpu.setReg(14, 0xFFFFFFFE);   // sentinel: game_main must never return
   }
 
@@ -676,7 +698,7 @@ export class Uvm2System implements ISystem, IBus {
       this.cpu1.setReg(15, this.cpu1.getReg(14) & ~1);   // la funcion vacia: volver
       return 1;
     }
-    if (pc1 < SRAM_BASE || pc1 > 0x20090000) {
+    if ((pc1 < SRAM_BASE || pc1 > 0x20090000) && psramOff(pc1) < 0) {
       if (!this.cpu1Perdido) {
         this.cpu1Perdido = true;
         console.error(`[Uvm2System] NUCLEO 1 PERDIDO en 0x${pc1.toString(16)}. ` +
@@ -952,6 +974,7 @@ export class Uvm2System implements ISystem, IBus {
     if (addr >= SRAM_BASE && addr < SRAM_BASE + SRAM_SIZE) {
       return this.sram[addr - SRAM_BASE];
     }
+    { const po = psramOff(addr); if (po >= 0) return this.psram[po]; }
 
     if (addr < BOOTROM_SIZE) return this.bootrom[addr];
 
@@ -1130,6 +1153,7 @@ export class Uvm2System implements ISystem, IBus {
       this.sram[addr - SRAM_BASE] = data;
       return;
     }
+    { const po = psramOff(addr); if (po >= 0) { this.psram[po] = data; return; } }
 
     {
       const sh = (addr & 3) * 8, bits = data << sh, mask = 0xFF << sh;

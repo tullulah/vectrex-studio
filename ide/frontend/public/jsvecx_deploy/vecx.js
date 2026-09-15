@@ -52,6 +52,10 @@ function VecX()
     this.via_t1ll = 0;
     this.via_t1lh = 0;
     this.via_t1pb7 = 0;
+    /* LA COLA DE LA RAMPA, medida en consola (2026-09-15, banco rampasojo): la rampa sigue
+     * ~2,5 ciclos despues de expirar T1. Globals.RAMP_TAIL_CYCLES (0 = como siempre). */
+    this.via_ramp_tail = 0;
+    this.via_ramp_tail_acc = 0;   /* la fraccion de la cola, acumulada entre rampas */
     this.via_t2on = 0;
     this.via_t2int = 0;
     this.via_t2c = 0;
@@ -822,6 +826,13 @@ function VecX()
                                 }
                                 this.via_t1pb7 = 0x80;
                                 this.via_t1int = 0;
+                                {   /* La cola medida es 2,5 ciclos. Un ciclo a medias partiria cada trazo en dos
+                                     * segmentos, asi que la fraccion se ACUMULA: una rampa de 2 y otra de 3. */
+                                    var tc = (Globals.RAMP_TAIL_CYCLES || 0);
+                                    this.via_ramp_tail_acc += tc - Math.floor(tc);
+                                    this.via_ramp_tail = Math.floor(tc);
+                                    if( this.via_ramp_tail_acc >= 1 ) { this.via_ramp_tail += 1; this.via_ramp_tail_acc -= 1; }
+                                }
                             }
                         }
                     }
@@ -945,6 +956,11 @@ function VecX()
                     if( this.via_acr & 0x80 )
                     {
                         sig_ramp = this.via_t1pb7;
+                        if( sig_ramp && this.via_ramp_tail > 0 )
+                        {
+                            sig_ramp = 0;                       /* la cola: sigue integrando */
+                            this.via_ramp_tail -= 1;
+                        }
                     }
                     else
                     {

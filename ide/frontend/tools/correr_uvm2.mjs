@@ -245,7 +245,7 @@ if (elf) {
                   `saltos=${rd(10)} descartados=${rd(6)} recals=${rd(7)}`);
       /* Y POR QUE dibuja poco: si falta el romset, el juego pinta una X y nada mas. Esa
        * es una respuesta completamente distinta de "el camino de dibujo esta roto". */
-      for (const sim of ["dk_rom_error", "uvm2_romzip_error", "uvm2_romzip_bytes", "mh_env_x0", "mh_env_x1", "mh_env_y0", "mh_env_y1", "figura", "densidad", "T1_EXTRA_Q8", "T1_LAG_ARRANQUE", "MIN_T1_ARRANQUE", "VCAP_SALTO", "RAMPA_FIJA", "VCAP_SLOW", "VCAP_DV", "T1_SALTO", "MIN_T1", "VCAP", "T1_TRANSPORT", "DRAW_SCALE", "T1_LAG",
+      for (const sim of ["dk_rom_error", "uvm2_romzip_error", "uvm2_romzip_bytes", "mh_env_x0", "mh_env_x1", "mh_env_y0", "mh_env_y1", "figura", "densidad", "T1_EXTRA_Q8", "T1_LAG_ARRANQUE", "MIN_T1_ARRANQUE", "VCAP_SALTO", "RAMPA_FIJA", "VCAP_SLOW", "VCAP_DV", "T1_SALTO", "MIN_T1", "VCAP", "T1_TRANSPORT", "DRAW_SCALE", "T1_LAG", "TRAZO_ENTERO", "DEUDA_ON", "TECHO_MANDA", "HAZ_POR_SR",
                          /* La ENTRADA tal como la ve el juego. Sin esto, "el emulador no
                           * reacciona a los botones" no distingue "no llegan" de "llegan y
                           * el juego no los usa", que se arreglan en sitios opuestos. */
