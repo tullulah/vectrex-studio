@@ -1787,8 +1787,8 @@ static void trocear(int dx, int dy, void (*emite)(int, int))
     int n = (m + UVM2_MAX_PASO - 1) / UVM2_MAX_PASO;
     int hx = 0, hy = 0;                       /* lo ya emitido */
     for (int i = 1; i <= n; i++){
-        int ox = (int)(((long long)dx * i) / n);   /* posicion ideal tras i trozos */
-        int oy = (int)(((long long)dy * i) / n);
+        int ox = (dx * i) / n;                     /* posicion ideal tras i trozos */
+        int oy = (dy * i) / n;
         emite(ox - hx, oy - hy);
         hx = ox; hy = oy;
     }

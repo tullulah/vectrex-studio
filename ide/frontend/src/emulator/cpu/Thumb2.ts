@@ -339,6 +339,27 @@ export class Thumb2 implements ICpu {
     this.setV(signA === signB && signR !== signA);
   }
 
+  /** AddWithCarry(a, b, c) del ARM ARM, con los cuatro flags EXACTOS. Es la unica forma
+   * correcta de calcular los flags de ADC y de SBC (SBC = AddWithCarry(Rn, NOT(op2), C)):
+   * los "aproximados" de antes —sumar el acarreo al segundo operando y usar la resta
+   * normal— daban N/V mal, y con ellos `subs.w; sbcs.w #0; itt lt` (el clamp de un i64
+   * a ±127 que emite rustc) elegia 127 para cualquier cociente: la busqueda de T1 de
+   * uvm2_draw salia distinta de la placa en 105.465 llamadas de una partida de dkong y
+   * nadie lo vio porque la .um2 y la BIOS lo hacian igual de mal. [[thumb2-bugs]] */
+  private setNZCV_addc(a: number, b: number, c: number): void {
+    const a32 = u32(a);
+    const b32 = u32(b);
+    const r64 = a32 + b32 + c;
+    const r32 = u32(r64);
+    this.setN((r32 >>> 31) === 1);
+    this.setZ(r32 === 0);
+    this.setC(r64 > 0xffff_ffff);
+    const signA = (a32 >>> 31) & 1;
+    const signB = (b32 >>> 31) & 1;
+    const signR = (r32 >>> 31) & 1;
+    this.setV(signA === signB && signR !== signA);
+  }
+
   /** Set all four flags after a subtraction: result32 = a - b. */
   private setNZCV_sub(a: number, b: number): void {
     // a - b == a + NOT(b) + 1 (carry semantics)
@@ -811,7 +832,7 @@ export class Thumb2 implements ICpu {
         const borrow = 1 - this.flagC;
         const r64 = u32(a) - u32(b) - borrow;
         const r32 = u32(r64);
-        if (!this.inItBlock()) this.setNZCV_sub(a, b + borrow);  // approximate for flags
+        if (!this.inItBlock()) this.setNZCV_addc(a, ~b, this.flagC);   // exactos
         this.regs[rdn] = r32;
         break;
       }
@@ -2231,7 +2252,7 @@ export class Thumb2 implements ICpu {
         const c = this.flagC;
         const r = u32(a - imm - (1 - c));
         this.regs[rd] = r;
-        if (s) this.setNZCV_sub(a, imm);
+        if (s) this.setNZCV_addc(a, ~imm, c);   // SBC = AddWithCarry(Rn, NOT(imm), C)
         break;
       }
       case 0xd: {  // SUB{S} Rd,Rn,#imm  /  CMP Rn,#imm (Rd=1111,S=1)
@@ -2336,7 +2357,7 @@ export class Thumb2 implements ICpu {
         const c = this.flagC;
         const r = u32(a + rmVal + c);
         this.regs[rd] = r;
-        if (s) this.setNZCV_add(a, rmVal + c);
+        if (s) this.setNZCV_addc(a, rmVal, c);
         break;
       }
       case 0xb: {  // SBC{S} Rd,Rn,Rm{,shift} — Rn - Rm - borrow (borrow = 1-C).
@@ -2348,7 +2369,7 @@ export class Thumb2 implements ICpu {
         const c = this.flagC;
         const r = u32(a - rmVal - (1 - c));
         this.regs[rd] = r;
-        if (s) this.setNZCV_sub(a, rmVal + (1 - c));  // approximate borrow flags
+        if (s) this.setNZCV_addc(a, ~rmVal, c);   // exactos, ver setNZCV_addc
         break;
       }
       case 0xd: {  // SUB{S}  /  CMP Rn,Rm{,shift} (Rd=15,S=1 → discard result)

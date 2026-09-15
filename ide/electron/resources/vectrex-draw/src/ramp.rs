@@ -386,9 +386,18 @@ fn ramp_params_con(dx: i8, dy: i8, vcap_in: u32) -> (i8, i8, u16) {
  * fraccionarias se expresan solas (el pide v=51,t1=8 = 2,55 unidades). Lo imponia nuestra
  * aritmetica. Aqui se arregla dividiendo por 2^q en cada sitio donde una LONGITUD se
  * multiplica por la escala. */
+/// DIAGNOSTICO: el mayor |delta| que ha entrado en ramp_params_q (en la unidad interna) y
+/// cuantas veces supero 2^15. Un delta de mas de 2048 unidades no cabe en la pantalla: si
+/// aparece, alguien pasa una posicion rota, y en 32 bits m*s*256 desborda a partir de ~66k.
+#[no_mangle]
+pub static RAMP_M_MAX: AtomicU32 = AtomicU32::new(0);
+#[no_mangle]
+pub static RAMP_M_GRANDES: AtomicU32 = AtomicU32::new(0);
 fn ramp_params_q(dx: i32, dy: i32, vcap_in: u32, q: u32) -> (i8, i8, u16) {
     let f = 1i32 << q;
     let m = core::cmp::max(dx.abs(), dy.abs());
+    RAMP_M_MAX.fetch_max(m as u32, Ordering::Relaxed);
+    if m >= 32768 { RAMP_M_GRANDES.fetch_add(1, Ordering::Relaxed); }
     /* ── DOS SUELOS, SEGUN SI LA RAMPA ARRANCA PARADA ────────────────────────────────
      *
      * Un trazo que CONTINUA al anterior entra con los integradores ya moviendose; el
@@ -601,15 +610,16 @@ fn ramp_params_q(dx: i32, dy: i32, vcap_in: u32, q: u32) -> (i8, i8, u16) {
     // t1 y t1+1 dan dos productos vx*t1 distintos y uno de los dos cae mas cerca. Cuesta
     // una division mas y un ciclo de rampa como mucho, y el error deja de tener direccion
     // preferida — que es lo unico que hace que se acumule.
-    let error_de = |t: i32| -> i64 {
-        if t <= 0 { return i64::MAX; }
+    let extra = T1_EXTRA_Q8.load(Ordering::Relaxed) as i32;
+    let error_de = |t: i32| -> i32 {
+        if t <= 0 { return i32::MAX; }
         let v = {
-            let den = (t as i64) * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i64;
-            let n = (m as i64) * (s as i64) * 256 / (f as i64);
+            let den = t * 256 + extra;
+            let n = m * s * 256 / f;
             let q = if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den };
             q.clamp(-128, 127)
         };
-        ((v * t as i64) - (m as i64) * (s as i64) / (f as i64)).abs()
+        (v * t - m * s / f).abs()
     };
     let t1 = if t1 < techo && error_de(t1 + 1) < error_de(t1) { t1 + 1 } else { t1 };
     // ROUND, DO NOT TRUNCATE. Distance is velocity x time, so `vx * t1` has to stay
@@ -628,10 +638,10 @@ fn ramp_params_q(dx: i32, dy: i32, vcap_in: u32, q: u32) -> (i8, i8, u16) {
     // El divisor es la duracion REAL de la rampa, no `t1`. Ver T1_EXTRA_Q8: el 6522
     // cuenta t1 + 1,5 en un disparo, y dividir por `t1` a secas recorre de mas.
     // Con T1_EXTRA_Q8 = 0 esto es exactamente la aritmetica de antes.
-    let den = (t1 as i64) * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i64;
+    let den = t1 * 256 + extra;
     let round_div = |num: i32| -> i32 {
-        let n = num as i64 * 256;
-        (if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den }) as i32
+        let n = num * 256;
+        if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den }
     };
     let vx = round_div(dx * s / f).clamp(-128, 127) as i8;
     let vy = round_div(dy * s / f).clamp(-128, 127) as i8;
@@ -947,8 +957,10 @@ fn recorrido_mil(v: i32, t1: u16) -> i32 {
      * (t1=8) y se lo cargara al siguiente — con T1_EXTRA_Q8=640 en consola "todo se veia
      * muchisimo peor" (Daniel, 2026-09-15). La cola es fisica, no una decision del emisor:
      * el haz recorre v*(t1+2,5) pida lo que pida la tasa. [[la-rampa-sigue-2-5-ciclos]] */
-    let t_q8 = t1 as i64 * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i64;
-    ((v as i64 * t_q8 * 1000) / (escala() as i64 * 256)) as i32
+    let t_q8 = t1 as i32 * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i32;
+    let a = v * t_q8;
+    let d = escala() * 256;
+    (a / d) * 1000 + ((a % d) * 1000) / d
 }
 
 /// `ramp_params` para un trazo DENTRO DE UNA CADENA: pide el delta mas lo que se debia y
@@ -1534,5 +1546,291 @@ mod sesgo_del_salto {
             std::println!("  {nom}   X {:+.3} (peor {:+.2})   Y {:+.3} (peor {:+.2})   {n} saltos",
                           sx_e / n as f64, px, sy_e / n as f64, py);
         }
+    }
+}
+
+#[cfg(test)]
+mod equivalencia_i32 {
+    extern crate std;
+    use super::*;
+    use core::sync::atomic::Ordering;
+fn ramp_params_q_old(dx: i32, dy: i32, vcap_in: u32, q: u32) -> (i8, i8, u16) {
+    let f = 1i32 << q;
+    let m = core::cmp::max(dx.abs(), dy.abs());
+    /* ── DOS SUELOS, SEGUN SI LA RAMPA ARRANCA PARADA ────────────────────────────────
+     *
+     * Un trazo que CONTINUA al anterior entra con los integradores ya moviendose; el
+     * primero despues de un salto en blanco tiene que acelerar desde el reposo, y esa es
+     * la distancia que se pierde. Los dos pagaban el mismo suelo, asi que subirlo para
+     * salvar al segundo se lo cobraba tambien al primero.
+     *
+     * MEDIDO EN CONSOLA (2026-08-26, dkong en el UVM2): con MIN_T1 = 31 los travesaños
+     * sueltos de las escaleras salen desplazados y las vigas encadenadas salen bien; con
+     * 94 sale TODO bien y el framerate cae de 23 a 14,3 fps. La cuenta dice por que:
+     *
+     *     23 -> 14,3 fps son 26,4 ms/frame; a 1,5 MHz, 39.700 ciclos
+     *     39.700 / (94-31) = 630 operaciones pagando el suelo
+     *     y el cartucho declara 549 vectores + 179 saltos = 728
+     *
+     * O sea que el 86% de lo dibujado estaba en el suelo: MIN_T1 no rescataba a unos
+     * pocos trazos cortos, fijaba la duracion de casi todo. Con el suelo separado, solo
+     * lo pagan las rampas que arrancan paradas — los saltos y el primer trazo de cada
+     * figura— y no los cientos de tramos interiores.
+     *
+     * QUIEN ES QUIEN, y no hace falta ningun dato nuevo: `vx_chain_reset()` lo llama
+     * quien reposiciona el haz (un salto o un re-cero), asi que "arranca parada" es
+     * exactamente "es la primera rampa despues de un reset". El salto LEE la bandera sin
+     * consumirla y el primer trazo iluminado la consume, de modo que los dos —el salto y
+     * el trazo que lo sigue, que tambien parte del reposo— cobran el suelo de arranque.
+     *
+     * DE FABRICA VALEN LO MISMO QUE LOS DE SIEMPRE: mientras no se barran, el
+     * comportamiento es identico al anterior, byte a byte. */
+    let arranque = ARRANQUE.load(Ordering::Relaxed) != 0;
+    if arranque { ARRANQUE_HITS.fetch_add(1, Ordering::Relaxed); }
+    let min_t1 = if arranque { MIN_T1_ARRANQUE.load(Ordering::Relaxed) }
+                 else        { MIN_T1.load(Ordering::Relaxed) } as i32;
+    let mut vcap = vcap_in as i32;
+
+    // ¿Este vector pide un salto grande de velocidad en Y respecto al anterior?
+    // Se estima con la velocidad que TENDRIA al tope normal; no hace falta que sea
+    // exacta, solo distinguir el zigzag del resto.
+    // EL DISPARADOR ES EL CAMBIO DE SIGNO, NO LA MAGNITUD.
+    //
+    // La primera version disparaba con "salto grande de vy respecto al anterior" y
+    // MEDIDO en hardware salto 218.591 veces en 2.767 frames — 79 vectores por frame,
+    // o sea casi todos. No seleccionaba nada: equivalia a bajar VCAP para todo, pero
+    // por un camino mas fragil. El umbral no separaba porque casi cualquier par de
+    // vectores consecutivos da un salto grande en vy.
+    //
+    // La firma REAL del zigzag es otra: el signo de dy **se invierte en cada trazo**.
+    //
+    //     zigzag:  (5,-7) (5,9) (6,-9) (6,9)   <- alterna en cada uno
+    //     logo:    trazos consecutivos que mantienen el signo
+    //
+    // Y ademas son CORTOS. Las dos condiciones juntas describen el zigzag y casi nada
+    // mas. `Y_HELD` guarda el vy anterior (bit 8 = valido) y su signo es el de dy,
+    // porque vy = dy * s / t1 con s y t1 positivos.
+    if m == 0 {
+        return (0, 0, min_t1 as u16); // degenerate (dot); minimal ramp
+    }
+
+    /* ── EL MODELO DE TIEMPO FIJO, COMO LA BIOS Y COMO RALF ──────────────────────
+     *
+     * RAMPA_FIJA = 0 -> el modelo de siempre (tiempo variable). >0 -> ese valor es la
+     * duracion de TODAS las rampas, y la longitud sale entera del DAC: vx = dx.
+     *
+     * POR QUE. El asm de 6809 que dibuja bien esta misma figura en esta misma consola
+     * carga `T1CL = $7F` UNA VEZ y despues, por cada vector, solo hace `CLR T1CH` para
+     * dispararla. Todos los vectores duran 127 cuentas. Ralf hace lo mismo con
+     * m_Scale = 128. Nosotros repartimos la distancia entre `vx` Y `t1`, con t1 de 31 a
+     * 160 — y eso hace que CUALQUIER error en el modelo de DURACION (el +1,5 del
+     * contador, el asentamiento, la fase de E) se convierta en error de distancia
+     * dividido por t1: 1% en un trazo largo, 5% en uno corto, 19% con MIN_T1=8.
+     *
+     * Eso es exactamente el sintoma medido el 2026-08-25: perimetro de Kong perfecto y
+     * detalle interior desplazado, la misma recta en 8 rampas mas larga que en 1, y el
+     * 6809 dibujando bien lo que nosotros torcemos.
+     *
+     * Con tiempo fijo no hay reparto, asi que no hay donde concentrar el error — y
+     * ademas vx = dx exacto, o sea que el residuo de redondeo desaparece y la cadena de
+     * deuda se queda sin trabajo. El coste es el otro lado de la moneda: un trazo corto
+     * dura lo mismo que uno largo, que es justo el ahorro que perseguia MIN_T1. Por eso
+     * es una perilla y no una sustitucion: hay que MEDIR las dos en la misma consola. */
+    let fija = RAMPA_FIJA.load(Ordering::Relaxed) as i32;
+    if fija > 0 {
+        return ((dx / f).clamp(-128, 127) as i8, (dy / f).clamp(-128, 127) as i8, fija as u16);
+    }
+    // 0xA0 = 160, NO 0x7F: el comentario que habia aqui decia 0x7F y llevaba tiempo
+    // mintiendo. `s` gobierna la longitud Y la velocidad de todos los vectores
+    // (vx = dx*s/t1, y t1 se acota a s), asi que razonar sobre ramp_params con 127 en la
+    // cabeza da numeros mal. Se detecto porque el histograma de t1 tenia un cubo de >=128
+    // que con s=127 no puede existir.
+    let s = escala();
+    let t1_floor = (s * m / (127 * f)).clamp(min_t1, s); // dwell floor (∝ length)
+    // VELOCITY CAP: at MIN_T1=24 mid-length segments (24 < m ≤ 110) run at the full
+    // ±127 swing, and the integrator op-amp overshoots the endpoint → platform
+    // vectors "stretch". MIN_T1=110 avoided it by throttling their velocity (long
+    // t1). Replicate that WITHOUT raising the global floor: if the dominant velocity
+    // (m·0x7F / t1) would exceed VCAP, raise t1 so it lands at VCAP (distance is
+    // preserved: velocity·t1 stays). Short vectors are already below VCAP → their
+    // short dwell (the flicker win) is untouched. t1 is capped at 0x7F.
+    // DIVISION HACIA ARRIBA, y aqui vivia un sesgo SISTEMATICO de -0,79 unidades por
+    // vector. `t1_vcap` es un SUELO: el tiempo minimo para que la velocidad no pase de
+    // VCAP. Truncando hacia abajo el suelo se queda corto, la velocidad se pasa, el DAC la
+    // recorta a +-127 y el vector sale CORTO — siempre en el mismo sentido, asi que se
+    // acumula LINEALMENTE con el numero de trazos.
+    //
+    //   m=50, VCAP=127:  50*160/127 = 62,99 -> 62    vx = round(8000/62) = 129 -> 127
+    //                    recorrido = 127*62/160 = 49,2                        -> -0,79
+    //   con techo:                          -> 63    vx = round(8000/63) = 127
+    //                    recorrido = 127*63/160 = 50,006                      -> +0,006
+    //
+    // MEDIDO en el host el 2026-08-24 sobre los 127 deltas: peor caso -0,788 antes, y una
+    // fila de cuatro trazos acumulaba -3,15. Es el sesgo que describe el comentario de
+    // VPY_MAX_CONSECUTIVE_DRAWS en el SDK ("fixed per movement, accumulates by count") y
+    // que se estaba tapando re-cerando el haz cada pocos trazos.
+    let vc = vcap.max(1);
+    let t1_vcap = ((m * s + vc * f - 1) / (vc * f)).max(1);
+    // EL TECHO SE CALCULA POR VECTOR, NO SE FIJA.
+    //
+    // `t1` y la velocidad son las dos mitades del mismo producto —v = d*s/t1— asi que
+    // alargar la rampa hunde la velocidad, y el primero en morir es el EJE MENOR: cuando su
+    // v se redondea a cero el vector se aplasta contra su eje mayor. Exigiendo solo que se
+    // mueva, |v| >= 1:
+    //
+    //     t1 <= d_menor * s
+    //
+    // NO PUEDE CONTRADECIR AL SUELO: d_menor >= 1 da un techo >= s, y `t1_floor` ya esta
+    // acotado a s, asi que el intervalo nunca se invierte. Y NO SE PUEDE EXIGIR MAS: con
+    // |v| >= 2 el techo baja a d_menor*s/2, que para un (127,1) da 80 cuando su geometria
+    // pide 160 — le robaria longitud al eje mayor para salvarle precision al menor. Un
+    // vector muy alargado TIENE el eje menor casi parado; eso no es un defecto que
+    // arreglar, es lo que significa alargado.
+    //
+    // LO QUE ESTO ARREGLA. Con el techo fijo en 160, `t1_vcap` se aplastaba y VCAP se
+    // quedaba sin recorrido: a VCAP = 8 pedia 2540 y recibia 160, un knob saturado — que es
+    // exactamente lo que se veia en pantalla el 2026-08-17, el espolon casi cerrado sin
+    // terminar de irse. Ahora un diagonal largo llega a sus 2540, y en cambio el (127,1) se
+    // queda en 160, que es la respuesta CORRECTA para EL y la que una constante global no
+    // puede dar: frenarlo mas lo aplanaria contra la horizontal.
+    //
+    // A VALORES DE FABRICA NO CAMBIA NADA. Con VCAP = 127 ningun vector pasa de t1 = 160
+    // (barrido sobre los 65.024 deltas: 0,0% lo rebasan), asi que esto abre rango solo
+    // cuando se baja VCAP a proposito.
+    let d_menor = match (dx.abs(), dy.abs()) {
+        (0, b) => b,                  // sin eje X que perder
+        (a, 0) => a,
+        (a, b) => a.min(b),
+    };
+    let techo = (d_menor * s / f)
+        .min(T1_TRANSPORT.load(Ordering::Relaxed) as i32)
+        .max(min_t1);                 // por si el transporte se deja por debajo del suelo
+    /* QUIEN MANDA CUANDO EL TECHO Y EL TOPE SE CONTRADICEN.
+     *
+     * `techo` protege la pendiente: pasado el, la tasa del eje MENOR redondea a 0 y la
+     * diagonal se endereza. `t1_vcap` protege la velocidad. En una diagonal tumbada los dos
+     * no caben, y hasta ahora ganaba el techo — con lo que la tasa se salta el tope.
+     *
+     * MEDIDO en un frame de nuestro Major Havoc: 341 de 754 trazos iluminados (45%) salen
+     * por encima de 51, y algunos a 125. A esa velocidad el trazo reparte 2,5 veces menos
+     * carga por unidad de longitud que uno a 51, mientras la junta entre microtramos sigue
+     * quemando sus 22-24 ciclos QUIETO: linea tenue con un punto brillante en cada extremo,
+     * que es el sintoma de "se ven todos los puntos de los microtramos".
+     *
+     * (Y OJO CON LA COMPARACION FACIL: el VecFever no pasa de 51 en su captura, pero eso NO
+     * es un tope suyo — su frame es 85% trazos rectos de texto y su diagonal mas tumbada
+     * tiene pendiente 0,48. Nunca se encuentra con este caso. Ver puntos-no-estan-en-la-lista.)
+     *
+     * Con el tope mandando, el eje menor se pierde en UN microtramo pero NO se pierde: la
+     * deuda lo apunta y lo cobra en el siguiente, que es justo para lo que esta. Esa deuda
+     * no existia cuando se escribio el techo.
+     *
+     * TECHO_MANDA = 0 hace ganar al tope. NO es el por defecto: el invariante "ningun eje
+     * con delta se queda parado" esta afirmado en `el_techo_de_t1_es_por_vector`, y soltar
+     * el techo ya se probo una vez y rompio el dibujo en los DOS cartuchos. Se compara en
+     * consola antes de decidir, no aqui. */
+    let t1 = if TECHO_MANDA.load(Ordering::Relaxed) != 0 {
+        t1_floor.max(t1_vcap).min(techo)
+    } else {
+        t1_floor.max(t1_vcap).min(techo.max(t1_vcap))
+    };
+    // COMPENSAR EL ARRANQUE EN VEZ DE FRENAR EL HAZ.
+    //
+    // OBSERVADO en consola el 2026-08-24 sobre la rejilla: con VCAP alto el dibujo "se va"
+    // —se queda corto— pero NO tiembla, o sea que el error es ESTATICO. Con VCAP bajo la
+    // geometria sale bien y lo que tiembla es el framerate, porque t1 se dispara.
+    //
+    // Un error estatico no se arregla frenando: se compensa. Si el amplificador tarda un
+    // tiempo FIJO en coger velocidad, el haz recorre v*(t1 - T) en vez de v*t1. Alargar t1
+    // en T devuelve la distancia SIN tocar la velocidad, y cuesta T ciclos por vector en
+    // vez de multiplicar t1 por 2,5 como hace bajar VCAP.
+    //
+    // T es un TIEMPO, asi que su peso relativo es mayor en los vectores cortos — que es
+    // exactamente la firma de "el dibujo se va" cuando el haz corre rapido.
+    //
+    // 0 = como siempre. Se ajusta en caliente desde el panel; el valor bueno es el que
+    // hace que la rejilla mida lo que dice medir.
+    // SE APLICA AL FINAL, NO AQUI — ver el final de la funcion.
+    //
+    // Estuvo aqui, sumado a `t1` ANTES de calcular `vx`, y eso lo anulaba exactamente: la
+    // distancia mandada es `vx*t1/s`, asi que al recalcular `vx` con el `t1` ya alargado el
+    // resultado vuelve a ser `dx`. El knob solo hacia la rampa mas lenta y mas larga, sin
+    // devolver una sola unidad de distancia. MEDIDO en consola el 2026-08-25: T1_LAG=8 no
+    // cambio el dibujo NADA, y por eso se descarto una hipotesis que en realidad no se
+    // habia llegado a probar.
+
+    // ELEGIR EL t1 QUE MENOS SE DESVIA, entre el calculado y el siguiente.
+    //
+    // Redondear `vx` al mas cercano acota el error de UN trazo, pero no lo centra: segun
+    // donde caiga s/t1, el redondeo tira casi siempre para el mismo lado y entonces deja de
+    // ser ruido y pasa a ser una DEUDA que se suma. MEDIDO con el test `el_error_de_la_
+    // rampa_no_tiene_sesgo`: +0,028 unidades por trazo a VCAP=96, o sea 2,4 al cabo de 84.
+    //
+    // t1 y t1+1 dan dos productos vx*t1 distintos y uno de los dos cae mas cerca. Cuesta
+    // una division mas y un ciclo de rampa como mucho, y el error deja de tener direccion
+    // preferida — que es lo unico que hace que se acumule.
+    let error_de = |t: i32| -> i64 {
+        if t <= 0 { return i64::MAX; }
+        let v = {
+            let den = (t as i64) * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i64;
+            let n = (m as i64) * (s as i64) * 256 / (f as i64);
+            let q = if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den };
+            q.clamp(-128, 127)
+        };
+        ((v * t as i64) - (m as i64) * (s as i64) / (f as i64)).abs()
+    };
+    let t1 = if t1 < techo && error_de(t1 + 1) < error_de(t1) { t1 + 1 } else { t1 };
+    // ROUND, DO NOT TRUNCATE. Distance is velocity x time, so `vx * t1` has to stay
+    // proportional to `dx * s` — but integer division always rounds DOWN, and the loss
+    // is the fractional part of `s / t1`, which lands wherever it lands:
+    //
+    //   t1 =  8 -> 127/8  = 15.875 -> 15  ->  94.5% of the length   (glyphs stepped)
+    //   t1 = 24 -> 127/24 =  5.29  ->  5  ->  94.5%
+    //   t1 = 31 -> 127/31 =  4.096 ->  4  ->  97.6%                 (glyphs clean)
+    //
+    // MEASURED on hardware 2026-08-05: the user found letters stepped at MIN_T1 = 8 and
+    // straight at 31, which is this table and nothing else — the error is not monotonic
+    // in the floor, so no choice of floor fixes it. Rounding to nearest halves the worst
+    // case and, more importantly, removes the dependence on where s/t1 happens to fall.
+    // Symmetric around zero so a stroke and its mirror get the same length.
+    // El divisor es la duracion REAL de la rampa, no `t1`. Ver T1_EXTRA_Q8: el 6522
+    // cuenta t1 + 1,5 en un disparo, y dividir por `t1` a secas recorre de mas.
+    // Con T1_EXTRA_Q8 = 0 esto es exactamente la aritmetica de antes.
+    let den = (t1 as i64) * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i64;
+    let round_div = |num: i32| -> i32 {
+        let n = num as i64 * 256;
+        (if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den }) as i32
+    };
+    let vx = round_div(dx * s / f).clamp(-128, 127) as i8;
+    let vy = round_div(dy * s / f).clamp(-128, 127) as i8;
+    // Y AHORA SI, EL RETARDO DE ARRANQUE. Con `vx` ya elegido, alargar la rampa en T hace
+    // que el haz recorra `vx*(t1+T)/s` — mas de lo pedido, que es justo la distancia que
+    // pierde mientras coge velocidad. Es un TIEMPO, asi que pesa mas en los trazos cortos:
+    // la firma de "el dibujo se va" cuando el haz corre rapido.
+    let t1 = t1 + if arranque { T1_LAG_ARRANQUE.load(Ordering::Relaxed) }
+                  else        { T1_LAG.load(Ordering::Relaxed) } as i32;
+    (vx, vy, t1 as u16)
+}
+
+    #[test]
+    fn ramp_params_q_i32_igual_que_i64() {
+        let mut malos = 0;
+        for (esc, extra, transp) in [(127u32, 640u32, 110u32), (146, 664, 110), (160, 0, 160), (110, 664, 110)] {
+            DRAW_SCALE.store(esc, Ordering::Relaxed);
+            T1_EXTRA_Q8.store(extra, Ordering::Relaxed);
+            T1_TRANSPORT.store(transp, Ordering::Relaxed);
+            let mut d = -2100i32;
+            while d <= 2100 {
+                let mut e = -2100i32;
+                while e <= 2100 {
+                    let a = ramp_params_q(d, e, TOPE_DAC, 4);
+                    let b = ramp_params_q_old(d, e, TOPE_DAC, 4);
+                    if a != b { malos += 1; if malos <= 5 { std::eprintln!("esc={esc} extra={extra} dx={d} dy={e}: nuevo {:?} viejo {:?}", a, b); } }
+                    e += 7;
+                }
+                d += 11;
+            }
+        }
+        assert_eq!(malos, 0, "casos distintos");
     }
 }
