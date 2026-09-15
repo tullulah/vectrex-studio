@@ -514,11 +514,15 @@ export class Uvm2System implements ISystem, IBus {
       for (let i = 0; i < 512; i++) this.write8((buf + i) >>> 0, this.sdImagen[lba * 512 + i]);
       ok = 1;
     }
-    if (this.sdBloquesVistos < 12) { this.sdBloquesVistos++; console.log(`[Uvm2System] SD bloque ${lba} -> 0x${buf.toString(16)} ${ok ? 'ok' : 'FUERA DE LA IMAGEN'}  desde lr=0x${(cpu.getReg(14) >>> 0).toString(16)} core=${cpu === this.cpu ? 0 : 1}`); }
+    if (this.sdBloquesVistos < 12 || this.frameCounter > 370) { this.sdBloquesVistos++; console.log(`[Uvm2System] SD bloque ${lba} -> 0x${buf.toString(16)} ${ok ? 'ok' : 'FUERA DE LA IMAGEN'}  desde lr=0x${(cpu.getReg(14) >>> 0).toString(16)} core=${cpu === this.cpu ? 0 : 1}`); }
     cpu.setReg(0, ok);
     cpu.setReg(15, cpu.getReg(14) & ~1);
   }
   private sdBloquesVistos = 0;
+  private enStream = false;
+  private execAddr = 0;
+  private execVuelta = [0, 0];   // LR guardado por nucleo mientras esta dentro de uvm2_exec
+  private enLista = 0;
   private volcarEn = Number((globalThis as any).__VOLCAR ?? 0) >>> 0;
   private volcados = 0;
   private qmiIdVisto = false;
@@ -649,6 +653,11 @@ export class Uvm2System implements ISystem, IBus {
     /* La BIOS del cartucho propio: su SD se atrapa en sd_hw_init / sd_hw_read_block
      * (sd.rs, la costura) y se sirve de una imagen FAT (setSdImagen). */
     this.sdHwInitAddr      = (sim.get('sd_hw_init') ?? 0) & ~1;
+    /* LA LISTA, Y SOLO LA LISTA: mientras un nucleo esta dentro de uvm2_exec (el que
+     * reproduce la lista de comandos por el stream) las escrituras a la VIA se marcan
+     * 'lista'. Lo demas (mandos, recalibraciones a mano) tambien pasa por el stream en la
+     * BIOS, asi que el origen PIO/SIO no separaba el dibujo. */
+    this.execAddr = (sim.get('uvm2_exec') ?? 0) & ~1;
     this.sdHwReadBlockAddr = (sim.get('sd_hw_read_block') ?? 0) & ~1;
     console.log(`[Uvm2System] simbolos: uvm2_sd_leer=0x${this.sdLeerAddr.toString(16)} ` +
                 `uvm2_sd_error=0x${this.sdErrorAddr.toString(16)}`);
@@ -736,6 +745,12 @@ export class Uvm2System implements ISystem, IBus {
   initFirmware(elf: Uint8Array): void {
     console.log('[Uvm2System] ARRANCANDO la BIOS del cartucho propio, ELF de', elf.length, 'bytes');
     this.placa = PLACA_PROPIA;
+    /* La BIOS EXPORTA uvm2_sd_leer_desde (su costura Rust sobre sd.rs, mismo nombre que la
+     * funcion C de la .um2), y setElf la habia registrado como trampa de la .um2: el
+     * emulador la servia desde la carpeta SDDIR y config/uvm2.cfg salia "no existe". Aqui
+     * la SD se sirve por bloques (sd_hw_*), asi que esas dos trampas no se aplican. */
+    this.sdLeerAddr = 0;
+    this.sdLeerDesdeAddr = 0;
     this.resets = 0;
     this.clocks.fill(0);
     this.bootram.fill(0);
@@ -845,6 +860,8 @@ export class Uvm2System implements ISystem, IBus {
     if (this.rastro1.length < 64) this.rastro1.push(pc1);
     if (this.sdLeerAddr && pc1 === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu1); return 1; }
     if (this.sdLeerDesdeAddr && pc1 === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu1); return 1; }
+    if (this.execAddr && pc1 === this.execAddr) { this.execVuelta[1] = this.cpu1.getReg(14) & ~1; this.enLista++; }
+    else if (this.execVuelta[1] && pc1 === this.execVuelta[1]) { this.execVuelta[1] = 0; this.enLista--; }
     if (this.sdHwInitAddr && pc1 === this.sdHwInitAddr) { this.atiendeSdHwInit(this.cpu1); return 1; }
     if (this.sdHwReadBlockAddr && pc1 === this.sdHwReadBlockAddr) { this.atiendeSdHwReadBlock(this.cpu1); return 1; }
     /* En la BIOS, core 1 salta al JUEGO, que vive en PSRAM: que lo busque alli deprisa. */
@@ -1019,7 +1036,9 @@ export class Uvm2System implements ISystem, IBus {
 
     if (w & 1) {
       this.gpioOut = ((this.gpioOut & ~PINES) | ((((w >>> 1) & ((1 << this.placa.outCount) - 1)) << this.placa.outBase) & PINES)) >>> 0;
+      this.enStream = true;
       this.correPeriodoE();
+      this.enStream = false;
       /* Y SE APARCA EN CUANTO SE ENGANCHA. En el hardware la SM del PIO ocupa cada periodo
        * de E; aqui el reloj avanza TAMBIEN con la CPU, asi que unos pines que se quedan
        * puestos los vuelve a enganchar la VIA en el siguiente flanco. Medido en la traza:
@@ -1088,7 +1107,10 @@ export class Uvm2System implements ISystem, IBus {
      * escribe ORB. Eso solo se ve en la traza. */
     if (this.traza.length < 40 && this.busCycle > 200000)
       this.traza.push(`${['ORB','ORA','DDRB','DDRA','T1CL','T1CH','T1LL','T1LH','T2CL','T2CH','SR','ACR','PCR','IFR','IER','ORAnh'][this.busAddress() & 0xF]}=0x${this.datoDe(this.gpioOut).toString(16)}`);
-    if ((globalThis as any).__VIADUMP) this.viaFull.push(this.busCycle, this.busAddress() & 0xF, this.datoDe(this.gpioOut));
+    /* CON SU ORIGEN: 1 = palabra del stream PIO (la LISTA de comandos), 0 = escritura por SIO
+     * (lectura de mandos, recalibraciones a mano). Separa el dibujo de lo demas en las dos
+     * placas con el mismo criterio, que es lo que hace comparable un frame con otro. */
+    if ((globalThis as any).__VIADUMP) this.viaFull.push(this.busCycle, this.busAddress() & 0xF, this.datoDe(this.gpioOut), this.enLista > 0 ? 1 : 0);
     this.via.write(this.busAddress() & 0xF, this.datoDe(this.gpioOut),
                    (xsh) => { this.beam.alg_xsh = xsh; });
     /* ¿Se mueve el sample-and-hold de Y? Si ORB=0 llega y esto no cambia, el enganche no
@@ -1563,8 +1585,11 @@ export class Uvm2System implements ISystem, IBus {
         r.push(`lr=0x${(this.cpu.getReg(14) >>> 0).toString(16)}`);
         const b = []; const base = this.cpu.getReg(8) >>> 0;
         for (let i = 0; i < 40; i += 4) b.push('0x' + this.read32(base + i).toString(16));
-        console.log(`[Uvm2System] VOLCAR pc=0x${pc.toString(16)} ${r.join(' ')}\n   [r8..]: ${b.join(' ')}`);
+        let txt = ''; for (let i = 0; i < 24; i++) { const c = this.read8((this.cpu.getReg(0) >>> 0) + i); if (c < 32 || c > 126) break; txt += String.fromCharCode(c); }
+        console.log(`[Uvm2System] VOLCAR pc=0x${pc.toString(16)} ${r.join(' ')}\n   [r8..]: ${b.join(' ')}   [r0] como texto: "${txt}"`);
       }
+      if (this.execAddr && pc === this.execAddr) { this.execVuelta[0] = this.cpu.getReg(14) & ~1; this.enLista++; }
+      else if (this.execVuelta[0] && pc === this.execVuelta[0]) { this.execVuelta[0] = 0; this.enLista--; }
       if (this.sdHwInitAddr && pc === this.sdHwInitAddr) { this.atiendeSdHwInit(this.cpu); continue; }
       if (this.sdHwReadBlockAddr && pc === this.sdHwReadBlockAddr) { this.atiendeSdHwReadBlock(this.cpu); continue; }
       /* Mirar y dejar pasar: no se atrapa la llamada, solo se le hace la foto. */

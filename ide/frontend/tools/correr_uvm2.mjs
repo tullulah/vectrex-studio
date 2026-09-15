@@ -446,10 +446,10 @@ if (elf) {
 if (process.env.VIADUMP) {
   const v = (sys /** @type {any} */).viaFull;
   const N=['ORB','ORA','DDRB','DDRA','T1CL','T1CH','T1LL','T1LH','T2CL','T2CH','SR','ACR','PCR','IFR','IER','ORAnh'];
-  let o='cycle\treg\tname\tdata\n';
-  for (let i=0;i<v.length;i+=3) o+=`${v[i]}\t${v[i+1].toString(16)}\t${N[v[i+1]]}\t${v[i+2].toString(16).padStart(2,'0')}\n`;
+  let o='cycle\treg\tname\tdata\tsrc\n';
+  for (let i=0;i<v.length;i+=4) o+=`${v[i]}\t${v[i+1].toString(16)}\t${N[v[i+1]]}\t${v[i+2].toString(16).padStart(2,'0')}\t${v[i+3] ? 'lista' : 'otro'}\n`;
   writeFileSync(process.env.VIADUMP, o);
-  console.log(`  VIA volcado: ${v.length/3} escrituras -> ${process.env.VIADUMP}`);
+  console.log(`  VIA volcado: ${v.length/4} escrituras -> ${process.env.VIADUMP}`);
 }
 
 function capacidadCmds(nmLines, elfPath) {

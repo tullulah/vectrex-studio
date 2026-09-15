@@ -113,6 +113,15 @@ struct dc_ctrl {
                           * directly either: core 0 owns the bus while it draws, and two
                           * writers on the VIA with no arbitration is the fault that shipped
                           * once already. It travels in the queue like everything else. */
+/* LAS DOS OPS EN CUARTOS DE UNIDAD, para que la BIOS reciba EXACTAMENTE lo que en la .um2
+ * recibe uvm2_draw.c: v_directDraw32 en la UVM2 es intensity + move_abs_q4 + delta_q4, sin
+ * redondear a i8 ni fusionar tramos (esa es la rama UVM2_SUBUNIDAD de abajo). Con el anillo
+ * en i8 la lista de la BIOS salia distinta de la de la .um2 (632 rampas contra 617, y mas
+ * pinzas de cero por la cadencia VPY_MAX_CONSECUTIVE_DRAWS) — y el objetivo es que salga
+ * IGUAL, que se mide en el emulador (VIADUMP de las dos). 12 bits con signo por eje: a =
+ * x[7:0], b = y[7:0], _pad = x[11:8] | y[11:8] << 4. VS_Q4(±16129) = ±2032, cabe. */
+#define DC_OP_MOVE_ABS_Q4 7
+#define DC_OP_DELTA_Q4    8
 #define DC_OP_DRAW_GAPPED 5 /* ONE STRAIGHT LINE WITH GAPS, IN A SINGLE RAMP. Header:
                           * a=dx, b=dy, _pad = gap count; then ceil(n*2/4) commands holding
                           * the (start,end) pairs as 0..255 fractions of the run.
@@ -141,6 +150,16 @@ static inline void dc_push(unsigned char op, signed char a, signed char b) {
 /* The gapped line, pushed to the command queue. `gaps` are (start,end) pairs as
  * 0..255 fractions of the run; n is capped at DC_GAPS_MAX (hoisted above both transports,
  * since flush_frame builds the array before it knows which one it is talking to). */
+static inline void dc_push_q4(unsigned char op, int x, int y) {
+    if (s_dc_n < DC_CMDS_MAX) {
+        struct dc_cmd *buf = s_dc_w ? DC_BUF1 : DC_BUF0;
+        buf[s_dc_n].op = op;
+        buf[s_dc_n].a = (signed char)(x & 0xFF);
+        buf[s_dc_n].b = (signed char)(y & 0xFF);
+        buf[s_dc_n]._pad = (unsigned char)(((x >> 8) & 0x0F) | (((y >> 8) & 0x0F) << 4));
+        s_dc_n++;
+    }
+}
 static void dc_push_gapped(signed char dx, signed char dy, const unsigned char *gaps, int n) {
     if (n < 0) n = 0;
     if (n > DC_GAPS_MAX) n = DC_GAPS_MAX;
@@ -855,9 +874,17 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
 #ifdef UVM2_CUENTA_ENTRADA
     uvm2_cuenta_entrada++;   /* DIAGNOSTICO: cuantas llamadas de dibujo ENTRAN al SDK */
 #endif
+#ifdef VPY_DUAL_CORE
+    /* El cartucho propio: las mismas tres llamadas, pero grabadas en el anillo para que las
+     * haga la BIOS (dc.rs), que las pasa a uvm2_draw.c tal cual. */
+    BEAM_INTENSITY((signed char)b);
+    dc_push_q4(DC_OP_MOVE_ABS_Q4, VS_Q4(x0), VS_Q4(y0));
+    dc_push_q4(DC_OP_DELTA_Q4, VS_Q4(x1) - VS_Q4(x0), VS_Q4(y1) - VS_Q4(y0));
+#else
     uvm2_draw_intensity((int)b);
     uvm2_draw_move_abs_q4(VS_Q4(x0), VS_Q4(y0));
     uvm2_draw_delta_q4(VS_Q4(x1) - VS_Q4(x0), VS_Q4(y1) - VS_Q4(y0));
+#endif
 }
 #else
 void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
