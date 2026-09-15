@@ -107,71 +107,39 @@ fn emit_dv_reset() -> String {
 // ─── dv_move_to ───────────────────────────────────────────────────────────
 
 fn emit_dv_move_to() -> String {
+    // EN SUBUNIDADES (2026-09-16). El delta entra en unidades de juego y sale en 1/16 por
+    // SYS_MOVE_Q4: el mismo camino (uvm2_draw_move_q4) que los puertos en C. El bucle de
+    // pasos de ±127 que habia aqui era trocear para un formato de comando que no es el
+    // nuestro: el SDK trocea por el limite REAL de la rampa. Los builtins que calculan
+    // con fraccion (escala, seno/coseno, bezier) entran por dv_move_to_q4 directamente.
     let mut s = String::new();
-    s.push_str("@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (a ramped delta after a\n");
-    s.push_str("@ reset). Split into <=127-per-axis steps: a scrolled origin can land far\n");
-    s.push_str("@ past the i8 DAC range, and SYS_MOVE casts to i8 → the whole shape WRAPS to\n");
-    s.push_str("@ the wrong side of the screen (mario_poc floor tiles). SYS_MOVE ramps the\n");
-    s.push_str("@ INTEGRATORS (velocity×time), not an absolute DAC, so stepping accumulates\n");
-    s.push_str("@ to the true (off-screen) origin — the visible part draws in place and the\n");
-    s.push_str("@ physical screen clips the rest. A move already within +/-127 does one step\n");
-    s.push_str("@ (unchanged).\n");
+    s.push_str("@ dv_move_to(r0=dx, r1=dy) unidades de juego -> SYS_MOVE_Q4 (1/16)\n");
     s.push_str(".global dv_move_to\n.type dv_move_to, %function\n.thumb_func\ndv_move_to:\n");
-    s.push_str("    push    {r2, r3, r4, r5, r6, r7, lr}  @ callers assume traps preserve regs\n");
-    s.push_str("    mov     r4, r0                  @ remaining dx\n");
-    s.push_str("    mov     r5, r1                  @ remaining dy\n");
-    s.push_str("    mov     r6, #127\n");
-    s.push_str("    rsb     r7, r6, #0              @ r7 = -127\n");
-    // Iteration cap: a real (even fully-scrolled) coordinate needs a handful of
-    // steps. A garbage/huge value (e.g. an object drawn at an uninitialized
-    // position) would otherwise spin millions of times → hang. The OLD single
-    // SYS_MOVE just wrapped garbage to i8 (harmless); the cap restores that
-    // tolerance. 8 steps = ±1016 travel, far past any on/off-screen need.
-    s.push_str("    mov     r3, #8                  @ max split steps (anti-hang guard)\n");
-    s.push_str("dvmt_loop:\n");
-    s.push_str("    mov     r0, r4                  @ step_x = clamp(remaining_x, -127, 127)\n");
-    s.push_str("    cmp     r0, r6\n    it      gt\n    movgt   r0, r6\n");
-    s.push_str("    cmp     r0, r7\n    it      lt\n    movlt   r0, r7\n");
-    s.push_str("    mov     r1, r5                  @ step_y = clamp(remaining_y, -127, 127)\n");
-    s.push_str("    cmp     r1, r6\n    it      gt\n    movgt   r1, r6\n");
-    s.push_str("    cmp     r1, r7\n    it      lt\n    movlt   r1, r7\n");
-    s.push_str("    push    {r0, r1}                @ svc clobbers r0; keep the steps\n");
-    s.push_str("    svc     #3                      @ SYS_MOVE (this step)\n");
-    s.push_str("    pop     {r0, r1}\n");
-    s.push_str("    subs    r4, r4, r0              @ remaining -= step\n");
-    s.push_str("    subs    r5, r5, r1\n");
-    s.push_str("    orrs    r2, r4, r5              @ both zero? → done\n");
-    s.push_str("    beq     dvmt_done\n");
-    s.push_str("    subs    r3, r3, #1              @ else step, until the cap\n");
-    s.push_str("    bne     dvmt_loop\n");
-    s.push_str("dvmt_done:\n");
-    s.push_str("    pop     {r2, r3, r4, r5, r6, r7, pc}\n\n");
-    s
-}
-
-// ─── dv_draw_delta ────────────────────────────────────────────────────────
-
-fn emit_dv_draw_delta() -> String {
-    let mut s = String::new();
-    s.push_str("@ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA\n");
-    s.push_str(".global dv_draw_delta\n.type dv_draw_delta, %function\n.thumb_func\ndv_draw_delta:\n");
-    s.push_str("    svc     #4                      @ SYS_DRAW_DELTA\n");
+    s.push_str("    lsl     r0, r0, #4\n    lsl     r1, r1, #4\n");
+    s.push_str("    svc     #28                     @ SYS_MOVE_Q4\n");
+    s.push_str("    bx      lr\n\n");
+    s.push_str("@ dv_move_to_q4(r0=dx_q4, r1=dy_q4) ya en 1/16\n");
+    s.push_str(".global dv_move_to_q4\n.type dv_move_to_q4, %function\n.thumb_func\ndv_move_to_q4:\n");
+    s.push_str("    svc     #28                     @ SYS_MOVE_Q4\n");
     s.push_str("    bx      lr\n\n");
     s
 }
 
-// ─── vpy_draw_vector ──────────────────────────────────────────────────────
-//
-// _NAME_VECTORS format (arm/assets.rs):
-//   .word  path_count
-//   .word  ptr_path0, ptr_path1, ...
-// _NAME_PATHn:
-//   .byte  intensity, y_start (i8), x_start (i8), 0, 0
-//   .byte  0xFF, dy, dx   (line)  |  .byte 0x02 (end)
-//
-// r0 = asset_ptr
-// Register map: r4=asset, r5=path_count, r6=path_idx, r7=path_ptr, r8=cmd_ptr
-// ---------------------------------------------------------------------------
+// ─── dv_draw_delta ────────────────────────────────────────────────────────
+fn emit_dv_draw_delta() -> String {
+    let mut s = String::new();
+    s.push_str("@ dv_draw_delta(r0=dx, r1=dy) unidades de juego -> SYS_DRAW_DELTA_Q4 (1/16)\n");
+    s.push_str(".global dv_draw_delta\n.type dv_draw_delta, %function\n.thumb_func\ndv_draw_delta:\n");
+    s.push_str("    lsl     r0, r0, #4\n    lsl     r1, r1, #4\n");
+    s.push_str("    svc     #29                     @ SYS_DRAW_DELTA_Q4\n");
+    s.push_str("    bx      lr\n\n");
+    s.push_str("@ dv_draw_delta_q4(r0=dx_q4, r1=dy_q4) ya en 1/16\n");
+    s.push_str(".global dv_draw_delta_q4\n.type dv_draw_delta_q4, %function\n.thumb_func\ndv_draw_delta_q4:\n");
+    s.push_str("    svc     #29                     @ SYS_DRAW_DELTA_Q4\n");
+    s.push_str("    bx      lr\n\n");
+    s
+}
+
 fn emit_draw_vector() -> String {
     let mut s = String::new();
     s.push_str("@ vpy_draw_vector(r0=asset_ptr, r1=ox, r2=oy)\n");
@@ -430,16 +398,19 @@ fn emit_draw_vector_3d() -> String {
 // ---------------------------------------------------------------------------
 fn emit_draw_recording() -> String {
     // Clamp the value in `reg` to [-127, 127] using r2 as scratch.
+    // EN SUBUNIDADES: el tope sigue siendo ±127 unidades, o sea ±2032 en 1/16.
     fn clamp_i8(s: &mut String, reg: &str) {
-        s.push_str(&format!("    cmp     {reg}, #127\n    it      gt\n    movgt   {reg}, #127\n"));
-        s.push_str("    mvn     r2, #126            @ r2 = -127\n");
+        s.push_str("    movw    r2, #2032           @ 127 unidades en 1/16\n");
+        s.push_str(&format!("    cmp     {reg}, r2\n    it      gt\n    movgt   {reg}, r2\n"));
+        s.push_str("    rsb     r2, r2, #0          @ -2032\n");
         s.push_str(&format!("    cmp     {reg}, r2\n    it      lt\n    movlt   {reg}, r2\n"));
     }
-    // r0 = (i8 at [r4, #off]) * scale >> 7  (sign preserved: ldrsb sign-extends)
+    // r0 = (i8 at [r4, #off]) * scale >> 3: el valor en 1/16 de unidad (antes >> 7 lo
+    // dejaba en enteros y un trazo de media unidad desaparecia)
     fn scale_byte(s: &mut String, off: u8) {
         s.push_str(&format!("    ldrsb   r0, [r4, #{off}]\n"));
         s.push_str("    mul     r0, r0, r8\n");
-        s.push_str("    asr     r0, r0, #7\n");
+        s.push_str("    asr     r0, r0, #3          @ 1/16 de unidad\n");
     }
 
     let mut s = String::new();
@@ -447,8 +418,8 @@ fn emit_draw_recording() -> String {
     s.push_str(".global vpy_draw_recording\n.type vpy_draw_recording, %function\n.thumb_func\nvpy_draw_recording:\n");
     s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, lr}\n");
     s.push_str("    mov     r4, r0              @ vrec base\n");
-    s.push_str("    mov     r6, r1              @ x offset\n");
-    s.push_str("    mov     r7, r2              @ y offset\n");
+    s.push_str("    lsl     r6, r1, #4          @ x offset, en 1/16\n");
+    s.push_str("    lsl     r7, r2, #4          @ y offset, en 1/16\n");
     s.push_str("    mov     r8, r3              @ scale (0-128, 128 = 100%)\n");
     // frame_idx = frame % frame_count (sdiv+mul+sub — no mls, emulator-safe)
     s.push_str("    ldr     r1, [r4]            @ frame_count\n");
@@ -486,7 +457,7 @@ fn emit_draw_recording() -> String {
     s.push_str("    add     r1, r0, r7          @ y + scaled start_y\n");
     clamp_i8(&mut s, "r1");
     s.push_str("    mov     r0, r10\n");
-    s.push_str("    bl      dv_move_to\n");
+    s.push_str("    bl      dv_move_to_q4\n");
     // advance cursor past the 4-byte chain header to first delta pair
     s.push_str("    add     r4, r4, #4\n");
 
@@ -502,7 +473,7 @@ fn emit_draw_recording() -> String {
     clamp_i8(&mut s, "r0");
     s.push_str("    mov     r1, r0              @ dy\n");
     s.push_str("    mov     r0, r10             @ dx\n");
-    s.push_str("    bl      dv_draw_delta\n");
+    s.push_str("    bl      dv_draw_delta_q4\n");
     // next delta pair
     s.push_str("    add     r4, r4, #2\n");
     s.push_str("    sub     r9, r9, #1\n");

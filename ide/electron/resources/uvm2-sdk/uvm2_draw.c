@@ -2032,6 +2032,16 @@ if (forzada) { vx = px_; vy = py_; t1 = pt1_; } else {
  * usa el helper de abajo. */
 static void move_rel_interno(int dx, int dy){ trocear(dx, dy, move_una); }
 void uvm2_draw_move(int dx, int dy){ trocear(dx * UVM2_Q, dy * UVM2_Q, move_una); }
+/* EL SALTO RELATIVO EN 1/16 DE UNIDAD, para VPy (SYS_MOVE_Q4): el compilador lleva la
+ * posicion en subunidades y pide el salto en las mismas; sin UVM2_SUBUNIDAD redondea. */
+void uvm2_draw_move_q4(int dx_q4, int dy_q4)
+{
+#if UVM2_Q_BITS > 0
+    trocear(dx_q4, dy_q4, move_una);
+#else
+    trocear((dx_q4 + (dx_q4 < 0 ? -8 : 8)) / 16, (dy_q4 + (dy_q4 < 0 ? -8 : 8)) / 16, move_una);
+#endif
+}
 
 
 /* LA DIFUSION VIVE EN LA CAJA COMPARTIDA. Estuvo aqui unas horas, y en el emulador habia

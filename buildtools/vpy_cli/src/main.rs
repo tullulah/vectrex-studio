@@ -1952,10 +1952,11 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         // cartucho. No confundir con VPY_DUAL_CORE, que apunta al core 1 del
         // FIRMWARE del cartucho y aqui no existe nadie que drene el buffer.
         .arg({
-            let mut defs = String::from("UVM2_STEP_OWNS_INIT");
-            if std::env::var("UVM2_DUAL_CORE").as_deref() == Ok("1") {
-                defs.push_str(";UVM2_DUAL_CORE");
-            }
+            // SIEMPRE doble nucleo, PIO+DMA y subunidades (Daniel, 2026-09-16: "todos los
+            // proyectos... vpy tambien. hay que unificarlo todo"). Antes el doble nucleo era
+            // una variable de entorno que nadie ponia y el .um2 de VPy salia por el camino
+            // de un nucleo; ahora la base es la misma que uvm2.mk da a los proyectos en C.
+            let mut defs = String::from("UVM2_STEP_OWNS_INIT;UVM2_DUAL_CORE;UVM2_PIO_STREAM;UVM2_SUBUNIDAD");
             // Los del PROYECTO ([uvm2] defs), que es donde vive lo medido y lo que
             // viaja con el .vpyproj. Van antes del entorno para que una prueba suelta
             // desde la linea de ordenes siga pudiendo pisarlos (en cmake gana el ultimo).

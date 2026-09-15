@@ -51,6 +51,8 @@ enum {
     SYS_PLAY_SFX      = 23,
     SYS_RASTER_TEXT   = 26,   /* (r0:x, r1:y, r2:str, r3:len) — see sdk_rp2350.c */
     SYS_DRAW_GAPPED   = 27,   /* (r0:dx, r1:dy, r2:gaps, r3:n) — one ramp, BLANK toggled inside */
+    SYS_MOVE_Q4       = 28,   /* (r0:dx, r1:dy) en 1/16 de unidad: VPy en subunidades */
+    SYS_DRAW_DELTA_Q4 = 29,   /* (r0:dx, r1:dy) en 1/16 de unidad, encendido */
 };
 
 /* Input is sampled once per frame in SYS_WAIT_RECAL and cached here: the read
@@ -353,6 +355,16 @@ void uvm2_svc_dispatch(uint32_t *frame)
 
     case SYS_MOVE_ABS:
         uvm2_draw_move_abs((int)(int32_t)r0, (int)(int32_t)r1);
+        break;
+
+    /* VPY EN SUBUNIDADES (2026-09-16): el compilador ARM emite el salto y el trazo en 1/16
+     * de unidad, las mismas funciones que v_directDraw32 en los puertos en C. */
+    case SYS_MOVE_Q4:
+        uvm2_draw_move_q4((int)(int32_t)r0, (int)(int32_t)r1);
+        break;
+
+    case SYS_DRAW_DELTA_Q4:
+        uvm2_draw_delta_q4((int)(int32_t)r0, (int)(int32_t)r1);
         break;
 
     /* ONE RAMP FOR A WHOLE COLLINEAR RUN. The emitter (sdk_rp2350.c flush_frame) has

@@ -42,6 +42,7 @@ void uvm2_draw_delta(int dx, int dy);
  * para tener efecto; sin el redondean y se comportan como las enteras. */
 void uvm2_draw_delta_q4(int dx_q4, int dy_q4);
 void uvm2_draw_move_abs_q4(int x_q4, int y_q4);
+void uvm2_draw_move_q4(int dx_q4, int dy_q4);      /* salto relativo, 1/16 (SYS_MOVE_Q4) */
 /* La misma recta pero con tramos apagados, en UNA rampa. `huecos` son pares
  * (inicio, fin) en fracciones 0..255 de la recta. n = cuantos pares. */
 void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int n);
