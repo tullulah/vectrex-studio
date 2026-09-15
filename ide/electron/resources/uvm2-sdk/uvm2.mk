@@ -283,3 +283,33 @@ uvm2-clean:
 	rm -rf $(UVM2_BUILD)
 
 .PHONY: uvm2 uvm2-clean
+
+# ── EL CARTUCHO DE VECTREX STUDIO (rp2350): UNA receta para todos los proyectos ──────────
+#
+# Daniel (2026-09-15): "TODOS los proyectos de C deben ser dual core, PIO y DMA". En el
+# cartucho propio eso lo pone la BIOS (core 0 ejecuta la lista por PIO+DMA; el programa
+# corre en core 1) y lo que decide el juego es COMO le habla: con VPY_DUAL_CORE
+# sdk_rp2350.c llama al SDK de la BIOS por su tabla de funciones (uvm2_config.h hace falta:
+# de ahi el -I del SDK), y sin el va por svc uno a uno y sin menu de configuracion. Cada
+# Makefile tenia su propia regla rp2350 copiada 43 veces, casi todas por svc; esta es la
+# misma para todos, con las MISMAS fuentes y defines que la .um2 (UVM2_SRCS/UVM2_CFLAGS):
+# la lista de comandos que sale de aqui es la que sale de la UVM2, medido en el emulador.
+#
+# `libc_stub.c` SI entra (UVM2_SRCS, no UVM2_SRCS_KEPT): la .um2 lo tira porque el pico-sdk
+# trae libc y el cartucho es -nostdlib. La regla se llama como el .cvproj espera
+# (`<nombre>_rp2350`) y ademas `rp2350-cart`.
+RP2350_BUILD   ?= build_rp2350
+RP2350_LDFLAGS ?= -nostdlib -Wl,--gc-sections -Wl,-T,$(RP2350_SDK)/rp2350_game_ram.ld \
+                  -Wa,--defsym,DUAL_CORE_FLAG=0x44430001
+RP2350_CART_CFLAGS = $(UVM2_CFLAGS_CLEAN) -DVPY_DUAL_CORE
+
+rp2350-cart $(UVM2_NAME)_rp2350: $(UVM2_DEPS) | $(RP2350_BUILD)
+	$(UVM2_LINKER) $(RP2350_CART_CFLAGS) $(RP2350_LDFLAGS) \
+	    $(RP2350_SDK)/rp2350_start.s $(UVM2_SRCS) $(UVM2_CXXSRCS) $(RP2350_SDK)/sdk_rp2350.c \
+	    $(UVM2_LDLIBS) -lgcc -o $(RP2350_BUILD)/$(UVM2_NAME).elf
+	$(UVM2_OBJCOPY) -O binary $(RP2350_BUILD)/$(UVM2_NAME).elf $(RP2350_BUILD)/$(UVM2_NAME)_sd.bin
+	@echo "=== Build (rp2350 SD game, dual core por la tabla de la BIOS): $(RP2350_BUILD)/$(UVM2_NAME)_sd.bin ==="
+
+$(RP2350_BUILD):
+	mkdir -p $(RP2350_BUILD)
+.PHONY: rp2350-cart $(UVM2_NAME)_rp2350
