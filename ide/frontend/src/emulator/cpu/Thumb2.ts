@@ -607,7 +607,13 @@ export class Thumb2 implements ICpu {
           cycles++;
         }
       }
-      this.regs[rn] = addr;  // writeback
+      /* LDM CON LA BASE EN LA LISTA NO ESCRIBE LA BASE (ARM ARM, LDM T1: "if wback &&
+       * registers<n> == '0'"). `ldmia r3, {r1, r2, r3}` —lo que rustc emite para cargar
+       * tres campos seguidos de un struct— dejaba r3 = base+12 en vez del campo, y la BIOS
+       * del cartucho propio calculaba el sector del directorio raiz como 0x2007edb4*2+1.
+       * STM siempre escribe la base (la base en la lista es UNPREDICTABLE salvo si es la
+       * mas baja, y ahi el valor guardado es el de antes, que es lo que hace este bucle). */
+      if (!(l && (rlist & (1 << rn)))) this.regs[rn] = addr;  // writeback
       return cycles;
     }
 

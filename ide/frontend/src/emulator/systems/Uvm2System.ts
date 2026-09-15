@@ -31,7 +31,7 @@ import { Beam }    from '../hardware/Beam.js';
 import { Psg }     from '../hardware/Psg.js';
 import { Canvas }  from '../hardware/Canvas.js';
 import { Thumb2 }  from '../cpu/Thumb2.js';
-import { extractElf32Symbols } from '../util/Elf32Symbols.js';
+import { extractElf32Symbols, loadElf32ByPaddr } from '../util/Elf32Symbols.js';
 
 /** Beam vector list → the IDE's Segment shape (same mapping the other systems use). */
 function vectorsToSegments(
@@ -226,8 +226,58 @@ const A15_MASK  = 0x02000000;
 const RW_MASK   = 0x04000000;          // 1 = read, 0 = write
 const HALT_MASK = 0x08000000;
 const CLK_MASK  = 0x80000000;
-/** Pins the cartridge pulls up and never drives: PB6, /IRQ, /NMI. */
 const PULLUP_IN = 0x20C00000;
+
+/* DOS PLACAS, UN EMULADOR. La imagen .um2 corre en la UVM2 de Ralf; la BIOS del cartucho de
+ * Vectrex Studio (hardware/debug_cart/firmware) corre en la nuestra. Desde el 2026-09-15 las
+ * dos construyen la lista de comandos con EL MISMO uvm2_draw.c y solo cambia el mapa de
+ * pines (uvm2_bus.h: UVM2_PALABRA_VIA; board.rs), asi que aqui el mapa es un PERFIL y todo
+ * lo demas —VIA, haz, PIO, DMA, PSM, PSRAM— es el mismo modelo. Es lo que permite comparar
+ * las escrituras a la VIA de las dos placas con el mismo juego (VIADUMP). */
+export interface Placa {
+  nombre: string;
+  /** El `out` del PIO: primer GPIO y cuantos. Layout::word(bus) = (bus >> out_base) << 1 | 1. */
+  outBase: number; outCount: number;
+  /** Datos y direccion, como campos de GPIO_OUT. */
+  dataShift: number; dataMask: number;
+  addrShift: number; addrMask: number;   // A0.. contiguos desde addrShift
+  a14Mask: number; a15Mask: number;      // 0 si A14/A15 van dentro del campo contiguo
+  rwMask: number;                        // 1 = lectura
+  haltMask: number; haltAssertHigh: boolean;
+  pullupIn: number;                      // lo que se lee alto sin conducir nada
+  /** Palabra de aparcado del stream, ya como bits de GPIO. */
+  park: number;
+}
+export const PLACA_UVM2: Placa = {
+  nombre: 'uvm2', outBase: 0, outCount: 27,
+  dataShift: 0, dataMask: DATA_MASK, addrShift: 8, addrMask: ADDR_MASK,
+  a14Mask: A14_MASK, a15Mask: A15_MASK, rwMask: RW_MASK,
+  haltMask: HALT_MASK, haltAssertHigh: false, pullupIn: PULLUP_IN,
+  park: A15_MASK | RW_MASK,
+};
+/* board.rs (debug_cart): A0-A14 en GP4-18, /CE GP19 = A15, ABUS_DIR GP20, datos GP21-28,
+ * DIR_CTRL GP29, R/W GP30, E GP31, /HALT GP1 y ASSERTA ALTO. vinterface.rs: out_base = 4,
+ * 25 pines, park = (0xC000 << 4) | (0x5A << 21). */
+export const PLACA_PROPIA: Placa = {
+  nombre: 'debug_cart', outBase: 4, outCount: 25,
+  dataShift: 21, dataMask: 0x1FE00000, addrShift: 4, addrMask: 0x000FFFF0,
+  a14Mask: 0, a15Mask: 0, rwMask: 1 << 30,
+  haltMask: 1 << 1, haltAssertHigh: true, pullupIn: 0,
+  park: ((0xC000 << 4) | (0x5A << 21)) >>> 0,
+};
+/* La flash del RP2350 (XIP), 4 MB en 0x10000000: la BIOS arranca de ahi (vector table +
+ * __pre_init, que copia el codigo a SRAM) y luego corre en RAM. La .um2 no la usa. */
+const FLASH_BASE = 0x10000000;
+const FLASH_SIZE = 0x00400000;
+/* QMI en modo directo (0x400d0000): lo que usa psram::init (BIOS) y uvm2_psram.c (.um2)
+ * para leer el ID de la PSRAM antes de abrir la ventana XIP. Sin esto el ID se lee a 0,
+ * la BIOS da la PSRAM por muerta y SYS_LAUNCH se niega a cargar nada. Se modela lo justo:
+ * un byte de respuesta por byte enviado, y al comando 0x9F (READ ID) contesta el
+ * APS6404L: MF 0x0D, KGD 0x5D. Registros de hardware/regs/qmi.h. */
+const QMI_BASE = 0x400D0000;
+const QMI_DIRECT_CSR = 0x00, QMI_DIRECT_TX = 0x04, QMI_DIRECT_RX = 0x08;
+const QMI_CSR_EN = 1 << 0, QMI_CSR_ASSERT_CS1N = 1 << 3, QMI_CSR_TXEMPTY = 1 << 11;
+/** Pins the cartridge pulls up and never drives: PB6, /IRQ, /NMI. */
 
 /** EXC_RETURN we hand the handler: thread mode, main stack, no FP context. */
 const EXC_RETURN = 0xFFFFFFF9;
@@ -252,6 +302,7 @@ export class Uvm2System implements ISystem, IBus {
   private lanzamiento: number[] = [];
   private rastro1: number[] = [];
   private cpu1Perdido = false;
+  private cpu1FetchEnSram = true;
   /** Media palabra del stream mientras llegan sus cuatro bytes. */
   viaHist = new Uint32Array(16);
   orbHist = new Uint32Array(256);
@@ -272,7 +323,15 @@ export class Uvm2System implements ISystem, IBus {
    * pone aqui como constante en vez de deducirlo de las palabras del preambulo: lo intente
    * y las dos primeras palabras no cuadraban con la definicion, y una heuristica que se
    * equivoca en silencio es peor que un dato copiado de su cabecera. */
-  private readonly pioPark = A15_MASK | RW_MASK;
+  private placa: Placa = PLACA_UVM2;
+  private flash: Uint8Array | null = null;
+  private sdImagen: Uint8Array | null = null;
+  private sdHwInitAddr = 0;
+  private sdHwReadBlockAddr = 0;
+  private qmiCsr = 0;
+  private qmiCs1 = false;
+  private qmiCmd: number[] = [];
+  private qmiRx: number[] = [];
   pioEsc = 0; pioPark_n = 0; pioSil = 0;
   private pioVistas = 0;
   txfDirectas = 0; dmaPalabras = 0;
@@ -412,6 +471,60 @@ export class Uvm2System implements ISystem, IBus {
 
   /** ROM de arranque sintetica (ver arriba). */
   private readonly bootrom = new Uint8Array(BOOTROM_SIZE);
+  /* QMI modo directo, ver la constante QMI_BASE. */
+  private qmiLeer(off: number): number {
+    if (off === QMI_DIRECT_CSR) {
+      /* BUSY siempre a 0, TXEMPTY siempre a 1, RXEMPTY a 1 solo si no hay nada que leer. */
+      const rxempty = this.qmiRx.length === 0 ? (1 << 16) : 0;
+      return ((this.qmiCsr & (QMI_CSR_EN | QMI_CSR_ASSERT_CS1N)) | QMI_CSR_TXEMPTY | rxempty) >>> 0;
+    }
+    if (off === QMI_DIRECT_RX) return this.qmiRx.length ? this.qmiRx.shift()! : 0xFF;
+    return 0;
+  }
+  private qmiEscribir(off: number, byte: number, data: number): void {
+    if (off === QMI_DIRECT_CSR) {
+      if (byte === 0) {
+        const antes = this.qmiCs1;
+        this.qmiCsr = (this.qmiCsr & ~0xFF) | data;
+        this.qmiCs1 = (data & QMI_CSR_ASSERT_CS1N) !== 0;
+        if (this.qmiCs1 && !antes) this.qmiCmd = [];   // nueva transaccion
+      }
+      return;
+    }
+    if (off === QMI_DIRECT_TX && byte === 0) {
+      /* SPI: un byte de respuesta por byte enviado. Tras 0x9F (READ ID) y 3 bytes de
+       * direccion, el chip contesta MF=0x0D, KGD=0x5D, y luego el EID. */
+      this.qmiCmd.push(data);
+      const k = this.qmiCmd.length;
+      let r = 0xFF;
+      if (this.qmiCmd[0] === 0x9F) r = k <= 4 ? 0xFF : k === 5 ? 0x0D : k === 6 ? 0x5D : 0x00;
+      if (this.qmiCmd[0] === 0x9F && k === 6 && !this.qmiIdVisto) { this.qmiIdVisto = true; console.log('[Uvm2System] PSRAM: READ ID contestado (0x0D 0x5D)'); }
+      this.qmiRx.push(r);
+    }
+  }
+  /* La costura de la SD del firmware (sd.rs: sd_hw_init / sd_hw_read_block). */
+  private atiendeSdHwInit(cpu: Thumb2): void {
+    cpu.setReg(0, this.sdImagen ? (1 | 2 | 4) : 0);   // presente, inicializada, SDHC (lba)
+    cpu.setReg(15, cpu.getReg(14) & ~1);
+  }
+  private atiendeSdHwReadBlock(cpu: Thumb2): void {
+    const lba = cpu.getReg(0) >>> 0, buf = cpu.getReg(2) >>> 0;
+    let ok = 0;
+    if (this.sdImagen && (lba + 1) * 512 <= this.sdImagen.length) {
+      for (let i = 0; i < 512; i++) this.write8((buf + i) >>> 0, this.sdImagen[lba * 512 + i]);
+      ok = 1;
+    }
+    if (this.sdBloquesVistos < 12) { this.sdBloquesVistos++; console.log(`[Uvm2System] SD bloque ${lba} -> 0x${buf.toString(16)} ${ok ? 'ok' : 'FUERA DE LA IMAGEN'}  desde lr=0x${(cpu.getReg(14) >>> 0).toString(16)} core=${cpu === this.cpu ? 0 : 1}`); }
+    cpu.setReg(0, ok);
+    cpu.setReg(15, cpu.getReg(14) & ~1);
+  }
+  private sdBloquesVistos = 0;
+  private volcarEn = Number((globalThis as any).__VOLCAR ?? 0) >>> 0;
+  private volcados = 0;
+  private qmiIdVisto = false;
+  private leidoEnCiclo = -1;
+  trazaLecturas: string[] = [];
+  lecturasIfr = 0;
   private montarBootrom(): void {
     this.bootrom.fill(0);
     // 0x16: puntero de 16 bits a rom_table_lookup, con el bit Thumb.
@@ -533,6 +646,10 @@ export class Uvm2System implements ISystem, IBus {
      * acaba de terminar. */
     this.frameBeginAddr = (sim.get('uvm2_frame_begin') ?? 0) & ~1;
     this.statsAddr      = (sim.get('uvm2_stats') ?? 0) >>> 0;
+    /* La BIOS del cartucho propio: su SD se atrapa en sd_hw_init / sd_hw_read_block
+     * (sd.rs, la costura) y se sirve de una imagen FAT (setSdImagen). */
+    this.sdHwInitAddr      = (sim.get('sd_hw_init') ?? 0) & ~1;
+    this.sdHwReadBlockAddr = (sim.get('sd_hw_read_block') ?? 0) & ~1;
     console.log(`[Uvm2System] simbolos: uvm2_sd_leer=0x${this.sdLeerAddr.toString(16)} ` +
                 `uvm2_sd_error=0x${this.sdErrorAddr.toString(16)}`);
   }
@@ -605,8 +722,43 @@ export class Uvm2System implements ISystem, IBus {
     cpu.setReg(15, cpu.getReg(14) & ~1);
   }
 
+  /** Una imagen FAT (superfloppy o con MBR) que la BIOS lee por bloques: es la tarjeta. */
+  setSdImagen(img: Uint8Array): void {
+    this.sdImagen = img;
+    console.log(`[Uvm2System] SD por bloques: ${img.length} bytes (${(img.length / 512) | 0} sectores)`);
+  }
+  /**
+   * ARRANCAR LA BIOS DEL CARTUCHO DE VECTREX STUDIO (el ELF del firmware, no una .um2).
+   * Arranca como el chip: MSP y reset desde la tabla de vectores en flash (0x10000000);
+   * __pre_init copia el codigo a SRAM y de ahi en adelante todo corre en RAM. Llama antes
+   * a setElf (mismo ELF: da los simbolos de la costura de la SD) y a setSdImagen.
+   */
+  initFirmware(elf: Uint8Array): void {
+    console.log('[Uvm2System] ARRANCANDO la BIOS del cartucho propio, ELF de', elf.length, 'bytes');
+    this.placa = PLACA_PROPIA;
+    this.resets = 0;
+    this.clocks.fill(0);
+    this.bootram.fill(0);
+    this.bootlocks = 0;
+    this.flash = new Uint8Array(FLASH_SIZE).fill(0xFF);
+    const segs = loadElf32ByPaddr(elf, this.flash, FLASH_BASE);
+    console.log(`[Uvm2System] flash: ${segs} segmentos PT_LOAD del ELF`);
+    this.sram.fill(0);
+    this.psram.fill(0);
+    this.cargaEnPsram = false;
+    this.montarBootrom();
+    this.reset();
+    /* La tabla de vectores es la de la flash, no la de SRAM: el reset de arriba puso
+     * MSP/PC leyendo la base de SRAM (a ceros); se pisan con los de la flash. */
+    this.vtor = FLASH_BASE;
+    this.cpu.setReg(13, this.read32(FLASH_BASE));
+    this.cpu.setReg(15, this.read32(FLASH_BASE + 4) & ~1);
+    console.log(`[Uvm2System] reset: msp=0x${this.read32(FLASH_BASE).toString(16)} pc=0x${(this.read32(FLASH_BASE + 4) & ~1).toString(16)}`);
+  }
   init(um2: Uint8Array): void {
     console.log('[Uvm2System] ARRANCANDO con una imagen de', um2.length, 'bytes');
+    this.placa = PLACA_UVM2;
+    this.flash = null;
     this.resets = 0;
     this.clocks.fill(0);
     this.bootram.fill(0);
@@ -693,6 +845,13 @@ export class Uvm2System implements ISystem, IBus {
     if (this.rastro1.length < 64) this.rastro1.push(pc1);
     if (this.sdLeerAddr && pc1 === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu1); return 1; }
     if (this.sdLeerDesdeAddr && pc1 === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu1); return 1; }
+    if (this.sdHwInitAddr && pc1 === this.sdHwInitAddr) { this.atiendeSdHwInit(this.cpu1); return 1; }
+    if (this.sdHwReadBlockAddr && pc1 === this.sdHwReadBlockAddr) { this.atiendeSdHwReadBlock(this.cpu1); return 1; }
+    /* En la BIOS, core 1 salta al JUEGO, que vive en PSRAM: que lo busque alli deprisa. */
+    if (psramOff(pc1) >= 0 && this.cpu1FetchEnSram) {
+      this.cpu1.setFetchRegion(this.psram, PSRAM_BASE); this.cpu1FetchEnSram = false;
+      console.log(`[Uvm2System] NUCLEO 1 EN EL JUEGO: pc=0x${pc1.toString(16)} (PSRAM), frame ${this.frameCounter}`);
+    }
     if (pc1 === ROM_LOOKUP) { this.romTableLookup(this.cpu1); return 1; }
     if (((pc1 & 0xFFFFFFF0) >>> 0) === ROM_NOOP) {
       this.cpu1.setReg(15, this.cpu1.getReg(14) & ~1);   // la funcion vacia: volver
@@ -804,6 +963,7 @@ export class Uvm2System implements ISystem, IBus {
     this.relojCore1 = this.relojCore0;
     this.cpu1.reset();
     this.cpu1.setFetchRegion(this.sram, SRAM_BASE);
+    this.cpu1FetchEnSram = true;
     this.cpu1.setReg(13, sp >>> 0);
     this.cpu1.setReg(15, (entry >>> 0) & ~1);
     this.cpu1.setReg(14, 0xFFFFFFFE);
@@ -834,7 +994,7 @@ export class Uvm2System implements ISystem, IBus {
    * dos tienen el bit 0 a uno, asi que sin saltarlas se leerian como escrituras y
    * mandarian basura a la VIA en el primer frame. */
   private pioPalabra(w: number): void {
-    const PINES = (1 << 27) - 1;
+    const PINES = (((1 << this.placa.outCount) - 1) << this.placa.outBase) >>> 0;
     if (this.pioVistas < 6) {
       console.log(`[Uvm2System] palabra ${this.pioVistas} = 0x${(w >>> 0).toString(16)} ` +
                   `(bit0=${w & 1} bit1=${(w >>> 1) & 1})`);
@@ -851,14 +1011,14 @@ export class Uvm2System implements ISystem, IBus {
     /* La palabra CRUDA junto al registro y dato que produce. Si el flujo lleva vy y aqui
      * sale 0, el fallo esta en la decodificacion, no en el juego. */
     if (this.trazaPio.length < 24 && this.busCycle > 200000 && (w & 1)) {
-      const g = (w >>> 1) & ((1 << 27) - 1);
-      const dir = ((g & 0x003FFF00) >>> 8) | ((g & 0x01000000) ? 0x4000 : 0) | ((g & 0x02000000) ? 0x8000 : 0);
-      this.trazaPio.push(`w=0x${(w >>> 0).toString(16)} dir=0x${dir.toString(16)} reg=${dir & 0xF} dato=0x${(g & 0xFF).toString(16)}`);
+      const g = (((w >>> 1) & ((1 << this.placa.outCount) - 1)) << this.placa.outBase) >>> 0;
+      const dir = this.direccionDe(g);
+      this.trazaPio.push(`w=0x${(w >>> 0).toString(16)} dir=0x${dir.toString(16)} reg=${dir & 0xF} dato=0x${this.datoDe(g).toString(16)}`);
     }
     if (w & 1) this.pioEsc++; else if (w & 2) this.pioPark_n++; else this.pioSil++;
 
     if (w & 1) {
-      this.gpioOut = ((this.gpioOut & ~PINES) | ((w >>> 1) & PINES)) >>> 0;
+      this.gpioOut = ((this.gpioOut & ~PINES) | ((((w >>> 1) & ((1 << this.placa.outCount) - 1)) << this.placa.outBase) & PINES)) >>> 0;
       this.correPeriodoE();
       /* Y SE APARCA EN CUANTO SE ENGANCHA. En el hardware la SM del PIO ocupa cada periodo
        * de E; aqui el reloj avanza TAMBIEN con la CPU, asi que unos pines que se quedan
@@ -866,7 +1026,7 @@ export class Uvm2System implements ISystem, IBus {
        * cada escritura aparecia DOS O TRES veces seguidas —"ORB=0x81 ORB=0x81",
        * "DDRB=0x9f" tres veces— y una repeticion es inocua para un puerto pero NO para
        * T1CH, que reinicia la rampa. */
-      this.gpioOut = ((this.gpioOut & ~PINES) | this.pioPark) >>> 0;
+      this.gpioOut = ((this.gpioOut & ~PINES) | this.placa.park) >>> 0;
     } else if (w & 2) {
       /* APARCAR ES PRESENTAR EL PATRON DE PARK, no dejar los pines como estaban.
        *
@@ -878,7 +1038,7 @@ export class Uvm2System implements ISystem, IBus {
        * Medido: 1.235.936 escrituras a T1LL en 60 frames, y el haz solo se movia en X
        * (todos los segmentos con la misma Y). El patron de PARK lleva A15 sin A14, que no
        * decodifica a la VIA: aparcar es no escribir. */
-      this.gpioOut = ((this.gpioOut & ~PINES) | this.pioPark) >>> 0;
+      this.gpioOut = ((this.gpioOut & ~PINES) | this.placa.park) >>> 0;
       const n = ((w >>> 2) & 0xFFFFFF) + 1;      // la cuenta va como N-1, ver el .pio
       for (let i = 0; i < n && i < 4096; i++) this.correPeriodoE();
     } else {
@@ -893,11 +1053,19 @@ export class Uvm2System implements ISystem, IBus {
   }
 
   /** Address currently on the bus, assembled from the GPIO pins. */
-  private busAddress(): number {
-    return (((this.gpioOut & ADDR_MASK) >>> 8)
-         | ((this.gpioOut & A14_MASK) ? 0x4000 : 0)
-         | ((this.gpioOut & A15_MASK) ? 0x8000 : 0)) >>> 0;
+  private direccionDe(g: number): number {
+    const p = this.placa;
+    return (((g & p.addrMask) >>> p.addrShift)
+         | ((p.a14Mask && (g & p.a14Mask)) ? 0x4000 : 0)
+         | ((p.a15Mask && (g & p.a15Mask)) ? 0x8000 : 0)) >>> 0;
   }
+  private datoDe(g: number): number { return ((g & this.placa.dataMask) >>> this.placa.dataShift) & 0xFF; }
+  /** El 6809 esta parado y el bus es nuestro: /HALT asertado, con la polaridad de la placa. */
+  private busNuestro(): boolean {
+    const h = (this.gpioOut & this.placa.haltMask) !== 0;
+    return this.placa.haltAssertHigh ? h : !h;
+  }
+  private busAddress(): number { return this.direccionDe(this.gpioOut); }
 
   private addressesVia(): boolean {
     return (this.busAddress() & 0xF000) === 0xD000;
@@ -905,23 +1073,23 @@ export class Uvm2System implements ISystem, IBus {
 
   /** The VIA latches a write here — the same edge the hardware uses. */
   private onFallingEdge(): void {
-    if (this.gpioOut & HALT_MASK) return;      // 6809 still owns the bus
-    if (this.gpioOut & RW_MASK)   return;      // read cycle
+    if (!this.busNuestro()) return;            // 6809 still owns the bus
+    if (this.gpioOut & this.placa.rwMask) return;   // read cycle
     if (!this.addressesVia())     return;      // parked, or not the VIA
 
     this.escriturasVia++;
     /* Histograma de registros, solo diagnostico: "no dibuja" no distingue "no llegan
      * escrituras" de "llegan pero a los registros equivocados". */
     this.viaHist[this.busAddress() & 0xF]++;
-    if ((this.busAddress() & 0xF) === 0) this.orbHist[this.gpioOut & 0xFF]++;   // ORB
-    if ((this.busAddress() & 0xF) === 1) this.oraHist[this.gpioOut & 0xFF]++;   // ORA
+    if ((this.busAddress() & 0xF) === 0) this.orbHist[this.datoDe(this.gpioOut)]++;   // ORB
+    if ((this.busAddress() & 0xF) === 1) this.oraHist[this.datoDe(this.gpioOut)]++;   // ORA
     /* LA SECUENCIA TAL CUAL LLEGA. Los histogramas dicen CUANTAS y de QUE, nunca EN QUE
      * ORDEN — y el enganche del S&H de Y depende de que ORA lleve la velocidad cuando se
      * escribe ORB. Eso solo se ve en la traza. */
     if (this.traza.length < 40 && this.busCycle > 200000)
-      this.traza.push(`${['ORB','ORA','DDRB','DDRA','T1CL','T1CH','T1LL','T1LH','T2CL','T2CH','SR','ACR','PCR','IFR','IER','ORAnh'][this.busAddress() & 0xF]}=0x${(this.gpioOut & 0xFF).toString(16)}`);
-    if ((globalThis as any).__VIADUMP) this.viaFull.push(this.busCycle, this.busAddress() & 0xF, this.gpioOut & 0xFF);
-    this.via.write(this.busAddress() & 0xF, this.gpioOut & DATA_MASK,
+      this.traza.push(`${['ORB','ORA','DDRB','DDRA','T1CL','T1CH','T1LL','T1LH','T2CL','T2CH','SR','ACR','PCR','IFR','IER','ORAnh'][this.busAddress() & 0xF]}=0x${this.datoDe(this.gpioOut).toString(16)}`);
+    if ((globalThis as any).__VIADUMP) this.viaFull.push(this.busCycle, this.busAddress() & 0xF, this.datoDe(this.gpioOut));
+    this.via.write(this.busAddress() & 0xF, this.datoDe(this.gpioOut),
                    (xsh) => { this.beam.alg_xsh = xsh; });
     /* ¿Se mueve el sample-and-hold de Y? Si ORB=0 llega y esto no cambia, el enganche no
      * ocurre; si cambia y el haz no se mueve, el problema esta en el integrador. Son dos
@@ -940,9 +1108,9 @@ export class Uvm2System implements ISystem, IBus {
    * side effects, and the image polls that register in a tight loop.
    */
   private onRisingEdge(): void {
-    if (this.gpioOut & HALT_MASK) return;
-    if (!(this.gpioOut & RW_MASK)) return;
-    if (this.gpioOe & DATA_MASK)  return;      // we are still driving the bus
+    if (!this.busNuestro()) return;
+    if (!(this.gpioOut & this.placa.rwMask)) return;
+    if (this.gpioOe & this.placa.dataMask) return;   // we are still driving the bus
     if (!this.addressesVia())     return;
 
     this.dataIn = this.via.read(
@@ -953,10 +1121,25 @@ export class Uvm2System implements ISystem, IBus {
 
   /** GPIO_IN as the image sees it: driven pins read back, plus the real inputs. */
   private gpioIn(): number {
-    let v = (this.gpioOut & this.gpioOe) | PULLUP_IN;
+    let v = (this.gpioOut & this.gpioOe) | this.placa.pullupIn;
     if (this.clkHigh) v |= CLK_MASK;
-    if (!(this.gpioOe & DATA_MASK)) {
-      v = (v & ~DATA_MASK) | (this.dataIn & DATA_MASK);
+    /* LECTURA CON LA DIRECCION PUESTA DESPUES DEL FLANCO. La BIOS del cartucho propio lee
+     * asi (vinterface::bus_read): espera la subida de E, ENTONCES pone A15 (SELECT), deja
+     * pasar el acceso y muestrea GPIO_IN con E aun alto. En el flanco de subida la
+     * direccion todavia no era la VIA, asi que onRisingEdge no presento nada y la lectura
+     * devolvia el dato viejo (0xFF): botones nunca pulsados. Aqui se presenta el dato en el
+     * momento de muestrear, una vez por periodo de E, que es lo que hace el chip. */
+    if (this.clkHigh && this.busNuestro() && (this.gpioOut & this.placa.rwMask) &&
+        !(this.gpioOe & this.placa.dataMask) && this.addressesVia() && this.leidoEnCiclo !== this.busCycle) {
+      this.leidoEnCiclo = this.busCycle;
+      this.dataIn = this.via.read(this.busAddress() & 0xF, this.beam.alg_compare,
+                                  this.psg.Regs, this.psg.selectedRegister) & 0xFF;
+      const r = this.busAddress() & 0xF;
+      if (r === 13) this.lecturasIfr++;
+      else if (this.trazaLecturas.length < 24) this.trazaLecturas.push(`f${this.frameCounter} ${r}:${this.dataIn.toString(16)}`);
+    }
+    if (!(this.gpioOe & this.placa.dataMask)) {
+      v = (v & ~this.placa.dataMask) | ((this.dataIn << this.placa.dataShift) & this.placa.dataMask);
     }
     return v >>> 0;
   }
@@ -977,6 +1160,8 @@ export class Uvm2System implements ISystem, IBus {
     { const po = psramOff(addr); if (po >= 0) return this.psram[po]; }
 
     if (addr < BOOTROM_SIZE) return this.bootrom[addr];
+    if (this.flash && addr >= FLASH_BASE && addr < FLASH_BASE + FLASH_SIZE) return this.flash[addr - FLASH_BASE];
+    if (addr >= QMI_BASE && addr < QMI_BASE + 0x10) return (this.qmiLeer(addr & 0xC) >>> ((addr & 3) * 8)) & 0xFF;
 
     // SCB->VTOR, TAMBIÉN EN LECTURA.
     //
@@ -1087,6 +1272,11 @@ export class Uvm2System implements ISystem, IBus {
       }
       else if (off === 0x010) word = this.gpioOut;
       else if (off === 0x030) word = this.gpioOe;
+      /* SPINLOCK0..31 (0x100..0x17C): leer es reclamar y devuelve el bit del cerrojo si se
+       * consigue. Aqui siempre se consigue: no hay contienda que modelar entre nucleos a
+       * este nivel, y sin esto la critical_section de rp235x-hal (BIOS) gira para siempre
+       * en cpsid/cpsie esperando un cerrojo que se lee a cero. */
+      else if (off >= 0x100 && off < 0x180) word = (1 << ((off - 0x100) >> 2)) >>> 0;
       // FIFO_ST at +0x50. THERE IS NO SECOND CORE HERE, and without an answer the image
       // never gets past multicore_launch_core1_raw: pico-sdk pushes the entry point to
       // core 1 and spins on RDY, which stayed 0 for ever. Measured: a dual-core .um2 sat
@@ -1234,6 +1424,7 @@ export class Uvm2System implements ISystem, IBus {
       for (const p of PLL_BASES) if (addr >= p && addr < p + ATOM_SIZE) return;
     }
 
+    if (addr >= QMI_BASE && addr < QMI_BASE + 0x10) { this.qmiEscribir(addr & 0xC, addr & 3, data); return; }
     if (((addr & 0xFFFFF000) >>> 0) === SIO_BASE) {
       const off = addr & 0xFFC, shift = (addr & 3) * 8;
       const bits = data << shift;
@@ -1274,8 +1465,11 @@ export class Uvm2System implements ISystem, IBus {
    * handler we vector to is the image's own, which is the whole point of
    * simulating this target at all.
    */
+  /** Cuantas veces se ha pedido cada svc: dice en que estado esta el programa sin verlo. */
+  svcHist = new Uint32Array(256);
   onSvc(_imm: number, cpu: { getReg(i: number): number; setReg(i: number, v: number): void;
                             setException?(n: number): void }): void {
+    this.svcHist[_imm & 0xFF]++;
     const sp = (cpu.getReg(13) - 32) >>> 0;
     const put = (i: number, v: number) => {
       const a = sp + i * 4;
@@ -1360,6 +1554,19 @@ export class Uvm2System implements ISystem, IBus {
       if (pc === ROM_LOOKUP) { this.romTableLookup(); continue; }
       if (this.sdLeerAddr && pc === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu); continue; }
       if (this.sdLeerDesdeAddr && pc === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu); continue; }
+      /* VOLCADO DE REGISTROS EN UN PC (depuracion): VOLCAR=0x2000362c imprime r0-r12, lr y
+       * 40 bytes en [r8] las primeras 4 veces que core 0 pasa por ahi. Sin esto, saber que
+       * calculo se tuerce dentro del emulador es adivinar sobre el desensamblado. */
+      if (this.volcarEn && pc === this.volcarEn && this.volcados < 4) {
+        this.volcados++;
+        const r = []; for (let i = 0; i <= 12; i++) r.push(`r${i}=0x${(this.cpu.getReg(i) >>> 0).toString(16)}`);
+        r.push(`lr=0x${(this.cpu.getReg(14) >>> 0).toString(16)}`);
+        const b = []; const base = this.cpu.getReg(8) >>> 0;
+        for (let i = 0; i < 40; i += 4) b.push('0x' + this.read32(base + i).toString(16));
+        console.log(`[Uvm2System] VOLCAR pc=0x${pc.toString(16)} ${r.join(' ')}\n   [r8..]: ${b.join(' ')}`);
+      }
+      if (this.sdHwInitAddr && pc === this.sdHwInitAddr) { this.atiendeSdHwInit(this.cpu); continue; }
+      if (this.sdHwReadBlockAddr && pc === this.sdHwReadBlockAddr) { this.atiendeSdHwReadBlock(this.cpu); continue; }
       /* Mirar y dejar pasar: no se atrapa la llamada, solo se le hace la foto. */
       if (this.frameBeginAddr && pc === this.frameBeginAddr && this.statsAddr) {
         this.ciclosDeBus    = this.read32(this.statsAddr + 4);   // bus_cycles
@@ -1371,7 +1578,9 @@ export class Uvm2System implements ISystem, IBus {
       // el salto que llevo hasta ahi todavia en el anillo, en vez de dejar que
       // avance por los datos y choque contra el manejador por defecto — que en el
       // log se lee como "instruccion no implementada 0xbe00" y despista.
-      if (pc >= SRAM_BASE && pc < VECTORES_FIN) {
+      /* Solo en la .um2: alli la base de SRAM es la tabla de vectores. En la BIOS del
+       * cartucho propio la base de SRAM es __sramcode, CODIGO, y saltar ahi es lo normal. */
+      if (!this.flash && pc >= SRAM_BASE && pc < VECTORES_FIN) {
         console.error(
           `[Uvm2System] PC PERDIDO: 0x${pc.toString(16)} esta DENTRO de la tabla de ` +
           `vectores (0x${SRAM_BASE.toString(16)}-0x${(VECTORES_FIN - 1).toString(16)}), ` +

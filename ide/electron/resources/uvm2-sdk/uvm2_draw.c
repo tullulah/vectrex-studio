@@ -2016,7 +2016,15 @@ if (forzada) { vx = px_; vy = py_; t1 = pt1_; } else {
     }
 }
 
-void uvm2_draw_move(int dx, int dy){ trocear(dx, dy, move_una); }
+/* LA API VA EN UNIDADES DE JUEGO, como uvm2_draw_delta y uvm2_draw_move_abs: por dentro se
+ * multiplica por UVM2_Q. Esta era la unica de las tres que no lo hacia, y con UVM2_SUBUNIDAD
+ * (Q4) los saltos salian 16 veces cortos para quien la llamaba con unidades de juego:
+ * uvm2_text.c (mezcla move y delta con las mismas coordenadas) y SYS_MOVE de uvm2_svc.c.
+ * Se vio en la BIOS del cartucho propio: la caja del frame de dkong salia de 2.256 unidades
+ * de ancho donde la .um2 daba 20.723. move_abs_interno, que trabaja en unidades INTERNAS,
+ * usa el helper de abajo. */
+static void move_rel_interno(int dx, int dy){ trocear(dx, dy, move_una); }
+void uvm2_draw_move(int dx, int dy){ trocear(dx * UVM2_Q, dy * UVM2_Q, move_una); }
 
 
 /* LA DIFUSION VIVE EN LA CAJA COMPARTIDA. Estuvo aqui unas horas, y en el emulador habia
@@ -2256,7 +2264,7 @@ static void move_abs_interno(int x, int y)
         }
         return;
     }
-    uvm2_draw_move(dx, dy);
+    move_rel_interno(dx, dy);
 }
 
 /* ── Frame ────────────────────────────────────────────────────────────────── */

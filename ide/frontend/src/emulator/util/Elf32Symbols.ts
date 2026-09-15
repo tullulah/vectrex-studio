@@ -216,3 +216,32 @@ export function loadElf32IntoFlash(elf: Uint8Array, flash: Uint8Array, flashBase
 
   return loaded;
 }
+
+/**
+ * Como loadElf32IntoFlash, pero colocando cada segmento en su LMA (p_paddr), que es donde
+ * esta EN LA FLASH. Hace falta para un firmware que corre desde SRAM: su .ram_code tiene
+ * VMA 0x2000xxxx y LMA en flash, y __pre_init lo copia al arrancar. Cargando por VMA la
+ * copia leia 0xFF y el primer salto a SRAM caia en `hw0=0xffff`.
+ */
+export function loadElf32ByPaddr(elf: Uint8Array, flash: Uint8Array, flashBase: number): number {
+  if (elf.length < 52) return 0;
+  if (readU32LE(elf, 0) !== ELF_MAGIC) return 0;
+  if (elf[4] !== 1 || elf[5] !== 1) return 0;
+  const PT_LOAD = 1, PHDR_SIZE = 32;
+  const e_phoff = readU32LE(elf, 28), e_phnum = readU16LE(elf, 44);
+  if (e_phoff === 0 || e_phnum === 0) return 0;
+  let loaded = 0;
+  for (let i = 0; i < e_phnum; i++) {
+    const base = e_phoff + i * PHDR_SIZE;
+    if (base + PHDR_SIZE > elf.length) break;
+    const p_type = readU32LE(elf, base + 0), p_offset = readU32LE(elf, base + 4);
+    const p_paddr = readU32LE(elf, base + 12), p_filesz = readU32LE(elf, base + 16);
+    if (p_type !== PT_LOAD || p_filesz === 0) continue;
+    const off = (p_paddr - flashBase) >>> 0;
+    if (off >= flash.length) continue;
+    const n = Math.min(p_filesz, flash.length - off);
+    flash.set(elf.subarray(p_offset, p_offset + n), off);
+    loaded++;
+  }
+  return loaded;
+}

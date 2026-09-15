@@ -8,6 +8,7 @@
  * ciclo de hoy (cambiar el emulador, probar, leer el PC, repetir) cabe aqui en segundos.
  */
 if (process.env.VIADUMP) globalThis.__VIADUMP = 1;
+if (process.env.VOLCAR) globalThis.__VOLCAR = Number(process.env.VOLCAR);
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -20,7 +21,18 @@ import { execFileSync } from "node:child_process";
 import { Uvm2System } from "./.uvm2emu-built.mjs";
 
 const [img, nFrames = "180", elf] = process.argv.slice(2);
-if (!img) { console.error("uso: correr_uvm2.mjs <imagen.um2> [frames] [elf]"); process.exit(2); }
+if (!img) {
+  console.error("uso: correr_uvm2.mjs <imagen.um2> [frames] [elf]\n" +
+                "     correr_uvm2.mjs <firmware.elf> [frames]   con SDIMG=<tarjeta.img> (BIOS del cartucho propio)");
+  process.exit(2);
+}
+/* LA BIOS DEL CARTUCHO PROPIO, MISMO EMULADOR. Si lo que se pasa es el ELF del firmware
+ * (hardware/debug_cart/firmware) y SDIMG apunta a una imagen FAT (tools/sd_imagen.sh), se
+ * arranca la BIOS como el chip: su menu lista los .BIN de la tarjeta y con PULSA=<frame>:4
+ * se lanza el primero (boton 4 = LAUNCH_GAME en el intro). Lo que sale por la VIA se
+ * compara con lo que sale de la .um2 del mismo juego: es la misma lista de comandos. */
+const cabecera = new Uint8Array(readFileSync(img)).subarray(0, 4);
+const esBios = cabecera[0] === 0x7F && cabecera[1] === 0x45 && cabecera[2] === 0x4C && cabecera[3] === 0x46;   // "\x7fELF"
 
 const sys = new Uvm2System();
 
@@ -29,7 +41,9 @@ const sys = new Uvm2System();
  * ~/VectrexStudio/sd, que es la MISMA carpeta que usa el simulador. */
 if (elf) sys.setElf(new Uint8Array(readFileSync(elf)));
 {
-  const raiz = join(homedir(), "VectrexStudio", "sd");
+  /* SDDIR=<carpeta> usa otra tarjeta: p. ej. la MISMA carpeta con la que se hizo la imagen
+   * de la BIOS (tools/sd_imagen.sh), para que los dos cartuchos lean el mismo uvm2.cfg. */
+  const raiz = process.env.SDDIR || join(homedir(), "VectrexStudio", "sd");
   const files = {};
   const anda = (dir, rel) => {
     let ent = []; try { ent = readdirSync(dir, { withFileTypes: true }); } catch { return; }
@@ -44,7 +58,15 @@ if (elf) sys.setElf(new Uint8Array(readFileSync(elf)));
   sys.setSdFiles(files);
 }
 
-sys.init(new Uint8Array(readFileSync(img)));
+if (esBios) {
+  const fw = new Uint8Array(readFileSync(img));
+  if (!process.env.SDIMG) { console.error("BIOS: falta SDIMG=<tarjeta.img> (tools/sd_imagen.sh)"); process.exit(2); }
+  sys.setElf(fw);
+  sys.setSdImagen(new Uint8Array(readFileSync(process.env.SDIMG)));
+  sys.initFirmware(fw);
+} else {
+  sys.init(new Uint8Array(readFileSync(img)));
+}
 
 let total = 0, conVectores = 0;
 const porFrame = [];
@@ -222,6 +244,8 @@ if (process.env.PORFRAME) {
 }
 console.log("  palabras del PIO:\n    " + (sys /** @type {any} */).trazaPio.join("\n    "));
 console.log("  secuencia a la VIA: " + (sys /** @type {any} */).traza.join(" "));
+{ const h = (sys /** @type {any} */).svcHist; const l = []; for (let i = 0; i < 256; i++) if (h[i]) l.push(`#${i}:${h[i]}`); console.log("  svc pedidos: " + l.join(" ")); }
+console.log("  lecturas de la VIA (frame reg:dato, sin IFR): " + ((sys /** @type {any} */).trazaLecturas ?? []).join(" ") + "   lecturas de IFR: " + (sys /** @type {any} */).lecturasIfr);
 console.log(`  caja de TODOS los frames: x[${caja.x0.toFixed(0)}..${caja.x1.toFixed(0)}] ` +
             `y[${caja.y0.toFixed(0)}..${caja.y1.toFixed(0)}]`);
 /* Los contadores internos: sin ellos "no dibuja" no distingue "no escribe a la VIA" de
