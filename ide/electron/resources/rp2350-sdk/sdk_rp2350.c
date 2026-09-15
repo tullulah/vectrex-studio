@@ -55,7 +55,12 @@ int8_t  currentJoy1Y = 0;
 
 /* ── Lifecycle (BIOS already did clocks/pins/VIA init; nothing to do here). ── */
 void vectrexinit(int mode) { (void)mode; }
+#if defined(VPY_DUAL_CORE) && !defined(UVM2_PICO_RUNTIME)
+static void dc_cfg_init(void);          /* abajo, con la API de configuracion del anillo */
+void v_init(void)          { dc_cfg_init(); }
+#else
 void v_init(void)          {}
+#endif
 void v_setRefresh(int hz)  { (void)hz; }   /* BIOS paces ~50 Hz in SYS_WAIT_RECAL */
 
 /* ── Beam-position tracking. SYS_WAIT_RECAL zero-refs the beam each frame, so we
@@ -88,6 +93,16 @@ struct dc_ctrl {
     volatile unsigned short count[2];  /* # commands in each buffer */
     volatile unsigned int   axes;      /* SYS_READ_AXES snapshot, published by core 0 */
     volatile unsigned int   buttons;   /* SYS_READ_BUTTONS snapshot (P1 bits 0-3) */
+    /* LA CALIBRACION DE LA CONSOLA, COMPARTIDA CON LA BIOS. La BIOS publica aqui lo que
+     * vale ahora (uvm2_config_actual, al lanzar y tras cada aplicar/guardar) y el juego la
+     * lee/escribe con la misma API que en la .um2 (uvm2_config_actual/aplicar/guardar,
+     * uvm2_refresco): las tres ops de abajo le dicen a la BIOS que la aplique, la guarde o
+     * cambie el tope de refresco. Es lo que hace que el menu de dkong tenga CALIBRATE /
+     * REFRESH / START IN MENU tambien en este cartucho. Campos en el orden de
+     * `struct uvm2_config` (uvm2_config.h), como int32 crudos: mismo layout en Rust. */
+    volatile unsigned int   cfg_ver;   /* la BIOS lo incrementa cada vez que publica */
+    volatile int            guardado;  /* resultado del ultimo guardar: 1 ok, 0 fallo */
+    volatile int            cfg[16];
 };
 /* MUST match the firmware dc.rs. 4096 cmds (was 1024): DK's title/intro emit
  * >1024 beam ops; the overflow was dropped, and vk_render draws text/logo LAST,
@@ -122,6 +137,9 @@ struct dc_ctrl {
  * x[7:0], b = y[7:0], _pad = x[11:8] | y[11:8] << 4. VS_Q4(±16129) = ±2032, cabe. */
 #define DC_OP_MOVE_ABS_Q4 7
 #define DC_OP_DELTA_Q4    8
+#define DC_OP_REFRESCO        9   /* a = hz & 0xFF, b = hz >> 8 (0 = a tope) */
+#define DC_OP_CONFIG_APLICAR 10   /* la BIOS aplica DC_CTRL->cfg */
+#define DC_OP_CONFIG_GUARDAR 11   /* ... y la guarda; resultado en DC_CTRL->guardado */
 #define DC_OP_DRAW_GAPPED 5 /* ONE STRAIGHT LINE WITH GAPS, IN A SINGLE RAMP. Header:
                           * a=dx, b=dy, _pad = gap count; then ceil(n*2/4) commands holding
                           * the (start,end) pairs as 0..255 fractions of the run.
@@ -160,6 +178,51 @@ static inline void dc_push_q4(unsigned char op, int x, int y) {
         s_dc_n++;
     }
 }
+#ifndef UVM2_PICO_RUNTIME
+/* LA API DE CONFIGURACION DEL SDK, PARA EL JUEGO DE ESTE CARTUCHO. En la .um2 la da
+ * uvm2_config.c dentro de la imagen; aqui la BIOS es la que tiene el SDK, y el juego habla
+ * con ella por DC_CTRL->cfg y tres ops del anillo. Misma firma que uvm2_config.h. */
+#include "uvm2_config.h"
+volatile int32_t uvm2_ajuste_hz = 50, uvm2_ajuste_menu = 1;
+static void dc_cfg_de(struct uvm2_config *c) {
+    const volatile int *v = DC_CTRL->cfg;
+    c->scale = v[0]; c->t1_tail_q8 = v[1]; c->zero = v[2]; c->bright = v[3];
+    c->hold_y_min = v[4]; c->hold_y_max = v[5]; c->neg_rate_x = v[6]; c->neg_rate_y = v[7];
+    c->drift_x = v[8]; c->drift_y = v[9]; c->hz = v[10]; c->start_menu = v[11];
+}
+static void dc_cfg_a(const struct uvm2_config *c) {
+    volatile int *v = DC_CTRL->cfg;
+    v[0] = c->scale; v[1] = c->t1_tail_q8; v[2] = c->zero; v[3] = c->bright;
+    v[4] = c->hold_y_min; v[5] = c->hold_y_max; v[6] = c->neg_rate_x; v[7] = c->neg_rate_y;
+    v[8] = c->drift_x; v[9] = c->drift_y; v[10] = c->hz; v[11] = c->start_menu;
+    __asm__ volatile("dmb 0xf" ::: "memory");
+}
+void uvm2_config_actual(struct uvm2_config *c) {
+    dc_cfg_de(c);
+    c->hz = uvm2_ajuste_hz; c->start_menu = uvm2_ajuste_menu;
+}
+void uvm2_config_aplicar(const struct uvm2_config *c) {
+    uvm2_ajuste_hz = (c->hz == 60) ? 60 : (c->hz == 0) ? 0 : 50;
+    uvm2_ajuste_menu = c->start_menu ? 1 : 0;
+    dc_cfg_a(c);
+    dc_push(DC_OP_CONFIG_APLICAR, 0, 0);
+}
+/* El guardado lo hace la BIOS al reproducir el frame, asi que lo que se devuelve es el
+ * resultado del ULTIMO guardado completado (1 al arrancar): el asistente lo lee al salir,
+ * y si la tarjeta no admite escritura lo ve en el siguiente intento. */
+int uvm2_config_guardar(void) {
+    struct uvm2_config c; dc_cfg_de(&c);
+    c.hz = uvm2_ajuste_hz; c.start_menu = uvm2_ajuste_menu;
+    dc_cfg_a(&c);
+    dc_push(DC_OP_CONFIG_GUARDAR, 0, 0);
+    return DC_CTRL->guardado;
+}
+void uvm2_refresco(unsigned hz) { dc_push(DC_OP_REFRESCO, (signed char)(hz & 0xFF), (signed char)(hz >> 8)); }
+/* Al arrancar el juego: los ajustes con los que la BIOS lo lanzo. */
+static void dc_cfg_init(void) {
+    uvm2_ajuste_hz = DC_CTRL->cfg[10]; uvm2_ajuste_menu = DC_CTRL->cfg[11];
+}
+#endif
 static void dc_push_gapped(signed char dx, signed char dy, const unsigned char *gaps, int n) {
     if (n < 0) n = 0;
     if (n > DC_GAPS_MAX) n = DC_GAPS_MAX;
