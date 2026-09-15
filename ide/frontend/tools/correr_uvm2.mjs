@@ -84,8 +84,17 @@ const caja = { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 };
 const guion = (process.env.PULSA || "").split(",").filter(Boolean)
   .map(x => ({ f: Number(x.split(":")[0]),
                bs: (x.split(":")[1] || "1").split("").map(Number) }));
+/* EL STICK, IGUAL: JOY="920:-100,935:-100" = en el frame 920 la Y del mando 1 a -100 durante
+ * seis frames y luego al centro; los menus que se navegan con el stick (dkong) piden un
+ * paso por gesto y que vuelva al centro entre dos. */
+const guionJoy = (process.env.JOY || "").split(",").filter(Boolean)
+  .map(x => ({ f: Number(x.split(":")[0]), y: Number(x.split(":")[1] || "0") }));
 for (let f = 0; f < Number(nFrames); f++) {
   const pulsa = guion.find(g => f >= g.f && f < g.f + 6);
+  if (guionJoy.length) {
+    const j = guionJoy.find(g => f >= g.f && f < g.f + 6);
+    sys.setJoyAxis(0, j ? j.y : 0);
+  }
   if (guion.length) {
     let m = 0xF0;
     if (pulsa) for (const b of pulsa.bs) m &= ~(1 << (3 + b));
@@ -622,3 +631,14 @@ if (process.env.CMDDUMP) {
   writeFileSync(process.env.CMDDUMP, o);
   console.log(`  s_cmds volcado: ${cnt} comandos -> ${process.env.CMDDUMP}`);
 }
+/* LEER=0x2000d3f8:2,0x20010b84 : palabras de la RAM al acabar, como `probe-rs read` en la
+ * placa, para comparar el emulador con la consola con la misma lectura. */
+for (const it of (process.env.LEER || "").split(",").filter(Boolean)) {
+  const [a, n] = it.split(":"); const addr = Number(a) >>> 0; const cnt = Number(n || "1");
+  const ws = []; for (let i = 0; i < cnt; i++) ws.push((sys.read32(addr + 4 * i) >>> 0).toString(16).padStart(8, "0"));
+  console.log(`  LEER 0x${addr.toString(16)}: ${ws.join(" ")}`);
+}
+/* SDOUT=<fichero>: la imagen de la SD tras la sesion, para arrancar otra vez con lo que el
+ * firmware guardo (es la unica forma de probar "guardar y reiniciar" sin tarjeta). */
+if (process.env.SDOUT && typeof sys.sdImagenActual === "function" && sys.sdImagenActual())
+  writeFileSync(process.env.SDOUT, sys.sdImagenActual());

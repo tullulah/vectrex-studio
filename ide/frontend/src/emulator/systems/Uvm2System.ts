@@ -327,6 +327,8 @@ export class Uvm2System implements ISystem, IBus {
   private placa: Placa = PLACA_UVM2;
   private flash: Uint8Array | null = null;
   private sdImagen: Uint8Array | null = null;
+  /** La imagen de la SD tal y como queda tras la sesion (con lo que el firmware escribio). */
+  sdImagenActual(): Uint8Array | null { return this.sdImagen; }
   private sdHwInitAddr = 0;
   private sdHwReadBlockAddr = 0;
   private sdHwWriteBlockAddr = 0;
@@ -516,7 +518,10 @@ export class Uvm2System implements ISystem, IBus {
     if (this.sdImagen && (lba + 1) * 512 <= this.sdImagen.length) {
       for (let i = 0; i < 512; i++) this.sdImagen[lba * 512 + i] = this.read8((buf + i) >>> 0);
       ok = 1;
-      console.log(`[Uvm2System] SD ESCRITO bloque ${lba} (en la imagen en memoria)`);
+      /* Y LO QUE SE ESCRIBE, como texto: un guardado que "no da error" y no cambia nada se
+       * depura viendo el sector, no el codigo de vuelta. */
+      let txt = ''; for (let i = 0; i < 512; i++) { const c = this.sdImagen[lba * 512 + i]; txt += (c >= 32 && c < 127) ? String.fromCharCode(c) : (c === 10 ? '|' : '.'); }
+      console.log(`[Uvm2System] SD ESCRITO bloque ${lba} (en la imagen en memoria): ${txt.replace(/ +\|/g, '|').slice(0, 300)}`);
     }
     cpu.setReg(0, ok);
     cpu.setReg(15, cpu.getReg(14) & ~1);
