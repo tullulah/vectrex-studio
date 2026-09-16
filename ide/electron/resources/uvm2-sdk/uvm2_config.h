@@ -73,6 +73,23 @@ struct uvm2_config {
 extern volatile int32_t uvm2_ajuste_hz, uvm2_ajuste_menu;
 
 /** Rellena `c` con lo que valen los knobs AHORA. */
+/* QUE AJUSTES PROPIOS USA ESTE JUEGO. La calibracion del haz es de la CONSOLA y se comparte;
+ * esto es lo que es del juego, y cada uno declara solo lo suyo — asi Donkey Kong, que es
+ * vertical, no enseña un interruptor de horizontal/vertical, y ocultar el menu en un juego no
+ * lo oculta en todos. */
+enum {
+    UVM2_AJUSTE_HZ   = 1u,   /* refresco 50/60/libre */
+    UVM2_AJUSTE_MENU = 2u,   /* menu al encender */
+    UVM2_AJUSTE_GIRO = 4u,   /* dibujo girado 90 grados */
+};
+
+/** Declara el nombre del juego (8.3, sin extension: "MHAVOC") y que ajustes propios usa.
+ *  Se llama ANTES de uvm2_config_cargar. Sus ajustes van en `config/<NOMBRE>.CFG`, encima
+ *  de `config/uvm2.cfg`, que es el de la consola. Sin llamar a esto, un solo fichero y
+ *  ningun ajuste de juego, que es como se comportaba antes. */
+void uvm2_config_juego(const char *nombre, unsigned ajustes);
+unsigned uvm2_config_ajustes_juego(void);
+
 void uvm2_config_actual(struct uvm2_config *c);
 
 /** Aplica `c` a los knobs vivos. */

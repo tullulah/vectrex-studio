@@ -38,15 +38,54 @@ struct guardado { uint32_t firma; struct uvm2_config c; uint32_t suma; };
  * y cero codigo, que es lo que hace falta si esto va a seguir creciendo.
  *
  * El orden es el del fichero de texto y el del struct; el offset lo pone el compilador. */
-#define CAMPO(n) { #n, (uint16_t)((unsigned char *)&((struct uvm2_config *)0)->n - (unsigned char *)0) }
-static const struct { const char *n; uint16_t off; } CAMPOS[] = {
-    CAMPO(scale), CAMPO(t1_tail_q8), CAMPO(zero), CAMPO(bright),
-    CAMPO(hold_y_min), CAMPO(hold_y_max),
-    CAMPO(neg_rate_x), CAMPO(neg_rate_y),
-    CAMPO(drift_x), CAMPO(drift_y),
-    CAMPO(hz), CAMPO(start_menu), CAMPO(rotate),
+/* DOS FICHEROS, Y LA RAZON ES DE QUIEN SON LOS AJUSTES (2026-09-16, lo vio Daniel).
+ *
+ * La calibracion del haz es de la CONSOLA: el cero, el brillo, la escala, la retencion de
+ * la Y, las tasas negativas y la deriva salen del tubo y de los condensadores de ESA
+ * maquina, y valen igual para todos los juegos. Eso vive en `config/uvm2.cfg`, lo crea el
+ * primero que arranque y los demas lo usan de base.
+ *
+ * Los ajustes del JUEGO no: que el menu salga al encender, o que el dibujo vaya girado,
+ * son de cada juego. Compartirlos obliga a Donkey Kong —que es vertical— a tener un
+ * interruptor de horizontal/vertical que no significa nada, y hace que ocultar el menu en
+ * un juego lo oculte en todos. Esos viven en `config/<JUEGO>.cfg`, y cada juego DECLARA
+ * cuales usa (uvm2_config_juego): el asistente solo enseña esos, y solo esos se guardan.
+ *
+ * El campo `bit` es 0 para lo de la consola y el bit del ajuste para lo del juego. */
+#define CAMPO(n, b) { #n, (uint16_t)((unsigned char *)&((struct uvm2_config *)0)->n - (unsigned char *)0), (b) }
+static const struct { const char *n; uint16_t off; unsigned bit; } CAMPOS[] = {
+    CAMPO(scale, 0), CAMPO(t1_tail_q8, 0), CAMPO(zero, 0), CAMPO(bright, 0),
+    CAMPO(hold_y_min, 0), CAMPO(hold_y_max, 0),
+    CAMPO(neg_rate_x, 0), CAMPO(neg_rate_y, 0),
+    CAMPO(drift_x, 0), CAMPO(drift_y, 0),
+    CAMPO(hz, UVM2_AJUSTE_HZ), CAMPO(start_menu, UVM2_AJUSTE_MENU), CAMPO(rotate, UVM2_AJUSTE_GIRO),
 };
 volatile int32_t uvm2_ajuste_hz = 50, uvm2_ajuste_menu = 1, uvm2_ajuste_giro = 0;
+
+/* Que juego es y que ajustes propios usa. Sin declarar nada se comporta como siempre: un
+ * solo fichero, y ningun ajuste de juego en el asistente. */
+static char     s_ruta_juego[32];
+static unsigned s_ajustes_juego;
+
+unsigned uvm2_config_ajustes_juego(void) { return s_ajustes_juego; }
+
+void uvm2_config_juego(const char *nombre, unsigned ajustes)
+{
+    int p = 0;
+    const char *d = "config/";
+    s_ajustes_juego = ajustes;
+    if (!nombre || !*nombre) { s_ruta_juego[0] = 0; return; }
+    while (*d) s_ruta_juego[p++] = *d++;
+    /* 8.3 y en mayusculas, que es lo que entiende el driver de la tarjeta. */
+    while (*nombre && p < 15) {
+        char ch = *nombre++;
+        if (ch >= 'a' && ch <= 'z') ch = (char)(ch - 'a' + 'A');
+        s_ruta_juego[p++] = ch;
+    }
+    d = ".CFG";
+    while (*d) s_ruta_juego[p++] = *d++;
+    s_ruta_juego[p] = 0;
+}
 #define N_CAMPOS ((int)(sizeof CAMPOS / sizeof CAMPOS[0]))
 static int32_t *campo_de(struct uvm2_config *c, int i)
 {
@@ -118,7 +157,7 @@ static int lee_entero(const char *s, int32_t *out)
     return hay;
 }
 
-static int cargar_de_sd(struct uvm2_config *c)
+static int cargar_de_sd(struct uvm2_config *c, const char *ruta, int solo_juego)
 {
     /* LOS DOS EXTREMOS DE ESTE FICHERO SE CONTRADECIAN, Y NO HABIA TAMAÑO QUE LOS CONTENTARA.
      *
@@ -132,7 +171,7 @@ static int cargar_de_sd(struct uvm2_config *c)
      * desde el offset que se le pida. Aqui solo interesa el primer sector, que es
      * exactamente lo que el escritor toca. */
     static unsigned char buf[520];
-    uint32_t n = uvm2_sd_leer_desde(RUTA_SD, buf, 512, 0);
+    uint32_t n = uvm2_sd_leer_desde(ruta, buf, 512, 0);
     if (n == 0) return 0;
     buf[n] = 0;
     int visto = 0;
@@ -149,8 +188,13 @@ static int cargar_de_sd(struct uvm2_config *c)
         while (*v == ' ' || *v == '\t') v++;
         int32_t x;
         if (!lee_entero(v, &x)) continue;
-        for (int k = 0; k < N_CAMPOS; k++)
-            if (!strcmp((char *)ln, CAMPOS[k].n)) { *campo_de(c, k) = x; visto = 1; break; }
+        for (int k = 0; k < N_CAMPOS; k++) {
+            if (strcmp((char *)ln, CAMPOS[k].n)) continue;
+            /* Del fichero del juego solo se hace caso a lo que ese juego declara suyo: asi
+             * un `rotate` que se cuele en la carpeta no gira un juego que no lo usa. */
+            if (solo_juego && !(CAMPOS[k].bit & s_ajustes_juego)) break;
+            *campo_de(c, k) = x; visto = 1; break;
+        }
     }
     return visto;
 }
@@ -175,7 +219,11 @@ int uvm2_config_cargar(void)
     uvm2_config_actual(&c);            /* de partida, lo que traiga el juego compilado */
     /* LA SD MANDA SI EXISTE: asi se prueba un ajuste dejando caer un fichero, sin pasar por
      * el asistente ni por la flash. */
-    int hay = cargar_de_sd(&c) || cargar_de_flash(&c);
+    /* EL COMUN DE BASE — con todos sus campos, tambien los de juego: un fichero de antes de
+     * esta separacion trae ahi el hz o el menu, y sirven de valor de partida. */
+    int hay = cargar_de_sd(&c, RUTA_SD, 0) || cargar_de_flash(&c);
+    /* Y ENCIMA EL DEL JUEGO, que solo puede tocar lo que el juego declaro suyo. */
+    if (s_ruta_juego[0] && cargar_de_sd(&c, s_ruta_juego, 1)) hay = 1;
     if (hay) uvm2_config_aplicar(&c);
     return hay;
 }
@@ -244,18 +292,35 @@ static int pon_campo(char *d, const char *nombre, int32_t v)
 static int s_permite_crear = 1;
 void uvm2_config_permitir_crear(int si) { s_permite_crear = si != 0; }
 
+/* Escribe los campos que pide `mascara` (0 = los de la consola) en `ruta`. Sobrescribir en
+ * sitio primero, que no toca ni la FAT ni el directorio; crear solo si no esta. */
+static int guarda_en(const char *ruta, const struct uvm2_config *c, unsigned mascara)
+{
+    char txt[256];
+    int p = 0, k;
+    for (k = 0; k < N_CAMPOS; k++) {
+        const unsigned bit = CAMPOS[k].bit;
+        if (mascara ? !(bit & mascara) : (bit != 0)) continue;
+        p += pon_campo(txt + p, CAMPOS[k].n, *campo_de((struct uvm2_config *)c, k));
+    }
+    if (p == 0) return 1;                       /* nada que guardar aqui: no es un fallo */
+    if (uvm2_sd_sobrescribir(ruta, (const unsigned char *)txt, (uint32_t)p)) return 1;
+    if (uvm2_sd_error != UVM2_SD_NO_ESTA && uvm2_sd_error != UVM2_SD_NO_CABE) return 0;
+    if (!s_permite_crear) return 0;
+    return uvm2_sd_crear(ruta, (const unsigned char *)txt, (uint32_t)p);
+}
+
 int uvm2_config_guardar(void)
 {
     struct uvm2_config c;
+    int ok;
     uvm2_config_actual(&c);
-    char txt[256];
-    int p = 0;
-    for (int k = 0; k < N_CAMPOS; k++)
-        p += pon_campo(txt + p, CAMPOS[k].n, *campo_de(&c, k));
-    if (uvm2_sd_sobrescribir(RUTA_SD, (const unsigned char *)txt, (uint32_t)p)) return 1;
-    if (uvm2_sd_error != UVM2_SD_NO_ESTA && uvm2_sd_error != UVM2_SD_NO_CABE) return 0;
-    if (!s_permite_crear) return 0;
-    return uvm2_sd_crear(RUTA_SD, (const unsigned char *)txt, (uint32_t)p);
+    /* La consola al fichero comun — lo crea el primero que arranque y lo comparten todos. */
+    ok = guarda_en(RUTA_SD, &c, 0);
+    /* Y lo del juego al suyo, solo lo que ese juego declara usar. */
+    if (s_ruta_juego[0] && s_ajustes_juego)
+        ok = guarda_en(s_ruta_juego, &c, s_ajustes_juego) && ok;
+    return ok;
 }
 
 /* ── EL CAMINO DE LA FLASH, PARADO ────────────────────────────────────────────────── */

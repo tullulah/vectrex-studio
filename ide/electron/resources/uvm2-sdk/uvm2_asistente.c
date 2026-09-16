@@ -134,16 +134,24 @@ int uvm2_config_asistente_con(void (*figura)(void))
      *
      * `scale` y `t1_tail_q8` se quedan porque son knobs REALES del dibujo, pero al final: no
      * son lo que calibra una consola. */
-    struct campo campos[] = {
-        { "CERO",    &c.zero,       0, 255, 1 },
-        { "BRILLO",  &c.bright,     0, 127, 1 },
-        { "ESCALA",  &c.scale,   80, 400, 1 },
-        { "FIJO",    &c.t1_tail_q8, -512, 512, 8 },
+    /* LOS DE LA CONSOLA SIEMPRE; LOS DEL JUEGO, SOLO LOS QUE EL JUEGO DECLARA SUYOS
+     * (uvm2_config_juego). Un interruptor que no significa nada en este juego no se enseña:
+     * Donkey Kong es vertical y no tiene que ver un GIRO, y el menu se oculta por juego y no
+     * para todos. */
+    struct campo campos[8];
+    int n = 0;
+    campos[n++] = (struct campo){ "CERO",    &c.zero,       0, 255, 1 };
+    campos[n++] = (struct campo){ "BRILLO",  &c.bright,     0, 127, 1 };
+    campos[n++] = (struct campo){ "ESCALA",  &c.scale,   80, 400, 1 };
+    campos[n++] = (struct campo){ "FIJO",    &c.t1_tail_q8, -512, 512, 8 };
+    {
+        const unsigned mios = uvm2_config_ajustes_juego();
         /* GIRO: la pantalla es vertical y bastantes recreativas son horizontales. Se ve al
          * instante sobre la propia figura, que es justo lo que un ajuste asi necesita. */
-        { "GIRO",    &c.rotate,       0,   1, 1 },
-    };
-    const int n = (int)(sizeof campos / sizeof campos[0]);
+        if (mios & UVM2_AJUSTE_GIRO) campos[n++] = (struct campo){ "GIRO", &c.rotate,     0, 1, 1 };
+        if (mios & UVM2_AJUSTE_MENU) campos[n++] = (struct campo){ "MENU", &c.start_menu, 0, 1, 1 };
+        if (mios & UVM2_AJUSTE_HZ)   campos[n++] = (struct campo){ "HZ",   &c.hz,         0, 60, 10 };
+    }
     int sel = 0, guardado = 0;
     /* LOS BOTONES SON ACTIVOS A NIVEL BAJO (PSG reg 14 en crudo: 0 = pulsado), asi que se
      * invierten aqui UNA vez y el resto del codigo razona con 1 = pulsado. Sin invertir, el
