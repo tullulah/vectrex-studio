@@ -52,6 +52,18 @@ game_header:
     .type game_main, %function
     .thumb_func
 game_main:
+    @ copy .sram_text [lma, lma+size) -> [vma, end): hot code the game asked to run
+    @ from internal SRAM instead of PSRAM (see rp2350_game_ram.ld). Empty = no-op.
+    ldr     r0, =__sram_text_lma
+    ldr     r1, =__sram_text_vma
+    ldr     r2, =__sram_text_end
+gm_st_loop:
+    cmp     r1, r2
+    bhs     gm_st_done
+    ldr     r3, [r0], #4
+    str     r3, [r1], #4
+    b       gm_st_loop
+gm_st_done:
     @ zero .bss [_bss_start, _bss_end) — RP2350 SRAM is not zero-initialised
     ldr     r0, =_bss_start
     ldr     r1, =_bss_end

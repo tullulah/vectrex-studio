@@ -68,6 +68,19 @@ SECTIONS {
         . = ALIGN(4);
     } > GAME_RAM
 
+    /* Hot code in internal SRAM (2026-09-16): LMA inside the PSRAM image, VMA in
+     * GAME_SRAM; rp2350_start.s copies it before main(). Whatever the game marks
+     * AAE_SRAM_TEXT (aae-src/aae_fast.h): the 6809 cores and the memory handlers.
+     * Empty, and free, in a game that marks nothing. */
+    .sram_text : ALIGN(4) {
+        __sram_text_vma = .;
+        *(.sram_text)
+        *(.sram_text.*)
+        . = ALIGN(4);
+        __sram_text_end = .;
+    } > GAME_SRAM AT> GAME_RAM
+    __sram_text_lma = LOADADDR(.sram_text);
+
     /* NOLOAD: no viaja en el .bin ni lo pone a cero rp2350_start.s; quien lo use lo
      * inicializa entero (la tabla de despacho de AAE, cpuintrf.c). */
     .sram_rapida (NOLOAD) : ALIGN(4) {

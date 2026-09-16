@@ -16,6 +16,8 @@ MEMORY {
 ENTRY(game_main)
 
 SECTIONS {
+    /* rp2350_start.s copies .sram_text; here the code already runs from SRAM. */
+    PROVIDE(__sram_text_lma = 0); PROVIDE(__sram_text_vma = 0); PROVIDE(__sram_text_end = 0);
     .game_rom 0x20040000 : {
         KEEP(*(.game_rom))
         *(.text)
