@@ -355,6 +355,9 @@ typedef struct {
      * `us_exec`, el mismo campo que core 1 usa para el dibujo de verdad: gana el ultimo
      * que pase y el lector no sabe de quien es. Ahora cada uno tiene el suyo. */
     uint32_t us_fin_frame;
+    /* Periodos que core 1 paso SIN lista y leyo los mandos por su cuenta (uvm2_core1.c):
+     * un juego que no dibuja sigue viendo sus botones. Al final, para no mover offsets. */
+    uint32_t frames_ociosos;
 } uvm2_stats_t;
 
 extern uvm2_stats_t uvm2_stats;

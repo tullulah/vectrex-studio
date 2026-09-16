@@ -1171,6 +1171,137 @@ export class Thumb2 implements ICpu {
   // 32-bit instruction execution
   // =========================================================================
 
+  /* Banderas de la comparacion VFP (FPSCR[31:28]); `vmrs APSR_nzcv, fpscr` las copia al CPSR. */
+  private fpscrNZCV = 0;
+  private readonly fpBits = new Uint32Array(1);
+  private readonly fpF32 = new Float32Array(this.fpBits.buffer);
+  private fS(i: number): number { this.fpBits[0] = this.vfp[i & 31]; return this.fpF32[0]; }
+  private fSet(i: number, v: number): void { this.fpF32[0] = v; this.vfp[i & 31] = this.fpBits[0]; }
+
+  /* VFPv4 SIMPLE PRECISION, el subconjunto que emiten gcc y newlib para `float` en un
+   * Cortex-M33 (medido en el .um2 de Major Havoc: vmov, vldr/vstr, vcvt, vsub, vdiv, vfma,
+   * vcmpe, vmrs; anadidos vadd/vmul/vmla/vabs/vneg/vsqrt por ser la misma tabla). Nada de
+   * doble precision ni de modos de redondeo: si aparece algo fuera de esto, devuelve -1 y
+   * el que llama sigue avisando con "Unimplemented", que es lo que hay que ver. Devuelve
+   * ciclos (>= 0) si la ejecuto. */
+  private exec32_vfp(hw0: number, hw1: number, bus: IBus, _pc: number): number {
+    const sz = (hw1 >>> 8) & 1;                      // 1 = doble: fuera de este subconjunto
+    const D = (hw0 >>> 6) & 1, N = (hw1 >>> 7) & 1, M = (hw1 >>> 5) & 1;
+    const Vd = (hw1 >>> 12) & 0xF, Vn = hw0 & 0xF, Vm = hw1 & 0xF;
+    const Sd = (Vd << 1) | D, Sn = (Vn << 1) | N, Sm = (Vm << 1) | M;
+
+    if ((hw0 & 0xFF00) === 0xEE00 && (hw1 & 0x10) !== 0) {
+      // Transferencias con registros del nucleo (forma MCR/MRC).
+      const rt = (hw1 >>> 12) & 0xF;
+      const aCore = (hw0 >>> 4) & 1;
+      if ((hw0 & 0xFFF0) === 0xEEF0 && (hw1 & 0x0FFF) === 0x0A10) {      // VMRS
+        if (rt === 15) this.cpsr = ((this.cpsr & 0x0FFFFFFF) | (this.fpscrNZCV << 28)) >>> 0;
+        else this.regs[rt] = (this.fpscrNZCV << 28) >>> 0;
+        return 1;
+      }
+      if ((hw0 & 0xFFF0) === 0xEEE0 && (hw1 & 0x0FFF) === 0x0A10) {      // VMSR
+        this.fpscrNZCV = (this.regs[rt] >>> 28) & 0xF;
+        return 1;
+      }
+      if ((hw0 & 0xFFE0) === 0xEE00 && (hw1 & 0x007F) === 0x0010 && sz === 0) {   // VMOV Sn <-> Rt
+        if (aCore) this.regs[rt] = this.vfp[Sn & 31] >>> 0;
+        else       this.vfp[Sn & 31] = this.regs[rt] >>> 0;
+        return 1;
+      }
+      return -1;
+    }
+    if ((hw0 & 0xFFE0) === 0xEC40) {
+      // VMOV dos registros del nucleo <-> dos simples (1010) o un doble (1011).
+      const L = (hw0 >>> 4) & 1, rt2 = hw0 & 0xF, rt = (hw1 >>> 12) & 0xF;
+      const lo = sz ? ((Vm << 1) | (M << 5)) & 63 : Sm;   // doble: d(Vm|M<<4) -> palabras 2d, 2d+1
+      const idx0 = sz ? (((M << 4) | Vm) << 1) : lo, idx1 = idx0 + 1;
+      if (L) { this.regs[rt] = this.vfp[idx0 & 63] >>> 0; this.regs[rt2] = this.vfp[idx1 & 63] >>> 0; }
+      else   { this.vfp[idx0 & 63] = this.regs[rt] >>> 0;  this.vfp[idx1 & 63] = this.regs[rt2] >>> 0; }
+      return 1;
+    }
+    if ((hw0 & 0xFE00) === 0xEC00 && ((hw0 >>> 8) & 1) === 1 && ((hw0 >>> 5) & 1) === 0) {
+      // VLDR / VSTR: 1110 1101 U D 0 L Rn | Vd 101 sz imm8
+      const U = (hw0 >>> 7) & 1, L = (hw0 >>> 4) & 1, rn = hw0 & 0xF;
+      const imm = (hw1 & 0xFF) << 2;
+      const base = rn === 15 ? ((this.regs[15] + 2) & ~3) >>> 0 : this.regs[rn] >>> 0;  // PC ya apunta a la siguiente
+      const dir = (U ? base + imm : base - imm) >>> 0;
+      const n = sz ? 2 : 1, idx = sz ? (((D << 4) | Vd) << 1) : Sd;
+      for (let i = 0; i < n; i++) {
+        if (L) this.vfp[(idx + i) & 63] = this.read32(bus, (dir + 4 * i) >>> 0) >>> 0;
+        else   this.write32(bus, (dir + 4 * i) >>> 0, this.vfp[(idx + i) & 63] >>> 0);
+      }
+      return 2;
+    }
+    if ((hw0 & 0xFF00) !== 0xEE00 || sz !== 0 || (hw1 & 0x10) !== 0) return -1;
+
+    // Proceso de datos, simple precision: 1110 1110 opc1(D) opc2 | Vd 101 0 opc3 M 0 Vm
+    const opc1 = ((hw0 >>> 4) & 0xB);            // bits 23,21,20 (D esta en el 22)
+    const opc3 = (hw1 >>> 6) & 3;
+    const a = this.fS(Sn), b = this.fS(Sm), d = this.fS(Sd);
+    const f = Math.fround;
+    switch (opc1) {
+      case 0x0: this.fSet(Sd, f(opc3 & 1 ? d - a * b : d + a * b)); return 1;      // VMLA / VMLS
+      case 0x1: this.fSet(Sd, f(opc3 & 1 ? -(a * b) : a * b)); return 1;           // VNMLS/VNMLA (aprox.)
+      case 0x2: this.fSet(Sd, f(opc3 & 1 ? -(a * b) : a * b)); return 1;           // VMUL / VNMUL
+      case 0x3: this.fSet(Sd, f(opc3 & 1 ? a - b : a + b)); return 1;              // VADD / VSUB
+      case 0x8: this.fSet(Sd, f(a / b)); return 1;                                 // VDIV
+      case 0x9: this.fSet(Sd, f(opc3 & 1 ? -d + a * b : -d - a * b)); return 1;    // VFNMS/VFNMA
+      case 0xA: this.fSet(Sd, f(opc3 & 1 ? d - a * b : d + a * b)); return 1;      // VFMA / VFMS
+      case 0xB: {
+        // opc2 = Vn distingue: 0000 vmov/vabs/vneg/vsqrt, 0100/0101 vcmp, 1000 vcvt de entero,
+        // 1100/1101 vcvt a entero. Solo con opc3 impar (bit 6); el par es VMOV inmediato.
+        if ((opc3 & 1) === 0) {                                                    // VMOV.F32 #imm
+          const imm4H = hw0 & 0xF, imm4L = hw1 & 0xF, imm8 = (imm4H << 4) | imm4L;
+          const sign = imm8 >>> 7, e = (imm8 >>> 4) & 7, frac = imm8 & 0xF;
+          const exp = (sign ? 0 : 0) + (((imm8 >>> 6) & 1) ? 0x7C : 0x80) + (e & 3) * 0 ;   // se recompone abajo
+          void exp;
+          // VFPExpandImm(imm8, 32): sign | NOT(imm8<6>) | Replicate(imm8<6>,5) | imm8<5:0> | Zeros(19)
+          const b6 = (imm8 >>> 6) & 1;
+          const bits = ((sign << 31) | ((b6 ^ 1) << 30) | ((b6 ? 0x1F : 0) << 25) | ((imm8 & 0x3F) << 19)) >>> 0;
+          this.vfp[Sd & 31] = bits; void e; void frac;
+          return 1;
+        }
+        switch (Vn) {
+          case 0x0:
+            if (opc3 === 1) this.fSet(Sd, b);                                      // VMOV
+            else this.fSet(Sd, Math.abs(b));                                       // VABS
+            return 1;
+          case 0x1:
+            if (opc3 === 1) this.fSet(Sd, -b);                                     // VNEG
+            else this.fSet(Sd, f(Math.sqrt(b)));                                   // VSQRT
+            return 1;
+          case 0x4: case 0x5: {                                                    // VCMP / VCMPE
+            const y = Vn === 0x5 ? 0 : b;
+            let nzcv: number;
+            if (Number.isNaN(d) || Number.isNaN(y)) nzcv = 0x3;                   // sin orden: C V
+            else if (d === y) nzcv = 0x6;                                          // igual: Z C
+            else if (d < y) nzcv = 0x8;                                            // menor: N
+            else nzcv = 0x2;                                                       // mayor: C
+            this.fpscrNZCV = nzcv;
+            return 1;
+          }
+          case 0x8: {                                                              // VCVT.F32 desde entero
+            const signed = (opc3 >>> 1) & 1;   // hw1 bit 7 = op: 1 con signo, 0 sin signo
+            const raw = this.vfp[Sm & 31] >>> 0;
+            this.fSet(Sd, f(signed ? (raw | 0) : raw));
+            return 1;
+          }
+          case 0xC: case 0xD: {                                                    // VCVT a entero
+            const signed = Vn === 0xD;
+            const rz = (hw1 >>> 7) & 1;           // 1 = truncar (lo que emite gcc), 0 = FPSCR (redondeo al mas cercano)
+            let v = rz ? Math.trunc(b) : Math.round(b);
+            if (Number.isNaN(v)) v = 0;
+            if (signed) { if (v > 2147483647) v = 2147483647; if (v < -2147483648) v = -2147483648; this.vfp[Sd & 31] = v >>> 0; }
+            else { if (v < 0) v = 0; if (v > 4294967295) v = 4294967295; this.vfp[Sd & 31] = v >>> 0; }
+            return 1;
+          }
+        }
+        return -1;
+      }
+    }
+    return -1;
+  }
+
   private exec32(hw0: number, hw1: number, bus: IBus, pc: number): number {
     // ARM Thumb-2 32-bit dispatch.
     // hw0[15:11] identifies the primary instruction group:
@@ -1988,6 +2119,13 @@ export class Thumb2 implements ICpu {
         this.regs[rt] = u32((this.read16(bus, u32(this.regs[rn] + (this.regs[rm] << imm2))) << 16) >> 16);
       }
       return 2;
+    }
+
+    // ── VFP de simple precision (p10): lo que usan los puertos con `float` ──────
+    // Va ANTES de VLDM/VSTM porque VLDR/VSTR comparten el prefijo 0xEC00 (P=1, W=0).
+    if (((hw1 >>> 9) & 0x7) === 0x5 && ((hw0 & 0xEE00) === 0xEC00 || (hw0 & 0xEF00) === 0xEE00)) {
+      const r = this.exec32_vfp(hw0, hw1, bus, pc);
+      if (r >= 0) return r;
     }
 
     // ── Coprocesadores (MCR/MRC y MCRR/MRRC) ─────────────────────────────

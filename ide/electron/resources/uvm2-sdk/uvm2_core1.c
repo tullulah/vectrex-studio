@@ -132,7 +132,31 @@ static void core1_main(void)
          * culpo al audio y se midio que no. Un reloj cuesta menos que una
          * hipotesis. */
         uint32_t t_w0 = time_us_32();
-        while (uvm2_frame_request == served) { }   /* nothing published yet */
+        /* WITHOUT A LIST THERE ARE NO CONTROLS — unless we read them here. The cache is
+         * refreshed after replaying a list, so a game that stops drawing never sees a
+         * button change: Major Havoc pauses while button 1 is held (no IRQs, no GO, no
+         * list), read the stale "pressed" byte forever and never left the pause; the
+         * same starvation made dkong's "hold 50 frames" count in microseconds. The beam
+         * is clamped at centre since the previous frame's close, so reading here is as
+         * safe as reading after a list. Once per frame period, and the hook runs too so
+         * the cart's music and SD work keep going while the game shows nothing. */
+        {
+            const uint32_t periodo_us = uvm2_pacer_cycles ? uvm2_pacer_cycles * 2u / 3u : 20000u;
+            uint32_t t_idle = t_w0;
+            while (uvm2_frame_request == served) {         /* nothing published yet */
+                if (time_us_32() - t_idle >= periodo_us) {
+                    t_idle = time_us_32();
+                    uvm2_single_cycles = 0;
+#ifndef UVM2_NO_INPUT
+                    uvm2_cached_buttons = uvm2_read_buttons();
+                    uvm2_cached_axes    = uvm2_read_axes();
+#endif
+                    uvm2_draw_invalidate();
+                    uvm2_core1_hueco();
+                    uvm2_stats.frames_ociosos++;
+                }
+            }
+        }
         uint32_t t0 = time_us_32();
         uvm2_stats.us_wait = t0 - t_w0;
         uvm2_stats.us_c1_wait_acum += t0 - t_w0;   /* lo que core 1 espera a core 0 */
