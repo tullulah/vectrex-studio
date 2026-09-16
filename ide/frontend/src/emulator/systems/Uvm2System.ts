@@ -827,6 +827,14 @@ export class Uvm2System implements ISystem, IBus {
 
     this.sram.fill(0);
     this.psram.fill(0);
+    /* RAMBASURA=1: la SRAM de la placa arranca con basura, no con ceros; una variable sin
+     * inicializar que aqui vale 0 alli vale cualquier cosa. Patron pseudoaleatorio fijo. */
+    if (typeof process !== 'undefined' && process.env && process.env.RAMBASURA) {
+      let x = 0x9E3779B9 >>> 0;
+      for (let i = 0; i < this.sram.length; i++) { x = (x * 1664525 + 1013904223) >>> 0; this.sram[i] = x >>> 24; }
+      for (let i = 0; i < this.psram.length; i++) { x = (x * 1664525 + 1013904223) >>> 0; this.psram[i] = x >>> 24; }
+      console.log('[Uvm2System] RAMBASURA: SRAM y PSRAM con basura antes de cargar');
+    }
     if (psramOff(loadAddr) >= 0) this.psram.set(payload, psramOff(loadAddr));
     else                         this.sram.set(payload, (loadAddr - SRAM_BASE) >>> 0);
     this.cargaEnPsram = psramOff(loadAddr) >= 0;
@@ -1223,6 +1231,26 @@ export class Uvm2System implements ISystem, IBus {
 
   // ─── IBus ─────────────────────────────────────────────────────────────────
 
+  /* ACCESOS FUERA DEL MAPA. En la placa un acceso a memoria que no existe es un HardFault;
+   * aqui devolvia 0 y seguia, asi que un puntero nulo o una pila desbordada en la consola
+   * eran invisibles en el emulador. Se apuntan los primeros con el PC de cada nucleo; el
+   * espacio de perifericos (>= 0x40000000) y el del sistema (0xE0000000) no cuentan. */
+  accesosFuera = 0;
+  private accesoFuera(addr: number, que: string): void {
+    if (addr >= 0x40000000) return;
+    if (addr < BOOTROM_SIZE) return;
+    /* La ventana XIP de la flash entera (16 MB), no solo los 4 MB que este emulador
+     * guarda: la config del UVM2 vive en el ultimo sector (0x10FFF000) y en la placa
+     * esa direccion existe. Leerla aqui devuelve ceros y la config no valida, que es
+     * justo lo que debe pasar sin flash cargada. */
+    if (addr >= FLASH_BASE && addr < PSRAM_BASE) return;
+    this.accesosFuera++;
+    if (this.accesosFuera <= 8) {
+      const c0 = (this as any).cpu?.pc, c1 = (this as any).cpu1?.pc;
+      console.log(`[Uvm2System] ACCESO FUERA DEL MAPA: ${que} 0x${addr.toString(16)}  pc0=0x${(c0 ?? 0).toString(16)} pc1=0x${(c1 ?? 0).toString(16)}`);
+    }
+  }
+
   private read32(addr: number): number {
     return (this.read8(addr) | (this.read8(addr + 1) << 8)
          | (this.read8(addr + 2) << 16) | (this.read8(addr + 3) << 24)) >>> 0;
@@ -1409,6 +1437,7 @@ export class Uvm2System implements ISystem, IBus {
       return (this.cycleCount >>> ((addr & 3) * 8)) & 0xFF;
     }
 
+    this.accesoFuera(addr, 'lee');
     return 0;
   }
 
@@ -1535,6 +1564,7 @@ export class Uvm2System implements ISystem, IBus {
     }
 
     // Pad/function-select, NVIC, SysTick, DWT control: accepted and ignored.
+    this.accesoFuera(addr, 'escribe');
   }
 
   /**

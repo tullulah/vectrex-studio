@@ -137,3 +137,13 @@ int main(void)
      * it ever got a say. */
     return uvm2_game_main();
 }
+
+/* A HARDFAULT WITH A WITNESS. The pico-sdk default for isr_hardfault is `bkpt`, which
+ * without a debugger attached is a silent lockup: on the UVM2 (no SWD on the bench) it
+ * looks exactly like a game spinning. Red LED, solid, means the CPU faulted — a bad
+ * pointer, a stack overflow, an unaligned access — and not a loop. Both cores share the
+ * vector table, so either core landing here lights it. */
+void isr_hardfault(void)
+{
+    for (;;) uvm2_led_rgb(255, 0, 0);
+}
