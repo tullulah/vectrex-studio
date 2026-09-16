@@ -1777,6 +1777,18 @@ static inline int uvm2_paso_max(void)
 
 static void move_abs_interno(int x, int y);
 
+/* CRONOMETROS DEL CAMINO DE UN VECTOR EN LA PLACA (solo BIOS; se leen por SWD sin parar):
+ * [0]/[1] rampa y secuencia del SALTO, [2]/[3] rampa y secuencia del TRAZO, en us
+ * acumulados (TIMER0 RAWL) y su cuenta. Para saber DONDE se van los 9-11 us por llamada
+ * que mide la tabla, que el perfil del emulador no ve (cuenta instrucciones, no esperas). */
+#ifdef UVM2_BIOS
+volatile uint32_t uvm2_sdk_us[4], uvm2_sdk_n[4];
+#define SDK_T0() (*(volatile uint32_t *)0x400B0028u)
+#define SDK_ACUM(i, t0) do { uvm2_sdk_us[i] += SDK_T0() - (t0); uvm2_sdk_n[i]++; } while (0)
+#else
+#define SDK_T0() 0u
+#define SDK_ACUM(i, t0) ((void)(t0))
+#endif
 static void trocear(int dx, int dy, void (*emite)(int, int))
 {
     int m = (dx < 0 ? -dx : dx);
@@ -1979,7 +1991,7 @@ static void move_una(int dx, int dy)
          * nosotros un salto nos costaba ~267 ciclos contra sus ~32. */
 if (forzada) { vx = px_; vy = py_; t1 = pt1_; } else {
 #if UVM2_Q_BITS > 0
-        vx_ramp_params_salto_qn(dx, dy, UVM2_Q_BITS, &vx, &vy, &t1);
+        { uint32_t t0_ = SDK_T0(); vx_ramp_params_salto_qn(dx, dy, UVM2_Q_BITS, &vx, &vy, &t1); SDK_ACUM(0, t0_); }
 #else
         vx_ramp_params_salto(dx, dy, &vx, &vy, &t1);
 #endif
@@ -2016,7 +2028,7 @@ if (forzada) { vx = px_; vy = py_; t1 = pt1_; } else {
         }
         struct vx_sink sink = vx_cart_sink();
         struct vx_timings k = vx_cart_timings();
-        vx_moveto_seq(&sink, vx, vy, t1, &k);
+        { uint32_t t0_ = SDK_T0(); vx_moveto_seq(&sink, vx, vy, t1, &k); SDK_ACUM(1, t0_); }
         s_rampas_desde_cero++;
         uvm2_stats.moves++;
         uvm2_stats.ramp_cycles += t1;
@@ -2069,14 +2081,14 @@ static void delta_una(int dx, int dy)
     }
 
 #if UVM2_Q_BITS > 0
-    vx_ramp_params_chain_qn(dx, dy, UVM2_Q_BITS, &vx, &vy, &t1);
+    { uint32_t t0_ = SDK_T0(); vx_ramp_params_chain_qn(dx, dy, UVM2_Q_BITS, &vx, &vy, &t1); SDK_ACUM(2, t0_); }
 #else
     vx_ramp_params_chain(dx, dy, &vx, &vy, &t1);
 #endif
 
     struct vx_sink sink = vx_cart_sink();
     struct vx_timings k = vx_cart_timings();
-    vx_draw_line_seq(&sink, vx, vy, t1, &k);
+    { uint32_t t0_ = SDK_T0(); vx_draw_line_seq(&sink, vx, vy, t1, &k); SDK_ACUM(3, t0_); }
     s_rampas_desde_cero++;
     uvm2_stats.vectors++;
     uvm2_stats.ramp_cycles += t1;

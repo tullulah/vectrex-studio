@@ -394,6 +394,12 @@ pub static RAMP_M_MAX: AtomicU32 = AtomicU32::new(0);
 #[no_mangle]
 pub static RAMP_M_GRANDES: AtomicU32 = AtomicU32::new(0);
 fn ramp_params_q(dx: i32, dy: i32, vcap_in: u32, q: u32) -> (i8, i8, u16) {
+    ramp_params_q_v(dx, dy, vcap_in, q, true)
+}
+/// La misma con `quiere_v = false` para quien solo necesita t1 (la cadena recalcula vx/vy
+/// con `directo` sobre la duracion redondeada a microtramos): se ahorra el redondeo de los
+/// dos ejes. 2026-09-16, medido en la placa: la rampa de un trazo eran 789 ciclos.
+fn ramp_params_q_v(dx: i32, dy: i32, vcap_in: u32, q: u32, quiere_v: bool) -> (i8, i8, u16) {
     let f = 1i32 << q;
     let m = core::cmp::max(dx.abs(), dy.abs());
     RAMP_M_MAX.fetch_max(m as u32, Ordering::Relaxed);
@@ -611,15 +617,14 @@ fn ramp_params_q(dx: i32, dy: i32, vcap_in: u32, q: u32) -> (i8, i8, u16) {
     // una division mas y un ciclo de rampa como mucho, y el error deja de tener direccion
     // preferida — que es lo unico que hace que se acumule.
     let extra = T1_EXTRA_Q8.load(Ordering::Relaxed) as i32;
+    /* Izadas del bucle: m*s >= 0, asi que dividir por f = 2^q es desplazar (exacto). */
+    let n_q8 = (m * s * 256) >> q;
+    let msf = (m * s) >> q;
     let error_de = |t: i32| -> i32 {
         if t <= 0 { return i32::MAX; }
-        let v = {
-            let den = t * 256 + extra;
-            let n = m * s * 256 / f;
-            let q = if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den };
-            q.clamp(-128, 127)
-        };
-        (v * t - m * s / f).abs()
+        let den = t * 256 + extra;
+        let v = ((n_q8 + den / 2) / den).clamp(-128, 127);   // n_q8 >= 0
+        (v * t - msf).abs()
     };
     let t1 = if t1 < techo && error_de(t1 + 1) < error_de(t1) { t1 + 1 } else { t1 };
     // ROUND, DO NOT TRUNCATE. Distance is velocity x time, so `vx * t1` has to stay
@@ -643,8 +648,9 @@ fn ramp_params_q(dx: i32, dy: i32, vcap_in: u32, q: u32) -> (i8, i8, u16) {
         let n = num * 256;
         if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den }
     };
-    let vx = round_div(dx * s / f).clamp(-128, 127) as i8;
-    let vy = round_div(dy * s / f).clamp(-128, 127) as i8;
+    let (vx, vy) = if quiere_v {
+        (round_div(dx * s / f).clamp(-128, 127) as i8, round_div(dy * s / f).clamp(-128, 127) as i8)
+    } else { (0i8, 0i8) };
     // Y AHORA SI, EL RETARDO DE ARRANQUE. Con `vx` ya elegido, alargar la rampa en T hace
     // que el haz recorra `vx*(t1+T)/s` — mas de lo pedido, que es justo la distancia que
     // pierde mientras coge velocidad. Es un TIEMPO, asi que pesa mas en los trazos cortos:
@@ -1032,7 +1038,7 @@ pub fn ramp_params_chain_qn(dx_q4: i32, dy_q4: i32, q: u32) -> (i8, i8, u16) {
     let px = if dx_q4 == 0 || !usa { dx_q4 } else { dx_q4 + a_q4(rx) };
     let py = if dy_q4 == 0 || !usa { dy_q4 } else { dy_q4 + a_q4(ry) };
 
-    let (vx, vy, t1) = ramp_params_q(px, py, TOPE_DAC, q);
+    let (_, _, t1) = ramp_params_q_v(px, py, TOPE_DAC, q, false);   // solo t1: ver ramp_params_q_v
     /* EL REDONDEO A MICROTRAMOS, AQUI Y NO EN EL EMISOR — SI NO, LA DEUDA NO LO VE.
      *
      * `draw_line_seq` parte el trazo en n microtramos de 8 cuentas y reescala la tasa para
@@ -1080,8 +1086,12 @@ pub fn ramp_params_chain_qn(dx_q4: i32, dy_q4: i32, q: u32) -> (i8, i8, u16) {
     let den32 = corridos * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i32;
     let den32 = if den32 > 0 { den32 } else { 1 };
     let fq = 1i32 << q;
+    /* Division TRUNCADA por 2^q con desplazamientos: `x / fq` de Rust trunca hacia cero, y
+     * `>>` redondea hacia abajo; para x < 0 se desplaza -x y se cambia el signo. Exacto. */
+    let div_t = |x: i32| -> i32 { if x >= 0 { x >> q } else { -((-x) >> q) } };
     let directo = |p: i32| -> i8 {
-        let n = (p / fq) * sc * 256 + ((p % fq) * sc * 256) / fq;
+        let pe = div_t(p);
+        let n = pe * sc * 256 + div_t((p - pe * fq) * sc * 256);
         let v = if n >= 0 { (n + den32 / 2) / den32 } else { (n - den32 / 2) / den32 };
         v.clamp(-128, 127) as i8
     };
@@ -1832,5 +1842,123 @@ fn ramp_params_q_old(dx: i32, dy: i32, vcap_in: u32, q: u32) -> (i8, i8, u16) {
             }
         }
         assert_eq!(malos, 0, "casos distintos");
+    }
+fn ramp_params_chain_qn_old(dx_q4: i32, dy_q4: i32, q: u32) -> (i8, i8, u16) {
+    let (rx, ry) = (DEUDA_X.load(Ordering::Relaxed), DEUDA_Y.load(Ordering::Relaxed));
+    let f = 1i32 << q;
+    /* Al mas cercano, no truncando: truncar reintroduce el sesgo que esto viene a quitar. */
+    let a_q4 = |r: i32| if r >= 0 { (r * f + 500) / 1000 } else { (r * f - 500) / 1000 };
+    /* UN EJE QUE NO SE PIDE NO SE MUEVE, NI POR LA DEUDA.
+     *
+     * La deuda existe para corregir el residuo del redondeo, pero sumandola a ciegas mete
+     * movimiento en un eje cuyo delta es CERO — y eso no es corregir, es inventar. MEDIDO
+     * con la geometria del VecFever de entrada: de sus 189 vectores verticales puros, los
+     * 189 salen con vx = 0 en su stream y NINGUNO en el nuestro (vx en {-2, 1, 2}), con
+     * suma +81, o sea +4 unidades de deriva a la derecha por frame que se acumulan hasta
+     * el siguiente re-cero. Es la deriva diagonal vista en consola.
+     *
+     * `un_vertical_no_mueve_la_x` ya cubria esto para `ramp_params`, pero no para la
+     * version con cadena, que es la que usan los trazos.
+     *
+     * La deuda NO se pierde: se queda para el proximo vector que si mueva ese eje. */
+    let usa = DEUDA_ON.load(Ordering::Relaxed) != 0;
+    let px = if dx_q4 == 0 || !usa { dx_q4 } else { dx_q4 + a_q4(rx) };
+    let py = if dy_q4 == 0 || !usa { dy_q4 } else { dy_q4 + a_q4(ry) };
+
+    let (vx, vy, t1) = ramp_params_q(px, py, TOPE_DAC, q);
+    /* EL REDONDEO A MICROTRAMOS, AQUI Y NO EN EL EMISOR — SI NO, LA DEUDA NO LO VE.
+     *
+     * `draw_line_seq` parte el trazo en n microtramos de 8 cuentas y reescala la tasa para
+     * el tiempo que de verdad va a correr. Esa reescala REDONDEA, y su residuo quedaba
+     * fuera de la contabilidad: la deuda se calculaba con el (vx, t1) de antes, veia
+     * `pedido - recorrido = 0` y no corregia nada.
+     *
+     * MEDIDO integrando nuestro stream contra la geometria de entrada: la posicion al
+     * empezar cada trazo se iba +8,45 unidades de mediana en X, creciendo de +2,64 en el
+     * primer tercio del frame a +13,29 en el ultimo, con la deuda constantemente a cero.
+     * La del VecFever es +0,00 con un peor caso de 0,03 en los 427 trazos.
+     *
+     * Devolviendo ya el t1 redondeado y la tasa calculada PARA EL, la deuda mide lo que se
+     * emite y el emisor no tiene nada que reescalar.
+     *
+     * EL 8 ES EL MISMO QUE `T1M` en emit.rs. Si uno cambia, cambia el otro: son la misma
+     * decision (el microtramo del idioma del VecFever) escrita en dos sitios. */
+    const MICRO: i32 = 8;
+    let n = core::cmp::max(1, (t1 as i32 + MICRO / 2) / MICRO);
+    let corridos = n * MICRO;
+    /* AQUI SE REDONDEA DOS VECES, Y SE SABE. `ramp_params_q` calculo la tasa para SU t1 y
+     * esto la reescala al t1 que de verdad corre. MEDIDO en el unico trazo que quedaba
+     * distinto del VecFever en su frame 120: pide 1,3477 unidades; el emite 27
+     * (1,3477*160/8 = 26,95); a nosotros nos sale 22 para t1 = 10 y al reescalar a 8 da
+     * 22*10/8 = 27,5 -> 28.
+     *
+     * INTENTO FALLIDO (2026-09-04): calcularla directa para `corridos`, con el mismo
+     * divisor que `ramp_params_q`. En el HOST da exactamente su 27; en el CARTUCHO satura a
+     * 127 casi todos los trazos y el parecido cae del 99,8% al 2,1%. El test
+     * `tasa_directa::el_trazo_391` deja la version del host, que es correcta — la causa de
+     * la divergencia entre las dos maquinas NO esta encontrada, y hasta que lo este esto se
+     * queda como estaba. No es un knob: es una trampa a la que ya se cayo. */
+    /* LA TASA, CALCULADA UNA VEZ PARA EL t1 QUE DE VERDAD CORRE — Y EN 32 BITS.
+     *
+     * Reescalar la tasa que `ramp_params_q` calculo para OTRO t1 redondea dos veces. En su
+     * frame 120 quedaba un trazo distinto por eso: pide 1,3477 unidades, el emite 27
+     * (1,3477*160/8 = 26,95) y a nosotros nos salia 22 para t1 = 10 que al reescalar a 8
+     * daba 27,5 -> 28.
+     *
+     * ESTE MISMO CAMBIO SE INTENTO POR LA MAÑANA Y SATURABA EN LA PLACA dando 127 en casi
+     * todos los trazos, con el host correcto. La causa era la aritmetica de 64 bits, no la
+     * formula: reescrita en 32 bits, la placa coincide con el host. Ver emulador-sin-rrx —
+     * el RRX arreglado no era el unico camino de 64 bits roto. */
+    let sc = escala();
+    let den32 = corridos * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i32;
+    let den32 = if den32 > 0 { den32 } else { 1 };
+    let fq = 1i32 << q;
+    let directo = |p: i32| -> i8 {
+        let n = (p / fq) * sc * 256 + ((p % fq) * sc * 256) / fq;
+        let v = if n >= 0 { (n + den32 / 2) / den32 } else { (n - den32 / 2) / den32 };
+        v.clamp(-128, 127) as i8
+    };
+    let (vx, vy, t1) = (directo(px), directo(py), corridos as u16);
+    ARRANQUE.store(0, Ordering::Relaxed);
+
+    /* Y la deuda solo se toca en el eje que se ha movido: si no se pidio nada, no hay
+     * residuo nuevo que apuntar, y el que ya habia sigue esperando su turno. */
+    if dx_q4 != 0 {
+        DEUDA_X.store((rx + dx_q4 * 1000 / f - recorrido_mil(vx as i32, t1)).clamp(-4000, 4000),
+                      Ordering::Relaxed);
+    }
+    if dy_q4 != 0 {
+        DEUDA_Y.store((ry + dy_q4 * 1000 / f - recorrido_mil(vy as i32, t1)).clamp(-4000, 4000),
+                      Ordering::Relaxed);
+    }
+    (vx, vy, t1)
+}
+
+    #[test]
+    fn chain_qn_igual_que_antes() {
+        let mut malos = 0;
+        for (esc, extra, transp) in [(127u32, 640u32, 110u32), (146, 664, 110), (160, 0, 160)] {
+            DRAW_SCALE.store(esc, Ordering::Relaxed);
+            T1_EXTRA_Q8.store(extra, Ordering::Relaxed);
+            T1_TRANSPORT.store(transp, Ordering::Relaxed);
+            let mut d = -1600i32;
+            while d <= 1600 {
+                let mut e = -1600i32;
+                while e <= 1600 {
+                    for deuda in [(0i32, 0i32), (350, -1200), (-999, 40)] {
+                        DEUDA_X.store(deuda.0, Ordering::Relaxed); DEUDA_Y.store(deuda.1, Ordering::Relaxed); ARRANQUE.store(1, Ordering::Relaxed);
+                        let a = ramp_params_chain_qn_old(d, e, 4);
+                        let da = (DEUDA_X.load(Ordering::Relaxed), DEUDA_Y.load(Ordering::Relaxed));
+                        DEUDA_X.store(deuda.0, Ordering::Relaxed); DEUDA_Y.store(deuda.1, Ordering::Relaxed); ARRANQUE.store(1, Ordering::Relaxed);
+                        let b = ramp_params_chain_qn(d, e, 4);
+                        let db = (DEUDA_X.load(Ordering::Relaxed), DEUDA_Y.load(Ordering::Relaxed));
+                        if a != b || da != db { malos += 1; if malos <= 5 { std::eprintln!("esc={esc} dx={d} dy={e} deuda={deuda:?}: nuevo {:?}/{:?} viejo {:?}/{:?}", b, db, a, da); } }
+                    }
+                    e += 13;
+                }
+                d += 17;
+            }
+        }
+        assert_eq!(malos, 0, "casos distintos en la cadena");
     }
 }
