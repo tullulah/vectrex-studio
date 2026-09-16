@@ -212,12 +212,31 @@ int uvm2_config_asistente_con(void (*figura)(void))
         uint32_t ejes = uvm2_cached_axes;
         int jx = (int8_t)(ejes >> 24), jy = (int8_t)(ejes >> 16);
 
-        /* ARRIBA/ABAJO ELIGE, POR FLANCO. Un toque, un cambio de linea. */
-        static int repos_y = 1;
-        if (jy > -40 && jy < 40) repos_y = 1;
-        else if (repos_y) {
-            repos_y = 0;
-            sel = (jy > 40) ? (sel + n - 1) % n : (sel + 1) % n;
+        /* ARRIBA/ABAJO ELIGE: UN PASO POR EXCURSION, CON HISTERESIS Y ASENTAMIENTO.
+         *
+         * Daniel, sobre esta pantalla: "al darle abajo y volver con el mando al centro,
+         * vuelve a subir". El stick es un MUELLE: al soltarlo cruza el centro y se pasa al
+         * otro lado unos frames. Lo que habia aqui se rearmaba en cuanto el eje entraba en
+         * +-40, asi que ese rebote contaba como una segunda excursion — en sentido contrario.
+         *
+         * La regla es la que ya se valido en el menu de dkong, con la MISMA queja y las
+         * mismas palabras (dkong_sbt/src/menu.c, stick_paso): dispara al pasar de +-60 y no
+         * se vuelve a armar hasta que el eje lleve tres frames seguidos dentro de +-25. El
+         * rebote del muelle dura menos que eso y cae entero dentro del periodo sin armar. */
+        {
+            static int armado = 1, asentado = 0;
+            int paso = 0;
+            if (jy > -25 && jy < 25) {
+                if (asentado < 3) asentado++;
+                if (asentado >= 3) armado = 1;
+            } else {
+                asentado = 0;
+                if (armado) {
+                    if (jy >= 60)      { armado = 0; paso = -1; }   /* arriba */
+                    else if (jy <= -60){ armado = 0; paso = +1; }   /* abajo */
+                }
+            }
+            if (paso) sel = (sel + n + paso) % n;
         }
 
         /* IZQUIERDA/DERECHA AJUSTA, CONTINUO MIENTRAS SE MANTIENE — como Vectorblade, que
