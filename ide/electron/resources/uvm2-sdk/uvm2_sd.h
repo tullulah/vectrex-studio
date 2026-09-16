@@ -33,6 +33,12 @@ int uvm2_sd_crear(const char *ruta, const unsigned char *datos, uint32_t n);
  *  lectura. 1 si se escribio. Ver el bloque de uvm2_sd.c. */
 int uvm2_sd_sobrescribir(const char *ruta, const unsigned char *datos, uint32_t n);
 
+/** Escribe un fichero de CUALQUIER tamaño, encadenando clusters en la FAT; crea la carpeta
+ *  si falta. 1 si se escribio. Es el que sirve para volcar trazas, partidas o capturas;
+ *  `uvm2_sd_crear` se queda para el caso de un cluster y `uvm2_sd_sobrescribir` para
+ *  reescribir en sitio sin tocar la FAT. */
+int uvm2_sd_escribir(const char *ruta, const unsigned char *datos, uint32_t n);
+
 uint32_t uvm2_sd_leer_desde(const char *ruta, unsigned char *dst, uint32_t max, uint32_t desde);
 
 /* Lo que el montaje entendio del disco, para poder mirarlo por SWD sin adivinar. Un

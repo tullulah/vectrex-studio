@@ -684,6 +684,80 @@ static uint32_t crea_directorio(uint32_t padre, const char *n83, unsigned char *
  * RAIZ con el mismo nombre. Crear directorios pediria escribir sus entradas '.' y '..' y
  * duplica la superficie de fallo por muy poco: con la raiz, cualquier tarjeta vale.
  */
+/* Resuelve la carpeta de `ruta`, creandola si hace falta, y deja el nombre 8.3 del fichero.
+ * Lo compartian `crear` y ahora tambien `escribir`, y estaba duplicado. */
+static int carpeta_de(const char **ruta, char *n83, uint32_t *dir, unsigned char *b)
+{
+    const char *barra = 0;
+    for (const char *p = *ruta; *p; p++) if (*p == '/') barra = p;
+    *dir = V.es32 ? V.raiz_cluster : 0;
+    if (barra) {
+        uint32_t c, len;
+        a83(*ruta, (int)(barra - *ruta), n83);
+        if (busca(*dir, n83, &c, &len, b)) *dir = c;
+        else {
+            const uint32_t nd = crea_directorio(*dir, n83, b);
+            if (nd == 0) { uvm2_sd_error = UVM2_SD_NO_CABE; return 0; }
+            *dir = nd;
+        }
+        *ruta = barra + 1;
+    }
+    a83(*ruta, 64, n83);
+    return 1;
+}
+
+/* UN FICHERO DE CUALQUIER TAMAÑO (2026-09-16).
+ *
+ * `uvm2_sd_crear` escribe un solo cluster y `uvm2_sd_sobrescribir` un solo sector, y con eso
+ * un juego no puede volcar nada de verdad — ni una traza, ni una partida guardada, ni una
+ * captura. La limitacion era mia, no del sistema de ficheros: encadenar clusters en la FAT es
+ * justamente para lo que sirve la FAT, y el asignador ya marca cada uno como fin de cadena al
+ * darlo, asi que basta con repasar el anterior para que apunte al siguiente.
+ *
+ * El orden importa y es el mismo que en `crear`: primero los datos, luego la entrada de
+ * directorio. Si algo se corta a medias quedan clusters en uso sin nadie que los apunte —
+ * espacio perdido que un chkdsk recupera — y no una entrada apuntando a basura, que el PC
+ * lee como fichero corrupto.
+ *
+ * Probado como se debe: `hardware/uvm2/tools/prueba_fat.c` lo ejecuta contra imagenes FAT16 y
+ * FAT32 reales hechas con newfs_msdos, y despues `fsck_msdos -n` tiene que salir limpio. */
+int uvm2_sd_escribir(const char *ruta, const unsigned char *datos, uint32_t n)
+{
+    static unsigned char b[512];
+    uint32_t dir, primero = 0, anterior = 0, escrito = 0, i;
+    char n83[11];
+
+    uvm2_sd_error = UVM2_SD_OK;
+    if (n == 0) { uvm2_sd_error = UVM2_SD_NO_CABE; return 0; }
+    if (!uvm2_sd_init()) return 0;
+    if (!monta(b)) { uvm2_sd_error = UVM2_SD_SIN_FAT; return 0; }
+    if (!carpeta_de(&ruta, n83, &dir, b)) return 0;
+
+    {
+        const uint32_t por_cluster = 512u * (uint32_t)V.spc;
+        const uint32_t cuantos = (n + por_cluster - 1u) / por_cluster;
+
+        for (i = 0; i < cuantos; i++) {
+            const uint32_t c = asigna_cluster(b);
+            uint32_t sec;
+            if (c == 0) { uvm2_sd_error = UVM2_SD_NO_CABE; return 0; }
+            /* Encadenar: el anterior deja de ser fin de cadena y apunta a este. */
+            if (anterior) { if (!fat_pon(anterior, c, b)) return 0; }
+            else          { primero = c; }
+            anterior = c;
+
+            for (sec = 0; sec < V.spc && escrito < n; sec++) {
+                uint32_t k = 0;
+                while (k < 512u && escrito < n) b[k++] = datos[escrito++];
+                while (k < 512u)                b[k++] = 0;   /* la cola del ultimo sector */
+                if (!escribe_bloque(sector_de(c) + sec, b)) return 0;
+            }
+        }
+    }
+
+    return crea_entrada(dir, n83, primero, n, b);
+}
+
 int uvm2_sd_crear(const char *ruta, const unsigned char *datos, uint32_t n)
 {
     static unsigned char b[512];
