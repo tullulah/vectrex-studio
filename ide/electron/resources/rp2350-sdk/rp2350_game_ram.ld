@@ -27,6 +27,10 @@
 
 MEMORY {
     GAME_RAM (rwx) : ORIGIN = 0x11000000, LENGTH = 8192K
+    /* El hueco libre de la SRAM interna durante un juego (2026-09-16): entre el .bss de la
+     * BIOS y la pila del juego (0x20077000). Solapa el buffer de previews del menu, que un
+     * juego nunca usa. Para tablas calientes que no caben en la cache XIP de la PSRAM. */
+    GAME_SRAM (rw)  : ORIGIN = 0x20040000, LENGTH = 220K
 }
 
 ENTRY(game_main)
@@ -57,6 +61,13 @@ SECTIONS {
         *(.data.*)
         . = ALIGN(4);
     } > GAME_RAM
+
+    /* NOLOAD: no viaja en el .bin ni lo pone a cero rp2350_start.s; quien lo use lo
+     * inicializa entero (la tabla de despacho de AAE, cpuintrf.c). */
+    .sram_rapida (NOLOAD) : ALIGN(4) {
+        *(.sram_rapida)
+        *(.sram_rapida.*)
+    } > GAME_SRAM
 
     .bss : {
         _bss_start = .;
