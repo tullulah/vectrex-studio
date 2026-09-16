@@ -33,6 +33,11 @@ void uvm2_draw_prime_holds(void);
 void uvm2_draw_intensity(int brightness);
 
 /* SYS_MOVE / SYS_DRAW_DELTA — relative, blanked and lit respectively. */
+/* Gira el dibujo 90 grados (sentido horario): para una recreativa horizontal en una
+ * pantalla vertical. Vale para todo lo que pase por esta capa, el texto incluido. */
+void uvm2_draw_girar(int si);
+int  uvm2_draw_girado(void);
+
 void uvm2_draw_move(int dx, int dy);
 void uvm2_draw_delta(int dx, int dy);
 

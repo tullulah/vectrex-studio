@@ -139,6 +139,9 @@ int uvm2_config_asistente_con(void (*figura)(void))
         { "BRILLO",  &c.bright,     0, 127, 1 },
         { "ESCALA",  &c.scale,   80, 400, 1 },
         { "FIJO",    &c.t1_tail_q8, -512, 512, 8 },
+        /* GIRO: la pantalla es vertical y bastantes recreativas son horizontales. Se ve al
+         * instante sobre la propia figura, que es justo lo que un ajuste asi necesita. */
+        { "GIRO",    &c.rotate,       0,   1, 1 },
     };
     const int n = (int)(sizeof campos / sizeof campos[0]);
     int sel = 0, guardado = 0;

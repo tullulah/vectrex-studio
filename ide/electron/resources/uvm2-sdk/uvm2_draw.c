@@ -2043,11 +2043,33 @@ if (forzada) { vx = px_; vy = py_; t1 = pt1_; } else {
  * de ancho donde la .um2 daba 20.723. move_abs_interno, que trabaja en unidades INTERNAS,
  * usa el helper de abajo. */
 static void move_rel_interno(int dx, int dy){ trocear(dx, dy, move_una); }
-void uvm2_draw_move(int dx, int dy){ trocear(dx * UVM2_Q, dy * UVM2_Q, move_una); }
+/* GIRO DE 90 GRADOS (2026-09-16, a peticion de Daniel).
+ *
+ * La pantalla de la Vectrex es VERTICAL y bastantes recreativas son horizontales: Major
+ * Havoc declara 580x500 sin rotacion (MAME, mhavoc.cpp:1005), o sea apenas mas ancha que
+ * alta, pero otras lo son de verdad. Sin girar, el eje ancho del juego es el estrecho del
+ * tubo y manda la escala: el dibujo se queda pequeño y sobran bandas arriba y abajo.
+ *
+ * Se gira AQUI y no en cada puerto por lo de siempre: una transformacion en la capa
+ * compartida vale para todos los juegos, el texto incluido, y no hay dos sitios donde se
+ * pueda divergir. Es una permutacion de ejes con un signo, asi que no cuesta precision ni
+ * toca el modelo del haz — lo que llega a la rampa sigue siendo un (dx,dy) entero.
+ *
+ * El sentido es el de las agujas del reloj mirando la pantalla: lo que en la recreativa va
+ * hacia la derecha, aqui va hacia abajo. */
+static int s_giro;
+
+void uvm2_draw_girar(int si) { s_giro = si ? 1 : 0; }
+int  uvm2_draw_girado(void)  { return s_giro; }
+
+#define GIRA(X, Y) do { if (s_giro) { const int giro_t_ = (X); (X) = (Y); (Y) = -giro_t_; } } while (0)
+
+void uvm2_draw_move(int dx, int dy){ GIRA(dx, dy); trocear(dx * UVM2_Q, dy * UVM2_Q, move_una); }
 /* EL SALTO RELATIVO EN 1/16 DE UNIDAD, para VPy (SYS_MOVE_Q4): el compilador lleva la
  * posicion en subunidades y pide el salto en las mismas; sin UVM2_SUBUNIDAD redondea. */
 void uvm2_draw_move_q4(int dx_q4, int dy_q4)
 {
+    GIRA(dx_q4, dy_q4);
 #if UVM2_Q_BITS > 0
     trocear(dx_q4, dy_q4, move_una);
 #else
@@ -2094,13 +2116,14 @@ static void delta_una(int dx, int dy)
     uvm2_stats.ramp_cycles += t1;
 }
 
-void uvm2_draw_delta(int dx, int dy){ trocear(dx * UVM2_Q, dy * UVM2_Q, delta_una); }
+void uvm2_draw_delta(int dx, int dy){ GIRA(dx, dy); trocear(dx * UVM2_Q, dy * UVM2_Q, delta_una); }
 
 /* LA MISMA EN 1/16 DE UNIDAD. Es la que deja pedir lo que el entero no puede — un trazo de
  * 2,5 unidades, o uno de media, que en enteros DESAPARECE. Sin -DUVM2_SUBUNIDAD redondea a
  * entero y se comporta como la de arriba, para que un juego pueda llamarla siempre. */
 void uvm2_draw_delta_q4(int dx_q4, int dy_q4)
 {
+    GIRA(dx_q4, dy_q4);
 #if UVM2_Q_BITS > 0   /* la unidad de la API es la INTERNA; ver UVM2_Q_BITS */
     trocear(dx_q4, dy_q4, delta_una);
 #else
@@ -2119,6 +2142,7 @@ void uvm2_draw_delta_q4(int dx_q4, int dy_q4)
  */
 void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int n)
 {
+    GIRA(dx, dy);
     int32_t vx, vy; uint32_t t1;
     s_pos_x += dx;
     s_pos_y += dy;
@@ -2184,10 +2208,11 @@ void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int 
  * multiplicar por UVM2_Q— y sin el define eso multiplicaba por 1 y dividia por 16: el
  * dibujo se encogia y los saltos pasaban de 180 a 406 por frame. La conversion tiene que
  * estar en CADA entrada, no en cadena. */
-void uvm2_draw_move_abs(int x, int y) { move_abs_interno(x * UVM2_Q, y * UVM2_Q); }
+void uvm2_draw_move_abs(int x, int y) { GIRA(x, y); move_abs_interno(x * UVM2_Q, y * UVM2_Q); }
 
 void uvm2_draw_move_abs_q4(int x_q4, int y_q4)
 {
+    GIRA(x_q4, y_q4);
 #if UVM2_Q_BITS > 0   /* la unidad de la API es la INTERNA; ver UVM2_Q_BITS */
     move_abs_interno(x_q4, y_q4);
 #else

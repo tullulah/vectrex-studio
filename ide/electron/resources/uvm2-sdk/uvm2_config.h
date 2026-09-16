@@ -68,6 +68,7 @@ struct uvm2_config {
      * y se guarda; un fichero viejo sin estas lineas se queda con los valores de serie. */
     int32_t hz;          /* refresco tope: 50 o 60 (la red), o 0 = a tope, sin enganche. */
     int32_t start_menu;    /* 1 = menu al encender; 0 = directo al juego (boton 4 fuerza el menu) */
+    int32_t rotate;      /* 1 = dibujo girado 90 grados, para recreativas horizontales. */
 };
 extern volatile int32_t uvm2_ajuste_hz, uvm2_ajuste_menu;
 

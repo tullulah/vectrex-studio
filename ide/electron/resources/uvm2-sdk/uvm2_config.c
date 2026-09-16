@@ -44,9 +44,9 @@ static const struct { const char *n; uint16_t off; } CAMPOS[] = {
     CAMPO(hold_y_min), CAMPO(hold_y_max),
     CAMPO(neg_rate_x), CAMPO(neg_rate_y),
     CAMPO(drift_x), CAMPO(drift_y),
-    CAMPO(hz), CAMPO(start_menu),
+    CAMPO(hz), CAMPO(start_menu), CAMPO(rotate),
 };
-volatile int32_t uvm2_ajuste_hz = 50, uvm2_ajuste_menu = 1;
+volatile int32_t uvm2_ajuste_hz = 50, uvm2_ajuste_menu = 1, uvm2_ajuste_giro = 0;
 #define N_CAMPOS ((int)(sizeof CAMPOS / sizeof CAMPOS[0]))
 static int32_t *campo_de(struct uvm2_config *c, int i)
 {
@@ -78,6 +78,7 @@ void uvm2_config_actual(struct uvm2_config *c)
     c->drift_y = uvm2_drift_y;
     c->hz       = uvm2_ajuste_hz;
     c->start_menu = uvm2_ajuste_menu;
+    c->rotate     = uvm2_ajuste_giro;
 }
 
 void uvm2_config_aplicar(const struct uvm2_config *c)
@@ -99,6 +100,8 @@ void uvm2_config_aplicar(const struct uvm2_config *c)
     uvm2_drift_y = c->drift_y;
     uvm2_ajuste_hz   = (c->hz == 60) ? 60 : (c->hz == 0) ? 0 : 50;   /* 50, 60 o 0 = a tope (sin enganche) */
     uvm2_ajuste_menu = c->start_menu ? 1 : 0;
+    uvm2_ajuste_giro = c->rotate ? 1 : 0;
+    uvm2_draw_girar((int)uvm2_ajuste_giro);
 }
 
 /* ── EL FICHERO DE TEXTO DE LA SD ────────────────────────────────────────────────────
