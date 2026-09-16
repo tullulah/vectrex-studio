@@ -41,7 +41,9 @@ extern volatile uint32_t uvm2_cached_axes;
 #define SEP       56      /* separacion entre los centros de los dos cuadrados */
 /* `scale` de uvm2_print_text va en MEDIAS unidades y su valor de serie es 3 (x1,5). Puse 1
  * —un tercio de lo normal— y en consola no se leia. 4 es x2. */
-#define TEXTO      4
+#define TEXTO      3     /* el tamaño de letra del asistente */
+#define PASO      19     /* separacion entre lineas */
+#define VISIBLES   5     /* cuantas caben de una vez sobre los +-127 de la pantalla */
 
 /* LA FIGURA DE CALIBRACION DE VECTORBLADE (`displaySwarmCalibration`, objectEnemySwarm.asm),
  * que es opensource. Ocho segmentos largos y torcidos a escala 6 — no un cuadrado: lo que la
@@ -140,17 +142,17 @@ int uvm2_config_asistente_con(void (*figura)(void))
      * para todos. */
     struct campo campos[8];
     int n = 0;
-    campos[n++] = (struct campo){ "CERO",    &c.zero,       0, 255, 1 };
-    campos[n++] = (struct campo){ "BRILLO",  &c.bright,     0, 127, 1 };
-    campos[n++] = (struct campo){ "ESCALA",  &c.scale,   80, 400, 1 };
-    campos[n++] = (struct campo){ "FIJO",    &c.t1_tail_q8, -512, 512, 8 };
+    campos[n++] = (struct campo){ "ZERO",   &c.zero,       0, 255, 1 };
+    campos[n++] = (struct campo){ "BRIGHT", &c.bright,     0, 127, 1 };
+    campos[n++] = (struct campo){ "SCALE",  &c.scale,   80, 400, 1 };
+    campos[n++] = (struct campo){ "TAIL",   &c.t1_tail_q8, -512, 512, 8 };
     {
         const unsigned mios = uvm2_config_ajustes_juego();
         /* GIRO: la pantalla es vertical y bastantes recreativas son horizontales. Se ve al
          * instante sobre la propia figura, que es justo lo que un ajuste asi necesita. */
-        if (mios & UVM2_AJUSTE_GIRO) campos[n++] = (struct campo){ "GIRO", &c.rotate,     0, 1, 1 };
-        if (mios & UVM2_AJUSTE_MENU) campos[n++] = (struct campo){ "MENU", &c.start_menu, 0, 1, 1 };
-        if (mios & UVM2_AJUSTE_HZ)   campos[n++] = (struct campo){ "HZ",   &c.hz,         0, 60, 10 };
+        if (mios & UVM2_AJUSTE_GIRO) campos[n++] = (struct campo){ "ROTATE", &c.rotate,     0, 1, 1 };
+        if (mios & UVM2_AJUSTE_MENU) campos[n++] = (struct campo){ "MENU",   &c.start_menu, 0, 1, 1 };
+        if (mios & UVM2_AJUSTE_HZ)   campos[n++] = (struct campo){ "HZ",     &c.hz,         0, 60, 10 };
     }
     int sel = 0, guardado = 0;
     /* LOS BOTONES SON ACTIVOS A NIVEL BAJO (PSG reg 14 en crudo: 0 = pulsado), asi que se
@@ -174,7 +176,15 @@ int uvm2_config_asistente_con(void (*figura)(void))
             cuadrado( 70, 10, 10);
         }
 
-        for (int i = 0; i < n; i++) {
+        /* UNA VENTANA, NO LA LISTA ENTERA, como el menu de dkong: con los ajustes del juego
+         * son hasta siete lineas, y a paso de 26 unidades desde -18 la lista se salia de la
+         * pantalla por abajo — se veian cuatro y media. Se enseñan VISIBLES con la
+         * seleccionada centrada, y la letra baja a un tamaño que cabe. */
+        int primero = sel - VISIBLES / 2;
+        if (primero > n - VISIBLES) primero = n - VISIBLES;
+        if (primero < 0) primero = 0;
+        for (int w = 0; w < VISIBLES && primero + w < n; w++) {
+            const int i = primero + w;
             char linea[24];
             int p = 0;
             linea[p++] = (i == sel) ? '>' : ' ';
@@ -188,7 +198,7 @@ int uvm2_config_asistente_con(void (*figura)(void))
             do { d[k++] = (char)('0' + v % 10); v /= 10; } while (v && k < 7);
             while (k) linea[p++] = d[--k];
             linea[p] = 0;
-            uvm2_print_text(-112, -18 - i * 26, linea, TEXTO, c.bright);
+            uvm2_print_text(-112, -22 - w * PASO, linea, TEXTO, c.bright);
         }
         uvm2_frame_end();
 
