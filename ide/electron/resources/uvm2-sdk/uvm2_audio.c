@@ -49,6 +49,21 @@ static int            s_sfx_delay;
  * without silencing the music on A and B. */
 static uint8_t s_psg_mixer = 0x3F;
 
+/* ...and the channel-C mixer bits the RUNNING EFFECT asked for, so the merge
+ * works in BOTH directions.
+ *
+ * It used to work in one: an effect merged itself over the music's A/B bits,
+ * but a music event that wrote register 7 afterwards wrote it raw and took
+ * channel C straight back — the effect fell silent mid-flight and stayed that
+ * way until its next mixer write, which for a diff-encoded stream may never
+ * come. Any track with noise percussion writes register 7 on every drum hit,
+ * so on those the effects were being cut within a couple of frames. */
+static uint8_t s_sfx_cbits = 0x24;      /* 0x24 = tone C and noise C disabled */
+
+/* What the sample player needs to know to turn its channel into a DC level without
+ * silencing the music on A and B (uvm2_smp.c). Strong here, weak there. */
+uint8_t uvm2_audio_mixer(void) { return s_psg_mixer; }
+
 static uint32_t rd_le32(const uint8_t *p)
 {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8)
@@ -72,6 +87,11 @@ static void psg(uint8_t reg, uint8_t val)
          * llegaba al bus y el PSG seguia con el 7 latcheado — y 0x3F es
          * justamente el contenido de ese registro. Ver [[via-porta-direction]]. */
         val = (uint8_t)(val & ~0x40u);
+        /* While an effect is running it owns channel C; a music write may set
+         * everything else but must leave those two bits as the effect left
+         * them. (sfx_tick merges the other way for the same reason.) */
+        if (s_sfx_active)
+            val = (uint8_t)((val & 0xDBu) | (s_sfx_cbits & 0x24u));
         s_psg_mixer = val;
     }
 
@@ -173,7 +193,9 @@ static void sfx_tick(void)
 
     if (num_writes == 0x00) {                       /* end of effect */
         psg(10, 0);                                 /* mute channel C */
-        s_sfx_active = 0;
+        s_sfx_active = 0;                           /* before the mixer write: */
+        s_sfx_cbits  = 0x24;                        /* C is the music's again  */
+        psg(7, (uint8_t)(s_psg_mixer | 0x24u));     /* positively disable C    */
         return;
     }
 
@@ -183,6 +205,7 @@ static void sfx_tick(void)
         if (reg == 7) {
             /* Take only the channel-C bits from the effect and keep the
              * music's A/B bits, or an SFX would cut the track. */
+            s_sfx_cbits = (uint8_t)(val & 0x24);
             val = (uint8_t)((s_psg_mixer & 0xDB) | (val & 0x24));
         }
         psg(reg, val);

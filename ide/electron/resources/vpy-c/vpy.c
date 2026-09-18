@@ -514,6 +514,15 @@ static int s_sfx_delay  = 0;
  * silencing music on channels A/B (the ARM runtime read-modify-writes reg 7). */
 static uint8_t s_psg_mixer = 0x3f;
 
+/* ...and the channel-C bits the RUNNING SFX asked for, so the merge works in
+ * BOTH directions. It used to work in one: an SFX merged itself over the
+ * music's A/B bits, but a music event writing reg 7 afterwards wrote it raw and
+ * took channel C straight back, cutting the effect off mid-flight until its own
+ * next mixer write — which a diff-encoded stream may never make. Any track with
+ * noise percussion writes reg 7 on every drum hit, so those cut effects within
+ * a couple of frames. */
+static uint8_t s_sfx_cbits = 0x24;    /* 0x24 = tone C and noise C disabled */
+
 static uint32_t rd_le32(const unsigned char *p)
 {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8)
@@ -523,7 +532,13 @@ static uint32_t rd_le32(const unsigned char *p)
 /* Write a PSG register, tracking the mixer shadow. */
 static void psg_write(uint8_t reg, uint8_t val)
 {
-    if (reg == 7) s_psg_mixer = val;
+    if (reg == 7) {
+        /* While an SFX runs it owns channel C: a music write sets everything
+         * else but leaves those two bits as the effect left them. */
+        if (s_sfx_active)
+            val = (uint8_t)((val & 0xdb) | (s_sfx_cbits & 0x24));
+        s_psg_mixer = val;
+    }
     v_writePSG(reg, val);
 }
 
@@ -618,7 +633,9 @@ void vpy_sfx_update(void)
 
     if (num_writes == 0x00) {          /* end of SFX */
         psg_write(10, 0);              /* mute channel C */
-        s_sfx_active = 0;
+        s_sfx_active = 0;              /* before the mixer write: */
+        s_sfx_cbits  = 0x24;           /* channel C is the music's again */
+        psg_write(7, (uint8_t)(s_psg_mixer | 0x24));
         return;
     }
 
@@ -628,6 +645,7 @@ void vpy_sfx_update(void)
         if (reg == 7) {
             /* Merge only channel-C mixer bits (0x24) from the SFX; keep the
              * music's A/B bits from the current mixer shadow. */
+            s_sfx_cbits = (uint8_t)(val & 0x24);
             val = (uint8_t)((s_psg_mixer & 0xdb) | (val & 0x24));
         }
         psg_write(reg, val);

@@ -210,7 +210,13 @@ export class Thumb2 implements ICpu {
   private _stepCount: number = 0;
 
   step(bus: IBus): number {
-    const pc = this.regs[15];
+    // The fetch address is ALWAYS even in Thumb — bit 0 is the interworking/Thumb
+    // state, not part of the address. Some branch/return paths leave a stray bit 0
+    // in regs[15]; if it isn't stripped before fetch the core reads a byte-misaligned
+    // instruction and derails (Musashi's m68k_init: an odd PC turned `ldr.w` into a
+    // 16-bit decode, +2 instead of +4). Normalise once here.
+    const pc = this.regs[15] & ~1;
+    this.regs[15] = pc;
     // Fetch fast path: read the 16/32-bit instruction directly from the code
     // array when PC is inside it (RAM-linked games run from SRAM), avoiding 2–4
     // bus.read8 range-dispatch calls per instruction — the dominant cost for the

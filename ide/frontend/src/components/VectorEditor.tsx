@@ -13,6 +13,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useEditorStore } from '../state/editorStore.js';
 import DxfParser from 'dxf-parser';
 import type { IEntity } from 'dxf-parser';
+import { textToPaths } from '../lib/strokeFont.js';
 
 // Types from the .vec format
 interface Point {
@@ -42,6 +43,9 @@ interface Layer {
   name: string;
   visible: boolean;
   paths: VecPath[];
+  // Set when the layer was produced by the text tool, so it can be re-edited
+  // (change the string / size and regenerate in place).
+  text?: { content: string; height: number; intensity: number };
 }
 
 interface CollisionSegment {
@@ -717,6 +721,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   
   const [resource, setResource] = useState<VecResource>(() => normalizeResource(initialResource));
   const [currentTool, setCurrentTool] = useState<Tool>('select');
+  // Text tool: null when closed, else the pending text to add. `editLayer` is
+  // the layer index when re-editing an existing text layer (else a new layer).
+  const [textDialog, setTextDialog] = useState<{ text: string; height: number; intensity: number; editLayer?: number } | null>(null);
   const [currentLayerIndex, setCurrentLayerIndex] = useState(0);
   const [currentPathIndex, setCurrentPathIndex] = useState(-1);
   const [selectedPointIndex, setSelectedPointIndex] = useState(-1);
@@ -2001,7 +2008,44 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       ctx.stroke();
       ctx.restore();
     }
-  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, backgroundFit, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge, walkAreaPreview, selectedWalkAreaIdx]);
+
+    // Text tool: live ghost preview of the string ON THE CANVAS at its REAL size
+    // and position (centred on the origin, where it will be dropped). The dialog's
+    // little preview auto-fits its box and can't convey scale, so this is what
+    // tells you the height you picked is the height you'll get.
+    if (textDialog && textDialog.text && textDialog.height > 0) {
+      // new text centres on the origin; re-editing centres on the layer's current
+      // strokes so the preview sits where the text already is
+      let cx = 0, cy = 0;
+      const el = textDialog.editLayer;
+      if (el != null && resource.layers[el]?.paths.length) {
+        let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+        resource.layers[el].paths.forEach(p => p.points.forEach(pt => {
+          if (pt.x < mnx) mnx = pt.x; if (pt.x > mxx) mxx = pt.x;
+          if (pt.y < mny) mny = pt.y; if (pt.y > mxy) mxy = pt.y;
+        }));
+        if (isFinite(mnx)) { cx = (mnx + mxx) / 2; cy = (mny + mxy) / 2; }
+      }
+      const strokes = textToPaths(textDialog.text, textDialog.height, { center: { x: cx, y: cy } });
+      ctx.save();
+      ctx.strokeStyle = '#66ff66';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.85;
+      ctx.setLineDash([]);
+      for (const s of strokes) {
+        if (s.points.length < 2) continue;
+        ctx.beginPath();
+        const p0 = resourceToCanvas(s.points[0]);
+        ctx.moveTo(p0.x, p0.y);
+        for (let i = 1; i < s.points.length; i++) {
+          const p = resourceToCanvas(s.points[i]);
+          ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }, [resource, currentLayerIndex, currentPathIndex, selectedPointIndex, selectedPoints, tempPoints, pan, zoom, width, height, resourceToCanvas, backgroundImage, backgroundOpacity, showBackground, backgroundFit, isBoxSelecting, boxStart, boxEnd, showPreview, previewPaths, showEdgeSettings, isBackgroundSelected, backgroundOffset, isSubtractSelect, isMoveMode, selectedTreePathKey, selectedTreePathKeys, currentTool, showCollisionMesh, selectedEdge, walkAreaPreview, selectedWalkAreaIdx, textDialog]);
 
   useEffect(() => {
     draw();
@@ -3081,6 +3125,63 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     }
   };
 
+  // Where a text block is centred: the origin for a new one, or the current
+  // centre of the layer's strokes when re-editing (so it stays where you moved
+  // it). Shared by the canvas preview and the commit below.
+  const getTextCenter = (editLayer?: number): { x: number; y: number } => {
+    if (editLayer == null) return { x: 0, y: 0 };
+    const lyr = resource.layers[editLayer];
+    if (!lyr || !lyr.paths.length) return { x: 0, y: 0 };
+    let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+    lyr.paths.forEach(p => p.points.forEach(pt => {
+      if (pt.x < mnx) mnx = pt.x; if (pt.x > mxx) mxx = pt.x;
+      if (pt.y < mny) mny = pt.y; if (pt.y > mxy) mxy = pt.y;
+    }));
+    if (!isFinite(mnx)) return { x: 0, y: 0 };
+    return { x: (mnx + mxx) / 2, y: (mny + mxy) / 2 };
+  };
+
+  // Text tool: turn the dialog's string into editable stroke paths in their OWN
+  // layer (so the word stays grouped and never mixes with other vectors), then
+  // select the whole thing in move-mode so it can be dragged into place at once.
+  // Re-editing an existing text layer replaces its strokes in place, keeping its
+  // position. The layer keeps `text` metadata so it can be re-edited later.
+  const addTextPaths = () => {
+    if (!textDialog) return;
+    const { text, height, intensity, editLayer } = textDialog;
+    if (!text.trim() || !(height > 0)) { setTextDialog(null); return; }
+    const center = getTextCenter(editLayer);
+    const strokes = textToPaths(text, height, { center });
+    if (!strokes.length) { setTextDialog(null); return; }
+    const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;
+    const newPaths: VecPath[] = strokes.map(s => ({ name: s.name, intensity, closed: false, points: s.points }));
+    let target: number;
+    if (editLayer != null && newResource.layers[editLayer]) {
+      newResource.layers[editLayer].paths = newPaths;
+      newResource.layers[editLayer].text = { content: text, height, intensity };
+      target = editLayer;
+    } else {
+      newResource.layers.push({
+        name: `text: ${text.trim().slice(0, 18)}`,
+        visible: true, paths: newPaths,
+        text: { content: text, height, intensity },
+      });
+      target = newResource.layers.length - 1;
+    }
+    updateResource(resource, newResource);
+    setCurrentLayerIndex(target);
+    // select every point so the whole word drags as one group; move-mode lets a
+    // drag from empty canvas space move it immediately
+    const sel = new Set<string>();
+    newPaths.forEach((p, pi) => p.points.forEach((_, i) => sel.add(`${pi}-${i}`)));
+    setSelectedPoints(sel);
+    setCurrentPathIndex(-1);
+    setSelectedPointIndex(-1);
+    setCurrentTool('select');
+    setIsMoveMode(true);
+    setTextDialog(null);
+  };
+
   const handleDoubleClick = () => {
     mousePenPosRef.current = null;
 
@@ -3868,6 +3969,24 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             </button>
           );
         })}
+        {/* Text tool: an ACTION (opens a dialog) rather than a drawing mode, so
+            it lives here with its own onClick instead of in railTools. */}
+        <button
+          onClick={() => {
+            const al = resource.layers[currentLayerIndex];
+            if (al && al.text) setTextDialog({ text: al.text.content, height: al.text.height, intensity: al.text.intensity, editLayer: currentLayerIndex });
+            else setTextDialog({ text: '', height: 24, intensity: 127 });
+          }}
+          style={{
+            width: 40, height: 40, fontSize: 15, fontWeight: 'bold', padding: 0,
+            background: textDialog ? '#4a4a8e' : '#3a3a5e', color: 'white',
+            border: textDialog ? '1px solid #8ab' : '1px solid transparent',
+            borderRadius: '4px', cursor: 'pointer',
+          }}
+          title="Text — type a string + size into its own layer (editable strokes). With a text layer active, re-edits it."
+        >
+          Abc
+        </button>
       </div>
     );
   };
@@ -4181,8 +4300,22 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
               <input type="checkbox" checked={showBackground} onChange={(e) => setShowBackground(e.target.checked)} style={{ margin: 0 }} />
               <span>📷 Background</span>
               <button
+                title="Export the background image to a PNG (named after this .vec)"
+                onClick={() => {
+                  const url = resource.backgroundImage;
+                  if (!url) return;
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${resource.name || 'background'}.png`;
+                  document.body.appendChild(a);
+                  a.click();
+                  a.remove();
+                }}
+                style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#8cf', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}
+              >⬇ PNG</button>
+              <button
                 onClick={() => { if (window.confirm('Remove background image?')) { setBackgroundImage(null); setShowBackground(false); setShowEdgeSettings(false); const nr = { ...resource }; delete nr.backgroundImage; updateResource(resource, nr); } }}
-                style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#a66', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}
+                style={{ background: 'transparent', border: 'none', color: '#a66', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}
               >✕</button>
             </div>
             <label
@@ -5069,7 +5202,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden', height: '100%' }}>
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden', height: '100%' }}>
       <Toolbar />
       {CircleArcSettings()}
       <div style={{ display: 'flex', gap: '8px', overflow: 'hidden', flex: 1 }}>
@@ -5144,6 +5277,108 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           <span>Zoom: {(zoom * 100).toFixed(0)}%</span>
         </span>
       </div>
+
+      {/* Text tool dialog: type a string + cap height, live-preview the strokes,
+          and drop them into the active layer as editable polylines. */}
+      {textDialog && (() => {
+        const preview = textToPaths(textDialog.text || 'Abc', textDialog.height, { center: { x: 0, y: 0 } });
+        // bbox of the preview strokes for the SVG viewBox
+        let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+        preview.forEach(s => s.points.forEach(p => {
+          if (p.x < mnx) mnx = p.x; if (p.x > mxx) mxx = p.x;
+          if (p.y < mny) mny = p.y; if (p.y > mxy) mxy = p.y;
+        }));
+        if (!isFinite(mnx)) { mnx = -10; mny = -10; mxx = 10; mxy = 10; }
+        const pad = 4;
+        const vbW = (mxx - mnx) + pad * 2, vbH = (mxy - mny) + pad * 2;
+        return (
+          // Floating panel (NOT a full-screen modal) so the canvas stays visible
+          // behind it and you can see the green real-size ghost preview.
+          <div style={{
+            position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 2000,
+            background: '#1e1e3a', border: '2px solid #4a4a8e', borderRadius: '8px',
+            padding: '20px', width: '360px', color: 'white', fontFamily: 'monospace',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+          }}>
+            <div>
+              <h3 style={{ margin: '0 0 16px', color: '#aaaaff' }}>🅰 {textDialog.editLayer != null ? 'Edit text layer' : 'Vector text'}</h3>
+
+              <label style={{ display: 'block', fontSize: '12px', color: '#888', marginBottom: '4px' }}>Text</label>
+              <input
+                autoFocus
+                type="text"
+                value={textDialog.text}
+                onChange={e => setTextDialog({ ...textDialog, text: e.target.value })}
+                onKeyDown={e => { if (e.key === 'Enter') addTextPaths(); if (e.key === 'Escape') setTextDialog(null); }}
+                placeholder="INSERT COIN"
+                style={{
+                  width: '100%', boxSizing: 'border-box', padding: '8px', marginBottom: '12px',
+                  background: '#2a2a4e', color: 'white', border: '1px solid #4a4a8e', borderRadius: '4px',
+                  fontFamily: 'monospace', fontSize: '14px',
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#888', marginBottom: '4px' }}>Height (units)</label>
+                  <input
+                    type="number" min={1} max={256} value={textDialog.height}
+                    onChange={e => setTextDialog({ ...textDialog, height: Number(e.target.value) })}
+                    onKeyDown={e => { if (e.key === 'Enter') addTextPaths(); }}
+                    style={{
+                      width: '100%', boxSizing: 'border-box', padding: '8px',
+                      background: '#2a2a4e', color: 'white', border: '1px solid #4a4a8e', borderRadius: '4px',
+                      fontFamily: 'monospace', fontSize: '14px',
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '12px', color: '#888', marginBottom: '4px' }}>Intensity (0-127)</label>
+                  <input
+                    type="number" min={0} max={127} value={textDialog.intensity}
+                    onChange={e => setTextDialog({ ...textDialog, intensity: Math.max(0, Math.min(127, Number(e.target.value))) })}
+                    onKeyDown={e => { if (e.key === 'Enter') addTextPaths(); }}
+                    style={{
+                      width: '100%', boxSizing: 'border-box', padding: '8px',
+                      background: '#2a2a4e', color: 'white', border: '1px solid #4a4a8e', borderRadius: '4px',
+                      fontFamily: 'monospace', fontSize: '14px',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* live preview (y-up flipped for SVG) */}
+              <div style={{ background: '#0a0a1e', border: '1px solid #2a2a4e', borderRadius: '4px', padding: '8px', marginBottom: '16px', textAlign: 'center' }}>
+                <svg width="100%" height="90" viewBox={`${mnx - pad} ${-(mxy + pad)} ${vbW} ${vbH}`} preserveAspectRatio="xMidYMid meet">
+                  {preview.map((s, i) => (
+                    <polyline key={i}
+                      points={s.points.map(p => `${p.x},${-p.y}`).join(' ')}
+                      fill="none" stroke="#6f6" strokeWidth={Math.max(0.5, textDialog.height / 24)} strokeLinecap="round" strokeLinejoin="round"
+                    />
+                  ))}
+                </svg>
+              </div>
+
+              <div style={{ fontSize: '11px', color: '#777', marginBottom: '12px' }}>
+                The green ghost on the canvas shows the REAL size &amp; position (this box only previews letter shapes). {preview.length} stroke(s) → {textDialog.editLayer != null
+                  ? <>replaces layer “{resource.layers[textDialog.editLayer]?.name ?? '?'}” in place</>
+                  : <>a new layer of its own</>}. Drops in selected, in move-mode, so you can drag it into place; re-edit it later with this button.
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setTextDialog(null)}
+                  style={{ padding: '8px 16px', background: '#3a3a5e', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={addTextPaths}
+                  style={{ padding: '8px 16px', background: '#4a8e6a', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                  Add text
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* DXF Import Dialog */}
       {dxfImport && (() => {

@@ -133,6 +133,9 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
   const ultimoFrameRef = useRef<Segment[]>([]);
   const disposedRef = useRef<boolean>(false);
   const startMsRef = useRef<number>(Date.now());
+  // One stamp per mount: saveData writes land in dumps/sim_<stamp>/ so play
+  // sessions never overwrite each other's files.
+  const sessionStampRef = useRef<string>(Date.now().toString(36));
   const moduleRef = useRef<any>(null);
   // AY-3-8910 audio on an AudioWorklet (audio thread — a synth stall can't
   // freeze the UI). Holds { ctx, node, resume } once set up.
@@ -156,15 +159,29 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       code === 'ArrowLeft' || code === 'ArrowRight' || code === 'ArrowUp' || code === 'ArrowDown' ||
       code === 'KeyA' || code === 'KeyD' || code === 'KeyW' || code === 'KeyS' ||
       code === 'KeyZ' || code === 'KeyX' || code === 'KeyC' || code === 'KeyV';
+    // Don't steal keys while the user is typing in a text field. WASD/ZXCV are
+    // both the controller mapping AND ordinary letters, so if the focus is on an
+    // input, textarea, select, contentEditable, or the Monaco editor, let the
+    // keystroke through instead of preventDefault-ing it (the bug that made those
+    // letters untypeable anywhere in the IDE while a sim view was mounted).
+    const typingInField = (e: KeyboardEvent) => {
+      const t = (e.target as HTMLElement | null) || (document.activeElement as HTMLElement | null);
+      if (!t) return false;
+      const tag = t.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+        || t.isContentEditable || !!t.closest('.monaco-editor');
+    };
     const down = (e: KeyboardEvent) => {
       keyDbgRef.current.n++;              // DEBUG: count every keydown reaching us
       keyDbgRef.current.last = e.code;
+      if (typingInField(e)) return;
       if (!isGameKey(e.code)) return;
       keysRef.current[e.code] = true;
       e.preventDefault();
       pollInput();
     };
     const up = (e: KeyboardEvent) => {
+      if (typingInField(e)) return;
       if (!isGameKey(e.code)) return;
       keysRef.current[e.code] = false;
       pollInput();
@@ -285,6 +302,21 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         if (n) { try { n.stop(); } catch { /* already stopped */ } voiceNodesRef.current.delete(voice); }
       },
       samplePlaying: (voice: number) => (voiceNodesRef.current.has(voice) ? 1 : 0),
+      // v_simSaveData: persist a blob from the game into ITS OWN project
+      // folder — <project>/dumps/sim_<stamp>/<basename>. The stamp is one per
+      // mount, so play sessions never collide and appendFileBin's append
+      // semantics only ever create fresh files. Path is confined: basename
+      // only, project dir derived from the module path (…/build_wasm/game.js).
+      saveData: (name: string, data: Uint8Array) => {
+        if (disposedRef.current) return;
+        // NB: file IPCs live under window.files (see preload.ts), NOT electronAPI
+        const api = (window as any).files;
+        if (!api?.appendFileBin) { log.current?.('[saveData] window.files.appendFileBin missing — dump lost'); return; }
+        const safe = String(name).split(/[\\/]/).pop()!.replace(/[^A-Za-z0-9._-]/g, '_');
+        const projDir = modulePath.replace(/[\\/][^\\/]+[\\/][^\\/]+$/, '');
+        if (projDir === modulePath || !safe) return;
+        api.appendFileBin({ path: `${projDir}/dumps/sim_${sessionStampRef.current}/${safe}`, data });
+      },
     };
 
     (async () => {
