@@ -1,704 +1,637 @@
 {
- "version": "1.0",
- "name": "auto_fx_014b_v2",
- "canvas": {
-  "width": 256,
-  "height": 256,
-  "origin": "center"
- },
- "layers": [
-  {
-   "name": "default",
-   "visible": true,
-   "paths": [
+  "version": "1.0",
+  "name": "auto_fx_014b_v2",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
     {
-     "name": "sil0",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -45,
-       "y": -5
-      },
-      {
-       "x": -45,
-       "y": 2
-      },
-      {
-       "x": -43,
-       "y": 2
-      },
-      {
-       "x": -43,
-       "y": 4
-      },
-      {
-       "x": -46,
-       "y": 6
-      }
-     ]
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "sil1",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": -2,
+              "y": -6
+            },
+            {
+              "x": 46,
+              "y": -6
+            },
+            {
+              "x": 46,
+              "y": 6
+            },
+            {
+              "x": 18,
+              "y": 6
+            },
+            {
+              "x": -30,
+              "y": 6
+            },
+            {
+              "x": -30,
+              "y": -6
+            }
+          ]
+        },
+        {
+          "name": "sil4",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": 14,
+              "y": 8
+            },
+            {
+              "x": 48,
+              "y": 8
+            },
+            {
+              "x": 48,
+              "y": -8
+            },
+            {
+              "x": -14,
+              "y": -8
+            },
+            {
+              "x": -48,
+              "y": -8
+            },
+            {
+              "x": -48,
+              "y": 8
+            }
+          ]
+        },
+        {
+          "name": "sil5",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": -29,
+              "y": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1789726420064",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -44,
+              "y": 6,
+              "z": 0
+            },
+            {
+              "x": -36,
+              "y": 6,
+              "z": 0
+            },
+            {
+              "x": -36,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": -37,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": -37,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": -35,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": -35,
+              "y": -5,
+              "z": 0
+            },
+            {
+              "x": -36,
+              "y": -5,
+              "z": 0
+            },
+            {
+              "x": -36,
+              "y": -6,
+              "z": 0
+            },
+            {
+              "x": -44,
+              "y": -6,
+              "z": 0
+            },
+            {
+              "x": -44,
+              "y": -5,
+              "z": 0
+            },
+            {
+              "x": -45,
+              "y": -5,
+              "z": 0
+            },
+            {
+              "x": -45,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": -43,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": -43,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": -44,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": -44,
+              "y": 6,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1789726430970",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -42,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": -42,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": -38,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": -38,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": -42,
+              "y": 4,
+              "z": 0
+            }
+          ]
+        }
+      ]
     },
     {
-     "name": "sil1",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -2,
-       "y": -6
-      },
-      {
-       "x": 46,
-       "y": -6
-      },
-      {
-       "x": 46,
-       "y": 6
-      },
-      {
-       "x": 18,
-       "y": 6
-      },
-      {
-       "x": -30,
-       "y": 6
-      },
-      {
-       "x": -30,
-       "y": -6
+      "name": "text: snow * power shot",
+      "visible": true,
+      "paths": [
+        {
+          "name": "text_0_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -41,
+              "y": -4
+            },
+            {
+              "x": -41,
+              "y": 0
+            },
+            {
+              "x": -39,
+              "y": 0
+            },
+            {
+              "x": -38,
+              "y": -1
+            },
+            {
+              "x": -38,
+              "y": -1
+            },
+            {
+              "x": -39,
+              "y": -2
+            },
+            {
+              "x": -41,
+              "y": -2
+            }
+          ]
+        }
+      ],
+      "text": {
+        "content": "p",
+        "height": 4,
+        "intensity": 127
       }
-     ]
     },
     {
-     "name": "sil2",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -23,
-       "y": 1
-      },
-      {
-       "x": -22,
-       "y": 5
-      },
-      {
-       "x": -22,
-       "y": 0
-      },
-      {
-       "x": -23,
-       "y": -5
+      "name": "text: power shot",
+      "visible": true,
+      "paths": [
+        {
+          "name": "text_0_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -28,
+              "y": -4
+            },
+            {
+              "x": -28,
+              "y": 3
+            },
+            {
+              "x": -24,
+              "y": 3
+            },
+            {
+              "x": -22,
+              "y": 1
+            },
+            {
+              "x": -22,
+              "y": 0
+            },
+            {
+              "x": -24,
+              "y": -1
+            },
+            {
+              "x": -28,
+              "y": -1
+            }
+          ]
+        },
+        {
+          "name": "text_1_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -20,
+              "y": -4
+            },
+            {
+              "x": -21,
+              "y": -3
+            },
+            {
+              "x": -21,
+              "y": 1
+            },
+            {
+              "x": -20,
+              "y": 3
+            },
+            {
+              "x": -17,
+              "y": 3
+            },
+            {
+              "x": -15,
+              "y": 1
+            },
+            {
+              "x": -15,
+              "y": -3
+            },
+            {
+              "x": -17,
+              "y": -4
+            },
+            {
+              "x": -20,
+              "y": -4
+            }
+          ]
+        },
+        {
+          "name": "text_2_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -14,
+              "y": 3
+            },
+            {
+              "x": -12,
+              "y": -4
+            },
+            {
+              "x": -9,
+              "y": 1
+            },
+            {
+              "x": -7,
+              "y": -4
+            },
+            {
+              "x": -5,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "name": "text_3_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 2,
+              "y": 3
+            },
+            {
+              "x": -3,
+              "y": 3
+            },
+            {
+              "x": -3,
+              "y": -4
+            },
+            {
+              "x": 2,
+              "y": -4
+            }
+          ]
+        },
+        {
+          "name": "text_3_1",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -3,
+              "y": -1
+            },
+            {
+              "x": 0,
+              "y": -1
+            }
+          ]
+        },
+        {
+          "name": "text_4_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 4,
+              "y": -4
+            },
+            {
+              "x": 4,
+              "y": 3
+            },
+            {
+              "x": 8,
+              "y": 3
+            },
+            {
+              "x": 10,
+              "y": 1
+            },
+            {
+              "x": 10,
+              "y": 0
+            },
+            {
+              "x": 8,
+              "y": -1
+            },
+            {
+              "x": 4,
+              "y": -1
+            }
+          ]
+        },
+        {
+          "name": "text_4_1",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 7,
+              "y": -1
+            },
+            {
+              "x": 10,
+              "y": -4
+            }
+          ]
+        },
+        {
+          "name": "text_6_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 23,
+              "y": 1
+            },
+            {
+              "x": 21,
+              "y": 3
+            },
+            {
+              "x": 18,
+              "y": 3
+            },
+            {
+              "x": 17,
+              "y": 1
+            },
+            {
+              "x": 18,
+              "y": -1
+            },
+            {
+              "x": 21,
+              "y": -1
+            },
+            {
+              "x": 23,
+              "y": -3
+            },
+            {
+              "x": 21,
+              "y": -4
+            },
+            {
+              "x": 18,
+              "y": -4
+            },
+            {
+              "x": 17,
+              "y": -3
+            }
+          ]
+        },
+        {
+          "name": "text_7_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 24,
+              "y": -4
+            },
+            {
+              "x": 24,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "name": "text_7_1",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 30,
+              "y": -4
+            },
+            {
+              "x": 30,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "name": "text_7_2",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 24,
+              "y": -1
+            },
+            {
+              "x": 30,
+              "y": -1
+            }
+          ]
+        },
+        {
+          "name": "text_8_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 33,
+              "y": -4
+            },
+            {
+              "x": 32,
+              "y": -3
+            },
+            {
+              "x": 32,
+              "y": 1
+            },
+            {
+              "x": 33,
+              "y": 3
+            },
+            {
+              "x": 36,
+              "y": 3
+            },
+            {
+              "x": 38,
+              "y": 1
+            },
+            {
+              "x": 38,
+              "y": -3
+            },
+            {
+              "x": 36,
+              "y": -4
+            },
+            {
+              "x": 33,
+              "y": -4
+            }
+          ]
+        },
+        {
+          "name": "text_9_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 39,
+              "y": 3
+            },
+            {
+              "x": 45,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "name": "text_9_1",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 42,
+              "y": 3
+            },
+            {
+              "x": 42,
+              "y": -4
+            }
+          ]
+        }
+      ],
+      "text": {
+        "content": "power shot",
+        "height": 7,
+        "intensity": 127
       }
-     ]
-    },
-    {
-     "name": "sil3",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 12,
-       "y": -1
-      },
-      {
-       "x": 12,
-       "y": 5
-      },
-      {
-       "x": 13,
-       "y": 0
-      },
-      {
-       "x": 13,
-       "y": -4
-      },
-      {
-       "x": 11,
-       "y": -5
-      }
-     ]
-    },
-    {
-     "name": "sil4",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 14,
-       "y": 8
-      },
-      {
-       "x": 47,
-       "y": 8
-      },
-      {
-       "x": 48,
-       "y": -8
-      },
-      {
-       "x": -14,
-       "y": -8
-      },
-      {
-       "x": -47,
-       "y": -8
-      },
-      {
-       "x": -48,
-       "y": 8
-      }
-     ]
-    },
-    {
-     "name": "sil5",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -26,
-       "y": 1
-      },
-      {
-       "x": -29,
-       "y": 0
-      },
-      {
-       "x": -28,
-       "y": 3
-      },
-      {
-       "x": -27,
-       "y": 4
-      },
-      {
-       "x": -28,
-       "y": 1
-      }
-     ]
-    },
-    {
-     "name": "sil6",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 0,
-       "y": 5
-      },
-      {
-       "x": 4,
-       "y": 4
-      },
-      {
-       "x": 4,
-       "y": 0
-      },
-      {
-       "x": 1,
-       "y": -2
-      },
-      {
-       "x": 0,
-       "y": -5
-      }
-     ]
-    },
-    {
-     "name": "sil7",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 36,
-       "y": 4
-      },
-      {
-       "x": 36,
-       "y": -5
-      },
-      {
-       "x": 35,
-       "y": 0
-      },
-      {
-       "x": 33,
-       "y": 0
-      },
-      {
-       "x": 32,
-       "y": -5
-      },
-      {
-       "x": 32,
-       "y": 5
-      },
-      {
-       "x": 33,
-       "y": 1
-      },
-      {
-       "x": 35,
-       "y": 1
-      },
-      {
-       "x": 35,
-       "y": 5
-      }
-     ]
-    },
-    {
-     "name": "sil8",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 5,
-       "y": 1
-      },
-      {
-       "x": 6,
-       "y": 5
-      },
-      {
-       "x": 9,
-       "y": 4
-      },
-      {
-       "x": 9,
-       "y": -4
-      },
-      {
-       "x": 8,
-       "y": 2
-      },
-      {
-       "x": 8,
-       "y": 4
-      },
-      {
-       "x": 6,
-       "y": 4
-      },
-      {
-       "x": 6,
-       "y": -4
-      },
-      {
-       "x": 8,
-       "y": -5
-      },
-      {
-       "x": 5,
-       "y": -4
-      }
-     ]
-    },
-    {
-     "name": "sil9",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 41,
-       "y": -2
-      },
-      {
-       "x": 41,
-       "y": -4
-      },
-      {
-       "x": 38,
-       "y": -5
-      },
-      {
-       "x": 40,
-       "y": -4
-      },
-      {
-       "x": 40,
-       "y": -1
-      },
-      {
-       "x": 41,
-       "y": 4
-      }
-     ]
-    },
-    {
-     "name": "sil10",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -1,
-       "y": -1
-      },
-      {
-       "x": -4,
-       "y": -3
-      },
-      {
-       "x": -6,
-       "y": 0
-      },
-      {
-       "x": -3,
-       "y": 2
-      }
-     ]
-    },
-    {
-     "name": "sil11",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 18,
-       "y": 1
-      },
-      {
-       "x": 17,
-       "y": -4
-      },
-      {
-       "x": 19,
-       "y": -5
-      },
-      {
-       "x": 16,
-       "y": -5
-      },
-      {
-       "x": 16,
-       "y": -2
-      },
-      {
-       "x": 16,
-       "y": 5
-      },
-      {
-       "x": 19,
-       "y": 5
-      },
-      {
-       "x": 17,
-       "y": 4
-      }
-     ]
-    },
-    {
-     "name": "sil12",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -35,
-       "y": -5
-      },
-      {
-       "x": -36,
-       "y": -6
-      },
-      {
-       "x": -33,
-       "y": -6
-      },
-      {
-       "x": -33,
-       "y": 6
-      },
-      {
-       "x": -36,
-       "y": 6
-      },
-      {
-       "x": -37,
-       "y": 4
-      },
-      {
-       "x": -37,
-       "y": 2
-      },
-      {
-       "x": -35,
-       "y": 2
-      }
-     ]
-    },
-    {
-     "name": "sil13",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -38,
-       "y": 0
-      },
-      {
-       "x": -36,
-       "y": 0
-      },
-      {
-       "x": -38,
-       "y": 1
-      },
-      {
-       "x": -40,
-       "y": 1
-      }
-     ]
-    },
-    {
-     "name": "sil14",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 43,
-       "y": -1
-      },
-      {
-       "x": 42,
-       "y": 5
-      },
-      {
-       "x": 45,
-       "y": 5
-      },
-      {
-       "x": 44,
-       "y": 3
-      },
-      {
-       "x": 44,
-       "y": -5
-      }
-     ]
-    },
-    {
-     "name": "sil15",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -18,
-       "y": -3
-      },
-      {
-       "x": -18,
-       "y": 4
-      },
-      {
-       "x": -15,
-       "y": 4
-      },
-      {
-       "x": -17,
-       "y": 4
-      }
-     ]
-    },
-    {
-     "name": "sil16",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 24,
-       "y": -4
-      },
-      {
-       "x": 23,
-       "y": -5
-      },
-      {
-       "x": 23,
-       "y": -3
-      },
-      {
-       "x": 24,
-       "y": -2
-      }
-     ]
-    },
-    {
-     "name": "sil17",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 24,
-       "y": 3
-      },
-      {
-       "x": 23,
-       "y": -2
-      },
-      {
-       "x": 21,
-       "y": -1
-      },
-      {
-       "x": 21,
-       "y": -5
-      },
-      {
-       "x": 20,
-       "y": 2
-      },
-      {
-       "x": 20,
-       "y": 5
-      },
-      {
-       "x": 23,
-       "y": 5
-      },
-      {
-       "x": 21,
-       "y": 4
-      },
-      {
-       "x": 21,
-       "y": 0
-      },
-      {
-       "x": 23,
-       "y": 0
-      },
-      {
-       "x": 23,
-       "y": 4
-      }
-     ]
-    },
-    {
-     "name": "sil18",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 30,
-       "y": -3
-      },
-      {
-       "x": 30,
-       "y": -1
-      },
-      {
-       "x": 31,
-       "y": -2
-      },
-      {
-       "x": 31,
-       "y": -4
-      }
-     ]
-    },
-    {
-     "name": "sil19",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -10,
-       "y": 3
-      },
-      {
-       "x": -10,
-       "y": -4
-      },
-      {
-       "x": -11,
-       "y": -2
-      },
-      {
-       "x": -11,
-       "y": 5
-      }
-     ]
-    },
-    {
-     "name": "sil20",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 37,
-       "y": -2
-      },
-      {
-       "x": 37,
-       "y": 4
-      },
-      {
-       "x": 39,
-       "y": 4
-      },
-      {
-       "x": 38,
-       "y": -4
-      }
-     ]
-    },
-    {
-     "name": "sil21",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -21,
-       "y": -3
-      },
-      {
-       "x": -20,
-       "y": 5
-      },
-      {
-       "x": -19,
-       "y": 3
-      },
-      {
-       "x": -19,
-       "y": -5
-      }
-     ]
-    },
-    {
-     "name": "sil22",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 30,
-       "y": 4
-      },
-      {
-       "x": 28,
-       "y": 4
-      },
-      {
-       "x": 29,
-       "y": 0
-      },
-      {
-       "x": 27,
-       "y": 1
-      },
-      {
-       "x": 27,
-       "y": 4
-      }
-     ]
     }
-   ]
-  }
- ],
- "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAAAQCAYAAADpunr5AAAB5klEQVR4nO1YPVbDMAyWeVygR2BlgyP0CLDFY7IxMsJYRka2eHSPkWOwcoQewTwZVITq36S0fSXfULmJ9CmWbUmJ2ryDgxlHweIa1CUO3l7HETw8fsmx9v8ZGLtVC84vAOLZgELZtq1bLpf+WtM0Xq7Xay+HYQBjjGIkTtrPKAPFbrsAHBhoLmvhnHNKKRX6L8cAAPKelDlfNJY+S7ilfYwvx1sytxDvhXRAO5xLeS0XEDmRlF6Jbg6Sp5abdGN8tc8c0iN+7ie4AAhKQSTlOOeYHPGHnBrkU4MM5Fj8SkGY/2XAmqZxVAPofslJ+CtYa53W+nzqDbahWI3lAsR2LddBW27/beIheXh6kNwuck/yoG9EaKOM5d4+cMI2FRNun+PgY4rbbhG+WTm4evr5f8ccfrzgD5ScTFlAp+Z6a62jrqzve0yJ25Mg82wtpF2Kj+Yh58btahCsAWOR6iimQmutuq7zY5Q8DckiOhU5rn3OLdiGniqMMQp3/iFqUGinl7TFRz0BoVZQ3p/qQ59TAQ6dgPYWc3zn205sfuw9eyFbjNs5KT0QPXLNS9i+uEtrSIh3it7OAuDRpg4j9hZccvxTOz82JsReWGKI6ZVylz5rrX6Jrb82fw09HvAjpl8R1sfPgMPiE51K6T16bfL0AAAAAElFTkSuQmCC",
- "backgroundFit": "naturalCenter",
- "backgroundOffset": {
-  "x": 0,
-  "y": 0
- }
+  ],
+  "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAAAQCAYAAADpunr5AAAB5klEQVR4nO1YPVbDMAyWeVygR2BlgyP0CLDFY7IxMsJYRka2eHSPkWOwcoQewTwZVITq36S0fSXfULmJ9CmWbUmJ2ryDgxlHweIa1CUO3l7HETw8fsmx9v8ZGLtVC84vAOLZgELZtq1bLpf+WtM0Xq7Xay+HYQBjjGIkTtrPKAPFbrsAHBhoLmvhnHNKKRX6L8cAAPKelDlfNJY+S7ilfYwvx1sytxDvhXRAO5xLeS0XEDmRlF6Jbg6Sp5abdGN8tc8c0iN+7ie4AAhKQSTlOOeYHPGHnBrkU4MM5Fj8SkGY/2XAmqZxVAPofslJ+CtYa53W+nzqDbahWI3lAsR2LddBW27/beIheXh6kNwuck/yoG9EaKOM5d4+cMI2FRNun+PgY4rbbhG+WTm4evr5f8ccfrzgD5ScTFlAp+Z6a62jrqzve0yJ25Mg82wtpF2Kj+Yh58btahCsAWOR6iimQmutuq7zY5Q8DckiOhU5rn3OLdiGniqMMQp3/iFqUGinl7TFRz0BoVZQ3p/qQ59TAQ6dgPYWc3zn205sfuw9eyFbjNs5KT0QPXLNS9i+uEtrSIh3it7OAuDRpg4j9hZccvxTOz82JsReWGKI6ZVylz5rrX6Jrb82fw09HvAjpl8R1sfPgMPiE51K6T16bfL0AAAAAElFTkSuQmCC",
+  "backgroundFit": "naturalCenter",
+  "backgroundOffset": {
+    "x": 0,
+    "y": 0
+  },
+  "center_x": 0,
+  "center_y": 0
 }

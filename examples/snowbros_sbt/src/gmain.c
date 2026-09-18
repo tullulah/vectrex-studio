@@ -74,8 +74,10 @@ int main(void)
     const char *sl = getenv("SPRLOAD");
     if (sl) {
         extern unsigned char sb_spriteram[0x1000];
+        extern int sb_spr_live;
         FILE *f = fopen(sl, "rb");
         if (f) { fread(sb_spriteram, 1, 0x1000, f); fclose(f); }
+        sb_spr_live = 1;   /* loaded a dump directly, not via the 68000 — mark live */
         for (;;) { v_WaitRecal(); sb_render(); }
     }
 

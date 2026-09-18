@@ -1,909 +1,895 @@
 {
- "version": "1.0",
- "name": "auto_fx_014c_v2",
- "canvas": {
-  "width": 256,
-  "height": 256,
-  "origin": "center"
- },
- "layers": [
-  {
-   "name": "default",
-   "visible": true,
-   "paths": [
+  "version": "1.0",
+  "name": "auto_fx_014c_v2",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
     {
-     "name": "sil0",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 5,
-       "y": 6
-      },
-      {
-       "x": -38,
-       "y": 6
-      },
-      {
-       "x": -38,
-       "y": -6
-      },
-      {
-       "x": 11,
-       "y": -6
-      },
-      {
-       "x": 54,
-       "y": -6
-      },
-      {
-       "x": 54,
-       "y": 6
-      }
-     ]
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "sil0",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": 5,
+              "y": 6
+            },
+            {
+              "x": -38,
+              "y": 6
+            },
+            {
+              "x": -38,
+              "y": -6
+            },
+            {
+              "x": 11,
+              "y": -6
+            },
+            {
+              "x": 54,
+              "y": -6
+            },
+            {
+              "x": 54,
+              "y": 6
+            }
+          ]
+        },
+        {
+          "name": "sil1",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": -30,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "sil2",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": -15,
+              "y": 8
+            },
+            {
+              "x": 56,
+              "y": 8
+            },
+            {
+              "x": 56,
+              "y": -8
+            },
+            {
+              "x": 15,
+              "y": -8
+            },
+            {
+              "x": -56,
+              "y": -8
+            },
+            {
+              "x": -56,
+              "y": 8
+            }
+          ]
+        },
+        {
+          "name": "sil3",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": 38,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "sil4",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": 34,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "sil5",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": 26,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "sil6",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": -17,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "sil7",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": -8,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "sil10",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": 15,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "sil11",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": -19,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "sil14",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": -28,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "sil16",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": 31,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "sil17",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": -37,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "name": "sil20",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": 44,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "sil26",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": 5,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "sil29",
+          "intensity": 115,
+          "closed": true,
+          "points": [
+            {
+              "x": 10,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "path_1789726598434",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -52,
+              "y": 6,
+              "z": 0
+            },
+            {
+              "x": -44,
+              "y": 6,
+              "z": 0
+            },
+            {
+              "x": -44,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": -45,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": -45,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": -43,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": -43,
+              "y": -5,
+              "z": 0
+            },
+            {
+              "x": -44,
+              "y": -5,
+              "z": 0
+            },
+            {
+              "x": -44,
+              "y": -6,
+              "z": 0
+            },
+            {
+              "x": -52,
+              "y": -6,
+              "z": 0
+            },
+            {
+              "x": -52,
+              "y": -5,
+              "z": 0
+            },
+            {
+              "x": -53,
+              "y": -5,
+              "z": 0
+            },
+            {
+              "x": -53,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": -51,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": -51,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": -52,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": -52,
+              "y": 6,
+              "z": 0
+            }
+          ]
+        },
+        {
+          "name": "path_1789726609124",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -50,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": -50,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": -46,
+              "y": 2,
+              "z": 0
+            },
+            {
+              "x": -46,
+              "y": 4,
+              "z": 0
+            },
+            {
+              "x": -50,
+              "y": 4,
+              "z": 0
+            }
+          ]
+        }
+      ]
     },
     {
-     "name": "sil1",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -31,
-       "y": 1
-      },
-      {
-       "x": -30,
-       "y": 5
-      },
-      {
-       "x": -30,
-       "y": 0
-      },
-      {
-       "x": -31,
-       "y": -5
+      "name": "text: longrange shot",
+      "visible": true,
+      "paths": [
+        {
+          "name": "text_0_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -36,
+              "y": 3
+            },
+            {
+              "x": -36,
+              "y": -3
+            },
+            {
+              "x": -32,
+              "y": -3
+            }
+          ]
+        },
+        {
+          "name": "text_1_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -29,
+              "y": -3
+            },
+            {
+              "x": -30,
+              "y": -2
+            },
+            {
+              "x": -30,
+              "y": 2
+            },
+            {
+              "x": -29,
+              "y": 3
+            },
+            {
+              "x": -27,
+              "y": 3
+            },
+            {
+              "x": -25,
+              "y": 2
+            },
+            {
+              "x": -25,
+              "y": -2
+            },
+            {
+              "x": -27,
+              "y": -3
+            },
+            {
+              "x": -29,
+              "y": -3
+            }
+          ]
+        },
+        {
+          "name": "text_2_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -24,
+              "y": -3
+            },
+            {
+              "x": -24,
+              "y": 3
+            },
+            {
+              "x": -19,
+              "y": -3
+            },
+            {
+              "x": -19,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "name": "text_3_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -12,
+              "y": 2
+            },
+            {
+              "x": -14,
+              "y": 3
+            },
+            {
+              "x": -16,
+              "y": 3
+            },
+            {
+              "x": -18,
+              "y": 2
+            },
+            {
+              "x": -18,
+              "y": -2
+            },
+            {
+              "x": -16,
+              "y": -3
+            },
+            {
+              "x": -14,
+              "y": -3
+            },
+            {
+              "x": -12,
+              "y": -2
+            },
+            {
+              "x": -12,
+              "y": 0
+            },
+            {
+              "x": -15,
+              "y": 0
+            }
+          ]
+        },
+        {
+          "name": "text_4_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -11,
+              "y": -3
+            },
+            {
+              "x": -11,
+              "y": 3
+            },
+            {
+              "x": -8,
+              "y": 3
+            },
+            {
+              "x": -6,
+              "y": 2
+            },
+            {
+              "x": -6,
+              "y": 1
+            },
+            {
+              "x": -8,
+              "y": 0
+            },
+            {
+              "x": -11,
+              "y": 0
+            }
+          ]
+        },
+        {
+          "name": "text_4_1",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -9,
+              "y": 0
+            },
+            {
+              "x": -6,
+              "y": -3
+            }
+          ]
+        },
+        {
+          "name": "text_5_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -5,
+              "y": -3
+            },
+            {
+              "x": -2,
+              "y": 3
+            },
+            {
+              "x": 1,
+              "y": -3
+            }
+          ]
+        },
+        {
+          "name": "text_5_1",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -4,
+              "y": -1
+            },
+            {
+              "x": 0,
+              "y": -1
+            }
+          ]
+        },
+        {
+          "name": "text_6_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 3,
+              "y": -3
+            },
+            {
+              "x": 3,
+              "y": 3
+            },
+            {
+              "x": 8,
+              "y": -3
+            },
+            {
+              "x": 8,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "name": "text_7_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 14,
+              "y": 2
+            },
+            {
+              "x": 13,
+              "y": 3
+            },
+            {
+              "x": 10,
+              "y": 3
+            },
+            {
+              "x": 9,
+              "y": 2
+            },
+            {
+              "x": 9,
+              "y": -2
+            },
+            {
+              "x": 10,
+              "y": -3
+            },
+            {
+              "x": 13,
+              "y": -3
+            },
+            {
+              "x": 14,
+              "y": -2
+            },
+            {
+              "x": 14,
+              "y": 0
+            },
+            {
+              "x": 12,
+              "y": 0
+            }
+          ]
+        },
+        {
+          "name": "text_8_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 20,
+              "y": 3
+            },
+            {
+              "x": 15,
+              "y": 3
+            },
+            {
+              "x": 15,
+              "y": -3
+            },
+            {
+              "x": 20,
+              "y": -3
+            }
+          ]
+        },
+        {
+          "name": "text_8_1",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 15,
+              "y": 0
+            },
+            {
+              "x": 18,
+              "y": 0
+            }
+          ]
+        },
+        {
+          "name": "text_10_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 31,
+              "y": 2
+            },
+            {
+              "x": 30,
+              "y": 3
+            },
+            {
+              "x": 27,
+              "y": 3
+            },
+            {
+              "x": 26,
+              "y": 2
+            },
+            {
+              "x": 27,
+              "y": 0
+            },
+            {
+              "x": 30,
+              "y": 0
+            },
+            {
+              "x": 31,
+              "y": -2
+            },
+            {
+              "x": 30,
+              "y": -3
+            },
+            {
+              "x": 27,
+              "y": -3
+            },
+            {
+              "x": 26,
+              "y": -2
+            }
+          ]
+        },
+        {
+          "name": "text_11_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 33,
+              "y": -3
+            },
+            {
+              "x": 33,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "name": "text_11_1",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 38,
+              "y": -3
+            },
+            {
+              "x": 38,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "name": "text_11_2",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 33,
+              "y": 0
+            },
+            {
+              "x": 38,
+              "y": 0
+            }
+          ]
+        },
+        {
+          "name": "text_12_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 40,
+              "y": -3
+            },
+            {
+              "x": 39,
+              "y": -2
+            },
+            {
+              "x": 39,
+              "y": 2
+            },
+            {
+              "x": 40,
+              "y": 3
+            },
+            {
+              "x": 43,
+              "y": 3
+            },
+            {
+              "x": 44,
+              "y": 2
+            },
+            {
+              "x": 44,
+              "y": -2
+            },
+            {
+              "x": 43,
+              "y": -3
+            },
+            {
+              "x": 40,
+              "y": -3
+            }
+          ]
+        },
+        {
+          "name": "text_13_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 45,
+              "y": 3
+            },
+            {
+              "x": 51,
+              "y": 3
+            }
+          ]
+        },
+        {
+          "name": "text_13_1",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": 48,
+              "y": 3
+            },
+            {
+              "x": 48,
+              "y": -3
+            }
+          ]
+        }
+      ],
+      "text": {
+        "content": "longrange shot",
+        "height": 6,
+        "intensity": 127
       }
-     ]
     },
     {
-     "name": "sil2",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -15,
-       "y": 8
-      },
-      {
-       "x": 55,
-       "y": 8
-      },
-      {
-       "x": 56,
-       "y": -8
-      },
-      {
-       "x": 15,
-       "y": -8
-      },
-      {
-       "x": -55,
-       "y": -8
-      },
-      {
-       "x": -56,
-       "y": 8
+      "name": "text: l",
+      "visible": true,
+      "paths": [
+        {
+          "name": "text_0_0",
+          "intensity": 127,
+          "closed": false,
+          "points": [
+            {
+              "x": -50,
+              "y": 0
+            },
+            {
+              "x": -50,
+              "y": -4
+            },
+            {
+              "x": -46,
+              "y": -4
+            }
+          ]
+        }
+      ],
+      "text": {
+        "content": "l",
+        "height": 4,
+        "intensity": 127
       }
-     ]
-    },
-    {
-     "name": "sil3",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 39,
-       "y": 3
-      },
-      {
-       "x": 38,
-       "y": 2
-      },
-      {
-       "x": 37,
-       "y": 4
-      },
-      {
-       "x": 38,
-       "y": 5
-      }
-     ]
-    },
-    {
-     "name": "sil4",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 33,
-       "y": -2
-      },
-      {
-       "x": 34,
-       "y": -5
-      },
-      {
-       "x": 32,
-       "y": -5
-      },
-      {
-       "x": 32,
-       "y": 3
-      },
-      {
-       "x": 32,
-       "y": 5
-      },
-      {
-       "x": 34,
-       "y": 5
-      }
-     ]
-    },
-    {
-     "name": "sil5",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 22,
-       "y": 5
-      },
-      {
-       "x": 24,
-       "y": 0
-      },
-      {
-       "x": 26,
-       "y": 5
-      },
-      {
-       "x": 26,
-       "y": -5
-      },
-      {
-       "x": 24,
-       "y": 0
-      },
-      {
-       "x": 22,
-       "y": -5
-      }
-     ]
-    },
-    {
-     "name": "sil6",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -17,
-       "y": -2
-      },
-      {
-       "x": -17,
-       "y": 5
-      },
-      {
-       "x": -16,
-       "y": 1
-      },
-      {
-       "x": -16,
-       "y": -4
-      },
-      {
-       "x": -18,
-       "y": -5
-      }
-     ]
-    },
-    {
-     "name": "sil7",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -5,
-       "y": -5
-      },
-      {
-       "x": -8,
-       "y": -5
-      },
-      {
-       "x": -8,
-       "y": 5
-      },
-      {
-       "x": -7,
-       "y": -4
-      }
-     ]
-    },
-    {
-     "name": "sil8",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -43,
-       "y": 0
-      },
-      {
-       "x": -44,
-       "y": -6
-      },
-      {
-       "x": -41,
-       "y": -6
-      },
-      {
-       "x": -41,
-       "y": 1
-      },
-      {
-       "x": -41,
-       "y": 6
-      },
-      {
-       "x": -44,
-       "y": 6
-      },
-      {
-       "x": -45,
-       "y": 2
-      },
-      {
-       "x": -43,
-       "y": 2
-      }
-     ]
-    },
-    {
-     "name": "sil9",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 16,
-       "y": -4
-      },
-      {
-       "x": 15,
-       "y": -5
-      },
-      {
-       "x": 15,
-       "y": -3
-      },
-      {
-       "x": 16,
-       "y": -2
-      }
-     ]
-    },
-    {
-     "name": "sil10",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 16,
-       "y": 3
-      },
-      {
-       "x": 15,
-       "y": -2
-      },
-      {
-       "x": 13,
-       "y": -1
-      },
-      {
-       "x": 13,
-       "y": -5
-      },
-      {
-       "x": 12,
-       "y": 2
-      },
-      {
-       "x": 12,
-       "y": 5
-      },
-      {
-       "x": 15,
-       "y": 5
-      },
-      {
-       "x": 13,
-       "y": 4
-      },
-      {
-       "x": 13,
-       "y": 0
-      },
-      {
-       "x": 15,
-       "y": 0
-      },
-      {
-       "x": 15,
-       "y": 4
-      }
-     ]
-    },
-    {
-     "name": "sil11",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -18,
-       "y": 3
-      },
-      {
-       "x": -18,
-       "y": -4
-      },
-      {
-       "x": -19,
-       "y": -2
-      },
-      {
-       "x": -19,
-       "y": 5
-      }
-     ]
-    },
-    {
-     "name": "sil12",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 18,
-       "y": 2
-      },
-      {
-       "x": 18,
-       "y": 0
-      },
-      {
-       "x": 20,
-       "y": 0
-      },
-      {
-       "x": 21,
-       "y": 4
-      },
-      {
-       "x": 21,
-       "y": -5
-      },
-      {
-       "x": 20,
-       "y": -3
-      },
-      {
-       "x": 20,
-       "y": -1
-      },
-      {
-       "x": 18,
-       "y": -1
-      },
-      {
-       "x": 17,
-       "y": -5
-      },
-      {
-       "x": 17,
-       "y": 4
-      }
-     ]
-    },
-    {
-     "name": "sil13",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -3,
-       "y": -3
-      },
-      {
-       "x": -1,
-       "y": -4
-      },
-      {
-       "x": -4,
-       "y": -4
-      },
-      {
-       "x": -4,
-       "y": 0
-      },
-      {
-       "x": -3,
-       "y": 4
-      }
-     ]
-    },
-    {
-     "name": "sil14",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -29,
-       "y": -3
-      },
-      {
-       "x": -28,
-       "y": 5
-      },
-      {
-       "x": -27,
-       "y": 3
-      },
-      {
-       "x": -27,
-       "y": -5
-      }
-     ]
-    },
-    {
-     "name": "sil15",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -53,
-       "y": -1
-      },
-      {
-       "x": -51,
-       "y": 4
-      },
-      {
-       "x": -54,
-       "y": 6
-      },
-      {
-       "x": -54,
-       "y": 2
-      },
-      {
-       "x": -54,
-       "y": -6
-      },
-      {
-       "x": -52,
-       "y": -6
-      }
-     ]
-    },
-    {
-     "name": "sil16",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 29,
-       "y": -4
-      },
-      {
-       "x": 29,
-       "y": 0
-      },
-      {
-       "x": 31,
-       "y": 0
-      },
-      {
-       "x": 31,
-       "y": -5
-      },
-      {
-       "x": 28,
-       "y": -5
-      },
-      {
-       "x": 27,
-       "y": 2
-      },
-      {
-       "x": 28,
-       "y": 5
-      },
-      {
-       "x": 31,
-       "y": 5
-      },
-      {
-       "x": 31,
-       "y": 2
-      },
-      {
-       "x": 28,
-       "y": 4
-      }
-     ]
-    },
-    {
-     "name": "sil17",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -37,
-       "y": 3
-      },
-      {
-       "x": -35,
-       "y": 4
-      },
-      {
-       "x": -36,
-       "y": 1
-      },
-      {
-       "x": -32,
-       "y": -1
-      },
-      {
-       "x": -33,
-       "y": -3
-      },
-      {
-       "x": -34,
-       "y": 0
-      },
-      {
-       "x": -37,
-       "y": 0
-      }
-     ]
-    },
-    {
-     "name": "sil18",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 0,
-       "y": 1
-      },
-      {
-       "x": 0,
-       "y": -4
-      },
-      {
-       "x": -1,
-       "y": -1
-      },
-      {
-       "x": -1,
-       "y": 4
-      }
-     ]
-    },
-    {
-     "name": "sil19",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 45,
-       "y": -3
-      },
-      {
-       "x": 45,
-       "y": 4
-      },
-      {
-       "x": 48,
-       "y": 4
-      },
-      {
-       "x": 46,
-       "y": 3
-      },
-      {
-       "x": 46,
-       "y": -4
-      },
-      {
-       "x": 48,
-       "y": -5
-      }
-     ]
-    },
-    {
-     "name": "sil20",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 42,
-       "y": -1
-      },
-      {
-       "x": 40,
-       "y": -5
-      },
-      {
-       "x": 40,
-       "y": 5
-      },
-      {
-       "x": 42,
-       "y": 0
-      },
-      {
-       "x": 44,
-       "y": 5
-      },
-      {
-       "x": 44,
-       "y": -5
-      }
-     ]
-    },
-    {
-     "name": "sil21",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 9,
-       "y": -2
-      },
-      {
-       "x": 8,
-       "y": 0
-      },
-      {
-       "x": 10,
-       "y": 0
-      },
-      {
-       "x": 10,
-       "y": -4
-      },
-      {
-       "x": 7,
-       "y": -5
-      }
-     ]
-    },
-    {
-     "name": "sil22",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -25,
-       "y": -5
-      },
-      {
-       "x": -26,
-       "y": 4
-      },
-      {
-       "x": -23,
-       "y": 4
-      },
-      {
-       "x": -25,
-       "y": 4
-      },
-      {
-       "x": -25,
-       "y": -4
-      },
-      {
-       "x": -23,
-       "y": -4
-      }
-     ]
-    },
-    {
-     "name": "sil23",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 48,
-       "y": 2
-      },
-      {
-       "x": 49,
-       "y": 4
-      },
-      {
-       "x": 49,
-       "y": -2
-      },
-      {
-       "x": 48,
-       "y": -4
-      }
-     ]
-    },
-    {
-     "name": "sil24",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 36,
-       "y": 3
-      },
-      {
-       "x": 37,
-       "y": 4
-      },
-      {
-       "x": 37,
-       "y": 2
-      },
-      {
-       "x": 36,
-       "y": 1
-      }
-     ]
-    },
-    {
-     "name": "sil25",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -46,
-       "y": 1
-      },
-      {
-       "x": -48,
-       "y": 1
-      },
-      {
-       "x": -46,
-       "y": 0
-      },
-      {
-       "x": -44,
-       "y": 0
-      }
-     ]
-    },
-    {
-     "name": "sil26",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 5,
-       "y": -3
-      },
-      {
-       "x": 5,
-       "y": -5
-      },
-      {
-       "x": 3,
-       "y": -3
-      },
-      {
-       "x": 4,
-       "y": 2
-      },
-      {
-       "x": 5,
-       "y": 5
-      }
-     ]
-    },
-    {
-     "name": "sil27",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -48,
-       "y": 2
-      },
-      {
-       "x": -46,
-       "y": 2
-      },
-      {
-       "x": -46,
-       "y": 4
-      },
-      {
-       "x": -48,
-       "y": 4
-      }
-     ]
-    },
-    {
-     "name": "sil28",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": -12,
-       "y": 1
-      },
-      {
-       "x": -11,
-       "y": 2
-      },
-      {
-       "x": -9,
-       "y": 0
-      },
-      {
-       "x": -11,
-       "y": -2
-      },
-      {
-       "x": -12,
-       "y": -3
-      },
-      {
-       "x": -14,
-       "y": -1
-      }
-     ]
-    },
-    {
-     "name": "sil29",
-     "intensity": 115,
-     "closed": true,
-     "points": [
-      {
-       "x": 6,
-       "y": -3
-      },
-      {
-       "x": 6,
-       "y": 4
-      },
-      {
-       "x": 10,
-       "y": 5
-      },
-      {
-       "x": 10,
-       "y": 2
-      },
-      {
-       "x": 7,
-       "y": 4
-      }
-     ]
     }
-   ]
-  }
- ],
- "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHAAAAAQCAYAAADOFPsRAAACBElEQVR4nO1ZO1LEMAy1GC7ANThGjpEtsx0llJS0W9JtyuQYuQIdLUfgCGJkVoxR/JEdZz8zeY0c23pyrFiyJvD9adBsuEk8PBq4p8b7oYzg6flXlupvKAft/Vtn0DqQ8NobINl1HTZNY/vatrVyHEcrp2kyfd+DQ4JSf8N5wHv/50AX5ChX5gIREQDA9yzbJOWYlDm2Yry+tlUQc2XfEk6pl9KN7Y1vXXdGgE+YK2VfDO7ma+Zp5uYAlbzuPDkm9Zdy+pyn5ZGOlNwzBxI4hLKU7ZRhNuQusqaTSoAr2L/0O81CKOU/ubi2bZFzII9rTuJaGIYBd7tdVfuQCNNrcFazSWUE3WakA0NfmDuHdF39k4qF5HHDkeQOjUkesk3wfWiMEG+KO6Vfyhnaj1x7ss37Pguh1MmO4YkeR4XAoXsW45fmOjp5x+PRtknSs8lAyH7sg5O5S/tOcq4vJ0rHlO6NNweWInQDqwEKm/v93rZJ1gqjELjE+Pq0YS83POZwS3jLiGsF5d6mafAcORiUZUwuanNWPYG+q7ccX2pjycmDC1xW1sbsBH6ZzrwcTmXDB90+h6yCXvvlhmoct07Sbg46PKHiOWa/FmI50feOGp7UHvxzIIUmvuGFnKYJX7GTF2rLviX5BirYD60l1peynbMedW7e/kbcLugngvWoojzYYK4TP26HSQn58IQaAAAAAElFTkSuQmCC",
- "backgroundFit": "naturalCenter",
- "backgroundOffset": {
-  "x": 0,
-  "y": 0
- }
+  ],
+  "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHAAAAAQCAYAAADOFPsRAAACBElEQVR4nO1ZO1LEMAy1GC7ANThGjpEtsx0llJS0W9JtyuQYuQIdLUfgCGJkVoxR/JEdZz8zeY0c23pyrFiyJvD9adBsuEk8PBq4p8b7oYzg6flXlupvKAft/Vtn0DqQ8NobINl1HTZNY/vatrVyHEcrp2kyfd+DQ4JSf8N5wHv/50AX5ChX5gIREQDA9yzbJOWYlDm2Yry+tlUQc2XfEk6pl9KN7Y1vXXdGgE+YK2VfDO7ma+Zp5uYAlbzuPDkm9Zdy+pyn5ZGOlNwzBxI4hLKU7ZRhNuQusqaTSoAr2L/0O81CKOU/ubi2bZFzII9rTuJaGIYBd7tdVfuQCNNrcFazSWUE3WakA0NfmDuHdF39k4qF5HHDkeQOjUkesk3wfWiMEG+KO6Vfyhnaj1x7ss37Pguh1MmO4YkeR4XAoXsW45fmOjp5x+PRtknSs8lAyH7sg5O5S/tOcq4vJ0rHlO6NNweWInQDqwEKm/v93rZJ1gqjELjE+Pq0YS83POZwS3jLiGsF5d6mafAcORiUZUwuanNWPYG+q7ccX2pjycmDC1xW1sbsBH6ZzrwcTmXDB90+h6yCXvvlhmoct07Sbg46PKHiOWa/FmI50feOGp7UHvxzIIUmvuGFnKYJX7GTF2rLviX5BirYD60l1peynbMedW7e/kbcLugngvWoojzYYK4TP26HSQn58IQaAAAAAElFTkSuQmCC",
+  "backgroundFit": "naturalCenter",
+  "backgroundOffset": {
+    "x": 0,
+    "y": 0
+  },
+  "center_x": 0,
+  "center_y": 0
 }

@@ -1,2 +1,7 @@
 # unmatched sprite frames — cumulative; regenerate vecs with
 # tools/autotrace.py --catalog after capturing them in dumps/
+0384 44 32x32 4 player pose
+0388 8 32x32 4 player pose
+038c 8 32x32 4 player pose
+0390 8 32x32 4 player pose
+0394 8 32x32 4 player pose

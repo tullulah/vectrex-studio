@@ -25,6 +25,16 @@ int8_t currentJoy1X = 0, currentJoy1Y = 0;
 void vectrexinit(int x) { (void)x; }
 void v_setRefresh(int hz) { (void)hz; }
 
+/* Audio: the harness is SILENT and stays deterministic (see v_WaitRecal's
+ * note — byte-comparable runs are the point of the host). The sound is still
+ * verifiable from here without a console: `SB_TRACE_SND=1` logs every latch
+ * command with its frame, and `tools/snd_check.py --session <log>` mixes that
+ * into a WAV by running the very streams the cartridge would play. */
+void v_playMusic(const unsigned char *vmus) { (void)vmus; }
+void v_stopMusic(void)                      { }
+void v_playSFX(const unsigned char *vsfx)   { (void)vsfx; }
+void v_writePSG(unsigned char r, unsigned char v) { (void)r; (void)v; }
+
 /* AUTOPLAY=1: wander left/right, hop and shoot — enough motion to surface
  * walk/jump/throw poses and snowed enemies for the frame harvest */
 void v_readJoystick1Analog(void)

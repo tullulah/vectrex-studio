@@ -23,6 +23,8 @@
 #include "musashi/m68k.h"
 #include "sb_rom.h"
 
+void sb_audio_cmd(unsigned char cmd);   /* sb_audio.c */
+
 /* LA RAM DE SPRITES, EN LA SRAM INTERNA. Son 4 KB que se recorren ENTEROS cada
  * frame (512 entradas de 8 bytes en sb_render) y que ademas escribe el 68000 por
  * wr8, asi que los toca el frame por los dos lados. En la PSRAM eso va por la
@@ -43,6 +45,12 @@
 unsigned char sb_ram[0x4000];
 unsigned char sb_spriteram[0x1000] SB_EN_SRAM;
 unsigned char sb_palette[0x200];
+
+/* 0 until the 68000 first writes the Pandora sprite list. Before that the sprite
+ * RAM is uninitialised power-on garbage (the arcade shows it as two random
+ * sprites during the RAM/ROM self-test; on the vector console it came out as
+ * bright random lines). sb_render skips drawing while this is 0. */
+int sb_spr_live;
 
 /* inputs, ACTIVE-LOW bit fields (1 = released). gmain.c clears bits. */
 unsigned char sb_p1 = 0x7f;      /* up,down,left,right,b1,b2,b3 ; bit7 must stay 0 */
@@ -156,10 +164,22 @@ static void wr8(unsigned int a, unsigned int d)
 #endif
         return;
     }
-    if (a == 0x300001) { soundcmd = d; return; }
+    if (a == 0x300001) {
+        /* SB_TRACE_SND=1: log every sound-latch command with its frame — the raw
+         * material for mapping arcade command bytes to PSG music/SFX assets. */
+        { static int t = -1; if (t < 0) t = getenv("SB_TRACE_SND") ? 1 : 0;
+          if (t) { extern int sb_frame_counter;
+                   printf("SND f%d cmd %02x\n", sb_frame_counter, d); } }
+        /* The board's sound latch IS our sound trigger: the game's own code
+         * decides what plays, and sb_audio.c maps the command to the PSG stream
+         * ripped from the sound ROM. Only the WRITE matters — the read side
+         * still answers the boot handshake below. */
+        sb_audio_cmd((unsigned char)d);
+        soundcmd = d; return; }
     if (a >= 0x600000 && a <= 0x6001ff) { sb_palette[a & 0x1ff] = d; return; }
     if (a >= 0x700000 && a <= 0x701fff) {
         if (a & 1) sb_spriteram[(a & 0x1fff) >> 1] = d;    /* low lane only */
+        sb_spr_live = 1;   /* the game now drives the sprite list; safe to draw */
 #ifdef SB_TRACE_SPR
         /* SB_TRACE_SPR: log unique PCs that write sprite Y (byte 5 of each 8-byte
          * Pandora entry) after gameplay starts — that routine builds the display
@@ -403,6 +423,7 @@ void sb_hw_init(void)
     memset(sb_ram, 0, sizeof sb_ram);
     memset(sb_spriteram, 0, sizeof sb_spriteram);
     memset(sb_palette, 0, sizeof sb_palette);
+    sb_spr_live = 0;
     sb_idle_buscar();
     m68k_init();
     m68k_set_cpu_type(M68K_CPU_TYPE_68000);

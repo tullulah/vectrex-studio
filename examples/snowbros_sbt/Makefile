@@ -19,10 +19,11 @@
 AAE_SRC   = $(HOME)/projects/vectrex-arcade-private/aae-games/aae-src
 MUSASHI   = $(AAE_SRC)/musashi
 
-SRC = src/gmain.c src/sb_hw.c src/sb_render.c \
+SRC = src/gmain.c src/sb_hw.c src/sb_render.c src/sb_audio.c \
       $(MUSASHI)/m68kcpu.c $(MUSASHI)/m68kops.c $(MUSASHI)/softfloat/softfloat.c
 
-GEN = src/sb_rom.h src/sb_tiles.h src/sb_sprites.h src/sb_font.h src/sb_shapes.h
+GEN = src/sb_rom.h src/sb_tiles.h src/sb_sprites.h src/sb_font.h src/sb_shapes.h \
+      src/sb_snddata.h
 
 #   CHEATS=1  invulnerability (the board's own DSW2 dip) — for reaching high
 #             floors to grow the sprite catalogue, TNZS-style
@@ -77,6 +78,33 @@ sim: $(GEN) | build_wasm
 	PATH="$(EMCC_PATH)" $(EMCC) $(WASM_CFLAGS) $(SRC) src/sb_sim.c $(PITREX_SIM_SDK)/sdk_host.c $(WASM_LDFLAGS) -o build_wasm/game.js
 	@echo "=== sim build OK: build_wasm/game.js ==="
 
+# ---- sound ripper: the Z80+YM3812 music, out of the ROM --------------------
+# Runs the real sound program (sbros-4.29) under mz80, feeds it each latch
+# command and logs the YM3812 register writes — the raw material the PSG
+# .vmus/.vsfx conversion works from. See the header of tools/snd_rip.c.
+#   make snd_rip && ./build/snd_rip build/sbros4.bin build/snd
+build/sbros4.bin: rom/snowbros.zip | build
+	python3 -c "import zipfile; open('build/sbros4.bin','wb').write(zipfile.ZipFile('rom/snowbros.zip').read('sbros-4.29'))"
+
+snd_rip: tools/snd_rip.c tools/mz80/mz80.c build/sbros4.bin | build
+	$(HOST_CC) -std=gnu11 -O2 -w -DNO_PI -Itools/mz80 tools/snd_rip.c tools/mz80/mz80.c -o build/snd_rip
+	@mkdir -p build/snd
+	@echo "=== snd_rip: build/snd_rip ==="
+
+# snd_ref: the SAME logs played back through the REAL chip (MAME's ymfm
+# YM3812). Two jobs: a reference to listen to, and the measurements that drive
+# the SFX conversion — an FM zap's pitch cannot be computed from fnum (the
+# operator MULT scales it, feedback and inharmonic modulation dominate it), so
+# it is measured off the rendered audio. See tools/snd_ref.cpp.
+#   make snd_ref && ./build/snd_ref build/snd/cmd_1f.log shot.wav
+YMFM ?= $(HOME)/projects/mame/3rdparty/ymfm/src
+YMFM_SRCS = $(YMFM)/ymfm_opl.cpp $(YMFM)/ymfm_misc.cpp $(YMFM)/ymfm_pcm.cpp \
+            $(YMFM)/ymfm_adpcm.cpp $(YMFM)/ymfm_ssg.cpp
+
+snd_ref: tools/snd_ref.cpp | build
+	c++ -std=c++17 -O2 -w -I$(YMFM) tools/snd_ref.cpp $(YMFM_SRCS) -o build/snd_ref
+	@echo "=== snd_ref: build/snd_ref ==="
+
 src/sb_rom.h src/sb_tiles.h: tools/roms_to_c.py tools/extract_sprites.py
 	python3 tools/roms_to_c.py
 
@@ -89,7 +117,16 @@ src/sb_shapes.h: tools/vec_to_shapes.py $(wildcard assets/vectors/level_*.vec)
 src/sb_font.h: tools/make_font.py
 	python3 tools/make_font.py
 
-.PHONY: host sim
+# The PSG streams of the arcade's own music/SFX. Two stages, both offline: the
+# ripper runs the sound ROM (build/snd/*.log), the converter reduces YM3812 to
+# PSG. build/snd is kept out of the deps on purpose — re-ripping is cheap but it
+# needs the romset, and a checkout with sb_snddata.h already present must build.
+src/sb_snddata.h: tools/snd_conv.py tools/snd_rip.c tools/snd_ref.cpp | build
+	$(MAKE) snd_rip snd_ref
+	./build/snd_rip build/sbros4.bin build/snd
+	python3 tools/snd_conv.py
+
+.PHONY: host sim snd_rip snd_ref
 
 # ---- the two cartridges (UVM2 + RP2350) ------------------------------------
 # Same program, bare metal, twice. The game speaks the same `svc` ABI through
@@ -115,7 +152,7 @@ UVM2_NAME   = snowbros_sbt
 # libc_stub.c is in the list but never reaches the .um2: uvm2.mk drops it by name
 # (UVM2_SRCS_DROP), because that path already has a real crt0 and the two would
 # collide. See the file — it is three functions, and it says why.
-UVM2_SRCS   = src/gmain.c src/sb_hw.c $(RENDER_OBJ) src/libc_stub.c src/sb_rtt.c \
+UVM2_SRCS   = src/gmain.c src/sb_hw.c src/sb_audio.c $(RENDER_OBJ) src/libc_stub.c src/sb_rtt.c \
               $(MUSASHI_OBJ) $(MUSASHI)/softfloat/softfloat.c
 
 # ---- LAS TABLAS DEL DIBUJO EN LA SRAM INTERNA -----------------------------

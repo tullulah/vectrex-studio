@@ -114,6 +114,7 @@ static void draw_glyph(int code, int sx, int sy)
 static struct { int x, y, tile, flip, pal; } obj[OBJ_MAX];
 static int nobj;
 static int obx0, oby0, obx1, oby1;   /* bbox of collected tiles */
+static int frame_bg_tiles;           /* level-bank (0x600-0xcff) tiles this frame */
 
 /* the game parks unused sprites by pointing their colours at black — if the
  * whole object resolves to near-black in the live CRAM, the arcade shows
@@ -174,13 +175,13 @@ static void draw_stream(const int16_t *d, int dy)
 
 static void draw_level_platforms(void)
 {
-    /* Only while a level is actually being played. The player object (fixed
-     * struct at 0x1015b2, X word at +6 = 0x1015b8) is zero on the static title
-     * and high-score screens and non-zero once a floor is running (attract DEMO
-     * included, which is correct — it plays a real level). Without this, the
-     * level word (still 0) would paint level-0 platforms over the SNOW BROS
-     * logo. It is a whole-game invariant, not a per-level pixel heuristic. */
-    if (!((sb_ram[0x15b8] << 8) | sb_ram[0x15b9])) return;
+    /* Draw platforms ONLY when the level backdrop is actually on screen — i.e.
+     * this frame has a bulk of level-bank tiles (0x600-0xcff). That is true
+     * during a real floor (gameplay OR the attract demo) and false on the
+     * medal / logo / how-to-play attract screens, where the level word is still
+     * 0 but no floor is shown. Keying on the player object instead painted the
+     * floor-1 platforms over those attract screens. */
+    if (frame_bg_tiles < 40) return;
     int level = (sb_ram[0x1572] << 8) | sb_ram[0x1573];
     if (level < 0 || level >= SB_NLEVELS) return;
 
@@ -335,6 +336,10 @@ int sb_frame_counter;
 void sb_render(void)
 {
     sb_frame_counter++;
+    /* Nothing to draw until the game has taken over the Pandora sprite list.
+     * Before that the sprite RAM is power-on garbage (bright random vectors on
+     * the console during the RAM/ROM self-test). See sb_spr_live in sb_hw.c. */
+    { extern int sb_spr_live; if (!sb_spr_live) return; }
     if (log_unmatched < 0) {
         /* on by default on the host — SB_LOG_UNMATCHED=0 disables */
         const char *e = getenv("SB_LOG_UNMATCHED");
@@ -342,6 +347,7 @@ void sb_render(void)
     }
     int x = 0, y = 0;
     nobj = 0;
+    frame_bg_tiles = 0;
     for (int offs = 0; offs < 0x1000; offs += 8) {
         int dx = sb_spriteram[offs + 4];
         int dy = sb_spriteram[offs + 5];
@@ -364,6 +370,7 @@ void sb_render(void)
 
         int tile = (((at & 0x3f) << 8) | sb_spriteram[offs + 6]) & 0xfff;
         if (sb_tile_blank[tile]) continue;
+        if (tile >= 0x600 && tile <= 0xcff) frame_bg_tiles++;   /* level backdrop present */
         if (!nobj) { obx0 = obx1 = x; oby0 = oby1 = y; }
         else {
             if (x < obx0) obx0 = x; if (x > obx1) obx1 = x;
