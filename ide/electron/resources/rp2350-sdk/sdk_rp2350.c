@@ -41,6 +41,7 @@ static inline int  sys_read_buttons(void)    { register int r0 __asm__("r0"); __
 static inline int  sys_read_axes(void)       { register int r0 __asm__("r0"); __asm__ volatile("svc #13" : "=r"(r0) :: "memory"); return r0; }
 static inline void sys_play_music(const void *p){ register const void *r0 __asm__("r0")=p; __asm__ volatile("svc #21" : "+r"(r0) :: "memory"); }
 static inline void sys_stop_music(void)      { __asm__ volatile("svc #22" ::: "r0","r1","r2","r3","memory"); }
+static inline void sys_play_sfx(const void *p){ register const void *r0 __asm__("r0")=p; __asm__ volatile("svc #23" : "+r"(r0) :: "memory"); }
 /* SYS_RASTER_TEXT = 26 (23 es SYS_PLAY_SFX en la BIOS: con ese numero un puntero a texto
  * llegaba al reproductor de SFX como pista y colgaba el nucleo). */
 static inline void sys_raster_text(int x,int y,const unsigned char*s,int n){ register int r0 __asm__("r0")=x; register int r1 __asm__("r1")=y; register const unsigned char* r2 __asm__("r2")=s; register int r3 __asm__("r3")=n; __asm__ volatile("svc #26" :: "r"(r0),"r"(r1),"r"(r2),"r"(r3) : "memory"); }
@@ -96,6 +97,13 @@ struct uvm2_api {
     void (*config_aplicar)(const int32_t *);
     int  (*config_guardar)(void);
     void (*refresco)(unsigned);
+    /* version 2: .vsmp samples (uvm2_smp.c, injected into the list). The order is
+     * the contract with uvm2c.rs and only ever grows at the end; callers check
+     * `version` first, because a version-1 table ends just above. */
+    void (*play_sample)(const void *, unsigned, int);
+    void (*stop_sample)(unsigned);
+    int  (*sample_playing)(unsigned);
+    const void *(*sample_bundle_entry)(unsigned);
 };
 #define UVM2_API        ((const struct uvm2_api *)0x20077000u)
 #define UVM2_API_MAGIC  0x50415356u   /* 'VSAP' */
@@ -158,9 +166,38 @@ unsigned uvm2_cuenta_entrada;   /* DIAGNOSTICO, ver uvm2_frame_end */
 void uvm2_draw_move_abs_q4(int x_q4, int y_q4);
 void uvm2_draw_delta_q4(int dx_q4, int dy_q4);
 void uvm2_draw_intensity(int z);
+/* uvm2_smp.c, inside the image on the .um2 (on the cartridge it is reached
+ * through the BIOS table). */
+void uvm2_smp_play(const void *data, unsigned voice, int loop);
+void uvm2_smp_stop(unsigned voice);
+int  uvm2_smp_playing(unsigned voice);
+const void *uvm2_smp_bundle_entry(unsigned idx);
+
+/* ── HOW MUCH OF A FRAME IS SPENT INSIDE THE DRAW PATH ──────────────────────
+ *
+ * Tac/Scan measured 30.1 ms a frame in "vector generation + list building" — 86.7%
+ * of everything the builder does, and 11057 M33 cycles per path. That number lumps
+ * two different suspects: the port's own walk over the game's vector RAM, and the
+ * three calls this function makes into the SDK. On this board those three are
+ * INDIRECT calls through the BIOS table at 0x20077000, from game code in PSRAM into
+ * BIOS code in flash — two XIP regions per path, which the .um2 does not have
+ * because there the SDK is inside the image. Splitting them says whether that
+ * structural difference is the cost or a red herring.
+ *
+ * Off unless the build asks (-DUVM2_MIDE_DIBUJO). The timer reads are APB accesses
+ * and there are two per call, so with 400 paths a frame they add tens of
+ * microseconds of their own: the figure is an upper bound, not a hairline. */
+#ifdef UVM2_MIDE_DIBUJO
+volatile uint32_t uvm2_us_draw;    /* accumulated microseconds inside this function */
+volatile uint32_t uvm2_n_draw;     /* calls counted, to get the per-path cost */
+#define DRAW_NOW() (*(volatile uint32_t *)0x400B000CU)   /* TIMER0 TIMELR, 1 MHz */
+#endif
 
 void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
 {
+#ifdef UVM2_MIDE_DIBUJO
+    uint32_t t0 = DRAW_NOW();
+#endif
     if (b == 0) return;                       /* z=0 es un salto en blanco, no un trazo */
 #ifdef UVM2_CUENTA_ENTRADA
     uvm2_cuenta_entrada++;   /* DIAGNOSTICO: cuantas llamadas de dibujo ENTRAN al SDK */
@@ -173,6 +210,10 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
     uvm2_draw_intensity((int)b);
     uvm2_draw_move_abs_q4(VS_Q4(x0), VS_Q4(y0));
     uvm2_draw_delta_q4(VS_Q4(x1) - VS_Q4(x0), VS_Q4(y1) - VS_Q4(y0));
+#endif
+#ifdef UVM2_MIDE_DIBUJO
+    uvm2_us_draw += DRAW_NOW() - t0;
+    uvm2_n_draw++;
 #endif
 }
 
@@ -237,13 +278,78 @@ void v_writePSG(uint8_t reg, uint8_t val)
 #endif
 }
 
-/* Muestras digitalizadas (AAE Sega G80): sin voz software aun, en silencio. */
-void v_playSample(int idx, int voice, int loop) { (void)idx; (void)voice; (void)loop; }
-void v_stopSample(int voice)                    { (void)voice; }
-int  v_samplePlaying(int voice)                 { (void)voice; return 0; }
+/* ── DIGITISED SAMPLES (AAE Sega G80: Tac/Scan, Star Trek…) ───────────────────────────
+ *
+ * They sound through the PSG's volume DAC, with the writes PUT INTO THE DRAW LIST —
+ * see the uvm2_smp.h header, which is where the model and the measurements live.
+ * Only the plumbing is here, and it has one piece that is not obvious:
+ *
+ * AAE ASKS FOR A SOUND BY NUMBER (`v_playSample(idx, …)`, where idx indexes its own
+ * sample table), and the SDK cannot know which .vsmp is which: that belongs to the
+ * game. In the simulator the JS side resolves it by reading `samples/samples.json`;
+ * on the cartridge `v_sampleData` resolves it, and EACH GAME defines it with its own
+ * table. The weak default returns 0, so the 43 ports with no samples keep compiling
+ * and keep silent without a line of change. It is the same rule as the rest of the
+ * SDK: generalise at the contract, never per program. */
+/* THE DEFAULT IS THE BUNDLE, which is what a port normally wants: the sounds ship
+ * as a file on the card and the index is the position in it. Who READS that file
+ * differs by board and that is the whole reason this is not one line:
+ *
+ *   - .um2: the game reads it itself at startup (uvm2_smp_bundle_load), because it
+ *     owns the bus while it boots.
+ *   - Vectrex Studio cartridge: the BIOS reads it in SYS_LAUNCH, next to the
+ *     romset. The game runs on core 1 while core 0 drives the bus, and a card read
+ *     from the other core returns garbage — so the game must not try.
+ *
+ * A port that would rather link its own table just defines v_sampleData itself. */
+__attribute__((weak)) const void *v_sampleData(int idx)
+{
+    if (idx < 0) return 0;
+#ifdef VPY_DUAL_CORE
+    return (UVM2_API->version >= 2u) ? UVM2_API->sample_bundle_entry((unsigned)idx) : 0;
+#else
+    return uvm2_smp_bundle_entry((unsigned)idx);
+#endif
+}
+
+void v_playSample(int idx, int voice, int loop)
+{
+    const void *p = v_sampleData(idx);
+    if (!p) return;
+#ifdef VPY_DUAL_CORE
+    /* A VERSION-1 TABLE ENDS AT `refresco`. Calling `play_sample` on a BIOS from
+     * back then would be jumping into whatever that RAM holds, so the number is
+     * checked: an old BIOS with a new game stays quiet, which is what it did
+     * before any of this. */
+    if (UVM2_API->version >= 2u) UVM2_API->play_sample(p, (unsigned)voice, loop);
+#else
+    uvm2_smp_play(p, (unsigned)voice, loop);
+#endif
+}
+
+void v_stopSample(int voice)
+{
+#ifdef VPY_DUAL_CORE
+    if (UVM2_API->version >= 2u) UVM2_API->stop_sample((unsigned)voice);
+#else
+    uvm2_smp_stop((unsigned)voice);
+#endif
+}
+
+int v_samplePlaying(int voice)
+{
+#ifdef VPY_DUAL_CORE
+    return (UVM2_API->version >= 2u) ? UVM2_API->sample_playing((unsigned)voice) : 0;
+#else
+    return uvm2_smp_playing((unsigned)voice);
+#endif
+}
 
 void v_playMusic(const unsigned char *vmus) { sys_play_music(vmus); }
 void v_stopMusic(void)                      { sys_stop_music(); }
+/* Compiled .vsfx over the music: the BIOS sequencer merges it on channel C
+ * (SYS_PLAY_SFX = 23, see the note above about not confusing it with 26). */
+void v_playSFX(const unsigned char *vsfx)   { sys_play_sfx(vsfx); }
 
 #include <stddef.h>
 #ifndef UVM2_PICO_RUNTIME

@@ -358,6 +358,13 @@ typedef struct {
     /* Periodos que core 1 paso SIN lista y leyo los mandos por su cuenta (uvm2_core1.c):
      * un juego que no dibuja sigue viendo sus botones. Al final, para no mover offsets. */
     uint32_t frames_ociosos;
+    /* .vsmp samples put into the last frame's list (uvm2_smp.c). With a voice
+     * active it should be around `frame_cycles / (1.5 MHz / UVM2_SMP_HZ)`: 160 at
+     * 8 kHz in a 50 Hz frame. A zero while audio was asked for means there was no
+     * gap to inject into — a list with no strokes — not that the player is
+     * stopped; two different faults. At the end of the struct, to not move any
+     * offsets. */
+    uint32_t samples;
 } uvm2_stats_t;
 
 extern uvm2_stats_t uvm2_stats;

@@ -78,6 +78,7 @@ add_executable(${UVM2_NAME}
     ${UVM2_SDK_DIR}/uvm2_led.c
     ${UVM2_SDK_DIR}/uvm2_text.c
     ${UVM2_SDK_DIR}/uvm2_audio.c
+    ${UVM2_SDK_DIR}/uvm2_smp.c
     ${UVM2_SDK_DIR}/uvm2_svc.c
     ${UVM2_SDK_DIR}/uvm2_core1.c
     ${UVM2_SDK_DIR}/uvm2_psram.c

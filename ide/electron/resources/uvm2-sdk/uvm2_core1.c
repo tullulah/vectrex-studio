@@ -65,6 +65,12 @@ extern volatile uint32_t uvm2_frame_done;
 extern const uint8_t    *uvm2_frame_buffer(uint32_t frame);
 extern uint32_t          uvm2_frame_length(uint32_t frame);
 
+/* EL PERIODO DEL FRAME, MEDIDO, para que la razon de arriba se calcule contra algo
+ * real. Lo rellena el pacer al cerrar cada vuelta, asi que la razon usa el periodo del
+ * frame ANTERIOR — un frame de desfase en un diagnostico no cambia ninguna decision, y
+ * medirlo antes de que el frame acabe es imposible. */
+static uint32_t s_ciclo_us;
+
 /* PSG writes the game issued mid-frame, drained between frames.
  *
  * A ring rather than a flag per register: a game that writes the same register
@@ -224,15 +230,30 @@ static void core1_main(void)
         {
             extern uint32_t uvm2_ciclos_frame(uint32_t);
             const uint32_t pedidos = uvm2_ciclos_frame(served);   /* el que se acaba de reproducir */
-            const uint32_t us = t1 - t0;
+            /* NO SE MIDE CONTRA `t1 - t0`, Y ESA ERA LA TRAMPA.
+             *
+             * En el camino SIO `uvm2_exec` espera flanco a flanco del CLK, asi que su
+             * duracion ES el tiempo de bus y la razon decia lo que promete. Con PIO+DMA
+             * el mismo codigo encola palabras, llama a `vbus_flush` y vuelve: el PIO
+             * sigue tocando despues. Medir contra eso daba **120%**, o sea "el bus va un
+             * 20% mas rapido que su nominal" — imposible, porque va enganchado al CLK de
+             * la consola. Lo que medía era lo rapido que ENCOLAMOS, que es justo para lo
+             * que esta el DMA.
+             *
+             * Contra el PERIODO DEL FRAME si significa algo, y ademas es lo que se quiere
+             * saber: 100 = el bus esta ocupado todo el frame (el dibujo es el limite),
+             * 50 = la mitad del frame el bus esta parado y el limite esta en otro sitio.
+             * Costo una sesion entera creerse el 120%: no se publica un numero cuyo
+             * nombre no corresponda con lo que se midio. */
+            const uint32_t us = s_ciclo_us;   /* el del frame ANTERIOR: ver abajo */
             if (pedidos && us) {
-                /* razon en centesimas: 100 = el bus va a su ritmo nominal */
+                /* razon en centesimas: 100 = el bus ocupado el frame entero */
                 uint32_t r = (uint32_t)(((uint64_t)pedidos * 100u * 100u) / ((uint64_t)us * 150u));
                 uvm2_stats.exec_razon_ult = r;
                 if (r > uvm2_stats.exec_razon_max) uvm2_stats.exec_razon_max = r;
                 if (uvm2_stats.exec_razon_min == 0u || r < uvm2_stats.exec_razon_min)
                     uvm2_stats.exec_razon_min = r;
-                /* la forma entera: 100 = nominal, 50 = la mitad de rapido */
+                /* la forma entera: 100 = bus ocupado el frame entero */
                 static const uint32_t T[7] = { 50u, 70u, 85u, 95u, 105u, 130u, 200u };
                 unsigned b = 7u;
                 for (unsigned i = 0; i < 7u; i++) if (r < T[i]) { b = i; break; }
@@ -289,9 +310,40 @@ static void core1_main(void)
          * 0 = libre (Asteroids redibujaba en cuanto acababa su lista). != 0 = periodo fijo
          * en ciclos de bus; 30000 = 50 Hz. */
         uvm2_stats.bus_cycles = cycles;
-        if (uvm2_pacer_cycles != 0) {
-            if (cycles < uvm2_pacer_cycles) uvm2_bus_delay(uvm2_pacer_cycles - cycles);
-            else                            uvm2_stats.overrun++;
+
+        /* EL RITMO SE MARCA CONTRA EL RELOJ, NO CONTRA LA LISTA.
+         *
+         * Aqui se esperaba `pacer - cycles` ciclos de bus, y eso da por hecho que entre el
+         * final de un frame y el del siguiente solo ha pasado la lista. Es falso por dos
+         * motivos a la vez: entre listas este nucleo lee los mandos, vacia el PSG y atiende
+         * la SD, y ademas `cycles` es lo que la lista CREE que cuesta, no lo que el bus
+         * tarda. El camino de un solo nucleo ya arreglo esto mismo en uvm2_frame_end y su
+         * nota lo dice: "lista rellenada a 30000 ciclos clavados y frames de 20,5 a 26,5 ms".
+         *
+         * Ahora el objetivo es "el frame anterior acabo en T, este acaba en T + periodo".
+         * Lo que sobre se espera con TIMER0; si ya nos hemos pasado es un overrun de verdad
+         * y se re-engancha desde ahora en vez de arrastrar el retraso.
+         *
+         * `uvm2_pacer_cycles` sigue siendo la perilla (0 = libre) y se convierte a
+         * microsegundos aqui: el bus es de 1,5 MHz, o sea ciclos * 2/3. */
+        {
+            static uint32_t s_fin_us;
+            const uint32_t ahora = time_us_32();
+            if (s_fin_us) s_ciclo_us = ahora - s_fin_us;   /* lo que ha durado esta vuelta */
+            if (uvm2_pacer_cycles == 0u) {
+                s_fin_us = ahora;
+            } else {
+                const uint32_t periodo_us = (uvm2_pacer_cycles * 2u) / 3u;
+                const uint32_t objetivo   = s_fin_us + periodo_us;
+                const int32_t  falta      = (int32_t)(objetivo - ahora);
+                if (falta > 0 && (uint32_t)falta <= periodo_us) {
+                    while ((int32_t)(objetivo - time_us_32()) > 0) { }
+                    s_fin_us = objetivo;
+                } else {
+                    uvm2_stats.overrun++;
+                    s_fin_us = ahora;
+                }
+            }
         }
 
         uvm2_stats.us_rest = time_us_32() - t2;

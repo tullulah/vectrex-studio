@@ -272,6 +272,18 @@ type TrapFn = (cpu: Thumb2) => number;
 const DC_CTRL_ADDR = 0x20076F00;
 const DC_BUF0_ADDR = 0x20077000;
 const DC_BUF1_ADDR = 0x2007B000;
+
+// UVM2 BIOS API table. The modern dual-core cartridge SDK (sdk_rp2350.c,
+// VPY_DUAL_CORE) calls EVERYTHING — draw, wait_recal, input, config — through a
+// function table the BIOS publishes at a fixed address (`struct uvm2_api`). On
+// hardware Ralf's BIOS fills it; here the emulator IS the BIOS, so we publish the
+// table with pointers to trap addresses and implement each entry as a TrapFn.
+const UVM2_API_ADDR  = 0x20077000;        // == DC_BUF0_ADDR; same fixed slot
+const UVM2_API_MAGIC  = 0x50415356;       // 'VSAP'
+const UVM2_TRAP_BASE  = 0x21000000;       // synthetic trap addresses (unmapped region)
+// q4 (1/16 device unit) → ALG units. q4 = device*16/127 (VS_Q4), and the
+// emulator's ALG space is ~1:1 with device units, so ALG = q4 * 127/16.
+const UVM2_Q4_TO_ALG  = 127 / 16;
 const DC_CMDS_MAX  = 4096;
 
 export class Rp2350System implements ISystem, IBus {
@@ -515,7 +527,9 @@ export class Rp2350System implements ISystem, IBus {
    * Returns all vector segments drawn during the frame.
    */
   runFrame(): Segment[] {
-    if (this.dcActive) return this.runFrameDualCore();
+    // dcApiMode games (modern UVM2_API table) run through the normal trap loop;
+    // only the obsolete DC_BUF command-buffer model uses runFrameDualCore.
+    if (this.dcActive && !this.dcApiMode) return this.runFrameDualCore();
     const fc     = this.frameCounter;
     const debugEnabled = (typeof window !== 'undefined') && !!(window as any).RP2350_DEBUG;
     const logAll = debugEnabled && (fc < 10 || fc % 60 === 0);
@@ -1606,15 +1620,116 @@ export class Rp2350System implements ISystem, IBus {
     this.dcActive = bin.length >= 12 &&
       ((bin[8] | (bin[9] << 8) | (bin[10] << 16) | (bin[11] << 24)) >>> 0) === 0x44430001;
     const SP_TOP = inPsram ? 0x2007F000 : GAME_LOAD_ADDR;
-    this.cpu.setReg(13, this.dcActive ? DC_CTRL_ADDR : SP_TOP); // SP: grows down from below the shared block
+    this.cpu.setReg(13, SP_TOP);       // SP: stack in high SRAM (grows down)
     this.cpu.setReg(15, entry & ~1);   // PC = game_main (thumb bit stripped)
     this.cpu.setReg(14, 0xFFFFFFFE);   // LR sentinel (halt if game_main returns)
+    // Modern dual-core cartridge: publish the BIOS API table + traps and run the
+    // game through the normal trap loop (not the obsolete DC_BUF drain).
+    if (this.dcActive) this.publishUvm2Api();
     console.log(`[Rp2350System.initRamGame] loaded ${len}b @ 0x${GAME_LOAD_ADDR.toString(16)} (${inPsram ? 'PSRAM' : 'SRAM'}), entry=0x${entry.toString(16)}${this.dcActive ? ' (DUAL-CORE)' : ''}`);
   }
 
   // Shared block with the game, from sdk_rp2350.c. Keep them in step.
   private static readonly _dcDoc = 1;
   private dcActive = false;
+  private dcApiMode = false;   // true once the UVM2_API table is published (modern path)
+
+  /**
+   * Publish the UVM2_API function table at 0x20077000 and register a trap for
+   * each entry, so the dual-core cartridge SDK's indirect calls (UVM2_API->...)
+   * land on emulator handlers. Replaces the obsolete DC_BUF command-buffer model.
+   * Handlers reuse the same beam/ALG state as the svc drawing traps.
+   */
+  private publishUvm2Api(): void {
+    const base = UVM2_API_ADDR - SRAM_BASE;
+    const wr32 = (off: number, v: number) => {
+      this.sram[off]     = v & 0xff;
+      this.sram[off + 1] = (v >>> 8) & 0xff;
+      this.sram[off + 2] = (v >>> 16) & 0xff;
+      this.sram[off + 3] = (v >>> 24) & 0xff;
+    };
+    wr32(base + 0, UVM2_API_MAGIC);
+    // 2 = the table carries play_sample/stop_sample/sample_playing after refresco
+    // (uvm2c.rs). The game checks this number before calling them, so publishing 1
+    // here would leave samples silent in the emulator and sounding on the console —
+    // the kind of difference that sends you debugging the wrong place.
+    wr32(base + 4, 2);   // version
+
+    // handlers in struct order (offset 8 = first fn pointer)
+    const packAxes = () =>
+      (((this.joyJ1X & 0xff) << 24) | ((this.joyJ1Y & 0xff) << 16) |
+       ((this.joyJ2X & 0xff) << 8) | (this.joyJ2Y & 0xff)) >>> 0;
+    const i8 = (v: number) => (v << 24) >> 24;
+
+    const drawIntensity = (cpu: Thumb2): number => {
+      this.armIntensity = cpu.getReg(0) & 0x7f; this.beam.alg_zsh = this.armIntensity; return 10;
+    };
+    const drawReset = (_c: Thumb2): number => {
+      this.armBeamX = ALG_CENTER_X; this.armBeamY = ALG_CENTER_Y; this.armIntensity = 0;
+      this.beam.alg_dx = 0; this.beam.alg_dy = 0; this.beam.alg_vectoring = 0; this.beam.alg_zsh = 0;
+      return 100;
+    };
+    const moveAbs = (cpu: Thumb2, scale: number): number => {
+      this.armBeamX = ALG_CENTER_X + Math.round((cpu.getReg(0) | 0) * scale);
+      this.armBeamY = ALG_CENTER_Y - Math.round((cpu.getReg(1) | 0) * scale);
+      return 200;
+    };
+    const drawDelta = (cpu: Thumb2, scale: number): number => {
+      const newX = this.armBeamX + Math.round((cpu.getReg(0) | 0) * scale);
+      const newY = this.armBeamY - Math.round((cpu.getReg(1) | 0) * scale);
+      const clip = clipSegment(this.armBeamX, this.armBeamY, newX, newY);
+      if (clip !== null) this.beam.addSegmentDirect(clip[0], clip[1], clip[2], clip[3], this.armIntensity);
+      this.armBeamX = newX; this.armBeamY = newY;
+      return 200;
+    };
+    // device units are ~1:1 with ALG; q4 is 1/16 device so ×127/16 (UVM2_Q4_TO_ALG)
+    const DEV = 127 / 128;
+    const handlers: TrapFn[] = [
+      /* draw_intensity        */ drawIntensity,
+      /* draw_reset            */ drawReset,
+      /* draw_move             */ (c) => moveAbs(c, DEV),
+      /* draw_delta            */ (c) => drawDelta(c, DEV),
+      /* draw_move_abs_q4      */ (c) => moveAbs(c, UVM2_Q4_TO_ALG),
+      /* draw_delta_q4         */ (c) => drawDelta(c, UVM2_Q4_TO_ALG),
+      /* draw_delta_patterned  */ (c) => drawDelta(c, UVM2_Q4_TO_ALG),  // pattern ignored
+      /* print_text            */ (_c) => 20,                            // raster text: skip
+      /* wait_recal            */ (c) => { this.audioFrame(); c.hitWfi = true; return 128; },
+      /* read_buttons          */ (c) => { c.setReg(0, this.readButtonsBios() >>> 0); return 10; },
+      /* read_axes             */ (c) => { c.setReg(0, packAxes()); return 10; },
+      /* psg_queue             */ (c) => { this.psgShadow[c.getReg(0) & 0x0f] = c.getReg(1) & 0xff; return 10; },
+      /* config_actual         */ (c) => {
+        // sizeof(struct uvm2_config) is 52 (13 int32) — writing more clobbers the
+        // caller's saved LR on the stack (buffer is `sub sp,#60; add r0,sp,#4`).
+        const p = c.getReg(0) >>> 0;
+        for (let k = 0; k < 52; k++) this.write8(p + k, 0);
+        const w32 = (off: number, val: number) => {
+          this.write8(p + off, val & 0xff); this.write8(p + off + 1, (val >> 8) & 0xff);
+          this.write8(p + off + 2, (val >> 16) & 0xff); this.write8(p + off + 3, (val >> 24) & 0xff);
+        };
+        w32(0, 128);   // scale (non-zero divisor)
+        w32(12, 127);  // bright
+        w32(40, 50);   // hz
+        return 20;
+      },
+      /* config_aplicar        */ (_c) => 20,
+      /* config_guardar        */ (c) => { c.setReg(0, 0); return 20; },
+      /* refresco              */ (_c) => 20,
+      /* play_sample (v2)      */ (c) => {
+        this.playSampleVoice(c.getReg(0) >>> 0, c.getReg(1) >>> 0, (c.getReg(2) | 0) !== 0);
+        return 20;
+      },
+      /* stop_sample (v2)      */ (c) => { this.stopSampleVoice(c.getReg(0) >>> 0); return 10; },
+      /* sample_playing (v2)   */ (c) => {
+        c.setReg(0, this.sampleVoicePlaying(c.getReg(0) >>> 0) ? 1 : 0); return 10;
+      },
+    ];
+    handlers.forEach((fn, k) => {
+      const trapAddr = UVM2_TRAP_BASE + k * 4;
+      wr32(base + 8 + k * 4, trapAddr | 1);   // table pointer (Thumb bit set)
+      this.traps.set(trapAddr, fn);
+    });
+    this.dcApiMode = true;
+  }
 
   /** DUAL-CORE frame: the game (would-be core 1) records its draws into a shared
    * RAM double-buffer with no svc; we act as core 0 — publish input, run the CPU
@@ -1898,6 +2013,71 @@ export class Rp2350System implements ISystem, IBus {
     this.sampleStartTime = ctx.currentTime;
     this.sampleRateHz = sampleRate;
     this.sampleDurationSec = numSamples / sampleRate;
+  }
+
+  /**
+   * UVM2_API play_sample/stop_sample/sample_playing — the AAE voices (Tac/Scan,
+   * Star Trek). Separate from `playSample` above on purpose, for two reasons:
+   *
+   *  - MULTIVOZ. AAE layers sounds (thrust looping under a laser), so a single
+   *    `sampleSource` would cut one with the next. `playSample` keeps its single
+   *    voice because that is what VPy's PLAY_SAMPLE means (one video soundtrack,
+   *    and SAMPLE_POS derives the frame from its clock).
+   *  - DE DONDE SE LEE. A C game links into GAME_RAM (0x11000000, PSRAM), not
+   *    flash, so its .vsmp blobs are not where `playSample`'s reader looks. This
+   *    one goes through `read8`, which maps every region.
+   *
+   * On hardware this is NOT how it sounds: there the samples are 4 bits through
+   * the PSG volume register, injected into the draw list (uvm2_smp.c). Here they
+   * are clean Web Audio. So this panel says WHAT plays and WHEN — the game logic —
+   * and not how good it will sound; for that, the previews from
+   * `make snd SND_ARGS="--preview build/snd"` are the honest ones.
+   */
+  private sampleVoices = new Map<number, AudioBufferSourceNode>();
+
+  playSampleVoice(assetPtr: number, voice: number, loop: boolean): void {
+    if (!this.audioCtx) {
+      try {
+        this.audioCtx = new AudioContext({ sampleRate: Rp2350System.AUDIO_SAMPLE_RATE });
+      } catch { return; }
+    }
+    const ctx = this.audioCtx;
+    const rd = (a: number) => this.read8(a >>> 0) & 0xff;
+    const rd32 = (a: number) =>
+      (rd(a) | (rd(a + 1) << 8) | (rd(a + 2) << 16) | (rd(a + 3) << 24)) >>> 0;
+
+    const rate = rd32(assetPtr);
+    const n    = rd32(assetPtr + 4);
+    if (rate <= 0 || rate > 48000 || n <= 0 || n > 0x400000) return;
+
+    const buf = ctx.createBuffer(1, n, rate);
+    const out = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) {
+      const byte = rd(assetPtr + 8 + (i >> 1));
+      const v = (i & 1) === 0 ? (byte & 0x0f) : ((byte >> 4) & 0x0f);
+      out[i] = (v / 15) * 2 - 1;
+    }
+
+    this.stopSampleVoice(voice);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = loop;
+    src.connect(ctx.destination);
+    src.onended = () => { if (this.sampleVoices.get(voice) === src) this.sampleVoices.delete(voice); };
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
+    src.start();
+    this.sampleVoices.set(voice, src);
+  }
+
+  stopSampleVoice(voice: number): void {
+    const s = this.sampleVoices.get(voice);
+    if (!s) return;
+    try { s.stop(); s.disconnect(); } catch { /* already finished */ }
+    this.sampleVoices.delete(voice);
+  }
+
+  sampleVoicePlaying(voice: number): boolean {
+    return this.sampleVoices.has(voice);
   }
 
   /** SAMPLE_POS(fps): current audio-synced frame index (video follows audio).

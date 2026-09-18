@@ -17,6 +17,7 @@
 #include <limits.h>
 #include "uvm2_draw.h"
 #include "uvm2_config.h"
+#include "uvm2_smp.h"          /* .vsmp samples injected into the list; see smp_inject */
 #ifdef UVM2_PIO_STREAM
 #include "uvm2_bus_stream.h"   /* vbus_lista_*: la lista de un frame como un solo DMA */
 #endif
@@ -1186,9 +1187,90 @@ static void vxs_alargar_ultimo(void *ctx, uint32_t extra_q8)
     p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16);
 }
 
+/* ONE DAC SAMPLE, PUT INTO THE LIST. See uvm2_smp.h for the model; what justifies
+ * the PLACE is this:
+ *
+ * It is called right before a `T1CL`, and there the previous ramp's timer has
+ * ALREADY expired (its gap is 11 cycles for a count of 8), so PB7 is high and the
+ * integrators are frozen. Writing Port A does not move the beam — but Port A is
+ * the X rate the coming ramp will use, so the last write RESTORES `s_porta`.
+ * Without that, the next stroke is drawn at the speed of an audio sample.
+ *
+ * It is four commands (data, BDIR up, BDIR down, restore X) and it touches
+ * neither the PCR nor the ACR nor the shift register: nothing the beam model
+ * considers its own, beyond the Port A it hands back as it found it. The visible
+ * price is that this point of the stroke sits 4 cycles longer with the beam
+ * parked, on top of the ~18 it already sits in every micro-segment — 22% more
+ * brightness on one micro-segment in six. If it shows on the console, the knob is
+ * UVM2_SMP_HZ. */
+static void smp_inject(void)
+{
+    uint8_t v, base, congelar;
+
+    if (!uvm2_smp_active()) return;           /* zero cost in the 43 ports with no audio */
+    if (!uvm2_smp_due(s_ciclos, &v)) return;
+
+    base = (uint8_t)(s_portb & (uint8_t)~0x18u);   /* the rest of Port B, without BC1/BDIR */
+
+    /* IF THE RAMP IS OPEN, FREEZE IT FIRST — and this is what lets a sample go out
+     * during the inter-frame rhythm as well as inside a stroke.
+     *
+     * Before a T1CL the timer has expired on its own and PB7 is already high: nothing
+     * to do. But `ritmo_vecfever` runs with ACR=0x18, which takes PB7 away from T1 and
+     * leaves the ramp OPEN for its whole zero-reference alternation, using Port A as
+     * the discharge current. Writing a sample there without freezing would inject a
+     * wrong drive into the integrator — which is why injection used to skip that block
+     * entirely. Measured on hardware once the frame was paced at 40 Hz, skipping it
+     * left a gap of 7689 bus cycles, 5.1 ms of every 26 with no audio at all: a fifth
+     * of the frame silent, which is a buzz, not grain.
+     *
+     * Freezing costs two commands and pauses the discharge for the six cycles the PSG
+     * write takes. It introduces no error — a frozen integrator holds — it only spends
+     * about 6% of that block's integration time, which `ritmo_vecfever` absorbs by
+     * emitting fewer alternation units. */
+    congelar = (uint8_t)((s_portb & UVM2_PB_RAMP_OFF) == 0u);
+    if (congelar) emit(UVM2_VIA_PORTB, (uint8_t)(base | UVM2_PB_RAMP_OFF), 0);
+
+    /* One full PSG write: address latch, then the data byte. */
+#define SMP_PSG(reg, val)                                    \
+    do {                                                     \
+        emit(UVM2_VIA_PORTA, (reg),            0);           \
+        emit(UVM2_VIA_PORTB, base | 0x18u,     0);           \
+        emit(UVM2_VIA_PORTB, base,             0);           \
+        emit(UVM2_VIA_PORTA, (val),            0);           \
+        emit(UVM2_VIA_PORTB, base | 0x10u,     0);           \
+        emit(UVM2_VIA_PORTB, base,             0);           \
+    } while (0)
+
+    if (uvm2_smp_needs_latch()) {
+        /* THE MIXER FIRST, ONCE PER LIST: with its tone bit enabled the channel gates a
+         * square wave and the volume only scales it — a tone, not the sample. */
+        SMP_PSG(7u, uvm2_smp_mixer());
+        /* And leave the volume register addressed, so the rest are three commands. */
+        emit(UVM2_VIA_PORTA, UVM2_SMP_REG,     0);
+        emit(UVM2_VIA_PORTB, base | 0x18u,     0);
+        emit(UVM2_VIA_PORTB, base,             0);
+    }
+#undef SMP_PSG
+
+    emit(UVM2_VIA_PORTA, v,                    0);
+    emit(UVM2_VIA_PORTB, base | 0x10u,         0);   /* BDIR = write the data */
+    emit(UVM2_VIA_PORTB, base,                 0);   /* the PSG latches on this fall */
+    if (s_portb != base && !congelar) emit(UVM2_VIA_PORTB, s_portb, 0);
+    if (congelar) emit(UVM2_VIA_PORTB, s_portb, 0);  /* ramp open again, as it was */
+    emit(UVM2_VIA_PORTA, s_porta,              0);   /* the X rate the ramp needs */
+}
+
 static void vxs_emit(void *ctx, uint32_t reg, uint32_t data, uint32_t delay_q8)
 {
     (void)ctx;
+    /* THE AUDIO GAP, BEFORE STARTING THE RAMP. It goes here and not in `emit` on
+     * purpose: `emit` is also called by via_setup's prologue, by the recalibration
+     * and by the inter-frame rhythm, and in those three the beam is NOT parked
+     * (the rhythm opens the ramp through PORTB and uses Port A as the
+     * zero-reference discharge alternation). This path is the drawing one, which
+     * is the only one with the guarantee. */
+    if (reg == UVM2_VIA_T1CL) smp_inject();
     /* La cache de Port A la lleva set_porta, y el modelo escribe PORTA por su cuenta.
      * Sin esto la cache creeria un valor que ya no esta en el DAC y se saltaria la
      * siguiente escritura — un fallo que solo aparece de vez en cuando, que es el peor
@@ -2614,8 +2696,15 @@ static void ritmo_vecfever(void)
     emit(UVM2_VIA_ACR,   0x18, 6);    /* PB7 fuera de T1: la rampa la manda PORTB */
     emit(UVM2_VIA_T1CL,  0xBF, 0);
     emit(UVM2_VIA_T1CH,  0x00, 212);
-    unsigned n = (objetivo - s_ciclos) / ALT;
-    for (unsigned i = 0; i < n; i++) {
+    /* THE BOUND IS RE-CHECKED EACH TURN, not computed once up front. It used to be
+     * `n = (objetivo - s_ciclos) / ALT` with a plain `for`, which was exact while this
+     * loop was the only thing emitting — and stopped being exact the moment samples
+     * started going in here too, since each one adds cycles the count did not know
+     * about. Asking `does another unit still fit` cannot drift. */
+    unsigned n = 0;
+    while (s_ciclos + ALT <= objetivo) {
+        unsigned i = n++;
+        smp_inject();      /* the inter-frame gap carries audio too: see smp_inject */
         emit(UVM2_VIA_PORTA, (i & 1u) ? 0x40 : 0xC0, 6);
         emit(UVM2_VIA_T1CL,  0x1F, 0);
         emit(UVM2_VIA_T1CH,  0x00, 41);
@@ -2701,6 +2790,18 @@ void uvm2_frame_end(void)
 
     /* Y EL SOBRANTE DEL FRAME SE GASTA COMO EL: con comandos, no callado. */
     if (RITMO_VECFEVER) ritmo_vecfever();
+
+    /* THE AUDIO CLOCK CLOSES WITH THE LIST, and here — before the dual-core fork —
+     * because it is the only point both paths go through with `s_ciclos` final. It
+     * tells the sequencer how long the whole frame measured, so whatever did not
+     * fit at the end of this list is charged at the start of the next and the
+     * sample does not slow down at every boundary.
+     *
+     * IT GOES AFTER COPYING THE COUNT INTO THE STATS: `uvm2_smp_frame` zeroes it
+     * for the coming frame, and a counter read after it was reset is a zero that
+     * looks like a diagnosis. */
+    uvm2_stats.samples = uvm2_smp_injected;
+    uvm2_smp_frame(s_ciclos);
 
 #ifdef UVM2_DUAL_CORE
     /* Hand the finished list to core 1 and go straight back to the game.  The
