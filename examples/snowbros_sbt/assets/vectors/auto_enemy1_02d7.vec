@@ -1,0 +1,131 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy1_02d7",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -5,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": -6
+      },
+      {
+       "x": -2,
+       "y": -4
+      },
+      {
+       "x": -5,
+       "y": 1
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 3,
+       "y": -2
+      },
+      {
+       "x": 4,
+       "y": -4
+      },
+      {
+       "x": 1,
+       "y": -4
+      },
+      {
+       "x": -4,
+       "y": 1
+      },
+      {
+       "x": -4,
+       "y": 4
+      },
+      {
+       "x": -3,
+       "y": 4
+      },
+      {
+       "x": -3,
+       "y": 1
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -1,
+       "y": 4
+      },
+      {
+       "x": 1,
+       "y": 3
+      },
+      {
+       "x": 0,
+       "y": 2
+      },
+      {
+       "x": -2,
+       "y": 3
+      }
+     ]
+    },
+    {
+     "name": "det2",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 6,
+       "y": 3
+      },
+      {
+       "x": 6,
+       "y": 6
+      },
+      {
+       "x": 7,
+       "y": 6
+      },
+      {
+       "x": 7,
+       "y": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAlElEQVR4nL2SgQnDMAwE35oiM2Qtz+W1NEO3UJFRykfGJi6lB0+M8b/1JsAd69L4smjvULMaa0kBqK4TjxFscqjhhYIWl8mWW9HNqwnNdfUb3oA1e4OLOlufoagjWNAfFEDT+773d7yOJE/hA0hm7t7YkPBuw+gMX1AmZz4hOYjNq4Ah5Gc/EjYmQLCc5EnAV8H/4w1oATrocusuCQAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

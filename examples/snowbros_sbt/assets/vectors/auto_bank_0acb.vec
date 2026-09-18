@@ -1,0 +1,101 @@
+{
+ "version": "1.0",
+ "name": "auto_bank_0acb",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -8,
+       "y": 5
+      },
+      {
+       "x": -8,
+       "y": 32
+      },
+      {
+       "x": 8,
+       "y": 32
+      },
+      {
+       "x": 8,
+       "y": -5
+      },
+      {
+       "x": 8,
+       "y": -32
+      },
+      {
+       "x": -8,
+       "y": -32
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -3,
+       "y": 9
+      },
+      {
+       "x": -7,
+       "y": 13
+      },
+      {
+       "x": -7,
+       "y": 16
+      },
+      {
+       "x": -3,
+       "y": 17
+      },
+      {
+       "x": -4,
+       "y": 24
+      },
+      {
+       "x": -7,
+       "y": 25
+      },
+      {
+       "x": -6,
+       "y": 27
+      },
+      {
+       "x": -7,
+       "y": 31
+      },
+      {
+       "x": 7,
+       "y": 31
+      },
+      {
+       "x": 7,
+       "y": 0
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAABACAYAAAATffeWAAAB9UlEQVR4nM2Wr3eDMBDHL/cQlSCRlalbXS1/AkjkJHXdnzA717pVVlI5N2zdJMjKSirrshe6sIQfTZNs7/X7Hjwu4T4clzsIKbMnlhQXsBWGdGrt3AAAAPJo4gZwEQZF5gQgEH8yYdBqaR4BOArraAP8sAbAjzjEZjXQ+tH/Agjp1Pg18E8j4DLtDRwarOjaHhAYljbhpWxTwkoElUHIfcA0BBcIsuctuECQn1wgKC5sISgbNhCUjXNxhPKSGkFwlny0zqKUTSDITxxyqq4AUwiKC/53soGgbNhASL2OWbCcK4NllittzaGzyQ7geGpsuXeQn+r1F9yKhGbR6BKjuBiD+NFvJAqkSvs5qAcgXbWQeNFACCtXrNoUbahkFgClO8WJf2jHcoK9R0jhaVcHADwYUfmaAtBaBW8KJZIyfNF81qtgNBIBwpuAOyCoBWggns73fLourQ/zHiSHox7QTSzZLVp7drojB344bw4hlh7cf65MgnhjN5FEhzk05Yzgov2hHwEr1erTyZMN0VTWgNBi4014Oxt7DUWw3bzd7ZREAD5d/c0mi7xnoLxCQmPlhrzaw615b4ja7fmx+Qfc6trIGxrUFZQ875lmvTuPIqtyZru6NY/gKHyMVQgNst4VqfNrL+QG3xLejW0Eoi2huL+duYTfNx2e859yHbbtAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

@@ -17,62 +17,35 @@
      "closed": true,
      "points": [
       {
-       "x": 6,
-       "y": 0
+       "x": -8,
+       "y": -4
       },
       {
-       "x": 8,
+       "x": -8,
        "y": 1
       },
       {
-       "x": 8,
-       "y": -8
-      },
-      {
-       "x": 2,
-       "y": -8
-      },
-      {
-       "x": -1,
-       "y": -8
+       "x": -2,
+       "y": -1
       },
       {
        "x": 0,
        "y": -4
       },
       {
-       "x": 2,
-       "y": -1
-      }
-     ]
-    },
-    {
-     "name": "det0",
-     "intensity": 80,
-     "closed": true,
-     "points": [
-      {
-       "x": 4,
-       "y": -1
+       "x": 1,
+       "y": -8
       },
       {
-       "x": 7,
-       "y": -1
-      },
-      {
-       "x": 7,
-       "y": -2
-      },
-      {
-       "x": 4,
-       "y": -2
+       "x": -8,
+       "y": -8
       }
      ]
     }
    ]
   }
  ],
- "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAVUlEQVR4nGNgGAXDADBSoPc/uQb8J9cF/7EJMpKjORmJzUKCC+Aa514jzQX/YZpBGiWgjnmxj4FBwolIA5A1v0DTQpIXQJqTtVDFCLkA7nwYmIumAADSixR7vfkJLAAAAABJRU5ErkJggg==",
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAaklEQVR4nGNgGAXDBPyHYrIAE6UGMVHqIsZkJMVzscgTNIDhGsKAZC0MgwgawCBx7f9/hin//4NoMPsaw3+oq4jyCooLwAYy/Gd4wcAIdg3UJXhdwQJzNgzMvUbY1aguQHNmMrJhqOqwAgBRbiST6Z4g3gAAAABJRU5ErkJggg==",
  "backgroundFit": "naturalCenter",
  "backgroundOffset": {
   "x": 0,

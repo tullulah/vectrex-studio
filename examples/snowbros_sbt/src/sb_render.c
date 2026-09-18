@@ -18,10 +18,28 @@
 #include "sb_tiles.h"
 #include "sb_sprites.h"
 #include "sb_font.h"
+#include "sb_shapes.h"
 
 void v_directDraw32(int32_t, int32_t, int32_t, int32_t, uint8_t);
+
+/* SB_FPSRTT=1 — telemetria de fotogramas por RTT, solo para los cartuchos (lee un
+ * periferico del RP2350). Ver src/sb_rtt.c: `make rp2350 FPSRTT=1`.
+ *
+ * El contador de segmentos va en un MACRO y no tocando los sitios que dibujan: un
+ * macro con nombre de funcion no se re-expande dentro de si mismo, asi que esto se
+ * expande a la llamada de verdad mas un incremento. Once puntos de dibujo repartidos
+ * por el fichero, y ninguno hay que recordarlo. */
+#ifndef SB_FPSRTT
+#define SB_FPSRTT 0
+#endif
+#if SB_FPSRTT
+static unsigned sb_segs;
+#define v_directDraw32(a, b, c, d, e) (sb_segs++, v_directDraw32((a), (b), (c), (d), (e)))
+#endif
+
 extern unsigned char sb_spriteram[0x1000];
 extern unsigned char sb_palette[0x200];
+extern unsigned char sb_ram[0x4000];   /* 68000 work RAM (0x100000..) */
 
 #define SB_W 256
 #define SB_H 224
@@ -31,6 +49,24 @@ extern unsigned char sb_palette[0x200];
 #define BRIGHT 95
 #define BG_TILES 24   /* objects with more tiles than this are backdrop */
 #define BG_BRIGHT 25  /* draw backdrop faint; 0 culls it entirely */
+
+/* SB_TILE_BOXES — the per-tile SILHOUETTE BOXES, the placeholder for every tile
+ * whose object found no traced .vec. 1 draws them, 0 leaves those tiles blank.
+ *
+ * They are scaffolding: they keep the screen readable while the vec catalogue
+ * grows, and they are the reason a half-traced level looks like a grid of
+ * rectangles. `make <target> TILE_BOXES=1` puts them back — one variable, and
+ * it reaches all four targets (see the Makefile; a knob that arrives at the host
+ * but not at the cartridge means measuring two games that draw differently).
+ *
+ * WHAT THIS DOES *NOT* TURN OFF, because neither is a placeholder:
+ *   - the stroke font (draw_glyph): text is text, traced or not.
+ *   - the authored PLATFORMS (draw_level_platforms): the per-level geometry from
+ *     sb_shapes.h IS the level — it is drawn regardless of this box knob.
+ */
+#ifndef SB_TILE_BOXES
+#define SB_TILE_BOXES 1
+#endif
 
 static void rect(int x0, int y0, int x1, int y1, uint8_t b)
 {
@@ -73,24 +109,6 @@ static void draw_glyph(int code, int sx, int sy)
     }
 }
 
-/* snow-capped (walkable) tile: most of its top pixel row is near-white in the
- * LIVE palette — the one visual invariant of every standable brick in the game */
-static int snowy_top(int tile, int pal)
-{
-    const unsigned char *row = sb_tile_toprow[tile];
-    int white = 0, solid = 0;
-    for (int i = 0; i < 16; i++) {
-        int c = (i & 1) ? (row[i >> 1] & 0x0f) : (row[i >> 1] >> 4);
-        if (!c) continue;
-        solid++;
-        int off = ((pal * 16 + c) & 0xff) * 2;
-        int w = (sb_palette[off] << 8) | sb_palette[off + 1];
-        int r = w & 0x1f, g = (w >> 5) & 0x1f, b = (w >> 10) & 0x1f;
-        if (r + g + b >= 72 && r >= 18 && g >= 18 && b >= 18) white++;
-    }
-    return solid >= 12 && white * 3 >= solid * 2;
-}
-
 /* current object being collected */
 #define OBJ_MAX 512
 static struct { int x, y, tile, flip, pal; } obj[OBJ_MAX];
@@ -123,31 +141,74 @@ int sb_capture_request;   /* set on a new unmatched sighting; host saves RAM */
 static struct { unsigned count; unsigned char w, h, ntiles; } unmatched[4096];
 static int log_unmatched = -1;
 
-/* frame-wide snow-capped tile collection -> merged platform runs */
-#define SNOW_MAX 512
-static struct { int x, y; } snowv[SNOW_MAX];
-static int n_snow;
-
-static void flush_platforms(void)
+/* Authored per-level platform geometry (sb_shapes.h), drawn in arcade space via
+ * DX/DY so it lands under the sprites. This REPLACES flush_platforms/snowy_top:
+ * the pixel heuristic missed the left-hand structures and had no diagonals; the
+ * .vec has every platform exactly where it was traced. Level word at 0x101572. */
+static void draw_stream(const int16_t *d, int dy)
 {
-    for (int i = 1; i < n_snow; i++) {
-        int j = i;
-        while (j > 0 && (snowv[j - 1].y > snowv[j].y ||
-               (snowv[j - 1].y == snowv[j].y && snowv[j - 1].x > snowv[j].x))) {
-            int tx = snowv[j].x, ty = snowv[j].y;
-            snowv[j].x = snowv[j - 1].x; snowv[j].y = snowv[j - 1].y;
-            snowv[j - 1].x = tx; snowv[j - 1].y = ty;
-            j--;
-        }
+    int have = 0, ppx = 0, ppy = 0;
+    for (int i = 0; d[i] != SB_END; ) {
+        if (d[i] == SB_PEN) { have = 0; i++; continue; }
+        int py = d[i] + dy, px = d[i + 1]; i += 2;
+        if (have) v_directDraw32(DX(ppx), DY(ppy), DX(px), DY(py), BRIGHT);
+        ppx = px; ppy = py; have = 1;
     }
-    for (int i = 0; i < n_snow; ) {
-        int j = i;
-        while (j + 1 < n_snow && snowv[j + 1].y == snowv[i].y
-               && snowv[j + 1].x <= snowv[j].x + 16) j++;
-        rect(snowv[i].x, snowv[i].y, snowv[j].x + 16, snowv[i].y + 14, BRIGHT);
-        i = j + 1;
+}
+
+/* Snow Bros stacks a world's floors as one continuous vertical strip and SCROLLS
+ * UP between them. Measured from a MAME capture by cross-correlating the backdrop
+ * frame to frame: it slides 2px/frame for a FULL SCREEN (224px) over ~112 frames
+ * when the floor advances — the outgoing floor leaves completely out the bottom
+ * as the incoming one arrives from the top, no overlap. The per-level .vec is a
+ * fixed screen, so we animate that same slide ourselves: on the frame the level
+ * word (0x101572) steps up by one, slide the OUTGOING floor down and bring the
+ * INCOMING floor down from a full screen above. SB_SCROLL_PX/FRAMES are the
+ * measured defaults; override at runtime on the host (env) to tune vs hardware. */
+#ifndef SB_SCROLL_PX
+#define SB_SCROLL_PX 224
+#endif
+#ifndef SB_SCROLL_FRAMES
+#define SB_SCROLL_FRAMES 112
+#endif
+
+static void draw_level_platforms(void)
+{
+    /* Only while a level is actually being played. The player object (fixed
+     * struct at 0x1015b2, X word at +6 = 0x1015b8) is zero on the static title
+     * and high-score screens and non-zero once a floor is running (attract DEMO
+     * included, which is correct — it plays a real level). Without this, the
+     * level word (still 0) would paint level-0 platforms over the SNOW BROS
+     * logo. It is a whole-game invariant, not a per-level pixel heuristic. */
+    if (!((sb_ram[0x15b8] << 8) | sb_ram[0x15b9])) return;
+    int level = (sb_ram[0x1572] << 8) | sb_ram[0x1573];
+    if (level < 0 || level >= SB_NLEVELS) return;
+
+    static int scroll_px = -1, scroll_frames;
+    if (scroll_px < 0) {
+        const char *a = getenv("SB_SCROLL_PX"), *b = getenv("SB_SCROLL_FRAMES");
+        scroll_px = a ? atoi(a) : SB_SCROLL_PX;
+        scroll_frames = b ? atoi(b) : SB_SCROLL_FRAMES;
     }
-    n_snow = 0;
+
+    /* transition tracking: animate only a normal +1 floor step; any other jump
+     * (game over -> 0, forced level, boot garbage) snaps with no slide */
+    static int prev = -1, t, from;
+    if (prev < 0) prev = level;
+    if (level != prev) {
+        if (level == prev + 1 && scroll_frames > 0) { t = scroll_frames; from = prev; }
+        else t = 0;
+        prev = level;
+    }
+
+    if (t > 0) {
+        int off = scroll_px * (scroll_frames - t) / scroll_frames;  /* 0..scroll_px */
+        if (from >= 0 && from < SB_NLEVELS) draw_stream(sb_levels[from], off);       /* out the bottom */
+        draw_stream(sb_levels[level], off - scroll_px);                              /* in from the top */
+        t--;
+    } else {
+        draw_stream(sb_levels[level], 0);
+    }
 }
 
 static int sig_find(int tile)
@@ -236,10 +297,13 @@ static void flush_object(void)
     }
     int bright = scenery ? BG_BRIGHT : BRIGHT;
 
-    /* worklist: skip scenery, HUD-region singles (own path) and level-bank
-     * fragments — they draw, they just are not tracing work */
+    /* worklist: skip scenery and HUD-region singles (own path). Level-bank
+     * bases (0x600-0xcff) are only skipped when the object is scenery-SHAPED
+     * (>= 10 tiles, same threshold the draw rule uses): floor-11+ enemies keep
+     * their gfx in those banks and arrive as small objects — excluding the
+     * whole range made them uncapturable and the worklist blind to them. */
     if (log_unmatched > 0 && !scenery && nobj <= BG_TILES
-        && base >= 0x100 && (base < 0x600 || base > 0xcff)) {
+        && base >= 0x100 && (base < 0x600 || base > 0xcff || nobj < 10)) {
         /* first sighting of this base -> ask the host to dump the sprite RAM
          * NOW, so transient frames can't slip between farm samples */
         if (!unmatched[base].count) sb_capture_request = 1;
@@ -252,12 +316,10 @@ static void flush_object(void)
     for (int i = 0; i < nobj; i++) {
         int t = obj[i].tile;
         if (is_textish(t)) { draw_glyph(text_code(t), obj[i].x, obj[i].y); continue; }
-        /* snow-capped tiles are platforms — collected frame-wide, drawn as
-         * merged runs at the end of sb_render */
-        if (snowy_top(t, obj[i].pal)) {
-            if (n_snow < SNOW_MAX) { snowv[n_snow].x = obj[i].x; snowv[n_snow].y = obj[i].y; n_snow++; }
-            continue;
-        }
+        /* platforms no longer come from snow-cap detection here — they are drawn
+         * from the authored per-level geometry (draw_level_platforms), so these
+         * scenery tiles just fall through to the faint backdrop boxes below. */
+        if (!SB_TILE_BOXES) continue;   /* untraced tile: draw nothing at all */
         if (!bright) continue;
         const unsigned char *b = sb_tile_box[t];
         int bx0 = b[0], by0 = b[1], bx1 = b[2] + 1, by1 = b[3] + 1;
@@ -273,7 +335,6 @@ int sb_frame_counter;
 void sb_render(void)
 {
     sb_frame_counter++;
-    n_snow = 0;
     if (log_unmatched < 0) {
         /* on by default on the host — SB_LOG_UNMATCHED=0 disables */
         const char *e = getenv("SB_LOG_UNMATCHED");
@@ -318,7 +379,12 @@ void sb_render(void)
         }
     }
     flush_object();
-    flush_platforms();
+    draw_level_platforms();
+#if SB_FPSRTT
+    /* AL FINAL, con el frame ya emitido: lo que cuenta es lo que se ha dibujado.
+     * Quien emite la linea es sb_marca(2), desde gmain — aqui solo se deja el dato. */
+    { extern unsigned sb_vec_last; sb_vec_last = sb_segs; sb_segs = 0; }
+#endif
 }
 
 /* host: dump the unmatched-tile toplist (call at exit) */

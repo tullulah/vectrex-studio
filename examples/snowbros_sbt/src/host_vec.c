@@ -75,10 +75,17 @@ void v_WaitRecal(void)
         if (every > 0 && (frame % every == 0 || sb_capture_request)) {
             sb_capture_request = 0;
             extern unsigned char sb_spriteram[0x1000];
+            extern unsigned char sb_palette[0x200];
             char path[512];
             snprintf(path, sizeof path, "%s/sprites_%05d.bin", farm, frame);
             FILE *f = fopen(path, "wb");
             if (f) { fwrite(sb_spriteram, 1, 0x1000, f); fclose(f); }
+            /* the LIVE palette RAM alongside — each level reloads its own 16
+             * palettes, so the background must be coloured with these, not a
+             * fixed attract-mode set */
+            snprintf(path, sizeof path, "%s/pal_%05d.bin", farm, frame);
+            f = fopen(path, "wb");
+            if (f) { fwrite(sb_palette, 1, 0x200, f); fclose(f); }
             /* RAMFARM=<dir>: work RAM alongside, for state archaeology */
             const char *rf = getenv("RAMFARM");
             if (rf) {

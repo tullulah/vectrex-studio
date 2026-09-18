@@ -1,0 +1,149 @@
+{
+ "version": "1.0",
+ "name": "auto_bank_075c",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 3,
+       "y": -14
+      },
+      {
+       "x": 2,
+       "y": -16
+      },
+      {
+       "x": -2,
+       "y": -16
+      },
+      {
+       "x": -4,
+       "y": -9
+      },
+      {
+       "x": -15,
+       "y": -3
+      },
+      {
+       "x": -15,
+       "y": 2
+      },
+      {
+       "x": -10,
+       "y": 6
+      },
+      {
+       "x": -6,
+       "y": 6
+      },
+      {
+       "x": -3,
+       "y": 14
+      },
+      {
+       "x": -2,
+       "y": 16
+      },
+      {
+       "x": 2,
+       "y": 16
+      },
+      {
+       "x": 4,
+       "y": 8
+      },
+      {
+       "x": 15,
+       "y": 2
+      },
+      {
+       "x": 15,
+       "y": -3
+      },
+      {
+       "x": 10,
+       "y": -7
+      },
+      {
+       "x": 6,
+       "y": -7
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -3,
+       "y": -9
+      },
+      {
+       "x": -5,
+       "y": -8
+      },
+      {
+       "x": -5,
+       "y": 7
+      },
+      {
+       "x": -3,
+       "y": 8
+      },
+      {
+       "x": -2,
+       "y": 15
+      },
+      {
+       "x": 2,
+       "y": 15
+      },
+      {
+       "x": 3,
+       "y": 9
+      },
+      {
+       "x": 5,
+       "y": 7
+      },
+      {
+       "x": 5,
+       "y": -8
+      },
+      {
+       "x": 3,
+       "y": -9
+      },
+      {
+       "x": 2,
+       "y": -15
+      },
+      {
+       "x": -2,
+       "y": -15
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAzElEQVR4nO2X4Q2EIAyFy4uL3AqO4AjO4AbOcRs4w43gCK5wo+gvEyXCtRXKmfD+QUrfByWQOlKqe/XrcTx/P06TBynMQ3PZAFIK0gWxnWpOAVRYqAD0pBJ0jEsmvYjgBk7jsuaIbVIk4awf3q1jAUw3jX8B+SCwMI95wNL8ygvW5j4EqLBQAegfSjAEHomc2j3hT1ianwCsIHyPJhSQ+m1g/wWhBVIg7mk6SVLuXy/pESAB4CSWNiigwkIFIKFiNdY0qHhkCa52qm3PN0gvVf9sT/6tAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

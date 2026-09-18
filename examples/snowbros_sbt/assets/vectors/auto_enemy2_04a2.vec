@@ -17,40 +17,36 @@
      "closed": true,
      "points": [
       {
-       "x": 4,
-       "y": 2
-      },
-      {
-       "x": 6,
-       "y": 0
-      },
-      {
-       "x": 5,
-       "y": -4
-      },
-      {
-       "x": -8,
-       "y": -5
-      },
-      {
-       "x": -8,
-       "y": 3
-      },
-      {
-       "x": -8,
-       "y": 8
-      },
-      {
-       "x": 4,
-       "y": 8
-      },
-      {
-       "x": 1,
+       "x": -3,
        "y": 6
       },
       {
+       "x": -4,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": -5
+      },
+      {
        "x": 5,
+       "y": -5
+      },
+      {
+       "x": -5,
+       "y": -4
+      },
+      {
+       "x": -5,
        "y": 4
+      },
+      {
+       "x": -1,
+       "y": 5
       }
      ]
     },
@@ -60,51 +56,39 @@
      "closed": true,
      "points": [
       {
-       "x": 1,
-       "y": 2
+       "x": 3,
+       "y": 3
       },
       {
-       "x": 3,
-       "y": 1
+       "x": 4,
+       "y": 4
+      },
+      {
+       "x": 5,
+       "y": 3
       },
       {
        "x": 2,
-       "y": -1
+       "y": 0
       },
       {
        "x": 0,
        "y": -1
       },
       {
-       "x": -5,
-       "y": 4
+       "x": -2,
+       "y": 0
       },
       {
        "x": -4,
        "y": 3
       },
       {
-       "x": -2,
-       "y": 4
-      },
-      {
-       "x": -3,
-       "y": 3
-      },
-      {
-       "x": -3,
-       "y": 2
-      },
-      {
        "x": -1,
-       "y": 3
-      },
-      {
-       "x": -2,
        "y": 1
       },
       {
-       "x": 1,
+       "x": 2,
        "y": 1
       }
      ]
@@ -112,7 +96,7 @@
    ]
   }
  ],
- "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAkElEQVR4nN2S3Q2AIAyEr07BDI7hKl3JV1dxDGZwixrwB7QtIT56SRNypBf6FUKEBAi2FQgTsraR0NDzkgFJIe/Kvi6dxsbFUsKvs/sk8pJ7Rxi6WuJZh0QFMIAQi89GYwLtSUIUBSx5N+AWSDZoOxswQ+gDxLoXfRAbGpQzS03c2z+ZI/DrIzVkB6Cz6WfaAU1AR0QAheixAAAAAElFTkSuQmCC",
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAj0lEQVR4nNWQyxGAMAhEF6tIDZZhK2nJq61YBjWkCxyjifnhJzffDIcQWGAJNQIFw8eXWwEzAQ4EUmozEQtg4brIjlAFopBvToRK6Gn6E0OzeV+X+wQ8JiyRCNnCzNY5AYnB3gMxLFfujCSXIVpYJUdF82eGniZNgJSaI7+bOddLUvG+PSM4v7yYil5PfsgG04o58f2nQ6cAAAAASUVORK5CYII=",
  "backgroundFit": "naturalCenter",
  "backgroundOffset": {
   "x": 0,

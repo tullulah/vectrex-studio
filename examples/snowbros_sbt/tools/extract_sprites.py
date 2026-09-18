@@ -27,7 +27,9 @@ from pathlib import Path
 try:
     from PIL import Image, ImageDraw
 except ImportError:
-    sys.exit("needs Pillow: pip3 install Pillow")
+    # only the rendering helpers need PIL; load_tiles/decode_tile/load_palettes
+    # (used at build time by vec_to_sprites) must work without it
+    Image = ImageDraw = None
 
 TILE_BYTES = 128
 TILE_W = 16
@@ -93,7 +95,7 @@ def used_tile_palettes(dump_dir: Path) -> dict[int, set[int]]:
 GRAY = [(i * 17, i * 17, i * 17) for i in range(16)]
 
 
-def render_tile(img: Image.Image, px: list[int], colors, x0: int, y0: int, scale: int):
+def render_tile(img: "Image.Image", px: list[int], colors, x0: int, y0: int, scale: int):
     put = img.putpixel
     for y in range(16):
         for x in range(16):

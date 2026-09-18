@@ -1,0 +1,128 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy3_05a7",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 1,
+       "y": -5
+      },
+      {
+       "x": 0,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": 8
+      },
+      {
+       "x": -5,
+       "y": 8
+      },
+      {
+       "x": -5,
+       "y": 6
+      },
+      {
+       "x": -3,
+       "y": 8
+      },
+      {
+       "x": 1,
+       "y": 8
+      },
+      {
+       "x": 1,
+       "y": 6
+      },
+      {
+       "x": 3,
+       "y": 8
+      },
+      {
+       "x": 5,
+       "y": 7
+      },
+      {
+       "x": 1,
+       "y": -2
+      },
+      {
+       "x": 4,
+       "y": -3
+      }
+     ]
+    },
+    {
+     "name": "sil1",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 5,
+       "y": -6
+      },
+      {
+       "x": 5,
+       "y": -8
+      },
+      {
+       "x": 2,
+       "y": -8
+      },
+      {
+       "x": 1,
+       "y": -7
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -5,
+       "y": 5
+      },
+      {
+       "x": -4,
+       "y": 4
+      },
+      {
+       "x": -6,
+       "y": 3
+      },
+      {
+       "x": -6,
+       "y": 6
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA30lEQVR4nIWTyw2EMAxE7YgiUkPK4EoZXCmH65ax1y0jNaQLr2wSx/kAI4Eik+eZfAAfieDMT9YOQFKPQDwudal1cunXFhj4RoIE2NQVjrUha1HwEEBgrYWJc2g7O3jRByrQp2oSsIo7T7TuuswVBjl5H4g2epHshcI4xNcEO689F7aAA+xXTjWXs9GtcxHDT3J2QgpY98Ecr2zeJL4mKPId/OY+PcbUwda9uQ/55i7vHhVMAesyjmvs+qt8F72Bn5bQbCogeKBbWBpcZ3z7fYRPuv7UrKW49K49ZNPZpn8ex3M2WfzSvgAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

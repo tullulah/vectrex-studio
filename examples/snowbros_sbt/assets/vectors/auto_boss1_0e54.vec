@@ -1,0 +1,159 @@
+{
+ "version": "1.0",
+ "name": "auto_boss1_0e54",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -5,
+       "y": -5
+      },
+      {
+       "x": -6,
+       "y": 5
+      },
+      {
+       "x": -5,
+       "y": -4
+      },
+      {
+       "x": -2,
+       "y": -4
+      },
+      {
+       "x": -2,
+       "y": 5
+      },
+      {
+       "x": -1,
+       "y": -4
+      }
+     ]
+    },
+    {
+     "name": "sil1",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 6,
+       "y": 0
+      },
+      {
+       "x": 6,
+       "y": 6
+      },
+      {
+       "x": -8,
+       "y": 6
+      },
+      {
+       "x": -8,
+       "y": 8
+      },
+      {
+       "x": 7,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 0
+      },
+      {
+       "x": 8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -6
+      },
+      {
+       "x": 6,
+       "y": -6
+      }
+     ]
+    },
+    {
+     "name": "sil2",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 4,
+       "y": 0
+      },
+      {
+       "x": 4,
+       "y": 4
+      },
+      {
+       "x": 1,
+       "y": 4
+      },
+      {
+       "x": 1,
+       "y": 0
+      }
+     ]
+    },
+    {
+     "name": "sil3",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 0,
+       "y": 3
+      },
+      {
+       "x": 0,
+       "y": 5
+      },
+      {
+       "x": 5,
+       "y": 4
+      },
+      {
+       "x": 5,
+       "y": 0
+      },
+      {
+       "x": 3,
+       "y": -1
+      },
+      {
+       "x": 1,
+       "y": -1
+      },
+      {
+       "x": 0,
+       "y": -5
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAT0lEQVR4nM2SSQoAIAwDk+L/v1zxVouKmoMOKES6BgnAcQ8NGk4luV2WHwba0+kom93ipB61QcSeFyibcdE8qiZ+7AFXu86Qv3LueozsQQXYVg4escDjBQAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

@@ -1,0 +1,140 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy3_0550_v2",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 7,
+       "y": -1
+      },
+      {
+       "x": 6,
+       "y": -5
+      },
+      {
+       "x": 2,
+       "y": -8
+      },
+      {
+       "x": -4,
+       "y": -7
+      },
+      {
+       "x": -7,
+       "y": -1
+      },
+      {
+       "x": -6,
+       "y": 3
+      },
+      {
+       "x": -2,
+       "y": 6
+      },
+      {
+       "x": 4,
+       "y": 5
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 4,
+       "y": -5
+      },
+      {
+       "x": 2,
+       "y": -7
+      },
+      {
+       "x": -4,
+       "y": -6
+      },
+      {
+       "x": -6,
+       "y": -3
+      },
+      {
+       "x": -6,
+       "y": 1
+      },
+      {
+       "x": -4,
+       "y": 3
+      },
+      {
+       "x": -2,
+       "y": 5
+      },
+      {
+       "x": 4,
+       "y": 4
+      },
+      {
+       "x": 6,
+       "y": 1
+      },
+      {
+       "x": 6,
+       "y": -3
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -1,
+       "y": 1
+      },
+      {
+       "x": 1,
+       "y": 0
+      },
+      {
+       "x": 2,
+       "y": 1
+      },
+      {
+       "x": 1,
+       "y": 3
+      },
+      {
+       "x": -1,
+       "y": 4
+      },
+      {
+       "x": -2,
+       "y": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAq0lEQVR4nO2UQQ6CQAxF//QUnsctx8HduNQdHIclnsdbaMY4CUyM/La6oi9hQSj9ryUMEARBsHeS9cUeeCzvR2Ov5A1u0YqIJ3y4HF/XkmlD0CzQfwi/5xnIa4mbUkLg4IArvCTPd6+Tn85l7jXlSUf0Tx6Bb7ACom3MhrPIrxtqEaaorJKVqHXM+mmBfyJsIbMF7fQF9VFcD5n647VSmnCTQCtiDQ6CIMCbJ+YzIp9phmu9AAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

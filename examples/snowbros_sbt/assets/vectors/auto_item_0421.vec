@@ -17,27 +17,31 @@
      "closed": true,
      "points": [
       {
-       "x": 8,
-       "y": -8
+       "x": -8,
+       "y": -6
       },
       {
-       "x": 3,
-       "y": -8
-      },
-      {
-       "x": 4,
-       "y": -4
-      },
-      {
-       "x": 7,
+       "x": -7,
        "y": -3
+      },
+      {
+       "x": -3,
+       "y": -5
+      },
+      {
+       "x": -3,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -8
       }
      ]
     }
    ]
   }
  ],
- "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMklEQVR4nGNgGAWjYMSD/6AQYCQjGMAaYYCJVM0S11D0k2wAwwuQo6cgDCHZgGQtVD4AUUgH+5BFCB8AAAAASUVORK5CYII=",
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANElEQVR4nGNgGAWjYFiB/+RqZMSiGSRGNGBC5khcA5tFkmsQBkz5z/CCNMsxXZCsRbJ+BgCQ9wf8xT46kAAAAABJRU5ErkJggg==",
  "backgroundFit": "naturalCenter",
  "backgroundOffset": {
   "x": 0,

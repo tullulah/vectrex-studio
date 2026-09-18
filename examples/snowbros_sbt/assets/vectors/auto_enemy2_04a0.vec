@@ -17,32 +17,32 @@
      "closed": true,
      "points": [
       {
-       "x": -3,
+       "x": 8,
+       "y": -8
+      },
+      {
+       "x": -4,
+       "y": -8
+      },
+      {
+       "x": 0,
+       "y": -5
+      },
+      {
+       "x": 1,
+       "y": -3
+      },
+      {
+       "x": 6,
        "y": -2
       },
       {
-       "x": 4,
-       "y": -7
-      },
-      {
-       "x": -2,
-       "y": -8
-      },
-      {
-       "x": -8,
-       "y": -8
-      },
-      {
-       "x": -8,
+       "x": 6,
        "y": -6
       },
       {
-       "x": -6,
+       "x": 8,
        "y": -6
-      },
-      {
-       "x": -7,
-       "y": -3
       }
      ]
     },
@@ -52,35 +52,35 @@
      "closed": true,
      "points": [
       {
-       "x": -5,
-       "y": -7
-      },
-      {
-       "x": -6,
-       "y": -7
-      },
-      {
-       "x": -5,
-       "y": -6
-      },
-      {
-       "x": -6,
+       "x": 6,
        "y": -3
       },
       {
-       "x": -4,
-       "y": -4
+       "x": 5,
+       "y": -5
       },
       {
-       "x": -4,
+       "x": 6,
        "y": -7
+      },
+      {
+       "x": 5,
+       "y": -7
+      },
+      {
+       "x": 4,
+       "y": -7
+      },
+      {
+       "x": 4,
+       "y": -4
       }
      ]
     }
    ]
   }
  ],
- "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAXklEQVR4nGNgGAWjYDAARiT2fxzieAETsmaJa/8ZkhF8ZAMJgv8wLHHtPxgnE2kIC5KTwYq9tSCu33oNxGVkYNCCG4LTW3DbQRjJZgj7GooYFjDl/38wRlWIivEYAgAUozU2XUVbQwAAAABJRU5ErkJggg==",
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAX0lEQVR4nGNgGAWjYDAARhLV/0fXy0SCxv/JDAwMEtf+YzOMAa/mZAaG/xLX/oMxzDCYAfi8ALHhGgODBMN/Bm8tiNK5aF7AayvDNSiN8AK6C7B6A64Zi2KE3JT/YAwAvh40CKSN+NAAAAAASUVORK5CYII=",
  "backgroundFit": "naturalCenter",
  "backgroundOffset": {
   "x": 0,

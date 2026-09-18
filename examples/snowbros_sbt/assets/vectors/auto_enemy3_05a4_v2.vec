@@ -1,0 +1,334 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy3_05a4_v2",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 5,
+       "y": -20
+      },
+      {
+       "x": -14,
+       "y": -20
+      },
+      {
+       "x": -12,
+       "y": -18
+      },
+      {
+       "x": -17,
+       "y": -16
+      },
+      {
+       "x": -24,
+       "y": -9
+      },
+      {
+       "x": -21,
+       "y": -8
+      },
+      {
+       "x": -22,
+       "y": -6
+      },
+      {
+       "x": -16,
+       "y": -8
+      },
+      {
+       "x": -20,
+       "y": -3
+      },
+      {
+       "x": -17,
+       "y": -3
+      },
+      {
+       "x": -21,
+       "y": 6
+      },
+      {
+       "x": -21,
+       "y": 10
+      },
+      {
+       "x": -17,
+       "y": 6
+      },
+      {
+       "x": -19,
+       "y": 13
+      },
+      {
+       "x": -17,
+       "y": 13
+      },
+      {
+       "x": -11,
+       "y": 6
+      },
+      {
+       "x": -14,
+       "y": 15
+      },
+      {
+       "x": -10,
+       "y": 15
+      },
+      {
+       "x": -8,
+       "y": 11
+      },
+      {
+       "x": -9,
+       "y": 17
+      },
+      {
+       "x": -7,
+       "y": 16
+      },
+      {
+       "x": -7,
+       "y": 18
+      },
+      {
+       "x": -9,
+       "y": 19
+      },
+      {
+       "x": -7,
+       "y": 20
+      },
+      {
+       "x": -3,
+       "y": 13
+      },
+      {
+       "x": -1,
+       "y": 19
+      },
+      {
+       "x": -2,
+       "y": 23
+      },
+      {
+       "x": 0,
+       "y": 24
+      },
+      {
+       "x": -1,
+       "y": 21
+      },
+      {
+       "x": 1,
+       "y": 17
+      },
+      {
+       "x": 3,
+       "y": 17
+      },
+      {
+       "x": 3,
+       "y": 22
+      },
+      {
+       "x": 6,
+       "y": 24
+      },
+      {
+       "x": 5,
+       "y": 15
+      },
+      {
+       "x": 9,
+       "y": 23
+      },
+      {
+       "x": 10,
+       "y": 18
+      },
+      {
+       "x": 14,
+       "y": 21
+      },
+      {
+       "x": 14,
+       "y": 11
+      },
+      {
+       "x": 20,
+       "y": 16
+      },
+      {
+       "x": 14,
+       "y": 2
+      },
+      {
+       "x": 23,
+       "y": 8
+      },
+      {
+       "x": 21,
+       "y": 1
+      },
+      {
+       "x": 23,
+       "y": 1
+      },
+      {
+       "x": 22,
+       "y": -1
+      },
+      {
+       "x": 24,
+       "y": -2
+      },
+      {
+       "x": 19,
+       "y": -10
+      },
+      {
+       "x": 21,
+       "y": -8
+      },
+      {
+       "x": 24,
+       "y": -8
+      },
+      {
+       "x": 24,
+       "y": -10
+      },
+      {
+       "x": 16,
+       "y": -17
+      },
+      {
+       "x": 18,
+       "y": -19
+      }
+     ]
+    },
+    {
+     "name": "sil1",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -13,
+       "y": 17
+      },
+      {
+       "x": -14,
+       "y": 16
+      },
+      {
+       "x": -15,
+       "y": 20
+      },
+      {
+       "x": -13,
+       "y": 20
+      }
+     ]
+    },
+    {
+     "name": "sil2",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 20,
+       "y": -2
+      },
+      {
+       "x": 19,
+       "y": -4
+      },
+      {
+       "x": 21,
+       "y": -3
+      },
+      {
+       "x": 22,
+       "y": -1
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 19,
+       "y": -5
+      },
+      {
+       "x": 20,
+       "y": -4
+      },
+      {
+       "x": 21,
+       "y": -5
+      },
+      {
+       "x": 18,
+       "y": -9
+      },
+      {
+       "x": 17,
+       "y": -11
+      },
+      {
+       "x": 17,
+       "y": -8
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -2,
+       "y": -20
+      },
+      {
+       "x": -5,
+       "y": -20
+      },
+      {
+       "x": -5,
+       "y": -19
+      },
+      {
+       "x": -2,
+       "y": -19
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAEnElEQVR4nO1ZLXMTURTdZBBFIiOLSx0SZPkHqSuyuFbiqCwO2ToiqWv/AZWtxHUdyMhKcGFOyMmcnNz79i0tA6J3JpNm9+2959yvd9+2af6i3P74Nvdrd/P5HJ9o/cWXz2vXT07fzx8cQJ9nMwI11/65lLyvgO/+R/AZuCh97ubzuaYO0qZP6gzvkw40WGss0tsEcnz0YVCbvlUEMimFH/dmP78X62i0td3LGdSlOqsI7Dx9PvAHIc8GgwG8tX8wuVce771+M1DwGWni4Hc1AVfgEdh5MW6cBLyvgKLcb5qmubo6X7MBh9R6vxcBgI8iEKUR13mKZHJS6X3ccycOa3NQFbuRw8OTMAo1utr2tmp9RmxYE75SHRy+3VuRiKQ2CpDJwUFDcU9n18IUqunFmUei6+31TUjqyvLf75fsdNbAeLwTphSUR56AnH26WBlXEONXL0MbraQPvZ+Bz2yGBJBKUO4kPI34fXZ2vKFDu1CURpH3R8t1eLZ2xFgjEIUrioQCOj79GCrWNUqmK/cjwpn3gXdY2yFIAq0zMlISXwtC1D0JUodrugTEhhlT7UjuIRfc1zTqC2bUc7221TUCnAo9ldBFALKUSplEYNiVJoljVK+nD7FdTqfNBgHMJL7QOwVIREWLewAbAXai0FmK6iyJQFSjw1LPLm1sGbjSbyc+2touRlG9r57Hh9jCNkrFGoVS2PsUNHVkz8zM+5rvAI5nFcMGAaQRezSMRIBxjd2IBkve5Bo8p/1/VihWHx4Jnn+nBFw5SSAK+qAWdE3LA3Do0l15VOg+pRFCU7s4TqtCj0RXa3UpAVdbSFWtQ+a8ej9to5pGqoQGF13o6N2aUaaOkoW3PSpc07deXEiEBf6k6RAHGY0OXLPYYa9v0uHNx4uR/HYnQJiyHm2AZwovIqCDE0OjUdB6yIBFgJxkiQyE9uAArTcHz4MTamFBgB2FC0onoEwiD9YUd0RWwfshx6eBsAai6a9mh42KtSt6s+V9ttfsiAlSAH/7tV38Lm5kJAEwWswRiWzu7zoP1NybWO4DPM7e59PLzTYavfrI5nAIiNVE5U+7zkTAL1rn0vP83iAAsHyTlr0C12h4dDKp3eQgfkaAfi9m9T5kiBGaHy6mUZDY3d1f6w6+0WQk6HnvZJm0kvvEwXpyr/OlA7rRUEdoHB+dBAQkVmuWSkve1+LFeo4Rtbv9BKNL4n12IZJapJCTiJSX3jLUdqiuKFzKyOCksIF6CwWhVQ0oCe88keFVJGTULoludNQ5W+7cfsBxfb77w/ushfRE5koy7zFi2X1OoDXdaMLitWLmQOfgNwiQxMKrNj5n0lUTJKbfbASted8bBMFTHHxIwOdtKogAai0AiKaGgoYO3zfo5VvpMHRcLfiUQETCCzci1LVrk4iTaAPPK8EMfJEASUTRqG2nq7Xjnebi/GIFTMHt7f9+u62eJ2hGJwNfdR4gkaZp1g7WBK+G9W8l6AOab0ytgVcpgYd0vjZx0V4Mz0bTIzsTXxDT+11yPr3sjbUPgY3Z6OT0/dpv9R6mRr/WATCTh42AyH3+M3kfu4/yKM0Dyi/lPEBdDNVkoQAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

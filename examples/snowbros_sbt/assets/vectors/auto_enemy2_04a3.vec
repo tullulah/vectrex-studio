@@ -17,39 +17,39 @@
      "closed": true,
      "points": [
       {
-       "x": -5,
-       "y": 8
-      },
-      {
-       "x": 8,
-       "y": 8
-      },
-      {
-       "x": 8,
-       "y": -5
-      },
-      {
        "x": 3,
-       "y": -5
+       "y": 5
       },
       {
-       "x": -6,
-       "y": -3
+       "x": 2,
+       "y": 3
       },
       {
-       "x": -7,
+       "x": 7,
        "y": 1
       },
       {
-       "x": -2,
-       "y": 3
+       "x": 5,
+       "y": -4
+      },
+      {
+       "x": -8,
+       "y": -5
+      },
+      {
+       "x": -8,
+       "y": 8
+      },
+      {
+       "x": 5,
+       "y": 8
       }
      ]
     }
    ]
   }
  ],
- "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAk0lEQVR4nNWR3Q2AIAyEW+MQztC1mIu1mMEtamooILT48+aXoLFyd4UiXGF5hPwRmx9SiwlgA4YdsNTXzmAQ9qg4kG2A2kWLdlSgGrIaIdrfYCTCnmXSrZ3upIGbaphEx4AtsWckE2nvgF1VHt0JYRXT3YUpOUmR8ckRtjRKeLaCvNNYx87gNctkIo/Ah/s+dfcTDj7TK1jp1jsYAAAAAElFTkSuQmCC",
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAmUlEQVR4nNWS2Q3EIAwFxxFFpIa0RV0pY1txDdsFqyUYcnAknxnJAhme8YGgBBIzgS+CX2A1J+DTuvOJbdz/cjxUorjGPtgZgZIBml60oG1Nxh2OkrDz2IWpp7DauVuCv197zkZsClb3QHgJIjkDLUE+urniVAZ9cbNdXiSPs9GvJuFgSvBnX90q/+AZMhxjh/KV6fOsGe/kB5TyLNC9y5EaAAAAAElFTkSuQmCC",
  "backgroundFit": "naturalCenter",
  "backgroundOffset": {
   "x": 0,

@@ -1,0 +1,118 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy3_057c",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 3,
+       "y": -1
+      },
+      {
+       "x": 0,
+       "y": -10
+      },
+      {
+       "x": -2,
+       "y": -5
+      },
+      {
+       "x": -6,
+       "y": -4
+      },
+      {
+       "x": -2,
+       "y": 0
+      },
+      {
+       "x": -7,
+       "y": 2
+      },
+      {
+       "x": -10,
+       "y": 1
+      },
+      {
+       "x": -5,
+       "y": 4
+      },
+      {
+       "x": -8,
+       "y": 7
+      },
+      {
+       "x": -2,
+       "y": 7
+      },
+      {
+       "x": -6,
+       "y": 9
+      },
+      {
+       "x": -4,
+       "y": 11
+      },
+      {
+       "x": -10,
+       "y": 9
+      },
+      {
+       "x": -10,
+       "y": 11
+      },
+      {
+       "x": -4,
+       "y": 13
+      },
+      {
+       "x": 9,
+       "y": 11
+      },
+      {
+       "x": 3,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 6
+      },
+      {
+       "x": 3,
+       "y": 5
+      },
+      {
+       "x": 3,
+       "y": 3
+      },
+      {
+       "x": 6,
+       "y": 2
+      },
+      {
+       "x": 1,
+       "y": 0
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABLklEQVR4nO2WPQ6DMAyFbcSFuAJjO/YojO3Yjj1Kx3bMFXqkVAYMaZQfO0Fi4UnIAmK/LyauCnBoZ6E2wXZgl5tLP8WXGcPnC3BW1mxyC94Ali4ypotMRmM2n0HG5/N6WkdRAoCxFwOAZQt3V/ber4WvPcDDrJEK3sy4lgHo6TPhgzFzP2kxJrOUPJBYvSRASkmQh/kzlgg1i4MgbjGluQiA2kcx1PhTN0U+gK5y357V5sydIlEQNnRFealvz8IcoQ8Ug5DuWNWBkHlotzVCqSkrM4TqTmDKnAu5rTcBiFBHpBAoJXVBGMY3LzkDqE0IwZQYqw9hZhJsKUijTfDNTWUX2tIxzE2DVFiS5E9FzRnA0kT/N6IUoikF2MJ8M4AaNXvselMNwj+fhw4dgoh+HWZm2sACkIoAAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

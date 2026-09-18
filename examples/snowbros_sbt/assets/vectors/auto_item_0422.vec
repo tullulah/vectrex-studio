@@ -17,32 +17,36 @@
      "closed": true,
      "points": [
       {
-       "x": -8,
-       "y": -4
+       "x": -4,
+       "y": -3
+      },
+      {
+       "x": -7,
+       "y": -3
       },
       {
        "x": -8,
-       "y": 8
+       "y": 1
+      },
+      {
+       "x": -2,
+       "y": 3
       },
       {
        "x": 0,
        "y": 8
       },
       {
-       "x": 1,
-       "y": 4
-      },
-      {
-       "x": 4,
-       "y": 3
+       "x": 6,
+       "y": 8
       },
       {
        "x": 8,
-       "y": 1
+       "y": 8
       },
       {
-       "x": 7,
-       "y": -3
+       "x": 8,
+       "y": -5
       },
       {
        "x": 0,
@@ -53,7 +57,7 @@
    ]
   }
  ],
- "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAeElEQVR4nN1S2w2AMAg8jEM4g2sxl2uxDoYaU2tAiP55ySVNuV55AYB65H5OoV9NNKTkBlRM03Qupuwl9yzfGVwQlqPFPngEFtFQYDF2JnPyuJPSGMeMpMeouiy3pjZsNh5ODEz0AJqbSJyf1vDxsBNUKCFcop9gB/rGX+GeX24WAAAAAElFTkSuQmCC",
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAcElEQVR4nN1RQQ6AMAgrxkf4Br+1d+1bfAezTJMtAo16swmHhbWFAnBYAQxxfSJbTm8fNBcQKkCwkPEp1jeurhu8IvtfZlaGGpvtvamF5LOHTlTfMT2j9itMYdWHuwsLjl1CgkBvIlUd8d0XoII/wwHPFF8F5KqzEgAAAABJRU5ErkJggg==",
  "backgroundFit": "naturalCenter",
  "backgroundOffset": {
   "x": 0,

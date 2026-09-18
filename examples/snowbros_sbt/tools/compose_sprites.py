@@ -22,7 +22,13 @@ import argparse
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+# PIL is only needed for the rendering helpers below; parse_objects/normalize
+# (imported by vec_to_sprites.py at build time) must work without it, so the
+# import is lazy — the IDE's python3 has no Pillow and the build must not need it.
+try:
+    from PIL import Image, ImageDraw
+except ImportError:
+    Image = ImageDraw = None
 
 from extract_sprites import decode_tile, load_palettes, load_tiles
 
@@ -85,7 +91,7 @@ def normalize(obj: list[tuple]) -> tuple:
     return tuple(sorted((x - minx, y - miny, *rest) for x, y, *rest in obj))
 
 
-def render_object(obj: tuple, tiles, pals, scale: int) -> Image.Image:
+def render_object(obj: tuple, tiles, pals, scale: int) -> "Image.Image":
     w = max(t[0] for t in obj) + 16
     h = max(t[1] for t in obj) + 16
     img = Image.new("RGB", (w * scale, h * scale), (0, 0, 0))

@@ -1,0 +1,58 @@
+{
+ "version": "1.0",
+ "name": "auto_item_0460",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 8,
+       "y": -8
+      },
+      {
+       "x": -1,
+       "y": -8
+      },
+      {
+       "x": -1,
+       "y": -3
+      },
+      {
+       "x": 1,
+       "y": -1
+      },
+      {
+       "x": 4,
+       "y": -1
+      },
+      {
+       "x": 5,
+       "y": -3
+      },
+      {
+       "x": 8,
+       "y": -1
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAL0lEQVR4nGNgGAWjgAqAkUh1/3Ho+c9EomZk/n9iXPCfkOlMRLiA+gYkI7EH3gsA6gQHaS3i7jgAAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

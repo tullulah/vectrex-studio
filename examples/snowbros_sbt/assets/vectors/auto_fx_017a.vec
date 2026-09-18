@@ -41,34 +41,11 @@
        "y": -1
       }
      ]
-    },
-    {
-     "name": "det0",
-     "intensity": 80,
-     "closed": true,
-     "points": [
-      {
-       "x": -4,
-       "y": -4
-      },
-      {
-       "x": -2,
-       "y": -3
-      },
-      {
-       "x": -1,
-       "y": -4
-      },
-      {
-       "x": -2,
-       "y": -5
-      }
-     ]
     }
    ]
   }
  ],
- "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAt0lEQVR4nO1QsQ3CMBC8SCxA5zVYwSMkZcq07ihxaTZwS+kyjOAV6EJJ644RjN7Kh9gxTJCTrD+97+71D+zY8QMGiNG5OMm8Ur/UNmtTOwyJH815Eyr8Y+HXvoeevQ2bL84hyNNGzCj/OOTAgqf3AD0A79cNdw+0EqkSaECmre09SaQ9hRDRWpsece5zXd9iuQGJqXadrB52HPOpSqnvDdJuQkSt9SL4F2SMQQghD+CQqqsAm4l/ACkWW6wStaKBAAAAAElFTkSuQmCC",
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAcklEQVR4nGNgGAWjgIGBEUcg/CdWDyNWTVOw6M/BsAsswIiiGaYRUzEuOUZUA0gHjEzIzoGBZAYGBolr/8EYxMalGUWjxLX/YFe82IddtYQTKv+FFsT1MBcweGtBzAIpRFcMMxhmOEwtNqcTFRZzkfQBALnJG5kEyGIfAAAAAElFTkSuQmCC",
  "backgroundFit": "naturalCenter",
  "backgroundOffset": {
   "x": 0,

@@ -1,0 +1,253 @@
+{
+ "version": "1.0",
+ "name": "auto_bank_068c",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -4,
+       "y": 13
+      },
+      {
+       "x": -3,
+       "y": 16
+      },
+      {
+       "x": -1,
+       "y": 13
+      },
+      {
+       "x": -2,
+       "y": 10
+      }
+     ]
+    },
+    {
+     "name": "sil1",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 3,
+       "y": -14
+      },
+      {
+       "x": -1,
+       "y": -15
+      },
+      {
+       "x": -3,
+       "y": -11
+      },
+      {
+       "x": -6,
+       "y": -13
+      },
+      {
+       "x": -8,
+       "y": -9
+      },
+      {
+       "x": -8,
+       "y": 2
+      },
+      {
+       "x": -5,
+       "y": 1
+      },
+      {
+       "x": -4,
+       "y": 5
+      },
+      {
+       "x": -2,
+       "y": 5
+      },
+      {
+       "x": -2,
+       "y": 9
+      },
+      {
+       "x": 0,
+       "y": 12
+      },
+      {
+       "x": 1,
+       "y": 11
+      },
+      {
+       "x": 4,
+       "y": 5
+      },
+      {
+       "x": 6,
+       "y": 6
+      },
+      {
+       "x": 7,
+       "y": -1
+      },
+      {
+       "x": 9,
+       "y": 0
+      },
+      {
+       "x": 9,
+       "y": 3
+      },
+      {
+       "x": 11,
+       "y": 3
+      },
+      {
+       "x": 12,
+       "y": -1
+      },
+      {
+       "x": 8,
+       "y": -12
+      }
+     ]
+    },
+    {
+     "name": "sil2",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -7,
+       "y": 5
+      },
+      {
+       "x": -6,
+       "y": 3
+      },
+      {
+       "x": -8,
+       "y": 4
+      },
+      {
+       "x": -8,
+       "y": 7
+      }
+     ]
+    },
+    {
+     "name": "sil3",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 10,
+       "y": 12
+      },
+      {
+       "x": 9,
+       "y": 9
+      },
+      {
+       "x": 7,
+       "y": 10
+      },
+      {
+       "x": 8,
+       "y": 11
+      },
+      {
+       "x": 9,
+       "y": 15
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 2,
+       "y": -5
+      },
+      {
+       "x": 0,
+       "y": -8
+      },
+      {
+       "x": 0,
+       "y": -13
+      },
+      {
+       "x": -5,
+       "y": -9
+      },
+      {
+       "x": -4,
+       "y": -6
+      },
+      {
+       "x": -1,
+       "y": -5
+      },
+      {
+       "x": 1,
+       "y": -2
+      },
+      {
+       "x": 3,
+       "y": -2
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 3,
+       "y": -10
+      },
+      {
+       "x": 7,
+       "y": -5
+      },
+      {
+       "x": 8,
+       "y": -6
+      },
+      {
+       "x": 6,
+       "y": -8
+      },
+      {
+       "x": 4,
+       "y": -13
+      },
+      {
+       "x": 1,
+       "y": -12
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAB/UlEQVR4nMVWS47DIAx1UC+UHoFlZ5mjTHfNktl1jpJluuQI6ZEYmWAK1AFE086TkBJC/Pz8AQAaYHowsBMEfAA5h0WTsUWxRlsiI6AR3R26p8lBAusUM/8SjJKmVjV+37NmLEKDOeOWPHB2d8xQJthdfUSOCo0y+Az/2YanfnUI3gHDhNCrdzm2o4emSIjiCqaFvgC62919u2y03m4OQGwQVeLAsHugE4uCk5JsKl7aCbtRP204lpxTT+9J1NhNq9aB0IBXnpL/aP+IUYBJR5GgmoEWB+ZSYSH5pB9OMDWRgygtQMVU4VHeQ2BEQicGuaapAoeqVWgQHsa3cBs1nJK5rONQuxGFYUWl9E7hx5FLn3OaqwNR4rb9jkSLWg0NCfkg4Xxf13mll8e6UD3XDQeoASkMlTucR169J6eOmbSNQOqEKHH7XY9A5JO2ylmyFO6fpgjMaREFxEiFpq89T4jrrqBtelAItMDQgWOU3Uy+YR20JeNztMYdTn6+cC6IkgM2/EmVU5CjWQy9K8yoLhaV3cwE1ABzexyjnBOuG+mx8+6/XPhFidv+PLk23FKP3zgHLzJ7EFU54HEcs59D8lB9CaKGG+sAxy9AhxEh9TYai4JzxxBd5Fo/e2FOCok6ga5j1B10UX3bbTiEJ3OENN52QYUE/nKq5OdI98Yf3Vw88RnJ3TsAAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

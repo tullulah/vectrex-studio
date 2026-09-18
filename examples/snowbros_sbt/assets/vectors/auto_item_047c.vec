@@ -1,0 +1,22 @@
+{
+ "version": "1.0",
+ "name": "auto_item_047c",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": []
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMElEQVR4nGNgGFJA4tr//3Sz7D/dbBoFxIP/NEsgTMQqpDgVohkAYuM0kCKbSNYMALVyEa2jtgSJAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

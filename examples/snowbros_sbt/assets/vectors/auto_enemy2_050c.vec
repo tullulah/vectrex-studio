@@ -1,0 +1,101 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy2_050c",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -13,
+       "y": 3
+      },
+      {
+       "x": -7,
+       "y": 14
+      },
+      {
+       "x": 3,
+       "y": 15
+      },
+      {
+       "x": 11,
+       "y": 9
+      },
+      {
+       "x": 13,
+       "y": 3
+      },
+      {
+       "x": 12,
+       "y": -2
+      },
+      {
+       "x": 11,
+       "y": -8
+      },
+      {
+       "x": 6,
+       "y": -13
+      },
+      {
+       "x": -4,
+       "y": -15
+      },
+      {
+       "x": -11,
+       "y": -10
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 2,
+       "y": -6
+      },
+      {
+       "x": 2,
+       "y": -5
+      },
+      {
+       "x": 3,
+       "y": -6
+      },
+      {
+       "x": 6,
+       "y": -5
+      },
+      {
+       "x": 6,
+       "y": -6
+      },
+      {
+       "x": 4,
+       "y": -8
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACYklEQVR4nM1XIXbjMBSU/AoWmgYGBvoKhVm2e4TCHmEDW7a0sEdo2Qb2CoGBhqWGZdk3SsYdf3/Jdgp25z0/24qkmT//S1ZC+MeI1wyqb/+cVptt//5+3Kd79/Z98XxxLiHuSgo0mxAOx/AlIXEOOYhBBoCQzwTbKOa4fwz1upklJC4hn4K6MVdEdS357q5NlyVnGkDOea4SsDL5BgFJQLz6tg4Pz+tehBWq40siKq+RA5hXEuOdhPdP5zaIIPA7iOkC0bUH/OqKuAkzwQiVUHOufQAVsdn+Cuk1CZlwoJY1rgSM3JIuw9iFyu22GUajS1DvL7/bdLGPikMQDARusChnCThkolRhdAQpYRttz66e9c+ygFrs37+eJ8NET/chVT3FoY21oEtx+2NcgFOobAMm4CQ2CpCp1RCBa6ouzquAe8OwDipvACKBE/3m8tGmy4qwxHi3+4eKoJCigM7pROgSVFK9A7YmSnVQWXJWq1a+5pvPLEibJrtiBgG1L9MOrMR6ndyL3pIS6kYKSImNiGimOtW3D30ecx8i+0n2ilDtTy6AGPa3u1jciruLZepETow9jOQKsITKTBltBFyWtthKS68/GdnKd2ogjoc3J1jlbZ1ehErGMfZ5KOAzSMD/GqZ8NYNaQMSaV/6mooYbjjOnIc8IQKfzbsW80m7vJGzhueBZXxCQ35D06+YdPGzkffUnjKMHMgfGy36dqYVcvkfCJ8gLAoYiAEvoEnGbHVieJ58QYIQowUVQ97YrEE+TzxQgIixRlnge+QIBCRcnmvHJpt1d/V8zLh3wKeTL8/wf+AuDNWfBF4H3GAAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

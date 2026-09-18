@@ -17,188 +17,51 @@
      "closed": true,
      "points": [
       {
-       "x": -3,
-       "y": -9
-      },
-      {
        "x": -8,
-       "y": -8
+       "y": -4
       },
       {
-       "x": -11,
-       "y": -5
-      },
-      {
-       "x": -10,
-       "y": 2
-      },
-      {
-       "x": -15,
-       "y": 2
-      },
-      {
-       "x": -16,
-       "y": 6
-      },
-      {
-       "x": -12,
-       "y": 12
-      },
-      {
-       "x": -9,
-       "y": 11
-      },
-      {
-       "x": -6,
-       "y": 14
-      },
-      {
-       "x": -1,
-       "y": 14
-      },
-      {
-       "x": 5,
-       "y": 10
-      },
-      {
-       "x": 7,
-       "y": 11
-      },
-      {
-       "x": 12,
-       "y": 11
-      },
-      {
-       "x": 15,
-       "y": 6
-      },
-      {
-       "x": 14,
-       "y": 2
-      },
-      {
-       "x": 12,
-       "y": 2
-      },
-      {
-       "x": 12,
-       "y": 4
-      },
-      {
-       "x": 10,
+       "x": -5,
        "y": 3
       },
       {
-       "x": 10,
-       "y": 5
-      },
-      {
-       "x": 8,
-       "y": 4
-      },
-      {
-       "x": 9,
-       "y": -8
-      },
-      {
-       "x": 12,
-       "y": -11
-      },
-      {
-       "x": 5,
-       "y": -12
-      }
-     ]
-    },
-    {
-     "name": "det0",
-     "intensity": 80,
-     "closed": true,
-     "points": [
-      {
-       "x": -6,
-       "y": 5
-      },
-      {
-       "x": -7,
-       "y": 5
-      },
-      {
-       "x": -7,
-       "y": 8
-      },
-      {
-       "x": -4,
-       "y": 10
-      },
-      {
-       "x": -3,
-       "y": 8
-      }
-     ]
-    },
-    {
-     "name": "det1",
-     "intensity": 80,
-     "closed": true,
-     "points": [
-      {
-       "x": -8,
-       "y": 7
-      },
-      {
-       "x": -8,
-       "y": 5
-      },
-      {
-       "x": -10,
-       "y": 5
-      },
-      {
-       "x": -10,
-       "y": 7
-      },
-      {
-       "x": -10,
-       "y": 9
-      }
-     ]
-    },
-    {
-     "name": "det2",
-     "intensity": 80,
-     "closed": true,
-     "points": [
-      {
-       "x": 0,
-       "y": 0
-      },
-      {
-       "x": 1,
-       "y": -2
+       "x": -1,
+       "y": 3
       },
       {
        "x": 2,
-       "y": -2
+       "y": 6
       },
       {
-       "x": 1,
-       "y": 0
+       "x": 7,
+       "y": 6
       },
       {
-       "x": 1,
-       "y": 2
+       "x": 8,
+       "y": 1
       },
       {
-       "x": -1,
-       "y": 2
+       "x": 8,
+       "y": -8
+      },
+      {
+       "x": -3,
+       "y": -8
+      },
+      {
+       "x": -3,
+       "y": -5
+      },
+      {
+       "x": -7,
+       "y": -6
       }
      ]
     }
    ]
   }
  ],
- "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACU0lEQVR4nO1XO1LDMBBdZXIIXyF0ukJajpDSdLhLCaW5gdPhMkeg5QrukiPgW5h5slas1nIsIDTAm/FYXm32vV19Q/TXYbI9m2aIvruOqG3NzwtoRuLj/X0w7Q6HqwkxE0tZjpkiKMi3WzpuNiOx9pVCUmIQy9qLIs2EHD/gYNa6zHcpUlTkfB7br69TEYj1/ExHWbGEkFVKFZMj+4j4cKCirqf+0o8TYXKIhFj4ICZX2GOdzN5aR9QjAMqviWX2UgRXQpLDhkeLXKwA0Uh6Pkfk/dube/O8CGDy/d69djoe96sqrCbZw9kHiQILhOx0vxfuwNmzDRWQQ+GxjmYqK5TAD3wFOPskuRYs+xATFbu7o+LlheMMVFXmYw7IpbfZUI8AvsxMnCSSQnUVum4kHGd+vJGFCjDk2GDGo1xyyQEq87qq3PuxaUYBQgSIgb7vjVyC/ek0uLheqJlsPvzthwIkjkAK2m6pvrkJ2oMI38dj77JnAQzNNYuyHGoi97hhOZ1Cm+2Df6SPe9Auy6EoimTZl5dhGW8WrtSq7BrSx8Fa6m9v6WsCrKW6bcPnQ4IYtifR/ipWOU6maQIJxprJ0WYREWZ2vXwB3cdSAgkOJCYk1Z4VkQmTtIpVEE5DXpq6zTteKnPYq8p8awh23BAXkogImxVvsfJ8YFFqQucJaFsThgHZIkt5+umDaM6WgfVsD18q5qAJL50PF2AWPbSI1GGVIuZLzcKd0XxKrhSjhUhi2c/fWXfCXCxMrInACyJMNuk1RCVEmKsJWBJzhT8x//ideAe+uV1IKjKjLAAAAABJRU5ErkJggg==",
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAUUlEQVR4nGNgGGjASILa/9j0M5KpEQ6YcGj4T4xmsBMYSLCNWBeQbcB/Sg1goMSA/5QY8J8aLiAnYWE14D85BiDbCmKT5Ap8iolyDa5oJNorAD02DBKMMyZ/AAAAAElFTkSuQmCC",
  "backgroundFit": "naturalCenter",
  "backgroundOffset": {
   "x": 0,

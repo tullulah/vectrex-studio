@@ -404,14 +404,18 @@ def main():
 # (base range lo, hi, family label, palette fallback)
 FAMILIES = [
     (0x0fa, 0x0fa, 'misc'),    # (c) mark of the copyright line
-    (0x11c, 0x17d, 'fx'),      # effects, power-up banners, sparkles
+    (0x11c, 0x1ff, 'fx'),      # effects, power-up banners, sparkles
     (0x200, 0x27f, 'ghost'),   # hurry-up pumpkin ghost: flames, ghost, totems
     (0x280, 0x33f, 'enemy1'),  # includes the 0x280 block: floor-2+ states
     (0x340, 0x3ef, 'nick'),    # includes the back-view / bonus poses past 0x3df
     (0x3f0, 0x47f, 'item'),    # pickups: potions, sushi, bonus drops
     (0x480, 0x52f, 'enemy2'),
     (0x530, 0x5be, 'enemy3'),
+    (0x600, 0xcff, 'bank'),    # level banks: floor-11+ enemies live here (big
+                               # scenery pieces are filtered out by the w/h cap)
+    (0xd00, 0xd8e, 'title'),   # instruction-banner singles
     (0xe00, 0xed9, 'boss1'),
+    (0xeda, 0xff2, 'boss2'),   # dragon + golden bird + eggs (floor-20 boss)
     (0xff3, 0xffb, 'misc'),    # TOAPLAN banner + continue-screen blocks
 ]
 

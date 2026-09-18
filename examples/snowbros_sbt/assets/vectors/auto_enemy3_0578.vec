@@ -1,0 +1,254 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy3_0578",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 2,
+       "y": 7
+      },
+      {
+       "x": 0,
+       "y": 4
+      },
+      {
+       "x": 3,
+       "y": 2
+      },
+      {
+       "x": 0,
+       "y": 2
+      },
+      {
+       "x": 0,
+       "y": 0
+      },
+      {
+       "x": 3,
+       "y": -3
+      },
+      {
+       "x": 1,
+       "y": -3
+      },
+      {
+       "x": 0,
+       "y": -6
+      },
+      {
+       "x": 3,
+       "y": -7
+      },
+      {
+       "x": 1,
+       "y": -8
+      },
+      {
+       "x": 3,
+       "y": -10
+      },
+      {
+       "x": 0,
+       "y": -15
+      },
+      {
+       "x": -6,
+       "y": -12
+      },
+      {
+       "x": -12,
+       "y": -4
+      },
+      {
+       "x": -12,
+       "y": -1
+      },
+      {
+       "x": -14,
+       "y": -1
+      },
+      {
+       "x": -13,
+       "y": 1
+      },
+      {
+       "x": -15,
+       "y": 2
+      },
+      {
+       "x": -13,
+       "y": 5
+      },
+      {
+       "x": -16,
+       "y": 9
+      },
+      {
+       "x": -15,
+       "y": 11
+      },
+      {
+       "x": -1,
+       "y": 13
+      },
+      {
+       "x": -8,
+       "y": 9
+      },
+      {
+       "x": 1,
+       "y": 9
+      },
+      {
+       "x": 3,
+       "y": 8
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -3,
+       "y": -5
+      },
+      {
+       "x": -6,
+       "y": -3
+      },
+      {
+       "x": -12,
+       "y": -4
+      },
+      {
+       "x": -12,
+       "y": -2
+      },
+      {
+       "x": -10,
+       "y": -2
+      },
+      {
+       "x": 0,
+       "y": -3
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -13,
+       "y": 3
+      },
+      {
+       "x": -14,
+       "y": 2
+      },
+      {
+       "x": -13,
+       "y": 5
+      },
+      {
+       "x": -11,
+       "y": 6
+      },
+      {
+       "x": -10,
+       "y": 5
+      },
+      {
+       "x": -7,
+       "y": 5
+      },
+      {
+       "x": -7,
+       "y": 4
+      },
+      {
+       "x": -13,
+       "y": 4
+      }
+     ]
+    },
+    {
+     "name": "det2",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -6,
+       "y": -6
+      },
+      {
+       "x": -7,
+       "y": -7
+      },
+      {
+       "x": -10,
+       "y": -6
+      },
+      {
+       "x": -10,
+       "y": -5
+      },
+      {
+       "x": -6,
+       "y": -5
+      }
+     ]
+    },
+    {
+     "name": "det3",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -9,
+       "y": 10
+      },
+      {
+       "x": -10,
+       "y": 9
+      },
+      {
+       "x": -10,
+       "y": 11
+      },
+      {
+       "x": -8,
+       "y": 12
+      },
+      {
+       "x": -6,
+       "y": 11
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAB00lEQVR4nO1WO3LDIBRcMr6QcwSVbn0Up4tLpUuO4lIuOUJ8JDKLWPnBWJYt4VGTnQEJkNjH+wL8Y2W4e4sdEPj0ABozzzHxM/H/0wJ0iZDYtQ3OR58RoiJxJkAHhN3WzO57cv8iUovNQafeN8BnA3x54HQlfxWx4NiFLcL50qs9w8n3gund4OMCfCetuct8IR07akHU0RS/LfB+7MlFLEGopRJJa3ME2Rg1D0LEDUUmQgpUIgm3RAMZqAmao0vPoYX22jRum9iwEM6S2wWr6Mw30qnpAzWc1Nn4z0JxDPIFu8nRzxbijZ23m6fGE+qUGYpoIKI5trkGn0Ynu3Mz2Ti0gaaJa5qzvlHTBwiSKbaz5KQoYHgqQipFgNOLcsGoH5DcQoIs9AFXTgx1wWZA63jlOM3N1YQrya2Llf4+FSVzhHB2kJnBFidgtDTTZ5b4wcYOlJLBwiSq5IQ7dicfn7EQpeS0xP7x/1uTNitmRerWBrWioIT8IZqEpy2roImCak5YIuaFtijJY4LMFMLdWxycUsWovBtUSEZu6gN7WSHKu+NSQd6mPmBkyNpZgqqkBffoh4qMwSSmKla7ET0CRoeabk9YAwcglupVyGGEWFWAGvgDii308So5kJEAAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

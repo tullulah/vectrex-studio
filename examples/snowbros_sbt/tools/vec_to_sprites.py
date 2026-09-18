@@ -40,7 +40,7 @@ def rebuild_frames():
     seen = {}
     dump_files = sorted(DUMPS.glob('sprites_*.bin')) + \
                  sorted((DUMPS.parent / 'snowdump_cmp').glob('sprites_*.bin')) + \
-                 sorted((here / 'dumps').glob('sprites_*.bin'))
+                 sorted((here / 'dumps').rglob('sprites_*.bin'))
     for f in dump_files:
         for obj in parse_objects(f.read_bytes()):
             obj = [t for t in obj if t[2] not in blank]

@@ -13,9 +13,9 @@ from pathlib import Path
 here = Path(__file__).resolve().parent.parent
 log = Path(sys.argv[1])
 n = 0
-existing = len(list((here / 'dumps').glob('sbfarm_*.bin')))
+existing = len(list((here / 'dumps').glob('sprites_sbfarm_*.bin')))
 for m in re.finditer(r'SBFARM ([0-9a-f]{8192})', log.read_text(errors='replace')):
     data = bytes.fromhex(m.group(1))
-    (here / 'dumps' / f'sbfarm_{existing + n:05d}.bin').write_bytes(data)
+    (here / 'dumps' / f'sprites_sbfarm_{existing + n:05d}.bin').write_bytes(data)
     n += 1
 print(f'{n} dumps imported into dumps/')

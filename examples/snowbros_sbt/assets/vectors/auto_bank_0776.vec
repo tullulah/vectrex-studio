@@ -1,0 +1,132 @@
+{
+ "version": "1.0",
+ "name": "auto_bank_0776",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -3,
+       "y": -2
+      },
+      {
+       "x": -1,
+       "y": -4
+      },
+      {
+       "x": -8,
+       "y": -5
+      },
+      {
+       "x": -8,
+       "y": 8
+      },
+      {
+       "x": -3,
+       "y": 8
+      },
+      {
+       "x": 4,
+       "y": 8
+      },
+      {
+       "x": 2,
+       "y": -2
+      },
+      {
+       "x": 0,
+       "y": -2
+      },
+      {
+       "x": 0,
+       "y": 0
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -5,
+       "y": -1
+      },
+      {
+       "x": -7,
+       "y": -1
+      },
+      {
+       "x": -7,
+       "y": 1
+      },
+      {
+       "x": -5,
+       "y": 1
+      },
+      {
+       "x": -4,
+       "y": 6
+      },
+      {
+       "x": -2,
+       "y": 7
+      },
+      {
+       "x": 0,
+       "y": 7
+      },
+      {
+       "x": 0,
+       "y": 5
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -7,
+       "y": 4
+      },
+      {
+       "x": -7,
+       "y": 7
+      },
+      {
+       "x": -5,
+       "y": 6
+      },
+      {
+       "x": -5,
+       "y": 4
+      },
+      {
+       "x": -6,
+       "y": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAbUlEQVR4nN2S0QnAIAxET3Ea18pcXSvrpKAI1miM+NcHIkQud1EBQKxFdUdX+xDhQwlPG5iIGZ9V/SpBcCcgh/syAR1EirgkrZwfBpDLzGLNn0bhIN4S2k8rooZTXGNxd7t5cr5tAPU8bvef8AL57zEunGJKiQAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

@@ -1,0 +1,120 @@
+{
+ "version": "1.0",
+ "name": "auto_boss2_0f0a",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 6,
+       "y": -4
+      },
+      {
+       "x": 8,
+       "y": -4
+      },
+      {
+       "x": 8,
+       "y": -7
+      },
+      {
+       "x": -6,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -4
+      }
+     ]
+    },
+    {
+     "name": "sil1",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 4,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": -2
+      },
+      {
+       "x": -1,
+       "y": -1
+      },
+      {
+       "x": -5,
+       "y": 2
+      },
+      {
+       "x": -6,
+       "y": 8
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 5,
+       "y": 7
+      },
+      {
+       "x": 7,
+       "y": 7
+      },
+      {
+       "x": 7,
+       "y": 3
+      },
+      {
+       "x": 5,
+       "y": 4
+      },
+      {
+       "x": 4,
+       "y": 4
+      },
+      {
+       "x": 4,
+       "y": 5
+      },
+      {
+       "x": 6,
+       "y": 4
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAhElEQVR4nL2SAQrAIAhFv7FD7Ay7VufqWp1ht2hsq2aWYGzsgaChX8WAQkQCsnEfSGtMTczzXKn3W5W6/QgTrolyURBJO8imBmUNP1iL2cOVqBUpAg4SZQ0znneTa1gmCAA1VzBeY8jZtUxUfWE0K8jj8Ga6z6DuM0zS/4O/BRbl3XydAwtnV9tRjHEfAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

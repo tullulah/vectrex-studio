@@ -20,6 +20,20 @@ command = "make"
 args = ["uvm2"]
 artifact = "build_uvm2/snowbros_sbt.bin"
 
+# Nuestro cartucho RP2350. Mismo programa y mismas fuentes que la imagen de
+# arriba; lo que cambia es quien contesta al `svc`: alli el propio binario, aqui
+# la BIOS del cartucho, por su tabla de funciones (doble nucleo — core 0
+# materializa el haz por PIO+DMA mientras el juego corre en core 1).
+#
+# TIENE QUE ESTAR ESCRITO AQUI. El IDE fuerza el objetivo `rp2350` en "Build for
+# SD"; si no encuentra [targets.rp2350] cae al [build] por defecto y copia a la
+# tarjeta lo que ese produzca, sin fallar. En dkong eso puso el .js del simulador
+# en la SD: lo avisaba en el log, y en la tarjeta el fallo era mudo.
+[targets.rp2350]
+command = "make"
+args = ["rp2350"]
+artifact = "build_rp2350/snowbros_sbt_sd.bin"
+
 [env]
 UVM2_LOAD_PSRAM = "1"
 
@@ -27,7 +41,7 @@ UVM2_LOAD_PSRAM = "1"
 # SDK shim via emscripten). The IDE injects $PITREX_SIM_SDK + emcc.
 [simulate]
 command = "make"
-args = ["sim", "CHEATS=1"]   # invulnerability dip ON in the IDE build; drop CHEATS=1 to play honest
+args = ["sim", "CHEATS=1", "TILE_BOXES=1"]   # invulnerability dip ON + placeholder boxes for untraced sprites (capture runs want to SEE the unknowns); drop flags to play honest/clean
 module = "build_wasm/game.js"
 
 # Optional: prepend a toolchain bin dir to PATH for the build.

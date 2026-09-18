@@ -17,35 +17,31 @@
      "closed": true,
      "points": [
       {
-       "x": -7,
-       "y": 2
+       "x": -8,
+       "y": -4
       },
       {
-       "x": -2,
-       "y": 3
+       "x": -8,
+       "y": 8
       },
       {
        "x": 0,
        "y": 8
       },
       {
-       "x": 8,
-       "y": 8
+       "x": 2,
+       "y": 3
+      },
+      {
+       "x": 4,
+       "y": 3
       },
       {
        "x": 8,
-       "y": 0
+       "y": 2
       },
       {
        "x": 8,
-       "y": -5
-      },
-      {
-       "x": -5,
-       "y": -4
-      },
-      {
-       "x": -8,
        "y": -3
       }
      ]
@@ -56,31 +52,27 @@
      "closed": true,
      "points": [
       {
-       "x": 6,
-       "y": 0
-      },
-      {
-       "x": 5,
-       "y": 0
-      },
-      {
-       "x": 6,
+       "x": -6,
        "y": -2
       },
       {
-       "x": 4,
-       "y": -1
+       "x": -5,
+       "y": 2
       },
       {
-       "x": 4,
+       "x": -4,
        "y": 2
+      },
+      {
+       "x": -4,
+       "y": -1
       }
      ]
     }
    ]
   }
  ],
- "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAdklEQVR4nL2Qiw3AIAhED9MhOoNrOVdX6RjM0C1oVGzs30/alxAw4Q4BeEfycD4zZGQJb1MgPmOBZa6cjGPwVrcZhFUAoXv9s3uCapqvMLoPfLhCUejTflMqyplSZmBAKzb+gPSiO+caqOeAySCnywwN/D7wA1YYQTHGaVdKKAAAAABJRU5ErkJggg==",
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAeUlEQVR4nN2R3Q2AIAyEP4hDOINrMRerOAYzuMUZNCT+06BPXtKWh+v1aAHUJ4mEAohzPMLnNI3AcMupiihPv5hsdqIb6yYBZ7G44b4SuILzIZcESzWg8JcA+bg+iEaBo5gPw+MJq3AtOyjfjR8ska6xb3dSvXHwA8yoNjD1foZ+sAAAAABJRU5ErkJggg==",
  "backgroundFit": "naturalCenter",
  "backgroundOffset": {
   "x": 0,
