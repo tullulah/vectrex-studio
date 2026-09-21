@@ -234,6 +234,12 @@ static uint32_t s_ciclos;
 
 uint32_t uvm2_ciclos_lista(void) { return s_ciclos; }
 
+/* Commands queued so far in the list being built. Like `uvm2_emit_raw`, this is for
+ * measurement benches only: reading it between two calls says how many commands that
+ * call cost, which `uvm2_stats.commands` cannot because it is only written when the
+ * frame closes. Nothing in a game should need it. */
+uint32_t uvm2_comandos_lista(void) { return s_count; }
+
 /* Los del frame ya PUBLICADO, que es el que core 1 reproduce. */
 uint32_t uvm2_ciclos_frame(uint32_t frame) { return s_ciclos_pub[frame & 1u]; }
 
@@ -416,6 +422,10 @@ static int32_t s_drift_ax, s_drift_ay;   /* ver la compensacion de deriva, abajo
 void vx_ramp_params_chain(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
 void vx_chain_reset(void);
 void vx_deuda_reset(void);
+/* The jump's half of the debt model: how much to absorb into the dark stretch, and the
+ * ledger entry for each ramp actually emitted. See `move_una`, which is the only caller. */
+void vx_debt_take(int32_t dx, int32_t dy, uint32_t q, int32_t *ax, int32_t *ay);
+void vx_debt_record(int32_t dx, int32_t dy, uint32_t q, int32_t vx, int32_t vy, uint32_t t1);
 /* El SALTO va a oscuras: no hay nada que frenar, asi que corre al fondo de escala del
  * DAC como el resto. Ver `TOPE_DAC` en ramp.rs. */
 void vx_ramp_params_salto(int32_t dx, int32_t dy, int32_t *vx, int32_t *vy, uint32_t *t1);
@@ -1898,21 +1908,52 @@ static int paso_arranque(void)
 
 static void move_una(int dx, int dy)
 {
-    /* EL SALTO NO LLEVA DEUDA — Y ESO DEJA UNA DERIVA CONOCIDA, SIN CERRAR.
+    /* THE JUMP ABSORBS THE DEBT, which is the half of the model that was never wired up.
      *
-     * Medido sobre los deltas reales de dkong (60 frames, 1416 saltos): la posicion se va
-     * -47,2 unidades en X y -88,7 en Y, porque el salto tambien es una rampa que redondea
-     * y aqui su error se TIRA. Los trazos, que si van encadenados, se quedan en +0,4.
+     * The debt is "where the beam really is minus where the drawing believes it is",
+     * accumulated over every ramp that rounds. `vx_chain_reset` stopped throwing it away
+     * some time ago and `ramp_params_salto_con_deuda` was written to absorb it here — but
+     * nothing ever called that function. Its only entry point, `vx_ramp_params_q4`, has no
+     * callers anywhere in the tree, so the jump went through `vx_ramp_params_salto_qn` ->
+     * `ramp_params_q` bare: it neither absorbed the debt nor recorded its own.
      *
-     * Se probo lo evidente —encadenar tambien los saltos— y SALE PEOR: la deuda que el
-     * salto no consigue absorber la acaba pagando el siguiente trazo ILUMINADO, que se
-     * dobla. En la rejilla las filas pasaron de planas (desvio 0, exactas) a empezar 378
-     * unidades mas arriba y caer 189 a lo largo. Una linea recta torcida se ve mucho mas
-     * que un origen desplazado.
+     * What that left is not "no correction" but correction IN THE WRONG PLACE. The stroke
+     * path does chain (`ramp_params_chain_qn` asks for delta + debt), so the whole
+     * accumulated debt landed on the first LIT stroke after every jump, stretching it.
+     * That is the deformation: strokes landing short and corners not closing.
      *
-     * Lo que hace falta es que el salto ABSORBA la deuda entero durante el tramo apagado
-     * —donde corregir no se ve— y no que la reparta. Eso no esta hecho. */
+     * MEASURED with `el_salto_absorbe_o_no` in ramp.rs, replaying real geometry through
+     * the real model, jump-without-debt versus jump-with-debt:
+     *
+     *     VecFever frame 120, 427 segments   median X  -0.619 -> -0.038   worst -0.895 -> -0.187
+     *     Star Wars logo, 149 segs 48 jumps  median X  -0.031 -> +0.000   worst -2.306 -> +1.669
+     *
+     * The two notes that used to live here and in ramp.rs saying this was tried and came
+     * out worse (+705 in X; 86.8 -> 99.8 units over an asterock frame) are both from BEFORE
+     * UVM2_SUBUNIDAD: one was fixed by the "an axis not asked does not move" guard, the
+     * other measured in whole units, and its own text says it is not proof either way.
+     *
+     * THE LEDGER IS KEPT HERE AND NOT INSIDE THE PARAMS FUNCTION, because this is the only
+     * place that knows what actually reaches the bus: the duration ladder below replaces t1
+     * and recomputes the rates after the ramp is chosen, and the soft start splits the jump
+     * into a priming unit plus a long ramp. `vx_debt_take` says how much to absorb,
+     * `vx_debt_record` is called once per ramp emitted with that ramp's slice of the
+     * request, and the slices add up to the whole jump. */
     vx_chain_reset();
+    const int dx_pedido_ = dx, dy_pedido_ = dy;
+    {
+        int32_t ax_ = 0, ay_ = 0;
+        vx_debt_take(dx, dy, UVM2_Q_BITS, &ax_, &ay_);
+        dx += ax_;
+        dy += ay_;
+        /* THE BELIEF ABOUT POSITION DOES NOT MOVE WITH THE CORRECTION. The correction aims
+         * the real beam; `s_pos` is where the drawing thinks the beam is, and the target it
+         * was asked for has not changed. The ramps below advance `s_pos` by the corrected
+         * delta, so give it back here — otherwise every jump shifts the model's own idea of
+         * the origin by the debt and the next `move_abs` asks for the wrong delta. */
+        s_pos_x -= ax_;
+        s_pos_y -= ay_;
+    }
 
     /* LA COMPENSACION DE DERIVA, DE VUELTA. Estaba aqui —en el salto, que es donde se
      * midio— y se quedo MUERTA en el commit que metio vectrex-draw: el `return` del camino
@@ -1953,6 +1994,7 @@ static void move_una(int dx, int dy)
      *
      * Su recorrido se DESCUENTA del salto, asi que la posicion final no cambia. */
     int forzada = 0;
+    int res_tot_x_ = 0, res_tot_y_ = 0;   /* what the priming unit took of the request */
     int32_t px_ = 0, py_ = 0; uint32_t pt1_ = 0;   /* la rampa larga, para emitirla tal cual */
     if (uvm2_arranque_suave > 0) {
         /* SU CRITERIO ES LA TASA DEL SALTO, NO SU DISTANCIA. Medido sobre sus 198
@@ -2018,6 +2060,11 @@ static void move_una(int dx, int dy)
                 SIGUEN_UNIDADES = 0;
                 s_pos_x += res_x; s_pos_y += res_y;
                 dx -= res_x; dy -= res_y;
+                /* This ramp's slice of the ledger. The long ramp below records the rest,
+                 * and the two slices add up to the ORIGINAL request — not the corrected
+                 * one, or the absorbed debt would be asked for twice and never clear. */
+                res_tot_x_ = res_x; res_tot_y_ = res_y;
+                vx_debt_record(res_x, res_y, UVM2_Q_BITS, ax, ay, at1);
                 s_rampas_desde_cero++;
                 uvm2_stats.moves++;
                 uvm2_stats.ramp_cycles += at1;
@@ -2036,7 +2083,8 @@ static void move_una(int dx, int dy)
         int32_t vx, vy; uint32_t t1;
         s_pos_x += dx;
         s_pos_y += dy;
-        /* NO DEBT, AND THE SIGN BIAS THAT JUSTIFIED IT IS GONE (2026-09-12).
+        /* THE JUMP'S OWN SIGN BIAS IS GONE (2026-09-12), which is what made absorbing the
+         * debt here safe. The absorption itself is at the top of this function.
          *
          * Giving jumps their OWN debt was tried and measured worse: over the 255 real jumps
          * of an asterock frame the accumulated error rose from 86.8 to 99.8 units in X and
@@ -2111,6 +2159,11 @@ if (forzada) { vx = px_; vy = py_; t1 = pt1_; } else {
         struct vx_sink sink = vx_cart_sink();
         struct vx_timings k = vx_cart_timings();
         { uint32_t t0_ = SDK_T0(); vx_moveto_seq(&sink, vx, vy, t1, &k); SDK_ACUM(1, t0_); }
+        /* The rest of the ledger: whatever the priming unit did not take of the ORIGINAL
+         * request, against what this ramp — with whatever t1 the ladder settled on —
+         * actually travels. */
+        vx_debt_record(dx_pedido_ - res_tot_x_, dy_pedido_ - res_tot_y_,
+                       UVM2_Q_BITS, vx, vy, t1);
         s_rampas_desde_cero++;
         uvm2_stats.moves++;
         uvm2_stats.ramp_cycles += t1;

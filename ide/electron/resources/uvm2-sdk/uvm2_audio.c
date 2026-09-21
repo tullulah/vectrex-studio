@@ -64,6 +64,15 @@ static uint8_t s_sfx_cbits = 0x24;      /* 0x24 = tone C and noise C disabled */
  * silencing the music on A and B (uvm2_smp.c). Strong here, weak there. */
 uint8_t uvm2_audio_mixer(void) { return s_psg_mixer; }
 
+/* A GAME THAT DRIVES THE PSG ITSELF still owns the mixer, and the sample injector
+ * composes its DAC channel over whatever this says. Without this the shadow only ever
+ * moved when the .vmus sequencer wrote it, so a game with no track kept the initial 0x3F
+ * -- everything silenced -- and the injector re-latched that over the game's own mixer
+ * once a frame. Measured on Star Wars, which translates the arcade's POKEYs live: all
+ * audio vanished the moment the speech stream started. Weak twin in uvm2_smp.c. */
+void uvm2_audio_note_mixer(uint8_t val) { s_psg_mixer = (uint8_t)(val & 0xBFu); }
+
+
 static uint32_t rd_le32(const uint8_t *p)
 {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8)

@@ -88,6 +88,13 @@ static volatile uint32_t s_psg_tail;      /* written by core 1 */
 void uvm2_psg_queue(uint32_t reg, uint32_t value)
 {
     uint32_t h = s_psg_head;
+    /* Register 7 is the mixer, and the sample injector composes its own channel over
+     * whatever it believes the mixer to be. Tell it, or a game that drives the PSG
+     * itself gets its channels silenced once a frame -- see uvm2_audio_note_mixer.
+     * Noted HERE, on the core that builds the list, because that is the core that reads
+     * it back through uvm2_smp_mixer. */
+    if (reg == 7u) { extern void uvm2_smp_note_mixer(uint8_t);
+                     uvm2_smp_note_mixer((uint8_t)value); }
     s_psg_reg[h % PSG_QUEUE_LEN] = reg;
     s_psg_val[h % PSG_QUEUE_LEN] = value;
     __asm volatile ("dmb" ::: "memory");  /* the data before the index */
@@ -263,7 +270,8 @@ static void core1_main(void)
 
         /* Between frames, with the beam clamped at centre by the last command of
          * the stream — the only window in which anything else may drive Port A
-         * or Port B. Same window the single-core path used, same order. */
+         * or Port B. Same window the single-core path used, same order.
+         */
         uvm2_single_cycles = 0;
 #ifndef UVM2_NO_INPUT
         uvm2_cached_buttons = uvm2_read_buttons();

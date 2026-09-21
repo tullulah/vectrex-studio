@@ -515,7 +515,35 @@ int uvm2_smp_due(uint32_t cycles, uint8_t *value)
 /* The .vmus player's mixer shadow, if that player is in this build. The cartridge
  * BIOS compiles with UVM2_NO_AUDIO and has no shadow, and a build with no music has
  * nothing to preserve either: all channels disabled is the right default for a DAC. */
-__attribute__((weak)) uint8_t uvm2_audio_mixer(void) { return 0x3F; }
+/* WHAT THE MIXER IS WHEN NOBODY IS PLAYING A .vmus.
+ *
+ * This fallback used to answer a constant 0x3F -- every channel silenced -- and
+ * `uvm2_smp_mixer()` composes the DAC's channel OVER it and re-latches the result once
+ * a frame, inside the list. For a game that drives the PSG itself and plays no .vmus,
+ * that silently overwrote its own mixer every frame.
+ *
+ * MEASURED on Star Wars, which writes the PSG directly (its music is a live translation
+ * of the arcade's POKEYs) and streams speech through this DAC: the moment the speech
+ * started, the music and effects went, and only the voice was left. The cartridge BIOS
+ * does not even compile uvm2_audio.c, so this weak version is the one that answers
+ * there -- the constant was not a fallback, it WAS the behaviour.
+ *
+ * So the last mixer the game asked for is remembered and answered instead. */
+static uint8_t s_game_mixer = 0x3F;
+
+/* The .vmus player keeps its OWN shadow and its `uvm2_audio_mixer` is the strong symbol
+ * wherever it is compiled, so telling only the fallback above is not enough: on the .um2
+ * target uvm2_audio.c IS compiled and the fallback never answers. This hook is weak here
+ * and strong there, so one call site serves both. */
+__attribute__((weak)) void uvm2_audio_note_mixer(uint8_t val) { (void)val; }
+
+void uvm2_smp_note_mixer(uint8_t val)
+{
+    s_game_mixer = (uint8_t)(val & 0xBFu);
+    uvm2_audio_note_mixer(s_game_mixer);
+}
+
+__attribute__((weak)) uint8_t uvm2_audio_mixer(void) { return s_game_mixer; }
 
 uint8_t uvm2_smp_mixer(void)
 {

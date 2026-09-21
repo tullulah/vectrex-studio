@@ -402,8 +402,11 @@ fn ramp_params_q(dx: i32, dy: i32, vcap_in: u32, q: u32) -> (i8, i8, u16) {
 fn ramp_params_q_v(dx: i32, dy: i32, vcap_in: u32, q: u32, quiere_v: bool) -> (i8, i8, u16) {
     let f = 1i32 << q;
     let m = core::cmp::max(dx.abs(), dy.abs());
-    RAMP_M_MAX.fetch_max(m as u32, Ordering::Relaxed);
-    if m >= 32768 { RAMP_M_GRANDES.fetch_add(1, Ordering::Relaxed); }
+    /* The three counters that used to live here -- RAMP_M_MAX, RAMP_M_GRANDES and
+     * ARRANQUE_HITS -- were written on EVERY ramp and read by nothing: not by this
+     * crate, not by the SDK, not by the cartridge firmware. On a Cortex-M33 each is an
+     * LDREX/STREX pair in the hottest function of the draw builder. Same shape as the
+     * FLICKER_TELEM cleanup: diagnostics that outlived the diagnosis. */
     /* ── DOS SUELOS, SEGUN SI LA RAMPA ARRANCA PARADA ────────────────────────────────
      *
      * Un trazo que CONTINUA al anterior entra con los integradores ya moviendose; el
@@ -433,7 +436,6 @@ fn ramp_params_q_v(dx: i32, dy: i32, vcap_in: u32, q: u32, quiere_v: bool) -> (i
      * DE FABRICA VALEN LO MISMO QUE LOS DE SIEMPRE: mientras no se barran, el
      * comportamiento es identico al anterior, byte a byte. */
     let arranque = ARRANQUE.load(Ordering::Relaxed) != 0;
-    if arranque { ARRANQUE_HITS.fetch_add(1, Ordering::Relaxed); }
     let min_t1 = if arranque { MIN_T1_ARRANQUE.load(Ordering::Relaxed) }
                  else        { MIN_T1.load(Ordering::Relaxed) } as i32;
     let mut vcap = vcap_in as i32;
@@ -761,66 +763,32 @@ pub extern "C" fn vx_ramp_params(dx: i32, dy: i32, out_vx: *mut i32, out_vy: *mu
     }
 }
 
-/// `vx_ramp_params` CON SUB-UNIDADES: `dx`/`dy` en 1/16 de unidad de dispositivo.
-///
-/// Existe porque la rejilla entera es diez veces mas basta que la del VecFever y eso es lo
-/// que deforma los glifos — ver el bloque de `ramp_params_q`. El puente ya tomaba `i32`, asi
-/// que lo unico que cambiaba era que aqui se recortaba a `i8` y se perdia la fraccion.
-///
-/// Q4 y no mas: con 1/16 el paso de posicion es 160/16 = 10 cuentas de tasa a t1=8, o sea
-/// mas fino que las ~20 con las que el VecFever coloca sus puntos. Mas bits no compran nada
-/// que el DAC pueda expresar.
-#[no_mangle]
-pub extern "C" fn vx_ramp_params_q4(dx_q4: i32, dy_q4: i32, out_vx: *mut i32,
-                                    out_vy: *mut i32, out_t1: *mut u32) {
-    let v = TOPE_DAC;
-    let (vx, vy, t1) = ramp_params_salto_con_deuda(dx_q4, dy_q4, v, 4);
-    unsafe {
-        if !out_vx.is_null() { *out_vx = vx as i32; }
-        if !out_vy.is_null() { *out_vy = vy as i32; }
-        if !out_t1.is_null() { *out_t1 = t1 as u32; }
-    }
-}
+/// THE JUMP'S DEBT ABSORPTION USED TO LIVE HERE, as `vx_ramp_params_q4` ->
+/// `ramp_params_salto_con_deuda`, and it was DEAD CODE: nothing in the tree called that
+/// entry point, so the half of the model that corrects the beam during the dark stretch
+/// never ran, and the whole accumulated debt landed on the first lit stroke after every
+/// jump instead. It is now `vx_debt_take` / `vx_debt_record`, driven by `move_una` in the
+/// SDK — the only place that knows which ramps actually reach the bus, which matters
+/// because the duration ladder and the soft start both change the ramp after it is chosen.
 
 /// La gemela para los SALTOS, con su propio tope de velocidad.
-/// EL SALTO ABSORBE LA DEUDA ENTERA, que es donde corregir no se ve.
+/// THE JUMP ABSORBING THE DEBT, AS THE CARTRIDGE DRIVES IT — for the bench.
 ///
-/// La deuda es `pedido - recorrido` acumulado sobre TODO — trazos y saltos. El trazo solo
-/// la apunta; el salto pide `d + deuda` y con eso la posicion vuelve a cuadrar, porque el
-/// haz va apagado y ese trozo de mas nadie lo ve.
+/// The debt is `asked - travelled` accumulated over everything, strokes and jumps. A lit
+/// stroke can only note it down; the jump asks for `delta + debt` and with that the
+/// position squares up again, because the beam is dark and nobody sees the extra bit.
 ///
-/// LO QUE ESTO ARREGLA, medido integrando nuestro stream contra la geometria de entrada:
-/// la posicion al empezar cada trazo se iba +8,45 unidades de mediana en X y crecia a lo
-/// largo del frame (+2,64 -> +13,29 por tercios). La del VecFever es +0,00.
-///
-/// Y POR QUE NO ESTABA: el intento anterior encadeno tambien los saltos REPARTIENDO la
-/// deuda, y salio peor — lo que el salto no absorbia lo pagaba el siguiente trazo
-/// iluminado, que se doblaba. La diferencia es absorber entero, no repartir. El comentario
-/// de `move_una` en el SDK ya lo pedia asi y no estaba hecho.
+/// This is a COMPOSITION of the three primitives the SDK calls, not a second copy of the
+/// rule: take the correction, choose the ramp, record asked against travelled. `move_una`
+/// does the same three steps, but spread out, because between the second and the third it
+/// may still swap t1 for a rung of the duration ladder or split the jump into a priming
+/// unit and a long ramp.
+#[cfg(test)]
 fn ramp_params_salto_con_deuda(dx_q4: i32, dy_q4: i32, vcap: u32, q: u32) -> (i8, i8, u16) {
-    let (rx, ry) = (DEUDA_X.load(Ordering::Relaxed), DEUDA_Y.load(Ordering::Relaxed));
-    let f = 1i32 << q;
-    let a_q4 = |r: i32| if r >= 0 { (r * f + 500) / 1000 } else { (r * f - 500) / 1000 };
-    /* UN EJE QUE NO SE PIDE NO SE MUEVE — TAMPOCO EN EL SALTO. La guarda estaba solo en el
-     * trazo, y aqui faltaba: un salto con dx = 0 salia con vx = 1 porque la deuda se colaba
-     * como movimiento. MEDIDO en los comandos crudos del frame — el salto entre el segmento
-     * 0 y el 1 tiene dx = 0 y emite ORA=0x01, o sea 1*8/160 = 0,05 unidades de deriva. Por
-     * 187 saltos son 9,3 unidades, del orden de la deriva que se estaba persiguiendo.
-     *
-     * La deuda de ese eje NO se pierde: se queda para el proximo salto que si lo mueva. */
-    let px = if dx_q4 == 0 { 0 } else { dx_q4 + a_q4(rx) };
-    let py = if dy_q4 == 0 { 0 } else { dy_q4 + a_q4(ry) };
-    let (vx, vy, t1) = ramp_params_q(px, py, vcap, q);
-    /* La deuda queda con lo que el salto NO ha llegado a absorber: pedido (con la
-     * correccion dentro) menos recorrido. Si el salto la absorbe entera, queda en cero. */
-    if dx_q4 != 0 {
-        DEUDA_X.store((rx + dx_q4 * 1000 / f - recorrido_mil(vx as i32, t1)).clamp(-4000, 4000),
-                      Ordering::Relaxed);
-    }
-    if dy_q4 != 0 {
-        DEUDA_Y.store((ry + dy_q4 * 1000 / f - recorrido_mil(vy as i32, t1)).clamp(-4000, 4000),
-                      Ordering::Relaxed);
-    }
+    let (mut ax, mut ay) = (0i32, 0i32);
+    vx_debt_take(dx_q4, dy_q4, q, &mut ax, &mut ay);
+    let (vx, vy, t1) = ramp_params_q(dx_q4 + ax, dy_q4 + ay, vcap, q);
+    vx_debt_record(dx_q4, dy_q4, q, vx as i32, vy as i32, t1 as u32);
     (vx, vy, t1)
 }
 
@@ -929,22 +897,74 @@ pub extern "C" fn vx_chain_reset() {
      *
      * La deuda es "donde esta el haz de verdad menos donde creemos que esta". Un salto no
      * arregla eso — es justo el sitio donde corregirlo sin que se vea, porque va a
-     * oscuras. Lo absorbe `ramp_params_salto_con_deuda`.
+     * oscuras. Lo absorbe el salto, por `vx_debt_take` / `vx_debt_record`.
      *
      * Lo que si se reinicia es el ARRANQUE: el haz se reposiciona, asi que la proxima
      * rampa parte del reposo. Eso no tiene nada que ver con la deuda y son dos cosas que
      * estaban juntas por costumbre.
      *
-     * PROBADO Y REVERTIDO (2026-09-04): conservar la deuda entre saltos + que el salto la
-     * absorbiera entera dejo la **Y practicamente perfecta** (+0,01 de mediana contra el
-     * +0,00 del VecFever, viniendo de -0,52) y **disparo la X a +705** — la correccion en X
-     * entra en realimentacion positiva. La asimetria no esta explicada: el codigo trata los
-     * dos ejes igual, pero 145 de los 427 segmentos del frame tienen dx=0 y casi ninguno
-     * dy=0, asi que la X pasa por el camino de "eje que no se pide" muchas mas veces.
-     * Sospechoso principal: el tope de +-4000 milesimas esta pensado para la rejilla
-     * ENTERA (4 unidades), y en 1/16 son 64 cuantos — una correccion enorme para un delta
-     * pequeño. Ahi es por donde hay que seguir. */
+     * AND FOR TWO WEEKS NOBODY ABSORBED IT. Keeping the debt here was only half the fix:
+     * the absorbing half lived in `ramp_params_salto_con_deuda`, whose only entry point
+     * (`vx_ramp_params_q4`) had no callers anywhere, so the jump ran through
+     * `ramp_params_q` bare and the whole debt landed on the first LIT stroke after it.
+     * Wired up in `move_una` 2026-09-20.
+     *
+     * TRIED AND REVERTED (2026-09-04), and why it is not an objection any more: preserving
+     * the debt across jumps plus full absorption left **Y practically perfect** (+0.01
+     * median against the VecFever's +0.00, coming from -0.52) and **threw X to +705**. The
+     * asymmetry was the missing "an axis not asked does not move" guard on the jump — 145
+     * of that frame's 427 segments have dx = 0 and almost none dy = 0, so X took that path
+     * far more often and the correction leaked in as movement. With the guard, measured by
+     * `el_salto_absorbe_o_no` on the same frame: X median -0.619 -> -0.038. */
     ARRANQUE.store(1, Ordering::Relaxed);
+}
+
+/// HOW MUCH THE JUMP MUST ABSORB, in the caller's Q units.
+///
+/// The jump is the only dark stretch, so it is the only place where moving the beam to
+/// where the drawing believes it is costs nothing to look at. This returns what to ADD to
+/// the requested delta; it does NOT touch the debt.
+///
+/// AN AXIS THE JUMP DOES NOT MOVE IS NOT CORRECTED. Measured in the raw commands of a
+/// frame: a jump with dx = 0 came out with vx = 1 because the debt leaked in as movement,
+/// 0.05 units of drift each, and over 187 jumps that is 9.3 units — the very drift being
+/// chased. That axis keeps its debt for the next jump that does move it.
+///
+/// WHY THIS IS SPLIT FROM THE BOOKKEEPING, and the previous attempt was not: folding both
+/// into the params function (`ramp_params_salto_con_deuda`) makes the accounting assume
+/// the ramp it just computed is the one that gets emitted. In `move_una` it is often not:
+/// the duration ladder replaces t1 and recomputes the rates afterwards, and the soft start
+/// splits the jump into a priming unit plus a long ramp. On top of that the jump's ramp is
+/// computed TWICE per transport — once to decide about priming, once to emit — so a
+/// function that mutated the debt would count every jump twice. Taking and recording
+/// separately lets the caller record what it actually emitted, however it got there.
+#[no_mangle]
+pub extern "C" fn vx_debt_take(dx: i32, dy: i32, q: u32, out_ax: *mut i32, out_ay: *mut i32) {
+    let f = 1i32 << q;
+    let a = |r: i32| if r >= 0 { (r * f + 500) / 1000 } else { (r * f - 500) / 1000 };
+    let ax = if dx == 0 { 0 } else { a(DEUDA_X.load(Ordering::Relaxed)) };
+    let ay = if dy == 0 { 0 } else { a(DEUDA_Y.load(Ordering::Relaxed)) };
+    unsafe {
+        if !out_ax.is_null() { *out_ax = ax; }
+        if !out_ay.is_null() { *out_ay = ay; }
+    }
+}
+
+/// ONE EMITTED RAMP'S SHARE OF THE LEDGER: what it was asked for, minus what it travels.
+///
+/// Call it once per ramp actually written to the bus, with that ramp's own slice of the
+/// request — a jump split into a priming unit and a long ramp calls it twice, and the two
+/// slices add up to the whole jump. The travel is computed HERE, with `recorrido_mil`, and
+/// not by the caller: that number carries the ramp's physical 2.5-count tail, and a second
+/// copy of the rule in C is exactly the kind of divergence this file keeps paying for.
+#[no_mangle]
+pub extern "C" fn vx_debt_record(dx: i32, dy: i32, q: u32, vx: i32, vy: i32, t1: u32) {
+    let f = 1i32 << q;
+    let t = t1 as u16;
+    DEUDA_X.store((DEUDA_X.load(Ordering::Relaxed) + dx * 1000 / f - recorrido_mil(vx, t))
+                      .clamp(-4000, 4000), Ordering::Relaxed);
+    DEUDA_Y.store((DEUDA_Y.load(Ordering::Relaxed) + dy * 1000 / f - recorrido_mil(vy, t))
+                      .clamp(-4000, 4000), Ordering::Relaxed);
 }
 
 /// Tirar la deuda de verdad. La usa el RE-CERO, que si devuelve el haz a un punto conocido:
@@ -1357,10 +1377,17 @@ mod deriva {
     /// LA PRECISION LA DICE EL FICHERO. Estaba escrita a mano como 16 en cinco sitios, y
     /// al regenerar la tabla en 1/256 el banco reventaba por desbordamiento en vez de
     /// avisar de que estaba leyendo otra unidad.
+    /// De donde sale la geometria. `VX_GEOM` la cambia sin tocar el banco, que es lo que
+    /// deja medir una imagen concreta —el logo de Star Wars, por ejemplo— con el mismo
+    /// instrumento con el que se midio el frame del VecFever.
+    fn fichero() -> std::string::String {
+        std::env::var("VX_GEOM").unwrap_or_else(|_|
+            "/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/sdkplay/src/vf_geom_mh.h"
+                .into())
+    }
+
     fn qbits() -> u32 {
-        let t = std::fs::read_to_string(
-            "/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/sdkplay/src/vf_geom_mh.h")
-            .unwrap_or_default();
+        let t = std::fs::read_to_string(fichero()).unwrap_or_default();
         t.lines()
             .find_map(|l| l.trim().strip_prefix("#define VF_GEOM_QBITS "))
             .and_then(|v| v.trim().parse().ok())
@@ -1368,9 +1395,7 @@ mod deriva {
     }
 
     fn geometria() -> std::vec::Vec<(i32, i32, i32, i32)> {
-        let t = std::fs::read_to_string(
-            "/Users/daniel/projects/vectrex-arcade-private/hardware/uvm2/sdkplay/src/vf_geom_mh.h")
-            .unwrap_or_default();
+        let t = std::fs::read_to_string(fichero()).unwrap_or_default();
         let mut v = std::vec::Vec::new();
         for l in t.lines() {
             let l = l.trim();
@@ -1380,6 +1405,95 @@ mod deriva {
             if n.len() >= 4 { v.push((n[0], n[1], n[2], n[3])); }
         }
         v
+    }
+
+    /// UNA PASADA POR LA GEOMETRIA, con el salto absorbiendo la deuda o sin absorberla.
+    ///
+    /// Las dos variantes existen en el arbol y hasta ahora solo una se medía: el banco
+    /// llamaba a `ramp_params_salto_con_deuda` mientras el cartucho llamaba, por
+    /// `vx_ramp_params_salto_qn`, a `ramp_params_q` a secas. O sea que esto medía el
+    /// modelo de diseño y la placa corría otro. `con_deuda` elige cual, con todo lo demas
+    /// igual, que es la unica forma de que la comparacion signifique algo.
+    ///
+    /// Devuelve (mediana, peor, deuda peor) del error de posicion del haz al TERMINAR cada
+    /// trazo, en unidades de dispositivo.
+    fn pasada(g: &[(i32, i32, i32, i32)], q: u32, con_deuda: bool) -> (f64, f64, i32) {
+        DEUDA_X.store(0, Ordering::Relaxed);
+        DEUDA_Y.store(0, Ordering::Relaxed);
+        let f = (1u32 << q) as f64;
+        let (mut bx, mut by) = (0.0f64, 0.0f64);    // donde esta el haz, en unidades
+        let (mut px_, mut py_) = (0.0f64, 0.0f64);  // donde CREE el dibujante que esta
+        let mut errores: std::vec::Vec<f64> = std::vec::Vec::new();
+        let mut peor = 0.0f64;
+        let mut peor_deuda = 0i32;
+        let mut satur = 0usize;
+        let mut saltos = 0usize;
+        for (x0, y0, x1, y1) in g.iter() {
+            let (jx4, jy4) = (*x0 - (px_ * f).round() as i32,
+                              *y0 - (py_ * f).round() as i32);
+            if jx4 != 0 || jy4 != 0 {
+                let (mut ax, mut ay) = (0i32, 0i32);
+                if con_deuda { vx_debt_take(jx4, jy4, q, &mut ax, &mut ay); }
+                let (mut vx, mut vy, mut t1) =
+                    ramp_params_q(jx4 + ax, jy4 + ay, TOPE_DAC, q);
+                /* THE DURATION LADDER, which `move_una` applies to every jump and this
+                 * bench did not model. It replaces t1 with the first rung of {8, 18, 31}
+                 * that fits under the rate cap and recomputes the rates for it — so the
+                 * ramp that reaches the bus is NOT the one the params function chose, and
+                 * a bench that skips this measures a jump the board never emits. */
+                let m = (jx4 + ax).abs().max((jy4 + ay).abs()) as i64;
+                for r in [8u16, 18, 31] {
+                    if m * escala() as i64 <= 120i64 * (1i64 << q) * r as i64 {
+                        if r != t1 {
+                            t1 = r;
+                            let (mut nx, mut ny) = (0i32, 0i32);
+                            vx_ramp_params_con_t1(jx4 + ax, jy4 + ay, 1i32 << q,
+                                                  t1 as u32, &mut nx, &mut ny);
+                            vx = nx.clamp(-128, 127) as i8;
+                            vy = ny.clamp(-128, 127) as i8;
+                        }
+                        break;
+                    }
+                }
+                if vx.abs() == 127 || vy.abs() == 127 { satur += 1; }
+                saltos += 1;
+                bx += vx as f64 * t1 as f64 / 160.0;
+                by += vy as f64 * t1 as f64 / 160.0;
+                if con_deuda {
+                    vx_debt_record(jx4, jy4, q, vx as i32, vy as i32, t1 as u32);
+                }
+            }
+            px_ = *x0 as f64 / f; py_ = *y0 as f64 / f;
+            let (vx, vy, t1) = ramp_params_chain_qn(x1 - x0, y1 - y0, q);
+            bx += vx as f64 * t1 as f64 / 160.0;
+            by += vy as f64 * t1 as f64 / 160.0;
+            px_ = *x1 as f64 / f; py_ = *y1 as f64 / f;
+            let e = bx - px_;
+            errores.push(e);
+            if e.abs() > peor.abs() { peor = e; }
+            let d = DEUDA_X.load(Ordering::Relaxed);
+            if d.abs() > peor_deuda.abs() { peor_deuda = d; }
+            let _ = by;
+        }
+        errores.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        std::println!("      {saltos} jumps, {satur} ramps pinned at the DAC's limit");
+        (errores[errores.len() / 2], peor, peor_deuda)
+    }
+
+    /// LAS DOS VARIANTES DEL SALTO, UNA AL LADO DE LA OTRA, sobre la misma geometria.
+    #[test]
+    fn el_salto_absorbe_o_no() {
+        let _t = crate::emit::TURNO.lock().unwrap_or_else(|e| e.into_inner());
+        knobs_como_el_cartucho();
+        T1_EXTRA_Q8.store(0, Ordering::Relaxed);
+        let q = qbits();
+        let g = geometria();
+        if g.is_empty() { return; }
+        let (m0, p0, d0) = pasada(&g, q, false);
+        let (m1, p1, d1) = pasada(&g, q, true);
+        std::println!("  {} segmentos, q={q}", g.len());
+        std::println!("  salto SIN deuda (lo que corre hoy): X mediana {m0:+.3}  peor {p0:+.3}  deuda peor {d0:+}");
+        std::println!("  salto CON deuda (el modelo entero):  X mediana {m1:+.3}  peor {p1:+.3}  deuda peor {d1:+}");
     }
 
     #[test]

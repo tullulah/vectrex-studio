@@ -49,6 +49,11 @@ enum {
     SYS_PLAY_MUSIC    = 21,
     SYS_STOP_MUSIC    = 22,
     SYS_PLAY_SFX      = 23,
+    /* Voice 0's cursor as a frame number at `fps`, matching the cartridge BIOS. A game
+     * streaming into a ring buffer needs it to know how far the injector has got; asking
+     * with fps = the sample's own rate gives the cursor in SAMPLES. It was missing here,
+     * so on this target the call returned whatever was in r0 and the refill ran blind. */
+    SYS_SAMPLE_POS    = 10,
     SYS_RASTER_TEXT   = 26,   /* (r0:x, r1:y, r2:str, r3:len) — see sdk_rp2350.c */
     SYS_DRAW_GAPPED   = 27,   /* (r0:dx, r1:dy, r2:gaps, r3:n) — one ramp, BLANK toggled inside */
     SYS_MOVE_Q4       = 28,   /* (r0:dx, r1:dy) en 1/16 de unidad: VPy en subunidades */
@@ -412,7 +417,18 @@ void uvm2_svc_dispatch(uint32_t *frame)
 
 #endif /* UVM2_NO_DRAW */
 
+    case SYS_SAMPLE_POS: {
+        extern unsigned uvm2_smp_pos(unsigned voice, unsigned fps);
+        frame[0] = uvm2_smp_pos(0u, r0);
+        break;
+    }
+
     case SYS_PSG_WRITE:
+        /* Register 7 is the mixer. The sample injector composes its own channel over
+         * what it believes the mixer to be, so a game driving the PSG directly has to
+         * say -- see uvm2_audio_note_mixer. */
+        if (r0 == 7u) { extern void uvm2_smp_note_mixer(uint8_t);
+                        uvm2_smp_note_mixer((uint8_t)r1); }
         UVM2_PSG(r0, r1);
         break;
 

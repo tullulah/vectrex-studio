@@ -39,6 +39,12 @@ static inline void sys_set_intensity(int b)  { register int r0 __asm__("r0")=b; 
 static inline void sys_psg_write(int reg,int val){ register int r0 __asm__("r0")=reg; register int r1 __asm__("r1")=val; __asm__ volatile("svc #5" : "+r"(r0) : "r"(r1) : "memory"); }
 static inline int  sys_read_buttons(void)    { register int r0 __asm__("r0"); __asm__ volatile("svc #7"  : "=r"(r0) :: "memory"); return r0; }
 static inline int  sys_read_axes(void)       { register int r0 __asm__("r0"); __asm__ volatile("svc #13" : "=r"(r0) :: "memory"); return r0; }
+/* SYS_SAMPLE_POS (10): how far voice 0's cursor has got, expressed as a frame number
+ * at the `fps` asked for. Asking with fps = the sample's own rate gives the cursor in
+ * SAMPLES, which is what a game streaming into a ring buffer needs to know. It goes by
+ * svc even on the cartridge -- like sound, music and raster text -- because only the
+ * DRAW path uses the BIOS table. */
+static inline int sys_sample_pos(int fps){ register int r0 __asm__("r0")=fps; __asm__ volatile("svc #10" : "+r"(r0) :: "memory"); return r0; }
 static inline void sys_play_music(const void *p){ register const void *r0 __asm__("r0")=p; __asm__ volatile("svc #21" : "+r"(r0) :: "memory"); }
 static inline void sys_stop_music(void)      { __asm__ volatile("svc #22" ::: "r0","r1","r2","r3","memory"); }
 static inline void sys_play_sfx(const void *p){ register const void *r0 __asm__("r0")=p; __asm__ volatile("svc #23" : "+r"(r0) :: "memory"); }
@@ -104,6 +110,12 @@ struct uvm2_api {
     void (*stop_sample)(unsigned);
     int  (*sample_playing)(unsigned);
     const void *(*sample_bundle_entry)(unsigned);
+    /* version 3: ask the BIOS for the REAL analog axes. `uvm2_read_axes` otherwise
+     * returns a digital verdict scaled to the ends of the range (-127, 0, +127), which
+     * is all a yoke game like Star Wars ever saw on this board. It is a request rather
+     * than the default because core 1 reads the axes every frame whether the game looks
+     * at them or not, and the successive-approximation read disturbs the PSG. */
+    void (*set_analog)(int);
 };
 #define UVM2_API        ((const struct uvm2_api *)0x20077000u)
 #define UVM2_API_MAGIC  0x50415356u   /* 'VSAP' */
@@ -179,20 +191,51 @@ const void *uvm2_smp_bundle_entry(unsigned idx);
  * of everything the builder does, and 11057 M33 cycles per path. That number lumps
  * two different suspects: the port's own walk over the game's vector RAM, and the
  * three calls this function makes into the SDK. On this board those three are
- * INDIRECT calls through the BIOS table at 0x20077000, from game code in PSRAM into
- * BIOS code in flash — two XIP regions per path, which the .um2 does not have
- * because there the SDK is inside the image. Splitting them says whether that
- * structural difference is the cost or a red herring.
+ * INDIRECT calls through the BIOS table at 0x20077000, and an older note here said
+ * they land in BIOS code in flash — a second XIP region per path. MEASURED AND
+ * UNTRUE (2026-09-19, starwars): every pointer in that table reads back as
+ * 0x2000xxxx, i.e. internal SRAM, so the callee side is not XIP at all. What IS in
+ * PSRAM is the caller: this file and the port's draw path link into .game_rom.
+ *
+ * So the split worth having is three ways, and that is what the two counter pairs
+ * below give when the port also times its call to us:
+ *   port's span  minus  uvm2_us_draw  = the caller-side conversions (a port that
+ *                                       hands us floats pays soft-float here)
+ *   uvm2_us_draw minus  uvm2_us_api   = VS_Q4 and this function's own body
+ *   uvm2_us_api                       = the BIOS list builder, in SRAM
  *
  * Off unless the build asks (-DUVM2_MIDE_DIBUJO). The timer reads are APB accesses
- * and there are two per call, so with 400 paths a frame they add tens of
- * microseconds of their own: the figure is an upper bound, not a hairline. */
+ * and there are four per call once both pairs are on, so with 400 paths a frame they
+ * add tens of microseconds of their own: the figure is an upper bound, not a
+ * hairline. (Measured on starwars: turning one pair on moved a 13 ms span by less
+ * than its sample-to-sample spread at ~650 paths a frame.) */
 #ifdef UVM2_MIDE_DIBUJO
 volatile uint32_t uvm2_us_draw;    /* accumulated microseconds inside this function */
 volatile uint32_t uvm2_n_draw;     /* calls counted, to get the per-path cost */
+/* Of those, the three calls into the BIOS builder, one counter each. They are not the
+ * same animal: the intensity call is usually a no-op (a display list rarely changes
+ * brightness between segments), the move is a blanked ramp that is often zero-length
+ * (connected geometry), and the delta is the lit stroke that always has to happen. A
+ * single lumped figure cannot tell "the builder is expensive" from "we are asking it
+ * for two ramps per segment when one would do". */
+volatile uint32_t uvm2_us_api_i, uvm2_us_api_m, uvm2_us_api_d;
+volatile uint32_t uvm2_n_api;
 #define DRAW_NOW() (*(volatile uint32_t *)0x400B000CU)   /* TIMER0 TIMELR, 1 MHz */
 #endif
 
+/* THIS ONE RUNS FROM SRAM ON THE CART. It is called once per segment -- a thousand
+ * times a frame in a dense port -- and it is the last piece of the draw path still
+ * linked into .game_rom, which on the cartridge is the PSRAM XIP window. An XIP hit
+ * is not an SRAM access, however good the hit rate is. rp2350_start.s copies
+ * .sram_text before main(); on the .um2 the whole image already runs from SRAM, so
+ * the attribute is empty there. */
+#if defined(VPY_DUAL_CORE) && !defined(UVM2_PICO_RUNTIME)
+#define SDK_SRAM_TEXT __attribute__((section(".sram_text")))
+#else
+#define SDK_SRAM_TEXT
+#endif
+
+SDK_SRAM_TEXT
 void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
 {
 #ifdef UVM2_MIDE_DIBUJO
@@ -203,9 +246,30 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
     uvm2_cuenta_entrada++;   /* DIAGNOSTICO: cuantas llamadas de dibujo ENTRAN al SDK */
 #endif
 #ifdef VPY_DUAL_CORE
+    {
+#ifdef UVM2_MIDE_DIBUJO
+    /* The arguments are evaluated OUTSIDE this span on purpose: VS_Q4 is the caller's
+     * own arithmetic, and charging it to the BIOS would hide it. */
+    int i_ = (int)b;
+    int ax_ = VS_Q4(x0), ay_ = VS_Q4(y0);
+    int dx_ = VS_Q4(x1) - ax_, dy_ = VS_Q4(y1) - ay_;
+    uint32_t ta_ = DRAW_NOW();
+    UVM2_API->draw_intensity(i_);
+    uint32_t tb_ = DRAW_NOW();
+    UVM2_API->draw_move_abs_q4(ax_, ay_);
+    uint32_t tc_ = DRAW_NOW();
+    UVM2_API->draw_delta_q4(dx_, dy_);
+    uint32_t td_ = DRAW_NOW();
+    uvm2_us_api_i += tb_ - ta_;
+    uvm2_us_api_m += tc_ - tb_;
+    uvm2_us_api_d += td_ - tc_;
+    uvm2_n_api++;
+#else
     UVM2_API->draw_intensity((int)b);
     UVM2_API->draw_move_abs_q4(VS_Q4(x0), VS_Q4(y0));
     UVM2_API->draw_delta_q4(VS_Q4(x1) - VS_Q4(x0), VS_Q4(y1) - VS_Q4(y0));
+#endif
+    }
 #else
     uvm2_draw_intensity((int)b);
     uvm2_draw_move_abs_q4(VS_Q4(x0), VS_Q4(y0));
@@ -243,6 +307,28 @@ uint8_t v_readButtons(void)
     currentButtonState = (uint8_t)sys_read_buttons();
 #endif
     return currentButtonState;
+}
+
+/* A GAME THAT STEERS WITH THE STICK SAYS SO, ONCE, BEFORE IT READS AN AXIS.
+ *
+ * Without it the axes come back as -127, 0 or +127 and nothing between: the BIOS's
+ * `s_analog` defaults to off and only the .um2 runtime ever set it, so on the cartridge
+ * every yoke game got a digital verdict scaled to the ends. Measured on the board with
+ * Star Wars in gameplay -- `uvm2_cached_axes` read 0x7f000000, 0x00000000, 0x81000000
+ * and never anything else.
+ *
+ * Harmless on an older BIOS: the table grew at the end, so the version check leaves the
+ * game exactly as it was rather than calling into whatever the RAM held. */
+/* Voice 0's cursor, as a frame count at `fps`. See sys_sample_pos. */
+int v_samplePos(int fps) { return sys_sample_pos(fps); }
+
+void v_setAnalog(int on)
+{
+#ifdef VPY_DUAL_CORE
+    if (UVM2_API->version >= 3) UVM2_API->set_analog(on);
+#else
+    (void)on;   /* the .um2 runtime turns it on in uvm2_svc.c */
+#endif
 }
 
 void v_readJoystick1Analog(void)

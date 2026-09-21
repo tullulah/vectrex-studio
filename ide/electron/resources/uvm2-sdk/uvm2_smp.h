@@ -210,6 +210,12 @@ int uvm2_smp_needs_latch(void);
  *  constant level set by the volume, which is the whole trick. */
 uint8_t uvm2_smp_mixer(void);
 
+/** Tell the injector what the GAME's mixer is, so its channel composes over the game's
+ *  own instead of over a constant. Called for every register-7 write that passes
+ *  through the SDK; a game that plays a .vmus does not need it (the player's shadow
+ *  wins) and a game that drives the PSG itself cannot do without it. */
+void uvm2_smp_note_mixer(uint8_t val);
+
 /* Samples put into the last frame's list. Readable over SWD and surfaced in the
  * stats: zero with a voice active means the injection is NOT happening — and "no
  * sound" and "not running" are two different faults. */
