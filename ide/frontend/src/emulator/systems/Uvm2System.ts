@@ -978,6 +978,13 @@ export class Uvm2System implements ISystem, IBus {
       this.busCycle++;
       // Integrate one bus cycle's worth of beam movement.
       this.via.tick();
+      /* DIAGNOSTICO (SONDA_CB2): cuantas veces conmuta el blanking por el registro de
+       * desplazamiento. El texto barrido lo usa para apagar entre letras; si esto sale 0
+       * el emulador no reproduce ese camino y no sirve para validarlo. */
+      if ((globalThis as any).__SONDA_CB2) {
+        const g = globalThis as any;
+        if (this.via.via_cb2s !== g.__cb2prev) { g.__cb2prev = this.via.via_cb2s; g.__cb2n = (g.__cb2n || 0) + 1; }
+      }
       this.beam.tick(
         this.via.via_acr, this.via.via_pcr, this.via.via_ca2,
         this.via.via_cb2h, this.via.via_cb2s, this.via.via_t1pb7,

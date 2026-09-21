@@ -31,3 +31,19 @@ bus = ["dep:vectrex-bus"]
 [profile.release]
 panic = "abort"
 opt-level = "s"
+
+# EL MODELO DE RAMPA AQUI SE QUEDA EN "s", Y NO ES UN DESCUIDO (2026-09-21).
+#
+# El firmware del cartucho sube `vectrex-draw` a opt-level 3
+# (hardware/debug_cart/firmware/Cargo.toml) y esa anulacion vale solo para SU enlace:
+# cuando se construye una .um2, la raiz del build es ESTA caja y el modelo vuelve a
+# compilarse en "s". Parece un despiste y se probo a igualarlo.
+#
+# MEDIDO: no compensa AQUI. En el cartucho la subida valio -3,2% (16.776 -> 16.233 ns por
+# trazo) y su propia nota dice "no esperes mas de aqui" — es aritmetica entera sin nada que
+# desenrollar. Pero la imagen crece, y una .um2 vive en 496 KB: con opt-level 3,
+# aae_tomcatsw —que compilaba con 448 bytes de margen— DEJA DE CABER. Un 3% de una parte
+# del llenado no vale un puerto que deja de construirse.
+#
+# Cuando los .um2 de doble nucleo dejen de cargar el LISTA_BUF muerto (98 KB, ver
+# UVM2_LISTA_MAX en uvm2.mk) el margen sobrara y esto se puede volver a igualar.

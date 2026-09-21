@@ -269,7 +269,49 @@ pub unsafe fn push(word: u32) {
 // construye el frame siguiente mientras el anterior sale por el bus. Dos buferes: el que
 // se llena y el que el DMA esta leyendo. Lo que se empuja FUERA de una lista (mandos, PSG)
 // sigue por los lotes pequenos, en el momento.
-pub const LISTA_MAX: usize = 12288;
+// CUANTO CABE EN LA LISTA, POR IMAGEN — y por que es una perilla y no una constante.
+//
+// Son dos buferes de palabras de 32 bits, asi que 12288 son 98 KB de RAM. En una imagen
+// .um2 (496 KB, todo el juego dentro) eso es una quinta parte, y compite con la OTRA
+// lista: `s_cmds` de uvm2_draw.c, que a 3 bytes por comando y dos buferes cuesta 6 bytes
+// por comando de tope. Las dos guardan LO MISMO —un comando es una palabra de bus— y
+// hasta aqui se dimensionaban por separado.
+//
+// LAS DOS NO SE DESBORDAN IGUAL, Y ESO ES LO QUE DECIDE A CUAL SE LE DA LA RAM:
+//
+//   - `s_cmds` lleno = GEOMETRIA PERDIDA. El resto del frame no se emite y no se ve como
+//     un error, se ve como un dibujo que se corta a medias.
+//   - esta lista llena = `lista_disparar` dispara lo acumulado y sigue (LISTA_DESBORDES
+//     lo cuenta). Se pierde el solapamiento con el frame siguiente, nada mas, y en la
+//     UVM2 quien lo paga es core 1, que no tiene otra cosa que hacer.
+//
+// O sea que una imagen apretada hace bien en bajar ESTA y gastarlo en el tope de comandos.
+// esb es el caso: 1136 segmentos por frame = 12498 comandos medidos, y con las dos a
+// 12288 no cabia. Por defecto se queda como estaba — el firmware del cartucho propio, que
+// enlaza esto como rlib y tiene RAM de sobra, no cambia.
+//
+//     cargo build ... con VECTREX_LISTA_MAX=8192 en el entorno
+//
+// (la .um2 lo pasa desde el Makefile del juego; ver UVM2_LISTA_MAX en uvm2.mk)
+const fn lista_max() -> usize {
+    match option_env!("VECTREX_LISTA_MAX") {
+        None => 12288,
+        Some(s) => {
+            let b = s.as_bytes();
+            let mut i = 0usize;
+            let mut n = 0usize;
+            while i < b.len() {
+                let c = b[i];
+                assert!(c >= b'0' && c <= b'9', "VECTREX_LISTA_MAX: solo digitos");
+                n = n * 10 + (c - b'0') as usize;
+                i += 1;
+            }
+            assert!(n >= 64, "VECTREX_LISTA_MAX: por debajo de 64 la lista no compensa el lote");
+            n
+        }
+    }
+}
+pub const LISTA_MAX: usize = lista_max();
 static mut LISTA_BUF: [[u32; LISTA_MAX]; 2] = [[0; LISTA_MAX]; 2];
 static LISTA_IDX:  AtomicU32 = AtomicU32::new(0);
 static LISTA_FILL: AtomicU32 = AtomicU32::new(0);

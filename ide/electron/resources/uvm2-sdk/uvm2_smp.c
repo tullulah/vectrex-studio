@@ -164,7 +164,14 @@ struct voice {
 };
 
 static struct voice s_voice[UVM2_SMP_VOICES];
-static unsigned     s_active;
+/* NO ES STATIC, Y ESA ES LA GRACIA. `uvm2_smp_active()` se consulta en el camino mas
+ * caliente del dibujo —`vxs_emit`, en cada T1CL: 1.844 veces por frame en esb— y vivia
+ * aqui, en otra unidad de compilacion, o sea una llamada de verdad cada vez para leer un
+ * entero. Publicandolo, el .h puede ofrecer la consulta como `static inline` y el test se
+ * inlinea en quien pregunta. El nombre lleva el prefijo del modulo porque ya no es suyo
+ * a solas. */
+unsigned            uvm2_smp_s_active;
+#define s_active uvm2_smp_s_active
 
 /* Cycles elapsed since the last emitted sample. It is a DEBT and not an absolute
  * position: that way the frame boundary needs no signed subtraction, and what is
@@ -320,7 +327,8 @@ int uvm2_smp_playing(unsigned voice)
     return (voice < UVM2_SMP_VOICES) ? s_voice[voice].active : 0;
 }
 
-int uvm2_smp_active(void) { return s_active != 0u; }
+/* `uvm2_smp_active()` es ahora `static inline` en uvm2_smp.h sobre el contador de
+ * arriba; aqui ya no hay definicion fuera de linea que la contradiga. */
 
 unsigned uvm2_smp_pos(unsigned voice, unsigned fps)
 {

@@ -96,6 +96,28 @@ ifeq ($(UVM2_PIO_STREAM),1)
 export UVM2_PIO_STREAM := 1
 endif
 
+# EL TAMAÑO DE LA LISTA DEL STREAM (LISTA_BUF de vectrex-bus), en palabras y por juego.
+# Por defecto 12288, que son 98 KB de los 496 de la imagen.
+#
+# OJO, Y ESTO VALE 98 KB: EN DOBLE NUCLEO ESA LISTA NO SE USA. Lo unico que la abre en
+# todo el SDK es `vbus_lista_begin()` en uvm2_draw.c, y esa llamada vive dentro del #else
+# de `#ifdef UVM2_DUAL_CORE` — o sea, SOLO en el camino de un nucleo (y en la BIOS del
+# cartucho propio, que tiene su propio enlace a bus::lista_begin). Con UVM2_DUAL_CORE=1,
+# que es el defecto desde 2026-08-12, `EN_LISTA` se queda en cero, `push` va por los lotes
+# de 64 palabras y LISTA_BUF no se escribe NUNCA: son 98 KB de SRAM muertos en la imagen
+# de cada juego de doble nucleo.
+#
+# Asi que un juego apretado en doble nucleo la baja al minimo (64) y se gasta esos 98 KB
+# en lo que si dibuja. Un juego de UN nucleo NO puede: alli la lista es el transporte, y
+# si se desborda `lista_disparar` la suelta a media construccion y deja el haz parado
+# donde le pille. Medir antes de bajarla: una palabra por comando, y DOS si el comando
+# lleva retardo (ver uvm2_exec en uvm2_bus.c).
+#
+# Va por el ENTORNO: lo lee uvm2_pico.cmake y se lo pasa a cargo.
+ifneq ($(UVM2_LISTA_MAX),)
+export UVM2_LISTA_MAX := $(UVM2_LISTA_MAX)
+endif
+
 # Enciende la PSRAM sin usarla. Aisla "el chip activo" de "la lista vive alli".
 # Retardo artificial entre frames, en us. Separa el TIEMPO de la PSRAM. Ver uvm2_draw.c.
 ifneq ($(UVM2_RETARDO_US),)
@@ -144,14 +166,34 @@ UVM2_CFLAGS += -DUVM2_ROMZIP_MAX=$(UVM2_ROMZIP_MAX)
 # vieja (build_uvm2_pio/CMakeCache.txt lo lleva) y se perdio por el camino.
 #
 # Aqui la PSRAM esta en su mejor caso: se escribe una vez y se lee una vez, sin nada que
-# dependa del tiempo — justo lo contrario de la lista de comandos, que por eso no se mueve.
-# Salvo que el build diga UVM2_ROMZIP_IN_PSRAM=0: el EMULADOR no tiene PSRAM, y con el zip
-# alli el juego arranca con dk_rom_error=1 y pinta la X de 'falta el romset' (medido).
+# dependa del tiempo.
+#
+# EL EMULADOR DEL IDE YA TIENE PSRAM (Uvm2System.ts, desde el 2026-09-15: los 8 MB por la
+# ventana XIP y por el alias sin cache, con el QMI en modo directo contestando el READ ID).
+# Esta nota decia lo contrario y mandaba construir con UVM2_ROMZIP_IN_PSRAM=0 para iterar
+# alli — de cuando era verdad que el zip en PSRAM arrancaba con dk_rom_error=1 y la X de
+# 'falta el romset'. Ya no: la imagen que se prueba en el emulador es la que va a la
+# consola. El interruptor sigue existiendo para bisecar.
 ifneq ($(UVM2_ROMZIP_IN_PSRAM),0)
 UVM2_CFLAGS += -DUVM2_ROMZIP_IN_PSRAM=1
 endif
 endif
 endif
+
+# BANDERAS QUE SON SOLO DE LA .um2, Y NO DEL CARTUCHO PROPIO.
+#
+# `rp2350-cart` (abajo) construye con los MISMOS UVM2_CFLAGS que la .um2 — que es lo que
+# garantiza que la lista de comandos sea la misma en los dos sitios— pero hay ajustes que
+# solo tienen sentido en una imagen que vive entera en 496 KB de SRAM, y que en el
+# cartucho propio son una PERDIDA. El caso claro es -DAAE_DISPATCH_NOINLINE: ahorra ~15 KB
+# de codigo y en el cartucho lleva al juego de 45 fps a 27 (medido, ver aae_memdispatch.h).
+# Hasta ahora se ponia en UVM2_CFLAGS y el cartucho se lo comia entero sin que nadie lo
+# dijera. Es el hermano de UVM2_SRCS_DROP, que ya hacia esto con las FUENTES.
+#
+#     UVM2_SOLO_UM2 = -DAAE_DISPATCH_NOINLINE
+#
+UVM2_SOLO_UM2 ?=
+UVM2_CFLAGS += $(UVM2_SOLO_UM2)
 
 UVM2_CFLAGS_CLEAN = $(filter-out -DVPY_DUAL_CORE -Wa$(,)--defsym$(,)DUAL_CORE_FLAG=0x44430001,\
                       $(UVM2_CFLAGS)) -I$(UVM2_SDK)
@@ -308,7 +350,7 @@ uvm2-clean:
 RP2350_BUILD   ?= build_rp2350
 RP2350_LDFLAGS ?= -nostdlib -Wl,--gc-sections -Wl,-T,$(RP2350_SDK)/rp2350_game_ram.ld \
                   -Wa,--defsym,DUAL_CORE_FLAG=0x44430001
-RP2350_CART_CFLAGS = $(UVM2_CFLAGS_CLEAN) -DVPY_DUAL_CORE
+RP2350_CART_CFLAGS = $(filter-out $(UVM2_SOLO_UM2),$(UVM2_CFLAGS_CLEAN)) -DVPY_DUAL_CORE
 
 rp2350-cart $(UVM2_NAME)_rp2350: $(UVM2_DEPS) | $(RP2350_BUILD)
 	$(UVM2_LINKER) $(RP2350_CART_CFLAGS) $(RP2350_LDFLAGS) \

@@ -683,9 +683,21 @@ pub fn draw_line_patterned_seq<S: BusSink>(
     sink.emit(REG_T1_HI, (t1 >> 8) as u8, k.beam_on_q8);
 
     let mut cur: u16 = 0;
-    // Encendido hasta el primer hueco. Si el primer hueco empieza en 0, no se enciende.
+    /* LOS HUECOS VAN EN CUENTAS DE RAMPA, Y ESAS SON CICLOS DE E CRUDOS. `k.e()` escala
+     * por `e6809_q8` —64 en el UVM2, no 256— asi que pasar por ahi una posicion de T1 la
+     * deja en un cuarto: todo el patron se apelotona en el primer tramo de la rampa. Es
+     * la misma piedra que ya esta anotada en el salto largo, y se vio en consola con el
+     * texto de esb: las letras amontonadas en una esquina. `wait_ramp` lo confirma —
+     * `d = t1 + extra/256`, o sea una cuenta de T1 = un ciclo de bus. */
+    // POR `haz`, NO POR EL PCR A PELO. Esto escribia REG_CNTL directamente, y con el
+    // idioma de serie —el haz por el registro de desplazamiento, HAZ_POR_SR arranca en
+    // 1— esas escrituras NO HACEN NADA: el barrido salia entero encendido, huecos
+    // incluidos, y con el los saltos entre barridos. Visto en consola con el texto de
+    // esb (2026-09-21): filas de puntos unidas por un abanico de rayas saliendo de un
+    // punto. Nadie lo habia pillado porque desde que el idioma SR es el de serie nadie
+    // habia pasado por aqui — lo dice la nota de uvm2_draw_delta_patterned.
     if huecos[0].0 > 0 {
-        sink.emit(REG_CNTL, 0xEE, k.e(huecos[0].0 as u32));
+        haz(sink, true, huecos[0].0 as u32 * E);
         sink.beam_lit();
         cur = huecos[0].0;
     }
@@ -694,12 +706,12 @@ pub fn draw_line_patterned_seq<S: BusSink>(
         let fin = b.min(t1);
         let siguiente = huecos.get(i + 1).map(|g| g.0).unwrap_or(t1);
         // apagado durante el hueco
-        sink.emit(REG_CNTL, 0xCE, k.e((fin.saturating_sub(cur)) as u32));
+        haz(sink, false, fin.saturating_sub(cur) as u32 * E);
         sink.beam_blanked();
         cur = fin;
         // y encendido hasta el siguiente hueco (o hasta el final)
         if siguiente > cur {
-            sink.emit(REG_CNTL, 0xEE, k.e((siguiente - cur) as u32));
+            haz(sink, true, (siguiente - cur) as u32 * E);
             sink.beam_lit();
             cur = siguiente;
         }
@@ -707,7 +719,92 @@ pub fn draw_line_patterned_seq<S: BusSink>(
     // Lo que quede de rampa, sondeando como siempre: el asentamiento del final es lo que
     // convierte los puntos brillantes en los vertices, y ahi no se cuenta, se pregunta.
     sink.wait_ramp(t1.saturating_sub(cur), k.e(4) as i32 + k.blank_settle_q8);
-    sink.emit(REG_CNTL, 0xCE, 0);
+    haz(sink, false, 0);
+    sink.beam_blanked();
+}
+
+/// UNA RECTA CUYO BLANK LO DICTA EL REGISTRO DE DESPLAZAMIENTO: el texto de la BIOS.
+///
+/// `draw_line_patterned_seq` conmuta el haz hueco a hueco por el PCR, y eso son DOS
+/// comandos por hueco. Medido con texto real de esb (634 caracteres, tools/
+/// uvm2_texto_raster.c): 30,4 comandos por caracter, y los huecos son la mayor parte.
+///
+/// La VIA sabe hacerlo sola. Con ACR = 0x98 el registro de desplazamiento esta en modo
+/// 110 -- saca 8 bits a ritmo de Phi2 y para, dejando CB2 (~BLANK) con el ultimo -- asi
+/// que UNA escritura pinta OCHO puntos. Un caracter de 8 puntos de ancho pasa de ~3
+/// comandos por fila a 1, que es exactamente como el Vectrex dibuja su propio texto.
+///
+/// EL TAMAÑO DE LA LETRA NO SE ELIGE AQUI, y hay que saberlo: los 8 desplazamientos duran
+/// 8 ciclos de Phi2 pase lo que pase, asi que el ancho de un caracter lo fija la VELOCIDAD
+/// de la rampa (`vx`). `paso` son las cuentas de T1 entre escrituras y debe valer 8 para
+/// que los puntos salgan seguidos; quien llama elige `vx` para que 8 ciclos sean el ancho
+/// que quiere. Pedir otro tamaño es cambiar `vx`, no `paso`.
+///
+/// El ultimo byte deja CB2 con su bit 0. Se cierra siempre con SR = 0x00: si no, una fila
+/// que acabe en punto encendido deja el haz corriendo hasta la siguiente escritura.
+pub fn draw_line_sr_seq<S: BusSink>(
+    sink: &mut S, vx: i8, vy: i8, t1: u16, k: &Timings, patron: &[u8], paso: u16,
+) {
+    if patron.is_empty() {
+        return draw_line_seq(sink, vx, vy, t1, k);
+    }
+    /* LA Y SE RE-MUESTREA SIEMPRE EN UN BARRIDO, cueste lo que cueste.
+     *
+     * `y_can_skip` dice si el S&H ya sostiene esta velocidad, y para un vector normal es
+     * correcto: dura 20-40 cuentas. Un barrido de texto dura n*paso —hasta 255, o sea
+     * ~168 us contra ~25— y el S&H de Y es un CONDENSADOR: en ese tiempo cae lo bastante
+     * para que la recta salga inclinada. Y como la caida es proporcional a la tension, se
+     * inclina MAS cuanto mas arriba esta el texto, que es exactamente lo que se vio en
+     * consola: abajo recto, arriba muy diagonal, y peor segun sube el scroll.
+     *
+     * Las tres escrituras que cuesta (ORA, abrir mux, cerrarlo) son el precio de que la
+     * linea salga recta. Es la asimetria que la nota de `vxs_y_can_skip` ya senalaba. */
+    /* LA VENTANA DE Y AQUI ES DEMASIADO CORTA, y por eso el llamante la pone antes.
+     *
+     * `y_mux_q8` es fija (4 ciclos de E). El camino normal usa `set_y`, que la escala con
+     * lo LEJOS que tiene que ir la Y (`hold_entre`, ley logaritmica) porque el canal 0 del
+     * mux es un condensador de 10 nF. Un barrido de texto pide vy = 0 justo despues de un
+     * salto grande en Y, y con 4 ciclos el condensador no acaba de descargarse: queda una
+     * velocidad residual y la recta sale INCLINADA — tanto mas cuanto mas alto esta el
+     * texto, porque mas grande fue el salto. Medido en consola: recta en Y=0 y cada vez
+     * mas diagonal segun sube.
+     *
+     * Si el llamante ya dejo la Y puesta (uvm2_draw_barrido_sr llama a `set_y`), esto se
+     * la salta y no la estropea con una ventana corta. */
+    if !sink.y_can_skip(vy) {
+        sink.emit(REG_PORT_A, vy as u8, k.e(2));
+        sink.emit(REG_PORT_B, 0x00, k.y_mux_q8);
+        sink.emit(REG_PORT_B, 0x01, k.e(4));
+        sink.y_held(vy);
+    }
+    sink.emit(REG_PORT_A, vx as u8, k.e(3));
+    emitir_t1cl(sink, t1, 0);
+    sink.emit(REG_T1_HI, (t1 >> 8) as u8, k.beam_on_q8);
+
+    let mut cur: u16 = 0;
+    for &b in patron {
+        if cur >= t1 {
+            break;
+        }
+        let d = paso.min(t1 - cur);
+        /* `paso - 1` Y NO `paso`: el ejecutor gasta 1 + retardo ciclos por comando (ver
+         * uvm2_exec), asi que pedir `paso` de retardo consume `paso + 1` cuentas de
+         * rampa. El patron se adelantaba una cuenta por caracter y el ULTIMO de cada
+         * barrido se caia fuera de la rampa — en el banco se veia como el sexto glifo de
+         * cada grupo de seis degradado. */
+        let hueco = if d > 1 { (d as u32 - 1) * E } else { 0 };
+        sink.emit(REG_SHIFT, b, hueco);
+        cur += d;
+        if b & 1 != 0 { sink.beam_lit(); } else { sink.beam_blanked(); }
+    }
+    /* EL SR = 0x00 NECESITA SUS 8 CICLOS, y con hueco cero no los tiene. Lo dice la nota
+     * de `haz_apagar_y_esperar` en uvm2_draw.c y se vio en consola: escribir cero no apaga
+     * en el acto, el registro tarda 8 desplazamientos en sacarlo por CB2. Si detras va la
+     * pinza del re-cero, el haz sigue vivo mientras los integradores se descargan — y eso
+     * no es una raya, es una CURVA (la descarga es RC). En pantalla, un abanico de curvas
+     * convergiendo en el centro. El mismo hueco que usa el resto del fichero. */
+    sink.wait_ramp(t1.saturating_sub(cur), k.e(4) as i32 + k.blank_settle_q8);
+    sink.emit(REG_SHIFT, 0x00, H_SR_OFF_A_ORA * k.e6809_q8);
     sink.beam_blanked();
 }
 
@@ -759,6 +856,28 @@ mod prueba {
         }
     }
 
+        /* LA PERILLA DEL HAZ ES UN GLOBAL Y LAS PRUEBAS CORREN EN PARALELO.
+     *
+     * Tres pruebas necesitan el idioma del PCR (`HAZ_POR_SR = 0`) y lo ponian sin
+     * restaurarlo, asi que se pisaban entre ellas y con las que esperan el idioma de
+     * serie: la suite fallaba 3 o 4 pruebas segun el orden en que tocara correr. Esto lo
+     * serializa y devuelve el valor al salir. */
+    static PERILLA: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    pub struct Idioma(std::sync::MutexGuard<'static, ()>, u32);
+    impl Idioma {
+        pub fn por_pcr() -> Self { Self::poner(0) }
+        pub fn poner(v: u32) -> Self {
+            let g = PERILLA.lock().unwrap_or_else(|e| e.into_inner());
+            let antes = crate::ramp::HAZ_POR_SR.load(Ordering::Relaxed);
+            crate::ramp::HAZ_POR_SR.store(v, Ordering::Relaxed);
+            Idioma(g, antes)
+        }
+        pub fn cambiar(&self, v: u32) { crate::ramp::HAZ_POR_SR.store(v, Ordering::Relaxed); }
+    }
+    impl Drop for Idioma {
+        fn drop(&mut self) { crate::ramp::HAZ_POR_SR.store(self.1, Ordering::Relaxed); }
+    }
+
     /// La lista ESPERADA esta transcrita del `moveto` original de vinterface.rs, no
     /// generada por este codigo. Si se generara con lo mismo que verifica, no verificaria
     /// nada — solo diria que la funcion es igual a si misma.
@@ -767,7 +886,7 @@ mod prueba {
         /* ESTE TEST PRUEBA EL BLANKING POR PCR, que desde 2026-09-04 ya no es el de serie
          * (`HAZ_POR_SR` arranca en 1). Sigue siendo un camino vivo —`-DUVM2_HAZ_POR_PCR`—
          * asi que se fija aqui en vez de borrar el test. */
-        crate::ramp::HAZ_POR_SR.store(0, core::sync::atomic::Ordering::Relaxed);
+        let _idioma = Idioma::por_pcr();
         /* LA CADENCIA QUE ESTE TEST AFIRMA ES LA DE ASTEROCK (6/8/4/9). Desde 2026-09-04 los
          * valores por defecto son los de MAJOR HAVOC (4/10/9/4), que son los validados
          * contra su captura; las dos son suyas y reales — ver `vecfever-no-hay-una-cadencia`.
@@ -877,6 +996,9 @@ mod prueba {
     fn una_rampa_con_un_hueco() {
         let k = tiempos(2 * E, 11 * E as i32);
         let mut p = Papel::default();
+        // El idioma del PCR, que es el que esta escrito abajo byte a byte. El de serie
+        // es el OTRO (arranca en 1), y se comprueba en la segunda mitad de esta prueba.
+        let idioma = Idioma::por_pcr();
         // 62 cuentas de rampa, apagado de la 20 a la 30
         draw_line_patterned_seq(&mut p, 30, -10, 0x3E, &k, &[(20, 30)]);
         assert_eq!(
@@ -899,6 +1021,36 @@ mod prueba {
         // dos programaciones de DAC/T1 costaria partir la recta en dos; aqui hay UNA
         assert_eq!(p.v.iter().filter(|c| c.0 == REG_T1_HI).count(), 1);
         assert_eq!(p.v.iter().filter(|c| c.0 == REG_PORT_A).count(), 2); // vy y vx
+
+        /* Y EL MISMO HUECO EN EL IDIOMA DE SERIE, que es el que faltaba y costo una vuelta
+         * a la consola: esta rutina escribia el PCR a pelo, y con el haz gobernado por el
+         * registro de desplazamiento —que es como arranca— esas escrituras NO HACEN NADA.
+         * El barrido salia entero encendido, huecos incluidos, y con el los saltos entre
+         * barridos: en pantalla, filas de puntos unidas por un abanico de rayas. El resto
+         * del fichero ya pasaba por `haz`; esta era la unica que no.
+         *
+         * Va en la MISMA prueba y no en otra aparte porque `HAZ_POR_SR` es un global y las
+         * pruebas corren en paralelo: separadas se pisan la perilla entre ellas. */
+        idioma.cambiar(1);
+        let mut q = Papel::default();
+        draw_line_patterned_seq(&mut q, 30, -10, 0x3E, &k, &[(20, 30)]);
+        assert!(q.v.iter().all(|c| c.0 != REG_CNTL), "el PCR no pinta nada en este idioma");
+        let sr: std::vec::Vec<u8> = q.v.iter().filter(|c| c.0 == REG_SHIFT).map(|c| c.1).collect();
+        assert_eq!(sr, std::vec![0xFF, 0x00, 0xFF, 0x00], "encender, EL HUECO, encender, apagar");
+
+        /* CON EL RELOJ DE VERDAD, que es lo que faltaba. Las dos mitades de arriba usan
+         * `tiempos(2*E, ..)`, o sea e6809_q8 = E: con esa escala `k.e(n)` y `n*E` dan lo
+         * MISMO y una posicion de rampa mal convertida pasa desapercibida. En el UVM2
+         * e6809_q8 vale 64, y por ahi el patron entero se iba al primer cuarto de la
+         * rampa — el texto amontonado en una esquina que se vio en consola. Los huecos
+         * son cuentas de T1 y tienen que salir en ciclos crudos pase lo que pase. */
+        let real = Timings { e6809_q8: 64, ..tiempos(2 * E, 11 * E as i32) };
+        let mut w = Papel::default();
+        draw_line_patterned_seq(&mut w, 30, -10, 0x3E, &real, &[(20, 30)]);
+        let huecos: std::vec::Vec<u32> =
+            w.v.iter().filter(|c| c.0 == REG_SHIFT).map(|c| c.2).collect();
+        assert_eq!(huecos[0], 20 * E, "encendido hasta la cuenta 20 de la rampa");
+        assert_eq!(huecos[1], 10 * E, "apagado 10 cuentas");
     }
 
     /// El muestreo de Y NO se salta nunca en el idioma microtramo: el VecFever re-latchea
@@ -937,7 +1089,7 @@ mod prueba {
         /* ESTE TEST PRUEBA EL BLANKING POR PCR, que desde 2026-09-04 ya no es el de serie
          * (`HAZ_POR_SR` arranca en 1). Sigue siendo un camino vivo —`-DUVM2_HAZ_POR_PCR`—
          * asi que se fija aqui en vez de borrar el test. */
-        crate::ramp::HAZ_POR_SR.store(0, core::sync::atomic::Ordering::Relaxed);
+        let _idioma = Idioma::por_pcr();
         let k = tiempos(0, 0);
         let mut p = Papel::default();
         moveto_seq(&mut p, 1, 1, 0x0123, &k);
@@ -1123,6 +1275,32 @@ pub extern "C" fn vx_draw_line_patterned_seq(sink: *mut CSink, vx: i32, vy: i32,
         buf[i] = unsafe { (*huecos.add(i * 2), *huecos.add(i * 2 + 1)) };
     }
     draw_line_patterned_seq(s, vx8, vy8, t1 as u16, &t, &buf[..cuantos]);
+}
+
+/// `draw_line_sr_seq` para quien llama desde C. Ver alli por que `paso` no es el tamaño.
+#[no_mangle]
+pub extern "C" fn vx_draw_line_sr_seq(sink: *mut CSink, vx: i32, vy: i32, t1: u32,
+                                      k: *const CTimings,
+                                      patron: *const u8, n: u32, paso: u32) {
+    if sink.is_null() || k.is_null() {
+        return;
+    }
+    let (s, kk) = unsafe { (&mut *sink, &*k) };
+    let t = kk.a_timings();
+    let vx8 = vx.clamp(-128, 127) as i8;
+    let vy8 = vy.clamp(-128, 127) as i8;
+    if patron.is_null() || n == 0 {
+        return draw_line_seq(s, vx8, vy8, t1 as u16, &t);
+    }
+    // El mismo criterio que el patronado: tope fijo, sin asignador, y lo que sobre se
+    // pierde de forma visible en vez de reservar memoria en bare-metal.
+    const MAX: usize = 64;
+    let cuantos = (n as usize).min(MAX);
+    let mut buf = [0u8; MAX];
+    for i in 0..cuantos {
+        buf[i] = unsafe { *patron.add(i) };
+    }
+    draw_line_sr_seq(s, vx8, vy8, t1 as u16, &t, &buf[..cuantos], paso as u16);
 }
 
 /// `Moveto_d` para quien llama desde C. La MISMA funcion que usa el firmware: eso es

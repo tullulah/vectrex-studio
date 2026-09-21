@@ -116,6 +116,11 @@ struct uvm2_api {
      * than the default because core 1 reads the axes every frame whether the game looks
      * at them or not, and the successive-approximation read disturbs the PSG. */
     void (*set_analog)(int);
+    /* version 4: una recta cuyos huecos los saca la VIA sola — un byte al registro de
+     * desplazamiento = 8 puntos. Es el texto de la BIOS, y en un juego con mucho texto
+     * baja el caracter de 36,4 comandos a 21,2 (medido, uvm2_texto_raster.c). Mirar
+     * `version >= 4` antes de llamarla: una BIOS de antes termina en `set_analog`. */
+    int (*draw_barrido_sr)(int, int, const unsigned char *, int, int);
 };
 #define UVM2_API        ((const struct uvm2_api *)0x20077000u)
 #define UVM2_API_MAGIC  0x50415356u   /* 'VSAP' */
@@ -177,6 +182,8 @@ unsigned uvm2_cuenta_entrada;   /* DIAGNOSTICO, ver uvm2_frame_end */
  * consola. Aqui no se decide nada de eso. */
 void uvm2_draw_move_abs_q4(int x_q4, int y_q4);
 void uvm2_draw_delta_q4(int dx_q4, int dy_q4);
+void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int n);
+int uvm2_draw_barrido_sr(int dx, int dy, const unsigned char *patron, int n, int paso);
 void uvm2_draw_intensity(int z);
 /* uvm2_smp.c, inside the image on the .um2 (on the cartridge it is reached
  * through the BIOS table). */
@@ -278,6 +285,62 @@ void v_directDraw32(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b)
 #ifdef UVM2_MIDE_DIBUJO
     uvm2_us_draw += DRAW_NOW() - t0;
     uvm2_n_draw++;
+#endif
+}
+
+/* UN TRAZO CON HUECOS, EN UNA SOLA RAMPA — las mismas unidades que v_directDraw32.
+ *
+ * `huecos` son pares (inicio, fin) en fracciones 0..255 del trazo; el SDK los pasa a
+ * cuentas de T1 y conmuta el BLANK por el camino en vez de programar una rampa por
+ * tramo. Es lo que hace falta para barrer texto: una linea de pixeles es UNA rampa con
+ * los huecos de la fuente, no un trazo por cada grupo de puntos encendidos.
+ *
+ * ESTO EXISTE PORQUE `v_rasterText` NO VALE PARA ESO. En el cartucho aquella acaba en
+ * `UVM2_API->print_text(..., 1, 0x5F)`, o sea la fuente VECTORIAL del SDK a escala fija:
+ * el llamante pone la posicion y la BIOS pone la letra y el tamaño, asi que un texto
+ * escalado por el juego sale descuadrado. Por aqui la fuente y el tamaño los pone quien
+ * llama, y `draw_delta_patterned` esta en la tabla de la BIOS desde la version 1. */
+void v_directGapped(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b,
+                    const unsigned char *huecos, int n)
+{
+    if (b == 0) return;
+#ifdef VPY_DUAL_CORE
+    UVM2_API->draw_intensity((int)b);
+    UVM2_API->draw_move_abs_q4(VS_Q4(x0), VS_Q4(y0));
+    UVM2_API->draw_delta_patterned(VS_Q4(x1) - VS_Q4(x0), VS_Q4(y1) - VS_Q4(y0),
+                                   huecos, n);
+#else
+    uvm2_draw_intensity((int)b);
+    uvm2_draw_move_abs_q4(VS_Q4(x0), VS_Q4(y0));
+    uvm2_draw_delta_patterned(VS_Q4(x1) - VS_Q4(x0), VS_Q4(y1) - VS_Q4(y0), huecos, n);
+#endif
+}
+
+/* EL BARRIDO CON EL REGISTRO DE DESPLAZAMIENTO, mismas unidades que v_directDraw32.
+ *
+ * `patron` es un byte por cada 8 puntos, bit 7 el de la izquierda; `paso` son las cuentas
+ * de T1 entre escrituras y vale 8, que es lo que tardan los 8 desplazamientos a ritmo de
+ * Phi2. El ancho de lo dibujado NO se elige con `paso` sino con la distancia: quien llama
+ * pone (x1-x0) para que n*8 cuentas den el ancho que quiere.
+ *
+ * DEVUELVE CUANTOS BYTES HA DIBUJADO, o 0 si la BIOS no lo trae (tabla anterior a la v4).
+ * No tienen por que ser los `n` pedidos: la celda son los 8 desplazamientos del SR y no se
+ * puede estirar, asi que si la velocidad de rampa no llega entran menos caracteres. El
+ * llamante sigue desde donde se quedo. */
+int v_directSweepSR(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint8_t b,
+                    const unsigned char *patron, int n, int paso)
+{
+    if (b == 0) return n;
+#ifdef VPY_DUAL_CORE
+    if (UVM2_API->magic != UVM2_API_MAGIC || UVM2_API->version < 4u) return 0;
+    UVM2_API->draw_intensity((int)b);
+    UVM2_API->draw_move_abs_q4(VS_Q4(x0), VS_Q4(y0));
+    return UVM2_API->draw_barrido_sr(VS_Q4(x1) - VS_Q4(x0), VS_Q4(y1) - VS_Q4(y0),
+                                     patron, n, paso);
+#else
+    uvm2_draw_intensity((int)b);
+    uvm2_draw_move_abs_q4(VS_Q4(x0), VS_Q4(y0));
+    return uvm2_draw_barrido_sr(VS_Q4(x1) - VS_Q4(x0), VS_Q4(y1) - VS_Q4(y0), patron, n, paso);
 #endif
 }
 

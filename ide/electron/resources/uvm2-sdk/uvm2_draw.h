@@ -51,6 +51,15 @@ void uvm2_draw_move_q4(int dx_q4, int dy_q4);      /* salto relativo, 1/16 (SYS_
 /* La misma recta pero con tramos apagados, en UNA rampa. `huecos` son pares
  * (inicio, fin) en fracciones 0..255 de la recta. n = cuantos pares. */
 void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int n);
+/* Como la de arriba, pero los huecos los saca la VIA sola: un byte de `patron` = 8 puntos.
+ * Es el texto de la BIOS, y EXIGE el idioma SR (HAZ_POR_SR). Ver uvm2_draw.c. */
+/* Devuelve CUANTOS bytes ha dibujado: la celda son los 8 desplazamientos del SR y no se
+ * puede estirar, asi que si la velocidad de rampa no da entran menos caracteres. El
+ * llamante sigue desde ahi. */
+int uvm2_draw_barrido_sr(int dx, int dy, const unsigned char *patron, int n, int paso);
+/* Tope de DURACION de un barrido, en cuentas de T1: lo manda la fuga del integrador de Y,
+ * no el numero de caracteres. Ver uvm2_draw.c. */
+extern volatile uint32_t uvm2_barrido_t1_max;
 
 /* SYS_MOVE_ABS — absolute position, measured from centre. */
 void uvm2_draw_move_abs(int x, int y);

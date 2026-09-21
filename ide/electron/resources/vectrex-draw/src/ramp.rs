@@ -752,6 +752,28 @@ pub static RAMPA_FIJA: AtomicU32 = AtomicU32::new(0);
 /// La misma funcion para quien llama desde C (la imagen del UVM2). Punteros porque una
 /// tupla de Rust no tiene representacion C — y ENTEROS, que es la regla de la caja: la
 /// imagen se compila `softfp` y el firmware `eabihf`, asi que ni un flotante cruza.
+/// LA VELOCIDAD PARA QUE EL PATRON CUBRA `p` EN `t1` CUENTAS, sin contar el arranque.
+///
+/// `vx_ramp_params_con_t1` no vale para esto y la diferencia se midio en la consola
+/// leyendo su lista de comandos: para 14 celdas de 122 subunidades en 140 cuentas devuelve
+/// vx = 88, no 122. No es un fallo suyo — su modelo cuenta el retardo de arranque
+/// (`T1_EXTRA_Q8`, unas 54 cuentas), asi que elige la velocidad para que la rampa cubra la
+/// distancia en `t1 + 54`. Correcto para un trazo, que solo mira donde acaba.
+///
+/// Un BARRIDO mira otra cosa: sus escrituras al registro van espaciadas en cuentas de T1 y
+/// se acaban en `t1`, asi que lo que tiene que cuadrar es la distancia recorrida DURANTE
+/// esas `t1` — no la total. Con la otra el texto salia al 72% de ancho, las letras
+/// apretadas. Lo que sobra al final es cola oscura, que no molesta.
+#[no_mangle]
+pub extern "C" fn vx_ramp_vel_sin_lag(p: i32, t1: u32, f: i32) -> i32 {
+    let f = if f > 0 { f } else { 1 };
+    let s = escala();
+    let den = (f as i64) * (if t1 > 0 { t1 } else { 1 }) as i64;
+    let n = p as i64 * s as i64;
+    let v = if n >= 0 { (n + den / 2) / den } else { (n - den / 2) / den };
+    v.clamp(-127, 127) as i32
+}
+
 #[no_mangle]
 pub extern "C" fn vx_ramp_params(dx: i32, dy: i32, out_vx: *mut i32, out_vy: *mut i32,
                                  out_t1: *mut u32) {
@@ -798,6 +820,27 @@ fn ramp_params_salto_con_deuda(dx_q4: i32, dy_q4: i32, vcap: u32, q: u32) -> (i8
 /// corta. Medido en sus 1041 saltos que siguen a un trazo, la escalera {8, 18, 31} con tope
 /// de tasa 120 explica 1008 (97%) — y en su frame 120 los explica TODOS. Nuestro modelo
 /// derivaba t1 del tope de velocidad y daba valores continuos (9, 13, 15) donde el pone 18.
+/// LO QUE UNA RAMPA RECORRE DE VERDAD — la inversa de `vx_ramp_params_con_t1`.
+///
+/// Hace falta porque quien fija `t1` en vez de dejarlo elegir (el barrido del texto)
+/// recibe una velocidad REDONDEADA, y a veces recortada a +-127: la rampa cubre una
+/// distancia que no es la pedida. Apuntar la pedida en la posicion del haz hace que el
+/// SDK crea que esta donde no esta, y el error se acumula barrido a barrido hasta empujar
+/// el dibujo entero a una esquina — visto en consola con el texto de esb.
+///
+/// Misma aritmetica que `r()` alli, al reves: p = v * f * t1 / s.
+#[no_mangle]
+pub extern "C" fn vx_ramp_dist(v: i32, t1: u32, f: i32) -> i32 {
+    let f = if f > 0 { f } else { 1 };
+    let s = escala();
+    if s <= 0 { return 0; }
+    let den = (t1 as i32) * 256 + T1_EXTRA_Q8.load(Ordering::Relaxed) as i32;
+    /* v = (p*s*256 + den/2) / den  =>  p = v*den / (s*256), con el mismo f de vuelta. */
+    let n = v as i64 * den as i64 * f as i64;
+    let d = s as i64 * 256;
+    ((if n >= 0 { n + d / 2 } else { n - d / 2 }) / d) as i32
+}
+
 #[no_mangle]
 pub extern "C" fn vx_ramp_params_con_t1(dx: i32, dy: i32, f: i32, t1: u32,
                                         out_vx: *mut i32, out_vy: *mut i32) {

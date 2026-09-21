@@ -172,7 +172,11 @@ int uvm2_smp_playing(unsigned voice);
 
 /** Is any voice active? The draw path checks this so it pays nothing when there
  *  is no audio — which is the case for 43 of the 44 ports. */
-int uvm2_smp_active(void);
+/* INLINE, porque se pregunta en el camino caliente del emisor. Ver la nota del contador
+ * en uvm2_smp.c: como funcion fuera de linea era una llamada por rampa para leer un
+ * entero, y el emisor la hace 1.844 veces por frame. La semantica es la misma. */
+extern unsigned uvm2_smp_s_active;
+static inline int uvm2_smp_active(void) { return uvm2_smp_s_active != 0u; }
 
 /** The frame the voice has reached if the video runs at `fps`: what VPy's
  *  SAMPLE_POS needs so the picture follows the AUDIO and not the other way round

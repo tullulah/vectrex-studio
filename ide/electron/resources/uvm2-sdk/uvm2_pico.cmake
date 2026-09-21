@@ -242,8 +242,26 @@ if(NOT CARGO_EXE)
         "instala rustup y `rustup target add ${VECTREX_DRAW_TARGET}`.")
 endif()
 
+# EL TAMAÑO DE LA LISTA DEL STREAM, POR JUEGO. Son dos buferes de palabras de 32 bits en
+# vectrex-bus (LISTA_BUF), 98 KB con el valor por defecto, y en una imagen que vive entera
+# en 496 KB compiten con el tope de comandos de uvm2_draw.c. La diferencia esta en que
+# desbordar ESTA solo cuesta un disparo anticipado del DMA, mientras que desbordar el tope
+# de comandos PIERDE dibujo — ver la nota larga en vectrex-bus/src/lib.rs. Un juego
+# apretado baja esta y sube aquel:
+#
+#     make uvm2 UVM2_LISTA_MAX=8192 UVM2_CMD_CAPACITY=14336
+#
+# Va por variable de entorno porque quien la lee es `option_env!` dentro de la caja Rust.
+# Cargo apunta esa lectura en la huella del build, asi que cambiarla RECOMPILA la .a; el
+# .a es compartido entre juegos, o sea que alternar entre dos valores cuesta una
+# recompilacion de la caja, no una imagen equivocada.
+if(DEFINED ENV{UVM2_LISTA_MAX} AND NOT "$ENV{UVM2_LISTA_MAX}" STREQUAL "")
+    message(STATUS "UVM2_LISTA_MAX: lista del stream de $ENV{UVM2_LISTA_MAX} palabras (vectrex-bus pone 12288)")
+    set(VECTREX_CARGO_ENV ${CMAKE_COMMAND} -E env VECTREX_LISTA_MAX=$ENV{UVM2_LISTA_MAX})
+endif()
+
 add_custom_target(vectrex_draw_lib ALL
-    COMMAND ${CARGO_EXE} build --release --target ${VECTREX_DRAW_TARGET}
+    COMMAND ${VECTREX_CARGO_ENV} ${CARGO_EXE} build --release --target ${VECTREX_DRAW_TARGET}
             --manifest-path "${VECTREX_DRAW_DIR}/cabi/Cargo.toml"
             ${VECTREX_CABI_FEATURES}
     BYPRODUCTS ${VECTREX_DRAW_LIB}

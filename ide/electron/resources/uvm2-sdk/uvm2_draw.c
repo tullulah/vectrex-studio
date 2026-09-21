@@ -700,6 +700,10 @@ extern volatile uint32_t TECHO_MANDA, DEUDA_ON, TRAZO_ENTERO;
  * PSG). En la .um2 no hace falta: core 1 lo hace en su bucle. */
 __attribute__((weak)) void uvm2_frame_hueco(void) { }
 
+/* Adelantada: uvm2_draw_init dibuja (el cebado de Z) antes de que el cache este definido
+ * mas abajo, y una estructura sin rellenar es un puntero a funcion nulo. */
+static void vx_cart_refrescar(void);
+
 void uvm2_draw_init(void)
 {
     /* LA CALIBRACION DE LA CONSOLA, ANTES DE NADA. Los knobs que toca —escala, termino fijo
@@ -825,6 +829,7 @@ void uvm2_draw_init(void)
      * y ahora el prologo de frame es el suyo y no ceba Z. Aqui sigue haciendo falta por si
      * un juego dibuja antes de su primer SET_INTENSITY: sin esto el haz correria con lo que
      * tuviera C306 al encender. Fondo de escala, como el. */
+    vx_cart_refrescar();       /* aqui se dibuja antes del primer frame_begin */
     if (HAZ_POR_SR) set_z(UVM2_Z_CEBADO, UVM2_HOLD_DELAY);   /* s_z_last ya arranca ahi */
 
     uvm2_stats.bus_cycles = uvm2_exec(s_cmds[s_buf], s_count);
@@ -1217,7 +1222,7 @@ static void smp_inject(void)
 {
     uint8_t v, base, congelar;
 
-    if (!uvm2_smp_active()) return;           /* zero cost in the 43 ports with no audio */
+    if (!uvm2_smp_active()) return;           /* red de seguridad: quien llama ya lo testea */
     if (!uvm2_smp_due(s_ciclos, &v)) return;
 
     base = (uint8_t)(s_portb & (uint8_t)~0x18u);   /* the rest of Port B, without BC1/BDIR */
@@ -1280,7 +1285,11 @@ static void vxs_emit(void *ctx, uint32_t reg, uint32_t data, uint32_t delay_q8)
      * (the rhythm opens the ramp through PORTB and uses Port A as the
      * zero-reference discharge alternation). This path is the drawing one, which
      * is the only one with the guarantee. */
-    if (reg == UVM2_VIA_T1CL) smp_inject();
+    /* `uvm2_smp_active()` es un `static inline` sobre un entero (uvm2_smp.h): esto es un
+     * test, no una llamada. Sin el, cada T1CL entraba en `smp_inject` para que su primera
+     * linea preguntara lo mismo desde otra unidad de compilacion — dos llamadas por rampa
+     * en un juego sin audio. Misma semantica, exacta. */
+    if (reg == UVM2_VIA_T1CL && uvm2_smp_active()) smp_inject();
     /* La cache de Port A la lleva set_porta, y el modelo escribe PORTA por su cuenta.
      * Sin esto la cache creeria un valor que ya no esta en el DAC y se saltaria la
      * siguiente escritura — un fallo que solo aparece de vez en cuando, que es el peor
@@ -1747,6 +1756,29 @@ static struct vx_timings vx_cart_timings(void)
     return k;
 }
 
+/* ── LAS DOS, UNA VEZ POR FRAME Y NO DOS VECES POR VECTOR ────────────────────────────
+ *
+ * `vx_cart_sink()` rellena nueve punteros a funcion sobre una estructura puesta a cero, y
+ * `vx_cart_timings()` siete campos leyendo seis knobs. Las dos se construian en la PILA en
+ * cada `move_una`, cada `delta_una` y cada `move_abs_interno` — o sea unas 2.262 veces por
+ * frame en esb (1131 vectores), para producir exactamente el mismo par de estructuras.
+ *
+ * DENTRO DE UN FRAME SON CONSTANTES: el sumidero son punteros a funciones fijas, y los
+ * knobs de tiempo los mueve `uvm2_config_cargar()` o el asistente de calibracion, que
+ * corren FUERA del dibujo. Refrescarlas en `uvm2_frame_begin` es por tanto exacto, y lo
+ * unico que cambia es que un knob movido a mitad de frame se nota en el siguiente — que
+ * es un frame de 20 ms en un mando que se gira con la mano.
+ *
+ * Tambien en `uvm2_draw_init`, porque alli se dibuja (el cebado de Z) antes del primer
+ * frame_begin, y una estructura sin rellenar es un puntero a funcion nulo. */
+static struct vx_sink    s_sink_cache;
+static struct vx_timings s_k_cache;
+static void vx_cart_refrescar(void)
+{
+    s_sink_cache = vx_cart_sink();
+    s_k_cache    = vx_cart_timings();
+}
+
 /* TROCEAR LO QUE NO CABE EN UNA RAMPA — y esto faltaba entero.
  *
  * Una rampa expresa como mucho +-127 (vx_ramp_params hace clamp(-128,127)), pero
@@ -2051,8 +2083,8 @@ static void move_una(int dx, int dy)
                 vx_ramp_params_salto(res_x, res_y, &ax, &ay, &at1);
 #endif
                 if (at1 > (uint32_t)t1p) at1 = (uint32_t)t1p;   /* el suyo es SIEMPRE t1 = 8 */
-                struct vx_sink s0 = vx_cart_sink();
-                struct vx_timings k0 = vx_cart_timings();
+                struct vx_sink s0 = s_sink_cache;      /* copia local: la firma pide no-const */
+                struct vx_timings k0 = s_k_cache;
                 /* DETRAS DE ESTA VIENE LA RAMPA LARGA, asi que el haz se apaga ANTES de
                  * esta unidad y no dentro de su ventana de mux. Ver SIGUEN_UNIDADES. */
                 SIGUEN_UNIDADES = 1;
@@ -2156,8 +2188,8 @@ if (forzada) { vx = px_; vy = py_; t1 = pt1_; } else {
             }
         }
         }
-        struct vx_sink sink = vx_cart_sink();
-        struct vx_timings k = vx_cart_timings();
+        struct vx_sink sink = s_sink_cache;
+        struct vx_timings k = s_k_cache;
         { uint32_t t0_ = SDK_T0(); vx_moveto_seq(&sink, vx, vy, t1, &k); SDK_ACUM(1, t0_); }
         /* The rest of the ledger: whatever the priming unit did not take of the ORIGINAL
          * request, against what this ramp — with whatever t1 the ladder settled on —
@@ -2229,13 +2261,6 @@ static void delta_una(int dx, int dy)
     s_pos_x += dx;
     s_pos_y += dy;
     /* Alimentar la caja del frame con la posicion ya en unidades de dispositivo. */
-    {
-        const int32_t ux = s_pos_x / (int32_t)UVM2_Q, uy = s_pos_y / (int32_t)UVM2_Q;
-        if (ux < s_caja_x0) s_caja_x0 = ux;
-        if (ux > s_caja_x1) s_caja_x1 = ux;
-        if (uy < s_caja_y0) s_caja_y0 = uy;
-        if (uy > s_caja_y1) s_caja_y1 = uy;
-    }
 
 #if UVM2_Q_BITS > 0
     { uint32_t t0_ = SDK_T0(); vx_ramp_params_chain_qn(dx, dy, UVM2_Q_BITS, &vx, &vy, &t1); SDK_ACUM(2, t0_); }
@@ -2243,8 +2268,8 @@ static void delta_una(int dx, int dy)
     vx_ramp_params_chain(dx, dy, &vx, &vy, &t1);
 #endif
 
-    struct vx_sink sink = vx_cart_sink();
-    struct vx_timings k = vx_cart_timings();
+    struct vx_sink sink = s_sink_cache;
+    struct vx_timings k = s_k_cache;
     { uint32_t t0_ = SDK_T0(); vx_draw_line_seq(&sink, vx, vy, t1, &k); SDK_ACUM(3, t0_); }
     s_rampas_desde_cero++;
     uvm2_stats.vectors++;
@@ -2296,8 +2321,8 @@ void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int 
 #else
     vx_ramp_params_chain(dx, dy, &vx, &vy, &t1);
 #endif
-    struct vx_sink sink = vx_cart_sink();
-    struct vx_timings k = vx_cart_timings();
+    struct vx_sink sink = s_sink_cache;
+    struct vx_timings k = s_k_cache;
 
     /* fracciones -> cuentas de T1. Un hueco que al redondear se queda en cero no se emite:
      * costaria dos escrituras de bus y no apagaria nada. */
@@ -2315,6 +2340,169 @@ void uvm2_draw_delta_patterned(int dx, int dy, const unsigned char *huecos, int 
     else        vx_draw_line_patterned_seq(&sink, vx, vy, t1, &k, cuentas, (uint32_t)m);
     uvm2_stats.vectors++;
     uvm2_stats.ramp_cycles += t1;
+}
+
+void vx_draw_line_sr_seq(struct vx_sink *, int32_t vx, int32_t vy, uint32_t t1,
+                         const struct vx_timings *, const unsigned char *patron,
+                         uint32_t n, uint32_t paso);
+
+/* UNA RECTA CUYOS HUECOS LOS SACA EL REGISTRO DE DESPLAZAMIENTO: el texto de la BIOS.
+ *
+ * `uvm2_draw_delta_patterned` ya programa UNA rampa y conmuta el BLANK por el camino,
+ * pero lo conmuta con el PCR: dos comandos por hueco. Con ACR = 0x98 la VIA saca OCHO
+ * bits sola a ritmo de Phi2, asi que una escritura al SR pinta ocho puntos — que es como
+ * el Vectrex dibuja su propio texto, y la razon de que le quepa tanto.
+ *
+ * `patron` son los bytes, uno por cada 8 puntos, bit 7 el primero. EXIGE EL IDIOMA SR:
+ * con HAZ_POR_SR en 0 el ACR sale 0x80, el registro no desplaza y esto no pinta nada. El
+ * llamante elige `dx` (y con el la velocidad de rampa) para que 8 ciclos de Phi2 valgan
+ * el ancho de caracter que quiere; `paso` son las cuentas de T1 entre escrituras y vale
+ * 8 salvo que se busque separacion entre grupos. Ver draw_line_sr_seq en emit.rs. */
+int32_t vx_ramp_dist(int32_t v, uint32_t t1, int32_t f);
+int32_t vx_ramp_vel_sin_lag(int32_t p, uint32_t t1, int32_t f);
+
+/* CUANTAS CUENTAS DE T1 PUEDE DURAR UN BARRIDO. Es un tope de TIEMPO, no de caracteres:
+ * lo fija la fuga del integrador de Y (ver abajo). 64 cuentas son ~43 us, del orden de un
+ * vector normal del juego. Variable y no #define para poder barrerlo en consola. */
+/* 65535 MEDIDO, y la primera lectura decia lo contrario porque comparaba dos builds que
+ * se diferenciaban en DOS cosas. Sobre la pantalla de records, a igualdad de re-ceros:
+ *
+ *     tope 255 : 270 barridos, 1180 bytes, 51299 ciclos
+ *     sin tope : 258 barridos, 1168 bytes, 50375 ciclos   -> 924 menos
+ *
+ * Los 20 re-ceros de mas que se le achacaron eran de ESB_RECERO, que iba en la misma
+ * build. Fundir los trozos ahorra las rampas y los bytes sacrificados que promete.
+ *
+ * Sigue siendo la perilla de la INCLINACION (la fuga del integrador de Y: un barrido de
+ * 432 cuentas se tuerce mas que uno de 252). Bajarla vuelve a partir los barridos. */
+volatile uint32_t uvm2_barrido_t1_max = 65535;
+
+int uvm2_draw_barrido_sr(int dx, int dy, const unsigned char *patron, int n, int paso)
+{
+    /* 65535 Y NO 255: T1 ES DE 16 BITS Y EL RECORTE ERA NUESTRO.
+     *
+     * Estuvo en 255 desde que se midio la inclinacion (la fuga del integrador de Y, ver
+     * abajo), y eso partia toda linea de mas de 255/paso caracteres -- 13 con paso 18.
+     * Pero el tope de verdad lo pone `draw_line_sr_seq`, que recibe t1 como u16, y la
+     * BIOS del Vectrex demuestra que el hardware no lo pide: su `Print_Str` ($F495) barre
+     * la cadena entera sin usar T1 siquiera, abriendo /RAMP por PB7 y cerrandolo cuando
+     * acaba el bucle de escrituras al registro.
+     *
+     * `uvm2_barrido_t1_max` sigue siendo la perilla de la inclinacion: bajarla vuelve a
+     * partir los barridos largos. Lo que se quita es el techo fijo, no el control. */
+    uint32_t t1_max = uvm2_barrido_t1_max > 65535u ? 65535u : uvm2_barrido_t1_max;
+    GIRA(dx, dy);
+    int32_t vx, vy; uint32_t t1;
+    if (n < 1 || paso < 1) return 0;
+
+    /* LA CELDA SON LOS DESPLAZAMIENTOS, Y NO SE PUEDE ESTIRAR.
+     *
+     * Aqui hubo un bucle que alargaba `t1` cuando la velocidad saturaba, para que la
+     * rampa llegase al final pedido. Es un error de bulto: los 8 desplazamientos del SR
+     * duran 8 ciclos de Phi2 pase lo que pase, asi que alargar la rampa ensancha la CELDA
+     * pero no la TINTA — cada caracter queda como una mancha diminuta en una celda enorme.
+     * Medido en el emulador sobre una fila de texto: tramos encendidos de 77 unidades en
+     * celdas de 987, o sea 1/12 de lo que toca.
+     *
+     * Lo que se puede mover es CUANTOS caracteres entran. La rampa dura n*paso cuentas y
+     * cubre lo que cubra a esa velocidad; si la velocidad se sale de rango, entran menos
+     * caracteres — no una rampa mas larga. Se devuelve cuantos se han dibujado y el
+     * llamante sigue por ahi. */
+    /* EL BARRIDO NO PUEDE DURAR MUCHO: EL INTEGRADOR DE Y SE FUGA HACIA EL CERO.
+     *
+     * Medido en consola (Daniel, 2026-09-21): una linea de texto sale RECTA mientras su Y
+     * vale cero y se va inclinando segun se aleja, tanto mas cuanto mas lejos. Eso es
+     * dY/dt = -Y/tau: la fuga siempre tira hacia el centro y es proporcional a la altura.
+     * No es un error de cuentas — es tiempo. Un vector del juego dura 20-40 cuentas (~25
+     * us) y no se nota; un barrido de linea entera llega a 255 (~170 us) y se ve.
+     *
+     * Asi que la duracion se acota y entran los caracteres que quepan. El llamante ya
+     * recibe cuantos se han dibujado y sigue desde ahi, que es justo para lo que esta esa
+     * vuelta. Es la perilla que hay que mover si la inclinacion vuelve. */
+    if (t1_max < 1) t1_max = 1;
+    int cabe = n;
+    for (;;) {
+        t1 = (uint32_t)cabe * (uint32_t)paso;
+        if (t1 > t1_max) { cabe = t1_max / paso; if (cabe < 1) cabe = 1; continue; }
+        /* LA VELOCIDAD LA CALCULA `vx_ramp_vel_sin_lag` Y NO `..._con_t1`, y la diferencia
+         * se leyo de la lista de comandos del cartucho: para 14 celdas de 122 subunidades
+         * en 140 cuentas, aquella devuelve 88 en vez de 122 porque su modelo cuenta el
+         * retardo de arranque de la rampa (~54 cuentas). Para un trazo esta bien —solo
+         * importa donde acaba— pero el patron del barrido se AGOTA en `t1`, asi que las
+         * letras salian al 72% del ancho, apretadas. Lo que la rampa siga recorriendo
+         * despues es cola oscura. */
+        vx = vx_ramp_vel_sin_lag(dx / n * cabe, t1, (int32_t)UVM2_Q);
+        vy = vx_ramp_vel_sin_lag(dy / n * cabe, t1, (int32_t)UVM2_Q);
+        if (cabe <= 1) break;
+        /* 126 Y NO 120: el recorte de `vx_ramp_params_con_t1` esta en +-127, y un margen
+         * de 7 tiraba caracteres que caben. La celda grande de aae_esb da vx = 122 exacto
+         * — con la guarda a 120 el barrido se partia y la linea salia incompleta
+         * ("REBE FORC ROST" en el banco). Se deja 1 de margen por el redondeo. */
+        if (vx <= 126 && vx >= -126 && vy <= 126 && vy >= -126) break;
+        cabe -= cabe / 4 + 1;      /* la velocidad no da: menos caracteres por barrido */
+    }
+
+    /* LA RAMPA LLEVA 8 CUENTAS DE COLA, y sin ellas se pierde el ULTIMO caracter de cada
+     * barrido. El patron no arranca a la vez que la rampa: entre el T1CH y la primera
+     * escritura hay el hueco de encendido, asi que todo va corrido un par de cuentas y el
+     * ultimo byte empieza a desplazarse justo cuando la rampa se acaba — sus puntos se
+     * pintan con el haz ya parado. Medido en el banco: del abecedario faltaban la F, la L
+     * y la R, que son la sexta y la duodecima de cada fila, con el barrido cortando cada
+     * seis (t1_max 64 / paso 10).
+     *
+     * La distancia se estira en la MISMA proporcion que el tiempo para que el ancho de
+     * celda no cambie: lo que se añade es cola oscura detras de la ultima letra, no
+     * espacio entre las letras. */
+    /* La posicion que se apunta es la que la rampa recorre DE VERDAD: con `t1` fijo la
+     * velocidad sale redondeada y la distancia no es la pedida. Ver vx_ramp_dist. */
+    dx = vx_ramp_dist(vx, t1, (int32_t)UVM2_Q);
+    dy = vx_ramp_dist(vy, t1, (int32_t)UVM2_Q);
+    s_pos_x += dx;
+    s_pos_y += dy;
+    {   /* la caja del frame, en unidades de dispositivo */
+        const int32_t ux = s_pos_x / (int32_t)UVM2_Q, uy = s_pos_y / (int32_t)UVM2_Q;
+        if (ux < s_caja_x0) s_caja_x0 = ux;
+        if (ux > s_caja_x1) s_caja_x1 = ux;
+        if (uy < s_caja_y0) s_caja_y0 = uy;
+        if (uy > s_caja_y1) s_caja_y1 = uy;
+    }
+
+    /* LA Y, CON SU VENTANA DE VERDAD. `set_y` escala el tiempo de muestreo con lo lejos
+     * que tiene que ir (hold_entre): el canal 0 del mux es un condensador de 10 nF y la
+     * ventana fija del emisor —4 ciclos— no lo descarga despues de un salto grande. Lo
+     * que queda es velocidad residual en Y, o sea una recta inclinada, y tanto mas cuanto
+     * mas alto este el texto. Puesta aqui, `y_can_skip` hace que el emisor no la repita. */
+    set_y((int)vy, 0);
+
+    /* EL ULTIMO BYTE DEL BARRIDO SE PIERDE, asi que se sacrifica uno a proposito.
+     *
+     * El patron no arranca a la vez que la rampa —entre el T1CH y la primera escritura hay
+     * el hueco de encendido— asi que todo va corrido y el ultimo byte empieza a
+     * desplazarse cuando la rampa ya se acaba: sus puntos se pintan con el haz parado. En
+     * el banco faltaban la F, la L y la R del abecedario, que son la sexta y la duodecima
+     * con el barrido cortando cada seis.
+     *
+     * Alargar la rampa parecia la cura y NO LO ES: mueve las celdas y las letras del borde
+     * salian solapadas, probado con cola de 8 cuentas y con cola de un paso entero. Lo que
+     * si funciona es no poner nada que perder ahi: el ultimo byte es un CERO y al llamante
+     * se le dice que ha dibujado uno menos, asi que la ultima letra de verdad siempre tiene
+     * una celda entera de rampa detras. Cuesta un caracter por barrido. */
+    unsigned char cola[64];   /* el tope de vx_draw_line_sr_seq (MAX en emit.rs) */
+    uint32_t n_emit = (uint32_t)cabe;
+    int n_dicho = cabe;
+    if (cabe > 1 && cabe < (int)sizeof cola) {
+        for (int i = 0; i < cabe; i++) cola[i] = patron[i];
+        cola[cabe - 1] = 0x00;              /* la ultima celda, en negro */
+        patron = cola;
+        n_dicho = cabe - 1;
+    }
+
+    struct vx_sink sink = s_sink_cache;
+    struct vx_timings k = s_k_cache;
+    vx_draw_line_sr_seq(&sink, vx, vy, t1, &k, patron, n_emit, (uint32_t)paso);
+    uvm2_stats.vectors++;
+    uvm2_stats.ramp_cycles += t1;
+    return n_dicho;
 }
 
 /* ── AQUI HUBO UNA "CAPA DE TASAS" (uvm2_draw_rate / uvm2_draw_raw), Y ERA UN ERROR ───
@@ -2444,8 +2632,8 @@ static void move_abs_interno(int x, int y)
 #else
             vx_ramp_params_salto(0, 0, &vx, &vy, &t1);
 #endif
-            struct vx_sink sink = vx_cart_sink();
-            struct vx_timings k = vx_cart_timings();
+            struct vx_sink sink = s_sink_cache;
+            struct vx_timings k = s_k_cache;
             vx_moveto_seq(&sink, 0, 0, t1, &k);   /* tasas a cero: no mueve, solo separa */
             s_rampas_desde_cero++;
             uvm2_stats.moves++;
@@ -2588,6 +2776,7 @@ void uvm2_frame_begin(void)
     uvm2_stats.recals = uvm2_cuenta_entrada;   /* lo del frame que acaba */
     uvm2_cuenta_entrada = 0;
 #endif
+    vx_cart_refrescar();       /* el sumidero y los tiempos, una vez para todo el frame */
     s_count = 0;
     s_ciclos = 0;
     s_limite = UVM2_CMD_CAPACITY - UVM2_CMD_RESERVA;
