@@ -1,14 +1,134 @@
 /*
  * vpy.c — implementation of the VPy builtin runtime on the PiTrex SDK contract.
- * See vpy.h. Everything routes through v_directDraw32 / v_writePSG etc., so it
- * behaves identically on real hardware and in the IDE simulator.
+ * See vpy.h. Everything routes through the stroke buffer (and v_writePSG etc.)
+ * and reaches v_directDraw32 only from vpy_flush(), so it behaves identically
+ * on real hardware and in the IDE simulator.
  */
 #include "vpy.h"
 #include <vectrex/vectrexInterface.h>
+#include "vpy_trig_q14.h"
 /* No <math.h>: libvpy is integer-only so it compiles to plain integer ARM that
  * both real hardware and the VPy sim (PitrexCore's ARMv6 interpreter) can run. */
 
 #define VPY_SCALE 127   /* VPy logical unit -> PiTrex deflection unit */
+
+/* ---- the stroke buffer ----------------------------------------------------
+ * NOTHING in libvpy reaches v_directDraw32 except vpy_flush(). Every shape,
+ * sprite, level object, enemy and glyph lands here first, and the whole frame
+ * goes out at the frame boundary in the order it was produced.
+ *
+ * Why the indirection: a frame has to be costed, and shed when it does not
+ * fit, BEFORE it becomes bus commands. One stroke is roughly 13 commands on
+ * the UVM2 and there is no taking them back once emitted, so holding the frame
+ * as strokes is what makes a budget possible at all. It is also the only way a
+ * layer that draws a lot (the 3D path) can drop distant detail while keeping
+ * the HUD, which is what `pri` is for.
+ *
+ * Coordinates here are PiTrex deflection units (VPy units * VPY_SCALE) — what
+ * v_directDraw32 itself takes. int16_t covers the documented PiTrex range
+ * (x +-18000, y +-24000); anything outside it is CLAMPED and counted rather
+ * than silently wrapped, because a wrapped coordinate draws a plausible wrong
+ * picture and a counted one does not.
+ */
+#ifndef VPY_SB_MAX
+#define VPY_SB_MAX 1024   /* a full UVM2 command list is worth ~940 strokes */
+#endif
+#define VPY_DEV_MAX 32000 /* int16_t headroom over the PiTrex y range (24000) */
+
+typedef struct {
+    int16_t x0, y0, x1, y1;
+    uint8_t br;    /* 0..127 */
+    uint8_t pri;   /* shed order: 0 goes first, 255 is kept */
+} vpy_stroke_t;
+
+static vpy_stroke_t     s_sb[VPY_SB_MAX];
+static int              s_nsb;
+static uint8_t          s_pri = VPY_PRI_NORMAL;
+static vpy_draw_stats_t s_stats;
+
+/* Lowest-priority slot strictly below `want`, or -1 if the buffer is all at
+ * least as important as the stroke asking to get in. Only walked when full. */
+static int sb_evict_slot(int want)
+{
+    int best = -1, best_pri = want;
+    for (int i = 0; i < s_nsb; i++) {
+        if (s_sb[i].pri < best_pri) { best_pri = s_sb[i].pri; best = i; }
+    }
+    return best;
+}
+
+static int16_t sb_clamp(int32_t v)
+{
+    if (v >  VPY_DEV_MAX) { s_stats.clamped++; return  (int16_t)VPY_DEV_MAX; }
+    if (v < -VPY_DEV_MAX) { s_stats.clamped++; return (int16_t)-VPY_DEV_MAX; }
+    return (int16_t)v;
+}
+
+/* Push one stroke in PiTrex deflection units. The single door into the frame. */
+static void sb_push_dev(int32_t x0, int32_t y0, int32_t x1, int32_t y1, int br)
+{
+    if (br <= 0) return;             /* an unlit stroke is not a stroke */
+    if (br > 127) br = 127;
+
+    int slot;
+    if (s_nsb < VPY_SB_MAX) {
+        slot = s_nsb++;
+    } else {
+        slot = sb_evict_slot(s_pri);
+        if (slot < 0) { s_stats.dropped++; return; }
+        s_stats.shed++;              /* a cheaper stroke made way for this one */
+    }
+    vpy_stroke_t *t = &s_sb[slot];
+    t->x0 = sb_clamp(x0); t->y0 = sb_clamp(y0);
+    t->x1 = sb_clamp(x1); t->y1 = sb_clamp(y1);
+    t->br = (uint8_t)br;
+    t->pri = s_pri;
+}
+
+/* A stroke already in PiTrex deflection units. The VPy drawing calls work in
+ * logical units (+-127 integers), which is too coarse for a 3D camera: a slow
+ * pan would step instead of glide. Anything that computes its own geometry —
+ * vpy3d, a game with its own projection — comes in here instead and keeps the
+ * full resolution the beam can actually resolve. */
+void vpy_draw_line_dev(int32_t x0, int32_t y0, int32_t x1, int32_t y1, int br)
+{
+    sb_push_dev(x0, y0, x1, y1, br);
+}
+
+void vpy_set_priority(int p)
+{
+    s_pri = (uint8_t)(p < 0 ? 0 : (p > 255 ? 255 : p));
+}
+int vpy_get_priority(void) { return (int)s_pri; }
+
+void vpy_flush(void)
+{
+    for (int i = 0; i < s_nsb; i++) {
+        const vpy_stroke_t *t = &s_sb[i];
+        v_directDraw32(t->x0, t->y0, t->x1, t->y1, t->br);
+    }
+    s_stats.strokes = (uint32_t)s_nsb;
+    if (s_stats.strokes > s_stats.peak) s_stats.peak = s_stats.strokes;
+    s_stats.frames++;
+    s_nsb = 0;
+}
+
+int vpy_pending_strokes(void) { return s_nsb; }
+
+/* Read back a stroke that is buffered but not yet sent. For telemetry and for
+ * capture harnesses: it is the only way to see the frame a game actually built
+ * without standing in the beam's way. */
+int vpy_peek_stroke(int i, int32_t *x0, int32_t *y0, int32_t *x1, int32_t *y1, int *br)
+{
+    if (i < 0 || i >= s_nsb) return 0;
+    const vpy_stroke_t *t = &s_sb[i];
+    if (x0) *x0 = t->x0;  if (y0) *y0 = t->y0;
+    if (x1) *x1 = t->x1;  if (y1) *y1 = t->y1;
+    if (br) *br = t->br;
+    return 1;
+}
+
+const vpy_draw_stats_t *vpy_draw_stats(void) { return &s_stats; }
 
 /* ---- state ---- */
 static int   s_cur_x = 0, s_cur_y = 0;   /* MOVE origin, in VPy units */
@@ -42,8 +162,8 @@ static void ensure_tables(void) { /* tables are compile-time const now */ }
 /* Draw one segment in absolute VPy space (no MOVE offset). */
 static void raw_line(int x0, int y0, int x1, int y1, int b)
 {
-    v_directDraw32((int32_t)x0 * VPY_SCALE, (int32_t)y0 * VPY_SCALE,
-                   (int32_t)x1 * VPY_SCALE, (int32_t)y1 * VPY_SCALE, (uint8_t)b);
+    sb_push_dev((int32_t)x0 * VPY_SCALE, (int32_t)y0 * VPY_SCALE,
+                (int32_t)x1 * VPY_SCALE, (int32_t)y1 * VPY_SCALE, b);
 }
 
 /* ---- lifecycle ---- */
@@ -55,9 +175,15 @@ void vpy_init(void)
     v_setRefresh(50);   /* Vectrex refresh; .vmus/.vsfx are compiled at 50 fps */
 }
 
+void vpy_wait_recal(void)
+{
+    vpy_flush();              /* the frame just drawn goes out... */
+    v_WaitRecal();            /* ...and is presented here */
+}
+
 void vpy_frame_begin(void)
 {
-    v_WaitRecal();
+    vpy_wait_recal();
     v_readButtons();          /* refresh currentButtonState */
     v_readJoystick1Analog();  /* refresh currentJoy1X / currentJoy1Y */
 }
@@ -234,7 +360,7 @@ void vpy_draw_vector_ex(const unsigned char *data, int x, int y, int mirror, int
  * BLOW_UP=15 table) ---------------------------------------------------------
  * This is the SAME font the inline PiTrex path renders via v_printString, so
  * PRINT_TEXT looks identical on hardware, the C-import WASM sim, and the VPy
- * PitrexCore sim — all drawn through v_directDraw32 (we do NOT add
+ * PitrexCore sim — all drawn through the stroke buffer (we do NOT add
  * v_printString to the SDK contract).
  *
  * Each glyph is a stream of [pattern, dy, dx] signed-byte triples (the dy/dx
@@ -327,7 +453,7 @@ static int font_text_size(void) { return (s_text_size > 0) ? s_text_size : 8; }
 
 /* Core glyph-stream renderer, reproducing the inline PiTrex print sequence
  * (builtins.rs pitrex_print_text) followed by v_printString's pipeline, but
- * drawing each stroke via v_directDraw32 in raw deflection units:
+ * pushing each stroke to the buffer in raw deflection units:
  *   baseline = y - 8                       (inline cap_height shift, VPy units)
  *   startX   = ((x*127) >> 7) * 128        (inline 127/128 pre-scale, then *128)
  * Each stroke endpoint = trunc(cursor + delta * textSize * 1.5); computed
@@ -346,7 +472,7 @@ static void font_draw_string(int x, int y, const char *s)
             int nx = (startX * 2 + (int)list[2] * ts * 3) / 2;
             int ny = (startY * 2 + (int)list[1] * ts * 3) / 2;
             if (pat != 0)
-                v_directDraw32(startX, startY, nx, ny, (uint8_t)s_intensity);
+                sb_push_dev(startX, startY, nx, ny, s_intensity);
             startX = nx;
             startY = ny;
             list += 3;
@@ -381,7 +507,7 @@ void vpy_print_number(int x, int y, long n)
     if (neg) {
         int x0   = x * 127;
         int ymid = (y - 8) * 127 + 6 * ts;
-        v_directDraw32(x0, ymid, x0 + 8 * ts, ymid, (uint8_t)s_intensity);
+        sb_push_dev(x0, ymid, x0 + 8 * ts, ymid, s_intensity);
     }
 
     /* Leading-zero suppression: the inline scan starts at buf[0]; for negatives
@@ -412,6 +538,24 @@ int vpy_max(int a, int b) { return a > b ? a : b; }
 int vpy_clamp(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 int vpy_sin(int a) { ensure_tables(); return s_sin[((a % 128) + 128) & 127]; }
 int vpy_cos(int a) { ensure_tables(); return s_sin[(((a % 128) + 128) + 32) & 127]; }
+
+/* Q14 trig: 4096 steps per turn, amplitude +-16384. A separate name from
+ * vpy_sin/vpy_cos ON PURPOSE — those keep their 128-step, +-127 meaning on
+ * every target, so no function changes what it returns depending on where it
+ * was compiled. 128 steps is a visible staircase on a moving 3D camera, which
+ * is what this pair is for.
+ *
+ * VPY_SIN_Q14 is a quarter wave at one entry per unit, so the three folds below
+ * are exact and nothing is interpolated. */
+int vpy_sin_q14(int a)
+{
+    a &= (VPY_Q14_TURN - 1);                      /* 0..4095 */
+    if (a < 1024) return  VPY_SIN_Q14[a];         /* 0..90   */
+    if (a < 2048) return  VPY_SIN_Q14[2048 - a];  /* 90..180 */
+    if (a < 3072) return -VPY_SIN_Q14[a - 2048];  /* 180..270 */
+    return                -VPY_SIN_Q14[4096 - a]; /* 270..360 */
+}
+int vpy_cos_q14(int a) { return vpy_sin_q14(a + 1024); }
 int vpy_sqrt(int v) {
     if (v <= 0) return 0;
     int x = v, y = (x + 1) / 2;

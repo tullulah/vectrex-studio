@@ -269,7 +269,7 @@ def state_player_dead():
 
 def draw_player_death():
     SET_INTENSITY(65)
-    stop_music()
+    STOP_MUSIC()
     elapsed = DEATH_DELAY - frame_timer
     if elapsed < 12:
         DRAW_VECTOR("player_die1", player_x, player_y - camera_y, player_facing)

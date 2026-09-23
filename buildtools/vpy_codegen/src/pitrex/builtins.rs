@@ -197,6 +197,17 @@ fn emit_pitrex_wait_recal() -> String {
     s.push_str(".global pitrex_wait_recal\n.type pitrex_wait_recal, %function\npitrex_wait_recal:\n");
     s.push_str("    push    {r4, r5, r6, lr}\n");
 
+    // Send the frame the game just drew. libvpy accumulates every stroke and
+    // NOTHING reaches v_directDraw32 until this call, so a frame boundary that
+    // does not flush draws nothing at all. This is the only boundary the ARM
+    // backend has — WAIT_RECAL and the generated game loop both land here — so
+    // it is the one place the flush belongs.
+    //
+    // Before the CLO read on purpose: sending the frame IS frame work, and the
+    // work_us figure below is supposed to say how long the frame took.
+    // vpy_flush() clobbers only r0-r3/r12, which are dead here.
+    s.push_str("    bl      vpy_flush           @ libvpy stroke buffer -> the beam\n");
+
     // Read CLO (current µs)
     s.push_str("    ldr     r4, =bcm2835_st\n");
     s.push_str("    ldr     r4, [r4]            @ dereference: r4 = ST base ptr\n");
@@ -2496,6 +2507,10 @@ fn emit_pitrex_system() -> String {
     s.push_str(".global pitrex_wait\n.type pitrex_wait, %function\npitrex_wait:\n");
     s.push_str("    push    {r4, lr}\n");
     s.push_str("    mov     r4, r0\n");
+    // Present whatever is pending before idling, otherwise a WAIT right after
+    // drawing would hold the frame in the buffer and show nothing. Once, not
+    // per iteration: the following frames draw nothing, exactly as before.
+    s.push_str("    bl      vpy_flush           @ libvpy stroke buffer -> the beam\n");
     s.push_str(".Lwait_loop:\n");
     s.push_str("    cmp     r4, #0\n");
     s.push_str("    beq     .Lwait_done\n");

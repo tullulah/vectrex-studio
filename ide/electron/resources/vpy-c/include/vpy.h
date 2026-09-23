@@ -21,9 +21,53 @@ extern "C" {
 #endif
 
 /* ---- lifecycle ---- */
-void vpy_init(void);                 /* vectrexinit + v_init + v_setRefresh(60) */
-void vpy_frame_begin(void);          /* v_WaitRecal + refresh input snapshot   */
+void vpy_init(void);                 /* vectrexinit + v_init + v_setRefresh(50) */
+void vpy_frame_begin(void);          /* vpy_wait_recal + refresh input snapshot */
 void vpy_run(void (*setup)(void), void (*loop)(void)); /* init; setup(); loop forever */
+
+/* ---- the stroke buffer ---------------------------------------------------
+ * Every drawing call in libvpy accumulates strokes; NOTHING reaches
+ * v_directDraw32 until the frame is flushed. This is what lets a frame be
+ * costed and shed before it turns into bus commands (one stroke is ~13
+ * commands on the UVM2, and they cannot be taken back once emitted).
+ *
+ * THE ONE RULE: something has to flush, once per frame. Use vpy_run(), or
+ * vpy_frame_begin(), or vpy_wait_recal() as your frame boundary. A game that
+ * calls v_WaitRecal() directly will accumulate and never draw — that shows up
+ * as vpy_draw_stats()->frames stuck at 0 while ->dropped climbs, which is the
+ * signal to look for if the screen is black.
+ *
+ * Priority decides what survives a full buffer: a stroke that cannot fit
+ * evicts the lowest-priority stroke below it, or is dropped if everything
+ * present is at least as important. Draw the HUD at VPY_PRI_KEEP and distant
+ * detail at VPY_PRI_LOW and the picture degrades in the right order. */
+#define VPY_PRI_LOW    0     /* shed first: decals, distant scenery */
+#define VPY_PRI_NORMAL 128   /* the default */
+#define VPY_PRI_KEEP   255   /* never shed: the player, the HUD */
+
+typedef struct {
+    uint32_t frames;    /* flushes so far. STUCK AT 0 = nothing is flushing */
+    uint32_t strokes;   /* strokes in the frame last flushed */
+    uint32_t peak;      /* the most ever flushed in one frame */
+    uint32_t shed;      /* strokes evicted to make room for more important ones */
+    uint32_t dropped;   /* strokes lost: the buffer was full of equal-or-better */
+    uint32_t clamped;   /* coordinates pulled back to the legal PiTrex range */
+} vpy_draw_stats_t;
+
+/* A stroke straight into the buffer, in PiTrex deflection units (VPy unit x
+ * 127). For code that computes its own geometry and would lose it to the
+ * +-127 logical grid — a 3D projection, a camera pan. */
+void vpy_draw_line_dev(int32_t x0, int32_t y0, int32_t x1, int32_t y1, int br);
+
+void vpy_wait_recal(void);           /* flush, then v_WaitRecal: the frame boundary */
+void vpy_flush(void);                /* send the accumulated frame, empty the buffer */
+void vpy_set_priority(int p);        /* shed priority of the strokes drawn next */
+int  vpy_get_priority(void);
+int  vpy_pending_strokes(void);      /* accumulated but not yet flushed */
+/* Read back stroke i of the frame being built (0 if there is no such stroke).
+ * For telemetry and capture: sees the frame without disturbing the beam. */
+int  vpy_peek_stroke(int i, int32_t *x0, int32_t *y0, int32_t *x1, int32_t *y1, int *br);
+const vpy_draw_stats_t *vpy_draw_stats(void);
 
 /* ---- drawing (VPy space, brightness 0..127) ---- */
 void vpy_set_intensity(int b);
@@ -79,6 +123,13 @@ int vpy_max(int a, int b);
 int vpy_clamp(int v, int lo, int hi);
 int vpy_sin(int a);                  /* a: 0..127 = full circle; returns -127..127 */
 int vpy_cos(int a);
+/* Q14 trig: 4096 steps per full turn, returns -16384..16384 (16384 = 1.0).
+ * A SEPARATE name, not a replacement: vpy_sin/vpy_cos keep their 128-step
+ * meaning on every target, so no call changes what it returns depending on
+ * where it was compiled. Use these wherever 128 steps would show as a
+ * staircase — a rotating camera, a slow orbit, any 3D transform. */
+int vpy_sin_q14(int a);
+int vpy_cos_q14(int a);
 int vpy_sqrt(int v);
 int vpy_atan2(int y, int x);         /* returns 0..127 (full circle) */
 int vpy_rand(void);
@@ -165,6 +216,11 @@ void vpy_enemy_fire_event_str(int idx, const char *event);
 #define DRAW_VECTOR     vpy_draw_vector
 #define DRAW_VECTOR_EX  vpy_draw_vector_ex
 #define DRAW_ANIM       vpy_draw_anim
+#define WAIT_RECAL      vpy_wait_recal
+#define FLUSH           vpy_flush
+#define SET_PRIORITY    vpy_set_priority
+#define SIN_Q14         vpy_sin_q14
+#define COS_Q14         vpy_cos_q14
 #define SET_TEXT_SIZE   vpy_set_text_size
 #define PRINT_TEXT      vpy_print_text
 #define PRINT_NUMBER    vpy_print_number
