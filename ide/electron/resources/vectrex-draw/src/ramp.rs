@@ -288,6 +288,17 @@ pub static TECHO_MANDA: AtomicU32 = AtomicU32::new(1);
 #[no_mangle]
 pub static DEUDA_ON: AtomicU32 = AtomicU32::new(1);
 
+/// 1 = el techo solo manda MIENTRAS SALGA A CUENTA (por defecto). 0 = manda siempre, que
+/// es como estuvo hasta 2026-09-23.
+///
+/// ES UN KNOB Y NO UN `if` FIJO PORQUE LAS DOS ARMAS TIENEN QUE CABER EN UN FLASHEO. El
+/// dia que se puso, el cartucho se quedo sin mando y no hubo forma de saber si era esto o
+/// el propio flasheo: el emulador daba las dos BIOS IDENTICAS —reproduce la geometria, no
+/// los tiempos— y distinguirlo pedia reflashear dos veces, rompiendo la consola cada vez.
+/// Con el knob, `probe-rs write` lo conmuta con el juego corriendo.
+#[no_mangle]
+pub static TECHO_A_CUENTA: AtomicU32 = AtomicU32::new(1);
+
 #[no_mangle]
 /* `VCAP_SLOW` / `VCAP_DV` / `VCAP_SLOW_HITS` RETIRADOS con VCAP (2026-09-09).
  *
@@ -578,7 +589,38 @@ fn ramp_params_q_v(dx: i32, dy: i32, vcap_in: u32, q: u32, quiere_v: bool) -> (i
      * con delta se queda parado" esta afirmado en `el_techo_de_t1_es_por_vector`, y soltar
      * el techo ya se probo una vez y rompio el dibujo en los DOS cartuchos. Se compara en
      * consola antes de decidir, no aqui. */
-    let t1 = if TECHO_MANDA.load(Ordering::Relaxed) != 0 {
+    /* EL TECHO NO PUEDE COSTAR MAS DE LO QUE SALVA.
+     *
+     * Lo de arriba da por hecho que el techo siempre sale a cuenta, y en una diagonal
+     * lo esta: cuesta velocidad y salva la pendiente. En un trazo CASI alineado con un
+     * eje, no. Medido en consola el 2026-09-23 con un cubo casi de frente, congelando
+     * el frame, leyendolo por RTT y pasandolo por aqui:
+     *
+     *     dx_q4=815 dy_q4=1  ->  techo = 1*s/f = 10,  t1 = 24,  vx CLAVADO en 127
+     *                            recorre 305 de 815 subunidades: el 37%
+     *
+     * El eje menor es UNA subunidad —1/16 de unidad de dispositivo, invisible— y por
+     * salvarla el techo se come el 63% del eje mayor, que es el trazo entero. En
+     * pantalla es una arista del cubo dibujada a la mitad, y al girar salta de arista
+     * en arista. No es un caso raro: un cubo de frente tiene cuatro.
+     *
+     * Asi que el techo manda MIENTRAS SALGA A CUENTA: lo que salva son como mucho
+     * `d_menor` subunidades, y lo que cuesta es lo que el eje mayor no alcanza a
+     * recorrer con la velocidad tapada por el DAC en `techo` cuentas. Cuando cuesta
+     * mas de lo que salva, gana el tope — y el eje menor NO se pierde: la deuda lo
+     * apunta y lo cobra en el trazo siguiente, que es para lo que esta y no existia
+     * cuando se escribio el techo.
+     *
+     * NO ES `TECHO_MANDA = 0`, que lo suelta SIEMPRE: +41% de comandos y el dibujo
+     * roto en los dos cartuchos la vez que se probo. Esto solo lo suelta donde el
+     * propio techo esta rompiendo el trazo. En una diagonal de verdad `alcance` es
+     * mucho mayor que `d_mayor`, `cuesta` sale 0, y no cambia nada. */
+    let d_mayor = dx.abs().max(dy.abs());
+    let alcance = vc * techo * f / s.max(1);   /* lo que el eje mayor cubre en `techo` */
+    let cuesta = (d_mayor - alcance).max(0);
+    let sale_a_cuenta = cuesta <= d_menor || TECHO_A_CUENTA.load(Ordering::Relaxed) == 0;
+
+    let t1 = if TECHO_MANDA.load(Ordering::Relaxed) != 0 && sale_a_cuenta {
         t1_floor.max(t1_vcap).min(techo)
     } else {
         t1_floor.max(t1_vcap).min(techo.max(t1_vcap))
