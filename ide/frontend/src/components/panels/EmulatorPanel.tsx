@@ -14,7 +14,7 @@ import { asmAddressToVpyLine, formatAddress } from '../../utils/debugHelpers';
 import { emuCore } from '../../emulatorCoreSingleton';
 import { VectorRecorder, serializeVrec, defaultRecordingName, MAX_RECORD_SECONDS, type RawSegment } from '../../emulator/recorder/VectorRecorder';
 import { VideoRecorder, defaultVideoName } from '../../emulator/recorder/VideoRecorder';
-import { getRunningContextOutputs, getOutputsForContext } from '../../emulator/recorder/audioGraphTracker';
+import { getAllLiveContextOutputs, getOutputsForContext } from '../../emulator/recorder/audioGraphTracker';
 import { PitrexSimView, PITREX_RANGE, type Segment as PitrexSegment } from '../PitrexSimView';
 
 // Helper: Get line->address map for both single-bank and multibank formats
@@ -417,6 +417,9 @@ export const EmulatorPanel: React.FC = () => {
   // Gameplay video recorder (real pixels + audio → WebM → MP4 via ffmpeg).
   // Separate from the .vrec vector recorder above.
   const videoRecorderRef = useRef<VideoRecorder | null>(null);
+  /* Cuantos contextos pincho el tap la ultima vez, para no imprimir el
+   * diagnostico diez veces por segundo: solo cuando cambia. */
+  const ultimoTapRef = useRef<number>(-1);
   /* El canvas de PitrexSimView, que se superpone al del emulador cuando corre un
    * simulador WASM de proyecto externo. Grabar el de abajo daba "Nothing captured"
    * sin un solo error: no fallaba nada, es que ese canvas ya no lo pinta nadie. */
@@ -617,18 +620,27 @@ export const EmulatorPanel: React.FC = () => {
   // Resolve the active target's live { ctx, outputNode } for the audio tap.
   // PiTrex has its own core (not part of emuCore); everything else routes
   // through emuCore's active system (m6809 → VectrexSystem, rp2350 → Rp2350System).
-  const getActiveAudio = useCallback((): { ctx: AudioContext; outputs: AudioNode[] } | null => {
+  const getActiveAudio = useCallback((): Array<{ ctx: AudioContext; outputs: AudioNode[] }> => {
     try {
-      // WHICH CONTEXT FIRST, then its nodes.
+      // ── EVERY LIVE CONTEXT, AND THE ACTIVE TARGET'S FIRST ─────────────────
       //
-      // This used to prefer getRunningContextOutputs(), which returns the FIRST
-      // tracked context that is 'running' with outputs. After switching targets
-      // in one session (m6809 → uvm2 → rp2350) that is often a STALE context:
-      // still running, still with an output node, and completely silent. The
-      // recorder tapped it, set hasAudio = true, and produced a mute video with
-      // no warning. So: pin the ACTIVE target's context, then ask the tracker
-      // for every node feeding THAT context — which keeps the full-mix capture
-      // (late PLAY_SAMPLE BufferSources included) without the wrong-context bug.
+      // THIS USED TO CHOOSE ONE, and choosing is what kept going wrong. First it
+      // preferred getRunningContextOutputs(), which returns the first tracked
+      // context that is 'running' with outputs — after switching targets that is
+      // often a STALE context: still running, still with an output node, and
+      // completely silent. So it was changed to pin the ACTIVE target's context,
+      // which fixed that and introduced the opposite failure: only a component
+      // this panel knows about can BE the active target, and the WASM simulator
+      // (PitrexSimView) is a React child that owns its own audio and is not one
+      // of them. Its recordings came out silent from end to end — video fine, no
+      // sound at all — and the recorder reported success both times. Measured,
+      // not guessed: ffmpeg volumedetect reads -91 dB on both of today's files
+      // and -21.7 dB on one from August.
+      //
+      // Tapping ALL of them cannot fail that way. A stale context contributes
+      // silence to a mix, which costs nothing; whatever is actually sounding is
+      // in there by construction. The active target still goes first so the
+      // diagnostic log names something meaningful.
       const pit = (pitrexCoreRef.current as any)?.getAudioContextAndOutputNode?.();
       const core = (emuCore as any)?.getAudioContextAndOutputNode?.();
       const legacy = psgAudio.getAudioContextAndOutputNode?.();
@@ -637,20 +649,26 @@ export const EmulatorPanel: React.FC = () => {
       const activo = [pit, core, legacy, vecxAudio]
         .find((c): c is { ctx: AudioContext; outputNode: AudioNode } =>
           !!c?.ctx && !!c?.outputNode && c.ctx.state !== 'closed');
-      if (activo) {
-        const todos = getOutputsForContext(activo.ctx);
+
+      const todos = getAllLiveContextOutputs();
+      const lista = activo
+        ? [{ ctx: activo.ctx, outputs: getOutputsForContext(activo.ctx).length
+                                       ? getOutputsForContext(activo.ctx)
+                                       : [activo.outputNode] },
+           ...todos.filter(t => t.ctx !== activo.ctx)]
+        : todos;
+
+      if (lista.length !== ultimoTapRef.current) {
+        ultimoTapRef.current = lista.length;
         const cual = activo === pit ? 'pitrex' : activo === core ? 'emuCore'
-                   : activo === legacy ? 'psgAudio' : 'window.vecx';
-        console.log(`[EmulatorPanel] audio tap → ${cual} ctx state=${activo.ctx.state}`,
-                    `nodos=${todos.length || 1}`);
-        return { ctx: activo.ctx, outputs: todos.length ? todos : [activo.outputNode] };
+                   : activo === legacy ? 'psgAudio' : activo === vecxAudio ? 'window.vecx'
+                   : 'ninguno declarado';
+        console.log(`[EmulatorPanel] audio tap → ${lista.length} contexto(s), activo: ${cual}`,
+                    lista.map(t => `${t.ctx.state}/${t.outputs.length}n`).join(' '));
       }
-      // No active system claims an audio context (e.g. a subsystem that plays
-      // through a path none of the accessors know): fall back to the universal
-      // tap rather than recording silence.
-      return getRunningContextOutputs();
+      return lista;
     } catch {
-      return null;
+      return [];
     }
   }, []);
 

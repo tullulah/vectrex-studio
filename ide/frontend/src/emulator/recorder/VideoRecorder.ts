@@ -55,12 +55,14 @@ export class VideoRecorder {
   // 0 and receives the emulator's audio once it appears (cross-context bridge).
   private recCtx: AudioContext | null = null;
   private recDest: MediaStreamAudioDestinationNode | null = null;
-  private getAudioCtx: (() => { ctx: AudioContext; outputs: AudioNode[] } | null) | null = null;
-  private bridgeEmuCtx: AudioContext | null = null;
-  private bridgeEmuDest: MediaStreamAudioDestinationNode | null = null;
-  private bridgeSource: MediaStreamAudioSourceNode | null = null;
-  private tappedNodes: Set<AudioNode> | null = null;
-  private tapGains: Array<[AudioNode, GainNode]> | null = null;
+  private getAudioCtx: (() => Array<{ ctx: AudioContext; outputs: AudioNode[] }>) | null = null;
+  /* ONE BRIDGE PER CONTEXT. It was one bridge, for one chosen context, and
+   * choosing is what kept going wrong — see getAllLiveContextOutputs. */
+  private bridges = new Map<AudioContext,
+                            { dest: MediaStreamAudioDestinationNode;
+                              src: MediaStreamAudioSourceNode }>();
+  private tappedNodes: Set<AudioNode> = new Set();
+  private tapGains: Array<[AudioNode, GainNode]> = [];
   private startedAt = 0;
   private tickTimer: number | null = null;
 
@@ -91,7 +93,7 @@ export class VideoRecorder {
   start(
     canvas: HTMLCanvasElement,
     fps: number,
-    getAudioCtx: () => { ctx: AudioContext; outputs: AudioNode[] } | null,
+    getAudioCtx: () => Array<{ ctx: AudioContext; outputs: AudioNode[] }>,
   ): void {
     if (this.isRecording) return;
 
@@ -167,36 +169,38 @@ export class VideoRecorder {
    */
   private tryBridgeAudio(): void {
     if (!this.recCtx || !this.recDest || !this.getAudioCtx) return;
-    const info = this.getAudioCtx();
-    if (!info || !info.ctx || info.outputs.length === 0) return;
-    try {
-      const ctx = info.ctx;
-      // First time we see a running context: build the cross-context path.
-      if (!this.bridgeEmuDest || this.bridgeEmuCtx !== ctx) {
-        if (ctx.state !== 'running') ctx.resume().catch(() => {});
-        const emuDest = ctx.createMediaStreamDestination();
-        const src = this.recCtx.createMediaStreamSource(emuDest.stream);
-        src.connect(this.recDest);
-        this.bridgeEmuDest = emuDest;
-        this.bridgeEmuCtx = ctx;
-        this.bridgeSource = src;
-        this.tappedNodes = new Set();
-        this.tapGains = [];
+    const lista = this.getAudioCtx();
+    if (!lista.length) return;
+    for (const info of lista) {
+      if (!info.ctx || info.outputs.length === 0) continue;
+      try {
+        const ctx = info.ctx;
+        // One cross-context path per context, built the first time it is seen.
+        let br = this.bridges.get(ctx);
+        if (!br) {
+          if (ctx.state !== 'running') ctx.resume().catch(() => {});
+          const dest = ctx.createMediaStreamDestination();
+          const src = this.recCtx.createMediaStreamSource(dest.stream);
+          src.connect(this.recDest);
+          br = { dest, src };
+          this.bridges.set(ctx, br);
+        }
+        // Connect every not-yet-tapped output node (via a unity gain — direct
+        // ScriptProcessor→dest is unreliable in Chromium).
+        for (const node of info.outputs) {
+          if (this.tappedNodes.has(node)) continue;
+          const g = ctx.createGain();
+          g.gain.value = 1;
+          node.connect(g);
+          g.connect(br.dest);
+          this.tappedNodes.add(node);
+          this.tapGains.push([node, g]);
+          this.hasAudio = true;
+        }
+      } catch (e) {
+        // One bad context must not stop the others being tapped.
+        console.warn('[VideoRecorder] audio bridge failed for a context:', e);
       }
-      // Connect every not-yet-tapped output node (via a unity gain — direct
-      // ScriptProcessor→dest is unreliable in Chromium).
-      for (const node of info.outputs) {
-        if (this.tappedNodes!.has(node)) continue;
-        const g = ctx.createGain();
-        g.gain.value = 1;
-        node.connect(g);
-        g.connect(this.bridgeEmuDest);
-        this.tappedNodes!.add(node);
-        this.tapGains!.push([node, g]);
-        this.hasAudio = true;
-      }
-    } catch (e) {
-      console.warn('[VideoRecorder] audio bridge failed:', e);
     }
   }
 
@@ -267,13 +271,13 @@ export class VideoRecorder {
       this.tickTimer = null;
     }
     // Disconnect ONLY our parallel taps, never the emulator→speakers path.
-    if (this.tapGains) {
-      for (const [node, g] of this.tapGains) {
-        try { node.disconnect(g); } catch { /* gone */ }
-        try { g.disconnect(); } catch { /* gone */ }
-      }
+    for (const [node, g] of this.tapGains) {
+      try { node.disconnect(g); } catch { /* gone */ }
+      try { g.disconnect(); } catch { /* gone */ }
     }
-    try { this.bridgeSource?.disconnect(); } catch { /* gone */ }
+    for (const br of this.bridges.values()) {
+      try { br.src.disconnect(); } catch { /* gone */ }
+    }
     try { this.recCtx?.close(); } catch { /* gone */ }
     try { this.videoTrack?.stop(); } catch { /* noop */ }
     this.audioSource = null;
@@ -284,11 +288,9 @@ export class VideoRecorder {
     this.analyserBuf = null;
     this.recCtx = null;
     this.recDest = null;
-    this.bridgeEmuCtx = null;
-    this.bridgeEmuDest = null;
-    this.bridgeSource = null;
-    this.tappedNodes = null;
-    this.tapGains = null;
+    this.bridges.clear();
+    this.tappedNodes.clear();
+    this.tapGains = [];
     this.getAudioCtx = null;
     this.videoTrack = null;
     this.stream = null;
