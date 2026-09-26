@@ -140,6 +140,8 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
   // AY-3-8910 audio on an AudioWorklet (audio thread — a synth stall can't
   // freeze the UI). Holds { ctx, node, resume } once set up.
   const audioRef = useRef<any>(null);
+  /* El DAC del cartucho: contexto propio, ver donde se arma. */
+  const jackRef = useRef<any>(null);
   // Digitised-sample audio (e.g. AAE Sega-G80). `samplesRef` holds one decoded
   // AudioBuffer per bank index (from samples/samples.json, order = the game's
   // sample index); `voiceNodesRef` maps a mixing voice → its live source node.
@@ -462,6 +464,99 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
             log.current?.(`[PiTrex simulator] no pude montar el romset: ${e?.message || e}`);
           }
         }
+        /* ── EL AUDIO DEL DAC DEL CARTUCHO, EN EL SIMULADOR ──────────────────
+         *
+         * El simulador corre a velocidad real y el emulador va a 8 fps, asi que
+         * el simulador es el UNICO sitio donde se puede juzgar una pieza de
+         * musica — y eso no vale nada si suena por otro mezclador. Aqui no hay
+         * PIO ni DMA ni PSRAM: se le dan al juego los dos ficheros que habria
+         * leido de la tarjeta y se le piden muestras. `stream_render` es el
+         * MISMO codigo que corre en el cartucho, con el mismo ADPCM, el mismo
+         * remuestreo y los mismos niveles.
+         *
+         * Contexto de audio propio y no el del PSG: los dos existen a la vez en
+         * la consola —el chip por la tele y el DAC por el conector— y ademas
+         * asi no depende de cual de los dos arranque primero. */
+        try {
+          /* DOS PUENTES DISTINTOS, y el que los confunde no recibe un error:
+           * recibe `undefined` y una funcion que nunca se llama. sdSimList vive
+           * en `electronAPI` y readFileBin en `files` (preload.ts los expone por
+           * separado), asi que `electronAPI.readFileBin` es undefined y todas
+           * las lecturas devolvian nada — con el log culpando a los ficheros,
+           * que si estaban. */
+          const api: any = (window as any).electronAPI;
+          const fapi: any = (window as any).files ?? api;
+          const lista = await api?.sdSimList?.();
+          const leer = async (nombre: string): Promise<Uint8Array | undefined> => {
+            if (!lista?.dir || !fapi?.readFileBin) return undefined;
+            try {
+              const r = await fapi.readFileBin(`${lista.dir}/${nombre}`);
+              if (r && !r.error && r.base64)
+                return Uint8Array.from(atob(r.base64), (c: string) => c.charCodeAt(0));
+            } catch { /* no esta */ }
+            return undefined;
+          };
+          const mus = await leer('KUROMUS.PCM');
+          const sfx = await leer('KUROSFX.PCM');
+          /* CADA FORMA DE NO SONAR DICE CUAL ES. Sin esto, "no hay tarjeta", "no
+           * estan los ficheros" y "este juego no lleva audio de jack" salen las
+           * tres por el mismo sitio: nada en el log y silencio por el altavoz.
+           * Es el fallo que he perseguido tres veces hoy. */
+          if (!lista?.dir)
+            log.current?.('[PiTrex simulator] sin tarjeta simulada: no hay audio de jack');
+          else if (!fapi?.readFileBin)
+            log.current?.('[PiTrex simulator] no hay readFileBin: no puedo leer la tarjeta');
+          else if (!mus && !sfx)
+            log.current?.(`[PiTrex simulator] ni KUROMUS.PCM ni KUROSFX.PCM en ${lista.dir}`);
+          else if (typeof (instance as any)._stream_host_load !== 'function')
+            log.current?.('[PiTrex simulator] este game.js no exporta stream_host_load ' +
+                          '(reconstruye con `make sim`)');
+          if ((mus || sfx) && typeof (instance as any)._stream_host_load === 'function') {
+            const meter = (b?: Uint8Array): [number, number] => {
+              if (!b || !b.length) return [0, 0];
+              const ptr = (instance as any)._malloc(b.length);
+              (instance as any).HEAPU8.set(b, ptr);
+              return [ptr, b.length];
+            };
+            const [pm, nm] = meter(mus);
+            const [ps, ns] = meter(sfx);
+            (instance as any)._stream_host_load(pm, nm, ps, ns);
+            log.current?.(`[PiTrex simulator] audio del jack: musica ${nm} B, efectos ${ns} B`);
+
+            const ctxJ = new AudioContext();
+            const BLOQUE = 2048;
+            const scratch = (instance as any)._malloc(BLOQUE * 2);
+            /* Vecino mas cercano de los 32 kHz del cartucho a los del navegador:
+             * es ADPCM de 4 bits subido, y un filtro no le devolveria nada. */
+            const paso = 32000 / ctxJ.sampleRate;
+            let frac = 0, held = 0, tengo = 0, leido = 0;
+            // eslint-disable-next-line @typescript-eslint/no-deprecated
+            const nodo = ctxJ.createScriptProcessor(BLOQUE, 0, 1);
+            nodo.onaudioprocess = (ev: AudioProcessingEvent) => {
+              const out = ev.outputBuffer.getChannelData(0);
+              for (let i = 0; i < out.length; i++) {
+                frac += paso;
+                while (frac >= 1) {
+                  frac -= 1;
+                  if (leido >= tengo) {
+                    (instance as any)._stream_render(scratch, BLOQUE);
+                    tengo = BLOQUE; leido = 0;
+                  }
+                  held = (instance as any).HEAP16[(scratch >> 1) + leido++] / 32768;
+                }
+                out[i] = held;
+              }
+            };
+            nodo.connect(ctxJ.destination);
+            const despierta = () => { if (ctxJ.state !== 'running') ctxJ.resume().catch(() => {}); };
+            ['keydown', 'pointerdown', 'mousedown', 'click', 'touchstart']
+              .forEach((e) => window.addEventListener(e, despierta, { capture: true }));
+            jackRef.current = { ctxJ, nodo, despierta };
+          }
+        } catch (e: any) {
+          log.current?.(`[PiTrex simulator] sin audio de jack: ${e?.message || e}`);
+        }
+
         setState('running');
         log.current?.('[PiTrex simulator] module ready — starting main()');
 
@@ -505,6 +600,15 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         }
       } catch { /* ignore */ }
       audioRef.current = null;
+      try {
+        const j = jackRef.current;
+        if (j) {
+          ['keydown', 'pointerdown', 'mousedown', 'click', 'touchstart']
+            .forEach((e) => window.removeEventListener(e, j.despierta, { capture: true } as any));
+          j.nodo?.disconnect(); j.ctxJ?.close?.();
+        }
+      } catch { /* ya estaba cerrado */ }
+      jackRef.current = null;
     };
   }, [modulePath, pollInput]);
 

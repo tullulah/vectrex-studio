@@ -138,9 +138,28 @@ static uint8_t comando(uint8_t idx, uint32_t arg, uint8_t crc)
 
 static int s_sdhc = 0;
 
+/* ── ARRANCA UNA VEZ, NO EN CADA LECTURA ────────────────────────────────────
+ *
+ * Esta funcion no tenia guarda, y leer_rango la llama al principio de CADA
+ * lectura. O sea que cada trozo de fichero pagaba el arranque entero de la
+ * tarjeta — 80 pulsos, CMD0, CMD8 y el bucle de ACMD41, que son miles de
+ * vueltas — y ADEMAS lo pagaba a `s_lento = 1`, que es el tick 24 veces mas
+ * lento que el normal.
+ *
+ * MEDIDO EN LA CONSOLA (2026-09-24, streameando musica en kuroishi): 422 ms
+ * para leer 4 KB, unos 10 KB/s. El SPI a pelo no es rapido, pero no es eso: es
+ * que de esos 422 ms casi todo es volver a presentarse a la tarjeta.
+ *
+ * La bandera se pone SOLO al terminar bien, y cualquier fallo la deja a cero,
+ * de modo que una tarjeta que se saca y se vuelve a meter se reintenta. Lo que
+ * no se hace es reintentarlo cuando ya funciona.
+ */
+static int s_listo;
+
 int uvm2_sd_init(void)
 {
     uvm2_sd_error = UVM2_SD_OK;
+    if (s_listo) return 1;
     cfg_pin(PIN_SCK, 1); cfg_pin(PIN_MOSI, 1); cfg_pin(PIN_CS, 1);
     cfg_pin(PIN_MISO, 0);
     pon(PIN_SCK, 0); pon(PIN_MOSI, 1); cs(0);
@@ -150,7 +169,7 @@ int uvm2_sd_init(void)
     for (int i = 0; i < 10; i++) xfer(0xFF);
 
     cs(1);
-    if (comando(0, 0, 0x95) != 0x01) { cs(0); uvm2_sd_error = UVM2_SD_NO_ARRANCA; return 0; }
+    if (comando(0, 0, 0x95) != 0x01) { cs(0); s_listo = 0; uvm2_sd_error = UVM2_SD_NO_ARRANCA; return 0; }
 
     uint8_t r = comando(8, 0x1AA, 0x87);     /* v2 responde 0x01 + 4 bytes */
     int v2 = (r == 0x01);
@@ -159,7 +178,7 @@ int uvm2_sd_init(void)
     for (int intento = 0; ; intento++) {
         comando(55, 0, 0xFF);
         if (comando(41, v2 ? 0x40000000u : 0, 0xFF) == 0x00) break;
-        if (intento > 20000) { cs(0); uvm2_sd_error = UVM2_SD_NO_ARRANCA; return 0; }
+        if (intento > 20000) { cs(0); s_listo = 0; uvm2_sd_error = UVM2_SD_NO_ARRANCA; return 0; }
     }
     if (v2) {                                 /* CMD58: ¿direcciona por bloques? */
         if (comando(58, 0, 0xFF) == 0x00) {
@@ -169,6 +188,7 @@ int uvm2_sd_init(void)
     }
     cs(0);
     s_lento = 0;
+    s_listo = 1;
     return 1;
 }
 
@@ -536,6 +556,61 @@ static uint32_t leer_rango(const char *ruta, unsigned char *dst, uint32_t max,
 }
 
 /* Un trozo desde `desde`: lo que quepa, y quedarse corto NO es un fallo. */
+/* ── UN FICHERO ABIERTO ─────────────────────────────────────────────────────
+ *
+ * El montaje y la busqueda, UNA vez; despues cada trozo cuesta sus sectores y
+ * nada mas. Ver la cabecera para por que hacia falta: leer 1,8 MB a trozos por
+ * uvm2_sd_leer_desde tardaba minutos y el coste crecia con el offset.
+ */
+int uvm2_sd_abrir(const char *ruta, uvm2_sd_fichero *f)
+{
+    static unsigned char b[512];
+    f->ok = 0; f->pos = 0; f->sec = 0; f->len = 0; f->cluster = 0;
+    uvm2_sd_error = UVM2_SD_OK;
+    if (!uvm2_sd_init()) return 0;
+    if (!monta(b)) { uvm2_sd_error = UVM2_SD_SIN_FAT; return 0; }
+
+    const char *barra = 0;
+    for (const char *p = ruta; *p; p++) if (*p == '/') barra = p;
+    uint32_t dir = V.es32 ? V.raiz_cluster : 0;
+    char n83[11];
+    if (barra) {
+        uint32_t len;
+        a83(ruta, (int)(barra - ruta), n83);
+        if (!busca(dir, n83, &dir, &len, b)) { uvm2_sd_error = UVM2_SD_NO_ESTA; return 0; }
+        ruta = barra + 1;
+    }
+    uint32_t c, len;
+    a83(ruta, 64, n83);
+    if (!busca(dir, n83, &c, &len, b)) { uvm2_sd_error = UVM2_SD_NO_ESTA; return 0; }
+    f->cluster = c; f->len = len; f->ok = 1;
+    return 1;
+}
+
+uint32_t uvm2_sd_seguir(uvm2_sd_fichero *f, unsigned char *dst, uint32_t max)
+{
+    static unsigned char b[512];
+    if (!f->ok || f->pos >= f->len) return 0;
+    uint32_t queda = f->len - f->pos;
+    if (queda > max) queda = max;
+
+    uint32_t escrito = 0;
+    while (escrito < queda) {
+        if (f->cluster < 2 || f->cluster >= 0x0FFFFFF8u) { f->ok = 0; break; }
+        /* EL SECTOR DENTRO DEL CLUSTER SE RECUERDA, que es la mitad del truco:
+         * sin eso habria que volver a contar desde el principio del cluster. */
+        if (f->sec >= V.spc) { f->cluster = siguiente(f->cluster, b); f->sec = 0; continue; }
+        if (!lee_bloque(sector_de(f->cluster) + f->sec, b)) { f->ok = 0; break; }
+        const uint32_t dentro = f->pos % 512u;           /* por si quedo a medias */
+        uint32_t n = 512u - dentro;
+        if (n > queda - escrito) n = queda - escrito;
+        for (uint32_t i = 0; i < n; i++) dst[escrito + i] = b[dentro + i];
+        escrito += n; f->pos += n;
+        if ((f->pos % 512u) == 0) f->sec++;              /* sector consumido entero */
+    }
+    return escrito;
+}
+
 uint32_t uvm2_sd_leer_desde(const char *ruta, unsigned char *dst, uint32_t max, uint32_t desde)
 {
     return leer_rango(ruta, dst, max, desde, 0);

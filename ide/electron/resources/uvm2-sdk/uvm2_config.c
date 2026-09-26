@@ -59,8 +59,10 @@ static const struct { const char *n; uint16_t off; unsigned bit; } CAMPOS[] = {
     CAMPO(neg_rate_x, 0), CAMPO(neg_rate_y, 0),
     CAMPO(drift_x, 0), CAMPO(drift_y, 0),
     CAMPO(hz, UVM2_AJUSTE_HZ), CAMPO(start_menu, UVM2_AJUSTE_MENU), CAMPO(rotate, UVM2_AJUSTE_GIRO),
+    CAMPO(audio, UVM2_AJUSTE_AUDIO),
 };
 volatile int32_t uvm2_ajuste_hz = 50, uvm2_ajuste_menu = 1, uvm2_ajuste_giro = 0;
+volatile int32_t uvm2_ajuste_audio = 0;   /* 0 = the jack, which is what it already did */
 
 /* Que juego es y que ajustes propios usa. Sin declarar nada se comporta como siempre: un
  * solo fichero, y ningun ajuste de juego en el asistente. */
@@ -118,6 +120,7 @@ void uvm2_config_actual(struct uvm2_config *c)
     c->hz       = uvm2_ajuste_hz;
     c->start_menu = uvm2_ajuste_menu;
     c->rotate     = uvm2_ajuste_giro;
+    c->audio      = uvm2_ajuste_audio;
 }
 
 void uvm2_config_aplicar(const struct uvm2_config *c)
@@ -141,6 +144,9 @@ void uvm2_config_aplicar(const struct uvm2_config *c)
     uvm2_ajuste_menu = c->start_menu ? 1 : 0;
     uvm2_ajuste_giro = c->rotate ? 1 : 0;
     uvm2_draw_girar((int)uvm2_ajuste_giro);
+    /* And this one is NOT applied to anything: the SDK does not route a game's sound. It is
+     * stored so the game finds it where it left it. See uvm2_config.h. */
+    uvm2_ajuste_audio = c->audio ? 1 : 0;
 }
 
 /* ── EL FICHERO DE TEXTO DE LA SD ────────────────────────────────────────────────────

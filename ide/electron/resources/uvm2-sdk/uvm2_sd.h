@@ -41,6 +41,36 @@ int uvm2_sd_escribir(const char *ruta, const unsigned char *datos, uint32_t n);
 
 uint32_t uvm2_sd_leer_desde(const char *ruta, unsigned char *dst, uint32_t max, uint32_t desde);
 
+/* ── UN FICHERO ABIERTO, PARA LEERLO A TROZOS SIN PAGARLO N VECES ───────────
+ *
+ * uvm2_sd_leer_desde es O(n^2) en cuanto el fichero es grande, y no por poco:
+ * cada llamada vuelve a montar el volumen, a recorrer el directorio y a
+ * RECORRER LA CADENA DE CLUSTERS DESDE EL PRINCIPIO para llegar al offset, asi
+ * que el ultimo trozo cuesta tantas vueltas de FAT como trozos hay. Medido en
+ * consola cargando 1,8 MB de audio: minutos.
+ *
+ * Esto se abre una vez y se sigue leyendo. La posicion —cluster, sector dentro
+ * del cluster y bytes entregados— vive en la estructura, asi que el siguiente
+ * trozo empieza exactamente donde acabo el anterior y la cadena se recorre UNA
+ * vez de principio a fin.
+ *
+ * No hay que cerrar nada: es de solo lectura y no reserva nada. Lo que si hay
+ * es que no tocar el fichero por otro camino mientras esta abierto, porque la
+ * posicion guardada dejaria de querer decir lo que dice.
+ */
+typedef struct {
+    uint32_t cluster;    /* el cluster que se esta leyendo                 */
+    uint32_t sec;        /* sector dentro de ese cluster                   */
+    uint32_t pos;        /* bytes ya entregados                            */
+    uint32_t len;        /* tamaño del fichero, de la entrada de directorio */
+    int      ok;         /* 0 = no abierto o agotado                       */
+} uvm2_sd_fichero;
+
+/* 1 si lo encontro. Admite UN subdirectorio, igual que los demas. */
+int uvm2_sd_abrir(const char *ruta, uvm2_sd_fichero *f);
+/* Lo siguiente, hasta `max`. Devuelve lo copiado; 0 es el final del fichero. */
+uint32_t uvm2_sd_seguir(uvm2_sd_fichero *f, unsigned char *dst, uint32_t max);
+
 /* Lo que el montaje entendio del disco, para poder mirarlo por SWD sin adivinar. Un
  * NO_ESTA puede ser un fichero ausente o un volumen mal interpretado, y desde fuera se
  * ven igual; esto los separa. Se lee de un tiron:

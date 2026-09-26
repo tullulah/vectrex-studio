@@ -2782,7 +2782,61 @@ export const EmulatorPanel: React.FC = () => {
           console.error('[EmulatorPanel] emuCore.loadUvm2 not available — uvm2 target unsupported in this build');
           return;
         }
-        emuCore.loadUvm2(romData, canvasRef.current ?? undefined);
+        /* EL ELF Y LA TARJETA, igual que el camino del rp2350 justo debajo.
+         *
+         * Sin ELF no hay simbolos, y sin simbolos Uvm2System no puede atrapar las
+         * llamadas al lector de SD — las sirve en JS porque el driver de verdad
+         * habla SPI a pelo con unos pines que el emulador no modela. El sintoma
+         * no es un error: el juego arranca, dibuja perfecto, y todo lo que sale
+         * de la tarjeta (el romset, la musica del jack) simplemente no esta.
+         *
+         * Y el .elf de una imagen .um2 no siempre esta al lado: el recipe del
+         * pico-sdk lo deja en pico/, asi que se prueban los dos sitios. */
+        let elfUvm2: Uint8Array | undefined;
+        if (romPath && filesApi?.readFileBin) {
+          const base = romPath.replace(/\.um2$/i, '');
+          const dir  = base.replace(/[^/\\]*$/, '');
+          const name = base.slice(dir.length);
+          for (const cand of [`${base}.elf`, `${dir}pico/${name}.elf`]) {
+            try {
+              const r = await filesApi.readFileBin(cand);
+              if (r && !(r as any).error && (r as any).base64) {
+                elfUvm2 = Uint8Array.from(atob((r as any).base64), c => c.charCodeAt(0));
+                console.log(`[EmulatorPanel] ✓ ELF del .um2: ${cand} (${elfUvm2.length} bytes)`);
+                break;
+              }
+            } catch { /* el siguiente sitio */ }
+          }
+          if (!elfUvm2)
+            console.log('[EmulatorPanel] sin .elf junto al .um2 — sin simbolos no hay SD simulada');
+        }
+        /* LA TARJETA SIMULADA, CON CONTENIDOS Y NO CON NOMBRES. sdSimList devuelve
+         * `files: string[]`; Uvm2System.setSdFiles quiere
+         * Record<ruta, Uint8Array>. Pasarle la lista tal cual compila
+         * perfectamente y no sirve para nada: Object.keys de un array da
+         * "0","1","2" y toda busqueda falla. Otro desajuste que no da error.
+         *
+         * Se saltan los .um2 y los .bin: son las imagenes de los OTROS juegos de
+         * la tarjeta, decenas de megas que ningun juego lee nunca. */
+        let sdUvm2Files: Record<string, Uint8Array> | undefined;
+        try {
+          const lista = await (window as any).electronAPI?.sdSimList?.();
+          if (lista?.dir && Array.isArray(lista.files) && filesApi?.readFileBin) {
+            const out: Record<string, Uint8Array> = {};
+            for (const nombre of lista.files as string[]) {
+              if (/\.(um2|bin)$/i.test(nombre)) continue;
+              try {
+                const r = await filesApi.readFileBin(`${lista.dir}/${nombre}`);
+                if (r && !(r as any).error && (r as any).base64)
+                  out[nombre.toLowerCase()] =
+                    Uint8Array.from(atob((r as any).base64), c => c.charCodeAt(0));
+              } catch { /* ese no */ }
+            }
+            sdUvm2Files = out;
+            console.log(`[EmulatorPanel] SD simulada para uvm2: ${Object.keys(out).length} ficheros`);
+          }
+        } catch { /* sin tarjeta simulada */ }
+        emuCore.loadUvm2(romData, canvasRef.current ?? undefined, elfUvm2, sdUvm2Files);
         if (canvasRef.current) {
           const ctx = canvasRef.current.getContext('2d');
           if (ctx) {

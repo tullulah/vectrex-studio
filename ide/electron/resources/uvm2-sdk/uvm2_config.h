@@ -69,8 +69,30 @@ struct uvm2_config {
     int32_t hz;          /* refresco tope: 50 o 60 (la red), o 0 = a tope, sin enganche. */
     int32_t start_menu;    /* 1 = menu al encender; 0 = directo al juego (boton 4 fuerza el menu) */
     int32_t rotate;      /* 1 = dibujo girado 90 grados, para recreativas horizontales. */
+    /* WHERE THE SOUND COMES OUT: 0 = the 16-bit jack, 1 = the console's own chip.
+     *
+     * IT GOES AT THE END, not where it would read best. The order of this struct is the
+     * contract with the BIOS: `sdk_rp2350.c` hands it over as an `int32_t *` to
+     * `UVM2_API->config_actual`, so a field inserted in the middle changes the meaning of
+     * every field after it. Appending is the only safe change, and a BIOS that does not
+     * know about it simply never touches it.
+     *
+     * NOBODY APPLIES IT HERE, and that is deliberate: the SDK does not route a game's
+     * sound. It is a STORED value, and what it means is decided by the game that declares
+     * it — for KUROISHI, whether the music and the effects go out of the cartridge's DAC or
+     * out of the PSG. All the SDK knows is how to read it, write it and not lose it.
+     *
+     * ZERO IS THE JACK because zero is what a file written before this existed brings, and
+     * on the UVMC2 the jack is what it was already doing. The trap of a zero that means
+     * "old file" is described in uvm2_config.c; there is no trap here because the default
+     * IS zero. */
+    int32_t audio;
 };
 extern volatile int32_t uvm2_ajuste_hz, uvm2_ajuste_menu;
+/* The audio one is declared separately: `sdk_rp2350.c` does not define it, because the debug
+ * board has no jack and the choice does not exist there. Whoever reads it fences itself off
+ * with KUROISHI_UVM2 or the equivalent. */
+extern volatile int32_t uvm2_ajuste_audio;
 
 /** Rellena `c` con lo que valen los knobs AHORA. */
 /* QUE AJUSTES PROPIOS USA ESTE JUEGO. La calibracion del haz es de la CONSOLA y se comparte;
@@ -81,6 +103,7 @@ enum {
     UVM2_AJUSTE_HZ   = 1u,   /* refresco 50/60/libre */
     UVM2_AJUSTE_MENU = 2u,   /* menu al encender */
     UVM2_AJUSTE_GIRO = 4u,   /* dibujo girado 90 grados */
+    UVM2_AJUSTE_AUDIO = 8u,  /* where the sound comes out: jack or console */
 };
 
 /** Declara el nombre del juego (8.3, sin extension: "MHAVOC") y que ajustes propios usa.

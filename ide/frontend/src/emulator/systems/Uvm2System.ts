@@ -201,6 +201,22 @@ const DMA_TRANS_COUNT = 0x08;
 const DMA_CTRL_TRIG  = 0x0C;
 const DMA_EN         = 1 << 0;
 
+/* ── EL JACK DE AUDIO DEL UVMC2, un PT8211 colgado de PIO2 + DMA ────────────
+ *
+ * Ni el PSG ni el haz: es una salida de 16 bits en un conector del cartucho, y
+ * hasta ahora el emulador no la modelaba en absoluto — el juego sonaba en la
+ * consola y callaba en el simulador, que es la peor asimetria posible cuando el
+ * simulador es donde se itera.
+ *
+ * NO SE EMULA EL PIO. Igual que con el stream del bus, lo que se modela es el
+ * DMA: el juego arma un canal en anillo que lleva palabras de la RAM al TX FIFO
+ * de PIO2, una por muestra estereo, y lo que hace falta es (a) sacar esas
+ * palabras al audio del anfitrion y (b) ADELANTAR SU read_addr, porque el juego
+ * lo lee para saber cuanto le queda por rellenar. Sin (b) cree que el buffer no
+ * se vacia nunca y deja de escribir: silencio con todo lo demas correcto. */
+const PIO2_TXF0  = 0x50400010;
+const JACK_HZ    = 32000;
+
 const PIO0_TXF0  = 0x50200010;
 const PIO0_FSTAT = 0x50200004;
 const PIO0_BASE  = 0x50200000;
@@ -352,9 +368,22 @@ export class Uvm2System implements ISystem, IBus {
   private sdArchivos: Record<string, Uint8Array> = {};
   private sdLeerAddr = 0;
   private sdLeerDesdeAddr = 0;
+  private sdAbrirAddr = 0;
+  private sdSeguirAddr = 0;
   private sdErrorAddr = 0;
-  /** Registros del canal 0 del DMA, por indice de palabra. */
-  private dmaRegs = new Uint32Array(16);
+  /** Registros del DMA. DIECISEIS CANALES y no uno: el stream del bus se queda
+   * con el 0 y el jack coge el mas alto que encuentre libre. */
+  private dmaRegs = new Uint32Array(16 * 16);
+  /** El canal que alimenta a PIO2, -1 si el juego no ha armado el jack. */
+  private jackCh = -1;
+  private jackMask = 0;          /* mascara del anillo, en bytes */
+  private jackAcc = 0;           /* periodos de E acumulados hacia la siguiente muestra */
+  private jackBuf = new Float32Array(1 << 14);
+  private jackW = 0; private jackR = 0;
+  /** Muestras sacadas del anillo y cuantas no eran silencio: la diferencia entre
+   * "el jack corre" y "el jack suena", que desde fuera se ven igual. */
+  jackMuestras = 0; jackVivas = 0;
+  private jackFrac = 0; private jackHeld = 0;
   /** Cuantas palabras del stream se han consumido. Solo para diagnostico. */
   pioPalabras = 0;
   private via: Via6522;
@@ -677,6 +706,8 @@ export class Uvm2System implements ISystem, IBus {
     const sim = extractElf32Symbols(elf);
     this.sdLeerAddr  = (sim.get('uvm2_sd_leer')  ?? 0) & ~1;
     this.sdLeerDesdeAddr = (sim.get('uvm2_sd_leer_desde') ?? 0) & ~1;
+    this.sdAbrirAddr  = (sim.get('uvm2_sd_abrir')  ?? 0) & ~1;
+    this.sdSeguirAddr = (sim.get('uvm2_sd_seguir') ?? 0) & ~1;
     this.sdErrorAddr = (sim.get('uvm2_sd_error') ?? 0) >>> 0;
     /* EL PRINCIPIO DEL FRAME ES DONDE SE MIRAN LAS CUENTAS DEL ANTERIOR. Los contadores
      * vivos los pone a cero `uvm2_frame_begin`, asi que leerlos en cualquier otro momento
@@ -767,6 +798,68 @@ export class Uvm2System implements ISystem, IBus {
     cpu.setReg(15, cpu.getReg(14) & ~1);
   }
 
+  /* ── EL FICHERO ABIERTO ─────────────────────────────────────────────────────
+   *
+   * uvm2_sd_abrir / uvm2_sd_seguir, que es como el juego lee algo grande sin
+   * pagar el montaje y el recorrido de la cadena de clusters en cada trozo. Se
+   * atienden igual que uvm2_sd_leer_desde —por PC, sirviendo desde los ficheros
+   * simulados— porque el driver de verdad habla SPI a pelo con unos pines que
+   * aqui no existen.
+   *
+   * Sin esto, el juego arranca, el jack corre y el DAC saca 32000 muestras por
+   * segundo TODAS A CERO: la unica diferencia entre "no suena" y "no hay nada
+   * que sonar", y desde fuera se ven igual.
+   *
+   * La estructura es { u32 cluster, sec, pos, len; int ok } y el emulador usa
+   * `cluster` como lo que para el es: un indice a SU tabla. El juego no lo mira,
+   * solo lo transporta. */
+  private sdAbiertos: Uint8Array[] = [];
+
+  private atiendeSdAbrir(cpu: Thumb2): void {
+    let ruta = '';
+    for (let a = cpu.getReg(0) >>> 0, i = 0; i < 128; i++) {
+      const c = this.read8(a + i);
+      if (!c) break;
+      ruta += String.fromCharCode(c);
+    }
+    const f = this.sdArchivos[ruta.toLowerCase()];
+    const st = cpu.getReg(1) >>> 0;
+    const put = (off: number, v: number) => {
+      for (let i = 0; i < 4; i++) this.write8((st + off + i) >>> 0, (v >>> (i * 8)) & 0xFF);
+    };
+    if (!f) {
+      put(16, 0);                                   /* ok = 0 */
+      if (this.sdErrorAddr) for (let i = 0; i < 4; i++) this.write8(this.sdErrorAddr + i, i ? 0 : 4);
+      cpu.setReg(0, 0);
+      cpu.setReg(15, cpu.getReg(14) & ~1);
+      return;
+    }
+    const idx = this.sdAbiertos.push(f) - 1;
+    put(0, idx); put(4, 0); put(8, 0); put(12, f.length); put(16, 1);
+    if (this.sdErrorAddr) for (let i = 0; i < 4; i++) this.write8(this.sdErrorAddr + i, 0);
+    cpu.setReg(0, 1);
+    cpu.setReg(15, cpu.getReg(14) & ~1);
+  }
+
+  private atiendeSdSeguir(cpu: Thumb2): void {
+    const st  = cpu.getReg(0) >>> 0;
+    const dst = cpu.getReg(1) >>> 0;
+    const max = cpu.getReg(2) >>> 0;
+    const get = (off: number) => this.read32((st + off) >>> 0) >>> 0;
+    const f = this.sdAbiertos[get(0)];
+    let pos = get(8);
+    const len = get(12);
+    let n = 0;
+    if (f && get(16) && pos < len) {
+      n = Math.min(len - pos, max);
+      for (let i = 0; i < n; i++) this.write8((dst + i) >>> 0, f[pos + i]);
+      pos += n;
+      for (let i = 0; i < 4; i++) this.write8((st + 8 + i) >>> 0, (pos >>> (i * 8)) & 0xFF);
+    }
+    cpu.setReg(0, n >>> 0);
+    cpu.setReg(15, cpu.getReg(14) & ~1);
+  }
+
   /** Una imagen FAT (superfloppy o con MBR) que la BIOS lee por bloques: es la tarjeta. */
   setSdImagen(img: Uint8Array): void {
     this.sdImagen = img;
@@ -787,6 +880,7 @@ export class Uvm2System implements ISystem, IBus {
      * la SD se sirve por bloques (sd_hw_*), asi que esas dos trampas no se aplican. */
     this.sdLeerAddr = 0;
     this.sdLeerDesdeAddr = 0;
+    this.sdAbrirAddr = 0; this.sdSeguirAddr = 0;
     this.resets = 0;
     this.clocks.fill(0);
     this.bootram.fill(0);
@@ -915,6 +1009,8 @@ export class Uvm2System implements ISystem, IBus {
     this.ultimos1[this.ultimos1N++ & 63] = pc1;   /* y los ULTIMOS: el choque ocurre lejos del arranque */
     if (this.sdLeerAddr && pc1 === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu1); return 1; }
     if (this.sdLeerDesdeAddr && pc1 === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu1); return 1; }
+    if (this.sdAbrirAddr  && pc1 === this.sdAbrirAddr)  { this.atiendeSdAbrir(this.cpu1);  return 1; }
+    if (this.sdSeguirAddr && pc1 === this.sdSeguirAddr) { this.atiendeSdSeguir(this.cpu1); return 1; }
     if (this.execAddr && pc1 === this.execAddr) { this.execVuelta[1] = this.cpu1.getReg(14) & ~1; this.enLista++; }
     else if (this.execVuelta[1] && pc1 === this.execVuelta[1]) { this.execVuelta[1] = 0; this.enLista--; }
     if (this.sdHwInitAddr && pc1 === this.sdHwInitAddr) { this.atiendeSdHwInit(this.cpu1); return 1; }
@@ -1139,6 +1235,52 @@ export class Uvm2System implements ISystem, IBus {
   private correPeriodoE(): void {
     if (!this.clkHigh) this.halfStep();   // subir
     this.halfStep();                      // bajar: aqui se latchea
+  }
+
+  /** ── LAS MUESTRAS DE UN FRAME DEL JACK ─────────────────────────────────────
+   *
+   * Una por 1/32000 de segundo, y el frame del emulador es 1/50 por
+   * construccion (runFrame corre BUS_PER_FRAME ciclos), asi que son 640. El
+   * ritmo sale de la MISMA base de tiempo que el juego y no de un temporizador
+   * del anfitrion: si el emulador va lento, el audio va lento con el en vez de
+   * desincronizarse.
+   *
+   * ESTUVO COLGADO DE correPeriodoE Y ESO ERA UN RELOJ QUE NO CORRE. Los
+   * periodos de E solo avanzan cuando hay una escritura al bus — unos dos mil
+   * por frame contra los treinta mil que dura — asi que el jack iba a la
+   * septima parte de su velocidad y no llegaba ni a la primera muestra del
+   * segundo. Un reloj tomado de un contador que solo cuenta a ratos.
+   *
+   * Y adelantar read_addr no es contabilidad: el juego lo LEE (jack_space) para
+   * saber cuanto le falta por rellenar. */
+  private jackFrame(): void {
+    if (this.jackCh < 0) return;
+    for (let k = 0; k < JACK_HZ / 50; k++) {
+      const base = (this.jackCh * DMA_CH_STRIDE) >>> 2;
+      const rd = this.dmaRegs[base + (DMA_READ_ADDR >>> 2)] >>> 0;
+      const w = this.read32(rd) >>> 0;
+      /* La palabra es una trama estereo: el mismo valor en los dos canales, asi
+       * que con la mitad baja basta. Con signo, que es como la escribe el juego. */
+      const v = (w & 0xFFFF);
+      const s16 = v >= 0x8000 ? v - 0x10000 : v;
+      this.jackMuestras++;
+      if (s16 !== 0) this.jackVivas++;
+      /* UNA VEZ, AL PRIMER SEGUNDO. "El jack corre" y "el jack suena" se ven
+       * igual desde fuera — un anillo de ceros sale por el DAC tan puntual como
+       * la musica — y esta linea es la que los separa. */
+      if (this.jackMuestras === JACK_HZ)
+        console.log(`[Uvm2System] jack: ${this.jackMuestras} muestras en un segundo, ` +
+                    `${this.jackVivas} distintas de cero`);
+      const n = (this.jackW + 1) & (this.jackBuf.length - 1);
+      if (n !== this.jackR) { this.jackBuf[this.jackW] = s16 / 32768; this.jackW = n; }
+      /* El anillo envuelve la DIRECCION, no el contador: es lo que hace
+       * channel_config_set_ring, y el driver se apoya en ello para no tener que
+       * rearmar el canal nunca. */
+      const next = this.jackMask === 0xFFFFFFFF
+        ? (rd + 4) >>> 0
+        : (((rd & ~this.jackMask) | ((rd + 4) & this.jackMask)) >>> 0);
+      this.dmaRegs[base + (DMA_READ_ADDR >>> 2)] = next;
+    }
   }
 
   /** Address currently on the bus, assembled from the GPIO pins. */
@@ -1451,7 +1593,6 @@ export class Uvm2System implements ISystem, IBus {
   write8(addr: number, data: number): void {
     addr = addr >>> 0;
     data &= 0xFF;
-
     if (addr >= SRAM_BASE && addr < SRAM_BASE + SRAM_SIZE) {
       this.sram[addr - SRAM_BASE] = data;
       return;
@@ -1483,10 +1624,27 @@ export class Uvm2System implements ISystem, IBus {
         const off = addr & 0xFFC, shift = (addr & 3) * 8;
         const i = off >>> 2;
         this.dmaRegs[i] = (((this.dmaRegs[i] ?? 0) & ~(0xFF << shift)) | (data << shift)) >>> 0;
-        // Solo el canal 0, que es el unico que usa el stream.
-        if (off === DMA_CTRL_TRIG && (addr & 3) === 3 &&
-            (this.dmaRegs[i] & DMA_EN) && off < DMA_CH_STRIDE) {
-          this.dmaTransferencia();
+        if (off % DMA_CH_STRIDE === DMA_CTRL_TRIG && (addr & 3) === 3 &&
+            (this.dmaRegs[i] & DMA_EN)) {
+          if (off < DMA_CH_STRIDE) {
+            this.dmaTransferencia();              // canal 0: el stream del bus
+          } else if ((this.dmaRegs[i - 2] >>> 0) === PIO2_TXF0) {
+            /* CUALQUIER OTRO CANAL QUE ESCRIBA AL TX FIFO DE PIO2 ES EL JACK, y
+             * se reconoce por su DESTINO y no por su numero: el driver coge el
+             * canal libre mas alto que encuentre, asi que cual le toca depende
+             * de lo que haya reservado el resto del juego. */
+            const ch = (off / DMA_CH_STRIDE) | 0;
+            const ctrl = this.dmaRegs[i] >>> 0;
+            /* RING_SIZE son los bits 11:8 en el RP2350 (dma.h: RING_SIZE_LSB=8), no
+             * los 13:10 del RP2040. Con el desplazamiento del 2040 el anillo salia
+             * de 2 KB en vez de 8 y la lectura habria envuelto a la cuarta parte. */
+            const ringBits = (ctrl >>> 8) & 0xF;
+            this.jackCh = ch;
+            this.jackMask = ringBits ? ((1 << ringBits) - 1) >>> 0 : 0xFFFFFFFF;
+            this.jackAcc = 0;
+            console.log(`[Uvm2System] jack de audio: canal DMA ${ch}, anillo de ` +
+                        `${ringBits ? (1 << ringBits) : 0} bytes`);
+          }
         }
         return;
       }
@@ -1634,6 +1792,7 @@ export class Uvm2System implements ISystem, IBus {
   private fifoPendiente = false;
 
   runFrame(): Segment[] {
+    this.jackFrame();
     const until = this.busCycle + BUS_PER_FRAME;
     let spent = 0;
 
@@ -1668,6 +1827,8 @@ export class Uvm2System implements ISystem, IBus {
       if (pc === ROM_LOOKUP) { this.romTableLookup(); continue; }
       if (this.sdLeerAddr && pc === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu); continue; }
       if (this.sdLeerDesdeAddr && pc === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu); continue; }
+      if (this.sdAbrirAddr  && pc === this.sdAbrirAddr)  { this.atiendeSdAbrir(this.cpu);  continue; }
+      if (this.sdSeguirAddr && pc === this.sdSeguirAddr) { this.atiendeSdSeguir(this.cpu); continue; }
       /* VOLCADO DE REGISTROS EN UN PC (depuracion): VOLCAR=0x2000362c imprime r0-r12, lr y
        * 40 bytes en [r8] las primeras 4 veces que core 0 pasa por ahi. Sin esto, saber que
        * calculo se tuerce dentro del emulador es adivinar sobre el desensamblado. */
@@ -1818,7 +1979,35 @@ export class Uvm2System implements ISystem, IBus {
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       const node = ctx.createScriptProcessor(2048, 0, 1);
       node.onaudioprocess = (ev) => {
-        this.psg.fillBuffer(ev.outputBuffer.getChannelData(0), 2048);
+        const out = ev.outputBuffer.getChannelData(0);
+        this.psg.fillBuffer(out, 2048);
+        /* ── Y EL JACK POR ENCIMA ────────────────────────────────────────────
+         *
+         * Las dos salidas suenan a la vez en la consola — el chip del Vectrex
+         * por la tele y el DAC por el conector — asi que se suman aqui en vez
+         * de elegir una. Remuestreado de los 32 kHz del cartucho a los 44100
+         * del anfitrion por el vecino mas cercano: es audio de 4 bits ADPCM
+         * subido de 32 a 44, y un filtro no le devolveria nada que tenga.
+         *
+         * Si el anillo se queda seco no se repite lo ultimo: se calla. Un
+         * emulador que va lento tiene que sonar entrecortado y no ronco, o el
+         * problema parece del juego. */
+        if (this.jackCh >= 0) {
+          const paso = JACK_HZ / 44100;
+          for (let i = 0; i < 2048; i++) {
+            this.jackFrac += paso;
+            while (this.jackFrac >= 1) {
+              this.jackFrac -= 1;
+              if (this.jackR !== this.jackW) {
+                this.jackHeld = this.jackBuf[this.jackR];
+                this.jackR = (this.jackR + 1) & (this.jackBuf.length - 1);
+              } else {
+                this.jackHeld = 0;
+              }
+            }
+            out[i] += this.jackHeld;
+          }
+        }
       };
       node.connect(ctx.destination);
       this.audioCtx = ctx;
