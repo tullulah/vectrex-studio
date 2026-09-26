@@ -140,7 +140,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
   // AY-3-8910 audio on an AudioWorklet (audio thread — a synth stall can't
   // freeze the UI). Holds { ctx, node, resume } once set up.
   const audioRef = useRef<any>(null);
-  /* El DAC del cartucho: contexto propio, ver donde se arma. */
+  /* El DAC del cartucho. Comparte el AudioContext del chip; ver donde se arma. */
   const jackRef = useRef<any>(null);
   // Digitised-sample audio (e.g. AAE Sega-G80). `samplesRef` holds one decoded
   // AudioBuffer per bank index (from samples/samples.json, order = the game's
@@ -474,9 +474,10 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
          * MISMO codigo que corre en el cartucho, con el mismo ADPCM, el mismo
          * remuestreo y los mismos niveles.
          *
-         * Contexto de audio propio y no el del PSG: los dos existen a la vez en
-         * la consola —el chip por la tele y el DAC por el conector— y ademas
-         * asi no depende de cual de los dos arranque primero. */
+         * Los dos suenan a la vez en la consola —el chip por la tele y el DAC
+         * por el conector— y aqui salen por el MISMO AudioContext: son una
+         * maquina con dos salidas, no dos maquinas. Tuvo contexto propio y lo
+         * que eso costo esta escrito donde se arma. */
         try {
           /* DOS PUENTES DISTINTOS, y el que los confunde no recibe un error:
            * recibe `undefined` y una funcion que nunca se llama. sdSimList vive
@@ -523,7 +524,29 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
             (instance as any)._stream_host_load(pm, nm, ps, ns);
             log.current?.(`[PiTrex simulator] audio del jack: musica ${nm} B, efectos ${ns} B`);
 
-            const ctxJ = new AudioContext();
+            /* ── THE SAME AudioContext THE REST OF THE SIMULATOR USES ────────
+             *
+             * It was `new AudioContext()`, a second one of its own, and that is
+             * what stopped the video recorder from capturing the jack: the
+             * recorder pins ONE context — the active target's, which here is the
+             * PiTrex core's AY worklet — and taps every node feeding ITS speakers.
+             * A node on a context nobody named is a node nobody records. Daniel:
+             * "graba video y audio cuando es PCM, pero el audio de jack no lo
+             * graba". It played perfectly out of the speakers the whole time,
+             * which is why it took a report to find rather than a build.
+             *
+             * Sharing it is right anyway, recording or no recording: this is ONE
+             * machine with two outputs, and two contexts are two hardware audio
+             * callbacks whose clocks drift against each other, so the mix would
+             * happen in the room instead of in the graph.
+             *
+             * Its own only if the AY worklet never came up — that path is
+             * best-effort and must not take the jack down with it. `propio` says
+             * which, because closing a context we borrowed would kill the chip's
+             * audio on the next Build & Run. */
+            const prestado: AudioContext | null = audioRef.current?.ctx ?? null;
+            const ctxJ: AudioContext = prestado ?? new AudioContext();
+            const propio = !prestado;
             const BLOQUE = 2048;
             const scratch = (instance as any)._malloc(BLOQUE * 2);
             /* Vecino mas cercano de los 32 kHz del cartucho a los del navegador:
@@ -551,7 +574,9 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
             const despierta = () => { if (ctxJ.state !== 'running') ctxJ.resume().catch(() => {}); };
             ['keydown', 'pointerdown', 'mousedown', 'click', 'touchstart']
               .forEach((e) => window.addEventListener(e, despierta, { capture: true }));
-            jackRef.current = { ctxJ, nodo, despierta };
+            jackRef.current = { ctxJ, nodo, despierta, propio };
+            log.current?.(`[PiTrex simulator] jack en ${propio ? 'su propio' : 'el mismo'} `
+                          + `AudioContext que el chip (${ctxJ.sampleRate} Hz)`);
           }
         } catch (e: any) {
           log.current?.(`[PiTrex simulator] sin audio de jack: ${e?.message || e}`);
@@ -605,7 +630,11 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         if (j) {
           ['keydown', 'pointerdown', 'mousedown', 'click', 'touchstart']
             .forEach((e) => window.removeEventListener(e, j.despierta, { capture: true } as any));
-          j.nodo?.disconnect(); j.ctxJ?.close?.();
+          j.nodo?.disconnect();
+          /* ONLY IF IT IS OURS. Since the jack shares the AY worklet's context,
+           * closing it here would take the chip's audio down with it — and the
+           * block above has already closed it in that case. */
+          if (j.propio) j.ctxJ?.close?.();
         }
       } catch { /* ya estaba cerrado */ }
       jackRef.current = null;
