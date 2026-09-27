@@ -317,7 +317,13 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         const safe = String(name).split(/[\\/]/).pop()!.replace(/[^A-Za-z0-9._-]/g, '_');
         const projDir = modulePath.replace(/[\\/][^\\/]+[\\/][^\\/]+$/, '');
         if (projDir === modulePath || !safe) return;
-        api.appendFileBin({ path: `${projDir}/dumps/sim_${sessionStampRef.current}/${safe}`, data });
+        const dest = `${projDir}/dumps/sim_${sessionStampRef.current}/${safe}`;
+        api.appendFileBin({ path: dest, data });
+        /* SAY SO. A dump that is written in silence is indistinguishable from one that
+         * was never written, and that cost a whole round: the recorder had been built
+         * out by the IDE's own `make sim` and the only symptom was a folder that was
+         * not there. One line, with the size, so "did it save" is answered on screen. */
+        log.current?.(`[saveData] ${data.length} B -> ${dest}`);
       },
     };
 
