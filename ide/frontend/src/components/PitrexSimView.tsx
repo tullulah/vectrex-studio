@@ -7,7 +7,7 @@ import { VECTREX_GAMMA } from '../emulator/hardware/Canvas';
 /*
  * PitrexSimView — runs an external project's WASM "simulator" module in the
  * emulator panel. The module speaks the PiTrex host SDK contract (see
- * ide/electron/resources/pitrex-sim/): it calls back into `Module.pitrex.*`
+ * ide/electron/resources/uvmc2-sdk/pitrex-sim/): it calls back into `Module.pitrex.*`
  * for drawing, input, time and sound, and yields once per frame at
  * v_WaitRecal() via Asyncify (emscripten_sleep). NOTHING here is
  * game-specific — the view only knows a module path + the SDK contract.

@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { rampParams, knobs } from "../src/emulator/hardware/Ramp.ts";
 
 const CABI = process.env.CABI ??
-  "/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/vectrex-draw/cabi/target/release/libvectrex_draw_cabi.a";
+  "/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvmc2-sdk/vectrex-draw/cabi/target/release/libvectrex_draw_cabi.a";
 
 /* Se saca la referencia del BINARIO DE RUST, no de una copia de su formula: comparar dos
  * traducciones mias del mismo papel no prueba nada. */

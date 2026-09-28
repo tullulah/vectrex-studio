@@ -2,7 +2,7 @@
 //!
 //! De-risks the larger refactor that will replace the ~4600 lines of inline
 //! ARM-emitting builtin bodies in `builtins.rs` with calls into `libvpy`
-//! (`ide/electron/resources/vpy-c/vpy.c`) — the SAME builtins written in C on
+//! (`ide/electron/resources/uvmc2-sdk/vpy-c/vpy.c`) — the SAME builtins written in C on
 //! the PiTrex SDK contract, which C programs already link against.
 //!
 //! Mechanism: for a builtin listed here, the codegen evaluates its arguments

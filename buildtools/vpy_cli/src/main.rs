@@ -1170,8 +1170,8 @@ fn find_arm_ar() -> String {
 /// contract; the pitrex backend can call into it (`bl vpy_<name>`) instead of
 /// emitting the builtin body inline. Search order:
 ///   1. `VPY_C_DIR` env var
-///   2. bundled next to the executable: `<exe_dir>/vpy-c` (IDE packaging)
-///   3. the repo tree relative to this crate: `ide/electron/resources/vpy-c`
+///   2. bundled next to the executable: `<exe_dir>/uvmc2-sdk/vpy-c` (IDE packaging)
+///   3. the repo tree relative to this crate: `ide/electron/resources/uvmc2-sdk/vpy-c`
 fn find_vpy_c_dir() -> Option<std::path::PathBuf> {
     let ok = |p: &std::path::Path| p.join("vpy.c").exists();
 
@@ -1181,13 +1181,13 @@ fn find_vpy_c_dir() -> Option<std::path::PathBuf> {
     }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(d) = exe.parent() {
-            let p = d.join("vpy-c");
+            let p = d.join("uvmc2-sdk").join("vpy-c");
             if ok(&p) { return Some(p); }
         }
     }
     // CARGO_MANIFEST_DIR = <repo>/buildtools/vpy_cli → repo root is two levels up.
     let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let p = manifest.join("../../ide/electron/resources/vpy-c");
+    let p = manifest.join("../../ide/electron/resources/uvmc2-sdk/vpy-c");
     if ok(&p) { return p.canonicalize().ok(); }
     None
 }
@@ -1204,12 +1204,12 @@ fn find_uvm2_sdk_dir() -> Option<std::path::PathBuf> {
     }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(d) = exe.parent() {
-            let p = d.join("uvm2-sdk");
+            let p = d.join("uvmc2-sdk").join("uvm2-sdk");
             if ok(&p) { return Some(p); }
         }
     }
     let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let p = manifest.join("../../ide/electron/resources/uvm2-sdk");
+    let p = manifest.join("../../ide/electron/resources/uvmc2-sdk/uvm2-sdk");
     if ok(&p) { return p.canonicalize().ok(); }
     None
 }
@@ -1905,7 +1905,7 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     //
     // Los juegos en C ya se migraron en uvm2.mk; esto es lo mismo para VPy.
     let sdk_dir = find_uvm2_sdk_dir().ok_or_else(|| anyhow::anyhow!(
-        "UVM2 SDK not found (expected ide/electron/resources/uvm2-sdk, or set UVM2_SDK_DIR).\n\
+        "UVM2 SDK not found (expected ide/electron/resources/uvmc2-sdk/uvm2-sdk, or set UVM2_SDK_DIR).\n\
          It provides the halt-mode bus, the beam runtime and the SVCall handler —\n\
          without it the image has no implementation for any VPy builtin."))?;
 
@@ -1933,6 +1933,29 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     }
 
     println!("\n{}", "Phase 4: CMake configure (pico-sdk)".bright_cyan().bold());
+    // A CACHE FROM ANOTHER SDK DIRECTORY IS NOT REUSABLE. CMake refuses it outright ("does not
+    // match the source ... used to generate cache"), and every project built before the SDK
+    // became the uvmc2-sdk submodule (2026-09-28) has one pointing at the old
+    // resources/uvm2-sdk. So a stale cache is dropped here, and said, instead of failing.
+    let cache = cmake_build.join("CMakeCache.txt");
+    if let Ok(text) = std::fs::read_to_string(&cache) {
+        let want = sdk_dir.join("pico");
+        let home = text.lines()
+            .find_map(|l| l.strip_prefix("CMAKE_HOME_DIRECTORY:INTERNAL="))
+            .map(PathBuf::from);
+        let same = match (&home, want.canonicalize()) {
+            (Some(h), Ok(w)) => h.canonicalize().map(|h| h == w).unwrap_or(false),
+            _ => false,
+        };
+        if !same {
+            println!("  {} CMake cache made for {}, now {}: removing it",
+                     "note:".yellow(),
+                     home.as_ref().map(|h| h.display().to_string()).unwrap_or_else(|| "?".into()),
+                     want.display());
+            let _ = std::fs::remove_file(&cache);
+            let _ = std::fs::remove_dir_all(cmake_build.join("CMakeFiles"));
+        }
+    }
     // UVM2_STEP_OWNS_INIT: el codegen ya inyecta `bl uvm2_runtime_init` como
     // primera instruccion de game_main, asi que uvm2_pico_main.c NO debe volver
     // a llamarlo. Sin esto el runtime se inicializa dos veces por arranque.
@@ -1964,7 +1987,7 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
             // proyectos... vpy tambien. hay que unificarlo todo"). Antes el doble nucleo era
             // una variable de entorno que nadie ponia y el .um2 de VPy salia por el camino
             // de un nucleo; ahora la base es la misma que uvm2.mk da a los proyectos en C.
-            let mut defs = String::from("UVM2_STEP_OWNS_INIT;UVM2_DUAL_CORE;UVM2_PIO_STREAM;UVM2_SUBUNIDAD");
+            let mut defs = String::from("UVM2_STEP_OWNS_INIT;UVM2_DUAL_CORE;UVM2_PIO_STREAM;UVM2_SUBUNITS");
             // Los del PROYECTO ([uvm2] defs), que es donde vive lo medido y lo que
             // viaja con el .vpyproj. Van antes del entorno para que una prueba suelta
             // desde la linea de ordenes siga pudiendo pisarlos (en cmake gana el ultimo).

@@ -1763,8 +1763,8 @@ export async function executeSimBuild(args: {
 
   // Host SDK shim + the C VPy runtime ship in the app resources.
   const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
-  const shimDir = join(resourcesDir, 'pitrex-sim');
-  const vpyCDir = join(resourcesDir, 'vpy-c');
+  const shimDir = join(resourcesDir, 'uvmc2-sdk', 'pitrex-sim');   // the uvmc2-sdk submodule
+  const vpyCDir = join(resourcesDir, 'uvmc2-sdk', 'vpy-c');
 
   const env: NodeJS.ProcessEnv = { ...process.env, ...(manifest.env || {}), PITREX_SIM_SDK: shimDir, VPY_C_SDK: vpyCDir };
   const emDir = resolveEmscriptenDir();

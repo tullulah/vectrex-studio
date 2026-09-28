@@ -59,8 +59,8 @@ host: $(GEN) | build
 	@echo "=== host: build/host_sb ==="
 
 # ---- IDE simulator (WASM) — this is what F5 runs ---------------------------
-PITREX_SIM_SDK ?= $(HOME)/projects/vectrex-pseudo-python/ide/electron/resources/pitrex-sim
-VPY_C_SDK      ?= $(HOME)/projects/vectrex-pseudo-python/ide/electron/resources/vpy-c
+PITREX_SIM_SDK ?= $(HOME)/projects/vectrex-pseudo-python/ide/electron/resources/uvmc2-sdk/pitrex-sim
+VPY_C_SDK      ?= $(HOME)/projects/vectrex-pseudo-python/ide/electron/resources/uvmc2-sdk/vpy-c
 EMCC           ?= emcc
 EMSDK          ?= $(HOME)/emsdk
 EMSDK_EMCC     := $(EMSDK)/upstream/emscripten
@@ -299,7 +299,7 @@ RP2350_LDFLAGS = -nostartfiles --specs=nosys.specs \
                  -Wa,--defsym,DUAL_CORE_FLAG=0x44430001 \
                  -Wl,--defsym,end=_bss_end
 
-include $(HOME)/projects/vectrex-pseudo-python/ide/electron/resources/uvm2-sdk/uvm2.mk
+include $(HOME)/projects/vectrex-pseudo-python/ide/electron/resources/uvmc2-sdk/uvm2-sdk/uvm2.mk
 
 # El nombre corto, que es el que escribe todo el mundo y el que busca el IDE en
 # [targets.rp2350]. uvm2.mk declara `rp2350-cart` y `snowbros_sbt_rp2350`.

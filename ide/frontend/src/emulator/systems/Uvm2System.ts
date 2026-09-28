@@ -704,10 +704,10 @@ export class Uvm2System implements ISystem, IBus {
    *  sigue funcionando, solo que la SD no se atiende y el juego lo dira a su manera. */
   setElf(elf: Uint8Array): void {
     const sim = extractElf32Symbols(elf);
-    this.sdLeerAddr  = (sim.get('uvm2_sd_leer')  ?? 0) & ~1;
-    this.sdLeerDesdeAddr = (sim.get('uvm2_sd_leer_desde') ?? 0) & ~1;
-    this.sdAbrirAddr  = (sim.get('uvm2_sd_abrir')  ?? 0) & ~1;
-    this.sdSeguirAddr = (sim.get('uvm2_sd_seguir') ?? 0) & ~1;
+    this.sdLeerAddr  = (sim.get('uvm2_sd_read')  ?? 0) & ~1;
+    this.sdLeerDesdeAddr = (sim.get('uvm2_sd_read_from') ?? 0) & ~1;
+    this.sdAbrirAddr  = (sim.get('uvm2_sd_open')  ?? 0) & ~1;
+    this.sdSeguirAddr = (sim.get('uvm2_sd_next') ?? 0) & ~1;
     this.sdErrorAddr = (sim.get('uvm2_sd_error') ?? 0) >>> 0;
     /* EL PRINCIPIO DEL FRAME ES DONDE SE MIRAN LAS CUENTAS DEL ANTERIOR. Los contadores
      * vivos los pone a cero `uvm2_frame_begin`, asi que leerlos en cualquier otro momento
@@ -726,7 +726,7 @@ export class Uvm2System implements ISystem, IBus {
     this.execAddr = (sim.get('uvm2_exec') ?? 0) & ~1;
     this.sdHwReadBlockAddr = (sim.get('sd_hw_read_block') ?? 0) & ~1;
     this.sdHwWriteBlockAddr = (sim.get('sd_hw_write_block') ?? 0) & ~1;
-    console.log(`[Uvm2System] simbolos: uvm2_sd_leer=0x${this.sdLeerAddr.toString(16)} ` +
+    console.log(`[Uvm2System] simbolos: uvm2_sd_read=0x${this.sdLeerAddr.toString(16)} ` +
                 `uvm2_sd_error=0x${this.sdErrorAddr.toString(16)}`);
   }
 

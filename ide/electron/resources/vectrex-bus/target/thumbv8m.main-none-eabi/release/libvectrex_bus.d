@@ -1,1 +1,0 @@
-/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/vectrex-bus/target/thumbv8m.main-none-eabi/release/libvectrex_bus.rlib: /Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/vectrex-bus/src/lib.rs

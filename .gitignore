@@ -104,7 +104,9 @@ tools/**/__pycache__/
 *.exe
 
 # Cargo tree of the cartridge bus: 522 MB of intermediate objects.
-ide/electron/resources/vectrex-bus/target/
+ide/electron/resources/uvmc2-sdk/vectrex-bus/target/
+ide/electron/resources/uvmc2-sdk/vectrex-draw/target/
+ide/electron/resources/uvmc2-sdk/vectrex-draw/cabi/target/
 
 # snowbros_sbt: source, assets and the .um2 are versioned; NOT the debug dumps (13 MB of
 # ramdumps, 6.8 MB of dumps) nor the build trees.
