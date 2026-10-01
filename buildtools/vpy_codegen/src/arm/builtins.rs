@@ -206,6 +206,13 @@ fn emit_sd_builtins() -> String {
     s.push_str(".global vpy_launch_game\n.type vpy_launch_game, %function\n.thumb_func\nvpy_launch_game:\n");
     s.push_str("    svc     #20                     @ SYS_LAUNCH\n");
     s.push_str("    bx      lr\n\n");
+    // CALIBRATE(): the console calibration screen (the SDK's uvm2_wizard), run by
+    // the BIOS until button 4; it saves to config/uvm2.cfg on the SD. Returns 1 if
+    // the settings were saved, 0 if not (no config file, or a card that refused).
+    s.push_str("@ vpy_calibrate() -> r0 = 1 saved — BIOS trap: SYS_CALIBRATE\n");
+    s.push_str(".global vpy_calibrate\n.type vpy_calibrate, %function\n.thumb_func\nvpy_calibrate:\n");
+    s.push_str("    svc     #26                     @ SYS_CALIBRATE\n");
+    s.push_str("    bx      lr\n\n");
     s
 }
 

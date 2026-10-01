@@ -378,6 +378,7 @@ pub fn emit_call(
         "SD_FILE_NAME"           => "vpy_sd_name",
         "DRAW_SD_PREVIEW"        => "vpy_draw_sd_preview",
         "LAUNCH_GAME"            => "vpy_launch_game",
+        "CALIBRATE"              => "vpy_calibrate",
         // Message system
         "MSG_DEF"         => "vpy_msg_def",
         "PRINT_MSG"       => "vpy_print_msg",

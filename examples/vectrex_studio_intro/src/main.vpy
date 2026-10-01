@@ -20,6 +20,9 @@ logo_rot: i16 = 0       # logo Y-rotation angle (0..127 = full turn)
 t: i16 = 0              # frame counter
 sel: i16 = 0            # menu: selected game index
 nav_latch: i16 = 0      # menu: joystick edge latch (one move per push)
+jy: i16 = 0             # menu: stick Y this frame, centred on its rest
+btn_latch: i16 = 1      # menu: buttons 3/4 act on a press, not while held (1 = wait for release)
+not_saved: i16 = 0      # menu: frames left showing "NOT SAVED" after a calibration
 
 FADE_MAX: i16 = 80     # peak brightness
 SPIN_FRAMES: i16 = 128  # spin for 2 full turns (~2.56 s), covers the jingle
@@ -75,7 +78,6 @@ def loop():
     elif state == 1:
         # NOTE: deferred until the pieces work on HW —
         #   PLAY_MUSIC("menu_theme")          # audio (jingle already covers it)
-        #   J1_Y() / J1_BUTTON_1() navigation # VIA read path broken on the cart
         #   DRAW_RECORDING(...) previews       # expensive + big ROM
         # Start MINIMAL: a title + the preview box, to prove the transition and
         # measure the budget. Build the list up from here.
@@ -90,36 +92,35 @@ def loop():
         n = SD_FILE_COUNT()
         if n == 0:
             # No card (or a card with no .BIN): same text size as the game rows.
-            # At size 4 a cell is 14 px wide, so the message has to be short to
-            # stay clear of the preview frame, which starts at x ~ +11.
+            # At size 4 a cell is ~7.5 units (measured on the tube), so the message
+            # has to be short to stay clear of the preview frame, which starts at x ~ +11.
             SET_INTENSITY(80)
             SET_TEXT_SIZE(4)
             PRINT_TEXT(-70, 0, "NO SD")
         else:
-            # --- navigation: J1 buttons 1 (up) / 2 (down), edge-latched ---
-            # Digital buttons, NOT the analog stick: reading the analog axes runs
-            # a SAR against the DAC/comparator that perturbs the PSG → speaker
-            # noise + stretched vectors every frame. Buttons are clean.
-            if J1_BUTTON_1() == 1:
+            # --- navigation: the stick only, one step per push, round the ends ---
+            # The BIOS reads the axes between frames anyway (once, with Joy_Analog's
+            # algorithm) and J1_Y() returns that cached value centred on the stick's
+            # own rest, which is not 0 (measured 2026-10-02: Y rests at 31..48). Past
+            # half the travel counts as a push, so a resting stick never moves it.
+            # Up from the first game goes to the last, down from the last to the first.
+            jy = J1_Y()
+            if jy > 64:
                 if nav_latch == 0:
                     sel = sel - 1
+                    if sel < 0:
+                        sel = n - 1
                     nav_latch = 1
-            elif J1_BUTTON_2() == 1:
+            elif jy < -64:
                 if nav_latch == 0:
                     sel = sel + 1
+                    if sel >= n:
+                        sel = 0
                     nav_latch = 1
             else:
                 nav_latch = 0
-            if sel < 0:
-                sel = 0
             if sel >= n:
                 sel = n - 1
-
-            # --- launch the selected game with button 4 ---
-            # LAUNCH_GAME loads <NAME>.BIN from the SD into RAM and jumps to it;
-            # it does not return. Exit back here = hold all 4 buttons ~1 s.
-            if J1_BUTTON_4() == 1:
-                LAUNCH_GAME(sel)
 
             # --- scroll window: up to 5 rows, keeping the selection visible ---
             top = 0
@@ -153,3 +154,33 @@ def loop():
         # binary previews exist.
         if n > 0:
             DRAW_SD_PREVIEW(sel, 52, 20, 40)
+
+        # --- buttons, on a PRESS: 3 calibrates, 4 starts the selected game ---
+        # Not while held: the calibration screen also closes with button 4, and
+        # that same press must not launch a game the moment the menu comes back.
+        # LAUNCH_GAME loads <NAME>.BIN and does not return (exit: hold all 4 ~1 s).
+        b3 = J1_BUTTON_3()
+        b4 = J1_BUTTON_4()
+        if b3 == 1 and btn_latch == 0:
+            btn_latch = 1
+            if CALIBRATE() == 0:
+                not_saved = 150
+        elif b4 == 1 and btn_latch == 0:
+            btn_latch = 1
+            if n > 0:
+                LAUNCH_GAME(sel)
+        elif b3 == 0 and b4 == 0:
+            btn_latch = 0
+
+        # --- what the buttons do, at the bottom, centred ---
+        # The same size as the game list. Measured on the tube (2026-10-02): a
+        # cell at size 4 is ~7.5 units — "AAE OMEGRACE" runs from -85 to +5 — so
+        # 22 cells are ~165 and the full sentence fits.
+        SET_INTENSITY(60)
+        SET_TEXT_SIZE(4)
+        PRINT_TEXT(-82, -84, "BUTTON 3 - CALIBRATION")
+        PRINT_TEXT(-60, -104, "BUTTON 4 - START")
+        if not_saved > 0:
+            not_saved = not_saved - 1
+            SET_INTENSITY(80)
+            PRINT_TEXT(-34, -122, "NOT SAVED")
