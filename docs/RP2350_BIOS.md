@@ -125,7 +125,7 @@ Canonical mirror of `firmware/src/syscalls.rs` (the source of truth). **Append-o
 | 21 | `SYS_PLAY_MUSIC`     | r0 = `.vmus` table ptr (0 = stop)        | —            | hand the track to the core-1 player (tempo decoupled from draw load) |
 | 22 | `SYS_STOP_MUSIC`     | —                                        | —            | stop the core-1 music player + silence |
 | 23 | `SYS_PLAY_SFX`       | r0 = `.vsfx` table ptr                    | —            | one-shot SFX on the core-1 player (channel C, overlays music) |
-| 26 | `SYS_CALIBRATE`      | —                                        | 1 saved / 0 not | the console calibration screen (the SDK's `uvm2_wizard.c`) until button 4; saves by overwriting `config/uvm2.cfg`, which must exist |
+| 30 | `SYS_CALIBRATE`      | —                                        | 1 saved / 0 not | the console calibration screen (the SDK's `uvm2_wizard.c`) until button 4; saves by overwriting `config/uvm2.cfg`, which must exist |
 | 255 | `SYS_BIOS_VERSION`  | —                                        | (major<<8)\|minor | capability query |
 
 Coordinate/units convention (unchanged from the proven `master.rs`): coordinates
@@ -215,7 +215,7 @@ These were hard-won on real hardware — do **not** re-derive or guess:
 
 `--target rp2350` **is** the BIOS-linked mode: the backend emits `svc #SYS_x` for
 the system primitives (no inline bus/init). SD-launcher builtins (`SD_FILE_COUNT`,
-`SD_FILE_NAME`, `DRAW_SD_PREVIEW`, `LAUNCH_GAME`, `CALIBRATE`→svc #26) and the core-1 audio traps
+`SD_FILE_NAME`, `DRAW_SD_PREVIEW`, `LAUNCH_GAME`, `CALIBRATE`→svc #30) and the core-1 audio traps
 (`PLAY_MUSIC`/`STOP_MUSIC`→svc #21/#22, `PLAY_SFX`→#23, `AUDIO_UPDATE` no-op) are
 in too. `--ram` selects the SRAM linker script for SD-launched games. The mapping:
 
