@@ -742,6 +742,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [viewMode, setViewMode] = useState<ViewMode>('xy');
   const [rotation3D, setRotation3D] = useState({ pitch: 30, yaw: 45 }); // degrees
+  const orbitRef = useRef(false);   // the middle-button drag in progress orbits (Shift held)
   const [isDrawing, setIsDrawing] = useState(false);
   const [tempPoints, setTempPoints] = useState<Point[]>([]);
   const [showCollisionMesh, setShowCollisionMesh] = useState(false);
@@ -2362,12 +2363,15 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       return;
     }
 
-    // Middle mouse button (button 1) → temporary pan regardless of current tool
+    // Middle mouse button (button 1) → temporary pan regardless of current tool;
+    // with Shift held, ORBIT instead (switching to the 3D view if not in it)
     if (e.button === 1) {
       e.preventDefault();
       const canvasX = e.clientX - rect.left;
       const canvasY = e.clientY - rect.top;
       dragStartRef.current = { x: canvasX, y: canvasY, panX: pan.x, panY: pan.y };
+      orbitRef.current = e.shiftKey;
+      if (e.shiftKey && viewMode !== '3d') setViewMode('3d');
       setIsDrawing(true);
       return;
     }
@@ -2625,6 +2629,17 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       draw();
     }
 
+    // Middle mouse button + Shift drag → orbit the 3D view
+    if (e.buttons === 4 && dragStartRef.current && orbitRef.current) {
+      const deltaX = canvasX - dragStartRef.current.x;
+      const deltaY = canvasY - dragStartRef.current.y;
+      setRotation3D(r => ({
+        pitch: Math.max(-89, Math.min(89, r.pitch - deltaY * 0.5)),
+        yaw: (r.yaw + deltaX * 0.5) % 360,
+      }));
+      dragStartRef.current = { ...dragStartRef.current, x: canvasX, y: canvasY };
+      return;
+    }
     // Middle mouse button drag → pan (e.buttons bit 4 = middle button held)
     if (e.buttons === 4 && dragStartRef.current) {
       const deltaX = canvasX - dragStartRef.current.x;
@@ -2715,6 +2730,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   };
 
   const handleMouseUp = () => {
+    orbitRef.current = false;
     // Persist background offset if the background was dragged
     if (currentTool === 'background' && isDrawing && isBackgroundSelected && dragStartRef.current) {
       const nr = { ...resource, backgroundOffset: backgroundOffset };
@@ -3577,6 +3593,30 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   // UI Components
   const Toolbar = () => (
     <div style={{ display: 'flex', gap: '4px', marginBottom: '8px', padding: '4px', background: '#2a2a4e', borderRadius: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+      {/* The four views, one button each. The keys 1-4 only reach the canvas when it has
+          focus, and the cube's centre is a small target: these are always there. In 3D,
+          middle button + Shift orbits (see handleMouseDown). */}
+      {([['xy', 'XY', 'Front view (X-Y) — key 1'], ['xz', 'XZ', 'Top view (X-Z) — key 2'],
+         ['yz', 'YZ', 'Side view (Y-Z) — key 3'], ['3d', '3D', '3D view — key 4; orbit with middle button + Shift']] as const)
+        .map(([mode, label, title]) => (
+          <button
+            key={mode}
+            onClick={() => setViewMode(mode)}
+            style={{
+              padding: '8px 10px',
+              background: viewMode === mode ? '#4a4a8e' : '#3a3a5e',
+              color: viewMode === mode ? 'white' : '#bbb',
+              border: viewMode === mode ? '1px solid #7a7abf' : '1px solid transparent',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+            }}
+            title={title}
+          >
+            {label}
+          </button>
+        ))}
+      <div style={{ width: '1px', alignSelf: 'stretch', background: '#4a4a6e', margin: '0 4px' }} />
       {/* Scale buttons */}
       <button
         onClick={() => {
