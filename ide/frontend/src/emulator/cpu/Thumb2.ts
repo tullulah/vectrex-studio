@@ -1229,7 +1229,13 @@ export class Thumb2 implements ICpu {
       // VLDR / VSTR: 1110 1101 U D 0 L Rn | Vd 101 sz imm8
       const U = (hw0 >>> 7) & 1, L = (hw0 >>> 4) & 1, rn = hw0 & 0xF;
       const imm = (hw1 & 0xFF) << 2;
-      const base = rn === 15 ? ((this.regs[15] + 2) & ~3) >>> 0 : this.regs[rn] >>> 0;  // PC ya apunta a la siguiente
+      /* Align(PC, 4), with regs[15] already = this instruction + 4 (step() sets it before
+       * exec32). It said (regs[15] + 2) & ~3, which is right only when the instruction sits
+       * on a multiple of 4: from an address 2 mod 4 it read the literal pool one word too
+       * far, and a float constant came back as its neighbour — silently. Found 2026-10-02
+       * with n64/sm64/bench (vldr s14,[pc,#200] at 0x200005f6 loaded 0, not 1000.0). The
+       * integer LDR literal below (T2) already had this fix and says why. */
+      const base = rn === 15 ? (this.regs[15] & ~3) >>> 0 : this.regs[rn] >>> 0;
       const dir = (U ? base + imm : base - imm) >>> 0;
       const n = sz ? 2 : 1, idx = sz ? (((D << 4) | Vd) << 1) : Sd;
       for (let i = 0; i < n; i++) {
