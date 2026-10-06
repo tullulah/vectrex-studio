@@ -124,3 +124,6 @@ examples/*/build/uvm2/
 examples/*/rom/*.zip
 examples/*/src/sb_rom.h
 examples/*/rom/palette_table.bin
+
+# Claude Code worktrees (local only)
+.claude/worktrees/
