@@ -1,0 +1,127 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy3_05a4",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -1,
+       "y": 2
+      },
+      {
+       "x": -2,
+       "y": 0
+      },
+      {
+       "x": -4,
+       "y": 2
+      },
+      {
+       "x": -3,
+       "y": 4
+      },
+      {
+       "x": -1,
+       "y": 4
+      }
+     ]
+    },
+    {
+     "name": "sil1",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -2,
+       "y": -8
+      },
+      {
+       "x": -3,
+       "y": -7
+      },
+      {
+       "x": 2,
+       "y": -3
+      },
+      {
+       "x": 2,
+       "y": -8
+      }
+     ]
+    },
+    {
+     "name": "sil2",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -8,
+       "y": -8
+      },
+      {
+       "x": -6,
+       "y": -1
+      },
+      {
+       "x": -4,
+       "y": -2
+      },
+      {
+       "x": -3,
+       "y": 0
+      },
+      {
+       "x": -2,
+       "y": -2
+      },
+      {
+       "x": -4,
+       "y": -7
+      }
+     ]
+    },
+    {
+     "name": "sil3",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 5,
+       "y": -8
+      },
+      {
+       "x": 3,
+       "y": -8
+      },
+      {
+       "x": 4,
+       "y": -7
+      },
+      {
+       "x": 5,
+       "y": -6
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAgElEQVR4nGNgoDWQuPb/P8PQAxLX/v8n1ulMDFOo7EcJEmyHgCmYiikKeQkSNTNh04jPkGQGBhQ5RmyaXmgxMpLkAgkCzgbZim4zigEMUFtf7MOuee41PKbDog3sCrQYAdt6DbftqC5Asx2XzejeBRsA15wDCTxkG5O1cGsGyQAATvlOZN3uwZAAAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

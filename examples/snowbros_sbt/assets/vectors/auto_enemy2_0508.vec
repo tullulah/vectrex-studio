@@ -1,0 +1,74 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy2_0508",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 3,
+       "y": -14
+      },
+      {
+       "x": -3,
+       "y": -15
+      },
+      {
+       "x": -7,
+       "y": -13
+      },
+      {
+       "x": -13,
+       "y": -3
+      },
+      {
+       "x": -13,
+       "y": 4
+      },
+      {
+       "x": -10,
+       "y": 11
+      },
+      {
+       "x": -4,
+       "y": 14
+      },
+      {
+       "x": 6,
+       "y": 14
+      },
+      {
+       "x": 12,
+       "y": 5
+      },
+      {
+       "x": 11,
+       "y": -7
+      },
+      {
+       "x": 5,
+       "y": -14
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACQ0lEQVR4nMVXO3LCMBCVNDmAW0pKStqUKUlJlyuQLiWU5Agcg3RxyRUoKSnTcgMyK3vx02rXyMAMbwZkGWnf248+OPdk+FsmVW+/Z34eTWbu71DH59PufbC9l1tJGdMJfXO/GXM67p07rorE+FJiJm0IndssujGvn937/cHFiJSK8NfIkZiMowgGi2EhQ0T4e8gtQfxbFLFbUc/kCX3q0Di1kgjDzmJQWHRgPKeR50ECqtZ7JEBg/nkMeVv/1HEsiq3G01bEAAGjNvSSGMmlCJqDqwPnRhFGFEL2ZrxOBrJH16DVBjpjRSHIF41anRS9XmzSPoNSgWlJRJQIGEHur3lOItTCE3NZiJaGkHbTAbKykdACkfG8uA9AqyEkPciTJCePMOT4zGM7TxtMZkt3qL+bznGr1kHQVFkbDEeAWvrI9a/ZIBHSOVNA1Rag9ESKsIg5/+Z8ioKALznxLBARFi2DNiS0050L22xbDtiRxUITLW+YXEIWYF80MwGkUKvYPiNyA8ItOLGlhD8XAOFhDzGvLAQFsceyZZCI8mUIUcDwWvXAQpD0cj2T3sdVkB/LQbWshB2jwS2R4LiE3Ah5wZ1w752bX1YDV/DH1zK5aMg8Z2HGdd9zHHv99fSMk2gz4ZpAL7NCk+AokC3jaubt2akI3qQsmBXPNgwBwbQYVW9VAtNr9LiAnNB/babLiXGIMNQ04Jxbb8WZCAlNlIzAvf8LsmuaFCLSBMT0/Zh/RgKNkPHaqWiIB9n1pQNVIY+z9zz8A6XbX7SAjfkCAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

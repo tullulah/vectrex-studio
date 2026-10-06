@@ -62,6 +62,16 @@ interface DebugStore extends LegacyDebugState {
   pdbData: PdbData | null;
   callStack: CallFrame[];
   currentFps: number;
+  /* EL REFRESCO QUE PERMITE EL DIBUJO, aparte del que consigue el emulador.
+   *
+   * Son dos cosas distintas y confundirlas manda a optimizar el sitio equivocado:
+   * `currentFps` es lo que el navegador logra emular por segundo de reloj de pared, y
+   * `drawFps` es a cuanto podria refrescar el juego EN LA CONSOLA si el dibujo fuese el
+   * unico coste — 1,5 MHz de bus entre los ciclos que costo el frame. El segundo es fiel
+   * porque la lista de comandos se reproduce igual aqui que alli; el primero solo dice si
+   * el emulador va comodo. Un fps absoluto de consola NO se puede dar: el modelo de CPU no
+   * tiene esperas de memoria y sale unas veinte veces optimista. */
+  drawFps: number;
   loadingForDebug: boolean; // Flag to indicate loading binary for debug session (don't auto-start)
   
   // New actions
@@ -72,7 +82,7 @@ interface DebugStore extends LegacyDebugState {
   loadPdbData: (pdb: PdbData) => void;
   clearPdbData: () => void;
   updateCallStack: (stack: CallFrame[]) => void;
-  updateStats: (cycles: number, fps: number) => void;
+  updateStats: (cycles: number, fps: number, drawFps?: number) => void;
   setLoadingForDebug: (loading: boolean) => void;
   
   // Debug controls
@@ -116,6 +126,7 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   pdbData: null,
   callStack: [],
   currentFps: 0,
+  drawFps: 0,
   loadingForDebug: false,
   
   // New actions
@@ -190,7 +201,7 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   },
   
   updateCallStack: (stack) => set({ callStack: stack }),
-  updateStats: (cycles, fps) => set({ cycles, currentFps: fps }),
+  updateStats: (cycles, fps, drawFps) => set({ cycles, currentFps: fps, ...(drawFps === undefined ? {} : { drawFps }) }),
   
   // Debug controls
   run: () => {

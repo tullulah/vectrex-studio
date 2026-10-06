@@ -34,12 +34,20 @@ export interface VectorEntry {
   x1: number;
   y1: number;
   color: number;
+  /**
+   * Bus cycles the beam spent LIT on this segment. On a CRT the phosphor charge is
+   * intensity × time: a beam parked lit for 24 cycles is a bright DOT (zero length,
+   * high ticks) and an 8-cycle ramp stroke is dimmer per unit length. Without this
+   * the T1=8 microtramo language (VecFever) renders as clean strokes in the emulator
+   * while the real console shows dots — the renderer needs the dwell to be faithful.
+   */
+  ticks: number;
 }
 
 /** Mutable vector slot (matches vector_t in vecx_full.js). */
 class VectorSlot implements VectorEntry {
-  x0 = 0; y0 = 0; x1 = 0; y1 = 0; color = 0;
-  reset(): void { this.x0 = this.y0 = this.x1 = this.y1 = this.color = 0; }
+  x0 = 0; y0 = 0; x1 = 0; y1 = 0; color = 0; ticks = 0;
+  reset(): void { this.x0 = this.y0 = this.x1 = this.y1 = this.color = this.ticks = 0; }
 }
 
 export class Beam {
@@ -92,6 +100,8 @@ export class Beam {
   alg_vector_dx: number = 0;
   alg_vector_dy: number = 0;
   alg_vector_color: number = 0;
+  /** Bus cycles the current segment has been lit (dwell). See VectorEntry.ticks. */
+  alg_vector_ticks: number = 0;
 
   // ------------------------------------------------------------------ //
   // Double-buffered vector lists (draw / erase, swapped per frame)
@@ -170,7 +180,7 @@ export class Beam {
   // ------------------------------------------------------------------ //
   // alg_addline — mirrors vecx_full.js lines 5135–5198
   // ------------------------------------------------------------------ //
-  private addLine(x0: number, y0: number, x1: number, y1: number, color: number): void {
+  private addLine(x0: number, y0: number, x1: number, y1: number, color: number, ticks: number): void {
     // Compute hash for deduplication
     let key = x0;
     key = key * 31 + y0;
@@ -185,6 +195,7 @@ export class Beam {
       const v = this._vectors_draw[index];
       if (v.x0 === x0 && v.y0 === y0 && v.x1 === x1 && v.y1 === y1) {
         v.color = color;
+        v.ticks += ticks;   // redrawn within the frame: the phosphor charges again
         return;
       }
     }
@@ -204,6 +215,7 @@ export class Beam {
     slot.x1    = x1;
     slot.y1    = y1;
     slot.color = color;
+    slot.ticks = ticks;
     this._vector_hash[key] = this.vector_draw_cnt;
     this.vector_draw_cnt++;
   }
@@ -269,6 +281,7 @@ export class Beam {
         this.alg_vector_dx   = sig_dx;
         this.alg_vector_dy   = sig_dy;
         this.alg_vector_color = this.alg_zsh & 0xff;
+        this.alg_vector_ticks = 0;
       }
     } else {
       // Currently drawing a vector
@@ -279,6 +292,7 @@ export class Beam {
           this.alg_vector_x0, this.alg_vector_y0,
           this.alg_vector_x1, this.alg_vector_y1,
           this.alg_vector_color,
+          this.alg_vector_ticks,
         );
       } else if (
         sig_dx !== this.alg_vector_dx ||
@@ -290,6 +304,7 @@ export class Beam {
           this.alg_vector_x0, this.alg_vector_y0,
           this.alg_vector_x1, this.alg_vector_y1,
           this.alg_vector_color,
+          this.alg_vector_ticks,
         );
         // Start new segment if still in bounds
         if (
@@ -303,6 +318,7 @@ export class Beam {
           this.alg_vector_dx   = sig_dx;
           this.alg_vector_dy   = sig_dy;
           this.alg_vector_color = this.alg_zsh & 0xff;
+          this.alg_vector_ticks = 0;
         } else {
           this.alg_vectoring = 0;
         }
@@ -310,6 +326,7 @@ export class Beam {
     }
 
     // Advance beam position
+    if (this.alg_vectoring === 1) this.alg_vector_ticks++;
     this.alg_curr_x += sig_dx;
     this.alg_curr_y += sig_dy;
 
@@ -367,6 +384,7 @@ export class Beam {
     this.alg_curr_x   = ALG_MAX_X >> 1;
     this.alg_curr_y   = ALG_MAX_Y >> 1;
     this.alg_vectoring = 0;
+    this.alg_vector_ticks = 0;
     this.vector_draw_cnt = 0;
     this.vector_erse_cnt = 0;
 
@@ -396,7 +414,7 @@ export class Beam {
     // clamp any lit vector to a minimum visible intensity instead of dropping it.
     if (x0 === x1 && y0 === y1) return;            // zero-length: nothing to draw
     if (color === 0) color = DIRECT_MIN_INTENSITY; // only pure-0 (→black) needs the floor
-    this.addLine(x0, y0, x1, y1, color);
+    this.addLine(x0, y0, x1, y1, color, 0);       // 0 = no dwell data (direct path)
   }
 
   /** VECTREX_COLORS constant exposed so Canvas can check sentinel value. */

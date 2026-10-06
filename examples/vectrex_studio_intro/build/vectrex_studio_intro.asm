@@ -64,6 +64,7 @@
 .equ ENEMY_STATE_ARM,     0x2007F41C  @ enemy state per slot: 8 × i32
 .equ VPY_PLAYER_ANIM_STATE, 0x2007F43C  @ player animation state: frame_idx(u8)+ticks_left(u8)
 .equ VPY_BRIGHTNESS_OVERRIDE, 0x2007F43E  @ SET_INTENSITY override: 0=.vec intensity, >0=override (1 byte)
+.equ VPY_DRAW_SCALE,      0x2007F43F  @ escala del proximo DRAW_VECTOR_EX (x32; 0/32 = 1:1, 1 byte)
 .equ WANDER_SCRATCH_ARM,  0x2007F440  @ wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)
 .equ USER_RAM_START,      0x2007F460  @ user variables begin here
 

@@ -1,2075 +1,1602 @@
 {
-  "version": "1.0",
-  "source": "main.vpy",
-  "asm": "set_text_size.asm",
-  "binary": "set_text_size.bin",
-  "entryPoint": "0x00DB",
-  "symbols": {
-    "DRAW_SCALES": "0x0137",
-    "J1B4_BUILTIN.J1B4_OFF": "0x0085",
-    "MAIN": "0x0100",
-    "J1B3_BUILTIN.J1B3_OFF": "0x0076",
-    "J1B2_BUILTIN": "0x005C",
-    "STR_0": "0x02D8",
-    "STR_4": "0x02FA",
-    "J1B3_BUILTIN": "0x006B",
-    "VECTREX_PRINT_TEXT": "0x0089",
-    "STR_1": "0x02E5",
-    "__Moveto_d": "0x00D1",
-    "J1B4_BUILTIN": "0x007A",
-    "STR_2": "0x02EC",
-    "START": "0x00DB",
-    "J1B1_BUILTIN": "0x004D",
-    "__Intensity_a": "0x00C9",
-    "LOOP_BODY": "0x02C8",
-    "J1X_BUILTIN": "0x001D",
-    "__Draw_Line_d": "0x00D6",
-    "VECTREX_SET_INTENSITY": "0x00B9",
-    "__Reset0Ref": "0x00CE",
-    "J1B1_BUILTIN.J1B1_OFF": "0x0058",
-    "J1B2_BUILTIN.J1B2_OFF": "0x0067",
-    "STR_3": "0x02F3",
-    "J1Y_BUILTIN": "0x0035"
+  "asm": "multibank_temp/bank_00_full.asm",
+  "asmAddressMap": {},
+  "asmBankAddr": {
+    "0:0000": 539,
+    "0:000A": 540,
+    "0:000B": 541,
+    "0:0010": 542,
+    "0:0011": 543,
+    "0:0018": 544,
+    "0:0019": 545,
+    "0:001A": 552,
+    "0:001C": 553,
+    "0:001E": 554,
+    "0:0021": 555,
+    "0:0023": 556,
+    "0:0026": 557,
+    "0:0029": 558,
+    "0:002B": 559,
+    "0:002F": 562,
+    "0:0031": 563,
+    "0:0034": 565,
+    "0:0037": 605,
+    "0:003A": 606,
+    "0:003D": 607,
+    "0:0040": 608,
+    "0:0042": 609,
+    "0:0045": 610,
+    "0:0047": 611,
+    "0:004A": 613,
+    "0:004D": 614,
+    "0:0050": 615,
+    "0:0052": 616,
+    "0:0055": 617,
+    "0:0057": 618,
+    "0:005A": 619,
+    "0:005C": 620,
+    "0:005F": 621,
+    "0:0061": 622,
+    "0:0064": 623,
+    "0:0067": 630,
+    "0:006A": 631,
+    "0:006C": 632,
+    "0:006F": 633,
+    "0:0072": 634,
+    "0:0075": 637,
+    "0:007B": 641,
+    "0:007E": 642,
+    "0:0081": 644,
+    "0:0084": 645,
+    "0:0085": 651,
+    "0:0088": 652,
+    "0:008B": 653,
+    "0:008C": 654,
+    "0:008F": 655,
+    "0:0092": 656,
+    "0:0093": 657,
+    "0:0094": 658,
+    "0:0098": 660,
+    "0:009B": 664,
+    "0:009E": 665,
+    "0:00A1": 666,
+    "0:00A4": 667,
+    "0:00A7": 668,
+    "0:00AA": 669,
+    "0:00AD": 670,
+    "0:00B0": 671,
+    "0:00B3": 672,
+    "0:00B6": 675,
+    "0:00B9": 676,
+    "0:00BC": 677,
+    "0:00BD": 678,
+    "0:00C0": 679,
+    "0:00C3": 680,
+    "0:00C4": 681,
+    "0:00C5": 682,
+    "0:00C9": 684,
+    "0:00CC": 688,
+    "0:00CF": 689,
+    "0:00D2": 690,
+    "0:00D5": 691,
+    "0:00D8": 692,
+    "0:00DB": 693,
+    "0:00DE": 694,
+    "0:00E1": 695,
+    "0:00E4": 696,
+    "0:00E7": 699,
+    "0:00EA": 700,
+    "0:00ED": 701,
+    "0:00EE": 702,
+    "0:00F1": 703,
+    "0:00F4": 704,
+    "0:00F5": 705,
+    "0:00F6": 706,
+    "0:00FA": 708,
+    "0:00FD": 712,
+    "0:0100": 713,
+    "0:0103": 714,
+    "0:0106": 715,
+    "0:0109": 716,
+    "0:010C": 717,
+    "0:010F": 718,
+    "0:0112": 719,
+    "0:0115": 720,
+    "0:0118": 723,
+    "0:011B": 724,
+    "0:011E": 725,
+    "0:011F": 726,
+    "0:0122": 727,
+    "0:0125": 728,
+    "0:0126": 729,
+    "0:0127": 730,
+    "0:012B": 732,
+    "0:012E": 736,
+    "0:0131": 737,
+    "0:0134": 738,
+    "0:0137": 739,
+    "0:013A": 740,
+    "0:013D": 741,
+    "0:0140": 742,
+    "0:0143": 743,
+    "0:0146": 744,
+    "0:0149": 747,
+    "0:014C": 748,
+    "0:014F": 749,
+    "0:0150": 750,
+    "0:0153": 751,
+    "0:0156": 752,
+    "0:0157": 753,
+    "0:0158": 754,
+    "0:015C": 756,
+    "0:015F": 760,
+    "0:0162": 761,
+    "0:0165": 762,
+    "0:0168": 763,
+    "0:016B": 764,
+    "0:016E": 765,
+    "0:0171": 766,
+    "0:0174": 767,
+    "0:0177": 768,
+    "0:017A": 771,
+    "0:017D": 772,
+    "0:0180": 773,
+    "0:0181": 774,
+    "0:0184": 775,
+    "0:0187": 776,
+    "0:0188": 777,
+    "0:0189": 778,
+    "0:018D": 780,
+    "0:0190": 781
+  },
+  "asmBankFiles": {
+    "0": "multibank_temp/bank_00_full.asm",
+    "1": "multibank_temp/bank_01_full.asm",
+    "2": "multibank_temp/bank_02_full.asm"
+  },
+  "asmFunctions": {},
+  "asmLineMap": {},
+  "binary": "main.bin",
+  "bios_symbols": {
+    "Abs_a_b": "0xF584",
+    "Abs_b": "0xF58B",
+    "Add_Score_a": "0xF85E",
+    "Add_Score_d": "0xF87C",
+    "Bitmask_a": "0xF57E",
+    "Check0Ref": "0xF34F",
+    "Clear_C8_RAM": "0xF542",
+    "Clear_Score": "0xF84F",
+    "Clear_Sound": "0xF272",
+    "Clear_x_256": "0xF545",
+    "Clear_x_b": "0xF53F",
+    "Clear_x_b_80": "0xF550",
+    "Clear_x_b_a": "0xF552",
+    "Clear_x_d": "0xF548",
+    "Cold_Start": "0xF000",
+    "Compare_Score": "0xF8C7",
+    "DP_to_C8": "0xF1AF",
+    "DP_to_D0": "0xF1AA",
+    "Dec_3_Counters": "0xF55A",
+    "Dec_6_Counters": "0xF55E",
+    "Dec_Counters": "0xF563",
+    "Delay_0": "0xF579",
+    "Delay_1": "0xF575",
+    "Delay_2": "0xF571",
+    "Delay_3": "0xF56D",
+    "Delay_RTS": "0xF57D",
+    "Delay_b": "0xF57A",
+    "Do_Sound": "0xF289",
+    "Do_Sound_x": "0xF28C",
+    "Dot_List": "0xF2D5",
+    "Dot_List_Reset": "0xF2DE",
+    "Dot_d": "0xF2C3",
+    "Dot_here": "0xF2C5",
+    "Dot_ix": "0xF2C1",
+    "Dot_ix_b": "0xF2BE",
+    "Draw_Grid_VL": "0xFF9F",
+    "Draw_Line_d": "0xF3DF",
+    "Draw_Pat_VL": "0xF437",
+    "Draw_Pat_VL_a": "0xF434",
+    "Draw_Pat_VL_d": "0xF439",
+    "Draw_VL": "0xF3DD",
+    "Draw_VL_a": "0xF3DA",
+    "Draw_VL_ab": "0xF3D8",
+    "Draw_VL_b": "0xF3D2",
+    "Draw_VL_mode": "0xF46E",
+    "Draw_VLc": "0xF3CE",
+    "Draw_VLcs": "0xF3D6",
+    "Draw_VLp": "0xF410",
+    "Draw_VLp_7F": "0xF408",
+    "Draw_VLp_FF": "0xF404",
+    "Draw_VLp_b": "0xF40E",
+    "Draw_VLp_scale": "0xF40C",
+    "Explosion_Snd": "0xF92E",
+    "Get_Rise_Idx": "0xF5D9",
+    "Get_Rise_Run": "0xF5EF",
+    "Get_Run_Idx": "0xF5DB",
+    "Init_Music": "0xF68D",
+    "Init_Music_Buf": "0xF533",
+    "Init_Music_chk": "0xF687",
+    "Init_Music_x": "0xF692",
+    "Init_OS": "0xF18B",
+    "Init_OS_RAM": "0xF164",
+    "Init_VIA": "0xF14C",
+    "Intensity_1F": "0xF29D",
+    "Intensity_3F": "0xF2A1",
+    "Intensity_5F": "0xF2A5",
+    "Intensity_7F": "0xF2A9",
+    "Intensity_a": "0xF2AB",
+    "Joy_Analog": "0xF1F5",
+    "Joy_Digital": "0xF1F8",
+    "Mov_Draw_VL": "0xF3BC",
+    "Mov_Draw_VL_a": "0xF3B9",
+    "Mov_Draw_VL_ab": "0xF3B7",
+    "Mov_Draw_VL_b": "0xF3B1",
+    "Mov_Draw_VL_d": "0xF3BE",
+    "Mov_Draw_VLc_a": "0xF3AD",
+    "Mov_Draw_VLcs": "0xF3B5",
+    "Move_Mem_a": "0xF683",
+    "Move_Mem_a_1": "0xF67F",
+    "Moveto_d": "0xF312",
+    "Moveto_d_7F": "0xF2FC",
+    "Moveto_ix": "0xF310",
+    "Moveto_ix_7F": "0xF30C",
+    "Moveto_ix_FF": "0xF308",
+    "Moveto_ix_a": "0xF30E",
+    "Moveto_x_7F": "0xF2F2",
+    "New_High_Score": "0xF8D8",
+    "Obj_Hit": "0xF8FF",
+    "Obj_Will_Hit": "0xF8F3",
+    "Obj_Will_Hit_u": "0xF8E5",
+    "Print_List": "0xF38A",
+    "Print_List_chk": "0xF38C",
+    "Print_List_hw": "0xF385",
+    "Print_Ships": "0xF393",
+    "Print_Ships_x": "0xF391",
+    "Print_Str": "0xF495",
+    "Print_Str_d": "0xF37A",
+    "Print_Str_hwyx": "0xF373",
+    "Print_Str_yx": "0xF378",
+    "Random": "0xF517",
+    "Random_3": "0xF511",
+    "Read_Btns": "0xF1BA",
+    "Read_Btns_Mask": "0xF1B4",
+    "Recalibrate": "0xF2E6",
+    "Reset0Int": "0xF36B",
+    "Reset0Ref": "0xF354",
+    "Reset0Ref_D0": "0xF34A",
+    "Reset_Pen": "0xF35B",
+    "Rise_Run_Angle": "0xF593",
+    "Rise_Run_Len": "0xF603",
+    "Rise_Run_X": "0xF5FF",
+    "Rise_Run_Y": "0xF601",
+    "Rot_VL": "0xF616",
+    "Rot_VL_Mode": "0xF62B",
+    "Rot_VL_Mode_a": "0xF61F",
+    "Rot_VL_ab": "0xF610",
+    "Rot_VL_dft": "0xF637",
+    "Select_Game": "0xF7A9",
+    "Set_Refresh": "0xF1A2",
+    "Sound_Byte": "0xF256",
+    "Sound_Byte_raw": "0xF25B",
+    "Sound_Byte_x": "0xF259",
+    "Sound_Bytes": "0xF27D",
+    "Sound_Bytes_x": "0xF284",
+    "Strip_Zeros": "0xF8B7",
+    "VIA_DDR_a": "0xD003",
+    "VIA_DDR_b": "0xD002",
+    "VIA_aux_cntl": "0xD00B",
+    "VIA_cntl": "0xD00C",
+    "VIA_int_enable": "0xD00E",
+    "VIA_int_flags": "0xD00D",
+    "VIA_port_a": "0xD001",
+    "VIA_port_a_nohs": "0xD00F",
+    "VIA_port_b": "0xD000",
+    "VIA_shift_reg": "0xD00A",
+    "VIA_t1_cnt_hi": "0xD005",
+    "VIA_t1_cnt_lo": "0xD004",
+    "VIA_t1_lch_hi": "0xD007",
+    "VIA_t1_lch_lo": "0xD006",
+    "VIA_t2_hi": "0xD009",
+    "VIA_t2_lo": "0xD008",
+    "Vec_0Ref_Enable": "0xC824",
+    "Vec_ADSR_Table": "0xC84F",
+    "Vec_ADSR_Timers": "0xC85E",
+    "Vec_Angle": "0xC836",
+    "Vec_Brightness": "0xC827",
+    "Vec_Btn_State": "0xC80F",
+    "Vec_Button_1_1": "0xC812",
+    "Vec_Button_1_2": "0xC813",
+    "Vec_Button_1_3": "0xC814",
+    "Vec_Button_1_4": "0xC815",
+    "Vec_Button_2_1": "0xC816",
+    "Vec_Button_2_2": "0xC817",
+    "Vec_Button_2_3": "0xC818",
+    "Vec_Button_2_4": "0xC819",
+    "Vec_Buttons": "0xC811",
+    "Vec_Cold_Flag": "0xCBFE",
+    "Vec_Counter_1": "0xC82E",
+    "Vec_Counter_2": "0xC82F",
+    "Vec_Counter_3": "0xC830",
+    "Vec_Counter_4": "0xC831",
+    "Vec_Counter_5": "0xC832",
+    "Vec_Counter_6": "0xC833",
+    "Vec_Counters": "0xC82E",
+    "Vec_Default_Stk": "0xCBEA",
+    "Vec_Dot_Dwell": "0xC828",
+    "Vec_Duration": "0xC857",
+    "Vec_Expl_1": "0xC858",
+    "Vec_Expl_2": "0xC859",
+    "Vec_Expl_3": "0xC85A",
+    "Vec_Expl_4": "0xC85B",
+    "Vec_Expl_Chan": "0xC85C",
+    "Vec_Expl_ChanA": "0xC853",
+    "Vec_Expl_ChanB": "0xC85D",
+    "Vec_Expl_Chans": "0xC854",
+    "Vec_Expl_Flag": "0xC867",
+    "Vec_Expl_Timer": "0xC877",
+    "Vec_FIRQ_Vector": "0xCBF5",
+    "Vec_Freq_Table": "0xC84D",
+    "Vec_High_Score": "0xCBEB",
+    "Vec_IRQ_Vector": "0xCBF8",
+    "Vec_Joy_1_X": "0xC81B",
+    "Vec_Joy_1_Y": "0xC81C",
+    "Vec_Joy_2_X": "0xC81D",
+    "Vec_Joy_2_Y": "0xC81E",
+    "Vec_Joy_Mux": "0xC81F",
+    "Vec_Joy_Mux_1_X": "0xC81F",
+    "Vec_Joy_Mux_1_Y": "0xC820",
+    "Vec_Joy_Mux_2_X": "0xC821",
+    "Vec_Joy_Mux_2_Y": "0xC822",
+    "Vec_Joy_Resltn": "0xC81A",
+    "Vec_Loop_Count": "0xC825",
+    "Vec_Max_Games": "0xC850",
+    "Vec_Max_Players": "0xC84F",
+    "Vec_Misc_Count": "0xC823",
+    "Vec_Music_Chan": "0xC855",
+    "Vec_Music_Flag": "0xC856",
+    "Vec_Music_Freq": "0xC861",
+    "Vec_Music_Ptr": "0xC853",
+    "Vec_Music_Twang": "0xC858",
+    "Vec_Music_Wk_1": "0xC84B",
+    "Vec_Music_Wk_5": "0xC847",
+    "Vec_Music_Wk_6": "0xC846",
+    "Vec_Music_Wk_7": "0xC845",
+    "Vec_Music_Wk_A": "0xC842",
+    "Vec_Music_Work": "0xC83F",
+    "Vec_NMI_Vector": "0xCBFB",
+    "Vec_Num_Game": "0xC87A",
+    "Vec_Num_Players": "0xC879",
+    "Vec_Pattern": "0xC829",
+    "Vec_Prev_Btns": "0xC810",
+    "Vec_Random_Seed": "0xC87D",
+    "Vec_Rfrsh": "0xC83D",
+    "Vec_Rfrsh_hi": "0xC83E",
+    "Vec_Rfrsh_lo": "0xC83D",
+    "Vec_RiseRun_Len": "0xC83B",
+    "Vec_RiseRun_Tmp": "0xC834",
+    "Vec_Rise_Index": "0xC839",
+    "Vec_Run_Index": "0xC837",
+    "Vec_SWI2_Vector": "0xCBF2",
+    "Vec_SWI3_Vector": "0xCBF2",
+    "Vec_SWI_Vector": "0xCBFB",
+    "Vec_Seed_Ptr": "0xC87B",
+    "Vec_Snd_Shadow": "0xC800",
+    "Vec_Str_Ptr": "0xC82C",
+    "Vec_Text_HW": "0xC82A",
+    "Vec_Text_Height": "0xC82A",
+    "Vec_Text_Width": "0xC82B",
+    "Vec_Twang_Table": "0xC851",
+    "Wait_Recal": "0xF192",
+    "Warm_Start": "0xF06C",
+    "Xform_Rise": "0xF663",
+    "Xform_Rise_a": "0xF661",
+    "Xform_Run": "0xF65D",
+    "Xform_Run_a": "0xF65B",
+    "music1": "0xFD0D",
+    "music2": "0xFD1D",
+    "music3": "0xFD81",
+    "music4": "0xFDD3",
+    "music5": "0xFE38",
+    "music6": "0xFE76",
+    "music7": "0xFEC6",
+    "music8": "0xFEF8",
+    "music9": "0xFF26",
+    "musica": "0xFF44",
+    "musicb": "0xFF62",
+    "musicc": "0xFF7A",
+    "musicd": "0xFF8F"
+  },
+  "entry_point": "0x0022",
+  "functions": {
+    "DRAW_SCALES": {
+      "address": "0x0085",
+      "endLine": 24,
+      "startLine": 12,
+      "type": "vpy"
+    },
+    "LOOP": {
+      "address": "0x007B",
+      "endLine": 26,
+      "startLine": 25,
+      "type": "vpy"
+    },
+    "MAIN": {
+      "address": "0x0037",
+      "endLine": 11,
+      "startLine": 9,
+      "type": "vpy"
+    }
+  },
+  "labels": {
+    "ABS_A_B": 62852,
+    "ABS_B": 62859,
+    "ADD_SCORE_A": 63582,
+    "ADD_SCORE_D": 63612,
+    "Abs_a_b": 62852,
+    "Abs_b": 62859,
+    "Add_Score_a": 63582,
+    "Add_Score_d": 63612,
+    "BITMASK_A": 62846,
+    "BTN_PREV_STATE": 51340,
+    "BTN_RAW": 51341,
+    "Bitmask_a": 62846,
+    "CHECK0REF": 62287,
+    "CLEAR_C8_RAM": 62786,
+    "CLEAR_SCORE": 63567,
+    "CLEAR_SOUND": 62066,
+    "CLEAR_X_256": 62789,
+    "CLEAR_X_B": 62783,
+    "CLEAR_X_B_80": 62800,
+    "CLEAR_X_B_A": 62802,
+    "CLEAR_X_D": 62792,
+    "COLD_START": 61440,
+    "COMPARE_SCORE": 63687,
+    "CURRENT_ROM_BANK": 51381,
+    "Check0Ref": 62287,
+    "Clear_C8_RAM": 62786,
+    "Clear_Score": 63567,
+    "Clear_Sound": 62066,
+    "Clear_x_256": 62789,
+    "Clear_x_b": 62783,
+    "Clear_x_b_80": 62800,
+    "Clear_x_b_a": 62802,
+    "Clear_x_d": 62792,
+    "Cold_Start": 61440,
+    "Compare_Score": 63687,
+    "DEC_3_COUNTERS": 62810,
+    "DEC_6_COUNTERS": 62814,
+    "DEC_COUNTERS": 62819,
+    "DELAY_0": 62841,
+    "DELAY_1": 62837,
+    "DELAY_2": 62833,
+    "DELAY_3": 62829,
+    "DELAY_B": 62842,
+    "DELAY_RTS": 62845,
+    "DOT_D": 62147,
+    "DOT_HERE": 62149,
+    "DOT_IX": 62145,
+    "DOT_IX_B": 62142,
+    "DOT_LIST": 62165,
+    "DOT_LIST_RESET": 62174,
+    "DO_SOUND": 62089,
+    "DO_SOUND_X": 62092,
+    "DP_TO_C8": 61871,
+    "DP_TO_D0": 61866,
+    "DP_to_C8": 61871,
+    "DP_to_D0": 61866,
+    "DRAW_GRID_VL": 65439,
+    "DRAW_LINE_ARGS": 51343,
+    "DRAW_LINE_D": 62431,
+    "DRAW_PAT_VL": 62519,
+    "DRAW_PAT_VL_A": 62516,
+    "DRAW_PAT_VL_D": 62521,
+    "DRAW_VEC_INTENSITY": 51342,
+    "DRAW_VL": 62429,
+    "DRAW_VLC": 62414,
+    "DRAW_VLCS": 62422,
+    "DRAW_VLP": 62480,
+    "DRAW_VLP_7F": 62472,
+    "DRAW_VLP_B": 62478,
+    "DRAW_VLP_FF": 62468,
+    "DRAW_VLP_SCALE": 62476,
+    "DRAW_VL_A": 62426,
+    "DRAW_VL_AB": 62424,
+    "DRAW_VL_B": 62418,
+    "DRAW_VL_MODE": 62574,
+    "Dec_3_Counters": 62810,
+    "Dec_6_Counters": 62814,
+    "Dec_Counters": 62819,
+    "Delay_0": 62841,
+    "Delay_1": 62837,
+    "Delay_2": 62833,
+    "Delay_3": 62829,
+    "Delay_RTS": 62845,
+    "Delay_b": 62842,
+    "Do_Sound": 62089,
+    "Do_Sound_x": 62092,
+    "Dot_List": 62165,
+    "Dot_List_Reset": 62174,
+    "Dot_d": 62147,
+    "Dot_here": 62149,
+    "Dot_ix": 62145,
+    "Dot_ix_b": 62142,
+    "Draw_Grid_VL": 65439,
+    "Draw_Line_d": 62431,
+    "Draw_Pat_VL": 62519,
+    "Draw_Pat_VL_a": 62516,
+    "Draw_Pat_VL_d": 62521,
+    "Draw_VL": 62429,
+    "Draw_VL_a": 62426,
+    "Draw_VL_ab": 62424,
+    "Draw_VL_b": 62418,
+    "Draw_VL_mode": 62574,
+    "Draw_VLc": 62414,
+    "Draw_VLcs": 62422,
+    "Draw_VLp": 62480,
+    "Draw_VLp_7F": 62472,
+    "Draw_VLp_FF": 62468,
+    "Draw_VLp_b": 62478,
+    "Draw_VLp_scale": 62476,
+    "EXPLOSION_SND": 63790,
+    "Explosion_Snd": 63790,
+    "GET_RISE_IDX": 62937,
+    "GET_RISE_RUN": 62959,
+    "GET_RUN_IDX": 62939,
+    "Get_Rise_Idx": 62937,
+    "Get_Rise_Run": 62959,
+    "Get_Run_Idx": 62939,
+    "INIT_MUSIC": 63117,
+    "INIT_MUSIC_BUF": 62771,
+    "INIT_MUSIC_CHK": 63111,
+    "INIT_MUSIC_X": 63122,
+    "INIT_OS": 61835,
+    "INIT_OS_RAM": 61796,
+    "INIT_VIA": 61772,
+    "INTENSITY_1F": 62109,
+    "INTENSITY_3F": 62113,
+    "INTENSITY_5F": 62117,
+    "INTENSITY_7F": 62121,
+    "INTENSITY_A": 62123,
+    "Init_Music": 63117,
+    "Init_Music_Buf": 62771,
+    "Init_Music_chk": 63111,
+    "Init_Music_x": 63122,
+    "Init_OS": 61835,
+    "Init_OS_RAM": 61796,
+    "Init_VIA": 61772,
+    "Intensity_1F": 62109,
+    "Intensity_3F": 62113,
+    "Intensity_5F": 62117,
+    "Intensity_7F": 62121,
+    "Intensity_a": 62123,
+    "JOY_ANALOG": 61941,
+    "JOY_DIGITAL": 61944,
+    "Joy_Analog": 61941,
+    "Joy_Digital": 61944,
+    "MOD16": 16442,
+    "MOD16.M16_DONE": 16525,
+    "MOD16.M16_DPOS": 16471,
+    "MOD16.M16_END": 16510,
+    "MOD16.M16_LOOP": 16494,
+    "MOD16.M16_RCHECK": 16479,
+    "MOD16.M16_RPOS": 16494,
+    "MOVETO_D": 62226,
+    "MOVETO_D_7F": 62204,
+    "MOVETO_IX": 62224,
+    "MOVETO_IX_7F": 62220,
+    "MOVETO_IX_A": 62222,
+    "MOVETO_IX_FF": 62216,
+    "MOVETO_X_7F": 62194,
+    "MOVE_MEM_A": 63107,
+    "MOVE_MEM_A_1": 63103,
+    "MOV_DRAW_VL": 62396,
+    "MOV_DRAW_VLCS": 62389,
+    "MOV_DRAW_VLC_A": 62381,
+    "MOV_DRAW_VL_A": 62393,
+    "MOV_DRAW_VL_AB": 62391,
+    "MOV_DRAW_VL_B": 62385,
+    "MOV_DRAW_VL_D": 62398,
+    "MUSIC1": 64781,
+    "MUSIC2": 64797,
+    "MUSIC3": 64897,
+    "MUSIC4": 64979,
+    "MUSIC5": 65080,
+    "MUSIC6": 65142,
+    "MUSIC7": 65222,
+    "MUSIC8": 65272,
+    "MUSIC9": 65318,
+    "MUSICA": 65348,
+    "MUSICB": 65378,
+    "MUSICC": 65402,
+    "MUSICD": 65423,
+    "Mov_Draw_VL": 62396,
+    "Mov_Draw_VL_a": 62393,
+    "Mov_Draw_VL_ab": 62391,
+    "Mov_Draw_VL_b": 62385,
+    "Mov_Draw_VL_d": 62398,
+    "Mov_Draw_VLc_a": 62381,
+    "Mov_Draw_VLcs": 62389,
+    "Move_Mem_a": 63107,
+    "Move_Mem_a_1": 63103,
+    "Moveto_d": 62226,
+    "Moveto_d_7F": 62204,
+    "Moveto_ix": 62224,
+    "Moveto_ix_7F": 62220,
+    "Moveto_ix_FF": 62216,
+    "Moveto_ix_a": 62222,
+    "Moveto_x_7F": 62194,
+    "NEW_HIGH_SCORE": 63704,
+    "New_High_Score": 63704,
+    "OBJ_HIT": 63743,
+    "OBJ_WILL_HIT": 63731,
+    "OBJ_WILL_HIT_U": 63717,
+    "Obj_Hit": 63743,
+    "Obj_Will_Hit": 63731,
+    "Obj_Will_Hit_u": 63717,
+    "PRINT_LIST": 62346,
+    "PRINT_LIST_CHK": 62348,
+    "PRINT_LIST_HW": 62341,
+    "PRINT_SHIPS": 62355,
+    "PRINT_SHIPS_X": 62353,
+    "PRINT_STR": 62613,
+    "PRINT_STR_D": 62330,
+    "PRINT_STR_HWYX": 62323,
+    "PRINT_STR_YX": 62328,
+    "PRINT_TEXT_STR_11966217390444143374": 16560,
+    "PRINT_TEXT_STR_2171175787713719065": 16547,
+    "PRINT_TEXT_STR_2446385107": 16526,
+    "PRINT_TEXT_STR_2446385109": 16533,
+    "PRINT_TEXT_STR_2446385111": 16540,
+    "Print_List": 62346,
+    "Print_List_chk": 62348,
+    "Print_List_hw": 62341,
+    "Print_Ships": 62355,
+    "Print_Ships_x": 62353,
+    "Print_Str": 62613,
+    "Print_Str_d": 62330,
+    "Print_Str_hwyx": 62323,
+    "Print_Str_yx": 62328,
+    "RANDOM": 62743,
+    "RANDOM_3": 62737,
+    "READ_BTNS": 61882,
+    "READ_BTNS_MASK": 61876,
+    "RECALIBRATE": 62182,
+    "RESET0INT": 62315,
+    "RESET0REF": 62292,
+    "RESET0REF_D0": 62282,
+    "RESET_PEN": 62299,
+    "RESULT": 51328,
+    "RISE_RUN_ANGLE": 62867,
+    "RISE_RUN_LEN": 62979,
+    "RISE_RUN_X": 62975,
+    "RISE_RUN_Y": 62977,
+    "ROT_VL": 62998,
+    "ROT_VL_AB": 62992,
+    "ROT_VL_DFT": 63031,
+    "ROT_VL_MODE": 63019,
+    "ROT_VL_MODE_A": 63007,
+    "Random": 62743,
+    "Random_3": 62737,
+    "Read_Btns": 61882,
+    "Read_Btns_Mask": 61876,
+    "Recalibrate": 62182,
+    "Reset0Int": 62315,
+    "Reset0Ref": 62292,
+    "Reset0Ref_D0": 62282,
+    "Reset_Pen": 62299,
+    "Rise_Run_Angle": 62867,
+    "Rise_Run_Len": 62979,
+    "Rise_Run_X": 62975,
+    "Rise_Run_Y": 62977,
+    "Rot_VL": 62998,
+    "Rot_VL_Mode": 63019,
+    "Rot_VL_Mode_a": 63007,
+    "Rot_VL_ab": 62992,
+    "Rot_VL_dft": 63031,
+    "SELECT_GAME": 63401,
+    "SET_REFRESH": 61858,
+    "SOUND_BYTE": 62038,
+    "SOUND_BYTES": 62077,
+    "SOUND_BYTES_X": 62084,
+    "SOUND_BYTE_RAW": 62043,
+    "SOUND_BYTE_X": 62041,
+    "STRIP_ZEROS": 63671,
+    "Select_Game": 63401,
+    "Set_Refresh": 61858,
+    "Sound_Byte": 62038,
+    "Sound_Byte_raw": 62043,
+    "Sound_Byte_x": 62041,
+    "Sound_Bytes": 62077,
+    "Sound_Bytes_x": 62084,
+    "Strip_Zeros": 63671,
+    "TEMP_YX": 51338,
+    "TEXT_SCALE_H": 51363,
+    "TEXT_SCALE_W": 51364,
+    "TMPPTR": 51332,
+    "TMPPTR2": 51334,
+    "TMPVAL": 51330,
+    "VECTREX_PRINT_TEXT": 16384,
+    "VEC_0REF_ENABLE": 51236,
+    "VEC_ADSR_TABLE": 51279,
+    "VEC_ADSR_TIMERS": 51294,
+    "VEC_ANGLE": 51254,
+    "VEC_BRIGHTNESS": 51239,
+    "VEC_BTN_STATE": 51215,
+    "VEC_BUTTONS": 51217,
+    "VEC_BUTTON_1_1": 51218,
+    "VEC_BUTTON_1_2": 51219,
+    "VEC_BUTTON_1_3": 51220,
+    "VEC_BUTTON_1_4": 51221,
+    "VEC_BUTTON_2_1": 51222,
+    "VEC_BUTTON_2_2": 51223,
+    "VEC_BUTTON_2_3": 51224,
+    "VEC_BUTTON_2_4": 51225,
+    "VEC_COLD_FLAG": 52222,
+    "VEC_COUNTERS": 51246,
+    "VEC_COUNTER_1": 51246,
+    "VEC_COUNTER_2": 51247,
+    "VEC_COUNTER_3": 51248,
+    "VEC_COUNTER_4": 51249,
+    "VEC_COUNTER_5": 51250,
+    "VEC_COUNTER_6": 51251,
+    "VEC_DEFAULT_STK": 52202,
+    "VEC_DOT_DWELL": 51240,
+    "VEC_DURATION": 51287,
+    "VEC_EXPL_1": 51288,
+    "VEC_EXPL_2": 51289,
+    "VEC_EXPL_3": 51290,
+    "VEC_EXPL_4": 51291,
+    "VEC_EXPL_CHAN": 51292,
+    "VEC_EXPL_CHANA": 51283,
+    "VEC_EXPL_CHANB": 51293,
+    "VEC_EXPL_CHANS": 51284,
+    "VEC_EXPL_FLAG": 51303,
+    "VEC_EXPL_TIMER": 51319,
+    "VEC_FIRQ_VECTOR": 52213,
+    "VEC_FREQ_TABLE": 51277,
+    "VEC_HIGH_SCORE": 52203,
+    "VEC_IRQ_VECTOR": 52216,
+    "VEC_JOY_1_X": 51227,
+    "VEC_JOY_1_Y": 51228,
+    "VEC_JOY_2_X": 51229,
+    "VEC_JOY_2_Y": 51230,
+    "VEC_JOY_MUX": 51231,
+    "VEC_JOY_MUX_1_X": 51231,
+    "VEC_JOY_MUX_1_Y": 51232,
+    "VEC_JOY_MUX_2_X": 51233,
+    "VEC_JOY_MUX_2_Y": 51234,
+    "VEC_JOY_RESLTN": 51226,
+    "VEC_LOOP_COUNT": 51237,
+    "VEC_MAX_GAMES": 51280,
+    "VEC_MAX_PLAYERS": 51279,
+    "VEC_MISC_COUNT": 51235,
+    "VEC_MUSIC_CHAN": 51285,
+    "VEC_MUSIC_FLAG": 51286,
+    "VEC_MUSIC_FREQ": 51297,
+    "VEC_MUSIC_PTR": 51283,
+    "VEC_MUSIC_TWANG": 51288,
+    "VEC_MUSIC_WK_1": 51275,
+    "VEC_MUSIC_WK_5": 51271,
+    "VEC_MUSIC_WK_6": 51270,
+    "VEC_MUSIC_WK_7": 51269,
+    "VEC_MUSIC_WK_A": 51266,
+    "VEC_MUSIC_WORK": 51263,
+    "VEC_NMI_VECTOR": 52219,
+    "VEC_NUM_GAME": 51322,
+    "VEC_NUM_PLAYERS": 51321,
+    "VEC_PATTERN": 51241,
+    "VEC_PREV_BTNS": 51216,
+    "VEC_RANDOM_SEED": 51325,
+    "VEC_RFRSH": 51261,
+    "VEC_RFRSH_HI": 51262,
+    "VEC_RFRSH_LO": 51261,
+    "VEC_RISERUN_LEN": 51259,
+    "VEC_RISERUN_TMP": 51252,
+    "VEC_RISE_INDEX": 51257,
+    "VEC_RUN_INDEX": 51255,
+    "VEC_SEED_PTR": 51323,
+    "VEC_SND_SHADOW": 51200,
+    "VEC_STR_PTR": 51244,
+    "VEC_SWI2_VECTOR": 52210,
+    "VEC_SWI3_VECTOR": 52210,
+    "VEC_SWI_VECTOR": 52219,
+    "VEC_TEXT_HEIGHT": 51242,
+    "VEC_TEXT_HW": 51242,
+    "VEC_TEXT_WIDTH": 51243,
+    "VEC_TWANG_TABLE": 51281,
+    "VLINE_DX": 51357,
+    "VLINE_DX_16": 51353,
+    "VLINE_DX_REMAINING": 51361,
+    "VLINE_DY": 51358,
+    "VLINE_DY_16": 51355,
+    "VLINE_DY_REMAINING": 51359,
+    "VPY_MOVE_X": 51336,
+    "VPY_MOVE_Y": 51337,
+    "Vec_0Ref_Enable": 51236,
+    "Vec_ADSR_Table": 51279,
+    "Vec_ADSR_Timers": 51294,
+    "Vec_Angle": 51254,
+    "Vec_Brightness": 51239,
+    "Vec_Btn_State": 51215,
+    "Vec_Button_1_1": 51218,
+    "Vec_Button_1_2": 51219,
+    "Vec_Button_1_3": 51220,
+    "Vec_Button_1_4": 51221,
+    "Vec_Button_2_1": 51222,
+    "Vec_Button_2_2": 51223,
+    "Vec_Button_2_3": 51224,
+    "Vec_Button_2_4": 51225,
+    "Vec_Buttons": 51217,
+    "Vec_Cold_Flag": 52222,
+    "Vec_Counter_1": 51246,
+    "Vec_Counter_2": 51247,
+    "Vec_Counter_3": 51248,
+    "Vec_Counter_4": 51249,
+    "Vec_Counter_5": 51250,
+    "Vec_Counter_6": 51251,
+    "Vec_Counters": 51246,
+    "Vec_Default_Stk": 52202,
+    "Vec_Dot_Dwell": 51240,
+    "Vec_Duration": 51287,
+    "Vec_Expl_1": 51288,
+    "Vec_Expl_2": 51289,
+    "Vec_Expl_3": 51290,
+    "Vec_Expl_4": 51291,
+    "Vec_Expl_Chan": 51292,
+    "Vec_Expl_ChanA": 51283,
+    "Vec_Expl_ChanB": 51293,
+    "Vec_Expl_Chans": 51284,
+    "Vec_Expl_Flag": 51303,
+    "Vec_Expl_Timer": 51319,
+    "Vec_FIRQ_Vector": 52213,
+    "Vec_Freq_Table": 51277,
+    "Vec_High_Score": 52203,
+    "Vec_IRQ_Vector": 52216,
+    "Vec_Joy_1_X": 51227,
+    "Vec_Joy_1_Y": 51228,
+    "Vec_Joy_2_X": 51229,
+    "Vec_Joy_2_Y": 51230,
+    "Vec_Joy_Mux": 51231,
+    "Vec_Joy_Mux_1_X": 51231,
+    "Vec_Joy_Mux_1_Y": 51232,
+    "Vec_Joy_Mux_2_X": 51233,
+    "Vec_Joy_Mux_2_Y": 51234,
+    "Vec_Joy_Resltn": 51226,
+    "Vec_Loop_Count": 51237,
+    "Vec_Max_Games": 51280,
+    "Vec_Max_Players": 51279,
+    "Vec_Misc_Count": 51235,
+    "Vec_Music_Chan": 51285,
+    "Vec_Music_Flag": 51286,
+    "Vec_Music_Freq": 51297,
+    "Vec_Music_Ptr": 51283,
+    "Vec_Music_Twang": 51288,
+    "Vec_Music_Wk_1": 51275,
+    "Vec_Music_Wk_5": 51271,
+    "Vec_Music_Wk_6": 51270,
+    "Vec_Music_Wk_7": 51269,
+    "Vec_Music_Wk_A": 51266,
+    "Vec_Music_Work": 51263,
+    "Vec_NMI_Vector": 52219,
+    "Vec_Num_Game": 51322,
+    "Vec_Num_Players": 51321,
+    "Vec_Pattern": 51241,
+    "Vec_Prev_Btns": 51216,
+    "Vec_Random_Seed": 51325,
+    "Vec_Rfrsh": 51261,
+    "Vec_Rfrsh_hi": 51262,
+    "Vec_Rfrsh_lo": 51261,
+    "Vec_RiseRun_Len": 51259,
+    "Vec_RiseRun_Tmp": 51252,
+    "Vec_Rise_Index": 51257,
+    "Vec_Run_Index": 51255,
+    "Vec_SWI2_Vector": 52210,
+    "Vec_SWI3_Vector": 52210,
+    "Vec_SWI_Vector": 52219,
+    "Vec_Seed_Ptr": 51323,
+    "Vec_Snd_Shadow": 51200,
+    "Vec_Str_Ptr": 51244,
+    "Vec_Text_HW": 51242,
+    "Vec_Text_Height": 51242,
+    "Vec_Text_Width": 51243,
+    "Vec_Twang_Table": 51281,
+    "WAIT_RECAL": 61842,
+    "WARM_START": 61548,
+    "Wait_Recal": 61842,
+    "Warm_Start": 61548,
+    "XFORM_RISE": 63075,
+    "XFORM_RISE_A": 63073,
+    "XFORM_RUN": 63069,
+    "XFORM_RUN_A": 63067,
+    "Xform_Rise": 63075,
+    "Xform_Rise_a": 63073,
+    "Xform_Run": 63069,
+    "Xform_Run_a": 63067,
+    "music1": 64781,
+    "music2": 64797,
+    "music3": 64897,
+    "music4": 64979,
+    "music5": 65080,
+    "music6": 65142,
+    "music7": 65222,
+    "music8": 65272,
+    "music9": 65318,
+    "musica": 65348,
+    "musicb": 65378,
+    "musicc": 65402,
+    "musicd": 65423
   },
   "lineMap": {
-    "10": "0x0137",
-    "18": "0x0228",
-    "21": "0x0292",
-    "15": "0x01C6",
-    "16": "0x01E0",
-    "19": "0x024E",
-    "13": "0x017E",
-    "20": "0x0270",
-    "24": "0x02D4",
-    "11": "0x013A",
-    "12": "0x0152",
-    "8": "0x00EC",
-    "14": "0x019A",
-    "17": "0x020A"
+    "10": "0x0067",
+    "13": "0x0085",
+    "14": "0x009B",
+    "15": "0x00B6",
+    "16": "0x00CC",
+    "17": "0x00E7",
+    "18": "0x00FD",
+    "19": "0x0118",
+    "20": "0x012E",
+    "21": "0x0149",
+    "22": "0x015F",
+    "23": "0x017A",
+    "26": "0x0081"
   },
-  "vpyLineMap": {
-    "0x019A": {
-      "file": "main.vpy",
-      "address": "0x019A",
-      "line": 14
-    },
-    "0x013A": {
-      "file": "main.vpy",
-      "address": "0x013A",
-      "line": 11
-    },
-    "0x017E": {
-      "file": "main.vpy",
-      "address": "0x017E",
-      "line": 13
-    },
-    "0x01C6": {
-      "file": "main.vpy",
-      "address": "0x01C6",
-      "line": 15
-    },
-    "0x020A": {
-      "file": "main.vpy",
-      "address": "0x020A",
-      "line": 17
-    },
-    "0x0137": {
-      "file": "main.vpy",
-      "address": "0x0137",
-      "line": 10
-    },
-    "0x0152": {
-      "file": "main.vpy",
-      "address": "0x0152",
-      "line": 12
-    },
-    "0x00EC": {
-      "file": "main.vpy",
-      "address": "0x00EC",
-      "line": 8
-    },
-    "0x0228": {
-      "file": "main.vpy",
-      "address": "0x0228",
-      "line": 18
-    },
-    "0x024E": {
-      "file": "main.vpy",
-      "address": "0x024E",
-      "line": 19
-    },
-    "0x0270": {
-      "file": "main.vpy",
-      "address": "0x0270",
-      "line": 20
-    },
-    "0x0292": {
-      "file": "main.vpy",
-      "address": "0x0292",
-      "line": 21
-    },
-    "0x01E0": {
-      "file": "main.vpy",
-      "address": "0x01E0",
-      "line": 16
-    },
-    "0x02D4": {
-      "file": "main.vpy",
-      "address": "0x02D4",
-      "line": 24
-    }
-  },
-  "asmLineMap": {
-    "0x0063": {
-      "file": "set_text_size.asm",
-      "address": "0x0063",
-      "line": 100
-    },
-    "0x0170": {
-      "file": "set_text_size.asm",
-      "address": "0x0170",
-      "line": 248
-    },
-    "0x02A4": {
-      "file": "set_text_size.asm",
-      "address": "0x02A4",
-      "line": 398
-    },
-    "0x0081": {
-      "file": "set_text_size.asm",
-      "address": "0x0081",
-      "line": 120
-    },
-    "0x025F": {
-      "file": "set_text_size.asm",
-      "address": "0x025F",
-      "line": 365
-    },
-    "0x0022": {
-      "file": "set_text_size.asm",
-      "address": "0x0022",
-      "line": 56
-    },
-    "0x015E": {
-      "file": "set_text_size.asm",
-      "address": "0x015E",
-      "line": 242
-    },
-    "0x00DB": {
-      "file": "set_text_size.asm",
-      "address": "0x00DB",
-      "line": 169
-    },
-    "0x01EC": {
-      "file": "set_text_size.asm",
-      "address": "0x01EC",
-      "line": 312
-    },
-    "0x01EF": {
-      "file": "set_text_size.asm",
-      "address": "0x01EF",
-      "line": 313
-    },
-    "0x00B2": {
-      "file": "set_text_size.asm",
-      "address": "0x00B2",
-      "line": 144
-    },
-    "0x014A": {
-      "file": "set_text_size.asm",
-      "address": "0x014A",
-      "line": 230
-    },
-    "0x00DF": {
-      "file": "set_text_size.asm",
-      "address": "0x00DF",
-      "line": 171
-    },
-    "0x00D3": {
-      "file": "set_text_size.asm",
-      "address": "0x00D3",
-      "line": 164
-    },
-    "0x018B": {
-      "file": "set_text_size.asm",
-      "address": "0x018B",
-      "line": 261
-    },
-    "0x0222": {
-      "file": "set_text_size.asm",
-      "address": "0x0222",
-      "line": 334
-    },
-    "0x0268": {
-      "file": "set_text_size.asm",
-      "address": "0x0268",
-      "line": 368
-    },
-    "0x027A": {
-      "file": "set_text_size.asm",
-      "address": "0x027A",
-      "line": 382
-    },
-    "0x02AF": {
-      "file": "set_text_size.asm",
-      "address": "0x02AF",
-      "line": 403
-    },
-    "0x0058": {
-      "file": "set_text_size.asm",
-      "address": "0x0058",
-      "line": 93
-    },
-    "0x013A": {
-      "file": "set_text_size.asm",
-      "address": "0x013A",
-      "line": 222
-    },
-    "0x0270": {
-      "file": "set_text_size.asm",
-      "address": "0x0270",
-      "line": 374
-    },
-    "0x01DB": {
-      "file": "set_text_size.asm",
-      "address": "0x01DB",
-      "line": 299
-    },
-    "0x01F2": {
-      "file": "set_text_size.asm",
-      "address": "0x01F2",
-      "line": 314
-    },
-    "0x017C": {
-      "file": "set_text_size.asm",
-      "address": "0x017C",
-      "line": 253
-    },
-    "0x0204": {
-      "file": "set_text_size.asm",
-      "address": "0x0204",
-      "line": 321
-    },
-    "0x00A8": {
-      "file": "set_text_size.asm",
-      "address": "0x00A8",
-      "line": 140
-    },
-    "0x014C": {
-      "file": "set_text_size.asm",
-      "address": "0x014C",
-      "line": 232
-    },
-    "0x0072": {
-      "file": "set_text_size.asm",
-      "address": "0x0072",
-      "line": 110
-    },
-    "0x0280": {
-      "file": "set_text_size.asm",
-      "address": "0x0280",
-      "line": 384
-    },
-    "0x025C": {
-      "file": "set_text_size.asm",
-      "address": "0x025C",
-      "line": 364
-    },
-    "0x01C7": {
-      "file": "set_text_size.asm",
-      "address": "0x01C7",
-      "line": 291
-    },
-    "0x0195": {
-      "file": "set_text_size.asm",
-      "address": "0x0195",
-      "line": 267
-    },
-    "0x0051": {
-      "file": "set_text_size.asm",
-      "address": "0x0051",
-      "line": 88
-    },
-    "0x0230": {
-      "file": "set_text_size.asm",
-      "address": "0x0230",
-      "line": 346
-    },
-    "0x0251": {
-      "file": "set_text_size.asm",
-      "address": "0x0251",
-      "line": 359
-    },
-    "0x0236": {
-      "file": "set_text_size.asm",
-      "address": "0x0236",
-      "line": 348
-    },
-    "0x0155": {
-      "file": "set_text_size.asm",
-      "address": "0x0155",
-      "line": 239
-    },
-    "0x0151": {
-      "file": "set_text_size.asm",
-      "address": "0x0151",
-      "line": 235
-    },
-    "0x003A": {
-      "file": "set_text_size.asm",
-      "address": "0x003A",
-      "line": 70
-    },
-    "0x024B": {
-      "file": "set_text_size.asm",
-      "address": "0x024B",
-      "line": 356
-    },
-    "0x01AB": {
-      "file": "set_text_size.asm",
-      "address": "0x01AB",
-      "line": 279
-    },
-    "0x0061": {
-      "file": "set_text_size.asm",
-      "address": "0x0061",
-      "line": 99
-    },
-    "0x0085": {
-      "file": "set_text_size.asm",
-      "address": "0x0085",
-      "line": 123
-    },
-    "0x018A": {
-      "file": "set_text_size.asm",
-      "address": "0x018A",
-      "line": 260
-    },
-    "0x00F8": {
-      "file": "set_text_size.asm",
-      "address": "0x00F8",
-      "line": 185
-    },
-    "0x0289": {
-      "file": "set_text_size.asm",
-      "address": "0x0289",
-      "line": 388
-    },
-    "0x028C": {
-      "file": "set_text_size.asm",
-      "address": "0x028C",
-      "line": 389
-    },
-    "0x0274": {
-      "file": "set_text_size.asm",
-      "address": "0x0274",
-      "line": 378
-    },
-    "0x022B": {
-      "file": "set_text_size.asm",
-      "address": "0x022B",
-      "line": 343
-    },
-    "0x00DD": {
-      "file": "set_text_size.asm",
-      "address": "0x00DD",
-      "line": 11
-    },
-    "0x019F": {
-      "file": "set_text_size.asm",
-      "address": "0x019F",
-      "line": 275
-    },
-    "0x0025": {
-      "file": "set_text_size.asm",
-      "address": "0x0025",
-      "line": 57
-    },
-    "0x0043": {
-      "file": "set_text_size.asm",
-      "address": "0x0043",
-      "line": 73
-    },
-    "0x01E9": {
-      "file": "set_text_size.asm",
-      "address": "0x01E9",
-      "line": 311
-    },
-    "0x0279": {
-      "file": "set_text_size.asm",
-      "address": "0x0279",
-      "line": 381
-    },
-    "0x0099": {
-      "file": "set_text_size.asm",
-      "address": "0x0099",
-      "line": 135
-    },
-    "0x00A5": {
-      "file": "set_text_size.asm",
-      "address": "0x00A5",
-      "line": 139
-    },
-    "0x0076": {
-      "file": "set_text_size.asm",
-      "address": "0x0076",
-      "line": 113
-    },
-    "0x01A2": {
-      "file": "set_text_size.asm",
-      "address": "0x01A2",
-      "line": 276
-    },
-    "0x004D": {
-      "file": "set_text_size.asm",
-      "address": "0x004D",
-      "line": 86
-    },
-    "0x0167": {
-      "file": "set_text_size.asm",
-      "address": "0x0167",
-      "line": 245
-    },
-    "0x01A5": {
-      "file": "set_text_size.asm",
-      "address": "0x01A5",
-      "line": 277
-    },
-    "0x02A9": {
-      "file": "set_text_size.asm",
-      "address": "0x02A9",
-      "line": 401
-    },
-    "0x01E5": {
-      "file": "set_text_size.asm",
-      "address": "0x01E5",
-      "line": 309
-    },
-    "0x0148": {
-      "file": "set_text_size.asm",
-      "address": "0x0148",
-      "line": 228
-    },
-    "0x01C3": {
-      "file": "set_text_size.asm",
-      "address": "0x01C3",
-      "line": 288
-    },
-    "0x02D8": {
-      "file": "set_text_size.asm",
-      "address": "0x02D8",
-      "line": 424
-    },
-    "0x01DD": {
-      "file": "set_text_size.asm",
-      "address": "0x01DD",
-      "line": 301
-    },
-    "0x02FA": {
-      "file": "set_text_size.asm",
-      "address": "0x02FA",
-      "line": 436
-    },
-    "0x02F4": {
-      "file": "set_text_size.asm",
-      "address": "0x02F4",
-      "line": 434
-    },
-    "0x0150": {
-      "file": "set_text_size.asm",
-      "address": "0x0150",
-      "line": 234
-    },
-    "0x0122": {
-      "file": "set_text_size.asm",
-      "address": "0x0122",
-      "line": 208
-    },
-    "0x0037": {
-      "file": "set_text_size.asm",
-      "address": "0x0037",
-      "line": 69
-    },
-    "0x0210": {
-      "file": "set_text_size.asm",
-      "address": "0x0210",
-      "line": 326
-    },
-    "0x0040": {
-      "file": "set_text_size.asm",
-      "address": "0x0040",
-      "line": 72
-    },
-    "0x0248": {
-      "file": "set_text_size.asm",
-      "address": "0x0248",
-      "line": 355
-    },
-    "0x0164": {
-      "file": "set_text_size.asm",
-      "address": "0x0164",
-      "line": 244
-    },
-    "0x02D4": {
-      "file": "set_text_size.asm",
-      "address": "0x02D4",
-      "line": 416
-    },
-    "0x00F2": {
-      "file": "set_text_size.asm",
-      "address": "0x00F2",
-      "line": 182
-    },
-    "0x0228": {
-      "file": "set_text_size.asm",
-      "address": "0x0228",
-      "line": 340
-    },
-    "0x01CE": {
-      "file": "set_text_size.asm",
-      "address": "0x01CE",
-      "line": 294
-    },
-    "0x00BE": {
-      "file": "set_text_size.asm",
-      "address": "0x00BE",
-      "line": 151
-    },
-    "0x008D": {
-      "file": "set_text_size.asm",
-      "address": "0x008D",
-      "line": 131
-    },
-    "0x007E": {
-      "file": "set_text_size.asm",
-      "address": "0x007E",
-      "line": 118
-    },
-    "0x01DE": {
-      "file": "set_text_size.asm",
-      "address": "0x01DE",
-      "line": 302
-    },
-    "0x011A": {
-      "file": "set_text_size.asm",
-      "address": "0x011A",
-      "line": 202
-    },
-    "0x002E": {
-      "file": "set_text_size.asm",
-      "address": "0x002E",
-      "line": 60
-    },
-    "0x012D": {
-      "file": "set_text_size.asm",
-      "address": "0x012D",
-      "line": 212
-    },
-    "0x01E1": {
-      "file": "set_text_size.asm",
-      "address": "0x01E1",
-      "line": 307
-    },
-    "0x011F": {
-      "file": "set_text_size.asm",
-      "address": "0x011F",
-      "line": 46
-    },
-    "0x018E": {
-      "file": "set_text_size.asm",
-      "address": "0x018E",
-      "line": 262
-    },
-    "0x029E": {
-      "file": "set_text_size.asm",
-      "address": "0x029E",
-      "line": 396
-    },
-    "0x0112": {
-      "file": "set_text_size.asm",
-      "address": "0x0112",
-      "line": 40
-    },
-    "0x00B8": {
-      "file": "set_text_size.asm",
-      "address": "0x00B8",
-      "line": 146
-    },
-    "0x02D1": {
-      "file": "set_text_size.asm",
-      "address": "0x02D1",
-      "line": 413
-    },
-    "0x0193": {
-      "file": "set_text_size.asm",
-      "address": "0x0193",
-      "line": 265
-    },
-    "0x02B6": {
-      "file": "set_text_size.asm",
-      "address": "0x02B6",
-      "line": 406
-    },
-    "0x0233": {
-      "file": "set_text_size.asm",
-      "address": "0x0233",
-      "line": 347
-    },
-    "0x0066": {
-      "file": "set_text_size.asm",
-      "address": "0x0066",
-      "line": 102
-    },
-    "0x001F": {
-      "file": "set_text_size.asm",
-      "address": "0x001F",
-      "line": 55
-    },
-    "0x0212": {
-      "file": "set_text_size.asm",
-      "address": "0x0212",
-      "line": 328
-    },
-    "0x0275": {
-      "file": "set_text_size.asm",
-      "address": "0x0275",
-      "line": 379
-    },
-    "0x002B": {
-      "file": "set_text_size.asm",
-      "address": "0x002B",
-      "line": 59
-    },
-    "0x0269": {
-      "file": "set_text_size.asm",
-      "address": "0x0269",
-      "line": 369
-    },
-    "0x007D": {
-      "file": "set_text_size.asm",
-      "address": "0x007D",
-      "line": 117
-    },
-    "0x0147": {
-      "file": "set_text_size.asm",
-      "address": "0x0147",
-      "line": 227
-    },
-    "0x019B": {
-      "file": "set_text_size.asm",
-      "address": "0x019B",
-      "line": 273
-    },
-    "0x00FB": {
-      "file": "set_text_size.asm",
-      "address": "0x00FB",
-      "line": 30
-    },
-    "0x023F": {
-      "file": "set_text_size.asm",
-      "address": "0x023F",
-      "line": 351
-    },
-    "0x0128": {
-      "file": "set_text_size.asm",
-      "address": "0x0128",
-      "line": 210
-    },
-    "0x0245": {
-      "file": "set_text_size.asm",
-      "address": "0x0245",
-      "line": 354
-    },
-    "0x01FE": {
-      "file": "set_text_size.asm",
-      "address": "0x01FE",
-      "line": 319
-    },
-    "0x02B3": {
-      "file": "set_text_size.asm",
-      "address": "0x02B3",
-      "line": 405
-    },
-    "0x021E": {
-      "file": "set_text_size.asm",
-      "address": "0x021E",
-      "line": 332
-    },
-    "0x00FD": {
-      "file": "set_text_size.asm",
-      "address": "0x00FD",
-      "line": 188
-    },
-    "0x0179": {
-      "file": "set_text_size.asm",
-      "address": "0x0179",
-      "line": 252
-    },
-    "0x00D1": {
-      "file": "set_text_size.asm",
-      "address": "0x00D1",
-      "line": 163
-    },
-    "0x022F": {
-      "file": "set_text_size.asm",
-      "address": "0x022F",
-      "line": 345
-    },
-    "0x02A6": {
-      "file": "set_text_size.asm",
-      "address": "0x02A6",
-      "line": 400
-    },
-    "0x01F8": {
-      "file": "set_text_size.asm",
-      "address": "0x01F8",
-      "line": 316
-    },
-    "0x00CE": {
-      "file": "set_text_size.asm",
-      "address": "0x00CE",
-      "line": 161
-    },
-    "0x0295": {
-      "file": "set_text_size.asm",
-      "address": "0x0295",
-      "line": 393
-    },
-    "0x010B": {
-      "file": "set_text_size.asm",
-      "address": "0x010B",
-      "line": 196
-    },
-    "0x003D": {
-      "file": "set_text_size.asm",
-      "address": "0x003D",
-      "line": 71
-    },
-    "0x01B4": {
-      "file": "set_text_size.asm",
-      "address": "0x01B4",
-      "line": 282
-    },
-    "0x01DC": {
-      "file": "set_text_size.asm",
-      "address": "0x01DC",
-      "line": 300
-    },
-    "0x0239": {
-      "file": "set_text_size.asm",
-      "address": "0x0239",
-      "line": 349
-    },
-    "0x01CB": {
-      "file": "set_text_size.asm",
-      "address": "0x01CB",
-      "line": 293
-    },
-    "0x00A2": {
-      "file": "set_text_size.asm",
-      "address": "0x00A2",
-      "line": 138
-    },
-    "0x02AC": {
-      "file": "set_text_size.asm",
-      "address": "0x02AC",
-      "line": 402
-    },
-    "0x0176": {
-      "file": "set_text_size.asm",
-      "address": "0x0176",
-      "line": 251
-    },
-    "0x0106": {
-      "file": "set_text_size.asm",
-      "address": "0x0106",
-      "line": 35
-    },
-    "0x01C8": {
-      "file": "set_text_size.asm",
-      "address": "0x01C8",
-      "line": 292
-    },
-    "0x0054": {
-      "file": "set_text_size.asm",
-      "address": "0x0054",
-      "line": 90
-    },
-    "0x005F": {
-      "file": "set_text_size.asm",
-      "address": "0x005F",
-      "line": 97
-    },
-    "0x0050": {
-      "file": "set_text_size.asm",
-      "address": "0x0050",
-      "line": 87
-    },
-    "0x028F": {
-      "file": "set_text_size.asm",
-      "address": "0x028F",
-      "line": 390
-    },
-    "0x001D": {
-      "file": "set_text_size.asm",
-      "address": "0x001D",
-      "line": 54
-    },
-    "0x0100": {
-      "file": "set_text_size.asm",
-      "address": "0x0100",
-      "line": 33
-    },
-    "0x0207": {
-      "file": "set_text_size.asm",
-      "address": "0x0207",
-      "line": 322
-    },
-    "0x00EA": {
-      "file": "set_text_size.asm",
-      "address": "0x00EA",
-      "line": 175
-    },
-    "0x026C": {
-      "file": "set_text_size.asm",
-      "address": "0x026C",
-      "line": 370
-    },
-    "0x010D": {
-      "file": "set_text_size.asm",
-      "address": "0x010D",
-      "line": 38
-    },
-    "0x00C2": {
-      "file": "set_text_size.asm",
-      "address": "0x00C2",
-      "line": 153
-    },
-    "0x00B9": {
-      "file": "set_text_size.asm",
-      "address": "0x00B9",
-      "line": 149
-    },
-    "0x00AB": {
-      "file": "set_text_size.asm",
-      "address": "0x00AB",
-      "line": 141
-    },
-    "0x00F5": {
-      "file": "set_text_size.asm",
-      "address": "0x00F5",
-      "line": 20
-    },
-    "0x005C": {
-      "file": "set_text_size.asm",
-      "address": "0x005C",
-      "line": 96
-    },
-    "0x019A": {
-      "file": "set_text_size.asm",
-      "address": "0x019A",
-      "line": 272
-    },
-    "0x009F": {
-      "file": "set_text_size.asm",
-      "address": "0x009F",
-      "line": 137
-    },
-    "0x014B": {
-      "file": "set_text_size.asm",
-      "address": "0x014B",
-      "line": 231
-    },
-    "0x01E4": {
-      "file": "set_text_size.asm",
-      "address": "0x01E4",
-      "line": 308
-    },
-    "0x0271": {
-      "file": "set_text_size.asm",
-      "address": "0x0271",
-      "line": 375
-    },
-    "0x02D9": {
-      "file": "set_text_size.asm",
-      "address": "0x02D9",
-      "line": 425
-    },
-    "0x01C0": {
-      "file": "set_text_size.asm",
-      "address": "0x01C0",
-      "line": 287
-    },
-    "0x0060": {
-      "file": "set_text_size.asm",
-      "address": "0x0060",
-      "line": 98
-    },
-    "0x0067": {
-      "file": "set_text_size.asm",
-      "address": "0x0067",
-      "line": 103
-    },
-    "0x0194": {
-      "file": "set_text_size.asm",
-      "address": "0x0194",
-      "line": 266
-    },
-    "0x027D": {
-      "file": "set_text_size.asm",
-      "address": "0x027D",
-      "line": 383
-    },
-    "0x00FC": {
-      "file": "set_text_size.asm",
-      "address": "0x00FC",
-      "line": 31
-    },
-    "0x017D": {
-      "file": "set_text_size.asm",
-      "address": "0x017D",
-      "line": 254
-    },
-    "0x0191": {
-      "file": "set_text_size.asm",
-      "address": "0x0191",
-      "line": 263
-    },
-    "0x0273": {
-      "file": "set_text_size.asm",
-      "address": "0x0273",
-      "line": 377
-    },
-    "0x0084": {
-      "file": "set_text_size.asm",
-      "address": "0x0084",
-      "line": 122
-    },
-    "0x021B": {
-      "file": "set_text_size.asm",
-      "address": "0x021B",
-      "line": 331
-    },
-    "0x02E5": {
-      "file": "set_text_size.asm",
-      "address": "0x02E5",
-      "line": 427
-    },
-    "0x0132": {
-      "file": "set_text_size.asm",
-      "address": "0x0132",
-      "line": 215
-    },
-    "0x0047": {
-      "file": "set_text_size.asm",
-      "address": "0x0047",
-      "line": 75
-    },
-    "0x0201": {
-      "file": "set_text_size.asm",
-      "address": "0x0201",
-      "line": 320
-    },
-    "0x011D": {
-      "file": "set_text_size.asm",
-      "address": "0x011D",
-      "line": 206
-    },
-    "0x0103": {
-      "file": "set_text_size.asm",
-      "address": "0x0103",
-      "line": 193
-    },
-    "0x006F": {
-      "file": "set_text_size.asm",
-      "address": "0x006F",
-      "line": 108
-    },
-    "0x0031": {
-      "file": "set_text_size.asm",
-      "address": "0x0031",
-      "line": 63
-    },
-    "0x00CB": {
-      "file": "set_text_size.asm",
-      "address": "0x00CB",
-      "line": 159
-    },
-    "0x0196": {
-      "file": "set_text_size.asm",
-      "address": "0x0196",
-      "line": 268
-    },
-    "0x01D4": {
-      "file": "set_text_size.asm",
-      "address": "0x01D4",
-      "line": 296
-    },
-    "0x0242": {
-      "file": "set_text_size.asm",
-      "address": "0x0242",
-      "line": 353
-    },
-    "0x01C6": {
-      "file": "set_text_size.asm",
-      "address": "0x01C6",
-      "line": 290
-    },
-    "0x01A8": {
-      "file": "set_text_size.asm",
-      "address": "0x01A8",
-      "line": 278
-    },
-    "0x0035": {
-      "file": "set_text_size.asm",
-      "address": "0x0035",
-      "line": 68
-    },
-    "0x0117": {
-      "file": "set_text_size.asm",
-      "address": "0x0117",
-      "line": 201
-    },
-    "0x016D": {
-      "file": "set_text_size.asm",
-      "address": "0x016D",
-      "line": 247
-    },
-    "0x0028": {
-      "file": "set_text_size.asm",
-      "address": "0x0028",
-      "line": 58
-    },
-    "0x013D": {
-      "file": "set_text_size.asm",
-      "address": "0x013D",
-      "line": 223
-    },
-    "0x00D8": {
-      "file": "set_text_size.asm",
-      "address": "0x00D8",
-      "line": 167
-    },
-    "0x02A1": {
-      "file": "set_text_size.asm",
-      "address": "0x02A1",
-      "line": 397
-    },
-    "0x0089": {
-      "file": "set_text_size.asm",
-      "address": "0x0089",
-      "line": 129
-    },
-    "0x026F": {
-      "file": "set_text_size.asm",
-      "address": "0x026F",
-      "line": 371
-    },
-    "0x01FB": {
-      "file": "set_text_size.asm",
-      "address": "0x01FB",
-      "line": 317
-    },
-    "0x0257": {
-      "file": "set_text_size.asm",
-      "address": "0x0257",
-      "line": 361
-    },
-    "0x0140": {
-      "file": "set_text_size.asm",
-      "address": "0x0140",
-      "line": 224
-    },
-    "0x02F3": {
-      "file": "set_text_size.asm",
-      "address": "0x02F3",
-      "line": 433
-    },
-    "0x00BB": {
-      "file": "set_text_size.asm",
-      "address": "0x00BB",
-      "line": 150
-    },
-    "0x0090": {
-      "file": "set_text_size.asm",
-      "address": "0x0090",
-      "line": 132
-    },
-    "0x02EC": {
-      "file": "set_text_size.asm",
-      "address": "0x02EC",
-      "line": 430
-    },
-    "0x025A": {
-      "file": "set_text_size.asm",
-      "address": "0x025A",
-      "line": 362
-    },
-    "0x02FB": {
-      "file": "set_text_size.asm",
-      "address": "0x02FB",
-      "line": 437
-    },
-    "0x01DF": {
-      "file": "set_text_size.asm",
-      "address": "0x01DF",
-      "line": 303
-    },
-    "0x02D7": {
-      "file": "set_text_size.asm",
-      "address": "0x02D7",
-      "line": 417
-    },
-    "0x00EF": {
-      "file": "set_text_size.asm",
-      "address": "0x00EF",
-      "line": 18
-    },
-    "0x0298": {
-      "file": "set_text_size.asm",
-      "address": "0x0298",
-      "line": 394
-    },
-    "0x016A": {
-      "file": "set_text_size.asm",
-      "address": "0x016A",
-      "line": 246
-    },
-    "0x025B": {
-      "file": "set_text_size.asm",
-      "address": "0x025B",
-      "line": 363
-    },
-    "0x00D6": {
-      "file": "set_text_size.asm",
-      "address": "0x00D6",
-      "line": 166
-    },
-    "0x0152": {
-      "file": "set_text_size.asm",
-      "address": "0x0152",
-      "line": 238
-    },
-    "0x0052": {
-      "file": "set_text_size.asm",
-      "address": "0x0052",
-      "line": 89
-    },
-    "0x0049": {
-      "file": "set_text_size.asm",
-      "address": "0x0049",
-      "line": 77
-    },
-    "0x019C": {
-      "file": "set_text_size.asm",
-      "address": "0x019C",
-      "line": 274
-    },
-    "0x0030": {
-      "file": "set_text_size.asm",
-      "address": "0x0030",
-      "line": 62
-    },
-    "0x015B": {
-      "file": "set_text_size.asm",
-      "address": "0x015B",
-      "line": 241
-    },
-    "0x007A": {
-      "file": "set_text_size.asm",
-      "address": "0x007A",
-      "line": 116
-    },
-    "0x020A": {
-      "file": "set_text_size.asm",
-      "address": "0x020A",
-      "line": 324
-    },
-    "0x00B0": {
-      "file": "set_text_size.asm",
-      "address": "0x00B0",
-      "line": 143
-    },
-    "0x0229": {
-      "file": "set_text_size.asm",
-      "address": "0x0229",
-      "line": 341
-    },
-    "0x01E0": {
-      "file": "set_text_size.asm",
-      "address": "0x01E0",
-      "line": 306
-    },
-    "0x0057": {
-      "file": "set_text_size.asm",
-      "address": "0x0057",
-      "line": 92
-    },
-    "0x0075": {
-      "file": "set_text_size.asm",
-      "address": "0x0075",
-      "line": 112
-    },
-    "0x006E": {
-      "file": "set_text_size.asm",
-      "address": "0x006E",
-      "line": 107
-    },
-    "0x00C5": {
-      "file": "set_text_size.asm",
-      "address": "0x00C5",
-      "line": 154
-    },
-    "0x002F": {
-      "file": "set_text_size.asm",
-      "address": "0x002F",
-      "line": 61
-    },
-    "0x0225": {
-      "file": "set_text_size.asm",
-      "address": "0x0225",
-      "line": 335
-    },
-    "0x021F": {
-      "file": "set_text_size.asm",
-      "address": "0x021F",
-      "line": 333
-    },
-    "0x0187": {
-      "file": "set_text_size.asm",
-      "address": "0x0187",
-      "line": 259
-    },
-    "0x0093": {
-      "file": "set_text_size.asm",
-      "address": "0x0093",
-      "line": 133
-    },
-    "0x0137": {
-      "file": "set_text_size.asm",
-      "address": "0x0137",
-      "line": 219
-    },
-    "0x014D": {
-      "file": "set_text_size.asm",
-      "address": "0x014D",
-      "line": 233
-    },
-    "0x00E7": {
-      "file": "set_text_size.asm",
-      "address": "0x00E7",
-      "line": 174
-    },
-    "0x00C0": {
-      "file": "set_text_size.asm",
-      "address": "0x00C0",
-      "line": 152
-    },
-    "0x01B1": {
-      "file": "set_text_size.asm",
-      "address": "0x01B1",
-      "line": 281
-    },
-    "0x0149": {
-      "file": "set_text_size.asm",
-      "address": "0x0149",
-      "line": 229
-    },
-    "0x00E2": {
-      "file": "set_text_size.asm",
-      "address": "0x00E2",
-      "line": 13
-    },
-    "0x022A": {
-      "file": "set_text_size.asm",
-      "address": "0x022A",
-      "line": 342
-    },
-    "0x0278": {
-      "file": "set_text_size.asm",
-      "address": "0x0278",
-      "line": 380
-    },
-    "0x0283": {
-      "file": "set_text_size.asm",
-      "address": "0x0283",
-      "line": 385
-    },
-    "0x0096": {
-      "file": "set_text_size.asm",
-      "address": "0x0096",
-      "line": 134
-    },
-    "0x0070": {
-      "file": "set_text_size.asm",
-      "address": "0x0070",
-      "line": 109
-    },
-    "0x02B2": {
-      "file": "set_text_size.asm",
-      "address": "0x02B2",
-      "line": 404
-    },
-    "0x0197": {
-      "file": "set_text_size.asm",
-      "address": "0x0197",
-      "line": 269
-    },
-    "0x01D8": {
-      "file": "set_text_size.asm",
-      "address": "0x01D8",
-      "line": 298
-    },
-    "0x0227": {
-      "file": "set_text_size.asm",
-      "address": "0x0227",
-      "line": 337
-    },
-    "0x02CB": {
-      "file": "set_text_size.asm",
-      "address": "0x02CB",
-      "line": 411
-    },
-    "0x024E": {
-      "file": "set_text_size.asm",
-      "address": "0x024E",
-      "line": 358
-    },
-    "0x01E6": {
-      "file": "set_text_size.asm",
-      "address": "0x01E6",
-      "line": 310
-    },
-    "0x0048": {
-      "file": "set_text_size.asm",
-      "address": "0x0048",
-      "line": 76
-    },
-    "0x008B": {
-      "file": "set_text_size.asm",
-      "address": "0x008B",
-      "line": 130
-    },
-    "0x00E4": {
-      "file": "set_text_size.asm",
-      "address": "0x00E4",
-      "line": 14
-    },
-    "0x012A": {
-      "file": "set_text_size.asm",
-      "address": "0x012A",
-      "line": 211
-    },
-    "0x0125": {
-      "file": "set_text_size.asm",
-      "address": "0x0125",
-      "line": 209
-    },
-    "0x023C": {
-      "file": "set_text_size.asm",
-      "address": "0x023C",
-      "line": 350
-    },
-    "0x0161": {
-      "file": "set_text_size.asm",
-      "address": "0x0161",
-      "line": 243
-    },
-    "0x02A5": {
-      "file": "set_text_size.asm",
-      "address": "0x02A5",
-      "line": 399
-    },
-    "0x012F": {
-      "file": "set_text_size.asm",
-      "address": "0x012F",
-      "line": 213
-    },
-    "0x0192": {
-      "file": "set_text_size.asm",
-      "address": "0x0192",
-      "line": 264
-    },
-    "0x006B": {
-      "file": "set_text_size.asm",
-      "address": "0x006B",
-      "line": 106
-    },
-    "0x01D1": {
-      "file": "set_text_size.asm",
-      "address": "0x01D1",
-      "line": 295
-    },
-    "0x009C": {
-      "file": "set_text_size.asm",
-      "address": "0x009C",
-      "line": 136
-    },
-    "0x017E": {
-      "file": "set_text_size.asm",
-      "address": "0x017E",
-      "line": 256
-    },
-    "0x02C8": {
-      "file": "set_text_size.asm",
-      "address": "0x02C8",
-      "line": 410
-    },
-    "0x0046": {
-      "file": "set_text_size.asm",
-      "address": "0x0046",
-      "line": 74
-    },
-    "0x0292": {
-      "file": "set_text_size.asm",
-      "address": "0x0292",
-      "line": 392
-    },
-    "0x0110": {
-      "file": "set_text_size.asm",
-      "address": "0x0110",
-      "line": 198
-    },
-    "0x020D": {
-      "file": "set_text_size.asm",
-      "address": "0x020D",
-      "line": 325
-    },
-    "0x0173": {
-      "file": "set_text_size.asm",
-      "address": "0x0173",
-      "line": 249
-    },
-    "0x0262": {
-      "file": "set_text_size.asm",
-      "address": "0x0262",
-      "line": 366
-    },
-    "0x0115": {
-      "file": "set_text_size.asm",
-      "address": "0x0115",
-      "line": 200
-    },
-    "0x00C9": {
-      "file": "set_text_size.asm",
-      "address": "0x00C9",
-      "line": 158
-    },
-    "0x0272": {
-      "file": "set_text_size.asm",
-      "address": "0x0272",
-      "line": 376
-    },
-    "0x01BA": {
-      "file": "set_text_size.asm",
-      "address": "0x01BA",
-      "line": 285
-    },
-    "0x0184": {
-      "file": "set_text_size.asm",
-      "address": "0x0184",
-      "line": 258
-    },
-    "0x01D5": {
-      "file": "set_text_size.asm",
-      "address": "0x01D5",
-      "line": 297
-    },
-    "0x00B5": {
-      "file": "set_text_size.asm",
-      "address": "0x00B5",
-      "line": 145
-    },
-    "0x007F": {
-      "file": "set_text_size.asm",
-      "address": "0x007F",
-      "line": 119
-    },
-    "0x0141": {
-      "file": "set_text_size.asm",
-      "address": "0x0141",
-      "line": 225
-    },
-    "0x0215": {
-      "file": "set_text_size.asm",
-      "address": "0x0215",
-      "line": 329
-    },
-    "0x01B7": {
-      "file": "set_text_size.asm",
-      "address": "0x01B7",
-      "line": 283
-    },
-    "0x02ED": {
-      "file": "set_text_size.asm",
-      "address": "0x02ED",
-      "line": 431
-    },
-    "0x0144": {
-      "file": "set_text_size.asm",
-      "address": "0x0144",
-      "line": 226
-    },
-    "0x0135": {
-      "file": "set_text_size.asm",
-      "address": "0x0135",
-      "line": 216
-    },
-    "0x00EC": {
-      "file": "set_text_size.asm",
-      "address": "0x00EC",
-      "line": 180
-    },
-    "0x02E6": {
-      "file": "set_text_size.asm",
-      "address": "0x02E6",
-      "line": 428
-    },
-    "0x0211": {
-      "file": "set_text_size.asm",
-      "address": "0x0211",
-      "line": 327
-    },
-    "0x01F5": {
-      "file": "set_text_size.asm",
-      "address": "0x01F5",
-      "line": 315
-    },
-    "0x00C8": {
-      "file": "set_text_size.asm",
-      "address": "0x00C8",
-      "line": 155
-    },
-    "0x0226": {
-      "file": "set_text_size.asm",
-      "address": "0x0226",
-      "line": 336
-    },
-    "0x0254": {
-      "file": "set_text_size.asm",
-      "address": "0x0254",
-      "line": 360
-    },
-    "0x0108": {
-      "file": "set_text_size.asm",
-      "address": "0x0108",
-      "line": 36
-    },
-    "0x01BD": {
-      "file": "set_text_size.asm",
-      "address": "0x01BD",
-      "line": 286
-    },
-    "0x029B": {
-      "file": "set_text_size.asm",
-      "address": "0x029B",
-      "line": 395
-    },
-    "0x01AE": {
-      "file": "set_text_size.asm",
-      "address": "0x01AE",
-      "line": 280
-    },
-    "0x022E": {
-      "file": "set_text_size.asm",
-      "address": "0x022E",
-      "line": 344
-    },
-    "0x0265": {
-      "file": "set_text_size.asm",
-      "address": "0x0265",
-      "line": 367
-    },
-    "0x0158": {
-      "file": "set_text_size.asm",
-      "address": "0x0158",
-      "line": 240
-    },
-    "0x0181": {
-      "file": "set_text_size.asm",
-      "address": "0x0181",
-      "line": 257
-    },
-    "0x02CE": {
-      "file": "set_text_size.asm",
-      "address": "0x02CE",
-      "line": 412
-    },
-    "0x0286": {
-      "file": "set_text_size.asm",
-      "address": "0x0286",
-      "line": 387
-    },
-    "0x00AD": {
-      "file": "set_text_size.asm",
-      "address": "0x00AD",
-      "line": 142
-    },
-    "0x0218": {
-      "file": "set_text_size.asm",
-      "address": "0x0218",
-      "line": 330
-    }
-  },
-  "functions": {},
   "nativeCalls": {
-    "12": "VECTREX_PRINT_TEXT",
-    "18": "VECTREX_PRINT_TEXT",
-    "20": "VECTREX_PRINT_TEXT",
-    "16": "VECTREX_PRINT_TEXT",
-    "14": "VECTREX_PRINT_TEXT",
-    "8": "VECTREX_SET_INTENSITY"
+    "10": "SET_INTENSITY",
+    "13": "SET_TEXT_SIZE",
+    "14": "PRINT_TEXT",
+    "15": "SET_TEXT_SIZE",
+    "16": "PRINT_TEXT",
+    "17": "SET_TEXT_SIZE",
+    "18": "PRINT_TEXT",
+    "19": "SET_TEXT_SIZE",
+    "20": "PRINT_TEXT",
+    "21": "SET_TEXT_SIZE",
+    "22": "PRINT_TEXT",
+    "23": "SET_TEXT_SIZE"
   },
-  "asmFunctions": {
-    "VECTREX_PRINT_TEXT": {
-      "name": "VECTREX_PRINT_TEXT",
-      "file": "set_text_size.asm",
-      "startLine": 125,
-      "endLine": 146,
-      "type": "native"
-    }
-  },
-  "asmAddressMap": {
-    "164": "0x00D3",
-    "346": "0x0230",
-    "260": "0x018A",
-    "333": "0x021F",
-    "281": "0x01B1",
-    "288": "0x01C3",
-    "119": "0x007F",
-    "195": "0x0108",
-    "34": "0x0103",
-    "93": "0x0058",
-    "243": "0x0161",
-    "337": "0x0227",
-    "350": "0x023C",
-    "361": "0x0257",
-    "37": "0x010B",
-    "223": "0x013D",
-    "29": "0x00F8",
-    "69": "0x0037",
-    "321": "0x0204",
-    "247": "0x016D",
-    "242": "0x015E",
-    "112": "0x0075",
-    "394": "0x0298",
-    "142": "0x00AD",
-    "74": "0x0046",
-    "36": "0x0108",
-    "328": "0x0212",
-    "256": "0x017E",
-    "315": "0x01F5",
-    "130": "0x008B",
-    "365": "0x025F",
-    "389": "0x028C",
-    "222": "0x013A",
-    "183": "0x00F5",
-    "187": "0x00FC",
-    "307": "0x01E1",
-    "254": "0x017D",
-    "212": "0x012D",
-    "296": "0x01D4",
-    "194": "0x0106",
-    "107": "0x006E",
-    "344": "0x022E",
-    "358": "0x024E",
-    "406": "0x02B6",
-    "44": "0x011D",
-    "282": "0x01B4",
-    "172": "0x00E2",
-    "151": "0x00BE",
-    "399": "0x02A5",
-    "368": "0x0268",
-    "300": "0x01DC",
-    "325": "0x020D",
-    "322": "0x0207",
-    "273": "0x019B",
-    "191": "0x0100",
-    "153": "0x00C2",
-    "345": "0x022F",
-    "310": "0x01E6",
-    "39": "0x0110",
-    "272": "0x019A",
-    "58": "0x0028",
-    "41": "0x0115",
-    "226": "0x0144",
-    "137": "0x009F",
-    "396": "0x029E",
-    "433": "0x02F3",
-    "170": "0x00DD",
-    "375": "0x0271",
-    "388": "0x0289",
-    "6": "0x00DB",
-    "378": "0x0274",
-    "356": "0x024B",
-    "382": "0x027A",
-    "216": "0x0135",
-    "211": "0x012A",
-    "2": "0x00DB",
-    "196": "0x010B",
-    "298": "0x01D8",
-    "133": "0x0093",
-    "334": "0x0222",
-    "367": "0x0265",
-    "209": "0x0125",
-    "371": "0x026F",
-    "263": "0x0191",
-    "312": "0x01EC",
-    "167": "0x00D8",
-    "359": "0x0251",
-    "197": "0x010D",
-    "309": "0x01E5",
-    "259": "0x0187",
-    "113": "0x0076",
-    "245": "0x0167",
-    "54": "0x001D",
-    "369": "0x0269",
-    "280": "0x01AE",
-    "186": "0x00FB",
-    "71": "0x003D",
-    "287": "0x01C0",
-    "342": "0x022A",
-    "155": "0x00C8",
-    "383": "0x027D",
-    "173": "0x00E4",
-    "43": "0x011A",
-    "17": "0x00EC",
-    "88": "0x0051",
-    "140": "0x00A8",
-    "253": "0x017C",
-    "20": "0x00F5",
-    "19": "0x00F2",
-    "380": "0x0278",
-    "118": "0x007E",
-    "370": "0x026C",
-    "354": "0x0245",
-    "13": "0x00E2",
-    "268": "0x0196",
-    "332": "0x021E",
-    "207": "0x011F",
-    "403": "0x02AF",
-    "436": "0x02FA",
-    "397": "0x02A1",
-    "398": "0x02A4",
-    "131": "0x008D",
-    "213": "0x012F",
-    "252": "0x0179",
-    "412": "0x02CE",
-    "264": "0x0192",
-    "132": "0x0090",
-    "161": "0x00CE",
-    "116": "0x007A",
-    "275": "0x019F",
-    "106": "0x006B",
-    "63": "0x0031",
-    "285": "0x01BA",
-    "265": "0x0193",
-    "92": "0x0057",
-    "374": "0x0270",
-    "120": "0x0081",
-    "219": "0x0137",
-    "335": "0x0225",
-    "181": "0x00EF",
-    "294": "0x01CE",
-    "276": "0x01A2",
-    "411": "0x02CB",
-    "349": "0x0239",
-    "425": "0x02D9",
-    "301": "0x01DD",
-    "292": "0x01C8",
-    "336": "0x0226",
-    "31": "0x00FC",
-    "381": "0x0279",
-    "135": "0x0099",
-    "401": "0x02A9",
-    "76": "0x0048",
-    "302": "0x01DE",
-    "102": "0x0066",
-    "385": "0x0283",
-    "248": "0x0170",
-    "117": "0x007D",
-    "198": "0x0110",
-    "317": "0x01FB",
-    "434": "0x02F4",
-    "392": "0x0292",
-    "139": "0x00A5",
-    "291": "0x01C7",
-    "363": "0x025B",
-    "261": "0x018B",
-    "417": "0x02D7",
-    "14": "0x00E4",
-    "246": "0x016A",
-    "308": "0x01E4",
-    "351": "0x023F",
-    "98": "0x0060",
-    "56": "0x0022",
-    "227": "0x0147",
-    "123": "0x0085",
-    "405": "0x02B3",
-    "55": "0x001F",
-    "144": "0x00B2",
-    "257": "0x0181",
-    "108": "0x006F",
-    "180": "0x00EC",
-    "77": "0x0049",
-    "377": "0x0273",
-    "303": "0x01DF",
-    "395": "0x029B",
-    "400": "0x02A6",
-    "324": "0x020A",
-    "138": "0x00A2",
-    "293": "0x01CB",
-    "169": "0x00DB",
-    "16": "0x00EA",
-    "46": "0x011F",
-    "109": "0x0070",
-    "32": "0x00FD",
-    "355": "0x0248",
-    "313": "0x01EF",
-    "166": "0x00D6",
-    "274": "0x019C",
-    "145": "0x00B5",
-    "402": "0x02AC",
-    "286": "0x01BD",
-    "199": "0x0112",
-    "200": "0x0115",
-    "320": "0x0201",
-    "238": "0x0152",
-    "210": "0x0128",
-    "134": "0x0096",
-    "229": "0x0149",
-    "150": "0x00BB",
-    "283": "0x01B7",
-    "89": "0x0052",
-    "68": "0x0035",
-    "159": "0x00CB",
-    "428": "0x02E6",
-    "96": "0x005C",
-    "99": "0x0061",
-    "258": "0x0184",
-    "90": "0x0054",
-    "175": "0x00EA",
-    "231": "0x014B",
-    "146": "0x00B8",
-    "42": "0x0117",
-    "110": "0x0072",
-    "379": "0x0275",
-    "87": "0x0050",
-    "206": "0x011D",
-    "12": "0x00DF",
-    "353": "0x0242",
-    "295": "0x01D1",
-    "202": "0x011A",
-    "234": "0x0150",
-    "416": "0x02D4",
-    "97": "0x005F",
-    "311": "0x01E9",
-    "413": "0x02D1",
-    "103": "0x0067",
-    "185": "0x00F8",
-    "362": "0x025A",
-    "290": "0x01C6",
-    "241": "0x015B",
-    "326": "0x0210",
-    "143": "0x00B0",
-    "384": "0x0280",
-    "225": "0x0141",
-    "136": "0x009C",
-    "347": "0x0233",
-    "15": "0x00E7",
-    "122": "0x0084",
-    "62": "0x0030",
-    "188": "0x00FD",
-    "360": "0x0254",
-    "366": "0x0262",
-    "73": "0x0043",
-    "437": "0x02FB",
-    "228": "0x0148",
-    "208": "0x0122",
-    "331": "0x021B",
-    "262": "0x018E",
-    "100": "0x0063",
-    "297": "0x01D5",
-    "30": "0x00FB",
-    "319": "0x01FE",
-    "60": "0x002E",
-    "348": "0x0236",
-    "240": "0x0158",
-    "149": "0x00B9",
-    "249": "0x0173",
-    "230": "0x014A",
-    "57": "0x0025",
-    "232": "0x014C",
-    "327": "0x0211",
-    "299": "0x01DB",
-    "364": "0x025C",
-    "277": "0x01A5",
-    "279": "0x01AB",
-    "393": "0x0295",
-    "306": "0x01E0",
-    "404": "0x02B2",
-    "341": "0x0229",
-    "239": "0x0155",
-    "390": "0x028F",
-    "387": "0x0286",
-    "163": "0x00D1",
-    "152": "0x00C0",
-    "158": "0x00C9",
-    "141": "0x00AB",
-    "410": "0x02C8",
-    "269": "0x0197",
-    "427": "0x02E5",
-    "171": "0x00DF",
-    "75": "0x0047",
-    "278": "0x01A8",
-    "330": "0x0218",
-    "430": "0x02EC",
-    "61": "0x002F",
-    "59": "0x002B",
-    "72": "0x0040",
-    "329": "0x0215",
-    "18": "0x00EF",
-    "174": "0x00E7",
-    "266": "0x0194",
-    "33": "0x0100",
-    "201": "0x0117",
-    "182": "0x00F2",
-    "233": "0x014D",
-    "224": "0x0140",
-    "193": "0x0103",
-    "235": "0x0151",
-    "129": "0x0089",
-    "251": "0x0176",
-    "70": "0x003A",
-    "314": "0x01F2",
-    "38": "0x010D",
-    "316": "0x01F8",
-    "267": "0x0195",
-    "35": "0x0106",
-    "424": "0x02D8",
-    "340": "0x0228",
-    "431": "0x02ED",
-    "215": "0x0132",
-    "40": "0x0112",
-    "244": "0x0164",
-    "343": "0x022B",
-    "154": "0x00C5",
-    "11": "0x00DD",
-    "376": "0x0272",
-    "86": "0x004D"
+  "source": "main.vpy",
+  "symbols": {
+    "ABS_A_B": "0xF584",
+    "ABS_B": "0xF58B",
+    "ADD_SCORE_A": "0xF85E",
+    "ADD_SCORE_D": "0xF87C",
+    "Abs_a_b": "0xF584",
+    "Abs_b": "0xF58B",
+    "Add_Score_a": "0xF85E",
+    "Add_Score_d": "0xF87C",
+    "BITMASK_A": "0xF57E",
+    "Bitmask_a": "0xF57E",
+    "CHECK0REF": "0xF34F",
+    "CLEAR_C8_RAM": "0xF542",
+    "CLEAR_SCORE": "0xF84F",
+    "CLEAR_SOUND": "0xF272",
+    "CLEAR_X_256": "0xF545",
+    "CLEAR_X_B": "0xF53F",
+    "CLEAR_X_B_80": "0xF550",
+    "CLEAR_X_B_A": "0xF552",
+    "CLEAR_X_D": "0xF548",
+    "COLD_START": "0xF000",
+    "COMPARE_SCORE": "0xF8C7",
+    "Check0Ref": "0xF34F",
+    "Clear_C8_RAM": "0xF542",
+    "Clear_Score": "0xF84F",
+    "Clear_Sound": "0xF272",
+    "Clear_x_256": "0xF545",
+    "Clear_x_b": "0xF53F",
+    "Clear_x_b_80": "0xF550",
+    "Clear_x_b_a": "0xF552",
+    "Clear_x_d": "0xF548",
+    "Cold_Start": "0xF000",
+    "Compare_Score": "0xF8C7",
+    "DEC_3_COUNTERS": "0xF55A",
+    "DEC_6_COUNTERS": "0xF55E",
+    "DEC_COUNTERS": "0xF563",
+    "DELAY_0": "0xF579",
+    "DELAY_1": "0xF575",
+    "DELAY_2": "0xF571",
+    "DELAY_3": "0xF56D",
+    "DELAY_B": "0xF57A",
+    "DELAY_RTS": "0xF57D",
+    "DOT_D": "0xF2C3",
+    "DOT_HERE": "0xF2C5",
+    "DOT_IX": "0xF2C1",
+    "DOT_IX_B": "0xF2BE",
+    "DOT_LIST": "0xF2D5",
+    "DOT_LIST_RESET": "0xF2DE",
+    "DO_SOUND": "0xF289",
+    "DO_SOUND_X": "0xF28C",
+    "DP_TO_C8": "0xF1AF",
+    "DP_TO_D0": "0xF1AA",
+    "DP_to_C8": "0xF1AF",
+    "DP_to_D0": "0xF1AA",
+    "DRAW_GRID_VL": "0xFF9F",
+    "DRAW_LINE_D": "0xF3DF",
+    "DRAW_PAT_VL": "0xF437",
+    "DRAW_PAT_VL_A": "0xF434",
+    "DRAW_PAT_VL_D": "0xF439",
+    "DRAW_SCALES": "0x0085",
+    "DRAW_VL": "0xF3DD",
+    "DRAW_VLC": "0xF3CE",
+    "DRAW_VLCS": "0xF3D6",
+    "DRAW_VLP": "0xF410",
+    "DRAW_VLP_7F": "0xF408",
+    "DRAW_VLP_B": "0xF40E",
+    "DRAW_VLP_FF": "0xF404",
+    "DRAW_VLP_SCALE": "0xF40C",
+    "DRAW_VL_A": "0xF3DA",
+    "DRAW_VL_AB": "0xF3D8",
+    "DRAW_VL_B": "0xF3D2",
+    "DRAW_VL_MODE": "0xF46E",
+    "Dec_3_Counters": "0xF55A",
+    "Dec_6_Counters": "0xF55E",
+    "Dec_Counters": "0xF563",
+    "Delay_0": "0xF579",
+    "Delay_1": "0xF575",
+    "Delay_2": "0xF571",
+    "Delay_3": "0xF56D",
+    "Delay_RTS": "0xF57D",
+    "Delay_b": "0xF57A",
+    "Do_Sound": "0xF289",
+    "Do_Sound_x": "0xF28C",
+    "Dot_List": "0xF2D5",
+    "Dot_List_Reset": "0xF2DE",
+    "Dot_d": "0xF2C3",
+    "Dot_here": "0xF2C5",
+    "Dot_ix": "0xF2C1",
+    "Dot_ix_b": "0xF2BE",
+    "Draw_Grid_VL": "0xFF9F",
+    "Draw_Line_d": "0xF3DF",
+    "Draw_Pat_VL": "0xF437",
+    "Draw_Pat_VL_a": "0xF434",
+    "Draw_Pat_VL_d": "0xF439",
+    "Draw_VL": "0xF3DD",
+    "Draw_VL_a": "0xF3DA",
+    "Draw_VL_ab": "0xF3D8",
+    "Draw_VL_b": "0xF3D2",
+    "Draw_VL_mode": "0xF46E",
+    "Draw_VLc": "0xF3CE",
+    "Draw_VLcs": "0xF3D6",
+    "Draw_VLp": "0xF410",
+    "Draw_VLp_7F": "0xF408",
+    "Draw_VLp_FF": "0xF404",
+    "Draw_VLp_b": "0xF40E",
+    "Draw_VLp_scale": "0xF40C",
+    "EXPLOSION_SND": "0xF92E",
+    "Explosion_Snd": "0xF92E",
+    "GET_RISE_IDX": "0xF5D9",
+    "GET_RISE_RUN": "0xF5EF",
+    "GET_RUN_IDX": "0xF5DB",
+    "Get_Rise_Idx": "0xF5D9",
+    "Get_Rise_Run": "0xF5EF",
+    "Get_Run_Idx": "0xF5DB",
+    "INIT_MUSIC": "0xF68D",
+    "INIT_MUSIC_BUF": "0xF533",
+    "INIT_MUSIC_CHK": "0xF687",
+    "INIT_MUSIC_X": "0xF692",
+    "INIT_OS": "0xF18B",
+    "INIT_OS_RAM": "0xF164",
+    "INIT_VIA": "0xF14C",
+    "INTENSITY_1F": "0xF29D",
+    "INTENSITY_3F": "0xF2A1",
+    "INTENSITY_5F": "0xF2A5",
+    "INTENSITY_7F": "0xF2A9",
+    "INTENSITY_A": "0xF2AB",
+    "Init_Music": "0xF68D",
+    "Init_Music_Buf": "0xF533",
+    "Init_Music_chk": "0xF687",
+    "Init_Music_x": "0xF692",
+    "Init_OS": "0xF18B",
+    "Init_OS_RAM": "0xF164",
+    "Init_VIA": "0xF14C",
+    "Intensity_1F": "0xF29D",
+    "Intensity_3F": "0xF2A1",
+    "Intensity_5F": "0xF2A5",
+    "Intensity_7F": "0xF2A9",
+    "Intensity_a": "0xF2AB",
+    "JOY_ANALOG": "0xF1F5",
+    "JOY_DIGITAL": "0xF1F8",
+    "Joy_Analog": "0xF1F5",
+    "Joy_Digital": "0xF1F8",
+    "LOOP_BODY": "0x007B",
+    "MAIN": "0x0037",
+    "MAIN.MAIN_LOOP": "0x0075",
+    "MOD16": "0x403A",
+    "MOD16.M16_DONE": "0x408D",
+    "MOD16.M16_DPOS": "0x4057",
+    "MOD16.M16_END": "0x407E",
+    "MOD16.M16_LOOP": "0x406E",
+    "MOD16.M16_RCHECK": "0x405F",
+    "MOD16.M16_RPOS": "0x406E",
+    "MOVETO_D": "0xF312",
+    "MOVETO_D_7F": "0xF2FC",
+    "MOVETO_IX": "0xF310",
+    "MOVETO_IX_7F": "0xF30C",
+    "MOVETO_IX_A": "0xF30E",
+    "MOVETO_IX_FF": "0xF308",
+    "MOVETO_X_7F": "0xF2F2",
+    "MOVE_MEM_A": "0xF683",
+    "MOVE_MEM_A_1": "0xF67F",
+    "MOV_DRAW_VL": "0xF3BC",
+    "MOV_DRAW_VLCS": "0xF3B5",
+    "MOV_DRAW_VLC_A": "0xF3AD",
+    "MOV_DRAW_VL_A": "0xF3B9",
+    "MOV_DRAW_VL_AB": "0xF3B7",
+    "MOV_DRAW_VL_B": "0xF3B1",
+    "MOV_DRAW_VL_D": "0xF3BE",
+    "MUSIC1": "0xFD0D",
+    "MUSIC2": "0xFD1D",
+    "MUSIC3": "0xFD81",
+    "MUSIC4": "0xFDD3",
+    "MUSIC5": "0xFE38",
+    "MUSIC6": "0xFE76",
+    "MUSIC7": "0xFEC6",
+    "MUSIC8": "0xFEF8",
+    "MUSIC9": "0xFF26",
+    "MUSICA": "0xFF44",
+    "MUSICB": "0xFF62",
+    "MUSICC": "0xFF7A",
+    "MUSICD": "0xFF8F",
+    "Mov_Draw_VL": "0xF3BC",
+    "Mov_Draw_VL_a": "0xF3B9",
+    "Mov_Draw_VL_ab": "0xF3B7",
+    "Mov_Draw_VL_b": "0xF3B1",
+    "Mov_Draw_VL_d": "0xF3BE",
+    "Mov_Draw_VLc_a": "0xF3AD",
+    "Mov_Draw_VLcs": "0xF3B5",
+    "Move_Mem_a": "0xF683",
+    "Move_Mem_a_1": "0xF67F",
+    "Moveto_d": "0xF312",
+    "Moveto_d_7F": "0xF2FC",
+    "Moveto_ix": "0xF310",
+    "Moveto_ix_7F": "0xF30C",
+    "Moveto_ix_FF": "0xF308",
+    "Moveto_ix_a": "0xF30E",
+    "Moveto_x_7F": "0xF2F2",
+    "NEW_HIGH_SCORE": "0xF8D8",
+    "New_High_Score": "0xF8D8",
+    "OBJ_HIT": "0xF8FF",
+    "OBJ_WILL_HIT": "0xF8F3",
+    "OBJ_WILL_HIT_U": "0xF8E5",
+    "Obj_Hit": "0xF8FF",
+    "Obj_Will_Hit": "0xF8F3",
+    "Obj_Will_Hit_u": "0xF8E5",
+    "PRINT_LIST": "0xF38A",
+    "PRINT_LIST_CHK": "0xF38C",
+    "PRINT_LIST_HW": "0xF385",
+    "PRINT_SHIPS": "0xF393",
+    "PRINT_SHIPS_X": "0xF391",
+    "PRINT_STR": "0xF495",
+    "PRINT_STR_D": "0xF37A",
+    "PRINT_STR_HWYX": "0xF373",
+    "PRINT_STR_YX": "0xF378",
+    "PRINT_TEXT_STR_11966217390444143374": "0x40B0",
+    "PRINT_TEXT_STR_2171175787713719065": "0x40A3",
+    "PRINT_TEXT_STR_2446385107": "0x408E",
+    "PRINT_TEXT_STR_2446385109": "0x4095",
+    "PRINT_TEXT_STR_2446385111": "0x409C",
+    "Print_List": "0xF38A",
+    "Print_List_chk": "0xF38C",
+    "Print_List_hw": "0xF385",
+    "Print_Ships": "0xF393",
+    "Print_Ships_x": "0xF391",
+    "Print_Str": "0xF495",
+    "Print_Str_d": "0xF37A",
+    "Print_Str_hwyx": "0xF373",
+    "Print_Str_yx": "0xF378",
+    "RANDOM": "0xF517",
+    "RANDOM_3": "0xF511",
+    "READ_BTNS": "0xF1BA",
+    "READ_BTNS_MASK": "0xF1B4",
+    "RECALIBRATE": "0xF2E6",
+    "RESET0INT": "0xF36B",
+    "RESET0REF": "0xF354",
+    "RESET0REF_D0": "0xF34A",
+    "RESET_PEN": "0xF35B",
+    "RISE_RUN_ANGLE": "0xF593",
+    "RISE_RUN_LEN": "0xF603",
+    "RISE_RUN_X": "0xF5FF",
+    "RISE_RUN_Y": "0xF601",
+    "ROT_VL": "0xF616",
+    "ROT_VL_AB": "0xF610",
+    "ROT_VL_DFT": "0xF637",
+    "ROT_VL_MODE": "0xF62B",
+    "ROT_VL_MODE_A": "0xF61F",
+    "Random": "0xF517",
+    "Random_3": "0xF511",
+    "Read_Btns": "0xF1BA",
+    "Read_Btns_Mask": "0xF1B4",
+    "Recalibrate": "0xF2E6",
+    "Reset0Int": "0xF36B",
+    "Reset0Ref": "0xF354",
+    "Reset0Ref_D0": "0xF34A",
+    "Reset_Pen": "0xF35B",
+    "Rise_Run_Angle": "0xF593",
+    "Rise_Run_Len": "0xF603",
+    "Rise_Run_X": "0xF5FF",
+    "Rise_Run_Y": "0xF601",
+    "Rot_VL": "0xF616",
+    "Rot_VL_Mode": "0xF62B",
+    "Rot_VL_Mode_a": "0xF61F",
+    "Rot_VL_ab": "0xF610",
+    "Rot_VL_dft": "0xF637",
+    "SELECT_GAME": "0xF7A9",
+    "SET_REFRESH": "0xF1A2",
+    "SOUND_BYTE": "0xF256",
+    "SOUND_BYTES": "0xF27D",
+    "SOUND_BYTES_X": "0xF284",
+    "SOUND_BYTE_RAW": "0xF25B",
+    "SOUND_BYTE_X": "0xF259",
+    "START": "0x0022",
+    "STRIP_ZEROS": "0xF8B7",
+    "Select_Game": "0xF7A9",
+    "Set_Refresh": "0xF1A2",
+    "Sound_Byte": "0xF256",
+    "Sound_Byte_raw": "0xF25B",
+    "Sound_Byte_x": "0xF259",
+    "Sound_Bytes": "0xF27D",
+    "Sound_Bytes_x": "0xF284",
+    "Strip_Zeros": "0xF8B7",
+    "VECTREX_PRINT_TEXT": "0x4000",
+    "VEC_0REF_ENABLE": "0xC824",
+    "VEC_ADSR_TABLE": "0xC84F",
+    "VEC_ADSR_TIMERS": "0xC85E",
+    "VEC_ANGLE": "0xC836",
+    "VEC_BRIGHTNESS": "0xC827",
+    "VEC_BTN_STATE": "0xC80F",
+    "VEC_BUTTONS": "0xC811",
+    "VEC_BUTTON_1_1": "0xC812",
+    "VEC_BUTTON_1_2": "0xC813",
+    "VEC_BUTTON_1_3": "0xC814",
+    "VEC_BUTTON_1_4": "0xC815",
+    "VEC_BUTTON_2_1": "0xC816",
+    "VEC_BUTTON_2_2": "0xC817",
+    "VEC_BUTTON_2_3": "0xC818",
+    "VEC_BUTTON_2_4": "0xC819",
+    "VEC_COLD_FLAG": "0xCBFE",
+    "VEC_COUNTERS": "0xC82E",
+    "VEC_COUNTER_1": "0xC82E",
+    "VEC_COUNTER_2": "0xC82F",
+    "VEC_COUNTER_3": "0xC830",
+    "VEC_COUNTER_4": "0xC831",
+    "VEC_COUNTER_5": "0xC832",
+    "VEC_COUNTER_6": "0xC833",
+    "VEC_DEFAULT_STK": "0xCBEA",
+    "VEC_DOT_DWELL": "0xC828",
+    "VEC_DURATION": "0xC857",
+    "VEC_EXPL_1": "0xC858",
+    "VEC_EXPL_2": "0xC859",
+    "VEC_EXPL_3": "0xC85A",
+    "VEC_EXPL_4": "0xC85B",
+    "VEC_EXPL_CHAN": "0xC85C",
+    "VEC_EXPL_CHANA": "0xC853",
+    "VEC_EXPL_CHANB": "0xC85D",
+    "VEC_EXPL_CHANS": "0xC854",
+    "VEC_EXPL_FLAG": "0xC867",
+    "VEC_EXPL_TIMER": "0xC877",
+    "VEC_FIRQ_VECTOR": "0xCBF5",
+    "VEC_FREQ_TABLE": "0xC84D",
+    "VEC_HIGH_SCORE": "0xCBEB",
+    "VEC_IRQ_VECTOR": "0xCBF8",
+    "VEC_JOY_1_X": "0xC81B",
+    "VEC_JOY_1_Y": "0xC81C",
+    "VEC_JOY_2_X": "0xC81D",
+    "VEC_JOY_2_Y": "0xC81E",
+    "VEC_JOY_MUX": "0xC81F",
+    "VEC_JOY_MUX_1_X": "0xC81F",
+    "VEC_JOY_MUX_1_Y": "0xC820",
+    "VEC_JOY_MUX_2_X": "0xC821",
+    "VEC_JOY_MUX_2_Y": "0xC822",
+    "VEC_JOY_RESLTN": "0xC81A",
+    "VEC_LOOP_COUNT": "0xC825",
+    "VEC_MAX_GAMES": "0xC850",
+    "VEC_MAX_PLAYERS": "0xC84F",
+    "VEC_MISC_COUNT": "0xC823",
+    "VEC_MUSIC_CHAN": "0xC855",
+    "VEC_MUSIC_FLAG": "0xC856",
+    "VEC_MUSIC_FREQ": "0xC861",
+    "VEC_MUSIC_PTR": "0xC853",
+    "VEC_MUSIC_TWANG": "0xC858",
+    "VEC_MUSIC_WK_1": "0xC84B",
+    "VEC_MUSIC_WK_5": "0xC847",
+    "VEC_MUSIC_WK_6": "0xC846",
+    "VEC_MUSIC_WK_7": "0xC845",
+    "VEC_MUSIC_WK_A": "0xC842",
+    "VEC_MUSIC_WORK": "0xC83F",
+    "VEC_NMI_VECTOR": "0xCBFB",
+    "VEC_NUM_GAME": "0xC87A",
+    "VEC_NUM_PLAYERS": "0xC879",
+    "VEC_PATTERN": "0xC829",
+    "VEC_PREV_BTNS": "0xC810",
+    "VEC_RANDOM_SEED": "0xC87D",
+    "VEC_RFRSH": "0xC83D",
+    "VEC_RFRSH_HI": "0xC83E",
+    "VEC_RFRSH_LO": "0xC83D",
+    "VEC_RISERUN_LEN": "0xC83B",
+    "VEC_RISERUN_TMP": "0xC834",
+    "VEC_RISE_INDEX": "0xC839",
+    "VEC_RUN_INDEX": "0xC837",
+    "VEC_SEED_PTR": "0xC87B",
+    "VEC_SND_SHADOW": "0xC800",
+    "VEC_STR_PTR": "0xC82C",
+    "VEC_SWI2_VECTOR": "0xCBF2",
+    "VEC_SWI3_VECTOR": "0xCBF2",
+    "VEC_SWI_VECTOR": "0xCBFB",
+    "VEC_TEXT_HEIGHT": "0xC82A",
+    "VEC_TEXT_HW": "0xC82A",
+    "VEC_TEXT_WIDTH": "0xC82B",
+    "VEC_TWANG_TABLE": "0xC851",
+    "VIA_AUX_CNTL": "0xD00B",
+    "VIA_CNTL": "0xD00C",
+    "VIA_DDR_A": "0xD003",
+    "VIA_DDR_B": "0xD002",
+    "VIA_DDR_a": "0xD003",
+    "VIA_DDR_b": "0xD002",
+    "VIA_INT_ENABLE": "0xD00E",
+    "VIA_INT_FLAGS": "0xD00D",
+    "VIA_PORT_A": "0xD001",
+    "VIA_PORT_A_NOHS": "0xD00F",
+    "VIA_PORT_B": "0xD000",
+    "VIA_SHIFT_REG": "0xD00A",
+    "VIA_T1_CNT_HI": "0xD005",
+    "VIA_T1_CNT_LO": "0xD004",
+    "VIA_T1_LCH_HI": "0xD007",
+    "VIA_T1_LCH_LO": "0xD006",
+    "VIA_T2_HI": "0xD009",
+    "VIA_T2_LO": "0xD008",
+    "VIA_aux_cntl": "0xD00B",
+    "VIA_cntl": "0xD00C",
+    "VIA_int_enable": "0xD00E",
+    "VIA_int_flags": "0xD00D",
+    "VIA_port_a": "0xD001",
+    "VIA_port_a_nohs": "0xD00F",
+    "VIA_port_b": "0xD000",
+    "VIA_shift_reg": "0xD00A",
+    "VIA_t1_cnt_hi": "0xD005",
+    "VIA_t1_cnt_lo": "0xD004",
+    "VIA_t1_lch_hi": "0xD007",
+    "VIA_t1_lch_lo": "0xD006",
+    "VIA_t2_hi": "0xD009",
+    "VIA_t2_lo": "0xD008",
+    "Vec_0Ref_Enable": "0xC824",
+    "Vec_ADSR_Table": "0xC84F",
+    "Vec_ADSR_Timers": "0xC85E",
+    "Vec_Angle": "0xC836",
+    "Vec_Brightness": "0xC827",
+    "Vec_Btn_State": "0xC80F",
+    "Vec_Button_1_1": "0xC812",
+    "Vec_Button_1_2": "0xC813",
+    "Vec_Button_1_3": "0xC814",
+    "Vec_Button_1_4": "0xC815",
+    "Vec_Button_2_1": "0xC816",
+    "Vec_Button_2_2": "0xC817",
+    "Vec_Button_2_3": "0xC818",
+    "Vec_Button_2_4": "0xC819",
+    "Vec_Buttons": "0xC811",
+    "Vec_Cold_Flag": "0xCBFE",
+    "Vec_Counter_1": "0xC82E",
+    "Vec_Counter_2": "0xC82F",
+    "Vec_Counter_3": "0xC830",
+    "Vec_Counter_4": "0xC831",
+    "Vec_Counter_5": "0xC832",
+    "Vec_Counter_6": "0xC833",
+    "Vec_Counters": "0xC82E",
+    "Vec_Default_Stk": "0xCBEA",
+    "Vec_Dot_Dwell": "0xC828",
+    "Vec_Duration": "0xC857",
+    "Vec_Expl_1": "0xC858",
+    "Vec_Expl_2": "0xC859",
+    "Vec_Expl_3": "0xC85A",
+    "Vec_Expl_4": "0xC85B",
+    "Vec_Expl_Chan": "0xC85C",
+    "Vec_Expl_ChanA": "0xC853",
+    "Vec_Expl_ChanB": "0xC85D",
+    "Vec_Expl_Chans": "0xC854",
+    "Vec_Expl_Flag": "0xC867",
+    "Vec_Expl_Timer": "0xC877",
+    "Vec_FIRQ_Vector": "0xCBF5",
+    "Vec_Freq_Table": "0xC84D",
+    "Vec_High_Score": "0xCBEB",
+    "Vec_IRQ_Vector": "0xCBF8",
+    "Vec_Joy_1_X": "0xC81B",
+    "Vec_Joy_1_Y": "0xC81C",
+    "Vec_Joy_2_X": "0xC81D",
+    "Vec_Joy_2_Y": "0xC81E",
+    "Vec_Joy_Mux": "0xC81F",
+    "Vec_Joy_Mux_1_X": "0xC81F",
+    "Vec_Joy_Mux_1_Y": "0xC820",
+    "Vec_Joy_Mux_2_X": "0xC821",
+    "Vec_Joy_Mux_2_Y": "0xC822",
+    "Vec_Joy_Resltn": "0xC81A",
+    "Vec_Loop_Count": "0xC825",
+    "Vec_Max_Games": "0xC850",
+    "Vec_Max_Players": "0xC84F",
+    "Vec_Misc_Count": "0xC823",
+    "Vec_Music_Chan": "0xC855",
+    "Vec_Music_Flag": "0xC856",
+    "Vec_Music_Freq": "0xC861",
+    "Vec_Music_Ptr": "0xC853",
+    "Vec_Music_Twang": "0xC858",
+    "Vec_Music_Wk_1": "0xC84B",
+    "Vec_Music_Wk_5": "0xC847",
+    "Vec_Music_Wk_6": "0xC846",
+    "Vec_Music_Wk_7": "0xC845",
+    "Vec_Music_Wk_A": "0xC842",
+    "Vec_Music_Work": "0xC83F",
+    "Vec_NMI_Vector": "0xCBFB",
+    "Vec_Num_Game": "0xC87A",
+    "Vec_Num_Players": "0xC879",
+    "Vec_Pattern": "0xC829",
+    "Vec_Prev_Btns": "0xC810",
+    "Vec_Random_Seed": "0xC87D",
+    "Vec_Rfrsh": "0xC83D",
+    "Vec_Rfrsh_hi": "0xC83E",
+    "Vec_Rfrsh_lo": "0xC83D",
+    "Vec_RiseRun_Len": "0xC83B",
+    "Vec_RiseRun_Tmp": "0xC834",
+    "Vec_Rise_Index": "0xC839",
+    "Vec_Run_Index": "0xC837",
+    "Vec_SWI2_Vector": "0xCBF2",
+    "Vec_SWI3_Vector": "0xCBF2",
+    "Vec_SWI_Vector": "0xCBFB",
+    "Vec_Seed_Ptr": "0xC87B",
+    "Vec_Snd_Shadow": "0xC800",
+    "Vec_Str_Ptr": "0xC82C",
+    "Vec_Text_HW": "0xC82A",
+    "Vec_Text_Height": "0xC82A",
+    "Vec_Text_Width": "0xC82B",
+    "Vec_Twang_Table": "0xC851",
+    "WAIT_RECAL": "0xF192",
+    "WARM_START": "0xF06C",
+    "Wait_Recal": "0xF192",
+    "Warm_Start": "0xF06C",
+    "XFORM_RISE": "0xF663",
+    "XFORM_RISE_A": "0xF661",
+    "XFORM_RUN": "0xF65D",
+    "XFORM_RUN_A": "0xF65B",
+    "Xform_Rise": "0xF663",
+    "Xform_Rise_a": "0xF661",
+    "Xform_Run": "0xF65D",
+    "Xform_Run_a": "0xF65B",
+    "music1": "0xFD0D",
+    "music2": "0xFD1D",
+    "music3": "0xFD81",
+    "music4": "0xFDD3",
+    "music5": "0xFE38",
+    "music6": "0xFE76",
+    "music7": "0xFEC6",
+    "music8": "0xFEF8",
+    "music9": "0xFF26",
+    "musica": "0xFF44",
+    "musicb": "0xFF62",
+    "musicc": "0xFF7A",
+    "musicd": "0xFF8F"
   },
   "variables": {
-    "TEXT_SCALE_W": {
-      "name": "TEXT_SCALE_W",
-      "address": "0xC89D",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPPTR": {
-      "name": "TMPPTR",
-      "address": "0xC882",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg2": {
-      "name": "arg2",
-      "address": "0xC8A2",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPPTR2": {
-      "name": "TMPPTR2",
-      "address": "0xC884",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TEMP_YX": {
-      "name": "TEMP_YX",
-      "address": "0xC886",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "RESULT": {
-      "name": "RESULT",
-      "address": "0xC880",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TEXT_SCALE_H": {
-      "name": "TEXT_SCALE_H",
-      "address": "0xC89C",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "NUM_STR": {
-      "name": "NUM_STR",
-      "address": "0xC896",
-      "size": 6,
-      "type": "unknown",
-      "declLine": null
-    },
     "arg0": {
+      "address": "0xC8A5",
+      "declLine": null,
       "name": "arg0",
-      "address": "0xC89E",
       "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "VPY_MOVE_Y": {
-      "name": "VPY_MOVE_Y",
-      "address": "0xC88B",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg3": {
-      "name": "arg3",
-      "address": "0xC8A4",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_LINE_ARGS": {
-      "name": "DRAW_LINE_ARGS",
-      "address": "0xC88C",
-      "size": 10,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TEMP_X": {
-      "name": "TEMP_X",
-      "address": "0xC888",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
+      "type": "unknown"
     },
     "arg1": {
+      "address": "0xC8A7",
+      "declLine": null,
       "name": "arg1",
-      "address": "0xC8A0",
       "size": 2,
-      "type": "unknown",
-      "declLine": null
+      "type": "unknown"
     },
-    "VPY_MOVE_X": {
-      "name": "VPY_MOVE_X",
-      "address": "0xC88A",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
+    "arg2": {
+      "address": "0xC8A9",
+      "declLine": null,
+      "name": "arg2",
+      "size": 2,
+      "type": "unknown"
     },
-    "TEMP_Y": {
-      "name": "TEMP_Y",
-      "address": "0xC889",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
+    "arg3": {
+      "address": "0xC8AB",
+      "declLine": null,
+      "name": "arg3",
+      "size": 2,
+      "type": "unknown"
+    },
+    "arg4": {
+      "address": "0xC8AD",
+      "declLine": null,
+      "name": "arg4",
+      "size": 2,
+      "type": "unknown"
+    },
+    "arg5": {
+      "address": "0xC8AF",
+      "declLine": null,
+      "name": "arg5",
+      "size": 2,
+      "type": "unknown"
+    },
+    "arg6": {
+      "address": "0xC8B1",
+      "declLine": null,
+      "name": "arg6",
+      "size": 2,
+      "type": "unknown"
+    },
+    "arg7": {
+      "address": "0xC8B3",
+      "declLine": null,
+      "name": "arg7",
+      "size": 2,
+      "type": "unknown"
+    }
+  },
+  "version": "2.0",
+  "vpyLineMap": {
+    "103": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 10
+    },
+    "129": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 26
+    },
+    "133": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 13
+    },
+    "155": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 14
+    },
+    "182": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 15
+    },
+    "204": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 16
+    },
+    "231": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 17
+    },
+    "253": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 18
+    },
+    "280": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 19
+    },
+    "302": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 20
+    },
+    "329": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 21
+    },
+    "351": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 22
+    },
+    "378": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 23
     }
   }
 }

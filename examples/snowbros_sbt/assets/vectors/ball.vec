@@ -1,0 +1,74 @@
+{
+ "version": "1.0",
+ "name": "ball",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -12,
+       "y": -1
+      },
+      {
+       "x": -10,
+       "y": 9
+      },
+      {
+       "x": -2,
+       "y": 15
+      },
+      {
+       "x": 3,
+       "y": 15
+      },
+      {
+       "x": 9,
+       "y": 12
+      },
+      {
+       "x": 13,
+       "y": 0
+      },
+      {
+       "x": 13,
+       "y": -5
+      },
+      {
+       "x": 10,
+       "y": -11
+      },
+      {
+       "x": 3,
+       "y": -16
+      },
+      {
+       "x": -5,
+       "y": -15
+      },
+      {
+       "x": -10,
+       "y": -10
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACxklEQVR4nMVXLZDaUBh8yWDqro7IyNT1HJVIJOdqK0/WVla2DuTJWiQSeTjqLjIyuOJO0tkkG7Yf74UHczPdGSbJI8nut99PEuf+M5JbL3z8/uWIbZEXzfHmee1Wy83V90tuJf00mzVrdVm6qqpcnuf9eevN2i2/PSVvKmDx60dDDqKsaKMmVAS2QFmVUSKSWHIlzu5OAupD2QuwrsSkZhRD3pAWxT/ECgoDMQExz+u1y7JTanxIYyJnfhGtDxqxruE61Mv8cXq8WsCiIz8jg+WdENqvgBAV06RuwIXUXQDsvZ/Me/tJqG5oAVK0ChlyYRRqNxYdiXfbVS9IhTBKJUf+mRb80BFXOVB0w8U6QUEkt1YT+B/nQgjrAGnwuZCGlGmv027bBQ+fv/b7SBNF2YKEiNm0bdGLAhZd210CCCGsT8mhbNb6jhGX8MN09BVj6rs5b9LY3VU6fqwDRqtE6Hn+z5p4Wv48u7dNwygUYZPHyclyJWXEdvBo1AyCBYg68BVjGhJAEtsF3FfyfkRL3XA0M/ehTkjtAu1jIbEA7bGuBQOQCVnX7dbWQWov0pvaKYfIketLxL6ISUwhwRooq7KfAyTSSYfW841gn+Cz54MhB84c4Ek6UgnklPnXx+9Q9Nz3kQPBLkBB6ctFKCodzTGpOdSvww6slpsEhHyc+lIC6MBR8ubaQLTAZrVNohyozHse9jHNAAjyjVx1Svuegmz0Xgd4ga1ikIV6GsdKpq2mbtjogeC7Gkam3ggR2ZdOS4LzVUC5e3F32bsm8j/13v3eVsnVLyRFl38Qalqwzv+0x22/D5EPOgBM55Njcf/BK4jwOUFiRF/t2rWbBIREKGzFa6Eh8iFyIOq7ACKwRUTMsxJi/RbyaAHAx0neiHifjQfPI3Fdvbr9fv82X0auw3g8bj9S8jZiilFSIob8agFWiEUsqeIvt4cr+pqNBs4AAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

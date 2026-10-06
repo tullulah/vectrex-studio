@@ -1,0 +1,62 @@
+{
+ "version": "1.0",
+ "name": "auto_ghost_0224",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 3,
+       "y": 5
+      },
+      {
+       "x": 8,
+       "y": 4
+      },
+      {
+       "x": 8,
+       "y": -8
+      },
+      {
+       "x": -2,
+       "y": -7
+      },
+      {
+       "x": -7,
+       "y": -8
+      },
+      {
+       "x": -7,
+       "y": -6
+      },
+      {
+       "x": -2,
+       "y": -1
+      },
+      {
+       "x": -1,
+       "y": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAARUlEQVR4nGNgGPKAkQS1/7HpZyRTIxwwUaKZGAMYKDHgP2HtNHTBf0oM+E+JC/6TohndgP+kasbmArINIMt2fC4gOo8AAMhqCRJxv+t2AAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

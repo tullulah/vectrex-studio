@@ -290,8 +290,7 @@ mod tests {
     fn test_note_period_table_coverage() {
         // Verify the MIDI-to-period formula produces valid values for range 24-107
         for midi in 24u8..=107 {
-            let period = (88200.0 / (440.0 * 2f32.powf((midi as f32 - 69.0) / 12.0))).round() as u16;
-            let period = period.max(1).min(4095);
+            let period = crate::psg::midi_to_period(midi as f64);
             assert!(period >= 1 && period <= 4095,
                 "MIDI {} produced out-of-range period {}", midi, period);
         }

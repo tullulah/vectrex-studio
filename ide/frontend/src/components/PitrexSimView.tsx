@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useJoystickStore } from '../state/joystickStore';
+import { useEmulatorStore } from '../state/emulatorStore';
+import { VECTREX_GAMMA } from '../emulator/hardware/Canvas';
 
 /*
  * PitrexSimView — runs an external project's WASM "simulator" module in the
  * emulator panel. The module speaks the PiTrex host SDK contract (see
- * ide/electron/resources/pitrex-sim/): it calls back into `Module.pitrex.*`
+ * ide/electron/resources/uvmc2-sdk/pitrex-sim/): it calls back into `Module.pitrex.*`
  * for drawing, input, time and sound, and yields once per frame at
  * v_WaitRecal() via Asyncify (emscripten_sleep). NOTHING here is
  * game-specific — the view only knows a module path + the SDK contract.
@@ -28,7 +30,10 @@ const INTERNAL_H = 440;
 const DEBUG_INPUT = false;    // draw a live controller-state readout (diagnostic)
 
 /* rgb: 0x00RRGGBB, 0 = the display's own monochrome look (the Vectrex default). */
-interface Segment { x0: number; y0: number; x1: number; y1: number; b: number; rgb: number; }
+export interface Segment { x0: number; y0: number; x1: number; y1: number; b: number; rgb: number; }
+
+/* El espacio del PiTrex, para que quien grabe pueda convertirlo sin adivinarlo. */
+export const PITREX_RANGE = { x: PITREX_X_RANGE, y: PITREX_Y_RANGE };
 
 // Vectrex controller state fed back to the WASM via Module.pitrex hooks.
 interface ControllerState {
@@ -54,9 +59,18 @@ export interface PitrexSimViewProps {
   height: number;
   /** Optional stdout/stderr sink (build/runtime log lines). */
   onLog?: (line: string) => void;
+  /** Publica un lector del ULTIMO frame dibujado, para la grabacion de vectores
+   *  (.vrec). Sin esto el grabador lee de emuCore/window.vecx, que con el
+   *  simulador externo corriendo estan parados: salia un .vrec vacio. */
+  onCaptureReady?: (leer: (() => Segment[] | null) | null) => void;
+  /** Se avisa con el <canvas> real en cuanto existe (y con null al desmontar).
+   *  Esta vista TAPA el canvas del emulador, asi que quien quiera grabar video
+   *  tiene que apuntar a este; si no, graba el de debajo, que ya no pinta nadie. */
+  onCanvasReady?: (el: HTMLCanvasElement | null) => void;
 }
 
-export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width, height, onLog }) => {
+export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width, height, onLog, onCanvasReady, onCaptureReady }) => {
+  const simRomZip = useEmulatorStore(s => s.simRomZip);
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [state, setState] = useState<'loading' | 'running' | 'error'>('loading');
@@ -114,12 +128,20 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
     controllerRef.current = { joyX: x, joyY: y, buttons };
   }, []);
   const segmentsRef = useRef<Segment[]>([]);
+  /* El frame COMPLETO mas reciente. `segmentsRef` se vacia al principio de cada
+   * present(), asi que no sirve para que lo lea nadie de fuera a su propio ritmo. */
+  const ultimoFrameRef = useRef<Segment[]>([]);
   const disposedRef = useRef<boolean>(false);
   const startMsRef = useRef<number>(Date.now());
+  // One stamp per mount: saveData writes land in dumps/sim_<stamp>/ so play
+  // sessions never overwrite each other's files.
+  const sessionStampRef = useRef<string>(Date.now().toString(36));
   const moduleRef = useRef<any>(null);
   // AY-3-8910 audio on an AudioWorklet (audio thread — a synth stall can't
   // freeze the UI). Holds { ctx, node, resume } once set up.
   const audioRef = useRef<any>(null);
+  /* El DAC del cartucho. Comparte el AudioContext del chip; ver donde se arma. */
+  const jackRef = useRef<any>(null);
   // Digitised-sample audio (e.g. AAE Sega-G80). `samplesRef` holds one decoded
   // AudioBuffer per bank index (from samples/samples.json, order = the game's
   // sample index); `voiceNodesRef` maps a mixing voice → its live source node.
@@ -139,15 +161,29 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       code === 'ArrowLeft' || code === 'ArrowRight' || code === 'ArrowUp' || code === 'ArrowDown' ||
       code === 'KeyA' || code === 'KeyD' || code === 'KeyW' || code === 'KeyS' ||
       code === 'KeyZ' || code === 'KeyX' || code === 'KeyC' || code === 'KeyV';
+    // Don't steal keys while the user is typing in a text field. WASD/ZXCV are
+    // both the controller mapping AND ordinary letters, so if the focus is on an
+    // input, textarea, select, contentEditable, or the Monaco editor, let the
+    // keystroke through instead of preventDefault-ing it (the bug that made those
+    // letters untypeable anywhere in the IDE while a sim view was mounted).
+    const typingInField = (e: KeyboardEvent) => {
+      const t = (e.target as HTMLElement | null) || (document.activeElement as HTMLElement | null);
+      if (!t) return false;
+      const tag = t.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+        || t.isContentEditable || !!t.closest('.monaco-editor');
+    };
     const down = (e: KeyboardEvent) => {
       keyDbgRef.current.n++;              // DEBUG: count every keydown reaching us
       keyDbgRef.current.last = e.code;
+      if (typingInField(e)) return;
       if (!isGameKey(e.code)) return;
       keysRef.current[e.code] = true;
       e.preventDefault();
       pollInput();
     };
     const up = (e: KeyboardEvent) => {
+      if (typingInField(e)) return;
       if (!isGameKey(e.code)) return;
       keysRef.current[e.code] = false;
       pollInput();
@@ -159,6 +195,12 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       window.removeEventListener('keyup', up, { capture: true } as any);
     };
   }, [pollInput]);
+
+  // Publicar el lector del ultimo frame mientras esta vista este viva.
+  useEffect(() => {
+    onCaptureReady?.(() => (disposedRef.current ? null : ultimoFrameRef.current));
+    return () => onCaptureReady?.(null);
+  }, [onCaptureReady]);
 
   // ── Load + instantiate the WASM module ────────────────────────────────────
   useEffect(() => {
@@ -183,7 +225,11 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       const sx = (x: number) => (x + PITREX_X_RANGE) / (2 * PITREX_X_RANGE) * W;
       const sy = (y: number) => (PITREX_Y_RANGE - y) / (2 * PITREX_Y_RANGE) * H; // Y flipped
       for (const s of segs) {
-        const alpha = Math.max(0, Math.min(1, s.b / 127));
+        /* THE TUBE'S GAMMA, the same curve Canvas.ts uses for the ARM view — see
+         * VECTREX_GAMMA there. This was a linear b/127, which is not what a phosphor does
+         * and, more to the point, is not what the other view does: a segment at intensity
+         * 32 came out at 64 here and 119 there. */
+        const alpha = Math.pow(Math.max(0, Math.min(1, s.b / 127)), VECTREX_GAMMA);
         if (alpha <= 0) continue;
         // Monochrome unless the game asked for a colour; brightness scales either way.
         if (s.rgb) {
@@ -223,6 +269,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         pollInput();   // poll the physical gamepad once per frame (live)
         const segs = segmentsRef.current;
         segmentsRef.current = [];
+        ultimoFrameRef.current = segs;
         draw(segs);
       },
       readButtons: () => controllerRef.current.buttons,
@@ -257,6 +304,27 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         if (n) { try { n.stop(); } catch { /* already stopped */ } voiceNodesRef.current.delete(voice); }
       },
       samplePlaying: (voice: number) => (voiceNodesRef.current.has(voice) ? 1 : 0),
+      // v_simSaveData: persist a blob from the game into ITS OWN project
+      // folder — <project>/dumps/sim_<stamp>/<basename>. The stamp is one per
+      // mount, so play sessions never collide and appendFileBin's append
+      // semantics only ever create fresh files. Path is confined: basename
+      // only, project dir derived from the module path (…/build_wasm/game.js).
+      saveData: (name: string, data: Uint8Array) => {
+        if (disposedRef.current) return;
+        // NB: file IPCs live under window.files (see preload.ts), NOT electronAPI
+        const api = (window as any).files;
+        if (!api?.appendFileBin) { log.current?.('[saveData] window.files.appendFileBin missing — dump lost'); return; }
+        const safe = String(name).split(/[\\/]/).pop()!.replace(/[^A-Za-z0-9._-]/g, '_');
+        const projDir = modulePath.replace(/[\\/][^\\/]+[\\/][^\\/]+$/, '');
+        if (projDir === modulePath || !safe) return;
+        const dest = `${projDir}/dumps/sim_${sessionStampRef.current}/${safe}`;
+        api.appendFileBin({ path: dest, data });
+        /* SAY SO. A dump that is written in silence is indistinguishable from one that
+         * was never written, and that cost a whole round: the recorder had been built
+         * out by the IDE's own `make sim` and the only symptom was a folder that was
+         * not there. One line, with the size, so "did it save" is answered on screen. */
+        log.current?.(`[saveData] ${data.length} B -> ${dest}`);
+      },
     };
 
     (async () => {
@@ -388,6 +456,138 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         const instance = await factory(moduleArg);
         if (cancelled || disposedRef.current) return;
         moduleRef.current = instance;
+
+        // El romset, en el FS de emscripten y ANTES de main(): el juego lo abre por
+        // stdio nada mas arrancar (ra_rom_file.c), igual que el cartucho lo lee de la
+        // SD. Esta carpeta es la "tarjeta" del simulador. Si no hay zip no se escribe
+        // nada y el juego dibuja su cartel NO ROMSET, que es la respuesta correcta.
+        if (simRomZip && instance.FS) {
+          try {
+            try { instance.FS.mkdir('/roms'); } catch { /* ya existe */ }
+            instance.FS.writeFile('/roms/game.zip', simRomZip);
+            log.current?.(`[PiTrex simulator] romset montado: ${simRomZip.length} bytes`);
+          } catch (e: any) {
+            log.current?.(`[PiTrex simulator] no pude montar el romset: ${e?.message || e}`);
+          }
+        }
+        /* ── EL AUDIO DEL DAC DEL CARTUCHO, EN EL SIMULADOR ──────────────────
+         *
+         * El simulador corre a velocidad real y el emulador va a 8 fps, asi que
+         * el simulador es el UNICO sitio donde se puede juzgar una pieza de
+         * musica — y eso no vale nada si suena por otro mezclador. Aqui no hay
+         * PIO ni DMA ni PSRAM: se le dan al juego los dos ficheros que habria
+         * leido de la tarjeta y se le piden muestras. `stream_render` es el
+         * MISMO codigo que corre en el cartucho, con el mismo ADPCM, el mismo
+         * remuestreo y los mismos niveles.
+         *
+         * Los dos suenan a la vez en la consola —el chip por la tele y el DAC
+         * por el conector— y aqui salen por el MISMO AudioContext: son una
+         * maquina con dos salidas, no dos maquinas. Tuvo contexto propio y lo
+         * que eso costo esta escrito donde se arma. */
+        try {
+          /* DOS PUENTES DISTINTOS, y el que los confunde no recibe un error:
+           * recibe `undefined` y una funcion que nunca se llama. sdSimList vive
+           * en `electronAPI` y readFileBin en `files` (preload.ts los expone por
+           * separado), asi que `electronAPI.readFileBin` es undefined y todas
+           * las lecturas devolvian nada — con el log culpando a los ficheros,
+           * que si estaban. */
+          const api: any = (window as any).electronAPI;
+          const fapi: any = (window as any).files ?? api;
+          const lista = await api?.sdSimList?.();
+          const leer = async (nombre: string): Promise<Uint8Array | undefined> => {
+            if (!lista?.dir || !fapi?.readFileBin) return undefined;
+            try {
+              const r = await fapi.readFileBin(`${lista.dir}/${nombre}`);
+              if (r && !r.error && r.base64)
+                return Uint8Array.from(atob(r.base64), (c: string) => c.charCodeAt(0));
+            } catch { /* no esta */ }
+            return undefined;
+          };
+          const mus = await leer('KUROMUS.PCM');
+          const sfx = await leer('KUROSFX.PCM');
+          /* CADA FORMA DE NO SONAR DICE CUAL ES. Sin esto, "no hay tarjeta", "no
+           * estan los ficheros" y "este juego no lleva audio de jack" salen las
+           * tres por el mismo sitio: nada en el log y silencio por el altavoz.
+           * Es el fallo que he perseguido tres veces hoy. */
+          if (!lista?.dir)
+            log.current?.('[PiTrex simulator] sin tarjeta simulada: no hay audio de jack');
+          else if (!fapi?.readFileBin)
+            log.current?.('[PiTrex simulator] no hay readFileBin: no puedo leer la tarjeta');
+          else if (!mus && !sfx)
+            log.current?.(`[PiTrex simulator] ni KUROMUS.PCM ni KUROSFX.PCM en ${lista.dir}`);
+          else if (typeof (instance as any)._stream_host_load !== 'function')
+            log.current?.('[PiTrex simulator] este game.js no exporta stream_host_load ' +
+                          '(reconstruye con `make sim`)');
+          if ((mus || sfx) && typeof (instance as any)._stream_host_load === 'function') {
+            const meter = (b?: Uint8Array): [number, number] => {
+              if (!b || !b.length) return [0, 0];
+              const ptr = (instance as any)._malloc(b.length);
+              (instance as any).HEAPU8.set(b, ptr);
+              return [ptr, b.length];
+            };
+            const [pm, nm] = meter(mus);
+            const [ps, ns] = meter(sfx);
+            (instance as any)._stream_host_load(pm, nm, ps, ns);
+            log.current?.(`[PiTrex simulator] audio del jack: musica ${nm} B, efectos ${ns} B`);
+
+            /* ── THE SAME AudioContext THE REST OF THE SIMULATOR USES ────────
+             *
+             * It was `new AudioContext()`, a second one of its own, and that is
+             * what stopped the video recorder from capturing the jack: the
+             * recorder pins ONE context — the active target's, which here is the
+             * PiTrex core's AY worklet — and taps every node feeding ITS speakers.
+             * A node on a context nobody named is a node nobody records. Daniel:
+             * "graba video y audio cuando es PCM, pero el audio de jack no lo
+             * graba". It played perfectly out of the speakers the whole time,
+             * which is why it took a report to find rather than a build.
+             *
+             * Sharing it is right anyway, recording or no recording: this is ONE
+             * machine with two outputs, and two contexts are two hardware audio
+             * callbacks whose clocks drift against each other, so the mix would
+             * happen in the room instead of in the graph.
+             *
+             * Its own only if the AY worklet never came up — that path is
+             * best-effort and must not take the jack down with it. `propio` says
+             * which, because closing a context we borrowed would kill the chip's
+             * audio on the next Build & Run. */
+            const prestado: AudioContext | null = audioRef.current?.ctx ?? null;
+            const ctxJ: AudioContext = prestado ?? new AudioContext();
+            const propio = !prestado;
+            const BLOQUE = 2048;
+            const scratch = (instance as any)._malloc(BLOQUE * 2);
+            /* Vecino mas cercano de los 32 kHz del cartucho a los del navegador:
+             * es ADPCM de 4 bits subido, y un filtro no le devolveria nada. */
+            const paso = 32000 / ctxJ.sampleRate;
+            let frac = 0, held = 0, tengo = 0, leido = 0;
+            // eslint-disable-next-line @typescript-eslint/no-deprecated
+            const nodo = ctxJ.createScriptProcessor(BLOQUE, 0, 1);
+            nodo.onaudioprocess = (ev: AudioProcessingEvent) => {
+              const out = ev.outputBuffer.getChannelData(0);
+              for (let i = 0; i < out.length; i++) {
+                frac += paso;
+                while (frac >= 1) {
+                  frac -= 1;
+                  if (leido >= tengo) {
+                    (instance as any)._stream_render(scratch, BLOQUE);
+                    tengo = BLOQUE; leido = 0;
+                  }
+                  held = (instance as any).HEAP16[(scratch >> 1) + leido++] / 32768;
+                }
+                out[i] = held;
+              }
+            };
+            nodo.connect(ctxJ.destination);
+            const despierta = () => { if (ctxJ.state !== 'running') ctxJ.resume().catch(() => {}); };
+            ['keydown', 'pointerdown', 'mousedown', 'click', 'touchstart']
+              .forEach((e) => window.addEventListener(e, despierta, { capture: true }));
+            jackRef.current = { ctxJ, nodo, despierta, propio };
+            log.current?.(`[PiTrex simulator] jack en ${propio ? 'su propio' : 'el mismo'} `
+                          + `AudioContext que el chip (${ctxJ.sampleRate} Hz)`);
+          }
+        } catch (e: any) {
+          log.current?.(`[PiTrex simulator] sin audio de jack: ${e?.message || e}`);
+        }
+
         setState('running');
         log.current?.('[PiTrex simulator] module ready — starting main()');
 
@@ -431,13 +631,26 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         }
       } catch { /* ignore */ }
       audioRef.current = null;
+      try {
+        const j = jackRef.current;
+        if (j) {
+          ['keydown', 'pointerdown', 'mousedown', 'click', 'touchstart']
+            .forEach((e) => window.removeEventListener(e, j.despierta, { capture: true } as any));
+          j.nodo?.disconnect();
+          /* ONLY IF IT IS OURS. Since the jack shares the AY worklet's context,
+           * closing it here would take the chip's audio down with it — and the
+           * block above has already closed it in that case. */
+          if (j.propio) j.ctxJ?.close?.();
+        }
+      } catch { /* ya estaba cerrado */ }
+      jackRef.current = null;
     };
   }, [modulePath, pollInput]);
 
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
       <canvas
-        ref={canvasRef}
+        ref={(el) => { canvasRef.current = el; onCanvasReady?.(el); }}
         width={INTERNAL_W}
         height={INTERNAL_H}
         style={{

@@ -1,0 +1,214 @@
+{
+ "version": "1.0",
+ "name": "auto_bank_06b8",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 10,
+       "y": 14
+      },
+      {
+       "x": 15,
+       "y": 11
+      },
+      {
+       "x": 11,
+       "y": 8
+      },
+      {
+       "x": 9,
+       "y": 2
+      },
+      {
+       "x": 10,
+       "y": -7
+      },
+      {
+       "x": 15,
+       "y": -12
+      },
+      {
+       "x": 15,
+       "y": -15
+      },
+      {
+       "x": 9,
+       "y": -16
+      },
+      {
+       "x": 3,
+       "y": -11
+      },
+      {
+       "x": -3,
+       "y": -14
+      },
+      {
+       "x": -9,
+       "y": -14
+      },
+      {
+       "x": -11,
+       "y": -16
+      },
+      {
+       "x": -16,
+       "y": -15
+      },
+      {
+       "x": -16,
+       "y": -11
+      },
+      {
+       "x": -11,
+       "y": -6
+      },
+      {
+       "x": -12,
+       "y": 2
+      },
+      {
+       "x": -4,
+       "y": 5
+      },
+      {
+       "x": 0,
+       "y": 15
+      },
+      {
+       "x": 4,
+       "y": 11
+      },
+      {
+       "x": 7,
+       "y": 15
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -12,
+       "y": -10
+      },
+      {
+       "x": -9,
+       "y": -11
+      },
+      {
+       "x": -11,
+       "y": -15
+      },
+      {
+       "x": -12,
+       "y": -13
+      },
+      {
+       "x": -14,
+       "y": -11
+      },
+      {
+       "x": -12,
+       "y": -7
+      },
+      {
+       "x": -11,
+       "y": -7
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -11,
+       "y": -7
+      },
+      {
+       "x": -7,
+       "y": -4
+      },
+      {
+       "x": -6,
+       "y": -5
+      },
+      {
+       "x": -9,
+       "y": -8
+      }
+     ]
+    },
+    {
+     "name": "det2",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 7,
+       "y": -5
+      },
+      {
+       "x": 7,
+       "y": 0
+      },
+      {
+       "x": 8,
+       "y": -2
+      },
+      {
+       "x": 9,
+       "y": -6
+      }
+     ]
+    },
+    {
+     "name": "det3",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 10,
+       "y": -12
+      },
+      {
+       "x": 9,
+       "y": -11
+      },
+      {
+       "x": 11,
+       "y": -9
+      },
+      {
+       "x": 12,
+       "y": -11
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAADX0lEQVR4nNWXL3TiQBDGJ7wKznFukZHgQFZGIotrZeoaRyUy8uqIa2TPUVdkZOqICxKZuOIOx71vkln2AqQQ1M17eQk7yfy+mf0L0f9uSqldnU+uU++0roX7nndUhPjkqhPRyBDw1fd3vczhuwkwfXLJO1UhLbrSJqFDL250NEv4xPDOz6R/8J7VFIwg/R+3/HzvDhkA4HQ24zbTJwJMYXgvz3PLugbes3v8e7VeaRDsd7j8xxet3y10gfgFjuerBXQ7txQloc5W4IPBmPJ1pn3pn1h/L3BY4zEg8GwT62wfp1MOjPZu2SY+AZvwRgLMvj8lTNldytars+K1LhVQzV76GebYdzvJHuWHHz6Uv5r5RQJUOW1w925D7t+qIPN+bvZnCRCohjuOzg6GjCFoMnkr4JuY/VcJUMYa7j8sdDvgpo3upoUIu0dJFLEYEdFYgFJqN+67hGwlOEyEoLwAAI5niALcBKPf5bmu/48KwMvzNOQAEIHgGNVJMi/8ZXkBR9vi3ed3Zb4D7gzc5hUwTbIASDJGG0qNtkAFFDghQ2XxMU1mRyMBgRMyQIuIIg1FG+7uW0CdQZciN2a4VOkSu6lzdh5sCsrSPkX7tjdakDsKaL74RZuk6JJLRv55XZBuKZ4SpfOursjT14LbAAV8PHpm3+vXQi86l/R/rYB0ZevnyTTXQtg37+rMxWQcwDAzZEpi2W58JHOyjK/q7zBJ+DeqgOyl/ICa+4C5EZ0tQJWbjUD4TPeRUjzej/CX+w7fn0Nft5kwrB2yaH0nwjoGx0e8mMQbWi6LE85w6NHXIKXc2RL12zz6226RueyOskkJHDPnuw2pdUpZFY5jFJ/nojapGWl47h1WgMHlKnn2NFSVY5aYwOWsZ0JRBSoHowxCWajMcUEYz2tA4l21CjcCR2lziog+CwegQ9ej1WRJj7Qk8oqyw9zR834NSLf74xYgMJu0CFQhe99vTswyRFgCR78imPO5LxtWOIGapqdguuUukYAy3aqV5INpGQvfogv1oVRBQFlSCQoRyGobdg+ADIra++44MrCqQrCIAT42KiciLPLVTgJzFYzMTlnd9npMiJlItQo3eCAqYHn/sKzXGGJAhICZ5GbUYUHGSspKUYn7Tu0/2aYm8Tsfg4P/h38BFFZY3wL4itQAAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

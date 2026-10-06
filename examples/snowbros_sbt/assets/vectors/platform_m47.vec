@@ -1,0 +1,108 @@
+{
+ "version": "1.0",
+ "name": "platform_m47",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "outline",
+     "intensity": 85,
+     "closed": true,
+     "points": [
+      {
+       "x": -23,
+       "y": 6
+      },
+      {
+       "x": 23,
+       "y": 6
+      },
+      {
+       "x": 23,
+       "y": -6
+      },
+      {
+       "x": -23,
+       "y": -6
+      }
+     ]
+    },
+    {
+     "name": "mid",
+     "intensity": 70,
+     "closed": false,
+     "points": [
+      {
+       "x": -23,
+       "y": 0
+      },
+      {
+       "x": 23,
+       "y": 0
+      }
+     ]
+    },
+    {
+     "name": "t-11",
+     "intensity": 70,
+     "closed": false,
+     "points": [
+      {
+       "x": -11,
+       "y": 0
+      },
+      {
+       "x": -11,
+       "y": -6
+      }
+     ]
+    },
+    {
+     "name": "t13",
+     "intensity": 70,
+     "closed": false,
+     "points": [
+      {
+       "x": 13,
+       "y": 0
+      },
+      {
+       "x": 13,
+       "y": -6
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "walkableAreas": [
+  {
+   "y": 6,
+   "x_min": -23,
+   "x_max": 23
+  }
+ ],
+ "collisionMesh": {
+  "segments": [
+   {
+    "x1": -23,
+    "y1": 6,
+    "x2": 23,
+    "y2": 6
+   }
+  ]
+ },
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC4AAAAMCAYAAAAd3Y8KAAABlElEQVR4nNVVoXbCQBCc9GHqsMjgqGskMnVIkEjiaisrK2vriKwMf0BkZOoal5ORfEL69siGzXUvRdJ5j3d3u5PZub0jCY5F3T6EIf4TsjzHhCbmOUD40eLbGLiboFhlDBZdnPL0IGETxz2H4sz1YdPxNW0aKU8xruNq80gIsje0y12rChHknCDzvBm59hnn/GJEWwPXkDr0sx0v0gCzEsBLPTDERMLMPKEJj4iRIDf7niMLH7qT8BmonNNjvtXE3o5Uw9XVYDtOk2lc4/59jvILqHZ7m9yWCcrN0Zp2QYVOrwmW4YXPJjQQf5EmPZfnGp+4ksNePqPzPCsPCIo12ia6PESdJ/PRIyDjnHO5BI3POZ+2ltPqSW0+0Gy6wt2Qeib4TMtRFmYj1yDymNbg80KYaN3xmZbrv7jUKWtUmGgUA4NTE1xpnnHiv9Aaw45rO3djbOga7rXaZac5hiYdrn9dlbFiXGDMvGvEZ2o2YlrTda9jwF9OfrFX2zluFUX3hszXq/MdJ/RfzM8a6fJ2zZNpGn8Aj/sB9VxaIxEAAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

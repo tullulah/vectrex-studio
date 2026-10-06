@@ -85,6 +85,22 @@ export function getRunningAudioTap(): { ctx: AudioContext; outputNode: AudioNode
 }
 
 /**
+ * Every tracked node feeding the speakers OF ONE GIVEN CONTEXT.
+ *
+ * Use this when the caller already knows WHICH context it wants (the active
+ * emulation target's). `getRunningContextOutputs()` picks the first running
+ * context it finds, which after switching targets can be a stale one that is
+ * still 'running' but silent — the recorder then taps it, captures nothing, and
+ * reports success. Pinning the context first and asking for its outputs here
+ * keeps the full-mix behaviour without that failure mode.
+ */
+export function getOutputsForContext(ctx: BaseAudioContext | null | undefined): AudioNode[] {
+  if (!ctx) return [];
+  const t = tracked.find(x => x.ctx === ctx);
+  return t ? Array.from(t.outputs) : [];
+}
+
+/**
  * The running context and ALL nodes feeding its speakers. The video recorder
  * connects every one to its tap (and re-checks for newly-added nodes each tick),
  * so it captures the FULL mix — PSG music AND late-arriving BufferSources like a
@@ -96,4 +112,28 @@ export function getRunningContextOutputs(): { ctx: AudioContext; outputs: AudioN
     withOutputs.find(t => (t.ctx as any).state === 'running') ?? withOutputs[0];
   if (!pick) return null;
   return { ctx: pick.ctx as AudioContext, outputs: Array.from(pick.outputs) };
+}
+
+/**
+ * EVERY live context that has something feeding its speakers, most recently
+ * created last.
+ *
+ * WHY THE RECORDER WANTS ALL OF THEM AND NOT THE BEST ONE. Picking is what kept
+ * going wrong. getRunningContextOutputs() picks the first running context, which
+ * after switching targets is often a stale silent one. getOutputsForContext()
+ * fixed that by pinning the ACTIVE TARGET's context — but only a component the
+ * panel knows about can be "the active target", and the WASM simulator is a
+ * React component that owns its own audio and is not one of them. Its recordings
+ * came out silent end to end, video and all, and the recorder reported success.
+ *
+ * Tapping every live context cannot have that failure: a stale one contributes
+ * silence to a mix, which costs nothing, while the one that is actually sounding
+ * is in there by construction. There is no judgement left to get wrong.
+ *
+ * Closed contexts are skipped — connecting to one throws.
+ */
+export function getAllLiveContextOutputs(): Array<{ ctx: AudioContext; outputs: AudioNode[] }> {
+  return tracked
+    .filter(t => t.outputs.size > 0 && (t.ctx as any).state !== 'closed')
+    .map(t => ({ ctx: t.ctx as AudioContext, outputs: Array.from(t.outputs) }));
 }

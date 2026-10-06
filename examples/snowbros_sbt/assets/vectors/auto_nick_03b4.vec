@@ -1,0 +1,132 @@
+{
+ "version": "1.0",
+ "name": "auto_nick_03b4",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 10,
+       "y": -12
+      },
+      {
+       "x": -7,
+       "y": -13
+      },
+      {
+       "x": -7,
+       "y": -11
+      },
+      {
+       "x": -4,
+       "y": -10
+      },
+      {
+       "x": -4,
+       "y": -7
+      },
+      {
+       "x": -6,
+       "y": -4
+      },
+      {
+       "x": -9,
+       "y": -5
+      },
+      {
+       "x": -11,
+       "y": -1
+      },
+      {
+       "x": -7,
+       "y": 9
+      },
+      {
+       "x": -6,
+       "y": 11
+      },
+      {
+       "x": 1,
+       "y": 12
+      },
+      {
+       "x": 2,
+       "y": 14
+      },
+      {
+       "x": 6,
+       "y": 11
+      },
+      {
+       "x": 4,
+       "y": 3
+      },
+      {
+       "x": 7,
+       "y": 0
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -5,
+       "y": 4
+      },
+      {
+       "x": -7,
+       "y": 4
+      },
+      {
+       "x": -6,
+       "y": 7
+      },
+      {
+       "x": -4,
+       "y": 7
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -1,
+       "y": -9
+      },
+      {
+       "x": 1,
+       "y": -9
+      },
+      {
+       "x": 2,
+       "y": -12
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACNUlEQVR4nO2WoXfiQBDGZ3kRJ3vukDkHLnU9GdzFgTssDtzJIul/UNxZ6ooDB5K64sBd5J27yrrt+yY7YYEr2Q3wavjeywsvs+zvy+7OZIguOp10mT9VTgXX95NSJlQZ2N6DDJ5N2Eu85lW+4B+3XUpaTUrTlFbPSw6Mqt/5PpxP+d4bD53nDlzhg8dfdBPHVL965QerMKQwDNmIaiV03+x6wyGXM6Dx1oAJXPTFmEDcgL2lXAyMnmcMg4HVy6et4N80zbfj4c7v7aGKy9JDjc9fqarqewNkFSCshG8mVIoGYPL2dePdOFYAql9HPlx3A7awFQA2hh1qrDd7bmeEr4KiAZgcYKg9vcsexhHNat2t/YfKnAF1IKZNXNMgzsEQ4E/zOYNHTwt+Nv2zpOWaqF88r5MBPfv3mw8ea/EzB8ue41zoOGKwCAYgHxPqkAEIJmQLcOJFYgRbAEX9Tm7Cx0DlvYAAYCSOqnyhDkgxss0weJClKzQwL3GMAYUlFhMoPvZlG+R4yQyADmaBLO/kccx5LgXHjh0Dh5TLdwDpZarcniQGg2XOgSoyYI3j31Ka+60MBjhSsWw2BB4G2YTk/i1qws03oh342Vuy9ni4AZoiZL+13M9lQCVroqRtKqOpgLsmdqRP3pRORvM9MPY7qm2PQ5dkOiV98qZ0UvvvYctjaW2TNYfatMAXbHfAqWlCKQNo6Qs3Jaq4Rwxc4TbY7oBFArdl9YnyZS29Bdpx3DGMi+hD9AZo4BduAypJiwAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

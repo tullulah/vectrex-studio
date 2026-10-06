@@ -1414,12 +1414,12 @@ fn vsfx_stream(vsfx: &VsfxResource) -> CompiledStream {
             let idx = ((frame_time_ms / arp_speed_ms) as usize) % n;
             let offset = vsfx.modulation.arpeggio_notes[idx] as f64;
             let freq = 440.0 * 2f64.powf((base_midi + offset - 69.0) / 12.0);
-            if freq > 0.0 { (88200.0 / freq).round() as u16 } else { 0xFFF }
+            crate::psg::hz_to_period(freq)
         } else {
             let t = if total_frames > 1 { frame as f64 / (total_frames - 1) as f64 } else { 0.0 };
             let mult = s_mult + (e_mult - s_mult) * t;
             let freq = base_freq * mult;
-            if freq > 0.0 { (88200.0 / freq).round() as u16 } else { 0xFFF }
+            crate::psg::hz_to_period(freq)
         };
         let period = period.max(1).min(0xFFF);
 

@@ -66,7 +66,7 @@ const GROUPS: &[(&str, &[&str], &[&str])] = &[
     ("PLAY_SAMPLE",     &["PLAY_SAMPLE"],       &[]),
     ("SAMPLE_POS",      &["SAMPLE_POS"],        &[]),
     // SD card game list: SVC stubs only (svc #17 SYS_SD_COUNT, #18 SYS_SD_NAME).
-    ("SD",              &["SD_FILE_COUNT", "SD_FILE_NAME", "DRAW_SD_PREVIEW", "LAUNCH_GAME"], &[]),
+    ("SD",              &["SD_FILE_COUNT", "SD_FILE_NAME", "DRAW_SD_PREVIEW", "LAUNCH_GAME", "CALIBRATE"], &[]),
     // _SIN_TABLE data + smul_lut (smul_lut reads _SIN_TABLE).
     ("SIN_TABLE",       &[],                    &[]),
     // vpy_sin / vpy_cos: read _SIN_TABLE directly.

@@ -37,6 +37,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -60,20 +62,23 @@ DRAW_RECT_Y          EQU $C880+$0F   ; Rectangle Y (1 bytes)
 DRAW_RECT_WIDTH      EQU $C880+$10   ; Rectangle width (1 bytes)
 DRAW_RECT_HEIGHT     EQU $C880+$11   ; Rectangle height (1 bytes)
 DRAW_RECT_INTENSITY  EQU $C880+$12   ; Rectangle intensity (1 bytes)
-DRAW_LINE_ARGS       EQU $C880+$13   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
-VLINE_DX_16          EQU $C880+$1D   ; DRAW_LINE dx (16-bit) (2 bytes)
-VLINE_DY_16          EQU $C880+$1F   ; DRAW_LINE dy (16-bit) (2 bytes)
-VLINE_DX             EQU $C880+$21   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
-VLINE_DY             EQU $C880+$22   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
-VLINE_DY_REMAINING   EQU $C880+$23   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
-VLINE_DX_REMAINING   EQU $C880+$25   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
-VAR_ARG0             EQU $CB80   ; Function argument 0 (16-bit) (2 bytes)
-VAR_ARG1             EQU $CB82   ; Function argument 1 (16-bit) (2 bytes)
-VAR_ARG2             EQU $CB84   ; Function argument 2 (16-bit) (2 bytes)
-VAR_ARG3             EQU $CB86   ; Function argument 3 (16-bit) (2 bytes)
-VAR_ARG4             EQU $CB88   ; Function argument 4 (16-bit) (2 bytes)
-CURRENT_ROM_BANK     EQU $CB8A   ; Current ROM bank ID (multibank tracking) (1 bytes)
-
+DRAW_VEC_INTENSITY   EQU $C880+$13   ; Vector intensity override (0=use vector data) (1 bytes)
+DRAW_LINE_ARGS       EQU $C880+$14   ; DRAW_LINE argument buffer (x0,y0,x1,y1,intensity) (10 bytes)
+VLINE_DX_16          EQU $C880+$1E   ; DRAW_LINE dx (16-bit) (2 bytes)
+VLINE_DY_16          EQU $C880+$20   ; DRAW_LINE dy (16-bit) (2 bytes)
+VLINE_DX             EQU $C880+$22   ; DRAW_LINE dx clamped (8-bit) (1 bytes)
+VLINE_DY             EQU $C880+$23   ; DRAW_LINE dy clamped (8-bit) (1 bytes)
+VLINE_DY_REMAINING   EQU $C880+$24   ; DRAW_LINE remaining dy for segment 2 (16-bit) (2 bytes)
+VLINE_DX_REMAINING   EQU $C880+$26   ; DRAW_LINE remaining dx for segment 2 (16-bit) (2 bytes)
+VAR_ARG0             EQU $C880+$28   ; Function argument 0 (16-bit) (2 bytes)
+VAR_ARG1             EQU $C880+$2A   ; Function argument 1 (16-bit) (2 bytes)
+VAR_ARG2             EQU $C880+$2C   ; Function argument 2 (16-bit) (2 bytes)
+VAR_ARG3             EQU $C880+$2E   ; Function argument 3 (16-bit) (2 bytes)
+VAR_ARG4             EQU $C880+$30   ; Function argument 4 (16-bit) (2 bytes)
+VAR_ARG5             EQU $C880+$32   ; Function argument 5 (16-bit) (2 bytes)
+VAR_ARG6             EQU $C880+$34   ; Function argument 6 (16-bit) (2 bytes)
+VAR_ARG7             EQU $C880+$36   ; Function argument 7 (16-bit) (2 bytes)
+CURRENT_ROM_BANK     EQU $C880+$38   ; Current ROM bank ID (multibank tracking) (1 bytes)
 
 ;***************************************************************************
 ; MAIN PROGRAM (Bank #0)
@@ -83,6 +88,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
     CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
@@ -98,6 +104,7 @@ MAIN:
     ; Mux configured - J1_X()/J1_Y() can now be called
 
     ; Call main() for initialization
+; VPy_LINE:11
     ; TODO: Statement Pass { source_line: 11 }
 
 .MAIN_LOOP:
@@ -107,6 +114,8 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+; VPy_LINE:15
+; NATIVE_CALL: DRAW_RECT at line 15
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -137,6 +146,8 @@ LOOP_BODY:
     TFR A,DP    ; Restore DP=$C8
     LDD #0
     STD RESULT
+; VPy_LINE:18
+; NATIVE_CALL: DRAW_RECT at line 18
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -167,6 +178,8 @@ LOOP_BODY:
     TFR A,DP    ; Restore DP=$C8
     LDD #0
     STD RESULT
+; VPy_LINE:21
+; NATIVE_CALL: DRAW_RECT at line 21
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -318,10 +331,9 @@ DRAW_RECT_RUNTIME:
     NEGB                ; -width
     JSR Draw_Line_d
     
-    ; Draw up side
+    ; Draw up side (close rectangle: +height closes the -height of down side)
     CLR Vec_Misc_Count
-    LDA 2,S             ; height
-    NEGA                ; -height
+    LDA 3,S             ; +height
     LDB #0
     JSR Draw_Line_d
     

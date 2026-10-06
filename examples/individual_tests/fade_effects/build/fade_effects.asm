@@ -34,7 +34,6 @@
 .equ CAMERA_X,            0x2007F14C  @ camera X offset (used by show_level)
 .equ CAMERA_Y,            0x2007F150  @ camera Y offset
 .equ TEXT_SIZE,           0x2007F154  @ text scale factor (1=normal, 2=double, ...)
-.equ TEXT_COLOR,          0x2007F158  @ text intensity (0-127)
 .equ LEVEL_DATA_PTR,      0x2007F15C  @ pointer to loaded level ROM data
 .equ DBGVAL,              0x2007F160  @ debug_print last written value
 .equ PRINT_BEAM_X,        0x2007F164  @ beam X shadow during print_text
@@ -65,6 +64,7 @@
 .equ ENEMY_STATE_ARM,     0x2007F41C  @ enemy state per slot: 8 × i32
 .equ VPY_PLAYER_ANIM_STATE, 0x2007F43C  @ player animation state: frame_idx(u8)+ticks_left(u8)
 .equ VPY_BRIGHTNESS_OVERRIDE, 0x2007F43E  @ SET_INTENSITY override: 0=.vec intensity, >0=override (1 byte)
+.equ VPY_DRAW_SCALE,      0x2007F43F  @ escala del proximo DRAW_VECTOR_EX (x32; 0/32 = 1:1, 1 byte)
 .equ WANDER_SCRATCH_ARM,  0x2007F440  @ wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)
 .equ USER_RAM_START,      0x2007F460  @ user variables begin here
 
@@ -135,12 +135,12 @@ bus_write:
     svc     #8                      @ SYS_BUS_WRITE
     bx      lr
 
-@ bus_read(r0=addr) — stub: returns 0xFF (no BIOS read syscall yet)
+@ bus_read(r0=addr) -> r0=data — BIOS trap: SYS_BUS_READ
 .global bus_read
 .type bus_read, %function
 .thumb_func
 bus_read:
-    mov     r0, #0xFF
+    svc     #11                     @ SYS_BUS_READ
     bx      lr
 
 @ ============================================================
@@ -155,13 +155,50 @@ dv_reset:
     svc     #0                      @ SYS_RESET0REF
     bx      lr
 
-@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (delta after a reset)
+@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (a ramped delta after a
+@ reset). Split into <=127-per-axis steps: a scrolled origin can land far
+@ past the i8 DAC range, and SYS_MOVE casts to i8 → the whole shape WRAPS to
+@ the wrong side of the screen (mario_poc floor tiles). SYS_MOVE ramps the
+@ INTEGRATORS (velocity×time), not an absolute DAC, so stepping accumulates
+@ to the true (off-screen) origin — the visible part draws in place and the
+@ physical screen clips the rest. A move already within +/-127 does one step
+@ (unchanged).
 .global dv_move_to
 .type dv_move_to, %function
 .thumb_func
 dv_move_to:
-    svc     #3                      @ SYS_MOVE
-    bx      lr
+    push    {r2, r3, r4, r5, r6, r7, lr}  @ callers assume traps preserve regs
+    mov     r4, r0                  @ remaining dx
+    mov     r5, r1                  @ remaining dy
+    mov     r6, #127
+    rsb     r7, r6, #0              @ r7 = -127
+    mov     r3, #8                  @ max split steps (anti-hang guard)
+dvmt_loop:
+    mov     r0, r4                  @ step_x = clamp(remaining_x, -127, 127)
+    cmp     r0, r6
+    it      gt
+    movgt   r0, r6
+    cmp     r0, r7
+    it      lt
+    movlt   r0, r7
+    mov     r1, r5                  @ step_y = clamp(remaining_y, -127, 127)
+    cmp     r1, r6
+    it      gt
+    movgt   r1, r6
+    cmp     r1, r7
+    it      lt
+    movlt   r1, r7
+    push    {r0, r1}                @ svc clobbers r0; keep the steps
+    svc     #3                      @ SYS_MOVE (this step)
+    pop     {r0, r1}
+    subs    r4, r4, r0              @ remaining -= step
+    subs    r5, r5, r1
+    orrs    r2, r4, r5              @ both zero? → done
+    beq     dvmt_done
+    subs    r3, r3, #1              @ else step, until the cap
+    bne     dvmt_loop
+dvmt_done:
+    pop     {r2, r3, r4, r5, r6, r7, pc}
 
 @ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA
 .global dv_draw_delta
@@ -174,636 +211,6 @@ dv_draw_delta:
 @ ============================================================
 @ VPy Builtins — ARM Thumb2 / RP2350
 @ ============================================================
-
-@ ============================================================
-@ Vector font — ASCII 32-126 stroke data
-@ Each glyph: [cmd(1=move,2=draw), x(0-4), y(0-6), ..., 0x00]
-@ _FONT_PTRS[char-32] = absolute address of glyph (0 = no strokes)
-@ ============================================================
-
-.global _FONT_PTRS
-_FONT_PTRS:
-    .word   0    @ ' ' no strokes
-    .word   _glyph_033   @ '!'
-    .word   _glyph_034   @ '"'
-    .word   0    @ '#' no strokes
-    .word   0    @ '$' no strokes
-    .word   0    @ '%' no strokes
-    .word   0    @ '&' no strokes
-    .word   0    @ ''' no strokes
-    .word   0    @ '(' no strokes
-    .word   0    @ ')' no strokes
-    .word   0    @ '*' no strokes
-    .word   _glyph_043   @ '+'
-    .word   _glyph_044   @ ','
-    .word   _glyph_045   @ '-'
-    .word   _glyph_046   @ '.'
-    .word   _glyph_047   @ '/'
-    .word   _glyph_048   @ '0'
-    .word   _glyph_049   @ '1'
-    .word   _glyph_050   @ '2'
-    .word   _glyph_051   @ '3'
-    .word   _glyph_052   @ '4'
-    .word   _glyph_053   @ '5'
-    .word   _glyph_054   @ '6'
-    .word   _glyph_055   @ '7'
-    .word   _glyph_056   @ '8'
-    .word   _glyph_057   @ '9'
-    .word   _glyph_058   @ ':'
-    .word   _glyph_059   @ ';'
-    .word   _glyph_060   @ '<'
-    .word   _glyph_061   @ '='
-    .word   _glyph_062   @ '>'
-    .word   _glyph_063   @ '?'
-    .word   0    @ '@' no strokes
-    .word   _glyph_065   @ 'A'
-    .word   _glyph_066   @ 'B'
-    .word   _glyph_067   @ 'C'
-    .word   _glyph_068   @ 'D'
-    .word   _glyph_069   @ 'E'
-    .word   _glyph_070   @ 'F'
-    .word   _glyph_071   @ 'G'
-    .word   _glyph_072   @ 'H'
-    .word   _glyph_073   @ 'I'
-    .word   _glyph_074   @ 'J'
-    .word   _glyph_075   @ 'K'
-    .word   _glyph_076   @ 'L'
-    .word   _glyph_077   @ 'M'
-    .word   _glyph_078   @ 'N'
-    .word   _glyph_079   @ 'O'
-    .word   _glyph_080   @ 'P'
-    .word   _glyph_081   @ 'Q'
-    .word   _glyph_082   @ 'R'
-    .word   _glyph_083   @ 'S'
-    .word   _glyph_084   @ 'T'
-    .word   _glyph_085   @ 'U'
-    .word   _glyph_086   @ 'V'
-    .word   _glyph_087   @ 'W'
-    .word   _glyph_088   @ 'X'
-    .word   _glyph_089   @ 'Y'
-    .word   _glyph_090   @ 'Z'
-    .word   0    @ '[' no strokes
-    .word   0    @ '\' no strokes
-    .word   0    @ ']' no strokes
-    .word   0    @ '^' no strokes
-    .word   0    @ '_' no strokes
-    .word   0    @ '`' no strokes
-    .word   _glyph_097   @ 'a'
-    .word   _glyph_098   @ 'b'
-    .word   _glyph_099   @ 'c'
-    .word   _glyph_100   @ 'd'
-    .word   _glyph_101   @ 'e'
-    .word   _glyph_102   @ 'f'
-    .word   _glyph_103   @ 'g'
-    .word   _glyph_104   @ 'h'
-    .word   _glyph_105   @ 'i'
-    .word   _glyph_106   @ 'j'
-    .word   _glyph_107   @ 'k'
-    .word   _glyph_108   @ 'l'
-    .word   _glyph_109   @ 'm'
-    .word   _glyph_110   @ 'n'
-    .word   _glyph_111   @ 'o'
-    .word   _glyph_112   @ 'p'
-    .word   _glyph_113   @ 'q'
-    .word   _glyph_114   @ 'r'
-    .word   _glyph_115   @ 's'
-    .word   _glyph_116   @ 't'
-    .word   _glyph_117   @ 'u'
-    .word   _glyph_118   @ 'v'
-    .word   _glyph_119   @ 'w'
-    .word   _glyph_120   @ 'x'
-    .word   _glyph_121   @ 'y'
-    .word   _glyph_122   @ 'z'
-    .word   0    @ '{' no strokes
-    .word   0    @ '|' no strokes
-    .word   0    @ '}' no strokes
-    .word   0    @ '~' no strokes
-
-.global _FONT_DATA
-_FONT_DATA:
-_glyph_033:  @ '!'
-    .byte   1, 2, 6
-    .byte   2, 2, 2
-    .byte   1, 2, 0
-    .byte   2, 2, 1
-    .byte   0
-_glyph_034:  @ '"'
-    .byte   1, 1, 5
-    .byte   2, 1, 6
-    .byte   1, 3, 5
-    .byte   2, 3, 6
-    .byte   0
-_glyph_043:  @ '+'
-    .byte   1, 2, 1
-    .byte   2, 2, 5
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_044:  @ ','
-    .byte   1, 2, 1
-    .byte   2, 1, 0
-    .byte   0
-_glyph_045:  @ '-'
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_046:  @ '.'
-    .byte   1, 1, 0
-    .byte   2, 2, 0
-    .byte   0
-_glyph_047:  @ '/'
-    .byte   1, 0, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_048:  @ '0'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   0
-_glyph_049:  @ '1'
-    .byte   1, 2, 0
-    .byte   2, 2, 6
-    .byte   0
-_glyph_050:  @ '2'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 4, 3
-    .byte   2, 0, 3
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_051:  @ '3'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   1, 4, 3
-    .byte   2, 1, 3
-    .byte   0
-_glyph_052:  @ '4'
-    .byte   1, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   1, 4, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_053:  @ '5'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_054:  @ '6'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 3
-    .byte   2, 0, 3
-    .byte   0
-_glyph_055:  @ '7'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 2, 0
-    .byte   0
-_glyph_056:  @ '8'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_057:  @ '9'
-    .byte   1, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_058:  @ ':'
-    .byte   1, 2, 1
-    .byte   2, 2, 2
-    .byte   1, 2, 4
-    .byte   2, 2, 5
-    .byte   0
-_glyph_059:  @ ';'
-    .byte   1, 2, 4
-    .byte   2, 2, 5
-    .byte   1, 2, 1
-    .byte   2, 1, 0
-    .byte   0
-_glyph_060:  @ '<'
-    .byte   1, 3, 6
-    .byte   2, 0, 3
-    .byte   2, 3, 0
-    .byte   0
-_glyph_061:  @ '='
-    .byte   1, 0, 4
-    .byte   2, 4, 4
-    .byte   1, 0, 2
-    .byte   2, 4, 2
-    .byte   0
-_glyph_062:  @ '>'
-    .byte   1, 1, 6
-    .byte   2, 4, 3
-    .byte   2, 1, 0
-    .byte   0
-_glyph_063:  @ '?'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 4, 4
-    .byte   2, 2, 3
-    .byte   1, 2, 1
-    .byte   2, 2, 2
-    .byte   0
-_glyph_065:  @ 'A'
-    .byte   1, 0, 0
-    .byte   2, 2, 6
-    .byte   2, 4, 0
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_066:  @ 'B'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 3, 3
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_067:  @ 'C'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_068:  @ 'D'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 1
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_069:  @ 'E'
-    .byte   1, 4, 0
-    .byte   2, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_070:  @ 'F'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_071:  @ 'G'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 3
-    .byte   2, 2, 3
-    .byte   0
-_glyph_072:  @ 'H'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_073:  @ 'I'
-    .byte   1, 1, 0
-    .byte   2, 3, 0
-    .byte   1, 2, 0
-    .byte   2, 2, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_074:  @ 'J'
-    .byte   1, 0, 1
-    .byte   2, 1, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_075:  @ 'K'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_076:  @ 'L'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_077:  @ 'M'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_078:  @ 'N'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_079:  @ 'O'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   0
-_glyph_080:  @ 'P'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   0
-_glyph_081:  @ 'Q'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   1, 3, 1
-    .byte   2, 4, 0
-    .byte   0
-_glyph_082:  @ 'R'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_083:  @ 'S'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_084:  @ 'T'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 2, 6
-    .byte   2, 2, 0
-    .byte   0
-_glyph_085:  @ 'U'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_086:  @ 'V'
-    .byte   1, 0, 6
-    .byte   2, 2, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_087:  @ 'W'
-    .byte   1, 0, 6
-    .byte   2, 1, 0
-    .byte   2, 2, 3
-    .byte   2, 3, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_088:  @ 'X'
-    .byte   1, 0, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_089:  @ 'Y'
-    .byte   1, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   1, 2, 3
-    .byte   2, 2, 0
-    .byte   0
-_glyph_090:  @ 'Z'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_097:  @ 'a'
-    .byte   1, 0, 0
-    .byte   2, 2, 6
-    .byte   2, 4, 0
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_098:  @ 'b'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 3, 3
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_099:  @ 'c'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_100:  @ 'd'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 1
-    .byte   2, 3, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_101:  @ 'e'
-    .byte   1, 4, 0
-    .byte   2, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_102:  @ 'f'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 3, 3
-    .byte   0
-_glyph_103:  @ 'g'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 3
-    .byte   2, 2, 3
-    .byte   0
-_glyph_104:  @ 'h'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 3
-    .byte   0
-_glyph_105:  @ 'i'
-    .byte   1, 1, 0
-    .byte   2, 3, 0
-    .byte   1, 2, 0
-    .byte   2, 2, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_106:  @ 'j'
-    .byte   1, 0, 1
-    .byte   2, 1, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   1, 1, 6
-    .byte   2, 3, 6
-    .byte   0
-_glyph_107:  @ 'k'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 6
-    .byte   1, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_108:  @ 'l'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
-_glyph_109:  @ 'm'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_110:  @ 'n'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_111:  @ 'o'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   0
-_glyph_112:  @ 'p'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   0
-_glyph_113:  @ 'q'
-    .byte   1, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 0
-    .byte   1, 3, 1
-    .byte   2, 4, 0
-    .byte   0
-_glyph_114:  @ 'r'
-    .byte   1, 0, 0
-    .byte   2, 0, 6
-    .byte   2, 3, 6
-    .byte   2, 4, 5
-    .byte   2, 4, 4
-    .byte   2, 3, 3
-    .byte   2, 0, 3
-    .byte   2, 4, 0
-    .byte   0
-_glyph_115:  @ 's'
-    .byte   1, 4, 6
-    .byte   2, 0, 6
-    .byte   2, 0, 3
-    .byte   2, 4, 3
-    .byte   2, 4, 0
-    .byte   2, 0, 0
-    .byte   0
-_glyph_116:  @ 't'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   1, 2, 6
-    .byte   2, 2, 0
-    .byte   0
-_glyph_117:  @ 'u'
-    .byte   1, 0, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_118:  @ 'v'
-    .byte   1, 0, 6
-    .byte   2, 2, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_119:  @ 'w'
-    .byte   1, 0, 6
-    .byte   2, 1, 0
-    .byte   2, 2, 3
-    .byte   2, 3, 0
-    .byte   2, 4, 6
-    .byte   0
-_glyph_120:  @ 'x'
-    .byte   1, 0, 0
-    .byte   2, 4, 6
-    .byte   1, 0, 6
-    .byte   2, 4, 0
-    .byte   0
-_glyph_121:  @ 'y'
-    .byte   1, 0, 6
-    .byte   2, 2, 3
-    .byte   2, 4, 6
-    .byte   1, 2, 3
-    .byte   2, 2, 0
-    .byte   0
-_glyph_122:  @ 'z'
-    .byte   1, 0, 6
-    .byte   2, 4, 6
-    .byte   2, 0, 0
-    .byte   2, 4, 0
-    .byte   0
 
 @ vpy_wait_recal() — BIOS trap: SYS_WAIT_RECAL
 .global vpy_wait_recal
@@ -878,139 +285,24 @@ vdl_done:
     pop     {r4, r5, r6, r7, r8, pc}
     .ltorg
 
-@ vpy_print_text(r0=x, r1=y, r2=str_ptr)
+@ vpy_print_text(r0=x, r1=y, r2=str_ptr) -> BIOS trap SYS_PRINT_TEXT
 .global vpy_print_text
 .type vpy_print_text, %function
 .thumb_func
 vpy_print_text:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
-    mov     r4, r0
-    mov     r5, r1
-    mov     r6, r2
-    ldr     r7, =TEXT_SIZE
-    ldr     r7, [r7]
-    cmp     r7, #0
-    bne     vpt_sc
-    mov     r7, #3
-vpt_sc:
-    ldr     r8, =VPY_BRIGHTNESS_OVERRIDE
-    ldrb    r8, [r8]
-    cmp     r8, #0
-    bne     vpt_cc
-    ldr     r8, =TEXT_COLOR
-    ldr     r8, [r8]
-    cmp     r8, #0
-    bne     vpt_cc
-    mov     r8, #100
-vpt_cc:
-    bl      dv_reset
-    mov     r0, r8
-    bl      vpy_set_intensity
-    mov     r0, #6
-    mul     r0, r0, r7
-    asr     r0, r0, #1
-    sub     r5, r5, r0
-    mov     r0, r4
-    mov     r1, r5
-    bl      dv_move_to
-    ldr     r10, =PRINT_BEAM_X
-    str     r4, [r10]
-    ldr     r11, =PRINT_BEAM_Y
-    str     r5, [r11]
-    mov     r9, r4              @ cur_x = x
-vpt_loop:
-    ldrb    r0, [r6]
-    add     r6, r6, #1
-    cmp     r0, #0
-    beq     vpt_done
-    cmp     r0, #0x80
-    beq     vpt_done
-    cmp     r0, #0x61
-    blt     vpt_nl
-    cmp     r0, #0x7A
-    bgt     vpt_nl
-    sub     r0, r0, #0x20
-vpt_nl:
-    cmp     r0, #32
-    blt     vpt_adv
-    cmp     r0, #126
-    bgt     vpt_adv
-    sub     r0, r0, #32
-    ldr     r1, =_FONT_PTRS
-    lsl     r0, r0, #2
-    ldr     r0, [r1, r0]
-    cmp     r0, #0
-    beq     vpt_adv
-    push    {r0}
-    bl      dv_reset
-    mov     r0, r8
-    bl vpy_set_intensity
-    mov     r0, #0
-    str r0, [r10]
-    str r0, [r11]
-    pop     {r0}
-    mov     r1, r9
-    mov     r2, r5
-    mov     r3, r7
-    push    {r10, r11}
-    bl      vpt_draw_glyph
-    add     sp, sp, #8
-vpt_adv:
-    mov     r0, #7
-    mul     r0, r0, r7
-    asr     r0, r0, #1
-    add     r9, r9, r0
-    b       vpt_loop
-vpt_done:
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
-    .ltorg
-
-@ vpt_draw_glyph — internal: draw one glyph at (char_x, char_y) with scale
-.type vpt_draw_glyph, %function
-.thumb_func
-vpt_draw_glyph:
-    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}
-    mov     r4, r0              @ glyph_ptr
-    mov     r5, r1              @ char_x
-    mov     r6, r2              @ char_y
-    mov     r7, r3              @ scale
-    ldr     r8, [sp, #36]       @ bx_ptr (PRINT_BEAM_X)
-    ldr     r9, [sp, #40]       @ by_ptr (PRINT_BEAM_Y)
-    ldr     r10, [r8]           @ beam_x
-    ldr     r11, [r9]           @ beam_y
-vdg_loop:
-    ldrb    r0, [r4]
-    cmp     r0, #0
-    beq     vdg_done
-    ldrb    r1, [r4, #1]        @ gx
-    ldrb    r2, [r4, #2]        @ gy
-    add     r4, r4, #3
-    push    {r0}               @ save cmd
-    mul     r1, r1, r7
-    asr     r1, r1, #1
-    add     r1, r1, r5
-    mul     r2, r2, r7
-    asr     r2, r2, #1
-    add     r2, r2, r6
-    sub     r0, r1, r10         @ dx
-    sub     r3, r2, r11         @ dy
-    mov     r10, r1
-    mov     r11, r2
-    pop     {r1}               @ restore cmd
-    push    {r0, r3}           @ save dx, dy
-    cmp     r1, #1
-    bne     vdg_draw
-    pop     {r0, r1}
-    bl      dv_move_to
-    b       vdg_loop
-vdg_draw:
-    pop     {r0, r1}
-    bl      dv_draw_delta
-    b       vdg_loop
-vdg_done:
-    str     r10, [r8]           @ update PRINT_BEAM_X
-    str     r11, [r9]           @ update PRINT_BEAM_Y
-    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}
+    ldr     r3, =TEXT_SIZE
+    ldr     r3, [r3]
+    cmp     r3, #0
+    it      eq
+    moveq   r3, #3
+    ldr     r12, =VPY_BRIGHTNESS_OVERRIDE
+    ldrb    r12, [r12]
+    cmp     r12, #0
+    it      eq
+    moveq   r12, #100
+    orr     r3, r3, r12, lsl #8
+    svc     #16                     @ SYS_PRINT_TEXT
+    bx      lr
     .ltorg
 
 @ vpy_j1_x() → r0 = cached J1 X axis (-127..127)
@@ -1129,127 +421,38 @@ vpy_j2_btn4:
     eor     r0, r0, #1
     bx      lr
 
-@ vpy_update_buttons() — cache buttons and joystick axes (safe: called in WAIT_RECAL window)
+@ vpy_update_buttons() — cache buttons (+axes if analog is used)
 .global vpy_update_buttons
 .type vpy_update_buttons, %function
 .thumb_func
 vpy_update_buttons:
     push    {r4, lr}
-    mov     r0, #0xD002
-    mov     r1, #0x0F
-    bl      bus_write
-    mov     r0, #0xD000
-    bl      bus_read
+    svc     #14                     @ SYS_READ_BUTTONS_RAW
+    mov     r4, r0
+    ubfx    r0, r4, #8, #8
     ldr     r1, =BTN_STATE_J1
     str     r0, [r1]
-    mov     r0, #0xD002
-    mov     r1, #0xFF
-    bl      bus_write
-    mov     r0, #14
-    bl      psg_read
+    and     r0, r4, #0xFF
     ldr     r1, =BTN_STATE_J2
     str     r0, [r1]
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    sxtb    r4, r0
-    ldr     r0, =J1_AXIS_X
-    str     r4, [r0]
-    mov     r0, #0xD000
-    mov     r1, #0x03
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    sxtb    r4, r0
-    ldr     r0, =J1_AXIS_Y
-    str     r4, [r0]
-    mov     r0, #0xD000
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    sxtb    r4, r0
-    ldr     r0, =J2_AXIS_X
-    str     r4, [r0]
-    mov     r0, #0xD000
-    mov     r1, #0x02
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    sxtb    r4, r0
-    ldr     r0, =J2_AXIS_Y
-    str     r4, [r0]
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
     pop     {r4, pc}
     .ltorg
 
-@ psg_write(r0=reg, r1=data) — write AY-3-8912 PSG register
+@ psg_write(r0=reg, r1=data) — BIOS trap: SYS_PSG_WRITE
 .global psg_write
 .type psg_write, %function
 .thumb_func
 psg_write:
-    push    {r4, r5, lr}
-    mov     r4, r0              @ reg
-    mov     r5, r1              @ data
-    mov     r0, #0xD001
-    mov     r1, r4
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x19
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD001
-    mov     r1, r5
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x11
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    pop     {r4, r5, pc}
-    .ltorg
+    svc     #5                      @ SYS_PSG_WRITE
+    bx      lr
 
-@ psg_read(r0=reg) → r0 = PSG register value
+@ psg_read(r0=reg) -> r0=data — BIOS trap: SYS_PSG_READ
 .global psg_read
 .type psg_read, %function
 .thumb_func
 psg_read:
-    push    {r4, lr}
-    mov     r4, r0              @ reg
-    mov     r0, #0xD001
-    mov     r1, r4
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x19
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD003
-    mov     r1, #0x00
-    bl      bus_write
-    mov     r0, #0xD000
-    mov     r1, #0x09
-    bl      bus_write
-    mov     r0, #0xD001
-    bl      bus_read
-    push    {r0}               @ save result
-    mov     r0, #0xD000
-    mov     r1, #0x01
-    bl      bus_write
-    mov     r0, #0xD003
-    mov     r1, #0xFF
-    bl      bus_write
-    pop     {r0}               @ return value
-    pop     {r4, pc}
-    .ltorg
+    svc     #12                     @ SYS_PSG_READ
+    bx      lr
 
 .global vpy_set_text_size
 .type vpy_set_text_size, %function
@@ -1267,14 +470,6 @@ vsts_ok:
     str     r1, [r0]
     bx      lr
 
-.global vpy_set_text_color
-.type vpy_set_text_color, %function
-.thumb_func
-vpy_set_text_color:
-    ldr     r1, =TEXT_COLOR
-    str     r0, [r1]
-    bx      lr
-
 @ --- User variables (RAM) ---
 .equ VAR_BRIGHTNESS, 0x2007F460
 
@@ -1287,15 +482,20 @@ vpy_set_text_color:
 .thumb_func
 game_main:
     push    {r4, r5, r6, r7, lr}
+    @ zero runtime RAM (RP2350 SRAM is not zero-initialised)
+    ldr     r0, =TMPVAL              @ runtime RAM base
+    ldr     r1, =USER_RAM_START      @ end of system RAM (exclusive)
+    mov     r2, #0
+gm_zero_loop:
+    str     r2, [r0], #4
+    cmp     r0, r1
+    blo     gm_zero_loop
     @ default drawing state (SRAM is not zero-initialised)
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
     mov     r0, #0
     strb    r0, [r1]
     ldr     r1, =TEXT_SIZE
     mov     r0, #3
-    str     r0, [r1]
-    ldr     r1, =TEXT_COLOR
-    mov     r0, #100
     str     r0, [r1]
     @ initialize globals
     ldr     r1, =0x2007F460
@@ -1354,25 +554,12 @@ _str_1_after:
     beq     if_else_0
     ldr     r1, =0x2007F460    @ BRIGHTNESS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #5
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     cmp     r0, r1
-    ble    .Lcf0
-    movs    r0, #1
-    b       .Lcf0e
-.Lcf0:
-    movs    r0, #0
-.Lcf0e:
-    cmp     r0, #0
-    beq     if_else_1
+    ble     if_else_1
     ldr     r1, =0x2007F460    @ BRIGHTNESS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #5
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     sub     r0, r0, r1
     ldr     r1, =0x2007F460    @ BRIGHTNESS
     str     r0, [r1]
@@ -1387,25 +574,12 @@ if_end_0:
     beq     if_else_2
     ldr     r1, =0x2007F460    @ BRIGHTNESS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #120
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #120
     cmp     r0, r1
-    bge    .Lcf1
-    movs    r0, #1
-    b       .Lcf1e
-.Lcf1:
-    movs    r0, #0
-.Lcf1e:
-    cmp     r0, #0
-    beq     if_else_3
+    bge     if_else_3
     ldr     r1, =0x2007F460    @ BRIGHTNESS
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #5
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #5
     add     r0, r0, r1
     ldr     r1, =0x2007F460    @ BRIGHTNESS
     str     r0, [r1]

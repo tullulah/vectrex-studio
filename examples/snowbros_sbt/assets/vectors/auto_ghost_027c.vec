@@ -1,0 +1,158 @@
+{
+ "version": "1.0",
+ "name": "auto_ghost_027c",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -5,
+       "y": -5
+      },
+      {
+       "x": -5,
+       "y": -2
+      },
+      {
+       "x": -8,
+       "y": -2
+      },
+      {
+       "x": -7,
+       "y": 5
+      },
+      {
+       "x": -7,
+       "y": 0
+      },
+      {
+       "x": -5,
+       "y": 0
+      },
+      {
+       "x": -4,
+       "y": 5
+      }
+     ]
+    },
+    {
+     "name": "sil1",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 3,
+       "y": 3
+      },
+      {
+       "x": 4,
+       "y": -5
+      },
+      {
+       "x": 2,
+       "y": -5
+      },
+      {
+       "x": 1,
+       "y": 3
+      }
+     ]
+    },
+    {
+     "name": "sil2",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -3,
+       "y": 3
+      },
+      {
+       "x": 0,
+       "y": 3
+      },
+      {
+       "x": 0,
+       "y": -5
+      },
+      {
+       "x": -3,
+       "y": -5
+      }
+     ]
+    },
+    {
+     "name": "sil3",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 5,
+       "y": -3
+      },
+      {
+       "x": 5,
+       "y": 3
+      },
+      {
+       "x": 8,
+       "y": 3
+      },
+      {
+       "x": 8,
+       "y": 1
+      },
+      {
+       "x": 8,
+       "y": -5
+      },
+      {
+       "x": 5,
+       "y": -5
+      }
+     ]
+    },
+    {
+     "name": "sil4",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 2,
+       "y": -1
+      },
+      {
+       "x": 2,
+       "y": -4
+      },
+      {
+       "x": 3,
+       "y": -1
+      },
+      {
+       "x": 3,
+       "y": 2
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAPUlEQVR4nGNgGBbgPw42UYCJUttZcIgju4QRH58Jj+GMxPCZGKjkhf/kGsBEDRcwDmg0MuGRQ3cNIf5QBQCc6woVgfRgdwAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

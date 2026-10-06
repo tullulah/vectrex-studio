@@ -80,7 +80,13 @@ VRelease_2017_04_29/
 # WIP projects (local only, not ready for version control)
 examples/clockmakers_crypt/
 examples/clockmakers_crypt_web/
-hardware/
+# CON BARRA DELANTE: solo el hardware/ DE LA RAIZ. Sin anclar, esta regla se comia
+# cualquier directorio llamado hardware a cualquier profundidad — y el emulador tiene uno
+# (ide/frontend/src/emulator/hardware). Los ficheros que ya estaban versionados seguian
+# apareciendo, asi que el problema era invisible: solo los NUEVOS se ignoraban, en
+# silencio. Ramp.ts se quedo fuera de su propio commit y solo se noto porque git avisa al
+# hacer `add` explicito.
+/hardware/
 
 # Vector-movie SOURCE videos (dev-only, copyrighted — NOT part of the distributed
 # IDE and never committed). Regenerate/download with tools/fetch/url2vmov.sh.
@@ -96,3 +102,25 @@ tools/**/__pycache__/
 *.dmg
 *.AppImage
 *.exe
+
+# Cargo tree of the cartridge bus: 522 MB of intermediate objects.
+ide/electron/resources/uvmc2-sdk/vectrex-bus/target/
+ide/electron/resources/uvmc2-sdk/vectrex-draw/target/
+ide/electron/resources/uvmc2-sdk/vectrex-draw/cabi/target/
+
+# snowbros_sbt: source, assets and the .um2 are versioned; NOT the debug dumps (13 MB of
+# ramdumps, 6.8 MB of dumps) nor the build trees.
+examples/snowbros_sbt/ramdumps/
+examples/snowbros_sbt/dumps/
+examples/snowbros_sbt/build/
+examples/snowbros_sbt/build_wasm/
+examples/snowbros_sbt/build_uvm2/pico/
+examples/*/build/uvm2/
+
+# THE ARCADE ROM DOES NOT GO IN HERE. This repository is PUBLIC
+# (github.com/tullulah/vectrex-studio, checked with `gh repo view`), and the project's
+# standard is that the romset lives OUTSIDE the image and the game reads it from the SD,
+# MAME model. `sb_rom.h` is the same ROM in a C header: same material, different wrapper.
+examples/*/rom/*.zip
+examples/*/src/sb_rom.h
+examples/*/rom/palette_table.bin

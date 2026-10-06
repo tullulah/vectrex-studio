@@ -1,0 +1,94 @@
+{
+ "version": "1.0",
+ "name": "auto_item_046c",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -4,
+       "y": 13
+      },
+      {
+       "x": 5,
+       "y": 13
+      },
+      {
+       "x": 8,
+       "y": 9
+      },
+      {
+       "x": 8,
+       "y": 5
+      },
+      {
+       "x": 11,
+       "y": 3
+      },
+      {
+       "x": 8,
+       "y": -6
+      },
+      {
+       "x": 2,
+       "y": -8
+      },
+      {
+       "x": 2,
+       "y": -11
+      },
+      {
+       "x": 3,
+       "y": -13
+      },
+      {
+       "x": 0,
+       "y": -13
+      },
+      {
+       "x": -3,
+       "y": -10
+      },
+      {
+       "x": -2,
+       "y": -7
+      },
+      {
+       "x": -7,
+       "y": -3
+      },
+      {
+       "x": -9,
+       "y": 2
+      },
+      {
+       "x": -10,
+       "y": 10
+      },
+      {
+       "x": -4,
+       "y": 11
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACH0lEQVR4nO2Wr3PbMBzFn3IFDQxroWhZymxoWhZoQ5etrDCG9n+QQcMElrUshh5bWAsFV9axhXn3lSJPdpXGUpq73W3vzhfFP+599BQ/BfjXxZyf4Msm4lHnVCUqNRAJOz2AAcGjC2iJ6tULhMFVfNnooZnEen2B28IAGQjBBhmKx9345t3l/nJQKi4QzCdmbaojp+9Vddl//ngAGDPsg7QAMp2VnweA0SHCvmnfvJ6PO/e9vX2Rx1Ax11dOm9exin96xeXnOMla48nk6+cnYBOZn08VQB6/B7Wdcwaodj+0PMiwXlR4TEssznOEqwibZ4HtRrQQT8sf8pOSWC5muL+JUM/T9rW16ewgIiBNAWWizQgCCOWYIOZZiiIv8bR7Zja5lvcGU44aaMKiZN5LsHkW7WzpuJ4p47D41blGMxb1TyR3D+05UpDsT2L0ofPuPaa4TZDvDzXuXqaymPrXIs4Hrb3TEpCkkW5EKPM0jeVrGfZqIA9KhEUpQe6hS0ul4VfFFpG5lu4G0p8NScHmsbqWrSrmvxnxLoStHe0NqbViJ+kBYczcHLuIDb7TshT7WlIRDUuADQbYA2HVQHN3ABPCNDH/J3TMTwEgFTcp/6aGAEoRwK6PzUmeAEDKeWc5uhCHjZ2LyFQeRw01HolacbPdOpkeDWBux3SMk8w7Seb7oJnCMRAjXwCqVup33fGH9v1PT8BMQo/39f1//dX6DaxDGIOfj1a5AAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

@@ -1,0 +1,136 @@
+{
+ "version": "1.0",
+ "name": "auto_bank_0778",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 1,
+       "y": 10
+      },
+      {
+       "x": 8,
+       "y": 6
+      },
+      {
+       "x": 9,
+       "y": -3
+      },
+      {
+       "x": 5,
+       "y": -9
+      },
+      {
+       "x": -1,
+       "y": -10
+      },
+      {
+       "x": -8,
+       "y": -6
+      },
+      {
+       "x": -9,
+       "y": 3
+      },
+      {
+       "x": -5,
+       "y": 9
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -2,
+       "y": 9
+      },
+      {
+       "x": 5,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 2
+      },
+      {
+       "x": 8,
+       "y": -1
+      },
+      {
+       "x": 5,
+       "y": -4
+      },
+      {
+       "x": 5,
+       "y": -6
+      },
+      {
+       "x": 1,
+       "y": -7
+      },
+      {
+       "x": 0,
+       "y": -8
+      },
+      {
+       "x": -4,
+       "y": -6
+      },
+      {
+       "x": -8,
+       "y": 0
+      },
+      {
+       "x": -6,
+       "y": 7
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 0,
+       "y": 2
+      },
+      {
+       "x": 3,
+       "y": 3
+      },
+      {
+       "x": 2,
+       "y": 6
+      },
+      {
+       "x": -1,
+       "y": 5
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAA+UlEQVR4nO2UMRKCMBBFk60ssYPSUjsovYJHsPQItpa0HsdrSKdH0JLSDmeFOIgk7K5hKMxvMpDw/+OToFRQ0L9Li57K4+o1Xh719WpWj4c720+zg02oTQjDAAGv4ShcYxryBpATwwUQQAp3KNou1PKYiSFgEMCYWcKTbK7W8a4fwuseGEmaddwcLVz35+9JwvHUXjef4FiCmlgwuMLUOAVAlCa/uRPgwZeR9CXANVluCi1uoYFGDzGAuIVmLQUeKH5voxE2pCYBnNKqLG6fN/v+Dy1AhB6qnwxghTAgnWao4SwAA4FjL0jrU1HD2QBdkK44wUFBQarREysVU8ZWwjEwAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

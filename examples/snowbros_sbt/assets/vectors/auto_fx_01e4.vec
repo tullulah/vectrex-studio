@@ -1,0 +1,197 @@
+{
+ "version": "1.0",
+ "name": "auto_fx_01e4",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -14,
+       "y": -3
+      },
+      {
+       "x": -16,
+       "y": -2
+      },
+      {
+       "x": -15,
+       "y": 0
+      },
+      {
+       "x": -10,
+       "y": 0
+      },
+      {
+       "x": -6,
+       "y": 3
+      },
+      {
+       "x": -9,
+       "y": 10
+      },
+      {
+       "x": -13,
+       "y": 8
+      },
+      {
+       "x": -10,
+       "y": 15
+      },
+      {
+       "x": -3,
+       "y": 10
+      },
+      {
+       "x": -1,
+       "y": 14
+      },
+      {
+       "x": 1,
+       "y": 14
+      },
+      {
+       "x": 0,
+       "y": 11
+      },
+      {
+       "x": 3,
+       "y": 10
+      },
+      {
+       "x": 7,
+       "y": 15
+      },
+      {
+       "x": 9,
+       "y": 15
+      },
+      {
+       "x": 13,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 9
+      },
+      {
+       "x": 7,
+       "y": 4
+      },
+      {
+       "x": 10,
+       "y": 0
+      },
+      {
+       "x": 16,
+       "y": -1
+      },
+      {
+       "x": 14,
+       "y": -2
+      },
+      {
+       "x": 16,
+       "y": -5
+      },
+      {
+       "x": 8,
+       "y": -5
+      },
+      {
+       "x": 9,
+       "y": -13
+      },
+      {
+       "x": 7,
+       "y": -12
+      },
+      {
+       "x": 7,
+       "y": -15
+      },
+      {
+       "x": 4,
+       "y": -14
+      },
+      {
+       "x": 2,
+       "y": -16
+      },
+      {
+       "x": 0,
+       "y": -13
+      },
+      {
+       "x": -2,
+       "y": -16
+      },
+      {
+       "x": -3,
+       "y": -12
+      },
+      {
+       "x": -7,
+       "y": -15
+      },
+      {
+       "x": -6,
+       "y": -11
+      },
+      {
+       "x": -9,
+       "y": -12
+      },
+      {
+       "x": -8,
+       "y": -5
+      },
+      {
+       "x": -16,
+       "y": -5
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 6,
+       "y": 0
+      },
+      {
+       "x": 7,
+       "y": -1
+      },
+      {
+       "x": 6,
+       "y": -3
+      },
+      {
+       "x": 5,
+       "y": -1
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACzklEQVR4nM1Wr3fiQBCe5GHOIYtEci7Ik2vrqOtJ6qhDXiSVdcUVeXWHq12JJBIZCTL/Qe59y046DJsQfoh+7wFhd3a+b2ZnJ0v0XfE+m5WDrSmv8YH18NNkE9eR/05GlZO6xRPzp3yfroPzvA5+mkTEdRPD4bP7nS4Mmf6oDJEnyQM9vQ6j0HqsYz9NIuKm6OHkY7F2zyERIcAO4rCujYhIk7+O7QH5oD+gXvcXbYuVG9/kG7L5MgIJxu/6vSoLIJf2sH0cD4l9rtdv9OP+5wFnFNo3kD+lqSPBf6R6l28rESwEZJj7WM7cM8Ci2J5FACxk07MVb0enhMklCZzBKeVfmWBgjqMGJDmAbNl0uc8wfWU4mIEQZFrZOcNmiyNyQEYPAdSAmFoCDqtMeLLp9K8jSYy5iLyVADiBMy0Cv5m1ZJKxm+v5rdJbdLUALQKQ2wBsxRzQNnqg9RY0wUWuRLTtG502RuyMi61ORGXT59FReXURGn8K+JwD2GcuOjnGgAh8sOZUJqJTxDpqrnBAipLkIfu6TETue3bnVHaTHg2f+9XZlkdLOpNdT0cPwAanQzcljK/fcioyX8TpLopADmIGJid2fNB4uOGEItSQZFrE3CxIc3WgoqAddT+T8siRb70hcs4Ozj8DfUG+uNhHCMV95rIfudR7cigyi33xyHTqWtAFKIVARGi7uG7seFVlASI6khzZsIQXR3Pl6kYEQegDMhsyAEfMRZgSFTNy2w7us15G5+BmL6OBj6ptj2e7toLjczognDcJwZwkDvWJs1tx4m9Dl4jAWpNvGttx3ETOtyEAvUC2WRmpHJPHkH1cVQPbYnXQiHTP17Y4ESg+vjucQnzKYG5fIp1CfTmVAOnjKN2fAJ+1iwXM7csRsRw76HheDD8jYze5kgF8PWdyGbUk4W3Ksn+1QVyEiRcg/4fG5Ltfz98c+qLR9gqm8R8xCCguvOKFngAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

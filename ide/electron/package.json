@@ -75,7 +75,10 @@
         "from": "resources",
         "to": ".",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/target/**",
+          "!**/.git",
+          "!**/__pycache__/**"
         ]
       },
       {

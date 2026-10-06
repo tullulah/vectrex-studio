@@ -47,6 +47,8 @@ START:
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
     JSR $F533        ; Init_Music_Buf: init BIOS sound work buffer at Vec_Default_Stk
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -55,6 +57,7 @@ START:
     LDD #$0000
     STD >SFX_PTR            ; Clear SFX pointer
     STA >PSG_MUSIC_BANK     ; Bank 0 for music (prevents garbage bank switch in emulator)
+    STA >SFX_BANK           ; Bank 0 for SFX (prevents garbage bank switch in emulator)
     CLR >PSG_IS_PLAYING     ; No music playing at startup
     CLR >PSG_DELAY_FRAMES   ; Clear delay counter
     STD >PSG_MUSIC_PTR      ; Clear music pointer (D is already 0)
@@ -67,6 +70,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     LDA #$F8
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
@@ -92,13 +96,17 @@ MAIN:
     ; Mux configured - J1_X()/J1_Y() can now be called
 
     ; Call main() for initialization
+; VPy_LINE:15
+; NATIVE_CALL: PLAY_MUSIC at line 15
     ; PLAY_MUSIC("music1") - play music asset (index=0)
     LDX #0        ; Music asset index for lookup
     JSR PLAY_MUSIC_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
+; VPy_LINE:16
     LDD #0
     STD VAR_SFX_TIMER
+; VPy_LINE:17
     LDD #0
     STD VAR_LAST_SFX
 
@@ -109,56 +117,67 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+; VPy_LINE:20
+; NATIVE_CALL: PRINT_TEXT at line 20
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #80
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_68086998054879      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:21
+; NATIVE_CALL: PRINT_TEXT at line 21
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #55
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_1861138795901      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:22
+; NATIVE_CALL: PRINT_TEXT at line 22
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #38
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_60065079928      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:23
+; NATIVE_CALL: PRINT_TEXT at line 23
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #21
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_60093953114      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:24
+; NATIVE_CALL: PRINT_TEXT at line 24
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #4
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_60122367836      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:26
     LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
     BITA #$01
     BNE .J1B1_0_ON
@@ -169,18 +188,23 @@ LOOP_BODY:
 .J1B1_0_END:
     STD RESULT
     LBEQ IF_NEXT_1
+; VPy_LINE:27
+; NATIVE_CALL: PLAY_SFX at line 27
     ; PLAY_SFX("laser") - play SFX asset (index=3)
     LDX #3        ; SFX asset index for lookup
     JSR PLAY_SFX_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
+; VPy_LINE:28
     LDD #20
     STD VAR_SFX_TIMER
+; VPy_LINE:29
     LDD #1
     STD VAR_LAST_SFX
     LBRA IF_END_0
 IF_NEXT_1:
 IF_END_0:
+; VPy_LINE:31
     LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
     BITA #$02
     BNE .J1B2_1_ON
@@ -191,18 +215,23 @@ IF_END_0:
 .J1B2_1_END:
     STD RESULT
     LBEQ IF_NEXT_3
+; VPy_LINE:32
+; NATIVE_CALL: PLAY_SFX at line 32
     ; PLAY_SFX("explosion1") - play SFX asset (index=1)
     LDX #1        ; SFX asset index for lookup
     JSR PLAY_SFX_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
+; VPy_LINE:33
     LDD #20
     STD VAR_SFX_TIMER
+; VPy_LINE:34
     LDD #2
     STD VAR_LAST_SFX
     LBRA IF_END_2
 IF_NEXT_3:
 IF_END_2:
+; VPy_LINE:36
     LDA >$C80F   ; Vec_Btns_1: bit2=1 means btn3 pressed
     BITA #$04
     BNE .J1B3_2_ON
@@ -213,18 +242,23 @@ IF_END_2:
 .J1B3_2_END:
     STD RESULT
     LBEQ IF_NEXT_5
+; VPy_LINE:37
+; NATIVE_CALL: PLAY_SFX at line 37
     ; PLAY_SFX("jump") - play SFX asset (index=2)
     LDX #2        ; SFX asset index for lookup
     JSR PLAY_SFX_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
+; VPy_LINE:38
     LDD #20
     STD VAR_SFX_TIMER
+; VPy_LINE:39
     LDD #3
     STD VAR_LAST_SFX
     LBRA IF_END_4
 IF_NEXT_5:
 IF_END_4:
+; VPy_LINE:41
     LDA >$C80F   ; Vec_Btns_1: bit3=1 means btn4 pressed
     BITA #$08
     BNE .J1B4_3_ON
@@ -235,18 +269,23 @@ IF_END_4:
 .J1B4_3_END:
     STD RESULT
     LBEQ IF_NEXT_7
+; VPy_LINE:42
+; NATIVE_CALL: PLAY_SFX at line 42
     ; PLAY_SFX("coin") - play SFX asset (index=0)
     LDX #0        ; SFX asset index for lookup
     JSR PLAY_SFX_BANKED  ; Play with automatic bank switching
     LDD #0
     STD RESULT
+; VPy_LINE:43
     LDD #20
     STD VAR_SFX_TIMER
+; VPy_LINE:44
     LDD #4
     STD VAR_LAST_SFX
     LBRA IF_END_6
 IF_NEXT_7:
 IF_END_6:
+; VPy_LINE:47
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_SFX_TIMER
@@ -258,23 +297,22 @@ IF_END_6:
     LDD #1
 .CMP_0_END:
     LBEQ IF_NEXT_9
-    LDD >VAR_SFX_TIMER
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:48
     LDD #1
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_SFX_TIMER
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_SFX_TIMER
     LBRA IF_END_8
 IF_NEXT_9:
 IF_END_8:
-    LDD #20
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:51
     LDD >VAR_SFX_TIMER
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD #20
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_RADIUS
+; VPy_LINE:52
     LDD #0
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_SFX_TIMER
@@ -286,7 +324,8 @@ IF_END_8:
     LDD #1
 .CMP_1_END:
     LBEQ IF_NEXT_11
-    ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
+; VPy_LINE:53
+    ; DRAW_CIRCLE: Draw circle at (xc, yc) with radius
     LDD #0
     TFR B,A
     STA DRAW_CIRCLE_XC
@@ -302,17 +341,12 @@ IF_END_8:
     JSR DRAW_CIRCLE_RUNTIME
     LDD #0
     STD RESULT
-    LDD #1
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:54
     LDD >VAR_LAST_SFX
-    CMPD TMPVAL
-    LBEQ .CMP_2_TRUE
-    LDD #0
-    LBRA .CMP_2_END
-.CMP_2_TRUE:
-    LDD #1
-.CMP_2_END:
-    LBEQ IF_NEXT_13
+    CMPD #1
+    LBNE IF_NEXT_13
+; VPy_LINE:55
+; NATIVE_CALL: DRAW_LINE at line 55
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #-10
     STD DRAW_LINE_ARGS+0    ; x0
@@ -330,28 +364,22 @@ IF_END_8:
     LBRA IF_END_12
 IF_NEXT_13:
 IF_END_12:
-    LDD #2
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:56
     LDD >VAR_LAST_SFX
-    CMPD TMPVAL
-    LBEQ .CMP_3_TRUE
-    LDD #0
-    LBRA .CMP_3_END
-.CMP_3_TRUE:
-    LDD #1
-.CMP_3_END:
-    LBEQ IF_NEXT_15
-    ; DRAW_CIRCLE: Draw circle at (xc, yc) with diameter
+    CMPD #2
+    LBNE IF_NEXT_15
+; VPy_LINE:57
+    ; DRAW_CIRCLE: Draw circle at (xc, yc) with radius
     LDD #0
     TFR B,A
     STA DRAW_CIRCLE_XC
     LDD #-30
     TFR B,A
     STA DRAW_CIRCLE_YC
-    LDD >VAR_RADIUS
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
     LDD #8
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_RADIUS
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     TFR B,A
     STA DRAW_CIRCLE_DIAM
     LDD #80
@@ -363,17 +391,12 @@ IF_END_12:
     LBRA IF_END_14
 IF_NEXT_15:
 IF_END_14:
-    LDD #3
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:58
     LDD >VAR_LAST_SFX
-    CMPD TMPVAL
-    LBEQ .CMP_4_TRUE
-    LDD #0
-    LBRA .CMP_4_END
-.CMP_4_TRUE:
-    LDD #1
-.CMP_4_END:
-    LBEQ IF_NEXT_17
+    CMPD #3
+    LBNE IF_NEXT_17
+; VPy_LINE:59
+; NATIVE_CALL: DRAW_LINE at line 59
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #0
     STD DRAW_LINE_ARGS+0    ; x0
@@ -391,17 +414,11 @@ IF_END_14:
     LBRA IF_END_16
 IF_NEXT_17:
 IF_END_16:
-    LDD #4
-    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
+; VPy_LINE:60
     LDD >VAR_LAST_SFX
-    CMPD TMPVAL
-    LBEQ .CMP_5_TRUE
-    LDD #0
-    LBRA .CMP_5_END
-.CMP_5_TRUE:
-    LDD #1
-.CMP_5_END:
-    LBEQ IF_NEXT_19
+    CMPD #4
+    LBNE IF_NEXT_19
+; VPy_LINE:61
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -410,70 +427,70 @@ IF_END_16:
     LDA #$7F
     JSR Intensity_a
     LDA #$E2
-    LDB #$02
+    LDB #$04
     JSR Moveto_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$00
+    LDA #$01
     LDB #$FF
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$01
-    LDB #$00
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
     LDB #$FF
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$FE
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FF
     LDB #$FF
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$FF
-    LDB #$00
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
     LDB #$FF
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$FF
+    LDA #$FE
+    LDB #$00
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$FE
     LDB #$00
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$FF
-    LDB #$00
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
     LDB #$01
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$FF
-    LDB #$00
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
     LDB #$01
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$00
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$00
+    LDB #$02
+    JSR Draw_Line_d
+    CLR Vec_Misc_Count
+    LDA #$01
     LDB #$01
     JSR Draw_Line_d
     CLR Vec_Misc_Count
     LDA #$01
-    LDB #$00
-    JSR Draw_Line_d
-    CLR Vec_Misc_Count
-    LDA #$00
     LDB #$01
     JSR Draw_Line_d
     CLR Vec_Misc_Count
-    LDA #$01
+    LDA #$02
     LDB #$00
     JSR Draw_Line_d
     LDA #$C8
@@ -510,19 +527,19 @@ _MUSIC1_MUSIC:
     FCB     0              ; Delay 0 frames (maintain previous state)
     FCB     11              ; Frame 0 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
+    FCB     $B3             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $0B             ; Reg 2 value
+    FCB     $1C             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
+    FCB     $99             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -534,19 +551,19 @@ _MUSIC1_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     10              ; Frame 12 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
+    FCB     $B3             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $0B             ; Reg 2 value
+    FCB     $1C             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
+    FCB     $99             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -556,19 +573,19 @@ _MUSIC1_MUSIC:
     FCB     13              ; Delay 13 frames (maintain previous state)
     FCB     10              ; Frame 25 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
+    FCB     $8E             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $0B             ; Reg 2 value
+    FCB     $1C             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
+    FCB     $99             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -578,19 +595,19 @@ _MUSIC1_MUSIC:
     FCB     25              ; Delay 25 frames (maintain previous state)
     FCB     11              ; Frame 50 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
+    FCB     $78             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $E1             ; Reg 2 value
+    FCB     $EF             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
+    FCB     $99             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -602,19 +619,19 @@ _MUSIC1_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     10              ; Frame 62 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
+    FCB     $78             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $E1             ; Reg 2 value
+    FCB     $EF             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
+    FCB     $99             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -624,19 +641,19 @@ _MUSIC1_MUSIC:
     FCB     13              ; Delay 13 frames (maintain previous state)
     FCB     10              ; Frame 75 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $54             ; Reg 0 value
+    FCB     $5A             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $E1             ; Reg 2 value
+    FCB     $EF             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
+    FCB     $99             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -646,19 +663,19 @@ _MUSIC1_MUSIC:
     FCB     25              ; Delay 25 frames (maintain previous state)
     FCB     11              ; Frame 100 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
+    FCB     $78             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A8             ; Reg 2 value
+    FCB     $B3             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
+    FCB     $99             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -670,19 +687,19 @@ _MUSIC1_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     10              ; Frame 112 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $70             ; Reg 0 value
+    FCB     $78             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A8             ; Reg 2 value
+    FCB     $B3             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
+    FCB     $99             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -692,19 +709,19 @@ _MUSIC1_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     10              ; Frame 124 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $85             ; Reg 0 value
+    FCB     $8E             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $A8             ; Reg 2 value
+    FCB     $B3             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
+    FCB     $99             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -714,19 +731,19 @@ _MUSIC1_MUSIC:
     FCB     26              ; Delay 26 frames (maintain previous state)
     FCB     11              ; Frame 150 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
+    FCB     $B3             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $0B             ; Reg 2 value
+    FCB     $1C             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
+    FCB     $99             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -738,19 +755,19 @@ _MUSIC1_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     10              ; Frame 162 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $A8             ; Reg 0 value
+    FCB     $B3             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $0B             ; Reg 2 value
+    FCB     $1C             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $44             ; Reg 4 value
+    FCB     $99             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $05             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -760,19 +777,19 @@ _MUSIC1_MUSIC:
     FCB     38              ; Delay 38 frames (maintain previous state)
     FCB     11              ; Frame 200 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $FC             ; Reg 2 value
+    FCB     $0C             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
+    FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
+    FCB     $FD             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -784,19 +801,19 @@ _MUSIC1_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     10              ; Frame 212 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $FC             ; Reg 2 value
+    FCB     $0C             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
+    FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
+    FCB     $FD             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -806,19 +823,19 @@ _MUSIC1_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     10              ; Frame 224 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $7E             ; Reg 0 value
+    FCB     $86             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $FC             ; Reg 2 value
+    FCB     $0C             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
+    FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
+    FCB     $FD             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -828,19 +845,19 @@ _MUSIC1_MUSIC:
     FCB     25              ; Delay 25 frames (maintain previous state)
     FCB     11              ; Frame 249 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $64             ; Reg 0 value
+    FCB     $6B             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $C8             ; Reg 2 value
+    FCB     $D5             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
+    FCB     $FD             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -852,19 +869,19 @@ _MUSIC1_MUSIC:
     FCB     13              ; Delay 13 frames (maintain previous state)
     FCB     10              ; Frame 262 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $64             ; Reg 0 value
+    FCB     $6B             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $C8             ; Reg 2 value
+    FCB     $D5             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
+    FCB     $FD             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -874,19 +891,19 @@ _MUSIC1_MUSIC:
     FCB     13              ; Delay 13 frames (maintain previous state)
     FCB     10              ; Frame 275 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $4B             ; Reg 0 value
+    FCB     $50             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $C8             ; Reg 2 value
+    FCB     $D5             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
+    FCB     $FD             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -896,19 +913,19 @@ _MUSIC1_MUSIC:
     FCB     25              ; Delay 25 frames (maintain previous state)
     FCB     11              ; Frame 300 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $64             ; Reg 0 value
+    FCB     $6B             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $96             ; Reg 2 value
+    FCB     $A0             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
+    FCB     $FD             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -920,19 +937,19 @@ _MUSIC1_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     10              ; Frame 312 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $64             ; Reg 0 value
+    FCB     $6B             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $96             ; Reg 2 value
+    FCB     $A0             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
+    FCB     $FD             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -942,19 +959,19 @@ _MUSIC1_MUSIC:
     FCB     13              ; Delay 13 frames (maintain previous state)
     FCB     10              ; Frame 325 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $7E             ; Reg 0 value
+    FCB     $86             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $96             ; Reg 2 value
+    FCB     $A0             ; Reg 2 value
     FCB     3               ; Reg 3 number
     FCB     $00             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
+    FCB     $FD             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -964,19 +981,19 @@ _MUSIC1_MUSIC:
     FCB     25              ; Delay 25 frames (maintain previous state)
     FCB     11              ; Frame 350 - 11 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $FC             ; Reg 2 value
+    FCB     $0C             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
+    FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
+    FCB     $FD             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
@@ -988,26 +1005,36 @@ _MUSIC1_MUSIC:
     FCB     12              ; Delay 12 frames (maintain previous state)
     FCB     10              ; Frame 362 - 10 register writes
     FCB     0               ; Reg 0 number
-    FCB     $96             ; Reg 0 value
+    FCB     $A0             ; Reg 0 value
     FCB     1               ; Reg 1 number
     FCB     $00             ; Reg 1 value
     FCB     8               ; Reg 8 number
     FCB     $0C             ; Reg 8 value
     FCB     2               ; Reg 2 number
-    FCB     $FC             ; Reg 2 value
+    FCB     $0C             ; Reg 2 value
     FCB     3               ; Reg 3 number
-    FCB     $00             ; Reg 3 value
+    FCB     $01             ; Reg 3 value
     FCB     9               ; Reg 9 number
     FCB     $0A             ; Reg 9 value
     FCB     4               ; Reg 4 number
-    FCB     $B1             ; Reg 4 value
+    FCB     $FD             ; Reg 4 value
     FCB     5               ; Reg 5 number
     FCB     $04             ; Reg 5 value
     FCB     10               ; Reg 10 number
     FCB     $08             ; Reg 10 value
     FCB     7               ; Reg 7 number
     FCB     $38             ; Reg 7 value
-    FCB     38              ; Delay 38 frames before loop
+    FCB     4               ; Tail delay before force-silence (preserve last note release)
+    FCB     4               ; silence event (4 regs)
+    FCB     8               ; Reg 8 number
+    FCB     $00             ; Reg 8 value
+    FCB     9               ; Reg 9 number
+    FCB     $00             ; Reg 9 value
+    FCB     10               ; Reg 10 number
+    FCB     $00             ; Reg 10 value
+    FCB     7               ; Reg 7 number
+    FCB     $3F             ; Reg 7 value
+    FCB     34              ; Delay 34 frames before loop
     FCB     $FF             ; Loop command ($FF never valid as count)
     FDB     _MUSIC1_MUSIC       ; Jump to start (absolute address)
 
@@ -1016,63 +1043,63 @@ _COIN_SFX:
     ; SFX: coin (custom)
     ; Duration: 590ms (29fr), Freq: 855Hz, Channel: 0
     FCB $A0         ; Frame 0 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $59  ; Tone period = 89 (big-endian)
-    FCB $A7         ; Frame 1 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $59  ; Tone period = 89 (big-endian)
-    FCB $AF         ; Frame 2 - flags (vol=15, noisevol=0, tone=Y, noise=N)
-    FCB $00, $59  ; Tone period = 89 (big-endian)
-    FCB $AD         ; Frame 3 - flags (vol=13, noisevol=0, tone=Y, noise=N)
-    FCB $00, $59  ; Tone period = 89 (big-endian)
-    FCB $AB         ; Frame 4 - flags (vol=11, noisevol=0, tone=Y, noise=N)
-    FCB $00, $59  ; Tone period = 89 (big-endian)
-    FCB $A9         ; Frame 5 - flags (vol=9, noisevol=0, tone=Y, noise=N)
-    FCB $00, $50  ; Tone period = 80 (big-endian)
-    FCB $A7         ; Frame 6 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $50  ; Tone period = 80 (big-endian)
-    FCB $A7         ; Frame 7 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $50  ; Tone period = 80 (big-endian)
+    FCB $00, $5F  ; Tone period = 95 (big-endian)
+    FCB $A5         ; Frame 1 - flags (vol=5, noisevol=0, tone=Y, noise=N)
+    FCB $00, $5F  ; Tone period = 95 (big-endian)
+    FCB $AA         ; Frame 2 - flags (vol=10, noisevol=0, tone=Y, noise=N)
+    FCB $00, $5F  ; Tone period = 95 (big-endian)
+    FCB $AF         ; Frame 3 - flags (vol=15, noisevol=0, tone=Y, noise=N)
+    FCB $00, $5F  ; Tone period = 95 (big-endian)
+    FCB $AE         ; Frame 4 - flags (vol=14, noisevol=0, tone=Y, noise=N)
+    FCB $00, $5F  ; Tone period = 95 (big-endian)
+    FCB $AC         ; Frame 5 - flags (vol=12, noisevol=0, tone=Y, noise=N)
+    FCB $00, $55  ; Tone period = 85 (big-endian)
+    FCB $AB         ; Frame 6 - flags (vol=11, noisevol=0, tone=Y, noise=N)
+    FCB $00, $55  ; Tone period = 85 (big-endian)
+    FCB $A9         ; Frame 7 - flags (vol=9, noisevol=0, tone=Y, noise=N)
+    FCB $00, $55  ; Tone period = 85 (big-endian)
     FCB $A7         ; Frame 8 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $50  ; Tone period = 80 (big-endian)
+    FCB $00, $55  ; Tone period = 85 (big-endian)
     FCB $A7         ; Frame 9 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $59  ; Tone period = 89 (big-endian)
+    FCB $00, $5F  ; Tone period = 95 (big-endian)
     FCB $A7         ; Frame 10 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $59  ; Tone period = 89 (big-endian)
+    FCB $00, $5F  ; Tone period = 95 (big-endian)
     FCB $A7         ; Frame 11 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $59  ; Tone period = 89 (big-endian)
+    FCB $00, $5F  ; Tone period = 95 (big-endian)
     FCB $A7         ; Frame 12 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $59  ; Tone period = 89 (big-endian)
+    FCB $00, $5F  ; Tone period = 95 (big-endian)
     FCB $A7         ; Frame 13 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $5F  ; Tone period = 95 (big-endian)
+    FCB $00, $65  ; Tone period = 101 (big-endian)
     FCB $A7         ; Frame 14 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $5F  ; Tone period = 95 (big-endian)
+    FCB $00, $65  ; Tone period = 101 (big-endian)
     FCB $A7         ; Frame 15 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $5F  ; Tone period = 95 (big-endian)
+    FCB $00, $65  ; Tone period = 101 (big-endian)
     FCB $A7         ; Frame 16 - flags (vol=7, noisevol=0, tone=Y, noise=N)
+    FCB $00, $65  ; Tone period = 101 (big-endian)
+    FCB $A6         ; Frame 17 - flags (vol=6, noisevol=0, tone=Y, noise=N)
+    FCB $00, $65  ; Tone period = 101 (big-endian)
+    FCB $A5         ; Frame 18 - flags (vol=5, noisevol=0, tone=Y, noise=N)
+    FCB $00, $47  ; Tone period = 71 (big-endian)
+    FCB $A5         ; Frame 19 - flags (vol=5, noisevol=0, tone=Y, noise=N)
+    FCB $00, $47  ; Tone period = 71 (big-endian)
+    FCB $A4         ; Frame 20 - flags (vol=4, noisevol=0, tone=Y, noise=N)
+    FCB $00, $47  ; Tone period = 71 (big-endian)
+    FCB $A4         ; Frame 21 - flags (vol=4, noisevol=0, tone=Y, noise=N)
+    FCB $00, $47  ; Tone period = 71 (big-endian)
+    FCB $A3         ; Frame 22 - flags (vol=3, noisevol=0, tone=Y, noise=N)
+    FCB $00, $4B  ; Tone period = 75 (big-endian)
+    FCB $A3         ; Frame 23 - flags (vol=3, noisevol=0, tone=Y, noise=N)
+    FCB $00, $4B  ; Tone period = 75 (big-endian)
+    FCB $A2         ; Frame 24 - flags (vol=2, noisevol=0, tone=Y, noise=N)
+    FCB $00, $4B  ; Tone period = 75 (big-endian)
+    FCB $A2         ; Frame 25 - flags (vol=2, noisevol=0, tone=Y, noise=N)
+    FCB $00, $4B  ; Tone period = 75 (big-endian)
+    FCB $A1         ; Frame 26 - flags (vol=1, noisevol=0, tone=Y, noise=N)
     FCB $00, $5F  ; Tone period = 95 (big-endian)
-    FCB $A7         ; Frame 17 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $5F  ; Tone period = 95 (big-endian)
-    FCB $A7         ; Frame 18 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $43  ; Tone period = 67 (big-endian)
-    FCB $A7         ; Frame 19 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $43  ; Tone period = 67 (big-endian)
-    FCB $A7         ; Frame 20 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $43  ; Tone period = 67 (big-endian)
-    FCB $A7         ; Frame 21 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $43  ; Tone period = 67 (big-endian)
-    FCB $A6         ; Frame 22 - flags (vol=6, noisevol=0, tone=Y, noise=N)
-    FCB $00, $47  ; Tone period = 71 (big-endian)
-    FCB $A5         ; Frame 23 - flags (vol=5, noisevol=0, tone=Y, noise=N)
-    FCB $00, $47  ; Tone period = 71 (big-endian)
-    FCB $A4         ; Frame 24 - flags (vol=4, noisevol=0, tone=Y, noise=N)
-    FCB $00, $47  ; Tone period = 71 (big-endian)
-    FCB $A3         ; Frame 25 - flags (vol=3, noisevol=0, tone=Y, noise=N)
-    FCB $00, $47  ; Tone period = 71 (big-endian)
-    FCB $A2         ; Frame 26 - flags (vol=2, noisevol=0, tone=Y, noise=N)
-    FCB $00, $59  ; Tone period = 89 (big-endian)
     FCB $A1         ; Frame 27 - flags (vol=1, noisevol=0, tone=Y, noise=N)
-    FCB $00, $59  ; Tone period = 89 (big-endian)
+    FCB $00, $5F  ; Tone period = 95 (big-endian)
     FCB $A0         ; Frame 28 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $59  ; Tone period = 89 (big-endian)
+    FCB $00, $5F  ; Tone period = 95 (big-endian)
     FCB $D0, $20    ; End of effect marker
 
 
@@ -1080,7 +1107,7 @@ _EXPLOSION1_SFX:
     ; SFX: explosion1 (custom)
     ; Duration: 740ms (37fr), Freq: 19531Hz, Channel: 0
     FCB $6E         ; Frame 0 - flags (vol=14, noisevol=14, tone=Y, noise=Y)
-    FCB $00, $04  ; Tone period = 4 (big-endian)
+    FCB $00, $05  ; Tone period = 5 (big-endian)
     FCB $1A         ; Noise period
     FCB $0E         ; Frame 1 - flags (vol=14, noisevol=14, tone=N, noise=N)
     FCB $0E         ; Frame 2 - flags (vol=14, noisevol=14, tone=N, noise=N)
@@ -1125,55 +1152,55 @@ _LASER_SFX:
     ; SFX: laser (laser)
     ; Duration: 500ms (25fr), Freq: 880Hz, Channel: 0
     FCB $AC         ; Frame 0 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $32  ; Tone period = 50 (big-endian)
+    FCB $00, $35  ; Tone period = 53 (big-endian)
     FCB $AC         ; Frame 1 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $38  ; Tone period = 56 (big-endian)
+    FCB $00, $37  ; Tone period = 55 (big-endian)
     FCB $AC         ; Frame 2 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $3E  ; Tone period = 62 (big-endian)
+    FCB $00, $39  ; Tone period = 57 (big-endian)
     FCB $AC         ; Frame 3 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $44  ; Tone period = 68 (big-endian)
+    FCB $00, $3B  ; Tone period = 59 (big-endian)
     FCB $AC         ; Frame 4 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $4B  ; Tone period = 75 (big-endian)
+    FCB $00, $3D  ; Tone period = 61 (big-endian)
     FCB $AC         ; Frame 5 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $51  ; Tone period = 81 (big-endian)
+    FCB $00, $3F  ; Tone period = 63 (big-endian)
     FCB $AC         ; Frame 6 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $57  ; Tone period = 87 (big-endian)
+    FCB $00, $42  ; Tone period = 66 (big-endian)
     FCB $AC         ; Frame 7 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $5D  ; Tone period = 93 (big-endian)
+    FCB $00, $44  ; Tone period = 68 (big-endian)
     FCB $AC         ; Frame 8 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $64  ; Tone period = 100 (big-endian)
+    FCB $00, $47  ; Tone period = 71 (big-endian)
     FCB $AC         ; Frame 9 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $6A  ; Tone period = 106 (big-endian)
+    FCB $00, $4A  ; Tone period = 74 (big-endian)
     FCB $AC         ; Frame 10 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $70  ; Tone period = 112 (big-endian)
+    FCB $00, $4D  ; Tone period = 77 (big-endian)
     FCB $AC         ; Frame 11 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $76  ; Tone period = 118 (big-endian)
+    FCB $00, $51  ; Tone period = 81 (big-endian)
     FCB $AC         ; Frame 12 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $7D  ; Tone period = 125 (big-endian)
+    FCB $00, $55  ; Tone period = 85 (big-endian)
     FCB $AC         ; Frame 13 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $83  ; Tone period = 131 (big-endian)
+    FCB $00, $5A  ; Tone period = 90 (big-endian)
     FCB $AC         ; Frame 14 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $89  ; Tone period = 137 (big-endian)
+    FCB $00, $5F  ; Tone period = 95 (big-endian)
     FCB $AC         ; Frame 15 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $8F  ; Tone period = 143 (big-endian)
+    FCB $00, $64  ; Tone period = 100 (big-endian)
     FCB $AC         ; Frame 16 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $96  ; Tone period = 150 (big-endian)
+    FCB $00, $6B  ; Tone period = 107 (big-endian)
     FCB $AC         ; Frame 17 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $9C  ; Tone period = 156 (big-endian)
+    FCB $00, $72  ; Tone period = 114 (big-endian)
     FCB $AC         ; Frame 18 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $A2  ; Tone period = 162 (big-endian)
+    FCB $00, $7A  ; Tone period = 122 (big-endian)
     FCB $AC         ; Frame 19 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $A8  ; Tone period = 168 (big-endian)
+    FCB $00, $83  ; Tone period = 131 (big-endian)
     FCB $AC         ; Frame 20 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $AF  ; Tone period = 175 (big-endian)
+    FCB $00, $8E  ; Tone period = 142 (big-endian)
     FCB $A9         ; Frame 21 - flags (vol=9, noisevol=0, tone=Y, noise=N)
-    FCB $00, $B5  ; Tone period = 181 (big-endian)
+    FCB $00, $9B  ; Tone period = 155 (big-endian)
     FCB $A7         ; Frame 22 - flags (vol=7, noisevol=0, tone=Y, noise=N)
-    FCB $00, $BB  ; Tone period = 187 (big-endian)
+    FCB $00, $AA  ; Tone period = 170 (big-endian)
     FCB $A4         ; Frame 23 - flags (vol=4, noisevol=0, tone=Y, noise=N)
-    FCB $00, $C1  ; Tone period = 193 (big-endian)
+    FCB $00, $BD  ; Tone period = 189 (big-endian)
     FCB $A2         ; Frame 24 - flags (vol=2, noisevol=0, tone=Y, noise=N)
-    FCB $00, $C8  ; Tone period = 200 (big-endian)
+    FCB $00, $D5  ; Tone period = 213 (big-endian)
     FCB $D0, $20    ; End of effect marker
 
 
@@ -1181,23 +1208,23 @@ _JUMP_SFX:
     ; SFX: jump (jump)
     ; Duration: 180ms (9fr), Freq: 330Hz, Channel: 0
     FCB $A0         ; Frame 0 - flags (vol=0, noisevol=0, tone=Y, noise=N)
-    FCB $00, $A0  ; Tone period = 160 (big-endian)
+    FCB $01, $D9  ; Tone period = 473 (big-endian)
     FCB $AE         ; Frame 1 - flags (vol=14, noisevol=0, tone=Y, noise=N)
-    FCB $00, $BE  ; Tone period = 190 (big-endian)
-    FCB $AD         ; Frame 2 - flags (vol=13, noisevol=0, tone=Y, noise=N)
-    FCB $00, $DC  ; Tone period = 220 (big-endian)
-    FCB $AC         ; Frame 3 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $00, $FA  ; Tone period = 250 (big-endian)
+    FCB $01, $8F  ; Tone period = 399 (big-endian)
+    FCB $AE         ; Frame 2 - flags (vol=14, noisevol=0, tone=Y, noise=N)
+    FCB $01, $58  ; Tone period = 344 (big-endian)
+    FCB $AD         ; Frame 3 - flags (vol=13, noisevol=0, tone=Y, noise=N)
+    FCB $01, $2F  ; Tone period = 303 (big-endian)
     FCB $AC         ; Frame 4 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $01, $18  ; Tone period = 280 (big-endian)
-    FCB $AC         ; Frame 5 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $01, $36  ; Tone period = 310 (big-endian)
-    FCB $AC         ; Frame 6 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $01, $54  ; Tone period = 340 (big-endian)
-    FCB $AC         ; Frame 7 - flags (vol=12, noisevol=0, tone=Y, noise=N)
-    FCB $01, $72  ; Tone period = 370 (big-endian)
-    FCB $A6         ; Frame 8 - flags (vol=6, noisevol=0, tone=Y, noise=N)
-    FCB $01, $90  ; Tone period = 400 (big-endian)
+    FCB $01, $0F  ; Tone period = 271 (big-endian)
+    FCB $A9         ; Frame 5 - flags (vol=9, noisevol=0, tone=Y, noise=N)
+    FCB $00, $F4  ; Tone period = 244 (big-endian)
+    FCB $A7         ; Frame 6 - flags (vol=7, noisevol=0, tone=Y, noise=N)
+    FCB $00, $DF  ; Tone period = 223 (big-endian)
+    FCB $A4         ; Frame 7 - flags (vol=4, noisevol=0, tone=Y, noise=N)
+    FCB $00, $CD  ; Tone period = 205 (big-endian)
+    FCB $A2         ; Frame 8 - flags (vol=2, noisevol=0, tone=Y, noise=N)
+    FCB $00, $BD  ; Tone period = 189 (big-endian)
     FCB $D0, $20    ; End of effect marker
 
 
@@ -1325,6 +1352,7 @@ PLAY_SFX_BANKED:
     LDX #SFX_BANK_TABLE
     LDA D,X              ; A = bank ID for this SFX
     STA CURRENT_ROM_BANK ; Update RAM tracker
+    STA >SFX_BANK        ; Save SFX bank for AUDIO_UPDATE
     STA $DF00            ; Switch bank hardware register
 
     ; Get SFX's address from lookup table (2 bytes per entry)
@@ -1352,26 +1380,27 @@ PLAY_SFX_BANKED:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
-    ;       causing integrators to drift toward joystick DAC value.
-    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref   ; Reset beam to center before positioning text
-    LDU VAR_ARG2   ; string pointer
-    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
-    STA >$C82A      ; Vec_Text_Height: controls character Y scale
-    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
-    STA >$C82B      ; Vec_Text_Width: controls character X spacing
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
+    TFR A,DP
+    JSR Intensity_5F
+    JSR Reset0Ref
+    LDU >VAR_ARG2
+    LDA >TEXT_SCALE_H
+    STA >$C82A          ; Vec_Text_Height
+    LDA >TEXT_SCALE_W
+    STA >$C82B          ; Vec_Text_Width
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    LDX >$C82C
+    PSHS X
     JSR Print_Str_d
+    PULS X
+    STX >$C82C
     LDA #$F8
-    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    STA >$C82A
     LDA #$48
-    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    STA >$C82B
+    JSR $F1AF
     RTS
 
 MOD16:
@@ -1423,11 +1452,11 @@ MOD16:
 ; Inputs: DRAW_CIRCLE_XC, DRAW_CIRCLE_YC, DRAW_CIRCLE_DIAM, DRAW_CIRCLE_INTENSITY (bytes in RAM)
 ; Uses 16-segment polygon (same as constant path) via MUL scaling of fixed fractions
 ; 4 unique delta fractions of radius r (16-gon, vertices at k*22.5 deg):
-;   a = 0.3827*r (sin22.5) via MUL #98 /256, stored at DRAW_CIRCLE_TEMP+2
-;   b = 0.3244*r (sin45-sin22.5) via MUL #83 /256, stored at DRAW_CIRCLE_TEMP+3
-;   c = 0.2168*r via MUL #56 /256, stored at DRAW_CIRCLE_TEMP+4
-;   d = 0.0761*r via MUL #19 /256, stored at DRAW_CIRCLE_TEMP+5
-; DRAW_CIRCLE_TEMP layout: [radius16][a][b][c][d][--][--]
+;   a = 0.3827*r (sin22.5) via MUL #98 /256, stored at >DRAW_CIRCLE_TEMP+2
+;   b = 0.3244*r (sin45-sin22.5) via MUL #83 /256, stored at >DRAW_CIRCLE_TEMP+3
+;   c = 0.2168*r via MUL #56 /256, stored at >DRAW_CIRCLE_TEMP+4
+;   d = 0.0761*r via MUL #19 /256, stored at >DRAW_CIRCLE_TEMP+5
+; >DRAW_CIRCLE_TEMP layout: [radius16][a][b][c][d][--][--]
 DRAW_CIRCLE_RUNTIME:
 ; Read ALL parameters into registers/stack BEFORE changing DP (critical!)
 ; (These are byte variables, use LDB not LDD)
@@ -1435,20 +1464,18 @@ LDB DRAW_CIRCLE_INTENSITY
 PSHS B                 ; Save intensity on stack
 
 LDB DRAW_CIRCLE_DIAM
-SEX                    ; Sign-extend to 16-bit (diameter is unsigned 0..255)
-LSRA                   ; Divide by 2 to get radius
-RORB
-STD DRAW_CIRCLE_TEMP   ; DRAW_CIRCLE_TEMP = radius (16-bit, big-endian: +0=hi, +1=lo)
+SEX                    ; Sign-extend to 16-bit (radius is the arg, 0..127)
+STD >DRAW_CIRCLE_TEMP   ; >DRAW_CIRCLE_TEMP = radius (the 3rd arg IS the radius; was diameter/2)
 
 LDB DRAW_CIRCLE_XC     ; xc (signed -128..127)
 SEX
-STD DRAW_CIRCLE_TEMP+2 ; Save xc (16-bit, reused for 'a' after Moveto)
+STD >DRAW_CIRCLE_TEMP+2 ; Save xc (16-bit, reused for 'a' after Moveto)
 
 LDB DRAW_CIRCLE_YC     ; yc (signed -128..127)
 SEX
-STD DRAW_CIRCLE_TEMP+4 ; Save yc (16-bit, reused for 'c' after Moveto)
+STD >DRAW_CIRCLE_TEMP+4 ; Save yc (16-bit, reused for 'c' after Moveto)
 
-; NOW safe to setup BIOS (all params are in DRAW_CIRCLE_TEMP+stack)
+; NOW safe to setup BIOS (all params are in >DRAW_CIRCLE_TEMP+stack)
 LDA #$D0
 TFR A,DP
 JSR Reset0Ref
@@ -1466,36 +1493,40 @@ JSR Intensity_5F
 DCR_after_intensity:
 
 ; Move to start position: (xc + radius, yc)  [vertex 0 of 16-gon = rightmost]
-; radius = DRAW_CIRCLE_TEMP, xc = DRAW_CIRCLE_TEMP+2, yc = DRAW_CIRCLE_TEMP+4
-LDD DRAW_CIRCLE_TEMP   ; D = radius (16-bit)
-ADDD DRAW_CIRCLE_TEMP+2 ; D = xc + radius
+; radius = >DRAW_CIRCLE_TEMP, xc = >DRAW_CIRCLE_TEMP+2, yc = >DRAW_CIRCLE_TEMP+4
+LDD >DRAW_CIRCLE_TEMP   ; D = radius (16-bit)
+ADDD >DRAW_CIRCLE_TEMP+2 ; D = xc + radius
 TFR B,B                ; Keep X in B (low byte)
 PSHS B                 ; Save X on stack
-LDD DRAW_CIRCLE_TEMP+4 ; Load yc
+LDD >DRAW_CIRCLE_TEMP+4 ; Load yc
 TFR B,A                ; Y to A
 PULS B                 ; X to B
 JSR Moveto_d
 
 ; Precompute 4 delta fractions using MUL (same fractions as constant 16-gon path)
-; radius is at DRAW_CIRCLE_TEMP+1 (low byte, 0..127)
-; DRAW_CIRCLE_TEMP+2..5 now free to reuse for a,b,c,d
-; MUL: A * B -> D (unsigned); A_after = floor(frac * r) when frac byte = round(frac*256)
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+; radius is at >DRAW_CIRCLE_TEMP+1 (low byte, 0..127)
+; >DRAW_CIRCLE_TEMP+2..5 now free to reuse for a,b,c,d
+; MUL: A * B -> D (unsigned); ADDD #128 then A = round(frac * r) (avoids floor-to-0 for small radii)
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #98                ; 98/256 = 0.3828 ~ sin(22.5 deg) = 0.3827
-MUL                    ; A = floor(0.3828 * r) = a
-STA DRAW_CIRCLE_TEMP+2 ; Store a
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+MUL                    ; D = 98 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+2 ; Store a = round(0.3828 * r)
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #83                ; 83/256 = 0.3242 ~ 0.3244
-MUL                    ; A = b
-STA DRAW_CIRCLE_TEMP+3 ; Store b
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+MUL                    ; D = 83 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+3 ; Store b
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #56                ; 56/256 = 0.2188 ~ 0.2168
-MUL                    ; A = c
-STA DRAW_CIRCLE_TEMP+4 ; Store c
-LDB DRAW_CIRCLE_TEMP+1 ; radius
+MUL                    ; D = 56 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+4 ; Store c
+LDB >DRAW_CIRCLE_TEMP+1 ; radius
 LDA #19                ; 19/256 = 0.0742 ~ 0.0761
-MUL                    ; A = d
-STA DRAW_CIRCLE_TEMP+5 ; Store d
+MUL                    ; D = 19 * r
+ADDD #128              ; round before /256
+STA >DRAW_CIRCLE_TEMP+5 ; Store d
 
 ; Draw 16 unrolled segments - 16-gon counterclockwise from (xc+r, yc)
 ; Draw_Line_d(A=dy, B=dx). Symmetry pattern by quadrant:
@@ -1507,105 +1538,105 @@ STA DRAW_CIRCLE_TEMP+5 ; Store d
 ; --- Q1 ---
 ; Seg 0: dy=+a, dx=-d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a
-LDB DRAW_CIRCLE_TEMP+5  ; d
+LDA >DRAW_CIRCLE_TEMP+2  ; a
+LDB >DRAW_CIRCLE_TEMP+5  ; d
 NEGB
 JSR Draw_Line_d
 ; Seg 1: dy=+b, dx=-c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b
-LDB DRAW_CIRCLE_TEMP+4  ; c
+LDA >DRAW_CIRCLE_TEMP+3  ; b
+LDB >DRAW_CIRCLE_TEMP+4  ; c
 NEGB
 JSR Draw_Line_d
 ; Seg 2: dy=+c, dx=-b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c
-LDB DRAW_CIRCLE_TEMP+3  ; b
+LDA >DRAW_CIRCLE_TEMP+4  ; c
+LDB >DRAW_CIRCLE_TEMP+3  ; b
 NEGB
 JSR Draw_Line_d
 ; Seg 3: dy=+d, dx=-a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d
-LDB DRAW_CIRCLE_TEMP+2  ; a
+LDA >DRAW_CIRCLE_TEMP+5  ; d
+LDB >DRAW_CIRCLE_TEMP+2  ; a
 NEGB
 JSR Draw_Line_d
 
 ; --- Q2 ---
 ; Seg 4: dy=-d, dx=-a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d
+LDA >DRAW_CIRCLE_TEMP+5  ; d
 NEGA
-LDB DRAW_CIRCLE_TEMP+2  ; a
+LDB >DRAW_CIRCLE_TEMP+2  ; a
 NEGB
 JSR Draw_Line_d
 ; Seg 5: dy=-c, dx=-b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c
+LDA >DRAW_CIRCLE_TEMP+4  ; c
 NEGA
-LDB DRAW_CIRCLE_TEMP+3  ; b
+LDB >DRAW_CIRCLE_TEMP+3  ; b
 NEGB
 JSR Draw_Line_d
 ; Seg 6: dy=-b, dx=-c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b
+LDA >DRAW_CIRCLE_TEMP+3  ; b
 NEGA
-LDB DRAW_CIRCLE_TEMP+4  ; c
+LDB >DRAW_CIRCLE_TEMP+4  ; c
 NEGB
 JSR Draw_Line_d
 ; Seg 7: dy=-a, dx=-d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a
+LDA >DRAW_CIRCLE_TEMP+2  ; a
 NEGA
-LDB DRAW_CIRCLE_TEMP+5  ; d
+LDB >DRAW_CIRCLE_TEMP+5  ; d
 NEGB
 JSR Draw_Line_d
 
 ; --- Q3 ---
 ; Seg 8: dy=-a, dx=+d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a
+LDA >DRAW_CIRCLE_TEMP+2  ; a
 NEGA
-LDB DRAW_CIRCLE_TEMP+5  ; d (positive)
+LDB >DRAW_CIRCLE_TEMP+5  ; d (positive)
 JSR Draw_Line_d
 ; Seg 9: dy=-b, dx=+c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b
+LDA >DRAW_CIRCLE_TEMP+3  ; b
 NEGA
-LDB DRAW_CIRCLE_TEMP+4  ; c (positive)
+LDB >DRAW_CIRCLE_TEMP+4  ; c (positive)
 JSR Draw_Line_d
 ; Seg 10: dy=-c, dx=+b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c
+LDA >DRAW_CIRCLE_TEMP+4  ; c
 NEGA
-LDB DRAW_CIRCLE_TEMP+3  ; b (positive)
+LDB >DRAW_CIRCLE_TEMP+3  ; b (positive)
 JSR Draw_Line_d
 ; Seg 11: dy=-d, dx=+a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d
+LDA >DRAW_CIRCLE_TEMP+5  ; d
 NEGA
-LDB DRAW_CIRCLE_TEMP+2  ; a (positive)
+LDB >DRAW_CIRCLE_TEMP+2  ; a (positive)
 JSR Draw_Line_d
 
 ; --- Q4 ---
 ; Seg 12: dy=+d, dx=+a
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+5  ; d (positive)
-LDB DRAW_CIRCLE_TEMP+2  ; a (positive)
+LDA >DRAW_CIRCLE_TEMP+5  ; d (positive)
+LDB >DRAW_CIRCLE_TEMP+2  ; a (positive)
 JSR Draw_Line_d
 ; Seg 13: dy=+c, dx=+b
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+4  ; c (positive)
-LDB DRAW_CIRCLE_TEMP+3  ; b (positive)
+LDA >DRAW_CIRCLE_TEMP+4  ; c (positive)
+LDB >DRAW_CIRCLE_TEMP+3  ; b (positive)
 JSR Draw_Line_d
 ; Seg 14: dy=+b, dx=+c
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+3  ; b (positive)
-LDB DRAW_CIRCLE_TEMP+4  ; c (positive)
+LDA >DRAW_CIRCLE_TEMP+3  ; b (positive)
+LDB >DRAW_CIRCLE_TEMP+4  ; c (positive)
 JSR Draw_Line_d
 ; Seg 15: dy=+a, dx=+d
 CLR Vec_Misc_Count
-LDA DRAW_CIRCLE_TEMP+2  ; a (positive)
-LDB DRAW_CIRCLE_TEMP+5  ; d (positive)
+LDA >DRAW_CIRCLE_TEMP+2  ; a (positive)
+LDB >DRAW_CIRCLE_TEMP+5  ; d (positive)
 JSR Draw_Line_d
 
 LDA #$C8
@@ -1798,35 +1829,52 @@ RTS
 
 ; ============================================================================
 ; UPDATE_MUSIC_PSG - Update PSG (call every frame)
+; Data format per event: FCB delay, FCB count, (FCB reg, FCB val)*N
+; delay = frames since previous event (0 = apply immediately)
+; End marker: FCB 0 after last event's count
+; Loop marker: delay=$FF is treated as loop; OR count=$FF followed by FDB addr
+; PSG_DELAY_FRAMES counts down to the next event fire point.
+; PSG_MUSIC_PTR always points to delay byte of next pending event.
 ; ============================================================================
 UPDATE_MUSIC_PSG:
-; CRITICAL: Set VIA to PSG mode BEFORE accessing PSG (don't assume state)
-; DISABLED: Conflicts with SFX which uses Sound_Byte (HANDSHAKE mode)
-; LDA #$00       ; VIA_cntl = $00 (PSG mode)
-; STA >$D00C     ; VIA_cntl
 LDA #$01
-STA >PSG_MUSIC_ACTIVE   ; Mark music system active (for PSG logging)
-LDA >PSG_IS_PLAYING     ; Check if playing (extended - var at 0xC8A0)
-BEQ PSG_update_done     ; Not playing, exit
+STA >PSG_MUSIC_ACTIVE   ; Mark music system active
+LDA >PSG_IS_PLAYING
+LBEQ PSG_update_done    ; Not playing
 
-LDX >PSG_MUSIC_PTR      ; Load pointer (force extended - LDX has no DP mode)
+; Check if delay counter is running
+LDA >PSG_DELAY_FRAMES
+BEQ PSG_read_delay      ; Counter=0: time to read next delay byte
+DECA
+STA >PSG_DELAY_FRAMES
+LBNE PSG_update_done    ; Still waiting
+BRA PSG_process_event   ; Counter just hit 0: apply the event
 
-; Read frame count byte (number of register writes)
+PSG_read_delay:
+LDX >PSG_MUSIC_PTR      ; PTR → delay byte of current event
+LDB ,X+                 ; Consume delay byte, X → count byte
+CMPB #$FF
+LBEQ PSG_music_loop_d   ; $FF as delay = loop command
+STB >PSG_DELAY_FRAMES   ; Store delay count
+STX >PSG_MUSIC_PTR      ; Advance PTR past delay byte (now at count byte)
+BEQ PSG_process_event   ; delay=0: apply immediately
+DEC >PSG_DELAY_FRAMES   ; Decrement once (fires after delay-1 more frames)
+LBRA PSG_update_done    ; Wait
+
+PSG_process_event:
+LDX >PSG_MUSIC_PTR      ; PTR is at count byte
 LDB ,X+
-BEQ PSG_music_ended     ; Count=0 means end (no loop)
-CMPB #$FF               ; Check for loop command
-BEQ PSG_music_loop      ; $FF means loop (never valid as count)
+LBEQ PSG_music_ended    ; Count=0 means end
+CMPB #$FF
+LBEQ PSG_music_loop     ; Count=$FF means loop
 
-; Process frame - push counter to stack
 PSHS B                  ; Save count on stack
-
-; Write register/value pairs to PSG
 PSG_write_loop:
 LDA ,X+                 ; Load register number
 LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer (after reads)
+PSHS X                  ; Save pointer
 
-; WRITE_PSG sequence
+; WRITE_PSG sequence (direct VIA access)
 STA VIA_port_a          ; Store register number
 LDA #$19                ; BDIR=1, BC1=1 (LATCH)
 STA VIA_port_b
@@ -1841,30 +1889,43 @@ STB VIA_port_b
 
 PULS X                  ; Restore pointer
 PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ PSG_frame_done      ; Done with this frame
+DECB
+BEQ PSG_event_done      ; Done with this event
 PSHS B                  ; Save counter back
 BRA PSG_write_loop
 
-PSG_frame_done:
-
-; Frame complete - update pointer and done
-STX >PSG_MUSIC_PTR      ; Update pointer (force extended)
-BRA PSG_update_done
+PSG_event_done:
+STX >PSG_MUSIC_PTR      ; PTR → delay byte of next event
+CLR >PSG_DELAY_FRAMES   ; Trigger PSG_read_delay next frame
+LBRA PSG_update_done
 
 PSG_music_ended:
-CLR >PSG_IS_PLAYING     ; Stop playback (extended - var at 0xC8A0)
-; NOTE: Do NOT write PSG registers here - corrupts VIA for vector drawing
-; Music will fade naturally as frame data stops updating
-BRA PSG_update_done
+CLR >PSG_IS_PLAYING
+; Silence all 3 PSG channels so the last note doesn't keep ringing
+; until the next PLAY_MUSIC. DP is already $D0 (set by AUDIO_UPDATE).
+LDA #8                  ; PSG reg 8 = Volume Channel A
+LDB #0
+JSR Sound_Byte
+LDA #9                  ; PSG reg 9 = Volume Channel B
+LDB #0
+JSR Sound_Byte
+LDA #10                 ; PSG reg 10 = Volume Channel C
+LDB #0
+JSR Sound_Byte
+LBRA PSG_update_done
 
 PSG_music_loop:
-; Loop command: $FF followed by 2-byte address (FDB)
-; X points past $FF, read the target address
-LDD ,X                  ; Load 2-byte loop target address
-STD >PSG_MUSIC_PTR      ; Update pointer to loop start
-; Exit - next frame will start from loop target
-BRA PSG_update_done
+; count=$FF: X points after $FF, at FDB loop address
+LDD ,X
+STD >PSG_MUSIC_PTR
+CLR >PSG_DELAY_FRAMES
+LBRA PSG_update_done
+
+PSG_music_loop_d:
+; delay=$FF: X points after $FF, at FDB loop address
+LDD ,X
+STD >PSG_MUSIC_PTR
+CLR >PSG_DELAY_FRAMES
 
 PSG_update_done:
 CLR >PSG_MUSIC_ACTIVE   ; Clear flag (music system done)
@@ -1953,24 +2014,42 @@ BRA AU_MUSIC_PROCESS_WRITES
 AU_MUSIC_HAS_DELAY:
 ; B has delay > 0, store it and skip to next frame
 DECB                    ; Delay-1 (we consume this frame)
+BEQ AU_MUSIC_READ_COUNT ; delay was 1: X already at count byte, process immediately
 STB >PSG_DELAY_FRAMES   ; Save delay counter
 STX >PSG_MUSIC_PTR      ; Save pointer (X points to count byte)
 BRA AU_UPDATE_SFX       ; Skip reading data this frame
 
 AU_MUSIC_PROCESS_WRITES:
-PSHS B                  ; Save count
-
+; Per-event write loop. Inlined PSG protocol instead of JSR Sound_Byte
+; (~35 cycles vs ~92 incl JSR/RTS overhead — saves ~57 cycles per
+; register write). For theme-style music with 8-10 writes per event,
+; saves ~500-600 cycles per event frame → frees enough budget that the
+; music event no longer pushes the frame over vsync. Mirrors the BIOS
+; Sound_Byte protocol exactly (Vectrex VIA bits: BC1=bit3, BDIR=bit4).
+PSHS B                  ; save register-write count on stack for in-place DEC
 AU_MUSIC_WRITE_LOOP:
-LDA ,X+                 ; Load register number
-LDB ,X+                 ; Load register value
-PSHS X                  ; Save pointer
-JSR Sound_Byte          ; Write to PSG using BIOS (DP=$D0)
-PULS X                  ; Restore pointer
-PULS B                  ; Get counter
-DECB                    ; Decrement
-BEQ AU_MUSIC_DONE       ; Done if count=0
-PSHS B                  ; Save counter
-BRA AU_MUSIC_WRITE_LOOP ; Continue
+LDA ,X+                 ; A = register number
+LDB ,X+                 ; B = register value
+STA VIA_port_a          ; data bus = reg num
+LDA #$19                ; BC1=1, BDIR=1 → LATCH ADDR
+STA VIA_port_b
+LDA #$01                ; back to INACTIVE (BC1=0, BDIR=0)
+STA VIA_port_b
+LDA VIA_port_a          ; READ STATUS — settling delay so PSG finishes
+; latching the register address before we drive
+; the value. Without this, the PSG occasionally
+; writes the new value into the PREVIOUS register
+; (audible as glitchy pitch / 'noisy' music,
+; especially when other CPU activity perturbs
+; the timing between this loop and adjacent code).
+STB VIA_port_a          ; data bus = value
+LDA #$11                ; BC1=0, BDIR=1 → WRITE DATA
+STA VIA_port_b
+LDA #$01                ; back to INACTIVE
+STA VIA_port_b
+DEC ,S                  ; decrement count on stack (in-place; no PSHS/PULS per iter)
+BNE AU_MUSIC_WRITE_LOOP
+LEAS 1,S                ; discard saved count
 
 AU_MUSIC_DONE:
 STX >PSG_MUSIC_PTR      ; Update music pointer
@@ -1994,7 +2073,12 @@ AU_UPDATE_SFX:
 LDA >SFX_ACTIVE         ; Check if SFX is active
 BEQ AU_DONE             ; Skip if not active
 
-JSR sfx_doframe         ; Process one SFX frame (uses Sound_Byte internally)
+        ; MULTIBANK: Switch to SFX bank before reading SFX data
+LDA >SFX_BANK           ; Get SFX bank ID
+STA >CURRENT_ROM_BANK   ; Update RAM tracker
+STA $DF00               ; Switch bank hardware register
+
+        JSR sfx_doframe         ; Process one SFX frame (uses Sound_Byte internally)
 
 AU_DONE:
         ; MULTIBANK: Restore original bank

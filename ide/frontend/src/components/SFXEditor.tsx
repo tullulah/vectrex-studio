@@ -21,6 +21,10 @@ export interface SfxResource {
   name: string;
   category: SfxCategory;
   duration_ms: number;
+  /* RAFAGA QUE SE REPITE. 0 = un solo disparo. Con un valor, la envolvente y el barrido
+   * vuelven a empezar cada N ms hasta agotar duration_ms — que es lo que hace la placa
+   * original en efectos como el `coin` de Donkey Kong: tres chirridos identicos seguidos. */
+  repeat_ms?: number;
   oscillator: Oscillator;
   envelope: Envelope;
   pitch: PitchEnvelope;
@@ -56,6 +60,10 @@ export interface NoiseSettings {
   period: number;
   volume: number;
   decay_ms: number;
+  /** Mezclar ruido Y tono en el mismo canal, como hace el AY (los combina con un AND,
+   *  el ruido "pica" el tono). Sin esto solo se pueden hacer tonos limpios o siseos, y
+   *  un golpe necesita las dos cosas: solo tono suena a pitido plano. */
+  mix?: boolean;
 }
 
 export interface Modulation {
@@ -77,6 +85,62 @@ interface SFXEditorProps {
 // ============================================
 // Constants
 // ============================================
+
+/* EL DAC DEL AY ES LOGARITMICO: cada paso del registro de volumen vale unos 3 dB. La tabla
+ * se construye como en el simulador (ay8910-worklet.js): 32 medios pasos dividiendo por
+ * 1.188502227. Sin esto, este editor suena envolventes con otra forma que el juego. */
+const AY_AMP: number[] = (() => {
+  const t: number[] = new Array(32).fill(0);
+  let out = 1.0;
+  for (let i = 31; i > 0; i--) { t[i] = out; out /= 1.188502227; }
+  return Array.from({ length: 16 }, (_, v) => (v ? t[v * 2 + 1] : 0));
+})();
+const ayAmp = (v: number) => AY_AMP[Math.max(0, Math.min(15, Math.round(v)))];
+
+/* El motor del juego recalcula el volumen una vez por frame. */
+const MUS_FPS = 60;
+
+/* La MISMA ADSR que src/music.c, incluido que un ataque mas corto que un frame es
+ * instantaneo (si no, el primer frame saldria mudo y un efecto de 50 ms es inaudible). */
+function volEnvolvente(e: Envelope, t: number, durMs: number): number {
+  let vol: number;
+  if (t < e.attack && e.attack > 1000 / MUS_FPS) vol = (e.peak * t) / e.attack;
+  else if (t < e.attack) vol = e.peak;
+  else if (t < e.attack + e.decay) vol = e.peak + ((e.sustain - e.peak) * (t - e.attack)) / (e.decay || 1);
+  else if (t < durMs - e.release) vol = e.sustain;
+  else vol = e.release ? (e.sustain * (durMs - t)) / e.release : 0;
+  return Math.max(0, Math.min(15, vol));
+}
+
+
+/* El multiplicador de frecuencia en el instante t, EXACTAMENTE como lo calcula
+ * sfx_tick() en src/music.c: rafaga que se repite, arpegio, barrido y vibrato, en ese
+ * orden y multiplicandose entre si. */
+function multTono(sfx: SfxResource, tMs: number, durTotal: number): number {
+  const rep = sfx.repeat_ms || 0;
+  const t = rep > 0 ? tMs % rep : tMs;
+  const dur = rep > 0 ? rep : durTotal;
+  let m = 1.0;
+  const mod = sfx.modulation;
+  if (mod.arpeggio && mod.arpeggio_speed > 0 && mod.arpeggio_notes.length > 0) {
+    const k = Math.floor(t / mod.arpeggio_speed) % mod.arpeggio_notes.length;
+    m *= Math.pow(2, mod.arpeggio_notes[k] / 12);
+  }
+  if (sfx.pitch.enabled) {
+    const pr = t / dur;
+    if (sfx.pitch.curve === 3) {
+      /* geometrica: un numero constante de semitonos por ms */
+      m *= sfx.pitch.start_mult * Math.pow(sfx.pitch.end_mult / sfx.pitch.start_mult, pr);
+    } else {
+      const q = sfx.pitch.curve === 2 ? pr * pr : pr;
+      m *= sfx.pitch.start_mult + (sfx.pitch.end_mult - sfx.pitch.start_mult) * q;
+    }
+  }
+  if (mod.vibrato && mod.vibrato_speed > 0) {
+    m *= 1 + (mod.vibrato_depth / 100) * Math.sin((2 * Math.PI * mod.vibrato_speed * t) / 1000);
+  }
+  return m;
+}
 
 const CATEGORY_COLORS: Record<SfxCategory, string> = {
   custom: '#888',
@@ -200,6 +264,7 @@ class SfxPlayer {
   private audioContext: AudioContext | null = null;
   private currentOscillator: OscillatorNode | null = null;
   private currentGain: GainNode | null = null;
+  private vibratoLfo: OscillatorNode | null = null;
   private noiseSource: AudioBufferSourceNode | null = null;
   private noiseGain: GainNode | null = null;
 
@@ -214,6 +279,10 @@ class SfxPlayer {
     if (this.currentOscillator) {
       try { this.currentOscillator.stop(); } catch {}
       this.currentOscillator = null;
+    }
+    if (this.vibratoLfo) {
+      try { this.vibratoLfo.stop(); } catch {}
+      this.vibratoLfo = null;
     }
     if (this.noiseSource) {
       try { this.noiseSource.stop(); } catch {}
@@ -235,44 +304,20 @@ class SfxPlayer {
     osc.connect(gain);
     gain.connect(ctx.destination);
 
-    // Frequency with pitch envelope
+    // FRECUENCIA. Igual que la envolvente: se calcula punto por punto con la MISMA cuenta
+    // que sfx_tick() en src/music.c y se mete de una pieza. Antes se hacia con tres cosas
+    // encadenadas —una rampa exponencial, un LFO de vibrato y setValueAtTime por nota del
+    // arpegio— y se pisaban entre ellas: el arpegio borraba el barrido, y la rampa era
+    // siempre exponencial ignorando el campo `curve`. Es decir, el editor y el juego
+    // barrian con formas distintas, que es justo lo que hacia imposible comparar de oido.
     const baseFreq = sfx.oscillator.frequency;
-    if (sfx.pitch.enabled) {
-      const startFreq = baseFreq * sfx.pitch.start_mult;
-      const endFreq = baseFreq * sfx.pitch.end_mult;
-      osc.frequency.setValueAtTime(startFreq, now);
-      osc.frequency.exponentialRampToValueAtTime(Math.max(endFreq, 20), now + duration);
-    } else {
-      osc.frequency.setValueAtTime(baseFreq, now);
+    const curvaF = new Float32Array(Math.max(2, Math.round(duration * 1000)));
+    for (let i = 0; i < curvaF.length; i++) {
+      const t = Math.floor(i / (1000 / MUS_FPS)) * (1000 / MUS_FPS);
+      curvaF[i] = Math.max(20, baseFreq * multTono(sfx, t, duration * 1000));
     }
-
-    // Amplitude envelope (ADSR)
-    const peakVol = sfx.envelope.peak / 15;
-    const sustainVol = (sfx.envelope.sustain / 15) * peakVol;
-    const attackTime = sfx.envelope.attack / 1000;
-    const decayTime = sfx.envelope.decay / 1000;
-    const releaseTime = sfx.envelope.release / 1000;
-    const sustainTime = Math.max(0, duration - attackTime - decayTime - releaseTime);
-
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(peakVol, now + attackTime);
-    gain.gain.linearRampToValueAtTime(sustainVol, now + attackTime + decayTime);
-    gain.gain.setValueAtTime(sustainVol, now + attackTime + decayTime + sustainTime);
-    gain.gain.linearRampToValueAtTime(0, now + duration);
-
-    // Arpeggio (rapid frequency changes)
-    if (sfx.modulation.arpeggio && sfx.modulation.arpeggio_notes.length > 0) {
-      const arpSpeed = sfx.modulation.arpeggio_speed / 1000;
-      let time = now;
-      let noteIndex = 0;
-      while (time < now + duration) {
-        const semitone = sfx.modulation.arpeggio_notes[noteIndex % sfx.modulation.arpeggio_notes.length];
-        const freq = baseFreq * Math.pow(2, semitone / 12);
-        osc.frequency.setValueAtTime(freq, time);
-        time += arpSpeed;
-        noteIndex++;
-      }
-    }
+    osc.frequency.setValueCurveAtTime(curvaF, now, duration);
+    this.vibratoLfo = null;
 
     osc.start(now);
     osc.stop(now + duration + 0.1);
@@ -281,21 +326,43 @@ class SfxPlayer {
 
     // Noise layer
     if (sfx.noise.enabled) {
-      const bufferSize = ctx.sampleRate * duration;
+      const bufferSize = Math.max(1, Math.floor(ctx.sampleRate * duration));
       const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
       const output = noiseBuffer.getChannelData(0);
-      
-      // Generate white noise filtered by period (lower period = higher freq content)
-      const filterStrength = 1 - (sfx.noise.period / 31);
+
+      // EL PERIODO CAMBIA LA FRECUENCIA DEL RUIDO, NO SU VOLUMEN.
+      //
+      // Antes esto era `(Math.random()*2-1) * (1 - period/31)`, o sea que el periodo
+      // escalaba la AMPLITUD — y con period=31 el buffer salia lleno de CEROS: un efecto
+      // con ruido a 31 sonaba en el editor como un tono limpio y en el juego como ruido.
+      // En el AY el periodo divide el reloj: mas alto = ruido mas grave, nunca silencio.
+      const paso = (1500000 / 16) / Math.max(1, sfx.noise.period) / ctx.sampleRate;
+      let fase = 0, valor = 1;
       for (let i = 0; i < bufferSize; i++) {
-        output[i] = (Math.random() * 2 - 1) * filterStrength;
+        fase += paso;
+        while (fase >= 1) { fase -= 1; valor = Math.random() < 0.5 ? -1 : 1; }
+        output[i] = valor;
+      }
+
+      // MEZCLADO: el AY no SUMA tono y ruido, los combina con un AND en el mismo canal —
+      // el ruido pica el tono. Sumarlos suena a dos voces a la vez, que es otra cosa.
+      if (sfx.noise.mix) {
+        const pasoTono = baseFreq / ctx.sampleRate;
+        let fT = 0;
+        for (let i = 0; i < bufferSize; i++) {
+          fT += pasoTono; if (fT >= 1) fT -= 1;
+          const tono = fT < 0.5 ? 1 : -1;
+          output[i] = (output[i] > 0 && tono > 0) ? 1 : -1;
+        }
+        // el tono ya va dentro del buffer: el oscilador sobra
+        try { osc.stop(now); } catch { /* aun no habia arrancado */ }
       }
 
       const noiseSource = ctx.createBufferSource();
       noiseSource.buffer = noiseBuffer;
       
       const noiseGain = ctx.createGain();
-      const noiseVol = sfx.noise.volume / 15;
+      const noiseVol = ayAmp(sfx.noise.volume);
       const noiseDecay = sfx.noise.decay_ms / 1000;
       
       noiseGain.gain.setValueAtTime(noiseVol, now);
@@ -633,6 +700,18 @@ export const SFXEditor: React.FC<SFXEditorProps> = ({
               unit="ms"
               onChange={v => updateSfx({ duration_ms: v })}
             />
+            <Slider
+              label="Repeat every"
+              value={sfx.repeat_ms || 0}
+              min={0}
+              max={1000}
+              step={10}
+              unit="ms"
+              onChange={v => updateSfx({ repeat_ms: v })}
+            />
+            <div style={{ fontSize: 10, color: '#666', marginTop: 2 }}>
+              0 = un disparo. Con valor, la envolvente y el barrido se reinician cada N ms.
+            </div>
           </div>
 
           {/* Oscillator */}
@@ -705,9 +784,44 @@ export const SFXEditor: React.FC<SFXEditorProps> = ({
           </div>
           {sfx.noise.enabled && (
             <>
+              {/* Con esto marcado el ruido y el tono suenan JUNTOS en el mismo canal, que es
+                  lo que hace el AY (los combina con un AND). Sin marcar, el ruido va aparte
+                  como una capa suya. Un golpe necesita lo primero: solo tono es un pitido. */}
+              <div style={{ fontSize: 11, color: '#666', margin: '4px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                Tone + noise (AY mix)
+                <input
+                  type="checkbox"
+                  checked={!!sfx.noise.mix}
+                  onChange={e => updateNoise({ mix: e.target.checked })}
+                />
+              </div>
               <Slider label="Period" value={sfx.noise.period} min={0} max={31} onChange={v => updateNoise({ period: v })} />
               <Slider label="Volume" value={sfx.noise.volume} min={0} max={15} onChange={v => updateNoise({ volume: v })} />
               <Slider label="Decay" value={sfx.noise.decay_ms} min={10} max={1000} unit="ms" onChange={v => updateNoise({ decay_ms: v })} />
+            </>
+          )}
+
+          {/* Vibrato. Los campos existian en el formato desde el principio pero no habia ni
+              control aqui ni sintesis: se podia guardar un vibrato en el .vsfx y no se oia
+              ni se veia en ninguna parte. El salto de Donkey Kong es exactamente esto —una
+              onda de 9 Hz entre 338 y 471 Hz— y en el editor sonaba recto. */}
+          <div style={{ fontSize: 11, color: '#666', marginTop: 16, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            Vibrato
+            <input
+              type="checkbox"
+              checked={sfx.modulation.vibrato}
+              onChange={e => updateSfx({ modulation: { ...sfx.modulation, vibrato: e.target.checked } })}
+            />
+          </div>
+          {sfx.modulation.vibrato && (
+            <>
+              <div style={{ fontSize: 10, color: '#888', marginBottom: 8 }}>
+                Depth is % of the base frequency; speed is how many wobbles per second.
+              </div>
+              <Slider label="Depth" value={sfx.modulation.vibrato_depth} min={0} max={50} unit="%"
+                      onChange={v => updateSfx({ modulation: { ...sfx.modulation, vibrato_depth: v } })} />
+              <Slider label="Speed" value={sfx.modulation.vibrato_speed} min={1} max={30} unit="Hz"
+                      onChange={v => updateSfx({ modulation: { ...sfx.modulation, vibrato_speed: v } })} />
             </>
           )}
 

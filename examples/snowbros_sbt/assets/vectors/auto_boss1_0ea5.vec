@@ -1,0 +1,135 @@
+{
+ "version": "1.0",
+ "name": "auto_boss1_0ea5",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -5,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": -8
+      },
+      {
+       "x": 4,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": 8
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -6,
+       "y": -2
+      },
+      {
+       "x": -2,
+       "y": -1
+      },
+      {
+       "x": -1,
+       "y": -4
+      },
+      {
+       "x": 1,
+       "y": -5
+      },
+      {
+       "x": 0,
+       "y": -6
+      },
+      {
+       "x": 0,
+       "y": -7
+      },
+      {
+       "x": -7,
+       "y": -7
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 4,
+       "y": 5
+      },
+      {
+       "x": 4,
+       "y": 7
+      },
+      {
+       "x": 7,
+       "y": 7
+      },
+      {
+       "x": 6,
+       "y": 5
+      }
+     ]
+    },
+    {
+     "name": "det2",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 7,
+       "y": -1
+      },
+      {
+       "x": 7,
+       "y": -4
+      },
+      {
+       "x": 6,
+       "y": -4
+      },
+      {
+       "x": 6,
+       "y": -1
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABTUlEQVR4nI2SIVTDMBCGr3kzOOQmg+scdUxOTlJXZGVx4FqZSRxzIFdXHMjJzXVudUQWB26yvLtwadYN6P9e3zXJ++7+u8SLp9CAIykVlDMA6fu01lVlYrmjGGxyiq+7IUXB4JPaE0xJfB8C/xL6yGMHmAB1f/5mD7vVw00O+ufsMzHFPBUr28Jf1jkBqriK7J5I47teMCqVh4nq5xUM+sIEyTZJwQ7C+uFfuPzICZyDOtijGSyb96Z4MYvfYAZTyFpHMwXr5BEEwwiesu3CrgPWoAvhYFCjeHpUlZJogDIx1c8mI/OQSjWGr6qiz02E14UACiP/uxIIX4Q809NikG5AKtvqfl23T5k30FbXBUkqmgG3NFncGgcu7MajJNqAwTCiVvnqBdt3K7viYZJ0BjIY2+XNamFeYrdqV9t57kEaNQhvlwVcq4weHd7EN/iTvBC86AsmAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

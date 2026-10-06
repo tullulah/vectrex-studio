@@ -1,0 +1,58 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy2_04a3",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 3,
+       "y": 5
+      },
+      {
+       "x": 2,
+       "y": 3
+      },
+      {
+       "x": 7,
+       "y": 1
+      },
+      {
+       "x": 5,
+       "y": -4
+      },
+      {
+       "x": -8,
+       "y": -5
+      },
+      {
+       "x": -8,
+       "y": 8
+      },
+      {
+       "x": 5,
+       "y": 8
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAmUlEQVR4nNWS2Q3EIAwFxxFFpIa0RV0pY1txDdsFqyUYcnAknxnJAhme8YGgBBIzgS+CX2A1J+DTuvOJbdz/cjxUorjGPtgZgZIBml60oG1Nxh2OkrDz2IWpp7DauVuCv197zkZsClb3QHgJIjkDLUE+urniVAZ9cbNdXiSPs9GvJuFgSvBnX90q/+AZMhxjh/KV6fOsGe/kB5TyLNC9y5EaAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

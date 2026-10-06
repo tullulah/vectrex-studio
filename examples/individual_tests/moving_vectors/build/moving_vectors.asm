@@ -64,6 +64,7 @@
 .equ ENEMY_STATE_ARM,     0x2007F41C  @ enemy state per slot: 8 × i32
 .equ VPY_PLAYER_ANIM_STATE, 0x2007F43C  @ player animation state: frame_idx(u8)+ticks_left(u8)
 .equ VPY_BRIGHTNESS_OVERRIDE, 0x2007F43E  @ SET_INTENSITY override: 0=.vec intensity, >0=override (1 byte)
+.equ VPY_DRAW_SCALE,      0x2007F43F  @ escala del proximo DRAW_VECTOR_EX (x32; 0/32 = 1:1, 1 byte)
 .equ WANDER_SCRATCH_ARM,  0x2007F440  @ wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)
 .equ USER_RAM_START,      0x2007F460  @ user variables begin here
 
@@ -154,13 +155,50 @@ dv_reset:
     svc     #0                      @ SYS_RESET0REF
     bx      lr
 
-@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (delta after a reset)
+@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (a ramped delta after a
+@ reset). Split into <=127-per-axis steps: a scrolled origin can land far
+@ past the i8 DAC range, and SYS_MOVE casts to i8 → the whole shape WRAPS to
+@ the wrong side of the screen (mario_poc floor tiles). SYS_MOVE ramps the
+@ INTEGRATORS (velocity×time), not an absolute DAC, so stepping accumulates
+@ to the true (off-screen) origin — the visible part draws in place and the
+@ physical screen clips the rest. A move already within +/-127 does one step
+@ (unchanged).
 .global dv_move_to
 .type dv_move_to, %function
 .thumb_func
 dv_move_to:
-    svc     #3                      @ SYS_MOVE
-    bx      lr
+    push    {r2, r3, r4, r5, r6, r7, lr}  @ callers assume traps preserve regs
+    mov     r4, r0                  @ remaining dx
+    mov     r5, r1                  @ remaining dy
+    mov     r6, #127
+    rsb     r7, r6, #0              @ r7 = -127
+    mov     r3, #8                  @ max split steps (anti-hang guard)
+dvmt_loop:
+    mov     r0, r4                  @ step_x = clamp(remaining_x, -127, 127)
+    cmp     r0, r6
+    it      gt
+    movgt   r0, r6
+    cmp     r0, r7
+    it      lt
+    movlt   r0, r7
+    mov     r1, r5                  @ step_y = clamp(remaining_y, -127, 127)
+    cmp     r1, r6
+    it      gt
+    movgt   r1, r6
+    cmp     r1, r7
+    it      lt
+    movlt   r1, r7
+    push    {r0, r1}                @ svc clobbers r0; keep the steps
+    svc     #3                      @ SYS_MOVE (this step)
+    pop     {r0, r1}
+    subs    r4, r4, r0              @ remaining -= step
+    subs    r5, r5, r1
+    orrs    r2, r4, r5              @ both zero? → done
+    beq     dvmt_done
+    subs    r3, r3, #1              @ else step, until the cap
+    bne     dvmt_loop
+dvmt_done:
+    pop     {r2, r3, r4, r5, r6, r7, pc}
 
 @ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA
 .global dv_draw_delta
@@ -412,115 +450,30 @@ psg_read:
     svc     #12                     @ SYS_PSG_READ
     bx      lr
 
-@ vpy_play_music(r0=music_data_ptr)
+@ vpy_play_music(r0=music_data_ptr) — BIOS trap: SYS_PLAY_MUSIC
 .global vpy_play_music
 .type vpy_play_music, %function
 .thumb_func
 vpy_play_music:
-    push    {r4, lr}
-    mov     r4, r0
-    ldr     r1, =PSG_MUSIC_START
-    ldr     r1, [r1]
-    cmp     r4, r1
-    beq     vpm_already
-    bl      vpy_stop_music
-    ldr     r1, =PSG_MUSIC_START
-    str     r4, [r1]
-    add     r0, r4, #8
-    ldr     r1, =PSG_MUSIC_PTR
-    str     r0, [r1]
-    ldr     r1, =PSG_IS_PLAYING
-    mov     r0, #1
-    str     r0, [r1]
-    ldr     r1, =PSG_DELAY_FRAMES
-    mov     r0, #0
-    str     r0, [r1]
-vpm_already:
-    pop     {r4, pc}
-    .ltorg
+    svc     #21                     @ SYS_PLAY_MUSIC
+    bx      lr
 
-@ vpy_stop_music() — stop playback and silence all PSG channels
+@ vpy_stop_music() — BIOS trap: SYS_STOP_MUSIC
 .global vpy_stop_music
 .type vpy_stop_music, %function
 .thumb_func
 vpy_stop_music:
-    push    {lr}
-    ldr     r0, =PSG_IS_PLAYING
-    mov     r1, #0
-    str     r1, [r0]
-    mov     r0, #8
-    mov     r1, #0
-    bl      psg_write
-    mov     r0, #9
-    mov     r1, #0
-    bl      psg_write
-    mov     r0, #10
-   mov     r1, #0
-    bl      psg_write
-    mov     r0, #7
-    mov     r1, #0x3F
- bl      psg_write
-    pop     {pc}
-    .ltorg
+    svc     #22                     @ SYS_STOP_MUSIC
+    bx      lr
 
-@ vpy_music_update() — advance PSG music sequencer by one frame
+@ vpy_music_update() — no-op: core 1 advances the sequencer, the
+@ BIOS flushes it each frame from WAIT_RECAL. Kept so the auto-
+@ injected per-frame call still links.
 .global vpy_music_update
 .type vpy_music_update, %function
 .thumb_func
 vpy_music_update:
-    push    {r4, r5, r6, r7, lr}
-    ldr     r0, =PSG_IS_PLAYING
-    ldr     r0, [r0]
-    cmp     r0, #0
-    beq     vmu_done
-    ldr     r4, =PSG_DELAY_FRAMES
-    ldr     r0, [r4]
-    cmp     r0, #0
-    beq     vmu_process
-    sub     r0, r0, #1
-    str     r0, [r4]
-    b       vmu_done
-vmu_process:
-    ldr     r5, =PSG_MUSIC_PTR
-    ldr     r5, [r5]
-    ldrb    r6, [r5, #1]         @ num_writes
-    cmp     r6, #0
-    beq     vmu_end
-    cmp     r6, #0xFF
-    beq     vmu_loop
-    add     r7, r5, #2
-vmu_write_loop:
-    cmp     r6, #0
-    beq     vmu_after_writes
-    ldrb    r0, [r7]
-    ldrb    r1, [r7, #1]
-    push    {r6, r7}
-    bl      psg_write
-    pop     {r6, r7}
-    add     r7, r7, #2
-    sub     r6, r6, #1
-    b       vmu_write_loop
-vmu_after_writes:
-    ldr     r0, =PSG_MUSIC_PTR
-    str     r7, [r0]
-    ldrb    r0, [r7]
-    str     r0, [r4]
-    b       vmu_done
-vmu_end:
-    bl      vpy_stop_music
-    b       vmu_done
-vmu_loop:
-    ldr     r0, =PSG_MUSIC_START
-    ldr     r0, [r0]
-    ldr     r1, [r0, #4]         @ loop_event_offset
-    add     r1, r0, r1
-    ldr     r0, =PSG_MUSIC_PTR
-    str     r1, [r0]
-    ldrb    r0, [r1]
-    str     r0, [r4]
-vmu_done:
-    pop     {r4, r5, r6, r7, pc}
-    .ltorg
+    bx      lr
 
 .global vpy_set_text_size
 .type vpy_set_text_size, %function
@@ -557,6 +510,14 @@ vsts_ok:
 .thumb_func
 game_main:
     push    {r4, r5, r6, r7, lr}
+    @ zero runtime RAM (RP2350 SRAM is not zero-initialised)
+    ldr     r0, =TMPVAL              @ runtime RAM base
+    ldr     r1, =USER_RAM_START      @ end of system RAM (exclusive)
+    mov     r2, #0
+gm_zero_loop:
+    str     r2, [r0], #4
+    cmp     r0, r1
+    blo     gm_zero_loop
     @ default drawing state (SRAM is not zero-initialised)
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
     mov     r0, #0
@@ -599,8 +560,6 @@ game_main:
     str     r0, [r1]
     @ main() body
     ldr     r0, =_MUSIC1_MUSIC    @ asset 'music1'
-    push    {r0}
-    pop     {r0}
     bl      vpy_play_music
     mov     r0, #0
     ldr     r1, =0x2007F460    @ BALL_X
@@ -676,45 +635,26 @@ _str_0_after:
     bl      vpy_print_number
     ldr     r1, =0x2007F460    @ BALL_X
     ldr     r0, [r1]
-    push    {r0}
     ldr     r1, =0x2007F468    @ BALL_VX
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, [r1]
     add     r0, r0, r1
     ldr     r1, =0x2007F460    @ BALL_X
     str     r0, [r1]
     ldr     r1, =0x2007F464    @ BALL_Y
     ldr     r0, [r1]
-    push    {r0}
     ldr     r1, =0x2007F46C    @ BALL_VY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, [r1]
     add     r0, r0, r1
     ldr     r1, =0x2007F464    @ BALL_Y
     str     r0, [r1]
     ldr     r1, =0x2007F460    @ BALL_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #97
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #97
     cmp     r0, r1
-    ble    .Lcf0
-    movs    r0, #1
-    b       .Lcf0e
-.Lcf0:
-    movs    r0, #0
-.Lcf0e:
-    cmp     r0, #0
-    beq     if_else_0
+    ble     if_else_0
     mov     r0, #0
-    push    {r0}
     ldr     r1, =0x2007F468    @ BALL_VX
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, [r1]
     sub     r0, r0, r1
     ldr     r1, =0x2007F468    @ BALL_VX
     str     r0, [r1]
@@ -726,25 +666,12 @@ if_else_0:
 if_end_0:
     ldr     r1, =0x2007F460    @ BALL_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-97
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-97
     cmp     r0, r1
-    bge    .Lcf1
-    movs    r0, #1
-    b       .Lcf1e
-.Lcf1:
-    movs    r0, #0
-.Lcf1e:
-    cmp     r0, #0
-    beq     if_else_1
+    bge     if_else_1
     mov     r0, #0
-    push    {r0}
     ldr     r1, =0x2007F468    @ BALL_VX
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, [r1]
     sub     r0, r0, r1
     ldr     r1, =0x2007F468    @ BALL_VX
     str     r0, [r1]
@@ -756,25 +683,12 @@ if_else_1:
 if_end_1:
     ldr     r1, =0x2007F464    @ BALL_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #77
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #77
     cmp     r0, r1
-    ble    .Lcf2
-    movs    r0, #1
-    b       .Lcf2e
-.Lcf2:
-    movs    r0, #0
-.Lcf2e:
-    cmp     r0, #0
-    beq     if_else_2
+    ble     if_else_2
     mov     r0, #0
-    push    {r0}
     ldr     r1, =0x2007F46C    @ BALL_VY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, [r1]
     sub     r0, r0, r1
     ldr     r1, =0x2007F46C    @ BALL_VY
     str     r0, [r1]
@@ -786,25 +700,12 @@ if_else_2:
 if_end_2:
     ldr     r1, =0x2007F464    @ BALL_Y
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-77
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-77
     cmp     r0, r1
-    bge    .Lcf3
-    movs    r0, #1
-    b       .Lcf3e
-.Lcf3:
-    movs    r0, #0
-.Lcf3e:
-    cmp     r0, #0
-    beq     if_else_3
+    bge     if_else_3
     mov     r0, #0
-    push    {r0}
     ldr     r1, =0x2007F46C    @ BALL_VY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, [r1]
     sub     r0, r0, r1
     ldr     r1, =0x2007F46C    @ BALL_VY
     str     r0, [r1]
@@ -816,45 +717,26 @@ if_else_3:
 if_end_3:
     ldr     r1, =0x2007F470    @ BUB_X
     ldr     r0, [r1]
-    push    {r0}
     ldr     r1, =0x2007F478    @ BUB_VX
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, [r1]
     add     r0, r0, r1
     ldr     r1, =0x2007F470    @ BUB_X
     str     r0, [r1]
     ldr     r1, =0x2007F474    @ BUB_Y
     ldr     r0, [r1]
-    push    {r0}
     ldr     r1, =0x2007F47C    @ BUB_VY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, [r1]
     add     r0, r0, r1
     ldr     r1, =0x2007F474    @ BUB_Y
     str     r0, [r1]
     ldr     r1, =0x2007F470    @ BUB_X
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #90
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #90
     cmp     r0, r1
-    ble    .Lcf4
-    movs    r0, #1
-    b       .Lcf4e
-.Lcf4:
-    movs    r0, #0
-.Lcf4e:
-    cmp     r0, #0
-    beq     if_else_4
+    ble     if_else_4
     mov     r0, #0
-    push    {r0}
     ldr     r1, =0x2007F478    @ BUB_VX
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, [r1]
     sub     r0, r0, r1
     ldr     r1, =0x2007F478    @ BUB_VX
     str     r0, [r1]
@@ -866,25 +748,12 @@ if_else_4:
 if_end_4:
     ldr     r1, =0x2007F470    @ BUB_X
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-90
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-90
     cmp     r0, r1
-    bge    .Lcf5
-    movs    r0, #1
-    b       .Lcf5e
-.Lcf5:
-    movs    r0, #0
-.Lcf5e:
-    cmp     r0, #0
-    beq     if_else_5
+    bge     if_else_5
     mov     r0, #0
-    push    {r0}
     ldr     r1, =0x2007F478    @ BUB_VX
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, [r1]
     sub     r0, r0, r1
     ldr     r1, =0x2007F478    @ BUB_VX
     str     r0, [r1]
@@ -896,25 +765,12 @@ if_else_5:
 if_end_5:
     ldr     r1, =0x2007F474    @ BUB_Y
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #70
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #70
     cmp     r0, r1
-    ble    .Lcf6
-    movs    r0, #1
-    b       .Lcf6e
-.Lcf6:
-    movs    r0, #0
-.Lcf6e:
-    cmp     r0, #0
-    beq     if_else_6
+    ble     if_else_6
     mov     r0, #0
-    push    {r0}
     ldr     r1, =0x2007F47C    @ BUB_VY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, [r1]
     sub     r0, r0, r1
     ldr     r1, =0x2007F47C    @ BUB_VY
     str     r0, [r1]
@@ -926,25 +782,12 @@ if_else_6:
 if_end_6:
     ldr     r1, =0x2007F474    @ BUB_Y
     ldr     r0, [r1]
-    push    {r0}
-    ldr     r0, =-70
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, =-70
     cmp     r0, r1
-    bge    .Lcf7
-    movs    r0, #1
-    b       .Lcf7e
-.Lcf7:
-    movs    r0, #0
-.Lcf7e:
-    cmp     r0, #0
-    beq     if_else_7
+    bge     if_else_7
     mov     r0, #0
-    push    {r0}
     ldr     r1, =0x2007F47C    @ BUB_VY
-    ldr     r0, [r1]
-    mov     r1, r0
-    pop     {r0}
+    ldr     r1, [r1]
     sub     r0, r0, r1
     ldr     r1, =0x2007F47C    @ BUB_VY
     str     r0, [r1]
@@ -1057,16 +900,22 @@ _BALL_VECTORS:
 
 _BALL_PATH0:
     .byte   127               @ intensity
-    .byte   0x03, 0x00, 0x00, 0x00  @ y=3, x=0, hdr
-    .byte   0xFF, 0xFF, 0x02  @ line dy=-1, dx=2
-    .byte   0xFF, 0xFE, 0x01  @ line dy=-2, dx=1
+    .byte   0x03, 0x00, 0x00, 0x00  @ y=3, x=0, hdr (simplified: -3 pts)
+    .byte   0xFF, 0xFD, 0x03  @ line dy=-3, dx=3
     .byte   0xFF, 0xFE, 0xFF  @ line dy=-2, dx=-1
-    .byte   0xFF, 0xFF, 0xFE  @ line dy=-1, dx=-2
-    .byte   0xFF, 0x01, 0xFE  @ line dy=1, dx=-2
-    .byte   0xFF, 0x02, 0xFF  @ line dy=2, dx=-1
-    .byte   0xFF, 0x02, 0x01  @ line dy=2, dx=1
+    .byte   0xFF, 0x00, 0xFC  @ line dy=0, dx=-4
+    .byte   0xFF, 0x04, 0x00  @ line dy=4, dx=0
     .byte   0xFF, 0x01, 0x02  @ line dy=1, dx=2
     .byte   0x02            @ end marker
+
+@ --- BALL_VEC (libvpy position-independent .vec image) ---
+.section .rodata._BALL_VEC,"a",%progbits
+    .balign 4
+.global _BALL_VEC
+_BALL_VEC:
+    .byte   0x01, 0x00, 0x7F, 0x03, 0x00, 0x00, 0x00, 0xFF, 0xFD, 0x03, 0xFF, 0xFE, 0xFF, 0xFF, 0x00, 0xFC
+    .byte   0xFF, 0x04, 0x00, 0xFF, 0x01, 0x02, 0x02
+.section .text
 
 @ --- BALL_3D_DATA (1 path(s)) ---
     .balign 4
@@ -1093,6 +942,7 @@ _BALL_3D_DATA:
     .byte   5
     .byte   6
     .byte   7
+    .balign 4
 
 @ --- bubble_small (1 path(s)) ---
 .global _BUBBLE_SMALL_VECTORS
@@ -1102,32 +952,28 @@ _BUBBLE_SMALL_VECTORS:
 
 _BUBBLE_SMALL_PATH0:
     .byte   127               @ intensity
-    .byte   0x00, 0x0A, 0x00, 0x00  @ y=0, x=10, hdr
-    .byte   0xFF, 0x03, 0xFF  @ line dy=3, dx=-1
-    .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
-    .byte   0xFF, 0x02, 0xFE  @ line dy=2, dx=-2
-    .byte   0xFF, 0x02, 0xFE  @ line dy=2, dx=-2
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0x01, 0xFD  @ line dy=1, dx=-3
-    .byte   0xFF, 0xFF, 0xFD  @ line dy=-1, dx=-3
-    .byte   0xFF, 0x00, 0xFE  @ line dy=0, dx=-2
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0xFE, 0xFE  @ line dy=-2, dx=-2
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0xFF, 0xFD, 0xFF  @ line dy=-3, dx=-1
-    .byte   0xFF, 0xFD, 0x01  @ line dy=-3, dx=1
-    .byte   0xFF, 0xFE, 0x00  @ line dy=-2, dx=0
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0xFE, 0x02  @ line dy=-2, dx=2
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0xFF, 0x03  @ line dy=-1, dx=3
-    .byte   0xFF, 0x01, 0x03  @ line dy=1, dx=3
-    .byte   0xFF, 0x00, 0x02  @ line dy=0, dx=2
-    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
-    .byte   0xFF, 0x02, 0x02  @ line dy=2, dx=2
+    .byte   0x00, 0x0A, 0x00, 0x00  @ y=0, x=10, hdr (simplified: -14 pts)
+    .byte   0xFF, 0x05, 0xFF  @ line dy=5, dx=-1
+    .byte   0xFF, 0x04, 0xFC  @ line dy=4, dx=-4
+    .byte   0xFF, 0x00, 0xF6  @ line dy=0, dx=-10
+    .byte   0xFF, 0xFC, 0xFC  @ line dy=-4, dx=-4
+    .byte   0xFF, 0xF6, 0x00  @ line dy=-10, dx=0
+    .byte   0xFF, 0xFC, 0x04  @ line dy=-4, dx=4
+    .byte   0xFF, 0x00, 0x0A  @ line dy=0, dx=10
+    .byte   0xFF, 0x04, 0x04  @ line dy=4, dx=4
     .byte   0xFF, 0x02, 0x00  @ line dy=2, dx=0
     .byte   0xFF, 0x03, 0x01  @ line dy=3, dx=1
     .byte   0x02            @ end marker
+
+@ --- BUBBLE_SMALL_VEC (libvpy position-independent .vec image) ---
+.section .rodata._BUBBLE_SMALL_VEC,"a",%progbits
+    .balign 4
+.global _BUBBLE_SMALL_VEC
+_BUBBLE_SMALL_VEC:
+    .byte   0x01, 0x00, 0x7F, 0x00, 0x0A, 0x00, 0x00, 0xFF, 0x05, 0xFF, 0xFF, 0x04, 0xFC, 0xFF, 0x00, 0xF6
+    .byte   0xFF, 0xFC, 0xFC, 0xFF, 0xF6, 0x00, 0xFF, 0xFC, 0x04, 0xFF, 0x00, 0x0A, 0xFF, 0x04, 0x04, 0xFF
+    .byte   0x02, 0x00, 0xFF, 0x03, 0x01, 0x02
+.section .text
 
 @ --- BUBBLE_SMALL_3D_DATA (1 path(s)) ---
     .balign 4
@@ -1186,6 +1032,7 @@ _BUBBLE_SMALL_3D_DATA:
     .byte   21
     .byte   22
     .byte   23
+    .balign 4
 
 @ --- hit SFX (15 frames, 16 events) ---
 .global _HIT_SFX
@@ -1193,61 +1040,61 @@ _HIT_SFX:
     .word   16  @ num_events
     .byte   0, 5  @ frame=0
     .byte   6, 8  @ PSG r6
-    .byte   4, 112  @ PSG r4
+    .byte   4, 135  @ PSG r4
     .byte   5, 1  @ PSG r5
     .byte   10, 12  @ PSG r10
     .byte   7, 27  @ PSG r7
     .byte   0, 3  @ frame=1
-    .byte   4, 132  @ PSG r4
+    .byte   4, 157  @ PSG r4
     .byte   5, 1  @ PSG r5
     .byte   10, 11  @ PSG r10
     .byte   0, 3  @ frame=2
-    .byte   4, 156  @ PSG r4
+    .byte   4, 182  @ PSG r4
     .byte   5, 1  @ PSG r5
     .byte   10, 15  @ PSG r10
     .byte   0, 2  @ frame=3
-    .byte   4, 182  @ PSG r4
+    .byte   4, 209  @ PSG r4
     .byte   5, 1  @ PSG r5
     .byte   0, 3  @ frame=4
-    .byte   4, 212  @ PSG r4
+    .byte   4, 241  @ PSG r4
     .byte   5, 1  @ PSG r5
     .byte   10, 14  @ PSG r10
     .byte   0, 3  @ frame=5
-    .byte   4, 246  @ PSG r4
-    .byte   5, 1  @ PSG r5
+    .byte   4, 22  @ PSG r4
+    .byte   5, 2  @ PSG r5
     .byte   10, 13  @ PSG r10
     .byte   0, 3  @ frame=6
-    .byte   4, 30  @ PSG r4
+    .byte   4, 64  @ PSG r4
     .byte   5, 2  @ PSG r5
     .byte   10, 12  @ PSG r10
     .byte   0, 2  @ frame=7
-    .byte   4, 76  @ PSG r4
+    .byte   4, 113  @ PSG r4
     .byte   5, 2  @ PSG r5
     .byte   0, 2  @ frame=8
-    .byte   4, 131  @ PSG r4
+    .byte   4, 172  @ PSG r4
     .byte   5, 2  @ PSG r5
     .byte   0, 2  @ frame=9
-    .byte   4, 198  @ PSG r4
+    .byte   4, 242  @ PSG r4
     .byte   5, 2  @ PSG r5
     .byte   0, 3  @ frame=10
-    .byte   4, 24  @ PSG r4
+    .byte   4, 73  @ PSG r4
     .byte   5, 3  @ PSG r5
     .byte   7, 59  @ PSG r7
     .byte   0, 3  @ frame=11
-    .byte   4, 127  @ PSG r4
+    .byte   4, 183  @ PSG r4
     .byte   5, 3  @ PSG r5
     .byte   10, 9  @ PSG r10
     .byte   0, 3  @ frame=12
-    .byte   4, 5  @ PSG r4
+    .byte   4, 70  @ PSG r4
     .byte   5, 4  @ PSG r5
     .byte   10, 7  @ PSG r10
     .byte   0, 3  @ frame=13
-    .byte   4, 187  @ PSG r4
-    .byte   5, 4  @ PSG r5
+    .byte   4, 7  @ PSG r4
+    .byte   5, 5  @ PSG r5
     .byte   10, 4  @ PSG r10
     .byte   0, 3  @ frame=14
-    .byte   4, 190  @ PSG r4
-    .byte   5, 5  @ PSG r5
+    .byte   4, 26  @ PSG r4
+    .byte   5, 6  @ PSG r5
     .byte   10, 2  @ PSG r10
     .byte   0, 2  @ frame=15
     .byte   10, 0  @ PSG r10

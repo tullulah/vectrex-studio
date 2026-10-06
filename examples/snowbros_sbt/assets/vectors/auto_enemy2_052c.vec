@@ -1,0 +1,245 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy2_052c",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -12,
+       "y": -1
+      },
+      {
+       "x": -11,
+       "y": 0
+      },
+      {
+       "x": -10,
+       "y": -2
+      },
+      {
+       "x": -8,
+       "y": 0
+      },
+      {
+       "x": -7,
+       "y": 6
+      },
+      {
+       "x": -5,
+       "y": 2
+      },
+      {
+       "x": -3,
+       "y": 2
+      },
+      {
+       "x": -3,
+       "y": 6
+      },
+      {
+       "x": 0,
+       "y": 9
+      },
+      {
+       "x": 2,
+       "y": 16
+      },
+      {
+       "x": 7,
+       "y": 4
+      },
+      {
+       "x": 9,
+       "y": 11
+      },
+      {
+       "x": 12,
+       "y": 6
+      },
+      {
+       "x": 12,
+       "y": 2
+      },
+      {
+       "x": 14,
+       "y": 3
+      },
+      {
+       "x": 16,
+       "y": -5
+      },
+      {
+       "x": 16,
+       "y": -10
+      },
+      {
+       "x": 13,
+       "y": -12
+      },
+      {
+       "x": -15,
+       "y": -12
+      },
+      {
+       "x": -16,
+       "y": -7
+      }
+     ]
+    },
+    {
+     "name": "sil1",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 12,
+       "y": 11
+      },
+      {
+       "x": 11,
+       "y": 12
+      },
+      {
+       "x": 12,
+       "y": 14
+      },
+      {
+       "x": 13,
+       "y": 13
+      },
+      {
+       "x": 14,
+       "y": 11
+      }
+     ]
+    },
+    {
+     "name": "sil2",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -14,
+       "y": 10
+      },
+      {
+       "x": -14,
+       "y": 14
+      },
+      {
+       "x": -12,
+       "y": 12
+      },
+      {
+       "x": -13,
+       "y": 7
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 14,
+       "y": -6
+      },
+      {
+       "x": 15,
+       "y": -6
+      },
+      {
+       "x": 15,
+       "y": -10
+      },
+      {
+       "x": 10,
+       "y": -11
+      },
+      {
+       "x": 9,
+       "y": -10
+      },
+      {
+       "x": 12,
+       "y": -10
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -7,
+       "y": -11
+      },
+      {
+       "x": -5,
+       "y": -10
+      },
+      {
+       "x": -5,
+       "y": -12
+      },
+      {
+       "x": -8,
+       "y": -12
+      }
+     ]
+    },
+    {
+     "name": "det2",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 1,
+       "y": -10
+      },
+      {
+       "x": 1,
+       "y": -11
+      },
+      {
+       "x": -1,
+       "y": -11
+      },
+      {
+       "x": 0,
+       "y": -10
+      },
+      {
+       "x": 0,
+       "y": -9
+      },
+      {
+       "x": 2,
+       "y": -9
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACCUlEQVR4nO1WO27DMAyliVzIPYLGdMxROjqju7VHyZiMPkJ9JBV09FyaFmXFLZClBIJIMsn3+NGH6I/kShT32DE9WRiD2O6L4NHoXZwY+7iXhNgJiRoiFoeLrCrB5f/Yhzrd98HpgfeB6LTtJCsbdshMM1JDl+H+n2MXd2QCdkhtrgyl0rCeZJmVwPsQtzIh4MfWJ8EY3MZHoE3fCLCUsAuUBSuUiDF4pcein5x2yvHlp7lWJLoKAiWxvZHtFSH0cib66hfLQkay45WBaa9IxNg5hQi3hHfXHCSsSBZ0GaDr9AFXAVtjANt1r9lShqZymG3JWwRmB6eQPyuQfluG031H2DXbB0x7xYu2MgsugaginMdpj6+cd85c132jQXkFnozdY7l07puLpkYOK+ddEOS4aLRcnTFGdrSIbS56lIEGuo4U5fD7/YNEEymJ853nERhDUU60Ug09wNzZULDhOXqcbDbN1kjmANHftJ0lDj1ZS7ayG96I4jIDOWdetDbSmgZUOrh9eVF7G7FmjrkHLDrYqsjmFmkiYvcdUEq9vgsA5mUgQ1pjHrAgW2MFju2Uc54inZyN9+s2Kw44Vhv9bLLO9fx2TiCqV2RNtD7aFERbIGlE7D7xCMKbXroSD0tcPPiG37Teh/mb2IgPbQs97Rf/0Ic0lhluK8Qf1HhmXBANANsau3+hZ8k38dlDz8iGiYcAAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

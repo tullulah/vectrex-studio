@@ -59,7 +59,7 @@ also why an imported C or SBT program gets UVM2 support for free.
 
 ## The SDK
 
-`ide/electron/resources/uvm2-sdk/` — compiled and linked into every UVM2 build.
+`ide/electron/resources/uvmc2-sdk/uvm2-sdk/` — compiled and linked into every UVM2 build.
 
 | File | Role |
 |---|---|

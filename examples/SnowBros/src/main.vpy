@@ -10,6 +10,7 @@ const START_FLOOR       = 0 # piso inicial (0=normal floor 1, 2=floor 2, etc.)
 
 # ── States ──────────────────────────────────────────────────────────────────
 const STATE_TITLE       = 0  # título + "press a button"
+
 const STATE_GAME_START  = 1  # "ROUND N" antes de empezar
 const STATE_PLAYING     = 2  # gameplay activo
 const STATE_PLAYER_DEAD = 3  # animación de muerte + delay
@@ -268,7 +269,7 @@ def state_player_dead():
 
 def draw_player_death():
     SET_INTENSITY(65)
-    stop_music()
+    STOP_MUSIC()
     elapsed = DEATH_DELAY - frame_timer
     if elapsed < 12:
         DRAW_VECTOR("player_die1", player_x, player_y - camera_y, player_facing)

@@ -21,19 +21,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   emuAssemble: (args: { asmPath: string; outPath?: string; extra?: string[] }) => ipcRenderer.invoke('emu:assemble', args) as Promise<{ ok?: boolean; error?: string; binPath?: string; size?: number; base64?: string; stdout?: string; stderr?: string }>,
   runCompile: (args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string }) => ipcRenderer.invoke('run:compile', args) as Promise<{ ok?: boolean; error?: string; binPath?: string; size?: number; stdout?: string; stderr?: string; conflict?: boolean; currentMTime?: number }>,
   // External C/C++ projects: build (and optionally deploy) via their own toolchain.
-  runBuildExternal: (args: { manifestPath: string; deploy?: boolean; sdPath?: string; target?: 'pitrex' | 'rp2350' | 'uvm2'; preview?: boolean }) => ipcRenderer.invoke('run:buildExternal', args) as Promise<{ ok?: boolean; artifactPath?: string; error?: string; detail?: string }>,
+  runBuildExternal: (args: { manifestPath: string; deploy?: boolean; sdPath?: string; target?: 'pitrex' | 'rp2350' | 'uvm2'; preview?: boolean; uvm2Flags?: string }) => ipcRenderer.invoke('run:buildExternal', args) as Promise<{ ok?: boolean; artifactPath?: string; error?: string; detail?: string }>,
   // Build the WASM simulator module (for the emulator panel) of an external project.
-  runBuildSim: (args: { manifestPath: string }) => ipcRenderer.invoke('run:buildSim', args) as Promise<{ ok?: boolean; modulePath?: string; error?: string; detail?: string }>,
+  runBuildSim: (args: { manifestPath: string }) => ipcRenderer.invoke('run:buildSim', args) as Promise<{ ok?: boolean; modulePath?: string; romZipBase64?: string | null; error?: string; detail?: string }>,
   importCProject: (args?: { dir?: string }) => ipcRenderer.invoke('project:importC', args) as Promise<{ ok?: boolean; manifestPath?: string; existed?: boolean; detectedTarget?: string | null; canceled?: boolean; error?: string }>,
   onRunStdout: (cb: (chunk: string) => void) => ipcRenderer.on('run://stdout', (_e: IpcRendererEvent, data: string) => cb(data)),
   onRunStderr: (cb: (chunk: string) => void) => ipcRenderer.on('run://stderr', (_e: IpcRendererEvent, data: string) => cb(data)),
   onRunDiagnostics: (cb: (diags: Array<{ file: string; line: number; col: number; message: string }>) => void) => ipcRenderer.on('run://diagnostics', (_e: IpcRendererEvent, diags) => cb(diags)),
   onRunStatus: (cb: (line: string) => void) => ipcRenderer.on('run://status', (_e: IpcRendererEvent, data: string) => cb(data)),
   onEmuLoaded: (cb: (info: { size: number }) => void) => ipcRenderer.on('emu://loaded', (_e: IpcRendererEvent, data) => cb(data)), // kept for backward compatibility (may be unused)
-  onCompiledBin: (cb: (payload: { base64: string; size: number; binPath: string; sFileText?: string | null; libvpyAsm?: string | null }) => void) => ipcRenderer.on('emu://compiledBin', (_e: IpcRendererEvent, data) => cb(data)),
+  onCompiledBin: (cb: (payload: { base64: string; size: number; binPath: string; sFileText?: string | null; libvpyAsm?: string | null; elfBase64?: string | null; sdFiles?: Record<string, string> }) => void) => ipcRenderer.on('emu://compiledBin', (_e: IpcRendererEvent, data) => cb(data)),
   // setVectorMode legacy removed
   listSources: (args?: { limit?: number }) => ipcRenderer.invoke('list:sources', args) as Promise<{ ok?:boolean; sources?: Array<{ path:string; kind:'vpy'|'asm'; size:number; mtime:number }> }> ,
   sdSimList: () => ipcRenderer.invoke('sd:simList') as Promise<{ ok?: boolean; dir?: string; files?: string[]; previews?: Record<string, string>; error?: string }>,
+  sdRomZip: (stem: string, binPath?: string) => ipcRenderer.invoke('sd:romZip', stem, binPath) as Promise<{ ok?: boolean; dir?: string; name?: string; size?: number; base64?: string; error?: string; want?: string; have?: string[] }>,
   vrecCompile: (vrecPath: string) => ipcRenderer.invoke('vrec:compile', vrecPath) as Promise<{ ok?: boolean; vrbPath?: string; error?: string }>,
   // Disassemble a ROM snapshot (base64) using buildtools/vpy_disasm
   disassembleSnapshot: (args: { base64: string; startHex?: string; binPath?: string }) => ipcRenderer.invoke('tools:disassembleSnapshot', args) as Promise<{ ok: boolean; output?: string; error?: string; snapshotPath?: string; dissPath?: string; message?: string; stderr?: string }>,

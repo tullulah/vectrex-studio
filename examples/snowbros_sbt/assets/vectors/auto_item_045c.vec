@@ -1,0 +1,238 @@
+{
+ "version": "1.0",
+ "name": "auto_item_045c",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -3,
+       "y": -12
+      },
+      {
+       "x": -12,
+       "y": -11
+      },
+      {
+       "x": -13,
+       "y": -5
+      },
+      {
+       "x": -8,
+       "y": -5
+      },
+      {
+       "x": -9,
+       "y": 5
+      },
+      {
+       "x": -7,
+       "y": 6
+      },
+      {
+       "x": -8,
+       "y": 9
+      },
+      {
+       "x": -5,
+       "y": 13
+      },
+      {
+       "x": -2,
+       "y": 11
+      },
+      {
+       "x": 3,
+       "y": 13
+      },
+      {
+       "x": 4,
+       "y": 11
+      },
+      {
+       "x": 5,
+       "y": 8
+      },
+      {
+       "x": 3,
+       "y": 5
+      },
+      {
+       "x": 5,
+       "y": 0
+      },
+      {
+       "x": 8,
+       "y": -1
+      },
+      {
+       "x": 10,
+       "y": -5
+      },
+      {
+       "x": 14,
+       "y": -4
+      },
+      {
+       "x": 16,
+       "y": -9
+      },
+      {
+       "x": 13,
+       "y": -10
+      },
+      {
+       "x": 14,
+       "y": -12
+      },
+      {
+       "x": 10,
+       "y": -13
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -8,
+       "y": 1
+      },
+      {
+       "x": -8,
+       "y": 5
+      },
+      {
+       "x": -5,
+       "y": 6
+      },
+      {
+       "x": -5,
+       "y": 3
+      },
+      {
+       "x": -6,
+       "y": 3
+      },
+      {
+       "x": -7,
+       "y": -3
+      },
+      {
+       "x": -8,
+       "y": -3
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 7,
+       "y": -8
+      },
+      {
+       "x": 0,
+       "y": -7
+      },
+      {
+       "x": 0,
+       "y": -6
+      },
+      {
+       "x": 5,
+       "y": -7
+      },
+      {
+       "x": 4,
+       "y": -6
+      },
+      {
+       "x": 6,
+       "y": -5
+      },
+      {
+       "x": 7,
+       "y": -7
+      },
+      {
+       "x": 10,
+       "y": -5
+      }
+     ]
+    },
+    {
+     "name": "det2",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 0,
+       "y": 4
+      },
+      {
+       "x": -2,
+       "y": 1
+      },
+      {
+       "x": -3,
+       "y": 5
+      },
+      {
+       "x": -4,
+       "y": 6
+      },
+      {
+       "x": -2,
+       "y": 5
+      },
+      {
+       "x": 0,
+       "y": 6
+      }
+     ]
+    },
+    {
+     "name": "det3",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 6,
+       "y": -2
+      },
+      {
+       "x": 3,
+       "y": -1
+      },
+      {
+       "x": 3,
+       "y": 1
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAChklEQVR4nO1WLXCrQBBeGESeS9whkcURGRnZ514kksq4VlZGto64h6yMbGVkJDgikeAa17i82eUWjp8OkKHzKvrNMHdsLnzf7e7tHsAP/jO0IYuFEBccsyzT6ra6fXQBQojLehHQ3D94RIa2le2BOV1U7EME6H3JkUhYJj0ohHeO5GhDqPZRBSB4lypQFINFDIU+ZPeM9HQoRLXZRxXAyJK0GHdxUBCyPYp2ZB+aA0bXAvzgDoLLygZIo3Y7JM3w9IXW++gtzwD2BCA+g9hPSiFruc6/7hgaXeRErGDqWpBBUr47lhSSgvDF5UuOoQpzPiMRBPSItF0LvfdKSTY29CGLp4756Y7xN8yHLytEjDR8p/HmeQ43Hh4BBXE1X0Y5hl1C6vMieXsmo3FN/I9BXHlnT2BoUMzpJQGxb3bOUUJwitLC1ZwTKAiJF8KD1e0DeC9bygc8wl05oXURFrWAvRCXBaliQ9gT8gYKOWRB7ilZuD7zhNFGyPPGn9QkYxEA8Nd+oPEufiLSI9yXAvHZN7/P39bbOh/29Y371u4+e0Ku57gjuev8oefDPeTE8ZnsH07OzKHgS436bb3V7bLFcp1v7F4CY/3o+2B5S3oQKAJdjoLQhj2CQ8U3Kp6jiIqL1SsWi7ib3Ra7Pd6HlbhjScbMD8NcBIN2LBtWEuzBBDdPXvTY+1u+JknpCme0eYAuFtxiZ+U5R0I8YhQG1wLvdwTBqwPz+ZqIGL+iJSRu/q6SFwLlHQLRyEz2AmMrttU6IJOLjyCK6IPnjaBxEwa0cxKSZVqrgLqt3pIJNRGe47QSLzaydsg7AxMPvpB0ipKCMCcqdUAhrvxfitDgCgzteCrhD74d/gFgsE+FRujTDgAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

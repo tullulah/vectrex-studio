@@ -1,0 +1,179 @@
+{
+ "version": "1.0",
+ "name": "auto_boss1_0e08",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": 8
+      },
+      {
+       "x": -5,
+       "y": 8
+      },
+      {
+       "x": -4,
+       "y": 5
+      },
+      {
+       "x": 1,
+       "y": 2
+      },
+      {
+       "x": 1,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 8
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -5,
+       "y": -5
+      },
+      {
+       "x": -4,
+       "y": -4
+      },
+      {
+       "x": -5,
+       "y": 2
+      },
+      {
+       "x": -3,
+       "y": -1
+      },
+      {
+       "x": -1,
+       "y": -1
+      },
+      {
+       "x": -1,
+       "y": 1
+      },
+      {
+       "x": 1,
+       "y": 1
+      },
+      {
+       "x": 3,
+       "y": 4
+      },
+      {
+       "x": 4,
+       "y": 5
+      },
+      {
+       "x": 3,
+       "y": 4
+      },
+      {
+       "x": 4,
+       "y": -1
+      },
+      {
+       "x": 1,
+       "y": 0
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 7,
+       "y": -3
+      },
+      {
+       "x": 7,
+       "y": -5
+      },
+      {
+       "x": 3,
+       "y": -5
+      },
+      {
+       "x": 3,
+       "y": -4
+      },
+      {
+       "x": 6,
+       "y": -4
+      },
+      {
+       "x": 6,
+       "y": -2
+      },
+      {
+       "x": 4,
+       "y": -1
+      },
+      {
+       "x": 7,
+       "y": -1
+      }
+     ]
+    },
+    {
+     "name": "det2",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -7,
+       "y": -5
+      },
+      {
+       "x": -5,
+       "y": -5
+      },
+      {
+       "x": -4,
+       "y": -7
+      },
+      {
+       "x": -6,
+       "y": -7
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAv0lEQVR4nI1TgRHDIAjEXobIDF3LubIWM3QLclggSD+pf2c0wj+fiI2IhC40AuiWc3DZf39nSeMOoiJDiOf1qybeKRy+sKqVJAtORswr7yxjpkruWASS/d8IGh5EAkFGDoihm2kv/0yClXmNPAl0lPgQi72+UHX6bnBiko4EEiM+Wx9jU4UPtWhLbZhubbvbQeR4xaaPSlYouRKjGw2a29SOB5zslyYL53jGEPiXFA7SbXTxuExRHdhV4o8rez8BnV/IvTVPNbEAAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

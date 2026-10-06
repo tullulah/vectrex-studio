@@ -46,6 +46,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -57,6 +59,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     ; === Initialize Joystick (one-time setup) ===
     JSR $F1AF    ; DP_to_C8 (required for RAM access)
     CLR $C823    ; CRITICAL: Clear analog mode flag (Joy_Analog does DEC on this)
@@ -72,6 +75,7 @@ MAIN:
     ; Mux configured - J1_X()/J1_Y() can now be called
 
     ; Call main() for initialization
+; VPy_LINE:11
     ; TODO: Statement Pass { source_line: 11 }
 
 .MAIN_LOOP:
@@ -81,6 +85,8 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+; VPy_LINE:15
+; NATIVE_CALL: DRAW_RECT at line 15
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -111,6 +117,8 @@ LOOP_BODY:
     TFR A,DP    ; Restore DP=$C8
     LDD #0
     STD RESULT
+; VPy_LINE:18
+; NATIVE_CALL: DRAW_RECT at line 18
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -141,6 +149,8 @@ LOOP_BODY:
     TFR A,DP    ; Restore DP=$C8
     LDD #0
     STD RESULT
+; VPy_LINE:21
+; NATIVE_CALL: DRAW_RECT at line 21
     LDA #$D0
     TFR A,DP
     JSR Reset0Ref
@@ -293,10 +303,9 @@ DRAW_RECT_RUNTIME:
     NEGB                ; -width
     JSR Draw_Line_d
     
-    ; Draw up side
+    ; Draw up side (close rectangle: +height closes the -height of down side)
     CLR Vec_Misc_Count
-    LDA 2,S             ; height
-    NEGA                ; -height
+    LDA 3,S             ; +height
     LDB #0
     JSR Draw_Line_d
     

@@ -34,7 +34,6 @@
 .equ CAMERA_X,            0x2007F14C  @ camera X offset (used by show_level)
 .equ CAMERA_Y,            0x2007F150  @ camera Y offset
 .equ TEXT_SIZE,           0x2007F154  @ text scale factor (1=normal, 2=double, ...)
-.equ TEXT_COLOR,          0x2007F158  @ text intensity (0-127)
 .equ LEVEL_DATA_PTR,      0x2007F15C  @ pointer to loaded level ROM data
 .equ DBGVAL,              0x2007F160  @ debug_print last written value
 .equ PRINT_BEAM_X,        0x2007F164  @ beam X shadow during print_text
@@ -65,6 +64,7 @@
 .equ ENEMY_STATE_ARM,     0x2007F41C  @ enemy state per slot: 8 × i32
 .equ VPY_PLAYER_ANIM_STATE, 0x2007F43C  @ player animation state: frame_idx(u8)+ticks_left(u8)
 .equ VPY_BRIGHTNESS_OVERRIDE, 0x2007F43E  @ SET_INTENSITY override: 0=.vec intensity, >0=override (1 byte)
+.equ VPY_DRAW_SCALE,      0x2007F43F  @ escala del proximo DRAW_VECTOR_EX (x32; 0/32 = 1:1, 1 byte)
 .equ WANDER_SCRATCH_ARM,  0x2007F440  @ wander AI scratch: 8 slots x 4 bytes (scratch_a|target_x)
 .equ USER_RAM_START,      0x2007F460  @ user variables begin here
 
@@ -155,13 +155,50 @@ dv_reset:
     svc     #0                      @ SYS_RESET0REF
     bx      lr
 
-@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (delta after a reset)
+@ dv_move_to(r0=dx, r1=dy) — BIOS trap: SYS_MOVE (a ramped delta after a
+@ reset). Split into <=127-per-axis steps: a scrolled origin can land far
+@ past the i8 DAC range, and SYS_MOVE casts to i8 → the whole shape WRAPS to
+@ the wrong side of the screen (mario_poc floor tiles). SYS_MOVE ramps the
+@ INTEGRATORS (velocity×time), not an absolute DAC, so stepping accumulates
+@ to the true (off-screen) origin — the visible part draws in place and the
+@ physical screen clips the rest. A move already within +/-127 does one step
+@ (unchanged).
 .global dv_move_to
 .type dv_move_to, %function
 .thumb_func
 dv_move_to:
-    svc     #3                      @ SYS_MOVE
-    bx      lr
+    push    {r2, r3, r4, r5, r6, r7, lr}  @ callers assume traps preserve regs
+    mov     r4, r0                  @ remaining dx
+    mov     r5, r1                  @ remaining dy
+    mov     r6, #127
+    rsb     r7, r6, #0              @ r7 = -127
+    mov     r3, #8                  @ max split steps (anti-hang guard)
+dvmt_loop:
+    mov     r0, r4                  @ step_x = clamp(remaining_x, -127, 127)
+    cmp     r0, r6
+    it      gt
+    movgt   r0, r6
+    cmp     r0, r7
+    it      lt
+    movlt   r0, r7
+    mov     r1, r5                  @ step_y = clamp(remaining_y, -127, 127)
+    cmp     r1, r6
+    it      gt
+    movgt   r1, r6
+    cmp     r1, r7
+    it      lt
+    movlt   r1, r7
+    push    {r0, r1}                @ svc clobbers r0; keep the steps
+    svc     #3                      @ SYS_MOVE (this step)
+    pop     {r0, r1}
+    subs    r4, r4, r0              @ remaining -= step
+    subs    r5, r5, r1
+    orrs    r2, r4, r5              @ both zero? → done
+    beq     dvmt_done
+    subs    r3, r3, #1              @ else step, until the cap
+    bne     dvmt_loop
+dvmt_done:
+    pop     {r2, r3, r4, r5, r6, r7, pc}
 
 @ dv_draw_delta(r0=dx, r1=dy) — BIOS trap: SYS_DRAW_DELTA
 .global dv_draw_delta
@@ -204,13 +241,8 @@ vpy_print_text:
     ldr     r12, =VPY_BRIGHTNESS_OVERRIDE
     ldrb    r12, [r12]
     cmp     r12, #0
-    bne     vpt_col
-    ldr     r12, =TEXT_COLOR
-    ldr     r12, [r12]
-    cmp     r12, #0
-    bne     vpt_col
-    mov     r12, #100
-vpt_col:
+    it      eq
+    moveq   r12, #100
     orr     r3, r3, r12, lsl #8
     svc     #16                     @ SYS_PRINT_TEXT
     bx      lr
@@ -308,14 +340,6 @@ vsts_ok:
     str     r1, [r0]
     bx      lr
 
-.global vpy_set_text_color
-.type vpy_set_text_color, %function
-.thumb_func
-vpy_set_text_color:
-    ldr     r1, =TEXT_COLOR
-    str     r0, [r1]
-    bx      lr
-
 @ --- User variables (RAM) ---
 .equ VAR_COUNTER, 0x2007F460
 
@@ -328,15 +352,20 @@ vpy_set_text_color:
 .thumb_func
 game_main:
     push    {r4, r5, r6, r7, lr}
+    @ zero runtime RAM (RP2350 SRAM is not zero-initialised)
+    ldr     r0, =TMPVAL              @ runtime RAM base
+    ldr     r1, =USER_RAM_START      @ end of system RAM (exclusive)
+    mov     r2, #0
+gm_zero_loop:
+    str     r2, [r0], #4
+    cmp     r0, r1
+    blo     gm_zero_loop
     @ default drawing state (SRAM is not zero-initialised)
     ldr     r1, =VPY_BRIGHTNESS_OVERRIDE
     mov     r0, #0
     strb    r0, [r1]
     ldr     r1, =TEXT_SIZE
     mov     r0, #3
-    str     r0, [r1]
-    ldr     r1, =TEXT_COLOR
-    mov     r0, #100
     str     r0, [r1]
     @ initialize globals
     ldr     r1, =0x2007F460
@@ -412,10 +441,7 @@ _str_1_after:
     bl      vpy_print_number
     ldr     r1, =0x2007F460    @ COUNTER
     ldr     r0, [r1]
-    push    {r0}
-    mov     r0, #1
-    mov     r1, r0
-    pop     {r0}
+    mov     r1, #1
     add     r0, r0, r1
     ldr     r1, =0x2007F460    @ COUNTER
     str     r0, [r1]

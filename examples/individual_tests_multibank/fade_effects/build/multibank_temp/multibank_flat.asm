@@ -46,6 +46,8 @@ START:
     STA VIA_t1_cnt_lo
     LDX #Vec_Default_Stk ; Same stack as BIOS default ($CBEA)
     TFR X,S
+    LDS #$CFFF       ; Stack -> top of Vectrex 2KB RAM (avoids user var collision)
+
     ; Initialize bank tracking vars to 0 (prevents spurious $DF00 writes)
     LDA #0
     STA >CURRENT_ROM_BANK   ; Bank 0 is always active at boot
@@ -57,6 +59,7 @@ MAIN:
     ; Initialize global variables
     CLR VPY_MOVE_X        ; MOVE offset defaults to 0
     CLR VPY_MOVE_Y        ; MOVE offset defaults to 0
+    CLR DRAW_VEC_INTENSITY ; 0 = use recorded/vector intensity (no override)
     LDA #$F8
     STA TEXT_SCALE_H      ; Default height = -8 (normal size)
     LDA #$48
@@ -78,6 +81,7 @@ MAIN:
     ; Mux configured - J1_X()/J1_Y() can now be called
 
     ; Call main() for initialization
+; VPy_LINE:16
     LDD #100
     STD VAR_BRIGHTNESS
 
@@ -88,26 +92,31 @@ MAIN:
 LOOP_BODY:
     JSR Wait_Recal   ; Synchronize with screen refresh (mandatory)
     JSR $F1BA    ; Read_Btns: PSG reg14 -> $C80F (active-HIGH), edge -> $C811
+; VPy_LINE:19
+; NATIVE_CALL: PRINT_TEXT at line 19
     ; PRINT_TEXT: Print text at position
     LDD #-60
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #90
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_1817025702533201      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:20
+; NATIVE_CALL: PRINT_TEXT at line 20
     ; PRINT_TEXT: Print text at position
     LDD #-80
-    STD VAR_ARG0
+    STD >VAR_ARG0
     LDD #70
-    STD VAR_ARG1
+    STD >VAR_ARG1
     LDX #PRINT_TEXT_STR_166972285132112481      ; Pointer to string in helpers bank
-    STX VAR_ARG2
+    STX >VAR_ARG2
     JSR VECTREX_PRINT_TEXT
     LDD #0
     STD RESULT
+; VPy_LINE:22
     LDA >$C80F   ; Vec_Btns_1: bit0=1 means btn1 pressed
     BITA #$01
     BNE .J1B1_0_ON
@@ -118,6 +127,7 @@ LOOP_BODY:
 .J1B1_0_END:
     STD RESULT
     LBEQ IF_NEXT_1
+; VPy_LINE:23
     LDD #5
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_BRIGHTNESS
@@ -129,12 +139,11 @@ LOOP_BODY:
     LDD #1
 .CMP_0_END:
     LBEQ IF_NEXT_3
-    LDD >VAR_BRIGHTNESS
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:24
     LDD #5
-    STD TMPPTR      ; Save right operand to TMPPTR
-    LDD TMPVAL      ; Get left operand from TMPVAL
-    SUBD TMPPTR     ; Left - Right
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_BRIGHTNESS
+    SUBD TMPVAL         ; D = LEFT - RIGHT
     STD VAR_BRIGHTNESS
     LBRA IF_END_2
 IF_NEXT_3:
@@ -142,6 +151,7 @@ IF_END_2:
     LBRA IF_END_0
 IF_NEXT_1:
 IF_END_0:
+; VPy_LINE:26
     LDA >$C80F   ; Vec_Btns_1: bit1=1 means btn2 pressed
     BITA #$02
     BNE .J1B2_1_ON
@@ -152,6 +162,7 @@ IF_END_0:
 .J1B2_1_END:
     STD RESULT
     LBEQ IF_NEXT_5
+; VPy_LINE:27
     LDD #120
     STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)
     LDD >VAR_BRIGHTNESS
@@ -163,10 +174,11 @@ IF_END_0:
     LDD #1
 .CMP_1_END:
     LBEQ IF_NEXT_7
-    LDD >VAR_BRIGHTNESS
-    STD TMPVAL          ; Save left operand to TMPVAL (stack-safe temp)
+; VPy_LINE:28
     LDD #5
-    ADDD TMPVAL         ; D = D + LEFT (from TMPVAL)
+    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)
+    LDD >VAR_BRIGHTNESS
+    ADDD TMPVAL         ; D = LEFT + RIGHT
     STD VAR_BRIGHTNESS
     LBRA IF_END_6
 IF_NEXT_7:
@@ -174,6 +186,8 @@ IF_END_6:
     LBRA IF_END_4
 IF_NEXT_5:
 IF_END_4:
+; VPy_LINE:30
+; NATIVE_CALL: DRAW_LINE at line 30
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #-40
     STD DRAW_LINE_ARGS+0    ; x0
@@ -188,6 +202,8 @@ IF_END_4:
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
+; VPy_LINE:31
+; NATIVE_CALL: DRAW_LINE at line 31
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #40
     STD DRAW_LINE_ARGS+0    ; x0
@@ -202,6 +218,8 @@ IF_END_4:
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
+; VPy_LINE:32
+; NATIVE_CALL: DRAW_LINE at line 32
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #40
     STD DRAW_LINE_ARGS+0    ; x0
@@ -216,6 +234,8 @@ IF_END_4:
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
+; VPy_LINE:33
+; NATIVE_CALL: DRAW_LINE at line 33
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #-40
     STD DRAW_LINE_ARGS+0    ; x0
@@ -230,6 +250,8 @@ IF_END_4:
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
+; VPy_LINE:34
+; NATIVE_CALL: DRAW_LINE at line 34
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #-40
     STD DRAW_LINE_ARGS+0    ; x0
@@ -244,6 +266,8 @@ IF_END_4:
     JSR DRAW_LINE_WRAPPER
     LDD #0
     STD RESULT
+; VPy_LINE:35
+; NATIVE_CALL: DRAW_LINE at line 35
     ; DRAW_LINE: Draw line from (x0,y0) to (x1,y1)
     LDD #40
     STD DRAW_LINE_ARGS+0    ; x0
@@ -289,26 +313,27 @@ IF_END_4:
 VECTREX_PRINT_TEXT:
     ; VPy signature: PRINT_TEXT(x, y, string)
     ; BIOS signature: Print_Str_d(A=Y, B=X, U=string)
-    ; NOTE: Do NOT set VIA_cntl=$98 here - would release /ZERO prematurely
-    ;       causing integrators to drift toward joystick DAC value.
-    ;       Moveto_d_7F (called by Print_Str_d) handles VIA_cntl via $CE.
     LDA #$D0
-    TFR A,DP       ; Set Direct Page to $D0 for BIOS
-    JSR Intensity_5F ; Ensure consistent text brightness (DP=$D0 required)
-    JSR Reset0Ref   ; Reset beam to center before positioning text
-    LDU VAR_ARG2   ; string pointer
-    LDA >TEXT_SCALE_H ; height (signed byte, e.g. $F8=-8)
-    STA >$C82A      ; Vec_Text_Height: controls character Y scale
-    LDA >TEXT_SCALE_W ; width (unsigned byte, e.g. 72)
-    STA >$C82B      ; Vec_Text_Width: controls character X spacing
-    LDA >VAR_ARG1+1 ; Y coordinate
-    LDB >VAR_ARG0+1 ; X coordinate
+    TFR A,DP
+    JSR Intensity_5F
+    JSR Reset0Ref
+    LDU >VAR_ARG2
+    LDA >TEXT_SCALE_H
+    STA >$C82A          ; Vec_Text_Height
+    LDA >TEXT_SCALE_W
+    STA >$C82B          ; Vec_Text_Width
+    LDA >VAR_ARG1+1
+    LDB >VAR_ARG0+1
+    LDX >$C82C
+    PSHS X
     JSR Print_Str_d
+    PULS X
+    STX >$C82C
     LDA #$F8
-    STA >$C82A      ; Restore Vec_Text_Height to normal (-8)
+    STA >$C82A
     LDA #$48
-    STA >$C82B      ; Restore Vec_Text_Width to normal (72)
-    JSR $F1AF      ; DP_to_C8 - restore DP before return
+    STA >$C82B
+    JSR $F1AF
     RTS
 
 MOD16:

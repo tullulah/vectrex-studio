@@ -251,40 +251,9 @@ _ENEMY_PATH2:    ; Path 2
     FCB $FF,$1E,$0F          ; flag=-1, dy=30, dx=15
     FCB $FF,$E2,$0F          ; flag=-1, dy=-30, dx=15
     FCB 2                ; End marker (path complete)
-; Generated from platform.vec (Malban Draw_Sync_List format)
-; Total paths: 2, points: 7
-; X bounds: min=-49, max=48, width=97
-; Center: (0, 0)
-
-_PLATFORM_WIDTH EQU 97
-_PLATFORM_HALF_WIDTH EQU 48
-_PLATFORM_HEIGHT EQU 10
-_PLATFORM_HALF_HEIGHT EQU 5
-_PLATFORM_CENTER_X EQU 0
-_PLATFORM_CENTER_Y EQU 0
-
-_PLATFORM_VECTORS:  ; Main entry (header + 2 path(s))
-    FDB 2               ; path_count (2 bytes, for DRAW_VECTOR_BANKED runtime)
-    FDB _PLATFORM_PATH0        ; pointer to path 0
-    FDB _PLATFORM_PATH1        ; pointer to path 1
-
-_PLATFORM_PATH0:    ; Path 0
-    FCB 127              ; path0: intensity
-    FCB $05,$30,0,0        ; path0: header (y=5, x=48)
-    FCB $FF,$00,$9F          ; flag=-1, dy=0, dx=-97
-    FCB 2                ; End marker (path complete)
-
-_PLATFORM_PATH1:    ; Path 1
-    FCB 127              ; path1: intensity
-    FCB $05,$CF,0,0        ; path1: header (y=5, x=-49)
-    FCB $FF,$F6,$00          ; flag=-1, dy=-10, dx=0
-    FCB $FF,$00,$61          ; flag=-1, dy=0, dx=97
-    FCB $FF,$0A,$00          ; flag=-1, dy=10, dx=0
-    FCB $FF,$00,$00          ; flag=-1, dy=0, dx=0
-    FCB 2                ; End marker (path complete)
 ; ==== Level: WLEVEL ====
 ; Author: 
-; Difficulty: medium
+; Difficulty: 
 
 _WLEVEL_LEVEL:
     FDB -96  ; World bounds: xMin (16-bit signed)
@@ -293,7 +262,7 @@ _WLEVEL_LEVEL:
     FDB 127  ; yMax (16-bit signed)
     FDB 0  ; Time limit (seconds)
     FDB 0  ; Target score
-    FCB 2  ; Background object count
+    FCB 0  ; Background object count
     FCB 1  ; Gameplay object count
     FCB 0  ; Foreground object count
     FDB _WLEVEL_BG_OBJECTS
@@ -305,7 +274,7 @@ _WLEVEL_LEVEL:
     FDB -128  ; scrollLimit bottom
     FCB 1  ; enemy_count
     FDB _WLEVEL_ENEMY_INSTANCES  ; enemy_instances_ptr (0 if none)
-    FDB 42  ; groundBottomOffset (floor surface offset from screen bottom)
+    FDB 0  ; groundBottomOffset (floor surface offset from screen bottom)
     FCB 1    ; +34 screen_count
     FDB _WLEVEL_BG_SCREENS  ; +35 BG screens index
     FDB _WLEVEL_GP_SCREENS  ; +37 GP screens index
@@ -313,51 +282,13 @@ _WLEVEL_LEVEL:
 
 _WLEVEL_BG_OBJECTS:
 _WLEVEL_BG_OBJECTS_S0:
-; Object: obj_1784399032266 (background)
-    FCB 4  ; type
-    FDB -42  ; x
-    FDB -29  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _PLATFORM_VECTORS  ; vector_ptr (ROM+17)
-    FCB 48  ; half_width (1.00x, ROM+19)
-    FCB 5  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
-; Object: obj_1784399040656 (background)
-    FCB 4  ; type
-    FDB 45  ; x
-    FDB 21  ; y
-    FDB 127  ; scale (T1 direct; 1.00x)
-    FCB 0  ; rotation
-    FCB 0  ; intensity (0=use vec, >0=override)
-    FCB 0  ; velocity_x
-    FCB 0  ; velocity_y
-    FCB 0  ; physics_flags
-    FCB 1  ; collision_flags
-    FCB 10  ; collision_size
-    FDB 0  ; spawn_delay
-    FCB 0   ; vector_bank (ROM+16)
-    FDB _PLATFORM_VECTORS  ; vector_ptr (ROM+17)
-    FCB 48  ; half_width (1.00x, ROM+19)
-    FCB 5  ; half_height (1.00x, ROM+20)
-    FDB 0  ; coll_mesh_ptr (AABB fallback, ROM+21)
-
 
 _WLEVEL_GAMEPLAY_OBJECTS:
 _WLEVEL_GAMEPLAY_OBJECTS_S0:
 ; Object: e1 (enemy)
     FCB 1  ; type
-    FDB -62  ; x
-    FDB -4  ; y
+    FDB -40  ; x
+    FDB -20  ; y
     FDB 127  ; scale (T1 direct; 1.00x)
     FCB 0  ; rotation
     FCB 0  ; intensity (0=use vec, >0=override)
@@ -378,7 +309,7 @@ _WLEVEL_FG_OBJECTS:
 _WLEVEL_FG_OBJECTS_S0:
 
 _WLEVEL_BG_SCREENS:
-    FCB 2  ; screen 0 count
+    FCB 0  ; screen 0 count
     FDB _WLEVEL_BG_OBJECTS_S0  ; screen 0 ptr
 
 _WLEVEL_GP_SCREENS:
@@ -396,8 +327,8 @@ _WLEVEL_ENEMY_COUNT EQU 1
 _WLEVEL_ENEMY_INSTANCES:
     ; instance 0
     FDB _ENEMY_ENEMY   ; enemy type ptr
-    FDB -62                   ; spawn x
-    FDB -4                   ; spawn y
+    FDB -40                   ; spawn x
+    FDB -20                   ; spawn y
     FCB 4                    ; ai_type: 0=static,1=patrol,2=chase,3=flee,4=wander
     FCB 0                    ; wave (0=always present)
     FCB 0                    ; respawn: 0=no, 1=yes
@@ -410,15 +341,15 @@ _WLEVEL_ENEMY_INSTANCES:
 _WLEVEL_ENEMY0_AREAS:
     FCB 2    ; area_count
     FCB 1    ; trans_count
-; Areas (8 bytes each): FDB y, FDB x_min, FDB x_max, FCB 0, FCB 0
-    FDB -20  ; area[0].y
+; Areas (8 bytes each): FDB y, FDB x_min, FDB x_max, FDB y2 (y at x_max; ==y when flat)
+    FDB -20  ; area[0].y (@x_min)
     FDB -80  ; area[0].x_min
     FDB 0  ; area[0].x_max
-    FCB 0,0      ; pad
-    FDB 30  ; area[1].y
+    FDB -20  ; area[0].y2 (@x_max)
+    FDB 30  ; area[1].y (@x_min)
     FDB 10  ; area[1].x_min
     FDB 80  ; area[1].x_max
-    FCB 0,0      ; pad
+    FDB 30  ; area[1].y2 (@x_max)
 ; Transitions (8 bytes each): FCB from, FCB to, FCB type, FCB vy0, FDB from_x, FDB to_x
 ; type: 1=jump_up, 2=drop, 3=jump_across; vy0 = signed initial velocity
     FCB 0,1,1,$0A  ; trans[0] from,to,type,vy0
@@ -1772,11 +1703,13 @@ CMPD ,S
 LBLT UPD_W_EDGE_R
 PULS D
 STD 1,Y
+JSR UPD_W_SETY      ; world_y = surface_y_at(area, new_x) + feet_offset
 LBRA UPD_ENE_NEXT_POP
 UPD_W_EDGE_R:
 LEAS 2,S
 LDD 4,X
 STD 1,Y
+JSR UPD_W_SETY
 LBRA UPD_W_EDGE
 UPD_W_WALK_L:
 LDD 1,Y
@@ -1787,11 +1720,13 @@ CMPD ,S
 LBGT UPD_W_EDGE_L
 PULS D
 STD 1,Y
+JSR UPD_W_SETY      ; world_y = surface_y_at(area, new_x) + feet_offset
 LBRA UPD_ENE_NEXT_POP
 UPD_W_EDGE_L:
 LEAS 2,S
 LDD 2,X
 STD 1,Y
+JSR UPD_W_SETY
 UPD_W_EDGE:
 LDA 17,Y
 EORA #1
@@ -1804,6 +1739,16 @@ ANDB #$3F
 ADDB #90
 STB 20,Y
 LBRA UPD_ENE_NEXT_POP
+
+; Set pool world_y from the sloped surface at the enemy's current x.
+; Entry: X = &area, Y = pool. Clobbers A,B,X.
+UPD_W_SETY:
+LDD 1,Y             ; query x = current x
+JSR AREA_SURF_Y     ; D = surface_y_at(area, x)
+ADDB 26,Y           ; + feet_offset (low)
+ADCA #0
+STD 3,Y             ; world_y
+RTS
 
 UPD_W_IDLE:
 DEC 20,Y
@@ -1932,9 +1877,10 @@ LDA #8
 MUL
 ADDD #2
 LEAX D,X            ; X = &area[cur_area]
-LDB 26,Y            ; B = feet_offset
-CLRA
-ADDD ,X             ; D = feet_offset + area.y
+LDD 22,Y            ; target_x (to_x)
+JSR AREA_SURF_Y     ; D = surface_y_at(area, to_x)
+ADDB 26,Y           ; + feet_offset (low)
+ADCA #0
 PSHS D              ; stash target_y
 LDA 21,Y
 CMPA #2
@@ -1964,9 +1910,10 @@ LDA #8
 MUL
 ADDD #2
 LEAX D,X
-LDB 26,Y
-CLRA
-ADDD ,X             ; D = feet_offset + area.y
+LDD 22,Y            ; target_x (to_x)
+JSR AREA_SURF_Y     ; D = surface_y_at(area, to_x)
+ADDB 26,Y           ; + feet_offset (low)
+ADCA #0
 STD 3,Y
 CLR 18,Y
 LDA #1
@@ -1979,6 +1926,125 @@ LEAY 28,Y
 DECB
 LBNE UPD_ENE_LOOP
 UPD_ENE_DONE:
+RTS
+
+; ---- AREA_SURF_Y: sloped walkable-area surface height ----
+AREA_SURF_Y:
+PSHS D              ; [S+0..1] = query_x (saved for interp)
+LDD 6,X             ; y2
+CMPD 0,X            ; vs y1
+BEQ ASY_FLAT        ; flat area -> y1
+LDD 4,X             ; x_max
+CMPD 2,X            ; vs x_min (signed)
+BLE ASY_FLAT        ; x_max <= x_min -> y1
+LDD ,S              ; query_x
+CMPD 2,X            ; vs x_min (signed)
+BLE ASY_FLAT        ; x <= x_min -> y1
+CMPD 4,X            ; query_x vs x_max (signed)
+BGE ASY_FAR         ; x >= x_max -> y2
+BRA ASY_INTERP
+ASY_FLAT:
+LDD 0,X             ; return y1
+LEAS 2,S            ; drop saved query_x
+RTS
+ASY_FAR:
+LDD 6,X             ; return y2
+LEAS 2,S
+RTS
+ASY_INTERP:
+LEAS -14,S          ; locals: [0..3]P [4..5]w [6..7]t [8]sign [9..10]|dy| [11..12]y1 [13]cnt ; [14..15]query_x
+LDD 0,X             ; y1
+STD 11,S
+LDD 6,X             ; y2
+SUBD 0,X            ; dy = y2 - y1 (signed)
+TSTA
+BPL ASY_DYP
+COMA
+COMB
+ADDD #1             ; |dy|
+STD 9,S
+LDA #1
+STA 8,S             ; sign = negative
+BRA ASY_DYD
+ASY_DYP:
+STD 9,S             ; |dy| = dy
+CLR 8,S             ; sign = positive
+ASY_DYD:
+LDD 4,X             ; x_max
+SUBD 2,X            ; w = x_max - x_min (>0)
+STD 4,S
+LDD 14,S            ; query_x
+SUBD 2,X            ; t = query_x - x_min (>=1)
+STD 6,S
+; ---- X is now free; build 32-bit product P = |dy| * t ----
+LDA 10,S            ; al = |dy| low
+LDB 7,S             ; bl = t low
+MUL                 ; D = al*bl (p_ll)
+STD 2,S             ; P1:P0
+LDA 9,S             ; ah = |dy| high
+LDB 6,S             ; bh = t high
+MUL                 ; D = ah*bh (p_hh)
+STD 0,S             ; P3:P2
+LDA 9,S             ; ah
+LDB 7,S             ; bl
+MUL                 ; D = ah*bl (mid1)
+ADDB 2,S            ; add mid1<<8 into P
+STB 2,S
+ADCA 1,S
+STA 1,S
+LDA 0,S
+ADCA #0
+STA 0,S
+LDA 10,S            ; al
+LDB 6,S             ; bh
+MUL                 ; D = al*bh (mid2)
+ADDB 2,S            ; add mid2<<8 into P
+STB 2,S
+ADCA 1,S
+STA 1,S
+LDA 0,S
+ADCA #0
+STA 0,S
+; ---- divide P (32-bit) by w -> Q in P1:P0, 16-iter shift-subtract ----
+; The 32-bit dividend is shifted left through carry using only register
+; rotates (ASLB/ROLA/ROLB); LDD/STD do not affect C, so the carry chains
+; across the two 16-bit halves (the assembler has no indexed shifts).
+LDA #16
+STA 13,S            ; loop counter
+ASY_DIVLOOP:
+LDD 2,S             ; low word P1:P0
+ASLB                ; P0<<1, bit0=0, C=old bit7(P0)
+ROLA                ; P1<<1 | C, C=old bit7(P1)
+STD 2,S             ; store low word (C preserved)
+LDD 0,S             ; high word P3:P2 = rem (C preserved)
+ROLB                ; P2<<1 | C, C=old bit7(P2)
+ROLA                ; P3<<1 | C, C=old bit7(P3) = bit16
+STD 0,S             ; store rem (C preserved), D still = rem
+BCS ASY_DSUB        ; bit16 set -> rem definitely >= w
+CMPD 4,S            ; rem vs w (unsigned); D = rem
+BLO ASY_DNOSUB      ; rem < w -> quotient bit 0
+ASY_DSUB:
+LDD 0,S
+SUBD 4,S            ; rem -= w
+STD 0,S
+INC 3,S             ; quotient bit = 1 (LSB of P0, was 0 after shift)
+ASY_DNOSUB:
+DEC 13,S
+BNE ASY_DIVLOOP
+; ---- apply sign (truncate toward zero) and add y1 ----
+LDA 8,S             ; sign flag (0=pos, 1=neg); sets Z
+BNE ASY_QNEG
+LDD 2,S             ; Q (fits 16 bits)
+ADDD 11,S           ; result = y1 + Q
+LEAS 16,S           ; drop 14 locals + saved query_x
+RTS
+ASY_QNEG:
+LDD 2,S             ; Q
+COMA
+COMB
+ADDD #1             ; -Q (truncate toward zero)
+ADDD 11,S           ; result = y1 - Q
+LEAS 16,S           ; drop 14 locals + saved query_x
 RTS
 
 ; DRAW_ENEMIES_RUNTIME

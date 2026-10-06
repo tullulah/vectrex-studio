@@ -1,0 +1,128 @@
+{
+ "version": "1.0",
+ "name": "auto_boss1_0e8f",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 1,
+       "y": 6
+      },
+      {
+       "x": 2,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": -8
+      },
+      {
+       "x": 4,
+       "y": -8
+      },
+      {
+       "x": -3,
+       "y": -6
+      },
+      {
+       "x": -3,
+       "y": -3
+      },
+      {
+       "x": -1,
+       "y": -2
+      },
+      {
+       "x": -3,
+       "y": 3
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 7,
+       "y": -3
+      },
+      {
+       "x": 7,
+       "y": -6
+      },
+      {
+       "x": 4,
+       "y": -7
+      },
+      {
+       "x": 5,
+       "y": -5
+      },
+      {
+       "x": 6,
+       "y": -5
+      },
+      {
+       "x": 5,
+       "y": -1
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 3,
+       "y": 3
+      },
+      {
+       "x": 6,
+       "y": 5
+      },
+      {
+       "x": 7,
+       "y": 5
+      },
+      {
+       "x": 6,
+       "y": 4
+      },
+      {
+       "x": 5,
+       "y": 2
+      },
+      {
+       "x": 2,
+       "y": 2
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA10lEQVR4nJVTsRGCQBC8Z2jAEgjf7MlMbcEMS6AEDbUEW6AVMswkpARL0NnHZW4Y/z03gDmG3d/bBSdGhFPzwr2qt1J5L9M4xufuH/L+eIgzySaBkCBPw+O3QFC2CRLrvpNh10iZEwARhM3tHF8mEeDsUievw4IIQTJQ5hxEF97P1tvLsgLtZwWmz65aCG7gbJBmESm+ke/XzlGEQro6DWdpYQ29QmEhs0YQSWYbpbUFzM96DrLCpZe8A+Hp3i9NEDpgcwt6pn0gGWIuQIA5mH8mgoHyg3oD8Pp02uBMCgUAAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

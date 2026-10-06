@@ -1,6 +1,6 @@
 /* SnowBros_c — C port of examples/SnowBros (VPy). Incremental build.
  *
- * Capstone validation that libvpy (ide/electron/resources/vpy-c) is a complete
+ * Capstone validation that libvpy (ide/electron/resources/uvmc2-sdk/vpy-c) is a complete
  * C runtime. Ported in blocks; each block mirrors the VPy source in main.vpy
  * and is render-verified through the PitrexArm32 sim before the next lands.
  *

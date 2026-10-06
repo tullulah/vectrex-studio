@@ -14,8 +14,8 @@ import { asmAddressToVpyLine, formatAddress } from '../../utils/debugHelpers';
 import { emuCore } from '../../emulatorCoreSingleton';
 import { VectorRecorder, serializeVrec, defaultRecordingName, MAX_RECORD_SECONDS, type RawSegment } from '../../emulator/recorder/VectorRecorder';
 import { VideoRecorder, defaultVideoName } from '../../emulator/recorder/VideoRecorder';
-import { getRunningContextOutputs } from '../../emulator/recorder/audioGraphTracker';
-import { PitrexSimView } from '../PitrexSimView';
+import { getAllLiveContextOutputs, getOutputsForContext } from '../../emulator/recorder/audioGraphTracker';
+import { PitrexSimView, PITREX_RANGE, type Segment as PitrexSegment } from '../PitrexSimView';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -165,15 +165,23 @@ const getCurrentVpyLineForPC = (pc: number, pdbData: any): number | null => {
 };
 
 // Componente para mostrar información técnica del emulador (métricas reales)
-const EmulatorOutputInfo: React.FC = () => {
+/* `backend` = which emulator is running RIGHT NOW. Without it this panel always read
+  * `window.vecx` — the 6809 — so with UVM2 running it showed zeroed registers and a red
+  * "JSVecx: STOPPED / MISMATCH": a panel that looks broken when in fact it is reading the
+  * wrong machine. */
+const EmulatorOutputInfo: React.FC<{ backend: 'rp2350' | 'uvm2' | null }> = ({ backend }) => {
   const [metrics, setMetrics] = useState<VecxMetrics | null>(null);
   const [regs, setRegs] = useState<VecxRegs | null>(null);
   const [vecxRunning, setVecxRunning] = useState<boolean>(false);
-  
+  const [statsArm, setStatsArm] = useState<{ ciclos: number; vectores: number; frames: number } | null>(null);
+
   // Get debug state from debugStore
   const debugState = useDebugStore(s => s.state);
+  const emuFps = useDebugStore(s => s.currentFps);
+  const emuDrawFps = useDebugStore(s => s.drawFps);
 
   const fetchStats = () => {
+    try { setStatsArm((emuCore as any).uvm2FrameStats ?? null); } catch { setStatsArm(null); }
     try {
       const vecx = (window as any).vecx;
       if (!vecx) {
@@ -228,9 +236,41 @@ const EmulatorOutputInfo: React.FC = () => {
         letterSpacing: '0.5px',
         fontFamily: 'system-ui'
       }}>
-        Emulator Output
+        Emulator Output{backend ? ` — ${backend.toUpperCase()}` : ''}
       </div>
 
+      {/* With UVM2 (or the ARM core) running, the 6809 registers MEAN NOTHING: the 6809 is
+          stopped, everything reads zero, and the red MISMATCH is not a fault. Show the
+          counters of the backend that is actually running. */}
+      {backend ? (
+        <>
+          <div style={{ marginBottom: '2px' }}>
+            State: <span style={{
+              color: debugState === 'running' ? '#0f0' : debugState === 'paused' ? '#ff0' : '#f00',
+              fontWeight: 'bold'
+            }}>{debugState.toUpperCase()}</span>
+          </div>
+          <div style={{ marginBottom: '2px' }}>
+            Host FPS: {emuFps > 0 ? emuFps.toFixed(1) : '--'}
+          </div>
+          <div style={{ marginBottom: '2px' }}>
+            {/* What the frame's bus cycles would allow on the real console: this is the
+                number that matters, and it is NOT the one above (that one depends on this
+                machine). */}
+            Console refresh: {emuDrawFps > 0 ? `${emuDrawFps.toFixed(1)} Hz` : '--'}
+          </div>
+          <div style={{ marginBottom: '2px' }}>
+            Bus cycles/frame: {statsArm?.ciclos ? statsArm.ciclos : '--'}
+          </div>
+          <div style={{ marginBottom: '2px' }}>
+            Vectors/frame: {statsArm?.vectores ? statsArm.vectores : '--'}
+          </div>
+          <div>
+            Frames: {statsArm?.frames ?? 0}
+          </div>
+        </>
+      ) : (
+      <>
       <div style={{ marginBottom: '2px' }}>
         PC: {hex16(regs?.PC)}
         {' | '}BANK: {typeof regs?.BANK === 'number' ? regs.BANK.toString(16).toUpperCase() : '--'}
@@ -270,9 +310,35 @@ const EmulatorOutputInfo: React.FC = () => {
       <div>
         Avg Cycles/frame: {avgCyclesPerFrame > 0 ? avgCyclesPerFrame : '--'}
       </div>
+      </>
+      )}
     </div>
   );
 };
+
+// Romset for the simulated card. The ports read `roms/<STEM>.ZIP` off the SD at
+// boot instead of embedding the ROM (MAME model), so the emulator has to hand the
+// same bytes over — otherwise the game boots, finds no romset and says so, which is
+// correct behaviour but looks like a bug.
+//
+// Returns undefined when there is no romset: that is not an error here. A port that
+// still embeds its ROM ignores this entirely.
+async function loadSimRomZip(binPath?: string | null): Promise<Uint8Array | undefined> {
+  if (!binPath) return undefined;
+  const stem = binPath.split(/[/\\]/).pop()?.replace(/\.bin$/i, '');
+  if (!stem) return undefined;
+  // Se le pasa el .bin: el nombre del romset lo declara EL JUEGO (bloque RSET),
+  // no se deduce del nombre del fichero.
+  const res = await (window as any).electronAPI?.sdRomZip?.(stem, binPath).catch(() => null);
+  if (!res?.ok || !res.base64) {
+    console.log(`[EmulatorPanel] No romset for "${stem}" (${res?.error ?? 'no ipc'})` +
+      (res?.have?.length ? ` — roms/ has: ${res.have.join(', ')}` : '') +
+      ` — the game will report it if it needs one.`);
+    return undefined;
+  }
+  console.log(`[EmulatorPanel] \u2713 Romset ${res.name} (${res.size}b) from ${res.dir}`);
+  return Uint8Array.from(atob(res.base64), c => c.charCodeAt(0));
+}
 
 export const EmulatorPanel: React.FC = () => {
   const status = useEmulatorStore(s => s.status);
@@ -332,6 +398,12 @@ export const EmulatorPanel: React.FC = () => {
   const [breakpoints, setBreakpoints] = useState<Set<number>>(new Set());
   const debugState = useDebugStore(s => s.state);
   const pdbData = useDebugStore(s => s.pdbData);
+  /* FRAME COUNTER. The emulator loop already wrote this to the store, but the only
+   * component that rendered it (DebugToolbar) is not mounted anywhere, so the number was
+   * computed and thrown away. Shown here, next to the backend badge. */
+  const emuFps = useDebugStore(s => s.currentFps);
+  const emuDrawFps = useDebugStore(s => s.drawFps);
+  const emuCiclos = useDebugStore(s => s.cycles);
   const breakpointCheckIntervalRef = useRef<number | null>(null);
 
   // rp2350 requestAnimationFrame loop handle
@@ -345,6 +417,20 @@ export const EmulatorPanel: React.FC = () => {
   // Gameplay video recorder (real pixels + audio → WebM → MP4 via ffmpeg).
   // Separate from the .vrec vector recorder above.
   const videoRecorderRef = useRef<VideoRecorder | null>(null);
+  /* Cuantos contextos pincho el tap la ultima vez, para no imprimir el
+   * diagnostico diez veces por segundo: solo cuando cambia. */
+  const ultimoTapRef = useRef<number>(-1);
+  /* El canvas de PitrexSimView, que se superpone al del emulador cuando corre un
+   * simulador WASM de proyecto externo. Grabar el de abajo daba "Nothing captured"
+   * sin un solo error: no fallaba nada, es que ese canvas ya no lo pinta nadie. */
+  const simCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  /* Lector del ultimo frame del simulador externo, para el .vrec (mismo punto ciego
+   * que el video: emuCore y window.vecx estan parados mientras corre). */
+  const simSegmentsRef = useRef<(() => PitrexSegment[] | null) | null>(null);
+  /* Estables a proposito: una funcion en linea cambia de identidad en cada render y
+   * React la vuelve a invocar con null antes de reasignarla. */
+  const onSimCanvasReady = useCallback((el: HTMLCanvasElement | null) => { simCanvasRef.current = el; }, []);
+  const onSimCaptureReady = useCallback((leer: (() => PitrexSegment[] | null) | null) => { simSegmentsRef.current = leer; }, []);
   const [isVideoRecording, setIsVideoRecording] = useState<boolean>(false);
   const [videoElapsed, setVideoElapsed] = useState<number>(0);
   // idle | recording | transcoding | saved | error
@@ -409,6 +495,23 @@ export const EmulatorPanel: React.FC = () => {
   // ALG integrator space (x 0..33000, y 0..41000, Y down); conversion to
   // Vectrex space (-127..127, Y up) happens inside VectorRecorder.
   const captureCurrentSegments = useCallback((): RawSegment[] | null => {
+    // Simulador WASM de proyecto externo: tiene su propio bucle y su propio espacio
+    // de coordenadas, y mientras corre los otros backends estan parados. Se convierte
+    // de espacio PiTrex (x +-18000, y +-24000, Y arriba) al espacio ALG que espera el
+    // grabador (centro 16500/20500, 127 unidades por coordenada Vectrex, Y abajo), de
+    // forma que los extremos caigan justo en +-127.
+    const leerSim = simSegmentsRef.current;
+    if (simModulePath && leerSim) {
+      const segs = leerSim();
+      if (!segs) return null;
+      const kx = (127 * 127) / PITREX_RANGE.x;
+      const ky = (127 * 127) / PITREX_RANGE.y;
+      return segs.map(v => ({
+        x0: 16500 + v.x0 * kx, y0: 20500 - v.y0 * ky,
+        x1: 16500 + v.x1 * kx, y1: 20500 - v.y1 * ky,
+        intensity: v.b,
+      }));
+    }
     // rp2350 path (Rp2350System): emuCore.runFrame() stores each completed
     // frame in lastFrameSegments, exposed via getSegmentsShared().
     if ((emuCore as any)?._activeTarget === 'rp2350') {
@@ -430,7 +533,7 @@ export const EmulatorPanel: React.FC = () => {
     // Fallback: VectrexSystem path (useVectrexSystem flag) also updates
     // lastFrameSegments through emuCore.runFrame().
     return emuCore.getSegmentsShared() ?? null;
-  }, []);
+  }, [simModulePath]);
 
   const finishRecording = useCallback(async () => {
     const rec = recorderRef.current;
@@ -455,7 +558,15 @@ export const EmulatorPanel: React.FC = () => {
 
     const vrec = rec.stop(name);
     if (vrec.frames.length === 0) {
-      console.warn('[EmulatorPanel] Vector recording empty — nothing saved');
+      // Que no se pierda en la consola: una grabacion vacia es un fallo, y el motivo
+      // casi siempre es que se estaba leyendo un backend que no era el que corria.
+      const motivo = simModulePath
+        ? 'el simulador externo no entrego ningun frame'
+        : 'el emulador no entrego ningun frame';
+      console.warn(`[EmulatorPanel] Vector recording empty — ${motivo}`);
+      setVideoStatus('error');
+      setVideoMessage(`Vector recording empty — ${motivo}`);
+      setTimeout(() => setVideoStatus('idle'), 6000);
       return;
     }
 
@@ -481,7 +592,7 @@ export const EmulatorPanel: React.FC = () => {
     } catch (e) {
       console.error('[EmulatorPanel] Failed to save recording:', e);
     }
-  }, []);
+  }, [simModulePath]);
 
   const onToggleRecording = useCallback(() => {
     let rec = recorderRef.current;
@@ -509,27 +620,55 @@ export const EmulatorPanel: React.FC = () => {
   // Resolve the active target's live { ctx, outputNode } for the audio tap.
   // PiTrex has its own core (not part of emuCore); everything else routes
   // through emuCore's active system (m6809 → VectrexSystem, rp2350 → Rp2350System).
-  const getActiveAudio = useCallback((): { ctx: AudioContext; outputs: AudioNode[] } | null => {
+  const getActiveAudio = useCallback((): Array<{ ctx: AudioContext; outputs: AudioNode[] }> => {
     try {
-      // Universal tap: the graph tracker knows every live AudioContext and ALL
-      // the nodes feeding its speakers (PSG music AND late sources like a
-      // PLAY_SAMPLE BufferSource). Prefer it — the recorder connects every
-      // output, so it captures the full mix regardless of which subsystem plays.
-      const tracked = getRunningContextOutputs();
-      if (tracked) return tracked;
-      // Fallbacks (wrap a single output node): PiTrex, emuCore systems, legacy
-      // psgAudio, and window.vecx's internal ctx (m6809 sound).
+      // ── EVERY LIVE CONTEXT, AND THE ACTIVE TARGET'S FIRST ─────────────────
+      //
+      // THIS USED TO CHOOSE ONE, and choosing is what kept going wrong. First it
+      // preferred getRunningContextOutputs(), which returns the first tracked
+      // context that is 'running' with outputs — after switching targets that is
+      // often a STALE context: still running, still with an output node, and
+      // completely silent. So it was changed to pin the ACTIVE target's context,
+      // which fixed that and introduced the opposite failure: only a component
+      // this panel knows about can BE the active target, and the WASM simulator
+      // (PitrexSimView) is a React child that owns its own audio and is not one
+      // of them. Its recordings came out silent from end to end — video fine, no
+      // sound at all — and the recorder reported success both times. Measured,
+      // not guessed: ffmpeg volumedetect reads -91 dB on both of today's files
+      // and -21.7 dB on one from August.
+      //
+      // Tapping ALL of them cannot fail that way. A stale context contributes
+      // silence to a mix, which costs nothing; whatever is actually sounding is
+      // in there by construction. The active target still goes first so the
+      // diagnostic log names something meaningful.
       const pit = (pitrexCoreRef.current as any)?.getAudioContextAndOutputNode?.();
       const core = (emuCore as any)?.getAudioContextAndOutputNode?.();
       const legacy = psgAudio.getAudioContextAndOutputNode?.();
       const vx = (window as any).vecx;
       const vecxAudio = (vx?.ctx && vx?.node) ? { ctx: vx.ctx as AudioContext, outputNode: vx.node as AudioNode } : null;
-      const one = [pit, core, legacy, vecxAudio]
+      const activo = [pit, core, legacy, vecxAudio]
         .find((c): c is { ctx: AudioContext; outputNode: AudioNode } =>
-          !!c?.ctx && !!c?.outputNode && c.ctx.state === 'running');
-      return one ? { ctx: one.ctx, outputs: [one.outputNode] } : null;
+          !!c?.ctx && !!c?.outputNode && c.ctx.state !== 'closed');
+
+      const todos = getAllLiveContextOutputs();
+      const lista = activo
+        ? [{ ctx: activo.ctx, outputs: getOutputsForContext(activo.ctx).length
+                                       ? getOutputsForContext(activo.ctx)
+                                       : [activo.outputNode] },
+           ...todos.filter(t => t.ctx !== activo.ctx)]
+        : todos;
+
+      if (lista.length !== ultimoTapRef.current) {
+        ultimoTapRef.current = lista.length;
+        const cual = activo === pit ? 'pitrex' : activo === core ? 'emuCore'
+                   : activo === legacy ? 'psgAudio' : activo === vecxAudio ? 'window.vecx'
+                   : 'ninguno declarado';
+        console.log(`[EmulatorPanel] audio tap → ${lista.length} contexto(s), activo: ${cual}`,
+                    lista.map(t => `${t.ctx.state}/${t.outputs.length}n`).join(' '));
+      }
+      return lista;
     } catch {
-      return null;
+      return [];
     }
   }, []);
 
@@ -541,7 +680,9 @@ export const EmulatorPanel: React.FC = () => {
     const blob = await rec.stop();
     if (!blob || blob.size === 0) {
       setVideoStatus('error');
-      setVideoMessage('Nothing captured');
+      const porque = rec.lastDiagnostic;
+      setVideoMessage(porque ? `Nothing captured — ${porque}` : 'Nothing captured');
+      console.error('[EmulatorPanel] grabacion vacia:', porque || '(sin diagnostico)');
       setTimeout(() => setVideoStatus('idle'), 4000);
       return;
     }
@@ -561,8 +702,15 @@ export const EmulatorPanel: React.FC = () => {
       const res = await api.saveMp4({ webmBytes, name: defaultVideoName() });
       if (res?.path) {
         setVideoStatus('saved');
-        setVideoMessage(`Saved to ${res.path}`);
-        console.log(`[EmulatorPanel] ✓ Gameplay MP4 saved: ${res.path}`);
+        // A recording that came out MUTE used to be saved with a plain "Saved
+        // to ..." and no hint that anything was wrong. `hasAudio` is what the
+        // tap managed to connect; `inputHadAudio` is what ffmpeg actually found
+        // in the WebM — if they disagree the problem is the encoder, not the tap.
+        const mudo = !rec.hasAudio || res.inputHadAudio === false;
+        setVideoMessage(mudo ? `Saved (NO AUDIO) to ${res.path}` : `Saved to ${res.path}`);
+        console.log(`[EmulatorPanel] ✓ Gameplay MP4 saved: ${res.path}`,
+                    `| tap hasAudio=${rec.hasAudio} inputHadAudio=${res.inputHadAudio}`,
+                    res.streams ?? '');
         setTimeout(() => setVideoStatus('idle'), 6000);
       } else if (res?.canceled) {
         setVideoStatus('idle');
@@ -591,7 +739,8 @@ export const EmulatorPanel: React.FC = () => {
       void finishVideoRecording();
       return;
     }
-    const canvas = canvasRef.current;
+    // el que se VE: si hay simulador externo, el suyo; si no, el del emulador
+    const canvas = (simModulePath && simCanvasRef.current) || canvasRef.current;
     if (!canvas) {
       setVideoStatus('error');
       setVideoMessage('No display canvas');
@@ -607,8 +756,9 @@ export const EmulatorPanel: React.FC = () => {
     // can hit Record before the game boots (e.g. the intro) and still get sound.
     // Vectrex/6809 render at ~50 Hz; capture at 60 so no frame is dropped.
     rec.start(canvas, 60, getActiveAudio);
-    console.log('[EmulatorPanel] Gameplay video recording started (audio bridges when it appears)');
-  }, [finishVideoRecording, getActiveAudio]);
+    console.log(`[EmulatorPanel] Gameplay video recording started — canvas ${canvas.width}x${canvas.height}`
+      + `${simModulePath ? ' (simulador externo)' : ''} (audio bridges when it appears)`);
+  }, [finishVideoRecording, getActiveAudio, simModulePath]);
 
   useEffect(() => {
     // Lista basada en las ROMs que vimos en la carpeta public/roms/
@@ -2042,27 +2192,17 @@ export const EmulatorPanel: React.FC = () => {
     };
   }, [addBreakpoint, removeBreakpoint, pdbData]);
 
-  // Listen for F5 hotkey from Electron (continue debugging)
-  useEffect(() => {
-    const electronAPI = (window as any).electronAPI;
-    if (!electronAPI?.ipcRenderer) return;
-    
-    const handleF5Continue = () => {
-      // For an imported external C/C++ project, F5 = Build & Run the WASM
-      // simulator, NOT "continue" on the 6809 emulator (which would boot the
-      // BIOS / Minestorm). Route it to the build-run path instead.
-      if (useProjectStore.getState().vpyProject?.isExternal) {
-        console.log('[EmulatorPanel] 🎮 F5 (external project) - triggering simulator build & run');
-        window.postMessage({ type: 'vpy-run-external' }, '*');
-        return;
-      }
-      console.log('[EmulatorPanel] 🎮 F5 pressed - triggering debug continue');
-      window.postMessage({ type: 'debug-continue' }, '*');
-    };
-    
-    electronAPI.ipcRenderer.on('debug-continue-hotkey', handleF5Continue);
-    return () => electronAPI.ipcRenderer.removeListener('debug-continue-hotkey', handleF5Continue);
-  }, []);
+  /* THE `debug-continue-hotkey` LISTENER LIVED HERE AND IT OWNED F5.
+   *
+   * main.ts intercepted bare F5 in `before-input-event` and sent this event, so F5 meant
+   * "continue the 6809 emulator" — and on a project with no 6809 cartridge loaded that
+   * boots the BIOS, which is Minestorm. It had already been patched once, for external C
+   * projects only, which is why the fault survived: it looked handled.
+   *
+   * F5 now routes to build.run from main.ts like every other build key. Continuing a
+   * paused debug session is F12 (debug.continue) — it has its own key and does not need
+   * to borrow this one. Removed 2026-08-25.
+   */
 
   // Función para cargar ROM desde dropdown (definida antes de useEffects que la usan)
   const loadROMFromDropdown = useCallback(async (romName: string) => {
@@ -2660,7 +2800,61 @@ export const EmulatorPanel: React.FC = () => {
           console.error('[EmulatorPanel] emuCore.loadUvm2 not available — uvm2 target unsupported in this build');
           return;
         }
-        emuCore.loadUvm2(romData, canvasRef.current ?? undefined);
+        /* EL ELF Y LA TARJETA, igual que el camino del rp2350 justo debajo.
+         *
+         * Sin ELF no hay simbolos, y sin simbolos Uvm2System no puede atrapar las
+         * llamadas al lector de SD — las sirve en JS porque el driver de verdad
+         * habla SPI a pelo con unos pines que el emulador no modela. El sintoma
+         * no es un error: el juego arranca, dibuja perfecto, y todo lo que sale
+         * de la tarjeta (el romset, la musica del jack) simplemente no esta.
+         *
+         * Y el .elf de una imagen .um2 no siempre esta al lado: el recipe del
+         * pico-sdk lo deja en pico/, asi que se prueban los dos sitios. */
+        let elfUvm2: Uint8Array | undefined;
+        if (romPath && filesApi?.readFileBin) {
+          const base = romPath.replace(/\.um2$/i, '');
+          const dir  = base.replace(/[^/\\]*$/, '');
+          const name = base.slice(dir.length);
+          for (const cand of [`${base}.elf`, `${dir}pico/${name}.elf`]) {
+            try {
+              const r = await filesApi.readFileBin(cand);
+              if (r && !(r as any).error && (r as any).base64) {
+                elfUvm2 = Uint8Array.from(atob((r as any).base64), c => c.charCodeAt(0));
+                console.log(`[EmulatorPanel] ✓ ELF del .um2: ${cand} (${elfUvm2.length} bytes)`);
+                break;
+              }
+            } catch { /* el siguiente sitio */ }
+          }
+          if (!elfUvm2)
+            console.log('[EmulatorPanel] sin .elf junto al .um2 — sin simbolos no hay SD simulada');
+        }
+        /* LA TARJETA SIMULADA, CON CONTENIDOS Y NO CON NOMBRES. sdSimList devuelve
+         * `files: string[]`; Uvm2System.setSdFiles quiere
+         * Record<ruta, Uint8Array>. Pasarle la lista tal cual compila
+         * perfectamente y no sirve para nada: Object.keys de un array da
+         * "0","1","2" y toda busqueda falla. Otro desajuste que no da error.
+         *
+         * Se saltan los .um2 y los .bin: son las imagenes de los OTROS juegos de
+         * la tarjeta, decenas de megas que ningun juego lee nunca. */
+        let sdUvm2Files: Record<string, Uint8Array> | undefined;
+        try {
+          const lista = await (window as any).electronAPI?.sdSimList?.();
+          if (lista?.dir && Array.isArray(lista.files) && filesApi?.readFileBin) {
+            const out: Record<string, Uint8Array> = {};
+            for (const nombre of lista.files as string[]) {
+              if (/\.(um2|bin)$/i.test(nombre)) continue;
+              try {
+                const r = await filesApi.readFileBin(`${lista.dir}/${nombre}`);
+                if (r && !(r as any).error && (r as any).base64)
+                  out[nombre.toLowerCase()] =
+                    Uint8Array.from(atob((r as any).base64), c => c.charCodeAt(0));
+              } catch { /* ese no */ }
+            }
+            sdUvm2Files = out;
+            console.log(`[EmulatorPanel] SD simulada para uvm2: ${Object.keys(out).length} ficheros`);
+          }
+        } catch { /* sin tarjeta simulada */ }
+        emuCore.loadUvm2(romData, canvasRef.current ?? undefined, elfUvm2, sdUvm2Files);
         if (canvasRef.current) {
           const ctx = canvasRef.current.getContext('2d');
           if (ctx) {
@@ -2674,6 +2868,10 @@ export const EmulatorPanel: React.FC = () => {
         {
           const TARGET_MS = 1000 / 50;
           let lastFrameTs = 0;
+          /* CONTADOR DE FRAMES, sobre una ventana de un segundo. Se cuentan los frames que
+           * el emulador SACA, no los que pide el rAF: con la imagen corriendo despacio el
+           * bucle se salta turnos y contar peticiones daria siempre 50. */
+          let ventana = 0, desde = 0;
           const uvm2Loop = (ts: number) => {
             rp2350LoopRef.current = requestAnimationFrame(uvm2Loop);
             const elapsed = ts - lastFrameTs;
@@ -2681,6 +2879,18 @@ export const EmulatorPanel: React.FC = () => {
             lastFrameTs = ts - (elapsed % TARGET_MS);
             if (useDebugStore.getState().state !== 'running') return;
             emuCore.runFrame();
+            ventana++;
+            if (!desde) desde = ts;
+            else if (ts - desde >= 1000) {
+              const fps = (ventana * 1000) / (ts - desde);
+              const st = emuCore.uvm2FrameStats;
+              /* Frame bus cycles -> the refresh the drawing would allow on the console.
+               * The UVM2 bus clock is 1.5 MHz (30000 cycles x 50 Hz). */
+              const BUS_HZ = 30000 * 50;
+              useDebugStore.getState().updateStats(
+                st?.ciclos ?? 0, fps, st?.ciclos ? BUS_HZ / st.ciclos : 0);
+              ventana = 0; desde = ts;
+            }
           };
           useDebugStore.getState().setState('running');
           rp2350LoopRef.current = requestAnimationFrame(uvm2Loop);
@@ -2728,7 +2938,8 @@ export const EmulatorPanel: React.FC = () => {
         }
 
         const sdSim1 = await (window as any).electronAPI?.sdSimList?.().catch(() => null);
-        emuCore.loadArm(romData, elfData, canvasRef.current ?? undefined, sdSim1?.files ?? [], sdSim1?.previews ?? {});
+        const romZip1 = await loadSimRomZip(romPath);
+        emuCore.loadArm(romData, elfData, canvasRef.current ?? undefined, sdSim1?.files ?? [], sdSim1?.previews ?? {}, romZip1);
         console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
 
         // Clear the canvas before first rp2350 frame
@@ -2998,7 +3209,14 @@ export const EmulatorPanel: React.FC = () => {
     const electronAPI: any = (window as any).electronAPI;
     if (!electronAPI?.onCompiledBin) return;
 
-    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null; libvpyAsm?: string | null }) => {
+    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null; libvpyAsm?: string | null; sdFiles?: Record<string, string> }) => {
+    /* LA PRIMERA TRAZA DE LA CADENA. Todo lo que hay de aqui en adelante ya estaba
+     * instrumentado —"uvm2: bin=…", "✓ .um2 image loaded", "[loadUvm2] START"— asi que si
+     * no sale NINGUNA, el problema no esta en el emulador sino en que este manejador no se
+     * llama, o llega con otro `target`. Distinguir esas dos cosas es lo unico que falta, y
+     * sin ella hoy he depurado tres veces el fichero equivocado. */
+    console.log('[EmulatorPanel] handleCompiledBin: target=', payload?.target,
+                'bytes=', payload?.base64?.length ?? 0, 'bin=', payload?.binPath);
       // Clear the run-mode badge first: only the branch that handles THIS build
       // may set it. Without this it survives into the next build and a project
       // compiled for m6809 keeps claiming it is emulating whatever ran last.
@@ -3140,12 +3358,19 @@ export const EmulatorPanel: React.FC = () => {
             : typeof emuCore.loadArm === 'function';
           if (loaderAvailable) {
             if (isUvm2) {
-              emuCore.loadUvm2!(bin, canvasRef.current ?? undefined);
+              /* La SD simulada llega en base64 desde el proceso principal; se decodifica
+               * aqui porque el emulador quiere bytes. Ver leerSdSimulada en main.ts. */
+              const sdBytes: Record<string, Uint8Array> = {};
+              for (const [k, v] of Object.entries(payload.sdFiles ?? {})) {
+                sdBytes[k] = Uint8Array.from(atob(v), c => c.charCodeAt(0));
+              }
+              emuCore.loadUvm2!(bin, canvasRef.current ?? undefined, elf, sdBytes);
               console.log('[EmulatorPanel] ✓ .um2 image loaded into Uvm2System');
             } else {
               // Pass the shared canvas so Rp2350System renders directly to it
               const sdSim2 = await (electronAPI as any)?.sdSimList?.().catch(() => null);
-              emuCore.loadArm!(bin, elf, canvasRef.current ?? undefined, sdSim2?.files ?? [], sdSim2?.previews ?? {});
+              const romZip2 = await loadSimRomZip(payload.binPath);
+              emuCore.loadArm!(bin, elf, canvasRef.current ?? undefined, sdSim2?.files ?? [], sdSim2?.previews ?? {}, romZip2);
               console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
             }
 
@@ -3165,6 +3390,11 @@ export const EmulatorPanel: React.FC = () => {
             const TARGET_MS = 1000 / 50;  // 20 ms per frame (Vectrex PAL; music compiled at 50 Hz)
             let rp2350FrameCount = 0;
             let lastFrameTs = 0;
+            /* FRAME COUNTER, same as the "open a standalone .um2" loop. There are TWO
+             * paths that start the emulator, and this one — run what was just compiled —
+             * is the one the IDE uses. Wiring the counter to the other one alone left the
+             * readout at zero with nothing reporting a failure. */
+            let ventana = 0, desde = 0;
             const loop = (ts: number) => {
               rp2350LoopRef.current = requestAnimationFrame(loop);
               const elapsed = ts - lastFrameTs;
@@ -3177,6 +3407,18 @@ export const EmulatorPanel: React.FC = () => {
                 console.log(`[EmulatorPanel] rp2350 rAF loop frame ${rp2350FrameCount}`);
               }
               emuCore.runFrame();
+              ventana++;
+              if (!desde) desde = ts;
+              else if (ts - desde >= 1000) {
+                const fps = (ventana * 1000) / (ts - desde);
+                /* Frame bus cycles -> the refresh the drawing would allow on the console.
+                 * The UVM2 bus clock is 1.5 MHz (30000 cycles x 50 Hz). */
+                const BUS_HZ = 30000 * 50;
+                const st = (emuCore as any).uvm2FrameStats;
+                useDebugStore.getState().updateStats(
+                  st?.ciclos ?? 0, fps, st?.ciclos ? BUS_HZ / st.ciclos : 0);
+                ventana = 0; desde = ts;
+              }
             };
             // Mark as running so the RAF loop doesn't bail on the first check.
             useDebugStore.getState().setState('running');
@@ -3454,6 +3696,21 @@ export const EmulatorPanel: React.FC = () => {
                   : '🎯 EMULATING RP2350 (ARM · slow)'}
             </div>
           )}
+          {/* Frames per second. `emuFps` is what the HOST manages to render (depends on
+              this machine); `emuDrawFps` is the refresh the frame's bus cycles would allow
+              on the real console, which is the number that actually matters. */}
+          {(runMode === 'rp2350' || runMode === 'uvm2') && emuFps > 0 && (
+            <div style={{
+              position: 'absolute', top: 24, right: 4, zIndex: 30,
+              padding: '2px 7px', borderRadius: 4, pointerEvents: 'none',
+              fontFamily: 'monospace', fontSize: 10,
+              background: 'rgba(20,20,20,0.85)', color: '#9cf', border: '1px solid #468',
+            }}>
+              {`host ${emuFps.toFixed(1)} fps`}
+              {emuDrawFps > 0 && ` · console ${emuDrawFps.toFixed(1)} Hz`}
+              {emuCiclos > 0 && ` · ${emuCiclos} cycles`}
+            </div>
+          )}
           {/* External-project WASM simulator (runs any module speaking the
               PiTrex host SDK contract). Overlays the Vectrex canvas. */}
           {simModulePath && (
@@ -3464,6 +3721,8 @@ export const EmulatorPanel: React.FC = () => {
                 width={canvasSize.width}
                 height={canvasSize.height}
                 onLog={(line) => console.log(line)}
+                onCanvasReady={onSimCanvasReady}
+                onCaptureReady={onSimCaptureReady}
               />
             </div>
           )}
@@ -3571,7 +3830,7 @@ export const EmulatorPanel: React.FC = () => {
       </div>
 
       {/* Emulator Output - Información técnica del emulador */}
-      <EmulatorOutputInfo />
+      <EmulatorOutputInfo backend={runMode} />
 
       {/* Controles principales debajo del canvas - Estilo homogéneo */}
       <div style={{

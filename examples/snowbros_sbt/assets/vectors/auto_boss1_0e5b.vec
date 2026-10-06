@@ -1,0 +1,216 @@
+{
+ "version": "1.0",
+ "name": "auto_boss1_0e5b",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 6,
+       "y": 0
+      },
+      {
+       "x": 6,
+       "y": 5
+      },
+      {
+       "x": 8,
+       "y": 0
+      },
+      {
+       "x": 7,
+       "y": -5
+      }
+     ]
+    },
+    {
+     "name": "sil1",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -6,
+       "y": -5
+      },
+      {
+       "x": -8,
+       "y": -5
+      },
+      {
+       "x": -8,
+       "y": -1
+      },
+      {
+       "x": -6,
+       "y": 0
+      }
+     ]
+    },
+    {
+     "name": "sil2",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -6
+      },
+      {
+       "x": 8,
+       "y": -6
+      }
+     ]
+    },
+    {
+     "name": "sil3",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 2,
+       "y": 3
+      },
+      {
+       "x": 2,
+       "y": 0
+      },
+      {
+       "x": 4,
+       "y": 1
+      },
+      {
+       "x": 4,
+       "y": 4
+      }
+     ]
+    },
+    {
+     "name": "sil4",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 4,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 6
+      },
+      {
+       "x": -4,
+       "y": 6
+      },
+      {
+       "x": -8,
+       "y": 6
+      },
+      {
+       "x": -8,
+       "y": 8
+      }
+     ]
+    },
+    {
+     "name": "sil5",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -4,
+       "y": -5
+      },
+      {
+       "x": -4,
+       "y": 5
+      },
+      {
+       "x": -1,
+       "y": 4
+      },
+      {
+       "x": -3,
+       "y": 4
+      },
+      {
+       "x": -3,
+       "y": 0
+      },
+      {
+       "x": -1,
+       "y": 0
+      },
+      {
+       "x": -1,
+       "y": -2
+      },
+      {
+       "x": -3,
+       "y": -1
+      }
+     ]
+    },
+    {
+     "name": "sil6",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 4,
+       "y": -2
+      },
+      {
+       "x": 2,
+       "y": -1
+      },
+      {
+       "x": 1,
+       "y": -5
+      },
+      {
+       "x": 2,
+       "y": 4
+      },
+      {
+       "x": 5,
+       "y": 4
+      },
+      {
+       "x": 5,
+       "y": -5
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAVUlEQVR4nM2SwQrAMAhDE9n//3J2apGCrSOH7p00SDC2BCAYBP6AlhijV2NuokNdagEPDQNee4UnZcpb7LQMo1i/0vglAju/NE4DHQO5JhatnDvsG7xHsRYMFEC2hAAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

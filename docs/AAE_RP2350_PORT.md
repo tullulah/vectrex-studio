@@ -13,7 +13,7 @@ notes `c-game-rp2350-hw-validated`, `libvpy-c-runtime-plan`.
 
 **The key alignment that makes this tractable:** AAE already draws every vector
 through `v_directDraw32(x0,y0,x1,y1,brightness)` — the SAME primitive the RP2350
-SDK shim provides (`ide/electron/resources/rp2350-sdk/sdk_rp2350.c`). So AAE's
+SDK shim provides (`ide/electron/resources/uvmc2-sdk/rp2350-sdk/sdk_rp2350.c`). So AAE's
 video output falls straight into libvpy's draw path (with the per-path re-zero +
 `MAX_CONSECUTIVE_DRAWS=32` cap fixed in commit `a06ccde5`) — **no video
 re-targeting needed**. Input likewise goes through `v_readButtons` /

@@ -1,0 +1,62 @@
+{
+ "version": "1.0",
+ "name": "auto_boss2_0f06",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -8,
+       "y": -4
+      },
+      {
+       "x": -8,
+       "y": 8
+      },
+      {
+       "x": 5,
+       "y": 8
+      },
+      {
+       "x": 6,
+       "y": -1
+      },
+      {
+       "x": 7,
+       "y": -8
+      },
+      {
+       "x": -1,
+       "y": -8
+      },
+      {
+       "x": -3,
+       "y": -4
+      },
+      {
+       "x": -8,
+       "y": -8
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAjElEQVR4nKVS2xGAIAyLHadrMZdrdR08FYRiy0Nzly9p86iAIAYgYoblrUJcYbuA4EESByBvOPB42I4gTSeyEkFu5X1eHPRnuCyQtWEdQ1LOTKOTXg+E3DYntqfjiQiBv/0DJQK0veeM+VsvQqjV5SpyU/YdJ/WSVtl05rgsZzyh1DtQ534pd/qxejgA206BD60TjBYAAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

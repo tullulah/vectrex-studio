@@ -1,0 +1,74 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy3_05a5",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": 4
+      },
+      {
+       "x": -5,
+       "y": -1
+      },
+      {
+       "x": -6,
+       "y": 8
+      },
+      {
+       "x": -3,
+       "y": 6
+      },
+      {
+       "x": -3,
+       "y": 1
+      },
+      {
+       "x": -1,
+       "y": 1
+      },
+      {
+       "x": 1,
+       "y": 5
+      },
+      {
+       "x": 3,
+       "y": -3
+      },
+      {
+       "x": 7,
+       "y": 2
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAt0lEQVR4nJ1S2w2EIBAcqIIaLMNW+KUcfm3lyrAGupiLPDwEFvUmQQjZncciUODJuBqYvb+roc+TU0oqmpHoi4N6zwiLTPzMgSdnJPou4wwWoA4fueAgN2sf6+IA/4MboBJBq+DJOlp00TTbpw5CjjiclSdPghfDjOqb572DIAy4NMMpaKxqWBzQP/3IpbbLWMXgV1vI417UC0H8ZheS/cErwLrUI86gbpJmYXYmgiNGqzL7Q2t8AbbUVL1Q1xIAAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

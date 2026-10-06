@@ -1,0 +1,140 @@
+{
+ "version": "1.0",
+ "name": "auto_ghost_0240",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 3,
+       "y": 5
+      },
+      {
+       "x": 8,
+       "y": 5
+      },
+      {
+       "x": 8,
+       "y": -8
+      },
+      {
+       "x": 4,
+       "y": -8
+      },
+      {
+       "x": -2,
+       "y": -7
+      },
+      {
+       "x": -2,
+       "y": 0
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 2,
+       "y": -2
+      },
+      {
+       "x": 3,
+       "y": -3
+      },
+      {
+       "x": 2,
+       "y": -6
+      },
+      {
+       "x": 4,
+       "y": -7
+      },
+      {
+       "x": -1,
+       "y": -7
+      },
+      {
+       "x": 0,
+       "y": 1
+      },
+      {
+       "x": 2,
+       "y": 4
+      },
+      {
+       "x": 7,
+       "y": 3
+      },
+      {
+       "x": 7,
+       "y": 1
+      },
+      {
+       "x": 3,
+       "y": 2
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 7,
+       "y": -1
+      },
+      {
+       "x": 7,
+       "y": -5
+      },
+      {
+       "x": 6,
+       "y": -5
+      },
+      {
+       "x": 7,
+       "y": -7
+      },
+      {
+       "x": 5,
+       "y": -7
+      },
+      {
+       "x": 5,
+       "y": -5
+      },
+      {
+       "x": 4,
+       "y": -5
+      },
+      {
+       "x": 5,
+       "y": 1
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAm0lEQVR4nNVS2xGEIAxcqcIaLONa4ddy/L1WLCM10MU64XW5GcX46c7AJsCGQAK8HtODszzRMjwRx+pUZvSKYwnAC3uILsgsIDZm7v4NfjcKOAvzaGK1w0is09e8Pe1mdyfSMsH1iRqkIbXCrYXDSBgdAQO8WID5U9gLts/rtlbAlPG2kf4aR2oGYnwZV/G8cWpGZt3xjItO1PUDqI5fcAMHfl4AAAAASUVORK5CYII=",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

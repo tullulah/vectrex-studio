@@ -1,0 +1,46 @@
+{
+ "version": "1.0",
+ "name": "auto_boss1_0e84",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -8,
+       "y": -4
+      },
+      {
+       "x": -6,
+       "y": -3
+      },
+      {
+       "x": 0,
+       "y": -7
+      },
+      {
+       "x": -8,
+       "y": -8
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAT0lEQVR4nGNgGAWjYHiApdkM/0GYXP0sIMLQioFhKQPEkOipDIykGMDUIxDFcP4YhAM2iEQXMT2fu48BZAgMgAyBGUSUAcgcmEuQXUPIAACLxRhpaYPsAwAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

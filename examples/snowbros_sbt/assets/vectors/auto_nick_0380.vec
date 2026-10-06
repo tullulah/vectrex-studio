@@ -1,0 +1,230 @@
+{
+ "version": "1.0",
+ "name": "auto_nick_0380",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 7,
+       "y": -3
+      },
+      {
+       "x": 6,
+       "y": -11
+      },
+      {
+       "x": 9,
+       "y": -13
+      },
+      {
+       "x": 8,
+       "y": -16
+      },
+      {
+       "x": 3,
+       "y": -15
+      },
+      {
+       "x": 0,
+       "y": -10
+      },
+      {
+       "x": -4,
+       "y": -15
+      },
+      {
+       "x": -9,
+       "y": -16
+      },
+      {
+       "x": -10,
+       "y": -13
+      },
+      {
+       "x": -7,
+       "y": -11
+      },
+      {
+       "x": -8,
+       "y": 2
+      },
+      {
+       "x": -13,
+       "y": 7
+      },
+      {
+       "x": -15,
+       "y": 12
+      },
+      {
+       "x": -11,
+       "y": 13
+      },
+      {
+       "x": -6,
+       "y": 9
+      },
+      {
+       "x": -5,
+       "y": 16
+      },
+      {
+       "x": 4,
+       "y": 15
+      },
+      {
+       "x": 6,
+       "y": 9
+      },
+      {
+       "x": 12,
+       "y": 12
+      },
+      {
+       "x": 14,
+       "y": 8
+      },
+      {
+       "x": 7,
+       "y": 1
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -3,
+       "y": 13
+      },
+      {
+       "x": -1,
+       "y": 13
+      },
+      {
+       "x": -1,
+       "y": 9
+      },
+      {
+       "x": -3,
+       "y": 9
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 0,
+       "y": -7
+      },
+      {
+       "x": 1,
+       "y": -7
+      },
+      {
+       "x": 1,
+       "y": -10
+      },
+      {
+       "x": -1,
+       "y": -9
+      },
+      {
+       "x": -2,
+       "y": -10
+      },
+      {
+       "x": -2,
+       "y": -7
+      }
+     ]
+    },
+    {
+     "name": "det2",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -2,
+       "y": -2
+      },
+      {
+       "x": 2,
+       "y": -2
+      },
+      {
+       "x": 2,
+       "y": -3
+      },
+      {
+       "x": -2,
+       "y": -3
+      },
+      {
+       "x": -4,
+       "y": -2
+      },
+      {
+       "x": -4,
+       "y": 0
+      }
+     ]
+    },
+    {
+     "name": "det3",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -5,
+       "y": 2
+      },
+      {
+       "x": -6,
+       "y": 2
+      },
+      {
+       "x": -6,
+       "y": 6
+      },
+      {
+       "x": -5,
+       "y": 5
+      },
+      {
+       "x": -4,
+       "y": 3
+      },
+      {
+       "x": -4,
+       "y": 1
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACu0lEQVR4nMVXLXfqQBCdcBCVyIeMLC64VoID17qHxcE/KLK4SuJqiysOXCPBNa7PPSR1D4nLO3d2Z1nyQT5KT+85S/Zz7p2Z3ZAlKocIJZotuczuRtzWpRKcMuSzuxFXRp0eTZs7cl2X29vtlib3wyo2qU4lsR94NHevyCWXOl6T+wIienl/EyFRGRF1q26HMdMAvB60u1zfRR/8lDZElEVNyH8/jOjt318xEmV5n4fH1+es9al7pSaVVlsZR1jPifil8w587K+42GOyL+LksJkmrmaMvYe0CQI2GBNReYfLetgScXERdf105lOf08AeuGqDSU4H7S4vwNjndsupshFv214DarMe6FM7mrUJHYiQVECEhBuGGoMu7a0UdP3hqYjR85G549H86clK14GCcMenZD71mSuRAgEUYiI8FaBtw5B3PFVSBAl5q3Ekj3sPxAUgCiciUNAO/8RmauJEXUMcALk4Fvc+TUBCxFcAEbCxfF2kkmcJSIgYLHhxIYhoPCXsWeTnBJyIMMbbXXUKsOECK59ByH0c9uN/Qi55ngAjAvCuj532BrX77JQVIS8iwKDX9FgE8gm89B5UFIJQ1TUp5qx2xchLCRC0pr7xFGGX8w9hGIPQMqiVmWyM3w+ZUI6pkNtp+p7vgZtb8nbqncCR0PujpfdIDx8sm/U3CiCJQvKNVjb0lQXQzS316Jac/vFvGIiWh9LeFxagXsMhEzM2a4o2SWEoq4WffG1/UYAzgYPS2qz5mCXCD+8hgogmet2lBKTi1Muw8h6olZody/EkZ/zyAn4Q0SNuRB0vWl6ruvVdx230p4xdhjzS1zAYzyAwY5iH+UVF1AuQm+uY+SpI+T5o6GubWThbkjPu596SnCLkfrAynWNF7py7O4pgnjjun+VxzgmwDWri3DX4SVlXSYAxWHBupXX/AWbPnjhcVwo6AAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

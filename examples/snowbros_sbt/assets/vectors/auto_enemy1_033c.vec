@@ -1,0 +1,222 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy1_033c",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 10,
+       "y": -12
+      },
+      {
+       "x": -11,
+       "y": -13
+      },
+      {
+       "x": -8,
+       "y": -9
+      },
+      {
+       "x": -10,
+       "y": -7
+      },
+      {
+       "x": -10,
+       "y": 11
+      },
+      {
+       "x": -7,
+       "y": 12
+      },
+      {
+       "x": -6,
+       "y": 10
+      },
+      {
+       "x": -3,
+       "y": 12
+      },
+      {
+       "x": 2,
+       "y": 12
+      },
+      {
+       "x": 4,
+       "y": 10
+      },
+      {
+       "x": 6,
+       "y": 12
+      },
+      {
+       "x": 9,
+       "y": 11
+      },
+      {
+       "x": 8,
+       "y": 4
+      },
+      {
+       "x": 11,
+       "y": 1
+      },
+      {
+       "x": 12,
+       "y": -5
+      },
+      {
+       "x": 10,
+       "y": -7
+      },
+      {
+       "x": 7,
+       "y": -6
+      },
+      {
+       "x": 6,
+       "y": -9
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 6,
+       "y": -9
+      },
+      {
+       "x": 9,
+       "y": -12
+      },
+      {
+       "x": 3,
+       "y": -12
+      },
+      {
+       "x": 0,
+       "y": -12
+      },
+      {
+       "x": 0,
+       "y": -11
+      },
+      {
+       "x": 5,
+       "y": -11
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -6,
+       "y": 5
+      },
+      {
+       "x": -8,
+       "y": 4
+      },
+      {
+       "x": -8,
+       "y": 6
+      },
+      {
+       "x": -5,
+       "y": 7
+      },
+      {
+       "x": -6,
+       "y": 8
+      },
+      {
+       "x": -6,
+       "y": 9
+      },
+      {
+       "x": -3,
+       "y": 8
+      }
+     ]
+    },
+    {
+     "name": "det2",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -3,
+       "y": 2
+      },
+      {
+       "x": -2,
+       "y": 3
+      },
+      {
+       "x": -1,
+       "y": 2
+      },
+      {
+       "x": -3,
+       "y": 0
+      },
+      {
+       "x": -4,
+       "y": 1
+      },
+      {
+       "x": -6,
+       "y": 4
+      }
+     ]
+    },
+    {
+     "name": "det3",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 1,
+       "y": -7
+      },
+      {
+       "x": -4,
+       "y": -7
+      },
+      {
+       "x": -4,
+       "y": -8
+      },
+      {
+       "x": 1,
+       "y": -8
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAADCUlEQVR4nO1WK3DiUBQ9dDA4ZCIjkcE1MpJ1iaxEFte6jWQdOJDIriOuuI1EEol8kkhcZXfOTW42sJCkn5kV2zOTeS/vd+7v3fuAL/zv6NRNWpb1yjbLss6l8SqurTkfP8dNHfl8YsOkYXkYW36x7WHv3eEwmUvLf53TddzH/ZeEraKLFvjm9fC8zYkHjoP+cAi4vsz1XR+3aYL9zsHeGATY1hK2tgCR7I7SLpYjzDNaw+TkRJqctByncBSS2lf3v1sAIl5tpQ0OHgyAn9EMx90OVfCfHy3gbuyTfU3otloFYG4XB75ssAEwupuhX5Bvnh7zud4IiW3wcPBE++ftS2MQduomGUCTLNfIdx2Y7fJknkKU5IreCJgCJgIW1qFRgC4a4JAo8MXHgeOezJnMxsJ5OhmbwIa/dmDEYfh4DDhuHvU/ohm8yQRzk8rH/g7Hv8YIBiMF5xX9lGtIfJ8+ihBr+QMQrbAKAoyjVTk2jNa4D/xS8E2cYB/cYbB9er3mii6uQBOOoLjz98EOy2gtmq+nUxkP4wTraIUQ/dJVekvMZ7hg4DjlfdccQM0VJCV5lYzrktSIoLyada64aRKAB5Bc7zpvQzUTqrkp5jLO18lYMUdB6Ip3xYBJjRxOhEaPdOBHM3GHWkS1PboPSAzwq0iWBHOCJKXFZY4btIBqZQ3upSXZOI4RRpG0Sq7zXE+XhNO+kAdjT+rJJTd08UaQJLsyXnVb6YLdEcH4A5lwntniBgYj3VAlOke2X2KK3N+zNMXWepGSrIJcSs3dOnKaDfEfrcZpgpFTqYgVSE1gZXQdiQmFVsRrdaHTJAA3qhU0MBXsqakJrtGApPYkbHoZda4JoEJoX94DRVE6h2pMYkLJ685uJcC5EF7W0y6G6JeE7DMF00200EOLKtjqGlpFEDIls6Vm/JSc6ZhZUQqPMbgNQ8mMLOHVN2IdOnXkTKGqlcIUhanMhPo0qwZjkfm4tulN0LlGnr/t/lR1NTe11ueXkFTWEBohOkYB3hyEVgvTvQVt4+EL+Bf4DfgKvkRB8s1aAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

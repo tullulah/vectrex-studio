@@ -1,0 +1,105 @@
+{
+ "version": "1.0",
+ "name": "auto_enemy2_0504",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 13,
+       "y": 4
+      },
+      {
+       "x": 12,
+       "y": -7
+      },
+      {
+       "x": 6,
+       "y": -15
+      },
+      {
+       "x": -5,
+       "y": -15
+      },
+      {
+       "x": -11,
+       "y": -9
+      },
+      {
+       "x": -12,
+       "y": -5
+      },
+      {
+       "x": -13,
+       "y": 2
+      },
+      {
+       "x": -11,
+       "y": 8
+      },
+      {
+       "x": -3,
+       "y": 14
+      },
+      {
+       "x": 8,
+       "y": 12
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 10,
+       "y": -5
+      },
+      {
+       "x": 11,
+       "y": -1
+      },
+      {
+       "x": 12,
+       "y": -1
+      },
+      {
+       "x": 12,
+       "y": -4
+      },
+      {
+       "x": 11,
+       "y": -4
+      },
+      {
+       "x": 11,
+       "y": -7
+      },
+      {
+       "x": 9,
+       "y": -6
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACWUlEQVR4nOVXu3XDMAwk/TSA25QsXXqFlE4Xj5AVUqpUmRUygtLFpVdw6ZKl22ygvKMMCQRBkXLK3HuJLUrCHQ7gx8b8d9hHXto+fw/a+M/5ZXU8u5b4aXeYrvc7Y05fJ4Ox2/U0C/EXY3xbFdvWEuMTRCAltG9++n58d5GIWiGbteSXa0zefbrwR8K4Q1u3h09quQh2reU5UCkAOEFlKblga8g5MTnA3aD7dM0RRJxb3LX1JXCdahsI+g8fkUthsg/GeMdsKWxt9rzmnFCDdGR2IYxGnI2pAMglcc52lRx9ABd8n8RukhHXhezJZiKXxDlC+k6l4E38g38Qs9QD2zB1xq7mwRFQlqMkhMi5CNkLjam0/vB6iPog1xM0BfE8dySHRuQxoF4IMKr24WVkx8UQMd3joPl/u8YrJ7kgy9Ck0+UuZTcur1oGS42IsRtzwxhuf9EBM/UABaO5n5t+3HrYzldEDnV9MJmFCA8v1a20GFEMfXPqFwT4fnyIgZeCZgZvQpkdbz65TdethK4bqAzSSpk1XVPnSyRnhHuSfDXcaKqkCxRIWg5H6J78hDhNlFyK7dJGBCd4kJKdAN+SS9kD2QMJnw0UUDozrxcpeXowWXMecKMLuRflTin7QM0eUA4mm6w0pRf4NTUg33jkBhRZr+yEQP5IBhfw0n11zM0MIgUZdywiD1uxfiyzWQFcRPh+XKwlEeKZlDxtvjoBihOAmqlEZLlODtT9MOFOTGOzILW+hczXCRgxGNdlmykS5dvq+Lb0gMB8moEYjpl0VeyHfpxGQv4Y7xcyBI3/6O9FqAAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

@@ -1673,20 +1673,19 @@ BEEP_UPDATE_DONE:\n\
 }
 
 /// Emit NOTE_PERIOD_TABLE: 84 FDB entries for MIDI notes 24-107 → AY period
-/// Formula (calibrated for JSVecX): period = round(88200 / (440 * 2^((n-69)/12)))
+/// Formula: period = clk / (16 * f), con clk = 1,5 MHz (IC208 pin 15 <- E). Ver crate::psg.
 fn emit_note_period_table(asm: &mut String) {
     asm.push_str(
         "; ============================================================================\n\
         ; NOTE_PERIOD_TABLE — MIDI note 24 (C1) to 107 (B7) → AY-3-8910 period\n\
         ; Each entry is a 2-byte FDB (big-endian). Index = midi_note - 24.\n\
-        ; Formula: period = round(88200 / (440 * 2^((midi_note - 69) / 12)))\n\
+        ; Formula: period = 1500000 / (16 * 440 * 2^((midi_note - 69) / 12))\n\
         ; ============================================================================\n\
         NOTE_PERIOD_TABLE:\n"
     );
     for midi in 24u8..=107u8 {
-        let freq = 440.0_f32 * 2.0_f32.powf((midi as f32 - 69.0) / 12.0);
-        let period = (88200.0_f32 / freq).round() as u16;
-        let period = period.max(1).min(4095);
+        let period = crate::psg::midi_to_period(midi as f64);
+        let freq = crate::psg::midi_to_hz(midi as f64);
         // Emit note name as comment
         let note_names = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
         let octave = (midi as i32 - 12) / 12;

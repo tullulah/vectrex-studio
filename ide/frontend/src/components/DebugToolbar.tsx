@@ -18,6 +18,7 @@ export function DebugToolbar() {
   const currentAsmAddress = useDebugStore(s => s.currentAsmAddress);
   const cycles = useDebugStore(s => s.cycles);
   const fps = useDebugStore(s => s.currentFps);
+  const drawFps = useDebugStore(s => s.drawFps);
   
   // Keyboard shortcuts
   React.useEffect(() => {
@@ -163,6 +164,15 @@ export function DebugToolbar() {
           <span className="debug-info-item">
             <span className="debug-info-label">{t('label.fps', 'FPS')}:</span>
             <span className="debug-info-value">{fps.toFixed(1)}</span>
+          </span>
+        )}
+
+        {/* El refresco que daria el dibujo en la consola. Etiqueta aparte a proposito:
+            mezclarlo con el fps del emulador es invitar a leer uno por el otro. */}
+        {drawFps > 0 && (
+          <span className="debug-info-item" title="Refresco que permitiria el dibujo en la consola (1,5 MHz / ciclos de bus del frame)">
+            <span className="debug-info-label">{t('label.drawfps', 'Dibujo')}:</span>
+            <span className="debug-info-value">{drawFps.toFixed(1)}</span>
           </span>
         )}
 

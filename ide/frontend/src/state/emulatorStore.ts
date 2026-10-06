@@ -11,7 +11,8 @@ interface EmulatorStore extends EmulatorState {
   // Bumped on every setSimModule call so the panel can force a fresh remount
   // even when the same module path is rebuilt (identical path, new bytes).
   simModuleNonce: number;
-  setSimModule: (path: string | null) => void;
+  simRomZip?: Uint8Array | null;
+  setSimModule: (path: string | null, romZip?: Uint8Array | null) => void;
 }
 
 const initial: EmulatorState = { status: 'stopped' };
@@ -21,5 +22,6 @@ export const useEmulatorStore = create<EmulatorStore>((set) => ({
   simModulePath: null,
   simModuleNonce: 0,
   setStatus: (status) => set({ status }),
-  setSimModule: (path) => set((s) => ({ simModulePath: path, simModuleNonce: s.simModuleNonce + 1 })),
+  simRomZip: null,
+  setSimModule: (path, romZip = null) => set((s) => ({ simModulePath: path, simRomZip: romZip, simModuleNonce: s.simModuleNonce + 1 })),
 }));

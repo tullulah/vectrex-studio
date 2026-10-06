@@ -1,0 +1,151 @@
+{
+ "version": "1.0",
+ "name": "auto_bank_0a98",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -8,
+       "y": -3
+      },
+      {
+       "x": -8,
+       "y": 24
+      },
+      {
+       "x": 8,
+       "y": 24
+      },
+      {
+       "x": 8,
+       "y": 3
+      },
+      {
+       "x": 8,
+       "y": -24
+      },
+      {
+       "x": -8,
+       "y": -24
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -4,
+       "y": -13
+      },
+      {
+       "x": -4,
+       "y": -11
+      },
+      {
+       "x": -1,
+       "y": -12
+      },
+      {
+       "x": -1,
+       "y": -15
+      },
+      {
+       "x": -4,
+       "y": -14
+      },
+      {
+       "x": -5,
+       "y": -20
+      },
+      {
+       "x": -6,
+       "y": -20
+      },
+      {
+       "x": -4,
+       "y": -22
+      },
+      {
+       "x": -7,
+       "y": -23
+      },
+      {
+       "x": -7,
+       "y": -19
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 3,
+       "y": -20
+      },
+      {
+       "x": 5,
+       "y": -20
+      },
+      {
+       "x": 5,
+       "y": -23
+      },
+      {
+       "x": 0,
+       "y": -23
+      },
+      {
+       "x": -2,
+       "y": -22
+      }
+     ]
+    },
+    {
+     "name": "det2",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -1,
+       "y": -18
+      },
+      {
+       "x": -1,
+       "y": -15
+      },
+      {
+       "x": 0,
+       "y": -15
+      },
+      {
+       "x": 0,
+       "y": -18
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAwCAYAAAAYX/pXAAAAoklEQVR4nO2Wyw0DIQxEh9EWQQ20kjJS15axrbgGukgObLTIN3uklZLwJA4c/IRtfgXACwJUgpdgQIhwCfC3NbBzANiisdXG6X+0kltBxwjMp9AgCkwVQBRUd4UyKvhUPy3wnSCC7C4NRgVPN2dUcJw7MS3wEHcXsatnoaobyUMkUphXUVL/A7tSIUSYimpXN4r0xTFV8MUPywQhwiXAD9TgDYP7GilyaRvlAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

@@ -1,0 +1,128 @@
+{
+ "version": "1.0",
+ "name": "auto_boss1_0e18",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": -5,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": 8
+      },
+      {
+       "x": 8,
+       "y": -8
+      },
+      {
+       "x": 5,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": -8
+      },
+      {
+       "x": -8,
+       "y": 8
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -6,
+       "y": -7
+      },
+      {
+       "x": -7,
+       "y": -7
+      },
+      {
+       "x": -7,
+       "y": -4
+      },
+      {
+       "x": -2,
+       "y": -5
+      },
+      {
+       "x": -2,
+       "y": -6
+      },
+      {
+       "x": 1,
+       "y": -6
+      },
+      {
+       "x": 4,
+       "y": -4
+      },
+      {
+       "x": 7,
+       "y": -4
+      },
+      {
+       "x": 7,
+       "y": -7
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 3,
+       "y": 5
+      },
+      {
+       "x": -7,
+       "y": 6
+      },
+      {
+       "x": -7,
+       "y": 7
+      },
+      {
+       "x": -2,
+       "y": 7
+      },
+      {
+       "x": -2,
+       "y": 6
+      },
+      {
+       "x": 7,
+       "y": 7
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAArklEQVR4nKVTwQ3EIAxzTh2CGW6MW4XvjXPfrnJjMEO3oArFVVolCKn+BBrHCeBKBioCrOWI+R0xAEEgkO9ioUBBtR0iYiQuKsBN6sutDeaPrsci7xRI8TWE2P5HXLSYm3OSTyd8BfjV67e+ZpRUamNo0pJGoEA7QuoC3nhe1wsP4l/iCLxgYhklreA9x1cSOpGum4F9Xnli5dVaOU909lw69S+M7B0KzOL1pFhrdxdSQDQDIwJtAAAAAElFTkSuQmCC",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

@@ -1,4653 +1,1939 @@
 {
-  "version": "1.0",
-  "source": "main.vpy",
-  "asm": "set_intensity.asm",
-  "binary": "set_intensity.bin",
-  "entryPoint": "0x01FE",
-  "symbols": {
-    "LOOP_BODY": "0x023C",
-    "J1Y_BUILTIN": "0x0037",
-    "J1B4_BUILTIN.J1B4_OFF": "0x0087",
-    "STR_4": "0x0724",
-    "__Draw_Line_d": "0x00B7",
-    "DRAW_CIRCLE_RUNTIME": "0x00BC",
-    "J1X_BUILTIN": "0x001F",
-    "STR_0": "0x0716",
-    "J1B1_BUILTIN": "0x004F",
-    "J1B2_BUILTIN": "0x005E",
-    "STR_3": "0x0721",
-    "STR_5": "0x0727",
-    "J1B1_BUILTIN.J1B1_OFF": "0x005A",
-    "J1B2_BUILTIN.J1B2_OFF": "0x0069",
-    "J1B3_BUILTIN": "0x006D",
-    "J1B4_BUILTIN": "0x007C",
-    "DCR_intensity_5F": "0x00EE",
-    "DCR_after_intensity": "0x00F1",
-    "STR_1": "0x071A",
-    "STR_2": "0x071E",
-    "__Intensity_a": "0x00AA",
-    "__Moveto_d": "0x00B2",
-    "__Reset0Ref": "0x00AF",
-    "J1B3_BUILTIN.J1B3_OFF": "0x0078",
-    "MAIN": "0x020F",
-    "START": "0x01FE",
-    "VECTREX_PRINT_TEXT": "0x008B"
+  "asm": "multibank_temp/bank_00_full.asm",
+  "asmAddressMap": {},
+  "asmBankAddr": {
+    "0:0000": 551,
+    "0:000A": 552,
+    "0:000B": 553,
+    "0:0010": 554,
+    "0:0011": 555,
+    "0:001A": 556,
+    "0:001B": 557,
+    "0:001C": 564,
+    "0:001E": 565,
+    "0:0020": 566,
+    "0:0023": 567,
+    "0:0025": 568,
+    "0:0028": 569,
+    "0:002B": 570,
+    "0:002D": 571,
+    "0:0031": 574,
+    "0:0033": 575,
+    "0:0036": 577,
+    "0:0039": 623,
+    "0:003C": 624,
+    "0:003F": 625,
+    "0:0042": 626,
+    "0:0044": 627,
+    "0:0047": 628,
+    "0:0049": 629,
+    "0:004C": 631,
+    "0:004F": 632,
+    "0:0052": 633,
+    "0:0054": 634,
+    "0:0057": 635,
+    "0:0059": 636,
+    "0:005C": 637,
+    "0:005E": 638,
+    "0:0061": 639,
+    "0:0063": 640,
+    "0:0066": 641,
+    "0:0069": 649,
+    "0:006F": 653,
+    "0:0072": 654,
+    "0:0075": 658,
+    "0:0078": 659,
+    "0:007B": 660,
+    "0:007E": 661,
+    "0:0081": 662,
+    "0:0084": 663,
+    "0:0087": 664,
+    "0:008A": 665,
+    "0:008D": 666,
+    "0:0090": 668,
+    "0:0092": 669,
+    "0:0094": 670,
+    "0:0097": 671,
+    "0:0099": 672,
+    "0:009B": 673,
+    "0:009D": 674,
+    "0:00A0": 675,
+    "0:00A2": 676,
+    "0:00A4": 677,
+    "0:00A7": 678,
+    "0:00AA": 679,
+    "0:00AC": 680,
+    "0:00AE": 681,
+    "0:00B1": 682,
+    "0:00B4": 683,
+    "0:00B6": 684,
+    "0:00B8": 685,
+    "0:00BB": 686,
+    "0:00BE": 687,
+    "0:00C0": 688,
+    "0:00C2": 689,
+    "0:00C5": 690,
+    "0:00C8": 691,
+    "0:00CA": 692,
+    "0:00CC": 693,
+    "0:00CF": 694,
+    "0:00D2": 695,
+    "0:00D4": 696,
+    "0:00D6": 697,
+    "0:00D9": 698,
+    "0:00DC": 699,
+    "0:00DE": 700,
+    "0:00E0": 701,
+    "0:00E3": 702,
+    "0:00E6": 703,
+    "0:00E8": 704,
+    "0:00EA": 705,
+    "0:00ED": 706,
+    "0:00F0": 707,
+    "0:00F2": 708,
+    "0:00F4": 709,
+    "0:00F7": 710,
+    "0:00FA": 711,
+    "0:00FC": 712,
+    "0:00FE": 713,
+    "0:0101": 714,
+    "0:0104": 715,
+    "0:0106": 716,
+    "0:0108": 717,
+    "0:010B": 718,
+    "0:010E": 719,
+    "0:0110": 720,
+    "0:0112": 721,
+    "0:0115": 722,
+    "0:0118": 723,
+    "0:011A": 724,
+    "0:011C": 725,
+    "0:011F": 726,
+    "0:0122": 727,
+    "0:0124": 728,
+    "0:0126": 729,
+    "0:0129": 730,
+    "0:012C": 731,
+    "0:012E": 732,
+    "0:0130": 733,
+    "0:0133": 734,
+    "0:0136": 735,
+    "0:0138": 736,
+    "0:013A": 737,
+    "0:013D": 738,
+    "0:0140": 739,
+    "0:0142": 740,
+    "0:0144": 741,
+    "0:0147": 742,
+    "0:0149": 743,
+    "0:014B": 744,
+    "0:014E": 745,
+    "0:0151": 747,
+    "0:0153": 748,
+    "0:0155": 749,
+    "0:0158": 750,
+    "0:015A": 751,
+    "0:015C": 752,
+    "0:015E": 753,
+    "0:0161": 754,
+    "0:0163": 755,
+    "0:0165": 756,
+    "0:0168": 757,
+    "0:016B": 758,
+    "0:016D": 759,
+    "0:016F": 760,
+    "0:0172": 761,
+    "0:0175": 762,
+    "0:0177": 763,
+    "0:0179": 764,
+    "0:017C": 765,
+    "0:017F": 766,
+    "0:0181": 767,
+    "0:0183": 768,
+    "0:0186": 769,
+    "0:0189": 770,
+    "0:018B": 771,
+    "0:018D": 772,
+    "0:0190": 773,
+    "0:0193": 774,
+    "0:0195": 775,
+    "0:0197": 776,
+    "0:019A": 777,
+    "0:019D": 778,
+    "0:019F": 779,
+    "0:01A1": 780,
+    "0:01A4": 781,
+    "0:01A7": 782,
+    "0:01A9": 783,
+    "0:01AB": 784,
+    "0:01AE": 785,
+    "0:01B1": 786,
+    "0:01B3": 787,
+    "0:01B5": 788,
+    "0:01B8": 789,
+    "0:01BB": 790,
+    "0:01BD": 791,
+    "0:01BF": 792,
+    "0:01C2": 793,
+    "0:01C5": 794,
+    "0:01C7": 795,
+    "0:01C9": 796,
+    "0:01CC": 797,
+    "0:01CF": 798,
+    "0:01D1": 799,
+    "0:01D3": 800,
+    "0:01D6": 801,
+    "0:01D9": 802,
+    "0:01DB": 803,
+    "0:01DD": 804,
+    "0:01E0": 805,
+    "0:01E3": 806,
+    "0:01E5": 807,
+    "0:01E7": 808,
+    "0:01EA": 809,
+    "0:01ED": 810,
+    "0:01EF": 811,
+    "0:01F1": 812,
+    "0:01F4": 813,
+    "0:01F7": 814,
+    "0:01F9": 815,
+    "0:01FB": 816,
+    "0:01FE": 817,
+    "0:0201": 818,
+    "0:0203": 819,
+    "0:0205": 820,
+    "0:0208": 821,
+    "0:020A": 822,
+    "0:020C": 823,
+    "0:020F": 824,
+    "0:0212": 826,
+    "0:0214": 827,
+    "0:0216": 828,
+    "0:0219": 829,
+    "0:021B": 830,
+    "0:021D": 831,
+    "0:021F": 832,
+    "0:0222": 833,
+    "0:0224": 834,
+    "0:0226": 835,
+    "0:0229": 836,
+    "0:022C": 837,
+    "0:022E": 838,
+    "0:0230": 839,
+    "0:0233": 840,
+    "0:0236": 841,
+    "0:0238": 842,
+    "0:023A": 843,
+    "0:023D": 844,
+    "0:0240": 845,
+    "0:0242": 846,
+    "0:0244": 847,
+    "0:0247": 848,
+    "0:024A": 849,
+    "0:024C": 850,
+    "0:024E": 851,
+    "0:0251": 852,
+    "0:0254": 853,
+    "0:0256": 854,
+    "0:0258": 855,
+    "0:025B": 856,
+    "0:025E": 857,
+    "0:0260": 858,
+    "0:0262": 859,
+    "0:0265": 860,
+    "0:0268": 861,
+    "0:026A": 862,
+    "0:026C": 863,
+    "0:026F": 864,
+    "0:0272": 865,
+    "0:0274": 866,
+    "0:0276": 867,
+    "0:0279": 868,
+    "0:027C": 869,
+    "0:027E": 870,
+    "0:0280": 871,
+    "0:0283": 872,
+    "0:0286": 873,
+    "0:0288": 874,
+    "0:028A": 875,
+    "0:028D": 876,
+    "0:0290": 877,
+    "0:0292": 878,
+    "0:0294": 879,
+    "0:0297": 880,
+    "0:029A": 881,
+    "0:029C": 882,
+    "0:029E": 883,
+    "0:02A1": 884,
+    "0:02A4": 885,
+    "0:02A6": 886,
+    "0:02A8": 887,
+    "0:02AB": 888,
+    "0:02AE": 889,
+    "0:02B0": 890,
+    "0:02B2": 891,
+    "0:02B5": 892,
+    "0:02B8": 893,
+    "0:02BA": 894,
+    "0:02BC": 895,
+    "0:02BF": 896,
+    "0:02C2": 897,
+    "0:02C4": 898,
+    "0:02C6": 899,
+    "0:02C9": 900,
+    "0:02CB": 901,
+    "0:02CD": 902,
+    "0:02D0": 903,
+    "0:02D3": 905,
+    "0:02D5": 906,
+    "0:02D7": 907,
+    "0:02DA": 908,
+    "0:02DC": 909,
+    "0:02DE": 910,
+    "0:02E0": 911,
+    "0:02E3": 912,
+    "0:02E5": 913,
+    "0:02E7": 914,
+    "0:02EA": 915,
+    "0:02ED": 916,
+    "0:02EF": 917,
+    "0:02F1": 918,
+    "0:02F4": 919,
+    "0:02F7": 920,
+    "0:02F9": 921,
+    "0:02FB": 922,
+    "0:02FE": 923,
+    "0:0301": 924,
+    "0:0303": 925,
+    "0:0305": 926,
+    "0:0308": 927,
+    "0:030B": 928,
+    "0:030D": 929,
+    "0:030F": 930,
+    "0:0312": 931,
+    "0:0315": 932,
+    "0:0317": 933,
+    "0:0319": 934,
+    "0:031C": 935,
+    "0:031F": 936,
+    "0:0321": 937,
+    "0:0323": 938,
+    "0:0326": 939,
+    "0:0329": 940,
+    "0:032B": 941,
+    "0:032D": 942,
+    "0:0330": 943,
+    "0:0333": 944,
+    "0:0335": 945,
+    "0:0337": 946,
+    "0:033A": 947,
+    "0:033D": 948,
+    "0:033F": 949,
+    "0:0341": 950,
+    "0:0344": 951,
+    "0:0347": 952,
+    "0:0349": 953,
+    "0:034B": 954,
+    "0:034E": 955,
+    "0:0351": 956,
+    "0:0353": 957,
+    "0:0355": 958,
+    "0:0358": 959,
+    "0:035B": 960,
+    "0:035D": 961,
+    "0:035F": 962,
+    "0:0362": 963,
+    "0:0365": 964,
+    "0:0367": 965,
+    "0:0369": 966,
+    "0:036C": 967,
+    "0:036F": 968,
+    "0:0371": 969,
+    "0:0373": 970,
+    "0:0376": 971,
+    "0:0379": 972,
+    "0:037B": 973,
+    "0:037D": 974,
+    "0:0380": 975,
+    "0:0383": 976,
+    "0:0385": 977,
+    "0:0387": 978,
+    "0:038A": 979,
+    "0:038C": 980,
+    "0:038E": 981,
+    "0:0391": 982,
+    "0:0394": 984,
+    "0:0396": 985,
+    "0:0398": 986,
+    "0:039B": 987,
+    "0:039D": 988,
+    "0:039F": 989,
+    "0:03A1": 990,
+    "0:03A4": 991,
+    "0:03A6": 992,
+    "0:03A8": 993,
+    "0:03AB": 994,
+    "0:03AE": 995,
+    "0:03B0": 996,
+    "0:03B2": 997,
+    "0:03B5": 998,
+    "0:03B8": 999,
+    "0:03BA": 1000,
+    "0:03BC": 1001,
+    "0:03BF": 1002,
+    "0:03C2": 1003,
+    "0:03C4": 1004,
+    "0:03C6": 1005,
+    "0:03C9": 1006,
+    "0:03CC": 1007,
+    "0:03CE": 1008,
+    "0:03D0": 1009,
+    "0:03D3": 1010,
+    "0:03D6": 1011,
+    "0:03D8": 1012,
+    "0:03DA": 1013,
+    "0:03DD": 1014,
+    "0:03E0": 1015,
+    "0:03E2": 1016,
+    "0:03E4": 1017,
+    "0:03E7": 1018,
+    "0:03EA": 1019,
+    "0:03EC": 1020,
+    "0:03EE": 1021,
+    "0:03F1": 1022,
+    "0:03F4": 1023,
+    "0:03F6": 1024,
+    "0:03F8": 1025,
+    "0:03FB": 1026,
+    "0:03FE": 1027,
+    "0:0400": 1028,
+    "0:0402": 1029,
+    "0:0405": 1030,
+    "0:0408": 1031,
+    "0:040A": 1032,
+    "0:040C": 1033,
+    "0:040F": 1034,
+    "0:0412": 1035,
+    "0:0414": 1036,
+    "0:0416": 1037,
+    "0:0419": 1038,
+    "0:041C": 1039,
+    "0:041E": 1040,
+    "0:0420": 1041,
+    "0:0423": 1042,
+    "0:0426": 1043,
+    "0:0428": 1044,
+    "0:042A": 1045,
+    "0:042D": 1046,
+    "0:0430": 1047,
+    "0:0432": 1048,
+    "0:0434": 1049,
+    "0:0437": 1050,
+    "0:043A": 1051,
+    "0:043C": 1052,
+    "0:043E": 1053,
+    "0:0441": 1054,
+    "0:0444": 1055,
+    "0:0446": 1056,
+    "0:0448": 1057,
+    "0:044B": 1058,
+    "0:044D": 1059,
+    "0:044F": 1060,
+    "0:0452": 1061,
+    "0:0455": 1065,
+    "0:0458": 1066,
+    "0:045B": 1067,
+    "0:045E": 1068,
+    "0:0461": 1069,
+    "0:0464": 1070,
+    "0:0467": 1071,
+    "0:046A": 1072,
+    "0:046D": 1073,
+    "0:0470": 1077,
+    "0:0473": 1078,
+    "0:0476": 1079,
+    "0:0479": 1080,
+    "0:047C": 1081,
+    "0:047F": 1082,
+    "0:0482": 1083,
+    "0:0485": 1084,
+    "0:0488": 1085,
+    "0:048B": 1089,
+    "0:048E": 1090,
+    "0:0491": 1091,
+    "0:0494": 1092,
+    "0:0497": 1093,
+    "0:049A": 1094,
+    "0:049D": 1095,
+    "0:04A0": 1096,
+    "0:04A3": 1097,
+    "0:04A6": 1101,
+    "0:04A9": 1102,
+    "0:04AC": 1103,
+    "0:04AF": 1104,
+    "0:04B2": 1105,
+    "0:04B5": 1106,
+    "0:04B8": 1107,
+    "0:04BB": 1108,
+    "0:04BE": 1109,
+    "0:04C1": 1113,
+    "0:04C4": 1114,
+    "0:04C7": 1115,
+    "0:04CA": 1116,
+    "0:04CD": 1117,
+    "0:04D0": 1118,
+    "0:04D3": 1119,
+    "0:04D6": 1120,
+    "0:04D9": 1121,
+    "0:04DC": 1122
+  },
+  "asmBankFiles": {
+    "0": "multibank_temp/bank_00_full.asm",
+    "1": "multibank_temp/bank_01_full.asm",
+    "2": "multibank_temp/bank_02_full.asm"
+  },
+  "asmFunctions": {},
+  "asmLineMap": {},
+  "binary": "main.bin",
+  "bios_symbols": {
+    "Abs_a_b": "0xF584",
+    "Abs_b": "0xF58B",
+    "Add_Score_a": "0xF85E",
+    "Add_Score_d": "0xF87C",
+    "Bitmask_a": "0xF57E",
+    "Check0Ref": "0xF34F",
+    "Clear_C8_RAM": "0xF542",
+    "Clear_Score": "0xF84F",
+    "Clear_Sound": "0xF272",
+    "Clear_x_256": "0xF545",
+    "Clear_x_b": "0xF53F",
+    "Clear_x_b_80": "0xF550",
+    "Clear_x_b_a": "0xF552",
+    "Clear_x_d": "0xF548",
+    "Cold_Start": "0xF000",
+    "Compare_Score": "0xF8C7",
+    "DP_to_C8": "0xF1AF",
+    "DP_to_D0": "0xF1AA",
+    "Dec_3_Counters": "0xF55A",
+    "Dec_6_Counters": "0xF55E",
+    "Dec_Counters": "0xF563",
+    "Delay_0": "0xF579",
+    "Delay_1": "0xF575",
+    "Delay_2": "0xF571",
+    "Delay_3": "0xF56D",
+    "Delay_RTS": "0xF57D",
+    "Delay_b": "0xF57A",
+    "Do_Sound": "0xF289",
+    "Do_Sound_x": "0xF28C",
+    "Dot_List": "0xF2D5",
+    "Dot_List_Reset": "0xF2DE",
+    "Dot_d": "0xF2C3",
+    "Dot_here": "0xF2C5",
+    "Dot_ix": "0xF2C1",
+    "Dot_ix_b": "0xF2BE",
+    "Draw_Grid_VL": "0xFF9F",
+    "Draw_Line_d": "0xF3DF",
+    "Draw_Pat_VL": "0xF437",
+    "Draw_Pat_VL_a": "0xF434",
+    "Draw_Pat_VL_d": "0xF439",
+    "Draw_VL": "0xF3DD",
+    "Draw_VL_a": "0xF3DA",
+    "Draw_VL_ab": "0xF3D8",
+    "Draw_VL_b": "0xF3D2",
+    "Draw_VL_mode": "0xF46E",
+    "Draw_VLc": "0xF3CE",
+    "Draw_VLcs": "0xF3D6",
+    "Draw_VLp": "0xF410",
+    "Draw_VLp_7F": "0xF408",
+    "Draw_VLp_FF": "0xF404",
+    "Draw_VLp_b": "0xF40E",
+    "Draw_VLp_scale": "0xF40C",
+    "Explosion_Snd": "0xF92E",
+    "Get_Rise_Idx": "0xF5D9",
+    "Get_Rise_Run": "0xF5EF",
+    "Get_Run_Idx": "0xF5DB",
+    "Init_Music": "0xF68D",
+    "Init_Music_Buf": "0xF533",
+    "Init_Music_chk": "0xF687",
+    "Init_Music_x": "0xF692",
+    "Init_OS": "0xF18B",
+    "Init_OS_RAM": "0xF164",
+    "Init_VIA": "0xF14C",
+    "Intensity_1F": "0xF29D",
+    "Intensity_3F": "0xF2A1",
+    "Intensity_5F": "0xF2A5",
+    "Intensity_7F": "0xF2A9",
+    "Intensity_a": "0xF2AB",
+    "Joy_Analog": "0xF1F5",
+    "Joy_Digital": "0xF1F8",
+    "Mov_Draw_VL": "0xF3BC",
+    "Mov_Draw_VL_a": "0xF3B9",
+    "Mov_Draw_VL_ab": "0xF3B7",
+    "Mov_Draw_VL_b": "0xF3B1",
+    "Mov_Draw_VL_d": "0xF3BE",
+    "Mov_Draw_VLc_a": "0xF3AD",
+    "Mov_Draw_VLcs": "0xF3B5",
+    "Move_Mem_a": "0xF683",
+    "Move_Mem_a_1": "0xF67F",
+    "Moveto_d": "0xF312",
+    "Moveto_d_7F": "0xF2FC",
+    "Moveto_ix": "0xF310",
+    "Moveto_ix_7F": "0xF30C",
+    "Moveto_ix_FF": "0xF308",
+    "Moveto_ix_a": "0xF30E",
+    "Moveto_x_7F": "0xF2F2",
+    "New_High_Score": "0xF8D8",
+    "Obj_Hit": "0xF8FF",
+    "Obj_Will_Hit": "0xF8F3",
+    "Obj_Will_Hit_u": "0xF8E5",
+    "Print_List": "0xF38A",
+    "Print_List_chk": "0xF38C",
+    "Print_List_hw": "0xF385",
+    "Print_Ships": "0xF393",
+    "Print_Ships_x": "0xF391",
+    "Print_Str": "0xF495",
+    "Print_Str_d": "0xF37A",
+    "Print_Str_hwyx": "0xF373",
+    "Print_Str_yx": "0xF378",
+    "Random": "0xF517",
+    "Random_3": "0xF511",
+    "Read_Btns": "0xF1BA",
+    "Read_Btns_Mask": "0xF1B4",
+    "Recalibrate": "0xF2E6",
+    "Reset0Int": "0xF36B",
+    "Reset0Ref": "0xF354",
+    "Reset0Ref_D0": "0xF34A",
+    "Reset_Pen": "0xF35B",
+    "Rise_Run_Angle": "0xF593",
+    "Rise_Run_Len": "0xF603",
+    "Rise_Run_X": "0xF5FF",
+    "Rise_Run_Y": "0xF601",
+    "Rot_VL": "0xF616",
+    "Rot_VL_Mode": "0xF62B",
+    "Rot_VL_Mode_a": "0xF61F",
+    "Rot_VL_ab": "0xF610",
+    "Rot_VL_dft": "0xF637",
+    "Select_Game": "0xF7A9",
+    "Set_Refresh": "0xF1A2",
+    "Sound_Byte": "0xF256",
+    "Sound_Byte_raw": "0xF25B",
+    "Sound_Byte_x": "0xF259",
+    "Sound_Bytes": "0xF27D",
+    "Sound_Bytes_x": "0xF284",
+    "Strip_Zeros": "0xF8B7",
+    "VIA_DDR_a": "0xD003",
+    "VIA_DDR_b": "0xD002",
+    "VIA_aux_cntl": "0xD00B",
+    "VIA_cntl": "0xD00C",
+    "VIA_int_enable": "0xD00E",
+    "VIA_int_flags": "0xD00D",
+    "VIA_port_a": "0xD001",
+    "VIA_port_a_nohs": "0xD00F",
+    "VIA_port_b": "0xD000",
+    "VIA_shift_reg": "0xD00A",
+    "VIA_t1_cnt_hi": "0xD005",
+    "VIA_t1_cnt_lo": "0xD004",
+    "VIA_t1_lch_hi": "0xD007",
+    "VIA_t1_lch_lo": "0xD006",
+    "VIA_t2_hi": "0xD009",
+    "VIA_t2_lo": "0xD008",
+    "Vec_0Ref_Enable": "0xC824",
+    "Vec_ADSR_Table": "0xC84F",
+    "Vec_ADSR_Timers": "0xC85E",
+    "Vec_Angle": "0xC836",
+    "Vec_Brightness": "0xC827",
+    "Vec_Btn_State": "0xC80F",
+    "Vec_Button_1_1": "0xC812",
+    "Vec_Button_1_2": "0xC813",
+    "Vec_Button_1_3": "0xC814",
+    "Vec_Button_1_4": "0xC815",
+    "Vec_Button_2_1": "0xC816",
+    "Vec_Button_2_2": "0xC817",
+    "Vec_Button_2_3": "0xC818",
+    "Vec_Button_2_4": "0xC819",
+    "Vec_Buttons": "0xC811",
+    "Vec_Cold_Flag": "0xCBFE",
+    "Vec_Counter_1": "0xC82E",
+    "Vec_Counter_2": "0xC82F",
+    "Vec_Counter_3": "0xC830",
+    "Vec_Counter_4": "0xC831",
+    "Vec_Counter_5": "0xC832",
+    "Vec_Counter_6": "0xC833",
+    "Vec_Counters": "0xC82E",
+    "Vec_Default_Stk": "0xCBEA",
+    "Vec_Dot_Dwell": "0xC828",
+    "Vec_Duration": "0xC857",
+    "Vec_Expl_1": "0xC858",
+    "Vec_Expl_2": "0xC859",
+    "Vec_Expl_3": "0xC85A",
+    "Vec_Expl_4": "0xC85B",
+    "Vec_Expl_Chan": "0xC85C",
+    "Vec_Expl_ChanA": "0xC853",
+    "Vec_Expl_ChanB": "0xC85D",
+    "Vec_Expl_Chans": "0xC854",
+    "Vec_Expl_Flag": "0xC867",
+    "Vec_Expl_Timer": "0xC877",
+    "Vec_FIRQ_Vector": "0xCBF5",
+    "Vec_Freq_Table": "0xC84D",
+    "Vec_High_Score": "0xCBEB",
+    "Vec_IRQ_Vector": "0xCBF8",
+    "Vec_Joy_1_X": "0xC81B",
+    "Vec_Joy_1_Y": "0xC81C",
+    "Vec_Joy_2_X": "0xC81D",
+    "Vec_Joy_2_Y": "0xC81E",
+    "Vec_Joy_Mux": "0xC81F",
+    "Vec_Joy_Mux_1_X": "0xC81F",
+    "Vec_Joy_Mux_1_Y": "0xC820",
+    "Vec_Joy_Mux_2_X": "0xC821",
+    "Vec_Joy_Mux_2_Y": "0xC822",
+    "Vec_Joy_Resltn": "0xC81A",
+    "Vec_Loop_Count": "0xC825",
+    "Vec_Max_Games": "0xC850",
+    "Vec_Max_Players": "0xC84F",
+    "Vec_Misc_Count": "0xC823",
+    "Vec_Music_Chan": "0xC855",
+    "Vec_Music_Flag": "0xC856",
+    "Vec_Music_Freq": "0xC861",
+    "Vec_Music_Ptr": "0xC853",
+    "Vec_Music_Twang": "0xC858",
+    "Vec_Music_Wk_1": "0xC84B",
+    "Vec_Music_Wk_5": "0xC847",
+    "Vec_Music_Wk_6": "0xC846",
+    "Vec_Music_Wk_7": "0xC845",
+    "Vec_Music_Wk_A": "0xC842",
+    "Vec_Music_Work": "0xC83F",
+    "Vec_NMI_Vector": "0xCBFB",
+    "Vec_Num_Game": "0xC87A",
+    "Vec_Num_Players": "0xC879",
+    "Vec_Pattern": "0xC829",
+    "Vec_Prev_Btns": "0xC810",
+    "Vec_Random_Seed": "0xC87D",
+    "Vec_Rfrsh": "0xC83D",
+    "Vec_Rfrsh_hi": "0xC83E",
+    "Vec_Rfrsh_lo": "0xC83D",
+    "Vec_RiseRun_Len": "0xC83B",
+    "Vec_RiseRun_Tmp": "0xC834",
+    "Vec_Rise_Index": "0xC839",
+    "Vec_Run_Index": "0xC837",
+    "Vec_SWI2_Vector": "0xCBF2",
+    "Vec_SWI3_Vector": "0xCBF2",
+    "Vec_SWI_Vector": "0xCBFB",
+    "Vec_Seed_Ptr": "0xC87B",
+    "Vec_Snd_Shadow": "0xC800",
+    "Vec_Str_Ptr": "0xC82C",
+    "Vec_Text_HW": "0xC82A",
+    "Vec_Text_Height": "0xC82A",
+    "Vec_Text_Width": "0xC82B",
+    "Vec_Twang_Table": "0xC851",
+    "Wait_Recal": "0xF192",
+    "Warm_Start": "0xF06C",
+    "Xform_Rise": "0xF663",
+    "Xform_Rise_a": "0xF661",
+    "Xform_Run": "0xF65D",
+    "Xform_Run_a": "0xF65B",
+    "music1": "0xFD0D",
+    "music2": "0xFD1D",
+    "music3": "0xFD81",
+    "music4": "0xFDD3",
+    "music5": "0xFE38",
+    "music6": "0xFE76",
+    "music7": "0xFEC6",
+    "music8": "0xFEF8",
+    "music9": "0xFF26",
+    "musica": "0xFF44",
+    "musicb": "0xFF62",
+    "musicc": "0xFF7A",
+    "musicd": "0xFF8F"
+  },
+  "entry_point": "0x0022",
+  "functions": {
+    "LOOP": {
+      "address": "0x006F",
+      "endLine": 14,
+      "startLine": 13,
+      "type": "vpy"
+    },
+    "MAIN": {
+      "address": "0x0039",
+      "endLine": 12,
+      "startLine": 10,
+      "type": "vpy"
+    }
+  },
+  "labels": {
+    "ABS_A_B": 62852,
+    "ABS_B": 62859,
+    "ADD_SCORE_A": 63582,
+    "ADD_SCORE_D": 63612,
+    "Abs_a_b": 62852,
+    "Abs_b": 62859,
+    "Add_Score_a": 63582,
+    "Add_Score_d": 63612,
+    "BITMASK_A": 62846,
+    "BTN_PREV_STATE": 51340,
+    "BTN_RAW": 51341,
+    "Bitmask_a": 62846,
+    "CHECK0REF": 62287,
+    "CLEAR_C8_RAM": 62786,
+    "CLEAR_SCORE": 63567,
+    "CLEAR_SOUND": 62066,
+    "CLEAR_X_256": 62789,
+    "CLEAR_X_B": 62783,
+    "CLEAR_X_B_80": 62800,
+    "CLEAR_X_B_A": 62802,
+    "CLEAR_X_D": 62792,
+    "COLD_START": 61440,
+    "COMPARE_SCORE": 63687,
+    "CURRENT_ROM_BANK": 51394,
+    "Check0Ref": 62287,
+    "Clear_C8_RAM": 62786,
+    "Clear_Score": 63567,
+    "Clear_Sound": 62066,
+    "Clear_x_256": 62789,
+    "Clear_x_b": 62783,
+    "Clear_x_b_80": 62800,
+    "Clear_x_b_a": 62802,
+    "Clear_x_d": 62792,
+    "Cold_Start": 61440,
+    "Compare_Score": 63687,
+    "DCR_AFTER_INTENSITY": 16580,
+    "DCR_INTENSITY_5F": 16577,
+    "DCR_after_intensity": 16580,
+    "DCR_intensity_5F": 16577,
+    "DEC_3_COUNTERS": 62810,
+    "DEC_6_COUNTERS": 62814,
+    "DEC_COUNTERS": 62819,
+    "DELAY_0": 62841,
+    "DELAY_1": 62837,
+    "DELAY_2": 62833,
+    "DELAY_3": 62829,
+    "DELAY_B": 62842,
+    "DELAY_RTS": 62845,
+    "DOT_D": 62147,
+    "DOT_HERE": 62149,
+    "DOT_IX": 62145,
+    "DOT_IX_B": 62142,
+    "DOT_LIST": 62165,
+    "DOT_LIST_RESET": 62174,
+    "DO_SOUND": 62089,
+    "DO_SOUND_X": 62092,
+    "DP_TO_C8": 61871,
+    "DP_TO_D0": 61866,
+    "DP_to_C8": 61871,
+    "DP_to_D0": 61866,
+    "DRAW_CIRCLE_DIAM": 51344,
+    "DRAW_CIRCLE_INTENSITY": 51345,
+    "DRAW_CIRCLE_RADIUS": 51346,
+    "DRAW_CIRCLE_RUNTIME": 16526,
+    "DRAW_CIRCLE_TEMP": 51347,
+    "DRAW_CIRCLE_XC": 51342,
+    "DRAW_CIRCLE_YC": 51343,
+    "DRAW_GRID_VL": 65439,
+    "DRAW_LINE_ARGS": 51356,
+    "DRAW_LINE_D": 62431,
+    "DRAW_PAT_VL": 62519,
+    "DRAW_PAT_VL_A": 62516,
+    "DRAW_PAT_VL_D": 62521,
+    "DRAW_VEC_INTENSITY": 51355,
+    "DRAW_VL": 62429,
+    "DRAW_VLC": 62414,
+    "DRAW_VLCS": 62422,
+    "DRAW_VLP": 62480,
+    "DRAW_VLP_7F": 62472,
+    "DRAW_VLP_B": 62478,
+    "DRAW_VLP_FF": 62468,
+    "DRAW_VLP_SCALE": 62476,
+    "DRAW_VL_A": 62426,
+    "DRAW_VL_AB": 62424,
+    "DRAW_VL_B": 62418,
+    "DRAW_VL_MODE": 62574,
+    "Dec_3_Counters": 62810,
+    "Dec_6_Counters": 62814,
+    "Dec_Counters": 62819,
+    "Delay_0": 62841,
+    "Delay_1": 62837,
+    "Delay_2": 62833,
+    "Delay_3": 62829,
+    "Delay_RTS": 62845,
+    "Delay_b": 62842,
+    "Do_Sound": 62089,
+    "Do_Sound_x": 62092,
+    "Dot_List": 62165,
+    "Dot_List_Reset": 62174,
+    "Dot_d": 62147,
+    "Dot_here": 62149,
+    "Dot_ix": 62145,
+    "Dot_ix_b": 62142,
+    "Draw_Grid_VL": 65439,
+    "Draw_Line_d": 62431,
+    "Draw_Pat_VL": 62519,
+    "Draw_Pat_VL_a": 62516,
+    "Draw_Pat_VL_d": 62521,
+    "Draw_VL": 62429,
+    "Draw_VL_a": 62426,
+    "Draw_VL_ab": 62424,
+    "Draw_VL_b": 62418,
+    "Draw_VL_mode": 62574,
+    "Draw_VLc": 62414,
+    "Draw_VLcs": 62422,
+    "Draw_VLp": 62480,
+    "Draw_VLp_7F": 62472,
+    "Draw_VLp_FF": 62468,
+    "Draw_VLp_b": 62478,
+    "Draw_VLp_scale": 62476,
+    "EXPLOSION_SND": 63790,
+    "Explosion_Snd": 63790,
+    "GET_RISE_IDX": 62937,
+    "GET_RISE_RUN": 62959,
+    "GET_RUN_IDX": 62939,
+    "Get_Rise_Idx": 62937,
+    "Get_Rise_Run": 62959,
+    "Get_Run_Idx": 62939,
+    "INIT_MUSIC": 63117,
+    "INIT_MUSIC_BUF": 62771,
+    "INIT_MUSIC_CHK": 63111,
+    "INIT_MUSIC_X": 63122,
+    "INIT_OS": 61835,
+    "INIT_OS_RAM": 61796,
+    "INIT_VIA": 61772,
+    "INTENSITY_1F": 62109,
+    "INTENSITY_3F": 62113,
+    "INTENSITY_5F": 62117,
+    "INTENSITY_7F": 62121,
+    "INTENSITY_A": 62123,
+    "Init_Music": 63117,
+    "Init_Music_Buf": 62771,
+    "Init_Music_chk": 63111,
+    "Init_Music_x": 63122,
+    "Init_OS": 61835,
+    "Init_OS_RAM": 61796,
+    "Init_VIA": 61772,
+    "Intensity_1F": 62109,
+    "Intensity_3F": 62113,
+    "Intensity_5F": 62117,
+    "Intensity_7F": 62121,
+    "Intensity_a": 62123,
+    "JOY_ANALOG": 61941,
+    "JOY_DIGITAL": 61944,
+    "Joy_Analog": 61941,
+    "Joy_Digital": 61944,
+    "MOD16": 16442,
+    "MOD16.M16_DONE": 16525,
+    "MOD16.M16_DPOS": 16471,
+    "MOD16.M16_END": 16510,
+    "MOD16.M16_LOOP": 16494,
+    "MOD16.M16_RCHECK": 16479,
+    "MOD16.M16_RPOS": 16494,
+    "MOVETO_D": 62226,
+    "MOVETO_D_7F": 62204,
+    "MOVETO_IX": 62224,
+    "MOVETO_IX_7F": 62220,
+    "MOVETO_IX_A": 62222,
+    "MOVETO_IX_FF": 62216,
+    "MOVETO_X_7F": 62194,
+    "MOVE_MEM_A": 63107,
+    "MOVE_MEM_A_1": 63103,
+    "MOV_DRAW_VL": 62396,
+    "MOV_DRAW_VLCS": 62389,
+    "MOV_DRAW_VLC_A": 62381,
+    "MOV_DRAW_VL_A": 62393,
+    "MOV_DRAW_VL_AB": 62391,
+    "MOV_DRAW_VL_B": 62385,
+    "MOV_DRAW_VL_D": 62398,
+    "MUSIC1": 64781,
+    "MUSIC2": 64797,
+    "MUSIC3": 64897,
+    "MUSIC4": 64979,
+    "MUSIC5": 65080,
+    "MUSIC6": 65142,
+    "MUSIC7": 65222,
+    "MUSIC8": 65272,
+    "MUSIC9": 65318,
+    "MUSICA": 65348,
+    "MUSICB": 65378,
+    "MUSICC": 65402,
+    "MUSICD": 65423,
+    "Mov_Draw_VL": 62396,
+    "Mov_Draw_VL_a": 62393,
+    "Mov_Draw_VL_ab": 62391,
+    "Mov_Draw_VL_b": 62385,
+    "Mov_Draw_VL_d": 62398,
+    "Mov_Draw_VLc_a": 62381,
+    "Mov_Draw_VLcs": 62389,
+    "Move_Mem_a": 63107,
+    "Move_Mem_a_1": 63103,
+    "Moveto_d": 62226,
+    "Moveto_d_7F": 62204,
+    "Moveto_ix": 62224,
+    "Moveto_ix_7F": 62220,
+    "Moveto_ix_FF": 62216,
+    "Moveto_ix_a": 62222,
+    "Moveto_x_7F": 62194,
+    "NEW_HIGH_SCORE": 63704,
+    "New_High_Score": 63704,
+    "OBJ_HIT": 63743,
+    "OBJ_WILL_HIT": 63731,
+    "OBJ_WILL_HIT_U": 63717,
+    "Obj_Hit": 63743,
+    "Obj_Will_Hit": 63731,
+    "Obj_Will_Hit_u": 63717,
+    "PRINT_LIST": 62346,
+    "PRINT_LIST_CHK": 62348,
+    "PRINT_LIST_HW": 62341,
+    "PRINT_SHIPS": 62355,
+    "PRINT_SHIPS_X": 62353,
+    "PRINT_STR": 62613,
+    "PRINT_STR_D": 62330,
+    "PRINT_STR_HWYX": 62323,
+    "PRINT_STR_YX": 62328,
+    "PRINT_TEXT_STR_1598": 16861,
+    "PRINT_TEXT_STR_1691": 16864,
+    "PRINT_TEXT_STR_1784": 16867,
+    "PRINT_TEXT_STR_48656": 16870,
+    "PRINT_TEXT_STR_48694": 16874,
+    "PRINT_TEXT_STR_64483629934611": 16878,
+    "Print_List": 62346,
+    "Print_List_chk": 62348,
+    "Print_List_hw": 62341,
+    "Print_Ships": 62355,
+    "Print_Ships_x": 62353,
+    "Print_Str": 62613,
+    "Print_Str_d": 62330,
+    "Print_Str_hwyx": 62323,
+    "Print_Str_yx": 62328,
+    "RANDOM": 62743,
+    "RANDOM_3": 62737,
+    "READ_BTNS": 61882,
+    "READ_BTNS_MASK": 61876,
+    "RECALIBRATE": 62182,
+    "RESET0INT": 62315,
+    "RESET0REF": 62292,
+    "RESET0REF_D0": 62282,
+    "RESET_PEN": 62299,
+    "RESULT": 51328,
+    "RISE_RUN_ANGLE": 62867,
+    "RISE_RUN_LEN": 62979,
+    "RISE_RUN_X": 62975,
+    "RISE_RUN_Y": 62977,
+    "ROT_VL": 62998,
+    "ROT_VL_AB": 62992,
+    "ROT_VL_DFT": 63031,
+    "ROT_VL_MODE": 63019,
+    "ROT_VL_MODE_A": 63007,
+    "Random": 62743,
+    "Random_3": 62737,
+    "Read_Btns": 61882,
+    "Read_Btns_Mask": 61876,
+    "Recalibrate": 62182,
+    "Reset0Int": 62315,
+    "Reset0Ref": 62292,
+    "Reset0Ref_D0": 62282,
+    "Reset_Pen": 62299,
+    "Rise_Run_Angle": 62867,
+    "Rise_Run_Len": 62979,
+    "Rise_Run_X": 62975,
+    "Rise_Run_Y": 62977,
+    "Rot_VL": 62998,
+    "Rot_VL_Mode": 63019,
+    "Rot_VL_Mode_a": 63007,
+    "Rot_VL_ab": 62992,
+    "Rot_VL_dft": 63031,
+    "SELECT_GAME": 63401,
+    "SET_REFRESH": 61858,
+    "SOUND_BYTE": 62038,
+    "SOUND_BYTES": 62077,
+    "SOUND_BYTES_X": 62084,
+    "SOUND_BYTE_RAW": 62043,
+    "SOUND_BYTE_X": 62041,
+    "STRIP_ZEROS": 63671,
+    "Select_Game": 63401,
+    "Set_Refresh": 61858,
+    "Sound_Byte": 62038,
+    "Sound_Byte_raw": 62043,
+    "Sound_Byte_x": 62041,
+    "Sound_Bytes": 62077,
+    "Sound_Bytes_x": 62084,
+    "Strip_Zeros": 63671,
+    "TEMP_YX": 51338,
+    "TEXT_SCALE_H": 51376,
+    "TEXT_SCALE_W": 51377,
+    "TMPPTR": 51332,
+    "TMPPTR2": 51334,
+    "TMPVAL": 51330,
+    "VECTREX_PRINT_TEXT": 16384,
+    "VEC_0REF_ENABLE": 51236,
+    "VEC_ADSR_TABLE": 51279,
+    "VEC_ADSR_TIMERS": 51294,
+    "VEC_ANGLE": 51254,
+    "VEC_BRIGHTNESS": 51239,
+    "VEC_BTN_STATE": 51215,
+    "VEC_BUTTONS": 51217,
+    "VEC_BUTTON_1_1": 51218,
+    "VEC_BUTTON_1_2": 51219,
+    "VEC_BUTTON_1_3": 51220,
+    "VEC_BUTTON_1_4": 51221,
+    "VEC_BUTTON_2_1": 51222,
+    "VEC_BUTTON_2_2": 51223,
+    "VEC_BUTTON_2_3": 51224,
+    "VEC_BUTTON_2_4": 51225,
+    "VEC_COLD_FLAG": 52222,
+    "VEC_COUNTERS": 51246,
+    "VEC_COUNTER_1": 51246,
+    "VEC_COUNTER_2": 51247,
+    "VEC_COUNTER_3": 51248,
+    "VEC_COUNTER_4": 51249,
+    "VEC_COUNTER_5": 51250,
+    "VEC_COUNTER_6": 51251,
+    "VEC_DEFAULT_STK": 52202,
+    "VEC_DOT_DWELL": 51240,
+    "VEC_DURATION": 51287,
+    "VEC_EXPL_1": 51288,
+    "VEC_EXPL_2": 51289,
+    "VEC_EXPL_3": 51290,
+    "VEC_EXPL_4": 51291,
+    "VEC_EXPL_CHAN": 51292,
+    "VEC_EXPL_CHANA": 51283,
+    "VEC_EXPL_CHANB": 51293,
+    "VEC_EXPL_CHANS": 51284,
+    "VEC_EXPL_FLAG": 51303,
+    "VEC_EXPL_TIMER": 51319,
+    "VEC_FIRQ_VECTOR": 52213,
+    "VEC_FREQ_TABLE": 51277,
+    "VEC_HIGH_SCORE": 52203,
+    "VEC_IRQ_VECTOR": 52216,
+    "VEC_JOY_1_X": 51227,
+    "VEC_JOY_1_Y": 51228,
+    "VEC_JOY_2_X": 51229,
+    "VEC_JOY_2_Y": 51230,
+    "VEC_JOY_MUX": 51231,
+    "VEC_JOY_MUX_1_X": 51231,
+    "VEC_JOY_MUX_1_Y": 51232,
+    "VEC_JOY_MUX_2_X": 51233,
+    "VEC_JOY_MUX_2_Y": 51234,
+    "VEC_JOY_RESLTN": 51226,
+    "VEC_LOOP_COUNT": 51237,
+    "VEC_MAX_GAMES": 51280,
+    "VEC_MAX_PLAYERS": 51279,
+    "VEC_MISC_COUNT": 51235,
+    "VEC_MUSIC_CHAN": 51285,
+    "VEC_MUSIC_FLAG": 51286,
+    "VEC_MUSIC_FREQ": 51297,
+    "VEC_MUSIC_PTR": 51283,
+    "VEC_MUSIC_TWANG": 51288,
+    "VEC_MUSIC_WK_1": 51275,
+    "VEC_MUSIC_WK_5": 51271,
+    "VEC_MUSIC_WK_6": 51270,
+    "VEC_MUSIC_WK_7": 51269,
+    "VEC_MUSIC_WK_A": 51266,
+    "VEC_MUSIC_WORK": 51263,
+    "VEC_NMI_VECTOR": 52219,
+    "VEC_NUM_GAME": 51322,
+    "VEC_NUM_PLAYERS": 51321,
+    "VEC_PATTERN": 51241,
+    "VEC_PREV_BTNS": 51216,
+    "VEC_RANDOM_SEED": 51325,
+    "VEC_RFRSH": 51261,
+    "VEC_RFRSH_HI": 51262,
+    "VEC_RFRSH_LO": 51261,
+    "VEC_RISERUN_LEN": 51259,
+    "VEC_RISERUN_TMP": 51252,
+    "VEC_RISE_INDEX": 51257,
+    "VEC_RUN_INDEX": 51255,
+    "VEC_SEED_PTR": 51323,
+    "VEC_SND_SHADOW": 51200,
+    "VEC_STR_PTR": 51244,
+    "VEC_SWI2_VECTOR": 52210,
+    "VEC_SWI3_VECTOR": 52210,
+    "VEC_SWI_VECTOR": 52219,
+    "VEC_TEXT_HEIGHT": 51242,
+    "VEC_TEXT_HW": 51242,
+    "VEC_TEXT_WIDTH": 51243,
+    "VEC_TWANG_TABLE": 51281,
+    "VLINE_DX": 51370,
+    "VLINE_DX_16": 51366,
+    "VLINE_DX_REMAINING": 51374,
+    "VLINE_DY": 51371,
+    "VLINE_DY_16": 51368,
+    "VLINE_DY_REMAINING": 51372,
+    "VPY_MOVE_X": 51336,
+    "VPY_MOVE_Y": 51337,
+    "Vec_0Ref_Enable": 51236,
+    "Vec_ADSR_Table": 51279,
+    "Vec_ADSR_Timers": 51294,
+    "Vec_Angle": 51254,
+    "Vec_Brightness": 51239,
+    "Vec_Btn_State": 51215,
+    "Vec_Button_1_1": 51218,
+    "Vec_Button_1_2": 51219,
+    "Vec_Button_1_3": 51220,
+    "Vec_Button_1_4": 51221,
+    "Vec_Button_2_1": 51222,
+    "Vec_Button_2_2": 51223,
+    "Vec_Button_2_3": 51224,
+    "Vec_Button_2_4": 51225,
+    "Vec_Buttons": 51217,
+    "Vec_Cold_Flag": 52222,
+    "Vec_Counter_1": 51246,
+    "Vec_Counter_2": 51247,
+    "Vec_Counter_3": 51248,
+    "Vec_Counter_4": 51249,
+    "Vec_Counter_5": 51250,
+    "Vec_Counter_6": 51251,
+    "Vec_Counters": 51246,
+    "Vec_Default_Stk": 52202,
+    "Vec_Dot_Dwell": 51240,
+    "Vec_Duration": 51287,
+    "Vec_Expl_1": 51288,
+    "Vec_Expl_2": 51289,
+    "Vec_Expl_3": 51290,
+    "Vec_Expl_4": 51291,
+    "Vec_Expl_Chan": 51292,
+    "Vec_Expl_ChanA": 51283,
+    "Vec_Expl_ChanB": 51293,
+    "Vec_Expl_Chans": 51284,
+    "Vec_Expl_Flag": 51303,
+    "Vec_Expl_Timer": 51319,
+    "Vec_FIRQ_Vector": 52213,
+    "Vec_Freq_Table": 51277,
+    "Vec_High_Score": 52203,
+    "Vec_IRQ_Vector": 52216,
+    "Vec_Joy_1_X": 51227,
+    "Vec_Joy_1_Y": 51228,
+    "Vec_Joy_2_X": 51229,
+    "Vec_Joy_2_Y": 51230,
+    "Vec_Joy_Mux": 51231,
+    "Vec_Joy_Mux_1_X": 51231,
+    "Vec_Joy_Mux_1_Y": 51232,
+    "Vec_Joy_Mux_2_X": 51233,
+    "Vec_Joy_Mux_2_Y": 51234,
+    "Vec_Joy_Resltn": 51226,
+    "Vec_Loop_Count": 51237,
+    "Vec_Max_Games": 51280,
+    "Vec_Max_Players": 51279,
+    "Vec_Misc_Count": 51235,
+    "Vec_Music_Chan": 51285,
+    "Vec_Music_Flag": 51286,
+    "Vec_Music_Freq": 51297,
+    "Vec_Music_Ptr": 51283,
+    "Vec_Music_Twang": 51288,
+    "Vec_Music_Wk_1": 51275,
+    "Vec_Music_Wk_5": 51271,
+    "Vec_Music_Wk_6": 51270,
+    "Vec_Music_Wk_7": 51269,
+    "Vec_Music_Wk_A": 51266,
+    "Vec_Music_Work": 51263,
+    "Vec_NMI_Vector": 52219,
+    "Vec_Num_Game": 51322,
+    "Vec_Num_Players": 51321,
+    "Vec_Pattern": 51241,
+    "Vec_Prev_Btns": 51216,
+    "Vec_Random_Seed": 51325,
+    "Vec_Rfrsh": 51261,
+    "Vec_Rfrsh_hi": 51262,
+    "Vec_Rfrsh_lo": 51261,
+    "Vec_RiseRun_Len": 51259,
+    "Vec_RiseRun_Tmp": 51252,
+    "Vec_Rise_Index": 51257,
+    "Vec_Run_Index": 51255,
+    "Vec_SWI2_Vector": 52210,
+    "Vec_SWI3_Vector": 52210,
+    "Vec_SWI_Vector": 52219,
+    "Vec_Seed_Ptr": 51323,
+    "Vec_Snd_Shadow": 51200,
+    "Vec_Str_Ptr": 51244,
+    "Vec_Text_HW": 51242,
+    "Vec_Text_Height": 51242,
+    "Vec_Text_Width": 51243,
+    "Vec_Twang_Table": 51281,
+    "WAIT_RECAL": 61842,
+    "WARM_START": 61548,
+    "Wait_Recal": 61842,
+    "Warm_Start": 61548,
+    "XFORM_RISE": 63075,
+    "XFORM_RISE_A": 63073,
+    "XFORM_RUN": 63069,
+    "XFORM_RUN_A": 63067,
+    "Xform_Rise": 63075,
+    "Xform_Rise_a": 63073,
+    "Xform_Run": 63069,
+    "Xform_Run_a": 63067,
+    "music1": 64781,
+    "music2": 64797,
+    "music3": 64897,
+    "music4": 64979,
+    "music5": 65080,
+    "music6": 65142,
+    "music7": 65222,
+    "music8": 65272,
+    "music9": 65318,
+    "musica": 65348,
+    "musicb": 65378,
+    "musicc": 65402,
+    "musicd": 65423
   },
   "lineMap": {
-    "25": "0x06B2",
-    "12": "0x0248",
-    "24": "0x0686",
-    "16": "0x0332",
-    "23": "0x065A",
-    "19": "0x056E",
-    "26": "0x06DE",
-    "15": "0x0274",
-    "18": "0x04AF",
-    "22": "0x062C",
-    "17": "0x03F0"
+    "11": "0x0069",
+    "14": "0x0075",
+    "17": "0x0090",
+    "18": "0x0151",
+    "19": "0x0212",
+    "20": "0x02D3",
+    "21": "0x0394",
+    "24": "0x0455",
+    "25": "0x0470",
+    "26": "0x048B",
+    "27": "0x04A6",
+    "28": "0x04C1"
   },
-  "vpyLineMap": {
-    "0x0248": {
-      "file": "main.vpy",
-      "address": "0x0248",
-      "line": 12
-    },
-    "0x04AF": {
-      "file": "main.vpy",
-      "address": "0x04AF",
-      "line": 18
-    },
-    "0x06DE": {
-      "file": "main.vpy",
-      "address": "0x06DE",
-      "line": 26
-    },
-    "0x065A": {
-      "file": "main.vpy",
-      "address": "0x065A",
-      "line": 23
-    },
-    "0x06B2": {
-      "file": "main.vpy",
-      "address": "0x06B2",
-      "line": 25
-    },
-    "0x0332": {
-      "file": "main.vpy",
-      "address": "0x0332",
-      "line": 16
-    },
-    "0x062C": {
-      "file": "main.vpy",
-      "address": "0x062C",
-      "line": 22
-    },
-    "0x056E": {
-      "file": "main.vpy",
-      "address": "0x056E",
-      "line": 19
-    },
-    "0x0686": {
-      "file": "main.vpy",
-      "address": "0x0686",
-      "line": 24
-    },
-    "0x0274": {
-      "file": "main.vpy",
-      "address": "0x0274",
-      "line": 15
-    },
-    "0x03F0": {
-      "file": "main.vpy",
-      "address": "0x03F0",
-      "line": 17
-    }
-  },
-  "asmLineMap": {
-    "0x06FE": {
-      "file": "set_intensity.asm",
-      "address": "0x06FE",
-      "line": 913
-    },
-    "0x01A8": {
-      "file": "set_intensity.asm",
-      "address": "0x01A8",
-      "line": 313
-    },
-    "0x0517": {
-      "file": "set_intensity.asm",
-      "address": "0x0517",
-      "line": 702
-    },
-    "0x0191": {
-      "file": "set_intensity.asm",
-      "address": "0x0191",
-      "line": 303
-    },
-    "0x0037": {
-      "file": "set_intensity.asm",
-      "address": "0x0037",
-      "line": 72
-    },
-    "0x043C": {
-      "file": "set_intensity.asm",
-      "address": "0x043C",
-      "line": 611
-    },
-    "0x002D": {
-      "file": "set_intensity.asm",
-      "address": "0x002D",
-      "line": 63
-    },
-    "0x0129": {
-      "file": "set_intensity.asm",
-      "address": "0x0129",
-      "line": 249
-    },
-    "0x004B": {
-      "file": "set_intensity.asm",
-      "address": "0x004B",
-      "line": 81
-    },
-    "0x02E0": {
-      "file": "set_intensity.asm",
-      "address": "0x02E0",
-      "line": 464
-    },
-    "0x01FE": {
-      "file": "set_intensity.asm",
-      "address": "0x01FE",
-      "line": 6
-    },
-    "0x06C3": {
-      "file": "set_intensity.asm",
-      "address": "0x06C3",
-      "line": 887
-    },
-    "0x063F": {
-      "file": "set_intensity.asm",
-      "address": "0x063F",
-      "line": 827
-    },
-    "0x02B0": {
-      "file": "set_intensity.asm",
-      "address": "0x02B0",
-      "line": 445
-    },
-    "0x0212": {
-      "file": "set_intensity.asm",
-      "address": "0x0212",
-      "line": 18
-    },
-    "0x023A": {
-      "file": "set_intensity.asm",
-      "address": "0x023A",
-      "line": 389
-    },
-    "0x05F0": {
-      "file": "set_intensity.asm",
-      "address": "0x05F0",
-      "line": 793
-    },
-    "0x03B0": {
-      "file": "set_intensity.asm",
-      "address": "0x03B0",
-      "line": 551
-    },
-    "0x023F": {
-      "file": "set_intensity.asm",
-      "address": "0x023F",
-      "line": 43
-    },
-    "0x00E6": {
-      "file": "set_intensity.asm",
-      "address": "0x00E6",
-      "line": 200
-    },
-    "0x0303": {
-      "file": "set_intensity.asm",
-      "address": "0x0303",
-      "line": 478
-    },
-    "0x0412": {
-      "file": "set_intensity.asm",
-      "address": "0x0412",
-      "line": 594
-    },
-    "0x0403": {
-      "file": "set_intensity.asm",
-      "address": "0x0403",
-      "line": 588
-    },
-    "0x02D6": {
-      "file": "set_intensity.asm",
-      "address": "0x02D6",
-      "line": 460
-    },
-    "0x02A4": {
-      "file": "set_intensity.asm",
-      "address": "0x02A4",
-      "line": 440
-    },
-    "0x014C": {
-      "file": "set_intensity.asm",
-      "address": "0x014C",
-      "line": 265
-    },
-    "0x0546": {
-      "file": "set_intensity.asm",
-      "address": "0x0546",
-      "line": 721
-    },
-    "0x0525": {
-      "file": "set_intensity.asm",
-      "address": "0x0525",
-      "line": 708
-    },
-    "0x0353": {
-      "file": "set_intensity.asm",
-      "address": "0x0353",
-      "line": 514
-    },
-    "0x0229": {
-      "file": "set_intensity.asm",
-      "address": "0x0229",
-      "line": 379
-    },
-    "0x02D8": {
-      "file": "set_intensity.asm",
-      "address": "0x02D8",
-      "line": 461
-    },
-    "0x043F": {
-      "file": "set_intensity.asm",
-      "address": "0x043F",
-      "line": 612
-    },
-    "0x02CC": {
-      "file": "set_intensity.asm",
-      "address": "0x02CC",
-      "line": 456
-    },
-    "0x027E": {
-      "file": "set_intensity.asm",
-      "address": "0x027E",
-      "line": 424
-    },
-    "0x0507": {
-      "file": "set_intensity.asm",
-      "address": "0x0507",
-      "line": 696
-    },
-    "0x027F": {
-      "file": "set_intensity.asm",
-      "address": "0x027F",
-      "line": 425
-    },
-    "0x04DF": {
-      "file": "set_intensity.asm",
-      "address": "0x04DF",
-      "line": 680
-    },
-    "0x00C7": {
-      "file": "set_intensity.asm",
-      "address": "0x00C7",
-      "line": 179
-    },
-    "0x010B": {
-      "file": "set_intensity.asm",
-      "address": "0x010B",
-      "line": 226
-    },
-    "0x02C7": {
-      "file": "set_intensity.asm",
-      "address": "0x02C7",
-      "line": 454
-    },
-    "0x05C6": {
-      "file": "set_intensity.asm",
-      "address": "0x05C6",
-      "line": 776
-    },
-    "0x0694": {
-      "file": "set_intensity.asm",
-      "address": "0x0694",
-      "line": 866
-    },
-    "0x004F": {
-      "file": "set_intensity.asm",
-      "address": "0x004F",
-      "line": 90
-    },
-    "0x0570": {
-      "file": "set_intensity.asm",
-      "address": "0x0570",
-      "line": 740
-    },
-    "0x00E2": {
-      "file": "set_intensity.asm",
-      "address": "0x00E2",
-      "line": 197
-    },
-    "0x03BF": {
-      "file": "set_intensity.asm",
-      "address": "0x03BF",
-      "line": 557
-    },
-    "0x00DA": {
-      "file": "set_intensity.asm",
-      "address": "0x00DA",
-      "line": 191
-    },
-    "0x0539": {
-      "file": "set_intensity.asm",
-      "address": "0x0539",
-      "line": 716
-    },
-    "0x03B7": {
-      "file": "set_intensity.asm",
-      "address": "0x03B7",
-      "line": 554
-    },
-    "0x032B": {
-      "file": "set_intensity.asm",
-      "address": "0x032B",
-      "line": 494
-    },
-    "0x0132": {
-      "file": "set_intensity.asm",
-      "address": "0x0132",
-      "line": 253
-    },
-    "0x01A5": {
-      "file": "set_intensity.asm",
-      "address": "0x01A5",
-      "line": 312
-    },
-    "0x00F6": {
-      "file": "set_intensity.asm",
-      "address": "0x00F6",
-      "line": 211
-    },
-    "0x0286": {
-      "file": "set_intensity.asm",
-      "address": "0x0286",
-      "line": 428
-    },
-    "0x05A6": {
-      "file": "set_intensity.asm",
-      "address": "0x05A6",
-      "line": 763
-    },
-    "0x044C": {
-      "file": "set_intensity.asm",
-      "address": "0x044C",
-      "line": 617
-    },
-    "0x0242": {
-      "file": "set_intensity.asm",
-      "address": "0x0242",
-      "line": 44
-    },
-    "0x05FD": {
-      "file": "set_intensity.asm",
-      "address": "0x05FD",
-      "line": 798
-    },
-    "0x031E": {
-      "file": "set_intensity.asm",
-      "address": "0x031E",
-      "line": 489
-    },
-    "0x0707": {
-      "file": "set_intensity.asm",
-      "address": "0x0707",
-      "line": 916
-    },
-    "0x06A6": {
-      "file": "set_intensity.asm",
-      "address": "0x06A6",
-      "line": 873
-    },
-    "0x052D": {
-      "file": "set_intensity.asm",
-      "address": "0x052D",
-      "line": 711
-    },
-    "0x04BE": {
-      "file": "set_intensity.asm",
-      "address": "0x04BE",
-      "line": 665
-    },
-    "0x0257": {
-      "file": "set_intensity.asm",
-      "address": "0x0257",
-      "line": 405
-    },
-    "0x057A": {
-      "file": "set_intensity.asm",
-      "address": "0x057A",
-      "line": 744
-    },
-    "0x0725": {
-      "file": "set_intensity.asm",
-      "address": "0x0725",
-      "line": 937
-    },
-    "0x0098": {
-      "file": "set_intensity.asm",
-      "address": "0x0098",
-      "line": 138
-    },
-    "0x054B": {
-      "file": "set_intensity.asm",
-      "address": "0x054B",
-      "line": 723
-    },
-    "0x05B0": {
-      "file": "set_intensity.asm",
-      "address": "0x05B0",
-      "line": 767
-    },
-    "0x0248": {
-      "file": "set_intensity.asm",
-      "address": "0x0248",
-      "line": 400
-    },
-    "0x0438": {
-      "file": "set_intensity.asm",
-      "address": "0x0438",
-      "line": 609
-    },
-    "0x0117": {
-      "file": "set_intensity.asm",
-      "address": "0x0117",
-      "line": 231
-    },
-    "0x01A2": {
-      "file": "set_intensity.asm",
-      "address": "0x01A2",
-      "line": 311
-    },
-    "0x058C": {
-      "file": "set_intensity.asm",
-      "address": "0x058C",
-      "line": 753
-    },
-    "0x06E9": {
-      "file": "set_intensity.asm",
-      "address": "0x06E9",
-      "line": 905
-    },
-    "0x036A": {
-      "file": "set_intensity.asm",
-      "address": "0x036A",
-      "line": 523
-    },
-    "0x01EA": {
-      "file": "set_intensity.asm",
-      "address": "0x01EA",
-      "line": 345
-    },
-    "0x039C": {
-      "file": "set_intensity.asm",
-      "address": "0x039C",
-      "line": 543
-    },
-    "0x0494": {
-      "file": "set_intensity.asm",
-      "address": "0x0494",
-      "line": 646
-    },
-    "0x04C2": {
-      "file": "set_intensity.asm",
-      "address": "0x04C2",
-      "line": 668
-    },
-    "0x03F3": {
-      "file": "set_intensity.asm",
-      "address": "0x03F3",
-      "line": 580
-    },
-    "0x03CB": {
-      "file": "set_intensity.asm",
-      "address": "0x03CB",
-      "line": 562
-    },
-    "0x038D": {
-      "file": "set_intensity.asm",
-      "address": "0x038D",
-      "line": 537
-    },
-    "0x071B": {
-      "file": "set_intensity.asm",
-      "address": "0x071B",
-      "line": 928
-    },
-    "0x01D2": {
-      "file": "set_intensity.asm",
-      "address": "0x01D2",
-      "line": 335
-    },
-    "0x0332": {
-      "file": "set_intensity.asm",
-      "address": "0x0332",
-      "line": 499
-    },
-    "0x00F8": {
-      "file": "set_intensity.asm",
-      "address": "0x00F8",
-      "line": 212
-    },
-    "0x0164": {
-      "file": "set_intensity.asm",
-      "address": "0x0164",
-      "line": 278
-    },
-    "0x041C": {
-      "file": "set_intensity.asm",
-      "address": "0x041C",
-      "line": 598
-    },
-    "0x05D0": {
-      "file": "set_intensity.asm",
-      "address": "0x05D0",
-      "line": 780
-    },
-    "0x04B4": {
-      "file": "set_intensity.asm",
-      "address": "0x04B4",
-      "line": 661
-    },
-    "0x0535": {
-      "file": "set_intensity.asm",
-      "address": "0x0535",
-      "line": 714
-    },
-    "0x0234": {
-      "file": "set_intensity.asm",
-      "address": "0x0234",
-      "line": 39
-    },
-    "0x0295": {
-      "file": "set_intensity.asm",
-      "address": "0x0295",
-      "line": 434
-    },
-    "0x0054": {
-      "file": "set_intensity.asm",
-      "address": "0x0054",
-      "line": 93
-    },
-    "0x00A9": {
-      "file": "set_intensity.asm",
-      "address": "0x00A9",
-      "line": 144
-    },
-    "0x0217": {
-      "file": "set_intensity.asm",
-      "address": "0x0217",
-      "line": 372
-    },
-    "0x069D": {
-      "file": "set_intensity.asm",
-      "address": "0x069D",
-      "line": 869
-    },
-    "0x0205": {
-      "file": "set_intensity.asm",
-      "address": "0x0205",
-      "line": 357
-    },
-    "0x0306": {
-      "file": "set_intensity.asm",
-      "address": "0x0306",
-      "line": 479
-    },
-    "0x051E": {
-      "file": "set_intensity.asm",
-      "address": "0x051E",
-      "line": 705
-    },
-    "0x018A": {
-      "file": "set_intensity.asm",
-      "address": "0x018A",
-      "line": 297
-    },
-    "0x0701": {
-      "file": "set_intensity.asm",
-      "address": "0x0701",
-      "line": 914
-    },
-    "0x005E": {
-      "file": "set_intensity.asm",
-      "address": "0x005E",
-      "line": 100
-    },
-    "0x06F8": {
-      "file": "set_intensity.asm",
-      "address": "0x06F8",
-      "line": 910
-    },
-    "0x05A3": {
-      "file": "set_intensity.asm",
-      "address": "0x05A3",
-      "line": 762
-    },
-    "0x01F3": {
-      "file": "set_intensity.asm",
-      "address": "0x01F3",
-      "line": 349
-    },
-    "0x04A6": {
-      "file": "set_intensity.asm",
-      "address": "0x04A6",
-      "line": 653
-    },
-    "0x02F9": {
-      "file": "set_intensity.asm",
-      "address": "0x02F9",
-      "line": 474
-    },
-    "0x003F": {
-      "file": "set_intensity.asm",
-      "address": "0x003F",
-      "line": 75
-    },
-    "0x0395": {
-      "file": "set_intensity.asm",
-      "address": "0x0395",
-      "line": 540
-    },
-    "0x0278": {
-      "file": "set_intensity.asm",
-      "address": "0x0278",
-      "line": 421
-    },
-    "0x01D8": {
-      "file": "set_intensity.asm",
-      "address": "0x01D8",
-      "line": 337
-    },
-    "0x012C": {
-      "file": "set_intensity.asm",
-      "address": "0x012C",
-      "line": 250
-    },
-    "0x04A0": {
-      "file": "set_intensity.asm",
-      "address": "0x04A0",
-      "line": 651
-    },
-    "0x04F3": {
-      "file": "set_intensity.asm",
-      "address": "0x04F3",
-      "line": 688
-    },
-    "0x023C": {
-      "file": "set_intensity.asm",
-      "address": "0x023C",
-      "line": 393
-    },
-    "0x010E": {
-      "file": "set_intensity.asm",
-      "address": "0x010E",
-      "line": 227
-    },
-    "0x035B": {
-      "file": "set_intensity.asm",
-      "address": "0x035B",
-      "line": 517
-    },
-    "0x01C9": {
-      "file": "set_intensity.asm",
-      "address": "0x01C9",
-      "line": 331
-    },
-    "0x04C7": {
-      "file": "set_intensity.asm",
-      "address": "0x04C7",
-      "line": 670
-    },
-    "0x024B": {
-      "file": "set_intensity.asm",
-      "address": "0x024B",
-      "line": 401
-    },
-    "0x036F": {
-      "file": "set_intensity.asm",
-      "address": "0x036F",
-      "line": 525
-    },
-    "0x03F0": {
-      "file": "set_intensity.asm",
-      "address": "0x03F0",
-      "line": 579
-    },
-    "0x0021": {
-      "file": "set_intensity.asm",
-      "address": "0x0021",
-      "line": 59
-    },
-    "0x002A": {
-      "file": "set_intensity.asm",
-      "address": "0x002A",
-      "line": 62
-    },
-    "0x0585": {
-      "file": "set_intensity.asm",
-      "address": "0x0585",
-      "line": 750
-    },
-    "0x0414": {
-      "file": "set_intensity.asm",
-      "address": "0x0414",
-      "line": 595
-    },
-    "0x0187": {
-      "file": "set_intensity.asm",
-      "address": "0x0187",
-      "line": 296
-    },
-    "0x024E": {
-      "file": "set_intensity.asm",
-      "address": "0x024E",
-      "line": 48
-    },
-    "0x05B7": {
-      "file": "set_intensity.asm",
-      "address": "0x05B7",
-      "line": 770
-    },
-    "0x0114": {
-      "file": "set_intensity.asm",
-      "address": "0x0114",
-      "line": 230
-    },
-    "0x02BD": {
-      "file": "set_intensity.asm",
-      "address": "0x02BD",
-      "line": 450
-    },
-    "0x0125": {
-      "file": "set_intensity.asm",
-      "address": "0x0125",
-      "line": 247
-    },
-    "0x018D": {
-      "file": "set_intensity.asm",
-      "address": "0x018D",
-      "line": 298
-    },
-    "0x029C": {
-      "file": "set_intensity.asm",
-      "address": "0x029C",
-      "line": 437
-    },
-    "0x027D": {
-      "file": "set_intensity.asm",
-      "address": "0x027D",
-      "line": 423
-    },
-    "0x03BD": {
-      "file": "set_intensity.asm",
-      "address": "0x03BD",
-      "line": 556
-    },
-    "0x06AF": {
-      "file": "set_intensity.asm",
-      "address": "0x06AF",
-      "line": 876
-    },
-    "0x04FB": {
-      "file": "set_intensity.asm",
-      "address": "0x04FB",
-      "line": 691
-    },
-    "0x050D": {
-      "file": "set_intensity.asm",
-      "address": "0x050D",
-      "line": 698
-    },
-    "0x05CE": {
-      "file": "set_intensity.asm",
-      "address": "0x05CE",
-      "line": 779
-    },
-    "0x034F": {
-      "file": "set_intensity.asm",
-      "address": "0x034F",
-      "line": 512
-    },
-    "0x05AA": {
-      "file": "set_intensity.asm",
-      "address": "0x05AA",
-      "line": 765
-    },
-    "0x0683": {
-      "file": "set_intensity.asm",
-      "address": "0x0683",
-      "line": 856
-    },
-    "0x0594": {
-      "file": "set_intensity.asm",
-      "address": "0x0594",
-      "line": 756
-    },
-    "0x031C": {
-      "file": "set_intensity.asm",
-      "address": "0x031C",
-      "line": 488
-    },
-    "0x0444": {
-      "file": "set_intensity.asm",
-      "address": "0x0444",
-      "line": 614
-    },
-    "0x0070": {
-      "file": "set_intensity.asm",
-      "address": "0x0070",
-      "line": 111
-    },
-    "0x0450": {
-      "file": "set_intensity.asm",
-      "address": "0x0450",
-      "line": 619
-    },
-    "0x03D1": {
-      "file": "set_intensity.asm",
-      "address": "0x03D1",
-      "line": 564
-    },
-    "0x0061": {
-      "file": "set_intensity.asm",
-      "address": "0x0061",
-      "line": 101
-    },
-    "0x05CB": {
-      "file": "set_intensity.asm",
-      "address": "0x05CB",
-      "line": 778
-    },
-    "0x0271": {
-      "file": "set_intensity.asm",
-      "address": "0x0271",
-      "line": 416
-    },
-    "0x06F5": {
-      "file": "set_intensity.asm",
-      "address": "0x06F5",
-      "line": 909
-    },
-    "0x0592": {
-      "file": "set_intensity.asm",
-      "address": "0x0592",
-      "line": 755
-    },
-    "0x0179": {
-      "file": "set_intensity.asm",
-      "address": "0x0179",
-      "line": 289
-    },
-    "0x00F9": {
-      "file": "set_intensity.asm",
-      "address": "0x00F9",
-      "line": 213
-    },
-    "0x025A": {
-      "file": "set_intensity.asm",
-      "address": "0x025A",
-      "line": 406
-    },
-    "0x06B2": {
-      "file": "set_intensity.asm",
-      "address": "0x06B2",
-      "line": 880
-    },
-    "0x01A9": {
-      "file": "set_intensity.asm",
-      "address": "0x01A9",
-      "line": 315
-    },
-    "0x01ED": {
-      "file": "set_intensity.asm",
-      "address": "0x01ED",
-      "line": 346
-    },
-    "0x015A": {
-      "file": "set_intensity.asm",
-      "address": "0x015A",
-      "line": 274
-    },
-    "0x0290": {
-      "file": "set_intensity.asm",
-      "address": "0x0290",
-      "line": 432
-    },
-    "0x052F": {
-      "file": "set_intensity.asm",
-      "address": "0x052F",
-      "line": 712
-    },
-    "0x015D": {
-      "file": "set_intensity.asm",
-      "address": "0x015D",
-      "line": 275
-    },
-    "0x010A": {
-      "file": "set_intensity.asm",
-      "address": "0x010A",
-      "line": 225
-    },
-    "0x0102": {
-      "file": "set_intensity.asm",
-      "address": "0x0102",
-      "line": 222
-    },
-    "0x039F": {
-      "file": "set_intensity.asm",
-      "address": "0x039F",
-      "line": 544
-    },
-    "0x065A": {
-      "file": "set_intensity.asm",
-      "address": "0x065A",
-      "line": 840
-    },
-    "0x0583": {
-      "file": "set_intensity.asm",
-      "address": "0x0583",
-      "line": 749
-    },
-    "0x062F": {
-      "file": "set_intensity.asm",
-      "address": "0x062F",
-      "line": 821
-    },
-    "0x022C": {
-      "file": "set_intensity.asm",
-      "address": "0x022C",
-      "line": 383
-    },
-    "0x020A": {
-      "file": "set_intensity.asm",
-      "address": "0x020A",
-      "line": 15
-    },
-    "0x04E2": {
-      "file": "set_intensity.asm",
-      "address": "0x04E2",
-      "line": 681
-    },
-    "0x02DB": {
-      "file": "set_intensity.asm",
-      "address": "0x02DB",
-      "line": 462
-    },
-    "0x02E5": {
-      "file": "set_intensity.asm",
-      "address": "0x02E5",
-      "line": 466
-    },
-    "0x06FB": {
-      "file": "set_intensity.asm",
-      "address": "0x06FB",
-      "line": 911
-    },
-    "0x0349": {
-      "file": "set_intensity.asm",
-      "address": "0x0349",
-      "line": 510
-    },
-    "0x03EE": {
-      "file": "set_intensity.asm",
-      "address": "0x03EE",
-      "line": 576
-    },
-    "0x0435": {
-      "file": "set_intensity.asm",
-      "address": "0x0435",
-      "line": 608
-    },
-    "0x06E5": {
-      "file": "set_intensity.asm",
-      "address": "0x06E5",
-      "line": 903
-    },
-    "0x0636": {
-      "file": "set_intensity.asm",
-      "address": "0x0636",
-      "line": 824
-    },
-    "0x0340": {
-      "file": "set_intensity.asm",
-      "address": "0x0340",
-      "line": 506
-    },
-    "0x00F5": {
-      "file": "set_intensity.asm",
-      "address": "0x00F5",
-      "line": 210
-    },
-    "0x0150": {
-      "file": "set_intensity.asm",
-      "address": "0x0150",
-      "line": 267
-    },
-    "0x03E9": {
-      "file": "set_intensity.asm",
-      "address": "0x03E9",
-      "line": 574
-    },
-    "0x058F": {
-      "file": "set_intensity.asm",
-      "address": "0x058F",
-      "line": 754
-    },
-    "0x006D": {
-      "file": "set_intensity.asm",
-      "address": "0x006D",
-      "line": 110
-    },
-    "0x0496": {
-      "file": "set_intensity.asm",
-      "address": "0x0496",
-      "line": 647
-    },
-    "0x0661": {
-      "file": "set_intensity.asm",
-      "address": "0x0661",
-      "line": 843
-    },
-    "0x055F": {
-      "file": "set_intensity.asm",
-      "address": "0x055F",
-      "line": 731
-    },
-    "0x01B6": {
-      "file": "set_intensity.asm",
-      "address": "0x01B6",
-      "line": 321
-    },
-    "0x03EC": {
-      "file": "set_intensity.asm",
-      "address": "0x03EC",
-      "line": 575
-    },
-    "0x0677": {
-      "file": "set_intensity.asm",
-      "address": "0x0677",
-      "line": 851
-    },
-    "0x0550": {
-      "file": "set_intensity.asm",
-      "address": "0x0550",
-      "line": 725
-    },
-    "0x06D5": {
-      "file": "set_intensity.asm",
-      "address": "0x06D5",
-      "line": 894
-    },
-    "0x03A9": {
-      "file": "set_intensity.asm",
-      "address": "0x03A9",
-      "line": 548
-    },
-    "0x008F": {
-      "file": "set_intensity.asm",
-      "address": "0x008F",
-      "line": 135
-    },
-    "0x00AA": {
-      "file": "set_intensity.asm",
-      "address": "0x00AA",
-      "line": 147
-    },
-    "0x0126": {
-      "file": "set_intensity.asm",
-      "address": "0x0126",
-      "line": 248
-    },
-    "0x054D": {
-      "file": "set_intensity.asm",
-      "address": "0x054D",
-      "line": 724
-    },
-    "0x06B9": {
-      "file": "set_intensity.asm",
-      "address": "0x06B9",
-      "line": 883
-    },
-    "0x0171": {
-      "file": "set_intensity.asm",
-      "address": "0x0171",
-      "line": 284
-    },
-    "0x0432": {
-      "file": "set_intensity.asm",
-      "address": "0x0432",
-      "line": 607
-    },
-    "0x0482": {
-      "file": "set_intensity.asm",
-      "address": "0x0482",
-      "line": 639
-    },
-    "0x011D": {
-      "file": "set_intensity.asm",
-      "address": "0x011D",
-      "line": 234
-    },
-    "0x00BC": {
-      "file": "set_intensity.asm",
-      "address": "0x00BC",
-      "line": 172
-    },
-    "0x03A6": {
-      "file": "set_intensity.asm",
-      "address": "0x03A6",
-      "line": 547
-    },
-    "0x0581": {
-      "file": "set_intensity.asm",
-      "address": "0x0581",
-      "line": 747
-    },
-    "0x035D": {
-      "file": "set_intensity.asm",
-      "address": "0x035D",
-      "line": 518
-    },
-    "0x0176": {
-      "file": "set_intensity.asm",
-      "address": "0x0176",
-      "line": 288
-    },
-    "0x071A": {
-      "file": "set_intensity.asm",
-      "address": "0x071A",
-      "line": 927
-    },
-    "0x04F1": {
-      "file": "set_intensity.asm",
-      "address": "0x04F1",
-      "line": 687
-    },
-    "0x0408": {
-      "file": "set_intensity.asm",
-      "address": "0x0408",
-      "line": 590
-    },
-    "0x0081": {
-      "file": "set_intensity.asm",
-      "address": "0x0081",
-      "line": 123
-    },
-    "0x0254": {
-      "file": "set_intensity.asm",
-      "address": "0x0254",
-      "line": 404
-    },
-    "0x0631": {
-      "file": "set_intensity.asm",
-      "address": "0x0631",
-      "line": 822
-    },
-    "0x0039": {
-      "file": "set_intensity.asm",
-      "address": "0x0039",
-      "line": 73
-    },
-    "0x02F6": {
-      "file": "set_intensity.asm",
-      "address": "0x02F6",
-      "line": 473
-    },
-    "0x06C6": {
-      "file": "set_intensity.asm",
-      "address": "0x06C6",
-      "line": 888
-    },
-    "0x0392": {
-      "file": "set_intensity.asm",
-      "address": "0x0392",
-      "line": 539
-    },
-    "0x0633": {
-      "file": "set_intensity.asm",
-      "address": "0x0633",
-      "line": 823
-    },
-    "0x0639": {
-      "file": "set_intensity.asm",
-      "address": "0x0639",
-      "line": 825
-    },
-    "0x0300": {
-      "file": "set_intensity.asm",
-      "address": "0x0300",
-      "line": 477
-    },
-    "0x02E2": {
-      "file": "set_intensity.asm",
-      "address": "0x02E2",
-      "line": 465
-    },
-    "0x063C": {
-      "file": "set_intensity.asm",
-      "address": "0x063C",
-      "line": 826
-    },
-    "0x046E": {
-      "file": "set_intensity.asm",
-      "address": "0x046E",
-      "line": 631
-    },
-    "0x04CE": {
-      "file": "set_intensity.asm",
-      "address": "0x04CE",
-      "line": 673
-    },
-    "0x033F": {
-      "file": "set_intensity.asm",
-      "address": "0x033F",
-      "line": 505
-    },
-    "0x026C": {
-      "file": "set_intensity.asm",
-      "address": "0x026C",
-      "line": 413
-    },
-    "0x056B": {
-      "file": "set_intensity.asm",
-      "address": "0x056B",
-      "line": 736
-    },
-    "0x0140": {
-      "file": "set_intensity.asm",
-      "address": "0x0140",
-      "line": 260
-    },
-    "0x0192": {
-      "file": "set_intensity.asm",
-      "address": "0x0192",
-      "line": 304
-    },
-    "0x0087": {
-      "file": "set_intensity.asm",
-      "address": "0x0087",
-      "line": 127
-    },
-    "0x02A9": {
-      "file": "set_intensity.asm",
-      "address": "0x02A9",
-      "line": 442
-    },
-    "0x03DF": {
-      "file": "set_intensity.asm",
-      "address": "0x03DF",
-      "line": 570
-    },
-    "0x00A6": {
-      "file": "set_intensity.asm",
-      "address": "0x00A6",
-      "line": 143
-    },
-    "0x02AC": {
-      "file": "set_intensity.asm",
-      "address": "0x02AC",
-      "line": 443
-    },
-    "0x0697": {
-      "file": "set_intensity.asm",
-      "address": "0x0697",
-      "line": 867
-    },
-    "0x0553": {
-      "file": "set_intensity.asm",
-      "address": "0x0553",
-      "line": 726
-    },
-    "0x01DE": {
-      "file": "set_intensity.asm",
-      "address": "0x01DE",
-      "line": 340
-    },
-    "0x0136": {
-      "file": "set_intensity.asm",
-      "address": "0x0136",
-      "line": 255
-    },
-    "0x0202": {
-      "file": "set_intensity.asm",
-      "address": "0x0202",
-      "line": 356
-    },
-    "0x018E": {
-      "file": "set_intensity.asm",
-      "address": "0x018E",
-      "line": 299
-    },
-    "0x0149": {
-      "file": "set_intensity.asm",
-      "address": "0x0149",
-      "line": 263
-    },
-    "0x06C9": {
-      "file": "set_intensity.asm",
-      "address": "0x06C9",
-      "line": 889
-    },
-    "0x00FE": {
-      "file": "set_intensity.asm",
-      "address": "0x00FE",
-      "line": 215
-    },
-    "0x009B": {
-      "file": "set_intensity.asm",
-      "address": "0x009B",
-      "line": 139
-    },
-    "0x0224": {
-      "file": "set_intensity.asm",
-      "address": "0x0224",
-      "line": 33
-    },
-    "0x00FB": {
-      "file": "set_intensity.asm",
-      "address": "0x00FB",
-      "line": 214
-    },
-    "0x007F": {
-      "file": "set_intensity.asm",
-      "address": "0x007F",
-      "line": 121
-    },
-    "0x061B": {
-      "file": "set_intensity.asm",
-      "address": "0x061B",
-      "line": 810
-    },
-    "0x06BA": {
-      "file": "set_intensity.asm",
-      "address": "0x06BA",
-      "line": 884
-    },
-    "0x0270": {
-      "file": "set_intensity.asm",
-      "address": "0x0270",
-      "line": 415
-    },
-    "0x0537": {
-      "file": "set_intensity.asm",
-      "address": "0x0537",
-      "line": 715
-    },
-    "0x02F4": {
-      "file": "set_intensity.asm",
-      "address": "0x02F4",
-      "line": 472
-    },
-    "0x0442": {
-      "file": "set_intensity.asm",
-      "address": "0x0442",
-      "line": 613
-    },
-    "0x05A0": {
-      "file": "set_intensity.asm",
-      "address": "0x05A0",
-      "line": 761
-    },
-    "0x0168": {
-      "file": "set_intensity.asm",
-      "address": "0x0168",
-      "line": 281
-    },
-    "0x0052": {
-      "file": "set_intensity.asm",
-      "address": "0x0052",
-      "line": 91
-    },
-    "0x0596": {
-      "file": "set_intensity.asm",
-      "address": "0x0596",
-      "line": 757
-    },
-    "0x0686": {
-      "file": "set_intensity.asm",
-      "address": "0x0686",
-      "line": 860
-    },
-    "0x0428": {
-      "file": "set_intensity.asm",
-      "address": "0x0428",
-      "line": 603
-    },
-    "0x04EF": {
-      "file": "set_intensity.asm",
-      "address": "0x04EF",
-      "line": 686
-    },
-    "0x06BD": {
-      "file": "set_intensity.asm",
-      "address": "0x06BD",
-      "line": 885
-    },
-    "0x0704": {
-      "file": "set_intensity.asm",
-      "address": "0x0704",
-      "line": 915
-    },
-    "0x00C1": {
-      "file": "set_intensity.asm",
-      "address": "0x00C1",
-      "line": 175
-    },
-    "0x0108": {
-      "file": "set_intensity.asm",
-      "address": "0x0108",
-      "line": 224
-    },
-    "0x0068": {
-      "file": "set_intensity.asm",
-      "address": "0x0068",
-      "line": 106
-    },
-    "0x0184": {
-      "file": "set_intensity.asm",
-      "address": "0x0184",
-      "line": 295
-    },
-    "0x0622": {
-      "file": "set_intensity.asm",
-      "address": "0x0622",
-      "line": 813
-    },
-    "0x06B8": {
-      "file": "set_intensity.asm",
-      "address": "0x06B8",
-      "line": 882
-    },
-    "0x00D1": {
-      "file": "set_intensity.asm",
-      "address": "0x00D1",
-      "line": 185
-    },
-    "0x0716": {
-      "file": "set_intensity.asm",
-      "address": "0x0716",
-      "line": 924
-    },
-    "0x01E4": {
-      "file": "set_intensity.asm",
-      "address": "0x01E4",
-      "line": 342
-    },
-    "0x0485": {
-      "file": "set_intensity.asm",
-      "address": "0x0485",
-      "line": 640
-    },
-    "0x05DC": {
-      "file": "set_intensity.asm",
-      "address": "0x05DC",
-      "line": 785
-    },
-    "0x067A": {
-      "file": "set_intensity.asm",
-      "address": "0x067A",
-      "line": 853
-    },
-    "0x01F9": {
-      "file": "set_intensity.asm",
-      "address": "0x01F9",
-      "line": 351
-    },
-    "0x05EE": {
-      "file": "set_intensity.asm",
-      "address": "0x05EE",
-      "line": 792
-    },
-    "0x007C": {
-      "file": "set_intensity.asm",
-      "address": "0x007C",
-      "line": 120
-    },
-    "0x012F": {
-      "file": "set_intensity.asm",
-      "address": "0x012F",
-      "line": 251
-    },
-    "0x0446": {
-      "file": "set_intensity.asm",
-      "address": "0x0446",
-      "line": 615
-    },
-    "0x0156": {
-      "file": "set_intensity.asm",
-      "address": "0x0156",
-      "line": 269
-    },
-    "0x0625": {
-      "file": "set_intensity.asm",
-      "address": "0x0625",
-      "line": 814
-    },
-    "0x05B4": {
-      "file": "set_intensity.asm",
-      "address": "0x05B4",
-      "line": 769
-    },
-    "0x050F": {
-      "file": "set_intensity.asm",
-      "address": "0x050F",
-      "line": 699
-    },
-    "0x06DB": {
-      "file": "set_intensity.asm",
-      "address": "0x06DB",
-      "line": 896
-    },
-    "0x00B9": {
-      "file": "set_intensity.asm",
-      "address": "0x00B9",
-      "line": 156
-    },
-    "0x028B": {
-      "file": "set_intensity.asm",
-      "address": "0x028B",
-      "line": 430
-    },
-    "0x0421": {
-      "file": "set_intensity.asm",
-      "address": "0x0421",
-      "line": 600
-    },
-    "0x0310": {
-      "file": "set_intensity.asm",
-      "address": "0x0310",
-      "line": 483
-    },
-    "0x0133": {
-      "file": "set_intensity.asm",
-      "address": "0x0133",
-      "line": 254
-    },
-    "0x0383": {
-      "file": "set_intensity.asm",
-      "address": "0x0383",
-      "line": 533
-    },
-    "0x055D": {
-      "file": "set_intensity.asm",
-      "address": "0x055D",
-      "line": 730
-    },
-    "0x02FE": {
-      "file": "set_intensity.asm",
-      "address": "0x02FE",
-      "line": 476
-    },
-    "0x037B": {
-      "file": "set_intensity.asm",
-      "address": "0x037B",
-      "line": 530
-    },
-    "0x041E": {
-      "file": "set_intensity.asm",
-      "address": "0x041E",
-      "line": 599
-    },
-    "0x0111": {
-      "file": "set_intensity.asm",
-      "address": "0x0111",
-      "line": 228
-    },
-    "0x04F9": {
-      "file": "set_intensity.asm",
-      "address": "0x04F9",
-      "line": 690
-    },
-    "0x04A8": {
-      "file": "set_intensity.asm",
-      "address": "0x04A8",
-      "line": 654
-    },
-    "0x069A": {
-      "file": "set_intensity.asm",
-      "address": "0x069A",
-      "line": 868
-    },
-    "0x00D4": {
-      "file": "set_intensity.asm",
-      "address": "0x00D4",
-      "line": 186
-    },
-    "0x0505": {
-      "file": "set_intensity.asm",
-      "address": "0x0505",
-      "line": 695
-    },
-    "0x01C2": {
-      "file": "set_intensity.asm",
-      "address": "0x01C2",
-      "line": 325
-    },
-    "0x04D1": {
-      "file": "set_intensity.asm",
-      "address": "0x04D1",
-      "line": 674
-    },
-    "0x0400": {
-      "file": "set_intensity.asm",
-      "address": "0x0400",
-      "line": 586
-    },
-    "0x0024": {
-      "file": "set_intensity.asm",
-      "address": "0x0024",
-      "line": 60
-    },
-    "0x04B1": {
-      "file": "set_intensity.asm",
-      "address": "0x04B1",
-      "line": 660
-    },
-    "0x04D5": {
-      "file": "set_intensity.asm",
-      "address": "0x04D5",
-      "line": 676
-    },
-    "0x0668": {
-      "file": "set_intensity.asm",
-      "address": "0x0668",
-      "line": 846
-    },
-    "0x0645": {
-      "file": "set_intensity.asm",
-      "address": "0x0645",
-      "line": 829
-    },
-    "0x0030": {
-      "file": "set_intensity.asm",
-      "address": "0x0030",
-      "line": 64
-    },
-    "0x0045": {
-      "file": "set_intensity.asm",
-      "address": "0x0045",
-      "line": 77
-    },
-    "0x068E": {
-      "file": "set_intensity.asm",
-      "address": "0x068E",
-      "line": 864
-    },
-    "0x03B5": {
-      "file": "set_intensity.asm",
-      "address": "0x03B5",
-      "line": 553
-    },
-    "0x0063": {
-      "file": "set_intensity.asm",
-      "address": "0x0063",
-      "line": 103
-    },
-    "0x0048": {
-      "file": "set_intensity.asm",
-      "address": "0x0048",
-      "line": 78
-    },
-    "0x01C3": {
-      "file": "set_intensity.asm",
-      "address": "0x01C3",
-      "line": 329
-    },
-    "0x0374": {
-      "file": "set_intensity.asm",
-      "address": "0x0374",
-      "line": 527
-    },
-    "0x0385": {
-      "file": "set_intensity.asm",
-      "address": "0x0385",
-      "line": 534
-    },
-    "0x01E7": {
-      "file": "set_intensity.asm",
-      "address": "0x01E7",
-      "line": 344
-    },
-    "0x0027": {
-      "file": "set_intensity.asm",
-      "address": "0x0027",
-      "line": 61
-    },
-    "0x0728": {
-      "file": "set_intensity.asm",
-      "address": "0x0728",
-      "line": 940
-    },
-    "0x060E": {
-      "file": "set_intensity.asm",
-      "address": "0x060E",
-      "line": 805
-    },
-    "0x0662": {
-      "file": "set_intensity.asm",
-      "address": "0x0662",
-      "line": 844
-    },
-    "0x0488": {
-      "file": "set_intensity.asm",
-      "address": "0x0488",
-      "line": 641
-    },
-    "0x01B2": {
-      "file": "set_intensity.asm",
-      "address": "0x01B2",
-      "line": 318
-    },
-    "0x0578": {
-      "file": "set_intensity.asm",
-      "address": "0x0578",
-      "line": 743
-    },
-    "0x017C": {
-      "file": "set_intensity.asm",
-      "address": "0x017C",
-      "line": 290
-    },
-    "0x0077": {
-      "file": "set_intensity.asm",
-      "address": "0x0077",
-      "line": 116
-    },
-    "0x0523": {
-      "file": "set_intensity.asm",
-      "address": "0x0523",
-      "line": 707
-    },
-    "0x03C1": {
-      "file": "set_intensity.asm",
-      "address": "0x03C1",
-      "line": 558
-    },
-    "0x04E9": {
-      "file": "set_intensity.asm",
-      "address": "0x04E9",
-      "line": 684
-    },
-    "0x022E": {
-      "file": "set_intensity.asm",
-      "address": "0x022E",
-      "line": 37
-    },
-    "0x0326": {
-      "file": "set_intensity.asm",
-      "address": "0x0326",
-      "line": 492
-    },
-    "0x066E": {
-      "file": "set_intensity.asm",
-      "address": "0x066E",
-      "line": 848
-    },
-    "0x0543": {
-      "file": "set_intensity.asm",
-      "address": "0x0543",
-      "line": 720
-    },
-    "0x008D": {
-      "file": "set_intensity.asm",
-      "address": "0x008D",
-      "line": 134
-    },
-    "0x0474": {
-      "file": "set_intensity.asm",
-      "address": "0x0474",
-      "line": 633
-    },
-    "0x049C": {
-      "file": "set_intensity.asm",
-      "address": "0x049C",
-      "line": 649
-    },
-    "0x0401": {
-      "file": "set_intensity.asm",
-      "address": "0x0401",
-      "line": 587
-    },
-    "0x013F": {
-      "file": "set_intensity.asm",
-      "address": "0x013F",
-      "line": 259
-    },
-    "0x05DA": {
-      "file": "set_intensity.asm",
-      "address": "0x05DA",
-      "line": 784
-    },
-    "0x0139": {
-      "file": "set_intensity.asm",
-      "address": "0x0139",
-      "line": 256
-    },
-    "0x0499": {
-      "file": "set_intensity.asm",
-      "address": "0x0499",
-      "line": 648
-    },
-    "0x0163": {
-      "file": "set_intensity.asm",
-      "address": "0x0163",
-      "line": 277
-    },
-    "0x0159": {
-      "file": "set_intensity.asm",
-      "address": "0x0159",
-      "line": 273
-    },
-    "0x01AC": {
-      "file": "set_intensity.asm",
-      "address": "0x01AC",
-      "line": 316
-    },
-    "0x041A": {
-      "file": "set_intensity.asm",
-      "address": "0x041A",
-      "line": 597
-    },
-    "0x0266": {
-      "file": "set_intensity.asm",
-      "address": "0x0266",
-      "line": 410
-    },
-    "0x0561": {
-      "file": "set_intensity.asm",
-      "address": "0x0561",
-      "line": 732
-    },
-    "0x028E": {
-      "file": "set_intensity.asm",
-      "address": "0x028E",
-      "line": 431
-    },
-    "0x031A": {
-      "file": "set_intensity.asm",
-      "address": "0x031A",
-      "line": 487
-    },
-    "0x021A": {
-      "file": "set_intensity.asm",
-      "address": "0x021A",
-      "line": 373
-    },
-    "0x0065": {
-      "file": "set_intensity.asm",
-      "address": "0x0065",
-      "line": 104
-    },
-    "0x011C": {
-      "file": "set_intensity.asm",
-      "address": "0x011C",
-      "line": 233
-    },
-    "0x0567": {
-      "file": "set_intensity.asm",
-      "address": "0x0567",
-      "line": 734
-    },
-    "0x0500": {
-      "file": "set_intensity.asm",
-      "address": "0x0500",
-      "line": 693
-    },
-    "0x029F": {
-      "file": "set_intensity.asm",
-      "address": "0x029F",
-      "line": 438
-    },
-    "0x01CF": {
-      "file": "set_intensity.asm",
-      "address": "0x01CF",
-      "line": 334
-    },
-    "0x0572": {
-      "file": "set_intensity.asm",
-      "address": "0x0572",
-      "line": 741
-    },
-    "0x040D": {
-      "file": "set_intensity.asm",
-      "address": "0x040D",
-      "line": 592
-    },
-    "0x00BF": {
-      "file": "set_intensity.asm",
-      "address": "0x00BF",
-      "line": 173
-    },
-    "0x04C9": {
-      "file": "set_intensity.asm",
-      "address": "0x04C9",
-      "line": 671
-    },
-    "0x0665": {
-      "file": "set_intensity.asm",
-      "address": "0x0665",
-      "line": 845
-    },
-    "0x036D": {
-      "file": "set_intensity.asm",
-      "address": "0x036D",
-      "line": 524
-    },
-    "0x06DE": {
-      "file": "set_intensity.asm",
-      "address": "0x06DE",
-      "line": 900
-    },
-    "0x04DD": {
-      "file": "set_intensity.asm",
-      "address": "0x04DD",
-      "line": 679
-    },
-    "0x02A2": {
-      "file": "set_intensity.asm",
-      "address": "0x02A2",
-      "line": 439
-    },
-    "0x0200": {
-      "file": "set_intensity.asm",
-      "address": "0x0200",
-      "line": 11
-    },
-    "0x02C2": {
-      "file": "set_intensity.asm",
-      "address": "0x02C2",
-      "line": 452
-    },
-    "0x05F3": {
-      "file": "set_intensity.asm",
-      "address": "0x05F3",
-      "line": 794
-    },
-    "0x00CA": {
-      "file": "set_intensity.asm",
-      "address": "0x00CA",
-      "line": 181
-    },
-    "0x00F4": {
-      "file": "set_intensity.asm",
-      "address": "0x00F4",
-      "line": 209
-    },
-    "0x03D8": {
-      "file": "set_intensity.asm",
-      "address": "0x03D8",
-      "line": 567
-    },
-    "0x04BB": {
-      "file": "set_intensity.asm",
-      "address": "0x04BB",
-      "line": 664
-    },
-    "0x0071": {
-      "file": "set_intensity.asm",
-      "address": "0x0071",
-      "line": 112
-    },
-    "0x049E": {
-      "file": "set_intensity.asm",
-      "address": "0x049E",
-      "line": 650
-    },
-    "0x0371": {
-      "file": "set_intensity.asm",
-      "address": "0x0371",
-      "line": 526
-    },
-    "0x06A3": {
-      "file": "set_intensity.asm",
-      "address": "0x06A3",
-      "line": 871
-    },
-    "0x06E6": {
-      "file": "set_intensity.asm",
-      "address": "0x06E6",
-      "line": 904
-    },
-    "0x0183": {
-      "file": "set_intensity.asm",
-      "address": "0x0183",
-      "line": 294
-    },
-    "0x0059": {
-      "file": "set_intensity.asm",
-      "address": "0x0059",
-      "line": 96
-    },
-    "0x02C0": {
-      "file": "set_intensity.asm",
-      "address": "0x02C0",
-      "line": 451
-    },
-    "0x03CE": {
-      "file": "set_intensity.asm",
-      "address": "0x03CE",
-      "line": 563
-    },
-    "0x001F": {
-      "file": "set_intensity.asm",
-      "address": "0x001F",
-      "line": 58
-    },
-    "0x00D8": {
-      "file": "set_intensity.asm",
-      "address": "0x00D8",
-      "line": 190
-    },
-    "0x0056": {
-      "file": "set_intensity.asm",
-      "address": "0x0056",
-      "line": 94
-    },
-    "0x06E1": {
-      "file": "set_intensity.asm",
-      "address": "0x06E1",
-      "line": 901
-    },
-    "0x0269": {
-      "file": "set_intensity.asm",
-      "address": "0x0269",
-      "line": 411
-    },
-    "0x0263": {
-      "file": "set_intensity.asm",
-      "address": "0x0263",
-      "line": 409
-    },
-    "0x0276": {
-      "file": "set_intensity.asm",
-      "address": "0x0276",
-      "line": 420
-    },
-    "0x048F": {
-      "file": "set_intensity.asm",
-      "address": "0x048F",
-      "line": 644
-    },
-    "0x05FA": {
-      "file": "set_intensity.asm",
-      "address": "0x05FA",
-      "line": 797
-    },
-    "0x05D5": {
-      "file": "set_intensity.asm",
-      "address": "0x05D5",
-      "line": 782
-    },
-    "0x0600": {
-      "file": "set_intensity.asm",
-      "address": "0x0600",
-      "line": 799
-    },
-    "0x019C": {
-      "file": "set_intensity.asm",
-      "address": "0x019C",
-      "line": 309
-    },
-    "0x02D1": {
-      "file": "set_intensity.asm",
-      "address": "0x02D1",
-      "line": 458
-    },
-    "0x00CE": {
-      "file": "set_intensity.asm",
-      "address": "0x00CE",
-      "line": 183
-    },
-    "0x0260": {
-      "file": "set_intensity.asm",
-      "address": "0x0260",
-      "line": 408
-    },
-    "0x0607": {
-      "file": "set_intensity.asm",
-      "address": "0x0607",
-      "line": 802
-    },
-    "0x0476": {
-      "file": "set_intensity.asm",
-      "address": "0x0476",
-      "line": 634
-    },
-    "0x068D": {
-      "file": "set_intensity.asm",
-      "address": "0x068D",
-      "line": 863
-    },
-    "0x057F": {
-      "file": "set_intensity.asm",
-      "address": "0x057F",
-      "line": 746
-    },
-    "0x0317": {
-      "file": "set_intensity.asm",
-      "address": "0x0317",
-      "line": 486
-    },
-    "0x05F6": {
-      "file": "set_intensity.asm",
-      "address": "0x05F6",
-      "line": 795
-    },
-    "0x0284": {
-      "file": "set_intensity.asm",
-      "address": "0x0284",
-      "line": 427
-    },
-    "0x04E5": {
-      "file": "set_intensity.asm",
-      "address": "0x04E5",
-      "line": 682
-    },
-    "0x04C0": {
-      "file": "set_intensity.asm",
-      "address": "0x04C0",
-      "line": 666
-    },
-    "0x03BA": {
-      "file": "set_intensity.asm",
-      "address": "0x03BA",
-      "line": 555
-    },
-    "0x0215": {
-      "file": "set_intensity.asm",
-      "address": "0x0215",
-      "line": 19
-    },
-    "0x05E4": {
-      "file": "set_intensity.asm",
-      "address": "0x05E4",
-      "line": 788
-    },
-    "0x03F6": {
-      "file": "set_intensity.asm",
-      "address": "0x03F6",
-      "line": 581
-    },
-    "0x05E2": {
-      "file": "set_intensity.asm",
-      "address": "0x05E2",
-      "line": 787
-    },
-    "0x02FC": {
-      "file": "set_intensity.asm",
-      "address": "0x02FC",
-      "line": 475
-    },
-    "0x0406": {
-      "file": "set_intensity.asm",
-      "address": "0x0406",
-      "line": 589
-    },
-    "0x02B8": {
-      "file": "set_intensity.asm",
-      "address": "0x02B8",
-      "line": 448
-    },
-    "0x03B3": {
-      "file": "set_intensity.asm",
-      "address": "0x03B3",
-      "line": 552
-    },
-    "0x0721": {
-      "file": "set_intensity.asm",
-      "address": "0x0721",
-      "line": 933
-    },
-    "0x026F": {
-      "file": "set_intensity.asm",
-      "address": "0x026F",
-      "line": 414
-    },
-    "0x0657": {
-      "file": "set_intensity.asm",
-      "address": "0x0657",
-      "line": 836
-    },
-    "0x04DB": {
-      "file": "set_intensity.asm",
-      "address": "0x04DB",
-      "line": 678
-    },
-    "0x0298": {
-      "file": "set_intensity.asm",
-      "address": "0x0298",
-      "line": 435
-    },
-    "0x05C8": {
-      "file": "set_intensity.asm",
-      "address": "0x05C8",
-      "line": 777
-    },
-    "0x059C": {
-      "file": "set_intensity.asm",
-      "address": "0x059C",
-      "line": 759
-    },
-    "0x0480": {
-      "file": "set_intensity.asm",
-      "address": "0x0480",
-      "line": 638
-    },
-    "0x00E7": {
-      "file": "set_intensity.asm",
-      "address": "0x00E7",
-      "line": 201
-    },
-    "0x0237": {
-      "file": "set_intensity.asm",
-      "address": "0x0237",
-      "line": 40
-    },
-    "0x053F": {
-      "file": "set_intensity.asm",
-      "address": "0x053F",
-      "line": 718
-    },
-    "0x05D2": {
-      "file": "set_intensity.asm",
-      "address": "0x05D2",
-      "line": 781
-    },
-    "0x06AC": {
-      "file": "set_intensity.asm",
-      "address": "0x06AC",
-      "line": 875
-    },
-    "0x06EC": {
-      "file": "set_intensity.asm",
-      "address": "0x06EC",
-      "line": 906
-    },
-    "0x0049": {
-      "file": "set_intensity.asm",
-      "address": "0x0049",
-      "line": 79
-    },
-    "0x058A": {
-      "file": "set_intensity.asm",
-      "address": "0x058A",
-      "line": 752
-    },
-    "0x00B4": {
-      "file": "set_intensity.asm",
-      "address": "0x00B4",
-      "line": 153
-    },
-    "0x06B5": {
-      "file": "set_intensity.asm",
-      "address": "0x06B5",
-      "line": 881
-    },
-    "0x04D3": {
-      "file": "set_intensity.asm",
-      "address": "0x04D3",
-      "line": 675
-    },
-    "0x0146": {
-      "file": "set_intensity.asm",
-      "address": "0x0146",
-      "line": 262
-    },
-    "0x0467": {
-      "file": "set_intensity.asm",
-      "address": "0x0467",
-      "line": 628
-    },
-    "0x065D": {
-      "file": "set_intensity.asm",
-      "address": "0x065D",
-      "line": 841
-    },
-    "0x0123": {
-      "file": "set_intensity.asm",
-      "address": "0x0123",
-      "line": 236
-    },
-    "0x004A": {
-      "file": "set_intensity.asm",
-      "address": "0x004A",
-      "line": 80
-    },
-    "0x0062": {
-      "file": "set_intensity.asm",
-      "address": "0x0062",
-      "line": 102
-    },
-    "0x0367": {
-      "file": "set_intensity.asm",
-      "address": "0x0367",
-      "line": 522
-    },
-    "0x02EF": {
-      "file": "set_intensity.asm",
-      "address": "0x02EF",
-      "line": 470
-    },
-    "0x0674": {
-      "file": "set_intensity.asm",
-      "address": "0x0674",
-      "line": 850
-    },
-    "0x003C": {
-      "file": "set_intensity.asm",
-      "address": "0x003C",
-      "line": 74
-    },
-    "0x0032": {
-      "file": "set_intensity.asm",
-      "address": "0x0032",
-      "line": 66
-    },
-    "0x0231": {
-      "file": "set_intensity.asm",
-      "address": "0x0231",
-      "line": 385
-    },
-    "0x04C4": {
-      "file": "set_intensity.asm",
-      "address": "0x04C4",
-      "line": 669
-    },
-    "0x0691": {
-      "file": "set_intensity.asm",
-      "address": "0x0691",
-      "line": 865
-    },
-    "0x04F6": {
-      "file": "set_intensity.asm",
-      "address": "0x04F6",
-      "line": 689
-    },
-    "0x06A9": {
-      "file": "set_intensity.asm",
-      "address": "0x06A9",
-      "line": 874
-    },
-    "0x0680": {
-      "file": "set_intensity.asm",
-      "address": "0x0680",
-      "line": 855
-    },
-    "0x0430": {
-      "file": "set_intensity.asm",
-      "address": "0x0430",
-      "line": 606
-    },
-    "0x05EC": {
-      "file": "set_intensity.asm",
-      "address": "0x05EC",
-      "line": 791
-    },
-    "0x03D3": {
-      "file": "set_intensity.asm",
-      "address": "0x03D3",
-      "line": 565
-    },
-    "0x053C": {
-      "file": "set_intensity.asm",
-      "address": "0x053C",
-      "line": 717
-    },
-    "0x034C": {
-      "file": "set_intensity.asm",
-      "address": "0x034C",
-      "line": 511
-    },
-    "0x0100": {
-      "file": "set_intensity.asm",
-      "address": "0x0100",
-      "line": 221
-    },
-    "0x0347": {
-      "file": "set_intensity.asm",
-      "address": "0x0347",
-      "line": 509
-    },
-    "0x00DF": {
-      "file": "set_intensity.asm",
-      "address": "0x00DF",
-      "line": 193
-    },
-    "0x03AD": {
-      "file": "set_intensity.asm",
-      "address": "0x03AD",
-      "line": 550
-    },
-    "0x046C": {
-      "file": "set_intensity.asm",
-      "address": "0x046C",
-      "line": 630
-    },
-    "0x020F": {
-      "file": "set_intensity.asm",
-      "address": "0x020F",
-      "line": 17
-    },
-    "0x0221": {
-      "file": "set_intensity.asm",
-      "address": "0x0221",
-      "line": 32
-    },
-    "0x0160": {
-      "file": "set_intensity.asm",
-      "address": "0x0160",
-      "line": 276
-    },
-    "0x0342": {
-      "file": "set_intensity.asm",
-      "address": "0x0342",
-      "line": 507
-    },
-    "0x048A": {
-      "file": "set_intensity.asm",
-      "address": "0x048A",
-      "line": 642
-    },
-    "0x0521": {
-      "file": "set_intensity.asm",
-      "address": "0x0521",
-      "line": 706
-    },
-    "0x059E": {
-      "file": "set_intensity.asm",
-      "address": "0x059E",
-      "line": 760
-    },
-    "0x05F8": {
-      "file": "set_intensity.asm",
-      "address": "0x05F8",
-      "line": 796
-    },
-    "0x0671": {
-      "file": "set_intensity.asm",
-      "address": "0x0671",
-      "line": 849
-    },
-    "0x052B": {
-      "file": "set_intensity.asm",
-      "address": "0x052B",
-      "line": 710
-    },
-    "0x01AF": {
-      "file": "set_intensity.asm",
-      "address": "0x01AF",
-      "line": 317
-    },
-    "0x0464": {
-      "file": "set_intensity.asm",
-      "address": "0x0464",
-      "line": 627
-    },
-    "0x009E": {
-      "file": "set_intensity.asm",
-      "address": "0x009E",
-      "line": 140
-    },
-    "0x0207": {
-      "file": "set_intensity.asm",
-      "address": "0x0207",
-      "line": 14
-    },
-    "0x0078": {
-      "file": "set_intensity.asm",
-      "address": "0x0078",
-      "line": 117
-    },
-    "0x06CF": {
-      "file": "set_intensity.asm",
-      "address": "0x06CF",
-      "line": 891
-    },
-    "0x0312": {
-      "file": "set_intensity.asm",
-      "address": "0x0312",
-      "line": 484
-    },
-    "0x0105": {
-      "file": "set_intensity.asm",
-      "address": "0x0105",
-      "line": 223
-    },
-    "0x020D": {
-      "file": "set_intensity.asm",
-      "address": "0x020D",
-      "line": 16
-    },
-    "0x05D8": {
-      "file": "set_intensity.asm",
-      "address": "0x05D8",
-      "line": 783
-    },
-    "0x03F8": {
-      "file": "set_intensity.asm",
-      "address": "0x03F8",
-      "line": 582
-    },
-    "0x029A": {
-      "file": "set_intensity.asm",
-      "address": "0x029A",
-      "line": 436
-    },
-    "0x00EE": {
-      "file": "set_intensity.asm",
-      "address": "0x00EE",
-      "line": 203
-    },
-    "0x019F": {
-      "file": "set_intensity.asm",
-      "address": "0x019F",
-      "line": 310
-    },
-    "0x0453": {
-      "file": "set_intensity.asm",
-      "address": "0x0453",
-      "line": 620
-    },
-    "0x0345": {
-      "file": "set_intensity.asm",
-      "address": "0x0345",
-      "line": 508
-    },
-    "0x03DB": {
-      "file": "set_intensity.asm",
-      "address": "0x03DB",
-      "line": 568
-    },
-    "0x0356": {
-      "file": "set_intensity.asm",
-      "address": "0x0356",
-      "line": 515
-    },
-    "0x02E8": {
-      "file": "set_intensity.asm",
-      "address": "0x02E8",
-      "line": 467
-    },
-    "0x00C4": {
-      "file": "set_intensity.asm",
-      "address": "0x00C4",
-      "line": 176
-    },
-    "0x0727": {
-      "file": "set_intensity.asm",
-      "address": "0x0727",
-      "line": 939
-    },
-    "0x045D": {
-      "file": "set_intensity.asm",
-      "address": "0x045D",
-      "line": 624
-    },
-    "0x04B7": {
-      "file": "set_intensity.asm",
-      "address": "0x04B7",
-      "line": 662
-    },
-    "0x0410": {
-      "file": "set_intensity.asm",
-      "address": "0x0410",
-      "line": 593
-    },
-    "0x00A3": {
-      "file": "set_intensity.asm",
-      "address": "0x00A3",
-      "line": 142
-    },
-    "0x044E": {
-      "file": "set_intensity.asm",
-      "address": "0x044E",
-      "line": 618
-    },
-    "0x064E": {
-      "file": "set_intensity.asm",
-      "address": "0x064E",
-      "line": 833
-    },
-    "0x03E2": {
-      "file": "set_intensity.asm",
-      "address": "0x03E2",
-      "line": 571
-    },
-    "0x062A": {
-      "file": "set_intensity.asm",
-      "address": "0x062A",
-      "line": 816
-    },
-    "0x0113": {
-      "file": "set_intensity.asm",
-      "address": "0x0113",
-      "line": 229
-    },
-    "0x0031": {
-      "file": "set_intensity.asm",
-      "address": "0x0031",
-      "line": 65
-    },
-    "0x042B": {
-      "file": "set_intensity.asm",
-      "address": "0x042B",
-      "line": 604
-    },
-    "0x06A0": {
-      "file": "set_intensity.asm",
-      "address": "0x06A0",
-      "line": 870
-    },
-    "0x0588": {
-      "file": "set_intensity.asm",
-      "address": "0x0588",
-      "line": 751
-    },
-    "0x0689": {
-      "file": "set_intensity.asm",
-      "address": "0x0689",
-      "line": 861
-    },
-    "0x071E": {
-      "file": "set_intensity.asm",
-      "address": "0x071E",
-      "line": 930
-    },
-    "0x0069": {
-      "file": "set_intensity.asm",
-      "address": "0x0069",
-      "line": 107
-    },
-    "0x0175": {
-      "file": "set_intensity.asm",
-      "address": "0x0175",
-      "line": 287
-    },
-    "0x04AA": {
-      "file": "set_intensity.asm",
-      "address": "0x04AA",
-      "line": 655
-    },
-    "0x0514": {
-      "file": "set_intensity.asm",
-      "address": "0x0514",
-      "line": 701
-    },
-    "0x0582": {
-      "file": "set_intensity.asm",
-      "address": "0x0582",
-      "line": 748
-    },
-    "0x00F1": {
-      "file": "set_intensity.asm",
-      "address": "0x00F1",
-      "line": 208
-    },
-    "0x0616": {
-      "file": "set_intensity.asm",
-      "address": "0x0616",
-      "line": 808
-    },
-    "0x05C1": {
-      "file": "set_intensity.asm",
-      "address": "0x05C1",
-      "line": 774
-    },
-    "0x033C": {
-      "file": "set_intensity.asm",
-      "address": "0x033C",
-      "line": 503
-    },
-    "0x0648": {
-      "file": "set_intensity.asm",
-      "address": "0x0648",
-      "line": 830
-    },
-    "0x01C6": {
-      "file": "set_intensity.asm",
-      "address": "0x01C6",
-      "line": 330
-    },
-    "0x0092": {
-      "file": "set_intensity.asm",
-      "address": "0x0092",
-      "line": 136
-    },
-    "0x0511": {
-      "file": "set_intensity.asm",
-      "address": "0x0511",
-      "line": 700
-    },
-    "0x038B": {
-      "file": "set_intensity.asm",
-      "address": "0x038B",
-      "line": 536
-    },
-    "0x02D4": {
-      "file": "set_intensity.asm",
-      "address": "0x02D4",
-      "line": 459
-    },
-    "0x0569": {
-      "file": "set_intensity.asm",
-      "address": "0x0569",
-      "line": 735
-    },
-    "0x016E": {
-      "file": "set_intensity.asm",
-      "address": "0x016E",
-      "line": 283
-    },
-    "0x0292": {
-      "file": "set_intensity.asm",
-      "address": "0x0292",
-      "line": 433
-    },
-    "0x0575": {
-      "file": "set_intensity.asm",
-      "address": "0x0575",
-      "line": 742
-    },
-    "0x0599": {
-      "file": "set_intensity.asm",
-      "address": "0x0599",
-      "line": 758
-    },
-    "0x030A": {
-      "file": "set_intensity.asm",
-      "address": "0x030A",
-      "line": 481
-    },
-    "0x00D5": {
-      "file": "set_intensity.asm",
-      "address": "0x00D5",
-      "line": 187
-    },
-    "0x021F": {
-      "file": "set_intensity.asm",
-      "address": "0x021F",
-      "line": 375
-    },
-    "0x02B6": {
-      "file": "set_intensity.asm",
-      "address": "0x02B6",
-      "line": 447
-    },
-    "0x06F2": {
-      "file": "set_intensity.asm",
-      "address": "0x06F2",
-      "line": 908
-    },
-    "0x03C4": {
-      "file": "set_intensity.asm",
-      "address": "0x03C4",
-      "line": 559
-    },
-    "0x0245": {
-      "file": "set_intensity.asm",
-      "address": "0x0245",
-      "line": 45
-    },
-    "0x0195": {
-      "file": "set_intensity.asm",
-      "address": "0x0195",
-      "line": 305
-    },
-    "0x068C": {
-      "file": "set_intensity.asm",
-      "address": "0x068C",
-      "line": 862
-    },
-    "0x03E7": {
-      "file": "set_intensity.asm",
-      "address": "0x03E7",
-      "line": 573
-    },
-    "0x047B": {
-      "file": "set_intensity.asm",
-      "address": "0x047B",
-      "line": 636
-    },
-    "0x021C": {
-      "file": "set_intensity.asm",
-      "address": "0x021C",
-      "line": 30
-    },
-    "0x05C4": {
-      "file": "set_intensity.asm",
-      "address": "0x05C4",
-      "line": 775
-    },
-    "0x05DF": {
-      "file": "set_intensity.asm",
-      "address": "0x05DF",
-      "line": 786
-    },
-    "0x00C6": {
-      "file": "set_intensity.asm",
-      "address": "0x00C6",
-      "line": 178
-    },
-    "0x01BC": {
-      "file": "set_intensity.asm",
-      "address": "0x01BC",
-      "line": 323
-    },
-    "0x056E": {
-      "file": "set_intensity.asm",
-      "address": "0x056E",
-      "line": 739
-    },
-    "0x0549": {
-      "file": "set_intensity.asm",
-      "address": "0x0549",
-      "line": 722
-    },
-    "0x0172": {
-      "file": "set_intensity.asm",
-      "address": "0x0172",
-      "line": 285
-    },
-    "0x02BA": {
-      "file": "set_intensity.asm",
-      "address": "0x02BA",
-      "line": 449
-    },
-    "0x0399": {
-      "file": "set_intensity.asm",
-      "address": "0x0399",
-      "line": 542
-    },
-    "0x050A": {
-      "file": "set_intensity.asm",
-      "address": "0x050A",
-      "line": 697
-    },
-    "0x04B9": {
-      "file": "set_intensity.asm",
-      "address": "0x04B9",
-      "line": 663
-    },
-    "0x0360": {
-      "file": "set_intensity.asm",
-      "address": "0x0360",
-      "line": 519
-    },
-    "0x02B3": {
-      "file": "set_intensity.asm",
-      "address": "0x02B3",
-      "line": 446
-    },
-    "0x045A": {
-      "file": "set_intensity.asm",
-      "address": "0x045A",
-      "line": 623
-    },
-    "0x067D": {
-      "file": "set_intensity.asm",
-      "address": "0x067D",
-      "line": 854
-    },
-    "0x02DE": {
-      "file": "set_intensity.asm",
-      "address": "0x02DE",
-      "line": 463
-    },
-    "0x040A": {
-      "file": "set_intensity.asm",
-      "address": "0x040A",
-      "line": 591
-    },
-    "0x0458": {
-      "file": "set_intensity.asm",
-      "address": "0x0458",
-      "line": 622
-    },
-    "0x00E3": {
-      "file": "set_intensity.asm",
-      "address": "0x00E3",
-      "line": 198
-    },
-    "0x01F0": {
-      "file": "set_intensity.asm",
-      "address": "0x01F0",
-      "line": 347
-    },
-    "0x0379": {
-      "file": "set_intensity.asm",
-      "address": "0x0379",
-      "line": 529
-    },
-    "0x0143": {
-      "file": "set_intensity.asm",
-      "address": "0x0143",
-      "line": 261
-    },
-    "0x00E1": {
-      "file": "set_intensity.asm",
-      "address": "0x00E1",
-      "line": 194
-    },
-    "0x011A": {
-      "file": "set_intensity.asm",
-      "address": "0x011A",
-      "line": 232
-    },
-    "0x043A": {
-      "file": "set_intensity.asm",
-      "address": "0x043A",
-      "line": 610
-    },
-    "0x03A1": {
-      "file": "set_intensity.asm",
-      "address": "0x03A1",
-      "line": 545
-    },
-    "0x0083": {
-      "file": "set_intensity.asm",
-      "address": "0x0083",
-      "line": 124
-    },
-    "0x060C": {
-      "file": "set_intensity.asm",
-      "address": "0x060C",
-      "line": 804
-    },
-    "0x0180": {
-      "file": "set_intensity.asm",
-      "address": "0x0180",
-      "line": 292
-    },
-    "0x014D": {
-      "file": "set_intensity.asm",
-      "address": "0x014D",
-      "line": 266
-    },
-    "0x0642": {
-      "file": "set_intensity.asm",
-      "address": "0x0642",
-      "line": 828
-    },
-    "0x0519": {
-      "file": "set_intensity.asm",
-      "address": "0x0519",
-      "line": 703
-    },
-    "0x00B7": {
-      "file": "set_intensity.asm",
-      "address": "0x00B7",
-      "line": 155
-    },
-    "0x0251": {
-      "file": "set_intensity.asm",
-      "address": "0x0251",
-      "line": 403
-    },
-    "0x05A8": {
-      "file": "set_intensity.asm",
-      "address": "0x05A8",
-      "line": 764
-    },
-    "0x0564": {
-      "file": "set_intensity.asm",
-      "address": "0x0564",
-      "line": 733
-    },
-    "0x047E": {
-      "file": "set_intensity.asm",
-      "address": "0x047E",
-      "line": 637
-    },
-    "0x03C9": {
-      "file": "set_intensity.asm",
-      "address": "0x03C9",
-      "line": 561
-    },
-    "0x0557": {
-      "file": "set_intensity.asm",
-      "address": "0x0557",
-      "line": 728
-    },
-    "0x0120": {
-      "file": "set_intensity.asm",
-      "address": "0x0120",
-      "line": 235
-    },
-    "0x064B": {
-      "file": "set_intensity.asm",
-      "address": "0x064B",
-      "line": 831
-    },
-    "0x03DD": {
-      "file": "set_intensity.asm",
-      "address": "0x03DD",
-      "line": 569
-    },
-    "0x025D": {
-      "file": "set_intensity.asm",
-      "address": "0x025D",
-      "line": 407
-    },
-    "0x02CA": {
-      "file": "set_intensity.asm",
-      "address": "0x02CA",
-      "line": 455
-    },
-    "0x0359": {
-      "file": "set_intensity.asm",
-      "address": "0x0359",
-      "line": 516
-    },
-    "0x070A": {
-      "file": "set_intensity.asm",
-      "address": "0x070A",
-      "line": 917
-    },
-    "0x0226": {
-      "file": "set_intensity.asm",
-      "address": "0x0226",
-      "line": 34
-    },
-    "0x02CE": {
-      "file": "set_intensity.asm",
-      "address": "0x02CE",
-      "line": 457
-    },
-    "0x06CC": {
-      "file": "set_intensity.asm",
-      "address": "0x06CC",
-      "line": 890
-    },
-    "0x06EF": {
-      "file": "set_intensity.asm",
-      "address": "0x06EF",
-      "line": 907
-    },
-    "0x03FF": {
-      "file": "set_intensity.asm",
-      "address": "0x03FF",
-      "line": 585
-    },
-    "0x03E5": {
-      "file": "set_intensity.asm",
-      "address": "0x03E5",
-      "line": 572
-    },
-    "0x04AD": {
-      "file": "set_intensity.asm",
-      "address": "0x04AD",
-      "line": 656
-    },
-    "0x055A": {
-      "file": "set_intensity.asm",
-      "address": "0x055A",
-      "line": 729
-    },
-    "0x037E": {
-      "file": "set_intensity.asm",
-      "address": "0x037E",
-      "line": 531
-    },
-    "0x02A6": {
-      "file": "set_intensity.asm",
-      "address": "0x02A6",
-      "line": 441
-    },
-    "0x05E6": {
-      "file": "set_intensity.asm",
-      "address": "0x05E6",
-      "line": 789
-    },
-    "0x060A": {
-      "file": "set_intensity.asm",
-      "address": "0x060A",
-      "line": 803
-    },
-    "0x0424": {
-      "file": "set_intensity.asm",
-      "address": "0x0424",
-      "line": 601
-    },
-    "0x0724": {
-      "file": "set_intensity.asm",
-      "address": "0x0724",
-      "line": 936
-    },
-    "0x05AD": {
-      "file": "set_intensity.asm",
-      "address": "0x05AD",
-      "line": 766
-    },
-    "0x05BA": {
-      "file": "set_intensity.asm",
-      "address": "0x05BA",
-      "line": 771
-    },
-    "0x0337": {
-      "file": "set_intensity.asm",
-      "address": "0x0337",
-      "line": 501
-    },
-    "0x0471": {
-      "file": "set_intensity.asm",
-      "address": "0x0471",
-      "line": 632
-    },
-    "0x066B": {
-      "file": "set_intensity.asm",
-      "address": "0x066B",
-      "line": 847
-    },
-    "0x0042": {
-      "file": "set_intensity.asm",
-      "address": "0x0042",
-      "line": 76
-    },
-    "0x01DB": {
-      "file": "set_intensity.asm",
-      "address": "0x01DB",
-      "line": 339
-    },
-    "0x0456": {
-      "file": "set_intensity.asm",
-      "address": "0x0456",
-      "line": 621
-    },
-    "0x0365": {
-      "file": "set_intensity.asm",
-      "address": "0x0365",
-      "line": 521
-    },
-    "0x030D": {
-      "file": "set_intensity.asm",
-      "address": "0x030D",
-      "line": 482
-    },
-    "0x00A1": {
-      "file": "set_intensity.asm",
-      "address": "0x00A1",
-      "line": 141
-    },
-    "0x04AF": {
-      "file": "set_intensity.asm",
-      "address": "0x04AF",
-      "line": 659
-    },
-    "0x01CC": {
-      "file": "set_intensity.asm",
-      "address": "0x01CC",
-      "line": 332
-    },
-    "0x06E4": {
-      "file": "set_intensity.asm",
-      "address": "0x06E4",
-      "line": 902
-    },
-    "0x06D2": {
-      "file": "set_intensity.asm",
-      "address": "0x06D2",
-      "line": 893
-    },
-    "0x046A": {
-      "file": "set_intensity.asm",
-      "address": "0x046A",
-      "line": 629
-    },
-    "0x016B": {
-      "file": "set_intensity.asm",
-      "address": "0x016B",
-      "line": 282
-    },
-    "0x071F": {
-      "file": "set_intensity.asm",
-      "address": "0x071F",
-      "line": 931
-    },
-    "0x0388": {
-      "file": "set_intensity.asm",
-      "address": "0x0388",
-      "line": 535
-    },
-    "0x0288": {
-      "file": "set_intensity.asm",
-      "address": "0x0288",
-      "line": 429
-    },
-    "0x005A": {
-      "file": "set_intensity.asm",
-      "address": "0x005A",
-      "line": 97
-    },
-    "0x0086": {
-      "file": "set_intensity.asm",
-      "address": "0x0086",
-      "line": 126
-    },
-    "0x00AC": {
-      "file": "set_intensity.asm",
-      "address": "0x00AC",
-      "line": 148
-    },
-    "0x0618": {
-      "file": "set_intensity.asm",
-      "address": "0x0618",
-      "line": 809
-    },
-    "0x033E": {
-      "file": "set_intensity.asm",
-      "address": "0x033E",
-      "line": 504
-    },
-    "0x062C": {
-      "file": "set_intensity.asm",
-      "address": "0x062C",
-      "line": 820
-    },
-    "0x0377": {
-      "file": "set_intensity.asm",
-      "address": "0x0377",
-      "line": 528
-    },
-    "0x05BE": {
-      "file": "set_intensity.asm",
-      "address": "0x05BE",
-      "line": 773
-    },
-    "0x0274": {
-      "file": "set_intensity.asm",
-      "address": "0x0274",
-      "line": 419
-    },
-    "0x00AF": {
-      "file": "set_intensity.asm",
-      "address": "0x00AF",
-      "line": 150
-    },
-    "0x06D8": {
-      "file": "set_intensity.asm",
-      "address": "0x06D8",
-      "line": 895
-    },
-    "0x0080": {
-      "file": "set_intensity.asm",
-      "address": "0x0080",
-      "line": 122
-    },
-    "0x03D5": {
-      "file": "set_intensity.asm",
-      "address": "0x03D5",
-      "line": 566
-    },
-    "0x0723": {
-      "file": "set_intensity.asm",
-      "address": "0x0723",
-      "line": 934
-    },
-    "0x017F": {
-      "file": "set_intensity.asm",
-      "address": "0x017F",
-      "line": 291
-    },
-    "0x0095": {
-      "file": "set_intensity.asm",
-      "address": "0x0095",
-      "line": 137
-    },
-    "0x05B2": {
-      "file": "set_intensity.asm",
-      "address": "0x05B2",
-      "line": 768
-    },
-    "0x01F6": {
-      "file": "set_intensity.asm",
-      "address": "0x01F6",
-      "line": 350
-    },
-    "0x03FA": {
-      "file": "set_intensity.asm",
-      "address": "0x03FA",
-      "line": 583
-    },
-    "0x013C": {
-      "file": "set_intensity.asm",
-      "address": "0x013C",
-      "line": 257
-    },
-    "0x05BC": {
-      "file": "set_intensity.asm",
-      "address": "0x05BC",
-      "line": 772
-    },
-    "0x0397": {
-      "file": "set_intensity.asm",
-      "address": "0x0397",
-      "line": 541
-    },
-    "0x0555": {
-      "file": "set_intensity.asm",
-      "address": "0x0555",
-      "line": 727
-    },
-    "0x042E": {
-      "file": "set_intensity.asm",
-      "address": "0x042E",
-      "line": 605
-    },
-    "0x0328": {
-      "file": "set_intensity.asm",
-      "address": "0x0328",
-      "line": 493
-    },
-    "0x0602": {
-      "file": "set_intensity.asm",
-      "address": "0x0602",
-      "line": 800
-    },
-    "0x0492": {
-      "file": "set_intensity.asm",
-      "address": "0x0492",
-      "line": 645
-    },
-    "0x061E": {
-      "file": "set_intensity.asm",
-      "address": "0x061E",
-      "line": 811
-    },
-    "0x00C5": {
-      "file": "set_intensity.asm",
-      "address": "0x00C5",
-      "line": 177
-    },
-    "0x008B": {
-      "file": "set_intensity.asm",
-      "address": "0x008B",
-      "line": 133
-    },
-    "0x0324": {
-      "file": "set_intensity.asm",
-      "address": "0x0324",
-      "line": 491
-    },
-    "0x0053": {
-      "file": "set_intensity.asm",
-      "address": "0x0053",
-      "line": 92
-    },
-    "0x0335": {
-      "file": "set_intensity.asm",
-      "address": "0x0335",
-      "line": 500
-    },
-    "0x04D8": {
-      "file": "set_intensity.asm",
-      "address": "0x04D8",
-      "line": 677
-    },
-    "0x01D5": {
-      "file": "set_intensity.asm",
-      "address": "0x01D5",
-      "line": 336
-    },
-    "0x04C1": {
-      "file": "set_intensity.asm",
-      "address": "0x04C1",
-      "line": 667
-    },
-    "0x0321": {
-      "file": "set_intensity.asm",
-      "address": "0x0321",
-      "line": 490
-    },
-    "0x03FD": {
-      "file": "set_intensity.asm",
-      "address": "0x03FD",
-      "line": 584
-    },
-    "0x0363": {
-      "file": "set_intensity.asm",
-      "address": "0x0363",
-      "line": 520
-    },
-    "0x0381": {
-      "file": "set_intensity.asm",
-      "address": "0x0381",
-      "line": 532
-    },
-    "0x0072": {
-      "file": "set_intensity.asm",
-      "address": "0x0072",
-      "line": 113
-    },
-    "0x01B5": {
-      "file": "set_intensity.asm",
-      "address": "0x01B5",
-      "line": 319
-    },
-    "0x027B": {
-      "file": "set_intensity.asm",
-      "address": "0x027B",
-      "line": 422
-    },
-    "0x0660": {
-      "file": "set_intensity.asm",
-      "address": "0x0660",
-      "line": 842
-    },
-    "0x04CB": {
-      "file": "set_intensity.asm",
-      "address": "0x04CB",
-      "line": 672
-    },
-    "0x06C0": {
-      "file": "set_intensity.asm",
-      "address": "0x06C0",
-      "line": 886
-    },
-    "0x048C": {
-      "file": "set_intensity.asm",
-      "address": "0x048C",
-      "line": 643
-    },
-    "0x03C7": {
-      "file": "set_intensity.asm",
-      "address": "0x03C7",
-      "line": 560
-    },
-    "0x0460": {
-      "file": "set_intensity.asm",
-      "address": "0x0460",
-      "line": 625
-    },
-    "0x032F": {
-      "file": "set_intensity.asm",
-      "address": "0x032F",
-      "line": 496
-    },
-    "0x00E5": {
-      "file": "set_intensity.asm",
-      "address": "0x00E5",
-      "line": 199
-    },
-    "0x03AB": {
-      "file": "set_intensity.asm",
-      "address": "0x03AB",
-      "line": 549
-    },
-    "0x00B2": {
-      "file": "set_intensity.asm",
-      "address": "0x00B2",
-      "line": 152
-    },
-    "0x01B9": {
-      "file": "set_intensity.asm",
-      "address": "0x01B9",
-      "line": 322
-    },
-    "0x0339": {
-      "file": "set_intensity.asm",
-      "address": "0x0339",
-      "line": 502
-    },
-    "0x0308": {
-      "file": "set_intensity.asm",
-      "address": "0x0308",
-      "line": 480
-    },
-    "0x0717": {
-      "file": "set_intensity.asm",
-      "address": "0x0717",
-      "line": 925
-    },
-    "0x0620": {
-      "file": "set_intensity.asm",
-      "address": "0x0620",
-      "line": 812
-    },
-    "0x038F": {
-      "file": "set_intensity.asm",
-      "address": "0x038F",
-      "line": 538
-    },
-    "0x0314": {
-      "file": "set_intensity.asm",
-      "address": "0x0314",
-      "line": 485
-    },
-    "0x04EC": {
-      "file": "set_intensity.asm",
-      "address": "0x04EC",
-      "line": 685
-    },
-    "0x05E9": {
-      "file": "set_intensity.asm",
-      "address": "0x05E9",
-      "line": 790
-    },
-    "0x0541": {
-      "file": "set_intensity.asm",
-      "address": "0x0541",
-      "line": 719
-    },
-    "0x0449": {
-      "file": "set_intensity.asm",
-      "address": "0x0449",
-      "line": 616
-    },
-    "0x0478": {
-      "file": "set_intensity.asm",
-      "address": "0x0478",
-      "line": 635
-    },
-    "0x0426": {
-      "file": "set_intensity.asm",
-      "address": "0x0426",
-      "line": 602
-    },
-    "0x02EC": {
-      "file": "set_intensity.asm",
-      "address": "0x02EC",
-      "line": 469
-    },
-    "0x0532": {
-      "file": "set_intensity.asm",
-      "address": "0x0532",
-      "line": 713
-    },
-    "0x0628": {
-      "file": "set_intensity.asm",
-      "address": "0x0628",
-      "line": 815
-    },
-    "0x0654": {
-      "file": "set_intensity.asm",
-      "address": "0x0654",
-      "line": 835
-    },
-    "0x0417": {
-      "file": "set_intensity.asm",
-      "address": "0x0417",
-      "line": 596
-    },
-    "0x032D": {
-      "file": "set_intensity.asm",
-      "address": "0x032D",
-      "line": 495
-    },
-    "0x04FD": {
-      "file": "set_intensity.asm",
-      "address": "0x04FD",
-      "line": 692
-    },
-    "0x01BF": {
-      "file": "set_intensity.asm",
-      "address": "0x01BF",
-      "line": 324
-    },
-    "0x019B": {
-      "file": "set_intensity.asm",
-      "address": "0x019B",
-      "line": 307
-    },
-    "0x00DC": {
-      "file": "set_intensity.asm",
-      "address": "0x00DC",
-      "line": 192
-    },
-    "0x0611": {
-      "file": "set_intensity.asm",
-      "address": "0x0611",
-      "line": 806
-    },
-    "0x057C": {
-      "file": "set_intensity.asm",
-      "address": "0x057C",
-      "line": 745
-    },
-    "0x0351": {
-      "file": "set_intensity.asm",
-      "address": "0x0351",
-      "line": 513
-    },
-    "0x04E7": {
-      "file": "set_intensity.asm",
-      "address": "0x04E7",
-      "line": 683
-    },
-    "0x02EA": {
-      "file": "set_intensity.asm",
-      "address": "0x02EA",
-      "line": 468
-    },
-    "0x0033": {
-      "file": "set_intensity.asm",
-      "address": "0x0033",
-      "line": 67
-    },
-    "0x02C4": {
-      "file": "set_intensity.asm",
-      "address": "0x02C4",
-      "line": 453
-    },
-    "0x0503": {
-      "file": "set_intensity.asm",
-      "address": "0x0503",
-      "line": 694
-    },
-    "0x0074": {
-      "file": "set_intensity.asm",
-      "address": "0x0074",
-      "line": 114
-    },
-    "0x01E1": {
-      "file": "set_intensity.asm",
-      "address": "0x01E1",
-      "line": 341
-    },
-    "0x0462": {
-      "file": "set_intensity.asm",
-      "address": "0x0462",
-      "line": 626
-    },
-    "0x0651": {
-      "file": "set_intensity.asm",
-      "address": "0x0651",
-      "line": 834
-    },
-    "0x0167": {
-      "file": "set_intensity.asm",
-      "address": "0x0167",
-      "line": 280
-    },
-    "0x03A3": {
-      "file": "set_intensity.asm",
-      "address": "0x03A3",
-      "line": 546
-    },
-    "0x04A3": {
-      "file": "set_intensity.asm",
-      "address": "0x04A3",
-      "line": 652
-    },
-    "0x02AE": {
-      "file": "set_intensity.asm",
-      "address": "0x02AE",
-      "line": 444
-    },
-    "0x0614": {
-      "file": "set_intensity.asm",
-      "address": "0x0614",
-      "line": 807
-    },
-    "0x051B": {
-      "file": "set_intensity.asm",
-      "address": "0x051B",
-      "line": 704
-    },
-    "0x0604": {
-      "file": "set_intensity.asm",
-      "address": "0x0604",
-      "line": 801
-    },
-    "0x0198": {
-      "file": "set_intensity.asm",
-      "address": "0x0198",
-      "line": 306
-    },
-    "0x0281": {
-      "file": "set_intensity.asm",
-      "address": "0x0281",
-      "line": 426
-    },
-    "0x0153": {
-      "file": "set_intensity.asm",
-      "address": "0x0153",
-      "line": 268
-    },
-    "0x02F2": {
-      "file": "set_intensity.asm",
-      "address": "0x02F2",
-      "line": 471
-    },
-    "0x00CD": {
-      "file": "set_intensity.asm",
-      "address": "0x00CD",
-      "line": 182
-    },
-    "0x0528": {
-      "file": "set_intensity.asm",
-      "address": "0x0528",
-      "line": 709
-    }
-  },
-  "functions": {},
   "nativeCalls": {
-    "26": "VECTREX_PRINT_TEXT",
-    "24": "VECTREX_PRINT_TEXT",
-    "12": "VECTREX_PRINT_TEXT",
-    "22": "VECTREX_PRINT_TEXT",
-    "25": "VECTREX_PRINT_TEXT",
-    "23": "VECTREX_PRINT_TEXT"
+    "14": "PRINT_TEXT",
+    "24": "PRINT_TEXT",
+    "25": "PRINT_TEXT",
+    "26": "PRINT_TEXT",
+    "27": "PRINT_TEXT",
+    "28": "PRINT_TEXT"
   },
-  "asmFunctions": {
-    "VECTREX_PRINT_TEXT": {
-      "name": "VECTREX_PRINT_TEXT",
-      "file": "set_intensity.asm",
-      "startLine": 129,
-      "endLine": 144,
-      "type": "native"
-    }
-  },
-  "asmAddressMap": {
-    "394": "0x023F",
-    "193": "0x00DF",
-    "81": "0x004B",
-    "191": "0x00DA",
-    "540": "0x0395",
-    "490": "0x0321",
-    "747": "0x0581",
-    "648": "0x0499",
-    "200": "0x00E6",
-    "259": "0x013F",
-    "192": "0x00DC",
-    "445": "0x02B0",
-    "12": "0x0202",
-    "739": "0x056E",
-    "556": "0x03BD",
-    "628": "0x0467",
-    "925": "0x0717",
-    "729": "0x055A",
-    "461": "0x02D8",
-    "59": "0x0021",
-    "740": "0x0570",
-    "584": "0x03FD",
-    "368": "0x020F",
-    "847": "0x066B",
-    "526": "0x0371",
-    "758": "0x0599",
-    "123": "0x0081",
-    "667": "0x04C1",
-    "614": "0x0444",
-    "60": "0x0024",
-    "626": "0x0462",
-    "856": "0x0683",
-    "807": "0x0614",
-    "593": "0x0410",
-    "894": "0x06D5",
-    "631": "0x046E",
-    "292": "0x0180",
-    "376": "0x0221",
-    "768": "0x05B2",
-    "695": "0x0505",
-    "137": "0x0095",
-    "670": "0x04C7",
-    "313": "0x01A8",
-    "848": "0x066E",
-    "509": "0x0347",
-    "712": "0x052F",
-    "91": "0x0052",
-    "607": "0x0432",
-    "757": "0x0596",
-    "321": "0x01B6",
-    "522": "0x0367",
-    "297": "0x018A",
-    "692": "0x04FD",
-    "612": "0x043F",
-    "374": "0x021C",
-    "65": "0x0031",
-    "870": "0x06A0",
-    "865": "0x0691",
-    "767": "0x05B0",
-    "479": "0x0306",
-    "443": "0x02AC",
-    "419": "0x0274",
-    "709": "0x0528",
-    "407": "0x025D",
-    "469": "0x02EC",
-    "464": "0x02E0",
-    "31": "0x021F",
-    "504": "0x033E",
-    "378": "0x0226",
-    "686": "0x04EF",
-    "933": "0x0721",
-    "396": "0x0245",
-    "155": "0x00B7",
-    "596": "0x0417",
-    "924": "0x0716",
-    "136": "0x0092",
-    "13": "0x0205",
-    "153": "0x00B4",
-    "568": "0x03DB",
-    "223": "0x0105",
-    "585": "0x03FF",
-    "406": "0x025A",
-    "759": "0x059C",
-    "624": "0x045D",
-    "541": "0x0397",
-    "263": "0x0149",
-    "402": "0x024E",
-    "653": "0x04A6",
-    "142": "0x00A3",
-    "708": "0x0525",
-    "640": "0x0485",
-    "789": "0x05E6",
-    "783": "0x05D8",
-    "569": "0x03DD",
-    "880": "0x06B2",
-    "346": "0x01ED",
-    "531": "0x037E",
-    "643": "0x048C",
-    "232": "0x011A",
-    "579": "0x03F0",
-    "782": "0x05D5",
-    "342": "0x01E4",
-    "78": "0x0048",
-    "890": "0x06CC",
-    "520": "0x0363",
-    "325": "0x01C2",
-    "645": "0x0492",
-    "610": "0x043A",
-    "618": "0x044E",
-    "635": "0x0478",
-    "701": "0x0514",
-    "763": "0x05A6",
-    "652": "0x04A3",
-    "506": "0x0340",
-    "688": "0x04F3",
-    "452": "0x02C2",
-    "666": "0x04C0",
-    "900": "0x06DE",
-    "853": "0x067A",
-    "795": "0x05F6",
-    "662": "0x04B7",
-    "234": "0x011D",
-    "275": "0x015D",
-    "530": "0x037B",
-    "661": "0x04B4",
-    "371": "0x0215",
-    "638": "0x0480",
-    "524": "0x036D",
-    "930": "0x071E",
-    "726": "0x0553",
-    "940": "0x0728",
-    "260": "0x0140",
-    "491": "0x0324",
-    "673": "0x04CE",
-    "828": "0x0642",
-    "679": "0x04DD",
-    "732": "0x0561",
-    "860": "0x0686",
-    "306": "0x0198",
-    "791": "0x05EC",
-    "355": "0x0200",
-    "482": "0x030D",
-    "793": "0x05F0",
-    "861": "0x0689",
-    "408": "0x0260",
-    "429": "0x0288",
-    "804": "0x060C",
-    "888": "0x06C6",
-    "794": "0x05F3",
-    "46": "0x0248",
-    "548": "0x03A9",
-    "359": "0x020A",
-    "253": "0x0132",
-    "377": "0x0224",
-    "421": "0x0278",
-    "283": "0x016E",
-    "354": "0x01FE",
-    "231": "0x0117",
-    "312": "0x01A5",
-    "289": "0x0179",
-    "249": "0x0129",
-    "833": "0x064E",
-    "554": "0x03B7",
-    "770": "0x05B7",
-    "521": "0x0365",
-    "290": "0x017C",
-    "224": "0x0108",
-    "557": "0x03BF",
-    "842": "0x0660",
-    "689": "0x04F6",
-    "434": "0x0295",
-    "212": "0x00F8",
-    "835": "0x0654",
-    "810": "0x061B",
-    "473": "0x02F6",
-    "15": "0x020A",
-    "518": "0x035D",
-    "404": "0x0254",
-    "35": "0x0229",
-    "181": "0x00CA",
-    "825": "0x0639",
-    "282": "0x016B",
-    "743": "0x0578",
-    "727": "0x0555",
-    "211": "0x00F6",
-    "749": "0x0583",
-    "684": "0x04E9",
-    "538": "0x038F",
-    "649": "0x049C",
-    "11": "0x0200",
-    "694": "0x0503",
-    "332": "0x01CC",
-    "229": "0x0113",
-    "278": "0x0164",
-    "806": "0x0611",
-    "627": "0x0464",
-    "405": "0x0257",
-    "225": "0x010A",
-    "654": "0x04A8",
-    "30": "0x021C",
-    "533": "0x0383",
-    "650": "0x049E",
-    "730": "0x055D",
-    "32": "0x0221",
-    "680": "0x04DF",
-    "772": "0x05BC",
-    "519": "0x0360",
-    "582": "0x03F8",
-    "228": "0x0111",
-    "617": "0x044C",
-    "537": "0x038D",
-    "634": "0x0476",
-    "801": "0x0604",
-    "934": "0x0723",
-    "409": "0x0263",
-    "748": "0x0582",
-    "288": "0x0176",
-    "917": "0x070A",
-    "906": "0x06EC",
-    "183": "0x00CE",
-    "786": "0x05DF",
-    "38": "0x0231",
-    "620": "0x0453",
-    "426": "0x0281",
-    "621": "0x0456",
-    "780": "0x05D0",
-    "775": "0x05C4",
-    "431": "0x028E",
-    "42": "0x023C",
-    "357": "0x0205",
-    "646": "0x0494",
-    "310": "0x019F",
-    "457": "0x02CE",
-    "788": "0x05E4",
-    "714": "0x0535",
-    "814": "0x0625",
-    "778": "0x05CB",
-    "150": "0x00AF",
-    "460": "0x02D6",
-    "915": "0x0704",
-    "723": "0x054B",
-    "909": "0x06F5",
-    "882": "0x06B8",
-    "736": "0x056B",
-    "555": "0x03BA",
-    "761": "0x05A0",
-    "505": "0x033F",
-    "58": "0x001F",
-    "210": "0x00F5",
-    "558": "0x03C1",
-    "92": "0x0053",
-    "334": "0x01CF",
-    "508": "0x0345",
-    "385": "0x0231",
-    "616": "0x0449",
-    "350": "0x01F6",
-    "324": "0x01BF",
-    "370": "0x0212",
-    "671": "0x04C9",
-    "928": "0x071B",
-    "885": "0x06BD",
-    "639": "0x0482",
-    "395": "0x0242",
-    "660": "0x04B1",
-    "561": "0x03C9",
-    "678": "0x04DB",
-    "751": "0x0588",
-    "500": "0x0335",
-    "233": "0x011C",
-    "809": "0x0618",
-    "884": "0x06BA",
-    "499": "0x0332",
-    "790": "0x05E9",
-    "798": "0x05FD",
-    "449": "0x02BA",
-    "435": "0x0298",
-    "209": "0x00F4",
-    "190": "0x00D8",
-    "360": "0x020D",
-    "893": "0x06D2",
-    "843": "0x0661",
-    "836": "0x0657",
-    "16": "0x020D",
-    "471": "0x02F2",
-    "594": "0x0412",
-    "280": "0x0167",
-    "476": "0x02FE",
-    "187": "0x00D5",
-    "427": "0x0284",
-    "140": "0x009E",
-    "221": "0x0100",
-    "214": "0x00FB",
-    "74": "0x003C",
-    "388": "0x0237",
-    "503": "0x033C",
-    "502": "0x0339",
-    "176": "0x00C4",
-    "785": "0x05DC",
-    "560": "0x03C7",
-    "116": "0x0077",
-    "803": "0x060A",
-    "50": "0x0251",
-    "336": "0x01D5",
-    "386": "0x0234",
-    "62": "0x002A",
-    "393": "0x023C",
-    "914": "0x0701",
-    "827": "0x063F",
-    "773": "0x05BE",
-    "422": "0x027B",
-    "641": "0x0488",
-    "816": "0x062A",
-    "718": "0x053F",
-    "175": "0x00C1",
-    "494": "0x032B",
-    "455": "0x02CA",
-    "574": "0x03E9",
-    "796": "0x05F8",
-    "79": "0x0049",
-    "633": "0x0474",
-    "36": "0x022C",
-    "619": "0x0450",
-    "697": "0x050A",
-    "812": "0x0620",
-    "815": "0x0628",
-    "446": "0x02B3",
-    "384": "0x022E",
-    "222": "0x0102",
-    "937": "0x0725",
-    "462": "0x02DB",
-    "637": "0x047E",
-    "413": "0x026C",
-    "273": "0x0159",
-    "493": "0x0328",
-    "734": "0x0567",
-    "682": "0x04E5",
-    "315": "0x01A9",
-    "439": "0x02A2",
-    "927": "0x071A",
-    "581": "0x03F6",
-    "467": "0x02E8",
-    "294": "0x0183",
-    "668": "0x04C2",
-    "135": "0x008F",
-    "102": "0x0062",
-    "507": "0x0342",
-    "18": "0x0212",
-    "866": "0x0694",
-    "604": "0x042B",
-    "179": "0x00C7",
-    "489": "0x031E",
-    "256": "0x0139",
-    "73": "0x0039",
-    "567": "0x03D8",
-    "197": "0x00E2",
-    "687": "0x04F1",
-    "762": "0x05A3",
-    "185": "0x00D1",
-    "100": "0x005E",
-    "296": "0x0187",
-    "29": "0x021A",
-    "351": "0x01F9",
-    "40": "0x0237",
-    "285": "0x0172",
-    "383": "0x022C",
-    "106": "0x0068",
-    "676": "0x04D5",
-    "565": "0x03D3",
-    "546": "0x03A3",
-    "715": "0x0537",
-    "902": "0x06E4",
-    "262": "0x0146",
-    "111": "0x0070",
-    "340": "0x01DE",
-    "903": "0x06E5",
-    "681": "0x04E2",
-    "474": "0x02F9",
-    "705": "0x051E",
-    "756": "0x0594",
-    "547": "0x03A6",
-    "147": "0x00AA",
-    "609": "0x0438",
-    "672": "0x04CB",
-    "651": "0x04A0",
-    "876": "0x06AF",
-    "745": "0x057C",
-    "716": "0x0539",
-    "728": "0x0557",
-    "792": "0x05EE",
-    "908": "0x06F2",
-    "403": "0x0251",
-    "916": "0x0707",
-    "910": "0x06F8",
-    "725": "0x0550",
-    "177": "0x00C5",
-    "64": "0x0030",
-    "19": "0x0215",
-    "559": "0x03C4",
-    "454": "0x02C7",
-    "501": "0x0337",
-    "414": "0x026F",
-    "516": "0x0359",
-    "589": "0x0406",
-    "93": "0x0054",
-    "201": "0x00E7",
-    "276": "0x0160",
-    "375": "0x021F",
-    "753": "0x058C",
-    "805": "0x060E",
-    "267": "0x0150",
-    "307": "0x019B",
-    "182": "0x00CD",
-    "644": "0x048F",
-    "319": "0x01B5",
-    "304": "0x0192",
-    "33": "0x0224",
-    "754": "0x058F",
-    "781": "0x05D2",
-    "696": "0x0507",
-    "886": "0x06C0",
-    "440": "0x02A4",
-    "685": "0x04EC",
-    "411": "0x0269",
-    "330": "0x01C6",
-    "90": "0x004F",
-    "76": "0x0042",
-    "37": "0x022E",
-    "466": "0x02E5",
-    "425": "0x027F",
-    "442": "0x02A9",
-    "720": "0x0543",
-    "702": "0x0517",
-    "544": "0x039F",
-    "744": "0x057A",
-    "598": "0x041C",
-    "213": "0x00F9",
-    "423": "0x027D",
-    "472": "0x02F4",
-    "665": "0x04BE",
-    "120": "0x007C",
-    "784": "0x05DA",
-    "575": "0x03EC",
-    "39": "0x0234",
-    "107": "0x0069",
-    "605": "0x042E",
-    "750": "0x0585",
-    "487": "0x031A",
-    "274": "0x015A",
-    "862": "0x068C",
-    "226": "0x010B",
-    "295": "0x0184",
-    "121": "0x007F",
-    "735": "0x0569",
-    "752": "0x058A",
-    "303": "0x0191",
-    "251": "0x012F",
-    "227": "0x010E",
-    "868": "0x069A",
-    "698": "0x050D",
-    "254": "0x0133",
-    "911": "0x06FB",
-    "2": "0x01FE",
-    "845": "0x0665",
-    "629": "0x046A",
-    "562": "0x03CB",
-    "235": "0x0120",
-    "625": "0x0460",
-    "138": "0x0098",
-    "615": "0x0446",
-    "542": "0x0399",
-    "110": "0x006D",
-    "447": "0x02B6",
-    "647": "0x0496",
-    "349": "0x01F3",
-    "269": "0x0156",
-    "677": "0x04D8",
-    "573": "0x03E7",
-    "717": "0x053C",
-    "731": "0x055F",
-    "139": "0x009B",
-    "887": "0x06C3",
-    "769": "0x05B4",
-    "591": "0x040A",
-    "529": "0x0379",
-    "613": "0x0442",
-    "257": "0x013C",
-    "797": "0x05FA",
-    "799": "0x0600",
-    "663": "0x04B9",
-    "622": "0x0458",
-    "891": "0x06CF",
-    "741": "0x0572",
-    "341": "0x01E1",
-    "873": "0x06A6",
-    "669": "0x04C4",
-    "515": "0x0356",
-    "553": "0x03B5",
-    "127": "0x0087",
-    "44": "0x0242",
-    "851": "0x0677",
-    "831": "0x064B",
-    "433": "0x0292",
-    "590": "0x0408",
-    "889": "0x06C9",
-    "907": "0x06EF",
-    "871": "0x06A3",
-    "75": "0x003F",
-    "733": "0x0564",
-    "813": "0x0622",
-    "186": "0x00D4",
-    "683": "0x04E7",
-    "331": "0x01C9",
-    "580": "0x03F3",
-    "664": "0x04BB",
-    "779": "0x05CE",
-    "595": "0x0414",
-    "571": "0x03E2",
-    "846": "0x0668",
-    "704": "0x051B",
-    "323": "0x01BC",
-    "134": "0x008D",
-    "841": "0x065D",
-    "931": "0x071F",
-    "599": "0x041E",
-    "144": "0x00A9",
-    "601": "0x0424",
-    "496": "0x032F",
-    "719": "0x0541",
-    "199": "0x00E5",
-    "896": "0x06DB",
-    "432": "0x0290",
-    "690": "0x04F9",
-    "335": "0x01D2",
-    "126": "0x0086",
-    "755": "0x0592",
-    "700": "0x0511",
-    "572": "0x03E5",
-    "48": "0x024E",
-    "636": "0x047B",
-    "722": "0x0549",
-    "470": "0x02EF",
-    "415": "0x0270",
-    "194": "0x00E1",
-    "112": "0x0071",
-    "600": "0x0421",
-    "674": "0x04D1",
-    "265": "0x014C",
-    "523": "0x036A",
-    "468": "0x02EA",
-    "63": "0x002D",
-    "113": "0x0072",
-    "514": "0x0353",
-    "746": "0x057F",
-    "430": "0x028B",
-    "703": "0x0519",
-    "549": "0x03AB",
-    "317": "0x01AF",
-    "510": "0x0349",
-    "564": "0x03D1",
-    "642": "0x048A",
-    "570": "0x03DF",
-    "424": "0x027E",
-    "143": "0x00A6",
-    "867": "0x0697",
-    "874": "0x06A9",
-    "72": "0x0037",
-    "287": "0x0175",
-    "527": "0x0374",
-    "820": "0x062C",
-    "148": "0x00AC",
-    "706": "0x0521",
-    "534": "0x0385",
-    "198": "0x00E3",
-    "236": "0x0123",
-    "904": "0x06E6",
-    "760": "0x059E",
-    "829": "0x0645",
-    "117": "0x0078",
-    "517": "0x035B",
-    "939": "0x0727",
-    "936": "0x0724",
-    "777": "0x05C8",
-    "808": "0x0616",
-    "811": "0x061E",
-    "428": "0x0286",
-    "776": "0x05C6",
-    "824": "0x0636",
-    "248": "0x0126",
-    "655": "0x04AA",
-    "103": "0x0063",
-    "67": "0x0033",
-    "623": "0x045A",
-    "693": "0x0500",
-    "444": "0x02AE",
-    "586": "0x0400",
-    "834": "0x0651",
-    "96": "0x0059",
-    "358": "0x0207",
-    "77": "0x0045",
-    "659": "0x04AF",
-    "821": "0x062F",
-    "551": "0x03B0",
-    "480": "0x0308",
-    "774": "0x05C1",
-    "268": "0x0153",
-    "477": "0x0300",
-    "830": "0x0648",
-    "528": "0x0377",
-    "20": "0x0217",
-    "299": "0x018E",
-    "840": "0x065A",
-    "420": "0x0276",
-    "864": "0x068E",
-    "17": "0x020F",
-    "122": "0x0080",
-    "41": "0x023A",
-    "875": "0x06AC",
-    "255": "0x0136",
-    "441": "0x02A6",
-    "901": "0x06E1",
-    "329": "0x01C3",
-    "410": "0x0266",
-    "492": "0x0326",
-    "47": "0x024B",
-    "771": "0x05BA",
-    "602": "0x0426",
-    "104": "0x0065",
-    "710": "0x052B",
-    "400": "0x0248",
-    "481": "0x030A",
-    "632": "0x0471",
-    "787": "0x05E2",
-    "277": "0x0163",
-    "611": "0x043C",
-    "869": "0x069D",
-    "309": "0x019C",
-    "592": "0x040D",
-    "43": "0x023F",
-    "281": "0x0168",
-    "883": "0x06B9",
-    "711": "0x052D",
-    "699": "0x050F",
-    "802": "0x0607",
-    "478": "0x0303",
-    "291": "0x017F",
-    "322": "0x01B9",
-    "576": "0x03EE",
-    "713": "0x0532",
-    "318": "0x01B2",
-    "485": "0x0314",
-    "311": "0x01A2",
-    "456": "0x02CC",
-    "532": "0x0381",
-    "822": "0x0631",
-    "691": "0x04FB",
-    "80": "0x004A",
-    "484": "0x0312",
-    "764": "0x05A8",
-    "451": "0x02C0",
-    "114": "0x0074",
-    "905": "0x06E9",
-    "512": "0x034F",
-    "337": "0x01D8",
-    "266": "0x014D",
-    "552": "0x03B3",
-    "881": "0x06B5",
-    "707": "0x0523",
-    "34": "0x0226",
-    "284": "0x0171",
-    "305": "0x0195",
-    "401": "0x024B",
-    "895": "0x06D8",
-    "215": "0x00FE",
-    "250": "0x012C",
-    "261": "0x0143",
-    "850": "0x0674",
-    "14": "0x0207",
-    "765": "0x05AA",
-    "603": "0x0428",
-    "475": "0x02FC",
-    "724": "0x054D",
-    "511": "0x034C",
-    "173": "0x00BF",
-    "156": "0x00B9",
-    "61": "0x0027",
-    "373": "0x021A",
-    "347": "0x01F0",
-    "675": "0x04D3",
-    "465": "0x02E2",
-    "458": "0x02D1",
-    "486": "0x0317",
-    "766": "0x05AD",
-    "66": "0x0032",
-    "316": "0x01AC",
-    "800": "0x0602",
-    "379": "0x0229",
-    "656": "0x04AD",
-    "488": "0x031C",
-    "608": "0x0435",
-    "152": "0x00B2",
-    "94": "0x0056",
-    "298": "0x018D",
-    "436": "0x029A",
-    "208": "0x00F1",
-    "539": "0x0392",
-    "587": "0x0401",
-    "6": "0x01FE",
-    "389": "0x023A",
-    "124": "0x0083",
-    "372": "0x0217",
-    "463": "0x02DE",
-    "178": "0x00C6",
-    "230": "0x0114",
-    "854": "0x067D",
-    "543": "0x039C",
-    "823": "0x0633",
-    "101": "0x0061",
-    "356": "0x0202",
-    "344": "0x01E7",
-    "855": "0x0680",
-    "863": "0x068D",
-    "550": "0x03AD",
-    "45": "0x0245",
-    "453": "0x02C4",
-    "495": "0x032D",
-    "438": "0x029F",
-    "597": "0x041A",
-    "141": "0x00A1",
-    "448": "0x02B8",
-    "588": "0x0403",
-    "133": "0x008B",
-    "535": "0x0388",
-    "630": "0x046C",
-    "416": "0x0271",
-    "513": "0x0351",
-    "345": "0x01EA",
-    "844": "0x0662",
-    "483": "0x0310",
-    "583": "0x03FA",
-    "606": "0x0430",
-    "742": "0x0575",
-    "721": "0x0546",
-    "913": "0x06FE",
-    "97": "0x005A",
-    "545": "0x03A1",
-    "450": "0x02BD",
-    "536": "0x038B",
-    "849": "0x0671",
-    "172": "0x00BC",
-    "437": "0x029C",
-    "203": "0x00EE",
-    "826": "0x063C",
-    "459": "0x02D4",
-    "566": "0x03D5",
-    "525": "0x036F",
-    "247": "0x0125",
-    "563": "0x03CE",
-    "339": "0x01DB"
+  "source": "main.vpy",
+  "symbols": {
+    "ABS_A_B": "0xF584",
+    "ABS_B": "0xF58B",
+    "ADD_SCORE_A": "0xF85E",
+    "ADD_SCORE_D": "0xF87C",
+    "Abs_a_b": "0xF584",
+    "Abs_b": "0xF58B",
+    "Add_Score_a": "0xF85E",
+    "Add_Score_d": "0xF87C",
+    "BITMASK_A": "0xF57E",
+    "Bitmask_a": "0xF57E",
+    "CHECK0REF": "0xF34F",
+    "CLEAR_C8_RAM": "0xF542",
+    "CLEAR_SCORE": "0xF84F",
+    "CLEAR_SOUND": "0xF272",
+    "CLEAR_X_256": "0xF545",
+    "CLEAR_X_B": "0xF53F",
+    "CLEAR_X_B_80": "0xF550",
+    "CLEAR_X_B_A": "0xF552",
+    "CLEAR_X_D": "0xF548",
+    "COLD_START": "0xF000",
+    "COMPARE_SCORE": "0xF8C7",
+    "Check0Ref": "0xF34F",
+    "Clear_C8_RAM": "0xF542",
+    "Clear_Score": "0xF84F",
+    "Clear_Sound": "0xF272",
+    "Clear_x_256": "0xF545",
+    "Clear_x_b": "0xF53F",
+    "Clear_x_b_80": "0xF550",
+    "Clear_x_b_a": "0xF552",
+    "Clear_x_d": "0xF548",
+    "Cold_Start": "0xF000",
+    "Compare_Score": "0xF8C7",
+    "DCR_AFTER_INTENSITY": "0x40C4",
+    "DCR_INTENSITY_5F": "0x40C1",
+    "DCR_after_intensity": "0x40C4",
+    "DCR_intensity_5F": "0x40C1",
+    "DEC_3_COUNTERS": "0xF55A",
+    "DEC_6_COUNTERS": "0xF55E",
+    "DEC_COUNTERS": "0xF563",
+    "DELAY_0": "0xF579",
+    "DELAY_1": "0xF575",
+    "DELAY_2": "0xF571",
+    "DELAY_3": "0xF56D",
+    "DELAY_B": "0xF57A",
+    "DELAY_RTS": "0xF57D",
+    "DOT_D": "0xF2C3",
+    "DOT_HERE": "0xF2C5",
+    "DOT_IX": "0xF2C1",
+    "DOT_IX_B": "0xF2BE",
+    "DOT_LIST": "0xF2D5",
+    "DOT_LIST_RESET": "0xF2DE",
+    "DO_SOUND": "0xF289",
+    "DO_SOUND_X": "0xF28C",
+    "DP_TO_C8": "0xF1AF",
+    "DP_TO_D0": "0xF1AA",
+    "DP_to_C8": "0xF1AF",
+    "DP_to_D0": "0xF1AA",
+    "DRAW_CIRCLE_RUNTIME": "0x408E",
+    "DRAW_GRID_VL": "0xFF9F",
+    "DRAW_LINE_D": "0xF3DF",
+    "DRAW_PAT_VL": "0xF437",
+    "DRAW_PAT_VL_A": "0xF434",
+    "DRAW_PAT_VL_D": "0xF439",
+    "DRAW_VL": "0xF3DD",
+    "DRAW_VLC": "0xF3CE",
+    "DRAW_VLCS": "0xF3D6",
+    "DRAW_VLP": "0xF410",
+    "DRAW_VLP_7F": "0xF408",
+    "DRAW_VLP_B": "0xF40E",
+    "DRAW_VLP_FF": "0xF404",
+    "DRAW_VLP_SCALE": "0xF40C",
+    "DRAW_VL_A": "0xF3DA",
+    "DRAW_VL_AB": "0xF3D8",
+    "DRAW_VL_B": "0xF3D2",
+    "DRAW_VL_MODE": "0xF46E",
+    "Dec_3_Counters": "0xF55A",
+    "Dec_6_Counters": "0xF55E",
+    "Dec_Counters": "0xF563",
+    "Delay_0": "0xF579",
+    "Delay_1": "0xF575",
+    "Delay_2": "0xF571",
+    "Delay_3": "0xF56D",
+    "Delay_RTS": "0xF57D",
+    "Delay_b": "0xF57A",
+    "Do_Sound": "0xF289",
+    "Do_Sound_x": "0xF28C",
+    "Dot_List": "0xF2D5",
+    "Dot_List_Reset": "0xF2DE",
+    "Dot_d": "0xF2C3",
+    "Dot_here": "0xF2C5",
+    "Dot_ix": "0xF2C1",
+    "Dot_ix_b": "0xF2BE",
+    "Draw_Grid_VL": "0xFF9F",
+    "Draw_Line_d": "0xF3DF",
+    "Draw_Pat_VL": "0xF437",
+    "Draw_Pat_VL_a": "0xF434",
+    "Draw_Pat_VL_d": "0xF439",
+    "Draw_VL": "0xF3DD",
+    "Draw_VL_a": "0xF3DA",
+    "Draw_VL_ab": "0xF3D8",
+    "Draw_VL_b": "0xF3D2",
+    "Draw_VL_mode": "0xF46E",
+    "Draw_VLc": "0xF3CE",
+    "Draw_VLcs": "0xF3D6",
+    "Draw_VLp": "0xF410",
+    "Draw_VLp_7F": "0xF408",
+    "Draw_VLp_FF": "0xF404",
+    "Draw_VLp_b": "0xF40E",
+    "Draw_VLp_scale": "0xF40C",
+    "EXPLOSION_SND": "0xF92E",
+    "Explosion_Snd": "0xF92E",
+    "GET_RISE_IDX": "0xF5D9",
+    "GET_RISE_RUN": "0xF5EF",
+    "GET_RUN_IDX": "0xF5DB",
+    "Get_Rise_Idx": "0xF5D9",
+    "Get_Rise_Run": "0xF5EF",
+    "Get_Run_Idx": "0xF5DB",
+    "INIT_MUSIC": "0xF68D",
+    "INIT_MUSIC_BUF": "0xF533",
+    "INIT_MUSIC_CHK": "0xF687",
+    "INIT_MUSIC_X": "0xF692",
+    "INIT_OS": "0xF18B",
+    "INIT_OS_RAM": "0xF164",
+    "INIT_VIA": "0xF14C",
+    "INTENSITY_1F": "0xF29D",
+    "INTENSITY_3F": "0xF2A1",
+    "INTENSITY_5F": "0xF2A5",
+    "INTENSITY_7F": "0xF2A9",
+    "INTENSITY_A": "0xF2AB",
+    "Init_Music": "0xF68D",
+    "Init_Music_Buf": "0xF533",
+    "Init_Music_chk": "0xF687",
+    "Init_Music_x": "0xF692",
+    "Init_OS": "0xF18B",
+    "Init_OS_RAM": "0xF164",
+    "Init_VIA": "0xF14C",
+    "Intensity_1F": "0xF29D",
+    "Intensity_3F": "0xF2A1",
+    "Intensity_5F": "0xF2A5",
+    "Intensity_7F": "0xF2A9",
+    "Intensity_a": "0xF2AB",
+    "JOY_ANALOG": "0xF1F5",
+    "JOY_DIGITAL": "0xF1F8",
+    "Joy_Analog": "0xF1F5",
+    "Joy_Digital": "0xF1F8",
+    "LOOP_BODY": "0x006F",
+    "MAIN": "0x0039",
+    "MAIN.MAIN_LOOP": "0x0069",
+    "MOD16": "0x403A",
+    "MOD16.M16_DONE": "0x408D",
+    "MOD16.M16_DPOS": "0x4057",
+    "MOD16.M16_END": "0x407E",
+    "MOD16.M16_LOOP": "0x406E",
+    "MOD16.M16_RCHECK": "0x405F",
+    "MOD16.M16_RPOS": "0x406E",
+    "MOVETO_D": "0xF312",
+    "MOVETO_D_7F": "0xF2FC",
+    "MOVETO_IX": "0xF310",
+    "MOVETO_IX_7F": "0xF30C",
+    "MOVETO_IX_A": "0xF30E",
+    "MOVETO_IX_FF": "0xF308",
+    "MOVETO_X_7F": "0xF2F2",
+    "MOVE_MEM_A": "0xF683",
+    "MOVE_MEM_A_1": "0xF67F",
+    "MOV_DRAW_VL": "0xF3BC",
+    "MOV_DRAW_VLCS": "0xF3B5",
+    "MOV_DRAW_VLC_A": "0xF3AD",
+    "MOV_DRAW_VL_A": "0xF3B9",
+    "MOV_DRAW_VL_AB": "0xF3B7",
+    "MOV_DRAW_VL_B": "0xF3B1",
+    "MOV_DRAW_VL_D": "0xF3BE",
+    "MUSIC1": "0xFD0D",
+    "MUSIC2": "0xFD1D",
+    "MUSIC3": "0xFD81",
+    "MUSIC4": "0xFDD3",
+    "MUSIC5": "0xFE38",
+    "MUSIC6": "0xFE76",
+    "MUSIC7": "0xFEC6",
+    "MUSIC8": "0xFEF8",
+    "MUSIC9": "0xFF26",
+    "MUSICA": "0xFF44",
+    "MUSICB": "0xFF62",
+    "MUSICC": "0xFF7A",
+    "MUSICD": "0xFF8F",
+    "Mov_Draw_VL": "0xF3BC",
+    "Mov_Draw_VL_a": "0xF3B9",
+    "Mov_Draw_VL_ab": "0xF3B7",
+    "Mov_Draw_VL_b": "0xF3B1",
+    "Mov_Draw_VL_d": "0xF3BE",
+    "Mov_Draw_VLc_a": "0xF3AD",
+    "Mov_Draw_VLcs": "0xF3B5",
+    "Move_Mem_a": "0xF683",
+    "Move_Mem_a_1": "0xF67F",
+    "Moveto_d": "0xF312",
+    "Moveto_d_7F": "0xF2FC",
+    "Moveto_ix": "0xF310",
+    "Moveto_ix_7F": "0xF30C",
+    "Moveto_ix_FF": "0xF308",
+    "Moveto_ix_a": "0xF30E",
+    "Moveto_x_7F": "0xF2F2",
+    "NEW_HIGH_SCORE": "0xF8D8",
+    "New_High_Score": "0xF8D8",
+    "OBJ_HIT": "0xF8FF",
+    "OBJ_WILL_HIT": "0xF8F3",
+    "OBJ_WILL_HIT_U": "0xF8E5",
+    "Obj_Hit": "0xF8FF",
+    "Obj_Will_Hit": "0xF8F3",
+    "Obj_Will_Hit_u": "0xF8E5",
+    "PRINT_LIST": "0xF38A",
+    "PRINT_LIST_CHK": "0xF38C",
+    "PRINT_LIST_HW": "0xF385",
+    "PRINT_SHIPS": "0xF393",
+    "PRINT_SHIPS_X": "0xF391",
+    "PRINT_STR": "0xF495",
+    "PRINT_STR_D": "0xF37A",
+    "PRINT_STR_HWYX": "0xF373",
+    "PRINT_STR_YX": "0xF378",
+    "PRINT_TEXT_STR_1598": "0x41DD",
+    "PRINT_TEXT_STR_1691": "0x41E0",
+    "PRINT_TEXT_STR_1784": "0x41E3",
+    "PRINT_TEXT_STR_48656": "0x41E6",
+    "PRINT_TEXT_STR_48694": "0x41EA",
+    "PRINT_TEXT_STR_64483629934611": "0x41EE",
+    "Print_List": "0xF38A",
+    "Print_List_chk": "0xF38C",
+    "Print_List_hw": "0xF385",
+    "Print_Ships": "0xF393",
+    "Print_Ships_x": "0xF391",
+    "Print_Str": "0xF495",
+    "Print_Str_d": "0xF37A",
+    "Print_Str_hwyx": "0xF373",
+    "Print_Str_yx": "0xF378",
+    "RANDOM": "0xF517",
+    "RANDOM_3": "0xF511",
+    "READ_BTNS": "0xF1BA",
+    "READ_BTNS_MASK": "0xF1B4",
+    "RECALIBRATE": "0xF2E6",
+    "RESET0INT": "0xF36B",
+    "RESET0REF": "0xF354",
+    "RESET0REF_D0": "0xF34A",
+    "RESET_PEN": "0xF35B",
+    "RISE_RUN_ANGLE": "0xF593",
+    "RISE_RUN_LEN": "0xF603",
+    "RISE_RUN_X": "0xF5FF",
+    "RISE_RUN_Y": "0xF601",
+    "ROT_VL": "0xF616",
+    "ROT_VL_AB": "0xF610",
+    "ROT_VL_DFT": "0xF637",
+    "ROT_VL_MODE": "0xF62B",
+    "ROT_VL_MODE_A": "0xF61F",
+    "Random": "0xF517",
+    "Random_3": "0xF511",
+    "Read_Btns": "0xF1BA",
+    "Read_Btns_Mask": "0xF1B4",
+    "Recalibrate": "0xF2E6",
+    "Reset0Int": "0xF36B",
+    "Reset0Ref": "0xF354",
+    "Reset0Ref_D0": "0xF34A",
+    "Reset_Pen": "0xF35B",
+    "Rise_Run_Angle": "0xF593",
+    "Rise_Run_Len": "0xF603",
+    "Rise_Run_X": "0xF5FF",
+    "Rise_Run_Y": "0xF601",
+    "Rot_VL": "0xF616",
+    "Rot_VL_Mode": "0xF62B",
+    "Rot_VL_Mode_a": "0xF61F",
+    "Rot_VL_ab": "0xF610",
+    "Rot_VL_dft": "0xF637",
+    "SELECT_GAME": "0xF7A9",
+    "SET_REFRESH": "0xF1A2",
+    "SOUND_BYTE": "0xF256",
+    "SOUND_BYTES": "0xF27D",
+    "SOUND_BYTES_X": "0xF284",
+    "SOUND_BYTE_RAW": "0xF25B",
+    "SOUND_BYTE_X": "0xF259",
+    "START": "0x0022",
+    "STRIP_ZEROS": "0xF8B7",
+    "Select_Game": "0xF7A9",
+    "Set_Refresh": "0xF1A2",
+    "Sound_Byte": "0xF256",
+    "Sound_Byte_raw": "0xF25B",
+    "Sound_Byte_x": "0xF259",
+    "Sound_Bytes": "0xF27D",
+    "Sound_Bytes_x": "0xF284",
+    "Strip_Zeros": "0xF8B7",
+    "VECTREX_PRINT_TEXT": "0x4000",
+    "VEC_0REF_ENABLE": "0xC824",
+    "VEC_ADSR_TABLE": "0xC84F",
+    "VEC_ADSR_TIMERS": "0xC85E",
+    "VEC_ANGLE": "0xC836",
+    "VEC_BRIGHTNESS": "0xC827",
+    "VEC_BTN_STATE": "0xC80F",
+    "VEC_BUTTONS": "0xC811",
+    "VEC_BUTTON_1_1": "0xC812",
+    "VEC_BUTTON_1_2": "0xC813",
+    "VEC_BUTTON_1_3": "0xC814",
+    "VEC_BUTTON_1_4": "0xC815",
+    "VEC_BUTTON_2_1": "0xC816",
+    "VEC_BUTTON_2_2": "0xC817",
+    "VEC_BUTTON_2_3": "0xC818",
+    "VEC_BUTTON_2_4": "0xC819",
+    "VEC_COLD_FLAG": "0xCBFE",
+    "VEC_COUNTERS": "0xC82E",
+    "VEC_COUNTER_1": "0xC82E",
+    "VEC_COUNTER_2": "0xC82F",
+    "VEC_COUNTER_3": "0xC830",
+    "VEC_COUNTER_4": "0xC831",
+    "VEC_COUNTER_5": "0xC832",
+    "VEC_COUNTER_6": "0xC833",
+    "VEC_DEFAULT_STK": "0xCBEA",
+    "VEC_DOT_DWELL": "0xC828",
+    "VEC_DURATION": "0xC857",
+    "VEC_EXPL_1": "0xC858",
+    "VEC_EXPL_2": "0xC859",
+    "VEC_EXPL_3": "0xC85A",
+    "VEC_EXPL_4": "0xC85B",
+    "VEC_EXPL_CHAN": "0xC85C",
+    "VEC_EXPL_CHANA": "0xC853",
+    "VEC_EXPL_CHANB": "0xC85D",
+    "VEC_EXPL_CHANS": "0xC854",
+    "VEC_EXPL_FLAG": "0xC867",
+    "VEC_EXPL_TIMER": "0xC877",
+    "VEC_FIRQ_VECTOR": "0xCBF5",
+    "VEC_FREQ_TABLE": "0xC84D",
+    "VEC_HIGH_SCORE": "0xCBEB",
+    "VEC_IRQ_VECTOR": "0xCBF8",
+    "VEC_JOY_1_X": "0xC81B",
+    "VEC_JOY_1_Y": "0xC81C",
+    "VEC_JOY_2_X": "0xC81D",
+    "VEC_JOY_2_Y": "0xC81E",
+    "VEC_JOY_MUX": "0xC81F",
+    "VEC_JOY_MUX_1_X": "0xC81F",
+    "VEC_JOY_MUX_1_Y": "0xC820",
+    "VEC_JOY_MUX_2_X": "0xC821",
+    "VEC_JOY_MUX_2_Y": "0xC822",
+    "VEC_JOY_RESLTN": "0xC81A",
+    "VEC_LOOP_COUNT": "0xC825",
+    "VEC_MAX_GAMES": "0xC850",
+    "VEC_MAX_PLAYERS": "0xC84F",
+    "VEC_MISC_COUNT": "0xC823",
+    "VEC_MUSIC_CHAN": "0xC855",
+    "VEC_MUSIC_FLAG": "0xC856",
+    "VEC_MUSIC_FREQ": "0xC861",
+    "VEC_MUSIC_PTR": "0xC853",
+    "VEC_MUSIC_TWANG": "0xC858",
+    "VEC_MUSIC_WK_1": "0xC84B",
+    "VEC_MUSIC_WK_5": "0xC847",
+    "VEC_MUSIC_WK_6": "0xC846",
+    "VEC_MUSIC_WK_7": "0xC845",
+    "VEC_MUSIC_WK_A": "0xC842",
+    "VEC_MUSIC_WORK": "0xC83F",
+    "VEC_NMI_VECTOR": "0xCBFB",
+    "VEC_NUM_GAME": "0xC87A",
+    "VEC_NUM_PLAYERS": "0xC879",
+    "VEC_PATTERN": "0xC829",
+    "VEC_PREV_BTNS": "0xC810",
+    "VEC_RANDOM_SEED": "0xC87D",
+    "VEC_RFRSH": "0xC83D",
+    "VEC_RFRSH_HI": "0xC83E",
+    "VEC_RFRSH_LO": "0xC83D",
+    "VEC_RISERUN_LEN": "0xC83B",
+    "VEC_RISERUN_TMP": "0xC834",
+    "VEC_RISE_INDEX": "0xC839",
+    "VEC_RUN_INDEX": "0xC837",
+    "VEC_SEED_PTR": "0xC87B",
+    "VEC_SND_SHADOW": "0xC800",
+    "VEC_STR_PTR": "0xC82C",
+    "VEC_SWI2_VECTOR": "0xCBF2",
+    "VEC_SWI3_VECTOR": "0xCBF2",
+    "VEC_SWI_VECTOR": "0xCBFB",
+    "VEC_TEXT_HEIGHT": "0xC82A",
+    "VEC_TEXT_HW": "0xC82A",
+    "VEC_TEXT_WIDTH": "0xC82B",
+    "VEC_TWANG_TABLE": "0xC851",
+    "VIA_AUX_CNTL": "0xD00B",
+    "VIA_CNTL": "0xD00C",
+    "VIA_DDR_A": "0xD003",
+    "VIA_DDR_B": "0xD002",
+    "VIA_DDR_a": "0xD003",
+    "VIA_DDR_b": "0xD002",
+    "VIA_INT_ENABLE": "0xD00E",
+    "VIA_INT_FLAGS": "0xD00D",
+    "VIA_PORT_A": "0xD001",
+    "VIA_PORT_A_NOHS": "0xD00F",
+    "VIA_PORT_B": "0xD000",
+    "VIA_SHIFT_REG": "0xD00A",
+    "VIA_T1_CNT_HI": "0xD005",
+    "VIA_T1_CNT_LO": "0xD004",
+    "VIA_T1_LCH_HI": "0xD007",
+    "VIA_T1_LCH_LO": "0xD006",
+    "VIA_T2_HI": "0xD009",
+    "VIA_T2_LO": "0xD008",
+    "VIA_aux_cntl": "0xD00B",
+    "VIA_cntl": "0xD00C",
+    "VIA_int_enable": "0xD00E",
+    "VIA_int_flags": "0xD00D",
+    "VIA_port_a": "0xD001",
+    "VIA_port_a_nohs": "0xD00F",
+    "VIA_port_b": "0xD000",
+    "VIA_shift_reg": "0xD00A",
+    "VIA_t1_cnt_hi": "0xD005",
+    "VIA_t1_cnt_lo": "0xD004",
+    "VIA_t1_lch_hi": "0xD007",
+    "VIA_t1_lch_lo": "0xD006",
+    "VIA_t2_hi": "0xD009",
+    "VIA_t2_lo": "0xD008",
+    "Vec_0Ref_Enable": "0xC824",
+    "Vec_ADSR_Table": "0xC84F",
+    "Vec_ADSR_Timers": "0xC85E",
+    "Vec_Angle": "0xC836",
+    "Vec_Brightness": "0xC827",
+    "Vec_Btn_State": "0xC80F",
+    "Vec_Button_1_1": "0xC812",
+    "Vec_Button_1_2": "0xC813",
+    "Vec_Button_1_3": "0xC814",
+    "Vec_Button_1_4": "0xC815",
+    "Vec_Button_2_1": "0xC816",
+    "Vec_Button_2_2": "0xC817",
+    "Vec_Button_2_3": "0xC818",
+    "Vec_Button_2_4": "0xC819",
+    "Vec_Buttons": "0xC811",
+    "Vec_Cold_Flag": "0xCBFE",
+    "Vec_Counter_1": "0xC82E",
+    "Vec_Counter_2": "0xC82F",
+    "Vec_Counter_3": "0xC830",
+    "Vec_Counter_4": "0xC831",
+    "Vec_Counter_5": "0xC832",
+    "Vec_Counter_6": "0xC833",
+    "Vec_Counters": "0xC82E",
+    "Vec_Default_Stk": "0xCBEA",
+    "Vec_Dot_Dwell": "0xC828",
+    "Vec_Duration": "0xC857",
+    "Vec_Expl_1": "0xC858",
+    "Vec_Expl_2": "0xC859",
+    "Vec_Expl_3": "0xC85A",
+    "Vec_Expl_4": "0xC85B",
+    "Vec_Expl_Chan": "0xC85C",
+    "Vec_Expl_ChanA": "0xC853",
+    "Vec_Expl_ChanB": "0xC85D",
+    "Vec_Expl_Chans": "0xC854",
+    "Vec_Expl_Flag": "0xC867",
+    "Vec_Expl_Timer": "0xC877",
+    "Vec_FIRQ_Vector": "0xCBF5",
+    "Vec_Freq_Table": "0xC84D",
+    "Vec_High_Score": "0xCBEB",
+    "Vec_IRQ_Vector": "0xCBF8",
+    "Vec_Joy_1_X": "0xC81B",
+    "Vec_Joy_1_Y": "0xC81C",
+    "Vec_Joy_2_X": "0xC81D",
+    "Vec_Joy_2_Y": "0xC81E",
+    "Vec_Joy_Mux": "0xC81F",
+    "Vec_Joy_Mux_1_X": "0xC81F",
+    "Vec_Joy_Mux_1_Y": "0xC820",
+    "Vec_Joy_Mux_2_X": "0xC821",
+    "Vec_Joy_Mux_2_Y": "0xC822",
+    "Vec_Joy_Resltn": "0xC81A",
+    "Vec_Loop_Count": "0xC825",
+    "Vec_Max_Games": "0xC850",
+    "Vec_Max_Players": "0xC84F",
+    "Vec_Misc_Count": "0xC823",
+    "Vec_Music_Chan": "0xC855",
+    "Vec_Music_Flag": "0xC856",
+    "Vec_Music_Freq": "0xC861",
+    "Vec_Music_Ptr": "0xC853",
+    "Vec_Music_Twang": "0xC858",
+    "Vec_Music_Wk_1": "0xC84B",
+    "Vec_Music_Wk_5": "0xC847",
+    "Vec_Music_Wk_6": "0xC846",
+    "Vec_Music_Wk_7": "0xC845",
+    "Vec_Music_Wk_A": "0xC842",
+    "Vec_Music_Work": "0xC83F",
+    "Vec_NMI_Vector": "0xCBFB",
+    "Vec_Num_Game": "0xC87A",
+    "Vec_Num_Players": "0xC879",
+    "Vec_Pattern": "0xC829",
+    "Vec_Prev_Btns": "0xC810",
+    "Vec_Random_Seed": "0xC87D",
+    "Vec_Rfrsh": "0xC83D",
+    "Vec_Rfrsh_hi": "0xC83E",
+    "Vec_Rfrsh_lo": "0xC83D",
+    "Vec_RiseRun_Len": "0xC83B",
+    "Vec_RiseRun_Tmp": "0xC834",
+    "Vec_Rise_Index": "0xC839",
+    "Vec_Run_Index": "0xC837",
+    "Vec_SWI2_Vector": "0xCBF2",
+    "Vec_SWI3_Vector": "0xCBF2",
+    "Vec_SWI_Vector": "0xCBFB",
+    "Vec_Seed_Ptr": "0xC87B",
+    "Vec_Snd_Shadow": "0xC800",
+    "Vec_Str_Ptr": "0xC82C",
+    "Vec_Text_HW": "0xC82A",
+    "Vec_Text_Height": "0xC82A",
+    "Vec_Text_Width": "0xC82B",
+    "Vec_Twang_Table": "0xC851",
+    "WAIT_RECAL": "0xF192",
+    "WARM_START": "0xF06C",
+    "Wait_Recal": "0xF192",
+    "Warm_Start": "0xF06C",
+    "XFORM_RISE": "0xF663",
+    "XFORM_RISE_A": "0xF661",
+    "XFORM_RUN": "0xF65D",
+    "XFORM_RUN_A": "0xF65B",
+    "Xform_Rise": "0xF663",
+    "Xform_Rise_a": "0xF661",
+    "Xform_Run": "0xF65D",
+    "Xform_Run_a": "0xF65B",
+    "music1": "0xFD0D",
+    "music2": "0xFD1D",
+    "music3": "0xFD81",
+    "music4": "0xFDD3",
+    "music5": "0xFE38",
+    "music6": "0xFE76",
+    "music7": "0xFEC6",
+    "music8": "0xFEF8",
+    "music9": "0xFF26",
+    "musica": "0xFF44",
+    "musicb": "0xFF62",
+    "musicc": "0xFF7A",
+    "musicd": "0xFF8F"
   },
   "variables": {
-    "DRAW_LINE_ARGS": {
-      "name": "DRAW_LINE_ARGS",
-      "address": "0xC88C",
-      "size": 10,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPPTR2": {
-      "name": "TMPPTR2",
-      "address": "0xC884",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TEMP_YX": {
-      "name": "TEMP_YX",
-      "address": "0xC886",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
     "arg0": {
+      "address": "0xC8B2",
+      "declLine": null,
       "name": "arg0",
-      "address": "0xC8A8",
       "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "VPY_MOVE_X": {
-      "name": "VPY_MOVE_X",
-      "address": "0xC88A",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "VPY_MOVE_Y": {
-      "name": "VPY_MOVE_Y",
-      "address": "0xC88B",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_INTENSITY": {
-      "name": "DRAW_CIRCLE_INTENSITY",
-      "address": "0xC89F",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg2": {
-      "name": "arg2",
-      "address": "0xC8AC",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg3": {
-      "name": "arg3",
-      "address": "0xC8AE",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "DRAW_CIRCLE_TEMP": {
-      "name": "DRAW_CIRCLE_TEMP",
-      "address": "0xC8A0",
-      "size": 8,
-      "type": "unknown",
-      "declLine": null
-    },
-    "arg4": {
-      "name": "arg4",
-      "address": "0xC8B0",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "RESULT": {
-      "name": "RESULT",
-      "address": "0xC880",
-      "size": 2,
-      "type": "unknown",
-      "declLine": null
-    },
-    "NUM_STR": {
-      "name": "NUM_STR",
-      "address": "0xC896",
-      "size": 6,
-      "type": "unknown",
-      "declLine": null
+      "type": "unknown"
     },
     "arg1": {
+      "address": "0xC8B4",
+      "declLine": null,
       "name": "arg1",
-      "address": "0xC8AA",
       "size": 2,
-      "type": "unknown",
-      "declLine": null
+      "type": "unknown"
     },
-    "DRAW_CIRCLE_XC": {
-      "name": "DRAW_CIRCLE_XC",
-      "address": "0xC89C",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
-    },
-    "TMPPTR": {
-      "name": "TMPPTR",
-      "address": "0xC882",
+    "arg2": {
+      "address": "0xC8B6",
+      "declLine": null,
+      "name": "arg2",
       "size": 2,
-      "type": "unknown",
-      "declLine": null
+      "type": "unknown"
     },
-    "TEMP_Y": {
-      "name": "TEMP_Y",
-      "address": "0xC889",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
+    "arg3": {
+      "address": "0xC8B8",
+      "declLine": null,
+      "name": "arg3",
+      "size": 2,
+      "type": "unknown"
     },
-    "TEMP_X": {
-      "name": "TEMP_X",
-      "address": "0xC888",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
+    "arg4": {
+      "address": "0xC8BA",
+      "declLine": null,
+      "name": "arg4",
+      "size": 2,
+      "type": "unknown"
     },
-    "DRAW_CIRCLE_DIAM": {
-      "name": "DRAW_CIRCLE_DIAM",
-      "address": "0xC89E",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
+    "arg5": {
+      "address": "0xC8BC",
+      "declLine": null,
+      "name": "arg5",
+      "size": 2,
+      "type": "unknown"
     },
-    "DRAW_CIRCLE_YC": {
-      "name": "DRAW_CIRCLE_YC",
-      "address": "0xC89D",
-      "size": 1,
-      "type": "unknown",
-      "declLine": null
+    "arg6": {
+      "address": "0xC8BE",
+      "declLine": null,
+      "name": "arg6",
+      "size": 2,
+      "type": "unknown"
+    },
+    "arg7": {
+      "address": "0xC8C0",
+      "declLine": null,
+      "name": "arg7",
+      "size": 2,
+      "type": "unknown"
+    }
+  },
+  "version": "2.0",
+  "vpyLineMap": {
+    "105": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 11
+    },
+    "1109": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 24
+    },
+    "1136": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 25
+    },
+    "1163": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 26
+    },
+    "117": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 14
+    },
+    "1190": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 27
+    },
+    "1217": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 28
+    },
+    "144": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 17
+    },
+    "337": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 18
+    },
+    "530": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 19
+    },
+    "723": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 20
+    },
+    "916": {
+      "column": 0,
+      "file": "main.vpy",
+      "line": 21
     }
   }
 }

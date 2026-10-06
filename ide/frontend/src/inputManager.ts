@@ -10,7 +10,18 @@ class InputManager {
   private gamepadIndex: number | null = null;
 
   constructor(){
-    window.addEventListener('keydown', e=>{ this.keys[e.code]=true; });
+    // Don't register a keypress as joystick input while the user is typing in a
+    // text field (input/textarea/select/contentEditable/Monaco) — WASD and ZXCV
+    // are ordinary letters there. keyup always clears so a key can't stick if the
+    // focus moved between press and release.
+    const typing = (e: KeyboardEvent) => {
+      const t = (e.target as HTMLElement | null) || (document.activeElement as HTMLElement | null);
+      if (!t) return false;
+      const tag = t.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+        || t.isContentEditable || !!t.closest('.monaco-editor');
+    };
+    window.addEventListener('keydown', e=>{ if (typing(e)) return; this.keys[e.code]=true; });
     window.addEventListener('keyup', e=>{ this.keys[e.code]=false; });
     window.addEventListener('gamepadconnected', e=>{ if (this.gamepadIndex==null) this.gamepadIndex = (e as GamepadEvent).gamepad.index; });
     window.addEventListener('gamepaddisconnected', e=>{ if ((e as GamepadEvent).gamepad.index === this.gamepadIndex) this.gamepadIndex = null; });

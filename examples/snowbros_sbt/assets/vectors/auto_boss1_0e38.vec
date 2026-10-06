@@ -1,0 +1,266 @@
+{
+ "version": "1.0",
+ "name": "auto_boss1_0e38",
+ "canvas": {
+  "width": 256,
+  "height": 256,
+  "origin": "center"
+ },
+ "layers": [
+  {
+   "name": "default",
+   "visible": true,
+   "paths": [
+    {
+     "name": "sil0",
+     "intensity": 115,
+     "closed": true,
+     "points": [
+      {
+       "x": 4,
+       "y": 14
+      },
+      {
+       "x": 3,
+       "y": 6
+      },
+      {
+       "x": 11,
+       "y": 15
+      },
+      {
+       "x": 6,
+       "y": 2
+      },
+      {
+       "x": 12,
+       "y": 7
+      },
+      {
+       "x": 9,
+       "y": 1
+      },
+      {
+       "x": 11,
+       "y": -1
+      },
+      {
+       "x": 8,
+       "y": -3
+      },
+      {
+       "x": 12,
+       "y": -5
+      },
+      {
+       "x": 4,
+       "y": -8
+      },
+      {
+       "x": -4,
+       "y": -12
+      },
+      {
+       "x": -9,
+       "y": -8
+      },
+      {
+       "x": -10,
+       "y": -1
+      },
+      {
+       "x": -10,
+       "y": 9
+      },
+      {
+       "x": -7,
+       "y": 2
+      },
+      {
+       "x": -6,
+       "y": 15
+      },
+      {
+       "x": -4,
+       "y": 16
+      },
+      {
+       "x": -2,
+       "y": 7
+      },
+      {
+       "x": 2,
+       "y": 14
+      }
+     ]
+    },
+    {
+     "name": "det0",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 7,
+       "y": -3
+      },
+      {
+       "x": 5,
+       "y": -5
+      },
+      {
+       "x": 5,
+       "y": -6
+      },
+      {
+       "x": 7,
+       "y": -5
+      },
+      {
+       "x": 6,
+       "y": -7
+      },
+      {
+       "x": 4,
+       "y": -5
+      },
+      {
+       "x": 4,
+       "y": -3
+      },
+      {
+       "x": 7,
+       "y": 0
+      },
+      {
+       "x": 9,
+       "y": 0
+      },
+      {
+       "x": 9,
+       "y": -2
+      }
+     ]
+    },
+    {
+     "name": "det1",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 5,
+       "y": 5
+      },
+      {
+       "x": 6,
+       "y": 5
+      },
+      {
+       "x": 5,
+       "y": 2
+      },
+      {
+       "x": 6,
+       "y": 1
+      },
+      {
+       "x": 8,
+       "y": 2
+      },
+      {
+       "x": 7,
+       "y": 0
+      },
+      {
+       "x": 3,
+       "y": -1
+      },
+      {
+       "x": 3,
+       "y": 2
+      },
+      {
+       "x": 5,
+       "y": 3
+      }
+     ]
+    },
+    {
+     "name": "det2",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": 4,
+       "y": 7
+      },
+      {
+       "x": 5,
+       "y": 6
+      },
+      {
+       "x": 2,
+       "y": 3
+      },
+      {
+       "x": 1,
+       "y": 4
+      },
+      {
+       "x": 0,
+       "y": 5
+      },
+      {
+       "x": 1,
+       "y": 6
+      },
+      {
+       "x": 3,
+       "y": 5
+      }
+     ]
+    },
+    {
+     "name": "det3",
+     "intensity": 80,
+     "closed": true,
+     "points": [
+      {
+       "x": -4,
+       "y": 8
+      },
+      {
+       "x": -3,
+       "y": 9
+      },
+      {
+       "x": -3,
+       "y": 7
+      },
+      {
+       "x": -2,
+       "y": 6
+      },
+      {
+       "x": 0,
+       "y": 7
+      },
+      {
+       "x": 0,
+       "y": 6
+      },
+      {
+       "x": -3,
+       "y": 4
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "backgroundImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABb0lEQVR4nO2XvXHDMAyFJZ4GyAoeISldagStoFWyhsq0GsFlSq/gFbyBfChw9w7Gr6xUzmusA2l+DwRI2V1X0Dydtu5gtVfgMuYZtMaa9YWf70832yp8WW99ycDlen+KjV8f5TJE85s1YDnW5hCEzGlwintrtQiSNUg7poG0ndxt4KIs9kr2rgGsHT8zKKorw6PsXQMZISjqh8MNzMG9oPWE9p2WhXBWmB0+yzJlDIcGPDEI60yxaT4/1d5ryFaB0uIIQiMcW5ffUkO2igFcnJ55UTaBMcpWa9KSgVFcvZw1f8o4Zpm9sps3SAt6Ryo6blH2pCHjEkGyzlrdZYPybpSacIHJcsstOIG102HBXQMogmh1l5lrveDB0wbQiCU2VIGT3EG83awySHNogI+iZ2joDpDWhGQE4dZODEeCER6BywZWaEQNXK09q48mRG85Cc+C0wZY8ofG3oyl+spk7c22F7xb83Ta/uIv2r/eVw+cAgraO7cElwAAAABJRU5ErkJggg==",
+ "backgroundFit": "naturalCenter",
+ "backgroundOffset": {
+  "x": 0,
+  "y": 0
+ }
+}

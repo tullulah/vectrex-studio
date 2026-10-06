@@ -71,6 +71,7 @@ All documentation lives in `docs/`. The only exception is `README.md` at the pro
 | [6809_opcodes.md](6809_opcodes.md) | Complete MC6809 opcode table with addressing modes and cycle counts |
 | [MEMORY_MAP.md](MEMORY_MAP.md) | Vectrex memory map (RAM, ROM, BIOS, hardware registers) |
 | [UVM2_TARGET.md](UVM2_TARGET.md) | Ultimate Vectrex Multicart 2 target: halt-mode bus, `.um2` format, frame budget, bring-up ladder |
+| [ARCADE_SOUND_RIP.md](ARCADE_SOUND_RIP.md) | Sound for an arcade port, both routes: ripping music out of its own sound ROM down to PSG streams (`v_playMusic`/`v_playSFX`), and — for boards with no sound chip to record, like Tac/Scan's analogue USB — digitised `.vsmp` samples injected into the draw list (`v_playSample`) |
 | [AUTOMATIC_BANK_SWITCHING.md](AUTOMATIC_BANK_SWITCHING.md) | Multibank ROM banking architecture and switching mechanism |
 | [VECTOR_DRAWING_EXACT_SEQUENCE.md](VECTOR_DRAWING_EXACT_SEQUENCE.md) | Exact draw sequence for vector rendering |
 | [VECTOR_MULTIPATH_LIMITATION.md](VECTOR_MULTIPATH_LIMITATION.md) | Known limitation: multipath vector drawing |
