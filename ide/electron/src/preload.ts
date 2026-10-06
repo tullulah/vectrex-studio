@@ -143,6 +143,32 @@ contextBridge.exposeInMainWorld('project', {
   find: (startDir: string) => ipcRenderer.invoke('project:find', startDir) as Promise<{ path: string | null }>,
 });
 
+// SDK versions (uvmc2-sdk). Downloaded per version into ~/VectrexStudio/sdk/<tag>/;
+// each project pins one in its project file ([sdk] version).
+contextBridge.exposeInMainWorld('sdk', {
+  // Installed versions and GitHub tags, newest first. remote = null when offline.
+  list: (args?: { refresh?: boolean }) => ipcRenderer.invoke('sdk:list', args) as Promise<{
+    installed: string[];
+    remote: string[] | null;
+    latest: string | null;
+    root: string;
+  }>,
+  // Download a version if it isn't installed. Progress arrives through onProgress.
+  install: (tag: string) => ipcRenderer.invoke('sdk:install', tag) as Promise<{ ok: true; dir: string } | { ok: false; error: string }>,
+  onProgress: (cb: (p: { tag: string; phase: 'download' | 'extract' | 'done'; received: number; total: number | null }) => void) => {
+    const handler = (_e: IpcRendererEvent, p: any) => cb(p);
+    ipcRenderer.on('sdk://progress', handler);
+    return () => ipcRenderer.removeListener('sdk://progress', handler);
+  },
+  // The project's pinned version. A project without one is pinned to the latest
+  // tag here (pinned: true says this call wrote it).
+  getProjectVersion: (projectFile: string) => ipcRenderer.invoke('sdk:project:get', projectFile) as Promise<
+    { ok: true; version: string; pinned: boolean; installed: boolean } | { ok: false; error: string }>,
+  // Change the project's version (rewrites only the [sdk] table of the file).
+  setProjectVersion: (projectFile: string, tag: string) => ipcRenderer.invoke('sdk:project:set', projectFile, tag) as Promise<
+    { ok: true } | { ok: false; error: string }>,
+});
+
 // Git operations API
 contextBridge.exposeInMainWorld('git', {
   // Get git status (staged/unstaged changes)

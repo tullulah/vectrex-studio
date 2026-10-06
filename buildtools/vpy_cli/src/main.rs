@@ -3,6 +3,8 @@ use colored::*;
 use std::path::{Path, PathBuf};
 use anyhow::{Result, Context};
 
+mod sdk;
+
 // Use centralized asset discovery from vpy_codegen (ensures consistent sorting)
 fn discover_assets(source_path: &Path) -> Vec<vpy_codegen::AssetInfo> {
     vpy_codegen::m6809::assets::discover_assets(source_path)
@@ -1164,54 +1166,21 @@ fn find_arm_ar() -> String {
     ar_path.unwrap_or_else(|| "arm-none-eabi-ar".to_string())
 }
 
-/// Locate the libvpy C runtime source directory (`vpy.c` + `include/vpy.h`).
+/// Locate the libvpy C runtime source directory (`vpy.c` + `include/vpy.h`) in the uvmc2-sdk.
 ///
 /// This is the shared C reimplementation of the VPy builtins on the PiTrex SDK
 /// contract; the pitrex backend can call into it (`bl vpy_<name>`) instead of
-/// emitting the builtin body inline. Search order:
-///   1. `VPY_C_DIR` env var
-///   2. bundled next to the executable: `<exe_dir>/uvmc2-sdk/vpy-c` (IDE packaging)
-///   3. the repo tree relative to this crate: `ide/electron/resources/uvmc2-sdk/vpy-c`
-fn find_vpy_c_dir() -> Option<std::path::PathBuf> {
-    let ok = |p: &std::path::Path| p.join("vpy.c").exists();
-
-    if let Ok(dir) = std::env::var("VPY_C_DIR") {
-        let p = std::path::PathBuf::from(dir);
-        if ok(&p) { return Some(p); }
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(d) = exe.parent() {
-            let p = d.join("uvmc2-sdk").join("vpy-c");
-            if ok(&p) { return Some(p); }
-        }
-    }
-    // CARGO_MANIFEST_DIR = <repo>/buildtools/vpy_cli → repo root is two levels up.
-    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let p = manifest.join("../../ide/electron/resources/uvmc2-sdk/vpy-c");
-    if ok(&p) { return p.canonicalize().ok(); }
-    None
+/// emitting the builtin body inline. Resolution (see `sdk.rs`): `VPY_C_DIR`, then
+/// `$UVMC2_SDK/vpy-c`, then `<sdk_home>/<[sdk] version>/vpy-c` for a .vpyproj input.
+fn find_vpy_c_dir(input: &Path) -> Result<sdk::Resolved, String> {
+    sdk::resolve(&sdk::SdkInputs::from_env(input), &sdk::VPY_C)
 }
 
-/// Locate the UVM2 SDK (halt-mode bus + beam runtime + syscall handler).
-/// Same resolution order as find_vpy_c_dir: env override, next to the binary
-/// (packaged IDE), then the repo checkout.
-fn find_uvm2_sdk_dir() -> Option<std::path::PathBuf> {
-    let ok = |p: &std::path::Path| p.join("uvm2_bus.c").exists();
-
-    if let Ok(dir) = std::env::var("UVM2_SDK_DIR") {
-        let p = std::path::PathBuf::from(dir);
-        if ok(&p) { return Some(p); }
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(d) = exe.parent() {
-            let p = d.join("uvmc2-sdk").join("uvm2-sdk");
-            if ok(&p) { return Some(p); }
-        }
-    }
-    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let p = manifest.join("../../ide/electron/resources/uvmc2-sdk/uvm2-sdk");
-    if ok(&p) { return p.canonicalize().ok(); }
-    None
+/// Locate the UVM2 SDK (halt-mode bus + beam runtime + syscall handler) in the uvmc2-sdk.
+/// Resolution (see `sdk.rs`): `UVM2_SDK_DIR`, then `$UVMC2_SDK/uvm2-sdk`, then
+/// `<sdk_home>/<[sdk] version>/uvm2-sdk` for a .vpyproj input. Never downloads.
+fn find_uvm2_sdk_dir(input: &Path) -> Result<sdk::Resolved, String> {
+    sdk::resolve(&sdk::SdkInputs::from_env(input), &sdk::UVM2_SDK)
 }
 
 fn cmd_build_pitrex(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Result<()> {
@@ -1420,7 +1389,19 @@ fn cmd_build_pitrex(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> 
         // vpy_* symbol is actually referenced. A program using no bridged
         // builtin references no vpy_* symbol → nothing from libvpy is linked.
         let libvpy_a_path = build_dir.join("libvpy.a");
-        if let Some(vpy_c_dir) = find_vpy_c_dir() {
+        let vpy_c_found = match find_vpy_c_dir(input) {
+            Ok(r) => {
+                println!("  {} libvpy runtime: {}", "✓".green(), r.describe());
+                Some(r.dir)
+            }
+            Err(msg) => {
+                // Optional for pitrex: every builtin still has an inline body.
+                println!("  {} {}\n  {} continuing without libvpy (builtins stay inline)",
+                         "note:".yellow(), msg.replace('\n', "\n  "), "note:".yellow());
+                None
+            }
+        };
+        if let Some(vpy_c_dir) = vpy_c_found {
             let vpy_c   = vpy_c_dir.join("vpy.c");
             let vpy_inc = vpy_c_dir.join("include");
             let vpy_o   = build_dir.join(format!("{}_vpy.o", project_name));
@@ -1904,10 +1885,11 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     // (relojes, RCP, IMAGE_DEF) y nuestro uvm2_cpu_init() no toca los relojes.
     //
     // Los juegos en C ya se migraron en uvm2.mk; esto es lo mismo para VPy.
-    let sdk_dir = find_uvm2_sdk_dir().ok_or_else(|| anyhow::anyhow!(
-        "UVM2 SDK not found (expected ide/electron/resources/uvmc2-sdk/uvm2-sdk, or set UVM2_SDK_DIR).\n\
-         It provides the halt-mode bus, the beam runtime and the SVCall handler —\n\
-         without it the image has no implementation for any VPy builtin."))?;
+    let sdk_resolved = find_uvm2_sdk_dir(input).map_err(|msg| anyhow::anyhow!(
+        "{}\n  It provides the halt-mode bus, the beam runtime and the SVCall handler —\n  \
+         without it the image has no implementation for any VPy builtin.", msg))?;
+    println!("  {} UVM2 SDK: {}", "✓".green(), sdk_resolved.describe());
+    let sdk_dir = sdk_resolved.dir;
 
     // El pico-sdk vive en el checkout de Ralf: esta en .gitignore y pesa 391 MB,
     // asi que no se puede asumir la ruta sin decirlo. UVM2_PICO_SDK la sustituye.
@@ -1928,15 +1910,14 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
 
     let cmake_build = build_dir.join("uvm2");
     if verbose {
-        println!("  UVM2 SDK:  {}", sdk_dir.display());
         println!("  pico-sdk:  {}", pico_sdk.display());
     }
 
     println!("\n{}", "Phase 4: CMake configure (pico-sdk)".bright_cyan().bold());
     // A CACHE FROM ANOTHER SDK DIRECTORY IS NOT REUSABLE. CMake refuses it outright ("does not
-    // match the source ... used to generate cache"), and every project built before the SDK
-    // became the uvmc2-sdk submodule (2026-09-28) has one pointing at the old
-    // resources/uvm2-sdk. So a stale cache is dropped here, and said, instead of failing.
+    // match the source ... used to generate cache"), and a project's cache points at whichever
+    // SDK built it last: the old in-repo resources/uvm2-sdk, or another pinned SDK version
+    // under ~/VectrexStudio/sdk. So a stale cache is dropped here, and said, instead of failing.
     let cache = cmake_build.join("CMakeCache.txt");
     if let Ok(text) = std::fs::read_to_string(&cache) {
         let want = sdk_dir.join("pico");

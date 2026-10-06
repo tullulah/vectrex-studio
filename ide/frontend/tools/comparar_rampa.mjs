@@ -13,8 +13,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rampParams, knobs } from "../src/emulator/hardware/Ramp.ts";
 
-const CABI = process.env.CABI ??
-  "/Users/daniel/projects/vectrex-pseudo-python/ide/electron/resources/uvmc2-sdk/vectrex-draw/cabi/target/release/libvectrex_draw_cabi.a";
+// The Rust reference library, built inside an SDK checkout (cargo build --release in
+// vectrex-draw/cabi). CABI points at the .a directly; otherwise it is found under $UVMC2_SDK.
+const CABI = process.env.CABI ?? (process.env.UVMC2_SDK
+  ? join(process.env.UVMC2_SDK, "vectrex-draw/cabi/target/release/libvectrex_draw_cabi.a")
+  : (() => { throw new Error("Set CABI=<libvectrex_draw_cabi.a> or UVMC2_SDK=<sdk checkout>"); })());
 
 /* Se saca la referencia del BINARIO DE RUST, no de una copia de su formula: comparar dos
  * traducciones mias del mismo papel no prueba nada. */

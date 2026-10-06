@@ -273,7 +273,7 @@ Immediately before each `T1CL` the timer has expired, PB7 is high and the
 integrators are frozen. A sample costs four commands there — data, BDIR up, BDIR
 down, and **restoring Port A** to the rate the coming ramp needs — against the 187
 bus cycles that separate two samples at 8 kHz. The player is
-`ide/electron/resources/uvmc2-sdk/uvm2-sdk/uvm2_smp.{c,h}`; the emitter is `smp_inyecta` in
+`uvm2-sdk/uvm2_smp.{c,h}` in the uvmc2-sdk (see [SDK_VERSIONS.md](SDK_VERSIONS.md)); the emitter is `smp_inyecta` in
 `uvm2_draw.c`.
 
 Two consequences worth knowing before using this:

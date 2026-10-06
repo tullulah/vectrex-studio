@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["math_functions_wasm"]
 module = "build_wasm/math_functions.js"
+
+[sdk]
+version = "v1.3.1"

@@ -51,3 +51,6 @@ module = "build_wasm/game.js"
 # Optional: environment overrides passed to the build.
 # [env]
 # PITREX_SDK = "/Users/you/projects/pitrex-baremetal"
+
+[sdk]
+version = "v1.3.1"

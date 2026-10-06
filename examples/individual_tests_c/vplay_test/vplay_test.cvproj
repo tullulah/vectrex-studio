@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["vplay_test_wasm"]
 module = "build_wasm/vplay_test.js"
+
+[sdk]
+version = "v1.3.1"

@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["screen_border_wasm"]
 module = "build_wasm/screen_border.js"
+
+[sdk]
+version = "v1.3.1"

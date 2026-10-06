@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["print_number_wasm"]
 module = "build_wasm/print_number.js"
+
+[sdk]
+version = "v1.3.1"

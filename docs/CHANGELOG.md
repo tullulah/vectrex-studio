@@ -33,8 +33,8 @@ debug cartridge runs on a real console, and the Ultimate Vectrex Multicart 2
   hardware.
 - **UVM2 (Ultimate Vectrex Multicart 2) target**: halt-mode runtime that stops the
   6809 and drives the VIA directly over a clock-locked bus, answering the same
-  `svc` ABI so the ARM codegen is not forked. The SDK now lives in the
-  `ide/electron/resources/uvmc2-sdk` submodule.
+  `svc` ABI so the ARM codegen is not forked. The SDK is the separate
+  [`uvmc2-sdk`](https://github.com/tullulah/uvmc2-sdk) repository.
 - **C/C++ project import (`.cvproj`)**: external C/C++ games build for PiTrex,
   RP2350, UVM2 and the in-IDE WASM simulator. A shared `uvm2.mk` / `rp2350-cart`
   recipe adds the target to any C project in a few lines.
@@ -54,6 +54,10 @@ debug cartridge runs on a real console, and the Ultimate Vectrex Multicart 2
   (`TASA_NEG_X/Y`).
 - **`CALIBRATE()` builtin** (`svc 30`) and the cartridge menu driven by the stick.
 - **`[uvm2]` defs in `.vpyproj`** for per-game measured constants.
+- **Per-project SDK versions**: `.vpyproj` and `.cvproj` pin a uvmc2-sdk release
+  in an `[sdk]` table; the IDE downloads it on demand into
+  `~/VectrexStudio/sdk/<tag>/`. Unpinned projects are pinned to the latest tag on
+  first build. See [SDK_VERSIONS.md](SDK_VERSIONS.md).
 
 ### Added — Emulator and IDE
 
@@ -69,6 +73,8 @@ debug cartridge runs on a real console, and the Ultimate Vectrex Multicart 2
 - **Vector editor**: per-segment intensity (in the editor and the SDK), segment
   list in the panel, "playfield" background fit, "game" units (arcade grid), one
   button per view, orbit with middle button + Shift.
+- **Project Settings panel**: shows the project's pinned SDK version, lists
+  installed and GitHub releases, changes the pin and downloads with progress.
 - **Video recorder** captures what is on screen and every live audio context,
   including the jack.
 - **Ports**: Donkey Kong boots in the UVM2 emulator; SnowBros gets platforms from
@@ -108,6 +114,9 @@ debug cartridge runs on a real console, and the Ultimate Vectrex Multicart 2
   Buildtools/Core choice; every build goes through `vpy_cli`.
 - The language server `vpy_lsp` is now built from `buildtools/vpy_lsp`, on the
   same parser as the compiler, so editor diagnostics match build errors.
+- **Bundled uvmc2-sdk**: the `ide/electron/resources/uvmc2-sdk` submodule is
+  gone; the SDK is downloaded per version. Command-line builds take it from
+  `UVMC2_SDK` or from a release already installed by the IDE.
 
 ---
 

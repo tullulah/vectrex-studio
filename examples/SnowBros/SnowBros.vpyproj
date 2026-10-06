@@ -23,3 +23,6 @@ playground = ["assets/playground/**/*.vplay"]
 # de la pantalla. No es una preferencia de arte, es calibracion — el mismo 127 que usa dkong.
 [uvm2]
 defs = "UVM2_DRAW_SCALE=127"
+
+[sdk]
+version = "v1.3.1"

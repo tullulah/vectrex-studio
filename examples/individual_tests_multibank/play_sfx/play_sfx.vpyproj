@@ -13,3 +13,6 @@ vpy = ["src/**/*.vpy"]
 
 [resources]
 sfx = ["assets/sfx/*.vsfx"]
+
+[sdk]
+version = "v1.3.1"

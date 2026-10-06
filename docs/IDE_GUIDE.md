@@ -237,6 +237,7 @@ Toggle **⚡ Conciso** to get shorter, more direct responses — useful when you
 | **Git** | Git status, staging, commits, history, stashes, remotes, tags |
 | **PyPilot (AI Assistant)** | AI chat, code generation, asset creation, IDE control via MCP |
 | **Settings** | Build target selection (M6809, RP2350, PiTrex, UVM2) |
+| **Project Settings** | Only with a project open. The project's pinned uvmc2-sdk version: installed and GitHub releases, change the pin, download with progress. See [SDK_VERSIONS.md](SDK_VERSIONS.md) |
 
 ---
 
@@ -252,6 +253,11 @@ Open the **Settings** panel to choose the **Build Target** — the hardware `vpy
 | **UVM2 (Ultimate Vectrex Multicart)** | ARM Thumb2 target for the Ultimate Vectrex Multicart 2. Produces a `.um2` raw binary for the SD card. |
 
 Changes take effect on the next build.
+
+The UVM2 target (and, optionally, PiTrex for the libvpy C runtime) builds against the
+uvmc2-sdk release pinned by the project. The IDE downloads it on the first build that needs
+it; M6809 builds never do. The pinned version is managed in the **Project Settings** panel —
+see [SDK_VERSIONS.md](SDK_VERSIONS.md).
 
 ---
 
@@ -281,6 +287,9 @@ vectors = ["assets/vectors/*.vec"]
 music = ["assets/music/*.vmus"]
 sfx = ["assets/sfx/*.vsfx"]
 levels = ["assets/levels/*.vplay"]
+
+[sdk]
+version = "v1.3.1"          # uvmc2-sdk release (UVM2 / PiTrex / C builds)
 ```
 
 ### Key fields
@@ -292,6 +301,7 @@ levels = ["assets/levels/*.vplay"]
 | `build.output` | Yes | Output `.bin` path (relative to project root) |
 | `build.debug_symbols` | No | Set to `true` to enable PDB generation |
 | `build.optimization` | No | Optimization level 0–2 (default: 2) |
+| `sdk.version` | No | uvmc2-sdk release tag. If missing, the IDE pins the latest tag the first time a build needs the SDK. `.cvproj` files use the same table. See [SDK_VERSIONS.md](SDK_VERSIONS.md) |
 
 ---
 

@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["draw_circle_wasm"]
 module = "build_wasm/draw_circle.js"
+
+[sdk]
+version = "v1.3.1"

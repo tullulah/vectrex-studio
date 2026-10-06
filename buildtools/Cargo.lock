@@ -1031,6 +1031,7 @@ dependencies = [
  "clap",
  "colored",
  "serde_json",
+ "tempfile",
  "vpy_assembler",
  "vpy_bank_allocator",
  "vpy_binary_writer",

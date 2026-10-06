@@ -184,6 +184,12 @@ Compile an example project:
 
 Options: `--target m6809|rp2350|pitrex|uvm2` (default `m6809`), `--debug` (also emit `.pdb` debug symbols). `vpy_cli asm <file.vpy|project.vpyproj>` prints the generated assembly.
 
+The `uvm2` target (and the optional libvpy C runtime of `pitrex`) needs the uvmc2-sdk,
+which is not part of this repository. `vpy_cli` uses the release pinned in the project's
+`[sdk]` table once Vectrex Studio has downloaded it to `~/VectrexStudio/sdk/<version>/`, or
+any SDK you point `UVMC2_SDK` at. `m6809` builds need nothing extra. See
+[SDK_VERSIONS.md](SDK_VERSIONS.md).
+
 ### Test the IDE
 
 1. Launch the IDE (see above)

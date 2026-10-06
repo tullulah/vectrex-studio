@@ -59,7 +59,11 @@ also why an imported C or SBT program gets UVM2 support for free.
 
 ## The SDK
 
-`ide/electron/resources/uvmc2-sdk/uvm2-sdk/` — compiled and linked into every UVM2 build.
+`uvm2-sdk/` in the [uvmc2-sdk](https://github.com/tullulah/uvmc2-sdk) release the project
+pins in its `[sdk]` table — compiled and linked into every UVM2 build. The IDE downloads
+that release into `~/VectrexStudio/sdk/<version>/`; see [SDK_VERSIONS.md](SDK_VERSIONS.md)
+for the pin, the install location and how `vpy_cli` finds it outside the IDE. Paths below
+are relative to `uvm2-sdk/`.
 
 | File | Role |
 |---|---|

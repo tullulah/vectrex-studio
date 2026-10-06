@@ -15,3 +15,6 @@ vpy = ["src/**/*.vpy"]
 vectors = ["assets/vectors/*.vec"]
 music = ["assets/music/*.vmus"]
 sfx = ["assets/sfx/*.vsfx"]
+
+[sdk]
+version = "v1.3.1"

@@ -15,6 +15,10 @@ import * as net from 'net';
 import { getMCPServer } from './mcp/server.js';
 import type { MCPRequest } from './mcp/types.js';
 import { registerAIProxyHandlers } from './ai-proxy.js';
+import {
+  ensureSdk, isSdkInstalled, isValidSdkTag, latestSdkTag, listInstalledSdks, listRemoteSdkTags,
+  projectSdkVersion, resolveProjectSdk, sdkEnv, sdkRootDir, writeProjectSdkVersion, type SdkProgress,
+} from './sdkManager.js';
 import { storageGet, storageSet, storageDelete, storageKeys, storageClear, getStoragePath, StorageKeys } from './storage.js';
 import { 
   initPyPilotDb, 
@@ -998,6 +1002,52 @@ ipcMain.handle('bin:open', async () => {
 
 // Resolve compiler binary path. Supports env override VPY_COMPILER_BIN.
 // Binaries live in ide/electron/resources/ (dev) or process.resourcesPath (packaged).
+// ─── SDK versions (uvmc2-sdk) ──────────────────────────────────────────────
+// Not bundled: each project pins a version, downloaded into ~/VectrexStudio/sdk/<tag>/.
+
+function logSdk(line: string) {
+  mainWindow?.webContents.send('run://stdout', line);
+}
+
+function sendSdkProgress(p: SdkProgress) {
+  mainWindow?.webContents.send('sdk://progress', p);
+}
+
+ipcMain.handle('sdk:list', async (_e, args?: { refresh?: boolean }) => {
+  const [installed, remote] = await Promise.all([listInstalledSdks(), listRemoteSdkTags(!!args?.refresh)]);
+  return { installed, remote, latest: remote?.[0] ?? installed[0] ?? null, root: sdkRootDir() };
+});
+
+ipcMain.handle('sdk:install', async (_e, tag: string) => {
+  try {
+    return { ok: true, dir: await ensureSdk(tag, sendSdkProgress) };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+});
+
+ipcMain.handle('sdk:project:get', async (_e, projectFile: string) => {
+  try {
+    const v = await projectSdkVersion(projectFile);
+    if ('error' in v) return { ok: false, error: v.error };
+    if (v.pinned) logSdk(`[SDK] ${projectFile} had no [sdk] version — pinned to ${v.version}\n`);
+    return { ok: true, version: v.version, pinned: v.pinned, installed: await isSdkInstalled(v.version) };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+});
+
+ipcMain.handle('sdk:project:set', async (_e, projectFile: string, tag: string) => {
+  if (!isValidSdkTag(tag)) return { ok: false, error: `Invalid SDK version "${tag}"` };
+  try {
+    await writeProjectSdkVersion(projectFile, tag);
+    logSdk(`[SDK] ${projectFile} now uses SDK ${tag}\n`);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || String(e) };
+  }
+});
+
 function resolveCompilerPath(): string | null {
   const override = process.env.VPY_COMPILER_BIN;
   if (override) {
@@ -1477,8 +1527,17 @@ export async function executeExternalBuild(args: {
     return { error: 'manifest_read_failed', detail: e?.message };
   }
 
-  // Compose the child env: IDE env + optional toolchain PATH prefix + overrides.
-  const env: NodeJS.ProcessEnv = { ...process.env, ...(manifest.env || {}) };
+  // The project's pinned SDK. A C project may not use it, so a failure only warns:
+  // its own build reports what is missing.
+  const sdk = await resolveProjectSdk(manifestPath, logSdk, sendSdkProgress);
+  if ('error' in sdk) {
+    win?.webContents.send('run://stderr', `[SDK] ${sdk.error}\n`);
+  } else {
+    win?.webContents.send('run://stdout', `[SDK] ${sdk.version} (${sdk.dir})\n`);
+  }
+
+  // Compose the child env: IDE env + project SDK + optional toolchain PATH prefix + overrides.
+  const env: NodeJS.ProcessEnv = { ...process.env, ...('error' in sdk ? {} : sdkEnv(sdk.dir)), ...(manifest.env || {}) };
   if (manifest.toolchain?.path) {
     env.PATH = `${manifest.toolchain.path}${require('path').delimiter}${env.PATH || ''}`;
   }
@@ -1749,12 +1808,17 @@ export async function executeSimBuild(args: {
     return { error: 'no_simulate_target' };
   }
 
-  // Host SDK shim + the C VPy runtime ship in the app resources.
-  const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
-  const shimDir = join(resourcesDir, 'uvmc2-sdk', 'pitrex-sim');   // the uvmc2-sdk submodule
-  const vpyCDir = join(resourcesDir, 'uvmc2-sdk', 'vpy-c');
+  // The host SDK shim (pitrex-sim) and the C VPy runtime (vpy-c) come from the
+  // project's pinned SDK, downloaded if missing.
+  const sdk = await resolveProjectSdk(manifestPath, logSdk, sendSdkProgress);
+  if ('error' in sdk) {
+    win?.webContents.send('run://stderr', `[SIM] ${sdk.error}\n`);
+    return { error: 'sdk_unavailable', detail: sdk.error };
+  }
+  win?.webContents.send('run://stdout', `[SIM] SDK ${sdk.version} (${sdk.dir})\n`);
+  const { PITREX_SIM_SDK, VPY_C_SDK } = sdkEnv(sdk.dir);
 
-  const env: NodeJS.ProcessEnv = { ...process.env, ...(manifest.env || {}), PITREX_SIM_SDK: shimDir, VPY_C_SDK: vpyCDir };
+  const env: NodeJS.ProcessEnv = { ...process.env, ...(manifest.env || {}), PITREX_SIM_SDK, VPY_C_SDK };
   const emDir = resolveEmscriptenDir();
   if (emDir) {
     env.PATH = `${emDir}${require('path').delimiter}${env.PATH || ''}`;
@@ -2000,6 +2064,17 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
      * Sin esto, cuatro builds con nombres distintos salian con el MISMO md5 — comprobado
      * sobre los .um2 de la tarjeta el 2026-08-25. */
     const envHijo: NodeJS.ProcessEnv = { ...process.env };
+    // The project's pinned SDK (downloaded if missing), for the targets that use it.
+    if (isProjectMode && (target === 'uvm2' || target === 'pitrex')) {
+      const sdk = await resolveProjectSdk(targetPath, logSdk, sendSdkProgress);
+      if ('error' in sdk) {
+        mainWindow?.webContents.send('run://stderr', `[SDK] ${sdk.error}\n`);
+        if (target === 'uvm2') return { error: 'sdk_unavailable', detail: sdk.error };
+      } else {
+        Object.assign(envHijo, sdkEnv(sdk.dir));
+        mainWindow?.webContents.send('run://stdout', `[SDK] ${sdk.version} (${sdk.dir})\n`);
+      }
+    }
     const flagsUvm2 = (target === 'uvm2' ? (uvm2Flags || '') : '').trim();
     if (flagsUvm2) {
       for (const par of flagsUvm2.split(/\s+/)) {
@@ -3431,6 +3506,10 @@ ipcMain.handle('project:create', async (_e, args: { name: string; location?: str
     await fs.mkdir(join(assetsDir, 'movies'), { recursive: true });      // Vector movie manifests (.vmov)
     await fs.mkdir(buildDir, { recursive: true });
     
+    // New projects pin the latest SDK, so their builds are reproducible.
+    const sdkTag = await latestSdkTag();
+    const sdkToml = sdkTag ? `\n[sdk]\nversion = "${sdkTag}"\n` : '';
+
     // Create project file (TOML)
     const projectContent = `[project]
 name = "${args.name}"
@@ -3451,7 +3530,7 @@ animations = ["assets/animations/*.anim"]
 music = ["assets/music/*.mus"]
 sfx = ["assets/sfx/*.sfx"]
 voices = ["assets/voices/*.vox"]
-`;
+${sdkToml}`;
     const projectFile = join(projectDir, `${args.name}.vpyproj`);
     await fs.writeFile(projectFile, projectContent, 'utf-8');
     
@@ -3558,6 +3637,7 @@ args = ["${rp2350Arg}"]
 artifact = "build_rp2350/${name}_sd.bin"
 `
       : '';
+    const sdkTag = await latestSdkTag();
     const manifest = `# External C/C++ project imported into Vectrex Studio.
 # Built by running the command below; deployed to the PiTrex SD card.
 [project]
@@ -3586,6 +3666,12 @@ ${rp2350Toml}
 # Optional: environment overrides passed to the build.
 # [env]
 # PITREX_SDK = "/Users/you/projects/pitrex-baremetal"
+
+# Vectrex Studio SDK version (uvmc2-sdk). The IDE downloads it into
+# ~/VectrexStudio/sdk/<version>/ and passes its paths to the build:
+# $UVMC2_SDK, $UVM2_SDK_DIR, $VPY_C_SDK, $PITREX_SIM_SDK, $RP2350_SDK.
+[sdk]
+version = "${sdkTag ?? ''}"
 `;
     await fs.writeFile(manifestPath, manifest, 'utf-8');
     return { ok: true, manifestPath, existed: false, detectedTarget: buildArg || null };

@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["enemy_test_c_wasm"]
 module = "build_wasm/enemy_test_c.js"
+
+[sdk]
+version = "v1.3.1"

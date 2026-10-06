@@ -2,9 +2,13 @@
 # A test Makefile sets NAME then `include ../common.mk`.
 # Targets: $(NAME)_pitrex (hardware kernel), $(NAME)_wasm (IDE simulator).
 
+# The Vectrex Studio SDK (uvmc2-sdk). The IDE passes the version pinned in the
+# project's [sdk] table as $(UVMC2_SDK) (~/VectrexStudio/sdk/<version>). Outside
+# the IDE, set it yourself: make UVMC2_SDK=~/VectrexStudio/sdk/v1.3.1
+UVMC2_SDK       ?= $(error UVMC2_SDK is not set: build from Vectrex Studio, or pass UVMC2_SDK=~/VectrexStudio/sdk/<version>)
 PITREX_SDK      ?= $(HOME)/projects/pitrex-baremetal
-VPY_C_SDK       ?= $(HOME)/projects/vectrex-pseudo-python/ide/electron/resources/uvmc2-sdk/vpy-c
-PITREX_SIM_SDK  ?= $(HOME)/projects/vectrex-pseudo-python/ide/electron/resources/uvmc2-sdk/pitrex-sim
+VPY_C_SDK       ?= $(UVMC2_SDK)/vpy-c
+PITREX_SIM_SDK  ?= $(UVMC2_SDK)/pitrex-sim
 
 # ---- compiled assets (.vmus/.vsfx audio + .vec vectors -> C headers) ----
 # Each asset under assets/ is compiled to gen/<stem>.h by vpy_cli, reusing the
@@ -60,7 +64,7 @@ build_pitrex:
 # at 0x20040000 (rp2350_game_ram.ld). Produces <name>_sd.bin — the launcher
 # reads it off the SD card and jumps to game_main. Same main.c/vpy.c as PiTrex
 # and WASM; only the SDK backend differs.
-RP2350_SDK     ?= $(HOME)/projects/vectrex-pseudo-python/ide/electron/resources/uvmc2-sdk/rp2350-sdk
+RP2350_SDK     ?= $(UVMC2_SDK)/rp2350-sdk
 RP2350_CC      ?= arm-none-eabi-gcc
 RP2350_OBJCOPY ?= arm-none-eabi-objcopy
 RP2350_CFLAGS   = -mthumb -mcpu=cortex-m33 -mfloat-abi=soft \

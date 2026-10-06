@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["moving_vectors_wasm"]
 module = "build_wasm/moving_vectors.js"
+
+[sdk]
+version = "v1.3.1"

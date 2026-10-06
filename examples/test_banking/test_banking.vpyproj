@@ -9,3 +9,6 @@ output = "build/test_banking.bin"
 [assets]
 vectors = "assets/vectors"
 music = "assets/music"
+
+[sdk]
+version = "v1.3.1"

@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["joystick_position_wasm"]
 module = "build_wasm/joystick_position.js"
+
+[sdk]
+version = "v1.3.1"

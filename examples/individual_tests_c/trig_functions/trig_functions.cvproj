@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["trig_functions_wasm"]
 module = "build_wasm/trig_functions.js"
+
+[sdk]
+version = "v1.3.1"

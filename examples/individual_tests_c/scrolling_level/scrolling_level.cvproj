@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["scrolling_level_wasm"]
 module = "build_wasm/scrolling_level.js"
+
+[sdk]
+version = "v1.3.1"

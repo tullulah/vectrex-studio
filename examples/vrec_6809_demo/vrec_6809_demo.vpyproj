@@ -13,3 +13,6 @@ vpy = ["src/**/*.vpy"]
 
 [resources]
 recordings = ["assets/recordings/**/*.vrec"]
+
+[sdk]
+version = "v1.3.1"

@@ -23,3 +23,6 @@ artifact = "build_rp2350/SnowBros_c_sd.bin"
 command = "make"
 args = ["SnowBros_c_wasm"]
 module = "build_wasm/SnowBros_c.js"
+
+[sdk]
+version = "v1.3.1"

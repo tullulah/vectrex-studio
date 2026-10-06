@@ -1,3 +1,0 @@
-[submodule "ide/electron/resources/uvmc2-sdk"]
-	path = ide/electron/resources/uvmc2-sdk
-	url = https://github.com/tullulah/uvmc2-sdk.git

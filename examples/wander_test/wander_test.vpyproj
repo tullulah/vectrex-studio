@@ -6,3 +6,6 @@ output = "build/wander_test.bin"
 [resources]
 vectors = ["assets/vectors/*.vec"]
 levels = ["assets/playground/*.vplay"]
+
+[sdk]
+version = "v1.3.1"

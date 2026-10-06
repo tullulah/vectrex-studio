@@ -13,3 +13,6 @@ vpy = ["src/**/*.vpy"]
 
 [resources]
 music = ["assets/music/*.vmus"]
+
+[sdk]
+version = "v1.3.1"

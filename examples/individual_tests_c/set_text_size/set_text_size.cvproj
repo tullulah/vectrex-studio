@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["set_text_size_wasm"]
 module = "build_wasm/set_text_size.js"
+
+[sdk]
+version = "v1.3.1"

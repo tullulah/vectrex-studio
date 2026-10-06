@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["draw_move_wasm"]
 module = "build_wasm/draw_move.js"
+
+[sdk]
+version = "v1.3.1"

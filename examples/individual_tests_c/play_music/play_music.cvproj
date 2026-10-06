@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["play_music_wasm"]
 module = "build_wasm/play_music.js"
+
+[sdk]
+version = "v1.3.1"

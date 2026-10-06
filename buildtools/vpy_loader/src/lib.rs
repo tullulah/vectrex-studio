@@ -50,6 +50,59 @@ impl ProjectMetadata {
     }
 }
 
+/// `[sdk]` section of a .vpyproj: which uvmc2-sdk release this project is built against.
+///
+/// ```toml
+/// [sdk]
+/// version = "v1.3.1"
+/// ```
+///
+/// The SDK is NOT bundled with the compiler or the IDE: Vectrex Studio downloads the pinned
+/// version into `~/VectrexStudio/sdk/<version>/` (root overridable with
+/// `VECTREX_STUDIO_SDK_DIR`). The loader only reports what the project pins; it does not
+/// validate or resolve it (see [`is_valid_sdk_version`] and vpy_cli's SDK resolver).
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct SdkConfig {
+    pub version: Option<String>,
+}
+
+/// True if `v` is a well-formed SDK release tag: `^v\d+(\.\d+){0,3}$` (e.g. `v1`, `v1.3.1`).
+///
+/// The version becomes a path component (`<sdk_root>/<version>`), so anything else
+/// (separators, `..`, empty, pre-release suffixes) is rejected before touching the filesystem.
+pub fn is_valid_sdk_version(v: &str) -> bool {
+    let Some(rest) = v.strip_prefix('v') else { return false };
+    let parts: Vec<&str> = rest.split('.').collect();
+    !parts.is_empty()
+        && parts.len() <= 4
+        && parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Read only the `[sdk]` section of a .vpyproj (no entry-point / source discovery).
+///
+/// Returns `Ok(None)` when the project has no `[sdk]` table.
+pub fn read_sdk_config(vpyproj_path: &Path) -> Result<Option<SdkConfig>, LoadError> {
+    let content = std::fs::read_to_string(vpyproj_path)
+        .map_err(|e| LoadError::Io(e.to_string()))?;
+    parse_sdk_config(&content)
+}
+
+/// Parse the `[sdk]` section out of .vpyproj TOML text.
+pub fn parse_sdk_config(content: &str) -> Result<Option<SdkConfig>, LoadError> {
+    let table: toml::Table = toml::from_str(content)
+        .map_err(|e| LoadError::TomlError(e.to_string()))?;
+    sdk_from_table(&table)
+}
+
+fn sdk_from_table(table: &toml::Table) -> Result<Option<SdkConfig>, LoadError> {
+    match table.get("sdk") {
+        None => Ok(None),
+        Some(v) => v.clone().try_into::<SdkConfig>()
+            .map(Some)
+            .map_err(|e| LoadError::InvalidProject(format!("invalid [sdk] section: {}", e))),
+    }
+}
+
 /// Discovered source file
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SourceFile {
@@ -76,6 +129,8 @@ pub struct ProjectInfo {
     pub source_files: Vec<SourceFile>,
     pub asset_files: Vec<AssetFile>,
     pub entry_point: PathBuf, // Path to main.vpy
+    /// `[sdk]` section, if the project pins an SDK version.
+    pub sdk: Option<SdkConfig>,
 }
 
 impl ProjectInfo {
@@ -134,6 +189,11 @@ pub fn load_project(vpyproj_path: &Path) -> Result<ProjectInfo, LoadError> {
         toml::from_str::<ProjectMetadata>(&content)
             .unwrap_or_default()
     };
+
+    // Lenient here (like the metadata above): a malformed [sdk] must not break targets
+    // that need no SDK (m6809). The SDK resolver re-reads it with `read_sdk_config` and
+    // reports the error where it matters.
+    let sdk = sdk_from_table(&table).unwrap_or(None);
 
     let root_dir = vpyproj_path
         .parent()
@@ -351,6 +411,7 @@ pub fn load_project(vpyproj_path: &Path) -> Result<ProjectInfo, LoadError> {
         source_files,
         asset_files,
         entry_point,
+        sdk,
     })
 }
 
@@ -602,5 +663,54 @@ mod tests {
         assert!(names.contains(&"main.vpy"));
         assert!(names.contains(&"input.vpy"));
         assert!(names.contains(&"graphics.vpy"));
+    }
+
+    #[test]
+    fn test_sdk_version_parsed_from_vpyproj() {
+        let (_temp, root) = create_test_project(false);
+        let proj_path = root.join("test.vpyproj");
+        fs::write(
+            &proj_path,
+            "[project]\nname = \"x\"\nversion = \"0.1.0\"\n\n[sdk]\nversion = \"v1.3.1\"\n",
+        )
+        .unwrap();
+
+        let info = load_project(&proj_path).unwrap();
+        assert_eq!(info.sdk, Some(SdkConfig { version: Some("v1.3.1".into()) }));
+        // The project's own version must not leak into the SDK pin.
+        assert_eq!(info.metadata.version, Some("0.1.0".into()));
+
+        let direct = read_sdk_config(&proj_path).unwrap();
+        assert_eq!(direct, info.sdk);
+    }
+
+    #[test]
+    fn test_sdk_absent_is_none() {
+        let (_temp, root) = create_test_project(false);
+        let info = load_project(&root.join("test.vpyproj")).unwrap();
+        assert_eq!(info.sdk, None);
+        assert_eq!(read_sdk_config(&root.join("test.vpyproj")).unwrap(), None);
+    }
+
+    #[test]
+    fn test_sdk_malformed_section() {
+        // read_sdk_config reports it; load_project stays usable for SDK-less targets.
+        assert!(parse_sdk_config("[sdk]\nversion = 1\n").is_err());
+        let (_temp, root) = create_test_project(false);
+        let proj_path = root.join("test.vpyproj");
+        fs::write(&proj_path, "[sdk]\nversion = 1\n").unwrap();
+        assert!(load_project(&proj_path).unwrap().sdk.is_none());
+        assert!(read_sdk_config(&proj_path).is_err());
+    }
+
+    #[test]
+    fn test_sdk_version_validation() {
+        for ok in ["v1", "v1.3", "v1.3.1", "v10.0.0.2", "v0.0.0"] {
+            assert!(is_valid_sdk_version(ok), "{ok} should be valid");
+        }
+        for bad in ["", "v", "1.3.1", "v1.", "v.1", "v1..2", "v1.2.3.4.5", "v1.3.1-rc1",
+                    "v1/../..", "../v1", "v1.3.1 ", "V1.3.1", "v1.a"] {
+            assert!(!is_valid_sdk_version(bad), "{bad:?} should be rejected");
+        }
     }
 }

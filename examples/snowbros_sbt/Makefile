@@ -59,8 +59,15 @@ host: $(GEN) | build
 	@echo "=== host: build/host_sb ==="
 
 # ---- IDE simulator (WASM) — this is what F5 runs ---------------------------
-PITREX_SIM_SDK ?= $(HOME)/projects/vectrex-pseudo-python/ide/electron/resources/uvmc2-sdk/pitrex-sim
-VPY_C_SDK      ?= $(HOME)/projects/vectrex-pseudo-python/ide/electron/resources/uvmc2-sdk/vpy-c
+# The Vectrex Studio SDK (uvmc2-sdk). The IDE passes the version pinned in the
+# project's [sdk] table as $(UVMC2_SDK) (~/VectrexStudio/sdk/<version>). Outside
+# the IDE, set it yourself: make UVMC2_SDK=~/VectrexStudio/sdk/v1.3.1
+ifeq ($(origin UVMC2_SDK),undefined)
+UVMC2_SDK       = $(error UVMC2_SDK is not set: build from Vectrex Studio, or pass UVMC2_SDK=~/VectrexStudio/sdk/<version>)
+SDK_MISSING    := 1
+endif
+PITREX_SIM_SDK ?= $(UVMC2_SDK)/pitrex-sim
+VPY_C_SDK      ?= $(UVMC2_SDK)/vpy-c
 EMCC           ?= emcc
 EMSDK          ?= $(HOME)/emsdk
 EMSDK_EMCC     := $(EMSDK)/upstream/emscripten
@@ -299,7 +306,10 @@ RP2350_LDFLAGS = -nostartfiles --specs=nosys.specs \
                  -Wa,--defsym,DUAL_CORE_FLAG=0x44430001 \
                  -Wl,--defsym,end=_bss_end
 
-include $(HOME)/projects/vectrex-pseudo-python/ide/electron/resources/uvmc2-sdk/uvm2-sdk/uvm2.mk
+# Only with an SDK: targets that don't need it (host, ...) still build without one.
+ifndef SDK_MISSING
+include $(UVMC2_SDK)/uvm2-sdk/uvm2.mk
+endif
 
 # El nombre corto, que es el que escribe todo el mundo y el que busca el IDE en
 # [targets.rp2350]. uvm2.mk declara `rp2350-cart` y `snowbros_sbt_rp2350`.

@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["set_intensity_wasm"]
 module = "build_wasm/set_intensity.js"
+
+[sdk]
+version = "v1.3.1"

@@ -12,3 +12,6 @@ artifact = "kernel7l.img"
 command = "make"
 args = ["physics_ball_wasm"]
 module = "build_wasm/physics_ball.js"
+
+[sdk]
+version = "v1.3.1"

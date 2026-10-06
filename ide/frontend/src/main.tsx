@@ -26,6 +26,7 @@ import { GitPanel } from './components/panels/GitPanel.js';
 import { FileTreePanel } from './components/panels/FileTreePanel.js';
 import { PlaygroundPanel } from './components/panels/PlaygroundPanel.js';
 import { SettingsPanel } from './components/panels/SettingsPanel.js';
+import { ProjectSettingsPanel } from './components/panels/ProjectSettingsPanel.js';
 import { EpromProgrammerDialog } from './components/dialogs/EpromProgrammerDialog.js';
 import { useSettings, uvm2MakeFlags } from './state/settingsStore.js';
 import { useEmulatorSettings } from './state/emulatorSettings.js';
@@ -346,6 +347,13 @@ function App() {
   // EPROM Programmer dialog state
   const [showEpromDialog, setShowEpromDialog] = useState(false);
   const lastCompiledBinary = useEmulatorSettings(s => s.lastCompiledBinary);
+
+  // The project settings panel needs an open project: close it when the project closes.
+  useEffect(() => {
+    if (!vpyProject?.projectFile) {
+      setActiveSidebarPanel(prev => prev === 'projectSettings' ? 'files' : prev);
+    }
+  }, [vpyProject?.projectFile]);
 
   // Handle activity bar clicks — eprom opens a dialog instead of a panel
   const handleActivityBarClick = useCallback((item: ActivityBarItem) => {
@@ -1949,6 +1957,7 @@ def loop():
                   {activeSidebarPanel === 'files' && <FileTreePanel />}
                   {activeSidebarPanel === 'git' && <GitPanel />}
                   {activeSidebarPanel === 'settings' && <SettingsPanel />}
+                  {activeSidebarPanel === 'projectSettings' && <ProjectSettingsPanel />}
                 </div>
                 {/* Resize handle */}
                 <div
