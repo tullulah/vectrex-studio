@@ -270,5 +270,13 @@
   "projectSettings.sdk.installError": "No se pudo descargar {{tag}}: {{error}}",
   "projectSettings.sdk.retry": "Reintentar",
   "projectSettings.sdk.setError": "No se pudo cambiar la versión del SDK: {{error}}",
-  "projectSettings.sdk.folder": "Carpeta de instalación:"
+  "projectSettings.sdk.folder": "Carpeta de instalación:",
+  "projectSettings.toolchain.title": "Toolchain Arm GNU",
+  "projectSettings.toolchain.description": "El compilador que usan las builds UVM2. El IDE no lo descarga: instálalo una vez desde Arm.",
+  "projectSettings.toolchain.found": "Encontrada:",
+  "projectSettings.toolchain.missingNeeded": "Este proyecto compila para UVM2 y no se ha encontrado ninguna toolchain Arm GNU válida: la build fallará.",
+  "projectSettings.toolchain.missing": "No se ha encontrado la toolchain Arm GNU. Solo la necesitan las builds UVM2.",
+  "projectSettings.toolchain.howTo": "Instala la toolchain \"arm-none-eabi\" (bare-metal AArch32) desde developer.arm.com —no la de Homebrew— o define UVM2_ARM_TOOLCHAIN con su carpeta arm-none-eabi antes de abrir el IDE.",
+  "projectSettings.toolchain.download": "Abrir página de descarga",
+  "projectSettings.toolchain.recheck": "Comprobar de nuevo"
 }

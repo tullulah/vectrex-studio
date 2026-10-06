@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, session, dialog, systemPreferences } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, session, dialog, systemPreferences, shell } from 'electron';
 import { spawn } from 'child_process';
 // Legacy TypeScript emulator removed: all references to './emu6809' have been deleted.
 // NOTE: Remaining emulator-related IPC endpoints that depended on globalCpu have been pruned.
@@ -16,7 +16,7 @@ import { getMCPServer } from './mcp/server.js';
 import type { MCPRequest } from './mcp/types.js';
 import { registerAIProxyHandlers } from './ai-proxy.js';
 import {
-  ensureSdk, isSdkInstalled, isValidSdkTag, latestSdkTag, listInstalledSdks, listRemoteSdkTags,
+  ARM_TOOLCHAIN_DOWNLOAD_URL, detectArmToolchain, ensureSdk, isSdkInstalled, isValidSdkTag, latestSdkTag, listInstalledSdks, listRemoteSdkTags,
   projectSdkVersion, resolveProjectSdk, sdkEnv, sdkRootDir, writeProjectSdkVersion, type SdkProgress,
 } from './sdkManager.js';
 import { storageGet, storageSet, storageDelete, storageKeys, storageClear, getStoragePath, StorageKeys } from './storage.js';
@@ -1048,6 +1048,15 @@ ipcMain.handle('sdk:project:set', async (_e, projectFile: string, tag: string) =
   }
 });
 
+// The Arm GNU Toolchain is never downloaded (too big, per platform): the Project Settings
+// panel shows whether a usable one is installed, found the same way the build finds it.
+ipcMain.handle('sdk:toolchain', async () => detectArmToolchain());
+
+// Opens the one fixed download page — the renderer can't navigate to external URLs.
+ipcMain.handle('sdk:toolchain:openDownload', async () => {
+  await shell.openExternal(ARM_TOOLCHAIN_DOWNLOAD_URL);
+});
+
 function resolveCompilerPath(): string | null {
   const override = process.env.VPY_COMPILER_BIN;
   if (override) {
@@ -1820,7 +1829,8 @@ export async function executeSimBuild(args: {
   win?.webContents.send('run://stdout', `[SIM] SDK ${sdk.version} (${sdk.dir})\n`);
   const { PITREX_SIM_SDK, VPY_C_SDK } = sdkEnv(sdk.dir);
 
-  const env: NodeJS.ProcessEnv = { ...process.env, ...(manifest.env || {}), PITREX_SIM_SDK, VPY_C_SDK };
+  // The project's [env] still wins, as in the hardware build: a port can point at its own checkout.
+  const env: NodeJS.ProcessEnv = { ...process.env, PITREX_SIM_SDK, VPY_C_SDK, ...(manifest.env || {}) };
   const emDir = resolveEmscriptenDir();
   if (emDir) {
     env.PATH = `${emDir}${require('path').delimiter}${env.PATH || ''}`;

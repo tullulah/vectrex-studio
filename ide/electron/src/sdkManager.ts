@@ -384,3 +384,101 @@ export async function resolveProjectSdk(
     return { error: e?.message || String(e) };
   }
 }
+
+// ─── Arm GNU Toolchain (uvm2 builds) ───────────────────────────────────────
+//
+// Found, never downloaded: it is large and platform-specific. Same search as vpy_cli's
+// pico.rs and the SDK's uvm2.mk, so what the panel says is what the build will find:
+// $UVM2_ARM_TOOLCHAIN, then the standard install locations, newest first. It must be the
+// Arm build — Homebrew's arm-none-eabi-gcc ships no nosys.specs, which the pico-sdk link needs.
+
+export const ARM_TOOLCHAIN_DOWNLOAD_URL =
+  'https://developer.arm.com/downloads/-/arm-gnu-toolchain-downloads';
+
+export type ToolchainCandidate = { dir: string; source: string; problem: string | null };
+export type ToolchainStatus = {
+  found: { dir: string; version: string | null; source: string } | null;
+  candidates: ToolchainCandidate[];
+};
+
+function versionKey(p: string): number[] {
+  return (p.match(/\d+/g) || []).map(Number);
+}
+
+function compareVersionKeysDesc(a: string, b: string): number {
+  const ka = versionKey(a), kb = versionKey(b);
+  for (let i = 0; i < Math.max(ka.length, kb.length); i++) {
+    const d = (kb[i] ?? -1) - (ka[i] ?? -1);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+async function standardToolchainDirs(): Promise<string[]> {
+  const out: string[] = [];
+  for (const [base, prefix] of [
+    ['/Applications/ArmGNUToolchain', ''],     // macOS installer
+    ['/opt', 'arm-gnu-toolchain'],             // Linux tarball convention
+    ['/usr/local', 'arm-gnu-toolchain'],
+  ] as const) {
+    let names: string[];
+    try { names = await fs.readdir(base); } catch { continue; }
+    const found: string[] = [];
+    for (const n of names.filter(n => n.startsWith(prefix) && !n.startsWith('.'))) {
+      const p = join(base, n);
+      found.push(await isDir(join(p, 'arm-none-eabi')) ? join(p, 'arm-none-eabi') : p);
+    }
+    out.push(...found.sort(compareVersionKeysDesc));
+  }
+  return out;
+}
+
+async function isDir(p: string): Promise<boolean> {
+  try { return (await fs.stat(p)).isDirectory(); } catch { return false; }
+}
+
+async function containsFile(dir: string, name: string, depth: number): Promise<boolean> {
+  let entries: import('fs').Dirent[];
+  try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return false; }
+  if (entries.some(e => e.name === name)) return true;
+  if (depth <= 0) return false;
+  for (const e of entries) {
+    if (e.isDirectory() && await containsFile(join(dir, e.name), name, depth - 1)) return true;
+  }
+  return false;
+}
+
+const gccName = process.platform === 'win32' ? 'arm-none-eabi-gcc.exe' : 'arm-none-eabi-gcc';
+
+async function toolchainProblem(dir: string): Promise<string | null> {
+  try { await fs.access(join(dir, 'bin', gccName)); } catch { return `no bin/${gccName}`; }
+  if (!(await containsFile(dir, 'nosys.specs', 6))) {
+    return 'no nosys.specs (the Homebrew build? the pico-sdk link needs the Arm one)';
+  }
+  return null;
+}
+
+function gccVersion(dir: string): Promise<string | null> {
+  return new Promise(resolve => {
+    const child = spawn(join(dir, 'bin', gccName), ['-dumpversion'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    child.stdout.on('data', (c: Buffer) => { out += c.toString(); });
+    child.on('error', () => resolve(null));
+    child.on('close', code => resolve(code === 0 ? out.trim() || null : null));
+  });
+}
+
+export async function detectArmToolchain(): Promise<ToolchainStatus> {
+  const candidates: ToolchainCandidate[] = [];
+  const env = process.env.UVM2_ARM_TOOLCHAIN;
+  const tried: Array<{ dir: string; source: string }> = [
+    ...(env ? [{ dir: env, source: '$UVM2_ARM_TOOLCHAIN' }] : []),
+    ...(await standardToolchainDirs()).map(dir => ({ dir, source: 'standard location' })),
+  ];
+  for (const { dir, source } of tried) {
+    const problem = await toolchainProblem(dir);
+    candidates.push({ dir, source, problem });
+    if (!problem) return { found: { dir, source, version: await gccVersion(dir) }, candidates };
+  }
+  return { found: null, candidates };
+}

@@ -167,6 +167,13 @@ contextBridge.exposeInMainWorld('sdk', {
   // Change the project's version (rewrites only the [sdk] table of the file).
   setProjectVersion: (projectFile: string, tag: string) => ipcRenderer.invoke('sdk:project:set', projectFile, tag) as Promise<
     { ok: true } | { ok: false; error: string }>,
+  // Arm GNU Toolchain (needed by uvm2 builds; never downloaded): the one the build will
+  // use, or every place looked at and why each was rejected.
+  toolchain: () => ipcRenderer.invoke('sdk:toolchain') as Promise<{
+    found: { dir: string; version: string | null; source: string } | null;
+    candidates: Array<{ dir: string; source: string; problem: string | null }>;
+  }>,
+  openToolchainDownload: () => ipcRenderer.invoke('sdk:toolchain:openDownload') as Promise<void>,
 });
 
 // Git operations API

@@ -100,6 +100,14 @@ interface SdkAPI {
   getProjectVersion: (projectFile: string) => Promise<
     { ok: true; version: string; pinned: boolean; installed: boolean } | { ok: false; error: string }>;
   setProjectVersion: (projectFile: string, tag: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  // Arm GNU Toolchain (uvm2 builds; never downloaded), found the same way the build finds it.
+  toolchain: () => Promise<ToolchainStatus>;
+  openToolchainDownload: () => Promise<void>;
+}
+
+interface ToolchainStatus {
+  found: { dir: string; version: string | null; source: string } | null;
+  candidates: Array<{ dir: string; source: string; problem: string | null }>;
 }
 
 // Electron API types

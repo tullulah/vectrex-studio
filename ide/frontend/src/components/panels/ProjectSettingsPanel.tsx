@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProjectStore } from '../../state/projectStore';
+import { useSettings } from '../../state/settingsStore';
 import './SettingsPanel.css';
 import './ProjectSettingsPanel.css';
 
@@ -39,6 +40,88 @@ function joinPath(root: string, tag: string): string {
   return root.endsWith(sep) ? `${root}${tag}` : `${root}${sep}${tag}`;
 }
 
+/**
+ * The Arm GNU Toolchain uvm2 builds compile with. It is never downloaded (large, per
+ * platform), so this only reports what the build will find — and warns when a uvm2
+ * project has none.
+ */
+const ArmToolchainSection: React.FC<{ needed: boolean }> = ({ needed }) => {
+  const { t } = useTranslation(['common']);
+  const sdk = window.sdk;
+  const [status, setStatus] = useState<ToolchainStatus | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const check = useCallback(async () => {
+    if (!sdk?.toolchain) return;
+    setChecking(true);
+    try {
+      setStatus(await sdk.toolchain());
+    } finally {
+      setChecking(false);
+    }
+  }, [sdk]);
+
+  useEffect(() => { void check(); }, [check]);
+
+  if (!sdk?.toolchain) return null;
+  const rejected = status?.candidates.filter(c => c.problem) ?? [];
+
+  return (
+    <div className="settings-section">
+      <h3>{t('projectSettings.toolchain.title', 'Arm GNU Toolchain')}</h3>
+      <p className="settings-description">
+        {t('projectSettings.toolchain.description', 'The compiler UVM2 builds use. It is not downloaded by the IDE: install it once from Arm.')}
+      </p>
+
+      {!status && <p className="settings-description">{t('projectSettings.sdk.loading', 'Loading...')}</p>}
+
+      {status?.found && (
+        <>
+          <div className="ps-row">
+            <span className="ps-label">{t('projectSettings.toolchain.found', 'Found:')}</span>
+            <span className="ps-version">{status.found.version ?? '?'}</span>
+            <span className="ps-badge ps-badge-ok">{t('projectSettings.sdk.mark.installed', 'installed')}</span>
+          </div>
+          <p className="ps-small ps-path" title={status.found.dir}>{status.found.dir}</p>
+        </>
+      )}
+
+      {status && !status.found && (
+        <div className={`ps-message ${needed ? 'ps-error' : 'ps-notice'}`}>
+          <div>
+            {needed
+              ? t('projectSettings.toolchain.missingNeeded', 'This project builds for UVM2, and no usable Arm GNU Toolchain was found: the build will fail.')
+              : t('projectSettings.toolchain.missing', 'No Arm GNU Toolchain found. Only UVM2 builds need it.')}
+          </div>
+          <div className="ps-small">
+            {t('projectSettings.toolchain.howTo', 'Install the "arm-none-eabi" (bare-metal AArch32) toolchain from developer.arm.com — not the Homebrew one — or set UVM2_ARM_TOOLCHAIN to its arm-none-eabi folder before starting the IDE.')}
+          </div>
+          {rejected.length > 0 && (
+            <ul className="ps-small ps-candidates">
+              {rejected.map(c => (
+                <li key={c.dir} title={c.dir}>
+                  <span className="ps-path">{c.dir}</span> — {c.problem}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div className="ps-row">
+        {status && !status.found && (
+          <button className="pitrex-sd-browse" onClick={() => void sdk.openToolchainDownload()}>
+            {t('projectSettings.toolchain.download', 'Open download page')}
+          </button>
+        )}
+        <button className="pitrex-sd-browse" onClick={() => void check()} disabled={checking}>
+          {t('projectSettings.toolchain.recheck', 'Check again')}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 interface ProjectVersionState {
   version: string;
   pinned: boolean;
@@ -48,6 +131,9 @@ export const ProjectSettingsPanel: React.FC = () => {
   const { t } = useTranslation(['common']);
   const vpyProject = useProjectStore(s => s.vpyProject);
   const projectFile = vpyProject?.projectFile;
+  // C projects declare their target; VPy projects build for the target chosen in Settings.
+  const globalTarget = useSettings(s => s.buildTarget);
+  const buildsForUvm2 = (vpyProject?.isExternal ? vpyProject?.target : globalTarget) === 'uvm2';
   const sdk = window.sdk;
 
   const [list, setList] = useState<SdkListResult | null>(null);
@@ -318,6 +404,8 @@ export const ProjectSettingsPanel: React.FC = () => {
           </>
         )}
       </div>
+
+      <ArmToolchainSection needed={buildsForUvm2} />
     </div>
   );
 };

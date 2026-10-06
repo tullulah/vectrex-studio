@@ -127,3 +127,12 @@
   0% { left: -30%; }
   100% { left: 100%; }
 }
+
+.project-settings-panel .ps-candidates {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+
+.project-settings-panel .ps-candidates li {
+  word-break: break-all;
+}
