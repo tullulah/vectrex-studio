@@ -8,4 +8,4 @@ vectors = ["assets/vectors/*.vec"]
 levels = ["assets/playground/*.vplay"]
 
 [sdk]
-version = "v1.3.1"
+version = "v1.3.2"

@@ -14,4 +14,4 @@ args = ["random_numbers_wasm"]
 module = "build_wasm/random_numbers.js"
 
 [sdk]
-version = "v1.3.1"
+version = "v1.3.2"

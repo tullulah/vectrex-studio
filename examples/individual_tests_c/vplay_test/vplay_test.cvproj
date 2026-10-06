@@ -14,4 +14,4 @@ args = ["vplay_test_wasm"]
 module = "build_wasm/vplay_test.js"
 
 [sdk]
-version = "v1.3.1"
+version = "v1.3.2"

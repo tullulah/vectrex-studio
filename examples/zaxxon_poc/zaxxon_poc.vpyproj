@@ -16,4 +16,4 @@ vectors = ["assets/vectors/**/*.vec"]
 sfx     = ["assets/sfx/**/*.vsfx"]
 
 [sdk]
-version = "v1.3.1"
+version = "v1.3.2"

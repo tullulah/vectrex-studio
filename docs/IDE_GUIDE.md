@@ -289,7 +289,7 @@ sfx = ["assets/sfx/*.vsfx"]
 levels = ["assets/levels/*.vplay"]
 
 [sdk]
-version = "v1.3.1"          # uvmc2-sdk release (UVM2 / PiTrex / C builds)
+version = "v1.3.2"          # uvmc2-sdk release (UVM2 / PiTrex / C builds)
 ```
 
 ### Key fields

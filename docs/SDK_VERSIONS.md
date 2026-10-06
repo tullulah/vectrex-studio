@@ -24,10 +24,10 @@ Both `.vpyproj` and `.cvproj` files carry an `[sdk]` table:
 
 ```toml
 [sdk]
-version = "v1.3.1"
+version = "v1.3.2"
 ```
 
-- All example projects in `examples/` are pinned to `v1.3.1`.
+- All example projects in `examples/` are pinned to `v1.3.2`.
 - New projects (`project:create`) and C imports are created pinned to the latest tag.
 - A project with no `[sdk] version` is pinned to the latest tag the first time the IDE
   resolves its SDK (offline: the newest installed release). The IDE writes the pin into
@@ -39,7 +39,7 @@ version = "v1.3.1"
 ## Where releases come from
 
 Releases are the tags of the GitHub repository
-[`tullulah/uvmc2-sdk`](https://github.com/tullulah/uvmc2-sdk) (`v1.1` … `v1.3.1`). They
+[`tullulah/uvmc2-sdk`](https://github.com/tullulah/uvmc2-sdk) (`v1.1` … `v1.3.2`). They
 mirror the tags of the uvmc2-starter-kit, whose `sdk` submodule pins the same commits,
 so a given tag is the same SDK in both places.
 
@@ -121,7 +121,7 @@ UVMC2_SDK=~/src/uvmc2-sdk vpy_cli build mygame.vpy --target uvm2
 from `UVMC2_SDK` and stop with a clear error when it is unset. Outside the IDE:
 
 ```bash
-make <target> UVMC2_SDK=~/VectrexStudio/sdk/v1.3.1
+make <target> UVMC2_SDK=~/VectrexStudio/sdk/v1.3.2
 ```
 
 ## Project Settings panel

@@ -4,7 +4,7 @@
 
 # The Vectrex Studio SDK (uvmc2-sdk). The IDE passes the version pinned in the
 # project's [sdk] table as $(UVMC2_SDK) (~/VectrexStudio/sdk/<version>). Outside
-# the IDE, set it yourself: make UVMC2_SDK=~/VectrexStudio/sdk/v1.3.1
+# the IDE, set it yourself: make UVMC2_SDK=~/VectrexStudio/sdk/v1.3.2
 UVMC2_SDK       ?= $(error UVMC2_SDK is not set: build from Vectrex Studio, or pass UVMC2_SDK=~/VectrexStudio/sdk/<version>)
 PITREX_SDK      ?= $(HOME)/projects/pitrex-baremetal
 VPY_C_SDK       ?= $(UVMC2_SDK)/vpy-c

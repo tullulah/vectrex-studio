@@ -14,4 +14,4 @@ args = ["set_intensity_wasm"]
 module = "build_wasm/set_intensity.js"
 
 [sdk]
-version = "v1.3.1"
+version = "v1.3.2"
