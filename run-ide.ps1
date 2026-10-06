@@ -54,16 +54,14 @@ function Install-NodeModulesIfMissing($dir){
 Install-NodeModulesIfMissing (Join-Path $root 'ide/frontend')
 Install-NodeModulesIfMissing (Join-Path $root 'ide/electron')
 
-# Build Rust (LSP + core) salvo -NoRustBuild
+# Build Rust (vpy_cli + vpy_lsp) salvo -NoRustBuild
 if(-not $NoRustBuild){
   if(-not (Get-Command cargo -ErrorAction SilentlyContinue)){
     Write-Host '[WARN] cargo no encontrado; se omite build Rust' -ForegroundColor Yellow
   } else {
     Write-Host '[INFO] cargo build (vpy_lsp + vpy_cli)' -ForegroundColor Cyan
-    # Legacy vectrexc dropped — IDE defaults to buildtools (vpy_cli). Build it
-    # manually if you still need the deprecated core backend. The LSP still
-    # lives in core/ and powers diagnostics inside the editor, so always build
-    # it alongside vpy_cli and copy both to ide/electron/resources/ so dev-mode
+    # Build vpy_cli (the compiler) and vpy_lsp (the editor's language server),
+    # both from buildtools, and copy them to ide/electron/resources/ so dev-mode
     # finds them.
     cargo build --bin vpy_lsp --bin vpy_cli
     if($LASTEXITCODE -ne 0){ Write-Host '[ERR ] cargo build falló' -ForegroundColor Red; exit 1 }
@@ -75,7 +73,7 @@ if(-not $NoRustBuild){
 }
 
 # Comprobar binario LSP esperado (heursítica) y avisar si falta
-$lspExe = Join-Path $root 'target/debug/vpy_lsp.exe'
+$lspExe = Join-Path $root 'ide/electron/resources/vpy_lsp.exe'
 if(-not (Test-Path $lspExe)){
   Write-Host "[WARN] Binario LSP no encontrado en $lspExe (spawn podría fallar)" -ForegroundColor Yellow
 }

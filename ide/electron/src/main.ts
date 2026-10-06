@@ -593,20 +593,17 @@ function resolveLspPath(): string | null {
     // run-ide.sh no longer touches (it builds with --profile dev-fast).
     join(cwd, 'ide', 'electron', 'resources', exeName),
     join(cwd, '..', '..', 'ide', 'electron', 'resources', exeName),
-    // Manual `cargo build` without run-ide.sh
+    // Manual `cargo build` without run-ide.sh (root workspace, then buildtools/)
     join(cwd, 'target', 'dev-fast', exeName),
     join(cwd, 'target', 'debug', exeName),
     join(cwd, 'target', 'release', exeName),
+    join(cwd, 'buildtools', 'target', 'debug', exeName),
+    join(cwd, 'buildtools', 'target', 'release', exeName),
     // Bin copiado manualmente
     join(cwd, exeName),
-    // Layout monorepo: bin dentro de crate core
-    join(cwd, 'core', 'target', 'debug', exeName),
-    join(cwd, 'core', 'target', 'release', exeName),
     // Si por alguna razón el cwd termina en ide/electron
     join(cwd, '..', '..', 'target', 'debug', exeName),
     join(cwd, '..', '..', 'target', 'release', exeName),
-    join(cwd, '..', '..', 'core', 'target', 'debug', exeName),
-    join(cwd, '..', '..', 'core', 'target', 'release', exeName),
   ];
   for (const p of candidates) {
     try { if (existsSync(p)) return p; } catch {}
@@ -614,7 +611,7 @@ function resolveLspPath(): string | null {
   if (!lspPathWarned) {
     lspPathWarned = true;
     mainWindow?.webContents.send('lsp://stderr', { serverId: 'vpy', line: `[LSP] CWD=${cwd}` });
-    mainWindow?.webContents.send('lsp://stderr', { serverId: 'vpy', line: `LSP binary not found. Tried paths:\n${candidates.join('\n')}\nCompile with: cargo build -p vectrex_lang --bin vpy_lsp` });
+    mainWindow?.webContents.send('lsp://stderr', { serverId: 'vpy', line: `LSP binary not found. Tried paths:\n${candidates.join('\n')}\nCompile with: cargo build --bin vpy_lsp` });
   }
   return null;
 }
@@ -1001,8 +998,7 @@ ipcMain.handle('bin:open', async () => {
 
 // Resolve compiler binary path. Supports env override VPY_COMPILER_BIN.
 // Binaries live in ide/electron/resources/ (dev) or process.resourcesPath (packaged).
-// @param backend: 'buildtools' (default, new modular compiler) or 'core' (legacy compiler)
-function resolveCompilerPath(backend: 'buildtools' | 'core' = 'buildtools'): string | null {
+function resolveCompilerPath(): string | null {
   const override = process.env.VPY_COMPILER_BIN;
   if (override) {
     try { if (existsSync(override)) return override; } catch {}
@@ -1011,14 +1007,6 @@ function resolveCompilerPath(backend: 'buildtools' | 'core' = 'buildtools'): str
 
   const isWin = process.platform === 'win32';
   const resourcesDir = app.isPackaged ? process.resourcesPath : join(__dirname, '..', 'resources');
-
-  if (backend === 'core') {
-    const exe = isWin ? 'vectrexc.exe' : 'vectrexc';
-    const p = join(resourcesDir, exe);
-    try { if (existsSync(p)) return p; } catch {}
-    mainWindow?.webContents.send('run://stderr', `Core compiler not found: ${p}\nCopy binary to ide/electron/resources/ or build with: cargo build --bin vectrexc --release`);
-    return null;
-  }
 
   const exe = isWin ? 'vpy_cli.exe' : 'vpy_cli';
   const p = join(resourcesDir, exe);
@@ -1795,13 +1783,12 @@ export async function executeSimBuild(args: {
 }
 
 // Exported function for direct invocation (e.g. from MCP server)
-export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; compilerBackend?: 'buildtools' | 'core'; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; uvm2Flags?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string }) {
+export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; uvm2Flags?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string }) {
   // CRITICAL: Log received args to debug compiler selection
   console.log('[RUN] executeCompilation received args:', JSON.stringify({ ...args, saveIfDirty: args?.saveIfDirty ? '...' : undefined }));
   
-  const { path, saveIfDirty, autoStart, outputPath, compilerBackend = 'buildtools', target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '', uvm2Flags = '', rp2350FlashMethod = 'none', rp2350FirmwareDir = '', rp2350Ram = false, rp2350SdPath = '' } = args || {} as any;
+  const { path, saveIfDirty, autoStart, outputPath, target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '', uvm2Flags = '', rp2350FlashMethod = 'none', rp2350FirmwareDir = '', rp2350Ram = false, rp2350SdPath = '' } = args || {} as any;
   
-  console.log('[RUN] Extracted compilerBackend:', compilerBackend);
   // Surface pitrex SD flags to the output panel so they're always visible
   if (target === 'pitrex') {
     mainWindow?.webContents.send('run://stdout', `[SD] pitrexCopyToSD=${pitrexCopyToSD} sdPath="${pitrexSdPath}"\n`);
@@ -1890,12 +1877,12 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
   // Re-extract outputPath after potentially reading from .vpyproj
   const finalOutputPath = args.outputPath || outputPath;
   
-  const compiler = resolveCompilerPath(compilerBackend);
+  const compiler = resolveCompilerPath();
   if (!compiler) return { error: 'compiler_not_found' };
   
   // CRITICAL: Always log compiler path for debugging binary resolution
-  console.log('[RUN] ✓ Resolved compiler:', compiler, '(backend:', compilerBackend, ')');
-  mainWindow?.webContents.send('run://stdout', `[Compiler] Using: ${compiler} (${compilerBackend})\n`);
+  console.log('[RUN] ✓ Resolved compiler:', compiler);
+  mainWindow?.webContents.send('run://stdout', `[Compiler] Using: ${compiler}\n`);
   
   const verbose = process.env.VPY_IDE_VERBOSE_RUN === '1';
   // Marca de arranque, para la comprobacion de frescura de los artefactos derivados
@@ -1956,39 +1943,30 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
       outAsm = outAsm.replace(/\.asm$/, '_uvm2.asm');
     }
     
-    // Build compiler arguments based on backend
-    let argsv: string[];
-    
-    if (compilerBackend === 'core') {
-      // LEGACY CORE COMPILER (vectrexc) ARGUMENTS
-      // Usage: vectrexc build <file.vpy> --target vectrex --title TITLE --bin [--include-dir DIR]
-      argsv = ['build', fsPath, '--target', 'vectrex', '--title', basename(fsPath).replace(/\.[^.]+$/, '').toUpperCase(), '--bin', '--include-dir', workspaceRoot];
-    } else {
-      // NEW BUILDTOOLS COMPILER (vpy_cli) ARGUMENTS
-      const buildTarget = target ?? 'm6809';
-      argsv = ['build', fsPath, '--output', finalBinPath];
+    // vpy_cli arguments
+    const buildTarget = target ?? 'm6809';
+    const argsv: string[] = ['build', fsPath, '--output', finalBinPath];
 
-      // Add ROM size configuration if in project mode (read from .vpyproj if needed)
-      // Default: 32KB single-bank
-      argsv.push('--rom-size', '32768');
-      argsv.push('--bank-size', '32768');
+    // Add ROM size configuration if in project mode (read from .vpyproj if needed)
+    // Default: 32KB single-bank
+    argsv.push('--rom-size', '32768');
+    argsv.push('--bank-size', '32768');
 
-      // Target platform
-      argsv.push('--target', buildTarget);
+    // Target platform
+    argsv.push('--target', buildTarget);
 
-      // Build for SD: link the game to run from internal SRAM (0x20010000) so
-      // the cart's SD launcher can load it.
-      if (buildForSd) {
-        argsv.push('--ram');
-      }
+    // Build for SD: link the game to run from internal SRAM (0x20010000) so
+    // the cart's SD launcher can load it.
+    if (buildForSd) {
+      argsv.push('--ram');
+    }
 
-      // Always generate debug symbols
-      argsv.push('--debug');
+    // Always generate debug symbols
+    argsv.push('--debug');
 
-      // If verbose mode, add --verbose flag
-      if (verbose) {
-        argsv.push('--verbose');
-      }
+    // If verbose mode, add --verbose flag
+    if (verbose) {
+      argsv.push('--verbose');
     }
     
     // CRITICAL: Delete old .asm and .bin files before compilation to avoid stale files
@@ -2478,7 +2456,7 @@ function vrecToVrb(cli: string, input: string, output: string): Promise<boolean>
 ipcMain.handle('vrec:compile', async (_e, vrecPath: string) => {
   try {
     if (!vrecPath || !vrecPath.toLowerCase().endsWith('.vrec')) return { ok: false, error: 'not a .vrec' };
-    const cli = resolveCompilerPath('buildtools');
+    const cli = resolveCompilerPath();
     if (!cli) return { ok: false, error: 'compiler not found' };
     const vrbPath = vrecPath.slice(0, -5) + '.vrb';
     const ok = await vrecToVrb(cli, vrecPath, vrbPath);
@@ -2539,7 +2517,7 @@ ipcMain.handle('sd:simList', async () => {
     const previews: Record<string, string> = {};
     try {
       const pdir = join(dir, 'preview');
-      const cli = resolveCompilerPath('buildtools');
+      const cli = resolveCompilerPath();
       const pentries = await fs.readdir(pdir);
       for (const pe of pentries) {
         if (pe.startsWith('.') || !pe.toLowerCase().endsWith('.vrec')) continue;

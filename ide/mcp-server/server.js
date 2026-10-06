@@ -250,10 +250,12 @@ function getProjectDocs(topic) {
 - NEVER write MUSIC_UPDATE() or AUDIO_UPDATE() - auto-injected at END of loop()
 - Variables in main() are NOT accessible in loop() - separate scopes
 - Declare variables inside loop() where they are used
-- Build: cargo run --bin vectrexc -- build program.vpy --bin
+- Build: cargo run --bin vpy_cli -- build program.vpy -o program.bin [--target m6809|rp2350|pitrex|uvm2] [--debug]
+- Inspect generated assembly: cargo run --bin vpy_cli -- asm program.vpy -o program.asm
+- Compiler: buildtools/ (9 phases, one crate each); only the linker (Phase 7) computes final addresses
 - Single-bank: fits in 32KB. Multibank needs META ROM_TOTAL_SIZE + ROM_BANK_SIZE
 - Architecture: loop() compiles to LOOP_BODY subroutine, called via JSR from main loop
-- Source: core/src/backend/m6809/mod.rs (main codegen), core/src/backend/m6809/builtins.rs`,
+- Source: buildtools/vpy_codegen/src/m6809/mod.rs (main codegen), buildtools/vpy_codegen/src/m6809/functions.rs (MAIN/LOOP_BODY), buildtools/vpy_codegen/src/m6809/builtins.rs`,
 
     bios: `## BIOS Usage Rules
 - NEVER use synthetic BIOS - always use real bios.bin
@@ -300,7 +302,7 @@ function getProjectDocs(topic) {
 - RAM addresses: $CF00=Joy_1_X, $CF01=Joy_1_Y (unsigned 0-255)
 - Frontend writes these addresses every frame (browser Gamepad API)
 - Thresholds: 0-107=-1, 108-148=0, 149-255=+1 (deadzone ±20 around 128)
-- Source: core/src/backend/m6809/builtins.rs lines ~213-276`,
+- Source: buildtools/vpy_codegen/src/m6809/builtins.rs (J1_X/J1_Y dispatch), buildtools/vpy_codegen/src/m6809/joystick.rs (J1X_BUILTIN/J1Y_BUILTIN helpers)`,
 
     buttons: `## Button System (J1_BUTTON_1-4) - Auto-injected
 - NEVER call UPDATE_BUTTONS() - compiler auto-injects Read_Btns at start of loop()
@@ -308,8 +310,8 @@ function getProjectDocs(topic) {
 - Auto-injection sequence at loop start: JSR DP_to_D0 → JSR Read_Btns → JSR DP_to_C8
 - Buttons read cached $C80F (Vec_Btn_State) - set once per frame, no auto-fire
 - Why one Read_Btns per frame: multiple calls break Vec_Prev_Btns debounce
-- Source: core/src/backend/m6809/mod.rs line ~748 (auto-injection)
-         core/src/backend/m6809/emission.rs lines 105-160 (builtin handlers)`,
+- Source: buildtools/vpy_codegen/src/m6809/functions.rs (Read_Btns auto-injection in LOOP_BODY)
+         buildtools/vpy_codegen/src/m6809/builtins.rs (J1_BUTTON_* handlers)`,
 
     const_arrays: `## Const Arrays - ROM-Only Data
 - const keyword: allocates in ROM, zero RAM overhead
@@ -318,39 +320,36 @@ function getProjectDocs(topic) {
 - Const string arrays: const names = ["HELLO", "WORLD"] - indexing returns pointer
   - Use with PRINT_TEXT: PRINT_TEXT(x, y, names[i])
 - Regular arrays (let) allocate RAM pointer + init code in main()
-- Const arrays emit CONST_ARRAY_N labels in ROM, no VAR_* defined
-- Source: core/src/backend/m6809/mod.rs lines 246-273 (collection), 997-1039 (emission)
-         core/src/backend/m6809/expressions.rs lines 239-267 (indexing)`,
+- Const arrays emit ARRAY_<NAME>_DATA labels in ROM; MAIN sets the array pointer to that ROM label
+- Source: buildtools/vpy_codegen/src/m6809/variables.rs (array data emission)
+         buildtools/vpy_codegen/src/m6809/functions.rs (const array pointer init in MAIN)
+         buildtools/vpy_codegen/src/m6809/expressions.rs (indexing)`,
 
     modules: `## Module System (Phase 6.3 Complete)
 - Import: import input  then call input.get_input() or access input.var_name[i]
 - Unifier transforms dot notation: input.get_input() → INPUT_GET_INPUT()
 - Helpers auto-deduplicated (unifier merges all imports into one module before codegen)
-- Build: cargo run --bin vectrexc -- build main.vpy --bin (auto-resolves imports)
+- Build: cargo run --bin vpy_cli -- build project.vpyproj -o game.bin (auto-resolves imports)
 - Example: examples/multi-module/
-- Source: core/src/unifier.rs (dot notation rewriting)
-         core/src/backend/m6809/mod.rs lines 820-838 (collision-free array labels)`,
+- Source: buildtools/vpy_unifier/src/lib.rs (dot notation rewriting), buildtools/vpy_unifier/src/resolver.rs (symbol resolution)`,
 
     banking: `## Multibank ROM Architecture
 - Meta required: META ROM_TOTAL_SIZE = 524288 and META ROM_BANK_SIZE = 16384
-- 32 banks × 16KB = 512KB max. Bank #31 fixed at $4000-$7FFF (always visible)
-- Bank switch register: $DF00 (write bank ID 0-31). NEVER $4000 or $D000.
-- Boot sequence: BIOS → $0000 (Bank #0) → STA $DF00 #31 → JMP MAIN (Bank #31)
-- CRITICAL: BIOS always jumps to $0000, NEVER to RESET vector. Bank switch MUST be in Bank #0.
-- Cross-bank calls auto-wrapped (save bank → switch → call → restore)
-- CURRENT_ROM_BANK RAM tracker at $C880
-- Phase 6.7: multibank linker. Phase 6.8: PDB with correct bank addresses
-- Known issue: VAR_ARG2 undefined in bank_31 if PRINT_TEXT not used in code
-- Source: core/src/backend/m6809/mod.rs lines 839-851 (boot), bank_wrappers.rs`,
+- Banks 0..N-2 are switched in at $0000-$3FFF; the last bank (helpers, = total/bank_size - 1) is fixed at $4000-$7FFF
+- Every bank is assembled with ORG $0000. Tested configuration: 4 banks × 16KB (64KB); >4 banks compiles but cross-bank resolution is incomplete
+- Bank switch register: $DF00 (write bank ID). NEVER $4000 or $D000.
+- Boot: BIOS → $0000 (Bank #0). MAIN and LOOP_BODY live in Bank #0.
+- CRITICAL: BIOS always jumps to $0000, NEVER to RESET vector.
+- Cross-bank calls auto-wrapped (save bank → switch → call → restore); CURRENT_ROM_BANK RAM tracker
+- Source: buildtools/vpy_bank_allocator/src/ (allocator.rs, graph.rs), buildtools/vpy_codegen/src/m6809/functions.rs (generate_functions_by_bank),
+         buildtools/vpy_linker/src/multi_bank_linker.rs (per-bank assembly + ROM image)`,
 
     draw_line: `## DRAW_LINE Optimization
 - DRAW_LINE(x0, y0, x1, y1, intensity)
-- Inline optimization: when all args constant AND |dx|,|dy| <= 127
-- Wrapper (DRAW_LINE_WRAPPER): auto-emitted only when segmentation needed
-- Segmentation: segment1=±127, segment2=remainder (for lines > 127px)
-- Variable args always use wrapper (safe fallback)
-- Source: core/src/backend/m6809/analysis.rs lines 259-283 (detection)
-         core/src/backend/m6809/emission.rs lines 260-368 (wrapper code)`,
+- Args are stored in DRAW_LINE_ARGS (5 words) and DRAW_LINE_WRAPPER is called
+- DRAW_LINE_WRAPPER (emitted only if DRAW_LINE is used): sets DP=$D0, Reset0Ref, intensity, moves to (x0,y0), draws to (x1,y1) with segmentation for long lines
+- Source: buildtools/vpy_codegen/src/m6809/builtins.rs (emit_draw_line)
+         buildtools/vpy_codegen/src/m6809/drawing.rs (DRAW_LINE_WRAPPER)`,
 
     music: `## Music System
 - PLAY_MUSIC("name") - plays .vmus file embedded in ROM
@@ -359,7 +358,7 @@ function getProjectDocs(topic) {
 - MIDI to PSG: period = 1_500_000 / (16 * freq). freq = 440 * 2^((note-69)/12)
 - note 60 (C4) → PSG period 358, note 69 (A4) → period 213 (= Freq_Table[26] de la BIOS)
 - PSG channels: 0=A, 1=B, 2=C. Velocity: 0-15. Noise period: 0-31.
-- Source: core/src/musres.rs (MusicResource), core/src/backend/m6809/mod.rs (injection)`,
+- Source: buildtools/vpy_codegen/src/musres.rs (MusicResource), buildtools/vpy_codegen/src/m6809/functions.rs (AUDIO_UPDATE injection)`,
 
     meta: `## VPy META Configuration
 - META TITLE = "Game Name"      - Cartridge title

@@ -214,8 +214,8 @@
 After creating a .vec file:
 
 1. **Validate JSON**: Check syntax with any JSON validator
-2. **Compile**: `cargo run --bin vectrexc -- build your_program.vpy --bin`
-3. **Check ASM**: Verify `DRAW_VECTOR("name") - N path(s)` appears
+2. **Compile**: `cargo run --bin vpy_cli -- build your_program.vpy -o your_program.bin`
+3. **Check ASM**: Run `cargo run --bin vpy_cli -- asm your_program.vpy` and verify the asset block (`; Generated from name.vec`, `; Total paths: N, points: M`) appears with the expected path count
 4. **Test Binary**: Load .bin in IDE and verify all paths render
 
 ## 📊 PROVEN WORKING EXAMPLES (2025-12-12)

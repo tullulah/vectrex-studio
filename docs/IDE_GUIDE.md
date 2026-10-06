@@ -29,7 +29,7 @@ If you open a single `.vpy` file without a project, the IDE compiles that file d
 
 ## 2. Editor
 
-The editor is powered by Monaco with full VPy language support via the LSP server (`core/src/lsp.rs`, binary `vpy_lsp`).
+The editor is powered by Monaco with full VPy language support via the LSP server (`buildtools/vpy_lsp`, binary `vpy_lsp`). The LSP uses the compiler's own parser, so editor diagnostics match build errors.
 
 ### LSP Features
 
@@ -56,7 +56,7 @@ The editor supports `.vpy` (VPy source), `.asm` (MC6809 assembly), and asset fil
 Click **Run** (or press **F5** when stopped) to:
 
 1. Save any unsaved changes
-2. Invoke the compiler (Core or Buildtools, depending on Settings)
+2. Invoke the compiler (`vpy_cli`) for the build target selected in Settings
 3. Stream output to the **Build Output** panel
 4. On success: load the ROM into the emulator and start it automatically
 
@@ -68,9 +68,9 @@ Click **Run** (or press **F5** when stopped) to:
 | **Compiler Output** | Raw stdout/stderr stream from the compiler process |
 | **Errors** | Diagnostics list — click any entry to jump to the source location |
 
-### Compiler backends
+### Compiler
 
-The compiler backend is selected in **Settings**. See [Settings](#7-settings).
+The IDE compiles with `vpy_cli`, the buildtools compiler bundled in `ide/electron/resources/`. It handles single-bank and multibank ROMs and generates `.pdb` debug symbols for source-level debugging. The hardware target is chosen in [Settings](#8-settings). See [COMPILER_STATUS.md](COMPILER_STATUS.md) for the command-line interface.
 
 ---
 
@@ -102,9 +102,9 @@ Click in the **gutter** (left margin) of any line in the editor to toggle a brea
 
 - Persisted across sessions (stored in SQLite)
 - Supported in both `.vpy` source files and `.asm` assembly files
-- Mapped to ROM addresses via the `.pdb` debug symbol file (requires Buildtools backend with `debug_symbols = true`)
+- Mapped to ROM addresses via the `.pdb` debug symbol file (requires `debug_symbols = true` in the project file)
 
-> **Note:** Breakpoints in `.vpy` files require a PDB file to map VPy lines → MC6809 addresses. Core backend does not generate PDB files — use Buildtools for source-level debugging.
+> **Note:** Breakpoints in `.vpy` files require a PDB file to map VPy lines → MC6809 addresses. Enable `debug_symbols` in the `.vpyproj` (or pass `--debug` to `vpy_cli`).
 
 ### Debug controls
 
@@ -236,24 +236,22 @@ Toggle **⚡ Conciso** to get shorter, more direct responses — useful when you
 | **PSG Log** | Sound chip activity log |
 | **Git** | Git status, staging, commits, history, stashes, remotes, tags |
 | **PyPilot (AI Assistant)** | AI chat, code generation, asset creation, IDE control via MCP |
-| **Settings** | Compiler backend selection |
+| **Settings** | Build target selection (M6809, RP2350, PiTrex, UVM2) |
 
 ---
 
 ## 8. Settings
 
-Open the **Settings** panel to choose the compiler backend.
+Open the **Settings** panel to choose the **Build Target** — the hardware `vpy_cli` compiles for.
 
-| Option | Description |
+| Target | Description |
 |--------|-------------|
-| **Core (Legacy)** | Original compiler. Stable, well-tested. Always outputs a fixed 32KB ROM. No PDB debug symbols. Recommended for most projects. |
-| **Buildtools (New)** | Modular 9-phase pipeline. Supports multibank ROMs (up to 4MB) and PDB debug symbol generation. Some edge cases may not compile correctly yet. |
+| **M6809 (Vectrex)** | Original Vectrex hardware. Produces a `.bin` ROM cartridge image (single-bank or multibank). |
+| **RP2350 (Debug Cartridge)** | ARM Thumb2 target for the RP2350 debug cartridge. Requires the `arm-none-eabi` toolchain on PATH. Options: build mode (flash to cart via XIP, or SD card / RAM-linked for the launcher), flash on Build & Run, and an SD card folder for auto-copy. |
+| **PiTrex (Pi Zero / ARMv6)** | ARM32 native target for the PiTrex cartridge. Produces a `.img` file. Requires `arm-none-eabi` and `PITREX_SDK`. |
+| **UVM2 (Ultimate Vectrex Multicart)** | ARM Thumb2 target for the Ultimate Vectrex Multicart 2. Produces a `.um2` raw binary for the SD card. |
 
-The selection is saved in localStorage and takes effect on the next build.
-
-**Which to use:**
-- Use **Core** if your game fits in 32KB and you need reliability.
-- Use **Buildtools** if you need multibank support or source-level debugging (breakpoints in `.vpy` files).
+Changes take effect on the next build.
 
 ---
 
@@ -292,7 +290,7 @@ levels = ["assets/levels/*.vplay"]
 | `project.name` | Yes | Display name |
 | `project.entry` | Yes | Main `.vpy` file (relative to project root) |
 | `build.output` | Yes | Output `.bin` path (relative to project root) |
-| `build.debug_symbols` | No | Set to `true` to enable PDB generation (Buildtools only) |
+| `build.debug_symbols` | No | Set to `true` to enable PDB generation |
 | `build.optimization` | No | Optimization level 0–2 (default: 2) |
 
 ---

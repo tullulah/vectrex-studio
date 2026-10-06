@@ -52,7 +52,6 @@ function App() {
   const updateContent = useEditorStore(s => s.updateContent);
   
   // Settings
-  const compilerBackend = useSettings(s => s.compiler);
   const buildTarget = useSettings(s => s.buildTarget);
   const pitrexCopyToSD = useSettings(s => s.pitrexCopyToSD);
   const pitrexSdPath = useSettings(s => s.pitrexSdPath);
@@ -688,7 +687,6 @@ function App() {
       const args: any = {
         path: filePath,
         autoStart: forSd ? false : autoRun,
-        compilerBackend, // from useSettings
         target: forSd ? 'rp2350' : buildTarget, // SD games are always rp2350
         pitrexCopyToSD,
         pitrexSdPath,
@@ -810,7 +808,7 @@ function App() {
       isCompilingRef.current = false;
       logger.debug('Build', 'Build process completed, flag cleared');
     }
-  }, [documents, compilerBackend, buildTarget, pitrexCopyToSD, pitrexSdPath, uvm2CopyToSD, uvm2SdPath, rp2350FlashMethod, rp2350FirmwareDir, rp2350SdPath, rp2350BuildMode]);
+  }, [documents, buildTarget, pitrexCopyToSD, pitrexSdPath, uvm2CopyToSD, uvm2SdPath, rp2350FlashMethod, rp2350FirmwareDir, rp2350SdPath, rp2350BuildMode]);
 
   const commandExec = useCallback(async (id: string, payload?: any) => {
     const apiFiles: any = (window as any).files;
@@ -1062,7 +1060,6 @@ def loop():
           const args: any = {
             path: filePath,
             autoStart: false,  // No auto-run, queremos control manual
-            compilerBackend, // from useSettings
             target: buildTarget, // from useSettings
             pitrexCopyToSD,
             pitrexSdPath,

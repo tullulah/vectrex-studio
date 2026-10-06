@@ -72,15 +72,24 @@ META ROM_BANK_SIZE = 16384
 
 ## Compiler Architecture — Summary
 
-| Phase | Description |
-|-------|-------------|
-| 0 | Asset discovery (assets/vectors/*.vec, assets/music/*.vmus) |
-| 1-3 | Parse → Unify (imports resolved, dot notation → PREFIX_NAME) |
-| 4 | MC6809 ASM codegen |
-| 5 | Asset embedding (FCB/FDB in ROM) |
-| 6.3+ | Multibank split if ROM_TOTAL_SIZE is defined |
+The only compiler is **buildtools** (`buildtools/`, binary `vpy_cli`), one Rust crate per phase:
 
-- Build: `cargo run --bin vectrexc -- build program.vpy --bin`
+| Phase | Crate | Description |
+|-------|-------|-------------|
+| 1 | vpy_loader | Load `.vpyproj`, discover assets (assets/vectors/*.vec, assets/music/*.vmus) |
+| 2 | vpy_parser | Parse VPy source to AST |
+| 3 | vpy_unifier | Merge modules, resolve imports (dot notation → PREFIX_NAME) |
+| 4 | vpy_bank_allocator | Assign functions/assets to banks if ROM_TOTAL_SIZE is defined |
+| 5 | vpy_codegen | AST → MC6809 ASM (assets embedded as FCB/FDB) |
+| 6 | vpy_assembler | ASM → object code |
+| 7 | vpy_linker | Symbol resolution, final addresses (source of truth) |
+| 8 | vpy_binary_writer | `.bin` ROM image |
+| 9 | vpy_debug_gen | `.pdb` debug symbols |
+
+- Build: `cargo run --bin vpy_cli -- build program.vpy -o program.bin [--target m6809|rp2350|pitrex|uvm2] [--debug]`
+- ASM only: `cargo run --bin vpy_cli -- asm program.vpy -o program.asm`
+- Compiler tests: `cd buildtools && cargo test --all`
+- Language server: `buildtools/vpy_lsp` (binary `vpy_lsp`), same parser as the compiler
 - Tests: `cargo test -p vectrex_emulator`
 
 ---

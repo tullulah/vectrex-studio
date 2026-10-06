@@ -731,27 +731,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
-name = "strum"
-version = "0.27.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
-dependencies = [
- "strum_macros",
-]
-
-[[package]]
-name = "strum_macros"
-version = "0.27.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "syn"
 version = "2.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -792,16 +771,7 @@ version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
 dependencies = [
- "thiserror-impl 1.0.69",
-]
-
-[[package]]
-name = "thiserror"
-version = "2.0.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
-dependencies = [
- "thiserror-impl 2.0.18",
+ "thiserror-impl",
 ]
 
 [[package]]
@@ -809,17 +779,6 @@ name = "thiserror-impl"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "thiserror-impl"
-version = "2.0.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1034,27 +993,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
-name = "vectrex_lang"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "lazy_static",
- "serde",
- "serde_json",
- "strum",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "toml",
- "tower-lsp",
-]
-
-[[package]]
 name = "vpy_assembler"
 version = "0.4.0"
 dependencies = [
- "thiserror 1.0.69",
+ "thiserror",
  "vpy_codegen",
 ]
 
@@ -1062,7 +1004,7 @@ dependencies = [
 name = "vpy_bank_allocator"
 version = "0.4.0"
 dependencies = [
- "thiserror 1.0.69",
+ "thiserror",
  "vpy_parser",
  "vpy_unifier",
 ]
@@ -1072,7 +1014,7 @@ name = "vpy_binary_writer"
 version = "0.4.0"
 dependencies = [
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror",
  "vpy_linker",
 ]
 
@@ -1102,7 +1044,7 @@ dependencies = [
  "anyhow",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror",
  "vpy_bank_allocator",
  "vpy_parser",
  "vpy_unifier",
@@ -1114,7 +1056,7 @@ version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror",
  "vpy_linker",
 ]
 
@@ -1124,7 +1066,7 @@ version = "0.4.0"
 dependencies = [
  "bincode",
  "serde",
- "thiserror 1.0.69",
+ "thiserror",
  "vpy_assembler",
  "vpy_bank_allocator",
  "vpy_codegen",
@@ -1139,22 +1081,32 @@ dependencies = [
  "glob",
  "serde",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror",
  "toml",
+]
+
+[[package]]
+name = "vpy_lsp"
+version = "0.4.0"
+dependencies = [
+ "serde_json",
+ "tokio",
+ "tower-lsp",
+ "vpy_parser",
 ]
 
 [[package]]
 name = "vpy_parser"
 version = "0.4.0"
 dependencies = [
- "thiserror 1.0.69",
+ "thiserror",
 ]
 
 [[package]]
 name = "vpy_unifier"
 version = "0.4.0"
 dependencies = [
- "thiserror 1.0.69",
+ "thiserror",
  "vpy_parser",
 ]
 

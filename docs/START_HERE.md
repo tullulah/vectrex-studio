@@ -30,7 +30,7 @@
 ## I want to work on the IDE
 
 → Source code lives in `ide/` (Electron shell + React/TypeScript frontend).
-→ LSP server: `core/src/lsp.rs` (binary: `vpy_lsp`, built with `cargo build --bin vpy_lsp`)
+→ LSP server: `buildtools/vpy_lsp/` (binary: `vpy_lsp`, built with `cargo build --bin vpy_lsp`; shares the compiler's parser)
 → MCP server: `ide/mcp-server/` (Node.js)
 
 ---

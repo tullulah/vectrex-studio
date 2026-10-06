@@ -12,7 +12,7 @@ You are a TypeScript/Electron frontend engineer specializing in the VPy IDE — 
 ide/
 ├── electron/           # Electron shell (main process)
 │   ├── main.ts         # App entry, window creation, IPC
-│   ├── resources/      # vectrexc binary, vpy_lsp binary
+│   ├── resources/      # vpy_cli + vpy_lsp binaries (built from buildtools/ by run-ide.sh)
 │   └── preload.ts      # Secure bridge to renderer
 ├── frontend/           # React + Vite UI (renderer process)
 │   ├── src/

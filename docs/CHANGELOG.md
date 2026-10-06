@@ -100,6 +100,15 @@ debug cartridge runs on a real console, and the Ultimate Vectrex Multicart 2
 - Short-stroke trimming and budget-based re-zero were removed (they broke on
   real hardware).
 
+### Removed
+
+- **Legacy `core/` compiler** (crate `vectrex_lang`, binary `vectrexc`).
+  Buildtools (`buildtools/`, binary `vpy_cli`) is now the only compiler.
+- **IDE compiler selector**: the Settings panel no longer has a
+  Buildtools/Core choice; every build goes through `vpy_cli`.
+- The language server `vpy_lsp` is now built from `buildtools/vpy_lsp`, on the
+  same parser as the compiler, so editor diagnostics match build errors.
+
 ---
 
 ## [v0.2.0] — 2026-03-10

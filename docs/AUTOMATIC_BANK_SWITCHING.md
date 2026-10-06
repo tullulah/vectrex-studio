@@ -476,8 +476,10 @@ def draw_all():
 
 ### Compilation Output (Verbose Mode)
 
+Illustrative output for a 512 KB configuration; the exact text printed by `vpy_cli --verbose` differs.
+
 ```
-$ cargo run --bin vectrexc -- build bigame.vpy --verbose
+$ vpy_cli build bigame.vpy -o build/bigame.bin --verbose
 
 Phase 1: Parse AST... OK
 Phase 2: Semantic analysis... OK
@@ -531,74 +533,21 @@ ROM map: 2 banks in use (0, 31)
 
 ## Implementation Details
 
-### Data Structures
+### Source Layout
 
-```rust
-// core/src/codegen.rs
-pub struct BankConfig {
-    pub rom_bank_size: u32,      // 16384 (16KB)
-    pub rom_total_size: u32,     // 524288 (512KB)
-    pub rom_bank_count: u8,      // 32
-    pub fixed_bank: u8,          // 31 (last)
-    pub rom_bank_reg: u16,       // 0x4000
-}
+Bank switching is implemented across these buildtools crates:
 
-pub struct FunctionBankMap {
-    pub assignments: HashMap<String, u8>,  // function → bank
-    pub wrappers: Vec<WrapperCode>,        // generated wrappers
-}
+| Concern | Location |
+|---------|----------|
+| `META ROM_TOTAL_SIZE` / `ROM_BANK_SIZE` parsing | `buildtools/vpy_parser/src/parser.rs` |
+| Bank configuration (`BankConfig`, `BankAllocator`) | `buildtools/vpy_bank_allocator/src/allocator.rs` |
+| Call graph and function clustering (`CallGraph`, `FunctionNode`, `CallEdge`, `FunctionCluster`) | `buildtools/vpy_bank_allocator/src/graph.rs` |
+| Per-bank code emission and cross-bank call sequences | `buildtools/vpy_codegen/src/m6809/` (`mod.rs`, `functions.rs`, `helpers.rs`) |
+| Splitting ASM by bank, per-bank assembly, multibank ROM image | `buildtools/vpy_linker/src/multi_bank_linker.rs` (`MultiBankLinker`) |
+| Bank address layout | `buildtools/vpy_linker/src/bank_layout.rs` |
+| Loading multibank ROMs in the emulator | `ide/frontend/src/components/panels/EmulatorPanel.tsx` |
 
-pub struct WrapperCode {
-    pub name: String,           // CALL_BANK0_level_1_init
-    pub target_func: String,    // level_1_init
-    pub target_bank: u8,        // 0
-    pub asm_code: String,       // Generated ASM code
-}
-
-// core/src/backend/m6809/call_graph.rs (NEW)
-pub struct CallGraph {
-    pub nodes: HashMap<String, FunctionNode>,
-    pub edges: Vec<CallEdge>,
-}
-
-pub struct FunctionNode {
-    pub name: String,
-    pub size_bytes: usize,
-    pub is_critical: bool,
-    pub call_frequency: u32,
-}
-
-pub struct CallEdge {
-    pub from: String,
-    pub to: String,
-    pub frequency: u32,
-}
-
-// core/src/backend/m6809/bank_optimizer.rs (NEW)
-pub struct BankOptimizer {
-    config: BankConfig,
-    graph: CallGraph,
-}
-
-impl BankOptimizer {
-    pub fn assign_banks(&self) -> FunctionBankMap;
-    pub fn generate_wrappers(&self, map: &FunctionBankMap) -> Vec<WrapperCode>;
-}
-```
-
-### Files to Create/Modify
-
-**New Files**:
-- `core/src/backend/m6809/call_graph.rs` — Call graph analysis
-- `core/src/backend/m6809/bank_optimizer.rs` — Bank assignment algorithm
-- `core/src/backend/m6809/multi_bank_linker.rs` — ROM generation
-
-**Modified Files**:
-- `core/src/parser.rs` — Parse META ROM_TOTAL_SIZE
-- `core/src/codegen.rs` — Add BankConfig to CodegenOptions
-- `core/src/backend/m6809/mod.rs` — Integrate bank system
-- `core/src/backend/m6809/emission.rs` — Emit per-bank sections
-- `ide/frontend/src/components/panels/EmulatorPanel.tsx` — Load multi-bank ROMs
+Only the linker (Phase 7) computes final addresses; see [COMPILER_STATUS.md](COMPILER_STATUS.md) for the full pipeline.
 
 ## Hardware Requirements
 

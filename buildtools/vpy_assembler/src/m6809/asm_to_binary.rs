@@ -309,7 +309,7 @@ fn resolve_include_path(include_path: &str) -> Option<PathBuf> {
     let workspace_root = {
         let mut current = base_dir.clone();
         loop {
-            if current.join("Cargo.toml").exists() && current.join("core").exists() {
+            if current.join("Cargo.toml").exists() && current.join("buildtools").exists() {
                 break Some(current);
             }
             match current.parent() {

@@ -5,8 +5,8 @@ A complete development environment for the Vectrex retro gaming console: Python-
 ## Project Layout
 
 ```
-buildtools/   — 9-phase modular Rust compiler (ACTIVE)
-core/         — Legacy monolithic compiler (being retired)
+buildtools/   — 9-phase modular Rust compiler (the only compiler; binary `vpy_cli`)
+  vpy_lsp/    — Language server (binary `vpy_lsp`), shares the compiler's parser
 ide/          — Electron IDE with React+Monaco frontend
   electron/   — Main process, IPC, bundled binaries
   frontend/   — React + Vite UI
@@ -54,7 +54,7 @@ Python-like syntax, compiles to MC6809 assembly. Key builtins: `WAIT_RECAL()`, `
 ## IDE
 
 - Electron + React + Monaco. State managed with Zustand.
-- LSP server: `ide/electron/resources/vpy_lsp` (Rust binary).
+- LSP server: `buildtools/vpy_lsp` (binary `vpy_lsp`, built with `cargo build --bin vpy_lsp`); `run-ide.sh` builds `vpy_cli` + `vpy_lsp` and copies them to `ide/electron/resources/`.
 - Emulator: JSVecX running in renderer process.
 - MCP server on port 9123 (IDE must be running first).
 

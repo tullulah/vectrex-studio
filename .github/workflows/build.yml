@@ -43,13 +43,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Run tests (core)
-        run: cargo test -p vectrex_lang --verbose
-
-      - name: Build binaries
-        run: cargo build --release -p vectrex_lang
-
-      # buildtools is the compiler the IDE runs (vpy_cli); it is its own workspace
       - name: Run tests (buildtools)
         run: cargo test --manifest-path buildtools/Cargo.toml --all
 
@@ -102,31 +95,25 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-release-
 
-      # Build Rust LSP binary
-      - name: Build LSP & Compiler
-        run: cargo build --release -p vectrex_lang
+      # vpy_cli/vpy_lsp are committed as macOS arm64 binaries; every platform must ship its own
+      - name: Build compiler & LSP (buildtools)
+        run: cargo build --release --bin vpy_cli --bin vpy_lsp   # root workspace: release profile with LTO
 
-      # vpy_cli is committed as a macOS arm64 binary; every platform must ship its own
-      - name: Build vpy_cli (buildtools)
-        run: cargo build --release --manifest-path buildtools/Cargo.toml --bin vpy_cli
-
-      # Copy LSP binary to electron resources
-      - name: Copy LSP binary (Unix)
+      # Copy compiler + LSP binaries to electron resources
+      - name: Copy binaries (Unix)
         if: matrix.platform != 'win'
         run: |
           mkdir -p ide/electron/resources
+          cp target/release/vpy_cli ide/electron/resources/
           cp target/release/vpy_lsp ide/electron/resources/
-          cp target/release/vectrexc ide/electron/resources/
-          cp buildtools/target/release/vpy_cli ide/electron/resources/
 
-      - name: Copy LSP binary (Windows)
+      - name: Copy binaries (Windows)
         if: matrix.platform == 'win'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path ide/electron/resources
+          Copy-Item target/release/vpy_cli.exe ide/electron/resources/
           Copy-Item target/release/vpy_lsp.exe ide/electron/resources/
-          Copy-Item target/release/vectrexc.exe ide/electron/resources/
-          Copy-Item buildtools/target/release/vpy_cli.exe ide/electron/resources/
 
       # Sync version from git tag (e.g. v0.2.0 → "0.2.0" in package.json)
       - name: Sync version from tag

@@ -6,7 +6,7 @@ members = [
     "buildtools/vpy_assembler",
     "buildtools/vpy_bank_allocator",
     "buildtools/vpy_cli",
-    "core",
+    "buildtools/vpy_lsp",
 ]
 resolver = "2"
 

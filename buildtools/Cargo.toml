@@ -11,6 +11,7 @@ members = [
     "vpy_binary_writer",
     "vpy_debug_gen",
     "vpy_cli", "vpy_disasm",
+    "vpy_lsp",
 ]
 
 [workspace.package]
