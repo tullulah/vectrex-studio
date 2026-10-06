@@ -1529,15 +1529,17 @@ export async function executeExternalBuild(args: {
 
   // The project's pinned SDK. A C project may not use it, so a failure only warns:
   // its own build reports what is missing.
-  const sdk = await resolveProjectSdk(manifestPath, logSdk, sendSdkProgress);
+  // uvm2 builds also need the pico-sdk that SDK version asks for.
+  const isUvm2 = (target || manifest.project.target) === 'uvm2';
+  const sdk = await resolveProjectSdk(manifestPath, logSdk, sendSdkProgress, { pico: isUvm2 });
   if ('error' in sdk) {
     win?.webContents.send('run://stderr', `[SDK] ${sdk.error}\n`);
   } else {
-    win?.webContents.send('run://stdout', `[SDK] ${sdk.version} (${sdk.dir})\n`);
+    win?.webContents.send('run://stdout', `[SDK] ${sdk.version} (${sdk.dir})${sdk.picoSdkDir ? `, pico-sdk ${sdk.picoSdkDir}` : ''}\n`);
   }
 
   // Compose the child env: IDE env + project SDK + optional toolchain PATH prefix + overrides.
-  const env: NodeJS.ProcessEnv = { ...process.env, ...('error' in sdk ? {} : sdkEnv(sdk.dir)), ...(manifest.env || {}) };
+  const env: NodeJS.ProcessEnv = { ...process.env, ...('error' in sdk ? {} : sdkEnv(sdk.dir, sdk.picoSdkDir)), ...(manifest.env || {}) };
   if (manifest.toolchain?.path) {
     env.PATH = `${manifest.toolchain.path}${require('path').delimiter}${env.PATH || ''}`;
   }
@@ -2066,12 +2068,12 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
     const envHijo: NodeJS.ProcessEnv = { ...process.env };
     // The project's pinned SDK (downloaded if missing), for the targets that use it.
     if (isProjectMode && (target === 'uvm2' || target === 'pitrex')) {
-      const sdk = await resolveProjectSdk(targetPath, logSdk, sendSdkProgress);
+      const sdk = await resolveProjectSdk(targetPath, logSdk, sendSdkProgress, { pico: target === 'uvm2' });
       if ('error' in sdk) {
         mainWindow?.webContents.send('run://stderr', `[SDK] ${sdk.error}\n`);
         if (target === 'uvm2') return { error: 'sdk_unavailable', detail: sdk.error };
       } else {
-        Object.assign(envHijo, sdkEnv(sdk.dir));
+        Object.assign(envHijo, sdkEnv(sdk.dir, sdk.picoSdkDir));
         mainWindow?.webContents.send('run://stdout', `[SDK] ${sdk.version} (${sdk.dir})\n`);
       }
     }

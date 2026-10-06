@@ -58,6 +58,9 @@ debug cartridge runs on a real console, and the Ultimate Vectrex Multicart 2
   in an `[sdk]` table; the IDE downloads it on demand into
   `~/VectrexStudio/sdk/<tag>/`. Unpinned projects are pinned to the latest tag on
   first build. See [SDK_VERSIONS.md](SDK_VERSIONS.md).
+- **pico-sdk on demand** for uvm2 builds: the version the SDK release asks for
+  (2.2.0) is downloaded into `~/VectrexStudio/pico-sdk/<version>/`; the Arm toolchain
+  is found in its standard install locations instead of a fixed version path.
 
 ### Added — Emulator and IDE
 

@@ -117,24 +117,47 @@ export function ensureSdk(tag: string, onProgress?: (p: SdkProgress) => void): P
   return p;
 }
 
-async function installSdk(tag: string, onProgress?: (p: SdkProgress) => void): Promise<string> {
-  const dest = sdkDirFor(tag);
-  if (await isSdkInstalled(tag)) return dest;
+function installSdk(tag: string, onProgress?: (p: SdkProgress) => void): Promise<string> {
+  return installTarball({
+    what: `SDK ${tag}`,
+    url: `https://codeload.github.com/${SDK_REPO}/tar.gz/refs/tags/${tag}`,
+    root: sdkRootDir(),
+    name: tag,
+    mustContain: join('uvm2-sdk', 'uvm2_bus.c'),
+    marker: { tag, repo: SDK_REPO },
+    progressTag: tag,
+    onProgress,
+  });
+}
 
-  const root = sdkRootDir();
-  await fs.mkdir(root, { recursive: true });
+/**
+ * Download a GitHub tag tarball and install it as <root>/<name>, atomically: it is
+ * extracted next to the destination, checked, marked complete, then renamed into place.
+ * Already installed (marker present) → returns at once.
+ */
+async function installTarball(o: {
+  what: string; url: string; root: string; name: string; mustContain: string;
+  marker: Record<string, string>; progressTag: string; onProgress?: (p: SdkProgress) => void;
+}): Promise<string> {
+  const dest = join(o.root, o.name);
+  try {
+    await fs.access(join(dest, COMPLETE_MARKER));
+    return dest;
+  } catch { /* not installed */ }
+
+  await fs.mkdir(o.root, { recursive: true });
   const stamp = `${process.pid}-${Date.now()}`;
-  const tarball = join(root, `.download-${tag}-${stamp}.tar.gz`);
-  const staging = join(root, `.extract-${tag}-${stamp}`);
+  const tarball = join(o.root, `.download-${o.name}-${stamp}.tar.gz`);
+  const staging = join(o.root, `.extract-${o.name}-${stamp}`);
+  const tag = o.progressTag;
 
   try {
     // 1. Download the tag's source tarball (public repo: no token needed).
-    const url = `https://codeload.github.com/${SDK_REPO}/tar.gz/refs/tags/${tag}`;
-    const res = await fetch(url, { headers: { 'User-Agent': 'VectrexStudio' } });
+    const res = await fetch(o.url, { headers: { 'User-Agent': 'VectrexStudio' } });
     if (!res.ok || !res.body) {
       throw new Error(res.status === 404
-        ? `SDK version ${tag} does not exist in ${SDK_REPO}`
-        : `Download failed for SDK ${tag}: HTTP ${res.status}`);
+        ? `${o.what} does not exist (${o.url})`
+        : `Download failed for ${o.what}: HTTP ${res.status}`);
     }
     const total = Number(res.headers.get('content-length')) || null;
     let received = 0;
@@ -145,34 +168,81 @@ async function installSdk(tag: string, onProgress?: (p: SdkProgress) => void): P
       if (done) break;
       received += value.length;
       if (!out.write(value)) await new Promise<void>(r => out.once('drain', () => r()));
-      onProgress?.({ tag, phase: 'download', received, total });
+      o.onProgress?.({ tag, phase: 'download', received, total });
     }
     await new Promise<void>((resolve, reject) => out.end((err?: Error | null) => (err ? reject(err) : resolve())));
 
     // 2. Extract next to the final folder, so the rename below is atomic.
-    onProgress?.({ tag, phase: 'extract', received, total });
+    o.onProgress?.({ tag, phase: 'extract', received, total });
     await fs.mkdir(staging, { recursive: true });
     await runTar(['-xzf', tarball, '-C', staging, '--strip-components=1']);
 
-    // 3. Refuse a tarball that isn't an SDK.
+    // 3. Refuse a tarball that isn't what we expected.
     try {
-      await fs.access(join(staging, 'uvm2-sdk', 'uvm2_bus.c'));
+      await fs.access(join(staging, o.mustContain));
     } catch {
-      throw new Error(`SDK ${tag} downloaded but its layout is not recognised (no uvm2-sdk/uvm2_bus.c)`);
+      throw new Error(`${o.what} downloaded but its layout is not recognised (no ${o.mustContain})`);
     }
     await fs.writeFile(join(staging, COMPLETE_MARKER), JSON.stringify({
-      tag, repo: SDK_REPO, installedAt: new Date().toISOString(),
+      ...o.marker, installedAt: new Date().toISOString(),
     }, null, 2) + '\n');
 
     // 4. Publish. A leftover folder without the marker is a broken earlier attempt.
     await fs.rm(dest, { recursive: true, force: true });
     await fs.rename(staging, dest);
-    onProgress?.({ tag, phase: 'done', received, total });
+    o.onProgress?.({ tag, phase: 'done', received, total });
     return dest;
   } finally {
     await fs.rm(tarball, { force: true }).catch(() => {});
     await fs.rm(staging, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+// ─── pico-sdk (uvm2 builds) ────────────────────────────────────────────────
+//
+// The Raspberry Pi pico-sdk is too big to ship inside the SDK, and it is pinned, not
+// "latest": the startup contract the multicart loader validates (IMAGE_DEF block,
+// no_flash binary type, the weak isr_svcall the SDK overrides) can move between
+// releases. An SDK may name its pico-sdk in a PICO_SDK_VERSION file at its root;
+// every SDK tag so far uses 2.2.0. Installed without submodules (TinyUSB, lwIP,
+// BTstack, mbedTLS), which no uvm2 image enables — same as the starter kit's setup.sh.
+
+export const DEFAULT_PICO_SDK_VERSION = '2.2.0';
+const PICO_SDK_REPO = 'raspberrypi/pico-sdk';
+const PICO_VERSION_RE = /^\d+\.\d+\.\d+$/;
+
+export function picoSdkRootDir(): string {
+  return process.env.VECTREX_STUDIO_PICO_SDK_DIR || join(os.homedir(), 'VectrexStudio', 'pico-sdk');
+}
+
+/** The pico-sdk version an installed SDK asks for. */
+export async function picoSdkVersionFor(sdkDir: string): Promise<string> {
+  try {
+    const v = (await fs.readFile(join(sdkDir, 'PICO_SDK_VERSION'), 'utf-8')).trim();
+    if (PICO_VERSION_RE.test(v)) return v;
+  } catch { /* file absent: every SDK tag so far */ }
+  return DEFAULT_PICO_SDK_VERSION;
+}
+
+const picoInFlight = new Map<string, Promise<string>>();
+
+/** Make sure pico-sdk `version` is installed; download it if not. Returns its folder. */
+export function ensurePicoSdk(version: string, onProgress?: (p: SdkProgress) => void): Promise<string> {
+  if (!PICO_VERSION_RE.test(version)) return Promise.reject(new Error(`Invalid pico-sdk version "${version}"`));
+  const running = picoInFlight.get(version);
+  if (running) return running;
+  const p = installTarball({
+    what: `pico-sdk ${version}`,
+    url: `https://codeload.github.com/${PICO_SDK_REPO}/tar.gz/refs/tags/${version}`,
+    root: picoSdkRootDir(),
+    name: version,
+    mustContain: 'pico_sdk_init.cmake',
+    marker: { version, repo: PICO_SDK_REPO },
+    progressTag: `pico-sdk-${version}`,
+    onProgress,
+  }).finally(() => picoInFlight.delete(version));
+  picoInFlight.set(version, p);
+  return p;
 }
 
 /** bsdtar ships with macOS and Windows 10+, GNU tar with Linux; both take these flags. */
@@ -189,8 +259,9 @@ function runTar(args: string[]): Promise<void> {
 // ─── Environment for consumers ─────────────────────────────────────────────
 
 /** Every variable an SDK consumer reads: vpy_cli, the simulator build, makefiles. */
-export function sdkEnv(dir: string): Record<string, string> {
+export function sdkEnv(dir: string, picoSdkDir?: string): Record<string, string> {
   return {
+    ...(picoSdkDir ? { UVM2_PICO_SDK: picoSdkDir, PICO_SDK_PATH: picoSdkDir } : {}),
     UVMC2_SDK: dir,
     UVM2_SDK_DIR: join(dir, 'uvm2-sdk'),   // vpy_cli
     VPY_C_DIR: join(dir, 'vpy-c'),         // vpy_cli
@@ -283,19 +354,32 @@ export async function projectSdkVersion(projectFile: string): Promise<ProjectSdk
   return { version: latest, pinned: true };
 }
 
-/** Version + installed folder for a project, downloading the SDK if needed. */
+/**
+ * Version + installed folder for a project, downloading the SDK if needed. With
+ * `pico: true` (uvm2 builds) also the pico-sdk that SDK asks for, downloaded if needed.
+ */
 export async function resolveProjectSdk(
   projectFile: string,
   log: (line: string) => void,
   onProgress?: (p: SdkProgress) => void,
-): Promise<{ version: string; dir: string } | { error: string }> {
+  opts: { pico?: boolean } = {},
+): Promise<{ version: string; dir: string; picoSdkDir?: string } | { error: string }> {
   const v = await projectSdkVersion(projectFile);
   if ('error' in v) return v;
   if (v.pinned) log(`[SDK] ${projectFile} had no [sdk] version — pinned to ${v.version}\n`);
   if (!(await isSdkInstalled(v.version))) log(`[SDK] Downloading SDK ${v.version} into ${sdkDirFor(v.version)}...\n`);
   try {
     const dir = await ensureSdk(v.version, onProgress);
-    return { version: v.version, dir };
+    if (!opts.pico) return { version: v.version, dir };
+    const picoVersion = await picoSdkVersionFor(dir);
+    const picoDir = join(picoSdkRootDir(), picoVersion);
+    try {
+      await fs.access(join(picoDir, COMPLETE_MARKER));
+    } catch {
+      log(`[SDK] Downloading pico-sdk ${picoVersion} (needed by SDK ${v.version}) into ${picoDir}...\n`);
+    }
+    const picoSdkDir = await ensurePicoSdk(picoVersion, onProgress);
+    return { version: v.version, dir, picoSdkDir };
   } catch (e: any) {
     return { error: e?.message || String(e) };
   }

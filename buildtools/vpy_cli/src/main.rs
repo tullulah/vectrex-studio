@@ -3,6 +3,7 @@ use colored::*;
 use std::path::{Path, PathBuf};
 use anyhow::{Result, Context};
 
+mod pico;
 mod sdk;
 
 // Use centralized asset discovery from vpy_codegen (ensures consistent sorting)
@@ -1891,27 +1892,28 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     println!("  {} UVM2 SDK: {}", "✓".green(), sdk_resolved.describe());
     let sdk_dir = sdk_resolved.dir;
 
-    // El pico-sdk vive en el checkout de Ralf: esta en .gitignore y pesa 391 MB,
-    // asi que no se puede asumir la ruta sin decirlo. UVM2_PICO_SDK la sustituye.
-    let pico_sdk = std::env::var("UVM2_PICO_SDK").map(PathBuf::from).unwrap_or_else(|_| {
-        PathBuf::from(std::env::var("HOME").unwrap_or_default())
-            .join("projects/vectrex-arcade-private/hardware/uvm2/RP2350_CrazyStones/pico-sdk")
-    });
-    if !pico_sdk.join("cmake/preload/toolchains/pico_arm_cortex_m33_gcc.cmake").exists() {
-        return Err(anyhow::anyhow!(
-            "pico-sdk no encontrado en {}.\n\
-             El objetivo uvm2 enlaza por el pico-sdk (uvm2_pico.cmake): el camino\n\
-             viejo, hecho a mano, dibuja un vector fantasma por frame.\n\
-             Ponlo con UVM2_PICO_SDK=<ruta>.", pico_sdk.display()));
+    // The pico-sdk this SDK release asks for, and the Arm toolchain (see pico.rs).
+    let sdk_root = sdk_dir.parent().map(Path::to_path_buf).unwrap_or_else(|| sdk_dir.clone());
+    let pico_version = pico::pico_sdk_version_for(&sdk_root);
+    let pico_sdk = pico::resolve_pico_sdk(
+        std::env::var_os("UVM2_PICO_SDK").map(PathBuf::from),
+        std::env::var_os("PICO_SDK_PATH").map(PathBuf::from),
+        pico::default_pico_home().as_deref(),
+        &pico_version,
+    ).map_err(|msg| anyhow::anyhow!(
+        "{}\n  The uvm2 target links through the pico-sdk (uvm2_pico.cmake): the old hand-made\n  \
+         path draws a ghost vector every frame.", msg))?;
+    println!("  {} pico-sdk: {}", "✓".green(), pico_sdk.display());
+    if verbose {
+        println!("  pico-sdk {} is the one {} asks for", pico_version, sdk_root.display());
     }
-    // Homebrew's arm-none-eabi-gcc has no nosys.specs — this toolchain does.
-    let arm_tc = std::env::var("UVM2_ARM_TOOLCHAIN")
-        .unwrap_or_else(|_| "/Applications/ArmGNUToolchain/15.2.rel1/arm-none-eabi".into());
+    let arm_tc = pico::resolve_arm_toolchain(
+        std::env::var_os("UVM2_ARM_TOOLCHAIN").map(PathBuf::from),
+        &pico::standard_toolchain_candidates(),
+    ).map_err(|msg| anyhow::anyhow!("{}", msg))?;
+    println!("  {} Arm toolchain: {}", "✓".green(), arm_tc.display());
 
     let cmake_build = build_dir.join("uvm2");
-    if verbose {
-        println!("  pico-sdk:  {}", pico_sdk.display());
-    }
 
     println!("\n{}", "Phase 4: CMake configure (pico-sdk)".bright_cyan().bold());
     // A CACHE FROM ANOTHER SDK DIRECTORY IS NOT REUSABLE. CMake refuses it outright ("does not
@@ -1924,15 +1926,23 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         let home = text.lines()
             .find_map(|l| l.strip_prefix("CMAKE_HOME_DIRECTORY:INTERNAL="))
             .map(PathBuf::from);
-        let same = match (&home, want.canonicalize()) {
+        let same_path = |a: &Option<PathBuf>, b: &Path| match (a, b.canonicalize()) {
             (Some(h), Ok(w)) => h.canonicalize().map(|h| h == w).unwrap_or(false),
             _ => false,
         };
+        // The pico-sdk is baked into the cache too: a different one (another version, or the
+        // move from a private checkout to ~/VectrexStudio/pico-sdk) needs a fresh configure.
+        let cached_pico = text.lines()
+            .find_map(|l| l.strip_prefix("PICO_SDK_PATH:").and_then(|r| r.split_once('=')).map(|(_, v)| PathBuf::from(v)));
+        let same = same_path(&home, &want) && (cached_pico.is_none() || same_path(&cached_pico, &pico_sdk));
         if !same {
+            let (was, now) = if same_path(&home, &want) {
+                (cached_pico.as_ref().map(|p| format!("pico-sdk {}", p.display())), format!("pico-sdk {}", pico_sdk.display()))
+            } else {
+                (home.as_ref().map(|h| h.display().to_string()), want.display().to_string())
+            };
             println!("  {} CMake cache made for {}, now {}: removing it",
-                     "note:".yellow(),
-                     home.as_ref().map(|h| h.display().to_string()).unwrap_or_else(|| "?".into()),
-                     want.display());
+                     "note:".yellow(), was.unwrap_or_else(|| "?".into()), now);
             let _ = std::fs::remove_file(&cache);
             let _ = std::fs::remove_dir_all(cmake_build.join("CMakeFiles"));
         }
@@ -1947,7 +1957,7 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         .arg(format!("-DCMAKE_TOOLCHAIN_FILE={}",
              pico_sdk.join("cmake/preload/toolchains/pico_arm_cortex_m33_gcc.cmake").display()))
         .arg(format!("-DPICO_SDK_PATH={}", pico_sdk.display()))
-        .arg(format!("-DPICO_TOOLCHAIN_PATH={}", arm_tc))
+        .arg(format!("-DPICO_TOOLCHAIN_PATH={}", arm_tc.display()))
         .arg(format!("-DUVM2_SDK_DIR={}", sdk_dir.display()))
         // uvm2_pico.cmake envuelve el .bin en .um2 llamando a vpy_cli. Somos
         // nosotros: se le pasa nuestro propio directorio en vez de confiar en

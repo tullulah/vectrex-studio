@@ -15,7 +15,7 @@ releases are installed, which builds need them, and how command-line builds find
 - [How the IDE passes the SDK to a build](#how-the-ide-passes-the-sdk-to-a-build)
 - [Building outside the IDE](#building-outside-the-ide)
 - [Project Settings panel](#project-settings-panel)
-- [What the SDK does not cover](#what-the-sdk-does-not-cover)
+- [pico-sdk and the Arm toolchain (uvm2)](#pico-sdk-and-the-arm-toolchain-uvm2)
 - [Related](#related)
 
 ## Pinning a version
@@ -135,11 +135,30 @@ With a project open, the **Project Settings** sidebar panel
   and layout are preserved;
 - downloads a release with progress.
 
-## What the SDK does not cover
+## pico-sdk and the Arm toolchain (uvm2)
 
-UVM2 builds also need the **pico-sdk** (`UVM2_PICO_SDK`) and an **Arm GNU toolchain**
-(`UVM2_ARM_TOOLCHAIN`). These remain external installs and are not managed by the SDK
-versioning described here. See [UVM2_TARGET.md](UVM2_TARGET.md).
+UVM2 builds link through the Raspberry Pi **pico-sdk**. It is pinned, not "latest":
+the startup contract the multicart loader validates (IMAGE_DEF block, `no_flash`
+binary type, the weak `isr_svcall` the SDK overrides) can move between pico-sdk
+releases.
+
+- **Which version:** the one the SDK release asks for, in a `PICO_SDK_VERSION` file at
+  its root. Every release so far has none and uses **2.2.0**.
+- **Download:** the IDE fetches it like the SDK, on the first uvm2 build, into
+  `~/VectrexStudio/pico-sdk/<version>/` (override the root with
+  `VECTREX_STUDIO_PICO_SDK_DIR`), with the same `.vectrex-studio-sdk.json` marker. It
+  is the GitHub tag tarball (~2 MB, ~26 MB installed) **without submodules** —
+  TinyUSB, lwIP, BTstack and mbedTLS, which no uvm2 image enables.
+- **Passed to builds** as `UVM2_PICO_SDK` and `PICO_SDK_PATH`. Only uvm2 builds get it.
+- **vpy_cli** finds it by `UVM2_PICO_SDK`, then `PICO_SDK_PATH`, then
+  `~/VectrexStudio/pico-sdk/<version>/`; it never downloads. `uvm2.mk` reads the same
+  variables. A CMake cache made with a different pico-sdk is discarded and reconfigured.
+
+The **Arm GNU Toolchain** is not downloaded: it is large and platform-specific. vpy_cli
+and `uvm2.mk` look for it in `UVM2_ARM_TOOLCHAIN`, then `/Applications/ArmGNUToolchain/*`,
+`/opt/arm-gnu-toolchain*` and `/usr/local/arm-gnu-toolchain*` (newest first). It must be
+the Arm build from developer.arm.com: Homebrew's `arm-none-eabi-gcc` ships no
+`nosys.specs`, which the pico-sdk link needs, and is rejected with that reason.
 
 ## Related
 
