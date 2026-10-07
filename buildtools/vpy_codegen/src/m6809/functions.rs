@@ -356,6 +356,7 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
 
 fn generate_function_body(func: &Function, asm: &mut String, assets: &[AssetInfo]) -> Result<(), String> {
     // Set parameter mapping so identifiers referencing params use VAR_ARGn
+    context::set_current_function(&vpy_parser::symbols::m6809_label(&func.name));
     if !func.params.is_empty() {
         context::set_current_params(&func.params);
     }
@@ -368,6 +369,7 @@ fn generate_function_body(func: &Function, asm: &mut String, assets: &[AssetInfo
     if !func.params.is_empty() {
         context::clear_current_params();
     }
+    context::set_current_function("");
     Ok(())
 }
 
@@ -388,6 +390,18 @@ fn primary_builtin_call(stmt: &Stmt) -> Option<&str> {
         }
     }
     None
+}
+
+/// Error text for indexing / iterating a name that is not an array.
+pub(crate) fn not_an_array_message(name: &str) -> String {
+    format!(
+        "`{name}` is not an array. On m6809 you can index a global array \
+         (`xs = [..]`, `const XS = [..]`) or a function parameter that receives one"
+    )
+}
+
+fn not_an_array_error(name: &str, line: usize) -> String {
+    format!("line {line}: {}", not_an_array_message(name))
 }
 
 /// A global array name is a fixed base address, not a variable: `arr = ...` /
@@ -433,56 +447,51 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
                     }
                 }
                 
-                vpy_parser::AssignTarget::Index { target: array_expr, index, .. } => {
-                    // Array indexed assignment: arr[index] = value
-                    // Only support simple variable arrays (not complex expressions)
-                    let array_name = if let vpy_parser::Expr::Ident(id) = &**array_expr {
-                        &id.name
-                    } else {
-                        return Err("Complex array expressions not yet supported in assignment".to_string());
+                vpy_parser::AssignTarget::Index { target: array_expr, index, source_line, .. } => {
+                    // Array element assignment: arr[index] = value.
+                    // `arr` is a global array (base = its data label) or a parameter
+                    // holding the base address of the array the caller passed.
+                    let array_id = match &**array_expr {
+                        vpy_parser::Expr::Ident(id) => id,
+                        _ => {
+                            return Err(format!(
+                                "line {}: only a named array can be assigned through an index on m6809 (e.g. xs[i] = v)",
+                                source_line
+                            ))
+                        }
+                    };
+                    let Some((base, elem)) = context::resolve_array(&array_id.name) else {
+                        return Err(not_an_array_error(&array_id.name, *source_line));
                     };
 
-                    // Get element size for stride calculation
-                    let element_size = context::get_var_size(array_name).bytes;
-
-                    // 1. Evaluate index first; D = index after emit
+                    // 1. D = index * element size
                     expressions::emit_simple_expr(index, asm, assets);
-
-                    // Stride multiply: only if element_size == 2
-                    if element_size == 2 {
+                    if elem.bytes == 2 {
                         asm.push_str("    ASLB            ; Multiply index by 2 (16-bit elements)\n");
                         asm.push_str("    ROLA\n");
                     }
-                    // For 8-bit elements, stride is 1, no multiply needed
 
-                    asm.push_str("    STD TMPPTR      ; Save offset temporarily\n");
-
-                    // 2. Load array base address (RAM for mutable, ROM for const)
-                    // Use context to determine which label to use
-                    let name_upper = array_name.to_uppercase();
-                    let label = if context::is_mutable_array(array_name) {
-                        format!("VAR_{}_DATA", name_upper)  // RAM
-                    } else {
-                        format!("ARRAY_{}_DATA", name_upper)  // ROM
-                    };
-                    asm.push_str(&format!("    LDD #{}  ; Array data address\n", label));
-
-                    // 3. Add offset to base pointer
-                    asm.push_str("    TFR D,X         ; X = array base pointer\n");
-                    asm.push_str("    LDD TMPPTR      ; D = offset\n");
-                    asm.push_str("    LEAX D,X        ; X = base + offset\n");
+                    // 2. X = base + offset
+                    match &base {
+                        context::ArrayBase::Label(label) => {
+                            asm.push_str(&format!("    LDX #{}  ; Array data address\n", label));
+                            asm.push_str("    LEAX D,X        ; X = base + offset\n");
+                        }
+                        context::ArrayBase::Pointer(slot) => {
+                            asm.push_str(&format!("    ADDD >{}  ; + array base address (parameter)\n", slot));
+                            asm.push_str("    TFR D,X         ; X = base + offset\n");
+                        }
+                    }
                     asm.push_str("    PSHS X          ; Save computed address (stack-safe across function calls)\n");
 
-                    // 4. Evaluate value to assign
+                    // 3. Evaluate value to assign
                     expressions::emit_simple_expr(value, asm, assets);
 
-                    // 5. Store value at computed address with correct width dispatch
+                    // 4. Store with the element width
                     asm.push_str("    PULS X          ; Restore computed address\n");
-                    if element_size == 1 {
-                        // 8-bit store: B holds low byte from emit_simple_expr (LDX doesn't modify D/B)
+                    if elem.bytes == 1 {
                         asm.push_str("    STB ,X          ; Store 8-bit value\n");
                     } else {
-                        // 16-bit store: D still holds value from emit_simple_expr (LDX doesn't modify D)
                         asm.push_str("    STD ,X          ; Store 16-bit value\n");
                     }
                 }
@@ -493,35 +502,37 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
             }
         }
         
-        Stmt::CompoundAssign { target, op, value, .. } => {
-            // CRITICAL FIX (2026-02-22): Stack balance - use TMPVAL instead of PSHS/PULS
-            // Load current value, save to TMPVAL, evaluate right side, perform op
+        Stmt::CompoundAssign { target, op, value, source_line } => {
+            // `t op= v` is `t = t op v`: the binop code keeps both operands intact
+            // whatever `v` is, and the store uses the target's width.
             match target {
-                vpy_parser::AssignTarget::Ident { name, .. } => {
+                vpy_parser::AssignTarget::Ident { name, source_line: l, col } => {
                     reject_array_rebind(name)?;
-                    // IMPORTANT: Resolve to VAR_ARGn if this is a function parameter
+                    let current = Expr::Ident(vpy_parser::IdentInfo { name: name.clone(), source_line: *l, col: *col });
+                    let combined = Expr::Binary { op: *op, left: Box::new(current), right: Box::new(value.clone()) };
+                    expressions::emit_simple_expr(&combined, asm, assets);
                     let var_label = expressions::resolve_var_label(name);
-                    asm.push_str(&format!("    LDD >{}\n", var_label));
-                    asm.push_str("    STD TMPVAL          ; Save left operand\n");
-
-                    // Evaluate right side; D = value after emit
-                    expressions::emit_simple_expr(value, asm, assets);
-
-                    // Perform operation
-                    match op {
-                        vpy_parser::BinOp::Add => asm.push_str("    ADDD TMPVAL         ; D = D + TMPVAL\n"),
-                        vpy_parser::BinOp::Sub => {
-                            asm.push_str("    STD TMPPTR          ; Save right operand\n");
-                            asm.push_str("    LDD TMPVAL          ; Get left operand\n");
-                            asm.push_str("    SUBD TMPPTR         ; D = left - right\n");
-                        }
-                        _ => return Err(format!("Aug-assign {:?} not yet supported", op)),
+                    if context::get_var_size(name).bytes == 1 {
+                        asm.push_str(&format!("    STB {}\n", var_label));
+                    } else {
+                        asm.push_str(&format!("    STD {}\n", var_label));
                     }
-
-                    // Store back
-                    asm.push_str(&format!("    STD {}\n", var_label));
                 }
-                _ => return Err("Complex assignment targets not yet supported".to_string()),
+                // `xs[i] op= v` with a simple index (evaluated twice, so it must
+                // have no side effects).
+                vpy_parser::AssignTarget::Index { target: arr, index, .. } if expressions::is_simple(index) => {
+                    let element = Expr::Index { target: arr.clone(), index: index.clone() };
+                    let combined = Expr::Binary { op: *op, left: Box::new(element), right: Box::new(value.clone()) };
+                    let assign = Stmt::Assign { target: target.clone(), value: combined, source_line: *source_line };
+                    generate_statement(&assign, asm, assets, loop_labels)?;
+                }
+                _ => {
+                    return Err(format!(
+                        "line {}: compound assignment to a field, or to an element with a computed index \
+                         (`xs[i + 1] += v`), is not supported on m6809; write it out: `xs[j] = xs[j] + v`",
+                        source_line
+                    ))
+                }
             }
         }
         
@@ -621,27 +632,45 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
         }
 
         Stmt::ForIn { var, iterable, body, source_line, .. } => {
+            // `for v in xs` iterates a global array: its length is the compile-time
+            // ARRAY_<NAME>_LEN and each element is read with the array's own
+            // element size and sign (u8/i8 = 1 byte, untyped/i16/u16 = 2 bytes).
+            let array_id = match iterable {
+                Expr::Ident(id) => id,
+                _ => {
+                    return Err(format!(
+                        "line {}: `for {} in ...` needs the name of a global array on m6809 (its length must be known at compile time)",
+                        source_line, var
+                    ))
+                }
+            };
+            let (base_label_value, elem) = match context::resolve_array(&array_id.name) {
+                Some((context::ArrayBase::Label(label), elem)) => (label, elem),
+                Some((context::ArrayBase::Pointer(_), _)) => {
+                    return Err(format!(
+                        "line {}: `for {} in {}`: '{}' is a parameter, so its length is not known at compile time on m6809. \
+                         Pass the length as another argument and use `for i in range(0, n)`.",
+                        source_line, var, array_id.name, array_id.name
+                    ))
+                }
+                None => return Err(not_an_array_error(&array_id.name, *source_line)),
+            };
+
             let ls = fresh_label("FI");
             let li = fresh_label("FI_INC");  // continue target
             let le = fresh_label("FI_END");
             let mut inner_labels = loop_labels.to_vec();
             inner_labels.push((le.clone(), li.clone()));
 
-            let var_label  = format!("VAR_{}", var.to_uppercase());
+            let var_label  = expressions::resolve_var_label(var);
+            let var_size   = context::get_var_size(var);
             let ctr_label  = format!("VAR__FI_{}", source_line);
             let base_label = format!("VAR__FI_{}_BASE", source_line);
             let len_label  = format!("VAR__FI_{}_LEN", source_line);
 
-            // Evaluate array base pointer (D = pointer)
-            expressions::emit_simple_expr(iterable, asm, assets);
+            asm.push_str(&format!("    LDD #{}  ; array {} base address\n", base_label_value, array_id.name));
             asm.push_str(&format!("    STD >{}\n", base_label));
-
-            // Array length — compile-time constant via ARRAY_NAME_LEN equate if Ident
-            if let Expr::Ident(id_info) = iterable {
-                asm.push_str(&format!("    LDD #ARRAY_{}_LEN\n", id_info.name.to_uppercase()));
-            } else {
-                asm.push_str("    LDD #0              ; unknown array length\n");
-            }
+            asm.push_str(&format!("    LDD #ARRAY_{}_LEN\n", array_id.name.to_uppercase()));
             asm.push_str(&format!("    STD >{}\n", len_label));
 
             // Init counter = 0
@@ -654,14 +683,25 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
             asm.push_str(&format!("    CMPD >{}\n", len_label));
             asm.push_str(&format!("    LBGE {}\n", le));
 
-            // Load element: var = base_ptr[ctr * 2]
+            // Load element: var = base[ctr * element size]
             asm.push_str(&format!("    LDD >{}\n", ctr_label));
-            asm.push_str("    ASLB\n");
-            asm.push_str("    ROLA                ; D = ctr * 2\n");
+            if elem.bytes == 2 {
+                asm.push_str("    ASLB\n");
+                asm.push_str("    ROLA                ; D = ctr * 2 (16-bit elements)\n");
+            }
             asm.push_str(&format!("    ADDD >{}\n", base_label));
             asm.push_str("    TFR D,X\n");
-            asm.push_str("    LDD ,X              ; D = arr[ctr]\n");
-            asm.push_str(&format!("    STD >{}\n", var_label));
+            if elem.bytes == 1 {
+                asm.push_str("    LDB ,X              ; B = arr[ctr] (8-bit element)\n");
+                asm.push_str(if elem.signed { "    SEX                 ; i8: sign-extend\n" } else { "    CLRA                ; u8: zero-extend\n" });
+            } else {
+                asm.push_str("    LDD ,X              ; D = arr[ctr]\n");
+            }
+            if var_size.bytes == 1 {
+                asm.push_str(&format!("    STB >{}\n", var_label));
+            } else {
+                asm.push_str(&format!("    STD >{}\n", var_label));
+            }
 
             for s in body { generate_statement(s, asm, assets, &inner_labels)?; }
 
@@ -722,10 +762,21 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
 
             for (ci, (case_val, case_body)) in cases.iter().enumerate() {
                 let no_match = fresh_label("SW_NXT");
-                expressions::emit_simple_expr(case_val, asm, assets);
-                asm.push_str("    STD >TMPPTR         ; case value\n");
-                asm.push_str("    LDD >TMPVAL\n");
-                asm.push_str("    CMPD >TMPPTR\n");
+                // A case body ends with LBRA end, so TMPVAL only has to survive the
+                // case VALUES. A constant compares directly; any other case value may
+                // use TMPVAL itself, so the switch value waits on the stack meanwhile.
+                if let Some(k) = expressions::try_extract_int_literal(case_val) {
+                    asm.push_str("    LDD >TMPVAL\n");
+                    asm.push_str(&format!("    CMPD #{}            ; case value\n", k));
+                } else {
+                    asm.push_str("    LDD >TMPVAL\n");
+                    asm.push_str("    PSHS D              ; switch value\n");
+                    expressions::emit_simple_expr(case_val, asm, assets);
+                    asm.push_str("    STD >TMPPTR         ; case value\n");
+                    asm.push_str("    PULS D\n");
+                    asm.push_str("    STD >TMPVAL\n");
+                    asm.push_str("    CMPD >TMPPTR\n");
+                }
                 asm.push_str(&format!("    LBNE {}\n", no_match));
                 for s in case_body { generate_statement(s, asm, assets, loop_labels)?; }
                 asm.push_str(&format!("    LBRA {}\n", le));

@@ -176,3 +176,62 @@ fn rebinding_a_global_array_is_a_compile_error() {
         &["cannot assign to global array 'xs'"],
     );
 }
+
+#[test]
+fn typed_arrays_for_in_and_array_parameters_link() {
+    let src = "\
+words = [10, 20, 30]
+bytes: u8 = [1, 2, 200]
+signed: i8 = [-1, 5]
+const A = 3
+const B = A * 2 + 1
+total = 0
+
+def sum_words(arr):
+    return arr[0] + arr[2]
+
+def first_byte(bs):
+    bs[1] = B
+    return bs[0]
+
+def main():
+    SET_INTENSITY(127)
+    wait(20)
+    wait(B * 5)
+
+def loop():
+    total = sum_words(words) + first_byte(bytes)
+    for v in bytes:
+        total = total + v
+    for s in signed:
+        total = total + s
+    PRINT_NUMBER(0, 0, total)
+";
+    let (single, multi) = assert_builds_both_layouts("arrays_consts_waits", src);
+    for b in [&single, &multi] {
+        assert_label(b, "SUM_WORDS");
+        assert_label(b, "FIRST_BYTE");
+        let asm = b.asm.as_deref().unwrap();
+        assert!(!asm.contains("ARRAY_ARR_DATA") && !asm.contains("ARRAY_BS_DATA"));
+        assert!(asm.contains("LDD #7  ; const B"), "const B folds to 7");
+    }
+}
+
+#[test]
+fn array_and_const_errors_fail_with_line() {
+    assert_fails_with(
+        "bad_const",
+        "speed = 2\nconst B = speed * 2\n\ndef main():\n    SET_INTENSITY(127)\n\ndef loop():\n    PRINT_NUMBER(0, 0, B)\n",
+        &["line 2", "const `B` cannot be computed at compile time"],
+    );
+    assert_fails_with(
+        "bad_index",
+        "n = 3\n\ndef main():\n    SET_INTENSITY(127)\n\ndef loop():\n    PRINT_NUMBER(0, 0, n[1])\n",
+        &["line 7", "`N` is not an array"],
+    );
+    assert_fails_with(
+        "bad_sample",
+        "def main():\n    SET_INTENSITY(127)\n\ndef loop():\n    PLAY_SAMPLE(\"voice\")\n",
+        &["line 5", "PLAY_SAMPLE is not supported on m6809"],
+    );
+}

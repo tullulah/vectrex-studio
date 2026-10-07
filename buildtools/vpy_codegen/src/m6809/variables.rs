@@ -63,9 +63,10 @@ pub fn generate_user_variables(module: &Module, ram: &mut RamLayout) -> Result<S
     // This includes Stmt::Let items which also have type_annotation
     for item in &module.items {
         if let Item::Function(func) = item {
-            // Collect parameters - they are Vec<String>, assume 16-bit default
+            // Parameters live in the 16-bit VAR_ARGn slots (context::get_var_size
+            // returns 16-bit for them). Registering a size under the parameter's
+            // name would overwrite the size of a global with the same name.
             for param in &func.params {
-                context::set_var_size(param, 2, true);
                 vars.push((param.clone(), 2));
             }
 

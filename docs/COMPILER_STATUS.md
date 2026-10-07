@@ -40,7 +40,7 @@ Plus `vpy_disasm` (disassembler utility) and `vpy_cli` (orchestrator).
 - Full 9-phase pipeline runs end-to-end
 - **4-bank multibank ROM** (4×16 KB = 64 KB) via `META ROM_TOTAL_SIZE`/`ROM_BANK_SIZE`
 - All builtins in banked mode: `DRAW_VECTOR`, `SHOW_LEVEL`, `UPDATE_LEVEL`, `PLAY_SFX`
-- PDB debug symbol generation (Phase 9)
+- PDB debug symbol generation (Phase 9), single-bank and multibank. Each function's lines carry the `.vpy` file that defines it: `vpyLineMap` entries (`{file, line}`) and `functions[name].file` name the real file, `fileLineMap` holds per-file breakpoint addresses (`{"physics.vpy": {"7": "0x00B8"}}`), and `lineMap` (line numbers only, kept for older readers) holds the entry file's lines
 - ORG directive and two-pass assembly in `vpy_assembler`
 - Bank allocation with call graph analysis
 - Variable-sized types (`u8`, `i8`, `u16`, `i16`) — saves ~20% RAM; use with caution
@@ -48,7 +48,10 @@ Plus `vpy_disasm` (disassembler utility) and `vpy_cli` (orchestrator).
 **Language:**
 - Functions with positional parameters, `for`, `while`, `if/elif/else`, `switch/case`, `break`, `continue`, `return`
 - Globals declared at module level as `name = expr` (optionally typed: `name: u8 = expr`); locals created by plain assignment inside a function (`x = expr`, no type annotation); `const` values and const arrays. There are no `let`/`var` keywords
-- Arithmetic, bitwise, logical, comparison operators; chained comparisons (`a < b < c`)
+- m6809 `const` values are folded at compile time (numbers, other consts in any order, `+ - * / // % & | ~`, `not`, comparisons) and emitted as immediates; a const that cannot be folded, or does not fit in 16 bits, is a compile error with its line
+- Arrays: element size follows the declared type (`u8`/`i8` = 1 byte, untyped/`i16`/`u16` = 2) for `arr[i]`, `arr[i] = v` and `for v in arr`; `i8` elements are sign-extended. An array argument is passed as its base address, and on m6809 an indexed parameter takes its element type from the arrays passed at its call sites (forwarding through other functions included); arrays of different element types passed to one parameter are a compile error, and with no named array at any call site the elements are 2 bytes ([MANUAL.md](MANUAL.md#arrays-as-parameters)). Indexing a name that is neither a global array nor a parameter is a compile error
+- Arithmetic (`+ - * / // %`), bitwise (`& | ~`), logical, comparison operators; chained comparisons (`a < b < c`)
+- m6809 expression temporaries: `TMPVAL` (one RAM word) only holds an operand while the other operand is a plain name or literal; when both sides are expressions (a compare or binop with a binop, call or index on the side evaluated second), the first operand waits on the hardware stack (balanced `PSHS D`/`PULS D`). Arguments of a builtin that are expressions are computed before the builtin runs (into `VAR___HOIST<n>`, allocated only as far as the program needs); arguments of a user call go through the stack when a later argument is an expression or a parameter of the caller would be read after its slot was overwritten (`g(b, a)` inside `f(a, b)`). `min`/`max`/`clamp` methods, `switch` case values and `x op= v` follow the same rule. All `x op= v` operators work, and `xs[i] op= v` works with a simple index
 - String literals (high-bit terminated for BIOS `Print_Str_d`)
 - `META` directives (TITLE, COPYRIGHT, MUSIC, ROM_TOTAL_SIZE, ROM_BANK_SIZE)
 - Modules: `import m [as a]`, `from m import f [as g]`; `m.f()`, `m.var`, `m.arr[i]`, `m.var = …` (resolved by `vpy_unifier`; module symbols are named `MODULE_symbol` via `vpy_parser::symbols`). Every target compiles all project modules; an unresolved import or `m.name` is a compile error with file:line
@@ -83,8 +86,11 @@ runs on the BIOS's second core, so tempo is independent of the draw load.
 - `SET_SCALE()` not yet implemented
 - PC-relative addressing (`label,PCR`) is not supported by `vpy_assembler`
 - m6809: `wait`, `peek`, `poke`, `beep(period, frames)` and `atan2` need constant arguments (otherwise a compile error); `DRAW_SPRITE` is a compile error
-- The `.pdb` maps every function's lines to the entry file, so source lines of functions defined in an imported module point at the wrong file
-- `len(arr)` is the compile-time length of a global or const array. On m6809 any other argument is a compile error; on ARM a non-array name fails at link time and other expressions return 0. `GET_TIME()` does not build on any target
+- `len(arr)` is the compile-time length of a global or const array on every target; any other argument is a compile error with its line. `GET_TIME()` does not build on any target
+- The parser has no `^`, `<<`, `>>` or unary `+` (parse error), and `&` / `|` bind like `*` (tighter than `+`/`-`), unlike Python
+- m6809: `PLAY_SAMPLE` / `SAMPLE_POS` are a compile error ("not supported on m6809"). Digitised playback needs a PSG volume write every ~190 cycles at 8 kHz; the PSG is reached through VIA port A, which also feeds the beam DAC while a vector is drawn, and both VIA timers are taken (T1 times strokes, T2 the frame). Samples could only play with the screen stopped, which is not what `PLAY_SAMPLE` + `SAMPLE_POS` (a video synced to the audio) mean. The ARM targets stream samples from a second core ([ARCADE_SOUND_RIP.md](ARCADE_SOUND_RIP.md), [RP2350_BIOS.md](RP2350_BIOS.md))
+- m6809: parameters live in the global `VAR_ARG0..7` slots, so a function that calls another function and then reads its own parameter reads the callee's argument. Copy a parameter to a local before calling out
+- m6809: `xs[i + 1] += v` (compound assignment to an element with a computed index, or to a field) is a compile error with its line; write `xs[j] = xs[j] + v`
 - Inline `asm("...")` is not implemented (the parser accepts it; the build fails on an undefined `ASM` symbol)
 - `vectorlist` blocks are parsed but no backend emits them
 - m6809: `SET_TEXT_SIZE` and `J2_DIGITAL_X/Y` fail to assemble (missing helper symbols); `DRAW_POLYGON`, `DRAW_CIRCLE_SEG`, `DRAW_ARC`, `DRAW_FILLED_RECT`, `DRAW_ELLIPSE` and the Bézier builtins only work with constant arguments

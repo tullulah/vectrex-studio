@@ -375,8 +375,10 @@ pub fn discover_assets(source_path: &Path) -> Vec<AssetInfo> {
         }
     }
 
-    // Sort assets alphabetically by name for consistency
-    assets.sort_by(|a, b| a.name.cmp(&b.name));
+    // Sort by name, then path: read_dir order is filesystem-specific, and two assets can
+    // share a name (e.g. levels in different subfolders), so the name alone is not a total
+    // order and the build would depend on the directory listing.
+    assets.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.path.cmp(&b.path)));
     assets
 }
 
@@ -391,8 +393,9 @@ pub struct SizedAsset {
 /// Asset distribution result for multi-bank support
 #[derive(Debug, Clone)]
 pub struct AssetDistribution {
-    /// Assets assigned to each bank (bank_id -> list of assets)
-    pub bank_assignments: std::collections::HashMap<u8, Vec<SizedAsset>>,
+    /// Assets assigned to each bank (bank_id -> list of assets). A BTreeMap so the
+    /// per-bank emission and the legacy ASSET_*_TABLE order are the same every build.
+    pub bank_assignments: std::collections::BTreeMap<u8, Vec<SizedAsset>>,
     /// Total assets distributed
     pub total_assets: usize,
     /// Total bytes distributed
@@ -607,7 +610,7 @@ pub fn distribute_assets(
     use std::collections::HashMap;
     
     let sized_assets = prepare_assets_with_sizes(assets);
-    let mut bank_assignments: HashMap<u8, Vec<SizedAsset>> = HashMap::new();
+    let mut bank_assignments: std::collections::BTreeMap<u8, Vec<SizedAsset>> = std::collections::BTreeMap::new();
     // Seed bank_sizes with function code already assigned to each bank.
     let mut bank_sizes: HashMap<u8, usize> = pre_used_bytes.clone();
     
@@ -1373,7 +1376,11 @@ pub fn generate_distributed_assets_asm(
 
             // Emit vec files referenced by animations (also in helpers bank)
             lookup_asm.push_str("; Vec files referenced by animations (helpers bank for cross-bank safety)\n\n");
-            for vec_name in &anim_vec_refs {
+            // Sorted: anim_vec_refs is a HashSet, and its iteration order changes
+            // from run to run (would reorder these vecs in the helpers bank).
+            let mut anim_vec_names: Vec<&String> = anim_vec_refs.iter().collect();
+            anim_vec_names.sort();
+            for vec_name in anim_vec_names {
                 if let Some(vec_asset) = assets.iter().find(|a| matches!(a.asset_type, AssetType::Vector) && &a.name == vec_name) {
                     match crate::vecres::VecResource::load(std::path::Path::new(&vec_asset.path)) {
                         Ok(resource) => {

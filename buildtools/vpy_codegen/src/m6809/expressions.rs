@@ -66,9 +66,16 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
         
         Expr::Call(call) => {
             super::diagnostics::set_line(call.source_line);
-            // Check if builtin
-            if builtins::emit_builtin(&call.name, &call.args, out, assets) {
-                return;
+            let is_user = super::diagnostics::is_user_function(&call.name);
+            // Builtins read their arguments in their own order into their own slots
+            // (some of them shared temporaries). Every argument that is not simple is
+            // computed FIRST into a hoist slot, so evaluating one argument can never
+            // overwrite another one's saved value. Constant expressions fold.
+            if !is_user {
+                let args = emit_hoisted_args(&call.args, out, assets, |i| format!("VAR___HOIST{}", i));
+                if builtins::emit_builtin(&call.name, &args, out, assets) {
+                    return;
+                }
             }
             if !super::diagnostics::is_callable(&call.name) {
                 super::diagnostics::error_at(call.source_line, format!(
@@ -88,9 +95,41 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
                     call.name, call.args.len(), MAX_USER_ARGS
                 ));
             }
-            for (i, arg) in call.args.iter().enumerate().take(MAX_USER_ARGS) {
-                emit_simple_expr(arg, out, assets);
-                out.push_str(&format!("    STD VAR_ARG{}\n", i));
+            // Arguments travel in the global VAR_ARGn slots. Storing them one by one
+            // is only safe when no later argument can overwrite an earlier slot
+            // (a call writes VAR_ARGn; a binop may run helpers) and no argument
+            // reads a slot already overwritten (a parameter of THIS function is
+            // VAR_ARGk: `g(b, a)` inside `f(a, b)`). Otherwise every argument is
+            // computed first, waiting on the hardware stack, and then stored.
+            let args: Vec<Expr> = call.args[..call.args.len().min(MAX_USER_ARGS)]
+                .iter()
+                .map(|a| match (is_simple(a), super::consts::fold_expr(a)) {
+                    (false, Some(v)) => Expr::Number(v as i32),
+                    _ => a.clone(),
+                })
+                .collect();
+            let direct = args.iter().enumerate().all(|(i, a)| match a {
+                Expr::Ident(id) => context::get_param_index(&id.name).map_or(true, |k| k >= i),
+                other => is_simple(other),
+            });
+            if direct {
+                for (i, arg) in args.iter().enumerate() {
+                    emit_simple_expr(arg, out, assets);
+                    out.push_str(&format!("    STD VAR_ARG{}\n", i));
+                }
+            } else {
+                for (i, arg) in args.iter().enumerate() {
+                    emit_simple_expr(arg, out, assets);
+                    if i + 1 < args.len() {
+                        out.push_str(&format!("    PSHS D              ; argument {}\n", i));
+                    } else {
+                        out.push_str(&format!("    STD VAR_ARG{}\n", i));
+                    }
+                }
+                for i in (0..args.len().saturating_sub(1)).rev() {
+                    out.push_str("    PULS D\n");
+                    out.push_str(&format!("    STD VAR_ARG{}\n", i));
+                }
             }
 
             // Call function — same label function as the definition (functions.rs)
@@ -179,52 +218,40 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
                     out.push_str("    SBCA #0             ; 16-bit negate: ~D + 1\n");
                     out.push_str(&format!(".ABS_{id}_END:\n"));
                 }
+                // clamp / min / max: the operands are evaluated left to right onto the
+                // hardware stack (any of them may be an expression that uses TMPVAL or
+                // calls a function), compared there, and dropped with one LEAS.
                 "clamp" => {
-                    let lo = &info.args[0];
-                    let hi = &info.args[1];
-                    // val → TMPVAL; lo → TMPPTR; if val < lo: val = lo
                     emit_simple_expr(&info.target, out, assets);
-                    out.push_str("    STD >TMPVAL         ; val\n");
-                    emit_simple_expr(lo, out, assets);
-                    out.push_str("    STD >TMPPTR         ; lo\n");
-                    out.push_str("    LDD >TMPVAL\n");
-                    out.push_str("    CMPD >TMPPTR        ; val - lo\n");
-                    out.push_str(&format!("    BGE .CLAMP_{id}_HI  ; val >= lo: skip\n"));
-                    out.push_str("    LDD >TMPPTR\n");
-                    out.push_str("    STD >TMPVAL         ; val = lo\n");
+                    out.push_str("    PSHS D              ; val\n");
+                    emit_simple_expr(&info.args[0], out, assets);
+                    out.push_str("    PSHS D              ; lo\n");
+                    emit_simple_expr(&info.args[1], out, assets);
+                    out.push_str("    PSHS D              ; hi  (stack: hi, lo, val)\n");
+                    out.push_str("    LDD 4,S             ; val\n");
+                    out.push_str("    CMPD 2,S            ; val - lo\n");
+                    out.push_str(&format!("    BGE .CLAMP_{id}_HI  ; val >= lo\n"));
+                    out.push_str("    LDD 2,S             ; val = lo\n");
                     out.push_str(&format!(".CLAMP_{id}_HI:\n"));
-                    // hi → TMPPTR; if val > hi: val = hi
-                    emit_simple_expr(hi, out, assets);
-                    out.push_str("    STD >TMPPTR         ; hi\n");
-                    out.push_str("    LDD >TMPVAL\n");
-                    out.push_str("    CMPD >TMPPTR        ; val - hi\n");
-                    out.push_str(&format!("    BLE .CLAMP_{id}_END ; val <= hi: done\n"));
-                    out.push_str("    LDD >TMPPTR         ; val = hi\n");
+                    out.push_str("    CMPD ,S             ; val - hi\n");
+                    out.push_str(&format!("    BLE .CLAMP_{id}_END ; val <= hi\n"));
+                    out.push_str("    LDD ,S              ; val = hi\n");
                     out.push_str(&format!(".CLAMP_{id}_END:\n"));
+                    out.push_str("    LEAS 6,S            ; drop val, lo, hi (LEAS keeps D and flags)\n");
                 }
-                "min" => {
-                    let arg = &info.args[0];
+                "min" | "max" => {
+                    let keep = if info.method_name == "min" { "BLE" } else { "BGE" };
+                    let tag = info.method_name.to_uppercase();
                     emit_simple_expr(&info.target, out, assets);
-                    out.push_str("    STD >TMPVAL         ; a\n");
-                    emit_simple_expr(arg, out, assets);
-                    out.push_str("    STD >TMPPTR         ; b\n");
-                    out.push_str("    LDD >TMPVAL\n");
-                    out.push_str("    CMPD >TMPPTR        ; a - b\n");
-                    out.push_str(&format!("    BLE .MIN_{id}_END   ; a <= b: keep a\n"));
-                    out.push_str("    LDD >TMPPTR         ; D = b (smaller)\n");
-                    out.push_str(&format!(".MIN_{id}_END:\n"));
-                }
-                "max" => {
-                    let arg = &info.args[0];
-                    emit_simple_expr(&info.target, out, assets);
-                    out.push_str("    STD >TMPVAL         ; a\n");
-                    emit_simple_expr(arg, out, assets);
-                    out.push_str("    STD >TMPPTR         ; b\n");
-                    out.push_str("    LDD >TMPVAL\n");
-                    out.push_str("    CMPD >TMPPTR        ; a - b\n");
-                    out.push_str(&format!("    BGE .MAX_{id}_END   ; a >= b: keep a\n"));
-                    out.push_str("    LDD >TMPPTR         ; D = b (larger)\n");
-                    out.push_str(&format!(".MAX_{id}_END:\n"));
+                    out.push_str("    PSHS D              ; a\n");
+                    emit_simple_expr(&info.args[0], out, assets);
+                    out.push_str("    PSHS D              ; b  (stack: b, a)\n");
+                    out.push_str("    LDD 2,S             ; a\n");
+                    out.push_str("    CMPD ,S             ; a - b\n");
+                    out.push_str(&format!("    {keep} .{tag}_{id}_END   ; keep a\n"));
+                    out.push_str("    LDD ,S              ; D = b\n");
+                    out.push_str(&format!(".{tag}_{id}_END:\n"));
+                    out.push_str("    LEAS 4,S            ; drop a, b\n");
                 }
                 other => {
                     super::diagnostics::error_at(info.source_line, format!(
@@ -259,6 +286,89 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
     }
 }
 
+/// Name standing for hoisted argument `i` (its value is in `VAR___HOIST<i>`).
+fn hoist_name(i: usize) -> String {
+    format!("__HOIST{}", i)
+}
+
+/// Evaluated without touching any temporary and without running other code.
+pub fn is_simple(e: &Expr) -> bool {
+    matches!(e, Expr::Number(_) | Expr::Ident(_) | Expr::StringLit(_))
+}
+
+/// Indices of the arguments of a call that must be computed ahead of the call
+/// (see [`emit_hoisted_args`]): the non-simple, non-constant ones of a call
+/// with two or more arguments.
+pub fn hoisted_indices(args: &[Expr]) -> Vec<usize> {
+    if args.len() < 2 {
+        return Vec::new();
+    }
+    args.iter()
+        .enumerate()
+        .filter(|(_, a)| !is_simple(a) && super::consts::fold_expr(a).is_none())
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// RAM slots `VAR___HOIST<i>` the program needs (builtin calls only; a user
+/// call hoists straight into VAR_ARGn).
+pub fn hoist_slots_needed(module: &vpy_parser::Module) -> usize {
+    let mut n = 0;
+    super::ast_walk::for_each_call(module, |c| {
+        if !super::diagnostics::is_user_function(&c.name) {
+            if let Some(last) = hoisted_indices(&c.args).last() {
+                n = n.max(last + 1);
+            }
+        }
+    });
+    n
+}
+
+/// Compute every hoisted argument (left to right) into `slot(i)`, then return
+/// the argument list the call emits: hoisted arguments become the name of
+/// their slot, constant expressions become numbers, simple ones are unchanged.
+///
+/// All but the last hoisted value wait on the hardware stack (balanced
+/// PSHS D / PULS D), so a later argument — a binop, a builtin, a user function
+/// call — cannot overwrite an earlier one, whatever temporaries it uses.
+fn emit_hoisted_args(
+    args: &[Expr],
+    out: &mut String,
+    assets: &[AssetInfo],
+    slot: impl Fn(usize) -> String,
+) -> Vec<Expr> {
+    let hoisted = hoisted_indices(args);
+    for (n, &i) in hoisted.iter().enumerate() {
+        emit_simple_expr(&args[i], out, assets);
+        if n + 1 < hoisted.len() {
+            out.push_str(&format!("    PSHS D              ; argument {} (computed ahead)\n", i));
+        } else {
+            out.push_str(&format!("    STD >{}  ; argument {} (computed ahead)\n", slot(i), i));
+        }
+    }
+    if let Some((_, rest)) = hoisted.split_last() {
+        for &i in rest.iter().rev() {
+            out.push_str("    PULS D\n");
+            out.push_str(&format!("    STD >{}  ; argument {}\n", slot(i), i));
+        }
+    }
+    args.iter()
+        .enumerate()
+        .map(|(i, a)| {
+            if hoisted.contains(&i) {
+                Expr::Ident(vpy_parser::IdentInfo { name: hoist_name(i), source_line: 0, col: 0 })
+            } else if is_simple(a) {
+                a.clone()
+            } else {
+                match super::consts::fold_expr(a) {
+                    Some(v) => Expr::Number(v as i32),
+                    None => a.clone(),
+                }
+            }
+        })
+        .collect()
+}
+
 /// True if `e` is guaranteed not to touch TMPVAL / TMPPTR during evaluation.
 /// Used to avoid the stack save/restore overhead for the common simple-RHS
 /// case (`a + 4`, `i * stride`, …). Conservative — anything not in this
@@ -285,7 +395,7 @@ fn emit_binop(left: &Expr, op: BinOp, right: &Expr, out: &mut String, assets: &[
     //
     //   3. Anything else — park LEFT on the hardware stack while RIGHT
     //      is evaluated. 4 bytes overhead (PSHS D + PULS D, register-list
-    //      form — never `,S++`, which only increments S by 1).
+    //      form; `,S++` would also be correct — it pops 2 bytes, postbyte $E1).
     //
     // The check is structural: any non-simple expression may write TMPVAL.
     let is_commutative = matches!(
@@ -382,13 +492,14 @@ fn emit_binop(left: &Expr, op: BinOp, right: &Expr, out: &mut String, assets: &[
 }
 
 /// Try to extract an integer literal value from an expression that resolves
-/// to a compile-time constant. Catches direct integer literals and identifiers
-/// bound to a `const`. Returns None for runtime expressions.
+/// to a compile-time constant: an integer literal, a `const`, or an arithmetic /
+/// bit expression over those. Returns None for runtime expressions.
 pub fn try_extract_int_literal(expr: &Expr) -> Option<i32> {
     match expr {
         Expr::Number(n) => Some(*n as i32),
         Expr::Ident(id) => context::get_const_value(&id.name).map(|v| v as i32),
-        _ => None,
+        // Constant expressions over literals and consts (`B * 5`, `MAX - 1`).
+        _ => super::consts::fold_expr(expr).map(|v| v as i32),
     }
 }
 
@@ -437,18 +548,22 @@ pub fn emit_branch_if_false(cond: &Expr, label: &str, out: &mut String, assets: 
 fn emit_compare(left: &Expr, op: CmpOp, right: &Expr, out: &mut String, assets: &[AssetInfo]) {
     let id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
 
-    // CRITICAL FIX (2026-02-22): Stack balance - use TMPVAL instead of PSHS/PULS
-    // The `,S++` addressing mode doesn't properly pop for 16-bit comparisons.
-    // Instead, evaluate RIGHT into TMPVAL, evaluate LEFT into D, then CMPD TMPVAL.
-    // This avoids stack corruption from unbalanced PSHS/PULS pairs.
-
-    // Evaluate RIGHT first, save to TMPVAL
-    emit_simple_expr(right, out, assets);
-    out.push_str("    STD TMPVAL          ; Save right operand to TMPVAL (stack-safe temp)\n");
-
-    // Evaluate LEFT
-    emit_simple_expr(left, out, assets);
-    out.push_str("    CMPD TMPVAL\n");     // Compare LEFT - RIGHT (using memory temp, not stack)
+    // D = LEFT, TMPVAL = RIGHT. TMPVAL is not re-entrant: whatever operand is
+    // evaluated SECOND must not be able to write it. A simple LEFT can be
+    // evaluated after RIGHT is parked in TMPVAL; otherwise LEFT waits on the
+    // hardware stack while RIGHT (which may use TMPVAL itself) is evaluated.
+    if is_tmpval_safe(left) {
+        emit_simple_expr(right, out, assets);
+        out.push_str("    STD TMPVAL          ; RIGHT → TMPVAL (LEFT simple)\n");
+        emit_simple_expr(left, out, assets);
+    } else {
+        emit_simple_expr(left, out, assets);
+        out.push_str("    PSHS D              ; save LEFT on stack\n");
+        emit_simple_expr(right, out, assets);
+        out.push_str("    STD TMPVAL          ; RIGHT → TMPVAL\n");
+        out.push_str("    PULS D              ; restore LEFT into D\n");
+    }
+    out.push_str("    CMPD TMPVAL\n");
 
     let branch_true = match op {
         CmpOp::Eq => "LBEQ",
@@ -468,65 +583,63 @@ fn emit_compare(left: &Expr, op: CmpOp, right: &Expr, out: &mut String, assets: 
 }
 
 fn emit_index(array: &Expr, index: &Expr, out: &mut String, assets: &[AssetInfo]) {
-    // CRITICAL FIX (2026-02-22): Use TMPPTR for array index storage, not TMPVAL
-    // TMPVAL is reserved for comparison operands in conditional expressions
-    // Using TMPVAL here causes overwrites when array access appears in comparisons like:
-    //   joystick1_state[2] == 1  (TMPVAL gets 1, then gets overwritten by index 2)
+    // `arr[i]`: X = base + i * element_size, then load one element into D.
     //
-    // Solution: Use TMPPTR to store the index, keeping TMPVAL free for comparisons
-    // This avoids register pressure and maintains expression evaluation safety
-
-    // CRITICAL FIX (2026-01-19): Use correct label based on array type
-    // Mutable arrays (GlobalLet): VAR_{NAME}_DATA (in RAM)
-    // Const arrays: ARRAY_{NAME}_DATA (in ROM)
-    // Use context::is_mutable_array() to check which type
-
-    let element_size = if let Expr::Ident(id) = array {
-        context::get_var_size(&id.name).bytes  // Get element size for stride calculation
-    } else {
-        2  // Default to 16-bit if not a simple identifier
+    // The index is evaluated FIRST, into D: it may itself index an array or call
+    // a function, which would clobber an X loaded before it. TMPVAL / TMPPTR are
+    // not used, so an index inside a comparison keeps the comparison's operand.
+    //
+    // Bases: a global array is its data label (VAR_<NAME>_DATA in RAM for a
+    // mutable array, ARRAY_<NAME>_DATA in ROM for a const one); a parameter holds
+    // the base address its caller passed (element type: see `array_params`).
+    enum Base {
+        Label(String),
+        Pointer(String),
+        Computed,
+    }
+    let (base, elem) = match array {
+        Expr::Ident(id) => match context::resolve_array(&id.name) {
+            Some((context::ArrayBase::Label(l), elem)) => (Base::Label(l), elem),
+            Some((context::ArrayBase::Pointer(p), elem)) => (Base::Pointer(p), elem),
+            None => {
+                super::diagnostics::error_at(id.source_line, super::functions::not_an_array_message(&id.name));
+                out.push_str("    LDD #0\n");
+                return;
+            }
+        },
+        // Any other expression is an address of 16-bit elements.
+        _ => (Base::Computed, context::VarSize::default_i16()),
     };
 
-    // Step 1: Load array base into X
-    if let Expr::Ident(id) = array {
-        let name_upper = id.name.to_uppercase();
-        let label = if context::is_mutable_array(&id.name) {
-            format!("VAR_{}_DATA", name_upper)  // RAM
-        } else {
-            format!("ARRAY_{}_DATA", name_upper)  // ROM
-        };
-        out.push_str(&format!("    LDX #{}  ; Array base\n", label));
-    } else {
-        // Complex array expression - evaluate it; D holds result after emit
+    if matches!(base, Base::Computed) {
         emit_simple_expr(array, out, assets);
-        out.push_str("    TFR D,X     ; Array base address (D -> X, avoids RESULT read)\n");
+        out.push_str("    PSHS D              ; array base address\n");
     }
-
-    // Step 2: Evaluate index and save to TMPPTR (NOT TMPVAL - keeps comparison operand safe)
     emit_simple_expr(index, out, assets);
-    out.push_str("    STD TMPPTR  ; Save index to TMPPTR (safe from TMPVAL overwrites)\n");
-
-    // Step 3: Calculate stride and adjust X
-    // Stride multiply: only if element_size == 2 (8-bit arrays have stride 1, no multiply needed)
-    if element_size == 2 {
-        out.push_str("    LDD TMPPTR  ; Load index\n");
-        out.push_str("    ASLB        ; Multiply by 2 (16-bit elements)\n");
+    if elem.bytes == 2 {
+        out.push_str("    ASLB                ; index * 2 (16-bit elements)\n");
         out.push_str("    ROLA\n");
-    } else {
-        out.push_str("    LDD TMPPTR  ; Load index (stride = 1 for 8-bit)\n");
     }
-
-    // Step 4: Calculate address: X = X + (D = index * element_size)
-    out.push_str("    LEAX D,X    ; X = base + (index * element_size)\n");
-
-    // Step 5: Load element: use correct load instruction based on element type
-    if element_size == 1 {
-        // 8-bit element: LDB then zero-extend (arrays are typically unsigned)
-        out.push_str("    LDB ,X      ; Load 8-bit value\n");
-        out.push_str("    CLRA        ; Zero-extend to 16-bit (arrays are typically unsigned)\n");
+    match &base {
+        Base::Label(label) => {
+            out.push_str(&format!("    LDX #{}  ; Array base\n", label));
+            out.push_str("    LEAX D,X            ; X = base + offset\n");
+        }
+        Base::Pointer(slot) => {
+            out.push_str(&format!("    ADDD >{}  ; + array base address (parameter)\n", slot));
+            out.push_str("    TFR D,X\n");
+        }
+        Base::Computed => {
+            out.push_str("    ADDD ,S             ; + array base address\n");
+            out.push_str("    LEAS 2,S            ; drop it (balanced with PSHS D)\n");
+            out.push_str("    TFR D,X\n");
+        }
+    }
+    if elem.bytes == 1 {
+        out.push_str("    LDB ,X              ; Load 8-bit element\n");
+        out.push_str(if elem.signed { "    SEX                 ; i8: sign-extend\n" } else { "    CLRA                ; u8: zero-extend\n" });
     } else {
-        // 16-bit element: standard LDD
-        out.push_str("    LDD ,X      ; Load 16-bit value\n");
+        out.push_str("    LDD ,X              ; Load 16-bit element\n");
     }
 }
 

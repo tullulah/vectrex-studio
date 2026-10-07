@@ -34,6 +34,9 @@ pub fn generate_uvm2_asm(
     title: &str,
     asset_list: &[AssetInfo],
 ) -> Result<String, String> {
+    // len() must name a global array (compile-time length), as on m6809.
+    crate::validate::check_len_calls(module, "uvm2")?;
+
     let mut asm = String::new();
 
     asm.push_str(&format!(

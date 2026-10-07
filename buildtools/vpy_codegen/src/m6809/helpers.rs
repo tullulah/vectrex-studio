@@ -3,18 +3,19 @@
 //! Mathematical and utility functions
 
 use vpy_parser::{Module, Expr, BinOp};
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use super::ram_layout::RamLayout;
 
 /// Analyze module to detect which runtime helpers are needed
-/// Returns set of helper names that should be emitted.
+/// Returns set of helper names that should be emitted (a BTreeSet: callers iterate it
+/// to allocate RAM, so its order must be the same every build).
 ///
 /// Walks every statement and expression the code generator emits (all function
 /// bodies, including `for`/`switch` bodies, conditions, call arguments, index
 /// expressions and compound assignments, plus global initializers evaluated at
 /// startup) via the exhaustive [`super::ast_walk`] visitor.
-pub fn analyze_module_helpers(module: &Module) -> HashSet<String> {
-    let mut needed = HashSet::new();
+pub fn analyze_module_helpers(module: &Module) -> BTreeSet<String> {
+    let mut needed = BTreeSet::new();
     super::ast_walk::for_each_expr(module, |expr| note_expr_helpers(expr, &mut needed));
     needed
 }
@@ -36,6 +37,11 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
     ram.allocate("TMPVAL", 2, "Temporary value storage (alias for RESULT)");
     ram.allocate("TMPPTR", 2, "Temporary pointer");
     ram.allocate("TMPPTR2", 2, "Temporary pointer 2");
+    // Builtin arguments computed ahead of the call (expressions::emit_hoisted_args),
+    // only as many as the program's calls need.
+    for i in 0..crate::m6809::expressions::hoist_slots_needed(module) {
+        ram.allocate(&format!("VAR___HOIST{}", i), 2, "Builtin argument computed ahead of the call");
+    }
     ram.allocate("VPY_MOVE_X", 1, "MOVE() current X offset (signed byte, 0 by default)");
     ram.allocate("VPY_MOVE_Y", 1, "MOVE() current Y offset (signed byte, 0 by default)");
     ram.allocate("TEMP_YX", 2, "Temporary Y/X coordinate storage");
@@ -432,7 +438,7 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
 }
 
 /// Record the helpers a single expression node needs (children are visited by the walker).
-fn note_expr_helpers(expr: &Expr, needed: &mut HashSet<String>) {
+fn note_expr_helpers(expr: &Expr, needed: &mut BTreeSet<String>) {
     match expr {
         Expr::Call(call_info) => note_call_helpers(call_info, needed),
         Expr::Binary { left, op, right } => {
@@ -453,7 +459,7 @@ fn note_expr_helpers(expr: &Expr, needed: &mut HashSet<String>) {
 }
 
 /// Record the helpers a builtin call needs.
-fn note_call_helpers(call_info: &vpy_parser::CallInfo, needed: &mut HashSet<String>) {
+fn note_call_helpers(call_info: &vpy_parser::CallInfo, needed: &mut BTreeSet<String>) {
     let name_upper = call_info.name.to_uppercase();
     let args = &call_info.args;
     

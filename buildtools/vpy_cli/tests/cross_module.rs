@@ -185,3 +185,87 @@ fn unknown_function_is_a_compile_error_with_line() {
         assert!(r.output.contains("line 17: `DRAW_LIEN()` is not a builtin"), "{target}: {}", r.output);
     }
 }
+
+/// Every VPy line in the .pdb, as (file, line) pairs, from `vpyLineMap`.
+fn pdb_lines(pdb: &serde_json::Value) -> Vec<(String, u64)> {
+    let mut v: Vec<(String, u64)> = pdb["vpyLineMap"]
+        .as_object()
+        .expect("vpyLineMap")
+        .values()
+        .map(|e| (e["file"].as_str().unwrap().to_string(), e["line"].as_u64().unwrap()))
+        .collect();
+    v.sort();
+    v.dedup();
+    v
+}
+
+fn assert_pdb_attributes_imported_lines(pdb_path: &Path) {
+    let pdb: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(pdb_path).expect("pdb written")).unwrap();
+    let lines = pdb_lines(&pdb);
+    // physics.vpy line 7 (`return MAX_X` in clamp_x) maps to physics.vpy; main.vpy
+    // has no code on line 7. Line 6 has code in both files and both are kept.
+    assert!(lines.contains(&("physics.vpy".to_string(), 7)), "imported line not attributed to physics.vpy: {lines:?}");
+    assert!(lines.contains(&("main.vpy".to_string(), 11)), "entry line missing: {lines:?}");
+    assert!(!lines.contains(&("main.vpy".to_string(), 7)), "physics.vpy line 7 attributed to main.vpy: {lines:?}");
+    assert!(lines.contains(&("main.vpy".to_string(), 6)) && lines.contains(&("physics.vpy".to_string(), 6)));
+    assert_eq!(pdb["lineMap"]["6"], pdb["fileLineMap"]["main.vpy"]["6"]);
+    assert_ne!(pdb["fileLineMap"]["main.vpy"]["6"], pdb["fileLineMap"]["physics.vpy"]["6"]);
+    assert_eq!(pdb["functions"]["PHYSICS_CLAMP_X"]["file"], "physics.vpy");
+    assert_eq!(pdb["functions"]["LOOP"]["file"], "main.vpy");
+    // Per-file breakpoints; lineMap (line numbers only) keeps the entry file's.
+    assert!(pdb["fileLineMap"]["physics.vpy"]["7"].is_string());
+    assert_eq!(pdb["lineMap"].as_object().unwrap(), pdb["fileLineMap"]["main.vpy"].as_object().unwrap());
+}
+
+#[test]
+fn pdb_points_imported_code_at_its_file_single_bank() {
+    let p = project(MAIN);
+    let (r, _) = build_m6809(&p.path().join("xmod.vpyproj"), p.path());
+    assert!(r.ok, "build failed:\n{}", r.output);
+    assert_pdb_attributes_imported_lines(&p.path().join("out.pdb"));
+}
+
+#[test]
+fn pdb_points_imported_code_at_its_file_multibank() {
+    // The META lines shift main.vpy by 3 lines: main line 11 becomes 14.
+    let p = project(&format!("{MULTIBANK_META}{MAIN}"));
+    let (r, _) = build_m6809(&p.path().join("xmod.vpyproj"), p.path());
+    assert!(r.ok, "multibank build failed:\n{}", r.output);
+    let pdb: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(p.path().join("out.pdb")).expect("pdb written")).unwrap();
+    let lines = pdb_lines(&pdb);
+    assert!(lines.contains(&("physics.vpy".to_string(), 7)), "{lines:?}");
+    assert!(lines.contains(&("main.vpy".to_string(), 14)), "{lines:?}");
+    assert_eq!(pdb["functions"]["PHYSICS_STEP"]["file"], "physics.vpy");
+}
+
+#[test]
+fn pdb_of_a_lone_file_maps_everything_to_it() {
+    // Backward compatible shape: one file, lineMap == fileLineMap[file].
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("solo.vpy");
+    std::fs::write(&main, "def main():\n    SET_INTENSITY(127)\n\ndef loop():\n    DRAW_LINE(0, 0, 10, 0, 127)\n").unwrap();
+    let (r, _) = build_m6809(&main, tmp.path());
+    assert!(r.ok, "build failed:\n{}", r.output);
+    let pdb: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(tmp.path().join("out.pdb")).unwrap()).unwrap();
+    assert!(pdb_lines(&pdb).iter().all(|(f, _)| f == "solo.vpy"));
+    assert_eq!(pdb["lineMap"].as_object().unwrap(), pdb["fileLineMap"]["solo.vpy"].as_object().unwrap());
+}
+
+#[test]
+fn arm_len_matches_m6809() {
+    let ok = project(&MAIN.replace("    DRAW_LINE(0, 0, px, 0, 127)\n", "    px = px + len(physics.table)\n    DRAW_LINE(0, 0, px, 0, 127)\n"));
+    let bad = project(&MAIN.replace("    DRAW_LINE(0, 0, px, 0, 127)\n", "    px = len(px) + len(px + 1)\n"));
+    for target in ["rp2350", "uvm2", "pitrex"] {
+        let (r, asm) = asm_for(&ok.path().join("xmod.vpyproj"), target, ok.path());
+        assert!(r.ok, "{target}: len(global array) must build:\n{}", r.output);
+        assert!(asm.contains("=ARRAY_PHYSICS_TABLE_LEN"), "{target}: compile-time length");
+        assert!(!asm.contains("vpy_len") && !asm.contains("pitrex_len"), "{target}: no runtime stub");
+        let (r, _) = asm_for(&bad.path().join("xmod.vpyproj"), target, bad.path());
+        assert!(!r.ok, "{target}: len(non-array) must fail:\n{}", r.output);
+        assert!(r.output.contains(&format!("len(PX) is not supported on {target}")) && r.output.contains("line 16"),
+            "{target}: {}", r.output);
+        assert!(r.output.contains(&format!("len() on {target} needs the name of a global array (line 16")), "{target}: {}", r.output);
+    }
+}

@@ -9,15 +9,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Known orphans in crates owned by other work streams. Remove an entry once the file
-/// is wired in (with `mod`) or deleted. Do NOT add new entries to silence this test.
-const KNOWN_ORPHANS: &[&str] = &[
-    "vpy_codegen/src/context.rs",
-    "vpy_codegen/src/emitter.rs",
-    "vpy_codegen/src/error.rs",
-    "vpy_codegen/src/ir.rs",
-    "vpy_codegen/src/path_ordering.rs",
-];
+/// Known orphans. Remove an entry once the file is wired in (with `mod`) or deleted.
+/// Do NOT add new entries to silence this test: declare the file or delete it.
+const KNOWN_ORPHANS: &[&str] = &[];
 
 fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(dir) else { return };

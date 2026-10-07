@@ -25,7 +25,9 @@ LEVEL_SRCS  := $(wildcard assets/playground/*.vplay assets/*.vplay)
 # .vanim animations compile to gen/<stem>.h (PI anim descriptor + sprite table).
 # They `#include` their frame .vec headers, so VEC_SRCS must precede them.
 ANIM_SRCS   := $(wildcard assets/animations/*.vanim assets/*.vanim)
-ASSET_SRCS  := $(AUDIO_SRCS) $(VEC_SRCS) $(ANIM_SRCS) $(LEVEL_SRCS)
+# Instruments (PLAY_NOTE), recordings (DRAW_RECORDING) and samples (PLAY_SAMPLE).
+PLAYER_SRCS := $(wildcard assets/instruments/*.vinstr assets/recordings/*.vrec assets/samples/*.vsmp)
+ASSET_SRCS  := $(AUDIO_SRCS) $(VEC_SRCS) $(ANIM_SRCS) $(LEVEL_SRCS) $(PLAYER_SRCS)
 
 # `gen_audio` retained as an alias for older test Makefiles.
 gen_audio: gen_assets

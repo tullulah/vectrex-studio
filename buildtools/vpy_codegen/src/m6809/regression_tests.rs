@@ -311,3 +311,519 @@ def loop():
     let err = generate(src, SINGLE_BANK).expect_err("len(literal) must fail");
     assert!(err.contains("len()") && err.contains("global array"), "unexpected error: {err}");
 }
+
+// ---------------------------------------------------------------------------
+// Bug 5: `for v in arr` always stepped 2 bytes and zero-extended, whatever the
+// array's type; an 8-bit array was read as garbage pairs.
+// ---------------------------------------------------------------------------
+
+const FOR_IN_TYPED_SRC: &str = "\
+bytes: u8 = [1, 2, 200]
+signed: i8 = [-1, 5]
+words = [1000, -2000]
+total = 0
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    for b in bytes:
+        total = total + b
+    for s in signed:
+        total = total + s
+    for w in words:
+        total = total + w
+    PRINT_NUMBER(0, 0, total)
+";
+
+/// The element-load sequence of each `for .. in` loop, in source order.
+fn for_in_loads(asm: &str) -> Vec<String> {
+    asm.split("; forin start")
+        .skip(1)
+        .map(|chunk| chunk.split("; VPy_LINE").next().unwrap_or("").to_string())
+        .collect()
+}
+
+fn assert_for_in_strides(asm: &str) {
+    let loops = for_in_loads(asm);
+    assert_eq!(loops.len(), 3, "three for-in loops expected");
+    let (u8_loop, i8_loop, i16_loop) = (&loops[0], &loops[1], &loops[2]);
+    for (name, l) in [("u8", u8_loop), ("i8", i8_loop)] {
+        assert!(!l.contains("ASLB"), "{name} loop must step 1 byte:\n{l}");
+        assert!(l.contains("LDB ,X"), "{name} loop must load one byte:\n{l}");
+    }
+    assert!(u8_loop.contains("CLRA"), "u8 elements are zero-extended:\n{u8_loop}");
+    assert!(i8_loop.contains("SEX"), "i8 elements are sign-extended:\n{i8_loop}");
+    assert!(i16_loop.contains("ASLB") && i16_loop.contains("LDD ,X"), "16-bit loop steps 2 bytes:\n{i16_loop}");
+}
+
+#[test]
+fn for_in_uses_element_size_single_bank() {
+    assert_for_in_strides(&generate_ok(FOR_IN_TYPED_SRC, SINGLE_BANK));
+}
+
+#[test]
+fn for_in_uses_element_size_multibank() {
+    assert_for_in_strides(&generate_ok(FOR_IN_TYPED_SRC, MULTIBANK));
+}
+
+#[test]
+fn i8_index_is_sign_extended() {
+    let src = "\
+signed: i8 = [-1, 5]
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    PRINT_NUMBER(0, 0, signed[0])
+";
+    let asm = generate_ok(src, SINGLE_BANK);
+    assert!(asm.contains("LDB ,X") && asm.contains("SEX                 ; i8: sign-extend"), "{asm}");
+}
+
+#[test]
+fn for_in_over_non_array_is_an_error() {
+    let src = "\
+n = 3
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    for v in n:
+        pass
+";
+    let err = generate(src, SINGLE_BANK).expect_err("for-in over a scalar must fail");
+    assert!(err.contains("line 7") && err.contains("`N` is not an array"), "unexpected error: {err}");
+}
+
+#[test]
+fn for_in_over_parameter_is_an_error() {
+    let src = "\
+def total(a):
+    t = 0
+    for v in a:
+        t = t + v
+    return t
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    pass
+";
+    let err = generate(src, MULTIBANK).expect_err("for-in over a parameter must fail");
+    assert!(err.contains("line 3") && err.contains("parameter") && err.contains("range(0, n)"), "unexpected error: {err}");
+}
+
+// ---------------------------------------------------------------------------
+// Bug 6: indexing an array parameter emitted `ARRAY_<PARAM>_DATA` (undefined).
+// Arrays are passed as their base address; the parameter is a pointer whose
+// element type comes from the arrays passed at the call sites.
+// ---------------------------------------------------------------------------
+
+const ARRAY_PARAM_SRC: &str = "\
+words = [10, 20, 30]
+bytes: u8 = [1, 2, 3]
+total = 0
+
+def sum_words(arr):
+    return arr[0] + arr[2]
+
+def first_byte(b):
+    return b[0]
+
+def forward(b):
+    b[1] = 7
+    return first_byte(b)
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    total = sum_words(words) + forward(bytes)
+    PRINT_NUMBER(0, 0, total)
+";
+
+/// Body of the function at `label:` up to its RTS.
+fn body<'a>(asm: &'a str, label: &str) -> &'a str {
+    let start = asm.find(&format!("\n{label}:\n")).unwrap_or_else(|| panic!("{label} not defined"));
+    let rest = &asm[start..];
+    &rest[..rest.find("RTS").unwrap_or(rest.len())]
+}
+
+fn assert_array_params(asm: &str) {
+    assert!(!asm.contains("ARRAY_ARR_DATA") && !asm.contains("ARRAY_B_DATA"), "parameter indexed as a global array");
+    let words = body(asm, "SUM_WORDS");
+    assert!(words.contains("ADDD >VAR_ARG0") && words.contains("ASLB") && words.contains("LDD ,X"),
+        "16-bit elements through the pointer:\n{words}");
+    // u8 array passed to forward(), which forwards it to first_byte(): both 1-byte.
+    for f in ["FIRST_BYTE", "FORWARD"] {
+        let b = body(asm, f);
+        assert!(b.contains("ADDD >VAR_ARG0") && !b.contains("ASLB"), "{f}: 1-byte stride:\n{b}");
+    }
+    assert!(body(asm, "FIRST_BYTE").contains("LDB ,X"), "u8 load");
+    assert!(body(asm, "FORWARD").contains("STB ,X"), "u8 store");
+    // the call site passes the base address
+    assert!(asm.contains("LDD #VAR_WORDS_DATA") && asm.contains("LDD #VAR_BYTES_DATA"));
+}
+
+#[test]
+fn array_parameters_single_bank() {
+    assert_array_params(&generate_ok(ARRAY_PARAM_SRC, SINGLE_BANK));
+}
+
+#[test]
+fn array_parameters_multibank() {
+    assert_array_params(&generate_ok(ARRAY_PARAM_SRC, MULTIBANK));
+}
+
+#[test]
+fn array_parameter_with_mixed_element_types_is_an_error() {
+    let src = "\
+words = [10, 20]
+bytes: u8 = [1, 2]
+
+def first(a):
+    return a[0]
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    PRINT_NUMBER(0, 0, first(words) + first(bytes))
+";
+    let err = generate(src, SINGLE_BANK).expect_err("mixed element types must fail");
+    assert!(err.contains("parameter `a`") && err.contains("`WORDS` (i16)") && err.contains("`BYTES` (u8)"),
+        "unexpected error: {err}");
+}
+
+#[test]
+fn indexing_a_scalar_is_an_error() {
+    let src = "\
+n = 3
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    PRINT_NUMBER(0, 0, n[1])
+";
+    let err = generate(src, SINGLE_BANK).expect_err("indexing a scalar must fail");
+    assert!(err.contains("line 7") && err.contains("`N` is not an array"), "unexpected error: {err}");
+}
+
+#[test]
+fn parameter_named_like_a_u8_global_keeps_the_global_8_bit() {
+    // A parameter used to register its 16-bit size under its own name, which
+    // turned every access to the u8 global of the same name into a 16-bit one.
+    let src = "\
+level: u8 = 0
+
+def show(level):
+    PRINT_NUMBER(0, 0, level)
+
+def main():
+    level = 2
+
+def loop():
+    show(level)
+";
+    let asm = generate_ok(src, SINGLE_BANK);
+    assert!(asm.contains("STB VAR_LEVEL"), "u8 global must stay 8-bit:\n{asm}");
+}
+
+// ---------------------------------------------------------------------------
+// Bug 7: `const B = A * 2` was never initialised (RAM slot, no store).
+// ---------------------------------------------------------------------------
+
+const CONST_FOLD_SRC: &str = "\
+const A = 10
+const B = A * 2 + 4
+const MASK = ~B & 0xFF
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    PRINT_NUMBER(B, MASK, B + MASK)
+";
+
+fn assert_consts_folded(asm: &str) {
+    assert!(asm.contains("LDD #24  ; const B"), "B must fold to 24");
+    assert!(asm.contains(&format!("LDD #{}  ; const MASK", !24i64 & 0xFF)), "MASK must fold");
+    assert!(!asm.contains("VAR_B ") && !asm.contains("VAR_MASK"), "folded consts need no RAM");
+    let sum = 24 + (!24i64 & 0xFF);
+    assert!(asm.contains(&format!("LDD #{sum}\n")), "a constant argument expression folds to {sum}");
+}
+
+#[test]
+fn const_expressions_fold_single_bank() {
+    assert_consts_folded(&generate_ok(CONST_FOLD_SRC, SINGLE_BANK));
+}
+
+#[test]
+fn const_expressions_fold_multibank() {
+    assert_consts_folded(&generate_ok(CONST_FOLD_SRC, MULTIBANK));
+}
+
+#[test]
+fn unfoldable_const_is_an_error_with_line() {
+    let src = "\
+speed = 2
+
+const B = speed * 2
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    PRINT_NUMBER(0, 0, B)
+";
+    let err = generate(src, SINGLE_BANK).expect_err("a const of a variable must fail");
+    assert!(err.contains("line 3") && err.contains("`B`") && err.contains("not a const"), "unexpected error: {err}");
+}
+
+// ---------------------------------------------------------------------------
+// Bug 8: every wait(n > 10) defined the same `WAIT_LOOP` label.
+// ---------------------------------------------------------------------------
+
+const WAIT_SRC: &str = "\
+const PAUSE = 300
+
+def main():
+    SET_INTENSITY(127)
+    wait(20)
+    wait(PAUSE)
+
+def loop():
+    wait(2)
+";
+
+fn assert_unique_wait_labels(asm: &str) {
+    let labels: Vec<&str> = asm
+        .lines()
+        .filter(|l| l.starts_with("WAIT_LOOP") && l.trim_end().ends_with(':'))
+        .collect();
+    assert_eq!(labels.len(), 2, "one loop per wait(n > 10): {labels:?}");
+    assert_ne!(labels[0], labels[1], "wait loop labels must be unique");
+    assert!(asm.contains("LDD #300"), "a const frame count (16-bit) is accepted");
+}
+
+#[test]
+fn wait_labels_unique_single_bank() {
+    assert_unique_wait_labels(&generate_ok(WAIT_SRC, SINGLE_BANK));
+}
+
+#[test]
+fn wait_labels_unique_multibank() {
+    assert_unique_wait_labels(&generate_ok(WAIT_SRC, MULTIBANK));
+}
+
+#[test]
+fn wait_with_variable_count_is_an_error() {
+    let src = "\
+n = 20
+
+def main():
+    wait(n)
+
+def loop():
+    pass
+";
+    let err = generate(src, SINGLE_BANK).expect_err("wait(variable) must fail");
+    assert!(err.contains("wait() needs a constant frame count"), "unexpected error: {err}");
+}
+
+// ---------------------------------------------------------------------------
+// PLAY_SAMPLE / SAMPLE_POS: ARM-only, a clear target error on m6809.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn samples_are_a_target_error() {
+    let src = "\
+def main():
+    PLAY_SAMPLE(\"voice\")
+
+def loop():
+    PRINT_NUMBER(0, 0, SAMPLE_POS(25))
+";
+    for layout in [SINGLE_BANK, MULTIBANK] {
+        let err = generate(src, layout).expect_err("samples must fail on m6809");
+        assert!(err.contains("line 2: PLAY_SAMPLE is not supported on m6809"), "unexpected error: {err}");
+        assert!(err.contains("line 5: SAMPLE_POS is not supported on m6809"), "unexpected error: {err}");
+        assert!(err.contains("rp2350 or pitrex"), "unexpected error: {err}");
+    }
+}
+
+#[test]
+fn parameter_shadows_a_const_of_the_same_name() {
+    // Names are case-insensitive: parameter `b` and `const B` are the same name.
+    // Inside the function the parameter wins; it used to be replaced by B's value.
+    let src = "\
+const B = 32
+bytes: u8 = [1, 2, 3]
+
+def get(b, i):
+    return b[i]
+
+def fwd(b):
+    return get(b, 2)
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    PRINT_NUMBER(0, 0, fwd(bytes) + B)
+";
+    for layout in [SINGLE_BANK, MULTIBANK] {
+        let asm = generate_ok(src, layout);
+        let fwd = body(&asm, "FWD");
+        assert!(fwd.contains("LDD >VAR_ARG0") && !fwd.contains("LDD #32"), "param replaced by the const:\n{fwd}");
+        assert!(body(&asm, "LOOP_BODY").contains("LDD #32  ; const B"), "the const still folds outside");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Bug 9: one TMPVAL for every nested operand. `if a + 0 > b` parked b in
+// TMPVAL, then `a + 0` overwrote it and the compare saw 0. The second-evaluated
+// operand of a compare, a call argument, a min/max/clamp operand, a switch case
+// or the value of `x op= v` could all overwrite a saved operand.
+// ---------------------------------------------------------------------------
+
+/// Lines of `asm` between the `; VPy_LINE:<line>` marker and the next one.
+fn line_code(asm: &str, line: usize) -> String {
+    let marker = format!("; VPy_LINE:{line}\n");
+    let start = asm.find(&marker).unwrap_or_else(|| panic!("no code for line {line}")) + marker.len();
+    let rest = &asm[start..];
+    rest[..rest.find("; VPy_LINE:").unwrap_or(rest.len())].to_string()
+}
+
+/// Instructions only (no comments, no blank lines, no labels).
+fn instrs(code: &str) -> Vec<String> {
+    code.lines()
+        .map(|l| l.split(';').next().unwrap().trim().to_string())
+        .filter(|l| !l.is_empty() && !l.ends_with(':'))
+        .collect()
+}
+
+const NESTED_SRC: &str = "\
+a = 10
+b = 5
+c = 3
+xs = [7, 8, 9]
+k: u8 = 250
+r = 0
+
+def sub(p, q):
+    return p - q
+
+def swap_sub(p, q):
+    return sub(q, p)
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    if a + 0 > b:
+        r = 1
+    r = sub(sub(a, b), sub(b, c))
+    r = min(a + 1, sub(b, c) * 2)
+    k += a * 2
+    r = xs[a - 9] + xs[c - 1] * 2
+    r = a.clamp(sub(b, c), a + 1)
+";
+
+fn assert_nested_operands_survive(asm: &str) {
+    // line 18: compare whose LEFT is a binop → LEFT waits on the stack.
+    assert_eq!(
+        instrs(&line_code(asm, 18))[..8],
+        ["LDD #0", "STD TMPVAL", "LDD >VAR_A", "ADDD TMPVAL", "PSHS D", "LDD >VAR_B", "STD TMPVAL", "PULS D"]
+            .map(String::from),
+        "a + 0 must be saved before b is evaluated"
+    );
+    assert!(instrs(&line_code(asm, 18)).contains(&"CMPD TMPVAL".to_string()));
+    // line 20: nested user calls → arguments wait on the stack, then fill VAR_ARGn.
+    let call = instrs(&line_code(asm, 20));
+    let pos = |s: &str| call.iter().rposition(|l| l == s).unwrap_or_else(|| panic!("{s} missing: {call:?}"));
+    assert!(pos("PSHS D") < pos("JSR SUB"), "first argument saved across the second call: {call:?}");
+    // line 21: min() arguments are computed ahead into their slots.
+    let m = instrs(&line_code(asm, 21));
+    let hoisted = m.iter().position(|l| l == "STD >VAR___HOIST1").expect("second argument computed ahead");
+    assert!(m[..hoisted].contains(&"PSHS D".to_string()) && m[hoisted + 1] == "PULS D", "{m:?}");
+    // line 24: .clamp() operands live on the stack, dropped with one LEAS.
+    let cl = instrs(&line_code(asm, 24));
+    assert!(cl.contains(&"CMPD 2,S".to_string()) && cl.contains(&"LEAS 6,S".to_string()), "{cl:?}");
+    // line 22: u8 compound assignment stores one byte.
+    assert!(instrs(&line_code(asm, 22)).last().unwrap().starts_with("STB VAR_K"));
+    // Every PSHS in the user code is matched by a PULS or a LEAS.
+    let user = &asm[asm.find("LOOP_BODY:").unwrap()..asm.find("RUNTIME HELPERS").unwrap_or(asm.len())];
+    let push = user.lines().filter(|l| l.trim_start().starts_with("PSHS D")).count();
+    let pull = user.lines().filter(|l| l.trim_start().starts_with("PULS D")).count();
+    let leas = user.matches("LEAS 4,S").count() * 2 + user.matches("LEAS 6,S").count() * 3;
+    assert_eq!(push, pull + leas, "unbalanced stack in user code");
+}
+
+#[test]
+fn nested_operands_survive_single_bank() {
+    assert_nested_operands_survive(&generate_ok(NESTED_SRC, SINGLE_BANK));
+}
+
+#[test]
+fn nested_operands_survive_multibank() {
+    assert_nested_operands_survive(&generate_ok(NESTED_SRC, MULTIBANK));
+}
+
+#[test]
+fn parameter_forwarded_in_another_position_is_not_overwritten() {
+    // `sub(q, p)` inside swap_sub(p, q): storing VAR_ARG0 = q first used to
+    // overwrite p before it was read.
+    let asm = generate_ok(NESTED_SRC, SINGLE_BANK);
+    let f = instrs(body(&asm, "SWAP_SUB"));
+    assert_eq!(
+        f[..6],
+        ["LDD >VAR_ARG1", "PSHS D", "LDD >VAR_ARG0", "STD VAR_ARG1", "PULS D", "STD VAR_ARG0"].map(String::from),
+        "{f:?}"
+    );
+}
+
+#[test]
+fn builtin_arguments_are_computed_ahead() {
+    let src = "\
+a = 10
+b = 5
+
+def f(v):
+    return v + 1
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    DRAW_LINE(a + 1, f(b), a * 2, b - a, 127)
+";
+    let asm = generate_ok(src, SINGLE_BANK);
+    assert!(asm.contains("VAR___HOIST3"), "four computed arguments need four slots");
+    assert!(!asm.contains("VAR___HOIST4"), "the literal intensity needs none");
+    let line = instrs(&line_code(&asm, 11));
+    let first_builtin_read = line.iter().position(|l| l.starts_with("LDD >VAR___HOIST")).unwrap();
+    assert!(line[..first_builtin_read].iter().filter(|l| *l == "PSHS D").count() == 3, "{line:?}");
+    assert!(line[..first_builtin_read].iter().filter(|l| *l == "PULS D").count() == 3, "{line:?}");
+}
+
+#[test]
+fn compound_assignment_with_computed_index_is_an_error() {
+    let src = "\
+xs = [1, 2]
+i = 0
+
+def main():
+    xs[i + 1] += 2
+
+def loop():
+    pass
+";
+    let err = generate(src, SINGLE_BANK).expect_err("computed index in += must fail");
+    assert!(err.contains("line 5") && err.contains("computed index"), "{err}");
+}

@@ -2,7 +2,7 @@
 //!
 //! Builtins for drawing circles, rectangles, polygons, etc.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use vpy_parser::Expr;
 
 /// DRAW_CIRCLE(xc, yc, radius) or DRAW_CIRCLE(xc, yc, radius, intensity)
@@ -607,7 +607,7 @@ pub fn emit_draw_bezier_quad(args: &[Expr], out: &mut String) {
 
 /// Emit runtime helpers for drawing builtins
 /// Only emits helpers that are actually used in the code (tree shaking)
-pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
+pub fn emit_runtime_helpers(out: &mut String, needed: &BTreeSet<String>) {
     // DRAW_CIRCLE_RUNTIME: Draw circle with runtime parameters
     // Uses 8-segment octagon approximation (simple but effective)
     // Copied verbatim from core/src/backend/m6809/emission.rs

@@ -83,6 +83,83 @@ pub fn chain_frame(segments: &[Segment]) -> Vec<Chain> {
 }
 
 // ============================================================
+// The ROM table, as bytes (C header for libvpy)
+// ============================================================
+//
+// What the ARM and PiTrex backends assemble from `compile_vrec` (arm/assets.rs,
+// pitrex/assets.rs), byte for byte, so libvpy's `vpy_draw_recording` reads the
+// table the VPy runtime reads. Little-endian; the base must be 4-byte aligned.
+//
+//   [0]  frame_count   u32
+//   [4]  offset table  u32 × frame_count  (byte offset from the table base)
+//   ...  per frame (always at an even offset, so the assembler's `.balign 2`
+//        never pads):
+//          chain_count u16
+//          per chain:  start_x i8, start_y i8, intensity u8, seg_count u8,
+//                      then seg_count × (dx i8, dy i8)
+//
+// Unlike `.vrb` there is no simplification and no delta splitting: a delta
+// outside ±127 is clamped, exactly as the backends clamp it.
+
+/// Compile a `.vrec` JSON string into the backends' ROM table (see above).
+pub fn compile_vrec_json_to_rom_table(json: &str) -> Result<Vec<u8>, String> {
+    let doc: VrbDoc = serde_json::from_str(json).map_err(|e| format!("bad .vrec JSON: {e}"))?;
+    let clamp8 = |v: i32| v.clamp(-127, 127) as i8 as u8;
+
+    let mut frame_blobs: Vec<Vec<u8>> = Vec::with_capacity(doc.frames.len());
+    for frame in &doc.frames {
+        let segs: Vec<Segment> = frame.segments.iter()
+            .map(|s| Segment { x0: s.x0, y0: s.y0, x1: s.x1, y1: s.y1, i: s.i })
+            .collect();
+        // A chain longer than 255 deltas is split and re-anchored at the raw pen
+        // position, as `compile_vrec` does.
+        let mut emitted: Vec<(i32, i32, i32, Vec<(i32, i32)>)> = Vec::new();
+        for c in chain_frame(&segs) {
+            if c.deltas.len() <= VRB_MAX_DELTAS_PER_CHAIN {
+                emitted.push((c.start.0, c.start.1, c.intensity, c.deltas));
+            } else {
+                let (mut px, mut py) = c.start;
+                for part in c.deltas.chunks(VRB_MAX_DELTAS_PER_CHAIN) {
+                    emitted.push((px, py, c.intensity, part.to_vec()));
+                    for (dx, dy) in part {
+                        px += dx;
+                        py += dy;
+                    }
+                }
+            }
+        }
+        if emitted.len() > u16::MAX as usize {
+            return Err(format!("a frame has {} chains (max {})", emitted.len(), u16::MAX));
+        }
+        let mut blob = Vec::new();
+        blob.extend_from_slice(&(emitted.len() as u16).to_le_bytes());
+        for (sx, sy, inten, deltas) in &emitted {
+            blob.push(clamp8(*sx));
+            blob.push(clamp8(*sy));
+            blob.push((*inten).clamp(0, 127) as u8);
+            blob.push(deltas.len() as u8);
+            for (dx, dy) in deltas {
+                blob.push(clamp8(*dx));
+                blob.push(clamp8(*dy));
+            }
+        }
+        frame_blobs.push(blob);
+    }
+
+    let mut out = Vec::new();
+    out.extend_from_slice(&(frame_blobs.len() as u32).to_le_bytes());
+    let mut off = 4 + 4 * frame_blobs.len() as u32;
+    for blob in &frame_blobs {
+        out.extend_from_slice(&off.to_le_bytes());
+        off += blob.len() as u32;
+    }
+    for blob in &frame_blobs {
+        out.extend_from_slice(blob);
+    }
+    Ok(out)
+}
+
+// ============================================================
 // Standalone precompiled binary `.vrb` format
 // ============================================================
 //
@@ -346,6 +423,44 @@ mod tests {
         assert_eq!(chains.len(), 1);
         assert_eq!(chains[0].deltas.len(), 3);
         assert_eq!(chains[0].start, (0, 0));
+    }
+
+    /// The ROM table: u32 frame count, u32 offsets from the base, then each
+    /// frame's u16 chain count and its chains; out-of-range values clamp.
+    #[test]
+    fn rom_table_layout_and_clamps() {
+        let json = r#"{"fps":15,"frames":[
+            {"segments":[{"x0":-40,"y0":-40,"x1":40,"y1":-40,"i":90},
+                         {"x0":40,"y0":-40,"x1":40,"y1":40,"i":90}]},
+            {"segments":[{"x0":-200,"y0":0,"x1":100,"y1":0,"i":300}]}]}"#;
+        let b = compile_vrec_json_to_rom_table(json).unwrap();
+        let u32_at = |o: usize| u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]]) as usize;
+        assert_eq!(u32_at(0), 2);
+        let (f0, f1) = (u32_at(4), u32_at(8));
+        assert_eq!(f0, 12);
+        // frame 0: one chain of 2 deltas = 2 + 4 + 4 bytes
+        assert_eq!(&b[f0..f0 + 10], &[1, 0, 0xD8, 0xD8, 90, 2, 80, 0, 0, 80]);
+        assert_eq!(f1, f0 + 10);
+        // frame 1: start x -200 -> -127, i 300 -> 127, delta 300 -> 127
+        assert_eq!(&b[f1..], &[1, 0, 0x81, 0, 127, 1, 127, 0]);
+        assert_eq!(f0 % 2, 0);
+        assert_eq!(f1 % 2, 0);
+    }
+
+    /// A chain of more than 255 deltas splits and re-anchors at the raw pen.
+    #[test]
+    fn rom_table_splits_long_chains() {
+        let segs: Vec<String> = (0..300)
+            .map(|k| format!(r#"{{"x0":{},"y0":0,"x1":{},"y1":0,"i":50}}"#, k % 2, (k + 1) % 2))
+            .collect();
+        let json = format!(r#"{{"fps":10,"frames":[{{"segments":[{}]}}]}}"#, segs.join(","));
+        let b = compile_vrec_json_to_rom_table(&json).unwrap();
+        let f0 = u32::from_le_bytes([b[4], b[5], b[6], b[7]]) as usize;
+        assert_eq!(u16::from_le_bytes([b[f0], b[f0 + 1]]), 2);
+        assert_eq!(b[f0 + 5], 255);
+        let second = f0 + 2 + 4 + 2 * 255;
+        assert_eq!(&b[second..second + 4], &[1, 0, 50, 45]);
+        assert_eq!(b.len(), second + 4 + 2 * 45);
     }
 
     /// Empty frame → no chains.

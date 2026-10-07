@@ -39,6 +39,9 @@ pub fn generate_arm_asm(
     title: &str,
     assets: &[AssetInfo],
 ) -> Result<String, String> {
+    // len() must name a global array (compile-time length), as on m6809.
+    crate::validate::check_len_calls(module, "rp2350")?;
+
     let mut asm = String::new();
 
     // File header comment

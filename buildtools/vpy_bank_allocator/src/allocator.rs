@@ -283,9 +283,13 @@ impl BankAllocator {
         let mut asset_bank_usage: HashMap<u8, usize> = HashMap::new();
         
         // Collect all assets from all clusters
-        let all_assets: Vec<String> = clusters.iter()
+        // Sorted: cluster.assets is a HashSet, so the first-fit order (and the bank each
+        // asset lands in) would otherwise change from run to run.
+        let mut all_assets: Vec<String> = clusters.iter()
             .flat_map(|c| c.assets.iter().cloned())
             .collect();
+        all_assets.sort();
+        all_assets.dedup();
         
         // ── PASS 1: assign function code to banks ─────────────────────────────────
         // Must run BEFORE asset assignment so asset first-fit sees how much space

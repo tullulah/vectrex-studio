@@ -24,7 +24,7 @@ use std::path::Path;
 /// 3. Replaces those JSRs with `JSR TRAMP_LABEL`
 /// 4. Returns the trampoline ASM to be appended to the helpers bank
 fn generate_cross_bank_trampolines(
-    sections: &mut HashMap<u8, BankSection>,
+    sections: &mut BTreeMap<u8, BankSection>,
     helpers_bank: u8,
 ) -> String {
     // Step 1: Build label→bank map for switchable banks only (not helpers bank)
@@ -132,7 +132,7 @@ fn generate_cross_bank_trampolines(
 /// Moving ARRAY_XXX_DATA blocks to helpers bank (fixed at $4000-$7FFF) makes them
 /// accessible from any bank. MAIN's initialization code sets VAR_XXX = #ARRAY_XXX_DATA
 /// which will now resolve to $4XXX (always valid).
-fn relocate_array_data_to_helpers(sections: &mut HashMap<u8, BankSection>, helpers_bank: u8) {
+fn relocate_array_data_to_helpers(sections: &mut BTreeMap<u8, BankSection>, helpers_bank: u8) {
     let bank0_code = match sections.get(&0) {
         Some(b) => b.asm_code.clone(),
         None => return,
@@ -312,7 +312,7 @@ impl MultiBankLinker {
     /// ```
     ///
     /// Returns: HashMap<bank_id, BankSection>
-    pub fn split_asm_by_bank(&self, asm_content: &str) -> Result<HashMap<u8, BankSection>, String> {
+    pub fn split_asm_by_bank(&self, asm_content: &str) -> Result<BTreeMap<u8, BankSection>, String> {
         // **FIRST PASS**: Collect all definitions (EQU) before processing banks
         // This is necessary because definitions may appear AFTER bank code in the ASM
         let mut definitions = String::new();
@@ -365,7 +365,7 @@ impl MultiBankLinker {
             }
         };
 
-        let mut sections: HashMap<u8, BankSection> = HashMap::new();
+        let mut sections: BTreeMap<u8, BankSection> = BTreeMap::new();
         let mut current_bank_id: Option<u8> = None;
         let mut current_org: Option<u16> = None;
         let mut current_code = String::new();

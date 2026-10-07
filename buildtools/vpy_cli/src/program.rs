@@ -21,6 +21,23 @@ pub struct Program {
     pub project: Option<vpy_loader::ProjectInfo>,
     /// Number of modules that were parsed.
     pub module_count: usize,
+    /// Source file of every function: m6809 label (`MAIN`, `LOOP`,
+    /// `PHYSICS_CLAMP_X`) → the `.vpy` it is defined in. The unified module has
+    /// lost this; the PDB needs it to point imported code at the right file.
+    pub function_files: HashMap<String, PathBuf>,
+}
+
+impl Program {
+    /// Function label → file NAME (`physics.vpy`), the form the PDB and the IDE use.
+    pub fn function_file_names(&self) -> HashMap<String, String> {
+        self.function_files
+            .iter()
+            .map(|(label, path)| {
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("main.vpy").to_string();
+                (label.clone(), name)
+            })
+            .collect()
+    }
 }
 
 /// Module name of a source file: its file stem (`src/physics.vpy` → `physics`).
@@ -70,6 +87,22 @@ pub fn load_program(input: &Path) -> Result<Program> {
     }
     let module_count = modules.len();
 
+    // Unified name of every function (same rule as the unifier: entry symbols
+    // keep their name, imported ones become MODULE_symbol) → its file.
+    let mut function_files = HashMap::new();
+    for (name, module) in &modules {
+        for item in &module.items {
+            if let vpy_parser::Item::Function(f) = item {
+                let unified = if name == &entry_module {
+                    vpy_parser::symbols::entry_symbol(&f.name)
+                } else {
+                    vpy_parser::symbols::mangle(name, &f.name)
+                };
+                function_files.insert(vpy_parser::symbols::m6809_label(&unified), paths[name].clone());
+            }
+        }
+    }
+
     let unified = vpy_unifier::unify_modules(modules, &entry_module).map_err(|e| match e {
         vpy_unifier::UnifierError::Unresolved(diags) => {
             let rendered: Vec<String> = diags
@@ -87,7 +120,7 @@ pub fn load_program(input: &Path) -> Result<Program> {
         other => anyhow!("Unification error: {}", other),
     })?;
 
-    Ok(Program { unified, entry_path, entry_module, project, module_count })
+    Ok(Program { unified, entry_path, entry_module, project, module_count, function_files })
 }
 
 #[cfg(test)]
@@ -115,6 +148,16 @@ mod tests {
         let prog = load_program(&tmp.path().join("p.vpyproj")).expect("load");
         assert_eq!(prog.module_count, 2);
         assert!(prog.unified.items.iter().any(|i| matches!(i, vpy_parser::Item::Function(f) if f.name == "PHYSICS_clamp_x")));
+    }
+
+    #[test]
+    fn every_function_knows_its_source_file() {
+        let tmp = temp_project();
+        let prog = load_program(&tmp.path().join("p.vpyproj")).expect("load");
+        let files = prog.function_file_names();
+        assert_eq!(files.get("MAIN").map(String::as_str), Some("main.vpy"));
+        assert_eq!(files.get("LOOP").map(String::as_str), Some("main.vpy"));
+        assert_eq!(files.get("PHYSICS_CLAMP_X").map(String::as_str), Some("physics.vpy"));
     }
 
     #[test]

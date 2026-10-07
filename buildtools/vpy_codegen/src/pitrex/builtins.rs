@@ -2532,12 +2532,6 @@ fn emit_pitrex_system() -> String {
     s.push_str("    strb    r1, [r0]\n");
     s.push_str("    bx      lr\n\n");
 
-    // pitrex_len(r0=array_ptr) → r0 = 0 (stub — length resolved at compile time)
-    s.push_str("@ pitrex_len — stub (array length resolved at compile time via ARRAY_x_LEN)\n");
-    s.push_str(".global pitrex_len\n.type pitrex_len, %function\npitrex_len:\n");
-    s.push_str("    mov     r0, #0\n");
-    s.push_str("    bx      lr\n\n");
-
     s
 }
 

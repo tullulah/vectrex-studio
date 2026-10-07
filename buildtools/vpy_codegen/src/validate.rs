@@ -36,6 +36,83 @@ pub fn check_array_literals(module: &Module) -> Result<(), String> {
     if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
 }
 
+/// Every `len(...)` must have a length known at compile time, on every target.
+///
+/// `len(name)` works when `name` is a global array (a mutable or const list
+/// literal) that is not shadowed by a parameter of the enclosing function: it
+/// compiles to the `ARRAY_<NAME>_LEN` constant. Any other argument is an error
+/// with its line — the ARM backends used to fail at link time on a non-array
+/// name and silently return 0 for any other expression.
+pub fn check_len_calls(module: &Module, target: &str) -> Result<(), String> {
+    use vpy_parser::CallInfo;
+
+    let global_arrays: std::collections::HashSet<&str> = module
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::GlobalLet { name, value: Expr::List(_), .. } | Item::Const { name, value: Expr::List(_), .. } => {
+                Some(name.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+
+    let check = |call: &CallInfo, params: &[String], scope: &str| -> Result<(), String> {
+        if !call.name.eq_ignore_ascii_case("LEN") {
+            return Ok(());
+        }
+        let line = call.source_line;
+        if call.args.len() != 1 {
+            return Err(format!(
+                "len() takes exactly 1 argument, got {} (line {line}, in {scope})",
+                call.args.len()
+            ));
+        }
+        match &call.args[0] {
+            Expr::Ident(id) if params.iter().any(|p| p.eq_ignore_ascii_case(&id.name)) => Err(format!(
+                "len({}) is not supported on {target}: '{}' is a parameter of {scope}, so its length \
+                 is not known at compile time (line {line}). Pass the length as an extra argument.",
+                id.name, id.name
+            )),
+            Expr::Ident(id) if global_arrays.contains(id.name.as_str()) => Ok(()),
+            Expr::Ident(id) => Err(format!(
+                "len({}) is not supported on {target}: '{}' is not a global array (line {line}, in {scope}). \
+                 len() works on global list literals, e.g. `xs = [1, 2, 3]` or `const XS = [1, 2, 3]`.",
+                id.name, id.name
+            )),
+            _ => Err(format!(
+                "len() on {target} needs the name of a global array (line {line}, in {scope}); \
+                 its length must be known at compile time."
+            )),
+        }
+    };
+
+    let mut errors = Vec::new();
+    for item in &module.items {
+        let (params, scope): (&[String], String) = match item {
+            Item::Function(func) => (&func.params, format!("function '{}'", func.name)),
+            _ => (&[], "a global initializer".to_string()),
+        };
+        let mut on_expr = |e: &Expr| {
+            if let Expr::Call(call) = e {
+                if let Err(msg) = check(call, params, &scope) {
+                    errors.push(msg);
+                }
+            }
+        };
+        // The exhaustive walker reaches every nested body and sub-expression.
+        use crate::m6809::ast_walk;
+        match item {
+            Item::Function(func) => ast_walk::for_each_expr_in_stmts(&func.body, &mut on_expr),
+            Item::GlobalLet { value, .. } | Item::Const { value, .. } => {
+                ast_walk::walk_expr(value, &mut ast_walk::ExprFn(&mut on_expr))
+            }
+            Item::VectorList { .. } | Item::ExprStatement(_) | Item::Export(_) | Item::StructDef(_) => {}
+        }
+    }
+    if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -47,6 +124,23 @@ mod tests {
     #[test]
     fn literal_arrays_pass() {
         assert!(check_array_literals(&module("xs = [1, -2, 3]\nconst NAMES = [\"A\", \"B\"]\n")).is_ok());
+    }
+
+    #[test]
+    fn len_of_global_arrays_passes_on_every_target() {
+        let m = module("xs = [1, 2]\nconst YS = [3]\ndef f():\n    return len(xs) + len(YS)\n");
+        for t in ["m6809", "rp2350", "uvm2", "pitrex"] {
+            assert!(check_len_calls(&m, t).is_ok(), "{t}");
+        }
+    }
+
+    #[test]
+    fn len_of_anything_else_is_an_error_with_line() {
+        let m = module("n = 3\ndef f(a):\n    x = len(n)\n    y = len(a)\n    return len(\"abc\")\n");
+        let err = check_len_calls(&m, "rp2350").unwrap_err();
+        assert!(err.contains("len(n) is not supported on rp2350") && err.contains("line 3"), "{err}");
+        assert!(err.contains("len(a)") && err.contains("parameter") && err.contains("line 4"), "{err}");
+        assert!(err.contains("len() on rp2350 needs the name of a global array (line 5"), "{err}");
     }
 
     #[test]

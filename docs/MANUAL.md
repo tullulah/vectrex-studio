@@ -87,7 +87,18 @@ The compiler determines scope automatically: if the name was declared at the top
 const MAX_ENEMIES = 8
 const GRAVITY = 1
 const GROUND_Y = -70
+const HALF_W = WIDTH // 2      # consts of consts, in any order
+const WIDTH = 120
+const FLAG = 8
+const MASK = ~FLAG & 0xFF      # 0xF7
 ```
+
+A scalar constant's value is computed at compile time: it can be a number, another
+constant, or arithmetic (`+ - * / // %`) and bit operations (`& | ~`, `not`, comparisons)
+on those. Division truncates toward zero, as at run time. On m6809 a constant has no RAM;
+every use is an immediate value, so a value that cannot be computed at compile time
+(a variable, a call, a string) or that does not fit in 16 bits is a compile error with
+its line.
 
 ### Compound assignment
 
@@ -132,6 +143,7 @@ x = 0                # no annotation → defaults to i16
 
 **Known limitation:** Const arrays with `u8` type annotation may cause runtime issues in complex games. Use untyped const arrays as a workaround (they default to `i16`).
 
+
 **Example: typed game state**
 
 ```python
@@ -151,7 +163,9 @@ offsets: i8 = [-1, 0, 1]       # 3 bytes in RAM
 coords = [0, 100, 200]         # untyped → i16, 6 bytes in RAM
 ```
 
-Stride for element access is 1 byte for `u8`/`i8`, 2 bytes for `u16`/`i16`.
+Stride for element access is 1 byte for `u8`/`i8`, 2 bytes for `u16`/`i16`, for
+indexing and for `for v in arr` alike. `u8` elements are zero-extended and `i8`
+elements sign-extended when read.
 
 ### Integer literals
 
@@ -192,10 +206,10 @@ const names = ["LEVEL 1", "LEVEL 2", "LEVEL 3"]
 |----------|-------------|
 | `&` | AND |
 | `\|` | OR |
-| `^` | XOR |
 | `~` | NOT (bitwise complement) |
-| `<<` | Shift left |
-| `>>` | Shift right |
+
+`^`, `<<` and `>>` are not parsed yet (a parse error). `&` and `|` bind like `*`
+(tighter than `+` and `-`), not like Python: write parentheses when you mix them.
 
 ### Comparison
 
@@ -209,16 +223,12 @@ Chained comparisons are supported: `0 < x < 100` expands to `(0 < x) and (x < 10
 
 ### Operator precedence (high to low)
 
-1. Unary: `- + not ~`
-2. `* / %`
+1. Unary: `- not ~`
+2. `* / // % & |`
 3. `+ -`
-4. `<< >>`
-5. `&`
-6. `^`
-7. `|`
-8. Comparisons (including chained)
-9. `and`
-10. `or`
+4. Comparisons (including chained)
+5. `and`
+6. `or`
 
 ---
 
@@ -297,6 +307,10 @@ def draw_player(x, y, frame):
 ```
 
 - On the 6809, arguments are passed through `VAR_ARG0`..`VAR_ARG7` (up to 8); extra arguments are dropped.
+- An array argument is passed as its base address; the function indexes it like an
+  array (`arr[i]`, `arr[i] = v`). See [Arrays as parameters](#arrays-as-parameters).
+- A parameter hides a global or `const` with the same name inside its function. Names
+  are case-insensitive, so a parameter `b` also hides `const B`.
 - Return value is stored in the D register (16-bit).
 - Functions can call other functions freely.
 - Recursion is not safe (no stack depth protection).
@@ -346,8 +360,11 @@ const x_coords = [40, 40, -40, -10, 20, 50]
 ```python
 x = enemy_x[i]          # read by index
 enemy_x[i] = new_x      # write by index
-count = len(enemy_x)    # array length: works on ARM targets, returns 0 on m6809 (see Known Limitations)
+count = len(enemy_x)    # array length, a compile-time constant
 ```
+
+`len(name)` works on a global or const array, on every target. Any other argument (a
+parameter, a scalar, an expression, a string) is a compile error with its line.
 
 ### for-in over arrays
 
@@ -356,6 +373,39 @@ for state in enemy_active:
     if state == 1:
         active_count += 1
 ```
+
+`for v in name` needs a global or const array (its length is known at compile time).
+Each element is read with the array's element type. On m6809, iterating a parameter or
+a non-array is a compile error; loop over `range(0, n)` and index instead.
+
+### Arrays as parameters
+
+```python
+speeds: u8 = [1, 2, 4]
+
+def fastest(arr, n):
+    best = 0
+    for i in range(0, n):
+        if arr[i] > best:
+            best = arr[i]
+    return best
+
+def loop():
+    top = fastest(speeds, len(speeds))
+```
+
+Passing an array passes its base address; inside the function the parameter is
+indexed through that address. Parameters carry no type, so on m6809 the element size of
+an indexed parameter comes from the arrays passed at its call sites (also through other
+functions that forward the parameter):
+
+- Every call passes a `u8` array → the parameter is indexed as `u8`; likewise `i8`,
+  or untyped/`i16`/`u16` (2-byte elements).
+- Calls pass arrays with different element types (`u8` in one call, untyped in another)
+  → compile error naming both arrays and their lines. Use one element type, or two functions.
+- No call passes a named array (e.g. only computed addresses) → 2-byte elements.
+
+`len()` and `for v in` don't work on a parameter (the length is unknown): pass the length too.
 
 ### Notes
 
@@ -483,7 +533,7 @@ The analog axes and the buttons are read once per frame by code the compiler inj
 | `STOP_MUSIC()` | Stop current music. On m6809 the program must also use `PLAY_MUSIC` (the runtime is only linked then) |
 | `PLAY_SFX("name")` | Play a `.vsfx` sound effect |
 | `PLAY_NOTE("instrument", channel, midi_note)` | Play a note on a `.vinstr` instrument |
-| `PLAY_SAMPLE("name")` / `SAMPLE_POS(fps)` | Play a `.vsmp` sample / audio-synced frame index. ARM only |
+| `PLAY_SAMPLE("name")` / `SAMPLE_POS(fps)` | Play a `.vsmp` sample / audio-synced frame index. rp2350 and pitrex; on uvm2 they build but do nothing; on m6809 a compile error ("not supported on m6809") |
 
 The music/SFX engine is updated automatically every frame when the program uses `PLAY_MUSIC` or `PLAY_SFX`; there is nothing to call. (On m6809 the injected routine is `AUDIO_UPDATE`; calling it yourself is harmless but redundant. There is no user-callable `MUSIC_UPDATE`.) Formats and folders are in [ASSETS.md](ASSETS.md).
 
@@ -629,7 +679,7 @@ Each object in a layer:
 
 | Function | Description |
 |----------|-------------|
-| `wait(frames)` | Busy-wait N frames (nothing else runs meanwhile). m6809: constant `frames` only |
+| `wait(frames)` | Busy-wait N frames (nothing else runs meanwhile). m6809: `frames` must be a constant (a number, a const or a constant expression, up to 65535) |
 | `beep(period, frames)` | Non-blocking PSG tone: `period` is the PSG tone period (higher = lower pitch), `frames` the duration. m6809 also accepts `beep()` (period 50, 8 frames); on ARM pass both arguments |
 | `peek(addr)` | Read one byte from a Vectrex address. m6809: constant `addr` only |
 | `poke(addr, value)` | Write one byte to a Vectrex address. m6809: constant `addr` and `value` only |
@@ -725,7 +775,7 @@ These features are recognized by the parser but do not generate working code:
 - **Structs**: Parser accepts `struct` definitions, but codegen does not emit field access (`obj.field`). Use parallel arrays instead.
 - **Enums**: Not supported. Use named constants instead.
 - **`vectorlist` blocks**: Parsed, never emitted (see [section 10](#10-vectorlist-dsl)).
-- **`len()`**: `len(arr)` is the compile-time length of a global or const array. On m6809 anything else (a parameter, an expression, a string) is a compile error; on ARM a non-array name fails at link time and other expressions return 0 there.
+- **`len()`**: `len(arr)` is the compile-time length of a global or const array. On every target anything else (a parameter, a scalar, an expression, a string) is a compile error with its line.
 - **Inline assembly**: `asm("...")` is not implemented on any backend (the build fails with an undefined `ASM` symbol).
 - **Recursive functions**: Allowed but unsafe. No stack overflow protection.
 

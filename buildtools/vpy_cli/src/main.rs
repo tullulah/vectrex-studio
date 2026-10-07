@@ -5,6 +5,7 @@ use anyhow::{Result, Context};
 
 mod pico;
 mod program;
+mod reproducible;
 mod sdk;
 
 // Use centralized asset discovery from vpy_codegen (ensures consistent sorting)
@@ -93,14 +94,15 @@ enum Commands {
         simplify: i32,
     },
 
-    /// Compile a single `.vmus`/`.vsfx`/`.vec`/`.vplay` asset into its byte
-    /// stream, emitting a C header (`--format c`) or a raw `.bin` (`--format
-    /// bin`). Reuses the exact PSG (`.vmus`/`.vsfx`) / geometry (`.vec`) / level
-    /// (`.vplay`) compiler that drives the ARM/PiTrex asm backend, so the C
+    /// Compile a single asset into its byte stream, emitting a C header
+    /// (`--format c`) or a raw `.bin` (`--format bin`). Reuses the exact PSG
+    /// (`.vmus`/`.vsfx`) / geometry (`.vec`) / level (`.vplay`) / animation
+    /// (`.vanim`) / instrument (`.vinstr`) / recording (`.vrec`) / sample
+    /// (`.vsmp`) compiler that drives the ARM/PiTrex asm backend, so the C
     /// (vpy.h) runtime plays, draws and lays out byte-for-byte the same output
-    /// as hardware. `.vplay` additionally emits a sprite pointer table.
+    /// as hardware. `.vplay` and `.vanim` additionally emit a sprite pointer table.
     CompileAsset {
-        /// Input asset file (.vmus, .vsfx, .vec or .vplay)
+        /// Input asset file (.vmus, .vsfx, .vec, .vmesh, .vanim, .vplay, .vinstr, .vrec or .vsmp)
         input: PathBuf,
 
         /// Output format: `c` (C header) or `bin` (raw bytes)
@@ -892,12 +894,13 @@ fn check_asset_file(input: &Path) -> Result<String> {
     Ok(s)
 }
 
-/// Compile a `.vmus`/`.vsfx`/`.vec` asset into a C header or raw `.bin`.
+/// Compile an asset into a C header or raw `.bin`.
 ///
 /// The byte stream comes from the SAME compiler used by the ARM/PiTrex asm
-/// backend (`vpy_codegen::pitrex::assets`): notes→PSG for `.vmus`/`.vsfx`, and
-/// the path/segment geometry for `.vec`. The C runtime therefore plays/draws
-/// byte-for-byte identical output to real hardware.
+/// backend: notes→PSG for `.vmus`/`.vsfx`, the path/segment geometry for
+/// `.vec`, the instrument block for `.vinstr`, the chained recording table for
+/// `.vrec` and the rate/count/payload table for `.vsmp`. The C runtime therefore
+/// plays/draws byte-for-byte identical output to real hardware.
 fn cmd_compile_asset(input: &Path, format: &str, out: &Path, name: Option<String>) -> Result<()> {
     println!("{}", "=== COMPILE ASSET ===".bright_cyan().bold());
 
@@ -943,15 +946,48 @@ fn cmd_compile_asset(input: &Path, format: &str, out: &Path, name: Option<String
                 .map_err(|e| anyhow::anyhow!("compile {}: {e}", input.display()))?,
             "vmesh",
         ),
+        // .vinstr — the 16-byte instrument block PLAY_NOTE reads (instrres.rs).
+        "vinstr" => (
+            vpy_codegen::instrres::InstrResource::load(input)
+                .map_err(|e| anyhow::anyhow!("compile {}: {e}", input.display()))?
+                .compile_to_bytes()
+                .to_vec(),
+            "instr",
+        ),
+        // .vrec — the polyline-chained recording table DRAW_RECORDING reads,
+        // the same bytes the ARM/PiTrex backends assemble (vrec_chain.rs).
+        "vrec" => (
+            std::fs::read_to_string(input)
+                .map_err(|e| anyhow::anyhow!("read {}: {e}", input.display()))
+                .and_then(|t| vpy_codegen::vrec_chain::compile_vrec_json_to_rom_table(&t)
+                    .map_err(|e| anyhow::anyhow!("compile {}: {e}", input.display())))?,
+            "vrec",
+        ),
+        // .vsmp — rate, count and the packed 4-bit payload PLAY_SAMPLE hands to
+        // the SDK (arm/assets.rs).
+        "vsmp" => (
+            std::fs::read_to_string(input)
+                .map_err(|e| anyhow::anyhow!("read {}: {e}", input.display()))
+                .and_then(|t| vpy_codegen::arm::assets::compile_vsmp_json_to_bytes(&t)
+                    .map_err(|e| anyhow::anyhow!("compile {}: {e}", input.display())))?,
+            "smp",
+        ),
         other => {
             return Err(anyhow::anyhow!(
-                "unsupported asset extension '.{other}' \
-                 (expected .vmus, .vsfx, .vec, .vmesh or .vplay)"
+                "unsupported asset extension '.{other}' (expected .vmus, .vsfx, .vec, \
+                 .vmesh, .vanim, .vplay, .vinstr, .vrec or .vsmp)"
             ));
         }
     };
 
-    let kind = match suffix { "vec" => "path", "vmesh" => "mesh", _ => "PSG" };
+    let kind = match suffix {
+        "vec" => "path",
+        "vmesh" => "mesh",
+        "instr" => "instrument",
+        "vrec" => "recording",
+        "smp" => "sample",
+        _ => "PSG",
+    };
     println!("  {} → {} {} bytes", input.display(), bytes.len(), kind);
 
     match format {
@@ -966,12 +1002,22 @@ fn cmd_compile_asset(input: &Path, format: &str, out: &Path, name: Option<String
             let desc = match suffix {
                 "vec"   => "vector path stream (little-endian)",
                 "vmesh" => "surface mesh for vpy3d (little-endian)",
+                "instr" => "instrument block for PLAY_NOTE / vpy_play_note",
+                "vrec"  => "vector recording for DRAW_RECORDING / vpy_draw_recording (little-endian)",
+                "smp"   => "4-bit sample for PLAY_SAMPLE / vpy_play_sample (little-endian)",
                 _       => "PSG event stream (little-endian)",
+            };
+            // The recording and sample tables start with 32-bit words, and the SDK's
+            // sample player reads them as words: keep the base word-aligned, as the
+            // assembler's `.balign 4` does for the VPy backends.
+            let align = match suffix {
+                "vrec" | "smp" => " __attribute__((aligned(4)))",
+                _ => "",
             };
             h.push_str(&format!("/* Auto-generated by `vpy_cli compile-asset` from {}.\n", input.display()));
             h.push_str(&format!(" * {desc} — do not edit by hand. */\n"));
             h.push_str(&format!("#ifndef {guard}\n#define {guard}\n\n"));
-            h.push_str(&format!("static const unsigned char {var}[] = {{\n"));
+            h.push_str(&format!("static const unsigned char {var}[]{align} = {{\n"));
             for chunk in bytes.chunks(12) {
                 let row: Vec<String> = chunk.iter().map(|b| format!("0x{:02X}", b)).collect();
                 h.push_str(&format!("    {},\n", row.join(", ")));
@@ -2049,6 +2095,10 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
             if let Ok(extra) = std::env::var("UVM2_EXTRA_DEFS") {
                 if !extra.is_empty() { defs.push(';'); defs.push_str(&extra); }
             }
+            // Reproducible images: see reproducible::uvm2_reproducible_defs.
+            for def in reproducible::uvm2_reproducible_defs(std::env::var_os("SOURCE_DATE_EPOCH").is_some()) {
+                defs.push(';'); defs.push_str(def);
+            }
             format!("-DUVM2_GAME_DEFS={}", defs)
         })
         .output()
@@ -2060,8 +2110,15 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     println!("  {} configurado en {}", "✓".green(), cmake_build.display());
 
     println!("\n{}", "Phase 5: Build + link".bright_cyan().bold());
-    let bld = Command::new("cmake")
-        .args(["--build", cmake_build.to_str().unwrap(), "-j8"])
+    let mut bld_cmd = Command::new("cmake");
+    bld_cmd.args(["--build", cmake_build.to_str().unwrap(), "-j8"]);
+    // Reproducible images: see reproducible::uvm2_cargo_remap_env.
+    let user_rustflags = ["CARGO_ENCODED_RUSTFLAGS", "RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS"]
+        .iter().any(|k| std::env::var_os(k).is_some());
+    if let Some((key, value)) = reproducible::uvm2_cargo_remap_env(std::env::var_os("HOME").map(PathBuf::from).as_deref(), user_rustflags) {
+        bld_cmd.env(key, value);
+    }
+    let bld = bld_cmd
         .output()
         .map_err(|e| anyhow::anyhow!("cmake --build fallo: {}", e))?;
     if !bld.status.success() {
@@ -2497,7 +2554,7 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
                         let src_name = format!("{}.vpy", entry_module_name);
                         match std::fs::read_to_string(&flat_asm_path) {
                             Ok(flat_asm) => {
-                                match generate_pdb(&flat_asm, &src_name, &pdb_path, &symbol_table, &func_lines, &bank_asms) {
+                                match generate_pdb(&flat_asm, &src_name, &pdb_path, &symbol_table, &func_lines, &program.function_file_names(), &bank_asms) {
                                     Ok(()) => println!("  {} PDB written: {}", "✓".green(), pdb_path.display()),
                                     Err(e) => eprintln!("  ⚠ PDB write failed: {}", e),
                                 }
@@ -2580,6 +2637,26 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
 
         println!("  {} Binary written: {}", "✓".green(), output_path.display());
 
+        // Phase 9: debug symbols (.pdb) from the linker's addresses. Each function's
+        // lines are attributed to the .vpy file that defines it.
+        {
+            println!("\n{}", "Phase 9: Generating debug symbols...".bright_cyan());
+            let pdb_path = output_path.with_extension("pdb");
+            let sb_syms: std::collections::BTreeMap<String, u16> = rom.symbols.iter()
+                .map(|(name, loc)| (name.clone(), loc.offset))
+                .collect();
+            let func_lines: Vec<(String, usize)> = unified.items.iter().filter_map(|it| {
+                if let vpy_parser::Item::Function(f) = it {
+                    Some((f.name.to_uppercase(), f.line))
+                } else { None }
+            }).collect();
+            let src_name = format!("{}.vpy", entry_module_name);
+            match generate_pdb(&generated.asm_source, &src_name, &pdb_path, &sb_syms, &func_lines, &program.function_file_names(), &[]) {
+                Ok(()) => println!("  {} PDB written: {}", "✓".green(), pdb_path.display()),
+                Err(e) => eprintln!("  ⚠ PDB write failed: {}", e),
+            }
+        }
+
         println!("\n{}", format!("✓ BUILD SUCCESS: {} bytes ({} free)", padded_bytes, padded_bytes - code_bytes).bright_green().bold());
         
         return Ok(());
@@ -2589,6 +2666,7 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
     // module that is not part of this build is a compile error, not a silent pass.
     let program = program::load_program(input)?;
     let source_path = program.entry_path.clone();
+    let func_files = program.function_file_names();
     let module = program.unified;
     
     // Override rom_size and bank_size from META if specified
@@ -2751,7 +2829,7 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
                     let src_name = source_path.file_name().and_then(|n| n.to_str()).unwrap_or("main.vpy");
                     match std::fs::read_to_string(&flat_asm_path) {
                         Ok(flat_asm) => {
-                            match generate_pdb(&flat_asm, src_name, &pdb_path, &symbol_table, &func_lines, &bank_asms) {
+                            match generate_pdb(&flat_asm, src_name, &pdb_path, &symbol_table, &func_lines, &func_files, &bank_asms) {
                                 Ok(()) => println!("  {} PDB written: {}", "✓".green(), pdb_path.display()),
                                 Err(e) => eprintln!("  ⚠ PDB write failed: {}", e),
                             }
@@ -2846,7 +2924,7 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
                 Some((f.name.to_uppercase(), f.line))
             } else { None }
         }).collect();
-        match generate_pdb(&generated.asm_source, source_path.file_name().and_then(|n| n.to_str()).unwrap_or("main.vpy"), &pdb_path, &sb_syms, &sb_funcs, &[]) {
+        match generate_pdb(&generated.asm_source, source_path.file_name().and_then(|n| n.to_str()).unwrap_or("main.vpy"), &pdb_path, &sb_syms, &sb_funcs, &func_files, &[]) {
             Ok(()) => println!("  {} PDB written: {}", "✓".green(), pdb_path.display()),
             Err(e) => eprintln!("  ⚠ PDB write failed: {}", e),
         }
@@ -2896,6 +2974,9 @@ fn generate_pdb(
     symbol_table: &std::collections::BTreeMap<String, u16>,
     // (UPPERCASE function name, VPy def line). From the parsed module.
     func_lines: &[(String, usize)],
+    // Function label (UPPERCASE) -> name of the .vpy file that defines it
+    // (`Program::function_file_names`). Functions missing here are `source_name`'s.
+    func_files: &std::collections::HashMap<String, String>,
     // Per-bank full ASM: (bank_id, file content, relative path). Each is assembled
     // standalone to build a bank-aware line/address map (asmBankAddr) and the
     // bank->file table (asmBankFiles) so the IDE opens the active bank's ASM on pause.
@@ -2910,6 +2991,18 @@ fn generate_pdb(
     let mut labels: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();    // non-VAR equate -> int
     let mut line_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();  // "vpyLine" -> "0xADDR" (VPy breakpoints)
     let mut vpy_line_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // "decAddr" -> {file,line,column} (PC→VPy)
+    // "file.vpy" -> {"vpyLine" -> "0xADDR"}: every source file's breakpoints. `lineMap`
+    // (line numbers only) keeps the ENTRY file's lines, so an imported module's
+    // line N no longer overwrites or shadows the entry's line N.
+    let mut file_line_map: std::collections::BTreeMap<String, serde_json::Map<String, serde_json::Value>> =
+        std::collections::BTreeMap::new();
+    // Function label (UPPERCASE) -> its .vpy file name; `<LABEL>_BODY` (loop()) too.
+    let file_of_label = |label: &str| -> Option<&str> {
+        let up = label.to_uppercase();
+        func_files.get(&up)
+            .or_else(|| up.strip_suffix("_BODY").and_then(|base| func_files.get(base)))
+            .map(String::as_str)
+    };
     let mut asm_line_map: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // "0xADDR" -> {file,address,line} (PC→ASM)
     let mut native_calls: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // "vpyLine" -> "NAME"
     let mut asm_functions: serde_json::Map<String, serde_json::Value> = serde_json::Map::new(); // label -> {name,file,startLine,endLine,type}
@@ -2998,19 +3091,26 @@ fn generate_pdb(
         }
     }
 
-    // ── VPy functions: name -> {startLine,endLine,address,type} ──
+    // ── VPy functions: name -> {startLine,endLine,address,type,file} ──
     {
-        let mut sorted: Vec<(usize, &str)> = func_lines.iter().map(|(n, l)| (*l, n.as_str())).collect();
+        // End line = the line before the next function OF THE SAME FILE.
+        let file_for = |uname: &str| file_of_label(uname).unwrap_or(source_name).to_string();
+        let mut sorted: Vec<(String, usize, &str)> = func_lines.iter()
+            .map(|(n, l)| (file_for(n), *l, n.as_str()))
+            .collect();
         sorted.sort();
-        for (i, (def_line, uname)) in sorted.iter().enumerate() {
+        for (i, (file, def_line, uname)) in sorted.iter().enumerate() {
             // VPy `loop()` compiles to the label `LOOP_BODY`, not `LOOP`; fall back to `<NAME>_BODY`.
             let addr = symbol_table.get(*uname)
                 .or_else(|| symbol_table.get(&format!("{}_BODY", uname)))
                 .copied().unwrap_or(0);
-            let end_line = if i + 1 < sorted.len() { sorted[i + 1].0.saturating_sub(1) } else { def_line + 1 };
+            let end_line = match sorted.get(i + 1) {
+                Some((next_file, next_line, _)) if next_file == file => next_line.saturating_sub(1),
+                _ => def_line + 1,
+            };
             functions.insert(uname.to_string(), serde_json::json!({
                 "address": format!("0x{:04X}", addr),
-                "startLine": def_line, "endLine": end_line, "type": "vpy"
+                "startLine": def_line, "endLine": end_line, "type": "vpy", "file": file
             }));
         }
     }
@@ -3077,6 +3177,8 @@ fn generate_pdb(
             let mut pending_vpy: Option<u32> = None;
             let mut phys = 0usize;
             let mut label_lines: Vec<(String, usize)> = Vec::new();
+            // Source file of the VPy function whose code is being scanned.
+            let mut current_file: &str = source_name;
             for raw in text.lines() {
                 phys += 1;
                 let t = raw.trim();
@@ -3099,6 +3201,9 @@ fn generate_pdb(
                     let lbl = lbl.trim();
                     if !lbl.is_empty() && !lbl.contains(' ') && !lbl.starts_with('.') {
                         label_lines.push((lbl.to_string(), phys));
+                        if let Some(file) = file_of_label(lbl) {
+                            current_file = file;
+                        }
                     }
                 }
                 // First addressed line after a VPy_LINE marker binds that VPy line.
@@ -3106,9 +3211,13 @@ fn generate_pdb(
                     if let Some(addr) = line_to_addr.get(&phys) {
                         let a = *addr as u16;
                         let hex = format!("0x{:04X}", a);
-                        line_map.entry(n.to_string()).or_insert_with(|| serde_json::Value::String(hex.clone()));
+                        if current_file == source_name {
+                            line_map.entry(n.to_string()).or_insert_with(|| serde_json::Value::String(hex.clone()));
+                        }
+                        file_line_map.entry(current_file.to_string()).or_default()
+                            .entry(n.to_string()).or_insert_with(|| serde_json::Value::String(hex.clone()));
                         vpy_line_map.entry(a.to_string()) // decimal-addr key (IDE PC→VPy lookup)
-                            .or_insert_with(|| serde_json::json!({ "file": source_name, "line": n, "column": 0 }));
+                            .or_insert_with(|| serde_json::json!({ "file": current_file, "line": n, "column": 0 }));
                         pending_vpy = None;
                     }
                 }
@@ -3147,6 +3256,7 @@ fn generate_pdb(
         "labels": labels,
         "lineMap": line_map,
         "vpyLineMap": vpy_line_map,
+        "fileLineMap": file_line_map,
         "asmLineMap": asm_line_map,
         "asmAddressMap": asm_address_map,
         "asmBankAddr": asm_bank_addr,

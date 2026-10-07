@@ -1,7 +1,7 @@
 // Level System Builtins for VPy
 // vplay-aware level loading, rendering, and physics
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use vpy_parser::{Expr, Module};
 use super::expressions;
@@ -317,7 +317,7 @@ pub fn emit_level_collision_x(args: &[Expr], out: &mut String, assets: &[crate::
 
 /// Emit runtime helpers for level system.
 /// Only emits helpers that are actually used in the code (tree shaking).
-pub fn emit_runtime_helpers(out: &mut String, needed: &HashSet<String>) {
+pub fn emit_runtime_helpers(out: &mut String, needed: &BTreeSet<String>) {
 
     // =========================================================================
     // GET_LEVEL_FLOOR_Y_RUNTIME — multibank only

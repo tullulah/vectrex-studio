@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 /// Variable size metadata (bytes allocated + signedness)
 /// Used to determine correct load/store instructions and array stride
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct VarSize {
     /// Bytes allocated: 1 for u8/i8, 2 for u16/i16
     pub bytes: usize,
@@ -22,6 +22,26 @@ impl VarSize {
         VarSize {
             bytes: 2,
             signed: true,
+        }
+    }
+
+    /// Size of a declared type annotation: u8/i8 = 1 byte, u16/i16 = 2, none = i16.
+    pub fn from_annotation(type_annotation: &Option<String>) -> Self {
+        match type_annotation.as_deref() {
+            Some("u8") => VarSize { bytes: 1, signed: false },
+            Some("i8") => VarSize { bytes: 1, signed: true },
+            Some("u16") => VarSize { bytes: 2, signed: false },
+            _ => VarSize::default_i16(),
+        }
+    }
+
+    /// Type name for messages.
+    pub fn type_name(self) -> &'static str {
+        match (self.bytes, self.signed) {
+            (1, false) => "u8",
+            (1, true) => "i8",
+            (_, false) => "u16",
+            (_, true) => "i16",
         }
     }
 }
@@ -52,6 +72,23 @@ thread_local! {
     /// Map of current function parameter names (lowercase) → ARG index (0-4).
     /// When set, identifiers matching a param are emitted as VAR_ARGn instead of VAR_NAME.
     static CURRENT_PARAMS: RefCell<HashMap<String, usize>> = RefCell::new(HashMap::new());
+
+    /// Element type of every array PARAMETER, per function: m6809 label (upper-case)
+    /// → parameter name (lower-case) → element size. Filled by `array_params::analyze`
+    /// from the arrays passed at the call sites. Absent = 16-bit (the default).
+    static PARAM_ARRAY_ELEMS: RefCell<HashMap<String, HashMap<String, VarSize>>> = RefCell::new(HashMap::new());
+
+    /// m6809 label of the function whose body is being generated ("" outside one).
+    static CURRENT_FUNCTION: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+/// Where the elements of an indexable name live.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ArrayBase {
+    /// A global array: its data label is the base address (link-time constant).
+    Label(String),
+    /// A parameter holding an array's base address: the label of its 16-bit slot.
+    Pointer(String),
 }
 
 /// Initialize the mutable arrays context
@@ -112,6 +149,11 @@ pub fn set_var_size(name: &str, bytes: usize, signed: bool) {
 /// Returns the registered size, or default i16 (2 bytes, signed) if not found
 /// name: lowercase variable name (no VAR_ prefix)
 pub fn get_var_size(name: &str) -> VarSize {
+    // A parameter lives in a 16-bit VAR_ARGn slot whatever a global of the same
+    // name is declared as.
+    if get_param_index(name).is_some() {
+        return VarSize::default_i16();
+    }
     VAR_SIZES.with(|vs| {
         vs.borrow()
             .get(name)
@@ -138,6 +180,11 @@ pub fn set_const_value(name: &str, value: i64) {
 /// Look up a compile-time const value.
 /// Returns Some(value) if the name is a const, None if it is a runtime variable.
 pub fn get_const_value(name: &str) -> Option<i64> {
+    // A parameter of the function being generated shadows a const of the same
+    // name (names are case-insensitive: parameter `b` vs `const B`).
+    if get_param_index(name).is_some() {
+        return None;
+    }
     CONST_VALUES.with(|cv| {
         cv.borrow().get(&name.to_lowercase()).copied()
     })
@@ -195,6 +242,39 @@ pub fn get_param_index(name: &str) -> Option<usize> {
     })
 }
 
+/// Register the element type of every array parameter (see `array_params`).
+pub fn set_param_array_elems(map: HashMap<String, HashMap<String, VarSize>>) {
+    PARAM_ARRAY_ELEMS.with(|m| *m.borrow_mut() = map);
+}
+
+/// Record the m6809 label of the function whose body is being generated.
+pub fn set_current_function(label: &str) {
+    CURRENT_FUNCTION.with(|f| *f.borrow_mut() = label.to_string());
+}
+
+/// How to index `name`: its base address and element size, or None when `name`
+/// is neither a global array nor a parameter of the current function.
+///
+/// A parameter is a pointer to the array the caller passed. Its element type
+/// comes from the arrays passed at the call sites; with none known it is 16-bit.
+pub fn resolve_array(name: &str) -> Option<(ArrayBase, VarSize)> {
+    if let Some(idx) = get_param_index(name) {
+        let elem = CURRENT_FUNCTION.with(|f| {
+            PARAM_ARRAY_ELEMS.with(|m| {
+                m.borrow()
+                    .get(f.borrow().as_str())
+                    .and_then(|params| params.get(&name.to_lowercase()).copied())
+            })
+        });
+        return Some((
+            ArrayBase::Pointer(format!("VAR_ARG{}", idx)),
+            elem.unwrap_or_else(VarSize::default_i16),
+        ));
+    }
+    let label = global_array_base_label(name)?;
+    Some((ArrayBase::Label(label), get_var_size(name)))
+}
+
 /// Clear all compilation context (mutable arrays, variable sizes, const values, frame groups)
 pub fn clear_context() {
     MUTABLE_ARRAYS.with(|ma| {
@@ -216,6 +296,8 @@ pub fn clear_context() {
     CURRENT_PARAMS.with(|cp| {
         cp.borrow_mut().clear();
     });
+    PARAM_ARRAY_ELEMS.with(|m| m.borrow_mut().clear());
+    CURRENT_FUNCTION.with(|f| f.borrow_mut().clear());
 }
 
 #[cfg(test)]

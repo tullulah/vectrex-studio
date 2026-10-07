@@ -131,7 +131,6 @@ pub fn emit_builtins(msg_entries: &[MsgEntry], usage: &Usage) -> String {
     if usage.has("PEEK_POKE")  { s.push_str(&emit_peek_poke()); }
     if usage.has("WAIT")       { s.push_str(&emit_wait_builtin()); }
     if usage.has("BEEP")       { s.push_str(&emit_beep()); }
-    if usage.has("LEN")        { s.push_str(&emit_len()); }
     // Audio engines.
     if usage.has("MUSIC")      { s.push_str(&emit_music_engine()); }
     if usage.has("SFX")        { s.push_str(&emit_sfx_engine()); }
@@ -1231,19 +1230,6 @@ fn emit_beep() -> String {
     s.push_str("    mov     r0, #8\n    mov     r1, #0\n    bl      psg_write\n"); // vol=0
     s.push_str("    mov     r0, #7\n    mov     r1, #0x3F\n    bl      psg_write\n"); // mixer: all off
     s.push_str("vbu_done:\n    pop     {r4, pc}\n    .ltorg\n\n");
-
-    s
-}
-
-/// vpy_len — LEN group (fallback stub for non-static len() arguments).
-fn emit_len() -> String {
-    let mut s = String::new();
-
-    // vpy_len — fallback for non-Var len() arguments; emit_call handles len(arr_name) as a
-    // compile-time constant (ldr r0, =ARRAY_NAME_LEN) without calling this function.
-    s.push_str("@ vpy_len — fallback, returns 0 (len(arr) on static arrays resolved at compile time)\n");
-    s.push_str(".global vpy_len\n.type vpy_len, %function\n.thumb_func\nvpy_len:\n");
-    s.push_str("    mov     r0, #0\n    bx      lr\n\n");
 
     s
 }

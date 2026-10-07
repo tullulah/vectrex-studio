@@ -27,6 +27,8 @@ pub mod ram_layout;
 pub mod assets;
 pub mod context;  // Thread-local context for mutable array tracking
 pub mod ast_walk; // Exhaustive AST visitor shared by every "uses X?" scan
+pub mod array_params; // Element type of arrays passed to functions
+pub mod consts;   // Compile-time folding of `const` values
 #[cfg(test)]
 mod regression_tests;
 
@@ -164,14 +166,14 @@ pub fn generate_m6809_asm(
     context::set_const_arrays(const_arrays);
 
     // Register compile-time const values so emit_simple_expr emits LDD #n (immediate)
-    // instead of LDD >VAR_name (RAM load), which would read uninitialized garbage.
-    for item in &module.items {
-        if let Item::Const { name, value, .. } = item {
-            if let Expr::Number(n) = value {
-                context::set_const_value(name, *n as i64);
-            }
-        }
+    // instead of LDD >VAR_name (RAM load). A scalar const has no RAM slot, so every
+    // one must fold to a number here (`const B = A * 2` included) or the build fails.
+    for (name, value) in consts::fold_consts(module)? {
+        context::set_const_value(&name, value);
     }
+
+    // Arrays passed to functions: element type of every indexed parameter.
+    context::set_param_array_elems(array_params::analyze(module)?);
 
     // Calculate bank configuration dynamically
     // Use META ROM_BANK_SIZE if provided; default to 16KB for single-bank ROMs

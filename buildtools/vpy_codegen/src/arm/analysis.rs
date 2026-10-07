@@ -123,7 +123,6 @@ const GROUPS: &[(&str, &[&str], &[&str])] = &[
     // ── utilities ──────────────────────────────────────────────────────────
     ("WAIT",            &["WAIT"],              &[]),  // calls vpy_wait_recal (core)
     ("PEEK_POKE",       &["PEEK", "POKE"],      &[]),  // bus_read/bus_write (core)
-    ("LEN",             &["LEN"],               &[]),  // runtime fallback stub
     // ── sprites / enemies / levels ─────────────────────────────────────────
     // vpy_draw_anim: calls vpy_draw_vector_ex. Also a dep of ENEMIES.
     ("ANIM",            &["DRAW_ANIM"],         &["DRAW_VECTOR_EX"]),

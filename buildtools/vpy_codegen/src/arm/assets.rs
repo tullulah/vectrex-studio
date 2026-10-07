@@ -232,6 +232,22 @@ pub fn check_vsmp_json(text: &str) -> Result<(u32, u32, usize), String> {
     Ok((v.sample_rate, v.num_samples, bytes.len()))
 }
 
+/// A `.vsmp` JSON text as the bytes of the `_<NAME>_SMP` table `compile_vsmp`
+/// assembles: `u32 sample_rate`, `u32 num_samples` (little-endian), then the
+/// packed 4-bit payload. For the C header (`vpy_cli compile-asset --format c`)
+/// that libvpy's `vpy_play_sample` hands to the SDK. Validated like
+/// [`check_vsmp_json`]; the base must be 4-byte aligned where it is used.
+pub fn compile_vsmp_json_to_bytes(text: &str) -> Result<Vec<u8>, String> {
+    check_vsmp_json(text)?;
+    let v: VsmpResource = serde_json::from_str(text).map_err(|e| format!("invalid .vsmp JSON: {e}"))?;
+    let payload = base64_decode(&v.data);
+    let mut out = Vec::with_capacity(8 + payload.len());
+    out.extend_from_slice(&v.sample_rate.to_le_bytes());
+    out.extend_from_slice(&v.num_samples.to_le_bytes());
+    out.extend_from_slice(&payload);
+    Ok(out)
+}
+
 /// Decode a standard base64 string (RFC 4648, `+`/`/` alphabet, `=` padding)
 /// into bytes. Pure Rust — base64 is not a workspace dependency and the
 /// payload format is fixed. Whitespace in the input is ignored; any invalid
@@ -1695,6 +1711,15 @@ mod tests {
             "missing num_samples word:\n{asm}");
         assert!(asm.contains(".byte   0x21, 0x43"),
             "packed 4-bit payload bytes wrong:\n{asm}");
+    }
+
+    /// The C header's bytes are the table above: rate, count, payload.
+    #[test]
+    fn test_compile_vsmp_json_to_bytes() {
+        let b = compile_vsmp_json_to_bytes(VSMP_JSON).unwrap();
+        assert_eq!(b, vec![0x40, 0x1F, 0, 0, 4, 0, 0, 0, 0x21, 0x43]);
+        let short = VSMP_JSON.replace("\"numSamples\": 4", "\"numSamples\": 9");
+        assert!(compile_vsmp_json_to_bytes(&short).unwrap_err().contains("numSamples"));
     }
 
     #[test]

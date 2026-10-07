@@ -259,15 +259,15 @@ pub fn emit_call(
     info: &CallInfo,
     var_addrs: &std::collections::HashMap<String, u32>,
 ) -> Result<String, String> {
-    // Special case: len(arr) — resolved at compile time via ARRAY_NAME_LEN equate.
-    // Only works for simple variable-name arguments (the common case).
-    if (info.name == "len" || info.name == "LEN") && info.args.len() == 1 {
-        if let Some(vpy_parser::Expr::Ident(id)) = info.args.first() {
-            let varname = id.name.to_uppercase();
-            // Emit the compile-time constant directly — the assembler resolves it.
-            return Ok(format!("    ldr     r0, =ARRAY_{varname}_LEN\n"));
-        }
-        // Fallthrough for non-Var args → returns 0 via vpy_len
+    // len(arr) — the compile-time ARRAY_<NAME>_LEN equate. `validate::check_len_calls`
+    // has already rejected every other argument (with its line), as on m6809.
+    if info.name.eq_ignore_ascii_case("len") {
+        return match info.args.as_slice() {
+            [vpy_parser::Expr::Ident(id)] => {
+                Ok(format!("    ldr     r0, =ARRAY_{}_LEN\n", id.name.to_uppercase()))
+            }
+            _ => Err(format!("line {}: len() needs the name of a global array", info.source_line)),
+        };
     }
 
     // Enemy system builtins — implemented on rp2350 via vpy_spawn/update/draw_enemies.
@@ -391,7 +391,6 @@ pub fn emit_call(
         "wait" | "WAIT"   => "vpy_wait",
         "peek" | "PEEK"   => "vpy_peek",
         "poke" | "POKE"   => "vpy_poke",
-        "len" | "LEN"     => "vpy_len",
         // Animation
         "DRAW_ANIM"       => "vpy_draw_anim",
         // Enemy pool operations — ARM implementations

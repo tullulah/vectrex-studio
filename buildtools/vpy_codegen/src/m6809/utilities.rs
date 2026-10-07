@@ -1,7 +1,7 @@
 // Utility Builtins for VPy
 // Simple utility functions for common tasks
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use vpy_parser::Expr;
 
 /// Emit MOVE(x, y) - Move beam to position without drawing
@@ -62,76 +62,10 @@ pub fn emit_len(args: &[Expr], out: &mut String) {
     }
 }
 
-/// Reject every `len(...)` whose result is not known at compile time.
-///
-/// m6809 supports `len(name)` where `name` is a global array (mutable or const
-/// list literal) that is not shadowed by a parameter of the enclosing function.
+/// Reject every `len(...)` whose result is not known at compile time
+/// (shared with the ARM backends: [`crate::validate::check_len_calls`]).
 pub fn validate_len_calls(module: &vpy_parser::Module) -> Result<(), String> {
-    use vpy_parser::{CallInfo, Item};
-    let global_arrays: std::collections::HashSet<&str> = module.items.iter()
-        .filter_map(|item| match item {
-            Item::GlobalLet { name, value: Expr::List(_), .. }
-            | Item::Const { name, value: Expr::List(_), .. } => Some(name.as_str()),
-            _ => None,
-        })
-        .collect();
-
-    let check = |call: &CallInfo, params: &[String], scope: &str| -> Result<(), String> {
-        if !call.name.eq_ignore_ascii_case("LEN") {
-            return Ok(());
-        }
-        let line = call.source_line;
-        if call.args.len() != 1 {
-            return Err(format!(
-                "len() takes exactly 1 argument, got {} (line {line}, in {scope})",
-                call.args.len()
-            ));
-        }
-        match &call.args[0] {
-            Expr::Ident(id) if params.iter().any(|p| p.eq_ignore_ascii_case(&id.name)) => Err(format!(
-                "len({}) is not supported on m6809: '{}' is a parameter of {scope}, so its length \
-                 is not known at compile time (line {line}). Pass the length as an extra argument.",
-                id.name, id.name
-            )),
-            Expr::Ident(id) if global_arrays.contains(id.name.as_str()) => Ok(()),
-            Expr::Ident(id) => Err(format!(
-                "len({}) is not supported on m6809: '{}' is not a global array (line {line}, in {scope}). \
-                 len() works on global list literals, e.g. `xs = [1, 2, 3]` or `const XS = [1, 2, 3]`.",
-                id.name, id.name
-            )),
-            _ => Err(format!(
-                "len() on m6809 needs the name of a global array (line {line}, in {scope}); \
-                 its length must be known at compile time."
-            )),
-        }
-    };
-
-    for item in &module.items {
-        let (params, scope): (&[String], String) = match item {
-            Item::Function(f) => (&f.params, format!("function '{}'", f.name)),
-            _ => (&[], "a global initializer".to_string()),
-        };
-        let mut result = Ok(());
-        let mut on_expr = |e: &Expr| {
-            if result.is_ok() {
-                if let Expr::Call(call) = e {
-                    result = check(call, params, &scope);
-                }
-            }
-        };
-        match item {
-            Item::Function(f) => super::ast_walk::for_each_expr_in_stmts(&f.body, &mut on_expr),
-            Item::GlobalLet { value, .. } | Item::Const { value, .. } => {
-                super::ast_walk::walk_expr(value, &mut super::ast_walk::ExprFn(&mut on_expr))
-            }
-            Item::VectorList { .. }
-            | Item::ExprStatement(_)
-            | Item::Export(_)
-            | Item::StructDef(_) => {}
-        }
-        result?;
-    }
-    Ok(())
+    crate::validate::check_len_calls(module, "m6809")
 }
 
 /// Emit GET_TIME() - Get frame counter
@@ -207,9 +141,9 @@ pub fn emit_poke(args: &[Expr], out: &mut String) {
 /// Emit WAIT(frames) - Wait for N frames
 /// 
 /// Parameters:
-/// - frames: Number of frames to wait (1-255)
+/// - frames: Number of frames to wait: a literal or a const (up to 65535)
 /// 
-/// Calls WAIT_RECAL() N times
+/// Calls WAIT_RECAL() N times (inline up to 10, a loop above)
 pub fn emit_wait(args: &[Expr], out: &mut String) {
     out.push_str("    ; ===== WAIT builtin =====\n");
     
@@ -220,22 +154,25 @@ pub fn emit_wait(args: &[Expr], out: &mut String) {
         return;
     }
     
-    // Check if frames is constant
-    if let Expr::Number(frames) = &args[0] {
-        if *frames <= 10 {
+    // The frame count must be a compile-time constant (a literal or a const).
+    if let Some(frames) = super::expressions::try_extract_int_literal(&args[0]) {
+        if frames <= 10 {
             // Inline for small counts
-            for _ in 0..*frames {
+            for _ in 0..frames.max(0) {
                 out.push_str("    JSR Wait_Recal\n");
             }
         } else {
-            // Use loop for larger counts
-            out.push_str(&format!("    LDA #{}                ; Frame counter\n", frames));
-            out.push_str("WAIT_LOOP:\n");
-            out.push_str("    PSHS A\n");
+            // Loop for larger counts. The label is unique per call: two waits in
+            // one program used to define WAIT_LOOP twice. 16-bit counter on the
+            // stack (Wait_Recal clobbers D and X); balanced PSHS/PULS.
+            let lbl = super::functions::fresh_label("WAIT_LOOP");
+            out.push_str(&format!("    LDD #{}                ; Frame counter\n", frames));
+            out.push_str(&format!("{}:\n", lbl));
+            out.push_str("    PSHS D\n");
             out.push_str("    JSR Wait_Recal\n");
-            out.push_str("    PULS A\n");
-            out.push_str("    DECA\n");
-            out.push_str("    BNE WAIT_LOOP\n");
+            out.push_str("    PULS D\n");
+            out.push_str("    SUBD #1\n");
+            out.push_str(&format!("    BNE {}\n", lbl));
         }
     } else {
         super::diagnostics::error("wait() needs a constant frame count on m6809 (e.g. `wait(30)`)");
@@ -301,6 +238,6 @@ pub fn emit_beep(args: &[Expr], out: &mut String) {
 
 /// Emit runtime helpers for utilities builtins
 /// Only emits helpers that are actually used in the code (tree shaking)
-pub fn emit_runtime_helpers(_out: &mut String, _needed: &HashSet<String>) {
+pub fn emit_runtime_helpers(_out: &mut String, _needed: &BTreeSet<String>) {
     // No utility runtime helpers currently needed
 }

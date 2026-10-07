@@ -17,7 +17,7 @@ use super::utilities;
 use super::assets;
 use crate::{AssetInfo, AssetType};
 use crate::vecres::VecResource;
-use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A single entry from MSG_DEF(id, x, y, "text")
 #[derive(Debug, Clone)]
@@ -31,32 +31,37 @@ pub struct MsgEntry {
 /// Unique label counter for builtin function labels
 static LABEL_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-/// Flag indicating if we're generating code for multibank ROM
-/// When true, asset references use banked access (DRAW_VECTOR_BANKED, PLAY_MUSIC_BANKED)
-static IS_MULTIBANK: AtomicBool = AtomicBool::new(false);
-
-/// Flag indicating if assets are distributed across banks (requires bank switching)
-/// This is separate from IS_MULTIBANK because small assets stay in Bank #0 even in multibank mode
-static USE_BANKED_ASSETS: AtomicBool = AtomicBool::new(false);
+// Per-build mode flags. Thread-local like the rest of the m6809 codegen state
+// (context.rs): a process-wide flag let one build's multibank mode leak into another
+// running on a different thread (seen in the test suite: a single-bank build emitting
+// `JSR DRAW_VECTOR_BANKED`).
+thread_local! {
+    /// Generating code for a multibank ROM.
+    static IS_MULTIBANK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Assets are distributed across banks and need bank switching (DRAW_VECTOR_BANKED,
+    /// PLAY_MUSIC_BANKED). Separate from IS_MULTIBANK: small assets stay in bank #0 even
+    /// in multibank mode.
+    static USE_BANKED_ASSETS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
 
 /// Set multibank mode for code generation
 pub fn set_multibank_mode(multibank: bool) {
-    IS_MULTIBANK.store(multibank, Ordering::SeqCst);
+    IS_MULTIBANK.with(|f| f.set(multibank));
 }
 
 /// Set banked assets mode (called when assets are actually distributed)
 pub fn set_banked_assets_mode(banked: bool) {
-    USE_BANKED_ASSETS.store(banked, Ordering::SeqCst);
+    USE_BANKED_ASSETS.with(|f| f.set(banked));
 }
 
 /// Check if we're in multibank mode
 pub fn is_multibank() -> bool {
-    IS_MULTIBANK.load(Ordering::SeqCst)
+    IS_MULTIBANK.with(|f| f.get())
 }
 
 /// Check if assets require bank switching (distributed across banks)
 pub fn use_banked_assets() -> bool {
-    USE_BANKED_ASSETS.load(Ordering::SeqCst)
+    USE_BANKED_ASSETS.with(|f| f.get())
 }
 
 /// Builtin function arities (COPIED FROM core/src/codegen.rs)
@@ -227,7 +232,22 @@ pub fn emit_builtin(
     assets: &[AssetInfo],
 ) -> bool {
     let up = name.to_ascii_uppercase();
-    
+
+    // Digitised samples (.vsmp) are ARM-only. On the Vectrex the 6809 is also the
+    // vector engine: a 4-bit sample at 8 kHz needs a PSG volume write every ~190
+    // cycles, and the PSG is reached through VIA port A, the same port that feeds
+    // the beam DAC while a vector is drawn. There is no free timer either (T1
+    // times strokes, T2 the frame), so playback could only run with the screen
+    // stopped. See docs/COMPILER_STATUS.md.
+    if up == "PLAY_SAMPLE" || up == "SAMPLE_POS" {
+        super::diagnostics::error(format!(
+            "{up} is not supported on m6809: digitised samples need a CPU that is not drawing \
+             (build for rp2350 or pitrex; on uvm2 it builds but plays nothing)"
+        ));
+        out.push_str("    LDD #0\n");
+        return true;
+    }
+
     // CRITICAL: Validate arity BEFORE emitting any code
     if let Err(error) = validate_builtin_arity(name, args.len()) {
         panic!("Builtin arity error: {}", error);

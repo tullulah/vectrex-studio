@@ -166,3 +166,37 @@ fn test_assembler_local_label_branch_resolves() {
     assert_eq!(&bytes[..3], &[0x12, 0x20, 0xFD]);
     assert!(symbols.contains_key("MAIN"));
 }
+
+// --- auto-increment indexed modes ---
+// `,R++` post-increments by 2 (postbyte 1RR00001), `,R+` by 1 (1RR00000).
+// The 16-bit instructions that pop a word off the hardware stack must use `,S++`.
+
+fn bytes_of(src: &str) -> Vec<u8> {
+    assemble_m6809(src, 0, false, false).expect("assemble").0
+}
+
+#[test]
+fn post_increment_by_two_encodes_postbyte_x1() {
+    // S register bits = 11 → 0x60.
+    assert_eq!(bytes_of("    CMPD ,S++\n"), vec![0x10, 0xA3, 0xE1]);
+    assert_eq!(bytes_of("    ADDD ,S++\n"), vec![0xE3, 0xE1]);
+    assert_eq!(bytes_of("    SUBD ,S++\n"), vec![0xA3, 0xE1]);
+    assert_eq!(bytes_of("    LDD ,S++\n"), vec![0xEC, 0xE1]);
+    assert_eq!(bytes_of("    LDX ,S++\n"), vec![0xAE, 0xE1]);
+    assert_eq!(bytes_of("    LDY ,X++\n"), vec![0x10, 0xAE, 0x81]);
+    assert_eq!(bytes_of("    STY ,U++\n"), vec![0x10, 0xAF, 0xC1]);
+}
+
+#[test]
+fn post_increment_by_one_encodes_postbyte_x0() {
+    assert_eq!(bytes_of("    LDA ,X+\n"), vec![0xA6, 0x80]);
+    assert_eq!(bytes_of("    STA ,U+\n"), vec![0xA7, 0xC0]);
+    assert_eq!(bytes_of("    LDB ,S+\n"), vec![0xE6, 0xE0]);
+}
+
+#[test]
+fn stack_offset_and_pre_decrement_modes() {
+    assert_eq!(bytes_of("    ADDD ,S\n"), vec![0xE3, 0xE4]);
+    assert_eq!(bytes_of("    LEAS 2,S\n"), vec![0x32, 0x62]);
+    assert_eq!(bytes_of("    STD ,--S\n"), vec![0xED, 0xE3]);
+}
