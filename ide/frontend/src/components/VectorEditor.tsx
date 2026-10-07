@@ -14,6 +14,7 @@ import { useEditorStore } from '../state/editorStore.js';
 import DxfParser from 'dxf-parser';
 import type { IEntity } from 'dxf-parser';
 import { textToPaths } from '../lib/strokeFont.js';
+import { projectView, orbitRotation, type ViewMode } from '../utils/view3d.js';
 
 // Types from the .vec format
 interface Point {
@@ -135,7 +136,6 @@ interface VectorEditorProps {
 }
 
 type Tool = 'select' | 'pen' | 'line' | 'bezier' | 'polygon' | 'circle' | 'arc' | 'pan' | 'background' | 'walkarea';
-type ViewMode = 'xy' | 'xz' | 'yz' | '3d';
 
 const defaultResource: VecResource = {
   version: '1.0',
@@ -1200,31 +1200,11 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
 
   // Project 3D point to 2D based on current view
   const project3DTo2D = useCallback((point: Point): { x: number; y: number; z: number } => {
-    const x = point.x || 0;
-    const y = point.y || 0;
-    const z = point.z || 0;
-    
-    if (viewMode === 'xy') {
-      return { x, y, z: 0 };
-    } else if (viewMode === 'xz') {
-      return { x, y: z, z: 0 };
-    } else if (viewMode === 'yz') {
-      return { x: y, y: z, z: 0 };
-    } else { // 3D perspective
-      const pitch = (rotation3D.pitch * Math.PI) / 180;
-      const yaw = (rotation3D.yaw * Math.PI) / 180;
-
-      // Rotate around Y axis (yaw)
-      const x1 = x * Math.cos(yaw) - z * Math.sin(yaw);
-      const z1 = x * Math.sin(yaw) + z * Math.cos(yaw);
-
-      // Rotate around X axis (pitch)
-      const y2 = y * Math.cos(pitch) - z1 * Math.sin(pitch);
-      const z2 = y * Math.sin(pitch) + z1 * Math.cos(pitch);
-
-      // Orthographic projection — z2 is depth (smaller = closer to viewer)
-      return { x: x1, y: y2, z: z2 };
-    }
+    // Shared with MeshEditor (utils/view3d). The orthographic views report no
+    // depth here, as they always have; the 3D view reports depth (smaller =
+    // closer to the viewer) for hit-testing.
+    const p = projectView(point.x || 0, point.y || 0, point.z || 0, viewMode, rotation3D);
+    return { x: p.x, y: p.y, z: viewMode === '3d' ? p.depth : 0 };
   }, [viewMode, rotation3D]);
   
   // Convert resource coordinates to canvas coordinates
@@ -2633,10 +2613,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
     if (e.buttons === 4 && dragStartRef.current && orbitRef.current) {
       const deltaX = canvasX - dragStartRef.current.x;
       const deltaY = canvasY - dragStartRef.current.y;
-      setRotation3D(r => ({
-        pitch: Math.max(-89, Math.min(89, r.pitch - deltaY * 0.5)),
-        yaw: (r.yaw + deltaX * 0.5) % 360,
-      }));
+      setRotation3D(r => orbitRotation(r, deltaX, deltaY));
       dragStartRef.current = { ...dragStartRef.current, x: canvasX, y: canvasY };
       return;
     }
@@ -2667,10 +2644,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
       
       if (viewMode === '3d') {
         // 3D rotation
-        setRotation3D({
-          pitch: Math.max(-89, Math.min(89, rotation3D.pitch - deltaY * 0.5)),
-          yaw: (rotation3D.yaw + deltaX * 0.5) % 360,
-        });
+        setRotation3D(orbitRotation(rotation3D, deltaX, deltaY));
         dragStartRef.current = { ...dragStartRef.current, x: canvasX, y: canvasY };
       } else {
         // Ortho view panning

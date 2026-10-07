@@ -348,6 +348,12 @@ export const EmulatorPanel: React.FC = () => {
   const simModulePath = useEmulatorStore(s => s.simModulePath);
   const simModuleNonce = useEmulatorStore(s => s.simModuleNonce);
   const setSimModule = useEmulatorStore(s => s.setSimModule);
+
+  // Tell tools that start runs (MCP ide_run) whether anyone is here to load the program.
+  useEffect(() => {
+    useEmulatorStore.getState().setPanelMounted(true);
+    return () => useEmulatorStore.getState().setPanelMounted(false);
+  }, []);
   // Which run backend is active, shown as a badge so it's never ambiguous whether
   // you're SIMULATING (fast WASM, F5) or EMULATING the RP2350 ARM binary (slow
   // HW-accurate, Shift+F5).  'rp2350' is set when an ARM binary is loaded below.
@@ -3291,6 +3297,10 @@ export const EmulatorPanel: React.FC = () => {
         console.log('[EmulatorPanel] ✓ All emulators stopped');
       };
 
+      // Record the outcome of this load for tools that wait on it (MCP ide_run).
+      const noteLoad = (backend: 'm6809' | 'rp2350' | 'uvm2' | 'pitrex', ok: boolean, error?: string) =>
+        useEmulatorStore.getState().noteLoad({ backend, binPath: payload.binPath, ok, error });
+
       // ── pitrex path: ARM32 interpreter + vector renderer ──
       if (payload.target === 'pitrex') {
         setHardwareOverlayKind('pitrex');
@@ -3299,6 +3309,7 @@ export const EmulatorPanel: React.FC = () => {
           console.warn('[EmulatorPanel] pitrex: no .s file text in payload — cannot start emulator');
           setPitrexImgPath(payload.binPath);
           setShowPitrexOverlay(true);
+          noteLoad('pitrex', false, 'no .s file next to the pitrex image: nothing to emulate');
           return;
         }
         try {
@@ -3314,6 +3325,7 @@ export const EmulatorPanel: React.FC = () => {
 
           if (!core.isReady()) {
             console.error('[EmulatorPanel] PitrexCore failed to load assembly');
+            noteLoad('pitrex', false, 'the PiTrex interpreter could not load the assembly');
             return;
           }
 
@@ -3330,8 +3342,10 @@ export const EmulatorPanel: React.FC = () => {
           setPitrexAudioEnabled(true);
           core.startAudio();
           startPitrexRafLoop();
+          noteLoad('pitrex', true);
         } catch (e) {
           console.error('[EmulatorPanel] Failed to start pitrex emulator:', e);
+          noteLoad('pitrex', false, `failed to start the PiTrex emulator: ${(e as any)?.message || e}`);
         }
         const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
         loadOverlay(romName + '.bin');
@@ -3424,11 +3438,14 @@ export const EmulatorPanel: React.FC = () => {
             useDebugStore.getState().setState('running');
             rp2350LoopRef.current = requestAnimationFrame(loop);
             console.log('[EmulatorPanel] ✓ rp2350 rAF loop started');
+            noteLoad(isUvm2 ? 'uvm2' : 'rp2350', true);
           } else {
             console.error(`[EmulatorPanel] loader for ${payload.target} not available on emuCore`);
+            noteLoad(isUvm2 ? 'uvm2' : 'rp2350', false, `no ${payload.target} loader in this build of the emulator`);
           }
         } catch (e) {
           console.error('[EmulatorPanel] Failed to load ARM binary:', e);
+          noteLoad(isUvm2 ? 'uvm2' : 'rp2350', false, `failed to load the ARM binary: ${(e as any)?.message || e}`);
         }
         const romName = payload.binPath.split(/[/\\]/).pop()?.replace(/\.(bin|BIN)$/, '') || 'compiled';
         loadOverlay(romName + '.bin');
@@ -3445,6 +3462,7 @@ export const EmulatorPanel: React.FC = () => {
         
         if (!vecx) {
           console.error('[EmulatorPanel] JSVecX instance not available for loading binary');
+          noteLoad('m6809', false, 'the JSVecX emulator instance is not available');
           return;
         }
 
@@ -3571,9 +3589,11 @@ export const EmulatorPanel: React.FC = () => {
         loadOverlay(romName + '.bin');
         
         console.log('[EmulatorPanel] ✓ Compiled binary loaded and emulator restarted');
-        
+        noteLoad('m6809', true);
+
       } catch (error) {
         console.error('[EmulatorPanel] Failed to load compiled binary:', error);
+        noteLoad('m6809', false, `failed to load the ROM: ${(error as any)?.message || error}`);
       }
     };
 

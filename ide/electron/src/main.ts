@@ -14,7 +14,14 @@ import * as crypto from 'crypto';
 import * as net from 'net';
 import { getMCPServer } from './mcp/server.js';
 import type { MCPRequest } from './mcp/types.js';
+import { startMcpTcpServer } from './mcp/tcpServer.js';
+// How to launch the stdio MCP server against this IDE instance (used to wire Claude Code).
+import { getMcpLaunchSpec } from './mcp/auth.js';
+export { getMcpLaunchSpec, getMcpPort, getMcpToken } from './mcp/auth.js';
 import { registerAIProxyHandlers } from './ai-proxy.js';
+import { writeClaudeMcpConfig } from './shellIntegration.js';
+import { createProjectFromTemplate, ensureDefaultProjectsDir } from './projectTemplates.js';
+import { registerTerminalHandlers } from './terminal.js';
 import {
   ARM_TOOLCHAIN_DOWNLOAD_URL, detectArmToolchain, ensureSdk, isSdkInstalled, isValidSdkTag, latestSdkTag, listInstalledSdks, listRemoteSdkTags,
   projectSdkVersion, resolveProjectSdk, sdkEnv, sdkRootDir, writeProjectSdkVersion, type SdkProgress,
@@ -90,8 +97,6 @@ import ffmpegStatic from 'ffmpeg-static';
 })();
 
 let mainWindow: BrowserWindow | null = null;
-let mcpIpcServer: net.Server | null = null;
-const MCP_IPC_PORT = 9123;
 const verbose = process.env.VPY_IDE_VERBOSE_LSP === '1';
 
 // Track current project for MCP server
@@ -175,33 +180,34 @@ async function createWindow() {
           {
             label: 'New',
             submenu: [
-              { label: 'Project...', click: () => mainWindow?.webContents.send('command', 'project.new') },
+              { label: 'Project...', click: () => sendMenuCommand( 'project.new') },
               { type: 'separator' },
-              { label: 'VPy File', accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('command', 'file.new.vpy') },
-              { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
-              { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
-              { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
-            { label: 'Vector Movie (.vmov)', click: () => mainWindow?.webContents.send('command', 'file.new.vmov') },
-              { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
-              { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
-              { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
-              { label: 'Enemy (.venemy)', click: () => mainWindow?.webContents.send('command', 'file.new.venemy') }
+              { label: 'VPy File', accelerator: 'CmdOrCtrl+N', click: () => sendMenuCommand( 'file.new.vpy') },
+              { label: 'C/C++ File', click: () => sendMenuCommand( 'file.new.c') },
+              { label: 'Vector List (.vec)', click: () => sendMenuCommand( 'file.new.vec') },
+              { label: 'Music File (.vmus)', click: () => sendMenuCommand( 'file.new.vmus') },
+            { label: 'Vector Movie (.vmov)', click: () => sendMenuCommand( 'file.new.vmov') },
+              { label: 'Sound Effect (.vsfx)', click: () => sendMenuCommand( 'file.new.vsfx') },
+              { label: 'Animation (.vanim)', click: () => sendMenuCommand( 'file.new.vanim') },
+              { label: 'Instrument (.vinstr)', click: () => sendMenuCommand( 'file.new.vinstr') },
+              { label: 'Enemy (.venemy)', click: () => sendMenuCommand( 'file.new.venemy') },
+              { label: '3D Mesh (.vmesh)', click: () => sendMenuCommand( 'file.new.vmesh') }
             ]
           },
           {
             label: 'Open',
             submenu: [
-              { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow?.webContents.send('command', 'project.open') },
-              { label: 'Import C/C++ Project...', click: () => mainWindow?.webContents.send('command', 'project.importC') },
-              { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('command', 'file.open') }
+              { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => sendMenuCommand( 'project.open') },
+              { label: 'Import C/C++ Project...', click: () => sendMenuCommand( 'project.importC') },
+              { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => sendMenuCommand( 'file.open') }
             ]
           },
           { type: 'separator' },
-          { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => mainWindow?.webContents.send('command', 'file.save') },
-          { label: 'Save As...', accelerator: 'CmdOrCtrl+Shift+S', click: () => mainWindow?.webContents.send('command', 'file.saveAs') },
+          { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => sendMenuCommand( 'file.save') },
+          { label: 'Save As...', accelerator: 'CmdOrCtrl+Shift+S', click: () => sendMenuCommand( 'file.saveAs') },
           { type: 'separator' },
-          { label: 'Close File', click: () => mainWindow?.webContents.send('command', 'file.close') },
-          { label: 'Close Project', click: () => mainWindow?.webContents.send('command', 'project.close') },
+          { label: 'Close File', click: () => sendMenuCommand( 'file.close') },
+          { label: 'Close Project', click: () => sendMenuCommand( 'project.close') },
           { type: 'separator' },
           {
             label: 'Recent Projects',
@@ -210,7 +216,7 @@ async function createWindow() {
             ]
           },
           { type: 'separator' },
-          { label: 'Reset Layout', click: () => mainWindow?.webContents.send('command', 'layout.reset') }
+          { label: 'Reset Layout', click: () => sendMenuCommand( 'layout.reset') }
         ]
       },
       {
@@ -284,45 +290,48 @@ async function createWindow() {
           // the native menu takes the key BEFORE the renderer sees it, so an accelerator
           // that disagrees here silently wins. Bare = the selected target, Shift = the
           // simulator; F5 runs it, F7 only builds.
-          { label: 'Build && Run on emulator', accelerator: 'F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
-          { label: 'Build && Run on simulator (fast)', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.simulate') },
+          { label: 'Build && Run on emulator', accelerator: 'F5', click: () => sendMenuCommand( 'build.run') },
+          { label: 'Build && Run on simulator (fast)', accelerator: 'Shift+F5', click: () => sendMenuCommand( 'build.simulate') },
           { type: 'separator' },
-          { label: 'Build (no run)', accelerator: 'F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
-          { label: 'Build simulator (no run)', accelerator: 'Shift+F7', click: () => mainWindow?.webContents.send('command', 'build.buildSim') },
+          { label: 'Build (no run)', accelerator: 'F7', click: () => sendMenuCommand( 'build.build') },
+          { label: 'Build simulator (no run)', accelerator: 'Shift+F7', click: () => sendMenuCommand( 'build.buildSim') },
           { type: 'separator' },
-          { label: 'Clean', click: () => mainWindow?.webContents.send('command', 'build.clean') }
+          { label: 'Clean', click: () => sendMenuCommand( 'build.clean') }
         ]
       },
       {
         label: 'Debug',
         submenu: [
-          { label: 'Start Debugging', accelerator: 'CmdOrCtrl+D', click: () => mainWindow?.webContents.send('command', 'debug.start') },
-          { label: 'Stop Debugging', click: () => mainWindow?.webContents.send('command', 'debug.stop') },
+          { label: 'Start Debugging', accelerator: 'CmdOrCtrl+D', click: () => sendMenuCommand( 'debug.start') },
+          { label: 'Stop Debugging', click: () => sendMenuCommand( 'debug.stop') },
           { type: 'separator' },
-          { label: 'Step Over', accelerator: 'F10', click: () => mainWindow?.webContents.send('command', 'debug.stepOver') },
-          { label: 'Step Into', accelerator: 'F11', click: () => mainWindow?.webContents.send('command', 'debug.stepInto') },
-          { label: 'Step Out', accelerator: 'Shift+F11', click: () => mainWindow?.webContents.send('command', 'debug.stepOut') },
+          { label: 'Step Over', accelerator: 'F10', click: () => sendMenuCommand( 'debug.stepOver') },
+          { label: 'Step Into', accelerator: 'F11', click: () => sendMenuCommand( 'debug.stepInto') },
+          { label: 'Step Out', accelerator: 'Shift+F11', click: () => sendMenuCommand( 'debug.stepOut') },
           { type: 'separator' },
-          { label: 'Toggle Breakpoint', accelerator: 'F9', click: () => mainWindow?.webContents.send('command', 'debug.toggleBreakpoint') }
+          { label: 'Toggle Breakpoint', accelerator: 'F9', click: () => sendMenuCommand( 'debug.toggleBreakpoint') }
         ]
       },
       {
         label: 'View',
         submenu: [
-          { label: 'Emulator', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.emulator') },
-          { label: 'Dual Test', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.dual-emulator') },
-          { label: 'Debug', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.debug') },
-          { label: 'Errors', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.errors') },
-          { label: 'Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.output') },
-          { label: 'Build Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.build-output') },
-          { label: 'Compiler Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.compiler-output') },
-          { label: 'Memory', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.memory') },
-          { label: 'Trace', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.trace') },
-          { label: 'PSG Log', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.psglog') },
-          { label: 'PyPilot', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.ai-assistant') },
+          { label: 'Emulator', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.emulator') },
+          { label: 'Dual Test', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.dual-emulator') },
+          { label: 'Debug', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.debug') },
+          { label: 'Errors', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.errors') },
+          { label: 'Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.output') },
+          { label: 'Build Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.build-output') },
+          { label: 'Compiler Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.compiler-output') },
+          { label: 'Memory', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.memory') },
+          { label: 'Trace', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.trace') },
+          { label: 'PSG Log', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.psglog') },
+          { label: 'PyPilot', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.ai-assistant') },
+          { label: 'Terminal', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.terminal') },
+          { label: 'New Terminal', click: () => sendMenuCommand( 'terminal.new') },
+          { label: 'Claude Code in Terminal', click: () => sendMenuCommand( 'terminal.claude') },
           { type: 'separator' },
-          { label: 'Hide Active Panel', click: () => mainWindow?.webContents.send('command', 'view.hideActivePanel') },
-          { label: 'Pin/Unpin Active Panel', click: () => mainWindow?.webContents.send('command', 'view.togglePinActivePanel') },
+          { label: 'Hide Active Panel', click: () => sendMenuCommand( 'view.hideActivePanel') },
+          { label: 'Pin/Unpin Active Panel', click: () => sendMenuCommand( 'view.togglePinActivePanel') },
           { type: 'separator' },
           { role: 'reload' },
           { role: 'forceReload' },
@@ -466,7 +475,7 @@ async function createWindow() {
         ? (input.shift ? 'build.simulate' : 'build.run')
         : (input.shift ? 'build.buildSim' : 'build.build');
       console.log(`[IDE] ${input.shift ? 'Shift+' : ''}${input.key} -> ${cmd}`);
-      mainWindow?.webContents.send('command', cmd);
+      sendMenuCommand( cmd);
       event.preventDefault();
       return;
     }
@@ -517,69 +526,21 @@ async function createWindow() {
   });
 }
 
-// Start TCP server for MCP stdio process to communicate with IDE
+// Start the authenticated localhost TCP endpoint the stdio MCP server
+// (ide/mcp-server/server.js) connects to. Port 9123 by default, next free one up
+// to 9133 otherwise; token + port via getMcpToken()/getMcpPort() (mcp/auth.ts).
 function startMCPIpcServer() {
-  if (mcpIpcServer) return;
-  
-  const verbose = process.env.VPY_IDE_VERBOSE_LSP === '1';
-  
-  mcpIpcServer = net.createServer((socket) => {
-    console.log('[MCP IPC] Client connected');
-    
-    let buffer = '';
-    
-    socket.on('data', async (chunk) => {
-      buffer += chunk.toString();
-      
-      // Split by newlines
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      
-      for (const line of lines) {
-        if (line.trim()) {
-          try {
-            const request: MCPRequest = JSON.parse(line);
-            console.log('[MCP IPC] ▶ Request:', request.method, 'params:', request.params);
-            
-            const mcpServer = getMCPServer();
-            console.log('[MCP IPC] ▶ Calling handleRequest...');
-            const response = await mcpServer.handleRequest(request);
-            console.log('[MCP IPC] ✓ Response received:', response);
-            
-            // Send response back
-            socket.write(JSON.stringify(response) + '\n');
-            console.log('[MCP IPC] ✓ Response sent');
-          } catch (e: any) {
-            console.error('[MCP IPC] Error:', e.message);
-            socket.write(JSON.stringify({
-              jsonrpc: '2.0',
-              id: null,
-              error: { code: -32603, message: e.message }
-            }) + '\n');
-          }
-        }
-      }
-    });
-    
-    socket.on('error', (err) => {
-      console.error('[MCP IPC] Socket error:', err.message);
-    });
-    
-    socket.on('close', () => {
-      console.log('[MCP IPC] Client disconnected');
-    });
-  });
-  
-  mcpIpcServer.listen(MCP_IPC_PORT, 'localhost', () => {
-    console.log(`[MCP IPC] Server listening on port ${MCP_IPC_PORT}`);
-  });
-  
-  mcpIpcServer.on('error', (err: any) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(`[MCP IPC] Port ${MCP_IPC_PORT} already in use`);
-    } else {
-      console.error('[MCP IPC] Server error:', err);
+  startMcpTcpServer((request) => getMCPServer().handleRequest(request)).then((port) => {
+    // `claude` in the IDE's terminals is started with this config (shellIntegration.ts):
+    // written once the port is bound, since it carries the port and this run's token.
+    if (port == null) return;
+    try {
+      writeClaudeMcpConfig(getMcpLaunchSpec());
+    } catch (e: any) {
+      console.error('[MCP] could not write the Claude Code MCP config:', e?.message || e);
     }
+  }).catch((e) => {
+    console.error('[MCP TCP] failed to start:', e?.message || e);
   });
 }
 
@@ -712,45 +673,46 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
         {
           label: 'New',
           submenu: [
-            { label: 'Project...', click: () => mainWindow?.webContents.send('command', 'project.new') },
+            { label: 'Project...', click: () => sendMenuCommand( 'project.new') },
             { type: 'separator' },
-            { label: 'VPy File', accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('command', 'file.new.vpy') },
-            { label: 'C/C++ File', click: () => mainWindow?.webContents.send('command', 'file.new.c') },
-            { label: 'Vector List (.vec)', click: () => mainWindow?.webContents.send('command', 'file.new.vec') },
-            { label: 'Music File (.vmus)', click: () => mainWindow?.webContents.send('command', 'file.new.vmus') },
-            { label: 'Vector Movie (.vmov)', click: () => mainWindow?.webContents.send('command', 'file.new.vmov') },
-            { label: 'Sound Effect (.vsfx)', click: () => mainWindow?.webContents.send('command', 'file.new.vsfx') },
-            { label: 'Animation (.vanim)', click: () => mainWindow?.webContents.send('command', 'file.new.vanim') },
-            { label: 'Instrument (.vinstr)', click: () => mainWindow?.webContents.send('command', 'file.new.vinstr') },
-            { label: 'Enemy (.venemy)', click: () => mainWindow?.webContents.send('command', 'file.new.venemy') }
+            { label: 'VPy File', accelerator: 'CmdOrCtrl+N', click: () => sendMenuCommand( 'file.new.vpy') },
+            { label: 'C/C++ File', click: () => sendMenuCommand( 'file.new.c') },
+            { label: 'Vector List (.vec)', click: () => sendMenuCommand( 'file.new.vec') },
+            { label: 'Music File (.vmus)', click: () => sendMenuCommand( 'file.new.vmus') },
+            { label: 'Vector Movie (.vmov)', click: () => sendMenuCommand( 'file.new.vmov') },
+            { label: 'Sound Effect (.vsfx)', click: () => sendMenuCommand( 'file.new.vsfx') },
+            { label: 'Animation (.vanim)', click: () => sendMenuCommand( 'file.new.vanim') },
+            { label: 'Instrument (.vinstr)', click: () => sendMenuCommand( 'file.new.vinstr') },
+            { label: 'Enemy (.venemy)', click: () => sendMenuCommand( 'file.new.venemy') },
+            { label: '3D Mesh (.vmesh)', click: () => sendMenuCommand( 'file.new.vmesh') }
           ]
         },
         {
           label: 'Open',
           submenu: [
-            { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow?.webContents.send('command', 'project.open') },
-            { label: 'Import C/C++ Project...', click: () => mainWindow?.webContents.send('command', 'project.importC') },
-            { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('command', 'file.open') }
+            { label: 'Project...', accelerator: 'CmdOrCtrl+Shift+O', click: () => sendMenuCommand( 'project.open') },
+            { label: 'Import C/C++ Project...', click: () => sendMenuCommand( 'project.importC') },
+            { label: 'File...', accelerator: 'CmdOrCtrl+O', click: () => sendMenuCommand( 'file.open') }
           ]
         },
         { type: 'separator' },
-        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => mainWindow?.webContents.send('command', 'file.save') },
-        { label: 'Save As...', accelerator: 'CmdOrCtrl+Shift+S', click: () => mainWindow?.webContents.send('command', 'file.saveAs') },
+        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => sendMenuCommand( 'file.save') },
+        { label: 'Save As...', accelerator: 'CmdOrCtrl+Shift+S', click: () => sendMenuCommand( 'file.saveAs') },
         { type: 'separator' },
-        { label: 'Close File', click: () => mainWindow?.webContents.send('command', 'file.close') },
-        { label: 'Close Project', click: () => mainWindow?.webContents.send('command', 'project.close') },
+        { label: 'Close File', click: () => sendMenuCommand( 'file.close') },
+        { label: 'Close Project', click: () => sendMenuCommand( 'project.close') },
         { type: 'separator' },
         {
           label: 'Recent Projects',
           submenu: recents.length > 0 
             ? recents.map(r => ({
                 label: r.name,
-                click: () => mainWindow?.webContents.send('command', 'project.openPath', r.path)
+                click: () => sendMenuCommand( 'project.openPath', r.path)
               }))
             : [{ label: 'No recent projects', enabled: false }]
         },
         { type: 'separator' },
-        { label: 'Reset Layout', click: () => mainWindow?.webContents.send('command', 'layout.reset') }
+        { label: 'Reset Layout', click: () => sendMenuCommand( 'layout.reset') }
       ]
     },
     {
@@ -776,45 +738,48 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
         // the native menu takes the key BEFORE the renderer sees it, so an accelerator
         // that disagrees here silently wins. Bare = the selected target, Shift = the
         // simulator; F5 runs it, F7 only builds.
-        { label: 'Build && Run on emulator', accelerator: 'F5', click: () => mainWindow?.webContents.send('command', 'build.run') },
-        { label: 'Build && Run on simulator (fast)', accelerator: 'Shift+F5', click: () => mainWindow?.webContents.send('command', 'build.simulate') },
+        { label: 'Build && Run on emulator', accelerator: 'F5', click: () => sendMenuCommand( 'build.run') },
+        { label: 'Build && Run on simulator (fast)', accelerator: 'Shift+F5', click: () => sendMenuCommand( 'build.simulate') },
         { type: 'separator' },
-        { label: 'Build (no run)', accelerator: 'F7', click: () => mainWindow?.webContents.send('command', 'build.build') },
-        { label: 'Build simulator (no run)', accelerator: 'Shift+F7', click: () => mainWindow?.webContents.send('command', 'build.buildSim') },
+        { label: 'Build (no run)', accelerator: 'F7', click: () => sendMenuCommand( 'build.build') },
+        { label: 'Build simulator (no run)', accelerator: 'Shift+F7', click: () => sendMenuCommand( 'build.buildSim') },
         { type: 'separator' },
-        { label: 'Clean', click: () => mainWindow?.webContents.send('command', 'build.clean') }
+        { label: 'Clean', click: () => sendMenuCommand( 'build.clean') }
       ]
       },
     {
       label: 'Debug',
       submenu: [
-        { label: 'Start Debugging', accelerator: 'CmdOrCtrl+D', click: () => mainWindow?.webContents.send('command', 'debug.start') },
-        { label: 'Stop Debugging', click: () => mainWindow?.webContents.send('command', 'debug.stop') },
+        { label: 'Start Debugging', accelerator: 'CmdOrCtrl+D', click: () => sendMenuCommand( 'debug.start') },
+        { label: 'Stop Debugging', click: () => sendMenuCommand( 'debug.stop') },
         { type: 'separator' },
-        { label: 'Step Over', accelerator: 'F10', click: () => mainWindow?.webContents.send('command', 'debug.stepOver') },
-        { label: 'Step Into', accelerator: 'F11', click: () => mainWindow?.webContents.send('command', 'debug.stepInto') },
-        { label: 'Step Out', accelerator: 'Shift+F11', click: () => mainWindow?.webContents.send('command', 'debug.stepOut') },
+        { label: 'Step Over', accelerator: 'F10', click: () => sendMenuCommand( 'debug.stepOver') },
+        { label: 'Step Into', accelerator: 'F11', click: () => sendMenuCommand( 'debug.stepInto') },
+        { label: 'Step Out', accelerator: 'Shift+F11', click: () => sendMenuCommand( 'debug.stepOut') },
         { type: 'separator' },
-        { label: 'Toggle Breakpoint', accelerator: 'F9', click: () => mainWindow?.webContents.send('command', 'debug.toggleBreakpoint') }
+        { label: 'Toggle Breakpoint', accelerator: 'F9', click: () => sendMenuCommand( 'debug.toggleBreakpoint') }
       ]
     },
     {
       label: 'View',
       submenu: [
-        { label: 'Emulator', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.emulator') },
-        { label: 'Dual Test', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.dual-emulator') },
-        { label: 'Debug', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.debug') },
-        { label: 'Errors', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.errors') },
-        { label: 'Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.output') },
-        { label: 'Build Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.build-output') },
-        { label: 'Compiler Output', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.compiler-output') },
-        { label: 'Memory', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.memory') },
-        { label: 'Trace', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.trace') },
-        { label: 'PSG Log', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.psglog') },
-        { label: 'PyPilot', type: 'checkbox', click: () => mainWindow?.webContents.send('command', 'view.toggle.ai-assistant') },
+        { label: 'Emulator', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.emulator') },
+        { label: 'Dual Test', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.dual-emulator') },
+        { label: 'Debug', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.debug') },
+        { label: 'Errors', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.errors') },
+        { label: 'Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.output') },
+        { label: 'Build Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.build-output') },
+        { label: 'Compiler Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.compiler-output') },
+        { label: 'Memory', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.memory') },
+        { label: 'Trace', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.trace') },
+        { label: 'PSG Log', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.psglog') },
+        { label: 'PyPilot', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.ai-assistant') },
+        { label: 'Terminal', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.terminal') },
+        { label: 'New Terminal', click: () => sendMenuCommand( 'terminal.new') },
+        { label: 'Claude Code in Terminal', click: () => sendMenuCommand( 'terminal.claude') },
         { type: 'separator' },
-        { label: 'Hide Active Panel', click: () => mainWindow?.webContents.send('command', 'view.hideActivePanel') },
-        { label: 'Pin/Unpin Active Panel', click: () => mainWindow?.webContents.send('command', 'view.togglePinActivePanel') },
+        { label: 'Hide Active Panel', click: () => sendMenuCommand( 'view.hideActivePanel') },
+        { label: 'Pin/Unpin Active Panel', click: () => sendMenuCommand( 'view.togglePinActivePanel') },
         { type: 'separator' },
         { role: 'reload' },
         { role: 'forceReload' },
@@ -1056,6 +1021,16 @@ ipcMain.handle('sdk:toolchain', async () => detectArmToolchain());
 ipcMain.handle('sdk:toolchain:openDownload', async () => {
   await shell.openExternal(ARM_TOOLCHAIN_DOWNLOAD_URL);
 });
+
+// Every native-menu command goes through here. Clicking the macOS menu bar takes the
+// keyboard away from the page; without giving it back, a dialog the command opens (the
+// name prompt of File > New > Vector/Mesh/...) shows a focused input that receives no keys.
+function sendMenuCommand(id: string, ...payload: any[]) {
+  const wc = mainWindow?.webContents;
+  if (!wc || wc.isDestroyed()) return;
+  if (!wc.isFocused()) wc.focus();
+  wc.send('command', id, ...payload);
+}
 
 function resolveCompilerPath(): string | null {
   const override = process.env.VPY_COMPILER_BIN;
@@ -1548,7 +1523,10 @@ export async function executeExternalBuild(args: {
   }
 
   // Compose the child env: IDE env + project SDK + optional toolchain PATH prefix + overrides.
-  const env: NodeJS.ProcessEnv = { ...process.env, ...('error' in sdk ? {} : sdkEnv(sdk.dir, sdk.picoSdkDir)), ...(manifest.env || {}) };
+  // VPY_CLI: the IDE's compiler, for Makefiles that compile assets/ into headers
+  // (`$(VPY_CLI) compile-asset`, docs/ASSETS.md). The project's [env] still wins.
+  const vpyCli = resolveCompilerPath();
+  const env: NodeJS.ProcessEnv = { ...process.env, ...(vpyCli ? { VPY_CLI: vpyCli } : {}), ...('error' in sdk ? {} : sdkEnv(sdk.dir, sdk.picoSdkDir)), ...(manifest.env || {}) };
   if (manifest.toolchain?.path) {
     env.PATH = `${manifest.toolchain.path}${require('path').delimiter}${env.PATH || ''}`;
   }
@@ -1830,7 +1808,8 @@ export async function executeSimBuild(args: {
   const { PITREX_SIM_SDK, VPY_C_SDK } = sdkEnv(sdk.dir);
 
   // The project's [env] still wins, as in the hardware build: a port can point at its own checkout.
-  const env: NodeJS.ProcessEnv = { ...process.env, PITREX_SIM_SDK, VPY_C_SDK, ...(manifest.env || {}) };
+  const simCli = resolveCompilerPath(); // VPY_CLI: compiles assets/ for the Makefile (docs/ASSETS.md)
+  const env: NodeJS.ProcessEnv = { ...process.env, ...(simCli ? { VPY_CLI: simCli } : {}), PITREX_SIM_SDK, VPY_C_SDK, ...(manifest.env || {}) };
   const emDir = resolveEmscriptenDir();
   if (emDir) {
     env.PATH = `${emDir}${require('path').delimiter}${env.PATH || ''}`;
@@ -3484,109 +3463,32 @@ ipcMain.handle('project:read', async (_e, projectPath: string) => {
   }
 });
 
-// Create new project
-ipcMain.handle('project:create', async (_e, args: { name: string; location?: string }) => {
+// Create new project. The files come from projectTemplates.ts — the same module the MCP
+// tool project_create uses — so the dialog and the AI hand out the same projects.
+ipcMain.handle('project:defaultLocation', async () => ensureDefaultProjectsDir());
+
+ipcMain.handle('project:create', async (_e, args: { name: string; location?: string; kind?: 'vpy' | 'c' }) => {
   try {
     let targetDir: string;
     
-    if (args.location) {
-      targetDir = args.location;
-    } else {
-      // Ask user for location
-      const result = await dialog.showOpenDialog(mainWindow!, {
-        title: 'Select Project Location',
-        properties: ['openDirectory', 'createDirectory']
-      });
-      if (result.canceled || result.filePaths.length === 0) {
-        return { canceled: true };
-      }
-      targetDir = result.filePaths[0];
-    }
-    
-    const projectDir = join(targetDir, args.name);
-    const srcDir = join(projectDir, 'src');
-    const assetsDir = join(projectDir, 'assets');
-    const buildDir = join(projectDir, 'build');
-    
-    // Create directories
-    await fs.mkdir(srcDir, { recursive: true });
-    await fs.mkdir(join(assetsDir, 'vectors'), { recursive: true });     // Vector graphics (.vec)
-    await fs.mkdir(join(assetsDir, 'animations'), { recursive: true });  // Animated vector sequences
-    await fs.mkdir(join(assetsDir, 'music'), { recursive: true });       // Music data
-    await fs.mkdir(join(assetsDir, 'sfx'), { recursive: true });         // Sound effects
-    await fs.mkdir(join(assetsDir, 'voices'), { recursive: true });      // Voice samples (AtariVox)
-    await fs.mkdir(join(assetsDir, 'movies'), { recursive: true });      // Vector movie manifests (.vmov)
-    await fs.mkdir(buildDir, { recursive: true });
-    
+    // No location: the default workspace, ~/VectrexStudio/projects.
+    targetDir = args.location || await ensureDefaultProjectsDir();
+
     // New projects pin the latest SDK, so their builds are reproducible.
     const sdkTag = await latestSdkTag();
-    const sdkToml = sdkTag ? `\n[sdk]\nversion = "${sdkTag}"\n` : '';
-
-    // Create project file (TOML)
-    const projectContent = `[project]
-name = "${args.name}"
-version = "0.1.0"
-entry = "src/main.vpy"
-
-[build]
-output = "build/${args.name}.bin"
-optimization = 2
-debug_symbols = true
-
-[sources]
-vpy = ["src/**/*.vpy"]
-
-[resources]
-vectors = ["assets/vectors/*.vec"]
-animations = ["assets/animations/*.anim"]
-music = ["assets/music/*.mus"]
-sfx = ["assets/sfx/*.sfx"]
-voices = ["assets/voices/*.vox"]
-${sdkToml}`;
-    const projectFile = join(projectDir, `${args.name}.vpyproj`);
-    await fs.writeFile(projectFile, projectContent, 'utf-8');
-    
-    // Create main.vpy with valid VPy syntax
-    const mainContent = `# ${args.name} - Main entry point
-# VPy game for Vectrex
-
-META TITLE = "${args.name}"
-
-def main():
-    # Called once at startup
-    Set_Intensity(127)
-
-def loop():
-    # Game loop - called every frame
-    Wait_Recal()
-    
-    # Draw something to show it works
-    Move(0, 0)
-    Draw_To(50, 50)
-    Draw_To(-50, 50)
-    Draw_To(-50, -50)
-    Draw_To(50, -50)
-    Draw_To(50, 50)
-`;
-    await fs.writeFile(join(srcDir, 'main.vpy'), mainContent, 'utf-8');
-    
-    // Create .gitignore
-    const gitignore = `# Build artifacts
-/build/
-*.bin
-*.o
-
-# IDE
-.vscode/
-*.swp
-*~
-`;
-    await fs.writeFile(join(projectDir, '.gitignore'), gitignore, 'utf-8');
+    const created = await createProjectFromTemplate({
+      kind: args.kind === 'c' ? 'c' : 'vpy',
+      name: args.name,
+      parentDir: targetDir,
+      sdkVersion: sdkTag,
+    });
     
     return {
       ok: true,
-      projectFile,
-      projectDir,
+      projectFile: created.projectFile,
+      projectDir: created.projectDir,
+      entryFile: created.entryFile,
+      kind: created.kind,
       name: args.name
     };
   } catch (e: any) {
@@ -4748,6 +4650,7 @@ app.whenReady().then(() => {
   
   // Register AI proxy handlers
   registerAIProxyHandlers();
+  registerTerminalHandlers(() => mainWindow);
   if (verbose) console.log('[IDE] AI Proxy registered');
   
   createWindow();

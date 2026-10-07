@@ -13,6 +13,7 @@ import { EnemyEditor } from './EnemyEditor';
 import { VrecViewer } from './VrecViewer';
 import { VsmpPlayer } from './VsmpPlayer';
 import { VectorMovieEditor } from './VectorMovieEditor';
+import { MeshEditor } from './MeshEditor';
 
 // Basic custom tab bar replacing flexlayout doc:* logic.
 // Phase 1: single group, order = documents array order.
@@ -55,6 +56,7 @@ export const EditorSurface: React.FC = () => {
   const isVrecFile = active?.endsWith('.vrec') || false;
   const isVsmpFile = active?.endsWith('.vsmp') || false;
   const isVmovFile = active?.endsWith('.vmov') || false;
+  const isMeshFile = active?.endsWith('.vmesh') || false;
 
   // Parse vector resource from document content
   const vectorResource = useMemo(() => {
@@ -126,6 +128,17 @@ export const EditorSurface: React.FC = () => {
     try { return JSON.parse(activeDoc.content); } catch { return undefined; }
   }, [isVmovFile, activeDoc?.content]);
 
+  // Parse 3D mesh (.vmesh) from document content
+  const meshResource = useMemo(() => {
+    if (!isMeshFile || !activeDoc?.content) return undefined;
+    try { return JSON.parse(activeDoc.content); } catch { return undefined; }
+  }, [isMeshFile, activeDoc?.content]);
+
+  const handleMeshChange = useCallback((resource: any) => {
+    if (!active) return;
+    useEditorStore.getState().updateContent(active, JSON.stringify(resource, null, 2));
+  }, [active]);
+
   // Handle vector movie manifest changes
   const handleVmovChange = useCallback((resource: any) => {
     if (!active) return;
@@ -186,7 +199,8 @@ export const EditorSurface: React.FC = () => {
           const isVrec = doc.uri.endsWith('.vrec');
           const isVsmp = doc.uri.endsWith('.vsmp');
           const isVmov = doc.uri.endsWith('.vmov');
-          const icon = isVmov ? '📽️' : isVrec ? '📼' : isVsmp ? '🎙️' : isEnemy ? '👾' : isInstr ? '🎹' : isAnim ? '🎬' : isSfx ? '🔊' : isMus ? '🎵' : isVec ? '🎨' : '📄';
+          const isMesh = doc.uri.endsWith('.vmesh');
+          const icon = isMesh ? '🧊' : isVmov ? '📽️' : isVrec ? '📼' : isVsmp ? '🎙️' : isEnemy ? '👾' : isInstr ? '🎹' : isAnim ? '🎬' : isSfx ? '🔊' : isMus ? '🎵' : isVec ? '🎨' : '📄';
           return (
             <div key={doc.uri}
               className={"vpy-tab" + (doc.uri===active?" active":"") + (doc.dirty?" dirty":"")}
@@ -249,6 +263,10 @@ export const EditorSurface: React.FC = () => {
         ) : isVmovFile ? (
           <div style={{ background: '#0d0d14', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <VectorMovieEditor resource={vmovResource} docUri={active} onChange={handleVmovChange} />
+          </div>
+        ) : isMeshFile ? (
+          <div style={{ background: '#12121c', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <MeshEditor key={active} resource={meshResource} docUri={active} onChange={handleMeshChange} />
           </div>
         ) : (
           <MonacoEditorWrapper uri={active} />

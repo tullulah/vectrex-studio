@@ -257,6 +257,9 @@ export const FileTreePanel: React.FC = () => {
   // Handle keyboard events for file deletion
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Never treat Delete typed into a text field / the terminal / the editor as "delete files".
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
       if (event.key === 'Delete' && selectedFiles.size > 0) {
         event.preventDefault();
         

@@ -106,8 +106,9 @@ Both binaries can be built from the repository root (workspace) or from `buildto
 ```bash
 cd ide/frontend && npm install && cd ../..
 cd ide/electron && npm install && cd ../..
-cd ide/mcp-server && npm install && cd ../..
 ```
+
+The MCP server (`ide/mcp-server/`) has no dependencies and needs no install step; the IDE launches it with its own Electron binary.
 
 ---
 

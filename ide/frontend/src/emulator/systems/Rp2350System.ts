@@ -378,6 +378,9 @@ export class Rp2350System implements ISystem, IBus {
   //   event  [delay u8][num_writes u8] then num_writes x [reg u8][val u8]
   //          num_writes 0 = end, 0xFF = loop (music only)
   private psgShadow = new Uint8Array(14);
+  /** The game wrote the PSG itself through the BIOS table (psg_queue): flush it this
+   *  frame even with no BIOS music or SFX playing, as core 0 drains that queue on HW. */
+  private psgQueued = false;
   private musBase = 0; private musPtr = 0; private musDelay = 0; private musPlaying = false;
   private sfxPtr  = 0; private sfxDelay = 0; private sfxActive  = false;
 
@@ -1397,11 +1400,12 @@ export class Rp2350System implements ISystem, IBus {
   /**
    * Once per frame from WAIT_RECAL — the same point core 0 flushes on hardware.
    * Music first, then SFX overlays channel C on top of it, then the whole shadow
-   * goes to the synth. No-op while nothing is playing, so a game that never
-   * calls PLAY_MUSIC costs nothing.
+   * goes to the synth. No-op while nothing is playing and the game queued no
+   * PSG write of its own, so a silent game costs nothing.
    */
   private audioFrame(): void {
-    if (!this.musPlaying && !this.sfxActive) return;
+    if (!this.musPlaying && !this.sfxActive && !this.psgQueued) return;
+    this.psgQueued = false;
     this.musTick();
     this.sfxTick();
     for (let reg = 0; reg <= 10; reg++) this.psg.writeReg(reg, this.psgShadow[reg]);
@@ -1469,6 +1473,9 @@ export class Rp2350System implements ISystem, IBus {
         break;
       case 12: // SYS_PSG_READ(r0=reg) → r0
         cpu.setReg(0, this.psg.Regs[cpu.getReg(0) & 0x0f] & 0xff);
+        break;
+      case 10: // SYS_SAMPLE_POS(r0 = fps) → voice 0's cursor as a frame number, 0 if silent
+        cpu.setReg(0, this.sampleVoicePos(0, cpu.getReg(0) | 0));
         break;
       case 13: // SYS_READ_AXES → (J1X<<24)|(J1Y<<16)|(J2X<<8)|J2Y, each i8
         cpu.setReg(0, ((((this.joyJ1X & 0xff) << 24) | ((this.joyJ1Y & 0xff) << 16) |
@@ -1722,7 +1729,11 @@ export class Rp2350System implements ISystem, IBus {
       /* wait_recal            */ (c) => { this.audioFrame(); c.hitWfi = true; return 128; },
       /* read_buttons          */ (c) => { c.setReg(0, this.readButtonsBios() >>> 0); return 10; },
       /* read_axes             */ (c) => { c.setReg(0, packAxes()); return 10; },
-      /* psg_queue             */ (c) => { this.psgShadow[c.getReg(0) & 0x0f] = c.getReg(1) & 0xff; return 10; },
+      /* psg_queue             */ (c) => {
+        this.psgShadow[c.getReg(0) & 0x0f] = c.getReg(1) & 0xff;
+        this.psgQueued = true;   // a C game's own writes (notes, tones): flushed at WAIT_RECAL
+        return 10;
+      },
       /* config_actual         */ (c) => {
         // sizeof(struct uvm2_config) is 52 (13 int32) — writing more clobbers the
         // caller's saved LR on the stack (buffer is `sub sp,#60; add r0,sp,#4`).
@@ -2001,9 +2012,10 @@ export class Rp2350System implements ISystem, IBus {
     }
     const ctx = this.audioCtx;
 
-    // Read the asset header from the flash image (same accessor as read8/peekFlash).
-    const rd = (addr: number): number =>
-      this.flash[((addr >>> 0) - FLASH_BASE) & (FLASH_SIZE - 1)] ?? 0;
+    // Read the table through read8, which maps flash, PSRAM and SRAM: a VPy game's
+    // table is in flash, but a C game (libvpy's vpy_play_sample, same symbol) is
+    // linked into GAME_RAM and its table is there.
+    const rd = (addr: number): number => this.read8(addr >>> 0) & 0xff;
     const readU32 = (addr: number): number =>
       (rd(addr) | (rd(addr + 1) << 8) | (rd(addr + 2) << 16) | (rd(addr + 3) << 24)) >>> 0;
 
@@ -2060,6 +2072,8 @@ export class Rp2350System implements ISystem, IBus {
    * `make snd SND_ARGS="--preview build/snd"` are the honest ones.
    */
   private sampleVoices = new Map<number, AudioBufferSourceNode>();
+  /** When each table voice started, how long it is and whether it loops (SYS_SAMPLE_POS). */
+  private sampleVoiceClock = new Map<number, { src: AudioBufferSourceNode; t0: number; dur: number; loop: boolean }>();
 
   playSampleVoice(assetPtr: number, voice: number, loop: boolean): void {
     if (!this.audioCtx) {
@@ -2093,6 +2107,21 @@ export class Rp2350System implements ISystem, IBus {
     if (ctx.state !== 'running') ctx.resume().catch(() => {});
     src.start();
     this.sampleVoices.set(voice, src);
+    this.sampleVoiceClock.set(voice, { src, t0: ctx.currentTime, dur: n / rate, loop });
+  }
+
+  /** SYS_SAMPLE_POS on the cartridge (uvm2_smp_pos): how far `voice` has played, as a
+   *  frame number at `fps`; 0 when it is silent. A voice the game started through the
+   *  BIOS table answers from its own clock; otherwise VPy's single PLAY_SAMPLE source. */
+  sampleVoicePos(voice: number, fps: number): number {
+    const c = this.sampleVoiceClock.get(voice);
+    if (c && this.audioCtx && fps > 0 && this.sampleVoices.get(voice) === c.src) {
+      let t = Math.max(0, this.audioCtx.currentTime - c.t0);
+      if (c.loop && c.dur > 0) t %= c.dur;
+      else if (t > c.dur) return 0;
+      return Math.floor(t * fps) & 0x7fff;
+    }
+    return voice === 0 ? this.samplePos(fps) : 0;
   }
 
   stopSampleVoice(voice: number): void {

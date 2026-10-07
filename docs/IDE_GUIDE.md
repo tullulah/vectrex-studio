@@ -25,6 +25,17 @@ Use **File → Open Project** to open a `.vpyproj` file. The IDE loads the proje
 
 If you open a single `.vpy` file without a project, the IDE compiles that file directly (no `.vpyproj` needed for quick tests).
 
+**File → New → Project...** creates a project from a template. The **Language** choice picks its kind:
+
+| Language | Creates | Builds |
+|----------|---------|--------|
+| **VPy** | `<name>.vpyproj`, `src/main.vpy`, `assets/` folders | m6809, rp2350, uvm2, pitrex (vpy_cli) |
+| **C (SDK)** | `<name>.cvproj`, `Makefile`, `src/main.c` on the SDK's libvpy runtime (`#include <vpy.h>`, `vpy_run(setup, loop)`) | WASM simulator (`make sim`, Shift+F5), rp2350 (`make rp2350`), uvm2 (`make uvm2`) |
+
+Both are pinned to the latest SDK release (`[sdk] version`). The C project is self-contained: its Makefile only uses the SDK variables the IDE passes (`UVMC2_SDK`, `VPY_C_SDK`, `PITREX_SIM_SDK`, `RP2350_SDK`; see [SDK_VERSIONS.md](SDK_VERSIONS.md)) and the SDK's own rp2350/uvm2 recipes (`uvm2-sdk/uvm2.mk`). The same templates (`ide/electron/src/projectTemplates.ts`) back the MCP tool `project_create`.
+
+New projects go to the default workspace, `~/VectrexStudio/projects` (created on first use), unless another location is chosen in the dialog — the MCP tool `project_create` uses the same default.
+
 ---
 
 ## 2. Editor
@@ -45,7 +56,22 @@ The editor is powered by Monaco with full VPy language support via the LSP serve
 
 ### Language support
 
-The editor supports `.vpy` (VPy source), `.asm` (MC6809 assembly), and asset files (`.vec`, `.vmus`, `.vsfx`).
+The editor supports `.vpy` (VPy source), `.asm` (MC6809 assembly) and C sources. Asset files open in their own editors:
+
+| Asset | Editor |
+|---|---|
+| `.vec` | Vector Editor (2D, and 3D with per-point `z`) |
+| `.vmus` | Music Editor |
+| `.vsfx` | SFX Editor |
+| `.vanim` | Animation Editor |
+| `.venemy` | Enemy Editor |
+| `.vinstr` | Instrument Editor |
+| `.vplay` | Playground (levels) |
+| `.vmesh` | Mesh Editor — 3D wireframe with front/top/side/3D views (middle button pans, middle + Shift orbits), vertex and face editing, primitives (cube, pyramid, grid, cylinder), undo/redo and live validation against the compiler's rules. File → New → 3D Mesh creates `assets/meshes/<name>.vmesh` |
+| `.vmov` | Vector Movie Editor |
+| `.vsmp` | Sample player |
+
+Formats and how each asset is used from VPy and C: [ASSETS.md](ASSETS.md).
 
 ---
 
@@ -286,7 +312,7 @@ vpy = ["src/**/*.vpy"]
 vectors = ["assets/vectors/*.vec"]
 music = ["assets/music/*.vmus"]
 sfx = ["assets/sfx/*.vsfx"]
-levels = ["assets/levels/*.vplay"]
+levels = ["assets/playground/*.vplay"]
 
 [sdk]
 version = "v1.3.2"          # uvmc2-sdk release (UVM2 / PiTrex / C builds)
@@ -307,18 +333,28 @@ version = "v1.3.2"          # uvmc2-sdk release (UVM2 / PiTrex / C builds)
 
 ## 10. MCP Server
 
-The MCP server (`ide/mcp-server/server.js`) exposes the IDE's capabilities to AI assistants (Claude, Copilot, etc.) via the Model Context Protocol.
+The MCP server (`ide/mcp-server/server.js`) exposes the IDE's capabilities to AI assistants (Claude Code, Claude Desktop, any MCP client) via the Model Context Protocol.
 
-**Connection**: The IDE connects on TCP port 9123; AI clients connect via stdio.
+**Connection**: the AI client starts `server.js` and talks to it over stdio; `server.js` connects to the running IDE over TCP on `127.0.0.1` (port 9123, or the next free one up to 9133). Each connection must authenticate with a random token the IDE generates at startup, so only processes the IDE launches — with the port and token in `VECTREX_STUDIO_MCP_PORT` / `VECTREX_STUDIO_MCP_TOKEN` — can drive it. The server runs on the IDE's own Electron binary (`ELECTRON_RUN_AS_NODE=1`); no separate Node install is needed. The packaged app ships it in `<resources>/mcp-server/`.
+
+If the IDE is not running, the MCP server still starts: tool calls return a "Vectrex Studio is not running / not reachable" error and it reconnects on its own once the IDE is up.
 
 ### Available tool groups
 
+The tool list is served by the IDE itself, so it always matches what the IDE implements. Full list and behaviour: [ide/mcp-server/README.md](../ide/mcp-server/README.md).
+
+**Claude Code in the integrated terminal.** `claude` typed in the IDE's terminal gets these tools, plus the server's *instructions* (`ide/electron/src/mcp/instructions.ts`): they open with a mandatory checklist: call `ide_get_context` first (it carries the project's assets and its language API), make all art, sound, levels and animation assets with `asset_create`, look the API up with `api_reference` instead of searching the SDK or compiler sources, and build and run with `ide_run`. They also say what VPy / "the SDK" / the targets mean, and which tool equals F7 / F5 / Shift+F5.
+
 | Group | Tools |
 |-------|-------|
-| **Editor** | Read/write/edit documents, get diagnostics |
-| **Compiler** | Trigger builds, get errors |
-| **Emulator** | Start/stop, get CPU state |
-| **Debugger** | Add breakpoints, get call stack |
-| **Project** | Open/close projects, read/write files, create vector/music assets |
+| **IDE** | `ide_get_context` (open project, kind, SDK, selected target, buildable targets, what each key would do, emulator, Arm toolchain, IDE version; with a project open also its `assets` with the code that uses each one, and `api`: the language's calls on the selected target plus how-to recipes), `ide_run` (= F7 / F5 / Shift+F5 / Shift+F7, awaited, with the result), `settings_set_build_target` |
+| **Reference** | `api_reference` (the full API of the open project's language, generated from the real sources: VPy from the compiler's builtin catalog with per-target availability, C from the headers of the project's pinned SDK version) |
+| **Editor** | List/read open documents, write files into the project, line-range edits, save, diagnostics |
+| **Compiler** | Build the project (VPy: m6809; C: like F7), build and run, last build errors |
+| **Emulator** | Load and run a ROM, stop, CPU state (PC, registers, cycles) |
+| **Memory** | Dump RAM/ROM, list and read PDB variables, write RAM |
+| **Debugger** | Start a debug session, breakpoints, continue/pause/step, registers, call stack |
+| **Project** | Open/close/create projects (VPy or C), project tree, read/write files |
+| **Assets** | `assets_list` (the project's assets + the code that uses each), `asset_get_format`, `asset_create` (every asset type, written to its folder and compile-checked); see [ASSETS.md](ASSETS.md) |
 
-This allows AI tools to read your code, trigger builds, inspect the running emulator, and create or edit assets — all without leaving the IDE.
+File access is confined to the open project's folder. Emulator, debugger and memory tools need the Emulator panel open. Every tool reports success only when it actually did the thing; failures come back as tool errors with the reason.

@@ -13,7 +13,7 @@ import { initLsp, lspClient, getLspClient } from './lspClient.js';
 import { DockWorkspace } from './components/DockWorkspace.js';
 import { restoreEditorState, ensureEditorPersistence } from './state/editorPersistence.js';
 import { deriveBinaryName } from './utils/index.js';
-import { toggleComponent, resetLayout, ensureComponent } from './state/dockBus.js';
+import { toggleComponent, resetLayout, ensureComponent, focusComponent } from './state/dockBus.js';
 import { useEditorStore } from './state/editorStore.js';
 import { useProjectStore, setEditorStoreRef } from './state/projectStore.js';
 import { useDebugStore } from './state/debugStore.js';
@@ -31,6 +31,12 @@ import { EpromProgrammerDialog } from './components/dialogs/EpromProgrammerDialo
 import { useSettings, uvm2MakeFlags } from './state/settingsStore.js';
 import { useEmulatorSettings } from './state/emulatorSettings.js';
 import { useEmulatorStore } from './state/emulatorStore.js';
+import { openShellTerminal, openClaudeTerminal } from './components/panels/TerminalPanel.js';
+import { useTerminalStore, focusTerminal } from './services/terminalSessions.js';
+// Installs window.__mcpBridge__ — the renderer hooks the MCP tools call from main.
+import './services/mcpBridge.js';
+import { registerBuildRunner } from './services/mcpBridge.js';
+import type { BuildOutcome, BuildMode } from './services/buildOutcome.js';
 
 // Initialize store reference for cross-store access
 setEditorStoreRef(useEditorStore);
@@ -343,7 +349,7 @@ function App() {
   const [defaultProjectLocation, setDefaultProjectLocation] = useState('');
   // New File dialog state (for .vec files that need a name)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
-  const [newFileType, setNewFileType] = useState<'vec' | 'c' | 'vpy' | 'vmus' | 'vsfx' | 'vanim' | 'vinstr' | 'venemy' | 'vmov'>('vec');
+  const [newFileType, setNewFileType] = useState<'vec' | 'c' | 'vpy' | 'vmus' | 'vsfx' | 'vanim' | 'vinstr' | 'venemy' | 'vmov' | 'vmesh'>('vec');
   // EPROM Programmer dialog state
   const [showEpromDialog, setShowEpromDialog] = useState(false);
   const lastCompiledBinary = useEmulatorSettings(s => s.lastCompiledBinary);
@@ -380,6 +386,7 @@ function App() {
     { key: 'trace', label: t('panel.trace','Trace'), component: 'trace' },
     { key: 'psglog', label: 'PSG Log', component: 'psglog' },
     { key: 'ai-assistant', label: t('panel.ai','PyPilot'), component: 'ai-assistant' },
+    { key: 'terminal', label: `${t('panel.terminal','Terminal')} (Ctrl+\`)`, component: 'terminal' },
   ];
 
   // Detect visibility via flexlayout model only
@@ -416,7 +423,9 @@ function App() {
   const buildDebounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Función para manejar build y run
-  const handleBuild = useCallback(async (autoRun: boolean = false, opts?: { forSd?: boolean; sim?: boolean }) => {
+  // Returns what happened (BuildOutcome) for callers that need it — the MCP bridge's
+  // runBuild. The keys and menu items ignore the value; behaviour does not depend on it.
+  const handleBuild = useCallback(async (autoRun: boolean = false, opts?: { forSd?: boolean; sim?: boolean }): Promise<BuildOutcome> => {
     // "Build for SD": produce a RAM-linked rp2350 game for the cart's SD launcher.
     // Triggered either explicitly (Build menu item) or by selecting the rp2350
     // "SD card" build mode in Settings so a normal Build/Run makes the SD binary.
@@ -425,7 +434,7 @@ function App() {
     // CRITICAL: Prevent parallel compilations - return early if already compiling
     if (isCompilingRef.current) {
       logger.debug('Build', 'Build already in progress, skipping duplicate request');
-      return;
+      return { ok: false, project: null, target: null, launch: 'none', error: 'busy', detail: 'A build is already in progress' };
     }
     
     // Clear any pending debounced build to avoid stale calls
@@ -435,12 +444,13 @@ function App() {
     }
     
     isCompilingRef.current = true;
+    const notes: string[] = [];
     
     try {
       const electronAPI: any = (window as any).electronAPI;
       if (!electronAPI?.runCompile) {
         logger.warn('Build', 'electronAPI.runCompile not available');
-        return;
+        return { ok: false, project: null, target: null, launch: 'none', error: 'no_ipc', detail: 'electronAPI.runCompile not available' };
       }
 
       // CRITICAL: Stop emulator BEFORE compilation to avoid hanging
@@ -497,13 +507,14 @@ function App() {
             logger.warn('Build',
               `${projName} is a C/C++ project and has no 6809 build path, so ` +
               `there is nothing to compile for m6809 — only this preview runs.`);
+            notes.push('C/C++ projects have no m6809 build path; only the simulator preview runs.');
           }
         }
 
         if (!forSd && quiereSim) {
           if (!electronAPI?.runBuildSim) {
             logger.error('Build', 'electronAPI.runBuildSim not available');
-            return;
+            return { ok: false, project: 'c', target: 'sim', launch: 'none', error: 'no_ipc', detail: 'electronAPI.runBuildSim not available' };
           }
           logger.info('Build', `Building simulator for external project: ${projName}`);
           const simResult = await electronAPI.runBuildSim({ manifestPath });
@@ -515,15 +526,16 @@ function App() {
               ? Uint8Array.from(atob(simResult.romZipBase64), c => c.charCodeAt(0))
               : null;
             useEmulatorStore.getState().setSimModule(simResult.modulePath, romZip);
-            return;
+            return { ok: true, project: 'c', target: 'sim', artifact: simResult.modulePath, launch: 'sim', notes };
           }
           // No [simulate] target: fall through to the target build below, so Shift+F5
           // behaves like F5 on a project with no simulator. Any other error surfaces.
           if (simResult?.error && simResult.error !== 'no_simulate_target') {
             logger.error('Build', 'Simulator build failed:', simResult.error, simResult.detail || '');
-            return;
+            return { ok: false, project: 'c', target: 'sim', launch: 'none', error: simResult.error, detail: simResult.detail, notes };
           }
           logger.info('Build', `No [simulate] target for ${projName} — building for ${buildTarget}, same as F5.`);
+          notes.push(`No [simulate] section in the .cvproj: built ${buildTarget} instead, same as F5.`);
         }
         // THE TARGET BUILD — what F5 does, and what Shift+F5 falls back to.
         //
@@ -538,7 +550,7 @@ function App() {
         if (!forSd) {
           if (!electronAPI?.runBuildExternal) {
             logger.error('Build', 'electronAPI.runBuildExternal not available');
-            return;
+            return { ok: false, project: 'c', target: buildTarget, launch: 'none', error: 'no_ipc', detail: 'electronAPI.runBuildExternal not available' };
           }
           useEmulatorStore.getState().setSimModule(null);
           if (buildTarget === 'pitrex') {
@@ -549,7 +561,10 @@ function App() {
             });
             if (kr?.error) logger.error('Build', 'PiTrex build failed:', kr.error, kr.detail || '');
             else logger.info('Build', 'PiTrex kernel ready:', kr?.artifactPath || '');
-            return;
+            notes.push('pitrex has no emulator in the IDE: the kernel image is built (and copied to the SD card when "Copy to SD" is on).');
+            return kr?.error
+              ? { ok: false, project: 'c', target: 'pitrex', launch: 'none', error: kr.error, detail: kr.detail, notes }
+              : { ok: true, project: 'c', target: 'pitrex', artifact: kr?.artifactPath ?? null, launch: 'none', notes };
           }
           // UVM2: construye el .um2 Y LO PREVISUALIZA en el panel, como rp2350.
           //
@@ -571,24 +586,31 @@ function App() {
             });
             if (ur?.error) logger.error('Build', 'UVM2 build failed:', ur.error, ur.detail || '');
             else logger.info('Build', 'UVM2 image ready:', ur?.artifactPath || '');
-            return;
+            return ur?.error
+              ? { ok: false, project: 'c', target: 'uvm2', launch: 'none', error: ur.error, detail: ur.detail, notes }
+              : { ok: true, project: 'c', target: 'uvm2', artifact: ur?.artifactPath ?? null, launch: 'emulator', notes };
           }
           if (buildTarget === 'm6809') {
             logger.error('Build',
               `${projName} is a C/C++ project: there is no 6809 build path. ` +
               `Pick rp2350, pitrex or uvm2, or press F5 for the simulator preview.`);
-            return;
+            return {
+              ok: false, project: 'c', target: 'm6809', launch: 'none', error: 'no_m6809_for_c', notes,
+              detail: `${projName} is a C/C++ project: there is no 6809 build path. Select rp2350, uvm2 or pitrex, or use the simulator.`,
+            };
           }
           logger.info('Build', `Building + previewing RP2350 binary: ${projName}`);
           const pv = await electronAPI.runBuildExternal({ manifestPath, target: 'rp2350', preview: true });
           if (pv?.error) logger.error('Build', 'RP2350 preview build failed:', pv.error, pv.detail || '');
-          return;
+          return pv?.error
+            ? { ok: false, project: 'c', target: 'rp2350', launch: 'none', error: pv.error, detail: pv.detail, notes }
+            : { ok: true, project: 'c', target: 'rp2350', artifact: pv?.artifactPath ?? null, launch: 'emulator', notes };
         }
 
 
         if (!electronAPI?.runBuildExternal) {
           logger.error('Build', 'electronAPI.runBuildExternal not available');
-          return;
+          return { ok: false, project: 'c', target: null, launch: 'none', error: 'no_ipc', detail: 'electronAPI.runBuildExternal not available' };
         }
         // Route to the compiler for the SELECTED target (previously a C project
         // always built pitrex). "Build for SD" (forSd) is always an rp2350 game
@@ -626,10 +648,10 @@ function App() {
         });
         if (extResult?.error) {
           logger.error('Build', 'External build failed:', extResult.error, extResult.detail || '');
-        } else {
-          logger.info('Build', 'External build complete:', extResult?.artifactPath || '');
+          return { ok: false, project: 'c', target: extTarget, launch: 'none', error: extResult.error, detail: extResult.detail, notes };
         }
-        return;
+        logger.info('Build', 'External build complete:', extResult?.artifactPath || '');
+        return { ok: true, project: 'c', target: extTarget, artifact: extResult?.artifactPath ?? null, launch: extTarget === 'rp2350' ? 'emulator' : 'none', notes };
       }
 
     // If we have a project, use project entry point
@@ -661,14 +683,16 @@ function App() {
     
     if (!activeDoc) {
       logger.warn('Build', 'No active document to build');
-      return;
+      return { ok: false, project: null, target: null, launch: 'none', error: 'nothing_to_build', detail: 'No project is open and no .vpy document is active' };
     }
+    const kind: BuildOutcome['project'] = projectState.vpyProject ? 'vpy' : 'file';
+    const vpyTarget: BuildOutcome['target'] = forSd ? 'rp2350' : buildTarget;
 
     const filePath = activeDoc.diskPath || activeDoc.uri;
     
     if (!filePath.endsWith('.vpy') && !buildFromProject) {
       logger.warn('Build', 'Active document is not a .vpy file:', filePath);
-      return;
+      return { ok: false, project: kind, target: vpyTarget, launch: 'none', error: 'not_vpy', detail: `The active document is not a .vpy file: ${filePath}` };
     }
 
     const fileName = filePath.split('/').pop() || filePath;
@@ -679,7 +703,7 @@ function App() {
       
       if (filePath.startsWith('file://')) {
         logger.error('Build', 'Document has no diskPath, cannot compile:', activeDoc.uri);
-        return;
+        return { ok: false, project: kind, target: vpyTarget, launch: 'none', error: 'no_disk_path', detail: `The document has no file on disk: ${activeDoc.uri}` };
       }
       
       logger.debug('Build', 'Using file path:', filePath);
@@ -690,6 +714,7 @@ function App() {
       if (opts?.sim) {
         logger.info('Build',
           `VPy projects have no separate simulator — building and emulating ${buildTarget}, same as F5.`);
+        notes.push(`VPy projects have no separate simulator: built and emulated ${buildTarget}, same as F5.`);
       }
 
       const args: any = {
@@ -730,7 +755,7 @@ function App() {
       // so that the compiler reads the latest BPM/vectors/SFX from disk.
       const allDirty = editorState.documents.filter(
         d => d.dirty && d.diskPath && d.uri !== (activeDoc.uri)
-          && /\.(vmus|vec|vsfx|vplay|vpy)$/.test(d.diskPath)
+          && /\.(vmus|vec|vsfx|vplay|vpy|vmesh)$/.test(d.diskPath)
       );
       for (const dirtyDoc of allDirty) {
         try {
@@ -762,7 +787,7 @@ function App() {
       if (result.error) {
         logger.error('Build', 'Compilation failed:', result.error, result.detail || '');
         // Don't proceed to emulator - binary deleted and compilation failed
-        return;
+        return { ok: false, project: kind, target: vpyTarget, launch: 'none', error: result.error, detail: result.detail, stderr: result.stderr, notes };
       }
 
       if (result.conflict) {
@@ -773,17 +798,18 @@ function App() {
           const forceResult = await electronAPI.runCompile(forceArgs);
           if (forceResult.error) {
             logger.error('Build', 'Force compilation failed:', forceResult.error);
-            return;
+            return { ok: false, project: kind, target: vpyTarget, launch: 'none', error: forceResult.error, detail: forceResult.detail, stderr: forceResult.stderr, notes };
           }
           useEditorStore.getState().markSaved(activeDoc.uri, forceResult.savedMTime);
           logger.info('Build', 'Force compilation successful:', forceResult.binPath, `(${forceResult.size} bytes)`);
           if (autoRun) {
             logger.debug('Build', 'Auto-run enabled - emulator should load the binary automatically');
           }
+          return { ok: true, project: kind, target: vpyTarget, artifact: forceResult.binPath, size: forceResult.size, launch: forSd ? 'none' : 'emulator', notes };
         } catch (forceError) {
           logger.error('Build', 'Failed to force compile during conflict:', forceError);
+          return { ok: false, project: kind, target: vpyTarget, launch: 'none', error: 'exception', detail: String((forceError as any)?.message || forceError), notes };
         }
-        return;
       }
 
       logger.info('Build', 'Compilation successful:', result.binPath, `(${result.size} bytes)`);
@@ -809,8 +835,11 @@ function App() {
       if (autoRun) {
         logger.debug('Build', 'Auto-run enabled - emulator should load the binary automatically');
       }
+      if (forSd) notes.push('SD build: RAM-linked rp2350 game for the cartridge launcher; it is not loaded into the emulator.');
+      return { ok: true, project: kind, target: vpyTarget, artifact: result.binPath, size: result.size, launch: forSd ? 'none' : 'emulator', notes };
     } catch (error) {
       logger.error('Build', 'Build process failed:', error);
+      return { ok: false, project: null, target: null, launch: 'none', error: 'exception', detail: String((error as any)?.message || error), notes };
     } finally {
       // CRITICAL: Clear compilation flag when done
       isCompilingRef.current = false;
@@ -887,6 +916,10 @@ def loop():
         break; }
       case 'file.new.venemy': {
         setNewFileType('venemy');
+        setShowNewFileDialog(true);
+        break; }
+      case 'file.new.vmesh': {
+        setNewFileType('vmesh');
         setShowNewFileDialog(true);
         break; }
       case 'file.open': {
@@ -1296,27 +1329,12 @@ def loop():
       }
       
       case 'project.new': {
-        // Set default location - try from current project, recent projects, or empty
-        const projectState = useProjectStore.getState();
+        // Default location: the default workspace, ~/VectrexStudio/projects (the main
+        // process resolves the home folder and creates it). The dialog lets the user change it.
         let defaultLocation = '';
-        
-        // First try: current open project's parent directory
-        if (projectState.vpyProject?.rootDir) {
-          const parts = projectState.vpyProject.rootDir.replace(/\\/g, '/').split('/');
-          parts.pop(); // Get parent directory
-          defaultLocation = parts.join('/');
-        }
-        // Second try: parent directory of most recent project
-        else if (projectState.recentWorkspaces.length > 0) {
-          const lastProject = projectState.recentWorkspaces.find(w => w.isProject);
-          if (lastProject) {
-            const parts = lastProject.path.replace(/\\/g, '/').split('/');
-            parts.pop(); // Remove project file name
-            parts.pop(); // Get parent of project directory
-            defaultLocation = parts.join('/');
-          }
-        }
-        
+        try {
+          defaultLocation = (await (window as any).project?.defaultLocation?.()) || '';
+        } catch { /* browser-only dev: leave it empty */ }
         setDefaultProjectLocation(defaultLocation);
         // Show the new project dialog
         setShowNewProjectDialog(true);
@@ -1538,6 +1556,31 @@ def loop():
         resetLayout();
         break;
       }
+      // Integrated terminal. Tabs are created BEFORE the panel is shown so the panel's
+      // "open one if empty" logic doesn't add a second tab.
+      case 'terminal.toggle': {
+        const focusedInTerminal = !!(document.activeElement as HTMLElement | null)?.closest?.('.vpy-terminal-host');
+        if (!isComponentVisible('terminal')) {
+          ensureComponent('terminal');
+        } else if (focusedInTerminal) {
+          toggleComponent('terminal');
+        } else {
+          focusComponent('terminal');
+          const key = useTerminalStore.getState().activeKey;
+          if (key) setTimeout(() => focusTerminal(key), 20);
+        }
+        break;
+      }
+      case 'terminal.new': {
+        openShellTerminal(`${t('terminal.defaultTitle', 'Terminal')} ${useTerminalStore.getState().tabs.length + 1}`);
+        ensureComponent('terminal');
+        break;
+      }
+      case 'terminal.claude': {
+        openClaudeTerminal(t as any);
+        ensureComponent('terminal');
+        break;
+      }
       case 'project.openPath': {
         // Same shape as openRecent — path arrives in payload.
         const projectPath = payload || '';
@@ -1555,7 +1598,7 @@ def loop():
               const sel = n.getSelectedNode?.();
               if (sel) {
                 const c = typeof sel.getComponent === 'function' ? sel.getComponent() : sel?._attributes?.component;
-                if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','playground','psglog'].includes(c)) activeComp = c;
+                if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','playground','psglog','terminal'].includes(c)) activeComp = c;
               }
             }
           });
@@ -1574,7 +1617,7 @@ def loop():
               const sel = n.getSelectedNode?.();
               if (sel) {
                 const c = typeof sel.getComponent === 'function' ? sel.getComponent() : sel?._attributes?.component;
-                if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','playground','psglog'].includes(c)) activeComp = c;
+                if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','playground','psglog','terminal'].includes(c)) activeComp = c;
               }
             }
           });
@@ -1600,7 +1643,7 @@ def loop():
         // DockComponent yet, so silently ignore until it is implemented.
         if (id.startsWith('view.toggle.')) {
           const comp = id.slice('view.toggle.'.length);
-          const valid = ['emulator','debug','errors','output','memory','trace','psglog','ai-assistant','build-output','compiler-output','files','playground','bioscalls'];
+          const valid = ['emulator','debug','errors','output','memory','trace','psglog','ai-assistant','build-output','compiler-output','files','playground','bioscalls','terminal'];
           if (valid.includes(comp)) {
             toggleComponent(comp as any);
           } else if (comp === 'dual-emulator') {
@@ -1618,6 +1661,22 @@ def loop():
   // Keyboard shortcuts mapping (similar to VS conventions)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Ctrl+` toggles the terminal, Ctrl+Shift+` opens a new one (VS Code bindings,
+      // Ctrl on every platform). e.code so it works on non-US layouts too.
+      if (e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'Backquote') {
+        e.preventDefault();
+        commandExec(e.shiftKey ? 'terminal.new' : 'terminal.toggle');
+        return;
+      }
+      // Inside the terminal the shell owns the keyboard (Ctrl+D, Ctrl+L, Ctrl+K... are
+      // shell/TUI keys there). Only Cmd shortcuts on macOS (except the clipboard ones
+      // xterm handles) and F5/F7 (build/run, as VS Code does) still reach the IDE.
+      if ((e.target as HTMLElement | null)?.closest?.('.vpy-terminal-host')) {
+        const mac = (window.terminal?.platform || navigator.platform.toLowerCase()).startsWith('darwin') || navigator.platform.toLowerCase().startsWith('mac');
+        const cmdShortcut = mac && e.metaKey && !['c','v','a','k'].includes(e.key.toLowerCase());
+        const buildKey = (e.key === 'F5' || e.key === 'F7') && !e.ctrlKey && !e.metaKey && !e.altKey;
+        if (!cmdShortcut && !buildKey) return;
+      }
       const ctrl = e.ctrlKey || e.metaKey; // meta for mac future
       // File
       if (ctrl && e.key.toLowerCase() === 's' && !e.shiftKey) { e.preventDefault(); commandExec('file.save'); }
@@ -1689,6 +1748,18 @@ def loop():
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
   }, [handleBuild]);
+
+  // The MCP bridge's runBuild (tool ide_run) runs EXACTLY what the keys run, but awaits
+  // the outcome: build = F7 (build.build), run = F5 (build.run), simulate = Shift+F5
+  // (build.simulate), build_simulator = Shift+F7 (build.buildSim).
+  useEffect(() => registerBuildRunner((mode: BuildMode) => {
+    switch (mode) {
+      case 'build': return handleBuild(false);
+      case 'run': return handleBuild(true);
+      case 'simulate': return handleBuild(true, { sim: true });
+      case 'build_simulator': return handleBuild(false, { sim: true });
+    }
+  }), [handleBuild]);
 
   // Listen for vpy-command events from WelcomeView and other components
   useEffect(() => {
@@ -1787,6 +1858,7 @@ def loop():
               <MenuItem label={`${t('file.new.vanim', 'Animation (.vanim)')}`} onClick={()=>{ commandExec('file.new.vanim'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vinstr', 'Instrument (.vinstr)')}`} onClick={()=>{ commandExec('file.new.vinstr'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.venemy', 'Enemy (.venemy)')}`} onClick={()=>{ commandExec('file.new.venemy'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('file.new.vmesh', '3D Mesh (.vmesh)')}`} onClick={()=>{ commandExec('file.new.vmesh'); setOpenMenu(null); }} />
             </SubMenu>
             <SubMenu label={t('file.open', 'Open')}>
               <MenuItem label={`${t('project.open', 'Project...')}	Ctrl+Shift+O`} onClick={()=>{ commandExec('project.open'); setOpenMenu(null); }} />
@@ -1872,6 +1944,9 @@ def loop():
                 onClick={()=>toggleFromView(it.key)} />
             ))}
             <MenuSeparator />
+            <MenuItem label={`${t('terminal.new', 'New Terminal')}\tCtrl+Shift+\``} onClick={()=>{ commandExec('terminal.new'); setOpenMenu(null); }} />
+            <MenuItem label={t('terminal.claudeMenu', 'Claude Code in Terminal')} onClick={()=>{ commandExec('terminal.claude'); setOpenMenu(null); }} />
+            <MenuSeparator />
             <MenuItem label={t('panel.hideActive', 'Hide Active Panel')} onClick={()=>{
               // Determine active panel by scanning selected tab that matches our panels
               const mdl: any = (window as any).__vpyDockModel; let activeComp: string | undefined;
@@ -1882,7 +1957,7 @@ def loop():
                     const selected = n.getSelectedNode?.();
                     if (selected) {
                       const c = typeof selected.getComponent === 'function' ? selected.getComponent() : selected?._attributes?.component;
-                      if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output'].includes(c)) activeComp = c;
+                      if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','terminal'].includes(c)) activeComp = c;
                     }
                   }
                 });
@@ -1899,7 +1974,7 @@ def loop():
                     const selected = n.getSelectedNode?.();
                     if (selected) {
                       const c = typeof selected.getComponent === 'function' ? selected.getComponent() : selected?._attributes?.component;
-                      if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output'].includes(c)) activeComp = c;
+                      if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','terminal'].includes(c)) activeComp = c;
                     }
                   }
                 });
@@ -2003,13 +2078,14 @@ def loop():
               location: options.location,
               type: options.type,
               template: options.template,
+              kind: options.kind,
             });
             if (result && 'ok' in result && result.ok) {
               logger.info('Project', `Created project: ${result.name}`);
               // Open the created project
               const success = await openVpyProject(result.projectFile);
               if (success) {
-                const entryPath = useProjectStore.getState().getEntryPath();
+                const entryPath = result.entryFile || useProjectStore.getState().getEntryPath();
                 if (entryPath) {
                   const apiFiles: any = (window as any).files;
                   if (apiFiles?.readFile) {
@@ -2019,7 +2095,7 @@ def loop():
                       const uri = normPath.match(/^[A-Za-z]:\//) ? `file:///${normPath}` : `file://${normPath}`;
                       openDocument({
                         uri,
-                        language: 'vpy',
+                        language: /\.c$/i.test(entryPath) ? 'c' : 'vpy',
                         content: fileResult.content,
                         dirty: false,
                         diagnostics: [],
@@ -2043,9 +2119,9 @@ def loop():
       {/* New File Dialog */}
       <InputDialog
         isOpen={showNewFileDialog}
-        title={newFileType === 'vec' ? 'New Vector List' : newFileType === 'vmus' ? 'New Music File' : newFileType === 'vmov' ? 'New Vector Movie' : newFileType === 'vsfx' ? 'New Sound Effect' : newFileType === 'vanim' ? 'New Animation' : newFileType === 'vinstr' ? 'New Instrument' : newFileType === 'venemy' ? 'New Enemy Type' : 'New File'}
-        message={newFileType === 'vec' ? 'Enter a name for the vector list (without extension):' : newFileType === 'vmus' ? 'Enter a name for the music file (without extension):' : newFileType === 'vmov' ? 'Enter a name for the vector movie (without extension):' : newFileType === 'vsfx' ? 'Enter a name for the sound effect (without extension):' : newFileType === 'vanim' ? 'Enter a name for the animation (without extension):' : newFileType === 'vinstr' ? 'Enter a name for the instrument (without extension):' : newFileType === 'venemy' ? 'Enter a name for the enemy type (without extension):' : 'Enter filename:'}
-        placeholder={newFileType === 'vec' ? 'my_sprite' : newFileType === 'vmus' ? 'my_music' : newFileType === 'vmov' ? 'my_movie' : newFileType === 'vsfx' ? 'laser' : newFileType === 'vanim' ? 'player_walk' : newFileType === 'vinstr' ? 'pluck' : newFileType === 'venemy' ? 'snowbrother' : 'filename'}
+        title={newFileType === 'vec' ? 'New Vector List' : newFileType === 'vmus' ? 'New Music File' : newFileType === 'vmov' ? 'New Vector Movie' : newFileType === 'vsfx' ? 'New Sound Effect' : newFileType === 'vanim' ? 'New Animation' : newFileType === 'vinstr' ? 'New Instrument' : newFileType === 'venemy' ? 'New Enemy Type' : newFileType === 'vmesh' ? 'New 3D Mesh' : 'New File'}
+        message={newFileType === 'vec' ? 'Enter a name for the vector list (without extension):' : newFileType === 'vmus' ? 'Enter a name for the music file (without extension):' : newFileType === 'vmov' ? 'Enter a name for the vector movie (without extension):' : newFileType === 'vsfx' ? 'Enter a name for the sound effect (without extension):' : newFileType === 'vanim' ? 'Enter a name for the animation (without extension):' : newFileType === 'vinstr' ? 'Enter a name for the instrument (without extension):' : newFileType === 'venemy' ? 'Enter a name for the enemy type (without extension):' : newFileType === 'vmesh' ? 'Enter a name for the mesh (without extension):' : 'Enter filename:'}
+        placeholder={newFileType === 'vec' ? 'my_sprite' : newFileType === 'vmus' ? 'my_music' : newFileType === 'vmov' ? 'my_movie' : newFileType === 'vsfx' ? 'laser' : newFileType === 'vanim' ? 'player_walk' : newFileType === 'vinstr' ? 'pluck' : newFileType === 'venemy' ? 'snowbrother' : newFileType === 'vmesh' ? 'ship' : 'filename'}
         defaultValue=""
         validateFn={(value) => {
           if (!value.trim()) return 'Name is required';
@@ -2315,6 +2391,40 @@ def loop():
 
             // Fallback: create in-memory
             const uri = `inmemory://${name}.vinstr`;
+            openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
+          } else if (newFileType === 'vmesh') {
+            // 3D surface mesh for vpy3d (C projects): start from a cube, edited in the Mesh Editor.
+            const h = 500;
+            const content = JSON.stringify({
+              name,
+              hard: 45,
+              vertices: [
+                { x: -h, y: -h, z: -h }, { x: h, y: -h, z: -h }, { x: h, y: h, z: -h }, { x: -h, y: h, z: -h },
+                { x: -h, y: -h, z: h }, { x: h, y: -h, z: h }, { x: h, y: h, z: h }, { x: -h, y: h, z: h },
+              ],
+              faces: [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [2, 3, 7, 6], [1, 2, 6, 5], [0, 4, 7, 3]],
+            }, null, 2);
+
+            if (vpyProject?.rootDir && apiFiles?.saveFile) {
+              const filePath = `${vpyProject.rootDir}/assets/meshes/${name}.vmesh`.replace(/\\/g, '/');
+              try {
+                const result = await apiFiles.saveFile({ path: filePath, content });
+                if (result && !result.error) {
+                  const normPath = filePath.replace(/\\/g, '/');
+                  const uri = normPath.match(/^[A-Za-z]:\//) ? `file:///${normPath}` : `file://${normPath}`;
+                  openDocument({
+                    uri, language: 'json', content, dirty: false, diagnostics: [],
+                    diskPath: filePath, mtime: result.mtime, lastSavedContent: content
+                  });
+                  useProjectStore.getState().refreshWorkspace();
+                  logger.info('File', `Created ${filePath}`);
+                  return;
+                }
+              } catch (e) {
+                logger.warn('File', 'Failed to save to project folder, creating in-memory');
+              }
+            }
+            const uri = `inmemory://${name}.vmesh`;
             openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
           } else if (newFileType === 'venemy') {
             const content = JSON.stringify({

@@ -76,6 +76,15 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
   const [state, setState] = useState<'loading' | 'running' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState<string>('');
 
+  // Publish this module's status (keyed by the nonce it was mounted for) so tools that
+  // start a simulation (MCP ide_run) can report whether it is running or failed.
+  const nonceRef = useRef(useEmulatorStore.getState().simModuleNonce);
+  useEffect(() => {
+    useEmulatorStore.getState().setSimStatus({
+      nonce: nonceRef.current, state, ...(state === 'error' ? { error: errorMsg } : {}),
+    });
+  }, [state, errorMsg]);
+
   // Live refs read by the JS hooks each frame.
   const controllerRef = useRef<ControllerState>({ buttons: 0, joyX: 0, joyY: 0 });
   const keysRef = useRef<Record<string, boolean>>({});      // live keyboard state
@@ -147,6 +156,10 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
   // sample index); `voiceNodesRef` maps a mixing voice → its live source node.
   const samplesRef = useRef<(AudioBuffer | null)[]>([]);
   const voiceNodesRef = useRef<Map<number, AudioBufferSourceNode>>(new Map());
+  // Voices started from a .vsmp table (playSampleData): when each started, how long
+  // it is and whether it loops — what samplePos needs to answer "how far has voice 0
+  // got". A bank-index voice (playSample) has no entry, and samplePos stays 0 for it.
+  const voiceClockRef = useRef<Map<number, { node: AudioBufferSourceNode; t0: number; dur: number; loop: boolean }>>(new Map());
   const log = useRef(onLog);
   log.current = onLog;
 
@@ -304,6 +317,49 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
         if (n) { try { n.stop(); } catch { /* already stopped */ } voiceNodesRef.current.delete(voice); }
       },
       samplePlaying: (voice: number) => (voiceNodesRef.current.has(voice) ? 1 : 0),
+      // A sample given by its data (libvpy's vpy_play_sample / v_playSampleData): a
+      // copy of the .vsmp table — u32 rate, u32 count, packed 4-bit, low nibble first.
+      // Decoded like the RP2350 emulator does (nibble/15 -> [-1, 1]) and played on the
+      // voice; its clock feeds samplePos.
+      playSampleData: (bytes: Uint8Array, voice: number, loop: number) => {
+        if (disposedRef.current) return;
+        const a = audioRef.current;
+        if (!a || !bytes || bytes.length < 8) return;
+        const u32 = (o: number) => (bytes[o] | (bytes[o + 1] << 8) | (bytes[o + 2] << 16) | (bytes[o + 3] << 24)) >>> 0;
+        const rate = u32(0), n = u32(4);
+        if (rate < 3000 || rate > 96000 || n <= 0 || 8 + ((n + 1) >> 1) > bytes.length) return;
+        const buf = a.ctx.createBuffer(1, n, rate);
+        const out = buf.getChannelData(0);
+        for (let i = 0; i < n; i++) {
+          const b = bytes[8 + (i >> 1)];
+          out[i] = (((i & 1) === 0 ? b & 0x0f : b >> 4) / 15) * 2 - 1;
+        }
+        const prev = voiceNodesRef.current.get(voice);
+        if (prev) { try { prev.stop(); } catch { /* already stopped */ } }
+        const src = a.ctx.createBufferSource();
+        src.buffer = buf;
+        src.loop = !!loop;
+        src.connect(a.ctx.destination);
+        src.onended = () => {
+          if (voiceNodesRef.current.get(voice) === src) voiceNodesRef.current.delete(voice);
+          if (voiceClockRef.current.get(voice)?.node === src) voiceClockRef.current.delete(voice);
+        };
+        if (a.ctx.state !== 'running') a.ctx.resume().catch(() => {});
+        try { src.start(); } catch { /* ctx not running yet */ }
+        voiceNodesRef.current.set(voice, src);
+        voiceClockRef.current.set(voice, { node: src, t0: a.ctx.currentTime, dur: n / rate, loop: !!loop });
+      },
+      // Voice 0's cursor as a frame number at `fps` (the cartridge's SYS_SAMPLE_POS):
+      // 0 when voice 0 is silent or was started by bank index (no known clock).
+      samplePos: (fps: number) => {
+        const a = audioRef.current;
+        const c = voiceClockRef.current.get(0);
+        if (!a || !c || fps <= 0 || voiceNodesRef.current.get(0) !== c.node) return 0;
+        let t = Math.max(0, a.ctx.currentTime - c.t0);
+        if (c.loop && c.dur > 0) t %= c.dur;
+        else if (t > c.dur) return 0;
+        return Math.floor(t * fps) | 0;
+      },
       // v_simSaveData: persist a blob from the game into ITS OWN project
       // folder — <project>/dumps/sim_<stamp>/<basename>. The stamp is one per
       // mount, so play sessions never collide and appendFileBin's append
@@ -600,6 +656,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
           if (!disposedRef.current) {
             const msg = e?.message || String(e);
             log.current?.(`[PiTrex simulator] stopped: ${msg}`);
+            useEmulatorStore.getState().setSimStatus({ nonce: nonceRef.current, state: 'error', error: `program stopped: ${msg}` });
           }
         });
       } catch (e: any) {
@@ -622,6 +679,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       try {
         voiceNodesRef.current.forEach((n) => { try { n.stop(); } catch { /* ignore */ } });
         voiceNodesRef.current.clear();
+        voiceClockRef.current.clear();
         samplesRef.current = [];
         const a = audioRef.current;
         if (a) {

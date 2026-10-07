@@ -37,10 +37,13 @@ const PROJECT_TEMPLATES: ProjectTemplate[] = [
   },
 ];
 
+/** Project language: a VPy project (.vpyproj) or a C project on the SDK's libvpy runtime (.cvproj). */
+export type ProjectKind = 'vpy' | 'c';
+
 interface NewProjectDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreate: (options: { name: string; location: string; template: string; type: 'game' | 'library' }) => void;
+  onCreate: (options: { name: string; location: string; template: string; type: 'game' | 'library'; kind: ProjectKind }) => void;
   defaultLocation?: string;
 }
 
@@ -52,6 +55,7 @@ export const NewProjectDialog: React.FC<NewProjectDialogProps> = ({
 }) => {
   const { t } = useTranslation();
   const [selectedTemplate, setSelectedTemplate] = useState<string>('game');
+  const [kind, setKind] = useState<ProjectKind>('vpy');
   const [projectName, setProjectName] = useState('');
   const [location, setLocation] = useState(defaultLocation);
   const [searchFilter, setSearchFilter] = useState('');
@@ -61,6 +65,7 @@ export const NewProjectDialog: React.FC<NewProjectDialogProps> = ({
   useEffect(() => {
     if (isOpen) {
       setSelectedTemplate('game');
+      setKind('vpy');
       setProjectName('');
       setLocation(defaultLocation);
       setSearchFilter('');
@@ -120,6 +125,7 @@ export const NewProjectDialog: React.FC<NewProjectDialogProps> = ({
       location: location,
       template: selectedTemplate,
       type: template.type,
+      kind,
     });
     onClose();
   };
@@ -185,6 +191,29 @@ export const NewProjectDialog: React.FC<NewProjectDialogProps> = ({
         </div>
 
         <div className="new-project-config">
+          <div className="config-row">
+            <label>{t('dialog.newProject.language', 'Language')}</label>
+            <div className="config-kind" role="radiogroup">
+              {(['vpy', 'c'] as ProjectKind[]).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  role="radio"
+                  aria-checked={kind === k}
+                  className={`config-kind-option ${kind === k ? 'selected' : ''}`}
+                  onClick={() => setKind(k)}
+                >
+                  {k === 'vpy' ? t('dialog.newProject.languageVpy', 'VPy') : t('dialog.newProject.languageC', 'C (SDK)')}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="config-kind-hint">
+            {kind === 'vpy'
+              ? t('dialog.newProject.languageVpyHint', 'Python-like VPy: builds for the original cartridge (6809) and the ARM targets.')
+              : t('dialog.newProject.languageCHint', 'C on the SDK (uvmc2-sdk, libvpy runtime): runs in the simulator and builds for the RP2350 cartridge and the UVMC2 multicart.')}
+          </div>
+
           <div className="config-row">
             <label>{t('dialog.newProject.name', 'Project name')}</label>
             <input

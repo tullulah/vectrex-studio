@@ -110,9 +110,26 @@ interface ToolchainStatus {
   candidates: Array<{ dir: string; source: string; problem: string | null }>;
 }
 
+// Integrated terminal (preload `window.terminal`, main-process side in electron/src/terminal.ts)
+interface TerminalAPI {
+  /** process.platform of the host ('darwin' | 'linux' | 'win32' ...). */
+  platform: string;
+  create: (opts: { cwd?: string; cols: number; rows: number; command?: string }) =>
+    Promise<{ id: number; shell: string } | { error: string }>;
+  write: (id: number, data: string) => void;
+  resize: (id: number, cols: number, rows: number) => void;
+  kill: (id: number) => Promise<{ ok: boolean }>;
+  openLink: (url: string) => Promise<{ ok: boolean }>;
+  /** Batched PTY output. Returns an unsubscribe function. */
+  onData: (cb: (id: number, data: string) => void) => () => void;
+  /** The shell exited on its own. Returns an unsubscribe function. */
+  onExit: (cb: (id: number, code: number) => void) => () => void;
+}
+
 // Electron API types
 interface Window {
   sdk?: SdkAPI;
+  terminal?: TerminalAPI;
   electronAPI?: ElectronAPI;
   electron: {
     runCommand: (command: string) => Promise<{

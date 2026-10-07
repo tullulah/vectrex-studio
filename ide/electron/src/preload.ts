@@ -132,13 +132,18 @@ contextBridge.exposeInMainWorld('project', {
   } | { error: string }>,
   
   // Create new project
-  create: (args: { name: string; location?: string }) => ipcRenderer.invoke('project:create', args) as Promise<{
+  create: (args: { name: string; location?: string; kind?: 'vpy' | 'c' }) => ipcRenderer.invoke('project:create', args) as Promise<{
     ok: boolean;
     projectFile: string;
     projectDir: string;
+    entryFile: string;
+    kind: 'vpy' | 'c';
     name: string;
   } | { canceled: true } | { error: string }>,
   
+  // The default workspace (~/VectrexStudio/projects), created if missing
+  defaultLocation: () => ipcRenderer.invoke('project:defaultLocation') as Promise<string>,
+
   // Find project file in directory or parents
   find: (startDir: string) => ipcRenderer.invoke('project:find', startDir) as Promise<{ path: string | null }>,
 });
@@ -524,6 +529,27 @@ contextBridge.exposeInMainWorld('eprom', {
     const handler = (_e: IpcRendererEvent, data: string) => cb(data);
     ipcRenderer.on('eprom://progress', handler);
     return () => ipcRenderer.removeListener('eprom://progress', handler);
+  },
+});
+
+// Integrated terminal (real PTYs, see terminal.ts). Output arrives batched.
+contextBridge.exposeInMainWorld('terminal', {
+  platform: process.platform,
+  create: (opts: { cwd?: string; cols: number; rows: number; command?: string }) =>
+    ipcRenderer.invoke('terminal:create', opts) as Promise<{ id: number; shell: string } | { error: string }>,
+  write: (id: number, data: string) => ipcRenderer.send('terminal:write', id, data),
+  resize: (id: number, cols: number, rows: number) => ipcRenderer.send('terminal:resize', id, cols, rows),
+  kill: (id: number) => ipcRenderer.invoke('terminal:kill', id) as Promise<{ ok: boolean }>,
+  openLink: (url: string) => ipcRenderer.invoke('terminal:openLink', url) as Promise<{ ok: boolean }>,
+  onData: (cb: (id: number, data: string) => void) => {
+    const handler = (_e: IpcRendererEvent, id: number, data: string) => cb(id, data);
+    ipcRenderer.on('terminal://data', handler);
+    return () => ipcRenderer.removeListener('terminal://data', handler);
+  },
+  onExit: (cb: (id: number, code: number) => void) => {
+    const handler = (_e: IpcRendererEvent, id: number, code: number) => cb(id, code);
+    ipcRenderer.on('terminal://exit', handler);
+    return () => ipcRenderer.removeListener('terminal://exit', handler);
   },
 });
 

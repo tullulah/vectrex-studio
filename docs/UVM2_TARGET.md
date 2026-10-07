@@ -284,7 +284,11 @@ than hanging, because that case is exactly what the red state reports.
 ## Not implemented
 
 - **Digitised samples** and **SD browsing**. These are no-ops, matching the IDE
-  emulator, so a game that calls them runs rather than hanging.
+  emulator, so a game that calls them runs rather than hanging. A C project's
+  `PLAY_SAMPLE` (libvpy, through `v_playSampleData`) is a no-op here as well, and its
+  `SAMPLE_POS` returns 0. A sample linked into the image is what overflows it
+  (`uvm2_smp.h`), so ports ship theirs in an SD bundle and play them by index with
+  `v_playSample`.
 - **Analog joystick.** The successive-approximation path is written but its
   comparator polarity is inferred, not measured. Digital axes — a literal port of
   the reference — are the default, scaled to ±127 so ordinary game code behaves.

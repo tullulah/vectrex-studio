@@ -56,6 +56,12 @@ export interface ProjectConfig {
     vectors?: string[];
     music?: string[];
     sfx?: string[];
+    animations?: string[];
+    levels?: string[];
+    enemies?: string[];
+    instruments?: string[];
+    recordings?: string[];
+    samples?: string[];
     data?: string[];
   };
   dependencies?: Record<string, string | { path?: string; version?: string }>;

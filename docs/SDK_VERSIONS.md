@@ -28,7 +28,7 @@ version = "v1.3.2"
 ```
 
 - All example projects in `examples/` are pinned to `v1.3.2`.
-- New projects (`project:create`) and C imports are created pinned to the latest tag.
+- New projects (`project:create`, VPy or C — templates in `ide/electron/src/projectTemplates.ts`) and C imports are created pinned to the latest tag.
 - A project with no `[sdk] version` is pinned to the latest tag the first time the IDE
   resolves its SDK (offline: the newest installed release). The IDE writes the pin into
   the file and logs it in the console:
