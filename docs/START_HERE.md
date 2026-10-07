@@ -21,11 +21,12 @@
 → Read [COMPILER_STATUS.md](COMPILER_STATUS.md) to see the status of each phase and next steps.
 → Source code lives in `buildtools/` (Rust, one crate per phase).
 
-## I want to understand the emulator
+## I want to understand the hardware and the emulator
 
-→ [TIMING.md](TIMING.md) — Deterministic timing model (cycles, VIA, frame sync).
-→ [VECTOR_MODEL.md](VECTOR_MODEL.md) — Analog integrator, segment merging, auto-drain.
-→ [MEMORY_MAP.md](MEMORY_MAP.md) — Vectrex memory map.
+→ [IDE_GUIDE.md](IDE_GUIDE.md#4-emulator-panel) — The emulator panel and the debugger built on it.
+→ [vec_prog_docs/html/memorymap.htm](vec_prog_docs/html/memorymap.htm) — Vectrex memory map.
+→ [vec_prog_docs/html/vectordisplay.htm](vec_prog_docs/html/vectordisplay.htm) — How the vector display works.
+→ [vec_prog_docs/other/TOOLS/6809/TEXT/6809.TXT](vec_prog_docs/other/TOOLS/6809/TEXT/6809.TXT) — MC6809 instruction set.
 
 ## I want to work on the IDE
 

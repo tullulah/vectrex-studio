@@ -1,6 +1,6 @@
 # VPy Language Manual
 
-VPy is a Python-inspired language that compiles to MC6809 assembly for the Vectrex console. It supports multiple integer types (u8, i8, u16, i16), is compiled, and is designed for game development on constrained hardware.
+VPy is a Python-inspired language for the Vectrex console. The buildtools compiler (`vpy_cli`) compiles it to MC6809 assembly for a cartridge ROM (`--target m6809`, the default) and to ARM code for the RP2350 cartridge, the UVM2 multicart and the PiTrex. It supports four integer types (u8, i8, u16, i16) and is designed for game development on constrained hardware. Builtins that exist on only some targets are marked in [section 9](#9-built-in-functions).
 
 ---
 
@@ -69,7 +69,7 @@ score = 0
 
 ### Local variables
 
-Variables declared inside a function are local to that function call:
+A plain assignment inside a function creates a local variable. There are no `let`, `var` or `global` keywords, and locals cannot carry a type annotation (`x: u8 = 1` inside a function is a parse error):
 
 ```python
 def update_player():
@@ -106,7 +106,7 @@ VPy supports four integer types. Untyped variables default to `i16`.
 
 ### Integer Types
 
-Use Python type-hint syntax to declare the type of a variable:
+Use Python type-hint syntax to declare the type of a global (module-level) variable. Type annotations are only accepted at module level; locals are always untyped:
 
 ```python
 x: u8 = 10           # 8-bit unsigned: 0–255
@@ -296,11 +296,32 @@ def draw_player(x, y, frame):
     DRAW_VECTOR("player", x, y)
 ```
 
-- Up to 4 parameters per function.
-- Parameters are passed through `VAR_ARG0`..`VAR_ARG3` on the 6809.
+- On the 6809, arguments are passed through `VAR_ARG0`..`VAR_ARG7` (up to 8); extra arguments are dropped.
 - Return value is stored in the D register (16-bit).
 - Functions can call other functions freely.
 - Recursion is not safe (no stack depth protection).
+- Calling a name that is not a builtin, a BIOS routine (m6809) or a function of the program is a compile error with its line.
+
+### Modules (multiple files)
+
+Every `.vpy` under the project's `[sources]` is a module named after its file (`src/physics.vpy` → `physics`). Import a module to use its functions, variables, constants and arrays:
+
+```python
+import physics                    # physics.clamp_x(v), physics.speed, physics.table[i]
+import physics as ph              # ph.clamp_x(v)
+from physics import clamp_x       # clamp_x(v)
+from physics import speed as spd  # spd
+
+def loop():
+    px = physics.clamp_x(px)
+    physics.speed = 2
+```
+
+- Inside `physics.vpy`, its own functions and globals are used by their plain names.
+- Names are case-insensitive: `physics.CLAMP_X()` and `physics.clamp_x()` are the same function.
+- In the generated code a module's symbols are named `MODULE_symbol` (`PHYSICS_clamp_x`; m6809 labels are upper-case: `PHYSICS_CLAMP_X`). Two modules whose names collide that way are a compile error.
+- Build the project (`.vpyproj`): every target (m6809, rp2350, uvm2, pitrex) compiles all of its modules. Building a lone `.vpy` compiles only that file, so an `import` there fails with `main.vpy:1: error: module `physics` not found …`.
+- `module.name` where the module has no such symbol, or a module used without `import`, is a compile error with the file and line.
 
 ---
 
@@ -325,7 +346,7 @@ const x_coords = [40, 40, -40, -10, 20, 50]
 ```python
 x = enemy_x[i]          # read by index
 enemy_x[i] = new_x      # write by index
-count = len(enemy_x)    # array length
+count = len(enemy_x)    # array length: works on ARM targets, returns 0 on m6809 (see Known Limitations)
 ```
 
 ### for-in over arrays
@@ -339,6 +360,7 @@ for state in enemy_active:
 ### Notes
 
 - Array size is fixed at compile time.
+- Array literals hold only number literals (`[1, -2, 3]`) or only strings; a computed element (`[MAX_X, 2 * 3]`) is a compile error.
 - Index must be within bounds — no runtime bounds checking.
 - Coordinates are clamped to 8-bit signed (-128..127) for drawing.
 
@@ -368,34 +390,44 @@ META MUSIC = music1
 
 VPy is case-insensitive, so `DRAW_LINE`, `draw_line`, and `Draw_Line` are all the same.
 
+Unless a row says otherwise, a builtin works on both backends: **m6809** (cartridge ROM) and **ARM** (`rp2350`, `uvm2`). A builtin marked "m6809 only" fails to link on ARM ("undefined reference"); one marked "ARM only" fails to assemble on m6809 ("Undefined symbol"). The PiTrex target has its own backend and is not covered by these marks.
+
+Builtins that take an asset name (`DRAW_VECTOR`, `PLAY_MUSIC`, `PLAY_SFX`, `DRAW_ANIM`, `LOAD_LEVEL`, `SPAWN_ENEMIES`, `PLAY_NOTE`, `DRAW_RECORDING`, `PLAY_SAMPLE`) are covered, with every asset format and folder, in [ASSETS.md](ASSETS.md).
+
 ### Frame control
 
 | Function | Description |
 |----------|-------------|
 | `SET_INTENSITY(val)` | Set beam intensity (0–127) |
+| `GET_FRAME_US()` | Microseconds since the last frame sync (ARM). Always 0 on m6809 |
 
-> **Note:** `WAIT_RECAL` is **automatically injected** by the compiler at the start of every `loop()` call. Do not call it manually — it must never appear in VPy source code.
+> **Note:** `WAIT_RECAL` is **automatically injected** by the compiler at the start of every `loop()` call. Do not call it yourself.
 
 ### Drawing
 
 | Function | Description |
 |----------|-------------|
-| `MOVE(x, y)` | Move beam to position without drawing |
+| `MOVE(x, y)` | Move the beam to (x, y) without drawing. Constant or variable arguments |
 | `DRAW_LINE(x0, y0, x1, y1, intensity)` | Draw a line segment |
-| `DRAW_CIRCLE(cx, cy, diam, intensity)` | Draw a circle (16 segments) |
-| `DRAW_CIRCLE_SEG(segs, cx, cy, diam, intensity)` | Draw a circle with custom segment count |
-| `DRAW_POLYGON(x0, y0, x1, y1, ..., intensity)` | Draw a polygon |
-| `DRAW_VECTOR("name", x, y)` | Draw a `.vec` vector asset at position (x, y) |
+| `DRAW_CIRCLE(cx, cy, radius, intensity)` | Circle as a 16-segment polygon |
+| `DRAW_CIRCLE_SEG(segs, cx, cy, radius, intensity)` | Circle with a custom segment count (3–64). m6809 only, constant arguments only |
+| `DRAW_POLYGON(n, intensity, x0, y0, ..., xn-1, yn-1)` | Closed polygon with `n` (≥ 3) vertices. m6809 also accepts the form without `intensity` |
+| `DRAW_RECT(x, y, w, h, intensity)` | Rectangle outline |
+| `DRAW_FILLED_RECT(x, y, w, h, intensity)` | Filled rectangle (scanlines) |
+| `DRAW_ARC(segs, cx, cy, r, start_deg, sweep_deg, intensity)` | Open arc |
+| `DRAW_ELLIPSE(cx, cy, rx, ry, intensity)` | Ellipse |
+| `DRAW_BEZIER(x0, y0, cp1x, cp1y, cp2x, cp2y, x1, y1, steps, intensity)` | Cubic Bézier as `steps` line segments |
+| `DRAW_BEZIER_QUAD(x0, y0, cpx, cpy, x1, y1, steps, intensity)` | Quadratic Bézier as `steps` line segments |
+| `DRAW_VECTOR("name", x, y[, mirror])` | Draw a `.vec` asset at (x, y) |
 | `DRAW_VECTOR_EX("name", x, y, mirror, intensity)` | Draw a `.vec` asset with mirror and intensity override |
-| `DRAW_RECT(x, y, w, h, intensity)` | Draw a rectangle outline |
-| `DRAW_FILLED_RECT(x, y, w, h, intensity)` | Draw a filled rectangle |
-| `DRAW_ARC(segs, cx, cy, r, start_deg, sweep_deg, intensity)` | Draw an arc |
-| `DRAW_ELLIPSE(cx, cy, rx, ry, intensity)` | Draw an ellipse |
+| `DRAW_VECTOR_3D("name", ax, ay, az, x, y)` | Draw a 3D `.vec` asset rotated by (ax, ay, az) |
 
 **Parameters:**
-- `mirror` values for `DRAW_VECTOR_EX`: `0`=none, `1`=flip X, `2`=flip Y, `3`=flip both
-- All coordinates are 8-bit signed (-128..127), clamped at compile time
-- Intensity values: 0 (off) to 127 (maximum brightness)
+- `mirror`: `0`=none, `1`=flip X, `2`=flip Y, `3`=flip both
+- Coordinates are 8-bit signed (-128..127)
+- Intensity values: 0 (off) to 127 (maximum brightness). m6809 lets you omit the trailing `intensity` of the circle, rectangle, arc and ellipse builtins (default `0x5F`); ARM does not, so always pass it
+
+**m6809 limitation:** `DRAW_LINE`, `DRAW_CIRCLE` and `DRAW_RECT` accept variables. `DRAW_POLYGON`, `DRAW_CIRCLE_SEG`, `DRAW_ARC`, `DRAW_FILLED_RECT`, `DRAW_ELLIPSE`, `DRAW_BEZIER` and `DRAW_BEZIER_QUAD` are expanded at compile time and need **constant** arguments; with variables they compile but draw nothing. The ARM backend accepts variables for all of them.
 
 ### Text & Debug
 
@@ -403,7 +435,11 @@ VPy is case-insensitive, so `DRAW_LINE`, `draw_line`, and `Draw_Line` are all th
 |----------|-------------|
 | `PRINT_TEXT(x, y, "text")` | Print a string at screen position |
 | `PRINT_TEXT(x, y, var)` | Print a string variable |
-| `PRINT_NUMBER(x, y, number)` | Print a decimal number (range 0–9999, 4 digits with leading zeros) |
+| `PRINT_TEXT(x, y, "text", height, width)` | Print with an explicit text size (m6809) |
+| `PRINT_NUMBER(x, y, number)` | Print a decimal number. m6809: 0–9999. ARM: -9999..9999, no leading zeros |
+| `SET_TEXT_SIZE(n)` | Text size for later `PRINT_TEXT` calls (ARM only; on m6809 it currently fails to assemble) |
+| `MSG_DEF(id, x, y, "text")` | Declare message `id` in a ROM table (emits no code) |
+| `PRINT_MSG(id)` | Print the message declared with `MSG_DEF` for `id` (runtime lookup). On m6809 the program must also call `PRINT_TEXT` somewhere, or the text helper is not linked |
 | `DEBUG_PRINT(value)` | Debug output to console (editor only) |
 | `DEBUG_PRINT_LABELED("label", value)` | Debug output with label |
 | `DEBUG_PRINT_STR("text")` | Debug string output |
@@ -412,47 +448,44 @@ VPy is case-insensitive, so `DRAW_LINE`, `draw_line`, and `Draw_Line` are all th
 
 | Function | Description |
 |----------|-------------|
-| `J1_X()` | Return X-axis value (-128..127) |
-| `J1_Y()` | Return Y-axis value (-128..127) |
-| `J1_BUTTON_1()` | Returns 1 on press (rising edge), 0 otherwise |
+| `J1_X()` | Analog X position, signed (about -127..127, 0 at centre) |
+| `J1_Y()` | Analog Y position, signed (about -127..127, 0 at centre) |
+| `J1_BUTTON_1()` | 1 while button 1 is held, 0 otherwise (level, not edge) |
 | `J1_BUTTON_2()` | Same for button 2 |
 | `J1_BUTTON_3()` | Same for button 3 |
 | `J1_BUTTON_4()` | Same for button 4 |
+
+The analog axes and the buttons are read once per frame by code the compiler injects at the start of `loop()` (on m6809, BIOS `Read_Btns` every frame and `Joy_Analog` only when the program uses an axis). The builtins return the cached values, so calling them several times per frame is cheap. To act once per press, compare with the previous frame's value yourself.
 
 ### Input — Joystick 2
 
 | Function | Description |
 |----------|-------------|
-| `J2_X()` | Return X-axis value (-128..127) |
-| `J2_Y()` | Return Y-axis value (-128..127) |
-| `J2_BUTTON_1()` | Returns 1 on press (rising edge), 0 otherwise |
-| `J2_BUTTON_2()` | Same for button 2 |
-| `J2_BUTTON_3()` | Same for button 3 |
-| `J2_BUTTON_4()` | Same for button 4 |
-| `J2_ANALOG_X()` | Raw analog X value |
-| `J2_ANALOG_Y()` | Raw analog Y value |
-| `J2_DIGITAL_X()` | Digital X direction (-1, 0, +1) |
-| `J2_DIGITAL_Y()` | Digital Y direction (-1, 0, +1) |
-| `J2_BUTTON_UP()` | Returns 1 if up button pressed |
-| `J2_BUTTON_DOWN()` | Returns 1 if down button pressed |
-| `J2_BUTTON_LEFT()` | Returns 1 if left button pressed |
-| `J2_BUTTON_RIGHT()` | Returns 1 if right button pressed |
+| `J2_X()` | Analog X position, signed (same as `J1_X`) |
+| `J2_Y()` | Analog Y position, signed |
+| `J2_BUTTON_1()` … `J2_BUTTON_4()` | 1 while the button is held |
+| `J2_ANALOG_X()` / `J2_ANALOG_Y()` | Raw unsigned axis byte (0–255). m6809 only |
+| `J2_BUTTON_UP()` / `J2_BUTTON_DOWN()` / `J2_BUTTON_LEFT()` / `J2_BUTTON_RIGHT()` | 1 while the stick is pushed past the threshold in that direction. m6809 only |
+
+`J2_DIGITAL_X()` / `J2_DIGITAL_Y()` are recognised by the m6809 backend but currently fail to assemble (missing `J2X_BUILTIN` helper); use `J2_X()` with a threshold instead.
 
 ### Input — Button Updates
 
 | Function | Description |
 |----------|-------------|
-| `UPDATE_BUTTONS()` | Poll and update all button states (edge detection) |
+| `UPDATE_BUTTONS()` | Re-read the buttons now. Not needed normally — the compiler already reads them at the start of every frame |
 
 ### Audio
 
 | Function | Description |
 |----------|-------------|
 | `PLAY_MUSIC("name")` | Play a `.vmus` music file |
-| `STOP_MUSIC()` | Stop current music |
+| `STOP_MUSIC()` | Stop current music. On m6809 the program must also use `PLAY_MUSIC` (the runtime is only linked then) |
 | `PLAY_SFX("name")` | Play a `.vsfx` sound effect |
-| `AUDIO_UPDATE()` | Update audio engine state (called automatically in loop) |
-| `MUSIC_UPDATE()` | Update music playback (called automatically in loop) |
+| `PLAY_NOTE("instrument", channel, midi_note)` | Play a note on a `.vinstr` instrument |
+| `PLAY_SAMPLE("name")` / `SAMPLE_POS(fps)` | Play a `.vsmp` sample / audio-synced frame index. ARM only |
+
+The music/SFX engine is updated automatically every frame when the program uses `PLAY_MUSIC` or `PLAY_SFX`; there is nothing to call. (On m6809 the injected routine is `AUDIO_UPDATE`; calling it yourself is harmless but redundant. There is no user-callable `MUSIC_UPDATE`.) Formats and folders are in [ASSETS.md](ASSETS.md).
 
 ### Level System
 
@@ -460,12 +493,19 @@ VPy is case-insensitive, so `DRAW_LINE`, `draw_line`, and `Draw_Line` are all th
 |----------|-------------|
 | `LOAD_LEVEL("name")` | Load a `.vplay` level file into memory |
 | `SHOW_LEVEL()` | Render the currently loaded level at the current camera position |
-| `UPDATE_LEVEL()` | Update level state (tile animations, etc.) |
+| `UPDATE_LEVEL()` | Update level state |
 | `SET_CAMERA_X(x)` | Set the horizontal scroll offset (16-bit signed) |
 | `SET_CAMERA_Y(y)` | Set the vertical scroll offset (16-bit signed) |
-| `GET_LEVEL_WIDTH()` | Return width of current level in tiles |
-| `GET_LEVEL_HEIGHT()` | Return height of current level in tiles |
-| `GET_LEVEL_TILE(x, y)` | Return tile value at position (x, y) |
+| `GET_CAMERA_X()` / `GET_CAMERA_Y()` | Read the scroll offset back. ARM only |
+| `GET_SCROLL_LIMIT_LEFT()` / `_RIGHT()` / `_TOP()` / `_BOTTOM()` | Scroll limits of the loaded level |
+| `GET_LEVEL_FLOOR_Y()` | Floor surface Y of the loaded level |
+| `LEVEL_COLLISION_Y(x, y, half_height)` | Resolve vertical collision against the level; returns the corrected Y |
+| `LEVEL_COLLISION_X(x, y, half_width, half_height)` | Resolve horizontal collision; returns the push-out dx |
+| `GET_LEVEL_WIDTH()` | Width of the current level. m6809 only |
+| `GET_LEVEL_HEIGHT()` | Height of the current level. m6809 only |
+| `GET_LEVEL_TILE(x, y)` | Tile value at (x, y). m6809 only |
+
+On m6809 the level builtins (other than `LOAD_LEVEL`) only assemble in a program that also calls `LOAD_LEVEL`, because the level runtime and its RAM are only linked then. Enemy builtins (`SPAWN_ENEMIES`, `UPDATE_ENEMIES`, `DRAW_ENEMIES`, `GET_ENEMY_X`…) are documented with the `.venemy` format in [ASSETS.md](ASSETS.md).
 
 #### Scrolling
 
@@ -560,23 +600,23 @@ Each object in a layer:
 | `max(a, b)` | Maximum of two values |
 | `clamp(v, lo, hi)` | Clamp value between lo and hi |
 
-#### Trigonometry (Buildtools only)
+#### Trigonometry
 
 | Function | Description |
 |----------|-------------|
 | `sin(a)` | Sine — argument 0..127 covers full circle, result -127..127 |
 | `cos(a)` | Cosine — same range as sin |
-| `tan(a)` | Tangent — argument 0..127, result varies |
-| `atan2(y, x)` | Two-argument arctangent (returns angle 0..127) |
+| `tan(a)` | Tangent — argument 0..127, result varies. m6809 only |
+| `atan2(y, x)` | Two-argument arctangent (returns angle 0..127). m6809 only, constant arguments only (folded at compile time); variable arguments are a compile error |
 
-#### Power & Roots (Buildtools only)
+#### Power & Roots
 
 | Function | Description |
 |----------|-------------|
 | `sqrt(x)` | Integer square root |
-| `pow(x, y)` | Integer power: x raised to the y-th power |
+| `pow(x, y)` | Integer power: x raised to the y-th power. m6809 only |
 
-#### Random Numbers (Buildtools only)
+#### Random Numbers
 
 | Function | Description |
 |----------|-------------|
@@ -585,66 +625,34 @@ Each object in a layer:
 
 **Note:** All trigonometric functions use 128-entry lookup tables for performance. Angles wrap at 128 (360 degrees).
 
-### Utilities (Buildtools only)
+### Utilities
 
 | Function | Description |
 |----------|-------------|
-| `wait(frames)` | Wait (pause) for N frame cycles |
-| `beep()` | Emit a beep sound |
-| `fade_in()` | Fade display from black to full intensity |
-| `fade_out()` | Fade display from full intensity to black |
-| `peek(addr)` | Read 16-bit value from memory address (constant only) |
-| `poke(addr, value)` | Write 16-bit value to memory address (constant only) |
+| `wait(frames)` | Busy-wait N frames (nothing else runs meanwhile). m6809: constant `frames` only |
+| `beep(period, frames)` | Non-blocking PSG tone: `period` is the PSG tone period (higher = lower pitch), `frames` the duration. m6809 also accepts `beep()` (period 50, 8 frames); on ARM pass both arguments |
+| `peek(addr)` | Read one byte from a Vectrex address. m6809: constant `addr` only |
+| `poke(addr, value)` | Write one byte to a Vectrex address. m6809: constant `addr` and `value` only |
+| `DEBUG_PRINT…` | See [Text & Debug](#text--debug) |
 
-**Note:** `peek()` and `poke()` only support constant addresses known at compile time.
+On m6809, `wait`, `peek`, `poke` and `beep(period, frames)` with non-constant arguments are a compile error.
 
-### Advanced (Buildtools only)
+### SD launcher (ARM only)
 
 | Function | Description |
 |----------|-------------|
-| `asm("code")` | Inline raw MC6809 assembly code |
+| `SD_FILE_COUNT()` / `SD_FILE_NAME(i)` | Number of games on the SD card / pointer to the name of game `i` (both also build on m6809, with simulated data) |
+| `DRAW_SD_PREVIEW(i, x, y, scale)` | Play the `.vrec` preview of game `i` |
+| `LAUNCH_GAME(i)` | Load game `i` from the SD card and run it (does not return) |
+| `CALIBRATE()` | Show the console calibration screen |
+
+See [RP2350_BIOS.md](RP2350_BIOS.md) for the BIOS calls behind them.
 
 ---
 
 ## 10. VectorList DSL
 
-`vectorlist` blocks define reusable static vector graphics compiled into the ROM:
-
-```python
-vectorlist player_sprite:
-    SET_INTENSITY(0x7F)
-    MOVE(-8, -8)
-    RECT(-8, -8, 8, 8)
-    CIRCLE(0, 0, 12, 24)
-
-def draw_player():
-    DRAW_VECTORLIST("player_sprite")
-```
-
-### Available commands
-
-| Command | Description |
-|---------|-------------|
-| `MOVE(x, y)` | Move beam to absolute position |
-| `SET_INTENSITY(val)` | Set beam intensity |
-| `SET_ORIGIN()` | Reset to (0,0) — same as `ORIGIN` |
-| `ORIGIN` | Reset to (0,0) (no parentheses) |
-| `INTENSITY(val)` | Set intensity (alias for SET_INTENSITY) |
-| `RECT(x1, y1, x2, y2)` | Rectangle (4 segments) |
-| `POLYGON(N, x0, y0, x1, y1, ..., xN-1, yN-1)` | Closed polygon with N vertices |
-| `CIRCLE(cx, cy, r)` | Circle (16 segments) |
-| `CIRCLE(cx, cy, r, segs)` | Circle with custom segment count |
-| `ARC(cx, cy, r, start_deg, sweep_deg)` | Open arc (16 segments) |
-| `ARC(cx, cy, r, start_deg, sweep_deg, segs)` | Arc with custom segment count |
-| `SPIRAL(cx, cy, r_start, r_end, turns)` | Spiral (64 segments) |
-| `SPIRAL(cx, cy, r_start, r_end, turns, segs)` | Spiral with custom segment count |
-
-### Notes
-
-- Coordinates are 8-bit signed (-128..127).
-- The backend automatically inserts a `MOVE(0,0)` at the start and moves the first `SET_INTENSITY` after it.
-- Consecutive duplicate `ORIGIN` or `MOVE` commands are collapsed.
-- Dense vectorlists can cause flicker — split into multiple lists drawn on alternating frames if needed.
+The parser accepts `vectorlist name:` blocks (with `MOVE`, `SET_INTENSITY`, `RECT`, `POLYGON`, `CIRCLE`, `ARC`, `SPIRAL`… commands), but **no backend emits code for them**, and there is no builtin that draws one. Draw static shapes with `.vec` assets and `DRAW_VECTOR` instead (see [ASSETS.md](ASSETS.md)), or with the drawing builtins in [section 9](#drawing).
 
 ---
 
@@ -683,7 +691,7 @@ This is fine for positions and velocities since the Vectrex coordinate system is
 
 ### Parameter limit
 
-Functions accept up to 4 parameters. Additional parameters are ignored.
+On m6809, calls pass at most 8 arguments (`VAR_ARG0`..`VAR_ARG7`); additional arguments are dropped.
 
 ### No recursion safety
 
@@ -716,13 +724,17 @@ These features are recognized by the parser but do not generate working code:
 
 - **Structs**: Parser accepts `struct` definitions, but codegen does not emit field access (`obj.field`). Use parallel arrays instead.
 - **Enums**: Not supported. Use named constants instead.
-- **`len()`**: Always returns 0. Track array lengths in separate variables.
+- **`vectorlist` blocks**: Parsed, never emitted (see [section 10](#10-vectorlist-dsl)).
+- **`len()`**: `len(arr)` is the compile-time length of a global or const array. On m6809 anything else (a parameter, an expression, a string) is a compile error; on ARM a non-array name fails at link time and other expressions return 0 there.
+- **Inline assembly**: `asm("...")` is not implemented on any backend (the build fails with an undefined `ASM` symbol).
 - **Recursive functions**: Allowed but unsafe. No stack overflow protection.
 
 ### Removed Built-ins
 
-The following built-ins were documented in previous versions but are no longer supported:
+These names are not available; a program that calls them fails to build:
 
-- **`DRAW_TO(x, y)`**: Removed. Use `MOVE(x, y)` followed by `DRAW_LINE(current_x, current_y, x, y, intensity)` instead.
+- **`DRAW_TO(x, y)`**: Not implemented. Use `DRAW_LINE(x0, y0, x1, y1, intensity)`.
 - **`SET_SCALE(val)`**: Not implemented.
-- **`GET_TIME()`**: Placeholder only; unreliable.
+- **`GET_TIME()`**: Not implemented (m6809 references an undefined `FRAME_COUNTER`; ARM has no such builtin). Keep your own frame counter.
+- **`fade_in()` / `fade_out()`**: Removed. A vector display has no framebuffer to fade; vary the intensity you pass to the drawing builtins instead.
+- **`MUSIC_UPDATE()`**: Not user-callable; the audio update is injected automatically.

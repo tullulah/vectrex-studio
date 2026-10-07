@@ -47,11 +47,11 @@ Plus `vpy_disasm` (disassembler utility) and `vpy_cli` (orchestrator).
 
 **Language:**
 - Functions with positional parameters, `for`, `while`, `if/elif/else`, `switch/case`, `break`, `continue`, `return`
-- `let` locals, global `var`, `const` values and const arrays
+- Globals declared at module level as `name = expr` (optionally typed: `name: u8 = expr`); locals created by plain assignment inside a function (`x = expr`, no type annotation); `const` values and const arrays. There are no `let`/`var` keywords
 - Arithmetic, bitwise, logical, comparison operators; chained comparisons (`a < b < c`)
 - String literals (high-bit terminated for BIOS `Print_Str_d`)
 - `META` directives (TITLE, COPYRIGHT, MUSIC, ROM_TOTAL_SIZE, ROM_BANK_SIZE)
-- Module imports with dot notation (resolved by `vpy_unifier`)
+- Modules: `import m [as a]`, `from m import f [as g]`; `m.f()`, `m.var`, `m.arr[i]`, `m.var = …` (resolved by `vpy_unifier`; module symbols are named `MODULE_symbol` via `vpy_parser::symbols`). Every target compiles all project modules; an unresolved import or `m.name` is a compile error with file:line
 
 **Built-in functions (m6809, selection — full reference in [MANUAL.md](MANUAL.md)):**
 
@@ -65,7 +65,7 @@ Plus `vpy_disasm` (disassembler utility) and `vpy_cli` (orchestrator).
 | Input | `J1_X`, `J1_Y`, `J1_BUTTON_1–4`, `J2_X`, `J2_Y`, `J2_BUTTON_1–4` |
 | Level | `LOAD_LEVEL`, `SHOW_LEVEL`, `UPDATE_LEVEL` |
 | SD launcher (rp2350) | `SD_FILE_COUNT`, `SD_FILE_NAME`, `DRAW_SD_PREVIEW`, `LAUNCH_GAME` |
-| Misc | `ASM` (inline assembly), `POKE`, `PEEK`, `WAIT`, `BEEP` |
+| Misc | `POKE`, `PEEK`, `WAIT`, `BEEP` |
 
 **RP2350 (debug cart) target:** `vpy_cli build --target rp2350` emits BIOS-linked
 code (`svc #N` traps — see `docs/RP2350_BIOS.md`). Add `--ram` to link a game for
@@ -82,8 +82,14 @@ runs on the BIOS's second core, so tempo is independent of the draw load.
 - `DRAW_TO(x,y)` not yet implemented in codegen
 - `SET_SCALE()` not yet implemented
 - PC-relative addressing (`label,PCR`) is not supported by `vpy_assembler`
-- `MOVE` only supports constant arguments (variable x/y not yet implemented)
-- `LEN()` and `GET_TIME()` are placeholders on m6809
+- m6809: `wait`, `peek`, `poke`, `beep(period, frames)` and `atan2` need constant arguments (otherwise a compile error); `DRAW_SPRITE` is a compile error
+- The `.pdb` maps every function's lines to the entry file, so source lines of functions defined in an imported module point at the wrong file
+- `len(arr)` is the compile-time length of a global or const array. On m6809 any other argument is a compile error; on ARM a non-array name fails at link time and other expressions return 0. `GET_TIME()` does not build on any target
+- Inline `asm("...")` is not implemented (the parser accepts it; the build fails on an undefined `ASM` symbol)
+- `vectorlist` blocks are parsed but no backend emits them
+- m6809: `SET_TEXT_SIZE` and `J2_DIGITAL_X/Y` fail to assemble (missing helper symbols); `DRAW_POLYGON`, `DRAW_CIRCLE_SEG`, `DRAW_ARC`, `DRAW_FILLED_RECT`, `DRAW_ELLIPSE` and the Bézier builtins only work with constant arguments
+- Several builtins exist on one backend only (e.g. `tan`, `atan2`, `pow`, `GET_LEVEL_WIDTH` are m6809-only; `PLAY_SAMPLE`, `GET_CAMERA_X`, the SD launcher calls are ARM-only). [MANUAL.md](MANUAL.md) section 9 marks each one
+- `vpy_cli build <file.vpy> --target rp2350|pitrex` (a bare `.vpy`, no `.vpyproj`) fails with "Unknown variable" as soon as a variable is read inside an expression; build through a `.vpyproj` for ARM targets
 - Sloped walkable areas: the m6809 wander runtime interpolates the enemy's Y
   along a slope only during WALK-follow and landing. Unlike the libvpy (C) and
   ARM runtimes, it does **not** interpolate at spawn (it uses the authored
@@ -91,15 +97,6 @@ runs on the BIOS's second core, so tempo is independent of the draw load.
   enemy still walks and lands the incline correctly; only the exact spawn height
   and the jump-arc peak can differ by ~1 frame. Candidate for the final
   fine-tuning pass — make m6809 spawn/takeoff read the interpolated surface too.
-
-### Recently Fixed Issues
-
-**Stack Validator False Positives (Phase 5, Fixed 2026-02-22)**
-- **Issue:** Stack validator reported "stack imbalance" in functions like `UPDATE_ENEMIES` and `DRAW_ENEMIES` with claims of "+9 unmatched pushes"
-- **Root cause:** The validator's `count_registers()` function was parsing comments as register names. For example, `PULS X      ; Array base` was counted as 3 registers (X, Array, base) instead of 1.
-- **Result:** The generated code was always correct; only the validator gave false positives
-- **Fix:** Modified `count_registers()` to stop parsing at semicolons (comments are now ignored), and improved function detection to skip internal control flow labels (IF_*, WH_*, CMP_*)
-- **Verification:** UPDATE_ENEMIES and DRAW_ENEMIES now validate correctly; all codegen tests pass
 
 ### Project format
 
