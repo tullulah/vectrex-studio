@@ -203,8 +203,8 @@ def loop():
         total = total + v
 ";
     let asm = generate_ok(src, SINGLE_BANK);
-    assert!(asm.contains("LDD #ARRAY_YS_DATA"), "const array base not loaded as immediate");
-    assert!(asm.contains("LDD #VAR_XS_DATA"), "mutable array base not loaded as immediate");
+    assert!(asm.contains("LDX #ARRAY_YS_DATA"), "const array base not used as an immediate");
+    assert!(asm.contains("LDX #VAR_XS_DATA"), "mutable array base not used as an immediate");
 }
 
 #[test]
@@ -456,12 +456,12 @@ fn body<'a>(asm: &'a str, label: &str) -> &'a str {
 fn assert_array_params(asm: &str) {
     assert!(!asm.contains("ARRAY_ARR_DATA") && !asm.contains("ARRAY_B_DATA"), "parameter indexed as a global array");
     let words = body(asm, "SUM_WORDS");
-    assert!(words.contains("ADDD >VAR_ARG0") && words.contains("ASLB") && words.contains("LDD ,X"),
+    assert!(words.contains("ADDD >VAR_SUM_WORDS__ARR") && words.contains("ASLB") && words.contains("LDD ,X"),
         "16-bit elements through the pointer:\n{words}");
     // u8 array passed to forward(), which forwards it to first_byte(): both 1-byte.
     for f in ["FIRST_BYTE", "FORWARD"] {
         let b = body(asm, f);
-        assert!(b.contains("ADDD >VAR_ARG0") && !b.contains("ASLB"), "{f}: 1-byte stride:\n{b}");
+        assert!(b.contains(&format!("ADDD >VAR_{f}__B")) && !b.contains("ASLB"), "{f}: 1-byte stride:\n{b}");
     }
     assert!(body(asm, "FIRST_BYTE").contains("LDB ,X"), "u8 load");
     assert!(body(asm, "FORWARD").contains("STB ,X"), "u8 store");
@@ -680,7 +680,7 @@ def loop():
     for layout in [SINGLE_BANK, MULTIBANK] {
         let asm = generate_ok(src, layout);
         let fwd = body(&asm, "FWD");
-        assert!(fwd.contains("LDD >VAR_ARG0") && !fwd.contains("LDD #32"), "param replaced by the const:\n{fwd}");
+        assert!(fwd.contains("LDD >VAR_FWD__B") && !fwd.contains("LDD #32"), "param replaced by the const:\n{fwd}");
         assert!(body(&asm, "LOOP_BODY").contains("LDD #32  ; const B"), "the const still folds outside");
     }
 }
@@ -777,13 +777,15 @@ fn nested_operands_survive_multibank() {
 
 #[test]
 fn parameter_forwarded_in_another_position_is_not_overwritten() {
-    // `sub(q, p)` inside swap_sub(p, q): storing VAR_ARG0 = q first used to
-    // overwrite p before it was read.
+    // `sub(q, p)` inside swap_sub(p, q): with one global set of argument slots,
+    // storing argument 0 = q first overwrote p before it was read. Each function
+    // now has its own frame, so the arguments go straight into sub's slots.
     let asm = generate_ok(NESTED_SRC, SINGLE_BANK);
     let f = instrs(body(&asm, "SWAP_SUB"));
     assert_eq!(
-        f[..6],
-        ["LDD >VAR_ARG1", "PSHS D", "LDD >VAR_ARG0", "STD VAR_ARG1", "PULS D", "STD VAR_ARG0"].map(String::from),
+        f[..5],
+        ["LDD >VAR_SWAP_SUB__Q", "STD >VAR_SUB__P", "LDD >VAR_SWAP_SUB__P", "STD >VAR_SUB__Q", "JSR SUB"]
+            .map(String::from),
         "{f:?}"
     );
 }
@@ -826,4 +828,288 @@ def loop():
 ";
     let err = generate(src, SINGLE_BANK).expect_err("computed index in += must fail");
     assert!(err.contains("line 5") && err.contains("computed index"), "{err}");
+}
+
+// ---------------------------------------------------------------------------
+// Bug 10: parameters lived in the global VAR_ARG0..7 and locals in one global
+// VAR_<NAME> per name. `def f(a): t = g(5); return a + t` read g's argument as
+// `a` (f(100) returned 11), and two functions using `t` or `for i` clobbered
+// each other. Every function now has a static frame, overlaid by call graph.
+// ---------------------------------------------------------------------------
+
+const FRAMES_SRC: &str = "\
+x = 7
+r = 0
+small: u8 = 200
+
+def g(v):
+    return v + 1
+
+def f(a):
+    t = g(5)
+    return a + t
+
+def inner(k):
+    total = 0
+    for i in range(0, k):
+        total = total + 1
+    return total
+
+def outer():
+    total = 0
+    for i in range(0, 3):
+        total = total + inner(4)
+    return total
+
+def shadow(x):
+    return x * 2
+
+def is_small():
+    return small
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    r = f(100) + outer() + shadow(21)
+    r = f(g(1) + 1)
+    if is_small():
+        r = 1
+    if small:
+        r = 2
+";
+
+/// Address expression (`$C880+$2A`) of an EQU, or None.
+fn equ_of<'a>(asm: &'a str, label: &str) -> Option<&'a str> {
+    asm.lines().find_map(|l| {
+        let mut it = l.split_whitespace();
+        (it.next() == Some(label) && it.next() == Some("EQU")).then(|| it.next()).flatten()
+    })
+}
+
+fn assert_static_frames(asm: &str) {
+    // f reads its own parameter after calling g: a different slot than g's.
+    let f = instrs(body(asm, "F"));
+    assert_eq!(
+        f[..4],
+        ["LDD #5", "STD >VAR_G__V", "JSR G", "STD VAR_F__T"].map(String::from),
+        "caller stores the argument in the callee's parameter slot: {f:?}"
+    );
+    assert!(f.contains(&"LDD >VAR_F__A".to_string()), "f reads its own `a`: {f:?}");
+    let (fa, gv) = (equ_of(asm, "VAR_F__A").unwrap(), equ_of(asm, "VAR_G__V").unwrap());
+    assert_ne!(fa, gv, "a caller's frame and its callee's frame overlap");
+    // Same local names in two functions: different slots when one calls the other.
+    assert_ne!(equ_of(asm, "VAR_OUTER__I"), equ_of(asm, "VAR_INNER__I"));
+    assert_ne!(equ_of(asm, "VAR_OUTER__TOTAL"), equ_of(asm, "VAR_INNER__TOTAL"));
+    // Functions never active together share RAM (f and outer are both called from loop).
+    assert_eq!(equ_of(asm, "VAR_F__A"), equ_of(asm, "VAR_OUTER__TOTAL"));
+    // A parameter named like a global is the parameter; the global is untouched.
+    assert!(body(asm, "SHADOW").contains("LDD >VAR_SHADOW__X"));
+    assert!(!body(asm, "SHADOW").contains("VAR_X\n"));
+    // No user code goes through the old global argument slots.
+    let user = &asm[asm.find("LOOP_BODY:").unwrap()..asm.find("RUNTIME HELPERS").unwrap_or(asm.len())];
+    assert!(!user.contains("VAR_ARG"), "user code still uses VAR_ARGn");
+    assert!(!asm.contains("VAR_ARG3"), "only the builtin argument slots VAR_ARG0-2 remain");
+    assert!(equ_of(asm, "FRAME_POOL").is_some());
+    // u8 global initialised with one byte (STD wrote 0 into it and the value into the next byte).
+    assert!(asm.contains("STB VAR_SMALL"), "u8 global init must be a byte store");
+    // Truth tests: a returned value gets an explicit test, a u8 load clears A first.
+    let lp = instrs(&asm[asm.find("LOOP_BODY:").unwrap()..]);
+    let call = lp.iter().position(|l| l == "JSR IS_SMALL").unwrap();
+    assert_eq!(lp[call + 1], "CMPD #0", "{lp:?}");
+    let ld = lp.iter().position(|l| l == "LDB >VAR_SMALL").unwrap();
+    assert_eq!(lp[ld - 1], "CLRA", "CLRA after LDB would leave Z set: {lp:?}");
+}
+
+#[test]
+fn static_frames_single_bank() {
+    assert_static_frames(&generate_ok(FRAMES_SRC, SINGLE_BANK));
+}
+
+#[test]
+fn static_frames_multibank() {
+    assert_static_frames(&generate_ok(FRAMES_SRC, MULTIBANK));
+}
+
+#[test]
+fn argument_that_calls_the_callee_waits_on_the_stack() {
+    // f(g(1) + 1): g's frame may overlap f's (siblings) and g(...) may be f itself,
+    // so a computed argument is evaluated before any parameter slot is written.
+    let asm = generate_ok(FRAMES_SRC, SINGLE_BANK);
+    let line = instrs(&line_code(&asm, 35));
+    let jsr_g = line.iter().position(|l| l == "JSR G").unwrap();
+    let store_a = line.iter().position(|l| l == "STD >VAR_F__A").unwrap();
+    assert!(jsr_g < store_a, "{line:?}");
+}
+
+#[test]
+fn recursion_is_a_compile_error() {
+    let direct = "\
+r = 0
+
+def fact(n):
+    if n < 2:
+        return 1
+    return n * fact(n - 1)
+
+def main():
+    pass
+
+def loop():
+    r = fact(5)
+";
+    let indirect = "\
+def ping(n):
+    return pong(n)
+
+def pong(n):
+    return ping(n)
+
+def main():
+    pass
+
+def loop():
+    ping(1)
+";
+    for layout in [SINGLE_BANK, MULTIBANK] {
+        let e = generate(direct, layout).expect_err("recursion must fail");
+        assert!(e.contains("recursion is not supported on m6809") && e.contains("`fact()` calls `fact()` at line 6"), "{e}");
+        let e = generate(indirect, layout).expect_err("recursion must fail");
+        assert!(e.contains("`ping()` calls `pong()` at line 2") && e.contains("`pong()` calls `ping()` at line 5"), "{e}");
+    }
+}
+
+#[test]
+fn undeclared_name_and_wrong_argument_count_are_errors() {
+    // A local of main() is not visible in loop(); it used to be one shared global.
+    let src = "\
+r = 0
+
+def two(a, b):
+    return a + b
+
+def main():
+    t = 3
+
+def loop():
+    r = t
+    r = two(1)
+";
+    for layout in [SINGLE_BANK, MULTIBANK] {
+        let e = generate(src, layout).expect_err("must fail");
+        assert!(e.contains("line 10: `t` is used in `loop()`") && e.contains("declare it at top level"), "{e}");
+    }
+    let arity = "r = 0\n\ndef two(a, b):\n    return a + b\n\ndef main():\n    pass\n\ndef loop():\n    r = two(1)\n";
+    let e = generate(arity, SINGLE_BANK).expect_err("must fail");
+    assert!(e.contains("line 10: `two()` takes 2 arguments but is called with 1"), "{e}");
+}
+
+#[test]
+fn ram_overflow_is_a_compile_error() {
+    let zeros = vec!["0"; 600].join(", ");
+    let src = format!("big = [{zeros}]\n\ndef main():\n    pass\n\ndef loop():\n    big[0] = 1\n");
+    let e = generate(&src, SINGLE_BANK).expect_err("1200 bytes of array cannot fit");
+    assert!(e.contains("RAM overflow"), "{e}");
+}
+
+// ---------------------------------------------------------------------------
+// DRAW_VECTOR_ROT: a .vec sprite turned about its origin.
+// ---------------------------------------------------------------------------
+
+/// An "L" (20 right, then 10 up) plus a short tick, centred on its bounding box.
+const ELL_VEC: &str = r#"{"version":"1.0","name":"ell","canvas":{"width":256,"height":256,"origin":"center"},
+ "layers":[{"name":"default","visible":true,"paths":[
+  {"name":"l","intensity":100,"closed":false,"points":[{"x":-20,"y":-10},{"x":20,"y":-10},{"x":20,"y":10}]},
+  {"name":"tick","intensity":60,"closed":false,"points":[{"x":-20,"y":10},{"x":-10,"y":10}]}]}]}"#;
+
+fn ell_assets() -> Vec<crate::AssetInfo> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static N: AtomicUsize = AtomicUsize::new(0);
+    let path = std::env::temp_dir().join(format!(
+        "vpy_rot_{}_{}.vec",
+        std::process::id(),
+        N.fetch_add(1, Ordering::SeqCst)
+    ));
+    std::fs::write(&path, ELL_VEC).expect("write .vec");
+    vec![crate::AssetInfo {
+        name: "ell".to_string(),
+        path: path.display().to_string(),
+        asset_type: crate::AssetType::Vector,
+    }]
+}
+
+fn generate_rot(src: &str, (rom_size, bank_size): (usize, usize)) -> Result<String, String> {
+    super::generate_m6809_asm(&unify(src), "TEST", rom_size, bank_size, &ell_assets())
+}
+
+/// One call in a `for` body (helper scan), one with mirror + intensity.
+const ROT_SRC: &str = "\
+angle = 0
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    for i in range(0, 1):
+        DRAW_VECTOR_ROT(\"ell\", 30, 20, angle)
+    DRAW_VECTOR_ROT(\"ell\", -40, -30, angle, 1, 50)
+    angle = angle + 32
+";
+
+/// The runtime looks sin/cos up once per call (not per point) and the trig LUTs,
+/// the turned-point math and the asset's ordinary path table are all emitted.
+fn assert_rot_runtime(asm: &str) {
+    for label in ["DRAW_VEC_ROT_RUNTIME", "ROT2D_XFORM", "ROT2D_SMUL", "ROT2D_SCALE", "SIN_TABLE", "COS_TABLE", "_ELL_VECTORS"] {
+        assert!(defines_label(asm, label), "{label} not emitted");
+    }
+    let body = body(asm, "DRAW_VEC_ROT_RUNTIME");
+    let runtime = &body[..body.find("DVR_PATH:").expect("path loop")];
+    assert_eq!(runtime.matches("LDX #SIN_TABLE").count(), 1, "sin looked up once per call");
+    assert_eq!(runtime.matches("LDX #COS_TABLE").count(), 1, "cos looked up once per call");
+    assert!(asm.contains("STB >ROT2D_MIRROR") && asm.contains("STB >DRAW_VEC_INTENSITY"), "mirror/intensity args");
+}
+
+#[test]
+fn draw_vector_rot_found_inside_for_body() {
+    let needed = analyze_module_helpers(&unify(ROT_SRC));
+    assert!(needed.contains("DRAW_VECTOR_ROT"), "{needed:?}");
+}
+
+#[test]
+fn draw_vector_rot_single_bank() {
+    let asm = generate_rot(ROT_SRC, SINGLE_BANK).unwrap_or_else(|e| panic!("{e}"));
+    assert_rot_runtime(&asm);
+    assert_eq!(asm.matches("JSR DRAW_VEC_ROT_RUNTIME").count(), 2, "both calls draw directly");
+    assert!(asm.contains("LDX #_ELL_VECTORS"), "single bank passes the path table");
+}
+
+#[test]
+fn draw_vector_rot_multibank() {
+    let asm = generate_rot(ROT_SRC, MULTIBANK).unwrap_or_else(|e| panic!("{e}"));
+    assert_rot_runtime(&asm);
+    // Distributed assets: the call goes through the bank-switching wrapper.
+    assert!(defines_label(&asm, "DRAW_VEC_ROT_BANKED"), "banked wrapper not emitted");
+    assert_eq!(asm.matches("JSR DRAW_VEC_ROT_BANKED").count(), 2);
+}
+
+#[test]
+fn draw_vector_rot_unknown_asset_is_an_error() {
+    let src = "def main():\n    pass\n\ndef loop():\n    DRAW_VECTOR_ROT(\"nope\", 0, 0, 16)\n";
+    for layout in [SINGLE_BANK, MULTIBANK] {
+        let e = generate_rot(src, layout).expect_err("unknown asset");
+        assert!(e.contains("line 5") && e.contains("no vector asset named 'nope'") && e.contains("ell"), "{e}");
+    }
+}
+
+#[test]
+fn draw_vector_rot_wrong_arity_is_an_error() {
+    let three = "def main():\n    pass\n\ndef loop():\n    DRAW_VECTOR_ROT(\"ell\", 0, 0)\n";
+    let e = generate_rot(three, SINGLE_BANK).expect_err("3 args");
+    assert!(e.contains("line 5") && e.contains("takes 4 to 6 arguments") && e.contains("got 3"), "{e}");
+    let seven = "def main():\n    pass\n\ndef loop():\n    DRAW_VECTOR_ROT(\"ell\", 0, 0, 1, 0, 9, 9)\n";
+    let e = generate_rot(seven, MULTIBANK).expect_err("7 args");
+    assert!(e.contains("got 7"), "{e}");
+    let named = "n = 0\ndef main():\n    pass\n\ndef loop():\n    DRAW_VECTOR_ROT(n, 0, 0, 1)\n";
+    let e = generate_rot(named, SINGLE_BANK).expect_err("non-literal name");
+    assert!(e.contains("string literal"), "{e}");
 }

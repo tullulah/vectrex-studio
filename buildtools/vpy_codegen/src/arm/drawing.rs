@@ -42,6 +42,9 @@ pub fn emit_drawing(usage: &Usage) -> String {
     if usage.has("DRAW_VECTOR_3D") {
         s.push_str(&emit_draw_vector_3d());
     }
+    if usage.has("DRAW_VECTOR_ROT") {
+        s.push_str(&emit_draw_vector_rot());
+    }
     if usage.has("DRAW_RECORDING") {
         s.push_str(&emit_draw_recording());
     }
@@ -186,6 +189,97 @@ fn emit_draw_vector() -> String {
 
     s.push_str("dvv_done:\n    pop     {r4, r5, r6, r7, r8, r9, r10, pc}\n");
     s.push_str("    .ltorg\n\n");
+    s
+}
+
+// ─── vpy_draw_vector_rot ──────────────────────────────────────────────────
+//
+// DRAW_VECTOR_ROT("name", x, y, angle [, mirror [, intensity]]): the asset's
+// ordinary _NAME_VECTORS paths turned by `angle` (0-127 = one full turn,
+// counter-clockwise; the unit of SIN/COS/DRAW_VECTOR_3D) about the sprite origin.
+//
+// sin/cos come from _SIN_TABLE (x127) once per call. Each point is turned from
+// its UNROTATED sprite-local position (accumulated from the deltas), never delta
+// by delta, so rounding does not build up along a path; the result is in 1/16
+// units: q4 = (p*127 * 129 + 512) >> 10 (127*129/1024 = 16.001). Deltas go out
+// through SYS_DRAW_DELTA_Q4, which splits long strokes itself.
+//
+// ABI: r0=_NAME_VECTORS, r1=x, r2=y, r3=angle, [sp]=mirror (bit0 flip X, bit1
+// flip Y, in sprite space before turning), [sp+4]=intensity (0 = each path's own). Locals: [sp+0]=ux [sp+4]=uy [sp+8]=last x q4
+// [sp+12]=last y q4 [sp+16]=cos [sp+20]=sin.
+fn emit_draw_vector_rot() -> String {
+    // r0,r1 = (ux,uy) -> (x,y) in 1/16 units. Clobbers r3, r12.
+    fn turn(s: &mut String) {
+        s.push_str("    ldr     r12, [sp, #16]      @ cos\n");
+        s.push_str("    mul     r3, r0, r12         @ ux*cos\n");
+        s.push_str("    ldr     r12, [sp, #20]      @ sin\n");
+        s.push_str("    mul     r12, r1, r12        @ uy*sin\n");
+        s.push_str("    sub     r3, r3, r12         @ x' (x127)\n");
+        s.push_str("    ldr     r12, [sp, #20]\n");
+        s.push_str("    mul     r0, r0, r12         @ ux*sin\n");
+        s.push_str("    ldr     r12, [sp, #16]\n");
+        s.push_str("    mul     r1, r1, r12         @ uy*cos\n");
+        s.push_str("    add     r1, r0, r1          @ y' (x127)\n");
+        s.push_str("    mov     r0, r3\n");
+        s.push_str("    mov     r12, #129\n");
+        s.push_str("    mul     r0, r0, r12\n    add     r0, r0, #512\n    asr     r0, r0, #10   @ x' in 1/16\n");
+        s.push_str("    mul     r1, r1, r12\n    add     r1, r1, #512\n    asr     r1, r1, #10   @ y' in 1/16\n");
+    }
+    let mut s = String::new();
+    s.push_str("@ vpy_draw_vector_rot(r0=asset, r1=x, r2=y, r3=angle 0-127, [sp]=mirror, [sp+4]=intensity)\n");
+    s.push_str(".global vpy_draw_vector_rot\n.type vpy_draw_vector_rot, %function\n.thumb_func\nvpy_draw_vector_rot:\n");
+    s.push_str("    push    {r4, r5, r6, r7, r8, r9, r10, r11, lr}  @ 36 bytes\n");
+    s.push_str("    sub     sp, sp, #24         @ ux uy lastx lasty cos sin\n");
+    s.push_str("    mov     r4, r0              @ asset\n");
+    s.push_str("    lsl     r9, r1, #4          @ x in 1/16\n");
+    s.push_str("    lsl     r10, r2, #4         @ y in 1/16\n");
+    s.push_str("    ldr     r7, [sp, #60]       @ mirror (24 locals + 36 saved)\n");
+    s.push_str("    ldr     r8, [sp, #64]       @ intensity\n");
+    // mirror bit1 (flip Y) = flip X + half a turn; from here on r7 is flip X only.
+    s.push_str("    tst     r7, #2\n    beq     dvr_nofy\n");
+    s.push_str("    add     r3, r3, #64\n    eor     r7, r7, #1\n");
+    s.push_str("dvr_nofy:\n    and     r7, r7, #1\n");
+    s.push_str("    and     r3, r3, #0x7F\n");
+    s.push_str("    ldr     r0, =_SIN_TABLE\n");
+    s.push_str("    ldrsb   r1, [r0, r3]\n    str     r1, [sp, #20]   @ sin\n");
+    s.push_str("    add     r3, r3, #32\n    and     r3, r3, #0x7F\n");
+    s.push_str("    ldrsb   r1, [r0, r3]\n    str     r1, [sp, #16]   @ cos = sin(a+32)\n");
+    s.push_str("    ldr     r5, [r4]            @ path_count\n");
+    s.push_str("    mov     r6, #0\n");
+    s.push_str("dvr_pl:\n");
+    s.push_str("    cmp     r6, r5\n    bge     dvr_done\n");
+    s.push_str("    lsl     r11, r6, #2\n    add     r11, r11, #4\n    ldr     r11, [r4, r11]   @ path ptr\n");
+    s.push_str("    bl      dv_reset\n");
+    s.push_str("    ldrb    r0, [r11]           @ .vec per-path intensity\n");
+    s.push_str("    cmp     r8, #0\n    it      ne\n    movne   r0, r8   @ override\n");
+    s.push_str("    bl      vpy_set_intensity\n");
+    s.push_str("    ldrsb   r0, [r11, #2]       @ x_start\n");
+    s.push_str("    ldrsb   r1, [r11, #1]       @ y_start\n");
+    s.push_str("    cmp     r7, #0\n    it      ne\n    rsbne   r0, r0, #0   @ mirror in sprite space\n");
+    s.push_str("    str     r0, [sp, #0]\n    str     r1, [sp, #4]\n");
+    turn(&mut s);
+    s.push_str("    str     r0, [sp, #8]\n    str     r1, [sp, #12]\n");
+    s.push_str("    add     r0, r0, r9\n    add     r1, r1, r10\n");
+    s.push_str("    bl      dv_move_to_q4\n");
+    s.push_str("    add     r11, r11, #5        @ command ptr\n");
+    s.push_str("dvr_cl:\n");
+    s.push_str("    ldrb    r0, [r11]\n");
+    s.push_str("    cmp     r0, #0x02\n    beq     dvr_cend\n");
+    s.push_str("    cmp     r0, #0xFF\n    bne     dvr_cskip\n");
+    s.push_str("    ldrsb   r0, [r11, #2]       @ dx\n");
+    s.push_str("    ldrsb   r1, [r11, #1]       @ dy\n");
+    s.push_str("    cmp     r7, #0\n    it      ne\n    rsbne   r0, r0, #0\n");
+    s.push_str("    ldr     r12, [sp, #0]\n    add     r0, r0, r12\n    str     r0, [sp, #0]   @ ux += dx\n");
+    s.push_str("    ldr     r12, [sp, #4]\n    add     r1, r1, r12\n    str     r1, [sp, #4]   @ uy += dy\n");
+    turn(&mut s);
+    s.push_str("    ldr     r12, [sp, #8]\n    str     r0, [sp, #8]\n    sub     r0, r0, r12   @ turned dx\n");
+    s.push_str("    ldr     r12, [sp, #12]\n    str     r1, [sp, #12]\n    sub     r1, r1, r12  @ turned dy\n");
+    s.push_str("    bl      dv_draw_delta_q4\n");
+    s.push_str("    add     r11, r11, #3\n    b       dvr_cl\n");
+    s.push_str("dvr_cskip:\n    add     r11, r11, #1\n    b       dvr_cl\n");
+    s.push_str("dvr_cend:\n    add     r6, r6, #1\n    b       dvr_pl\n");
+    s.push_str("dvr_done:\n    add     sp, sp, #24\n");
+    s.push_str("    pop     {r4, r5, r6, r7, r8, r9, r10, r11, pc}\n    .ltorg\n\n");
     s
 }
 

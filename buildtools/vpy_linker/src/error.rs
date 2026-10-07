@@ -38,7 +38,7 @@ pub enum LinkerError {
         symbol: String,
     },
 
-    #[error("Binary too large: {size} bytes exceeds {limit} bytes")]
+    #[error("Binary too large: {size} bytes, {} bytes over the {limit}-byte ROM", .size.saturating_sub(*.limit))]
     BinaryTooLarge { 
         size: usize, 
         limit: usize 

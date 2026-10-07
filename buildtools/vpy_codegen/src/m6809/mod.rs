@@ -28,6 +28,7 @@ pub mod assets;
 pub mod context;  // Thread-local context for mutable array tracking
 pub mod ast_walk; // Exhaustive AST visitor shared by every "uses X?" scan
 pub mod array_params; // Element type of arrays passed to functions
+pub mod frames;   // Static, call-graph-overlaid frames for parameters and locals
 pub mod consts;   // Compile-time folding of `const` values
 #[cfg(test)]
 mod regression_tests;
@@ -99,9 +100,10 @@ fn analyze_used_assets(module: &Module, assets: &[crate::AssetInfo]) -> std::col
     used
 }
 
-/// True if SIN / COS / TAN / DRAW_VECTOR_3D is used anywhere (needs the trig LUTs).
+/// True if SIN / COS / TAN / DRAW_VECTOR_3D / DRAW_VECTOR_ROT is used anywhere
+/// (needs the trig LUTs).
 fn uses_trig(module: &Module) -> bool {
-    ast_walk::calls_any(module, &["SIN", "COS", "TAN", "DRAW_VECTOR_3D"])
+    ast_walk::calls_any(module, &["SIN", "COS", "TAN", "DRAW_VECTOR_3D", "DRAW_VECTOR_ROT"])
 }
 
 use vpy_parser::Module;
@@ -113,6 +115,20 @@ pub fn generate_m6809_asm(
     rom_size: usize,
     bank_size_meta: usize,
     assets: &[crate::AssetInfo],
+) -> Result<String, String> {
+    generate_m6809_asm_with_hints(module, title, rom_size, bank_size_meta, assets, &crate::CodeSizeHints::default())
+}
+
+/// M6809 code generation with measured code sizes for the bank allocator
+/// (see [`crate::CodeSizeHints`]). With measured sizes, code that does not fit the
+/// configured ROM is an error here instead of a bank overflow at link time.
+pub fn generate_m6809_asm_with_hints(
+    module: &Module,
+    title: &str,
+    rom_size: usize,
+    bank_size_meta: usize,
+    assets: &[crate::AssetInfo],
+    size_hints: &crate::CodeSizeHints,
 ) -> Result<String, String> {
     let mut asm = String::new();
 
@@ -143,6 +159,7 @@ pub fn generate_m6809_asm(
     // len() is a compile-time constant on m6809; reject arguments whose length
     // is unknown instead of silently evaluating to 0.
     utilities::validate_len_calls(module)?;
+    crate::validate::check_draw_vector_rot_calls(module, assets, "m6809")?;
 
     // FILTER ASSETS: Only embed assets actually used in code (2026-01-20)
     let assets = assets::filter_used_assets(assets, module);
@@ -174,6 +191,10 @@ pub fn generate_m6809_asm(
 
     // Arrays passed to functions: element type of every indexed parameter.
     context::set_param_array_elems(array_params::analyze(module)?);
+
+    // Parameters and locals: one static frame per function, overlaid by call
+    // graph. Rejects recursion and names that are not declared anywhere.
+    context::set_frames(frames::analyze(module)?);
 
     // Calculate bank configuration dynamically
     // Use META ROM_BANK_SIZE if provided; default to 16KB for single-bank ROMs
@@ -382,22 +403,57 @@ pub fn generate_m6809_asm(
             std::collections::HashMap::new()
         };
         
+        // An asset is emitted whole into one bank: one bigger than a bank can never be
+        // placed (the distributor used to panic on it).
+        let mut too_big: Vec<(&String, &usize)> = asset_sizes.iter()
+            .filter(|(_, &size)| size > bank_size)
+            .collect();
+        too_big.sort();
+        if let Some((name, size)) = too_big.first() {
+            return Err(format!(
+                "Asset '{}' is {} bytes, {} over one {}-byte ROM bank. An asset cannot span \
+                 banks, so no ROM_TOTAL_SIZE makes it fit: shorten or split the asset.",
+                name, size, *size - bank_size, bank_size
+            ));
+        }
+
         // Run allocator
         let mut allocator = vpy_bank_allocator::allocator::BankAllocator::new(config, graph);
         allocator.set_asset_sizes(asset_sizes);
+        let measured = !size_hints.is_empty();
+        if measured {
+            let sizes: std::collections::HashMap<String, usize> = size_hints.function_sizes
+                .iter()
+                .map(|(label, size)| (label.clone(), *size))
+                .collect();
+            allocator.set_measured_sizes(&sizes, &size_hints.bank_fixed_bytes);
+        }
         
         match allocator.assign_banks() {
             Ok(assignments) => {
-                // Compute per-bank function code bytes (for asset distribution coordination)
+                // Bytes each bank's code already takes (for asset distribution
+                // coordination). Pinned MAIN/LOOP are part of bank #0's fixed bytes when
+                // measured.
                 let func_sizes = allocator.get_function_sizes();
                 for (func_name, &bank_id) in &assignments {
+                    if measured && vpy_bank_allocator::allocator::is_pinned_to_bank0(func_name) {
+                        continue;
+                    }
                     let size = func_sizes.get(func_name).copied().unwrap_or(100);
                     *_per_bank_func_bytes.entry(bank_id).or_insert(0) += size;
+                }
+                if measured {
+                    for bank_id in 0..code_banks_count {
+                        *_per_bank_func_bytes.entry(bank_id as u8).or_insert(0) +=
+                            allocator.bank_fixed_bytes(bank_id);
+                    }
                 }
                 // Generate functions distributed by bank
                 functions_by_bank = functions::generate_functions_by_bank(module, &assets, &assignments)?;
                 _bank_assignments = assignments;
             }
+            // Sizes measured from assembled code: not fitting is a real, precise error.
+            Err(e) if measured => return Err(e.to_string()),
             Err(e) => {
                 eprintln!("[CODEGEN] Warning: BankAllocator failed: {:?}", e);
                 eprintln!("[CODEGEN] Falling back to single-bank function generation");
@@ -417,6 +473,8 @@ pub fn generate_m6809_asm(
         if let Some(bank0_funcs) = functions_by_bank.get(&0) {
             asm.push_str(bank0_funcs);
         }
+        asm.push_str(crate::FUNCTIONS_END_MARKER);
+        asm.push_str(" (Bank #0)\n");
     } else {
         // Single-bank: all functions in Bank #0 (existing behavior)
         let mut fb = std::collections::HashMap::new();
@@ -503,6 +561,7 @@ pub fn generate_m6809_asm(
                 if let Some(funcs) = functions_by_bank.get(&(bank_id as u8)) {
                     asm.push_str(funcs);
                 }
+                asm.push_str(&format!("{} (Bank #{})\n", crate::FUNCTIONS_END_MARKER, bank_id));
                 
                 // Then emit assets
                 if let Some(bank_assets) = bank_asm_map.get(&(bank_id as u8)) {

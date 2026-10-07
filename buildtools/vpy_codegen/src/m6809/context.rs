@@ -69,9 +69,8 @@ thread_local! {
     /// Interleaved frames count (2 or 3). 0 means disabled.
     static INTERLEAVED_N: RefCell<u8> = RefCell::new(0);
 
-    /// Map of current function parameter names (lowercase) → ARG index (0-4).
-    /// When set, identifiers matching a param are emitted as VAR_ARGn instead of VAR_NAME.
-    static CURRENT_PARAMS: RefCell<HashMap<String, usize>> = RefCell::new(HashMap::new());
+    /// Frames (parameters + locals) of every function, from `frames::analyze`.
+    static FRAMES: RefCell<super::frames::FrameLayout> = RefCell::new(super::frames::FrameLayout::default());
 
     /// Element type of every array PARAMETER, per function: m6809 label (upper-case)
     /// → parameter name (lower-case) → element size. Filled by `array_params::analyze`
@@ -122,7 +121,7 @@ pub fn set_const_arrays(arrays: HashSet<String>) {
 /// constant: `VAR_<NAME>_DATA` (RAM copy of a mutable array) or `ARRAY_<NAME>_DATA`
 /// (ROM data of a const array). There is no pointer variable in RAM.
 pub fn global_array_base_label(name: &str) -> Option<String> {
-    if get_param_index(name).is_some() {
+    if local_slot(name).is_some() {
         return None;
     }
     if is_mutable_array(name) {
@@ -149,10 +148,10 @@ pub fn set_var_size(name: &str, bytes: usize, signed: bool) {
 /// Returns the registered size, or default i16 (2 bytes, signed) if not found
 /// name: lowercase variable name (no VAR_ prefix)
 pub fn get_var_size(name: &str) -> VarSize {
-    // A parameter lives in a 16-bit VAR_ARGn slot whatever a global of the same
-    // name is declared as.
-    if get_param_index(name).is_some() {
-        return VarSize::default_i16();
+    // A parameter or local lives in its function's frame slot, whatever a global
+    // of the same name is declared as.
+    if let Some(slot) = local_slot(name) {
+        return slot.size;
     }
     VAR_SIZES.with(|vs| {
         vs.borrow()
@@ -182,7 +181,7 @@ pub fn set_const_value(name: &str, value: i64) {
 pub fn get_const_value(name: &str) -> Option<i64> {
     // A parameter of the function being generated shadows a const of the same
     // name (names are case-insensitive: parameter `b` vs `const B`).
-    if get_param_index(name).is_some() {
+    if local_slot(name).is_some() {
         return None;
     }
     CONST_VALUES.with(|cv| {
@@ -213,33 +212,35 @@ pub fn get_interleaved_n() -> u8 {
     INTERLEAVED_N.with(|inl| *inl.borrow())
 }
 
-/// Set the current function's parameter mapping (param name lowercase → ARG index).
-/// Call at the start of generating a user function with parameters.
-pub fn set_current_params(params: &[String]) {
-    CURRENT_PARAMS.with(|cp| {
-        let mut map = cp.borrow_mut();
-        map.clear();
-        // Keep in sync with MAX_USER_ARGS in expressions.rs.
-        for (i, p) in params.iter().enumerate().take(8) {
-            map.insert(p.to_lowercase(), i);
+/// Register the frames of every function (see `frames`).
+pub fn set_frames(layout: super::frames::FrameLayout) {
+    FRAMES.with(|f| *f.borrow_mut() = layout);
+}
+
+/// The frames of every function.
+pub fn frames() -> super::frames::FrameLayout {
+    FRAMES.with(|f| f.borrow().clone())
+}
+
+/// The frame of the function labelled `label`, if it is a user function.
+pub fn frame_of(label: &str) -> Option<super::frames::Frame> {
+    FRAMES.with(|f| f.borrow().frames.get(label).cloned())
+}
+
+/// The parameter or local `name` of the function being generated, if any.
+pub fn local_slot(name: &str) -> Option<super::frames::Slot> {
+    CURRENT_FUNCTION.with(|cur| {
+        let cur = cur.borrow();
+        if cur.is_empty() {
+            return None;
         }
-    });
-}
-
-/// Clear the current function parameter mapping.
-/// Call after generating a user function body.
-pub fn clear_current_params() {
-    CURRENT_PARAMS.with(|cp| {
-        cp.borrow_mut().clear();
-    });
-}
-
-/// Look up whether a variable name is a function parameter.
-/// Returns Some(index) if it is (should use VAR_ARGn), None if not.
-pub fn get_param_index(name: &str) -> Option<usize> {
-    CURRENT_PARAMS.with(|cp| {
-        cp.borrow().get(&name.to_lowercase()).copied()
+        FRAMES.with(|f| f.borrow().frames.get(cur.as_str()).and_then(|fr| fr.slot(name).cloned()))
     })
+}
+
+/// The parameter `name` of the function being generated, if any.
+pub fn param_slot(name: &str) -> Option<super::frames::Slot> {
+    local_slot(name).filter(|s| s.kind == super::frames::SlotKind::Param)
 }
 
 /// Register the element type of every array parameter (see `array_params`).
@@ -258,7 +259,7 @@ pub fn set_current_function(label: &str) {
 /// A parameter is a pointer to the array the caller passed. Its element type
 /// comes from the arrays passed at the call sites; with none known it is 16-bit.
 pub fn resolve_array(name: &str) -> Option<(ArrayBase, VarSize)> {
-    if let Some(idx) = get_param_index(name) {
+    if let Some(slot) = param_slot(name) {
         let elem = CURRENT_FUNCTION.with(|f| {
             PARAM_ARRAY_ELEMS.with(|m| {
                 m.borrow()
@@ -267,7 +268,7 @@ pub fn resolve_array(name: &str) -> Option<(ArrayBase, VarSize)> {
             })
         });
         return Some((
-            ArrayBase::Pointer(format!("VAR_ARG{}", idx)),
+            ArrayBase::Pointer(slot.label),
             elem.unwrap_or_else(VarSize::default_i16),
         ));
     }
@@ -293,9 +294,7 @@ pub fn clear_context() {
     INTERLEAVED_N.with(|inl| {
         *inl.borrow_mut() = 0;
     });
-    CURRENT_PARAMS.with(|cp| {
-        cp.borrow_mut().clear();
-    });
+    FRAMES.with(|f| *f.borrow_mut() = super::frames::FrameLayout::default());
     PARAM_ARRAY_ELEMS.with(|m| m.borrow_mut().clear());
     CURRENT_FUNCTION.with(|f| f.borrow_mut().clear());
 }

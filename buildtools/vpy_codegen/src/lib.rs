@@ -187,6 +187,67 @@ pub struct SymbolInfo {
     pub metadata: String,
 }
 
+/// Code sizes measured from a previous assembly of the same program, handed to the
+/// m6809 bank allocator in place of its AST estimates (multibank only).
+///
+/// Produced by `vpy_linker::sizing` (generate → assemble → measure → regenerate).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CodeSizeHints {
+    /// Assembled bytes of each user function, keyed by its assembly label
+    /// (`vpy_parser::symbols::m6809_label`, upper case). MAIN/LOOP_BODY are not here:
+    /// they are part of bank #0's fixed bytes.
+    pub function_sizes: std::collections::BTreeMap<String, usize>,
+    /// Assembled bytes of each code bank that do not belong to a movable function
+    /// (index = bank id). Bank #0: cartridge header, START, MAIN and LOOP_BODY.
+    pub bank_fixed_bytes: Vec<usize>,
+}
+
+impl CodeSizeHints {
+    /// No measurements: the allocator uses its AST estimates.
+    pub fn is_empty(&self) -> bool {
+        self.function_sizes.is_empty() && self.bank_fixed_bytes.is_empty()
+    }
+}
+
+/// Comment the m6809 backend writes right after the user functions of each code bank
+/// (multibank only); the size measurement uses it as the end of the last function.
+pub const FUNCTIONS_END_MARKER: &str = "; VPY_BANK_FUNCTIONS_END";
+
+/// True when the m6809 backend lays this configuration out as a banked cartridge
+/// (at least 2 code banks + the helpers bank). Same rule as the code generator.
+pub fn is_m6809_multibank(bank_config: &BankConfig) -> bool {
+    let bank_size = if bank_config.rom_bank_size > 0 { bank_config.rom_bank_size } else { 16384 };
+    bank_config.rom_total_size > 32768 && bank_config.rom_total_size / bank_size > 2
+}
+
+/// Generate m6809 assembly, letting the bank allocator use measured code sizes.
+/// With empty hints this is exactly [`generate_from_module`].
+pub fn generate_from_module_with_hints(
+    module: &Module,
+    bank_config: &BankConfig,
+    title: &str,
+    assets: &[AssetInfo],
+    hints: &CodeSizeHints,
+) -> Result<GeneratedASM, CodegenError> {
+    known_functions::register(module);
+    validate::check_array_literals(module).map_err(CodegenError::Error)?;
+    let asm_source = m6809::generate_m6809_asm_with_hints(
+        module,
+        title,
+        bank_config.rom_total_size,
+        bank_config.rom_bank_size,
+        assets,
+        hints,
+    ).map_err(CodegenError::Error)?;
+    let _validation_result = stack_validator::validate_stack_balance(&asm_source);
+    Ok(GeneratedASM {
+        asm_source,
+        bank_config: bank_config.clone(),
+        symbols: HashMap::new(),
+        external_refs: Vec::new(),
+    })
+}
+
 /// Generate unified ASM with bank markers (NEW - uses real M6809 codegen)
 pub fn generate_from_module(
     module: &Module,

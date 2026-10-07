@@ -36,6 +36,7 @@ pub fn generate_uvm2_asm(
 ) -> Result<String, String> {
     // len() must name a global array (compile-time length), as on m6809.
     crate::validate::check_len_calls(module, "uvm2")?;
+    crate::validate::check_draw_vector_rot_calls(module, asset_list, "uvm2")?;
 
     let mut asm = String::new();
 

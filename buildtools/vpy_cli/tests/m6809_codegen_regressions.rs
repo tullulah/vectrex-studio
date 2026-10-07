@@ -235,3 +235,128 @@ fn array_and_const_errors_fail_with_line() {
         &["line 5", "PLAY_SAMPLE is not supported on m6809"],
     );
 }
+
+/// Parameters and locals live in per-function static frames (overlaid by call
+/// graph); a function that calls another still reads its own parameter.
+#[test]
+fn static_frames_link_in_both_layouts() {
+    let src = "\
+r = 0
+
+def g(x):
+    return x + 1
+
+def f(a):
+    t = g(5)
+    return a + t
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    r = f(100)
+    PRINT_NUMBER(0, 0, r)
+";
+    let (single, multi) = assert_builds_both_layouts("static_frames", src);
+    for b in [&single, &multi] {
+        let asm = b.asm.as_deref().unwrap();
+        assert!(asm.contains("STD >VAR_G__X") && asm.contains("LDD >VAR_F__A"), "frame slots");
+        assert!(asm.contains("FRAME_POOL"), "frame pool allocated");
+    }
+}
+
+/// A call between switchable banks goes through a trampoline in the helpers bank;
+/// it must hand back the callee's return value (D) intact: restoring the caller's
+/// bank used to overwrite A, the high byte.
+#[test]
+fn cross_bank_call_keeps_the_return_value() {
+    let mut src = String::from(MULTIBANK_META);
+    src.push_str("junk = 0\nr = 0\n");
+    for k in 0..5 {
+        src.push_str(&format!("\ndef filler{k}(q):\n"));
+        for i in 0..300 {
+            src.push_str(&format!("    junk = junk + q + {i}\n"));
+        }
+        src.push_str("    return q * 1000\n");
+    }
+    src.push_str("\ndef main():\n    SET_INTENSITY(127)\n\ndef loop():\n    r = filler4(2) + filler3(1)\n");
+    let dir = tmp();
+    let b = build(dir.path(), "cross_bank", &src);
+    assert!(b.ok, "multibank build failed:\n{}", b.output);
+    let mut trampolines = String::new();
+    for entry in std::fs::read_dir(dir.path().join("multibank_temp")).expect("multibank_temp") {
+        let text = std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default();
+        if let Some(at) = text.find("TRAMP_") {
+            trampolines.push_str(&text[at..]);
+        }
+    }
+    assert!(trampolines.contains("JSR TRAMP_FILLER") || trampolines.contains("TRAMP_FILLER"),
+        "expected a cross-bank call (functions spread over banks):\n{}", b.output);
+    assert!(!trampolines.contains("    PULS A\n"), "trampoline overwrites the return value's high byte");
+    assert!(trampolines.contains("PSHS D,CC") && trampolines.contains("PULS CC,D"), "{trampolines}");
+}
+
+#[test]
+fn recursion_and_undeclared_names_fail_with_line() {
+    assert_fails_with(
+        "recursive",
+        "r = 0\n\ndef fact(n):\n    if n < 2:\n        return 1\n    return n * fact(n - 1)\n\ndef main():\n    pass\n\ndef loop():\n    r = fact(5)\n",
+        &["recursion is not supported on m6809", "`fact()` calls `fact()` at line 6"],
+    );
+    assert_fails_with(
+        "undeclared",
+        "r = 0\n\ndef main():\n    t = 3\n\ndef loop():\n    r = t\n",
+        &["line 7", "`t` is used in `loop()`"],
+    );
+}
+
+// ---------------------------------------------------------------------------
+// DRAW_VECTOR_ROT: assembles and links with the sprite's own path table, in a
+// single-bank and in a multibank cartridge (bank-switching wrapper).
+// ---------------------------------------------------------------------------
+
+const ELL_VEC: &str = r#"{"version":"1.0","name":"ell","canvas":{"width":256,"height":256,"origin":"center"},
+ "layers":[{"name":"default","visible":true,"paths":[
+  {"name":"l","intensity":100,"closed":false,"points":[{"x":-20,"y":-10},{"x":20,"y":-10},{"x":20,"y":10}]}]}]}"#;
+
+fn dir_with_ell() -> tempfile::TempDir {
+    let dir = tmp();
+    std::fs::create_dir_all(dir.path().join("assets/vectors")).unwrap();
+    std::fs::write(dir.path().join("assets/vectors/ell.vec"), ELL_VEC).unwrap();
+    dir
+}
+
+#[test]
+fn draw_vector_rot_builds_single_and_multibank() {
+    let src = "\
+angle = 0
+
+def main():
+    SET_INTENSITY(127)
+
+def loop():
+    DRAW_VECTOR_ROT(\"ell\", 30, 20, angle)
+    DRAW_VECTOR_ROT(\"ell\", -40, -30, angle, 1, 50)
+    angle = angle + 32
+";
+    let dir = dir_with_ell();
+    let single = build(dir.path(), "rot", src);
+    assert!(single.ok, "single-bank build failed:\n{}", single.output);
+    assert_label(&single, "DRAW_VEC_ROT_RUNTIME");
+    let multi = build(dir.path(), "rot_mb", &format!("{MULTIBANK_META}{src}"));
+    assert!(multi.ok, "multibank build failed:\n{}", multi.output);
+    assert_label(&multi, "DRAW_VEC_ROT_BANKED");
+    assert_label(&multi, "DRAW_VEC_ROT_RUNTIME");
+}
+
+#[test]
+fn draw_vector_rot_errors_name_the_line() {
+    let dir = dir_with_ell();
+    let unknown = build(dir.path(), "rot_unknown",
+        "def main():\n    pass\n\ndef loop():\n    DRAW_VECTOR_ROT(\"ship\", 0, 0, 8)\n");
+    assert!(!unknown.ok && unknown.output.contains("line 5") && unknown.output.contains("no vector asset named 'ship'"),
+        "{}", unknown.output);
+    let arity = build(dir.path(), "rot_arity",
+        "def main():\n    pass\n\ndef loop():\n    DRAW_VECTOR_ROT(\"ell\", 0, 0)\n");
+    assert!(!arity.ok && arity.output.contains("takes 4 to 6 arguments"), "{}", arity.output);
+}

@@ -150,8 +150,8 @@ fn collect_vanim_vec_refs(vanim_path: &str, used_names: &mut HashSet<String>) {
 /// still embedded.
 fn collect_asset_names(module: &Module, used_names: &mut HashSet<String>) {
     const ASSET_BUILTINS: &[&str] = &[
-        "DRAW_VECTOR", "DRAW_VECTOR_EX", "DRAW_VECTOR_3D", "PLAY_MUSIC", "PLAY_SFX",
-        "LOAD_LEVEL", "DRAW_ANIM", "PLAY_NOTE", "DRAW_RECORDING",
+        "DRAW_VECTOR", "DRAW_VECTOR_EX", "DRAW_VECTOR_3D", "DRAW_VECTOR_ROT", "PLAY_MUSIC",
+        "PLAY_SFX", "LOAD_LEVEL", "DRAW_ANIM", "PLAY_NOTE", "DRAW_RECORDING",
     ];
     super::ast_walk::for_each_call(module, |call| {
         let up = call.name.to_uppercase();

@@ -57,6 +57,8 @@ const GROUPS: &[(&str, &[&str], &[&str])] = &[
     ("DRAW_VECTOR_EX",  &["DRAW_VECTOR_EX"],    &[]),
     // vpy_draw_vector_3d: calls smul_lut (+ core).
     ("DRAW_VECTOR_3D",  &["DRAW_VECTOR_3D"],    &["SIN_TABLE"]),
+    // vpy_draw_vector_rot: reads _SIN_TABLE (+ core).
+    ("DRAW_VECTOR_ROT", &["DRAW_VECTOR_ROT"],   &["SIN_TABLE"]),
     // vpy_draw_recording (.vrec attract/preview playback): core only —
     // dv_reset/dv_move_to/dv_draw_delta/vpy_set_intensity are always emitted.
     ("DRAW_RECORDING",  &["DRAW_RECORDING"],    &[]),

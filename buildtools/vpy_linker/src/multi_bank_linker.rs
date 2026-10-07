@@ -100,9 +100,15 @@ fn generate_cross_bank_trampolines(
                                     trampolines.push_str("    STA CURRENT_ROM_BANK\n");
                                     trampolines.push_str("    STA $DF00\n");
                                     trampolines.push_str(&format!("    JSR {}\n", target));
-                                    trampolines.push_str("    PULS A\n");
+                                    // The callee's return value is in D and its flags in CC
+                                    // (`if f():` branches on them): keep both while the
+                                    // caller's bank is restored. Stack: CC, A, B, saved bank.
+                                    trampolines.push_str("    PSHS D,CC             ; keep the return value and its flags\n");
+                                    trampolines.push_str("    LDA 3,S               ; caller's bank\n");
                                     trampolines.push_str("    STA CURRENT_ROM_BANK  ; restore caller's bank\n");
                                     trampolines.push_str("    STA $DF00\n");
+                                    trampolines.push_str("    PULS CC,D             ; return value + flags\n");
+                                    trampolines.push_str("    LEAS 1,S              ; drop the saved bank (LEAS leaves CC alone)\n");
                                     trampolines.push_str("    RTS\n");
                                 }
                                 continue;
@@ -132,10 +138,11 @@ fn generate_cross_bank_trampolines(
 /// Moving ARRAY_XXX_DATA blocks to helpers bank (fixed at $4000-$7FFF) makes them
 /// accessible from any bank. MAIN's initialization code sets VAR_XXX = #ARRAY_XXX_DATA
 /// which will now resolve to $4XXX (always valid).
-fn relocate_array_data_to_helpers(sections: &mut BTreeMap<u8, BankSection>, helpers_bank: u8) {
+/// Returns the number of ASM characters moved (0 = nothing to relocate).
+pub(crate) fn relocate_array_data_to_helpers(sections: &mut BTreeMap<u8, BankSection>, helpers_bank: u8) -> usize {
     let bank0_code = match sections.get(&0) {
         Some(b) => b.asm_code.clone(),
-        None => return,
+        None => return 0,
     };
 
     let mut new_bank0_code = String::new();
@@ -187,10 +194,8 @@ fn relocate_array_data_to_helpers(sections: &mut BTreeMap<u8, BankSection>, help
     array_data.push_str(&pending);
 
     if array_data.is_empty() {
-        return;
+        return 0;
     }
-
-    eprintln!("[LINKER] Relocating const array data ({} chars) from bank 0 to helpers bank #{}", array_data.len(), helpers_bank);
 
     // Update bank 0 (strip array data)
     if let Some(b0) = sections.get_mut(&0) {
@@ -202,6 +207,7 @@ fn relocate_array_data_to_helpers(sections: &mut BTreeMap<u8, BankSection>, help
         helpers.asm_code.push_str("\n; === CONST ARRAY DATA (relocated to fixed bank - accessible from any bank) ===\n");
         helpers.asm_code.push_str(&array_data);
     }
+    array_data.len()
 }
 
 /// Simple label extractor - extracts labels from ASM without full assembly
@@ -1038,8 +1044,14 @@ impl MultiBankLinker {
         // Pad to bank size (16KB)
         let bank_size = self.rom_bank_size as usize;
         if binary_data.len() > bank_size {
-            return Err(format!("Bank {} overflow: {} bytes (max: {} bytes)", 
-                bank_section.bank_id, binary_data.len(), bank_size));
+            return Err(bank_overflow_message(
+                bank_section.bank_id,
+                &full_asm_longbranch,
+                bank_org,
+                binary_data.len(),
+                bank_size,
+                bank_section.bank_id as u8 == helper_bank_id,
+            ));
         }
         
         // Pad with 0xFF (standard for unused ROM)
@@ -1086,7 +1098,10 @@ impl MultiBankLinker {
         // Relocate const array ROM data from bank 0 to helpers bank so it's always accessible.
         // Functions split to banks 1-2 need array data at fixed addresses ($4000+).
         if sections.len() > 2 {
-            relocate_array_data_to_helpers(&mut sections, helper_bank_id_for_tramp);
+            let moved = relocate_array_data_to_helpers(&mut sections, helper_bank_id_for_tramp);
+            if moved > 0 {
+                eprintln!("[LINKER] Relocating const array data ({} chars) from bank 0 to helpers bank #{}", moved, helper_bank_id_for_tramp);
+            }
         }
 
         // **PASS 1**: Iteratively extract global symbol table from all banks
@@ -1308,7 +1323,14 @@ impl MultiBankLinker {
         // Pad helper bank to full size
         let bank_size = self.rom_bank_size as usize;
         if helper_binary.len() > bank_size {
-            return Err(format!("Helper bank {} overflow: {} bytes (max: {} bytes)", helper_bank_id, helper_binary.len(), bank_size));
+            return Err(bank_overflow_message(
+                helper_bank_id,
+                &helper_full_asm_longbranch,
+                helper_org,
+                helper_binary.len(),
+                bank_size,
+                true,
+            ));
         }
         helper_binary.resize(bank_size, 0xFF);
 
@@ -1581,6 +1603,62 @@ impl MultiBankLinker {
     }
 }
 
+/// "Bank N overflow" with the numbers needed to act on it: how many bytes over, how the
+/// bank splits into functions and data, and which META directive to change.
+fn bank_overflow_message(
+    bank_id: u8,
+    bank_asm: &str,
+    org: u16,
+    size: usize,
+    bank_size: usize,
+    is_helpers_bank: bool,
+) -> String {
+    let over = size - bank_size;
+    let mut msg = format!(
+        "Bank #{} overflow: {} bytes, {} bytes over the {}-byte bank.",
+        bank_id, size, over, bank_size
+    );
+    if is_helpers_bank {
+        msg.push_str(
+            " This is the fixed helpers bank (runtime helpers, lookup tables, const arrays, \
+             strings, cross-bank trampolines); it cannot grow with ROM_TOTAL_SIZE. Use fewer \
+             runtime features / const data, or fewer cross-bank calls.",
+        );
+        return msg;
+    }
+    // Where the user functions end (the backend marks it), to split code from data.
+    let mut probe = String::with_capacity(bank_asm.len() + 32);
+    let mut marked = false;
+    for line in bank_asm.lines() {
+        if !marked && line.trim_start().starts_with(vpy_codegen::FUNCTIONS_END_MARKER) {
+            probe.push_str("VPY_OVERFLOW_PROBE_END:\n");
+            marked = true;
+        } else {
+            probe.push_str(line);
+            probe.push('\n');
+        }
+    }
+    if marked {
+        if let Ok((_, _, symbols, _)) =
+            vpy_assembler::m6809::asm_to_binary::assemble_m6809(&probe, org, true, false)
+        {
+            if let Some(&end) = symbols.get("VPY_OVERFLOW_PROBE_END") {
+                let code = (end as usize).saturating_sub(org as usize);
+                msg.push_str(&format!(
+                    " It holds {} bytes of code (header and functions) and {} bytes of assets/data.",
+                    code,
+                    size.saturating_sub(code)
+                ));
+            }
+        }
+    }
+    msg.push_str(
+        " Give the program more banks (raise META ROM_TOTAL_SIZE, keeping META ROM_BANK_SIZE = \
+         16384) or make the code/assets in this bank smaller.",
+    );
+    msg
+}
+
 /// Convert all short branches to long branches in assembly code
 /// This is required for multi-bank compilation because helper functions
 /// (DIV16, MUL16, etc.) contain branches that may exceed ±127 bytes when
@@ -1593,7 +1671,7 @@ impl MultiBankLinker {
 /// - BCS label → LBCS label  (0x25 → 0x10 0x25)
 /// - BCC label → LBCC label  (0x24 → 0x10 0x24)
 /// - And many other conditional branches...
-fn convert_short_to_long_branches(asm: &str) -> String {
+pub(crate) fn convert_short_to_long_branches(asm: &str) -> String {
     let mut result = String::new();
     
     for line in asm.lines() {

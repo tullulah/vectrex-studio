@@ -99,8 +99,11 @@ fn write_project(root: &Path, multibank: bool, lines_per_helper: usize) -> PathB
         // Enough code per function that bank 0 overflows and the allocator spreads the
         // functions over the switchable banks.
         src.push_str(&format!("def helper_{i}(v):\n"));
-        // ...and from the switchable banks into each other.
-        src.push_str(&format!("    if v > 100:\n        helper_{}(v - 1)\n", (i + 3) % sprite_names.len()));
+        // ...and from the switchable banks into each other. Only forward calls: m6809
+        // has no recursion (parameters live at fixed RAM addresses), so no call cycle.
+        if i + 3 < sprite_names.len() {
+            src.push_str(&format!("    if v > 100:\n        helper_{}(v - 1)\n", i + 3));
+        }
         for k in 0..lines_per_helper {
             src.push_str(&format!(
                 "    x = x + v * {k}\n    if x > {lim}:\n        y = y - {k}\n        x = 0\n",
@@ -124,7 +127,8 @@ fn build_rom(main: &Path, out_dir: &Path) -> Vec<u8> {
 
     let assets = vpy_codegen::m6809::assets::discover_assets(main);
     let config = vpy_codegen::BankConfig::new(ROM_SIZE, BANK_SIZE);
-    let generated = vpy_codegen::generate_from_module(&unified, &config, "DETERMINISM", &assets)
+    // generate → measure → regenerate, as `vpy_cli build` does for multibank.
+    let generated = vpy_linker::sizing::generate_m6809(&unified, &config, "DETERMINISM", &assets, Some(include_dir()))
         .expect("codegen");
 
     std::fs::create_dir_all(out_dir).unwrap();

@@ -270,23 +270,166 @@ impl CallGraph {
     }
 }
 
-/// Estimate function size in bytes (ASM code)
-/// 
-/// Rough estimates:
-/// - Statement: ~10 bytes average
-/// - Expression: ~5 bytes average
-/// - Function overhead: 20 bytes (label + RTS)
-fn estimate_function_size(func: &Function) -> usize {
-    let stmt_count = count_statements(&func.body);
-    // NOTE: M6809 binary size estimate per VPy statement.
-    // Real measurement: clockmakers_crypt compiles to 32KB with ~800 statements
-    // → ~40 bytes/stmt in binary. Using 50 as a safe margin.
-    // (Previous 180-byte estimate was based on ASM text size, not binary size.)
-    let base_size = 30; // Function overhead (prologue, epilogue, locals)
-    let stmt_avg = 25; // Average binary bytes per VPy statement
-    
-    base_size + (stmt_count * stmt_avg)
+/// What the size estimate looks at in a function body.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FunctionShape {
+    /// Statements, nested ones included.
+    pub statements: usize,
+    /// Binary / comparison / logic operators (each spills an operand to a temporary and,
+    /// for comparisons, emits a compare-and-branch sequence).
+    pub operators: usize,
+    /// Calls (builtins and user functions: argument set-up + JSR).
+    pub calls: usize,
+    /// Leaf operands: numbers, names, strings.
+    pub leaves: usize,
+    /// Array reads/writes (index scaling + pointer arithmetic).
+    pub indexes: usize,
 }
+
+/// Count the parts of a function body the estimate is built from.
+pub fn function_shape(func: &Function) -> FunctionShape {
+    let mut shape = FunctionShape::default();
+    shape_stmts(&func.body, &mut shape);
+    shape
+}
+
+fn shape_stmts(body: &[Stmt], shape: &mut FunctionShape) {
+    for stmt in body {
+        shape.statements += 1;
+        match stmt {
+            Stmt::Assign { target, value, .. } | Stmt::CompoundAssign { target, value, .. } => {
+                shape_target(target, shape);
+                shape_expr(value, shape);
+            }
+            Stmt::Let { value, .. } => shape_expr(value, shape),
+            Stmt::For { start, end, step, body, .. } => {
+                shape_expr(start, shape);
+                shape_expr(end, shape);
+                if let Some(st) = step {
+                    shape_expr(st, shape);
+                }
+                shape.operators += 1; // loop test
+                shape_stmts(body, shape);
+            }
+            Stmt::ForIn { iterable, body, .. } => {
+                shape_expr(iterable, shape);
+                shape.operators += 1;
+                shape.indexes += 1;
+                shape_stmts(body, shape);
+            }
+            Stmt::While { cond, body, .. } => {
+                shape_expr(cond, shape);
+                shape_stmts(body, shape);
+            }
+            Stmt::If { cond, body, elifs, else_body, .. } => {
+                shape_expr(cond, shape);
+                shape_stmts(body, shape);
+                for (c, b) in elifs {
+                    shape_expr(c, shape);
+                    shape_stmts(b, shape);
+                }
+                if let Some(e) = else_body {
+                    shape_stmts(e, shape);
+                }
+            }
+            Stmt::Switch { expr, cases, default, .. } => {
+                shape_expr(expr, shape);
+                for (c, b) in cases {
+                    shape.operators += 1;
+                    shape_expr(c, shape);
+                    shape_stmts(b, shape);
+                }
+                if let Some(d) = default {
+                    shape_stmts(d, shape);
+                }
+            }
+            Stmt::Expr(e, _) => shape_expr(e, shape),
+            Stmt::Return(Some(e), _) => shape_expr(e, shape),
+            _ => {}
+        }
+    }
+}
+
+fn shape_target(target: &vpy_parser::AssignTarget, shape: &mut FunctionShape) {
+    match target {
+        vpy_parser::AssignTarget::Ident { .. } => {}
+        vpy_parser::AssignTarget::Index { target, index, .. } => {
+            shape.indexes += 1;
+            shape_expr(target, shape);
+            shape_expr(index, shape);
+        }
+        vpy_parser::AssignTarget::FieldAccess { target, .. } => shape_expr(target, shape),
+    }
+}
+
+fn shape_expr(expr: &Expr, shape: &mut FunctionShape) {
+    match expr {
+        Expr::Number(_) | Expr::StringLit(_) | Expr::Ident(_) | Expr::StructInit { .. } => shape.leaves += 1,
+        Expr::Call(call) => {
+            shape.calls += 1;
+            for a in &call.args {
+                shape_expr(a, shape);
+            }
+        }
+        Expr::MethodCall(m) => {
+            shape.calls += 1;
+            shape_expr(&m.target, shape);
+            for a in &m.args {
+                shape_expr(a, shape);
+            }
+        }
+        Expr::Binary { left, right, .. } | Expr::Compare { left, right, .. } | Expr::Logic { left, right, .. } => {
+            shape.operators += 1;
+            shape_expr(left, shape);
+            shape_expr(right, shape);
+        }
+        Expr::Not(e) | Expr::BitNot(e) => {
+            shape.operators += 1;
+            shape_expr(e, shape);
+        }
+        Expr::List(items) => {
+            for e in items {
+                shape_expr(e, shape);
+            }
+        }
+        Expr::Index { target, index } => {
+            shape.indexes += 1;
+            shape_expr(target, shape);
+            shape_expr(index, shape);
+        }
+        Expr::FieldAccess { target, .. } => shape_expr(target, shape),
+    }
+}
+
+/// Estimated m6809 code size of a function, in bytes, from its AST.
+///
+/// Only a first guess: multibank builds re-measure every function from assembled code
+/// (`vpy_linker::sizing`) and allocate with the real sizes. The weights are a
+/// non-negative least-squares fit to the assembled sizes of the 150 m6809 functions in
+/// `examples/` plus generated expression-heavy functions, times 1.25 as a safety margin:
+/// the estimate covers 88% of functions and overestimates the total by ~25% (the old
+/// "30 + 25 per statement" was off by up to 3x either way). The
+/// `estimate_tracks_assembled_sizes` test in vpy_linker keeps it honest.
+pub fn estimate_function_size(func: &Function) -> usize {
+    estimate_from_shape(&function_shape(func))
+}
+
+/// The estimate for a given shape (see [`estimate_function_size`]).
+pub fn estimate_from_shape(shape: &FunctionShape) -> usize {
+    EST_BASE
+        + EST_PER_STATEMENT * shape.statements
+        + EST_PER_OPERATOR * shape.operators
+        + EST_PER_CALL * shape.calls
+        + EST_PER_LEAF * shape.leaves
+        + EST_PER_INDEX * shape.indexes
+}
+
+const EST_BASE: usize = 47;
+const EST_PER_STATEMENT: usize = 4;
+const EST_PER_OPERATOR: usize = 16;
+const EST_PER_CALL: usize = 13;
+const EST_PER_LEAF: usize = 3;
+const EST_PER_INDEX: usize = 11;
 
 /// Find assets used by a function (DRAW_VECTOR, PLAY_MUSIC, PLAY_SFX, etc.)
 fn find_assets_used(body: &[Stmt]) -> HashSet<String> {
@@ -403,33 +546,6 @@ fn find_assets_in_expr(expr: &Expr, assets: &mut HashSet<String>) {
         },
         _ => {}
     }
-}
-
-/// Count total statements recursively
-fn count_statements(body: &[Stmt]) -> usize {
-    let mut count = 0;
-    for stmt in body {
-        count += 1; // This statement
-        
-        // Recurse into nested statements
-        match stmt {
-            Stmt::If { body, elifs, else_body, .. } => {
-                count += count_statements(body);
-                for (_, elif_body) in elifs {
-                    count += count_statements(elif_body);
-                }
-                if let Some(else_b) = else_body {
-                    count += count_statements(else_b);
-                }
-            },
-            Stmt::While { body, .. } |
-            Stmt::For { body, .. } => {
-                count += count_statements(body);
-            },
-            _ => {}
-        }
-    }
-    count
 }
 
 /// Find all function calls in a statement block

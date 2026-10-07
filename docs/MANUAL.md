@@ -79,6 +79,8 @@ def update_player():
 
 The compiler determines scope automatically: if the name was declared at the top level, assignment inside a function modifies the global. Otherwise it's local.
 
+On m6809 each function has its own locals: `t` in `update_player()` and `t` in `draw_hud()` are two different variables, and a local of `main()` is not visible in `loop()`. To share a value between functions (or keep it from one frame to the next), declare it at the top level. Reading a name that is not a parameter, not assigned in the function and not declared at the top level is a compile error on m6809.
+
 ### Constants
 
 `const` declares a compile-time constant. Constants cannot be reassigned:
@@ -306,14 +308,14 @@ def draw_player(x, y, frame):
     DRAW_VECTOR("player", x, y)
 ```
 
-- On the 6809, arguments are passed through `VAR_ARG0`..`VAR_ARG7` (up to 8); extra arguments are dropped.
+- Calling a function with a different number of arguments than it declares is a compile error on m6809.
 - An array argument is passed as its base address; the function indexes it like an
   array (`arr[i]`, `arr[i] = v`). See [Arrays as parameters](#arrays-as-parameters).
 - A parameter hides a global or `const` with the same name inside its function. Names
   are case-insensitive, so a parameter `b` also hides `const B`.
 - Return value is stored in the D register (16-bit).
-- Functions can call other functions freely.
-- Recursion is not safe (no stack depth protection).
+- Functions can call other functions freely, but not themselves: recursion (direct, or through other functions) is a compile error on m6809 that names the cycle. Write it as a loop.
+- On m6809 a function's parameters and locals live at fixed RAM addresses (its *frame*), not on the stack: the caller stores the arguments straight into the callee's parameter slots, so a parameter keeps its value across the calls the function makes. Functions that can never run at the same time share the same bytes (frames are overlaid by call graph), so locals do not keep their value from one call to the next.
 - Calling a name that is not a builtin, a BIOS routine (m6809) or a function of the program is a compile error with its line.
 
 ### Modules (multiple files)
@@ -444,6 +446,8 @@ Unless a row says otherwise, a builtin works on both backends: **m6809** (cartri
 
 Builtins that take an asset name (`DRAW_VECTOR`, `PLAY_MUSIC`, `PLAY_SFX`, `DRAW_ANIM`, `LOAD_LEVEL`, `SPAWN_ENEMIES`, `PLAY_NOTE`, `DRAW_RECORDING`, `PLAY_SAMPLE`) are covered, with every asset format and folder, in [ASSETS.md](ASSETS.md).
 
+The tables of this section are the doc lines of `vpy_cli builtins` (and so of the IDE's `api_reference` and the `api` block of `ide_get_context`). That command finds the builtins by compiling a call to each candidate for every target, so its target lists are measured; a builtin with no row here fails `cargo test -p vpy_cli`. Write a row as `` | `NAME(args)` | description | `` (the first sentence is the short purpose).
+
 ### Frame control
 
 | Function | Description |
@@ -471,13 +475,26 @@ Builtins that take an asset name (`DRAW_VECTOR`, `PLAY_MUSIC`, `PLAY_SFX`, `DRAW
 | `DRAW_VECTOR("name", x, y[, mirror])` | Draw a `.vec` asset at (x, y) |
 | `DRAW_VECTOR_EX("name", x, y, mirror, intensity)` | Draw a `.vec` asset with mirror and intensity override |
 | `DRAW_VECTOR_3D("name", ax, ay, az, x, y)` | Draw a 3D `.vec` asset rotated by (ax, ay, az) |
+| `DRAW_VECTOR_ROT("name", x, y, angle[, mirror[, intensity]])` | Draw a `.vec` asset turned by `angle` about its origin (0–127 = one full turn, counter-clockwise, the unit of `sin`/`cos`); `mirror` flips it before turning, `intensity` > 0 overrides every path |
 
 **Parameters:**
 - `mirror`: `0`=none, `1`=flip X, `2`=flip Y, `3`=flip both
 - Coordinates are 8-bit signed (-128..127)
 - Intensity values: 0 (off) to 127 (maximum brightness). m6809 lets you omit the trailing `intensity` of the circle, rectangle, arc and ellipse builtins (default `0x5F`); ARM does not, so always pass it
 
+**`DRAW_VECTOR_ROT`:** `angle` is any expression, taken modulo 128 (32 = 90°, 64 = 180°). The sprite turns about the centre of the `.vec`'s bounding box, the point `DRAW_VECTOR` puts at (x, y), and uses the sprite's ordinary path data (no extra ROM per asset). The name must be a string literal naming a `.vec` of the project, and the call takes 4 to 6 arguments; anything else is a compile error with its line, on every target. Per target:
+- m6809: sin/cos are looked up once per call, then each point costs four 8×8 multiplies. Points land on whole units (a point more than 64 units from the centre can be one unit short at angle 0, from the 127/128 scale of the sine table). A sprite source segment longer than 64 units is drawn in two halves. It is not clipped at the screen edge (as single-bank `DRAW_VECTOR`), and without an `intensity` argument each path keeps its own (`SET_INTENSITY` does not override it, as with `DRAW_VECTOR`).
+- rp2350 / uvm2: points are placed in 1/16 units. A `SET_INTENSITY` override of the frame applies when there is no `intensity` argument, as with `DRAW_VECTOR`.
+- pitrex: calls libvpy's `vpy_draw_vector_rot_ex`, which needs an SDK newer than v1.3.2 (the build says so otherwise).
+
 **m6809 limitation:** `DRAW_LINE`, `DRAW_CIRCLE` and `DRAW_RECT` accept variables. `DRAW_POLYGON`, `DRAW_CIRCLE_SEG`, `DRAW_ARC`, `DRAW_FILLED_RECT`, `DRAW_ELLIPSE`, `DRAW_BEZIER` and `DRAW_BEZIER_QUAD` are expanded at compile time and need **constant** arguments; with variables they compile but draw nothing. The ARM backend accepts variables for all of them.
+
+### Animation and recordings
+
+| Function | Description |
+|----------|-------------|
+| `DRAW_ANIM("name", x, y[, mirror[, scale[, speed]]])` | Draw the current frame of a `.vanim` and advance it; call it every frame. `scale` `$7F` = normal size |
+| `DRAW_RECORDING("name", x, y, scale, frame)` | Draw frame `frame` (wrapped) of a `.vrec` recording; `scale` 128 = 100% |
 
 ### Text & Debug
 
@@ -504,6 +521,7 @@ Builtins that take an asset name (`DRAW_VECTOR`, `PLAY_MUSIC`, `PLAY_SFX`, `DRAW
 | `J1_BUTTON_2()` | Same for button 2 |
 | `J1_BUTTON_3()` | Same for button 3 |
 | `J1_BUTTON_4()` | Same for button 4 |
+| `J1_BTN1()` … `J1_BTN4()` | Short names of `J1_BUTTON_1()` … `J1_BUTTON_4()` (ARM targets) |
 
 The analog axes and the buttons are read once per frame by code the compiler injects at the start of `loop()` (on m6809, BIOS `Read_Btns` every frame and `Joy_Analog` only when the program uses an axis). The builtins return the cached values, so calling them several times per frame is cheap. To act once per press, compare with the previous frame's value yourself.
 
@@ -514,10 +532,11 @@ The analog axes and the buttons are read once per frame by code the compiler inj
 | `J2_X()` | Analog X position, signed (same as `J1_X`) |
 | `J2_Y()` | Analog Y position, signed |
 | `J2_BUTTON_1()` … `J2_BUTTON_4()` | 1 while the button is held |
+| `J2_BTN1()` … `J2_BTN4()` | Short names of `J2_BUTTON_1()` … `J2_BUTTON_4()` (ARM targets) |
 | `J2_ANALOG_X()` / `J2_ANALOG_Y()` | Raw unsigned axis byte (0–255). m6809 only |
 | `J2_BUTTON_UP()` / `J2_BUTTON_DOWN()` / `J2_BUTTON_LEFT()` / `J2_BUTTON_RIGHT()` | 1 while the stick is pushed past the threshold in that direction. m6809 only |
 
-`J2_DIGITAL_X()` / `J2_DIGITAL_Y()` are recognised by the m6809 backend but currently fail to assemble (missing `J2X_BUILTIN` helper); use `J2_X()` with a threshold instead.
+`J2_DIGITAL_X()` / `J2_DIGITAL_Y()` do not work yet (see [Recognised but not working](#recognised-but-not-working)).
 
 ### Input — Button Updates
 
@@ -555,7 +574,7 @@ The music/SFX engine is updated automatically every frame when the program uses 
 | `GET_LEVEL_HEIGHT()` | Height of the current level. m6809 only |
 | `GET_LEVEL_TILE(x, y)` | Tile value at (x, y). m6809 only |
 
-On m6809 the level builtins (other than `LOAD_LEVEL`) only assemble in a program that also calls `LOAD_LEVEL`, because the level runtime and its RAM are only linked then. Enemy builtins (`SPAWN_ENEMIES`, `UPDATE_ENEMIES`, `DRAW_ENEMIES`, `GET_ENEMY_X`…) are documented with the `.venemy` format in [ASSETS.md](ASSETS.md).
+On m6809 the level builtins (other than `LOAD_LEVEL`) only assemble in a program that also calls `LOAD_LEVEL`, because the level runtime and its RAM are only linked then. Enemy builtins are listed under [Enemies](#enemies); the `.venemy` format is in [ASSETS.md](ASSETS.md).
 
 #### Scrolling
 
@@ -639,6 +658,25 @@ Each object in a layer:
 
 `worldBounds` documents the intended world extents for the game logic (e.g. for clamping `CAMERA_X`); they are not enforced by the runtime.
 
+### Enemies
+
+Enemies are `.venemy` types placed by a `.vplay` level. `i` is the slot in the enemy pool (0 .. count-1).
+
+| Function | Description |
+|----------|-------------|
+| `SPAWN_ENEMIES("level")` | Spawn the enemies the level places (after `LOAD_LEVEL`) |
+| `UPDATE_ENEMIES()` | Move every live enemy (behaviour, state machine); call once per frame |
+| `DRAW_ENEMIES()` | Draw every live enemy; call once per frame |
+| `GET_ENEMY_ACTIVE(i)` | 1 if slot `i` holds a live enemy, else 0 |
+| `GET_ENEMY_X(i)` / `GET_ENEMY_Y(i)` | Position of enemy `i` |
+| `SET_ENEMY_X(i, x)` / `SET_ENEMY_Y(i, y)` | Move enemy `i` |
+| `GET_ENEMY_HP(i)` | Hit points of enemy `i` |
+| `GET_ENEMY_STATE(i)` / `SET_ENEMY_STATE(i, state)` | State-machine state of enemy `i` (255 = no state machine) |
+| `SET_ENEMY_DIR(i, dir)` | Facing of enemy `i`: 0 left, 1 right |
+| `KILL_ENEMY(i)` | Remove enemy `i`; returns the number of enemies left |
+| `ENEMY_FIRE_EVENT(i, "event")` | Fire a state-machine event on enemy `i` |
+| `GET_ENEMY_AREA_IDX(i)` | Walkable area enemy `i` stands on (255 if inactive); for debugging |
+
 ### Math
 
 #### Basic Functions
@@ -681,6 +719,7 @@ Each object in a layer:
 |----------|-------------|
 | `wait(frames)` | Busy-wait N frames (nothing else runs meanwhile). m6809: `frames` must be a constant (a number, a const or a constant expression, up to 65535) |
 | `beep(period, frames)` | Non-blocking PSG tone: `period` is the PSG tone period (higher = lower pitch), `frames` the duration. m6809 also accepts `beep()` (period 50, 8 frames); on ARM pass both arguments |
+| `len(array)` | Number of elements of a global array (a compile-time constant) |
 | `peek(addr)` | Read one byte from a Vectrex address. m6809: constant `addr` only |
 | `poke(addr, value)` | Write one byte to a Vectrex address. m6809: constant `addr` and `value` only |
 | `DEBUG_PRINT…` | See [Text & Debug](#text--debug) |
@@ -697,6 +736,23 @@ On m6809, `wait`, `peek`, `poke` and `beep(period, frames)` with non-constant ar
 | `CALIBRATE()` | Show the console calibration screen |
 
 See [RP2350_BIOS.md](RP2350_BIOS.md) for the BIOS calls behind them.
+
+### Injected by the compiler
+
+The compiler emits these itself; a program never needs to call them.
+
+| Function | Description |
+|----------|-------------|
+| `WAIT_RECAL()` | Frame sync, injected at the start of every `loop()` |
+| `AUDIO_UPDATE()` | m6809 music/SFX update, injected every frame when the program plays audio |
+| `MUSIC_UPDATE()` / `SFX_UPDATE()` | Music / SFX sequencer step, injected every frame when the program plays audio (m6809: `MUSIC_UPDATE` does not assemble) |
+
+### Recognised but not working
+
+| Function | Description |
+|----------|-------------|
+| `GET_TIME()` | Placeholder: on m6809 it reads a `FRAME_COUNTER` that is never defined, so it does not assemble |
+| `J2_DIGITAL_X()` / `J2_DIGITAL_Y()` | m6809: fail to assemble (missing `J2X_BUILTIN` helper); use `J2_X()` with a threshold |
 
 ---
 
@@ -725,8 +781,9 @@ Common conflicts to avoid: `intensity`, `sin`, `cos`, `tan`, `min`, `max`, `abs`
 ### Variable scope
 
 - Top-level assignments → global (allocated in RAM, persisted across frames)
-- Assignments inside a function → local (stack frame, discarded when function returns)
-- There is no `global` keyword — globals are accessed automatically
+- Assignments inside a function to a name that is not a global → local of that function (on m6809, a slot in the function's static frame; its value is not kept between calls)
+- Parameters hide globals and consts of the same name
+- There is no `global` keyword — assigning to a global's name inside a function writes the global
 
 ### 16-bit unsigned arithmetic
 
@@ -739,13 +796,11 @@ x = -70     # compiled as 65466
 
 This is fine for positions and velocities since the Vectrex coordinate system is signed 8-bit.
 
-### Parameter limit
+### Parameters and recursion (m6809)
 
-On m6809, calls pass at most 8 arguments (`VAR_ARG0`..`VAR_ARG7`); additional arguments are dropped.
+Parameters and locals are 16-bit slots in the function's static frame; there is no limit on the number of parameters other than RAM. A call with the wrong number of arguments is a compile error. Recursion is a compile error (a frame holds one activation of its function): use a loop. The build also fails when the program's variables, frames included, do not fit in the 1 KB of RAM, and warns when fewer than 64 bytes are left for the stack.
 
-### No recursion safety
-
-The compiler does not prevent recursion, but there is no stack overflow detection. Deep recursion will corrupt RAM.
+The ARM targets (rp2350, uvm2, pitrex) do not have frames yet: there, each parameter or local name is one RAM slot shared by every function, and a parameter named like a global writes the global. Until that is fixed, give the parameters and locals of functions that call each other different names on those targets.
 
 ### Comments
 

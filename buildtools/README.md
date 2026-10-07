@@ -46,10 +46,20 @@ Phase 9: vpy_debug_gen  → .pdb file (from linker data)
 - 24 comprehensive tests passing
 
 ### ✅ Phase 4: vpy_bank_allocator (COMPLETE)
-- **Call graph analysis**: Function dependency tracking
-- **Sequential allocation**: First-fit assignment to banks
-- **Tests**: 12 passing (single-bank, multibank, overflow)
-- **Status**: Ready for Phase 7 linker integration
+- **Call graph analysis**: Function dependency tracking; functions that call each other
+  or share assets are clustered into one bank
+- **Pinned entry code**: `main()`/`loop()` (MAIN, LOOP_BODY) always live in bank #0 and
+  are not clustered with the functions they call
+- **Measured sizes**: multibank m6809 builds generate, assemble each code bank, read every
+  function's size off its labels and regenerate with those sizes
+  (`vpy_linker::sizing::generate_m6809`, used by `vpy_cli build` and `asm`). The AST
+  estimate (`graph::estimate_function_size`) is only the first guess; each code bank keeps
+  a 128-byte margin
+- **Errors**: code that does not fit says how many bytes are short and which
+  `META ROM_TOTAL_SIZE` holds it; a function or an asset bigger than a bank is reported
+  by name; link-time bank overflows give the bytes over and the code/data split
+- **Tests**: allocator unit tests + `vpy_linker/tests/bank_sizing.rs` (single-bank,
+  multibank spread, too-big error, estimate vs assembled sizes)
 
 ### ✅ Phase 5: vpy_codegen - Stack Balance Validation (COMPLETE)
 - **Tree Shaking System**: Automatic detection and elimination of unused runtime helpers

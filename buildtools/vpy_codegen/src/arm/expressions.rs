@@ -246,7 +246,7 @@ pub fn emit_expr(
 
 /// Builtins whose first argument is an asset name (string literal → ROM symbol address).
 const ASSET_BUILTINS: &[&str] = &[
-    "DRAW_VECTOR", "DRAW_VECTOR_EX", "DRAW_VECTOR_3D", "PLAY_MUSIC", "PLAY_SFX",
+    "DRAW_VECTOR", "DRAW_VECTOR_EX", "DRAW_VECTOR_3D", "DRAW_VECTOR_ROT", "PLAY_MUSIC", "PLAY_SFX",
     "LOAD_LEVEL", "SHOW_LEVEL", "PLAY_NOTE",
 ];
 
@@ -538,6 +538,39 @@ pub fn emit_call(
                 s.push_str("    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
                 s.push_str("    bl      vpy_draw_vector\n");
             }
+            return Ok(s);
+        }
+    }
+
+    // Special case: DRAW_VECTOR_ROT("name", x, y, angle [, mirror [, intensity]])
+    // ABI: r0=_NAME_VECTORS, r1=x, r2=y, r3=angle, [sp]=mirror, [sp+4]=intensity.
+    // Without an intensity argument the SET_INTENSITY override of the frame is
+    // passed (0 = each path's own), as plain DRAW_VECTOR does.
+    if info.name == "DRAW_VECTOR_ROT" {
+        if let Some(Expr::StringLit(asset_name)) = args.first() {
+            let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
+            let symbol = format!("_{sym_base}_VECTORS");
+            if let Some(intensity) = args.get(5) {
+                s.push_str(&emit_arg(intensity, var_addrs)?);
+            } else {
+                s.push_str("    ldr     r0, =VPY_BRIGHTNESS_OVERRIDE\n    ldrb    r0, [r0]\n");
+            }
+            s.push_str("    push    {r0}\n");
+            if let Some(mirror) = args.get(4) {
+                s.push_str(&emit_arg(mirror, var_addrs)?);
+            } else {
+                s.push_str("    mov     r0, #0\n");
+            }
+            s.push_str("    push    {r0}\n");
+            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
+            s.push_str("    push    {r0}\n");
+            for a in &args[1..4] {
+                s.push_str(&emit_arg(a, var_addrs)?);
+                s.push_str("    push    {r0}\n");
+            }
+            s.push_str("    pop     {r3}\n    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+            s.push_str("    bl      vpy_draw_vector_rot\n");
+            s.push_str("    add     sp, sp, #8          @ discard mirror, intensity\n");
             return Ok(s);
         }
     }

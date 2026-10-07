@@ -151,6 +151,28 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         ram.allocate("ROT3D_VBUF", 254, "3D rotated vertex cache (127 verts × 2 bytes: x',y')");
     }
 
+    // DRAW_VECTOR_ROT scratch (DRAW_VEC_ROT_RUNTIME). ROT2D_PX/PY are written with
+    // one STD, so they must stay adjacent and in this order.
+    if needed.contains("DRAW_VECTOR_ROT") {
+        ram.allocate("ROT2D_ANGLE", 1, "DRAW_VECTOR_ROT angle (0-127 = full turn)");
+        ram.allocate("ROT2D_MIRROR", 1, "DRAW_VECTOR_ROT mirror before rotating (bit0 X, bit1 Y)");
+        ram.allocate("ROT2D_S", 1, "DRAW_VECTOR_ROT sin(angle)*127 (i8)");
+        ram.allocate("ROT2D_C", 1, "DRAW_VECTOR_ROT cos(angle)*127 (i8)");
+        ram.allocate("ROT2D_UX", 1, "DRAW_VECTOR_ROT unrotated sprite-local x");
+        ram.allocate("ROT2D_UY", 1, "DRAW_VECTOR_ROT unrotated sprite-local y");
+        ram.allocate("ROT2D_PX", 1, "DRAW_VECTOR_ROT previous rotated x");
+        ram.allocate("ROT2D_PY", 1, "DRAW_VECTOR_ROT previous rotated y (after PX)");
+        ram.allocate("ROT2D_RX", 1, "DRAW_VECTOR_ROT rotated x being built");
+        ram.allocate("ROT2D_MA", 1, "DRAW_VECTOR_ROT signed multiply operand A");
+        ram.allocate("ROT2D_MB", 1, "DRAW_VECTOR_ROT signed multiply operand B");
+        ram.allocate("ROT2D_ACC", 2, "DRAW_VECTOR_ROT 16-bit product accumulator");
+        ram.allocate("ROT2D_T16", 2, "DRAW_VECTOR_ROT 16-bit product temp");
+        ram.allocate("ROT2D_TMP", 2, "DRAW_VECTOR_ROT beam target / delta (x,y)");
+        ram.allocate("ROT2D_D", 2, "DRAW_VECTOR_ROT source delta (dx,dy)");
+        ram.allocate("ROT2D_H", 2, "DRAW_VECTOR_ROT first half of a split delta");
+        ram.allocate("ROT2D_PC", 2, "DRAW_VECTOR_ROT paths remaining");
+    }
+
     // DRAW_LINE argument buffer (10 bytes: x0, y0, x1, y1, intensity)
     ram.allocate("DRAW_LINE_ARGS", 10, "DRAW_LINE argument buffer (x0,y0,x1,y1,intensity)");
     
@@ -368,23 +390,23 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
     }
 
     // =========================================================================
-    // FUNCTION ARGUMENT SLOTS — allocated EARLY so they always live inside the
-    // 1KB Vectrex RAM window ($C800-$CBFF). When allocated last in a program
-    // with many globals (e.g. SnowBros), VAR_ARG0-4 fell into $CC00+, which
-    // aliases to $C800+ (BIOS music workspace). Each PLAY_MUSIC would then
-    // corrupt VAR_ARG between every frame, breaking PRINT_NUMBER, function
-    // calls, etc.
+    // BUILTIN ARGUMENT SLOTS + FUNCTION FRAMES — allocated EARLY so they always
+    // live inside the 1KB Vectrex RAM window ($C800-$CBFF). When allocated last
+    // in a program with many globals (e.g. SnowBros), the argument slots fell
+    // into $CC00+, which aliases to $C800+ (BIOS music workspace): each
+    // PLAY_MUSIC corrupted them between frames.
     // CURRENT_ROM_BANK has the same problem in multibank ROMs.
+    //
+    // VAR_ARG0-2 are the argument slots of the runtime helpers (PRINT_TEXT,
+    // PRINT_NUMBER, DRAW_LINE...). User functions do not use them: their
+    // parameters and locals live in per-function frames inside FRAME_POOL,
+    // overlaid by call graph (see `frames`).
     // =========================================================================
-    ram.allocate("VAR_ARG0", 2, "Function argument 0 (16-bit)");
-    ram.allocate("VAR_ARG1", 2, "Function argument 1 (16-bit)");
-    ram.allocate("VAR_ARG2", 2, "Function argument 2 (16-bit)");
-    ram.allocate("VAR_ARG3", 2, "Function argument 3 (16-bit)");
-    ram.allocate("VAR_ARG4", 2, "Function argument 4 (16-bit)");
-    ram.allocate("VAR_ARG5", 2, "Function argument 5 (16-bit)");
-    ram.allocate("VAR_ARG6", 2, "Function argument 6 (16-bit)");
-    ram.allocate("VAR_ARG7", 2, "Function argument 7 (16-bit)");
+    ram.allocate("VAR_ARG0", 2, "Builtin argument 0 (16-bit)");
+    ram.allocate("VAR_ARG1", 2, "Builtin argument 1 (16-bit)");
+    ram.allocate("VAR_ARG2", 2, "Builtin argument 2 (16-bit)");
     ram.allocate("CURRENT_ROM_BANK", 1, "Current ROM bank ID (multibank tracking)");
+    allocate_frames(&mut ram);
 
     // =========================================================================
     // USER VARIABLES (continue allocation after system vars)
@@ -411,7 +433,9 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
         ram.allocate("SFX_BANK", 1, "SFX bank ID (for multibank)");
     }
 
-    // (VAR_ARG0-4 + CURRENT_ROM_BANK already allocated above, before user vars.)
+    // (VAR_ARG0-2, CURRENT_ROM_BANK and FRAME_POOL already allocated above, before user vars.)
+
+    check_ram_fits(&ram)?;
 
     // =========================================================================
     // EMIT EQU DEFINITIONS
@@ -435,6 +459,67 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
     asm.push_str("\n");
     
     Ok(asm)
+}
+
+/// Allocate the frame pool and name every parameter/local slot inside it.
+///
+/// The pool is as large as the deepest chain of frames (`FrameLayout::pool_size`);
+/// each slot gets an EQU at pool + frame offset + slot offset, so overlaid frames
+/// give several names to the same bytes.
+fn allocate_frames(ram: &mut RamLayout) {
+    let layout = crate::m6809::context::frames();
+    if layout.pool_size == 0 {
+        return;
+    }
+    let pool = ram.allocate(
+        "FRAME_POOL",
+        layout.pool_size,
+        format!(
+            "Function parameters + locals, frames overlaid by call graph ({} bytes unshared)",
+            layout.unshared_size()
+        ),
+    );
+    for frame in layout.frames.values() {
+        for slot in &frame.slots {
+            let kind = match slot.kind {
+                crate::m6809::frames::SlotKind::Param => "Parameter",
+                crate::m6809::frames::SlotKind::Local => "Local",
+            };
+            ram.alias(
+                &slot.label,
+                pool + frame.offset + slot.offset,
+                slot.size.bytes,
+                format!("{kind} `{}` of {}()", slot.name, frame.function),
+            );
+        }
+    }
+}
+
+/// End of the 1 KB of cartridge-visible RAM ($C800-$CBFF; $CC00-$CFFF mirrors it).
+const RAM_END: usize = 0xCC00;
+/// Bytes left for the hardware stack (it grows down from the top of RAM) below
+/// which the build warns.
+const STACK_HEADROOM: usize = 64;
+
+/// Fail the build when the RAM variables do not fit in RAM; warn when they leave
+/// little room for the stack.
+fn check_ram_fits(ram: &RamLayout) -> Result<(), String> {
+    let end = ram.base_address() as usize + ram.total_size();
+    let frames = crate::m6809::context::frames().pool_size;
+    if end > RAM_END {
+        return Err(format!(
+            "RAM overflow: the program's variables need {} bytes from ${:04X} and end at ${:04X},              past the end of the Vectrex RAM (${:04X}) by {} bytes ({} of them are the function frame pool).              Use 8-bit types (u8/i8) for globals and arrays, fewer or smaller arrays, or fewer locals",
+            ram.total_size(), ram.base_address(), end, RAM_END, end - RAM_END, frames
+        ));
+    }
+    if RAM_END - end < STACK_HEADROOM {
+        eprintln!(
+            "warning: RAM variables end at ${:04X}; only {} bytes are left for the stack (below $CC00)",
+            end,
+            RAM_END - end
+        );
+    }
+    Ok(())
 }
 
 /// Record the helpers a single expression node needs (children are visited by the walker).
@@ -491,6 +576,10 @@ fn note_call_helpers(call_info: &vpy_parser::CallInfo, needed: &mut BTreeSet<Str
     }
     if name_upper == "DRAW_VECTOR_3D" {
         needed.insert("DRAW_VECTOR_3D".to_string());
+        needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
+    }
+    if name_upper == "DRAW_VECTOR_ROT" {
+        needed.insert("DRAW_VECTOR_ROT".to_string());
         needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
     }
     
@@ -878,6 +967,11 @@ pub fn generate_helpers(module: &Module, is_multibank: bool, assets: &[crate::As
     // DRAW_VECTOR_3D_RUNTIME: 3D rotation and drawing
     if needed.contains("DRAW_VECTOR_3D") {
         emit_draw_vector_3d_runtime(&mut asm);
+    }
+
+    // DRAW_VEC_ROT_RUNTIME: .vec sprite rotated about its origin
+    if needed.contains("DRAW_VECTOR_ROT") {
+        emit_draw_vec_rot_runtime(&mut asm, super::builtins::use_banked_assets());
     }
 
     // DRAW_ANIM_RUNTIME: animation player
@@ -1992,6 +2086,287 @@ DV3D_ROTATE:\n\
     RTS\n\
 \n");
     s
+}
+
+/// Emit DRAW_VEC_ROT_RUNTIME (+ DRAW_VEC_ROT_BANKED for distributed assets).
+///
+/// Draws an ordinary `_NAME_VECTORS` sprite (the DRAW_VECTOR data, nothing extra
+/// per asset) turned by ROT2D_ANGLE about its origin. sin/cos are looked up ONCE
+/// per call; each point then costs four 8x8 multiplies. The point is turned from
+/// its unrotated sprite-local position (accumulated from the deltas), not delta by
+/// delta, so rounding never builds up along a path. A source delta over 64 units is
+/// drawn in two halves, which keeps every turned delta inside the 8-bit DAC.
+fn emit_draw_vec_rot_runtime(asm: &mut String, banked: bool) {
+    asm.push_str(r#"; ============================================================================
+; DRAW_VEC_ROT_RUNTIME - .vec sprite rotated about its origin (DRAW_VECTOR_ROT)
+; ============================================================================
+; Input:  X = _NAME_VECTORS (FDB path_count, FDB path pointers)
+;         ROT2D_ANGLE (0-127 = full turn, counter-clockwise), ROT2D_MIRROR (bit0
+;         flip X, bit1 flip Y, in sprite space before turning; flip Y is done as
+;         flip X + half a turn), DRAW_VEC_X/Y = screen position,
+;         DRAW_VEC_INTENSITY (0 = each path's own intensity)
+; Point (u,v) -> ((u*cos - v*sin + 64) >> 7, (u*sin + v*cos + 64) >> 7), cos/sin
+; = SIN_TABLE/COS_TABLE (x127). DP-independent: RAM with '>', VIA by address.
+; Destroys: A, B, X, Y, U
+DRAW_VEC_ROT_RUNTIME:
+    PSHS X
+    LDB >ROT2D_ANGLE
+    LDA >ROT2D_MIRROR
+    BITA #2
+    BEQ DVR_NOFY
+    ADDB #64            ; flip Y = flip X + half a turn
+    EORA #1
+DVR_NOFY:
+    ANDA #1
+    STA >ROT2D_MIRROR   ; 0/1 = flip X from here on
+    ANDB #$7F
+    ASLB                ; FDB entries (angle*2 <= 254)
+    LDX #SIN_TABLE
+    ABX
+    LDA 1,X             ; low byte = sin*127 (i8)
+    STA >ROT2D_S
+    LDX #COS_TABLE
+    ABX
+    LDA 1,X
+    STA >ROT2D_C
+    PULS X
+    LDD ,X++            ; path count
+    STD >ROT2D_PC
+    LBEQ DVR_DONE
+    TFR X,Y             ; Y = path pointer table
+DVR_PATH:
+    LDU ,Y++            ; U = path data
+    ; --- intensity: Z axis sample/hold (BIOS Intensity_a sequence) ---
+    LDA ,U+
+    LDB >DRAW_VEC_INTENSITY
+    BEQ DVR_INT
+    TFR B,A
+DVR_INT:
+    STA >$C832          ; Vec_Misc_Count (as DSWM)
+    STA VIA_port_a
+    LDA #$05
+    STA VIA_port_b
+    LDA #$04
+    STA VIA_port_b
+    STA VIA_port_b
+    LDA #$01
+    STA VIA_port_b
+    ; --- header: y0, x0, 2 pad bytes ---
+    LDB ,U+
+    LDA ,U+
+    LEAU 2,U
+    TST >ROT2D_MIRROR
+    BEQ DVR_HM
+    NEGA
+DVR_HM:
+    STA >ROT2D_UX
+    STB >ROT2D_UY
+    JSR ROT2D_XFORM     ; A = x', B = y'
+    STD >ROT2D_PX       ; PX, PY
+    ADDA >DRAW_VEC_X    ; screen start, saturated to the 8-bit range
+    BVC DVR_SX
+    BMI DVR_SXP
+    LDA #$81
+    BRA DVR_SX
+DVR_SXP:
+    LDA #$7F
+DVR_SX:
+    ADDB >DRAW_VEC_Y
+    BVC DVR_SY
+    BMI DVR_SYP
+    LDB #$81
+    BRA DVR_SY
+DVR_SYP:
+    LDB #$7F
+DVR_SY:
+    STD >ROT2D_TMP
+    ; --- reset integrators, then move to the start (as DSWM) ---
+    CLR VIA_shift_reg
+    LDA #$CC
+    STA VIA_cntl
+    CLR VIA_port_a
+    LDA #$03
+    STA VIA_port_b
+    LDA #$02
+    STA VIA_port_b
+    STA VIA_port_b
+    LDA #$01
+    STA VIA_port_b
+    LDD >ROT2D_TMP
+    STB VIA_port_a      ; Y to DAC
+    CLR VIA_port_b
+    PSHS A              ; settle
+    LDA #$CE
+    STA VIA_cntl
+    CLR VIA_shift_reg
+    INC VIA_port_b
+    PULS A
+    STA VIA_port_a      ; X to DAC
+    LDA #$7F
+    STA VIA_t1_cnt_lo
+    CLR VIA_t1_cnt_hi
+DVR_W1:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ DVR_W1
+DVR_SEG:
+    LDA ,U+             ; flag
+    CMPA #2
+    BEQ DVR_PATH_END
+    LDB ,U+             ; dy
+    LDA ,U+             ; dx
+    TST >ROT2D_MIRROR
+    BEQ DVR_SM
+    NEGA
+DVR_SM:
+    STD >ROT2D_D
+    CMPA #64
+    BGT DVR_SPLIT
+    CMPA #-64
+    BLT DVR_SPLIT
+    CMPB #64
+    BGT DVR_SPLIT
+    CMPB #-64
+    BLT DVR_SPLIT
+    BSR DVR_DRAW
+    BRA DVR_SEG
+DVR_SPLIT:
+    ASRA                ; first half
+    ASRB
+    STD >ROT2D_H
+    BSR DVR_DRAW
+    LDA >ROT2D_D        ; second half = delta - first half
+    SUBA >ROT2D_H
+    LDB >ROT2D_D+1
+    SUBB >ROT2D_H+1
+    BSR DVR_DRAW
+    BRA DVR_SEG
+DVR_PATH_END:
+    LDD >ROT2D_PC
+    SUBD #1
+    STD >ROT2D_PC
+    LBNE DVR_PATH
+DVR_DONE:
+    RTS
+
+; DVR_DRAW - A = dx, B = dy (sprite space): advance the unrotated point, turn it,
+; draw from the previous turned point. PB=1 on entry and exit.
+DVR_DRAW:
+    ADDA >ROT2D_UX
+    STA >ROT2D_UX
+    ADDB >ROT2D_UY
+    STB >ROT2D_UY
+    JSR ROT2D_XFORM     ; A = x', B = y'
+    PSHS D
+    SUBA >ROT2D_PX
+    SUBB >ROT2D_PY
+    STD >ROT2D_TMP      ; turned delta
+    PULS D
+    STD >ROT2D_PX
+    LDD >ROT2D_TMP
+    STB VIA_port_a      ; DY to DAC
+    CLR VIA_port_b
+    NOP
+    NOP
+    NOP
+    INC VIA_port_b
+    STA VIA_port_a      ; DX to DAC
+    LDA #$FF
+    STA VIA_shift_reg   ; beam on
+    CLR VIA_t1_cnt_hi   ; ramp
+DVR_W2:
+    LDA VIA_int_flags
+    ANDA #$40
+    BEQ DVR_W2
+    CLR VIA_port_a
+    CLR VIA_shift_reg   ; beam off
+    RTS
+
+; ROT2D_XFORM - (ROT2D_UX, ROT2D_UY) -> A = x', B = y'
+ROT2D_XFORM:
+    LDA >ROT2D_UX
+    LDB >ROT2D_C
+    BSR ROT2D_SMUL
+    STD >ROT2D_ACC      ; u*cos
+    LDA >ROT2D_UY
+    LDB >ROT2D_S
+    BSR ROT2D_SMUL
+    STD >ROT2D_T16      ; v*sin
+    LDD >ROT2D_ACC
+    SUBD >ROT2D_T16
+    BSR ROT2D_SCALE
+    STA >ROT2D_RX
+    LDA >ROT2D_UX
+    LDB >ROT2D_S
+    BSR ROT2D_SMUL
+    STD >ROT2D_ACC      ; u*sin
+    LDA >ROT2D_UY
+    LDB >ROT2D_C
+    BSR ROT2D_SMUL      ; v*cos
+    ADDD >ROT2D_ACC
+    BSR ROT2D_SCALE
+    TFR A,B
+    LDA >ROT2D_RX
+    RTS
+
+; ROT2D_SMUL - D = A * B, both signed 8-bit (unsigned MUL, then the sign fix-up)
+ROT2D_SMUL:
+    STA >ROT2D_MA
+    STB >ROT2D_MB
+    MUL
+    TST >ROT2D_MA
+    BPL RSM_1
+    SUBA >ROT2D_MB
+RSM_1:
+    TST >ROT2D_MB
+    BPL RSM_2
+    SUBA >ROT2D_MA
+RSM_2:
+    RTS
+
+; ROT2D_SCALE - A = (D + 64) >> 7, clamped to -127..127 (|D| <= 32258)
+ROT2D_SCALE:
+    ADDD #64
+    ASLB
+    ROLA                ; A = bits 14..7, C = sign
+    BCS RSC_NEG
+    TSTA
+    BPL RSC_OK
+    LDA #$7F
+    RTS
+RSC_NEG:
+    TSTA
+    BMI RSC_OK
+    LDA #$81
+RSC_OK:
+    RTS
+
+"#);
+    if banked {
+        asm.push_str(r#"; DRAW_VEC_ROT_BANKED - X = vector asset index: switch to its bank, draw, restore
+DRAW_VEC_ROT_BANKED:
+    TFR X,U
+    LDA >CURRENT_ROM_BANK
+    PSHS A
+    TFR X,D
+    LDX #VECTOR_BANK_TABLE
+    LDA D,X
+    STA >CURRENT_ROM_BANK
+    STA $DF00
+    TFR U,D
+    ASLB
+    ROLA
+    LDX #VECTOR_ADDR_TABLE
+    LEAX D,X
+    LDX ,X              ; _NAME_VECTORS in the asset's bank
+    JSR DRAW_VEC_ROT_RUNTIME
+    PULS A
+    STA >CURRENT_ROM_BANK
+    STA $DF00
+    RTS
+
+"#);
+    }
 }
 
 /// Emit SMUL8 (kept for backward compat), SMUL_LUT, SMUL_PROD table,

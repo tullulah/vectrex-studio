@@ -234,10 +234,9 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
                 emit_mutable_array_init(name, elements.len(), array_copy_counter, &mut asm);
                 array_copy_counter += 1;
             } else {
-                // Non-array initialization: use emit_simple_expr so we handle any
-                // valid initializer (Number, Ident pointing to a const, etc.)
-                expressions::emit_simple_expr(value, &mut asm, assets);
-                asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
+                // Non-array initialization: any valid initializer (Number, Ident
+                // pointing to a const, etc.), stored with the global's width.
+                emit_global_init(name, value, &mut asm, assets);
             }
         }
     }
@@ -355,22 +354,33 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
 }
 
 fn generate_function_body(func: &Function, asm: &mut String, assets: &[AssetInfo]) -> Result<(), String> {
-    // Set parameter mapping so identifiers referencing params use VAR_ARGn
-    context::set_current_function(&vpy_parser::symbols::m6809_label(&func.name));
-    if !func.params.is_empty() {
-        context::set_current_params(&func.params);
+    // Parameters and locals resolve to this function's frame slots (see `frames`);
+    // the caller has already stored the arguments in the parameter slots.
+    let label = vpy_parser::symbols::m6809_label(&func.name);
+    context::set_current_function(&label);
+    if let Some(frame) = context::frame_of(&label) {
+        if frame.size > 0 {
+            asm.push_str(&format!(
+                "    ; frame of {}(): {} bytes at frame pool +{}\n",
+                func.name, frame.size, frame.offset
+            ));
+        }
     }
     let loop_labels: Vec<(String, String)> = Vec::new();
     // Generate code for each statement
-    for stmt in &func.body {
-        generate_statement(stmt, asm, assets, &loop_labels)?;
-    }
-    // Clear parameter mapping after function body
-    if !func.params.is_empty() {
-        context::clear_current_params();
-    }
+    let result = func.body.iter().try_for_each(|stmt| generate_statement(stmt, asm, assets, &loop_labels));
     context::set_current_function("");
-    Ok(())
+    result
+}
+
+/// MAIN startup: store a scalar global's initial value with the global's width.
+fn emit_global_init(name: &str, value: &Expr, asm: &mut String, assets: &[AssetInfo]) {
+    expressions::emit_simple_expr(value, asm, assets);
+    if context::get_var_size(name).bytes == 1 {
+        asm.push_str(&format!("    STB VAR_{}\n", name.to_uppercase()));
+    } else {
+        asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
+    }
 }
 
 /// If a statement's primary expression is a direct call to a builtin/native
@@ -542,13 +552,13 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
             expressions::emit_simple_expr(value, asm, assets);
 
             // 2. Store to variable with correct width dispatch
-            let size = context::get_var_size(name);
-            if size.bytes == 1 {
+            let var_label = expressions::resolve_var_label(name);
+            if context::get_var_size(name).bytes == 1 {
                 // 8-bit store: B already holds low byte from emit_simple_expr
-                asm.push_str(&format!("    STB VAR_{}\n", name.to_uppercase()));
+                asm.push_str(&format!("    STB {}\n", var_label));
             } else {
                 // 16-bit store: D already holds value from emit_simple_expr
-                asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
+                asm.push_str(&format!("    STD {}\n", var_label));
             }
         }
 
@@ -664,14 +674,10 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
 
             let var_label  = expressions::resolve_var_label(var);
             let var_size   = context::get_var_size(var);
-            let ctr_label  = format!("VAR__FI_{}", source_line);
-            let base_label = format!("VAR__FI_{}_BASE", source_line);
-            let len_label  = format!("VAR__FI_{}_LEN", source_line);
-
-            asm.push_str(&format!("    LDD #{}  ; array {} base address\n", base_label_value, array_id.name));
-            asm.push_str(&format!("    STD >{}\n", base_label));
-            asm.push_str(&format!("    LDD #ARRAY_{}_LEN\n", array_id.name.to_uppercase()));
-            asm.push_str(&format!("    STD >{}\n", len_label));
+            // The counter is a local of the function (frame slot); the array base
+            // and length are link-time constants, used as immediates.
+            let ctr_label  = expressions::resolve_var_label(&super::frames::for_in_counter_name(*source_line));
+            let len_value  = format!("ARRAY_{}_LEN", array_id.name.to_uppercase());
 
             // Init counter = 0
             asm.push_str("    LDD #0\n");
@@ -680,7 +686,7 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
             asm.push_str(&format!("{}: ; forin start\n", ls));
             // Condition: ctr < len
             asm.push_str(&format!("    LDD >{}\n", ctr_label));
-            asm.push_str(&format!("    CMPD >{}\n", len_label));
+            asm.push_str(&format!("    CMPD #{}  ; array {} length\n", len_value, array_id.name));
             asm.push_str(&format!("    LBGE {}\n", le));
 
             // Load element: var = base[ctr * element size]
@@ -689,11 +695,18 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
                 asm.push_str("    ASLB\n");
                 asm.push_str("    ROLA                ; D = ctr * 2 (16-bit elements)\n");
             }
-            asm.push_str(&format!("    ADDD >{}\n", base_label));
-            asm.push_str("    TFR D,X\n");
+            // Same addressing as `xs[i]` (emit_index): LDX #base is the form the
+            // multibank linker relocates when a const array moves to the helpers bank.
+            asm.push_str(&format!("    LDX #{}  ; array {} base address\n", base_label_value, array_id.name));
+            asm.push_str("    LEAX D,X            ; X = base + offset\n");
             if elem.bytes == 1 {
-                asm.push_str("    LDB ,X              ; B = arr[ctr] (8-bit element)\n");
-                asm.push_str(if elem.signed { "    SEX                 ; i8: sign-extend\n" } else { "    CLRA                ; u8: zero-extend\n" });
+                if elem.signed {
+                    asm.push_str("    LDB ,X              ; B = arr[ctr] (8-bit element)\n");
+                    asm.push_str("    SEX                 ; i8: sign-extend\n");
+                } else {
+                    asm.push_str("    CLRA                ; u8: zero-extend\n");
+                    asm.push_str("    LDB ,X              ; B = arr[ctr] (8-bit element)\n");
+                }
             } else {
                 asm.push_str("    LDD ,X              ; D = arr[ctr]\n");
             }
@@ -721,34 +734,37 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
             let mut inner_labels = loop_labels.to_vec();
             inner_labels.push((le.clone(), li.clone()));
 
-            let var_label = format!("VAR_{}", var.to_uppercase());
+            // The loop variable is loaded/stored with its own width (a global may be 8-bit).
+            let var_label = expressions::resolve_var_label(var);
+            let store = if context::get_var_size(var).bytes == 1 { "STB" } else { "STD" };
+            let var_expr = Expr::Ident(vpy_parser::IdentInfo { name: var.clone(), source_line: 0, col: 0 });
 
             // Init loop variable = start
             expressions::emit_simple_expr(start, asm, assets);
-            asm.push_str(&format!("    STD >{}\n", var_label));
+            asm.push_str(&format!("    {} >{}\n", store, var_label));
 
             asm.push_str(&format!("{}: ; for start\n", ls));
 
             // Condition: var < end
             expressions::emit_simple_expr(end, asm, assets);
             asm.push_str("    STD >TMPVAL         ; for limit\n");
-            asm.push_str(&format!("    LDD >{}\n", var_label));
+            expressions::emit_simple_expr(&var_expr, asm, assets);
             asm.push_str("    CMPD >TMPVAL\n");
             asm.push_str(&format!("    LBGE {}\n", le));
 
             for s in body { generate_statement(s, asm, assets, &inner_labels)?; }
 
             asm.push_str(&format!("{}: ; for inc\n", li));
-            asm.push_str(&format!("    LDD >{}\n", var_label));
             if let Some(step_expr) = step {
                 expressions::emit_simple_expr(step_expr, asm, assets);
                 asm.push_str("    STD >TMPVAL\n");
-                asm.push_str(&format!("    LDD >{}\n", var_label));
+                expressions::emit_simple_expr(&var_expr, asm, assets);
                 asm.push_str("    ADDD >TMPVAL\n");
             } else {
+                expressions::emit_simple_expr(&var_expr, asm, assets);
                 asm.push_str("    ADDD #1\n");
             }
-            asm.push_str(&format!("    STD >{}\n", var_label));
+            asm.push_str(&format!("    {} >{}\n", store, var_label));
             asm.push_str(&format!("    LBRA {}\n", ls));
             asm.push_str(&format!("{}: ; for end\n", le));
         }
@@ -898,8 +914,7 @@ pub fn generate_functions_by_bank(
                 array_copy_counter += 1;
             } else {
                 // Non-array: emit value (handles Number, Ident→const, expressions)
-                expressions::emit_simple_expr(value, &mut bank0_asm, assets);
-                bank0_asm.push_str(&format!("    STD VAR_{}\n", name.to_uppercase()));
+                emit_global_init(name, value, &mut bank0_asm, assets);
             }
         }
     }

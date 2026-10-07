@@ -113,6 +113,58 @@ pub fn check_len_calls(module: &Module, target: &str) -> Result<(), String> {
     if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
 }
 
+/// Every `DRAW_VECTOR_ROT(...)` names a `.vec` of the project and has 4 to 6
+/// arguments: `("name", x, y, angle [, mirror [, intensity]])`.
+///
+/// Checked before code generation on every target, so a misspelled sprite is an
+/// error with its line instead of an undefined symbol at assembly or link time.
+pub fn check_draw_vector_rot_calls(
+    module: &Module,
+    assets: &[crate::AssetInfo],
+    target: &str,
+) -> Result<(), String> {
+    let mut errors = Vec::new();
+    crate::m6809::ast_walk::for_each_call(module, |call| {
+        if !call.name.eq_ignore_ascii_case("DRAW_VECTOR_ROT") {
+            return;
+        }
+        let line = call.source_line;
+        let n = call.args.len();
+        if !(4..=6).contains(&n) {
+            errors.push(format!(
+                "line {line}: DRAW_VECTOR_ROT takes 4 to 6 arguments (\"name\", x, y, angle [, mirror \
+                 [, intensity]]), got {n}"
+            ));
+            return;
+        }
+        match &call.args[0] {
+            Expr::StringLit(name) => {
+                let known = assets
+                    .iter()
+                    .any(|a| a.name == *name && matches!(a.asset_type, crate::AssetType::Vector));
+                if !known {
+                    let mut vecs: Vec<&str> = assets
+                        .iter()
+                        .filter(|a| matches!(a.asset_type, crate::AssetType::Vector))
+                        .map(|a| a.name.as_str())
+                        .collect();
+                    vecs.sort_unstable();
+                    errors.push(format!(
+                        "line {line}: DRAW_VECTOR_ROT(\"{name}\"): no vector asset named '{name}' on {target} \
+                         (a .vec in assets/vectors/; available: {})",
+                        if vecs.is_empty() { "none".to_string() } else { vecs.join(", ") }
+                    ));
+                }
+            }
+            _ => errors.push(format!(
+                "line {line}: DRAW_VECTOR_ROT needs the asset name as a string literal, e.g. \
+                 DRAW_VECTOR_ROT(\"ship\", x, y, angle)"
+            )),
+        }
+    });
+    if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

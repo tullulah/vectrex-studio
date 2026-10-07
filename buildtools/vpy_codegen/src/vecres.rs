@@ -270,6 +270,31 @@ impl VecResource {
             .collect()
     }
 
+    /// The paths `compile_to_asm_with_name` emits as `_<NAME>_PATH0..N-1`, in
+    /// order: visible paths reordered by `optimized_paths`, degenerate ones
+    /// (< 2 points) dropped, then contiguous open polylines fused by
+    /// `merge_contiguous_paths` when path fusion is on. This is the single
+    /// source of the m6809 path count; code that names `_PATHn` labels must
+    /// use `m6809_emitted_paths().len()`, never `visible_paths().len()`.
+    pub fn m6809_emitted_paths(&self) -> Vec<VecPath> {
+        if self.visible_paths().is_empty() {
+            return Vec::new();
+        }
+        // Greedy nearest-neighbour reorder, then drop 0-segment paths.
+        let paths: Vec<VecPath> = self.optimized_paths()
+            .into_iter()
+            .filter(|p| p.points.len() >= 2)
+            .collect();
+        // Fuse contiguous open polylines so the runtime skips the per-path
+        // re-zero at shared joins (ON by default; `optimized_paths` already
+        // put contiguous paths next to each other).
+        if vec_merge_enabled() {
+            merge_contiguous_paths(paths, vec_merge_max_segs())
+        } else {
+            paths
+        }
+    }
+
     /// Get visible paths reordered to minimize beam-off travel distance.
     ///
     /// Uses greedy nearest-neighbor: starting from screen center (0,0), always
@@ -495,21 +520,10 @@ impl VecResource {
             return asm;
         }
         
-        // Reorder paths to minimise beam-off (dark) travel — greedy nearest-neighbour.
-        // Filter out degenerate paths (< 2 points = 0 segments) before counting — they would
-        // still emit a full v_directMove32 + v_setScale call on PiTrex with nothing drawn.
-        let paths: Vec<VecPath> = self.optimized_paths()
-            .into_iter()
-            .filter(|p| p.points.len() >= 2)
-            .collect();
-        // Stage 2 (opt-in): fuse contiguous open polylines so the runtime skips
-        // the per-path dv_reset at shared joins. `optimized_paths` already put
-        // adjacent contiguous paths next to each other. ON by default.
-        let paths = if vec_merge_enabled() {
-            merge_contiguous_paths(paths, vec_merge_max_segs())
-        } else {
-            paths
-        };
+        // The exact list the `_PATHn` labels are emitted from. Anything that
+        // references those labels (the unrolled DRAW_VECTOR loop in
+        // m6809/builtins.rs) must count `m6809_emitted_paths()` too.
+        let paths = self.m6809_emitted_paths();
         let path_count = paths.len();
         
         asm.push_str(&format!("_{}_VECTORS:  ; Main entry (header + {} path(s))\n", symbol_name, path_count));
@@ -1148,5 +1162,28 @@ mod merge_tests {
     fn stage2_is_on_by_default() {
         // HW-validated on RP2350: ON by default. VPY_VEC_MERGE_PATHS=0 disables.
         assert!(vec_merge_enabled(), "path fusion is ON by default");
+    }
+
+    #[test]
+    fn emitted_paths_match_asm_labels() {
+        // Contiguous a+b fuse (when fusion is on), the 1-point path is dropped,
+        // the closed box is kept: the `_PATHn` labels must be exactly
+        // `m6809_emitted_paths()`, which DRAW_VECTOR's unrolled loop counts.
+        let res: VecResource = serde_json::from_str(r#"{
+            "version": "1.0", "name": "shape",
+            "layers": [{"name": "l", "visible": true, "paths": [
+                {"name": "a", "intensity": 100, "closed": false, "points": [{"x": -40, "y": 0}, {"x": -20, "y": 20}]},
+                {"name": "b", "intensity": 100, "closed": false, "points": [{"x": -20, "y": 20}, {"x": 0, "y": 0}]},
+                {"name": "dot", "intensity": 100, "closed": false, "points": [{"x": 5, "y": 5}]},
+                {"name": "box", "intensity": 80, "closed": true, "points": [{"x": 20, "y": -10}, {"x": 40, "y": -10}, {"x": 40, "y": 10}]}
+            ]}]
+        }"#).expect("parse .vec");
+        let n = res.m6809_emitted_paths().len();
+        let expected = if vec_merge_enabled() { 2 } else { 3 };
+        assert_eq!(n, expected);
+        let asm = res.compile_to_asm_with_name(Some("shape"));
+        let labels = asm.lines().filter(|l| l.starts_with("_SHAPE_PATH")).count();
+        assert_eq!(labels, n, "one _SHAPE_PATHn label per emitted path");
+        assert!(asm.contains(&format!("    FDB {}               ; path_count", n)));
     }
 }

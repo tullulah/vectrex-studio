@@ -240,7 +240,7 @@ const UNIFIED_ITEMS: &[&str] = &[
     "MOVE", "SET_INTENSITY", "DRAW_TO", "DRAW_LINE", "SET_ORIGIN", "PRINT_TEXT", "PRINT_NUMBER",
     // Direct drawing functions
     "DRAW_POLYGON", "DRAW_CIRCLE", "DRAW_CIRCLE_SEG", "DRAW_ARC", "DRAW_SPIRAL",
-    "RECT", "POLYGON", "CIRCLE", "ARC", "SPIRAL", "DRAW_VECTORLIST",
+    "RECT", "POLYGON", "CIRCLE", "ARC", "SPIRAL", "DRAW_VECTORLIST", "DRAW_VECTOR_ROT",
     // Message dispatch system
     "MSG_DEF", "PRINT_MSG",
     // Camera / scroll

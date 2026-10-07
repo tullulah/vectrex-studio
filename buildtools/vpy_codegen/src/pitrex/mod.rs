@@ -54,6 +54,7 @@ pub fn generate_pitrex_asm(
 ) -> Result<String, String> {
     // len() must name a global array (compile-time length), as on m6809.
     crate::validate::check_len_calls(module, "pitrex")?;
+    crate::validate::check_draw_vector_rot_calls(module, assets, "pitrex")?;
 
     let mut asm = String::new();
 

@@ -229,6 +229,7 @@ fn collect_asset_names_from_expr(expr: &Expr, used_names: &mut HashSet<String>) 
             // Check if it's an asset-loading builtin
             let up = name.to_uppercase();
             if up == "DRAW_VECTOR" || up == "DRAW_VECTOR_EX" || up == "DRAW_VECTOR_3D" ||
+               up == "DRAW_VECTOR_ROT" ||
                up == "PLAY_MUSIC" || up == "PLAY_SFX" || up == "LOAD_LEVEL" ||
                up == "DRAW_ANIM" || up == "PLAY_NOTE" || up == "DRAW_RECORDING" ||
                up == "PLAY_SAMPLE" {

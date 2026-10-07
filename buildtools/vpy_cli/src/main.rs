@@ -3,6 +3,7 @@ use colored::*;
 use std::path::{Path, PathBuf};
 use anyhow::{Result, Context};
 
+mod builtins_catalog;
 mod pico;
 mod program;
 mod reproducible;
@@ -234,6 +235,14 @@ enum Commands {
         #[arg(long)]
         ram: bool,
     },
+
+    /// List the VPy builtins: name, signature, doc line (docs/MANUAL.md) and the
+    /// targets whose backend accepts each one (measured by compiling a call)
+    Builtins {
+        /// One JSON object on stdout
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -323,6 +332,23 @@ fn main() -> Result<()> {
             cmd_link(&input, output)?;
         }
         
+        Commands::Builtins { json } => {
+            let catalog = builtins_catalog::build_catalog();
+            if json {
+                println!("{}", builtins_catalog::catalog_json(&catalog));
+            } else {
+                for b in &catalog.builtins {
+                    let sig = b.signature.clone().unwrap_or_else(|| format!("{}(...)", b.name));
+                    let doc = match (&b.doc, &b.alias_of) {
+                        (Some(d), _) => d.clone(),
+                        (None, Some(a)) => format!("alias of {a}"),
+                        (None, None) => "(no doc line in docs/MANUAL.md)".to_string(),
+                    };
+                    println!("{sig:<56} [{}] {doc}", b.targets.join(","));
+                }
+            }
+        }
+
         Commands::Build { input, output, rom_size, bank_size, debug, verbose, target, ram } => {
             println!("{}", "=== FULL BUILD PIPELINE ===".bright_green().bold());
             cmd_build(&input, output, rom_size, bank_size, debug, verbose, target, ram)?;
@@ -770,8 +796,14 @@ fn cmd_asm(input: &PathBuf, rom_size: usize, bank_size: usize, output: Option<Pa
     let assets = discover_assets(&source_path);
 
     // Generate unified ASM using selected backend
-    let generated = vpy_codegen::generate_from_module_with_target(&module, &bank_config, title, &assets, &build_target)
-        .context("Failed to generate ASM")?;
+    let generated = if build_target == vpy_codegen::Target::M6809 {
+        // Same layout as `build` (measured function sizes on multibank).
+        vpy_linker::sizing::generate_m6809(&module, &bank_config, title, &assets, Some(resolve_include_dir()))
+            .map_err(|e| anyhow::anyhow!("Failed to generate ASM: {}", e))?
+    } else {
+        vpy_codegen::generate_from_module_with_target(&module, &bank_config, title, &assets, &build_target)
+            .context("Failed to generate ASM")?
+    };
     
     println!("  ASM size: {} bytes", generated.asm_source.len());
     println!("  Symbols: {}", generated.symbols.len());
@@ -1532,6 +1564,23 @@ fn cmd_build_pitrex(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> 
                 None
             }
         };
+        // libvpy symbols the program calls that only newer SDKs carry: a clear
+        // error naming the SDK instead of an undefined reference at link time.
+        for (sym, builtin) in [("vpy_draw_vector_rot_ex", "DRAW_VECTOR_ROT")] {
+            if !generated.asm_source.contains(&format!("bl      {sym}\n")) {
+                continue;
+            }
+            let has = vpy_c_found.as_ref()
+                .and_then(|d| std::fs::read_to_string(d.join("vpy.c")).ok())
+                .is_some_and(|src| src.contains(sym));
+            if !has {
+                return Err(anyhow::anyhow!(
+                    "{builtin} on pitrex needs libvpy's {sym}, which this SDK does not have{}. \
+                     Pin a newer uvmc2-sdk in the project's [sdk] version, or set UVMC2_SDK=<sdk root>.",
+                    vpy_c_found.as_ref().map(|d| format!(" ({})", d.display())).unwrap_or_default()
+                ));
+            }
+        }
         if let Some(vpy_c_dir) = vpy_c_found {
             let vpy_c   = vpy_c_dir.join("vpy.c");
             let vpy_inc = vpy_c_dir.join("include");
@@ -2359,6 +2408,17 @@ fn vpyproj_project_name(vpyproj: &Path) -> Option<String> {
     None
 }
 
+/// Single-bank link failure; a ROM overflow says how much is over and what to change.
+fn link_error(e: vpy_linker::LinkerError, module: &vpy_parser::Module, assets: &[vpy_codegen::AssetInfo]) -> anyhow::Error {
+    match e {
+        vpy_linker::LinkerError::BinaryTooLarge { size, limit } => anyhow::anyhow!(
+            "Failed to link ROM: {}",
+            vpy_linker::sizing::single_bank_overflow_advice(size, limit, module, assets)
+        ),
+        other => anyhow::Error::new(other).context("Failed to link ROM"),
+    }
+}
+
 fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_size: usize, _debug: bool, verbose: bool, target: String, ram: bool) -> Result<()> {
     // PiTrex target: separate path — no banks, ARM32 toolchain invocation
     if target == "pitrex" {
@@ -2425,7 +2485,9 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
         // Discover assets
         let assets = discover_assets(&input);
         
-        let generated = vpy_codegen::generate_from_module(&unified, &bank_config, title, &assets)
+        // Multibank: generate → assemble → measure → regenerate, so the bank allocator
+        // places functions by their real size.
+        let generated = vpy_linker::sizing::generate_m6809(&unified, &bank_config, title, &assets, Some(resolve_include_dir()))
             .map_err(|e| anyhow::anyhow!("Codegen error: {}", e))?;
         
         println!("  {} Generated {} bytes ASM", "✓".green(), generated.asm_source.len());
@@ -2573,13 +2635,14 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
                     // FATAL ERROR: Multibank build explicitly requested via META but failed
                     // DO NOT fallback to single-bank - user expects multibank ROM
                     eprintln!("\n{}", format!("❌ BUILD FAILED (multibank): {}", e).bright_red().bold());
-                    eprintln!("\n  Multibank ROM generation failed.");
-                    eprintln!("  Project has META ROM_TOTAL_SIZE={} - multibank is REQUIRED.", rom_size);
-                    eprintln!("  Cannot fallback to single-bank (code exceeds 32KB limit).");
-                    eprintln!("\n  Common causes:");
-                    eprintln!("    - Cross-bank symbol references not resolved (PASS 1 failure)");
-                    eprintln!("    - Asset distribution issues (symbols missing from banks)");
-                    eprintln!("    - Syntax errors in generated bank ASM");
+                    if !e.contains("overflow") {
+                        eprintln!("\n  Multibank ROM generation failed.");
+                        eprintln!("  Project has META ROM_TOTAL_SIZE={} - multibank is REQUIRED.", rom_size);
+                        eprintln!("\n  Common causes:");
+                        eprintln!("    - Cross-bank symbol references not resolved (PASS 1 failure)");
+                        eprintln!("    - Asset distribution issues (symbols missing from banks)");
+                        eprintln!("    - Syntax errors in generated bank ASM");
+                    }
                     return Err(anyhow::anyhow!("Multibank build failed: {}", e));
                 }
             }
@@ -2620,7 +2683,7 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
 
         let code_bytes: usize = binaries.iter().map(|b| b.bytes.len()).sum();
         let rom = vpy_linker::link_unified_asm(&generated, binaries)
-            .context("Failed to link ROM")?;
+            .map_err(|e| link_error(e, unified, &assets))?;
         let padded_bytes = rom.rom_data.len();
 
         println!("  {} ROM size: {} bytes", "✓".green(), padded_bytes);
@@ -2694,8 +2757,8 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
     // Discover assets
     let assets = discover_assets(&source_path);
     
-    let generated = vpy_codegen::generate_from_module(&module, &bank_config, title, &assets)
-        .context("Failed to generate ASM")?;
+    let generated = vpy_linker::sizing::generate_m6809(&module, &bank_config, title, &assets, Some(resolve_include_dir()))
+        .map_err(|e| anyhow::anyhow!("Failed to generate ASM: {}", e))?;
     
     if verbose {
         println!("  ASM size: {} bytes", generated.asm_source.len());
@@ -2884,7 +2947,7 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
 
     let code_bytes: usize = binaries.iter().map(|b| b.bytes.len()).sum();
     let rom = vpy_linker::link_unified_asm(&generated, binaries)
-        .context("Failed to link ROM")?;
+        .map_err(|e| link_error(e, &module, &assets))?;
     let padded_bytes = rom.rom_data.len();
 
     if verbose {
@@ -3048,8 +3111,22 @@ fn generate_pdb(
         let Some(addr) = parse_equ_address(trimmed) else { continue };
         if name.starts_with("VAR_") {
             let size = parse_comment_size(trimmed);
-            let clean = name.strip_prefix("VAR_").unwrap_or(name).to_lowercase();
-            let var_type = if line.contains("system") || line.contains("System") { "system" }
+            // A function's parameter or local (m6809 frame slot) is commented
+            // "Parameter `x` of F()" / "Local `x` of F()": it is listed as `f.x`.
+            // Frames of functions that are never active together share addresses.
+            let comment = trimmed.split_once(';').map(|(_, c)| c.trim()).unwrap_or("");
+            let frame_slot = ["Parameter", "Local"].iter().find_map(|kind| {
+                let rest = comment.strip_prefix(kind)?.trim_start().strip_prefix('`')?;
+                let (var, rest) = rest.split_once('`')?;
+                let func = rest.trim_start().strip_prefix("of ")?.split("()").next()?;
+                Some((if *kind == "Parameter" { "param" } else { "local" }, format!("{}.{}", func, var).to_lowercase()))
+            });
+            let clean = match &frame_slot {
+                Some((_, qualified)) => qualified.clone(),
+                None => name.strip_prefix("VAR_").unwrap_or(name).to_lowercase(),
+            };
+            let var_type = if let Some((kind, _)) = frame_slot { kind }
+                else if line.contains("system") || line.contains("System") { "system" }
                 else if line.contains("array") || name.contains("_DATA") { "array" }
                 else { "unknown" };
             variables.insert(clean.clone(), serde_json::json!({

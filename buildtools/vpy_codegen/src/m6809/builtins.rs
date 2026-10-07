@@ -82,6 +82,7 @@ static BUILTIN_ARITIES: &[(&str, usize)] = &[
     ("DRAW_VECTOR", 3),     // name, x, y
     ("DRAW_VECTOR_EX", 5),  // name, x, y, mirror, intensity
     ("DRAW_VECTOR_3D", 6),  // name, ax, ay, az, x, y
+    ("DRAW_VECTOR_ROT", 4), // name, x, y, angle [, mirror [, intensity]]
     
     // Audio functions
     ("PLAY_MUSIC", 1),      // name
@@ -205,6 +206,12 @@ fn validate_builtin_arity(name: &str, arg_count: usize) -> Result<(), String> {
             }
             return Ok(());
         }
+        "DRAW_VECTOR_ROT" => {
+            if !(4..=6).contains(&arg_count) {
+                return Err(format!("DRAW_VECTOR_ROT requires 4 to 6 arguments (name, x, y, angle / +mirror / +intensity), got {}", arg_count));
+            }
+            return Ok(());
+        }
         _ => {}
     }
     
@@ -250,7 +257,11 @@ pub fn emit_builtin(
 
     // CRITICAL: Validate arity BEFORE emitting any code
     if let Err(error) = validate_builtin_arity(name, args.len()) {
-        panic!("Builtin arity error: {}", error);
+        // A compile error with the source line, not a panic: the emitters below
+        // index their arguments, so nothing is emitted for a malformed call.
+        super::diagnostics::error(error);
+        out.push_str("    LDD #0\n");
+        return true;
     }
     
     match up.as_str() {
@@ -666,6 +677,10 @@ pub fn emit_builtin(
         }
         "DRAW_VECTOR_3D" => {
             emit_draw_vector_3d(args, out, assets);
+            true
+        }
+        "DRAW_VECTOR_ROT" => {
+            emit_draw_vector_rot(args, out, assets);
             true
         }
         
@@ -1363,11 +1378,10 @@ fn emit_draw_vector(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             // Find path count
             let path_count = if let Some(asset) = assets.iter().find(|a| a.name == *asset_name && matches!(a.asset_type, AssetType::Vector)) {
                  if let Ok(resource) = VecResource::load(std::path::Path::new(&asset.path)) {
-                    // Must match the filter in vecres.rs compile_to_asm — degenerate
-                    // paths (< 2 points) are dropped from the data table, so the
-                    // unrolled DRAW_VECTOR loop here has to drop them too or it
-                    // references _NAME_PATHN labels that were never emitted.
-                    resource.visible_paths().iter().filter(|p| p.points.len() >= 2).count()
+                    // Same list compile_to_asm emits _NAME_PATHn from (reorder,
+                    // degenerate-path filter AND contiguous-path fusion), or the
+                    // unrolled loop names labels that were never emitted.
+                    resource.m6809_emitted_paths().len()
                  } else {
                     1
                  }
@@ -1464,11 +1478,10 @@ fn emit_draw_vector_ex(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
              // Find path count
             let path_count = if let Some(asset) = assets.iter().find(|a| a.name == *asset_name && matches!(a.asset_type, AssetType::Vector)) {
                  if let Ok(resource) = VecResource::load(std::path::Path::new(&asset.path)) {
-                    // Must match the filter in vecres.rs compile_to_asm — degenerate
-                    // paths (< 2 points) are dropped from the data table, so the
-                    // unrolled DRAW_VECTOR loop here has to drop them too or it
-                    // references _NAME_PATHN labels that were never emitted.
-                    resource.visible_paths().iter().filter(|p| p.points.len() >= 2).count()
+                    // Same list compile_to_asm emits _NAME_PATHn from (reorder,
+                    // degenerate-path filter AND contiguous-path fusion), or the
+                    // unrolled loop names labels that were never emitted.
+                    resource.m6809_emitted_paths().len()
                  } else {
                     1
                  }
@@ -1596,6 +1609,79 @@ fn emit_draw_vector_3d(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
             out.push_str("    LDD #0\n    STD RESULT\n");
         }
     }
+}
+
+/// DRAW_VECTOR_ROT("name", x, y, angle [, mirror [, intensity]]): the `.vec` sprite
+/// turned by `angle` about its origin (0-127 = one full turn, counter-clockwise: the
+/// unit of SIN/COS/DRAW_VECTOR_3D). Parks the arguments in RAM and calls
+/// DRAW_VEC_ROT_RUNTIME (helpers), which looks sin/cos up ONCE per call and turns
+/// every point of the asset's ordinary `_NAME_VECTORS` paths — no extra ROM per asset.
+fn emit_draw_vector_rot(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
+    // Arity already validated by emit_builtin (4..=6).
+    out.push_str("    ; DRAW_VECTOR_ROT: vector asset rotated about its origin\n");
+    let asset_name = match &args[0] {
+        Expr::StringLit(name) => name,
+        _ => {
+            super::diagnostics::error(
+                "DRAW_VECTOR_ROT: the first argument must be the asset name as a string literal",
+            );
+            out.push_str("    LDD #0\n    STD RESULT\n");
+            return;
+        }
+    };
+    if !assets.iter().any(|a| a.name == *asset_name && matches!(a.asset_type, AssetType::Vector)) {
+        super::diagnostics::error(format!(
+            "DRAW_VECTOR_ROT: unknown vector asset \"{asset_name}\" (no assets/vectors/{asset_name}.vec in the project)"
+        ));
+        out.push_str("    LDD #0\n    STD RESULT\n");
+        return;
+    }
+    // Same index VECTOR_ADDR_TABLE uses (see emit_draw_vector).
+    let anim_vec_refs = assets::collect_anim_vec_refs(assets);
+    let mut vector_assets: Vec<_> = assets.iter()
+        .filter(|a| matches!(a.asset_type, AssetType::Vector) && !anim_vec_refs.contains(&a.name))
+        .collect();
+    vector_assets.sort_by(|a, b| a.name.cmp(&b.name));
+    let asset_index = vector_assets.iter().position(|a| a.name == *asset_name).unwrap_or(0);
+    let symbol = format!("_{}", asset_name.to_uppercase().replace("-", "_").replace(" ", "_"));
+
+    let label_id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let skip_label = format!("DRVROT_SKIP_{}", label_id);
+    out.push_str(&format!("    ; Asset: {} (index={})\n", asset_name, asset_index));
+
+    // x: cull when the 16-bit screen x is outside the signed 8-bit range (as DRAW_VECTOR).
+    expressions::emit_simple_expr(&args[1], out, assets);
+    out.push_str("    STA TMPPTR2      ; high byte of 16-bit screen_x\n");
+    out.push_str("    TFR B,A\n");
+    out.push_str("    SEX              ; A = sign of B\n");
+    out.push_str("    CMPA TMPPTR2\n");
+    out.push_str(&format!("    LBNE {}          ; out of 8-bit range — skip draw\n", skip_label));
+    out.push_str("    STB >DRAW_VEC_X\n");
+    expressions::emit_simple_expr(&args[2], out, assets);
+    out.push_str("    STB >DRAW_VEC_Y\n");
+    expressions::emit_simple_expr(&args[3], out, assets);
+    out.push_str("    STB >ROT2D_ANGLE    ; 0-127 = full turn (masked in the runtime)\n");
+    if let Some(mirror) = args.get(4) {
+        expressions::emit_simple_expr(mirror, out, assets);
+        out.push_str("    STB >ROT2D_MIRROR\n");
+    } else {
+        out.push_str("    CLR >ROT2D_MIRROR\n");
+    }
+    if let Some(intensity) = args.get(5) {
+        expressions::emit_simple_expr(intensity, out, assets);
+        out.push_str("    STB >DRAW_VEC_INTENSITY  ; override (0 = per-path .vec intensity)\n");
+    } else {
+        out.push_str("    CLR >DRAW_VEC_INTENSITY  ; use .vec intensities\n");
+    }
+    if use_banked_assets() {
+        out.push_str(&format!("    LDX #{}        ; asset index for lookup\n", asset_index));
+        out.push_str("    JSR DRAW_VEC_ROT_BANKED\n");
+    } else {
+        out.push_str(&format!("    LDX #{}_VECTORS  ; path table\n", symbol));
+        out.push_str("    JSR DRAW_VEC_ROT_RUNTIME\n");
+    }
+    out.push_str(&format!("{}:\n", skip_label));
+    out.push_str("    LDD #0\n    STD RESULT\n");
 }
 
 /// Generate helper function implementations

@@ -44,19 +44,22 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
                 return;
             }
 
-            // Check if this is a function parameter → use VAR_ARGn
+            // Parameter/local → its frame slot; otherwise the global.
             let var_label = resolve_var_label(&id.name);
 
             // Variable references use uppercase labels
             // Check variable size: use LDB + sign/zero-extend for 8-bit, LDD for 16-bit
             let size = context::get_var_size(&id.name);
             if size.bytes == 1 {
-                // 8-bit load: LDB then extend to 16-bit in D (use > for extended addressing)
-                out.push_str(&format!("    LDB >{}\n", var_label));
+                // 8-bit load extended to 16 bits in D (use > for extended addressing).
+                // Z must reflect D afterwards (`if flag:` branches on it), so the
+                // unsigned case clears A BEFORE the load: CLRA after it would set Z.
                 if size.signed {
+                    out.push_str(&format!("    LDB >{}\n", var_label));
                     out.push_str("    SEX             ; Sign-extend B -> D\n");
                 } else {
-                    out.push_str("    CLRA            ; Zero-extend: A=0, B=value\n");
+                    out.push_str("    CLRA            ; Zero-extend: A=0 (before LDB, which sets Z)\n");
+                    out.push_str(&format!("    LDB >{}\n", var_label));
                 }
             } else {
                 // 16-bit load: standard LDD (use > for extended addressing)
@@ -85,37 +88,38 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
                 ));
             }
             
-            // User function call (name already uppercase from unifier)
-            // Evaluate arguments and store in VAR_ARG0..VAR_ARG7.
-            // D already holds the result after emit_simple_expr; no LDD RESULT reload needed.
-            const MAX_USER_ARGS: usize = 8;
-            if call.args.len() > MAX_USER_ARGS {
-                out.push_str(&format!(
-                    "    ; WARNING: {} called with {} args (max {}); extras dropped\n",
-                    call.name, call.args.len(), MAX_USER_ARGS
+            // User function call. Calling convention (see `frames`): the caller
+            // stores each argument straight into the callee's parameter slot (its
+            // static frame), then JSRs; the result comes back in D.
+            let callee = vpy_parser::symbols::m6809_label(&call.name);
+            let params: Vec<String> = context::frame_of(&callee)
+                .map(|f| f.params().map(|p| p.label.clone()).collect())
+                .unwrap_or_default();
+            if call.args.len() != params.len() && super::diagnostics::is_user_function(&call.name) {
+                super::diagnostics::error_at(call.source_line, format!(
+                    "`{}()` takes {} argument{} but is called with {}",
+                    super::frames::display_name(&call.name),
+                    params.len(),
+                    if params.len() == 1 { "" } else { "s" },
+                    call.args.len()
                 ));
             }
-            // Arguments travel in the global VAR_ARGn slots. Storing them one by one
-            // is only safe when no later argument can overwrite an earlier slot
-            // (a call writes VAR_ARGn; a binop may run helpers) and no argument
-            // reads a slot already overwritten (a parameter of THIS function is
-            // VAR_ARGk: `g(b, a)` inside `f(a, b)`). Otherwise every argument is
-            // computed first, waiting on the hardware stack, and then stored.
-            let args: Vec<Expr> = call.args[..call.args.len().min(MAX_USER_ARGS)]
+            let args: Vec<Expr> = call.args[..call.args.len().min(params.len())]
                 .iter()
                 .map(|a| match (is_simple(a), super::consts::fold_expr(a)) {
                     (false, Some(v)) => Expr::Number(v as i32),
                     _ => a.clone(),
                 })
                 .collect();
-            let direct = args.iter().enumerate().all(|(i, a)| match a {
-                Expr::Ident(id) => context::get_param_index(&id.name).map_or(true, |k| k >= i),
-                other => is_simple(other),
-            });
-            if direct {
-                for (i, arg) in args.iter().enumerate() {
+            // A simple argument (number, string, variable) runs no code, so it can
+            // be stored directly: the callee's frame never overlaps the caller's
+            // frame or a global. Any other argument may call a function whose frame
+            // overlaps the callee's (or the callee itself), so every argument is
+            // computed first, waiting on the hardware stack, and then stored.
+            if args.iter().all(is_simple) {
+                for (arg, slot) in args.iter().zip(&params) {
                     emit_simple_expr(arg, out, assets);
-                    out.push_str(&format!("    STD VAR_ARG{}\n", i));
+                    out.push_str(&format!("    STD >{}\n", slot));
                 }
             } else {
                 for (i, arg) in args.iter().enumerate() {
@@ -123,12 +127,12 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
                     if i + 1 < args.len() {
                         out.push_str(&format!("    PSHS D              ; argument {}\n", i));
                     } else {
-                        out.push_str(&format!("    STD VAR_ARG{}\n", i));
+                        out.push_str(&format!("    STD >{}\n", params[i]));
                     }
                 }
                 for i in (0..args.len().saturating_sub(1)).rev() {
                     out.push_str("    PULS D\n");
-                    out.push_str(&format!("    STD VAR_ARG{}\n", i));
+                    out.push_str(&format!("    STD >{}\n", params[i]));
                 }
             }
 
@@ -145,11 +149,11 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
             match op {
                 LogicOp::And => {
                     // Short-circuit AND: if left is false, result is 0 (false)
-                    emit_simple_expr(left, out, assets);
+                    emit_truth_value(left, out, assets);
                     out.push_str(&format!("    LBEQ .LOGIC_{}_FALSE\n", id));
 
                     // Left is true, check right
-                    emit_simple_expr(right, out, assets);
+                    emit_truth_value(right, out, assets);
                     out.push_str(&format!("    LBEQ .LOGIC_{}_FALSE\n", id));
                     
                     // Both true
@@ -162,11 +166,11 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
                 }
                 LogicOp::Or => {
                     // Short-circuit OR: if left is true, result is 1 (true)
-                    emit_simple_expr(left, out, assets);
+                    emit_truth_value(left, out, assets);
                     out.push_str(&format!("    LBNE .LOGIC_{}_TRUE\n", id));
 
                     // Left is false, check right
-                    emit_simple_expr(right, out, assets);
+                    emit_truth_value(right, out, assets);
                     out.push_str(&format!("    LBNE .LOGIC_{}_TRUE\n", id));
                     
                     // Both false
@@ -182,7 +186,7 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
         
         Expr::Not(expr) => {
             let id = LABEL_COUNTER.fetch_add(1, Ordering::SeqCst);
-            emit_simple_expr(expr, out, assets);
+            emit_truth_value(expr, out, assets);
             out.push_str(&format!("    LBNE .NOT_{}_ZERO\n", id));
             out.push_str("    LDD #1\n");
             out.push_str(&format!("    LBRA .NOT_{}_END\n", id));
@@ -311,7 +315,7 @@ pub fn hoisted_indices(args: &[Expr]) -> Vec<usize> {
 }
 
 /// RAM slots `VAR___HOIST<i>` the program needs (builtin calls only; a user
-/// call hoists straight into VAR_ARGn).
+/// call stages its arguments on the stack and stores them in the callee's frame).
 pub fn hoist_slots_needed(module: &vpy_parser::Module) -> usize {
     let mut n = 0;
     super::ast_walk::for_each_call(module, |c| {
@@ -503,6 +507,28 @@ pub fn try_extract_int_literal(expr: &Expr) -> Option<i32> {
     }
 }
 
+/// Does the code [`emit_simple_expr`] emits for `e` end with the Z flag set
+/// exactly when D == 0? (A plain load, ADDD/SUBD, or a 0/1 boolean does; a
+/// call, a helper, a shift, a bit operation or a method does not.)
+fn leaves_z_for_d(e: &Expr) -> bool {
+    match e {
+        Expr::Number(_) | Expr::StringLit(_) | Expr::Ident(_) | Expr::Index { .. } => true,
+        Expr::Compare { .. } | Expr::Logic { .. } | Expr::Not(_) => true,
+        Expr::Binary { op: BinOp::Add | BinOp::Sub, .. } => true,
+        _ => false,
+    }
+}
+
+/// Evaluate `e` into D for a truth test: afterwards Z is set exactly when D == 0,
+/// so the caller can LBEQ / LBNE. Values whose code leaves other flags (a user
+/// function's return value, a helper result, a bit operation) get a `CMPD #0`.
+pub fn emit_truth_value(e: &Expr, out: &mut String, assets: &[AssetInfo]) {
+    emit_simple_expr(e, out, assets);
+    if !leaves_z_for_d(e) {
+        out.push_str("    CMPD #0             ; truth test of the value in D\n");
+    }
+}
+
 /// Branch-if-false peephole for if/elif/while conditions.
 ///
 /// Without this, `if x == LIT` emits ~9 instructions / ~25 cycles because
@@ -540,8 +566,8 @@ pub fn emit_branch_if_false(cond: &Expr, label: &str, out: &mut String, assets: 
             }
         }
     }
-    // Fallback: produce 0/1 in D then branch when zero (= condition false).
-    emit_simple_expr(cond, out, assets);
+    // Fallback: produce the value in D then branch when zero (= condition false).
+    emit_truth_value(cond, out, assets);
     out.push_str(&format!("    LBEQ {}\n", label));
 }
 
@@ -636,18 +662,25 @@ fn emit_index(array: &Expr, index: &Expr, out: &mut String, assets: &[AssetInfo]
         }
     }
     if elem.bytes == 1 {
-        out.push_str("    LDB ,X              ; Load 8-bit element\n");
-        out.push_str(if elem.signed { "    SEX                 ; i8: sign-extend\n" } else { "    CLRA                ; u8: zero-extend\n" });
+        // u8: clear A first so the flags of LDB (Z) describe D.
+        if elem.signed {
+            out.push_str("    LDB ,X              ; Load 8-bit element\n");
+            out.push_str("    SEX                 ; i8: sign-extend\n");
+        } else {
+            out.push_str("    CLRA                ; u8: zero-extend (before LDB, which sets Z)\n");
+            out.push_str("    LDB ,X              ; Load 8-bit element\n");
+        }
     } else {
         out.push_str("    LDD ,X              ; Load 16-bit element\n");
     }
 }
 
-/// Resolve a variable name to its ASM label.
-/// If the name is a function parameter, returns VAR_ARGn; otherwise VAR_NAME.
+/// Resolve a variable name to its ASM label: the frame slot of a parameter or
+/// local of the function being generated (`VAR_<FUNC>__<NAME>`), else the
+/// global `VAR_<NAME>`.
 pub fn resolve_var_label(name: &str) -> String {
-    if let Some(idx) = context::get_param_index(name) {
-        format!("VAR_ARG{}", idx)
+    if let Some(slot) = context::local_slot(name) {
+        slot.label
     } else {
         format!("VAR_{}", name.to_uppercase())
     }

@@ -61,6 +61,7 @@ pub fn get_builtin_arity(func_name: &str) -> Option<AritySpec> {
         "DRAW_VECTOR" => Some(AritySpec::Variable(3)),          // name, x, y [, mirror]
         "DRAW_VECTOR_EX" => Some(AritySpec::Variable(4)),       // name, x, y, mirror [, intensity]
         "DRAW_VECTOR_3D" => Some(AritySpec::Exact(6)),          // name, ax, ay, az, x, y
+        "DRAW_VECTOR_ROT" => Some(AritySpec::Variable(4)),      // name, x, y, angle [, mirror [, intensity]]
         "DRAW_ANIM" => Some(AritySpec::Variable(1)),            // name [, x, y [, mirror [, scale [, speed]]]]
         "DRAW_BEZIER" => Some(AritySpec::Exact(10)),
         "DRAW_BEZIER_QUAD" => Some(AritySpec::Exact(8)),
@@ -282,6 +283,8 @@ pub fn tr(locale: &str, key: &str) -> String {
         ("es", "doc.SPIRAL") => "SPIRAL(cx, cy, r_ini, r_fin, vueltas) o SPIRAL(..., segs)  - dibuja una espiral.",
         ("en", "doc.DRAW_VECTORLIST") => "DRAW_VECTORLIST addr,len  - draws a raw vector list (advanced).",
         ("es", "doc.DRAW_VECTORLIST") => "DRAW_VECTORLIST dir,long  - dibuja una vector list cruda (avanzado).",
+        ("en", "doc.DRAW_VECTOR_ROT") => "DRAW_VECTOR_ROT(\"name\", x, y, angle [, mirror [, intensity]])  - draws a .vec sprite at (x,y) rotated about its centre; angle 0..127 = one full turn counter-clockwise (32 = 90 degrees), as SIN/COS.",
+        ("es", "doc.DRAW_VECTOR_ROT") => "DRAW_VECTOR_ROT(\"nombre\", x, y, ángulo [, espejo [, intensidad]])  - dibuja un sprite .vec en (x,y) girado sobre su centro; ángulo 0..127 = una vuelta completa en sentido antihorario (32 = 90 grados), como SIN/COS.",
 
         // Vectorlist-specific functions
         ("en", "doc.FRAME_BEGIN") => "FRAME_BEGIN intensity  - begins new frame.",
@@ -338,6 +341,7 @@ pub fn builtin_doc(locale: &str, upper: &str) -> Option<String> {
         "ARC" => "doc.ARC",
         "SPIRAL" => "doc.SPIRAL",
         "DRAW_VECTORLIST" | "VECTREX_DRAW_VECTORLIST" => "doc.DRAW_VECTORLIST",
+        "DRAW_VECTOR_ROT" => "doc.DRAW_VECTOR_ROT",
 
         // Vectorlist-specific functions
         "FRAME_BEGIN" | "VECTREX_FRAME_BEGIN" => "doc.FRAME_BEGIN",
