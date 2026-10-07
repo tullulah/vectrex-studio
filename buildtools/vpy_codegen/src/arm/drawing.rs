@@ -94,9 +94,9 @@ fn emit_smul_lut() -> String {
 // BIOS-linked emission: the system primitives are SVC stubs into the cartridge
 // BIOS (see docs/RP2350_BIOS.md and the firmware's syscalls.rs — the canonical
 // numbering; append-only). The BIOS owns the real hardware protocol (E-synced
-// CS-gated bus writes, BIOS.ASM-exact VIA sequences). The emulator traps these
-// SYMBOLS before executing their bodies, so it works unchanged (its Thumb2
-// core also treats a reached SVC as NOP).
+// CS-gated bus writes, BIOS.ASM-exact VIA sequences). The IDE emulator traps
+// some of these symbols before executing their bodies and serves every SVC that
+// is reached through `Rp2350System.onSvc`.
 
 fn emit_dv_reset() -> String {
     let mut s = String::new();

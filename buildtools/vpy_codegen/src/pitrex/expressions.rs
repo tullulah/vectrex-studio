@@ -60,15 +60,9 @@ pub fn emit_expr(
         }
 
         Expr::Ident(info) => {
-            let name_up = info.name.to_uppercase();
-            if let Some(&addr) = var_addrs.get(&name_up) {
-                Ok(format!(
-                    "    ldr     r1, =0x{addr:08X}    @ {}\n    ldr     r0, [r1]\n",
-                    info.name
-                ))
-            } else {
-                Err(format!("Unknown variable: {}", info.name))
-            }
+            // A parameter or local of the function being emitted (its stack
+            // frame, crate::arm::frame), else a global at its fixed address.
+            crate::arm::frame::load_r0(&info.name, var_addrs)
         }
 
         Expr::Binary { op, left, right } => {
@@ -1147,8 +1141,11 @@ pub fn emit_call(
 
     // An unmapped name must be a user function; anything else would only fail
     // at link time ("undefined reference") without a source line.
-    if fn_name == info.name.as_str() && !crate::known_functions::is_defined(&info.name) {
-        return Err(crate::known_functions::unknown_call_error(&info.name, info.source_line));
+    if fn_name == info.name.as_str() {
+        if !crate::known_functions::is_defined(&info.name) {
+            return Err(crate::known_functions::unknown_call_error(&info.name, info.source_line));
+        }
+        crate::known_functions::check_arity(&info.name, args.len(), info.source_line)?;
     }
     s.push_str(&format!("    bl      {fn_name}\n"));
 

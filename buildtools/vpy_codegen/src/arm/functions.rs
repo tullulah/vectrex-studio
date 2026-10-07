@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use super::ram_layout::RamAllocator;
 use super::expressions::emit_expr;
+use super::frame::{self, Scope};
 use super::analysis::Usage;
 use crate::AssetInfo;
 
@@ -18,6 +19,9 @@ pub fn emit_functions(
 ) -> Result<String, String> {
     let mut s = String::new();
 
+    // Parameters and locals of every function (m6809's name-resolution rules,
+    // shared): they live in stack frames, globals at fixed addresses.
+    let scopes = crate::m6809::frames::function_scopes(module)?;
     let (var_addrs, var_decls, scalar_consts) = allocate_globals(module);
 
     // Register scalar consts so expression codegen folds their reads to
@@ -55,11 +59,11 @@ pub fn emit_functions(
             if n == "MAIN" || n == "LOOP" {
                 continue;
             }
-            s.push_str(&emit_function(&func.name, &func.params, &func.body, &var_addrs)?);
+            s.push_str(&emit_function(func, &Scope::of(func, &scopes), &var_addrs)?);
         }
     }
 
-    s.push_str(&emit_game_main(module, &var_addrs, usage)?);
+    s.push_str(&emit_game_main(module, &scopes, &var_addrs, usage)?);
 
     Ok(s)
 }
@@ -133,146 +137,54 @@ fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String, HashMap<S
         }
     }
 
-    // Scan all function bodies (including main/loop) for parameters and local variables.
-    // Allocate RAM for each unique name not already in addrs.
-    for item in &module.items {
-        if let Item::Function(func) = item {
-            // Parameters: saved from r0-r3 at function entry
-            for param in &func.params {
-                ensure_var(param, &mut alloc, &mut addrs, &mut decls, "param");
-            }
-            collect_locals(&func.body, &mut alloc, &mut addrs, &mut decls);
-        }
-    }
-
     (addrs, decls, scalar_consts)
 }
 
-/// Recursively scan `stmts` for local variable declarations/assignments,
-/// allocating RAM for any name not already present in `addrs`.
-/// Handles: Stmt::Let, Stmt::For loop vars, Stmt::Assign to new names.
-fn collect_locals(
-    stmts: &[Stmt],
-    alloc: &mut RamAllocator,
-    addrs: &mut HashMap<String, u32>,
-    decls: &mut String,
-) {
-    for stmt in stmts {
-        match stmt {
-            Stmt::Let { name, .. } => {
-                ensure_var(name, alloc, addrs, decls, "local");
-            }
-            Stmt::Assign { target, .. } => {
-                // Implicit locals: assignment to an undeclared name
-                if let AssignTarget::Ident { name, .. } = target {
-                    ensure_var(name, alloc, addrs, decls, "implicit");
-                }
-            }
-            Stmt::CompoundAssign { target, .. } => {
-                if let AssignTarget::Ident { name, .. } = target {
-                    ensure_var(name, alloc, addrs, decls, "implicit");
-                }
-            }
-            Stmt::For { var, body, .. } => {
-                ensure_var(var, alloc, addrs, decls, "for var");
-                collect_locals(body, alloc, addrs, decls);
-            }
-            Stmt::If { body, elifs, else_body, .. } => {
-                collect_locals(body, alloc, addrs, decls);
-                for (_, elif_body) in elifs {
-                    collect_locals(elif_body, alloc, addrs, decls);
-                }
-                if let Some(else_stmts) = else_body {
-                    collect_locals(else_stmts, alloc, addrs, decls);
-                }
-            }
-            Stmt::While { body, .. } => {
-                collect_locals(body, alloc, addrs, decls);
-            }
-            Stmt::ForIn { var, body, source_line, .. } => {
-                ensure_var(var, alloc, addrs, decls, "forin elem");
-                ensure_var(&format!("_fi_{source_line}"), alloc, addrs, decls, "forin counter");
-                ensure_var(&format!("_fi_{source_line}_base"), alloc, addrs, decls, "forin base ptr");
-                ensure_var(&format!("_fi_{source_line}_len"), alloc, addrs, decls, "forin len");
-                collect_locals(body, alloc, addrs, decls);
-            }
-            Stmt::Switch { cases, default, .. } => {
-                for (_, case_body) in cases {
-                    collect_locals(case_body, alloc, addrs, decls);
-                }
-                if let Some(def) = default {
-                    collect_locals(def, alloc, addrs, decls);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-/// Allocate RAM for `name` if it is not already in `addrs`.
-fn ensure_var(
-    name: &str,
-    alloc: &mut RamAllocator,
-    addrs: &mut HashMap<String, u32>,
-    decls: &mut String,
-    kind: &str,
-) {
-    let varname = name.to_uppercase();
-    if !addrs.contains_key(&varname) {
-        let addr = alloc.alloc(4);
-        decls.push_str(&format!(".equ VAR_{varname}, 0x{addr:08X}  @ {kind}\n"));
-        addrs.insert(varname, addr);
-    }
-}
+/// Registers every user function and game_main push (20 bytes; the frame pads to 8).
+const PUSH: &str = "push    {r4, r5, r6, r7, lr}";
+const POP: &str = "pop     {r4, r5, r6, r7, pc}";
+const PUSHED: u32 = 20;
 
 fn emit_function(
-    name: &str,
-    params: &[String],
-    body: &[Stmt],
+    func: &vpy_parser::Function,
+    scope: &Scope,
     var_addrs: &HashMap<String, u32>,
 ) -> Result<String, String> {
     // Use original-case name as the ARM label (ARM assembly is case-sensitive).
     // Call sites emit `bl name` and the definition emits `name:` — they must match.
+    let name = &func.name;
+    let layout = frame::layout(&[scope], PUSHED, name)?.remove(0);
+    let ret_label = format!(".Lret_{name}");
     let mut s = String::new();
     s.push_str(&format!("@ --- function {name} ---\n"));
     s.push_str(".align 2\n");  // ensure 2-byte alignment after preceding .ltorg padding
     s.push_str(&format!(".global {name}\n.type {name}, %function\n.thumb_func\n{name}:\n"));
-    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
+    s.push_str(&format!("    {PUSH}\n"));
+    // Frame: parameters (r0-r3, then the caller's stack arguments) and locals.
+    s.push_str(&frame::prologue(&layout, &func.params, PUSHED, false));
 
-    // Save incoming arguments to their RAM slots. Args 0-3 arrive in r0-r3
-    // (ARM EABI); args 4+ live on the caller's stack — after our own push
-    // they sit at sp+20+4*(i-4) (5 regs = 20 bytes pushed). Caller pushes
-    // extras in reverse so the first stack arg (i=4) is at the lowest
-    // offset above the saved frame.
-    for (i, param) in params.iter().enumerate() {
-        let varname = param.to_uppercase();
-        let Some(&addr) = var_addrs.get(&varname) else { continue };
-        if i < 4 {
-            s.push_str(&format!(
-                "    ldr     r4, =0x{addr:08X}    @ save param {param}\n    str     r{i}, [r4]\n"
-            ));
-        } else {
-            let stack_off = 20 + (i - 4) * 4;
-            s.push_str(&format!(
-                "    ldr     r5, [sp, #{stack_off}]   @ load stack arg {param}\n\
-                 \x20   ldr     r4, =0x{addr:08X}    @ save param {param}\n\
-                 \x20   str     r5, [r4]\n"
-            ));
+    frame::enter(&layout);
+    let loop_labels: Vec<(String, String)> = Vec::new();
+    let mut body = String::new();
+    for stmt in &func.body {
+        match emit_stmt(stmt, var_addrs, &loop_labels, &ret_label) {
+            Ok(code) => body.push_str(&code),
+            Err(e) => {
+                frame::leave();
+                return Err(e);
+            }
         }
     }
-
-    let loop_labels: Vec<(String, String)> = Vec::new();
-    for stmt in body {
-        // return_label=None: `return` in a helper function emits the real function epilogue
-        s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels, None)?);
-    }
-    s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
+    frame::leave();
+    s.push_str(&body);
+    s.push_str(&frame::epilogue(&ret_label, &layout, POP, false));
     s.push_str("    .ltorg\n\n");
     Ok(s)
 }
 
 fn emit_game_main(
     module: &Module,
+    scopes: &std::collections::BTreeMap<String, crate::m6809::frames::Frame>,
     var_addrs: &HashMap<String, u32>,
     usage: &Usage,
 ) -> Result<String, String> {
@@ -295,7 +207,13 @@ fn emit_game_main(
     s.push_str("@ --- game_main (firmware entry point) ---\n");
     s.push_str(".align 2\n");  // ensure 2-byte alignment after preceding .ltorg padding
     s.push_str(".global game_main\n.type game_main, %function\n.thumb_func\ngame_main:\n");
-    s.push_str("    push    {r4, r5, r6, r7, lr}\n");
+    s.push_str(&format!("    {PUSH}\n"));
+    // One frame holds the locals of main() and, in other slots, those of loop():
+    // they persist across frames like every other variable of the game.
+    let main_scope = main_fn.map(|f| Scope::of(f, scopes)).unwrap_or_default();
+    let loop_scope = loop_fn.map(|f| Scope::of(f, scopes)).unwrap_or_default();
+    let layouts = frame::layout(&[&main_scope, &loop_scope], PUSHED, "game_main")?;
+    s.push_str(&frame::prologue(&layouts[0], &[], PUSHED, false));
 
     // Zero the VPy runtime RAM region [TMPVAL .. USER_RAM_START). RP2350 SRAM holds
     // power-on garbage; the emulator runs with zeroed SRAM, so all system state
@@ -443,16 +361,19 @@ fn emit_game_main(
     // main() body
     if let Some(f) = main_fn {
         s.push_str("    @ main() body\n");
-        for stmt in &f.body {
-            // return_label="game_main_loop": `return` in main() skips to game loop
-            s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels, Some("game_main_loop"))?);
-        }
+        frame::enter(&layouts[0]);
+        // `return` in main() skips to the game loop
+        let body = emit_body(&f.body, var_addrs, &loop_labels, "game_main_loop");
+        frame::leave();
+        s.push_str(&body?);
     }
 
     // Game loop. Per-frame runtime updates are auto-injected ONLY for the
     // engines the program actually uses (same gating as the routine emission
     // in builtins.rs — see arm/analysis.rs).
     s.push_str("game_main_loop:\n");
+    // Drop anything a `return` from inside a switch left on the stack.
+    s.push_str("    mov     sp, r7\n");
     s.push_str("    bl      vpy_wait_recal\n");
     if usage.has("JOYSTICK") {
         s.push_str("    bl      vpy_update_buttons\n");
@@ -476,14 +397,29 @@ fn emit_game_main(
     s.push_str("    mov     r1, #0\n");
     s.push_str("    strb    r1, [r0]\n");
     if let Some(f) = loop_fn {
-        for stmt in &f.body {
-            // return_label="game_main_loop": `return` in loop() jumps to next frame
-            s.push_str(&emit_stmt(stmt, var_addrs, &loop_labels, Some("game_main_loop"))?);
-        }
+        frame::enter(&layouts[1]);
+        // `return` in loop() jumps to the next frame
+        let body = emit_body(&f.body, var_addrs, &loop_labels, "game_main_loop");
+        frame::leave();
+        s.push_str(&body?);
     }
     s.push_str("    b       game_main_loop\n");
     s.push_str("    .ltorg\n\n");
 
+    Ok(s)
+}
+
+/// The statements of a body, in order.
+fn emit_body(
+    stmts: &[Stmt],
+    var_addrs: &HashMap<String, u32>,
+    loop_labels: &[(String, String)],
+    return_label: &str,
+) -> Result<String, String> {
+    let mut s = String::new();
+    for stmt in stmts {
+        s.push_str(&emit_stmt(stmt, var_addrs, loop_labels, return_label)?);
+    }
     Ok(s)
 }
 
@@ -526,21 +462,14 @@ fn emit_stmt(
     stmt: &Stmt,
     var_addrs: &HashMap<String, u32>,
     loop_labels: &[(String, String)],  // stack of (break_label, continue_label)
-    return_label: Option<&str>,        // when Some(lbl), `return` branches to lbl instead of popping
+    return_label: &str,                // `return` branches here (function epilogue / next frame)
 ) -> Result<String, String> {
     match stmt {
         Stmt::Assign { target, value, .. } => {
             let mut s = emit_expr(value, var_addrs)?;
             match target {
                 AssignTarget::Ident { name, .. } => {
-                    let varname = name.to_uppercase();
-                    if let Some(&addr) = var_addrs.get(&varname) {
-                        s.push_str(&format!(
-                            "    ldr     r1, =0x{addr:08X}    @ {name}\n    str     r0, [r1]\n"
-                        ));
-                    } else {
-                        return Err(format!("Unknown variable: {name}"));
-                    }
+                    s.push_str(&frame::store_r0(name, var_addrs)?);
                 }
                 AssignTarget::Index { target, index, .. } => {
                     // r0 = value; now compute element address
@@ -561,12 +490,7 @@ fn emit_stmt(
 
         Stmt::Let { name, value, .. } => {
             let mut s = emit_expr(value, var_addrs)?;
-            let varname = name.to_uppercase();
-            if let Some(&addr) = var_addrs.get(&varname) {
-                s.push_str(&format!(
-                    "    ldr     r1, =0x{addr:08X}\n    str     r0, [r1]\n"
-                ));
-            }
+            s.push_str(&frame::store_r0(name, var_addrs)?);
             Ok(s)
         }
 
@@ -574,18 +498,13 @@ fn emit_stmt(
             let mut s = String::new();
             match target {
                 AssignTarget::Ident { name, .. } => {
-                    let varname = name.to_uppercase();
-                    if let Some(&addr) = var_addrs.get(&varname) {
-                        s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    ldr     r0, [r1]\n"));
-                        s.push_str("    push    {r0}       @ left operand\n");
-                        s.push_str(&emit_expr(value, var_addrs)?);
-                        s.push_str("    mov     r1, r0\n");
-                        s.push_str("    pop     {r0}\n");
-                        emit_binop_on_regs(op, &mut s)?;
-                        s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    str     r0, [r1]\n"));
-                    } else {
-                        return Err(format!("Unknown variable: {name}"));
-                    }
+                    s.push_str(&frame::load_r0(name, var_addrs)?);
+                    s.push_str("    push    {r0}       @ left operand\n");
+                    s.push_str(&emit_expr(value, var_addrs)?);
+                    s.push_str("    mov     r1, r0\n");
+                    s.push_str("    pop     {r0}\n");
+                    emit_binop_on_regs(op, &mut s)?;
+                    s.push_str(&frame::store_r0(name, var_addrs)?);
                 }
                 AssignTarget::Index { target, index, .. } => {
                     // Load current element value
@@ -664,8 +583,6 @@ fn emit_stmt(
 
         Stmt::For { var, start, end, step, body, .. } => {
             let id = next_id();
-            let varname = var.to_uppercase();
-            let addr = var_addrs.get(&varname).copied().unwrap_or(0);
             // continue jumps to the increment step, not the top (where the condition check is)
             let break_lbl    = format!("for_end_{id}");
             let continue_lbl = format!("for_inc_{id}");
@@ -675,11 +592,11 @@ fn emit_stmt(
 
             // init: var = start
             s.push_str(&emit_expr(start, var_addrs)?);
-            s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    str     r0, [r1]\n"));
+            s.push_str(&frame::store_r0(var, var_addrs)?);
 
             s.push_str(&format!("for_top_{id}:\n"));
             // condition: var < end
-            s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    ldr     r0, [r1]\n"));
+            s.push_str(&frame::load_r0(var, var_addrs)?);
             s.push_str("    push    {r0}\n");
             s.push_str(&emit_expr(end, var_addrs)?);
             s.push_str("    mov     r1, r0\n    pop     {r0}\n");
@@ -693,9 +610,9 @@ fn emit_stmt(
             let step_val = step.as_ref().map(|e| {
                 if let Expr::Number(n) = e { *n } else { 1 }
             }).unwrap_or(1);
-            s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    ldr     r0, [r1]\n"));
+            s.push_str(&frame::load_r0(var, var_addrs)?);
             s.push_str(&format!("    add     r0, r0, #{step_val}\n"));
-            s.push_str(&format!("    str     r0, [r1]\n"));
+            s.push_str(&frame::store_r0(var, var_addrs)?);
             s.push_str(&format!("    b       for_top_{id}\n"));
             s.push_str(&format!("for_end_{id}:\n"));
             Ok(s)
@@ -703,21 +620,11 @@ fn emit_stmt(
 
         Stmt::Return(Some(expr), _) => {
             let mut s = emit_expr(expr, var_addrs)?;
-            if let Some(lbl) = return_label {
-                s.push_str(&format!("    b       {lbl}\n"));
-            } else {
-                s.push_str("    pop     {r4, r5, r6, r7, pc}\n");
-            }
+            s.push_str(&format!("    b       {return_label}\n"));
             Ok(s)
         }
 
-        Stmt::Return(None, _) => {
-            if let Some(lbl) = return_label {
-                Ok(format!("    b       {lbl}\n"))
-            } else {
-                Ok("    pop     {r4, r5, r6, r7, pc}\n".to_string())
-            }
-        }
+        Stmt::Return(None, _) => Ok(format!("    b       {return_label}\n")),
 
         Stmt::Break { .. } => {
             if let Some((break_lbl, _)) = loop_labels.last() {
@@ -739,19 +646,14 @@ fn emit_stmt(
 
         Stmt::ForIn { var, iterable, body, source_line, .. } => {
             let id = next_id();
-            let varname    = var.to_uppercase();
-            let ctr_name   = format!("_fi_{source_line}").to_uppercase();
-            let base_name  = format!("_fi_{source_line}_base").to_uppercase();
-            let len_name   = format!("_fi_{source_line}_len").to_uppercase();
-
-            let var_addr  = var_addrs.get(&varname).copied()
-                .ok_or_else(|| format!("ForIn var {var} not allocated"))?;
-            let ctr_addr  = var_addrs.get(&ctr_name).copied()
-                .ok_or_else(|| format!("ForIn counter {ctr_name} not allocated"))?;
-            let base_addr = var_addrs.get(&base_name).copied()
-                .ok_or_else(|| format!("ForIn base {base_name} not allocated"))?;
-            let len_addr  = var_addrs.get(&len_name).copied()
-                .ok_or_else(|| format!("ForIn len {len_name} not allocated"))?;
+            // Counter, base pointer and length are hidden locals of the frame.
+            let hidden = |name: String| {
+                frame::slot(&name).ok_or_else(|| format!("for-in slot {name} not in the frame"))
+            };
+            let ctr  = hidden(frame::for_in_counter(*source_line))?;
+            let base = hidden(frame::for_in_base(*source_line))?;
+            let len  = hidden(frame::for_in_len(*source_line))?;
+            let fp = frame::FP;
 
             let break_lbl    = format!("forin_end_{id}");
             let continue_lbl = format!("forin_inc_{id}");
@@ -760,9 +662,9 @@ fn emit_stmt(
 
             let mut s = String::new();
 
-            // Evaluate array base pointer, save to RAM
+            // Evaluate array base pointer, save it in the frame
             s.push_str(&emit_expr(iterable, var_addrs)?);
-            s.push_str(&format!("    ldr     r1, =0x{base_addr:08X}\n    str     r0, [r1]    @ forin base ptr\n"));
+            s.push_str(&format!("    str     r0, [{fp}, #{base}]    @ forin base ptr\n"));
 
             // Array length — compile-time constant via ARRAY_NAME_LEN equate
             let len_asm = if let Expr::Ident(id_info) = iterable {
@@ -771,34 +673,34 @@ fn emit_stmt(
                 "    mov     r0, #0             @ unknown array len\n".to_string()
             };
             s.push_str(&len_asm);
-            s.push_str(&format!("    ldr     r1, =0x{len_addr:08X}\n    str     r0, [r1]    @ forin len\n"));
+            s.push_str(&format!("    str     r0, [{fp}, #{len}]    @ forin len\n"));
 
             // Init counter = 0
             s.push_str("    mov     r0, #0\n");
-            s.push_str(&format!("    ldr     r1, =0x{ctr_addr:08X}\n    str     r0, [r1]\n"));
+            s.push_str(&format!("    str     r0, [{fp}, #{ctr}]    @ forin counter\n"));
 
             s.push_str(&format!("forin_top_{id}:\n"));
             // Condition: ctr < len
-            s.push_str(&format!("    ldr     r1, =0x{ctr_addr:08X}\n    ldr     r0, [r1]\n"));
-            s.push_str(&format!("    ldr     r1, =0x{len_addr:08X}\n    ldr     r1, [r1]\n"));
+            s.push_str(&format!("    ldr     r0, [{fp}, #{ctr}]\n"));
+            s.push_str(&format!("    ldr     r1, [{fp}, #{len}]\n"));
             s.push_str("    cmp     r0, r1\n");
             s.push_str(&format!("    bge     forin_end_{id}\n"));
 
             // Load element: var = base_ptr[ctr * 2]  (i16 elements)
-            s.push_str(&format!("    ldr     r1, =0x{base_addr:08X}\n    ldr     r1, [r1]\n"));
-            s.push_str(&format!("    ldr     r2, =0x{ctr_addr:08X}\n    ldr     r2, [r2]\n"));
+            s.push_str(&format!("    ldr     r1, [{fp}, #{base}]\n"));
+            s.push_str(&format!("    ldr     r2, [{fp}, #{ctr}]\n"));
             s.push_str("    lsl     r2, r2, #1     @ ctr * 2\n");
             s.push_str("    add     r1, r1, r2\n");
             s.push_str("    ldrsh   r0, [r1]       @ load i16 element\n");
-            s.push_str(&format!("    ldr     r1, =0x{var_addr:08X}\n    str     r0, [r1]    @ var = arr[ctr]\n"));
+            s.push_str(&frame::store_r0(var, var_addrs)?);
 
             for st in body { s.push_str(&emit_stmt(st, var_addrs, &inner_labels, return_label)?); }
 
             // Continue target: increment counter
             s.push_str(&format!("forin_inc_{id}:\n"));
-            s.push_str(&format!("    ldr     r1, =0x{ctr_addr:08X}\n    ldr     r0, [r1]\n"));
+            s.push_str(&format!("    ldr     r0, [{fp}, #{ctr}]\n"));
             s.push_str("    add     r0, r0, #1\n");
-            s.push_str("    str     r0, [r1]\n");
+            s.push_str(&format!("    str     r0, [{fp}, #{ctr}]\n"));
             s.push_str(&format!("    b       forin_top_{id}\n"));
             s.push_str(&format!("forin_end_{id}:\n"));
             Ok(s)

@@ -1479,6 +1479,32 @@ export class Rp2350System implements ISystem, IBus {
         this.armBeamY = ALG_CENTER_Y - (cpu.getReg(1) | 0) * ARM_ALG_SCALE;
         break;
       }
+      // #28/#29 — the same move/stroke as #3/#4 in 1/16 of a unit (q4). The ARM
+      // backend reaches them through dv_move_to_q4 / dv_draw_delta_q4, which every
+      // builtin that computes with a fraction uses: DRAW_VECTOR_EX (scale),
+      // DRAW_VECTOR_ROT (sin/cos), circles, arcs, curves. dv_move_to / dv_draw_delta
+      // are PC-trapped and never get here, but the _q4 entry points are not, so
+      // before these cases those sprites were invisible in this emulator.
+      // The cartridge SDK is built with UVM2_SUBUNITS (uvm2.mk), so the firmware
+      // keeps the fraction end to end (uvm2_draw_move_q4 / uvm2_draw_delta_q4);
+      // so does this: ALG = q4 * ARM_ALG_SCALE / 16, no rounding. The firmware's
+      // split() into ≤ramp-limit pieces is collinear, so one segment here is the
+      // same line.
+      case 28: { // SYS_MOVE_Q4(r0=dx_q4, r1=dy_q4) — blanked delta move
+        this.armBeamX += (cpu.getReg(0) | 0) * ARM_ALG_SCALE / 16;
+        this.armBeamY -= (cpu.getReg(1) | 0) * ARM_ALG_SCALE / 16;
+        break;
+      }
+      case 29: { // SYS_DRAW_DELTA_Q4(r0=dx_q4, r1=dy_q4) — lit segment
+        const newX = this.armBeamX + (cpu.getReg(0) | 0) * ARM_ALG_SCALE / 16;
+        const newY = this.armBeamY - (cpu.getReg(1) | 0) * ARM_ALG_SCALE / 16;
+        const clipped = clipSegment(this.armBeamX, this.armBeamY, newX, newY);
+        if (clipped !== null) {
+          this.beam.addSegmentDirect(clipped[0], clipped[1], clipped[2], clipped[3], this.armIntensity);
+        }
+        this.armBeamX = newX; this.armBeamY = newY;
+        break;
+      }
       // #16 PRINT_TEXT: libvpy renders text via v_directDraw32, not this call.
       //
       // #21/#22/#23 — core-1 music/SFX. These were no-ops on the premise that

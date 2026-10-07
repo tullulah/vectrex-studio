@@ -28,6 +28,26 @@
 //!    the SAME string. Entry-module symbols are upper-cased (no prefix).
 //! 5. **Validation**: a `module.symbol` that does not resolve is an error with
 //!    the module and line, never a silent pass-through.
+//!
+//! # Scopes inside a function
+//!
+//! VPy follows Python's function scope, with VPy's one difference (there is no
+//! `global` keyword):
+//! - a parameter is local (it shadows any top-level name);
+//! - a name assigned in the function (`x = …`, `x += …`, `for x in …`) is the
+//!   module-level symbol if the module defines it or imports it with
+//!   `from m import x` (assigning writes that global), otherwise it is a local;
+//! - a module never sees another module's globals or consts by their bare name —
+//!   not even the main program's: reading one is an error.
+//!
+//! Every module's symbols land in ONE namespace (the entry module's unprefixed),
+//! and the backends resolve a name there, case-insensitively. So a parameter or
+//! local whose name equals a top-level variable or const it does NOT refer to
+//! (an imported module's `x` vs the main program's global `x`; a main-program
+//! local `physics_x` vs `physics.x` → `PHYSICS_x`; a parameter `x` shadowing
+//! its own module's global `x`) is renamed by the unifier to
+//! `<name>__L` (with a counter if that is taken), at its declaration and at
+//! every use, so it can never be taken for that global.
 
 pub mod error;
 pub mod graph;
@@ -75,6 +95,65 @@ struct ModuleSymbols {
     defs: HashMap<String, (String, SymKind)>,
 }
 
+/// Upper-case unified name → (module, definition spelling) of every top-level
+/// variable or const of the program: the names a backend resolves globally.
+type ProgramVars = HashMap<String, (String, String)>;
+
+fn program_vars(tables: &HashMap<String, ModuleSymbols>, entry: &str) -> ProgramVars {
+    let mut vars = ProgramVars::new();
+    let mut modules: Vec<&String> = tables.keys().collect();
+    modules.sort();
+    for module in modules {
+        for (def, kind) in tables[module].defs.values() {
+            if *kind != SymKind::Function {
+                vars.entry(canonical(module, entry, def).to_uppercase())
+                    .or_insert_with(|| (module.clone(), def.clone()));
+            }
+        }
+    }
+    vars
+}
+
+/// Names a function body assigns (`x = …`, `x += …`, `for x in …`), in order.
+fn assigned_names(body: &[Stmt], out: &mut Vec<String>) {
+    for stmt in body {
+        match stmt {
+            Stmt::Assign { target: AssignTarget::Ident { name, .. }, .. }
+            | Stmt::CompoundAssign { target: AssignTarget::Ident { name, .. }, .. }
+            | Stmt::Let { name, .. } => out.push(name.clone()),
+            Stmt::For { var, body, .. } | Stmt::ForIn { var, body, .. } => {
+                out.push(var.clone());
+                assigned_names(body, out);
+            }
+            Stmt::If { body, elifs, else_body, .. } => {
+                assigned_names(body, out);
+                for (_, b) in elifs {
+                    assigned_names(b, out);
+                }
+                if let Some(b) = else_body {
+                    assigned_names(b, out);
+                }
+            }
+            Stmt::While { body, .. } => assigned_names(body, out),
+            Stmt::Switch { cases, default, .. } => {
+                for (_, b) in cases {
+                    assigned_names(b, out);
+                }
+                if let Some(b) = default {
+                    assigned_names(b, out);
+                }
+            }
+            Stmt::Assign { .. }
+            | Stmt::CompoundAssign { .. }
+            | Stmt::Return(..)
+            | Stmt::Expr(..)
+            | Stmt::Break { .. }
+            | Stmt::Continue { .. }
+            | Stmt::Pass { .. } => {}
+        }
+    }
+}
+
 impl ModuleSymbols {
     fn of(module: &Module) -> Self {
         let mut defs = HashMap::new();
@@ -120,6 +199,8 @@ pub fn unify_modules(
         .map(|(name, m)| (name.clone(), ModuleSymbols::of(m)))
         .collect();
 
+    let vars = program_vars(&tables, entry_module);
+
     let mut diags: Vec<Diagnostic> = Vec::new();
 
     // Phase 3.1: Build graph (nodes + one edge per import)
@@ -158,7 +239,7 @@ pub fn unify_modules(
         if module_name == entry_module {
             merged_meta = module.meta.clone();
         }
-        let mut ctx = Ctx::new(module_name, entry_module, module, &modules, &tables);
+        let mut ctx = Ctx::new(module_name, entry_module, module, &modules, &tables, &vars);
         for item in &module.items {
             merged_items.push(ctx.rewrite_item(item));
         }
@@ -295,14 +376,19 @@ struct Ctx<'a> {
     entry: &'a str,
     modules: &'a HashMap<String, Module>,
     tables: &'a HashMap<String, ModuleSymbols>,
+    /// top-level variables and consts of the whole program
+    vars: &'a ProgramVars,
     /// lower-case name usable as `name.x` → module it refers to (`import m [as a]`)
     module_aliases: HashMap<String, String>,
     /// lower-case local name → (module, definition spelling) for `from m import s [as a]`
     named: HashMap<String, (String, String)>,
     /// lower-case names of imported modules whose file is missing (already reported)
     missing: HashSet<String>,
-    /// lower-case parameter names of the function being rewritten
-    params: HashSet<String>,
+    /// lower-case names of the parameters and locals of the function being rewritten
+    locals: HashSet<String>,
+    /// lower-case local name → its new name, for the locals that would clash
+    /// with a top-level variable or const of another module (see the crate docs)
+    renamed: HashMap<String, String>,
     diags: Vec<Diagnostic>,
 }
 
@@ -313,6 +399,7 @@ impl<'a> Ctx<'a> {
         m: &Module,
         modules: &'a HashMap<String, Module>,
         tables: &'a HashMap<String, ModuleSymbols>,
+        vars: &'a ProgramVars,
     ) -> Self {
         let mut module_aliases = HashMap::new();
         let mut named = HashMap::new();
@@ -352,10 +439,12 @@ impl<'a> Ctx<'a> {
             entry,
             modules,
             tables,
+            vars,
             module_aliases,
             named,
             missing,
-            params: HashSet::new(),
+            locals: HashSet::new(),
+            renamed: HashMap::new(),
             diags: Vec::new(),
         }
     }
@@ -364,13 +453,14 @@ impl<'a> Ctx<'a> {
         self.diags.push(Diagnostic { module: self.module.to_string(), line, message });
     }
 
-    fn is_param(&self, name: &str) -> bool {
-        self.params.contains(&name.to_lowercase())
+    /// A parameter or local of the function being rewritten.
+    fn is_local(&self, name: &str) -> bool {
+        self.locals.contains(&name.to_lowercase())
     }
 
     /// Resolve a bare top-level name: own module first, then `from … import`.
     fn resolve_bare(&self, name: &str) -> Option<(String, SymKind)> {
-        if self.is_param(name) {
+        if self.is_local(name) {
             return None;
         }
         if let Some((def, kind)) = self.tables[self.module].get(name) {
@@ -385,6 +475,9 @@ impl<'a> Ctx<'a> {
 
     /// Unified name for an identifier used as a value / call target.
     fn ident_name(&self, name: &str) -> String {
+        if let Some(renamed) = self.renamed.get(&name.to_lowercase()) {
+            return renamed.clone();
+        }
         match self.resolve_bare(name) {
             Some((unified, _)) => unified,
             // locals, params, builtins: upper-case, as the backends expect
@@ -395,6 +488,9 @@ impl<'a> Ctx<'a> {
     /// Unified name for a name that DECLARES a local (`for v in`, `let v`).
     /// Kept as written unless it is a module-level symbol of an imported module.
     fn local_decl_name(&self, name: &str) -> String {
+        if let Some(renamed) = self.renamed.get(&name.to_lowercase()) {
+            return renamed.clone();
+        }
         if self.module == self.entry {
             return name.to_string();
         }
@@ -404,10 +500,76 @@ impl<'a> Ctx<'a> {
         }
     }
 
+    /// Declare the parameters and locals of `func` (see the crate docs) and
+    /// rename those that would clash with another module's top-level variable.
+    fn enter_function(&mut self, func: &vpy_parser::ast::Function) {
+        self.locals = func.params.iter().map(|p| p.to_lowercase()).collect();
+        self.renamed.clear();
+        let mut names: Vec<String> = func.params.clone();
+        let mut assigned = Vec::new();
+        assigned_names(&func.body, &mut assigned);
+        for name in assigned {
+            if !self.is_local(&name) && self.resolve_bare(&name).is_none() {
+                self.locals.insert(name.to_lowercase());
+                names.push(name);
+            }
+        }
+        let mut taken: HashSet<String> = names.iter().map(|n| n.to_uppercase()).collect();
+        for name in &names {
+            let lower = name.to_lowercase();
+            if self.renamed.contains_key(&lower) || !self.vars.contains_key(&name.to_uppercase()) {
+                continue;
+            }
+            let mut n = 1;
+            let fresh = loop {
+                let candidate = if n == 1 { format!("{name}__L") } else { format!("{name}__L{n}") };
+                let upper = candidate.to_uppercase();
+                if !taken.contains(&upper) && !self.vars.contains_key(&upper) {
+                    break candidate;
+                }
+                n += 1;
+            };
+            taken.insert(fresh.to_uppercase());
+            self.renamed.insert(lower, fresh);
+        }
+    }
+
+    fn leave_function(&mut self) {
+        self.locals.clear();
+        self.renamed.clear();
+    }
+
+    /// A bare name read here that is neither a local nor visible from this
+    /// module, but IS a top-level variable or const of the program: the
+    /// backends would silently bind it to that global, so it is an error.
+    fn check_foreign_read(&mut self, name: &str, line: usize) {
+        if self.is_local(name) || self.resolve_bare(name).is_some() {
+            return;
+        }
+        let Some((owner, def)) = self.vars.get(&name.to_uppercase()).cloned() else { return };
+        let message = if owner == self.entry {
+            format!(
+                "`{name}` is not defined in module `{}`: `{def}` is a global of the main program (`{owner}.vpy`), \
+                 and an imported module cannot see the main program's globals. Pass the value as a parameter, \
+                 or assign `{name}` in this function to make it a local",
+                self.module
+            )
+        } else if owner == self.module {
+            format!("`{name}` is the assembler name of this module's `{def}`: write `{def}`")
+        } else {
+            format!(
+                "`{name}` is not defined in module `{}`: it names `{def}` of module `{owner}` — \
+                 write `{owner}.{def}` (with `import {owner}`) or `from {owner} import {def}`",
+                self.module
+            )
+        };
+        self.error(line, message);
+    }
+
     /// If `name` (the `x` of `x.y`) denotes a module, return it.
     /// `Err(())` = an imported module whose file is missing (already reported).
     fn module_ref(&mut self, name: &str, line: usize) -> Option<Result<String, ()>> {
-        if self.is_param(name) || self.tables[self.module].get(name).is_some()
+        if self.is_local(name) || self.tables[self.module].get(name).is_some()
             || self.named.contains_key(&name.to_lowercase())
         {
             return None; // a value shadows any module of the same name
@@ -450,9 +612,14 @@ impl<'a> Ctx<'a> {
             Item::Function(func) => {
                 let mut new_func = func.clone();
                 new_func.name = canonical(self.module, self.entry, &func.name);
-                self.params = func.params.iter().map(|p| p.to_lowercase()).collect();
+                self.enter_function(func);
+                new_func.params = func
+                    .params
+                    .iter()
+                    .map(|p| self.renamed.get(&p.to_lowercase()).cloned().unwrap_or_else(|| p.clone()))
+                    .collect();
                 new_func.body = func.body.iter().map(|s| self.rewrite_stmt(s)).collect();
-                self.params.clear();
+                self.leave_function();
                 Item::Function(new_func)
             }
             Item::GlobalLet { name, type_annotation, value, source_line } => Item::GlobalLet {
@@ -583,11 +750,14 @@ impl<'a> Ctx<'a> {
 
     fn rewrite_expr(&mut self, expr: &Expr) -> Expr {
         match expr {
-            Expr::Ident(ident) => Expr::Ident(IdentInfo {
-                name: self.ident_name(&ident.name),
-                source_line: ident.source_line,
-                col: ident.col,
-            }),
+            Expr::Ident(ident) => {
+                self.check_foreign_read(&ident.name, ident.source_line);
+                Expr::Ident(IdentInfo {
+                    name: self.ident_name(&ident.name),
+                    source_line: ident.source_line,
+                    col: ident.col,
+                })
+            }
 
             Expr::Call(call) => Expr::Call(CallInfo {
                 name: self.ident_name(&call.name),

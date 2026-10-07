@@ -314,7 +314,7 @@ def draw_player(x, y, frame):
 - A parameter hides a global or `const` with the same name inside its function. Names
   are case-insensitive, so a parameter `b` also hides `const B`.
 - Return value is stored in the D register (16-bit).
-- Functions can call other functions freely, but not themselves: recursion (direct, or through other functions) is a compile error on m6809 that names the cycle. Write it as a loop.
+- Functions can call other functions freely. On m6809 they cannot call themselves: recursion (direct, or through other functions) is a compile error that names the cycle; write it as a loop. The ARM targets (rp2350, uvm2, pitrex) give every call its own stack frame, so recursion works there.
 - On m6809 a function's parameters and locals live at fixed RAM addresses (its *frame*), not on the stack: the caller stores the arguments straight into the callee's parameter slots, so a parameter keeps its value across the calls the function makes. Functions that can never run at the same time share the same bytes (frames are overlaid by call graph), so locals do not keep their value from one call to the next.
 - Calling a name that is not a builtin, a BIOS routine (m6809) or a function of the program is a compile error with its line.
 
@@ -338,6 +338,8 @@ def loop():
 - In the generated code a module's symbols are named `MODULE_symbol` (`PHYSICS_clamp_x`; m6809 labels are upper-case: `PHYSICS_CLAMP_X`). Two modules whose names collide that way are a compile error.
 - Build the project (`.vpyproj`): every target (m6809, rp2350, uvm2, pitrex) compiles all of its modules. Building a lone `.vpy` compiles only that file, so an `import` there fails with `main.vpy:1: error: module `physics` not found …`.
 - `module.name` where the module has no such symbol, or a module used without `import`, is a compile error with the file and line.
+- Scopes inside a function: a parameter is local; a name assigned in the function (`x = …`, `x += …`, `for x in …`) is the module's global if the module defines it or imports it with `from m import x` (there is no `global` keyword, assigning writes that global), and a local otherwise. A local or parameter of `enemies.vpy` named like a global of `main.vpy` is its own variable: it never reads or writes main's `x`.
+- A module cannot see the main program's globals (or another module's) by their bare name: `return x` in `enemies.vpy`, where only `main.vpy` defines `x`, is `enemies.vpy:N: error: `x` is not defined in module `enemies`…`. Pass the value as a parameter, or put shared state in a module both files import.
 
 ---
 
@@ -800,7 +802,7 @@ This is fine for positions and velocities since the Vectrex coordinate system is
 
 Parameters and locals are 16-bit slots in the function's static frame; there is no limit on the number of parameters other than RAM. A call with the wrong number of arguments is a compile error. Recursion is a compile error (a frame holds one activation of its function): use a loop. The build also fails when the program's variables, frames included, do not fit in the 1 KB of RAM, and warns when fewer than 64 bytes are left for the stack.
 
-The ARM targets (rp2350, uvm2, pitrex) do not have frames yet: there, each parameter or local name is one RAM slot shared by every function, and a parameter named like a global writes the global. Until that is fixed, give the parameters and locals of functions that call each other different names on those targets.
+On the ARM targets (rp2350, uvm2, pitrex) parameters and locals live in a stack frame per call instead: the same name rules and errors apply (a parameter hides a global, wrong argument counts and undeclared names fail with their line), a parameter keeps its value across the calls the function makes, and recursion is allowed (limited only by stack space).
 
 ### Comments
 

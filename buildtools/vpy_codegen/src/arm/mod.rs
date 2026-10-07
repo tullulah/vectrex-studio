@@ -15,7 +15,9 @@
 //! Key differences from M6809 backend:
 //!   - No BIOS — builtins write directly to VIA 6522 at 0xD000 via bus master
 //!   - 32-bit registers (r0–r15): no A/B/D split, MUL/SDIV are single instructions
-//!   - Calling convention: args in r0–r3, return in r0, callee saves r4–r11
+//!   - Calling convention: args in r0–r3 (5th+ on the stack), return in r0,
+//!     callee saves r4–r11; parameters and locals live in a stack frame
+//!     addressed from r7 (see frame.rs)
 //!   - Stack: full-descending (PUSH/POP), SP = r13
 //!   - No bankswitching — 4MB flash, 512KB SRAM, all addressable
 //!   - WAIT_RECAL = busy-wait on VIA Timer 1 via SPI/bus master
@@ -23,6 +25,7 @@
 pub mod header;
 pub mod ram_layout;
 pub mod functions;
+pub mod frame;
 pub mod expressions;
 pub mod builtins;
 pub mod helpers;
@@ -150,6 +153,8 @@ fn is_cond_branch(mnem: &str) -> bool {
 ///  - P3: adjacent no-op `push {rX}; pop {rX}` (single-arg call setup) is dropped.
 ///  - P4: `bool_from_flags` materialisation immediately consumed by a branch
 ///    (`... cmp r0,#0; beq TARGET`) fuses to a single conditional branch.
+///  - P5: `b L` straight before `L:` is dropped (a function's last `return`
+///    branching to the epilogue that follows it).
 fn peephole(asm: &str) -> String {
     let lines: Vec<&str> = asm.lines().collect();
     let n = lines.len();
@@ -184,6 +189,17 @@ fn peephole(asm: &str) -> String {
                             continue;
                         }
                     }
+                }
+            }
+        }
+
+        // --- P5: branch to the very next line ----------------------------
+        if i + 1 < n {
+            let code = c(i);
+            if let Some(target) = code.strip_prefix("b ") {
+                if !target.contains(' ') && c(i + 1) == format!("{target}:") {
+                    i += 1;
+                    continue;
                 }
             }
         }
@@ -415,6 +431,22 @@ mod peephole_tests {
         let out = peephole(asm);
         assert!(out.contains(".Lcf5"), "must not fuse without cmp/beq consumer:\n{out}");
         assert!(out.contains("movs    r0, #1"), "materialise wrongly removed:\n{out}");
+    }
+
+    /// P5: a `return` that falls into the epilogue needs no branch; others keep theirs.
+    #[test]
+    fn drops_branch_to_next_line() {
+        let asm = "\
+    b       .Lret_F
+    b       .Lret_F
+    mov     r0, #1
+    b       .Lret_F
+.Lret_F:
+    mov     sp, r7
+";
+        let out = peephole(asm);
+        assert_eq!(out.matches("b       .Lret_F").count(), 2, "got:\n{out}");
+        assert!(out.contains("mov     r0, #1\n.Lret_F:"), "got:\n{out}");
     }
 
     /// Push/pop of different registers must NOT be treated as a no-op.

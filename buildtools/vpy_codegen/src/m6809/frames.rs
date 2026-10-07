@@ -27,6 +27,10 @@
 //! Static frames cannot hold two activations of one function, so recursion
 //! (direct or through other functions) is a compile error.
 //!
+//! The name rules are not m6809-specific: the ARM backends take each
+//! function's parameters and locals from [`function_scopes`] and keep them in
+//! a stack frame per call (`arm/frame.rs`), where recursion is allowed.
+//!
 //! Names are case-insensitive (the unifier upper-cases most of them).
 
 use super::ast_walk::{self, Visitor};
@@ -201,10 +205,102 @@ impl<'a> Visitor<'a> for BodyScan<'_> {
     }
 }
 
+/// Frames (offsets 0, not overlaid), call graph and display names of every
+/// function, plus the name-resolution errors (duplicate parameter, undeclared name).
+struct Scopes {
+    frames: BTreeMap<String, Frame>,
+    /// caller label → (callee label → first call line)
+    calls: BTreeMap<String, BTreeMap<String, usize>>,
+    display: HashMap<String, (String, usize)>,
+    errors: Vec<String>,
+}
+
+/// The parameters and locals of every function under the name-resolution rules
+/// above, keyed by function label (upper case), WITHOUT the m6809-only parts
+/// (recursion check, call-graph overlay). Backends with a real stack frame (the
+/// ARM targets) use it: each slot of the returned frames is a parameter or a
+/// local of that function, in order; offsets are m6809's and mean nothing there.
+pub fn function_scopes(module: &Module) -> Result<BTreeMap<String, Frame>, String> {
+    let scopes = scan(module);
+    if !scopes.errors.is_empty() {
+        return Err(scopes.errors.join("\n"));
+    }
+    Ok(scopes.frames)
+}
+
 /// Build the frame of every function, check for recursion and undefined names,
 /// and overlay the frames by call graph.
 pub fn analyze(module: &Module) -> Result<FrameLayout, String> {
+    let Scopes { mut frames, calls, display, mut errors } = scan(module);
+
+    // Recursion: a cycle in the call graph.
+    if let Some(cycle) = find_cycle(&calls) {
+        let mut text = String::new();
+        for pair in cycle.windows(2) {
+            let (caller, callee) = (&pair[0], &pair[1]);
+            let line = calls[caller][callee];
+            let (cname, _) = &display[caller];
+            let (ename, _) = &display[callee];
+            if !text.is_empty() {
+                text.push_str(", ");
+            }
+            text.push_str(&format!("`{cname}()` calls `{ename}()` at line {line}"));
+        }
+        errors.push(format!(
+            "recursion is not supported on m6809: {text}. Parameters and locals live at fixed RAM addresses \
+             (the 6809 cartridge has 1 KB of RAM), so a function cannot be active twice; rewrite it as a loop"
+        ));
+    }
+    if !errors.is_empty() {
+        return Err(errors.join("\n"));
+    }
+
+    // Overlay: offset(f) = max over callers c of offset(c) + size(c). Roots (main,
+    // loop, functions nobody calls) start at 0. The graph is acyclic here, so the
+    // memoised recursion terminates.
+    let mut callers: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (caller, callees) in &calls {
+        for callee in callees.keys() {
+            callers.entry(callee.as_str()).or_default().push(caller.as_str());
+        }
+    }
+    fn offset_of<'a>(
+        f: &'a str,
+        callers: &HashMap<&'a str, Vec<&'a str>>,
+        frames: &BTreeMap<String, Frame>,
+        memo: &mut HashMap<&'a str, usize>,
+    ) -> usize {
+        if let Some(&o) = memo.get(f) {
+            return o;
+        }
+        let mut o = 0;
+        if let Some(cs) = callers.get(f) {
+            for &c in cs {
+                o = o.max(offset_of(c, callers, frames, memo) + frames[c].size);
+            }
+        }
+        memo.insert(f, o);
+        o
+    }
+    let mut memo: HashMap<&str, usize> = HashMap::new();
+    let labels: Vec<String> = frames.keys().cloned().collect();
+    let mut offsets: HashMap<String, usize> = HashMap::new();
+    for l in &labels {
+        offsets.insert(l.clone(), offset_of(l, &callers, &frames, &mut memo));
+    }
+    let mut pool_size = 0;
+    for (l, frame) in frames.iter_mut() {
+        frame.offset = offsets[l];
+        pool_size = pool_size.max(frame.offset + frame.size);
+    }
+    Ok(FrameLayout { frames, pool_size })
+}
+
+/// Scan every function: its parameters and locals, the names it reads, the user
+/// functions it calls.
+fn scan(module: &Module) -> Scopes {
     let label = |name: &str| vpy_parser::symbols::m6809_label(name);
+
     let globals = module_names(module);
     let functions: Vec<&Function> = module
         .items
@@ -295,67 +391,7 @@ pub fn analyze(module: &Module) -> Result<FrameLayout, String> {
         calls.insert(flabel, scan.calls);
     }
 
-    // Recursion: a cycle in the call graph.
-    if let Some(cycle) = find_cycle(&calls) {
-        let mut text = String::new();
-        for pair in cycle.windows(2) {
-            let (caller, callee) = (&pair[0], &pair[1]);
-            let line = calls[caller][callee];
-            let (cname, _) = &display[caller];
-            let (ename, _) = &display[callee];
-            if !text.is_empty() {
-                text.push_str(", ");
-            }
-            text.push_str(&format!("`{cname}()` calls `{ename}()` at line {line}"));
-        }
-        errors.push(format!(
-            "recursion is not supported on m6809: {text}. Parameters and locals live at fixed RAM addresses \
-             (the 6809 cartridge has 1 KB of RAM), so a function cannot be active twice; rewrite it as a loop"
-        ));
-    }
-    if !errors.is_empty() {
-        return Err(errors.join("\n"));
-    }
-
-    // Overlay: offset(f) = max over callers c of offset(c) + size(c). Roots (main,
-    // loop, functions nobody calls) start at 0. The graph is acyclic here, so the
-    // memoised recursion terminates.
-    let mut callers: HashMap<&str, Vec<&str>> = HashMap::new();
-    for (caller, callees) in &calls {
-        for callee in callees.keys() {
-            callers.entry(callee.as_str()).or_default().push(caller.as_str());
-        }
-    }
-    fn offset_of<'a>(
-        f: &'a str,
-        callers: &HashMap<&'a str, Vec<&'a str>>,
-        frames: &BTreeMap<String, Frame>,
-        memo: &mut HashMap<&'a str, usize>,
-    ) -> usize {
-        if let Some(&o) = memo.get(f) {
-            return o;
-        }
-        let mut o = 0;
-        if let Some(cs) = callers.get(f) {
-            for &c in cs {
-                o = o.max(offset_of(c, callers, frames, memo) + frames[c].size);
-            }
-        }
-        memo.insert(f, o);
-        o
-    }
-    let mut memo: HashMap<&str, usize> = HashMap::new();
-    let labels: Vec<String> = frames.keys().cloned().collect();
-    let mut offsets: HashMap<String, usize> = HashMap::new();
-    for l in &labels {
-        offsets.insert(l.clone(), offset_of(l, &callers, &frames, &mut memo));
-    }
-    let mut pool_size = 0;
-    for (l, frame) in frames.iter_mut() {
-        frame.offset = offsets[l];
-        pool_size = pool_size.max(frame.offset + frame.size);
-    }
-    Ok(FrameLayout { frames, pool_size })
+    Scopes { frames, calls, display, errors }
 }
 
 /// A call cycle as a list of labels whose first and last entries are the same
