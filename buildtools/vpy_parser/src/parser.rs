@@ -77,6 +77,11 @@ impl<'a> Parser<'a> {
 
     /// Match identifier case-insensitively
     fn match_ident_case(&mut self, upper: &str) -> bool {
+        // `as` is lexed as a keyword, not an identifier (`import m as a`).
+        if upper.eq_ignore_ascii_case("AS") && self.check(TokenKind::As) {
+            self.advance();
+            return true;
+        }
         if let Some(TokenKind::Identifier(s)) = self.peek_kind().cloned() {
             if s.eq_ignore_ascii_case(upper) {
                 self.advance();

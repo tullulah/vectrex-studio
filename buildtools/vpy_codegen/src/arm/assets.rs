@@ -207,6 +207,31 @@ struct VsmpResource {
     data: String,
 }
 
+/// Validate a `.vsmp` JSON text the way the sample compiler reads it.
+/// Returns `(sample_rate, num_samples, packed_bytes)`; errors on a missing rate,
+/// an empty or non-base64 payload, or a `numSamples` larger than the payload holds.
+pub fn check_vsmp_json(text: &str) -> Result<(u32, u32, usize), String> {
+    let v: VsmpResource = serde_json::from_str(text).map_err(|e| format!("invalid .vsmp JSON: {e}"))?;
+    if v.sample_rate == 0 {
+        return Err("\"sampleRate\" is missing or 0".into());
+    }
+    let clean: String = v.data.chars().filter(|c| !c.is_whitespace()).collect();
+    if clean.is_empty() {
+        return Err("\"data\" (base64 of packed 4-bit samples) is empty".into());
+    }
+    if !clean.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'+' || c == b'/' || c == b'=') {
+        return Err("\"data\" is not standard base64".into());
+    }
+    let bytes = base64_decode(&clean);
+    if (v.num_samples as usize) > bytes.len() * 2 {
+        return Err(format!(
+            "\"numSamples\" is {} but the payload holds only {} (2 samples per byte)",
+            v.num_samples, bytes.len() * 2
+        ));
+    }
+    Ok((v.sample_rate, v.num_samples, bytes.len()))
+}
+
 /// Decode a standard base64 string (RFC 4648, `+`/`/` alphabet, `=` padding)
 /// into bytes. Pure Rust — base64 is not a workspace dependency and the
 /// payload format is fixed. Whitespace in the input is ignored; any invalid

@@ -10,6 +10,7 @@ use vpy_parser::{Module, Function, Stmt, Expr};
 use super::expressions;
 use super::context;
 use super::joystick;
+use super::ast_walk;
 use crate::AssetInfo;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -21,32 +22,16 @@ pub fn fresh_label(prefix: &str) -> String {
     format!("{}_{}", prefix, id)
 }
 
+// ---------------------------------------------------------------------------
+// "Does the program use X?" scans. All of them go through the exhaustive
+// `ast_walk` visitor so a builtin is found wherever it appears (for/for-in/
+// while/switch bodies, if conditions, call arguments, index expressions,
+// compound assignments, returns, global initializers).
+// ---------------------------------------------------------------------------
+
 /// Check if module uses BEEP (needs BEEP_UPDATE_RUNTIME auto-injection)
 pub fn has_beep_calls(module: &Module) -> bool {
-    fn check_expr(expr: &Expr) -> bool {
-        matches!(expr, Expr::Call(c) if c.name == "BEEP")
-    }
-    fn check_stmt(stmt: &Stmt) -> bool {
-        match stmt {
-            Stmt::Expr(expr, _) => check_expr(expr),
-            Stmt::If { cond, body, elifs, else_body, .. } => {
-                check_expr(cond) ||
-                body.iter().any(check_stmt) ||
-                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
-                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
-            },
-            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
-            Stmt::For { body, .. } => body.iter().any(check_stmt),
-            _ => false,
-        }
-    }
-    module.items.iter().any(|item| {
-        if let vpy_parser::Item::Function(func) = item {
-            func.body.iter().any(check_stmt)
-        } else {
-            false
-        }
-    })
+    ast_walk::calls_any(module, &["BEEP"])
 }
 
 /// Check if any code path uses analog joystick reads (J1_X / J1_Y / J2_X / J2_Y / J2_ANALOG_X/Y).
@@ -54,270 +39,102 @@ pub fn has_beep_calls(module: &Module) -> bool {
 /// and J1X_BUILTIN/J1Y_BUILTIN/etc. become cheap cached-RAM reads. Saves ~750 cycles per
 /// duplicate call (Joy_Analog is heavy and already populates all 4 axes per BIOS call).
 pub fn has_joystick_analog_calls(module: &Module) -> bool {
-    fn is_joy(name: &str) -> bool {
-        matches!(name, "J1_X" | "J1_Y" | "J2_X" | "J2_Y" | "J2_ANALOG_X" | "J2_ANALOG_Y")
-    }
-    fn check_expr(expr: &Expr) -> bool {
-        match expr {
-            Expr::Call(c) => is_joy(&c.name) || c.args.iter().any(check_expr),
-            Expr::Compare { left, right, .. } => check_expr(left) || check_expr(right),
-            Expr::Binary { left, right, .. } => check_expr(left) || check_expr(right),
-            Expr::Logic { left, right, .. } => check_expr(left) || check_expr(right),
-            Expr::Not(e) | Expr::BitNot(e) => check_expr(e),
-            Expr::Index { target, index } => check_expr(target) || check_expr(index),
-            Expr::MethodCall(info) => check_expr(&info.target) || info.args.iter().any(check_expr),
-            Expr::List(items) => items.iter().any(check_expr),
-            Expr::FieldAccess { target, .. } => check_expr(target),
-            _ => false,
-        }
-    }
-    fn check_stmt(stmt: &Stmt) -> bool {
-        match stmt {
-            Stmt::Expr(expr, _) => check_expr(expr),
-            Stmt::Assign { value, .. } => check_expr(value),
-            Stmt::CompoundAssign { value, .. } => check_expr(value),
-            Stmt::Let { value, .. } => check_expr(value),
-            Stmt::If { cond, body, elifs, else_body, .. } => {
-                check_expr(cond) ||
-                body.iter().any(check_stmt) ||
-                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
-                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
-            },
-            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
-            Stmt::For { body, .. } => body.iter().any(check_stmt),
-            Stmt::ForIn { body, .. } => body.iter().any(check_stmt),
-            Stmt::Return(Some(e), _) => check_expr(e),
-            _ => false,
-        }
-    }
-    module.items.iter().any(|item| {
-        if let vpy_parser::Item::Function(func) = item {
-            func.body.iter().any(check_stmt)
-        } else {
-            false
-        }
-    })
+    ast_walk::calls_any(module, &["J1_X", "J1_Y", "J2_X", "J2_Y", "J2_ANALOG_X", "J2_ANALOG_Y"])
 }
 
 /// Check if module uses PLAY_NOTE (needs NOTE_UPDATE_RUNTIME + PLAY_NOTE_RUNTIME auto-injection)
 pub fn has_note_calls(module: &Module) -> bool {
-    fn check_expr(expr: &Expr) -> bool {
-        matches!(expr, Expr::Call(c) if c.name == "PLAY_NOTE")
-    }
-    fn check_stmt(stmt: &Stmt) -> bool {
-        match stmt {
-            Stmt::Expr(expr, _) => check_expr(expr),
-            Stmt::If { cond, body, elifs, else_body, .. } => {
-                check_expr(cond) ||
-                body.iter().any(check_stmt) ||
-                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
-                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
-            },
-            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
-            Stmt::For { body, .. } => body.iter().any(check_stmt),
-            _ => false,
-        }
-    }
-    module.items.iter().any(|item| {
-        if let vpy_parser::Item::Function(func) = item {
-            func.body.iter().any(check_stmt)
-        } else {
-            false
-        }
-    })
+    ast_walk::calls_any(module, &["PLAY_NOTE"])
 }
 
 /// Check if module uses PRINT_TEXT or PRINT_NUMBER (needs TEXT_SCALE initialization)
 pub fn has_print_calls(module: &Module) -> bool {
-    fn check_expr(expr: &Expr) -> bool {
-        matches!(expr, Expr::Call(c) if c.name == "PRINT_TEXT" || c.name == "PRINT_NUMBER")
-    }
-    fn check_stmt(stmt: &Stmt) -> bool {
-        match stmt {
-            Stmt::Expr(expr, _) => check_expr(expr),
-            Stmt::If { cond, body, elifs, else_body, .. } => {
-                check_expr(cond) ||
-                body.iter().any(check_stmt) ||
-                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
-                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
-            },
-            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
-            Stmt::For { body, .. } => body.iter().any(check_stmt),
-            _ => false,
-        }
-    }
-    module.items.iter().any(|item| {
-        if let vpy_parser::Item::Function(func) = item {
-            func.body.iter().any(check_stmt)
-        } else {
-            false
-        }
-    })
+    ast_walk::calls_any(module, &["PRINT_TEXT", "PRINT_NUMBER"])
 }
 
 /// Check if module uses DRAW_VECTOR, DRAW_ANIM, or SHOW_LEVEL (needs DRAW_SCALE initialization)
 pub fn has_draw_scale_calls(module: &Module) -> bool {
-    fn check_expr(expr: &Expr) -> bool {
-        matches!(expr, Expr::Call(c) if matches!(c.name.as_str(), "DRAW_VECTOR" | "DRAW_VECTOR_EX" | "DRAW_ANIM" | "SHOW_LEVEL"))
-    }
-    fn check_stmt(stmt: &Stmt) -> bool {
-        match stmt {
-            Stmt::Expr(expr, _) => check_expr(expr),
-            Stmt::If { cond, body, elifs, else_body, .. } => {
-                check_expr(cond) ||
-                body.iter().any(check_stmt) ||
-                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
-                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
-            },
-            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
-            Stmt::For { body, .. } => body.iter().any(check_stmt),
-            _ => false,
-        }
-    }
-    module.items.iter().any(|item| {
-        if let vpy_parser::Item::Function(func) = item {
-            func.body.iter().any(check_stmt)
-        } else {
-            false
-        }
-    })
+    ast_walk::calls_any(module, &["DRAW_VECTOR", "DRAW_VECTOR_EX", "DRAW_ANIM", "SHOW_LEVEL"])
 }
 
 /// Check if module uses DRAW_ANIM (needs DRAW_SCALE / DRAW_ANIM_SCALE initialization)
 pub fn has_draw_anim_calls(module: &Module) -> bool {
-    fn check_expr(expr: &Expr) -> bool {
-        matches!(expr, Expr::Call(c) if c.name == "DRAW_ANIM")
-    }
-    fn check_stmt(stmt: &Stmt) -> bool {
-        match stmt {
-            Stmt::Expr(expr, _) => check_expr(expr),
-            Stmt::If { cond, body, elifs, else_body, .. } => {
-                check_expr(cond) ||
-                body.iter().any(check_stmt) ||
-                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
-                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
-            },
-            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
-            Stmt::For { body, .. } => body.iter().any(check_stmt),
-            _ => false,
+    ast_walk::calls_any(module, &["DRAW_ANIM"])
+}
+
+/// String-literal first argument of every call to `builtin` (upper-case name).
+fn first_string_args<'a>(module: &'a Module, builtin: &str) -> Vec<&'a str> {
+    let mut out = Vec::new();
+    ast_walk::for_each_call(module, |c| {
+        if c.name.eq_ignore_ascii_case(builtin) {
+            if let Some(Expr::StringLit(name)) = c.args.first() {
+                out.push(name.as_str());
+            }
         }
-    }
-    module.items.iter().any(|item| {
-        if let vpy_parser::Item::Function(func) = item {
-            func.body.iter().any(check_stmt)
-        } else {
-            false
-        }
-    })
+    });
+    out
 }
 
 /// Collect every animation name passed to DRAW_ANIM("name", ...) in the module.
 /// Used to emit per-anim state RAM zeroing at MAIN startup.
 pub fn collect_draw_anim_names(module: &Module) -> std::collections::BTreeSet<String> {
-    use std::collections::BTreeSet;
-    fn collect_expr(expr: &Expr, out: &mut BTreeSet<String>) {
-        if let Expr::Call(c) = expr {
-            if c.name == "DRAW_ANIM" {
-                if let Some(Expr::StringLit(name)) = c.args.first() {
-                    out.insert(name.to_uppercase().replace('-', "_").replace(' ', "_"));
-                }
-            }
-        }
-    }
-    fn collect_stmt(stmt: &Stmt, out: &mut BTreeSet<String>) {
-        match stmt {
-            Stmt::Expr(expr, _) => collect_expr(expr, out),
-            Stmt::If { cond, body, elifs, else_body, .. } => {
-                collect_expr(cond, out);
-                body.iter().for_each(|s| collect_stmt(s, out));
-                elifs.iter().for_each(|(e, b)| { collect_expr(e, out); b.iter().for_each(|s| collect_stmt(s, out)); });
-                if let Some(eb) = else_body { eb.iter().for_each(|s| collect_stmt(s, out)); }
-            },
-            Stmt::While { cond, body, .. } => { collect_expr(cond, out); body.iter().for_each(|s| collect_stmt(s, out)); },
-            Stmt::For { body, .. } => body.iter().for_each(|s| collect_stmt(s, out)),
-            _ => {}
-        }
-    }
-    let mut out = BTreeSet::new();
-    for item in &module.items {
-        if let vpy_parser::Item::Function(func) = item {
-            func.body.iter().for_each(|s| collect_stmt(s, &mut out));
-        }
-    }
-    out
+    first_string_args(module, "DRAW_ANIM")
+        .into_iter()
+        .map(|name| name.to_uppercase().replace('-', "_").replace(' ', "_"))
+        .collect()
 }
 
 /// Collect the raw recording names referenced by DRAW_RECORDING("name", ...)
 /// calls (as typed in the source — NOT uppercased), for existence validation.
 pub fn collect_draw_recording_names(module: &Module) -> std::collections::BTreeSet<String> {
-    use std::collections::BTreeSet;
-    fn collect_expr(expr: &Expr, out: &mut BTreeSet<String>) {
-        if let Expr::Call(c) = expr {
-            if c.name == "DRAW_RECORDING" {
-                if let Some(Expr::StringLit(name)) = c.args.first() {
-                    out.insert(name.clone());
-                }
-            }
-        }
-    }
-    fn collect_stmt(stmt: &Stmt, out: &mut BTreeSet<String>) {
-        match stmt {
-            Stmt::Expr(expr, _) => collect_expr(expr, out),
-            Stmt::If { cond, body, elifs, else_body, .. } => {
-                collect_expr(cond, out);
-                body.iter().for_each(|s| collect_stmt(s, out));
-                elifs.iter().for_each(|(e, b)| { collect_expr(e, out); b.iter().for_each(|s| collect_stmt(s, out)); });
-                if let Some(eb) = else_body { eb.iter().for_each(|s| collect_stmt(s, out)); }
-            },
-            Stmt::While { cond, body, .. } => { collect_expr(cond, out); body.iter().for_each(|s| collect_stmt(s, out)); },
-            Stmt::For { body, .. } => body.iter().for_each(|s| collect_stmt(s, out)),
-            _ => {}
-        }
-    }
-    let mut out = BTreeSet::new();
-    for item in &module.items {
-        if let vpy_parser::Item::Function(func) = item {
-            func.body.iter().for_each(|s| collect_stmt(s, &mut out));
-        }
-    }
-    out
+    first_string_args(module, "DRAW_RECORDING")
+        .into_iter()
+        .map(str::to_string)
+        .collect()
 }
 
-/// Check if module uses PLAY_MUSIC or PLAY_SFX (needs AUDIO_UPDATE auto-injection)
 /// Check if module uses PLAY_MUSIC or PLAY_SFX builtins
 /// Used to determine if AUDIO_UPDATE helper should be auto-injected
 pub fn has_audio_calls(module: &Module) -> bool {
-    fn check_expr(expr: &Expr) -> bool {
-        match expr {
-            Expr::Call(call_info) => {
-                call_info.name == "PLAY_MUSIC" || call_info.name == "PLAY_SFX"
-            },
-            _ => false,
-        }
+    ast_walk::calls_any(module, &["PLAY_MUSIC", "PLAY_SFX"])
+}
+
+/// MAIN startup: copy a mutable global array's initial values from ROM
+/// (`ARRAY_<NAME>_DATA`) to its RAM block (`VAR_<NAME>_DATA`).
+///
+/// The array name itself evaluates to `#VAR_<NAME>_DATA` (see
+/// `context::global_array_base_label`), so no pointer variable is written here —
+/// an unused array therefore needs no extra RAM symbol.
+/// The copy is sized in BYTES (elements × element size): 8-bit arrays occupy
+/// N bytes in ROM and RAM, so a word-per-element copy would overrun both.
+fn emit_mutable_array_init(name: &str, element_count: usize, counter: usize, asm: &mut String) {
+    let rom_label = format!("ARRAY_{}_DATA", name.to_uppercase());
+    let ram_label = format!("VAR_{}_DATA", name.to_uppercase());
+    let element_bytes = context::get_var_size(name).bytes;
+    let total_bytes = element_count * element_bytes;
+    asm.push_str(&format!(
+        "    ; Copy array '{}' from ROM to RAM ({} elements x {} bytes)\n",
+        name, element_count, element_bytes
+    ));
+    if total_bytes == 0 {
+        return;
     }
-    
-    fn check_stmt(stmt: &Stmt) -> bool {
-        match stmt {
-            Stmt::Expr(expr, _) => check_expr(expr),
-            Stmt::If { cond, body, elifs, else_body, .. } => {
-                check_expr(cond) ||
-                body.iter().any(check_stmt) ||
-                elifs.iter().any(|(e, b)| check_expr(e) || b.iter().any(check_stmt)) ||
-                else_body.as_ref().map_or(false, |body| body.iter().any(check_stmt))
-            },
-            Stmt::While { cond, body, .. } => check_expr(cond) || body.iter().any(check_stmt),
-            Stmt::For { body, .. } => body.iter().any(check_stmt),
-            _ => false,
-        }
+    asm.push_str(&format!("    LDX #{}       ; Source: ROM array data\n", rom_label));
+    asm.push_str(&format!("    LDU #{}       ; Dest: RAM array space\n", ram_label));
+    if element_bytes == 2 {
+        asm.push_str(&format!("    LDD #{}        ; Number of 16-bit elements\n", element_count));
+        asm.push_str(&format!(".COPY_LOOP_{}:\n", counter));
+        asm.push_str("    LDY ,X++        ; Load word from ROM, increment source\n");
+        asm.push_str("    STY ,U++        ; Store word to RAM, increment dest\n");
+        asm.push_str("    SUBD #1         ; Decrement counter\n");
+    } else {
+        asm.push_str(&format!("    LDY #{}        ; Number of bytes\n", total_bytes));
+        asm.push_str(&format!(".COPY_LOOP_{}:\n", counter));
+        asm.push_str("    LDA ,X+         ; Load byte from ROM, increment source\n");
+        asm.push_str("    STA ,U+         ; Store byte to RAM, increment dest\n");
+        asm.push_str("    LEAY -1,Y       ; Decrement counter (sets Z)\n");
     }
-    
-    module.items.iter().any(|item| {
-        if let vpy_parser::Item::Function(func) = item {
-            func.body.iter().any(check_stmt)
-        } else {
-            false
-        }
-    })
+    asm.push_str(&format!("    LBNE .COPY_LOOP_{} ; Loop until done (LBNE for long branch)\n", counter));
 }
 
 pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<String, String> {
@@ -414,27 +231,7 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
     for item in &module.items {
         if let vpy_parser::Item::GlobalLet { name, value, .. } = item {
             if let vpy_parser::Expr::List(elements) = value {
-                // CRITICAL FIX (2026-01-19): Mutable arrays need RAM space
-                // 1. Copy initial values from ROM (ARRAY_{NAME}_DATA) to RAM (VAR_{NAME}_DATA)
-                // 2. Set VAR_{NAME} pointer to RAM location (not ROM)
-                let rom_label = format!("ARRAY_{}_DATA", name.to_uppercase());
-                let ram_label = format!("VAR_{}_DATA", name.to_uppercase());
-                let array_len = elements.len();
-
-                asm.push_str(&format!("    ; Copy array '{}' from ROM to RAM ({} elements)\n", name, array_len));
-                asm.push_str(&format!("    LDX #{}       ; Source: ROM array data\n", rom_label));
-                asm.push_str(&format!("    LDU #{}       ; Dest: RAM array space\n", ram_label));
-                asm.push_str(&format!("    LDD #{}        ; Number of elements\n", array_len));
-                asm.push_str(&format!(".COPY_LOOP_{}:\n", array_copy_counter));
-                asm.push_str("    LDY ,X++        ; Load word from ROM, increment source\n");
-                asm.push_str("    STY ,U++        ; Store word to RAM, increment dest\n");
-                asm.push_str("    SUBD #1         ; Decrement counter\n");
-                asm.push_str(&format!("    LBNE .COPY_LOOP_{} ; Loop until done (LBNE for long branch)\n", array_copy_counter));
-
-                // Set VAR_{NAME} pointer to RAM array (not ROM)
-                asm.push_str(&format!("    LDX #{}    ; Array now in RAM\n", ram_label));
-                asm.push_str(&format!("    STX VAR_{}\n", name.to_uppercase()));
-
+                emit_mutable_array_init(name, elements.len(), array_copy_counter, &mut asm);
                 array_copy_counter += 1;
             } else {
                 // Non-array initialization: use emit_simple_expr so we handle any
@@ -541,7 +338,7 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
         
         // IMPORTANT: Function name already comes uppercase from unifier
         asm.push_str(&format!("; Function: {}\n", func.name));
-        asm.push_str(&format!("{}:\n", func.name));
+        asm.push_str(&format!("{}:\n", vpy_parser::symbols::m6809_label(&func.name)));
         generate_function_body(func, &mut asm, assets)?;
         
         // Only add RTS if function doesn't end with explicit return
@@ -593,6 +390,18 @@ fn primary_builtin_call(stmt: &Stmt) -> Option<&str> {
     None
 }
 
+/// A global array name is a fixed base address, not a variable: `arr = ...` /
+/// `arr += ...` cannot be compiled. Assign elements with `arr[i] = v`.
+fn reject_array_rebind(name: &str) -> Result<(), String> {
+    if context::global_array_base_label(name).is_some() {
+        return Err(format!(
+            "cannot assign to global array '{}' as a whole on m6809; assign its elements instead (e.g. {}[i] = value)",
+            name, name
+        ));
+    }
+    Ok(())
+}
+
 fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_labels: &[(String, String)]) -> Result<(), String> {
     // Debug annotations (Phase 9 PDB): map this statement's first emitted instruction
     // back to its VPy source line, and flag native/builtin calls for step-into.
@@ -607,6 +416,7 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
         Stmt::Assign { target, value, .. } => {
             match target {
                 vpy_parser::AssignTarget::Ident { name, .. } => {
+                    reject_array_rebind(name)?;
                     // Simple variable assignment: var = value
                     // 1. Evaluate expression
                     expressions::emit_simple_expr(value, asm, assets);
@@ -688,6 +498,7 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
             // Load current value, save to TMPVAL, evaluate right side, perform op
             match target {
                 vpy_parser::AssignTarget::Ident { name, .. } => {
+                    reject_array_rebind(name)?;
                     // IMPORTANT: Resolve to VAR_ARGn if this is a function parameter
                     let var_label = expressions::resolve_var_label(name);
                     asm.push_str(&format!("    LDD >{}\n", var_label));
@@ -1032,21 +843,7 @@ pub fn generate_functions_by_bank(
     for item in &module.items {
         if let vpy_parser::Item::GlobalLet { name, value, .. } = item {
             if let vpy_parser::Expr::List(elements) = value {
-                let rom_label = format!("ARRAY_{}_DATA", name.to_uppercase());
-                let ram_label = format!("VAR_{}_DATA", name.to_uppercase());
-                let array_len = elements.len();
-                
-                bank0_asm.push_str(&format!("    ; Copy array '{}' from ROM to RAM ({} elements)\n", name, array_len));
-                bank0_asm.push_str(&format!("    LDX #{}       ; Source: ROM array data\n", rom_label));
-                bank0_asm.push_str(&format!("    LDU #{}       ; Dest: RAM array space\n", ram_label));
-                bank0_asm.push_str(&format!("    LDD #{}        ; Number of elements\n", array_len));
-                bank0_asm.push_str(&format!(".COPY_LOOP_{}:\n", array_copy_counter));
-                bank0_asm.push_str("    LDY ,X++        ; Load word from ROM, increment source\n");
-                bank0_asm.push_str("    STY ,U++        ; Store word to RAM, increment dest\n");
-                bank0_asm.push_str("    SUBD #1         ; Decrement counter\n");
-                bank0_asm.push_str(&format!("    LBNE .COPY_LOOP_{} ; Loop until done (LBNE for long branch)\n", array_copy_counter));
-                bank0_asm.push_str(&format!("    LDX #{}    ; Array now in RAM\n", ram_label));
-                bank0_asm.push_str(&format!("    STX VAR_{}\n", name.to_uppercase()));
+                emit_mutable_array_init(name, elements.len(), array_copy_counter, &mut bank0_asm);
                 array_copy_counter += 1;
             } else {
                 // Non-array: emit value (handles Number, Ident→const, expressions)
@@ -1120,7 +917,7 @@ pub fn generate_functions_by_bank(
         let asm = bank_asm.entry(bank_id).or_insert_with(String::new);
         
         asm.push_str(&format!("; Function: {} (Bank #{})\n", func.name, bank_id));
-        asm.push_str(&format!("{}:\n", func.name));
+        asm.push_str(&format!("{}:\n", vpy_parser::symbols::m6809_label(&func.name)));
         generate_function_body(func, asm, assets)?;
         
         let has_explicit_return = func.body.last()

@@ -20,6 +20,8 @@ pub mod instrres;
 pub mod animres;
 pub mod venemy;
 pub mod stack_validator;
+pub mod known_functions;
+pub mod validate;
 pub mod vrec_chain;
 
 pub use venemy::*;
@@ -203,6 +205,8 @@ pub fn generate_from_module_with_target(
     assets: &[AssetInfo],
     target: &Target,
 ) -> Result<GeneratedASM, CodegenError> {
+    known_functions::register(module);
+    validate::check_array_literals(module).map_err(CodegenError::Error)?;
     match target {
         Target::Rp2350 => {
             let asm_source = arm::generate_arm_asm(module, title, assets)

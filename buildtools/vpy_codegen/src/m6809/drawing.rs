@@ -491,9 +491,10 @@ pub fn emit_draw_sprite(
         return;
     }
     
-    // DRAW_SPRITE is complex (requires bitmap data, scanline conversion)
-    // For now, placeholder implementation
-    out.push_str("    ; TODO: DRAW_SPRITE implementation\n");
+    // DRAW_SPRITE has no m6809 implementation (it would need a bitmap asset
+    // system and raster conversion): fail the build instead of drawing nothing.
+    super::diagnostics::error("DRAW_SPRITE is not implemented on m6809 — draw a .vec asset with DRAW_VECTOR instead");
+    out.push_str("    ; DRAW_SPRITE: not implemented (compile error)\n");
     out.push_str("    ; Requires bitmap asset system and raster conversion\n");
     out.push_str("    LDD #0\n    STD RESULT\n");
 }

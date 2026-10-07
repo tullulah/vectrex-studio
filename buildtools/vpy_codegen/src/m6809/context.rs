@@ -31,6 +31,9 @@ thread_local! {
     /// Const arrays are not in this set (stored in ROM)
     static MUTABLE_ARRAYS: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
 
+    /// Set of global const array names (Item::Const with a list literal, stored in ROM)
+    static CONST_ARRAYS: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+
     /// Map of variable names (lowercase, no VAR_ prefix) to their size metadata
     /// Used to emit correct load/store instructions and allocation sizes
     static VAR_SIZES: RefCell<HashMap<String, VarSize>> = RefCell::new(HashMap::new());
@@ -66,6 +69,32 @@ pub fn is_mutable_array(name: &str) -> bool {
     MUTABLE_ARRAYS.with(|ma| {
         ma.borrow().contains(name)
     })
+}
+
+/// Register the global const arrays (Item::Const with a list literal, stored in ROM)
+pub fn set_const_arrays(arrays: HashSet<String>) {
+    CONST_ARRAYS.with(|ca| {
+        *ca.borrow_mut() = arrays;
+    });
+}
+
+/// Base address label of a global array, or None if `name` is not a global array
+/// (or is shadowed by a parameter of the function being generated).
+///
+/// A global array name used as a value evaluates to its base address, a link-time
+/// constant: `VAR_<NAME>_DATA` (RAM copy of a mutable array) or `ARRAY_<NAME>_DATA`
+/// (ROM data of a const array). There is no pointer variable in RAM.
+pub fn global_array_base_label(name: &str) -> Option<String> {
+    if get_param_index(name).is_some() {
+        return None;
+    }
+    if is_mutable_array(name) {
+        Some(format!("VAR_{}_DATA", name.to_uppercase()))
+    } else if CONST_ARRAYS.with(|ca| ca.borrow().contains(name)) {
+        Some(format!("ARRAY_{}_DATA", name.to_uppercase()))
+    } else {
+        None
+    }
 }
 
 /// Register a variable's size metadata
@@ -170,6 +199,9 @@ pub fn get_param_index(name: &str) -> Option<usize> {
 pub fn clear_context() {
     MUTABLE_ARRAYS.with(|ma| {
         ma.borrow_mut().clear();
+    });
+    CONST_ARRAYS.with(|ca| {
+        ca.borrow_mut().clear();
     });
     clear_var_sizes();
     CONST_VALUES.with(|cv| {

@@ -28,37 +28,110 @@ pub fn emit_move(args: &[Expr], out: &mut String) {
         out.push_str(&format!("    LDA #${:02X}                ; Y coordinate\n", (*y as i8) as u8));
         out.push_str("    STA VPY_MOVE_Y\n");
     } else {
-        // Variable args: evaluate each and store low byte
-        out.push_str("    ; TODO: variable MOVE args (store expressions)\n");
+        // Variable args: evaluate each (D = value) and store the low byte
+        super::expressions::emit_simple_expr(&args[0], out, &[]);
+        out.push_str("    STB VPY_MOVE_X            ; X coordinate (low byte)\n");
+        super::expressions::emit_simple_expr(&args[1], out, &[]);
+        out.push_str("    STB VPY_MOVE_Y            ; Y coordinate (low byte)\n");
     }
     
     out.push_str("    LDD #0\n");
     out.push_str("    STD RESULT\n");
 }
 
-/// Emit LEN(array) - Get array length
-/// 
-/// For now, returns size from array metadata (stored at array_ptr - 2)
-/// 
-/// Note: This is a placeholder - proper implementation needs:
-/// - Array metadata tracking
-/// - String length calculation
-/// - Variable length extraction
+/// Emit LEN(array) - number of elements of a global array.
+///
+/// The length of a global list literal (`xs = [..]` or `const XS = [..]`) is a
+/// compile-time constant, emitted as the `ARRAY_<NAME>_LEN` equate. Any other
+/// argument has no length known at compile time; [`validate_len_calls`] rejects
+/// those before code generation, so this function only sees valid calls.
 pub fn emit_len(args: &[Expr], out: &mut String) {
-    out.push_str("    ; ===== LEN builtin =====\n");
-    
-    if args.len() != 1 {
-        out.push_str("    ; ERROR: LEN requires 1 argument (array or string)\n");
-        out.push_str("    LDD #0\n");
-        out.push_str("    STD RESULT\n");
-        return;
+    match args {
+        [Expr::Ident(id)] if super::context::global_array_base_label(&id.name).is_some() => {
+            out.push_str(&format!(
+                "    LDD #ARRAY_{}_LEN   ; len({}) (compile-time constant)\n",
+                id.name.to_uppercase(),
+                id.name
+            ));
+        }
+        _ => {
+            // Unreachable after validate_len_calls; keep the generated code well-formed.
+            out.push_str("    ; ERROR: len() argument is not a global array\n");
+            out.push_str("    LDD #0\n");
+        }
     }
-    
-    // Placeholder - always return 0 for now
-    out.push_str("    ; TODO: Implement array/string length extraction\n");
-    out.push_str("    ; Needs metadata tracking in array system\n");
-    out.push_str("    LDD #0                 ; Placeholder return\n");
-    out.push_str("    STD RESULT\n");
+}
+
+/// Reject every `len(...)` whose result is not known at compile time.
+///
+/// m6809 supports `len(name)` where `name` is a global array (mutable or const
+/// list literal) that is not shadowed by a parameter of the enclosing function.
+pub fn validate_len_calls(module: &vpy_parser::Module) -> Result<(), String> {
+    use vpy_parser::{CallInfo, Item};
+    let global_arrays: std::collections::HashSet<&str> = module.items.iter()
+        .filter_map(|item| match item {
+            Item::GlobalLet { name, value: Expr::List(_), .. }
+            | Item::Const { name, value: Expr::List(_), .. } => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
+
+    let check = |call: &CallInfo, params: &[String], scope: &str| -> Result<(), String> {
+        if !call.name.eq_ignore_ascii_case("LEN") {
+            return Ok(());
+        }
+        let line = call.source_line;
+        if call.args.len() != 1 {
+            return Err(format!(
+                "len() takes exactly 1 argument, got {} (line {line}, in {scope})",
+                call.args.len()
+            ));
+        }
+        match &call.args[0] {
+            Expr::Ident(id) if params.iter().any(|p| p.eq_ignore_ascii_case(&id.name)) => Err(format!(
+                "len({}) is not supported on m6809: '{}' is a parameter of {scope}, so its length \
+                 is not known at compile time (line {line}). Pass the length as an extra argument.",
+                id.name, id.name
+            )),
+            Expr::Ident(id) if global_arrays.contains(id.name.as_str()) => Ok(()),
+            Expr::Ident(id) => Err(format!(
+                "len({}) is not supported on m6809: '{}' is not a global array (line {line}, in {scope}). \
+                 len() works on global list literals, e.g. `xs = [1, 2, 3]` or `const XS = [1, 2, 3]`.",
+                id.name, id.name
+            )),
+            _ => Err(format!(
+                "len() on m6809 needs the name of a global array (line {line}, in {scope}); \
+                 its length must be known at compile time."
+            )),
+        }
+    };
+
+    for item in &module.items {
+        let (params, scope): (&[String], String) = match item {
+            Item::Function(f) => (&f.params, format!("function '{}'", f.name)),
+            _ => (&[], "a global initializer".to_string()),
+        };
+        let mut result = Ok(());
+        let mut on_expr = |e: &Expr| {
+            if result.is_ok() {
+                if let Expr::Call(call) = e {
+                    result = check(call, params, &scope);
+                }
+            }
+        };
+        match item {
+            Item::Function(f) => super::ast_walk::for_each_expr_in_stmts(&f.body, &mut on_expr),
+            Item::GlobalLet { value, .. } | Item::Const { value, .. } => {
+                super::ast_walk::walk_expr(value, &mut super::ast_walk::ExprFn(&mut on_expr))
+            }
+            Item::VectorList { .. }
+            | Item::ExprStatement(_)
+            | Item::Export(_)
+            | Item::StructDef(_) => {}
+        }
+        result?;
+    }
+    Ok(())
 }
 
 /// Emit GET_TIME() - Get frame counter
@@ -96,7 +169,7 @@ pub fn emit_peek(args: &[Expr], out: &mut String) {
         out.push_str("    CLR RESULT             ; Clear high byte\n");
         out.push_str("    STA RESULT+1           ; Store low byte\n");
     } else {
-        out.push_str("    ; TODO: Support variable address\n");
+        super::diagnostics::error("peek() needs a constant address on m6809 (e.g. `peek(0xC880)`)");
         out.push_str("    LDD #0\n");
         out.push_str("    STD RESULT\n");
     }
@@ -124,7 +197,7 @@ pub fn emit_poke(args: &[Expr], out: &mut String) {
         out.push_str(&format!("    LDA #{}                ; Value to write\n", value));
         out.push_str(&format!("    STA ${:04X}             ; Write to address\n", addr));
     } else {
-        out.push_str("    ; TODO: Support variable address/value\n");
+        super::diagnostics::error("poke() needs a constant address and value on m6809 (e.g. `poke(0xC880, 1)`)");
     }
     
     out.push_str("    LDD #0\n");
@@ -165,7 +238,7 @@ pub fn emit_wait(args: &[Expr], out: &mut String) {
             out.push_str("    BNE WAIT_LOOP\n");
         }
     } else {
-        out.push_str("    ; TODO: Support variable frame count\n");
+        super::diagnostics::error("wait() needs a constant frame count on m6809 (e.g. `wait(30)`)");
     }
     
     out.push_str("    LDD #0\n");
@@ -191,7 +264,7 @@ pub fn emit_beep(args: &[Expr], out: &mut String) {
         if let (Expr::Number(f), Expr::Number(d)) = (&args[0], &args[1]) {
             (*f, *d)
         } else {
-            out.push_str("    ; TODO: Support variable frequency/duration\n");
+            super::diagnostics::error("beep(freq, frames) needs constant arguments on m6809 (e.g. `beep(50, 8)`)");
             out.push_str("    LDD #0\n    STD RESULT\n");
             return;
         }

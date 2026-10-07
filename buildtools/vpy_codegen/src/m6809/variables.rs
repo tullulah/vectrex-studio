@@ -45,7 +45,12 @@ pub fn generate_user_variables(module: &Module, ram: &mut RamLayout) -> Result<S
                 // tunables — critical for keeping the layout inside the 1KB Vectrex RAM
                 // window ($C800-$CBFF). Array consts still need allocation for the
                 // pointer; we handle those below in mutable_arrays.
-                if !matches!(value, Expr::List(_)) && matches!(value, Expr::Number(_)) {
+                if matches!(value, Expr::Number(_)) {
+                    continue;
+                }
+                // Const ARRAYS live in ROM (ARRAY_<NAME>_DATA); the name evaluates to
+                // that address, so no RAM slot either.
+                if matches!(value, Expr::List(_)) {
                     continue;
                 }
                 vars.push((name.clone(), bytes));
@@ -82,6 +87,11 @@ pub fn generate_user_variables(module: &Module, ram: &mut RamLayout) -> Result<S
         let canonical = var.to_uppercase();
         if seen.insert(canonical) {
             if context::get_const_value(var).is_some() {
+                continue;
+            }
+            // Global array names evaluate to their data label (VAR_<NAME>_DATA /
+            // ARRAY_<NAME>_DATA); they have no pointer variable.
+            if context::global_array_base_label(var).is_some() {
                 continue;
             }
             ram.allocate(&format!("VAR_{}", var.to_uppercase()), *bytes, &format!("User variable: {}", var));
@@ -228,7 +238,10 @@ pub fn emit_array_data(module: &Module) -> String {
                             asm.push_str(&format!("    {} {}   ; Element {}\n", directive, n, i));
                         }
                     } else {
-                        asm.push_str(&format!("    {} 0    ; Element {} (TODO: complex init)\n", directive, i));
+                        super::diagnostics::error(format!(
+                            "array `{}` element {} is not a number literal; array literals must contain \
+                             only numbers (e.g. `[1, -2, 3]`) or only strings", name, i));
+                        asm.push_str(&format!("    {} 0    ; Element {} (not a literal: compile error)\n", directive, i));
                     }
                 }
                 asm.push_str("\n");
@@ -369,7 +382,10 @@ pub fn generate_variables(module: &Module) -> Result<String, String> {
                     if let Expr::Number(n) = elem {
                         asm.push_str(&format!("    FDB {}   ; Element {}\n", n, i));
                     } else {
-                        asm.push_str(&format!("    FDB 0    ; Element {} (TODO: complex init)\n", i));
+                        super::diagnostics::error(format!(
+                            "array `{}` element {} is not a number literal; array literals must contain \
+                             only numbers (e.g. `[1, -2, 3]`) or only strings", name, i));
+                        asm.push_str(&format!("    FDB 0    ; Element {} (not a literal: compile error)\n", i));
                     }
                 }
                 asm.push_str("\n");
@@ -388,170 +404,64 @@ pub fn generate_variables(module: &Module) -> Result<String, String> {
     Ok(asm)
 }
 
-/// Recursively collect all identifiers from statements, registering their types
-/// This captures local variables and any identifiers used in expressions
+/// Collect every identifier the generated code will load or store (locals, loop
+/// variables, synthetic for-in counters, globals read in expressions), registering
+/// the size of typed `let` declarations. Uses the exhaustive [`super::ast_walk`]
+/// visitor so identifiers in every position (index expressions of assignment
+/// targets, switch cases, for bounds…) get a RAM slot.
 fn collect_identifiers_from_stmts(stmts: &[Stmt], vars: &mut Vec<(String, usize)>) {
-    for stmt in stmts {
-        match stmt {
-            Stmt::Assign { target, value, .. } => {
-                // Collect from assignment target
-                match target {
-                    AssignTarget::Ident { name, .. } => {
-                        if !vars.iter().any(|(n, _)| n == name) {
-                            vars.push((name.clone(), 2)); // Default to 16-bit if not already registered
-                        }
-                    }
-                    AssignTarget::Index { target, .. } => {
-                        collect_identifiers_from_expr(target, vars);
-                    }
-                    AssignTarget::FieldAccess { target, .. } => {
-                        collect_identifiers_from_expr(target, vars);
-                    }
-                }
+    super::ast_walk::walk_stmts(stmts, &mut IdentCollector { vars });
+}
 
-                // Collect from value expression
-                collect_identifiers_from_expr(value, vars);
-            }
-            Stmt::Let { name, type_annotation, value, .. } => {
-                let (bytes, signed) = size_for_annotation(type_annotation);
-                context::set_var_size(name, bytes, signed);
-                vars.push((name.clone(), bytes));
-                collect_identifiers_from_expr(value, vars);
-            }
-            Stmt::If { cond, body, elifs, else_body, .. } => {
-                collect_identifiers_from_expr(cond, vars);
-                collect_identifiers_from_stmts(body, vars);
-                for (elif_cond, elif_body) in elifs {
-                    collect_identifiers_from_expr(elif_cond, vars);
-                    collect_identifiers_from_stmts(elif_body, vars);
-                }
-                if let Some(else_stmts) = else_body {
-                    collect_identifiers_from_stmts(else_stmts, vars);
-                }
-            }
-            Stmt::While { cond, body, .. } => {
-                collect_identifiers_from_expr(cond, vars);
-                collect_identifiers_from_stmts(body, vars);
-            }
-            Stmt::For { var, start, end, step, body, .. } => {
-                // For loop variables default to 16-bit if not already registered
-                if !vars.iter().any(|(n, _)| n == var) {
-                    vars.push((var.clone(), 2));
-                }
-                collect_identifiers_from_expr(start, vars);
-                collect_identifiers_from_expr(end, vars);
-                if let Some(step_expr) = step {
-                    collect_identifiers_from_expr(step_expr, vars);
-                }
-                collect_identifiers_from_stmts(body, vars);
-            }
-            Stmt::ForIn { var, iterable, body, source_line, .. } => {
-                // ForIn loop variables default to 16-bit if not already registered
-                if !vars.iter().any(|(n, _)| n == var) {
-                    vars.push((var.clone(), 2));
-                }
-                // Synthetic counter, base ptr, and len variables for array iteration
-                let ctr_name  = format!("_fi_{source_line}");
-                let base_name = format!("_fi_{source_line}_base");
-                let len_name  = format!("_fi_{source_line}_len");
-                for synthetic in [&ctr_name, &base_name, &len_name] {
-                    if !vars.iter().any(|(n, _)| n == synthetic) {
-                        vars.push((synthetic.clone(), 2));
-                    }
-                }
-                collect_identifiers_from_expr(iterable, vars);
-                collect_identifiers_from_stmts(body, vars);
-            }
-            Stmt::Switch { expr, cases, default, .. } => {
-                collect_identifiers_from_expr(expr, vars);
-                for (case_val, case_body) in cases {
-                    collect_identifiers_from_expr(case_val, vars);
-                    collect_identifiers_from_stmts(case_body, vars);
-                }
-                if let Some(def) = default {
-                    collect_identifiers_from_stmts(def, vars);
-                }
-            }
-            Stmt::Return(value, _) => {
-                if let Some(expr) = value {
-                    collect_identifiers_from_expr(expr, vars);
-                }
-            }
-            Stmt::Expr(expr, _) => {
-                collect_identifiers_from_expr(expr, vars);
-            }
-            Stmt::CompoundAssign { target, value, .. } => {
-                match target {
-                    AssignTarget::Ident { name, .. } => {
-                        if !vars.iter().any(|(n, _)| n == name) {
-                            vars.push((name.clone(), 2)); // Default to 16-bit if not already registered
-                        }
-                    }
-                    AssignTarget::Index { target, .. } => {
-                        collect_identifiers_from_expr(target, vars);
-                    }
-                    AssignTarget::FieldAccess { target, .. } => {
-                        collect_identifiers_from_expr(target, vars);
-                    }
-                }
-                collect_identifiers_from_expr(value, vars);
-            }
-            _ => {}
+struct IdentCollector<'v> {
+    vars: &'v mut Vec<(String, usize)>,
+}
+
+impl IdentCollector<'_> {
+    /// Register `name` as a 16-bit variable unless it is already registered.
+    fn add_default(&mut self, name: &str) {
+        if !self.vars.iter().any(|(n, _)| n == name) {
+            self.vars.push((name.to_string(), 2));
         }
     }
 }
 
-/// Recursively collect identifiers from an expression
-fn collect_identifiers_from_expr(expr: &Expr, vars: &mut Vec<(String, usize)>) {
-    match expr {
-        Expr::Ident(id) => {
-            // Only add if not already registered with a size
-            if !vars.iter().any(|(n, _)| n == &id.name) {
-                vars.push((id.name.clone(), 2)); // Default to 16-bit
+impl<'a> super::ast_walk::Visitor<'a> for IdentCollector<'_> {
+    fn stmt(&mut self, stmt: &'a Stmt) {
+        match stmt {
+            Stmt::Assign { target, .. } | Stmt::CompoundAssign { target, .. } => {
+                // Index/field targets: their sub-expressions are visited by the walker.
+                if let AssignTarget::Ident { name, .. } = target {
+                    self.add_default(name);
+                }
             }
-        }
-        Expr::Binary { left, right, .. } => {
-            collect_identifiers_from_expr(left, vars);
-            collect_identifiers_from_expr(right, vars);
-        }
-        Expr::Compare { left, right, .. } => {
-            collect_identifiers_from_expr(left, vars);
-            collect_identifiers_from_expr(right, vars);
-        }
-        Expr::Logic { left, right, .. } => {
-            collect_identifiers_from_expr(left, vars);
-            collect_identifiers_from_expr(right, vars);
-        }
-        Expr::Not(operand) => {
-            collect_identifiers_from_expr(operand, vars);
-        }
-        Expr::BitNot(operand) => {
-            collect_identifiers_from_expr(operand, vars);
-        }
-        Expr::Call(call_info) => {
-            // CallInfo has name field, not func
-            for arg in &call_info.args {
-                collect_identifiers_from_expr(arg, vars);
+            Stmt::Let { name, type_annotation, .. } => {
+                let (bytes, signed) = size_for_annotation(type_annotation);
+                context::set_var_size(name, bytes, signed);
+                self.vars.push((name.clone(), bytes));
             }
-        }
-        Expr::MethodCall(method_info) => {
-            collect_identifiers_from_expr(&method_info.target, vars);
-            for arg in &method_info.args {
-                collect_identifiers_from_expr(arg, vars);
+            Stmt::For { var, .. } => self.add_default(var),
+            Stmt::ForIn { var, source_line, .. } => {
+                self.add_default(var);
+                // Synthetic counter, base ptr, and len variables for array iteration
+                self.add_default(&format!("_fi_{source_line}"));
+                self.add_default(&format!("_fi_{source_line}_base"));
+                self.add_default(&format!("_fi_{source_line}_len"));
             }
+            Stmt::While { .. }
+            | Stmt::If { .. }
+            | Stmt::Switch { .. }
+            | Stmt::Expr(..)
+            | Stmt::Return(..)
+            | Stmt::Break { .. }
+            | Stmt::Continue { .. }
+            | Stmt::Pass { .. } => {}
         }
-        Expr::Index { target, index, .. } => {
-            collect_identifiers_from_expr(target, vars);
-            collect_identifiers_from_expr(index, vars);
+    }
+
+    fn expr(&mut self, expr: &'a Expr) {
+        if let Expr::Ident(id) = expr {
+            self.add_default(&id.name);
         }
-        Expr::FieldAccess { target, .. } => {
-            collect_identifiers_from_expr(target, vars);
-        }
-        Expr::List(elements) => {
-            for elem in elements {
-                collect_identifiers_from_expr(elem, vars);
-            }
-        }
-        _ => {}
     }
 }

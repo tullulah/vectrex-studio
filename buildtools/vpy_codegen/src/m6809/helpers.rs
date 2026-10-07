@@ -2,24 +2,20 @@
 //!
 //! Mathematical and utility functions
 
-use vpy_parser::{Module, Item, Stmt, Expr, BinOp};
+use vpy_parser::{Module, Expr, BinOp};
 use std::collections::HashSet;
 use super::ram_layout::RamLayout;
 
 /// Analyze module to detect which runtime helpers are needed
-/// Returns set of helper names that should be emitted
+/// Returns set of helper names that should be emitted.
+///
+/// Walks every statement and expression the code generator emits (all function
+/// bodies, including `for`/`switch` bodies, conditions, call arguments, index
+/// expressions and compound assignments, plus global initializers evaluated at
+/// startup) via the exhaustive [`super::ast_walk`] visitor.
 pub fn analyze_module_helpers(module: &Module) -> HashSet<String> {
     let mut needed = HashSet::new();
-
-    // Scan all functions in module
-    for item in &module.items {
-        if let Item::Function(func) = item {
-            for stmt in &func.body {
-                analyze_stmt_for_helpers(stmt, &mut needed);
-            }
-        }
-    }
-
+    super::ast_walk::for_each_expr(module, |expr| note_expr_helpers(expr, &mut needed));
     needed
 }
 
@@ -435,186 +431,14 @@ pub fn generate_ram_and_arrays(module: &Module, assets: &[crate::AssetInfo]) -> 
     Ok(asm)
 }
 
-/// Recursively analyze statement for helper usage
-fn analyze_stmt_for_helpers(stmt: &Stmt, needed: &mut HashSet<String>) {
-    match stmt {
-        Stmt::Expr(expr, _) => analyze_expr_for_helpers(expr, needed),
-        Stmt::Assign { value, .. } => analyze_expr_for_helpers(value, needed),
-        Stmt::If { cond, body, elifs, else_body, .. } => {
-            analyze_expr_for_helpers(cond, needed);
-            for s in body {
-                analyze_stmt_for_helpers(s, needed);
-            }
-            for (elif_cond, elif_body) in elifs {
-                analyze_expr_for_helpers(elif_cond, needed);
-                for s in elif_body {
-                    analyze_stmt_for_helpers(s, needed);
-                }
-            }
-            if let Some(else_stmts) = else_body {
-                for s in else_stmts {
-                    analyze_stmt_for_helpers(s, needed);
-                }
-            }
-        }
-        Stmt::While { cond, body, .. } => {
-            analyze_expr_for_helpers(cond, needed);
-            for s in body {
-                analyze_stmt_for_helpers(s, needed);
-            }
-        }
-        Stmt::Return(Some(expr), _) => analyze_expr_for_helpers(expr, needed),
-        _ => {}
-    }
-}
-
-/// Recursively analyze expression for helper usage
-fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
+/// Record the helpers a single expression node needs (children are visited by the walker).
+fn note_expr_helpers(expr: &Expr, needed: &mut HashSet<String>) {
     match expr {
-        // Builtin calls that may need runtime helpers
-        Expr::Call(call_info) => {
-            let name_upper = call_info.name.to_uppercase();
-            let args = &call_info.args;
-            
-            // Text/Number printing
-            if name_upper == "PRINT_TEXT" {
-                needed.insert("PRINT_TEXT".to_string());
-            }
-            if name_upper == "PRINT_NUMBER" {
-                needed.insert("PRINT_NUMBER".to_string());
-            }
-            
-            // Drawing helpers: Always needed when called (even with constant args)
-            if name_upper == "DRAW_CIRCLE" {
-                needed.insert("DRAW_CIRCLE".to_string());
-                needed.insert("DRAW_CIRCLE_RUNTIME".to_string());
-            }
-            if name_upper == "DRAW_RECT" {
-                needed.insert("DRAW_RECT".to_string());
-                needed.insert("DRAW_RECT_RUNTIME".to_string());
-            }
-            if name_upper == "DRAW_LINE" {
-                needed.insert("DRAW_LINE_WRAPPER".to_string());
-            }
-            if name_upper == "DRAW_VECTOR" {
-                needed.insert("DRAW_VECTOR".to_string());
-            }
-            if name_upper == "DRAW_VECTOR_EX" {
-                needed.insert("DRAW_VECTOR_EX".to_string());
-            }
-            if name_upper == "DRAW_VECTOR_3D" {
-                needed.insert("DRAW_VECTOR_3D".to_string());
-                needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
-            }
-            
-            // Joystick helpers: Always needed when called
-            if name_upper == "J1_X" {
-                needed.insert("J1X_BUILTIN".to_string());
-            }
-            if name_upper == "J1_Y" {
-                needed.insert("J1Y_BUILTIN".to_string());
-            }
-            if name_upper == "J2_X" {
-                needed.insert("J2X_BUILTIN".to_string());
-            }
-            if name_upper == "J2_Y" {
-                needed.insert("J2Y_BUILTIN".to_string());
-            }
-            
-            // Level system helpers
-            if name_upper == "SHOW_LEVEL" {
-                needed.insert("SHOW_LEVEL_RUNTIME".to_string());
-                // SHOW_LEVEL_RUNTIME calls Draw_Sync_List_At_With_Mirrors,
-                // which is emitted in drawing.rs when DRAW_VECTOR is in needed.
-                needed.insert("DRAW_VECTOR".to_string());
-            }
-            if name_upper == "LOAD_LEVEL" {
-                needed.insert("LOAD_LEVEL".to_string());
-                needed.insert("LOAD_LEVEL_RUNTIME".to_string());
-            }
-            if name_upper == "UPDATE_LEVEL" {
-                needed.insert("UPDATE_LEVEL_RUNTIME".to_string());
-            }
-            if name_upper == "LEVEL_COLLISION_Y" {
-                needed.insert("LEVEL_COLLISION_Y_RUNTIME".to_string());
-            }
-            if name_upper == "LEVEL_COLLISION_X" {
-                needed.insert("LEVEL_COLLISION_X_RUNTIME".to_string());
-            }
-            if name_upper == "GET_LEVEL_FLOOR_Y" {
-                // Multibank emits a JSR to this helper instead of inlining the
-                // bank-switch (which would self-corrupt PC from switchable banks).
-                // Single-bank inline path doesn't need it. See emit_get_level_floor_y.
-                needed.insert("GET_LEVEL_FLOOR_Y_RUNTIME".to_string());
-            }
-            
-// Math helpers: Need runtime if operands contain variables
-            if name_upper == "SQRT" && has_variable_args(args) {
-                needed.insert("SQRT_HELPER".to_string());
-                needed.insert("DIV16".to_string()); // SQRT uses DIV16
-            }
-            if name_upper == "POW" && has_variable_args(args) {
-                needed.insert("POW_HELPER".to_string());
-            }
-            if name_upper == "ATAN2" && has_variable_args(args) {
-                needed.insert("ATAN2_HELPER".to_string());
-            }
-            if name_upper == "RAND" {
-                needed.insert("RAND_HELPER".to_string());
-            }
-            if name_upper == "RAND_RANGE" {
-                needed.insert("RAND_RANGE_HELPER".to_string());
-                needed.insert("RAND_HELPER".to_string()); // RAND_RANGE uses RAND
-            }
-            if name_upper == "BEEP" {
-                needed.insert("BEEP".to_string());
-            }
-
-            if name_upper == "DRAW_ANIM" {
-                needed.insert("DRAW_ANIM_RUNTIME".to_string());
-                needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
-                // Record which animation names are used (for state RAM allocation)
-                if let Some(Expr::StringLit(anim_name)) = args.first() {
-                    needed.insert(format!("DRAW_ANIM_STATE_{}", anim_name.to_uppercase().replace('-', "_").replace(' ', "_")));
-                }
-            }
-
-            // .vrec vector-movie playback (VIDEO-ONLY, SINGLE-BANK).
-            // MOD16 is always emitted by math::emit_runtime_helpers, so the
-            // runtime can JSR MOD16 for frame % frame_count unconditionally.
-            if name_upper == "DRAW_RECORDING" {
-                needed.insert("DRAW_RECORDING_RUNTIME".to_string());
-                // DREC_SCALE uses MUL16 for the signed (coord*scale)>>7 math.
-                // (MOD16 is always emitted, so no need to request it.)
-                needed.insert("MUL16".to_string());
-            }
-
-            // Enemy system helpers
-            if name_upper == "SPAWN_ENEMIES" || name_upper == "UPDATE_ENEMIES" || name_upper == "DRAW_ENEMIES" {
-                needed.insert("SPAWN_ENEMIES".to_string());
-                needed.insert("UPDATE_ENEMIES".to_string());
-                needed.insert("DRAW_ENEMIES".to_string());
-                needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
-                // Enemies may have vanim actions → always include DRAW_ANIM_RUNTIME so its
-                // RAM variables (DRAW_ANIM_MIRROR_X, DRAW_ANIM_SCALE, DRAW_SCALE, …) are allocated
-                // and the DRAW_ANIM_RUNTIME subroutine is emitted into the helpers bank.
-                needed.insert("DRAW_ANIM_RUNTIME".to_string());
-                // Wander enemies use RAND_HELPER for randomized idle pauses
-                needed.insert("RAND_HELPER".to_string());
-            }
-
-            // Recursively analyze arguments
-            for arg in args {
-                analyze_expr_for_helpers(arg, needed);
-            }
-        }
-        
-        // Binary operations that may need math helpers
+        Expr::Call(call_info) => note_call_helpers(call_info, needed),
         Expr::Binary { left, op, right } => {
-            // Check if operands are variables (not constants)
+            // Constant-folded when both operands are literals; otherwise a runtime helper.
             let left_is_const = matches!(**left, Expr::Number(_));
             let right_is_const = matches!(**right, Expr::Number(_));
-            
             if !left_is_const || !right_is_const {
                 match op {
                     BinOp::Mul => { needed.insert("MUL16".to_string()); }
@@ -623,23 +447,141 @@ fn analyze_expr_for_helpers(expr: &Expr, needed: &mut HashSet<String>) {
                     _ => {}
                 }
             }
-            
-            analyze_expr_for_helpers(left, needed);
-            analyze_expr_for_helpers(right, needed);
-        }
-        
-        // Other expression types (Not and BitNot are unary operations)
-        Expr::Not(operand) | Expr::BitNot(operand) => analyze_expr_for_helpers(operand, needed),
-        Expr::Index { target, index } => {
-            analyze_expr_for_helpers(target, needed);
-            analyze_expr_for_helpers(index, needed);
-        }
-        Expr::List(items) => {
-            for item in items {
-                analyze_expr_for_helpers(item, needed);
-            }
         }
         _ => {}
+    }
+}
+
+/// Record the helpers a builtin call needs.
+fn note_call_helpers(call_info: &vpy_parser::CallInfo, needed: &mut HashSet<String>) {
+    let name_upper = call_info.name.to_uppercase();
+    let args = &call_info.args;
+    
+    // Text/Number printing
+    if name_upper == "PRINT_TEXT" {
+        needed.insert("PRINT_TEXT".to_string());
+    }
+    if name_upper == "PRINT_NUMBER" {
+        needed.insert("PRINT_NUMBER".to_string());
+    }
+    
+    // Drawing helpers: Always needed when called (even with constant args)
+    if name_upper == "DRAW_CIRCLE" {
+        needed.insert("DRAW_CIRCLE".to_string());
+        needed.insert("DRAW_CIRCLE_RUNTIME".to_string());
+    }
+    if name_upper == "DRAW_RECT" {
+        needed.insert("DRAW_RECT".to_string());
+        needed.insert("DRAW_RECT_RUNTIME".to_string());
+    }
+    if name_upper == "DRAW_LINE" {
+        needed.insert("DRAW_LINE_WRAPPER".to_string());
+    }
+    if name_upper == "DRAW_VECTOR" {
+        needed.insert("DRAW_VECTOR".to_string());
+    }
+    if name_upper == "DRAW_VECTOR_EX" {
+        needed.insert("DRAW_VECTOR_EX".to_string());
+    }
+    if name_upper == "DRAW_VECTOR_3D" {
+        needed.insert("DRAW_VECTOR_3D".to_string());
+        needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
+    }
+    
+    // Joystick helpers: Always needed when called
+    if name_upper == "J1_X" {
+        needed.insert("J1X_BUILTIN".to_string());
+    }
+    if name_upper == "J1_Y" {
+        needed.insert("J1Y_BUILTIN".to_string());
+    }
+    if name_upper == "J2_X" {
+        needed.insert("J2X_BUILTIN".to_string());
+    }
+    if name_upper == "J2_Y" {
+        needed.insert("J2Y_BUILTIN".to_string());
+    }
+    
+    // Level system helpers
+    if name_upper == "SHOW_LEVEL" {
+        needed.insert("SHOW_LEVEL_RUNTIME".to_string());
+        // SHOW_LEVEL_RUNTIME calls Draw_Sync_List_At_With_Mirrors,
+        // which is emitted in drawing.rs when DRAW_VECTOR is in needed.
+        needed.insert("DRAW_VECTOR".to_string());
+    }
+    if name_upper == "LOAD_LEVEL" {
+        needed.insert("LOAD_LEVEL".to_string());
+        needed.insert("LOAD_LEVEL_RUNTIME".to_string());
+    }
+    if name_upper == "UPDATE_LEVEL" {
+        needed.insert("UPDATE_LEVEL_RUNTIME".to_string());
+    }
+    if name_upper == "LEVEL_COLLISION_Y" {
+        needed.insert("LEVEL_COLLISION_Y_RUNTIME".to_string());
+    }
+    if name_upper == "LEVEL_COLLISION_X" {
+        needed.insert("LEVEL_COLLISION_X_RUNTIME".to_string());
+    }
+    if name_upper == "GET_LEVEL_FLOOR_Y" {
+        // Multibank emits a JSR to this helper instead of inlining the
+        // bank-switch (which would self-corrupt PC from switchable banks).
+        // Single-bank inline path doesn't need it. See emit_get_level_floor_y.
+        needed.insert("GET_LEVEL_FLOOR_Y_RUNTIME".to_string());
+    }
+    
+// Math helpers: Need runtime if operands contain variables
+    if name_upper == "SQRT" && has_variable_args(args) {
+        needed.insert("SQRT_HELPER".to_string());
+        needed.insert("DIV16".to_string()); // SQRT uses DIV16
+    }
+    if name_upper == "POW" && has_variable_args(args) {
+        needed.insert("POW_HELPER".to_string());
+    }
+    if name_upper == "ATAN2" && has_variable_args(args) {
+        needed.insert("ATAN2_HELPER".to_string());
+    }
+    if name_upper == "RAND" {
+        needed.insert("RAND_HELPER".to_string());
+    }
+    if name_upper == "RAND_RANGE" {
+        needed.insert("RAND_RANGE_HELPER".to_string());
+        needed.insert("RAND_HELPER".to_string()); // RAND_RANGE uses RAND
+    }
+    if name_upper == "BEEP" {
+        needed.insert("BEEP".to_string());
+    }
+
+    if name_upper == "DRAW_ANIM" {
+        needed.insert("DRAW_ANIM_RUNTIME".to_string());
+        needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
+        // Record which animation names are used (for state RAM allocation)
+        if let Some(Expr::StringLit(anim_name)) = args.first() {
+            needed.insert(format!("DRAW_ANIM_STATE_{}", anim_name.to_uppercase().replace('-', "_").replace(' ', "_")));
+        }
+    }
+
+    // .vrec vector-movie playback (VIDEO-ONLY, SINGLE-BANK).
+    // MOD16 is always emitted by math::emit_runtime_helpers, so the
+    // runtime can JSR MOD16 for frame % frame_count unconditionally.
+    if name_upper == "DRAW_RECORDING" {
+        needed.insert("DRAW_RECORDING_RUNTIME".to_string());
+        // DREC_SCALE uses MUL16 for the signed (coord*scale)>>7 math.
+        // (MOD16 is always emitted, so no need to request it.)
+        needed.insert("MUL16".to_string());
+    }
+
+    // Enemy system helpers
+    if name_upper == "SPAWN_ENEMIES" || name_upper == "UPDATE_ENEMIES" || name_upper == "DRAW_ENEMIES" {
+        needed.insert("SPAWN_ENEMIES".to_string());
+        needed.insert("UPDATE_ENEMIES".to_string());
+        needed.insert("DRAW_ENEMIES".to_string());
+        needed.insert("DRAW_VECTOR".to_string()); // for DRAW_VEC_X/Y RAM vars
+        // Enemies may have vanim actions → always include DRAW_ANIM_RUNTIME so its
+        // RAM variables (DRAW_ANIM_MIRROR_X, DRAW_ANIM_SCALE, DRAW_SCALE, …) are allocated
+        // and the DRAW_ANIM_RUNTIME subroutine is emitted into the helpers bank.
+        needed.insert("DRAW_ANIM_RUNTIME".to_string());
+        // Wander enemies use RAND_HELPER for randomized idle pauses
+        needed.insert("RAND_HELPER".to_string());
     }
 }
 
@@ -1885,7 +1827,8 @@ fn emit_note_update_runtime(asm: &mut String) {
         "    LDB A,X                 ; B = signed semitone offset",
         "    LDX >TMPPTR",
         "    LDA 3,X                 ; A = base_note",
-        "    ABA                     ; A = base_note + offset",
+        "    PSHS B                  ; (6809 has no ABA)",
+        "    ADDA ,S+                ; A = base_note + offset",
         "    ; Clamp 24-107",
         "    CMPA #24",
         "    BHS note_upd_hi",

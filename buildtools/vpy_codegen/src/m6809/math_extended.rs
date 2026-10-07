@@ -184,7 +184,22 @@ pub fn emit_atan2(args: &[Expr], out: &mut String, assets: &[AssetInfo]) {
     }
     
     out.push_str("    ; ATAN2: Arctangent (y, x)\n");
-    
+
+    // Constant arguments fold at compile time (angle units: 128 = full turn).
+    if let (Expr::Number(y), Expr::Number(x)) = (&args[0], &args[1]) {
+        let turns = (*y as f64).atan2(*x as f64) / (2.0 * std::f64::consts::PI);
+        let angle = ((turns * 128.0).round() as i32).rem_euclid(128);
+        out.push_str(&format!("    LDD #{}        ; atan2({}, {}) folded\n", angle, y, x));
+        out.push_str("    STD RESULT\n");
+        return;
+    }
+    // ATAN2_HELPER only handles x == 0 (it returned 0 for every other input):
+    // a runtime atan2 is a compile error until it has a real implementation.
+    super::diagnostics::error(
+        "atan2(y, x) with non-constant arguments is not implemented on m6809 \
+         (only constant arguments, folded at compile time)",
+    );
+
     // Evaluate y; D = y after emit
     expressions::emit_simple_expr(&args[0], out, assets);
     out.push_str("    STD TMPPTR     ; Save y\n");

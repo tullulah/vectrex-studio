@@ -864,8 +864,11 @@ fn expand_local_label(operand: &str, last_global: &str) -> String {
 }
 
 /// Helper: Checks whether an operand is a label (alphanumeric, underscore, or dot for locals)
+/// A leading digit means a numeric literal (`BRA 2`, `JSR 4096`), not a label.
 fn is_label(operand: &str) -> bool {
-    operand.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.')
+    !operand.is_empty()
+        && !operand.starts_with(|c: char| c.is_ascii_digit())
+        && operand.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.')
 }
 
 fn emit_lda(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<String, u16>) -> Result<(), String> {
@@ -3111,6 +3114,27 @@ fn emit_ldu(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<String
 }
 
 fn emit_stu(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<String, u16>) -> Result<(), String> {
+    // Indexed addressing (,X  4,X  etc.) — used by the PLAY_NOTE runtime.
+    if operand.contains(',') {
+        let (postbyte, offset) = parse_indexed_mode(operand)?;
+        emitter.stu_indexed(postbyte);
+        if let Some(off) = offset {
+            emitter.emit(off as u8);
+        }
+        return Ok(());
+    }
+    if let Some(operand_without_prefix) = operand.strip_prefix('>') {
+        // Forced extended addressing (lwasm compatibility)
+        match resolve_address(operand_without_prefix, equates) {
+            Ok(addr) => emitter.stu_extended(addr),
+            Err(e) if e.starts_with("SYMBOL:") => {
+                let (symbol, addend) = parse_symbol_and_addend(&e)?;
+                emitter.emit_extended_symbol_ref(0xFF, &symbol, addend); // STU extended
+            }
+            Err(e) => return Err(e),
+        }
+        return Ok(());
+    }
     let upper = operand.to_uppercase();
     if let Some(&addr) = equates.get(&upper) {
         emitter.stu_extended(addr);
@@ -3304,3 +3328,7 @@ fn parse_push_pull_postbyte(operand: &str) -> Result<u8, String> {
     
     Ok(postbyte)
 }
+
+#[cfg(test)]
+#[path = "asm_to_binary_tests.rs"]
+mod tests;

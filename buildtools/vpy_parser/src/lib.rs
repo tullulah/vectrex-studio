@@ -8,6 +8,7 @@
 //! - `error.rs`: Error types (ParseError, ParseResult)
 //! - `lexer.rs`: Tokenizer (lexical analysis)
 //! - `builtins.rs`: Builtin function metadata
+//! - `symbols.rs`: Cross-module symbol naming (`MODULE_symbol`), shared by every phase
 //!
 //! # Public API
 //!
@@ -20,6 +21,7 @@ pub mod builtins;
 pub mod error;
 pub mod lexer;
 pub mod parser;
+pub mod symbols;
 
 pub use ast::{
     AssignTarget, BinOp, CallInfo, CmpOp, Expr, ExportDecl, FieldDef, Function, IdentInfo,

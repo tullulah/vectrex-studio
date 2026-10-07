@@ -15,6 +15,7 @@ pub mod functions;
 pub mod expressions;
 pub mod builtins;
 pub mod helpers;
+pub mod diagnostics;
 pub mod math;
 pub mod joystick;
 pub mod debug;
@@ -25,8 +26,11 @@ pub mod utilities;
 pub mod ram_layout;
 pub mod assets;
 pub mod context;  // Thread-local context for mutable array tracking
+pub mod ast_walk; // Exhaustive AST visitor shared by every "uses X?" scan
+#[cfg(test)]
+mod regression_tests;
 
-use vpy_parser::{Item, Expr, Stmt, CallInfo};
+use vpy_parser::{Item, Expr};
 
 /// Extract vector names referenced by a level asset
 /// Scans level JSON for vectorName fields in all layers
@@ -72,175 +76,30 @@ fn extract_level_vectors(level_name: &str, assets: &[crate::AssetInfo]) -> Vec<S
 fn analyze_used_assets(module: &Module, assets: &[crate::AssetInfo]) -> std::collections::HashSet<String> {
     use std::collections::HashSet;
     let mut used = HashSet::new();
-    
-    fn scan_expr(expr: &Expr, used: &mut HashSet<String>, assets: &[crate::AssetInfo], depth: usize) {
-        const MAX_DEPTH: usize = 500;
-        if depth > MAX_DEPTH {
-            panic!("Maximum expression nesting depth ({}) exceeded during asset analysis.", MAX_DEPTH);
+    ast_walk::for_each_call(module, |call_info| {
+        let name_upper = call_info.name.to_uppercase();
+        // DRAW_VECTOR("asset_name", x, y), DRAW_VECTOR_EX("asset_name", x, y, mirror, intensity),
+        // PLAY_MUSIC("asset_name"), PLAY_SFX("asset_name"), or LOAD_LEVEL("level_name")
+        if (name_upper == "DRAW_VECTOR" && call_info.args.len() == 3) ||
+           (name_upper == "DRAW_VECTOR_EX" && call_info.args.len() == 5) ||
+           (name_upper == "PLAY_MUSIC" && call_info.args.len() == 1) ||
+           (name_upper == "PLAY_SFX" && call_info.args.len() == 1) ||
+           (name_upper == "LOAD_LEVEL" && call_info.args.len() == 1) {
+            if let Expr::StringLit(asset_name) = &call_info.args[0] {
+                used.insert(asset_name.clone());
+                // If loading a level, also mark vectors it references as used
+                if name_upper == "LOAD_LEVEL" {
+                    used.extend(extract_level_vectors(asset_name, assets));
+                }
+            }
         }
-        match expr {
-            Expr::Call(call_info) => {
-                let name_upper = call_info.name.to_uppercase();
-                // Check for DRAW_VECTOR("asset_name", x, y), DRAW_VECTOR_EX("asset_name", x, y, mirror, intensity), 
-                // PLAY_MUSIC("asset_name"), PLAY_SFX("asset_name"), or LOAD_LEVEL("level_name")
-                if (name_upper == "DRAW_VECTOR" && call_info.args.len() == 3) || 
-                   (name_upper == "DRAW_VECTOR_EX" && call_info.args.len() == 5) ||
-                   (name_upper == "PLAY_MUSIC" && call_info.args.len() == 1) ||
-                   (name_upper == "PLAY_SFX" && call_info.args.len() == 1) ||
-                   (name_upper == "LOAD_LEVEL" && call_info.args.len() == 1) {
-                    if let Expr::StringLit(asset_name) = &call_info.args[0] {
-                        used.insert(asset_name.clone());
-
-                        // If loading a level, also mark vectors it references as used
-                        if name_upper == "LOAD_LEVEL" {
-                            let level_vectors = extract_level_vectors(asset_name, assets);
-                            for vec_name in level_vectors {
-                                used.insert(vec_name);
-                            }
-                        }
-                    }
-                }
-                // Recursively scan arguments
-                for arg in &call_info.args {
-                    scan_expr(arg, used, assets, depth + 1);
-                }
-            },
-            Expr::MethodCall(mc) => {
-                // Scan target and arguments for nested asset usages
-                scan_expr(&mc.target, used, assets, depth + 1);
-                for arg in &mc.args {
-                    scan_expr(arg, used, assets, depth + 1);
-                }
-            },
-            Expr::Binary { left, right, .. } | Expr::Compare { left, right, .. } | Expr::Logic { left, right, .. } => {
-                scan_expr(left, used, assets, depth + 1);
-                scan_expr(right, used, assets, depth + 1);
-            },
-            Expr::Not(inner) | Expr::BitNot(inner) => scan_expr(inner, used, assets, depth + 1),
-            Expr::List(elements) => {
-                for elem in elements {
-                    scan_expr(elem, used, assets, depth + 1);
-                }
-            },
-            Expr::Index { target, index } => {
-                scan_expr(target, used, assets, depth + 1);
-                scan_expr(index, used, assets, depth + 1);
-            },
-            _ => {}
-        }
-    }
-    
-    fn scan_stmt(stmt: &Stmt, used: &mut HashSet<String>, assets: &[crate::AssetInfo], depth: usize) {
-        const MAX_DEPTH: usize = 500;
-        if depth > MAX_DEPTH {
-            panic!("Maximum statement nesting depth ({}) exceeded during asset analysis.", MAX_DEPTH);
-        }
-        match stmt {
-            Stmt::Assign { value, .. } => scan_expr(value, used, assets, depth + 1),
-            Stmt::Let { value, .. } => scan_expr(value, used, assets, depth + 1),
-            Stmt::CompoundAssign { value, .. } => scan_expr(value, used, assets, depth + 1),
-            Stmt::Expr(expr, _line) => scan_expr(expr, used, assets, depth + 1),
-            Stmt::If { cond, body, elifs, else_body, .. } => {
-                scan_expr(cond, used, assets, depth + 1);
-                for s in body { scan_stmt(s, used, assets, depth + 1); }
-                for (elif_cond, elif_body) in elifs {
-                    scan_expr(elif_cond, used, assets, depth + 1);
-                    for s in elif_body { scan_stmt(s, used, assets, depth + 1); }
-                }
-                if let Some(els) = else_body {
-                    for s in els { scan_stmt(s, used, assets, depth + 1); }
-                }
-            },
-            Stmt::While { cond, body, .. } => {
-                scan_expr(cond, used, assets, depth + 1);
-                for s in body { scan_stmt(s, used, assets, depth + 1); }
-            },
-            Stmt::For { start, end, step, body, .. } => {
-                scan_expr(start, used, assets, depth + 1);
-                scan_expr(end, used, assets, depth + 1);
-                if let Some(step_expr) = step {
-                    scan_expr(step_expr, used, assets, depth + 1);
-                }
-                for s in body { scan_stmt(s, used, assets, depth + 1); }
-            },
-            Stmt::ForIn { iterable, body, .. } => {
-                scan_expr(iterable, used, assets, depth + 1);
-                for s in body { scan_stmt(s, used, assets, depth + 1); }
-            },
-            Stmt::Switch { expr, cases, default, .. } => {
-                scan_expr(expr, used, assets, depth + 1);
-                for (case_expr, case_body) in cases {
-                    scan_expr(case_expr, used, assets, depth + 1);
-                    for s in case_body { scan_stmt(s, used, assets, depth + 1); }
-                }
-                if let Some(default_body) = default {
-                    for s in default_body { scan_stmt(s, used, assets, depth + 1); }
-                }
-            },
-            Stmt::Return(Some(expr), _line) => scan_expr(expr, used, assets, depth + 1),
-            _ => {}
-        }
-    }
-    
-    // Scan all functions and top-level items in module
-    for item in &module.items {
-        match item {
-            Item::Function(func) => {
-                for stmt in &func.body {
-                    scan_stmt(stmt, &mut used, assets, 0);
-                }
-            },
-            Item::Const { value, .. } | Item::GlobalLet { value, .. } => {
-                scan_expr(value, &mut used, assets, 0);
-            },
-            Item::ExprStatement(expr) => {
-                scan_expr(expr, &mut used, assets, 0);
-            },
-            _ => {}
-        }
-    }
-    
+    });
     used
 }
 
-/// Check if trigonometric functions (SIN, COS, TAN) are used in statements
-fn check_trig_usage(stmts: &[Stmt]) -> bool {
-    for stmt in stmts {
-        if check_stmt_trig(stmt) {
-            return true;
-        }
-    }
-    false
-}
-
-fn check_stmt_trig(stmt: &Stmt) -> bool {
-    match stmt {
-        Stmt::Expr(expr, _) => check_expr_trig(expr),
-        Stmt::Assign { value, .. } => check_expr_trig(value),
-        Stmt::If { cond, body, elifs, else_body, .. } => {
-            check_expr_trig(cond)
-                || check_trig_usage(body)
-                || elifs.iter().any(|(c, b)| check_expr_trig(c) || check_trig_usage(b))
-                || else_body.as_ref().map_or(false, |b| check_trig_usage(b))
-        }
-        Stmt::While { cond, body, .. } => check_expr_trig(cond) || check_trig_usage(body),
-        _ => false,
-    }
-}
-
-fn check_expr_trig(expr: &Expr) -> bool {
-    match expr {
-        Expr::Call(CallInfo { name, args, .. }) => {
-            let upper = name.to_uppercase();
-            upper == "SIN" || upper == "COS" || upper == "TAN" || upper == "DRAW_VECTOR_3D"
-                || args.iter().any(check_expr_trig)
-        }
-        Expr::Binary { left, right, .. } => check_expr_trig(left) || check_expr_trig(right),
-        Expr::Not(operand) | Expr::BitNot(operand) => check_expr_trig(operand),
-        Expr::Index { target, index, .. } => check_expr_trig(target) || check_expr_trig(index),
-        Expr::List(elements) => elements.iter().any(check_expr_trig),
-        _ => false,
-    }
+/// True if SIN / COS / TAN / DRAW_VECTOR_3D is used anywhere (needs the trig LUTs).
+fn uses_trig(module: &Module) -> bool {
+    ast_walk::calls_any(module, &["SIN", "COS", "TAN", "DRAW_VECTOR_3D"])
 }
 
 use vpy_parser::Module;
@@ -279,20 +138,30 @@ pub fn generate_m6809_asm(
         }
     }
 
+    // len() is a compile-time constant on m6809; reject arguments whose length
+    // is unknown instead of silently evaluating to 0.
+    utilities::validate_len_calls(module)?;
+
     // FILTER ASSETS: Only embed assets actually used in code (2026-01-20)
     let assets = assets::filter_used_assets(assets, module);
     
     // CRITICAL FIX (2026-01-19): Populate context with mutable arrays
     // This allows emit_index() to know whether to use RAM or ROM labels
+    // Start from a clean slate: the context is thread-local and must not leak
+    // consts/arrays/sizes from a previous compilation on the same thread.
+    context::clear_context();
+    diagnostics::begin(module);
     let mut mutable_arrays = std::collections::HashSet::new();
+    let mut const_arrays = std::collections::HashSet::new();
     for item in &module.items {
-        if let Item::GlobalLet { name, value, .. } = item {
-            if matches!(value, Expr::List(_)) {
-                mutable_arrays.insert(name.clone());
-            }
+        match item {
+            Item::GlobalLet { name, value: Expr::List(_), .. } => { mutable_arrays.insert(name.clone()); }
+            Item::Const { name, value: Expr::List(_), .. } => { const_arrays.insert(name.clone()); }
+            _ => {}
         }
     }
     context::set_mutable_arrays(mutable_arrays);
+    context::set_const_arrays(const_arrays);
 
     // Register compile-time const values so emit_simple_expr emits LDD #n (immediate)
     // instead of LDD >VAR_name (RAM load), which would read uninitialized garbage.
@@ -673,13 +542,7 @@ pub fn generate_m6809_asm(
     
     // Emit trigonometry lookup tables (SIN, COS, TAN) - CONDITIONAL
     // Only emit if SIN, COS, or TAN functions are actually used
-    if module.items.iter().any(|item| {
-        if let Item::Function(f) = item {
-            check_trig_usage(&f.body)
-        } else {
-            false
-        }
-    }) {
+    if uses_trig(module) {
         asm.push_str(&math_extended::generate_trig_tables());
     }
     
@@ -703,13 +566,7 @@ pub fn generate_m6809_asm(
     // Emit compact 3D data tables in bank_00 for DRAW_VECTOR_3D.
     // Must be in the same bank as user code so the fixed helpers bank runtime
     // can read them (the calling bank stays mapped at $0000-$3FFF during the JSR).
-    let uses_draw_vector_3d = module.items.iter().any(|item| {
-        if let Item::Function(f) = item {
-            check_trig_usage(&f.body) // already returns true for DRAW_VECTOR_3D
-        } else {
-            false
-        }
-    });
+    let uses_draw_vector_3d = ast_walk::calls_any(module, &["DRAW_VECTOR_3D"]);
     if uses_draw_vector_3d && !assets.is_empty() {
         asm.push_str(&assets::generate_3d_data_asm(&assets));
     }
@@ -721,6 +578,9 @@ pub fn generate_m6809_asm(
     // Hardware vectors ($FFF0-$FFFF) are in BIOS ROM
     // BIOS vectors point to RAM vectors ($CBF2-$CBFB) as defined in VECTREX.I
     // Cartridge starts at $0000 and BIOS jumps there after verification
-    
+
+    // Anything an emitter could not translate is a compile error, not a comment.
+    diagnostics::finish()?;
+
     Ok(asm)
 }

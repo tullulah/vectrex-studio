@@ -1079,6 +1079,13 @@ impl BinaryEmitter {
         self.emit_word(addr);
     }
 
+    /// STU indexed (opcode 0xEF + postbyte)
+    pub fn stu_indexed(&mut self, postbyte: u8) {
+        self.record_line_mapping();
+        self.emit(0xEF);
+        self.emit(postbyte);
+    }
+
     /// LDS #immediate (opcode 0x10CE) - Load Stack Pointer
     pub fn lds_immediate(&mut self, value: u16) {
         self.record_line_mapping();

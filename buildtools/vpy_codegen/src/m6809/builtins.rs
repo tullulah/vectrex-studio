@@ -6,7 +6,7 @@
 //! - WAIT_RECAL: Wait for screen refresh
 //! - SET_INTENSITY: Set drawing intensity
 
-use vpy_parser::{Expr, Item, Module, Stmt};
+use vpy_parser::{Expr, Item, Module};
 use super::expressions;
 use super::math;
 use super::debug;
@@ -890,13 +890,6 @@ pub fn emit_builtin(
             true
         }
 
-        "OLD_LEN" => {
-            out.push_str("    ; LEN: Get array/string length\n");
-            expressions::emit_simple_expr(&args[0], out, assets);
-            out.push_str("    ; TODO: LEN implementation\n");
-            out.push_str("    STD RESULT\n");
-            true
-        }
         
         // ===== Animation =====
         // DRAW_ANIM("name")                          — draw at DRAW_VEC_X/Y (caller must set)
@@ -1597,120 +1590,30 @@ pub fn generate_helper_functions() -> String {
     
     asm
 }
-/// Collect all PRINT_TEXT string literals from the module
-/// Returns a map of hash -> string
+/// Collect every string literal the generated code can reference as
+/// `PRINT_TEXT_STR_<hash>` (PRINT_TEXT text, string arguments, scalar string
+/// `GlobalLet`s initialized at startup). Returns a map of hash -> string.
+///
+/// String-ARRAY literals are skipped: they get their own `ARRAY_<NAME>_DATA_STR_<i>`
+/// labels in `variables::emit_array_data`.
 pub fn collect_print_text_strings(module: &Module) -> std::collections::BTreeMap<u64, String> {
+    use super::ast_walk::{self, ExprFn};
     let mut strings = std::collections::BTreeMap::new();
-    
-    // Visit statements and collect PRINT_TEXT strings
+    let mut visitor = ExprFn(|e: &Expr| {
+        if let Expr::StringLit(s) = e {
+            strings.insert(hash_string(s), s.clone());
+        }
+    });
+    ast_walk::walk_code(module, &mut visitor);
     for item in &module.items {
-        if let vpy_parser::Item::Function(func) = item {
-            for stmt in &func.body {
-                collect_strings_from_stmt(stmt, &mut strings);
+        // Only GlobalLet scalars are evaluated by MAIN's startup code.
+        if let Item::GlobalLet { value, .. } = item {
+            if !matches!(value, Expr::List(_)) {
+                ast_walk::walk_expr(value, &mut visitor);
             }
         }
     }
-    
     strings
-}
-
-fn collect_strings_from_stmt(stmt: &vpy_parser::Stmt, strings: &mut std::collections::BTreeMap<u64, String>) {
-    match stmt {
-        vpy_parser::Stmt::Expr(expr, _) => collect_strings_from_expr(expr, strings),
-        vpy_parser::Stmt::Assign { value, .. } => collect_strings_from_expr(value, strings),
-        vpy_parser::Stmt::Let { value, .. } => collect_strings_from_expr(value, strings),
-        vpy_parser::Stmt::For { start, end, step, body, .. } => {
-            collect_strings_from_expr(start, strings);
-            collect_strings_from_expr(end, strings);
-            if let Some(s) = step {
-                collect_strings_from_expr(s, strings);
-            }
-            for s in body {
-                collect_strings_from_stmt(s, strings);
-            }
-        }
-        vpy_parser::Stmt::ForIn { iterable, body, .. } => {
-            collect_strings_from_expr(iterable, strings);
-            for s in body {
-                collect_strings_from_stmt(s, strings);
-            }
-        }
-        vpy_parser::Stmt::While { cond, body, .. } => {
-            collect_strings_from_expr(cond, strings);
-            for s in body {
-                collect_strings_from_stmt(s, strings);
-            }
-        }
-        vpy_parser::Stmt::If { cond, body, elifs, else_body, .. } => {
-            collect_strings_from_expr(cond, strings);
-            for s in body {
-                collect_strings_from_stmt(s, strings);
-            }
-            for (e, b) in elifs {
-                collect_strings_from_expr(e, strings);
-                for s in b {
-                    collect_strings_from_stmt(s, strings);
-                }
-            }
-            if let Some(else_stmts) = else_body {
-                for s in else_stmts {
-                    collect_strings_from_stmt(s, strings);
-                }
-            }
-        }
-        vpy_parser::Stmt::CompoundAssign { value, .. } => collect_strings_from_expr(value, strings),
-        _ => {}
-    }
-}
-
-fn collect_strings_from_expr(expr: &Expr, strings: &mut std::collections::BTreeMap<u64, String>) {
-    match expr {
-        Expr::StringLit(s) => {
-            let hash = hash_string(s);
-            strings.insert(hash, s.clone());
-        }
-        Expr::Call(call) => {
-            // Check for PRINT_TEXT 3rd arg (redundant now but harmless)
-            if call.name.to_uppercase() == "PRINT_TEXT" && call.args.len() >= 3 {
-                if let Expr::StringLit(s) = &call.args[2] {
-                    let hash = hash_string(s);
-                    strings.insert(hash, s.clone());
-                }
-            }
-            for arg in &call.args {
-                collect_strings_from_expr(arg, strings);
-            }
-        }
-        Expr::Binary { left, right, .. } => {
-            collect_strings_from_expr(left, strings);
-            collect_strings_from_expr(right, strings);
-        }
-        Expr::Compare { left, right, .. } => {
-            collect_strings_from_expr(left, strings);
-            collect_strings_from_expr(right, strings);
-        }
-        Expr::Logic { left, right, .. } => {
-            collect_strings_from_expr(left, strings);
-            collect_strings_from_expr(right, strings);
-        }
-        Expr::Not(expr) | Expr::BitNot(expr) => collect_strings_from_expr(expr, strings),
-        Expr::Index { target, index } => {
-            collect_strings_from_expr(target, strings);
-            collect_strings_from_expr(index, strings);
-        }
-        Expr::FieldAccess { target, .. } => collect_strings_from_expr(target, strings),
-        Expr::MethodCall(call) => {
-            for arg in &call.args {
-                collect_strings_from_expr(arg, strings);
-            }
-        }
-        Expr::List(items) => {
-            for item in items {
-                collect_strings_from_expr(item, strings);
-            }
-        }
-        _ => {}
-    }
 }
 
 /// DRAW_CIRCLE with full variable support
@@ -1861,38 +1764,7 @@ fn sim_sd_files() -> &'static Vec<String> {
 
 /// True if the module calls SD_FILE_COUNT / SD_FILE_NAME (so we emit the table).
 pub fn module_uses_sd(module: &Module) -> bool {
-    fn expr_uses(e: &Expr) -> bool {
-        match e {
-            Expr::Call(c) => {
-                let n = c.name.to_ascii_uppercase();
-                n == "SD_FILE_COUNT" || n == "SD_FILE_NAME" || c.args.iter().any(expr_uses)
-            }
-            _ => false,
-        }
-    }
-    fn stmts_use(stmts: &[Stmt]) -> bool {
-        stmts.iter().any(|s| match s {
-            Stmt::Expr(e, _) => expr_uses(e),
-            Stmt::Return(Some(e), _) => expr_uses(e),
-            Stmt::Let { value, .. } => expr_uses(value),
-            Stmt::Assign { value, .. } => expr_uses(value),
-            Stmt::CompoundAssign { value, .. } => expr_uses(value),
-            Stmt::If { cond, body, elifs, else_body, .. } => {
-                expr_uses(cond) || stmts_use(body)
-                    || elifs.iter().any(|(c, b)| expr_uses(c) || stmts_use(b))
-                    || else_body.as_ref().map(|b| stmts_use(b)).unwrap_or(false)
-            }
-            Stmt::While { cond, body, .. } => expr_uses(cond) || stmts_use(body),
-            Stmt::For { body, .. } => stmts_use(body),
-            Stmt::ForIn { body, .. } => stmts_use(body),
-            Stmt::Switch { cases, default, .. } => {
-                cases.iter().any(|(_, b)| stmts_use(b))
-                    || default.as_ref().map(|b| stmts_use(b)).unwrap_or(false)
-            }
-            _ => false,
-        })
-    }
-    module.items.iter().any(|it| matches!(it, Item::Function(f) if stmts_use(&f.body)))
+    super::ast_walk::calls_any(module, &["SD_FILE_COUNT", "SD_FILE_NAME"])
 }
 
 /// Emit the simulated SD name table + strings (helpers bank).
@@ -1918,44 +1790,18 @@ pub fn emit_sd_tables(out: &mut String) {
 /// Collect all MSG_DEF(id, x, y, "text") calls from the module
 pub fn collect_msg_entries(module: &Module) -> Vec<MsgEntry> {
     let mut entries = Vec::new();
-    for item in &module.items {
-        if let vpy_parser::Item::Function(func) = item {
-            for stmt in &func.body {
-                collect_msg_entries_from_stmt(stmt, &mut entries);
+    super::ast_walk::for_each_call(module, |call| {
+        if call.name.to_uppercase() == "MSG_DEF" && call.args.len() == 4 {
+            let id = extract_int_lit(&call.args[0]).unwrap_or(0) as u8;
+            let x  = extract_int_lit(&call.args[1]).unwrap_or(0) as i8;
+            let y  = extract_int_lit(&call.args[2]).unwrap_or(0) as i8;
+            if let Expr::StringLit(s) = &call.args[3] {
+                entries.push(MsgEntry { id, x, y, text: s.clone() });
             }
         }
-    }
+    });
     entries.sort_by_key(|e| e.id);
     entries
-}
-
-fn collect_msg_entries_from_stmt(stmt: &vpy_parser::Stmt, entries: &mut Vec<MsgEntry>) {
-    match stmt {
-        vpy_parser::Stmt::Expr(expr, _) => {
-            if let Expr::Call(call) = expr {
-                if call.name.to_uppercase() == "MSG_DEF" && call.args.len() == 4 {
-                    let id = extract_int_lit(&call.args[0]).unwrap_or(0) as u8;
-                    let x  = extract_int_lit(&call.args[1]).unwrap_or(0) as i8;
-                    let y  = extract_int_lit(&call.args[2]).unwrap_or(0) as i8;
-                    if let Expr::StringLit(s) = &call.args[3] {
-                        entries.push(MsgEntry { id, x, y, text: s.clone() });
-                    }
-                }
-            }
-        }
-        vpy_parser::Stmt::If { body, elifs, else_body, .. } => {
-            for s in body { collect_msg_entries_from_stmt(s, entries); }
-            for (_, b) in elifs { for s in b { collect_msg_entries_from_stmt(s, entries); } }
-            if let Some(eb) = else_body { for s in eb { collect_msg_entries_from_stmt(s, entries); } }
-        }
-        vpy_parser::Stmt::While { body, .. } => {
-            for s in body { collect_msg_entries_from_stmt(s, entries); }
-        }
-        vpy_parser::Stmt::For { body, .. } => {
-            for s in body { collect_msg_entries_from_stmt(s, entries); }
-        }
-        _ => {}
-    }
 }
 
 fn extract_int_lit(expr: &Expr) -> Option<i32> {

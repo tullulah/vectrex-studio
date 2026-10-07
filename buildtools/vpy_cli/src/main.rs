@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Result, Context};
 
 mod pico;
+mod program;
 mod sdk;
 
 // Use centralized asset discovery from vpy_codegen (ensures consistent sorting)
@@ -113,6 +114,20 @@ enum Commands {
         /// Override the C symbol/base name (default: input file stem, uppercased)
         #[arg(long)]
         name: Option<String>,
+    },
+
+    /// Validate ONE asset file of any type (.vec .vmus .vsfx .vanim .vplay
+    /// .venemy .vinstr .vrec .vsmp .vmesh) by loading and compiling it with the
+    /// same code the backends use. A full build only WARNS about an asset that
+    /// fails to load (and then fails on an undefined symbol); this reports the
+    /// real reason. Exit code 0 = valid. `--json` prints one JSON object.
+    CheckAsset {
+        /// Asset file to check
+        input: PathBuf,
+
+        /// Print a single JSON object ({ok, type, summary | error})
+        #[arg(long)]
+        json: bool,
     },
 
     /// Wrap a raw RAM image in a `.um2` header for the Ultimate Vectrex Multicart 2.
@@ -258,6 +273,27 @@ fn main() -> Result<()> {
 
         Commands::CompileAsset { input, format, out, name } => {
             cmd_compile_asset(&input, &format, &out, name)?;
+        }
+
+        Commands::CheckAsset { input, json } => {
+            let ext = input.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+            match check_asset_file(&input) {
+                Ok(summary) => {
+                    if json {
+                        println!("{}", serde_json::json!({ "ok": true, "type": ext, "summary": summary }));
+                    } else {
+                        println!("✓ {} ({}): {}", input.display(), ext, summary);
+                    }
+                }
+                Err(e) => {
+                    if json {
+                        println!("{}", serde_json::json!({ "ok": false, "type": ext, "error": format!("{e:#}") }));
+                    } else {
+                        eprintln!("✗ {}: {:#}", input.display(), e);
+                    }
+                    std::process::exit(1);
+                }
+            }
         }
 
         Commands::VrecCompile { input, output, simplify } => {
@@ -684,37 +720,15 @@ fn cmd_codegen(input: &PathBuf, _format: &str) -> Result<()> {
 }
 
 fn cmd_asm(input: &PathBuf, rom_size: usize, bank_size: usize, output: Option<PathBuf>, target: String) -> Result<()> {
-    // Parse project or single file
-    let source_path = if input.extension().and_then(|s| s.to_str()) == Some("vpyproj") {
+    // Load project or single file, parse every module, unify (same front end as `build`)
+    let program = program::load_program(input)?;
+    if let Some(info) = &program.project {
         println!("{}", "Detected .vpyproj - loading project...".bright_cyan());
-        let project_info = vpy_loader::load_project(input)
-            .context("Failed to load project")?;
-        
-        println!("  Entry point: {}", project_info.entry_point.display().to_string().bright_yellow());
-        println!("  Source files: {}", project_info.source_files.len());
-        
-        project_info.entry_point
-    } else {
-        input.clone()
-    };
-    
-    let source = std::fs::read_to_string(&source_path)
-        .context("Failed to read input file")?;
-    
-    // Parse to extract function names (placeholder)
-    let tokens = vpy_parser::lex(&source)
-        .map_err(|e| anyhow::anyhow!("Lex error: {}", e))?;
-    
-    let module = vpy_parser::parser::parse(tokens, source_path.to_str().unwrap_or("unknown"))
-        .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
-    
-    // Extract function names
-    let mut functions = Vec::new();
-    for item in &module.items {
-        if let vpy_parser::Item::Function(func) = item {
-            functions.push(func.name.clone());
-        }
+        println!("  Entry point: {}", info.entry_point.display().to_string().bright_yellow());
+        println!("  Source files: {}", info.source_files.len());
     }
+    let source_path = program.entry_path.clone();
+    let module = program.unified;
     
     // Extract title from META (default to filename if not specified)
     let title = module.meta.title_override
@@ -790,6 +804,92 @@ fn cmd_asm(input: &PathBuf, rom_size: usize, bank_size: usize, output: Option<Pa
     println!("\n{}", "✓ ASM generation SUCCESS".green().bold());
     
     Ok(())
+}
+
+/// Load + compile one asset with the backends' own code; returns a one-line summary.
+fn check_asset_file(input: &Path) -> Result<String> {
+    use vpy_codegen::pitrex::assets as pa;
+    let ext = input.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("asset").to_string();
+    if !input.is_file() {
+        anyhow::bail!("file not found: {}", input.display());
+    }
+    let text = std::fs::read_to_string(input).with_context(|| format!("read {}", input.display()))?;
+    // Every asset format is JSON: report a syntax error with its position first.
+    serde_json::from_str::<serde_json::Value>(&text).map_err(|e| anyhow::anyhow!("not valid JSON: {e}"))?;
+    let s = match ext.as_str() {
+        "vec" => {
+            let r = vpy_codegen::vecres::VecResource::load(input)?;
+            let _ = r.compile_to_asm_with_name(Some(&stem)); // m6809
+            let bytes = pa::compile_vec_file_to_bytes(input).map_err(|e| anyhow::anyhow!(e))?; // ARM / C
+            let paths: usize = r.layers.iter().map(|l| l.paths.len()).sum();
+            if paths == 0 { anyhow::bail!("no paths: add at least one path with 2+ points to a layer"); }
+            let is3d = r.layers.iter().flat_map(|l| l.paths.iter()).flat_map(|p| p.points.iter()).any(|p| p.z.map_or(false, |z| z != 0));
+            format!("{} layer(s), {} path(s), {} point(s){}, {} bytes", r.layers.len(), paths, r.point_count(),
+                if is3d { ", 3D (z)" } else { "" }, bytes.len())
+        }
+        "vmus" => {
+            let r = vpy_codegen::musres::MusicResource::load(input)?;
+            let _ = r.compile_to_asm(&stem); // m6809
+            let bytes = pa::compile_vmus_file_to_bytes(input).map_err(|e| anyhow::anyhow!(e))?; // ARM / C
+            format!("{} note(s), {} noise event(s), tempo {}, {} ticks, {} bytes", r.notes.len(), r.noise.len(), r.tempo, r.total_ticks, bytes.len())
+        }
+        "vsfx" => {
+            let r = vpy_codegen::sfxres::SfxResource::load(input)?;
+            let _ = r.compile_to_asm_with_name(Some(&stem)); // m6809
+            let bytes = pa::compile_vsfx_file_to_bytes(input).map_err(|e| anyhow::anyhow!(e))?; // ARM / C
+            format!("{} ms, {} bytes", r.duration_ms, bytes.len())
+        }
+        "vanim" => {
+            let r = vpy_codegen::animres::VanimResource::load(input)?;
+            if r.frames.is_empty() { anyhow::bail!("no frames"); }
+            let _ = vpy_codegen::animres::compile_vanim_to_asm(&r, &stem); // m6809
+            let inline = r.frames.iter().any(|f| !f.paths.is_empty());
+            if !inline {
+                r.compile_to_c_bytes()?; // C
+            }
+            format!("{} frame(s), loop {}, base_refs {:?}{}", r.frames.len(), r.r#loop, r.base_refs,
+                if inline { ", inline paths (VPy only; a C project needs vec_refs)" } else { "" })
+        }
+        "vplay" => {
+            let r = vpy_codegen::levelres::VPlayLevel::load(input)?;
+            let _ = r.compile_to_asm(); // m6809
+            let (bytes, sprites) = vpy_codegen::levelres::compile_vplay_file_to_c_bytes(input)?; // ARM / C
+            let n = r.layers.background.len() + r.layers.gameplay.len() + r.layers.foreground.len();
+            format!("{} object(s) (bg {}, gameplay {}, fg {}), {} sprite(s), {} bytes", n,
+                r.layers.background.len(), r.layers.gameplay.len(), r.layers.foreground.len(), sprites.len(), bytes.len())
+        }
+        "venemy" => {
+            let r = vpy_codegen::venemy::EnemyResource::load(input)?;
+            let _ = r.compile_to_asm_with_name(Some(&stem));
+            format!("{} action(s), hp {}, speed {}, behavior {}", r.actions.len(), r.stats.hp, r.stats.speed, r.behavior.behavior_type)
+        }
+        "vinstr" => {
+            let r = vpy_codegen::instrres::InstrResource::load(input)?;
+            let _ = r.compile_to_asm_with_name(Some(&stem));
+            format!("{} frame(s), volume {}", r.duration_frames, r.volume)
+        }
+        "vrec" => {
+            let bin = vpy_codegen::vrec_chain::compile_vrec_json_to_binary(&text, 0).map_err(|e| anyhow::anyhow!(e))?;
+            let v: serde_json::Value = serde_json::from_str(&text)?;
+            let frames = v.get("frames").and_then(|f| f.as_array()).map(|a| a.len()).unwrap_or(0);
+            if frames == 0 { anyhow::bail!("no frames"); }
+            format!("{} frame(s) @ {} fps, {} bytes", frames, v.get("fps").and_then(|f| f.as_u64()).unwrap_or(0), bin.len())
+        }
+        "vsmp" => {
+            let (rate, n, bytes) = vpy_codegen::arm::assets::check_vsmp_json(&text).map_err(|e| anyhow::anyhow!(e))?;
+            format!("{} sample(s) @ {} Hz ({:.2} s), {} bytes", n, rate, n as f64 / rate as f64, bytes)
+        }
+        "vmesh" => {
+            let bytes = vpy_codegen::vmeshres::compile_vmesh_file_to_bytes(input)?;
+            let le = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]);
+            format!("{} vertices, {} faces, {} bytes", le(8), le(10), bytes.len())
+        }
+        other => anyhow::bail!(
+            "unsupported asset extension '.{other}' (expected .vec .vmus .vsfx .vanim .vplay .venemy .vinstr .vrec .vsmp .vmesh)"
+        ),
+    };
+    Ok(s)
 }
 
 /// Compile a `.vmus`/`.vsfx`/`.vec` asset into a C header or raw `.bin`.
@@ -1208,27 +1308,11 @@ fn cmd_build_pitrex(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> 
         (input.clone(), dir)
     };
 
-    // Phase 2: Parse
-    println!("\n{}", "Phase 1: Parse".bright_cyan().bold());
-    let source = std::fs::read_to_string(&source_path)
-        .context("Failed to read source file")?;
-    let tokens = vpy_parser::lex(&source)
-        .map_err(|e| anyhow::anyhow!("Lex error: {}", e))?;
-    let module = vpy_parser::parser::parse(tokens, source_path.to_str().unwrap_or("unknown"))
-        .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
-    println!("  {} Parsed {} items", "✓".green(), module.items.len());
-
-    // Phase 3: Unify
-    println!("\n{}", "Phase 2: Unify".bright_cyan().bold());
-    let mut modules_map = std::collections::HashMap::new();
-    let module_name = source_path.file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("main")
-        .to_string();
-    modules_map.insert(module_name.clone(), module);
-    let unified = vpy_unifier::unify_modules(modules_map, &module_name)
-        .map_err(|e| anyhow::anyhow!("Unification error: {}", e))?;
-    println!("  {} Unified {} items", "✓".green(), unified.items.len());
+    // Phases 1-2: parse EVERY module of the project (not just the entry) + unify
+    println!("\n{}", "Phase 1-2: Parse + Unify".bright_cyan().bold());
+    let program = program::load_program(input)?;
+    let unified = program.unified;
+    println!("  {} Parsed {} modules, unified {} items", "✓".green(), program.module_count, unified.items.len());
 
     // Phase 4: PiTrex ARM32 codegen
     println!("\n{}", "Phase 3: PiTrex ARM32 Codegen".bright_cyan().bold());
@@ -1612,27 +1696,11 @@ fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool, ram
         (input.clone(), dir)
     };
 
-    // Phase 2: Parse
-    println!("\n{}", "Phase 1: Parse".bright_cyan().bold());
-    let source = std::fs::read_to_string(&source_path)
-        .context("Failed to read source file")?;
-    let tokens = vpy_parser::lex(&source)
-        .map_err(|e| anyhow::anyhow!("Lex error: {}", e))?;
-    let module = vpy_parser::parser::parse(tokens, source_path.to_str().unwrap_or("unknown"))
-        .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
-    println!("  {} Parsed {} items", "✓".green(), module.items.len());
-
-    // Phase 3: Unify (single file — wrap in identity unifier)
-    println!("\n{}", "Phase 2: Unify".bright_cyan().bold());
-    let mut modules_map = std::collections::HashMap::new();
-    let module_name = source_path.file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("main")
-        .to_string();
-    modules_map.insert(module_name.clone(), module);
-    let unified = vpy_unifier::unify_modules(modules_map, &module_name)
-        .map_err(|e| anyhow::anyhow!("Unification error: {}", e))?;
-    println!("  {} Unified {} items", "✓".green(), unified.items.len());
+    // Phases 1-2: parse EVERY module of the project (not just the entry) + unify
+    println!("\n{}", "Phase 1-2: Parse + Unify".bright_cyan().bold());
+    let program = program::load_program(input)?;
+    let unified = program.unified;
+    println!("  {} Parsed {} modules, unified {} items", "✓".green(), program.module_count, unified.items.len());
 
     // Phase 4: ARM codegen — always single-bank for RP2350
     println!("\n{}", "Phase 3: ARM Codegen".bright_cyan().bold());
@@ -1820,20 +1888,11 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         (input.clone(), dir)
     };
 
-    println!("\n{}", "Phase 1: Parse".bright_cyan().bold());
-    let source = std::fs::read_to_string(&source_path).context("Failed to read source file")?;
-    let tokens = vpy_parser::lex(&source).map_err(|e| anyhow::anyhow!("Lex error: {}", e))?;
-    let module = vpy_parser::parser::parse(tokens, source_path.to_str().unwrap_or("unknown"))
-        .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
-    println!("  {} Parsed {} items", "✓".green(), module.items.len());
-
-    println!("\n{}", "Phase 2: Unify".bright_cyan().bold());
-    let mut modules_map = std::collections::HashMap::new();
-    let module_name = source_path.file_stem().and_then(|s| s.to_str()).unwrap_or("main").to_string();
-    modules_map.insert(module_name.clone(), module);
-    let unified = vpy_unifier::unify_modules(modules_map, &module_name)
-        .map_err(|e| anyhow::anyhow!("Unification error: {}", e))?;
-    println!("  {} Unified {} items", "✓".green(), unified.items.len());
+    // Phases 1-2: parse EVERY module of the project (not just the entry) + unify
+    println!("\n{}", "Phase 1-2: Parse + Unify".bright_cyan().bold());
+    let program = program::load_program(input)?;
+    let unified = program.unified;
+    println!("  {} Parsed {} modules, unified {} items", "✓".green(), program.module_count, unified.items.len());
 
     println!("\n{}", "Phase 3: UVM2 ARM Thumb2 Codegen".bright_cyan().bold());
     let title = project_dir.file_name().and_then(|n| n.to_str()).unwrap_or("UVM2 Game");
@@ -2266,51 +2325,16 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
             println!("{}", "Compiling .vpyproj project with buildtools...".bright_cyan());
         }
         
-        // Phase 1: Load project
-        println!("\n{}", "Phase 1: Load Project".bright_cyan().bold());
-        let project_info = vpy_loader::load_project(input)
-            .context("Failed to load project")?;
-        
-        println!("  Entry: {}", project_info.entry_point.display().to_string().yellow());
-        println!("  Files: {}", project_info.source_files.len());
+        // Phases 1-3: load project, parse every module, unify (shared by all targets)
+        println!("\n{}", "Phase 1-3: Load, Parse, Unify".bright_cyan().bold());
+        let program = program::load_program(input)?;
+        let project_info = program.project.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("{} is not a project", input.display()))?;
+        println!("  Entry: {}", program.entry_path.display().to_string().yellow());
         println!("  Assets: {}", project_info.asset_files.len());
-        
-        // Phase 2: Parse all modules
-        println!("\n{}", "Phase 2: Parse Modules".bright_cyan().bold());
-        let mut modules = std::collections::HashMap::new();
-        for source_file in &project_info.source_files {
-            if verbose {
-                println!("  Parsing {}...", source_file.path.display());
-            }
-            
-            let source = std::fs::read_to_string(&source_file.path)
-                .with_context(|| format!("Failed to read {}", source_file.path.display()))?;
-            
-            let tokens = vpy_parser::lex(&source)
-                .map_err(|e| anyhow::anyhow!("Lex error in {}: {}", source_file.path.display(), e))?;
-            
-            let module = vpy_parser::parser::parse(tokens, source_file.path.to_str().unwrap_or("unknown"))
-                .map_err(|e| anyhow::anyhow!("Parse error in {}: {}", source_file.path.display(), e))?;
-            
-            // Module name from file stem
-            let module_name = source_file.path.file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown")
-                .to_string();
-            
-            modules.insert(module_name, module);
-        }
-        println!("  {} Parsed {} modules", "✓".green(), modules.len());
-        
-        // Phase 3: Unify modules
-        println!("\n{}", "Phase 3: Unify Modules".bright_cyan().bold());
-        let entry_module_name = project_info.entry_point
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("main");
-        
-        let unified = vpy_unifier::unify_modules(modules, entry_module_name)
-            .map_err(|e| anyhow::anyhow!("Unification error: {}", e))?;
+        println!("  {} Parsed {} modules", "✓".green(), program.module_count);
+        let entry_module_name = program.entry_module.as_str();
+        let unified = &program.unified;
         
         println!("  {} Unified {} items", "✓".green(), unified.items.len());
 
@@ -2561,25 +2585,11 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
         return Ok(());
     }
     
-    // Single-file project: use buildtools pipeline (unchanged)
-    let source_path = input.clone();
-    
-    let source = std::fs::read_to_string(&source_path)
-        .context("Failed to read input file")?;
-    
-    let tokens = vpy_parser::lex(&source)
-        .map_err(|e| anyhow::anyhow!("Lex error: {}", e))?;
-    
-    let module = vpy_parser::parser::parse(tokens, source_path.to_str().unwrap_or("unknown"))
-        .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
-    
-    // Extract function names
-    let mut functions = Vec::new();
-    for item in &module.items {
-        if let vpy_parser::Item::Function(func) = item {
-            functions.push(func.name.clone());
-        }
-    }
+    // Single file: same front end (parse + unify) as projects. An `import` of a
+    // module that is not part of this build is a compile error, not a silent pass.
+    let program = program::load_program(input)?;
+    let source_path = program.entry_path.clone();
+    let module = program.unified;
     
     // Override rom_size and bank_size from META if specified
     let rom_size = module.meta.rom_total_size.map(|s| s as usize).unwrap_or(rom_size);

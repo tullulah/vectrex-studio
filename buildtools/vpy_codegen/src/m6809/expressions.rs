@@ -38,6 +38,12 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
                 return;
             }
 
+            // A global array name evaluates to its base address (link-time constant).
+            if let Some(base) = context::global_array_base_label(&id.name) {
+                out.push_str(&format!("    LDD #{}  ; array {} base address\n", base, id.name));
+                return;
+            }
+
             // Check if this is a function parameter → use VAR_ARGn
             let var_label = resolve_var_label(&id.name);
 
@@ -59,9 +65,17 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
         }
         
         Expr::Call(call) => {
+            super::diagnostics::set_line(call.source_line);
             // Check if builtin
             if builtins::emit_builtin(&call.name, &call.args, out, assets) {
                 return;
+            }
+            if !super::diagnostics::is_callable(&call.name) {
+                super::diagnostics::error_at(call.source_line, format!(
+                    "`{}()` is not a builtin, a BIOS routine or a function defined in this program \
+                     (check the spelling; a function of another module is called as `module.name()`)",
+                    call.name
+                ));
             }
             
             // User function call (name already uppercase from unifier)
@@ -79,8 +93,8 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
                 out.push_str(&format!("    STD VAR_ARG{}\n", i));
             }
 
-            // Call function
-            out.push_str(&format!("    JSR {}\n", call.name));
+            // Call function — same label function as the definition (functions.rs)
+            out.push_str(&format!("    JSR {}\n", vpy_parser::symbols::m6809_label(&call.name)));
         }
         
         Expr::Binary { left, op, right } => {
@@ -213,15 +227,33 @@ pub fn emit_simple_expr(expr: &Expr, out: &mut String, assets: &[AssetInfo]) {
                     out.push_str(&format!(".MAX_{id}_END:\n"));
                 }
                 other => {
-                    out.push_str(&format!("    ; Unimplemented method call: .{other}()\n"));
+                    super::diagnostics::error_at(info.source_line, format!(
+                        "`.{other}()` is not supported on m6809 (value methods: .abs(), .clamp(lo, hi), .min(x), .max(x))"
+                    ));
                     out.push_str("    LDD #0\n");
                 }
             }
         }
 
-        _ => {
-            // Unimplemented expression types (List, StructInit, FieldAccess)
-            out.push_str(&format!("    ; Unimplemented Expr {:?}\n", expr));
+        Expr::FieldAccess { target, field, source_line, .. } => {
+            super::diagnostics::error_at(*source_line, format!(
+                "field access `{}.{field}` is not supported on m6809 (structs have no codegen; \
+                 a module's variable is read as `module.name` only when that module is imported)",
+                describe_expr(target)
+            ));
+            out.push_str("    LDD #0\n");
+        }
+        Expr::StructInit { struct_name, source_line, .. } => {
+            super::diagnostics::error_at(*source_line, format!(
+                "`{struct_name}()` creates a struct; structs are not supported on m6809"
+            ));
+            out.push_str("    LDD #0\n");
+        }
+        Expr::List(_) => {
+            super::diagnostics::error(
+                "a list literal can only initialise a global array (`xs = [1, 2, 3]` at top level), \
+                 not be used inside an expression or a function",
+            );
             out.push_str("    LDD #0\n");
         }
     }
@@ -505,5 +537,15 @@ pub fn resolve_var_label(name: &str) -> String {
         format!("VAR_ARG{}", idx)
     } else {
         format!("VAR_{}", name.to_uppercase())
+    }
+}
+
+/// Short human description of an expression, for error messages.
+fn describe_expr(e: &Expr) -> String {
+    match e {
+        Expr::Ident(id) => id.name.clone(),
+        Expr::FieldAccess { target, field, .. } => format!("{}.{field}", describe_expr(target)),
+        Expr::Call(c) => format!("{}()", c.name),
+        _ => "<expression>".to_string(),
     }
 }

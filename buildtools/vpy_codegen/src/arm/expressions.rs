@@ -810,6 +810,11 @@ pub fn emit_call(
         s.push_str(&format!("    pop     {{r{i}}}\n"));
     }
 
+    // An unmapped name must be a user function; anything else would only fail
+    // at link time ("undefined reference") without a source line.
+    if fn_name == info.name.as_str() && !crate::known_functions::is_defined(&info.name) {
+        return Err(crate::known_functions::unknown_call_error(&info.name, info.source_line));
+    }
     s.push_str(&format!("    bl      {fn_name}\n"));
 
     let nextra = n_extra;

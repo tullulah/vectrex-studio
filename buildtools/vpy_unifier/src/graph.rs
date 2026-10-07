@@ -35,7 +35,10 @@ impl ModuleGraph {
         if !self.dependencies.contains_key(&from) {
             self.dependencies.insert(from.clone(), Vec::new());
         }
-        self.dependencies.get_mut(&from).unwrap().push(to);
+        let deps = self.dependencies.get_mut(&from).unwrap();
+        if !deps.contains(&to) {
+            deps.push(to);
+        }
         Ok(())
     }
 
@@ -146,11 +149,17 @@ impl ModuleGraph {
         }
 
         // Kahn's algorithm: collect nodes with 0 in-degree
-        let mut queue: VecDeque<String> = in_degree
+        // Sorted so the merge order (and so the generated code) is deterministic.
+        let mut roots: Vec<String> = in_degree
             .iter()
             .filter(|(_, degree)| **degree == 0)
             .map(|(module, _)| module.clone())
             .collect();
+        roots.sort();
+        let mut queue: VecDeque<String> = roots.into();
+        for dependents in adj_list.values_mut() {
+            dependents.sort();
+        }
 
         let mut result = Vec::new();
 

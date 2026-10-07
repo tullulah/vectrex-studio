@@ -5,14 +5,14 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use std::collections::{HashSet, HashMap};
 use crate::{AssetInfo, AssetType};
-use vpy_parser::{Module, Item, Stmt, Expr};
+use vpy_parser::{Module, Expr};
 
 /// Filter assets to only those actually used in the code
 pub fn filter_used_assets(assets: &[AssetInfo], module: &Module) -> Vec<AssetInfo> {
     let mut used_names = HashSet::new();
 
     // Scan all statements for asset references
-    collect_asset_names(&module.items, &mut used_names);
+    collect_asset_names(module, &mut used_names);
 
     // Also scan any used level files to include the vectors they reference
     let level_names: Vec<String> = used_names.iter().cloned().collect();
@@ -144,118 +144,24 @@ fn collect_vanim_vec_refs(vanim_path: &str, used_names: &mut HashSet<String>) {
     }
 }
 
-/// Recursively collect asset names from statements
-fn collect_asset_names(items: &[Item], used_names: &mut HashSet<String>) {
-    for item in items {
-        match item {
-            Item::Function(func) => {
-                for stmt in &func.body {
-                    collect_asset_names_from_stmt(stmt, used_names);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-/// Collect asset names from a single statement
-fn collect_asset_names_from_stmt(stmt: &Stmt, used_names: &mut HashSet<String>) {
-    match stmt {
-        Stmt::Expr(e, _) => collect_asset_names_from_expr(e, used_names),
-        Stmt::If { cond, body, elifs, else_body, .. } => {
-            collect_asset_names_from_expr(cond, used_names);
-            for s in body {
-                collect_asset_names_from_stmt(s, used_names);
-            }
-            for (elif_cond, elif_body) in elifs {
-                collect_asset_names_from_expr(elif_cond, used_names);
-                for s in elif_body {
-                    collect_asset_names_from_stmt(s, used_names);
-                }
-            }
-            if let Some(else_stmts) = else_body {
-                for s in else_stmts {
-                    collect_asset_names_from_stmt(s, used_names);
-                }
+/// Collect asset names named by asset-loading builtins anywhere in the module
+/// (DRAW_VECTOR("name"), PLAY_MUSIC("name"), …). Uses the exhaustive walker so an
+/// asset referenced from a `switch` case, a `return`, or a compound assignment is
+/// still embedded.
+fn collect_asset_names(module: &Module, used_names: &mut HashSet<String>) {
+    const ASSET_BUILTINS: &[&str] = &[
+        "DRAW_VECTOR", "DRAW_VECTOR_EX", "DRAW_VECTOR_3D", "PLAY_MUSIC", "PLAY_SFX",
+        "LOAD_LEVEL", "DRAW_ANIM", "PLAY_NOTE", "DRAW_RECORDING",
+    ];
+    super::ast_walk::for_each_call(module, |call| {
+        let up = call.name.to_uppercase();
+        if ASSET_BUILTINS.contains(&up.as_str()) {
+            // First argument should be asset name (string literal)
+            if let Some(Expr::StringLit(asset_name)) = call.args.first() {
+                used_names.insert(asset_name.clone());
             }
         }
-        Stmt::While { cond, body, .. } => {
-            collect_asset_names_from_expr(cond, used_names);
-            for s in body {
-                collect_asset_names_from_stmt(s, used_names);
-            }
-        }
-        Stmt::For { start, end, step, body, .. } => {
-            collect_asset_names_from_expr(start, used_names);
-            collect_asset_names_from_expr(end, used_names);
-            if let Some(step_expr) = step {
-                collect_asset_names_from_expr(step_expr, used_names);
-            }
-            for s in body {
-                collect_asset_names_from_stmt(s, used_names);
-            }
-        }
-        Stmt::ForIn { iterable, body, .. } => {
-            collect_asset_names_from_expr(iterable, used_names);
-            for s in body {
-                collect_asset_names_from_stmt(s, used_names);
-            }
-        }
-        Stmt::Assign { value, .. } | Stmt::Let { value, .. } => {
-            collect_asset_names_from_expr(value, used_names);
-        }
-        _ => {}
-    }
-}
-
-/// Collect asset names from expressions (DRAW_VECTOR("name"), PLAY_MUSIC("name"), etc.)
-fn collect_asset_names_from_expr(expr: &Expr, used_names: &mut HashSet<String>) {
-    match expr {
-        Expr::Call(vpy_parser::CallInfo { name, args, .. }) => {
-            // Check if it's an asset-loading builtin
-            let up = name.to_uppercase();
-            if up == "DRAW_VECTOR" || up == "DRAW_VECTOR_EX" || up == "DRAW_VECTOR_3D" ||
-               up == "PLAY_MUSIC" || up == "PLAY_SFX" || up == "LOAD_LEVEL" ||
-               up == "DRAW_ANIM" || up == "PLAY_NOTE" || up == "DRAW_RECORDING" {
-                // First argument should be asset name (string literal)
-                if let Some(Expr::StringLit(asset_name)) = args.first() {
-                    used_names.insert(asset_name.clone());
-                }
-            }
-            // Recursively check arguments
-            for arg in args {
-                collect_asset_names_from_expr(arg, used_names);
-            }
-        }
-        Expr::Binary { left, right, .. } | 
-        Expr::Compare { left, right, .. } |
-        Expr::Logic { left, right, .. } => {
-            collect_asset_names_from_expr(left, used_names);
-            collect_asset_names_from_expr(right, used_names);
-        }
-        Expr::Not(operand) | Expr::BitNot(operand) => {
-            collect_asset_names_from_expr(operand, used_names);
-        }
-        Expr::Index { target, index } => {
-            collect_asset_names_from_expr(target, used_names);
-            collect_asset_names_from_expr(index, used_names);
-        }
-        Expr::List(elements) => {
-            for e in elements {
-                collect_asset_names_from_expr(e, used_names);
-            }
-        }
-        Expr::FieldAccess { target, .. } => {
-            collect_asset_names_from_expr(target, used_names);
-        }
-        Expr::MethodCall(vpy_parser::MethodCallInfo { target, args, .. }) => {
-            collect_asset_names_from_expr(target, used_names);
-            for arg in args {
-                collect_asset_names_from_expr(arg, used_names);
-            }
-        }
-        _ => {}
-    }
+    });
 }
 
 /// Discover all assets in a project
