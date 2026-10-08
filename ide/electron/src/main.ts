@@ -24,7 +24,7 @@ import { createProjectFromTemplate, ensureDefaultProjectsDir } from './projectTe
 import { registerTerminalHandlers } from './terminal.js';
 import {
   ARM_TOOLCHAIN_DOWNLOAD_URL, detectArmToolchain, ensureSdk, isSdkInstalled, isValidSdkTag, latestSdkTag, listInstalledSdks, listRemoteSdkTags,
-  projectSdkVersion, resolveProjectSdk, sdkEnv, sdkRootDir, writeProjectSdkVersion, type SdkProgress,
+  projectSdkVersion, resolveProjectSdk, dropStaleSdkBuilds, sdkEnv, sdkRootDir, writeProjectSdkVersion, type SdkProgress,
 } from './sdkManager.js';
 import { storageGet, storageSet, storageDelete, storageKeys, storageClear, getStoragePath, StorageKeys } from './storage.js';
 import { 
@@ -1520,6 +1520,7 @@ export async function executeExternalBuild(args: {
     win?.webContents.send('run://stderr', `[SDK] ${sdk.error}\n`);
   } else {
     win?.webContents.send('run://stdout', `[SDK] ${sdk.version} (${sdk.dir})${sdk.picoSdkDir ? `, pico-sdk ${sdk.picoSdkDir}` : ''}\n`);
+    await dropStaleSdkBuilds(dirname(manifestPath), sdk, (l) => win?.webContents.send('run://stdout', l));
   }
 
   // Compose the child env: IDE env + project SDK + optional toolchain PATH prefix + overrides.
@@ -1805,6 +1806,7 @@ export async function executeSimBuild(args: {
     return { error: 'sdk_unavailable', detail: sdk.error };
   }
   win?.webContents.send('run://stdout', `[SIM] SDK ${sdk.version} (${sdk.dir})\n`);
+  await dropStaleSdkBuilds(dirname(manifestPath), sdk, (l) => win?.webContents.send('run://stdout', l));
   const { PITREX_SIM_SDK, VPY_C_SDK } = sdkEnv(sdk.dir);
 
   // The project's [env] still wins, as in the hardware build: a port can point at its own checkout.
@@ -2063,6 +2065,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         if (target === 'uvm2') return { error: 'sdk_unavailable', detail: sdk.error };
       } else {
         Object.assign(envHijo, sdkEnv(sdk.dir, sdk.picoSdkDir));
+        await dropStaleSdkBuilds(dirname(targetPath), sdk, (l) => mainWindow?.webContents.send('run://stdout', l));
         mainWindow?.webContents.send('run://stdout', `[SDK] ${sdk.version} (${sdk.dir})\n`);
       }
     }

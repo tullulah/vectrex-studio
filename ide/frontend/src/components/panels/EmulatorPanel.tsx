@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useEmulatorStore } from '../../state/emulatorStore';
+import { useEmulatorStore, type ActiveEngine } from '../../state/emulatorStore';
 import { useEditorStore } from '../../state/editorStore';
 import { useEmulatorSettings } from '../../state/emulatorSettings';
 import { useDebugStore } from '../../state/debugStore';
@@ -348,6 +348,12 @@ export const EmulatorPanel: React.FC = () => {
   const simModulePath = useEmulatorStore(s => s.simModulePath);
   const simModuleNonce = useEmulatorStore(s => s.simModuleNonce);
   const setSimModule = useEmulatorStore(s => s.setSimModule);
+  // The simulator Stop took down, so Play can start it again from the beginning.
+  const stoppedSimRef = useRef<{ path: string; romZip: Uint8Array | null } | null>(null);
+  // The engine that owns the panel (see stopAllEngines). In the store, not in a ref,
+  // so it survives the panel remounting when the dock layout changes.
+  const activeEngine = useEmulatorStore(s => s.activeEngine);
+  const setActiveEngine = useEmulatorStore(s => s.setActiveEngine);
 
   // Tell tools that start runs (MCP ide_run) whether anyone is here to load the program.
   useEffect(() => {
@@ -367,7 +373,7 @@ export const EmulatorPanel: React.FC = () => {
     overlayEnabled, 
     lastRomPath, 
     lastRomName,
-    emulatorWasRunning,
+    // emulatorWasRunning is persisted but deliberately not read: a mount never starts an engine.
     lastCompiledBinary,
     lastCompiledProject,
     setAudioEnabled, 
@@ -450,6 +456,105 @@ export const EmulatorPanel: React.FC = () => {
   const pitrexSFileRef = useRef<string | null>(null);
   const pitrexLibvpyRef = useRef<string | null>(null);
   
+  // Reloads the last rp2350 / uvm2 image into its system (set by the load paths), so
+  // Reset, and Play after Stop, restart THAT program instead of falling through to
+  // the 6809 and booting the BIOS.
+  const armReloadRef = useRef<(() => void) | null>(null);
+  // The panel's Play / Pause / Stop, for the debugger message handler (a long-lived
+  // closure): assigned on every render once the handlers exist.
+  const runControlRef = useRef<{ play: () => void; pause: () => void; stop: () => void }>(
+    { play: () => {}, pause: () => {}, stop: () => {} });
+  // Mute state for handlers that live in long-lived closures (onCompiledBin).
+  const audioEnabledRef = useRef(audioEnabled);
+  audioEnabledRef.current = audioEnabled;
+
+  /* ── ONE ENGINE AT A TIME ────────────────────────────────────────────────
+   *
+   * Stops EVERY engine the panel can run and silences every audio path they own:
+   * JSVecX (CPU loop, its pending auto-start, its PSG callback), the psgAudio
+   * streamer, VectrexSystem's audio, the PiTrex interpreter, the rp2350 and uvm2
+   * systems (rAF loop + AudioContext) and, unless `keepSim`, the WASM simulator
+   * (unmounting PitrexSimView closes its contexts). Called at the single entry of
+   * every program load/start; the engine being started then starts itself (and its
+   * own audio) as before. Stopping only the CPU is not enough: a ScriptProcessor
+   * keeps rendering the last PSG registers, which is the stuck note.
+   *
+   * It does not change `activeEngine`: the caller that starts something sets it. */
+  const stopAllEngines = useCallback((reason: string, opts: { keepSim?: boolean } = {}) => {
+    // 1. JSVecX (m6809). stop() also cancels the start that vecx.reset() schedules
+    //    200 ms later, and silences the PSG even if the debugger had halted the loop.
+    const vecx = (window as any).vecx;
+    if (vecx) {
+      try { vecx.stop(); } catch {}
+      try { vecx.e8910?.stop?.(); } catch {}
+      // A 6809 debug session ends here: a stale 'paused' would make the breakpoint
+      // poller pause whatever engine runs next.
+      try { vecx.debugState = 'stopped'; vecx.stepMode = null; vecx.stepTargetAddress = null; } catch {}
+    }
+    // 2. The psgAudio streamer and VectrexSystem's own PSG output (the 6809 path).
+    try { psgAudio.stop(); } catch {}
+    try { (emuCore as any)._vectrexSystem?.stopAudio?.(); } catch {}
+    // 3. PiTrex interpreter: rAF loop + audio. The core is dropped; a reload makes a new one.
+    if (pitrexLoopRef.current !== null) {
+      cancelAnimationFrame(pitrexLoopRef.current);
+      pitrexLoopRef.current = null;
+    }
+    if (pitrexCoreRef.current) {
+      try { pitrexCoreRef.current.stopAudio?.(); } catch {}
+      pitrexCoreRef.current = null;
+    }
+    // 4. rp2350 and uvm2: one rAF loop drives either; each system owns an AudioContext.
+    if (rp2350LoopRef.current !== null) {
+      cancelAnimationFrame(rp2350LoopRef.current);
+      rp2350LoopRef.current = null;
+    }
+    try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
+    try { (emuCore as any)._uvm2System?.stopAudio?.(); } catch {}
+    // 5. The WASM simulator: unmounting PitrexSimView ends the program and closes its audio.
+    if (!opts.keepSim) {
+      stoppedSimRef.current = null;
+      if (useEmulatorStore.getState().simModulePath) setSimModule(null);
+    }
+    console.log(`[EmulatorPanel] stopAllEngines (${reason})${opts.keepSim ? ' — simulator kept' : ''}`);
+  }, [setSimModule]);
+
+  // Tools outside the panel (main.tsx before a build, the MCP bridge, DevTools) reach
+  // the same function and can see who owns the panel.
+  useEffect(() => {
+    (window as any).emulatorEngines = {
+      stopAll: (reason = 'external') => stopAllEngines(reason),
+      active: () => useEmulatorStore.getState().activeEngine,
+      // Who is running and which AudioContexts are live (for DevTools and tests).
+      state: () => {
+        const vecx = (window as any).vecx;
+        const ec = emuCore as any;
+        return {
+          active: useEmulatorStore.getState().activeEngine,
+          status: useEmulatorStore.getState().status,
+          sim: useEmulatorStore.getState().simModulePath,
+          m6809: { running: !!vecx?.running, pendingStart: vecx?.pendingStart != null,
+                   psgReady: !!vecx?.e8910?.psg?.ready, ctx: vecx?.e8910?.ctx?.state ?? null },
+          psgAudio: !!(psgAudio as any).running,
+          armLoop: rp2350LoopRef.current !== null,
+          rp2350Audio: ec._rp2350System?.audioCtx?.state ?? null,
+          uvm2Audio: ec._uvm2System?.audioCtx?.state ?? null,
+          pitrex: { loop: pitrexLoopRef.current !== null, core: !!pitrexCoreRef.current },
+          contexts: getAllLiveContextOutputs().map(t => `${t.ctx.state}/${t.outputs.length}`),
+        };
+      },
+    };
+    return () => { delete (window as any).emulatorEngines; };
+  }, [stopAllEngines]);
+
+  // rp2350 / uvm2 audio follows Pause and Mute by suspending the system's context
+  // (Stop closes it; the next load opens a new one).
+  const setArmAudioSuspended = useCallback((suspended: boolean) => {
+    const a = (emuCore as any)?.getAudioContextAndOutputNode?.();
+    const ctx: AudioContext | undefined = a?.ctx;
+    if (!ctx || ctx.state === 'closed') return;
+    (suspended ? ctx.suspend() : ctx.resume()).catch(() => {});
+  }, []);
+
   // Hook editor store para documentos activos
   const editorActive = useEditorStore(s => s.active);
   const editorDocuments = useEditorStore(s => s.documents);
@@ -461,9 +566,23 @@ export const EmulatorPanel: React.FC = () => {
     // console.log('📍 [EmulatorPanel] Mount stack trace:', new Error().stack); // Debug only
     return () => {
       console.log('💀 [EmulatorPanel] COMPONENT UNMOUNTING');
+      // The rAF loops and the PiTrex core live in this instance's refs: once it is
+      // gone nothing can stop them, so they stop here, sound included (cancelling
+      // only the loop left the last note sustaining). JSVecX is global and the
+      // remounted panel re-binds it, so it is left alone.
       if (rp2350LoopRef.current !== null) {
         cancelAnimationFrame(rp2350LoopRef.current);
         rp2350LoopRef.current = null;
+        try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
+        try { (emuCore as any)._uvm2System?.stopAudio?.(); } catch {}
+      }
+      if (pitrexLoopRef.current !== null) {
+        cancelAnimationFrame(pitrexLoopRef.current);
+        pitrexLoopRef.current = null;
+      }
+      if (pitrexCoreRef.current) {
+        try { pitrexCoreRef.current.stopAudio?.(); } catch {}
+        pitrexCoreRef.current = null;
       }
       // Discard any in-progress vector recording
       recorderRef.current?.discard();
@@ -472,28 +591,17 @@ export const EmulatorPanel: React.FC = () => {
     };
   }, []);
 
-  // When an external-project WASM simulator becomes active, stop every Vectrex
-  // backend (JSVecX / PiTrex interpreter / rp2350) so they don't fight over the
-  // canvas or audio. PitrexSimView owns its own canvas + lifecycle.
+  // The WASM simulator's entry: every activation (main.tsx Shift+F5, MCP, Play/Reset
+  // here) goes through the store's setSimModule, so this effect is the one place that
+  // hands the panel to it. Keyed on the nonce too: a rebuild of the same module path
+  // is a new program load. PitrexSimView owns its own canvas + lifecycle.
   useEffect(() => {
     if (!simModulePath) return;
-    try { (window as any).vecx?.stop?.(); } catch {}
-    if (pitrexLoopRef.current !== null) {
-      cancelAnimationFrame(pitrexLoopRef.current);
-      pitrexLoopRef.current = null;
-    }
-    if (pitrexCoreRef.current) {
-      try { pitrexCoreRef.current.stopAudio?.(); } catch {}
-      pitrexCoreRef.current = null;
-    }
-    if (rp2350LoopRef.current !== null) {
-      cancelAnimationFrame(rp2350LoopRef.current);
-      rp2350LoopRef.current = null;
-    }
-    try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
+    stopAllEngines('WASM simulator', { keepSim: true });
+    setActiveEngine('sim');
+    setRunMode(null);
     setShowPitrexOverlay(false);
-    console.log('[EmulatorPanel] PiTrex simulator active — Vectrex backends stopped');
-  }, [simModulePath]);
+  }, [simModulePath, simModuleNonce, stopAllEngines, setActiveEngine]);
 
   // ── Vector recorder (.vrec) ─────────────────────────────────────────────
   // Samples the most recent completed frame's draw list from whichever
@@ -878,7 +986,9 @@ export const EmulatorPanel: React.FC = () => {
         
         jsVecxInitialized.current = true; // Mark as initialized
         
-        if (!cancelled) {
+        // Only when nothing owns the panel: on a remount the status belongs to the
+        // engine that is running (the simulator, a 6809 game that kept running, ...).
+        if (!cancelled && useEmulatorStore.getState().activeEngine === null) {
           setStatus('stopped');
         }
       } catch (e) {
@@ -1010,6 +1120,9 @@ export const EmulatorPanel: React.FC = () => {
       getBreakpoints: () => Array.from(breakpoints),
       start: () => {
         const vecx = (window as any).vecx;
+        // Breakpoint sync calls this whenever the debugger reads 'paused'; that state
+        // is shared by every engine, so it must not start the 6809 under another one.
+        if (useEmulatorStore.getState().activeEngine !== 'm6809') return;
         if (vecx && vecx.debugState === 'paused') {
           console.log('[EmulatorPanel] 🚀 emulatorDebug.start() called - starting emulator');
           vecx.debugState = 'running';
@@ -1331,7 +1444,9 @@ export const EmulatorPanel: React.FC = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       const vecx = (window as any).vecx;
-      if (vecx && vecx.e8910 && status === 'running') {
+      // Only the 6809's PSG flag can be "reality" here: under another engine it is a
+      // leftover, and syncing from it would undo that engine's mute within a second.
+      if (vecx && vecx.e8910 && status === 'running' && activeEngine === 'm6809') {
         const actualState = vecx.e8910.enabled;
         if (actualState !== audioEnabled) {
           console.log('[EmulatorPanel] Audio state desync detected, syncing:', actualState);
@@ -1341,12 +1456,14 @@ export const EmulatorPanel: React.FC = () => {
     }, 1000); // Check every second
 
     return () => clearInterval(interval);
-  }, [audioEnabled, status, setAudioEnabled]);
+  }, [audioEnabled, status, setAudioEnabled, activeEngine]);
 
   // Phase 3: Breakpoint detection system (REACTIVE - no polling)
   // The WASM emulator checks breakpoints after EVERY instruction
   // We just need to detect when it has paused
   const checkBreakpointHit = useCallback(() => {
+    // Breakpoints belong to the 6809 (a stale JSVecX 'paused' must not pause another engine)
+    if (useEmulatorStore.getState().activeEngine !== 'm6809') return;
     // Solo verificar si estamos en modo debug
     if (debugState !== 'running') {
       console.log('[EmulatorPanel] 🔍 checkBreakpointHit called but debugState is:', debugState);
@@ -1484,8 +1601,29 @@ export const EmulatorPanel: React.FC = () => {
       
       const { type, address, line, currentVpyLine } = event.data;
       console.log('[EmulatorPanel] 📨 Message type:', type, 'address:', address, 'line:', line, 'currentVpyLine:', currentVpyLine);
-      
 
+      // Run control drives the engine that owns the panel. These cases used to fall
+      // through to JSVecX whenever no rp2350 loop was running, so F12, a step key or
+      // MCP emulator_run/stop under the simulator, PiTrex or a stopped uvm2 started
+      // the 6809 — and with no cartridge the BIOS boots Minestorm. (debug-stop also
+      // called vecx.reset(), which starts the machine again 200 ms later.)
+      const RUN_CONTROL = ['debug-continue', 'debug-pause', 'debug-stop',
+                           'debug-step-over', 'debug-step-into', 'debug-step-out', 'debug-switch-to-asm'];
+      const owner = useEmulatorStore.getState().activeEngine;
+      if (RUN_CONTROL.includes(type) && owner !== 'm6809') {
+        if (owner === null) {
+          console.log(`[EmulatorPanel] ${type} ignored: no program loaded`);
+        } else if (type === 'debug-continue') {
+          runControlRef.current.play();
+        } else if (type === 'debug-pause') {
+          runControlRef.current.pause();
+        } else if (type === 'debug-stop') {
+          runControlRef.current.stop();
+        } else {
+          console.log(`[EmulatorPanel] ${type} ignored: stepping is for 6809 programs (active: ${owner})`);
+        }
+        return;
+      }
 
       switch (type) {
         case 'debug-add-breakpoint':
@@ -1530,12 +1668,6 @@ export const EmulatorPanel: React.FC = () => {
           debugStoreForContinue.setCurrentVpyLine(null);
           debugStoreForContinue.setState('running');
 
-          if (rp2350LoopRef.current !== null) {
-            // rp2350 mode: RAF loop resumes automatically via state check
-            console.log('[EmulatorPanel] ✓ rp2350 RAF loop will resume (state=running)');
-            break;
-          }
-
           // CRITICAL: Check if paused by breakpoint BEFORE changing state
           const wasPausedByBreakpoint = vecx.isPausedByBreakpoint && vecx.isPausedByBreakpoint();
 
@@ -1573,24 +1705,19 @@ export const EmulatorPanel: React.FC = () => {
           
         case 'debug-pause':
           console.log('[EmulatorPanel] ⏸️  Debug: Pause execution');
-          if (rp2350LoopRef.current !== null) {
-            // rp2350 mode: RAF loop skips frames automatically via state check
-            console.log('[EmulatorPanel] ✓ rp2350 RAF loop paused (state=paused)');
-          } else if (vecx.running) {
+          if (vecx.running) {
             vecx.stop();
           }
           break;
 
         case 'debug-stop':
           console.log('[EmulatorPanel] 🛑 Debug: Stop execution');
-          if (rp2350LoopRef.current !== null) {
-            // rp2350 mode: reset ARM system; RAF loop skips frames via state check
-            emuCore.reset();
-            console.log('[EmulatorPanel] ✓ rp2350 system reset');
-          } else {
-            if (vecx.running) vecx.stop();
-            vecx.reset();
-          }
+          // Stop and rewind, but stay stopped: vecx.reset() would schedule start()
+          // 200 ms later and the program came back by itself.
+          vecx.stop();
+          vecx.vecx_reset();
+          try { vecx.osint.osint_clearscreen(); } catch {}
+          vecx.debugState = 'stopped';
           break;
           
         case 'debug-step-over':
@@ -2231,6 +2358,12 @@ export const EmulatorPanel: React.FC = () => {
         console.error('[EmulatorPanel] vecx instance not available');
         return;
       }
+
+      // A new program: nothing else may keep running or sounding.
+      stopAllEngines('ROM from dropdown');
+      setActiveEngine('m6809');
+      setRunMode(null);
+      setShowPitrexOverlay(false);
       
       // Convertir Uint8Array a string para JSVecX
       let cartDataString = '';
@@ -2268,15 +2401,13 @@ export const EmulatorPanel: React.FC = () => {
       setTimeout(() => {
         console.log('🔄 [EmulatorPanel] CALLING vecx.reset() - Reason: Second reset after ROM load');
         console.log('📍 [EmulatorPanel] Reset stack trace:', new Error().stack);
-        vecx.reset();
+        vecx.reset();   // starts the cartridge 200 ms later (vecx.js reset())
         console.log('[EmulatorPanel] ✓ Second reset after ROM load');
-        
-        // Si estaba corriendo, reiniciar
-        if (status === 'running') {
-          vecx.debugState = 'running';
-          vecx.start();
-          console.log('[EmulatorPanel] ✓ Restarted after ROM load');
-        }
+        // (A `status === 'running'` restart lived here; `status` was the closure's, not
+        // the current one, and reset() starts the machine anyway.)
+        vecx.debugState = 'running';
+        setStatus('running');
+        useDebugStore.getState().setState('running');
         
         // CRÍTICO: Aplicar estado de audio después de reset/start
         setTimeout(() => {
@@ -2287,7 +2418,7 @@ export const EmulatorPanel: React.FC = () => {
     } catch (error) {
       console.error('[EmulatorPanel] Failed to load ROM from dropdown:', error);
     }
-  }, [status, loadOverlay, applyAudioState]); // dependencias: status, loadOverlay, applyAudioState
+  }, [loadOverlay, applyAudioState, stopAllEngines, setActiveEngine, setStatus]);
 
   // Auto-load last ROM on emulator start - DISABLED (user loads manually)
   /*
@@ -2317,12 +2448,18 @@ export const EmulatorPanel: React.FC = () => {
   }, [lastRomName, availableROMs]); // Fixed: removed loadedROM to prevent reset loop when ROM display changes
   */
 
+  // The audio effects below are keyed on `status`, which EVERY engine sets ('running'
+  // also means the simulator, rp2350, uvm2 or PiTrex is running). They drive the 6809's
+  // audio only, and only while the 6809 owns the panel: otherwise a 'running' from
+  // another engine restarted the 6809's sound underneath it.
+  const m6809Active = activeEngine === 'm6809';
+
   // Apply initial audio state when emulator starts
   useEffect(() => {
-    if (status === 'running') {
+    if (status === 'running' && m6809Active) {
       applyAudioState();
     }
-  }, [status, applyAudioState]); // Apply when status changes to running
+  }, [status, applyAudioState, m6809Active]); // Apply when status changes to running
 
   // Audio lifecycle: init worklet on enable; start/stop with status
   useEffect(() => {
@@ -2330,7 +2467,8 @@ export const EmulatorPanel: React.FC = () => {
       if (audioEnabled) {
         try {
           await psgAudio.init();
-          if (status === 'running') psgAudio.start();
+          if (useEmulatorStore.getState().status === 'running'
+              && useEmulatorStore.getState().activeEngine === 'm6809') psgAudio.start();
         } catch(e) {
           console.warn('[EmulatorPanel] audio init failed', e);
         }
@@ -2342,12 +2480,12 @@ export const EmulatorPanel: React.FC = () => {
 
   useEffect(() => {
     if (!audioEnabled) return;
-    if (status === 'running') {
+    if (status === 'running' && m6809Active) {
       psgAudio.start();
     } else {
       psgAudio.stop();
     }
-  }, [status, audioEnabled]);
+  }, [status, audioEnabled, m6809Active]);
 
   // Poll de estadísticas de audio (cada ~500ms mientras audioEnabled)
   useEffect(() => {
@@ -2543,21 +2681,124 @@ export const EmulatorPanel: React.FC = () => {
     console.log('[EmulatorPanel] pitrex RAF loop started');
   }, []); // no deps — reads refs directly
 
+  // ── rp2350 / uvm2 rAF loop launcher ─────────────────────────────────────────
+  // ONE loop for both systems (emuCore.runFrame dispatches on the active target),
+  // shared by every path that loads an ARM image and by Play / Reset. Capped at
+  // 50 fps: rAF fires at the display rate (120/144 Hz on many monitors) and the game
+  // logic would otherwise run faster than the 6809 path, which the 50 Hz VIA timer
+  // paces (Vectrex PAL; music compiled at 50 Hz).
+  const startArmRafLoop = useCallback(() => {
+    if (rp2350LoopRef.current !== null) {
+      cancelAnimationFrame(rp2350LoopRef.current);
+      rp2350LoopRef.current = null;
+    }
+    const TARGET_MS = 1000 / 50;  // 20 ms per frame
+    let frames = 0;
+    let lastFrameTs = 0;
+    /* FRAME COUNTER over a one-second window. Counts the frames the emulator PRODUCES,
+     * not the ones rAF asks for: with the image running slowly the loop skips turns and
+     * counting requests would always read 50. */
+    let ventana = 0, desde = 0;
+    const loop = (ts: number) => {
+      rp2350LoopRef.current = requestAnimationFrame(loop);
+      const elapsed = ts - lastFrameTs;
+      if (elapsed < TARGET_MS) return;          // too soon — skip
+      lastFrameTs = ts - (elapsed % TARGET_MS); // align to 50 Hz grid
+      // Honour pause/stop from debug controls
+      if (useDebugStore.getState().state !== 'running') return;
+      frames++;
+      if ((window as any).RP2350_DEBUG && (frames <= 5 || frames % 120 === 0)) {
+        console.log(`[EmulatorPanel] rp2350 rAF loop frame ${frames}`);
+      }
+      emuCore.runFrame();
+      ventana++;
+      if (!desde) desde = ts;
+      else if (ts - desde >= 1000) {
+        const fps = (ventana * 1000) / (ts - desde);
+        /* Frame bus cycles -> the refresh the drawing would allow on the console.
+         * The UVM2 bus clock is 1.5 MHz (30000 cycles x 50 Hz). */
+        const BUS_HZ = 30000 * 50;
+        const st = (emuCore as any).uvm2FrameStats;
+        useDebugStore.getState().updateStats(
+          st?.ciclos ?? 0, fps, st?.ciclos ? BUS_HZ / st.ciclos : 0);
+        ventana = 0; desde = ts;
+      }
+    };
+    // Mark as running so the loop doesn't bail on the first check.
+    useDebugStore.getState().setState('running');
+    rp2350LoopRef.current = requestAnimationFrame(loop);
+    console.log('[EmulatorPanel] ✓ rp2350/uvm2 rAF loop started');
+  }, []); // no deps — reads refs directly
+
+  // Clear the shared canvas (the previous engine's last frame stays on it otherwise).
+  const clearCanvas = useCallback(() => {
+    if (canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+    }
+  }, []);
+
+  // Play / Pause / Stop / Reset act on the engine that owns the panel (activeEngine),
+  // never on "whatever ref happens to be set": the rp2350 system object outlives its
+  // run, so testing for it sent Stop to rp2350 while the 6809 played on, and every
+  // case that fell through to the JSVecX branch booted the BIOS behind the real engine.
   const onPlay = () => {
+    const engine = useEmulatorStore.getState().activeEngine;
+
+    if (engine === 'sim') {
+      // WASM simulator stopped by Stop: start it again from the beginning.
+      if (!simModulePath && stoppedSimRef.current) {
+        const { path, romZip } = stoppedSimRef.current;
+        stoppedSimRef.current = null;
+        setSimModule(path, romZip);
+        useDebugStore.getState().setState('running');
+        setStatus('running');
+        setEmulatorRunning(true);
+        console.log('[EmulatorPanel] WASM simulator restarted');
+      }
+      return;
+    }
+
     // PiTrex mode: the RAF loop already runs; just ungate it via debugStore state
-    if (pitrexCoreRef.current) {
+    if (engine === 'pitrex') {
+      if (!pitrexCoreRef.current) { console.log('[EmulatorPanel] PiTrex: nothing loaded — build again'); return; }
       useDebugStore.getState().setState('running');
       setStatus('running');
       setEmulatorRunning(true);
       // Ensure the RAF loop is actually running (may have been stopped on reset)
       if (pitrexLoopRef.current === null) {
-        pitrexCoreRef.current.startAudio();
+        if (audioEnabled) pitrexCoreRef.current.startAudio();
         startPitrexRafLoop();
       }
       console.log('[EmulatorPanel] PiTrex resumed');
       return;
     }
 
+    if (engine === 'rp2350' || engine === 'uvm2') {
+      if (rp2350LoopRef.current === null) {
+        // Stopped: start the same image again from the beginning.
+        if (!armReloadRef.current) { console.log(`[EmulatorPanel] ${engine}: nothing loaded — build again`); return; }
+        armReloadRef.current();
+        clearCanvas();
+        startArmRafLoop();
+      }
+      setArmAudioSuspended(!audioEnabled);
+      useDebugStore.getState().setState('running');
+      setStatus('running');
+      setEmulatorRunning(true);
+      console.log(`[EmulatorPanel] ${engine} running`);
+      return;
+    }
+
+    // The 6809 — also when nothing is loaded yet: pressing Play is the explicit start
+    // of the BIOS / inserted cartridge.
+    if (engine !== 'm6809') {
+      stopAllEngines('Play (6809)');
+      setActiveEngine('m6809');
+    }
     const vecx = (window as any).vecx;
     if (vecx) {
       // Si estaba stopped, reiniciar desde el principio
@@ -2583,11 +2824,30 @@ export const EmulatorPanel: React.FC = () => {
   };
 
   const onPause = () => {
+    const engine = useEmulatorStore.getState().activeEngine;
+    // The WASM simulator has no pause. Do not leave the debugger reading 'paused':
+    // F5 / Shift+F5 treat that as a 6809 debug session waiting to continue.
+    if (engine === 'sim') {
+      useDebugStore.getState().setState(simModulePath ? 'running' : 'stopped');
+      console.log('[EmulatorPanel] The WASM simulator has no pause (Stop ends it, Play restarts it)');
+      return;
+    }
+
     // PiTrex mode: gate the RAF loop by setting debugStore state to 'paused'
-    if (pitrexCoreRef.current) {
+    if (engine === 'pitrex') {
       useDebugStore.getState().setState('paused');
       setStatus('paused');
       console.log('[EmulatorPanel] PiTrex paused (RAF loop gated)');
+      return;
+    }
+
+    // rp2350 / uvm2: the loop skips frames while paused; the context is suspended so
+    // the last PSG state does not sustain as a note.
+    if (engine === 'rp2350' || engine === 'uvm2') {
+      useDebugStore.getState().setState('paused');
+      setStatus('paused');
+      setArmAudioSuspended(true);
+      console.log(`[EmulatorPanel] ${engine} paused`);
       return;
     }
 
@@ -2602,21 +2862,34 @@ export const EmulatorPanel: React.FC = () => {
   };
 
   const onStop = () => {
-    // PiTrex mode: gate the RAF loop and stop audio
-    if (pitrexCoreRef.current) {
+    const engine = useEmulatorStore.getState().activeEngine;
+    // WASM simulator: unmount it (its teardown ends the program and closes its audio).
+    if (engine === 'sim') {
+      if (simModulePath) {
+        stoppedSimRef.current = { path: simModulePath, romZip: useEmulatorStore.getState().simRomZip ?? null };
+        setSimModule(null);
+      }
       useDebugStore.getState().setState('stopped');
       setStatus('stopped');
       setEmulatorRunning(false);
-      pitrexCoreRef.current.stopAudio();
+      console.log('[EmulatorPanel] WASM simulator stopped');
+      return;
+    }
+
+    // PiTrex mode: gate the RAF loop and stop audio
+    if (engine === 'pitrex') {
+      useDebugStore.getState().setState('stopped');
+      setStatus('stopped');
+      setEmulatorRunning(false);
+      try { pitrexCoreRef.current?.stopAudio(); } catch {}
       console.log('[EmulatorPanel] PiTrex stopped');
       return;
     }
 
-    // rp2350 mode: cancel RAF loop and silence PSG. Without stopAudio() the
-    // ScriptProcessor keeps reading the last PSG state and the last note
-    // sustains forever after Stop is pressed.
-    const rp2350 = (emuCore as any)?._rp2350System;
-    if (rp2350LoopRef.current !== null || rp2350) {
+    // rp2350 / uvm2: cancel the rAF loop and close the system's audio. Without
+    // stopAudio() the ScriptProcessor keeps reading the last PSG state and the last
+    // note sustains forever after Stop is pressed. Play reloads the image.
+    if (engine === 'rp2350' || engine === 'uvm2') {
       if (rp2350LoopRef.current !== null) {
         cancelAnimationFrame(rp2350LoopRef.current);
         rp2350LoopRef.current = null;
@@ -2624,8 +2897,9 @@ export const EmulatorPanel: React.FC = () => {
       useDebugStore.getState().setState('stopped');
       setStatus('stopped');
       setEmulatorRunning(false);
-      try { rp2350?.stopAudio?.(); } catch {}
-      console.log('[EmulatorPanel] rp2350 stopped');
+      try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
+      try { (emuCore as any)._uvm2System?.stopAudio?.(); } catch {}
+      console.log(`[EmulatorPanel] ${engine} stopped`);
       return;
     }
 
@@ -2643,8 +2917,46 @@ export const EmulatorPanel: React.FC = () => {
   };
 
   const onReset = () => {
+    const engine = useEmulatorStore.getState().activeEngine;
+    // WASM simulator: remount it, which starts the program again.
+    if (engine === 'sim') {
+      const again = simModulePath
+        ? { path: simModulePath, romZip: useEmulatorStore.getState().simRomZip ?? null }
+        : stoppedSimRef.current;
+      stoppedSimRef.current = null;
+      if (again) {
+        setSimModule(again.path, again.romZip);
+        useDebugStore.getState().setState('running');
+        setStatus('running');
+      }
+      return;
+    }
+
+    // rp2350 / uvm2: reload the same image and run it from the beginning.
+    if (engine === 'rp2350' || engine === 'uvm2') {
+      if (!armReloadRef.current) { console.log(`[EmulatorPanel] ${engine}: nothing loaded — build again`); return; }
+      if (rp2350LoopRef.current !== null) {
+        cancelAnimationFrame(rp2350LoopRef.current);
+        rp2350LoopRef.current = null;
+      }
+      try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
+      try { (emuCore as any)._uvm2System?.stopAudio?.(); } catch {}
+      armReloadRef.current();
+      setArmAudioSuspended(!audioEnabled);
+      clearCanvas();
+      startArmRafLoop();
+      setStatus('running');
+      console.log(`[EmulatorPanel] ${engine} reset — image reloaded`);
+      return;
+    }
+
+    if (engine === 'pitrex' && !(pitrexCoreRef.current && pitrexSFileRef.current)) {
+      console.log('[EmulatorPanel] PiTrex: nothing loaded — build again');
+      return;
+    }
+
     // PiTrex mode: re-parse saved assembly and restart the RAF loop from the beginning
-    if (pitrexCoreRef.current && pitrexSFileRef.current) {
+    if (engine === 'pitrex' && pitrexCoreRef.current && pitrexSFileRef.current) {
       console.log('[EmulatorPanel] PiTrex reset — reloading assembly');
 
       // Stop current loop and audio
@@ -2676,7 +2988,7 @@ export const EmulatorPanel: React.FC = () => {
 
         useDebugStore.getState().setState('running');
         setStatus('running');
-        core.startAudio();
+        if (audioEnabledRef.current) core.startAudio();
         startPitrexRafLoop();
         console.log('[EmulatorPanel] PiTrex reset complete — new loop started');
       }).catch(e => {
@@ -2685,6 +2997,11 @@ export const EmulatorPanel: React.FC = () => {
       return;
     }
 
+    // The 6809 (also with nothing loaded: Reset is an explicit start of the BIOS).
+    if (engine !== 'm6809') {
+      stopAllEngines('Reset (6809)');
+      setActiveEngine('m6809');
+    }
     const vecx = (window as any).vecx;
     if (vecx) {
       // Clear PSG log on reset
@@ -2747,6 +3064,8 @@ export const EmulatorPanel: React.FC = () => {
     }
   };
 
+  runControlRef.current = { play: onPlay, pause: onPause, stop: onStop };
+
   const onLoadROM = async () => {
     // Prefer the Electron native dialog: it gives us the absolute path, which we
     // need to locate the sibling .elf for rp2350 binaries. Fall back to the
@@ -2790,6 +3109,10 @@ export const EmulatorPanel: React.FC = () => {
       // A fresh ROM means a fresh run mode; the branches below set it if they
       // take over, and the plain 6809 cartridge path correctly leaves it unset.
       setRunMode(null);
+      // A new program: nothing else may keep running or sounding (the uvm2 / rp2350
+      // branches used to start a second rAF loop next to the old one).
+      stopAllEngines('Load File');
+      setShowPitrexOverlay(false);
 
       // Auto-detect a UVM2 image by its "2CMU" header. It carries its own
       // syscall handler and drives the VIA itself, so it goes to Uvm2System
@@ -2860,47 +3183,17 @@ export const EmulatorPanel: React.FC = () => {
             console.log(`[EmulatorPanel] SD simulada para uvm2: ${Object.keys(out).length} ficheros`);
           }
         } catch { /* sin tarjeta simulada */ }
-        emuCore.loadUvm2(romData, canvasRef.current ?? undefined, elfUvm2, sdUvm2Files);
-        if (canvasRef.current) {
-          const ctx = canvasRef.current.getContext('2d');
-          if (ctx) {
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-          }
-        }
-
-        // Same 50 Hz rAF cap as the rp2350 path — the image paces itself against
-        // the emulated bus clock, so the host loop only has to not outrun it.
-        {
-          const TARGET_MS = 1000 / 50;
-          let lastFrameTs = 0;
-          /* CONTADOR DE FRAMES, sobre una ventana de un segundo. Se cuentan los frames que
-           * el emulador SACA, no los que pide el rAF: con la imagen corriendo despacio el
-           * bucle se salta turnos y contar peticiones daria siempre 50. */
-          let ventana = 0, desde = 0;
-          const uvm2Loop = (ts: number) => {
-            rp2350LoopRef.current = requestAnimationFrame(uvm2Loop);
-            const elapsed = ts - lastFrameTs;
-            if (elapsed < TARGET_MS) return;
-            lastFrameTs = ts - (elapsed % TARGET_MS);
-            if (useDebugStore.getState().state !== 'running') return;
-            emuCore.runFrame();
-            ventana++;
-            if (!desde) desde = ts;
-            else if (ts - desde >= 1000) {
-              const fps = (ventana * 1000) / (ts - desde);
-              const st = emuCore.uvm2FrameStats;
-              /* Frame bus cycles -> the refresh the drawing would allow on the console.
-               * The UVM2 bus clock is 1.5 MHz (30000 cycles x 50 Hz). */
-              const BUS_HZ = 30000 * 50;
-              useDebugStore.getState().updateStats(
-                st?.ciclos ?? 0, fps, st?.ciclos ? BUS_HZ / st.ciclos : 0);
-              ventana = 0; desde = ts;
-            }
-          };
-          useDebugStore.getState().setState('running');
-          rp2350LoopRef.current = requestAnimationFrame(uvm2Loop);
-        }
+        const um2 = romData;
+        armReloadRef.current = () =>
+          emuCore.loadUvm2!(um2, canvasRef.current ?? undefined, elfUvm2, sdUvm2Files);
+        armReloadRef.current();
+        setActiveEngine('uvm2');
+        setArmAudioSuspended(!audioEnabled);
+        clearCanvas();
+        // The image paces itself against the emulated bus clock, so the host loop
+        // only has to not outrun it.
+        startArmRafLoop();
+        setStatus('running');
 
         setLoadedROM(`${romName} (${romData.length} bytes, uvm2)`);
         setLastRom(null, romName);
@@ -2945,31 +3238,18 @@ export const EmulatorPanel: React.FC = () => {
 
         const sdSim1 = await (window as any).electronAPI?.sdSimList?.().catch(() => null);
         const romZip1 = await loadSimRomZip(romPath);
-        emuCore.loadArm(romData, elfData, canvasRef.current ?? undefined, sdSim1?.files ?? [], sdSim1?.previews ?? {}, romZip1);
+        const armBin = romData;
+        armReloadRef.current = () =>
+          emuCore.loadArm!(armBin, elfData, canvasRef.current ?? undefined, sdSim1?.files ?? [], sdSim1?.previews ?? {}, romZip1);
+        armReloadRef.current();
         console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
+        setActiveEngine('rp2350');
+        setArmAudioSuspended(!audioEnabled);
 
         // Clear the canvas before first rp2350 frame
-        if (canvasRef.current) {
-          const ctx = canvasRef.current.getContext('2d');
-          if (ctx) {
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-          }
-        }
-
-        // Start rAF loop capped at 50 fps (Vectrex PAL rate; music compiled at 50 Hz)
-        const TARGET_MS = 1000 / 50;
-        let lastFrameTs = 0;
-        const rp2350Loop = (ts: number) => {
-          rp2350LoopRef.current = requestAnimationFrame(rp2350Loop);
-          const elapsed = ts - lastFrameTs;
-          if (elapsed < TARGET_MS) return;
-          lastFrameTs = ts - (elapsed % TARGET_MS);
-          if (useDebugStore.getState().state !== 'running') return;
-          emuCore.runFrame();
-        };
-        useDebugStore.getState().setState('running');
-        rp2350LoopRef.current = requestAnimationFrame(rp2350Loop);
+        clearCanvas();
+        startArmRafLoop();
+        setStatus('running');
 
         setLoadedROM(`${romName} (${romData.length} bytes, rp2350${elfData ? ' + elf' : ''})`);
         setLastRom(null, romName);
@@ -2979,6 +3259,8 @@ export const EmulatorPanel: React.FC = () => {
       }
 
       // ── M6809 cartridge path ────────────────────────────────────────────
+      setActiveEngine('m6809');
+      applyAudioState(audioEnabled);
       let cartDataString = '';
       for (let i = 0; i < romData.length; i++) {
         cartDataString += String.fromCharCode(romData[i]);
@@ -3130,28 +3412,26 @@ export const EmulatorPanel: React.FC = () => {
       }
       END DISABLED AUTO-LOAD */
       
-      // Skip loading compiled ROM - go straight to default Minestorm
-      // But only for the M6809 path — rp2350/pitrex have no use for a 6809 ROM.
-      if (useSettings.getState().buildTarget === 'rp2350' || useSettings.getState().buildTarget === 'pitrex' || useSettings.getState().buildTarget === 'uvm2') {
-        defaultOverlayLoaded.current = true;
-        return;
-      }
-
-      // Fallback: Cargar Minestorm
-      console.log('[EmulatorPanel] Loading default: Minestorm');
-      await loadOverlay('minestorm.bin');
-      setLoadedROM('BIOS - Minestorm');
-      
+      /* A MOUNT NEVER STARTS AN ENGINE. This used to call vecx.start() whenever the
+       * persisted `emulatorWasRunning` was true — and Play sets it for EVERY engine
+       * (simulator, rp2350, uvm2, PiTrex) while builds never clear it. The panel
+       * remounts each time the dock layout changes and at every IDE start, so the
+       * 6809 booted the BIOS with no cartridge (Minestorm) in the background, under
+       * whatever was really running. JSVecX runs only when a 6809 program is loaded
+       * or the user presses Play / Reset. */
+      const owner = useEmulatorStore.getState().activeEngine;
       const vecx = (window as any).vecx;
-      if (vecx) {
-        if (emulatorWasRunning) {
-          vecx.debugState = 'running';
-          vecx.start();
-          setStatus('running');
-        } else {
-          vecx.stop();
-          setStatus('stopped');
-        }
+      // A 6809 that is the active engine keeps running across the remount (its canvas
+      // is re-bound in initJSVecX); under any other engine it must not run at all.
+      if (vecx && owner !== 'm6809' && vecx.running) vecx.stop();
+
+      // Nothing loaded yet and the 6809 is the selected target: show the BIOS as the
+      // inserted "cartridge", stopped (Play starts it).
+      if (owner === null && useSettings.getState().buildTarget === 'm6809') {
+        console.log('[EmulatorPanel] Default: BIOS (Minestorm), stopped');
+        await loadOverlay('minestorm.bin');
+        setLoadedROM('BIOS - Minestorm');
+        setStatus('stopped');
       }
       
       defaultOverlayLoaded.current = true;
@@ -3229,9 +3509,10 @@ export const EmulatorPanel: React.FC = () => {
       setRunMode(null);
       console.log(`[EmulatorPanel] Loading compiled binary: ${payload.binPath} (${payload.size} bytes) target=${payload.target ?? 'm6809'}`);
 
-      // A VPy / hardware binary is loading — tear down any external-project WASM
-      // simulator that was running so the Vectrex backend owns the panel again.
-      setSimModule(null);
+      // A new program is loading (any target, debug loads included): stop every engine
+      // and every audio path first — the WASM simulator too — so only the engine this
+      // load starts below runs and sounds.
+      stopAllEngines(`compiled ${payload.target ?? 'm6809'} binary`);
       
       // Guardar última ROM compilada con su proyecto
       const projectState = (window as any).__projectStore__?.getState?.();
@@ -3269,34 +3550,6 @@ export const EmulatorPanel: React.FC = () => {
         useDebugStore.getState().clearPdbData();
       }
       
-      // ── Shared helper: stop ALL three emulators before switching targets ──
-      const stopAllEmulators = () => {
-        // 1. JSVecX (m6809) — stop its internal setInterval/setTimeout loop
-        const _vecx = (window as any).vecx;
-        if (_vecx) { try { _vecx.stop(); } catch {} }
-
-        // 2. PiTrex — cancel RAF loop and stop audio context
-        if (pitrexLoopRef.current !== null) {
-          cancelAnimationFrame(pitrexLoopRef.current);
-          pitrexLoopRef.current = null;
-        }
-        if (pitrexCoreRef.current) {
-          try { pitrexCoreRef.current.stopAudio?.(); } catch {}
-          pitrexCoreRef.current = null;
-        }
-
-        // 3. rp2350 — cancel RAF loop and stop audio context via emuCore
-        if (rp2350LoopRef.current !== null) {
-          cancelAnimationFrame(rp2350LoopRef.current);
-          rp2350LoopRef.current = null;
-        }
-        // stopAudio is called inside emuCore.loadProgram when _activeTarget==='rp2350';
-        // call it explicitly here too so switching pitrex→rp2350 also cleans up.
-        try { (emuCore as any)._rp2350System?.stopAudio?.(); } catch {}
-
-        console.log('[EmulatorPanel] ✓ All emulators stopped');
-      };
-
       // Record the outcome of this load for tools that wait on it (MCP ide_run).
       const noteLoad = (backend: 'm6809' | 'rp2350' | 'uvm2' | 'pitrex', ok: boolean, error?: string) =>
         useEmulatorStore.getState().noteLoad({ backend, binPath: payload.binPath, ok, error });
@@ -3313,7 +3566,7 @@ export const EmulatorPanel: React.FC = () => {
           return;
         }
         try {
-          stopAllEmulators();
+          setActiveEngine('pitrex');
 
           // Dynamically import PitrexCore to avoid bundling it unless needed
           const { PitrexCore } = await import('../../pitrex/PitrexCore.js');
@@ -3339,8 +3592,10 @@ export const EmulatorPanel: React.FC = () => {
           }
 
           useDebugStore.getState().setState('running');
-          setPitrexAudioEnabled(true);
-          core.startAudio();
+          setStatus('running');
+          // Respect the panel's mute: the sound comes back with the engine, not over it.
+          setPitrexAudioEnabled(audioEnabledRef.current);
+          if (audioEnabledRef.current) core.startAudio();
           startPitrexRafLoop();
           noteLoad('pitrex', true);
         } catch (e) {
@@ -3360,7 +3615,7 @@ export const EmulatorPanel: React.FC = () => {
         setShowPitrexOverlay(false);
         setRunMode(isUvm2 ? 'uvm2' : 'rp2350');
         try {
-          stopAllEmulators();
+          setActiveEngine(isUvm2 ? 'uvm2' : 'rp2350');
 
           const bin = Uint8Array.from(atob(payload.base64), c => c.charCodeAt(0));
           const elf = payload.elfBase64
@@ -3378,66 +3633,27 @@ export const EmulatorPanel: React.FC = () => {
               for (const [k, v] of Object.entries(payload.sdFiles ?? {})) {
                 sdBytes[k] = Uint8Array.from(atob(v), c => c.charCodeAt(0));
               }
-              emuCore.loadUvm2!(bin, canvasRef.current ?? undefined, elf, sdBytes);
+              armReloadRef.current = () =>
+                emuCore.loadUvm2!(bin, canvasRef.current ?? undefined, elf, sdBytes);
+              armReloadRef.current();
               console.log('[EmulatorPanel] ✓ .um2 image loaded into Uvm2System');
             } else {
               // Pass the shared canvas so Rp2350System renders directly to it
               const sdSim2 = await (electronAPI as any)?.sdSimList?.().catch(() => null);
               const romZip2 = await loadSimRomZip(payload.binPath);
-              emuCore.loadArm!(bin, elf, canvasRef.current ?? undefined, sdSim2?.files ?? [], sdSim2?.previews ?? {}, romZip2);
+              armReloadRef.current = () =>
+                emuCore.loadArm!(bin, elf, canvasRef.current ?? undefined, sdSim2?.files ?? [], sdSim2?.previews ?? {}, romZip2);
+              armReloadRef.current();
               console.log('[EmulatorPanel] ✓ ARM binary loaded into Rp2350System');
             }
+            // The loader opened the system's audio; keep it asleep if the panel is muted.
+            setArmAudioSuspended(!audioEnabledRef.current);
 
             // Clear the canvas before first rp2350 frame (Minestorm may have drawn there)
-            if (canvasRef.current) {
-              const ctx = canvasRef.current.getContext('2d');
-              if (ctx) {
-                ctx.fillStyle = '#000000';
-                ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-              }
-            }
+            clearCanvas();
 
-            // Start our own requestAnimationFrame loop capped at 50 fps.
-            // RAF fires at the display refresh rate (120/144 Hz on many monitors).
-            // Without a cap the game logic would run proportionally faster than
-            // the M6809 path, which is driven by the Vectrex 50 Hz VIA timer.
-            const TARGET_MS = 1000 / 50;  // 20 ms per frame (Vectrex PAL; music compiled at 50 Hz)
-            let rp2350FrameCount = 0;
-            let lastFrameTs = 0;
-            /* FRAME COUNTER, same as the "open a standalone .um2" loop. There are TWO
-             * paths that start the emulator, and this one — run what was just compiled —
-             * is the one the IDE uses. Wiring the counter to the other one alone left the
-             * readout at zero with nothing reporting a failure. */
-            let ventana = 0, desde = 0;
-            const loop = (ts: number) => {
-              rp2350LoopRef.current = requestAnimationFrame(loop);
-              const elapsed = ts - lastFrameTs;
-              if (elapsed < TARGET_MS) return;          // too soon — skip
-              lastFrameTs = ts - (elapsed % TARGET_MS); // align to 50 Hz grid
-              // Honour pause/stop from debug controls
-              if (useDebugStore.getState().state !== 'running') return;
-              rp2350FrameCount++;
-              if ((window as any).RP2350_DEBUG && (rp2350FrameCount <= 5 || rp2350FrameCount % 120 === 0)) {
-                console.log(`[EmulatorPanel] rp2350 rAF loop frame ${rp2350FrameCount}`);
-              }
-              emuCore.runFrame();
-              ventana++;
-              if (!desde) desde = ts;
-              else if (ts - desde >= 1000) {
-                const fps = (ventana * 1000) / (ts - desde);
-                /* Frame bus cycles -> the refresh the drawing would allow on the console.
-                 * The UVM2 bus clock is 1.5 MHz (30000 cycles x 50 Hz). */
-                const BUS_HZ = 30000 * 50;
-                const st = (emuCore as any).uvm2FrameStats;
-                useDebugStore.getState().updateStats(
-                  st?.ciclos ?? 0, fps, st?.ciclos ? BUS_HZ / st.ciclos : 0);
-                ventana = 0; desde = ts;
-              }
-            };
-            // Mark as running so the RAF loop doesn't bail on the first check.
-            useDebugStore.getState().setState('running');
-            rp2350LoopRef.current = requestAnimationFrame(loop);
-            console.log('[EmulatorPanel] ✓ rp2350 rAF loop started');
+            startArmRafLoop();
+            setStatus('running');
             noteLoad(isUvm2 ? 'uvm2' : 'rp2350', true);
           } else {
             console.error(`[EmulatorPanel] loader for ${payload.target} not available on emuCore`);
@@ -3466,8 +3682,9 @@ export const EmulatorPanel: React.FC = () => {
           return;
         }
 
-        // Stop ALL emulators before loading m6809 ROM
-        stopAllEmulators();
+        setActiveEngine('m6809');
+        // The 6809's mute flag lives in its PSG (e8910.enabled): carry the panel's over.
+        applyAudioState(audioEnabledRef.current);
         
         // Cargar el binario en la instancia global Globals.cartdata
         const Globals = (window as any).Globals;
@@ -3597,11 +3814,16 @@ export const EmulatorPanel: React.FC = () => {
       }
     };
 
-    electronAPI.onCompiledBin(handleCompiledBin);
+    const unsubscribe = electronAPI.onCompiledBin(handleCompiledBin);
     console.log('[EmulatorPanel] ✓ Registered onCompiledBin listener');
-    
-    // No cleanup function needed - onCompiledBin typically doesn't return one
-  }, [loadOverlay, setLoadedROM, startPitrexRafLoop]);
+
+    // Unsubscribe on unmount. Without it every remount of the panel (dock layout
+    // changes) added one more listener that was never removed: each build was then
+    // loaded once per stale panel, and each stale copy started its own rAF loop or
+    // PiTrex core on refs nobody could reach any more — engines that kept running
+    // and sounding after Stop and after the next load.
+    return () => { if (typeof unsubscribe === 'function') unsubscribe(); };
+  }, [loadOverlay, setLoadedROM, startPitrexRafLoop, stopAllEngines, setActiveEngine, startArmRafLoop, setArmAudioSuspended, setStatus, clearCanvas, applyAudioState]);
 
   // Manejar cambio de ROM en dropdown
   const handleROMChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -3619,6 +3841,12 @@ export const EmulatorPanel: React.FC = () => {
     const newState = !overlayEnabled;
     setOverlayEnabled(newState);
   };
+
+  // What the mute button shows: the audio state of the engine that owns the panel.
+  const audioOn = simModulePath ? audioEnabled
+    : pitrexCoreRef.current ? pitrexAudioEnabled
+    : (activeEngine === 'rp2350' || activeEngine === 'uvm2') ? audioEnabled
+    : getCurrentAudioState();
 
   const btn: React.CSSProperties = { 
     background: '#1d1d1d', 
@@ -3743,6 +3971,7 @@ export const EmulatorPanel: React.FC = () => {
                 onLog={(line) => console.log(line)}
                 onCanvasReady={onSimCanvasReady}
                 onCaptureReady={onSimCaptureReady}
+                muted={!audioEnabled}
               />
             </div>
           )}
@@ -4038,8 +4267,8 @@ export const EmulatorPanel: React.FC = () => {
         <button
           style={{
             ...btn,
-            backgroundColor: (pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? '#2a4a2a' : '#4a2a2a',
-            color: (pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? '#afa' : '#faa',
+            backgroundColor: audioOn ? '#2a4a2a' : '#4a2a2a',
+            color: audioOn ? '#afa' : '#faa',
             fontSize: '20px',
             padding: '10px',
             minWidth: '50px',
@@ -4050,6 +4279,19 @@ export const EmulatorPanel: React.FC = () => {
             justifyContent: 'center'
           }} 
           onClick={() => {
+            // ── WASM simulator: PitrexSimView follows `audioEnabled` (muted prop) ──
+            if (simModulePath) {
+              setAudioEnabled(!audioEnabled);
+              return;
+            }
+            // ── rp2350 / uvm2: suspend or resume the system's AudioContext ──────
+            if (activeEngine === 'rp2350' || activeEngine === 'uvm2') {
+              const next = !audioEnabled;
+              setAudioEnabled(next);
+              // A paused machine stays silent until Play.
+              if (!next || status === 'running') setArmAudioSuspended(!next);
+              return;
+            }
             // ── PiTrex audio path ────────────────────────────────────────────
             if (pitrexCoreRef.current) {
               const newEnabled = !pitrexAudioEnabled;
@@ -4103,9 +4345,9 @@ export const EmulatorPanel: React.FC = () => {
               console.warn('[EmulatorPanel] Could not control PSG audio:', e);
             }
           }}
-          title={(pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? 'Mute audio' : 'Unmute audio'}
+          title={audioOn ? 'Mute audio' : 'Unmute audio'}
         >
-          {(pitrexCoreRef.current ? pitrexAudioEnabled : getCurrentAudioState()) ? '🔊' : '🔇'}
+          {audioOn ? '🔊' : '🔇'}
         </button>
         
         {/* Botón Toggle Overlay - Solo visible si hay overlay disponible */}

@@ -67,9 +67,11 @@ export interface PitrexSimViewProps {
    *  Esta vista TAPA el canvas del emulador, asi que quien quiera grabar video
    *  tiene que apuntar a este; si no, graba el de debajo, que ya no pinta nadie. */
   onCanvasReady?: (el: HTMLCanvasElement | null) => void;
+  /** The panel's mute button: suspends every AudioContext the simulator plays through. */
+  muted?: boolean;
 }
 
-export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width, height, onLog, onCanvasReady, onCaptureReady }) => {
+export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width, height, onLog, onCanvasReady, onCaptureReady, muted = false }) => {
   const simRomZip = useEmulatorStore(s => s.simRomZip);
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -151,6 +153,17 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
   const audioRef = useRef<any>(null);
   /* El DAC del cartucho. Comparte el AudioContext del chip; ver donde se arma. */
   const jackRef = useRef<any>(null);
+  // Muted: every context is suspended, and the gesture handlers that wake audio up
+  // (browsers start a context only after a click or key) leave it asleep.
+  const mutedRef = useRef(muted);
+  const applyMute = useCallback(() => {
+    const m = mutedRef.current;
+    for (const ctx of [audioRef.current?.ctx, jackRef.current?.ctxJ] as (AudioContext | undefined)[]) {
+      if (!ctx || ctx.state === 'closed') continue;
+      (m ? ctx.suspend() : ctx.resume()).catch(() => {});
+    }
+  }, []);
+  useEffect(() => { mutedRef.current = muted; applyMute(); }, [muted, applyMute]);
   // Digitised-sample audio (e.g. AAE Sega-G80). `samplesRef` holds one decoded
   // AudioBuffer per bank index (from samples/samples.json, order = the game's
   // sample index); `voiceNodesRef` maps a mixing voice → its live source node.
@@ -344,7 +357,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
           if (voiceNodesRef.current.get(voice) === src) voiceNodesRef.current.delete(voice);
           if (voiceClockRef.current.get(voice)?.node === src) voiceClockRef.current.delete(voice);
         };
-        if (a.ctx.state !== 'running') a.ctx.resume().catch(() => {});
+        if (a.ctx.state !== 'running' && !mutedRef.current) a.ctx.resume().catch(() => {});
         try { src.start(); } catch { /* ctx not running yet */ }
         voiceNodesRef.current.set(voice, src);
         voiceClockRef.current.set(voice, { node: src, t0: a.ctx.currentTime, dur: n / rate, loop: !!loop });
@@ -402,7 +415,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
               // GAMEPAD input does NOT qualify, so a pad-only player hears nothing
               // until they click/key once. Listen on ALL gesture types (capture,
               // on window) so any interaction unlocks it.
-              const resume = () => { if (ctx.state !== 'running') ctx.resume().catch(() => {}); };
+              const resume = () => { if (ctx.state !== 'running' && !mutedRef.current) ctx.resume().catch(() => {}); };
               const evts = ['keydown', 'pointerdown', 'mousedown', 'click', 'touchstart'];
               evts.forEach((e) => window.addEventListener(e, resume, { capture: true }));
               audioRef.current = { ctx, node, resume, evts };
@@ -561,6 +574,9 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
           };
           const mus = await leer('KUROMUS.PCM');
           const sfx = await leer('KUROSFX.PCM');
+          // Unmounted while reading the card (a new program was loaded): the cleanup
+          // has already run, so a context made from here on would never be closed.
+          if (cancelled || disposedRef.current) return;
           /* CADA FORMA DE NO SONAR DICE CUAL ES. Sin esto, "no hay tarjeta", "no
            * estan los ficheros" y "este juego no lleva audio de jack" salen las
            * tres por el mismo sitio: nada en el log y silencio por el altavoz.
@@ -633,7 +649,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
               }
             };
             nodo.connect(ctxJ.destination);
-            const despierta = () => { if (ctxJ.state !== 'running') ctxJ.resume().catch(() => {}); };
+            const despierta = () => { if (ctxJ.state !== 'running' && !mutedRef.current) ctxJ.resume().catch(() => {}); };
             ['keydown', 'pointerdown', 'mousedown', 'click', 'touchstart']
               .forEach((e) => window.addEventListener(e, despierta, { capture: true }));
             jackRef.current = { ctxJ, nodo, despierta, propio };
@@ -644,6 +660,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
           log.current?.(`[PiTrex simulator] sin audio de jack: ${e?.message || e}`);
         }
 
+        applyMute();   // started muted: keep the new contexts asleep
         setState('running');
         log.current?.('[PiTrex simulator] module ready — starting main()');
 
@@ -703,7 +720,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
       } catch { /* ya estaba cerrado */ }
       jackRef.current = null;
     };
-  }, [modulePath, pollInput]);
+  }, [modulePath, pollInput, applyMute]);
 
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>

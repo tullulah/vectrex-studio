@@ -1064,6 +1064,7 @@ function VecX()
     this.extraTime = 0;
     this.fpsTimer = null;
     this.running = false;
+    this.pendingStart = null; // the start() that reset() schedules, until it fires
     this.vecx_emuloop = function()
     {
         if( this.running ) return;
@@ -1161,6 +1162,13 @@ function VecX()
     }
     this.stop = function()
     {
+        // An explicit stop cancels the start that reset() schedules: without this,
+        // stop() inside those 200 ms was undone and the machine came back on its own.
+        if( this.pendingStart != null )
+        {
+            clearTimeout( this.pendingStart );
+            this.pendingStart = null;
+        }
         if( this.running )
         {
             if( this.fpsTimer != null )
@@ -1169,8 +1177,11 @@ function VecX()
                 this.fpsTimer = null;
             }
             this.running = false;
-            this.e8910.stop();
         }
+        // Silence the PSG even when the loop was already halted: the debugger's pause
+        // clears `running` without it, and the audio callback then keeps playing the
+        // last register state (a stuck note) until something calls start() again.
+        this.e8910.stop();
     }
     this.start = function()
     {
@@ -1207,7 +1218,8 @@ function VecX()
         this.vecx_reset();
         this.osint.osint_clearscreen();
         var vecx = this;
-        setTimeout( function() { vecx.start(); }, 200 );
+        // Kept so stop() can cancel it (see stop()).
+        this.pendingStart = setTimeout( function() { vecx.pendingStart = null; vecx.start(); }, 200 );
     }
     this.toggleSoundEnabled = function()
     {
@@ -1418,6 +1430,7 @@ function VecX()
             // DON'T set running=true here - vecx_emuloop() checks this and returns early if already true
             // Let vecx_emuloop() set running=true itself (line 983)
             this.skipNextBreakpoint = true; // Skip breakpoint at current position
+            this.e8910.start(); // stop() may have silenced the PSG while paused
             console.log('[JSVecx Debug] Continuing execution (stepMode cleared, skipNextBreakpoint=true, running will be set by vecx_emuloop)');
             // Continue the emulation loop
             this.vecx_emuloop();

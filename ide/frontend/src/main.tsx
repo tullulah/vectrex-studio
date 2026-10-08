@@ -453,10 +453,15 @@ function App() {
         return { ok: false, project: null, target: null, launch: 'none', error: 'no_ipc', detail: 'electronAPI.runCompile not available' };
       }
 
-      // CRITICAL: Stop emulator BEFORE compilation to avoid hanging
+      // CRITICAL: Stop emulator BEFORE compilation to avoid hanging. ALL engines, not
+      // just the 6809: the others were left gated with their audio still rendering the
+      // last PSG state (a stuck note for the length of the build). The Emulator panel
+      // owns that function; with the panel closed only JSVecX can be running.
+      const engines = (window as any).emulatorEngines;
       const vecx = (window as any).vecx;
-      if (vecx?.stop) {
-        vecx.stop();
+      if (engines?.stopAll || vecx?.stop) {
+        if (engines?.stopAll) engines.stopAll('build started');
+        else vecx.stop();
         // Also update debug store state
         const useDebugStore = (window as any).useDebugStore;
         if (useDebugStore) {

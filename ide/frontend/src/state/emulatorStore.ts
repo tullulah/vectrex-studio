@@ -4,6 +4,11 @@ import type { EmulatorState } from '../types/models.js';
 /** Which machine the Emulator panel last loaded a program into. */
 export type EmulatorBackend = 'm6809' | 'rp2350' | 'uvm2' | 'pitrex';
 
+/** The engine that owns the Emulator panel: the one whose program was loaded/started
+ *  last. 'sim' = the external project's WASM simulator (PitrexSimView). Only this
+ *  engine may run or make sound; every load stops all the others first. */
+export type ActiveEngine = EmulatorBackend | 'sim';
+
 /** One program load in the Emulator panel (emu://compiledBin). `seq` grows by one per load. */
 export interface EmulatorLoad {
   seq: number;
@@ -43,6 +48,9 @@ interface EmulatorStore extends EmulatorState {
   noteLoad: (load: Omit<EmulatorLoad, 'seq' | 'at'>) => void;
   simStatus: SimStatus | null;
   setSimStatus: (s: SimStatus) => void;
+  /** null until a program is loaded or started (no engine owns the panel yet). */
+  activeEngine: ActiveEngine | null;
+  setActiveEngine: (e: ActiveEngine | null) => void;
 }
 
 const initial: EmulatorState = { status: 'stopped' };
@@ -60,4 +68,6 @@ export const useEmulatorStore = create<EmulatorStore>((set) => ({
   noteLoad: (load) => set((s) => ({ lastLoad: { ...load, seq: (s.lastLoad?.seq ?? 0) + 1, at: Date.now() } })),
   simStatus: null,
   setSimStatus: (simStatus) => set({ simStatus }),
+  activeEngine: null,
+  setActiveEngine: (activeEngine) => set({ activeEngine }),
 }));

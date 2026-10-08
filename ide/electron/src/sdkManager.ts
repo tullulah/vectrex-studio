@@ -9,7 +9,7 @@
 // plain extracted tarball of a tag is a complete install: no git, no build step.
 
 import { promises as fs, createWriteStream } from 'fs';
-import { join } from 'path';
+import { basename, join } from 'path';
 import * as os from 'os';
 import { spawn } from 'child_process';
 
@@ -383,6 +383,92 @@ export async function resolveProjectSdk(
   } catch (e: any) {
     return { error: e?.message || String(e) };
   }
+}
+
+// ─── Build folders made with another SDK ───────────────────────────────────
+//
+// A project that switches SDK version (or pico-sdk) keeps build folders made with the
+// old one: CMake refuses its cache ("does not match the source ... used to generate
+// cache") and make's .d files keep objects compiled against the old headers, which are
+// still installed, so they never rebuild. Before a build, every top-level `build`, `build_*` or `build-*` folder
+// of the project that references a DIFFERENT version under the IDE's SDK or pico-sdk
+// folder is deleted; the build recreates it. Only those folders are touched, and only
+// when they point inside the IDE-managed roots, so a project's own paths never count.
+
+const STALE_SCAN_MAX_FILES = 5000;
+const STALE_SCAN_MAX_BYTES = 2 * 1024 * 1024;
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Versions under `root` that `text` references, other than `current`. */
+function otherVersionsIn(text: string, root: string, current: string): string[] {
+  const re = new RegExp(`${escapeRe(root)}[\\\\/]([^\\\\/\\s"';:]+)`, 'g');
+  const out = new Set<string>();
+  for (let m = re.exec(text); m; m = re.exec(text)) if (m[1] !== current) out.add(m[1]);
+  return [...out];
+}
+
+async function findStaleReference(dir: string, roots: Array<{ root: string; current: string; what: string }>): Promise<string | null> {
+  let seen = 0;
+  const walk = async (d: string, depth: number): Promise<string | null> => {
+    let entries: import('fs').Dirent[];
+    try { entries = await fs.readdir(d, { withFileTypes: true }); } catch { return null; }
+    // Caches first: one CMakeCache.txt settles a CMake folder without reading its objects.
+    entries.sort((a, b) => Number(b.name === 'CMakeCache.txt') - Number(a.name === 'CMakeCache.txt'));
+    for (const e of entries) {
+      if (seen >= STALE_SCAN_MAX_FILES) return null;
+      const p = join(d, e.name);
+      if (e.isDirectory()) {
+        if (depth < 8) { const hit = await walk(p, depth + 1); if (hit) return hit; }
+        continue;
+      }
+      if (e.name !== 'CMakeCache.txt' && !e.name.endsWith('.d')) continue;
+      seen++;
+      try {
+        const st = await fs.stat(p);
+        if (st.size > STALE_SCAN_MAX_BYTES) continue;
+        const text = await fs.readFile(p, 'utf8');
+        for (const r of roots) {
+          const other = otherVersionsIn(text, r.root, r.current);
+          if (other.length) return `${p} was made with ${r.what} ${other[0]}`;
+        }
+      } catch { /* unreadable: not ours to judge */ }
+    }
+    return null;
+  };
+  return walk(dir, 0);
+}
+
+/**
+ * Delete the project's top-level `build`, `build_*` or `build-*` folders made with another SDK / pico-sdk
+ * version than the one this build uses. Returns the folders deleted.
+ */
+export async function dropStaleSdkBuilds(
+  projectDir: string,
+  current: { dir: string; picoSdkDir?: string },
+  log: (line: string) => void,
+): Promise<string[]> {
+  const roots = [{ root: sdkRootDir(), current: basename(current.dir), what: 'SDK' }];
+  if (current.picoSdkDir) roots.push({ root: picoSdkRootDir(), current: basename(current.picoSdkDir), what: 'pico-sdk' });
+  let entries: import('fs').Dirent[];
+  try { entries = await fs.readdir(projectDir, { withFileTypes: true }); } catch { return []; }
+  const dropped: string[] = [];
+  for (const e of entries) {
+    if (!e.isDirectory() || !/^build([_-].*)?$/i.test(e.name)) continue;
+    const dir = join(projectDir, e.name);
+    const why = await findStaleReference(dir, roots);
+    if (!why) continue;
+    try {
+      await fs.rm(dir, { recursive: true, force: true });
+      dropped.push(dir);
+      log(`[SDK] ${e.name}/ was built with another SDK version (${why.slice(dir.length + 1)}): deleted, the build recreates it\n`);
+    } catch (err: any) {
+      log(`[SDK] could not delete stale ${dir}: ${err?.message || err}\n`);
+    }
+  }
+  return dropped;
 }
 
 // ─── Arm GNU Toolchain (uvm2 builds) ───────────────────────────────────────
