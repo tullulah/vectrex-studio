@@ -25,7 +25,7 @@ import {
 import { IDE_INSTRUCTIONS } from './instructions.js';
 import {
   ASSET_SPECS, AssetSpec, compileCheck, makefileCompilesAssets, makefileCompilesExt, missingReferences, newAssetName,
-  normaliseName, projectLang, resolveVpyCli, scanProjectAssets, specFor, summarizeAsset,
+  normaliseName, projectLang, resolveVpyCli, scanProjectAssets, specFor, structuralErrors, summarizeAsset,
 } from './assets.js';
 import { ApiReference, compactApi, cReference, filterEntries, howTo, topicsOf, vpyReference } from './apiReference.js';
 
@@ -1757,6 +1757,8 @@ export class MCPServer {
 
     const rel = `${spec.dir}/${name}${spec.ext}`;
     const abs = await resolveInsideRoot(info.rootDir, rel);
+    const bad = structuralErrors(spec, json);
+    if (bad.length) throw new Error(`${rel} is not a valid ${spec.ext} (nothing was written): ${bad.join('; ')} (see asset_get_format)`);
     const missing = missingReferences(spec, json, info.rootDir, path.dirname(abs));
     if (missing.length) {
       throw new Error(`${rel} references assets that do not exist (create them first): ${missing.join('; ')}`);

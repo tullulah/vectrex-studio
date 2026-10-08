@@ -257,5 +257,135 @@ test('round-trip keeps unknown fields and key order', () => {
   assert.ok(agree('roundtrip', out));
 });
 
+// ── scenery: lines and occluders ────────────────────────────────────────
+
+/**
+ * Does the bundled compiler know "lines"/"occluders"? An older one ignores the
+ * keys (serde) and refuses a scenery-only file; then the scenery cases are
+ * unit checks only.
+ */
+const cliKnowsScenery = haveCli && cliAccepts('probe_scenery', { name: 'p', lines: [{ points: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }] }] });
+const agreeScene = (name: string, raw: unknown) => (cliKnowsScenery ? agree(name, raw) : errors(raw).length === 0);
+
+const wall = { points: [{ x: -40000, y: 0, z: 5000 }, { x: 40000, y: 0, z: 5000 }, { x: 40000, y: 3000, z: 5000 }, { x: -40000, y: 3000, z: 5000 }] };
+
+test('scenery-only meshes are valid; vertices/faces still go together', () => {
+  assert.ok(agreeScene('lines_only', { name: 'room', hard: 45, lines: [{ points: wall.points, br: 70, closed: true }] }));
+  assert.ok(agreeScene('occ_only', { name: 'room', occluders: [wall] }));
+  assert.ok(agreeScene('cube_and_lines', { ...cubeRaw, lines: [{ points: wall.points.slice(0, 2) }], occluders: [wall] }));
+  const tri = [{ x: 0, y: 10 }, { x: 9, y: -5 }, { x: -9, y: -5 }];
+  assert.ok(agreeScene('loft_and_lines', { name: 't', sections: [{ z: -10, points: tri }, { z: 10, points: tri }], lines: [{ points: wall.points.slice(0, 2) }] }));
+  assert.ok(!agree('empty_scenery', { name: 'x', lines: [], occluders: [] }));
+  assert.equal(errors({ vertices: cube.vertices, faces: [], lines: [{ points: wall.points }] }).length, 1, 'vertices without faces is still an error');
+});
+
+test('scenery errors', () => {
+  const base = { name: 'x' };
+  const bad: [string, unknown][] = [
+    ['one point', { ...base, lines: [{ points: [{ x: 0, y: 0, z: 0 }] }] }],
+    ['br 0', { ...base, lines: [{ points: wall.points, br: 0 }] }],
+    ['br 101', { ...base, lines: [{ points: wall.points, br: 101 }] }],
+    ['br float', { ...base, lines: [{ points: wall.points, br: 50.5 }] }],
+    ['closed number', { ...base, lines: [{ points: wall.points, closed: 1 }] }],
+    ['fog string', { ...base, lines: [{ points: wall.points, fog: 'no' }] }],
+    ['points not array', { ...base, lines: [{ points: 3 }] }],
+    ['lines not array', { ...base, lines: {} }],
+    ['line beyond 1e6', { ...base, lines: [{ points: [{ x: 1_000_001, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }] }] }],
+    ['float point', { ...base, lines: [{ points: [{ x: 0.5, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }] }] }],
+    ['occluder 2 points', { ...base, occluders: [{ points: wall.points.slice(0, 2) }] }],
+    ['occluder 9 points', { ...base, occluders: [{ points: Array.from({ length: 9 }, (_, i) => ({ x: i, y: i * i, z: 0 })) }] }],
+  ];
+  for (const [what, raw] of bad) {
+    const e = errors(raw);
+    assert.ok(e.length > 0, `${what}: expected an error`);
+    assert.ok(e.every((x) => x.line !== undefined || x.occluder !== undefined || /must be an array/.test(x.message)), `${what}: errors point at the item`);
+    if (cliKnowsScenery) assert.ok(!agree(`scene_${what.replace(/\W+/g, '_')}`, raw));
+  }
+  // within range, and a vertex at 40000 is still an error
+  assert.equal(errors({ ...base, lines: [{ points: [{ x: 1_000_000, y: -1_000_000, z: 0 }, { x: 0, y: 0, z: 0 }] }] }).length, 0);
+  assert.ok(errors({ ...cubeRaw, vertices: cube.vertices.map((v, i) => (i ? v : { ...v, x: 40000 })), lines: [{ points: wall.points }] }).length > 0);
+  // warnings: a line with no length, an occluder with no area
+  assert.ok(warnings({ ...base, lines: [{ points: [{ x: 1, y: 1, z: 1 }, { x: 1, y: 1, z: 1 }] }] }).some((w) => w.line === 0));
+  assert.ok(warnings({ ...base, occluders: [{ points: [{ x: 0, y: 0, z: 0 }, { x: 1, y: 1, z: 1 }, { x: 2, y: 2, z: 2 }] }] }).some((w) => w.occluder === 0));
+});
+
+test('scenery round-trip keeps unknown fields and key order; mesh edits keep the scenery', () => {
+  const raw = {
+    name: 'throne', note: 'keep', hard: 45, vertices: cube.vertices, faces: cube.faces,
+    lines: [{ tag: 'rail', points: [{ x: 0, y: 0, z: 0, id: 'a' }, { x: 100, y: 0, z: 0 }], br: 70, closed: false, fog: false }],
+    occluders: [{ points: wall.points, who: 'wall' }],
+    tail: 1,
+  };
+  const sc = M.sceneryFromRaw(raw);
+  assert.equal(sc.lines.length, 1);
+  assert.equal(M.lineBr(sc.lines[0]), 70);
+  assert.equal(M.lineClosed(sc.lines[0]), false);
+  const out = M.sceneryToRaw(raw, sc);
+  assert.deepEqual(JSON.parse(JSON.stringify(out)), JSON.parse(JSON.stringify(raw)), 'untouched scenery round-trips exactly');
+  assert.deepEqual(Object.keys(out), Object.keys(raw));
+  const moved = M.moveScenePoints(sc, [{ kind: 'line', item: 0, point: 1 }], { x: 5, y: 0, z: 0 });
+  const out2 = M.sceneryToRaw(raw, moved) as typeof raw;
+  assert.deepEqual(Object.keys(out2.lines[0]), ['tag', 'points', 'br', 'closed', 'fog']);
+  assert.equal(out2.lines[0].points[1].x, 105);
+  assert.equal(out2.lines[0].points[0].id, 'a');
+  assert.equal(out2.occluders[0].who, 'wall');
+  // a mesh edit keeps lines/occluders verbatim
+  const meshEdit = M.meshToRaw(raw, M.setVertex(M.meshFromRaw(raw), 0, { x: 1 }));
+  assert.deepEqual(meshEdit.lines, raw.lines);
+  assert.deepEqual(meshEdit.occluders, raw.occluders);
+  assert.deepEqual(Object.keys(meshEdit), Object.keys(raw));
+  // a scenery-only file gets no empty vertices/faces from a mesh write
+  const only = { name: 'r', lines: raw.lines };
+  assert.ok(!('vertices' in M.meshToRaw(only, { vertices: [], faces: [] })));
+  // removing every line drops the key
+  assert.ok(!('lines' in M.sceneryToRaw(raw, { ...sc, lines: [] })));
+});
+
+test('scenery edits', () => {
+  const empty: M.Scenery = { lines: [], occluders: [] };
+  const r = M.addLine(empty, [{ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 2_000_000, y: 0, z: 0 }], true);
+  assert.ok('scenery' in r);
+  const sc = (r as { scenery: M.Scenery }).scenery;
+  assert.equal(sc.lines[0].points.length, 2, 'repeated point dropped');
+  assert.equal(sc.lines[0].points[1].x, M.SCENE_MAX, 'clamped to the scenery range');
+  assert.equal(sc.lines[0].closed, true);
+  assert.ok('error' in M.addLine(empty, [{ x: 1, y: 1, z: 1 }, { x: 1, y: 1, z: 1 }]));
+  // br: default omitted, null removes
+  const b = M.setLineProps(sc, 0, { br: 40 });
+  assert.equal(b.lines[0].br, 40);
+  assert.ok(!('br' in M.setLineProps(b, 0, { br: null }).lines[0]));
+  assert.ok(!('closed' in M.setLineProps({ lines: [{ points: sc.lines[0].points }], occluders: [] }, 0, { closed: false }).lines[0]));
+  assert.equal(M.setLineProps(sc, 0, { closed: false }).lines[0].closed, false, 'a spelled-out key stays');
+  // fog: default true, false is written, back to true removes the key
+  assert.equal(M.lineFog(sc.lines[0]), true);
+  const nf = M.setLineProps(sc, 0, { fog: false });
+  assert.equal(nf.lines[0].fog, false);
+  assert.equal(M.lineFog(nf.lines[0]), false);
+  assert.ok(!('fog' in M.setLineProps(sc, 0, { fog: true }).lines[0]));
+  assert.equal(M.setLineProps(nf, 0, { fog: true }).lines[0].fog, true, 'a spelled-out key stays');
+  assert.deepEqual(errors({ name: 'f', lines: [{ points: nf.lines[0].points, fog: false }] }), []);
+  // box occluders: full box = 8 corners, flat = 4 in order, a segment = none
+  assert.equal(M.boxOccluder([0, 0, 0], [10, 20, 30])!.points.length, 8);
+  const flat = M.boxOccluder([0, 0, 5], [10, 20, 5])!;
+  assert.deepEqual(flat.points.map((p) => [p.x, p.y]), [[0, 0], [0, 20], [10, 20], [10, 0]]);
+  assert.equal(M.boxOccluder([0, 0, 0], [10, 0, 0]), null);
+  // deleting points: a line under 2 points and an occluder under 3 go
+  const withOcc = M.addOccluder(sc, flat);
+  const del = M.deleteScenePoints(withOcc, [{ kind: 'line', item: 0, point: 0 }, { kind: 'occ', item: 0, point: 0 }]);
+  assert.equal(del.lines.length, 0);
+  assert.equal(del.occluders[0].points.length, 3);
+  const del2 = M.deleteScenePoints(withOcc, M.itemRefs(withOcc, 'occ', 0));
+  assert.equal(del2.occluders.length, 0);
+  assert.equal(del2.lines.length, 1);
+  // bounds include scenery
+  const bb = M.boundsOf(cube, withOcc)!;
+  assert.equal(bb.hi[0], M.SCENE_MAX);
+  assert.equal(M.boundsOf({ vertices: [], faces: [] }, empty), null);
+  // the result validates
+  const raw = M.sceneryToRaw({ name: 's' }, withOcc);
+  assert.deepEqual(errors(raw), []);
+  assert.equal(sc.lines[0].points.length, 2, 'operations do not mutate their input');
+});
+
 rmSync(work, { recursive: true, force: true });
-console.log(`\n${passed} passed${haveCli ? '' : ' (vpy_cli not found: compiler cross-check skipped)'}`);
+console.log(`\n${passed} passed${haveCli ? '' : ' (vpy_cli not found: compiler cross-check skipped)'}${haveCli && !cliKnowsScenery ? ' (vpy_cli predates lines/occluders: scenery cases not cross-checked)' : ''}`);

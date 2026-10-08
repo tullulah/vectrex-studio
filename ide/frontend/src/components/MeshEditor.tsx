@@ -15,6 +15,13 @@
  *   two of its corners and DISCONNECT merges the two faces across an edge.
  * - Lofted files (`sections`) are previewed, and can be converted to vertices
  *   + faces to edit them.
+ * - Scenery: "lines" (polylines, drawn at "br"% brightness) and "occluders"
+ *   (convex solids, never drawn, shown as a faint orange hull). The Line tool
+ *   clicks points on the view plane (Enter / double-click ends, Esc cancels);
+ *   the Occluder tool drags a box on a front/top/side view, or "Box occluder"
+ *   wraps the selection. Their points select, drag, nudge and delete like
+ *   vertices; clicking a line or an occluder outline selects all of it. They
+ *   are editable in lofted files too (they do not touch the sections).
  * - Saves the same JSON: fields the editor does not know are kept.
  */
 
@@ -34,18 +41,46 @@ interface MeshEditorProps {
   onChange?: (raw: M.VmeshRaw) => void;
 }
 
-type Tool = 'select' | 'add';
+type Tool = 'select' | 'add' | 'line' | 'occluder';
 type Display = 'wire' | 'vpy3d';
 
 type Drag =
   | { kind: 'pan'; x: number; y: number; panX: number; panY: number }
   | { kind: 'orbit'; x: number; y: number }
-  | { kind: 'move'; x: number; y: number; base: M.MeshData; primary: number; moved: boolean }
-  | { kind: 'box'; x0: number; y0: number; x: number; y: number; additive: boolean };
+  | { kind: 'move'; x: number; y: number; base: M.MeshData; baseScene: M.Scenery; primary: { v: number } | { s: M.ScenePointRef }; moved: boolean }
+  | { kind: 'box'; x0: number; y0: number; x: number; y: number; additive: boolean }
+  | { kind: 'occ'; x0: number; y0: number; x: number; y: number };
 
 interface Proj { x: number; y: number; depth: number }
 
 const EMPTY: M.MeshData = { vertices: [], faces: [] };
+const EMPTY_SCENE: M.Scenery = { lines: [], occluders: [] };
+const refKey = (r: M.ScenePointRef) => `${r.kind}:${r.item}:${r.point}`;
+/** Is every point of one line / occluder selected (and only those)? Then that item is "the selection". */
+function wholeItem(sc: M.Scenery, refs: M.ScenePointRef[]): { kind: M.ScenePointRef['kind']; item: number } | null {
+  if (!refs.length) return null;
+  const { kind, item } = refs[0];
+  if (refs.some((r) => r.kind !== kind || r.item !== item)) return null;
+  const o = M.sceneList(sc, kind)[item];
+  if (!o) return null;
+  return new Set(refs.map((r) => r.point)).size === o.points.length ? { kind, item } : null;
+}
+/** Convex hull of screen points (Andrew's monotone chain). */
+function hull2d(pts: { x: number; y: number }[]): { x: number; y: number }[] {
+  const p = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+  if (p.length < 3) return p;
+  const cross = (o: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower: { x: number; y: number }[] = [];
+  for (const q of p) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop(); lower.push(q); }
+  const upper: { x: number; y: number }[] = [];
+  for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop(); upper.push(q); }
+  return lower.slice(0, -1).concat(upper.slice(0, -1));
+}
+/** The colour of a scenery line at `br` percent. */
+function lineColour(br: number): string {
+  const k = 0.25 + 0.75 * Math.max(1, Math.min(100, br)) / 100;
+  return `rgb(${Math.round(150 * k)},${Math.round(225 * k)},${Math.round(255 * k)})`;
+}
 const HISTORY_MAX = 200;
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -112,6 +147,8 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
 
   const [sel, setSel] = useState<number[]>([]);
   const [face, setFace] = useState<number | null>(null);
+  /** Selected line / occluder points (in click order). */
+  const [ssel, setSsel] = useState<M.ScenePointRef[]>([]);
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
 
   const emit = useCallback((next: M.VmeshRaw) => {
@@ -140,6 +177,8 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     histRef.current = { stack: r ? [r] : [], index: r ? 0 : -1 };
     setSel([]);
     setFace(null);
+    setSsel([]);
+    setLinePts([]);
     rerender();
   }, [resource]);
 
@@ -198,6 +237,9 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
   const editable = !!raw && !lofted;
   const [dragMesh, setDragMesh] = useState<M.MeshData | null>(null);
   const shown = dragMesh ?? mesh;
+  const scenery = useMemo<M.Scenery>(() => (raw ? M.sceneryFromRaw(raw) : EMPTY_SCENE), [raw]);
+  const [dragScene, setDragScene] = useState<M.Scenery | null>(null);
+  const shownScene = dragScene ?? scenery;
   const issues = useMemo(() => (raw ? M.validateVmesh(raw, resolver) : []), [raw, resolver]);
   const errorCount = issues.filter((i) => i.level === 'error').length;
   const hardCos = raw ? M.hardCosQ14(raw) : 11585;
@@ -205,6 +247,8 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
   const geo = useMemo(() => M.meshGeometry(shown, hardCos), [shown, hardCos]);
   const badVerts = useMemo(() => new Set(issues.filter((i) => i.level === 'error' && i.vertex !== undefined).map((i) => i.vertex!)), [issues]);
   const badFaces = useMemo(() => new Set(issues.filter((i) => i.vertex === undefined && i.face !== undefined).map((i) => i.face!)), [issues]);
+  const badLines = useMemo(() => new Set(issues.filter((i) => i.level === 'error' && i.line !== undefined).map((i) => i.line!)), [issues]);
+  const badOccs = useMemo(() => new Set(issues.filter((i) => i.level === 'error' && i.occluder !== undefined).map((i) => i.occluder!)), [issues]);
 
   // Keep the selection inside the mesh after undo/delete/reload.
   useEffect(() => {
@@ -212,6 +256,9 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     setSel((s) => (s.some((i) => i >= nv) ? s.filter((i) => i < nv) : s));
     setFace((f) => (f !== null && f >= nf ? null : f));
   }, [mesh]);
+  useEffect(() => {
+    setSsel((s) => (s.some((r) => !M.scenePointAt(scenery, r)) ? s.filter((r) => M.scenePointAt(scenery, r)) : s));
+  }, [scenery]);
 
   // ── view ──
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
@@ -221,6 +268,14 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
   const [frameC, setFrameC] = useState<[number, number, number]>([0, 0, 0]);
   const [frameR, setFrameR] = useState(1000);
   const [tool, setTool] = useState<Tool>('select');
+  /** The line being drawn with the Line tool (model points). */
+  const [linePts, setLinePts] = useState<number[][]>([]);
+  const [newLineClosed, setNewLineClosed] = useState(false);
+  const [showOccluders, setShowOccluders] = useState(true);
+  /** Thickness, along the view direction, of an occluder dragged on the view plane (0 = a flat wall). */
+  const [occDepth, setOccDepth] = useState(0);
+  const [occRect, setOccRect] = useState<{ x0: number; y0: number; x: number; y: number } | null>(null);
+  useEffect(() => { if (tool !== 'line') setLinePts([]); }, [tool]);
   const [display, setDisplay] = useState<Display>('wire');
   const [showHidden, setShowHidden] = useState(true);
   const [showIndices, setShowIndices] = useState(false);
@@ -229,6 +284,9 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
   const [snapStep, setSnapStep] = useState(50);
   const [box, setBox] = useState<{ x0: number; y0: number; x: number; y: number } | null>(null);
   const [hover, setHover] = useState<number | null>(null);
+  const [hoverS, setHoverS] = useState<M.ScenePointRef | null>(null);
+  /** The mouse, for the rubber band of the line being drawn. */
+  const [mousePx, setMousePx] = useState<{ x: number; y: number } | null>(null);
   const [cursor, setCursor] = useState<{ x: number; y: number } | null>(null);
   const [cursorModel, setCursorModel] = useState<number[] | null>(null);
 
@@ -245,14 +303,11 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     return () => ro.disconnect();
   }, []);
 
-  const frameAll = useCallback((m: M.MeshData = mesh) => {
-    if (!m.vertices.length) { setFrameC([0, 0, 0]); setFrameR(1000); }
+  const frameAll = useCallback((m: M.MeshData = mesh, sc: M.Scenery = scenery) => {
+    const b = M.boundsOf(m, sc);
+    if (!b) { setFrameC([0, 0, 0]); setFrameR(1000); }
     else {
-      const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-      for (const v of m.vertices) {
-        const p = [v.x, v.y, v.z];
-        for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], p[k]); hi[k] = Math.max(hi[k], p[k]); }
-      }
+      const { lo, hi } = b;
       const c: [number, number, number] = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
       const r = Math.max(50, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2);
       setFrameC(c);
@@ -260,7 +315,7 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     }
     setZoom(1);
     setPan({ x: 0, y: 0 });
-  }, [mesh]);
+  }, [mesh, scenery]);
 
   // Frame the mesh when a document is opened.
   const framedFor = useRef<string | null>(null);
@@ -269,8 +324,8 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     if (framedFor.current === key || !raw) return;
     if (!mesh.vertices.length && lofted && loft?.pending) return; // wait for the .vec rings
     framedFor.current = key;
-    frameAll(mesh);
-  }, [docUri, raw, mesh, lofted, loft, frameAll]);
+    frameAll(mesh, scenery);
+  }, [docUri, raw, mesh, scenery, lofted, loft, frameAll]);
 
   const scale = (Math.min(size.w, size.h) * 0.42 / frameR) * zoom;
   // Screen axes as model-space unit vectors (the inverse of the view rotation).
@@ -299,6 +354,8 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
   }, [size, pan, scale, axes, frameC]);
 
   const proj = useMemo(() => shown.vertices.map((v) => toScreen(v.x, v.y, v.z)), [shown, toScreen]);
+  const lineProj = useMemo(() => shownScene.lines.map((l) => l.points.map((v) => toScreen(v.x, v.y, v.z))), [shownScene, toScreen]);
+  const occProj = useMemo(() => shownScene.occluders.map((o) => o.points.map((v) => toScreen(v.x, v.y, v.z))), [shownScene, toScreen]);
 
   /** In an orthographic view, snap the two plane axes of a model point. */
   const snapPoint = useCallback((p: number[]): number[] => {
@@ -328,6 +385,38 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     }
     return best;
   }, [geo, proj]);
+  /** The nearest line / occluder point within 8 px (occluders only while shown). */
+  const hitScenePoint = useCallback((x: number, y: number): M.ScenePointRef | null => {
+    let best: M.ScenePointRef | null = null, bestD = 8, bestDepth = Infinity;
+    const scan = (kind: M.ScenePointRef['kind'], list: Proj[][]) => list.forEach((pts, item) => pts.forEach((p, point) => {
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d > 8) return;
+      if (best === null || d < bestD - 1 || (Math.abs(d - bestD) <= 1 && p.depth < bestDepth)) { best = { kind, item, point }; bestD = d; bestDepth = p.depth; }
+    }));
+    scan('line', lineProj);
+    if (showOccluders) scan('occ', occProj);
+    return best;
+  }, [lineProj, occProj, showOccluders]);
+  /** A line within 5 px of a segment, else an occluder within 5 px of its outline. */
+  const hitSceneItem = useCallback((x: number, y: number): { kind: M.ScenePointRef['kind']; item: number } | null => {
+    let best: { kind: M.ScenePointRef['kind']; item: number } | null = null, bestD = 5;
+    lineProj.forEach((pts, item) => {
+      const closed = M.lineClosed(shownScene.lines[item]);
+      for (let k = 0; k + 1 < pts.length || (closed && k < pts.length && pts.length > 2); k++) {
+        const d = distToSeg(x, y, pts[k], pts[(k + 1) % pts.length]);
+        if (d < bestD) { best = { kind: 'line', item }; bestD = d; }
+      }
+    });
+    if (best || !showOccluders) return best;
+    occProj.forEach((pts, item) => {
+      const h = hull2d(pts);
+      for (let k = 0; k < h.length; k++) {
+        const d = distToSeg(x, y, h[k], h[(k + 1) % h.length]);
+        if (d < bestD) { best = { kind: 'occ', item }; bestD = d; }
+      }
+    });
+    return best;
+  }, [lineProj, occProj, shownScene, showOccluders]);
   const hitFace = useCallback((x: number, y: number): number | null => {
     let best: number | null = null, bestDepth = Infinity;
     shown.faces.forEach((f, fi) => {
@@ -347,6 +436,14 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     if (extra) next = extra(next);
     commit(next);
   }, [baseRaw, commit]);
+  /** One undo step that changes the mesh, the scenery or both (null = untouched). */
+  const applyBoth = useCallback((m: M.MeshData | null, sc: M.Scenery | null) => {
+    let next = baseRaw();
+    if (m) next = M.meshToRaw(next, m);
+    if (sc) next = M.sceneryToRaw(next, sc);
+    commit(next);
+  }, [baseRaw, commit]);
+  const applyScene = useCallback((sc: M.Scenery) => applyBoth(null, sc), [applyBoth]);
   const runOp = useCallback((r: { mesh: M.MeshData } | { error: string }, after?: (m: M.MeshData) => void) => {
     if ('error' in r) { flash(r.error, true); return; }
     applyMesh(r.mesh);
@@ -360,6 +457,17 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
   }, [editable, lofted, flash]);
 
   const doDelete = useCallback(() => {
+    if (ssel.length) {
+      const whole = wholeItem(scenery, ssel);
+      const m = sel.length && editable ? M.deleteVertices(mesh, sel) : null;
+      applyBoth(m, M.deleteScenePoints(scenery, ssel));
+      setSsel([]);
+      if (m) { setSel([]); setFace(null); }
+      flash(whole
+        ? (whole.kind === 'line' ? tr('deletedLine', 'Deleted line {{i}}', { i: whole.item }) : tr('deletedOccluder', 'Deleted occluder {{i}}', { i: whole.item }))
+        : tr('deletedPoints', 'Deleted {{n}} point(s); a line left with 1 point or an occluder with 2 goes too', { n: ssel.length }));
+      return;
+    }
     if (!needEditable()) return;
     if (sel.length) {
       const n = sel.length;
@@ -370,7 +478,7 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       applyMesh(M.deleteFaces(mesh, [face]));
       setFace(null);
     }
-  }, [needEditable, sel, face, mesh, applyMesh, flash]);
+  }, [needEditable, sel, ssel, face, mesh, scenery, editable, applyMesh, applyBoth, flash]);
   const doMakeFace = useCallback(() => {
     if (!needEditable()) return;
     runOp(M.makeFace(mesh, sel), (m) => { setFace(m.faces.length - 1); setSel([]); });
@@ -425,12 +533,67 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
   }, [emit]);
 
   const nudge = useCallback((dx: number, dy: number) => {
-    if (!editable || !sel.length) return;
+    const moveVerts = editable && sel.length > 0;
+    if (!moveVerts && !ssel.length) return;
     const step = snap && snapStep > 0 ? snapStep : 1;
     const { right, up } = axes;
     const d = { x: Math.round((dx * right[0] + dy * up[0]) * step), y: Math.round((dx * right[1] + dy * up[1]) * step), z: Math.round((dx * right[2] + dy * up[2]) * step) };
-    applyMesh(M.moveVertices(mesh, sel, d));
-  }, [editable, sel, snap, snapStep, axes, mesh, applyMesh]);
+    applyBoth(moveVerts ? M.moveVertices(mesh, sel, d) : null, ssel.length ? M.moveScenePoints(scenery, ssel, d) : null);
+  }, [editable, sel, ssel, snap, snapStep, axes, mesh, scenery, applyBoth]);
+
+  // ── scenery: lines and occluders ──
+  const finishLine = useCallback(() => {
+    if (linePts.length < 2) {
+      if (linePts.length) flash(tr('lineNeedsTwo', 'A line needs at least 2 points'), true);
+      setLinePts([]);
+      return;
+    }
+    const r = M.addLine(scenery, linePts.map((p) => ({ x: p[0], y: p[1], z: p[2] })), newLineClosed);
+    setLinePts([]);
+    if ('error' in r) { flash(r.error, true); return; }
+    applyScene(r.scenery);
+    const item = r.scenery.lines.length - 1;
+    setSsel(M.itemRefs(r.scenery, 'line', item));
+    setSel([]); setFace(null);
+    flash(tr('lineAdded', 'Line {{i}}: {{n}} points', { i: item, n: r.scenery.lines[item].points.length }));
+  }, [linePts, scenery, newLineClosed, applyScene, flash]);
+
+  const selectItem = useCallback((kind: M.ScenePointRef['kind'], item: number, add = false) => {
+    const refs = M.itemRefs(scenery, kind, item);
+    setSsel((s) => (add ? [...s, ...refs.filter((r) => !s.some((q) => refKey(q) === refKey(r)))] : refs));
+    if (!add) { setSel([]); setFace(null); }
+  }, [scenery]);
+
+  /** The model points of the selection: vertices and line/occluder points. */
+  const selPoints = useCallback((): M.MeshVertex[] => [
+    ...sel.map((i) => shown.vertices[i]).filter(Boolean),
+    ...ssel.map((r) => M.scenePointAt(shownScene, r)).filter((p): p is M.MeshVertex => !!p),
+  ], [sel, ssel, shown, shownScene]);
+
+  const doBoxOccluder = useCallback(() => {
+    const pts = selPoints();
+    if (!pts.length) { flash(tr('needSelection', 'Select vertices or line points first'), true); return; }
+    const b = M.boundsOf({ vertices: pts, faces: [] })!;
+    const occ = M.boxOccluder(b.lo, b.hi);
+    if (!occ) { flash(tr('occFlat', 'The selection spans a line or a point: an occluder needs an area'), true); return; }
+    const next = M.addOccluder(scenery, occ);
+    applyScene(next);
+    setShowOccluders(true);
+    const item = next.occluders.length - 1;
+    setSsel(M.itemRefs(next, 'occ', item));
+    setSel([]); setFace(null);
+    flash(tr('occAdded', 'Occluder {{i}}: {{n}} corners', { i: item, n: occ.points.length }));
+  }, [selPoints, scenery, applyScene, flash]);
+
+  const setLineBr = useCallback((item: number, br: number) => {
+    applyScene(M.setLineProps(scenery, item, { br: br >= 100 && scenery.lines[item]?.br === undefined ? null : br }));
+  }, [scenery, applyScene]);
+  const setLineClosedProp = useCallback((item: number, closed: boolean) => {
+    applyScene(M.setLineProps(scenery, item, { closed }));
+  }, [scenery, applyScene]);
+  const setLineFogProp = useCallback((item: number, fog: boolean) => {
+    applyScene(M.setLineProps(scenery, item, { fog }));
+  }, [scenery, applyScene]);
 
   // primitives
   const [primKind, setPrimKind] = useState<M.PrimitiveKind>('cube');
@@ -453,8 +616,9 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
   }, [lofted, needEditable, primKind, primSize, primSeg, mesh, applyMesh, frameAll]);
 
   // ── mouse ──
-  const live = useRef({ hitVertex, hitEdge, hitFace, toModel, snapPoint, proj, sel, scale, axes, editable, viewMode });
-  live.current = { hitVertex, hitEdge, hitFace, toModel, snapPoint, proj, sel, scale, axes, editable, viewMode };
+  const live = useRef({ hitVertex, hitEdge, hitFace, toModel, snapPoint, proj, lineProj, occProj, showOccluders, sel, ssel, scale, axes, editable, viewMode, frameC, occDepth, scenery });
+  live.current = { hitVertex, hitEdge, hitFace, toModel, snapPoint, proj, lineProj, occProj, showOccluders, sel, ssel, scale, axes, editable, viewMode, frameC, occDepth, scenery };
+  const dragSceneRef = useRef<M.Scenery | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const dragMeshRef = useRef<M.MeshData | null>(null);
 
@@ -468,19 +632,43 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     dragRef.current = null;
     if (!d) return;
     if (d.kind === 'move') {
-      const m = dragMeshRef.current;
+      const m = dragMeshRef.current, sc = dragSceneRef.current;
       dragMeshRef.current = null;
+      dragSceneRef.current = null;
       setDragMesh(null);
-      if (m && d.moved) applyMesh(m);
+      setDragScene(null);
+      if (d.moved && (m || sc)) applyBoth(m, sc);
     } else if (d.kind === 'box') {
       setBox(null);
       const x0 = Math.min(d.x0, d.x), x1 = Math.max(d.x0, d.x), y0 = Math.min(d.y0, d.y), y1 = Math.max(d.y0, d.y);
       if (x1 - x0 < 3 && y1 - y0 < 3) return;
+      const L = live.current;
+      const isIn = (p: Proj) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
       const inside: number[] = [];
-      live.current.proj.forEach((p, i) => { if (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1) inside.push(i); });
+      L.proj.forEach((p, i) => { if (isIn(p)) inside.push(i); });
+      const sIn: M.ScenePointRef[] = [];
+      L.lineProj.forEach((pts, item) => pts.forEach((p, point) => { if (isIn(p)) sIn.push({ kind: 'line', item, point }); }));
+      if (L.showOccluders) L.occProj.forEach((pts, item) => pts.forEach((p, point) => { if (isIn(p)) sIn.push({ kind: 'occ', item, point }); }));
       setSel((s) => (d.additive ? [...s, ...inside.filter((i) => !s.includes(i))] : inside));
+      setSsel((s) => (d.additive ? [...s, ...sIn.filter((r) => !s.some((q) => refKey(q) === refKey(r)))] : sIn));
+    } else if (d.kind === 'occ') {
+      setOccRect(null);
+      const L = live.current;
+      if (Math.abs(d.x - d.x0) < 3 || Math.abs(d.y - d.y0) < 3) return;
+      const a = L.snapPoint(L.toModel(d.x0, d.y0, L.frameC)), b = L.snapPoint(L.toModel(d.x, d.y, L.frameC));
+      const lo = [0, 1, 2].map((k) => Math.min(a[k], b[k])), hi = [0, 1, 2].map((k) => Math.max(a[k], b[k]));
+      // the axis along the view: centred on the plane, occDepth thick
+      const k = L.axes.fwd.findIndex((x) => Math.abs(x) > 0.5);
+      if (k >= 0) { lo[k] = Math.round(a[k] - L.occDepth / 2); hi[k] = lo[k] + Math.max(0, Math.round(L.occDepth)); }
+      const occ = M.boxOccluder(lo, hi);
+      if (!occ) return;
+      const next = M.addOccluder(L.scenery, occ);
+      applyBoth(null, next);
+      setShowOccluders(true);
+      setSsel(M.itemRefs(next, 'occ', next.occluders.length - 1));
+      setSel([]); setFace(null);
     }
-  }, [applyMesh]);
+  }, [applyBoth]);
 
   const onWindowMove = useCallback((e: MouseEvent) => {
     const d = dragRef.current;
@@ -498,15 +686,26 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       d.moved = true;
       const a = (p.x - d.x) / L.scale, b = -(p.y - d.y) / L.scale;
       const { right, up } = L.axes;
-      const v0 = d.base.vertices[d.primary];
+      const v0 = 'v' in d.primary ? d.base.vertices[d.primary.v] : M.scenePointAt(d.baseScene, d.primary.s);
+      if (!v0) return;
       const target = L.snapPoint([v0.x + a * right[0] + b * up[0], v0.y + a * right[1] + b * up[1], v0.z + a * right[2] + b * up[2]]);
       const delta = { x: target[0] - v0.x, y: target[1] - v0.y, z: target[2] - v0.z };
-      const moved = M.moveVertices(d.base, L.sel, delta);
-      dragMeshRef.current = moved;
-      setDragMesh(moved);
+      if (L.editable && L.sel.length) {
+        const moved = M.moveVertices(d.base, L.sel, delta);
+        dragMeshRef.current = moved;
+        setDragMesh(moved);
+      }
+      if (L.ssel.length) {
+        const movedScene = M.moveScenePoints(d.baseScene, L.ssel, delta);
+        dragSceneRef.current = movedScene;
+        setDragScene(movedScene);
+      }
     } else if (d.kind === 'box') {
       d.x = p.x; d.y = p.y;
       setBox({ x0: d.x0, y0: d.y0, x: p.x, y: p.y });
+    } else if (d.kind === 'occ') {
+      d.x = p.x; d.y = p.y;
+      setOccRect({ x0: d.x0, y0: d.y0, x: p.x, y: p.y });
     }
   }, []);
   const onWindowUp = useCallback(() => {
@@ -542,6 +741,28 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     const multi = e.shiftKey || e.ctrlKey || e.metaKey;
     const v = hitVertex(p.x, p.y);
 
+    if (tool === 'line') {
+      // the second press of a double-click ends the line
+      if (e.detail >= 2) { finishLine(); return; }
+      const sp = v === null ? hitScenePoint(p.x, p.y) : null;
+      const onto = v !== null ? shown.vertices[v] : sp ? M.scenePointAt(shownScene, sp) : undefined;
+      const last = linePts[linePts.length - 1];
+      const at = onto ? [onto.x, onto.y, onto.z] : snapPoint(toModel(p.x, p.y, last ?? frameC));
+      setLinePts((l) => [...l, at]);
+      return;
+    }
+    if (tool === 'occluder') {
+      if (viewMode === '3d') { flash(tr('occNeedsOrtho', 'Drag an occluder box in the front, top or side view (keys 1-3)'), true); return; }
+      startDrag({ kind: 'occ', x0: p.x, y0: p.y, x: p.x, y: p.y });
+      return;
+    }
+    const startMove = (primary: { v: number } | { s: M.ScenePointRef }, nextSel: number[], nextS: M.ScenePointRef[]) => {
+      live.current.sel = nextSel;
+      live.current.ssel = nextS;
+      if (!(editable && nextSel.length) && !nextS.length) return;
+      startDrag({ kind: 'move', x: p.x, y: p.y, base: mesh, baseScene: scenery, primary, moved: false });
+    };
+
     if (tool === 'add' && v === null) {
       if (!needEditable()) return;
       const last = sel.length ? mesh.vertices[sel[sel.length - 1]] : null;
@@ -556,27 +777,52 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       let nextSel = sel;
       if (multi || tool === 'add') nextSel = sel.includes(v) ? (tool === 'add' ? sel : sel.filter((i) => i !== v)) : [...sel, v];
       else if (!sel.includes(v)) nextSel = [v];
+      const nextS = multi || sel.includes(v) ? ssel : [];
+      setSel(nextSel);
+      setSsel(nextS);
+      setFace(null);
+      if (editable && nextSel.includes(v)) startMove({ v }, nextSel, nextS);
+      return;
+    }
+    const sp = hitScenePoint(p.x, p.y);
+    if (sp) {
+      const has = ssel.some((r) => refKey(r) === refKey(sp));
+      let nextS = ssel;
+      if (multi) nextS = has ? ssel.filter((r) => refKey(r) !== refKey(sp)) : [...ssel, sp];
+      else if (!has) nextS = [sp];
+      const nextSel = multi || has ? sel : [];
+      setSsel(nextS);
       setSel(nextSel);
       setFace(null);
-      if (editable && nextSel.includes(v)) {
-        live.current.sel = nextSel;
-        startDrag({ kind: 'move', x: p.x, y: p.y, base: mesh, primary: v, moved: false });
-      }
+      if (nextS.some((r) => refKey(r) === refKey(sp))) startMove({ s: sp }, nextSel, nextS);
       return;
     }
     const ed = hitEdge(p.x, p.y);
     if (ed) {
       setSel((s) => (multi ? [...s, ...[ed.a, ed.b].filter((i) => !s.includes(i))] : [ed.a, ed.b]));
+      if (!multi) setSsel([]);
       setFace(null);
+      return;
+    }
+    const it = hitSceneItem(p.x, p.y);
+    if (it) {
+      const refs = M.itemRefs(scenery, it.kind, it.item);
+      const nextS = multi ? [...ssel, ...refs.filter((r) => !ssel.some((q) => refKey(q) === refKey(r)))] : refs;
+      const nextSel = multi ? sel : [];
+      setSsel(nextS);
+      setSel(nextSel);
+      setFace(null);
+      if (refs.length) startMove({ s: refs[0] }, nextSel, nextS);
       return;
     }
     const f = hitFace(p.x, p.y);
     if (f !== null && !multi) {
       setFace(f);
       setSel([]);
+      setSsel([]);
       return;
     }
-    if (!multi) { setSel([]); setFace(null); }
+    if (!multi) { setSel([]); setSsel([]); setFace(null); }
     startDrag({ kind: 'box', x0: p.x, y0: p.y, x: p.x, y: p.y, additive: multi });
   };
 
@@ -584,6 +830,8 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     if (dragRef.current) return;
     const p = pos(e);
     setHover(hitVertex(p.x, p.y));
+    setHoverS(hitScenePoint(p.x, p.y));
+    setMousePx(tool === 'line' ? p : null);
     if (viewMode !== '3d') {
       const m = snapPoint(toModel(p.x, p.y, frameC));
       setCursor({ x: p.x, y: p.y });
@@ -622,7 +870,16 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     const done = () => { e.preventDefault(); e.stopPropagation(); };
     if (mod && (k === 'z' || k === 'Z')) { done(); if (e.shiftKey) redo(); else undo(); return; }
     if (mod && (k === 'y' || k === 'Y')) { done(); redo(); return; }
-    if (mod && (k === 'a' || k === 'A')) { done(); setSel(mesh.vertices.map((_, i) => i)); setFace(null); return; }
+    if (mod && (k === 'a' || k === 'A')) {
+      done();
+      setSel(mesh.vertices.map((_, i) => i));
+      setSsel([
+        ...scenery.lines.flatMap((_, i) => M.itemRefs(scenery, 'line', i)),
+        ...(showOccluders ? scenery.occluders.flatMap((_, i) => M.itemRefs(scenery, 'occ', i)) : []),
+      ]);
+      setFace(null);
+      return;
+    }
     if (mod) return;
     switch (k) {
       case '1': done(); setViewMode('xy'); return;
@@ -634,11 +891,19 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       case 'j': case 'J': done(); doConnect(); return;
       case 'k': case 'K': done(); doDisconnect(); return;
       case 'n': case 'N': done(); doFlip(); return;
-      case 's': case 'S': done(); setTool('select'); return;
+      case 's': case 'S': done(); setTool('select'); setLinePts([]); return;
       case 'a': case 'A': done(); setTool('add'); return;
+      case 'l': case 'L': done(); setTool('line'); return;
+      case 'o': case 'O': done(); setTool('occluder'); return;
+      case 'b': case 'B': done(); doBoxOccluder(); return;
+      case 'Enter': if (tool === 'line') { done(); finishLine(); } return;
       case 'w': case 'W': done(); setDisplay((d) => (d === 'wire' ? 'vpy3d' : 'wire')); return;
       case 'Home': case 'h': case 'H': done(); frameAll(); return;
-      case 'Escape': done(); setSel([]); setFace(null); return;
+      case 'Escape':
+        done();
+        if (linePts.length) { setLinePts([]); return; }
+        setSel([]); setSsel([]); setFace(null);
+        return;
       case 'ArrowLeft': done(); nudge(e.shiftKey ? -10 : -1, 0); return;
       case 'ArrowRight': done(); nudge(e.shiftKey ? 10 : 1, 0); return;
       case 'ArrowUp': done(); nudge(0, e.shiftKey ? 10 : 1); return;
@@ -705,6 +970,32 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       }
     }
 
+    const sselKeys = new Set(ssel.map(refKey));
+    const itemSelected = (kind: M.ScenePointRef['kind'], item: number, n: number) => {
+      if (!n) return false;
+      for (let k = 0; k < n; k++) if (!sselKeys.has(`${kind}:${item}:${k}`)) return false;
+      return true;
+    };
+
+    // occluders: a faint hull, behind everything
+    if (showOccluders) {
+      occProj.forEach((pts, oi) => {
+        const h = hull2d(pts);
+        if (!h.length) return;
+        const on = itemSelected('occ', oi, pts.length);
+        ctx.beginPath();
+        h.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+        ctx.closePath();
+        ctx.fillStyle = on ? 'rgba(255,150,50,0.16)' : 'rgba(230,130,40,0.07)';
+        ctx.fill();
+        ctx.strokeStyle = badOccs.has(oi) ? '#ff4d4d' : on ? '#ffaa28' : 'rgba(220,130,50,0.55)';
+        ctx.lineWidth = on ? 1.6 : 1;
+        ctx.setLineDash(on ? [] : [5, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
+    }
+
     // selected face fill
     if (face !== null && shown.faces[face] && shown.faces[face].every((i) => proj[i])) {
       const poly = shown.faces[face].map((i) => proj[i]);
@@ -744,6 +1035,19 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       f.forEach((i, k) => (k ? ctx.lineTo(proj[i].x, proj[i].y) : ctx.moveTo(proj[i].x, proj[i].y)));
       ctx.closePath(); ctx.stroke();
     }
+
+    // scenery lines, at their brightness
+    lineProj.forEach((pts, li) => {
+      if (pts.length < 2) return;
+      const l = shownScene.lines[li];
+      const on = itemSelected('line', li, pts.length);
+      ctx.strokeStyle = badLines.has(li) ? '#ff4d4d' : on ? '#ffaa28' : lineColour(M.lineBr(l));
+      ctx.lineWidth = on ? 2.2 : 1.5;
+      ctx.beginPath();
+      pts.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+      if (M.lineClosed(l) && pts.length > 2) ctx.closePath();
+      ctx.stroke();
+    });
 
     // selected face outline + normal
     const normalLen = frameR * 0.3;
@@ -788,6 +1092,38 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
       if (s !== undefined && sel.length > 1) { ctx.fillStyle = '#ffcc80'; ctx.fillText(String(s + 1), p.x + 6, p.y - 6); }
     });
+    // line and occluder points
+    const scenePts = (kind: M.ScenePointRef['kind'], list: Proj[][], col: string) => list.forEach((pts, item) => pts.forEach((q, point) => {
+      const key = `${kind}:${item}:${point}`;
+      const on = sselKeys.has(key);
+      const hov = hoverS !== null && refKey(hoverS) === key;
+      const r = on || hov ? 3.5 : 2;
+      ctx.fillStyle = on ? '#ffaa28' : hov ? '#fff' : col;
+      ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, Math.PI * 2); ctx.fill();
+    }));
+    scenePts('line', lineProj, '#9fd8ff');
+    if (showOccluders) scenePts('occ', occProj, '#c98a4a');
+
+    // the line being drawn
+    if (linePts.length) {
+      const pts = linePts.map((q) => toScreen(q[0], q[1], q[2]));
+      ctx.strokeStyle = '#d8f4ff'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      pts.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+      if (mousePx) ctx.lineTo(mousePx.x, mousePx.y);
+      if (newLineClosed && pts.length > 1) ctx.lineTo(pts[0].x, pts[0].y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#d8f4ff';
+      for (const q of pts) { ctx.beginPath(); ctx.arc(q.x, q.y, 3, 0, Math.PI * 2); ctx.fill(); }
+    }
+    if (occRect) {
+      ctx.strokeStyle = '#ffaa28'; ctx.fillStyle = 'rgba(255,150,50,0.10)'; ctx.setLineDash([4, 3]); ctx.lineWidth = 1;
+      const x = Math.min(occRect.x0, occRect.x), y = Math.min(occRect.y0, occRect.y), w = Math.abs(occRect.x - occRect.x0), hh = Math.abs(occRect.y - occRect.y0);
+      ctx.fillRect(x, y, w, hh); ctx.strokeRect(x, y, w, hh);
+      ctx.setLineDash([]);
+    }
+
     if (showIndices && proj.length <= 400) {
       ctx.fillStyle = '#8a8fa8';
       proj.forEach((p, i) => ctx.fillText(String(i), p.x + 5, p.y + 11));
@@ -814,7 +1150,8 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + q.x * 22, gy - q.y * 22); ctx.stroke();
       ctx.fillStyle = col; ctx.fillText(name, gx + q.x * 28 - 3, gy - q.y * 28 + 3);
     }
-  }, [size, scale, viewMode, rot, axes, frameC, frameR, toScreen, toModel, proj, geo, shown, display, showHidden, showIndices, showNormals, isOpen, face, sel, hover, box, badVerts, badFaces]);
+  }, [size, scale, viewMode, rot, axes, frameC, frameR, toScreen, toModel, proj, geo, shown, display, showHidden, showIndices, showNormals, isOpen, face, sel, hover, box, badVerts, badFaces,
+    lineProj, occProj, shownScene, ssel, hoverS, showOccluders, linePts, mousePx, newLineClosed, occRect, badLines, badOccs]);
 
   // ── side panel helpers ──
   const commitField = (key: string, value: unknown) => {
@@ -846,19 +1183,39 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     />
   );
 
-  const selCentroid = sel.length ? M.centroidOf(shown.vertices, sel.filter((i) => shown.vertices[i])) : null;
+  const selPts = selPoints();
+  const selCentroid = selPts.length ? M.centroidOf(selPts) : null;
+  const canMoveSel = (editable && sel.length > 0) || ssel.length > 0;
   const setSelAxis = (axis: 0 | 1 | 2, value: number) => {
-    if (!editable || !selCentroid) return;
+    if (!canMoveSel || !selCentroid) return;
     const key = (['x', 'y', 'z'] as const)[axis];
-    if (sel.length === 1) {
-      const p: Partial<Pick<M.MeshVertex, 'x' | 'y' | 'z'>> = {};
-      p[key] = value;
-      applyMesh(M.setVertex(mesh, sel[0], p));
-      return;
-    }
+    const p: Partial<Pick<M.MeshVertex, 'x' | 'y' | 'z'>> = {};
+    p[key] = value;
+    if (sel.length === 1 && !ssel.length) { applyMesh(M.setVertex(mesh, sel[0], p)); return; }
+    if (ssel.length === 1 && !sel.length) { applyScene(M.setScenePoint(scenery, ssel[0], p)); return; }
     const d = { x: 0, y: 0, z: 0 };
     d[key] = Math.round(value - selCentroid[axis]);
-    applyMesh(M.moveVertices(mesh, sel, d));
+    applyBoth(editable && sel.length ? M.moveVertices(mesh, sel, d) : null, ssel.length ? M.moveScenePoints(scenery, ssel, d) : null);
+  };
+  const selItem = wholeItem(scenery, ssel);
+  /** The line whose points are all or partly selected, when they are in one line. */
+  const selLine = ssel.length && ssel.every((r) => r.kind === 'line' && r.item === ssel[0].item) ? ssel[0].item : null;
+  const coordRange = ssel.length && !sel.length ? [M.SCENE_MIN, M.SCENE_MAX] : [M.I16_MIN, M.I16_MAX];
+  const nLinePts = shownScene.lines.reduce((a, l) => a + l.points.length, 0);
+  const selTitle = (): string => {
+    if (selItem && !sel.length) {
+      return selItem.kind === 'line' ? tr('lineN', 'Line {{i}}', { i: selItem.item }) : tr('occluderN', 'Occluder {{i}}', { i: selItem.item });
+    }
+    const n = sel.length + ssel.length;
+    if (n > 1) return sel.length && !ssel.length ? tr('selectionN', '{{n}} vertices (centre)', { n }) : tr('pointsN', '{{n}} points (centre)', { n });
+    if (sel.length === 1) return tr('vertexN', 'Vertex {{i}}', { i: sel[0] });
+    if (ssel.length === 1) {
+      const r = ssel[0];
+      return r.kind === 'line'
+        ? tr('linePointN', 'Line {{i}}, point {{p}}', { i: r.item, p: r.point })
+        : tr('occPointN', 'Occluder {{i}}, corner {{p}}', { i: r.item, p: r.point });
+    }
+    return tr('selection', 'Selection');
   };
 
   const h = histRef.current;
@@ -884,6 +1241,8 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
         <span style={S.sep} />
         <button title={tr('toolSelectTip', 'Select and move vertices (S). Click an edge to select its two vertices, inside a face to select the face; drag on empty space for a box.')} onClick={() => setTool('select')} style={tool === 'select' ? S.btnOn : S.btn}>{tr('toolSelect', 'Select')}</button>
         <button title={tr('toolAddTip', 'Add vertices (A): click on the view plane; new vertices join the selection in order, ready for Make face')} onClick={() => setTool('add')} style={tool === 'add' ? S.btnOn : S.btn} disabled={!editable && !!raw}>{tr('toolAdd', 'Add vertex')}</button>
+        <button title={tr('toolLineTip', 'Draw a line (L): click points on the view plane (or onto a vertex / point), Enter or double-click ends it, Esc cancels')} onClick={() => setTool('line')} style={tool === 'line' ? S.btnOn : S.btn}>{tr('toolLine', 'Line')}</button>
+        <button title={tr('toolOccTip', 'Drag a box occluder on the front, top or side view (O)')} onClick={() => setTool('occluder')} style={tool === 'occluder' ? S.btnOn : S.btn}>{tr('toolOcc', 'Occluder')}</button>
         <span style={S.sep} />
         <button title={tr('displayTip', 'Wireframe shows every edge (smooth edges dashed); vpy3d shows only what vpy3d_draw_mesh draws from this angle (W)')} onClick={() => setDisplay((d) => (d === 'wire' ? 'vpy3d' : 'wire'))} style={display === 'vpy3d' ? S.btnOn : S.btn}>
           {display === 'vpy3d' ? tr('displayVpy3d', 'vpy3d view') : tr('displayWire', 'Wireframe')}
@@ -893,6 +1252,7 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
         )}
         <label style={S.check}><input type="checkbox" checked={showIndices} onChange={(e) => setShowIndices(e.target.checked)} />{tr('indices', 'indices')}</label>
         <label style={S.check}><input type="checkbox" checked={showNormals} onChange={(e) => setShowNormals(e.target.checked)} />{tr('normals', 'normals')}</label>
+        <label style={S.check} title={tr('showOccTip', 'Show the occluders (never drawn by the game) as a faint orange hull')}><input type="checkbox" checked={showOccluders} onChange={(e) => setShowOccluders(e.target.checked)} />{tr('showOcc', 'occluders')}</label>
         <span style={S.sep} />
         <label style={S.check} title={tr('snapTip', 'Snap moved and added vertices to the grid in the front/top/side views')}>
           <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />{tr('snap', 'snap')}
@@ -909,10 +1269,10 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
         <div ref={wrapRef} style={S.viewport}>
           <canvas
             ref={canvasRef}
-            style={{ width: size.w, height: size.h, display: 'block', cursor: tool === 'add' ? 'crosshair' : hover !== null ? 'pointer' : 'default' }}
+            style={{ width: size.w, height: size.h, display: 'block', cursor: tool !== 'select' ? 'crosshair' : hover !== null || hoverS !== null ? 'pointer' : 'default' }}
             onMouseDown={onMouseDown}
             onMouseMove={onCanvasMove}
-            onMouseLeave={() => { setHover(null); setCursorModel(null); setCursor(null); }}
+            onMouseLeave={() => { setHover(null); setHoverS(null); setMousePx(null); setCursorModel(null); setCursor(null); }}
             onContextMenu={(e) => e.preventDefault()}
           />
           {!raw && (
@@ -971,15 +1331,18 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
               <Stat label={tr('faces', 'faces')} value={shown.faces.length} max={M.VPY3D_MESH_MAXF} />
               <Stat label={tr('edges', 'edges')} value={nEdges} extra={`${nCrease} ${tr('creases', 'creases')}`} />
               <Stat label={tr('indexEntries', 'face indices')} value={idxTotal} />
+              <Stat label={tr('lines', 'lines')} value={shownScene.lines.length} />
+              <Stat label={tr('linePoints', 'line points')} value={nLinePts} />
+              <Stat label={tr('occluders', 'occluders')} value={shownScene.occluders.length} />
             </div>
           </Section>
 
-          <Section title={sel.length > 1 ? tr('selectionN', '{{n}} vertices (centre)', { n: sel.length }) : sel.length === 1 ? tr('vertexN', 'Vertex {{i}}', { i: sel[0] }) : tr('selection', 'Selection')}>
+          <Section title={selTitle()}>
             {selCentroid ? (
               <Row label="X Y Z">
-                {numInput(selCentroid[0], (n) => setSelAxis(0, n), { disabled: !editable, width: 62, min: M.I16_MIN, max: M.I16_MAX })}
-                {numInput(selCentroid[1], (n) => setSelAxis(1, n), { disabled: !editable, width: 62, min: M.I16_MIN, max: M.I16_MAX })}
-                {numInput(selCentroid[2], (n) => setSelAxis(2, n), { disabled: !editable, width: 62, min: M.I16_MIN, max: M.I16_MAX })}
+                {numInput(selCentroid[0], (n) => setSelAxis(0, n), { disabled: !canMoveSel, width: 62, min: coordRange[0], max: coordRange[1] })}
+                {numInput(selCentroid[1], (n) => setSelAxis(1, n), { disabled: !canMoveSel, width: 62, min: coordRange[0], max: coordRange[1] })}
+                {numInput(selCentroid[2], (n) => setSelAxis(2, n), { disabled: !canMoveSel, width: 62, min: coordRange[0], max: coordRange[1] })}
               </Row>
             ) : face !== null && shown.faces[face] ? (
               <div style={S.dim}>
@@ -988,12 +1351,29 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
             ) : (
               <div style={S.dim}>{tr('selectHint', 'Click a vertex, an edge or a face. Shift adds; drag a box on empty space.')}</div>
             )}
+            {selLine !== null && shownScene.lines[selLine] && (
+              <>
+                <Row label={tr('lineBr', 'Brightness %')} tip={tr('lineBrTip', 'Percent of the brightness the mesh is drawn with (1-100, "br"; 100 is the default)')}>
+                  {numInput(M.lineBr(shownScene.lines[selLine]), (n) => setLineBr(selLine, Math.max(1, Math.min(100, n))), { min: 1, max: 100, width: 56 })}
+                </Row>
+                <Row label={tr('lineClosed', 'Closed')} tip={tr('lineClosedTip', 'Join the last point back to the first ("closed")')}>
+                  <input type="checkbox" checked={M.lineClosed(shownScene.lines[selLine])} onChange={(e) => setLineClosedProp(selLine, e.target.checked)} />
+                  <span style={S.dim}>{tr('nPoints', '{{n}} points', { n: shownScene.lines[selLine].points.length })}</span>
+                </Row>
+                <Row label={tr('lineFog', 'Fog')} tip={tr('lineFogTip', 'Off: the line ignores the scenery fog (vpy3d_set_scenery_fog), "fog": false')}>
+                  <input type="checkbox" checked={M.lineFog(shownScene.lines[selLine])} onChange={(e) => setLineFogProp(selLine, e.target.checked)} />
+                </Row>
+              </>
+            )}
+            {selItem?.kind === 'occ' && shownScene.occluders[selItem.item] && (
+              <div style={S.dim}>{tr('nCorners', '{{n}} corners', { n: shownScene.occluders[selItem.item].points.length })}</div>
+            )}
             <div style={S.btnGrid}>
               <button style={S.btn} onClick={doMakeFace} disabled={!editable || sel.length < 3} title={tr('makeFaceTip', 'Make a face from the selected vertices, in the order you selected them (F)')}>{tr('makeFace', 'Make face')}</button>
               <button style={S.btn} onClick={doConnect} disabled={!editable || sel.length !== 2} title={tr('connectTip', 'Connect two corners of the same face: splits the face along a new edge (J)')}>{tr('connect', 'Connect')}</button>
               <button style={S.btn} onClick={doDisconnect} disabled={!editable || sel.length !== 2} title={tr('disconnectTip', 'Remove the edge between two vertices by merging the two faces either side (K)')}>{tr('disconnect', 'Disconnect')}</button>
               <button style={S.btn} onClick={doFlip} disabled={!editable || face === null} title={tr('flipTip', 'Reverse the winding of the selected face (N)')}>{tr('flip', 'Flip face')}</button>
-              <button style={S.btn} onClick={doDelete} disabled={!editable || (!sel.length && face === null)} title={tr('deleteTip', 'Delete the selected vertices (and their faces) or the selected face (Del)')}>{tr('delete', 'Delete')}</button>
+              <button style={S.btn} onClick={doDelete} disabled={!ssel.length && (!editable || (!sel.length && face === null))} title={tr('deleteTip', 'Delete the selected vertices (and their faces), line/occluder points, or the selected face (Del)')}>{tr('delete', 'Delete')}</button>
               <button style={S.btn} onClick={doWindOutward} disabled={!editable || !shown.faces.length} title={tr('windTip', 'Re-wind every face anticlockwise seen from outside (normal away from the centre)')}>{tr('wind', 'Wind outward')}</button>
               <button style={S.btn} onClick={doRemoveUnused} disabled={!editable} title={tr('unusedTip', 'Delete vertices that no face uses')}>{tr('unused', 'Remove unused')}</button>
             </div>
@@ -1022,6 +1402,34 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
             </div>
           </Section>
 
+          <Section title={tr('scenery', 'Scenery: lines and occluders')}>
+            <div style={S.note}>{tr('sceneryNote', 'Lines are drawn as they are, cut by the occluders the game added before this mesh. Occluders are never drawn: added after the mesh, they hide what is drawn later behind them.')}</div>
+            <Row label={tr('newLineClosed', 'New line closed')} tip={tr('newLineClosedTip', 'Lines drawn with the Line tool join their last point to the first')}>
+              <input type="checkbox" checked={newLineClosed} onChange={(e) => setNewLineClosed(e.target.checked)} />
+            </Row>
+            <Row label={tr('occDepth', 'Occluder depth')} tip={tr('occDepthTip', 'Thickness along the view direction of an occluder dragged with the Occluder tool; 0 = a flat wall on the view plane')}>
+              {numInput(occDepth, (n) => setOccDepth(Math.max(0, Math.min(M.SCENE_MAX, Math.round(n)))), { min: 0, width: 70 })}
+            </Row>
+            <div style={S.btnGrid}>
+              <button style={tool === 'line' ? S.btnOn : S.btn} onClick={() => setTool(tool === 'line' ? 'select' : 'line')} title={tr('toolLineTip', 'Draw a line (L): click points on the view plane (or onto a vertex / point), Enter or double-click ends it, Esc cancels')}>{tr('toolLine', 'Line')}</button>
+              <button style={S.btn} onClick={finishLine} disabled={linePts.length < 2} title={tr('finishLineTip', 'End the line being drawn (Enter)')}>{tr('finishLine', 'End line')}</button>
+              <button style={tool === 'occluder' ? S.btnOn : S.btn} onClick={() => setTool(tool === 'occluder' ? 'select' : 'occluder')} title={tr('toolOccTip', 'Drag a box occluder on the front, top or side view (O)')}>{tr('toolOcc', 'Occluder')}</button>
+              <button style={S.btn} onClick={doBoxOccluder} disabled={!sel.length && !ssel.length} title={tr('boxOccTip', 'An occluder that is the bounding box of the selected vertices and points (B)')}>{tr('boxOcc', 'Box occluder from selection')}</button>
+            </div>
+            <div style={S.list}>
+              {shownScene.lines.slice(0, 512).map((l, li) => (
+                <div key={`l${li}`} onClick={() => selectItem('line', li)} style={{ ...S.listItem, background: selItem?.kind === 'line' && selItem.item === li ? '#3a2e18' : undefined, color: badLines.has(li) ? '#ff8080' : '#9fd8ff' }}>
+                  l{li}: {tr('nPoints', '{{n}} points', { n: l.points.length })}{M.lineClosed(l) ? `, ${tr('closedShort', 'closed')}` : ''}, br {M.lineBr(l)}%{M.lineFog(l) ? '' : `, ${tr('noFogShort', 'no fog')}`}
+                </div>
+              ))}
+              {shownScene.occluders.slice(0, 512).map((o, oi) => (
+                <div key={`o${oi}`} onClick={() => { setShowOccluders(true); selectItem('occ', oi); }} style={{ ...S.listItem, background: selItem?.kind === 'occ' && selItem.item === oi ? '#3a2e18' : undefined, color: badOccs.has(oi) ? '#ff8080' : '#d9a066' }}>
+                  o{oi}: {tr('nCorners', '{{n}} corners', { n: o.points.length })}
+                </div>
+              ))}
+            </div>
+          </Section>
+
           <Section title={`${tr('faceList', 'Faces')} (${shown.faces.length})`}>
             <div style={S.list}>
               {shown.faces.slice(0, 512).map((f, fi) => (
@@ -1039,10 +1447,12 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
             ) : (
               <div style={S.list}>
                 {issues.slice(0, 200).map((is, k) => (
-                  <div key={k} style={{ ...S.listItem, color: is.level === 'error' ? '#ff8080' : '#e6c07a', cursor: is.vertex !== undefined || is.face !== undefined ? 'pointer' : 'default' }}
+                  <div key={k} style={{ ...S.listItem, color: is.level === 'error' ? '#ff8080' : '#e6c07a', cursor: is.vertex !== undefined || is.face !== undefined || is.line !== undefined || is.occluder !== undefined ? 'pointer' : 'default' }}
                     onClick={() => {
-                      if (is.vertex !== undefined) { setSel([is.vertex]); setFace(null); }
-                      else if (is.face !== undefined) { setFace(is.face); setSel([]); }
+                      if (is.vertex !== undefined) { setSel([is.vertex]); setSsel([]); setFace(null); }
+                      else if (is.face !== undefined) { setFace(is.face); setSel([]); setSsel([]); }
+                      else if (is.line !== undefined) selectItem('line', is.line);
+                      else if (is.occluder !== undefined) { setShowOccluders(true); selectItem('occ', is.occluder); }
                     }}>
                     {is.level === 'error' ? '✖' : '⚠'} {is.message}
                   </div>
@@ -1053,7 +1463,7 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
           </Section>
 
           <div style={S.help}>
-            {tr('help', 'Middle drag: pan · Shift+middle or Alt+drag: orbit · wheel: zoom · 1-4: views · F face · J connect · K disconnect · N flip · Del delete · arrows nudge (Shift ×10) · Ctrl+Z / Ctrl+Y')}
+            {tr('help', 'Middle drag: pan · Shift+middle or Alt+drag: orbit · wheel: zoom · 1-4: views · F face · J connect · K disconnect · N flip · L line (Enter ends, Esc cancels) · O occluder · B box occluder · Del delete · arrows nudge (Shift ×10) · Ctrl+Z / Ctrl+Y')}
           </div>
         </div>
       </div>

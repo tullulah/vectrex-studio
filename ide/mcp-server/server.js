@@ -319,7 +319,14 @@ N = the name upper-cased with "-" -> "_".
  "notes":[{"id":"n1","note":60,"start":0,"duration":24,"velocity":12,"channel":0}],
  "noise":[{"id":"h1","start":0,"duration":6,"period":8,"channels":2,"velocity":5}],
  "loopStart":0,"loopEnd":96}
-- note: MIDI (60=C4). velocity 0-15. channel 0-2 (PSG A/B/C; SFX play on C). noise period 0-31, channels bitmask 1=A 2=B 4=C`,
+- note: MIDI (60=C4). velocity 0-15. channel 0-2 (PSG A/B/C; SFX play on C). noise period 0-31, channels bitmask 1=A 2=B 4=C
+
+### .vmesh (JSON, C only): faces and/or scenery
+{"name":"room","hard":45,"vertices":[{"x","y","z"}],"faces":[[0,3,2,1]],
+ "lines":[{"points":[{"x":0,"y":0,"z":0},{"x":40000,"y":0,"z":0}],"br":70,"closed":false,"fog":true}],
+ "occluders":[{"points":[3 to 8 corners of a convex solid]}]}
+- needs faces (with vertices), "sections" (lofting), lines or occluders. Vertices are i16; line/occluder points +-1000000.
+- lines: 2+ points, br 1..100 (% of the mesh brightness), fog false = ignores the scenery fog. Occluders are never drawn: they hide what is drawn after the mesh.`,
 
     joystick: `## Joystick Input
 - J1_X(), J1_Y(): signed analog axis, about -128..127 (0 = centre, +Y up). Use a dead zone: if J1_X() > 20: ...

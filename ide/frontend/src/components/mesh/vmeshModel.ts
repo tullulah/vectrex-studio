@@ -8,6 +8,15 @@
  *   lofted:   {"name","hard":45,"caps"?:true,"sections":[{"z","points":[{"x","y","z"?}]}
  *                                                   | {"z","vec":"../vectors/x.vec","path"?}]}
  *   optional "hard_cos" (Q14) overrides "hard" (degrees).
+ *   scenery (either form, or alone):
+ *     "lines":[{"points":[{"x","y","z"}...] (2+),"br"?:1..100,"closed"?:bool,"fog"?:bool}]
+ *       polylines drawn as they are (br = percent of the mesh's brightness;
+ *       "fog": false = ignores the scenery fog, vpy3d_set_scenery_fog),
+ *       cut by the occluders the game added before this mesh;
+ *     "occluders":[{"points":[...3 to 8 corners...]}]
+ *       convex solids never drawn: they hide what is drawn AFTER this mesh.
+ *   Line/occluder points may reach +-1,000,000 (rooms are big); vertices are i16.
+ *   A mesh needs faces (with vertices), sections, lines or occluders.
  * The format has NO edge list: vpy3d derives the edges from the faces, so in the
  * editor "connect" splits a face and "disconnect" merges the two faces across an
  * edge.
@@ -32,6 +41,13 @@ export const VPY3D_POOL_F = 512;
 export const VPY3D_POOL_FV = 2048;
 export const VPY3D_POOL_E = 1024;
 export const Q14_ONE = 16384;
+/** Line and occluder points are not stored as i16: scenery can be far bigger. */
+export const SCENE_MIN = -1_000_000;
+export const SCENE_MAX = 1_000_000;
+export const LINE_MIN_POINTS = 2;
+export const OCC_MIN_POINTS = 3;
+export const OCC_MAX_POINTS = 8;
+export const LINE_BR_DEFAULT = 100;
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -52,12 +68,39 @@ export interface MeshData {
 
 export type VmeshRaw = Record<string, unknown>;
 
+/**
+ * A polyline of the scenery. Every field of the JSON object rides along (key
+ * order too); read "br" / "closed" / "fog" with `lineBr` / `lineClosed` / `lineFog`.
+ */
+export interface MeshLine {
+  points: MeshVertex[];
+  [extra: string]: unknown;
+}
+/** A convex solid by its corners: never drawn, it hides what is drawn after the mesh. */
+export interface MeshOccluder {
+  points: MeshVertex[];
+  [extra: string]: unknown;
+}
+/** The scenery part of a mesh: independent of vertices/faces/sections. */
+export interface Scenery {
+  lines: MeshLine[];
+  occluders: MeshOccluder[];
+}
+/** One point of a line or an occluder. */
+export interface ScenePointRef {
+  kind: 'line' | 'occ';
+  item: number;
+  point: number;
+}
+
 export interface Issue {
   level: 'error' | 'warning';
   message: string;
   vertex?: number;
   face?: number;
   section?: number;
+  line?: number;
+  occluder?: number;
 }
 
 /** A ring loaded from a `.vec`, for lofted sections: (x, y, z|undefined) points. */
@@ -112,17 +155,69 @@ export function meshFromRaw(raw: VmeshRaw): MeshData {
 }
 
 /**
- * Write `mesh` back into `raw`, keeping every other field (and the key order).
+ * Write `mesh` back into `raw`, keeping every other field (and the key order),
+ * "lines" and "occluders" included.
  * Writing an explicit mesh into a lofted file drops `sections` and `caps`: a
- * file holds one form or the other.
+ * file holds one form or the other. An empty mesh in a file that had no
+ * vertices/faces (scenery only) adds no empty arrays.
  */
 export function meshToRaw(raw: VmeshRaw, mesh: MeshData): VmeshRaw {
   const out: VmeshRaw = { ...raw };
-  out.vertices = mesh.vertices.map((v) => ({ ...v, x: v.x, y: v.y, z: v.z }));
-  out.faces = mesh.faces.map((f) => [...f]);
+  const empty = !mesh.vertices.length && !mesh.faces.length;
+  // A scenery-only file stays without "vertices"/"faces".
+  if (!empty || 'vertices' in raw || 'faces' in raw) {
+    out.vertices = mesh.vertices.map((v) => ({ ...v, x: v.x, y: v.y, z: v.z }));
+    out.faces = mesh.faces.map((f) => [...f]);
+  }
   delete out.sections;
   delete out.caps;
   return out;
+}
+
+const pointFromRaw = (p: unknown): MeshVertex =>
+  (isObj(p) ? { ...p, x: num(p.x), y: num(p.y), z: num(p.z) } : { x: 0, y: 0, z: 0 });
+
+/** The lines and occluders of a raw `.vmesh`, coerced to numbers (other fields kept). */
+export function sceneryFromRaw(raw: VmeshRaw): Scenery {
+  const item = (o: unknown) => (isObj(o)
+    ? { ...o, points: Array.isArray(o.points) ? o.points.map(pointFromRaw) : [] }
+    : { points: [] });
+  return {
+    lines: Array.isArray(raw.lines) ? raw.lines.map(item) : [],
+    occluders: Array.isArray(raw.occluders) ? raw.occluders.map(item) : [],
+  };
+}
+
+export function hasScenery(raw: VmeshRaw): boolean {
+  return (Array.isArray(raw.lines) && raw.lines.length > 0) || (Array.isArray(raw.occluders) && raw.occluders.length > 0);
+}
+
+/**
+ * Write the scenery back into `raw`, keeping every other field and the key
+ * order (new keys go last). An empty list removes its key, unless the file has
+ * something there that is not an array (left for the user to see the error).
+ */
+export function sceneryToRaw(raw: VmeshRaw, sc: Scenery): VmeshRaw {
+  const out: VmeshRaw = { ...raw };
+  const put = (key: 'lines' | 'occluders', list: (MeshLine | MeshOccluder)[]) => {
+    if (list.length) out[key] = list.map((o) => ({ ...o, points: o.points.map((p) => ({ ...p })) }));
+    else if (out[key] === undefined || Array.isArray(out[key])) delete out[key];
+  };
+  put('lines', sc.lines);
+  put('occluders', sc.occluders);
+  return out;
+}
+
+/** A line's brightness, percent (1..100) of the mesh's. */
+export function lineBr(l: MeshLine): number {
+  return typeof l.br === 'number' && Number.isFinite(l.br) ? Math.max(1, Math.min(100, Math.round(l.br))) : LINE_BR_DEFAULT;
+}
+export function lineClosed(l: MeshLine): boolean {
+  return l.closed === true;
+}
+/** Does the line take the scenery fog (vpy3d_set_scenery_fog)? Default true. */
+export function lineFog(l: MeshLine): boolean {
+  return l.fog !== false;
 }
 
 /** The Q14 crease threshold the compiler will store (vmeshres.rs hard_cos_q14). */
@@ -252,7 +347,7 @@ export function validateVmesh(raw: unknown, resolveVec?: VecResolver): Issue[] {
   if (raw.hard_cos !== undefined && raw.hard_cos !== null && !isInt(raw.hard_cos)) err('"hard_cos" must be an integer (Q14 cosine)');
   if (raw.open !== undefined && typeof raw.open !== 'boolean') err('"open" must be true or false');
   if (raw.caps !== undefined && typeof raw.caps !== 'boolean') err('"caps" must be true or false');
-  for (const k of ['vertices', 'faces', 'sections'] as const) {
+  for (const k of ['vertices', 'faces', 'sections', 'lines', 'occluders'] as const) {
     if (raw[k] !== undefined && !Array.isArray(raw[k])) err(`"${k}" must be an array`);
   }
   if (out.length) return out;
@@ -260,8 +355,10 @@ export function validateVmesh(raw: unknown, resolveVec?: VecResolver): Issue[] {
   const vertsRaw = (raw.vertices as unknown[] | undefined) ?? [];
   const facesRaw = (raw.faces as unknown[] | undefined) ?? [];
   const sections = (raw.sections as unknown[] | undefined) ?? [];
+  const linesRaw = (raw.lines as unknown[] | undefined) ?? [];
+  const occRaw = (raw.occluders as unknown[] | undefined) ?? [];
 
-  const checkPoint = (p: unknown, where: string, needZ: boolean, extra: Partial<Issue>) => {
+  const checkPoint = (p: unknown, where: string, needZ: boolean, extra: Partial<Issue>, range?: [number, number]) => {
     if (!isObj(p)) { err(`${where} must be an object {"x","y","z"}`, extra); return; }
     for (const axis of ['x', 'y'] as const) {
       if (p[axis] === undefined) err(`${where} has no "${axis}"`, extra);
@@ -269,7 +366,36 @@ export function validateVmesh(raw: unknown, resolveVec?: VecResolver): Issue[] {
     }
     if (p.z !== undefined && p.z !== null && !isInt(p.z)) err(`${where}: "z" must be a whole number (got ${JSON.stringify(p.z)})`, extra);
     else if (needZ && p.z === undefined) warn(`${where} has no "z": the compiler uses 0`, extra);
+    if (range) {
+      for (const axis of ['x', 'y', 'z'] as const) {
+        const c = p[axis];
+        if (isInt(c) && (c < range[0] || c > range[1])) err(`${where} has ${axis}=${c}, outside ${range[0]}..${range[1]}`, extra);
+      }
+    }
   };
+  const sceneRange: [number, number] = [SCENE_MIN, SCENE_MAX];
+  linesRaw.forEach((l, li) => {
+    const extra = { line: li };
+    if (!isObj(l)) { err(`line ${li} must be an object {"points":[...]}`, extra); return; }
+    if (!Array.isArray(l.points)) { err(`line ${li}: "points" must be an array`, extra); return; }
+    if (l.points.length < LINE_MIN_POINTS) err(`line ${li} has ${l.points.length} point(s), a line needs ${LINE_MIN_POINTS}`, extra);
+    if (l.br !== undefined && l.br !== null && (!isInt(l.br) || l.br < 1 || l.br > 100)) {
+      err(`line ${li}: "br" must be a whole percent 1..100 (got ${JSON.stringify(l.br)})`, extra);
+    }
+    if (l.closed !== undefined && l.closed !== null && typeof l.closed !== 'boolean') err(`line ${li}: "closed" must be true or false`, extra);
+    if (l.fog !== undefined && l.fog !== null && typeof l.fog !== 'boolean') err(`line ${li}: "fog" must be true or false`, extra);
+    l.points.forEach((p, pi) => checkPoint(p, `line ${li} point ${pi}`, false, extra, sceneRange));
+  });
+  occRaw.forEach((o, oi) => {
+    const extra = { occluder: oi };
+    if (!isObj(o)) { err(`occluder ${oi} must be an object {"points":[...]}`, extra); return; }
+    if (!Array.isArray(o.points)) { err(`occluder ${oi}: "points" must be an array`, extra); return; }
+    if (o.points.length < OCC_MIN_POINTS || o.points.length > OCC_MAX_POINTS) {
+      err(`occluder ${oi} has ${o.points.length} point(s), an occluder has ${OCC_MIN_POINTS} to ${OCC_MAX_POINTS} corners`, extra);
+    }
+    o.points.forEach((p, pi) => checkPoint(p, `occluder ${oi} point ${pi}`, false, extra, sceneRange));
+  });
+  const scenery = linesRaw.length > 0 || occRaw.length > 0;
 
   vertsRaw.forEach((v, i) => checkPoint(v, `vertex ${i}`, true, { vertex: i }));
   facesRaw.forEach((f, i) => {
@@ -292,6 +418,7 @@ export function validateVmesh(raw: unknown, resolveVec?: VecResolver): Issue[] {
   if (out.some((x) => x.level === 'error')) return out;
 
   // vmeshres.rs compile_vmesh_file_to_bytes
+  const sceneWarn = () => out.push(...sceneryWarnings(sceneryFromRaw(raw)));
   let mesh: MeshData;
   if (sections.length) {
     if (vertsRaw.length || facesRaw.length) {
@@ -302,15 +429,23 @@ export function validateVmesh(raw: unknown, resolveVec?: VecResolver): Issue[] {
     out.push(...lofted.issues);
     if (!lofted.mesh) {
       if (lofted.pending) warn('a section takes its ring from a .vec that is not loaded: those checks wait for it');
+      if (!out.some((x) => x.level === 'error')) sceneWarn();
       return out;
     }
     mesh = lofted.mesh;
-  } else {
+  } else if (vertsRaw.length || facesRaw.length) {
     if (!vertsRaw.length || !facesRaw.length) {
-      err('a .vmesh needs "sections", or "vertices" and "faces"');
+      err('"vertices" and "faces" go together: faces need vertices, vertices are only drawn through faces');
       return out;
     }
     mesh = meshFromRaw(raw);
+  } else {
+    if (!scenery) {
+      err('a .vmesh needs "sections", "vertices" and "faces", "lines" or "occluders"');
+      return out;
+    }
+    sceneWarn();
+    return out;
   }
 
   const nv = mesh.vertices.length;
@@ -331,7 +466,48 @@ export function validateVmesh(raw: unknown, resolveVec?: VecResolver): Issue[] {
   if (out.some((x) => x.level === 'error')) return out;
 
   out.push(...meshWarnings(mesh, raw.open === true));
+  sceneWarn();
   return out;
+}
+
+/** What compiles but draws nothing useful: zero-length lines, flat-to-a-line occluders. */
+export function sceneryWarnings(sc: Scenery): Issue[] {
+  const out: Issue[] = [];
+  const key = (p: MeshVertex) => `${p.x},${p.y},${p.z}`;
+  sc.lines.forEach((l, li) => {
+    if (l.points.length >= 2 && new Set(l.points.map(key)).size < 2) {
+      out.push({ level: 'warning', line: li, message: `line ${li} has no length (all its points are the same)` });
+    }
+  });
+  sc.occluders.forEach((o, oi) => {
+    const pts = o.points;
+    if (pts.length < 3) return;
+    let area = 0;
+    for (let i = 1; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        const a = [pts[i].x - pts[0].x, pts[i].y - pts[0].y, pts[i].z - pts[0].z];
+        const b = [pts[j].x - pts[0].x, pts[j].y - pts[0].y, pts[j].z - pts[0].z];
+        area = Math.max(area, Math.hypot(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]));
+      }
+    }
+    if (area < 1e-6) out.push({ level: 'warning', occluder: oi, message: `occluder ${oi} has no area (its corners are in line): it hides nothing` });
+  });
+  return out;
+}
+
+/** Bounding box of everything in a mesh, scenery included; null if it is empty. */
+export function boundsOf(mesh: MeshData, sc?: Scenery): { lo: [number, number, number]; hi: [number, number, number] } | null {
+  const lo: [number, number, number] = [Infinity, Infinity, Infinity];
+  const hi: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  let any = false;
+  const add = (p: MeshVertex) => {
+    any = true;
+    const c = [p.x, p.y, p.z];
+    for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], c[k]); hi[k] = Math.max(hi[k], c[k]); }
+  };
+  mesh.vertices.forEach(add);
+  if (sc) for (const o of [...sc.lines, ...sc.occluders]) o.points.forEach(add);
+  return any ? { lo, hi } : null;
 }
 
 /** What compiles but vpy3d will refuse or draw wrong. Assumes no errors. */
@@ -718,4 +894,143 @@ export function makePrimitive(kind: PrimitiveKind, size: number, segments: numbe
     case 'grid': return primitiveGrid(size, segments);
     case 'cylinder': return primitiveCylinder(size / 2, size, segments);
   }
+}
+
+// ── scenery edits (pure; they return a new Scenery) ───────────────────────
+
+const clampScene = (n: number) => Math.max(SCENE_MIN, Math.min(SCENE_MAX, Math.round(n)));
+const scenePoint = (p: { x: number; y: number; z: number }): MeshVertex => ({ x: clampScene(p.x), y: clampScene(p.y), z: clampScene(p.z) });
+
+export function cloneScenery(sc: Scenery): Scenery {
+  const c = <T extends MeshLine | MeshOccluder>(o: T): T => ({ ...o, points: o.points.map((p) => ({ ...p })) });
+  return { lines: sc.lines.map(c), occluders: sc.occluders.map(c) };
+}
+
+export const sceneList = (sc: Scenery, kind: ScenePointRef['kind']): (MeshLine | MeshOccluder)[] =>
+  (kind === 'line' ? sc.lines : sc.occluders);
+
+export function scenePointAt(sc: Scenery, r: ScenePointRef): MeshVertex | undefined {
+  return sceneList(sc, r.kind)[r.item]?.points[r.point];
+}
+
+/** Every point of one line / occluder, as references. */
+export function itemRefs(sc: Scenery, kind: ScenePointRef['kind'], item: number): ScenePointRef[] {
+  const o = sceneList(sc, kind)[item];
+  return o ? o.points.map((_, point) => ({ kind, item, point })) : [];
+}
+
+/** A new polyline; consecutive repeated points are dropped. */
+export function addLine(sc: Scenery, points: { x: number; y: number; z: number }[], closed = false): { scenery: Scenery } | { error: string } {
+  const pts: MeshVertex[] = [];
+  for (const p of points) {
+    const q = scenePoint(p);
+    const last = pts[pts.length - 1];
+    if (!last || last.x !== q.x || last.y !== q.y || last.z !== q.z) pts.push(q);
+  }
+  if (closed && pts.length > 2) {
+    const a = pts[0], b = pts[pts.length - 1];
+    if (a.x === b.x && a.y === b.y && a.z === b.z) pts.pop();
+  }
+  if (pts.length < LINE_MIN_POINTS) return { error: `a line needs at least ${LINE_MIN_POINTS} different points` };
+  const out = cloneScenery(sc);
+  const line: MeshLine = { points: pts };
+  if (closed) line.closed = true;
+  out.lines.push(line);
+  return { scenery: out };
+}
+
+/**
+ * Set a line's "br" (null = the default, key removed), "closed" (false
+ * removes the key unless the file spelled it out) and/or "fog" (true, the
+ * default, likewise).
+ */
+export function setLineProps(sc: Scenery, i: number, p: { br?: number | null; closed?: boolean; fog?: boolean }): Scenery {
+  const out = cloneScenery(sc);
+  const l = out.lines[i];
+  if (!l) return out;
+  if (p.br !== undefined) {
+    if (p.br === null) delete l.br;
+    else l.br = Math.max(1, Math.min(100, Math.round(p.br)));
+  }
+  if (p.closed !== undefined) {
+    if (p.closed) l.closed = true;
+    else if ('closed' in l) l.closed = false;
+  }
+  if (p.fog !== undefined) {
+    if (!p.fog) l.fog = false;
+    else if ('fog' in l) l.fog = true;
+  }
+  return out;
+}
+
+export function setScenePoint(sc: Scenery, r: ScenePointRef, p: Partial<Pick<MeshVertex, 'x' | 'y' | 'z'>>): Scenery {
+  const out = cloneScenery(sc);
+  const q = scenePointAt(out, r);
+  if (!q) return out;
+  for (const k of ['x', 'y', 'z'] as const) if (p[k] !== undefined && Number.isFinite(p[k])) q[k] = clampScene(p[k]!);
+  return out;
+}
+
+/** Move points from their positions in `base` by a delta (used while dragging). */
+export function moveScenePoints(base: Scenery, refs: Iterable<ScenePointRef>, d: { x: number; y: number; z: number }): Scenery {
+  const out = cloneScenery(base);
+  const seen = new Set<string>();
+  for (const r of refs) {
+    const k = `${r.kind}:${r.item}:${r.point}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const q = scenePointAt(out, r);
+    if (!q) continue;
+    q.x = clampScene(q.x + d.x); q.y = clampScene(q.y + d.y); q.z = clampScene(q.z + d.z);
+  }
+  return out;
+}
+
+/**
+ * Delete points. A line left with fewer than 2 points, or an occluder with
+ * fewer than 3, goes too (so selecting a whole item and deleting removes it).
+ */
+export function deleteScenePoints(sc: Scenery, refs: Iterable<ScenePointRef>): Scenery {
+  const gone = new Set<string>();
+  for (const r of refs) gone.add(`${r.kind}:${r.item}:${r.point}`);
+  const keep = <T extends MeshLine | MeshOccluder>(list: T[], kind: ScenePointRef['kind'], min: number): T[] =>
+    list
+      .map((o, item) => ({ ...o, points: o.points.filter((_, point) => !gone.has(`${kind}:${item}:${point}`)).map((p) => ({ ...p })) }))
+      .filter((o, item) => o.points.length >= min || (o.points.length === list[item].points.length && o.points.length > 0));
+  return { lines: keep(sc.lines, 'line', LINE_MIN_POINTS), occluders: keep(sc.occluders, 'occ', OCC_MIN_POINTS) };
+}
+
+export function deleteSceneItems(sc: Scenery, kind: ScenePointRef['kind'], items: Iterable<number>): Scenery {
+  const gone = new Set(items);
+  const out = cloneScenery(sc);
+  if (kind === 'line') out.lines = out.lines.filter((_, i) => !gone.has(i));
+  else out.occluders = out.occluders.filter((_, i) => !gone.has(i));
+  return out;
+}
+
+/**
+ * The corners of the axis-aligned box lo..hi. A box flat on an axis gives a
+ * rectangle (4 corners), flat on two a segment (refused: it hides nothing).
+ */
+export function boxOccluder(lo: number[], hi: number[]): MeshOccluder | null {
+  const pts: MeshVertex[] = [];
+  const seen = new Set<string>();
+  for (const x of [lo[0], hi[0]]) for (const y of [lo[1], hi[1]]) for (const z of [lo[2], hi[2]]) {
+    const p = scenePoint({ x, y, z });
+    const k = `${p.x},${p.y},${p.z}`;
+    if (!seen.has(k)) { seen.add(k); pts.push(p); }
+  }
+  if (pts.length < OCC_MIN_POINTS) return null;
+  if (pts.length === 4) {
+    // a rectangle: put the corners in order around it
+    const [a, b, c, d] = pts; // binary order: 00, 01, 10, 11 over the two varying axes
+    return { points: [a, b, d, c] };
+  }
+  return { points: pts };
+}
+
+export function addOccluder(sc: Scenery, occ: MeshOccluder): Scenery {
+  const out = cloneScenery(sc);
+  out.occluders.push({ ...occ, points: occ.points.map((p) => scenePoint(p)) });
+  return out;
 }

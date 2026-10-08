@@ -361,7 +361,11 @@ on a PSG channel (0-2) at a MIDI note (24-107). In C, the call is
 - `hard` is the crease angle in degrees. `open: true` makes a plate instead of a solid.
 - The IDE's Mesh Editor (File > New > 3D Mesh) edits the explicit form. It checks the file
   the way the compiler does, and it can show what vpy3d draws from any angle. It only
-  previews a lofted file, until you convert it to vertices and faces.
+  previews a lofted file's faces, until you convert it to vertices and faces.
+- The editor also draws and edits scenery: the Line tool (L) places points on the view plane
+  (Enter or a double-click ends the line), the Occluder tool (O) drags a box, and "Box occluder
+  from selection" (B) wraps the selection. Its preview does not cut lines by occluders or
+  show fog.
 - Load and draw it with vpy3d:
 
 ```c
@@ -374,6 +378,42 @@ static vpy_mesh cube;
 
 Add `$(VPY_C_SDK)/vpy3d.c` to `SRCS` in the Makefile. VPy has no `.vmesh` support. For
 3D in VPy, use a `.vec` with `z` and `DRAW_VECTOR_3D`.
+
+#### Scenery: `lines` and `occluders` (SDK v1.3.5 or later)
+
+A `.vmesh` can also hold a piece of scenery (a room, a hangar bay, a corridor section),
+with or without faces:
+
+```json
+{"name":"throne_room",
+ "lines":[{"points":[{"x":-3000,"y":280,"z":1800},{"x":3000,"y":280,"z":1800}],"br":70},
+          {"points":[ ...16 points... ],"br":90,"closed":true}],
+ "occluders":[{"points":[ ...3 to 8 corners of a convex solid... ]}]}
+```
+
+- `lines` are polylines of 2 to 255 points. They are not edges of a face, and they are never
+  culled. `br` (1–100, default 100) is a percent of the brightness passed to
+  `vpy3d_draw_mesh`: draw the scenery at 100 and each `br` is its absolute brightness.
+  `closed: true` joins the last point to the first.
+- `occluders` are convex solids given by their corners (3 to 8). They are never drawn. Once
+  the mesh is drawn they go into the occluder table, so they hide whatever is drawn **after**
+  it, never the mesh's own lines. Draw near to far, as with `vpy3d_occl_add`.
+- A line always goes through the occluders already added, the way `vpy3d_occl_line` does.
+- Scenery points are 32-bit (±1,000,000), so a room fits in model units. Vertices keep the
+  16-bit range.
+- `vpy3d_set_scenery_fog(full_until, gone_at)` fades each line segment by the camera depth
+  of its middle, as `vpy3d_fog` does, and drops a segment faded below brightness 4. `0, 0`
+  turns it off (the default). A line with `"fog": false` keeps its brightness.
+- A file without `lines` or `occluders` compiles to a version-1 image, unchanged. A file
+  with them compiles to version 2, which needs SDK v1.3.5. A scenery-only mesh uses no vpy3d
+  pool space; its data is read in place from the compiled array.
+
+```c
+#include "throne_room.h"                  /* THRONE_ROOM_vmesh */
+static vpy_mesh room;
+/* setup():  */ vpy3d_load_mesh(&room, THRONE_ROOM_vmesh);
+/* loop():   */ vpy_xf at = vpy3d_translate(0, 0, 6000); vpy3d_draw_mesh(&room, &at, 100);
+```
 
 ## Known gaps
 

@@ -275,6 +275,8 @@ export const ASSET_SPECS: AssetSpec[] = [
 `JSON. Either explicit {"name","hard":crease degrees (45),"vertices":[{"x","y","z"}...],"faces":[[vertex indices, counter-clockwise seen from outside]...]}
 or lofted {"name","hard":45,"caps":true,"sections":[{"z","points":[{"x","y"}...]} or {"z","vec":"../vectors/x.vec","path":name}...]}
 - Optional "open":true for a plate (not a solid). Lofted sections all need the same point count (3+).
+- Scenery (rooms, corridors), with either form or alone: "lines":[{"points":[{"x","y","z"}...] (2+ points, a polyline),"br":1..100 (% of the mesh brightness, default 100),"closed":bool,"fog":bool (default true; false = ignores vpy3d_set_scenery_fog)}] and "occluders":[{"points":[3 to 8 corners of a convex solid]}]. Occluders are never drawn: added after the mesh, they hide what is drawn later behind them; lines are cut by the occluders added before. Line/occluder coordinates: integers within +-1000000 (vertices: i16).
+- A .vmesh needs faces (with vertices), sections, lines or occluders.
 - Drawn with hidden-line removal by vpy3d (C only): vpy3d_load_mesh + vpy3d_draw_mesh; set the camera with vpy3d_look_at.`,
     example: (n) => ({
       name: n, hard: 45,
@@ -426,7 +428,15 @@ export async function summarizeAsset(spec: AssetSpec, file: string): Promise<{ s
         return { summary: `${frames.length} frame(s) @ ${j.fps} fps, ~${Math.round(segs / Math.max(1, frames.length))} segments/frame`, meta, refs };
       }
       case 'vmesh':
-        return { summary: j.sections ? `lofted, ${j.sections.length} section(s)` : `${(j.vertices || []).length} vertices, ${(j.faces || []).length} faces`, meta, refs };
+      {
+        const scene = [
+          Array.isArray(j.lines) && j.lines.length ? `${j.lines.length} line(s)` : '',
+          Array.isArray(j.occluders) && j.occluders.length ? `${j.occluders.length} occluder(s)` : '',
+        ].filter(Boolean).join(', ');
+        const body = j.sections ? `lofted, ${j.sections.length} section(s)`
+          : (j.vertices || []).length || (j.faces || []).length || !scene ? `${(j.vertices || []).length} vertices, ${(j.faces || []).length} faces` : '';
+        return { summary: [body, scene].filter(Boolean).join(', '), meta, refs };
+      }
     }
   } catch (e: any) {
     return { summary: `unreadable: ${e?.message || e}`, meta, refs };
@@ -527,6 +537,45 @@ export function normaliseName(spec: AssetSpec, json: any, name: string): boolean
   if (json.name === name) return false;
   json.name = name;
   return true;
+}
+
+/**
+ * Structural errors the IDE checks itself before the compiler runs: the
+ * `.vmesh` "lines"/"occluders" (an older bundled vpy_cli ignores those keys,
+ * so a bad one would pass silently). Mirrors the Mesh Editor's validation.
+ */
+export function structuralErrors(spec: AssetSpec, json: any): string[] {
+  const errs: string[] = [];
+  if (spec.type !== 'vmesh' || !json || typeof json !== 'object') return errs;
+  const isInt = (v: unknown) => typeof v === 'number' && Number.isInteger(v);
+  const LIM = 1_000_000;
+  const points = (where: string, pts: unknown, min: number, max: number) => {
+    if (!Array.isArray(pts)) { errs.push(`${where}: "points" must be an array`); return; }
+    if (pts.length < min || pts.length > max) errs.push(`${where} has ${pts.length} point(s), needs ${max === Infinity ? `at least ${min}` : `${min} to ${max}`}`);
+    pts.forEach((p: any, i: number) => {
+      if (!p || typeof p !== 'object' || Array.isArray(p)) { errs.push(`${where} point ${i} must be {"x","y","z"}`); return; }
+      for (const a of ['x', 'y', 'z']) {
+        if (p[a] === undefined && a === 'z') continue;
+        if (!isInt(p[a]) || Math.abs(p[a]) > LIM) errs.push(`${where} point ${i}: "${a}" must be a whole number within +-${LIM}`);
+      }
+    });
+  };
+  for (const key of ['lines', 'occluders']) {
+    if (json[key] !== undefined && !Array.isArray(json[key])) errs.push(`"${key}" must be an array`);
+  }
+  (Array.isArray(json.lines) ? json.lines : []).forEach((l: any, i: number) => {
+    if (!l || typeof l !== 'object' || Array.isArray(l)) { errs.push(`line ${i} must be an object {"points":[...]}`); return; }
+    points(`line ${i}`, l.points, 2, Infinity);
+    if (l.br !== undefined && l.br !== null && (!isInt(l.br) || l.br < 1 || l.br > 100)) errs.push(`line ${i}: "br" must be a whole percent 1..100`);
+    for (const b of ['closed', 'fog']) {
+      if (l[b] !== undefined && l[b] !== null && typeof l[b] !== 'boolean') errs.push(`line ${i}: "${b}" must be true or false`);
+    }
+  });
+  (Array.isArray(json.occluders) ? json.occluders : []).forEach((o: any, i: number) => {
+    if (!o || typeof o !== 'object' || Array.isArray(o)) { errs.push(`occluder ${i} must be an object {"points":[...]}`); return; }
+    points(`occluder ${i}`, o.points, 3, 8);
+  });
+  return errs.slice(0, 20);
 }
 
 /** Assets this one references that do not exist. Paths are checked from the project root. */

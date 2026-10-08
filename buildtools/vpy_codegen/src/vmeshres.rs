@@ -38,6 +38,25 @@
 //!  16  .. vertices: x, y, z as i16 each
 //!   .. .. faces: u8 count, then that many u16 vertex indices
 //! ```
+//!
+//! Version 2 adds SCENERY, after the faces: lines that are not edges of any face
+//! and occluders that are never drawn. A file that uses neither still compiles
+//! to version 1, byte for byte, so it loads on every runtime.
+//! ```text
+//!   .. 2  line count
+//!          per line: u8 point count (2..255), u8 brightness percent (1..100),
+//!                    u8 flags (bit0: closed, bit1: no fog), then the points as i32 x, y, z
+//!   .. 2  occluder count
+//!          per occluder: u8 corner count (3..8), then the corners as i32 x, y, z
+//! ```
+//! Scenery points are i32 because a room is far bigger than a model: a vertex
+//! keeps the i16 range.
+//!
+//! ```json
+//! { "name": "throne",
+//!   "lines": [ {"points": [{"x":-4600,"y":3800,"z":6500}, ...], "br": 70, "closed": true} ],
+//!   "occluders": [ {"points": [ ...3 to 8 corners of a convex solid... ]} ] }
+//! ```
 
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
@@ -45,6 +64,10 @@ use std::path::Path;
 
 pub const VMESH_MAGIC: &[u8; 4] = b"VMSH";
 pub const VMESH_VERSION: u8 = 1;
+/// The version a file with `lines` or `occluders` compiles to.
+pub const VMESH_VERSION_SCENERY: u8 = 2;
+/// How far a scenery point may sit from the origin.
+pub const SCENERY_LIMIT: i64 = 1_000_000;
 
 #[derive(Debug, Deserialize)]
 pub struct VMeshPoint {
@@ -70,6 +93,27 @@ pub struct VMeshSection {
     pub path: Option<String>,
 }
 
+/// A polyline drawn as it is: not an edge of a face, never culled.
+#[derive(Debug, Deserialize)]
+pub struct VMeshLine {
+    pub points: Vec<VMeshPoint>,
+    /// Percent of the brightness the mesh is drawn with.
+    #[serde(default)]
+    pub br: Option<i64>,
+    /// Join the last point back to the first.
+    #[serde(default)]
+    pub closed: bool,
+    /// Faded by the scenery fog (vpy3d_set_scenery_fog). `false` keeps it at its brightness.
+    #[serde(default)]
+    pub fog: Option<bool>,
+}
+
+/// A convex solid by its corners: never drawn, it hides what is drawn after it.
+#[derive(Debug, Deserialize)]
+pub struct VMeshOccluder {
+    pub points: Vec<VMeshPoint>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct VMeshResource {
     #[serde(default)]
@@ -93,6 +137,10 @@ pub struct VMeshResource {
     pub faces: Vec<Vec<u16>>,
     #[serde(default)]
     pub sections: Vec<VMeshSection>,
+    #[serde(default)]
+    pub lines: Vec<VMeshLine>,
+    #[serde(default)]
+    pub occluders: Vec<VMeshOccluder>,
 }
 
 fn default_true() -> bool { true }
@@ -196,8 +244,11 @@ pub fn compile_vmesh_file_to_bytes(path: &Path) -> Result<Vec<u8>> {
         }
         loft(&r, base)?
     } else {
-        if r.vertices.is_empty() || r.faces.is_empty() {
-            bail!("a .vmesh needs `sections`, or `vertices` and `faces`");
+        if r.vertices.is_empty() != r.faces.is_empty() {
+            bail!("a .vmesh with `vertices` needs `faces`, and the other way round");
+        }
+        if r.vertices.is_empty() && r.lines.is_empty() && r.occluders.is_empty() {
+            bail!("a .vmesh needs `sections`, `vertices` and `faces`, `lines` or `occluders`");
         }
         (r.vertices.iter().map(|p| (p.x, p.y, p.z.unwrap_or(0))).collect(),
          r.faces.clone())
@@ -221,10 +272,42 @@ pub fn compile_vmesh_file_to_bytes(path: &Path) -> Result<Vec<u8>> {
         }
     }
 
+    let scenery = !r.lines.is_empty() || !r.occluders.is_empty();
+    let pt = |p: &VMeshPoint, what: &str| -> Result<[i32; 3]> {
+        let c = [p.x, p.y, p.z.unwrap_or(0)];
+        for v in c {
+            if (v as i64).abs() > SCENERY_LIMIT {
+                bail!("{} has a coordinate {} beyond ±{}", what, v, SCENERY_LIMIT);
+            }
+        }
+        Ok(c)
+    };
+    let mut lines: Vec<(u8, u8, Vec<[i32; 3]>)> = Vec::new();
+    for (li, l) in r.lines.iter().enumerate() {
+        if l.points.len() < 2 || l.points.len() > 255 {
+            bail!("line {} has {} points, needs 2 to 255", li, l.points.len());
+        }
+        let br = l.br.unwrap_or(100);
+        if !(1..=100).contains(&br) { bail!("line {} has br {}, needs 1 to 100", li, br); }
+        let pts = l.points.iter().map(|p| pt(p, &format!("line {}", li))).collect::<Result<Vec<_>>>()?;
+        let flags = (l.closed as u8) | if l.fog == Some(false) { 2 } else { 0 };
+        lines.push((br as u8, flags, pts));
+    }
+    let mut occs: Vec<Vec<[i32; 3]>> = Vec::new();
+    for (oi, o) in r.occluders.iter().enumerate() {
+        if o.points.len() < 3 || o.points.len() > 8 {
+            bail!("occluder {} has {} corners, needs 3 to 8", oi, o.points.len());
+        }
+        occs.push(o.points.iter().map(|p| pt(p, &format!("occluder {}", oi))).collect::<Result<Vec<_>>>()?);
+    }
+    if lines.len() > u16::MAX as usize || occs.len() > u16::MAX as usize {
+        bail!("too many lines or occluders");
+    }
+
     let idx_total: usize = faces.iter().map(|f| f.len()).sum();
     let mut out = Vec::with_capacity(16 + verts.len() * 6 + faces.len() + idx_total * 2);
     out.extend_from_slice(VMESH_MAGIC);
-    out.push(VMESH_VERSION);
+    out.push(if scenery { VMESH_VERSION_SCENERY } else { VMESH_VERSION });
     out.push(if r.open { 1 } else { 0 });
     out.extend_from_slice(&(hard_cos_q14(&r) as i16).to_le_bytes());
     out.extend_from_slice(&(verts.len() as u16).to_le_bytes());
@@ -239,6 +322,21 @@ pub fn compile_vmesh_file_to_bytes(path: &Path) -> Result<Vec<u8>> {
     for f in &faces {
         out.push(f.len() as u8);
         for &i in f { out.extend_from_slice(&i.to_le_bytes()); }
+    }
+    if scenery {
+        let put = |out: &mut Vec<u8>, p: &[i32; 3]| for c in p { out.extend_from_slice(&c.to_le_bytes()); };
+        out.extend_from_slice(&(lines.len() as u16).to_le_bytes());
+        for (br, flags, pts) in &lines {
+            out.push(pts.len() as u8);
+            out.push(*br);
+            out.push(*flags);
+            for p in pts { put(&mut out, p); }
+        }
+        out.extend_from_slice(&(occs.len() as u16).to_le_bytes());
+        for o in &occs {
+            out.push(o.len() as u8);
+            for p in o { put(&mut out, p); }
+        }
     }
     Ok(out)
 }
@@ -296,6 +394,41 @@ mod tests {
     fn a_face_index_out_of_range_is_caught() {
         let e = compile_as("badidx", r#"{"vertices":[{"x":0,"y":0,"z":0}],"faces":[[0,1,2]]}"#);
         assert!(e.is_err());
+    }
+
+    #[test]
+    fn a_plain_mesh_stays_version_1() {
+        let b = compile_as("plain", r#"{"vertices":[{"x":0,"y":0,"z":0},{"x":9,"y":0,"z":0},{"x":0,"y":9,"z":0}],
+            "faces":[[0,1,2]]}"#).unwrap();
+        assert_eq!(b[4], 1);
+        assert_eq!(b.len(), 16 + 3 * 6 + 1 + 3 * 2);
+    }
+
+    #[test]
+    fn scenery_only_compiles_to_version_2() {
+        let b = compile_as("scenery", r#"{"name":"room",
+            "lines":[{"points":[{"x":-40000,"y":0,"z":5},{"x":40000,"y":0,"z":5},{"x":0,"y":3000}],"br":70,"closed":true,"fog":false}],
+            "occluders":[{"points":[{"x":0,"y":0,"z":0},{"x":1,"y":0,"z":0},{"x":0,"y":1,"z":0}]}]}"#).unwrap();
+        assert_eq!(b[4], VMESH_VERSION_SCENERY);
+        assert_eq!(u16::from_le_bytes([b[8], b[9]]), 0);     // no vertices
+        assert_eq!(u16::from_le_bytes([b[10], b[11]]), 0);   // no faces
+        let l = &b[16..];
+        assert_eq!(u16::from_le_bytes([l[0], l[1]]), 1);     // one line
+        assert_eq!((l[2], l[3], l[4]), (3, 70, 3));           // 3 points, 70%, closed + no fog
+        assert_eq!(i32::from_le_bytes([l[5], l[6], l[7], l[8]]), -40000);
+        let o = &l[5 + 3 * 12..];
+        assert_eq!(u16::from_le_bytes([o[0], o[1]]), 1);     // one occluder
+        assert_eq!(o[2], 3);
+        assert_eq!(o.len(), 3 + 3 * 12);
+    }
+
+    #[test]
+    fn bad_scenery_is_refused() {
+        assert!(compile_as("line1", r#"{"lines":[{"points":[{"x":0,"y":0}]}]}"#).is_err());
+        assert!(compile_as("brzero", r#"{"lines":[{"points":[{"x":0,"y":0},{"x":1,"y":0}],"br":0}]}"#).is_err());
+        assert!(compile_as("occ2", r#"{"occluders":[{"points":[{"x":0,"y":0},{"x":1,"y":0}]}]}"#).is_err());
+        assert!(compile_as("far", r#"{"lines":[{"points":[{"x":0,"y":0},{"x":2000000,"y":0}]}]}"#).is_err());
+        assert!(compile_as("empty", r#"{"name":"nothing"}"#).is_err());
     }
 
     #[test]
