@@ -191,7 +191,8 @@ async function createWindow() {
               { label: 'Animation (.vanim)', click: () => sendMenuCommand( 'file.new.vanim') },
               { label: 'Instrument (.vinstr)', click: () => sendMenuCommand( 'file.new.vinstr') },
               { label: 'Enemy (.venemy)', click: () => sendMenuCommand( 'file.new.venemy') },
-              { label: '3D Mesh (.vmesh)', click: () => sendMenuCommand( 'file.new.vmesh') }
+              { label: '3D Mesh (.vmesh)', click: () => sendMenuCommand( 'file.new.vmesh') },
+              { label: '3D Scene (.vscene)', click: () => sendMenuCommand( 'file.new.vscene') }
             ]
           },
           {
@@ -684,7 +685,8 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
             { label: 'Animation (.vanim)', click: () => sendMenuCommand( 'file.new.vanim') },
             { label: 'Instrument (.vinstr)', click: () => sendMenuCommand( 'file.new.vinstr') },
             { label: 'Enemy (.venemy)', click: () => sendMenuCommand( 'file.new.venemy') },
-            { label: '3D Mesh (.vmesh)', click: () => sendMenuCommand( 'file.new.vmesh') }
+            { label: '3D Mesh (.vmesh)', click: () => sendMenuCommand( 'file.new.vmesh') },
+            { label: '3D Scene (.vscene)', click: () => sendMenuCommand( 'file.new.vscene') }
           ]
         },
         {

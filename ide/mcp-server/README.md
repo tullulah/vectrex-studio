@@ -190,7 +190,10 @@ Notes on behaviour:
   open?}` writes `<folder>/<name>.<ext>`, sets the asset's own name to the file name, checks
   that the assets it references exist, and compiles it with `vpy_cli check-asset` (and, in a C
   project, `vpy_cli compile-asset --format c`, the Makefile's step). On a compile error the file
-  is removed, or restored when it replaced one, and the compiler's message is returned.
+  is removed, or restored when it replaced one, and the compiler's message is returned. A
+  `.vmesh` / `.vscene` is also checked by the IDE itself first (`structuralErrors`; a scene's
+  meshes must exist in `assets/meshes`). When the bundled compiler predates the type
+  ("unsupported asset extension"), those IDE checks are all that run, and `validatedBy` says so.
   `project_create_vector` / `_music` / `_sfx` are shortcuts for it, with templates when the
   content is empty.
 - `asset_create` and `project_create_*` refuse to overwrite an existing asset unless `overwrite: true`.

@@ -22,7 +22,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'child_process';
 
-export type AssetType = 'vec' | 'vmus' | 'vsfx' | 'vanim' | 'vplay' | 'venemy' | 'vinstr' | 'vrec' | 'vsmp' | 'vmesh';
+export type AssetType = 'vec' | 'vmus' | 'vsfx' | 'vanim' | 'vplay' | 'venemy' | 'vinstr' | 'vrec' | 'vsmp' | 'vmesh' | 'vscene';
 export type ProjectLang = 'vpy' | 'c';
 
 export interface AssetSpec {
@@ -287,6 +287,43 @@ or lofted {"name","hard":45,"caps":true,"sections":[{"z","points":[{"x","y"}...]
       faces: [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [2, 3, 7, 6], [1, 2, 6, 5], [0, 4, 7, 3]],
     }),
   },
+  {
+    type: 'vscene', ext: '.vscene', title: '3D scene / set of .vmesh pieces (vpy3d)', dir: 'assets/scenes', editor: 'Scene Editor',
+    nameField: 'name',
+    vpy: { usable: false, usage: () => '', note: 'VPy has no .vscene support (C only, SDK v1.3.5+).' },
+    c: {
+      usable: true,
+      usage: (n) => `#include <vpy3d.h>\n${cInc(n)}\nstatic vpy_scene s;\n/* setup(): */ vpy3d_load_scene(&s, ${cSymbol(n)}_vscene, ${cSymbol(n)}_vscene_meshes);   /* 0 = failed, vpy3d_error() says why */\n/* loop():  */ int32_t pos[3] = { 0, 0, dist }; vpy3d_draw_scene(&s, 0 /* place, or &xf */, pos, groups_mask, 100);\n/* Makefile: SRCS += $(VPY_C_SDK)/vpy3d.c (SDK v1.3.5+) */`,
+      note: 'Needs SDK v1.3.5 or later and $(VPY_C_SDK)/vpy3d.c in SRCS.',
+    },
+    targets: 'C only: sim, rp2350, uvm2 (SDK v1.3.5+)',
+    format:
+`JSON. A set of .vmesh pieces placed from one game position "pos" (x,y,z) passed each frame.
+{"name","fog":{"full","gone"} (optional, 0 <= full < gone),"groups":[names] (optional, <= 32, no leading "!"),
+ "items":[{ (>= 1, drawn in this order: near pieces first, an item's occluders hide only later items)
+   "name":label (optional),
+   "mesh":"rib" (a .vmesh in assets/meshes, no extension) or ["a","b"] (only with "repeat": copy n uses mesh n mod len),
+   "at":{"x","y","z"} (whole numbers, |v| <= 1000000, missing = 0),
+   "follow":{"x","y","z"} (per-axis factor of pos, |f| <= 64, kept to 1/65536; z -1 = comes at you as pos.z grows),
+   "repeat":{"axis":"x"|"y"|"z" (default z),"step":1..1000000,"count":1..255},
+   "window":{"min","max"} (both optional; a copy is drawn only while its world z is within),
+   "br":1..100 (% of the draw brightness, default 100),
+   "fog":true (default, per line segment) | false | "whole" (each copy by the depth of its origin),
+   "group":"name" | "!name" (drawn only while that bit of the groups mask is set / clear; must be in "groups")}]}
+- At most 16 different meshes per scene; every mesh must exist (assets/meshes/<name>.vmesh).
+- Placement per item: p = at + floor(follow*pos) per axis. With a repeat: n0 = floor(-(p[axis]-at[axis]) / step), copy k (0..count-1) sits at p[axis] + (n0+k)*step and is copy number n0+k: the first copy is always in (at-step, at] and the run wraps as pos moves.
+- Example: "at":{"z":600},"follow":{"z":-1},"repeat":{"step":2000,"count":9} with pos.z = 4500 -> p.z = -3900, n0 = 2, copies at z 100, 2100 ... 16100 (copy numbers 2..10; with "mesh":["a","b"] they use b, a, b ...).
+- Fog true fades scenery line segments only (faces keep their brightness); "whole" dims each copy as one, faces included, and skips it below brightness 4. Group bit n = the n-th name in "groups".`,
+    example: (n) => ({
+      name: n,
+      fog: { full: 3000, gone: 17500 },
+      groups: ['alarm'],
+      items: [
+        { name: 'ribs', mesh: `${n}_piece`, at: { z: 600 }, follow: { z: -1 }, repeat: { axis: 'z', step: 2000, count: 9 }, window: { max: 16000 } },
+        { name: 'alarm light', mesh: `${n}_piece`, at: { y: 400, z: 3000 }, br: 50, fog: 'whole', group: 'alarm' },
+      ],
+    }),
+  },
 ];
 
 /** Files in assets/ that are not code assets, and what they are. */
@@ -437,6 +474,13 @@ export async function summarizeAsset(spec: AssetSpec, file: string): Promise<{ s
           : (j.vertices || []).length || (j.faces || []).length || !scene ? `${(j.vertices || []).length} vertices, ${(j.faces || []).length} faces` : '';
         return { summary: [body, scene].filter(Boolean).join(', '), meta, refs };
       }
+      case 'vscene': {
+        const items = Array.isArray(j.items) ? j.items : [];
+        refs.push(...sceneMeshNames(j));
+        const reps = items.filter((it: any) => it?.repeat).length;
+        const groups = Array.isArray(j.groups) ? j.groups.length : 0;
+        return { summary: `${items.length} item(s)${reps ? ` (${reps} repeated)` : ''}, meshes: ${refs.join(' ') || '-'}${groups ? `, ${groups} group(s)` : ''}${j.fog ? ', fog' : ''}`, meta, refs };
+      }
     }
   } catch (e: any) {
     return { summary: `unreadable: ${e?.message || e}`, meta, refs };
@@ -539,14 +583,103 @@ export function normaliseName(spec: AssetSpec, json: any, name: string): boolean
   return true;
 }
 
+/** The distinct mesh names a `.vscene` places, in first-use order (what its header includes). */
+export function sceneMeshNames(json: any): string[] {
+  const out: string[] = [];
+  for (const it of Array.isArray(json?.items) ? json.items : []) {
+    for (const m of Array.isArray(it?.mesh) ? it.mesh : [it?.mesh]) {
+      if (typeof m === 'string' && m && !out.includes(m)) out.push(m);
+    }
+  }
+  return out;
+}
+
+/**
+ * Structural errors of a `.vscene` (vsceneres.rs compile_vscene; the Scene
+ * Editor's validation is the full mirror). An older bundled vpy_cli does not
+ * know the type at all, so these are what stands between a bad scene and disk.
+ */
+function sceneErrors(json: any): string[] {
+  const errs: string[] = [];
+  const isInt = (v: unknown) => typeof v === 'number' && Number.isInteger(v);
+  const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+  const LIM = 1_000_000;
+  const items = json.items;
+  if (!Array.isArray(items) || !items.length) errs.push('a scene needs at least one item ("items")');
+  const groups = json.groups === undefined ? [] : json.groups;
+  if (!Array.isArray(groups)) errs.push('"groups" must be an array of names');
+  else {
+    if (groups.length > 32) errs.push(`at most 32 groups (${groups.length} given)`);
+    groups.forEach((g: any, i: number) => {
+      if (typeof g !== 'string' || !g || g.startsWith('!')) errs.push(`group ${i}: a name, not empty and not starting with '!'`);
+      else if (groups.indexOf(g) !== i) errs.push(`group "${g}" is listed twice`);
+    });
+  }
+  if (json.fog !== undefined && json.fog !== null) {
+    const f = json.fog;
+    if (!f || typeof f !== 'object' || !isInt(f.full) || !isInt(f.gone) || f.full < 0 || f.gone <= f.full || f.gone > 0x7fffffff) {
+      errs.push('fog: need {"full","gone"} with 0 <= full < gone (whole numbers)');
+    }
+  }
+  (Array.isArray(items) ? items : []).forEach((it: any, i: number) => {
+    const what = it && typeof it.name === 'string' ? `item ${i} (${it.name})` : `item ${i}`;
+    if (!it || typeof it !== 'object' || Array.isArray(it)) { errs.push(`${what} must be an object`); return; }
+    const names = Array.isArray(it.mesh) ? it.mesh : [it.mesh];
+    if (!names.length || names.length > 255) errs.push(`${what}: mesh must name 1 to 255 meshes`);
+    for (const n of names) {
+      if (typeof n !== 'string' || !n || /[\/\\]/.test(n) || n.endsWith('.vmesh')) {
+        errs.push(`${what}: mesh ${JSON.stringify(n)} must be the name of a .vmesh in assets/meshes, without the extension`);
+      }
+    }
+    if (names.length > 1 && !it.repeat) errs.push(`${what}: several meshes take turns along a repeat; without one, name a single mesh`);
+    for (const k of ['at', 'follow']) {
+      const v = it[k];
+      if (v === undefined || v === null) continue;
+      if (typeof v !== 'object' || Array.isArray(v)) { errs.push(`${what}: "${k}" must be {"x","y","z"}`); continue; }
+      for (const a of ['x', 'y', 'z']) {
+        if (v[a] === undefined) continue;
+        if (k === 'at' ? !isInt(v[a]) || Math.abs(v[a]) > LIM : !num(v[a]) || Math.abs(Math.round(v[a] * 65536)) > 64 * 65536) {
+          errs.push(k === 'at' ? `${what} at.${a}: must be a whole number within +-${LIM}` : `${what} follow.${a}: must be a number within -64..64`);
+        }
+      }
+    }
+    if (it.repeat !== undefined && it.repeat !== null) {
+      const r = it.repeat;
+      if (typeof r !== 'object') errs.push(`${what}: "repeat" must be {"axis","step","count"}`);
+      else {
+        if (r.axis !== undefined && !['x', 'y', 'z'].includes(r.axis)) errs.push(`${what}: repeat axis ${JSON.stringify(r.axis)} (x, y or z)`);
+        if (!isInt(r.step) || r.step < 1 || r.step > LIM) errs.push(`${what}: repeat step must be 1..${LIM}`);
+        if (!isInt(r.count) || r.count < 1 || r.count > 255) errs.push(`${what}: repeat count must be 1..255`);
+      }
+    }
+    if (it.window !== undefined && it.window !== null) {
+      const w = it.window;
+      const lo = w?.min ?? -0x80000000, hi = w?.max ?? 0x7fffffff;
+      if (typeof w !== 'object' || !isInt(lo) || !isInt(hi) || lo > hi || lo < -0x80000000 || hi > 0x7fffffff) errs.push(`${what}: window needs whole numbers with min <= max`);
+    }
+    if (it.br !== undefined && it.br !== null && (!isInt(it.br) || it.br < 1 || it.br > 100)) errs.push(`${what}: br is a percent, 1..100`);
+    if (it.fog !== undefined && it.fog !== true && it.fog !== false && it.fog !== 'whole') errs.push(`${what}: fog is true, false or "whole"`);
+    if (it.group !== undefined && it.group !== null) {
+      const g = typeof it.group === 'string' ? it.group.replace(/^!/, '') : null;
+      if (g === null || !Array.isArray(groups) || !groups.includes(g)) errs.push(`${what}: group ${JSON.stringify(it.group)} is not in the scene's groups`);
+    }
+  });
+  const meshes = sceneMeshNames(json);
+  if (meshes.length > 16) errs.push(`a scene may use at most 16 different meshes (${meshes.length} used)`);
+  return errs.slice(0, 20);
+}
+
 /**
  * Structural errors the IDE checks itself before the compiler runs: the
  * `.vmesh` "lines"/"occluders" (an older bundled vpy_cli ignores those keys,
- * so a bad one would pass silently). Mirrors the Mesh Editor's validation.
+ * so a bad one would pass silently), mirroring the Mesh Editor's validation,
+ * and a `.vscene` (sceneErrors).
  */
 export function structuralErrors(spec: AssetSpec, json: any): string[] {
   const errs: string[] = [];
-  if (spec.type !== 'vmesh' || !json || typeof json !== 'object') return errs;
+  if (!json || typeof json !== 'object') return errs;
+  if (spec.type === 'vscene') return sceneErrors(json);
+  if (spec.type !== 'vmesh') return errs;
   const isInt = (v: unknown) => typeof v === 'number' && Number.isInteger(v);
   const LIM = 1_000_000;
   const points = (where: string, pts: unknown, min: number, max: number) => {
@@ -604,6 +737,13 @@ export function missingReferences(spec: AssetSpec, json: any, rootDir: string, f
         if (!existsSync(path.resolve(fileDir, s.vec))) missing.push(`section vec -> ${s.vec} (relative to the .vmesh)`);
       }
     }
+  } else if (spec.type === 'vscene') {
+    // vsceneres.rs looks next to the scene's folder: <scene dir>/../meshes/<name>.vmesh
+    for (const m of sceneMeshNames(json)) {
+      if (/[\\/]/.test(m)) continue;   // structuralErrors refuses a path
+      const rel = path.relative(rootDir, path.resolve(fileDir, '..', 'meshes', `${m}.vmesh`)).split(path.sep).join('/');
+      need(rel, `mesh "${m}"`);
+    }
   }
   return missing;
 }
@@ -649,6 +789,11 @@ export async function compileCheck(cli: string, file: string, spec: AssetSpec, l
   if (line) {
     let j: any = null;
     try { j = JSON.parse(line); } catch { /* fall through */ }
+    if (j && j.ok === false && /unsupported asset extension/.test(String(j.error))) {
+      // A compiler older than this asset type (rebuild with run-ide.sh): the IDE's own
+      // checks (structuralErrors, missingReferences) are all that ran.
+      return { ok: true, validatedBy: `IDE checks only (the bundled vpy_cli predates ${spec.ext}: rebuild it with run-ide.sh)` };
+    }
     if (j && j.ok === false) return { ok: false, validatedBy, error: j.error };
     if (j && j.ok) summary = j.summary;
   } else if (/unrecognized subcommand|unexpected argument|Found argument/i.test(r.stderr)) {
@@ -657,7 +802,7 @@ export async function compileCheck(cli: string, file: string, spec: AssetSpec, l
   } else if (r.code !== 0) {
     return { ok: false, validatedBy, error: stripAnsi(r.stderr || r.stdout).trim().slice(-2000) || `vpy_cli exited ${r.code}` };
   }
-  const cTypes: AssetType[] = ['vec', 'vmus', 'vsfx', 'vanim', 'vplay', 'vmesh', 'vinstr', 'vrec', 'vsmp'];
+  const cTypes: AssetType[] = ['vec', 'vmus', 'vsfx', 'vanim', 'vplay', 'vmesh', 'vscene', 'vinstr', 'vrec', 'vsmp'];
   if (lang === 'c' || (!validatedBy && cTypes.includes(spec.type))) {
     if (cTypes.includes(spec.type)) {
       const tmp = path.join(os.tmpdir(), `vs-asset-${process.pid}-${Date.now()}.h`);

@@ -49,7 +49,7 @@ TYPICAL FLOW ("make a hello world with the SDK and run it in the emulator")
 
 ASSETS
 - JSON files the user opens in the IDE's editors (Vector, Music, SFX, Animation, Enemy, Instrument; the Playground for levels). asset_create compiles the asset and returns the error if it does not compile: fix and retry. Create what an asset references first: the frame .vec files before a .vanim; the sprite .vec files and .venemy types before the .vplay that places them. assets_list lists them all when ide_get_context truncates.
-- VPy names an asset by its file name, as a string literal: DRAW_VECTOR("ship", x, y), PLAY_MUSIC("theme"). C includes the header the Makefile generates: #include "ship.h" then DRAW_VECTOR(SHIP_vec, x, y), PLAY_MUSIC(THEME_music). The exact call for each asset is in ide_get_context "assets" and in asset_create's result. .vmesh (3D meshes, vpy3d.h) is C-only.
+- VPy names an asset by its file name, as a string literal: DRAW_VECTOR("ship", x, y), PLAY_MUSIC("theme"). C includes the header the Makefile generates: #include "ship.h" then DRAW_VECTOR(SHIP_vec, x, y), PLAY_MUSIC(THEME_music). The exact call for each asset is in ide_get_context "assets" and in asset_create's result. .vmesh (3D meshes) and .vscene (3D sets of meshes), both vpy3d.h, are C-only.
 
 WRITING VPY
 - Don't write WAIT_RECAL(), AUDIO_UPDATE()/MUSIC_UPDATE() or button reads: the compiler injects Wait_Recal and Read_Btns at the start of every loop() and the audio update when music/SFX are used.

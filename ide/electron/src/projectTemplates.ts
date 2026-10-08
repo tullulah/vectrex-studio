@@ -173,7 +173,7 @@ function cMakefile(name: string): string {
 #   make sim UVMC2_SDK=~/VectrexStudio/sdk/<version>
 
 NAME := ${name}
-SRCS  = src/main.c   # more sources here; a .vmesh also needs $(VPY_C_SDK)/vpy3d.c
+SRCS  = src/main.c   # more sources here; a .vmesh or .vscene also needs $(VPY_C_SDK)/vpy3d.c
 
 # The SDK root. The simulator build only gets VPY_C_SDK/PITREX_SIM_SDK, so the root is
 # derived from VPY_C_SDK (<root>/vpy-c) when UVMC2_SDK itself is not set.
@@ -193,20 +193,23 @@ INCLUDES := -Isrc -Igen -I$(VPY_C_SDK)/include -I$(PITREX_SIM_SDK)/include
 # header with its data; src/main.c includes it and passes the arrays to vpy.h:
 #   #include "ship.h"  ->  DRAW_VECTOR(SHIP_vec, x, y);
 # Levels and animations include the headers of the .vec sprites they use, and a
-# level reads assets/vectors and assets/enemies, hence the extra prerequisites.
-# A .vmesh needs vpy3d: add $(VPY_C_SDK)/vpy3d.c to SRCS.
+# level reads assets/vectors and assets/enemies, hence the extra prerequisites;
+# a scene includes the headers of its .vmesh pieces.
+# A .vmesh or .vscene needs vpy3d: add $(VPY_C_SDK)/vpy3d.c to SRCS.
 VPY_CLI ?= vpy_cli
 VEC_SRCS   := $(wildcard assets/vectors/*.vec)
 AUDIO_SRCS := $(wildcard assets/music/*.vmus assets/sfx/*.vsfx assets/instruments/*.vinstr \\
                         assets/samples/*.vsmp)
 REC_SRCS   := $(wildcard assets/recordings/*.vrec)
 MESH_SRCS  := $(wildcard assets/meshes/*.vmesh)
+SCENE_SRCS := $(wildcard assets/scenes/*.vscene)
 ANIM_SRCS  := $(wildcard assets/animations/*.vanim)
 LEVEL_SRCS := $(wildcard assets/playground/*.vplay)
 ENEMY_SRCS := $(wildcard assets/enemies/*.venemy)
 hdr = $(patsubst %,gen/%.h,$(basename $(notdir $(1))))
 VEC_HDRS   := $(call hdr,$(VEC_SRCS))
-ASSET_HDRS := $(VEC_HDRS) $(call hdr,$(AUDIO_SRCS) $(REC_SRCS) $(MESH_SRCS) $(ANIM_SRCS) $(LEVEL_SRCS))
+MESH_HDRS  := $(call hdr,$(MESH_SRCS))
+ASSET_HDRS := $(VEC_HDRS) $(MESH_HDRS) $(call hdr,$(AUDIO_SRCS) $(REC_SRCS) $(SCENE_SRCS) $(ANIM_SRCS) $(LEVEL_SRCS))
 
 vpath %.vec    assets/vectors
 vpath %.vmus   assets/music
@@ -215,6 +218,7 @@ vpath %.vinstr assets/instruments
 vpath %.vrec   assets/recordings
 vpath %.vsmp   assets/samples
 vpath %.vmesh  assets/meshes
+vpath %.vscene assets/scenes
 vpath %.vanim  assets/animations
 vpath %.vplay  assets/playground
 gen/%.h: %.vec   | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
@@ -224,10 +228,12 @@ gen/%.h: %.vinstr | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/
 gen/%.h: %.vrec  | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
 gen/%.h: %.vsmp  | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
 gen/%.h: %.vmesh | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
+gen/%.h: %.vscene | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
 gen/%.h: %.vanim | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
 gen/%.h: %.vplay | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
 $(call hdr,$(ANIM_SRCS) $(LEVEL_SRCS)): $(VEC_HDRS)
 $(call hdr,$(LEVEL_SRCS)): $(VEC_SRCS) $(ENEMY_SRCS)
+$(call hdr,$(SCENE_SRCS)): $(MESH_HDRS)
 
 assets: $(ASSET_HDRS)
 

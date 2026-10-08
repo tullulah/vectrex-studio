@@ -68,10 +68,45 @@ The editor supports `.vpy` (VPy source), `.asm` (MC6809 assembly) and C sources.
 | `.vinstr` | Instrument Editor |
 | `.vplay` | Playground (levels) |
 | `.vmesh` | Mesh Editor — 3D wireframe with front/top/side/3D views (middle button pans, middle + Shift orbits), vertex and face editing, primitives (cube, pyramid, grid, cylinder), undo/redo and live validation against the compiler's rules. File → New → 3D Mesh creates `assets/meshes/<name>.vmesh` |
+| `.vscene` | Scene Editor (below). File → New → 3D Scene creates `assets/scenes/<name>.vscene` with one piece, the first mesh in `assets/meshes` (so make a mesh first) |
 | `.vmov` | Vector Movie Editor |
 | `.vsmp` | Sample player |
 
 Formats and how each asset is used from VPy and C: [ASSETS.md](ASSETS.md).
+
+### Scene Editor
+
+A `.vscene` arranges `.vmesh` pieces into a 3D set for a C project (vpy3d,
+`vpy3d_draw_scene`). The editor has three columns:
+
+- **Left:** the items in draw order (add, duplicate, delete, move up/down). Order matters,
+  because an item's occluders hide only the items after it, so list the near pieces first.
+  Below the items are the groups (add, rename, delete) and the scene fog (on/off, `full`,
+  `gone`). Renaming a group renames it in every item that uses it. Deleting a group makes
+  those items draw always.
+- **Right:** the selected item. It has a name, a mesh or a list of meshes that take turns
+  along a repeat (picked from the project's `assets/meshes`), `at` and `follow` (x/y/z),
+  repeat (axis, step, count), window (min/max, each optional), brightness %, fog
+  (per segment / whole copy / none) and group (none, `name` or `!name`).
+- **Middle:** a preview that places every copy with the runtime's own arithmetic for a
+  preview `pos`. Set `pos` with the x/y/z sliders and fields. **▶** (or Space) advances
+  `pos.z` at the set speed, so you can watch a repeat scroll and wrap. The group checkboxes
+  in the left column form the groups mask.
+  - Views: **Eye** is a perspective from an editable point, looking along +z. Front, top,
+    side and an orbiting 3D view are also available.
+  - Faces' edges are green (smooth edges faint), scenery lines are drawn at their
+    brightness, and occluders show as a faint orange hull.
+  - Click a piece to select its item. The selected item is drawn in orange.
+  - The fog preview takes depth as z minus the eye's z, which approximates what the game's
+    camera sees.
+
+Errors show inline as you edit. They follow the compiler's rules, so the editor reports an
+error exactly when `vpy_cli check-asset` would refuse the file. That includes a mesh missing
+from `assets/meshes`, a list of meshes without a repeat, a group that is not declared, and
+more than 16 distinct meshes. Every edit can be undone (Ctrl+Z / Ctrl+Y). Saving writes
+2-space JSON and keeps any fields the editor does not know. **Reload meshes** reads the
+`.vmesh` files again after you change them. A mesh lofted from `.vec` sections is not
+previewed here: open it in the Mesh Editor.
 
 ---
 

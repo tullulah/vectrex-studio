@@ -1,7 +1,7 @@
 # Assets
 
 Vectrex Studio is asset-driven. Sprites, music, sound effects, animations, levels,
-enemies, instruments, recordings, samples and 3D meshes are JSON files under the
+enemies, instruments, recordings, samples, 3D meshes and 3D scenes are JSON files under the
 project's `assets/` folder. You edit them in the IDE's editors, and code refers to
 them by name. This page is the reference for every asset type: what it is, its format,
 where it goes, how VPy and C code use it, and which targets support it.
@@ -25,6 +25,7 @@ writes an asset to the right folder and compiles it.
 | `.vrec` | Vector recording | `assets/recordings/` | Recording viewer | `DRAW_RECORDING("n", x, y, scale, frame)` | `DRAW_RECORDING(N_vrec, x, y, scale, frame)` | m6809 (video only), rp2350, uvm2, pitrex; C: sim, rp2350, uvm2 |
 | `.vsmp` | 4-bit audio sample | `assets/samples/` | Sample player | `PLAY_SAMPLE("n")`, `SAMPLE_POS(fps)` | `PLAY_SAMPLE(N_smp)`, `SAMPLE_POS(fps)` | rp2350, pitrex; uvm2 builds but plays nothing; not m6809. C: sim, rp2350; uvm2 builds but plays nothing |
 | `.vmesh` | 3D surface mesh | `assets/meshes/` (C) | Mesh Editor | not available | `vpy3d_load_mesh(&m, N_vmesh)` + `vpy3d_draw_mesh` | C only: sim, rp2350, uvm2 |
+| `.vscene` | 3D set made of `.vmesh` pieces | `assets/scenes/` (C) | Scene Editor | not available | `vpy3d_load_scene(&s, N_vscene, N_vscene_meshes)` + `vpy3d_draw_scene` | C only: sim, rp2350, uvm2 (SDK v1.3.5+) |
 
 `n` is the asset name: the file name without its extension. `N` is that name upper-cased
 with `-`, `.` and spaces turned into `_` (what `vpy_cli compile-asset` derives). "all"
@@ -85,13 +86,16 @@ compiler to the build as `$(VPY_CLI)`. The Makefile of a new C project (from
 `project_create {kind:"c"}` or File > New Project) has the rules. It compiles
 `assets/vectors/*.vec`, `assets/music/*.vmus`, `assets/sfx/*.vsfx`,
 `assets/animations/*.vanim`, `assets/playground/*.vplay`, `assets/meshes/*.vmesh`,
-`assets/instruments/*.vinstr`, `assets/recordings/*.vrec` and `assets/samples/*.vsmp` to
+`assets/scenes/*.vscene`, `assets/instruments/*.vinstr`, `assets/recordings/*.vrec` and `assets/samples/*.vsmp` to
 `gen/<name>.h` before `make sim`, `make rp2350` and `make uvm2`, and adds `-Igen`. A
 C project created before `.vinstr`, `.vrec` and `.vsmp` could be used from C lacks
 their three `gen/%.h: %.<ext>` rules and wildcards: copy them from a new project's
 Makefile (`asset_create` warns when they are missing).
 Animations and levels include their sprites' headers, and a level also reads
-`assets/vectors` and `assets/enemies`, so keep the same folder layout as VPy.
+`assets/vectors` and `assets/enemies`, so keep the same folder layout as VPy. A scene
+includes the headers of its meshes. A C project created before `.vscene` lacks its rule:
+copy `SCENE_SRCS`, `MESH_HDRS`, `vpath %.vscene`, the `gen/%.h: %.vscene` rule and
+`$(call hdr,$(SCENE_SRCS)): $(MESH_HDRS)` from a new project's Makefile.
 `examples/individual_tests_c/common.mk` does the same for the examples.
 
 ```c
@@ -399,8 +403,9 @@ with or without faces:
   the mesh is drawn they go into the occluder table, so they hide whatever is drawn **after**
   it, never the mesh's own lines. Draw near to far, as with `vpy3d_occl_add`.
 - A line always goes through the occluders already added, the way `vpy3d_occl_line` does.
-- Scenery points are 32-bit (±1,000,000), so a room fits in model units. Vertices keep the
-  16-bit range.
+- Scenery points may be 32-bit (±1,000,000), so a room fits in model units. Vertices keep
+  the 16-bit range. The compiler stores a line or occluder whose points all fit in 16 bits
+  at half the size; that matters on uvm2, where the whole game runs from SRAM.
 - `vpy3d_set_scenery_fog(full_until, gone_at)` fades each line segment by the camera depth
   of its middle, as `vpy3d_fog` does, and drops a segment faded below brightness 4. `0, 0`
   turns it off (the default). A line with `"fog": false` keeps its brightness.
@@ -415,9 +420,75 @@ static vpy_mesh room;
 /* loop():   */ vpy_xf at = vpy3d_translate(0, 0, 6000); vpy3d_draw_mesh(&room, &at, 100);
 ```
 
+### `.vscene` (3D set, C only, SDK v1.3.5 or later)
+
+A scene arranges `.vmesh` pieces over time. It says where each piece stands, how it
+moves as the player travels, how often it repeats, and which pieces the game switches on
+and off: the ribs of a tunnel coming at you every 2000 units, two mountain ranges sliding
+by at different speeds, the stripes of a floor. Each frame the game passes one position,
+`pos` (how far it has gone along x, y and z), and the scene places every piece from it.
+
+```json
+{"name":"ds_tunnel",
+ "fog":{"full":3000,"gone":17500},
+ "groups":["alarm"],
+ "items":[
+   {"name":"ribs","mesh":"tunnel_rib","at":{"z":600},"follow":{"z":-1},
+    "repeat":{"axis":"z","step":2000,"count":9},"fog":"whole"},
+   {"name":"wall panels","mesh":["tunnel_panels_high","tunnel_panels_low"],"at":{"z":600},
+    "follow":{"z":-1},"repeat":{"axis":"z","step":2000,"count":9},"window":{"max":10999}},
+   {"name":"long edges","mesh":"tunnel_edges","fog":false},
+   {"name":"red lights","mesh":"alarm_lights","group":"alarm"}]}
+```
+
+- `mesh` names a `.vmesh` in `assets/meshes/` (without the extension). A scene uses at most
+  16 different meshes.
+- `at` is where the piece stands (x, y, z; a missing axis is 0).
+- `follow` is how far the piece moves per unit of `pos`, per axis. With `{"z": -1}` it
+  comes at you as you advance. With `{"x": 0.9167}`, a far range slides by almost as fast as
+  you turn, so it seems to move only a little. Fractions are kept to 1/65536.
+- `repeat` makes `count` copies `step` apart along `axis`. The copies wrap with the
+  movement, so there are always `count` of them, the first within one `step` past `at`.
+  With a list of meshes the copies take turns: copy n uses mesh n mod the list's length,
+  counted along the whole run, so the pattern stays put as it scrolls.
+- `window` draws a copy only while its z in the world (after `place`) is within `min`..`max`.
+  Use it for the near bays only, or to drop what is behind the camera.
+- `br` is a percent (1–100, default 100) of the brightness passed to `vpy3d_draw_scene`.
+- `fog` controls how the scene's `fog` fades the piece. `true` (the default) fades each line
+  segment by the depth of its middle. `"whole"` fades each copy as one, by the depth of its
+  `at`, and skips a copy faded below brightness 4; this fades its faces too. `false` leaves
+  the piece unfaded. With `true`, faces are not faded, only scenery lines.
+- `group` draws the piece only while the game sets that group's bit (bit n = the n-th name
+  in `groups`). `"!name"` works the other way round. A scene can have up to 32 groups.
+- Items are drawn in the order listed, each repeat from `at` outwards. A piece's occluders
+  hide only what is drawn after it, so list the near pieces first. When a frame has more
+  strokes than the stroke buffer holds, the strokes drawn last are dropped, which is one
+  more reason to put the far pieces last.
+
+```c
+#include <vpy3d.h>
+#include "ds_tunnel.h"                  /* DS_TUNNEL_vscene, DS_TUNNEL_vscene_meshes */
+static vpy_scene tunnel;
+/* setup():  */ vpy3d_load_scene(&tunnel, DS_TUNNEL_vscene, DS_TUNNEL_vscene_meshes);
+/* loop():   */ int32_t pos[3] = { 0, 0, dist };
+                vpy3d_draw_scene(&tunnel, 0, pos, alarm ? 1 : 0, 90);
+```
+
+`vpy3d_draw_scene(&s, place, pos, groups, br)` takes `place` (0 for none) to put the whole
+scene in the world after its pieces have moved. Each copy goes through `vpy3d_draw_mesh`.
+The scene's fog applies to its own pieces only, and the game's `vpy3d_set_scenery_fog` is
+back afterwards.
+
+A scenery-only mesh in a scene uses no RAM: it is read in place from the compiled array at
+every draw. A mesh with faces is built into the vpy3d pools once and kept in one of
+`VPY3D_SCENE_SOLIDS` slots (default 8) that all scenes share. Loading the same image again
+reuses its slot. Load scenes with solid pieces at start-up, before any `vpy3d_pool_mark`.
+`vpy3d_load_scene` returns 0 when the image or a mesh is bad, or when the slots are full,
+and `vpy3d_error()` says which. A `vpy_scene` itself is 24 bytes on the cartridges.
+
 ## Known gaps
 
 - On m6809, `PLAY_SAMPLE` and `SAMPLE_POS` don't build ("Undefined symbol").
 - On m6809, `STOP_MUSIC()` only builds when the program also calls `PLAY_MUSIC`.
 - `.vsmp` doesn't play on uvm2, from VPy or C.
-- `.vmesh` has no VPy support.
+- `.vmesh` and `.vscene` have no VPy support.

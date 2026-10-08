@@ -100,7 +100,7 @@ function languageForPath(p: string): string {
     case 'cpp': case 'cc': case 'cxx': case 'h': case 'hpp': return 'cpp';
     case 'asm': case 's': return 'asm';
     case 'json': case 'vec': case 'vmus': case 'vsfx': case 'vanim': case 'vplay': case 'vinstr': case 'venemy': case 'vmov':
-    case 'vrec': case 'vsmp': case 'vmesh': return 'json';
+    case 'vrec': case 'vsmp': case 'vmesh': case 'vscene': return 'json';
     case 'js': return 'javascript';
     case 'ts': return 'typescript';
     case 'md': return 'markdown';
@@ -713,7 +713,7 @@ export class MCPServer {
 
     this.registerTool('assets/list', this.assetsList.bind(this), {
       name: 'assets/list',
-      description: 'List the assets of the open project (vector sprites, music, SFX, animations, levels, enemies, instruments, recordings, samples, 3D meshes) grouped by type: name, path, a one-line summary and the EXACT code that uses each one in this project\'s language (VPy builtin call, or C #include + call). Also lists the asset types this project could use but has none of, the types its language cannot use, and other asset files. Call it before writing drawing, sound, level or animation code.',
+      description: 'List the assets of the open project (vector sprites, music, SFX, animations, levels, enemies, instruments, recordings, samples, 3D meshes, 3D scenes) grouped by type: name, path, a one-line summary and the EXACT code that uses each one in this project\'s language (VPy builtin call, or C #include + call). Also lists the asset types this project could use but has none of, the types its language cannot use, and other asset files. Call it before writing drawing, sound, level or animation code.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -737,7 +737,7 @@ export class MCPServer {
 
     this.registerTool('asset/create', this.assetCreate.bind(this), {
       name: 'asset/create',
-      description: 'Create (or with overwrite=true replace) an asset in the open project, in the folder its build reads (assets/vectors, assets/music, assets/sfx, assets/animations, assets/playground, assets/enemies, assets/instruments, assets/recordings, assets/samples, assets/meshes), and VALIDATE it by compiling it with vpy_cli (plus the C header step for a C project). On a compile error nothing is left behind (a replaced file is restored) and the compiler\'s message is returned. Returns the summary and the exact code to use it. Referenced assets (frame .vec files, level sprites, enemy types) must exist first. Formats: asset_get_format.',
+      description: 'Create (or with overwrite=true replace) an asset in the open project, in the folder its build reads (assets/vectors, assets/music, assets/sfx, assets/animations, assets/playground, assets/enemies, assets/instruments, assets/recordings, assets/samples, assets/meshes, assets/scenes), and VALIDATE it by compiling it with vpy_cli (plus the C header step for a C project). On a compile error nothing is left behind (a replaced file is restored) and the compiler\'s message is returned. Returns the summary and the exact code to use it. Referenced assets (frame .vec files, level sprites, enemy types, the .vmesh pieces of a scene) must exist first. Formats: asset_get_format.',
       inputSchema: {
         type: 'object',
         properties: {

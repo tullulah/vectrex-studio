@@ -307,6 +307,7 @@ type    folder               VPy                                              C 
 .vrec   assets/recordings    DRAW_RECORDING("n", x, y, scale 128=100%, frame)    DRAW_RECORDING(N_vrec, x, y, scale, frame)
 .vsmp   assets/samples       PLAY_SAMPLE("n"), SAMPLE_POS(fps) - not on m6809    PLAY_SAMPLE(N_smp)
 .vmesh  assets/meshes        (C only)                                            vpy3d_load_mesh(&m, N_vmesh)
+.vscene assets/scenes        (C only)                   vpy3d_load_scene(&s, N_vscene, N_vscene_meshes)  vpy3d_draw_scene
 N = the name upper-cased with "-" -> "_".
 
 ### .vec (JSON): coordinates -127..127 around the sprite centre, +Y up
@@ -326,7 +327,16 @@ N = the name upper-cased with "-" -> "_".
  "lines":[{"points":[{"x":0,"y":0,"z":0},{"x":40000,"y":0,"z":0}],"br":70,"closed":false,"fog":true}],
  "occluders":[{"points":[3 to 8 corners of a convex solid]}]}
 - needs faces (with vertices), "sections" (lofting), lines or occluders. Vertices are i16; line/occluder points +-1000000.
-- lines: 2+ points, br 1..100 (% of the mesh brightness), fog false = ignores the scenery fog. Occluders are never drawn: they hide what is drawn after the mesh.`,
+- lines: 2+ points, br 1..100 (% of the mesh brightness), fog false = ignores the scenery fog. Occluders are never drawn: they hide what is drawn after the mesh.
+
+### .vscene (JSON, C only, SDK v1.3.5+): a set of .vmesh pieces placed from the game's pos[3]
+{"name":"tunnel","fog":{"full":3000,"gone":17500},"groups":["alarm"],
+ "items":[{"name":"ribs","mesh":"rib","at":{"z":600},"follow":{"z":-1},"repeat":{"axis":"z","step":2000,"count":9}},
+          {"mesh":["low","high"],"at":{"z":600},"follow":{"z":-1},"repeat":{"step":2000,"count":9},"window":{"max":10999},"br":75},
+          {"mesh":"lights","group":"!alarm","fog":"whole"}]}
+- mesh = assets/meshes/<name>.vmesh (a list only with repeat: copies take turns); <= 16 meshes. at: whole numbers; follow: factor of pos per axis.
+- Items draw in order (near first). fog true|false|"whole". group bit n = n-th name in groups; "!name" inverts.
+- C: vpy3d_load_scene(&s, N_vscene, N_vscene_meshes); vpy3d_draw_scene(&s, 0, pos, groups_mask, br). SRCS += $(VPY_C_SDK)/vpy3d.c`,
 
     joystick: `## Joystick Input
 - J1_X(), J1_Y(): signed analog axis, about -128..127 (0 = centre, +Y up). Use a dead zone: if J1_X() > 20: ...

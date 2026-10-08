@@ -12,7 +12,7 @@ function getLanguageFromFilename(filename: string): 'vpy' | 'c' | 'cpp' | 'json'
     case 'cpp': case 'cc': case 'cxx': return 'cpp';
     case 'h': case 'hpp': return 'cpp';
     case 'asm': case 's': return 'asm';
-    case 'json': case 'vec': case 'vmus': return 'json';
+    case 'json': case 'vec': case 'vmus': case 'vmesh': case 'vscene': return 'json';
     case 'js': return 'javascript';
     case 'ts': return 'typescript';
     case 'md': return 'markdown';
@@ -550,6 +550,8 @@ export const FileTreePanel: React.FC = () => {
       case 'vec': return '🎨';
       case 'anim': return '🎬';
       case 'vplay': return '🎮';
+      case 'vmesh': return '🧊';
+      case 'vscene': return '🏞️';
       case 'c': case 'cpp': case 'h': case 'hpp': return '⚙️';
       case 'asm': case 's': return '📜';
       case 'js': case 'ts': return '📦';

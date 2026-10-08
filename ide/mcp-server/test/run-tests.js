@@ -587,10 +587,11 @@ function tcpSession(port) {
   const assetsLib = require(path.join(DIST, 'assets.js'));
   const REPO = path.join(__dirname, '..', '..', '..');
   const vpyCli = assetsLib.resolveVpyCli();
-  let cliHasCheck = false;
+  let cliHasCheck = false, cliHasScene = false;
   if (vpyCli) {
     const r = require('child_process').spawnSync(vpyCli, ['check-asset', '--help'], { encoding: 'utf-8' });
     cliHasCheck = r.status === 0;
+    cliHasScene = cliHasCheck && /\.vscene/.test(r.stdout);
   }
   const withCli = cliHasCheck ? test : async (name) => console.log(`  skip ${name} (no vpy_cli with check-asset; build buildtools and run-ide.sh)`);
   const TYPES = assetsLib.ASSET_SPECS.map((a) => a.type);
@@ -607,7 +608,7 @@ function tcpSession(port) {
     const r = await client.request('tools/list');
     const byName = Object.fromEntries(r.result.tools.map((t) => [t.name, t]));
     for (const n of ['assets_list', 'asset_get_format', 'asset_create', 'project_create_vector', 'project_create_music', 'project_create_sfx']) assert.ok(byName[n], `missing ${n}`);
-    assert.deepStrictEqual(TYPES, ['vec', 'vmus', 'vsfx', 'vanim', 'vplay', 'venemy', 'vinstr', 'vrec', 'vsmp', 'vmesh']);
+    assert.deepStrictEqual(TYPES, ['vec', 'vmus', 'vsfx', 'vanim', 'vplay', 'venemy', 'vinstr', 'vrec', 'vsmp', 'vmesh', 'vscene']);
     assert.deepStrictEqual(byName.asset_create.inputSchema.properties.type.enum, TYPES);
     assert.deepStrictEqual(byName.asset_get_format.inputSchema.properties.type.enum, TYPES);
     assert.deepStrictEqual(byName.assets_list.inputSchema.properties.type.enum, TYPES);
@@ -662,6 +663,7 @@ function tcpSession(port) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vs-assets-'));
     const put = (dir, file, j) => { fs.mkdirSync(path.join(root, dir), { recursive: true }); const p = path.join(root, dir, file); fs.writeFileSync(p, JSON.stringify(j)); return p; };
     for (const v of ['platform', 'example', 'example_1', 'example_2']) put('assets/vectors', `${v}.vec`, vecJson([[-8, 0], [8, 0], [0, 8]]));
+    put('assets/meshes', 'example_piece.vmesh', assetsLib.specFor('vmesh').example('example_piece'));
     for (const sp of assetsLib.ASSET_SPECS) {
       const p = put(sp.dir, 'example' + sp.ext, sp.example('example'));
       assert.deepStrictEqual(assetsLib.missingReferences(sp, sp.example('example'), root, path.dirname(p)), [], `${sp.type} example has missing refs`);
@@ -676,7 +678,10 @@ function tcpSession(port) {
 
   await withCli('C headers carry the symbol each C usage snippet names', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vs-csym-'));
-    for (const sp of assetsLib.ASSET_SPECS.filter((a) => a.c.usable && ['vinstr', 'vrec', 'vsmp', 'vmus', 'vsfx', 'vmesh'].includes(a.type))) {
+    fs.mkdirSync(path.join(root, 'assets/meshes'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'assets/meshes/demo_piece.vmesh'), JSON.stringify(assetsLib.specFor('vmesh').example('demo_piece')));
+    for (const sp of assetsLib.ASSET_SPECS.filter((a) => a.c.usable && ['vinstr', 'vrec', 'vsmp', 'vmus', 'vsfx', 'vmesh', 'vscene'].includes(a.type))) {
+      if (sp.type === 'vscene' && !cliHasScene) { console.log('  (skip .vscene header: this vpy_cli predates .vscene; rebuild it with run-ide.sh)'); continue; }
       fs.mkdirSync(path.join(root, sp.dir), { recursive: true });
       const src = path.join(root, sp.dir, 'demo' + sp.ext);
       fs.writeFileSync(src, JSON.stringify(sp.example('demo')));
@@ -685,6 +690,12 @@ function tcpSession(port) {
       assert.strictEqual(r.status, 0, `${sp.type}: ${r.stderr}`);
       const sym = sp.c.usage('demo').match(/\b(DEMO_[a-z]+)\b/)[1];
       assert.match(fs.readFileSync(out, 'utf-8'), new RegExp(`static const unsigned char ${sym}\\[\\]`), `${sp.type}: header lacks ${sym}`);
+      if (sp.type === 'vscene') {
+        const h = fs.readFileSync(out, 'utf-8');
+        assert.match(h, /#include "demo_piece\.h"/);
+        assert.match(h, /static const unsigned char \*const DEMO_vscene_meshes\[\] = \{\n {4}DEMO_PIECE_vmesh,/);
+        assert.match(sp.c.usage('demo'), /vpy3d_load_scene\(&s, DEMO_vscene, DEMO_vscene_meshes\)/);
+      }
     }
     fs.rmSync(root, { recursive: true, force: true });
   });
@@ -718,13 +729,13 @@ function tcpSession(port) {
     }
   });
 
-  await test('assets_list on an empty VPy project: no assets, every VPy type offered, .vmesh not usable', async () => {
+  await test('assets_list on an empty VPy project: no assets, every VPy type offered, .vmesh / .vscene not usable', async () => {
     openProjectFake(vproj.projectFile);
     const l = json(await client.callTool('assets_list', {}));
     assert.strictEqual(l.project.language, 'vpy');
     assert.deepStrictEqual(l.assets, {});
-    assert.deepStrictEqual(l.usableTypesWithNoAssets.map((t) => t.type), TYPES.filter((t) => t !== 'vmesh'));
-    assert.deepStrictEqual(l.typesNotUsableInThisLanguage.map((t) => t.type), ['vmesh']);
+    assert.deepStrictEqual(l.usableTypesWithNoAssets.map((t) => t.type), TYPES.filter((t) => t !== 'vmesh' && t !== 'vscene'));
+    assert.deepStrictEqual(l.typesNotUsableInThisLanguage.map((t) => t.type), ['vmesh', 'vscene']);
   });
 
   await withCli('asset_create (VPy): valid assets are written, compiled, opened, and come with their code', async () => {
@@ -836,6 +847,18 @@ function tcpSession(port) {
     const mesh = await mk('vmesh', 'cube', assetsLib.specFor('vmesh').example('cube'));
     assert.strictEqual(mesh.path, 'assets/meshes/cube.vmesh');
     assert.match(mesh.usage, /vpy3d_load_mesh\(&m, CUBE_vmesh\)/);
+    const noMesh = await client.callTool('asset_create', { type: 'vscene', name: 'hall', content: { items: [{ mesh: 'pillar' }] } });
+    assert.strictEqual(noMesh.isError, true);
+    assert.match(noMesh.content[0].text, /references assets that do not exist.*mesh "pillar" -> assets\/meshes\/pillar\.vmesh/s);
+    const badScene = await client.callTool('asset_create', { type: 'vscene', name: 'hall', content: { items: [{ mesh: ['cube', 'cube'], group: 'alarm', br: 0 }] } });
+    assert.strictEqual(badScene.isError, true);
+    assert.match(badScene.content[0].text, /not a valid \.vscene.*take turns along a repeat.*br is a percent.*group "alarm" is not in the scene's groups/s);
+    assert.ok(!fs.existsSync(path.join(cproj.projectDir, 'assets/scenes/hall.vscene')));
+    const scene = await mk('vscene', 'hall', { items: [{ name: 'cubes', mesh: 'cube', at: { z: 600 }, follow: { z: -1 }, repeat: { step: 2000, count: 4 } }] });
+    assert.strictEqual(scene.path, 'assets/scenes/hall.vscene');
+    assert.match(scene.validatedBy, /check-asset|IDE checks only/);
+    assert.match(scene.usage, /vpy3d_load_scene\(&s, HALL_vscene, HALL_vscene_meshes\)/);
+    assert.ok(!scene.warnings || !scene.warnings.some((w) => /Makefile/.test(w)), 'the template Makefile compiles .vscene');
     for (const v of ['walk_1', 'walk_2']) await mk('vec', v, vecJson([[-4, -8], [0, 0], [4, -8]], false));
     const inline = await client.callTool('asset_create', { type: 'vanim', name: 'wave', content: { version: '1.0', name: 'wave', frames: [{ index: 0, paths: [{ points: [{ x: 0, y: 0 }, { x: 5, y: 5 }] }] }] } });
     assert.strictEqual(inline.isError, true);
@@ -857,7 +880,7 @@ function tcpSession(port) {
     assert.strictEqual(l.project.language, 'c');
     assert.strictEqual(l.makefileCompilesAssets, true);
     assert.deepStrictEqual(l.typesNotUsableInThisLanguage.map((t) => t.type), []);
-    for (const t of ['vinstr', 'vrec', 'vsmp']) assert.ok(l.assets[t] && !l.assets[t].items[0].warning, `${t}: listed without a warning`);
+    for (const t of ['vinstr', 'vrec', 'vsmp', 'vscene']) assert.ok(l.assets[t] && !l.assets[t].items[0].warning, `${t}: listed without a warning`);
     fake.project = null;
   });
 

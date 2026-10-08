@@ -72,7 +72,7 @@ function languageOf(p: string): DocumentModel['language'] {
   if (ext === 'vpy') return 'vpy';
   if (ext === 'c' || ext === 'h') return 'c';
   if (ext === 'cpp' || ext === 'cc' || ext === 'cxx' || ext === 'hpp') return 'cpp';
-  if (['json', 'vec', 'vmus', 'vsfx', 'vanim', 'vplay'].includes(ext)) return 'json';
+  if (['json', 'vec', 'vmus', 'vsfx', 'vanim', 'vplay', 'vinstr', 'venemy', 'vmesh', 'vscene'].includes(ext)) return 'json';
   if (ext === 'asm' || ext === 's') return 'asm';
   if (ext === 'md') return 'markdown';
   return 'plaintext';

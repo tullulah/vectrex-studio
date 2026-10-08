@@ -349,7 +349,7 @@ function App() {
   const [defaultProjectLocation, setDefaultProjectLocation] = useState('');
   // New File dialog state (for .vec files that need a name)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
-  const [newFileType, setNewFileType] = useState<'vec' | 'c' | 'vpy' | 'vmus' | 'vsfx' | 'vanim' | 'vinstr' | 'venemy' | 'vmov' | 'vmesh'>('vec');
+  const [newFileType, setNewFileType] = useState<'vec' | 'c' | 'vpy' | 'vmus' | 'vsfx' | 'vanim' | 'vinstr' | 'venemy' | 'vmov' | 'vmesh' | 'vscene'>('vec');
   // EPROM Programmer dialog state
   const [showEpromDialog, setShowEpromDialog] = useState(false);
   const lastCompiledBinary = useEmulatorSettings(s => s.lastCompiledBinary);
@@ -760,7 +760,7 @@ function App() {
       // so that the compiler reads the latest BPM/vectors/SFX from disk.
       const allDirty = editorState.documents.filter(
         d => d.dirty && d.diskPath && d.uri !== (activeDoc.uri)
-          && /\.(vmus|vec|vsfx|vplay|vpy|vmesh)$/.test(d.diskPath)
+          && /\.(vmus|vec|vsfx|vplay|vpy|vmesh|vscene)$/.test(d.diskPath)
       );
       for (const dirtyDoc of allDirty) {
         try {
@@ -925,6 +925,10 @@ def loop():
         break; }
       case 'file.new.vmesh': {
         setNewFileType('vmesh');
+        setShowNewFileDialog(true);
+        break; }
+      case 'file.new.vscene': {
+        setNewFileType('vscene');
         setShowNewFileDialog(true);
         break; }
       case 'file.open': {
@@ -1864,6 +1868,7 @@ def loop():
               <MenuItem label={`${t('file.new.vinstr', 'Instrument (.vinstr)')}`} onClick={()=>{ commandExec('file.new.vinstr'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.venemy', 'Enemy (.venemy)')}`} onClick={()=>{ commandExec('file.new.venemy'); setOpenMenu(null); }} />
               <MenuItem label={`${t('file.new.vmesh', '3D Mesh (.vmesh)')}`} onClick={()=>{ commandExec('file.new.vmesh'); setOpenMenu(null); }} />
+              <MenuItem label={`${t('file.new.vscene', '3D Scene (.vscene)')}`} onClick={()=>{ commandExec('file.new.vscene'); setOpenMenu(null); }} />
             </SubMenu>
             <SubMenu label={t('file.open', 'Open')}>
               <MenuItem label={`${t('project.open', 'Project...')}	Ctrl+Shift+O`} onClick={()=>{ commandExec('project.open'); setOpenMenu(null); }} />
@@ -2124,9 +2129,9 @@ def loop():
       {/* New File Dialog */}
       <InputDialog
         isOpen={showNewFileDialog}
-        title={newFileType === 'vec' ? 'New Vector List' : newFileType === 'vmus' ? 'New Music File' : newFileType === 'vmov' ? 'New Vector Movie' : newFileType === 'vsfx' ? 'New Sound Effect' : newFileType === 'vanim' ? 'New Animation' : newFileType === 'vinstr' ? 'New Instrument' : newFileType === 'venemy' ? 'New Enemy Type' : newFileType === 'vmesh' ? 'New 3D Mesh' : 'New File'}
-        message={newFileType === 'vec' ? 'Enter a name for the vector list (without extension):' : newFileType === 'vmus' ? 'Enter a name for the music file (without extension):' : newFileType === 'vmov' ? 'Enter a name for the vector movie (without extension):' : newFileType === 'vsfx' ? 'Enter a name for the sound effect (without extension):' : newFileType === 'vanim' ? 'Enter a name for the animation (without extension):' : newFileType === 'vinstr' ? 'Enter a name for the instrument (without extension):' : newFileType === 'venemy' ? 'Enter a name for the enemy type (without extension):' : newFileType === 'vmesh' ? 'Enter a name for the mesh (without extension):' : 'Enter filename:'}
-        placeholder={newFileType === 'vec' ? 'my_sprite' : newFileType === 'vmus' ? 'my_music' : newFileType === 'vmov' ? 'my_movie' : newFileType === 'vsfx' ? 'laser' : newFileType === 'vanim' ? 'player_walk' : newFileType === 'vinstr' ? 'pluck' : newFileType === 'venemy' ? 'snowbrother' : newFileType === 'vmesh' ? 'ship' : 'filename'}
+        title={newFileType === 'vec' ? 'New Vector List' : newFileType === 'vmus' ? 'New Music File' : newFileType === 'vmov' ? 'New Vector Movie' : newFileType === 'vsfx' ? 'New Sound Effect' : newFileType === 'vanim' ? 'New Animation' : newFileType === 'vinstr' ? 'New Instrument' : newFileType === 'venemy' ? 'New Enemy Type' : newFileType === 'vmesh' ? 'New 3D Mesh' : newFileType === 'vscene' ? t('file.newScene.title', 'New 3D Scene') : 'New File'}
+        message={newFileType === 'vec' ? 'Enter a name for the vector list (without extension):' : newFileType === 'vmus' ? 'Enter a name for the music file (without extension):' : newFileType === 'vmov' ? 'Enter a name for the vector movie (without extension):' : newFileType === 'vsfx' ? 'Enter a name for the sound effect (without extension):' : newFileType === 'vanim' ? 'Enter a name for the animation (without extension):' : newFileType === 'vinstr' ? 'Enter a name for the instrument (without extension):' : newFileType === 'venemy' ? 'Enter a name for the enemy type (without extension):' : newFileType === 'vmesh' ? 'Enter a name for the mesh (without extension):' : newFileType === 'vscene' ? t('file.newScene.message', 'Enter a name for the scene (without extension):') : 'Enter filename:'}
+        placeholder={newFileType === 'vec' ? 'my_sprite' : newFileType === 'vmus' ? 'my_music' : newFileType === 'vmov' ? 'my_movie' : newFileType === 'vsfx' ? 'laser' : newFileType === 'vanim' ? 'player_walk' : newFileType === 'vinstr' ? 'pluck' : newFileType === 'venemy' ? 'snowbrother' : newFileType === 'vmesh' ? 'ship' : newFileType === 'vscene' ? 'tunnel' : 'filename'}
         defaultValue=""
         validateFn={(value) => {
           if (!value.trim()) return 'Name is required';
@@ -2430,6 +2435,44 @@ def loop():
               }
             }
             const uri = `inmemory://${name}.vmesh`;
+            openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
+          } else if (newFileType === 'vscene') {
+            // 3D scene for vpy3d (C projects): places the project's .vmesh pieces, edited in the
+            // Scene Editor. It starts with one piece: the first mesh in assets/meshes.
+            let firstMesh = '';
+            if (vpyProject?.rootDir && apiFiles?.readDirectory) {
+              try {
+                const r = await apiFiles.readDirectory(`${vpyProject.rootDir}/assets/meshes`.replace(/\\/g, '/'));
+                const names = (r?.files || []).filter((f: any) => !f.isDir && /\.vmesh$/i.test(f.name)).map((f: any) => f.name.replace(/\.vmesh$/i, '')).sort();
+                firstMesh = names[0] || '';
+              } catch { /* no meshes folder */ }
+            }
+            if (!firstMesh) {
+              window.alert(t('file.newScene.needMesh', 'A scene places .vmesh pieces from assets/meshes: create a 3D mesh first (File > New > 3D Mesh).'));
+              return;
+            }
+            const content = JSON.stringify({ name, items: [{ name: 'piece', mesh: firstMesh, at: { z: 2000 } }] }, null, 2);
+
+            if (vpyProject?.rootDir && apiFiles?.saveFile) {
+              const filePath = `${vpyProject.rootDir}/assets/scenes/${name}.vscene`.replace(/\\/g, '/');
+              try {
+                const result = await apiFiles.saveFile({ path: filePath, content });
+                if (result && !result.error) {
+                  const normPath = filePath.replace(/\\/g, '/');
+                  const uri = normPath.match(/^[A-Za-z]:\//) ? `file:///${normPath}` : `file://${normPath}`;
+                  openDocument({
+                    uri, language: 'json', content, dirty: false, diagnostics: [],
+                    diskPath: filePath, mtime: result.mtime, lastSavedContent: content
+                  });
+                  useProjectStore.getState().refreshWorkspace();
+                  logger.info('File', `Created ${filePath}`);
+                  return;
+                }
+              } catch (e) {
+                logger.warn('File', 'Failed to save to project folder, creating in-memory');
+              }
+            }
+            const uri = `inmemory://${name}.vscene`;
             openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
           } else if (newFileType === 'venemy') {
             const content = JSON.stringify({

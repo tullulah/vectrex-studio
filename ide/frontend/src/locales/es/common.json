@@ -297,5 +297,9 @@
   "dialog.newProject.languageVpy": "VPy",
   "dialog.newProject.languageC": "C (SDK)",
   "dialog.newProject.languageVpyHint": "VPy, parecido a Python: compila para el cartucho original (6809) y para los destinos ARM.",
-  "dialog.newProject.languageCHint": "C sobre el SDK (uvmc2-sdk, runtime libvpy): corre en el simulador y compila para el cartucho RP2350 y la multicart UVMC2."
+  "dialog.newProject.languageCHint": "C sobre el SDK (uvmc2-sdk, runtime libvpy): corre en el simulador y compila para el cartucho RP2350 y la multicart UVMC2.",
+  "file.new.vscene": "Escena 3D (.vscene)",
+  "file.newScene.title": "Nueva escena 3D",
+  "file.newScene.message": "Escribe un nombre para la escena (sin extensión):",
+  "file.newScene.needMesh": "Una escena coloca piezas .vmesh de assets/meshes: crea antes una malla 3D (Archivo > Nuevo > 3D Mesh)."
 }

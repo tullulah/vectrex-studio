@@ -45,12 +45,15 @@
 //! ```text
 //!   .. 2  line count
 //!          per line: u8 point count (2..255), u8 brightness percent (1..100),
-//!                    u8 flags (bit0: closed, bit1: no fog), then the points as i32 x, y, z
+//!                    u8 flags (bit0: closed, bit1: no fog, bit2: short points),
+//!                    then the points as x, y, z: i16 each when short, else i32
 //!   .. 2  occluder count
-//!          per occluder: u8 corner count (3..8), then the corners as i32 x, y, z
+//!          per occluder: u8 corner count (3..8) | 0x80 when short, then the
+//!                    corners as x, y, z, i16 or i32 the same way
 //! ```
-//! Scenery points are i32 because a room is far bigger than a model: a vertex
-//! keeps the i16 range.
+//! Scenery points may be i32 because a room is far bigger than a model (a vertex
+//! keeps the i16 range); a line or occluder whose points all fit in i16 is
+//! stored short, half the size, which counts on a cartridge that runs from RAM.
 //!
 //! ```json
 //! { "name": "throne",
@@ -324,18 +327,23 @@ pub fn compile_vmesh_file_to_bytes(path: &Path) -> Result<Vec<u8>> {
         for &i in f { out.extend_from_slice(&i.to_le_bytes()); }
     }
     if scenery {
-        let put = |out: &mut Vec<u8>, p: &[i32; 3]| for c in p { out.extend_from_slice(&c.to_le_bytes()); };
+        let short = |pts: &[[i32; 3]]| pts.iter().flatten().all(|&c| c >= i16::MIN as i32 && c <= i16::MAX as i32);
+        let put = |out: &mut Vec<u8>, pts: &[[i32; 3]], short: bool| for c in pts.iter().flatten() {
+            if short { out.extend_from_slice(&(*c as i16).to_le_bytes()); } else { out.extend_from_slice(&c.to_le_bytes()); }
+        };
         out.extend_from_slice(&(lines.len() as u16).to_le_bytes());
         for (br, flags, pts) in &lines {
+            let s = short(pts);
             out.push(pts.len() as u8);
             out.push(*br);
-            out.push(*flags);
-            for p in pts { put(&mut out, p); }
+            out.push(*flags | if s { 4 } else { 0 });
+            put(&mut out, pts, s);
         }
         out.extend_from_slice(&(occs.len() as u16).to_le_bytes());
         for o in &occs {
-            out.push(o.len() as u8);
-            for p in o { put(&mut out, p); }
+            let s = short(o);
+            out.push(o.len() as u8 | if s { 0x80 } else { 0 });
+            put(&mut out, o, s);
         }
     }
     Ok(out)
@@ -418,8 +426,18 @@ mod tests {
         assert_eq!(i32::from_le_bytes([l[5], l[6], l[7], l[8]]), -40000);
         let o = &l[5 + 3 * 12..];
         assert_eq!(u16::from_le_bytes([o[0], o[1]]), 1);     // one occluder
-        assert_eq!(o[2], 3);
-        assert_eq!(o.len(), 3 + 3 * 12);
+        assert_eq!(o[2], 3 | 0x80);                           // 3 corners, all within i16: short
+        assert_eq!(o.len(), 3 + 3 * 6);
+    }
+
+    #[test]
+    fn a_line_within_i16_is_stored_short() {
+        let b = compile_as("short", r#"{"lines":[{"points":[{"x":-32768,"y":0,"z":32767},{"x":5,"y":6}]}]}"#).unwrap();
+        let l = &b[16..];
+        assert_eq!((l[2], l[3], l[4]), (2, 100, 4));          // 2 points, 100%, short
+        assert_eq!(i16::from_le_bytes([l[5], l[6]]), -32768);
+        assert_eq!(i16::from_le_bytes([l[9], l[10]]), 32767);
+        assert_eq!(l.len(), 2 + 3 + 2 * 6 + 2);
     }
 
     #[test]
