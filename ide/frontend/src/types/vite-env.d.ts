@@ -120,6 +120,10 @@ interface TerminalAPI {
   resize: (id: number, cols: number, rows: number) => void;
   kill: (id: number) => Promise<{ ok: boolean }>;
   openLink: (url: string) => Promise<{ ok: boolean }>;
+  /** Saves the clipboard image as a temporary PNG; path is null when there is no image. */
+  pasteImage: () => Promise<{ path: string | null }>;
+  /** Absolute path of a file dropped from the OS (null for in-memory files). */
+  pathForFile: (file: File) => string | null;
   /** Batched PTY output. Returns an unsubscribe function. */
   onData: (cb: (id: number, data: string) => void) => () => void;
   /** The shell exited on its own. Returns an unsubscribe function. */

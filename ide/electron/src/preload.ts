@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Multi-language LSP: serverId selects the server ('vpy' | 'clangd'); cwd is
@@ -30,7 +30,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onRunDiagnostics: (cb: (diags: Array<{ file: string; line: number; col: number; message: string }>) => void) => ipcRenderer.on('run://diagnostics', (_e: IpcRendererEvent, diags) => cb(diags)),
   onRunStatus: (cb: (line: string) => void) => ipcRenderer.on('run://status', (_e: IpcRendererEvent, data: string) => cb(data)),
   onEmuLoaded: (cb: (info: { size: number }) => void) => ipcRenderer.on('emu://loaded', (_e: IpcRendererEvent, data) => cb(data)), // kept for backward compatibility (may be unused)
-  onCompiledBin: (cb: (payload: { base64: string; size: number; binPath: string; sFileText?: string | null; libvpyAsm?: string | null; elfBase64?: string | null; sdFiles?: Record<string, string> }) => void) => ipcRenderer.on('emu://compiledBin', (_e: IpcRendererEvent, data) => cb(data)),
+  // Returns the unsubscribe: the Emulator panel remounts with the dock layout, and a
+  // listener left behind by an unmounted panel would load (and start) every build again.
+  onCompiledBin: (cb: (payload: { base64: string; size: number; binPath: string; sFileText?: string | null; libvpyAsm?: string | null; elfBase64?: string | null; sdFiles?: Record<string, string> }) => void) => {
+    const handler = (_e: IpcRendererEvent, data: any) => cb(data);
+    ipcRenderer.on('emu://compiledBin', handler);
+    return () => { ipcRenderer.removeListener('emu://compiledBin', handler); };
+  },
   // setVectorMode legacy removed
   listSources: (args?: { limit?: number }) => ipcRenderer.invoke('list:sources', args) as Promise<{ ok?:boolean; sources?: Array<{ path:string; kind:'vpy'|'asm'; size:number; mtime:number }> }> ,
   sdSimList: () => ipcRenderer.invoke('sd:simList') as Promise<{ ok?: boolean; dir?: string; files?: string[]; previews?: Record<string, string>; error?: string }>,
@@ -541,6 +547,8 @@ contextBridge.exposeInMainWorld('terminal', {
   resize: (id: number, cols: number, rows: number) => ipcRenderer.send('terminal:resize', id, cols, rows),
   kill: (id: number) => ipcRenderer.invoke('terminal:kill', id) as Promise<{ ok: boolean }>,
   openLink: (url: string) => ipcRenderer.invoke('terminal:openLink', url) as Promise<{ ok: boolean }>,
+  pasteImage: () => ipcRenderer.invoke('terminal:pasteImage') as Promise<{ path: string | null }>,
+  pathForFile: (file: File) => { try { return webUtils.getPathForFile(file) || null; } catch { return null; } },
   onData: (cb: (id: number, data: string) => void) => {
     const handler = (_e: IpcRendererEvent, id: number, data: string) => cb(id, data);
     ipcRenderer.on('terminal://data', handler);

@@ -132,8 +132,36 @@ function copySelection(term: Terminal) {
   if (sel) navigator.clipboard?.writeText(sel).catch(() => {});
 }
 
+/** A path as one shell word (Claude Code also reads it as an attachment). */
+function shellPath(p: string): string {
+  if (terminalPlatform() === 'win32') return /\s/.test(p) ? `"${p}"` : p;
+  return p.replace(/([\s'"\\()&;|<>$`!*?[\]{}#~])/g, '\\$1');
+}
+
+/** Pastes clipboard text; with no text, a clipboard image is pasted as a temp PNG path. */
 function pasteInto(term: Terminal) {
-  navigator.clipboard?.readText().then((text) => { if (text) term.paste(text); }).catch(() => {});
+  const viaImage = () => api()?.pasteImage?.()
+    .then((r) => { if (r?.path) term.paste(shellPath(r.path) + ' '); })
+    .catch(() => {});
+  if (!navigator.clipboard) { viaImage(); return; }
+  navigator.clipboard.readText()
+    .then((text) => { if (text) term.paste(text); else viaImage(); })
+    .catch(() => viaImage());
+}
+
+/** Files dropped from the OS are pasted as their paths (images become Claude attachments). */
+function installDrop(term: Terminal, host: HTMLElement) {
+  host.addEventListener('dragover', (e) => {
+    if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
+  });
+  host.addEventListener('drop', (e) => {
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (!files.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const paths = files.map((f) => api()?.pathForFile?.(f)).filter((p): p is string => !!p);
+    if (paths.length) { term.paste(paths.map(shellPath).join(' ') + ' '); term.focus(); }
+  });
 }
 
 /**
@@ -200,6 +228,7 @@ function createRuntime(key: string, cwd?: string, command?: string): Runtime {
 
   const rt: Runtime = { term, fit, host, opened: false, starting: false, ptyId: null, cwd, command, disposed: false };
   term.attachCustomKeyEventHandler((e) => clipboardKeyHandler(term, e));
+  installDrop(term, host);
   term.onData((d) => { if (rt.ptyId != null) api()?.write(rt.ptyId, d); });
   term.onResize(({ cols, rows }) => { if (rt.ptyId != null) api()?.resize(rt.ptyId, cols, rows); });
   return rt;

@@ -14,8 +14,9 @@
 //           terminal://exit  (id, code)
 
 import { withShellIntegration } from './shellIntegration.js';
-import { app, BrowserWindow, ipcMain, shell, WebContents } from 'electron';
-import { existsSync, mkdirSync, statSync } from 'fs';
+import { app, BrowserWindow, clipboard, ipcMain, shell, WebContents } from 'electron';
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'fs';
+import { join } from 'path';
 import { defaultProjectsDir } from './projectTemplates.js';
 import * as os from 'os';
 import type { IPty } from '@lydell/node-pty';
@@ -237,6 +238,30 @@ export function registerTerminalHandlers(getWindow: () => BrowserWindow | null) 
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return { ok: false };
     await shell.openExternal(parsed.toString());
     return { ok: true };
+  });
+
+  // Paste of a clipboard image (a screenshot): the PTY only carries text, so the image
+  // is saved as a PNG and its path is pasted. Claude Code attaches a pasted image path.
+  ipcMain.handle('terminal:pasteImage', (e) => {
+    if (!allowedSender(e.sender)) return { path: null };
+    const img = clipboard.readImage();
+    if (img.isEmpty()) return { path: null };
+    const dir = join(os.tmpdir(), 'vectrex-studio-paste');
+    try {
+      mkdirSync(dir, { recursive: true });
+      // Keep the folder small: images older than a day are no longer needed.
+      const dayAgo = Date.now() - 24 * 3600 * 1000;
+      for (const f of readdirSync(dir)) {
+        const fp = join(dir, f);
+        try { if (statSync(fp).mtimeMs < dayAgo) unlinkSync(fp); } catch { /* ignore */ }
+      }
+      const file = join(dir, `image-${Date.now()}.png`);
+      writeFileSync(file, img.toPNG());
+      return { path: file };
+    } catch (err) {
+      console.warn('[TERMINAL] could not save the pasted image:', err);
+      return { path: null };
+    }
   });
 
   app.on('before-quit', () => killAllTerminals());

@@ -345,6 +345,8 @@ The tool list is served by the IDE itself, so it always matches what the IDE imp
 
 **Claude Code in the integrated terminal.** `claude` typed in the IDE's terminal gets these tools, plus the server's *instructions* (`ide/electron/src/mcp/instructions.ts`): they open with a mandatory checklist: call `ide_get_context` first (it carries the project's assets and its language API), make all art, sound, levels and animation assets with `asset_create`, look the API up with `api_reference` instead of searching the SDK or compiler sources, and build and run with `ide_run`. They also say what VPy / "the SDK" / the targets mean, and which tool equals F7 / F5 / Shift+F5.
 
+**Images in the terminal.** The terminal carries only text, so pasting a clipboard image (Cmd+V on macOS, Ctrl+Shift+V or Ctrl+V on Windows) saves it as a PNG in the system temp folder (`vectrex-studio-paste/`, cleared after a day) and pastes its path; Claude Code attaches a pasted image path. Files dragged onto the terminal are pasted as their paths the same way.
+
 | Group | Tools |
 |-------|-------|
 | **IDE** | `ide_get_context` (open project, kind, SDK, selected target, buildable targets, what each key would do, emulator, Arm toolchain, IDE version; with a project open also its `assets` with the code that uses each one, and `api`: the language's calls on the selected target plus how-to recipes), `ide_run` (= F7 / F5 / Shift+F5 / Shift+F7, awaited, with the result), `settings_set_build_target` |
