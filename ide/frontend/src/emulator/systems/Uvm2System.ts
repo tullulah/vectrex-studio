@@ -370,6 +370,7 @@ export class Uvm2System implements ISystem, IBus {
   private sdLeerDesdeAddr = 0;
   private sdAbrirAddr = 0;
   private sdSeguirAddr = 0;
+  private sdSaltarAddr = 0;
   private sdErrorAddr = 0;
   /** Registros del DMA. DIECISEIS CANALES y no uno: el stream del bus se queda
    * con el 0 y el jack coge el mas alto que encuentre libre. */
@@ -708,6 +709,7 @@ export class Uvm2System implements ISystem, IBus {
     this.sdLeerDesdeAddr = (sim.get('uvm2_sd_read_from') ?? 0) & ~1;
     this.sdAbrirAddr  = (sim.get('uvm2_sd_open')  ?? 0) & ~1;
     this.sdSeguirAddr = (sim.get('uvm2_sd_next') ?? 0) & ~1;
+    this.sdSaltarAddr = (sim.get('uvm2_sd_seek') ?? 0) & ~1;
     this.sdErrorAddr = (sim.get('uvm2_sd_error') ?? 0) >>> 0;
     /* EL PRINCIPIO DEL FRAME ES DONDE SE MIRAN LAS CUENTAS DEL ANTERIOR. Los contadores
      * vivos los pone a cero `uvm2_frame_begin`, asi que leerlos en cualquier otro momento
@@ -860,6 +862,22 @@ export class Uvm2System implements ISystem, IBus {
     cpu.setReg(15, cpu.getReg(14) & ~1);
   }
 
+  /** `uvm2_sd_seek(f, pos)`: el siguiente uvm2_sd_next lee desde `pos` (como mucho, el tamano).
+   *  Se atiende aqui por lo mismo que abrir y seguir: el f_lseek de verdad andaria sobre un FIL
+   *  que en el emulador no existe. */
+  private atiendeSdSaltar(cpu: Thumb2): void {
+    const st  = cpu.getReg(0) >>> 0;
+    const pos = cpu.getReg(1) >>> 0;
+    const len = this.read32((st + 12) >>> 0) >>> 0;
+    const ok = !!this.sdAbiertos[this.read32(st >>> 0) >>> 0] && pos <= len;
+    if (ok) {
+      for (let i = 0; i < 4; i++) this.write8((st + 8 + i) >>> 0, (pos >>> (i * 8)) & 0xFF);
+      for (let i = 0; i < 4; i++) this.write8((st + 16 + i) >>> 0, i ? 0 : 1);
+    }
+    cpu.setReg(0, ok ? 1 : 0);
+    cpu.setReg(15, cpu.getReg(14) & ~1);
+  }
+
   /** Una imagen FAT (superfloppy o con MBR) que la BIOS lee por bloques: es la tarjeta. */
   setSdImagen(img: Uint8Array): void {
     this.sdImagen = img;
@@ -880,7 +898,7 @@ export class Uvm2System implements ISystem, IBus {
      * la SD se sirve por bloques (sd_hw_*), asi que esas dos trampas no se aplican. */
     this.sdLeerAddr = 0;
     this.sdLeerDesdeAddr = 0;
-    this.sdAbrirAddr = 0; this.sdSeguirAddr = 0;
+    this.sdAbrirAddr = 0; this.sdSeguirAddr = 0; this.sdSaltarAddr = 0;
     this.resets = 0;
     this.clocks.fill(0);
     this.bootram.fill(0);
@@ -1011,6 +1029,7 @@ export class Uvm2System implements ISystem, IBus {
     if (this.sdLeerDesdeAddr && pc1 === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu1); return 1; }
     if (this.sdAbrirAddr  && pc1 === this.sdAbrirAddr)  { this.atiendeSdAbrir(this.cpu1);  return 1; }
     if (this.sdSeguirAddr && pc1 === this.sdSeguirAddr) { this.atiendeSdSeguir(this.cpu1); return 1; }
+    if (this.sdSaltarAddr && pc1 === this.sdSaltarAddr) { this.atiendeSdSaltar(this.cpu1); return 1; }
     if (this.execAddr && pc1 === this.execAddr) { this.execVuelta[1] = this.cpu1.getReg(14) & ~1; this.enLista++; }
     else if (this.execVuelta[1] && pc1 === this.execVuelta[1]) { this.execVuelta[1] = 0; this.enLista--; }
     if (this.sdHwInitAddr && pc1 === this.sdHwInitAddr) { this.atiendeSdHwInit(this.cpu1); return 1; }
@@ -1829,6 +1848,7 @@ export class Uvm2System implements ISystem, IBus {
       if (this.sdLeerDesdeAddr && pc === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu); continue; }
       if (this.sdAbrirAddr  && pc === this.sdAbrirAddr)  { this.atiendeSdAbrir(this.cpu);  continue; }
       if (this.sdSeguirAddr && pc === this.sdSeguirAddr) { this.atiendeSdSeguir(this.cpu); continue; }
+      if (this.sdSaltarAddr && pc === this.sdSaltarAddr) { this.atiendeSdSaltar(this.cpu); continue; }
       /* VOLCADO DE REGISTROS EN UN PC (depuracion): VOLCAR=0x2000362c imprime r0-r12, lr y
        * 40 bytes en [r8] las primeras 4 veces que core 0 pasa por ahi. Sin esto, saber que
        * calculo se tuerce dentro del emulador es adivinar sobre el desensamblado. */
