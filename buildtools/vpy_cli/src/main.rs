@@ -2082,14 +2082,35 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     let unified = program.unified;
     println!("  {} Parsed {} modules, unified {} items", "✓".green(), program.module_count, unified.items.len());
 
-    println!("\n{}", "Phase 3: UVM2 ARM Thumb2 Codegen".bright_cyan().bold());
+    // `[uvm2] backend = "c"`: the program as C, compiled by gcc against libvpy (vpy.c), the
+    // runtime C games use -- code about a third the size of the ARM backend's.
+    let c_backend = vpyproj_uvm2_key(input, "backend").as_deref() == Some("c");
     let title = project_dir.file_name().and_then(|n| n.to_str()).unwrap_or("UVM2 Game");
     let bank_config = vpy_codegen::BankConfig::single_bank();
     let assets = discover_assets(&source_path);
-    let generated = vpy_codegen::generate_from_module_with_target(
-        &unified, &bank_config, title, &assets, &vpy_codegen::Target::Uvm2,
-    ).context("UVM2 codegen failed")?;
-    println!("  {} Generated {} bytes of ARM assembly", "✓".green(), generated.asm_source.len());
+    let generated = if c_backend {
+        println!("\n{}", "Phase 3: UVM2 C codegen (libvpy)".bright_cyan().bold());
+        vpy_codegen::known_functions::register(&unified);
+        vpy_codegen::validate::check_array_literals(&unified).map_err(|e| anyhow::anyhow!("{e}"))?;
+        vpy_codegen::arm::three_d::check(&unified, &assets, "uvm2").map_err(|e| anyhow::anyhow!("{e}"))?;
+        vpy_codegen::validate::check_array_types(&unified, "uvm2").map_err(|e| anyhow::anyhow!("{e}"))?;
+        let c = vpy_codegen::cgen::generate_c(&unified, &assets)
+            .map_err(|e| anyhow::anyhow!("UVM2 C codegen failed:\n{e}"))?;
+        println!("  {} Generated {} bytes of C", "✓".green(), c.c_source.len());
+        vpy_codegen::GeneratedASM {
+            asm_source: c.c_source,
+            bank_config: bank_config.clone(),
+            symbols: std::collections::HashMap::new(),
+            external_refs: Vec::new(),
+        }
+    } else {
+        println!("\n{}", "Phase 3: UVM2 ARM Thumb2 Codegen".bright_cyan().bold());
+        let g = vpy_codegen::generate_from_module_with_target(
+            &unified, &bank_config, title, &assets, &vpy_codegen::Target::Uvm2,
+        ).context("UVM2 codegen failed")?;
+        println!("  {} Generated {} bytes of ARM assembly", "✓".green(), g.asm_source.len());
+        g
+    };
 
     let build_dir = project_dir.join("build");
     std::fs::create_dir_all(&build_dir)?;
@@ -2099,7 +2120,7 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         .or_else(|| vpyproj_project_name(input))
         .unwrap_or_else(|| project_dir.file_name().and_then(|n| n.to_str()).unwrap_or("output").to_string());
 
-    let s_path   = build_dir.join(format!("{}.S",   project_name));
+    let s_path   = build_dir.join(format!("{}.{}", project_name, if c_backend { "c" } else { "S" }));
     let asm_path = build_dir.join(format!("{}.asm", project_name));
     // El .o y el .elf los produce cmake dentro de build/uvm2/, no nosotros.
 
@@ -2177,6 +2198,10 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         let bridge = build_dir.join("vpy3d_bridge.c");
         std::fs::write(&bridge, VPY3D_BRIDGE_C)
             .with_context(|| format!("Failed to write {}", bridge.display()))?;
+        if c_backend {
+            // libvpy is linked: it gives vpy3d its draw hook, sine and font
+            c_defs.push("VPYX_LIBVPY".to_string());
+        }
         // 3D text needs libvpy's font, which lives inside vpy.c (not linkable here:
         // its builtins share names with the VPy runtime). The bridge #includes the
         // font tables cut out of the pinned SDK's vpy.c.
@@ -2220,6 +2245,23 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         // from their Makefile); without it the image links the host stub and the jack is mute.
         c_defs.push("VPY_RP2350".to_string());
         println!("  {} jukebox: music and effects off the SD card", "✓".green());
+    }
+    if c_backend {
+        // libvpy: vpy_run, the 2D builtins, the font, the stroke buffer
+        let vpy_c = sdk_root.join("vpy-c");
+        game_srcs.push(vpy_c.join("vpy.c"));
+        game_incs.push(vpy_c.join("include"));
+        game_incs.push(vpy_c.clone());
+        // vectrex/vectrexInterface.h: the SDK's names for the beam and the buttons, which
+        // the uvm2-sdk implements (C games get it the same way)
+        game_incs.push(sdk_root.join("pitrex-sim").join("include"));
+        // ...and sdk_rp2350.c implements them on this cartridge (uvm2.mk adds it to every C game)
+        game_srcs.push(sdk_root.join("rp2350-sdk").join("sdk_rp2350.c"));
+        game_incs.push(sdk_root.join("rp2350-sdk"));
+        if !c_defs.iter().any(|d| d == "VPY_RP2350") {
+            c_defs.push("VPY_RP2350".to_string());
+        }
+        println!("  {} libvpy: {}", "✓".green(), vpy_c.join("vpy.c").display());
     }
     let join_paths = |v: &[PathBuf]| v.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(";");
 
@@ -2287,7 +2329,13 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
             // proyectos... vpy tambien. hay que unificarlo todo"). Antes el doble nucleo era
             // una variable de entorno que nadie ponia y el .um2 de VPy salia por el camino
             // de un nucleo; ahora la base es la misma que uvm2.mk da a los proyectos en C.
-            let mut defs = String::from("UVM2_STEP_OWNS_INIT;UVM2_DUAL_CORE;UVM2_PIO_STREAM;UVM2_SUBUNITS");
+            // The ARM backend's runtime brings the machine up itself (UVM2_STEP_OWNS_INIT); with
+            // the C backend libvpy is a C game's runtime, and the SDK's main() does it, core 1 too.
+            let mut defs = String::from(if c_backend {
+                "UVM2_DUAL_CORE;UVM2_PIO_STREAM;UVM2_SUBUNITS"
+            } else {
+                "UVM2_STEP_OWNS_INIT;UVM2_DUAL_CORE;UVM2_PIO_STREAM;UVM2_SUBUNITS"
+            });
             for d in &c_defs {
                 defs.push(';'); defs.push_str(d);
             }
@@ -2518,6 +2566,28 @@ fn write_bundled_rp2350_ram_ld(build_dir: &Path) -> anyhow::Result<PathBuf> {
 /// tenia ningun sitio donde apuntarla, asi que TODO proyecto VPy compilaba con el defecto
 /// del SDK (160) y salia un 26% mas grande de lo medido — SnowBros se salia de la pantalla.
 /// La escotilla `UVM2_EXTRA_DEFS` del entorno no sirve para esto: no viaja con el proyecto.
+/// A key of the `[uvm2]` section of a .vpyproj (`backend = "c"`).
+fn vpyproj_uvm2_key(vpyproj: &Path, key: &str) -> Option<String> {
+    let content = std::fs::read_to_string(vpyproj).ok()?;
+    let mut in_uvm2 = false;
+    for line in content.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            in_uvm2 = t == "[uvm2]";
+            continue;
+        }
+        if !in_uvm2 {
+            continue;
+        }
+        if let Some((k, v)) = t.split_once('=') {
+            if k.trim() == key {
+                return Some(v.trim().trim_matches('"').trim().to_string());
+            }
+        }
+    }
+    None
+}
+
 fn vpyproj_uvm2_defs(vpyproj: &Path) -> Option<String> {
     let content = std::fs::read_to_string(vpyproj).ok()?;
     let mut en_uvm2 = false;

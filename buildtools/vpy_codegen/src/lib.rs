@@ -8,6 +8,7 @@
 
 pub mod m6809;
 pub mod arm;
+pub mod cgen;
 pub mod pitrex;
 pub mod uvm2;
 pub mod vecres;

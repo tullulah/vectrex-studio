@@ -44,7 +44,8 @@
 /* Arguments 5 and up of a vpyx_* call. */
 int32_t vpyx_args[12];
 
-/* ---- what vpy3d calls in libvpy ---------------------------------------- */
+/* ---- what vpy3d calls in libvpy (when libvpy itself is not linked) ------- */
+#ifndef VPYX_LIBVPY
 
 void uvm2_draw_reset(void);
 void uvm2_draw_intensity(int brightness);
@@ -89,6 +90,7 @@ int vpy_cos_q14(int a) { return vpy_sin_q14(a + 1024); }
    (the glyph tables, font_glyph and vpy_font_next) */
 #include "vpy3d_font.inc"
 const signed char *vpy_font_glyph(int c) { return font_glyph((unsigned char)c); }
+#endif /* VPYX_LIBVPY */
 
 /* ---- transforms ----------------------------------------------------------- */
 

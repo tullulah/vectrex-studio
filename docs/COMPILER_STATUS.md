@@ -81,6 +81,10 @@ runs on the BIOS's second core, so tempo is independent of the draw load.
 
 **Asset pipeline:** `.vec` vector lists, `.vanim` animations, `.vmus` music (PSG AY-3-8912), `.vsfx` sound effects, `.vplay` levels.
 
+### The C backend (uvm2)
+
+`[uvm2] backend = "c"` in the `.vpyproj` compiles the program for the UVMC2 as C instead of ARM assembly (`vpy_codegen/src/cgen.rs`): gcc builds it at `-Os` against libvpy (the SDK's `vpy.c`, `vpy_run(setup, loop)`), the runtime C games use, and the 3D/effects/jukebox builtins go to the same C bridge as from the ARM backend. A `.um2` runs entirely from the cartridge's SRAM, code included, and the ARM backend's stack-machine code is about three times the size of the same game written in C; the Return of the Jedi port's Episode VI part is 224 KB of text this way against 323 KB. The semantics are the ARM backend's (32-bit wrapping integers, truncating `/`, `for` re-testing `< end`, typed arrays, strings and functions as addresses); the 2D builtins are libvpy's own, so text and vectors draw exactly as in a C game. Builtins libvpy has no counterpart for (levels, enemies, animations, samples, …) are a compile error with this backend for now.
+
 ### Known issues
 
 - Cross-bank symbol resolution incomplete for configs larger than 4×16 KB

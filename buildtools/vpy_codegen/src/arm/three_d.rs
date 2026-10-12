@@ -471,11 +471,38 @@ enum CArg<'a> {
     Sym(String),
 }
 
-/// Code for a 3D builtin call (None: `info` is not one). Result in r0.
-pub fn emit_call(
-    info: &CallInfo,
-    var_addrs: &std::collections::HashMap<String, u32>,
-) -> Option<Result<String, String>> {
+/// A builtin call lowered to its C function and arguments, for any backend.
+pub enum Lowered<'a> {
+    /// `MESH("name")`: no call, the slot number itself.
+    Slot(i64),
+    /// A call of `c_fn` with these arguments (r0-r3, then `vpyx_args[]`).
+    Call(&'static str, Vec<CPart<'a>>),
+}
+
+/// One C argument of a lowered builtin call.
+pub enum CPart<'a> {
+    Expr(&'a Expr),
+    Imm(i64),
+    /// An asset's data, by name: the backend names its symbol.
+    Data(AssetData, String),
+}
+
+/// Which data of an asset an argument passes.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum AssetData {
+    /// a `.vmesh` image
+    Mesh,
+    /// a `.vscene` image
+    Scene,
+    /// the table of the mesh images a `.vscene` places
+    SceneMeshes,
+    /// a `.vec` image (libvpy's position-independent one)
+    Vec,
+}
+
+/// The builtin `info` calls, lowered (None: not a builtin of this table, or the
+/// program defines a function of that name).
+pub fn lower_call(info: &CallInfo) -> Option<Result<Lowered<'_>, String>> {
     if crate::known_functions::is_defined(&info.name) {
         return None; // the program's own function of that name
     }
@@ -485,37 +512,61 @@ pub fn emit_call(
         let Some(Expr::StringLit(s)) = info.args.first() else {
             return Some(Err(format!("line {}: `MESH()` needs the mesh's name as a string literal", info.source_line)));
         };
-        return Some(Ok(format!("    ldr     r0, ={}\n", slot(Mesh, s))));
+        return Some(Ok(Lowered::Slot(slot(Mesh, s) as i64)));
     }
-    let mut c_args: Vec<CArg> = Vec::new();
+    let mut c_args: Vec<CPart> = Vec::new();
     for (i, arg) in b.args.iter().enumerate() {
         let Some(e) = info.args.get(i) else {
-            c_args.push(CArg::Imm(if *arg == OptMesh { -1 } else { 0 }));
+            c_args.push(CPart::Imm(if *arg == OptMesh { -1 } else { 0 }));
             continue;
         };
         match (arg, e) {
-            (Mesh | OptMesh | Scene, Expr::StringLit(s)) => c_args.push(CArg::Imm(slot(*arg, s) as i64)),
-            (Vector, Expr::StringLit(s)) => c_args.push(CArg::Sym(format!("_{}_VEC", sym(s)))),
+            (Mesh | OptMesh | Scene, Expr::StringLit(s)) => c_args.push(CPart::Imm(slot(*arg, s) as i64)),
+            (Vector, Expr::StringLit(s)) => c_args.push(CPart::Data(AssetData::Vec, s.clone())),
             (MeshData, Expr::StringLit(s)) => {
-                c_args.push(CArg::Imm(slot(*arg, s) as i64));
-                c_args.push(CArg::Sym(mesh_symbol(s)));
+                c_args.push(CPart::Imm(slot(*arg, s) as i64));
+                c_args.push(CPart::Data(AssetData::Mesh, s.clone()));
             }
             (SceneData, Expr::StringLit(s)) => {
-                c_args.push(CArg::Imm(slot(*arg, s) as i64));
-                c_args.push(CArg::Sym(scene_symbol(s)));
-                c_args.push(CArg::Sym(format!("{}_MESHES", scene_symbol(s))));
+                c_args.push(CPart::Imm(slot(*arg, s) as i64));
+                c_args.push(CPart::Data(AssetData::Scene, s.clone()));
+                c_args.push(CPart::Data(AssetData::SceneMeshes, s.clone()));
             }
-            (Mesh | OptMesh, _) => c_args.push(CArg::Expr(e)),
-            (Scene | MeshData | SceneData, _) => {
+            (Mesh | OptMesh, _) => c_args.push(CPart::Expr(e)),
+            (Scene | MeshData | SceneData | Vector, _) => {
                 return Some(Err(format!(
                     "line {}: `{}()` needs the asset's name as a string literal",
                     info.source_line, b.name
                 )))
             }
-            _ => c_args.push(CArg::Expr(e)),
+            _ => c_args.push(CPart::Expr(e)),
         }
     }
-    Some(emit_c_call(b.c_fn, &c_args, var_addrs))
+    Some(Ok(Lowered::Call(b.c_fn, c_args)))
+}
+
+/// Code for a 3D builtin call (None: `info` is not one). Result in r0.
+pub fn emit_call(
+    info: &CallInfo,
+    var_addrs: &std::collections::HashMap<String, u32>,
+) -> Option<Result<String, String>> {
+    let (c_fn, parts) = match lower_call(info)? {
+        Err(e) => return Some(Err(e)),
+        Ok(Lowered::Slot(n)) => return Some(Ok(format!("    ldr     r0, ={n}\n"))),
+        Ok(Lowered::Call(f, parts)) => (f, parts),
+    };
+    let c_args: Vec<CArg> = parts
+        .into_iter()
+        .map(|p| match p {
+            CPart::Expr(e) => CArg::Expr(e),
+            CPart::Imm(n) => CArg::Imm(n),
+            CPart::Data(AssetData::Vec, s) => CArg::Sym(format!("_{}_VEC", sym(&s))),
+            CPart::Data(AssetData::Mesh, s) => CArg::Sym(mesh_symbol(&s)),
+            CPart::Data(AssetData::Scene, s) => CArg::Sym(scene_symbol(&s)),
+            CPart::Data(AssetData::SceneMeshes, s) => CArg::Sym(format!("{}_MESHES", scene_symbol(&s))),
+        })
+        .collect();
+    Some(emit_c_call(c_fn, &c_args, var_addrs))
 }
 
 /// Evaluate `args`, pass them per the AAPCS (r0-r3, then `vpyx_args[]`) and call
