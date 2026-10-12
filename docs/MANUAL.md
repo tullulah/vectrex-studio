@@ -908,6 +908,9 @@ string literal and must exist (a missing one is a compile error).
 | `OCCL_LINE(ax, ay, az, bx, by, bz, brightness)` | A world line hidden by the occluders added so far |
 | `OCCL_MESH("name", xf)` | Add a loaded mesh placed by `xf` as an occluder: it hides what is drawn after it |
 | `OCCL_ADD(corners, n)` | Add a convex occluder of `n` (3..8) corners; `corners` is an `i32` array of `n` points (x, y, z) |
+| `RAY_MESH(out, "mesh", xf, ox, oy, oz, dx, dy, dz, max_dist)` | The first face of a loaded mesh placed by `xf` that the ray from (ox, oy, oz) along (dx, dy, dz) meets within `max_dist`: its index, or -1. `out` (an `i32` array of 7) gets the hit point, the face's normal (Q14) and the distance |
+| `MARKS_CLEAR(k)` / `MARKS_ADD(k, xf, x, y, z, nx, ny, nz)` | Damage marks, set `k` (0..3; raise `VPYX_MARK_SETS` in `[uvm2] defs`): forget them / add a hit at (x, y, z) with face normal (nx, ny, nz) on the object placed by `xf` (what `RAY_MESH` gives). They turn and move with the object |
+| `MARKS_DRAW(k, xf, radius, brightness[, style])` | Draw set `k` on the object placed by `xf`: style 0 a scorch ring, 1 a crack; draw right after the object, before adding it as an occluder |
 | `FOG(brightness, x, y, z, full_until, gone_at)` | `brightness` faded by the distance of (x, y, z) from the camera: full up to `full_until`, 0 from `gone_at` |
 | `SCENERY_FOG(full_until, gone_at)` | The same fade for the lines of `.vmesh` scenery (0, 0 = off) |
 
@@ -966,7 +969,7 @@ body number; `SOFT_STEP()` and `SOFT_DRAW(body, …)` once per frame.
 
 The pool sizes of these layers (`VPYFX_MAX`, `VPYSOFT_MAX_POINTS`, `VPYSOFT_MAX_SPRINGS`,
 `VPYB_MAX_BONES`) go in the project's `[uvm2] defs`. Not available yet from VPy: 3D text,
-damage marks, hit tests (`ray_mesh`), terrain, and bone animation clips.
+terrain, and bone animation clips.
 
 ### SD launcher (ARM only)
 

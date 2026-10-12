@@ -132,6 +132,11 @@ const BUILTINS: &[Builtin] = &[
     Builtin { name: "OCCL_LINE", c_fn: "vpyx_occl_line", args: &[Int, Int, Int, Int, Int, Int, Int], optional: 0, group: Core },
     Builtin { name: "OCCL_MESH", c_fn: "vpyx_occl_add_mesh", args: &[Mesh, Xf], optional: 0, group: Core },
     Builtin { name: "OCCL_ADD", c_fn: "vpyx_occl_add", args: &[Words(9), Int], optional: 0, group: Core },
+    // a ray against a placed mesh; damage marks that turn with their object
+    Builtin { name: "RAY_MESH", c_fn: "vpyx_ray_mesh", args: &[Words(7), Mesh, Xf, Int, Int, Int, Int, Int, Int, Int], optional: 0, group: Core },
+    Builtin { name: "MARKS_CLEAR", c_fn: "vpyx_marks_clear", args: &[Int], optional: 0, group: Core },
+    Builtin { name: "MARKS_ADD", c_fn: "vpyx_marks_add", args: &[Int, Xf, Int, Int, Int, Int, Int, Int], optional: 0, group: Core },
+    Builtin { name: "MARKS_DRAW", c_fn: "vpyx_marks_draw", args: &[Int, Xf, Int, Int, Int], optional: 1, group: Core },
     Builtin { name: "FOG", c_fn: "vpyx_fog", args: &[Int, Int, Int, Int, Int, Int], optional: 0, group: Core },
     Builtin { name: "SCENERY_FOG", c_fn: "vpyx_set_scenery_fog", args: &[Int, Int], optional: 0, group: Core },
     // effects (vpyfx): pieces that fly, fall, bounce and fade

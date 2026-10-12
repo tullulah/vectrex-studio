@@ -219,6 +219,40 @@ int vpyx_fog(int br, int32_t x, int32_t y, int32_t z)
 }
 void vpyx_set_scenery_fog(int32_t full_until, int32_t gone_at) { vpy3d_set_scenery_fog(full_until, gone_at); }
 
+/* the first face of mesh i placed by xf that the ray from o along d meets within
+   max_dist: its index, or -1. out = { x, y, z, nx, ny, nz, dist }: the hit point,
+   the face's normal (Q14, towards the ray), how far */
+int vpyx_ray_mesh(int32_t *out, int i, const vpy_xf *xf, int32_t ox)
+{
+    vpy3d_hit h;
+    const int face = vpy3d_ray_mesh(&s_mesh[i], xf, ox, vpyx_args[0], vpyx_args[1],
+                                    vpyx_args[2], vpyx_args[3], vpyx_args[4], vpyx_args[5], &h);
+    if (face >= 0) {
+        out[0] = h.x; out[1] = h.y; out[2] = h.z;
+        out[3] = h.nx; out[4] = h.ny; out[5] = h.nz; out[6] = h.dist;
+    }
+    return face;
+}
+
+/* damage marks: set k (0 .. VPYX_MARK_SETS - 1) belongs to one object */
+#ifndef VPYX_MARK_SETS
+#define VPYX_MARK_SETS 4
+#endif
+static vpy3d_marks s_marks[VPYX_MARK_SETS];
+static vpy3d_marks *marks(int k) { return k >= 0 && k < VPYX_MARK_SETS ? &s_marks[k] : 0; }
+
+void vpyx_marks_clear(int k) { if (marks(k)) vpy3d_marks_clear(marks(k)); }
+/* a hit at (x, y, z), face normal (nx, ny, nz), on the object placed by xf */
+void vpyx_marks_add(int k, const vpy_xf *xf, int32_t x, int32_t y)
+{
+    if (marks(k)) vpy3d_marks_add(marks(k), xf, x, y, vpyx_args[0], vpyx_args[1], vpyx_args[2], vpyx_args[3]);
+}
+/* style: 0 a scorch ring, 1 a crack; how many were drawn */
+int vpyx_marks_draw(int k, const vpy_xf *xf, int32_t radius, int br)
+{
+    return marks(k) ? vpy3d_marks_draw(marks(k), xf, radius, br, vpyx_args[0]) : 0;
+}
+
 /* ---- effects (vpyfx) ---------------------------------------------------- */
 #ifdef VPYX_FX
 #define A(i) vpyx_args[i]
