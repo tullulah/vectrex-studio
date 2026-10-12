@@ -44,6 +44,9 @@ struct Gen<'a> {
     consts: HashMap<String, i64>,
     globals: HashMap<String, Global>,
     functions: HashMap<String, usize>,
+    /// a struct's field arrays (`TIE__X`, `TIE__Y`, ...) put back together as one C array of
+    /// structs: field array → (struct array, member)
+    aos: HashMap<String, (String, String)>,
     frames: BTreeMap<String, Frame>,
     /// the slot names (upper case) of the function being written
     cur_slots: BTreeSet<String>,
@@ -237,6 +240,9 @@ impl<'a> Gen<'a> {
     fn array_access(&mut self, target: &Expr, index: &str) -> Result<(String, bool), String> {
         if let Expr::Ident(id) = target {
             if !self.is_local(&id.name) {
+                if let Some((base, member)) = self.aos.get(&up(&id.name)) {
+                    return Ok((format!("G_{base}[{index}].{member}"), false));
+                }
                 match self.globals.get(&up(&id.name)) {
                     Some(Global::Array { .. }) => return Ok((format!("G_{}[{index}]", up(&id.name)), false)),
                     Some(Global::Strings { .. }) => return Ok((format!("G_{}[{index}]", up(&id.name)), true)),
@@ -785,6 +791,7 @@ pub fn generate_c(module: &Module, assets: &[AssetInfo]) -> Result<GeneratedC, S
         consts,
         globals: HashMap::new(),
         functions: HashMap::new(),
+        aos: HashMap::new(),
         frames,
         cur_slots: BTreeSet::new(),
         vecs: BTreeSet::new(),
@@ -818,6 +825,74 @@ pub fn generate_c(module: &Module, assets: &[AssetInfo]) -> Result<GeneratedC, S
         }
     }
 
+    // A struct's fields were lowered to one array each (`tie[i].x` -> `TIE__X[i]`): every field
+    // then needs its own base address. Put them back as one array of C structs -- one base,
+    // fixed offsets, as the C game has them -- when no field array is used as a whole.
+    let mut groups: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
+    {
+        let (mut whole, mut indexed) = (HashMap::<String, usize>::new(), HashMap::<String, usize>::new());
+        struct Uses<'u> {
+            whole: &'u mut HashMap<String, usize>,
+            indexed: &'u mut HashMap<String, usize>,
+        }
+        impl<'a, 'u> crate::m6809::ast_walk::Visitor<'a> for Uses<'u> {
+            fn stmt(&mut self, s: &'a Stmt) {
+                let t = match s {
+                    Stmt::Assign { target: AssignTarget::Index { target, .. }, .. }
+                    | Stmt::CompoundAssign { target: AssignTarget::Index { target, .. }, .. } => Some(&**target),
+                    Stmt::ForIn { iterable, .. } => Some(iterable),
+                    _ => None,
+                };
+                if let Some(Expr::Ident(id)) = t {
+                    *self.indexed.entry(up(&id.name)).or_default() += 1;
+                }
+            }
+            fn expr(&mut self, e: &'a Expr) {
+                match e {
+                    Expr::Ident(id) => *self.whole.entry(up(&id.name)).or_default() += 1,
+                    Expr::Index { target, .. } => {
+                        if let Expr::Ident(id) = &**target {
+                            *self.indexed.entry(up(&id.name)).or_default() += 1;
+                        }
+                    }
+                    Expr::Call(c) if c.name.eq_ignore_ascii_case("len") => {
+                        if let Some(Expr::Ident(id)) = c.args.first() {
+                            *self.indexed.entry(up(&id.name)).or_default() += 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let mut v = Uses { whole: &mut whole, indexed: &mut indexed };
+        crate::m6809::ast_walk::walk_code(module, &mut v);
+        crate::m6809::ast_walk::walk_global_inits(module, &mut v);
+        let mut by_base: BTreeMap<String, Vec<(String, String, usize)>> = BTreeMap::new();
+        for item in &module.items {
+            let Item::GlobalLet { name, .. } = item else { continue };
+            let u = up(name);
+            let Some(Global::Array { len, .. }) = g.globals.get(&u) else { continue };
+            let Some((base, field)) = u.rsplit_once("__") else { continue };
+            if base.is_empty() || field.is_empty() || g.globals.contains_key(base) {
+                continue;
+            }
+            by_base.entry(base.to_string()).or_default().push((u.clone(), field.to_lowercase(), *len));
+        }
+        for (base, fields) in by_base {
+            let same_len = fields.iter().all(|f| f.2 == fields[0].2);
+            let only_indexed = fields.iter().all(|f| whole.get(&f.0).copied().unwrap_or(0) <= indexed.get(&f.0).copied().unwrap_or(0));
+            let distinct: BTreeSet<&String> = fields.iter().map(|f| &f.0).collect();
+            if fields.len() < 2 || !same_len || !only_indexed || distinct.len() != fields.len() {
+                continue;
+            }
+            for (u, member, _) in &fields {
+                g.aos.insert(u.clone(), (base.clone(), format!("f_{member}")));
+            }
+            groups.insert(base, fields.into_iter().map(|(u, m, _)| (u, format!("f_{m}"))).collect());
+        }
+    }
+    let mut emitted_groups = BTreeSet::new();
+
     // ---- data: globals and constant tables ---------------------------------------
     let mut data = String::new();
     let mut init = String::new(); // values not known at compile time, set before main()
@@ -834,6 +909,42 @@ pub fn generate_c(module: &Module, assets: &[AssetInfo]) -> Result<GeneratedC, S
             continue;
         }
         let cq = if constant { "const " } else { "" };
+        if let Some((base, _)) = g.aos.get(&u).cloned() {
+            // the whole struct array, at its first field
+            if emitted_groups.insert(base.clone()) {
+                let fields = &groups[&base];
+                let mut members = String::new();
+                let mut rows: Vec<Vec<String>> = Vec::new();
+                let mut n = 0;
+                for (fu, member) in fields {
+                    let Some(Global::Array { elem, len }) = g.globals.get(fu).cloned() else { continue };
+                    n = len;
+                    let _ = write!(members, " {} {member};", c_type(elem));
+                    let vals = module.items.iter().find_map(|it| match it {
+                        Item::GlobalLet { name, value: Expr::List(v), .. } if up(name) == *fu => Some(v.clone()),
+                        _ => None,
+                    }).unwrap_or_default();
+                    for (i, e) in vals.iter().enumerate() {
+                        let cv = g.const_value(e);
+                        if rows.len() <= i {
+                            rows.push(Vec::new());
+                        }
+                        rows[i].push(cv.unwrap_or(0).to_string());
+                        if cv.is_none() {
+                            let x = g.expr(e);
+                            let _ = writeln!(init, "    G_{base}[{i}].{member} = {x};");
+                        }
+                    }
+                }
+                if rows.iter().flatten().all(|v| v == "0") {
+                    let _ = writeln!(data, "static struct {{{members} }} G_{base}[{n}];");
+                } else {
+                    let list: Vec<String> = rows.iter().map(|r| format!("{{ {} }}", r.join(", "))).collect();
+                    let _ = writeln!(data, "static struct {{{members} }} G_{base}[{n}] = {{ {} }};", list.join(", "));
+                }
+            }
+            continue;
+        }
         match (g.globals.get(&u).cloned(), value) {
             (Some(Global::Strings { len }), Expr::List(v)) => {
                 let items: Vec<String> = v

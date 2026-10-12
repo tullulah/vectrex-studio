@@ -2085,6 +2085,10 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     // `[uvm2] backend = "c"`: the program as C, compiled by gcc against libvpy (vpy.c), the
     // runtime C games use -- code about a third the size of the ARM backend's.
     let c_backend = vpyproj_uvm2_key(input, "backend").as_deref() == Some("c");
+    // `[uvm2] sdk_opt = "O2"` (or "Os"): the SDK's C libraries (vpy3d, the layers over it,
+    // libvpy) at that level instead of the build's -O3 -- the C games' SDK_O2. The image runs
+    // from SRAM: the Return of the Jedi C game ships this way.
+    let sdk_opt = vpyproj_uvm2_key(input, "sdk_opt").filter(|o| o == "O2" || o == "Os" || o == "O1");
     let title = project_dir.file_name().and_then(|n| n.to_str()).unwrap_or("UVM2 Game");
     let bank_config = vpy_codegen::BankConfig::single_bank();
     let assets = discover_assets(&source_path);
@@ -2212,7 +2216,7 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         std::fs::write(build_dir.join("vpy3d_font.inc"), font)
             .with_context(|| "Failed to write vpy3d_font.inc")?;
         game_incs.push(build_dir.canonicalize().unwrap_or(build_dir.clone()));
-        game_srcs.push(bridge.canonicalize().unwrap_or(bridge));
+        game_srcs.push(sdk_source(&bridge.canonicalize().unwrap_or(bridge), sdk_opt.as_deref(), &build_dir)?);
         let groups = vpy_codegen::arm::three_d::groups(&unified);
         let mut layers = Vec::new();
         // VPYX_LAYERS_OS in the project's [uvm2] defs: the layers over vpy3d (effects,
@@ -2226,14 +2230,10 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
                 if !path.exists() {
                     return Err(anyhow::anyhow!("the program uses {:?} builtins, but the SDK has no vpy-c/{src}", g));
                 }
-                if layers_os && *g != vpy_codegen::arm::three_d::Group::Core {
-                    let wrap = build_dir.join(format!("vpyx_os_{src}"));
-                    std::fs::write(&wrap, format!("/* {src} compiled for size (VPYX_LAYERS_OS) */\n#pragma GCC optimize (\"Os\")\n#include \"{}\"\n", path.display()))
-                        .with_context(|| format!("Failed to write {}", wrap.display()))?;
-                    game_srcs.push(wrap.canonicalize().unwrap_or(wrap));
-                } else {
-                    game_srcs.push(path);
-                }
+                let opt = sdk_opt.clone().or_else(|| {
+                    (layers_os && *g != vpy_codegen::arm::three_d::Group::Core).then(|| "Os".to_string())
+                });
+                game_srcs.push(sdk_source(&path, opt.as_deref(), &build_dir)?);
                 layers.push(src.trim_end_matches(".c"));
             }
             c_defs.push(g.define().to_string());
@@ -2251,7 +2251,7 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         let juke = build_dir.join("vpy_jukebox.c");
         std::fs::write(&juke, VPY_JUKEBOX_C)
             .with_context(|| format!("Failed to write {}", juke.display()))?;
-        game_srcs.push(juke.canonicalize().unwrap_or(juke));
+        game_srcs.push(sdk_source(&juke.canonicalize().unwrap_or(juke), sdk_opt.as_deref(), &build_dir)?);
         c_defs.push(vpy_codegen::arm::three_d::Group::Juke.define().to_string());
         // The SDK's uvm2_jack.c drives the PIO and DMA only under VPY_RP2350 (C games get it
         // from their Makefile); without it the image links the host stub and the jack is mute.
@@ -2261,7 +2261,7 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     if c_backend {
         // libvpy: vpy_run, the 2D builtins, the font, the stroke buffer
         let vpy_c = sdk_root.join("vpy-c");
-        game_srcs.push(vpy_c.join("vpy.c"));
+        game_srcs.push(sdk_source(&vpy_c.join("vpy.c"), sdk_opt.as_deref(), &build_dir)?);
         game_incs.push(vpy_c.join("include"));
         game_incs.push(vpy_c.clone());
         // vectrex/vectrexInterface.h: the SDK's names for the beam and the buttons, which
@@ -2589,6 +2589,19 @@ fn write_bundled_rp2350_ram_ld(build_dir: &Path) -> anyhow::Result<PathBuf> {
 /// tenia ningun sitio donde apuntarla, asi que TODO proyecto VPy compilaba con el defecto
 /// del SDK (160) y salia un 26% mas grande de lo medido — SnowBros se salia de la pantalla.
 /// La escotilla `UVM2_EXTRA_DEFS` del entorno no sirve para esto: no viaja con el proyecto.
+/// An SDK C file for the uvm2 build: itself, or (with `opt`) a wrapper in the build
+/// directory that compiles it at that optimisation level (`#pragma GCC optimize`).
+fn sdk_source(path: &Path, opt: Option<&str>, build_dir: &Path) -> Result<PathBuf> {
+    let Some(opt) = opt else { return Ok(path.to_path_buf()) };
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("sdk.c");
+    let wrap = build_dir.join(format!("vpyx_{}_{name}", opt.to_lowercase()));
+    std::fs::write(&wrap, format!(
+        "/* {name} from the SDK at -{opt} (the build is -O3): [uvm2] sdk_opt */\n#pragma GCC optimize (\"{opt}\")\n#include \"{}\"\n",
+        path.display()))
+        .with_context(|| format!("Failed to write {}", wrap.display()))?;
+    Ok(wrap.canonicalize().unwrap_or(wrap))
+}
+
 /// A key of the `[uvm2]` section of a .vpyproj (`backend = "c"`).
 fn vpyproj_uvm2_key(vpyproj: &Path, key: &str) -> Option<String> {
     let content = std::fs::read_to_string(vpyproj).ok()?;

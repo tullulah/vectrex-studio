@@ -36,3 +36,13 @@ fn function_values_and_indirect_calls() {
     assert!(c.contains("(int32_t)(intptr_t)F_TWICE"), "{c}");
     assert!(c.contains("((int32_t (*)(int32_t))(intptr_t)(G_F))(3)"), "{c}");
 }
+
+/// A struct array lowered to field arrays comes back as one C array of structs (one base,
+/// fixed offsets), unless a field array is used as a whole.
+#[test]
+fn struct_fields_become_c_structs() {
+    let c = gen("struct Tie:\n    on: u8\n    x: i32\n    z: i32\ntie = Tie[4]\ndef main():\n    pass\n\
+                 def loop():\n    tie[1].x = 5\n    tie[2].z += tie[1].x\n");
+    assert!(c.contains("static struct { uint8_t f_on; int32_t f_x; int32_t f_z; } G_TIE[4];"), "{c}");
+    assert!(c.contains("G_TIE[1].f_x = 5;"), "{c}");
+}
