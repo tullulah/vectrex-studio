@@ -127,7 +127,41 @@ impl ModuleGraph {
                 cycle
             )));
         }
+        Ok(self.merge_order())
+    }
 
+    /// The order modules are merged in: dependencies first. Modules that import each
+    /// other (`common` uses `sound`, `sound` uses `common`, as Python allows) have no such
+    /// order; they follow the rest, each after what it imports outside the cycle, in a
+    /// fixed order. Merging is all it decides: every name resolves against every module's
+    /// table, and constants fold in any order.
+    pub fn merge_order(&self) -> Vec<String> {
+        let mut result = self.kahn();
+        if result.len() < self.modules.len() {
+            let mut done: HashSet<String> = result.iter().cloned().collect();
+            let mut rest: Vec<&String> = self.modules.keys().filter(|m| !done.contains(*m)).collect();
+            rest.sort();
+            for m in rest {
+                self.post_order(m, &mut done, &mut result);
+            }
+        }
+        result
+    }
+
+    fn post_order(&self, node: &str, done: &mut HashSet<String>, out: &mut Vec<String>) {
+        if !done.insert(node.to_string()) {
+            return;
+        }
+        let mut deps: Vec<&String> = self.dependencies.get(node).map(|d| d.iter().collect()).unwrap_or_default();
+        deps.sort();
+        for d in deps {
+            self.post_order(d, done, out);
+        }
+        out.push(node.to_string());
+    }
+
+    /// Kahn's algorithm: every module not in (or behind) a cycle.
+    fn kahn(&self) -> Vec<String> {
         let mut in_degree: HashMap<String, usize> = HashMap::new();
         let mut adj_list: HashMap<String, Vec<String>> = HashMap::new();
 
@@ -176,13 +210,7 @@ impl ModuleGraph {
             }
         }
 
-        if result.len() != self.modules.len() {
-            return Err(UnifierError::CircularDependency(
-                "Failed to topologically sort".to_string(),
-            ));
-        }
-
-        Ok(result)
+        result
     }
 }
 

@@ -21,6 +21,10 @@
 //! aligned to 8 bytes at the `bl`, whatever the expression evaluation pushed.
 //! Meshes and scenes are named by string literal and become an index into the
 //! bridge's mesh/scene slots, which vpy_cli sizes (`VPYX_MESHES`/`VPYX_SCENES`).
+//!
+//! The jukebox builtins ([`Group::Juke`]: MUSIC_TRACK, SFX_PCM, LISTENER…) use the
+//! same calling path into `vpy_jukebox.c`, also shipped inside vpy_cli: recorded music
+//! and effects off the SD card, out of the UVMC2's audio jack. They need no 3D.
 
 use crate::{AssetInfo, AssetType};
 use std::cell::RefCell;
@@ -73,6 +77,8 @@ pub enum Group {
     Bones,
     /// vpysoft.c: cloth and soft bodies.
     Soft,
+    /// vpy_jukebox.c (in vpy_cli, not the SDK): music and effects off the SD card.
+    Juke,
 }
 
 impl Group {
@@ -83,6 +89,7 @@ impl Group {
             Group::Fx => &["vpyfx.c"],
             Group::Bones => &["vpybone.c", "vpyik.c"],
             Group::Soft => &["vpysoft.c"],
+            Group::Juke => &[],
         }
     }
     /// The define that compiles its part of the bridge.
@@ -92,7 +99,12 @@ impl Group {
             Group::Fx => "VPYX_FX",
             Group::Bones => "VPYX_BONES",
             Group::Soft => "VPYX_SOFT",
+            Group::Juke => "VPYX_JUKE",
         }
+    }
+    /// Does it sit on vpy3d (and so need the 3D bridge)?
+    pub fn is_3d(self) -> bool {
+        self != Group::Juke
     }
 }
 
@@ -198,6 +210,19 @@ const BUILTINS: &[Builtin] = &[
     Builtin { name: "SOFT_PUSH", c_fn: "vpysoft_push", args: &[Int, Int, Int, Int], optional: 0, group: Soft },
     Builtin { name: "SOFT_STEP", c_fn: "vpysoft_step", args: &[], optional: 0, group: Soft },
     Builtin { name: "SOFT_DRAW", c_fn: "vpysoft_draw", args: &[Int, Int, Int], optional: 1, group: Soft },
+    // the jukebox (vpy_jukebox.c): recorded music and effects off the SD card, out of the jack
+    Builtin { name: "JUKEBOX_DIR", c_fn: "vpyj_dir", args: &[Str], optional: 0, group: Juke },
+    Builtin { name: "JUKEBOX_MODE", c_fn: "vpyj_mode", args: &[Int], optional: 0, group: Juke },
+    Builtin { name: "JUKEBOX_LIVE", c_fn: "jukebox_live", args: &[], optional: 0, group: Juke },
+    Builtin { name: "JUKEBOX_PROGRESS", c_fn: "jukebox_boot_progress", args: &[], optional: 0, group: Juke },
+    Builtin { name: "JUKEBOX_REPORT", c_fn: "jukebox_report", args: &[], optional: 0, group: Juke },
+    Builtin { name: "MUSIC_TRACK", c_fn: "jukebox_play", args: &[Str], optional: 0, group: Juke },
+    Builtin { name: "SFX_PCM", c_fn: "vpyj_sfx", args: &[Int, Int, Int, Int], optional: 2, group: Juke },
+    Builtin { name: "SFX_PCM_AT", c_fn: "vpyj_sfx_at", args: &[Int, Int, Int, Int, Int, Int, Int], optional: 0, group: Juke },
+    Builtin { name: "SFX_PCM_MOVE", c_fn: "jukebox_voice_at", args: &[Int, Int, Int, Int], optional: 0, group: Juke },
+    Builtin { name: "SFX_PCM_STOP", c_fn: "jukebox_sfx_stop", args: &[Int], optional: 0, group: Juke },
+    Builtin { name: "SFX_PCM_BUSY", c_fn: "jukebox_sfx_busy", args: &[Int], optional: 0, group: Juke },
+    Builtin { name: "LISTENER", c_fn: "jukebox_listener", args: &[Int, Int, Int, Int, Int], optional: 0, group: Juke },
 ];
 
 fn find(name: &str) -> Option<&'static Builtin> {
@@ -222,12 +247,14 @@ pub fn names() -> impl Iterator<Item = &'static str> {
     BUILTINS.iter().map(|b| b.name)
 }
 
-/// The SDK layers `module` uses, Core first when any is used.
+/// The layers `module` uses, Core first when any 3D one is used.
 pub fn groups(module: &Module) -> Vec<Group> {
     let mut set = std::collections::BTreeSet::new();
     crate::m6809::ast_walk::for_each_call(module, |c| {
         if let Some(b) = find_in(module, &c.name) {
-            set.insert(Core);
+            if b.group.is_3d() {
+                set.insert(Core);
+            }
             set.insert(b.group);
         }
     });
@@ -245,11 +272,14 @@ thread_local! {
     static SLOTS: RefCell<Usage> = RefCell::new(Usage::default());
 }
 
-/// Does `module` call any 3D builtin?
+/// Does `module` call any 3D builtin (one on vpy3d)?
 pub fn uses_3d(module: &Module) -> bool {
-    let mut any = false;
-    crate::m6809::ast_walk::for_each_call(module, |c| any |= find_in(module, &c.name).is_some());
-    any
+    groups(module).iter().any(|g| g.is_3d())
+}
+
+/// Does `module` call any jukebox builtin?
+pub fn uses_jukebox(module: &Module) -> bool {
+    groups(module).contains(&Juke)
 }
 
 /// The meshes and scenes `module` names, each once, sorted (the slot numbers).
@@ -305,8 +335,9 @@ pub fn check(module: &Module, assets: &[AssetInfo], target: &str) -> Result<(), 
         let Some(b) = find_in(module, &c.name) else { return };
         let line = c.source_line;
         if target != "uvm2" {
+            let what = if b.group == Juke { "a jukebox builtin (the UVMC2's audio jack)" } else { "a 3D builtin (vpy3d)" };
             errors.push(format!(
-                "line {line}: `{}()` is a 3D builtin (vpy3d); it is available on the uvm2 target only, not on {target}",
+                "line {line}: `{}()` is {what}; it is available on the uvm2 target only, not on {target}",
                 b.name
             ));
             return;
@@ -470,7 +501,7 @@ fn emit_c_call(
     args: &[CArg],
     var_addrs: &std::collections::HashMap<String, u32>,
 ) -> Result<String, String> {
-    let mut s = format!("    @ {c_fn}: vpy3d (C)\n");
+    let mut s = format!("    @ {c_fn} (C)\n");
     for a in args {
         match a {
             // (a string literal becomes the address of its NUL-terminated text)

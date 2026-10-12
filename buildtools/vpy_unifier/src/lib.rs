@@ -232,11 +232,8 @@ pub fn unify_modules(
         check_clashes(name, &modules[*name], &mut diags);
     }
 
-    // Phase 3.3: Detect cycles + topological sort
-    if let Some(cycle) = graph.detect_cycles() {
-        return Err(UnifierError::CircularDependency(cycle.join(" -> ")));
-    }
-    let sort_order = graph.topological_sort()?;
+    // Phase 3.3: The merge order: dependencies first. Modules may import each other.
+    let sort_order = graph.merge_order();
 
     // Phase 3.4: Resolve + rename, module by module
     let mut merged_items = Vec::new();
@@ -1046,6 +1043,22 @@ mod tests {
     }
 
     // ---- Cross-module resolution (regression: definition and reference must agree) ----
+
+    /// Modules may import each other, as in Python: the Return of the Jedi port's `common`
+    /// calls `sound.play`, and `sound` reads `common.state`.
+    #[test]
+    fn modules_may_import_each_other() {
+        let m = unify(&[
+            ("main", "import common\ndef main():\n    pass\ndef loop():\n    common.hit()\n"),
+            ("common", "import sound\nstate = 0\ndef hit():\n    sound.play(1)\n"),
+            ("sound", "import common\nlast = 0\ndef play(k):\n    last = common.state + k\n"),
+        ])
+        .expect("a cycle of imports unifies");
+        let refs = references(&m);
+        assert!(refs.iter().any(|r| r == "SOUND_play"), "{refs:?}");
+        assert!(refs.iter().any(|r| r == "COMMON_state"), "{refs:?}");
+    }
+
 
     fn parse(src: &str, file: &str) -> Module {
         let tokens = vpy_parser::lex(src).expect("lex");

@@ -381,6 +381,7 @@ def loop():
 - A compile error names the file it is in (`src/space.vpy:18: error: …`), whichever module
   the code comes from, and the names as written in it (`ties.hp`, not the generated global).
 - Names are case-insensitive: `physics.CLAMP_X()` and `physics.clamp_x()` are the same function.
+- Modules may import each other, as in Python: `common` can call `sound.play()` while `sound` reads `common.state`. Every name resolves against every module, so nothing depends on which one comes first.
 - In the generated code a module's symbols are named `MODULE_symbol` (`PHYSICS_clamp_x`; m6809 labels are upper-case: `PHYSICS_CLAMP_X`). Two modules whose names collide that way are a compile error.
 - Build the project (`.vpyproj`): every target (m6809, rp2350, uvm2, pitrex) compiles all of its modules. Building a lone `.vpy` compiles only that file, so an `import` there fails with `main.vpy:1: error: module `physics` not found …`.
 - `module.name` where the module has no such symbol, or a module used without `import`, is a compile error with the file and line.
@@ -680,6 +681,24 @@ The analog axes and the buttons are read once per frame by code the compiler inj
 | `PLAY_SAMPLE("name")` / `SAMPLE_POS(fps)` | Play a `.vsmp` sample / audio-synced frame index. rp2350 and pitrex; on uvm2 they build but do nothing; on m6809 a compile error ("not supported on m6809") |
 
 The music/SFX engine is updated automatically every frame when the program uses `PLAY_MUSIC` or `PLAY_SFX`; there is nothing to call. (On m6809 the injected routine is `AUDIO_UPDATE`; calling it yourself is harmless but redundant. There is no user-callable `MUSIC_UPDATE`.) Formats and folders are in [ASSETS.md](ASSETS.md).
+
+### Jukebox (uvm2)
+
+Recorded music and effects off the SD card, out of the UVMC2's audio jack — the same player the C games use, compiled into the image when a program calls any of these. A track is `<dir>/<ID>.PCM` on the card (4-bit IMA ADPCM, `RJMU` header); the effects are one pack, `<dir>/SFX.PCM` (`RJSX`: numbered groups of clips, one of a group at random), loaded whole into the cartridge's PSRAM. The track playing is streamed into PSRAM a slice a frame while it plays, and a new one cross-fades in. Five voices mix over the music: 0 an engine or hum, 1 yours, 2 the world, 3 voices (they duck the music), 4 things passing. The compiler calls the jukebox at the start of every frame; there is nothing to update. Where there is no jack, no PSRAM or no file, every call is silent: `SFX_PCM` returns 0, so the program can fall back to `PLAY_SFX`.
+
+| Function | Description |
+|----------|-------------|
+| `JUKEBOX_DIR("dir")` | The card folder the tracks and `SFX.PCM` are in (e.g. `"ROTJ"`); call it in `main()` |
+| `JUKEBOX_MODE(m)` | How much of each frame the card may take: 0 a screen (~6 ms, the default), 1 play (~2 ms), 2 a loading screen (~15 ms) |
+| `JUKEBOX_PROGRESS()` | 0..256: the effects pack, then the first track's head, loaded; 256 = ready (a loading bar) |
+| `JUKEBOX_LIVE()` | 1 while a track is playing or loading out of the jack |
+| `JUKEBOX_REPORT()` | One line of what the audio path is doing (jack, PSRAM, card, slots), as a string for the text builtins |
+| `MUSIC_TRACK("ID")` | Play `<dir>/ID.PCM`, cross-fading from the one playing; the same track carries on, so it is safe every frame. `""` fades to silence |
+| `SFX_PCM(group, voice[, gain, loop])` | A clip of `group` on `voice` (it cuts what that voice played); gain 256 = full (0 = full), loop 1 for a hum. Returns 1 if it plays |
+| `SFX_PCM_AT(group, voice, gain, loop, x, y, z)` | The same, heard from a place in the world: quieter far off, in the ear on its side |
+| `SFX_PCM_MOVE(voice, x, y, z)` | Move a voice that is playing (a ship going by) |
+| `SFX_PCM_STOP(voice)` / `SFX_PCM_BUSY(voice)` | Stop a voice / 1 while it plays |
+| `LISTENER(x, y, z, fx, fz)` | Where the listener is (usually the camera) and its heading on the floor, for the placed sounds |
 
 ### Level System
 

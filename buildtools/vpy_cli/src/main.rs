@@ -2020,6 +2020,7 @@ fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool, ram
 
 /// The C side of VPy's 3D builtins (vpy_codegen arm/three_d.rs emits the calls).
 const VPY3D_BRIDGE_C: &str = include_str!("c/vpy3d_bridge.c");
+const VPY_JUKEBOX_C: &str = include_str!("c/vpy_jukebox.c");
 
 /// libvpy's vector font, cut out of the SDK's vpy.c: from its first glyph table
 /// (`static const signed char F_…`) to the end of `vpy_font_next`. The tables,
@@ -2207,6 +2208,19 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         c_defs.push(format!("VPYX_SCENES={}", used.scenes.len().max(1)));
         println!("  {} 3D: {} + bridge, {} mesh(es), {} scene(s)", "✓".green(), layers.join(", "), used.meshes.len(), used.scenes.len());
     }
+    // Jukebox builtins: recorded music and effects off the SD card, out of the jack
+    // (the SDK links uvm2_sd/uvm2_jack/uvm2_psram into every image already).
+    if vpy_codegen::arm::three_d::uses_jukebox(&unified) {
+        let juke = build_dir.join("vpy_jukebox.c");
+        std::fs::write(&juke, VPY_JUKEBOX_C)
+            .with_context(|| format!("Failed to write {}", juke.display()))?;
+        game_srcs.push(juke.canonicalize().unwrap_or(juke));
+        c_defs.push(vpy_codegen::arm::three_d::Group::Juke.define().to_string());
+        // The SDK's uvm2_jack.c drives the PIO and DMA only under VPY_RP2350 (C games get it
+        // from their Makefile); without it the image links the host stub and the jack is mute.
+        c_defs.push("VPY_RP2350".to_string());
+        println!("  {} jukebox: music and effects off the SD card", "✓".green());
+    }
     let join_paths = |v: &[PathBuf]| v.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(";");
 
     println!("\n{}", "Phase 4: CMake configure (pico-sdk)".bright_cyan().bold());
@@ -2334,6 +2348,9 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     // -o apunta al .bin, que es lo que esta funcion prometia historicamente.
     let bin_path = output.unwrap_or_else(|| build_dir.join(format!("{}.bin", project_name)));
     std::fs::copy(cmake_build.join(format!("{}.bin", project_name)), &bin_path).ok();
+    // The ELF beside the .um2, where the IDE looks for it: the emulator hooks the SD card's
+    // calls (uvm2_sd_open/next) by symbol, so without it a game's card files never arrive.
+    std::fs::copy(cmake_build.join(format!("{}.elf", project_name)), build_dir.join(format!("{}.elf", project_name))).ok();
     let um2_len = std::fs::metadata(&um2_path)?.len();
     println!("  {} UM2: {} ({} bytes)", "✓".green(), um2_path.display(), um2_len);
 
