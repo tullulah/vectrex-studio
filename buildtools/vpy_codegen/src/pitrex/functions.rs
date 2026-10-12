@@ -283,6 +283,7 @@ fn emit_function(
     s.push_str(&frame::prologue(&layout, &func.params, PUSHED, true));
 
     frame::enter(&layout);
+    crate::arm::pool::reset();
     let body = emit_body(&func.body, var_addrs, &[], &ret_label);
     frame::leave();
     s.push_str(&body?);
@@ -334,6 +335,7 @@ fn emit_game_main(
     let layouts = frame::layout_aligned(&[&main_scope, &loop_scope], 32, 16, "main")?;
     crate::arm::arrays::enter_function("", &[]);
     s.push_str(&frame::prologue(&layouts[0], &[], 32, true));
+    crate::arm::pool::reset();
 
     // UART debug init (PL011, 921600 baud, 250 MHz clock) — Malban SDK
     s.push_str("    @ UART debug init\n");
@@ -685,7 +687,19 @@ fn emit_index_load(
     Ok(())
 }
 
+/// One statement's code, followed by a literal-pool island when one is due.
 fn emit_stmt(
+    stmt: &Stmt,
+    var_addrs: &HashMap<String, u32>,
+    loop_labels: &[(String, String)],
+    return_label: &str,
+) -> Result<String, String> {
+    let mut code = emit_stmt_code(stmt, var_addrs, loop_labels, return_label)?;
+    crate::arm::pool::after(&mut code);
+    Ok(code)
+}
+
+fn emit_stmt_code(
     stmt: &Stmt,
     var_addrs: &HashMap<String, u32>,
     loop_labels: &[(String, String)],

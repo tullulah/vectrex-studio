@@ -809,6 +809,7 @@ Enemies are `.venemy` types placed by a `.vplay` level. `i` is the slot in the e
 | `min(a, b)` | Minimum of two values |
 | `max(a, b)` | Maximum of two values |
 | `clamp(v, lo, hi)` | Clamp value between lo and hi |
+| `MUL_SHR(a, b, shift)` | `(a * b) >> shift` with a 64-bit product, for fixed-point maths whose product does not fit 32 bits (`MUL_SHR(x, SIN_Q14(a), 14)`). ARM targets only |
 
 #### Trigonometry
 
@@ -886,19 +887,23 @@ string literal and must exist (a missing one is a compile error).
 | `XF_ROT_X(xf, angle)` / `XF_ROT_Y(xf, angle)` / `XF_ROT_Z(xf, angle)` | `xf` = a rotation about one axis (4096 per turn) |
 | `XF_MUL(dst, a, b)` | `dst` = `b` then `a` (`dst` may be `a` or `b`) |
 | `XF_POINT(out, xf, x, y, z)` | `out[0..2]` = the point (x, y, z) moved by `xf` (`out`: an `i32` array of 3) |
-| `CAMERA_LOOK_AT(ex, ey, ez, tx, ty, tz)` | Camera at the eye (ex, ey, ez) looking at (tx, ty, tz), up = +y. Returns 0 if eye and target coincide |
+| `CAMERA_LOOK_AT(ex, ey, ez, tx, ty, tz[, ux, uy, uz])` | Camera at the eye (ex, ey, ez) looking at (tx, ty, tz); (ux, uy, uz) is the world direction that ends up pointing up on screen (default +y; tilt it to bank, e.g. `SIN_Q14(roll), COS_Q14(roll), 0`). Returns 0 if eye and target coincide |
 | `CAMERA_SET(xf)` / `CAMERA_GET(xf)` | Set the world→camera transform / read it into `xf` |
 | `CAMERA_FOCAL(f)` | Field of view: deflection units per unit of x over z (default 28000, about 58°; bigger = narrower) |
 | `CAMERA_NEAR(z)` | Nothing nearer than `z` is drawn (default 600) |
 | `CAMERA_CLIP(half_x[, half_y])` | Half the visible window in deflection units (default 15500 square) |
 | `PROJECT(out, x, y, z)` | Where a world point lands on screen: `out[0]`, `out[1]` in deflection units (`out`: an `i32` array of 2). Returns 0 if it is behind the camera |
+| `PROJECT_CAM(out, x, y, z)` | The same for a point already in camera space (x right, y up, z ahead) |
+| `SCREEN_SIZE(x, y, z, radius)` | How big a ball of `radius` at world (x, y, z) looks, in deflection units |
 | `SIN_Q14(angle)` / `COS_Q14(angle)` | Sine and cosine with 4096 per turn, -16384..16384 |
+| `ATAN2_Q14(y, x)` | The angle of (x, y) from +x towards +y, 4096 per turn (0..4095) |
 | `LOAD_MESH("name")` | Load `name.vmesh` into the mesh pools. Returns 0 if the pools are full (raise `VPY3D_POOL_*` in the project's `[uvm2] defs`) |
 | `DRAW_MESH("name", xf, brightness)` | Draw a loaded mesh placed by `xf` |
 | `MESH_POOL_MARK()` / `MESH_POOL_RELEASE()` | Remember where the pools are / give back every mesh loaded since (load them again before drawing them) |
 | `LOAD_SCENE("name")` | Load `name.vscene` and the meshes it places. Returns 0 on failure |
 | `DRAW_SCENE("name", x, y, z, brightness[, groups])` | Draw a scene at position (x, y, z) — what its `follow` items move with; `groups` is the bit mask its `group` items test |
 | `LINE_3D(ax, ay, az, bx, by, bz, brightness)` | A line in world space |
+| `LINE_CAM(ax, ay, az, bx, by, bz, brightness)` | A line in camera space (x right, y up, z ahead): gunsights and other overlays that turn with the view |
 | `OCCL_RESET()` | Forget the occluders (once per frame, before adding the frame's) |
 | `OCCL_LINE(ax, ay, az, bx, by, bz, brightness)` | A world line hidden by the occluders added so far |
 | `OCCL_MESH("name", xf)` | Add a loaded mesh placed by `xf` as an occluder: it hides what is drawn after it |
@@ -1015,6 +1020,11 @@ brightness = 50
 
 Common conflicts to avoid: `intensity`, `sin`, `cos`, `tan`, `min`, `max`, `abs`, `clamp`, `move`.
 
+For the same reason a module cannot define one name twice as different things — `struct
+Target` and `def target`, a function and a global — and says so at the second definition.
+A struct may share its name with a variable (`tie = Tie[4]`), and a global may be declared
+again. A function of the program with a builtin's name is used instead of the builtin.
+
 ### Variable scope
 
 - Top-level assignments → global (allocated in RAM, persisted across frames)
@@ -1051,6 +1061,14 @@ Block comments (`"""..."""`) are not supported.
 ### Indentation
 
 Exactly 4 spaces per block level. Tabs are not allowed.
+
+As in Python, a line inside an open `(` or `[` goes on onto the next one, whose
+indentation does not count — a long call or array can be split:
+
+```python
+FX_SHATTER("tie_wing", wing, vx, vy, vz, x, y, z,
+           2200, TURN, 45, 120)
+```
 
 ### Parser error reporting
 

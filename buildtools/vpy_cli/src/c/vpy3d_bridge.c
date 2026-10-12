@@ -117,9 +117,13 @@ void vpyx_xf_point(int32_t *out, const vpy_xf *xf, int32_t x)
 
 /* ---- the camera ----------------------------------------------------------- */
 
+/* eye, target, and the world direction that ends up pointing up on screen
+   (left out: 0, 0, 0 = +y) */
 int vpyx_look_at(int32_t ex, int32_t ey, int32_t ez, int32_t tx)
 {
-    return vpy3d_look_at(ex, ey, ez, tx, vpyx_args[0], vpyx_args[1], 0, 1, 0);
+    int32_t ux = vpyx_args[2], uy = vpyx_args[3], uz = vpyx_args[4];
+    if (!ux && !uy && !uz) uy = 1;
+    return vpy3d_look_at(ex, ey, ez, tx, vpyx_args[0], vpyx_args[1], ux, uy, uz);
 }
 void vpyx_set_camera(const vpy_xf *xf) { vpy3d_set_camera(xf); }
 void vpyx_get_camera(vpy_xf *d) { *d = *vpy3d_camera(); }
@@ -134,6 +138,33 @@ int vpyx_project(int32_t *out, int32_t x, int32_t y, int32_t z)
     int32_t cam[3];
     vpy3d_to_camera(x, y, z, cam);
     return vpy3d_project(cam, &out[0], &out[1]);
+}
+
+/* the same for a point already in camera space */
+int vpyx_project_cam(int32_t *out, int32_t x, int32_t y, int32_t z)
+{
+    const int32_t cam[3] = { x, y, z };
+    return vpy3d_project(cam, &out[0], &out[1]);
+}
+
+/* the angle of (x, y) from +x towards +y, 4096 per turn (0..4095): an octant fold,
+   then a binary search of the sine table for the angle whose tangent is the ratio */
+int vpyx_atan2_q14(int32_t y, int32_t x)
+{
+    if (!x && !y) return 0;
+    int64_t ax = x < 0 ? -(int64_t)x : x, ay = y < 0 ? -(int64_t)y : y;
+    const int steep = ay > ax;
+    const int64_t lo = steep ? ax : ay, hi = steep ? ay : ax;     /* lo / hi in 0..1 */
+    int a0 = 0, a1 = 513;                                          /* 0..45 degrees, both ends */
+    while (a1 - a0 > 1) {
+        const int m = (a0 + a1) / 2;
+        if ((int64_t)VPY_SIN_Q14[m] * hi <= (int64_t)VPY_SIN_Q14[1024 - m] * lo) a0 = m; else a1 = m;
+    }
+    int a = a0;                                                    /* within one step (0.09 degrees) */
+    if (steep) a = 1024 - a;
+    if (x < 0) a = 2048 - a;
+    if (y < 0) a = -a;
+    return a & 4095;
 }
 
 int vpyx_sin_q14(int a) { return vpy_sin_q14(a); }
@@ -167,6 +198,12 @@ void vpyx_draw_scene(int i, int32_t x, int32_t y, int32_t z)
 void vpyx_line_world(int32_t ax, int32_t ay, int32_t az, int32_t bx)
 {
     vpy3d_line_world(ax, ay, az, bx, vpyx_args[0], vpyx_args[1], vpyx_args[2]);
+}
+/* a line in camera space (x right, y up, z ahead): overlays such as a gunsight */
+void vpyx_line_cam(int32_t ax, int32_t ay, int32_t az, int32_t bx)
+{
+    const int32_t a[3] = { ax, ay, az }, b[3] = { bx, vpyx_args[0], vpyx_args[1] };
+    vpy3d_line_cam(a, b, vpyx_args[2]);
 }
 void vpyx_occl_reset(void) { vpy3d_occl_reset(); }
 void vpyx_occl_line(int32_t ax, int32_t ay, int32_t az, int32_t bx)

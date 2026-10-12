@@ -1103,13 +1103,14 @@ fn emit_sqrt() -> String {
     // vpy_sqrt(r0=n) — integer square root via binary search
     s.push_str("@ vpy_sqrt(r0=n) → r0 = floor(sqrt(n))\n");
     s.push_str(".global vpy_sqrt\n.type vpy_sqrt, %function\n.thumb_func\nvpy_sqrt:\n");
-    s.push_str("    cmp     r0, #0\n    beq     vsqrt_zero\n");
+    s.push_str("    cmp     r0, #0\n    ble     vsqrt_zero\n");
     s.push_str("    push    {r4, r5, r6}\n");
     s.push_str("    mov     r4, r0              @ n\n");
     s.push_str("    mov     r5, #0              @ lo\n");
-    s.push_str("    ldr     r6, =46340         @ hi (floor(sqrt(2^31-1)))\n"); // 46340^2 = 2147395600 < 2^31
-    s.push_str("    cmp     r4, r6\n    blt     vsqrt_loop\n    mov     r0, r6\n");
-    s.push_str("    pop     {r4, r5, r6}\n    bx      lr\n");
+    // hi = 46341: sqrt of any positive int32 is at most 46340 (46340^2 = 2147395600),
+    // and mid < hi keeps mid*mid within 31 bits. (This used to RETURN 46340 for every
+    // n >= 46340: sqrt(100000) was 46340.)
+    s.push_str("    ldr     r6, =46341         @ hi (exclusive)\n");
     s.push_str("vsqrt_loop:\n");
     s.push_str("    add     r0, r5, r6\n    lsr     r0, r0, #1  @ mid = (lo+hi)/2\n");
     s.push_str("    mul     r2, r0, r0           @ mid*mid\n");
@@ -1122,7 +1123,7 @@ fn emit_sqrt() -> String {
     s.push_str("vsqrt_done:\n    mov     r0, r5\n    sub     r0, r0, #1\n"); // floor: return lo-1
     s.push_str("    pop     {r4, r5, r6}\n    bx      lr\n");
     s.push_str("vsqrt_exact:\n    pop     {r4, r5, r6}\n    bx      lr\n");
-    s.push_str("vsqrt_zero:\n    bx      lr\n    .ltorg\n\n");
+    s.push_str("vsqrt_zero:\n    mov     r0, #0\n    bx      lr\n    .ltorg\n\n");
 
     s
 }

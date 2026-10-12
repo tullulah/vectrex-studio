@@ -171,6 +171,7 @@ fn emit_function(
     s.push_str(&frame::prologue(&layout, &func.params, PUSHED, false));
 
     frame::enter(&layout);
+    super::pool::reset();
     let loop_labels: Vec<(String, String)> = Vec::new();
     let mut body = String::new();
     for stmt in &func.body {
@@ -222,6 +223,7 @@ fn emit_game_main(
     let layouts = frame::layout(&[&main_scope, &loop_scope], PUSHED, "game_main")?;
     super::arrays::enter_function("", &[]);
     s.push_str(&frame::prologue(&layouts[0], &[], PUSHED, false));
+    super::pool::reset();
 
     // Zero the VPy runtime RAM region [TMPVAL .. USER_RAM_START). RP2350 SRAM holds
     // power-on garbage; the emulator runs with zeroed SRAM, so all system state
@@ -265,6 +267,7 @@ fn emit_game_main(
         })
         .collect();
     for item in &module.items {
+        let before = s.len();
         match item {
             Item::GlobalLet { name, value, .. } => {
                 let varname = name.to_uppercase();
@@ -351,6 +354,9 @@ fn emit_game_main(
             }
             _ => {}
         }
+        let mut chunk = s.split_off(before);
+        super::pool::after(&mut chunk);
+        s.push_str(&chunk);
     }
 
     // Initialise PSG_MIXER_SHADOW to 0x3F (all tone+noise channels disabled)
@@ -468,7 +474,19 @@ fn emit_index_load(target: &Expr, index: &Expr, var_addrs: &HashMap<String, u32>
     Ok(())
 }
 
+/// One statement's code, followed by a literal-pool island when one is due.
 fn emit_stmt(
+    stmt: &Stmt,
+    var_addrs: &HashMap<String, u32>,
+    loop_labels: &[(String, String)],
+    return_label: &str,
+) -> Result<String, String> {
+    let mut code = emit_stmt_code(stmt, var_addrs, loop_labels, return_label)?;
+    super::pool::after(&mut code);
+    Ok(code)
+}
+
+fn emit_stmt_code(
     stmt: &Stmt,
     var_addrs: &HashMap<String, u32>,
     loop_labels: &[(String, String)],  // stack of (break_label, continue_label)

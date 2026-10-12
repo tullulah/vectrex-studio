@@ -225,9 +225,11 @@ pub fn unify_modules(
         }
     }
 
-    // Phase 3.2: Every import must name a compiled module.
+    // Phase 3.2: Every import must name a compiled module, and no module defines one
+    // name twice as different things (names are case-insensitive).
     for name in &names {
         check_imports(name, &modules[*name], &modules, &tables, &mut diags);
+        check_clashes(name, &modules[*name], &mut diags);
     }
 
     // Phase 3.3: Detect cycles + topological sort
@@ -268,6 +270,45 @@ pub fn unify_modules(
     // repetition or several dimensions become flat arrays.
     let unified = structs::lower(unified, entry_module).map_err(UnifierError::Unresolved)?;
     arrays::lower(unified, entry_module).map_err(UnifierError::Unresolved)
+}
+
+/// A name defined twice in one module as different things -- a function and a struct, a
+/// global and a function, two functions -- is an error at the second definition. (A
+/// global or const declared again keeps one symbol, as it always has, and a struct may
+/// share its name with a variable.) Names are case-insensitive, so `struct Target` and
+/// `def target` clash.
+fn check_clashes(module_name: &str, module: &Module, diags: &mut Vec<Diagnostic>) {
+    let mut seen: HashMap<String, (String, SymKind, usize)> = HashMap::new();
+    for item in &module.items {
+        let (name, kind, line) = match item {
+            Item::Function(f) => (&f.name, SymKind::Function, f.line),
+            Item::GlobalLet { name, source_line, .. } => (name, SymKind::Global, *source_line),
+            Item::Const { name, source_line, .. } => (name, SymKind::Const, *source_line),
+            Item::StructDef(d) => (&d.name, SymKind::Struct, d.source_line),
+            _ => continue,
+        };
+        let data = |k: SymKind| matches!(k, SymKind::Global | SymKind::Const);
+        // A struct and a variable may share a name (`tie = Tie[4]`, the Python habit): a
+        // struct is only ever named in `Name[n]` / `Name(...)`, which the lowering tells apart.
+        let type_and_var = |a: SymKind, b: SymKind| {
+            matches!((a, b), (SymKind::Struct, SymKind::Global) | (SymKind::Global, SymKind::Struct))
+        };
+        match seen.get(&name.to_lowercase()) {
+            Some((first, k, first_line)) if !(data(*k) && data(kind)) && !type_and_var(*k, kind) => diags.push(Diagnostic {
+                module: module_name.to_string(),
+                line,
+                message: format!(
+                    "`{name}` is already defined at line {first_line} (the {} `{first}`): names are \
+                     case-insensitive, so rename one of them",
+                    k.describe()
+                ),
+            }),
+            Some(_) => {}
+            None => {
+                seen.insert(name.to_lowercase(), (name.clone(), kind, line));
+            }
+        }
+    }
 }
 
 /// Unified name of `def` (spelled as defined) living in `module`.
@@ -1231,6 +1272,18 @@ def Step(v):
         assert_eq!(diags[0].line, 1);
         assert!(diags[0].message.contains("module `physics` not found"), "{}", diags[0].message);
         assert!(diags[0].message.contains(".vpyproj"), "{}", diags[0].message);
+    }
+
+    #[test]
+    fn clashing_names_in_a_module_are_errors() {
+        let main = "struct Target:\n    x: i16\n\nties = Target[2]\n\ndef target(i):\n    return i\n\nconst TIES = 1\n";
+        let diags = errors(unify(&[("main", main)]));
+        let text: Vec<&str> = diags.iter().map(|d| d.message.as_str()).collect();
+        assert!(diags.iter().any(|d| d.line == 6 && d.message.contains("`target` is already defined at line 1 (the struct `Target`)")), "{text:?}");
+        // a struct may share its name with a variable; a global and a const keep one symbol
+        assert_eq!(diags.len(), 1, "{text:?}");
+        let ok = "struct Tie:\n    x: i16\n\ntie = Tie[4]\n\ndef main():\n    tie[1].x = 3\n";
+        assert!(unify(&[("main", ok)]).is_ok());
     }
 
     #[test]

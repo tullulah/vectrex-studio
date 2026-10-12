@@ -279,6 +279,26 @@ pub fn emit_call(
         };
     }
 
+    // MUL_SHR(a, b, s): (a * b) >> s with a 64-bit product (`smull`), for Q14 maths
+    // whose product would overflow 32 bits. s in 0..31; the result is the low word.
+    if info.name.eq_ignore_ascii_case("MUL_SHR") {
+        if info.args.len() != 3 {
+            return Err(format!("line {}: MUL_SHR(a, b, shift) takes 3 arguments, got {}", info.source_line, info.args.len()));
+        }
+        let mut s = String::new();
+        for a in &info.args {
+            s.push_str(&emit_expr(a, var_addrs)?);
+            s.push_str("    push    {r0}\n");
+        }
+        s.push_str("    pop     {r2}\n    pop     {r1}\n    pop     {r0}\n");
+        s.push_str("    smull   r3, r12, r0, r1    @ r12:r3 = a * b\n");
+        s.push_str("    lsr     r3, r3, r2\n");
+        s.push_str("    rsb     r2, r2, #32\n");
+        s.push_str("    lsl     r12, r12, r2       @ (a shift of 32 gives 0)\n");
+        s.push_str("    orr     r0, r3, r12        @ MUL_SHR\n");
+        return Ok(s);
+    }
+
     // 3D builtins (vpy3d, uvm2): calls into the C bridge.
     if let Some(code) = super::three_d::emit_call(info, var_addrs) {
         return code;

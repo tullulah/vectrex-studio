@@ -1664,6 +1664,18 @@ mod tests {
     }
 
     #[test]
+    fn test_a_call_goes_on_inside_brackets() {
+        // as in Python: inside ( ) or [ ] a line goes on onto the next, whatever its indent
+        let src = "xs = [1, 2,\n  3]\ndef f():\n    g(1,\n           2,\n  3)\n    return 0\n";
+        let module = lex_and_parse(src).unwrap();
+        assert!(matches!(&module.items[0], Item::GlobalLet { value: Expr::List(v), .. } if v.len() == 3));
+        let Item::Function(f) = &module.items[1] else { panic!() };
+        assert!(matches!(&f.body[0], Stmt::Expr(Expr::Call(c), _) if c.args.len() == 3), "{:?}", f.body[0]);
+        assert_eq!(f.body.len(), 2);
+        assert!(lex_and_parse("x = (1 +\n").is_err(), "unclosed bracket at the end of the file");
+    }
+
+    #[test]
     fn test_enum_members_are_consts_counting_up() {
         let src = "enum State:\n    TITLE\n    PLAY, PAUSE\n    OVER = 10\n    WON\n    NEG = -2, NEXT\n";
         let module = lex_and_parse(src).unwrap();

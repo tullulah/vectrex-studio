@@ -104,13 +104,16 @@ const BUILTINS: &[Builtin] = &[
     Builtin { name: "XF_MUL", c_fn: "vpyx_xf_mul", args: &[Xf, Xf, Xf], optional: 0, group: Core },
     Builtin { name: "XF_POINT", c_fn: "vpyx_xf_point", args: &[Words(3), Xf, Int, Int, Int], optional: 0, group: Core },
     // the camera
-    Builtin { name: "CAMERA_LOOK_AT", c_fn: "vpyx_look_at", args: &[Int, Int, Int, Int, Int, Int], optional: 0, group: Core },
+    Builtin { name: "CAMERA_LOOK_AT", c_fn: "vpyx_look_at", args: &[Int, Int, Int, Int, Int, Int, Int, Int, Int], optional: 3, group: Core },
     Builtin { name: "CAMERA_SET", c_fn: "vpyx_set_camera", args: &[Xf], optional: 0, group: Core },
     Builtin { name: "CAMERA_GET", c_fn: "vpyx_get_camera", args: &[Xf], optional: 0, group: Core },
     Builtin { name: "CAMERA_FOCAL", c_fn: "vpyx_set_focal", args: &[Int], optional: 0, group: Core },
     Builtin { name: "CAMERA_NEAR", c_fn: "vpyx_set_near", args: &[Int], optional: 0, group: Core },
     Builtin { name: "CAMERA_CLIP", c_fn: "vpyx_set_clip", args: &[Int, Int], optional: 1, group: Core },
     Builtin { name: "PROJECT", c_fn: "vpyx_project", args: &[Words(2), Int, Int, Int], optional: 0, group: Core },
+    Builtin { name: "PROJECT_CAM", c_fn: "vpyx_project_cam", args: &[Words(2), Int, Int, Int], optional: 0, group: Core },
+    Builtin { name: "SCREEN_SIZE", c_fn: "vpy3d_screen_size", args: &[Int, Int, Int, Int], optional: 0, group: Core },
+    Builtin { name: "ATAN2_Q14", c_fn: "vpyx_atan2_q14", args: &[Int, Int], optional: 0, group: Core },
     // Q14 trig: 4096 per turn, -16384..16384
     Builtin { name: "SIN_Q14", c_fn: "vpyx_sin_q14", args: &[Int], optional: 0, group: Core },
     Builtin { name: "COS_Q14", c_fn: "vpyx_cos_q14", args: &[Int], optional: 0, group: Core },
@@ -124,6 +127,7 @@ const BUILTINS: &[Builtin] = &[
     Builtin { name: "DRAW_SCENE", c_fn: "vpyx_draw_scene", args: &[Scene, Int, Int, Int, Int, Int], optional: 1, group: Core },
     // lines, occluders, fog
     Builtin { name: "LINE_3D", c_fn: "vpyx_line_world", args: &[Int, Int, Int, Int, Int, Int, Int], optional: 0, group: Core },
+    Builtin { name: "LINE_CAM", c_fn: "vpyx_line_cam", args: &[Int, Int, Int, Int, Int, Int, Int], optional: 0, group: Core },
     Builtin { name: "OCCL_RESET", c_fn: "vpyx_occl_reset", args: &[], optional: 0, group: Core },
     Builtin { name: "OCCL_LINE", c_fn: "vpyx_occl_line", args: &[Int, Int, Int, Int, Int, Int, Int], optional: 0, group: Core },
     Builtin { name: "OCCL_MESH", c_fn: "vpyx_occl_add_mesh", args: &[Mesh, Xf], optional: 0, group: Core },

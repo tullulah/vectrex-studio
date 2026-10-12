@@ -34,6 +34,7 @@ pub mod drawing;
 pub mod analysis;
 pub mod arrays;
 pub mod three_d;
+pub mod pool;
 
 use vpy_parser::Module;
 use crate::AssetInfo;
