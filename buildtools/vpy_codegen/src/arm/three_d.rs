@@ -32,6 +32,8 @@ use vpy_parser::{CallInfo, Expr, Item, Module};
 enum Arg {
     /// An integer expression.
     Int,
+    /// A string: a literal, or a variable or parameter that holds one.
+    Str,
     /// A transform: a global `i32`/`u32` array of at least 12 elements.
     Xf,
     /// A global `i32`/`u32` array of at least this many elements, by address.
@@ -139,6 +141,9 @@ const BUILTINS: &[Builtin] = &[
     Builtin { name: "MARKS_DRAW", c_fn: "vpyx_marks_draw", args: &[Int, Xf, Int, Int, Int], optional: 1, group: Core },
     Builtin { name: "FOG", c_fn: "vpyx_fog", args: &[Int, Int, Int, Int, Int, Int], optional: 0, group: Core },
     Builtin { name: "SCENERY_FOG", c_fn: "vpyx_set_scenery_fog", args: &[Int, Int], optional: 0, group: Core },
+    // text in the world (libvpy's font)
+    Builtin { name: "TEXT_BILLBOARD", c_fn: "vpyx_text_billboard", args: &[Str, Int, Int, Int, Int, Int, Int], optional: 1, group: Core },
+    Builtin { name: "TEXT_3D", c_fn: "vpyx_text", args: &[Str, Xf, Int, Int, Int], optional: 1, group: Core },
     // effects (vpyfx): pieces that fly, fall, bounce and fade
     Builtin { name: "FX_RESET", c_fn: "vpyfx_reset", args: &[], optional: 0, group: Fx },
     Builtin { name: "FX_SEED", c_fn: "vpyfx_seed", args: &[Int], optional: 0, group: Fx },
@@ -315,6 +320,14 @@ pub fn check(module: &Module, assets: &[AssetInfo], target: &str) -> Result<(), 
                         errors.push(format!("line {line}: `{}()` argument {n} is a number, not a string", b.name));
                     }
                 }
+                Str => {
+                    if !matches!(e, Expr::StringLit(_) | Expr::Ident(_)) {
+                        errors.push(format!(
+                            "line {line}: `{}()` argument {n} must be a string: a literal, or a variable or parameter holding one",
+                            b.name
+                        ));
+                    }
+                }
                 Mesh | MeshData | OptMesh | Scene | SceneData => {
                     let (kind, t, folder) = if matches!(arg, Mesh | MeshData | OptMesh) {
                         ("mesh", AssetType::Mesh, "assets/meshes/ (any folder)")
@@ -444,7 +457,8 @@ fn emit_c_call(
     let mut s = format!("    @ {c_fn}: vpy3d (C)\n");
     for a in args {
         match a {
-            CArg::Expr(e) => s.push_str(&super::expressions::emit_expr(e, var_addrs)?),
+            // (a string literal becomes the address of its NUL-terminated text)
+            CArg::Expr(e) => s.push_str(&super::expressions::emit_arg(e, var_addrs)?),
             CArg::Imm(n) if (0..=255).contains(n) => s.push_str(&format!("    mov     r0, #{n}\n")),
             CArg::Imm(n) => s.push_str(&format!("    ldr     r0, ={n}\n")),
             CArg::Sym(sym) => s.push_str(&format!("    ldr     r0, ={sym}\n")),

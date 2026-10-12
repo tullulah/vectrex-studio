@@ -19,7 +19,7 @@
  * SDK's v_directDraw32 sends it on this cartridge), vpy_beam_rezero, the shed
  * priority (kept, unused: nothing sheds here), the Q14 sine and the font. libvpy
  * itself (vpy.c) cannot be linked into a VPy image: its builtins share names with
- * the VPy runtime. The font is a blank glyph for now, so 3D text draws nothing.
+ * the VPy runtime, so vpy_cli copies its font out of it (vpy3d_font.inc).
  */
 #include <stdint.h>
 #include "vpy3d.h"
@@ -85,13 +85,10 @@ int vpy_sin_q14(int a)
 }
 int vpy_cos_q14(int a) { return vpy_sin_q14(a + 1024); }
 
-int vpy_font_next(const char **sp) { return (unsigned char)*(*sp)++; }
-const signed char *vpy_font_glyph(int c)
-{
-    static const signed char blank[] = { 0, 0, 60, 1, 0, 0 };   /* an advance, then the end */
-    (void)c;
-    return blank;
-}
+/* the font: vpy_cli cuts libvpy's out of the SDK's vpy.c into vpy3d_font.inc
+   (the glyph tables, font_glyph and vpy_font_next) */
+#include "vpy3d_font.inc"
+const signed char *vpy_font_glyph(int c) { return font_glyph((unsigned char)c); }
 
 /* ---- transforms ----------------------------------------------------------- */
 
@@ -218,6 +215,18 @@ int vpyx_fog(int br, int32_t x, int32_t y, int32_t z)
     return vpy3d_fog(br, x, y, z, vpyx_args[0], vpyx_args[1]);
 }
 void vpyx_set_scenery_fog(int32_t full_until, int32_t gone_at) { vpy3d_set_scenery_fog(full_until, gone_at); }
+
+/* text in the world: s at (x, y, z) facing the camera, `height` world units tall;
+   flags: 1 hidden by the occluders, 2 centred, 4 only seen from the front */
+int vpyx_text_billboard(const char *s, int32_t x, int32_t y, int32_t z)
+{
+    return vpy3d_text_billboard(s, x, y, z, vpyx_args[0], vpyx_args[1], vpyx_args[2]);
+}
+/* s on the plane placed by xf (its x along the text, y up) */
+int vpyx_text(const char *s, const vpy_xf *xf, int32_t height, int br)
+{
+    return vpy3d_text(s, xf, height, br, vpyx_args[0]);
+}
 
 /* the first face of mesh i placed by xf that the ray from o along d meets within
    max_dist: its index, or -1. out = { x, y, z, nx, ny, nz, dist }: the hit point,

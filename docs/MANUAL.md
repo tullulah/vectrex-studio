@@ -913,6 +913,8 @@ string literal and must exist (a missing one is a compile error).
 | `MARKS_DRAW(k, xf, radius, brightness[, style])` | Draw set `k` on the object placed by `xf`: style 0 a scorch ring, 1 a crack; draw right after the object, before adding it as an occluder |
 | `FOG(brightness, x, y, z, full_until, gone_at)` | `brightness` faded by the distance of (x, y, z) from the camera: full up to `full_until`, 0 from `gone_at` |
 | `SCENERY_FOG(full_until, gone_at)` | The same fade for the lines of `.vmesh` scenery (0, 0 = off) |
+| `TEXT_BILLBOARD(text, x, y, z, height, brightness[, flags])` | Text in the world at (x, y, z), facing the camera, `height` world units tall (libvpy's vector font). `text` is a string literal or a variable or parameter holding one. flags: 1 hidden by the occluders, 2 centred, 4 only seen from the front |
+| `TEXT_3D(text, xf, height, brightness[, flags])` | Text on the plane placed by `xf` (its x along the text, y up) |
 
 **Effects** (vpyfx): short-lived pieces that fly, fall, bounce on a floor and fade. Spawn
 them, then `FX_STEP()` and `FX_DRAW()` once per frame. Velocities are units per second,
@@ -968,8 +970,8 @@ body number; `SOFT_STEP()` and `SOFT_DRAW(body, …)` once per frame.
 | `SOFT_STEP()` / `SOFT_DRAW(body, brightness[, occlude])` | Move every body / draw one |
 
 The pool sizes of these layers (`VPYFX_MAX`, `VPYSOFT_MAX_POINTS`, `VPYSOFT_MAX_SPRINGS`,
-`VPYB_MAX_BONES`) go in the project's `[uvm2] defs`. Not available yet from VPy: 3D text,
-terrain, and bone animation clips.
+`VPYB_MAX_BONES`) go in the project's `[uvm2] defs`. Not available yet from VPy: terrain
+and bone animation clips.
 
 ### SD launcher (ARM only)
 

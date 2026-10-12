@@ -916,7 +916,7 @@ pub fn emit_call(
 
 /// Emit one function argument into r0.
 /// Handles string literals as inline PC-relative data (branch-over trick).
-fn emit_arg(
+pub(crate) fn emit_arg(
     expr: &Expr,
     var_addrs: &std::collections::HashMap<String, u32>,
 ) -> Result<String, String> {

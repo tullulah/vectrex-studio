@@ -2021,6 +2021,38 @@ fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool, ram
 /// The C side of VPy's 3D builtins (vpy_codegen arm/three_d.rs emits the calls).
 const VPY3D_BRIDGE_C: &str = include_str!("c/vpy3d_bridge.c");
 
+/// libvpy's vector font, cut out of the SDK's vpy.c: from its first glyph table
+/// (`static const signed char F_…`) to the end of `vpy_font_next`. The tables,
+/// `font_glyph` and `vpy_font_next` are all that 3D text (vpy3d_text) reads.
+fn extract_libvpy_font(src: &str) -> Result<String, String> {
+    let start = src.find("static const signed char F_").ok_or("no glyph tables (static const signed char F_...)")?;
+    let next = src[start..].find("int vpy_font_next(").ok_or("no vpy_font_next after the glyph tables")? + start;
+    if !src[start..next].contains("static const signed char *font_glyph(") {
+        return Err("no font_glyph between the tables and vpy_font_next".into());
+    }
+    let open = src[next..].find('{').ok_or("vpy_font_next has no body")? + next;
+    let mut depth = 0usize;
+    let mut end = None;
+    for (i, c) in src[open..].char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    end = Some(open + i + 1);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let end = end.ok_or("vpy_font_next's body is not closed")?;
+    Ok(format!(
+        "/* libvpy's vector font, cut out of the SDK's vpy.c by vpy_cli (extract_libvpy_font). */\n{}\n",
+        &src[start..end]
+    ))
+}
+
 /// Build for the UVM2 (Ultimate Vectrex Multicart 2) — Cortex-M33 / Pico SDK toolchain.
 fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Result<()> {
     use std::process::Command;
@@ -2144,6 +2176,16 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         let bridge = build_dir.join("vpy3d_bridge.c");
         std::fs::write(&bridge, VPY3D_BRIDGE_C)
             .with_context(|| format!("Failed to write {}", bridge.display()))?;
+        // 3D text needs libvpy's font, which lives inside vpy.c (not linkable here:
+        // its builtins share names with the VPy runtime). The bridge #includes the
+        // font tables cut out of the pinned SDK's vpy.c.
+        let vpy_c_src = std::fs::read_to_string(vpy_c.join("vpy.c"))
+            .with_context(|| format!("the 3D layer needs {}", vpy_c.join("vpy.c").display()))?;
+        let font = extract_libvpy_font(&vpy_c_src).map_err(|e| anyhow::anyhow!(
+            "{e} in {}: this vpy_cli does not know this SDK's vpy.c", vpy_c.join("vpy.c").display()))?;
+        std::fs::write(build_dir.join("vpy3d_font.inc"), font)
+            .with_context(|| "Failed to write vpy3d_font.inc")?;
+        game_incs.push(build_dir.canonicalize().unwrap_or(build_dir.clone()));
         game_srcs.push(bridge.canonicalize().unwrap_or(bridge));
         let groups = vpy_codegen::arm::three_d::groups(&unified);
         let mut layers = Vec::new();
