@@ -922,6 +922,7 @@ string literal and must exist (a missing one is a compile error).
 | `ATAN2_Q14(y, x)` | The angle of (x, y) from +x towards +y, 4096 per turn (0..4095) |
 | `LOAD_MESH("name")` | Load `name.vmesh` into the mesh pools. Returns 0 if the pools are full (raise `VPY3D_POOL_*` in the project's `[uvm2] defs`) |
 | `DRAW_MESH("name", xf, brightness)` | Draw a loaded mesh placed by `xf` |
+| `MESH("name")` | The mesh's slot, as a number: every mesh argument also takes a slot, so a function can be handed the mesh to draw (`def figure(p, body): DRAW_MESH(body, p, 100)` … `figure(p, MESH("scout_trooper"))`) |
 | `MESH_OCCLUSION(on)` | 1: meshes are cut by the solids drawn before them in the frame (meshes and `OCCL_*`), as lines already are; 0 (the default): meshes are drawn whole |
 | `MESH_POOL_MARK()` / `MESH_POOL_RELEASE()` | Remember where the pools are / give back every mesh loaded since (load them again before drawing them) |
 | `LOAD_SCENE("name")` | Load `name.vscene` and the meshes it places. Returns 0 on failure |

@@ -44,6 +44,9 @@ fn every_builtin_takes_its_arguments_where_the_codegen_puts_them() {
     let juke = include_str!("../src/c/vpy_jukebox.c");
     let mut checked = 0;
     for (name, c_fn, n) in vpy_codegen::arm::three_d::c_calls() {
+        if c_fn.is_empty() {
+            continue; // MESH(): no call, the slot itself
+        }
         let Some((params, body)) = body_of(bridge, c_fn).or_else(|| body_of(juke, c_fn)) else {
             // straight into the SDK: it must take no more than r0-r3 carry
             assert!(n <= 4, "{name}: {n} arguments straight into {c_fn}, which reads the 5th on from the stack: wrap it");

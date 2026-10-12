@@ -45,7 +45,8 @@ enum Arg {
     Xf,
     /// A global `i32`/`u32` array of at least this many elements, by address.
     Words(usize),
-    /// A mesh by name → its slot index.
+    /// A mesh: its name → its slot index, or an integer expression holding a slot
+    /// (`MESH("name")`, passed around in variables and parameters).
     Mesh,
     /// An optional mesh by name → its slot index, -1 when left out.
     OptMesh,
@@ -138,6 +139,7 @@ const BUILTINS: &[Builtin] = &[
     // meshes
     Builtin { name: "LOAD_MESH", c_fn: "vpyx_load_mesh", args: &[MeshData], optional: 0, group: Core },
     Builtin { name: "DRAW_MESH", c_fn: "vpyx_draw_mesh", args: &[Mesh, Xf, Int], optional: 0, group: Core },
+    Builtin { name: "MESH", c_fn: "", args: &[Mesh], optional: 0, group: Core },
     Builtin { name: "MESH_OCCLUSION", c_fn: "vpy3d_set_mesh_occlusion", args: &[Int], optional: 0, group: Core },
     Builtin { name: "MESH_POOL_MARK", c_fn: "vpyx_pool_mark", args: &[], optional: 0, group: Core },
     Builtin { name: "MESH_POOL_RELEASE", c_fn: "vpyx_pool_release", args: &[], optional: 0, group: Core },
@@ -385,6 +387,9 @@ pub fn check(module: &Module, assets: &[AssetInfo], target: &str) -> Result<(), 
                         b.name
                     )),
                 },
+                Mesh | OptMesh if !matches!(e, Expr::StringLit(_)) && b.name != "MESH" => {
+                    // a slot held in a variable (from MESH("name"))
+                }
                 Mesh | MeshData | OptMesh | Scene | SceneData => {
                     let (kind, t, folder) = if matches!(arg, Mesh | MeshData | OptMesh) {
                         ("mesh", AssetType::Mesh, "assets/meshes/ (any folder)")
@@ -475,6 +480,13 @@ pub fn emit_call(
         return None; // the program's own function of that name
     }
     let b = find(&info.name)?;
+    if b.name == "MESH" {
+        // the slot itself, as a number
+        let Some(Expr::StringLit(s)) = info.args.first() else {
+            return Some(Err(format!("line {}: `MESH()` needs the mesh's name as a string literal", info.source_line)));
+        };
+        return Some(Ok(format!("    ldr     r0, ={}\n", slot(Mesh, s))));
+    }
     let mut c_args: Vec<CArg> = Vec::new();
     for (i, arg) in b.args.iter().enumerate() {
         let Some(e) = info.args.get(i) else {
@@ -493,7 +505,8 @@ pub fn emit_call(
                 c_args.push(CArg::Sym(scene_symbol(s)));
                 c_args.push(CArg::Sym(format!("{}_MESHES", scene_symbol(s))));
             }
-            (Mesh | OptMesh | Scene | MeshData | SceneData, _) => {
+            (Mesh | OptMesh, _) => c_args.push(CArg::Expr(e)),
+            (Scene | MeshData | SceneData, _) => {
                 return Some(Err(format!(
                     "line {}: `{}()` needs the asset's name as a string literal",
                     info.source_line, b.name

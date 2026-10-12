@@ -194,3 +194,25 @@ def loop():
         assert!(!asm.contains("vpyx_project"), "{target:?}");
     }
 }
+
+/// A mesh can be handed around as its slot: MESH("name") is a number, and every mesh
+/// argument takes one (the Return of the Jedi port's figure_draw gets its body mesh).
+#[test]
+fn mesh_slots_can_be_passed_as_values() {
+    let src = "p: i32 = [0] * 12\ndef fig(m):\n    DRAW_MESH(m, p, 100)\ndef main():\n    LOAD_MESH(\"ship\")\ndef loop():\n    fig(MESH(\"ship\"))\n";
+    let tokens = vpy_parser::lex(src).expect("lex");
+    let m = vpy_parser::parse_tokens(&tokens, "main.vpy").expect("parse");
+    let mut modules = std::collections::HashMap::new();
+    modules.insert("main".to_string(), m);
+    let module = vpy_unifier::unify_modules(modules, "main").expect("unify");
+    let assets = vec![vpy_codegen::AssetInfo {
+        name: "ship".into(),
+        path: "ship.vmesh".into(),
+        asset_type: vpy_codegen::AssetType::Mesh,
+    }];
+    vpy_codegen::arm::three_d::check(&module, &assets, "uvm2").expect("a slot in a variable is a mesh argument");
+    vpy_codegen::arm::three_d::setup(&module);
+    let call = vpy_parser::CallInfo { name: "MESH".into(), args: vec![vpy_parser::Expr::StringLit("ship".into())], source_line: 7, col: 0 };
+    let code = vpy_codegen::arm::three_d::emit_call(&call, &Default::default()).unwrap().unwrap();
+    assert!(code.contains("ldr     r0, =0"), "{code}");
+}
