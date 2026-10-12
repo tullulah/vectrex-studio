@@ -2273,6 +2273,9 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         if !c_defs.iter().any(|d| d == "VPY_RP2350") {
             c_defs.push("VPY_RP2350".to_string());
         }
+        // No romset (that is the arcade ports' ROM off the card): its 24 KB buffer goes, and
+        // the pico-sdk's 2 KB heap too (nothing allocates) -- as C games build.
+        c_defs.push("UVM2_ROMZIP_MAX=4".to_string());
         println!("  {} libvpy: {}", "✓".green(), vpy_c.join("vpy.c").display());
     }
     let join_paths = |v: &[PathBuf]| v.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(";");
@@ -2312,7 +2315,11 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     // UVM2_STEP_OWNS_INIT: el codegen ya inyecta `bl uvm2_runtime_init` como
     // primera instruccion de game_main, asi que uvm2_pico_main.c NO debe volver
     // a llamarlo. Sin esto el runtime se inicializa dos veces por arranque.
-    let cfg = Command::new("cmake")
+    let mut cfg_cmd = Command::new("cmake");
+    if c_backend {
+        cfg_cmd.env("UVM2_HEAP", "0");
+    }
+    let cfg = cfg_cmd
         .args(["-S", sdk_dir.join("pico").to_str().unwrap(),
                "-B", cmake_build.to_str().unwrap(),
                "-DCMAKE_BUILD_TYPE=Release"])

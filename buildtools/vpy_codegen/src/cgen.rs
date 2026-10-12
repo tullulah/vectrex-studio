@@ -515,6 +515,31 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// A loop variable: a local, or a global scalar of the module. (Names are
+    /// case-insensitive: `for k in ...` next to `const K = [...]` would be the table.)
+    fn loop_var(&mut self, var: &str, line: usize) -> String {
+        if self.is_local(var) {
+            return Self::local(var);
+        }
+        let u = up(var);
+        match self.globals.get(&u) {
+            Some(Global::Scalar) => format!("G_{u}"),
+            Some(_) => {
+                self.err(line, format!(
+                    "loop variable `{var}` is the array of the same name (names are case-insensitive): rename one of them"
+                ));
+                "_bad".into()
+            }
+            None if self.consts.contains_key(&u) => {
+                self.err(line, format!(
+                    "loop variable `{var}` is the constant of the same name (names are case-insensitive): rename one of them"
+                ));
+                "_bad".into()
+            }
+            None => format!("G_{u}"),
+        }
+    }
+
     fn stmt(&mut self, s: &Stmt, out: &mut String, ind: usize) {
         let pad = "    ".repeat(ind);
         match s {
@@ -572,8 +597,8 @@ impl<'a> Gen<'a> {
                 self.block(body, out, ind + 1);
                 let _ = writeln!(out, "{pad}}}");
             }
-            Stmt::For { var, start, end, step, body, .. } => {
-                let v = if self.is_local(var) { Self::local(var) } else { format!("G_{}", up(var)) };
+            Stmt::For { var, start, end, step, body, source_line } => {
+                let v = self.loop_var(var, *source_line);
                 let (a, b) = (self.expr(start), self.expr(end));
                 let st = match step {
                     Some(Expr::Number(n)) => *n,
@@ -584,7 +609,7 @@ impl<'a> Gen<'a> {
                 let _ = writeln!(out, "{pad}}}");
             }
             Stmt::ForIn { var, iterable, body, source_line } => {
-                let v = if self.is_local(var) { Self::local(var) } else { format!("G_{}", up(var)) };
+                let v = self.loop_var(var, *source_line);
                 let len = match iterable {
                     Expr::Ident(id) => match self.globals.get(&up(&id.name)) {
                         Some(Global::Array { len, .. }) | Some(Global::Strings { len }) => *len,
@@ -880,7 +905,9 @@ pub fn generate_c(module: &Module, assets: &[AssetInfo]) -> Result<GeneratedC, S
             let _ = writeln!(bodies, "    int32_t {};", locals.join(", "));
         }
         let mut body = String::new();
+        let start = g.errors.len();
         g.block(&f.body, &mut body, 1);
+        crate::origins::locate_new(&mut g.errors, start, &f.name);
         bodies.push_str(&body);
         bodies.push_str("    return 0;\n}\n\n");
     }
