@@ -201,12 +201,46 @@ fn coord(v: f64, what: &str) -> Result<i32> {
     Ok(v as i32)
 }
 
-/// Compile a `.vscene`. Every mesh it names must exist as
-/// `<scene dir>/../meshes/<name>.vmesh`.
+/// Every `.vmesh` under `dir`, in any folder inside it (a project may sort its meshes into
+/// folders), by name: the name is the file name without `.vmesh`, so it must be unique
+/// across the folders -- the C header and the scene's table know a mesh by name alone.
+pub fn find_meshes(dir: &Path) -> std::collections::BTreeMap<String, Vec<std::path::PathBuf>> {
+    fn walk(d: &Path, depth: usize, out: &mut std::collections::BTreeMap<String, Vec<std::path::PathBuf>>) {
+        if depth > 8 { return; }
+        let Ok(rd) = std::fs::read_dir(d) else { return };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.is_dir() { walk(&p, depth + 1, out); continue; }
+            if p.extension().and_then(|x| x.to_str()).map(|x| x.eq_ignore_ascii_case("vmesh")) == Some(true) {
+                if let Some(stem) = p.file_stem().and_then(|x| x.to_str()) {
+                    out.entry(stem.to_string()).or_default().push(p.clone());
+                }
+            }
+        }
+    }
+    let mut out = std::collections::BTreeMap::new();
+    walk(dir, 0, &mut out);
+    out
+}
+
+/// Compile a `.vscene`. Every mesh it names must exist once as `<name>.vmesh` in
+/// `<scene dir>/../meshes/` or any folder inside it.
 pub fn compile_vscene_file_to_bytes(path: &Path) -> Result<VSceneCompiled> {
     let r = VSceneResource::load(path)?;
     let meshes_dir = path.parent().unwrap_or(Path::new(".")).join("..").join("meshes");
-    compile_vscene(&r, |name| meshes_dir.join(format!("{name}.vmesh")).is_file())
+    let found = find_meshes(&meshes_dir);
+    for n in r.items.iter().flat_map(|it| match &it.mesh {
+        VSceneMeshes::One(s) => vec![s.clone()],
+        VSceneMeshes::Many(v) => v.clone(),
+    }) {
+        if let Some(ps) = found.get(&n) {
+            if ps.len() > 1 {
+                let list: Vec<String> = ps.iter().map(|p| p.display().to_string()).collect();
+                bail!("mesh \"{n}\" is in more than one folder of assets/meshes ({}): mesh names must be unique", list.join(", "));
+            }
+        }
+    }
+    compile_vscene(&r, |name| found.get(name).map(|v| v.len() == 1).unwrap_or(false))
 }
 
 pub fn compile_vscene(r: &VSceneResource, mesh_exists: impl Fn(&str) -> bool) -> Result<VSceneCompiled> {
@@ -254,10 +288,10 @@ pub fn compile_vscene(r: &VSceneResource, mesh_exists: impl Fn(&str) -> bool) ->
         let mut idx = Vec::new();
         for n in &names {
             if n.is_empty() || n.contains(['/', '\\']) || n.ends_with(".vmesh") {
-                bail!("{what}: mesh \"{n}\" must be the name of a .vmesh in assets/meshes, without the extension");
+                bail!("{what}: mesh \"{n}\" must be the name of a .vmesh in assets/meshes (or a folder inside it), without the extension or the folder");
             }
             if !mesh_exists(n) {
-                bail!("{what}: mesh \"{n}\" does not exist (assets/meshes/{n}.vmesh)");
+                bail!("{what}: mesh \"{n}\" does not exist (no {n}.vmesh in assets/meshes or its folders)");
             }
             let k = match table.iter().position(|t| t == n) {
                 Some(k) => k,
@@ -346,6 +380,27 @@ pub fn compile_vscene(r: &VSceneResource, mesh_exists: impl Fn(&str) -> bool) ->
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn meshes_in_folders_are_found_by_name_and_must_be_unique() {
+        let root = std::env::temp_dir().join(format!("vscene_folders_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("scenes")).unwrap();
+        std::fs::create_dir_all(root.join("meshes/escenarios/ep4")).unwrap();
+        std::fs::create_dir_all(root.join("meshes/otros")).unwrap();
+        let mesh = r#"{"name":"rib","lines":[{"points":[{"x":0,"y":0,"z":0},{"x":100,"y":0,"z":0}]}]}"#;
+        std::fs::write(root.join("meshes/escenarios/ep4/rib.vmesh"), mesh).unwrap();
+        let scene = root.join("scenes/s.vscene");
+        std::fs::write(&scene, r#"{"name":"s","items":[{"mesh":"rib"}]}"#).unwrap();
+        let c = compile_vscene_file_to_bytes(&scene).expect("a mesh in a folder is found by name");
+        assert_eq!(c.meshes, vec!["rib"]);
+        std::fs::write(root.join("meshes/otros/rib.vmesh"), mesh).unwrap();
+        let e = match compile_vscene_file_to_bytes(&scene) { Ok(_) => panic!("duplicate name accepted"), Err(e) => e.to_string() };
+        assert!(e.contains("more than one folder"), "{e}");
+        std::fs::write(&scene, r#"{"name":"s","items":[{"mesh":"nope"}]}"#).unwrap();
+        assert!(compile_vscene_file_to_bytes(&scene).is_err());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     use super::*;
 
     fn compile(json: &str) -> Result<VSceneCompiled> {
