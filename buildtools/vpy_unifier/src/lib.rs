@@ -340,6 +340,27 @@ fn check_clashes(module_name: &str, module: &Module, diags: &mut Vec<Diagnostic>
             }
         }
     }
+    // A parameter spelled like a const or global of the module but in another case
+    // (`gear` and `const GEAR`) is the same name: inside the function every `GEAR[g]` read the
+    // parameter. Spelled the same, it is ordinary shadowing and fine.
+    for item in &module.items {
+        let Item::Function(f) = item else { continue };
+        for p in &f.params {
+            if let Some((top, k, top_line)) = seen.get(&p.to_lowercase()) {
+                if matches!(k, SymKind::Global | SymKind::Const) && top != p {
+                    diags.push(Diagnostic {
+                        module: module_name.to_string(),
+                        line: f.line,
+                        message: format!(
+                            "parameter `{p}` of `{}` is the {} `{top}` (line {top_line}): names are \
+                             case-insensitive, so inside `{}` `{top}` means the parameter -- rename one of them",
+                            f.name, k.describe(), f.name
+                        ),
+                    });
+                }
+            }
+        }
+    }
 }
 
 /// Unified name of `def` (spelled as defined) living in `module`.
@@ -1331,6 +1352,14 @@ def Step(v):
         assert_eq!(diags[0].line, 1);
         assert!(diags[0].message.contains("module `physics` not found"), "{}", diags[0].message);
         assert!(diags[0].message.contains(".vpyproj"), "{}", diags[0].message);
+    }
+
+    #[test]
+    fn a_parameter_spelled_like_a_const_in_another_case_is_an_error() {
+        let src = "const GEAR = [[1, 2]]\n\ndef draw(p, gear):\n    return GEAR[0][0]\n\ndef same(GEAR):\n    return GEAR\n";
+        let diags = errors(unify(&[("main", src)]));
+        assert!(diags.iter().any(|d| d.message.contains("parameter `gear` of `draw`")), "{diags:?}");
+        assert!(!diags.iter().any(|d| d.message.contains("of `same`")), "{diags:?}");
     }
 
     #[test]
