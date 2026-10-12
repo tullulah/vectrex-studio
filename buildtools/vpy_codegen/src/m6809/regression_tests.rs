@@ -659,17 +659,18 @@ def loop():
 
 #[test]
 fn parameter_shadows_a_const_of_the_same_name() {
-    // Names are case-insensitive: parameter `b` and `const B` are the same name.
-    // Inside the function the parameter wins; it used to be replaced by B's value.
+    // A parameter spelled like a const shadows it: inside the function the parameter wins;
+    // it used to be replaced by B's value. (Spelled in another case, `b`, it is a compile
+    // error now: the unifier's check_clashes.)
     let src = "\
 const B = 32
 bytes: u8 = [1, 2, 3]
 
-def get(b, i):
-    return b[i]
+def get(B, i):
+    return B[i]
 
-def fwd(b):
-    return get(b, 2)
+def fwd(B):
+    return get(B, 2)
 
 def main():
     SET_INTENSITY(127)

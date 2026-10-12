@@ -26,6 +26,8 @@ writes an asset to the right folder and compiles it.
 | `.vsmp` | 4-bit audio sample | `assets/samples/` | Sample player | `PLAY_SAMPLE("n")`, `SAMPLE_POS(fps)` | `PLAY_SAMPLE(N_smp)`, `SAMPLE_POS(fps)` | rp2350, pitrex; uvm2 builds but plays nothing; not m6809. C: sim, rp2350; uvm2 builds but plays nothing |
 | `.vmesh` | 3D surface mesh | `assets/meshes/` (any folder) | Mesh Editor | `LOAD_MESH("n")`, `DRAW_MESH("n", xf, br)` | `vpy3d_load_mesh(&m, N_vmesh)` + `vpy3d_draw_mesh` | VPy: uvm2; C: sim, rp2350, uvm2 |
 | `.vscene` | 3D set made of `.vmesh` pieces | `assets/scenes/` | Scene Editor | `LOAD_SCENE("n")`, `DRAW_SCENE("n", x, y, z, br)` | `vpy3d_load_scene(&s, N_vscene, N_vscene_meshes)` + `vpy3d_draw_scene` | VPy: uvm2; C: sim, rp2350, uvm2 (SDK v1.3.5+) |
+| `.vclip` | 3D poses, animation clips and sets on a skeleton | `assets/clips/` | 3D Animation editor | `import n` → `n.T_POSES[n.POSE_X][n.JOINT_Y]`, `n.T_KEYS`, `n.T_SET_CLIPS`… (constant tables) | `#include "n.h"` → `N_T_POSES[N_POSE_X][N_JOINT_Y]`… | VPy: uvm2 (the only target tried); C: sim, rp2350, uvm2 |
+| `.vskel` | The skeleton a `.vclip` poses | `assets/skeletons/` | 3D Animation editor | read by the compiler for a `.vclip`'s joint order | the same | (not compiled on its own) |
 
 `n` is the asset name: the file name without its extension. `N` is that name upper-cased
 with `-`, `.` and spaces turned into `_` (what `vpy_cli compile-asset` derives). "all"
@@ -40,8 +42,6 @@ Other files you may find in `assets/` are not used by code:
 | `.vmov` | Vector movie manifest (Vector Movie editor). It pairs a `.vrec` video with a `.vsmp` voice track, and code plays those parts: `DRAW_RECORDING` + `PLAY_SAMPLE`, with `SAMPLE_POS(fps)` as the frame clock. |
 | `.vrb` | A binary preview the IDE generates from a `.vrec` (`vpy_cli vrec-compile`) for the SD-card game menu. It is generated, so don't edit it. |
 | `.vgz` | A compressed VGM recording of arcade audio, kept as source material for sound rips ([ARCADE_SOUND_RIP.md](ARCADE_SOUND_RIP.md)). No compiler or editor reads it. |
-| `.vskel` | A 3D skeleton for animation (bones, their meshes, the joints that turn them), in `assets/skeletons/`. See [`.vskel`](#vskel-3d-skeleton). Edited in the IDE's 3D Animation editor; the compiler doesn't read it yet. |
-| `.vclip` | A library of 3D poses and animation clips on a `.vskel`, in `assets/clips/`. See [`.vclip`](#vclip-3d-poses-and-clips). Edited in the IDE's 3D Animation editor; the compiler doesn't read it yet. |
 
 ## How a VPy project uses assets
 
@@ -88,7 +88,7 @@ compiler to the build as `$(VPY_CLI)`. The Makefile of a new C project (from
 `project_create {kind:"c"}` or File > New Project) has the rules. It compiles
 `assets/vectors/*.vec`, `assets/music/*.vmus`, `assets/sfx/*.vsfx`,
 `assets/animations/*.vanim`, `assets/playground/*.vplay`, `assets/meshes/*.vmesh`,
-`assets/scenes/*.vscene`, `assets/instruments/*.vinstr`, `assets/recordings/*.vrec` and `assets/samples/*.vsmp` to
+`assets/scenes/*.vscene`, `assets/clips/*.vclip`, `assets/instruments/*.vinstr`, `assets/recordings/*.vrec` and `assets/samples/*.vsmp` to
 `gen/<name>.h` before `make sim`, `make rp2350` and `make uvm2`, and adds `-Igen`. A
 C project created before `.vinstr`, `.vrec` and `.vsmp` could be used from C lacks
 their three `gen/%.h: %.<ext>` rules and wildcards: copy them from a new project's
@@ -600,9 +600,40 @@ means. The game reads them, so the same format serves a sword fight, a door or a
 - `sets`: per character or style, the clip for each role and the pose for each named
   stance, plus that style's own numbers. Two sets may share clips.
 
+**What code reads.** The compiler turns a library into constant tables: a VPy program writes
+`import fighters` (no `fighters.vpy` needed: the compiler finds
+`assets/clips/**/fighters.vclip` and its skeleton), a C program includes `gen/fighters.h`
+(`vpy_cli compile-asset fighters.vclip --format c`; a new C project's Makefile has the rule).
+The names are the same in both, with the library's prefix in C (`FIGHTERS_POSE_GUARD`):
+
+| Name | What |
+|---|---|
+| `N_JOINTS`, `JOINT_<j>` | the skeleton's joints, in its order: a pose's columns |
+| `N_POSES`, `POSE_<p>`, `T_POSES[N_POSES][N_JOINTS]` | every pose's angles |
+| `N_CLIPS`, `CLIP_<c>`, `T_CLIPS[N_CLIPS][4]` | a clip's first key, key count, length in frames, loop |
+| `N_KEYS`, `T_KEYS[N_KEYS][2]` | frame and pose of every clip's keys, one clip after another |
+| `N_PROPS`, `PROP_<k>`, `T_CLIP_PROPS[N_CLIPS][N_PROPS]` | the clips' properties (0 if absent) |
+| `N_MARKS`, `MARK_<m>`, `N_MARK_ROWS`, `T_MARKS[..][4]` | every mark: clip, frame, mark, value |
+| `N_SETS`, `SET_<s>` | the sets |
+| `N_STANCES`, `STANCE_<r>`, `T_SET_POSES[N_SETS][N_STANCES]` | a set's pose per stance (-1 if absent) |
+| `N_ROLES`, `ROLE_<r>`, `T_SET_CLIPS[N_SETS][N_ROLES]` | a set's clip per role (-1 if absent) |
+| `N_SPROPS`, `SPROP_<k>`, `T_SET_PROPS[N_SETS][N_SPROPS]` | a set's properties (0 if absent) |
+
+Names are upper-cased (`maul_guard` → `POSE_MAUL_GUARD`). Read everything by name: poses,
+clips and sets are numbered alphabetically, so adding one renumbers the rest. In C each
+array has the narrowest type its values need (`int8_t`, `int16_t` or `int32_t`; `T_POSES`
+at least `int16_t`, so a row reads as one 16-bit angle per joint); index the arrays rather
+than keeping pointers of a fixed type. A table with no rows or columns is left out. Return
+of the Jedi reads its duels this way (`move_of` in its `main.c`, `fighter.mv` in the VPy
+port): a blow is a clip of four keys (guard, wind-up, strike, guard) plus `damage` and
+`lunge`.
+
 ## Known gaps
 
 - On m6809, `PLAY_SAMPLE` and `SAMPLE_POS` don't build ("Undefined symbol").
 - On m6809, `STOP_MUSIC()` only builds when the program also calls `PLAY_MUSIC`.
 - `.vsmp` doesn't play on uvm2, from VPy or C.
 - `.vmesh` and `.vscene` work from VPy on uvm2 only (not m6809, rp2350 or pitrex).
+- A `.vskel` reaches code only as the joint order of the `.vclip` files on it: bones,
+  meshes, offsets, variants and sockets are not compiled yet, so a game still builds its
+  skeleton in code (Return of the Jedi's `fighter_build`).

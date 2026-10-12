@@ -782,8 +782,8 @@ fn binop(op: BinOp, l: &str, r: &str) -> String {
 pub fn generate_c(module: &Module, assets: &[AssetInfo]) -> Result<GeneratedC, String> {
     crate::known_functions::register(module);
     crate::arm::three_d::setup(module);
-    crate::arm::arrays::setup(module)?;
     let consts = fold_consts32(module)?;
+    crate::arm::arrays::setup_narrowing(module, Some(&|e: &Expr| const_eval(e, &consts)))?;
     let frames = crate::m6809::frames::function_scopes(module)?;
 
     let mut g = Gen {

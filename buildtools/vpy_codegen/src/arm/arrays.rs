@@ -26,6 +26,13 @@ thread_local! {
 
 /// Record the element type of every array of `module` for a fresh compile.
 pub fn setup(module: &Module) -> Result<(), String> {
+    setup_narrowing(module, None)
+}
+
+/// [`setup`], where an untyped `const` array whose every value `value_of` folds to
+/// -128..127 holds bytes (`i8`) instead of halfwords. The C backend asks for it: its constant
+/// tables live in the .um2's SRAM like everything else, and most are small numbers.
+pub fn setup_narrowing(module: &Module, value_of: Option<&dyn Fn(&Expr) -> Option<i64>>) -> Result<(), String> {
     let globals = module
         .items
         .iter()
@@ -34,7 +41,13 @@ pub fn setup(module: &Module) -> Result<(), String> {
             | Item::Const { name, value: Expr::List(v), type_annotation, .. } => {
                 // a table of strings holds their addresses
                 let strings = !v.is_empty() && v.iter().all(|e| matches!(e, Expr::StringLit(_)));
-                let size = if strings { VarSize { bytes: 4, signed: false } } else { VarSize::from_annotation(type_annotation) };
+                let bytes = value_of.is_some_and(|f| {
+                    matches!(item, Item::Const { .. }) && type_annotation.is_none() && !v.is_empty()
+                        && v.iter().all(|e| f(e).is_some_and(|x| (-128..=127).contains(&x)))
+                });
+                let size = if strings { VarSize { bytes: 4, signed: false } }
+                    else if bytes { VarSize { bytes: 1, signed: true } }
+                    else { VarSize::from_annotation(type_annotation) };
                 Some((name.to_uppercase(), size))
             }
             _ => None,

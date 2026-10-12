@@ -85,6 +85,29 @@ pub fn load_program(input: &Path) -> Result<Program> {
         modules.insert(name.clone(), parse_file(path)?);
         paths.insert(name, path.clone());
     }
+    // `import x` with no x.vpy: a library of poses and clips, assets/clips/**/x.vclip, as a
+    // module of constants (vclipres.rs)
+    if let Some(info) = &project {
+        let clips = info.root_dir.join("assets").join("clips");
+        let mut wanted: Vec<String> = modules
+            .values()
+            .flat_map(|m| m.imports.iter().filter_map(|i| i.module_path.last().cloned()))
+            .filter(|n| !modules.contains_key(n))
+            .collect();
+        wanted.sort();
+        wanted.dedup();
+        for name in wanted {
+            let Some(path) = vpy_codegen::vclipres::find_file(&clips, &name, "vclip") else { continue };
+            let lib = vpy_codegen::vclipres::load_vclip_file(&path)
+                .map_err(|e| anyhow!("{}: {e}", path.display()))?;
+            let src = vpy_codegen::vclipres::vpy_module(&lib, &format!("{name}.vclip"));
+            let tokens = vpy_parser::lex(&src).map_err(|e| anyhow!("{}: generated module: {e}", path.display()))?;
+            let module = vpy_parser::parser::parse(tokens, path.to_str().unwrap_or("clip"))
+                .map_err(|e| anyhow!("{}: generated module: {e}", path.display()))?;
+            modules.insert(name.clone(), module);
+            paths.insert(name, path);
+        }
+    }
     let module_count = modules.len();
 
     // Unified name of every function (same rule as the unifier: entry symbols

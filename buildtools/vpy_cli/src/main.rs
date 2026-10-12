@@ -920,13 +920,22 @@ fn check_asset_file(input: &Path) -> Result<String> {
             let le = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]);
             format!("{} vertices, {} faces, {} bytes", le(8), le(10), bytes.len())
         }
+        "vclip" => {
+            let l = vpy_codegen::vclipres::load_vclip_file(input)?;
+            format!("{} pose(s), {} clip(s), {} set(s) on skeleton \"{}\" ({} joints)",
+                l.poses.len(), l.clips.len(), l.sets.len(), l.skeleton, l.joints.len())
+        }
+        "vskel" => {
+            let j = vpy_codegen::vclipres::skeleton_joints(input)?;
+            format!("{} joint(s)", j.len())
+        }
         "vscene" => {
             let c = vpy_codegen::vsceneres::compile_vscene_file_to_bytes(input)?;
             format!("{} item(s), {} mesh(es) {:?}, {} bytes",
                 u16::from_le_bytes([c.bytes[6], c.bytes[7]]), c.meshes.len(), c.meshes, c.bytes.len())
         }
         other => anyhow::bail!(
-            "unsupported asset extension '.{other}' (expected .vec .vmus .vsfx .vanim .vplay .venemy .vinstr .vrec .vsmp .vmesh .vscene)"
+            "unsupported asset extension '.{other}' (expected .vec .vmus .vsfx .vanim .vplay .venemy .vinstr .vrec .vsmp .vmesh .vscene .vclip .vskel)"
         ),
     };
     Ok(s)
@@ -963,6 +972,22 @@ fn cmd_compile_asset(input: &Path, format: &str, out: &Path, name: Option<String
     // Scene (.vscene) → the scene image + a table of the .vmesh arrays it places.
     if ext == "vscene" {
         return cmd_compile_scene(input, format, out, &sym);
+    }
+
+    // Poses, clips and sets (.vclip) → constant tables (vclipres.rs). C only: a VPy program
+    // imports the library by name instead.
+    if ext == "vclip" {
+        let lib = vpy_codegen::vclipres::load_vclip_file(input)
+            .map_err(|e| anyhow::anyhow!("compile {}: {e}", input.display()))?;
+        if format == "bin" {
+            anyhow::bail!("a .vclip has no binary form: --format c (VPy imports it by name)");
+        }
+        let src = input.file_name().and_then(|n| n.to_str()).unwrap_or("x.vclip");
+        std::fs::write(out, vpy_codegen::vclipres::c_header(&lib, &sym, src))
+            .with_context(|| format!("write {}", out.display()))?;
+        println!("  {} → {} poses, {} clips, {} sets", input.display(), lib.poses.len(), lib.clips.len(), lib.sets.len());
+        println!("{}", format!("✓ Wrote {}", out.display()).green().bold());
+        return Ok(());
     }
 
     // Compile to bytes + choose the C array suffix based on asset kind.
