@@ -168,7 +168,7 @@ fn unknown_module_member_is_a_compile_error() {
     let p = project(&MAIN.replace("physics.step(px)", "physics.stepp(px)"));
     let (r, _) = build_m6809(&p.path().join("xmod.vpyproj"), p.path());
     assert!(!r.ok);
-    assert!(r.output.contains("main.vpy:12: error: module `physics` has no function, variable or const named `stepp`"),
+    assert!(r.output.contains("main.vpy:12: error: module `physics` has no function, variable, const or struct named `stepp`"),
         "{}", r.output);
 }
 
@@ -178,11 +178,12 @@ fn unknown_function_is_a_compile_error_with_line() {
     let proj = p.path().join("xmod.vpyproj");
     let (r, _) = build_m6809(&proj, p.path());
     assert!(!r.ok, "m6809 must fail:\n{}", r.output);
-    assert!(r.output.contains("line 17: `DRAW_LIEN()` is not a builtin"), "{}", r.output);
+    // The error names the file of the function it is in.
+    assert!(r.output.contains("main.vpy:17: error: `DRAW_LIEN()` is not a builtin"), "{}", r.output);
     for target in ["rp2350", "pitrex"] {
         let (r, _) = asm_for(&proj, target, p.path());
         assert!(!r.ok, "{target} must fail:\n{}", r.output);
-        assert!(r.output.contains("line 17: `DRAW_LIEN()` is not a builtin"), "{target}: {}", r.output);
+        assert!(r.output.contains("main.vpy:17: error: `DRAW_LIEN()` is not a builtin"), "{target}: {}", r.output);
     }
 }
 
@@ -264,8 +265,98 @@ fn arm_len_matches_m6809() {
         assert!(!asm.contains("vpy_len") && !asm.contains("pitrex_len"), "{target}: no runtime stub");
         let (r, _) = asm_for(&bad.path().join("xmod.vpyproj"), target, bad.path());
         assert!(!r.ok, "{target}: len(non-array) must fail:\n{}", r.output);
-        assert!(r.output.contains(&format!("len(PX) is not supported on {target}")) && r.output.contains("line 16"),
+        assert!(r.output.contains(&format!("main.vpy:16: error: len(px) is not supported on {target}")),
             "{target}: {}", r.output);
-        assert!(r.output.contains(&format!("len() on {target} needs the name of a global array (line 16")), "{target}: {}", r.output);
+        assert!(r.output.contains(&format!("main.vpy:16: error: len() on {target} needs the name of a global array")), "{target}: {}", r.output);
+    }
+}
+
+/// A project of the given `src/` files.
+fn project_of(files: &[(&str, &str)]) -> tempfile::TempDir {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("xmod.vpyproj"),
+        "[project]\nname = \"xmod\"\nversion = \"0.1.0\"\nentry = \"src/main.vpy\"\n\n[sources]\nvpy = [\"src/**/*.vpy\"]\n",
+    )
+    .unwrap();
+    for (name, text) in files {
+        std::fs::write(dir.join("src").join(name), text).unwrap();
+    }
+    tmp
+}
+
+const TYPES: &str = "\
+enum Stage:
+    S_SPACE
+    S_TRENCH
+
+struct Tie:
+    x: i16
+    hp: u8 = 3
+
+ties = Tie[4]
+";
+
+#[test]
+fn struct_types_enums_and_arrays_cross_modules() {
+    // A struct type used from another module three ways: module.Type[n],
+    // `from m import Type`, module.Type(values).
+    let space = "\
+import types
+from types import Tie, S_TRENCH
+
+bolts = types.Tie[2]
+boss = types.Tie(5, 9)
+more = Tie[3]
+stage = 0
+
+def hit(i):
+    types.ties[i].hp -= 1
+    bolts[1].x = boss.hp + more[2].hp
+    stage = S_TRENCH
+";
+    let main = "\
+import space
+
+def main():
+    space.hit(2)
+
+def loop():
+    pass
+";
+    let p = project_of(&[("main.vpy", main), ("space.vpy", space), ("types.vpy", TYPES)]);
+    let proj = p.path().join("xmod.vpyproj");
+    let (r, asm) = build_m6809(&proj, p.path());
+    assert!(r.ok, "m6809:\n{}", r.output);
+    for global in ["TYPES_TIES__HP", "SPACE_BOLTS__X", "SPACE_BOSS__HP", "SPACE_MORE__HP"] {
+        assert!(asm.contains(&format!("VAR_{global}")), "m6809: no {global}");
+    }
+    for target in ["rp2350", "uvm2", "pitrex"] {
+        let (r, _) = asm_for(&proj, target, p.path());
+        assert!(r.ok, "{target}:\n{}", r.output);
+    }
+}
+
+#[test]
+fn codegen_errors_name_the_module_file_and_the_written_names() {
+    // A codegen error inside an imported module names that file, not "line N",
+    // and a struct field as written (`ties.x`), not its global (`TYPES_ties__x`).
+    let types = TYPES.replace("    x: i16", "    x: i32");
+    let space = "def frame():\n    nope_fn(1)\n";
+    let main = "import space\nimport types\n\ndef main():\n    pass\n\ndef loop():\n    space.frame()\n";
+    let p = project_of(&[("main.vpy", main), ("space.vpy", space), ("types.vpy", &types)]);
+    let proj = p.path().join("xmod.vpyproj");
+    let (r, _) = build_m6809(&proj, p.path());
+    assert!(!r.ok);
+    assert!(r.output.contains("types.vpy:9: error: `ties.x: i32`"), "{}", r.output);
+    let ok_types = TYPES.to_string();
+    let p = project_of(&[("main.vpy", main), ("space.vpy", space), ("types.vpy", &ok_types)]);
+    let proj = p.path().join("xmod.vpyproj");
+    for target in ["m6809", "rp2350", "uvm2", "pitrex"] {
+        let r = if target == "m6809" { build_m6809(&proj, p.path()).0 } else { asm_for(&proj, target, p.path()).0 };
+        assert!(!r.ok, "{target} must fail");
+        assert!(r.output.contains("space.vpy:2: error: `NOPE_FN()` is not a builtin"), "{target}: {}", r.output);
     }
 }

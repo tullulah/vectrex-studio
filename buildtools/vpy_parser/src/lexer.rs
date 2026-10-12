@@ -37,6 +37,7 @@ pub enum TokenKind {
     As,
     Export,
     Struct,
+    Enum,
     Self_,
     At,
 
@@ -84,6 +85,11 @@ pub enum TokenKind {
     SlashEqual,
     SlashSlashEqual,
     PercentEqual,
+    AmpEqual,
+    PipeEqual,
+    CaretEqual,
+    ShiftLeftEqual,
+    ShiftRightEqual,
 
     // Structural
     Newline,
@@ -289,16 +295,31 @@ fn lex_line(line: &str, line_no: usize, out: &mut Vec<Token>) -> ParseResult<()>
 
             // Bitwise operators
             '&' => {
-                out.push(token(TokenKind::Amp, line_no, idx));
-                idx += 1;
+                if idx + 1 < chars.len() && chars[idx + 1] == '=' {
+                    out.push(token(TokenKind::AmpEqual, line_no, idx));
+                    idx += 2;
+                } else {
+                    out.push(token(TokenKind::Amp, line_no, idx));
+                    idx += 1;
+                }
             }
             '|' => {
-                out.push(token(TokenKind::Pipe, line_no, idx));
-                idx += 1;
+                if idx + 1 < chars.len() && chars[idx + 1] == '=' {
+                    out.push(token(TokenKind::PipeEqual, line_no, idx));
+                    idx += 2;
+                } else {
+                    out.push(token(TokenKind::Pipe, line_no, idx));
+                    idx += 1;
+                }
             }
             '^' => {
-                out.push(token(TokenKind::Caret, line_no, idx));
-                idx += 1;
+                if idx + 1 < chars.len() && chars[idx + 1] == '=' {
+                    out.push(token(TokenKind::CaretEqual, line_no, idx));
+                    idx += 2;
+                } else {
+                    out.push(token(TokenKind::Caret, line_no, idx));
+                    idx += 1;
+                }
             }
             '~' => {
                 out.push(token(TokenKind::Tilde, line_no, idx));
@@ -331,7 +352,10 @@ fn lex_line(line: &str, line_no: usize, out: &mut Vec<Token>) -> ParseResult<()>
                 }
             }
             '<' => {
-                if idx + 1 < chars.len() && chars[idx + 1] == '<' {
+                if idx + 2 < chars.len() && chars[idx + 1] == '<' && chars[idx + 2] == '=' {
+                    out.push(token(TokenKind::ShiftLeftEqual, line_no, idx));
+                    idx += 3;
+                } else if idx + 1 < chars.len() && chars[idx + 1] == '<' {
                     out.push(token(TokenKind::ShiftLeft, line_no, idx));
                     idx += 2;
                 } else if idx + 1 < chars.len() && chars[idx + 1] == '=' {
@@ -343,7 +367,10 @@ fn lex_line(line: &str, line_no: usize, out: &mut Vec<Token>) -> ParseResult<()>
                 }
             }
             '>' => {
-                if idx + 1 < chars.len() && chars[idx + 1] == '>' {
+                if idx + 2 < chars.len() && chars[idx + 1] == '>' && chars[idx + 2] == '=' {
+                    out.push(token(TokenKind::ShiftRightEqual, line_no, idx));
+                    idx += 3;
+                } else if idx + 1 < chars.len() && chars[idx + 1] == '>' {
                     out.push(token(TokenKind::ShiftRight, line_no, idx));
                     idx += 2;
                 } else if idx + 1 < chars.len() && chars[idx + 1] == '=' {
@@ -513,6 +540,7 @@ fn lex_line(line: &str, line_no: usize, out: &mut Vec<Token>) -> ParseResult<()>
                     "as" => TokenKind::As,
                     "export" => TokenKind::Export,
                     "struct" => TokenKind::Struct,
+                    "enum" => TokenKind::Enum,
                     "self" => TokenKind::Self_,
                     _ => TokenKind::Identifier(ident.to_string()),
                 };

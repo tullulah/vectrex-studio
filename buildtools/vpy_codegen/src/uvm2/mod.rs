@@ -172,8 +172,10 @@ pub fn generate_uvm2_asm(
     let msg_entries = builtins::collect_msg_entries(module);
     asm.push_str(&builtins::emit_builtins(&msg_entries, &usage));
 
+    crate::arm::three_d::setup(module);
     asm.push_str(&functions::emit_functions(module, asset_list, &usage)?);
     asm.push_str(&assets::emit_arm_assets(asset_list));
+    asm.push_str(&crate::arm::three_d::emit_data(asset_list)?);
 
     // Expand cbz, then inject the runtime bring-up call at start of game_main
     let expanded = crate::arm::expand_cbz_pub(&asm);

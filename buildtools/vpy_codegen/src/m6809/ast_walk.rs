@@ -197,6 +197,28 @@ pub fn for_each_expr_in_stmts<'a>(stmts: &'a [Stmt], f: impl FnMut(&'a Expr)) {
     walk_stmts(stmts, &mut ExprFn(f));
 }
 
+/// Call `f(item, call)` for every call in the module, with the name of the item it
+/// is in: the function, or the global/const whose initializer holds it.
+pub fn for_each_call_in_items<'a>(module: &'a Module, mut f: impl FnMut(&'a str, &'a CallInfo)) {
+    for item in &module.items {
+        match item {
+            Item::Function(func) => for_each_expr_in_stmts(&func.body, |e| {
+                if let Expr::Call(call) = e {
+                    f(&func.name, call)
+                }
+            }),
+            Item::GlobalLet { name, value, .. } | Item::Const { name, value, .. } => {
+                walk_expr(value, &mut ExprFn(|e: &'a Expr| {
+                    if let Expr::Call(call) = e {
+                        f(name, call)
+                    }
+                }))
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Call `f` for every call expression in the module (builtin or user function).
 pub fn for_each_call<'a>(module: &'a Module, mut f: impl FnMut(&'a CallInfo)) {
     for_each_expr(module, |e| {

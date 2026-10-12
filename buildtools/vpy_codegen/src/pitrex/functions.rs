@@ -142,7 +142,8 @@ pub fn allocate_globals_bss(module: &Module) -> (HashMap<String, u32>, String) {
                 match value {
                     Expr::List(elems) => {
                         let len = elems.len();
-                        let data_size = ((len * 2) as u32 + 3) & !3;
+                        let elem_bytes = crate::arm::arrays::of_global(name).bytes;
+                        let data_size = ((len * elem_bytes) as u32 + 3) & !3;
                         let data_addr = alloc.alloc(data_size);
                         let ptr_addr  = alloc.alloc(4);
                         decls.push_str(&format!(".equ ARRAY_{varname}_DATA, 0x{data_addr:08X}\n"));
@@ -183,7 +184,7 @@ pub fn allocate_globals_bss(module: &Module) -> (HashMap<String, u32>, String) {
 
 /// Emit const array ROM data tables (to be placed in .rodata section).
 /// String arrays emit a .word pointer table followed by .asciz string data.
-/// Numeric arrays emit .hword entries (i16).
+/// Numeric arrays emit entries of their element type (.byte/.hword/.word).
 /// Also registers string array names for stride-4/ldr indexing in expressions.
 pub fn emit_const_array_data(module: &Module) -> String {
     let mut s = String::new();
@@ -212,11 +213,12 @@ pub fn emit_const_array_data(module: &Module) -> String {
                         }
                     }
                 } else {
+                    let directive = crate::arm::arrays::directive(crate::arm::arrays::of_global(name));
                     s.push_str(".align 2\n");
                     s.push_str(&format!("ARRAY_{varname}_DATA:\n"));
                     for elem in elems {
                         if let Expr::Number(n) = elem {
-                            s.push_str(&format!("    .hword {n}\n"));
+                            s.push_str(&format!("    {directive} {n}\n"));
                         }
                     }
                 }
@@ -244,11 +246,13 @@ pub fn emit_functions(
         if let Item::Function(func) = item {
             let n = func.name.to_uppercase();
             if n == "MAIN" || n == "LOOP" { continue; }
-            s.push_str(&emit_function(func, &Scope::of(func, &scopes), var_addrs)?);
+            s.push_str(&emit_function(func, &Scope::of(func, &scopes), var_addrs)
+                .map_err(|e| crate::origins::locate_for(&func.name, &e))?);
         }
     }
 
-    s.push_str(&emit_game_main(module, &scopes, var_addrs)?);
+    s.push_str(&emit_game_main(module, &scopes, var_addrs)
+        .map_err(|e| crate::origins::locate_for("MAIN", &e))?);
     Ok(s)
 }
 
@@ -274,6 +278,7 @@ fn emit_function(
     // ARM32: no .thumb_func directive
     s.push_str(&format!(".global {name}\n.type {name}, %function\n{name}:\n"));
     s.push_str(&format!("    {PUSH}\n"));
+    crate::arm::arrays::enter_function(name, &func.params);
     // Frame: parameters (r0-r3, then the caller's stack arguments) and locals.
     s.push_str(&frame::prologue(&layout, &func.params, PUSHED, true));
 
@@ -327,6 +332,7 @@ fn emit_game_main(
     let main_scope = main_fn.map(|f| Scope::of(f, scopes)).unwrap_or_default();
     let loop_scope = loop_fn.map(|f| Scope::of(f, scopes)).unwrap_or_default();
     let layouts = frame::layout_aligned(&[&main_scope, &loop_scope], 32, 16, "main")?;
+    crate::arm::arrays::enter_function("", &[]);
     s.push_str(&frame::prologue(&layouts[0], &[], 32, true));
 
     // UART debug init (PL011, 921600 baud, 250 MHz clock) — Malban SDK
@@ -404,14 +410,16 @@ fn emit_game_main(
                         }
                         Expr::List(elems) => {
                             let data_varname = format!("ARRAY_{varname}_DATA");
+                            let elem = crate::arm::arrays::of_global(name);
+                            let store = crate::arm::arrays::store(elem);
                             s.push_str(&format!("    @ init array {name}\n"));
                             s.push_str(&format!("    ldr     r2, ={data_varname}\n"));
                             // ARMv6 STRH immediate offset max = 255 bytes.
-                            // For arrays > 128 halfwords, rechunk into r3 every 256 bytes.
+                            // For arrays > 255 bytes, rechunk into r3 every 256 bytes.
                             let mut chunk_base: usize = 0;
-                            for (i, elem) in elems.iter().enumerate() {
-                                if let Expr::Number(n) = elem {
-                                    let byte_off = i * 2;
+                            for (i, e) in elems.iter().enumerate() {
+                                if let Expr::Number(n) = e {
+                                    let byte_off = i * elem.bytes;
                                     if byte_off > 0 && byte_off >= chunk_base + 256 {
                                         chunk_base = (byte_off / 256) * 256;
                                         s.push_str(&format!(
@@ -426,7 +434,7 @@ fn emit_game_main(
                                         format!("    ldr     r0, ={n}\n")
                                     };
                                     s.push_str(&format!(
-                                        "{mov}    strh    r0, [{base_reg}, #{local_off}]\n"
+                                        "{mov}    {store}   r0, [{base_reg}, #{local_off}]\n"
                                     ));
                                 }
                             }
@@ -666,13 +674,14 @@ fn emit_index_load(
     var_addrs: &HashMap<String, u32>,
     s: &mut String,
 ) -> Result<(), String> {
+    let elem = crate::arm::arrays::of(target);
     s.push_str(&emit_expr(target, var_addrs)?);  // r0 = base ptr
     s.push_str("    push    {r0}           @ save base ptr\n");
     s.push_str(&emit_expr(index, var_addrs)?);   // r0 = index
-    s.push_str("    lsl     r0, r0, #1       @ index * 2\n");
+    s.push_str(&crate::arm::arrays::scale("r0", elem));
     s.push_str("    pop     {r1}           @ base ptr\n");
     s.push_str("    add     r1, r1, r0       @ element addr\n");
-    s.push_str("    ldrsh   r0, [r1]         @ signed 16-bit load\n");
+    s.push_str(&format!("    {}   r0, [r1]         @ load {} element\n", crate::arm::arrays::load(elem), elem.type_name()));
     Ok(())
 }
 
@@ -690,15 +699,16 @@ fn emit_stmt(
                     s.push_str(&frame::store_r0(name, var_addrs)?);
                 }
                 AssignTarget::Index { target, index, .. } => {
+                    let elem = crate::arm::arrays::of(target);
                     s.push_str("    push    {r0}           @ save value\n");
                     s.push_str(&emit_expr(target, var_addrs)?);
                     s.push_str("    push    {r0}           @ save base ptr\n");
                     s.push_str(&emit_expr(index, var_addrs)?);
-                    s.push_str("    lsl     r0, r0, #1       @ index * 2\n");
+                    s.push_str(&crate::arm::arrays::scale("r0", elem));
                     s.push_str("    pop     {r1}           @ base ptr\n");
                     s.push_str("    add     r1, r1, r0       @ element addr\n");
                     s.push_str("    pop     {r0}           @ value\n");
-                    s.push_str("    strh    r0, [r1]         @ store 16-bit\n");
+                    s.push_str(&format!("    {}   r0, [r1]         @ store {}\n", crate::arm::arrays::store(elem), elem.type_name()));
                 }
                 other => return Err(format!("Unsupported assign target: {:?}", other)),
             }
@@ -732,7 +742,7 @@ fn emit_stmt(
                     s.push_str("    pop     {r0}\n");
                     emit_binop_on_regs(op, &mut s)?;
                     s.push_str("    pop     {r1}       @ element addr\n");
-                    s.push_str("    strh    r0, [r1]     @ store result\n");
+                    s.push_str(&format!("    {}   r0, [r1]     @ store result\n", crate::arm::arrays::store(crate::arm::arrays::of(target))));
                 }
                 other => return Err(format!("Unsupported compound assign target: {:?}", other)),
             }

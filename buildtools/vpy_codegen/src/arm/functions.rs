@@ -22,6 +22,7 @@ pub fn emit_functions(
     // Parameters and locals of every function (m6809's name-resolution rules,
     // shared): they live in stack frames, globals at fixed addresses.
     let scopes = crate::m6809::frames::function_scopes(module)?;
+    super::arrays::setup(module)?;
     let (var_addrs, var_decls, scalar_consts) = allocate_globals(module);
 
     // Register scalar consts so expression codegen folds their reads to
@@ -33,17 +34,19 @@ pub fn emit_functions(
     s.push('\n');
 
     // Emit const array ROM data tables (before user functions so they land in bank 0).
-    // These are labelled .hword tables pointed to by VAR_{name} at startup.
+    // Tables of the declared element type (.byte/.hword/.word), pointed to by
+    // VAR_{name} at startup.
     s.push_str("@ --- Const array ROM data ---\n");
     for item in &module.items {
         if let Item::Const { name, value, .. } = item {
             if let Expr::List(elems) = value {
                 let varname = name.to_uppercase();
+                let directive = super::arrays::directive(super::arrays::of_global(name));
                 s.push_str(".align 2\n");
                 s.push_str(&format!("ARRAY_{varname}_DATA:\n"));
                 for elem in elems {
                     if let Expr::Number(n) = elem {
-                        s.push_str(&format!("    .hword {n}\n"));
+                        s.push_str(&format!("    {directive} {n}\n"));
                     }
                 }
             }
@@ -59,11 +62,13 @@ pub fn emit_functions(
             if n == "MAIN" || n == "LOOP" {
                 continue;
             }
-            s.push_str(&emit_function(func, &Scope::of(func, &scopes), &var_addrs)?);
+            s.push_str(&emit_function(func, &Scope::of(func, &scopes), &var_addrs)
+                .map_err(|e| crate::origins::locate_for(&func.name, &e))?);
         }
     }
 
-    s.push_str(&emit_game_main(module, &scopes, &var_addrs, usage)?);
+    s.push_str(&emit_game_main(module, &scopes, &var_addrs, usage)
+        .map_err(|e| crate::origins::locate_for("MAIN", &e))?);
 
     Ok(s)
 }
@@ -82,7 +87,8 @@ fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String, HashMap<S
                 match value {
                     Expr::List(elems) => {
                         let len = elems.len();
-                        let data_size = ((len * 2) as u32 + 3) & !3;
+                        let elem_bytes = super::arrays::of_global(name).bytes;
+                        let data_size = ((len * elem_bytes) as u32 + 3) & !3;
                         let data_addr = alloc.alloc(data_size);
                         let ptr_addr  = alloc.alloc(4);
                         decls.push_str(&format!(
@@ -160,6 +166,7 @@ fn emit_function(
     s.push_str(".align 2\n");  // ensure 2-byte alignment after preceding .ltorg padding
     s.push_str(&format!(".global {name}\n.type {name}, %function\n.thumb_func\n{name}:\n"));
     s.push_str(&format!("    {PUSH}\n"));
+    super::arrays::enter_function(name, &func.params);
     // Frame: parameters (r0-r3, then the caller's stack arguments) and locals.
     s.push_str(&frame::prologue(&layout, &func.params, PUSHED, false));
 
@@ -213,6 +220,7 @@ fn emit_game_main(
     let main_scope = main_fn.map(|f| Scope::of(f, scopes)).unwrap_or_default();
     let loop_scope = loop_fn.map(|f| Scope::of(f, scopes)).unwrap_or_default();
     let layouts = frame::layout(&[&main_scope, &loop_scope], PUSHED, "game_main")?;
+    super::arrays::enter_function("", &[]);
     s.push_str(&frame::prologue(&layouts[0], &[], PUSHED, false));
 
     // Zero the VPy runtime RAM region [TMPVAL .. USER_RAM_START). RP2350 SRAM holds
@@ -272,14 +280,16 @@ fn emit_game_main(
                         }
                         Expr::List(elems) => {
                             let data_varname = format!("ARRAY_{varname}_DATA");
+                            let elem = super::arrays::of_global(name);
+                            let store = super::arrays::store(elem);
                             s.push_str(&format!("    @ init array {name}\n"));
                             s.push_str(&format!("    ldr     r2, ={data_varname}\n"));
                             // ARMv6 STRH immediate offset max = 255 bytes.
-                            // For arrays > 128 halfwords, rechunk into r3 every 256 bytes.
+                            // For arrays > 255 bytes, rechunk into r3 every 256 bytes.
                             let mut chunk_base: usize = 0;
-                            for (i, elem) in elems.iter().enumerate() {
-                                if let Expr::Number(n) = elem {
-                                    let byte_off = i * 2;
+                            for (i, e) in elems.iter().enumerate() {
+                                if let Expr::Number(n) = e {
+                                    let byte_off = i * elem.bytes;
                                     if byte_off > 0 && byte_off >= chunk_base + 256 {
                                         chunk_base = (byte_off / 256) * 256;
                                         s.push_str(&format!(
@@ -294,7 +304,7 @@ fn emit_game_main(
                                         format!("    ldr     r0, ={n}\n")
                                     };
                                     s.push_str(&format!(
-                                        "{mov}    strh    r0, [{base_reg}, #{local_off}]\n"
+                                        "{mov}    {store}   r0, [{base_reg}, #{local_off}]\n"
                                     ));
                                 }
                             }
@@ -444,17 +454,17 @@ fn emit_binop_on_regs(op: &BinOp, s: &mut String) -> Result<(), String> {
     Ok(())
 }
 
-/// Emit code to load element at arr[index] into r0 (sign-extended 16-bit).
+/// Emit code to load element at arr[index] into r0 (extended by the element type).
 /// Leaves element address in r1 as a side-effect (used by compound index assign).
 fn emit_index_load(target: &Expr, index: &Expr, var_addrs: &HashMap<String, u32>, s: &mut String) -> Result<(), String> {
+    let elem = super::arrays::of(target);
     s.push_str(&emit_expr(target, var_addrs)?);  // base ptr in r0
     s.push_str("    push    {r0}           @ save base ptr\n");
     s.push_str(&emit_expr(index, var_addrs)?);   // index in r0
-    s.push_str("    lsl     r0, r0, #1     @ index * 2 (16-bit elements)\n");
+    s.push_str(&super::arrays::scale("r0", elem));
     s.push_str("    pop     {r1}           @ base ptr\n");
     s.push_str("    add     r1, r1, r0     @ element addr\n");
-    s.push_str("    ldrh    r0, [r1]       @ load 16-bit element\n");
-    s.push_str("    sxth    r0, r0         @ sign-extend\n");
+    s.push_str(&format!("    {}   r0, [r1]       @ load {} element\n", super::arrays::load(elem), elem.type_name()));
     Ok(())
 }
 
@@ -473,15 +483,16 @@ fn emit_stmt(
                 }
                 AssignTarget::Index { target, index, .. } => {
                     // r0 = value; now compute element address
+                    let elem = super::arrays::of(target);
                     s.push_str("    push    {r0}           @ save value\n");
                     s.push_str(&emit_expr(target, var_addrs)?);
                     s.push_str("    push    {r0}           @ save base ptr\n");
                     s.push_str(&emit_expr(index, var_addrs)?);
-                    s.push_str("    lsl     r0, r0, #1     @ index * 2 (16-bit elements)\n");
+                    s.push_str(&super::arrays::scale("r0", elem));
                     s.push_str("    pop     {r1}           @ base ptr\n");
                     s.push_str("    add     r1, r1, r0     @ element addr\n");
                     s.push_str("    pop     {r0}           @ value\n");
-                    s.push_str("    strh    r0, [r1]       @ store 16-bit\n");
+                    s.push_str(&format!("    {}   r0, [r1]       @ store {}\n", super::arrays::store(elem), elem.type_name()));
                 }
                 other => return Err(format!("Unsupported assign target: {:?}", other)),
             }
@@ -517,7 +528,7 @@ fn emit_stmt(
                     s.push_str("    pop     {r0}\n");
                     emit_binop_on_regs(op, &mut s)?;
                     s.push_str("    pop     {r1}       @ element addr\n");
-                    s.push_str("    strh    r0, [r1]   @ store result\n");
+                    s.push_str(&format!("    {}   r0, [r1]   @ store result\n", super::arrays::store(super::arrays::of(target))));
                 }
                 other => return Err(format!("Unsupported compound assign target: {:?}", other)),
             }
@@ -686,12 +697,13 @@ fn emit_stmt(
             s.push_str("    cmp     r0, r1\n");
             s.push_str(&format!("    bge     forin_end_{id}\n"));
 
-            // Load element: var = base_ptr[ctr * 2]  (i16 elements)
+            // Load element: var = base_ptr[ctr]  (the array's element type)
+            let elem = super::arrays::of(iterable);
             s.push_str(&format!("    ldr     r1, [{fp}, #{base}]\n"));
             s.push_str(&format!("    ldr     r2, [{fp}, #{ctr}]\n"));
-            s.push_str("    lsl     r2, r2, #1     @ ctr * 2\n");
+            s.push_str(&super::arrays::scale("r2", elem));
             s.push_str("    add     r1, r1, r2\n");
-            s.push_str("    ldrsh   r0, [r1]       @ load i16 element\n");
+            s.push_str(&format!("    {}   r0, [r1]       @ load {} element\n", super::arrays::load(elem), elem.type_name()));
             s.push_str(&frame::store_r0(var, var_addrs)?);
 
             for st in body { s.push_str(&emit_stmt(st, var_addrs, &inner_labels, return_label)?); }

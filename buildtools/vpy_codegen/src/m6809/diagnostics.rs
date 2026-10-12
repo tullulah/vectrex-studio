@@ -82,6 +82,8 @@ pub fn error(message: impl Into<String>) {
     let line = CURRENT_LINE.with(|l| *l.borrow());
     let message = message.into();
     let text = if line > 0 { format!("line {line}: {message}") } else { message };
+    // In a multi-file program, the file of the function being compiled.
+    let text = crate::origins::locate(&text);
     ERRORS.with(|e| e.borrow_mut().push(text));
 }
 

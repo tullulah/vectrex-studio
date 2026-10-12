@@ -353,7 +353,15 @@ pub fn generate_functions(module: &Module, assets: &[AssetInfo]) -> Result<Strin
     Ok(asm)
 }
 
+/// The code of one function; its errors carry the function's source file.
 fn generate_function_body(func: &Function, asm: &mut String, assets: &[AssetInfo]) -> Result<(), String> {
+    crate::origins::enter(&func.name);
+    let result = generate_function_body_in(func, asm, assets).map_err(|e| crate::origins::locate(&e));
+    crate::origins::leave();
+    result
+}
+
+fn generate_function_body_in(func: &Function, asm: &mut String, assets: &[AssetInfo]) -> Result<(), String> {
     // Parameters and locals resolve to this function's frame slots (see `frames`);
     // the caller has already stored the arguments in the parameter slots.
     let label = vpy_parser::symbols::m6809_label(&func.name);
@@ -528,9 +536,10 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
                         asm.push_str(&format!("    STD {}\n", var_label));
                     }
                 }
-                // `xs[i] op= v` with a simple index (evaluated twice, so it must
-                // have no side effects).
-                vpy_parser::AssignTarget::Index { target: arr, index, .. } if expressions::is_simple(index) => {
+                // `xs[i] op= v`: the index is evaluated twice, so it must have no
+                // side effects (no call); `g[r][c] += 1` and `ties[i + 1].hp -= 1`
+                // lower to such an index.
+                vpy_parser::AssignTarget::Index { target: arr, index, .. } if has_no_calls(index) => {
                     let element = Expr::Index { target: arr.clone(), index: index.clone() };
                     let combined = Expr::Binary { op: *op, left: Box::new(element), right: Box::new(value.clone()) };
                     let assign = Stmt::Assign { target: target.clone(), value: combined, source_line: *source_line };
@@ -538,8 +547,8 @@ fn generate_statement(stmt: &Stmt, asm: &mut String, assets: &[AssetInfo], loop_
                 }
                 _ => {
                     return Err(format!(
-                        "line {}: compound assignment to a field, or to an element with a computed index \
-                         (`xs[i + 1] += v`), is not supported on m6809; write it out: `xs[j] = xs[j] + v`",
+                        "line {}: compound assignment to an element whose index calls a function \
+                         (`xs[f(i)] += v`) is not supported on m6809; put the index in a variable first",
                         source_line
                     ))
                 }
@@ -996,4 +1005,13 @@ pub fn generate_functions_by_bank(
     }
     
     Ok(bank_asm)
+}
+
+/// Does `e` contain no call (so evaluating it twice is the same as once)?
+fn has_no_calls(e: &Expr) -> bool {
+    let mut calls = false;
+    super::ast_walk::walk_expr(e, &mut super::ast_walk::ExprFn(|x: &Expr| {
+        calls |= matches!(x, Expr::Call(_) | Expr::MethodCall(_));
+    }));
+    !calls
 }

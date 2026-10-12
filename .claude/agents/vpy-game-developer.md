@@ -73,7 +73,7 @@ const ENEMY_COUNT = 4
 
 ship_x = 0                     # global: a top-level assignment (untyped = i16)
 ship_y = -80
-lives: u8 = 3                  # optional type: u8, i8, u16, i16
+lives: u8 = 3                  # optional type: u8, i8, u16, i16 (i32/u32 on ARM targets)
 score = 0
 angle = 0
 facing_left = 0
@@ -131,7 +131,8 @@ Rules:
   untyped (typed `u8` const arrays break in complex games).
 - Control flow: `if/elif/else`, `while`, `for i in range(a, b)` (or `range(a, b, step)`),
   `for x in array`, `switch/case`, `break`, `continue`, `return`. Operators: `+ - * / %`,
-  `& | ^ ~ << >>`, comparisons, `and/or/not`, and `+= -= *=`.
+  `& | ^ ~ << >>` (Python precedence), comparisons, `and/or/not`, and `+= -= *= /= %= &= |= ^= <<= >>=`.
+  Array elements have the declared size (u8/i8 1 byte, untyped/i16/u16 2, i32/u32 4 on ARM only).
 - `META TITLE`, `META COPYRIGHT`, `META MUSIC`, `META ROM_TOTAL_SIZE` / `META ROM_BANK_SIZE`
   (multibank).
 - No floats, no heap, no recursion safety. Every variable has a fixed address.

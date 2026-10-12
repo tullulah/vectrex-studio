@@ -358,6 +358,31 @@ pub fn discover_assets(source_path: &Path) -> Vec<AssetInfo> {
         }
     }
 
+    // 3D assets for vpy3d (the 3D builtins, uvm2): .vmesh anywhere under
+    // assets/meshes/ (names unique across its folders), .vscene in assets/scenes/.
+    for (name, paths) in crate::vsceneres::find_meshes(&project_root.join("assets").join("meshes")) {
+        for path in paths {
+            assets.push(AssetInfo {
+                name: name.clone(),
+                path: path.display().to_string(),
+                asset_type: AssetType::Mesh,
+            });
+        }
+    }
+    let scenes_dir = project_root.join("assets").join("scenes");
+    for entry in fs::read_dir(&scenes_dir).into_iter().flatten().flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) == Some("vscene") {
+            if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                assets.push(AssetInfo {
+                    name: name.to_string(),
+                    path: path.display().to_string(),
+                    asset_type: AssetType::Scene,
+                });
+            }
+        }
+    }
+
     // Search for enemy assets (assets/enemies/*.venemy)
     let enemies_dir = project_root.join("assets").join("enemies");
     if enemies_dir.is_dir() {
@@ -1050,6 +1075,10 @@ pub fn generate_distributed_assets_asm(
                 // bank packer (filter_used_assets drops them), but keep the
                 // match exhaustive.
                 AssetType::Sample => format!("_{}_SMP", symbol_name),
+                // 3D assets are uvm2-only (the 3D builtins are a compile error on
+                // m6809), so they never reach the bank packer either.
+                AssetType::Mesh => format!("_{}_VMESH", symbol_name),
+                AssetType::Scene => format!("_{}_VSCENE", symbol_name),
             };
             asset_entries.push((asset.info.name.clone(), *bank_id, label, asset.info.asset_type.clone()));
         }

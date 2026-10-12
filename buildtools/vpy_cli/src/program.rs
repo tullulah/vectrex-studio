@@ -103,6 +103,26 @@ pub fn load_program(input: &Path) -> Result<Program> {
         }
     }
 
+    // The file of every function, global and const, by unified name: codegen
+    // errors ("line N: …") then say which file (vpy_codegen::origins).
+    let mut item_files = HashMap::new();
+    for (name, module) in &modules {
+        for item in &module.items {
+            let def = match item {
+                vpy_parser::Item::Function(f) => &f.name,
+                vpy_parser::Item::GlobalLet { name, .. } | vpy_parser::Item::Const { name, .. } => name,
+                _ => continue,
+            };
+            let unified = if name == &entry_module {
+                vpy_parser::symbols::entry_symbol(def)
+            } else {
+                vpy_parser::symbols::mangle(name, def)
+            };
+            item_files.insert(unified, (paths[name].display().to_string(), def.clone()));
+        }
+    }
+    vpy_codegen::origins::set_items(item_files);
+
     let unified = vpy_unifier::unify_modules(modules, &entry_module).map_err(|e| match e {
         vpy_unifier::UnifierError::Unresolved(diags) => {
             let rendered: Vec<String> = diags

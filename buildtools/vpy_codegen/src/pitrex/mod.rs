@@ -55,6 +55,8 @@ pub fn generate_pitrex_asm(
     // len() must name a global array (compile-time length), as on m6809.
     crate::validate::check_len_calls(module, "pitrex")?;
     crate::validate::check_draw_vector_rot_calls(module, assets, "pitrex")?;
+    // Element type of every array (shared with the Thumb2 backends).
+    crate::arm::arrays::setup(module)?;
 
     let mut asm = String::new();
 

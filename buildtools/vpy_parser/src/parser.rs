@@ -205,12 +205,12 @@ impl<'a> Parser<'a> {
             let type_name = self.identifier()?;
             // Validate that the type name is one of the supported types
             match type_name.as_str() {
-                "u8" | "i8" | "u16" | "i16" => {
+                "u8" | "i8" | "u16" | "i16" | "u32" | "i32" => {
                     Ok(Some(type_name))
                 }
                 _ => {
                     self.err_here(&format!(
-                        "Invalid type name '{}'. Supported types: u8, i8, u16, i16",
+                        "Invalid type name '{}'. Supported types: u8, i8, u16, i16, i32, u32 (32-bit on the ARM targets only)",
                         type_name
                     ))
                 }
@@ -340,6 +340,11 @@ impl<'a> Parser<'a> {
                     items.push(Item::StructDef(struct_def));
                     continue;
                 }
+                TokenKind::Enum => {
+                    self.advance();
+                    items.extend(self.parse_enum()?);
+                    continue;
+                }
                 TokenKind::At => {
                     // @frame(N) decorator before def
                     self.advance();
@@ -387,7 +392,7 @@ impl<'a> Parser<'a> {
             if self.check_identifier() {
                 let checkpoint = self.pos;
                 if let Ok(name) = self.identifier() {
-                    let type_annotation = self.try_parse_type_annotation().ok().flatten();
+                    let type_annotation = self.try_parse_type_annotation()?;
                     if self.match_kind(&TokenKind::Equal) {
                         let global_line = self.current_line();
                         let value = self.expression()?;
@@ -555,26 +560,21 @@ impl<'a> Parser<'a> {
                     methods.push(func);
                 }
             } else {
-                // Parse field: field_name = default_value or field_name: type
-                let field_name = self.identifier()?;
+                // Field: `name`, `name: type`, `name = default` or `name: type = default`
                 let field_line = self.current_line();
-                
-                // Skip type annotation or default value (simplified parsing)
-                if self.match_kind(&TokenKind::Colon) {
-                    // Type annotation - skip it
-                    let _type_name = self.identifier()?;
-                    self.consume(TokenKind::Newline)?;
-                } else if self.match_kind(&TokenKind::Equal) {
-                    // Default value - skip it
-                    let _ = self.expression()?;
-                    self.consume(TokenKind::Newline)?;
+                let field_name = self.identifier()?;
+                let type_annotation = self.try_parse_type_annotation()?;
+                let default = if self.match_kind(&TokenKind::Equal) {
+                    Some(self.expression()?)
                 } else {
-                    self.consume(TokenKind::Newline)?;
-                }
-                
+                    None
+                };
+                self.consume(TokenKind::Newline)?;
+
                 fields.push(FieldDef {
                     name: field_name,
-                    type_annotation: None,
+                    type_annotation,
+                    default,
                     source_line: field_line,
                 });
             }
@@ -588,6 +588,48 @@ impl<'a> Parser<'a> {
             constructor,
             source_line: line,
         })
+    }
+
+    /// `enum Name:` and its members, one per line or several per line separated by
+    /// commas. Each member is a global const: 0, 1, 2… as in C; `MEMBER = n` sets the
+    /// value and the members after it count on from there. The enum's name only names
+    /// the group.
+    fn parse_enum(&mut self) -> ParseResult<Vec<Item>> {
+        let _name = self.identifier()?;
+        self.consume(TokenKind::Colon)?;
+        self.consume(TokenKind::Newline)?;
+        self.consume(TokenKind::Indent)?;
+        let mut items = Vec::new();
+        let mut next: i64 = 0;
+        while !self.check(TokenKind::Dedent) {
+            self.skip_newlines();
+            if self.check(TokenKind::Dedent) {
+                break;
+            }
+            loop {
+                let line = self.current_line();
+                let name = self.identifier()?;
+                if self.match_kind(&TokenKind::Equal) {
+                    match self.unary()? {
+                        Expr::Number(n) => next = n as i64,
+                        _ => return self.err_here(&format!("enum member `{name}`: the value must be a number")),
+                    }
+                }
+                let value = i32::try_from(next)
+                    .map_err(|_| ParseError::Generic(format!("{}:{line}: error: enum member `{name}` is out of range", self.filename)))?;
+                items.push(Item::Const { name, type_annotation: None, value: Expr::Number(value), source_line: line });
+                next += 1;
+                if !self.match_kind(&TokenKind::Comma) {
+                    break;
+                }
+            }
+            self.consume(TokenKind::Newline)?;
+        }
+        self.consume(TokenKind::Dedent)?;
+        if items.is_empty() {
+            return self.err_here("an enum needs at least one member");
+        }
+        Ok(items)
     }
 
     /// Parse vectorlist definition
@@ -654,9 +696,9 @@ impl<'a> Parser<'a> {
 
     /// Parse equality expression (==, !=, <, >, <=, >=)
     fn equality(&mut self) -> ParseResult<Expr> {
-        let mut left = self.additive()?;
+        let mut left = self.bit_or()?;
         while let Some(op) = self.match_cmp_op() {
-            let right = self.additive()?;
+            let right = self.bit_or()?;
             left = Expr::Compare {
                 op,
                 left: Box::new(left),
@@ -664,6 +706,51 @@ impl<'a> Parser<'a> {
             };
         }
         Ok(left)
+    }
+
+    /// Binary operators bind as in Python: `|` < `^` < `&` < `<<`/`>>` < `+`/`-` < `*`/`/`,
+    /// all above the comparisons, so `x & 3 == 0` is `(x & 3) == 0`.
+    fn bit_or(&mut self) -> ParseResult<Expr> {
+        self.binary_level(&[(TokenKind::Pipe, BinOp::BitOr)], Self::bit_xor)
+    }
+
+    fn bit_xor(&mut self) -> ParseResult<Expr> {
+        self.binary_level(&[(TokenKind::Caret, BinOp::BitXor)], Self::bit_and)
+    }
+
+    fn bit_and(&mut self) -> ParseResult<Expr> {
+        self.binary_level(&[(TokenKind::Amp, BinOp::BitAnd)], Self::shift)
+    }
+
+    /// Parse shift expression (<<, >>; `>>` is arithmetic: it keeps the sign)
+    fn shift(&mut self) -> ParseResult<Expr> {
+        self.binary_level(
+            &[(TokenKind::ShiftLeft, BinOp::Shl), (TokenKind::ShiftRight, BinOp::Shr)],
+            Self::additive,
+        )
+    }
+
+    /// One left-associative precedence level: `next (op next)*`.
+    fn binary_level(
+        &mut self,
+        ops: &[(TokenKind, BinOp)],
+        next: fn(&mut Self) -> ParseResult<Expr>,
+    ) -> ParseResult<Expr> {
+        let mut left = next(self)?;
+        'outer: loop {
+            for (kind, op) in ops {
+                if self.match_kind(kind) {
+                    let right = next(self)?;
+                    left = Expr::Binary {
+                        op: *op,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    };
+                    continue 'outer;
+                }
+            }
+            return Ok(left);
+        }
     }
 
     /// Parse additive expression (+, -)
@@ -720,20 +807,6 @@ impl<'a> Parser<'a> {
                 let right = self.unary()?;
                 left = Expr::Binary {
                     op: BinOp::FloorDiv,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                };
-            } else if self.match_kind(&TokenKind::Amp) {
-                let right = self.unary()?;
-                left = Expr::Binary {
-                    op: BinOp::BitAnd,
-                    left: Box::new(left),
-                    right: Box::new(right),
-                };
-            } else if self.match_kind(&TokenKind::Pipe) {
-                let right = self.unary()?;
-                left = Expr::Binary {
-                    op: BinOp::BitOr,
                     left: Box::new(left),
                     right: Box::new(right),
                 };
@@ -1012,6 +1085,11 @@ impl<'a> Parser<'a> {
                 | TokenKind::SlashEqual
                 | TokenKind::SlashSlashEqual
                 | TokenKind::PercentEqual
+                | TokenKind::AmpEqual
+                | TokenKind::PipeEqual
+                | TokenKind::CaretEqual
+                | TokenKind::ShiftLeftEqual
+                | TokenKind::ShiftRightEqual
         )
     }
 
@@ -1041,6 +1119,26 @@ impl<'a> Parser<'a> {
             TokenKind::PercentEqual => {
                 self.advance();
                 Ok(BinOp::Mod)
+            }
+            TokenKind::AmpEqual => {
+                self.advance();
+                Ok(BinOp::BitAnd)
+            }
+            TokenKind::PipeEqual => {
+                self.advance();
+                Ok(BinOp::BitOr)
+            }
+            TokenKind::CaretEqual => {
+                self.advance();
+                Ok(BinOp::BitXor)
+            }
+            TokenKind::ShiftLeftEqual => {
+                self.advance();
+                Ok(BinOp::Shl)
+            }
+            TokenKind::ShiftRightEqual => {
+                self.advance();
+                Ok(BinOp::Shr)
             }
             _ => self.err_here("Expected compound assignment operator"),
         }
@@ -1527,9 +1625,84 @@ mod tests {
 
     #[test]
     fn test_parse_invalid_type_name() {
-        let code = "const BAD: u32 = 100\n";
+        let code = "const BAD: u64 = 100\n";
         let result = lex_and_parse(code);
-        assert!(result.is_err(), "Should reject invalid type name u32");
+        assert!(result.is_err(), "Should reject invalid type name u64");
+    }
+
+    #[test]
+    fn test_parse_32_bit_types() {
+        let module = lex_and_parse("ws: i32 = [100000]\nconst N: u32 = 7\n").unwrap();
+        assert!(matches!(&module.items[0], Item::GlobalLet { type_annotation: Some(t), .. } if t == "i32"));
+        assert!(matches!(&module.items[1], Item::Const { type_annotation: Some(t), .. } if t == "u32"));
+    }
+
+    #[test]
+    fn test_invalid_type_of_a_global_is_an_error() {
+        // It used to be dropped in silence, leaving a 16-bit variable.
+        let err = lex_and_parse("ws: int32 = [1]\n").unwrap_err();
+        assert!(format!("{err:?}").contains("Invalid type name 'int32'"), "{err:?}");
+    }
+
+    /// The value of global `x` in `x = <expr>`, as a compact string.
+    fn expr_of(src: &str) -> String {
+        fn show(e: &Expr) -> String {
+            match e {
+                Expr::Number(n) => n.to_string(),
+                Expr::Ident(id) => id.name.clone(),
+                Expr::Binary { op, left, right } => format!("({} {:?} {})", show(left), op, show(right)),
+                Expr::Compare { op, left, right } => format!("({} {:?} {})", show(left), op, show(right)),
+                Expr::BitNot(x) => format!("~{}", show(x)),
+                other => format!("{other:?}"),
+            }
+        }
+        let module = lex_and_parse(&format!("x = {src}\n")).unwrap();
+        match &module.items[0] {
+            Item::GlobalLet { value, .. } => show(value),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_enum_members_are_consts_counting_up() {
+        let src = "enum State:\n    TITLE\n    PLAY, PAUSE\n    OVER = 10\n    WON\n    NEG = -2, NEXT\n";
+        let module = lex_and_parse(src).unwrap();
+        let got: Vec<(String, i32)> = module
+            .items
+            .iter()
+            .map(|i| match i {
+                Item::Const { name, value: Expr::Number(n), .. } => (name.clone(), *n),
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        let want = [("TITLE", 0), ("PLAY", 1), ("PAUSE", 2), ("OVER", 10), ("WON", 11), ("NEG", -2), ("NEXT", -1)];
+        assert_eq!(got, want.iter().map(|(n, v)| (n.to_string(), *v)).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn test_binary_operators_bind_as_in_python() {
+        assert_eq!(expr_of("a << 2 >> 1"), "((a Shl 2) Shr 1)");
+        assert_eq!(expr_of("1 + b << 3"), "((1 Add b) Shl 3)");
+        assert_eq!(expr_of("a | b ^ c & d"), "(a BitOr (b BitXor (c BitAnd d)))");
+        assert_eq!(expr_of("a & 3 == 1"), "((a BitAnd 3) Eq 1)");
+        assert_eq!(expr_of("a * 2 >> 1 + 1"), "((a Mul 2) Shr (1 Add 1))");
+        assert_eq!(expr_of("~a & 255 ^ b"), "((~a BitAnd 255) BitXor b)");
+    }
+
+    #[test]
+    fn test_bitwise_compound_assignments() {
+        let src = "def f():\n    x <<= 1\n    x >>= 2\n    x &= 3\n    x |= 4\n    x ^= 5\n";
+        let module = lex_and_parse(src).unwrap();
+        let Item::Function(f) = &module.items[0] else { panic!() };
+        let ops: Vec<BinOp> = f
+            .body
+            .iter()
+            .map(|st| match st {
+                Stmt::CompoundAssign { op, .. } => *op,
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(ops, vec![BinOp::Shl, BinOp::Shr, BinOp::BitAnd, BinOp::BitOr, BinOp::BitXor]);
     }
 
     #[test]

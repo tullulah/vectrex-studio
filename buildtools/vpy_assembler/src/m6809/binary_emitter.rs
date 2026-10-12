@@ -607,7 +607,7 @@ impl BinaryEmitter {
     /// ORA #immediate (opcode 0x8A)
     pub fn ora_immediate(&mut self, value: u8) {
         self.record_line_mapping();
-        self.emit(0xAA);  // ORAA #immediate (was 0x8A = ORCC, WRONG!)
+        self.emit(0x8A);  // ORA #immediate (0xAA is ORA indexed, ORCC is 0x1A)
         self.emit(value);
     }
 
@@ -615,6 +615,13 @@ impl BinaryEmitter {
     pub fn eora_immediate(&mut self, value: u8) {
         self.record_line_mapping();
         self.emit(0x88);
+        self.emit(value);
+    }
+
+    /// EORB #immediate (opcode 0xC8)
+    pub fn eorb_immediate(&mut self, value: u8) {
+        self.record_line_mapping();
+        self.emit(0xC8);
         self.emit(value);
     }
 

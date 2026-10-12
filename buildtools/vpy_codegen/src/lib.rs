@@ -23,6 +23,7 @@ pub mod venemy;
 pub mod stack_validator;
 pub mod known_functions;
 pub mod validate;
+pub mod origins;
 pub mod vrec_chain;
 
 pub use venemy::*;
@@ -111,6 +112,8 @@ pub enum AssetType {
     Enemy,      // .venemy file (enemy type definition)
     Recording,  // .vrec file (multi-frame vector recording for attract/preview playback)
     Sample,     // .vsmp file (4-bit PCM audio sample streamed to the PSG volume DAC)
+    Mesh,       // .vmesh file (surface mesh for vpy3d; assets/meshes/, any folder)
+    Scene,      // .vscene file (a set of .vmesh pieces for vpy3d; assets/scenes/)
 }
 
 #[derive(Debug, Clone, Error)]
@@ -232,6 +235,8 @@ pub fn generate_from_module_with_hints(
 ) -> Result<GeneratedASM, CodegenError> {
     known_functions::register(module);
     validate::check_array_literals(module).map_err(CodegenError::Error)?;
+    arm::three_d::check(module, assets, "m6809").map_err(CodegenError::Error)?;
+    validate::check_array_types(module, "m6809").map_err(CodegenError::Error)?;
     let asm_source = m6809::generate_m6809_asm_with_hints(
         module,
         title,
@@ -269,6 +274,14 @@ pub fn generate_from_module_with_target(
 ) -> Result<GeneratedASM, CodegenError> {
     known_functions::register(module);
     validate::check_array_literals(module).map_err(CodegenError::Error)?;
+    let target_name = match target {
+        Target::M6809 => "m6809",
+        Target::Rp2350 => "rp2350",
+        Target::Uvm2 => "uvm2",
+        Target::PiTrex => "pitrex",
+    };
+    arm::three_d::check(module, assets, target_name).map_err(CodegenError::Error)?;
+    validate::check_array_types(module, target_name).map_err(CodegenError::Error)?;
     match target {
         Target::Rp2350 => {
             let asm_source = arm::generate_arm_asm(module, title, assets)

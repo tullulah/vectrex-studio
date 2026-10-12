@@ -1,6 +1,6 @@
 # VPy Language Manual
 
-VPy is a Python-inspired language for the Vectrex console. The buildtools compiler (`vpy_cli`) compiles it to MC6809 assembly for a cartridge ROM (`--target m6809`, the default) and to ARM code for the RP2350 cartridge, the UVM2 multicart and the PiTrex. It supports four integer types (u8, i8, u16, i16) and is designed for game development on constrained hardware. Builtins that exist on only some targets are marked in [section 9](#9-built-in-functions).
+VPy is a Python-inspired language for the Vectrex console. The buildtools compiler (`vpy_cli`) compiles it to MC6809 assembly for a cartridge ROM (`--target m6809`, the default) and to ARM code for the RP2350 cartridge, the UVM2 multicart and the PiTrex. It supports the integer types u8, i8, u16, i16 (plus u32 and i32 on the ARM targets) and is designed for game development on constrained hardware. Builtins that exist on only some targets are marked in [section 9](#9-built-in-functions).
 
 ---
 
@@ -96,11 +96,25 @@ const MASK = ~FLAG & 0xFF      # 0xF7
 ```
 
 A scalar constant's value is computed at compile time: it can be a number, another
-constant, or arithmetic (`+ - * / // %`) and bit operations (`& | ~`, `not`, comparisons)
-on those. Division truncates toward zero, as at run time. On m6809 a constant has no RAM;
+constant, or arithmetic (`+ - * / // %`) and bit operations (`& | ^ ~ << >>`, `not`,
+comparisons) on those. Division truncates toward zero, as at run time. On m6809 a constant has no RAM;
 every use is an immediate value, so a value that cannot be computed at compile time
 (a variable, a call, a string) or that does not fit in 16 bits is a compile error with
 its line.
+
+### Enums
+
+`enum` declares a group of constants numbered 0, 1, 2… as in C. `NAME = n` sets a value
+and the members after it count on from it. Members are global constants (the enum's
+name only labels the group); one per line, or several on a line separated by commas:
+
+```python
+enum State:
+    ST_TITLE                # 0
+    ST_PLAY, ST_PAUSE       # 1, 2
+    ST_OVER = 10
+    ST_WON                  # 11
+```
 
 ### Compound assignment
 
@@ -109,13 +123,20 @@ x += 1
 x -= 5
 x *= 2
 counter += 1
+flags |= 4
+flags &= 251
+bits ^= 1
+v <<= 2
+v >>= 1
 ```
+
+`+= -= *= /= //= %= &= |= ^= <<= >>=` all work on variables and on array elements.
 
 ---
 
 ## 3. Types and Values
 
-VPy supports four integer types. Untyped variables default to `i16`.
+VPy supports four integer types on every target, plus two 32-bit types on the ARM targets (rp2350, uvm2, pitrex). Untyped variables default to `i16`.
 
 ### Integer Types
 
@@ -135,6 +156,13 @@ x = 0                # no annotation → defaults to i16
 | `i8` | 1 byte | Yes | -128 to +127 |
 | `u16` | 2 bytes | No | 0–65535 |
 | `i16` | 2 bytes | Yes | -32768 to +32767 |
+| `u32` | 4 bytes | No | 0–4294967295 (ARM targets only) |
+| `i32` | 4 bytes | Yes | -2147483648 to +2147483647 (ARM targets only) |
+
+`u32`/`i32` on m6809 are a compile error with the line. On the ARM targets every scalar
+variable (global, local or parameter) is a 32-bit word whatever its annotation, and
+arithmetic is 32-bit; the annotation matters for arrays, whose elements have the declared
+size.
 
 - Truthiness: `0` is false, any other value is true.
 - No floating point. No booleans — use `1` and `0` instead.
@@ -163,11 +191,17 @@ Array elements use the declared element type:
 enemy_hp: u8 = [100, 90, 80]   # 3 bytes in RAM
 offsets: i8 = [-1, 0, 1]       # 3 bytes in RAM
 coords = [0, 100, 200]         # untyped → i16, 6 bytes in RAM
+world_z: i32 = [40000, -90000] # ARM targets only, 8 bytes in RAM
 ```
 
-Stride for element access is 1 byte for `u8`/`i8`, 2 bytes for `u16`/`i16`, for
-indexing and for `for v in arr` alike. `u8` elements are zero-extended and `i8`
-elements sign-extended when read.
+Stride for element access is 1 byte for `u8`/`i8`, 2 bytes for `u16`/`i16`, 4 bytes for
+`u32`/`i32`, for indexing and for `for v in arr` alike, on every target. Unsigned
+elements are zero-extended and signed elements sign-extended when read.
+
+A value must fit its element: an array literal element, or a constant stored into a global
+array (`xs[i] = 100000`), that does not fit 8 bits (u8/i8), 16 bits (untyped/u16/i16) or
+32 bits is a compile error with the line. Values computed at run time are truncated to the
+element size, as in C.
 
 ### Integer literals
 
@@ -208,10 +242,12 @@ const names = ["LEVEL 1", "LEVEL 2", "LEVEL 3"]
 |----------|-------------|
 | `&` | AND |
 | `\|` | OR |
+| `^` | XOR |
 | `~` | NOT (bitwise complement) |
+| `<<` | Shift left |
+| `>>` | Shift right, arithmetic (keeps the sign: `-100 >> 2` is `-25`) |
 
-`^`, `<<` and `>>` are not parsed yet (a parse error). `&` and `|` bind like `*`
-(tighter than `+` and `-`), not like Python: write parentheses when you mix them.
+They bind as in Python: `x & 3 == 0` is `(x & 3) == 0`, `1 + b << 3` is `(1 + b) << 3`.
 
 ### Comparison
 
@@ -226,11 +262,15 @@ Chained comparisons are supported: `0 < x < 100` expands to `(0 < x) and (x < 10
 ### Operator precedence (high to low)
 
 1. Unary: `- not ~`
-2. `* / // % & |`
+2. `* / // %`
 3. `+ -`
-4. Comparisons (including chained)
-5. `and`
-6. `or`
+4. `<< >>`
+5. `&`
+6. `^`
+7. `|`
+8. Comparisons (including chained)
+9. `and`
+10. `or`
 
 ---
 
@@ -334,6 +374,12 @@ def loop():
 ```
 
 - Inside `physics.vpy`, its own functions and globals are used by their plain names.
+- Struct types, enum members and arrays (of any dimension) are module symbols too:
+  `enemies = types.Tie[8]`, `from types import Tie, S_PLAY`, `types.GRID[r][c]`,
+  `types.ties[i].hp -= 1`. On the ARM targets a function of another module can be passed
+  as a value: `each(physics.step)`.
+- A compile error names the file it is in (`src/space.vpy:18: error: …`), whichever module
+  the code comes from, and the names as written in it (`ties.hp`, not the generated global).
 - Names are case-insensitive: `physics.CLAMP_X()` and `physics.clamp_x()` are the same function.
 - In the generated code a module's symbols are named `MODULE_symbol` (`PHYSICS_clamp_x`; m6809 labels are upper-case: `PHYSICS_CLAMP_X`). Two modules whose names collide that way are a compile error.
 - Build the project (`.vpyproj`): every target (m6809, rp2350, uvm2, pitrex) compiles all of its modules. Building a lone `.vpy` compiles only that file, so an `import` there fails with `main.vpy:1: error: module `physics` not found …`.
@@ -358,6 +404,25 @@ enemy_x = [0, 0, 0, 0, 0, 0, 0, 0]
 const level_names = ["LEVEL 1", "LEVEL 2", "LEVEL 3"]
 const x_coords = [40, 40, -40, -10, 20, 50]
 ```
+
+### Repetition and several dimensions
+
+A list can be repeated (`[0] * 12`, `[1, 2] * 3`), and lists can nest: an array of N
+dimensions must be rectangular and is indexed with one index per dimension. It is stored
+flat, row after row (`g[r][c]` is element `r * columns + c`), and `len()` gives the first
+dimension:
+
+```python
+xf: i32 = [0] * 12                  # twelve zeros
+grid = [[0] * 8] * 4                # 4 rows of 8
+const GAPS = [[1, 2, 3], [4, 5, 6]] # 2 x 3, in ROM
+
+grid[r][c] = 1
+n = len(grid)                       # 4
+```
+
+Indexing it with fewer indices than it has dimensions, and `for v in` over it, are compile
+errors. Passed to a function it is a flat address: index it once there.
 
 ### Access and assignment
 
@@ -399,22 +464,77 @@ def loop():
 ```
 
 Passing an array passes its base address; inside the function the parameter is
-indexed through that address. Parameters carry no type, so on m6809 the element size of
-an indexed parameter comes from the arrays passed at its call sites (also through other
-functions that forward the parameter):
+indexed through that address. Parameters carry no type, so on every target the element
+size of an indexed parameter comes from the arrays passed at its call sites (also through
+other functions that forward the parameter):
 
 - Every call passes a `u8` array → the parameter is indexed as `u8`; likewise `i8`,
-  or untyped/`i16`/`u16` (2-byte elements).
+  untyped/`i16`/`u16` (2-byte elements) or `i32`/`u32` (4-byte elements, ARM targets).
 - Calls pass arrays with different element types (`u8` in one call, untyped in another)
   → compile error naming both arrays and their lines. Use one element type, or two functions.
 - No call passes a named array (e.g. only computed addresses) → 2-byte elements.
 
 `len()` and `for v in` don't work on a parameter (the length is unknown): pass the length too.
 
+### Structs
+
+A `struct` groups fields; each field has a type (default `i16`) and a default value
+(default 0). A struct variable is a global: one (`Name()`, with optional values for the
+fields in order) or an array of them (`Name[count]`):
+
+```python
+struct Tie:
+    x: i32
+    z: i32 = 4000
+    hp: u8 = 3
+
+ties = Tie[8]               # eight TIEs
+boss = Tie(0, 9000, 20)     # one, x = 0, z = 9000, hp = 20
+
+def hit(i, damage):         # a function takes the element's index
+    ties[i].hp -= damage
+    if ties[i].hp == 0:
+        boss.z += 100
+
+def loop():
+    for i in range(0, len(ties)):
+        ties[i].z -= 50
+```
+
+Each field is stored as its own global (an array for an array of structs: `ties[i].hp`
+is element `i` of the field array `hp`), so fields keep their own size and every target
+compiles them. A struct is not a value: passing, assigning, comparing or iterating a whole
+struct, methods, and struct variables inside a function are compile errors with the line.
+Pass an element's index instead.
+
+### Function references (ARM targets)
+
+On rp2350, uvm2 and pitrex a function's name can be stored like a number, and calling a
+variable calls the function it holds:
+
+```python
+def draw_tie(i):
+    ...
+def draw_bolt(i):
+    ...
+
+def draw_all(draw, n):      # `draw` is a function
+    for i in range(0, n):
+        draw(i)
+
+def loop():
+    draw_all(draw_tie, 8)
+    draw_all(draw_bolt, 4)
+```
+
+Nothing checks the number of arguments of a call through a variable. On m6809 both are a
+compile error (its frames need the callee at compile time); pick the function with `if` or
+`switch` there. Function names in array literals (dispatch tables) are not supported yet.
+
 ### Notes
 
 - Array size is fixed at compile time.
-- Array literals hold only number literals (`[1, -2, 3]`) or only strings; a computed element (`[MAX_X, 2 * 3]`) is a compile error.
+- Array literals hold only number literals (`[1, -2, 3]`, repeated or nested as above) or only strings; a computed element (`[MAX_X, 2 * 3]`) is a compile error.
 - Index must be within bounds — no runtime bounds checking.
 - Coordinates are clamped to 8-bit signed (-128..127) for drawing.
 
@@ -728,6 +848,121 @@ Enemies are `.venemy` types placed by a `.vplay` level. `i` is the slot in the e
 
 On m6809, `wait`, `peek`, `poke` and `beep(period, frames)` with non-constant arguments are a compile error.
 
+### 3D (uvm2)
+
+Meshes (`.vmesh`, anywhere under `assets/meshes/`) and scenes (`.vscene`, in
+`assets/scenes/`) drawn in perspective with hidden-line removal, occluders and fog. These
+builtins call the SDK's vpy3d — the same 3D layer C games use — which vpy_cli compiles
+into the `.um2` when the program uses any of them. On m6809, rp2350 and pitrex they are a
+compile error. See [ASSETS.md](ASSETS.md) for the `.vmesh` / `.vscene` formats.
+
+**Transforms** are global `i32` arrays of 12 elements (a Q14 rotation, 16384 = 1.0, then a
+translation); declare one per placement you need:
+
+```python
+pose: i32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+spin: i32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+def main():
+    LOAD_MESH("tie_cockpit")
+    CAMERA_LOOK_AT(0, 0, -2000, 0, 0, 0)
+
+def loop():
+    XF_ROT_Y(spin, angle)                 # 4096 = one turn
+    XF_TRANSLATE(pose, x, y, z)
+    XF_MUL(pose, pose, spin)              # spin first, then move
+    DRAW_MESH("tie_cockpit", pose, 110)
+```
+
+Units: world coordinates are 32-bit integers in the meshes' own unit; angles are 4096 per
+turn; brightness 0..127. Screen positions from `PROJECT` are deflection units (VPy units
+×127). A mesh must be loaded (`LOAD_MESH`) before it is drawn; meshes and scenes are named by
+string literal and must exist (a missing one is a compile error).
+
+| Function | Description |
+|----------|-------------|
+| `XF_IDENTITY(xf)` | `xf` = no rotation, no move |
+| `XF_TRANSLATE(xf, x, y, z)` | `xf` = a move by (x, y, z) |
+| `XF_ROT_X(xf, angle)` / `XF_ROT_Y(xf, angle)` / `XF_ROT_Z(xf, angle)` | `xf` = a rotation about one axis (4096 per turn) |
+| `XF_MUL(dst, a, b)` | `dst` = `b` then `a` (`dst` may be `a` or `b`) |
+| `XF_POINT(out, xf, x, y, z)` | `out[0..2]` = the point (x, y, z) moved by `xf` (`out`: an `i32` array of 3) |
+| `CAMERA_LOOK_AT(ex, ey, ez, tx, ty, tz)` | Camera at the eye (ex, ey, ez) looking at (tx, ty, tz), up = +y. Returns 0 if eye and target coincide |
+| `CAMERA_SET(xf)` / `CAMERA_GET(xf)` | Set the world→camera transform / read it into `xf` |
+| `CAMERA_FOCAL(f)` | Field of view: deflection units per unit of x over z (default 28000, about 58°; bigger = narrower) |
+| `CAMERA_NEAR(z)` | Nothing nearer than `z` is drawn (default 600) |
+| `CAMERA_CLIP(half_x[, half_y])` | Half the visible window in deflection units (default 15500 square) |
+| `PROJECT(out, x, y, z)` | Where a world point lands on screen: `out[0]`, `out[1]` in deflection units (`out`: an `i32` array of 2). Returns 0 if it is behind the camera |
+| `SIN_Q14(angle)` / `COS_Q14(angle)` | Sine and cosine with 4096 per turn, -16384..16384 |
+| `LOAD_MESH("name")` | Load `name.vmesh` into the mesh pools. Returns 0 if the pools are full (raise `VPY3D_POOL_*` in the project's `[uvm2] defs`) |
+| `DRAW_MESH("name", xf, brightness)` | Draw a loaded mesh placed by `xf` |
+| `MESH_POOL_MARK()` / `MESH_POOL_RELEASE()` | Remember where the pools are / give back every mesh loaded since (load them again before drawing them) |
+| `LOAD_SCENE("name")` | Load `name.vscene` and the meshes it places. Returns 0 on failure |
+| `DRAW_SCENE("name", x, y, z, brightness[, groups])` | Draw a scene at position (x, y, z) — what its `follow` items move with; `groups` is the bit mask its `group` items test |
+| `LINE_3D(ax, ay, az, bx, by, bz, brightness)` | A line in world space |
+| `OCCL_RESET()` | Forget the occluders (once per frame, before adding the frame's) |
+| `OCCL_LINE(ax, ay, az, bx, by, bz, brightness)` | A world line hidden by the occluders added so far |
+| `OCCL_MESH("name", xf)` | Add a loaded mesh placed by `xf` as an occluder: it hides what is drawn after it |
+| `OCCL_ADD(corners, n)` | Add a convex occluder of `n` (3..8) corners; `corners` is an `i32` array of `n` points (x, y, z) |
+| `FOG(brightness, x, y, z, full_until, gone_at)` | `brightness` faded by the distance of (x, y, z) from the camera: full up to `full_until`, 0 from `gone_at` |
+| `SCENERY_FOG(full_until, gone_at)` | The same fade for the lines of `.vmesh` scenery (0, 0 = off) |
+
+**Effects** (vpyfx): short-lived pieces that fly, fall, bounce on a floor and fade. Spawn
+them, then `FX_STEP()` and `FX_DRAW()` once per frame. Velocities are units per second,
+gravity units per second², `life` in frames. Each spawn returns how many pieces it made.
+
+| Function | Description |
+|----------|-------------|
+| `FX_RESET()` | No pieces, no floor, no gravity |
+| `FX_SEED(seed)` / `FX_RATE(steps_per_second)` / `FX_BUDGET(strokes)` | Random seed; simulation rate (default 50); strokes drawn per frame at most (default 160) |
+| `FX_GRAVITY(gx, gy, gz)` | Gravity on every piece |
+| `FX_FLOOR(on, y, bounce_q8)` | A floor at height `y`; `bounce_q8` 256 = a perfect bounce |
+| `FX_SPARK(x, y, z, vx, vy, vz, life, brightness)` | One spark |
+| `FX_BURST(x, y, z, vx, vy, vz, count, speed, life, brightness)` | `count` sparks thrown out from a point, moving with (vx, vy, vz) |
+| `FX_STICK(ax, ay, az, bx, by, bz, vx, vy, vz, spin, life, brightness)` | A spinning line segment |
+| `FX_LINE(ax, ay, az, bx, by, bz, life, brightness)` | A line that stays put and fades |
+| `FX_RING(cx, cy, cz, nx, ny, nz, r0, speed, segments, life, brightness)` | A ring around the axis (nx, ny, nz), growing from radius `r0` |
+| `FX_SHATTER("mesh", xf, vx, vy, vz, cx, cy, cz, speed, spin, life, brightness)` | A loaded mesh placed by `xf` broken into its edges, flying out from (cx, cy, cz) |
+| `FX_DISINTEGRATE("mesh", xf, cx, cy, cz, per_edge, speed, spin, wave, life, brightness)` | A mesh coming apart in a wave from (cx, cy, cz) |
+| `FX_ASSEMBLE("mesh", xf, per_edge, scatter, frames, stagger, brightness)` | Pieces flying in to form the mesh; returns a group |
+| `FX_ASSEMBLED(group)` / `FX_RELEASE(group)` | Is the group in place / let its pieces go |
+| `FX_STEP()` / `FX_DRAW([occlude])` / `FX_DRAW2D()` | Move the pieces / draw them in 3D (1 = hidden by the occluders) / draw 2D pieces |
+
+**Skeletons** (vpybone): bones in a tree, each with an optional mesh, posed by rotations
+or by IK. A skeleton is a number, 0 or 1 by default (raise `VPYX_SKELETONS` in the project's
+`[uvm2] defs`); bone -1 in `BONE_ROT` / `BONE_ROT_MUL` is the root.
+
+| Function | Description |
+|----------|-------------|
+| `BONE_INIT(sk)` | Empty skeleton `sk` |
+| `BONE_ADD(sk, parent, ox, oy, oz[, "mesh"])` | A bone at offset (ox, oy, oz) from its parent's joint (`parent` -1 = a root), drawn with the mesh; returns its index, -1 if refused |
+| `BONE_ROT(sk, bone, ax, ay, az, angle)` | The bone's rotation about the axis (ax, ay, az), 4096 per turn |
+| `BONE_ROT_MUL(sk, bone, ax, ay, az, angle)` | Compose a second rotation: rotation = rotation × (axis, angle), as `qmul(rotation, q)` in C |
+| `BONE_POSE(sk, x, y, z)` | Place the skeleton's root at (x, y, z) and work out every bone (call after changing rotations) |
+| `BONE_IK(sk, upper, tx, ty, tz, px, py, pz)` | Bend the two bones below `upper` so its chain reaches (tx, ty, tz), the knee towards (px, py, pz); 1 if it reached. `BONE_POSE` again afterwards |
+| `BONE_XF(xf, sk, bone)` / `BONE_POS(out, sk, bone)` | A bone's transform / its joint in the world (`out`: an `i32` array of 3) |
+| `BONE_DRAW(sk, brightness[, what])` | Draw the skeleton: 1 meshes (default), 2 lines, 3 both |
+
+**Soft bodies** (vpysoft): cloth sheets and blobs of points and springs. Each made one is a
+body number; `SOFT_STEP()` and `SOFT_DRAW(body, …)` once per frame.
+
+| Function | Description |
+|----------|-------------|
+| `SOFT_RESET()` | No bodies |
+| `SOFT_RATE(n)` / `SOFT_ITERATIONS(n)` / `SOFT_DAMPING(q8)` / `SOFT_BUDGET(strokes)` | Simulation rate, solver iterations (default 8), damping (default 254 of 256), strokes per draw |
+| `SOFT_GRAVITY(gx, gy, gz)` / `SOFT_FLOOR(on, y, friction_q8)` | Gravity; a floor at height `y` |
+| `SOFT_CLOTH(x, y, z, w, h, cell, stiff_q8)` | A `w` × `h` sheet of points `cell` apart, its top-left corner at (x, y, z); returns the body |
+| `SOFT_BLOB(x, y, z, n, radius, stiff_q8, pressure_q8)` | A ring of `n` points that keeps its area |
+| `SOFT_MESH("mesh", x, y, z, stiff_q8)` | A loaded mesh made soft |
+| `SOFT_PIN(body, i, x, y, z)` / `SOFT_UNPIN(body, i)` | Hold point `i` at (x, y, z) / let it go |
+| `SOFT_PUSH(body, vx, vy, vz)` | Add a velocity to every point |
+| `SOFT_POINT(out, body, i)` / `SOFT_POINTS(body)` | Where point `i` is (`out`: an `i32` array of 3) / how many points |
+| `SOFT_FREE(body)` | Remove the body |
+| `SOFT_STEP()` / `SOFT_DRAW(body, brightness[, occlude])` | Move every body / draw one |
+
+The pool sizes of these layers (`VPYFX_MAX`, `VPYSOFT_MAX_POINTS`, `VPYSOFT_MAX_SPRINGS`,
+`VPYB_MAX_BONES`) go in the project's `[uvm2] defs`. Not available yet from VPy: 3D text,
+damage marks, hit tests (`ray_mesh`), terrain, and bone animation clips.
+
 ### SD launcher (ARM only)
 
 | Function | Description |
@@ -829,8 +1064,7 @@ The parser currently reports only the first error per file. Fix errors one at a 
 
 These features are recognized by the parser but do not generate working code:
 
-- **Structs**: Parser accepts `struct` definitions, but codegen does not emit field access (`obj.field`). Use parallel arrays instead.
-- **Enums**: Not supported. Use named constants instead.
+- **Struct methods**: a `def` inside a `struct` is a compile error; write functions that take the element's index ([Structs](#structs)).
 - **`vectorlist` blocks**: Parsed, never emitted (see [section 10](#10-vectorlist-dsl)).
 - **`len()`**: `len(arr)` is the compile-time length of a global or const array. On every target anything else (a parameter, a scalar, an expression, a string) is a compile error with its line.
 - **Inline assembly**: `asm("...")` is not implemented on any backend (the build fails with an undefined `ASM` symbol).

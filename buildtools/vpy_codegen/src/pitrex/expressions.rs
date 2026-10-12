@@ -62,6 +62,16 @@ pub fn emit_expr(
         Expr::Ident(info) => {
             // A parameter or local of the function being emitted (its stack
             // frame, crate::arm::frame), else a global at its fixed address.
+            // A function's name as a value: its address (ARM32: no Thumb bit).
+            let up = info.name.to_uppercase();
+            if crate::arm::frame::slot(&up).is_none() && !var_addrs.contains_key(&up)
+                && crate::known_functions::is_defined(&info.name)
+            {
+                if up == "MAIN" || up == "LOOP" {
+                    return Err(format!("line {}: `{}` cannot be used as a value", info.source_line, info.name));
+                }
+                return Ok(format!("    ldr     r0, ={}    @ address of function {}\n", info.name, info.name));
+            }
             crate::arm::frame::load_r0(&info.name, var_addrs)
         }
 
@@ -174,9 +184,10 @@ pub fn emit_expr(
                 s.push_str("    add     r0, r0, r1\n");
                 s.push_str("    ldr     r0, [r0]       @ load 32-bit string pointer\n");
             } else {
-                s.push_str("    lsl     r1, r1, #1     @ index * 2 (i16 stride)\n");
+                let elem = crate::arm::arrays::of(target);
+                s.push_str(&crate::arm::arrays::scale("r1", elem));
                 s.push_str("    add     r0, r0, r1\n");
-                s.push_str("    ldrsh   r0, [r0]       @ sign-extend 16-bit load\n");
+                s.push_str(&format!("    {}   r0, [r0]       @ load {} element\n", crate::arm::arrays::load(elem), elem.type_name()));
             }
             Ok(s)
         }
@@ -1137,6 +1148,24 @@ pub fn emit_call(
     let nreg = total_reg_args.min(4);
     for i in (0..nreg).rev() {
         s.push_str(&format!("    pop     {{r{i}}}\n"));
+    }
+
+    // A variable holding a function's address: call what it holds.
+    if fn_name == info.name.as_str() && !crate::known_functions::is_defined(&info.name) {
+        let up = info.name.to_uppercase();
+        let target = if let Some(off) = crate::arm::frame::slot(&up) {
+            Some(format!("    ldr     r12, [{}, #{off}]    @ {}\n", crate::arm::frame::FP, info.name))
+        } else {
+            var_addrs.get(&up).map(|addr| format!("    ldr     r12, =0x{addr:08X}    @ {}\n    ldr     r12, [r12]\n", info.name))
+        };
+        if let Some(load) = target {
+            s.push_str(&load);
+            s.push_str("    blx     r12\n");
+            if n_extra > 0 {
+                s.push_str(&format!("    add     sp, sp, #{}\n", n_extra * 4));
+            }
+            return Ok(s);
+        }
     }
 
     // An unmapped name must be a user function; anything else would only fail

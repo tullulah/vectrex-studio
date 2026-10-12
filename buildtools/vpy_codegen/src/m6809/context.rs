@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 /// Used to determine correct load/store instructions and array stride
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct VarSize {
-    /// Bytes allocated: 1 for u8/i8, 2 for u16/i16
+    /// Bytes allocated: 1 for u8/i8, 2 for u16/i16, 4 for u32/i32 (ARM targets only)
     pub bytes: usize,
     /// Whether type is signed: true for i8/i16, false for u8/u16
     pub signed: bool,
@@ -25,12 +25,15 @@ impl VarSize {
         }
     }
 
-    /// Size of a declared type annotation: u8/i8 = 1 byte, u16/i16 = 2, none = i16.
+    /// Size of a declared type annotation: u8/i8 = 1 byte, u16/i16 = 2, u32/i32 = 4,
+    /// none = i16. (m6809 rejects the 32-bit types before code generation.)
     pub fn from_annotation(type_annotation: &Option<String>) -> Self {
         match type_annotation.as_deref() {
             Some("u8") => VarSize { bytes: 1, signed: false },
             Some("i8") => VarSize { bytes: 1, signed: true },
             Some("u16") => VarSize { bytes: 2, signed: false },
+            Some("u32") => VarSize { bytes: 4, signed: false },
+            Some("i32") => VarSize { bytes: 4, signed: true },
             _ => VarSize::default_i16(),
         }
     }
@@ -40,6 +43,8 @@ impl VarSize {
         match (self.bytes, self.signed) {
             (1, false) => "u8",
             (1, true) => "i8",
+            (4, false) => "u32",
+            (4, true) => "i32",
             (_, false) => "u16",
             (_, true) => "i16",
         }

@@ -200,3 +200,14 @@ fn stack_offset_and_pre_decrement_modes() {
     assert_eq!(bytes_of("    LEAS 2,S\n"), vec![0x32, 0x62]);
     assert_eq!(bytes_of("    STD ,--S\n"), vec![0xED, 0xE3]);
 }
+
+// EORB was missing (the `^` operator's code could not be assembled), and
+// `ORA #n` emitted ORA indexed ($AA) instead of the immediate form ($8A).
+#[test]
+fn eorb_and_ora_immediate_encode() {
+    assert_eq!(bytes_of("    EORB #$0F\n"), vec![0xC8, 0x0F]);
+    assert_eq!(bytes_of("    EORB ,X\n"), vec![0xE8, 0x84]);
+    assert_eq!(bytes_of("    EORB $C880\n"), vec![0xF8, 0xC8, 0x80]);
+    assert_eq!(bytes_of("    EORA #$0F\n"), vec![0x88, 0x0F]);
+    assert_eq!(bytes_of("    ORA #$0F\n"), vec![0x8A, 0x0F]);
+}

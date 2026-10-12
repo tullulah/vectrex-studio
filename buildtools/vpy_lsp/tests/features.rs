@@ -137,7 +137,7 @@ fn completion_after_colon_offers_types_only() {
     let src = "x: \n";
     let items = completion_items(src, Position { line: 0, character: 2 }, &uri(), &[]);
     let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
-    assert_eq!(labels, vec!["u8", "i8", "u16", "i16"]);
+    assert_eq!(labels, vec!["u8", "i8", "u16", "i16", "u32", "i32"]);
 }
 
 #[test]

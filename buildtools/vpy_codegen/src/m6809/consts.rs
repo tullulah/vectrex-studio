@@ -57,9 +57,9 @@ pub fn fold_consts(module: &Module) -> Result<Vec<(String, i64)>, String> {
     for (name, value, line) in &scalars {
         match values.get(&name.to_lowercase()) {
             Some(v) if (-32768..=65535).contains(v) => out.push(((*name).clone(), *v)),
-            Some(v) => errors.push(format!(
+            Some(v) => errors.push(crate::origins::locate_for(name, &format!(
                 "line {line}: const `{name}` = {v} does not fit in 16 bits (-32768..65535)"
-            )),
+            ))),
             None => {
                 let why = match eval(value, &values, &const_names) {
                     Err(NotFolded::Never(msg)) => msg,
@@ -68,10 +68,10 @@ pub fn fold_consts(module: &Module) -> Result<Vec<(String, i64)>, String> {
                     ),
                     Ok(_) => unreachable!("folded on the last pass"),
                 };
-                errors.push(format!(
+                errors.push(crate::origins::locate_for(name, &format!(
                     "line {line}: const `{name}` cannot be computed at compile time: {why}. A const must be a number, \
                      another const, or arithmetic (+ - * / // %) and bit operations (& | ~) on those."
-                ));
+                )));
             }
         }
     }

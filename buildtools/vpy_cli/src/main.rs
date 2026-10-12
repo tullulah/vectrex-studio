@@ -2018,6 +2018,9 @@ fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool, ram
     Ok(())
 }
 
+/// The C side of VPy's 3D builtins (vpy_codegen arm/three_d.rs emits the calls).
+const VPY3D_BRIDGE_C: &str = include_str!("c/vpy3d_bridge.c");
+
 /// Build for the UVM2 (Ultimate Vectrex Multicart 2) — Cortex-M33 / Pico SDK toolchain.
 fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Result<()> {
     use std::process::Command;
@@ -2126,6 +2129,44 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
 
     let cmake_build = build_dir.join("uvm2");
 
+    // 3D builtins: the C bridge (shipped in vpy_cli) and the SDK's vpy3d.c go into the
+    // image, with one slot per mesh and scene the program names.
+    let mut game_srcs = vec![s_path.canonicalize().unwrap_or(s_path.clone())];
+    let mut game_incs: Vec<PathBuf> = Vec::new();
+    let mut c_defs: Vec<String> = Vec::new();
+    if vpy_codegen::arm::three_d::uses_3d(&unified) {
+        let vpy_c = sdk_root.join("vpy-c");
+        if !vpy_c.join("vpy3d.c").exists() {
+            return Err(anyhow::anyhow!(
+                "the program uses 3D builtins, but the SDK has no vpy-c/vpy3d.c ({}): pin an SDK with vpy3d",
+                vpy_c.display()));
+        }
+        let bridge = build_dir.join("vpy3d_bridge.c");
+        std::fs::write(&bridge, VPY3D_BRIDGE_C)
+            .with_context(|| format!("Failed to write {}", bridge.display()))?;
+        game_srcs.push(bridge.canonicalize().unwrap_or(bridge));
+        let groups = vpy_codegen::arm::three_d::groups(&unified);
+        let mut layers = Vec::new();
+        for g in &groups {
+            for src in g.sources() {
+                let path = vpy_c.join(src);
+                if !path.exists() {
+                    return Err(anyhow::anyhow!("the program uses {:?} builtins, but the SDK has no vpy-c/{src}", g));
+                }
+                game_srcs.push(path);
+                layers.push(src.trim_end_matches(".c"));
+            }
+            c_defs.push(g.define().to_string());
+        }
+        game_incs.push(vpy_c.join("include"));
+        game_incs.push(vpy_c.clone());
+        let used = vpy_codegen::arm::three_d::usage(&unified);
+        c_defs.push(format!("VPYX_MESHES={}", used.meshes.len().max(1)));
+        c_defs.push(format!("VPYX_SCENES={}", used.scenes.len().max(1)));
+        println!("  {} 3D: {} + bridge, {} mesh(es), {} scene(s)", "✓".green(), layers.join(", "), used.meshes.len(), used.scenes.len());
+    }
+    let join_paths = |v: &[PathBuf]| v.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(";");
+
     println!("\n{}", "Phase 4: CMake configure (pico-sdk)".bright_cyan().bold());
     // A CACHE FROM ANOTHER SDK DIRECTORY IS NOT REUSABLE. CMake refuses it outright ("does not
     // match the source ... used to generate cache"), and a project's cache points at whichever
@@ -2178,7 +2219,8 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
              .and_then(|e| e.parent().map(|d| d.to_path_buf()))
              .unwrap_or_default().display()))
         .arg(format!("-DUVM2_NAME={}", project_name))
-        .arg(format!("-DUVM2_GAME_SRCS={}", s_path.canonicalize().unwrap_or(s_path.clone()).display()))
+        .arg(format!("-DUVM2_GAME_SRCS={}", join_paths(&game_srcs)))
+        .arg(format!("-DUVM2_GAME_INCS={}", join_paths(&game_incs)))
         // UVM2_DUAL_CORE=1 enciende NUESTRO core 1 dentro de la imagen
         // (uvm2_core1.c): reproduccion, entrada, cola del PSG y ritmo de 50 Hz
         // alli, con el mismo doble buffer y los mismos contadores que el
@@ -2190,6 +2232,9 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
             // una variable de entorno que nadie ponia y el .um2 de VPy salia por el camino
             // de un nucleo; ahora la base es la misma que uvm2.mk da a los proyectos en C.
             let mut defs = String::from("UVM2_STEP_OWNS_INIT;UVM2_DUAL_CORE;UVM2_PIO_STREAM;UVM2_SUBUNITS");
+            for d in &c_defs {
+                defs.push(';'); defs.push_str(d);
+            }
             // Los del PROYECTO ([uvm2] defs), que es donde vive lo medido y lo que
             // viaja con el .vpyproj. Van antes del entorno para que una prueba suelta
             // desde la linea de ordenes siga pudiendo pisarlos (en cmake gana el ultimo).
@@ -2545,7 +2590,7 @@ fn cmd_build(input: &PathBuf, output: Option<PathBuf>, rom_size: usize, bank_siz
         // Multibank: generate → assemble → measure → regenerate, so the bank allocator
         // places functions by their real size.
         let generated = vpy_linker::sizing::generate_m6809(&unified, &bank_config, title, &assets, Some(resolve_include_dir()))
-            .map_err(|e| anyhow::anyhow!("Codegen error: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
         
         println!("  {} Generated {} bytes ASM", "✓".green(), generated.asm_source.len());
         

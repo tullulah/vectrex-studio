@@ -143,6 +143,9 @@ struct BodyScan<'m> {
     read_set: HashSet<String>,
     /// Callee label → first call line.
     calls: BTreeMap<String, usize>,
+    /// Calls to a name that is not a function (a builtin, or a variable holding a
+    /// function), with their lines.
+    other_calls: Vec<(String, usize)>,
     /// Line of the statement being visited (identifiers carry their own).
     line: usize,
 }
@@ -198,6 +201,8 @@ impl<'a> Visitor<'a> for BodyScan<'_> {
                 let label = vpy_parser::symbols::m6809_label(&call.name);
                 if self.functions.contains(&label) {
                     self.calls.entry(label).or_insert(call.source_line);
+                } else {
+                    self.other_calls.push((call.name.clone(), call.source_line));
                 }
             }
             _ => {}
@@ -213,6 +218,9 @@ struct Scopes {
     calls: BTreeMap<String, BTreeMap<String, usize>>,
     display: HashMap<String, (String, usize)>,
     errors: Vec<String>,
+    /// Function references and calls through a variable (the ARM targets only):
+    /// (function, line, description).
+    indirect: Vec<(String, usize, String)>,
 }
 
 /// The parameters and locals of every function under the name-resolution rules
@@ -222,6 +230,8 @@ struct Scopes {
 /// local of that function, in order; offsets are m6809's and mean nothing there.
 pub fn function_scopes(module: &Module) -> Result<BTreeMap<String, Frame>, String> {
     let scopes = scan(module);
+    // Function references (`f = draw_tie`) and calls through a variable (`f(x)`)
+    // work on the ARM targets: the callee's frame is its own stack frame.
     if !scopes.errors.is_empty() {
         return Err(scopes.errors.join("\n"));
     }
@@ -231,7 +241,16 @@ pub fn function_scopes(module: &Module) -> Result<BTreeMap<String, Frame>, Strin
 /// Build the frame of every function, check for recursion and undefined names,
 /// and overlay the frames by call graph.
 pub fn analyze(module: &Module) -> Result<FrameLayout, String> {
-    let Scopes { mut frames, calls, display, mut errors } = scan(module);
+    let Scopes { mut frames, calls, display, mut errors, indirect } = scan(module);
+    // m6809 frames are static and overlaid by call graph: the caller must know its
+    // callee at compile time.
+    for (func, line, what) in indirect {
+        errors.push(crate::origins::locate_for(&func, &format!(
+            "line {line}: {what}: function references and calls through a variable work on the ARM \
+             targets (rp2350, uvm2, pitrex), not on m6809 (its frames need the callee at compile time); \
+             use `if`/`switch` on a value to pick the function"
+        )));
+    }
 
     // Recursion: a cycle in the call graph.
     if let Some(cycle) = find_cycle(&calls) {
@@ -317,6 +336,7 @@ fn scan(module: &Module) -> Scopes {
     // caller label → (callee label → first call line)
     let mut calls: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
     let mut display: HashMap<String, (String, usize)> = HashMap::new();
+    let mut indirect: Vec<(String, usize, String)> = Vec::new();
 
     for func in &functions {
         let flabel = label(&func.name);
@@ -328,6 +348,7 @@ fn scan(module: &Module) -> Scopes {
             read: Vec::new(),
             read_set: HashSet::new(),
             calls: BTreeMap::new(),
+            other_calls: Vec::new(),
             line: func.line,
         };
         ast_walk::walk_stmts(&func.body, &mut scan);
@@ -338,10 +359,10 @@ fn scan(module: &Module) -> Scopes {
         for p in &func.params {
             let key = p.to_lowercase();
             if !seen.insert(key) {
-                errors.push(format!(
+                errors.push(crate::origins::locate_for(&func.name, &format!(
                     "line {}: function `{}` has two parameters named `{p}`",
                     func.line, display_name(&func.name)
-                ));
+                )));
                 continue;
             }
             slots.push(Slot {
@@ -369,19 +390,32 @@ fn scan(module: &Module) -> Scopes {
             offset += 2;
         }
 
-        // A read must name a parameter, a local, or something declared at module level.
+        // A read must name a parameter, a local, something declared at module level,
+        // or a function (its address).
         for (name, line) in &scan.read {
             let key = name.to_lowercase();
             if seen.contains(&key) || globals.contains(&key) {
                 continue;
             }
+            if function_labels.contains(&label(name)) {
+                indirect.push((func.name.clone(), *line, format!("`{}` names a function as a value", display_name(name))));
+                continue;
+            }
             let name = display_name(name);
-            errors.push(format!(
+            errors.push(crate::origins::locate_for(&func.name, &format!(
                 "line {line}: `{name}` is used in `{}()` but it is not a parameter, it is never assigned in \
                  this function, and it is not declared at module level. Each function has its own variables; \
                  to share a value between functions declare it at top level (e.g. `{name} = 0`)",
                 display_name(&func.name)
-            ));
+            )));
+        }
+
+        // A call to a parameter, a local or a global calls the function it holds.
+        for (name, line) in &scan.other_calls {
+            let key = name.to_lowercase();
+            if seen.contains(&key) || globals.contains(&key) {
+                indirect.push((func.name.clone(), *line, format!("`{}(...)` calls the function held in a variable", display_name(name))));
+            }
         }
 
         frames.insert(
@@ -391,7 +425,7 @@ fn scan(module: &Module) -> Scopes {
         calls.insert(flabel, scan.calls);
     }
 
-    Scopes { frames, calls, display, errors }
+    Scopes { frames, calls, display, errors, indirect }
 }
 
 /// A call cycle as a list of labels whose first and last entries are the same

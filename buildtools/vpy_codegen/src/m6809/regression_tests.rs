@@ -815,8 +815,10 @@ def loop():
 }
 
 #[test]
-fn compound_assignment_with_computed_index_is_an_error() {
-    let src = "\
+fn compound_assignment_with_computed_index() {
+    // A computed index without calls is evaluated twice (`xs[i + 1] = xs[i + 1] + 2`):
+    // 2-D arrays and arrays of structs lower to such indices.
+    let ok = "\
 xs = [1, 2]
 i = 0
 
@@ -826,8 +828,22 @@ def main():
 def loop():
     pass
 ";
-    let err = generate(src, SINGLE_BANK).expect_err("computed index in += must fail");
-    assert!(err.contains("line 5") && err.contains("computed index"), "{err}");
+    generate(ok, SINGLE_BANK).expect("computed index in += compiles");
+    // An index that calls a function would run it twice: refused, with its line.
+    let src = "\
+xs = [1, 2]
+
+def one():
+    return 1
+
+def main():
+    xs[one()] += 2
+
+def loop():
+    pass
+";
+    let err = generate(src, SINGLE_BANK).expect_err("an index with a call in += must fail");
+    assert!(err.contains("line 7") && err.contains("index calls a function"), "{err}");
 }
 
 // ---------------------------------------------------------------------------

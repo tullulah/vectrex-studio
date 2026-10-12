@@ -64,13 +64,22 @@ fn assert_label(build: &Build, label: &str) {
     );
 }
 
+/// Does `output` point at source line `n` ("file.vpy:N: error:", or "line N")?
+fn names_line(output: &str, n: usize) -> bool {
+    output.contains(&format!(".vpy:{n}: error:")) || output.contains(&format!("line {n}"))
+}
+
 fn assert_fails_with(name: &str, src: &str, needles: &[&str]) {
     let dir = tmp();
     let b = build(dir.path(), name, src);
     assert!(!b.ok, "{name} should fail to build:\n{}", b.output);
     let lower = b.output.to_lowercase();
     for needle in needles {
-        assert!(lower.contains(&needle.to_lowercase()), "missing '{needle}' in error output:\n{}", b.output);
+        let found = match needle.strip_prefix("line ").and_then(|n| n.parse::<usize>().ok()) {
+            Some(n) => names_line(&b.output, n),
+            None => lower.contains(&needle.to_lowercase()),
+        };
+        assert!(found, "missing '{needle}' in error output:\n{}", b.output);
     }
 }
 
@@ -354,7 +363,7 @@ fn draw_vector_rot_errors_name_the_line() {
     let dir = dir_with_ell();
     let unknown = build(dir.path(), "rot_unknown",
         "def main():\n    pass\n\ndef loop():\n    DRAW_VECTOR_ROT(\"ship\", 0, 0, 8)\n");
-    assert!(!unknown.ok && unknown.output.contains("line 5") && unknown.output.contains("no vector asset named 'ship'"),
+    assert!(!unknown.ok && names_line(&unknown.output, 5) && unknown.output.contains("no vector asset named 'ship'"),
         "{}", unknown.output);
     let arity = build(dir.path(), "rot_arity",
         "def main():\n    pass\n\ndef loop():\n    DRAW_VECTOR_ROT(\"ell\", 0, 0)\n");

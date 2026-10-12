@@ -593,6 +593,7 @@ fn parse_and_emit_instruction(emitter: &mut BinaryEmitter, line: &str, equates: 
         "ORB" => emit_orb(emitter, operand, equates),
         "ORA" => emit_ora(emitter, operand, equates),
         "EORA" => emit_eora(emitter, operand, equates),
+        "EORB" => emit_eorb(emitter, operand, equates),
         
         // === REGISTER OPS ===
         "CLRA" => { emitter.clra(); Ok(()) },
@@ -2269,6 +2270,42 @@ fn emit_eora(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<Strin
                     let symbol = &msg[7..];
                     emitter.add_symbol_ref(symbol, false, 2);
                     emitter.emit(0xB8);
+                    emitter.emit_word(0);
+                    Ok(())
+                } else {
+                    Err(msg)
+                }
+            }
+        }
+    }
+}
+
+fn emit_eorb(emitter: &mut BinaryEmitter, operand: &str, equates: &HashMap<String, u16>) -> Result<(), String> {
+    if operand.starts_with('#') {
+        let val = parse_immediate(&operand[1..])?;
+        emitter.eorb_immediate(val);
+        Ok(())
+    } else if operand.contains(',') {
+        // INDEXED MODE
+        emitter.emit(0xE8); // EORB indexed opcode
+        let (postbyte, offset) = parse_indexed_mode(operand)?;
+        emitter.emit(postbyte);
+        if let Some(off) = offset {
+            emitter.emit(off as u8);
+        }
+        Ok(())
+    } else {
+        match evaluate_expression(operand, equates) {
+            Ok(addr) => {
+                emitter.emit(0xF8); // EORB extended opcode
+                emitter.emit_word(addr);
+                Ok(())
+            }
+            Err(msg) => {
+                if msg.starts_with("SYMBOL:") {
+                    let symbol = &msg[7..];
+                    emitter.add_symbol_ref(symbol, false, 2);
+                    emitter.emit(0xF8);
                     emitter.emit_word(0);
                     Ok(())
                 } else {

@@ -1,4 +1,5 @@
-//! Element type of array parameters (m6809).
+//! Element type of array parameters (m6809, and the ARM backends through
+//! `arm::arrays`).
 //!
 //! An array passed to a function is passed as its base address: `f(xs)` stores
 //! the address of `xs`'s data in the parameter slot, and `p[i]` inside `f` reads
@@ -182,14 +183,15 @@ pub fn analyze(module: &Module) -> Result<HashMap<String, HashMap<String, VarSiz
                         .iter()
                         .map(|(v, (array, line))| format!("`{array}` ({}) at line {line}", v.type_name()))
                         .collect();
-                    errors.push(format!(
+                    errors.push(crate::origins::locate_for(&func.name, &format!(
                         "line {}: parameter `{param}` of `{}` is indexed as an array, but it receives arrays \
-                         with different element types: {}. One function indexes with one element size on m6809; \
-                         pass arrays of the same type (u8/i8 = 1 byte, untyped/i16/u16 = 2 bytes) or use a second function.",
+                         with different element types: {}. One function indexes with one element size; pass arrays \
+                         of the same type (u8/i8 = 1 byte, untyped/i16/u16 = 2 bytes, i32/u32 = 4 bytes) or use a \
+                         second function.",
                         func.line,
                         func.name,
                         listing.join(" and ")
-                    ));
+                    )));
                 }
             }
         }

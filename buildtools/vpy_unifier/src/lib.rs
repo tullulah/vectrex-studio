@@ -53,6 +53,8 @@ pub mod error;
 pub mod graph;
 pub mod resolver;
 pub mod scope;
+pub mod structs;
+pub mod arrays;
 pub mod type_tracker;
 pub mod types;
 pub mod visitor;
@@ -76,6 +78,7 @@ enum SymKind {
     Function,
     Global,
     Const,
+    Struct,
 }
 
 impl SymKind {
@@ -84,6 +87,7 @@ impl SymKind {
             SymKind::Function => "function",
             SymKind::Global => "variable",
             SymKind::Const => "const",
+            SymKind::Struct => "struct",
         }
     }
 }
@@ -105,7 +109,7 @@ fn program_vars(tables: &HashMap<String, ModuleSymbols>, entry: &str) -> Program
     modules.sort();
     for module in modules {
         for (def, kind) in tables[module].defs.values() {
-            if *kind != SymKind::Function {
+            if !matches!(kind, SymKind::Function | SymKind::Struct) {
                 vars.entry(canonical(module, entry, def).to_uppercase())
                     .or_insert_with(|| (module.clone(), def.clone()));
             }
@@ -162,6 +166,7 @@ impl ModuleSymbols {
                 Item::Function(f) => (&f.name, SymKind::Function),
                 Item::GlobalLet { name, .. } => (name, SymKind::Global),
                 Item::Const { name, .. } => (name, SymKind::Const),
+                Item::StructDef(d) => (&d.name, SymKind::Struct),
                 _ => continue,
             };
             // First definition wins (a later re-declaration keeps the same symbol).
@@ -254,11 +259,15 @@ pub fn unify_modules(
         return Err(UnifierError::Unresolved(diags));
     }
 
-    Ok(Module {
+    let unified = Module {
         items: merged_items,
         meta: merged_meta,
         imports: vec![], // All imports resolved, empty in unified module
-    })
+    };
+    // Phase 3.6: structs become one global (array) per field; array literals with
+    // repetition or several dimensions become flat arrays.
+    let unified = structs::lower(unified, entry_module).map_err(UnifierError::Unresolved)?;
+    arrays::lower(unified, entry_module).map_err(UnifierError::Unresolved)
 }
 
 /// Unified name of `def` (spelled as defined) living in `module`.
@@ -322,7 +331,7 @@ fn check_imports(
                         module: module_name.to_string(),
                         line: import.source_line,
                         message: format!(
-                            "cannot import `{}` from module `{target}`: it defines no such function, variable or const (it defines: {})",
+                            "cannot import `{}` from module `{target}`: it defines no such function, variable, const or struct (it defines: {})",
                             sym.name,
                             table.listing()
                         ),
@@ -600,7 +609,7 @@ impl<'a> Ctx<'a> {
             None => {
                 let listing = self.tables[module].listing();
                 self.error(line, format!(
-                    "module `{module}` has no function, variable or const named `{symbol}` (it defines: {listing})"
+                    "module `{module}` has no function, variable, const or struct named `{symbol}` (it defines: {listing})"
                 ));
                 None
             }
@@ -634,6 +643,13 @@ impl<'a> Ctx<'a> {
                 value: self.rewrite_expr(value),
                 source_line: *source_line,
             },
+            // A struct type, named like any other symbol of its module so that
+            // `common.Tie[8]` / `from common import Tie` find it.
+            Item::StructDef(def) => {
+                let mut def = def.clone();
+                def.name = canonical(self.module, self.entry, &def.name);
+                Item::StructDef(def)
+            }
             other => other.clone(),
         }
     }
@@ -773,7 +789,7 @@ impl<'a> Ctx<'a> {
                     match self.module_ref(&ident.name, call.source_line) {
                         Some(Ok(m)) => {
                             let name = match self.resolve_member(&m, &call.method_name, call.source_line) {
-                                Some((unified, SymKind::Function)) => unified,
+                                Some((unified, SymKind::Function | SymKind::Struct)) => unified,
                                 Some((unified, kind)) => {
                                     self.error(call.source_line, format!(
                                         "`{}.{}` is a {}, not a function — drop the parentheses",
@@ -811,13 +827,9 @@ impl<'a> Ctx<'a> {
                 if let Expr::Ident(ident) = target.as_ref() {
                     match self.module_ref(&ident.name, *source_line) {
                         Some(Ok(m)) => {
+                            // A function without parentheses is its address (a function
+                            // reference: ARM targets; m6809 rejects it in its frames).
                             let name = match self.resolve_member(&m, field, *source_line) {
-                                Some((unified, SymKind::Function)) => {
-                                    self.error(*source_line, format!(
-                                        "`{}.{field}` is a function — call it: `{}.{field}(...)`", ident.name, ident.name
-                                    ));
-                                    unified
-                                }
                                 Some((unified, _)) => unified,
                                 None => symbols::mangle(&m, field),
                             };
@@ -1227,7 +1239,7 @@ def Step(v):
         let diags = errors(unify(&[("main", main), ("physics", PHYSICS)]));
         assert_eq!(diags.len(), 1, "{diags:?}");
         assert_eq!(diags[0].line, 7);
-        assert!(diags[0].message.contains("no function, variable or const named `clamp_y`"), "{}", diags[0].message);
+        assert!(diags[0].message.contains("no function, variable, const or struct named `clamp_y`"), "{}", diags[0].message);
         assert!(diags[0].message.contains("clamp_x"), "should list what exists: {}", diags[0].message);
     }
 

@@ -24,8 +24,8 @@ writes an asset to the right folder and compiles it.
 | `.vinstr` | Instrument | `assets/instruments/` | Instrument Editor | `PLAY_NOTE("n", channel, midi_note)` | `PLAY_NOTE(N_instr, channel, midi_note)` | all |
 | `.vrec` | Vector recording | `assets/recordings/` | Recording viewer | `DRAW_RECORDING("n", x, y, scale, frame)` | `DRAW_RECORDING(N_vrec, x, y, scale, frame)` | m6809 (video only), rp2350, uvm2, pitrex; C: sim, rp2350, uvm2 |
 | `.vsmp` | 4-bit audio sample | `assets/samples/` | Sample player | `PLAY_SAMPLE("n")`, `SAMPLE_POS(fps)` | `PLAY_SAMPLE(N_smp)`, `SAMPLE_POS(fps)` | rp2350, pitrex; uvm2 builds but plays nothing; not m6809. C: sim, rp2350; uvm2 builds but plays nothing |
-| `.vmesh` | 3D surface mesh | `assets/meshes/` (C) | Mesh Editor | not available | `vpy3d_load_mesh(&m, N_vmesh)` + `vpy3d_draw_mesh` | C only: sim, rp2350, uvm2 |
-| `.vscene` | 3D set made of `.vmesh` pieces | `assets/scenes/` (C) | Scene Editor | not available | `vpy3d_load_scene(&s, N_vscene, N_vscene_meshes)` + `vpy3d_draw_scene` | C only: sim, rp2350, uvm2 (SDK v1.3.5+) |
+| `.vmesh` | 3D surface mesh | `assets/meshes/` (any folder) | Mesh Editor | `LOAD_MESH("n")`, `DRAW_MESH("n", xf, br)` | `vpy3d_load_mesh(&m, N_vmesh)` + `vpy3d_draw_mesh` | VPy: uvm2; C: sim, rp2350, uvm2 |
+| `.vscene` | 3D set made of `.vmesh` pieces | `assets/scenes/` | Scene Editor | `LOAD_SCENE("n")`, `DRAW_SCENE("n", x, y, z, br)` | `vpy3d_load_scene(&s, N_vscene, N_vscene_meshes)` + `vpy3d_draw_scene` | VPy: uvm2; C: sim, rp2350, uvm2 (SDK v1.3.5+) |
 
 `n` is the asset name: the file name without its extension. `N` is that name upper-cased
 with `-`, `.` and spaces turned into `_` (what `vpy_cli compile-asset` derives). "all"
@@ -351,7 +351,7 @@ on a PSG channel (0-2) at a MIDI note (24-107). In C, the call is
   On uvm2 the sample data is still linked into the `.um2`, and a large one overflows the
   image ([UVM2_TARGET.md](UVM2_TARGET.md)). Keep samples out of uvm2 builds.
 
-### `.vmesh` (3D surface mesh, C only)
+### `.vmesh` (3D surface mesh)
 
 ```json
 {"name":"cube","hard":45,
@@ -380,8 +380,25 @@ static vpy_mesh cube;
 /* loop():   */ vpy_xf place = vpy3d_rot_y(angle); vpy3d_draw_mesh(&cube, &place, 127);
 ```
 
-Add `$(VPY_C_SDK)/vpy3d.c` to `SRCS` in the Makefile. VPy has no `.vmesh` support. For
-3D in VPy, use a `.vec` with `z` and `DRAW_VECTOR_3D`.
+Add `$(VPY_C_SDK)/vpy3d.c` to `SRCS` in the Makefile.
+
+From VPy (uvm2 target), the same mesh is a name and a transform, a global `i32` array of 12
+([MANUAL.md](MANUAL.md#3d-uvm2) lists every 3D builtin):
+
+```python
+place: i32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+def main():
+    LOAD_MESH("cube")
+    CAMERA_LOOK_AT(0, 0, -3000, 0, 0, 0)
+def loop():
+    XF_ROT_Y(place, angle)
+    DRAW_MESH("cube", place, 127)
+```
+
+vpy_cli compiles the SDK's `vpy3d.c` into the `.um2` when the program uses a 3D builtin. The
+pool sizes (`VPY3D_POOL_V` &c.) go in the project's `[uvm2] defs`. On m6809, rp2350 and
+pitrex the 3D builtins are a compile error; there, a `.vec` with `z` and `DRAW_VECTOR_3D`
+gives simple 3D.
 
 #### Scenery: `lines` and `occluders` (SDK v1.3.5 or later)
 
@@ -420,7 +437,7 @@ static vpy_mesh room;
 /* loop():   */ vpy_xf at = vpy3d_translate(0, 0, 6000); vpy3d_draw_mesh(&room, &at, 100);
 ```
 
-### `.vscene` (3D set, C only, SDK v1.3.5 or later)
+### `.vscene` (3D set, SDK v1.3.5 or later)
 
 A scene arranges `.vmesh` pieces over time. It says where each piece stands, how it
 moves as the player travels, how often it repeats, and which pieces the game switches on
@@ -491,4 +508,4 @@ and `vpy3d_error()` says which. A `vpy_scene` itself is 24 bytes on the cartridg
 - On m6809, `PLAY_SAMPLE` and `SAMPLE_POS` don't build ("Undefined symbol").
 - On m6809, `STOP_MUSIC()` only builds when the program also calls `PLAY_MUSIC`.
 - `.vsmp` doesn't play on uvm2, from VPy or C.
-- `.vmesh` and `.vscene` have no VPy support.
+- `.vmesh` and `.vscene` work from VPy on uvm2 only (not m6809, rp2350 or pitrex).

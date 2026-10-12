@@ -228,11 +228,13 @@ fn parse_from_import(line: &str) -> Option<(&str, Vec<(&str, Option<&str>)>)> {
     Some((parts[0].trim(), names))
 }
 
-const TYPE_KEYWORDS: [(&str, &str); 4] = [
+const TYPE_KEYWORDS: [(&str, &str); 6] = [
     ("u8", "Unsigned 8-bit integer (0-255)"),
     ("i8", "Signed 8-bit integer (-128 to 127)"),
     ("u16", "Unsigned 16-bit integer (0-65535)"),
     ("i16", "Signed 16-bit integer (-32768 to 32767)"),
+    ("u32", "Unsigned 32-bit integer (ARM targets only)"),
+    ("i32", "Signed 32-bit integer (ARM targets only)"),
 ];
 
 /// Unified functions (global + vectorlist) and VPy keywords offered by completion.
