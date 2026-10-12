@@ -538,7 +538,7 @@ compile error (its frames need the callee at compile time); pick the function wi
 - A table of strings (`const NAMES = ["HOTH", "ENDOR"]`, also nested) holds their
   addresses; `NAMES[i]` can be passed wherever a string goes. On the ARM targets it must be
   `const`.
-- Array literals hold only number literals (`[1, -2, 3]`, repeated or nested as above) or only strings; a computed element (`[MAX_X, 2 * 3]`) is a compile error.
+- Array literals hold numbers or only strings. A number can be a constant expression: literals, `const`s and enum members, and arithmetic over them (`[SX_LASER, MAX_X * 2, -3]`), laid out as its value. Anything else (a variable, a call) is a compile error.
 - Index must be within bounds — no runtime bounds checking.
 - Coordinates are clamped to 8-bit signed (-128..127) for drawing.
 
