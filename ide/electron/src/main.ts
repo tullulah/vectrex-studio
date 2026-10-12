@@ -1452,7 +1452,13 @@ interface ExternalProjectManifest {
   // target (e.g. rp2350), these replace the default [build] command/args/
   // artifact so a C project uses the CORRECT compiler per target instead of
   // always the pitrex one. Declared in the .cvproj as `[targets.rp2350]` etc.
-  targets?: Record<string, { command?: string; args?: string[]; artifact?: string; deploy_extra?: string[] }>;
+  targets?: Record<string, { command?: string; args?: string[]; artifact?: string; deploy_extra?: string[];
+    /* THE EMULATOR (uvm2), for an image that is not one ELF: `emu_elf` the image's ELF when it
+     * is not beside the artifact, `emu_psram_elf` the ELF of a program the image loads into
+     * the PSRAM and jumps to (its SD calls are trapped at that ELF's addresses from then on),
+     * `emu_card` files of the build put on the simulated card as "card/path=build/path",
+     * over the card's size caps. ScummVM's loader + SCUMMVM.BIN is the case. */
+    emu_elf?: string; emu_psram_elf?: string; emu_card?: string[] }>;
   // Optional simulator build: compiles the project to a WASM module (via
   // emscripten) that runs in the IDE emulator panel against the host SDK shim.
   // `module` is the emitted MODULARIZE loader (.js) with sibling .wasm/.data.
@@ -1655,7 +1661,9 @@ export async function executeExternalBuild(args: {
       // UVM2 se copia a build_uvm2/ mientras su ELF se queda en build_uvm2/pico/, asi que
       // buscar solo al lado no lo encontraba y el emulador se quedaba sin simbolos —
       // "elf=0b" en la consola, en silencio.
+      const emuDecl = manifest.targets?.[effectiveTarget] || {};
       const candidatos = [
+        ...(emuDecl.emu_elf ? [join(rootDir, emuDecl.emu_elf)] : []),
         artifactPath.replace(/\.(bin|um2)$/i, '.elf'),
         join(dirname(artifactPath), 'pico', basename(artifactPath).replace(/\.(bin|um2)$/i, '.elf')),
       ];
@@ -1681,6 +1689,26 @@ export async function executeExternalBuild(args: {
       if (effectiveTarget === 'uvm2') {
         sdFiles = await leerSdSimulada();
         console.log(`[build] SD simulada: ${Object.keys(sdFiles).length} ficheros`);
+        for (const decl of emuDecl.emu_card ?? []) {
+          const eq = decl.indexOf('=');
+          if (eq <= 0) continue;
+          const enTarjeta = decl.slice(0, eq).trim().toLowerCase(), desde = join(rootDir, decl.slice(eq + 1).trim());
+          try {
+            sdFiles[enTarjeta] = (await fs.readFile(desde)).toString('base64');
+            win?.webContents.send('run://stdout', `[C] simulated card: ${enTarjeta} <- ${decl.slice(eq + 1).trim()}\n`);
+          } catch (e: any) {
+            win?.webContents.send('run://stderr', `[C] emu_card ${decl}: ${e?.message || e}\n`);
+          }
+        }
+      }
+      let psramElfBase64: string | null = null;
+      if (emuDecl.emu_psram_elf) {
+        try {
+          psramElfBase64 = (await fs.readFile(join(rootDir, emuDecl.emu_psram_elf))).toString('base64');
+          win?.webContents.send('run://stdout', `[C] PSRAM program ELF: ${emuDecl.emu_psram_elf}\n`);
+        } catch (e: any) {
+          win?.webContents.send('run://stderr', `[C] emu_psram_elf ${emuDecl.emu_psram_elf}: ${e?.message || e}\n`);
+        }
       }
       win?.webContents.send('emu://compiledBin', {
         base64: buf.toString('base64'),
@@ -1689,6 +1717,7 @@ export async function executeExternalBuild(args: {
         target: effectiveTarget,
         elfBase64,
         sdFiles,
+        psramElfBase64,
       });
       win?.webContents.send('run://status',
         `Previewing ${effectiveTarget} binary: ${manifest.project.name}`);
@@ -2571,6 +2600,18 @@ async function leerSdSimulada(): Promise<Record<string, string>> {
   await anda(raiz, '');
   return out;
 }
+
+/* The simulated card WITH its contents and sub-folders, for the WASM simulator: a game built
+ * with the SDK's uvm2_sd_sim.c reads it from /sd in emscripten's file system, which the
+ * simulator view fills from this before main(). Same folder, same caps and same lower-case
+ * paths as the card F5 hands the .um2 emulator (leerSdSimulada). */
+ipcMain.handle('sd:simFiles', async () => {
+  try {
+    return { ok: true, dir: join(os.homedir(), 'VectrexStudio', 'sd'), files: await leerSdSimulada() };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'sd_sim_files_failed' };
+  }
+});
 
 ipcMain.handle('sd:simList', async () => {
   try {
@@ -3644,6 +3685,13 @@ ipcMain.handle('file:watchDirectory', async (_e, dirPath: string) => {
       /\.pdb$/,
       /\.map$/,
       /[/\\]build[/\\]/,
+      /* BUILD OUTPUT AND VENDORED TREES ARE NOT WATCHED. A C project with build_<target>/
+       * folders and a cloned dependency in third_party/ (ScummVM: ~35,000 files, thousands
+       * rewritten by every build) flooded the renderer with one event per object file, each
+       * one a full workspace refresh; the main process died in V8 (SIGABRT, node::OnFatalError)
+       * on 2026-10-11 during builds. Nothing the editor shows lives in them. */
+      /[/\\](build(_[^/\\]*)?|third_party|node_modules)([/\\]|$)/,
+      /\.(o|a|d|obj|elf|wasm|um2|uf2)$/,
     ];
 
     const watcher = chokidar.watch(dirPath, {
@@ -3660,6 +3708,11 @@ ipcMain.handle('file:watchDirectory', async (_e, dirPath: string) => {
       const recent = recentChanges.get(fullPath);
       if (recent && (now - recent.timestamp) < 300) return;
       recentChanges.set(fullPath, { timestamp: now, type });
+      /* the debounce table only needs the last second: it grew by one entry per file ever
+       * changed and was never emptied */
+      if (recentChanges.size > 2000) {
+        for (const [k, v] of recentChanges) if (now - v.timestamp > 1000) recentChanges.delete(k);
+      }
 
       // Send the full absolute path so the renderer can match reliably
       console.log(`[FileWatcher] ${type}: ${fullPath}`);

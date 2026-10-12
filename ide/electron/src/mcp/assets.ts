@@ -17,7 +17,7 @@
 //
 // Pure Node (no electron import): the test harness loads it directly.
 
-import { promises as fs, existsSync } from 'fs';
+import { promises as fs, existsSync, readdirSync } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'child_process';
@@ -302,7 +302,7 @@ or lofted {"name","hard":45,"caps":true,"sections":[{"z","points":[{"x","y"}...]
 {"name","fog":{"full","gone"} (optional, 0 <= full < gone),"groups":[names] (optional, <= 32, no leading "!"),
  "items":[{ (>= 1, drawn in this order: near pieces first, an item's occluders hide only later items)
    "name":label (optional),
-   "mesh":"rib" (a .vmesh in assets/meshes, no extension) or ["a","b"] (only with "repeat": copy n uses mesh n mod len),
+   "mesh":"rib" (a .vmesh in assets/meshes or a folder inside it, by name, no extension) or ["a","b"] (only with "repeat": copy n uses mesh n mod len),
    "at":{"x","y","z"} (whole numbers, |v| <= 1000000, missing = 0),
    "follow":{"x","y","z"} (per-axis factor of pos, |f| <= 64, kept to 1/65536; z -1 = comes at you as pos.z grows),
    "repeat":{"axis":"x"|"y"|"z" (default z),"step":1..1000000,"count":1..255},
@@ -310,7 +310,7 @@ or lofted {"name","hard":45,"caps":true,"sections":[{"z","points":[{"x","y"}...]
    "br":1..100 (% of the draw brightness, default 100),
    "fog":true (default, per line segment) | false | "whole" (each copy by the depth of its origin),
    "group":"name" | "!name" (drawn only while that bit of the groups mask is set / clear; must be in "groups")}]}
-- At most 16 different meshes per scene; every mesh must exist (assets/meshes/<name>.vmesh).
+- At most 16 different meshes per scene; every mesh must exist (assets/meshes/<name>.vmesh, or in a folder inside assets/meshes; names must be unique across folders).
 - Placement per item: p = at + floor(follow*pos) per axis. With a repeat: n0 = floor(-(p[axis]-at[axis]) / step), copy k (0..count-1) sits at p[axis] + (n0+k)*step and is copy number n0+k: the first copy is always in (at-step, at] and the run wraps as pos moves.
 - Example: "at":{"z":600},"follow":{"z":-1},"repeat":{"step":2000,"count":9} with pos.z = 4500 -> p.z = -3900, n0 = 2, copies at z 100, 2100 ... 16100 (copy numbers 2..10; with "mesh":["a","b"] they use b, a, b ...).
 - Fog true fades scenery line segments only (faces keep their brightness); "whole" dims each copy as one, faces included, and skips it below brightness 4. Group bit n = the n-th name in "groups".`,
@@ -497,6 +497,8 @@ export function inBuildFolder(spec: AssetSpec, rel: string, lang: ProjectLang): 
   const dir = path.posix.dirname(rel);
   // VPy finds levels in ANY direct sub-folder of assets/ (discover_assets).
   if (lang === 'vpy' && spec.type === 'vplay') return /^assets\/[^/]+$/.test(dir);
+  // C: the Makefile compiles every .vmesh under assets/meshes, folders included.
+  if (lang === 'c' && spec.type === 'vmesh') return dir === spec.dir || dir.startsWith(spec.dir + '/');
   return dir === spec.dir;
 }
 
@@ -628,7 +630,7 @@ function sceneErrors(json: any): string[] {
     if (!names.length || names.length > 255) errs.push(`${what}: mesh must name 1 to 255 meshes`);
     for (const n of names) {
       if (typeof n !== 'string' || !n || /[\/\\]/.test(n) || n.endsWith('.vmesh')) {
-        errs.push(`${what}: mesh ${JSON.stringify(n)} must be the name of a .vmesh in assets/meshes, without the extension`);
+        errs.push(`${what}: mesh ${JSON.stringify(n)} must be the name of a .vmesh in assets/meshes (or a folder inside it), without the extension or folder`);
       }
     }
     if (names.length > 1 && !it.repeat) errs.push(`${what}: several meshes take turns along a repeat; without one, name a single mesh`);
@@ -738,14 +740,34 @@ export function missingReferences(spec: AssetSpec, json: any, rootDir: string, f
       }
     }
   } else if (spec.type === 'vscene') {
-    // vsceneres.rs looks next to the scene's folder: <scene dir>/../meshes/<name>.vmesh
+    // vsceneres.rs looks next to the scene's folder, by name: <scene dir>/../meshes/**/<name>.vmesh
+    const meshesDir = path.resolve(fileDir, '..', 'meshes');
+    const found = findMeshes(meshesDir);
     for (const m of sceneMeshNames(json)) {
       if (/[\\/]/.test(m)) continue;   // structuralErrors refuses a path
-      const rel = path.relative(rootDir, path.resolve(fileDir, '..', 'meshes', `${m}.vmesh`)).split(path.sep).join('/');
-      need(rel, `mesh "${m}"`);
+      const at = found.get(m) || [];
+      const rel = path.relative(rootDir, path.join(meshesDir, `${m}.vmesh`)).split(path.sep).join('/');
+      if (!at.length) missing.push(`mesh "${m}" -> ${rel} (or a folder inside ${path.posix.dirname(rel)})`);
+      else if (at.length > 1) missing.push(`mesh "${m}" is in more than one folder: ${at.map((p) => path.relative(rootDir, p).split(path.sep).join('/')).join(', ')}`);
     }
   }
   return missing;
+}
+
+/** Every .vmesh under `dir` (folders included, as vsceneres.rs searches), by name → its paths. */
+function findMeshes(dir: string, out = new Map<string, string[]>(), depth = 0): Map<string, string[]> {
+  if (depth > 8) return out;
+  let items: import('fs').Dirent[];
+  try { items = readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  for (const it of items) {
+    const full = path.join(dir, it.name);
+    if (it.isDirectory()) findMeshes(full, out, depth + 1);
+    else if (it.isFile() && /\.vmesh$/i.test(it.name)) {
+      const n = it.name.replace(/\.vmesh$/i, '');
+      out.set(n, [...(out.get(n) || []), full]);
+    }
+  }
+  return out;
 }
 
 /** The bundled compiler: $VPY_COMPILER_BIN, the packaged resources, or ide/electron/resources. */

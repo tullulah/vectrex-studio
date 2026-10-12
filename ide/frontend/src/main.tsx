@@ -2438,12 +2438,16 @@ def loop():
             openDocument({ uri, language: 'json', content, dirty: true, diagnostics: [] });
           } else if (newFileType === 'vscene') {
             // 3D scene for vpy3d (C projects): places the project's .vmesh pieces, edited in the
-            // Scene Editor. It starts with one piece: the first mesh in assets/meshes.
+            // Scene Editor. It starts with one piece: the first mesh in assets/meshes (or its folders).
             let firstMesh = '';
             if (vpyProject?.rootDir && apiFiles?.readDirectory) {
               try {
                 const r = await apiFiles.readDirectory(`${vpyProject.rootDir}/assets/meshes`.replace(/\\/g, '/'));
-                const names = (r?.files || []).filter((f: any) => !f.isDir && /\.vmesh$/i.test(f.name)).map((f: any) => f.name.replace(/\.vmesh$/i, '')).sort();
+                // meshes may sit in folders inside assets/meshes; a scene names them only
+                const names: string[] = [];
+                const walk = (es: any[]) => { for (const f of es || []) { if (f.isDir) walk(f.children); else if (/\.vmesh$/i.test(f.name)) names.push(f.name.replace(/\.vmesh$/i, '')); } };
+                walk(r?.files);
+                names.sort();
                 firstMesh = names[0] || '';
               } catch { /* no meshes folder */ }
             }

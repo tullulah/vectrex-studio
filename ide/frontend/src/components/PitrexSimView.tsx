@@ -539,6 +539,40 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
             log.current?.(`[PiTrex simulator] no pude montar el romset: ${e?.message || e}`);
           }
         }
+
+        /* THE CARD, for games built with the SDK's uvm2_sd_sim.c (they export uvm2_sd_sim):
+         * ~/VectrexStudio/sd copied into /sd BEFORE main(), sub-folders included, so the same
+         * uvm2_sd_* calls that read the card on the console read it here. Only for those games:
+         * the copy is megabytes and the others never look. */
+        if (typeof (instance as any)._uvm2_sd_sim === 'function' && instance.FS) {
+          try {
+            const r = await (window as any).electronAPI?.sdSimFiles?.();
+            if (cancelled || disposedRef.current) return;
+            if (!r?.ok || !r.files) {
+              log.current?.(`[PiTrex simulator] sin tarjeta simulada${r?.error ? `: ${r.error}` : ''}`);
+            } else {
+              const mkdirs = (path: string) => {
+                let p = '';
+                for (const part of path.split('/').slice(0, -1)) {
+                  p += '/' + part;
+                  try { instance.FS.mkdir(p); } catch { /* ya existe */ }
+                }
+              };
+              let bytes = 0;
+              const names = Object.keys(r.files);
+              for (const rel of names) {
+                const b = Uint8Array.from(atob(r.files[rel]), (c: string) => c.charCodeAt(0));
+                mkdirs(`sd/${rel}`);
+                instance.FS.writeFile(`/sd/${rel}`, b);
+                bytes += b.length;
+              }
+              if (!names.length) try { instance.FS.mkdir('/sd'); } catch { /* ya existe */ }
+              log.current?.(`[PiTrex simulator] tarjeta en /sd: ${names.length} ficheros, ${(bytes / 1048576).toFixed(1)} MB (${r.dir})`);
+            }
+          } catch (e: any) {
+            log.current?.(`[PiTrex simulator] no pude montar la tarjeta: ${e?.message || e}`);
+          }
+        }
         /* ── EL AUDIO DEL DAC DEL CARTUCHO, EN EL SIMULADOR ──────────────────
          *
          * El simulador corre a velocidad real y el emulador va a 8 fps, asi que
@@ -585,9 +619,9 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
             log.current?.('[PiTrex simulator] sin tarjeta simulada: no hay audio de jack');
           else if (!fapi?.readFileBin)
             log.current?.('[PiTrex simulator] no hay readFileBin: no puedo leer la tarjeta');
-          else if (!mus && !sfx)
+          else if (!mus && !sfx && typeof (instance as any)._jukebox_wanted !== 'function')
             log.current?.(`[PiTrex simulator] ni KUROMUS.PCM ni KUROSFX.PCM en ${lista.dir}`);
-          else if (typeof (instance as any)._stream_host_load !== 'function')
+          else if ((mus || sfx) && typeof (instance as any)._stream_host_load !== 'function')
             log.current?.('[PiTrex simulator] este game.js no exporta stream_host_load ' +
                           '(reconstruye con `make sim`)');
           if ((mus || sfx) && typeof (instance as any)._stream_host_load === 'function') {
@@ -655,6 +689,81 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
             jackRef.current = { ctxJ, nodo, despierta, propio };
             log.current?.(`[PiTrex simulator] jack en ${propio ? 'su propio' : 'el mismo'} `
                           + `AudioContext que el chip (${ctxJ.sampleRate} Hz)`);
+          } else if (typeof (instance as any)._jukebox_wanted === 'function' &&
+                     typeof (instance as any)._jukebox_host_load === 'function' &&
+                     typeof (instance as any)._jukebox_render_host === 'function' &&
+                     lista?.dir && fapi?.readFileBin) {
+            /* ── A JUKEBOX: MANY PIECES, ONE AT A TIME, ASKED FOR BY NAME ──────────
+             *
+             * KUROMUS.PCM is one file handed over at the start. A game with a piece
+             * per scene (return_of_the_jedi's src/jukebox.c) instead says which file
+             * it wants (`jukebox_wanted`, a path on the card) and takes it when it
+             * comes (`jukebox_host_load`); the samples come out of `jukebox_render_host`
+             * at 32 kHz, the same mixer the cartridge runs. The game keeps pointers to
+             * the last two files it was given (its two slots), so the last three stay
+             * allocated and older ones are freed. */
+            const inst: any = instance;
+            const prestado: AudioContext | null = audioRef.current?.ctx ?? null;
+            const ctxJ: AudioContext = prestado ?? new AudioContext();
+            const propio = !prestado;
+            const BLOQUE = 2048;
+            /* STEREO when the game has it (jukebox_render_host_lr: frames, left and right
+               interleaved): a TIE going by on the right is heard on the right. */
+            const lr = typeof inst._jukebox_render_host_lr === 'function';
+            const scratch = inst._malloc(BLOQUE * (lr ? 4 : 2));
+            const paso = 32000 / ctxJ.sampleRate;
+            let frac = 0, heldL = 0, heldR = 0, tengo = 0, leido = 0;
+            // eslint-disable-next-line @typescript-eslint/no-deprecated
+            const nodo = ctxJ.createScriptProcessor(BLOQUE, 0, lr ? 2 : 1);
+            nodo.onaudioprocess = (ev: AudioProcessingEvent) => {
+              const outL = ev.outputBuffer.getChannelData(0);
+              const outR = lr ? ev.outputBuffer.getChannelData(1) : null;
+              for (let i = 0; i < outL.length; i++) {
+                frac += paso;
+                while (frac >= 1) {
+                  frac -= 1;
+                  if (leido >= tengo) {
+                    if (lr) inst._jukebox_render_host_lr(scratch, BLOQUE); else inst._jukebox_render_host(scratch, BLOQUE);
+                    tengo = BLOQUE; leido = 0;
+                  }
+                  if (lr) { heldL = inst.HEAP16[(scratch >> 1) + 2 * leido] / 32768; heldR = inst.HEAP16[(scratch >> 1) + 2 * leido + 1] / 32768; }
+                  else heldL = heldR = inst.HEAP16[(scratch >> 1) + leido] / 32768;
+                  leido++;
+                }
+                outL[i] = heldL;
+                if (outR) outR[i] = heldR;
+              }
+            };
+            nodo.connect(ctxJ.destination);
+            const dados: number[] = [];
+            let pidiendo = '';
+            const leerTexto = (ptr: number): string => {
+              let t = '';
+              for (let k = 0; ptr && k < 64; k++) { const c = inst.HEAPU8[ptr + k]; if (!c) break; t += String.fromCharCode(c); }
+              return t;
+            };
+            const sondeo = window.setInterval(async () => {
+              if (cancelled || disposedRef.current) return;
+              const ruta = leerTexto(inst._jukebox_wanted());
+              if (!ruta || ruta === pidiendo) return;
+              pidiendo = ruta;
+              const b = await leer(ruta);
+              if (cancelled || disposedRef.current) return;
+              if (leerTexto(inst._jukebox_wanted()) !== ruta) { pidiendo = ''; return; }   /* asked for another meanwhile */
+              if (!b) { log.current?.(`[PiTrex simulator] jukebox: no esta ${ruta} en ${lista.dir}`); inst._jukebox_host_load(0, 0); pidiendo = ''; return; }
+              const ptr = inst._malloc(b.length);
+              inst.HEAPU8.set(b, ptr);
+              inst._jukebox_host_load(ptr, b.length);
+              dados.push(ptr);
+              while (dados.length > 3) inst._free(dados.shift());
+              pidiendo = '';
+              log.current?.(`[PiTrex simulator] jukebox: ${ruta} (${b.length} B)`);
+            }, 200);
+            const despierta = () => { if (ctxJ.state !== 'running' && !mutedRef.current) ctxJ.resume().catch(() => {}); };
+            ['keydown', 'pointerdown', 'mousedown', 'click', 'touchstart']
+              .forEach((e) => window.addEventListener(e, despierta, { capture: true }));
+            jackRef.current = { ctxJ, nodo, despierta, propio, sondeo };
+            log.current?.(`[PiTrex simulator] jukebox del jack: musica de ${lista.dir}`);
           }
         } catch (e: any) {
           log.current?.(`[PiTrex simulator] sin audio de jack: ${e?.message || e}`);
@@ -712,6 +821,7 @@ export const PitrexSimView: React.FC<PitrexSimViewProps> = ({ modulePath, width,
           ['keydown', 'pointerdown', 'mousedown', 'click', 'touchstart']
             .forEach((e) => window.removeEventListener(e, j.despierta, { capture: true } as any));
           j.nodo?.disconnect();
+          if (j.sondeo) window.clearInterval(j.sondeo);
           /* ONLY IF IT IS OURS. Since the jack shares the AY worklet's context,
            * closing it here would take the chip's audio down with it — and the
            * block above has already closed it in that case. */

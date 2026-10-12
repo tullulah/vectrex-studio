@@ -125,6 +125,21 @@ function buildPreview(json: unknown): PreviewMesh {
 
 // ── component ──────────────────────────────────────────────────────────────
 
+type DirEntry = { name: string; path?: string; isDir: boolean; children?: DirEntry[] };
+
+/** Every .vmesh under the listing, by name → its path relative to the listed folder. */
+function collectMeshes(entries: DirEntry[], prefix = '', out: Record<string, string> = {}): Record<string, string> {
+  for (const f of entries) {
+    const rel = prefix ? `${prefix}/${f.name}` : f.name;
+    if (f.isDir) collectMeshes(f.children ?? [], rel, out);
+    else if (/\.vmesh$/i.test(f.name)) {
+      const n = f.name.replace(/\.vmesh$/i, '');
+      if (!(n in out)) out[n] = rel;
+    }
+  }
+  return out;
+}
+
 export const SceneEditor: React.FC<SceneEditorProps> = ({ resource, docUri, onChange }) => {
   const { t } = useTranslation(['editor']);
   const tr = (k: string, d: string, o?: Record<string, unknown>) => t(`scene.${k}`, { defaultValue: d, ...(o || {}) }) as string;
@@ -192,15 +207,17 @@ export const SceneEditor: React.FC<SceneEditorProps> = ({ resource, docUri, onCh
     setSelItem((s) => (s === null ? (itemList.length ? 0 : null) : s >= itemList.length ? (itemList.length ? itemList.length - 1 : null) : s));
   }, [itemList.length]);
 
-  // ── the project's meshes: <scene dir>/../meshes/*.vmesh, as the compiler looks ──
+  // ── the project's meshes: <scene dir>/../meshes/**/*.vmesh, by name, as the compiler looks ──
   const meshesDir = useMemo(() => (docUri && docUri.startsWith('file://') ? joinPath(dirOf(uriToFsPath(docUri)), '../meshes') : ''), [docUri]);
   const filesApi = (window as unknown as {
     files?: {
       readFile?: (p: string) => Promise<{ content: string } | { error: string }>;
-      readDirectory?: (p: string) => Promise<{ files: Array<{ name: string; isDir: boolean }> } | { error: string }>;
+      readDirectory?: (p: string) => Promise<{ files: DirEntry[] } | { error: string }>;
     };
   }).files;
   const [meshNames, setMeshNames] = useState<string[] | null>(null);
+  /** name → path inside assets/meshes (meshes may sit in folders; a scene names them only). */
+  const meshPaths = useRef<Record<string, string>>({});
   const [meshData, setMeshData] = useState<Record<string, PreviewMesh>>({});
   const inFlight = useRef(new Set<string>());
   const [reloadTick, setReloadTick] = useState(0);
@@ -209,8 +226,10 @@ export const SceneEditor: React.FC<SceneEditorProps> = ({ resource, docUri, onCh
     let live = true;
     filesApi.readDirectory(meshesDir).then((r) => {
       if (!live) return;
-      if ('error' in r) { setMeshNames([]); return; }
-      setMeshNames(r.files.filter((f) => !f.isDir && /\.vmesh$/i.test(f.name)).map((f) => f.name.replace(/\.vmesh$/i, '')).sort());
+      if ('error' in r) { meshPaths.current = {}; setMeshNames([]); return; }
+      const found = collectMeshes(r.files);
+      meshPaths.current = found;
+      setMeshNames(Object.keys(found).sort());
     }).catch(() => { if (live) setMeshNames(null); });
     return () => { live = false; };
   }, [meshesDir, reloadTick]);
@@ -221,7 +240,7 @@ export const SceneEditor: React.FC<SceneEditorProps> = ({ resource, docUri, onCh
       if (!name || /[/\\]/.test(name) || name in meshData || inFlight.current.has(name)) continue;
       if (meshNames && !meshNames.includes(name)) continue;
       inFlight.current.add(name);
-      filesApi.readFile(joinPath(meshesDir, `${name}.vmesh`)).then((res) => {
+      filesApi.readFile(joinPath(meshesDir, meshPaths.current[name] ?? `${name}.vmesh`)).then((res) => {
         inFlight.current.delete(name);
         let entry: PreviewMesh;
         if ('error' in res) entry = { error: res.error };
@@ -733,7 +752,7 @@ export const SceneEditor: React.FC<SceneEditorProps> = ({ resource, docUri, onCh
         {[0, 1, 2].map((a) => <React.Fragment key={a}>{numInput(eye[a], (n) => setEye((e) => { const c = [...e] as Vec3; c[a] = Math.round(n); return c; }), { width: 58 })}</React.Fragment>)}
         <span style={ST.sep} />
         <button title={tr('frameTip', 'Frame the whole set (Home / H)')} onClick={frameAll} style={ST.btn}>{tr('frame', 'Frame')}</button>
-        <button title={tr('reloadTip', 'Read the meshes again from assets/meshes')} onClick={reloadMeshes} style={ST.btn}>{tr('reload', 'Reload meshes')}</button>
+        <button title={tr('reloadTip', 'Read the meshes again from assets/meshes and its folders')} onClick={reloadMeshes} style={ST.btn}>{tr('reload', 'Reload meshes')}</button>
         <button title={tr('undoTip', 'Undo (Ctrl+Z)')} onClick={undo} disabled={!canUndo} style={ST.btn}>↶</button>
         <button title={tr('redoTip', 'Redo (Ctrl+Shift+Z / Ctrl+Y)')} onClick={redo} disabled={!canRedo} style={ST.btn}>↷</button>
       </div>
@@ -872,7 +891,7 @@ export const SceneEditor: React.FC<SceneEditorProps> = ({ resource, docUri, onCh
                 ))}
                 <button style={ST.btnSmall} onClick={() => apply((r) => S3.setItemMeshes(r, selItem, [...selMeshes, selMeshes[selMeshes.length - 1] || defaultMesh()]))}
                   title={tr('addMeshTip', 'Add a mesh to take turns with (needs a repeat)')}>{tr('addMesh', '+ mesh')}</button>
-                {meshNames && !meshNames.length && <div style={ST.note}>{tr('noMeshes', 'No .vmesh in assets/meshes yet: create one first (File > New > 3D Mesh).')}</div>}
+                {meshNames && !meshNames.length && <div style={ST.note}>{tr('noMeshes', 'No .vmesh in assets/meshes (or its folders) yet: create one first (File > New > 3D Mesh).')}</div>}
 
                 <div style={ST.subTitle} title={tr('atTip', 'Where the piece stands: whole numbers, a missing axis is 0')}>{tr('at', 'At')}</div>
                 <Row label="X Y Z">

@@ -1177,6 +1177,13 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
   const enUnidades = useCallback((v: number) => v / escalaUnidad, [escalaUnidad]);
 
   // Convert canvas coordinates to resource coordinates (2D projection)
+  /* HOW FAR A POINT MAY GO: half the canvas, never less than the beam's 127. The limit was a
+   * fixed +-127 (the Vectrex unit), and a canvas wider than 256 — a ScummVM room is 320 to 960
+   * pixels across, one unit a pixel — had every point dragged past x 127 piled up on it
+   * (2026-10-11). A normal 256 canvas keeps exactly the old limit. */
+  const limX = Math.max(127, Math.ceil((resource.canvas?.width ?? 256) / 2));
+  const limY = Math.max(127, Math.ceil((resource.canvas?.height ?? 256) / 2));
+
   const canvasToResource = useCallback((canvasX: number, canvasY: number): Point => {
     const centerX = width / 2;
     const centerY = height / 2;
@@ -2687,8 +2694,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         const [pIdx, ptIdx] = key.split('-').map(Number);
         const path = newResource.layers[currentLayerIndex]?.paths[pIdx];
         if (path?.points[ptIdx]) {
-          path.points[ptIdx].x = Math.round(Math.max(-127, Math.min(127, startPos.x + dx)));
-          path.points[ptIdx].y = Math.round(Math.max(-127, Math.min(127, startPos.y + dy)));
+          path.points[ptIdx].x = Math.round(Math.max(-limX, Math.min(limX, startPos.x + dx)));
+          path.points[ptIdx].y = Math.round(Math.max(-limY, Math.min(limY, startPos.y + dy)));
         }
       }
       updateResource(resource, newResource);
@@ -3258,8 +3265,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
           name: `${path.name}_copy`,
           points: path.points.map((pt: any) => ({
             ...pt,
-            x: Math.max(-127, Math.min(127, pt.x + PASTE_OFFSET)),
-            y: Math.max(-127, Math.min(127, pt.y + PASTE_OFFSET)),
+            x: Math.max(-limX, Math.min(limX, pt.x + PASTE_OFFSET)),
+            y: Math.max(-limY, Math.min(limY, pt.y + PASTE_OFFSET)),
           }))
         }));
         const newResource = JSON.parse(JSON.stringify(resource)) as VecResource;

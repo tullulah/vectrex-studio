@@ -3495,7 +3495,7 @@ export const EmulatorPanel: React.FC = () => {
     const electronAPI: any = (window as any).electronAPI;
     if (!electronAPI?.onCompiledBin) return;
 
-    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null; libvpyAsm?: string | null; sdFiles?: Record<string, string> }) => {
+    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null; libvpyAsm?: string | null; sdFiles?: Record<string, string>; psramElfBase64?: string | null }) => {
     /* LA PRIMERA TRAZA DE LA CADENA. Todo lo que hay de aqui en adelante ya estaba
      * instrumentado —"uvm2: bin=…", "✓ .um2 image loaded", "[loadUvm2] START"— asi que si
      * no sale NINGUNA, el problema no esta en el emulador sino en que este manejador no se
@@ -3633,8 +3633,11 @@ export const EmulatorPanel: React.FC = () => {
               for (const [k, v] of Object.entries(payload.sdFiles ?? {})) {
                 sdBytes[k] = Uint8Array.from(atob(v), c => c.charCodeAt(0));
               }
+              const psramElf = payload.psramElfBase64
+                ? Uint8Array.from(atob(payload.psramElfBase64), c => c.charCodeAt(0))
+                : undefined;
               armReloadRef.current = () =>
-                emuCore.loadUvm2!(bin, canvasRef.current ?? undefined, elf, sdBytes);
+                emuCore.loadUvm2!(bin, canvasRef.current ?? undefined, elf, sdBytes, psramElf);
               armReloadRef.current();
               console.log('[EmulatorPanel] ✓ .um2 image loaded into Uvm2System');
             } else {

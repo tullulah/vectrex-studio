@@ -201,7 +201,11 @@ VEC_SRCS   := $(wildcard assets/vectors/*.vec)
 AUDIO_SRCS := $(wildcard assets/music/*.vmus assets/sfx/*.vsfx assets/instruments/*.vinstr \\
                         assets/samples/*.vsmp)
 REC_SRCS   := $(wildcard assets/recordings/*.vrec)
-MESH_SRCS  := $(wildcard assets/meshes/*.vmesh)
+# meshes may sit in folders inside assets/meshes (one header per name: names must be unique)
+rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
+MESH_SRCS  := $(sort $(call rwildcard,assets/meshes,*.vmesh))
+MESH_DUPS  := $(sort $(foreach n,$(notdir $(MESH_SRCS)),$(if $(word 2,$(filter %/$(n),$(MESH_SRCS))),$(n))))
+$(if $(MESH_DUPS),$(error two .vmesh files share a name: $(MESH_DUPS)))
 SCENE_SRCS := $(wildcard assets/scenes/*.vscene)
 ANIM_SRCS  := $(wildcard assets/animations/*.vanim)
 LEVEL_SRCS := $(wildcard assets/playground/*.vplay)
@@ -217,7 +221,7 @@ vpath %.vsfx   assets/sfx
 vpath %.vinstr assets/instruments
 vpath %.vrec   assets/recordings
 vpath %.vsmp   assets/samples
-vpath %.vmesh  assets/meshes
+vpath %.vmesh  assets/meshes $(sort $(dir $(MESH_SRCS)))
 vpath %.vscene assets/scenes
 vpath %.vanim  assets/animations
 vpath %.vplay  assets/playground

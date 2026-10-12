@@ -170,6 +170,7 @@ export const FileTreePanel: React.FC = () => {
     let isSubscribed = true;
     
     let cleanupListener: (() => void) | null = null;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     
     const setupWatcher = async () => {
       try {
@@ -219,8 +220,12 @@ export const FileTreePanel: React.FC = () => {
               }
             }
             
-            // Refresh the workspace after a short delay to batch changes
-            setTimeout(() => {
+            // Refresh the workspace after a short delay to batch changes: ONE pending refresh,
+            // pushed back by every event. It was one timer per event, so a burst of N changes
+            // ran N full workspace refreshes.
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+              refreshTimer = null;
               if (isSubscribed) {
                 refreshWorkspace();
               }
@@ -239,6 +244,7 @@ export const FileTreePanel: React.FC = () => {
     
     return () => {
       isSubscribed = false;
+      if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
       
       // Remove event listener (check if it's a function)
       if (cleanupListener && typeof cleanupListener === 'function') {
