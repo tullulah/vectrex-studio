@@ -291,7 +291,10 @@ fn check_clashes(module_name: &str, module: &Module, diags: &mut Vec<Diagnostic>
             matches!((a, b), (SymKind::Struct, SymKind::Global) | (SymKind::Global, SymKind::Struct))
         };
         match seen.get(&name.to_lowercase()) {
-            Some((first, k, first_line)) if !(data(*k) && data(kind)) && !type_and_var(*k, kind) => diags.push(Diagnostic {
+            // (a global declared again, or a const, keeps one symbol; but a const and a
+            // variable of one name -- `const HANGAR_W` and `hangar_w`, two names in C -- made
+            // every read of the variable the constant, silently)
+            Some((first, k, first_line)) if !(data(*k) && *k == kind) && !type_and_var(*k, kind) => diags.push(Diagnostic {
                 module: module_name.to_string(),
                 line,
                 message: format!(
@@ -1293,8 +1296,12 @@ def Step(v):
         let diags = errors(unify(&[("main", main)]));
         let text: Vec<&str> = diags.iter().map(|d| d.message.as_str()).collect();
         assert!(diags.iter().any(|d| d.line == 6 && d.message.contains("`target` is already defined at line 1 (the struct `Target`)")), "{text:?}");
-        // a struct may share its name with a variable; a global and a const keep one symbol
-        assert_eq!(diags.len(), 1, "{text:?}");
+        // a struct may share its name with a variable; a const may not (every read of the
+        // variable became the constant)
+        assert!(diags.iter().any(|d| d.line == 9 && d.message.contains("`TIES` is already defined at line 4")), "{text:?}");
+        assert_eq!(diags.len(), 2, "{text:?}");
+        let again = "x = 1\nx = 2\nconst K = 1\nconst K = 1\ndef main():\n    pass\n";
+        assert!(unify(&[("main", again)]).is_ok(), "a global or a const declared again keeps one symbol");
         let ok = "struct Tie:\n    x: i16\n\ntie = Tie[4]\n\ndef main():\n    tie[1].x = 3\n";
         assert!(unify(&[("main", ok)]).is_ok());
     }

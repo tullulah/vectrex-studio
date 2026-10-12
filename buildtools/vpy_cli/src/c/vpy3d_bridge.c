@@ -214,6 +214,14 @@ void vpyx_draw_scene(int i, int32_t x, int32_t y, int32_t z)
     vpy3d_draw_scene(&s_scene[i], 0, pos, (uint32_t)vpyx_args[1], vpyx_args[0]);
 }
 
+/* The same, the whole scene placed by xf (its origin moved, turned): (x, y) in r2-r3,
+ * z, br and groups in vpyx_args[0..2]. */
+void vpyx_draw_scene_at(int i, const vpy_xf *xf, int32_t x, int32_t y)
+{
+    const int32_t pos[3] = { x, y, vpyx_args[0] };
+    vpy3d_draw_scene(&s_scene[i], xf, pos, (uint32_t)vpyx_args[2], vpyx_args[1]);
+}
+
 /* ---- lines, occluders, fog -------------------------------------------------- */
 
 void vpyx_line_world(int32_t ax, int32_t ay, int32_t az, int32_t bx)

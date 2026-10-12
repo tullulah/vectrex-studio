@@ -928,6 +928,7 @@ string literal and must exist (a missing one is a compile error).
 | `MESH_POOL_MARK()` / `MESH_POOL_RELEASE()` | Remember where the pools are / give back every mesh loaded since (load them again before drawing them) |
 | `LOAD_SCENE("name")` | Load `name.vscene` and the meshes it places. Returns 0 on failure |
 | `DRAW_SCENE("name", x, y, z, brightness[, groups])` | Draw a scene at position (x, y, z) — what its `follow` items move with; `groups` is the bit mask its `group` items test |
+| `DRAW_SCENE_AT("name", xf, x, y, z, brightness[, groups])` | `DRAW_SCENE`, the whole scene placed by the transform `xf` (moved and turned) |
 | `LINE_3D(ax, ay, az, bx, by, bz, brightness)` | A line in world space |
 | `LINE_CAM(ax, ay, az, bx, by, bz, brightness)` | A line in camera space (x right, y up, z ahead): gunsights and other overlays that turn with the view |
 | `OCCL_RESET()` | Forget the occluders (once per frame, before adding the frame's) |
