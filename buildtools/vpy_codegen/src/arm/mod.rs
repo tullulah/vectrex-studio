@@ -86,6 +86,7 @@ pub fn generate_arm_asm(
     // Core stubs (bus_write/bus_read, vpy_wait_recal, vpy_set_intensity,
     // dv_reset/dv_move_to/dv_draw_delta) are always emitted.
     let usage = analysis::analyze(module);
+    ram_layout::set_array_region(None);
 
     // Recordings (.vrec) are usage-filtered: only those referenced by a
     // DRAW_RECORDING("name", ...) call are emitted. Other asset types pass
@@ -142,6 +143,60 @@ fn single_reg(code: &str, op: &str) -> Option<String> {
     }
 }
 
+/// The globals' base: every user variable (and the runtime's) lives in the 4 KB from here
+/// (ram_layout.rs), so `ldr r0, [r6, #off]` reaches any of them.
+pub const GLOBALS_BASE: u32 = 0x2007_F000;
+/// game_main's line that sets r6 to GLOBALS_BASE (the peephole folds onto it only then).
+pub const GLOBALS_BASE_MARK: &str = "@ globals base r6";
+
+/// Is r1 dead from line `from` on: written before it is read, looking a few instructions
+/// ahead? Anything unclear -- a label, a branch, a call -- counts as alive.
+fn r1_dead_after(lines: &[&str], from: usize) -> bool {
+    for line in lines.iter().skip(from).take(8) {
+        let code = norm_code(line);
+        if code.is_empty() {
+            continue;
+        }
+        // A statement's end -- a label, a branch -- ends r1's life too: the emitter never
+        // carries a value in r1 across control flow (a call might take it as an argument)
+        if code.ends_with(':') {
+            return true;
+        }
+        if code.starts_with('.') || code.starts_with('#') {
+            return false;
+        }
+        let (op, rest) = code.split_once(' ').unwrap_or((code.as_str(), ""));
+        if op == "b" || (op.len() == 3 && op.starts_with('b') && is_cond_branch(op)) {
+            return true;
+        }
+        if op.starts_with('b') || op.starts_with("cb") || op.starts_with("it") {
+            return false;
+        }
+        let regs: Vec<&str> = rest.split(|ch: char| !ch.is_ascii_alphanumeric()).filter(|t| !t.is_empty()).collect();
+        if !regs.contains(&"r1") {
+            if op == "pop" && rest.contains("pc") {
+                return false;
+            }
+            continue;
+        }
+        if op == "pop" {
+            return rest == "{r1}";
+        }
+        let writes_only = matches!(op, "mov" | "movs" | "ldr" | "ldrh" | "ldrsh" | "ldrb" | "ldrsb" | "add" | "sub" | "lsl" | "mul")
+            && regs.first() == Some(&"r1")
+            && !regs[1..].contains(&"r1");
+        return writes_only;
+    }
+    false
+}
+
+/// If `code` loads r0 from the address in r0 (`ldr r0, [r0]`, `ldrsh r0, [r0]`, …),
+/// the load's mnemonic.
+fn load_r0_from_r0(code: &str) -> Option<&str> {
+    let mnem = code.strip_suffix(" r0, [r0]")?;
+    matches!(mnem, "ldr" | "ldrh" | "ldrsh" | "ldrb" | "ldrsb").then_some(mnem)
+}
+
 /// The conditional branch mnemonics emitted by `bool_from_flags`.
 fn is_cond_branch(mnem: &str) -> bool {
     matches!(mnem, "beq" | "bne" | "blt" | "bgt" | "ble" | "bge" | "bcs" | "bcc")
@@ -156,9 +211,26 @@ fn is_cond_branch(mnem: &str) -> bool {
 ///  - P3: adjacent no-op `push {rX}; pop {rX}` (single-arg call setup) is dropped.
 ///  - P4: `bool_from_flags` materialisation immediately consumed by a branch
 ///    (`... cmp r0,#0; beq TARGET`) fuses to a single conditional branch.
+///  - P2b: the same for a frame slot (`ldr r0, [r7, #K]`: a parameter or a local).
 ///  - P5: `b L` straight before `L:` is dropped (a function's last `return`
 ///    branching to the epilogue that follows it).
 fn peephole(asm: &str) -> String {
+    // the globals' base register: set by game_main (functions.rs) when this target has it
+    let base = asm.contains(GLOBALS_BASE_MARK);
+    // to a fixpoint: one rewrite can bring the next pattern together (P1's `mov r1, #N`
+    // in front of an indexed load is P6)
+    let mut cur = peephole_pass(asm, base);
+    for _ in 0..4 {
+        let next = peephole_pass(&cur, base);
+        if next == cur {
+            break;
+        }
+        cur = next;
+    }
+    cur
+}
+
+fn peephole_pass(asm: &str, base: bool) -> String {
     let lines: Vec<&str> = asm.lines().collect();
     let n = lines.len();
     let mut out: Vec<String> = Vec::with_capacity(n);
@@ -166,6 +238,26 @@ fn peephole(asm: &str) -> String {
 
     let mut i = 0;
     while i < n {
+        // --- P9: a global through the base register -----------------------
+        // ldr r1,=ADDR / LD r0,[r1]  →  LD r0,[r6,#ADDR-BASE]   (ST likewise; and the
+        // right operand's `ldr r1,=ADDR / ldr r1,[r1]`), when r1 is dead after it
+        if base && i + 1 < n {
+            if let Some(off) = c(i).strip_prefix("ldr r1, =0x").and_then(|h| u32::from_str_radix(h, 16).ok())
+                .and_then(|a| a.checked_sub(GLOBALS_BASE)).filter(|o| *o <= 4095)
+            {
+                let next = c(i + 1);
+                if let Some((op, dst)) = next.split_once(' ').and_then(|(op, rest)| rest.strip_suffix(", [r1]").map(|d| (op, d))) {
+                    let load = matches!(op, "ldr" | "ldrh" | "ldrsh" | "ldrb" | "ldrsb");
+                    let store = matches!(op, "str" | "strh" | "strb");
+                    if (load && dst == "r1") || ((load || store) && dst == "r0" && r1_dead_after(&lines, i + 2)) {
+                        out.push(format!("    {op:<7} {dst}, [r6, #{off}]"));
+                        i += 2;
+                        continue;
+                    }
+                }
+            }
+        }
+
         // --- P4: bool-materialise + branch fusion -------------------------
         // <cbranch> .LcfK / movs r0,#1 / b .LcfKe / .LcfK: / movs r0,#0 /
         // .LcfKe: / cmp r0,#0 / beq TARGET   →   <cbranch> TARGET
@@ -214,6 +306,12 @@ fn peephole(asm: &str) -> String {
                     i += 2;
                     continue;
                 }
+                // two low registers: a move
+                if a.len() == 2 && b.len() == 2 {
+                    out.push(format!("    mov     {b}, {a}"));
+                    i += 2;
+                    continue;
+                }
             }
         }
 
@@ -232,6 +330,91 @@ fn peephole(asm: &str) -> String {
             }
             if let Some(imm) = mid.strip_prefix("ldr r0, ") {
                 out.push(format!("    ldr     r1, {imm}"));
+                i += 4;
+                continue;
+            }
+        }
+
+        // --- P6: an array element at a constant index --------------------
+        // mov r1,#N / lsl r1,r1,#S / add r0,r0,r1 / LD r0,[r0]  →  LD r0,[r0,#N<<S]
+        if i + 3 < n {
+            if let (Some(idx), Some(sh), true, Some(ld)) = (
+                c(i).strip_prefix("mov r1, #").and_then(|v| v.parse::<i64>().ok()),
+                c(i + 1).strip_prefix("lsl r1, r1, #").and_then(|v| v.parse::<u32>().ok()),
+                c(i + 2) == "add r0, r0, r1",
+                load_r0_from_r0(&c(i + 3)),
+            ) {
+                let off = idx << sh;
+                if (0..=4095).contains(&off) {   // Thumb-2's 12-bit offset
+                    out.push(format!("    {ld:<7} r0, [r0, #{off}]"));
+                    i += 4;
+                    continue;
+                }
+            }
+        }
+
+        // --- P6b: the same once P7 has folded the load --------------------
+        // mov r1,#N / LD r0,[r0,r1,lsl #S]  →  LD r0,[r0,#N<<S]
+        if i + 1 < n {
+            if let Some(idx) = c(i).strip_prefix("mov r1, #").and_then(|v| v.parse::<i64>().ok()) {
+                let next = c(i + 1);
+                if let Some((ld, rest)) = next.split_once(" r0, [r0, r1, lsl #") {
+                    if let (true, Ok(sh)) = (load_r0_from_r0(&format!("{ld} r0, [r0]")).is_some(), rest.trim_end_matches(']').parse::<u32>()) {
+                        let off = idx << sh;
+                        if (0..=4095).contains(&off) {
+                            out.push(format!("    {ld:<7} r0, [r0, #{off}]"));
+                            i += 2;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- P8: a constant right operand of cmp / add / sub ---------------
+        // mov r1,#N / cmp r0,r1  →  cmp r0,#N   (add, sub: r0,r0,#N; r1 is scratch here)
+        if i + 1 < n {
+            if let Some(v) = c(i).strip_prefix("mov r1, #").and_then(|v| v.parse::<i64>().ok()) {
+                let next = c(i + 1);
+                if next == "cmp r0, r1" && (0..=255).contains(&v) {
+                    out.push(format!("    cmp     r0, #{v}"));
+                    i += 2;
+                    continue;
+                }
+                if (next == "add r0, r0, r1" || next == "sub r0, r0, r1") && (0..=4095).contains(&v) {
+                    out.push(format!("    {}    r0, r0, #{v}", &next[..3]));
+                    i += 2;
+                    continue;
+                }
+            }
+        }
+
+        // --- P7: an array element at a register index ---------------------
+        // lsl r1,r1,#S / add r0,r0,r1 / LD r0,[r0]  →  LD r0,[r0,r1,lsl #S]
+        if i + 2 < n {
+            if let (Some(sh), true, Some(ld)) = (
+                c(i).strip_prefix("lsl r1, r1, #").and_then(|v| v.parse::<u32>().ok()),
+                c(i + 1) == "add r0, r0, r1",
+                load_r0_from_r0(&c(i + 2)),
+            ) {
+                if sh <= 3 {
+                    out.push(format!("    {ld:<7} r0, [r0, r1, lsl #{sh}]"));
+                    i += 3;
+                    continue;
+                }
+            }
+        }
+
+        // --- P2b: a frame slot (parameter or local) as the right operand --
+        // push {r0} / ldr r0,[r7,#K] / mov r1,r0 / pop {r0}  →  ldr r1,[r7,#K]
+        if i + 3 < n
+            && c(i) == "push {r0}"
+            && c(i + 2) == "mov r1, r0"
+            && c(i + 3) == "pop {r0}"
+        {
+            let mid = c(i + 1);
+            if let Some(slot) = mid.strip_prefix("ldr r0, [r7") {
+                out.push(format!("    ldr     r1, [r7{slot}"));
                 i += 4;
                 continue;
             }
@@ -260,6 +443,9 @@ fn peephole(asm: &str) -> String {
     result.push('\n');
     result
 }
+
+/// The peephole pass, for the uvm2 backend (the same emitter, the same idioms).
+pub fn peephole_pub(asm: &str) -> String { peephole(asm) }
 
 /// Public re-export so the uvm2 backend can reuse the same post-processing.
 pub fn expand_cbz_pub(asm: &str) -> String { expand_cbz(asm) }
@@ -381,7 +567,8 @@ mod peephole_tests {
     cmp     r0, r1
 ";
         let out = peephole(asm);
-        assert!(out.contains("mov     r1, #8"), "got:\n{out}");
+        // (and then P8: the constant straight into the compare)
+        assert!(out.contains("cmp     r0, #8"), "got:\n{out}");
         assert!(!out.contains("push"), "push not removed:\n{out}");
         assert!(!out.contains("pop"), "pop not removed:\n{out}");
     }
@@ -402,6 +589,89 @@ mod peephole_tests {
         assert!(out.contains("ldr     r1, [r1]"), "value reload missing:\n{out}");
         assert!(!out.contains("push"), "push not removed:\n{out}");
         assert!(!out.contains("mov     r1, r0"), "spill move not removed:\n{out}");
+    }
+
+    /// P2b: a parameter or local (a frame slot) as the right operand: straight into r1.
+    #[test]
+    fn elides_frame_slot_operand_spill() {
+        let asm = "\
+    push    {r0}
+    ldr     r0, [r7, #16]    @ j
+    mov     r1, r0
+    pop     {r0}
+    cmp     r0, r1
+";
+        let out = peephole(asm);
+        assert!(out.contains("ldr     r1, [r7, #16]"), "got:\n{out}");
+        assert!(!out.contains("push") && !out.contains("pop"), "spill not removed:\n{out}");
+    }
+
+    /// P6/P7: an array element at a constant or a register index is one load.
+    #[test]
+    fn folds_indexed_loads() {
+        let asm = "\
+    mov     r1, #3
+    lsl     r1, r1, #2     @ index * 4 (i32)
+    add     r0, r0, r1
+    ldr     r0, [r0]       @ load i32 element
+    lsl     r1, r1, #1
+    add     r0, r0, r1
+    ldrsh   r0, [r0]
+";
+        let out = peephole(asm);
+        assert!(out.contains("ldr     r0, [r0, #12]"), "got:\n{out}");
+        assert!(out.contains("ldrsh   r0, [r0, r1, lsl #1]"), "got:\n{out}");
+        assert!(!out.contains("add"), "got:\n{out}");
+    }
+
+    /// P6b and P8: a constant index after P7's fold; a constant operand of cmp/add/sub.
+    #[test]
+    fn folds_constant_operands() {
+        let asm = "\
+    mov     r1, #5
+    ldr     r0, [r0, r1, lsl #2]
+    mov     r1, #13
+    cmp     r0, r1
+    mov     r1, #300
+    add     r0, r0, r1
+    mov     r1, #300
+    cmp     r0, r1
+";
+        let out = peephole(asm);
+        assert!(out.contains("ldr     r0, [r0, #20]"), "got:\n{out}");
+        assert!(out.contains("cmp     r0, #13"), "got:\n{out}");
+        assert!(out.contains("add    r0, r0, #300"), "got:\n{out}");
+        // cmp's immediate is 8 bits here: 300 keeps its register
+        assert!(out.contains("mov     r1, #300\n    cmp     r0, r1"), "got:\n{out}");
+    }
+
+    /// P9: a global through the base register, only where its address register is dead
+    /// after; never without the base set.
+    #[test]
+    fn folds_globals_onto_the_base_register() {
+        let asm = "\
+    @ globals base r6
+    ldr     r1, =0x2007F460    @ a
+    ldr     r0, [r1]
+    push    {r0}
+    ldr     r1, =0x2007F464    @ b
+    ldr     r1, [r1]
+    pop     {r0}
+    add     r0, r0, r1
+    ldr     r1, =0x2007F468    @ c
+    str     r0, [r1]
+    mov     r1, #2
+    ldr     r1, =0x2007F46C    @ d: r1 is read next
+    ldr     r0, [r1]
+    str     r0, [r1, #4]
+";
+        let out = peephole(asm);
+        assert!(out.contains("ldr     r0, [r6, #1120]"), "got:\n{out}");
+        assert!(out.contains("ldr     r1, [r6, #1124]"), "got:\n{out}");
+        assert!(out.contains("str     r0, [r6, #1128]"), "got:\n{out}");
+        assert!(out.contains("ldr     r1, =0x2007F46C"), "r1 still read: must keep it\n{out}");
+        let plain = peephole(&asm.replace("@ globals base r6", ""));
+        assert!(!plain.contains("r6"), "no base, no fold:\n{plain}");
     }
 
     /// P3: adjacent no-op `push {rX}; pop {rX}` is dropped.
@@ -459,8 +729,9 @@ mod peephole_tests {
     push    {r0}
     pop     {r1}
 ";
+        // not a no-op: a move (the same r1, the stack left as it was)
         let out = peephole(asm);
-        assert!(out.contains("push    {r0}"), "got:\n{out}");
-        assert!(out.contains("pop     {r1}"), "got:\n{out}");
+        assert!(out.contains("mov     r1, r0"), "got:\n{out}");
+        assert!(!out.contains("push") && !out.contains("pop"), "got:\n{out}");
     }
 }

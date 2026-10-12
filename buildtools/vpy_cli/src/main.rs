@@ -2215,13 +2215,25 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         game_srcs.push(bridge.canonicalize().unwrap_or(bridge));
         let groups = vpy_codegen::arm::three_d::groups(&unified);
         let mut layers = Vec::new();
+        // VPYX_LAYERS_OS in the project's [uvm2] defs: the layers over vpy3d (effects,
+        // skeletons, cloth) compiled for size, through a wrapper that #includes the SDK file
+        // under `#pragma GCC optimize ("Os")` -- the C games' way (their src/o2). The image
+        // runs from SRAM, where every byte of code is one the game cannot have.
+        let layers_os = vpyproj_uvm2_defs(input).is_some_and(|d| d.split(';').any(|x| x.trim() == "VPYX_LAYERS_OS"));
         for g in &groups {
             for src in g.sources() {
                 let path = vpy_c.join(src);
                 if !path.exists() {
                     return Err(anyhow::anyhow!("the program uses {:?} builtins, but the SDK has no vpy-c/{src}", g));
                 }
-                game_srcs.push(path);
+                if layers_os && *g != vpy_codegen::arm::three_d::Group::Core {
+                    let wrap = build_dir.join(format!("vpyx_os_{src}"));
+                    std::fs::write(&wrap, format!("/* {src} compiled for size (VPYX_LAYERS_OS) */\n#pragma GCC optimize (\"Os\")\n#include \"{}\"\n", path.display()))
+                        .with_context(|| format!("Failed to write {}", wrap.display()))?;
+                    game_srcs.push(wrap.canonicalize().unwrap_or(wrap));
+                } else {
+                    game_srcs.push(path);
+                }
                 layers.push(src.trim_end_matches(".c"));
             }
             c_defs.push(g.define().to_string());

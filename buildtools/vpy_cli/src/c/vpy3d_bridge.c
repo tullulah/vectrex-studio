@@ -44,6 +44,22 @@
 /* Arguments 5 and up of a vpyx_* call. */
 int32_t vpyx_args[12];
 
+/* vpyx_call: every builtin's call from VPy code goes through here, its C function in r12
+   and its arguments in r0-r3 (and vpyx_args[]) -- SP aligned to 8 bytes as the AAPCS asks,
+   whatever the expression being evaluated had pushed, then put back. (Weak: both
+   vpy3d_bridge.c and vpy_jukebox.c carry it, either may be in the image alone.) */
+__attribute__((naked, weak)) void vpyx_call(void)
+{
+    __asm volatile(
+        "push {r4, lr}\n"
+        "mov r4, sp\n"
+        "bic lr, r4, #7\n"
+        "mov sp, lr\n"
+        "blx r12\n"
+        "mov sp, r4\n"
+        "pop {r4, pc}\n");
+}
+
 /* ---- what vpy3d calls in libvpy (when libvpy itself is not linked) ------- */
 #ifndef VPYX_LIBVPY
 

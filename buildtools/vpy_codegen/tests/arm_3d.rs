@@ -96,20 +96,20 @@ fn calls_follow_the_aapcs_and_the_mesh_data_is_emitted() {
     let asm = generate(SRC, &assets, &Target::Uvm2).unwrap();
     let code = instrs(&asm);
     for f in ["vpyx_load_mesh", "vpyx_look_at", "vpyx_xf_rot_y", "vpyx_xf_translate", "vpyx_xf_mul", "vpyx_draw_mesh", "vpyx_line_world"] {
-        let at = code.iter().position(|l| *l == format!("bl {f}")).unwrap_or_else(|| panic!("no call to {f}"));
-        // SP aligned to 8 around every call, r4 keeping the old SP.
-        assert_eq!(&code[at - 4..at], ["push {r4}", "mov r4, sp", "bic r12, r4, #7", "mov sp, r12"], "{f}");
-        assert_eq!(&code[at + 1..at + 3], ["mov sp, r4", "pop {r4}"], "{f}");
+        // through the trampoline that aligns SP to 8 (vpyx_call, in the C bridge)
+        let at = code.iter().position(|l| *l == format!("ldr r12, ={f}")).unwrap_or_else(|| panic!("no call to {f}"));
+        assert_eq!(code[at + 1], "bl vpyx_call", "{f}");
     }
     // LINE_3D: 7 arguments → r0-r3 and vpyx_args[0..2].
-    let at = code.iter().position(|l| l == "bl vpyx_line_world").unwrap();
+    let at = code.iter().position(|l| l == "ldr r12, =vpyx_line_world").unwrap();
     let before = &code[..at];
     for k in [0, 4, 8] {
         assert!(before.iter().any(|l| *l == format!("str r0, [r1, #{k}]")), "vpyx_args[{}]", k / 4);
     }
     // The mesh's slot (0) and its image.
     assert!(asm.contains("_CUBE_VMESH:\n    .byte"), "mesh image");
-    assert!(code.iter().any(|l| l == "ldr r0, =_CUBE_VMESH"), "LOAD_MESH passes the image");
+    // (straight into its argument register, r1, once the peephole folds the push/pop)
+    assert!(code.iter().any(|l| l.starts_with("ldr r") && l.ends_with(", =_CUBE_VMESH")), "LOAD_MESH passes the image");
 }
 
 #[test]
@@ -169,7 +169,7 @@ def loop():
     let asm = generate(src, &assets, &Target::Uvm2).unwrap();
     let code = instrs(&asm);
     // FX_SHATTER: 12 C arguments → r0-r3 and vpyx_args[0..7].
-    let at = code.iter().position(|l| l == "bl vpyx_fx_shatter").unwrap();
+    let at = code.iter().position(|l| l == "ldr r12, =vpyx_fx_shatter").unwrap();
     for k in 0..8 {
         assert!(code[..at].iter().any(|l| *l == format!("str r0, [r1, #{}]", k * 4)), "vpyx_args[{k}]");
     }

@@ -841,7 +841,19 @@ pub fn emit_call(
         })
         .collect();
 
-    // Emit asset name as first register (r0 = address of asset data in ROM)
+    let n_asset = if is_asset_builtin { 1 } else { 0 };
+    let total_reg_args = runtime_args.len() + n_asset;
+    let n_extra = total_reg_args.saturating_sub(4);
+    let n_skip = (4usize).saturating_sub(n_asset);
+
+    // Extra args right-to-left
+    for (_, arg) in runtime_args.iter().skip(n_skip).rev() {
+        s.push_str(&emit_arg(arg, var_addrs)?);
+        s.push_str("    push    {r0}\n");
+    }
+    // The register args: the asset name first (r0 = address of asset data in ROM), then
+    // the first runtime args
+    let mut reg_codes: Vec<String> = Vec::new();
     if is_asset_builtin {
         if let Some(Expr::StringLit(asset_name)) = args.first() {
             let sym_base = asset_name.to_uppercase().replace('-', "_").replace(' ', "_");
@@ -854,31 +866,13 @@ pub fn emit_call(
                 _                          => "VECTORS",
             };
             let symbol = format!("_{sym_base}_{suffix}");
-            s.push_str(&format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
-            s.push_str("    push    {r0}\n");
+            reg_codes.push(format!("    ldr     r0, ={symbol}    @ asset '{asset_name}'\n"));
         }
     }
-
-    let n_asset = if is_asset_builtin { 1 } else { 0 };
-    let total_reg_args = runtime_args.len() + n_asset;
-    let n_extra = total_reg_args.saturating_sub(4);
-    let n_skip = (4usize).saturating_sub(n_asset);
-
-    // Extra args right-to-left
-    for (_, arg) in runtime_args.iter().skip(n_skip).rev() {
-        s.push_str(&emit_arg(arg, var_addrs)?);
-        s.push_str("    push    {r0}\n");
-    }
-    // First register args
     for (_, arg) in runtime_args.iter().take(n_skip) {
-        s.push_str(&emit_arg(arg, var_addrs)?);
-        s.push_str("    push    {r0}\n");
+        reg_codes.push(emit_arg(arg, var_addrs)?);
     }
-
-    let nreg = total_reg_args.min(4);
-    for i in (0..nreg).rev() {
-        s.push_str(&format!("    pop     {{r{i}}}\n"));
-    }
+    s.push_str(&emit_reg_args(&reg_codes));
 
     // A variable (parameter, local or global) holding a function's address: call
     // what it holds. The arguments are already in r0-r3 (and on the stack).
@@ -916,6 +910,61 @@ pub fn emit_call(
     }
 
     Ok(s)
+}
+
+/// A leaf argument's code -- a constant, a frame slot (parameter or local), or (globals_ok)
+/// a global -- loaded straight into `r{reg}` instead of r0; None when it is anything more.
+pub(crate) fn leaf_into(code: &str, reg: usize, globals_ok: bool) -> Option<String> {
+    let lines: Vec<String> = code
+        .lines()
+        .map(|l| l.split('@').next().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|l| !l.is_empty())
+        .collect();
+    match lines.as_slice() {
+        [one] => {
+            if let Some(v) = one.strip_prefix("mov r0, #") {
+                return Some(format!("    mov     r{reg}, #{v}\n"));
+            }
+            if let Some(v) = one.strip_prefix("ldr r0, =") {
+                return Some(format!("    ldr     r{reg}, ={v}\n"));
+            }
+            let slot = one.strip_prefix("ldr r0, [r7, #")?;
+            Some(format!("    ldr     r{reg}, [r7, #{slot}\n"))
+        }
+        [a, b] if globals_ok && b == "ldr r0, [r1]" => {
+            let addr = a.strip_prefix("ldr r1, =")?;
+            Some(format!("    ldr     r{reg}, ={addr}\n    ldr     r{reg}, [r{reg}]\n"))
+        }
+        _ => None,
+    }
+}
+
+/// The register arguments of a call (each code leaves its value in r0) into r0-r3: the
+/// others evaluated and pushed in order and popped into their registers, then the leaves
+/// loaded straight in -- not a push and a pop each. A global is a leaf only when no other
+/// argument makes a call (which could change it: Python reads it first).
+pub(crate) fn emit_reg_args(codes: &[String]) -> String {
+    let codes = &codes[..codes.len().min(4)];
+    // (any `bl…` at all counts: a call, or a branch that may hide one -- erring towards loading
+    // the global in order)
+    let calls = codes.iter().any(|c| leaf_into(c, 0, false).is_none() && c.contains("bl"));
+    let leaves: Vec<Option<String>> = codes.iter().enumerate().map(|(i, c)| leaf_into(c, i, !calls)).collect();
+    let mut s = String::new();
+    for (c, leaf) in codes.iter().zip(&leaves) {
+        if leaf.is_none() {
+            s.push_str(c);
+            s.push_str("    push    {r0}\n");
+        }
+    }
+    for i in (0..codes.len()).rev() {
+        if leaves[i].is_none() {
+            s.push_str(&format!("    pop     {{r{i}}}\n"));
+        }
+    }
+    for leaf in leaves.iter().flatten() {
+        s.push_str(leaf);
+    }
+    s
 }
 
 /// Emit one function argument into r0.

@@ -423,7 +423,8 @@ n = len(grid)                       # 4
 ```
 
 Indexing it with fewer indices than it has dimensions, and `for v in` over it, are compile
-errors. Passed to a function it is a flat address: index it once there.
+errors. Passed to a function it is a flat address: index it once there. A list may end with
+a comma (`[1, 2, 3,]`), as in Python: handy in a table written one row per line.
 
 ### Access and assignment
 
@@ -997,8 +998,15 @@ body number; `SOFT_STEP()` and `SOFT_DRAW(body, …)` once per frame.
 | `SOFT_STEP()` / `SOFT_DRAW(body, brightness[, occlude])` | Move every body / draw one |
 
 The pool sizes of these layers (`VPYFX_MAX`, `VPYSOFT_MAX_POINTS`, `VPYSOFT_MAX_SPRINGS`,
-`VPYB_MAX_BONES`) go in the project's `[uvm2] defs`. Not available yet from VPy: terrain
-and bone animation clips.
+`VPYB_MAX_BONES`, and `VPYX_SKELETONS`: how many skeletons, 2 by default) go in the
+project's `[uvm2] defs`. `VPYX_LAYERS_OS` there compiles these layers (effects, skeletons,
+cloth) for size instead of speed: a `.um2` runs from SRAM, where code and data share 512 KB,
+and a big game may need the room. Not available yet from VPy: terrain and bone animation
+clips.
+
+On uvm2 a program's variables live in the 16 KB the runtime reserves at the top of SRAM: the
+scalars (and each array's pointer) in the ~2.9 KB after the runtime's own, the arrays' data in
+the 12 KB below it. Running out of either is a compile error.
 
 ### SD launcher (ARM only)
 

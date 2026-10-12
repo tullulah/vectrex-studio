@@ -23,7 +23,7 @@ pub fn emit_functions(
     // shared): they live in stack frames, globals at fixed addresses.
     let scopes = crate::m6809::frames::function_scopes(module)?;
     super::arrays::setup(module)?;
-    let (var_addrs, var_decls, scalar_consts) = allocate_globals(module);
+    let (var_addrs, var_decls, scalar_consts) = allocate_globals(module)?;
 
     // Register scalar consts so expression codegen folds their reads to
     // immediates (no RAM slot, no startup init emitted for them).
@@ -89,7 +89,7 @@ pub fn emit_functions(
     Ok(s)
 }
 
-fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String, HashMap<String, i32>) {
+fn allocate_globals(module: &Module) -> Result<(HashMap<String, u32>, String, HashMap<String, i32>), String> {
     let mut alloc = RamAllocator::new();
     let mut addrs: HashMap<String, u32> = HashMap::new();
     let mut decls = String::new();
@@ -105,8 +105,8 @@ fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String, HashMap<S
                         let len = elems.len();
                         let elem_bytes = super::arrays::of_global(name).bytes;
                         let data_size = ((len * elem_bytes) as u32 + 3) & !3;
-                        let data_addr = alloc.alloc(data_size);
-                        let ptr_addr  = alloc.alloc(4);
+                        let data_addr = alloc.alloc_data(data_size)?;
+                        let ptr_addr  = alloc.alloc(4)?;
                         decls.push_str(&format!(
                             ".equ ARRAY_{varname}_DATA, 0x{data_addr:08X}\n"
                         ));
@@ -119,7 +119,7 @@ fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String, HashMap<S
                         addrs.insert(varname, ptr_addr);
                     }
                     _ => {
-                        let addr = alloc.alloc(4);
+                        let addr = alloc.alloc(4)?;
                         decls.push_str(&format!(".equ VAR_{varname}, 0x{addr:08X}\n"));
                         addrs.insert(varname, addr);
                     }
@@ -130,7 +130,7 @@ fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String, HashMap<S
                 match value {
                     Expr::List(elems) => {
                         let len = elems.len();
-                        let ptr_addr = alloc.alloc(4);
+                        let ptr_addr = alloc.alloc(4)?;
                         decls.push_str(&format!(
                             ".equ ARRAY_{varname}_LEN, {len}\n"
                         ));
@@ -147,7 +147,7 @@ fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String, HashMap<S
                     _ => {
                         // Non-literal scalar const: allocate RAM so reads work via
                         // var_addrs. Value is initialized in game_main startup.
-                        let addr = alloc.alloc(4);
+                        let addr = alloc.alloc(4)?;
                         decls.push_str(&format!(
                             ".equ VAR_{varname}, 0x{addr:08X}  @ const scalar\n"
                         ));
@@ -159,7 +159,7 @@ fn allocate_globals(module: &Module) -> (HashMap<String, u32>, String, HashMap<S
         }
     }
 
-    (addrs, decls, scalar_consts)
+    Ok((addrs, decls, scalar_consts))
 }
 
 /// Registers every user function and game_main push (20 bytes; the frame pads to 8).
@@ -250,6 +250,9 @@ fn emit_game_main(
     // collision loops on a bogus count until they fault. This is a bss-clear that
     // gives HW the same zeroed initial state the emulator gets for free. User
     // globals live at/after USER_RAM_START and are initialised explicitly below.
+    // r6 holds the globals' base for the whole program (callee-saved: every function keeps
+    // it), so the peephole turns a global's `ldr r1, =ADDR; ldr r0, [r1]` into one load
+    s.push_str(&format!("    ldr     r6, =0x{:08X}    {}\n", super::GLOBALS_BASE, super::GLOBALS_BASE_MARK));
     s.push_str("    @ zero runtime RAM (RP2350 SRAM is not zero-initialised)\n");
     s.push_str("    ldr     r0, =TMPVAL              @ runtime RAM base\n");
     s.push_str("    ldr     r1, =USER_RAM_START      @ end of system RAM (exclusive)\n");
@@ -303,6 +306,24 @@ fn emit_game_main(
                             let store = super::arrays::store(elem);
                             s.push_str(&format!("    @ init array {name}\n"));
                             s.push_str(&format!("    ldr     r2, ={data_varname}\n"));
+                            // Every element the same (`[0] * 168`, `[-1, -1]`): a store loop,
+                            // not a mov+str per element (8 bytes of code each).
+                            let first = match elems.first() { Some(Expr::Number(n)) => Some(*n), _ => None };
+                            if let Some(v) = first.filter(|v| elems.len() >= 4 && elems.iter().all(|e| matches!(e, Expr::Number(n) if n == v))) {
+                                let mov = if (0..=255).contains(&v) { format!("    mov     r0, #{v}\n") } else { format!("    ldr     r0, ={v}\n") };
+                                s.push_str(&mov);
+                                s.push_str(&format!("    ldr     r3, =({data_varname} + {})\n", elems.len() * elem.bytes));
+                                s.push_str(&format!(".Lainit_{varname}:\n"));
+                                s.push_str(&format!("    {store}   r0, [r2], #{}\n", elem.bytes));
+                                s.push_str("    cmp     r2, r3\n");
+                                s.push_str(&format!("    blo     .Lainit_{varname}\n"));
+                                s.push_str(&format!("    ldr     r2, ={data_varname}\n"));
+                                s.push_str(&format!("    ldr     r1, =0x{addr:08X}\n    str     r2, [r1]\n"));
+                                let mut chunk = s.split_off(before);
+                                super::pool::after(&mut chunk);
+                                s.push_str(&chunk);
+                                continue;
+                            }
                             // ARMv6 STRH immediate offset max = 255 bytes.
                             // For arrays > 255 bytes, rechunk into r3 every 256 bytes.
                             let mut chunk_base: usize = 0;

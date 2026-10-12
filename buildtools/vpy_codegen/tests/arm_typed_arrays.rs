@@ -100,6 +100,13 @@ fn element_loads_and_stores_follow_the_declared_type() {
         ];
         for (func, access, scale) in expect {
             let code = body(&asm, func);
+            // a scaled load may be folded into one (the peephole's P7): `ldrh r0, [r0, r1, lsl #1]`
+            let folded = scale.filter(|_| access.ends_with(" r0, [r0]")).map(|s| {
+                access.replace("[r0]", &format!("[r0, r1, lsl #{}]", s.rsplit('#').next().unwrap()))
+            });
+            if folded.as_ref().is_some_and(|f| has(&code, f)) {
+                continue;
+            }
             assert!(has(&code, access), "{target:?} {func}: no `{access}` in {code:#?}");
             if let Some(scale) = scale {
                 assert!(has(&code, scale), "{target:?} {func}: no `{scale}` in {code:#?}");

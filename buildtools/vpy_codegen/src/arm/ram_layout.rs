@@ -124,22 +124,70 @@ pub fn emit_ram_layout() -> String {
     s
 }
 
+/// The end of the variables' window: the runtime area and the user's scalars (and each
+/// array's pointer) live in [0x2007F000, USER_RAM_END).
+pub const USER_RAM_END: u32 = 0x2008_0000;
+
+thread_local! {
+    /// Where the arrays' data go on a target that reserves more RAM below the window: uvm2's
+    /// .vpyram is [0x2007C000, 0x20080000), whose first 12 KB nothing else used. None: the
+    /// arrays go in the window too (rp2350, unchecked as it always was).
+    static ARRAY_REGION: std::cell::Cell<Option<(u32, u32)>> = const { std::cell::Cell::new(None) };
+}
+
+/// Set (uvm2) or clear (rp2350) the array region for this compile.
+pub fn set_array_region(region: Option<(u32, u32)>) {
+    ARRAY_REGION.with(|r| r.set(region));
+}
+
 /// Allocate a user variable and return its address.
 /// Called by the functions module while processing GlobalLet items.
 pub struct RamAllocator {
     next: u32,
+    arr_start: u32,
+    arr_next: u32,
+    arr_end: u32,
+    checked: bool,
 }
 
 impl RamAllocator {
     pub fn new() -> Self {
-        Self { next: 0x2007_F460 } // USER_RAM_START (after wander scratch at 0x440–0x45F)
+        let region = ARRAY_REGION.with(|r| r.get());
+        let (arr_next, arr_end) = region.unwrap_or((0, 0));
+        // USER_RAM_START (after wander scratch at 0x440–0x45F)
+        Self { next: 0x2007_F460, arr_start: arr_next, arr_next, arr_end, checked: region.is_some() }
     }
 
-    /// Allocate `bytes` bytes, return base address.
-    pub fn alloc(&mut self, bytes: u32) -> u32 {
+    /// Allocate `bytes` bytes in the window, return base address. Past its end is an error
+    /// where the RAM around is known (uvm2: the cores' stacks are there).
+    pub fn alloc(&mut self, bytes: u32) -> Result<u32, String> {
         // Align to 4 bytes
         let addr = (self.next + 3) & !3;
         self.next = addr + bytes;
-        addr
+        if self.checked && self.next > USER_RAM_END {
+            return Err(format!(
+                "the program's variables do not fit: {} bytes of scalars and array pointers, over the {} the runtime leaves",
+                self.next - 0x2007_F460,
+                USER_RAM_END - 0x2007_F460
+            ));
+        }
+        Ok(addr)
+    }
+
+    /// Allocate an array's data: in the array region if the target has one, else the window.
+    pub fn alloc_data(&mut self, bytes: u32) -> Result<u32, String> {
+        if !self.checked {
+            return self.alloc(bytes);
+        }
+        let addr = (self.arr_next + 3) & !3;
+        self.arr_next = addr + bytes;
+        if self.arr_next > self.arr_end {
+            return Err(format!(
+                "the program's arrays do not fit: {} bytes of array data, over the {} reserved for them",
+                self.arr_next - self.arr_start,
+                self.arr_end - self.arr_start
+            ));
+        }
+        Ok(addr)
     }
 }

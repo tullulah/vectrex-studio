@@ -576,35 +576,61 @@ fn emit_c_call(
     args: &[CArg],
     var_addrs: &std::collections::HashMap<String, u32>,
 ) -> Result<String, String> {
+    use super::expressions::leaf_into;
     let mut s = format!("    @ {c_fn} (C)\n");
+    let mut codes = Vec::new();
     for a in args {
-        match a {
+        codes.push(match a {
             // (a string literal becomes the address of its NUL-terminated text)
-            CArg::Expr(e) => s.push_str(&super::expressions::emit_arg(e, var_addrs)?),
-            CArg::Imm(n) if (0..=255).contains(n) => s.push_str(&format!("    mov     r0, #{n}\n")),
-            CArg::Imm(n) => s.push_str(&format!("    ldr     r0, ={n}\n")),
-            CArg::Sym(sym) => s.push_str(&format!("    ldr     r0, ={sym}\n")),
-        }
-        s.push_str("    push    {r0}\n");
+            CArg::Expr(e) => super::expressions::emit_arg(e, var_addrs)?,
+            CArg::Imm(n) if (0..=255).contains(n) => format!("    mov     r0, #{n}\n"),
+            CArg::Imm(n) => format!("    ldr     r0, ={n}\n"),
+            CArg::Sym(sym) => format!("    ldr     r0, ={sym}\n"),
+        });
     }
-    // Pop in reverse: the extra arguments into vpyx_args[], then r3..r0.
-    for i in (4..args.len()).rev() {
-        s.push_str("    pop     {r0}\n");
+    // A leaf (a constant, a local, a global) is loaded straight where it goes, after the
+    // others are evaluated -- not a push and a pop each. A global only when nothing else
+    // makes a call (which could change it).
+    let calls = codes.iter().any(|c| leaf_into(c, 0, false).is_none() && c.contains("bl"));
+    let leaf: Vec<bool> = codes.iter().map(|c| leaf_into(c, 0, !calls).is_some()).collect();
+    for (c, l) in codes.iter().zip(&leaf) {
+        if !l {
+            s.push_str(c);
+            s.push_str("    push    {r0}\n");
+        }
+    }
+    // The extra arguments into vpyx_args[] (the others on the stack in reverse), then r3..r0.
+    if args.len() > 4 {
+        // (r1 keeps the table's address throughout: a leaf only touches r0)
         s.push_str("    ldr     r1, =vpyx_args\n");
-        s.push_str(&format!("    str     r0, [r1, #{}]\n", (i - 4) * 4));
+        for i in (4..args.len()).rev() {
+            if !leaf[i] {
+                s.push_str("    pop     {r0}\n");
+                s.push_str(&format!("    str     r0, [r1, #{}]\n", (i - 4) * 4));
+            }
+        }
+        for i in 4..args.len() {
+            if leaf[i] {
+                s.push_str(&leaf_into(&codes[i], 0, !calls).unwrap());
+                s.push_str(&format!("    str     r0, [r1, #{}]\n", (i - 4) * 4));
+            }
+        }
     }
     for i in (0..args.len().min(4)).rev() {
-        s.push_str(&format!("    pop     {{r{i}}}\n"));
+        if !leaf[i] {
+            s.push_str(&format!("    pop     {{r{i}}}\n"));
+        }
     }
-    // AAPCS: SP 8-byte aligned at the call. r4 is callee-saved, so it keeps the
-    // old SP across the call; r12 is scratch.
-    s.push_str("    push    {r4}\n");
-    s.push_str("    mov     r4, sp\n");
-    s.push_str("    bic     r12, r4, #7\n");
-    s.push_str("    mov     sp, r12\n");
-    s.push_str(&format!("    bl      {c_fn}\n"));
-    s.push_str("    mov     sp, r4\n");
-    s.push_str("    pop     {r4}\n");
+    for i in 0..args.len().min(4) {
+        if leaf[i] {
+            s.push_str(&leaf_into(&codes[i], i, !calls).unwrap());
+        }
+    }
+    // AAPCS: SP 8-byte aligned at the call, whatever the evaluation pushed: through
+    // vpyx_call (the C side's trampoline: it aligns SP, calls r12, puts SP back), one
+    // `ldr`+`bl` here instead of seven instructions at every call.
+    s.push_str(&format!("    ldr     r12, ={c_fn}\n"));
+    s.push_str("    bl      vpyx_call\n");
     Ok(s)
 }
 

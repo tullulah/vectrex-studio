@@ -173,11 +173,18 @@ pub fn generate_uvm2_asm(
     asm.push_str(&builtins::emit_builtins(&msg_entries, &usage));
 
     crate::arm::three_d::setup(module);
+    // The arrays' data in the first 12 KB of .vpyram (reserved below, and unused by the
+    // runtime): the window after the runtime area keeps the scalars, and either running out
+    // is a compile error instead of variables over the cores' stacks.
+    ram_layout::set_array_region(Some((0x2007_C000, 0x2007_F000)));
     asm.push_str(&functions::emit_functions(module, asset_list, &usage)?);
     asm.push_str(&assets::emit_arm_assets(asset_list));
     asm.push_str(&crate::arm::three_d::emit_data(asset_list)?);
 
-    // Expand cbz, then inject the runtime bring-up call at start of game_main
+    // The arm target's peephole (spill elision, compare→branch fusion: it was never run
+    // here, and a big program came out ~40% larger), then expand cbz, then inject the
+    // runtime bring-up call at start of game_main
+    let asm = crate::arm::peephole_pub(&asm);
     let expanded = crate::arm::expand_cbz_pub(&asm);
     inject_runtime_init(&expanded)
 }

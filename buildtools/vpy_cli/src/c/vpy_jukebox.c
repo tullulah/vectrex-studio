@@ -24,6 +24,22 @@ int  jukebox_sfx(int group, int voice, int gain, int loop);
 /* A builtin's arguments past the fourth (vpy3d_bridge.c defines it when the program has 3D) */
 __attribute__((weak)) int32_t vpyx_args[12];
 
+/* vpyx_call: every builtin's call from VPy code goes through here, its C function in r12
+   and its arguments in r0-r3 (and vpyx_args[]) -- SP aligned to 8 bytes as the AAPCS asks,
+   whatever the expression being evaluated had pushed, then put back. (Weak: both
+   vpy3d_bridge.c and vpy_jukebox.c carry it, either may be in the image alone.) */
+__attribute__((naked, weak)) void vpyx_call(void)
+{
+    __asm volatile(
+        "push {r4, lr}\n"
+        "mov r4, sp\n"
+        "bic lr, r4, #7\n"
+        "mov sp, lr\n"
+        "blx r12\n"
+        "mov sp, r4\n"
+        "pop {r4, pc}\n");
+}
+
 static char s_dir[17] = "";        /* the card folder (JUKEBOX_DIR) */
 
 void jukebox_play(const char *id);
