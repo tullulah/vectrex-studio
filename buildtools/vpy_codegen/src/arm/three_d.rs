@@ -146,6 +146,7 @@ const BUILTINS: &[Builtin] = &[
     // scenes
     Builtin { name: "LOAD_SCENE", c_fn: "vpyx_load_scene", args: &[SceneData], optional: 0, group: Core },
     Builtin { name: "DRAW_SCENE", c_fn: "vpyx_draw_scene", args: &[Scene, Int, Int, Int, Int, Int], optional: 1, group: Core },
+    Builtin { name: "DRAW_SCENE_AT", c_fn: "vpyx_draw_scene_at", args: &[Scene, Xf, Int, Int, Int, Int, Int], optional: 1, group: Core },
     // lines, occluders, fog
     Builtin { name: "LINE_3D", c_fn: "vpyx_line_world", args: &[Int, Int, Int, Int, Int, Int, Int], optional: 0, group: Core },
     Builtin { name: "LINE_CAM", c_fn: "vpyx_line_cam", args: &[Int, Int, Int, Int, Int, Int, Int], optional: 0, group: Core },
