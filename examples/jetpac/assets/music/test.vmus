@@ -1,0 +1,29 @@
+{
+  "version": "1.0",
+  "name": "test",
+  "author": "",
+  "tempo": 120,
+  "ticksPerBeat": 24,
+  "totalTicks": 384,
+  "notes": [
+    {
+      "id": "rbk9a76vz",
+      "note": 77,
+      "start": 2,
+      "duration": 17,
+      "velocity": 15,
+      "channel": 0
+    },
+    {
+      "id": "auh3ly34i",
+      "note": 75,
+      "start": 20,
+      "duration": 19,
+      "velocity": 15,
+      "channel": 0
+    }
+  ],
+  "noise": [],
+  "loopStart": 0,
+  "loopEnd": 384
+}

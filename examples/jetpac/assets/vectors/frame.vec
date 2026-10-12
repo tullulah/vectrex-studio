@@ -1,0 +1,28 @@
+{
+  "version": "1.0",
+  "name": "frame",
+  "canvas": {
+    "width": 256,
+    "height": 256,
+    "origin": "center"
+  },
+  "layers": [
+    {
+      "name": "default",
+      "visible": true,
+      "paths": [
+        {
+          "name": "vectrex_screen",
+          "intensity": 100,
+          "closed": true,
+          "points": [
+            {"x": -127, "y": 120},
+            {"x": 126, "y": 120},
+            {"x": 126, "y": -120},
+            {"x": -127, "y": -120}
+          ]
+        }
+      ]
+    }
+  ]
+}

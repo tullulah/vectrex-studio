@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "name": "Laser Shot",
+  "author": "VPy",
+  "tempo": 240,
+  "ticksPerBeat": 24,
+  "totalTicks": 24,
+  "notes": [
+    {"id": "note1", "note": 84, "start": 0, "duration": 4, "velocity": 15, "channel": 0},
+    {"id": "note2", "note": 72, "start": 4, "duration": 4, "velocity": 12, "channel": 0},
+    {"id": "note3", "note": 60, "start": 8, "duration": 8, "velocity": 8, "channel": 0}
+  ],
+  "noise": [],
+  "loopStart": 0,
+  "loopEnd": 0
+}
