@@ -534,6 +534,9 @@ compile error (its frames need the callee at compile time); pick the function wi
 ### Notes
 
 - Array size is fixed at compile time.
+- A table of strings (`const NAMES = ["HOTH", "ENDOR"]`, also nested) holds their
+  addresses; `NAMES[i]` can be passed wherever a string goes. On the ARM targets it must be
+  `const`.
 - Array literals hold only number literals (`[1, -2, 3]`, repeated or nested as above) or only strings; a computed element (`[MAX_X, 2 * 3]`) is a compile error.
 - Index must be within bounds — no runtime bounds checking.
 - Coordinates are clamped to 8-bit signed (-128..127) for drawing.
@@ -915,6 +918,8 @@ string literal and must exist (a missing one is a compile error).
 | `SCENERY_FOG(full_until, gone_at)` | The same fade for the lines of `.vmesh` scenery (0, 0 = off) |
 | `TEXT_BILLBOARD(text, x, y, z, height, brightness[, flags])` | Text in the world at (x, y, z), facing the camera, `height` world units tall (libvpy's vector font). `text` is a string literal or a variable or parameter holding one. flags: 1 hidden by the occluders, 2 centred, 4 only seen from the front |
 | `TEXT_3D(text, xf, height, brightness[, flags])` | Text on the plane placed by `xf` (its x along the text, y up) |
+| `LABEL_NUM(text, n)` | `text` followed by `n` in decimal, as a string for the text builtins (`TEXT_BILLBOARD(LABEL_NUM("SCORE ", score), …)`); four can be alive at once |
+| `VEC_3D("name", xf, scale, brightness[, flags])` | A `.vec` drawn on the plane placed by `xf`, its units times `scale` |
 
 **Effects** (vpyfx): short-lived pieces that fly, fall, bounce on a floor and fade. Spawn
 them, then `FX_STEP()` and `FX_DRAW()` once per frame. Velocities are units per second,

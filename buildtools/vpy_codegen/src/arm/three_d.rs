@@ -32,8 +32,11 @@ use vpy_parser::{CallInfo, Expr, Item, Module};
 enum Arg {
     /// An integer expression.
     Int,
-    /// A string: a literal, or a variable or parameter that holds one.
+    /// A string: a literal, a variable or parameter that holds one, or a call that
+    /// returns one (LABEL_NUM).
     Str,
+    /// A `.vec` by name → its libvpy image (`_NAME_VEC`).
+    Vector,
     /// A transform: a global `i32`/`u32` array of at least 12 elements.
     Xf,
     /// A global `i32`/`u32` array of at least this many elements, by address.
@@ -144,6 +147,8 @@ const BUILTINS: &[Builtin] = &[
     // text in the world (libvpy's font)
     Builtin { name: "TEXT_BILLBOARD", c_fn: "vpyx_text_billboard", args: &[Str, Int, Int, Int, Int, Int, Int], optional: 1, group: Core },
     Builtin { name: "TEXT_3D", c_fn: "vpyx_text", args: &[Str, Xf, Int, Int, Int], optional: 1, group: Core },
+    Builtin { name: "LABEL_NUM", c_fn: "vpyx_label_num", args: &[Str, Int], optional: 0, group: Core },
+    Builtin { name: "VEC_3D", c_fn: "vpyx_draw_vec", args: &[Vector, Xf, Int, Int, Int], optional: 1, group: Core },
     // effects (vpyfx): pieces that fly, fall, bounce and fade
     Builtin { name: "FX_RESET", c_fn: "vpyfx_reset", args: &[], optional: 0, group: Fx },
     Builtin { name: "FX_SEED", c_fn: "vpyfx_seed", args: &[Int], optional: 0, group: Fx },
@@ -321,13 +326,23 @@ pub fn check(module: &Module, assets: &[AssetInfo], target: &str) -> Result<(), 
                     }
                 }
                 Str => {
-                    if !matches!(e, Expr::StringLit(_) | Expr::Ident(_)) {
+                    if !matches!(e, Expr::StringLit(_) | Expr::Ident(_) | Expr::Call(_) | Expr::Index { .. }) {
                         errors.push(format!(
                             "line {line}: `{}()` argument {n} must be a string: a literal, or a variable or parameter holding one",
                             b.name
                         ));
                     }
                 }
+                Vector => match e {
+                    Expr::StringLit(s) if count(AssetType::Vector, s) >= 1 => {}
+                    Expr::StringLit(s) => errors.push(format!(
+                        "line {line}: vector \"{s}\" not found: there is no {s}.vec in assets/vectors/"
+                    )),
+                    _ => errors.push(format!(
+                        "line {line}: `{}()` argument {n} must be the vector's name as a string literal",
+                        b.name
+                    )),
+                },
                 Mesh | MeshData | OptMesh | Scene | SceneData => {
                     let (kind, t, folder) = if matches!(arg, Mesh | MeshData | OptMesh) {
                         ("mesh", AssetType::Mesh, "assets/meshes/ (any folder)")
@@ -426,6 +441,7 @@ pub fn emit_call(
         };
         match (arg, e) {
             (Mesh | OptMesh | Scene, Expr::StringLit(s)) => c_args.push(CArg::Imm(slot(*arg, s) as i64)),
+            (Vector, Expr::StringLit(s)) => c_args.push(CArg::Sym(format!("_{}_VEC", sym(s)))),
             (MeshData, Expr::StringLit(s)) => {
                 c_args.push(CArg::Imm(slot(*arg, s) as i64));
                 c_args.push(CArg::Sym(mesh_symbol(s)));

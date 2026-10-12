@@ -419,7 +419,7 @@ mod peephole_tests {
         assert!(out.contains("bl      vpy_set_camera_y"), "surrounding code changed:\n{out}");
     }
 
-    /// A bool block consumed by `and`/`or` (tail `b 2f`, not `cmp r0,#0`) is left intact.
+    /// A bool block consumed by `and`/`or` (tail `b .Llg5e`, not `cmp r0,#0`) is left intact.
     #[test]
     fn leaves_nonbranch_consumer_untouched() {
         let asm = "\
@@ -429,7 +429,7 @@ mod peephole_tests {
 .Lcf5:
     movs    r0, #0
 .Lcf5e:
-    b       2f
+    b       .Llg5e
 ";
         let out = peephole(asm);
         assert!(out.contains(".Lcf5"), "must not fuse without cmp/beq consumer:\n{out}");

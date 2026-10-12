@@ -131,26 +131,30 @@ pub fn emit_expr(
         Expr::Logic { op, left, right } => {
             let mut s = String::new();
             match op {
+                // Labels of their own: numeric `1f`/`2f` would be caught by an `and`/`or`
+                // nested in the right operand (`a or (b and c)` was false when a was true).
                 LogicOp::And => {
                     // Short-circuit: if left is 0, result is 0
+                    let id = COND_LABEL_CTR.fetch_add(1, Ordering::Relaxed);
                     s.push_str(&emit_expr(left, var_addrs)?);
                     s.push_str("    cmp     r0, #0\n");
-                    s.push_str("    beq     1f\n");
+                    s.push_str(&format!("    beq     .Llg{id}\n"));
                     s.push_str(&emit_expr(right, var_addrs)?);
                     s.push_str("    cmp     r0, #0\n");
                     s.push_str(&bool_from_flags("beq"));
-                    s.push_str("    b       2f\n");
-                    s.push_str("1:  mov     r0, #0\n");
-                    s.push_str("2:\n");
+                    s.push_str(&format!("    b       .Llg{id}e\n"));
+                    s.push_str(&format!(".Llg{id}:\n    mov     r0, #0\n"));
+                    s.push_str(&format!(".Llg{id}e:\n"));
                 }
                 LogicOp::Or => {
+                    let id = COND_LABEL_CTR.fetch_add(1, Ordering::Relaxed);
                     s.push_str(&emit_expr(left, var_addrs)?);
                     s.push_str("    cmp     r0, #0\n");
-                    s.push_str("    bne     1f\n");
+                    s.push_str(&format!("    bne     .Llg{id}\n"));
                     s.push_str(&emit_expr(right, var_addrs)?);
-                    s.push_str("    b       2f\n");
-                    s.push_str("1:  mov     r0, #1\n");
-                    s.push_str("2:\n");
+                    s.push_str(&format!("    b       .Llg{id}e\n"));
+                    s.push_str(&format!(".Llg{id}:\n    mov     r0, #1\n"));
+                    s.push_str(&format!(".Llg{id}e:\n"));
                 }
             }
             Ok(s)

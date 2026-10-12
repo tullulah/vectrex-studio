@@ -118,6 +118,13 @@ pub fn check_array_types(module: &Module, target: &str) -> Result<(), String> {
             Expr::Number(n) if is_const => {
                 consts.insert(name.to_uppercase(), *n as i64);
             }
+            Expr::List(elements)
+                if target != "m6809" && !is_const && elements.iter().any(|e| matches!(e, Expr::StringLit(_))) =>
+            {
+                errors.push(crate::origins::locate_for(name, &format!(
+                    "line {line}: `{name}` is a table of strings: on {target} it must be `const` (`const {name} = [...]`)"
+                )));
+            }
             Expr::List(elements) => {
                 arrays.insert(name.to_uppercase(), type_annotation);
                 let bits = element_bits(type_annotation);

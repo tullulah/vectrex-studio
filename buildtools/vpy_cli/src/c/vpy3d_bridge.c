@@ -222,6 +222,29 @@ int vpyx_text_billboard(const char *s, int32_t x, int32_t y, int32_t z)
 {
     return vpy3d_text_billboard(s, x, y, z, vpyx_args[0], vpyx_args[1], vpyx_args[2]);
 }
+/* label followed by n in decimal, in one of four buffers taken in turn (so a few can
+   be alive at once, as arguments of one call) */
+const char *vpyx_label_num(const char *label, int32_t n)
+{
+    static char buf[4][40];
+    static int k;
+    char *o = buf[k = (k + 1) & 3], t[12];
+    int i = 0, j = 0;
+    while (label && label[j] && j < 26) { o[j] = label[j]; j++; }
+    if (n < 0) { o[j++] = '-'; n = -n; }
+    if (n == 0) t[i++] = '0';
+    while (n > 0) { t[i++] = (char)('0' + n % 10); n /= 10; }
+    while (i) o[j++] = t[--i];
+    o[j] = 0;
+    return o;
+}
+
+/* a .vec (its libvpy image) placed by xf, its units scaled by `scale` */
+int vpyx_draw_vec(const unsigned char *vec, const vpy_xf *xf, int32_t scale, int br)
+{
+    return vpy3d_draw_vec(vec, xf, scale, br, vpyx_args[0]);
+}
+
 /* s on the plane placed by xf (its x along the text, y up) */
 int vpyx_text(const char *s, const vpy_xf *xf, int32_t height, int br)
 {

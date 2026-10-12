@@ -30,9 +30,12 @@ pub fn setup(module: &Module) -> Result<(), String> {
         .items
         .iter()
         .filter_map(|item| match item {
-            Item::GlobalLet { name, value: Expr::List(_), type_annotation, .. }
-            | Item::Const { name, value: Expr::List(_), type_annotation, .. } => {
-                Some((name.to_uppercase(), VarSize::from_annotation(type_annotation)))
+            Item::GlobalLet { name, value: Expr::List(v), type_annotation, .. }
+            | Item::Const { name, value: Expr::List(v), type_annotation, .. } => {
+                // a table of strings holds their addresses
+                let strings = !v.is_empty() && v.iter().all(|e| matches!(e, Expr::StringLit(_)));
+                let size = if strings { VarSize { bytes: 4, signed: false } } else { VarSize::from_annotation(type_annotation) };
+                Some((name.to_uppercase(), size))
             }
             _ => None,
         })

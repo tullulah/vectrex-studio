@@ -36,7 +36,10 @@ pub fn emit_functions(
     // Emit const array ROM data tables (before user functions so they land in bank 0).
     // Tables of the declared element type (.byte/.hword/.word), pointed to by
     // VAR_{name} at startup.
+    // The runtime above still has literals pending: flush them here, or a long table (string
+    // tables are kilobytes) pushes them out of the runtime's `ldr =` reach.
     s.push_str("@ --- Const array ROM data ---\n");
+    s.push_str(".ltorg\n");
     for item in &module.items {
         if let Item::Const { name, value, .. } = item {
             if let Expr::List(elems) = value {
@@ -44,6 +47,19 @@ pub fn emit_functions(
                 let directive = super::arrays::directive(super::arrays::of_global(name));
                 s.push_str(".align 2\n");
                 s.push_str(&format!("ARRAY_{varname}_DATA:\n"));
+                if elems.iter().all(|e| matches!(e, Expr::StringLit(_))) {
+                    // a table of strings: their addresses, then the NUL-terminated texts
+                    for i in 0..elems.len() {
+                        s.push_str(&format!("    .word   .L{varname}_STR{i}\n"));
+                    }
+                    for (i, elem) in elems.iter().enumerate() {
+                        if let Expr::StringLit(text) = elem {
+                            s.push_str(&format!(".L{varname}_STR{i}:\n    .asciz  \"{text}\"\n"));
+                        }
+                    }
+                    s.push_str(".align 2\n");
+                    continue;
+                }
                 for elem in elems {
                     if let Expr::Number(n) = elem {
                         s.push_str(&format!("    {directive} {n}\n"));
