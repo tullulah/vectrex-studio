@@ -120,6 +120,7 @@ const BUILTINS: &[Builtin] = &[
     Builtin { name: "XF_ROT_Z", c_fn: "vpyx_xf_rot_z", args: &[Xf, Int], optional: 0, group: Core },
     Builtin { name: "XF_MUL", c_fn: "vpyx_xf_mul", args: &[Xf, Xf, Xf], optional: 0, group: Core },
     Builtin { name: "XF_POINT", c_fn: "vpyx_xf_point", args: &[Words(3), Xf, Int, Int, Int], optional: 0, group: Core },
+    Builtin { name: "XF_TO_MODEL", c_fn: "vpyx_world_to_model", args: &[Words(3), Xf, Int, Int, Int], optional: 0, group: Core },
     // the camera
     Builtin { name: "CAMERA_LOOK_AT", c_fn: "vpyx_look_at", args: &[Int, Int, Int, Int, Int, Int, Int, Int, Int], optional: 3, group: Core },
     Builtin { name: "CAMERA_SET", c_fn: "vpyx_set_camera", args: &[Xf], optional: 0, group: Core },
@@ -137,6 +138,7 @@ const BUILTINS: &[Builtin] = &[
     // meshes
     Builtin { name: "LOAD_MESH", c_fn: "vpyx_load_mesh", args: &[MeshData], optional: 0, group: Core },
     Builtin { name: "DRAW_MESH", c_fn: "vpyx_draw_mesh", args: &[Mesh, Xf, Int], optional: 0, group: Core },
+    Builtin { name: "MESH_OCCLUSION", c_fn: "vpy3d_set_mesh_occlusion", args: &[Int], optional: 0, group: Core },
     Builtin { name: "MESH_POOL_MARK", c_fn: "vpyx_pool_mark", args: &[], optional: 0, group: Core },
     Builtin { name: "MESH_POOL_RELEASE", c_fn: "vpyx_pool_release", args: &[], optional: 0, group: Core },
     // scenes
@@ -222,7 +224,7 @@ const BUILTINS: &[Builtin] = &[
     Builtin { name: "SFX_PCM_MOVE", c_fn: "jukebox_voice_at", args: &[Int, Int, Int, Int], optional: 0, group: Juke },
     Builtin { name: "SFX_PCM_STOP", c_fn: "jukebox_sfx_stop", args: &[Int], optional: 0, group: Juke },
     Builtin { name: "SFX_PCM_BUSY", c_fn: "jukebox_sfx_busy", args: &[Int], optional: 0, group: Juke },
-    Builtin { name: "LISTENER", c_fn: "jukebox_listener", args: &[Int, Int, Int, Int, Int], optional: 0, group: Juke },
+    Builtin { name: "LISTENER", c_fn: "vpyj_listener", args: &[Int, Int, Int, Int, Int], optional: 0, group: Juke },
 ];
 
 fn find(name: &str) -> Option<&'static Builtin> {
@@ -240,6 +242,15 @@ fn find_in(module: &Module, name: &str) -> Option<&'static Builtin> {
 /// Is `name` one of the 3D builtins?
 pub fn is_3d_builtin(name: &str) -> bool {
     find(name).is_some()
+}
+
+/// Every builtin's C function and how many C arguments it receives (a mesh with its data
+/// is two, a scene with its data three): r0-r3 carry the first four, `vpyx_args[]` the rest.
+pub fn c_calls() -> impl Iterator<Item = (&'static str, &'static str, usize)> {
+    BUILTINS.iter().map(|b| {
+        let n = b.args.iter().map(|a| match a { MeshData => 2, SceneData => 3, _ => 1 }).sum();
+        (b.name, b.c_fn, n)
+    })
 }
 
 /// Every 3D builtin's name, for the builtin catalog.

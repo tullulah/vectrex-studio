@@ -104,12 +104,18 @@ void vpyx_xf_mul(vpy_xf *d, const vpy_xf *a, const vpy_xf *b)
     *d = r;
 }
 /* out[0..2] = the point (x, y, z) moved by the transform. */
-void vpyx_xf_point(int32_t *out, const vpy_xf *xf, int32_t x)
+void vpyx_xf_point(int32_t *out, const vpy_xf *xf, int32_t x, int32_t y)
 {
-    const int32_t y = vpyx_args[0], z = vpyx_args[1];
+    const int32_t z = vpyx_args[0];
     for (int r = 0; r < 3; r++)
         out[r] = xf->t[r] + (int32_t)(((int64_t)xf->m[r * 3] * x + (int64_t)xf->m[r * 3 + 1] * y
                                        + (int64_t)xf->m[r * 3 + 2] * z) >> 14);
+}
+
+/* out[0..2] = the world point (x, y, z) in the transform's own frame (its inverse). */
+void vpyx_world_to_model(int32_t *out, const vpy_xf *xf, int32_t x, int32_t y)
+{
+    vpy3d_world_to_model(xf, x, y, vpyx_args[0], &out[0], &out[1], &out[2]);
 }
 
 /* ---- the camera ----------------------------------------------------------- */

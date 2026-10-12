@@ -21,6 +21,9 @@
 
 int  jukebox_sfx(int group, int voice, int gain, int loop);
 
+/* A builtin's arguments past the fourth (vpy3d_bridge.c defines it when the program has 3D) */
+__attribute__((weak)) int32_t vpyx_args[12];
+
 static char s_dir[17] = "";        /* the card folder (JUKEBOX_DIR) */
 
 void jukebox_play(const char *id);
@@ -485,7 +488,13 @@ void vpyj_dir(const char *d)
 void vpyj_mode(int m) { s_mode = m < 0 ? 0 : m > 2 ? 2 : m; }
 void vpyj_frame(void) { jukebox_update(s_mode); }
 int  vpyj_sfx(int group, int voice, int gain, int loop) { return jukebox_sfx(group, voice, gain, loop); }
-int  vpyj_sfx_at(int group, int voice, int gain, int loop, int32_t x, int32_t y, int32_t z)
+/* fz: argument 5, in vpyx_args[0] */
+void vpyj_listener(int32_t x, int32_t y, int32_t z, int32_t fx)
 {
-    return jukebox_sfx_at(group, voice, gain, loop, x, y, z);
+    jukebox_listener(x, y, z, fx, vpyx_args[0]);
+}
+/* (x, y, z): arguments 5-7, which the codegen passes in vpyx_args[] */
+int  vpyj_sfx_at(int group, int voice, int gain, int loop)
+{
+    return jukebox_sfx_at(group, voice, gain, loop, vpyx_args[0], vpyx_args[1], vpyx_args[2]);
 }

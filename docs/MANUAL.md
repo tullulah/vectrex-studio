@@ -909,6 +909,7 @@ string literal and must exist (a missing one is a compile error).
 | `XF_ROT_X(xf, angle)` / `XF_ROT_Y(xf, angle)` / `XF_ROT_Z(xf, angle)` | `xf` = a rotation about one axis (4096 per turn) |
 | `XF_MUL(dst, a, b)` | `dst` = `b` then `a` (`dst` may be `a` or `b`) |
 | `XF_POINT(out, xf, x, y, z)` | `out[0..2]` = the point (x, y, z) moved by `xf` (`out`: an `i32` array of 3) |
+| `XF_TO_MODEL(out, xf, x, y, z)` | The reverse: `out[0..2]` = the world point (x, y, z) in `xf`'s own frame |
 | `CAMERA_LOOK_AT(ex, ey, ez, tx, ty, tz[, ux, uy, uz])` | Camera at the eye (ex, ey, ez) looking at (tx, ty, tz); (ux, uy, uz) is the world direction that ends up pointing up on screen (default +y; tilt it to bank, e.g. `SIN_Q14(roll), COS_Q14(roll), 0`). Returns 0 if eye and target coincide |
 | `CAMERA_SET(xf)` / `CAMERA_GET(xf)` | Set the world→camera transform / read it into `xf` |
 | `CAMERA_FOCAL(f)` | Field of view: deflection units per unit of x over z (default 28000, about 58°; bigger = narrower) |
@@ -921,6 +922,7 @@ string literal and must exist (a missing one is a compile error).
 | `ATAN2_Q14(y, x)` | The angle of (x, y) from +x towards +y, 4096 per turn (0..4095) |
 | `LOAD_MESH("name")` | Load `name.vmesh` into the mesh pools. Returns 0 if the pools are full (raise `VPY3D_POOL_*` in the project's `[uvm2] defs`) |
 | `DRAW_MESH("name", xf, brightness)` | Draw a loaded mesh placed by `xf` |
+| `MESH_OCCLUSION(on)` | 1: meshes are cut by the solids drawn before them in the frame (meshes and `OCCL_*`), as lines already are; 0 (the default): meshes are drawn whole |
 | `MESH_POOL_MARK()` / `MESH_POOL_RELEASE()` | Remember where the pools are / give back every mesh loaded since (load them again before drawing them) |
 | `LOAD_SCENE("name")` | Load `name.vscene` and the meshes it places. Returns 0 on failure |
 | `DRAW_SCENE("name", x, y, z, brightness[, groups])` | Draw a scene at position (x, y, z) — what its `follow` items move with; `groups` is the bit mask its `group` items test |
