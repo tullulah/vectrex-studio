@@ -275,8 +275,39 @@ pub fn unify_modules(
 /// share its name with a variable.) Names are case-insensitive, so `struct Target` and
 /// `def target` clash.
 fn check_clashes(module_name: &str, module: &Module, diags: &mut Vec<Diagnostic>) {
+    // a definition named like a module this one imports hides it: `import cast` and
+    // `def cast(d)` made every `cast.x` a call on the function
+    let imported: HashMap<String, (String, usize)> = module
+        .imports
+        .iter()
+        .filter_map(|i| match &i.symbols {
+            ImportSymbols::Module { alias } => {
+                let local = alias.clone().unwrap_or_else(|| import_module_name(i).to_string());
+                Some((local.to_lowercase(), (local, i.source_line)))
+            }
+            _ => None,
+        })
+        .collect();
     let mut seen: HashMap<String, (String, SymKind, usize)> = HashMap::new();
     for item in &module.items {
+        let def = match item {
+            Item::Function(f) => Some((&f.name, f.line)),
+            Item::GlobalLet { name, source_line, .. } | Item::Const { name, source_line, .. } => Some((name, *source_line)),
+            Item::StructDef(d) => Some((&d.name, d.source_line)),
+            _ => None,
+        };
+        if let Some((name, line)) = def {
+            if let Some((module_alias, import_line)) = imported.get(&name.to_lowercase()) {
+                diags.push(Diagnostic {
+                    module: module_name.to_string(),
+                    line,
+                    message: format!(
+                        "`{name}` is also the module imported as `{module_alias}` at line {import_line}: \
+                         `{module_alias}.x` would not reach the module, so rename one of them"
+                    ),
+                });
+            }
+        }
         let (name, kind, line) = match item {
             Item::Function(f) => (&f.name, SymKind::Function, f.line),
             Item::GlobalLet { name, source_line, .. } => (name, SymKind::Global, *source_line),
@@ -1046,6 +1077,18 @@ mod tests {
     }
 
     // ---- Cross-module resolution (regression: definition and reference must agree) ----
+
+    /// A definition named like an imported module hides the module: an error, not a
+    /// confusing "method call" further on.
+    #[test]
+    fn definition_named_like_an_imported_module_is_an_error() {
+        let r = unify(&[
+            ("main", "import cast\ndef cast(d):\n    pass\ndef main():\n    cast.draw()\ndef loop():\n    pass\n"),
+            ("cast", "def draw():\n    pass\n"),
+        ]);
+        let msg = format!("{:?}", r.err().expect("an error"));
+        assert!(msg.contains("also the module imported as `cast`"), "{msg}");
+    }
 
     /// Modules may import each other, as in Python: the Return of the Jedi port's `common`
     /// calls `sound.play`, and `sound` reads `common.state`.
