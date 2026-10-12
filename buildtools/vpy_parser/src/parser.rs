@@ -908,7 +908,8 @@ impl<'a> Parser<'a> {
             if !self.check(TokenKind::RBracket) {
                 loop {
                     elements.push(self.expression()?);
-                    if !self.match_kind(&TokenKind::Comma) {
+                    // a comma after the last element, as Python allows: `[1, 2, 3,]`
+                    if !self.match_kind(&TokenKind::Comma) || self.check(TokenKind::RBracket) {
                         break;
                     }
                 }
@@ -1407,6 +1408,17 @@ mod tests {
         let code = "x = 42\n";
         let result = lex_and_parse(code);
         assert!(result.is_ok() || result.is_err()); // Module parsing WIP
+    }
+
+    /// A comma after a list's last element, as Python allows, also in a table spread over
+    /// lines; a lone comma is still an error.
+    #[test]
+    fn list_may_end_with_a_comma() {
+        let m = lex_and_parse("const T = [\n    [1, 2,],\n    [3, 4],\n]\n").expect("trailing commas parse");
+        let Item::Const { value: Expr::List(rows), .. } = &m.items[0] else { panic!("{:?}", m.items) };
+        assert_eq!(rows.len(), 2);
+        assert!(matches!(&rows[0], Expr::List(r) if r.len() == 2));
+        assert!(lex_and_parse("const T = [,]\n").is_err());
     }
 
     #[test]
