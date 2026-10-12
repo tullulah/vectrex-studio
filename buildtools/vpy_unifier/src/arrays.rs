@@ -93,10 +93,49 @@ fn shape(l: Lit) -> Result<(Vec<usize>, Vec<Expr>), String> {
 }
 
 /// Lower repetition and N-dimensional arrays in `module`.
+/// The value of a constant expression: number literals, the module's scalar consts (by
+/// their unified name, consts of consts too) and arithmetic over them.
+fn fold(e: &Expr, consts: &HashMap<String, Expr>, depth: usize) -> Option<i32> {
+    if depth > 32 {
+        return None; // a const defined through itself
+    }
+    match e {
+        Expr::Number(n) => Some(*n),
+        Expr::Ident(id) => fold(consts.get(&id.name.to_uppercase())?, consts, depth + 1),
+        Expr::BitNot(x) => fold(x, consts, depth + 1).map(|v| !v),
+        Expr::Binary { op, left, right } => {
+            let (l, r) = (fold(left, consts, depth + 1)?, fold(right, consts, depth + 1)?);
+            match op {
+                BinOp::Add => l.checked_add(r),
+                BinOp::Sub => l.checked_sub(r),
+                BinOp::Mul => l.checked_mul(r),
+                BinOp::Div | BinOp::FloorDiv => l.checked_div(r),
+                BinOp::Mod => l.checked_rem(r),
+                BinOp::Shl => u32::try_from(r).ok().filter(|&r| r < 32).map(|r| l << r),
+                BinOp::Shr => u32::try_from(r).ok().filter(|&r| r < 32).map(|r| l >> r),
+                BinOp::BitAnd => Some(l & r),
+                BinOp::BitOr => Some(l | r),
+                BinOp::BitXor => Some(l ^ r),
+            }
+        }
+        _ => None,
+    }
+}
+
 pub fn lower(module: Module, module_name: &str) -> Result<Module, Vec<Diagnostic>> {
     let mut diags = Vec::new();
     let mut dims: HashMap<String, Vec<usize>> = HashMap::new();
     let mut items = Vec::new();
+    // Named constants in an array literal (`[SX_TIE_FLYBY, MAX * 2]`, enum members) are
+    // laid out as their values, as C does: every backend needs number literals there.
+    let consts: HashMap<String, Expr> = module
+        .items
+        .iter()
+        .filter_map(|i| match i {
+            Item::Const { name, value, .. } if !matches!(value, Expr::List(_)) => Some((name.to_uppercase(), value.clone())),
+            _ => None,
+        })
+        .collect();
     for item in module.items {
         match item {
             Item::GlobalLet { ref value, .. } | Item::Const { ref value, .. } if is_list_expr(value) => {
@@ -116,6 +155,13 @@ pub fn lower(module: Module, module_name: &str) -> Result<Module, Vec<Diagnostic
                 if d.len() > 1 {
                     dims.insert(name.to_uppercase(), d);
                 }
+                let flat = flat
+                    .into_iter()
+                    .map(|e| match e {
+                        Expr::Number(_) | Expr::StringLit(_) => e,
+                        _ => fold(&e, &consts, 0).map(Expr::Number).unwrap_or(e),
+                    })
+                    .collect();
                 let value = Expr::List(flat);
                 items.push(match item {
                     Item::GlobalLet { name, type_annotation, source_line, .. } => Item::GlobalLet { name, type_annotation, value, source_line },
@@ -353,6 +399,14 @@ mod tests {
                 _ => None,
             })
             .unwrap_or_else(|| panic!("no array {name}"))
+    }
+
+    /// Named constants and enum members in an array literal become their values, as in C
+    /// (`static const int8_t FX[] = { SX_TIE_FLYBY, ... }`).
+    #[test]
+    fn named_constants_in_array_literals_fold() {
+        let m = unify("enum Sx:\n    A, B, C\nconst MAX = 4\nconst T = [C, MAX * 2, A, B + MAX]\ndef main():\n    pass\ndef loop():\n    pass\n").unwrap();
+        assert_eq!(list_of(&m, "T"), vec![2, 8, 0, 5]);
     }
 
     #[test]
