@@ -1116,6 +1116,6 @@ pub fn generate_c(module: &Module, assets: &[AssetInfo]) -> Result<GeneratedC, S
     if g.functions.contains_key("LOOP") {
         c.push_str("    F_LOOP();\n");
     }
-    c.push_str("}\n\nint main(void)\n{\n    vpy_run(vpy_setup, vpy_loop);\n    return 0;\n}\n");
+    c.push_str("}\n\nextern void vpyf_install(void);   /* vpy_fault.c: a HardFault that writes its registers and SRAM to the card */\n\nint main(void)\n{\n    vpyf_install();\n    vpy_run(vpy_setup, vpy_loop);\n    return 0;\n}\n");
     Ok(GeneratedC { c_source: c, uses_jukebox })
 }

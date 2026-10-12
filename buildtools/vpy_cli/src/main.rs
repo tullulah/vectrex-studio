@@ -2021,6 +2021,7 @@ fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool, ram
 /// The C side of VPy's 3D builtins (vpy_codegen arm/three_d.rs emits the calls).
 const VPY3D_BRIDGE_C: &str = include_str!("c/vpy3d_bridge.c");
 const VPY_JUKEBOX_C: &str = include_str!("c/vpy_jukebox.c");
+const VPY_FAULT_C: &str = include_str!("c/vpy_fault.c");
 
 /// libvpy's vector font, cut out of the SDK's vpy.c: from its first glyph table
 /// (`static const signed char F_…`) to the end of `vpy_font_next`. The tables,
@@ -2280,6 +2281,12 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         // up to 8 KB in front of it (the C game does the same; the ARM backend's .vpyram
         // uses that top, so only here)
         c_defs.push("UVM2_JACK_RING_TOP".to_string());
+        // The HardFault handler generated main() installs: registers and SRAM to the card
+        let fault = build_dir.join("vpy_fault.c");
+        let game = input.file_stem().and_then(|n| n.to_str()).unwrap_or("vpy").replace(['"', '\\'], "_");
+        std::fs::write(&fault, format!("#define VPYF_GAME \"{game}\"\n{VPY_FAULT_C}"))
+            .with_context(|| format!("Failed to write {}", fault.display()))?;
+        game_srcs.push(fault.canonicalize().unwrap_or(fault));
         println!("  {} libvpy: {}", "✓".green(), vpy_c.join("vpy.c").display());
     }
     let join_paths = |v: &[PathBuf]| v.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(";");
