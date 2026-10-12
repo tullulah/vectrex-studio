@@ -23,7 +23,11 @@
  */
 #include <stdint.h>
 #include "vpy3d.h"
-#include "vpy_trig_q14.h"
+#ifndef VPYX_LIBVPY
+#include "vpy_trig_q14.h"      /* (libvpy has the table and vpy_sin_q14 when it is linked) */
+#endif
+int vpy_sin_q14(int a);
+int vpy_cos_q14(int a);
 #ifdef VPYX_FX
 #include "vpyfx.h"
 #endif
@@ -179,7 +183,9 @@ int vpyx_atan2_q14(int32_t y, int32_t x)
     int a0 = 0, a1 = 513;                                          /* 0..45 degrees, both ends */
     while (a1 - a0 > 1) {
         const int m = (a0 + a1) / 2;
-        if ((int64_t)VPY_SIN_Q14[m] * hi <= (int64_t)VPY_SIN_Q14[1024 - m] * lo) a0 = m; else a1 = m;
+        /* (through vpy_sin_q14, not the table: with libvpy linked the table is vpy.c's, and a
+           second copy of it here cost 2 KB) */
+        if ((int64_t)vpy_sin_q14(m) * hi <= (int64_t)vpy_sin_q14(1024 - m) * lo) a0 = m; else a1 = m;
     }
     int a = a0;                                                    /* within one step (0.09 degrees) */
     if (steep) a = 1024 - a;
