@@ -2276,6 +2276,10 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         // No romset (that is the arcade ports' ROM off the card): its 24 KB buffer goes, and
         // the pico-sdk's 2 KB heap too (nothing allocates) -- as C games build.
         c_defs.push("UVM2_ROMZIP_MAX=4".to_string());
+        // The jack's 8 KB ring at the top of SRAM, not in .bss where its 8 KB alignment pads
+        // up to 8 KB in front of it (the C game does the same; the ARM backend's .vpyram
+        // uses that top, so only here)
+        c_defs.push("UVM2_JACK_RING_TOP".to_string());
         println!("  {} libvpy: {}", "✓".green(), vpy_c.join("vpy.c").display());
     }
     let join_paths = |v: &[PathBuf]| v.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(";");

@@ -821,6 +821,7 @@ pub fn generate_c(module: &Module, assets: &[AssetInfo]) -> Result<GeneratedC, S
     // ---- data: globals and constant tables ---------------------------------------
     let mut data = String::new();
     let mut init = String::new(); // values not known at compile time, set before main()
+    let mut declared = BTreeSet::new();
     for item in &module.items {
         let (name, value, constant) = match item {
             Item::GlobalLet { name, value, .. } => (name, value, false),
@@ -828,6 +829,10 @@ pub fn generate_c(module: &Module, assets: &[AssetInfo]) -> Result<GeneratedC, S
             _ => continue,
         };
         let u = up(name);
+        // declared again: still one variable, the first declaration's (as on ARM)
+        if !declared.insert(u.clone()) {
+            continue;
+        }
         let cq = if constant { "const " } else { "" };
         match (g.globals.get(&u).cloned(), value) {
             (Some(Global::Strings { len }), Expr::List(v)) => {
