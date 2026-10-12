@@ -40,6 +40,8 @@ Other files you may find in `assets/` are not used by code:
 | `.vmov` | Vector movie manifest (Vector Movie editor). It pairs a `.vrec` video with a `.vsmp` voice track, and code plays those parts: `DRAW_RECORDING` + `PLAY_SAMPLE`, with `SAMPLE_POS(fps)` as the frame clock. |
 | `.vrb` | A binary preview the IDE generates from a `.vrec` (`vpy_cli vrec-compile`) for the SD-card game menu. It is generated, so don't edit it. |
 | `.vgz` | A compressed VGM recording of arcade audio, kept as source material for sound rips ([ARCADE_SOUND_RIP.md](ARCADE_SOUND_RIP.md)). No compiler or editor reads it. |
+| `.vskel` | A 3D skeleton for animation (bones, their meshes, the joints that turn them), in `assets/skeletons/`. See [`.vskel`](#vskel-3d-skeleton). The compiler and the IDE don't read it yet. |
+| `.vclip` | A library of 3D poses and animation clips on a `.vskel`, in `assets/clips/`. See [`.vclip`](#vclip-3d-poses-and-clips). The compiler and the IDE don't read it yet. |
 
 ## How a VPy project uses assets
 
@@ -502,6 +504,97 @@ every draw. A mesh with faces is built into the vpy3d pools once and kept in one
 reuses its slot. Load scenes with solid pieces at start-up, before any `vpy3d_pool_mark`.
 `vpy3d_load_scene` returns 0 when the image or a mesh is bad, or when the slots are full,
 and `vpy3d_error()` says which. A `vpy_scene` itself is 24 bytes on the cartridges.
+
+### `.vskel` (3D skeleton)
+
+A skeleton is a tree of rigid bones, the model of vpybone (`vpy-c/vpybone.h`). Each bone
+hangs from its parent's joint at an offset and carries one `.vmesh`, so nothing stretches.
+Bones are not posed directly. A small set of named **joints**, each a single angle, turns
+them: a shoulder has a pitch and a roll, an elbow one angle. Poses and clips
+([`.vclip`](#vclip-3d-poses-and-clips)) store joint angles, so a pose made for one character
+fits every character on the same skeleton. A rigid object is a skeleton with one bone.
+
+```json
+{
+  "version": 1,
+  "angle_unit": 4096,
+  "joints": [ { "name": "twist" }, { "name": "lean" }, { "name": "elbow_r" } ],
+  "bones": [
+    { "name": "hips",  "parent": null,   "offset": [0, 950, 0], "mesh": "tunic_hips", "rotate": [] },
+    { "name": "torso", "parent": "hips", "offset": [0, 0, 0],   "mesh": "jedi_torso",
+      "rotate": [ { "joint": "twist", "axis": "y" }, { "joint": "lean", "axis": "x" } ] },
+    { "name": "head",  "parent": "torso", "offset": [0, 680, 0], "mesh": "luke_head",
+      "rotate": [ { "joint": "twist", "axis": "y", "mul": -1, "div": 2 } ] }
+  ],
+  "variants": {
+    "vader": { "scale": 282, "meshes": { "head": "vader_helmet", "torso": "vader_torso" } },
+    "yoda":  { "scale": 72,  "meshes": { "head": "yoda_head" }, "offsets": { "head": [0, 640, 0] } }
+  }
+}
+```
+
+- `angle_unit`: angles per turn. Every angle in the skeleton and its clips is a whole
+  number in this unit (4096 is libvpy's `VPY_Q14_TURN`), so files round-trip exactly.
+- `joints`: the joint names, in order. That order is the order of a pose's angles when a
+  program stores a pose as an array.
+- `bones`: parents come before their children. `offset` is the joint's position in the
+  parent's frame (x right, y up, z forward). `mesh` is a `.vmesh` name, or `null` for a bone
+  that only carries others.
+- `rotate`: the bone's local rotation, a product of single-axis turns in the order listed
+  (the first is outermost: `[y, x]` is `qmul(qy, qx)`). Each turn's angle is
+  `joint * mul / div + add`, in integer arithmetic truncating toward zero (as in C).
+  `mul` and `div` default to 1, `add` to 0, and a turn without `joint` is the constant `add`.
+  An empty list leaves the bone unturned.
+- The axes, as seen from the bone's frame: a positive **x** turn swings a limb that hangs
+  down (−y) forward, towards +z. A positive **y** turn turns +z towards +x. A positive **z**
+  turn turns +x towards +y. vpybone's `vpyb_quat_axis` has the opposite sign about x, so a
+  program negates x angles when it builds the quaternions (Return of the Jedi measures the
+  signs at boot: `fight_probe`).
+- `variants`: the characters that share the skeleton. `scale` is Q8 (256 = as modelled) and
+  multiplies every offset (`offset * scale / 256`, truncating). `meshes` and `offsets`
+  replace a bone's mesh or offset (`null`: no mesh). `bones` adds bones after the shared ones
+  (Grievous's second pair of arms), and `rotate` replaces a bone's rotation.
+
+### `.vclip` (3D poses and clips)
+
+A clip library for one skeleton: named **poses** (one angle per joint), **clips** that move
+through poses over frames, and **sets** that say which clip a character plays for each
+role. The editor and the compiler know nothing about what a role, a property or a mark
+means. The game reads them, so the same format serves a sword fight, a door or a walk.
+
+```json
+{
+  "version": 1,
+  "skeleton": "fighter",
+  "poses": {
+    "maul_guard":    { "twist": 227, "lean": 136, "elbow_r": 796 },
+    "maul_cut_wind": { "twist": -341, "lean": 56, "elbow_r": 455 }
+  },
+  "clips": {
+    "maul_slash": {
+      "keys": [ { "frame": 0, "pose": "maul_guard" }, { "frame": 4, "pose": "maul_cut_wind" },
+                { "frame": 8, "pose": "maul_cut_strike" }, { "frame": 12, "pose": "maul_guard" } ],
+      "loop": false,
+      "props": { "damage": 1, "lunge": 60 },
+      "marks": [ { "frame": 4, "name": "strike" }, { "frame": 8, "name": "recover" } ]
+    }
+  },
+  "sets": {
+    "maul": { "poses": { "guard": "maul_guard" }, "clips": { "slash": "maul_slash" },
+              "props": { "stance": 90, "twirl": 1 } }
+  }
+}
+```
+
+- `skeleton`: the `.vskel` name. A pose names every joint of it (the example shows three), in its `angle_unit`.
+- `keys`: poses at frames, in rising frame order. Between keys the joints move from one
+  pose to the next; how (straight, or chased by springs as Return of the Jedi does) is the
+  program's choice. `loop` wraps the last key back to the first.
+- `props`: whole numbers the game reads off the clip (damage, how far a blow lunges).
+- `marks`: named instants on the clip's timeline (`value` optional): where a blow lands,
+  where a footstep falls. Unreal calls these notifies; Unity calls them animation events.
+- `sets`: per character or style, the clip for each role and the pose for each named
+  stance, plus that style's own numbers. Two sets may share clips.
 
 ## Known gaps
 
