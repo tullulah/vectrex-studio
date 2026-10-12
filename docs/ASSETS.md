@@ -40,8 +40,8 @@ Other files you may find in `assets/` are not used by code:
 | `.vmov` | Vector movie manifest (Vector Movie editor). It pairs a `.vrec` video with a `.vsmp` voice track, and code plays those parts: `DRAW_RECORDING` + `PLAY_SAMPLE`, with `SAMPLE_POS(fps)` as the frame clock. |
 | `.vrb` | A binary preview the IDE generates from a `.vrec` (`vpy_cli vrec-compile`) for the SD-card game menu. It is generated, so don't edit it. |
 | `.vgz` | A compressed VGM recording of arcade audio, kept as source material for sound rips ([ARCADE_SOUND_RIP.md](ARCADE_SOUND_RIP.md)). No compiler or editor reads it. |
-| `.vskel` | A 3D skeleton for animation (bones, their meshes, the joints that turn them), in `assets/skeletons/`. See [`.vskel`](#vskel-3d-skeleton). The compiler and the IDE don't read it yet. |
-| `.vclip` | A library of 3D poses and animation clips on a `.vskel`, in `assets/clips/`. See [`.vclip`](#vclip-3d-poses-and-clips). The compiler and the IDE don't read it yet. |
+| `.vskel` | A 3D skeleton for animation (bones, their meshes, the joints that turn them), in `assets/skeletons/`. See [`.vskel`](#vskel-3d-skeleton). Edited in the IDE's 3D Animation editor; the compiler doesn't read it yet. |
+| `.vclip` | A library of 3D poses and animation clips on a `.vskel`, in `assets/clips/`. See [`.vclip`](#vclip-3d-poses-and-clips). Edited in the IDE's 3D Animation editor; the compiler doesn't read it yet. |
 
 ## How a VPy project uses assets
 
@@ -550,10 +550,14 @@ fits every character on the same skeleton. A rigid object is a skeleton with one
   turn turns +x towards +y. vpybone's `vpyb_quat_axis` has the opposite sign about x, so a
   program negates x angles when it builds the quaternions (Return of the Jedi measures the
   signs at boot: `fight_probe`).
+- `sockets` (optional): named segments fixed to a bone, from `from` to `to` in the bone's
+  frame: what a hand holds (a blade, a gun), where a shot leaves. Unreal calls them sockets.
+  The editor draws them; the game finds them in the same place.
 - `variants`: the characters that share the skeleton. `scale` is Q8 (256 = as modelled) and
-  multiplies every offset (`offset * scale / 256`, truncating). `meshes` and `offsets`
-  replace a bone's mesh or offset (`null`: no mesh). `bones` adds bones after the shared ones
-  (Grievous's second pair of arms), and `rotate` replaces a bone's rotation.
+  scales the whole character: every offset (`offset * scale / 256`, truncating), the meshes
+  and the sockets. `meshes` and `offsets` replace a bone's mesh or offset (`null`: no mesh).
+  `bones` adds bones after the shared ones (Grievous's second pair of arms), `rotate`
+  replaces a bone's rotation, and `sockets` replaces the skeleton's sockets.
 
 ### `.vclip` (3D poses and clips)
 

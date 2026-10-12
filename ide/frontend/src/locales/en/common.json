@@ -301,5 +301,12 @@
   "file.new.vscene": "3D Scene (.vscene)",
   "file.newScene.title": "New 3D Scene",
   "file.newScene.message": "Enter a name for the scene (without extension):",
-  "file.newScene.needMesh": "A scene places .vmesh pieces from assets/meshes: create a 3D mesh first (File > New > 3D Mesh)."
+  "file.newScene.needMesh": "A scene places .vmesh pieces from assets/meshes: create a 3D mesh first (File > New > 3D Mesh).",
+  "file.new.vskel": "3D Skeleton (.vskel)",
+  "file.new.vclip": "3D Animation (.vclip)",
+  "file.newSkel.title": "New 3D Skeleton",
+  "file.newSkel.message": "Enter a name for the skeleton (without extension):",
+  "file.newClip.title": "New 3D Animation",
+  "file.newClip.message": "Enter a name for the animation library (without extension):",
+  "file.newClip.needSkel": "An animation library poses a skeleton from assets/skeletons: create a 3D skeleton first (File > New > 3D Skeleton)."
 }

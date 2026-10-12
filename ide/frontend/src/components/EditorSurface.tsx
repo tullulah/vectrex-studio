@@ -15,6 +15,7 @@ import { VsmpPlayer } from './VsmpPlayer';
 import { VectorMovieEditor } from './VectorMovieEditor';
 import { MeshEditor } from './MeshEditor';
 import { SceneEditor } from './SceneEditor';
+import { Anim3DEditor } from './Anim3DEditor';
 
 // Basic custom tab bar replacing flexlayout doc:* logic.
 // Phase 1: single group, order = documents array order.
@@ -59,6 +60,7 @@ export const EditorSurface: React.FC = () => {
   const isVmovFile = active?.endsWith('.vmov') || false;
   const isMeshFile = active?.endsWith('.vmesh') || false;
   const isSceneFile = active?.endsWith('.vscene') || false;
+  const isAnim3dFile = (active?.endsWith('.vclip') || active?.endsWith('.vskel')) || false;
 
   // Parse vector resource from document content
   const vectorResource = useMemo(() => {
@@ -137,6 +139,12 @@ export const EditorSurface: React.FC = () => {
   }, [isMeshFile, activeDoc?.content]);
 
   // Parse 3D scene (.vscene) from document content
+  // 3D animation (.vclip / .vskel) from document content
+  const anim3dResource = useMemo(() => {
+    if (!isAnim3dFile || !activeDoc?.content) return undefined;
+    try { return JSON.parse(activeDoc.content); } catch { return undefined; }
+  }, [isAnim3dFile, activeDoc?.content]);
+
   const sceneResource = useMemo(() => {
     if (!isSceneFile || !activeDoc?.content) return undefined;
     try { return JSON.parse(activeDoc.content); } catch { return undefined; }
@@ -209,7 +217,8 @@ export const EditorSurface: React.FC = () => {
           const isVmov = doc.uri.endsWith('.vmov');
           const isMesh = doc.uri.endsWith('.vmesh');
           const isScene = doc.uri.endsWith('.vscene');
-          const icon = isScene ? '🏞️' : isMesh ? '🧊' : isVmov ? '📽️' : isVrec ? '📼' : isVsmp ? '🎙️' : isEnemy ? '👾' : isInstr ? '🎹' : isAnim ? '🎬' : isSfx ? '🔊' : isMus ? '🎵' : isVec ? '🎨' : '📄';
+          const isAnim3d = doc.uri.endsWith('.vclip') || doc.uri.endsWith('.vskel');
+          const icon = isAnim3d ? '🦴' : isScene ? '🏞️' : isMesh ? '🧊' : isVmov ? '📽️' : isVrec ? '📼' : isVsmp ? '🎙️' : isEnemy ? '👾' : isInstr ? '🎹' : isAnim ? '🎬' : isSfx ? '🔊' : isMus ? '🎵' : isVec ? '🎨' : '📄';
           return (
             <div key={doc.uri}
               className={"vpy-tab" + (doc.uri===active?" active":"") + (doc.dirty?" dirty":"")}
@@ -276,6 +285,10 @@ export const EditorSurface: React.FC = () => {
         ) : isMeshFile ? (
           <div style={{ background: '#12121c', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <MeshEditor key={active} resource={meshResource} docUri={active} onChange={handleMeshChange} />
+          </div>
+        ) : isAnim3dFile ? (
+          <div style={{ background: '#12121c', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <Anim3DEditor key={active} resource={anim3dResource} docUri={active} onChange={handleMeshChange} />
           </div>
         ) : isSceneFile ? (
           <div style={{ background: '#12121c', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>

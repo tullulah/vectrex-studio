@@ -301,5 +301,12 @@
   "file.new.vscene": "Escena 3D (.vscene)",
   "file.newScene.title": "Nueva escena 3D",
   "file.newScene.message": "Escribe un nombre para la escena (sin extensión):",
-  "file.newScene.needMesh": "Una escena coloca piezas .vmesh de assets/meshes: crea antes una malla 3D (Archivo > Nuevo > 3D Mesh)."
+  "file.newScene.needMesh": "Una escena coloca piezas .vmesh de assets/meshes: crea antes una malla 3D (Archivo > Nuevo > 3D Mesh).",
+  "file.new.vskel": "Esqueleto 3D (.vskel)",
+  "file.new.vclip": "Animación 3D (.vclip)",
+  "file.newSkel.title": "Nuevo esqueleto 3D",
+  "file.newSkel.message": "Nombre del esqueleto (sin extensión):",
+  "file.newClip.title": "Nueva animación 3D",
+  "file.newClip.message": "Nombre de la biblioteca de animación (sin extensión):",
+  "file.newClip.needSkel": "Una biblioteca de animación pone en pose un esqueleto de assets/skeletons: crea antes un esqueleto 3D (Archivo > Nuevo > Esqueleto 3D)."
 }

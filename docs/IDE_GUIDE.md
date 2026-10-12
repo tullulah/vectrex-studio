@@ -69,6 +69,7 @@ The editor supports `.vpy` (VPy source), `.asm` (MC6809 assembly) and C sources.
 | `.vplay` | Playground (levels) |
 | `.vmesh` | Mesh Editor — 3D wireframe with front/top/side/3D views (middle button pans, middle + Shift orbits), vertex and face editing, primitives (cube, pyramid, grid, cylinder), undo/redo and live validation against the compiler's rules. File → New → 3D Mesh creates `assets/meshes/<name>.vmesh` |
 | `.vscene` | Scene Editor (below). File → New → 3D Scene creates `assets/scenes/<name>.vscene` with one piece, the first mesh in `assets/meshes` (so make a mesh first) |
+| `.vskel`, `.vclip` | 3D Animation Editor (below): skeletons, poses, clips and sets. File → New → 3D Skeleton / 3D Animation |
 | `.vmov` | Vector Movie Editor |
 | `.vsmp` | Sample player |
 
@@ -107,6 +108,55 @@ more than 16 distinct meshes. Every edit can be undone (Ctrl+Z / Ctrl+Y). Saving
 2-space JSON and keeps any fields the editor does not know. **Reload meshes** reads the
 `.vmesh` files again after you change them. A mesh lofted from `.vec` sections is not
 previewed here: open it in the Mesh Editor.
+
+### 3D Animation Editor
+
+`.vskel` skeletons and `.vclip` libraries of poses and clips (formats in
+[ASSETS.md](ASSETS.md#vskel-3d-skeleton)) open in one editor, in the spirit of Unreal's
+Persona or Unity's Animation window. `.vanim` stays separate: it is a flipbook of 2D frames.
+Create them with **File > New > 3D Skeleton** (into `assets/skeletons/`) and
+**3D Animation** (into `assets/clips/`, posing the project's first skeleton).
+
+The view in the middle draws the character the way the console draws it: hard edges facing
+the camera, the outline of smooth surfaces, the bones in blue and the sockets (a blade, a
+gun) in red. **Smooth edges** shows every edge, faint. **Character** picks one of the
+skeleton's variants; the toolbar's checkboxes turn meshes, bones and sockets on and off.
+**3D**, **Front**, **Side** and **Top** are views of a character facing +z. Dragging orbits,
+Shift or middle drag pans, the wheel zooms, and clicking a joint selects its bone. The
+skeleton and the meshes are read from `assets/skeletons` and `assets/meshes` (any folder);
+**⟳** reads them again.
+
+A `.vclip` has three tabs:
+
+- **Poses:** the list of poses on the left, one slider per joint on the right, in degrees
+  and in the file's own units. The editor warns when a pose is shared by several clips or
+  sets, because changing it changes all of them. Clicking a joint's name finds its bone in
+  the view, and the joints that turn the selected bone are highlighted.
+- **Clips:** the keys (a pose at a frame) and the marks (a named instant, with an optional
+  value), the clip's loop and its whole-number properties. The timeline under the view plays
+  the clip at the game's 50 frames a second (Space, or **▶**; slower speeds too), scrubs
+  with a click, and moves a key when you drag it. **+ Key at frame n** adds a key at the
+  playhead, and **+ New pose here** turns what the view shows into a new pose keyed there.
+  **Ghost** draws the last key passed, faintly. Selecting a key shows its pose's sliders.
+  Between keys the preview moves in straight lines. How the game eases between them is its
+  own business (Return of the Jedi chases each pose with springs).
+- **Sets:** per character or style, the pose for each stance, the clip for each role
+  (**▶** plays it) and the set's own numbers.
+
+A `.vskel` has three tabs:
+
+- **Bones:** the tree. A bone has its parent, its offset, its mesh and its turns (axis,
+  joint, `mul`, `div`, `add`), plus the sockets fixed to it.
+- **Joints:** names and optional limits, plus test sliders that pose the skeleton without
+  saving anything.
+- **Variants:** the scale, and a mesh and an offset per bone. A variant's extra bones,
+  rotations and sockets are listed but edited as text.
+
+Renaming a pose, a clip, a bone or a joint renames it wherever the same file uses it.
+Deleting one that is still used is refused, and the message names the users. Renaming a
+joint in a `.vskel` does not rename it in the `.vclip` files that pose it. Errors show on the
+left as you edit. Every edit can be undone (Ctrl+Z / Ctrl+Y), and saving keeps the fields
+the editor does not know. The compiler does not read these files yet.
 
 ---
 
