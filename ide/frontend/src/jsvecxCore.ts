@@ -598,7 +598,7 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
    * image carries its own syscall handler, and the simulator runs it.
    */
   loadUvm2(um2: Uint8Array, canvas?: HTMLCanvasElement,
-           elf?: Uint8Array, sdFiles?: Record<string, Uint8Array>): void {
+           elf?: Uint8Array, sdFiles?: Record<string, Uint8Array>, psramElf?: Uint8Array): void {
     console.log(`[loadUvm2] START um2=${um2.length}b canvas=${canvas ? `${canvas.width}x${canvas.height}` : 'none'}`);
     if (this._activeTarget === 'rp2350' && this._rp2350System) {
       try { this._rp2350System.stopAudio(); } catch {}
@@ -609,6 +609,7 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
      * juego pinta su X de "falta el romset" y ya no vuelve a mirar. */
     if (elf) this._uvm2System.setElf(elf);
     if (sdFiles) this._uvm2System.setSdFiles(sdFiles);
+    this._uvm2System.setPsramElf(psramElf ?? null);
     this._uvm2System.init(um2);
     if (canvas) this._uvm2System.setCanvas(canvas);
     this._activeTarget = 'uvm2';

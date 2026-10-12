@@ -371,6 +371,9 @@ export class Uvm2System implements ISystem, IBus {
   private sdAbrirAddr = 0;
   private sdSeguirAddr = 0;
   private sdSaltarAddr = 0;
+  private sdDirAbrirAddr = 0;
+  private sdDirSeguirAddr = 0;
+  private sdDirCerrarAddr = 0;
   private sdErrorAddr = 0;
   /** Registros del DMA. DIECISEIS CANALES y no uno: el stream del bus se queda
    * con el 0 y el jack coge el mas alto que encuentre libre. */
@@ -506,7 +509,17 @@ export class Uvm2System implements ISystem, IBus {
   private leerClocks(off: number): number {
     if (off === 0x38) return (1 << (this.clocks[0x30 >> 2] & 3)) >>> 0;  // CLK_REF_SELECTED
     if (off === 0x44) return (1 << (this.clocks[0x3C >> 2] & 1)) >>> 0;  // CLK_SYS_SELECTED
-    if (off >= 0x30 && ((off - 0x38) % 12) === 0) return 1;
+    /* EL CONTADOR DE FRECUENCIA (FC0): STATUS (0xA4) siempre DONE y RESULT (0xA8) la
+     * frecuencia del reloj que se escribio en SRC (0xA0), en kHz desde el bit 5. Los de la
+     * placa: cristal de 12 MHz, sys y peri a 150, usb y adc a 48. Lo usa una imagen que
+     * arranca un cargador para volver a anotar sus relojes (uvm2_clocks_report); sin esto
+     * frequency_count_khz esperaba DONE para siempre. */
+    if (off === 0xA4) return 0x10;
+    if (off === 0xA8) {
+      const khz: Record<number, number> = { 0x08: 12000, 0x09: 150000, 0x0a: 150000, 0x0b: 48000, 0x0c: 48000 };
+      return ((khz[this.clocks[0xA0 >> 2] & 0xFF] ?? 0) << 5) >>> 0;
+    }
+    if (off >= 0x30 && off < 0x80 && ((off - 0x38) % 12) === 0) return 1;
     return this.clocks[off >> 2];
   }
 
@@ -710,6 +723,9 @@ export class Uvm2System implements ISystem, IBus {
     this.sdAbrirAddr  = (sim.get('uvm2_sd_open')  ?? 0) & ~1;
     this.sdSeguirAddr = (sim.get('uvm2_sd_next') ?? 0) & ~1;
     this.sdSaltarAddr = (sim.get('uvm2_sd_seek') ?? 0) & ~1;
+    this.sdDirAbrirAddr  = (sim.get('uvm2_sd_dir_open')  ?? 0) & ~1;
+    this.sdDirSeguirAddr = (sim.get('uvm2_sd_dir_next')  ?? 0) & ~1;
+    this.sdDirCerrarAddr = (sim.get('uvm2_sd_dir_close') ?? 0) & ~1;
     this.sdErrorAddr = (sim.get('uvm2_sd_error') ?? 0) >>> 0;
     /* EL PRINCIPIO DEL FRAME ES DONDE SE MIRAN LAS CUENTAS DEL ANTERIOR. Los contadores
      * vivos los pone a cero `uvm2_frame_begin`, asi que leerlos en cualquier otro momento
@@ -731,6 +747,15 @@ export class Uvm2System implements ISystem, IBus {
     console.log(`[Uvm2System] simbolos: uvm2_sd_read=0x${this.sdLeerAddr.toString(16)} ` +
                 `uvm2_sd_error=0x${this.sdErrorAddr.toString(16)}`);
   }
+
+  /** THE ELF OF A PROGRAM THAT RUNS FROM THE PSRAM. A two-stage image (a loader in SRAM that
+   *  reads the real program off the card into the PSRAM at 0x11000000 and jumps; ScummVM,
+   *  2026-10-11) carries TWO copies of the uvm2_sd_* functions, and the SD is trapped at the
+   *  addresses of one ELF: the loader's first, and this one's from the first frame the PC is
+   *  in the PSRAM — what the project's tools/uvm2_run.mjs did by hand. */
+  private psramElf: Uint8Array | null = null;
+  private psramElfArmed = false;
+  setPsramElf(elf: Uint8Array | null): void { this.psramElf = elf; this.psramElfArmed = false; }
 
   /** Los ficheros de la SD simulada, por ruta relativa en minusculas. */
   setSdFiles(files: Record<string, Uint8Array>): void {
@@ -878,6 +903,85 @@ export class Uvm2System implements ISystem, IBus {
     cpu.setReg(15, cpu.getReg(14) & ~1);
   }
 
+  /* ── LA CARPETA ABIERTA ─────────────────────────────────────────────────────
+   *
+   * uvm2_sd_dir_open / _next / _close, para los juegos que listan la tarjeta (un menu de
+   * juegos). Se atienden por PC por lo mismo que el fichero abierto: el f_opendir de verdad
+   * andaria sobre una SD que aqui no existe. Las TRES, close incluida: la de verdad llamaria
+   * a f_closedir sobre un DIR que el emulador nunca relleno.
+   *
+   * La estructura es { u32 magic, count; u64 dir[12] } y el emulador guarda en dir[0] el
+   * indice a SU tabla de listas. La carpeta se saca de las rutas de la SD simulada, que
+   * estan en minusculas: los nombres salen en minusculas y en orden alfabetico (en la
+   * tarjeta salen como estan escritos y en el orden del directorio). Igual que alli, se
+   * saltan los nombres que empiezan por '.'. */
+  private sdCarpetas: { nombre: string; tam: number; carpeta: boolean }[][] = [];
+
+  private leeCadena(a: number): string {
+    let s = '';
+    for (let i = 0; i < 128; i++) {
+      const c = this.read8((a + i) >>> 0);
+      if (!c) break;
+      s += String.fromCharCode(c);
+    }
+    return s;
+  }
+
+  private atiendeSdDirAbrir(cpu: Thumb2): void {
+    const pre = this.leeCadena(cpu.getReg(0) >>> 0).toLowerCase().replace(/^\/+|\/+$/g, '');
+    const st = cpu.getReg(1) >>> 0;
+    const put = (off: number, v: number) => {
+      for (let i = 0; i < 4; i++) this.write8((st + off + i) >>> 0, (v >>> (i * 8)) & 0xFF);
+    };
+    const vistos = new Map<string, { nombre: string; tam: number; carpeta: boolean }>();
+    for (const ruta of Object.keys(this.sdArchivos)) {
+      if (pre && !ruta.startsWith(pre + '/')) continue;
+      const resto = pre ? ruta.slice(pre.length + 1) : ruta;
+      const corte = resto.indexOf('/');
+      const nombre = corte < 0 ? resto : resto.slice(0, corte);
+      if (!nombre || nombre.startsWith('.')) continue;
+      if (!vistos.has(nombre))
+        vistos.set(nombre, { nombre, tam: corte < 0 ? this.sdArchivos[ruta].length : 0, carpeta: corte >= 0 });
+    }
+    /* Una carpeta que no existe es un fallo (MISSING), salvo la raiz. */
+    const ok = !pre || vistos.size > 0;
+    put(0, ok ? 0x52494444 : 0);                     /* 'DDIR' */
+    put(4, 0);
+    if (ok) put(8, this.sdCarpetas.push([...vistos.values()].sort((a, b) => a.nombre < b.nombre ? -1 : 1)) - 1);
+    if (this.sdErrorAddr) for (let i = 0; i < 4; i++) this.write8(this.sdErrorAddr + i, i ? 0 : (ok ? 0 : 4));
+    cpu.setReg(0, ok ? 1 : 0);
+    cpu.setReg(15, cpu.getReg(14) & ~1);
+  }
+
+  private atiendeSdDirSeguir(cpu: Thumb2): void {
+    const st = cpu.getReg(0) >>> 0, dst = cpu.getReg(1) >>> 0;
+    const max = cpu.getReg(2) >>> 0, tam = cpu.getReg(3) >>> 0;
+    const put = (a: number, v: number) => {
+      for (let i = 0; i < 4; i++) this.write8((a + i) >>> 0, (v >>> (i * 8)) & 0xFF);
+    };
+    if (max) this.write8(dst, 0);
+    if (tam) put(tam, 0);
+    const lista = this.read32(st) >>> 0 === 0x52494444 ? this.sdCarpetas[this.read32((st + 8) >>> 0) >>> 0] : undefined;
+    const n = this.read32((st + 4) >>> 0) >>> 0;
+    const e = lista?.[n];
+    if (!e) { cpu.setReg(0, 0); cpu.setReg(15, cpu.getReg(14) & ~1); return; }
+    if (max) {
+      let i = 0;
+      for (; i < e.nombre.length && i < max - 1; i++) this.write8((dst + i) >>> 0, e.nombre.charCodeAt(i) & 0xFF);
+      this.write8((dst + i) >>> 0, 0);
+    }
+    if (tam) put(tam, e.tam);
+    put(st + 4, n + 1);
+    cpu.setReg(0, e.carpeta ? 2 : 1);
+    cpu.setReg(15, cpu.getReg(14) & ~1);
+  }
+
+  private atiendeSdDirCerrar(cpu: Thumb2): void {
+    const st = cpu.getReg(0) >>> 0;
+    for (let i = 0; i < 4; i++) this.write8((st + i) >>> 0, 0);
+    cpu.setReg(15, cpu.getReg(14) & ~1);
+  }
+
   /** Una imagen FAT (superfloppy o con MBR) que la BIOS lee por bloques: es la tarjeta. */
   setSdImagen(img: Uint8Array): void {
     this.sdImagen = img;
@@ -899,6 +1003,7 @@ export class Uvm2System implements ISystem, IBus {
     this.sdLeerAddr = 0;
     this.sdLeerDesdeAddr = 0;
     this.sdAbrirAddr = 0; this.sdSeguirAddr = 0; this.sdSaltarAddr = 0;
+    this.sdDirAbrirAddr = 0; this.sdDirSeguirAddr = 0; this.sdDirCerrarAddr = 0;
     this.resets = 0;
     this.clocks.fill(0);
     this.bootram.fill(0);
@@ -920,6 +1025,7 @@ export class Uvm2System implements ISystem, IBus {
   }
   init(um2: Uint8Array): void {
     console.log('[Uvm2System] ARRANCANDO con una imagen de', um2.length, 'bytes');
+    this.psramElfArmed = false;
     this.placa = PLACA_UVM2;
     this.flash = null;
     this.resets = 0;
@@ -1030,6 +1136,9 @@ export class Uvm2System implements ISystem, IBus {
     if (this.sdAbrirAddr  && pc1 === this.sdAbrirAddr)  { this.atiendeSdAbrir(this.cpu1);  return 1; }
     if (this.sdSeguirAddr && pc1 === this.sdSeguirAddr) { this.atiendeSdSeguir(this.cpu1); return 1; }
     if (this.sdSaltarAddr && pc1 === this.sdSaltarAddr) { this.atiendeSdSaltar(this.cpu1); return 1; }
+    if (this.sdDirAbrirAddr  && pc1 === this.sdDirAbrirAddr)  { this.atiendeSdDirAbrir(this.cpu1);  return 1; }
+    if (this.sdDirSeguirAddr && pc1 === this.sdDirSeguirAddr) { this.atiendeSdDirSeguir(this.cpu1); return 1; }
+    if (this.sdDirCerrarAddr && pc1 === this.sdDirCerrarAddr) { this.atiendeSdDirCerrar(this.cpu1); return 1; }
     if (this.execAddr && pc1 === this.execAddr) { this.execVuelta[1] = this.cpu1.getReg(14) & ~1; this.enLista++; }
     else if (this.execVuelta[1] && pc1 === this.execVuelta[1]) { this.execVuelta[1] = 0; this.enLista--; }
     if (this.sdHwInitAddr && pc1 === this.sdHwInitAddr) { this.atiendeSdHwInit(this.cpu1); return 1; }
@@ -1157,7 +1266,10 @@ export class Uvm2System implements ISystem, IBus {
     if (this.cpu1 || this.lanzamiento.length < 6) return;
     const [a, b, c, , sp, entry] = this.lanzamiento;
     if (a !== 0 || b !== 0 || c !== 1) return;
-    if ((entry >>> 0) < SRAM_BASE || (sp >>> 0) < SRAM_BASE) return;
+    /* La entrada puede estar en la PSRAM: un programa enlazado alli (tras su cargador) lanza
+     * el nucleo 1 sobre su propio core1_trampoline, que vive con el resto de su .text. La pila
+     * sigue en SRAM. */
+    if (((entry >>> 0) < SRAM_BASE && psramOff(entry >>> 0) < 0) || (sp >>> 0) < SRAM_BASE) return;
 
     this.cpu1 = new Thumb2();
     /* EN HORA. Su reloj arranca donde va el de core 0: dejarlo en 0 congela el minimo
@@ -1706,6 +1818,17 @@ export class Uvm2System implements ISystem, IBus {
             this.fifoEco = 0;
             this.fifoPendiente = true;
           }
+          /* EL NUCLEO 1 SE APAGA DE VERDAD. Antes solo se recordaba el bit y el nucleo seguia
+           * corriendo, asi que una imagen que relanza el nucleo 1 sobre otra que ya lo tenia
+           * en marcha (un programa en PSRAM tras su cargador) se quedaba con el nucleo 1 del
+           * ANTERIOR: quizaLanzarCore1 no crea uno nuevo si ya hay uno, y el programa esperaba
+           * para siempre a un nucleo que corria el bucle de otra imagen. En el chip, FRCE_OFF
+           * lo apaga y el siguiente saludo lo arranca desde la bootrom. */
+          if (!(antes & PSM_PROC1) && (this.psmFrceOff & PSM_PROC1) && this.cpu1) {
+            console.log(`[Uvm2System] NUCLEO 1 APAGADO (PSM FRCE_OFF) en pc=0x${(this.cpu1.getReg(15) >>> 0).toString(16)}`);
+            this.cpu1 = null;
+            this.lanzamiento = [];
+          }
         }
         return;
       }
@@ -1811,6 +1934,14 @@ export class Uvm2System implements ISystem, IBus {
   private fifoPendiente = false;
 
   runFrame(): Segment[] {
+    if (this.psramElf && !this.psramElfArmed) {
+      const pcNow = this.cpu.getReg(15) >>> 0;
+      if (pcNow >= 0x11000000 && pcNow < 0x11800000) {
+        this.psramElfArmed = true;
+        this.setElf(this.psramElf);
+        console.log(`[Uvm2System] PC in the PSRAM (0x${pcNow.toString(16)}): the program's ELF traps the SD now`);
+      }
+    }
     this.jackFrame();
     const until = this.busCycle + BUS_PER_FRAME;
     let spent = 0;
@@ -1849,6 +1980,9 @@ export class Uvm2System implements ISystem, IBus {
       if (this.sdAbrirAddr  && pc === this.sdAbrirAddr)  { this.atiendeSdAbrir(this.cpu);  continue; }
       if (this.sdSeguirAddr && pc === this.sdSeguirAddr) { this.atiendeSdSeguir(this.cpu); continue; }
       if (this.sdSaltarAddr && pc === this.sdSaltarAddr) { this.atiendeSdSaltar(this.cpu); continue; }
+      if (this.sdDirAbrirAddr  && pc === this.sdDirAbrirAddr)  { this.atiendeSdDirAbrir(this.cpu);  continue; }
+      if (this.sdDirSeguirAddr && pc === this.sdDirSeguirAddr) { this.atiendeSdDirSeguir(this.cpu); continue; }
+      if (this.sdDirCerrarAddr && pc === this.sdDirCerrarAddr) { this.atiendeSdDirCerrar(this.cpu); continue; }
       /* VOLCADO DE REGISTROS EN UN PC (depuracion): VOLCAR=0x2000362c imprime r0-r12, lr y
        * 40 bytes en [r8] las primeras 4 veces que core 0 pasa por ahi. Sin esto, saber que
        * calculo se tuerce dentro del emulador es adivinar sobre el desensamblado. */

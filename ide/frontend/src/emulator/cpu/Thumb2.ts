@@ -159,6 +159,18 @@ export class Thumb2 implements ICpu {
    * mentir en el nucleo para tapar una omision del sistema.
    */
   private ipsr = 0;
+  /** PCs que ya avisaron de un exclusivo sobre XIP (ver vigilaExclusivo). */
+  private exclusivosXip = new Set<number>();
+  private vigilaExclusivo(addr: number): void {
+    if (addr < 0x10000000 || addr >= 0x18000000) return;
+    const pc = this.regs[15] >>> 0;
+    if (this.exclusivosXip.has(pc)) return;
+    this.exclusivosXip.add(pc);
+    console.warn(`[Thumb2] ACCESO EXCLUSIVO a 0x${addr.toString(16)} (ventana XIP) en pc=0x${pc.toString(16)}: ` +
+                 `en el RP2350 este STREX no termina nunca. La variable tiene que vivir en SRAM.`);
+  }
+  private msplim = 0;
+  private psplim = 0;
   setException(n: number): void { this.ipsr = n & 0x1ff; }
   getException(): number { return this.ipsr; }
 
@@ -175,6 +187,8 @@ export class Thumb2 implements ICpu {
       case 6:  return 0;             // EPSR: se lee como 0
       case 7:  return this.ipsr;     // IEPSR
       case 8:  case 9:  return this.SP >>> 0;   // MSP / PSP — pila unica aqui
+      case 10: return this.msplim;   // MSPLIM (ARMv8-M)
+      case 11: return this.psplim;   // PSPLIM
       case 16: return this.primask;
       case 17: case 18: return this.basepri;    // BASEPRI / BASEPRI_MAX
       case 19: return this.faultmask;
@@ -193,6 +207,12 @@ export class Thumb2 implements ICpu {
         return;
       case 5: case 6: case 7: return;           // IPSR/EPSR/IEPSR: solo lectura
       case 8: case 9: this.SP = value >>> 0; return;
+      /* MSPLIM / PSPLIM (ARMv8-M, the M33): the stack limits. Kept and returned, never
+       * checked — a stack overflow is not modelled here. The pico-sdk's crt0 sets MSPLIM at
+       * its second instruction, so any image started at _entry_point (a PSRAM program after
+       * its loader) stopped right there. */
+      case 10: this.msplim = value & ~7; return;
+      case 11: this.psplim = value & ~7; return;
       case 16: this.primask   = value & 1; return;
       case 17: case 18: this.basepri = value & 0xff; return;
       case 19: this.faultmask = value & 1; return;
@@ -1196,6 +1216,30 @@ export class Thumb2 implements ICpu {
     const Vd = (hw1 >>> 12) & 0xF, Vn = hw0 & 0xF, Vm = hw1 & 0xF;
     const Sd = (Vd << 1) | D, Sn = (Vn << 1) | N, Sm = (Vm << 1) | M;
 
+    /* LAS DE ARMv8 (FPv5), que el M33 tiene y gcc emite con -march=armv8-m.main+fp: roundf,
+     * floorf y ceilf salen como VRINTA/M/P, y un `a > b ? a : b` en float como VSEL. Las
+     * encontro ScummVM (BdfFont::scaleFont, la primera); sin ellas el emulador se paraba en
+     * "Unimplemented" y en el chip corrian bien. Solo simple precision, como el resto. */
+    if ((hw0 & 0xFF80) === 0xFE00 && (hw1 & 0x0F50) === 0x0A00) {        // VSEL<cc>.F32
+      const cc = (hw0 >>> 4) & 3;                    // EQ, VS, GE, GT, sobre las banderas del APSR
+      const pass = this.evalCond([0x0, 0x6, 0xA, 0xC][cc]);
+      this.vfp[Sd & 31] = this.vfp[(pass ? Sn : Sm) & 31];
+      return 1;
+    }
+    if ((hw0 & 0xFFBC) === 0xFEB8 && (hw1 & 0x0FD0) === 0x0A40) {        // VRINT{A,N,P,M}.F32
+      const x = this.fS(Sm);
+      let r: number;
+      switch (hw0 & 3) {
+        case 0: r = x < 0 ? -Math.round(-x) : Math.round(x); break;                  // A: empates lejos del 0
+        case 1: { const f = Math.floor(x), d = x - f;                                // N: empates al par
+                  r = d > 0.5 ? f + 1 : d < 0.5 ? f : (f % 2 === 0 ? f : f + 1); break; }
+        case 2: r = Math.ceil(x); break;                                              // P: hacia +inf
+        default: r = Math.floor(x); break;                                            // M: hacia -inf
+      }
+      this.fSet(Sd, r);
+      return 1;
+    }
+
     if ((hw0 & 0xFF00) === 0xEE00 && (hw1 & 0x10) !== 0) {
       // Transferencias con registros del nucleo (forma MCR/MRC).
       const rt = (hw1 >>> 12) & 0xF;
@@ -1703,6 +1747,13 @@ export class Thumb2 implements ICpu {
       return 2;
     }
 
+    // ── UN EXCLUSIVO SOBRE LA VENTANA XIP NO TERMINA EN EL CHIP ──────────
+    // En el RP2350 el STREX a memoria XIP (flash o PSRAM, 0x10000000..0x17FFFFFF) falla
+    // siempre, y el bucle que lo reintenta gira para siempre sin fallo ni aviso. Aqui el
+    // almacen siempre tiene exito, asi que una imagen que lo hace corre en el emulador y se
+    // queda en negro en la consola: paso dos veces seguidas con ScummVM desde la PSRAM (los
+    // atomicos de vectrex_bus y los spinlocks del pico-sdk en el .bss). Se avisa, una vez por
+    // PC, en vez de colgar: el aviso dice que variable mover a SRAM.
     // ── LDREX / STREX de palabra, con desplazamiento inmediato ───────────
     //   STREX Rd, Rt, [Rn, #imm8*4]   hw0 = 0xE840|Rn, hw1 = Rt Rd imm8
     //   LDREX Rt,     [Rn, #imm8*4]   hw0 = 0xE850|Rn, hw1 = Rt 1111 imm8
@@ -1712,6 +1763,7 @@ export class Thumb2 implements ICpu {
       const rn   = hw0 & 0xF;
       const rt   = (hw1 >>> 12) & 0xF;
       const addr = u32(this.regs[rn] + (hw1 & 0xff) * 4);
+      this.vigilaExclusivo(addr);
       if ((hw0 >>> 4) & 1) {
         this.regs[rt] = this.read32(bus, addr);          // LDREX
       } else {
@@ -1763,6 +1815,7 @@ export class Thumb2 implements ICpu {
       const addr = this.regs[rn];
       const tam  = (op & 3) === 0 ? 1 : (op & 3) === 1 ? 2 : 4;
       const exclusivo = op === 0x4 || op === 0x5 || op >= 0xC;
+      if (exclusivo) this.vigilaExclusivo(addr >>> 0);
       if (carga) {
         this.regs[rt] = tam === 1 ? bus.read8(addr) >>> 0
                       : tam === 2 ? this.read16(bus, addr)
@@ -1840,6 +1893,34 @@ export class Thumb2 implements ICpu {
       }
       if (writeback) this.regs[rn2] = addr;
       return 2;
+    }
+
+    // ── LDMDB / STMDB (decrement before) T1, any base ───────────────────
+    // hw0 = 1110 1001 00 W L Rn: 0xE910|Rn LDMDB, 0xE930|Rn LDMDB Rn!, 0xE900|Rn STMDB,
+    // 0xE920|Rn STMDB Rn! (0xE92D, PUSH, is handled above). The lowest register goes at the
+    // lowest address, which is Rn - 4*count. GCC emits LDMDB for copies that walk a struct
+    // from its end (found in ScummVM: `ldmdb r4, {r0-r3}`); missing, the emulator stopped there.
+    if ((hw0 & 0xFFD0) === 0xE910 || (hw0 & 0xFFD0) === 0xE900) {
+      const rn2 = hw0 & 0xF;
+      const load = (hw0 & 0x0010) !== 0;
+      const writeback = (hw0 & 0x0020) !== 0;
+      let count = 0;
+      for (let r = 0; r <= 15; r++) if (hw1 & (1 << r)) count++;
+      const base = u32(this.regs[rn2] - count * 4);
+      let addr = base;
+      for (let r = 0; r <= 15; r++) {
+        if (!(hw1 & (1 << r))) continue;
+        if (load) {
+          const val = this.read32(bus, addr);
+          if (r === 15) this.regs[15] = val & ~1;
+          else if (r !== 13) this.regs[r] = val;
+        } else if (r <= 14) {
+          this.write32(bus, addr, this.regs[r]);
+        }
+        addr = u32(addr + 4);
+      }
+      if (writeback) this.regs[rn2] = base;
+      return count + 1;
     }
 
     const rn  = hw0 & 0xf;

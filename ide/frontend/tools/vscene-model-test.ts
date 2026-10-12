@@ -176,7 +176,10 @@ test('an unknown mesh listing says nothing about missing meshes', () => {
 // The real scenes of a game, when it is on this machine.
 const ROTJ = path.join(process.env.HOME || '', 'VectrexStudio/projects/return_of_the_jedi/assets');
 if (existsSync(path.join(ROTJ, 'scenes'))) {
-  const have = (n: string) => existsSync(path.join(ROTJ, 'meshes', `${n}.vmesh`));
+  const meshNames = new Set<string>();
+  const walk = (d: string) => { for (const e of readdirSync(d, { withFileTypes: true })) { if (e.isDirectory()) walk(path.join(d, e.name)); else if (e.name.endsWith('.vmesh')) meshNames.add(e.name.slice(0, -6)); } };
+  walk(path.join(ROTJ, 'meshes'));
+  const have = (n: string) => meshNames.has(n);
   for (const f of readdirSync(path.join(ROTJ, 'scenes')).filter((x) => x.endsWith('.vscene'))) {
     test(`real scene ${f}: no errors, and the compiler agrees`, () => {
       const file = path.join(ROTJ, 'scenes', f);

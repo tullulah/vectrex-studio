@@ -284,7 +284,10 @@ if (elf) {
                          /* La ENTRADA tal como la ve el juego. Sin esto, "el emulador no
                           * reacciona a los botones" no distingue "no llegan" de "llegan y
                           * el juego no los usa", que se arreglan en sitios opuestos. */
-                         "currentButtonState", "currentJoy1X", "currentJoy1Y", "vfcap_frames", "vfcap_saltados", "vfcap_error", "vfcap_bytes", "vfcap_psram_ok", "vfcap_copiado", "vfcap_nframes", "dbg_mt", "DBG_MT_X", "DBG_H_X", "DEUDA_X", "DEUDA_Y", "vpy_red_n", "vpy_red_err_c", "vpy_red_subunidad", "vpy_red_cero", "sonda_lista", "sonda_a", "sonda_b", "sonda_c", "sonda_d", "sonda_e", "sonda_f", "uvm2_pacer_cycles", "uvm2_cero_cada"]) {
+                         "currentButtonState", "currentJoy1X", "currentJoy1Y", "vfcap_frames", "vfcap_saltados", "vfcap_error", "vfcap_bytes", "vfcap_psram_ok", "vfcap_copiado", "vfcap_nframes", "dbg_mt", "DBG_MT_X", "DBG_H_X", "DEUDA_X", "DEUDA_Y", "vpy_red_n", "vpy_red_err_c", "vpy_red_subunidad", "vpy_red_cero", "sonda_lista", "sonda_a", "sonda_b", "sonda_c", "sonda_d", "sonda_e", "sonda_f", "uvm2_pacer_cycles", "uvm2_cero_cada",
+                         /* El sonido del jack y los POKEY de quantum: "el anillo corre" y
+                          * "el anillo lleva musica" se ven igual desde fuera. */
+                         "qu_jack_slices", "qu_jack_tail", "quantum_pokey_escrituras", "quantum_port_reads"]) {
         const ln = nm.split("\n").find(x => x.endsWith(" " + sim));
         if (!ln) continue;
         const v = q.read32(parseInt(ln.split(" ")[0], 16));
