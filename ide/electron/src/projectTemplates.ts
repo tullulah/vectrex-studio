@@ -103,6 +103,11 @@ enemies = ["assets/enemies/*.venemy"]
 instruments = ["assets/instruments/*.vinstr"]
 recordings = ["assets/recordings/*.vrec"]
 samples = ["assets/samples/*.vsmp"]
+# 3D (uvm2): meshes (folders inside assets/meshes too), scenes, skeletons and their clips
+meshes = ["assets/meshes/*.vmesh"]
+scenes = ["assets/scenes/*.vscene"]
+skeletons = ["assets/skeletons/*.vskel"]
+clips = ["assets/clips/*.vclip"]
 ${sdkVersion ? `\n[sdk]\nversion = ${q(sdkVersion)}\n` : ''}`;
 }
 
@@ -394,7 +399,8 @@ export async function createProjectFromTemplate(opts: {
     projectFile = join(projectDir, `${name}.vpyproj`);
     entryFile = join(projectDir, 'src', 'main.vpy');
     for (const d of ['src', 'build', 'assets/vectors', 'assets/music', 'assets/sfx', 'assets/animations', 'assets/playground',
-      'assets/enemies', 'assets/instruments', 'assets/recordings', 'assets/samples', 'assets/movies']) {
+      'assets/enemies', 'assets/instruments', 'assets/recordings', 'assets/samples', 'assets/movies',
+      'assets/meshes', 'assets/scenes', 'assets/skeletons', 'assets/clips']) {
       await fs.mkdir(join(projectDir, d), { recursive: true });
     }
     files.push(

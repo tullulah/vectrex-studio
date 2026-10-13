@@ -608,7 +608,7 @@ function tcpSession(port) {
     const r = await client.request('tools/list');
     const byName = Object.fromEntries(r.result.tools.map((t) => [t.name, t]));
     for (const n of ['assets_list', 'asset_get_format', 'asset_create', 'project_create_vector', 'project_create_music', 'project_create_sfx']) assert.ok(byName[n], `missing ${n}`);
-    assert.deepStrictEqual(TYPES, ['vec', 'vmus', 'vsfx', 'vanim', 'vplay', 'venemy', 'vinstr', 'vrec', 'vsmp', 'vmesh', 'vscene']);
+    assert.deepStrictEqual(TYPES, ['vec', 'vmus', 'vsfx', 'vanim', 'vplay', 'venemy', 'vinstr', 'vrec', 'vsmp', 'vmesh', 'vscene', 'vskel', 'vclip']);
     assert.deepStrictEqual(byName.asset_create.inputSchema.properties.type.enum, TYPES);
     assert.deepStrictEqual(byName.asset_get_format.inputSchema.properties.type.enum, TYPES);
     assert.deepStrictEqual(byName.assets_list.inputSchema.properties.type.enum, TYPES);
@@ -644,8 +644,12 @@ function tcpSession(port) {
       assert.ok(doc.includes('`' + sp.dir + '/`'), `ASSETS.md lacks folder ${sp.dir}/`);
       assert.ok(topic.includes(sp.ext) && topic.includes(sp.dir), `get_project_docs assets lacks ${sp.ext} / ${sp.dir}`);
       if (sp.vpy.usable) {
-        const call = sp.vpy.usage('n').match(/[A-Z_0-9]{4,}\(/g).filter((c) => c !== 'SPAWN_ENEMIES(' || sp.type !== 'venemy')[0];
-        assert.ok(doc.includes(call), `ASSETS.md lacks ${call} (${sp.type})`);
+        // an asset read as constant tables (.vskel, .vclip) is imported, the others are called
+        if (/^import n\b/.test(sp.vpy.usage('n'))) assert.ok(doc.includes('`import n`'), `ASSETS.md lacks how VPy imports ${sp.ext}`);
+        else {
+          const call = sp.vpy.usage('n').match(/[A-Z_0-9]{4,}\(/g).filter((c) => c !== 'SPAWN_ENEMIES(' || sp.type !== 'venemy')[0];
+          assert.ok(doc.includes(call), `ASSETS.md lacks ${call} (${sp.type})`);
+        }
       }
       if (sp.c.usable) {
         // the C call and the header symbol the catalog hands out (DEMO_instr -> `N_instr`)
@@ -664,6 +668,7 @@ function tcpSession(port) {
     const put = (dir, file, j) => { fs.mkdirSync(path.join(root, dir), { recursive: true }); const p = path.join(root, dir, file); fs.writeFileSync(p, JSON.stringify(j)); return p; };
     for (const v of ['platform', 'example', 'example_1', 'example_2']) put('assets/vectors', `${v}.vec`, vecJson([[-8, 0], [8, 0], [0, 8]]));
     put('assets/meshes', 'example_piece.vmesh', assetsLib.specFor('vmesh').example('example_piece'));
+    put('assets/skeletons', 'example_skeleton.vskel', assetsLib.specFor('vskel').example('example'));
     for (const sp of assetsLib.ASSET_SPECS) {
       const p = put(sp.dir, 'example' + sp.ext, sp.example('example'));
       assert.deepStrictEqual(assetsLib.missingReferences(sp, sp.example('example'), root, path.dirname(p)), [], `${sp.type} example has missing refs`);
@@ -716,7 +721,11 @@ function tcpSession(port) {
     assert.match(mk, /-Igen/);
     assert.match(mk, /^sim: \$\(ASSET_HDRS\)/m);
     assert.match(mk, /^UVM2_DEPS += \$\(ASSET_HDRS\)$|^UVM2_DEPS\s+= \$\(ASSET_HDRS\)$/m);
-    for (const sp of assetsLib.ASSET_SPECS.filter((a) => a.c.usable && a.type !== 'venemy')) assert.ok(mk.includes(`${sp.dir}/*${sp.ext}`), `Makefile does not compile ${sp.dir}/*${sp.ext}`);
+    for (const sp of assetsLib.ASSET_SPECS.filter((a) => a.c.usable && a.type !== 'venemy')) {
+      // meshes are also found in folders inside assets/meshes (rwildcard)
+      const found = sp.type === 'vmesh' ? mk.includes(`rwildcard,${sp.dir},*${sp.ext}`) : mk.includes(`${sp.dir}/*${sp.ext}`);
+      assert.ok(found, `Makefile does not compile ${sp.dir}/*${sp.ext}`);
+    }
     assert.ok(await assetsLib.makefileCompilesAssets(cproj.projectDir));
   });
 
@@ -729,13 +738,13 @@ function tcpSession(port) {
     }
   });
 
-  await test('assets_list on an empty VPy project: no assets, every VPy type offered, .vmesh / .vscene not usable', async () => {
+  await test('assets_list on an empty VPy project: no assets, every type offered', async () => {
     openProjectFake(vproj.projectFile);
     const l = json(await client.callTool('assets_list', {}));
     assert.strictEqual(l.project.language, 'vpy');
     assert.deepStrictEqual(l.assets, {});
-    assert.deepStrictEqual(l.usableTypesWithNoAssets.map((t) => t.type), TYPES.filter((t) => t !== 'vmesh' && t !== 'vscene'));
-    assert.deepStrictEqual(l.typesNotUsableInThisLanguage.map((t) => t.type), ['vmesh', 'vscene']);
+    assert.deepStrictEqual(l.usableTypesWithNoAssets.map((t) => t.type), TYPES);
+    assert.deepStrictEqual(l.typesNotUsableInThisLanguage, []);
   });
 
   await withCli('asset_create (VPy): valid assets are written, compiled, opened, and come with their code', async () => {
@@ -802,9 +811,39 @@ function tcpSession(port) {
       assert.strictEqual(r.isError, true);
       assert.match(r.content[0].text, re);
     }
-    const mesh = await client.callTool('asset_create', { type: 'vmesh', name: 'cube', content: assetsLib.specFor('vmesh').example('cube') });
-    assert.strictEqual(mesh.isError, true);
-    assert.match(mesh.content[0].text, /cannot be used from a VPy project/);
+    // a skeleton's meshes and its clips' skeleton must exist first
+    const noMesh = await client.callTool('asset_create', { type: 'vskel', name: 'rig', content: assetsLib.specFor('vskel').example('rig') });
+    assert.strictEqual(noMesh.isError, true);
+    assert.match(noMesh.content[0].text, /references assets that do not exist.*mesh "rig_piece" -> assets\/meshes\/rig_piece\.vmesh/s);
+    const noSkel = await client.callTool('asset_create', { type: 'vclip', name: 'moves', content: { ...assetsLib.specFor('vclip').example('x'), skeleton: 'nope' } });
+    assert.strictEqual(noSkel.isError, true);
+    assert.match(noSkel.content[0].text, /skeleton "nope" -> assets\/skeletons\/nope\.vskel/);
+  });
+
+  await withCli('asset_create (VPy): a 3D skeleton with its meshes and its clips', async () => {
+    openProjectFake(vproj.projectFile);
+    const mk = async (type, name, content) => {
+      const r = await client.callTool('asset_create', { type, name, content, open: false });
+      assert.ok(!r.isError, r.content[0].text);
+      return json(r);
+    };
+    const mesh = await mk('vmesh', 'rig_piece', assetsLib.specFor('vmesh').example('rig_piece'));
+    assert.match(mesh.usage, /^LOAD_MESH\("rig_piece"\)/);
+    const skel = await mk('vskel', 'rig', assetsLib.specFor('vskel').example('rig'));
+    assert.strictEqual(skel.path, 'assets/skeletons/rig.vskel');
+    assert.match(skel.validatedBy, /check-asset/);
+    assert.match(skel.usage, /^import rig\b/);
+    assert.ok(!('name' in JSON.parse(fs.readFileSync(path.join(vproj.projectDir, skel.path), 'utf-8'))), 'no name field added to a .vskel');
+    const clip = await mk('vclip', 'rig_moves', { ...assetsLib.specFor('vclip').example('x'), skeleton: 'rig' });
+    assert.match(clip.summary, /pose|clip/);
+    // a pose that misses a joint is the compiler's error, returned
+    const bad = await client.callTool('asset_create', { type: 'vclip', name: 'rig_bad', content: { version: 1, skeleton: 'rig', poses: { p: { twist: 0 } } } });
+    assert.strictEqual(bad.isError, true);
+    assert.match(bad.content[0].text, /does not compile.*nothing was written/s);
+    const l = json(await client.callTool('assets_list', {}));
+    assert.match(l.assets.vskel.items[0].summary, /3 joint\(s\), 3 bone\(s\), variants: tall short/);
+    assert.ok(!l.assets.vskel.items[0].warning && !l.assets.vclip.items[0].warning);
+    for (const f of ['assets/meshes/rig_piece.vmesh', 'assets/skeletons/rig.vskel', 'assets/clips/rig_moves.vclip']) fs.rmSync(path.join(vproj.projectDir, f));
   });
 
   await test('assets_list warns about an asset the build will not find and lists other asset files', async () => {
@@ -926,7 +965,7 @@ function tcpSession(port) {
       assert.ok(ctx.assets.byType.vplay.some((l) => l.startsWith('level1: LOAD_LEVEL("level1")')));
     }
     assert.match(ctx.assets.canCreate, /^asset_create .*vec vector sprite.*vplay level/);
-    assert.ok(!/vmesh/.test(ctx.assets.canCreate), 'VPy cannot use .vmesh');
+    assert.match(ctx.assets.canCreate, /; on uvm2 only: vmesh, vscene, vskel$/, 'the 3D types are offered only on uvm2');
     const api = ctx.api;
     assert.strictEqual(ctx.project.kind, 'vpy');
     assert.match(api.source, /^vpy_cli .* builtins/);

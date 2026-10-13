@@ -1035,7 +1035,7 @@ export class MCPServer {
     if (info?.open && project) {
       const lang: 'vpy' | 'c' = project.kind === 'c' ? 'c' : 'vpy';
       [assets, api] = await Promise.all([
-        this.contextAssets(info, lang).catch((e: any) => ({ error: e?.message || String(e) })),
+        this.contextAssets(info, lang, target).catch((e: any) => ({ error: e?.message || String(e) })),
         this.languageReference(info, project, { download: true })
           .then(({ ref, note }) => ({ ...compactApi(ref, lang === 'vpy' ? target : undefined), ...(note ? { note } : {}) }))
           .catch((e: any) => ({ error: e?.message || String(e), more: 'api_reference retries' })),
@@ -1065,7 +1065,7 @@ export class MCPServer {
   }
 
   /** ide_get_context's "assets": every asset with the code that uses it, capped, + what can be created. */
-  private async contextAssets(info: ProjectInfo, lang: 'vpy' | 'c'): Promise<any> {
+  private async contextAssets(info: ProjectInfo, lang: 'vpy' | 'c', target?: string): Promise<any> {
     const PER_TYPE = 12, TOTAL = 40;
     const scan = await scanProjectAssets(info.rootDir, lang, { maxPerType: PER_TYPE });
     // The first statement of a usage snippet (C: the #include and the call), no trailing comment.
@@ -1078,10 +1078,14 @@ export class MCPServer {
       shown += room;
       if (group.count > room) byType[type].push(`+${group.count - room} more: assets_list {type:"${type}"}`);
     }
-    const usable = ASSET_SPECS.filter((sp) => (lang === 'c' ? sp.c.usable : sp.vpy.usable));
+    // VPy: the 3D types only on the targets that draw them (uvm2)
+    const here = (sp: typeof ASSET_SPECS[number]) => !sp.vpyTargets || !target || sp.vpyTargets.includes(target);
+    const usable = ASSET_SPECS.filter((sp) => (lang === 'c' ? sp.c.usable : sp.vpy.usable && here(sp)));
+    const elsewhere = lang === 'vpy' ? ASSET_SPECS.filter((sp) => sp.vpy.usable && !here(sp)) : [];
     return {
       ...(shown ? { byType } : { byType: {}, none: 'This project has no assets yet.' }),
-      canCreate: `asset_create (format: asset_get_format): ${usable.map((sp) => `${sp.type} ${sp.title.toLowerCase().replace(/\s*\(.*\)$/, '')}`).join(', ')}`,
+      canCreate: `asset_create (format: asset_get_format): ${usable.map((sp) => `${sp.type} ${sp.title.toLowerCase().replace(/\s*\(.*\)$/, '')}`).join(', ')}`
+        + (elsewhere.length ? `; on ${[...new Set(elsewhere.flatMap((sp) => sp.vpyTargets!))].join('/')} only: ${elsewhere.map((sp) => sp.type).join(', ')}` : ''),
     };
   }
 

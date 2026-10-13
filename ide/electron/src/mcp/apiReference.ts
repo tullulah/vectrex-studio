@@ -478,10 +478,18 @@ export function howTo(ref: ApiReference, target?: string): string[] {
 /** The compact view for ide_get_context: what a game calls, one short line each. */
 export function compactApi(ref: ApiReference, target?: string): CompactApi {
   const functions: Record<string, Array<{ name: string; text: string }>> = {};
+  // VPy categories named for one target ("3D (uvm2)"): left out elsewhere, and only counted
+  // there (the 3D calls alone are ~5 KB), as vpy3d.h is for C
+  const big: Record<string, number> = {};
   if (ref.language === 'vpy') {
     for (const e of ref.entries) {
       if (e.aliasOf || VPY_COMPACT_SKIP.test(e.category) || /^Short names? of|debug/i.test(e.doc)) continue;
       if (target && e.targets && !e.targets.includes(target)) continue;
+      const only = /\((\w+)\)$/.exec(e.category)?.[1];
+      if (only && ['m6809', 'rp2350', 'pitrex', 'uvm2'].includes(only)) {
+        if (target && target !== only) continue;
+        if (/^3D/.test(e.category)) { big[e.category] = (big[e.category] || 0) + 1; continue; }
+      }
       (functions[e.category] ||= []).push({ name: e.name, text: `${e.signature} — ${shortDoc(e.doc)}` });
     }
   } else {
@@ -501,6 +509,8 @@ export function compactApi(ref: ApiReference, target?: string): CompactApi {
     howTo: howTo(ref, target),
     more: `api_reference {topic?, query?}: all ${total} entries${ref.language === 'vpy' ? ' + targets' : ', vpy3d.h, modules'}`,
   };
+  const bigs = Object.entries(big).map(([cat, n]) => `${cat}: ${n} functions (meshes, camera, bones; topic "${cat}")`);
+  if (bigs.length) compact.modules = bigs.join('; ');
   if (ref.language === 'c') {
     const n3d = ref.entries.filter((e) => e.header === 'vpy3d.h' && e.kind === 'function').length;
     const mods = (ref.modules || []).map((m) => m.header.replace(/\.h$/, ''));

@@ -17,12 +17,12 @@
 //
 // Pure Node (no electron import): the test harness loads it directly.
 
-import { promises as fs, existsSync, readdirSync } from 'fs';
+import { promises as fs, existsSync, readdirSync, statSync } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'child_process';
 
-export type AssetType = 'vec' | 'vmus' | 'vsfx' | 'vanim' | 'vplay' | 'venemy' | 'vinstr' | 'vrec' | 'vsmp' | 'vmesh' | 'vscene';
+export type AssetType = 'vec' | 'vmus' | 'vsfx' | 'vanim' | 'vplay' | 'venemy' | 'vinstr' | 'vrec' | 'vsmp' | 'vmesh' | 'vscene' | 'vskel' | 'vclip';
 export type ProjectLang = 'vpy' | 'c';
 
 export interface AssetSpec {
@@ -39,12 +39,14 @@ export interface AssetSpec {
   c: { usable: boolean; usage: (name: string, meta?: AssetMeta) => string; note?: string };
   /** VPy targets where a project using it builds (measured). */
   targets: string;
+  /** The only VPy build targets where it can be used (absent: all of them). */
+  vpyTargets?: string[];
   /** Concise format reference. */
   format: string;
   /** Minimal valid example (JSON value) for an asset named `name`. */
   example: (name: string) => any;
-  /** Where the asset's own name lives in the JSON (normalised to the file name). */
-  nameField: 'name' | 'metadata.name';
+  /** Where the asset's own name lives in the JSON (normalised to the file name); 'none': only the file name names it. */
+  nameField: 'name' | 'metadata.name' | 'none';
 }
 
 /** Per-file facts the usage snippet depends on. */
@@ -265,12 +267,17 @@ export const ASSET_SPECS: AssetSpec[] = [
   {
     type: 'vmesh', ext: '.vmesh', title: '3D surface mesh (vpy3d)', dir: 'assets/meshes', editor: 'Mesh Editor',
     nameField: 'name',
-    vpy: { usable: false, usage: () => '', note: 'VPy has no .vmesh support; for 3D in VPy use a .vec with "z" and DRAW_VECTOR_3D.' },
+    vpy: {
+      usable: true,
+      usage: (n) => `LOAD_MESH("${n}")   # once, in main()\nDRAW_MESH("${n}", xf, brightness)   # loop(): xf = i32 array of 12 set by XF_ROT_Y/XF_TRANSLATE/XF_MUL; camera: CAMERA_LOOK_AT(ex, ey, ez, tx, ty, tz)`,
+      note: 'uvm2 only: on m6809, rp2350 and pitrex the 3D builtins are a compile error (for 3D there, a .vec with "z" and DRAW_VECTOR_3D).',
+    },
     c: {
       usable: true,
       usage: (n) => `#include <vpy3d.h>\n${cInc(n)}\nstatic vpy_mesh m;\n/* setup(): */ vpy3d_load_mesh(&m, ${cSymbol(n)}_vmesh); vpy3d_look_at(0, 0, -3000, 0, 0, 0, 0, 1, 0);\n/* loop():  */ vpy_xf place = vpy3d_rot_y(angle); vpy3d_draw_mesh(&m, &place, 127);\n/* Makefile: SRCS += $(VPY_C_SDK)/vpy3d.c */`,
     },
-    targets: 'C only: sim, rp2350, uvm2',
+    targets: 'VPy: uvm2; C: sim, rp2350, uvm2',
+    vpyTargets: ['uvm2'],
     format:
 `JSON. Either explicit {"name","hard":crease degrees (45),"vertices":[{"x","y","z"}...],"faces":[[vertex indices, counter-clockwise seen from outside]...]}
 or lofted {"name","hard":45,"caps":true,"sections":[{"z","points":[{"x","y"}...]} or {"z","vec":"../vectors/x.vec","path":name}...]}
@@ -290,13 +297,18 @@ or lofted {"name","hard":45,"caps":true,"sections":[{"z","points":[{"x","y"}...]
   {
     type: 'vscene', ext: '.vscene', title: '3D scene / set of .vmesh pieces (vpy3d)', dir: 'assets/scenes', editor: 'Scene Editor',
     nameField: 'name',
-    vpy: { usable: false, usage: () => '', note: 'VPy has no .vscene support (C only, SDK v1.3.5+).' },
+    vpy: {
+      usable: true,
+      usage: (n) => `LOAD_SCENE("${n}")   # once, in main(); loads the meshes it places\nDRAW_SCENE("${n}", x, y, z, brightness)   # loop(); optional 6th argument: the groups bit mask`,
+      note: 'uvm2 only: on m6809, rp2350 and pitrex the 3D builtins are a compile error.',
+    },
     c: {
       usable: true,
       usage: (n) => `#include <vpy3d.h>\n${cInc(n)}\nstatic vpy_scene s;\n/* setup(): */ vpy3d_load_scene(&s, ${cSymbol(n)}_vscene, ${cSymbol(n)}_vscene_meshes);   /* 0 = failed, vpy3d_error() says why */\n/* loop():  */ int32_t pos[3] = { 0, 0, dist }; vpy3d_draw_scene(&s, 0 /* place, or &xf */, pos, groups_mask, 100);\n/* Makefile: SRCS += $(VPY_C_SDK)/vpy3d.c (SDK v1.3.5+) */`,
       note: 'Needs SDK v1.3.5 or later and $(VPY_C_SDK)/vpy3d.c in SRCS.',
     },
-    targets: 'C only: sim, rp2350, uvm2 (SDK v1.3.5+)',
+    targets: 'VPy: uvm2; C: sim, rp2350, uvm2 (SDK v1.3.5+)',
+    vpyTargets: ['uvm2'],
     format:
 `JSON. A set of .vmesh pieces placed from one game position "pos" (x,y,z) passed each frame.
 {"name","fog":{"full","gone"} (optional, 0 <= full < gone),"groups":[names] (optional, <= 32, no leading "!"),
@@ -322,6 +334,76 @@ or lofted {"name","hard":45,"caps":true,"sections":[{"z","points":[{"x","y"}...]
         { name: 'ribs', mesh: `${n}_piece`, at: { z: 600 }, follow: { z: -1 }, repeat: { axis: 'z', step: 2000, count: 9 }, window: { max: 16000 } },
         { name: 'alarm light', mesh: `${n}_piece`, at: { y: 400, z: 3000 }, br: 50, fog: 'whole', group: 'alarm' },
       ],
+    }),
+  },
+  {
+    type: 'vskel', ext: '.vskel', title: '3D skeleton (bones, joints, sockets, characters)', dir: 'assets/skeletons', editor: '3D Animation editor',
+    nameField: 'none',
+    vpy: {
+      usable: true,
+      usage: (n) => `import ${n}   # constant tables, no ${n}.vpy needed\n# build (main): for each bone b of variant v (${n}.T_VARIANTS[v] = scale Q8, bone count): BONE_ADD(sk, parent, x*sc/256, y*sc/256, z*sc/256, ${n}.T_MESHES[m]) from ${n}.T_BONES[b] = parent, x, y, z, turn list (${n}.T_VARIANT_BONES overrides it) and m = ${n}.T_BONE_MESHES[v][b] (-1: none)\n# turn (loop): per bone, BONE_ROT / BONE_ROT_MUL by its turns ${n}.T_ROTS[list] -> ${n}.T_TURNS rows (axis, joint, mul, div, add), then BONE_POSE + BONE_DRAW; names: ${n}.JOINT_X, ${n}.BONE_X, ${n}.VARIANT_X, ${n}.SOCKET_X`,
+      note: 'uvm2 only when it gives bones meshes (T_MESHES holds MESH() slots).',
+    },
+    c: {
+      usable: true,
+      usage: (n) => `${cInc(n)}   /* ${cSymbol(n)}_T_BONES, ${cSymbol(n)}_T_TURNS, ${cSymbol(n)}_T_BONE_MESHES, ${cSymbol(n)}_T_SOCKETS... */\n/* the meshes are yours to load: map each ${cSymbol(n)}_MESH_<m> (names: ${cSymbol(n)}_MESH_NAMES) to a vpy_mesh; build with vpyb_add per bone (offset * scale / 256), turn every frame by the bone's T_TURNS rows (vpybone.h; docs/ASSETS.md "What code reads") */`,
+    },
+    targets: 'VPy: uvm2 (the only target tried); C: sim, rp2350, uvm2',
+    vpyTargets: ['uvm2'],
+    format:
+`JSON. {"version":1,"angle_unit":4096,"joints":[{"name","min"?,"max"?}...],"bones":[...],"sockets"?:[...],"variants"?:{...}}
+- Bones are rigid, posed only through the joints (each joint is one angle; a pose in a .vclip gives every joint a value). Names: letters, digits, _; unique even when upper-cased.
+- bone: {"name","parent":bone name or null (the root),"offset":[x,y,z] (the joint's position in the parent's frame; x right, y up, z forward),"mesh":.vmesh name or null,"rotate":[turn...]}. Parents come before children.
+- turn: {"axis":"x"|"y"|"z","joint":name (omit for a constant),"mul":1,"div":1,"add":0}: angle = joint*mul/div+add, truncating like C, in angle_unit per turn. The list's first turn is outermost; [] = unturned.
+- Axes: +x swings a limb hanging down (-y) forward (+z); +y turns +z towards +x; +z turns +x towards +y.
+- socket: {"name","bone","from":[x,y,z],"to":[x,y,z]} in the bone's frame: what a hand holds (a blade), where a shot leaves.
+- variants (characters sharing the skeleton): {"<name>":{"scale":Q8 (256 = as modelled),"meshes":{bone: mesh or null},"offsets":{bone:[x,y,z]},"rotate":{bone:[turns]},"bones":[extra bones, after the shared ones],"sockets":[replaces the skeleton's]}}. None = one variant, "default".
+- Every mesh must exist (assets/meshes or a folder inside it). Edited in the 3D Animation editor; poses and clips for it go in a .vclip.`,
+    example: (n) => ({
+      version: 1, angle_unit: 4096,
+      joints: [{ name: 'twist', min: -1024, max: 1024 }, { name: 'lean' }, { name: 'elbow_r', min: 0, max: 2048 }],
+      bones: [
+        { name: 'hips', parent: null, offset: [0, 950, 0], mesh: `${n}_piece`, rotate: [] },
+        { name: 'torso', parent: 'hips', offset: [0, 0, 0], mesh: `${n}_piece`, rotate: [{ joint: 'twist', axis: 'y' }, { joint: 'lean', axis: 'x' }] },
+        { name: 'forearm_r', parent: 'torso', offset: [300, 500, 0], mesh: null, rotate: [{ joint: 'elbow_r', axis: 'x', mul: -1 }] },
+      ],
+      sockets: [{ name: 'blade', bone: 'forearm_r', from: [0, -300, 0], to: [0, -1500, 0] }],
+      variants: { tall: { scale: 300 }, short: { scale: 200, meshes: { torso: null } } },
+    }),
+  },
+  {
+    type: 'vclip', ext: '.vclip', title: '3D poses, clips and sets on a skeleton', dir: 'assets/clips', editor: '3D Animation editor',
+    nameField: 'none',
+    vpy: {
+      usable: true,
+      usage: (n) => `import ${n}   # constant tables, no ${n}.vpy needed\n${n}.T_POSES[${n}.POSE_X][${n}.JOINT_Y]   # a pose's angle for a joint\n# a clip: ${n}.T_CLIPS[${n}.CLIP_X] = first key, key count, frames, loop; ${n}.T_KEYS[k] = frame, pose; ${n}.T_CLIP_PROPS[c][${n}.PROP_X]; marks in ${n}.T_MARKS\n# a set: ${n}.T_SET_CLIPS[${n}.SET_X][${n}.ROLE_Y], ${n}.T_SET_POSES[s][${n}.STANCE_Y], ${n}.T_SET_PROPS[s][${n}.SPROP_Y]`,
+    },
+    c: {
+      usable: true,
+      usage: (n) => `${cInc(n)}\n${cSymbol(n)}_T_POSES[${cSymbol(n)}_POSE_X][${cSymbol(n)}_JOINT_Y];   /* clips: ${cSymbol(n)}_T_CLIPS / _T_KEYS / _T_CLIP_PROPS / _T_MARKS; sets: ${cSymbol(n)}_T_SET_CLIPS[set][role], _T_SET_POSES, _T_SET_PROPS. Index the arrays (each has the narrowest int type) */`,
+    },
+    targets: 'VPy: uvm2 (the only target tried); C: sim, rp2350, uvm2',
+    format:
+`JSON. {"version":1,"skeleton":<.vskel name>,"poses":{...},"clips":{...},"sets":{...}}
+- The skeleton must exist (assets/skeletons or a folder inside it) and must not share this file's name (VPy imports both by name).
+- pose: {"<joint>":angle,...} naming EVERY joint of the skeleton, whole numbers in its angle_unit.
+- clip: {"keys":[{"frame","pose"}...] (rising frames, from 0),"loop":bool,"props"?:{"<k>":int},"marks"?:[{"frame","name","value"?}]}. Between keys the game interpolates (straight or with springs: its choice).
+- set (a character or style): {"poses":{"<stance>":pose},"clips":{"<role>":clip},"props"?:{"<k>":int}}. Two sets may share clips.
+- Names: letters, digits, _. Poses, clips and sets are numbered alphabetically in the tables: read them by name (POSE_X), not by number.`,
+    example: (n) => ({
+      version: 1, skeleton: `${n}_skeleton`,
+      poses: {
+        guard: { twist: 0, lean: 100, elbow_r: 800 },
+        wind_up: { twist: -340, lean: 50, elbow_r: 450 },
+        strike: { twist: 300, lean: 200, elbow_r: 200 },
+      },
+      clips: {
+        slash: {
+          keys: [{ frame: 0, pose: 'guard' }, { frame: 4, pose: 'wind_up' }, { frame: 8, pose: 'strike' }, { frame: 12, pose: 'guard' }],
+          loop: false, props: { damage: 1 }, marks: [{ frame: 8, name: 'hit' }],
+        },
+      },
+      sets: { hero: { poses: { guard: 'guard' }, clips: { attack: 'slash' }, props: { speed: 2 } } },
     }),
   },
 ];
@@ -481,6 +563,17 @@ export async function summarizeAsset(spec: AssetSpec, file: string): Promise<{ s
         const groups = Array.isArray(j.groups) ? j.groups.length : 0;
         return { summary: `${items.length} item(s)${reps ? ` (${reps} repeated)` : ''}, meshes: ${refs.join(' ') || '-'}${groups ? `, ${groups} group(s)` : ''}${j.fog ? ', fog' : ''}`, meta, refs };
       }
+      case 'vskel': {
+        refs.push(...skeletonMeshNames(j));
+        const variants = j.variants && typeof j.variants === 'object' ? Object.keys(j.variants) : [];
+        const sockets = Array.isArray(j.sockets) ? j.sockets.length : 0;
+        return { summary: `${(j.joints || []).length} joint(s), ${(j.bones || []).length} bone(s), variants: ${variants.join(' ') || 'default'}${sockets ? `, ${sockets} socket(s)` : ''}, meshes: ${refs.join(' ') || '-'}`, meta, refs };
+      }
+      case 'vclip': {
+        if (typeof j.skeleton === 'string') refs.push(j.skeleton);
+        const count = (o: any) => (o && typeof o === 'object' ? Object.keys(o).length : 0);
+        return { summary: `skeleton ${j.skeleton ?? '?'}, ${count(j.poses)} pose(s), ${count(j.clips)} clip(s), ${count(j.sets)} set(s)`, meta, refs };
+      }
     }
   } catch (e: any) {
     return { summary: `unreadable: ${e?.message || e}`, meta, refs };
@@ -497,8 +590,11 @@ export function inBuildFolder(spec: AssetSpec, rel: string, lang: ProjectLang): 
   const dir = path.posix.dirname(rel);
   // VPy finds levels in ANY direct sub-folder of assets/ (discover_assets).
   if (lang === 'vpy' && spec.type === 'vplay') return /^assets\/[^/]+$/.test(dir);
-  // C: the Makefile compiles every .vmesh under assets/meshes, folders included.
-  if (lang === 'c' && spec.type === 'vmesh') return dir === spec.dir || dir.startsWith(spec.dir + '/');
+  // Meshes anywhere under assets/meshes (VPy and the C Makefile); VPy imports skeletons
+  // and clips from anywhere under their folder, the C Makefile only from the folder itself.
+  if (spec.type === 'vmesh' || (lang === 'vpy' && (spec.type === 'vskel' || spec.type === 'vclip'))) {
+    return dir === spec.dir || dir.startsWith(spec.dir + '/');
+  }
   return dir === spec.dir;
 }
 
@@ -574,6 +670,7 @@ export function newAssetName(name: unknown, ext: string): string {
 /** Set the asset's own name field to the file name (the compiler names symbols after the file). */
 export function normaliseName(spec: AssetSpec, json: any, name: string): boolean {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return false;
+  if (spec.nameField === 'none') return false;
   if (spec.nameField === 'metadata.name') {
     if (!json.metadata || typeof json.metadata !== 'object') json.metadata = {};
     if (json.metadata.name === name) return false;
@@ -594,6 +691,27 @@ export function sceneMeshNames(json: any): string[] {
     }
   }
   return out;
+}
+
+/** The distinct mesh names a `.vskel` hangs on its bones, its variants' included. */
+export function skeletonMeshNames(json: any): string[] {
+  const out: string[] = [];
+  const add = (m: unknown) => { if (typeof m === 'string' && m && !out.includes(m)) out.push(m); };
+  for (const b of Array.isArray(json?.bones) ? json.bones : []) add(b?.mesh);
+  for (const v of json?.variants && typeof json.variants === 'object' ? Object.values<any>(json.variants) : []) {
+    for (const m of v?.meshes && typeof v.meshes === 'object' ? Object.values(v.meshes) : []) add(m);
+    for (const b of Array.isArray(v?.bones) ? v.bones : []) add(b?.mesh);
+  }
+  return out;
+}
+
+/** The nearest `<ancestor>/<name>` folder above `fileDir`, as vclipres.rs skeletons_dir looks. */
+function folderAbove(fileDir: string, name: string): string | null {
+  for (let d = fileDir; ; d = path.dirname(d)) {
+    const f = path.join(d, name);
+    try { if (statSync(f).isDirectory()) return f; } catch { /* keep looking */ }
+    if (path.dirname(d) === d) return null;
+  }
 }
 
 /**
@@ -750,20 +868,40 @@ export function missingReferences(spec: AssetSpec, json: any, rootDir: string, f
       if (!at.length) missing.push(`mesh "${m}" -> ${rel} (or a folder inside ${path.posix.dirname(rel)})`);
       else if (at.length > 1) missing.push(`mesh "${m}" is in more than one folder: ${at.map((p) => path.relative(rootDir, p).split(path.sep).join('/')).join(', ')}`);
     }
+  } else if (spec.type === 'vskel') {
+    // vskelres.rs checks the meshes when the project has a meshes folder beside the skeletons
+    const skels = folderAbove(fileDir, 'skeletons') || fileDir;
+    const meshesDir = path.resolve(skels, '..', 'meshes');
+    const found = findMeshes(meshesDir);
+    for (const m of skeletonMeshNames(json)) {
+      if (!found.has(m)) missing.push(`mesh "${m}" -> ${path.relative(rootDir, path.join(meshesDir, `${m}.vmesh`)).split(path.sep).join('/')} (or a folder inside it)`);
+    }
+  } else if (spec.type === 'vclip') {
+    // vclipres.rs: the nearest skeletons folder above the clip, searched by name
+    const sk = typeof json.skeleton === 'string' ? json.skeleton : '';
+    const dir = folderAbove(fileDir, 'skeletons') || path.join(rootDir, 'assets', 'skeletons');
+    if (sk && !findFiles(dir, '.vskel').has(sk)) {
+      missing.push(`skeleton "${sk}" -> ${path.relative(rootDir, path.join(dir, `${sk}.vskel`)).split(path.sep).join('/')} (or a folder inside it)`);
+    }
   }
   return missing;
 }
 
 /** Every .vmesh under `dir` (folders included, as vsceneres.rs searches), by name → its paths. */
-function findMeshes(dir: string, out = new Map<string, string[]>(), depth = 0): Map<string, string[]> {
+function findMeshes(dir: string): Map<string, string[]> {
+  return findFiles(dir, '.vmesh');
+}
+
+/** Every file with extension `ext` under `dir`, folders included, by name → its paths. */
+function findFiles(dir: string, ext: string, out = new Map<string, string[]>(), depth = 0): Map<string, string[]> {
   if (depth > 8) return out;
   let items: import('fs').Dirent[];
   try { items = readdirSync(dir, { withFileTypes: true }); } catch { return out; }
   for (const it of items) {
     const full = path.join(dir, it.name);
-    if (it.isDirectory()) findMeshes(full, out, depth + 1);
-    else if (it.isFile() && /\.vmesh$/i.test(it.name)) {
-      const n = it.name.replace(/\.vmesh$/i, '');
+    if (it.isDirectory()) findFiles(full, ext, out, depth + 1);
+    else if (it.isFile() && it.name.toLowerCase().endsWith(ext)) {
+      const n = it.name.slice(0, -ext.length);
       out.set(n, [...(out.get(n) || []), full]);
     }
   }
@@ -824,7 +962,7 @@ export async function compileCheck(cli: string, file: string, spec: AssetSpec, l
   } else if (r.code !== 0) {
     return { ok: false, validatedBy, error: stripAnsi(r.stderr || r.stdout).trim().slice(-2000) || `vpy_cli exited ${r.code}` };
   }
-  const cTypes: AssetType[] = ['vec', 'vmus', 'vsfx', 'vanim', 'vplay', 'vmesh', 'vscene', 'vinstr', 'vrec', 'vsmp'];
+  const cTypes: AssetType[] = ['vec', 'vmus', 'vsfx', 'vanim', 'vplay', 'vmesh', 'vscene', 'vinstr', 'vrec', 'vsmp', 'vskel', 'vclip'];
   if (lang === 'c' || (!validatedBy && cTypes.includes(spec.type))) {
     if (cTypes.includes(spec.type)) {
       const tmp = path.join(os.tmpdir(), `vs-asset-${process.pid}-${Date.now()}.h`);

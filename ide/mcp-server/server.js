@@ -286,8 +286,8 @@ function getProjectDocs(topic) {
 
     assets: `## Assets (full reference: docs/ASSETS.md)
 The IDE is asset-driven: sprites, music, sound effects, animations, levels and enemies are JSON
-files the user edits in the IDE's editors (Vector, Music, SFX, Animation, Enemy, Instrument
-editors; the Playground for levels). Do not hard-code them in code (no DRAW_LINE sprite lists,
+files the user edits in the IDE's editors (Vector, Music, SFX, Animation, Enemy, Instrument,
+Mesh, Scene and 3D Animation editors; the Playground for levels). Do not hard-code them in code (no DRAW_LINE sprite lists,
 raw PSG writes or level tables). With the IDE running:
 - assets_list: the project's assets + the exact code that uses each one
 - asset_get_format {type}: fields + a minimal valid example
@@ -306,8 +306,13 @@ type    folder               VPy                                              C 
 .vinstr assets/instruments   PLAY_NOTE("n", channel, midi_note)                  PLAY_NOTE(N_instr, channel, midi_note)
 .vrec   assets/recordings    DRAW_RECORDING("n", x, y, scale 128=100%, frame)    DRAW_RECORDING(N_vrec, x, y, scale, frame)
 .vsmp   assets/samples       PLAY_SAMPLE("n"), SAMPLE_POS(fps) - not on m6809    PLAY_SAMPLE(N_smp)
-.vmesh  assets/meshes        (C only)                                            vpy3d_load_mesh(&m, N_vmesh)
-.vscene assets/scenes        (C only)                   vpy3d_load_scene(&s, N_vscene, N_vscene_meshes)  vpy3d_draw_scene
+.vmesh  assets/meshes        LOAD_MESH("n"), DRAW_MESH("n", xf, br) - uvm2 only   vpy3d_load_mesh(&m, N_vmesh)
+.vscene assets/scenes        LOAD_SCENE("n"), DRAW_SCENE("n", x, y, z, br) - uvm2 only
+                                                        vpy3d_load_scene(&s, N_vscene, N_vscene_meshes)  vpy3d_draw_scene
+.vskel  assets/skeletons     import n -> n.T_BONES, n.T_TURNS, n.T_BONE_MESHES... (uvm2: BONE_ADD/BONE_ROT)
+                                                                                 N_T_BONES, N_T_TURNS... (vpybone)
+.vclip  assets/clips         import n -> n.T_POSES[n.POSE_X][n.JOINT_Y], n.T_CLIPS, n.T_KEYS, n.T_SET_CLIPS
+                                                                                 N_T_POSES[N_POSE_X][N_JOINT_Y]...
 N = the name upper-cased with "-" -> "_".
 
 ### .vec (JSON): coordinates -127..127 around the sprite centre, +Y up
