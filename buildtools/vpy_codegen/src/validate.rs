@@ -34,7 +34,11 @@ pub fn check_array_literals(module: &Module) -> Result<(), String> {
             continue;
         }
         for (i, e) in elements.iter().enumerate() {
-            if !matches!(e, Expr::Number(_)) {
+            // a mesh's slot, `MESH("name")`, is a number fixed for the compile (a .vskel's
+            // T_MESHES); a target without meshes refuses the call itself (arm/three_d.rs check)
+            let mesh_slot = matches!(e, Expr::Call(c) if c.name.eq_ignore_ascii_case("MESH")
+                && matches!(c.args.as_slice(), [Expr::StringLit(_)]));
+            if !matches!(e, Expr::Number(_)) && !mesh_slot {
                 errors.push(crate::origins::locate_for(name, &format!(
                     "line {line}: array `{name}` element {i} is not a number literal — array literals are \
                      laid out at compile time and must contain only numbers (e.g. `[1, -2, 3]`) or only strings"

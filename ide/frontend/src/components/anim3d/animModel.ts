@@ -174,7 +174,7 @@ function checkSockets(s: unknown, bones: Set<string>, out: Issue[], variant: str
   if (!Array.isArray(s)) { out.push({ message: `${where}sockets must be a list`, variant }); return; }
   const seen = new Set<string>();
   s.forEach((x, k) => {
-    if (!isObj(x) || typeof x.name !== 'string' || !x.name) { out.push({ message: `${where}socket ${k}: needs a name`, variant }); return; }
+    if (!isObj(x) || typeof x.name !== 'string' || !NAME.test(x.name)) { out.push({ message: `${where}socket ${k}: needs a name (letters, digits, _)`, variant }); return; }
     if (seen.has(x.name)) out.push({ message: `${where}socket "${x.name}" is defined twice`, variant });
     seen.add(x.name);
     if (typeof x.bone !== 'string' || !bones.has(x.bone)) out.push({ message: `${where}socket "${x.name}": no bone "${String(x.bone)}"`, variant });

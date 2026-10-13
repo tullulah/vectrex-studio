@@ -723,6 +723,12 @@ fn const_eval(e: &Expr, consts: &HashMap<String, i64>) -> Option<i64> {
                 }) as i64
             }
             Expr::BitNot(x) => !(const_eval(x, consts)? as i32) as i64,
+            // a mesh's slot (`MESH("name")`): fixed for the compile, so a constant table may
+            // hold it (a .vskel's T_MESHES)
+            Expr::Call(info) if info.name.eq_ignore_ascii_case("MESH") => match crate::arm::three_d::lower_call(info)? {
+                Ok(Lowered::Slot(n)) => n,
+                _ => return None,
+            },
             _ => return None,
         })
 }

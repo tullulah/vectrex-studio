@@ -121,7 +121,7 @@ enum Commands {
     },
 
     /// Validate ONE asset file of any type (.vec .vmus .vsfx .vanim .vplay
-    /// .venemy .vinstr .vrec .vsmp .vmesh .vscene) by loading and compiling it with the
+    /// .venemy .vinstr .vrec .vsmp .vmesh .vscene .vclip .vskel) by loading and compiling it with the
     /// same code the backends use. A full build only WARNS about an asset that
     /// fails to load (and then fails on an undefined symbol); this reports the
     /// real reason. Exit code 0 = valid. `--json` prints one JSON object.
@@ -926,8 +926,8 @@ fn check_asset_file(input: &Path) -> Result<String> {
                 l.poses.len(), l.clips.len(), l.sets.len(), l.skeleton, l.joints.len())
         }
         "vskel" => {
-            let j = vpy_codegen::vclipres::skeleton_joints(input)?;
-            format!("{} joint(s)", j.len())
+            let l = vpy_codegen::vskelres::load_vskel_file(input)?;
+            format!("{} joint(s), {} bone(s), {} variant(s)", l.joints.len(), l.shared.len(), l.variants.len())
         }
         "vscene" => {
             let c = vpy_codegen::vsceneres::compile_vscene_file_to_bytes(input)?;
@@ -986,6 +986,21 @@ fn cmd_compile_asset(input: &Path, format: &str, out: &Path, name: Option<String
         std::fs::write(out, vpy_codegen::vclipres::c_header(&lib, &sym, src))
             .with_context(|| format!("write {}", out.display()))?;
         println!("  {} → {} poses, {} clips, {} sets", input.display(), lib.poses.len(), lib.clips.len(), lib.sets.len());
+        println!("{}", format!("✓ Wrote {}", out.display()).green().bold());
+        return Ok(());
+    }
+
+    // A skeleton (.vskel) → constant tables (vskelres.rs), as a .vclip.
+    if ext == "vskel" {
+        let lib = vpy_codegen::vskelres::load_vskel_file(input)
+            .map_err(|e| anyhow::anyhow!("compile {}: {e}", input.display()))?;
+        if format == "bin" {
+            anyhow::bail!("a .vskel has no binary form: --format c (VPy imports it by name)");
+        }
+        let src = input.file_name().and_then(|n| n.to_str()).unwrap_or("x.vskel");
+        std::fs::write(out, vpy_codegen::vskelres::c_header(&lib, &sym, src))
+            .with_context(|| format!("write {}", out.display()))?;
+        println!("  {} → {} bones, {} variants", input.display(), lib.shared.len(), lib.variants.len());
         println!("{}", format!("✓ Wrote {}", out.display()).green().bold());
         return Ok(());
     }

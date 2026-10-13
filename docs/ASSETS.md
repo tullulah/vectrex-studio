@@ -27,7 +27,7 @@ writes an asset to the right folder and compiles it.
 | `.vmesh` | 3D surface mesh | `assets/meshes/` (any folder) | Mesh Editor | `LOAD_MESH("n")`, `DRAW_MESH("n", xf, br)` | `vpy3d_load_mesh(&m, N_vmesh)` + `vpy3d_draw_mesh` | VPy: uvm2; C: sim, rp2350, uvm2 |
 | `.vscene` | 3D set made of `.vmesh` pieces | `assets/scenes/` | Scene Editor | `LOAD_SCENE("n")`, `DRAW_SCENE("n", x, y, z, br)` | `vpy3d_load_scene(&s, N_vscene, N_vscene_meshes)` + `vpy3d_draw_scene` | VPy: uvm2; C: sim, rp2350, uvm2 (SDK v1.3.5+) |
 | `.vclip` | 3D poses, animation clips and sets on a skeleton | `assets/clips/` | 3D Animation editor | `import n` → `n.T_POSES[n.POSE_X][n.JOINT_Y]`, `n.T_KEYS`, `n.T_SET_CLIPS`… (constant tables) | `#include "n.h"` → `N_T_POSES[N_POSE_X][N_JOINT_Y]`… | VPy: uvm2 (the only target tried); C: sim, rp2350, uvm2 |
-| `.vskel` | The skeleton a `.vclip` poses | `assets/skeletons/` | 3D Animation editor | read by the compiler for a `.vclip`'s joint order | the same | (not compiled on its own) |
+| `.vskel` | 3D skeleton: bones, joints, sockets, characters | `assets/skeletons/` | 3D Animation editor | `import n` → `n.T_BONES`, `n.T_TURNS`, `n.T_BONE_MESHES`, `n.T_MESHES`… (constant tables) | `#include "n.h"` → `N_T_BONES`… | VPy: uvm2 (`T_MESHES` needs meshes); C: sim, rp2350, uvm2 |
 
 `n` is the asset name: the file name without its extension. `N` is that name upper-cased
 with `-`, `.` and spaces turned into `_` (what `vpy_cli compile-asset` derives). "all"
@@ -88,7 +88,7 @@ compiler to the build as `$(VPY_CLI)`. The Makefile of a new C project (from
 `project_create {kind:"c"}` or File > New Project) has the rules. It compiles
 `assets/vectors/*.vec`, `assets/music/*.vmus`, `assets/sfx/*.vsfx`,
 `assets/animations/*.vanim`, `assets/playground/*.vplay`, `assets/meshes/*.vmesh`,
-`assets/scenes/*.vscene`, `assets/clips/*.vclip`, `assets/instruments/*.vinstr`, `assets/recordings/*.vrec` and `assets/samples/*.vsmp` to
+`assets/scenes/*.vscene`, `assets/clips/*.vclip`, `assets/skeletons/*.vskel`, `assets/instruments/*.vinstr`, `assets/recordings/*.vrec` and `assets/samples/*.vsmp` to
 `gen/<name>.h` before `make sim`, `make rp2350` and `make uvm2`, and adds `-Igen`. A
 C project created before `.vinstr`, `.vrec` and `.vsmp` could be used from C lacks
 their three `gen/%.h: %.<ext>` rules and wildcards: copy them from a new project's
@@ -536,7 +536,8 @@ fits every character on the same skeleton. A rigid object is a skeleton with one
 - `angle_unit`: angles per turn. Every angle in the skeleton and its clips is a whole
   number in this unit (4096 is libvpy's `VPY_Q14_TURN`), so files round-trip exactly.
 - `joints`: the joint names, in order. That order is the order of a pose's angles when a
-  program stores a pose as an array.
+  program stores a pose as an array. A joint may have `min` and `max`: the range of the
+  editor's slider (code never sees them).
 - `bones`: parents come before their children. `offset` is the joint's position in the
   parent's frame (x right, y up, z forward). `mesh` is a `.vmesh` name, or `null` for a bone
   that only carries others.
@@ -557,7 +558,43 @@ fits every character on the same skeleton. A rigid object is a skeleton with one
   scales the whole character: every offset (`offset * scale / 256`, truncating), the meshes
   and the sockets. `meshes` and `offsets` replace a bone's mesh or offset (`null`: no mesh).
   `bones` adds bones after the shared ones (Grievous's second pair of arms), `rotate`
-  replaces a bone's rotation, and `sockets` replaces the skeleton's sockets.
+  replaces a bone's rotation, and `sockets` replaces the skeleton's sockets. A bone that two
+  variants add comes at the same place in both and hangs from the same parent.
+
+**What code reads.** As a `.vclip`, the compiler turns a skeleton into constant tables: a
+VPy program writes `import humanoid` (the compiler finds `assets/skeletons/**/humanoid.vskel`;
+a `.vclip` and a `.vskel` of one name are an error), a C program includes `gen/humanoid.h`
+(`vpy_cli compile-asset humanoid.vskel --format c`; a new C project's Makefile has the rule):
+
+| Name | What |
+|---|---|
+| `N_JOINTS`, `JOINT_<j>` | the joints, in order |
+| `N_BONES`, `BONE_<b>` | every bone: the shared ones, then the variants' own |
+| `N_VARIANTS`, `VARIANT_<v>`, `T_VARIANTS[N_VARIANTS][2]` | a variant's scale (Q8) and how many bones it has |
+| `T_BONES[N_BONES][5]` | parent (-1: the root), offset x y z as modelled, turn list (row of `T_ROTS`) |
+| `N_ROTS`, `T_ROTS[N_ROTS][2]` | a turn list: first row of `T_TURNS`, how many (0: unturned) |
+| `N_TURNS`, `T_TURNS[N_TURNS][5]` | axis (0 x, 1 y, 2 z), joint (-1: none), mul, div, add |
+| `N_VARIANT_BONES`, `T_VARIANT_BONES[..][6]` | variant, bone, offset x y z, turn list: where a variant's bone differs from `T_BONES` |
+| `N_MESHES`, `MESH_<m>`, `T_BONE_MESHES[N_VARIANTS][N_BONES]` | each variant's mesh on each bone (-1: none) |
+| `T_MESHES[N_MESHES]` | VPy only: each mesh's `MESH("name")` slot |
+| `N_SOCKETS`, `SOCKET_<s>`, `T_VARIANT_SOCKETS[N_VARIANTS][N_SOCKETS]` | a variant's socket (row of `T_SOCKETS`, -1: none) |
+| `T_SOCKETS[..][7]` | bone, from x y z, to x y z, in the bone's frame as modelled |
+
+Variants and meshes are numbered alphabetically, bones in the file's order, sockets in the
+order first met (the skeleton's, then each variant's). A file without variants has one,
+`default`. Every table is there: one with nothing in it holds a single row that is never
+read (its count is 0), so code needs no conditionals. Offsets are as modelled: a program
+scales them by the variant's scale (`offset * scale / 256`, truncating) and places meshes and
+sockets with the bone's frame scaled the same way. In C a mesh is an object the program
+loads, so it supplies one table, `MESH_<m>` → its `vpy_mesh`; `<N>_MESH_NAMES` lists the
+names. VPy gets the slots in `T_MESHES`.
+
+A program builds a character with one `vpyb_add` / `BONE_ADD` per bone, and turns it each
+frame: for every bone, the product of its turns, each `joint * mul / div + add` (the first
+turn outermost, the same truncation). Return of the Jedi does both in a few lines (`skel_build`,
+`skel_turn` and `fsocket` in its `main.c`; `skel.build`, `skel.turn` and `fighter.socket` in
+the VPy port), then turns a few bones itself for what the format does not hold: Grievous's
+hands spinning, the cast sitting down.
 
 ### `.vclip` (3D poses and clips)
 
@@ -634,6 +671,3 @@ port): a blow is a clip of four keys (guard, wind-up, strike, guard) plus `damag
 - On m6809, `STOP_MUSIC()` only builds when the program also calls `PLAY_MUSIC`.
 - `.vsmp` doesn't play on uvm2, from VPy or C.
 - `.vmesh` and `.vscene` work from VPy on uvm2 only (not m6809, rp2350 or pitrex).
-- A `.vskel` reaches code only as the joint order of the `.vclip` files on it: bones,
-  meshes, offsets, variants and sockets are not compiled yet, so a game still builds its
-  skeleton in code (Return of the Jedi's `fighter_build`).

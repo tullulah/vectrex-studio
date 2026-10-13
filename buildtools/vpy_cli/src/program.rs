@@ -85,10 +85,12 @@ pub fn load_program(input: &Path) -> Result<Program> {
         modules.insert(name.clone(), parse_file(path)?);
         paths.insert(name, path.clone());
     }
-    // `import x` with no x.vpy: a library of poses and clips, assets/clips/**/x.vclip, as a
-    // module of constants (vclipres.rs)
+    // `import x` with no x.vpy: a library of poses and clips (assets/clips/**/x.vclip,
+    // vclipres.rs) or a skeleton (assets/skeletons/**/x.vskel, vskelres.rs), as a module of
+    // constants
     if let Some(info) = &project {
         let clips = info.root_dir.join("assets").join("clips");
+        let skels = info.root_dir.join("assets").join("skeletons");
         let mut wanted: Vec<String> = modules
             .values()
             .flat_map(|m| m.imports.iter().filter_map(|i| i.module_path.last().cloned()))
@@ -97,12 +99,31 @@ pub fn load_program(input: &Path) -> Result<Program> {
         wanted.sort();
         wanted.dedup();
         for name in wanted {
-            let Some(path) = vpy_codegen::vclipres::find_file(&clips, &name, "vclip") else { continue };
-            let lib = vpy_codegen::vclipres::load_vclip_file(&path)
-                .map_err(|e| anyhow!("{}: {e}", path.display()))?;
-            let src = vpy_codegen::vclipres::vpy_module(&lib, &format!("{name}.vclip"));
+            let clip = vpy_codegen::vclipres::find_file(&clips, &name, "vclip");
+            let skel = vpy_codegen::vclipres::find_file(&skels, &name, "vskel");
+            let (path, src) = match (clip, skel) {
+                (Some(c), Some(s)) => {
+                    return Err(anyhow!(
+                        "`import {name}`: both {} and {} are called {name}: rename one",
+                        c.display(), s.display()
+                    ))
+                }
+                (Some(path), None) => {
+                    let lib = vpy_codegen::vclipres::load_vclip_file(&path)
+                        .map_err(|e| anyhow!("{}: {e}", path.display()))?;
+                    let src = vpy_codegen::vclipres::vpy_module(&lib, &format!("{name}.vclip"));
+                    (path, src)
+                }
+                (None, Some(path)) => {
+                    let lib = vpy_codegen::vskelres::load_vskel_file(&path)
+                        .map_err(|e| anyhow!("{}: {e}", path.display()))?;
+                    let src = vpy_codegen::vskelres::vpy_module(&lib, &format!("{name}.vskel"));
+                    (path, src)
+                }
+                (None, None) => continue,
+            };
             let tokens = vpy_parser::lex(&src).map_err(|e| anyhow!("{}: generated module: {e}", path.display()))?;
-            let module = vpy_parser::parser::parse(tokens, path.to_str().unwrap_or("clip"))
+            let module = vpy_parser::parser::parse(tokens, path.to_str().unwrap_or("asset"))
                 .map_err(|e| anyhow!("{}: generated module: {e}", path.display()))?;
             modules.insert(name.clone(), module);
             paths.insert(name, path);

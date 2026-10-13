@@ -15,6 +15,7 @@ pub mod vecres;
 pub mod vmeshres;
 pub mod vsceneres;
 pub mod vclipres;
+pub mod vskelres;
 pub mod psg;
 pub mod musres;
 pub mod levelres;

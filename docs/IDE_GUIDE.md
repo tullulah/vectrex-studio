@@ -156,7 +156,9 @@ Renaming a pose, a clip, a bone or a joint renames it wherever the same file use
 Deleting one that is still used is refused, and the message names the users. Renaming a
 joint in a `.vskel` does not rename it in the `.vclip` files that pose it. Errors show on the
 left as you edit. Every edit can be undone (Ctrl+Z / Ctrl+Y), and saving keeps the fields
-the editor does not know. The compiler does not read these files yet.
+the editor does not know. A game reads both files as constant tables built when it is
+built: `import name` in VPy, `gen/name.h` in C ([ASSETS.md](ASSETS.md#vskel-3d-skeleton)),
+so what is saved here is what the next build runs.
 
 ---
 

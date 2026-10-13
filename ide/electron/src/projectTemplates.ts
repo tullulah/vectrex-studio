@@ -207,7 +207,7 @@ MESH_SRCS  := $(sort $(call rwildcard,assets/meshes,*.vmesh))
 MESH_DUPS  := $(sort $(foreach n,$(notdir $(MESH_SRCS)),$(if $(word 2,$(filter %/$(n),$(MESH_SRCS))),$(n))))
 $(if $(MESH_DUPS),$(error two .vmesh files share a name: $(MESH_DUPS)))
 SCENE_SRCS := $(wildcard assets/scenes/*.vscene)
-# poses, clips and sets (.vclip) on the skeletons in assets/skeletons
+# skeletons (.vskel) and the poses, clips and sets on them (.vclip)
 CLIP_SRCS  := $(wildcard assets/clips/*.vclip)
 SKEL_SRCS  := $(wildcard assets/skeletons/*.vskel)
 ANIM_SRCS  := $(wildcard assets/animations/*.vanim)
@@ -216,7 +216,7 @@ ENEMY_SRCS := $(wildcard assets/enemies/*.venemy)
 hdr = $(patsubst %,gen/%.h,$(basename $(notdir $(1))))
 VEC_HDRS   := $(call hdr,$(VEC_SRCS))
 MESH_HDRS  := $(call hdr,$(MESH_SRCS))
-ASSET_HDRS := $(VEC_HDRS) $(MESH_HDRS) $(call hdr,$(AUDIO_SRCS) $(REC_SRCS) $(SCENE_SRCS) $(ANIM_SRCS) $(LEVEL_SRCS) $(CLIP_SRCS))
+ASSET_HDRS := $(VEC_HDRS) $(MESH_HDRS) $(call hdr,$(AUDIO_SRCS) $(REC_SRCS) $(SCENE_SRCS) $(ANIM_SRCS) $(LEVEL_SRCS) $(CLIP_SRCS) $(SKEL_SRCS))
 
 vpath %.vec    assets/vectors
 vpath %.vmus   assets/music
@@ -227,6 +227,7 @@ vpath %.vsmp   assets/samples
 vpath %.vmesh  assets/meshes $(sort $(dir $(MESH_SRCS)))
 vpath %.vscene assets/scenes
 vpath %.vclip  assets/clips
+vpath %.vskel  assets/skeletons
 vpath %.vanim  assets/animations
 vpath %.vplay  assets/playground
 gen/%.h: %.vec   | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
@@ -238,12 +239,14 @@ gen/%.h: %.vsmp  | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/n
 gen/%.h: %.vmesh | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
 gen/%.h: %.vscene | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
 gen/%.h: %.vclip | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
+gen/%.h: %.vskel | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
 gen/%.h: %.vanim | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
 gen/%.h: %.vplay | gen ; $(VPY_CLI) compile-asset $< --format c --out $@ >/dev/null
 $(call hdr,$(ANIM_SRCS) $(LEVEL_SRCS)): $(VEC_HDRS)
 $(call hdr,$(LEVEL_SRCS)): $(VEC_SRCS) $(ENEMY_SRCS)
 $(call hdr,$(SCENE_SRCS)): $(MESH_HDRS)
 $(call hdr,$(CLIP_SRCS)): $(SKEL_SRCS)
+$(call hdr,$(SKEL_SRCS)): $(MESH_SRCS)
 
 assets: $(ASSET_HDRS)
 
