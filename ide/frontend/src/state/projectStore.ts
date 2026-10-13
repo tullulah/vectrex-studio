@@ -412,7 +412,8 @@ export const useProjectStore = create<ProjectState>()(
         const { vpyProject } = get();
         if (!vpyProject) return null;
         
-        const entry = vpyProject.config.project.entry;
+        const entry = vpyProject.config.project?.entry;
+        if (!entry) return null; // a C project need not name an entry file
         const rootDir = vpyProject.rootDir.replace(/\\/g, '/');
         const entryPath = entry.replace(/\\/g, '/');
         

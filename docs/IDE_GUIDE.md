@@ -211,22 +211,26 @@ The emulator starts automatically after a successful build.
 
 ### Breakpoints
 
-Click in the **gutter** (left margin) of any line in the editor to toggle a breakpoint. Breakpoints are:
+Click in the **gutter** (left margin) of any line in the editor to toggle a breakpoint (or F9). Breakpoints are:
 
 - Persisted across sessions (stored in SQLite)
-- Supported in both `.vpy` source files and `.asm` assembly files
-- Mapped to ROM addresses via the `.pdb` debug symbol file (requires `debug_symbols = true` in the project file)
+- Supported in `.vpy` source files — every file of the program, imported modules included — and in single-bank `.asm` files
+- Mapped to ROM addresses through the `.pdb` the build writes (the IDE always builds with `--debug`), by file and line: `main.vpy:10` and `util.vpy:10` are different places
+- Only the open project's: a breakpoint in another project's `main.vpy` is ignored
 
-> **Note:** Breakpoints in `.vpy` files require a PDB file to map VPy lines → MC6809 addresses. Enable `debug_symbols` in the `.vpyproj` (or pass `--debug` to `vpy_cli`).
+A breakpoint on a line with no code of its own (a comment, a `def`, an `else:`) stops at the next statement of the same function. When execution stops, the editor opens that statement's file and highlights the line.
+
+Breakpoints, stepping and the debugger tools are for **m6809** programs (JSVecX). The ARM targets (rp2350, uvm2, pitrex) have no source-level debugger yet.
 
 ### Debug controls
 
 | Key | Action |
 |-----|--------|
-| **F5** | Continue (resume from breakpoint) |
-| **F10** | Step Over |
-| **F11** | Step Into |
-| **Shift+F11** | Step Out |
+| **F5** | Build and run; while paused, Continue |
+| **F12** | Continue |
+| **F10** | Step Over: run to the next statement of this function or of the one it returns to, over calls (an `if` whose body is skipped is skipped; the end of `loop()` goes round to its top) |
+| **F11** | Step Into: run to the next statement, inside a called function if the statement calls one, in whatever file it lives |
+| **Shift+F11** | Step Out: run until back in the caller |
 
 These controls are also available as buttons in the **Debug Toolbar** at the top.
 

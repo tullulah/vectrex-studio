@@ -689,8 +689,9 @@ function VecX()
                 }
             }
             
-            // Debug: Check step over/into/out
-            if (this.stepMode === 'over' && currentPC === this.stepTargetAddress) {
+            // Debug: Check step over/into/out (a step over a set of statements only
+            // stops AFTER an instruction: it starts on one of them)
+            if (this.stepMode === 'over' && !this.stepTargets && currentPC === this.stepTargetAddress) {
                 this.pauseDebugger('step', currentPC);
                 this.stepMode = null;
                 this.stepTargetAddress = null;
@@ -762,8 +763,12 @@ function VecX()
                 return; // Stop execution immediately
             }
             
-            // CRITICAL: Check step target AFTER instruction execution (PC may have changed)
-            if (this.stepMode === 'over' && newPC === this.stepTargetAddress) {
+            // CRITICAL: Check step target AFTER instruction execution (PC may have changed).
+            // With stepTargets: the next statement start (any file) that is not deeper in
+            // the stack than where the step began (S grows down: a call pushes).
+            if (this.stepMode === 'over' && (this.stepTargets
+                    ? this.stepTargets.has(newPC) && (e6809.reg_s.value & 0xFFFF) >= this.stepMinS
+                    : newPC === this.stepTargetAddress)) {
                 console.log('[JSVecx Debug] ✅ Step Over reached target: 0x' + newPC.toString(16).toUpperCase());
                 this.pauseDebugger('step', newPC);
                 this.stepMode = null;
@@ -1476,9 +1481,19 @@ function VecX()
     }
     
     // Step Over (F10) - ejecutar instrucción por instrucción hasta la siguiente línea
-    this.debugStepOver = function(targetAddress) {
+    // targetAddress: one address (run until PC reaches it), or a Set of statement
+    // addresses with minS: run until PC reaches one of them with S >= minS (the
+    // statement after this one, in this function or the one it returns to).
+    this.debugStepOver = function(targetAddress, minS) {
         if (typeof targetAddress === 'string') {
             targetAddress = parseInt(targetAddress, 16);
+        }
+        if (targetAddress instanceof Set) {
+            this.stepTargets = targetAddress;
+            this.stepMinS = minS & 0xFFFF;
+            targetAddress = -1;
+        } else {
+            this.stepTargets = null;
         }
         // Clamp any stale high bits on reg_pc from prior unmasked execution.
         if (this.e6809) this.e6809.reg_pc = this.e6809.reg_pc & 0xFFFF;
@@ -1650,6 +1665,8 @@ function VecX()
         console.log('[JSVecx Debug] Listeners setup complete');
     }
     
-    // Auto-setup de listeners al crear el emulador
-    this.setupDebugListeners();
+    // No auto-setup: the IDE's Emulator panel handles every debug-* message (and
+    // only while the 6809 owns the panel). With this listener too, each command ran
+    // twice — a Step Into also stepped one instruction here, Continue resumed twice.
+    // A page without the IDE can still call this.setupDebugListeners() itself.
 }

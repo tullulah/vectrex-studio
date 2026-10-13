@@ -395,9 +395,13 @@ const api: Record<string, Fn> = {
   startEmulator: async () => {
     const v = vecx();
     if (!v) throw new Error('Emulator not available (is the Emulator panel open?)');
+    // It may run into a breakpoint again before the first poll (one frame is a few
+    // ms): progress in cycles, not `running`, says it resumed.
+    const cycles0 = v.totalCycles;
     window.postMessage({ type: 'debug-continue' }, '*');
-    for (let i = 0; i < 20 && !v.running; i++) await sleep(25);
-    return { running: !!v.running, debugState: useDebugStore.getState().state };
+    for (let i = 0; i < 20 && !v.running && v.totalCycles === cycles0; i++) await sleep(25);
+    const ran = !!v.running || v.totalCycles !== cycles0;
+    return { running: !!v.running, resumed: ran, debugState: useDebugStore.getState().state };
   },
 
   stopEmulator: async () => {

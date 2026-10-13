@@ -1337,8 +1337,8 @@ export class MCPServer {
   }
 
   private async startAndVerify(): Promise<any> {
-    const r = await this.bridge<{ running: boolean; debugState: string }>('startEmulator');
-    if (!r.running) throw new Error(`The emulator did not start (debugger state: ${r.debugState}). Is the Emulator panel open?`);
+    const r = await this.bridge<{ running: boolean; resumed?: boolean; debugState: string }>('startEmulator');
+    if (!r.running && !r.resumed) throw new Error(`The emulator did not start (debugger state: ${r.debugState}). Is the Emulator panel open?`);
     return r;
   }
 
@@ -1569,8 +1569,14 @@ export class MCPServer {
   private async stepOut(_params: any): Promise<any> { return this.step('debug.stepOut'); }
 
   private async debugContinue(_params: any): Promise<any> {
-    const r = await this.startAndVerify();
-    return { running: true, debugState: r.debugState };
+    await this.startAndVerify();
+    // Running on, or already stopped at the next breakpoint (often the same one, a frame later)
+    await new Promise((res) => setTimeout(res, 100));
+    const s = await this.bridge<any>('emulatorState');
+    if (s.debugState === 'paused') {
+      return { running: false, debugState: 'paused', stoppedAt: { pcHex: s.pc === null ? null : hex(s.pc, 4), file: s.currentVpyFile, line: s.currentVpyLine } };
+    }
+    return { running: true, debugState: s.debugState };
   }
 
   private async debugPause(_params: any): Promise<any> {

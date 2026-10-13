@@ -1719,9 +1719,11 @@ def loop():
         // rp2350 rAF loops, the WASM sim, the 6809. So once anything had run, F5 would
         // have started the 6809 debugger instead of building. A session waiting for the
         // user is 'paused'; 'running' is not one.
+        // (Paused means stopped at a breakpoint or after a step: continue from there.
+        // debug.start rebuilt the program and started over.)
         const debugState = useDebugStore.getState().state;
         if (debugState === 'paused') {
-          commandExec('debug.start');
+          commandExec('debug.continue');
         } else {
           commandExec('build.run');
         }

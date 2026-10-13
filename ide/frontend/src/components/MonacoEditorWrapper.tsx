@@ -282,7 +282,10 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
   const clearAllBreakpoints = useEditorStore(s => s.clearAllBreakpoints);
   const pdbData = useDebugStore(s => s.pdbData);
   const currentVpyLine = useDebugStore(s => s.currentVpyLine); // Phase 6.1: Track current line
-  const currentVpyFile = pdbData?.source?.split('/').pop() ?? null; // CRITICAL: Track which VPy file the breakpoint is in
+  // The .vpy file execution stopped in (an imported module too); older pauses set no
+  // file: then it is the entry file
+  const pausedFile = useDebugStore(s => s.currentVpyFile);
+  const currentVpyFile = pausedFile ?? pdbData?.source?.split('/').pop() ?? null;
   const debugState = useDebugStore(s => s.state); // Phase 6.1: Track debug state
 
   const targetUri = uri || active;
@@ -924,141 +927,8 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
       decorations
     );
     
-    // Phase 4: Sync breakpoints with emulator
-    const emulatorDebug = (window as any).emulatorDebug;
-    
-    // DEBUG: Log sync attempt
-    console.log('[Monaco] 🔍 Sync check:', {
-      emulatorDebug: !!emulatorDebug,
-      pdbData: !!pdbData,
-      bpsSize: bps.size,
-      bpsArray: Array.from(bps)
-    });
-    
-    if (pdbData) {
-      console.log('[Monaco] 📋 PDB lineMap contents:', pdbData.lineMap);
-    }
-    
-    if (emulatorDebug && pdbData) {
-      console.log('[Monaco] ✅ Both emulatorDebug and pdbData available - proceeding with sync');
-      
-      // Get current emulator breakpoints
-      const currentEmulatorBps = new Set<number>(emulatorDebug.getBreakpoints() as number[]);
-      console.log('[Monaco] Current emulator breakpoints:', Array.from(currentEmulatorBps));
-      
-      // CRITICAL: Detect if current file is ASM or VPy
-      const isAsmFile = doc.uri.toLowerCase().endsWith('.asm');
-      console.log(`[Monaco] 📄 Current file type: ${isAsmFile ? 'ASM' : 'VPy'}`);
-      
-      // Convert VPy lines to ASM addresses (only if VPy file)
-      const targetAddresses = new Set<number>();
-      if (isAsmFile) {
-        // ASM file: breakpoints are already in ASM format, use asmAddressMap directly
-        console.log('[Monaco] 🔧 ASM file - using asmAddressMap for address lookup');
-        for (const line of bps) {
-          const address = pdbData.asmAddressMap?.[line.toString()];
-          console.log(`[Monaco] 🔍 ASM line ${line} → asmAddressMap result: ${address}`);
-          if (address) {
-            const addr = parseInt(address, 16);
-            if (!isNaN(addr)) {
-              targetAddresses.add(addr);
-              console.log(`[Monaco] ✓ Added breakpoint target at 0x${addr.toString(16).toUpperCase()}`);
-            }
-          } else {
-            console.warn(`[Monaco] ⚠️ No address mapping for ASM line ${line} in asmAddressMap`);
-          }
-        }
-      } else {
-        // VPy file: convert VPy lines to ASM addresses using lineMap or vpyLineMap
-        console.log('[Monaco] 🔧 VPy file - using lineMap/vpyLineMap for address lookup');
-        
-        // Support both single-bank (lineMap) and multibank (vpyLineMap) formats
-        const hasVpyLineMap = pdbData.vpyLineMap !== undefined;
-        console.log(`[Monaco] 📊 PDB format: ${hasVpyLineMap ? 'multibank (vpyLineMap)' : 'single-bank (lineMap)'}`);
-        
-        for (const line of bps) {
-          let address: string | undefined;
-          
-          if (hasVpyLineMap && pdbData.vpyLineMap) {
-            // Multibank format: vpyLineMap is address → {file, line, column}
-            // Find the address where the VPy line maps to
-            address = Object.entries(pdbData.vpyLineMap)
-              .find(([_, info]) => info.line === line)?.[0];
-            
-              // If exact line not found, try to find nearest mapped line (prefer previous, fallback to next)
-            if (!address) {
-              const mappedLines = Object.entries(pdbData.vpyLineMap)
-                .map(([addr, info]) => ({ addr, line: info.line }))
-                .sort((a, b) => a.line - b.line);
-              
-                // First try: find the closest line BEFORE (better UX - execute first, then break)
-                const previousMappedLine = mappedLines
-                  .filter(m => m.line < line)
-                  .sort((a, b) => b.line - a.line)[0]; // Get the closest one
-              
-                // Fallback: if no previous, use the next line
-                const nextMappedLine = mappedLines.find(m => m.line > line);
-              
-                const selectedLine = previousMappedLine || nextMappedLine;
-                if (selectedLine) {
-                  address = selectedLine.addr;
-                  const direction = previousMappedLine ? 'previous' : 'next';
-                  console.log(`[Monaco] 🔍 VPy line ${line} has no direct mapping - using ${direction} mapped line ${selectedLine.line} at 0x${address}`);
-              } else {
-                  console.warn(`[Monaco] ⚠️ No ASM mapping for VPy line ${line} (no nearby lines with mapping)`);
-              }
-            } else {
-              console.log(`[Monaco] 🔍 VPy line ${line} → vpyLineMap result: 0x${address}`);
-            }
-          } else {
-            // Single-bank format: lineMap is line → address
-            address = pdbData.lineMap?.[line.toString()];
-            console.log(`[Monaco] 🔍 VPy line ${line} → lineMap result: ${address}`);
-          }
-
-          if (address) {
-            // vpyLineMap keys are DECIMAL address strings (e.g. "776"); lineMap values
-            // are hex ("0x0308"). Parse by form so both paths resolve correctly.
-            const addr = address.toLowerCase().startsWith('0x')
-              ? parseInt(address, 16)
-              : parseInt(address, 10);
-            if (!isNaN(addr)) {
-              targetAddresses.add(addr);
-              console.log(`[Monaco] ✓ Added breakpoint target at 0x${addr.toString(16).toUpperCase()}`);
-            }
-          } else {
-            console.warn(`[Monaco] ⚠️ No ASM mapping for VPy line ${line}`);
-          }
-        }
-      }
-      
-      console.log('[Monaco] Target addresses to sync:', Array.from(targetAddresses).map(a => '0x' + a.toString(16).toUpperCase()));
-
-      // Apply the diff to the emulator. (Earlier this used pdbData.lineMap, which is
-      // empty for multibank ROMs, so no breakpoint was ever actually added.)
-      for (const addr of currentEmulatorBps) {
-        if (!targetAddresses.has(addr)) {
-          emulatorDebug.removeBreakpoint(addr);
-        }
-      }
-      for (const addr of targetAddresses) {
-        if (!currentEmulatorBps.has(addr)) {
-          console.log(`[Monaco] 🔧 emulatorDebug.addBreakpoint(0x${addr.toString(16).toUpperCase()})`);
-          emulatorDebug.addBreakpoint(addr);
-        }
-      }
-
-      // If a debug session is paused waiting for breakpoints, resume now that they're set.
-      const dbgState = useDebugStore.getState().state;
-      if (dbgState === 'paused' && targetAddresses.size > 0) {
-        emulatorDebug.start?.();
-        useDebugStore.getState().setState('running');
-        console.log('[Monaco] 🚀 Breakpoints synced - emulator running in debug mode');
-      }
-    } else {
-      if (!emulatorDebug) console.warn('[Monaco] ⚠️ emulatorDebug not available');
-      if (!pdbData) console.warn('[Monaco] ⚠️ pdbData not available - compile first (Ctrl+F5)');
-    }
+    // The emulator's breakpoints follow the editor store for every file at once:
+    // debug/breakpointSync.ts (not this tab's editor).
   }, [breakpoints, doc?.uri, pdbData]);
 
   // Keyboard shortcuts for breakpoints

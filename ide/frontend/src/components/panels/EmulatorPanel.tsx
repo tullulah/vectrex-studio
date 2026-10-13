@@ -16,6 +16,8 @@ import { VectorRecorder, serializeVrec, defaultRecordingName, MAX_RECORD_SECONDS
 import { VideoRecorder, defaultVideoName } from '../../emulator/recorder/VideoRecorder';
 import { getAllLiveContextOutputs, getOutputsForContext } from '../../emulator/recorder/audioGraphTracker';
 import { PitrexSimView, PITREX_RANGE, type Segment as PitrexSegment } from '../PitrexSimView';
+import { installBreakpointSync, syncEmulatorBreakpoints } from '../../debug/breakpointSync';
+import { baseName, sourceAt, statementAddresses } from '../../debug/pdbSource';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -41,6 +43,35 @@ function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
   }
   
   return result;
+}
+
+/**
+ * Show `fileName` (a .vpy base name from the .pdb) at `line` (1-based): this project's
+ * open tab of that name — not another project's main.vpy — or the file read from the
+ * project's src/.
+ */
+function showProjectSource(fileName: string, line: number): void {
+  const root = useProjectStore.getState().vpyProject?.rootDir?.replace(/\\/g, '/');
+  const editorStore = useEditorStore.getState();
+  const fsOf = (uri: string) => uri.replace(/^file:\/\//, '');
+  const doc = editorStore.documents.find(d =>
+    baseName(d.uri) === fileName && (!root || fsOf(d.uri).startsWith(root + '/')));
+  if (doc) {
+    if (editorStore.active !== doc.uri) editorStore.setActive(doc.uri);
+    editorStore.gotoLocation(doc.uri, line - 1, 0);
+    return;
+  }
+  if (!root) { console.warn(`[EmulatorPanel] ⚠️ No project open: cannot show ${fileName}`); return; }
+  const fsPath = `${root}/src/${fileName}`;
+  const uri = `file://${fsPath}`;
+  (window as any).files?.readFile?.(fsPath).then((res: { content?: string; error?: string }) => {
+    if (!res || res.error || res.content === undefined) {
+      console.warn(`[EmulatorPanel] ⚠️ Could not open ${fsPath}: ${res?.error}`);
+      return;
+    }
+    useEditorStore.getState().openDocument({ uri, content: res.content, language: 'vpy', dirty: false, mtime: Date.now(), diagnostics: [] });
+    useEditorStore.getState().gotoLocation(uri, line - 1, 0);
+  });
 }
 
 // Tipos para JSVecX
@@ -1112,12 +1143,15 @@ export const EmulatorPanel: React.FC = () => {
 
   // Expose breakpoint functions globally for debugStore integration
   useEffect(() => {
+    // The 6809's own breakpoint set (vecx.breakpoints) is what stops it; the panel's
+    // copy only mirrors it. debug/breakpointSync.ts drives these.
+    const vx = () => (window as any).vecx;
     (window as any).emulatorDebug = {
-      addBreakpoint,
-      removeBreakpoint,
+      addBreakpoint: (a: number) => { vx()?.addBreakpoint?.(a); addBreakpoint(a); },
+      removeBreakpoint: (a: number) => { vx()?.removeBreakpoint?.(a); removeBreakpoint(a); },
       toggleBreakpoint,
-      clearAllBreakpoints,
-      getBreakpoints: () => Array.from(breakpoints),
+      clearAllBreakpoints: () => { vx()?.clearBreakpoints?.(); clearAllBreakpoints(); },
+      getBreakpoints: () => Array.from((vx()?.breakpoints as Set<number> | undefined) ?? breakpoints),
       start: () => {
         const vecx = (window as any).vecx;
         // Breakpoint sync calls this whenever the debugger reads 'paused'; that state
@@ -1130,6 +1164,8 @@ export const EmulatorPanel: React.FC = () => {
         }
       }
     };
+    installBreakpointSync();
+    syncEmulatorBreakpoints();
     
     return () => {
       delete (window as any).emulatorDebug;
@@ -1671,19 +1707,21 @@ export const EmulatorPanel: React.FC = () => {
           // CRITICAL: Check if paused by breakpoint BEFORE changing state
           const wasPausedByBreakpoint = vecx.isPausedByBreakpoint && vecx.isPausedByBreakpoint();
 
-          // Now set debugState to 'running' AFTER checking pause state
+          // Resume from breakpoint if it was paused by one. resumeFromBreakpoint
+          // (vecx.debugContinue) only resumes while vecx.debugState is still
+          // 'paused': it sets 'running', skips the breakpoint it stands on and
+          // restarts the loop. Setting 'running' first made it a no-op.
+          if (wasPausedByBreakpoint && vecx.resumeFromBreakpoint) {
+            console.log('[EmulatorPanel] 🔓 Resuming from breakpoint');
+            vecx.resumeFromBreakpoint();
+            break;
+          }
           vecx.debugState = 'running';
           vecx.stepMode = null; // Clear any step mode
           vecx.stepTargetAddress = null;
           console.log('[EmulatorPanel] ✓ JSVecx debugState set to running, step mode cleared');
 
-          // Resume from breakpoint if it was paused by one
-          if (wasPausedByBreakpoint) {
-            console.log('[EmulatorPanel] 🔓 Resuming from breakpoint');
-            if (vecx.resumeFromBreakpoint) {
-              vecx.resumeFromBreakpoint();
-            }
-          } else if (!vecx.running) {
+          if (!vecx.running) {
             // Only call start() if emulator is NOT paused by breakpoint
             initPsgLogging();
             vecx.start();
@@ -1705,9 +1743,11 @@ export const EmulatorPanel: React.FC = () => {
           
         case 'debug-pause':
           console.log('[EmulatorPanel] ⏸️  Debug: Pause execution');
-          if (vecx.running) {
-            vecx.stop();
-          }
+          // Pause where it is and say where (debugger-paused): the source line is shown,
+          // an in-progress step is cancelled. vecx.stop() also silences the PSG.
+          if (vecx.debugPause) vecx.debugPause();
+          if (vecx.running && vecx.pauseDebugger) vecx.pauseDebugger('manual', vecx.e6809.reg_pc & 0xffff);
+          vecx.stop();
           break;
 
         case 'debug-stop':
@@ -1751,55 +1791,13 @@ export const EmulatorPanel: React.FC = () => {
             // PC === 0 is a valid address (e.g. multibank bank-relative entry of a
             // function placed at the bank's start), so check for undefined, not truthiness.
             if (currentPC !== undefined && stepOverPdbData) {
-              // Get line address map for both single-bank and multibank formats
-              const lineAddressMap = getLineAddressMap(stepOverPdbData);
-              
-              // Find current line by exact match or closest previous address
-              let currentLine: number | null = null;
-              
-              // First try exact match
-              for (const [line, addr] of Object.entries(lineAddressMap)) {
-                if (addr === currentPC) {
-                  currentLine = parseInt(line, 10);
-                  break;
-                }
-              }
-              
-              // If no exact match, find the line with the closest address <= currentPC
-              if (currentLine === null) {
-                let closestLine: number | null = null;
-                let closestAddr = 0;
-                for (const [line, addr] of Object.entries(lineAddressMap)) {
-                  if (addr <= currentPC && addr > closestAddr) {
-                    closestAddr = addr;
-                    closestLine = parseInt(line, 10);
-                  }
-                }
-                currentLine = closestLine;
-                if (currentLine !== null) {
-                  console.log(`[EmulatorPanel] Step Over: PC 0x${currentPC.toString(16)} mapped to closest line ${currentLine} (addr: 0x${closestAddr.toString(16)})`);
-                }
-              }
-              
-              if (currentLine !== null) {
-                // Find next line with address
-                const sortedLines = Object.keys(lineAddressMap).map(l => parseInt(l, 10)).sort((a, b) => a - b);
-                const nextLine = sortedLines.find(l => l > currentLine!);
-                if (nextLine && lineAddressMap[nextLine]) {
-                  const targetAddr = lineAddressMap[nextLine];
-                  console.log(`[EmulatorPanel] Step Over: line ${currentLine} → ${nextLine} (0x${targetAddr.toString(16)})`);
-                  vecx.debugStepOver(targetAddr);
-                } else {
-                  // No next line found - stop execution instead of auto-wrapping
-                  console.log(`[EmulatorPanel] ⚠️ Step Over: No next line after ${currentLine}, stopping execution`);
-                  debugStoreForStepOver.setState('paused');
-                  if (vecx.running) {
-                    vecx.stop();
-                  }
-                }
-              } else {
-                console.log(`[EmulatorPanel] ⚠️ Step Over: Could not map PC 0x${currentPC.toString(16)} to any line`);
-              }
+              // Run to the next statement start (any file: a module's code counts) that
+              // is not deeper in the stack: over calls, out of a finished function,
+              // past an `if` whose body is skipped, round to the top of loop().
+              const targets = statementAddresses(stepOverPdbData as any);
+              const s = vecx.e6809?.reg_s?.value ?? 0; // e6809 keeps S as {value}
+              console.log(`[EmulatorPanel] Step Over from 0x${currentPC.toString(16)} (S=0x${s.toString(16)}) to the next of ${targets.size} statements`);
+              vecx.debugStepOver(targets, s);
             }
           }
           break;
@@ -1808,41 +1806,22 @@ export const EmulatorPanel: React.FC = () => {
           console.log('[EmulatorPanel] 🔽 Debug: Step into');
           {
             const debugStoreForStepInto = useDebugStore.getState();
-            debugStoreForStepInto.setState('running');
-
-            if (!vecx.e6809 || !vecx.debugStepInto) break;
+            if (!vecx.e6809) break;
 
             // Step until PC maps to a *different* VPy source line. One M6809
             // instruction is rarely enough — a function call may go through a
             // cross-bank trampoline (JSR TRAMP_FOO → bank switch → JMP FOO) and
             // a non-call statement may emit several instructions before the
-            // next line's address. We loop synchronously through vecx_emu's
-            // step mechanism (each debugStepInto runs 1 instruction and pauses)
-            // until PC sits on a mapped, different VPy line, with a safety cap.
+            // next line's address. So run (in batches, like Step Over) until PC sits
+            // on the start of any statement, at any stack depth: into a called
+            // function — in whatever file it lives — or on to the next statement.
             const startPC = vecx.e6809.reg_pc;
             const pdb = debugStoreForStepInto.pdbData;
-            const startLine = getCurrentVpyLineForPC(startPC, pdb);
-            console.log(`[EmulatorPanel] 📍 Step Into from VPy line ${startLine}, PC ${formatAddress(startPC)}`);
-
-            const MAX_STEP_INTO_INSTRUCTIONS = 10000;
-            let steps = 0;
-            let landed = false;
-            while (steps < MAX_STEP_INTO_INSTRUCTIONS) {
-              vecx.debugStepInto(false); // runs 1 instruction synchronously
-              steps++;
-              const newPC = vecx.e6809.reg_pc;
-              const newLine = getCurrentVpyLineForPC(newPC, pdb);
-              if (newLine !== null && newLine !== startLine) {
-                console.log(`[EmulatorPanel] 🎯 Step Into landed at VPy line ${newLine}, PC ${formatAddress(newPC)} (${steps} instructions)`);
-                landed = true;
-                break;
-              }
-            }
-            if (!landed) {
-              console.warn(`[EmulatorPanel] ⚠️ Step Into hit safety cap (${MAX_STEP_INTO_INSTRUCTIONS} instructions) without reaching a new mapped line`);
-            }
-            // vecx posts 'debugger-paused' from the final debugStepInto;
-            // the handler will pick up the final PC and update the UI.
+            if (!pdb || !vecx.debugStepOver) break;
+            console.log(`[EmulatorPanel] 📍 Step Into from PC ${formatAddress(startPC)}`);
+            debugStoreForStepInto.setCurrentVpyLine(null);
+            vecx.debugStepOver(statementAddresses(pdb as any), 0);
+            // vecx_emu posts 'debugger-paused' where it lands; the handler shows it.
           }
           break;
           
@@ -1899,6 +1878,16 @@ export const EmulatorPanel: React.FC = () => {
           
         case 'debug-step-out':
           console.log('[EmulatorPanel] 🔼 Debug: Step out');
+          {
+            // Run to the first statement back in the caller: S above this frame's
+            // (RTS pops the 2-byte return address)
+            const outPdb = useDebugStore.getState().pdbData;
+            if (outPdb && vecx.e6809 && vecx.debugStepOver) {
+              useDebugStore.getState().setCurrentVpyLine(null);
+              vecx.debugStepOver(statementAddresses(outPdb as any), ((vecx.e6809.reg_s?.value ?? 0) + 2) & 0xffff);
+              break;
+            }
+          }
           if (vecx.debugStepOut) {
             vecx.debugStepOut();
             console.log('[EmulatorPanel] ✓ Step out executed');
@@ -1926,45 +1915,16 @@ export const EmulatorPanel: React.FC = () => {
               let backInVpy = false;
               let vpyLine = null;
               
-              // Get line address map for both single-bank and multibank formats
-              const lineAddressMap = getLineAddressMap(currentPdbData);
-              const pcNum = parseInt(pcHex, 16);  // Convert "009b" to 155 (decimal)
-              for (const [line, addr] of Object.entries(lineAddressMap)) {
-                const addrNum = typeof addr === 'string' ? parseInt(addr, 10) : addr;
-                if (addrNum === pcNum) {
-                  vpyLine = parseInt(line, 10);
-                  console.log(`[EmulatorPanel] 🔄 PC back in VPy code at line ${vpyLine} - exiting ASM debugging mode`);
-                  (window as any).asmDebuggingMode = false;
-                  (window as any).asmDebuggingFile = null;
-                  backInVpy = true;
-                  
-                  // CRITICAL: Switch back to VPy file automatically
-                  const editorStore = useEditorStore.getState();
-                  
-                  // Get the VPy source file URI from lastCompiledBinary
-                  // (replace .bin with .vpy and go to src/ instead of build/)
-                  let vpyUri: string | null = null;
-                  if (lastCompiledBinary) {
-                    // From: /path/to/project/build/test_bp_min.bin
-                    // To:   /path/to/project/src/main.vpy
-                    const projectRoot = lastCompiledBinary.substring(0, lastCompiledBinary.lastIndexOf('/build/'));
-                    // Try to get source file from vpyLineMap, fallback to main.vpy
-                    let sourceFile = 'main.vpy';
-                    if (currentPdbData.vpyLineMap && Object.keys(currentPdbData.vpyLineMap).length > 0) {
-                      const firstEntry = Object.values(currentPdbData.vpyLineMap)[0] as any;
-                      if (firstEntry && firstEntry.file) {
-                        sourceFile = firstEntry.file;
-                      }
-                    }
-                    vpyUri = `file://${projectRoot}/src/${sourceFile}`;
-                    
-                    console.log(`[EmulatorPanel] 🔄 Auto-switching to VPy file: ${vpyUri}`);
-                    editorStore.gotoLocation(vpyUri, vpyLine, 1);
-                  } else {
-                    console.error(`[EmulatorPanel] ❌ Cannot switch to VPy - no lastCompiledBinary`);
-                  }
-                  break;
-                }
+              // Back in a VPy statement? Then leave ASM mode for that statement's file.
+              const backAt = sourceAt(currentPdbData as any, parseInt(pcHex, 16));
+              if (backAt) {
+                vpyLine = backAt.line;
+                console.log(`[EmulatorPanel] 🔄 PC back in VPy code at ${backAt.file}:${vpyLine} - exiting ASM debugging mode`);
+                (window as any).asmDebuggingMode = false;
+                (window as any).asmDebuggingFile = null;
+                backInVpy = true;
+                debugStore.setCurrentVpyLineWithFile(backAt.line, backAt.file);
+                showProjectSource(backAt.file, backAt.line);
               }
               
               // If still in ASM, try to find the exact ASM line using asmLineMap
@@ -2048,81 +2008,15 @@ export const EmulatorPanel: React.FC = () => {
               }
             }
             
-            // Check if PC is in VPy code range (lineMap or vpyLineMap)
+            // The statement at the PC, in its own file (an imported module too)
             let foundInVpy = false;
-            const lineAddressMap2 = getLineAddressMap(currentPdbData);
-            console.log(`[EmulatorPanel] 🔍 DEBUG lineAddressMap2:`, lineAddressMap2);
-            console.log(`[EmulatorPanel] 🔍 DEBUG pcHex from event:`, event.data.pc, 'parsed:', pcHex);
-            const pcNum = parseInt(pcHex, 16);  // Convert "009b" to 155 (decimal)
-            console.log(`[EmulatorPanel] 🔍 DEBUG pcNum (converted):`, pcNum);
-            for (const [line, addr] of Object.entries(lineAddressMap2)) {
-              const addrNum = typeof addr === 'string' ? parseInt(addr, 10) : addr;
-              console.log(`[EmulatorPanel] 🔍 DEBUG comparing: line=${line}, addr=${addr}, addrNum=${addrNum} vs pcNum=${pcNum}`);
-              if (addrNum === pcNum) {
-                const lineNumber = parseInt(line, 10);
-                // Get VPy filename from vpyLineMap or default to 'main.vpy'
-                let vpyFileName = 'main.vpy';
-                if (currentPdbData.vpyLineMap && Object.keys(currentPdbData.vpyLineMap).length > 0) {
-                  const firstEntry = Object.values(currentPdbData.vpyLineMap)[0] as any;
-                  if (firstEntry && firstEntry.file) {
-                    vpyFileName = firstEntry.file;
-                  }
-                }
-                console.log(`[EmulatorPanel] 📍 Highlighting VPy line ${lineNumber} in ${vpyFileName} (PC: ${event.data.pc})`);
-                debugStore.setCurrentVpyLine(lineNumber); // CRITICAL: file is derived from pdbData.source
-                
-                // CRITICAL: Auto-switch to VPy file if we're not already in it
-                const editorStore = useEditorStore.getState();
-                const activeUri = editorStore.active;
-                
-                // Search for the VPy file in open documents
-                const vpyDoc = editorStore.documents.find(d => {
-                  const docFileName = d.uri.split('/').pop() || '';
-                  return docFileName === vpyFileName;
-                });
-                
-                if (vpyDoc) {
-                  // File is already open - switch to it
-                  if (activeUri !== vpyDoc.uri) {
-                    console.log(`[EmulatorPanel] 🔄 Switching to open tab: ${vpyFileName}`);
-                    editorStore.setActive(vpyDoc.uri);
-                  }
-                } else {
-                  // File is not open - use gotoLocation to open it (auto-creates if not exists)
-                  const activeDoc = editorStore.documents.find(d => d.uri === activeUri);
-                  if (activeDoc) {
-                    // Extract directory path from URI (remove file:// prefix first, then get directory)
-                    let uriPath = activeDoc.uri.startsWith('file://') 
-                      ? activeDoc.uri.substring(7) 
-                      : activeDoc.uri;
-                    let dirPath = uriPath.substring(0, uriPath.lastIndexOf('/'));
-                    
-                    // CRITICAL: If we're in /build directory, go up to project root and enter /src
-                    if (dirPath.endsWith('/build')) {
-                      const projectRoot = dirPath.substring(0, dirPath.lastIndexOf('/build'));
-                      dirPath = `${projectRoot}/src`;
-                      console.log(`[EmulatorPanel] 🔄 Adjusted path from /build to /src: ${dirPath}`);
-                    }
-                    
-                    const vpyPath = `file://${dirPath}/${vpyFileName}`;
-                    
-                    console.log(`[EmulatorPanel] 📂 Opening VPy file:`);
-                    console.log(`   activeDoc.uri: ${activeDoc.uri}`);
-                    console.log(`   uriPath (after removing file://): ${uriPath}`);
-                    console.log(`   dirPath (adjusted): ${dirPath}`);
-                    console.log(`   vpyFileName: ${vpyFileName}`);
-                    console.log(`   vpyPath (final): ${vpyPath}`);
-                    console.log(`   lineNumber: ${lineNumber}`);
-                    console.log(`[EmulatorPanel] Calling gotoLocation with vpyPath=${vpyPath}, lineNumber=${lineNumber}`);
-                    editorStore.gotoLocation(vpyPath, lineNumber, 1);
-                  } else {
-                    console.log(`[EmulatorPanel] ⚠️ Could not find activeDoc with uri: ${activeUri}`);
-                  }
-                }
-                
-                foundInVpy = true;
-                break;
-              }
+            const here = sourceAt(currentPdbData as any, parseInt(pcHex, 16));
+            if (here) {
+              const { file: vpyFileName, line: lineNumber } = here;
+              console.log(`[EmulatorPanel] 📍 Highlighting VPy line ${lineNumber} in ${vpyFileName} (PC: ${event.data.pc})`);
+              debugStore.setCurrentVpyLineWithFile(lineNumber, vpyFileName);
+              showProjectSource(vpyFileName, lineNumber);
+              foundInVpy = true;
             }
             
             // If not in VPy range, we're in ASM (native call or generated code)
@@ -3772,7 +3666,10 @@ export const EmulatorPanel: React.FC = () => {
           vecx.debugState = 'paused';
           console.log('[EmulatorPanel] ✓ JSVecx debugState set to paused');
           
-          // DO NOT call vecx.start() yet - MonacoEditorWrapper will start after adding breakpoints
+          // DO NOT call vecx.start() here: the breakpoint sync starts it once the
+          // breakpoints are in (now, if this program's .pdb is already loaded)
+          vecx.waitingForBreakpoints = true;
+          syncEmulatorBreakpoints();
           console.log('[EmulatorPanel] ⏸️ Emulator ready in debug mode (waiting for breakpoint sync)');
           
           // NO resetear el flag aquí - mantenerlo activo durante toda la sesión de debug

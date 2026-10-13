@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { DebugState as LegacyDebugState } from '../types/models.js';
 import { useEditorStore } from './editorStore.js';
+import { syncEmulatorBreakpoints } from '../debug/breakpointSync';
 
 export type ExecutionState = 'stopped' | 'running' | 'paused';
 
@@ -139,65 +140,13 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   
   loadPdbData: (pdb) => {
     console.log('[DebugStore] 📋 Loaded .pdb:', pdb);
-    set({ pdbData: pdb });
-    
-    // Re-synchronize existing breakpoints from editorStore
-    const allBreakpoints = useEditorStore.getState().breakpoints;
-    console.log('[DebugStore] 🔄 Re-synchronizing breakpoints from editorStore:', allBreakpoints);
-    
-    // Convert Set<number> to number[] for each file
-    const breakpointsArray: Record<string, number[]> = {};
-    Object.entries(allBreakpoints).forEach(([uri, lineSet]) => {
-      breakpointsArray[uri] = Array.from(lineSet);
-    });
-    
-    // Sync breakpoints to WASM emulator
-    get().syncBreakpointsToWasm(pdb, breakpointsArray);
+    set({ pdbData: pdb }); // the breakpoint sync (debug/breakpointSync.ts) follows the store
   },
-  
-  // Synchronize breakpoints from editor to WASM emulator
-  syncBreakpointsToWasm: (pdb: PdbData, breakpoints: Record<string, number[]>) => {
-    console.log('[DebugStore] 🎯 Syncing breakpoints to WASM...');
-    
-    // Send message to clear all breakpoints first
-    window.postMessage({ type: 'debug-clear-breakpoints' }, '*');
-    
-    // For each file's breakpoints, convert line → address and send to WASM
-    Object.entries(breakpoints).forEach(([uri, lines]) => {
-      lines.forEach((line) => {
-        let addressHex: string | undefined = undefined;
-        
-        // Check if this is an ASM file breakpoint
-        const isAsmFile = uri.endsWith('.asm');
-        console.log(`[DebugStore] 🔍 Checking breakpoint: ${uri}:${line} (isAsmFile: ${isAsmFile})`);
-        
-        if (isAsmFile) {
-          // Search asmLineMap for this line number
-          const asmEntry = Object.values(pdb.asmLineMap || {}).find(
-            (entry: any) => entry.line === line
-          );
-          if (asmEntry) {
-            addressHex = asmEntry.address;
-          }
-        } else {
-          // VPy file - use lineMap (VPy line → address)
-          addressHex = pdb.lineMap[line.toString()];
-        }
-        
-        if (addressHex) {
-          const address = parseInt(addressHex, 16);
-          console.log(`[DebugStore] 📍 Breakpoint: ${uri}:${line} → ${addressHex} (${address})`);
-          window.postMessage({
-            type: 'debug-add-breakpoint',
-            address,
-            line,
-            uri
-          }, '*');
-        } else {
-          console.warn(`[DebugStore] ⚠️  No address mapping for ${isAsmFile ? 'ASM' : 'VPy'} line ${line} (file: ${uri})`);
-        }
-      });
-    });
+
+  // Breakpoints reach the emulator through ONE path, debug/breakpointSync.ts, which
+  // maps every file's lines with the .pdb's per-file maps (debug/pdbSource.ts).
+  syncBreakpointsToWasm: (_pdb: PdbData, _breakpoints: Record<string, number[]>) => {
+    syncEmulatorBreakpoints();
   },
   
   updateCallStack: (stack) => set({ callStack: stack }),
@@ -266,80 +215,12 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
     window.postMessage({ type: 'debug-step-out' }, '*');
   },
   
-  // Breakpoint synchronization
-  onBreakpointAdded: (uri, line) => {
-    const { pdbData } = get();
-    
-    // Always allow adding breakpoint (will be persisted to SQLite by editorStore)
-    // Only sync to WASM emulator if PDB is loaded
-    if (!pdbData) {
-      console.log(`[DebugStore] 📍 Breakpoint added (not yet synced to emulator, waiting for PDB): ${uri}:${line}`);
-      return;
-    }
-    
-    let addressHex: string | undefined = undefined;
-    
-    // Check if this is an ASM file breakpoint
-    if (uri.endsWith('.asm')) {
-      // Search asmLineMap for this line number
-      const asmEntry = Object.values(pdbData.asmLineMap || {}).find(
-        (entry: any) => entry.line === line
-      );
-      if (asmEntry) {
-        addressHex = asmEntry.address;
-      }
-    } else {
-      // VPy file - use lineMap (VPy line → address)
-      addressHex = pdbData.lineMap[line.toString()];
-    }
-    
-    if (addressHex) {
-      const address = parseInt(addressHex, 16); // Parse hex string to decimal
-      console.log(`[DebugStore] ➕ Breakpoint added and synced to emulator: ${uri}:${line} → ${addressHex} (${address})`);
-      window.postMessage({
-        type: 'debug-add-breakpoint',
-        address,
-        line,
-        uri
-      }, '*');
-    } else {
-      const fileType = uri.endsWith('.asm') ? 'ASM' : 'VPy';
-      console.warn(`[DebugStore] ⚠️ No address mapping for ${fileType} line ${line} (file: ${uri})`);
-    }
+  // Breakpoint synchronization (the editor store changes first; this is a nudge)
+  onBreakpointAdded: (_uri, _line) => {
+    syncEmulatorBreakpoints();
   },
-  
-  onBreakpointRemoved: (uri, line) => {
-    const { pdbData } = get();
-    
-    if (!pdbData) return;
-    
-    let addressHex: string | undefined = undefined;
-    
-    // Check if this is an ASM file breakpoint
-    if (uri.endsWith('.asm')) {
-      // Search asmLineMap for this line number
-      const asmEntry = Object.values(pdbData.asmLineMap || {}).find(
-        (entry: any) => entry.line === line
-      );
-      if (asmEntry) {
-        addressHex = asmEntry.address;
-      }
-    } else {
-      // VPy file - use lineMap (VPy line → address)
-      addressHex = pdbData.lineMap[line.toString()];
-    }
-    
-    if (addressHex) {
-      const address = parseInt(addressHex, 16); // Parse hex string to decimal
-      console.log(`[DebugStore] ➖ Breakpoint removed: ${uri}:${line} → ${addressHex} (${address})`);
-      window.postMessage({
-        type: 'debug-remove-breakpoint',
-        address,
-        line,
-        uri
-      }, '*');
-    } else {
-      console.warn(`[DebugStore] ⚠️  Cannot remove - no address found for line ${line} (file: ${uri})`);
-    }
+
+  onBreakpointRemoved: (_uri, _line) => {
+    syncEmulatorBreakpoints();
   }
 }));
