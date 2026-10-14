@@ -263,13 +263,15 @@ Breakpoints are the emulator's (never written into the program). One gdb at a ti
 
 These controls are also available as buttons in the **Debug Toolbar** at the top.
 
-### Debug Panel
+### Call Stack Panel
 
-While the program is paused, the **Call stack** heads the panel (m6809, rp2350, uvm2): the innermost function first, each user function with its file and line (a click opens it), then its callers down to `main`. Runtime routines and BIOS routines appear by name (`Moveto_ix` ← `Wait_Recal` ← `loop` ← `main`). The stack is rebuilt from the return addresses on the 6809 stack, so a call through `JSR` indexed shows its callee by address, and in a multibank ROM a caller in another bank than the one mapped is missing. `main`'s frame under `loop` has no line: it is the compiler's own frame loop.
+While the program is paused (m6809, rp2350, uvm2) it lists the calls that led there (View → Call Stack; the first stop of a session opens it): the innermost function first, each user function with its file and line (a click opens it), then its callers down to `main`. Runtime routines and BIOS routines appear by name (`Moveto_ix` ← `Wait_Recal` ← `loop` ← `main`). The stack is rebuilt from the return addresses on the 6809 stack, so a call through `JSR` indexed shows its callee by address, and in a multibank ROM a caller in another bank than the one mapped is missing. `main`'s frame under `loop` has no line: it is the compiler's own frame loop.
 
 On rp2350 and uvm2 the stack is unwound with the call-frame information in the build's ELF (and, for code built without it, from the function's prologue), down through the C runtime and the firmware: `vpy3d_occl_add` ← `ties.draw` (ties.vpy:63) ← `loop` ← `vpy_run` ← `main` ← `_reset_handler`. A pause inside a system call (SVC) stops at its handler. A function gcc inlined has no frame of its own: with the C backend, `main()` and `loop()` themselves are inlined into the runtime's `vpy_setup` / `vpy_loop` and appear as `main` / `loop`, and a line of an inlined function shows in the frame of its caller.
 
-Below it, values printed via `DEBUG_PRINT` and variables tracked via `DEBUG_PRINT_STR` from the running program. Updates every 100ms.
+### Debug Panel
+
+Values printed via `DEBUG_PRINT` and variables tracked via `DEBUG_PRINT_STR` from the running program. Updates every 100ms.
 
 ### Trace Panel
 

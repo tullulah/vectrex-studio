@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { DebugState as LegacyDebugState } from '../types/models.js';
 import { useEditorStore } from './editorStore.js';
+import { ensureComponent } from './dockBus';
 import { syncEmulatorBreakpoints } from '../debug/breakpointSync';
 
 export type ExecutionState = 'stopped' | 'running' | 'paused';
@@ -109,6 +110,9 @@ const initial: LegacyDebugState = {
   constants: [],
 };
 
+/** Has the Call Stack panel been opened for a stop this session? */
+let callStackShown = false;
+
 export const useDebugStore = create<DebugStore>((set, get) => ({
   ...initial,
   
@@ -151,7 +155,15 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
     syncEmulatorBreakpoints();
   },
   
-  updateCallStack: (stack) => set({ callStack: stack }),
+  updateCallStack: (stack) => {
+    // The first stop with a stack opens the Call Stack panel (once a session: closed
+    // again, it stays closed)
+    if (stack.length && !callStackShown) {
+      callStackShown = true;
+      try { ensureComponent('callstack'); } catch { /* no dock (tests) */ }
+    }
+    set({ callStack: stack });
+  },
   updateStats: (cycles, fps, drawFps) => set({ cycles, currentFps: fps, ...(drawFps === undefined ? {} : { drawFps }) }),
   
   // Debug controls

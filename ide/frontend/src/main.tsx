@@ -382,6 +382,7 @@ function App() {
     { key: 'emulator', label: t('panel.emulator'), component: 'emulator' },
     { key: 'dual-emulator', label: 'Dual Test', component: 'dual-emulator' },
     { key: 'debug', label: t('panel.debug'), component: 'debug' },
+    { key: 'callstack', label: t('panel.callstack', 'Call Stack'), component: 'callstack' },
     { key: 'errors', label: t('panel.errors'), component: 'errors', badge: (errCount+warnCount>0) ? (errCount>0? `${errCount}E` : `${warnCount}W`) : undefined },
     { key: 'output', label: t('panel.output','Output'), component: 'output' },
     { key: 'build-output', label: 'Build Output', component: 'build-output' },
@@ -1631,7 +1632,7 @@ def loop():
               const sel = n.getSelectedNode?.();
               if (sel) {
                 const c = typeof sel.getComponent === 'function' ? sel.getComponent() : sel?._attributes?.component;
-                if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','playground','psglog','terminal'].includes(c)) activeComp = c;
+                if (['files','emulator','debug','errors','memory','trace','bioscalls','callstack','ai-assistant','build-output','compiler-output','playground','psglog','terminal'].includes(c)) activeComp = c;
               }
             }
           });
@@ -1650,7 +1651,7 @@ def loop():
               const sel = n.getSelectedNode?.();
               if (sel) {
                 const c = typeof sel.getComponent === 'function' ? sel.getComponent() : sel?._attributes?.component;
-                if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','playground','psglog','terminal'].includes(c)) activeComp = c;
+                if (['files','emulator','debug','errors','memory','trace','bioscalls','callstack','ai-assistant','build-output','compiler-output','playground','psglog','terminal'].includes(c)) activeComp = c;
               }
             }
           });
@@ -1676,7 +1677,7 @@ def loop():
         // DockComponent yet, so silently ignore until it is implemented.
         if (id.startsWith('view.toggle.')) {
           const comp = id.slice('view.toggle.'.length);
-          const valid = ['emulator','debug','errors','output','memory','trace','psglog','ai-assistant','build-output','compiler-output','files','playground','bioscalls','terminal'];
+          const valid = ['emulator','debug','errors','output','memory','trace','psglog','ai-assistant','build-output','compiler-output','files','playground','bioscalls','callstack','terminal'];
           if (valid.includes(comp)) {
             toggleComponent(comp as any);
           } else if (comp === 'dual-emulator') {
@@ -1972,7 +1973,7 @@ def loop():
                     const selected = n.getSelectedNode?.();
                     if (selected) {
                       const c = typeof selected.getComponent === 'function' ? selected.getComponent() : selected?._attributes?.component;
-                      if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','terminal'].includes(c)) activeComp = c;
+                      if (['files','emulator','debug','errors','memory','trace','bioscalls','callstack','ai-assistant','build-output','compiler-output','terminal'].includes(c)) activeComp = c;
                     }
                   }
                 });
@@ -1989,7 +1990,7 @@ def loop():
                     const selected = n.getSelectedNode?.();
                     if (selected) {
                       const c = typeof selected.getComponent === 'function' ? selected.getComponent() : selected?._attributes?.component;
-                      if (['files','emulator','debug','errors','memory','trace','bioscalls','ai-assistant','build-output','compiler-output','terminal'].includes(c)) activeComp = c;
+                      if (['files','emulator','debug','errors','memory','trace','bioscalls','callstack','ai-assistant','build-output','compiler-output','terminal'].includes(c)) activeComp = c;
                     }
                   }
                 });
