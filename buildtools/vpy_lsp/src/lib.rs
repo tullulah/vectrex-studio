@@ -12,6 +12,7 @@ pub mod builtins;
 pub mod catalog;
 pub mod diagnostics;
 pub mod features;
+pub mod navigate;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -191,7 +192,12 @@ impl LanguageServer for Backend {
         let pos = params.text_document_position_params.position;
         let uri = params.text_document_position_params.text_document.uri;
         let Some(text) = self.doc_text(&uri) else { return Ok(None) };
-        Ok(features::definition_at(&text, pos, &uri, &self.symbols()).map(GotoDefinitionResponse::Scalar))
+        let docs = self.docs.lock().unwrap().clone();
+        let read = navigate::read_with(&docs);
+        // A document that does not parse (being edited) still finds its functions
+        let found = navigate::definition(&text, pos, &uri, &read)
+            .or_else(|| features::definition_at(&text, pos, &uri, &self.symbols()));
+        Ok(found.map(GotoDefinitionResponse::Scalar))
     }
 
     async fn code_action(&self, params: CodeActionParams) -> LspResult<Option<CodeActionResponse>> {

@@ -140,7 +140,7 @@ The LSP server lives in `buildtools/vpy_lsp` (binary `vpy_lsp`). It uses the com
 - Diagnostics: parse errors; calls to a function this file neither defines nor imports by name, and UPPERCASE calls that are no builtin (an error); a builtin called with an argument count none of its documented forms takes (a warning); unused variables, and `const` hints for scalar globals nothing changes. A `module.function()` call, and whether a builtin exists on the selected target, are the compiler's to check: it sees every module. A global another module of the same folder reads (`common.speed`) counts as used there.
 - Completions (keywords, builtins, user-defined functions)
 - Hover documentation (a builtin's forms, its doc line from MANUAL.md section 9, its targets)
-- Go-to-definition
+- Go-to-definition on the AST with the compiler's name rules (parameter, module-level name, local), across modules (`module.name`, `import` / `from … import` lines), to struct fields, and from an asset's name to its file (`vpy_lsp/src/navigate.rs`)
 - Semantic tokens
 - Rename, signature help, code actions
 

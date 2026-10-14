@@ -26,6 +26,8 @@ if (!(window as any).monaco) {
 import { dockBus } from '../state/dockBus';
 import { lspClient, getLspClient, openClangdDocument } from '../lspClient';
 import { useProjectStore } from '../state/projectStore';
+import { openFileAt } from '../utils/openFile';
+import { debugValue, hoverTarget } from '../debug/debugHover';
 // TODO(i18n): Adapt Monaco UI strings (context menu, messages) when supporting dynamic locale changes.
 
 // --- C/C++ (clangd) support ------------------------------------------------
@@ -178,6 +180,68 @@ export function registerClangdProviders(monaco: Monaco) {
     });
   }
   logger.debug('LSP', '[clangd] Monaco providers registered for c/cpp');
+}
+
+// Go to definition for .vpy (F12, Alt+click) and the opening of the file it lands in,
+// and the debugger's values on hover.
+// Registered once: Monaco providers are global, and every editor mount would add one.
+let vpyNavigationRegistered = false;
+function registerVpyNavigation(monaco: Monaco) {
+  if (vpyNavigationRegistered) return;
+  vpyNavigationRegistered = true;
+  monaco.languages.registerDefinitionProvider('vpy', {
+    provideDefinition: async (model, position) => {
+      try {
+        const uri = model.uri.toString();
+        // the server has the text as of the last completion: send the current one
+        lspClient.didChange(uri, model.getValue());
+        const params = { textDocument: { uri }, position: { line: position.lineNumber - 1, character: position.column - 1 } };
+        const res = await (lspClient as any).request('textDocument/definition', params);
+        if (!res) return [];
+        const locs = Array.isArray(res) ? res : [res];
+        return locs.map((loc: any) => ({
+          uri: monaco.Uri.parse(loc.uri || loc.targetUri || uri),
+          range: new monaco.Range(
+            loc.range.start.line + 1,
+            loc.range.start.character + 1,
+            loc.range.end.line + 1,
+            loc.range.end.character + 1
+          )
+        }));
+      } catch (e) { logger.warn('LSP', 'definition error:', e); }
+      return [];
+    }
+  });
+  // Paused in the debugger: the value of the variable under the mouse
+  monaco.languages.registerHoverProvider('vpy', {
+    provideHover: (model, position) => {
+      if (useDebugStore.getState().state !== 'paused') return null;
+      const w = model.getWordAtPosition(position);
+      if (!w) return null;
+      const target = hoverTarget(model.getValue(), model.uri.path, position.lineNumber, w.word, w.startColumn);
+      const value = target && debugValue(target);
+      if (!target || value === null) return null;
+      const label = target.fieldOf ? `${target.fieldOf}[…].${target.word}` : target.qualifier ? `${target.qualifier}.${target.word}` : target.word;
+      return {
+        range: new monaco.Range(position.lineNumber, w.startColumn, position.lineNumber, w.endColumn),
+        contents: [{ value: '```text\n' + `${label} = ${value}` + '\n```' }],
+      };
+    }
+  });
+  // A definition in another file (a module, an asset): open it in the IDE, which
+  // picks the editor for its type, and move to the line
+  monaco.editor.registerEditorOpener({
+    openCodeEditor(_source: any, resource: any, selectionOrPosition?: any) {
+      if (resource.scheme !== 'file') return false;
+      const start = selectionOrPosition
+        ? ('startLineNumber' in selectionOrPosition
+          ? { line: selectionOrPosition.startLineNumber, column: selectionOrPosition.startColumn }
+          : { line: selectionOrPosition.lineNumber, column: selectionOrPosition.column })
+        : null;
+      openFileAt(resource.fsPath, start ? start.line - 1 : undefined, start ? start.column - 1 : 0);
+      return true;
+    }
+  });
 }
 
 // Simple language placeholder registration for 'vpy'
@@ -336,6 +400,7 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
     logger.debug('App', 'Monaco Editor mounted');
     ensureLanguage(monaco);
     registerClangdProviders(monaco);
+    registerVpyNavigation(monaco);
     editorRef.current = editor;
     monacoRef.current = monaco;
     setEditorReady(true); // Signal that editor is ready for F9 registration
@@ -576,28 +641,6 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
       editor.updateOptions({ hover: { enabled: true, delay: 150 } });
       // Fallback hover removed (native Monaco hover now active). If needed, reintroduce with a feature flag.
     } catch (e) { logger.warn('App', 'Monaco instrumentation error:', e); }
-    // Definition provider
-    monaco.languages.registerDefinitionProvider('vpy', {
-      provideDefinition: async (model, position) => {
-        try {
-          const uri = model.uri.toString();
-          const params = { textDocument: { uri }, position: { line: position.lineNumber - 1, character: position.column - 1 } };
-          const res = await (lspClient as any).request('textDocument/definition', params);
-          if (!res) return [];
-          const locs = Array.isArray(res) ? res : (res ? [res] : []);
-          return locs.map((loc: any) => ({
-            uri: monaco.Uri.parse(loc.uri || (loc.targetUri && loc.targetUri.uri) || uri),
-            range: new monaco.Range(
-              loc.range.start.line + 1,
-              loc.range.start.character + 1,
-              loc.range.end.line + 1,
-              loc.range.end.character + 1
-            )
-          }));
-        } catch (e) { logger.warn('LSP', 'definition error:', e); }
-        return [];
-      }
-    });
     if (doc) {
       const mUri = monaco.Uri.parse(doc.uri);
       let model = monaco.editor.getModel(mUri);
@@ -889,6 +932,11 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
       if (!uri || line===undefined || column===undefined) return;
       const monaco = monacoRef.current;
       const model = monaco.editor.getModel(monaco.Uri.parse(uri));
+      // A document opened just now gets its model on the next render
+      if (!model && (e.detail.tries ?? 0) < 20) {
+        setTimeout(() => listener({ detail: { ...e.detail, tries: (e.detail.tries ?? 0) + 1 } }), 50);
+        return;
+      }
       if (model) {
         editorRef.current.setModel(model);
         lastModelRef.current = uri;
@@ -1182,6 +1230,8 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
         suggestOnTriggerCharacters: true,
         renderValidationDecorations: 'on',
         glyphMargin: true, // Enable glyph margin for breakpoints
+        // Alt+click goes to the definition (Cmd/Ctrl+click adds a cursor), as in Visual Studio
+        multiCursorModifier: 'ctrlCmd',
         lineNumbersMinChars: 3 // Make room for line numbers + glyph margin
       }}
     />

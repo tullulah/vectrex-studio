@@ -39,7 +39,7 @@ export interface LineTable {
 
 // ---- ELF32 little-endian sections ----
 
-function sections(elf: Uint8Array): Map<string, Uint8Array> {
+export function sections(elf: Uint8Array): Map<string, Uint8Array> {
   const dv = new DataView(elf.buffer, elf.byteOffset, elf.byteLength);
   const out = new Map<string, Uint8Array>();
   if (dv.getUint32(0, false) !== 0x7f454c46 || elf[4] !== 1) return out; // ELF32 only

@@ -15,9 +15,10 @@ import { emuCore } from '../emulatorCoreSingleton';
 import { useDebugStore } from '../state/debugStore';
 import { useEditorStore } from '../state/editorStore';
 import { useProjectStore } from '../state/projectStore';
-import { lineTable, type LineTable } from './dwarfLines';
+import { lineTable, sections, type LineTable } from './dwarfLines';
 import { frameTable, type FrameTable } from './dwarfFrames';
-import { unwind } from './armCallStack';
+import { debugInfo, type DebugInfo, type CType, type VarPlace } from './dwarfInfo';
+import { unwind, vpyName } from './armCallStack';
 import { showProjectSource } from './showSource';
 import type { ArmDebug } from '../emulator/cpu/armDebug';
 import type { Thumb2 } from '../emulator/cpu/Thumb2';
@@ -29,6 +30,9 @@ const baseName = (p: string) => p.split('/').pop() || p;
 
 let table: LineTable | null = null;
 let frames: FrameTable | null = null;
+/** The ELF the tables came from: its variables are read on the first hover. */
+let elfBytes: Uint8Array | null = null;
+let info: DebugInfo | null | undefined;
 /** Statement starts in the project's own .vpy files: where a step may stop. */
 let projectStarts = new Set<number>();
 /** The .vpy statements starting at each of those addresses (several when gcc inlines). */
@@ -117,6 +121,74 @@ export function armCallStack() {
   return unwind(regs, frames, table, read32, sourceAt, read16);
 }
 
+/** A variable of the paused ARM program: its type and where it is, and how to read it. */
+export interface ArmVariable {
+  type: CType;
+  place: VarPlace;
+  read8(addr: number): number | null;
+  reg(n: number): number;
+}
+
+function variables(): DebugInfo | null {
+  if (info === undefined) {
+    try {
+      info = elfBytes ? debugInfo(sections(elfBytes)) : null;
+    } catch (e) {
+      console.warn('[armSourceDebug] could not read the ELF variables:', e);
+      info = null;
+    }
+  }
+  return info;
+}
+
+const memRead8 = (s: ArmSystem) => (a: number) => (MEMORY.some(([lo, hi]) => a >= lo && a < hi) ? s.read8(a) : null);
+
+/** A global by its symbol: typed with the ELF's debug info, else (the asm backend) a 32-bit integer. */
+export function armGlobal(symbol: string): ArmVariable | null {
+  const s = system();
+  if (!s) return null;
+  const read8 = memRead8(s);
+  const reg = (n: number) => s.core0.getReg(n) >>> 0;
+  const g = variables()?.global(symbol);
+  if (g) return { type: g.type, place: { kind: 'memory', addr: g.addr }, read8, reg };
+  const addr = table?.symbolAddress(symbol);
+  if (addr === undefined) return null;
+  return { type: { kind: 'int', size: 4, signed: true, name: 'int32' }, place: { kind: 'memory', addr }, read8, reg };
+}
+
+/**
+ * A local or parameter of `vpyFunction` (`loop`, `util.bump`) where the program is
+ * paused: of the function at pc or one gcc inlined there. null when that function is
+ * not running at pc, or has no such variable; `unavailable` when optimised out there.
+ */
+export function armLocal(vpyFunction: string, cName: string): ArmVariable | null {
+  const s = system();
+  const di = variables();
+  if (!s || !di || !table) return null;
+  const pc = (s.core0.getReg(15) & ~1) >>> 0;
+  const modules = [...table.files].filter((f) => /\.vpy$/i.test(f)).map((f) => baseName(f).replace(/\.vpy$/i, ''));
+  const scopes = di.scopesAt(pc);
+  const at = scopes.findIndex((sc) => vpyName(sc.function, modules).toLowerCase() === vpyFunction.toLowerCase());
+  if (at < 0) return null;
+  // its own variables, then those of the blocks gcc kept around it (inlined scopes come first)
+  const v = scopes[at].vars.find((x) => x.name === cName);
+  if (!v) return null;
+  const regs = Array.from({ length: 16 }, (_, i) => s.core0.getReg(i) >>> 0);
+  const row = frames?.rowAt(pc);
+  const read8 = memRead8(s);
+  const read32 = (a: number) => {
+    const b = [0, 1, 2, 3].map((i) => read8(a + i));
+    return b.some((x) => x === null) ? null : ((b[0]! | (b[1]! << 8) | (b[2]! << 16) | (b[3]! << 24)) >>> 0);
+  };
+  const cfa = row ? (regs[row.cfaReg] + row.cfaOffset) >>> 0 : null;
+  return { type: v.type, place: v.place(pc, { regs, cfa, read32 }), read8, reg: (n) => regs[n] };
+}
+
+/** Is an ARM program loaded (its variables are read from the ELF, not the .pdb)? */
+export function armProgramActive(): boolean {
+  return !!system() && !!table;
+}
+
 /** Show where the program is paused, when it is in the project's .vpy code, and its stack. */
 export function showArmStop(): void {
   const s = system();
@@ -172,6 +244,8 @@ const watched = new WeakSet<ArmDebug>();
 function load(elf: Uint8Array | null): void {
   table = null;
   frames = null;
+  elfBytes = elf;
+  info = undefined;
   projectStarts = new Set();
   vpyStartAt = new Map();
   if (elf) {

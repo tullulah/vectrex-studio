@@ -2,23 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useProjectStore } from '../../state/projectStore';
 import { useEditorStore } from '../../state/editorStore';
 import type { FileNode } from '../../types/models';
-
-// Helper function to detect language from file extension
-function getLanguageFromFilename(filename: string): 'vpy' | 'c' | 'cpp' | 'json' | 'plaintext' | 'asm' | 'javascript' | 'typescript' | 'markdown' {
-  const ext = filename.split('.').pop()?.toLowerCase() || '';
-  switch (ext) {
-    case 'vpy': return 'vpy';
-    case 'c': return 'c';
-    case 'cpp': case 'cc': case 'cxx': return 'cpp';
-    case 'h': case 'hpp': return 'cpp';
-    case 'asm': case 's': return 'asm';
-    case 'json': case 'vec': case 'vmus': case 'vmesh': case 'vscene': case 'vskel': case 'vclip': return 'json';
-    case 'js': return 'javascript';
-    case 'ts': return 'typescript';
-    case 'md': return 'markdown';
-    default: return 'plaintext';
-  }
-}
+import { languageOfFile as getLanguageFromFilename } from '../../utils/openFile';
 
 // Helper function to normalize file paths to proper file:// URIs (same logic as File > Open)
 function normalizeFileUri(path: string): string {

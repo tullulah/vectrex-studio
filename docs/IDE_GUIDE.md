@@ -48,11 +48,13 @@ The editor is powered by Monaco with full VPy language support via the LSP serve
 |---------|----------------|
 | **Completions** | Type any identifier character — suggestions appear automatically |
 | **Diagnostics** | Parse errors and semantic warnings appear as red/yellow squiggles in real-time |
-| **Hover** | Hover over an identifier to see its type or documentation |
-| **Go to Definition** | Click a symbol while holding Cmd/Ctrl |
+| **Hover** | Hover over an identifier to see its type or documentation; while the program is paused, a variable's value (see [Debugging](#5-debugging)) |
+| **Go to Definition** | Alt+click a name, or right-click → Go to Definition (Cmd/Ctrl+click adds a cursor) |
 | **Rename** | Right-click → Rename Symbol — renames across all open files |
 | **Quick Fixes** | Click the lightbulb or press Cmd+. on a squiggle (e.g. "Convert to const", "Remove unused variable") |
 | **Semantic Tokens** | Built-in names, keywords, and user identifiers are colored differently |
+
+Go to Definition resolves a name as the compiler does: in a function, a parameter (its `def` line), then a module-level name (global, `const`, enum member, function, struct), then a local (the first statement that assigns it). `module.name` goes to `name` in that module's file, the module of an `import` line to its file, a name a `from … import` brings in to its definition there, `value.field` / `ships[i].hp` to the struct's field, and a string naming an asset (`DRAW_VECTOR("ship")`) to the project's asset file, opened in its editor.
 
 ### Language support
 
@@ -262,6 +264,14 @@ Breakpoints are the emulator's (never written into the program). One gdb at a ti
 | **Shift+F11** | Step Out: run until back in the caller |
 
 These controls are also available as buttons in the **Debug Toolbar** at the top.
+
+### Values on hover
+
+While the program is paused, hovering a variable in the editor shows its value — a scalar in decimal (and hex), an array's first 16 elements, a struct's fields; `ships[i].hp` shows `hp` of every element. The name resolves as in the compiler (parameter, then global, then local of the function the line is in), and `module.name` reads another module's global.
+
+- **m6809**: every global, array and struct field, and the parameters and locals of the functions on the call stack (the `.pdb`'s variables; m6809 frames are overlaid by call graph, so a function that is not running has no value of its own). One-byte values show unsigned, two-byte ones signed: the `.pdb` does not record the declared type.
+- **rp2350 / uvm2 with the C backend**: from the debug information gcc writes into the ELF — globals with their C types, and the parameters and locals of the function the program is paused in, or of one gcc inlined there (a local of a function further up the call stack shows nothing). At `-O3` a local often lives in a register, or nowhere at that point: the hover then says *optimised out here*. A global gcc kept in a register, or folded because nothing changes it, has no value to show either.
+- **rp2350 / uvm2 with the asm backend**: scalar globals (`VAR_<NAME>`, 32-bit); arrays and locals are not shown (the asm backend writes no type or frame information).
 
 ### Call Stack Panel
 
