@@ -82,6 +82,16 @@ export class Thumb2 implements ICpu {
     this._fetchBase = base >>> 0;
   }
 
+  /** Data fast path, opt-in: a RAM region whose reads and writes have no side effects,
+   * accessed directly by the 16- and 32-bit loads and stores instead of four bus.read8
+   * range-dispatches each. Only for memory the system would serve from the same array. */
+  private _dataMem: Uint8Array | null = null;
+  private _dataBase: number = 0;
+  setDataRegion(mem: Uint8Array | null, base: number): void {
+    this._dataMem = mem;
+    this._dataBase = base >>> 0;
+  }
+
   /**
    * Set by exec of a WFI instruction; cleared by the outer run-loop at the
    * start of each frame.  The Rp2350System uses this as the frame-sync gate.
@@ -512,10 +522,20 @@ export class Thumb2 implements ICpu {
   private vfp = new Uint32Array(64);
 
   private read16(bus: IBus, addr: number): number {
+    const m = this._dataMem;
+    if (m !== null) {
+      const o = (addr - this._dataBase) >>> 0;
+      if (o < m.length - 1) return m[o] | (m[o + 1] << 8);
+    }
     return bus.read8(addr) | (bus.read8(addr + 1) << 8);
   }
 
   private read32(bus: IBus, addr: number): number {
+    const m = this._dataMem;
+    if (m !== null) {
+      const o = (addr - this._dataBase) >>> 0;
+      if (o < m.length - 3) return (m[o] | (m[o + 1] << 8) | (m[o + 2] << 16) | (m[o + 3] << 24)) >>> 0;
+    }
     return u32(bus.read8(addr)
       | (bus.read8(addr + 1) << 8)
       | (bus.read8(addr + 2) << 16)
@@ -523,11 +543,21 @@ export class Thumb2 implements ICpu {
   }
 
   private write16(bus: IBus, addr: number, val: number): void {
+    const m = this._dataMem;
+    if (m !== null) {
+      const o = (addr - this._dataBase) >>> 0;
+      if (o < m.length - 1) { m[o] = val; m[o + 1] = val >>> 8; return; }
+    }
     bus.write8(addr,     val & 0xff);
     bus.write8(addr + 1, (val >>> 8) & 0xff);
   }
 
   private write32(bus: IBus, addr: number, val: number): void {
+    const m = this._dataMem;
+    if (m !== null) {
+      const o = (addr - this._dataBase) >>> 0;
+      if (o < m.length - 3) { m[o] = val; m[o + 1] = val >>> 8; m[o + 2] = val >>> 16; m[o + 3] = val >>> 24; return; }
+    }
     const v = u32(val);
     bus.write8(addr,     v & 0xff);
     bus.write8(addr + 1, (v >>> 8)  & 0xff);

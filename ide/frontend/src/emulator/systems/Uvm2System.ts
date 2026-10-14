@@ -478,6 +478,15 @@ export class Uvm2System implements ISystem, IBus {
   /** El mismo muestreo para CORE 1 (en la BIOS el juego vive alli): PERFIL1=1 lo imprime. */
   private readonly perfil1 = new Map<number, number>();
   private muestra1 = 0;
+  /** One byte per halfword of SRAM: set where some pc trap is (marcarTrampas). */
+  private marcas = new Uint8Array(SRAM_SIZE >>> 1);
+  /* CORE 1 WAITING FOR A TIME (sondeoTimerCore1): the core reading the timer, the last
+   * instruction that read it and at which step, and the cycles to add to its clock. */
+  private enCore1 = false;
+  private timerPollPc1 = -1;
+  private timerPollPaso1 = 0;
+  private timerPollCiclo1 = 0;
+  private saltoCore1 = 0;
   perfilCore1(n = 12): [number, number][] {
     return [...this.perfil1.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
   }
@@ -1095,6 +1104,7 @@ export class Uvm2System implements ISystem, IBus {
     this.cpu.reset();
     if (this.cargaEnPsram) this.cpu.setFetchRegion(this.psram, PSRAM_BASE);
     else                   this.cpu.setFetchRegion(this.sram, SRAM_BASE);
+    this.cpu.setDataRegion(this.sram, SRAM_BASE);   // SRAM reads and writes have no side effects
 
     // The firmware loads MSP and the entry point from the image's own vector
     // table — word 0 and word 1 — exactly as a Cortex-M reset would.
@@ -1137,48 +1147,83 @@ export class Uvm2System implements ISystem, IBus {
      * bucle o se pierde, y sin guardarlos un PC absurdo no dice de donde vino. */
     if (this.rastro1.length < 64) this.rastro1.push(pc1);
     if ((this.muestra1++ & 63) === 0) this.perfil1.set(pc1, (this.perfil1.get(pc1) ?? 0) + 1);
-    if (this.volcarLista.size && this.volcarLista.has(pc1)) this.volcar(this.cpu1, pc1, 1);
     this.ultimos1[this.ultimos1N++ & 63] = pc1;   /* y los ULTIMOS: el choque ocurre lejos del arranque */
-    if (this.sdLeerAddr && pc1 === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu1); return 1; }
-    if (this.sdLeerDesdeAddr && pc1 === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu1); return 1; }
-    if (this.sdAbrirAddr  && pc1 === this.sdAbrirAddr)  { this.atiendeSdAbrir(this.cpu1);  return 1; }
-    if (this.sdSeguirAddr && pc1 === this.sdSeguirAddr) { this.atiendeSdSeguir(this.cpu1); return 1; }
-    if (this.sdSaltarAddr && pc1 === this.sdSaltarAddr) { this.atiendeSdSaltar(this.cpu1); return 1; }
-    if (this.sdDirAbrirAddr  && pc1 === this.sdDirAbrirAddr)  { this.atiendeSdDirAbrir(this.cpu1);  return 1; }
-    if (this.sdDirSeguirAddr && pc1 === this.sdDirSeguirAddr) { this.atiendeSdDirSeguir(this.cpu1); return 1; }
-    if (this.sdDirCerrarAddr && pc1 === this.sdDirCerrarAddr) { this.atiendeSdDirCerrar(this.cpu1); return 1; }
-    if (this.execAddr && pc1 === this.execAddr) { this.execVuelta[1] = this.cpu1.getReg(14) & ~1; this.enLista++; }
-    else if (this.execVuelta[1] && pc1 === this.execVuelta[1]) { this.execVuelta[1] = 0; this.enLista--; }
-    if (this.sdHwInitAddr && pc1 === this.sdHwInitAddr) { this.atiendeSdHwInit(this.cpu1); return 1; }
-    if (this.sdHwReadBlockAddr && pc1 === this.sdHwReadBlockAddr) { this.atiendeSdHwReadBlock(this.cpu1); return 1; }
-    if (this.sdHwWriteBlockAddr && pc1 === this.sdHwWriteBlockAddr) { this.atiendeSdHwWriteBlock(this.cpu1); return 1; }
-    /* En la BIOS, core 1 salta al JUEGO, que vive en PSRAM: que lo busque alli deprisa. */
-    if (psramOff(pc1) >= 0 && this.cpu1FetchEnSram) {
-      this.cpu1.setFetchRegion(this.psram, PSRAM_BASE); this.cpu1FetchEnSram = false;
-      console.log(`[Uvm2System] NUCLEO 1 EN EL JUEGO: pc=0x${pc1.toString(16)} (PSRAM), frame ${this.frameCounter}`);
-    }
-    if (pc1 === ROM_LOOKUP) { this.romTableLookup(this.cpu1); return 1; }
-    if (((pc1 & 0xFFFFFFF0) >>> 0) === ROM_NOOP) {
-      this.cpu1.setReg(15, this.cpu1.getReg(14) & ~1);   // la funcion vacia: volver
-      return 1;
-    }
-    /* En la BIOS el programa de core 1 (intro, menu, lanzador) vive en la FLASH y solo el
-     * juego en PSRAM; la flash se busca por el bus (read8), sin region rapida. */
-    const enFlash1 = this.flash !== null && pc1 >= FLASH_BASE && pc1 < FLASH_BASE + FLASH_SIZE;
-    if ((pc1 < SRAM_BASE || pc1 > 0x20090000) && psramOff(pc1) < 0 && !enFlash1) {
-      if (!this.cpu1Perdido) {
-        this.cpu1Perdido = true;
-        const ult = []; for (let i = 1; i <= 64 && i <= this.ultimos1N; i++) ult.unshift(this.ultimos1[(this.ultimos1N - i) & 63]);
-        console.error(`[Uvm2System] NUCLEO 1 PERDIDO en 0x${pc1.toString(16)}. ` +
-          `Camino: ${this.rastro1.map(x => '0x' + x.toString(16)).join(' ')}\n` +
-          `  ultimos PCs: ${ult.map(x => '0x' + x.toString(16)).join(' ')}\n` +
-          `  r0-r3=${[0,1,2,3].map(i => '0x' + (this.cpu1!.getReg(i) >>> 0).toString(16)).join(' ')} ` +
-          `lr=0x${(this.cpu1!.getReg(14) >>> 0).toString(16)} sp=0x${(this.cpu1!.getReg(13) >>> 0).toString(16)}`);
+    const o1 = (pc1 - SRAM_BASE) >>> 0;
+    if (o1 >= SRAM_SIZE || this.marcas[o1 >>> 1] || (this.execVuelta[1] && pc1 === this.execVuelta[1])) {   // see marcarTrampas
+      if (this.volcarLista.size && this.volcarLista.has(pc1)) this.volcar(this.cpu1, pc1, 1);
+      if (this.sdLeerAddr && pc1 === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu1); return 1; }
+      if (this.sdLeerDesdeAddr && pc1 === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu1); return 1; }
+      if (this.sdAbrirAddr  && pc1 === this.sdAbrirAddr)  { this.atiendeSdAbrir(this.cpu1);  return 1; }
+      if (this.sdSeguirAddr && pc1 === this.sdSeguirAddr) { this.atiendeSdSeguir(this.cpu1); return 1; }
+      if (this.sdSaltarAddr && pc1 === this.sdSaltarAddr) { this.atiendeSdSaltar(this.cpu1); return 1; }
+      if (this.sdDirAbrirAddr  && pc1 === this.sdDirAbrirAddr)  { this.atiendeSdDirAbrir(this.cpu1);  return 1; }
+      if (this.sdDirSeguirAddr && pc1 === this.sdDirSeguirAddr) { this.atiendeSdDirSeguir(this.cpu1); return 1; }
+      if (this.sdDirCerrarAddr && pc1 === this.sdDirCerrarAddr) { this.atiendeSdDirCerrar(this.cpu1); return 1; }
+      if (this.execAddr && pc1 === this.execAddr) { this.execVuelta[1] = this.cpu1.getReg(14) & ~1; this.enLista++; }
+      else if (this.execVuelta[1] && pc1 === this.execVuelta[1]) { this.execVuelta[1] = 0; this.enLista--; }
+      if (this.sdHwInitAddr && pc1 === this.sdHwInitAddr) { this.atiendeSdHwInit(this.cpu1); return 1; }
+      if (this.sdHwReadBlockAddr && pc1 === this.sdHwReadBlockAddr) { this.atiendeSdHwReadBlock(this.cpu1); return 1; }
+      if (this.sdHwWriteBlockAddr && pc1 === this.sdHwWriteBlockAddr) { this.atiendeSdHwWriteBlock(this.cpu1); return 1; }
+      /* En la BIOS, core 1 salta al JUEGO, que vive en PSRAM: que lo busque alli deprisa. */
+      if (psramOff(pc1) >= 0 && this.cpu1FetchEnSram) {
+        this.cpu1.setFetchRegion(this.psram, PSRAM_BASE); this.cpu1FetchEnSram = false;
+        console.log(`[Uvm2System] NUCLEO 1 EN EL JUEGO: pc=0x${pc1.toString(16)} (PSRAM), frame ${this.frameCounter}`);
       }
-      this.cpu1 = null;
-      return 0;
+      if (pc1 === ROM_LOOKUP) { this.romTableLookup(this.cpu1); return 1; }
+      if (((pc1 & 0xFFFFFFF0) >>> 0) === ROM_NOOP) {
+        this.cpu1.setReg(15, this.cpu1.getReg(14) & ~1);   // la funcion vacia: volver
+        return 1;
+      }
+      /* En la BIOS el programa de core 1 (intro, menu, lanzador) vive en la FLASH y solo el
+       * juego en PSRAM; la flash se busca por el bus (read8), sin region rapida. */
+      const enFlash1 = this.flash !== null && pc1 >= FLASH_BASE && pc1 < FLASH_BASE + FLASH_SIZE;
+      if ((pc1 < SRAM_BASE || pc1 > 0x20090000) && psramOff(pc1) < 0 && !enFlash1) {
+        if (!this.cpu1Perdido) {
+          this.cpu1Perdido = true;
+          const ult = []; for (let i = 1; i <= 64 && i <= this.ultimos1N; i++) ult.unshift(this.ultimos1[(this.ultimos1N - i) & 63]);
+          console.error(`[Uvm2System] NUCLEO 1 PERDIDO en 0x${pc1.toString(16)}. ` +
+            `Camino: ${this.rastro1.map(x => '0x' + x.toString(16)).join(' ')}\n` +
+            `  ultimos PCs: ${ult.map(x => '0x' + x.toString(16)).join(' ')}\n` +
+            `  r0-r3=${[0,1,2,3].map(i => '0x' + (this.cpu1!.getReg(i) >>> 0).toString(16)).join(' ')} ` +
+            `lr=0x${(this.cpu1!.getReg(14) >>> 0).toString(16)} sp=0x${(this.cpu1!.getReg(13) >>> 0).toString(16)}`);
+        }
+        this.cpu1 = null;
+        return 0;
+      }
     }
-    return this.cpu1.step(this);
+    this.enCore1 = true;
+    const c = this.cpu1.step(this);
+    this.enCore1 = false;
+    return c;
+  }
+
+  /**
+   * Core 1 waiting for a moment: `while ((int32_t)(target - time_us_32()) > 0) {}`, the
+   * pacer that starts each list on time (uvm2_core1.c). The loop is four instructions,
+   * ~6 cycles, against a timer that changes once per microsecond (150 cycles): 25 turns
+   * that can only read the same value, and in ROTJ 62% of everything core 1 executed.
+   *
+   * When the SAME instruction reads the timer again within a few steps, it is that loop:
+   * its clock skips the turns that can only read this same microsecond again. A whole
+   * number of turns (P cycles each, measured between the two reads), so the next read
+   * lands on the very cycle the loop would have read on: the program, the bus and the
+   * beam see exactly what they saw without the skip. (maybeCollapseSpin does the same for
+   * the bus clock.)
+   */
+  private sondeoTimerCore1(): void {
+    const pc = this.cpu1!.getReg(15) >>> 0;
+    const ahora = this.cpuCiclos;
+    if (pc === this.timerPollPc1 && this.muestra1 - this.timerPollPaso1 <= 8) {
+      const P = ahora - this.timerPollCiclo1;
+      if (P > 0 && P <= 64) {
+        const hastaCambio = CPU_POR_US - (ahora % CPU_POR_US);   // to the next microsecond
+        const vueltas = Math.ceil(hastaCambio / P) - 1;            // turns that read this one again
+        if (vueltas > 0) this.saltoCore1 = vueltas * P;
+      }
+    }
+    this.timerPollPc1 = pc;
+    this.timerPollPaso1 = this.muestra1;
+    this.timerPollCiclo1 = ahora + this.saltoCore1;
   }
 
   /* El bus, hasta el instante que LOS DOS nucleos han alcanzado ya. */
@@ -1285,6 +1330,7 @@ export class Uvm2System implements ISystem, IBus {
     this.relojCore1 = this.relojCore0;
     this.cpu1.reset();
     this.cpu1.setFetchRegion(this.sram, SRAM_BASE);
+    this.cpu1.setDataRegion(this.sram, SRAM_BASE);
     this.cpu1FetchEnSram = true;
     this.cpu1.setReg(13, sp >>> 0);
     this.cpu1.setReg(15, (entry >>> 0) & ~1);
@@ -1591,6 +1637,7 @@ export class Uvm2System implements ISystem, IBus {
        * absoluto de consola. */
       if (addr >= TIMER0_BASE && addr < TIMER0_BASE + 0x30) {
         const off = addr & 0xFC;
+        if (this.enCore1 && (addr & 3) === 0 && (off === 0x28 || off === 0x0C)) this.sondeoTimerCore1();
         const us  = Math.floor(this.cpuCiclos / CPU_POR_US);
         const alta = Math.floor(us / 4294967296);
         let w = 0;
@@ -1941,7 +1988,22 @@ export class Uvm2System implements ISystem, IBus {
   /** ¿Hay una palabra sin leer? Es el bit VLD de FIFO_ST. Ver la nota alli. */
   private fifoPendiente = false;
 
+  /** Mark every pc in SRAM the step loops trap, rebuilt each frame (the symbols can change
+   *  when an ELF is set). A trap added to the loops must be marked here. */
+  private marcarTrampas(): void {
+    const m = this.marcas;
+    m.fill(0);
+    const marca = (a: number) => { const o = ((a >>> 0) - SRAM_BASE) >>> 0; if (a && o < SRAM_SIZE) m[o >>> 1] = 1; };
+    for (const a of [this.sdLeerAddr, this.sdLeerDesdeAddr, this.sdAbrirAddr, this.sdSeguirAddr, this.sdSaltarAddr,
+                     this.sdDirAbrirAddr, this.sdDirSeguirAddr, this.sdDirCerrarAddr, this.sdHwInitAddr,
+                     this.sdHwReadBlockAddr, this.sdHwWriteBlockAddr, this.execAddr, this.frameBeginAddr,
+                     this.volcarEn, ROM_LOOKUP]) marca(a);
+    for (const a of this.volcarLista) marca(a);
+    if (!this.flash) m.fill(1, 0, (VECTORES_FIN - SRAM_BASE) >>> 1);   // the vector table: a lost pc
+  }
+
   runFrame(): Segment[] {
+    this.marcarTrampas();
     if (this.psramElf && !this.psramElfArmed) {
       const pcNow = this.cpu.getReg(15) >>> 0;
       if (pcNow >= 0x11000000 && pcNow < 0x11800000) {
@@ -1965,6 +2027,7 @@ export class Uvm2System implements ISystem, IBus {
       if (this.cpu1 && this.relojCore1 < this.relojCore0) {
         const c1 = this.pasoCore1();
         this.relojCore1 += c1 > 0 ? c1 : 1;
+        if (this.saltoCore1) { this.relojCore1 += this.saltoCore1; this.saltoCore1 = 0; }
         spent += c1;
         this.sincronizaBus();
         continue;
@@ -1989,55 +2052,61 @@ export class Uvm2System implements ISystem, IBus {
       this.pcHist[this.pcHistN++ & (PC_HIST - 1)] = pc;
       if ((this.muestra++ & 63) === 0) this.perfil.set(pc, (this.perfil.get(pc) ?? 0) + 1);
 
-      if (pc === ROM_LOOKUP) { this.romTableLookup(); continue; }
-      if (this.sdLeerAddr && pc === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu); continue; }
-      if (this.sdLeerDesdeAddr && pc === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu); continue; }
-      if (this.sdAbrirAddr  && pc === this.sdAbrirAddr)  { this.atiendeSdAbrir(this.cpu);  continue; }
-      if (this.sdSeguirAddr && pc === this.sdSeguirAddr) { this.atiendeSdSeguir(this.cpu); continue; }
-      if (this.sdSaltarAddr && pc === this.sdSaltarAddr) { this.atiendeSdSaltar(this.cpu); continue; }
-      if (this.sdDirAbrirAddr  && pc === this.sdDirAbrirAddr)  { this.atiendeSdDirAbrir(this.cpu);  continue; }
-      if (this.sdDirSeguirAddr && pc === this.sdDirSeguirAddr) { this.atiendeSdDirSeguir(this.cpu); continue; }
-      if (this.sdDirCerrarAddr && pc === this.sdDirCerrarAddr) { this.atiendeSdDirCerrar(this.cpu); continue; }
-      /* VOLCADO DE REGISTROS EN UN PC (depuracion): VOLCAR=0x2000362c imprime r0-r12, lr y
-       * 40 bytes en [r8] las primeras 4 veces que core 0 pasa por ahi. Sin esto, saber que
-       * calculo se tuerce dentro del emulador es adivinar sobre el desensamblado. */
-      if (this.volcarLista.size && this.volcarLista.has(pc)) this.volcar(this.cpu, pc, 0);
-      if (this.volcarEn && pc === this.volcarEn && this.volcados < 4) {
-        this.volcados++;
-        const r = []; for (let i = 0; i <= 12; i++) r.push(`r${i}=0x${(this.cpu.getReg(i) >>> 0).toString(16)}`);
-        r.push(`lr=0x${(this.cpu.getReg(14) >>> 0).toString(16)}`);
-        const b = []; const base = this.cpu.getReg(8) >>> 0;
-        for (let i = 0; i < 40; i += 4) b.push('0x' + this.read32(base + i).toString(16));
-        let txt = ''; for (let i = 0; i < 24; i++) { const c = this.read8((this.cpu.getReg(0) >>> 0) + i); if (c < 32 || c > 126) break; txt += String.fromCharCode(c); }
-        console.log(`[Uvm2System] VOLCAR pc=0x${pc.toString(16)} ${r.join(' ')}\n   [r8..]: ${b.join(' ')}   [r0] como texto: "${txt}"`);
-      }
-      if (this.execAddr && pc === this.execAddr) { this.execVuelta[0] = this.cpu.getReg(14) & ~1; this.enLista++; }
-      else if (this.execVuelta[0] && pc === this.execVuelta[0]) { this.execVuelta[0] = 0; this.enLista--; }
-      if (this.sdHwInitAddr && pc === this.sdHwInitAddr) { this.atiendeSdHwInit(this.cpu); continue; }
-      if (this.sdHwReadBlockAddr && pc === this.sdHwReadBlockAddr) { this.atiendeSdHwReadBlock(this.cpu); continue; }
-      if (this.sdHwWriteBlockAddr && pc === this.sdHwWriteBlockAddr) { this.atiendeSdHwWriteBlock(this.cpu); continue; }
-      /* Mirar y dejar pasar: no se atrapa la llamada, solo se le hace la foto. */
-      if (this.frameBeginAddr && pc === this.frameBeginAddr && this.statsAddr) {
-        this.ciclosDeBus    = this.read32(this.statsAddr + 4);   // bus_cycles
-        this.vectoresDeBus  = this.read32(this.statsAddr + 8);   // vectors
-        this.framesDelJuego++;
-      }
+      /* THE TRAPS, ONLY WHERE THERE IS ONE: a pc in SRAM goes through them only when its
+       * mark is set (marcarTrampas), so an ordinary instruction pays one array read for all
+       * of them. Outside SRAM (the boot ROM, PSRAM, flash) every check runs as before. */
+      const o0 = (pc - SRAM_BASE) >>> 0;
+      if (o0 >= SRAM_SIZE || this.marcas[o0 >>> 1] || (this.execVuelta[0] && pc === this.execVuelta[0])) {
+        if (pc === ROM_LOOKUP) { this.romTableLookup(); continue; }
+        if (this.sdLeerAddr && pc === this.sdLeerAddr) { this.atiendeSdLeer(this.cpu); continue; }
+        if (this.sdLeerDesdeAddr && pc === this.sdLeerDesdeAddr) { this.atiendeSdLeerDesde(this.cpu); continue; }
+        if (this.sdAbrirAddr  && pc === this.sdAbrirAddr)  { this.atiendeSdAbrir(this.cpu);  continue; }
+        if (this.sdSeguirAddr && pc === this.sdSeguirAddr) { this.atiendeSdSeguir(this.cpu); continue; }
+        if (this.sdSaltarAddr && pc === this.sdSaltarAddr) { this.atiendeSdSaltar(this.cpu); continue; }
+        if (this.sdDirAbrirAddr  && pc === this.sdDirAbrirAddr)  { this.atiendeSdDirAbrir(this.cpu);  continue; }
+        if (this.sdDirSeguirAddr && pc === this.sdDirSeguirAddr) { this.atiendeSdDirSeguir(this.cpu); continue; }
+        if (this.sdDirCerrarAddr && pc === this.sdDirCerrarAddr) { this.atiendeSdDirCerrar(this.cpu); continue; }
+        /* VOLCADO DE REGISTROS EN UN PC (depuracion): VOLCAR=0x2000362c imprime r0-r12, lr y
+         * 40 bytes en [r8] las primeras 4 veces que core 0 pasa por ahi. Sin esto, saber que
+         * calculo se tuerce dentro del emulador es adivinar sobre el desensamblado. */
+        if (this.volcarLista.size && this.volcarLista.has(pc)) this.volcar(this.cpu, pc, 0);
+        if (this.volcarEn && pc === this.volcarEn && this.volcados < 4) {
+          this.volcados++;
+          const r = []; for (let i = 0; i <= 12; i++) r.push(`r${i}=0x${(this.cpu.getReg(i) >>> 0).toString(16)}`);
+          r.push(`lr=0x${(this.cpu.getReg(14) >>> 0).toString(16)}`);
+          const b = []; const base = this.cpu.getReg(8) >>> 0;
+          for (let i = 0; i < 40; i += 4) b.push('0x' + this.read32(base + i).toString(16));
+          let txt = ''; for (let i = 0; i < 24; i++) { const c = this.read8((this.cpu.getReg(0) >>> 0) + i); if (c < 32 || c > 126) break; txt += String.fromCharCode(c); }
+          console.log(`[Uvm2System] VOLCAR pc=0x${pc.toString(16)} ${r.join(' ')}\n   [r8..]: ${b.join(' ')}   [r0] como texto: "${txt}"`);
+        }
+        if (this.execAddr && pc === this.execAddr) { this.execVuelta[0] = this.cpu.getReg(14) & ~1; this.enLista++; }
+        else if (this.execVuelta[0] && pc === this.execVuelta[0]) { this.execVuelta[0] = 0; this.enLista--; }
+        if (this.sdHwInitAddr && pc === this.sdHwInitAddr) { this.atiendeSdHwInit(this.cpu); continue; }
+        if (this.sdHwReadBlockAddr && pc === this.sdHwReadBlockAddr) { this.atiendeSdHwReadBlock(this.cpu); continue; }
+        if (this.sdHwWriteBlockAddr && pc === this.sdHwWriteBlockAddr) { this.atiendeSdHwWriteBlock(this.cpu); continue; }
+        /* Mirar y dejar pasar: no se atrapa la llamada, solo se le hace la foto. */
+        if (this.frameBeginAddr && pc === this.frameBeginAddr && this.statsAddr) {
+          this.ciclosDeBus    = this.read32(this.statsAddr + 4);   // bus_cycles
+          this.vectoresDeBus  = this.read32(this.statsAddr + 8);   // vectors
+          this.framesDelJuego++;
+        }
 
-      // Ejecutar la tabla de vectores es siempre un PC perdido. Se corta aqui, con
-      // el salto que llevo hasta ahi todavia en el anillo, en vez de dejar que
-      // avance por los datos y choque contra el manejador por defecto — que en el
-      // log se lee como "instruccion no implementada 0xbe00" y despista.
-      /* Solo en la .um2: alli la base de SRAM es la tabla de vectores. En la BIOS del
-       * cartucho propio la base de SRAM es __sramcode, CODIGO, y saltar ahi es lo normal. */
-      if (!this.flash && pc >= SRAM_BASE && pc < VECTORES_FIN) {
-        console.error(
-          `[Uvm2System] PC PERDIDO: 0x${pc.toString(16)} esta DENTRO de la tabla de ` +
-          `vectores (0x${SRAM_BASE.toString(16)}-0x${(VECTORES_FIN - 1).toString(16)}), ` +
-          `que son datos, no codigo. Ultimos saltos: ${this.historialSaltos().join(' ')}`);
-        this.halted = true;
-        break;
-      }
+        // Ejecutar la tabla de vectores es siempre un PC perdido. Se corta aqui, con
+        // el salto que llevo hasta ahi todavia en el anillo, en vez de dejar que
+        // avance por los datos y choque contra el manejador por defecto — que en el
+        // log se lee como "instruccion no implementada 0xbe00" y despista.
+        /* Solo en la .um2: alli la base de SRAM es la tabla de vectores. En la BIOS del
+         * cartucho propio la base de SRAM es __sramcode, CODIGO, y saltar ahi es lo normal. */
+        if (!this.flash && pc >= SRAM_BASE && pc < VECTORES_FIN) {
+          console.error(
+            `[Uvm2System] PC PERDIDO: 0x${pc.toString(16)} esta DENTRO de la tabla de ` +
+            `vectores (0x${SRAM_BASE.toString(16)}-0x${(VECTORES_FIN - 1).toString(16)}), ` +
+            `que son datos, no codigo. Ultimos saltos: ${this.historialSaltos().join(' ')}`);
+          this.halted = true;
+          break;
+        }
 
+      }
       let c: number;
       try {
         c = this.cpu.step(this);
