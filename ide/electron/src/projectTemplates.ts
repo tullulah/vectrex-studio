@@ -21,7 +21,7 @@
 
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { sdkDirFor } from './sdkManager.js';
+import { readProjectSdkVersion, sdkDirFor, sdkRootDir } from './sdkManager.js';
 import * as os from 'os';
 
 /** The default workspace: new projects go here unless the user picks another folder. */
@@ -343,12 +343,49 @@ int main(void)
 
 /** clangd include paths for the pinned SDK (as the bundled examples ship them). */
 function cCompileFlags(sdkVersion: string | null): string {
-  const lines = ['-Isrc'];
+  // The Makefile's INCLUDES: src/, then gen/ (the asset headers it compiles)
+  const lines = ['-Isrc', '-Igen'];
   if (sdkVersion) {
     const dir = sdkDirFor(sdkVersion);
     lines.unshift(`-I${join(dir, 'vpy-c', 'include')}`, `-I${join(dir, 'pitrex-sim', 'include')}`);
   }
   return lines.join('\n') + '\n';
+}
+
+/**
+ * Bring a C project's compile_flags.txt (clangd's include paths) up to date: its SDK
+ * paths to the version the .cvproj pins now, and -Igen for the asset headers the
+ * Makefile compiles. The file is written once at creation, so without this a project
+ * moved to a newer SDK, or made before gen/ was in the flags, shows its includes as
+ * "file not found". Other lines are kept as they are. Returns true when it changed.
+ */
+export async function syncCompileFlags(projectDir: string): Promise<boolean> {
+  const flagsFile = join(projectDir, 'compile_flags.txt');
+  let text: string;
+  try { text = await fs.readFile(flagsFile, 'utf8'); } catch { return false; }
+  const cvproj = (await fs.readdir(projectDir)).find((f) => /\.cvproj$/i.test(f));
+  if (!cvproj) return false;
+  const version = await readProjectSdkVersion(join(projectDir, cvproj)).catch(() => null);
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  let lines = text.split(/\r?\n/);
+  if (lines[lines.length - 1] === '') lines.pop();
+  if (version) {
+    const root = sdkRootDir().replace(/[\\/]+$/, '');
+    const dir = sdkDirFor(version);
+    lines = lines.map((l) => {
+      if (!l.startsWith(`-I${root}`)) return l;
+      const rest = l.slice(2 + root.length).replace(/^[\\/][^\\/]+/, ''); // drop the old version
+      return `-I${dir}${rest}`;
+    });
+  }
+  if (!lines.includes('-Igen')) {
+    const src = lines.indexOf('-Isrc');
+    lines.splice(src >= 0 ? src + 1 : lines.length, 0, '-Igen');
+  }
+  const next = lines.join(eol) + eol;
+  if (next === text) return false;
+  await fs.writeFile(flagsFile, next, 'utf8');
+  return true;
 }
 
 async function assertNoProjectIn(projectDir: string): Promise<void> {

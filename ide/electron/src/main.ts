@@ -21,7 +21,7 @@ import { getMcpLaunchSpec } from './mcp/auth.js';
 export { getMcpLaunchSpec, getMcpPort, getMcpToken } from './mcp/auth.js';
 import { registerAIProxyHandlers } from './ai-proxy.js';
 import { writeClaudeMcpConfig } from './shellIntegration.js';
-import { createProjectFromTemplate, ensureDefaultProjectsDir } from './projectTemplates.js';
+import { createProjectFromTemplate, ensureDefaultProjectsDir, syncCompileFlags } from './projectTemplates.js';
 import { registerTerminalHandlers } from './terminal.js';
 import {
   ARM_TOOLCHAIN_DOWNLOAD_URL, detectArmToolchain, ensureSdk, isSdkInstalled, isValidSdkTag, latestSdkTag, listInstalledSdks, listRemoteSdkTags,
@@ -865,6 +865,10 @@ ipcMain.handle('lsp_start', async (_e, args?: { serverId?: string; cwd?: string 
     mainWindow?.webContents.send('lsp://stderr', { serverId, line: `[LSP:${serverId}] server binary not found` });
     return { ok: false, error: 'binary_not_found' };
   }
+  if (serverId === 'clangd' && args?.cwd) {
+    // Include paths for the SDK the project pins now (compile_flags.txt is written once)
+    if (await syncCompileFlags(args.cwd).catch(() => false)) logSdk(`[SDK] ${args.cwd}/compile_flags.txt updated\n`);
+  }
   if (verbose) console.log(`[LSP:${serverId}] spawning`, resolved.cmd, resolved.args, 'cwd=', args?.cwd);
   let child;
   try {
@@ -1053,6 +1057,7 @@ ipcMain.handle('sdk:project:set', async (_e, projectFile: string, tag: string) =
   try {
     await writeProjectSdkVersion(projectFile, tag);
     logSdk(`[SDK] ${projectFile} now uses SDK ${tag}\n`);
+    if (/\.cvproj$/i.test(projectFile)) await syncCompileFlags(dirname(projectFile)).catch(() => false);
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message || String(e) };
