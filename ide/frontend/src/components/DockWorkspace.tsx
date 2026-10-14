@@ -205,14 +205,31 @@ export const DockWorkspace: React.FC = () => {
   // Tabset-level pin button (mueve pin junto al botón de maximizar del grupo)
   // (tabset-level pin button moved below after helper callbacks are declared)
 
+  // The native View menu's checkboxes show the panels the layout has (as the in-window
+  // menu's do, main.tsx isComponentVisible)
+  const publishVisiblePanels = useCallback(() => {
+    const open = new Set<string>();
+    model.visitNodes((n: any) => {
+      const c = typeof n.getComponent === 'function' ? n.getComponent() : n?._attributes?.component;
+      if (typeof c === 'string' && !c.startsWith('doc:')) open.add(c);
+    });
+    try { (window as any).viewMenu?.setVisiblePanels([...open]); } catch { /* no Electron */ }
+  }, [model]);
+  useEffect(() => {
+    publishVisiblePanels(); // the saved layout, at start
+    const off = dockBus.on((ev) => { if (ev.type === 'changed') publishVisiblePanels(); });
+    return () => { off(); };
+  }, [publishVisiblePanels]);
+
   // Persist changes
   const onModelChange = useCallback(() => {
     const json = model.toJson();
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(json));
+    publishVisiblePanels();
     persistPinnedPanels();
     // schedule DOM tagging refresh shortly after React commit
     requestAnimationFrame(() => tagTabsetsWithIds(model));
-  }, [model]);
+  }, [model, publishVisiblePanels]);
 
   // Force relayout of Monaco when editor tab becomes visible
   const onAction = useCallback((action: any) => {

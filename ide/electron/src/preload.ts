@@ -443,6 +443,11 @@ contextBridge.exposeInMainWorld('git', {
   }>,
 });
 
+// The native View menu's checkboxes: which panels the layout shows
+contextBridge.exposeInMainWorld('viewMenu', {
+  setVisiblePanels: (panels: string[]) => ipcRenderer.send('view:visiblePanels', panels),
+});
+
 // MCP Server API for AI agents
 contextBridge.exposeInMainWorld('mcp', {
   // Send JSON-RPC request to MCP server

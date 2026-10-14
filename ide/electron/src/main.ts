@@ -320,20 +320,20 @@ async function createWindow() {
         label: 'View',
         submenu: [
           // the panels, alphabetically (the same list as the in-window View menu, main.tsx)
-          { label: 'BIOS Calls', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.bioscalls') },
-          { label: 'Build Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.build-output') },
-          { label: 'Call Stack', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.callstack') },
-          { label: 'Compiler Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.compiler-output') },
-          { label: 'Debug', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.debug') },
-          { label: 'Dual Test', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.dual-emulator') },
-          { label: 'Emulator', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.emulator') },
-          { label: 'Errors', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.errors') },
-          { label: 'Memory', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.memory') },
-          { label: 'Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.output') },
-          { label: 'PSG Log', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.psglog') },
-          { label: 'PyPilot', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.ai-assistant') },
-          { label: 'Terminal', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.terminal') },
-          { label: 'Trace', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.trace') },
+          { id: 'view.toggle.bioscalls', label: 'BIOS Calls', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.bioscalls') },
+          { id: 'view.toggle.build-output', label: 'Build Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.build-output') },
+          { id: 'view.toggle.callstack', label: 'Call Stack', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.callstack') },
+          { id: 'view.toggle.compiler-output', label: 'Compiler Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.compiler-output') },
+          { id: 'view.toggle.debug', label: 'Debug', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.debug') },
+          { id: 'view.toggle.dual-emulator', label: 'Dual Test', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.dual-emulator') },
+          { id: 'view.toggle.emulator', label: 'Emulator', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.emulator') },
+          { id: 'view.toggle.errors', label: 'Errors', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.errors') },
+          { id: 'view.toggle.memory', label: 'Memory', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.memory') },
+          { id: 'view.toggle.output', label: 'Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.output') },
+          { id: 'view.toggle.psglog', label: 'PSG Log', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.psglog') },
+          { id: 'view.toggle.ai-assistant', label: 'PyPilot', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.ai-assistant') },
+          { id: 'view.toggle.terminal', label: 'Terminal', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.terminal') },
+          { id: 'view.toggle.trace', label: 'Trace', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.trace') },
           { type: 'separator' },
           { label: 'New Terminal', click: () => sendMenuCommand( 'terminal.new') },
           { label: 'Claude Code in Terminal', click: () => sendMenuCommand( 'terminal.claude') },
@@ -548,6 +548,20 @@ async function createWindow() {
 // Start the authenticated localhost TCP endpoint the stdio MCP server
 // (ide/mcp-server/server.js) connects to. Port 9123 by default, next free one up
 // to 9133 otherwise; token + port via getMcpToken()/getMcpPort() (mcp/auth.ts).
+// The View menu's panel checkboxes follow the layout: the renderer says which panels
+// are open (at start, from the saved layout, and on every change). A click flips the
+// checkbox by itself, and the layout's answer sets it right.
+ipcMain.on('view:visiblePanels', (_e, visible: unknown) => {
+  if (!Array.isArray(visible)) return;
+  const menu = Menu.getApplicationMenu();
+  if (!menu) return;
+  for (const item of menu.items) {
+    for (const sub of item.submenu?.items ?? []) {
+      if (sub.id?.startsWith('view.toggle.')) sub.checked = visible.includes(sub.id.slice('view.toggle.'.length));
+    }
+  }
+});
+
 function startMCPIpcServer() {
   startMcpTcpServer((request) => getMCPServer().handleRequest(request)).then((port) => {
     // `claude` in the IDE's terminals is started with this config (shellIntegration.ts):
@@ -786,20 +800,20 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
       label: 'View',
       submenu: [
         // the panels, alphabetically (the same list as the in-window View menu, main.tsx)
-        { label: 'BIOS Calls', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.bioscalls') },
-        { label: 'Build Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.build-output') },
-        { label: 'Call Stack', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.callstack') },
-        { label: 'Compiler Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.compiler-output') },
-        { label: 'Debug', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.debug') },
-        { label: 'Dual Test', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.dual-emulator') },
-        { label: 'Emulator', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.emulator') },
-        { label: 'Errors', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.errors') },
-        { label: 'Memory', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.memory') },
-        { label: 'Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.output') },
-        { label: 'PSG Log', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.psglog') },
-        { label: 'PyPilot', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.ai-assistant') },
-        { label: 'Terminal', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.terminal') },
-        { label: 'Trace', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.trace') },
+        { id: 'view.toggle.bioscalls', label: 'BIOS Calls', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.bioscalls') },
+        { id: 'view.toggle.build-output', label: 'Build Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.build-output') },
+        { id: 'view.toggle.callstack', label: 'Call Stack', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.callstack') },
+        { id: 'view.toggle.compiler-output', label: 'Compiler Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.compiler-output') },
+        { id: 'view.toggle.debug', label: 'Debug', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.debug') },
+        { id: 'view.toggle.dual-emulator', label: 'Dual Test', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.dual-emulator') },
+        { id: 'view.toggle.emulator', label: 'Emulator', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.emulator') },
+        { id: 'view.toggle.errors', label: 'Errors', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.errors') },
+        { id: 'view.toggle.memory', label: 'Memory', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.memory') },
+        { id: 'view.toggle.output', label: 'Output', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.output') },
+        { id: 'view.toggle.psglog', label: 'PSG Log', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.psglog') },
+        { id: 'view.toggle.ai-assistant', label: 'PyPilot', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.ai-assistant') },
+        { id: 'view.toggle.terminal', label: 'Terminal', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.terminal') },
+        { id: 'view.toggle.trace', label: 'Trace', type: 'checkbox', click: () => sendMenuCommand( 'view.toggle.trace') },
         { type: 'separator' },
         { label: 'New Terminal', click: () => sendMenuCommand( 'terminal.new') },
         { label: 'Claude Code in Terminal', click: () => sendMenuCommand( 'terminal.claude') },
