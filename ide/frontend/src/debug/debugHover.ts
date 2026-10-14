@@ -240,6 +240,8 @@ export function debugValue(t: HoverTarget): string | null {
 
 // ---- C ----
 
+const NOT_RUNNING = 'not running (the program is paused in another function)';
+
 /** A struct member: the struct's own value, or across the elements of an array of them. */
 function memberValue(base: ArmVariable, field: string, ofElements: boolean): string | null {
   if (base.place.kind !== 'memory') return base.place.kind === 'unavailable' ? 'optimised out here' : null;
@@ -274,10 +276,12 @@ export function cDebugValue(text: string, filePath: string, line: number, word: 
     const baseName = field?.[1] ?? qual?.[1];
     if (baseName) {
       const base = armCVariable(filePath, line, baseName);
+      if (base === 'not running') return NOT_RUNNING;
       return base ? memberValue(base, word, !!field) : null;
     }
     if (/->\s*$/.test(before)) return null; // through a pointer: the pointee's type is not kept
     const v = armCVariable(filePath, line, word);
+    if (v === 'not running') return NOT_RUNNING;
     return v ? armValue(v) : null;
   } catch (e) {
     console.warn('[debugHover] could not read a C value:', e);

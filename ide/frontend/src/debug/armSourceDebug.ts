@@ -203,20 +203,29 @@ export function armLocal(vpyFunction: string, cName: string): ArmVariable | null
 
 /**
  * The C variable `name` as code at `file`:`line` sees it, where the program is paused:
- * a local or parameter of the function that line is in (when that function is running
- * at pc, or inlined there), else a global (file statics included).
+ * a local or parameter of a function that line is in (when it is running at pc, or
+ * inlined there), else a global (file statics included). A line's code can belong to
+ * several functions — the start of a `for` in a function gcc inlined is often counted
+ * as the caller's — so every function at every address of the line is a candidate, and
+ * the innermost one active at pc that has the name wins. `'not running'` when the name
+ * is a local of the line's function but that function is not where the program is.
  */
-export function armCVariable(file: string, line: number, name: string): ArmVariable | null {
+export function armCVariable(file: string, line: number, name: string): ArmVariable | 'not running' | null {
   const s = system();
   const di = variables();
   if (!s || !table) return null;
   const path = tablePath(file);
-  const lineAddr = path ? addressesFor(path, line).addrs[0] : undefined;
-  if (di && lineAddr !== undefined) {
-    const fn = di.scopesAt(lineAddr)[0]?.function;
+  const addrs = path ? addressesFor(path, line).addrs : [];
+  if (di && addrs.length) {
+    const lineScopes = addrs.flatMap((a) => di.scopesAt(a));
+    const candidates = new Set(lineScopes.map((sc) => sc.function));
     const pc = (s.core0.getReg(15) & ~1) >>> 0;
-    const v = fn ? di.scopesAt(pc).find((sc) => sc.function === fn)?.vars.find((x) => x.name === name) : undefined;
-    if (v) return placed(s, pc, v);
+    for (const sc of di.scopesAt(pc)) {
+      if (!candidates.has(sc.function)) continue;
+      const v = sc.vars.find((x) => x.name === name);
+      if (v) return placed(s, pc, v);
+    }
+    if (lineScopes.some((sc) => sc.vars.some((x) => x.name === name))) return 'not running';
   }
   return armGlobal(name);
 }
