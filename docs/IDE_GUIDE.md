@@ -222,7 +222,7 @@ Click in the **gutter** (left margin) of any line in the editor to toggle a brea
 
 A breakpoint on a line with no code of its own (a comment, a `def`, an `else:`) stops at the next statement of the same function. When execution stops, the editor opens that statement's file and highlights the line.
 
-The editor's breakpoints and the keys below work on **m6809** (JSVecX, through the `.pdb`) and on **rp2350 and uvm2** (the ARM emulator, through the line table in the build's ELF: see the next section). pitrex has no debugger.
+The editor's breakpoints and the keys below work on **m6809** (JSVecX, through the `.pdb`) and on **rp2350 and uvm2** (the ARM emulator, through the line table in the build's ELF: see the next section). In a C project (`.cvproj`) they work in its own C files the same way (steps stop in the project's files, not in the SDK's); the uvm2 build's ELF is read from `build_uvm2/pico/`. pitrex and the WASM simulator (Shift+F5) have no debugger.
 
 On the ARM targets a C-backend build (`[uvm2] backend = "c"`) is optimised: gcc inlines and reorders, so a line may be skipped, a breakpoint on a call may show the first line of the function inlined there, and Step Over stays in the current file while the stack does not change (a call to another module that gcc inlined is stepped over). Step Out from `loop()` goes to whatever runs next in the frame.
 

@@ -3528,12 +3528,16 @@ export const EmulatorPanel: React.FC = () => {
                 : undefined;
               // The debugger's line table: the ELF next to the image (not handed to the
               // system: see setArmDebugElf). A missing one only means no source debugging.
+              // A C project's uvm2 build (the pico-sdk recipe) leaves it in pico/.
               let debugElf: Uint8Array | null = elf ?? null;
-              if (!debugElf && (window as any).files?.readFileBin) {
+              const base = String(payload.binPath || '').replace(/\.(bin|um2)$/i, '');
+              const dir = base.replace(/[^/\\]*$/, '');
+              for (const cand of [`${base}.elf`, `${dir}pico/${base.slice(dir.length)}.elf`]) {
+                if (debugElf || !base || !(window as any).files?.readFileBin) break;
                 try {
-                  const r = await (window as any).files.readFileBin(payload.binPath.replace(/\.(bin|um2)$/i, '.elf'));
+                  const r = await (window as any).files.readFileBin(cand);
                   if (r && !r.error && r.base64) debugElf = Uint8Array.from(atob(r.base64), c => c.charCodeAt(0));
-                } catch { /* no ELF */ }
+                } catch { /* not there */ }
               }
               (emuCore as any).setArmDebugElf?.(debugElf);
               armReloadRef.current = () =>

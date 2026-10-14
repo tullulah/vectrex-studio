@@ -1,11 +1,13 @@
 /**
  * The editor's debugger on the ARM targets (rp2350, uvm2): the editor's breakpoints
- * in the running program, the stopped line shown in the editor, and steps by .vpy
- * statement — the m6809 debugger's behaviour, over the ELF's line table
- * (dwarfLines.ts) instead of the .pdb.
+ * in the running program, the stopped line shown in the editor, and steps by
+ * statement of the project's own source — the m6809 debugger's behaviour, over the
+ * ELF's line table (dwarfLines.ts) instead of the .pdb. The project's source is its
+ * .vpy files in a VPy project, and in a C project its C files (not the SDK's, not the
+ * build's).
  *
  * Steps run the program until the first instruction that starts a statement of one of
- * the project's .vpy files, on another line than the one stepped from:
+ * the project's source files, on another line than the one stepped from:
  *   over  — not deeper in the stack (sp not below where it started)
  *   into  — anywhere
  *   out   — shallower (back in the caller)
@@ -20,6 +22,7 @@ import { frameTable, type FrameTable } from './dwarfFrames';
 import { debugInfo, type DebugInfo, type CType, type VarPlace } from './dwarfInfo';
 import { unwind, vpyName } from './armCallStack';
 import { showProjectSource } from './showSource';
+import { openFileAt } from '../utils/openFile';
 import type { ArmDebug } from '../emulator/cpu/armDebug';
 import type { Thumb2 } from '../emulator/cpu/Thumb2';
 
@@ -33,15 +36,15 @@ let frames: FrameTable | null = null;
 /** The ELF the tables came from: its variables are read on the first hover. */
 let elfBytes: Uint8Array | null = null;
 let info: DebugInfo | null | undefined;
-/** Statement starts in the project's own .vpy files: where a step may stop. */
+/** Statement starts in the project's own source files: where a step may stop. */
 let projectStarts = new Set<number>();
-/** The .vpy statements starting at each of those addresses (several when gcc inlines). */
+/** The statements starting at each of those addresses (several when gcc inlines). */
 let vpyStartAt = new Map<number, Array<{ file: string; line: number }>>();
 /** Editor breakpoints by address: the line the user put each one on. */
 let breakpointLines = new Map<number, { file: string; line: number }>();
 
 /**
- * The source line at `pc`: the .vpy statement that starts there, else the line table's
+ * The source line at `pc`: the project statement that starts there, else the line table's
  * row. Optimised C puts several rows at one address (a .vpy statement of no length and
  * the C around it, or a call and the first statement of the function inlined there);
  * a breakpoint's own line wins, then the innermost statement (the last row).
@@ -61,21 +64,44 @@ function projectRoot(): string | null {
   return useProjectStore.getState().vpyProject?.rootDir?.replace(/\\/g, '/').replace(/\/$/, '') ?? null;
 }
 
+/** macOS names /tmp and /private/tmp the same directory: compare paths without it. */
+const canonical = (p: string) => p.replace(/^\/private(?=\/)/, '');
+
+/** `p` relative to the project root ("/src/main.c"), or null when outside it. */
+function inProject(p: string): string | null {
+  const root = projectRoot();
+  if (!root) return null;
+  const a = canonical(p), r = canonical(root);
+  return a.startsWith(r + '/') ? a.slice(r.length) : null;
+}
+
 /**
  * The table's name for a project file: the same path once both are relative to the
  * project (the ELF has the build's absolute path, which may differ in its prefix —
  * /tmp vs /private/tmp — from the editor's).
  */
 function tablePath(file: string): string | null {
-  const root = projectRoot();
-  if (!table || !root || !file.startsWith(root + '/')) return null;
-  const rel = file.slice(root.length); // "/src/main.vpy"
+  if (!table) return null;
+  const rel = inProject(file); // "/src/main.vpy"
+  if (rel === null) return table.files.has(file) ? file : null; // an SDK file, by its own path
   for (const p of table.files) if (p.endsWith(rel)) return p;
   return null;
 }
 
-/** Is `p` (a table path) one of the program's .vpy files? (The SDK has none.) */
-const isProjectVpy = (p: string) => /\.vpy$/i.test(p);
+/**
+ * Is `p` (a table path) the project's own source? A VPy project's .vpy files (the C its
+ * C backend generates is not); a C project's C/asm files under the project, but not
+ * under a build directory (the pico-sdk the uvm2 build fetches lives there).
+ */
+function isProjectSource(p: string): boolean {
+  if (/\.vpy$/i.test(p)) return true;
+  if (!useProjectStore.getState().vpyProject?.isExternal) return false;
+  const rel = inProject(p);
+  return rel !== null && /\.(c|h|cc|cpp|cxx|hpp|hh|s)$/i.test(rel) && !/^\/build/i.test(rel);
+}
+
+/** A source file the editor can set breakpoints in. */
+const SOURCE_FILE = /\.(vpy|c|h|cc|cpp|cxx|hpp|hh|s)$/i;
 
 /** Where a breakpoint on `line` stops: that line's statements, or the next line with code. */
 function addressesFor(path: string, line: number): { line: number; addrs: number[] } {
@@ -93,7 +119,7 @@ export function syncArmBreakpoints(): void {
   breakpointLines = new Map();
   if (!table) return;
   for (const [uri, lines] of Object.entries(useEditorStore.getState().breakpoints || {})) {
-    if (!/\.vpy$/i.test(uri)) continue;
+    if (!SOURCE_FILE.test(uri)) continue;
     const path = tablePath(fsPath(uri));
     if (!path) continue;
     for (const line of lines as Iterable<number>) {
@@ -189,7 +215,7 @@ export function armProgramActive(): boolean {
   return !!system() && !!table;
 }
 
-/** Show where the program is paused, when it is in the project's .vpy code, and its stack. */
+/** Show where the program is paused, when it is in the project's source, and its stack. */
 export function showArmStop(): void {
   const s = system();
   if (!s || !table) return;
@@ -199,13 +225,14 @@ export function showArmStop(): void {
     console.warn('[armSourceDebug] could not unwind the stack:', e);
   }
   const at = sourceAt(s.core0.getReg(15));
-  if (!at || !isProjectVpy(at.file)) {
+  if (!at || !isProjectSource(at.file)) {
     useDebugStore.getState().setCurrentVpyLine(null);
     return;
   }
   const name = baseName(at.file);
   useDebugStore.getState().setCurrentVpyLineWithFile(at.line, name);
-  showProjectSource(name, at.line);
+  if (/\.vpy$/i.test(at.file)) showProjectSource(name, at.line);
+  else void openFileAt(projectRoot() + inProject(at.file)!, at.line - 1); // its path in the editor's form
 }
 
 export function armStep(kind: 'over' | 'into' | 'out'): void {
@@ -259,7 +286,7 @@ function load(elf: Uint8Array | null): void {
   if (table) {
     for (const [key, addrs] of table.starts) {
       const path = key.slice(0, key.lastIndexOf(':'));
-      if (!isProjectVpy(path)) continue;
+      if (!isProjectSource(path)) continue;
       const line = +key.slice(key.lastIndexOf(':') + 1);
       for (const a of addrs) {
         projectStarts.add(a);
@@ -267,7 +294,7 @@ function load(elf: Uint8Array | null): void {
         if (list) list.push({ file: path, line }); else vpyStartAt.set(a, [{ file: path, line }]);
       }
     }
-    console.log(`[armSourceDebug] ${table.files.size} source files, ${projectStarts.size} .vpy statements of this project`);
+    console.log(`[armSourceDebug] ${table.files.size} source files, ${projectStarts.size} statements of this project's source`);
   }
   const s = system();
   if (s && !watched.has(s.debug)) {
@@ -290,7 +317,7 @@ export function armDebugInfo(): Record<string, unknown> | null {
     pcHex: hex(pc),
     spHex: hex(s.core0.getReg(13)),
     source: sourceAt(pc),
-    lineTable: table ? { files: table.files.size, vpyStatements: projectStarts.size, unwindEntries: frames?.fdes ?? 0 } : null,
+    lineTable: table ? { files: table.files.size, projectStatements: projectStarts.size, unwindEntries: frames?.fdes ?? 0 } : null,
     editorBreakpoints: [...s.debug.ideBreakpoints].map(hex),
     gdbBreakpoints: [...s.debug.breakpoints].map(hex),
     stopped: s.debug.stopped,
