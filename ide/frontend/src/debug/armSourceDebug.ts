@@ -16,16 +16,19 @@ import { useDebugStore } from '../state/debugStore';
 import { useEditorStore } from '../state/editorStore';
 import { useProjectStore } from '../state/projectStore';
 import { lineTable, type LineTable } from './dwarfLines';
+import { frameTable, type FrameTable } from './dwarfFrames';
+import { unwind } from './armCallStack';
 import { showProjectSource } from './showSource';
 import type { ArmDebug } from '../emulator/cpu/armDebug';
 import type { Thumb2 } from '../emulator/cpu/Thumb2';
 
-interface ArmSystem { debug: ArmDebug; core0: Thumb2 }
+interface ArmSystem { debug: ArmDebug; core0: Thumb2; read8(addr: number): number }
 
 const fsPath = (uri: string) => decodeURI(uri.replace(/^file:\/\//, '')).replace(/\\/g, '/');
 const baseName = (p: string) => p.split('/').pop() || p;
 
 let table: LineTable | null = null;
+let frames: FrameTable | null = null;
 /** Statement starts in the project's own .vpy files: where a step may stop. */
 let projectStarts = new Set<number>();
 /** The .vpy statements starting at each of those addresses (several when gcc inlines). */
@@ -99,10 +102,30 @@ export function syncArmBreakpoints(): void {
   }
 }
 
-/** Show where the program is paused, when it is in the project's .vpy code. */
+/** Where a debugger may read: memory, never a peripheral (reads have side effects). */
+const MEMORY: Array<[number, number]> = [[0x10000000, 0x14000000], [0x20000000, 0x20082000]];
+
+/** The paused program's call stack (innermost first); empty without the ELF's tables. */
+export function armCallStack() {
+  const s = system();
+  if (!s || !table || !frames) return [];
+  const read32 = (a: number) => (MEMORY.some(([lo, hi]) => a >= lo && a + 4 <= hi)
+    ? ((s.read8(a) | (s.read8(a + 1) << 8) | (s.read8(a + 2) << 16) | (s.read8(a + 3) << 24)) >>> 0)
+    : null);
+  const read16 = (a: number) => (MEMORY.some(([lo, hi]) => a >= lo && a + 2 <= hi) ? (s.read8(a) | (s.read8(a + 1) << 8)) : null);
+  const regs = Array.from({ length: 16 }, (_, i) => s.core0.getReg(i));
+  return unwind(regs, frames, table, read32, sourceAt, read16);
+}
+
+/** Show where the program is paused, when it is in the project's .vpy code, and its stack. */
 export function showArmStop(): void {
   const s = system();
   if (!s || !table) return;
+  try {
+    useDebugStore.getState().updateCallStack(armCallStack());
+  } catch (e) {
+    console.warn('[armSourceDebug] could not unwind the stack:', e);
+  }
   const at = sourceAt(s.core0.getReg(15));
   if (!at || !isProjectVpy(at.file)) {
     useDebugStore.getState().setCurrentVpyLine(null);
@@ -148,11 +171,13 @@ const watched = new WeakSet<ArmDebug>();
 
 function load(elf: Uint8Array | null): void {
   table = null;
+  frames = null;
   projectStarts = new Set();
   vpyStartAt = new Map();
   if (elf) {
     try {
       table = lineTable(elf);
+      frames = frameTable(elf);
     } catch (e) {
       console.warn('[armSourceDebug] could not read the ELF line table:', e);
     }
@@ -191,7 +216,7 @@ export function armDebugInfo(): Record<string, unknown> | null {
     pcHex: hex(pc),
     spHex: hex(s.core0.getReg(13)),
     source: sourceAt(pc),
-    lineTable: table ? { files: table.files.size, vpyStatements: projectStarts.size } : null,
+    lineTable: table ? { files: table.files.size, vpyStatements: projectStarts.size, unwindEntries: frames?.fdes ?? 0 } : null,
     editorBreakpoints: [...s.debug.ideBreakpoints].map(hex),
     gdbBreakpoints: [...s.debug.breakpoints].map(hex),
     stopped: s.debug.stopped,

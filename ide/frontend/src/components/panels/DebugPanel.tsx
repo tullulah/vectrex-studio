@@ -96,7 +96,7 @@ export const DebugPanel: React.FC = () => {
             {callStack.map((f, i) => (
               <div
                 key={i}
-                onClick={() => { if (f.file && f.line) showProjectSource(f.file, f.line); }}
+                onClick={() => { if (f.type === 'vpy' && f.file && f.line) showProjectSource(f.file, f.line); }}
                 title={f.address}
                 style={{
                   padding: '4px 12px',
@@ -105,7 +105,7 @@ export const DebugPanel: React.FC = () => {
                   fontSize: '13px',
                   display: 'flex',
                   justifyContent: 'space-between',
-                  cursor: f.file && f.line ? 'pointer' : 'default',
+                  cursor: f.type === 'vpy' && f.file && f.line ? 'pointer' : 'default',
                   color: f.type === 'vpy' ? '#DCDCAA' : '#888'
                 }}
               >

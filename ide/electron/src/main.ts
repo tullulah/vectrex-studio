@@ -381,6 +381,10 @@ async function createWindow() {
       sandbox: sandboxEnabled,
       // No permitir contenido inseguro mixto
       allowRunningInsecureContent: false,
+      // The emulators run on requestAnimationFrame, which Chromium stops in a window
+      // that is hidden or covered: a game behind another window froze, and so did a
+      // program being debugged from a gdb terminal in front of the IDE
+      backgroundThrottling: false,
       // Bloquear navegación arbitraria (seguimos validando manualmente de todos modos)
       webSecurity: true,
       // DevTools sólo si se habilita variable explícita; en prod quedan bloqueadas incluso si usuario presiona F12

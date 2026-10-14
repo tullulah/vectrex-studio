@@ -31,6 +31,10 @@ export interface LineTable {
   files: Set<string>;
   /** Where each function of the ELF starts (its symbol table's FUNC symbols). */
   functionStarts: Set<number>;
+  /** The function `pc` is in (a FUNC symbol and its size); null outside them. */
+  functionAt(pc: number): { name: string; start: number } | null;
+  /** Any symbol's address (a label too); undefined when the ELF has none of that name. */
+  symbolAddress(name: string): number | undefined;
 }
 
 // ---- ELF32 little-endian sections ----
@@ -99,19 +103,53 @@ const cstrAt = (b: Uint8Array | undefined, off: number) => {
 
 const join = (dir: string, name: string) => (!dir || name.startsWith('/') ? name : `${dir.replace(/\/$/, '')}/${name}`);
 
-/** The addresses of the ELF's functions (STT_FUNC symbols, Thumb bit dropped). */
-export function functionStarts(elf: Uint8Array): Set<number> {
+/** The ELF's functions (STT_FUNC symbols, Thumb bit dropped), by address. */
+export function functions(elf: Uint8Array): Array<{ name: string; start: number; end: number }> {
   const sec = sections(elf);
   const symtab = sec.get('.symtab');
-  const out = new Set<number>();
+  const strtab = sec.get('.strtab');
+  const out: Array<{ name: string; start: number; end: number }> = [];
   if (!symtab) return out;
   const dv = new DataView(symtab.buffer, symtab.byteOffset, symtab.byteLength);
   for (let o = 0; o + 16 <= symtab.length; o += 16) {
     const value = dv.getUint32(o + 4, true);
+    const size = dv.getUint32(o + 8, true);
     const info = symtab[o + 12];
-    if ((info & 0xf) === 2 && value) out.add((value & ~1) >>> 0); // STT_FUNC
+    if ((info & 0xf) !== 2 || !value) continue; // STT_FUNC, not a dropped one
+    const start = (value & ~1) >>> 0;
+    out.push({ name: cstrAt(strtab, dv.getUint32(o, true)), start, end: size ? start + size : 0 });
+  }
+  out.sort((a, b) => a.start - b.start);
+  // A symbol without a size (hand-written asm, the VPy asm backend's functions) runs to
+  // the next function
+  for (let i = 0; i < out.length; i++) {
+    if (out[i].end) continue;
+    const next = out.slice(i + 1).find((f) => f.start > out[i].start);
+    out[i].end = next ? next.start : out[i].start + 0x1000;
   }
   return out;
+}
+
+/** Every named symbol's address (functions, labels, data), Thumb bit dropped. */
+export function symbolAddresses(elf: Uint8Array): Map<string, number> {
+  const sec = sections(elf);
+  const symtab = sec.get('.symtab');
+  const strtab = sec.get('.strtab');
+  const out = new Map<string, number>();
+  if (!symtab) return out;
+  const dv = new DataView(symtab.buffer, symtab.byteOffset, symtab.byteLength);
+  for (let o = 0; o + 16 <= symtab.length; o += 16) {
+    const value = dv.getUint32(o + 4, true);
+    if (!value) continue;
+    const name = cstrAt(strtab, dv.getUint32(o, true));
+    if (name && !out.has(name)) out.set(name, (value & ~1) >>> 0);
+  }
+  return out;
+}
+
+/** The addresses where the ELF's functions start. */
+export function functionStarts(elf: Uint8Array): Set<number> {
+  return new Set(functions(elf).map((f) => f.start));
 }
 
 /** Every row of every sequence; a sequence ends with an end row (line -1). */
@@ -267,5 +305,19 @@ export function lineTable(elf: Uint8Array): LineTable {
     const rg = ranges[hit];
     return pc < rg.end && rg.line > 0 ? { file: rg.file, line: rg.line } : null;
   };
-  return { starts, startSet, lineAt, files, functionStarts: functionStarts(elf) };
+  const fns = functions(elf);
+  const functionAt = (pc: number) => {
+    pc = (pc & ~1) >>> 0;
+    let lo = 0, hi = fns.length - 1, hit = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (fns[mid].start <= pc) { hit = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    // several symbols can share a start (aliases): any whose size covers pc
+    for (let i = hit; i >= 0 && fns[i].start === fns[hit]?.start; i--) if (pc < fns[i].end) return { name: fns[i].name, start: fns[i].start };
+    return null;
+  };
+  let syms: Map<string, number> | null = null; // read on first use
+  const symbolAddress = (name: string) => (syms ??= symbolAddresses(elf)).get(name);
+  return { starts, startSet, lineAt, files, functionStarts: new Set(fns.map((f) => f.start)), functionAt, symbolAddress };
 }

@@ -222,7 +222,7 @@ A breakpoint on a line with no code of its own (a comment, a `def`, an `else:`) 
 
 The editor's breakpoints and the keys below work on **m6809** (JSVecX, through the `.pdb`) and on **rp2350 and uvm2** (the ARM emulator, through the line table in the build's ELF: see the next section). pitrex has no debugger.
 
-On the ARM targets a C-backend build (`[uvm2] backend = "c"`) is optimised: gcc inlines and reorders, so a line may be skipped, a breakpoint on a call may show the first line of the function inlined there, and Step Over stays in the current file while the stack does not change (a call to another module that gcc inlined is stepped over). Step Out from `loop()` goes to whatever runs next in the frame. The call stack panel is for m6809 only.
+On the ARM targets a C-backend build (`[uvm2] backend = "c"`) is optimised: gcc inlines and reorders, so a line may be skipped, a breakpoint on a call may show the first line of the function inlined there, and Step Over stays in the current file while the stack does not change (a call to another module that gcc inlined is stepped over). Step Out from `loop()` goes to whatever runs next in the frame.
 
 ### Debugging ARM programs with gdb (rp2350, uvm2)
 
@@ -265,7 +265,9 @@ These controls are also available as buttons in the **Debug Toolbar** at the top
 
 ### Debug Panel
 
-While the program is paused, the **Call stack** heads the panel: the innermost function first, each user function with its file and line (a click opens it), then its callers down to `main`. Runtime routines and BIOS routines appear by name (`Moveto_ix` ← `Wait_Recal` ← `loop` ← `main`). The stack is rebuilt from the return addresses on the 6809 stack, so a call through `JSR` indexed shows its callee by address, and in a multibank ROM a caller in another bank than the one mapped is missing. `main`'s frame under `loop` has no line: it is the compiler's own frame loop.
+While the program is paused, the **Call stack** heads the panel (m6809, rp2350, uvm2): the innermost function first, each user function with its file and line (a click opens it), then its callers down to `main`. Runtime routines and BIOS routines appear by name (`Moveto_ix` ← `Wait_Recal` ← `loop` ← `main`). The stack is rebuilt from the return addresses on the 6809 stack, so a call through `JSR` indexed shows its callee by address, and in a multibank ROM a caller in another bank than the one mapped is missing. `main`'s frame under `loop` has no line: it is the compiler's own frame loop.
+
+On rp2350 and uvm2 the stack is unwound with the call-frame information in the build's ELF (and, for code built without it, from the function's prologue), down through the C runtime and the firmware: `vpy3d_occl_add` ← `ties.draw` (ties.vpy:63) ← `loop` ← `vpy_run` ← `main` ← `_reset_handler`. A pause inside a system call (SVC) stops at its handler. A function gcc inlined has no frame of its own: with the C backend, `main()` and `loop()` themselves are inlined into the runtime's `vpy_setup` / `vpy_loop` and appear as `main` / `loop`, and a line of an inlined function shows in the frame of its caller.
 
 Below it, values printed via `DEBUG_PRINT` and variables tracked via `DEBUG_PRINT_STR` from the running program. Updates every 100ms.
 
