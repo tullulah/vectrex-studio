@@ -87,6 +87,9 @@ export class Thumb2 implements ICpu {
    * range-dispatches each. Only for memory the system would serve from the same array. */
   private _dataMem: Uint8Array | null = null;
   private _dataBase: number = 0;
+  /** Stores that went through the data fast path (the rest reach bus.write8): a system
+   *  watching a polling loop counts both to know the loop wrote nothing. */
+  public escrituras = 0;
   setDataRegion(mem: Uint8Array | null, base: number): void {
     this._dataMem = mem;
     this._dataBase = base >>> 0;
@@ -546,7 +549,7 @@ export class Thumb2 implements ICpu {
     const m = this._dataMem;
     if (m !== null) {
       const o = (addr - this._dataBase) >>> 0;
-      if (o < m.length - 1) { m[o] = val; m[o + 1] = val >>> 8; return; }
+      if (o < m.length - 1) { m[o] = val; m[o + 1] = val >>> 8; this.escrituras++; return; }
     }
     bus.write8(addr,     val & 0xff);
     bus.write8(addr + 1, (val >>> 8) & 0xff);
@@ -556,7 +559,7 @@ export class Thumb2 implements ICpu {
     const m = this._dataMem;
     if (m !== null) {
       const o = (addr - this._dataBase) >>> 0;
-      if (o < m.length - 3) { m[o] = val; m[o + 1] = val >>> 8; m[o + 2] = val >>> 16; m[o + 3] = val >>> 24; return; }
+      if (o < m.length - 3) { m[o] = val; m[o + 1] = val >>> 8; m[o + 2] = val >>> 16; m[o + 3] = val >>> 24; this.escrituras++; return; }
     }
     const v = u32(val);
     bus.write8(addr,     v & 0xff);

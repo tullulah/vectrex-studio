@@ -193,8 +193,8 @@ const PSM_PROC1 = 0x01000000;
  * escribiendo CTRL_TRIG. Modelar solo TXF0 no veia NADA — medido: "palabras del stream: 0"
  * con el juego dibujando por ese camino.
  *
- * Aqui la transferencia es SINCRONA: al disparar se consumen las n palabras de golpe. Por
- * eso BUSY se lee siempre a cero, y `batch_flush` —que espera a que se libere— no gira. */
+ * Al disparar, las n palabras van a la cola del PIO (pioCola), que las saca una por periodo
+ * de E; el canal se lee BUSY mientras no quepan en el TX FIFO. */
 const DMA_BASE       = 0x50000000;
 const DMA_CH_STRIDE  = 0x40;
 const DMA_READ_ADDR  = 0x00;
@@ -222,6 +222,9 @@ const PIO0_TXF0  = 0x50200010;
 const PIO0_FSTAT = 0x50200004;
 const PIO0_BASE  = 0x50200000;
 const PIO_TXEMPTY_SM0 = 1 << 24;   // pio.h: FSTAT TXEMPTY empieza en el bit 24
+const PIO_TXFULL_SM0  = 1 << 16;   // FSTAT TXFULL, bits 19:16
+const PIO_TX_FIFO     = 4;         // TX FIFO depth (not joined: vectrex-bus sets no FJOIN)
+const DMA_BUSY        = 1 << 26;   // CTRL_TRIG BUSY on the RP2350 (24 on the RP2040)
 
 // ── Timing ──────────────────────────────────────────────────────────────────
 /** RP2350 core cycles per Vectrex bus cycle (150 MHz / 1.5 MHz). */
@@ -480,12 +483,19 @@ export class Uvm2System implements ISystem, IBus {
   private muestra1 = 0;
   /** One byte per halfword of SRAM: set where some pc trap is (marcarTrampas). */
   private marcas = new Uint8Array(SRAM_SIZE >>> 1);
-  /* CORE 1 WAITING FOR A TIME (sondeoTimerCore1): the core reading the timer, the last
-   * instruction that read it and at which step, and the cycles to add to its clock. */
+  /* CORE 1 POLLING (sondeoCore1): the core doing the reading, the last polling read (its
+   * instruction, step, cycle, core-1 store count and registers), the change of the
+   * registers over one turn, and the cycles to add to core 1's clock. */
   private enCore1 = false;
-  private timerPollPc1 = -1;
-  private timerPollPaso1 = 0;
-  private timerPollCiclo1 = 0;
+  private escriturasCore1 = 0;   // core 1's stores through write8 (the CPU counts the rest)
+  private sondeoPc = -1;
+  private sondeoPaso = 0;
+  private sondeoCiclo = 0;
+  private sondeoEsc = 0;
+  private sondeoP = 0;
+  private sondeoRegs = new Uint32Array(15);
+  private sondeoDelta = new Int32Array(15);
+  private sondeoDeltaOk = false;
   private saltoCore1 = 0;
   perfilCore1(n = 12): [number, number][] {
     return [...this.perfil1.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
@@ -605,7 +615,6 @@ export class Uvm2System implements ISystem, IBus {
     cpu.setReg(15, cpu.getReg(14) & ~1);
   }
   private sdBloquesVistos = 0;
-  private enStream = false;
   private execAddr = 0;
   private execVuelta = [0, 0];   // LR guardado por nucleo mientras esta dentro de uvm2_exec
   private enLista = 0;
@@ -1198,32 +1207,68 @@ export class Uvm2System implements ISystem, IBus {
   }
 
   /**
-   * Core 1 waiting for a moment: `while ((int32_t)(target - time_us_32()) > 0) {}`, the
-   * pacer that starts each list on time (uvm2_core1.c). The loop is four instructions,
-   * ~6 cycles, against a timer that changes once per microsecond (150 cycles): 25 turns
-   * that can only read the same value, and in ROTJ 62% of everything core 1 executed.
+   * CORE 1 POLLING A REGISTER: skip the turns that can only read the same value again.
    *
-   * When the SAME instruction reads the timer again within a few steps, it is that loop:
-   * its clock skips the turns that can only read this same microsecond again. A whole
-   * number of turns (P cycles each, measured between the two reads), so the next read
-   * lands on the very cycle the loop would have read on: the program, the bus and the
-   * beam see exactly what they saw without the skip. (maybeCollapseSpin does the same for
-   * the bus clock.)
+   * Two loops took nearly all core 1 executed in ROTJ, each a handful of instructions
+   * against a value that changes far less often:
+   *   - the pacer, `while ((int32_t)(target - time_us_32()) > 0) {}`: the timer changes once
+   *     per microsecond (150 cycles), the turn is ~6;
+   *   - vectrex_bus waiting for the DMA (`while CTRL_TRIG & BUSY { n_waits += 1 }`) and for
+   *     the TX FIFO to empty: they change when the PIO has taken enough words.
+   * The caller gives `h`, the cycles until the polled value can change (0 = not known).
+   *
+   * A turn is recognised by the SAME instruction reading again within a few steps, with
+   * no store in between and the registers changed by the SAME amount as over the turn
+   * before (a counter: -1 per turn; everything else unchanged). Then k whole turns are
+   * skipped: the clock advances by k turns' cycles and the registers by k turns' change, so
+   * the next read lands on the very cycle, with the very registers, the loop would have
+   * had — the program, the bus and the beam see what they saw without the skip.
    */
-  private sondeoTimerCore1(): void {
-    const pc = this.cpu1!.getReg(15) >>> 0;
+  private sondeoCore1(h: number): void {
+    const cpu = this.cpu1!;
+    const pc = cpu.getReg(15) >>> 0;
     const ahora = this.cpuCiclos;
-    if (pc === this.timerPollPc1 && this.muestra1 - this.timerPollPaso1 <= 8) {
-      const P = ahora - this.timerPollCiclo1;
-      if (P > 0 && P <= 64) {
-        const hastaCambio = CPU_POR_US - (ahora % CPU_POR_US);   // to the next microsecond
-        const vueltas = Math.ceil(hastaCambio / P) - 1;            // turns that read this one again
-        if (vueltas > 0) this.saltoCore1 = vueltas * P;
+    const esc = cpu.escrituras + this.escriturasCore1;
+    const regs = this.sondeoRegs, delta = this.sondeoDelta;
+    let mismo = pc === this.sondeoPc && this.muestra1 - this.sondeoPaso <= 12 && esc === this.sondeoEsc;
+    if (mismo) {
+      const P = ahora - this.sondeoCiclo;
+      let igual = this.sondeoDeltaOk && P === this.sondeoP;
+      for (let i = 0; i < 15; i++) {
+        const d = (cpu.getReg(i) - regs[i]) | 0;
+        if (d !== delta[i]) igual = false;
+        delta[i] = d;
       }
+      if (igual && P > 0 && P <= 64 && h > 0) {
+        const k = Math.ceil(h / P) - 1;                 // turns that read the same value again
+        if (k > 0) {
+          for (let i = 0; i < 15; i++) if (delta[i]) cpu.setReg(i, (cpu.getReg(i) + Math.imul(k, delta[i])) >>> 0);
+          this.saltoCore1 = k * P;
+        }
+      }
+      this.sondeoP = P;
+      this.sondeoDeltaOk = true;
+    } else {
+      this.sondeoDeltaOk = false;
     }
-    this.timerPollPc1 = pc;
-    this.timerPollPaso1 = this.muestra1;
-    this.timerPollCiclo1 = ahora + this.saltoCore1;
+    for (let i = 0; i < 15; i++) regs[i] = cpu.getReg(i);
+    this.sondeoPc = pc;
+    this.sondeoPaso = this.muestra1;
+    this.sondeoEsc = esc;
+    this.sondeoCiclo = ahora + this.saltoCore1;
+  }
+
+  /** CPU cycles until the PIO has taken `m` more words (pioPeriodo, one per rising edge
+   *  of E, a park holding the machine for its N periods). */
+  private ciclosHastaTomar(m: number): number {
+    if (m <= 0) return 0;
+    let t = (this.clkHigh ? CPU_PER_BUS : CPU_PER_BUS / 2) - this.cpuAcc + CPU_PER_BUS * this.pioParkResto;
+    const mask = this.pioCola.length - 1;
+    for (let i = 0; i < m - 1 && i < 65536; i++) {
+      const w = this.pioCola[(this.pioSale + i) & mask];
+      t += CPU_PER_BUS * ((w & 1) ? 1 : (w & 2) ? ((w >>> 2) & 0xFFFFFF) + 1 : 1);
+    }
+    return t;
   }
 
   /* El bus, hasta el instante que LOS DOS nucleos han alcanzado ya. */
@@ -1269,6 +1314,7 @@ export class Uvm2System implements ISystem, IBus {
       );
     } else {
       this.clkHigh = true;
+      this.pioPeriodo();
       this.onRisingEdge();
     }
   }
@@ -1344,7 +1390,8 @@ export class Uvm2System implements ISystem, IBus {
                 `sp=0x${(sp >>> 0).toString(16)}  pila=[${w.map(x => '0x' + (x >>> 0).toString(16)).join(', ')}]`);
   }
 
-  /** La transferencia del canal 0: n palabras del lote al TX FIFO, de golpe. */
+  /** La transferencia del canal 0: las n palabras del lote, a la cola del PIO (pioPeriodo
+   *  las saca al ritmo del bus; el canal sigue BUSY mientras no quepan en el TX FIFO). */
   private dmaTransferencia(): void {
     const src = this.dmaRegs[DMA_READ_ADDR >>> 2] >>> 0;
     const n   = this.dmaRegs[DMA_TRANS_COUNT >>> 2] & 0x0FFFFFFF;   // 31:28 = MODE
@@ -1355,14 +1402,34 @@ export class Uvm2System implements ISystem, IBus {
     this.dmaRegs[DMA_TRANS_COUNT >>> 2] = 0;
   }
 
-  /** Una palabra del stream: se presenta en los pines y se corre su periodo de E.
+  /* THE STREAM RUNS IN BUS TIME, NEXT TO THE CPU.
+   *
+   * On the cartridge the DMA feeds the PIO's TX FIFO and the state machine takes one word
+   * per E period while both cores go on working: CPU time and bus time are ONE clock. Here
+   * every word used to be run the moment the DMA was triggered, and then the CPU's own time
+   * advanced the bus too — the two were ADDED. Measured on ROTJ: only 31-72% of a frame's
+   * 30000 bus cycles were CPU time, so a list arrived every second frame (the picture came
+   * in halves, flickering) and the bus cycles that slipped in between words had no
+   * counterpart on the console.
+   *
+   * So the words wait in this queue and pioPeriodo, at each rising edge of E, takes the next
+   * one. The channel reads BUSY while more words are waiting than the TX FIFO holds (4: the
+   * SDK does not join the FIFOs), and FSTAT says TXEMPTY / TXFULL from the same count —
+   * which is what batch_flush and drain wait on. */
+  private pioCola = new Uint32Array(1 << 17);
+  private pioSale = 0;       // words taken (index of the next one, unwrapped)
+  private pioEntra = 0;      // words queued
+  private pioParkResto = 0;  // periods left of the park being presented
+  private pioTrasEscritura = false;   // the previous period presented a write
+  private pioEnCola(): number { return this.pioEntra - this.pioSale; }
+
+  /** Una palabra del stream: a la cola del PIO, que pioPeriodo saca al ritmo del bus.
    *
    * LAS DOS PRIMERAS SE TIRAN. El preambulo del .pio hace dos `pull block`: la primera
    * palabra son 27 unos para `out pindirs` y la segunda el patron de PARK que va a X. Las
    * dos tienen el bit 0 a uno, asi que sin saltarlas se leerian como escrituras y
    * mandarian basura a la VIA en el primer frame. */
   private pioPalabra(w: number): void {
-    const PINES = (((1 << this.placa.outCount) - 1) << this.placa.outBase) >>> 0;
     if (this.pioVistas < 6) {
       console.log(`[Uvm2System] palabra ${this.pioVistas} = 0x${(w >>> 0).toString(16)} ` +
                   `(bit0=${w & 1} bit1=${(w >>> 1) & 1})`);
@@ -1384,35 +1451,32 @@ export class Uvm2System implements ISystem, IBus {
       this.trazaPio.push(`w=0x${(w >>> 0).toString(16)} dir=0x${dir.toString(16)} reg=${dir & 0xF} dato=0x${this.datoDe(g).toString(16)}`);
     }
     if (w & 1) this.pioEsc++; else if (w & 2) this.pioPark_n++; else this.pioSil++;
+    if (this.pioEnCola() >= this.pioCola.length) return;   // can not happen: the DMA waits
+    this.pioCola[this.pioEntra++ & (this.pioCola.length - 1)] = w;
+  }
 
+  /** One E period of the state machine, at its rising edge: the next word on the pins.
+   *
+   * A write presents its address and data for one period — the VIA latches it on the falling
+   * edge — and parks right after: pins left on a write would be latched again on the next
+   * edge, harmless for a port, NOT for T1CH, which restarts the ramp. A park presents the
+   * PARK pattern (A15 without A14: not the VIA) for its N periods; a silence leaves the pins
+   * as they are for one. With nothing queued the machine waits on `pull`, parked. */
+  private pioPeriodo(): void {
+    const PINES = (((1 << this.placa.outCount) - 1) << this.placa.outBase) >>> 0;
+    if (this.pioTrasEscritura) {
+      this.pioTrasEscritura = false;
+      this.gpioOut = ((this.gpioOut & ~PINES) | this.placa.park) >>> 0;
+    }
+    if (this.pioParkResto > 0) { this.pioParkResto--; return; }
+    if (this.pioSale === this.pioEntra) return;
+    const w = this.pioCola[this.pioSale++ & (this.pioCola.length - 1)];
     if (w & 1) {
       this.gpioOut = ((this.gpioOut & ~PINES) | ((((w >>> 1) & ((1 << this.placa.outCount) - 1)) << this.placa.outBase) & PINES)) >>> 0;
-      this.enStream = true;
-      this.correPeriodoE();
-      this.enStream = false;
-      /* Y SE APARCA EN CUANTO SE ENGANCHA. En el hardware la SM del PIO ocupa cada periodo
-       * de E; aqui el reloj avanza TAMBIEN con la CPU, asi que unos pines que se quedan
-       * puestos los vuelve a enganchar la VIA en el siguiente flanco. Medido en la traza:
-       * cada escritura aparecia DOS O TRES veces seguidas —"ORB=0x81 ORB=0x81",
-       * "DDRB=0x9f" tres veces— y una repeticion es inocua para un puerto pero NO para
-       * T1CH, que reinicia la rampa. */
-      this.gpioOut = ((this.gpioOut & ~PINES) | this.placa.park) >>> 0;
+      this.pioTrasEscritura = true;
     } else if (w & 2) {
-      /* APARCAR ES PRESENTAR EL PATRON DE PARK, no dejar los pines como estaban.
-       *
-       * El `parkeo` del .pio hace `mov osr, x` + `out pins` en CADA vuelta. Dejandolos
-       * quietos, la ultima direccion sigue seleccionada y la VIA la RE-ENGANCHA en cada
-       * flanco — que es justo contra lo que avisa el comentario del .pio: idempotente para
-       * un registro de puerto, NO para T1CH, que reinicia la rampa.
-       *
-       * Medido: 1.235.936 escrituras a T1LL en 60 frames, y el haz solo se movia en X
-       * (todos los segmentos con la misma Y). El patron de PARK lleva A15 sin A14, que no
-       * decodifica a la VIA: aparcar es no escribir. */
       this.gpioOut = ((this.gpioOut & ~PINES) | this.placa.park) >>> 0;
-      const n = ((w >>> 2) & 0xFFFFFF) + 1;      // la cuenta va como N-1, ver el .pio
-      for (let i = 0; i < n && i < 4096; i++) this.correPeriodoE();
-    } else {
-      this.correPeriodoE();                       // silencio: los pines se quedan como esten
+      this.pioParkResto = ((w >>> 2) & 0xFFFFFF);   // N-1 more after this one (the .pio counts N-1)
     }
   }
 
@@ -1637,7 +1701,8 @@ export class Uvm2System implements ISystem, IBus {
        * absoluto de consola. */
       if (addr >= TIMER0_BASE && addr < TIMER0_BASE + 0x30) {
         const off = addr & 0xFC;
-        if (this.enCore1 && (addr & 3) === 0 && (off === 0x28 || off === 0x0C)) this.sondeoTimerCore1();
+        if (this.enCore1 && (addr & 3) === 0 && (off === 0x28 || off === 0x0C))
+          this.sondeoCore1(CPU_POR_US - (this.cpuCiclos % CPU_POR_US));   // the next microsecond
         const us  = Math.floor(this.cpuCiclos / CPU_POR_US);
         const alta = Math.floor(us / 4294967296);
         let w = 0;
@@ -1666,19 +1731,26 @@ export class Uvm2System implements ISystem, IBus {
       }
     }
 
-    /* DMA: se lee lo ultimo escrito, y CTRL_TRIG SIN el bit BUSY — la transferencia ya
-     * ocurrio en el disparo, asi que nunca esta ocupado. */
+    /* DMA: se lee lo ultimo escrito; CTRL_TRIG del canal 0 con BUSY mientras la cola del PIO
+     * tenga mas palabras de las que caben en el TX FIFO (ver pioCola). */
     if (((addr & 0xFFFFF000) >>> 0) === DMA_BASE) {
       const off = addr & 0xFFC, shift = (addr & 3) * 8;
-      const word = this.dmaRegs[off >>> 2] ?? 0;
+      let word = this.dmaRegs[off >>> 2] ?? 0;
+      if (off === DMA_CTRL_TRIG && this.pioEnCola() > PIO_TX_FIFO) {      // channel 0: see pioCola
+        word |= DMA_BUSY;
+        if (this.enCore1 && (addr & 3) === 0) this.sondeoCore1(this.ciclosHastaTomar(this.pioEnCola() - PIO_TX_FIFO));
+      }
       return (word >>> shift) & 0xFF;
     }
 
-    /* PIO0.FSTAT: el TX FIFO SIEMPRE esta vacio porque cada palabra se consume en el acto,
-     * en la propia escritura. `drain` gira hasta ver TXEMPTY, asi que sin esto no sale. */
+    /* PIO0.FSTAT: TXEMPTY / TXFULL segun la cola del PIO (pioCola). `drain` gira hasta ver
+     * TXEMPTY. */
     if (((addr & 0xFFFFF000) >>> 0) === PIO0_BASE) {
       const off = addr & 0xFFC, shift = (addr & 3) * 8;
-      const word = off === (PIO0_FSTAT & 0xFFF) ? (PIO_TXEMPTY_SM0 | 0x0F) : 0;
+      const q = this.pioEnCola();
+      if (q > 0 && this.enCore1 && (addr & 3) === 0 && off === (PIO0_FSTAT & 0xFFF)) this.sondeoCore1(this.ciclosHastaTomar(q));
+      const word = off === (PIO0_FSTAT & 0xFFF)
+        ? ((q === 0 ? PIO_TXEMPTY_SM0 : 0) | (q >= PIO_TX_FIFO ? PIO_TXFULL_SM0 : 0) | 0x0F) : 0;
       return (word >>> shift) & 0xFF;
     }
 
@@ -1779,6 +1851,7 @@ export class Uvm2System implements ISystem, IBus {
   write8(addr: number, data: number): void {
     addr = addr >>> 0;
     data &= 0xFF;
+    if (this.enCore1) this.escriturasCore1++;
     if (addr >= SRAM_BASE && addr < SRAM_BASE + SRAM_SIZE) {
       this.sram[addr - SRAM_BASE] = data;
       return;
@@ -1835,8 +1908,7 @@ export class Uvm2System implements ISystem, IBus {
         return;
       }
 
-      /* PIO0.TXF0: la palabra del stream. Se consume EN EL ACTO — un periodo de E por
-       * escritura, que es lo que hace el programa del PIO. */
+      /* PIO0.TXF0: la palabra del stream, a la cola del PIO como las del DMA. */
       if (((addr & 0xFFFFF000) >>> 0) === PIO0_BASE) {
         if ((addr & 0xFFC) === (PIO0_TXF0 & 0xFFF)) {
           const shift = (addr & 3) * 8;
