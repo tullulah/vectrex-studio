@@ -27,7 +27,7 @@ import { dockBus } from '../state/dockBus';
 import { lspClient, getLspClient, openClangdDocument } from '../lspClient';
 import { useProjectStore } from '../state/projectStore';
 import { openFileAt } from '../utils/openFile';
-import { debugValue, hoverTarget } from '../debug/debugHover';
+import { cDebugValue, debugValue, hoverTarget } from '../debug/debugHover';
 // TODO(i18n): Adapt Monaco UI strings (context menu, messages) when supporting dynamic locale changes.
 
 // --- C/C++ (clangd) support ------------------------------------------------
@@ -254,6 +254,24 @@ function registerVpyNavigation(monaco: Monaco) {
       };
     }
   });
+  // The same in a C project's files on the ARM targets (shown next to clangd's hover)
+  for (const langId of ['c', 'cpp']) {
+    monaco.languages.registerHoverProvider(langId, {
+      provideHover: (model, position) => {
+        if (useDebugStore.getState().state !== 'paused') return null;
+        const w = model.getWordAtPosition(position);
+        if (!w) return null;
+        const value = cDebugValue(model.getValue(), model.uri.fsPath.replace(/\\/g, '/'), position.lineNumber, w.word, w.startColumn);
+        if (value === null) return null;
+        const before = model.getLineContent(position.lineNumber).slice(0, w.startColumn - 1);
+        const q = /([A-Za-z_]\w*\s*(?:\[[^\]]*\]\s*)?\.\s*)$/.exec(before)?.[1].replace(/\s+/g, '') ?? '';
+        return {
+          range: new monaco.Range(position.lineNumber, w.startColumn, position.lineNumber, w.endColumn),
+          contents: [{ value: '```text\n' + `${q}${w.word} = ${value}` + '\n```' }],
+        };
+      }
+    });
+  }
   // A definition in another file (a module, an asset): open it in the IDE, which
   // picks the editor for its type, and move to the line
   monaco.editor.registerEditorOpener({

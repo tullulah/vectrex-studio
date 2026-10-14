@@ -10,10 +10,12 @@
  *   ARM   — the ELF: the C backend's `G_<NAME>` / `G_<MODULE>_<NAME>` globals (struct
  *           arrays `G_<NAME>[i].f_<field>`) and `l_<name>` locals, typed by its debug
  *           info, where they are at the paused pc; the asm backend's `VAR_<NAME>`.
+ * In a C project's own files (cDebugValue) the names are the C ones: a local of the
+ * function the hovered line is in, else a global; `s.field` and `arr[i].field` too.
  */
 import { useDebugStore } from '../state/debugStore';
 import { useProjectStore } from '../state/projectStore';
-import { armGlobal, armLocal, armProgramActive, type ArmVariable } from './armSourceDebug';
+import { armCVariable, armGlobal, armLocal, armProgramActive, type ArmVariable } from './armSourceDebug';
 import type { CType } from './dwarfInfo';
 
 const MAX_ELEMENTS = 16;
@@ -232,6 +234,53 @@ export function debugValue(t: HoverTarget): string | null {
     return armProgramActive() ? armHoverValue(t) : m6809Value(t);
   } catch (e) {
     console.warn('[debugHover] could not read a value:', e);
+    return null;
+  }
+}
+
+// ---- C ----
+
+/** A struct member: the struct's own value, or across the elements of an array of them. */
+function memberValue(base: ArmVariable, field: string, ofElements: boolean): string | null {
+  if (base.place.kind !== 'memory') return base.place.kind === 'unavailable' ? 'optimised out here' : null;
+  const addr = base.place.addr;
+  if (ofElements) {
+    if (base.type.kind !== 'array' || base.type.elem.kind !== 'struct') return null;
+    const member = base.type.elem.members.find((m) => m.name === field);
+    if (!member) return null;
+    const { count, elem } = base.type;
+    const n = Math.min(count, MAX_ELEMENTS);
+    const items = Array.from({ length: n }, (_, i) => cValue(member.type, base.read8, addr + i * elem.size + member.offset, 1));
+    return `[${items.join(', ')}${count > n ? `, … (${count})` : ''}]`;
+  }
+  if (base.type.kind !== 'struct') return null;
+  const member = base.type.members.find((m) => m.name === field);
+  return member ? cValue(member.type, base.read8, addr + member.offset) : null;
+}
+
+/**
+ * The value of the C variable at `word` (from 1-based `startColumn` of `line`) in the
+ * C file at `filePath`, while an ARM program is paused; null otherwise.
+ */
+export function cDebugValue(text: string, filePath: string, line: number, word: string, startColumn: number): string | null {
+  if (useDebugStore.getState().state !== 'paused' || !armProgramActive()) return null;
+  const l = text.split(/\r?\n/)[line - 1] ?? '';
+  const before = l.slice(0, startColumn - 1);
+  const after = l.slice(startColumn - 1 + word.length);
+  if (/^\s*\(/.test(after) || /^[0-9]/.test(word) || /\/\/|\/\*/.test(before)) return null; // a call, a number, a comment
+  try {
+    const field = /([A-Za-z_]\w*)\s*\[[^\]]*\]\s*\.\s*$/.exec(before);
+    const qual = field ? null : /([A-Za-z_]\w*)\s*\.\s*$/.exec(before);
+    const baseName = field?.[1] ?? qual?.[1];
+    if (baseName) {
+      const base = armCVariable(filePath, line, baseName);
+      return base ? memberValue(base, word, !!field) : null;
+    }
+    if (/->\s*$/.test(before)) return null; // through a pointer: the pointee's type is not kept
+    const v = armCVariable(filePath, line, word);
+    return v ? armValue(v) : null;
+  } catch (e) {
+    console.warn('[debugHover] could not read a C value:', e);
     return null;
   }
 }

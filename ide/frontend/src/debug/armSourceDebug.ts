@@ -19,7 +19,7 @@ import { useEditorStore } from '../state/editorStore';
 import { useProjectStore } from '../state/projectStore';
 import { lineTable, sections, type LineTable } from './dwarfLines';
 import { frameTable, type FrameTable } from './dwarfFrames';
-import { debugInfo, type DebugInfo, type CType, type VarPlace } from './dwarfInfo';
+import { debugInfo, type DebugInfo, type CType, type ScopeVar, type VarPlace } from './dwarfInfo';
 import { unwind, vpyName } from './armCallStack';
 import { showProjectSource } from './showSource';
 import { openFileAt } from '../utils/openFile';
@@ -198,7 +198,30 @@ export function armLocal(vpyFunction: string, cName: string): ArmVariable | null
   if (at < 0) return null;
   // its own variables, then those of the blocks gcc kept around it (inlined scopes come first)
   const v = scopes[at].vars.find((x) => x.name === cName);
-  if (!v) return null;
+  return v ? placed(s, pc, v) : null;
+}
+
+/**
+ * The C variable `name` as code at `file`:`line` sees it, where the program is paused:
+ * a local or parameter of the function that line is in (when that function is running
+ * at pc, or inlined there), else a global (file statics included).
+ */
+export function armCVariable(file: string, line: number, name: string): ArmVariable | null {
+  const s = system();
+  const di = variables();
+  if (!s || !table) return null;
+  const path = tablePath(file);
+  const lineAddr = path ? addressesFor(path, line).addrs[0] : undefined;
+  if (di && lineAddr !== undefined) {
+    const fn = di.scopesAt(lineAddr)[0]?.function;
+    const pc = (s.core0.getReg(15) & ~1) >>> 0;
+    const v = fn ? di.scopesAt(pc).find((sc) => sc.function === fn)?.vars.find((x) => x.name === name) : undefined;
+    if (v) return placed(s, pc, v);
+  }
+  return armGlobal(name);
+}
+
+function placed(s: ArmSystem, pc: number, v: ScopeVar): ArmVariable {
   const regs = Array.from({ length: 16 }, (_, i) => s.core0.getReg(i) >>> 0);
   const row = frames?.rowAt(pc);
   const read8 = memRead8(s);

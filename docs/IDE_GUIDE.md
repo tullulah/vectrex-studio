@@ -272,6 +272,7 @@ While the program is paused, hovering a variable in the editor shows its value â
 - **m6809**: every global, array and struct field, and the parameters and locals of the functions on the call stack (the `.pdb`'s variables; m6809 frames are overlaid by call graph, so a function that is not running has no value of its own). One-byte values show unsigned, two-byte ones signed: the `.pdb` does not record the declared type.
 - **rp2350 / uvm2 with the C backend**: from the debug information gcc writes into the ELF â€” globals with their C types, and the parameters and locals of the function the program is paused in, or of one gcc inlined there (a local of a function further up the call stack shows nothing). At `-O3` a local often lives in a register, or nowhere at that point: the hover then says *optimised out here*. A global gcc kept in a register, or folded because nothing changes it, has no value to show either.
 - **rp2350 / uvm2 with the asm backend**: scalar globals (`VAR_<NAME>`, 32-bit); arrays and locals are not shown (the asm backend writes no type or frame information).
+- **C projects (`.cvproj`) on rp2350 / uvm2**: the same debug information, by the C names, next to clangd's own hover: a parameter or local of the function the hovered line is in (when that function is running, or inlined where the program is paused), else a global or file `static`; `s.field` and `arr[i].field` (the field of every element) too. A member read through a pointer (`p->field`) is not shown.
 
 ### Call Stack Panel
 
