@@ -1275,7 +1275,27 @@ export class Uvm2System implements ISystem, IBus {
   private sincronizaBus(): void {
     const ahora = this.cpu1 ? Math.min(this.relojCore0, this.relojCore1) : this.relojCore0;
     const d = ahora - this.relojBus;
-    if (d > 0) { this.relojBus = ahora; this.advanceBus(d); }
+    if (d > 0) { this.relojBus = ahora; this.advanceBus(d); this.calculaFinFrame(); }
+  }
+
+  /* THE BUS IS BROUGHT UP TO DATE ONLY WHEN SOMETHING CAN SEE IT.
+   *
+   * It used to be synced after every instruction of either core: two thirds of the time
+   * went around the instructions rather than in them (the interpreter alone runs ~90 M
+   * instructions a second, the system ran 33). The CPU only sees or changes the bus
+   * through a peripheral — the timer, GPIO, DMA, PIO, the VIA by SIO — and read8/write8
+   * sync before serving any of them, at the same instant the per-step sync had reached
+   * (the clock before the current instruction). SRAM, PSRAM, ROM and flash never see it.
+   * The other thing that depends on the bus is the end of the frame: relojFinFrame is the
+   * clock at which the bus will reach it, and the step loop syncs when a core gets there. */
+  private finFrameBus = 0;
+  private relojFinFrame = 0;
+  private calculaFinFrame(): void {
+    const quedan = this.finFrameBus - this.busCycle;   // falling edges still to come
+    if (quedan <= 0) { this.relojFinFrame = this.relojBus; return; }
+    // the next falling edge: this phase's end if the clock is high, else one phase more
+    const primera = (this.clkHigh ? CPU_PER_BUS / 2 : CPU_PER_BUS) - this.cpuAcc;
+    this.relojFinFrame = this.relojBus + primera + (quedan - 1) * CPU_PER_BUS;
   }
 
   private advanceBus(cpuCycles: number): void {
@@ -1344,6 +1364,7 @@ export class Uvm2System implements ISystem, IBus {
       // them in the accumulator counts the same phase twice, which stretches
       // every ramp and blows up the geometry.
       this.cpuAcc = 0;
+      this.calculaFinFrame();
     } else {
       this.lastPollPc = pc;
     }
@@ -1480,11 +1501,6 @@ export class Uvm2System implements ISystem, IBus {
     }
   }
 
-  /** Un periodo de E completo, que es donde la VIA engancha (en el flanco de bajada). */
-  private correPeriodoE(): void {
-    if (!this.clkHigh) this.halfStep();   // subir
-    this.halfStep();                      // bajar: aqui se latchea
-  }
 
   /** ── LAS MUESTRAS DE UN FRAME DEL JACK ─────────────────────────────────────
    *
@@ -1664,6 +1680,7 @@ export class Uvm2System implements ISystem, IBus {
 
     if (addr < BOOTROM_SIZE) return this.bootrom[addr];
     if (this.flash && addr >= FLASH_BASE && addr < FLASH_BASE + FLASH_SIZE) return this.flash[addr - FLASH_BASE];
+    this.sincronizaBus();   // a peripheral: it sees the bus as it is now (see relojFinFrame)
     if (addr >= QMI_BASE && addr < QMI_BASE + 0x10) return (this.qmiLeer(addr & 0xC) >>> ((addr & 3) * 8)) & 0xFF;
 
     // SCB->VTOR, TAMBIÉN EN LECTURA.
@@ -1857,6 +1874,7 @@ export class Uvm2System implements ISystem, IBus {
       return;
     }
     { const po = psramOff(addr); if (po >= 0) { this.psram[po] = data; return; } }
+    this.sincronizaBus();   // a peripheral (see relojFinFrame)
 
     {
       const sh = (addr & 3) * 8, bits = data << sh, mask = 0xFF << sh;
@@ -2088,11 +2106,20 @@ export class Uvm2System implements ISystem, IBus {
     if (!this.frameAMedias) this.jackFrame();
     const until = this.frameAMedias ? this.finDeFrame : this.busCycle + BUS_PER_FRAME;
     this.finDeFrame = until;
+    this.finFrameBus = until;
+    this.calculaFinFrame();
     this.frameAMedias = false;
     let spent = 0;
     let paradoPorDepurador = false;
+    // Read once a frame (a getter over four fields, per instruction, was 2.5% of the time):
+    // breakpoints set meanwhile apply from the next frame, steps only change between frames
+    const depurando = this.debug.armed;
 
     while (!this.halted && this.busCycle < until && spent < MAX_CPU_CYCLES_PER_FRAME) {
+      if ((this.cpu1 ? Math.min(this.relojCore0, this.relojCore1) : this.relojCore0) >= this.relojFinFrame) {
+        this.sincronizaBus();
+        if (this.busCycle >= until) break;
+      }
       /* ANDA EL QUE VA POR DETRAS. Es lo unico que hace falta para que los dos nucleos
        * corran a la misma tasa de CICLOS en vez de a la misma de instrucciones: se mira
        * que reloj esta mas atrasado y se le da un paso. El bus va detras del minimo. */
@@ -2101,7 +2128,6 @@ export class Uvm2System implements ISystem, IBus {
         this.relojCore1 += c1 > 0 ? c1 : 1;
         if (this.saltoCore1) { this.relojCore1 += this.saltoCore1; this.saltoCore1 = 0; }
         spent += c1;
-        this.sincronizaBus();
         continue;
       }
       const pc = this.cpu.getReg(15) >>> 0;
@@ -2114,7 +2140,7 @@ export class Uvm2System implements ISystem, IBus {
       }
 
       // A debugger breakpoint or step (cpu/armDebug.ts): leave the frame right here
-      if (this.debug.armed && this.debug.shouldStop(pc, this.cpu.getReg(13))) { paradoPorDepurador = true; break; }
+      if (depurando && this.debug.shouldStop(pc, this.cpu.getReg(13))) { paradoPorDepurador = true; break; }
 
       // Historial de PCs, solo para el informe de fallo. Un fallo en este nucleo
       // dice DONDE se paro pero no COMO se llego, y sin el "como" no se puede
@@ -2207,8 +2233,8 @@ export class Uvm2System implements ISystem, IBus {
 
       spent += c;
       this.relojCore0 += c;
-      this.sincronizaBus();
     }
+    this.sincronizaBus();
 
     // Stopped by the debugger mid-frame: the beam keeps what this frame drew so far and
     // the next runFrame goes on from here (the canvas keeps the last whole frame)
