@@ -1,0 +1,2483 @@
+{
+  "builtins": [
+    {
+      "doc": "Set beam intensity (0–127)",
+      "name": "SET_INTENSITY",
+      "signature": "SET_INTENSITY(val)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Microseconds since the last frame sync (ARM). Always 0 on m6809",
+      "name": "GET_FRAME_US",
+      "signature": "GET_FRAME_US()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Move the beam to (x, y) without drawing. Constant or variable arguments",
+      "name": "MOVE",
+      "signature": "MOVE(x, y)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Draw a line segment",
+      "name": "DRAW_LINE",
+      "signature": "DRAW_LINE(x0, y0, x1, y1, intensity)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Circle as a 16-segment polygon",
+      "name": "DRAW_CIRCLE",
+      "signature": "DRAW_CIRCLE(cx, cy, radius, intensity)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Circle with a custom segment count (3–64). m6809 only, constant arguments only",
+      "name": "DRAW_CIRCLE_SEG",
+      "signature": "DRAW_CIRCLE_SEG(segs, cx, cy, radius, intensity)",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "Closed polygon with n (≥ 3) vertices. m6809 also accepts the form without intensity",
+      "name": "DRAW_POLYGON",
+      "signature": "DRAW_POLYGON(n, intensity, x0, y0, ..., xn-1, yn-1)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Rectangle outline",
+      "name": "DRAW_RECT",
+      "signature": "DRAW_RECT(x, y, w, h, intensity)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Filled rectangle (scanlines)",
+      "name": "DRAW_FILLED_RECT",
+      "signature": "DRAW_FILLED_RECT(x, y, w, h, intensity)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Open arc",
+      "name": "DRAW_ARC",
+      "signature": "DRAW_ARC(segs, cx, cy, r, start_deg, sweep_deg, intensity)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Ellipse",
+      "name": "DRAW_ELLIPSE",
+      "signature": "DRAW_ELLIPSE(cx, cy, rx, ry, intensity)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Cubic Bézier as steps line segments",
+      "name": "DRAW_BEZIER",
+      "signature": "DRAW_BEZIER(x0, y0, cp1x, cp1y, cp2x, cp2y, x1, y1, steps, intensity)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Quadratic Bézier as steps line segments",
+      "name": "DRAW_BEZIER_QUAD",
+      "signature": "DRAW_BEZIER_QUAD(x0, y0, cpx, cpy, x1, y1, steps, intensity)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Draw a .vec asset at (x, y)",
+      "name": "DRAW_VECTOR",
+      "signature": "DRAW_VECTOR(\"name\", x, y[, mirror])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Draw a .vec asset with mirror and intensity override",
+      "name": "DRAW_VECTOR_EX",
+      "signature": "DRAW_VECTOR_EX(\"name\", x, y, mirror, intensity)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Draw a 3D .vec asset rotated by (ax, ay, az)",
+      "name": "DRAW_VECTOR_3D",
+      "signature": "DRAW_VECTOR_3D(\"name\", ax, ay, az, x, y)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Draw a .vec asset turned by angle about its origin (0–127 = one full turn, counter-clockwise, the unit of sin/cos); mirror flips it before turning, intensity > 0 overrides every path",
+      "name": "DRAW_VECTOR_ROT",
+      "signature": "DRAW_VECTOR_ROT(\"name\", x, y, angle[, mirror[, intensity]])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Draw the current frame of a .vanim and advance it; call it every frame. scale $7F = normal size",
+      "name": "DRAW_ANIM",
+      "signature": "DRAW_ANIM(\"name\", x, y[, mirror[, scale[, speed]]])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Draw frame frame (wrapped) of a .vrec recording; scale 128 = 100%",
+      "name": "DRAW_RECORDING",
+      "signature": "DRAW_RECORDING(\"name\", x, y, scale, frame)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "alternatives": [
+        "PRINT_TEXT(x, y, var)",
+        "PRINT_TEXT(x, y, \"text\", height, width)"
+      ],
+      "doc": "Print a string at screen position",
+      "name": "PRINT_TEXT",
+      "signature": "PRINT_TEXT(x, y, \"text\")",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Print a decimal number. m6809: 0–9999. ARM: -9999..9999, no leading zeros",
+      "name": "PRINT_NUMBER",
+      "signature": "PRINT_NUMBER(x, y, number)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Text size for later PRINT_TEXT calls (ARM only; on m6809 it currently fails to assemble)",
+      "name": "SET_TEXT_SIZE",
+      "signature": "SET_TEXT_SIZE(n)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Declare message id in a ROM table (emits no code)",
+      "name": "MSG_DEF",
+      "signature": "MSG_DEF(id, x, y, \"text\")",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Print the message declared with MSG_DEF for id (runtime lookup). On m6809 the program must also call PRINT_TEXT somewhere, or the text helper is not linked",
+      "name": "PRINT_MSG",
+      "signature": "PRINT_MSG(id)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Debug output to console (editor only)",
+      "name": "DEBUG_PRINT",
+      "signature": "DEBUG_PRINT(value)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Debug output with label",
+      "name": "DEBUG_PRINT_LABELED",
+      "signature": "DEBUG_PRINT_LABELED(\"label\", value)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Debug string output",
+      "name": "DEBUG_PRINT_STR",
+      "signature": "DEBUG_PRINT_STR(\"text\")",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Analog X position, signed (about -127..127, 0 at centre)",
+      "name": "J1_X",
+      "signature": "J1_X()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Analog Y position, signed (about -127..127, 0 at centre)",
+      "name": "J1_Y",
+      "signature": "J1_Y()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "1 while button 1 is held, 0 otherwise (level, not edge)",
+      "name": "J1_BUTTON_1",
+      "signature": "J1_BUTTON_1()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Same for button 2",
+      "name": "J1_BUTTON_2",
+      "signature": "J1_BUTTON_2()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Same for button 3",
+      "name": "J1_BUTTON_3",
+      "signature": "J1_BUTTON_3()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Same for button 4",
+      "name": "J1_BUTTON_4",
+      "signature": "J1_BUTTON_4()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Short names of J1_BUTTON_1() … J1_BUTTON_4() (ARM targets)",
+      "name": "J1_BTN1",
+      "signature": "J1_BTN1()",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Short names of J1_BUTTON_1() … J1_BUTTON_4() (ARM targets)",
+      "name": "J1_BTN2",
+      "signature": "J1_BTN2()",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Short names of J1_BUTTON_1() … J1_BUTTON_4() (ARM targets)",
+      "name": "J1_BTN3",
+      "signature": "J1_BTN3()",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Short names of J1_BUTTON_1() … J1_BUTTON_4() (ARM targets)",
+      "name": "J1_BTN4",
+      "signature": "J1_BTN4()",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Analog X position, signed (same as J1_X)",
+      "name": "J2_X",
+      "signature": "J2_X()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Analog Y position, signed",
+      "name": "J2_Y",
+      "signature": "J2_Y()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "1 while the button is held",
+      "name": "J2_BUTTON_1",
+      "signature": "J2_BUTTON_1()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "1 while the button is held",
+      "name": "J2_BUTTON_2",
+      "signature": "J2_BUTTON_2()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "1 while the button is held",
+      "name": "J2_BUTTON_3",
+      "signature": "J2_BUTTON_3()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "1 while the button is held",
+      "name": "J2_BUTTON_4",
+      "signature": "J2_BUTTON_4()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Short names of J2_BUTTON_1() … J2_BUTTON_4() (ARM targets)",
+      "name": "J2_BTN1",
+      "signature": "J2_BTN1()",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Short names of J2_BUTTON_1() … J2_BUTTON_4() (ARM targets)",
+      "name": "J2_BTN2",
+      "signature": "J2_BTN2()",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Short names of J2_BUTTON_1() … J2_BUTTON_4() (ARM targets)",
+      "name": "J2_BTN3",
+      "signature": "J2_BTN3()",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Short names of J2_BUTTON_1() … J2_BUTTON_4() (ARM targets)",
+      "name": "J2_BTN4",
+      "signature": "J2_BTN4()",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Raw unsigned axis byte (0–255). m6809 only",
+      "name": "J2_ANALOG_X",
+      "signature": "J2_ANALOG_X()",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "Raw unsigned axis byte (0–255). m6809 only",
+      "name": "J2_ANALOG_Y",
+      "signature": "J2_ANALOG_Y()",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "1 while the stick is pushed past the threshold in that direction. m6809 only",
+      "name": "J2_BUTTON_UP",
+      "signature": "J2_BUTTON_UP()",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "1 while the stick is pushed past the threshold in that direction. m6809 only",
+      "name": "J2_BUTTON_DOWN",
+      "signature": "J2_BUTTON_DOWN()",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "1 while the stick is pushed past the threshold in that direction. m6809 only",
+      "name": "J2_BUTTON_LEFT",
+      "signature": "J2_BUTTON_LEFT()",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "1 while the stick is pushed past the threshold in that direction. m6809 only",
+      "name": "J2_BUTTON_RIGHT",
+      "signature": "J2_BUTTON_RIGHT()",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "Re-read the buttons now. Not needed normally — the compiler already reads them at the start of every frame",
+      "name": "UPDATE_BUTTONS",
+      "signature": "UPDATE_BUTTONS()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Play a .vmus music file",
+      "name": "PLAY_MUSIC",
+      "signature": "PLAY_MUSIC(\"name\")",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Stop current music. On m6809 the program must also use PLAY_MUSIC (the runtime is only linked then)",
+      "name": "STOP_MUSIC",
+      "signature": "STOP_MUSIC()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Play a .vsfx sound effect",
+      "name": "PLAY_SFX",
+      "signature": "PLAY_SFX(\"name\")",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Play a note on a .vinstr instrument",
+      "name": "PLAY_NOTE",
+      "signature": "PLAY_NOTE(\"instrument\", channel, midi_note)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Play a .vsmp sample / audio-synced frame index. rp2350 and pitrex; on uvm2 they build but do nothing; on m6809 a compile error (\"not supported on m6809\")",
+      "name": "PLAY_SAMPLE",
+      "signature": "PLAY_SAMPLE(\"name\")",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Play a .vsmp sample / audio-synced frame index. rp2350 and pitrex; on uvm2 they build but do nothing; on m6809 a compile error (\"not supported on m6809\")",
+      "name": "SAMPLE_POS",
+      "signature": "SAMPLE_POS(fps)",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "The card folder the tracks and SFX.PCM are in (e.g. \"ROTJ\"); call it in main()",
+      "name": "JUKEBOX_DIR",
+      "signature": "JUKEBOX_DIR(\"dir\")",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "How much of each frame the card may take: 0 a screen (~6 ms, the default), 1 play (~2 ms), 2 a loading screen (~15 ms)",
+      "name": "JUKEBOX_MODE",
+      "signature": "JUKEBOX_MODE(m)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "0..256: the effects pack, then the first track's head, loaded; 256 = ready (a loading bar)",
+      "name": "JUKEBOX_PROGRESS",
+      "signature": "JUKEBOX_PROGRESS()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "1 while a track is playing or loading out of the jack",
+      "name": "JUKEBOX_LIVE",
+      "signature": "JUKEBOX_LIVE()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "One line of what the audio path is doing (jack, PSRAM, card, slots), as a string for the text builtins",
+      "name": "JUKEBOX_REPORT",
+      "signature": "JUKEBOX_REPORT()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Play <dir>/ID.PCM, cross-fading from the one playing; the same track carries on, so it is safe every frame. \"\" fades to silence",
+      "name": "MUSIC_TRACK",
+      "signature": "MUSIC_TRACK(\"ID\")",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A clip of group on voice (it cuts what that voice played); gain 256 = full (0 = full), loop 1 for a hum. Returns 1 if it plays",
+      "name": "SFX_PCM",
+      "signature": "SFX_PCM(group, voice[, gain, loop])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "The same, heard from a place in the world: quieter far off, in the ear on its side",
+      "name": "SFX_PCM_AT",
+      "signature": "SFX_PCM_AT(group, voice, gain, loop, x, y, z)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Move a voice that is playing (a ship going by)",
+      "name": "SFX_PCM_MOVE",
+      "signature": "SFX_PCM_MOVE(voice, x, y, z)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Stop a voice / 1 while it plays",
+      "name": "SFX_PCM_STOP",
+      "signature": "SFX_PCM_STOP(voice)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Stop a voice / 1 while it plays",
+      "name": "SFX_PCM_BUSY",
+      "signature": "SFX_PCM_BUSY(voice)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Where the listener is (usually the camera) and its heading on the floor, for the placed sounds",
+      "name": "LISTENER",
+      "signature": "LISTENER(x, y, z, fx, fz)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Load a .vplay level file into memory",
+      "name": "LOAD_LEVEL",
+      "signature": "LOAD_LEVEL(\"name\")",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Render the currently loaded level at the current camera position",
+      "name": "SHOW_LEVEL",
+      "signature": "SHOW_LEVEL()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Update level state",
+      "name": "UPDATE_LEVEL",
+      "signature": "UPDATE_LEVEL()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Set the horizontal scroll offset (16-bit signed)",
+      "name": "SET_CAMERA_X",
+      "signature": "SET_CAMERA_X(x)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Set the vertical scroll offset (16-bit signed)",
+      "name": "SET_CAMERA_Y",
+      "signature": "SET_CAMERA_Y(y)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Read the scroll offset back. ARM only",
+      "name": "GET_CAMERA_X",
+      "signature": "GET_CAMERA_X()",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Read the scroll offset back. ARM only",
+      "name": "GET_CAMERA_Y",
+      "signature": "GET_CAMERA_Y()",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Scroll limits of the loaded level",
+      "name": "GET_SCROLL_LIMIT_LEFT",
+      "signature": "GET_SCROLL_LIMIT_LEFT()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Scroll limits of the loaded level",
+      "name": "GET_SCROLL_LIMIT_RIGHT",
+      "signature": "GET_SCROLL_LIMIT_RIGHT()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Scroll limits of the loaded level",
+      "name": "GET_SCROLL_LIMIT_TOP",
+      "signature": "GET_SCROLL_LIMIT_TOP()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Scroll limits of the loaded level",
+      "name": "GET_SCROLL_LIMIT_BOTTOM",
+      "signature": "GET_SCROLL_LIMIT_BOTTOM()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Floor surface Y of the loaded level",
+      "name": "GET_LEVEL_FLOOR_Y",
+      "signature": "GET_LEVEL_FLOOR_Y()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Resolve vertical collision against the level; returns the corrected Y",
+      "name": "LEVEL_COLLISION_Y",
+      "signature": "LEVEL_COLLISION_Y(x, y, half_height)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Resolve horizontal collision; returns the push-out dx",
+      "name": "LEVEL_COLLISION_X",
+      "signature": "LEVEL_COLLISION_X(x, y, half_width, half_height)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Width of the current level. m6809 only",
+      "name": "GET_LEVEL_WIDTH",
+      "signature": "GET_LEVEL_WIDTH()",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "Height of the current level. m6809 only",
+      "name": "GET_LEVEL_HEIGHT",
+      "signature": "GET_LEVEL_HEIGHT()",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "Tile value at (x, y). m6809 only",
+      "name": "GET_LEVEL_TILE",
+      "signature": "GET_LEVEL_TILE(x, y)",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "Spawn the enemies the level places (after LOAD_LEVEL)",
+      "name": "SPAWN_ENEMIES",
+      "signature": "SPAWN_ENEMIES(\"level\")",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Move every live enemy (behaviour, state machine); call once per frame",
+      "name": "UPDATE_ENEMIES",
+      "signature": "UPDATE_ENEMIES()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Draw every live enemy; call once per frame",
+      "name": "DRAW_ENEMIES",
+      "signature": "DRAW_ENEMIES()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "1 if slot i holds a live enemy, else 0",
+      "name": "GET_ENEMY_ACTIVE",
+      "signature": "GET_ENEMY_ACTIVE(i)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Position of enemy i",
+      "name": "GET_ENEMY_X",
+      "signature": "GET_ENEMY_X(i)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Position of enemy i",
+      "name": "GET_ENEMY_Y",
+      "signature": "GET_ENEMY_Y(i)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Move enemy i",
+      "name": "SET_ENEMY_X",
+      "signature": "SET_ENEMY_X(i, x)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Move enemy i",
+      "name": "SET_ENEMY_Y",
+      "signature": "SET_ENEMY_Y(i, y)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Hit points of enemy i",
+      "name": "GET_ENEMY_HP",
+      "signature": "GET_ENEMY_HP(i)",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "State-machine state of enemy i (255 = no state machine)",
+      "name": "GET_ENEMY_STATE",
+      "signature": "GET_ENEMY_STATE(i)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "State-machine state of enemy i (255 = no state machine)",
+      "name": "SET_ENEMY_STATE",
+      "signature": "SET_ENEMY_STATE(i, state)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Facing of enemy i: 0 left, 1 right",
+      "name": "SET_ENEMY_DIR",
+      "signature": "SET_ENEMY_DIR(i, dir)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Remove enemy i; returns the number of enemies left",
+      "name": "KILL_ENEMY",
+      "signature": "KILL_ENEMY(i)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Fire a state-machine event on enemy i",
+      "name": "ENEMY_FIRE_EVENT",
+      "signature": "ENEMY_FIRE_EVENT(i, \"event\")",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Walkable area enemy i stands on (255 if inactive); for debugging",
+      "name": "GET_ENEMY_AREA_IDX",
+      "signature": "GET_ENEMY_AREA_IDX(i)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Absolute value",
+      "name": "abs",
+      "signature": "abs(x)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Minimum of two values",
+      "name": "min",
+      "signature": "min(a, b)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Maximum of two values",
+      "name": "max",
+      "signature": "max(a, b)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Clamp value between lo and hi",
+      "name": "clamp",
+      "signature": "clamp(v, lo, hi)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "(a * b) >> shift with a 64-bit product, for fixed-point maths whose product does not fit 32 bits (MUL_SHR(x, SIN_Q14(a), 14)). ARM targets only",
+      "name": "MUL_SHR",
+      "signature": "MUL_SHR(a, b, shift)",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Sine — argument 0..127 covers full circle, result -127..127",
+      "name": "sin",
+      "signature": "sin(a)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Cosine — same range as sin",
+      "name": "cos",
+      "signature": "cos(a)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Tangent — argument 0..127, result varies. m6809 only",
+      "name": "tan",
+      "signature": "tan(a)",
+      "targets": [
+        "m6809",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Two-argument arctangent (returns angle 0..127). m6809 only, constant arguments only (folded at compile time); variable arguments are a compile error",
+      "name": "atan2",
+      "signature": "atan2(y, x)",
+      "targets": [
+        "m6809",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Integer square root",
+      "name": "sqrt",
+      "signature": "sqrt(x)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Integer power: x raised to the y-th power. m6809 only",
+      "name": "pow",
+      "signature": "pow(x, y)",
+      "targets": [
+        "m6809",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Return random value 0..65535",
+      "name": "rand",
+      "signature": "rand()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Return random value in range [min, max)",
+      "name": "rand_range",
+      "signature": "rand_range(min, max)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Busy-wait N frames (nothing else runs meanwhile). m6809: frames must be a constant (a number, a const or a constant expression, up to 65535)",
+      "name": "wait",
+      "signature": "wait(frames)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Non-blocking PSG tone: period is the PSG tone period (higher = lower pitch), frames the duration. m6809 also accepts beep() (period 50, 8 frames); on ARM pass both arguments",
+      "name": "beep",
+      "signature": "beep(period, frames)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Number of elements of a global array (a compile-time constant)",
+      "name": "len",
+      "signature": "len(array)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Read one byte from a Vectrex address. m6809: constant addr only",
+      "name": "peek",
+      "signature": "peek(addr)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Write one byte to a Vectrex address. m6809: constant addr and value only",
+      "name": "poke",
+      "signature": "poke(addr, value)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "xf = no rotation, no move",
+      "name": "XF_IDENTITY",
+      "signature": "XF_IDENTITY(xf)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "xf = a move by (x, y, z)",
+      "name": "XF_TRANSLATE",
+      "signature": "XF_TRANSLATE(xf, x, y, z)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "xf = a rotation about one axis (4096 per turn)",
+      "name": "XF_ROT_X",
+      "signature": "XF_ROT_X(xf, angle)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "xf = a rotation about one axis (4096 per turn)",
+      "name": "XF_ROT_Y",
+      "signature": "XF_ROT_Y(xf, angle)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "xf = a rotation about one axis (4096 per turn)",
+      "name": "XF_ROT_Z",
+      "signature": "XF_ROT_Z(xf, angle)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "dst = b then a (dst may be a or b)",
+      "name": "XF_MUL",
+      "signature": "XF_MUL(dst, a, b)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "out[0..2] = the point (x, y, z) moved by xf (out: an i32 array of 3)",
+      "name": "XF_POINT",
+      "signature": "XF_POINT(out, xf, x, y, z)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "The reverse: out[0..2] = the world point (x, y, z) in xf's own frame",
+      "name": "XF_TO_MODEL",
+      "signature": "XF_TO_MODEL(out, xf, x, y, z)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Camera at the eye (ex, ey, ez) looking at (tx, ty, tz); (ux, uy, uz) is the world direction that ends up pointing up on screen (default +y; tilt it to bank, e.g. SIN_Q14(roll), COS_Q14(roll), 0). Returns 0 if eye and target coincide",
+      "name": "CAMERA_LOOK_AT",
+      "signature": "CAMERA_LOOK_AT(ex, ey, ez, tx, ty, tz[, ux, uy, uz])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Set the world→camera transform / read it into xf",
+      "name": "CAMERA_SET",
+      "signature": "CAMERA_SET(xf)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Set the world→camera transform / read it into xf",
+      "name": "CAMERA_GET",
+      "signature": "CAMERA_GET(xf)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Field of view: deflection units per unit of x over z (default 28000, about 58°; bigger = narrower)",
+      "name": "CAMERA_FOCAL",
+      "signature": "CAMERA_FOCAL(f)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Nothing nearer than z is drawn (default 600)",
+      "name": "CAMERA_NEAR",
+      "signature": "CAMERA_NEAR(z)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Half the visible window in deflection units (default 15500 square)",
+      "name": "CAMERA_CLIP",
+      "signature": "CAMERA_CLIP(half_x[, half_y])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Where a world point lands on screen: out[0], out[1] in deflection units (out: an i32 array of 2). Returns 0 if it is behind the camera",
+      "name": "PROJECT",
+      "signature": "PROJECT(out, x, y, z)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "The same for a point already in camera space (x right, y up, z ahead)",
+      "name": "PROJECT_CAM",
+      "signature": "PROJECT_CAM(out, x, y, z)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "How big a ball of radius at world (x, y, z) looks, in deflection units",
+      "name": "SCREEN_SIZE",
+      "signature": "SCREEN_SIZE(x, y, z, radius)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Sine and cosine with 4096 per turn, -16384..16384",
+      "name": "SIN_Q14",
+      "signature": "SIN_Q14(angle)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Sine and cosine with 4096 per turn, -16384..16384",
+      "name": "COS_Q14",
+      "signature": "COS_Q14(angle)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "The angle of (x, y) from +x towards +y, 4096 per turn (0..4095)",
+      "name": "ATAN2_Q14",
+      "signature": "ATAN2_Q14(y, x)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Load name.vmesh into the mesh pools. Returns 0 if the pools are full (raise VPY3D_POOL_* in the project's [uvm2] defs)",
+      "name": "LOAD_MESH",
+      "signature": "LOAD_MESH(\"name\")",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Draw a loaded mesh placed by xf",
+      "name": "DRAW_MESH",
+      "signature": "DRAW_MESH(\"name\", xf, brightness)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "The mesh's slot, as a number: every mesh argument also takes a slot, so a function can be handed the mesh to draw (def figure(p, body): DRAW_MESH(body, p, 100) … figure(p, MESH(\"scout_trooper\")))",
+      "name": "MESH",
+      "signature": "MESH(\"name\")",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "1: meshes are cut by the solids drawn before them in the frame (meshes and OCCL_*), as lines already are; 0 (the default): meshes are drawn whole",
+      "name": "MESH_OCCLUSION",
+      "signature": "MESH_OCCLUSION(on)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Remember where the pools are / give back every mesh loaded since (load them again before drawing them)",
+      "name": "MESH_POOL_MARK",
+      "signature": "MESH_POOL_MARK()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Remember where the pools are / give back every mesh loaded since (load them again before drawing them)",
+      "name": "MESH_POOL_RELEASE",
+      "signature": "MESH_POOL_RELEASE()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Load name.vscene and the meshes it places. Returns 0 on failure",
+      "name": "LOAD_SCENE",
+      "signature": "LOAD_SCENE(\"name\")",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Draw a scene at position (x, y, z) — what its follow items move with; groups is the bit mask its group items test",
+      "name": "DRAW_SCENE",
+      "signature": "DRAW_SCENE(\"name\", x, y, z, brightness[, groups])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "DRAW_SCENE, the whole scene placed by the transform xf (moved and turned)",
+      "name": "DRAW_SCENE_AT",
+      "signature": "DRAW_SCENE_AT(\"name\", xf, x, y, z, brightness[, groups])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A line in world space",
+      "name": "LINE_3D",
+      "signature": "LINE_3D(ax, ay, az, bx, by, bz, brightness)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A line in camera space (x right, y up, z ahead): gunsights and other overlays that turn with the view",
+      "name": "LINE_CAM",
+      "signature": "LINE_CAM(ax, ay, az, bx, by, bz, brightness)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Forget the occluders (once per frame, before adding the frame's)",
+      "name": "OCCL_RESET",
+      "signature": "OCCL_RESET()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A world line hidden by the occluders added so far",
+      "name": "OCCL_LINE",
+      "signature": "OCCL_LINE(ax, ay, az, bx, by, bz, brightness)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Add a loaded mesh placed by xf as an occluder: it hides what is drawn after it",
+      "name": "OCCL_MESH",
+      "signature": "OCCL_MESH(\"name\", xf)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Add a convex occluder of n (3..8) corners; corners is an i32 array of n points (x, y, z)",
+      "name": "OCCL_ADD",
+      "signature": "OCCL_ADD(corners, n)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "The first face of a loaded mesh placed by xf that the ray from (ox, oy, oz) along (dx, dy, dz) meets within max_dist: its index, or -1. out (an i32 array of 7) gets the hit point, the face's normal (Q14) and the distance",
+      "name": "RAY_MESH",
+      "signature": "RAY_MESH(out, \"mesh\", xf, ox, oy, oz, dx, dy, dz, max_dist)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Damage marks, set k (0..3; raise VPYX_MARK_SETS in [uvm2] defs): forget them / add a hit at (x, y, z) with face normal (nx, ny, nz) on the object placed by xf (what RAY_MESH gives). They turn and move with the object",
+      "name": "MARKS_CLEAR",
+      "signature": "MARKS_CLEAR(k)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Damage marks, set k (0..3; raise VPYX_MARK_SETS in [uvm2] defs): forget them / add a hit at (x, y, z) with face normal (nx, ny, nz) on the object placed by xf (what RAY_MESH gives). They turn and move with the object",
+      "name": "MARKS_ADD",
+      "signature": "MARKS_ADD(k, xf, x, y, z, nx, ny, nz)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Draw set k on the object placed by xf: style 0 a scorch ring, 1 a crack; draw right after the object, before adding it as an occluder",
+      "name": "MARKS_DRAW",
+      "signature": "MARKS_DRAW(k, xf, radius, brightness[, style])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "brightness faded by the distance of (x, y, z) from the camera: full up to full_until, 0 from gone_at",
+      "name": "FOG",
+      "signature": "FOG(brightness, x, y, z, full_until, gone_at)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "The same fade for the lines of .vmesh scenery (0, 0 = off)",
+      "name": "SCENERY_FOG",
+      "signature": "SCENERY_FOG(full_until, gone_at)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Text in the world at (x, y, z), facing the camera, height world units tall (libvpy's vector font). text is a string literal or a variable or parameter holding one. flags: 1 hidden by the occluders, 2 centred, 4 only seen from the front",
+      "name": "TEXT_BILLBOARD",
+      "signature": "TEXT_BILLBOARD(text, x, y, z, height, brightness[, flags])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Text on the plane placed by xf (its x along the text, y up)",
+      "name": "TEXT_3D",
+      "signature": "TEXT_3D(text, xf, height, brightness[, flags])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "text followed by n in decimal, as a string for the text builtins (TEXT_BILLBOARD(LABEL_NUM(\"SCORE \", score), …)); four can be alive at once",
+      "name": "LABEL_NUM",
+      "signature": "LABEL_NUM(text, n)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A .vec drawn on the plane placed by xf, its units times scale",
+      "name": "VEC_3D",
+      "signature": "VEC_3D(\"name\", xf, scale, brightness[, flags])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "No pieces, no floor, no gravity",
+      "name": "FX_RESET",
+      "signature": "FX_RESET()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Random seed; simulation rate (default 50); strokes drawn per frame at most (default 160)",
+      "name": "FX_SEED",
+      "signature": "FX_SEED(seed)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Random seed; simulation rate (default 50); strokes drawn per frame at most (default 160)",
+      "name": "FX_RATE",
+      "signature": "FX_RATE(steps_per_second)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Random seed; simulation rate (default 50); strokes drawn per frame at most (default 160)",
+      "name": "FX_BUDGET",
+      "signature": "FX_BUDGET(strokes)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Gravity on every piece",
+      "name": "FX_GRAVITY",
+      "signature": "FX_GRAVITY(gx, gy, gz)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A floor at height y; bounce_q8 256 = a perfect bounce",
+      "name": "FX_FLOOR",
+      "signature": "FX_FLOOR(on, y, bounce_q8)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "One spark",
+      "name": "FX_SPARK",
+      "signature": "FX_SPARK(x, y, z, vx, vy, vz, life, brightness)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "count sparks thrown out from a point, moving with (vx, vy, vz)",
+      "name": "FX_BURST",
+      "signature": "FX_BURST(x, y, z, vx, vy, vz, count, speed, life, brightness)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A spinning line segment",
+      "name": "FX_STICK",
+      "signature": "FX_STICK(ax, ay, az, bx, by, bz, vx, vy, vz, spin, life, brightness)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A line that stays put and fades",
+      "name": "FX_LINE",
+      "signature": "FX_LINE(ax, ay, az, bx, by, bz, life, brightness)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A ring around the axis (nx, ny, nz), growing from radius r0",
+      "name": "FX_RING",
+      "signature": "FX_RING(cx, cy, cz, nx, ny, nz, r0, speed, segments, life, brightness)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A loaded mesh placed by xf broken into its edges, flying out from (cx, cy, cz)",
+      "name": "FX_SHATTER",
+      "signature": "FX_SHATTER(\"mesh\", xf, vx, vy, vz, cx, cy, cz, speed, spin, life, brightness)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A mesh coming apart in a wave from (cx, cy, cz)",
+      "name": "FX_DISINTEGRATE",
+      "signature": "FX_DISINTEGRATE(\"mesh\", xf, cx, cy, cz, per_edge, speed, spin, wave, life, brightness)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Pieces flying in to form the mesh; returns a group",
+      "name": "FX_ASSEMBLE",
+      "signature": "FX_ASSEMBLE(\"mesh\", xf, per_edge, scatter, frames, stagger, brightness)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Is the group in place / let its pieces go",
+      "name": "FX_ASSEMBLED",
+      "signature": "FX_ASSEMBLED(group)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Is the group in place / let its pieces go",
+      "name": "FX_RELEASE",
+      "signature": "FX_RELEASE(group)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Move the pieces / draw them in 3D (1 = hidden by the occluders) / draw 2D pieces",
+      "name": "FX_STEP",
+      "signature": "FX_STEP()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Move the pieces / draw them in 3D (1 = hidden by the occluders) / draw 2D pieces",
+      "name": "FX_DRAW",
+      "signature": "FX_DRAW([occlude])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Move the pieces / draw them in 3D (1 = hidden by the occluders) / draw 2D pieces",
+      "name": "FX_DRAW2D",
+      "signature": "FX_DRAW2D()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Empty skeleton sk",
+      "name": "BONE_INIT",
+      "signature": "BONE_INIT(sk)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A bone at offset (ox, oy, oz) from its parent's joint (parent -1 = a root), drawn with the mesh; returns its index, -1 if refused",
+      "name": "BONE_ADD",
+      "signature": "BONE_ADD(sk, parent, ox, oy, oz[, \"mesh\"])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "The bone's rotation about the axis (ax, ay, az), 4096 per turn",
+      "name": "BONE_ROT",
+      "signature": "BONE_ROT(sk, bone, ax, ay, az, angle)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Compose a second rotation: rotation = rotation × (axis, angle), as qmul(rotation, q) in C",
+      "name": "BONE_ROT_MUL",
+      "signature": "BONE_ROT_MUL(sk, bone, ax, ay, az, angle)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Place the skeleton's root at (x, y, z) and work out every bone (call after changing rotations)",
+      "name": "BONE_POSE",
+      "signature": "BONE_POSE(sk, x, y, z)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Bend the two bones below upper so its chain reaches (tx, ty, tz), the knee towards (px, py, pz); 1 if it reached. BONE_POSE again afterwards",
+      "name": "BONE_IK",
+      "signature": "BONE_IK(sk, upper, tx, ty, tz, px, py, pz)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A bone's transform / its joint in the world (out: an i32 array of 3)",
+      "name": "BONE_XF",
+      "signature": "BONE_XF(xf, sk, bone)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A bone's transform / its joint in the world (out: an i32 array of 3)",
+      "name": "BONE_POS",
+      "signature": "BONE_POS(out, sk, bone)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Draw the skeleton: 1 meshes (default), 2 lines, 3 both",
+      "name": "BONE_DRAW",
+      "signature": "BONE_DRAW(sk, brightness[, what])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "No bodies",
+      "name": "SOFT_RESET",
+      "signature": "SOFT_RESET()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Simulation rate, solver iterations (default 8), damping (default 254 of 256), strokes per draw",
+      "name": "SOFT_RATE",
+      "signature": "SOFT_RATE(n)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Simulation rate, solver iterations (default 8), damping (default 254 of 256), strokes per draw",
+      "name": "SOFT_ITERATIONS",
+      "signature": "SOFT_ITERATIONS(n)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Simulation rate, solver iterations (default 8), damping (default 254 of 256), strokes per draw",
+      "name": "SOFT_DAMPING",
+      "signature": "SOFT_DAMPING(q8)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Simulation rate, solver iterations (default 8), damping (default 254 of 256), strokes per draw",
+      "name": "SOFT_BUDGET",
+      "signature": "SOFT_BUDGET(strokes)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Gravity; a floor at height y",
+      "name": "SOFT_GRAVITY",
+      "signature": "SOFT_GRAVITY(gx, gy, gz)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Gravity; a floor at height y",
+      "name": "SOFT_FLOOR",
+      "signature": "SOFT_FLOOR(on, y, friction_q8)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A w × h sheet of points cell apart, its top-left corner at (x, y, z); returns the body",
+      "name": "SOFT_CLOTH",
+      "signature": "SOFT_CLOTH(x, y, z, w, h, cell, stiff_q8)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A ring of n points that keeps its area",
+      "name": "SOFT_BLOB",
+      "signature": "SOFT_BLOB(x, y, z, n, radius, stiff_q8, pressure_q8)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "A loaded mesh made soft",
+      "name": "SOFT_MESH",
+      "signature": "SOFT_MESH(\"mesh\", x, y, z, stiff_q8)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Hold point i at (x, y, z) / let it go",
+      "name": "SOFT_PIN",
+      "signature": "SOFT_PIN(body, i, x, y, z)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Hold point i at (x, y, z) / let it go",
+      "name": "SOFT_UNPIN",
+      "signature": "SOFT_UNPIN(body, i)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Add a velocity to every point",
+      "name": "SOFT_PUSH",
+      "signature": "SOFT_PUSH(body, vx, vy, vz)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Where point i is (out: an i32 array of 3) / how many points",
+      "name": "SOFT_POINT",
+      "signature": "SOFT_POINT(out, body, i)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Where point i is (out: an i32 array of 3) / how many points",
+      "name": "SOFT_POINTS",
+      "signature": "SOFT_POINTS(body)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Remove the body",
+      "name": "SOFT_FREE",
+      "signature": "SOFT_FREE(body)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Move every body / draw one",
+      "name": "SOFT_STEP",
+      "signature": "SOFT_STEP()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Move every body / draw one",
+      "name": "SOFT_DRAW",
+      "signature": "SOFT_DRAW(body, brightness[, occlude])",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Number of games on the SD card / pointer to the name of game i (both also build on m6809, with simulated data)",
+      "name": "SD_FILE_COUNT",
+      "signature": "SD_FILE_COUNT()",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2"
+      ]
+    },
+    {
+      "doc": "Number of games on the SD card / pointer to the name of game i (both also build on m6809, with simulated data)",
+      "name": "SD_FILE_NAME",
+      "signature": "SD_FILE_NAME(i)",
+      "targets": [
+        "m6809",
+        "rp2350",
+        "uvm2"
+      ]
+    },
+    {
+      "doc": "Play the .vrec preview of game i",
+      "name": "DRAW_SD_PREVIEW",
+      "signature": "DRAW_SD_PREVIEW(i, x, y, scale)",
+      "targets": [
+        "rp2350",
+        "uvm2"
+      ]
+    },
+    {
+      "doc": "Load game i from the SD card and run it (does not return)",
+      "name": "LAUNCH_GAME",
+      "signature": "LAUNCH_GAME(i)",
+      "targets": [
+        "rp2350",
+        "uvm2"
+      ]
+    },
+    {
+      "doc": "Show the console calibration screen",
+      "name": "CALIBRATE",
+      "signature": "CALIBRATE()",
+      "targets": [
+        "rp2350",
+        "uvm2"
+      ]
+    },
+    {
+      "doc": "Frame sync, injected at the start of every loop()",
+      "name": "WAIT_RECAL",
+      "signature": "WAIT_RECAL()",
+      "targets": [
+        "rp2350",
+        "uvm2",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "m6809 music/SFX update, injected every frame when the program plays audio",
+      "name": "AUDIO_UPDATE",
+      "signature": "AUDIO_UPDATE()",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "Music / SFX sequencer step, injected every frame when the program plays audio (m6809: MUSIC_UPDATE does not assemble)",
+      "name": "MUSIC_UPDATE",
+      "signature": "MUSIC_UPDATE()",
+      "targets": [
+        "m6809",
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Music / SFX sequencer step, injected every frame when the program plays audio (m6809: MUSIC_UPDATE does not assemble)",
+      "name": "SFX_UPDATE",
+      "signature": "SFX_UPDATE()",
+      "targets": [
+        "pitrex"
+      ]
+    },
+    {
+      "doc": "Placeholder: on m6809 it reads a FRAME_COUNTER that is never defined, so it does not assemble",
+      "name": "GET_TIME",
+      "signature": "GET_TIME()",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "m6809: fail to assemble (missing J2X_BUILTIN helper); use J2_X() with a threshold",
+      "name": "J2_DIGITAL_X",
+      "signature": "J2_DIGITAL_X()",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "doc": "m6809: fail to assemble (missing J2X_BUILTIN helper); use J2_X() with a threshold",
+      "name": "J2_DIGITAL_Y",
+      "signature": "J2_DIGITAL_Y()",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "aliasOf": "ABS",
+      "name": "MATH_ABS",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "aliasOf": "ATAN2",
+      "name": "MATH_ATAN2",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "aliasOf": "COS",
+      "name": "MATH_COS",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "aliasOf": "MAX",
+      "name": "MATH_MAX",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "aliasOf": "MIN",
+      "name": "MATH_MIN",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "aliasOf": "POW",
+      "name": "MATH_POW",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "aliasOf": "RAND",
+      "name": "MATH_RAND",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "aliasOf": "RAND_RANGE",
+      "name": "MATH_RAND_RANGE",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "aliasOf": "SIN",
+      "name": "MATH_SIN",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "aliasOf": "SQRT",
+      "name": "MATH_SQRT",
+      "targets": [
+        "m6809"
+      ]
+    },
+    {
+      "aliasOf": "TAN",
+      "name": "MATH_TAN",
+      "targets": [
+        "m6809"
+      ]
+    }
+  ],
+  "source": "generated by vpy_cli (builtins_catalog.rs, lsp_catalog_json) from the compiler: do not edit"
+}

@@ -126,7 +126,8 @@ fn stdio_session_publishes_diagnostics_and_answers_requests() {
     server.send(json!({"jsonrpc": "2.0", "id": 2, "method": "textDocument/hover", "params": {
         "textDocument": {"uri": uri}, "position": {"line": 6, "character": 12}}}));
     let hover = server.wait_for("hover response", |m| m["id"] == 2);
-    assert_eq!(hover["result"]["contents"]["value"], "DRAW_LINE(x1, y1, x2, y2, intensity)  - draws line segment.");
+    let hover_text = hover["result"]["contents"]["value"].as_str().unwrap_or_default();
+    assert!(hover_text.starts_with("`DRAW_LINE(x0, y0, x1, y1, intensity)`"), "{hover_text}");
 
     server.send(json!({"jsonrpc": "2.0", "id": 3, "method": "textDocument/completion", "params": {
         "textDocument": {"uri": uri}, "position": {"line": 4, "character": 4}}}));

@@ -20,6 +20,63 @@ pub struct VariableUsage {
     pub declaration_range: Option<Range>,
     pub last_write_range: Option<Range>,
     pub is_const: bool,
+    /// A module-level variable (other modules may use it as `module.name`).
+    pub global: bool,
+    /// Its initial value is a number (or arithmetic on numbers): only such a variable
+    /// can become a `const` (a `const` array lives in ROM, and arrays are written
+    /// element by element or by the functions they are passed to).
+    pub scalar: bool,
+}
+
+/// A number, or arithmetic and bit operations on numbers.
+fn is_scalar_value(e: &Expr) -> bool {
+    match e {
+        Expr::Number(_) => true,
+        Expr::Binary { left, right, .. } => is_scalar_value(left) && is_scalar_value(right),
+        Expr::Not(x) | Expr::BitNot(x) => is_scalar_value(x),
+        _ => false,
+    }
+}
+
+/// How the other modules of the project use this one's globals (`module.name`), by
+/// upper-cased name: a global they read is used, one they assign is not a constant.
+#[derive(Debug, Default)]
+pub struct ExternalUse {
+    pub read: std::collections::HashSet<String>,
+    pub written: std::collections::HashSet<String>,
+}
+
+impl ExternalUse {
+    /// Every `module.name` in `sources` (the other files' texts), split into reads and
+    /// assignments (`=`, `+=`…, not `==`).
+    pub fn scan<'a>(module: &str, sources: impl Iterator<Item = &'a str>) -> Self {
+        let mut out = ExternalUse::default();
+        let prefix = format!("{module}.");
+        for text in sources {
+            for line in text.lines() {
+                let code = line.split('#').next().unwrap_or("");
+                let mut from = 0;
+                while let Some(at) = code[from..].find(&prefix) {
+                    let start = from + at;
+                    from = start + prefix.len();
+                    // `module.` must start a name (not `my_module.`)
+                    if code[..start].chars().last().map_or(false, |c| c.is_ascii_alphanumeric() || c == '_' || c == '.') {
+                        continue;
+                    }
+                    let rest = &code[from..];
+                    let len = rest.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).unwrap_or(rest.len());
+                    if len == 0 { continue; }
+                    let name = rest[..len].to_ascii_uppercase();
+                    let after = rest[len..].trim_start();
+                    let assigned = (after.starts_with('=') && !after.starts_with("=="))
+                        || ["+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=", "//="].iter().any(|op| after.starts_with(op));
+                    if assigned { out.written.insert(name.clone()); }
+                    out.read.insert(name);
+                }
+            }
+        }
+        out
+    }
 }
 
 /// Usage of every variable declared in a module.
@@ -37,6 +94,8 @@ pub fn analyze_variable_usage(module: &Module) -> UsageAnalysis {
         match item {
             Item::GlobalLet { name, value, source_line, .. } => {
                 let usage = VariableUsage {
+                    global: true,
+                    scalar: is_scalar_value(value),
                     declared: true,
                     initialized: value != &Expr::Number(0), // Simplified check
                     write_count: 1,
@@ -228,15 +287,18 @@ pub fn line_to_range(line: usize) -> Range {
 }
 
 /// Emit "unused-variable" warnings and "suggest-const" hints.
-pub fn generate_usage_diagnostics(analysis: &UsageAnalysis, locale: &str, diags: &mut Vec<Diagnostic>) {
+pub fn generate_usage_diagnostics(analysis: &UsageAnalysis, external: &ExternalUse, locale: &str, diags: &mut Vec<Diagnostic>) {
     for (name, usage) in &analysis.variables {
         // Builtins and constants are not user variables.
         if is_builtin_function(name) || usage.is_const {
             continue;
         }
 
-        // Declared but never read. Names starting with '_' are intentionally unused.
-        if usage.declared && usage.read_count == 0 && !name.starts_with('_') {
+        // Names starting with '_' are intentionally unused.
+        let upper = name.to_ascii_uppercase();
+        // Declared but never read — here or, for a global, by another module
+        let used_elsewhere = usage.global && external.read.contains(&upper);
+        if usage.declared && usage.read_count == 0 && !used_elsewhere && !name.starts_with('_') {
             if let Some(range) = &usage.declaration_range {
                 let msg = if locale.starts_with("es") {
                     format!("Variable '{}' se declara pero nunca se usa", name)
@@ -255,8 +317,11 @@ pub fn generate_usage_diagnostics(analysis: &UsageAnalysis, locale: &str, diags:
             }
         }
 
-        // Initialized once, never modified: could be const.
-        if usage.initialized && usage.write_count == 1 && usage.read_count > 0 {
+        // A global initialized once and never modified (here or by another module):
+        // could be const. A local cannot be one.
+        if usage.global && usage.scalar && usage.initialized && usage.write_count == 1 && usage.read_count > 0
+            && !external.written.contains(&upper)
+        {
             if let Some(range) = &usage.declaration_range {
                 let msg = if locale.starts_with("es") {
                     format!("Variable '{}' nunca cambia - considera 'const' para ahorrar RAM (2 bytes)", name)

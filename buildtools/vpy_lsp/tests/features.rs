@@ -79,14 +79,42 @@ fn indentation_error_reports_line() {
 fn builtin_arity_and_unknown_function_are_reported() {
     let src = "def main():\n    DRAW_LINE(1, 2)\n    not_defined(3)\n";
     let diags = compute_diagnostics(&uri(), src, "en");
+    // a wrong count is a warning (the forms come from the manual; the compiler decides)
+    assert!(diags.iter().any(|d| d.range.start.line == 1
+        && d.severity == Some(DiagnosticSeverity::WARNING)
+        && d.message.starts_with("Function `DRAW_LINE` expects 5 arguments, but 2 were provided.")), "{:#?}", diags);
     let errs = errors(&diags);
-    assert!(errs.iter().any(|d| d.range.start.line == 1
-        && d.message == "Function `DRAW_LINE` expects 5 arguments, but 2 were provided."), "{:#?}", diags);
     assert!(errs.iter().any(|d| d.range.start.line == 2
+        && d.range.start.character == 4
         && d.message == "Unknown function 'not_defined'"), "{:#?}", diags);
 
     let es = compute_diagnostics(&uri(), src, "es");
     assert!(es.iter().any(|d| d.message.starts_with("La función `DRAW_LINE` espera 5")));
+}
+
+/// What a real multi-module uvm2 game writes (Return of the Jedi's main.vpy): none of it
+/// is an error the editor can see.
+#[test]
+fn module_calls_target_builtins_and_expressions_are_not_unknown() {
+    let src = "import zones\nimport common\n\ndef main():\n    zones.load_common()\n    MESH_OCCLUSION(1)\n    FX_BUDGET(180)\n    JUKEBOX_DIR(\"music\")\n\ndef loop():\n    b = J1_BUTTON_1() | J1_BUTTON_2()\n    common.pressed = 0\n    DRAW_LINE(0, 0, ABS(b), MAX(1, 2), 127)\n";
+    let diags = compute_diagnostics(&uri(), src, "en");
+    assert!(errors(&diags).is_empty(), "{:#?}", diags);
+    assert!(!diags.iter().any(|d| d.message.contains("expects")), "nested calls counted right: {:#?}", diags);
+}
+
+#[test]
+fn uppercase_names_must_be_builtins_and_imports_count() {
+    let src = "def main():\n    DRAW_LIEN(1, 2, 3, 4, 5)\n";
+    let errs = errors(&compute_diagnostics(&uri(), src, "en")).into_iter().map(|d| d.message.clone()).collect::<Vec<_>>();
+    assert_eq!(errs, vec!["`DRAW_LIEN` is not a VPy builtin".to_string()]);
+    // (`helpers` does not exist next to this test's file: its import error is not the point)
+    let call_errors = |src: &str| -> Vec<String> {
+        errors(&compute_diagnostics(&uri(), src, "en")).into_iter()
+            .map(|d| d.message.clone()).filter(|m| !m.contains("Cannot resolve module")).collect()
+    };
+    // a name imported by name, a function of this file, a variable holding a function
+    let src = "from helpers import spawn as sp\n\ndef f():\n    pass\n\ndef main():\n    sp(1)\n    f()\n    g = f\n    g()\n";
+    assert!(call_errors(src).is_empty(), "{:?}", call_errors(src));
 }
 
 #[test]
@@ -123,10 +151,12 @@ fn usage_analysis_and_quick_fixes() {
 fn completion_offers_builtins_and_user_functions() {
     let (_, defs) = semantic_tokens(&uri(), VALID_PROGRAM);
     let items = completion_items(VALID_PROGRAM, Position { line: 10, character: 4 }, &uri(), &defs);
+    // the compiler's builtins, uvm2's too, with their form
     let draw_line = items.iter().find(|i| i.label == "DRAW_LINE").expect("DRAW_LINE offered");
-    assert_eq!(draw_line.kind, Some(CompletionItemKind::KEYWORD));
-    let wait = items.iter().find(|i| i.label == "WAIT_RECAL").expect("WAIT_RECAL offered");
-    assert_eq!(wait.kind, Some(CompletionItemKind::METHOD));
+    assert_eq!(draw_line.kind, Some(CompletionItemKind::FUNCTION));
+    assert!(draw_line.detail.as_deref().unwrap_or("").starts_with("DRAW_LINE("));
+    assert!(items.iter().any(|i| i.label == "MESH_OCCLUSION"));
+    assert!(!items.iter().any(|i| i.label == "RECT"), "not a VPy builtin");
     let ship = items.iter().find(|i| i.label == "draw_ship").expect("user function offered");
     assert_eq!(ship.insert_text.as_deref(), Some("draw_ship($0)"));
     assert_eq!(ship.detail.as_deref(), Some("Function (current file)"));
@@ -148,12 +178,13 @@ fn hover_on_builtin_shows_docs() {
     match hover.contents {
         HoverContents::Markup(m) => {
             assert_eq!(m.kind, MarkupKind::Markdown);
-            assert_eq!(m.value, "DRAW_LINE(x1, y1, x2, y2, intensity)  - draws line segment.");
+            // the compiler's: form, the manual's doc line, targets
+            assert!(m.value.starts_with("`DRAW_LINE(x0, y0, x1, y1, intensity)`"), "{}", m.value);
+            assert!(m.value.contains("Draw a line segment"));
+            assert!(m.value.contains("Targets: m6809, rp2350, uvm2, pitrex"));
         }
         other => panic!("unexpected hover contents {:?}", other),
     }
-    let es = hover_at(VALID_PROGRAM, Position { line: 12, character: 12 }, &uri(), "es-ES", &[]).unwrap();
-    assert!(matches!(es.contents, HoverContents::Markup(ref m) if m.value.contains("dibuja segmento")));
 }
 
 #[test]
@@ -226,4 +257,26 @@ fn lexer_error_location_formats() {
     let loc = parse_lexer_error("Unexpected character '$' at line 2:1", text).unwrap();
     assert_eq!((loc.line, loc.col), (1, 4));
     assert!(parse_lexer_error("no position here", text).is_none());
+}
+
+/// A module's globals are the project's: another module reading `common.speed` uses it,
+/// one assigning `common.timer` makes it no constant. Locals are never offered `const`.
+#[test]
+fn globals_used_by_other_modules_are_used() {
+    let dir = std::env::temp_dir().join(format!("vpy-lsp-modules-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("main.vpy"), "import common\n\ndef loop():\n    common.timer += 1\n    if common.speed == 2:\n        DEBUG_PRINT(1)\n").unwrap();
+    let common = "speed = 2\ntimer = 0\nlonely = 5\npose: i32 = [0] * 12\n\ndef f():\n    k = 3\n    XF_MUL(pose, pose, pose)\n    DEBUG_PRINT(k + timer + speed)\n";
+    let path = dir.join("common.vpy");
+    std::fs::write(&path, common).unwrap();
+    let uri = Url::from_file_path(&path).unwrap();
+    let diags = compute_diagnostics(&uri, common, "en");
+    let msgs: Vec<&str> = diags.iter().map(|d| d.message.as_str()).collect();
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(msgs.iter().any(|m| m.contains("'lonely' is declared but never used")), "{msgs:?}");
+    assert!(!msgs.iter().any(|m| m.contains("'speed'") && m.contains("never used")), "{msgs:?}");
+    assert!(msgs.iter().any(|m| m.contains("'speed' never changes")), "read elsewhere, written nowhere: {msgs:?}");
+    assert!(!msgs.iter().any(|m| m.contains("'timer' never changes")), "main.vpy assigns it: {msgs:?}");
+    assert!(!msgs.iter().any(|m| m.contains("'k' never changes")), "a local cannot be const: {msgs:?}");
+    assert!(!msgs.iter().any(|m| m.contains("'pose' never changes")), "an array is written through its elements: {msgs:?}");
 }

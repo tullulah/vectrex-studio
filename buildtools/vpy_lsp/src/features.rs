@@ -237,27 +237,15 @@ const TYPE_KEYWORDS: [(&str, &str); 6] = [
     ("i32", "Signed 32-bit integer (ARM targets only)"),
 ];
 
-/// Unified functions (global + vectorlist) and VPy keywords offered by completion.
-const UNIFIED_ITEMS: &[&str] = &[
-    "MOVE", "SET_INTENSITY", "DRAW_TO", "DRAW_LINE", "SET_ORIGIN", "PRINT_TEXT", "PRINT_NUMBER",
-    // Direct drawing functions
-    "DRAW_POLYGON", "DRAW_CIRCLE", "DRAW_CIRCLE_SEG", "DRAW_ARC", "DRAW_SPIRAL",
-    "RECT", "POLYGON", "CIRCLE", "ARC", "SPIRAL", "DRAW_VECTORLIST", "DRAW_VECTOR_ROT",
-    // Message dispatch system
-    "MSG_DEF", "PRINT_MSG",
-    // Camera / scroll
-    "SET_CAMERA_X",
+/// VPy keywords and declarations offered by completion (the builtins come from the
+/// compiler's catalog, catalog.rs).
+const KEYWORD_ITEMS: &[&str] = &[
     // Declarations and structures
-    "VECTORLIST", "CONST", "VAR", "META", "TITLE", "MUSIC", "COPYRIGHT",
+    "CONST", "VAR", "META", "TITLE", "MUSIC", "COPYRIGHT",
     // Control keywords
     "def", "for", "while", "if", "switch",
     // Import keywords
     "from", "import", "export", "as",
-];
-
-/// Vectorlist-only functions offered by completion.
-const VECTORLIST_ONLY: [&str; 6] = [
-    "FRAME_BEGIN", "VECTOR_PHASE_BEGIN", "WAIT_RECAL", "PLAY_MUSIC1", "DBG_STATIC_VL", "DRAW_VL",
 ];
 
 /// Completion items at `pos`. After a `:` only the integer type names are
@@ -285,22 +273,23 @@ pub fn completion_items(text: &str, pos: Position, uri: &Url, symbols: &[SymbolD
         }
     }
 
-    for name in UNIFIED_ITEMS {
+    for name in KEYWORD_ITEMS {
         items.push(CompletionItem {
             label: name.to_string(),
             kind: Some(CompletionItemKind::KEYWORD),
-            insert_text: None,
-            detail: Some("Unified function (global/vectorlist)".to_string()),
             ..Default::default()
         });
     }
 
-    for name in VECTORLIST_ONLY {
+    // The compiler's builtins, with their forms, doc line and targets
+    for b in crate::catalog::all() {
+        let mut doc = b.doc.clone().unwrap_or_default();
+        doc.push_str(&format!("\n\nTargets: {}", b.targets.join(", ")));
         items.push(CompletionItem {
-            label: name.to_string(),
-            kind: Some(CompletionItemKind::METHOD),
-            insert_text: None,
-            detail: Some("Vectorlist-only function".to_string()),
+            label: b.name.clone(),
+            kind: Some(CompletionItemKind::FUNCTION),
+            detail: b.signatures.first().cloned(),
+            documentation: Some(Documentation::String(doc)),
             ..Default::default()
         });
     }

@@ -9,6 +9,7 @@
 
 pub mod analysis;
 pub mod builtins;
+pub mod catalog;
 pub mod diagnostics;
 pub mod features;
 

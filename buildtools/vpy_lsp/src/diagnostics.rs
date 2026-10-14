@@ -6,10 +6,10 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range, Url};
-use vpy_parser::{lex, parse_tokens, Item};
+use vpy_parser::{lex, parse_tokens};
 
-use crate::analysis::{analyze_variable_usage, generate_usage_diagnostics};
-use crate::builtins::{get_builtin_arity, is_python_keyword_or_builtin, tr, AritySpec};
+use crate::analysis::{analyze_variable_usage, generate_usage_diagnostics, ExternalUse};
+use crate::builtins::{is_python_keyword_or_builtin, tr};
 
 /// A front-end error resolved to a 0-based document position.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -214,88 +214,152 @@ fn validate_import_statement(uri: &Url, line: &str, line_num: u32, diags: &mut V
     }
 }
 
-/// Line-based check of call arity for builtins and of unknown function names.
-/// VPy uses Python-style calls `FUNCTION(arg1, ...)`; a known builtin used
-/// without parentheses is reported as an error.
-fn validate_function_arity(
-    original_line: &str,
-    line_num: u32,
-    locale: &str,
-    diags: &mut Vec<Diagnostic>,
-    defined_functions: &HashSet<String>,
-) {
-    let trimmed = original_line.trim();
-    if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with("//") {
-        return;
-    }
-    // Control structures ending with ':'.
-    if trimmed.ends_with(':') {
-        return;
-    }
+/// Calls whose name the compiler would not know, and builtins called with an argument
+/// count no form of theirs takes — from the parsed module, every call node (the
+/// compiler's own AST walker), against the compiler's builtin catalog (catalog.rs).
+///
+/// Only what this file can tell: a `module.function()` call is the compiler's to check
+/// (it sees every module of the project), and so is whether a builtin exists on the
+/// selected target. A lowercase name must be a function, struct or variable of this
+/// file or imported by name (`from m import *` turns that check off); an UPPERCASE
+/// one must be a builtin.
+fn check_calls(module: &vpy_parser::Module, text: &str, locale: &str, diags: &mut Vec<Diagnostic>) {
+    use vpy_codegen::m6809::ast_walk::{walk_module, Visitor};
+    use vpy_parser::{AssignTarget, Expr, ImportSymbols, Item, Stmt};
 
-    let parts: Vec<&str> = trimmed.split_whitespace().collect();
-    if let Some(first_word) = parts.first() {
-        if is_python_keyword_or_builtin(first_word) {
-            return;
-        }
-    }
-
-    // Ignore parentheses inside trailing comments.
-    let comment_pos = trimmed.find('#').unwrap_or(trimmed.len());
-    let code_part = trimmed[..comment_pos].trim();
-
-    if let Some(paren_pos) = code_part.find('(') {
-        let func_name = code_part[..paren_pos].trim();
-        let remaining = &code_part[paren_pos + 1..];
-
-        if is_python_keyword_or_builtin(func_name) {
-            return;
-        }
-
-        if let Some(close_paren) = remaining.find(')') {
-            let args_part = &remaining[..close_paren];
-
-            if let Some(arity_spec) = get_builtin_arity(func_name) {
-                let arg_count = if args_part.trim().is_empty() {
-                    0
-                } else {
-                    args_part.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).count()
-                };
-
-                let message_key = match arity_spec {
-                    AritySpec::Exact(expected) if arg_count == expected => None,
-                    AritySpec::Exact(expected) if arg_count < expected => Some("diagnostic.arity.too_few"),
-                    AritySpec::Exact(_) => Some("diagnostic.arity.too_many"),
-                    AritySpec::Variable(min_args) if arg_count >= min_args => None,
-                    AritySpec::Variable(_) => Some("diagnostic.arity.variable"),
-                };
-
-                if let Some(message_key) = message_key {
-                    let expected_str = match arity_spec {
-                        AritySpec::Exact(n) => n.to_string(),
-                        AritySpec::Variable(n) => format!("at least {}", n),
-                    };
-                    let message = tr(locale, message_key)
-                        .replacen("{}", func_name, 1)
-                        .replacen("{}", &expected_str, 1)
-                        .replacen("{}", &arg_count.to_string(), 1);
-                    diags.push(error_diagnostic(whole_line(line_num, original_line), message));
+    // Every name this file binds (case-insensitive, as VPy names are)
+    let mut known: HashSet<String> = HashSet::new();
+    let mut star_import = false;
+    for imp in &module.imports {
+        match &imp.symbols {
+            ImportSymbols::All => star_import = true,
+            ImportSymbols::Named(list) => {
+                for sym in list {
+                    known.insert(sym.alias.as_ref().unwrap_or(&sym.name).to_ascii_uppercase());
                 }
-            } else if !func_name.is_empty() && !defined_functions.contains(func_name) {
-                diags.push(error_diagnostic(
-                    whole_line(line_num, original_line),
-                    format!("Unknown function '{}'", func_name),
-                ));
+            }
+            ImportSymbols::Module { .. } => {}
+        }
+    }
+    for item in &module.items {
+        match item {
+            Item::Function(f) => {
+                known.insert(f.name.to_ascii_uppercase());
+                known.extend(f.params.iter().map(|p| p.to_ascii_uppercase()));
+            }
+            Item::StructDef(st) => { known.insert(st.name.to_ascii_uppercase()); }
+            Item::Const { name, .. } | Item::GlobalLet { name, .. } | Item::VectorList { name, .. } => {
+                known.insert(name.to_ascii_uppercase());
+            }
+            _ => {}
+        }
+    }
+
+    struct Calls<'a> { calls: Vec<&'a vpy_parser::CallInfo>, bound: Vec<String> }
+    impl<'a> Visitor<'a> for Calls<'a> {
+        fn stmt(&mut self, stmt: &'a Stmt) {
+            match stmt {
+                Stmt::Let { name, .. } => self.bound.push(name.clone()),
+                Stmt::Assign { target: AssignTarget::Ident { name, .. }, .. } => self.bound.push(name.clone()),
+                Stmt::For { var, .. } | Stmt::ForIn { var, .. } => self.bound.push(var.clone()),
+                _ => {}
             }
         }
-    } else if let Some(func_name) = parts.first() {
-        if get_builtin_arity(func_name).is_some() {
-            diags.push(error_diagnostic(
-                whole_line(line_num, original_line),
-                format!("Function '{}' must be called with parentheses: {}(...)", func_name, func_name),
-            ));
+        fn expr(&mut self, expr: &'a Expr) {
+            if let Expr::Call(info) = expr {
+                self.calls.push(info);
+            }
         }
     }
+    let mut v = Calls { calls: Vec::new(), bound: Vec::new() };
+    walk_module(module, &mut v);
+    known.extend(v.bound.iter().map(|n| n.to_ascii_uppercase()));
+
+    let lines: Vec<&str> = text.lines().collect();
+    for call in v.calls {
+        let name = call.name.as_str();
+        if name.is_empty() || name.contains('.') || is_python_keyword_or_builtin(name) {
+            continue;
+        }
+        let upper = name.to_ascii_uppercase();
+        let line = call.source_line.saturating_sub(1) as u32;
+        let line_txt = lines.get(line as usize).copied().unwrap_or("");
+        // the name where it is written (the parser's column leaves the indentation out)
+        let range = match line_txt.find(&format!("{name}(")) {
+            Some(at) => Range {
+                start: Position { line, character: at as u32 },
+                end: Position { line, character: (at + name.len()) as u32 },
+            },
+            None => whole_line(line, line_txt),
+        };
+        if let Some(b) = crate::catalog::lookup(name) {
+            if let Some(counts) = crate::catalog::accepted_counts(b) {
+                let n = call.args.len();
+                if !counts.contains(&n) {
+                    let expected = counts.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" or ");
+                    let key = if n < counts[0] { "diagnostic.arity.too_few" } else { "diagnostic.arity.too_many" };
+                    let message = tr(locale, key)
+                        .replacen("{}", &b.name, 1)
+                        .replacen("{}", &expected, 1)
+                        .replacen("{}", &n.to_string(), 1);
+                    // a warning: the forms come from the manual, the compiler has the last word
+                    diags.push(Diagnostic {
+                        range,
+                        severity: Some(DiagnosticSeverity::WARNING),
+                        source: Some("vpy".into()),
+                        message: format!("{message} ({})", b.signatures.join("  |  ")),
+                        ..Default::default()
+                    });
+                }
+            }
+            continue;
+        }
+        if vpy_parser::builtins::is_known_builtin(&upper) || known.contains(&upper) {
+            continue;
+        }
+        let looks_builtin = name.chars().any(|c| c.is_ascii_uppercase()) && !name.chars().any(|c| c.is_ascii_lowercase());
+        if !looks_builtin && star_import {
+            continue; // it may come from the `import *`
+        }
+        let message = if looks_builtin {
+            format!("`{name}` is not a VPy builtin")
+        } else {
+            format!("Unknown function '{name}'")
+        };
+        diags.push(error_diagnostic(range, message));
+    }
+}
+
+/// The other `.vpy` files next to `uri` (the project's other modules), read again only
+/// when they change on disk.
+fn sibling_sources(uri: &Url) -> Vec<std::sync::Arc<String>> {
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex, OnceLock};
+    use std::time::SystemTime;
+    static CACHE: OnceLock<Mutex<HashMap<std::path::PathBuf, (SystemTime, Arc<String>)>>> = OnceLock::new();
+    let Ok(path) = uri.to_file_path() else { return Vec::new() };
+    let Some(dir) = path.parent() else { return Vec::new() };
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    let mut cache = CACHE.get_or_init(|| Mutex::new(HashMap::new())).lock().unwrap();
+    let mut out = Vec::new();
+    for e in entries.flatten() {
+        let p = e.path();
+        if p == path || p.extension().and_then(|x| x.to_str()) != Some("vpy") {
+            continue;
+        }
+        let Ok(mtime) = e.metadata().and_then(|m| m.modified()) else { continue };
+        match cache.get(&p) {
+            Some((t, text)) if *t == mtime => out.push(text.clone()),
+            _ => {
+                if let Ok(text) = std::fs::read_to_string(&p) {
+                    let text = Arc::new(text);
+                    cache.insert(p, (mtime, text.clone()));
+                    out.push(text);
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Compute all diagnostics for a document.
@@ -306,31 +370,18 @@ pub fn compute_diagnostics(uri: &Url, text: &str, locale: &str) -> Vec<Diagnosti
 
     match lex(text) {
         Ok(tokens) => {
-            // Collect `def name(` matches from raw text first so user calls are
-            // not flagged as unknown when the parse fails.
-            let mut defined_functions = HashSet::new();
-            for line in text.lines() {
-                let t = line.trim_start();
-                if let Some(rest) = t.strip_prefix("def ") {
-                    if let Some(paren) = rest.find('(') {
-                        let name = rest[..paren].trim();
-                        if !name.is_empty() {
-                            defined_functions.insert(name.to_string());
-                        }
-                    }
-                }
-            }
-
             match parse_tokens(&tokens, uri.path()) {
                 Ok(module) => {
-                    for item in &module.items {
-                        if let Item::Function(func) = item {
-                            defined_functions.insert(func.name.clone());
-                        }
-                    }
                     eprintln!("[LSP] Analyzing variable usage...");
                     let analysis = analyze_variable_usage(&module);
-                    generate_usage_diagnostics(&analysis, locale, &mut diags);
+                    // this module's globals as the others use them (`module.name`)
+                    let stem = uri.to_file_path().ok()
+                        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
+                        .unwrap_or_default();
+                    let others = sibling_sources(uri);
+                    let external = ExternalUse::scan(&stem, others.iter().map(|t| t.as_str()));
+                    generate_usage_diagnostics(&analysis, &external, locale, &mut diags);
+                    check_calls(&module, text, locale, &mut diags);
                 }
                 Err(e) => {
                     let msg = e.to_string();
@@ -364,7 +415,6 @@ pub fn compute_diagnostics(uri: &Url, text: &str, locale: &str) -> Vec<Diagnosti
                     });
                 }
 
-                validate_function_arity(line_txt, i as u32, locale, &mut diags, &defined_functions);
             }
         }
         Err(e) => {

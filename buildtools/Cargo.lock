@@ -1102,6 +1102,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tower-lsp",
+ "vpy_codegen",
  "vpy_parser",
 ]
 

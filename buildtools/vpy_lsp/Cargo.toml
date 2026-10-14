@@ -18,6 +18,9 @@ path = "src/main.rs"
 
 [dependencies]
 vpy_parser = { path = "../vpy_parser" }
+# the AST walker every "where is X used" scan shares (m6809/ast_walk.rs)
+vpy_codegen = { path = "../vpy_codegen" }
+serde_json = "1.0"
 tower-lsp = "0.20"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
 

@@ -137,11 +137,13 @@ vpy = ["main.vpy", "player.vpy"]
 ## LSP Server
 
 The LSP server lives in `buildtools/vpy_lsp` (binary `vpy_lsp`). It uses the compiler's own parser (`vpy_parser`), so editor diagnostics match what `vpy_cli` reports. It provides:
-- Diagnostics (parse errors, semantic warnings)
+- Diagnostics: parse errors; calls to a function this file neither defines nor imports by name, and UPPERCASE calls that are no builtin (an error); a builtin called with an argument count none of its documented forms takes (a warning); unused variables, and `const` hints for scalar globals nothing changes. A `module.function()` call, and whether a builtin exists on the selected target, are the compiler's to check: it sees every module. A global another module of the same folder reads (`common.speed`) counts as used there.
 - Completions (keywords, builtins, user-defined functions)
-- Hover documentation
+- Hover documentation (a builtin's forms, its doc line from MANUAL.md section 9, its targets)
 - Go-to-definition
 - Semantic tokens
 - Rename, signature help, code actions
+
+The builtins it knows are the compiler's: `vpy_lsp/src/builtins_catalog.json` is generated from the code generators and MANUAL.md (as `vpy_cli builtins`), and a `vpy_cli` test fails while it is out of date. After adding or changing a builtin: `VPY_UPDATE_LSP_CATALOG=1 cargo test -p vpy_cli lsp_catalog`.
 
 Build with: `cargo build --bin vpy_lsp`. `run-ide.sh` builds `vpy_cli` and `vpy_lsp` and copies both into `ide/electron/resources/`.

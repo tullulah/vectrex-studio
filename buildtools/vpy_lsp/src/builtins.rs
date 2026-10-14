@@ -8,15 +8,6 @@
 //! `vpy_parser::builtins::is_known_builtin`, so anything the parser treats as a
 //! builtin is also highlighted as one.
 
-/// Expected argument count of a builtin call.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AritySpec {
-    /// Exact number of arguments required.
-    Exact(usize),
-    /// At least N arguments required (POLYGON, PRINT_TEXT, ...).
-    Variable(usize),
-}
-
 /// Python keywords, VPy declarations and assignment-looking words that must
 /// never be treated as a function name by the line-based arity checker.
 pub fn is_python_keyword_or_builtin(word: &str) -> bool {
@@ -33,146 +24,13 @@ pub fn is_python_keyword_or_builtin(word: &str) -> bool {
     )
 }
 
-/// Arity of a builtin function (case-insensitive), or `None` if the name is
-/// not a builtin with a known signature.
-pub fn get_builtin_arity(func_name: &str) -> Option<AritySpec> {
-    let upper = func_name.to_ascii_uppercase();
-    match upper.as_str() {
-        // Unified functions (global and vectorlist context)
-        "MOVE" => Some(AritySpec::Exact(2)),                    // x, y
-        "SET_INTENSITY" => Some(AritySpec::Exact(1)),           // val
-        "DRAW_TO" => Some(AritySpec::Exact(2)),                 // x, y
-        "DRAW_LINE" => Some(AritySpec::Exact(5)),               // x1, y1, x2, y2, intensity
-        "SET_ORIGIN" => Some(AritySpec::Exact(0)),              // no arguments
-
-        // Direct drawing functions (global only)
-        "RECT" => Some(AritySpec::Exact(4)),                    // x, y, w, h
-        "CIRCLE" => Some(AritySpec::Exact(1)),                  // r
-        "ARC" => Some(AritySpec::Exact(3)),                     // r, startAngle, endAngle
-        "SPIRAL" => Some(AritySpec::Exact(2)),                  // r, turns
-        "POLYGON" => Some(AritySpec::Variable(3)),              // n, x1, y1, ... (count + at least one point)
-        "PRINT_TEXT" => Some(AritySpec::Variable(3)),           // x, y, text [, height, width]
-        "PRINT_NUMBER" => Some(AritySpec::Exact(3)),            // x, y, number
-        "SET_TEXT_SIZE" => Some(AritySpec::Exact(1)),           // n (1-8, 8=normal)
-        "DEBUG_PRINT" => Some(AritySpec::Exact(1)),             // value
-        "DEBUG_PRINT_LABELED" => Some(AritySpec::Exact(2)),     // label, value
-
-        // Asset system functions
-        "DRAW_VECTOR" => Some(AritySpec::Variable(3)),          // name, x, y [, mirror]
-        "DRAW_VECTOR_EX" => Some(AritySpec::Variable(4)),       // name, x, y, mirror [, intensity]
-        "DRAW_VECTOR_3D" => Some(AritySpec::Exact(6)),          // name, ax, ay, az, x, y
-        "DRAW_VECTOR_ROT" => Some(AritySpec::Variable(4)),      // name, x, y, angle [, mirror [, intensity]]
-        "DRAW_ANIM" => Some(AritySpec::Variable(1)),            // name [, x, y [, mirror [, scale [, speed]]]]
-        "DRAW_BEZIER" => Some(AritySpec::Exact(10)),
-        "DRAW_BEZIER_QUAD" => Some(AritySpec::Exact(8)),
-        "DRAW_RECT" => Some(AritySpec::Exact(5)),
-        "DRAW_FILLED_RECT" => Some(AritySpec::Exact(5)),
-        "DRAW_ARC" => Some(AritySpec::Exact(5)),
-        "DRAW_ELLIPSE" => Some(AritySpec::Exact(5)),
-        "PLAY_MUSIC" => Some(AritySpec::Exact(1)),              // music asset (background, loops)
-        "PLAY_SFX" => Some(AritySpec::Exact(1)),                // sound effect (one-shot)
-        "STOP_MUSIC" => Some(AritySpec::Exact(0)),
-        "MUSIC_UPDATE" => Some(AritySpec::Exact(0)),
-        "AUDIO_UPDATE" => Some(AritySpec::Exact(0)),            // alias for MUSIC_UPDATE
-        "BEEP" => Some(AritySpec::Exact(2)),                    // frequency, duration
-        "RAND" => Some(AritySpec::Exact(0)),                    // random 0-255
-        "RAND_RANGE" => Some(AritySpec::Exact(2)),              // min, max
-        "UPDATE_BUTTONS" => Some(AritySpec::Exact(0)),
-        "ABS" => Some(AritySpec::Exact(1)),
-        "MIN" => Some(AritySpec::Exact(2)),
-        "MAX" => Some(AritySpec::Exact(2)),
-        "CLAMP" => Some(AritySpec::Exact(3)),                   // value, min, max
-
-        // Drawing functions with explicit intensity
-        "DRAW_POLYGON" => Some(AritySpec::Variable(4)),         // n, intensity, x1, y1, ...
-        "DRAW_CIRCLE" => Some(AritySpec::Exact(4)),             // x, y, r, intensity
-        "DRAW_CIRCLE_SEG" => Some(AritySpec::Exact(5)),         // segments, x, y, r, intensity
-        "DRAW_VECTORLIST" | "VECTREX_DRAW_VECTORLIST" => Some(AritySpec::Exact(2)), // addr, len
-
-        // Vectorlist-specific functions
-        "FRAME_BEGIN" | "VECTREX_FRAME_BEGIN" => Some(AritySpec::Exact(1)), // intensity
-        "VECTOR_PHASE_BEGIN" | "VECTREX_VECTOR_PHASE_BEGIN" => Some(AritySpec::Exact(0)),
-        "WAIT_RECAL" | "VECTREX_WAIT_RECAL" => Some(AritySpec::Exact(0)),
-        "PLAY_MUSIC1" | "VECTREX_PLAY_MUSIC1" => Some(AritySpec::Exact(0)),
-        "DBG_STATIC_VL" | "VECTREX_DBG_STATIC_VL" => Some(AritySpec::Exact(0)),
-        "DRAW_VL" | "VECTREX_DRAW_VL" => Some(AritySpec::Exact(2)),         // addr, len
-
-        // Backward compatibility with old names (deprecated)
-        "INTENSITY" => Some(AritySpec::Exact(1)),               // use SET_INTENSITY
-        "ORIGIN" => Some(AritySpec::Exact(0)),                  // use SET_ORIGIN
-        "MOVE_TO" | "VECTREX_MOVE_TO" => Some(AritySpec::Exact(2)), // use MOVE
-        "VECTREX_DRAW_TO" => Some(AritySpec::Exact(2)),
-        "VECTREX_DRAW_LINE" => Some(AritySpec::Exact(5)),
-        "VECTREX_SET_ORIGIN" => Some(AritySpec::Exact(0)),
-        "VECTREX_SET_INTENSITY" => Some(AritySpec::Exact(1)),
-
-        // Trigonometry (precomputed tables; angle 0-127 represents 0-2pi)
-        "SIN" | "MATH_SIN" | "MATH.SIN" => Some(AritySpec::Exact(1)),
-        "COS" | "MATH_COS" | "MATH.COS" => Some(AritySpec::Exact(1)),
-        "TAN" | "MATH_TAN" | "MATH.TAN" => Some(AritySpec::Exact(1)),
-
-        // Level system
-        "LOAD_LEVEL" => Some(AritySpec::Exact(1)),              // level_index
-        "SHOW_LEVEL" => Some(AritySpec::Exact(0)),
-        "UPDATE_LEVEL" => Some(AritySpec::Exact(0)),
-
-        // Message dispatch system
-        "MSG_DEF" => Some(AritySpec::Exact(4)),                 // id, x, y, text (data only)
-        "PRINT_MSG" => Some(AritySpec::Exact(1)),               // id_expr
-
-        // Camera / scroll
-        "SET_CAMERA_X" => Some(AritySpec::Exact(1)),
-        "SET_CAMERA_Y" => Some(AritySpec::Exact(1)),
-        "GET_SCROLL_LIMIT_LEFT" | "GET_SCROLL_LIMIT_RIGHT"
-        | "GET_SCROLL_LIMIT_TOP" | "GET_SCROLL_LIMIT_BOTTOM"
-        | "GET_LEVEL_FLOOR_Y" | "GET_FRAME_US" => Some(AritySpec::Exact(0)),
-
-        // Level collision
-        "LEVEL_COLLISION_Y" => Some(AritySpec::Exact(3)),       // x, y, half_height
-        "LEVEL_COLLISION_X" => Some(AritySpec::Exact(4)),       // x, y, half_width, half_height
-
-        // Joystick 1
-        "J1_X" | "J1_Y" | "J1_X_DIGITAL" | "J1_Y_DIGITAL"
-        | "J1_X_ANALOG" | "J1_Y_ANALOG"
-        | "J1_BUTTON_1" | "J1_BUTTON_2" | "J1_BUTTON_3" | "J1_BUTTON_4" => Some(AritySpec::Exact(0)),
-        // Joystick 2
-        "J2_X" | "J2_Y" | "J2_X_DIGITAL" | "J2_Y_DIGITAL"
-        | "J2_X_ANALOG" | "J2_Y_ANALOG"
-        | "J2_BUTTON_1" | "J2_BUTTON_2" | "J2_BUTTON_3" | "J2_BUTTON_4" => Some(AritySpec::Exact(0)),
-
-        // Debug
-        "DEBUG_PRINT_STR" => Some(AritySpec::Exact(1)),
-
-        // Misc
-        "RESET0REF" => Some(AritySpec::Exact(0)),
-        "LEN" | "ASM" => Some(AritySpec::Variable(1)),
-
-        // Enemy system (pool management)
-        "SPAWN_ENEMIES" => Some(AritySpec::Exact(1)),
-        "UPDATE_ENEMIES" => Some(AritySpec::Exact(0)),
-        "DRAW_ENEMIES" => Some(AritySpec::Exact(0)),
-        "KILL_ENEMY" => Some(AritySpec::Exact(1)),
-        "GET_ENEMY_ACTIVE" | "GET_ENEMY_X" | "GET_ENEMY_Y"
-        | "GET_ENEMY_HP" | "GET_ENEMY_STATE"
-        | "GET_ENEMY_AREA_IDX" => Some(AritySpec::Exact(1)),
-        "SET_ENEMY_X" | "SET_ENEMY_Y" | "SET_ENEMY_STATE"
-        | "SET_ENEMY_DIR" => Some(AritySpec::Exact(2)),
-        "ENEMY_FIRE_EVENT" => Some(AritySpec::Exact(2)),
-
-        // Pitched instrument
-        "PLAY_NOTE" => Some(AritySpec::Exact(3)),
-
-        _ => None,
-    }
-}
-
 /// True if `name` (case-insensitive) is a builtin function. Used for semantic
 /// highlighting and to keep builtins out of the variable usage analysis.
 pub fn is_builtin_function(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
 
-    // Anything the real parser classifies as a builtin.
-    if vpy_parser::builtins::is_known_builtin(&upper) {
+    // The compiler's builtins (catalog.rs), and anything the parser classifies as one
+    if crate::catalog::lookup(&upper).is_some() || vpy_parser::builtins::is_known_builtin(&upper) {
         return true;
     }
 
@@ -325,6 +183,15 @@ pub fn tr(locale: &str, key: &str) -> String {
 
 /// Hover documentation for a builtin, given its upper-cased name.
 pub fn builtin_doc(locale: &str, upper: &str) -> Option<String> {
+    // The compiler's own: every form, the doc line of docs/MANUAL.md, the targets
+    if let Some(b) = crate::catalog::lookup(upper) {
+        let mut doc = b.signatures.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join("  \n");
+        if let Some(d) = &b.doc {
+            doc.push_str(&format!("\n\n{d}"));
+        }
+        doc.push_str(&format!("\n\nTargets: {}", b.targets.join(", ")));
+        return Some(doc);
+    }
     let key = match upper {
         // Unified functions (global + vectorlist)
         "MOVE" => "doc.MOVE",
