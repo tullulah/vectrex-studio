@@ -15,6 +15,7 @@ import * as net from 'net';
 import { getMCPServer } from './mcp/server.js';
 import type { MCPRequest } from './mcp/types.js';
 import { startMcpTcpServer } from './mcp/tcpServer.js';
+import { startGdbServer, setGdbWindow } from './gdb/server.js';
 // How to launch the stdio MCP server against this IDE instance (used to wire Claude Code).
 import { getMcpLaunchSpec } from './mcp/auth.js';
 export { getMcpLaunchSpec, getMcpPort, getMcpToken } from './mcp/auth.js';
@@ -456,6 +457,13 @@ async function createWindow() {
   
   // Start MCP IPC server for external MCP stdio process
   startMCPIpcServer();
+
+  // gdb's way into the ARM emulator: `target remote :3333` (gdb/server.ts)
+  setGdbWindow(mainWindow);
+  startGdbServer(verbose).then((p) => {
+    if (p == null) console.error('[gdb] no free port in 3333-3343: gdb cannot attach');
+    else console.log(`[gdb] ARM emulator: arm-none-eabi-gdb -ex "target remote :${p}"`);
+  });
   
   // CRITICAL: Block accidental browser reloads that would clear localStorage
   mainWindow.webContents.on('before-input-event', (event, input) => {

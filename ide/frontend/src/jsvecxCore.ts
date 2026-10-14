@@ -27,6 +27,13 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
   // halt-mode bus, which is the whole thing worth simulating.
   private _uvm2System: Uvm2System | null = null;
   private _activeTarget: 'm6809' | 'rp2350' | 'uvm2' = 'm6809';
+
+  /** The ARM system running now (the debugger's target), or null on the 6809. */
+  get activeArmSystem(): Rp2350System | Uvm2System | null {
+    if (this._activeTarget === 'uvm2') return this._uvm2System;
+    if (this._activeTarget === 'rp2350') return this._rp2350System;
+    return null;
+  }
   
   // Debug output system
   private debugMessages: string[] = [];

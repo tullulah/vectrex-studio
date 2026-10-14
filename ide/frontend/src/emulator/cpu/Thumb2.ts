@@ -127,6 +127,13 @@ export class Thumb2 implements ICpu {
   /** Write general-purpose register n (0–15). */
   setReg(n: number, v: number): void { this.regs[n] = v >>> 0; }
 
+  /** xPSR as a debugger shows it: the NZCVQ flags, the Thumb bit (always set on
+   * M-profile) and the exception number. */
+  getXpsr(): number { return ((this.cpsr & 0xf8000000) | (1 << 24) | this.ipsr) >>> 0; }
+
+  /** A debugger's write to xPSR: only the flags are kept (the rest is the core's). */
+  setXpsr(v: number): void { this.cpsr = (this.cpsr & ~0xf8000000) | (v & 0xf8000000); }
+
   // ─── Registros de sistema del perfil M (MRS / MSR) ─────────────────────
   //
   // Este nucleo es FUNCIONAL: no tiene modelo de excepciones, ni pila dual, ni

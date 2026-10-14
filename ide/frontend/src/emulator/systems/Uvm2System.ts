@@ -31,6 +31,7 @@ import { Beam }    from '../hardware/Beam.js';
 import { Psg }     from '../hardware/Psg.js';
 import { Canvas }  from '../hardware/Canvas.js';
 import { Thumb2 }  from '../cpu/Thumb2.js';
+import { ArmDebug } from '../cpu/armDebug.js';
 import { extractElf32Symbols, loadElf32ByPaddr } from '../util/Elf32Symbols.js';
 
 /** Beam vector list → the IDE's Segment shape (same mapping the other systems use). */
@@ -299,6 +300,13 @@ const QMI_CSR_EN = 1 << 0, QMI_CSR_ASSERT_CS1N = 1 << 3, QMI_CSR_TXEMPTY = 1 << 
 const EXC_RETURN = 0xFFFFFFF9;
 
 export class Uvm2System implements ISystem, IBus {
+  /** Breakpoints and steps of core 0, for gdb (debug/gdbStub.ts). */
+  readonly debug = new ArmDebug();
+  /** The last frame stopped by the debugger before its end, which ends at finDeFrame. */
+  private frameAMedias = false;
+  private finDeFrame = 0;
+  /** Core 0, whose registers the debugger shows. */
+  get core0(): Thumb2 { return this.cpu; }
   readonly cpuName = 'Cortex-M33 (UVM2 halt mode)';
 
   private sram = new Uint8Array(SRAM_SIZE);
@@ -1942,9 +1950,13 @@ export class Uvm2System implements ISystem, IBus {
         console.log(`[Uvm2System] PC in the PSRAM (0x${pcNow.toString(16)}): the program's ELF traps the SD now`);
       }
     }
-    this.jackFrame();
-    const until = this.busCycle + BUS_PER_FRAME;
+    // A frame the debugger stopped goes on where it was: same end, no second audio frame
+    if (!this.frameAMedias) this.jackFrame();
+    const until = this.frameAMedias ? this.finDeFrame : this.busCycle + BUS_PER_FRAME;
+    this.finDeFrame = until;
+    this.frameAMedias = false;
     let spent = 0;
+    let paradoPorDepurador = false;
 
     while (!this.halted && this.busCycle < until && spent < MAX_CPU_CYCLES_PER_FRAME) {
       /* ANDA EL QUE VA POR DETRAS. Es lo unico que hace falta para que los dos nucleos
@@ -1965,6 +1977,9 @@ export class Uvm2System implements ISystem, IBus {
         this.exceptionReturn();
         continue;
       }
+
+      // A debugger breakpoint or step (cpu/armDebug.ts): leave the frame right here
+      if (this.debug.armed && this.debug.shouldStop(pc)) { paradoPorDepurador = true; break; }
 
       // Historial de PCs, solo para el informe de fallo. Un fallo en este nucleo
       // dice DONDE se paro pero no COMO se llego, y sin el "como" no se puede
@@ -2053,6 +2068,10 @@ export class Uvm2System implements ISystem, IBus {
       this.relojCore0 += c;
       this.sincronizaBus();
     }
+
+    // Stopped by the debugger mid-frame: the beam keeps what this frame drew so far and
+    // the next runFrame goes on from here (the canvas keeps the last whole frame)
+    if (paradoPorDepurador) { this.frameAMedias = true; return []; }
 
     this.lastFrameBusCycles = BUS_PER_FRAME;
     const { draw, drawCnt, erse, erseCnt } = this.beam.swapBuffers();

@@ -36,6 +36,8 @@ import { useTerminalStore, focusTerminal } from './services/terminalSessions.js'
 // Installs window.__mcpBridge__ — the renderer hooks the MCP tools call from main.
 import './services/mcpBridge.js';
 import { registerBuildRunner } from './services/mcpBridge.js';
+import { installArmGdbTarget } from './debug/armGdbTarget';
+installArmGdbTarget(); // gdb's way into the ARM emulator (ide/electron/src/gdb/)
 import type { BuildOutcome, BuildMode } from './services/buildOutcome.js';
 
 // Initialize store reference for cross-store access

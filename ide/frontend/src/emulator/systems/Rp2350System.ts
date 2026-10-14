@@ -39,6 +39,7 @@ import { Beam }           from '../hardware/Beam.js';
 import { Psg }            from '../hardware/Psg.js';
 import { Canvas }         from '../hardware/Canvas.js';
 import { Thumb2 }         from '../cpu/Thumb2.js';
+import { ArmDebug } from '../cpu/armDebug.js';
 import { extractElf32Symbols, readElf32Entry, loadElf32IntoFlash } from '../util/Elf32Symbols.js';
 import { glyphStrokes } from './vectorFont.js';
 import { rampParams, recorrido } from '../hardware/Ramp.js';
@@ -287,6 +288,10 @@ const UVM2_Q4_TO_ALG  = 127 / 16;
 const DC_CMDS_MAX  = 4096;
 
 export class Rp2350System implements ISystem, IBus {
+  /** Breakpoints and steps of core 0, for gdb (debug/gdbStub.ts). */
+  readonly debug = new ArmDebug();
+  /** Core 0, whose registers the debugger shows. */
+  get core0(): Thumb2 { return this.cpu; }
   readonly cpuName = 'ARM Cortex-M33 (RP2350)';
 
   // Hardware
@@ -544,6 +549,7 @@ export class Rp2350System implements ISystem, IBus {
     this.cpu.hitWfi = false;
 
     let spent   = 0;
+    let stoppedByDebugger = false;
     let lastPc  = this.cpu.pc;
     let steps   = 0;
     // Collect first few PC values executed this frame for diagnostics.
@@ -555,6 +561,9 @@ export class Rp2350System implements ISystem, IBus {
       if (logAll && firstPcs.length < 8) {
         firstPcs.push('0x' + lastPc.toString(16));
       }
+
+      // A debugger breakpoint or step (cpu/armDebug.ts): leave the frame right here
+      if (this.debug.armed && this.debug.shouldStop(this.cpu.pc)) { stoppedByDebugger = true; break; }
 
       // Check for trap before executing
       const pc = this.cpu.pc & ~1; // strip Thumb bit for lookup
@@ -604,6 +613,10 @@ export class Rp2350System implements ISystem, IBus {
         console.log(`[Rp2350 ENEMY] frame=${fc} world=(${wx},${wy}) is_anim=${isAnim} frameIdx=${frameIdx} ticks=${ticksLeft} sprPtr=0x${sprPtrLo.toString(16)}`);
       }
     }
+
+    // Stopped by the debugger mid-frame: the next runFrame goes on from here (the
+    // canvas keeps the last whole frame)
+    if (stoppedByDebugger) return [];
 
     // Swap beam buffers, render to canvas, and build segment list for this frame
     const { draw, drawCnt, erse, erseCnt } = this.beam.swapBuffers();

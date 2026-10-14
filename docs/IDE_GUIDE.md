@@ -220,7 +220,31 @@ Click in the **gutter** (left margin) of any line in the editor to toggle a brea
 
 A breakpoint on a line with no code of its own (a comment, a `def`, an `else:`) stops at the next statement of the same function. When execution stops, the editor opens that statement's file and highlights the line.
 
-Breakpoints, stepping and the debugger tools are for **m6809** programs (JSVecX). The ARM targets (rp2350, uvm2, pitrex) have no source-level debugger yet.
+The editor's breakpoints, stepping and the debugger tools are for **m6809** programs (JSVecX). The rp2350 and uvm2 targets are debugged with gdb (below); pitrex has no debugger.
+
+### Debugging ARM programs with gdb (rp2350, uvm2)
+
+While the IDE runs, its ARM emulator accepts `arm-none-eabi-gdb` on localhost port **3333** (the next free port up to 3343 if 3333 is taken; the IDE's log says which). Build and run the program on the emulator (F5), then attach with the build's ELF (an IDE build for uvm2 writes `build/<name>_uvm2.elf`):
+
+```bash
+arm-none-eabi-gdb build/<name>_uvm2.elf -ex "target remote :3333"
+```
+
+Attaching pauses the emulator. Then, at the `.vpy` level:
+
+| gdb | Does |
+|-----|------|
+| `break util.vpy:5`, `break UTIL_bump` | Breakpoint on a line or a function |
+| `continue` (Ctrl+C to stop) | Run; the IDE's emulator runs with it |
+| `next`, `step`, `finish` | Line steps over / into calls, run to the caller |
+| `bt` | VPy calls, then the runtime and the firmware below them |
+| `stepi`, `x/8i $pc`, `info registers` | Instruction level |
+| `x/4wx 0x20010000` | Memory (RAM, flash, PSRAM; not peripherals) |
+| `detach` | Remove gdb's breakpoints and let the program run |
+
+The builds carry the line table for this: the asm backend writes a `.loc` per statement (and unwind data for `bt`, in a debug section: the image is the same with or without it); the C backend (`[uvm2] backend = "c"`) writes `#line`, so gdb shows the C runtime's own functions and parameters as well. With the C backend at `-O3`, `next` can land in an inlined runtime function. `step` into a VPy function stops on its `def` line first. The SDK's C (the uvm2 runtime, the firmware) has its own debug info.
+
+Breakpoints are the emulator's (never written into the program). One gdb at a time; core 0 only on dual-core images; watchpoints are not supported. A uvm2 C project (`.cvproj`) is built by the same pico-sdk CMake, with debug info, and is debugged the same way with its ELF.
 
 ### Debug controls
 
