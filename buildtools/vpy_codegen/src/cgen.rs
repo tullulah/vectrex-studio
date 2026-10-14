@@ -547,6 +547,8 @@ impl<'a> Gen<'a> {
     }
 
     fn stmt(&mut self, s: &Stmt, out: &mut String, ind: usize) {
+        // its .vpy line, for gdb (arm/debug_lines.rs)
+        out.push_str(&crate::arm::debug_lines::c_line(s.source_line()));
         let pad = "    ".repeat(ind);
         match s {
             Stmt::Assign { target, value, .. } => {
@@ -1028,7 +1030,9 @@ pub fn generate_c(module: &Module, assets: &[AssetInfo]) -> Result<GeneratedC, S
         }
         let mut body = String::new();
         let start = g.errors.len();
+        crate::arm::debug_lines::enter_c(&f.name);
         g.block(&f.body, &mut body, 1);
+        body.push_str(&crate::arm::debug_lines::c_leave());
         crate::origins::locate_new(&mut g.errors, start, &f.name);
         bodies.push_str(&body);
         bodies.push_str("    return 0;\n}\n\n");

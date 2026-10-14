@@ -1891,6 +1891,8 @@ fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool, ram
     // Phases 1-2: parse EVERY module of the project (not just the entry) + unify
     println!("\n{}", "Phase 1-2: Parse + Unify".bright_cyan().bold());
     let program = program::load_program(input)?;
+    // Each function's .vpy, for the .loc lines gdb reads (arm/debug_lines.rs)
+    vpy_codegen::arm::debug_lines::set_sources(&program.function_files);
     let unified = program.unified;
     println!("  {} Parsed {} modules, unified {} items", "✓".green(), program.module_count, unified.items.len());
 
@@ -2120,6 +2122,8 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     // Phases 1-2: parse EVERY module of the project (not just the entry) + unify
     println!("\n{}", "Phase 1-2: Parse + Unify".bright_cyan().bold());
     let program = program::load_program(input)?;
+    // Each function's .vpy, for the .loc lines gdb reads (arm/debug_lines.rs)
+    vpy_codegen::arm::debug_lines::set_sources(&program.function_files);
     let unified = program.unified;
     println!("  {} Parsed {} modules, unified {} items", "✓".green(), program.module_count, unified.items.len());
 
@@ -2179,7 +2183,13 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     // y el entry equivocado. Se borra el viejo antes de escribir.
     let stale = s_path.with_extension("s");
     let _ = std::fs::remove_file(&stale);
-    std::fs::write(&s_path, &generated.asm_source)
+    // C: each function's end back to the .c's own lines after its #line "x.vpy" ones
+    let source_text = if c_backend {
+        vpy_codegen::arm::debug_lines::finish_c(&generated.asm_source, &s_path)
+    } else {
+        generated.asm_source.clone()
+    };
+    std::fs::write(&s_path, &source_text)
         .with_context(|| format!("Failed to write {}", s_path.display()))?;
     std::fs::copy(&s_path, &asm_path)
         .with_context(|| format!("Failed to write {}", asm_path.display()))?;

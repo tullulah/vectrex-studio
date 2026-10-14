@@ -186,7 +186,8 @@ pub fn generate_uvm2_asm(
     // runtime bring-up call at start of game_main
     let asm = crate::arm::peephole_pub(&asm);
     let expanded = crate::arm::expand_cbz_pub(&asm);
-    inject_runtime_init(&expanded)
+    // Last: the .vpy statement marks become .loc lines for gdb (arm/debug_lines.rs)
+    inject_runtime_init(&expanded).map(|asm| crate::arm::debug_lines::finish(&asm))
 }
 
 // ── VIA constants (same addresses — it's the same Vectrex VIA chip) ──────────

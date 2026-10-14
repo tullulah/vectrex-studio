@@ -180,11 +180,16 @@ fn emit_function(
     let mut s = String::new();
     s.push_str(&format!("@ --- function {name} ---\n"));
     s.push_str(".align 2\n");  // ensure 2-byte alignment after preceding .ltorg padding
-    s.push_str(&format!(".global {name}\n.type {name}, %function\n.thumb_func\n{name}:\n"));
+    s.push_str(&format!(".global {name}\n.type {name}, %function\n.thumb_func\n"));
+    s.push_str(&super::debug_lines::enter_function(name, func.line));
+    s.push_str(&format!("{name}:\n"));
+    s.push_str(&super::debug_lines::cfi_start());
     s.push_str(&format!("    {PUSH}\n"));
+    s.push_str(&super::debug_lines::cfi_after_push(PUSHED));
     super::arrays::enter_function(name, &func.params);
     // Frame: parameters (r0-r3, then the caller's stack arguments) and locals.
     s.push_str(&frame::prologue(&layout, &func.params, PUSHED, false));
+    s.push_str(&super::debug_lines::cfi_frame_pointer(layout.size, PUSHED));
 
     frame::enter(&layout);
     super::pool::reset();
@@ -202,6 +207,8 @@ fn emit_function(
     frame::leave();
     s.push_str(&body);
     s.push_str(&frame::epilogue(&ret_label, &layout, POP, false));
+    s.push_str(&super::debug_lines::cfi_end());
+    s.push_str(&super::debug_lines::leave_function());
     s.push_str("    .ltorg\n\n");
     Ok(s)
 }
@@ -232,6 +239,9 @@ fn emit_game_main(
     s.push_str(".align 2\n");  // ensure 2-byte alignment after preceding .ltorg padding
     s.push_str(".global game_main\n.type game_main, %function\n.thumb_func\ngame_main:\n");
     s.push_str(&format!("    {PUSH}\n"));
+    // unwind data from the push on (uvm2 puts its runtime's init call before the push)
+    s.push_str(&super::debug_lines::cfi_start());
+    s.push_str(&super::debug_lines::cfi_after_push(PUSHED));
     // One frame holds the locals of main() and, in other slots, those of loop():
     // they persist across frames like every other variable of the game.
     let main_scope = main_fn.map(|f| Scope::of(f, scopes)).unwrap_or_default();
@@ -239,6 +249,7 @@ fn emit_game_main(
     let layouts = frame::layout(&[&main_scope, &loop_scope], PUSHED, "game_main")?;
     super::arrays::enter_function("", &[]);
     s.push_str(&frame::prologue(&layouts[0], &[], PUSHED, false));
+    s.push_str(&super::debug_lines::cfi_frame_pointer(layouts[0].size, PUSHED));
     super::pool::reset();
 
     // Zero the VPy runtime RAM region [TMPVAL .. USER_RAM_START). RP2350 SRAM holds
@@ -414,17 +425,21 @@ fn emit_game_main(
     // main() body
     if let Some(f) = main_fn {
         s.push_str("    @ main() body\n");
+        s.push_str(&super::debug_lines::enter_function(&f.name, f.line));
         frame::enter(&layouts[0]);
         // `return` in main() skips to the game loop
         let body = emit_body(&f.body, var_addrs, &loop_labels, "game_main_loop");
         frame::leave();
         s.push_str(&body?);
+        s.push_str(&super::debug_lines::leave_function());
     }
 
     // Game loop. Per-frame runtime updates are auto-injected ONLY for the
     // engines the program actually uses (same gating as the routine emission
     // in builtins.rs — see arm/analysis.rs).
     s.push_str("game_main_loop:\n");
+    // the frame's own work (Wait_Recal, buttons...) is loop()'s `def` line
+    if let Some(f) = loop_fn { s.push_str(&super::debug_lines::enter_function(&f.name, f.line)); }
     // Drop anything a `return` from inside a switch left on the stack.
     s.push_str("    mov     sp, r7\n");
     s.push_str("    bl      vpy_wait_recal\n");
@@ -462,6 +477,8 @@ fn emit_game_main(
         s.push_str(&body?);
     }
     s.push_str("    b       game_main_loop\n");
+    s.push_str(&super::debug_lines::cfi_end());
+    s.push_str(&super::debug_lines::leave_function());
     s.push_str("    .ltorg\n\n");
 
     Ok(s)
@@ -523,7 +540,8 @@ fn emit_stmt(
     loop_labels: &[(String, String)],
     return_label: &str,
 ) -> Result<String, String> {
-    let mut code = emit_stmt_code(stmt, var_addrs, loop_labels, return_label)?;
+    let mut code = super::debug_lines::statement(stmt.source_line());
+    code.push_str(&emit_stmt_code(stmt, var_addrs, loop_labels, return_label)?);
     super::pool::after(&mut code);
     Ok(code)
 }
@@ -612,51 +630,51 @@ fn emit_stmt_code(
             let mut s = String::new();
             s.push_str(&emit_expr(cond, var_addrs)?);
             s.push_str("    cmp     r0, #0\n");
-            s.push_str(&format!("    beq     if_else_{id}\n"));
+            s.push_str(&format!("    beq     .Lif_else_{id}\n"));
             for st in body { s.push_str(&emit_stmt(st, var_addrs, loop_labels, return_label)?); }
-            s.push_str(&format!("    b       if_end_{id}\n"));
-            s.push_str(&format!("if_else_{id}:\n"));
+            s.push_str(&format!("    b       .Lif_end_{id}\n"));
+            s.push_str(&format!(".Lif_else_{id}:\n"));
 
             for (elif_cond, elif_body) in elifs {
                 let eid = next_id();
                 s.push_str(&emit_expr(elif_cond, var_addrs)?);
                 s.push_str("    cmp     r0, #0\n");
-                s.push_str(&format!("    beq     elif_end_{eid}\n"));
+                s.push_str(&format!("    beq     .Lelif_end_{eid}\n"));
                 for st in elif_body { s.push_str(&emit_stmt(st, var_addrs, loop_labels, return_label)?); }
-                s.push_str(&format!("    b       if_end_{id}\n"));
-                s.push_str(&format!("elif_end_{eid}:\n"));
+                s.push_str(&format!("    b       .Lif_end_{id}\n"));
+                s.push_str(&format!(".Lelif_end_{eid}:\n"));
             }
 
             if let Some(else_stmts) = else_body {
                 for st in else_stmts { s.push_str(&emit_stmt(st, var_addrs, loop_labels, return_label)?); }
             }
-            s.push_str(&format!("if_end_{id}:\n"));
+            s.push_str(&format!(".Lif_end_{id}:\n"));
             Ok(s)
         }
 
         Stmt::While { cond, body, .. } => {
             let id = next_id();
-            let break_lbl    = format!("while_end_{id}");
-            let continue_lbl = format!("while_top_{id}");
+            let break_lbl    = format!(".Lwhile_end_{id}");
+            let continue_lbl = format!(".Lwhile_top_{id}");
             let mut inner_labels = loop_labels.to_vec();
             inner_labels.push((break_lbl.clone(), continue_lbl.clone()));
 
             let mut s = String::new();
-            s.push_str(&format!("while_top_{id}:\n"));
+            s.push_str(&format!(".Lwhile_top_{id}:\n"));
             s.push_str(&emit_expr(cond, var_addrs)?);
             s.push_str("    cmp     r0, #0\n");
-            s.push_str(&format!("    beq     while_end_{id}\n"));
+            s.push_str(&format!("    beq     .Lwhile_end_{id}\n"));
             for st in body { s.push_str(&emit_stmt(st, var_addrs, &inner_labels, return_label)?); }
-            s.push_str(&format!("    b       while_top_{id}\n"));
-            s.push_str(&format!("while_end_{id}:\n"));
+            s.push_str(&format!("    b       .Lwhile_top_{id}\n"));
+            s.push_str(&format!(".Lwhile_end_{id}:\n"));
             Ok(s)
         }
 
         Stmt::For { var, start, end, step, body, .. } => {
             let id = next_id();
             // continue jumps to the increment step, not the top (where the condition check is)
-            let break_lbl    = format!("for_end_{id}");
-            let continue_lbl = format!("for_inc_{id}");
+            let break_lbl    = format!(".Lfor_end_{id}");
+            let continue_lbl = format!(".Lfor_inc_{id}");
             let mut inner_labels = loop_labels.to_vec();
             inner_labels.push((break_lbl.clone(), continue_lbl.clone()));
             let mut s = String::new();
@@ -665,27 +683,27 @@ fn emit_stmt_code(
             s.push_str(&emit_expr(start, var_addrs)?);
             s.push_str(&frame::store_r0(var, var_addrs)?);
 
-            s.push_str(&format!("for_top_{id}:\n"));
+            s.push_str(&format!(".Lfor_top_{id}:\n"));
             // condition: var < end
             s.push_str(&frame::load_r0(var, var_addrs)?);
             s.push_str("    push    {r0}\n");
             s.push_str(&emit_expr(end, var_addrs)?);
             s.push_str("    mov     r1, r0\n    pop     {r0}\n");
             s.push_str("    cmp     r0, r1\n");
-            s.push_str(&format!("    bge     for_end_{id}\n"));
+            s.push_str(&format!("    bge     .Lfor_end_{id}\n"));
 
             for st in body { s.push_str(&emit_stmt(st, var_addrs, &inner_labels, return_label)?); }
 
             // increment — continue target
-            s.push_str(&format!("for_inc_{id}:\n"));
+            s.push_str(&format!(".Lfor_inc_{id}:\n"));
             let step_val = step.as_ref().map(|e| {
                 if let Expr::Number(n) = e { *n } else { 1 }
             }).unwrap_or(1);
             s.push_str(&frame::load_r0(var, var_addrs)?);
             s.push_str(&format!("    add     r0, r0, #{step_val}\n"));
             s.push_str(&frame::store_r0(var, var_addrs)?);
-            s.push_str(&format!("    b       for_top_{id}\n"));
-            s.push_str(&format!("for_end_{id}:\n"));
+            s.push_str(&format!("    b       .Lfor_top_{id}\n"));
+            s.push_str(&format!(".Lfor_end_{id}:\n"));
             Ok(s)
         }
 
@@ -726,8 +744,8 @@ fn emit_stmt_code(
             let len  = hidden(frame::for_in_len(*source_line))?;
             let fp = frame::FP;
 
-            let break_lbl    = format!("forin_end_{id}");
-            let continue_lbl = format!("forin_inc_{id}");
+            let break_lbl    = format!(".Lforin_end_{id}");
+            let continue_lbl = format!(".Lforin_inc_{id}");
             let mut inner_labels = loop_labels.to_vec();
             inner_labels.push((break_lbl.clone(), continue_lbl.clone()));
 
@@ -750,12 +768,12 @@ fn emit_stmt_code(
             s.push_str("    mov     r0, #0\n");
             s.push_str(&format!("    str     r0, [{fp}, #{ctr}]    @ forin counter\n"));
 
-            s.push_str(&format!("forin_top_{id}:\n"));
+            s.push_str(&format!(".Lforin_top_{id}:\n"));
             // Condition: ctr < len
             s.push_str(&format!("    ldr     r0, [{fp}, #{ctr}]\n"));
             s.push_str(&format!("    ldr     r1, [{fp}, #{len}]\n"));
             s.push_str("    cmp     r0, r1\n");
-            s.push_str(&format!("    bge     forin_end_{id}\n"));
+            s.push_str(&format!("    bge     .Lforin_end_{id}\n"));
 
             // Load element: var = base_ptr[ctr]  (the array's element type)
             let elem = super::arrays::of(iterable);
@@ -769,18 +787,18 @@ fn emit_stmt_code(
             for st in body { s.push_str(&emit_stmt(st, var_addrs, &inner_labels, return_label)?); }
 
             // Continue target: increment counter
-            s.push_str(&format!("forin_inc_{id}:\n"));
+            s.push_str(&format!(".Lforin_inc_{id}:\n"));
             s.push_str(&format!("    ldr     r0, [{fp}, #{ctr}]\n"));
             s.push_str("    add     r0, r0, #1\n");
             s.push_str(&format!("    str     r0, [{fp}, #{ctr}]\n"));
-            s.push_str(&format!("    b       forin_top_{id}\n"));
-            s.push_str(&format!("forin_end_{id}:\n"));
+            s.push_str(&format!("    b       .Lforin_top_{id}\n"));
+            s.push_str(&format!(".Lforin_end_{id}:\n"));
             Ok(s)
         }
 
         Stmt::Switch { expr, cases, default, .. } => {
             let id = next_id();
-            let end_lbl = format!("switch_end_{id}");
+            let end_lbl = format!(".Lswitch_end_{id}");
             let mut s = String::new();
 
             // Evaluate switch expression once, save to RAM scratch via r4 (callee-saved)
@@ -798,13 +816,13 @@ fn emit_stmt_code(
             // r4 is callee-saved but may be in use by the outer function body. Use the
             // stack approach with an explicit cleanup label that break jumps to.
             // --- Use stack approach, add cleanup label before end_lbl ---
-            let cleanup_lbl = format!("switch_cleanup_{id}");
+            let cleanup_lbl = format!(".Lswitch_cleanup_{id}");
 
             s.push_str(&emit_expr(expr, var_addrs)?);
             s.push_str("    push    {r0, r1}       @ switch value (r1=pad, 8-byte align)\n");
 
             for (ci, (case_val, case_body)) in cases.iter().enumerate() {
-                let no_match_lbl = format!("switch_next_{ci}_{id}");
+                let no_match_lbl = format!(".Lswitch_next_{ci}_{id}");
                 s.push_str(&emit_expr(case_val, var_addrs)?);
                 s.push_str("    mov     r1, r0\n");
                 s.push_str("    ldr     r0, [sp, #0]   @ reload switch value\n");

@@ -35,6 +35,7 @@ pub mod analysis;
 pub mod arrays;
 pub mod three_d;
 pub mod pool;
+pub mod debug_lines;
 
 use vpy_parser::Module;
 use crate::AssetInfo;
@@ -121,7 +122,9 @@ pub fn generate_arm_asm(
     // Post-process 2: expand `cbz rN, label` to `cmp rN, #0; beq.w label`
     // cbz only works with low registers (r0-r7) and has ±252 byte range.
     // The wide beq.w form handles high registers and long-range branches.
-    Ok(expand_cbz(&asm))
+    // Last: the .vpy statement marks become .loc lines for gdb (debug_lines.rs). After
+    // everything that reads line adjacency, so the code is the same with them or not.
+    Ok(debug_lines::finish(&expand_cbz(&asm)))
 }
 
 /// Normalise an instruction line for matching: strip any `@` comment and

@@ -36,7 +36,8 @@ pub fn after(code: &mut String) {
         }
         None => code.as_str(),
     };
-    let n = LINES.with(|l| l.get()) + tail.lines().count();
+    // the debugger's marks (`@@loc`, `@@cfi_…`: debug_lines.rs) are no code
+    let n = LINES.with(|l| l.get()) + tail.lines().filter(|l| !l.trim_start().starts_with("@@")).count();
     if n < LIMIT {
         LINES.with(|l| l.set(n));
         return;
