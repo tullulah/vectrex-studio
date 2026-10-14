@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { emuCore } from '../../emulatorCoreSingleton';
+import { useDebugStore } from '../../state/debugStore';
+import { showProjectSource } from '../../debug/showSource';
 
 export const DebugPanel: React.FC = () => {
   const { t } = useTranslation(['common']);
@@ -8,6 +10,7 @@ export const DebugPanel: React.FC = () => {
   const [debugVariables, setDebugVariables] = useState<Record<string, number>>({});
   const [debugStrings, setDebugStrings] = useState<Record<string, string>>({});
   const [lastOutput, setLastOutput] = useState<string>('');
+  const callStack = useDebugStore((s) => s.callStack);
 
   // Poll for debug messages, variables and strings every 100ms
   useEffect(() => {
@@ -83,6 +86,37 @@ export const DebugPanel: React.FC = () => {
         </button>
       </div>
       
+      {/* Call stack of the paused program: innermost first, a click shows the line */}
+      {callStack.length > 0 && (
+        <>
+          <div style={{ fontSize: '11px', color: '#888', marginBottom: 4, fontWeight: 'bold' }}>
+            {t('debug.callStack', 'Call stack')}:
+          </div>
+          <div style={{ border: '1px solid #555', backgroundColor: '#1a1a1a', borderRadius: 3, marginBottom: 8 }}>
+            {callStack.map((f, i) => (
+              <div
+                key={i}
+                onClick={() => { if (f.file && f.line) showProjectSource(f.file, f.line); }}
+                title={f.address}
+                style={{
+                  padding: '4px 12px',
+                  borderBottom: '1px solid #333',
+                  fontFamily: 'monospace',
+                  fontSize: '13px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  cursor: f.file && f.line ? 'pointer' : 'default',
+                  color: f.type === 'vpy' ? '#DCDCAA' : '#888'
+                }}
+              >
+                <span>{f.function}</span>
+                <span style={{ color: '#888' }}>{f.file && f.line ? `${f.file}:${f.line}` : f.address}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
       {lastOutput && (
         <div style={{ 
           marginBottom: 8, 

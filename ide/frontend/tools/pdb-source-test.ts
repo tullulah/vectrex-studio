@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as P from '../src/debug/pdbSource.ts';
+const { buildCallStack } = P;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const vpyCli = process.env.VPY_CLI || path.resolve(here, '../../electron/resources/vpy_cli');
@@ -116,6 +117,33 @@ t('an older PDB with only lineMap still serves the entry file', () => {
   const old: P.PdbLines = { source: 'main.vpy', lineMap: pdb.lineMap };
   assert.equal(P.breakpointAddress(old, 'main.vpy', 10), P.fileLines(pdb, 'main.vpy').get(10));
   assert.equal(P.breakpointAddress(old, 'util.vpy', 5), null);
+});
+
+t('the call stack: util.bump called from loop(), called by the frame loop of main()', () => {
+  // The return address after each JSR <target> in the program
+  const retAfter = (target: number) => {
+    for (let i = 0; i + 2 < bin.length; i++) if (bin[i] === 0xbd && ((bin[i + 1] << 8) | bin[i + 2]) === target) return i + 3;
+    throw new Error(`no JSR ${target.toString(16)}`);
+  };
+  const fn = (name: string) => parseInt((pdb as any).functions[name].address, 16);
+  const ram = new Map<number, number>();
+  const push16 = (a: number, v: number) => { ram.set(a, v >> 8); ram.set(a + 1, v & 0xff); };
+  // S (from $CFFF, as VPy sets it) points at: a byte PSHS B left, then bump's return
+  // into loop, then loop's return into main
+  const s = 0xcfff - 5;
+  ram.set(s, 0x42);
+  push16(s + 1, retAfter(fn('UTIL_BUMP')));
+  push16(s + 3, retAfter(fn('LOOP')));
+  const read8 = (a: number) => (a < bin.length ? bin[a] : ram.get(a) ?? 0);
+  const pc = P.fileLines(pdb, 'util.vpy').get(5)!;
+  const frames = buildCallStack(pdb as any, pc, s, read8);
+  assert.deepEqual(frames.map((f) => [f.function, f.file, f.line, f.type]), [
+    ['util.bump', 'util.vpy', 5, 'vpy'],
+    ['loop', 'main.vpy', 10, 'vpy'],
+    ['main', 'main.vpy', null, 'vpy'],
+  ]);
+  // Nothing on the stack: just where it is
+  assert.deepEqual(buildCallStack(pdb as any, pc, 0xcfff, read8).map((f) => f.function), ['util.bump']);
 });
 
 rmSync(root, { recursive: true, force: true });

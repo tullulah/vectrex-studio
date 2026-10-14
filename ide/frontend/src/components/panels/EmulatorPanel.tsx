@@ -17,7 +17,8 @@ import { VideoRecorder, defaultVideoName } from '../../emulator/recorder/VideoRe
 import { getAllLiveContextOutputs, getOutputsForContext } from '../../emulator/recorder/audioGraphTracker';
 import { PitrexSimView, PITREX_RANGE, type Segment as PitrexSegment } from '../PitrexSimView';
 import { installBreakpointSync, syncEmulatorBreakpoints } from '../../debug/breakpointSync';
-import { baseName, sourceAt, statementAddresses } from '../../debug/pdbSource';
+import { buildCallStack, sourceAt, statementAddresses } from '../../debug/pdbSource';
+import { showProjectSource } from '../../debug/showSource';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -45,34 +46,6 @@ function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
   return result;
 }
 
-/**
- * Show `fileName` (a .vpy base name from the .pdb) at `line` (1-based): this project's
- * open tab of that name — not another project's main.vpy — or the file read from the
- * project's src/.
- */
-function showProjectSource(fileName: string, line: number): void {
-  const root = useProjectStore.getState().vpyProject?.rootDir?.replace(/\\/g, '/');
-  const editorStore = useEditorStore.getState();
-  const fsOf = (uri: string) => uri.replace(/^file:\/\//, '');
-  const doc = editorStore.documents.find(d =>
-    baseName(d.uri) === fileName && (!root || fsOf(d.uri).startsWith(root + '/')));
-  if (doc) {
-    if (editorStore.active !== doc.uri) editorStore.setActive(doc.uri);
-    editorStore.gotoLocation(doc.uri, line - 1, 0);
-    return;
-  }
-  if (!root) { console.warn(`[EmulatorPanel] ⚠️ No project open: cannot show ${fileName}`); return; }
-  const fsPath = `${root}/src/${fileName}`;
-  const uri = `file://${fsPath}`;
-  (window as any).files?.readFile?.(fsPath).then((res: { content?: string; error?: string }) => {
-    if (!res || res.error || res.content === undefined) {
-      console.warn(`[EmulatorPanel] ⚠️ Could not open ${fsPath}: ${res?.error}`);
-      return;
-    }
-    useEditorStore.getState().openDocument({ uri, content: res.content, language: 'vpy', dirty: false, mtime: Date.now(), diagnostics: [] });
-    useEditorStore.getState().gotoLocation(uri, line - 1, 0);
-  });
-}
 
 // Tipos para JSVecX
 interface VecxMetrics {
@@ -240,6 +213,10 @@ const EmulatorOutputInfo: React.FC<{ backend: 'rp2350' | 'uvm2' | null }> = ({ b
     const interval = setInterval(fetchStats, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Each pause (a step, a breakpoint) has a new PC: show it now, not at the next poll
+  const pausedStack = useDebugStore(s => s.callStack);
+  useEffect(() => { fetchStats(); }, [debugState, pausedStack]);
 
   const hex8 = (v: any) => typeof v === 'number' ? `0x${(v & 0xFF).toString(16).padStart(2, '0')}` : '--';
   const hex16 = (v: any) => typeof v === 'number' ? `0x${(v & 0xFFFF).toString(16).padStart(4, '0')}` : '--';
@@ -1902,6 +1879,10 @@ export const EmulatorPanel: React.FC = () => {
           
           // Get pdbData from store directly (not from hook)
           const currentPdbData = debugStore.pdbData;
+          // Who called whom, from the return addresses on S (debug/pdbSource.ts)
+          debugStore.updateCallStack(currentPdbData && vecx.e6809
+            ? buildCallStack(currentPdbData as any, vecx.e6809.reg_pc & 0xffff, vecx.e6809.reg_s.value & 0xffff, (a: number) => vecx.read8(a))
+            : []);
           
           if (event.data.pc && currentPdbData) {
             const pcHex = event.data.pc.replace('0x', '').toLowerCase();

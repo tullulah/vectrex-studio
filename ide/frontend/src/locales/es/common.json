@@ -30,6 +30,7 @@
   "panel.errors": "Errores",
   "panel.emulator": "Emulador",
   "panel.debug": "Depuración",
+  "debug.callStack": "Pila de llamadas",
   "panel.registers": "Registros",
   "panel.variables": "Variables",
   "panel.constants": "Constantes",

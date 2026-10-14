@@ -41,6 +41,7 @@ export interface PdbData {
 
 export interface CallFrame {
   function: string;
+  file?: string | null;
   line: number | null;
   address: string;
   type: 'vpy' | 'native' | 'bios';
@@ -131,7 +132,8 @@ export const useDebugStore = create<DebugStore>((set, get) => ({
   loadingForDebug: false,
   
   // New actions
-  setState: (state) => set({ state }),
+  // The call stack is the paused program's: running or stopped, it is stale
+  setState: (state) => set(state === 'paused' ? { state } : { state, callStack: [] }),
   setCurrentVpyLine: (line) => set({ currentVpyLine: line }),
   setCurrentVpyLineWithFile: (line, file) => set({ currentVpyLine: line, currentVpyFile: file }),
   setCurrentAsmAddress: (address) => set({ currentAsmAddress: address }),

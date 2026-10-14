@@ -236,7 +236,9 @@ These controls are also available as buttons in the **Debug Toolbar** at the top
 
 ### Debug Panel
 
-Shows values printed via `DEBUG_PRINT` and variables tracked via `DEBUG_PRINT_STR` from the running program. Updates every 100ms.
+While the program is paused, the **Call stack** heads the panel: the innermost function first, each user function with its file and line (a click opens it), then its callers down to `main`. Runtime routines and BIOS routines appear by name (`Moveto_ix` ← `Wait_Recal` ← `loop` ← `main`). The stack is rebuilt from the return addresses on the 6809 stack, so a call through `JSR` indexed shows its callee by address, and in a multibank ROM a caller in another bank than the one mapped is missing. `main`'s frame under `loop` has no line: it is the compiler's own frame loop.
+
+Below it, values printed via `DEBUG_PRINT` and variables tracked via `DEBUG_PRINT_STR` from the running program. Updates every 100ms.
 
 ### Trace Panel
 

@@ -116,3 +116,147 @@ export function statementAddresses(pdb: PdbLines): Set<number> {
   for (const a of Object.values(pdb.lineMap || {})) out.add(parseAddr(a));
   return out;
 }
+
+/**
+ * The 6809 call stack of a paused program, rebuilt from its hardware stack.
+ *
+ * m6809 VPy keeps no frame pointer (parameters and locals live in static frames), so
+ * the only trace of the callers is the return addresses JSR/BSR/LBSR pushed on S. The
+ * stack is scanned from S up to its top (stackTop); a word counts as a return
+ * address only when the bytes before it are a call instruction, and — when the call's
+ * target can be decoded — that target is not past the code it supposedly called (a
+ * value a PSHS left there rarely passes both).
+ *
+ * Limits: a call through JSR indexed has no decodable target (its frame is kept, its
+ * callee named by address); a return address into another 16 KB bank than the one
+ * mapped now is read from the wrong bank and is skipped.
+ *
+ * Memory comes in as `read8`.
+ */
+
+export interface StackPdb extends PdbLines {
+  symbols?: Record<string, string>;
+  bios_symbols?: Record<string, string>;
+}
+
+export interface StackFrame {
+  function: string;
+  file: string | null;
+  line: number | null;
+  /** The frame's PC: where it is paused (frame 0) or where it returns to. */
+  address: string;
+  type: 'vpy' | 'native' | 'bios';
+}
+
+/**
+ * The end of the stack S is on: a VPy program runs with S from $CFFF (codegen's
+ * `LDS #$CFFF`, the top of the 1 KB RAM's high mirror); the BIOS's own stack starts
+ * at $CBEA, below its interrupt vectors.
+ */
+export const stackTop = (s: number) => ((s & 0xffff) >= 0xcc00 ? 0xd000 : 0xcbea);
+const MAX_FRAMES = 64;
+
+const hex4 = (n: number) => '0x' + (n & 0xffff).toString(16).toUpperCase().padStart(4, '0');
+const isBios = (a: number) => a >= 0xe000;
+
+/** The call that returns to `ret`: its target (null when indexed) or no call at all. */
+function callBefore(ret: number, read8: (a: number) => number): { target: number | null } | null {
+  const b = (a: number) => read8(a & 0xffff) & 0xff;
+  const w = (a: number) => (b(a) << 8) | b(a + 1);
+  if (b(ret - 3) === 0xbd) return { target: w(ret - 2) }; // JSR extended
+  if (b(ret - 3) === 0x17) return { target: (ret + ((w(ret - 2) << 16) >> 16)) & 0xffff }; // LBSR
+  if (b(ret - 2) === 0x8d) return { target: (ret + ((b(ret - 1) << 24) >> 24)) & 0xffff }; // BSR
+  if (b(ret - 2) === 0xad) return { target: null }; // JSR ,R / JSR [,R]
+  return null;
+}
+
+interface Fn { name: string; address: number; type: StackFrame['type']; file: string | null }
+
+/** Every routine the PDB names, by address: user functions first, then runtime, then BIOS. */
+function routines(pdb: StackPdb): { byAddr: Map<number, Fn>; user: Fn[] } {
+  const byAddr = new Map<number, Fn>();
+  const user: Fn[] = [];
+  for (const [name, f] of Object.entries(pdb.functions || {})) {
+    const fn: Fn = { name, address: parseAddr(f.address), type: 'vpy', file: f.file ? baseName(f.file) : entryFile(pdb) };
+    user.push(fn);
+    byAddr.set(fn.address, fn);
+  }
+  for (const [name, a] of Object.entries(pdb.symbols || {})) {
+    const addr = parseAddr(a);
+    if (!name.includes('.') && !byAddr.has(addr)) byAddr.set(addr, { name, address: addr, type: 'native', file: null });
+  }
+  for (const [name, a] of Object.entries(pdb.bios_symbols || {})) {
+    const addr = parseAddr(a);
+    if (!byAddr.has(addr)) byAddr.set(addr, { name, address: addr, type: 'bios', file: null });
+  }
+  user.sort((x, y) => x.address - y.address);
+  return { byAddr, user };
+}
+
+/** A user function's name as the source spells it: UTIL_BUMP in util.vpy -> util.bump. */
+function displayName(fn: Fn, entry: string): string {
+  if (fn.type !== 'vpy') return fn.name;
+  const stem = (fn.file || '').replace(/\.vpy$/i, '').toUpperCase();
+  if (fn.file && fn.file !== entry && fn.name.startsWith(stem + '_')) {
+    return `${stem.toLowerCase()}.${fn.name.slice(stem.length + 1).toLowerCase()}`;
+  }
+  return fn.name.toLowerCase();
+}
+
+export function buildCallStack(pdb: StackPdb, pc: number, s: number, read8: (a: number) => number): StackFrame[] {
+  const { byAddr, user } = routines(pdb);
+  const entry = entryFile(pdb);
+  // Each file's statements by address, to name the line a frame is on
+  const statements = new Map<string, Array<[number, number]>>(); // file -> [addr, line] ascending
+  for (const fn of user) {
+    if (!fn.file || statements.has(fn.file)) continue;
+    statements.set(fn.file, [...fileLines(pdb, fn.file)].map(([l, a]) => [a, l] as [number, number]).sort((x, y) => x[0] - y[0]));
+  }
+  const enclosingUser = (a: number) => {
+    let hit: Fn | null = null;
+    for (const fn of user) if (fn.address <= a) hit = fn;
+    return hit;
+  };
+
+  // The frames' PCs, innermost first, and the routine each call went to
+  const pcs: number[] = [pc & 0xffff];
+  const callees: Array<number | null> = [];
+  const top = stackTop(s);
+  for (let a = s & 0xffff; a + 1 < top && pcs.length < MAX_FRAMES; a++) {
+    const ret = (read8(a) << 8) | read8(a + 1);
+    if (ret < 3 || (ret >= 0x8000 && !isBios(ret))) continue; // not ROM
+    const call = callBefore(ret, read8);
+    if (!call) continue;
+    // The call must have gone to (or before) the code of the frame it made
+    if (call.target !== null && !isBios(call.target) && call.target > pcs[pcs.length - 1]) continue;
+    callees.push(call.target);
+    pcs.push(ret);
+    a++; // the word's second byte
+  }
+
+  return pcs.map((framePc, i) => {
+    // A frame's routine: what its caller's call went to, else the user function around it
+    const target = callees[i] ?? null;
+    let fn = target !== null ? byAddr.get(target) ?? null : null;
+    if (!fn && !isBios(framePc)) fn = enclosingUser(framePc);
+    const name = fn ? displayName(fn, entry) : target !== null ? hex4(target) : isBios(framePc) ? 'BIOS' : hex4(framePc);
+    const type: StackFrame['type'] = fn?.type ?? (isBios(framePc) ? 'bios' : 'native');
+
+    // Its line: the last statement of its function at or before the PC (a return
+    // address points past the call, so the call itself is at PC-1). main()'s frame
+    // below loop() is the compiler's own frame loop: it has no line.
+    let line: number | null = null;
+    if (fn?.type === 'vpy' && fn.file) {
+      const at = i === 0 ? framePc : framePc - 1;
+      const calledLoop = i > 0 && fn.name === 'MAIN' && callees[i - 1] !== null && byAddr.get(callees[i - 1]!)?.name === 'LOOP';
+      if (!calledLoop) {
+        for (const [addr, l] of statements.get(fn.file) || []) {
+          if (addr < fn.address) continue;
+          if (addr > at) break;
+          line = l;
+        }
+      }
+    }
+    return { function: name, file: fn?.type === 'vpy' ? fn.file : null, line, address: hex4(framePc), type };
+  });
+}
