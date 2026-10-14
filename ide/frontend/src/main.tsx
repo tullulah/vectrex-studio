@@ -1043,6 +1043,13 @@ def loop():
         }, 0);
         break;
       case 'build.run':
+        // F5 while paused at a breakpoint or after a step continues the program (to the
+        // next breakpoint): building would throw the session away. 'paused' is only a
+        // debug stop; a program merely running is 'running'.
+        if (useDebugStore.getState().state === 'paused') {
+          commandExec('debug.continue');
+          break;
+        }
         // Debounce build requests - ignore if one already triggered in last 100ms
         if (buildDebounceTimerRef.current) {
           logger.debug('Build', 'Build&Run request debounced (already queued)');
@@ -1065,6 +1072,11 @@ def loop():
         }, 0);
         break;
       case 'build.simulate':
+        // Shift+F5 while paused ends the debug session (as in VS Code)
+        if (useDebugStore.getState().state === 'paused') {
+          commandExec('debug.stop');
+          break;
+        }
         // Shift+F5: build & run the fast WASM simulator. Plain F5 builds the selected
         // target and runs it on the faithful emulator; a project with no simulator gets
         // the same thing from both keys.
@@ -1714,24 +1726,10 @@ def loop():
       // reaching this handler. preventDefault below is what stops the reload.
       else if (e.key === 'F7' && !e.shiftKey) { e.preventDefault(); commandExec('build.build'); }
       else if (e.key === 'F7' && e.shiftKey) { e.preventDefault(); commandExec('build.buildSim'); }
-      else if (e.key === 'F5' && !e.shiftKey) {
-        e.preventDefault();
-        // Resume a PAUSED debug session; otherwise build and run.
-        //
-        // The test used to be `state !== 'stopped'`, and that is not "am I debugging" —
-        // `state` means THE EMULATOR IS RUNNING, and every backend sets it: the uvm2 and
-        // rp2350 rAF loops, the WASM sim, the 6809. So once anything had run, F5 would
-        // have started the 6809 debugger instead of building. A session waiting for the
-        // user is 'paused'; 'running' is not one.
-        // (Paused means stopped at a breakpoint or after a step: continue from there.
-        // debug.start rebuilt the program and started over.)
-        const debugState = useDebugStore.getState().state;
-        if (debugState === 'paused') {
-          commandExec('debug.continue');
-        } else {
-          commandExec('build.run');
-        }
-      }
+      // F5 / Shift+F5: the same commands the Electron main process sends for these keys
+      // (it takes them before the page does): build.run / build.simulate, which continue
+      // or end a paused debug session instead of building.
+      else if (e.key === 'F5' && !e.shiftKey) { e.preventDefault(); commandExec('build.run'); }
       // Debug shortcuts
       else if (ctrl && e.key.toLowerCase() === 'd' && !e.shiftKey) { e.preventDefault(); commandExec('debug.start'); }
       else if (e.key === 'F9') { e.preventDefault(); commandExec('debug.toggleBreakpoint'); }
@@ -1739,16 +1737,7 @@ def loop():
       else if (e.key === 'F11' && !e.shiftKey) { e.preventDefault(); commandExec('debug.stepInto'); }
       else if (e.key === 'F11' && e.shiftKey) { e.preventDefault(); commandExec('debug.stepOut'); }
       else if (e.key === 'F12') { e.preventDefault(); commandExec('debug.continue'); }
-      else if (e.key === 'F5' && e.shiftKey) {
-        e.preventDefault();
-        // Shift+F5: end a PAUSED debug session; otherwise build and run the simulator.
-        //
-        // Same trap as F5 above: testing `state !== 'stopped'` meant that once any
-        // emulator had run, this key stopped the debugger instead of simulating, and it
-        // never worked twice in a row.
-        if (useDebugStore.getState().state === 'paused') commandExec('debug.stop');
-        else commandExec('build.simulate');
-      }
+      else if (e.key === 'F5' && e.shiftKey) { e.preventDefault(); commandExec('build.simulate'); }
       // Git
       else if (ctrl && e.key.toLowerCase() === 'g' && !e.shiftKey) { e.preventDefault(); commandExec('git.checkout'); } // Ctrl+G = Git checkout branch
       else if (ctrl && e.key.toLowerCase() === 'g' && e.shiftKey) { e.preventDefault(); commandExec('git.history'); } // Ctrl+Shift+G = Git history

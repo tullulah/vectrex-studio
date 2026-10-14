@@ -254,7 +254,8 @@ Breakpoints are the emulator's (never written into the program). One gdb at a ti
 
 | Key | Action |
 |-----|--------|
-| **F5** | Build and run; while paused, Continue |
+| **F5** | Build and run; while paused (at a breakpoint or after a step), Continue to the next breakpoint |
+| **Shift+F5** | Build and run the simulator; while paused, end the debug session |
 | **F12** | Continue |
 | **F10** | Step Over: run to the next statement of this function or of the one it returns to, over calls (an `if` whose body is skipped is skipped; the end of `loop()` goes round to its top) |
 | **F11** | Step Into: run to the next statement, inside a called function if the statement calls one, in whatever file it lives |
