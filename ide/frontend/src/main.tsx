@@ -390,9 +390,10 @@ function App() {
     { key: 'memory', label: t('panel.memory','Memory'), component: 'memory' },
     { key: 'trace', label: t('panel.trace','Trace'), component: 'trace' },
     { key: 'psglog', label: 'PSG Log', component: 'psglog' },
+    { key: 'bioscalls', label: t('panel.bioscalls','BIOS Calls'), component: 'bioscalls' },
     { key: 'ai-assistant', label: t('panel.ai','PyPilot'), component: 'ai-assistant' },
     { key: 'terminal', label: `${t('panel.terminal','Terminal')} (Ctrl+\`)`, component: 'terminal' },
-  ];
+  ].sort((a, b) => a.label.localeCompare(b.label)); // alphabetically, in the UI's language (as the native View menus)
 
   // Detect visibility via flexlayout model only
   const isComponentVisible = (comp: string) => {
