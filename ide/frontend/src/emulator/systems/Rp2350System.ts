@@ -563,7 +563,7 @@ export class Rp2350System implements ISystem, IBus {
       }
 
       // A debugger breakpoint or step (cpu/armDebug.ts): leave the frame right here
-      if (this.debug.armed && this.debug.shouldStop(this.cpu.pc)) { stoppedByDebugger = true; break; }
+      if (this.debug.armed && this.debug.shouldStop(this.cpu.pc, this.cpu.getReg(13))) { stoppedByDebugger = true; break; }
 
       // Check for trap before executing
       const pc = this.cpu.pc & ~1; // strip Thumb bit for lookup

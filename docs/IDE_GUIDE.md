@@ -220,9 +220,13 @@ Click in the **gutter** (left margin) of any line in the editor to toggle a brea
 
 A breakpoint on a line with no code of its own (a comment, a `def`, an `else:`) stops at the next statement of the same function. When execution stops, the editor opens that statement's file and highlights the line.
 
-The editor's breakpoints, stepping and the debugger tools are for **m6809** programs (JSVecX). The rp2350 and uvm2 targets are debugged with gdb (below); pitrex has no debugger.
+The editor's breakpoints and the keys below work on **m6809** (JSVecX, through the `.pdb`) and on **rp2350 and uvm2** (the ARM emulator, through the line table in the build's ELF: see the next section). pitrex has no debugger.
+
+On the ARM targets a C-backend build (`[uvm2] backend = "c"`) is optimised: gcc inlines and reorders, so a line may be skipped, a breakpoint on a call may show the first line of the function inlined there, and Step Over stays in the current file while the stack does not change (a call to another module that gcc inlined is stepped over). Step Out from `loop()` goes to whatever runs next in the frame. The call stack panel is for m6809 only.
 
 ### Debugging ARM programs with gdb (rp2350, uvm2)
+
+The editor's breakpoints and steps cover the usual work; gdb adds instruction stepping, registers, memory and the full stack down to the firmware.
 
 While the IDE runs, its ARM emulator accepts `arm-none-eabi-gdb` on localhost port **3333** (the next free port up to 3343 if 3333 is taken; the IDE's log says which). Build and run the program on the emulator (F5), then attach with the build's ELF (an IDE build for uvm2 writes `build/<name>_uvm2.elf`):
 

@@ -28,6 +28,19 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
   private _uvm2System: Uvm2System | null = null;
   private _activeTarget: 'm6809' | 'rp2350' | 'uvm2' = 'm6809';
 
+  /** Told of each ARM program loaded, with its ELF (debug/armSourceDebug.ts reads its lines). */
+  private readonly armLoadListeners = new Set<(elf: Uint8Array | null) => void>();
+  onArmProgramLoaded(fn: (elf: Uint8Array | null) => void): void { this.armLoadListeners.add(fn); }
+  /** The ELF for the debugger's line table only, when it is not given to the system
+   *  (a uvm2 image runs without its ELF: setElf would change how its SD is served). */
+  private armDebugElf: Uint8Array | null = null;
+  setArmDebugElf(elf: Uint8Array | null): void { this.armDebugElf = elf; }
+  private armLoaded(elf: Uint8Array | undefined): void {
+    for (const fn of this.armLoadListeners) {
+      try { fn(elf ?? this.armDebugElf); } catch (e) { console.warn('[JsVecxCore] ARM load listener failed:', e); }
+    }
+  }
+
   /** The ARM system running now (the debugger's target), or null on the 6809. */
   get activeArmSystem(): Rp2350System | Uvm2System | null {
     if (this._activeTarget === 'uvm2') return this._uvm2System;
@@ -597,6 +610,7 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     // triggered by a user action, so the AudioContext can start here).
     this._rp2350System.startAudio();
     console.log(`[loadArm] DONE — activeTarget=${this._activeTarget} traps registered`);
+    this.armLoaded(elf);
   }
 
   /**
@@ -622,6 +636,7 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
     this._activeTarget = 'uvm2';
     this._uvm2System.startAudio();
     console.log('[loadUvm2] DONE — activeTarget=uvm2');
+    this.armLoaded(elf);
   }
 
   /** Lo que costo el ultimo frame COMPLETO del juego, en ciclos de bus del Vectrex, y los

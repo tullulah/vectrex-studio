@@ -38,6 +38,8 @@ import './services/mcpBridge.js';
 import { registerBuildRunner } from './services/mcpBridge.js';
 import { installArmGdbTarget } from './debug/armGdbTarget';
 installArmGdbTarget(); // gdb's way into the ARM emulator (ide/electron/src/gdb/)
+import { installArmSourceDebug } from './debug/armSourceDebug';
+installArmSourceDebug(); // the editor's breakpoints and steps on rp2350/uvm2
 import type { BuildOutcome, BuildMode } from './services/buildOutcome.js';
 
 // Initialize store reference for cross-store access

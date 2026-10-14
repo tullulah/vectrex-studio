@@ -1979,7 +1979,7 @@ export class Uvm2System implements ISystem, IBus {
       }
 
       // A debugger breakpoint or step (cpu/armDebug.ts): leave the frame right here
-      if (this.debug.armed && this.debug.shouldStop(pc)) { paradoPorDepurador = true; break; }
+      if (this.debug.armed && this.debug.shouldStop(pc, this.cpu.getReg(13))) { paradoPorDepurador = true; break; }
 
       // Historial de PCs, solo para el informe de fallo. Un fallo en este nucleo
       // dice DONDE se paro pero no COMO se llego, y sin el "como" no se puede

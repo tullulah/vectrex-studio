@@ -19,6 +19,7 @@ import { PitrexSimView, PITREX_RANGE, type Segment as PitrexSegment } from '../P
 import { installBreakpointSync, syncEmulatorBreakpoints } from '../../debug/breakpointSync';
 import { buildCallStack, sourceAt, statementAddresses } from '../../debug/pdbSource';
 import { showProjectSource } from '../../debug/showSource';
+import { armStep, showArmStop } from '../../debug/armSourceDebug';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -1630,10 +1631,14 @@ export const EmulatorPanel: React.FC = () => {
           runControlRef.current.play();
         } else if (type === 'debug-pause') {
           runControlRef.current.pause();
+          if (owner === 'uvm2' || owner === 'rp2350') showArmStop();
         } else if (type === 'debug-stop') {
           runControlRef.current.stop();
+        } else if ((owner === 'uvm2' || owner === 'rp2350') && type !== 'debug-switch-to-asm') {
+          // steps by .vpy statement through the ELF's line table (debug/armSourceDebug.ts)
+          armStep(type === 'debug-step-over' ? 'over' : type === 'debug-step-into' ? 'into' : 'out');
         } else {
-          console.log(`[EmulatorPanel] ${type} ignored: stepping is for 6809 programs (active: ${owner})`);
+          console.log(`[EmulatorPanel] ${type} ignored: stepping is for 6809 and ARM programs (active: ${owner})`);
         }
         return;
       }
@@ -2941,6 +2946,16 @@ export const EmulatorPanel: React.FC = () => {
 
   runControlRef.current = { play: onPlay, pause: onPause, stop: onStop };
 
+  // ARM: a breakpoint or a step pauses through the debug store (debug/armSourceDebug.ts,
+  // gdb), not through these controls: the panel follows it (status, silenced audio)
+  const armDebugState = useDebugStore(st => st.state);
+  useEffect(() => {
+    const engine = useEmulatorStore.getState().activeEngine;
+    if (engine !== 'rp2350' && engine !== 'uvm2') return;
+    if (armDebugState === 'paused') { setStatus('paused'); setArmAudioSuspended(true); }
+    else if (armDebugState === 'running') { setStatus('running'); setArmAudioSuspended(!audioEnabled); }
+  }, [armDebugState]);
+
   const onLoadROM = async () => {
     // Prefer the Electron native dialog: it gives us the absolute path, which we
     // need to locate the sibling .elf for rp2350 binaries. Fall back to the
@@ -3511,6 +3526,16 @@ export const EmulatorPanel: React.FC = () => {
               const psramElf = payload.psramElfBase64
                 ? Uint8Array.from(atob(payload.psramElfBase64), c => c.charCodeAt(0))
                 : undefined;
+              // The debugger's line table: the ELF next to the image (not handed to the
+              // system: see setArmDebugElf). A missing one only means no source debugging.
+              let debugElf: Uint8Array | null = elf ?? null;
+              if (!debugElf && (window as any).files?.readFileBin) {
+                try {
+                  const r = await (window as any).files.readFileBin(payload.binPath.replace(/\.(bin|um2)$/i, '.elf'));
+                  if (r && !r.error && r.base64) debugElf = Uint8Array.from(atob(r.base64), c => c.charCodeAt(0));
+                } catch { /* no ELF */ }
+              }
+              (emuCore as any).setArmDebugElf?.(debugElf);
               armReloadRef.current = () =>
                 emuCore.loadUvm2!(bin, canvasRef.current ?? undefined, elf, sdBytes, psramElf);
               armReloadRef.current();
@@ -3519,6 +3544,7 @@ export const EmulatorPanel: React.FC = () => {
               // Pass the shared canvas so Rp2350System renders directly to it
               const sdSim2 = await (electronAPI as any)?.sdSimList?.().catch(() => null);
               const romZip2 = await loadSimRomZip(payload.binPath);
+              (emuCore as any).setArmDebugElf?.(null); // rp2350: the system's own ELF is the debugger's
               armReloadRef.current = () =>
                 emuCore.loadArm!(bin, elf, canvasRef.current ?? undefined, sdSim2?.files ?? [], sdSim2?.previews ?? {}, romZip2);
               armReloadRef.current();

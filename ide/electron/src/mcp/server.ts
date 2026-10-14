@@ -1222,6 +1222,16 @@ export class MCPServer {
         launched: r.launch, emulator: em, notes: r.notes || [], buildMs: r.buildMs,
         output: String(r.output || '').slice(-3000),
       };
+      // Already stopped at a breakpoint (one in main(), say): it ran, and that is where it is
+      if ((mode === 'run' || mode === 'simulate') && r.launch !== 'none' && !em.running && !em.lastLoad?.error) {
+        const st = await this.bridge<any>('emulatorState').catch(() => null);
+        if (st?.debugState === 'paused') {
+          const pcHex = st.arm ? st.arm.pcHex : st.pc == null ? null : hex(st.pc, 4);
+          result.stoppedAt = { pcHex, file: st.currentVpyFile, line: st.currentVpyLine };
+          result.notes = [...result.notes, 'The program stopped at a breakpoint: debugger_continue / debugger_step_* go on from there.'];
+          return result;
+        }
+      }
       // "run"/"simulate" promise a running program: say so when it is not.
       if ((mode === 'run' || mode === 'simulate') && r.launch !== 'none' && !em.running) {
         const why = r.emulatorWait?.timedOut
@@ -1574,7 +1584,8 @@ export class MCPServer {
     await new Promise((res) => setTimeout(res, 100));
     const s = await this.bridge<any>('emulatorState');
     if (s.debugState === 'paused') {
-      return { running: false, debugState: 'paused', stoppedAt: { pcHex: s.pc === null ? null : hex(s.pc, 4), file: s.currentVpyFile, line: s.currentVpyLine } };
+      const pcHex = s.arm ? s.arm.pcHex : s.pc == null ? null : hex(s.pc, 4); // ARM: its own pc
+      return { running: false, debugState: 'paused', stoppedAt: { pcHex, file: s.currentVpyFile, line: s.currentVpyLine } };
     }
     return { running: true, debugState: s.debugState };
   }

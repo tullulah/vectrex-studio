@@ -18,6 +18,8 @@
 import { useEditorStore } from '../state/editorStore.js';
 import { useProjectStore } from '../state/projectStore.js';
 import { useDebugStore } from '../state/debugStore.js';
+import { armDebugInfo } from '../debug/armSourceDebug.js';
+import { emuCore } from '../emulatorCoreSingleton.js';
 import { useSettings, type BuildTarget } from '../state/settingsStore.js';
 import { useEmulatorStore } from '../state/emulatorStore.js';
 import { ensureComponent } from '../state/dockBus.js';
@@ -338,6 +340,9 @@ const api: Record<string, Fn> = {
       currentVpyFile: dbg.currentVpyFile,
       backend: emulatorSummary(),
     };
+    // An ARM program: its own pc, line and breakpoints (the 6809 below is stopped)
+    const arm = armDebugInfo();
+    if (arm) return { ...base, running: dbg.state === 'running', arm };
     if (!v?.e6809) return { ...base, running: false, pc: null, registers: null, cycles: null };
     const registers = readRegisters();
     return { ...base, running: !!v.running, pc: registers.PC, registers, cycles: Number(v.totalCycles ?? 0) };
@@ -393,6 +398,15 @@ const api: Record<string, Fn> = {
 
   /** Start/resume through the Emulator panel's own handler (same as the debugger's Continue). */
   startEmulator: async () => {
+    // An ARM program: the same, with core 0's cycles (the 6809 below is stopped)
+    const arm = (emuCore as any).activeArmSystem;
+    if (arm?.core0) {
+      const c0 = arm.core0.cycles;
+      window.postMessage({ type: 'debug-continue' }, '*');
+      const running = () => useDebugStore.getState().state === 'running';
+      for (let i = 0; i < 20 && !running() && arm.core0.cycles === c0; i++) await sleep(25);
+      return { running: running(), resumed: running() || arm.core0.cycles !== c0, debugState: useDebugStore.getState().state };
+    }
     const v = vecx();
     if (!v) throw new Error('Emulator not available (is the Emulator panel open?)');
     // It may run into a breakpoint again before the first poll (one frame is a few

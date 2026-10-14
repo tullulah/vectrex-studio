@@ -43,12 +43,14 @@ function need(): ArmSystem {
 let pendingStop: StopReason | null = null;
 
 /** Every system's stops reach the IDE: it pauses, and gdb is told (poll). */
+const watched = new WeakSet<ArmSystem>();
 function watch(s: ArmSystem): void {
-  if (s.debug.onStop) return;
-  s.debug.onStop = (reason) => {
+  if (watched.has(s)) return;
+  watched.add(s);
+  s.debug.onStop((reason) => {
     pendingStop = reason;
     useDebugStore.getState().setState('paused');
-  };
+  });
 }
 
 const target: GdbTarget = {
