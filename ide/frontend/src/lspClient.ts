@@ -232,7 +232,9 @@ export function ensureClangd(rootDir: string): Promise<LspClient> {
         capabilities: {
           textDocument: {
             synchronization: { didSave: false, willSave: false, willSaveWaitUntil: false, dynamicRegistration: false },
-            publishDiagnostics: { relatedInformation: false },
+            // codeActionsInline (a clangd extension): each diagnostic carries its fixes,
+            // which the editor offers as quick fixes
+            publishDiagnostics: { relatedInformation: false, codeActionsInline: true },
             completion: { completionItem: { snippetSupport: false, documentationFormat: ['plaintext', 'markdown'] } },
             hover: { contentFormat: ['markdown', 'plaintext'] },
             definition: { linkSupport: false },

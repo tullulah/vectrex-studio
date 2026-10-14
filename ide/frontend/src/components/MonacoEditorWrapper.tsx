@@ -86,6 +86,8 @@ function mapCompletionKind(kind: number | undefined, monaco: Monaco): any {
 // but pointed at getLspClient('clangd'). Registered once (Monaco providers are
 // global per monaco instance, not per editor).
 let clangdProvidersRegistered = false;
+// The last diagnostics clangd published per document uri, with their inline fixes
+const clangdDiagnostics = new Map<string, any[]>();
 export function registerClangdProviders(monaco: Monaco) {
   if (clangdProvidersRegistered) return;
   clangdProvidersRegistered = true;
@@ -165,6 +167,30 @@ export function registerClangdProviders(monaco: Monaco) {
         return [];
       }
     });
+    // Quick fixes: the fixes clangd attached to the diagnostics under the cursor
+    monaco.languages.registerCodeActionProvider(langId, {
+      provideCodeActions: (model, _range, context) => {
+        const diags = clangdDiagnostics.get(model.uri.toString()) || [];
+        const actions: any[] = [];
+        for (const marker of context.markers) {
+          const d = diags.find((x: any) => x.message === marker.message
+            && x.range.start.line + 1 === marker.startLineNumber && x.range.start.character + 1 === marker.startColumn);
+          for (const a of d?.codeActions || []) {
+            const edits = Object.entries(a.edit?.changes || {}).flatMap(([uri, list]: [string, any]) => list.map((e: any) => ({
+              resource: monaco.Uri.parse(uri),
+              versionId: undefined,
+              textEdit: {
+                range: new monaco.Range(e.range.start.line + 1, e.range.start.character + 1, e.range.end.line + 1, e.range.end.character + 1),
+                text: e.newText,
+              },
+            })));
+            if (!edits.length) continue;
+            actions.push({ title: a.title, kind: 'quickfix', diagnostics: [marker], isPreferred: !!a.isPreferred, edit: { edits } });
+          }
+        }
+        return { actions, dispose: () => {} };
+      },
+    }, { providedCodeActionKinds: ['quickfix'] });
     monaco.languages.registerSignatureHelpProvider(langId, {
       signatureHelpTriggerCharacters: ['(', ','],
       provideSignatureHelp: async (model, position) => {
@@ -858,6 +884,7 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
         source: d.source || 'clangd'
       }));
       monaco.editor.setModelMarkers(model, 'clangd', markers);
+      clangdDiagnostics.set(model.uri.toString(), diagnostics || []);
       logger.debug('LSP', '[clangd] applied markers:', markers.length, 'to', model.uri.toString());
     };
     getLspClient('clangd').onNotification(handler);
