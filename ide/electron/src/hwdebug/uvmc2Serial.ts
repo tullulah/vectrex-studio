@@ -95,7 +95,7 @@ async function startBridge(): Promise<string | null> {
   return `could not load the SD bridge in BOOTSEL: ${last}`;
 }
 
-/** The serial devices of the monitor / bridge (VID 0x2E8A PID 0x10DB). */
+/** The serial devices of the monitor / bridge (VID 0x2E8A PID 0x10DB), its own port first. */
 function monitorPorts(): string[] {
   const out: string[] = [];
   if (process.platform === 'darwin') {
@@ -120,7 +120,10 @@ function monitorPorts(): string[] {
       } catch { /* not a USB one */ }
     }
   }
-  return out;
+  // The monitor has two ports: its own (interface 0) and gdb's (interface 2). Interface order
+  // is name order on both systems (macOS ...1 / ...3, Linux ttyACM<n>): its own first, so the
+  // `v` that finds it does not wait out gdb's port first.
+  return out.sort();
 }
 
 class Link {

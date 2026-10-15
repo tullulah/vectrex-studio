@@ -291,7 +291,9 @@ With the target **UVM2**, **Debug → Debug on Cartridge (UVMC2, USB)** (MCP: `c
 2. It attaches to the monitor (`MONITOR.BIN`, in the PSRAM), which uses the Cortex-M33's **monitor-mode debug**: a breakpoint (a BKPT the monitor writes over the game's code, keeping the original), a step or a pause raises the DebugMonitor exception, and the core waits there while the USB interrupt goes on answering the IDE. Core 1 keeps redrawing the last picture, so a paused game stays on screen.
 3. Steps run on the cartridge: the IDE marks where the step may stop, the game runs to the first of them.
 
-`DEBUG_PRINT` / `vpy_log` text comes over the same USB port and shows in the build output as `[rtt] …`. **Stop Debugging on Cartridge** (or closing or reloading the IDE) takes every breakpoint out and leaves the game running.
+While the game is held, the console shows its last picture with a pause sign in the top right corner, as on the RP2350 cartridge. `DEBUG_PRINT` / `vpy_log` text comes over the same USB port and shows in the build output as `[rtt] …`. **Stop Debugging on Cartridge** (or closing or reloading the IDE) takes every breakpoint out and leaves the game running.
+
+**Without the IDE.** The SDK's `tools/uvmc2.py` does the same from a terminal (`deploy`, `upload`, `run`, `log`), and the monitor's second USB port speaks gdb's remote protocol: `arm-none-eabi-gdb game.elf -ex "target remote <port>"` (`uvmc2.py gdb` prints the port). See the uvmc2-sdk README. Use the IDE's debugger or gdb, one at a time.
 
 Breakpoints work from the game's first frame on (the monitor starts at the end of it): a line that only runs before it — early in `main()` / `setup()` — does not stop. Only the game's core (core 0) is debugged.
 
