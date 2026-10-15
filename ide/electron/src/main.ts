@@ -2406,7 +2406,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         // da direcciones que ya no son las del binario cargado, y el sintoma es que
         // el juego corre pero sin sonido o sin mandos — parece un fallo del juego.
         let elfBase64: string | null = null;
-        if (target === 'rp2350') {
+        if (target === 'rp2350' || target === 'uvm2') {
           const r = await resolveFreshArtifact('.elf');
           if (r && 'path' in r) {
             try {
@@ -2416,7 +2416,7 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           } else if (r) {
             avisarRancio('.elf', r);
           } else {
-            console.warn('[main] rp2350: could not find .elf next to', binPath, 'or in build/');
+            console.warn(`[main] ${target}: could not find .elf next to`, binPath, 'or in build/');
           }
         }
 
@@ -2484,6 +2484,16 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           return;
         }
 
+        /* The simulated card, as for a C project: a uvm2 image reads its music, samples and
+         * romsets off the SD, and the emulator serves it at the ELF's uvm2_sd_* symbols. Without
+         * both, ROTJ's VPy port ran silent (no music, no SFX) while the C game played. */
+        let sdFiles: Record<string, string> | undefined;
+        let sdDeferred: Record<string, number> | undefined;
+        if (target === 'uvm2') {
+          sdDeferred = {};
+          sdFiles = await leerSdSimulada(sdDeferred);
+        }
+
         // Notify renderer to load binary
         mainWindow?.webContents.send('emu://compiledBin', {
           base64: payloadBase64, size: buf.length, binPath, pdbData,
@@ -2491,6 +2501,8 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           elfBase64,
           sFileText,
           libvpyAsm,
+          sdFiles,
+          sdDeferred,
         });
 
         // Copy to SD card if requested (pitrex target only)
