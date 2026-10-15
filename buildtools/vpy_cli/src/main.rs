@@ -2655,6 +2655,11 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
             }
             format!("-DUVM2_GAME_DEFS={}", defs)
         })
+        // The IDE's debug builds (Debug on Cartridge: UVM2_DEBUG_CFLAGS=-Og) as raw compile
+        // options, after the build type's -O so gcc keeps this one. Always passed, empty or
+        // not, so a cached configuration from a debug build does not outlive it.
+        .arg(format!("-DUVM2_GAME_OPTS={}",
+            std::env::var("UVM2_DEBUG_CFLAGS").unwrap_or_default().split_whitespace().collect::<Vec<_>>().join(";")))
         .output()
         .map_err(|e| anyhow::anyhow!("cmake no encontrado: {}", e))?;
     if !cfg.status.success() {
