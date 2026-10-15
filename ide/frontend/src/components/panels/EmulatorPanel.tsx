@@ -682,11 +682,11 @@ export const EmulatorPanel: React.FC = () => {
 
     const vrec = rec.stop(name);
     if (vrec.frames.length === 0) {
-      // Que no se pierda en la consola: una grabacion vacia es un fallo, y el motivo
-      // casi siempre es que se estaba leyendo un backend que no era el que corria.
+      // Not just in the console: an empty recording is a failure, and the reason is
+      // almost always that a backend other than the running one was being read.
       const motivo = simModulePath
-        ? 'el simulador externo no entrego ningun frame'
-        : 'el emulador no entrego ningun frame';
+        ? 'the external simulator delivered no frames'
+        : 'the emulator delivered no frames';
       console.warn(`[EmulatorPanel] Vector recording empty — ${motivo}`);
       setVideoStatus('error');
       setVideoMessage(`Vector recording empty — ${motivo}`);
@@ -806,7 +806,7 @@ export const EmulatorPanel: React.FC = () => {
       setVideoStatus('error');
       const porque = rec.lastDiagnostic;
       setVideoMessage(porque ? `Nothing captured — ${porque}` : 'Nothing captured');
-      console.error('[EmulatorPanel] grabacion vacia:', porque || '(sin diagnostico)');
+      console.error('[EmulatorPanel] empty recording:', porque || '(no diagnostic)');
       setTimeout(() => setVideoStatus('idle'), 4000);
       return;
     }

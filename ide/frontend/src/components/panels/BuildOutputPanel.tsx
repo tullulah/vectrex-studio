@@ -24,7 +24,7 @@ export const BuildOutputPanel: React.FC = () => {
     else if (text.includes('❌') || text.includes('FAILED') || text.includes('ERROR')) kind = 'error';
     else if (text.includes('CRITICAL')) kind = 'critical';
     else if (lower.includes('warning') || lower.includes('warn')) kind = 'warn';
-    else if (lower.includes('error') || lower.includes('failed') || lower.includes('fallo')) kind = 'error';
+    else if (lower.includes('error') || lower.includes('failed')) kind = 'error';
     
     append(text, kind);
   };

@@ -710,7 +710,7 @@ export const SFXEditor: React.FC<SFXEditorProps> = ({
               onChange={v => updateSfx({ repeat_ms: v })}
             />
             <div style={{ fontSize: 10, color: '#666', marginTop: 2 }}>
-              0 = un disparo. Con valor, la envolvente y el barrido se reinician cada N ms.
+              0 = one-shot. With a value, the envelope and sweep restart every N ms.
             </div>
           </div>
 
@@ -784,9 +784,9 @@ export const SFXEditor: React.FC<SFXEditorProps> = ({
           </div>
           {sfx.noise.enabled && (
             <>
-              {/* Con esto marcado el ruido y el tono suenan JUNTOS en el mismo canal, que es
-                  lo que hace el AY (los combina con un AND). Sin marcar, el ruido va aparte
-                  como una capa suya. Un golpe necesita lo primero: solo tono es un pitido. */}
+              {/* When checked, noise and tone sound TOGETHER on the same channel, which is
+                  what the AY does (it ANDs them). Unchecked, the noise goes separately
+                  as its own layer. A hit needs the former: tone alone is just a beep. */}
               <div style={{ fontSize: 11, color: '#666', margin: '4px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
                 Tone + noise (AY mix)
                 <input
@@ -801,10 +801,10 @@ export const SFXEditor: React.FC<SFXEditorProps> = ({
             </>
           )}
 
-          {/* Vibrato. Los campos existian en el formato desde el principio pero no habia ni
-              control aqui ni sintesis: se podia guardar un vibrato en el .vsfx y no se oia
-              ni se veia en ninguna parte. El salto de Donkey Kong es exactamente esto —una
-              onda de 9 Hz entre 338 y 471 Hz— y en el editor sonaba recto. */}
+          {/* Vibrato. The fields were in the format from the start, but there was neither a
+              control here nor synthesis: a vibrato could be saved in the .vsfx and was never
+              heard or shown anywhere. The Donkey Kong jump is exactly this (a 9 Hz wave
+              between 338 and 471 Hz) and in the editor it sounded flat. */}
           <div style={{ fontSize: 11, color: '#666', marginTop: 16, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
             Vibrato
             <input

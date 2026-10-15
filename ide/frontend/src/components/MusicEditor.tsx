@@ -385,7 +385,7 @@ const MidiImportDialog: React.FC<MidiImportDialogProps> = ({ importData, onImpor
           </div>
         </div>        <p style={{ color: '#888', fontSize: '13px', margin: '0 0 8px 0' }}>
           {multiplexMode
-            ? 'Multiplex: hasta 6 canales virtuales, sin descartar notas.'
+            ? 'Multiplex: up to 6 virtual channels, no notes dropped.'
             : mergeMode 
               ? 'Select tracks to merge. Notes will be dynamically assigned to A/B/C.' 
               : 'Select up to 3 tracks. Each becomes a fixed channel.'}
@@ -492,7 +492,7 @@ const MidiImportDialog: React.FC<MidiImportDialogProps> = ({ importData, onImpor
             style={{ ...btnStyle, background: selectedTracks.length > 0 ? '#4a4' : '#333' }}
           >
             {multiplexMode
-              ? `Multiplex (${selectedTracks.length} canales)`
+              ? `Multiplex (${selectedTracks.length} channel${selectedTracks.length !== 1 ? 's' : ''})`
               : mergeMode
                 ? `Merge ${selectedTracks.length} Track${selectedTracks.length !== 1 ? 's' : ''}`
                 : `Import ${selectedTracks.length} Channel${selectedTracks.length !== 1 ? 's' : ''}`

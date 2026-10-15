@@ -403,7 +403,7 @@ N = the name upper-cased with "-" -> "_".
 - AUDIO_UPDATE auto-injected at END of loop() by compiler
 - PSG player updates every frame (50Hz)
 - MIDI to PSG: period = 1_500_000 / (16 * freq). freq = 440 * 2^((note-69)/12)
-- note 60 (C4) → PSG period 358, note 69 (A4) → period 213 (= Freq_Table[26] de la BIOS)
+- note 60 (C4) → PSG period 358, note 69 (A4) → period 213 (= the BIOS Freq_Table[26])
 - PSG channels: 0=A, 1=B, 2=C. Velocity: 0-15. Noise period: 0-31.
 - Source: buildtools/vpy_codegen/src/musres.rs (MusicResource), buildtools/vpy_codegen/src/m6809/functions.rs (AUDIO_UPDATE injection)`,
 

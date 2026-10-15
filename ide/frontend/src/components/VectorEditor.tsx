@@ -4604,15 +4604,15 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             }}
             title="Adjust path intensity (brightness)"
           />
-          {/* LOS TRAMOS, UNO POR UNO. Los botones anteriores dependian de que estuvieran
-              marcados los dos extremos del tramo, y segun como selecciones los puntos eso
-              no siempre llena `selectedPoints` — el Apply se iba entonces al path entero y
-              apagaba el dibujo completo sin decir por que. Esta lista no depende de
-              ninguna seleccion: cada tramo tiene su valor y se toca ahi. */}
+          {/* THE SEGMENTS, ONE BY ONE. The earlier buttons depended on both ends of the
+              segment being selected, and depending on how the points are selected that
+              does not always fill `selectedPoints`; the Apply then went to the whole path and
+              turned the whole drawing off without saying why. This list does not depend on
+              any selection: each segment has its own value and is edited here. */}
           {path.points.length > 1 && (
             <div style={{ marginTop: '10px' }}>
               <div style={{ color: '#aaa', fontSize: '11px', marginBottom: '4px' }}>
-                Tramos <span style={{ color: '#666' }}>· 0 = apagado</span>
+                Segments <span style={{ color: '#666' }}>· 0 = off</span>
               </div>
               <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {path.points.slice(0, path.closed ? undefined : -1).map((_, k) => {
@@ -4627,8 +4627,8 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                       : new Array(nseg2).fill(p2.intensity);
                     ints[k] = Math.max(0, Math.min(127, nv));
                     p2.intensities = ints;
-                    /* Si el path entero estaba a 0, con tramos encendidos ya no tiene
-                       sentido: el VK_INT de apertura los apagaria a todos. */
+                    /* If the whole path was at 0, that no longer makes sense with segments
+                       turned on: the opening VK_INT would turn them all off. */
                     if (p2.intensity === 0 && ints.some(x => x > 0)) p2.intensity = 127;
                     updateResource(resource, nr);
                   };
@@ -4647,7 +4647,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                                  background: v === 0 ? '#5a3a3a' : '#3a5a3a',
                                  border: '1px solid ' + (v === 0 ? '#8a5a5a' : '#5a8a5a'), color: '#ddd' }}
                       >
-                        {v === 0 ? 'apagado' : 'encendido'}
+                        {v === 0 ? 'off' : 'on'}
                       </button>
                     </div>
                   );
@@ -4910,7 +4910,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                 <input type="number" key={`y_${a.y}`} defaultValue={a.y} onBlur={commit('y')} onKeyDown={onKey('y')} onWheel={onWheel} style={inputStyle} />
                 <span>x</span>
                 <input type="number" key={`xmin_${a.x_min}`} defaultValue={a.x_min} onBlur={commit('x_min')} onKeyDown={onKey('x_min')} onWheel={onWheel} style={inputStyle} />
-                <span title="x_max (rango horizontal: de x_min a x_max)" style={{ color: '#8ab', padding: '0 1px' }}>→</span>
+                <span title="x_max (horizontal range: from x_min to x_max)" style={{ color: '#8ab', padding: '0 1px' }}>→</span>
                 <input type="number" key={`xmax_${a.x_max}`} defaultValue={a.x_max} onBlur={commit('x_max')} onKeyDown={onKey('x_max')} onWheel={onWheel} style={inputStyle} />
                 <span title="Surface height at x_max (the right end). Set it different from y to make the area a SLOPE — enemies follow the incline. Equal to y = flat." style={{ color: isSlope ? '#fc8' : '#8ab', padding: '0 1px' }}>⇕y2</span>
                 <input type="number" key={`y2_${a.y2 ?? a.y}`} defaultValue={a.y2 ?? a.y} onBlur={commit('y2')} onKeyDown={onKey('y2')} onWheel={onWheel} style={{ ...inputStyle, color: isSlope ? '#fc8' : '#4fc', borderColor: isSlope ? '#a74' : '#4a4' }} />
@@ -5166,16 +5166,16 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
         onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#3a3a5e'; }}
         style={{ position: 'absolute', left: -5, top: 0, bottom: 0, width: 8, cursor: 'ew-resize', zIndex: 10,
                  background: '#3a3a5e', borderRadius: 4, transition: 'background 0.12s' }}
-        title="Arrastra para redimensionar el panel"
+        title="Drag to resize the panel"
       />
       {/* Set Intensity + Clean Orphans — always at top */}
       <div style={{ background: '#1e2230', border: '1px solid #3a3a5e', borderRadius: '4px', padding: '8px' }}>
         <div style={{ color: '#aaa', fontSize: '11px', fontWeight: 'bold', marginBottom: '6px' }}>
           Intensity
           {segmentosSeleccionados.length === 1
-            ? <span style={{ color: '#6af', fontWeight: 'normal' }}> · tramo {segmentosSeleccionados[0] + 1}</span>
+            ? <span style={{ color: '#6af', fontWeight: 'normal' }}> · segment {segmentosSeleccionados[0] + 1}</span>
             : segmentosSeleccionados.length > 1
-              ? <span style={{ color: '#6af', fontWeight: 'normal' }}> · {segmentosSeleccionados.length} tramos</span>
+              ? <span style={{ color: '#6af', fontWeight: 'normal' }}> · {segmentosSeleccionados.length} segments</span>
               : <span style={{ color: '#666', fontWeight: 'normal' }}> · path</span>}
         </div>
         <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
@@ -5201,9 +5201,9 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
             title={hasPathSel ? `Apply to ${selCount} path${selCount !== 1 ? 's' : ''}` : 'Select paths first'}
           >
             {segmentosSeleccionados.length === 1
-              ? `Apply · tramo ${segmentosSeleccionados[0] + 1}`
+              ? `Apply · segment ${segmentosSeleccionados[0] + 1}`
               : segmentosSeleccionados.length > 1
-                ? `Apply · ${segmentosSeleccionados.length} tramos`
+                ? `Apply · ${segmentosSeleccionados.length} segments`
                 : `Apply${hasPathSel ? ` · path (${selCount})` : ''}`}
           </button>
         </div>
@@ -5512,7 +5512,7 @@ export const VectorEditor: React.FC<VectorEditorProps> = ({
                     </div>
                     {mode === 'silhouette' && (
                       <div style={{ fontSize: '11px', color: '#8af', marginBottom: '8px', background: '#1a1a30', borderRadius: '4px', padding: '6px 8px' }}>
-                        Muestra solo los edges donde las normales de las caras adyacentes cruzan el plano de visión — perfecto para cilindros y esferas.
+                        Shows only the edges where the normals of adjacent faces cross the view plane — ideal for cylinders and spheres.
                       </div>
                     )}
                     {/* Angle slider — only for hard mode */}

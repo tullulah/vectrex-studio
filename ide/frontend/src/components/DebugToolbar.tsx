@@ -167,11 +167,11 @@ export function DebugToolbar() {
           </span>
         )}
 
-        {/* El refresco que daria el dibujo en la consola. Etiqueta aparte a proposito:
-            mezclarlo con el fps del emulador es invitar a leer uno por el otro. */}
+        {/* The refresh rate the drawing would allow on the console. A separate label on purpose:
+            mixing it with the emulator fps invites reading one as the other. */}
         {drawFps > 0 && (
-          <span className="debug-info-item" title="Refresco que permitiria el dibujo en la consola (1,5 MHz / ciclos de bus del frame)">
-            <span className="debug-info-label">{t('label.drawfps', 'Dibujo')}:</span>
+          <span className="debug-info-item" title={t('tooltip.drawfps', 'Refresh rate the drawing would allow on the console (1.5 MHz / bus cycles per frame)')}>
+            <span className="debug-info-label">{t('label.drawfps', 'Draw')}:</span>
             <span className="debug-info-value">{drawFps.toFixed(1)}</span>
           </span>
         )}

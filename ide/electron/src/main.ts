@@ -1655,12 +1655,12 @@ export async function executeExternalBuild(args: {
   if (extraUvm2) {
     buildArgs = [...buildArgs, ...extraUvm2.split(/\s+/)];
   } else if (effectiveTarget === 'uvm2') {
-    /* DECIRLO CUANDO NO HAY NINGUNA. Sin este aviso, "compilo tres veces y salen del mismo
-     * tamano" no tiene explicacion en pantalla: una perilla que no llega y una perilla en
-     * su valor de fabrica producen el MISMO binario, y se leen igual. */
+    /* SAY SO WHEN THERE ARE NONE. Without this note, "I built three times and they came out
+     * the same size" has no explanation on screen: a knob that never arrives and a knob at
+     * its factory value produce the SAME binary, and read the same. */
     win?.webContents.send('run://stderr',
-      `[build] uvm2: sin flags del panel — se compila el DEFECTO ` +
-      `(doble nucleo + PIO/DMA). Settings -> UVM2 -> Advanced para cambiarlo.\n`);
+      `[build] uvm2: no flags from the panel — building the DEFAULT ` +
+      `(dual core + PIO/DMA). Change it in Settings -> UVM2 -> Advanced.\n`);
   }
   win?.webContents.send('run://stderr',
     `[build] ${buildCommand} ${buildArgs.join(' ')}   (cwd ${rootDir})\n`);
@@ -1710,9 +1710,9 @@ export async function executeExternalBuild(args: {
    * renderer y las de aqui a la terminal donde corre run-ide.sh — son dos sitios
    * distintos, y hoy hemos perdido un rato mirando el que no era. Esta linea sale junto a
    * las de [FileWatcher], que es donde el usuario ya esta mirando. */
-  console.log(`[build] artefacto=${artifactPath} target=${effectiveTarget} preview=${preview}`);
+  console.log(`[build] artifact=${artifactPath} target=${effectiveTarget} preview=${preview}`);
   if (preview && (effectiveTarget === 'rp2350' || effectiveTarget === 'uvm2')) {
-    console.log(`[build] -> enviando emu://compiledBin al panel (${effectiveTarget})`);
+    console.log(`[build] -> sending emu://compiledBin to the panel (${effectiveTarget})`);
     try {
       const buf = await fs.readFile(artifactPath);
       // El ELF hermano, si el proyecto lo deja al lado con el mismo nombre
@@ -1737,8 +1737,8 @@ export async function executeExternalBuild(args: {
       if (elfPath !== artifactPath) {
         try {
           elfBase64 = (await fs.readFile(elfPath)).toString('base64');
-          win?.webContents.send('run://stdout', `[C] ELF hermano: ${basename(elfPath)}\n`);
-        } catch { /* sin ELF: escaneo de prologos */ }
+          win?.webContents.send('run://stdout', `[C] Companion ELF: ${basename(elfPath)}\n`);
+        } catch { /* no ELF: prologue scan */ }
       }
       /* LA TARJETA SD SIMULADA, para el UVM2. Un juego del UVM2 lee su romset de la SD
        * (uvm2_romzip_cargar -> uvm2_sd_leer "roms/<nombre>.zip"), asi que sin ella el
@@ -1754,7 +1754,7 @@ export async function executeExternalBuild(args: {
       if (effectiveTarget === 'uvm2') {
         sdDeferred = {};
         sdFiles = await leerSdSimulada(sdDeferred);
-        console.log(`[build] SD simulada: ${Object.keys(sdFiles).length} ficheros`);
+        console.log(`[build] simulated SD: ${Object.keys(sdFiles).length} files`);
         for (const decl of emuDecl.emu_card ?? []) {
           const eq = decl.indexOf('=');
           if (eq <= 0) continue;
@@ -1788,7 +1788,7 @@ export async function executeExternalBuild(args: {
       });
       win?.webContents.send('run://status',
         `Previewing ${effectiveTarget} binary: ${manifest.project.name}`);
-      console.log(`[build] emu://compiledBin ENVIADO: ${buf.length} bytes, elf=${elfBase64 ? 'si' : 'no'}`);
+      console.log(`[build] emu://compiledBin SENT: ${buf.length} bytes, elf=${elfBase64 ? 'yes' : 'no'}`);
     } catch (e: any) {
       win?.webContents.send('run://stderr', `[C] rp2350 preview: could not read ${artifactPath}: ${e?.message || e}\n`);
     }
@@ -1859,8 +1859,8 @@ async function romZipForManifest(manifest: ExternalProjectManifest, rootDir: str
     const hit = entries.find(f => f.toLowerCase() === want);
     if (!hit) {
       mainWindow?.webContents.send('run://stderr',
-        `[SIM] sin romset para "${stem}" en ${dir}` +
-        (entries.length ? ` — hay: ${entries.join(', ')}` : ' (carpeta vacia)') + `\n`);
+        `[SIM] no romset for "${stem}" in ${dir}` +
+        (entries.length ? ` — found: ${entries.join(', ')}` : ' (folder is empty)') + `\n`);
       return null;
     }
     const buf = await fs.readFile(join(dir, hit));
@@ -2259,7 +2259,6 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           // Binary not found - check for lwasm errors in stderr
           const lwasmeErrors = stderrBuf.split('\n').filter(line => 
             line.includes('lwasm') || 
-            line.includes('fallo') || 
             line.includes('failed') ||
             line.includes('error') ||
             line.includes('ERROR')
@@ -2387,11 +2386,11 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           const seg = Math.round(r.atrasoMs / 1000);
           const cuanto = seg < 120 ? `${seg} s` : `${Math.round(seg / 60)} min`;
           mainWindow?.webContents.send('run://stderr',
-            `[build] ${r.rancio} es de una compilacion ANTERIOR (${cuanto} antes de ` +
-            `que esta empezara). NO se usa: un ${ext} rancio se comporta como un fallo ` +
-            `del JUEGO y no como un fallo de la BUILD, que es lo que lo hace caro. ` +
-            `Borralo y vuelve a compilar.\n`);
-          console.warn(`[main] ${ext} rancio, descartado:`, r.rancio);
+            `[build] ${r.rancio} is from an EARLIER build (${cuanto} before this one ` +
+            `started). It is NOT used: a stale ${ext} looks like a bug in the GAME rather ` +
+            `than a failed BUILD, which is what makes it costly. ` +
+            `Delete it and build again.\n`);
+          console.warn(`[main] stale ${ext} discarded:`, r.rancio);
         };
 
         // uvm2 ships a `.um2` (20-byte header + the RAM image the cartridge
@@ -2410,9 +2409,9 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
             avisarRancio('.um2', r);
           } else {
             mainWindow?.webContents.send('run://stderr',
-              `[build] No hay ningun .um2 junto a ${binPath} ni en build/. El ` +
-              `simulador de UVM2 no puede cargar un .bin crudo: le falta la ` +
-              `cabecera '2CMU'.\n`);
+              `[build] No .um2 next to ${binPath} or in build/. The ` +
+              `UVM2 simulator cannot load a raw .bin: it lacks the ` +
+              `'2CMU' header.\n`);
             console.warn('[main] uvm2: no .um2 next to', binPath, 'or in build/');
           }
         }
@@ -2549,8 +2548,8 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
             await copyUvm2ToSDCard(um2ForSd, uvm2SdPath, mainWindow ?? null);
           } else {
             mainWindow?.webContents.send('run://stderr',
-              `[SD] No se ha copiado nada: no hay un .um2 de esta compilacion junto a ` +
-              `${binPath} ni en build/. El cartucho no puede cargar un .bin crudo.\n`);
+              `[SD] Nothing copied: no .um2 from this build next to ` +
+              `${binPath} or in build/. The cartridge cannot load a raw .bin.\n`);
           }
         }
 

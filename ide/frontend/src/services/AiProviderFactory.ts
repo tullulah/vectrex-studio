@@ -12,10 +12,10 @@ export class AiProviderFactory {
   private static instances: Map<AiProviderType, IAiProvider> = new Map();
 
   /**
-   * Crea o reutiliza una instancia del proveedor especificado
+   * Creates or reuses an instance of the given provider
    */
   public static getProvider(type: AiProviderType, config?: AiProviderConfig): IAiProvider {
-    // Para Mock provider, no necesitamos configuración
+    // The Mock provider needs no configuration
     if (type === 'mock') {
       if (!this.instances.has('mock')) {
         this.instances.set('mock', new MockProvider());
@@ -23,19 +23,19 @@ export class AiProviderFactory {
       return this.instances.get('mock')!;
     }
 
-    // Para otros proveedores, necesitamos configuración
+    // Other providers need a configuration
     if (!config) {
       throw new Error(`Configuration required for provider: ${type}`);
     }
 
-    // Crear nueva instancia siempre que cambie la config (por si cambia API key)
+    // Create a new instance whenever the config changes (in case the API key changed)
     const provider = this.createProvider(type, config);
     this.instances.set(type, provider);
     return provider;
   }
 
   /**
-   * Crea una nueva instancia del proveedor
+   * Creates a new provider instance
    */
   private static createProvider(type: AiProviderType, config: AiProviderConfig): IAiProvider {
     switch (type) {
@@ -88,7 +88,7 @@ export class AiProviderFactory {
   }
 
   /**
-   * Obtiene todos los tipos de proveedores disponibles
+   * Gets all the available provider types
    */
   public static getAvailableProviders(): Array<{
     type: AiProviderType;
@@ -103,56 +103,56 @@ export class AiProviderFactory {
       {
         type: 'mock',
         name: 'Mock Provider',
-        description: 'Simulador local para testing - no requiere API key',
+        description: 'Local simulator for testing - no API key required',
         requiresApiKey: false,
         isConfigured: mockProvider.isConfigured()
       },
       {
         type: 'deepseek',
         name: 'DeepSeek',
-        description: 'API gratuita de DeepSeek - Rápida y eficiente',
+        description: 'Free DeepSeek API - fast and efficient',
         requiresApiKey: true,
         isConfigured: false // Will be checked when config is provided
       },
       {
         type: 'openai',
         name: 'OpenAI',
-        description: 'GPT-4o y GPT-4o-mini - Máxima calidad',
+        description: 'GPT-4o and GPT-4o-mini - top quality',
         requiresApiKey: true,
         isConfigured: false
       },
       {
         type: 'anthropic',
         name: 'Anthropic Claude',
-        description: 'Claude 3.5 Sonnet/Haiku - Razonamiento avanzado',
+        description: 'Claude 3.5 Sonnet/Haiku - advanced reasoning',
         requiresApiKey: true,
         isConfigured: false
       },
       {
         type: 'github',
         name: 'GitHub Models',
-        description: 'Modelos via GitHub Copilot/Models - GPT-4o, Claude, Llama',
+        description: 'Models via GitHub Copilot/Models - GPT-4o, Claude, Llama',
         requiresApiKey: true,
         isConfigured: false
       },
       {
         type: 'groq',
         name: 'Groq',
-        description: 'API gratuita con Llama 3 - Ultrarrápida inferencia',
+        description: 'Free API with Llama 3 - ultra-fast inference',
         requiresApiKey: true,
         isConfigured: false
       },
       {
         type: 'ollama',
         name: 'Ollama (Local)',
-        description: 'Modelos locales en tu Mac - 100% privado, sin API key',
+        description: 'Local models on your Mac - 100% private, no API key',
         requiresApiKey: false,
         isConfigured: true // Always configured, just needs Ollama running
       },
       {
         type: 'gemini',
         name: 'Google Gemini',
-        description: 'Gemini 1.5 Pro/Flash - Multimodal avanzado',
+        description: 'Gemini 1.5 Pro/Flash - advanced multimodal',
         requiresApiKey: true,
         isConfigured: false
       }
@@ -160,7 +160,7 @@ export class AiProviderFactory {
   }
 
   /**
-   * Verifica si un proveedor está correctamente configurado
+   * Checks whether a provider is correctly configured
    */
   public static async isProviderConfigured(type: AiProviderType, config?: AiProviderConfig): Promise<boolean> {
     try {
@@ -172,7 +172,7 @@ export class AiProviderFactory {
   }
 
   /**
-   * Prueba la conexión con un proveedor
+   * Tests the connection to a provider
    */
   public static async testProviderConnection(type: AiProviderType, config?: AiProviderConfig): Promise<boolean> {
     try {
@@ -187,14 +187,14 @@ export class AiProviderFactory {
   }
 
   /**
-   * Limpia la caché de instancias (útil cuando cambian configs)
+   * Clears the instance cache (useful when configs change)
    */
   public static clearCache(): void {
     this.instances.clear();
   }
 
   /**
-   * Obtiene información sobre modelos disponibles para un proveedor
+   * Gets information about the models available for a provider
    */
   public static async getProviderModels(type: AiProviderType, config?: AiProviderConfig): Promise<string[]> {
     try {

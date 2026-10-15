@@ -242,18 +242,18 @@ export class VideoRecorder {
   }
 
   /**
-   * Que se vio, cuando no se capturo nada. Lo mas probable es que el canvas no se
-   * dibujase: MediaRecorder con una pista de video que nunca produce un frame no
-   * emite NADA, ni siquiera el audio, y no lanza ningun error.
+   * What was seen, when nothing was captured. Most likely the canvas never drew:
+   * MediaRecorder with a video track that never produces a frame emits NOTHING,
+   * not even the audio, and throws no error.
    */
   private porQueVacia(): string {
     const t = this.videoTrack;
-    if (!t) return 'el canvas no dio pista de video';
+    if (!t) return 'the canvas gave no video track';
     const s = t.getSettings?.() ?? ({} as MediaTrackSettings);
     const tam = `${s.width ?? '?'}x${s.height ?? '?'}`;
-    if (t.readyState !== 'live') return `la pista de video estaba "${t.readyState}"`;
-    return `el canvas (${tam}) no dibujo ni un frame mientras grababa`
-      + `${this.hasAudio ? '' : ' y tampoco se engancho audio'}`;
+    if (t.readyState !== 'live') return `the video track was "${t.readyState}"`;
+    return `the canvas (${tam}) did not draw a single frame while recording`
+      + `${this.hasAudio ? '' : ' and no audio was attached either'}`;
   }
 
   /** Abort without producing a blob (e.g. component unmount). */

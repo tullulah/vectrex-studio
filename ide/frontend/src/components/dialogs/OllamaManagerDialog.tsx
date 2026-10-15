@@ -144,7 +144,7 @@ export const OllamaManagerDialog: React.FC<OllamaManagerDialogProps> = ({
   };
 
   const deleteModel = async (modelName: string) => {
-    if (!confirm(`¿Eliminar modelo ${modelName}? Esta acción no se puede deshacer.`)) {
+    if (!confirm(`Delete model ${modelName}? This cannot be undone.`)) {
       return;
     }
 

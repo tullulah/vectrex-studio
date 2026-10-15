@@ -324,7 +324,7 @@ To use a tool, respond with a JSON function call in a code block:
         
         if (isEdit) {
           // Show what will be changed
-          results.push(`🔧 **${call.tool}**\nAplicando cambios...`);
+          results.push(`🔧 **${call.tool}**\nApplying changes...`);
         }
         
         const result = await this.callTool(call.tool, call.arguments);
@@ -339,14 +339,14 @@ To use a tool, respond with a JSON function call in a code block:
         } else if (typeof result === 'object') {
           // For structured results, provide summary instead of full JSON
           if (result.uri) {
-            resultText = `Archivo: ${result.uri}`;
+            resultText = `File: ${result.uri}`;
           } else if (result.documents) {
-            resultText = `${result.documents.length} documento(s)`;
+            resultText = `${result.documents.length} document(s)`;
           } else if (result.content) {
             const contentLength = result.content.length;
-            resultText = `Contenido leído (${contentLength} caracteres)`;
+            resultText = `Content read (${contentLength} characters)`;
           } else {
-            resultText = 'Completado';
+            resultText = 'Completed';
           }
         }
 
@@ -354,7 +354,7 @@ To use a tool, respond with a JSON function call in a code block:
         this.updateProjectContextForTool(call.tool, call.arguments);
 
         if (isEdit) {
-          results.push(`✅ Cambios aplicados correctamente`);
+          results.push(`✅ Changes applied successfully`);
         } else {
           // Only show tool name, not verbose results
           results.push(`✅ ${call.tool}: ${resultText}`);
@@ -406,17 +406,17 @@ To use a tool, respond with a JSON function call in a code block:
   async previewEdit(tool: string, args: Record<string, any>): Promise<string> {
     const { uri, startLine, endLine, startColumn, endColumn, newText, text } = args;
     
-    let preview = `📝 **Preview de cambio:**\n\n`;
-    preview += `**Archivo:** ${uri.split('/').pop()}\n`;
+    let preview = `📝 **Change preview:**\n\n`;
+    preview += `**File:** ${uri.split('/').pop()}\n`;
     
     if (tool.includes('replace')) {
-      preview += `**Líneas:** ${startLine}:${startColumn} → ${endLine}:${endColumn}\n`;
-      preview += `**Nuevo texto:**\n\`\`\`\n${newText}\n\`\`\``;
+      preview += `**Lines:** ${startLine}:${startColumn} → ${endLine}:${endColumn}\n`;
+      preview += `**New text:**\n\`\`\`\n${newText}\n\`\`\``;
     } else if (tool.includes('insert')) {
-      preview += `**Insertar en:** Línea ${args.line}, Columna ${args.column}\n`;
-      preview += `**Texto:**\n\`\`\`\n${text}\n\`\`\``;
+      preview += `**Insert at:** Line ${args.line}, Column ${args.column}\n`;
+      preview += `**Text:**\n\`\`\`\n${text}\n\`\`\``;
     } else if (tool.includes('delete')) {
-      preview += `**Eliminar:** Líneas ${startLine}:${startColumn} → ${endLine}:${endColumn}`;
+      preview += `**Delete:** Lines ${startLine}:${startColumn} → ${endLine}:${endColumn}`;
     }
     
     return preview;

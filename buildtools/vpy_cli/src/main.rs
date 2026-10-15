@@ -2661,12 +2661,12 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         .arg(format!("-DUVM2_GAME_OPTS={}",
             std::env::var("UVM2_DEBUG_CFLAGS").unwrap_or_default().split_whitespace().collect::<Vec<_>>().join(";")))
         .output()
-        .map_err(|e| anyhow::anyhow!("cmake no encontrado: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("cmake not found: {}", e))?;
     if !cfg.status.success() {
-        return Err(anyhow::anyhow!("cmake configure fallo:\n{}\n{}",
+        return Err(anyhow::anyhow!("cmake configure failed:\n{}\n{}",
             String::from_utf8_lossy(&cfg.stdout), String::from_utf8_lossy(&cfg.stderr)));
     }
-    println!("  {} configurado en {}", "✓".green(), cmake_build.display());
+    println!("  {} configured in {}", "✓".green(), cmake_build.display());
 
     println!("\n{}", "Phase 5: Build + link".bright_cyan().bold());
     let mut bld_cmd = Command::new("cmake");
@@ -2679,25 +2679,25 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     }
     let bld = bld_cmd
         .output()
-        .map_err(|e| anyhow::anyhow!("cmake --build fallo: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("cmake --build failed: {}", e))?;
     if !bld.status.success() {
-        return Err(anyhow::anyhow!("build fallo:\n{}\n{}",
+        return Err(anyhow::anyhow!("build failed:\n{}\n{}",
             String::from_utf8_lossy(&bld.stdout), String::from_utf8_lossy(&bld.stderr)));
     }
-    println!("  {} enlazado", "✓".green());
+    println!("  {} linked", "✓".green());
 
-    // uvm2_pico.cmake ya empaqueta el .um2 como paso posterior al enlazado.
+    // uvm2_pico.cmake already packs the .um2 as a post-link step.
     println!("\n{}", "Phase 6: UM2".bright_cyan().bold());
     let built_um2 = cmake_build.join(format!("{}.um2", project_name));
     if !built_um2.exists() {
         return Err(anyhow::anyhow!(
-            "el build no dejo {}. uvm2_pico.cmake empaqueta el .um2 con vpy_cli:\n\
-             si no lo encuentra, avisa con un WARNING y solo deja el .bin.",
+            "the build did not produce {}. uvm2_pico.cmake packs the .um2 with vpy_cli:\n\
+             if it cannot find vpy_cli it prints a WARNING and leaves only the .bin.",
             built_um2.display()));
     }
     let um2_path = build_dir.join(format!("{}.um2", project_name));
     std::fs::copy(&built_um2, &um2_path)?;
-    // -o apunta al .bin, que es lo que esta funcion prometia historicamente.
+    // -o points at the .bin, which is what this function has always promised.
     let bin_path = output.unwrap_or_else(|| build_dir.join(format!("{}.bin", project_name)));
     std::fs::copy(cmake_build.join(format!("{}.bin", project_name)), &bin_path).ok();
     // The ELF beside the .um2, where the IDE looks for it: the emulator hooks the SD card's

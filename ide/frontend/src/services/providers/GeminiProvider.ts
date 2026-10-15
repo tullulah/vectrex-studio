@@ -15,7 +15,7 @@ export class GeminiProvider extends BaseAiProvider {
 
   public async sendRequest(request: AiRequest): Promise<AiResponse> {
     if (!this.isConfigured()) {
-      throw new Error('Gemini API key no configurada');
+      throw new Error('Gemini API key not configured');
     }
 
     try {
