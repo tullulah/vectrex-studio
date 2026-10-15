@@ -39,6 +39,7 @@ import { registerBuildRunner } from './services/mcpBridge.js';
 import { installArmGdbTarget } from './debug/armGdbTarget';
 installArmGdbTarget(); // gdb's way into the ARM emulator (ide/electron/src/gdb/)
 import { installArmSourceDebug } from './debug/armSourceDebug';
+import { runOnCartridge, stopCartridgeDebug, cartridgeDebugActive, say as hwSay } from './debug/hwDebug';
 installArmSourceDebug(); // the editor's breakpoints and steps on rp2350/uvm2
 import type { BuildOutcome, BuildMode } from './services/buildOutcome.js';
 
@@ -431,12 +432,15 @@ function App() {
   // Función para manejar build y run
   // Returns what happened (BuildOutcome) for callers that need it — the MCP bridge's
   // runBuild. The keys and menu items ignore the value; behaviour does not depend on it.
-  const handleBuild = useCallback(async (autoRun: boolean = false, opts?: { forSd?: boolean; sim?: boolean }): Promise<BuildOutcome> => {
+  const handleBuild = useCallback(async (autoRun: boolean = false, opts?: { forSd?: boolean; sim?: boolean; debug?: boolean }): Promise<BuildOutcome> => {
     // "Build for SD": produce a RAM-linked rp2350 game for the cart's SD launcher.
     // Triggered either explicitly (Build menu item) or by selecting the rp2350
     // "SD card" build mode in Settings so a normal Build/Run makes the SD binary.
     // Never auto-run (the RAM image isn't emulatable) and never flash.
-    const forSd = !!opts?.forSd || (buildTarget === 'rp2350' && rp2350BuildMode === 'sd');
+    // SWD debug builds the same RAM image (then runOnCartridge uploads and launches it).
+    const forSd = !!opts?.forSd || (buildTarget === 'rp2350' && (rp2350BuildMode === 'sd' || rp2350BuildMode === 'swd'));
+    // Built to be debugged on the cartridge: -Og, so the locals are there to see and change
+    const debugBuild = !!opts?.debug || (buildTarget === 'rp2350' && rp2350BuildMode === 'swd');
     // CRITICAL: Prevent parallel compilations - return early if already compiling
     if (isCompilingRef.current) {
       logger.debug('Build', 'Build already in progress, skipping duplicate request');
@@ -655,7 +659,9 @@ function App() {
           // correr esto: un proyecto C externo sin seccion [simulate] no tiene
           // WASM, asi que sin esto "Build for SD" con la tarjeta desconectada no
           // deja nada que probar. Es el mismo binario que se acaba de desplegar.
-          preview: extTarget === 'rp2350',
+          // (not in the SWD debug mode: the game runs on the cartridge, not in the panel too)
+          preview: extTarget === 'rp2350' && !(buildTarget === 'rp2350' && rp2350BuildMode === 'swd'),
+          debugBuild: extTarget === 'rp2350' && debugBuild,
         });
         if (extResult?.error) {
           logger.error('Build', 'External build failed:', extResult.error, extResult.detail || '');
@@ -740,7 +746,9 @@ function App() {
         rp2350FlashMethod: forSd ? 'none' : rp2350FlashMethod,
         rp2350FirmwareDir,
         rp2350Ram: forSd,
-        rp2350SdPath,
+        // SWD debug goes to the cartridge's memory, not to the card
+        rp2350SdPath: rp2350BuildMode === 'swd' && !opts?.forSd ? '' : rp2350SdPath,
+        debugBuild,
       };
 
       // If building from project, include output path
@@ -857,6 +865,18 @@ function App() {
       logger.debug('Build', 'Build process completed, flag cleared');
     }
   }, [documents, buildTarget, pitrexCopyToSD, pitrexSdPath, uvm2CopyToSD, uvm2SdPath, rp2350FlashMethod, rp2350FirmwareDir, rp2350SdPath, rp2350BuildMode]);
+
+  /**
+   * A build, and in the rp2350 "SWD debug" build mode its image uploaded to the cartridge,
+   * launched and debugged there (debug/hwDebug.ts): the editor's breakpoints stop the game on
+   * the console. What F7, F5 and the MCP's ide_run do.
+   */
+  const buildMaybeOnCartridge = useCallback(async (autoRun: boolean): Promise<BuildOutcome> => {
+    const out = await handleBuild(autoRun);
+    if (!(buildTarget === 'rp2350' && rp2350BuildMode === 'swd') || !out.ok || !out.artifact) return out;
+    await runOnCartridge(out.artifact);
+    return { ...out, launch: 'none', notes: [...(out.notes ?? []), 'SWD debug: uploaded to the cartridge and launched there.'] };
+  }, [handleBuild, buildTarget, rp2350BuildMode]);
 
   const commandExec = useCallback(async (id: string, payload?: any) => {
     const apiFiles: any = (window as any).files;
@@ -1031,7 +1051,7 @@ def loop():
           clearTimeout(buildDebounceTimerRef.current);
         }
         buildDebounceTimerRef.current = setTimeout(() => {
-          handleBuild(false); // Solo compilar
+          void buildMaybeOnCartridge(false); // Solo compilar (o, en modo SWD debug, a la consola)
           buildDebounceTimerRef.current = null;
         }, 0);
         break;
@@ -1048,7 +1068,9 @@ def loop():
         // F5 while paused at a breakpoint or after a step continues the program (to the
         // next breakpoint): building would throw the session away. 'paused' is only a
         // debug stop; a program merely running is 'running'.
-        if (useDebugStore.getState().state === 'paused') {
+        // A game being debugged on the cartridge: F5 is Continue, never a rebuild (that would
+        // reset the console under the session).
+        if (useDebugStore.getState().state === 'paused' || cartridgeDebugActive()) {
           commandExec('debug.continue');
           break;
         }
@@ -1058,9 +1080,19 @@ def loop():
           clearTimeout(buildDebounceTimerRef.current);
         }
         buildDebounceTimerRef.current = setTimeout(() => {
-          handleBuild(true); // Compilar y ejecutar
+          void buildMaybeOnCartridge(true); // Compilar y ejecutar
           buildDebounceTimerRef.current = null;
         }, 0);
+        break;
+      case 'debug.cartridge': {
+        // Debug on the RP2350 cartridge over SWD (debug/hwDebug.ts): the SD build, uploaded
+        // to the cartridge's PSRAM and launched from its menu, debugged on core 1.
+        const out = await handleBuild(false, { forSd: true, debug: true });
+        if (!out.ok || !out.artifact) { hwSay(`build failed: ${out.detail ?? out.error ?? 'unknown'}`, true); break; }
+        await runOnCartridge(out.artifact);
+        break; }
+      case 'debug.cartridgeStop':
+        await stopCartridgeDebug();
         break;
       case 'build.sd':
         // Build a RAM-linked rp2350 game for the cart's SD launcher.
@@ -1691,7 +1723,7 @@ def loop():
         logger.warn('App', 'unknown command:', id);
       }
     }
-  }, [documents, openDocument, activeBinName, openVpyProject, closeVpyProject, handleBuild]);
+  }, [documents, openDocument, activeBinName, openVpyProject, closeVpyProject, handleBuild, buildMaybeOnCartridge]);
 
   // Keyboard shortcuts mapping (similar to VS conventions)
   useEffect(() => {
@@ -1757,23 +1789,23 @@ def loop():
   // the WASM simulator instead of continuing the 6809 emulator.
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
-      if (e.data?.type === 'vpy-run-external') handleBuild(true);
+      if (e.data?.type === 'vpy-run-external') void buildMaybeOnCartridge(true);
     };
     window.addEventListener('message', onMsg);
     return () => window.removeEventListener('message', onMsg);
-  }, [handleBuild]);
+  }, [buildMaybeOnCartridge]);
 
   // The MCP bridge's runBuild (tool ide_run) runs EXACTLY what the keys run, but awaits
   // the outcome: build = F7 (build.build), run = F5 (build.run), simulate = Shift+F5
   // (build.simulate), build_simulator = Shift+F7 (build.buildSim).
   useEffect(() => registerBuildRunner((mode: BuildMode) => {
     switch (mode) {
-      case 'build': return handleBuild(false);
-      case 'run': return handleBuild(true);
+      case 'build': return buildMaybeOnCartridge(false);
+      case 'run': return buildMaybeOnCartridge(true);
       case 'simulate': return handleBuild(true, { sim: true });
       case 'build_simulator': return handleBuild(false, { sim: true });
     }
-  }), [handleBuild]);
+  }), [handleBuild, buildMaybeOnCartridge]);
 
   // Listen for vpy-command events from WelcomeView and other components
   useEffect(() => {
@@ -1944,6 +1976,9 @@ def loop():
                   session is already PAUSED, and then it resumes rather than starts. */}
               <MenuItem label={`${t('debug.start', 'Start Debugging')}	Ctrl+D`} onClick={()=>{ commandExec('debug.start'); setOpenMenu(null); }} />
               <MenuItem label={`${t('debug.stop', 'Stop Debugging')}	Shift+F5 (while paused)`} onClick={()=>{ commandExec('debug.stop'); setOpenMenu(null); }} />
+              <MenuSeparator />
+              <MenuItem label={t('debug.cartridge', 'Debug on Cartridge (RP2350, SWD)')} onClick={()=>{ commandExec('debug.cartridge'); setOpenMenu(null); }} />
+              <MenuItem label={t('debug.cartridgeStop', 'Stop Debugging on Cartridge')} onClick={()=>{ commandExec('debug.cartridgeStop'); setOpenMenu(null); }} />
               <MenuSeparator />
               <MenuItem label={`${t('debug.stepOver', 'Step Over')}	F10`} onClick={()=>{ commandExec('debug.stepOver'); setOpenMenu(null); }} />
               <MenuItem label={`${t('debug.stepInto', 'Step Into')}	F11`} onClick={()=>{ commandExec('debug.stepInto'); setOpenMenu(null); }} />

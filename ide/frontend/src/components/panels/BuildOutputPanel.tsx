@@ -41,6 +41,13 @@ export const BuildOutputPanel: React.FC = () => {
       diags.forEach(d => append(`${d.file}:${d.line+1}:${d.col+1}: ${d.message}`, 'diagnostic'));
     });
     w?.electronAPI?.onRunStatus?.((msg: string) => append(msg, 'info'));
+    // on-cartridge debugging (debug/hwDebug.ts) reports its steps here
+    const hw = (e: Event) => {
+      const d = (e as CustomEvent<{ text: string; error?: boolean }>).detail;
+      append(`[cartridge] ${d.text}`, d.error ? 'error' : 'info');
+    };
+    window.addEventListener('hwdebug:status', hw);
+    return () => window.removeEventListener('hwdebug:status', hw);
   }, []);
 
   useEffect(() => {

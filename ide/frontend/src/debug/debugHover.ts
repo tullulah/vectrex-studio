@@ -15,7 +15,7 @@
  */
 import { useDebugStore } from '../state/debugStore';
 import { useProjectStore } from '../state/projectStore';
-import { armCVariable, armGlobal, armLocal, armProgramActive, type ArmVariable } from './armSourceDebug';
+import { armCVariable, armGlobal, armLocal, armProgramActive, armWriteMemory, type ArmVariable } from './armSourceDebug';
 import type { CType } from './dwarfInfo';
 
 const MAX_ELEMENTS = 16;
@@ -287,4 +287,107 @@ export function cDebugValue(text: string, filePath: string, line: number, word: 
     console.warn('[debugHover] could not read a C value:', e);
     return null;
   }
+}
+
+// ---- changing a value ----
+
+/** A variable whose value the debugger can set: one integer in memory. */
+export interface Lvalue { label: string; addr: number; size: number; signed: boolean; current: string }
+
+/** The editable place of a variable (an int or a pointer in memory), or why it is not one. */
+function lvalueOf(label: string, v: ArmVariable | null, member?: { type: CType; offset: number }): Lvalue | string | null {
+  if (!v) return null;
+  const p = v.place;
+  if (p.kind === 'unavailable') return `${label} is optimised out here`;
+  if (p.kind !== 'memory') return `${label} lives in a register here: changing it is not supported yet`;
+  const type = member?.type ?? v.type;
+  const addr = p.addr + (member?.offset ?? 0);
+  if (type.kind !== 'int' && type.kind !== 'pointer') return `${label} is ${type.kind === 'array' ? 'an array' : type.kind === 'struct' ? 'a struct' : 'not an integer'}: change one of its values`;
+  const size = type.kind === 'pointer' ? 4 : type.size;
+  const signed = type.kind === 'int' && type.signed;
+  return { label, addr, size, signed, current: cValue(type, v.read8, addr) };
+}
+
+/** The variable under the mouse in a .vpy file, to change (ARM targets). */
+export function vpyLvalue(t: HoverTarget): Lvalue | string | null {
+  if (useDebugStore.getState().state !== 'paused') return 'the program is not paused';
+  if (!armProgramActive()) return 'changing a value works on the ARM targets (rp2350, uvm2) for now';
+  if (t.fieldOf) return `${t.fieldOf}[…].${t.word} is a list: change one element (not supported yet)`;
+  const entry = entryModule().toUpperCase();
+  const mod = t.module.toUpperCase();
+  const w = t.word.toUpperCase();
+  const g = (name: string, inModule = mod) => (inModule === entry ? name : `${inModule}_${name}`);
+  const global = (name: string): ArmVariable | null => armGlobal(`G_${name}`) ?? armGlobal(`VAR_${name}`);
+  if (t.qualifier) {
+    const label = `${t.qualifier}.${t.word}`;
+    const v = global(`${t.qualifier.toUpperCase()}_${w}`);
+    if (v) return lvalueOf(label, v);
+    const one = armGlobal(`G_${g(t.qualifier.toUpperCase())}`);
+    if (one?.type.kind === 'struct') {
+      const member = one.type.members.find((m) => m.name === `f_${t.word.toLowerCase()}`);
+      if (member) return lvalueOf(label, one, member);
+    }
+    return null;
+  }
+  const fn = t.fn ? (t.module.toUpperCase() === entry ? t.fn.name : `${t.module}.${t.fn.name}`) : null;
+  const local = () => (fn ? armLocal(fn, `l_${t.word.toLowerCase()}`) : null);
+  let v: ArmVariable | null = null;
+  if (t.fn?.params.some((p) => p.toUpperCase() === w)) v = local();
+  v ??= global(g(w)) ?? local();
+  return lvalueOf(t.word, v);
+}
+
+/** The C variable under the mouse, to change. */
+export function cLvalue(text: string, filePath: string, line: number, word: string, startColumn: number): Lvalue | string | null {
+  if (useDebugStore.getState().state !== 'paused') return 'the program is not paused';
+  if (!armProgramActive()) return null;
+  const l = text.split(/\r?\n/)[line - 1] ?? '';
+  const before = l.slice(0, startColumn - 1);
+  if (/[0-9]/.test(word[0] ?? '')) return null;
+  if (/\[[^\]]*\]\s*\.\s*$/.test(before)) return `${word}: a field of an array element (not supported yet)`;
+  if (/->\s*$/.test(before)) return `${word}: through a pointer (not supported yet)`;
+  const qual = /([A-Za-z_]\w*)\s*\.\s*$/.exec(before);
+  if (qual) {
+    const base = armCVariable(filePath, line, qual[1]);
+    if (base === 'not running') return NOT_RUNNING;
+    if (!base || base.type.kind !== 'struct') return null;
+    const member = base.type.members.find((m) => m.name === word);
+    return member ? lvalueOf(`${qual[1]}.${word}`, base, member) : null;
+  }
+  const v = armCVariable(filePath, line, word);
+  if (v === 'not running') return NOT_RUNNING;
+  return lvalueOf(word, v);
+}
+
+/** A typed value as text: decimal, -decimal, 0x hex, 0b binary or a 'c'haracter. Null if not one. */
+export function parseValue(text: string): number | null {
+  const t = text.trim().replace(/_/g, '');
+  if (/^'.'$/.test(t)) return t.charCodeAt(1);
+  if (/^-?(0x[0-9a-f]+|0b[01]+|\d+)$/i.test(t)) {
+    const neg = t.startsWith('-');
+    const body = neg ? t.slice(1) : t;
+    const v = /^0x/i.test(body) ? parseInt(body.slice(2), 16) : /^0b/i.test(body) ? parseInt(body.slice(2), 2) : parseInt(body, 10);
+    return neg ? -v : v;
+  }
+  return null;
+}
+
+/** Why `value` does not fit `lv`, or null when it does. */
+export function checkValue(lv: Lvalue, text: string): string | null {
+  const v = parseValue(text);
+  if (v === null) return 'a number: 42, -3, 0x2A, 0b101 or \'A\'';
+  const bits = lv.size * 8;
+  const min = lv.signed ? -(2 ** (bits - 1)) : -(2 ** (bits - 1));   // a negative is taken as its two's complement
+  const max = lv.signed ? 2 ** (bits - 1) - 1 : 2 ** bits - 1;
+  if (v < min || v > max) return `out of range for ${lv.size} byte${lv.size > 1 ? 's' : ''}${lv.signed ? ' (signed)' : ''}: ${min}..${max}`;
+  return null;
+}
+
+/** Write `text` into the variable (little-endian, the ARM targets). */
+export async function setValue(lv: Lvalue, text: string): Promise<void> {
+  const v = parseValue(text)!;
+  const bytes = new Uint8Array(lv.size);
+  let u = v < 0 ? 2 ** (lv.size * 8) + v : v;
+  for (let i = 0; i < lv.size; i++) { bytes[i] = u % 256; u = Math.floor(u / 256); }
+  await armWriteMemory(lv.addr, bytes);
 }

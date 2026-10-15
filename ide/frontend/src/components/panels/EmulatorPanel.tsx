@@ -20,6 +20,7 @@ import { installBreakpointSync, syncEmulatorBreakpoints } from '../../debug/brea
 import { buildCallStack, sourceAt, statementAddresses } from '../../debug/pdbSource';
 import { showProjectSource } from '../../debug/showSource';
 import { armStep, showArmStop } from '../../debug/armSourceDebug';
+import { cartridgeDebugActive } from '../../debug/hwDebug';
 
 // Helper: Get line->address map for both single-bank and multibank formats
 function getLineAddressMap(pdb: PdbData | null): Record<number, number> {
@@ -1623,6 +1624,9 @@ export const EmulatorPanel: React.FC = () => {
       // called vecx.reset(), which starts the machine again 200 ms later.)
       const RUN_CONTROL = ['debug-continue', 'debug-pause', 'debug-stop',
                            'debug-step-over', 'debug-step-into', 'debug-step-out', 'debug-switch-to-asm'];
+      // A game being debugged on the cartridge owns the run control: debug/hwDebug.ts
+      // listens for these itself (this panel need not be open).
+      if (RUN_CONTROL.includes(type) && cartridgeDebugActive()) return;
       const owner = useEmulatorStore.getState().activeEngine;
       if (RUN_CONTROL.includes(type) && owner !== 'm6809') {
         if (owner === null) {

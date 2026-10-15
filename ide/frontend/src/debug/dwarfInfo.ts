@@ -229,6 +229,52 @@ function evaluate(ops: Uint8Array, m: Machine, frameBase: () => number | null): 
 
 // ---- the tree ----
 
+/**
+ * Each compile unit's directory, by the offset of its line program (DW_AT_stmt_list ->
+ * DW_AT_comp_dir): what a DWARF 2-4 line table's relative paths are relative to (version 5
+ * carries it as its directory 0). A Makefile build names `src/main.c` this way.
+ */
+export function compileDirs(sec: Map<string, Uint8Array>): Map<number, string> {
+  const out = new Map<number, string>();
+  const info = sec.get('.debug_info');
+  const abbrev = sec.get('.debug_abbrev');
+  if (!info || !abbrev) return out;
+  const s: Sections = { str: sec.get('.debug_str'), lineStr: sec.get('.debug_line_str') };
+  const r = new Reader(info);
+  while (r.pos + 11 <= info.length) {
+    const start = r.pos;
+    const length = r.u32();
+    if (length === 0xffffffff) break;
+    const end = r.pos + length;
+    const version = r.u16();
+    let abbrevOff: number, addrSize: number;
+    if (version >= 5) {
+      const unitType = r.u8();
+      addrSize = r.u8();
+      abbrevOff = r.u32();
+      if (unitType !== 0x01) { r.pos = end; continue; }
+    } else {
+      abbrevOff = r.u32();
+      addrSize = r.u8();
+    }
+    try {
+      const ab = abbrevTable(abbrev, abbrevOff).get(r.uleb());
+      if (ab?.tag === T_CU) {
+        let dir: Value | undefined, stmt: Value | undefined;
+        for (const [attr, form, implicit] of ab.specs) {
+          const v = readForm(r, form, implicit, { start, version, addrSize, offSize: 4 }, s);
+          if (attr === 0x1b) dir = v;          // DW_AT_comp_dir
+          else if (attr === 0x10) stmt = v;    // DW_AT_stmt_list
+        }
+        const off = typeof stmt === 'number' ? stmt : (stmt as any)?.form === 'sec_offset' ? (stmt as any).offset : -1;
+        if (typeof dir === 'string' && off >= 0) out.set(off, dir);
+      }
+    } catch { /* a unit this reader cannot follow: its paths stay as written */ }
+    r.pos = end;
+  }
+  return out;
+}
+
 export function debugInfo(sec: Map<string, Uint8Array>): DebugInfo {
   const info = sec.get('.debug_info');
   const abbrev = sec.get('.debug_abbrev');

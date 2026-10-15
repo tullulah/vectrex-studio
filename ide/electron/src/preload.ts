@@ -61,6 +61,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }
 });
 
+// On-cartridge debugging (electron/src/hwdebug/session.ts): a probe-rs DAP session on the
+// RP2350 cartridge's core 1, driven by frontend/src/debug/hwDebug.ts.
+contextBridge.exposeInMainWorld('hwDebug', {
+  start: (args: { elfPath: string }) => ipcRenderer.invoke('hwdebug:start', args) as Promise<{ ok: true } | { error: string }>,
+  request: (command: string, args?: unknown) => ipcRenderer.invoke('hwdebug:request', command, args ?? {}) as Promise<any>,
+  end: () => ipcRenderer.invoke('hwdebug:end') as Promise<{ ok: true }>,
+  onEvent: (cb: (ev: any) => void) => {
+    const h = (_e: IpcRendererEvent, ev: any) => cb(ev);
+    ipcRenderer.on('hwdebug:event', h);
+    return () => ipcRenderer.removeListener('hwdebug:event', h);
+  },
+  onEnded: (cb: (why: string) => void) => {
+    const h = (_e: IpcRendererEvent, why: string) => cb(why);
+    ipcRenderer.on('hwdebug:ended', h);
+    return () => ipcRenderer.removeListener('hwdebug:ended', h);
+  },
+});
+
 contextBridge.exposeInMainWorld('files', {
   openFile: () => ipcRenderer.invoke('file:open') as Promise<{ path: string; content: string; mtime: number; size: number; name: string } | { error: string } | null>,
   openFilePath: (path: string) => ipcRenderer.invoke('file:openPath', path) as Promise<{ path: string; content: string; mtime: number; size: number; name: string } | { error: string } | null>,

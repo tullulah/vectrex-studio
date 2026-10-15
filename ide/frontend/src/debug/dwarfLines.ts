@@ -10,6 +10,8 @@
  * Pure: bytes in, tables out. tools/dwarf-lines-test.ts checks it against objdump.
  */
 
+import { compileDirs } from './dwarfInfo';
+
 export interface LineRow {
   address: number;
   file: string;
@@ -32,7 +34,7 @@ export interface LineTable {
   /** Where each function of the ELF starts (its symbol table's FUNC symbols). */
   functionStarts: Set<number>;
   /** The function `pc` is in (a FUNC symbol and its size); null outside them. */
-  functionAt(pc: number): { name: string; start: number } | null;
+  functionAt(pc: number): { name: string; start: number; end: number } | null;
   /** Any symbol's address (a label too); undefined when the ELF has none of that name. */
   symbolAddress(name: string): number | undefined;
 }
@@ -160,6 +162,7 @@ export function parseLineRows(elf: Uint8Array): LineRow[] {
   const lineStr = sec.get('.debug_line_str');
   const str = sec.get('.debug_str');
   const rows: LineRow[] = [];
+  let compDirs: Map<number, string> | null = null;   // read when a DWARF 2-4 unit needs it
   const r = new Reader(dl);
   while (r.pos + 4 <= dl.length) {
     const unitStart = r.pos;
@@ -211,10 +214,15 @@ export function parseLineRows(elf: Uint8Array): LineRow[] {
         }
       };
       entries(dirs, false);
+      // Directory 0 is the compilation directory; the others may be relative to it (a
+      // Makefile build: `src`, so files read `src/main.c` and match no project path)
+      for (let i = 1; i < dirs.length; i++) dirs[i] = join(dirs[0], dirs[i]);
       entries(files, true);
     } else {
-      dirs.push(''); // index 0: the compilation directory (not in this table)
-      for (let d = r.cstr(); d; d = r.cstr()) dirs.push(d);
+      // index 0: the compilation directory, which this version keeps in .debug_info
+      const comp = (compDirs ??= compileDirs(sec)).get(unitStart) ?? '';
+      dirs.push(comp);
+      for (let d = r.cstr(); d; d = r.cstr()) dirs.push(join(comp, d));
       files.push(''); // file numbers start at 1
       for (let f = r.cstr(); f; f = r.cstr()) {
         const dir = r.uleb(); r.uleb(); r.uleb();
@@ -314,7 +322,7 @@ export function lineTable(elf: Uint8Array): LineTable {
       if (fns[mid].start <= pc) { hit = mid; lo = mid + 1; } else hi = mid - 1;
     }
     // several symbols can share a start (aliases): any whose size covers pc
-    for (let i = hit; i >= 0 && fns[i].start === fns[hit]?.start; i--) if (pc < fns[i].end) return { name: fns[i].name, start: fns[i].start };
+    for (let i = hit; i >= 0 && fns[i].start === fns[hit]?.start; i--) if (pc < fns[i].end) return { name: fns[i].name, start: fns[i].start, end: fns[i].end };
     return null;
   };
   let syms: Map<string, number> | null = null; // read on first use

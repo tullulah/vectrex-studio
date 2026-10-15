@@ -20,13 +20,57 @@ import { useProjectStore } from '../state/projectStore';
 import { lineTable, sections, type LineTable } from './dwarfLines';
 import { frameTable, type FrameTable } from './dwarfFrames';
 import { debugInfo, type DebugInfo, type CType, type ScopeVar, type VarPlace } from './dwarfInfo';
-import { unwind, vpyName } from './armCallStack';
+import { prologueRow, unwind, vpyName } from './armCallStack';
 import { showProjectSource } from './showSource';
 import { openFileAt } from '../utils/openFile';
 import type { ArmDebug } from '../emulator/cpu/armDebug';
 import type { Thumb2 } from '../emulator/cpu/Thumb2';
 
-interface ArmSystem { debug: ArmDebug; core0: Thumb2; read8(addr: number): number }
+/** What the debugger drives: the run control (ArmDebug, or the cartridge's, hwDebug.ts). */
+export interface ArmRunControl {
+  readonly breakpoints: Set<number>;
+  readonly ideBreakpoints: Set<number>;
+  stopped: ArmDebug['stopped'];
+  onStop(fn: (reason: NonNullable<ArmDebug['stopped']>, pc: number) => void): void;
+  resume(step: boolean, until?: ((pc: number, sp: number) => boolean) | null, kind?: 'over' | 'into' | 'out'): void;
+  /** Called after the editor's breakpoints were copied into ideBreakpoints. */
+  breakpointsChanged?(): void;
+}
+
+/** An ARM program being debugged: an emulator's, or the one on the cartridge (hwDebug.ts). */
+export interface ArmSystem {
+  debug: ArmRunControl;
+  core0: Pick<Thumb2, 'getReg'>;
+  read8(addr: number): number;
+  /** A byte, or null when the target has not got it to hand (the cartridge reads its RAM
+   *  through the probe after a stop); without it, read8. */
+  peek?(addr: number): number | null;
+  /** Change memory (the debugger setting a variable): the emulators write it at once, the
+   *  cartridge through the probe. */
+  write8?(addr: number, value: number): void;
+  writeMemory?(addr: number, bytes: Uint8Array): Promise<void>;
+  /** Fetch what peek() was asked for and did not have; true if anything came in. */
+  fetchMissed?(): Promise<boolean>;
+}
+
+/** After a value was shown as unknown: fetch the memory it needed (the cartridge reads its
+ *  RAM on demand) and say whether it is worth computing again. */
+export async function armFetchMissed(): Promise<boolean> {
+  const s = system();
+  return s?.fetchMissed ? s.fetchMissed() : false;
+}
+
+/** Write `bytes` at `addr` in the paused program's memory (SRAM, or PSRAM data). */
+export async function armWriteMemory(addr: number, bytes: Uint8Array): Promise<void> {
+  const s = system();
+  if (!s) throw new Error('no ARM program');
+  // RAM only: the SRAM and the PSRAM a game's data may live in (never flash, never a peripheral)
+  const RAM: Array<[number, number]> = [[0x11000000, 0x11800000], [0x20000000, 0x20082000]];
+  if (!RAM.some(([lo, hi]) => addr >= lo && addr + bytes.length <= hi)) throw new Error(`0x${addr.toString(16)} is not RAM the debugger may write`);
+  if (s.writeMemory) { await s.writeMemory(addr, bytes); return; }
+  if (!s.write8) throw new Error('this target cannot change memory');
+  bytes.forEach((b, i) => s.write8!(addr + i, b));
+}
 
 const fsPath = (uri: string) => decodeURI(uri.replace(/^file:\/\//, '')).replace(/\\/g, '/');
 const baseName = (p: string) => p.split('/').pop() || p;
@@ -56,8 +100,131 @@ function sourceAt(pc: number): { file: string; line: number } | null {
   return table?.lineAt(pc) ?? null;
 }
 
+/** The cartridge being debugged over SWD (hwDebug.ts): it takes over from the emulator. */
+let hardware: ArmSystem | null = null;
+
 function system(): ArmSystem | null {
-  return ((emuCore as any).activeArmSystem as ArmSystem | null) ?? null;
+  return hardware ?? ((emuCore as any).activeArmSystem as ArmSystem | null) ?? null;
+}
+
+/** Debug the program on the cartridge (null: back to the emulator's). */
+export function setHardwareArmSystem(sys: ArmSystem | null, elf: Uint8Array | null): void {
+  hardware = sys;
+  if (sys) load(elf);
+}
+
+/** What one Thumb instruction does to the flow: where a branch may go, a call, a return, or
+ *  a jump this cannot work out (a register, a table it cannot read). */
+interface Flow { len: 2 | 4; branch?: number[]; call?: number; ret?: boolean; indirect?: boolean }
+
+export function flowAt(a: number, read16: (a: number) => number | null): Flow | null {
+  const h1 = read16(a);
+  if (h1 === null) return null;
+  if ((h1 >>> 11) < 0b11101) {
+    if ((h1 & 0xF000) === 0xD000) {                                     // B<c> T1, svc, udf
+      const c = (h1 >> 8) & 0xF;
+      if (c === 0xF) return { len: 2 };                                 // svc: back to the next instruction
+      if (c === 0xE) return { len: 2, indirect: true };
+      return { len: 2, branch: [(a + 4 + (((h1 & 0xFF) << 24) >> 23)) >>> 0] };
+    }
+    if ((h1 & 0xF800) === 0xE000) return { len: 2, branch: [(a + 4 + (((h1 & 0x7FF) << 21) >> 20)) >>> 0] };   // B T2
+    if ((h1 & 0xF500) === 0xB100) return { len: 2, branch: [(a + 4 + ((((h1 >> 9) & 1) << 6) | (((h1 >> 3) & 0x1F) << 1))) >>> 0] };   // CBZ/CBNZ
+    if ((h1 & 0xFF87) === 0x4700) return ((h1 >> 3) & 0xF) === 14 ? { len: 2, ret: true } : { len: 2, indirect: true };   // BX
+    if ((h1 & 0xFF87) === 0x4780) return { len: 2 };                    // BLX reg: a call, back to the next one
+    if ((h1 & 0xFF00) === 0xBD00) return { len: 2, ret: true };         // POP {.., pc}
+    if ((h1 & 0xFF87) === 0x4687 || (h1 & 0xFF87) === 0x4487) return { len: 2, indirect: true };   // MOV/ADD pc
+    return { len: 2 };
+  }
+  const h2 = read16(a + 2);
+  if (h2 === null) return null;
+  if ((h1 & 0xF800) === 0xF000 && (h2 & 0x8000)) {
+    const s = (h1 >> 10) & 1, j1 = (h2 >> 13) & 1, j2 = (h2 >> 11) & 1;
+    const op = h2 & 0x5000;
+    if (op === 0x0000) {                                                 // B<c> T3 (cond 111x: msr, hints...)
+      if ((((h1 >> 6) & 0xF) & 0xE) === 0xE) return { len: 4 };
+      const imm = (s << 20) | (j2 << 19) | (j1 << 18) | ((h1 & 0x3F) << 12) | ((h2 & 0x7FF) << 1);
+      return { len: 4, branch: [(a + 4 + ((imm << 11) >> 11)) >>> 0] };
+    }
+    const imm = (s << 24) | ((~(j1 ^ s) & 1) << 23) | ((~(j2 ^ s) & 1) << 22) | ((h1 & 0x3FF) << 12) | ((h2 & 0x7FF) << 1);
+    const t = (a + 4 + ((imm << 7) >> 7)) >>> 0;
+    return op === 0x1000 ? { len: 4, branch: [t] } : { len: 4, call: t };   // B T4 ; BL / BLX imm
+  }
+  if ((h1 & 0xFFF0) === 0xE8D0 && (h2 & 0xFFE0) === 0xF000) {           // TBB / TBH: a switch's table
+    if ((h1 & 0xF) !== 0xF) return { len: 4, indirect: true };          // the table is not right after it
+    const half = (h2 & 0x10) !== 0;
+    const base = a + 4;
+    const byte = (x: number) => { const w = read16(x & ~1); return w === null ? null : (x & 1 ? w >> 8 : w & 0xFF); };
+    const targets: number[] = [];
+    let tableEnd = Infinity;                                             // the cases' code starts where the table ends
+    for (let i = 0; i < 1024; i++) {
+      const at = base + (half ? 2 * i : i);
+      if (at >= tableEnd) break;
+      const e = half ? read16(at) : byte(at);
+      if (e === null) break;
+      const t = base + 2 * e;
+      targets.push(t);
+      tableEnd = Math.min(tableEnd, t);
+    }
+    return { len: 4, branch: targets };
+  }
+  if (((h1 & 0xFFD0) === 0xE890 || (h1 & 0xFFD0) === 0xE910) && (h2 & 0x8000)) {   // LDM with pc
+    return (h1 & 0xF) === 13 ? { len: 4, ret: true } : { len: 4, indirect: true };
+  }
+  if (((h1 & 0xFFF0) === 0xF8D0 || (h1 & 0xFFF0) === 0xF850) && (h2 >> 12) === 0xF) {   // LDR pc
+    return (h1 & 0xF) === 13 ? { len: 4, ret: true } : { len: 4, indirect: true };
+  }
+  return { len: 4 };
+}
+
+/**
+ * Where a step from `pc` may stop, for a target that cannot check every instruction (the
+ * cartridge stops only at breakpoints, and every one it writes costs a transfer): where the
+ * statement at pc can go -- the next statement, its branches' targets (a switch's table
+ * included) -- and for `into` the first statement of what it calls. `needReturn` when it
+ * can leave the function (the caller sets the return address too). A jump this cannot follow
+ * makes it every statement of the function, as before.
+ */
+export function stepStops(kind: 'over' | 'into' | 'out', pc: number, read16: (a: number) => number | null): { stops: number[]; needReturn: boolean } {
+  if (!table) return { stops: [], needReturn: true };
+  pc = (pc & ~1) >>> 0;
+  const fn = table.functionAt(pc);
+  if (!fn) return { stops: [], needReturn: true };
+  const here = sourceAt(pc);
+  const stoppable = stoppableFor(kind, here);
+  // the statement's code: from pc to the next statement start of the function
+  let end = fn.end;
+  for (const a of table.startSet) if (a > pc && a < end) end = a;
+  const stops = new Set<number>();
+  const callees: number[] = [];
+  let needReturn = false, unknown = false;
+  for (let a = pc; a < end;) {
+    const f = flowAt(a, read16);
+    if (!f) { unknown = true; break; }
+    for (const t of f.branch ?? []) if (t < pc || t >= end) stops.add(t);   // inside it is still this statement
+    if (f.call !== undefined) callees.push(f.call);
+    if (f.ret) needReturn = true;
+    if (f.indirect) unknown = true;
+    a += f.len;
+  }
+  if (end < fn.end) stops.add(end); else needReturn = true;   // falls through, or off the end
+  if (unknown) {
+    needReturn = true;
+    for (const a of stoppable) {
+      if (a < fn.start || a >= fn.end) continue;
+      const at = sourceAt(a);
+      if (!(here && at && at.line === here.line && at.file === here.file)) stops.add(a);
+    }
+  }
+  if (kind === 'into') {
+    for (const c of callees) {
+      const callee = table.functionAt(c);
+      if (!callee) continue;
+      let first = -1;
+      for (const p of stoppable) if (p >= callee.start && p < callee.end && (first < 0 || p < first)) first = p;
+      if (first >= 0) stops.add(first);
+    }
+  }
+  return { stops: [...stops], needReturn };
 }
 
 function projectRoot(): string | null {
@@ -117,7 +284,7 @@ export function syncArmBreakpoints(): void {
   if (!s) return;
   s.debug.ideBreakpoints.clear();
   breakpointLines = new Map();
-  if (!table) return;
+  if (!table) { s.debug.breakpointsChanged?.(); return; }
   for (const [uri, lines] of Object.entries(useEditorStore.getState().breakpoints || {})) {
     if (!SOURCE_FILE.test(uri)) continue;
     const path = tablePath(fsPath(uri));
@@ -130,6 +297,7 @@ export function syncArmBreakpoints(): void {
       }
     }
   }
+  s.debug.breakpointsChanged?.();
 }
 
 /** Where a debugger may read: memory, never a peripheral (reads have side effects). */
@@ -167,7 +335,7 @@ function variables(): DebugInfo | null {
   return info;
 }
 
-const memRead8 = (s: ArmSystem) => (a: number) => (MEMORY.some(([lo, hi]) => a >= lo && a < hi) ? s.read8(a) : null);
+const memRead8 = (s: ArmSystem) => (a: number) => (MEMORY.some(([lo, hi]) => a >= lo && a < hi) ? (s.peek ? s.peek(a) : s.read8(a)) : null);
 
 /** A global by its symbol: typed with the ELF's debug info, else (the asm backend) a 32-bit integer. */
 export function armGlobal(symbol: string): ArmVariable | null {
@@ -257,14 +425,29 @@ export function showArmStop(): void {
     console.warn('[armSourceDebug] could not unwind the stack:', e);
   }
   const at = sourceAt(s.core0.getReg(15));
-  if (!at || !isProjectSource(at.file)) {
+  // the project's source, or (a step went into it) any other file the line table names by
+  // its full path: the SDK's C
+  if (!at || (!isProjectSource(at.file) && !at.file.startsWith('/'))) {
     useDebugStore.getState().setCurrentVpyLine(null);
     return;
   }
   const name = baseName(at.file);
   useDebugStore.getState().setCurrentVpyLineWithFile(at.line, name);
   if (/\.vpy$/i.test(at.file)) showProjectSource(name, at.line);
-  else void openFileAt(projectRoot() + inProject(at.file)!, at.line - 1); // its path in the editor's form
+  else if (inProject(at.file) !== null) void openFileAt(projectRoot() + inProject(at.file)!, at.line - 1); // its path in the editor's form
+  else void openFileAt(at.file, at.line - 1);
+}
+
+/**
+ * Where a step may stop: `into` goes all the way down, into any source with a line table
+ * (the SDK's C, libvpy, the runtime); `over` and `out` from the project's own source stop only
+ * in it (a call into the SDK is stepped over), and once inside the SDK they go line by line
+ * there too.
+ */
+function stoppableFor(kind: 'over' | 'into' | 'out', here: { file: string; line: number } | null): Set<number> {
+  if (!table) return new Set();
+  if (kind === 'into' || !here || !isProjectSource(here.file)) return table.startSet;
+  return projectStarts;
 }
 
 export function armStep(kind: 'over' | 'into' | 'out'): void {
@@ -282,23 +465,35 @@ export function armStep(kind: 'over' | 'into' | 'out'): void {
   // statement) the frame is not pushed yet: sp is still the caller's. There `over` takes
   // the next statement of this file (the body's, at whatever depth the prologue leaves)
   // or anything once back in the caller; `out` is back at the caller's sp, not above it.
-  const atEntry = t.functionStarts.has((s.core0.getReg(15) & ~1) >>> 0);
+  const pc0 = (s.core0.getReg(15) & ~1) >>> 0;
+  const atEntry = t.functionStarts.has(pc0);
   const step = kind;
+  const stops = stoppableFor(kind, here);
+  // OUT OF THE FUNCTION: sp above where it was, or -- a function that pushes nothing (a leaf
+  // like `void f(void) { x = 0; }`) returns with the sp it had -- at the sp it was entered
+  // with (its CFA) and in another function. Judged by sp alone, a step from a leaf saw the
+  // caller "at the same depth, in another file" and went on through the whole frame.
+  const fn0 = t.functionAt(pc0);
+  let cfa0 = sp0;
+  const row = frames?.rowAt(pc0) ?? (fn0 ? prologueRow(fn0.start, pc0, (a) => s.read8(a) | (s.read8(a + 1) << 8)) : null);
+  if (row) cfa0 = (s.core0.getReg(row.cfaReg) + row.cfaOffset) >>> 0;
+  const left = (pc: number, sp: number) => sp > sp0 || (sp >= cfa0 && t.functionAt(pc)?.start !== fn0?.start);
   const until =
-    atEntry && step === 'over' ? (pc: number, sp: number) => projectStarts.has(pc) && otherLine(pc) && (sp > sp0 || sameFile(pc))
-    : step === 'into' ? (pc: number) => projectStarts.has(pc) && otherLine(pc)
-    // over: not deeper; at the same depth only in this file — gcc inlines calls to other
-    // modules (no bl, no frame), and their statements are not "the next line"
-    : step === 'over' ? (pc: number, sp: number) => projectStarts.has(pc) && otherLine(pc)
-        && (sp > sp0 || (sp === sp0 && sameFile(pc)))
-    : atEntry ? (pc: number, sp: number) => projectStarts.has(pc) && sp >= sp0 && otherLine(pc)
-    : (pc: number, sp: number) => projectStarts.has(pc) && sp > sp0;
+    step === 'into' ? (pc: number) => stops.has(pc) && otherLine(pc)
+    // over: back in the caller, or the next line of this function -- at the same depth and
+    // only in this file (gcc inlines calls to other modules: no bl, no frame, and their
+    // statements are not "the next line"); at a function's first instruction the frame is
+    // not pushed yet, so the body's statements are deeper
+    : step === 'over' ? (pc: number, sp: number) => stops.has(pc) && otherLine(pc)
+        && (left(pc, sp) || ((sp === sp0 || atEntry) && sameFile(pc)))
+    // out: back in the caller (from the SDK, `stops` is every statement: whoever called)
+    : (pc: number, sp: number) => stops.has(pc) && left(pc, sp);
   useDebugStore.getState().setCurrentVpyLine(null);
-  s.debug.resume(false, until); // before 'running': the store's watcher only resumes a stopped one
+  s.debug.resume(false, until, kind); // before 'running': the store's watcher only resumes a stopped one
   useDebugStore.getState().setState('running');
 }
 
-const watched = new WeakSet<ArmDebug>();
+const watched = new WeakSet<ArmRunControl>();
 
 function load(elf: Uint8Array | null): void {
   table = null;

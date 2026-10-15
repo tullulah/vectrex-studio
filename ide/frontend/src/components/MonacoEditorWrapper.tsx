@@ -27,7 +27,9 @@ import { dockBus } from '../state/dockBus';
 import { lspClient, getLspClient, openClangdDocument } from '../lspClient';
 import { useProjectStore } from '../state/projectStore';
 import { openFileAt } from '../utils/openFile';
-import { cDebugValue, debugValue, hoverTarget } from '../debug/debugHover';
+import { cDebugValue, cLvalue, checkValue, debugValue, hoverTarget, setValue, vpyLvalue, type Lvalue } from '../debug/debugHover';
+import { armFetchMissed } from '../debug/armSourceDebug';
+import { InputDialog } from './dialogs/InputDialog';
 // TODO(i18n): Adapt Monaco UI strings (context menu, messages) when supporting dynamic locale changes.
 
 // --- C/C++ (clangd) support ------------------------------------------------
@@ -240,12 +242,14 @@ function registerVpyNavigation(monaco: Monaco) {
   });
   // Paused in the debugger: the value of the variable under the mouse
   monaco.languages.registerHoverProvider('vpy', {
-    provideHover: (model, position) => {
+    provideHover: async (model, position) => {
       if (useDebugStore.getState().state !== 'paused') return null;
       const w = model.getWordAtPosition(position);
       if (!w) return null;
       const target = hoverTarget(model.getValue(), model.uri.path, position.lineNumber, w.word, w.startColumn);
-      const value = target && debugValue(target);
+      let value = target && debugValue(target);
+      // the cartridge reads RAM on demand: what was missing comes in, then again
+      if (target && value !== null && await armFetchMissed()) value = debugValue(target);
       if (!target || value === null) return null;
       const label = target.fieldOf ? `${target.fieldOf}[…].${target.word}` : target.qualifier ? `${target.qualifier}.${target.word}` : target.word;
       return {
@@ -257,11 +261,13 @@ function registerVpyNavigation(monaco: Monaco) {
   // The same in a C project's files on the ARM targets (shown next to clangd's hover)
   for (const langId of ['c', 'cpp']) {
     monaco.languages.registerHoverProvider(langId, {
-      provideHover: (model, position) => {
+      provideHover: async (model, position) => {
         if (useDebugStore.getState().state !== 'paused') return null;
         const w = model.getWordAtPosition(position);
         if (!w) return null;
-        const value = cDebugValue(model.getValue(), model.uri.fsPath.replace(/\\/g, '/'), position.lineNumber, w.word, w.startColumn);
+        const compute = () => cDebugValue(model.getValue(), model.uri.fsPath.replace(/\\/g, '/'), position.lineNumber, w.word, w.startColumn);
+        let value = compute();
+        if (value !== null && await armFetchMissed()) value = compute();
         if (value === null) return null;
         const before = model.getLineContent(position.lineNumber).slice(0, w.startColumn - 1);
         const q = /([A-Za-z_]\w*\s*(?:\[[^\]]*\]\s*)?\.\s*)$/.exec(before)?.[1].replace(/\s+/g, '') ?? '';
@@ -407,6 +413,8 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
   const breakpointDecorationsRef = useRef<string[]>([]); // Track breakpoint decoration IDs
   const currentLineDecorationsRef = useRef<string[]>([]); // Track current line highlight (Phase 6.1)
   const [editorReady, setEditorReady] = useState(false); // Track when editor is mounted and ready
+  // Debug → Change Value: the variable being changed (the dialog is open while it is set)
+  const [editing, setEditing] = useState<Lvalue | null>(null);
   
   const beforeMount: BeforeMount = (_monaco) => {
     (window as any).MonacoEnvironment = {
@@ -1077,12 +1085,36 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
       }
     });
     
+    // Paused in the debugger: change the value of the variable under the cursor
+    const changeValueAction = editor.addAction({
+      id: 'vpy-change-value',
+      label: t('common:debug.changeValue', 'Change Value…'),
+      contextMenuGroupId: 'navigation',
+      contextMenuOrder: 0.5,
+      run: async (ed: any) => {
+        const model = ed.getModel();
+        const pos = ed.getPosition();
+        const w = model && pos ? model.getWordAtPosition(pos) : null;
+        const tell = (msg: string) => ed.getContribution('editor.contrib.messageController')?.showMessage(msg, pos);
+        if (!w) return;
+        const resolve = () => model.getLanguageId() === 'vpy'
+          ? (() => { const target = hoverTarget(model.getValue(), model.uri.path, pos.lineNumber, w.word, w.startColumn); return target ? vpyLvalue(target) : null; })()
+          : cLvalue(model.getValue(), model.uri.fsPath.replace(/\\/g, '/'), pos.lineNumber, w.word, w.startColumn);
+        let lv = resolve();
+        if (lv && typeof lv !== 'string' && /\?/.test(lv.current) && await armFetchMissed()) lv = resolve();
+        if (!lv) { tell(t('common:debug.changeValue.none', 'No variable here to change')); return; }
+        if (typeof lv === 'string') { tell(lv); return; }
+        setEditing(lv);
+      }
+    });
+
     logger.debug('App', `F9 shortcuts registered as actions for ${currentUri}`);
     
     return () => {
       // Dispose actions on cleanup
       f9Action?.dispose();
       clearAllAction?.dispose();
+      changeValueAction?.dispose();
       logger.debug('App', `F9 shortcuts cleanup for ${currentUri}`);
     };
   }, [doc?.uri, toggleBreakpoint, clearAllBreakpoints, editorReady]); // Added editorReady to ensure registration on mount
@@ -1252,34 +1284,56 @@ export const MonacoEditorWrapper: React.FC<{ uri?: string }> = ({ uri }) => {
   }, [debugState, currentVpyLine, pdbData, doc, active]);
 
   return (
-    <Editor
-      height="100%"
-      defaultLanguage={fileLanguageId(doc.uri) || 'vpy'}
-      language={fileLanguageId(doc.uri) || 'vpy'}
-  theme="vpy-dark"
-  // Model is managed manually; prevent internal re-create by not binding value each render
-  value={undefined}
-      onChange={handleChange}
-      onMount={handleMount}
-      beforeMount={beforeMount}
-      options={{
-        automaticLayout: true,
-        minimap: { enabled: false },
-        fontSize: 14,
-        scrollBeyondLastLine: false,
-        wordWrap: 'on',
-        wordBasedSuggestions: 'off',
-        hover: { enabled: true, delay: 150 },
-        'semanticHighlighting.enabled': true,
-        quickSuggestions: { other: true, strings: false, comments: false },
-        suggestOnTriggerCharacters: true,
-        renderValidationDecorations: 'on',
-        glyphMargin: true, // Enable glyph margin for breakpoints
-        // Alt+click goes to the definition (Cmd/Ctrl+click adds a cursor), as in Visual Studio
-        multiCursorModifier: 'ctrlCmd',
-        lineNumbersMinChars: 3 // Make room for line numbers + glyph margin
-      }}
-    />
+    <>
+      <Editor
+        height="100%"
+        defaultLanguage={fileLanguageId(doc.uri) || 'vpy'}
+        language={fileLanguageId(doc.uri) || 'vpy'}
+    theme="vpy-dark"
+    // Model is managed manually; prevent internal re-create by not binding value each render
+    value={undefined}
+        onChange={handleChange}
+        onMount={handleMount}
+        beforeMount={beforeMount}
+        options={{
+          automaticLayout: true,
+          minimap: { enabled: false },
+          fontSize: 14,
+          scrollBeyondLastLine: false,
+          wordWrap: 'on',
+          wordBasedSuggestions: 'off',
+          hover: { enabled: true, delay: 150 },
+          'semanticHighlighting.enabled': true,
+          quickSuggestions: { other: true, strings: false, comments: false },
+          suggestOnTriggerCharacters: true,
+          renderValidationDecorations: 'on',
+          glyphMargin: true, // Enable glyph margin for breakpoints
+          // Alt+click goes to the definition (Cmd/Ctrl+click adds a cursor), as in Visual Studio
+          multiCursorModifier: 'ctrlCmd',
+          lineNumbersMinChars: 3 // Make room for line numbers + glyph margin
+        }}
+      />
+      <InputDialog
+        isOpen={!!editing}
+        title={t('common:debug.changeValue.title', 'Change Value')}
+        message={editing ? `${editing.label} = ${editing.current}  (${editing.size} byte${editing.size > 1 ? 's' : ''}${editing.signed ? ', signed' : ''})` : ''}
+        defaultValue={editing && /^-?\d+/.test(editing.current) ? editing.current.split(' ')[0] : ''}
+        validateFn={(v) => (editing ? checkValue(editing, v) : null)}
+        onCancel={() => setEditing(null)}
+        onConfirm={async (v) => {
+          const lv = editing;
+          setEditing(null);
+          if (!lv) return;
+          const ed = editorRef.current;
+          try {
+            await setValue(lv, v);
+            ed?.getContribution('editor.contrib.messageController')?.showMessage(`${lv.label} = ${v.trim()}`, ed.getPosition());
+          } catch (e: any) {
+            ed?.getContribution('editor.contrib.messageController')?.showMessage(String(e?.message ?? e), ed.getPosition());
+          }
+        }}
+      />
+    </>
   );
 };
 

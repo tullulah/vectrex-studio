@@ -3,7 +3,9 @@ import { persist } from 'zustand/middleware';
 
 export type BuildTarget = 'm6809' | 'rp2350' | 'pitrex' | 'uvm2';
 export type Rp2350FlashMethod = 'none' | 'swd' | 'usb';
-export type Rp2350BuildMode = 'flash' | 'sd';
+/** flash: embed in the firmware; sd: a RAM image for the card's launcher; swd: that image
+ *  uploaded to the cartridge over SWD, launched and debugged there (debug/hwDebug.ts). */
+export type Rp2350BuildMode = 'flash' | 'sd' | 'swd';
 
 const DEFAULT_RP2350_FIRMWARE_DIR =
   '/Users/daniel/projects/vectrex-arcade-private/hardware/debug_cart/firmware';

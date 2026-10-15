@@ -222,7 +222,7 @@ Click in the **gutter** (left margin) of any line in the editor to toggle a brea
 
 A breakpoint on a line with no code of its own (a comment, a `def`, an `else:`) stops at the next statement of the same function. When execution stops, the editor opens that statement's file and highlights the line.
 
-The editor's breakpoints and the keys below work on **m6809** (JSVecX, through the `.pdb`) and on **rp2350 and uvm2** (the ARM emulator, through the line table in the build's ELF: see the next section). In a C project (`.cvproj`) they work in its own C files the same way (steps stop in the project's files, not in the SDK's); the uvm2 build's ELF is read from `build_uvm2/pico/`. pitrex and the WASM simulator (Shift+F5) have no debugger.
+The editor's breakpoints and the keys below work on **m6809** (JSVecX, through the `.pdb`) and on **rp2350 and uvm2** (the ARM emulator, through the line table in the build's ELF: see the next section). In a C project (`.cvproj`) they work in its own C files the same way. Step Into goes all the way down, into any code with line info (the SDK's C, libvpy); Step Over and Step Out from the project's own files stop only in them (a call into the SDK is stepped over), and once inside the SDK they go line by line there too, opening the SDK's file in the editor; the uvm2 build's ELF is read from `build_uvm2/pico/`. pitrex and the WASM simulator (Shift+F5) have no debugger.
 
 On the ARM targets a C-backend build (`[uvm2] backend = "c"`) is optimised: gcc inlines and reorders, so a line may be skipped, a breakpoint on a call may show the first line of the function inlined there, and Step Over stays in the current file while the stack does not change (a call to another module that gcc inlined is stepped over). Step Out from `loop()` goes to whatever runs next in the frame.
 
@@ -251,6 +251,22 @@ Attaching pauses the emulator. Then, at the `.vpy` level:
 The builds carry the line table for this: the asm backend writes a `.loc` per statement (and unwind data for `bt`, in a debug section: the image is the same with or without it); the C backend (`[uvm2] backend = "c"`) writes `#line`, so gdb shows the C runtime's own functions and parameters as well. With the C backend at `-O3`, `next` can land in an inlined runtime function. `step` into a VPy function stops on its `def` line first. The SDK's C (the uvm2 runtime, the firmware) has its own debug info.
 
 Breakpoints are the emulator's (never written into the program). One gdb at a time; core 0 only on dual-core images; watchpoints are not supported. A uvm2 C project (`.cvproj`) is built by the same pico-sdk CMake, with debug info, and is debugged the same way with its ELF.
+
+### Debugging on the cartridge (rp2350, over SWD)
+
+**Debug → Debug on Cartridge (RP2350, SWD)** runs a VPy project on the RP2350 cartridge itself and debugs it there with the editor's breakpoints, the stepping keys (F10, F11, Shift+F11), Continue/Pause, the call stack and hover values — the same debugger as on the emulator. **Stop Debugging on Cartridge** (or Stop) ends the session and leaves the game running.
+
+It needs a Raspberry Pi Debug Probe (or any CMSIS-DAP probe) on the cartridge's SWD header, `probe-rs` installed (`cargo install probe-rs-tools`), and the cartridge firmware with the SWD launch mailbox (`vectrex-arcade-private/hardware/debug_cart/firmware`, `bios.rs` `SWD_LAUNCH`), flashed once.
+
+What it does:
+
+1. Builds the project as **Build for SD** does: a RAM image with the `VPy2` header (`build/<name>_sd.bin`) and its ELF.
+2. Resets the cartridge to its menu, attaches a `probe-rs dap-server` to **core 1 only** — the core that runs the program — and writes the image to the PSRAM where the firmware loads games from the card (`0x11000000`).
+3. Writes the launch mailbox in SCRATCH_X (`0x20080004`: magic `0x53574C4E`, size, answer); the menu's next frame launches the game exactly as from the SD card (without a romset or samples, which are found by the card's game index).
+
+Core 0 drives the Vectrex bus and keeps redrawing the last picture, so a paused game stays on screen and the beam never stops on one spot. Breakpoints are BKPT instructions written into the game's code (and the original put back): the core has a handful of hardware ones, and a step needs one at every statement of the function it is in. A step takes about a second (each stop reads the registers and the RAM the editor shows through the probe at 1 MHz SWD). Every BKPT is removed when the session ends, and the game keeps running.
+
+The debugger reads the stack, the VPy runtime RAM (`0x2007F000`) and up to 64 KB of the program's data at each stop; a value outside them shows nothing. Not supported yet: C projects, games that need their romset or samples from the card, core 0, RTT output.
 
 ### Debug controls
 

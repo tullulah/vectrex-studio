@@ -16,6 +16,7 @@ import { getMCPServer } from './mcp/server.js';
 import type { MCPRequest } from './mcp/types.js';
 import { startMcpTcpServer } from './mcp/tcpServer.js';
 import { startGdbServer, setGdbWindow } from './gdb/server.js';
+import { registerHwDebug } from './hwdebug/session.js';
 // How to launch the stdio MCP server against this IDE instance (used to wire Claude Code).
 import { getMcpLaunchSpec } from './mcp/auth.js';
 export { getMcpLaunchSpec, getMcpPort, getMcpToken } from './mcp/auth.js';
@@ -1547,9 +1548,13 @@ export async function executeExternalBuild(args: {
    * compilar VARIAS versiones (un nucleo / dos, PIO / SIO, otro refresco) y compararlas
    * en la CONSOLA, que es donde se decide. */
   uvm2Flags?: string;
+  /** rp2350 "SWD debug" mode: build for the debugger (-Og: the locals stay where the
+   *  debugger can see and change them). Reaches the SDK's cartridge recipe as
+   *  UVM2_DEBUG_CFLAGS, which comes after the project's own -O. */
+  debugBuild?: boolean;
 }): Promise<{ ok: true; artifactPath: string } | { error: string; detail?: string }> {
   const win = mainWindow ?? null;
-  const { manifestPath, deploy = false, sdPath = '', target, preview = false, uvm2Flags = '' } = args || ({} as any);
+  const { manifestPath, deploy = false, sdPath = '', target, preview = false, uvm2Flags = '', debugBuild = false } = args || ({} as any);
 
   let manifest: ExternalProjectManifest;
   let rootDir: string;
@@ -1588,6 +1593,7 @@ export async function executeExternalBuild(args: {
   if (manifest.toolchain?.path) {
     env.PATH = `${manifest.toolchain.path}${require('path').delimiter}${env.PATH || ''}`;
   }
+  if (debugBuild) env.UVM2_DEBUG_CFLAGS = '-Og';
 
   // Pick the build recipe for the selected hardware target. Default = the
   // [build] table (pitrex, back-compat); a [targets.<target>] table overrides
@@ -1923,11 +1929,11 @@ export async function executeSimBuild(args: {
 }
 
 // Exported function for direct invocation (e.g. from MCP server)
-export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; uvm2Flags?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string }) {
+export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; uvm2Flags?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string; debugBuild?: boolean }) {
   // CRITICAL: Log received args to debug compiler selection
   console.log('[RUN] executeCompilation received args:', JSON.stringify({ ...args, saveIfDirty: args?.saveIfDirty ? '...' : undefined }));
   
-  const { path, saveIfDirty, autoStart, outputPath, target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '', uvm2Flags = '', rp2350FlashMethod = 'none', rp2350FirmwareDir = '', rp2350Ram = false, rp2350SdPath = '' } = args || {} as any;
+  const { path, saveIfDirty, autoStart, outputPath, target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '', uvm2Flags = '', rp2350FlashMethod = 'none', rp2350FirmwareDir = '', rp2350Ram = false, rp2350SdPath = '', debugBuild = false } = args || {} as any;
   
   // Surface pitrex SD flags to the output panel so they're always visible
   if (target === 'pitrex') {
@@ -2140,6 +2146,8 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
      * Sin esto, cuatro builds con nombres distintos salian con el MISMO md5 — comprobado
      * sobre los .um2 de la tarjeta el 2026-08-25. */
     const envHijo: NodeJS.ProcessEnv = { ...process.env };
+    // rp2350 "SWD debug" mode: a C-backend program built for the debugger (vpy_cli build_rp2350_c)
+    if (debugBuild) envHijo.UVM2_DEBUG_CFLAGS = '-Og';
     // The project's pinned SDK (downloaded if missing), for the targets that use it.
     if (isProjectMode && (target === 'uvm2' || target === 'pitrex')) {
       const sdk = await resolveProjectSdk(targetPath, logSdk, sendSdkProgress, { pico: target === 'uvm2' });
@@ -2537,8 +2545,19 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
 
         // Flash the RP2350 debug cartridge if requested (rp2350 target)
         if (target === 'rp2350' && rp2350FlashMethod !== 'none') {
-          const sPath = binPath.replace(/\.[^.]+$/, '.s');
-          await flashRp2350(sPath, rp2350FirmwareDir, rp2350FlashMethod, mainWindow ?? null);
+          // A RAM image (the 'VPy2' header with its entry in PSRAM or SRAM: a C-backend
+          // program, `[rp2350] backend = "c"`) has no .s to embed in the firmware; an old .s
+          // beside it would be flashed instead. It runs from the SD card, or Debug on Cartridge.
+          const entry = buf.length >= 8 && buf.readUInt32LE(0) === 0x32795056 ? buf.readUInt32LE(4) : 0;
+          const ramImage = (entry >= 0x11000000 && entry < 0x11800000) || (entry >= 0x20000000 && entry < 0x20080000);
+          if (ramImage) {
+            mainWindow?.webContents.send('run://stderr',
+              `[RP2350] ${basename(binPath)} is a RAM image for the SD card (C backend), not a program to ` +
+              `embed in the firmware: not flashed. Copy it to the card, or use Debug on Cartridge.\n`);
+          } else {
+            const sPath = binPath.replace(/\.[^.]+$/, '.s');
+            await flashRp2350(sPath, rp2350FirmwareDir, rp2350FlashMethod, mainWindow ?? null);
+          }
         }
 
         resolvePromise({ 
@@ -4866,6 +4885,7 @@ app.whenReady().then(() => {
   // Register AI proxy handlers
   registerAIProxyHandlers();
   registerTerminalHandlers(() => mainWindow);
+  registerHwDebug(() => mainWindow);
   if (verbose) console.log('[IDE] AI Proxy registered');
   
   createWindow();

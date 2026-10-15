@@ -147,6 +147,21 @@ export const SettingsPanel: React.FC = () => {
                   />
                   <span>{t('settings.target.rp2350.mode.sd', 'SD card (RAM-linked, for the launcher)')}</span>
                 </label>
+                <label className="settings-checkbox">
+                  <input
+                    type="radio"
+                    name="rp2350BuildMode"
+                    value="swd"
+                    checked={rp2350BuildMode === 'swd'}
+                    onChange={() => setRp2350BuildMode('swd')}
+                  />
+                  <span>{t('settings.target.rp2350.mode.swd', 'SWD debug (upload to the cartridge, run and debug there)')}</span>
+                </label>
+                {rp2350BuildMode === 'swd' && (
+                  <span className="rp2350-flash-label" style={{ fontWeight: 400, opacity: 0.8 }}>
+                    {t('settings.target.rp2350.mode.swdHint', 'Build and Build & Run upload the game over SWD to the cartridge (probe-rs and a debug probe on its SWD header) and start it from the menu; the editor\'s breakpoints stop it on the console.')}
+                  </span>
+                )}
 
                 {rp2350BuildMode === 'flash' && (
                   <>
