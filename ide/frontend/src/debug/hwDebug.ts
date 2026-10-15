@@ -506,7 +506,7 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
   /** Counts the stops: a background read belongs to the stop it was started at. */
   private stopGen = 0;
 
-  private async fetchRange(lo: number, hi: number, gen = this.stopGen): Promise<void> {
+  private async fetchRange(lo: number, hi: number, gen = this.stopGen, chunk = 4096): Promise<void> {
     const win = [SRAM, PSRAM].find(([a, b]) => lo < b && hi > a);
     if (!win) return;
     lo = Math.max(lo, win[0]); hi = Math.min(hi, win[1]);
@@ -514,7 +514,7 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
     for (let a = lo; a < hi;) {
       if (this.pages.has(a / PAGE)) { a += PAGE; continue; }
       let end = a;
-      while (end < hi && !this.pages.has(end / PAGE) && end - a < 4096) end += PAGE;
+      while (end < hi && !this.pages.has(end / PAGE) && end - a < chunk) end += PAGE;
       const bytes = await this.readMem(a, end - a);
       if (gen !== this.stopGen || this.running) return;   // it ran on meanwhile: stale
       for (let p = a; p < end; p += PAGE) this.pages.set(p / PAGE, bytes.slice(p - a, p - a + PAGE));
@@ -553,7 +553,8 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
     try {
       for (const [lo, hi] of ranges) {
         if (gen !== this.stopGen || this.running || this.closed) return;
-        await this.fetchRange(lo, hi, gen);
+        // 1 KB at a time: a step asked for meanwhile waits for one of these at most (~60 ms)
+        await this.fetchRange(lo, hi, gen, 1024);
       }
     } catch { /* the probe went away, or the program ran on: nothing to show */ }
   }
@@ -573,8 +574,8 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
     void this.write32(PAUSE_FLAG, PAUSE_MAGIC).catch(() => {});
     const pc = this.regs[15] >>> 0;
     for (const fn of this.listeners) fn(reason, pc);
-    // (prefetchData is off for now: the program's data is not read at a stop, so hover shows
-    // only what is on the stack. Turn it back on once a stop is fast without it.)
+    // the program's data, behind the stop: hovers then need no read of their own
+    void this.prefetchData();
   }
 
   /** Leave the game running, every BKPT out, and the probe free. */
