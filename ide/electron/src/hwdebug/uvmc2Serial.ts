@@ -211,7 +211,13 @@ async function connect(tries: number): Promise<{ link: Link; ver: string } | { e
       try {
         link = Link.open(path);
         await link.write('v\n');
-        const ver = await link.line(2000);
+        // what was in the port before (a game's text: a line cut in two) is not the answer
+        const end = Date.now() + 2000;
+        let ver: string | null = null;
+        while (Date.now() < end) {
+          ver = await link.line(end - Date.now());
+          if (ver === null || ver.startsWith('UVMC2-')) break;
+        }
         if (ver?.startsWith('UVMC2-')) return { link, ver };
         last = `${path} answered ${ver ?? 'nothing'}`;
       } catch (e: any) {
