@@ -635,7 +635,7 @@ The tables of this section are the doc lines of `vpy_cli builtins` (and so of th
 | `SET_TEXT_SIZE(n)` | Text size for later `PRINT_TEXT` calls (ARM only; on m6809 it currently fails to assemble) |
 | `MSG_DEF(id, x, y, "text")` | Declare message `id` in a ROM table (emits no code) |
 | `PRINT_MSG(id)` | Print the message declared with `MSG_DEF` for `id` (runtime lookup). On m6809 the program must also call `PRINT_TEXT` somewhere, or the text helper is not linked |
-| `DEBUG_PRINT(value)` | Debug output to console (editor only) |
+| `DEBUG_PRINT(value)` | Debug output: the emulator's debug panel; on the rp2350 cartridge (C backend), the IDE's build output as `[rtt]` lines while it is debugged over SWD |
 | `DEBUG_PRINT_LABELED("label", value)` | Debug output with label |
 | `DEBUG_PRINT_STR("text")` | Debug string output |
 

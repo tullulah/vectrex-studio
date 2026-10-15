@@ -266,7 +266,9 @@ What it does:
 
 Core 0 drives the Vectrex bus and keeps redrawing the last picture, so a paused game stays on screen and the beam never stops on one spot. Breakpoints are BKPT instructions written into the game's code (and the original put back): the core has a handful of hardware ones, and a step needs one at every statement of the function it is in. A step takes about a second (each stop reads the registers and the RAM the editor shows through the probe at 1 MHz SWD). Every BKPT is removed when the session ends, and the game keeps running.
 
-The debugger reads the stack, the VPy runtime RAM (`0x2007F000`) and up to 64 KB of the program's data at each stop; a value outside them shows nothing. Not supported yet: C projects, games that need their romset or samples from the card, core 0, RTT output.
+The debugger reads the stack, the VPy runtime RAM (`0x2007F000`) and up to 64 KB of the program's data at each stop; a value outside them shows nothing. **Text from the game (RTT).** `vpy_log("x %d\n", x)` and `DEBUG_PRINT_LABELED` in a C game (and `DEBUG_PRINT…` in a VPy program built as C) write to an RTT ring the SDK puts in every cartridge image (`_SEGGER_RTT`, sdk_rp2350.c); the IDE reads it every 200 ms while the session lasts and shows each line in the build output as `[rtt] …`. Writing never waits: with no debugger reading, the text is dropped and the game runs the same.
+
+**Change Value** works on globals and on locals in memory; a local the compiler keeps in a register can be changed on the emulators but not on the cartridge (probe-rs cannot set a core register). Not supported yet: games that need their romset or samples from the card, core 0.
 
 ### Debug controls
 

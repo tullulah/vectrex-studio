@@ -26,6 +26,7 @@ import { useDebugStore } from '../state/debugStore';
 import { useProjectStore } from '../state/projectStore';
 import { armCallStack, armStep, setHardwareArmSystem, stepStops, type ArmRunControl, type ArmSystem } from './armSourceDebug';
 import type { ArmStopReason } from '../emulator/cpu/armDebug';
+import { symbolAddresses } from './dwarfLines';
 
 /** The firmware's launch mailbox (bios.rs): magic, size, answer. */
 const SWD_LAUNCH = 0x20080004;
@@ -124,6 +125,44 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
     const secs = elfSections(elf);
     this.code = secs.filter((s) => s.bytes && !s.writable);
     this.data = secs.filter((s) => s.writable);
+    this.rttAddr = symbolAddresses(elf).get('_SEGGER_RTT') ?? null;
+  }
+
+  // ── RTT: the game's text (sdk_rp2350.c, vpy_log / DEBUG_PRINT) ─────────────────────────
+  //
+  // Read here and not by probe-rs: its DAP server looks for the control block once, when it
+  // attaches -- before the game is in the PSRAM -- and gives up. The ring is polled while the
+  // session lasts: up[0] (at +24) is { name, buf, size, wr, rd, flags }; what is between rd
+  // and wr is new, and rd is moved on so the game has the room again.
+
+  private readonly rttAddr: number | null;
+  private rttTimer: ReturnType<typeof setInterval> | null = null;
+  private rttBusy = false;
+  private rttLine = '';
+
+  private startRtt(): void {
+    if (this.rttAddr === null || this.rttTimer) return;
+    this.rttTimer = setInterval(() => {
+      if (this.rttBusy || this.closed || this.stepping) return;
+      this.rttBusy = true;
+      void this.serial(() => this.pollRtt()).finally(() => { this.rttBusy = false; });
+    }, 200);
+  }
+
+  private async pollRtt(): Promise<void> {
+    const at = this.rttAddr! + 24;
+    const d = await this.readMem(at, 20);
+    const w = (o: number) => (d[o] | (d[o + 1] << 8) | (d[o + 2] << 16) | (d[o + 3] << 24)) >>> 0;
+    const buf = w(4), size = w(8), wr = w(12), rd = w(16);
+    if (!size || size > 65536 || wr >= size || rd >= size || wr === rd) return;
+    const parts = wr > rd ? [[rd, wr - rd]] : [[rd, size - rd], [0, wr]];
+    let text = '';
+    for (const [o, n] of parts) if (n) text += new TextDecoder().decode(await this.readMem(buf + o, n));
+    await this.write32(at + 16, wr);
+    this.rttLine += text;
+    const lines = this.rttLine.split('\n');
+    this.rttLine = lines.pop() ?? '';
+    for (const l of lines) window.dispatchEvent(new CustomEvent('hwdebug:status', { detail: { text: l.replace(/\r$/, ''), rtt: true } }));
   }
 
   // ── ArmSystem ────────────────────────────────────────────────────────────────────────
@@ -336,6 +375,7 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
     this.launched = true;
     // breakpoints set while the image was going up
     await this.applyPatches(new Set(this.ideBreakpoints));
+    this.startRtt();
   }
 
   /** Make the cartridge's BKPTs exactly `want` (within the game's code), in as few writes as it takes. */
@@ -545,6 +585,7 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
       console.warn('[hwDebug] could not take the breakpoints out:', e);
     }
     this.closed = true;
+    if (this.rttTimer) clearInterval(this.rttTimer);
     for (const u of this.unsubs) u();
     await api()?.end();
   }

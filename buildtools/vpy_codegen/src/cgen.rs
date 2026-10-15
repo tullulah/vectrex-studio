@@ -416,6 +416,29 @@ impl<'a> Gen<'a> {
                 let k = &u[10..];
                 format!("((int32_t)vpy_j1_button({k}))")
             }
+            // Text for the IDE's debugger: RTT on the rp2350 cartridge, nothing elsewhere
+            // (sdk_rp2350.c, vpy_log)
+            "DEBUG_PRINT" => {
+                if !want(self, 1) {
+                    return "0".into();
+                }
+                let v = arg(self, 0);
+                format!("(vpy_debug_print((int32_t)({v})), 0)")
+            }
+            "DEBUG_PRINT_LABELED" => {
+                if !want(self, 2) {
+                    return "0".into();
+                }
+                let (l, v) = (arg(self, 0), arg(self, 1));
+                format!("(vpy_debug_print_labeled((const char *)(intptr_t)({l}), (int32_t)({v})), 0)")
+            }
+            "DEBUG_PRINT_STR" => {
+                if !want(self, 1) {
+                    return "0".into();
+                }
+                let t = arg(self, 0);
+                format!("(vpy_debug_print_str((const char *)(intptr_t)({t})), 0)")
+            }
             "PRINT_TEXT" => {
                 if !want(self, 3) {
                     return "0".into();

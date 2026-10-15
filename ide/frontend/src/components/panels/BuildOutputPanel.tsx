@@ -43,8 +43,8 @@ export const BuildOutputPanel: React.FC = () => {
     w?.electronAPI?.onRunStatus?.((msg: string) => append(msg, 'info'));
     // on-cartridge debugging (debug/hwDebug.ts) reports its steps here
     const hw = (e: Event) => {
-      const d = (e as CustomEvent<{ text: string; error?: boolean }>).detail;
-      append(`[cartridge] ${d.text}`, d.error ? 'error' : 'info');
+      const d = (e as CustomEvent<{ text: string; error?: boolean; rtt?: boolean }>).detail;
+      append(d.rtt ? `[rtt] ${d.text}` : `[cartridge] ${d.text}`, d.error ? 'error' : d.rtt ? 'stdout' : 'info');
     };
     window.addEventListener('hwdebug:status', hw);
     return () => window.removeEventListener('hwdebug:status', hw);
