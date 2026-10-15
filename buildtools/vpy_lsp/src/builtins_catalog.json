@@ -266,7 +266,7 @@
       ]
     },
     {
-      "doc": "Debug output to console (editor only)",
+      "doc": "Debug output: the emulator's debug panel; on the rp2350 cartridge (C backend), the IDE's build output as [rtt] lines while it is debugged over SWD",
       "name": "DEBUG_PRINT",
       "signature": "DEBUG_PRINT(value)",
       "targets": [
