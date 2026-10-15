@@ -17,6 +17,7 @@ import type { MCPRequest } from './mcp/types.js';
 import { startMcpTcpServer } from './mcp/tcpServer.js';
 import { startGdbServer, setGdbWindow } from './gdb/server.js';
 import { registerHwDebug } from './hwdebug/session.js';
+import { registerUvmc2Serial } from './hwdebug/uvmc2Serial.js';
 // How to launch the stdio MCP server against this IDE instance (used to wire Claude Code).
 import { getMcpLaunchSpec } from './mcp/auth.js';
 export { getMcpLaunchSpec, getMcpPort, getMcpToken } from './mcp/auth.js';
@@ -303,6 +304,8 @@ async function createWindow() {
           { type: 'separator' },
           { label: 'Build (no run)', accelerator: 'F7', click: () => sendMenuCommand( 'build.build') },
           { label: 'Build simulator (no run)', accelerator: 'Shift+F7', click: () => sendMenuCommand( 'build.buildSim') },
+          { type: 'separator' },
+          { label: 'Upload to Cartridge (UVMC2, USB)', click: () => sendMenuCommand( 'build.uploadUvm2') },
           { type: 'separator' },
           { label: 'Clean', click: () => sendMenuCommand( 'build.clean') }
         ]
@@ -786,6 +789,8 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
         { type: 'separator' },
         { label: 'Build (no run)', accelerator: 'F7', click: () => sendMenuCommand( 'build.build') },
         { label: 'Build simulator (no run)', accelerator: 'Shift+F7', click: () => sendMenuCommand( 'build.buildSim') },
+        { type: 'separator' },
+        { label: 'Upload to Cartridge (UVMC2, USB)', click: () => sendMenuCommand( 'build.uploadUvm2') },
         { type: 'separator' },
         { label: 'Clean', click: () => sendMenuCommand( 'build.clean') }
       ]
@@ -4886,6 +4891,7 @@ app.whenReady().then(() => {
   registerAIProxyHandlers();
   registerTerminalHandlers(() => mainWindow);
   registerHwDebug(() => mainWindow);
+  registerUvmc2Serial();
   if (verbose) console.log('[IDE] AI Proxy registered');
   
   createWindow();

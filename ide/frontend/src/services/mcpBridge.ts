@@ -96,6 +96,15 @@ export function registerBuildRunner(fn: BuildRunner): () => void {
   return () => { if (buildRunner === fn) buildRunner = null; };
 }
 
+// ── Cartridge upload (registered by main.tsx: Build > Upload to Cartridge, UVMC2) ──
+type CartridgeUploader = () => Promise<{ ok: boolean; message: string; log: string[] }>;
+let cartridgeUploader: CartridgeUploader | null = null;
+
+export function registerCartridgeUploader(fn: CartridgeUploader): () => void {
+  cartridgeUploader = fn;
+  return () => { if (cartridgeUploader === fn) cartridgeUploader = null; };
+}
+
 // ── Build output capture (run://stdout, run://stderr, run://status) ──────────
 // Kept in a bounded buffer with a sequence number so runBuild can return exactly the
 // output of ITS build. Registered once, at module load.
@@ -475,6 +484,12 @@ const api: Record<string, Fn> = {
    * key runs), then waits for the Emulator panel to load/start what it produced, and
    * returns the outcome, the emulator state and the build output of THIS build.
    */
+  /** Build > Upload to Cartridge (UVMC2), awaited: the build, the upload, its progress lines. */
+  cartridgeUpload: async () => {
+    if (!cartridgeUploader) throw new Error('The IDE window is not ready yet (no cartridge uploader registered); try again in a moment');
+    return cartridgeUploader();
+  },
+
   runBuild: async ({ mode }: { mode: BuildMode }) => {
     if (!['build', 'run', 'simulate', 'build_simulator'].includes(mode)) {
       throw new Error(`Unknown mode "${mode}" (expected build, run, simulate or build_simulator)`);

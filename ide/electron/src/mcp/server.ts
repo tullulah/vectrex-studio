@@ -448,6 +448,12 @@ export class MCPServer {
       },
     });
 
+    this.registerTool('cartridge/upload', this.cartridgeUpload.bind(this), {
+      name: 'cartridge/upload',
+      description: 'Build > Upload to Cartridge on the UVMC2 multicart (target uvm2), and WAIT for it: builds the open project with the USB debug monitor, uploads the .um2 (and MONITOR.BIN) to the cartridge\'s SD card over USB, then resets the cartridge to its menu, where the game is picked by hand. Needs the real cartridge on USB, either running a game built with the monitor or sitting in the multicart menu (then it goes through BOOTSEL and a RAM-only SD bridge; picotool must be installed). Returns ok, a message and the progress lines.',
+      inputSchema: noParams,
+    });
+
     // Compiler tools
     this.registerTool('compiler/build', this.compilerBuild.bind(this), {
       name: 'compiler/build',
@@ -1183,6 +1189,18 @@ export class MCPServer {
   }
 
   /** ide/run: F7 / F5 / Shift+F5 / Shift+F7 through the renderer's own handleBuild, awaited. */
+  private async cartridgeUpload(): Promise<any> {
+    if (this.buildInFlight) throw new Error('A build started through MCP is already running');
+    this.buildInFlight = true;
+    try {
+      const r = await this.bridge<{ ok: boolean; message: string; log: string[] }>('cartridgeUpload');
+      if (!r.ok) throw new Error([r.message, ...(r.log.length ? ['--- progress ---', ...r.log] : [])].join('\n'));
+      return r;
+    } finally {
+      this.buildInFlight = false;
+    }
+  }
+
   private async ideRun(params: any, nested = false): Promise<any> {
     // No mode: what a model should start on the selected target (instructions rule 4) —
     // the simulator on the ARM targets, whose emulators run the real code and are slow.

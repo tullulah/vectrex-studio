@@ -183,6 +183,19 @@ Click **Run** (or press **F5** when stopped) to:
 | **Compiler Output** | Raw stdout/stderr stream from the compiler process |
 | **Errors** | Diagnostics list — click any entry to jump to the source location |
 
+### Upload to the UVMC2 cartridge (USB)
+
+**Build → Upload to Cartridge (UVMC2, USB)** (target UVM2; MCP tool `cartridge_upload`) builds the project with the USB debug monitor in it, puts the `.um2` on the cartridge's SD card over USB, with `MONITOR.BIN` beside it, and checks each file's CRC-32. No card reader is needed. Then press **RESET** on the console for the multicart's menu and pick the game there; the cartridge cannot reset the console's 6809 itself.
+
+It works with the cartridge in either of two states, plugged into the computer by USB:
+
+| Cartridge | How the IDE reaches the card |
+|-----------|------------------------------|
+| Running a game built with the monitor (`UVM2_USB_MONITOR=1`, which this command sets) | The monitor (`MONITOR.BIN`, loaded off the card into the PSRAM) answers on USB while the game runs. |
+| In the multicart's menu | The menu's firmware is sent to the chip's BOOTSEL mode with `picotool`, and the SD bridge (a RAM-only program; the flash is not touched) is loaded and run. The console shows the upload's progress, then DONE; RESET goes back to the menu. |
+
+It needs `picotool` (macOS: `brew install picotool`) and runs on macOS and Linux, not yet on Windows. Both programs come with the IDE (`ide/electron/resources/uvmc2/`); their sources are in uvmc2-sdk (`uvm2-sdk/monitor`, `uvm2-sdk/sdbridge`). A game built with the monitor costs about 2 KB of SRAM.
+
 ### Compiler
 
 The IDE compiles with `vpy_cli`, the buildtools compiler bundled in `ide/electron/resources/`. It handles single-bank and multibank ROMs and generates `.pdb` debug symbols for source-level debugging. The hardware target is chosen in [Settings](#8-settings). See [COMPILER_STATUS.md](COMPILER_STATUS.md) for the command-line interface.
@@ -504,7 +517,7 @@ The tool list is served by the IDE itself, so it always matches what the IDE imp
 
 | Group | Tools |
 |-------|-------|
-| **IDE** | `ide_get_context` (open project, kind, SDK, selected target, buildable targets, what each key would do, emulator, Arm toolchain, IDE version; with a project open also its `assets` with the code that uses each one, and `api`: the language's calls on the selected target plus how-to recipes), `ide_run` (= F7 / F5 / Shift+F5 / Shift+F7, awaited, with the result), `settings_set_build_target` |
+| **IDE** | `ide_get_context` (open project, kind, SDK, selected target, buildable targets, what each key would do, emulator, Arm toolchain, IDE version; with a project open also its `assets` with the code that uses each one, and `api`: the language's calls on the selected target plus how-to recipes), `ide_run` (= F7 / F5 / Shift+F5 / Shift+F7, awaited, with the result), `settings_set_build_target`, `cartridge_upload` (= Build → Upload to Cartridge, UVMC2) |
 | **Reference** | `api_reference` (the full API of the open project's language, generated from the real sources: VPy from the compiler's builtin catalog with per-target availability, C from the headers of the project's pinned SDK version) |
 | **Editor** | List/read open documents, write files into the project, line-range edits, save, diagnostics |
 | **Compiler** | Build the project (VPy: m6809; C: like F7), build and run, last build errors |

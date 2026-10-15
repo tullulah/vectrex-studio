@@ -63,6 +63,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 // On-cartridge debugging (electron/src/hwdebug/session.ts): a probe-rs DAP session on the
 // RP2350 cartridge's core 1, driven by frontend/src/debug/hwDebug.ts.
+// The UVMC2's USB upload (hwdebug/uvmc2Serial.ts): the .um2 onto the cartridge's card, progress lines
+contextBridge.exposeInMainWorld('uvmc2', {
+  upload: async (um2Path: string, onProgress: (line: string) => void) => {
+    const h = (_e: any, line: string) => onProgress(line);
+    ipcRenderer.on('uvmc2:progress', h);
+    try {
+      return await ipcRenderer.invoke('uvmc2:upload', um2Path) as { ok: boolean; message: string };
+    } finally {
+      ipcRenderer.removeListener('uvmc2:progress', h);
+    }
+  },
+});
+
 contextBridge.exposeInMainWorld('hwDebug', {
   start: (args: { elfPath: string }) => ipcRenderer.invoke('hwdebug:start', args) as Promise<{ ok: true } | { error: string }>,
   request: (command: string, args?: unknown) => ipcRenderer.invoke('hwdebug:request', command, args ?? {}) as Promise<any>,

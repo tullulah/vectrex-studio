@@ -2639,6 +2639,11 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
             if let Some(pd) = vpyproj_uvm2_defs(input) {
                 defs.push(';'); defs.push_str(&pd);
             }
+            // The USB debug monitor (uvm2_monitor.c in the SDK): the IDE's "Upload to
+            // Cartridge" builds with it, so the game it uploads answers on USB too.
+            if std::env::var("UVM2_USB_MONITOR").map(|v| v == "1").unwrap_or(false) {
+                defs.push_str(";UVM2_USB_MONITOR");
+            }
             // Escotilla para experimentos que no merecen una bandera propia,
             // como UVM2_PSRAM_PROBE. Separados por ';', que es lo que come cmake.
             if let Ok(extra) = std::env::var("UVM2_EXTRA_DEFS") {

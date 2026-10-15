@@ -35,7 +35,7 @@ import { openShellTerminal, openClaudeTerminal } from './components/panels/Termi
 import { useTerminalStore, focusTerminal } from './services/terminalSessions.js';
 // Installs window.__mcpBridge__ — the renderer hooks the MCP tools call from main.
 import './services/mcpBridge.js';
-import { registerBuildRunner } from './services/mcpBridge.js';
+import { registerBuildRunner, registerCartridgeUploader } from './services/mcpBridge.js';
 import { installArmGdbTarget } from './debug/armGdbTarget';
 installArmGdbTarget(); // gdb's way into the ARM emulator (ide/electron/src/gdb/)
 import { installArmSourceDebug } from './debug/armSourceDebug';
@@ -432,7 +432,7 @@ function App() {
   // Función para manejar build y run
   // Returns what happened (BuildOutcome) for callers that need it — the MCP bridge's
   // runBuild. The keys and menu items ignore the value; behaviour does not depend on it.
-  const handleBuild = useCallback(async (autoRun: boolean = false, opts?: { forSd?: boolean; sim?: boolean; debug?: boolean }): Promise<BuildOutcome> => {
+  const handleBuild = useCallback(async (autoRun: boolean = false, opts?: { forSd?: boolean; sim?: boolean; debug?: boolean; usbMonitor?: boolean }): Promise<BuildOutcome> => {
     // "Build for SD": produce a RAM-linked rp2350 game for the cart's SD launcher.
     // Triggered either explicitly (Build menu item) or by selecting the rp2350
     // "SD card" build mode in Settings so a normal Build/Run makes the SD binary.
@@ -441,6 +441,10 @@ function App() {
     const forSd = !!opts?.forSd || (buildTarget === 'rp2350' && (rp2350BuildMode === 'sd' || rp2350BuildMode === 'swd'));
     // Built to be debugged on the cartridge: -Og, so the locals are there to see and change
     const debugBuild = !!opts?.debug || (buildTarget === 'rp2350' && rp2350BuildMode === 'swd');
+    // "Upload to Cartridge" (UVMC2): the game carries the USB monitor, and goes over USB, not
+    // onto a card in the computer
+    const uvm2Flags = uvm2MakeFlags({ uvm2DualCore, uvm2PioStream, uvm2Hz, uvm2ExtraFlags }) + (opts?.usbMonitor ? ' UVM2_USB_MONITOR=1' : '');
+    const uvm2Deploy = uvm2CopyToSD && !opts?.usbMonitor;
     // CRITICAL: Prevent parallel compilations - return early if already compiling
     if (isCompilingRef.current) {
       logger.debug('Build', 'Build already in progress, skipping duplicate request');
@@ -596,8 +600,8 @@ function App() {
             logger.info('Build', `Building UVM2 image: ${projName}`);
             const ur = await electronAPI.runBuildExternal({
               manifestPath, target: 'uvm2', preview: true,
-              deploy: uvm2CopyToSD, sdPath: uvm2SdPath,
-              uvm2Flags: uvm2MakeFlags({ uvm2DualCore, uvm2PioStream, uvm2Hz, uvm2ExtraFlags }),
+              deploy: uvm2Deploy, sdPath: uvm2SdPath,
+              uvm2Flags,
             });
             if (ur?.error) logger.error('Build', 'UVM2 build failed:', ur.error, ur.detail || '');
             else logger.info('Build', 'UVM2 image ready:', ur?.artifactPath || '');
@@ -740,9 +744,9 @@ function App() {
         target: forSd ? 'rp2350' : buildTarget, // SD games are always rp2350
         pitrexCopyToSD,
         pitrexSdPath,
-        uvm2CopyToSD,
+        uvm2CopyToSD: uvm2Deploy,
         uvm2SdPath,
-        uvm2Flags: uvm2MakeFlags({ uvm2DualCore, uvm2PioStream, uvm2Hz, uvm2ExtraFlags }),
+        uvm2Flags,
         rp2350FlashMethod: forSd ? 'none' : rp2350FlashMethod,
         rp2350FirmwareDir,
         rp2350Ram: forSd,
@@ -877,6 +881,28 @@ function App() {
     await runOnCartridge(out.artifact);
     return { ...out, launch: 'none', notes: [...(out.notes ?? []), 'SWD debug: uploaded to the cartridge and launched there.'] };
   }, [handleBuild, buildTarget, rp2350BuildMode]);
+
+  /**
+   * Build with the USB monitor and upload the .um2 to the UVMC2's card (electron
+   * hwdebug/uvmc2Serial.ts):
+   * through the monitor of a game running there, or through the SD bridge from the multicart's
+   * menu; then the cartridge is reset to its menu. Build > Upload to Cartridge, and the MCP's
+   * cartridge_upload, which also gets the progress lines.
+   */
+  const uploadUvm2 = useCallback(async (): Promise<{ ok: boolean; message: string; log: string[] }> => {
+    const log: string[] = [];
+    const say = (t: string, err = false) => { log.push(t); hwSay(t, err); };
+    if (buildTarget !== 'uvm2') return { ok: false, message: 'Upload to Cartridge (UVMC2): set the build target to UVM2 first (Settings).', log };
+    const out = await handleBuild(false, { usbMonitor: true });
+    if (!out.ok || !out.artifact) return { ok: false, message: `build failed: ${out.detail ?? out.error ?? 'unknown'}`, log };
+    const um2 = out.artifact.endsWith('.um2') ? out.artifact : out.artifact.replace(/\.bin$/i, '.um2');
+    const api = (window as any).uvmc2;
+    if (!api?.upload) return { ok: false, message: 'this IDE build cannot upload to the UVMC2', log };
+    const res = await api.upload(um2, (t: string) => say(t));
+    return { ...res, log };
+  }, [buildTarget, handleBuild]);
+
+  useEffect(() => registerCartridgeUploader(uploadUvm2), [uploadUvm2]);
 
   const commandExec = useCallback(async (id: string, payload?: any) => {
     const apiFiles: any = (window as any).files;
@@ -1090,6 +1116,10 @@ def loop():
         const out = await handleBuild(false, { forSd: true, debug: true });
         if (!out.ok || !out.artifact) { hwSay(`build failed: ${out.detail ?? out.error ?? 'unknown'}`, true); break; }
         await runOnCartridge(out.artifact);
+        break; }
+      case 'build.uploadUvm2': {
+        const res = await uploadUvm2();
+        hwSay(res.message, !res.ok);
         break; }
       case 'debug.cartridgeStop':
         await stopCartridgeDebug();
@@ -1723,7 +1753,7 @@ def loop():
         logger.warn('App', 'unknown command:', id);
       }
     }
-  }, [documents, openDocument, activeBinName, openVpyProject, closeVpyProject, handleBuild, buildMaybeOnCartridge]);
+  }, [documents, openDocument, activeBinName, openVpyProject, closeVpyProject, handleBuild, buildMaybeOnCartridge, uploadUvm2]);
 
   // Keyboard shortcuts mapping (similar to VS conventions)
   useEffect(() => {
@@ -1965,6 +1995,7 @@ def loop():
             <MenuItem label={`${t('build.buildSim', 'Build simulator (no run)')}	Shift+F7`} onClick={()=>{ commandExec('build.buildSim'); setOpenMenu(null); }} />
             <MenuSeparator />
             <MenuItem label={t('build.buildForSd', 'Build for SD (RP2350)')} onClick={()=>{ commandExec('build.sd'); setOpenMenu(null); }} />
+            <MenuItem label={t('build.uploadUvm2', 'Upload to Cartridge (UVMC2, USB)')} disabled={buildTarget !== 'uvm2'} onClick={()=>{ commandExec('build.uploadUvm2'); setOpenMenu(null); }} />
             <MenuItem label={t('build.clean', 'Clean')} onClick={()=>{ commandExec('build.clean'); setOpenMenu(null); }} />
             <MenuSeparator />
             <MenuItem label={`${t('build.targetBinary', 'Target Binary')}: ${activeBinName}`} disabled />

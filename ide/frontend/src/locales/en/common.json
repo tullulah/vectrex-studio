@@ -77,6 +77,7 @@
   "build.build": "Build",
   "build.buildAndRun": "Build && Run (Simulate)",
   "build.buildForSd": "Build for SD (RP2350)",
+  "build.uploadUvm2": "Upload to Cartridge (UVMC2, USB)",
   "build.clean": "Clean",
   "settings.target.rp2350.mode.title": "Build mode:",
   "settings.target.rp2350.mode.flash": "Flash to cart (XIP)",
