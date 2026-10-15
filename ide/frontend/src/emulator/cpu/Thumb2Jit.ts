@@ -136,6 +136,9 @@ export class Thumb2Jit {
   invalidations = 0;
   /** Emit only exec calls (no inline forms): the reference the inline forms are checked by. */
   inline = true;
+  /** Set when the page forbids `new Function` (a CSP without 'unsafe-eval'): everything
+   *  then runs on the interpreter, as without a translator. */
+  disabled = false;
 
   private readonly mem: Uint8Array;
   private readonly base: number;
@@ -161,7 +164,16 @@ export class Thumb2Jit {
     const tab = this.blocks[core];
     const b = tab[o >>> 1];
     if (b !== undefined) return b;
-    const built = this.translate(core, pc);
+    if (this.disabled) return null;
+    let built: JitBlock | null;
+    try {
+      built = this.translate(core, pc);
+    } catch (e) {
+      if (!(e instanceof EvalError)) throw e;
+      console.warn('[Thumb2Jit] new Function is not allowed here (CSP): running on the interpreter', e);
+      this.disabled = true;
+      return null;
+    }
     tab[o >>> 1] = built;
     return built;
   }
