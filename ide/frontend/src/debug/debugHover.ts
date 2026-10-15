@@ -143,10 +143,11 @@ function armValue(v: ArmVariable): string {
 
 // ---- m6809 ----
 
-function m6809Value(t: HoverTarget): string | null {
+/** The .pdb variable the hover target names: its key, its entry, and the array length
+ *  label; a string when it is a local of a function not running. */
+function m6809Var(t: HoverTarget): { key: string; v: any; labels: Record<string, number> } | string | null {
   const pdb: any = useDebugStore.getState().pdbData;
-  const vecx = (window as any).vecx;
-  if (!pdb?.variables || !vecx?.read8) return null;
+  if (!pdb?.variables) return null;
   const vars = new Map<string, any>();
   for (const [k, v] of Object.entries(pdb.variables)) vars.set(k.toLowerCase(), v);
   const labels: Record<string, number> = pdb.labels || {};
@@ -175,7 +176,15 @@ function m6809Value(t: HoverTarget): string | null {
     const stack = useDebugStore.getState().callStack || [];
     if (stack.length && !stack.some((f) => f.function.toLowerCase() === name)) return 'not running (its frame may hold another function\'s values)';
   }
-  const v = vars.get(key);
+  return { key, v: vars.get(key), labels };
+}
+
+function m6809Value(t: HoverTarget): string | null {
+  const vecx = (window as any).vecx;
+  if (!vecx?.read8) return null;
+  const found = m6809Var(t);
+  if (found === null || typeof found === 'string') return found;
+  const { key, v, labels } = found;
   const addr = parseInt(String(v.address), 16);
   const read8 = (a: number) => vecx.read8(a & 0xffff) & 0xff;
   if (v.type === 'array') {
@@ -292,8 +301,23 @@ export function cDebugValue(text: string, filePath: string, line: number, word: 
 // ---- changing a value ----
 
 /** A variable whose value the debugger can set: one integer, in memory (`addr`) or in a
- *  register of the paused function (`reg`). */
-export interface Lvalue { label: string; addr: number; reg?: number; size: number; signed: boolean; current: string }
+ *  register of the paused function (`reg`); the 6809's are big-endian, in JSVecX. */
+export interface Lvalue { label: string; addr: number; reg?: number; size: number; signed: boolean; current: string; m6809?: boolean }
+
+/** A 6809 variable of the .pdb, to change: a scalar (u8/i8 or a 16-bit word). */
+function m6809Lvalue(t: HoverTarget): Lvalue | string | null {
+  const vecx = (window as any).vecx;
+  if (!vecx?.read8 || !vecx?.write8) return 'no 6809 program in the emulator';
+  const found = m6809Var(t);
+  if (found === null || typeof found === 'string') return found;
+  const { v } = found;
+  const label = t.qualifier ? `${t.qualifier}.${t.word}` : t.word;
+  if (v.type === 'array') return `${label} is an array: change one of its values (not supported yet)`;
+  const addr = parseInt(String(v.address), 16);
+  const size = v.size === 1 ? 1 : 2;
+  const read8 = (a: number) => vecx.read8(a & 0xffff) & 0xff;
+  return { label, addr, size, signed: size === 2, current: intText(readInt(read8, addr, size, true) ?? 0, size, size === 2), m6809: true };
+}
 
 /** The editable place of a variable (an int or a pointer in memory), or why it is not one. */
 function lvalueOf(label: string, v: ArmVariable | null, member?: { type: CType; offset: number }): Lvalue | string | null {
@@ -320,7 +344,7 @@ function lvalueOf(label: string, v: ArmVariable | null, member?: { type: CType; 
 /** The variable under the mouse in a .vpy file, to change (ARM targets). */
 export function vpyLvalue(t: HoverTarget): Lvalue | string | null {
   if (useDebugStore.getState().state !== 'paused') return 'the program is not paused';
-  if (!armProgramActive()) return 'changing a value works on the ARM targets (rp2350, uvm2) for now';
+  if (!armProgramActive()) return m6809Lvalue(t);
   if (t.fieldOf) return `${t.fieldOf}[…].${t.word} is a list: change one element (not supported yet)`;
   const entry = entryModule().toUpperCase();
   const mod = t.module.toUpperCase();
@@ -398,6 +422,12 @@ export async function setValue(lv: Lvalue, text: string): Promise<void> {
   const v = parseValue(text)!;
   const bytes = new Uint8Array(lv.size);
   let u = v < 0 ? 2 ** (lv.size * 8) + v : v;
+  if (lv.m6809) {   // big-endian, straight into JSVecX's memory
+    const vecx = (window as any).vecx;
+    let w = v < 0 ? 2 ** (lv.size * 8) + v : v;
+    for (let i = lv.size - 1; i >= 0; i--) { vecx.write8((lv.addr + i) & 0xffff, w % 256); w = Math.floor(w / 256); }
+    return;
+  }
   if (lv.reg !== undefined) {
     // a register holds the whole word: a narrow type is sign- or zero-extended in it
     const word = lv.signed ? v | 0 : (v < 0 ? 2 ** (lv.size * 8) + v : v);
