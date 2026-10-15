@@ -28,6 +28,11 @@ version = "v1.3.2"
 ```
 
 - All example projects in `examples/` are pinned to `v1.3.2`.
+- **UVMC2 over USB needs `v1.4.0` or later**: Build → Upload to Cartridge and Debug →
+  Debug on Cartridge build the game with the SDK's debug monitor, which older versions do
+  not have (the upload still works from the multicart's menu, through the SD bridge, but the
+  game then has no monitor to debug). The console's reset button (one press: the game
+  again, two: the menu) is also `v1.4.0`. See [IDE_GUIDE.md](IDE_GUIDE.md).
 - New projects (`project:create`, VPy or C — templates in `ide/electron/src/projectTemplates.ts`) and C imports are created pinned to the latest tag.
 - A project with no `[sdk] version` is pinned to the latest tag the first time the IDE
   resolves its SDK (offline: the newest installed release). The IDE writes the pin into
@@ -39,9 +44,10 @@ version = "v1.3.2"
 ## Where releases come from
 
 Releases are the tags of the GitHub repository
-[`tullulah/uvmc2-sdk`](https://github.com/tullulah/uvmc2-sdk) (`v1.1` … `v1.3.2`). They
-mirror the tags of the uvmc2-starter-kit, whose `sdk` submodule pins the same commits,
-so a given tag is the same SDK in both places.
+[`tullulah/uvmc2-sdk`](https://github.com/tullulah/uvmc2-sdk) (`v1.1` … `v1.4.0`); what each
+one changes is in the SDK's `CHANGELOG.md` and the tag messages. The uvmc2-starter-kit pins
+the SDK as its `sdk` submodule, and a kit release carries the tag of the SDK it pins
+(`v1.4.0`; the kit has no `v1.3.2` … `v1.3.4`).
 
 The IDE downloads the tag tarball
 (`https://codeload.github.com/tullulah/uvmc2-sdk/tar.gz/refs/tags/<tag>`) and extracts
