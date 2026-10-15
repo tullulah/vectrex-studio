@@ -32,6 +32,7 @@ import { Psg }     from '../hardware/Psg.js';
 import { Canvas }  from '../hardware/Canvas.js';
 import { Thumb2 }  from '../cpu/Thumb2.js';
 import { ArmDebug } from '../cpu/armDebug.js';
+import { Thumb2Jit } from '../cpu/Thumb2Jit.js';
 import { extractElf32Symbols, loadElf32ByPaddr } from '../util/Elf32Symbols.js';
 
 /** Beam vector list → the IDE's Segment shape (same mapping the other systems use). */
@@ -127,6 +128,12 @@ const BOOTRAM_SIZE_ = 0x1000;
 const BOOTLOCK_OFF  = 0x800;
 const BOOTLOCK_N    = 16;
 const SRAM_SIZE = 0x00082000;
+/** pasoCore1 ran a translated block, which moved core 1's clock itself. */
+const JIT_BLOQUE = -1;
+/** The cycles a core must be able to run before the other's turn for a block to be worth
+ *  calling: the two clocks usually advance together, one instruction each, and a block
+ *  that stops after one instruction costs more than a step. */
+const JIT_MARGEN = 12;
 /* LA PSRAM DEL UVM2, 8 MB por la ventana XIP de CS1 (0x11000000) y por su alias sin cache
  * (0x15000000). Sin ella, cualquier imagen que la use falla EN SILENCIO: dkong con el romset
  * en PSRAM arrancaba con dk_rom_error=1 y pintaba la X de "falta el romset", y una tarde de
@@ -488,6 +495,14 @@ export class Uvm2System implements ISystem, IBus {
   private muestra1 = 0;
   /** One byte per halfword of SRAM: set where some pc trap is (marcarTrampas). */
   private marcas = new Uint8Array(SRAM_SIZE >>> 1);
+  private marcasAntes = new Uint8Array(SRAM_SIZE >>> 1);
+  /* THE BLOCK TRANSLATOR (cpu/Thumb2Jit.ts): SRAM code run as translated blocks instead of
+   * one step() per instruction. A block reads and writes relojCore0/1, muestra1, jitIo
+   * (set by any peripheral access) and jitSpent; see the notes there. Off with
+   * globalThis.__NO_JIT (to compare against the interpreter). */
+  private jit: Thumb2Jit | null = null;
+  private jitIo = false;
+  private jitSpent = 0;
   /* CORE 1 POLLING (sondeoCore1): the core doing the reading, the last polling read (its
    * instruction, step, cycle, core-1 store count and registers), the change of the
    * registers over one turn, and the cycles to add to core 1's clock. */
@@ -1128,6 +1143,9 @@ export class Uvm2System implements ISystem, IBus {
     if (this.cargaEnPsram) this.cpu.setFetchRegion(this.psram, PSRAM_BASE);
     else                   this.cpu.setFetchRegion(this.sram, SRAM_BASE);
     this.cpu.setDataRegion(this.sram, SRAM_BASE);   // SRAM reads and writes have no side effects
+    this.jit = (globalThis as any).__NO_JIT ? null
+      : new Thumb2Jit(this.sram, SRAM_BASE, 2, (a) => { const o = (a - SRAM_BASE) >>> 0; return o >= SRAM_SIZE || this.marcas[o >>> 1] === 1; });
+    this.cpu.setCodeWatch(this.jit ? this.jit.watch : null, this.jit ? (o, l) => this.jit!.onWrite(o, l) : null);
 
     // The firmware loads MSP and the entry point from the image's own vector
     // table — word 0 and word 1 — exactly as a Cortex-M reset would.
@@ -1215,6 +1233,16 @@ export class Uvm2System implements ISystem, IBus {
       }
     }
     this.enCore1 = true;
+    if (this.jit !== null && this.relojCore0 - this.relojCore1 >= JIT_MARGEN && (pc1 & 1) === 0 && (this.cpu1 as any).itState === 0) {
+      const blk = this.jit.block(1, pc1);
+      if (blk !== null) {
+        // runs while core 1 stays the one behind and the frame goes on (see runFrame)
+        this.jitIo = false;
+        blk((this.cpu1 as any).regs, this.cpu1, this, this, Math.min(this.relojCore0, this.relojFinFrame));
+        this.enCore1 = false;
+        return JIT_BLOQUE;
+      }
+    }
     const c = this.cpu1.step(this);
     this.enCore1 = false;
     return c;
@@ -1412,6 +1440,7 @@ export class Uvm2System implements ISystem, IBus {
     this.cpu1.reset();
     this.cpu1.setFetchRegion(this.sram, SRAM_BASE);
     this.cpu1.setDataRegion(this.sram, SRAM_BASE);
+    this.cpu1.setCodeWatch(this.jit ? this.jit.watch : null, this.jit ? (o, l) => this.jit!.onWrite(o, l) : null);
     this.cpu1FetchEnSram = true;
     this.cpu1.setReg(13, sp >>> 0);
     this.cpu1.setReg(15, (entry >>> 0) & ~1);
@@ -1695,6 +1724,7 @@ export class Uvm2System implements ISystem, IBus {
     if (addr < BOOTROM_SIZE) return this.bootrom[addr];
     if (this.flash && addr >= FLASH_BASE && addr < FLASH_BASE + FLASH_SIZE) return this.flash[addr - FLASH_BASE];
     this.sincronizaBus();   // a peripheral: it sees the bus as it is now (see relojFinFrame)
+    this.jitIo = true;      // and a translated block hands back to the step loop
     if (addr >= QMI_BASE && addr < QMI_BASE + 0x10) return (this.qmiLeer(addr & 0xC) >>> ((addr & 3) * 8)) & 0xFF;
 
     // SCB->VTOR, TAMBIÉN EN LECTURA.
@@ -1885,10 +1915,12 @@ export class Uvm2System implements ISystem, IBus {
     if (this.enCore1) this.escriturasCore1++;
     if (addr >= SRAM_BASE && addr < SRAM_BASE + SRAM_SIZE) {
       this.sram[addr - SRAM_BASE] = data;
+      if (this.jit !== null && this.jit.watch[(addr - SRAM_BASE) >>> 8]) this.jit.onWrite(addr - SRAM_BASE, 1);
       return;
     }
     { const po = psramOff(addr); if (po >= 0) { this.psram[po] = data; return; } }
     this.sincronizaBus();   // a peripheral (see relojFinFrame)
+    this.jitIo = true;
 
     {
       const sh = (addr & 3) * 8, bits = data << sh, mask = 0xFF << sh;
@@ -2104,6 +2136,12 @@ export class Uvm2System implements ISystem, IBus {
                      this.volcarEn, ROM_LOOKUP]) marca(a);
     for (const a of this.volcarLista) marca(a);
     if (!this.flash) m.fill(1, 0, (VECTORES_FIN - SRAM_BASE) >>> 1);   // the vector table: a lost pc
+    // translated blocks stop before every trap: other traps, other blocks
+    if (this.jit !== null) {
+      let igual = true;
+      for (let i = 0; i < m.length; i++) if (m[i] !== this.marcasAntes[i]) { igual = false; break; }
+      if (!igual) { this.jit.flush(); this.marcasAntes.set(m); }
+    }
   }
 
   runFrame(): Segment[] {
@@ -2139,9 +2177,9 @@ export class Uvm2System implements ISystem, IBus {
        * que reloj esta mas atrasado y se le da un paso. El bus va detras del minimo. */
       if (this.cpu1 && this.relojCore1 < this.relojCore0) {
         const c1 = this.pasoCore1();
-        this.relojCore1 += c1 > 0 ? c1 : 1;
+        if (c1 === JIT_BLOQUE) spent += this.jitSpent;   // the block moved the clock itself
+        else { this.relojCore1 += c1 > 0 ? c1 : 1; spent += c1; }
         if (this.saltoCore1) { this.relojCore1 += this.saltoCore1; this.saltoCore1 = 0; }
-        spent += c1;
         continue;
       }
       const pc = this.cpu.getReg(15) >>> 0;
@@ -2221,6 +2259,18 @@ export class Uvm2System implements ISystem, IBus {
       }
       let c: number;
       try {
+        /* A translated block: the same instructions without this loop around each, while
+         * core 0 stays the one the scheduler picks (c0 <= c1) and the frame goes on. Not
+         * while debugging (every instruction is checked) nor inside an IT block. */
+        const blk = this.jit !== null && !depurando && (pc & 1) === 0 && (this.cpu as any).itState === 0
+          && (!this.cpu1 || this.relojCore1 - this.relojCore0 >= JIT_MARGEN) ? this.jit.block(0, pc) : null;
+        if (blk !== null) {
+          this.jitIo = false;
+          blk((this.cpu as any).regs, this.cpu, this, this,
+              this.cpu1 ? Math.min(this.relojCore1 + 1, this.relojFinFrame) : this.relojFinFrame);
+          spent += this.jitSpent;
+          continue;
+        }
         c = this.cpu.step(this);
       } catch (e) {
         console.error(`[Uvm2System] CPU fault at 0x${pc.toString(16)}:`, e);

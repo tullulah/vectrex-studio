@@ -95,6 +95,15 @@ export class Thumb2 implements ICpu {
     this._dataBase = base >>> 0;
   }
 
+  /** Pages of the data region holding translated code (Thumb2Jit), one byte per 256: a
+   *  store through the fast path into one tells `onWrite` (offset, length). */
+  private _codeWatch: Uint8Array | null = null;
+  private _onCodeWrite: ((o: number, len: number) => void) | null = null;
+  setCodeWatch(watch: Uint8Array | null, onWrite: ((o: number, len: number) => void) | null): void {
+    this._codeWatch = watch;
+    this._onCodeWrite = onWrite;
+  }
+
   /**
    * Set by exec of a WFI instruction; cleared by the outer run-loop at the
    * start of each frame.  The Rp2350System uses this as the frame-sync gate.
@@ -562,7 +571,12 @@ export class Thumb2 implements ICpu {
     const m = this._dataMem;
     if (m !== null) {
       const o = (addr - this._dataBase) >>> 0;
-      if (o < m.length - 1) { m[o] = val; m[o + 1] = val >>> 8; this.escrituras++; return; }
+      if (o < m.length - 1) {
+        m[o] = val; m[o + 1] = val >>> 8; this.escrituras++;
+        const w = this._codeWatch;
+        if (w !== null && (w[o >>> 8] | w[(o + 1) >>> 8])) this._onCodeWrite!(o, 2);
+        return;
+      }
     }
     bus.write8(addr,     val & 0xff);
     bus.write8(addr + 1, (val >>> 8) & 0xff);
@@ -572,7 +586,12 @@ export class Thumb2 implements ICpu {
     const m = this._dataMem;
     if (m !== null) {
       const o = (addr - this._dataBase) >>> 0;
-      if (o < m.length - 3) { m[o] = val; m[o + 1] = val >>> 8; m[o + 2] = val >>> 16; m[o + 3] = val >>> 24; this.escrituras++; return; }
+      if (o < m.length - 3) {
+        m[o] = val; m[o + 1] = val >>> 8; m[o + 2] = val >>> 16; m[o + 3] = val >>> 24; this.escrituras++;
+        const w = this._codeWatch;
+        if (w !== null && (w[o >>> 8] | w[(o + 3) >>> 8])) this._onCodeWrite!(o, 4);
+        return;
+      }
     }
     const v = u32(val);
     bus.write8(addr,     v & 0xff);
