@@ -505,6 +505,19 @@ export class Thumb2 implements ICpu {
     }
   }
 
+  /** The carry-out of an immediate shift (DecodeImmShift + Shift_C): 0/1, or -1 when the
+   *  carry is left as it is (LSL #0). What a flag-setting LOGICAL instruction with a
+   *  shifted register (ANDS, ORRS, EORS, BICS, MOVS, MVNS, TST, TEQ) puts in C. */
+  private shiftImmCarry(val: number, type: number, amt: number): number {
+    const v = val >>> 0;
+    switch (type) {
+      case 0:  return amt === 0 ? -1 : (v >>> (32 - amt)) & 1;
+      case 1:  return amt === 0 ? v >>> 31 : (v >>> (amt - 1)) & 1;
+      case 2:  return amt === 0 ? v >>> 31 : (v >>> (amt - 1)) & 1;
+      default: return amt === 0 ? v & 1 : (v >>> (amt - 1)) & 1;   // RRX / ROR
+    }
+  }
+
   private ror(val: number, amount: number, updateC: boolean): number {
     const v = u32(val);
     amount &= 31;
@@ -782,12 +795,17 @@ export class Thumb2 implements ICpu {
       const rm   = (hw >>> 3) & 0x7;
       const rd   = hw & 0x7;
       let result: number;
+      // Inside an IT block a 16-bit shift sets NO flags, the carry included (it is LSLS/LSRS/
+      // ASRS outside one, LSL<c>/LSR<c>/ASR<c> inside): nzIt guarded N and Z but C was set
+      // anyway, and a following conditional instruction tested the wrong carry (found
+      // against Unicorn in vectrex_draw's ramp_params_chain_qn: `it hi; lsrhi r3, r0, #3`).
+      const c = !this.inItBlock();
       if (shiftType === 0) {
-        result = this.lsl(this.regs[rm], imm5 === 0 ? 0 : imm5, imm5 !== 0);
+        result = this.lsl(this.regs[rm], imm5 === 0 ? 0 : imm5, c && imm5 !== 0);
       } else if (shiftType === 1) {
-        result = this.lsr(this.regs[rm], imm5 === 0 ? 32 : imm5, true);
+        result = this.lsr(this.regs[rm], imm5 === 0 ? 32 : imm5, c);
       } else {
-        result = this.asr(this.regs[rm], imm5 === 0 ? 32 : imm5, true);
+        result = this.asr(this.regs[rm], imm5 === 0 ? 32 : imm5, c);
       }
       this.regs[rd] = result;
       this.nzIt(result);
@@ -859,21 +877,21 @@ export class Thumb2 implements ICpu {
       }
       case 0x2: {  // LSL reg
         const shift = b & 0xff;
-        const r = this.lsl(a, shift, true);
+        const r = this.lsl(a, shift, !this.inItBlock());   // no flags inside IT (see the shifts above)
         this.regs[rdn] = r;
         this.nzIt(r);
         break;
       }
       case 0x3: {  // LSR reg
         const shift = b & 0xff;
-        const r = this.lsr(a, shift === 0 ? 0 : shift, shift !== 0);
+        const r = this.lsr(a, shift === 0 ? 0 : shift, shift !== 0 && !this.inItBlock());
         this.regs[rdn] = r;
         this.nzIt(r);
         break;
       }
       case 0x4: {  // ASR reg
         const shift = b & 0xff;
-        const r = this.asr(a, shift, shift !== 0);
+        const r = this.asr(a, shift, shift !== 0 && !this.inItBlock());
         this.regs[rdn] = r;
         this.nzIt(r);
         break;
@@ -904,7 +922,7 @@ export class Thumb2 implements ICpu {
       }
       case 0x7: {  // ROR
         const shift = b & 0xff;
-        const r = this.ror(a, shift, shift !== 0);
+        const r = this.ror(a, shift, shift !== 0 && !this.inItBlock());
         this.regs[rdn] = r;
         this.nzIt(r);
         break;
@@ -2465,36 +2483,39 @@ export class Thumb2 implements ICpu {
     const imm3 = (hw1 >>> 12) & 0x7;
     const imm8 = hw1 & 0xff;
     const imm  = decodeThumb2Imm((i << 11) | (imm3 << 8) | imm8);
+    /* ThumbExpandImm_C: a ROTATED immediate (imm12[11:10] != 0) gives the logical ops with S
+     * their carry, bit 31 of the constant; the plain/replicated forms leave C alone. */
+    const immC = () => { if (((i << 1) | (imm3 >>> 2)) !== 0) this.setC((imm >>> 31) === 1); };
 
     switch (op) {
       case 0x0: {  // AND{S} Rd,Rn,#imm  /  TST Rn,#imm (Rd=1111,S=1)
         const r = u32(this.regs[rn] & imm);
         if (rd !== 0xf) this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (s) { this.setNZ(r); immC(); }
         break;
       }
       case 0x1: {  // BIC{S} Rd,Rn,#imm
         const r = u32(this.regs[rn] & ~imm);
         this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (s) { this.setNZ(r); immC(); }
         break;
       }
       case 0x2: {  // ORR{S} Rd,Rn,#imm  /  MOV{S} Rd,#imm (Rn=1111)
         const r = rn === 0xf ? imm : u32(this.regs[rn] | imm);
         this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (s) { this.setNZ(r); immC(); }
         break;
       }
       case 0x3: {  // ORN{S} Rd,Rn,#imm  /  MVN{S} Rd,#imm (Rn=1111)
         const r = rn === 0xf ? u32(~imm) : u32(this.regs[rn] | ~imm);
         this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (s) { this.setNZ(r); immC(); }
         break;
       }
       case 0x4: {  // EOR{S} Rd,Rn,#imm  /  TEQ Rn,#imm (Rd=1111,S=1)
         const r = u32(this.regs[rn] ^ imm);
         if (rd !== 0xf) this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (s) { this.setNZ(r); immC(); }
         break;
       }
       case 0x8: {  // ADD{S} Rd,Rn,#imm  /  CMN Rn,#imm (Rd=1111,S=1)
@@ -2565,26 +2586,33 @@ export class Thumb2 implements ICpu {
     /* OJO: no vale `if (shiftAmt > 0)`. Un inmediato a 0 no quiere decir "sin
      * desplazamiento" salvo en LSL — ver `shiftImm`. */
     const rmVal = this.shiftImm(this.regs[rm], shiftType, shiftAmt);
+    /* A LOGICAL op with S sets C from the shifter (LSRS.W Rd, Rm, #n is MOVS with a shift).
+     * Only N and Z were set: C kept a stale carry (found against Unicorn in vpy3d's text,
+     * `lsrs.w r3, r1, #1` with r1 = 4 left C = 1, and the glyphs came out 2.5x wide). */
+    const shC = s ? this.shiftImmCarry(this.regs[rm], shiftType, shiftAmt) : -1;   // before Rd is written
+    const logicalC = () => { if (shC >= 0) this.setC(shC === 1); };
 
     switch (op) {
       case 0x0: {  // AND{S}  /  TST Rn,Rm{,shift} (Rd=15,S=1 → discard result)
         const r = u32(this.regs[rn] & rmVal);
         if (rd !== 15) this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (s) { this.setNZ(r); logicalC(); }
         break;
       }
       case 0x1: {  // BIC{S}
         const r = u32(this.regs[rn] & ~rmVal);
         this.regs[rd] = r;
-        if (s) this.setNZ(r);
+        if (s) { this.setNZ(r); logicalC(); }
         break;
       }
       case 0x2: {  // ORR{S} or MOV (Rn=1111)
         if (rn === 0xf) {
           // MOV{S} Rd, Rm (possibly shifted)
+          if (s) logicalC();   // before the write: Rd may be Rm
           this.regs[rd] = rmVal;
           if (s) this.setNZ(rmVal);
         } else {
+          if (s) logicalC();
           const r = u32(this.regs[rn] | rmVal);
           this.regs[rd] = r;
           if (s) this.setNZ(r);
@@ -2592,6 +2620,7 @@ export class Thumb2 implements ICpu {
         break;
       }
       case 0x3: {  // ORN{S} or MVN (Rn=1111)
+        if (s) logicalC();
         if (rn === 0xf) {
           const r = u32(~rmVal);
           this.regs[rd] = r;
@@ -2604,6 +2633,7 @@ export class Thumb2 implements ICpu {
         break;
       }
       case 0x4: {  // EOR{S}  /  TEQ Rn,Rm{,shift} (Rd=15,S=1 → discard result)
+        if (s) logicalC();
         const r = u32(this.regs[rn] ^ rmVal);
         if (rd !== 15) this.regs[rd] = r;
         if (s) this.setNZ(r);
