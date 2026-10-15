@@ -185,14 +185,14 @@ Click **Run** (or press **F5** when stopped) to:
 
 ### Upload to the UVMC2 cartridge (USB)
 
-**Build → Upload to Cartridge (UVMC2, USB)** (target UVM2; MCP tool `cartridge_upload`) builds the project with the USB debug monitor in it, puts the `.um2` on the cartridge's SD card over USB, with `MONITOR.BIN` beside it, and checks each file's CRC-32. No card reader is needed. Then press **RESET** on the console for the multicart's menu and pick the game there; the cartridge cannot reset the console's 6809 itself.
+**Build → Upload to Cartridge (UVMC2, USB)** (target UVM2; MCP tool `cartridge_upload`) builds the project with the USB debug monitor in it, puts the `.um2` on the cartridge's SD card over USB, with `MONITOR.BIN` beside it, and checks each file's CRC-32, then **starts the game**: the chip goes to its BOOTSEL mode and the game's ELF (the image the `.um2` is made from) is loaded into SRAM and run, the way the multicart would run it off the card. No card reader is needed; a whole upload takes about 5–7 seconds. The game also stays on the card, in the multicart's menu.
 
 It works with the cartridge in either of two states, plugged into the computer by USB:
 
 | Cartridge | How the IDE reaches the card |
 |-----------|------------------------------|
 | Running a game built with the monitor (`UVM2_USB_MONITOR=1`, which this command sets) | The monitor (`MONITOR.BIN`, loaded off the card into the PSRAM) answers on USB while the game runs. |
-| In the multicart's menu | The menu's firmware is sent to the chip's BOOTSEL mode with `picotool`, and the SD bridge (a RAM-only program; the flash is not touched) is loaded and run. The console shows the upload's progress, then DONE; RESET goes back to the menu. |
+| In the multicart's menu | The menu's firmware is sent to the chip's BOOTSEL mode with `picotool`, and the SD bridge (a RAM-only program; the flash is not touched) is loaded and run. The console shows the upload's progress. |
 
 It needs `picotool` (macOS: `brew install picotool`) and runs on macOS and Linux, not yet on Windows. Both programs come with the IDE (`ide/electron/resources/uvmc2/`); their sources are in uvmc2-sdk (`uvm2-sdk/monitor`, `uvm2-sdk/sdbridge`). A game built with the monitor costs about 2 KB of SRAM.
 

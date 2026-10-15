@@ -11,6 +11,8 @@
  * Their protocol is text lines, answers ending in CR LF:
  *   v                  -> "UVMC2-MON <n>" / "UVMC2-BRIDGE <n>"
  *   u <size> <path>    -> "OK", then <size> raw bytes, then "DONE <size> <crc32 hex>"
+ *   x                  -> "OK", then the chip goes to BOOTSEL; the game's ELF is loaded into SRAM
+ *                         and run (picotool load -x): the upload ends with the game running
  *   b                  -> "OK"; the monitor resets the chip into the multicart's firmware, the
  *                         bridge shows DONE and does that when the console's RESET is pressed
  * The `u` line ends in LF alone: an older monitor took the LF after a CR for the file's first
@@ -24,7 +26,7 @@
 import { app, ipcMain } from 'electron';
 import { spawn, spawnSync } from 'child_process';
 import { closeSync, constants, existsSync, openSync, readFileSync, readSync, readdirSync, writeSync } from 'fs';
-import { basename, join } from 'path';
+import { basename, dirname, join } from 'path';
 
 const VID = 0x2e8a;
 const PID = 0x10db;
@@ -176,6 +178,16 @@ class Link {
   }
 }
 
+/** The ELF the .um2 was made from: beside it (a VPy build: build/<name>_uvm2.elf), or in
+ *  the pico-sdk build under it (a C project: build_uvm2/pico/<name>.elf). */
+function gameElf(um2Path: string): string | null {
+  const dir = dirname(um2Path), stem = basename(um2Path).replace(/\.um2$/i, '');
+  for (const p of [join(dir, `${stem}.elf`), join(dir, 'pico', `${stem}.elf`), join(dir, 'uvm2', `${stem}.elf`)]) {
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
 /** CRC-32 (IEEE), as the monitor computes it over what it wrote to the card. */
 function crc32(data: Buffer): number {
   let crc = 0xffffffff;
@@ -229,9 +241,9 @@ async function sendFile(link: Link, name: string, data: Buffer, say: (t: string)
 
 /**
  * Put `um2Path` on the cartridge's SD card, and the debug monitor (MONITOR.BIN) with it so a
- * game built with the monitor finds the current one; then reset the cartridge to its menu,
- * where the game is picked. Through the monitor of a game running there or, with none, the SD
- * bridge started from the menu.
+ * game built with the monitor finds the current one; then run the game on the cartridge.
+ * Through the monitor of a game running there or, with none, the SD bridge started from the
+ * menu.
  */
 async function upload(um2Path: string, say: (t: string) => void): Promise<{ ok: boolean; message: string }> {
   if (process.platform === 'win32') return { ok: false, message: 'Upload to Cartridge (UVMC2) is not available on Windows yet' };
@@ -257,8 +269,25 @@ async function upload(um2Path: string, say: (t: string) => void): Promise<{ ok: 
       err = await sendFile(link, 'MONITOR.BIN', readFileSync(mon), say);
       if (err) return { ok: false, message: err };
     }
-    // The monitor resets the chip at once; the bridge says DONE on screen and waits for the
-    // button. Either way the 6809 needs the console's RESET (the cartridge cannot reset it).
+    // RUN IT: back to BOOTSEL (`x`), and the game's ELF into SRAM and started, as the bridge
+    // was (the same image the multicart would load off the card, so it runs the same).
+    const elf = gameElf(um2Path);
+    if (elf) {
+      await link.write('x\n');
+      if ((await link.line(2000)) === 'OK') {
+        link.close();
+        say(`starting ${basename(elf)} on the cartridge`);
+        for (let i = 0; i < 20; i++) {
+          await sleep(300);
+          const load = await picotool(['load', '-x', elf, '--vid', '0x2e8a', '--pid', '0x000f']);
+          if (load.code === 0) return { ok: true, message: `${name} is on the card and running on the cartridge.` };
+        }
+        return { ok: false, message: `${name} is on the card, but it could not be started (the cartridge is in BOOTSEL: power it off and on, or RESET for the menu)` };
+      }
+    }
+    // An older monitor has no `x`, or there is no ELF: the multicart's menu, by hand. The
+    // monitor resets the chip, the bridge shows DONE and waits for the button; either way the
+    // 6809 needs the console's RESET (the cartridge cannot reset it).
     await link.write('b\n');
     await link.line(2000);
     return { ok: true, message: `${name} is on the card. Press RESET on the console for the multicart's menu, then pick ${name}.` };
