@@ -42,7 +42,7 @@ const LONG_CALL_TIMEOUT_MS = 180000;
 // A build through ide/run can download the SDK / pico-sdk and run a full C toolchain.
 const BUILD_CALL_TIMEOUT_MS = 900000;
 const LONG_METHODS = new Set(['compiler/build', 'compiler/build_and_run', 'debugger/start', 'emulator/run', 'project/open', 'project/create', 'ide/get_context']);
-const BUILD_METHODS = new Set(['ide/run', 'compiler/build', 'compiler/build_and_run', 'cartridge/upload']);
+const BUILD_METHODS = new Set(['ide/run', 'compiler/build', 'compiler/build_and_run', 'cartridge/upload', 'cartridge/debug']);
 const INSTRUCTIONS_TIMEOUT_MS = 3000;
 
 // Used only when the IDE cannot be reached at initialize time. The real text is the IDE's

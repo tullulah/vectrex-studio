@@ -352,6 +352,7 @@
   "tabs.unpin": "Unpin",
   "tabs.confirmCloseUnsaved": "{{count}} file(s) with unsaved changes: {{names}}\n\nClose them anyway?",
   "debug.cartridge": "Debug on Cartridge (RP2350, SWD)",
+  "debug.cartridgeUvm2": "Debug on Cartridge (UVMC2, USB)",
   "debug.cartridgeStop": "Stop Debugging on Cartridge",
   "settings.target.rp2350.mode.swd": "SWD debug (upload to the cartridge, run and debug there)",
   "settings.target.rp2350.mode.swdHint": "Build and Build & Run upload the game over SWD to the cartridge (probe-rs and a debug probe on its SWD header) and start it from the menu; the editor's breakpoints stop it on the console.",

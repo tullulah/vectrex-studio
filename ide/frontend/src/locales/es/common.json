@@ -352,6 +352,7 @@
   "tabs.unpin": "Desfijar",
   "tabs.confirmCloseUnsaved": "{{count}} archivo(s) con cambios sin guardar: {{names}}\n\n¿Cerrarlos de todos modos?",
   "debug.cartridge": "Depurar en el cartucho (RP2350, SWD)",
+  "debug.cartridgeUvm2": "Depurar en el cartucho (UVMC2, USB)",
   "debug.cartridgeStop": "Parar la depuración en el cartucho",
   "settings.target.rp2350.mode.swd": "Depuración SWD (subir al cartucho, ejecutar y depurar allí)",
   "settings.target.rp2350.mode.swdHint": "Compilar y Compilar y ejecutar suben el juego por SWD al cartucho (probe-rs y una sonda en su conector SWD) y lo arrancan desde el menú; los breakpoints del editor lo paran en la consola.",

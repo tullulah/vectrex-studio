@@ -454,6 +454,17 @@ export class MCPServer {
       inputSchema: noParams,
     });
 
+    this.registerTool('cartridge/debug', this.cartridgeDebug.bind(this), {
+      name: 'cartridge/debug',
+      description: 'Debug > Debug on Cartridge on the UVMC2 (target uvm2), and WAIT until the session is attached: cartridge_upload, then the editor\'s debugger attaches to the game\'s USB debug monitor. The editor\'s breakpoints (debugger_add_breakpoint) then stop the game ON THE CONSOLE; emulator_get_state shows the debugger state and the current file/line; debugger_continue / debugger_step_* / debugger_pause drive it. Breakpoints work from the game\'s first frame on (not in code that runs before it). End with cartridge_debug_stop.',
+      inputSchema: noParams,
+    });
+    this.registerTool('cartridge/debug_stop', this.cartridgeDebugStop.bind(this), {
+      name: 'cartridge/debug_stop',
+      description: 'Debug > Stop Debugging on Cartridge: breakpoints out of the game, the game left running, the USB port released.',
+      inputSchema: noParams,
+    });
+
     // Compiler tools
     this.registerTool('compiler/build', this.compilerBuild.bind(this), {
       name: 'compiler/build',
@@ -1199,6 +1210,22 @@ export class MCPServer {
     } finally {
       this.buildInFlight = false;
     }
+  }
+
+  private async cartridgeDebug(): Promise<any> {
+    if (this.buildInFlight) throw new Error('A build started through MCP is already running');
+    this.buildInFlight = true;
+    try {
+      const r = await this.bridge<{ ok: boolean; message: string; log: string[] }>('cartridgeDebug');
+      if (!r.ok) throw new Error([r.message, ...(r.log.length ? ['--- progress ---', ...r.log] : [])].join('\n'));
+      return r;
+    } finally {
+      this.buildInFlight = false;
+    }
+  }
+
+  private async cartridgeDebugStop(): Promise<any> {
+    return this.bridge('cartridgeDebugStop');
   }
 
   private async ideRun(params: any, nested = false): Promise<any> {

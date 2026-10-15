@@ -35,11 +35,11 @@ import { openShellTerminal, openClaudeTerminal } from './components/panels/Termi
 import { useTerminalStore, focusTerminal } from './services/terminalSessions.js';
 // Installs window.__mcpBridge__ — the renderer hooks the MCP tools call from main.
 import './services/mcpBridge.js';
-import { registerBuildRunner, registerCartridgeUploader } from './services/mcpBridge.js';
+import { registerBuildRunner, registerCartridgeUploader, registerCartridgeDebugger } from './services/mcpBridge.js';
 import { installArmGdbTarget } from './debug/armGdbTarget';
 installArmGdbTarget(); // gdb's way into the ARM emulator (ide/electron/src/gdb/)
 import { installArmSourceDebug } from './debug/armSourceDebug';
-import { runOnCartridge, stopCartridgeDebug, cartridgeDebugActive, say as hwSay } from './debug/hwDebug';
+import { runOnCartridge, debugOnUvmc2, stopCartridgeDebug, cartridgeDebugActive, say as hwSay } from './debug/hwDebug';
 installArmSourceDebug(); // the editor's breakpoints and steps on rp2350/uvm2
 import type { BuildOutcome, BuildMode } from './services/buildOutcome.js';
 
@@ -599,7 +599,7 @@ function App() {
           if (buildTarget === 'uvm2') {
             logger.info('Build', `Building UVM2 image: ${projName}`);
             const ur = await electronAPI.runBuildExternal({
-              manifestPath, target: 'uvm2', preview: true,
+              manifestPath, target: 'uvm2', preview: !opts?.usbMonitor,   // to the cartridge: not the emulator
               deploy: uvm2Deploy, sdPath: uvm2SdPath,
               uvm2Flags,
             });
@@ -753,6 +753,7 @@ function App() {
         // SWD debug goes to the cartridge's memory, not to the card
         rp2350SdPath: rp2350BuildMode === 'swd' && !opts?.forSd ? '' : rp2350SdPath,
         debugBuild,
+        noPreview: !!opts?.usbMonitor,   // to the cartridge (Upload / Debug on Cartridge): not the emulator
       };
 
       // If building from project, include output path
@@ -889,20 +890,35 @@ function App() {
    * menu; then the cartridge is reset to its menu. Build > Upload to Cartridge, and the MCP's
    * cartridge_upload, which also gets the progress lines.
    */
-  const uploadUvm2 = useCallback(async (): Promise<{ ok: boolean; message: string; log: string[] }> => {
+  const uploadUvm2 = useCallback(async (opts?: { debug?: boolean }): Promise<{ ok: boolean; message: string; log: string[]; um2?: string }> => {
     const log: string[] = [];
     const say = (t: string, err = false) => { log.push(t); hwSay(t, err); };
     if (buildTarget !== 'uvm2') return { ok: false, message: 'Upload to Cartridge (UVMC2): set the build target to UVM2 first (Settings).', log };
-    const out = await handleBuild(false, { usbMonitor: true });
+    const out = await handleBuild(false, { usbMonitor: true, debug: !!opts?.debug });
     if (!out.ok || !out.artifact) return { ok: false, message: `build failed: ${out.detail ?? out.error ?? 'unknown'}`, log };
     const um2 = out.artifact.endsWith('.um2') ? out.artifact : out.artifact.replace(/\.bin$/i, '.um2');
     const api = (window as any).uvmc2;
     if (!api?.upload) return { ok: false, message: 'this IDE build cannot upload to the UVMC2', log };
+    await stopCartridgeDebug();   // the port is the upload's now
     const res = await api.upload(um2, (t: string) => say(t));
-    return { ...res, log };
+    return { ...res, log, um2 };
   }, [buildTarget, handleBuild]);
 
   useEffect(() => registerCartridgeUploader(uploadUvm2), [uploadUvm2]);
+
+  /** Debug on Cartridge, UVMC2: Upload to Cartridge, then the session on the game's monitor
+   *  (debug/hwDebug.ts). The menu command and the MCP's cartridge_debug. */
+  const debugUvm2 = useCallback(async (): Promise<{ ok: boolean; message: string; log: string[] }> => {
+    const up = await uploadUvm2({ debug: true });   // -Og: lines and locals as written
+    hwSay(up.message, !up.ok);
+    if (!up.ok || !up.um2) return up;
+    const err = await debugOnUvmc2(up.um2);
+    return err
+      ? { ok: false, message: err, log: up.log }
+      : { ok: true, message: 'debugging on the cartridge: the game runs, the editor\'s breakpoints stop it there', log: up.log };
+  }, [uploadUvm2]);
+
+  useEffect(() => registerCartridgeDebugger(debugUvm2), [debugUvm2]);
 
   const commandExec = useCallback(async (id: string, payload?: any) => {
     const apiFiles: any = (window as any).files;
@@ -1111,6 +1127,9 @@ def loop():
         }, 0);
         break;
       case 'debug.cartridge': {
+        // UVMC2: built with the monitor, uploaded and started (as Upload to Cartridge), then
+        // debugged through the monitor over USB (debug/hwDebug.ts, MonitorTransport)
+        if (buildTarget === 'uvm2') { await debugUvm2(); break; }
         // Debug on the RP2350 cartridge over SWD (debug/hwDebug.ts): the SD build, uploaded
         // to the cartridge's PSRAM and launched from its menu, debugged on core 1.
         const out = await handleBuild(false, { forSd: true, debug: true });
@@ -1753,7 +1772,7 @@ def loop():
         logger.warn('App', 'unknown command:', id);
       }
     }
-  }, [documents, openDocument, activeBinName, openVpyProject, closeVpyProject, handleBuild, buildMaybeOnCartridge, uploadUvm2]);
+  }, [documents, openDocument, activeBinName, openVpyProject, closeVpyProject, handleBuild, buildMaybeOnCartridge, uploadUvm2, debugUvm2, buildTarget]);
 
   // Keyboard shortcuts mapping (similar to VS conventions)
   useEffect(() => {
@@ -2008,7 +2027,7 @@ def loop():
               <MenuItem label={`${t('debug.start', 'Start Debugging')}	Ctrl+D`} onClick={()=>{ commandExec('debug.start'); setOpenMenu(null); }} />
               <MenuItem label={`${t('debug.stop', 'Stop Debugging')}	Shift+F5 (while paused)`} onClick={()=>{ commandExec('debug.stop'); setOpenMenu(null); }} />
               <MenuSeparator />
-              <MenuItem label={t('debug.cartridge', 'Debug on Cartridge (RP2350, SWD)')} onClick={()=>{ commandExec('debug.cartridge'); setOpenMenu(null); }} />
+              <MenuItem label={buildTarget === 'uvm2' ? t('debug.cartridgeUvm2', 'Debug on Cartridge (UVMC2, USB)') : t('debug.cartridge', 'Debug on Cartridge (RP2350, SWD)')} onClick={()=>{ commandExec('debug.cartridge'); setOpenMenu(null); }} />
               <MenuItem label={t('debug.cartridgeStop', 'Stop Debugging on Cartridge')} onClick={()=>{ commandExec('debug.cartridgeStop'); setOpenMenu(null); }} />
               <MenuSeparator />
               <MenuItem label={`${t('debug.stepOver', 'Step Over')}	F10`} onClick={()=>{ commandExec('debug.stepOver'); setOpenMenu(null); }} />

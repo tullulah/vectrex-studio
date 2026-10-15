@@ -125,7 +125,7 @@ function monitorPorts(): string[] {
 
 class Link {
   private buf = '';
-  private constructor(private fd: number) {}
+  private constructor(readonly fd: number) {}
 
   /** Opened non-blocking, then raw: no echo, no line editing, no CR/LF rewriting both ways
    *  (an upload is binary). The settings hold while the port stays open. */
@@ -163,7 +163,7 @@ class Link {
       if (nl >= 0) {
         const l = this.buf.slice(0, nl).trim();
         this.buf = this.buf.slice(nl + 1);
-        if (l) return l;
+        if (l && !l.startsWith('!')) return l;   // '!' lines are the monitor's events (debugger, text)
         continue;
       }
       if (Date.now() > end) return null;
@@ -298,12 +298,115 @@ async function upload(um2Path: string, say: (t: string) => void): Promise<{ ok: 
   }
 }
 
+// ── THE DEBUGGER'S CONNECTION (frontend/src/debug/hwDebug.ts, the monitor transport) ──────
+//
+// One port held open for the session. A pump reads it all the time: the monitor's events go to
+// the renderer as they come ("!S <why> <pc>" a stop, "!T <hex>" the game's DEBUG_PRINT text),
+// every other line answers the request in flight. Requests go one at a time.
+
+class DebugConn {
+  private buf = '';
+  private waiter: ((line: string | null) => void) | null = null;
+  private timer: ReturnType<typeof setInterval>;
+  private chain: Promise<unknown> = Promise.resolve();
+  closed = false;
+
+  constructor(private readonly link: Link, private readonly emit: (ch: string, payload: unknown) => void) {
+    const tmp = Buffer.alloc(4096);
+    this.timer = setInterval(() => {
+      if (this.closed) return;
+      for (;;) {
+        let n = 0;
+        try { n = readSync(this.link.fd, tmp, 0, tmp.length, null); } catch (e: any) {
+          if (e?.code === 'EAGAIN') break;
+          this.end('the cartridge went off USB');
+          return;
+        }
+        if (n <= 0) break;
+        this.buf += tmp.subarray(0, n).toString('latin1');
+      }
+      let nl: number;
+      while ((nl = this.buf.indexOf('\n')) >= 0) {
+        const l = this.buf.slice(0, nl).trim();
+        this.buf = this.buf.slice(nl + 1);
+        if (!l) continue;
+        if (l.startsWith('!S ')) {
+          const [, why, pc] = l.split(' ');
+          this.emit('uvmc2dbg:event', { reason: why, pc: parseInt(pc, 16) >>> 0 });
+        } else if (l.startsWith('!T ')) {
+          this.emit('uvmc2dbg:text', Buffer.from(l.slice(3), 'hex').toString('latin1'));
+        } else if (this.waiter) {
+          const w = this.waiter;
+          this.waiter = null;
+          w(l);
+        }
+      }
+    }, 2);
+  }
+
+  /** One command, its one-line answer (null: none within 3 s). */
+  request(line: string): Promise<string | null> {
+    const run = async () => {
+      if (this.closed) return null;
+      const answer = new Promise<string | null>((resolve) => { this.waiter = resolve; });
+      await this.link.write(line + '\n');
+      const t = setTimeout(() => { const w = this.waiter; this.waiter = null; w?.(null); }, 3000);
+      const r = await answer;
+      clearTimeout(t);
+      return r;
+    };
+    const p = this.chain.then(run, run);
+    this.chain = p.catch(() => {});
+    return p;
+  }
+
+  /** The session is over: the monitor takes every breakpoint out and lets the game run (D),
+   *  whoever ends it -- the IDE, a reload of its window, the IDE quitting. A BKPT left in the
+   *  game would hold it for good at the next one. */
+  end(why: string): void {
+    if (this.closed) return;
+    this.closed = true;
+    try { writeSync(this.link.fd, 'D\n'); } catch { /* the port is gone: so is the game */ }
+    clearInterval(this.timer);
+    this.waiter?.(null);
+    this.link.close();
+    this.emit('uvmc2dbg:ended', why);
+  }
+}
+
+let debugConn: DebugConn | null = null;
+
 let busy = false;
 
 export function registerUvmc2Serial(): void {
+  // The debugger: attach to the monitor of the game running on the cartridge (just started by
+  // an upload: its port can take a few seconds to appear).
+  ipcMain.handle('uvmc2dbg:start', async (e) => {
+    debugConn?.end('ended');
+    if (process.platform === 'win32') return { error: 'not available on Windows yet' };
+    const c = await connect(60);
+    if ('error' in c) return { error: `no game with the monitor answered on USB (${c.error})` };
+    if (!/^UVMC2-MON ([5-9]|\d\d)/.test(c.ver)) { c.link.close(); return { error: `the game's monitor is too old to debug (${c.ver}): upload it again` }; }
+    const send = (ch: string, payload: unknown) => { if (!e.sender.isDestroyed()) e.sender.send(ch, payload); };
+    const conn = new DebugConn(c.link, send);
+    debugConn = conn;
+    // The window reloads (a frontend rebuild, Cmd+R) or goes: its session is gone with it.
+    const drop = () => { conn.end('the IDE window reloaded'); if (debugConn === conn) debugConn = null; };
+    e.sender.once('did-start-loading', drop);
+    e.sender.once('destroyed', drop);
+    return { ok: true, version: c.ver };
+  });
+  ipcMain.handle('uvmc2dbg:request', async (_e, line: string) => {
+    if (!debugConn || debugConn.closed) return { error: 'no session' };
+    const r = await debugConn.request(line);
+    return r === null ? { error: `no answer to ${line.split(' ')[0]}` } : { line: r };
+  });
+  ipcMain.handle('uvmc2dbg:end', () => { debugConn?.end('ended'); debugConn = null; return { ok: true }; });
+
   ipcMain.handle('uvmc2:upload', async (e, um2Path: string) => {
     if (busy) return { ok: false, message: 'an upload to the cartridge is already running' };
     busy = true;
+    if (debugConn) { debugConn.end('ended'); debugConn = null; }   // the port is the upload's now
     try {
       return await upload(um2Path, (t) => { if (!e.sender.isDestroyed()) e.sender.send('uvmc2:progress', t); });
     } finally {

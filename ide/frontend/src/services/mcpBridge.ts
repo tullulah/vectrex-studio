@@ -105,6 +105,14 @@ export function registerCartridgeUploader(fn: CartridgeUploader): () => void {
   return () => { if (cartridgeUploader === fn) cartridgeUploader = null; };
 }
 
+let cartridgeDebugger: CartridgeUploader | null = null;
+
+/** Debug on Cartridge (UVMC2): registered by main.tsx like the uploader. */
+export function registerCartridgeDebugger(fn: CartridgeUploader): () => void {
+  cartridgeDebugger = fn;
+  return () => { if (cartridgeDebugger === fn) cartridgeDebugger = null; };
+}
+
 // ── Build output capture (run://stdout, run://stderr, run://status) ──────────
 // Kept in a bounded buffer with a sequence number so runBuild can return exactly the
 // output of ITS build. Registered once, at module load.
@@ -484,6 +492,19 @@ const api: Record<string, Fn> = {
    * key runs), then waits for the Emulator panel to load/start what it produced, and
    * returns the outcome, the emulator state and the build output of THIS build.
    */
+  /** Debug > Debug on Cartridge (UVMC2), awaited: build, upload, start, attach. */
+  cartridgeDebug: async () => {
+    if (!cartridgeDebugger) throw new Error('The IDE window is not ready yet (no cartridge debugger registered); try again in a moment');
+    return cartridgeDebugger();
+  },
+
+  /** Debug > Stop Debugging on Cartridge. */
+  cartridgeDebugStop: async () => {
+    const { stopCartridgeDebug } = await import('../debug/hwDebug');
+    await stopCartridgeDebug();
+    return { ok: true };
+  },
+
   /** Build > Upload to Cartridge (UVMC2), awaited: the build, the upload, its progress lines. */
   cartridgeUpload: async () => {
     if (!cartridgeUploader) throw new Error('The IDE window is not ready yet (no cartridge uploader registered); try again in a moment');

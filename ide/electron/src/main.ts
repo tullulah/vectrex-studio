@@ -315,6 +315,8 @@ async function createWindow() {
         submenu: [
           { label: 'Start Debugging', accelerator: 'CmdOrCtrl+D', click: () => sendMenuCommand( 'debug.start') },
           { label: 'Stop Debugging', click: () => sendMenuCommand( 'debug.stop') },
+          { label: 'Debug on Cartridge (RP2350 SWD / UVMC2 USB)', click: () => sendMenuCommand( 'debug.cartridge') },
+          { label: 'Stop Debugging on Cartridge', click: () => sendMenuCommand( 'debug.cartridgeStop') },
           { type: 'separator' },
           { label: 'Step Over', accelerator: 'F10', click: () => sendMenuCommand( 'debug.stepOver') },
           { label: 'Step Into', accelerator: 'F11', click: () => sendMenuCommand( 'debug.stepInto') },
@@ -800,6 +802,8 @@ ipcMain.handle('menu:updateRecentProjects', async (_e, recents: Array<{name: str
       submenu: [
         { label: 'Start Debugging', accelerator: 'CmdOrCtrl+D', click: () => sendMenuCommand( 'debug.start') },
         { label: 'Stop Debugging', click: () => sendMenuCommand( 'debug.stop') },
+        { label: 'Debug on Cartridge (RP2350 SWD / UVMC2 USB)', click: () => sendMenuCommand( 'debug.cartridge') },
+        { label: 'Stop Debugging on Cartridge', click: () => sendMenuCommand( 'debug.cartridgeStop') },
         { type: 'separator' },
         { label: 'Step Over', accelerator: 'F10', click: () => sendMenuCommand( 'debug.stepOver') },
         { label: 'Step Into', accelerator: 'F11', click: () => sendMenuCommand( 'debug.stepInto') },
@@ -1934,11 +1938,11 @@ export async function executeSimBuild(args: {
 }
 
 // Exported function for direct invocation (e.g. from MCP server)
-export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; uvm2Flags?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string; debugBuild?: boolean }) {
+export async function executeCompilation(args: { path: string; saveIfDirty?: { content: string; expectedMTime?: number }; autoStart?: boolean; outputPath?: string; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; pitrexCopyToSD?: boolean; pitrexSdPath?: string; uvm2CopyToSD?: boolean; uvm2SdPath?: string; uvm2Flags?: string; rp2350FlashMethod?: 'none' | 'swd' | 'usb'; rp2350FirmwareDir?: string; rp2350Ram?: boolean; rp2350SdPath?: string; debugBuild?: boolean; noPreview?: boolean }) {
   // CRITICAL: Log received args to debug compiler selection
   console.log('[RUN] executeCompilation received args:', JSON.stringify({ ...args, saveIfDirty: args?.saveIfDirty ? '...' : undefined }));
   
-  const { path, saveIfDirty, autoStart, outputPath, target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '', uvm2Flags = '', rp2350FlashMethod = 'none', rp2350FirmwareDir = '', rp2350Ram = false, rp2350SdPath = '', debugBuild = false } = args || {} as any;
+  const { path, saveIfDirty, autoStart, outputPath, target = 'm6809', pitrexCopyToSD = false, pitrexSdPath = '', uvm2CopyToSD = false, uvm2SdPath = '', uvm2Flags = '', rp2350FlashMethod = 'none', rp2350FirmwareDir = '', rp2350Ram = false, rp2350SdPath = '', debugBuild = false, noPreview = false } = args || {} as any;
   
   // Surface pitrex SD flags to the output panel so they're always visible
   if (target === 'pitrex') {
@@ -2507,8 +2511,10 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
           sdFiles = await leerSdSimulada(sdDeferred);
         }
 
-        // Notify renderer to load binary
-        mainWindow?.webContents.send('emu://compiledBin', {
+        // Notify renderer to load binary (not for a build that goes to the cartridge: Upload /
+        // Debug on Cartridge, UVMC2 -- the emulator would run it too, and the editor's
+        // breakpoints would stop the emulator instead of the console)
+        if (!noPreview) mainWindow?.webContents.send('emu://compiledBin', {
           base64: payloadBase64, size: buf.length, binPath, pdbData,
           target: target || 'm6809',
           elfBase64,

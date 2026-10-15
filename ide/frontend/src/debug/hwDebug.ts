@@ -1,5 +1,10 @@
 /**
- * The editor's debugger on the RP2350 cartridge itself, over SWD.
+ * The editor's debugger on the cartridge itself: the RP2350 cartridge over SWD, or the UVMC2
+ * over USB through the game's debug monitor (uvmc2-sdk monitor/debug.c). The session below is
+ * the same for both; what differs is its Transport (memory, registers, one instruction,
+ * continue, pause): SwdTransport (probe-rs's DAP) or MonitorTransport (the monitor's lines).
+ * The rest of this comment is the RP2350's; the UVMC2's game is already running (an upload
+ * started it) and the session attaches to it (startUvmc2Debug).
  *
  * The IDE builds the game as for the SD card (a RAM image with the 'VPy2' header), resets
  * the cartridge to its menu, writes the image where the firmware loads games from the card
@@ -92,9 +97,135 @@ function elfSections(elf: Uint8Array): Section[] {
   return out;
 }
 
+/** What the session needs of the cartridge. Stops come back through handleEvent, as DAP
+ *  'stopped' events: reason 'step' (one instruction done), 'breakpoint' or 'pause'. */
+interface Transport {
+  readonly kind: 'swd' | 'monitor';
+  readMem(addr: number, count: number): Promise<Uint8Array>;
+  writeMem(addr: number, bytes: Uint8Array): Promise<void>;
+  /** r0-r15 of the stopped program. */
+  registers(): Promise<number[]>;
+  writeRegister?(n: number, value: number): Promise<void>;
+  stepInstruction(): Promise<void>;
+  cont(): Promise<void>;
+  pause(): Promise<void>;
+  configure?(): Promise<void>;
+  end(): Promise<unknown>;
+  /** Breakpoints kept by the cartridge itself (the monitor): it holds the original code and
+   *  steps off a breakpoint on its own when it goes on. Without it they are BKPTs written
+   *  over the code (writeMem), and the session steps off them. */
+  patch?(add: number[], remove: number[]): Promise<void>;
+}
+
 const b64 = (bytes: Uint8Array) => { let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s); };
 const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const hex = (n: number) => '0x' + (n >>> 0).toString(16);
+
+/** probe-rs's DAP server on the RP2350 cartridge (electron/src/hwdebug/session.ts). */
+class SwdTransport implements Transport {
+  readonly kind = 'swd' as const;
+
+  private async dap(command: string, args: unknown = {}): Promise<any> {
+    const r = await api()!.request(command, args);
+    if (!r?.success) throw new Error(`${command}: ${r?.message ?? 'failed'}`);
+    return r;
+  }
+
+  async readMem(addr: number, count: number): Promise<Uint8Array> {
+    const r = await this.dap('readMemory', { memoryReference: hex(addr), count });
+    return unb64(r.body?.data ?? '');
+  }
+
+  async writeMem(addr: number, bytes: Uint8Array): Promise<void> {
+    await this.dap('writeMemory', { memoryReference: hex(addr), data: b64(bytes) });
+  }
+
+  /** From the registers' scope at this stop. (No writeRegister: probe-rs 0.31's DAP server
+   *  cannot set a register -- setVariable answers "cancelled", its REPL has no `set`, and
+   *  DCRSR/DCRDR need word writes it does not make.) */
+  async registers(): Promise<number[]> {
+    const tr = await this.dap('stackTrace', { threadId: THREAD, levels: 1 });
+    const frameId = tr.body?.stackFrames?.[0]?.id;
+    const sc = await this.dap('scopes', { frameId });
+    const ref = sc.body?.scopes?.find((s: any) => /register/i.test(s.name))?.variablesReference;
+    const vars = await this.dap('variables', { variablesReference: ref });
+    const regs = new Array(16).fill(0);
+    for (const v of vars.body?.variables ?? []) {
+      const m = /^R(\d+)\b/.exec(v.name);
+      if (m && +m[1] < 16) regs[+m[1]] = parseInt(v.value, 16) >>> 0;
+    }
+    return regs;
+  }
+
+  async stepInstruction(): Promise<void> { await this.dap('stepIn', { threadId: THREAD, granularity: 'instruction' }); }
+  async cont(): Promise<void> { await this.dap('continue', { threadId: THREAD }); }
+  async pause(): Promise<void> { await this.dap('pause', { threadId: THREAD }); }
+  async configure(): Promise<void> { await this.dap('configurationDone'); }
+  end(): Promise<unknown> { return api()?.end() ?? Promise.resolve(); }
+}
+
+interface MonitorApi {
+  start(): Promise<{ ok: true; version: string } | { error: string }>;
+  request(line: string): Promise<{ line: string } | { error: string }>;
+  end(): Promise<unknown>;
+  onEvent(cb: (ev: { reason: string; pc: number }) => void): () => void;
+  onText(cb: (text: string) => void): () => void;
+  onEnded(cb: (why: string) => void): () => void;
+}
+const monitorApi = (): MonitorApi | undefined => (window as any).uvmc2Debug;
+
+/** The UVMC2 game's debug monitor, over USB (electron/src/hwdebug/uvmc2Serial.ts, DebugConn). */
+class MonitorTransport implements Transport {
+  readonly kind = 'monitor' as const;
+
+  private async ask(line: string): Promise<string> {
+    const r = await monitorApi()!.request(line);
+    if ('error' in r) throw new Error(r.error);
+    if (r.line.startsWith('ERR')) throw new Error(`${line.split(' ')[0]}: the monitor said ${r.line}`);
+    return r.line;
+  }
+
+  async readMem(addr: number, count: number): Promise<Uint8Array> {
+    const out = new Uint8Array(count);
+    for (let o = 0; o < count; o += 256) {
+      const n = Math.min(256, count - o);
+      const h = await this.ask(`r ${(addr + o).toString(16)} ${n}`);
+      for (let i = 0; i < n; i++) out[o + i] = parseInt(h.substr(i * 2, 2), 16);
+    }
+    return out;
+  }
+
+  async writeMem(addr: number, bytes: Uint8Array): Promise<void> {
+    for (let o = 0; o < bytes.length; o += 64) {
+      let h = '';
+      for (const b of bytes.subarray(o, o + 64)) h += b.toString(16).padStart(2, '0');
+      await this.ask(`w ${(addr + o).toString(16)} ${h}`);
+    }
+  }
+
+  /** "R r0 .. r12 sp lr pc xpsr". */
+  async registers(): Promise<number[]> {
+    const parts = (await this.ask('R')).split(' ').slice(1).map((x) => parseInt(x, 16) >>> 0);
+    return parts.slice(0, 16);
+  }
+
+  async writeRegister(n: number, value: number): Promise<void> {
+    await this.ask(`P ${n.toString(16)} ${(value >>> 0).toString(16)}`);
+  }
+
+  async patch(add: number[], remove: number[]): Promise<void> {
+    for (const [cmd, list] of [['z', remove], ['Z', add]] as const) {
+      for (let i = 0; i < list.length; i += 12) {   // a line holds 12 addresses
+        await this.ask(`${cmd} ${list.slice(i, i + 12).map((a) => a.toString(16)).join(' ')}`);
+      }
+    }
+  }
+
+  async stepInstruction(): Promise<void> { await this.ask('s 0 0 0'); }   // an empty range: one instruction
+  async cont(): Promise<void> { await this.ask('c'); }
+  async pause(): Promise<void> { await this.ask('H'); }
+  end(): Promise<unknown> { return monitorApi()?.end() ?? Promise.resolve(); }
+}
 
 class CartridgeSession implements ArmRunControl, ArmSystem {
   readonly breakpoints = new Set<number>();      // gdb's: none on the cartridge
@@ -123,7 +254,16 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
   private unsubs: Array<() => void> = [];
   closed = false;
 
-  constructor(private readonly elf: Uint8Array) {
+  /** Change Value on a variable kept in a register: only through the monitor. */
+  readonly writeRegister?: (n: number, value: number) => Promise<void>;
+
+  constructor(private readonly elf: Uint8Array, private readonly t: Transport) {
+    if (t.writeRegister) {
+      this.writeRegister = (n, value) => this.serial(async () => {
+        await t.writeRegister!(n, value);
+        this.regs[n] = value >>> 0;
+      });
+    }
     const secs = elfSections(elf);
     this.code = secs.filter((s) => s.bytes && !s.writable);
     this.data = secs.filter((s) => s.writable);
@@ -253,7 +393,7 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
   pause(): void {
     if (!this.running || this.closed) return;
     this.pauseRequested = true;
-    void this.dap('pause', { threadId: THREAD });
+    void this.t.pause().catch((e) => say(`cartridge: ${e?.message ?? e}`, true));
   }
 
   // ── The session ──────────────────────────────────────────────────────────────────────
@@ -265,20 +405,9 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
     return run;
   }
 
-  private async dap(command: string, args: unknown = {}): Promise<any> {
-    const r = await api()!.request(command, args);
-    if (!r?.success) throw new Error(`${command}: ${r?.message ?? 'failed'}`);
-    return r;
-  }
+  private readMem(addr: number, count: number): Promise<Uint8Array> { return this.t.readMem(addr, count); }
 
-  private async readMem(addr: number, count: number): Promise<Uint8Array> {
-    const r = await this.dap('readMemory', { memoryReference: hex(addr), count });
-    return unb64(r.body?.data ?? '');
-  }
-
-  private async writeMem(addr: number, bytes: Uint8Array): Promise<void> {
-    await this.dap('writeMemory', { memoryReference: hex(addr), data: b64(bytes) });
-  }
+  private writeMem(addr: number, bytes: Uint8Array): Promise<void> { return this.t.writeMem(addr, bytes); }
 
   private async read32(addr: number): Promise<number> {
     const b = await this.readMem(addr, 4);
@@ -325,8 +454,17 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
   /** DBGPAUSE as the session found it, to put back at the end. */
   private dbgPause: number[] | null = null;
 
+  /** The UVMC2: the game is running already (an upload started it); its breakpoints go in now. */
+  attachRunning(): Promise<void> {
+    return this.serial(async () => {
+      this.launched = true;
+      this.running = true;
+      await this.applyPatches(new Set(this.ideBreakpoints));
+    });
+  }
+
   private async launchNow(image: Uint8Array, name: string, stem: string): Promise<void> {
-    await this.dap('configurationDone');
+    await this.t.configure?.();
     // the game paused on core 1 must not stop the clock core 0 draws by
     const saved: number[] = [];
     for (const r of TIMER_DBGPAUSE) {
@@ -388,6 +526,11 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
   private async applyPatches(want: Set<number>): Promise<void> {
     const inCode = (a: number) => this.codeHalf(a) !== null;
     const target = new Set([...want].filter(inCode));
+    if (this.t.patch) {
+      await this.t.patch([...target].filter((a) => !this.patched.has(a)), [...this.patched].filter((a) => !target.has(a)));
+      this.patched = target;
+      return;
+    }
     const changed = [...new Set([...target].filter((a) => !this.patched.has(a)).concat([...this.patched].filter((a) => !target.has(a))))].sort((a, b) => a - b);
     // neighbouring changes go in one write: the original code with the BKPTs that stay
     for (let i = 0; i < changed.length;) {
@@ -411,18 +554,18 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
    */
   private async leaveStop(wait: boolean): Promise<Promise<any> | null> {
     const pc = (this.regs[15] & ~1) >>> 0;
-    if (this.patched.has(pc)) {
+    if (this.patched.has(pc) && !this.t.patch) {   // the monitor steps off its own
       const h = this.codeHalf(pc)!;
       await this.writeMem(pc, new Uint8Array([h & 0xFF, h >> 8]));
       const stepped = this.waitStop((r) => r === 'step');
-      await this.dap('stepIn', { threadId: THREAD, granularity: 'instruction' });
+      await this.t.stepInstruction();
       await stepped;
       await this.writeMem(pc, new Uint8Array(BKPT));
     }
     const stop = wait ? this.waitStop((r) => r !== 'step') : null;
     if (this.pauseShown) { this.pauseShown = false; await this.write32(PAUSE_FLAG, 0); }
     this.running = true;
-    await this.dap('continue', { threadId: THREAD });
+    await this.t.cont();
     return stop;
   }
 
@@ -480,28 +623,10 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
   }
 
   private async fetchRegisters(): Promise<void> {
-    const tr = await this.dap('stackTrace', { threadId: THREAD, levels: 1 });
-    const frameId = tr.body?.stackFrames?.[0]?.id;
-    const sc = await this.dap('scopes', { frameId });
-    const ref = sc.body?.scopes?.find((s: any) => /register/i.test(s.name))?.variablesReference;
-    const vars = await this.dap('variables', { variablesReference: ref });
-    const regs = new Array(16).fill(0);
-    this.regRef = ref;
-    this.regNames = new Map();
-    for (const v of vars.body?.variables ?? []) {
-      const m = /^R(\d+)\b/.exec(v.name);
-      if (m && +m[1] < 16) { regs[+m[1]] = parseInt(v.value, 16) >>> 0; this.regNames.set(+m[1], v.name); }
-    }
-    this.regs = regs;
+    this.regs = await this.t.registers();
     this.pages.clear();
     this.stopGen++;   // a background read of the previous stop must not land in this one
   }
-
-  /** The registers' scope at this stop and probe-rs's names for them ("R4", "R13/SP"). (No
-   *  writeRegister: probe-rs 0.31's DAP server cannot set a register -- setVariable answers
-   *  "cancelled", its REPL has no `set`, and DCRSR/DCRDR need word writes it does not make.) */
-  private regRef = 0;
-  private regNames = new Map<number, string>();
 
   /** Counts the stops: a background read belongs to the stop it was started at. */
   private stopGen = 0;
@@ -569,9 +694,12 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
 
   private announce(reason: ArmStopReason): void {
     this.stopped = reason;
-    // the pause sign in the corner while the game waits for the debugger
-    this.pauseShown = true;
-    void this.write32(PAUSE_FLAG, PAUSE_MAGIC).catch(() => {});
+    // the pause sign in the corner while the game waits for the debugger (our cartridge's
+    // firmware draws it; on the UVMC2 the picture just stays)
+    if (this.t.kind === 'swd') {
+      this.pauseShown = true;
+      void this.write32(PAUSE_FLAG, PAUSE_MAGIC).catch(() => {});
+    }
     const pc = this.regs[15] >>> 0;
     for (const fn of this.listeners) fn(reason, pc);
     // the program's data, behind the stop: hovers then need no read of their own
@@ -585,8 +713,12 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
       // running or stopped, the code goes back to the original (end then lets it run)
       await this.serial(async () => {
         await this.applyPatches(new Set());
-        await this.write32(PAUSE_FLAG, 0);
-        if (this.dbgPause) TIMER_DBGPAUSE.forEach((r, i) => void this.write32(r, this.dbgPause![i]));
+        if (this.t.kind === 'swd') {
+          await this.write32(PAUSE_FLAG, 0);
+          if (this.dbgPause) TIMER_DBGPAUSE.forEach((r, i) => void this.write32(r, this.dbgPause![i]));
+        } else if (this.stopped) {
+          await this.t.cont();   // held at a stop: let it go
+        }
       });
     } catch (e) {
       console.warn('[hwDebug] could not take the breakpoints out:', e);
@@ -594,7 +726,7 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
     this.closed = true;
     if (this.rttTimer) clearInterval(this.rttTimer);
     for (const u of this.unsubs) u();
-    await api()?.end();
+    await this.t.end();
   }
 
   attach(unsub: () => void): void { this.unsubs.push(unsub); }
@@ -648,7 +780,7 @@ export async function startCartridgeDebug(binPath: string, elfPath: string): Pro
   say('resetting the cartridge and attaching to core 1…');
   const started = await hw.start({ elfPath });
   if ('error' in started) throw new Error(started.error);
-  const s = new CartridgeSession(elf);
+  const s = new CartridgeSession(elf, new SwdTransport());
   current = s;
   s.attach(hw.onEvent((ev) => { if (current === s) s.handleEvent(ev); }));
   s.attach(hw.onEnded((why) => {
@@ -696,6 +828,76 @@ export async function runOnCartridge(binPath: string): Promise<void> {
     await startCartridgeDebug(binPath, elfPath);
   } catch (e: any) {
     say(String(e?.message ?? e), true);
+  }
+}
+
+/**
+ * Debug the game running on the UVMC2 (Build > Debug on Cartridge, target uvm2: an upload
+ * started it), through its debug monitor, with `elfPath`'s line table. Breakpoints work from
+ * the game's first frame on: the monitor starts there, and a BKPT met before it would fault.
+ */
+export async function startUvmc2Debug(elfPath: string): Promise<void> {
+  const mon = monitorApi();
+  const files = (window as any).files;
+  if (!mon || !files?.readFileBin) throw new Error('on-cartridge debugging needs the desktop IDE');
+  await stopCartridgeDebug();
+  const r = await files.readFileBin(elfPath);
+  if (!r || r.error || !r.base64) throw new Error(`cannot read ${elfPath}: ${r?.error ?? 'missing'}`);
+  const elf = unb64(r.base64);
+  say('attaching to the game\'s monitor on USB…');
+  const started = await mon.start();
+  if ('error' in started) throw new Error(started.error);
+  const s = new CartridgeSession(elf, new MonitorTransport());
+  current = s;
+  const why: Record<string, string> = { bp: 'breakpoint', bkpt: 'breakpoint', step: 'step', pause: 'pause' };
+  s.attach(mon.onEvent((ev) => { if (current === s) s.handleEvent({ event: 'stopped', body: { reason: why[ev.reason] ?? 'pause' } }); }));
+  let rttLine = '';
+  s.attach(mon.onText((t) => {
+    rttLine += t;
+    const lines = rttLine.split('\n');
+    rttLine = lines.pop() ?? '';
+    for (const l of lines) window.dispatchEvent(new CustomEvent('hwdebug:status', { detail: { text: l.replace(/\r$/, ''), rtt: true } }));
+  }));
+  s.attach(mon.onEnded((why) => {
+    if (current !== s) return;
+    current = null;
+    s.abort();
+    void s.close();
+    setHardwareArmSystem(null, null);
+    useDebugStore.getState().setState('stopped');
+    if (why !== 'ended') say(`session ended: ${why}`, true);
+  }));
+  window.addEventListener('message', onDebugMessage);
+  s.attach(() => window.removeEventListener('message', onDebugMessage));
+  setHardwareArmSystem(s, elf);
+  await s.attachRunning();
+  useDebugStore.getState().setState('running');
+  say(`debugging on the cartridge (${started.version})`);
+}
+
+/** Debug the game an upload just started on the UVMC2 (`um2Path`), with its ELF: beside the
+ *  .um2 (a VPy build) or in the pico-sdk build under it (a C project's build_uvm2/pico/).
+ *  Failures are reported (and returned), not thrown. */
+export async function debugOnUvmc2(um2Path: string): Promise<string | null> {
+  const files = (window as any).files;
+  const dir = um2Path.replace(/[\\/][^\\/]*$/, ''), stem = (um2Path.split(/[\\/]/).pop() ?? '').replace(/\.um2$/i, '');
+  const candidates = [`${dir}/${stem}.elf`, `${dir}/pico/${stem}.elf`, `${dir}/uvm2/${stem}.elf`];
+  let elfPath: string | null = null;
+  for (const c of candidates) {
+    const info = await files?.getFileInfo?.(c).catch(() => null);
+    if (info?.ok) { elfPath = c; break; }
+  }
+  if (!elfPath) {
+    const m = `no ELF beside ${um2Path} (looked for ${candidates.join(', ')})`;
+    say(m, true);
+    return m;
+  }
+  try {
+    await startUvmc2Debug(elfPath);
+    return null;
+  } catch (e: any) {
+    say(String(e?.message ?? e), true);
+    return String(e?.message ?? e);
   }
 }
 

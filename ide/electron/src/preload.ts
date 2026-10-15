@@ -63,6 +63,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 // On-cartridge debugging (electron/src/hwdebug/session.ts): a probe-rs DAP session on the
 // RP2350 cartridge's core 1, driven by frontend/src/debug/hwDebug.ts.
+// The UVMC2 debugger's connection to the game's monitor (hwdebug/uvmc2Serial.ts, DebugConn)
+contextBridge.exposeInMainWorld('uvmc2Debug', {
+  start: () => ipcRenderer.invoke('uvmc2dbg:start') as Promise<{ ok: true; version: string } | { error: string }>,
+  request: (line: string) => ipcRenderer.invoke('uvmc2dbg:request', line) as Promise<{ line: string } | { error: string }>,
+  end: () => ipcRenderer.invoke('uvmc2dbg:end'),
+  onEvent: (cb: (ev: { reason: string; pc: number }) => void) => {
+    const h = (_e: any, ev: any) => cb(ev);
+    ipcRenderer.on('uvmc2dbg:event', h);
+    return () => ipcRenderer.removeListener('uvmc2dbg:event', h);
+  },
+  onText: (cb: (text: string) => void) => {
+    const h = (_e: any, t: string) => cb(t);
+    ipcRenderer.on('uvmc2dbg:text', h);
+    return () => ipcRenderer.removeListener('uvmc2dbg:text', h);
+  },
+  onEnded: (cb: (why: string) => void) => {
+    const h = (_e: any, why: string) => cb(why);
+    ipcRenderer.on('uvmc2dbg:ended', h);
+    return () => ipcRenderer.removeListener('uvmc2dbg:ended', h);
+  },
+});
+
 // The UVMC2's USB upload (hwdebug/uvmc2Serial.ts): the .um2 onto the cartridge's card, progress lines
 contextBridge.exposeInMainWorld('uvmc2', {
   upload: async (um2Path: string, onProgress: (line: string) => void) => {

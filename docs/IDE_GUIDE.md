@@ -283,6 +283,18 @@ The debugger reads the stack, the VPy runtime RAM (`0x2007F000`) and up to 64 KB
 
 **Change Value** works on globals and on locals in memory; a local the compiler keeps in a register can be changed on the emulators but not on the cartridge (probe-rs cannot set a core register). Not supported yet: games that need their romset or samples from the card, core 0.
 
+### Debugging on the cartridge (UVMC2, over USB)
+
+With the target **UVM2**, **Debug → Debug on Cartridge (UVMC2, USB)** (MCP: `cartridge_debug`, `cartridge_debug_stop`) debugs the game on Ralf's multicart with the same debugger: breakpoints, F10/F11/Shift+F11, Continue/Pause, the call stack, hover values and Change Value — registers included, which the RP2350 session cannot do. No probe: the game's own debug monitor answers over the cartridge's USB.
+
+1. It builds the project with the USB debug monitor and `-Og`, and puts it on the card and starts it as **Upload to Cartridge** does (from the multicart menu, or over a game with the monitor already running).
+2. It attaches to the monitor (`MONITOR.BIN`, in the PSRAM), which uses the Cortex-M33's **monitor-mode debug**: a breakpoint (a BKPT the monitor writes over the game's code, keeping the original), a step or a pause raises the DebugMonitor exception, and the core waits there while the USB interrupt goes on answering the IDE. Core 1 keeps redrawing the last picture, so a paused game stays on screen.
+3. Steps run on the cartridge: the IDE marks where the step may stop, the game runs to the first of them.
+
+`DEBUG_PRINT` / `vpy_log` text comes over the same USB port and shows in the build output as `[rtt] …`. **Stop Debugging on Cartridge** (or closing or reloading the IDE) takes every breakpoint out and leaves the game running.
+
+Breakpoints work from the game's first frame on (the monitor starts at the end of it): a line that only runs before it — early in `main()` / `setup()` — does not stop. Only the game's core (core 0) is debugged.
+
 ### Debug controls
 
 | Key | Action |
@@ -517,7 +529,7 @@ The tool list is served by the IDE itself, so it always matches what the IDE imp
 
 | Group | Tools |
 |-------|-------|
-| **IDE** | `ide_get_context` (open project, kind, SDK, selected target, buildable targets, what each key would do, emulator, Arm toolchain, IDE version; with a project open also its `assets` with the code that uses each one, and `api`: the language's calls on the selected target plus how-to recipes), `ide_run` (= F7 / F5 / Shift+F5 / Shift+F7, awaited, with the result), `settings_set_build_target`, `cartridge_upload` (= Build → Upload to Cartridge, UVMC2) |
+| **IDE** | `ide_get_context` (open project, kind, SDK, selected target, buildable targets, what each key would do, emulator, Arm toolchain, IDE version; with a project open also its `assets` with the code that uses each one, and `api`: the language's calls on the selected target plus how-to recipes), `ide_run` (= F7 / F5 / Shift+F5 / Shift+F7, awaited, with the result), `settings_set_build_target`, `cartridge_upload` (= Build → Upload to Cartridge, UVMC2), `cartridge_debug` / `cartridge_debug_stop` (= Debug on Cartridge, UVMC2) |
 | **Reference** | `api_reference` (the full API of the open project's language, generated from the real sources: VPy from the compiler's builtin catalog with per-target availability, C from the headers of the project's pinned SDK version) |
 | **Editor** | List/read open documents, write files into the project, line-range edits, save, diagnostics |
 | **Compiler** | Build the project (VPy: m6809; C: like F7), build and run, last build errors |
