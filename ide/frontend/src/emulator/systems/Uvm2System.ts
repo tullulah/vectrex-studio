@@ -504,7 +504,7 @@ export class Uvm2System implements ISystem, IBus {
   private jitIo = false;
   private jitSpent = 0;
   /**
-   * HOW FAR APART THE TWO CORES MAY RUN, in CPU cycles. 0 (the default) is the reference:
+   * HOW FAR APART THE TWO CORES MAY RUN, in CPU cycles. 0 is the reference:
    * the core that is behind runs, one instruction at a time, so the two interleave by
    * cycle exactly — and while core 1 is busy (building the stream) that forbids blocks,
    * which caps ROTJ at ~22 emulated frames/s. With a quantum a translated block runs until
@@ -516,8 +516,13 @@ export class Uvm2System implements ISystem, IBus {
    * not depend on it), and a peripheral access by the core that is ahead sees the bus up
    * to `quantum` cycles late (the bus follows the slower core; one bus cycle is 100 CPU
    * cycles). Set it on the system, or with globalThis.__UVM2_QUANTUM before it is built.
+   *
+   * THE DEFAULT IS 48: ROTJ in real time (~51 frames/s against ~21 at 0), the same picture.
+   * On the chip the two cores run at once, so the cycle-exact interleaving of 0 is not
+   * something a program can rely on either; 48 CPU cycles is under half a bus cycle. Use 0
+   * (globalThis.__UVM2_QUANTUM = 0) to compare runs bit for bit.
    */
-  quantum = Math.max(0, Number((globalThis as any).__UVM2_QUANTUM ?? 0) | 0);
+  quantum = Math.max(0, Number((globalThis as any).__UVM2_QUANTUM ?? 48) | 0);
   /* CORE 1 POLLING (sondeoCore1): the core doing the reading, the last polling read (its
    * instruction, step, cycle, core-1 store count and registers), the change of the
    * registers over one turn, and the cycles to add to core 1's clock. */

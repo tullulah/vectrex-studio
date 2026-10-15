@@ -227,8 +227,11 @@ than vecx's ideal model:
   one, because a command list can take longer than a frame to draw.
 
 The image's own fps (the SDK HUD: buttons 1+4 held two seconds) matches a
-console's; the emulator itself runs below real time (~17 Vectrex frames a second
-on ROTJ), its cost being the Thumb-2 interpreter.
+console's. The Thumb-2 code in SRAM runs as translated blocks (`cpu/Thumb2Jit.ts`),
+and the two cores may run up to 48 CPU cycles apart (`Uvm2System.quantum`): ROTJ
+runs in real time (~51 Vectrex frames a second). With `globalThis.__UVM2_QUANTUM = 0`
+the cores interleave cycle by cycle (~21 frames a second), the reference for
+comparing two runs bit for bit; `__NO_JIT` turns the translator off.
 
 Frame 0 is consumed entirely by the `/HALT` settle (30000 bus cycles by design),
 frame 1 by VIA initialisation; steady state begins at frame 2.
