@@ -207,8 +207,8 @@ export class Thumb2Jit {
       const inIt = it !== 0;
       const flush = core === 0
         ? `${clk} = clk, r[15] = ${next}`
-        : `${clk} = clk, r[15] = ${next}, S.muestra1 = m0 + ${n}`;
-      const k = `k = ${n + 1};`;
+        : `${clk} = clk, r[15] = ${next}, S.muestra1 = m0 + kb + ${n}`;
+      const k = `k = kb + ${n + 1};`;
       let e: Emit | null = this.inline ? (is32 ? this.emit32(hw0, hw1, pc, inIt) : this.emit16(hw0, pc, inIt)) : null;
       let code: string, cyc: string;
       if (e === null) {
@@ -231,7 +231,14 @@ export class Thumb2Jit {
         // IT: the conditioned instructions that follow carry its state
         if (!is32 && (hw0 & 0xff00) === 0xbf00 && (hw0 & 0xf) !== 0) it = ((hw0 >>> 4) & 0xf) << 4 | (hw0 & 0x1f);
       }
-      if (e !== null && e.post) out.push(e.post.replace(/break out;/g, `${k} break out;`));
+      if (e !== null && e.post) {
+        // a branch back to the block's start (a loop) goes round inside the function, while
+        // the scheduler would still pick this core (the clock against L)
+        const t = /^if \(tk\) \{ r\[15\] = (\d+); break out; \}$/.exec(e.post);
+        if (t && Number(t[1]) === start && !/r\[14\]/.test(e.code) && (!inIt || it === 0))
+          out.push(`if (tk) { if (clk >= L) { r[15] = ${start}; ${k} break out; } kb += ${n + 1}; continue out; }`);
+        else out.push(e.post.replace(/break out;/g, `${k} break out;`));
+      }
       if (e === null) out.push(`if (r[15] !== ${next} || S.jitIo || J.invalidations !== iv0) { ${k} break out; }`);
       else if (e.mem) out.push(`if (sl | iv) { if (iv || S.jitIo) { r[15] = ${next}; ${k} break out; } sl = 0; }`);
       out.push(`if (clk >= L) { r[15] = ${next}; ${k} break out; }`);
@@ -244,8 +251,8 @@ export class Thumb2Jit {
       : `${clk} = clk; cpu.cpsr = F; S.muestra1 = m0 + k - 1; c = clk - clk0 - z; cpu._cycles += c; cpu._stepCount += k; S.jitSpent = c;`;
     const src =
       `return function (r, cpu, bus, S, L) {\n` +
-      `let clk = ${clk}, clk0 = clk, F = cpu.cpsr, m0 = S.muestra1, iv0 = J.invalidations, c = 0, tk = 0, k = 0, z = 0, sl = 0, iv = 0, a = 0, o = 0, v = 0, x = 0, y = 0;\n` +
-      `out: {\n${out.join('\n')}\nr[15] = ${pc}; k = ${n};\n}\n${exit}\n};`;
+      `let clk = ${clk}, clk0 = clk, F = cpu.cpsr, m0 = S.muestra1, iv0 = J.invalidations, c = 0, tk = 0, k = 0, kb = 0, z = 0, sl = 0, iv = 0, a = 0, o = 0, v = 0, x = 0, y = 0;\n` +
+      `out: for (;;) {\n${out.join('\n')}\nr[15] = ${pc}; k = kb + ${n}; break out;\n}\n${exit}\n};`;
     const fn = new Function('m', 'w', 'J', src)(m, this.codePages, this) as JitBlock;
     const s = (start - base) >>> 1;
     for (let p = (start - base) >>> PAGE_SHIFT; p <= ((pc - 1 - base) >>> PAGE_SHIFT); p++) {

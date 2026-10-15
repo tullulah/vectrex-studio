@@ -10,7 +10,9 @@
  * IT state, cycle and step counts, store counters and memory, and must have made the same
  * bus accesses, each seeing the same r15, core clock and core-1 step count — what the
  * system looks at during an access. An instruction the interpreter throws on must throw
- * in the block too.
+ * in the block too. The block runs to the clock the interpreter's run ended at, which also
+ * stops a branch back to the block's start (a loop closed inside the block) where the
+ * interpreter stopped.
  */
 import assert from 'node:assert/strict';
 import { Thumb2 } from '../src/emulator/cpu/Thumb2.ts';
@@ -102,8 +104,28 @@ function runInterp(side: Side, n: number, core: number) {
   if (core === 0) S.relojCore0 = side.clk; else S.relojCore1 = side.clk;
 }
 
+/** The interpreter following the code wherever it branches inside [CODE, end), up to
+ *  `max` instructions (a loop goes round). */
+function runInterpLoop(side: Side, end: number, max: number, core: number) {
+  const { cpu, S } = side;
+  try {
+    for (let i = 0; i < max; i++) {
+      const pc = cpu.getReg(15) >>> 0;
+      if (pc < CODE || pc >= end) break;
+      if (core === 1) S.muestra1++;
+      if (core === 0) S.relojCore0 = side.clk; else S.relojCore1 = side.clk;
+      const c = cpu.step(S);
+      side.clk += core === 1 ? (c > 0 ? c : 1) : c;
+      side.spent += c;
+      side.steps++;
+      if (S.jitIo) break;
+    }
+  } catch (e: any) { side.threw = String(e?.message || e).replace(/ at PC=.*/, ''); }
+  if (core === 0) S.relojCore0 = side.clk; else S.relojCore1 = side.clk;
+}
+
 /** The block for the same run (translation stopped right after it). */
-function runBlock(side: Side, n: number, core: number, inline: boolean) {
+function runBlock(side: Side, n: number, core: number, inline: boolean, L: number) {
   const { cpu, S, mem } = side;
   let end = CODE;
   for (let i = 0; i < n; i++) { const hw = mem[end - BASE] | (mem[end - BASE + 1] << 8); end += (hw >>> 11) >= 0x1d ? 4 : 2; }
@@ -114,7 +136,7 @@ function runBlock(side: Side, n: number, core: number, inline: boolean) {
   if (core === 1) S.muestra1++;                            // pasoCore1 counts the first one
   const blk = jit.block(core, CODE);
   assert.ok(blk, 'no block');
-  try { blk!(cpu.regs, cpu, S, S, 1e15); } catch (e: any) { side.threw = String(e?.message || e).replace(/ at PC=.*/, ''); }
+  try { blk!(cpu.regs, cpu, S, S, L); } catch (e: any) { side.threw = String(e?.message || e).replace(/ at PC=.*/, ''); }
   side.spent = S.jitSpent;
 }
 
@@ -147,7 +169,9 @@ function check(code: number[], n: number, label: string) {
   for (const core of [0, 1]) {
     const a = setup(st, code, core), b = setup(st, code, core);
     runInterp(a, n, core);
-    runBlock(b, n, core, true);
+    // the block's clock limit: where the interpreter's run ended (a loop back to the start
+    // would otherwise go round for ever)
+    runBlock(b, n, core, true, a.threw ? 1e15 : a.clk);
     compare(`${label} core${core}`, a, b);
   }
 }
@@ -188,6 +212,28 @@ for (let s = 0; s < 20000; s++) {
     n++;
   }
   check(code, n, `run ${code.map((h) => h.toString(16)).join(' ')}`);
+}
+
+// loops closed inside a block: a body of plain instructions and a branch back to the start
+const plain = () => { for (;;) { const hw = rnd() & 0xffff; if ((hw >>> 11) >= 0x1d) continue; if ((hw & 0xf000) === 0xd000 || (hw & 0xf800) === 0xe000) continue;
+  if ((hw & 0xff00) === 0xbf00 || (hw & 0xff00) === 0x4700 || (hw & 0xfe00) === 0xbc00 || (hw & 0xff00) === 0xbd00 || (hw & 0xf500) === 0xb100 || (hw & 0xf500) === 0xb900) continue; return hw; } };
+for (let s = 0; s < 20000; s++) {
+  const body: number[] = []; const len = 1 + (rnd() % 4);
+  for (let i = 0; i < len; i++) body.push(plain());
+  const back = -(len + 2);                                    // halfwords from the branch's pc+4 to CODE
+  const br = (rnd() & 1) ? (0xe000 | (back & 0x7ff)) : (0xd000 | ((rnd() % 14) << 8) | (back & 0xff));
+  const code = [...body, br];
+  const st = randomState();
+  for (const core of [0, 1]) {
+    const a = setup(st, code, core), b = setup(st, code, core);
+    const end = CODE + code.length * 2;
+    runInterpLoop(a, end, 60, core);
+    runBlock(b, code.length, core, true, a.threw ? 1e15 : a.clk);
+    // where the interpreter stopped by count, not by leaving the loop, the block may stop on
+    // the clock one turn later: compare only runs that left, threw, or touched the bus
+    const pcA = a.cpu.getReg(15) >>> 0;
+    if (a.threw || pcA < CODE || pcA >= end || a.S.jitIo || a.steps < 60) compare(`loop ${code.map((h) => h.toString(16)).join(' ')} core${core}`, a, b);
+  }
 }
 
 console.log(`${checked} comparisons, ${failed} failed`);
