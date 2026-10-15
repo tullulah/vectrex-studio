@@ -22,6 +22,7 @@ import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } 
 import { useTranslation } from 'react-i18next';
 import * as A from './anim3d/animModel';
 import { Viewport3D, type ViewOptions } from './anim3d/Viewport3D';
+import { useViewBg } from '../utils/viewBg';
 import { collectByExt, dirOf, joinPath, meshStrokes, uriToFsPath, type DirEntry, type MeshStrokes } from './anim3d/meshStrokes';
 
 interface Props {
@@ -153,7 +154,7 @@ export const Anim3DEditor: React.FC<Props> = ({ resource, docUri, onChange }) =>
   }, [resolved, meshPaths, meshData, assetsDir]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── view options ──
-  const [opts, setOpts] = useState<ViewOptions>({ meshes: true, bones: true, sockets: true, soft: false });
+  const [opts, setOpts] = useState<ViewOptions>({ meshes: true, bones: true, sockets: true, soft: false, solid: true });
   const [selBone, setSelBone] = useState<number | null>(null);
 
   if (kind === 'skel') {
@@ -194,6 +195,16 @@ interface Common {
   tr: Tr;
 }
 
+/** The views' background grey (utils/viewBg.ts: shared with the Mesh Editor). */
+const BgSlider: React.FC<{ tr: Tr }> = ({ tr }) => {
+  const [grey, setGrey] = useViewBg();
+  return (
+    <label style={ST.check} title={tr('bgTip', 'Background grey, black to white (every 3D view)')}>{tr('background', 'Background')}
+      <input type="range" min={0} max={255} value={grey} onChange={(e) => setGrey(Number(e.target.value))} style={{ width: 80 }} />
+    </label>
+  );
+};
+
 // ── the toolbar both panes share ─────────────────────────────────────────────
 const Toolbar: React.FC<Common & { tabs: [string, string][]; tab: string; setTab: (t: string) => void; extra?: React.ReactNode }> = (p) => {
   const { tr } = p;
@@ -207,13 +218,14 @@ const Toolbar: React.FC<Common & { tabs: [string, string][]; tab: string; setTab
         {p.variants.map((v) => <option key={v} value={v}>{v}</option>)}
       </select>
       <span style={ST.sep} />
-      {([['meshes', tr('meshes', 'Meshes')], ['bones', tr('bones', 'Bones')], ['sockets', tr('sockets', 'Sockets')], ['soft', tr('smooth', 'Smooth edges')]] as const).map(([k, label]) => (
+      {([['meshes', tr('meshes', 'Meshes')], ['bones', tr('bones', 'Bones')], ['sockets', tr('sockets', 'Sockets')], ['soft', tr('smooth', 'Smooth edges')], ['solid', tr('solid', 'Solid')]] as const).map(([k, label]) => (
         <label key={k} style={ST.check}><input type="checkbox" checked={p.opts[k]} onChange={(e) => p.setOpts({ ...p.opts, [k]: e.target.checked })} />{label}</label>
       ))}
       <span style={ST.sep} />
       <button style={ST.btn} disabled={p.hist.index <= 0} onClick={p.undo} title="Ctrl+Z">↶</button>
       <button style={ST.btn} disabled={p.hist.index >= p.hist.stack.length - 1} onClick={p.redo} title="Ctrl+Y">↷</button>
       <button style={ST.btn} onClick={p.reload} title={tr('reloadTip', 'Read the skeleton and the meshes again from disk')}>⟳</button>
+      <BgSlider tr={tr} />
       {p.extra}
       {p.message && <span style={{ color: p.message.error ? '#ff8080' : '#9fd89f', marginLeft: 8 }}>{p.message.text}</span>}
     </div>

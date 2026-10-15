@@ -6,10 +6,12 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { orbitRotation, projectView, viewForward, type Rotation3D, type ViewMode } from '../../utils/view3d';
+import { useViewBg, viewBgCss } from '../../utils/viewBg';
 import * as A from './animModel';
 import type { MeshStrokes } from './meshStrokes';
 
-export interface ViewOptions { meshes: boolean; bones: boolean; sockets: boolean; soft: boolean }
+/** solid: the meshes' faces filled (far first), in their own colours when they have them. */
+export interface ViewOptions { meshes: boolean; bones: boolean; sockets: boolean; soft: boolean; solid: boolean }
 
 interface Props {
   resolved: A.Resolved | null;
@@ -31,11 +33,20 @@ type V3 = A.Vec3;
 const VIEWS: [string, Rotation3D][] = [['3D', { pitch: -15, yaw: 200 }], ['Front', { pitch: 0, yaw: 180 }], ['Side', { pitch: 0, yaw: 90 }], ['Top', { pitch: -89, yaw: 180 }]];
 const view: ViewMode = '3d';
 
+/** "#rrggbb" times a light level (0..1), as a CSS colour. */
+function shadeHex(hex: string, k: number): string {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  const [r, g, b] = m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [138, 147, 168];
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * k)));
+  return `rgb(${c(r)},${c(g)},${c(b)})`;
+}
+
 export const Viewport3D: React.FC<Props> = ({ resolved, posed, ghost, meshes, options, selBone, onPickBone, overlay, status, viewLabels }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 600, h: 400 });
   const [rot, setRot] = useState<Rotation3D>(VIEWS[0][1]);
+  const [bgGrey] = useViewBg();
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   useEffect(() => {
@@ -52,7 +63,8 @@ export const Viewport3D: React.FC<Props> = ({ resolved, posed, ghost, meshes, op
   const scene = useMemo(() => {
     const segs: { a: V3; b: V3; kind: 'mesh' | 'soft' | 'bone' | 'socket' | 'ghost'; bone: number }[] = [];
     const joints: { p: V3; bone: number }[] = [];
-    if (!resolved || !posed) return { segs, joints };
+    const polys: { pts: V3[]; n: V3; color: string | null; bone: number }[] = [];
+    if (!resolved || !posed) return { segs, joints, polys };
     resolved.bones.forEach((b, i) => {
       const P = posed.bones[i];
       if (!P) return;
@@ -64,7 +76,9 @@ export const Viewport3D: React.FC<Props> = ({ resolved, posed, ghost, meshes, op
         // surfaces only the outline (one face towards the eye, the other away)
         const R = P.rot;
         const facing = (n: A.Vec3 | null) => (n ? A.apply3(R, n).reduce((acc, c, k) => acc + c * look[k], 0) < 0 : true);
-        if (m && 'segs' in m) for (const s of m.segs) {
+        if (options.solid && m && 'faces' in m) {
+          for (const f of m.faces) polys.push({ pts: f.pts.map((q) => A.boneToWorld(posed, i, q)), n: A.apply3(R, f.n), color: f.color, bone: i });
+        } else if (m && 'segs' in m) for (const s of m.segs) {
           const f0 = facing(s.n0), f1 = s.n1 ? facing(s.n1) : f0;
           let kind: 'mesh' | 'soft' | null;
           if (s.hard) kind = f0 || f1 ? 'mesh' : (options.soft ? 'soft' : null);
@@ -84,7 +98,7 @@ export const Viewport3D: React.FC<Props> = ({ resolved, posed, ghost, meshes, op
     if (ghost) resolved.bones.forEach((b, i) => {
       if (b.parent >= 0 && ghost.bones[i]) segs.push({ a: ghost.bones[b.parent].pos, b: ghost.bones[i].pos, kind: 'ghost', bone: i });
     });
-    return { segs, joints };
+    return { segs, joints, polys };
   }, [resolved, posed, ghost, meshes, options, look]);
 
   // framed on the skeleton at rest height: the floor at the bottom, the head near the top
@@ -110,7 +124,7 @@ export const Viewport3D: React.FC<Props> = ({ resolved, posed, ghost, meshes, op
     const ctx = c.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#0b0b12';
+    ctx.fillStyle = viewBgCss(bgGrey);
     ctx.fillRect(0, 0, size.w, size.h);
     const line = (a: V3, b: V3) => { const p = toScreen(a), q = toScreen(b); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke(); };
     // the floor (y = 0)
@@ -131,6 +145,22 @@ export const Viewport3D: React.FC<Props> = ({ resolved, posed, ghost, meshes, op
         default: return { c: 'rgba(160,160,220,0.28)', w: 2, d: [4, 3] };
       }
     };
+    // solid: the faces, far ones first, lit from the eye, each outlined
+    if (scene.polys.length) {
+      const depthOf = (p: V3) => projectView(p[0] - frame.c[0], p[1] - frame.c[1], p[2] - frame.c[2], view, rot).depth;
+      const sorted = scene.polys.map((f) => ({ f, d: f.pts.reduce((acc, p) => acc + depthOf(p), 0) / f.pts.length }))
+        .sort((a, b) => b.d - a.d);
+      ctx.lineWidth = 1;
+      for (const { f } of sorted) {
+        const lit = 0.35 + 0.65 * Math.abs(f.n[0] * look[0] + f.n[1] * look[1] + f.n[2] * look[2]);
+        ctx.fillStyle = shadeHex(f.color ?? '#8a93a8', lit);
+        ctx.strokeStyle = f.bone === selBone ? '#ffbe50' : 'rgba(0,0,0,0.45)';
+        ctx.beginPath();
+        f.pts.forEach((p, k) => { const q = toScreen(p); if (k) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+      }
+    }
     const order = ['ghost', 'soft', 'mesh', 'bone', 'socket'];
     for (const k of order) for (const s of scene.segs) {
       if (s.kind !== k) continue;

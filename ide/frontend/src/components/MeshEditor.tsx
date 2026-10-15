@@ -5,8 +5,11 @@
  * VectorEditor (utils/view3d.ts).
  *
  * - Views: front (XY), top (XZ), side (YZ) and an orbiting 3D view. Middle
- *   button pans, middle button + Shift (or Alt + left) orbits, the wheel zooms
- *   to the cursor — the VectorEditor's 3D controls.
+ *   button pans, middle button + Shift (or Alt + left, or the right button)
+ *   orbits, the wheel zooms to the cursor — the VectorEditor's 3D controls.
+ * - Solid (D): faces filled, far ones first, lit from the viewer, in their own
+ *   colour when the file has "face_colors" (imported models carry the original
+ *   game's), each outlined; in the vpy3d view the edges vpy3d draws go on top.
  * - "vpy3d" display draws only what vpy3d_draw_mesh draws from this angle
  *   (creases, silhouettes, rims, same crease threshold), the rest faint.
  * - Vertices: select (click, Shift-click, box), drag, nudge, add, delete,
@@ -28,6 +31,7 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import * as M from './mesh/vmeshModel';
+import { useViewBg, viewBgCss } from '../utils/viewBg';
 import {
   DEFAULT_ROTATION_3D, orbitRotation, projectView, viewForward,
   type Rotation3D, type ViewMode,
@@ -54,6 +58,14 @@ type Drag =
 interface Proj { x: number; y: number; depth: number }
 
 const EMPTY: M.MeshData = { vertices: [], faces: [] };
+
+/** "#rrggbb" times a light level (0..1), as a CSS colour. */
+function shadeHex(hex: string, k: number): string {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  const [r, g, b] = m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [138, 147, 168];
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * k)));
+  return `rgb(${c(r)},${c(g)},${c(b)})`;
+}
 const EMPTY_SCENE: M.Scenery = { lines: [], occluders: [] };
 const refKey = (r: M.ScenePointRef) => `${r.kind}:${r.item}:${r.point}`;
 /** Is every point of one line / occluder selected (and only those)? Then that item is "the selection". */
@@ -146,6 +158,11 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
   const [, rerender] = useReducer((x: number) => x + 1, 0);
 
   const [sel, setSel] = useState<number[]>([]);
+  /** Edges picked by clicking them (Shift adds): Delete dissolves these, merging their faces. */
+  const [edgeSel, setEdgeSel] = useState<[number, number][]>([]);
+  useEffect(() => {
+    setEdgeSel((e) => (e.some(([a, b]) => !sel.includes(a) || !sel.includes(b)) ? e.filter(([a, b]) => sel.includes(a) && sel.includes(b)) : e));
+  }, [sel]);
   const [face, setFace] = useState<number | null>(null);
   /** Selected line / occluder points (in click order). */
   const [ssel, setSsel] = useState<M.ScenePointRef[]>([]);
@@ -278,6 +295,8 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
   useEffect(() => { if (tool !== 'line') setLinePts([]); }, [tool]);
   const [display, setDisplay] = useState<Display>('wire');
   const [showHidden, setShowHidden] = useState(true);
+  const [solid, setSolid] = useState(true);
+  const [bgGrey, setBgGrey] = useViewBg();
   const [showIndices, setShowIndices] = useState(false);
   const [showNormals, setShowNormals] = useState(false);
   const [snap, setSnap] = useState(true);
@@ -469,6 +488,16 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       return;
     }
     if (!needEditable()) return;
+    if (edgeSel.length) {
+      /* edges picked: dissolve them, the faces either side become one */
+      const r = M.dissolveEdges(mesh, edgeSel);
+      if (r.merged) applyMesh(r.mesh);
+      setSel([]); setEdgeSel([]); setFace(null);
+      flash(r.skipped
+        ? tr('dissolvedSome', 'Dissolved {{n}} edge(s); {{k}} could not be (a rim, or already gone)', { n: r.merged, k: r.skipped })
+        : tr('dissolved', 'Dissolved {{n}} edge(s): their faces merged', { n: r.merged }), !r.merged);
+      return;
+    }
     if (sel.length) {
       const n = sel.length;
       applyMesh(M.deleteVertices(mesh, sel));
@@ -478,7 +507,7 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       applyMesh(M.deleteFaces(mesh, [face]));
       setFace(null);
     }
-  }, [needEditable, sel, ssel, face, mesh, scenery, editable, applyMesh, applyBoth, flash]);
+  }, [needEditable, sel, edgeSel, ssel, face, mesh, scenery, editable, applyMesh, applyBoth, flash]);
   const doMakeFace = useCallback(() => {
     if (!needEditable()) return;
     runOp(M.makeFace(mesh, sel), (m) => { setFace(m.faces.length - 1); setSel([]); });
@@ -726,9 +755,9 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
   const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     containerRef.current?.focus();
     const p = pos(e);
-    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    if (e.button === 1 || e.button === 2 || (e.button === 0 && e.altKey)) {
       e.preventDefault();
-      const orbit = e.shiftKey || e.altKey;
+      const orbit = e.button === 2 || e.shiftKey || e.altKey;
       if (orbit) {
         if (viewMode !== '3d') setViewMode('3d');
         startDrag({ kind: 'orbit', x: p.x, y: p.y });
@@ -800,6 +829,11 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     const ed = hitEdge(p.x, p.y);
     if (ed) {
       setSel((s) => (multi ? [...s, ...[ed.a, ed.b].filter((i) => !s.includes(i))] : [ed.a, ed.b]));
+      setEdgeSel((e) => {
+        const pair: [number, number] = [ed.a, ed.b];
+        if (!multi) return [pair];
+        return e.some(([a, b]) => (a === ed.a && b === ed.b) || (a === ed.b && b === ed.a)) ? e : [...e, pair];
+      });
       if (!multi) setSsel([]);
       setFace(null);
       return;
@@ -898,6 +932,7 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       case 'b': case 'B': done(); doBoxOccluder(); return;
       case 'Enter': if (tool === 'line') { done(); finishLine(); } return;
       case 'w': case 'W': done(); setDisplay((d) => (d === 'wire' ? 'vpy3d' : 'wire')); return;
+      case 'd': case 'D': done(); setSolid((v) => !v); return;
       case 'Home': case 'h': case 'H': done(); frameAll(); return;
       case 'Escape':
         done();
@@ -923,7 +958,7 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
     const ctx = c.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#0b0b12';
+    ctx.fillStyle = viewBgCss(bgGrey);
     ctx.fillRect(0, 0, size.w, size.h);
 
     // grid
@@ -996,6 +1031,33 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       });
     }
 
+    // solid: every face filled, far ones first (painter's), lit from the viewer, in its
+    // own colour if the file has them; each outlined so the polygons read
+    if (solid) {
+      const fw = axes.fwd;
+      const order: { fi: number; d: number }[] = [];
+      shown.faces.forEach((f, fi) => {
+        if (f.length < 3 || f.some((i) => !proj[i])) return;
+        let d = 0;
+        for (const i of f) d += proj[i].depth;
+        order.push({ fi, d: d / f.length });
+      });
+      order.sort((a, b) => b.d - a.d);
+      ctx.lineWidth = 1;
+      for (const { fi } of order) {
+        const f = shown.faces[fi], n = geo.normals[fi];
+        const facing = n ? Math.abs(n[0] * fw[0] + n[1] * fw[1] + n[2] * fw[2]) : 0.5;
+        const base = M.faceColor(shown, fi) ?? '#8a93a8';
+        ctx.fillStyle = shadeHex(base, 0.35 + 0.65 * facing);
+        ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+        ctx.beginPath();
+        f.forEach((i, k) => (k ? ctx.lineTo(proj[i].x, proj[i].y) : ctx.moveTo(proj[i].x, proj[i].y)));
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+
     // selected face fill
     if (face !== null && shown.faces[face] && shown.faces[face].every((i) => proj[i])) {
       const poly = shown.faces[face].map((i) => proj[i]);
@@ -1022,9 +1084,19 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       ctx.stroke();
       ctx.setLineDash([]);
     };
-    if (display === 'vpy3d' && showHidden) stroke(hidden, '#24304a', 1, [3, 4]);
-    stroke(soft, '#2b5a3a', 1, [4, 3]);
-    stroke(lines, display === 'vpy3d' ? '#b8ffb8' : '#5fd35f', display === 'vpy3d' ? 1.6 : 1.3);
+    // Solid: the fills already show the shape; only what vpy3d draws goes on top.
+    if (display === 'vpy3d' && showHidden && !solid) stroke(hidden, '#24304a', 1, [3, 4]);
+    if (!solid) stroke(soft, '#2b5a3a', 1, [4, 3]);
+    if (!solid || display === 'vpy3d') stroke(lines, display === 'vpy3d' ? '#b8ffb8' : '#5fd35f', display === 'vpy3d' ? 1.6 : 1.3);
+    // picked edges (Delete dissolves them)
+    if (edgeSel.length) {
+      ctx.strokeStyle = '#ffaa28'; ctx.lineWidth = 3; ctx.beginPath();
+      for (const [a, b] of edgeSel) {
+        const pa = proj[a], pb = proj[b];
+        if (pa && pb) { ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); }
+      }
+      ctx.stroke();
+    }
 
     // faces with errors
     ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 2;
@@ -1150,7 +1222,7 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
       ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + q.x * 22, gy - q.y * 22); ctx.stroke();
       ctx.fillStyle = col; ctx.fillText(name, gx + q.x * 28 - 3, gy - q.y * 28 + 3);
     }
-  }, [size, scale, viewMode, rot, axes, frameC, frameR, toScreen, toModel, proj, geo, shown, display, showHidden, showIndices, showNormals, isOpen, face, sel, hover, box, badVerts, badFaces,
+  }, [size, scale, viewMode, rot, axes, frameC, frameR, toScreen, toModel, proj, geo, shown, display, solid, bgGrey, edgeSel, showHidden, showIndices, showNormals, isOpen, face, sel, hover, box, badVerts, badFaces,
     lineProj, occProj, shownScene, ssel, hoverS, showOccluders, linePts, mousePx, newLineClosed, occRect, badLines, badOccs]);
 
   // ── side panel helpers ──
@@ -1239,7 +1311,7 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
           <button key={m} title={tip} onClick={() => setViewMode(m)} style={viewMode === m ? S.btnOn : S.btn}>{label}</button>
         ))}
         <span style={S.sep} />
-        <button title={tr('toolSelectTip', 'Select and move vertices (S). Click an edge to select its two vertices, inside a face to select the face; drag on empty space for a box.')} onClick={() => setTool('select')} style={tool === 'select' ? S.btnOn : S.btn}>{tr('toolSelect', 'Select')}</button>
+        <button title={tr('toolSelectTip', 'Select and move vertices (S). Click an edge to pick it (Shift adds more; Delete then merges the faces either side), inside a face to select the face; drag on empty space for a box.')} onClick={() => setTool('select')} style={tool === 'select' ? S.btnOn : S.btn}>{tr('toolSelect', 'Select')}</button>
         <button title={tr('toolAddTip', 'Add vertices (A): click on the view plane; new vertices join the selection in order, ready for Make face')} onClick={() => setTool('add')} style={tool === 'add' ? S.btnOn : S.btn} disabled={!editable && !!raw}>{tr('toolAdd', 'Add vertex')}</button>
         <button title={tr('toolLineTip', 'Draw a line (L): click points on the view plane (or onto a vertex / point), Enter or double-click ends it, Esc cancels')} onClick={() => setTool('line')} style={tool === 'line' ? S.btnOn : S.btn}>{tr('toolLine', 'Line')}</button>
         <button title={tr('toolOccTip', 'Drag a box occluder on the front, top or side view (O)')} onClick={() => setTool('occluder')} style={tool === 'occluder' ? S.btnOn : S.btn}>{tr('toolOcc', 'Occluder')}</button>
@@ -1247,6 +1319,8 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
         <button title={tr('displayTip', 'Wireframe shows every edge (smooth edges dashed); vpy3d shows only what vpy3d_draw_mesh draws from this angle (W)')} onClick={() => setDisplay((d) => (d === 'wire' ? 'vpy3d' : 'wire'))} style={display === 'vpy3d' ? S.btnOn : S.btn}>
           {display === 'vpy3d' ? tr('displayVpy3d', 'vpy3d view') : tr('displayWire', 'Wireframe')}
         </button>
+        <button title={tr('solidTip', 'Fill the faces, far ones first, in their own colour when the file has face_colors (D)')} onClick={() => setSolid((v) => !v)} style={solid ? S.btnOn : S.btn}>{tr('solid', 'Solid')}</button>
+        <label style={S.check} title={tr('bgTip', 'Background grey, black to white (every 3D view)')}>{tr('background', 'Background')}<input type="range" min={0} max={255} value={bgGrey} onChange={(e) => setBgGrey(Number(e.target.value))} style={{ width: 80 }} /></label>
         {display === 'vpy3d' && (
           <label style={S.check}><input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />{tr('hidden', 'hidden')}</label>
         )}
@@ -1463,7 +1537,7 @@ export const MeshEditor: React.FC<MeshEditorProps> = ({ resource, docUri, onChan
           </Section>
 
           <div style={S.help}>
-            {tr('help', 'Middle drag: pan · Shift+middle or Alt+drag: orbit · wheel: zoom · 1-4: views · F face · J connect · K disconnect · N flip · L line (Enter ends, Esc cancels) · O occluder · B box occluder · Del delete · arrows nudge (Shift ×10) · Ctrl+Z / Ctrl+Y')}
+            {tr('help', 'Middle drag: pan · Shift+middle or Alt+drag: orbit · wheel: zoom · 1-4: views · F face · J connect · K disconnect · N flip · L line (Enter ends, Esc cancels) · O occluder · B box occluder · Del delete (picked edges: merge their faces) · arrows nudge (Shift ×10) · Ctrl+Z / Ctrl+Y')}
           </div>
         </div>
       </div>

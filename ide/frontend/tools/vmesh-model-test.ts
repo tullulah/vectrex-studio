@@ -387,5 +387,55 @@ test('scenery edits', () => {
   assert.equal(sc.lines[0].points.length, 2, 'operations do not mutate their input');
 });
 
+test('face_colors follow their faces through every edit', () => {
+  const raw = { name: 'c', vertices: M.primitiveCube(1000).vertices, faces: M.primitiveCube(1000).faces,
+    face_colors: ['#100000', '#200000', '#300000', '#400000', '#500000', '#600000'] };
+  const m = M.meshFromRaw(raw);
+  assert.equal(m.faceColors?.length, 6);
+  // a split face: both halves keep the colour
+  const f0 = m.faces[0];
+  const split = M.connectVertices(m, f0[0], f0[2]);
+  assert.ok('mesh' in split);
+  const s1 = (split as { mesh: M.MeshData }).mesh;
+  assert.equal(s1.faces.length, 7);
+  assert.deepEqual(s1.faceColors!.slice(0, 2), ['#100000', '#100000']);
+  // merged back: one face, the first one's colour, the rest untouched
+  const merged = M.disconnectVertices(s1, f0[0], f0[2]);
+  assert.ok('mesh' in merged);
+  const s2 = (merged as { mesh: M.MeshData }).mesh;
+  assert.deepEqual(s2.faceColors, m.faceColors);
+  // deleting faces and vertices drops their colours
+  const d = M.deleteFaces(m, [1, 3]);
+  assert.deepEqual(d.faceColors, ['#100000', '#300000', '#500000', '#600000']);
+  const dv = M.deleteVertices(m, [0]);
+  assert.equal(dv.faceColors!.length, dv.faces.length);
+  // a new face has none; written back, the array keeps its length, and a mesh
+  // without colours writes none (a stale array never survives)
+  const nf = M.makeFace(dv, [1, 2, 3]);
+  assert.ok('mesh' in nf);
+  const s3 = (nf as { mesh: M.MeshData }).mesh;
+  assert.equal(s3.faceColors![s3.faceColors!.length - 1], null);
+  const back = M.meshToRaw(raw, s3);
+  assert.equal((back.face_colors as unknown[]).length, s3.faces.length);
+  assert.equal('face_colors' in M.meshToRaw(raw, M.primitiveCube(1000)), false);
+  assert.deepEqual(errors(back), []);
+});
+
+test('dissolveEdges merges a strip of faces into one, colours kept', () => {
+  // a 1 x 4 strip of quads: vertices 0..9 in two columns (x 0 and 1000, y 0..4000)
+  const vertices = [] as M.MeshVertex[];
+  for (let r = 0; r <= 4; r++) { vertices.push({ x: 0, y: r * 1000, z: 0 }, { x: 1000, y: r * 1000, z: 0 }); }
+  const faces = [0, 1, 2, 3].map((r) => [2 * r, 2 * r + 1, 2 * r + 3, 2 * r + 2]);
+  const m: M.MeshData = { vertices, faces, faceColors: ['#a00000', '#b00000', '#c00000', '#d00000'] };
+  const r = M.dissolveEdges(m, [[2, 3], [4, 5], [6, 7]]);
+  assert.equal(r.merged, 3);
+  assert.equal(r.skipped, 0);
+  assert.equal(r.mesh.faces.length, 1);
+  assert.equal(r.mesh.faces[0].length, 10);
+  assert.deepEqual(r.mesh.faceColors, ['#a00000']);
+  // a rim cannot be dissolved
+  assert.equal(M.dissolveEdges(m, [[0, 1]]).skipped, 1);
+});
+
 rmSync(work, { recursive: true, force: true });
 console.log(`\n${passed} passed${haveCli ? '' : ' (vpy_cli not found: compiler cross-check skipped)'}${haveCli && !cliKnowsScenery ? ' (vpy_cli predates lines/occluders: scenery cases not cross-checked)' : ''}`);

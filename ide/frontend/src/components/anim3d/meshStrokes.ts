@@ -8,7 +8,9 @@ import type { Vec3 } from './animModel';
 
 /** An edge, and the outward normals of the faces either side (n1 null: an open edge or a line). */
 export interface MeshSeg { a: Vec3; b: Vec3; hard: boolean; n0: Vec3 | null; n1: Vec3 | null }
-export type MeshStrokes = { segs: MeshSeg[]; note?: string } | { error: string };
+/** A face for the Solid view: its corners, its outward normal and its colour ("face_colors"). */
+export interface MeshPoly { pts: Vec3[]; n: Vec3; color: string | null }
+export type MeshStrokes = { segs: MeshSeg[]; faces: MeshPoly[]; note?: string } | { error: string };
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -29,6 +31,11 @@ export function meshStrokes(json: unknown): MeshStrokes {
     const a = v[e.a], b = v[e.b];
     if (a && b) segs.push({ a: [a.x, a.y, a.z], b: [b.x, b.y, b.z], hard: e.hard, n0: geo.normals[e.f0] ?? null, n1: e.f1 >= 0 ? geo.normals[e.f1] ?? null : null });
   }
+  const faces: MeshPoly[] = [];
+  mesh.faces.forEach((f, fi) => {
+    if (f.length < 3 || f.some((i) => !v[i])) return;
+    faces.push({ pts: f.map((i) => [v[i].x, v[i].y, v[i].z] as Vec3), n: geo.normals[fi] ?? [0, 0, 1], color: M.faceColor(mesh, fi) });
+  });
   for (const l of M.sceneryFromRaw(raw).lines) {
     const pts = l.points;
     const n = M.lineClosed(l) && pts.length > 2 ? pts.length : pts.length - 1;
@@ -37,7 +44,7 @@ export function meshStrokes(json: unknown): MeshStrokes {
       segs.push({ a: [a.x, a.y, a.z], b: [b.x, b.y, b.z], hard: true, n0: null, n1: null });
     }
   }
-  return { segs, note };
+  return { segs, faces, note };
 }
 
 export type DirEntry = { name: string; path?: string; isDir: boolean; children?: DirEntry[] };

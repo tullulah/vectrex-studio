@@ -64,6 +64,13 @@ export type MeshFace = number[];
 export interface MeshData {
   vertices: MeshVertex[];
   faces: MeshFace[];
+  /**
+   * Optional per-face colour ("face_colors" in the file: "#rrggbb" or null), one per
+   * face. The Solid view fills with it; every edit operation keeps it with its face
+   * (a split face's halves keep the colour, a merge keeps the first face's).
+   * Imported meshes carry the original game's colours this way.
+   */
+  faceColors?: (string | null)[];
 }
 
 export type VmeshRaw = Record<string, unknown>;
@@ -151,6 +158,10 @@ export function meshFromRaw(raw: VmeshRaw): MeshData {
   const faces: MeshFace[] = Array.isArray(raw.faces)
     ? raw.faces.map((f) => (Array.isArray(f) ? f.map((i) => num(i, -1)) : []))
     : [];
+  const fc = raw.face_colors;
+  if (Array.isArray(fc) && fc.length === faces.length) {
+    return { vertices, faces, faceColors: fc.map((c) => (typeof c === 'string' ? c : null)) };
+  }
   return { vertices, faces };
 }
 
@@ -168,6 +179,11 @@ export function meshToRaw(raw: VmeshRaw, mesh: MeshData): VmeshRaw {
   if (!empty || 'vertices' in raw || 'faces' in raw) {
     out.vertices = mesh.vertices.map((v) => ({ ...v, x: v.x, y: v.y, z: v.z }));
     out.faces = mesh.faces.map((f) => [...f]);
+  }
+  if (mesh.faceColors && mesh.faceColors.length === mesh.faces.length && mesh.faceColors.some((c) => c)) {
+    out.face_colors = [...mesh.faceColors];
+  } else {
+    delete out.face_colors;
   }
   delete out.sections;
   delete out.caps;
@@ -654,7 +670,14 @@ export function edgeVisible(geo: Geometry, e: Edge, forward: [number, number, nu
 const clampI16 = (n: number) => Math.max(I16_MIN, Math.min(I16_MAX, Math.round(n)));
 
 export function cloneMesh(m: MeshData): MeshData {
-  return { vertices: m.vertices.map((v) => ({ ...v })), faces: m.faces.map((f) => [...f]) };
+  const out: MeshData = { vertices: m.vertices.map((v) => ({ ...v })), faces: m.faces.map((f) => [...f]) };
+  if (m.faceColors) out.faceColors = [...m.faceColors];
+  return out;
+}
+
+/** The colour of face i (null when the mesh has none). */
+export function faceColor(m: MeshData, i: number): string | null {
+  return m.faceColors?.[i] ?? null;
 }
 
 export function addVertex(m: MeshData, p: { x: number; y: number; z: number }): { mesh: MeshData; index: number } {
@@ -688,10 +711,13 @@ export function deleteVertices(m: MeshData, del: Iterable<number>): MeshData {
   const remap = new Map<number, number>();
   const vertices: MeshVertex[] = [];
   m.vertices.forEach((v, i) => { if (!gone.has(i)) { remap.set(i, vertices.length); vertices.push({ ...v }); } });
+  const keep = m.faces.map((f) => f.every((i) => !gone.has(i)));
   const faces = m.faces
-    .filter((f) => f.every((i) => !gone.has(i)))
+    .filter((_, k) => keep[k])
     .map((f) => f.map((i) => remap.get(i) ?? i));
-  return { vertices, faces };
+  const out: MeshData = { vertices, faces };
+  if (m.faceColors) out.faceColors = m.faceColors.filter((_, k) => keep[k]);
+  return out;
 }
 
 /** Drop vertices no face uses. */
@@ -719,12 +745,15 @@ export function makeFace(m: MeshData, order: number[]): { mesh: MeshData } | { e
     if (n[0] * (g[0] - c[0]) + n[1] * (g[1] - c[1]) + n[2] * (g[2] - c[2]) < 0) face = [...face].reverse();
   }
   out.faces.push(face);
+  if (out.faceColors) out.faceColors.push(null);
   return { mesh: out };
 }
 
 export function deleteFaces(m: MeshData, del: Iterable<number>): MeshData {
   const gone = new Set(del);
-  return { vertices: m.vertices.map((v) => ({ ...v })), faces: m.faces.filter((_, i) => !gone.has(i)).map((f) => [...f]) };
+  const out: MeshData = { vertices: m.vertices.map((v) => ({ ...v })), faces: m.faces.filter((_, i) => !gone.has(i)).map((f) => [...f]) };
+  if (m.faceColors) out.faceColors = m.faceColors.filter((_, i) => !gone.has(i));
+  return out;
 }
 
 export function flipFaces(m: MeshData, which: Iterable<number>): MeshData {
@@ -777,6 +806,7 @@ export function connectVertices(m: MeshData, a: number, b: number): { mesh: Mesh
   };
   const out = cloneMesh(m);
   out.faces.splice(fi, 1, walk(i, j), walk(j, i));
+  if (out.faceColors) out.faceColors.splice(fi, 1, faceColor(m, fi), faceColor(m, fi));
   return { mesh: out };
 }
 
@@ -816,16 +846,38 @@ export function disconnectVertices(m: MeshData, a: number, b: number): { mesh: M
   const out = cloneMesh(m);
   out.faces[f1i] = merged;
   out.faces.splice(f2i, 1);
+  if (out.faceColors) out.faceColors.splice(f2i, 1);
   return { mesh: out };
+}
+
+/**
+ * DISSOLVE: remove several edges at once, each by merging the two faces either side
+ * (DISCONNECT, one after another, so a run of edges across a strip of faces leaves one
+ * face). Rims and edges already gone are skipped and counted.
+ */
+export function dissolveEdges(m: MeshData, edges: [number, number][]): { mesh: MeshData; merged: number; skipped: number } {
+  let cur = m, merged = 0, skipped = 0;
+  for (const [a, b] of edges) {
+    const r = disconnectVertices(cur, a, b);
+    if ('mesh' in r) { cur = r.mesh; merged++; } else skipped++;
+  }
+  return { mesh: cur, merged, skipped };
 }
 
 /** Append `add` to `m` (vertex indices shifted). */
 export function appendMesh(m: MeshData, add: MeshData): MeshData {
   const base = m.vertices.length;
-  return {
+  const out: MeshData = {
     vertices: [...m.vertices.map((v) => ({ ...v })), ...add.vertices.map((v) => ({ ...v }))],
     faces: [...m.faces.map((f) => [...f]), ...add.faces.map((f) => f.map((i) => i + base))],
   };
+  if (m.faceColors || add.faceColors) {
+    out.faceColors = [
+      ...(m.faceColors ?? m.faces.map(() => null)),
+      ...(add.faceColors ?? add.faces.map(() => null)),
+    ];
+  }
+  return out;
 }
 
 // ── primitives (wound anticlockwise seen from outside: Newell normal outward) ─
