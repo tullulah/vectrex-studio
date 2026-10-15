@@ -440,14 +440,22 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
     const ref = sc.body?.scopes?.find((s: any) => /register/i.test(s.name))?.variablesReference;
     const vars = await this.dap('variables', { variablesReference: ref });
     const regs = new Array(16).fill(0);
+    this.regRef = ref;
+    this.regNames = new Map();
     for (const v of vars.body?.variables ?? []) {
       const m = /^R(\d+)\b/.exec(v.name);
-      if (m && +m[1] < 16) regs[+m[1]] = parseInt(v.value, 16) >>> 0;
+      if (m && +m[1] < 16) { regs[+m[1]] = parseInt(v.value, 16) >>> 0; this.regNames.set(+m[1], v.name); }
     }
     this.regs = regs;
     this.pages.clear();
     this.stopGen++;   // a background read of the previous stop must not land in this one
   }
+
+  /** The registers' scope at this stop and probe-rs's names for them ("R4", "R13/SP"). (No
+   *  writeRegister: probe-rs 0.31's DAP server cannot set a register -- setVariable answers
+   *  "cancelled", its REPL has no `set`, and DCRSR/DCRDR need word writes it does not make.) */
+  private regRef = 0;
+  private regNames = new Map<number, string>();
 
   /** Counts the stops: a background read belongs to the stop it was started at. */
   private stopGen = 0;

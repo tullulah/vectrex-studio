@@ -15,7 +15,7 @@
  */
 import { useDebugStore } from '../state/debugStore';
 import { useProjectStore } from '../state/projectStore';
-import { armCVariable, armGlobal, armLocal, armProgramActive, armWriteMemory, type ArmVariable } from './armSourceDebug';
+import { armCanWriteRegisters, armCVariable, armGlobal, armLocal, armProgramActive, armWriteMemory, armWriteRegister, type ArmVariable } from './armSourceDebug';
 import type { CType } from './dwarfInfo';
 
 const MAX_ELEMENTS = 16;
@@ -291,15 +291,24 @@ export function cDebugValue(text: string, filePath: string, line: number, word: 
 
 // ---- changing a value ----
 
-/** A variable whose value the debugger can set: one integer in memory. */
-export interface Lvalue { label: string; addr: number; size: number; signed: boolean; current: string }
+/** A variable whose value the debugger can set: one integer, in memory (`addr`) or in a
+ *  register of the paused function (`reg`). */
+export interface Lvalue { label: string; addr: number; reg?: number; size: number; signed: boolean; current: string }
 
 /** The editable place of a variable (an int or a pointer in memory), or why it is not one. */
 function lvalueOf(label: string, v: ArmVariable | null, member?: { type: CType; offset: number }): Lvalue | string | null {
   if (!v) return null;
   const p = v.place;
   if (p.kind === 'unavailable') return `${label} is optimised out here`;
-  if (p.kind !== 'memory') return `${label} lives in a register here: changing it is not supported yet`;
+  if (p.kind === 'value') return `${label} is a constant here (the compiler put its value in the code)`;
+  if (p.kind === 'register') {
+    if (member) return `${label}: a field of a struct held in registers (not supported)`;
+    if (!armCanWriteRegisters()) return `${label} is in r${p.reg} here, and the probe cannot set a register: stop where it is in memory, or make it a global`;
+    const t = v.type;
+    if (t.kind !== 'int' && t.kind !== 'pointer') return `${label} is not an integer`;
+    const size = t.kind === 'pointer' ? 4 : t.size;
+    return { label, addr: 0, reg: p.reg, size, signed: t.kind === 'int' && t.signed, current: armValue(v) };
+  }
   const type = member?.type ?? v.type;
   const addr = p.addr + (member?.offset ?? 0);
   if (type.kind !== 'int' && type.kind !== 'pointer') return `${label} is ${type.kind === 'array' ? 'an array' : type.kind === 'struct' ? 'a struct' : 'not an integer'}: change one of its values`;
@@ -343,7 +352,8 @@ export function cLvalue(text: string, filePath: string, line: number, word: stri
   if (!armProgramActive()) return null;
   const l = text.split(/\r?\n/)[line - 1] ?? '';
   const before = l.slice(0, startColumn - 1);
-  if (/[0-9]/.test(word[0] ?? '')) return null;
+  const after = l.slice(startColumn - 1 + word.length);
+  if (/[0-9]/.test(word[0] ?? '') || /^\s*\(/.test(after) || /\/\/|\/\*/.test(before)) return null;   // a number, a call, a comment
   if (/\[[^\]]*\]\s*\.\s*$/.test(before)) return `${word}: a field of an array element (not supported yet)`;
   if (/->\s*$/.test(before)) return `${word}: through a pointer (not supported yet)`;
   const qual = /([A-Za-z_]\w*)\s*\.\s*$/.exec(before);
@@ -388,6 +398,12 @@ export async function setValue(lv: Lvalue, text: string): Promise<void> {
   const v = parseValue(text)!;
   const bytes = new Uint8Array(lv.size);
   let u = v < 0 ? 2 ** (lv.size * 8) + v : v;
+  if (lv.reg !== undefined) {
+    // a register holds the whole word: a narrow type is sign- or zero-extended in it
+    const word = lv.signed ? v | 0 : (v < 0 ? 2 ** (lv.size * 8) + v : v);
+    await armWriteRegister(lv.reg, word >>> 0);
+    return;
+  }
   for (let i = 0; i < lv.size; i++) { bytes[i] = u % 256; u = Math.floor(u / 256); }
   await armWriteMemory(lv.addr, bytes);
 }

@@ -51,6 +51,25 @@ export interface ArmSystem {
   writeMemory?(addr: number, bytes: Uint8Array): Promise<void>;
   /** Fetch what peek() was asked for and did not have; true if anything came in. */
   fetchMissed?(): Promise<boolean>;
+  /** Set a register of the paused core (the cartridge, through the probe). */
+  writeRegister?(n: number, value: number): Promise<void>;
+}
+
+/** Can the target set a register (the emulators; not the cartridge through probe-rs)? */
+export function armCanWriteRegisters(): boolean {
+  const s = system();
+  return !!(s && (s.writeRegister || (s.core0 as { setReg?: unknown }).setReg));
+}
+
+/** Set register `n` of the paused program (a variable the compiler keeps in a register). */
+export async function armWriteRegister(n: number, value: number): Promise<void> {
+  const s = system();
+  if (!s) throw new Error('no ARM program');
+  if (n < 0 || n > 12) throw new Error(`r${n} is not a register a variable can live in`);
+  if (s.writeRegister) { await s.writeRegister(n, value >>> 0); return; }
+  const cpu = s.core0 as { setReg?: (n: number, v: number) => void };
+  if (!cpu.setReg) throw new Error('this target cannot change registers');
+  cpu.setReg(n, value >>> 0);
 }
 
 /** After a value was shown as unknown: fetch the memory it needed (the cartridge reads its
@@ -347,6 +366,8 @@ export function armGlobal(symbol: string): ArmVariable | null {
   if (g) return { type: g.type, place: { kind: 'memory', addr: g.addr }, read8, reg };
   const addr = table?.symbolAddress(symbol);
   if (addr === undefined) return null;
+  // (a function's symbol is not a variable: no value, and never written over)
+  if (table?.functionAt(addr)?.start === addr) return null;
   return { type: { kind: 'int', size: 4, signed: true, name: 'int32' }, place: { kind: 'memory', addr }, read8, reg };
 }
 
