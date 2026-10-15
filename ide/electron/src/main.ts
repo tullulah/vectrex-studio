@@ -3432,6 +3432,72 @@ ipcMain.handle('file:delete', async (_e, filePath: string) => {
   }
 });
 
+/* ── The file tree's context menu (FileTreePanel) ──────────────────────────────────────
+ * Every handler takes absolute paths and refuses to overwrite: a name that is taken comes
+ * back as `exists`, so the tree can say so instead of losing a file. */
+const exists = (p: string) => fs.stat(p).then(() => true, () => false);
+const validName = (n: string) => !!n && n !== '.' && n !== '..' && !/[\\/]/.test(n);
+
+ipcMain.handle('file:mkdir', async (_e, dirPath: string) => {
+  if (!dirPath) return { error: 'no_path' };
+  if (!validName(basename(dirPath))) return { error: 'invalid_name' };
+  if (await exists(dirPath)) return { error: 'exists' };
+  try { await fs.mkdir(dirPath, { recursive: true }); return { ok: true, path: dirPath }; }
+  catch (e: any) { return { error: e?.message || 'mkdir_failed' }; }
+});
+
+ipcMain.handle('file:create', async (_e, filePath: string) => {
+  if (!filePath) return { error: 'no_path' };
+  if (!validName(basename(filePath))) return { error: 'invalid_name' };
+  try { await fs.writeFile(filePath, '', { flag: 'wx' }); return { ok: true, path: filePath }; }
+  catch (e: any) { return { error: e?.code === 'EEXIST' ? 'exists' : (e?.message || 'create_failed') }; }
+});
+
+ipcMain.handle('file:rename', async (_e, args: { path: string; newName: string }) => {
+  const { path: from, newName } = args ?? ({} as any);
+  if (!from || !validName(newName)) return { error: 'invalid_name' };
+  const to = join(dirname(from), newName);
+  if (to === from) return { ok: true, path: to };
+  // A change of case only (Foo -> foo) on a case-insensitive disk "exists" as itself.
+  if (to.toLowerCase() !== from.toLowerCase() && await exists(to)) return { error: 'exists' };
+  try { await fs.rename(from, to); return { ok: true, path: to }; }
+  catch (e: any) { return { error: e?.message || 'rename_failed' }; }
+});
+
+/* A copy into targetDir under a free name: "x.vec", then "x copy.vec", "x copy 2.vec"... */
+ipcMain.handle('file:copy', async (_e, args: { sourcePath: string; targetDir: string }) => {
+  const { sourcePath, targetDir } = args ?? ({} as any);
+  if (!sourcePath || !targetDir) return { error: 'missing_paths' };
+  const sep = targetDir.includes('\\') ? '\\' : '/';
+  if ((targetDir + sep).startsWith(sourcePath + sep)) return { error: 'into_itself' };
+  try {
+    const name = basename(sourcePath);
+    const st = await fs.stat(sourcePath);
+    const dot = st.isDirectory() ? -1 : name.lastIndexOf('.');
+    const stem = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : '';
+    let target = join(targetDir, name);
+    for (let n = 1; await exists(target); n++)
+      target = join(targetDir, `${stem} copy${n > 1 ? ' ' + n : ''}${ext}`);
+    await fs.cp(sourcePath, target, { recursive: true, errorOnExist: true, force: false });
+    return { ok: true, targetPath: target };
+  } catch (e: any) {
+    return { error: e?.message || 'copy_failed' };
+  }
+});
+
+/* Delete from the tree = to the system's trash, so a wrong click can be undone there. */
+ipcMain.handle('file:trash', async (_e, filePath: string) => {
+  if (!filePath) return { error: 'no_path' };
+  try { await shell.trashItem(filePath); return { ok: true, path: filePath }; }
+  catch (e: any) { return { error: e?.message || 'trash_failed' }; }
+});
+
+ipcMain.handle('file:reveal', async (_e, filePath: string) => {
+  if (!filePath) return { error: 'no_path' };
+  shell.showItemInFolder(filePath);
+  return { ok: true };
+});
+
 // Move file or directory
 ipcMain.handle('file:move', async (_e, args: { sourcePath: string; targetDir: string }) => {
   const { sourcePath, targetDir } = args;

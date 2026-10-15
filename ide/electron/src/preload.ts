@@ -80,6 +80,13 @@ contextBridge.exposeInMainWorld('files', {
   openBin: () => ipcRenderer.invoke('bin:open') as Promise<{ path: string; base64: string; size: number } | { error: string } | null>,
   deleteFile: (path: string) => ipcRenderer.invoke('file:delete', path) as Promise<{ success: boolean; path: string } | { error: string }>,
   moveFile: (args: { sourcePath: string; targetDir: string }) => ipcRenderer.invoke('file:move', args) as Promise<{ success: boolean; sourcePath: string; targetPath: string } | { error: string; targetPath?: string }>,
+  // The file tree's context menu: absolute paths; a taken name answers { error: 'exists' }.
+  mkdir: (path: string) => ipcRenderer.invoke('file:mkdir', path) as Promise<{ ok: true; path: string } | { error: string }>,
+  createFile: (path: string) => ipcRenderer.invoke('file:create', path) as Promise<{ ok: true; path: string } | { error: string }>,
+  rename: (args: { path: string; newName: string }) => ipcRenderer.invoke('file:rename', args) as Promise<{ ok: true; path: string } | { error: string }>,
+  copy: (args: { sourcePath: string; targetDir: string }) => ipcRenderer.invoke('file:copy', args) as Promise<{ ok: true; targetPath: string } | { error: string }>,
+  trash: (path: string) => ipcRenderer.invoke('file:trash', path) as Promise<{ ok: true; path: string } | { error: string }>,
+  reveal: (path: string) => ipcRenderer.invoke('file:reveal', path) as Promise<{ ok: true } | { error: string }>,
   watchDirectory: (path: string) => ipcRenderer.invoke('file:watchDirectory', path) as Promise<{ ok: boolean; error?: string }>,
   unwatchDirectory: (path: string) => ipcRenderer.invoke('file:unwatchDirectory', path) as Promise<{ ok: boolean }>,
   onFileChanged: (cb: (event: { type: 'added' | 'removed' | 'changed'; path: string; isDir: boolean }) => void) => {
