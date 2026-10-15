@@ -40,6 +40,8 @@ const UPLOAD_MAGIC = 0x444C5055;
  *  draws the pause sign over its redraw of the last frame. */
 const PAUSE_FLAG = 0x20080040;
 const PAUSE_MAGIC = 0x53554150;
+/** The game's name on the card (16 bytes): the firmware finds its romset and samples by it. */
+const SWD_STEM = 0x20080044;
 /** Where the firmware loads a game (sd.rs GAME_LOAD_ADDR) and where it copies one linked for SRAM. */
 const GAME_LOAD_ADDR = 0x11000000;
 const GAME_SRAM_ADDR = 0x20040000;
@@ -316,14 +318,14 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
   }
 
   /** Upload the game, its breakpoints already in it, and have the menu launch it. */
-  launch(image: Uint8Array, name: string): Promise<void> {
-    return this.serial(() => this.launchNow(image, name));
+  launch(image: Uint8Array, name: string, stem: string): Promise<void> {
+    return this.serial(() => this.launchNow(image, name, stem));
   }
 
   /** DBGPAUSE as the session found it, to put back at the end. */
   private dbgPause: number[] | null = null;
 
-  private async launchNow(image: Uint8Array, name: string): Promise<void> {
+  private async launchNow(image: Uint8Array, name: string, stem: string): Promise<void> {
     await this.dap('configurationDone');
     // the game paused on core 1 must not stop the clock core 0 draws by
     const saved: number[] = [];
@@ -357,6 +359,10 @@ class CartridgeSession implements ArmRunControl, ArmSystem {
       await this.write32(UPLOAD, 0).catch(() => {});   // back to the menu
       throw e;
     }
+    // the name it would have on the card: its romset (ROMS/<x>.ZIP) and samples (<x>.VSM)
+    const st = new Uint8Array(16);
+    for (let i = 0; i < Math.min(15, stem.length); i++) st[i] = stem.charCodeAt(i) & 0x7F;
+    await this.writeMem(SWD_STEM, st);
     await this.write32(SWD_LAUNCH + 8, 0);
     await this.write32(SWD_LAUNCH + 4, image.length);
     await this.write32(SWD_LAUNCH, SWD_LAUNCH_MAGIC);
@@ -661,7 +667,9 @@ export async function startCartridgeDebug(binPath: string, elfPath: string): Pro
   const project = useProjectStore.getState().vpyProject?.config?.project?.name
     ?? (binPath.split(/[\\/]/).pop() ?? 'GAME').replace(/(_sd)?\.bin$/i, '');
   try {
-    await s.launch(image, project.replace(/_/g, ' '));
+    // the name the IDE copies it to the card with (SNOWBROS_sd.bin -> SNOWBROS.BIN)
+    const stem = (binPath.split(/[\\/]/).pop() ?? '').replace(/(_sd)?\.bin$/i, '').toUpperCase();
+    await s.launch(image, project.replace(/_/g, ' '), stem);
   } catch (e) {
     await stopCartridgeDebug();
     throw e;
