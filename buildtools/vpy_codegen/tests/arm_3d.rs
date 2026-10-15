@@ -122,6 +122,15 @@ fn three_d_builtins_are_uvm2_only() {
 }
 
 #[test]
+fn three_d_builtins_pass_on_rp2350_built_as_c() {
+    // vpy_cli builds `[rp2350] backend = "c"` programs with the SDK's 3D layer linked in
+    let (_dir, assets) = cube_asset();
+    vpy_codegen::arm::three_d::check(&module(SRC), &assets, "rp2350-c").expect("3D on the rp2350 C build");
+    let err = vpy_codegen::arm::three_d::check(&module(SRC), &assets, "rp2350").unwrap_err();
+    assert!(err.contains("or on rp2350 with `backend = \"c\"`"), "{err}");
+}
+
+#[test]
 fn bad_arguments_are_errors_with_the_line() {
     let (_dir, assets) = cube_asset();
     let src = "\

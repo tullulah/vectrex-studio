@@ -670,4 +670,4 @@ port): a blow is a clip of four keys (guard, wind-up, strike, guard) plus `damag
 - On m6809, `PLAY_SAMPLE` and `SAMPLE_POS` don't build ("Undefined symbol").
 - On m6809, `STOP_MUSIC()` only builds when the program also calls `PLAY_MUSIC`.
 - `.vsmp` doesn't play on uvm2, from VPy or C.
-- `.vmesh` and `.vscene` work from VPy on uvm2 only (not m6809, rp2350 or pitrex).
+- `.vmesh` and `.vscene` work from VPy on uvm2, and on rp2350 when the program is built with the C backend (`[rp2350] backend = "c"`, see COMPILER_STATUS.md); not on m6809 or pitrex.

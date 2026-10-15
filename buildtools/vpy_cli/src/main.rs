@@ -1896,6 +1896,13 @@ fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool, ram
     let unified = program.unified;
     println!("  {} Parsed {} modules, unified {} items", "✓".green(), program.module_count, unified.items.len());
 
+    // `[rp2350] backend = "c"` (or, with no [rp2350] section saying otherwise, the project's
+    // [uvm2] one): the program as C on libvpy, linked by the cartridge's own C recipe. It is
+    // the only way the 3D, effects, skeleton and jukebox builtins reach this target.
+    if rp2350_c_backend(input) {
+        return build_rp2350_c(input, &source_path, &project_dir, &unified, output, verbose, ram);
+    }
+
     // Phase 4: ARM codegen — always single-bank for RP2350
     println!("\n{}", "Phase 3: ARM Codegen".bright_cyan().bold());
     let title = unified.meta.title_override.as_deref().unwrap_or("VPY GAME");
@@ -2057,6 +2064,213 @@ fn cmd_build_rp2350(input: &PathBuf, output: Option<PathBuf>, verbose: bool, ram
         bin_size,
         bin_path.display()).bright_green().bold());
 
+    Ok(())
+}
+
+/// A key of a .vpyproj section (`[rp2350] backend = "c"`).
+fn vpyproj_section_key(vpyproj: &Path, section: &str, key: &str) -> Option<String> {
+    let content = std::fs::read_to_string(vpyproj).ok()?;
+    let header = format!("[{section}]");
+    let mut inside = false;
+    for line in content.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            inside = t == header;
+            continue;
+        }
+        if !inside {
+            continue;
+        }
+        if let Some((k, v)) = t.split_once('=') {
+            if k.trim() == key {
+                return Some(v.trim().trim_matches('"').trim().to_string());
+            }
+        }
+    }
+    None
+}
+
+/// The rp2350 setting `key`: the project's [rp2350] section, else its [uvm2] one (a program
+/// written for the C backend is C on both cartridges, with the same pools and limits).
+fn rp2350_key(input: &Path, key: &str) -> Option<String> {
+    if input.extension().and_then(|s| s.to_str()) != Some("vpyproj") {
+        return None;
+    }
+    vpyproj_section_key(input, "rp2350", key).or_else(|| vpyproj_section_key(input, "uvm2", key))
+}
+
+fn rp2350_c_backend(input: &Path) -> bool {
+    rp2350_key(input, "backend").as_deref() == Some("c")
+}
+
+/// What a C-backend program calls that only the .um2 has, for the cartridge: the fault
+/// handler writes to the uvm2 SD driver (the cartridge's BIOS keeps its own). (sdk_rp2350.c
+/// brings the memory functions a -nostdlib image needs.)
+const RP2350_C_SUPPORT: &str = "/* vpy_cli: the rp2350 cartridge's side of a C-backend VPy program (build_rp2350_c). */\nvoid vpyf_install(void) {}\n";
+
+/// The rp2350 build of a C-backend program: libvpy C compiled and linked as the SDK's
+/// `rp2350-cart` recipe builds a C game (uvm2.mk) -- the BIOS's SDK reached through its
+/// function table (VPY_DUAL_CORE), the image linked into the PSRAM where the cartridge's
+/// launcher loads games (rp2350_game_ram.ld), with the 'VPy2' header of rp2350_start.s. The
+/// image is the SD card's whether or not --ram is given: there is no firmware-embedded C build.
+#[allow(clippy::too_many_arguments)]
+fn build_rp2350_c(
+    input: &Path,
+    source_path: &Path,
+    project_dir: &Path,
+    unified: &vpy_parser::Module,
+    output: Option<PathBuf>,
+    verbose: bool,
+    ram: bool,
+) -> Result<()> {
+    use std::process::Command;
+
+    println!("\n{}", "Phase 3: RP2350 C codegen (libvpy)".bright_cyan().bold());
+    if !ram {
+        println!("  {} the C backend builds the SD card's RAM image (the emulator and the cartridge's launcher run it)", "note:".yellow());
+    }
+    let assets = discover_assets(&source_path.to_path_buf());
+    vpy_codegen::known_functions::register(unified);
+    vpy_codegen::validate::check_array_literals(unified).map_err(|e| anyhow::anyhow!("{e}"))?;
+    vpy_codegen::arm::three_d::check(unified, &assets, "rp2350-c").map_err(|e| anyhow::anyhow!("{e}"))?;
+    vpy_codegen::validate::check_array_types(unified, "rp2350").map_err(|e| anyhow::anyhow!("{e}"))?;
+    let c = vpy_codegen::cgen::generate_c(unified, &assets)
+        .map_err(|e| anyhow::anyhow!("RP2350 C codegen failed:\n{e}"))?;
+    println!("  {} Generated {} bytes of C", "✓".green(), c.c_source.len());
+
+    let build_dir = project_dir.join("build");
+    std::fs::create_dir_all(&build_dir)?;
+    let project_name: String = output.as_ref()
+        .and_then(|p| p.file_stem()).and_then(|s| s.to_str()).map(|s| s.to_string())
+        .or_else(|| vpyproj_project_name(&input.to_path_buf()))
+        .unwrap_or_else(|| project_dir.file_name().and_then(|n| n.to_str()).unwrap_or("output").to_string());
+    let c_path = build_dir.join(format!("{project_name}.c"));
+    let asm_path = build_dir.join(format!("{project_name}.asm")); // the IDE's status check
+    let elf_path = build_dir.join(format!("{project_name}.elf"));
+    let bin_path = output.unwrap_or_else(|| build_dir.join(format!("{project_name}.bin")));
+    let source_text = vpy_codegen::arm::debug_lines::finish_c(&c.c_source, &c_path);
+    std::fs::write(&c_path, &source_text).with_context(|| format!("Failed to write {}", c_path.display()))?;
+    std::fs::copy(&c_path, &asm_path).with_context(|| format!("Failed to write {}", asm_path.display()))?;
+    println!("  {} C written: {}", "✓".green(), c_path.display());
+
+    let sdk_resolved = find_uvm2_sdk_dir(input).map_err(|msg| anyhow::anyhow!(
+        "{}\n  The C backend links libvpy, the 3D layer and the cartridge's SDK from it.", msg))?;
+    println!("  {} SDK: {}", "✓".green(), sdk_resolved.describe());
+    let uvm2_sdk = sdk_resolved.dir;
+    let sdk_root = uvm2_sdk.parent().map(Path::to_path_buf).unwrap_or_else(|| uvm2_sdk.clone());
+    let vpy_c = sdk_root.join("vpy-c");
+    let rp2350_sdk = sdk_root.join("rp2350-sdk");
+    for need in [vpy_c.join("vpy.c"), rp2350_sdk.join("sdk_rp2350.c"), rp2350_sdk.join("rp2350_start.s"), rp2350_sdk.join("rp2350_game_ram.ld")] {
+        if !need.exists() {
+            return Err(anyhow::anyhow!("the SDK at {} has no {}", sdk_root.display(), need.display()));
+        }
+    }
+    let sdk_opt = rp2350_key(input, "sdk_opt").filter(|o| o == "O2" || o == "Os" || o == "O1");
+
+    let mut srcs: Vec<PathBuf> = vec![rp2350_sdk.join("rp2350_start.s"), c_path.canonicalize().unwrap_or(c_path.clone())];
+    let mut incs: Vec<PathBuf> = vec![vpy_c.join("include"), vpy_c.clone(), sdk_root.join("pitrex-sim").join("include"), rp2350_sdk.clone(), uvm2_sdk.clone()];
+    let mut defs: Vec<String> = ["VPY_RP2350", "VPY_DUAL_CORE", "UVM2_SUBUNITS", "UVM2_HZ=50"].iter().map(|s| s.to_string()).collect();
+    srcs.push(sdk_source(&vpy_c.join("vpy.c"), sdk_opt.as_deref(), &build_dir)?);
+    srcs.push(rp2350_sdk.join("sdk_rp2350.c"));
+    let support = build_dir.join("vpy_rp2350_support.c");
+    std::fs::write(&support, RP2350_C_SUPPORT).with_context(|| format!("Failed to write {}", support.display()))?;
+    srcs.push(support);
+
+    if vpy_codegen::arm::three_d::uses_3d(unified) {
+        if !vpy_c.join("vpy3d.c").exists() {
+            return Err(anyhow::anyhow!("the program uses 3D builtins, but the SDK has no vpy-c/vpy3d.c ({})", vpy_c.display()));
+        }
+        let bridge = build_dir.join("vpy3d_bridge.c");
+        std::fs::write(&bridge, VPY3D_BRIDGE_C).with_context(|| format!("Failed to write {}", bridge.display()))?;
+        defs.push("VPYX_LIBVPY".to_string());   // libvpy gives vpy3d its draw hook, sine and font
+        let vpy_c_src = std::fs::read_to_string(vpy_c.join("vpy.c"))
+            .with_context(|| format!("the 3D layer needs {}", vpy_c.join("vpy.c").display()))?;
+        let font = extract_libvpy_font(&vpy_c_src).map_err(|e| anyhow::anyhow!(
+            "{e} in {}: this vpy_cli does not know this SDK's vpy.c", vpy_c.join("vpy.c").display()))?;
+        std::fs::write(build_dir.join("vpy3d_font.inc"), font).with_context(|| "Failed to write vpy3d_font.inc")?;
+        incs.push(build_dir.canonicalize().unwrap_or(build_dir.clone()));
+        srcs.push(sdk_source(&bridge.canonicalize().unwrap_or(bridge), sdk_opt.as_deref(), &build_dir)?);
+        let mut layers = Vec::new();
+        for g in vpy_codegen::arm::three_d::groups(unified) {
+            for src in g.sources() {
+                let path = vpy_c.join(src);
+                if !path.exists() {
+                    return Err(anyhow::anyhow!("the program uses {:?} builtins, but the SDK has no vpy-c/{src}", g));
+                }
+                srcs.push(sdk_source(&path, sdk_opt.as_deref(), &build_dir)?);
+                layers.push(src.trim_end_matches(".c"));
+            }
+            defs.push(g.define().to_string());
+        }
+        let used = vpy_codegen::arm::three_d::usage(unified);
+        defs.push(format!("VPYX_MESHES={}", used.meshes.len().max(1)));
+        defs.push(format!("VPYX_SCENES={}", used.scenes.len().max(1)));
+        println!("  {} 3D: {} + bridge, {} mesh(es), {} scene(s)", "✓".green(), layers.join(", "), used.meshes.len(), used.scenes.len());
+    }
+    if vpy_codegen::arm::three_d::uses_jukebox(unified) {
+        // The cartridge has no audio jack: vpy_jukebox.c outside the .um2 runtime is silent,
+        // and a program falls back to its PSG sounds (JUKEBOX_LIVE() is 0).
+        let juke = build_dir.join("vpy_jukebox.c");
+        std::fs::write(&juke, VPY_JUKEBOX_C).with_context(|| format!("Failed to write {}", juke.display()))?;
+        srcs.push(sdk_source(&juke.canonicalize().unwrap_or(juke), sdk_opt.as_deref(), &build_dir)?);
+        defs.push(vpy_codegen::arm::three_d::Group::Juke.define().to_string());
+        println!("  {} jukebox: silent on this cartridge (no audio jack); the PSG sounds play", "note:".yellow());
+    }
+    // the project's own (pools, limits): [rp2350] defs, else [uvm2] defs
+    if let Some(pd) = rp2350_key(input, "defs") {
+        defs.extend(pd.split(';').map(|d| d.trim().to_string()).filter(|d| !d.is_empty()));
+    }
+
+    println!("\n{}", "Phase 4: Compile + link (rp2350 cartridge recipe)".bright_cyan().bold());
+    let gcc = pico::resolve_arm_toolchain(
+        std::env::var_os("UVM2_ARM_TOOLCHAIN").map(PathBuf::from),
+        &pico::standard_toolchain_candidates(),
+    ).map(|d| d.join("bin").join("arm-none-eabi-gcc")).ok()
+        .filter(|p| p.exists())
+        .unwrap_or_else(|| PathBuf::from("arm-none-eabi-gcc"));
+    let mut cmd = Command::new(&gcc);
+    cmd.args(["-mthumb", "-mcpu=cortex-m33", "-mfloat-abi=softfp", "-mfpu=fpv5-sp-d16", "-fno-math-errno",
+              "-O2", "-g", "-ffreestanding", "-ffunction-sections", "-fdata-sections", "-fno-common",
+              "-fno-tree-loop-distribute-patterns",
+              "-nostdlib", "-Wl,--gc-sections",
+              "-Wa,--defsym,DUAL_CORE_FLAG=0x44430001"]);
+    cmd.arg(format!("-Wl,-T,{}", rp2350_sdk.join("rp2350_game_ram.ld").display()));
+    // The IDE's "SWD debug" build mode (UVM2_DEBUG_CFLAGS=-Og, as for a C project's Makefile):
+    // after the -O2 above, so it is the level gcc keeps
+    if let Ok(extra) = std::env::var("UVM2_DEBUG_CFLAGS") {
+        cmd.args(extra.split_whitespace());
+        if !extra.trim().is_empty() {
+            println!("  {} debug build: {}", "note:".yellow(), extra.trim());
+        }
+    }
+    for i in &incs { cmd.arg(format!("-I{}", i.display())); }
+    for d in &defs { cmd.arg(format!("-D{d}")); }
+    cmd.args(&srcs).args(["-lgcc", "-o"]).arg(&elf_path);
+    if verbose {
+        println!("  {} {:?}", "$".dimmed(), cmd);
+    }
+    let out = cmd.output().map_err(|e| anyhow::anyhow!("could not run {}: {e}", gcc.display()))?;
+    if !out.status.success() {
+        return Err(anyhow::anyhow!("rp2350 C build failed:\n{}{}",
+            String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr)));
+    }
+    println!("  {} Linked: {}", "✓".green(), elf_path.display());
+    let objcopy = gcc.with_file_name("arm-none-eabi-objcopy");
+    let objcopy = if objcopy.exists() { objcopy } else { PathBuf::from("arm-none-eabi-objcopy") };
+    let oc = Command::new(&objcopy).args(["-O", "binary"]).arg(&elf_path).arg(&bin_path).output()
+        .map_err(|e| anyhow::anyhow!("could not run {}: {e}", objcopy.display()))?;
+    if !oc.status.success() {
+        return Err(anyhow::anyhow!("arm-none-eabi-objcopy failed:\n{}", String::from_utf8_lossy(&oc.stderr)));
+    }
+    // The debugger and the emulator look for the ELF next to the image
+    let elf_beside = bin_path.with_extension("elf");
+    if elf_beside != elf_path {
+        let _ = std::fs::copy(&elf_path, &elf_beside);
+    }
+    let bin_size = std::fs::metadata(&bin_path).map(|m| m.len()).unwrap_or(0);
+    println!("  {} Binary written: {} ({} bytes)", "✓".green(), bin_path.display(), bin_size);
+    println!("\n{}", format!("✓ BUILD SUCCESS (rp2350, C backend): {} bytes written to {}",
+        bin_size, bin_path.display()).bright_green().bold());
     Ok(())
 }
 

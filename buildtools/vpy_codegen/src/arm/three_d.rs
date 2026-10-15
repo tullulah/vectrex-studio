@@ -348,10 +348,14 @@ pub fn check(module: &Module, assets: &[AssetInfo], target: &str) -> Result<(), 
         (|| {
         let Some(b) = find_in(module, &c.name) else { return };
         let line = c.source_line;
-        if target != "uvm2" {
+        // The C side of these builtins (the SDK's vpy3d and the layers over it, vpy_jukebox.c)
+        // links into the uvm2 image, and into the rp2350 cartridge's when the program is
+        // built as C (vpy_cli: `[rp2350] backend = "c"`, target "rp2350-c").
+        if target != "uvm2" && target != "rp2350-c" {
             let what = if b.group == Juke { "a jukebox builtin (the UVMC2's audio jack)" } else { "a 3D builtin (vpy3d)" };
+            let rp2350 = if target == "rp2350" { " (or on rp2350 with `backend = \"c\"` in the project's [rp2350] section)" } else { "" };
             errors.push(format!(
-                "line {line}: `{}()` is {what}; it is available on the uvm2 target only, not on {target}",
+                "line {line}: `{}()` is {what}; it is available on the uvm2 target only{rp2350}, not on {target}",
                 b.name
             ));
             return;
