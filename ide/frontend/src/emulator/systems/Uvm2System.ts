@@ -229,6 +229,11 @@ const DMA_BUSY        = 1 << 26;   // CTRL_TRIG BUSY on the RP2350 (24 on the RP
 // ── Timing ──────────────────────────────────────────────────────────────────
 /** RP2350 core cycles per Vectrex bus cycle (150 MHz / 1.5 MHz). */
 const CPU_PER_BUS   = 100;
+/** The SDK's screen, half-width and half-height in its device units (see the constructor). */
+const UVM2_SCREEN_X = 18000;
+const UVM2_SCREEN_Y = 24000;
+/** Beam (alg) units per device unit at the SDK's default DRAW_SCALE, measured on ROTJ. */
+const UVM2_BEAM_PER_UNIT = 1.26;
 /** A 50 Hz Vectrex frame. Matches UVM2_CYCLES_PER_FRAME in the SDK. */
 const BUS_PER_FRAME = 30000;
 /** El refresco que la BIOS acostumbra, del que sale todo lo demas. */
@@ -730,6 +735,15 @@ export class Uvm2System implements ISystem, IBus {
       (orb, ora) => this.psg.write(orb, ora),
     );
     this.canvas = new Canvas(canvasElement);
+    /* THE SCREEN OF A UVM2 GAME IS THE SDK's, NOT vecx's. A game draws in the SDK's device
+     * units, +-18000 x +-24000 (the WASM simulator shows exactly that box), and the SDK's
+     * default DRAW_SCALE ramps them to ~1.26 beam units each — measured on ROTJ against the
+     * simulator's lines once the ramp tail was modelled. That box is the tube: on a console
+     * ROTJ's score and shield bars sit just inside its edges. vecx's 0-33000 x 0-41000 field
+     * is ~70% of it, so here they fell off the sides. Centred on the zero (16500, 20500). */
+    const hx = UVM2_SCREEN_X * UVM2_BEAM_PER_UNIT, hy = UVM2_SCREEN_Y * UVM2_BEAM_PER_UNIT;
+    this.beam.setBounds(16500 - hx, 20500 - hy, 16500 + hx, 20500 + hy);
+    this.canvas.setView(16500 - hx, 20500 - hy, 16500 + hx, 20500 + hy);
   }
 
   // ─── Loading ──────────────────────────────────────────────────────────────
@@ -2252,7 +2266,7 @@ export class Uvm2System implements ISystem, IBus {
     } else {
       this.framesSinDibujo = 0;
     }
-    this.canvas.renderFrame(draw, drawCnt, erse, erseCnt);
+    this.canvas.renderPersistent(draw, drawCnt, erse, erseCnt);   // a list can span two frames
     /* SI NO DIBUJA, DECIR DONDE SE QUEDO. Un emulador mudo no distingue "la imagen esta
      * colgada" de "el emulador no arranca" ni de "no se llamo al emulador", y hoy me ha
      * costado tres intentos en el fichero equivocado por no tener esto.

@@ -41,6 +41,10 @@ export class Canvas {
   private screen_y: number = SCREEN_Y_DEFAULT;
   private lPitch: number   = BYTES_PER_PIXEL * SCREEN_X_DEFAULT;
   private scl_factor: number = 1;
+  /** The beam rectangle shown (alg units): the whole 0–ALG_MAX field unless setView says otherwise. */
+  private view = { x0: 0, y0: 0, x1: ALG_MAX_X, y1: ALG_MAX_Y };
+  private offX = 0;
+  private offY = 0;
 
   /** Grayscale colour table: index → [R, G, B] */
   private color_set: [number, number, number][] = [];
@@ -77,9 +81,26 @@ export class Canvas {
   }
 
   private updateScale(): void {
-    const sclx = (ALG_MAX_X / this.screen_x) | 0;
-    const scly = (ALG_MAX_Y / this.screen_y) | 0;
-    this.scl_factor = sclx > scly ? sclx : scly;
+    const w = this.view.x1 - this.view.x0, h = this.view.y1 - this.view.y0;
+    if (w === ALG_MAX_X && h === ALG_MAX_Y && this.view.x0 === 0 && this.view.y0 === 0) {
+      // the field as vecx shows it (integer scale, top-left aligned)
+      const sclx = (ALG_MAX_X / this.screen_x) | 0;
+      const scly = (ALG_MAX_Y / this.screen_y) | 0;
+      this.scl_factor = sclx > scly ? sclx : scly;
+      this.offX = 0; this.offY = 0;
+      return;
+    }
+    // a window: fit it whole, centred
+    this.scl_factor = Math.max(w / this.screen_x, h / this.screen_y);
+    this.offX = this.view.x0 - (this.screen_x * this.scl_factor - w) / 2;
+    this.offY = this.view.y0 - (this.screen_y * this.scl_factor - h) / 2;
+  }
+
+  /** Show this rectangle of the beam field (alg units) instead of the whole 0–ALG_MAX one. */
+  setView(x0: number, y0: number, x1: number, y1: number): void {
+    this.view = { x0, y0, x1, y1 };
+    this.updateScale();
+    this.clearScreen();
   }
 
   // ------------------------------------------------------------------ //
@@ -123,8 +144,9 @@ export class Canvas {
     const { data, scl_factor, lPitch, color_set } = this;
     const [cr, cg, cb] = color_set[color] ?? [0, 0, 0];
 
-    let ax = x0 / scl_factor, ay = y0 / scl_factor;
-    let bx = x1 / scl_factor, by = y1 / scl_factor;
+    const { offX, offY } = this;
+    let ax = (x0 - offX) / scl_factor, ay = (y0 - offY) / scl_factor;
+    let bx = (x1 - offX) / scl_factor, by = (y1 - offY) / scl_factor;
     const steep = Math.abs(by - ay) > Math.abs(bx - ax);
     if (steep) { let t = ax; ax = ay; ay = t; t = bx; bx = by; by = t; }
     if (ax > bx) { let t = ax; ax = bx; bx = t; t = ay; ay = by; by = t; }
@@ -190,6 +212,36 @@ export class Canvas {
       this.drawLine(d.x0, d.y0, d.x1, d.y1, d.color);
     }
 
+    this.ctx2d.putImageData(this.imageData, 0, 0);
+  }
+
+  /**
+   * Render this frame AND the previous one, on a cleared canvas.
+   *
+   * A program whose command list takes longer than a frame to draw (the UVM2 SDK's: a list
+   * runs in bus time, ~22 ms for ROTJ's title) has it cut in two by the frame boundary, and
+   * rendering frame by frame showed one half, then the other — on a tube the phosphor and the
+   * eye join them. Two frames are the eye's share. `prev` is the beam's erase list, i.e. the
+   * previous frame's draw list; its entries the beam marked invalid (redrawn this frame) are
+   * skipped.
+   */
+  renderPersistent(
+    vectorsDraw: readonly VectorEntry[],
+    vectorDrawCnt: number,
+    vectorsPrev: readonly VectorEntry[],
+    vectorPrevCnt: number,
+  ): void {
+    if (!this.ctx2d || !this.imageData || !this.data) return;
+    const d = this.data;
+    for (let i = 0; i < d.length; i += 4) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; }
+    for (let v = 0; v < vectorPrevCnt; v++) {
+      const e = vectorsPrev[v];
+      if (e.color !== VECTREX_COLORS && e.color > 0) this.drawLine(e.x0, e.y0, e.x1, e.y1, e.color);
+    }
+    for (let v = 0; v < vectorDrawCnt; v++) {
+      const e = vectorsDraw[v];
+      if (e.color > 0) this.drawLine(e.x0, e.y0, e.x1, e.y1, e.color);
+    }
     this.ctx2d.putImageData(this.imageData, 0, 0);
   }
 
