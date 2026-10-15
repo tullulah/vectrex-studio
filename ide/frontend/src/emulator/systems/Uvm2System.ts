@@ -503,6 +503,21 @@ export class Uvm2System implements ISystem, IBus {
   private jit: Thumb2Jit | null = null;
   private jitIo = false;
   private jitSpent = 0;
+  /**
+   * HOW FAR APART THE TWO CORES MAY RUN, in CPU cycles. 0 (the default) is the reference:
+   * the core that is behind runs, one instruction at a time, so the two interleave by
+   * cycle exactly — and while core 1 is busy (building the stream) that forbids blocks,
+   * which caps ROTJ at ~22 emulated frames/s. With a quantum a translated block runs until
+   * its core is `quantum` cycles past the other: ROTJ stage 2 measured 41 frames/s at 16,
+   * 54 at 48, 62 at 100, the same scene drawn and the HUD within a frame per second.
+   *
+   * What it changes: the order of the two cores' memory accesses inside a window of that
+   * many cycles (on the chip the two cores really run at once, so a correct program does
+   * not depend on it), and a peripheral access by the core that is ahead sees the bus up
+   * to `quantum` cycles late (the bus follows the slower core; one bus cycle is 100 CPU
+   * cycles). Set it on the system, or with globalThis.__UVM2_QUANTUM before it is built.
+   */
+  quantum = Math.max(0, Number((globalThis as any).__UVM2_QUANTUM ?? 0) | 0);
   /* CORE 1 POLLING (sondeoCore1): the core doing the reading, the last polling read (its
    * instruction, step, cycle, core-1 store count and registers), the change of the
    * registers over one turn, and the cycles to add to core 1's clock. */
@@ -1233,12 +1248,12 @@ export class Uvm2System implements ISystem, IBus {
       }
     }
     this.enCore1 = true;
-    if (this.jit !== null && this.relojCore0 - this.relojCore1 >= JIT_MARGEN && (pc1 & 1) === 0 && (this.cpu1 as any).itState === 0) {
+    if (this.jit !== null && this.relojCore0 + this.quantum - this.relojCore1 >= JIT_MARGEN && (pc1 & 1) === 0 && (this.cpu1 as any).itState === 0) {
       const blk = this.jit.block(1, pc1);
       if (blk !== null) {
         // runs while core 1 stays the one behind and the frame goes on (see runFrame)
         this.jitIo = false;
-        blk((this.cpu1 as any).regs, this.cpu1, this, this, Math.min(this.relojCore0, this.relojFinFrame));
+        blk((this.cpu1 as any).regs, this.cpu1, this, this, Math.min(this.relojCore0 + this.quantum, this.relojFinFrame));
         this.enCore1 = false;
         return JIT_BLOQUE;
       }
@@ -2263,11 +2278,11 @@ export class Uvm2System implements ISystem, IBus {
          * core 0 stays the one the scheduler picks (c0 <= c1) and the frame goes on. Not
          * while debugging (every instruction is checked) nor inside an IT block. */
         const blk = this.jit !== null && !depurando && (pc & 1) === 0 && (this.cpu as any).itState === 0
-          && (!this.cpu1 || this.relojCore1 - this.relojCore0 >= JIT_MARGEN) ? this.jit.block(0, pc) : null;
+          && (!this.cpu1 || this.relojCore1 + this.quantum - this.relojCore0 >= JIT_MARGEN) ? this.jit.block(0, pc) : null;
         if (blk !== null) {
           this.jitIo = false;
           blk((this.cpu as any).regs, this.cpu, this, this,
-              this.cpu1 ? Math.min(this.relojCore1 + 1, this.relojFinFrame) : this.relojFinFrame);
+              this.cpu1 ? Math.min(this.relojCore1 + 1 + this.quantum, this.relojFinFrame) : this.relojFinFrame);
           spent += this.jitSpent;
           continue;
         }
