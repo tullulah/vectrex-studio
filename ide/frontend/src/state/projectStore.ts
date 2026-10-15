@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Project, FileNode } from '../types/models.js';
 import { logger } from '../utils/logger.js';
+import i18n from '../i18n';
 
 // Lazy import to avoid circular dependency
 let editorStoreRef: any = null;
@@ -110,6 +111,7 @@ interface ProjectState {
   setVpyProject: (project: LoadedVpyProject | undefined) => void;
   openVpyProject: (projectFile: string) => Promise<boolean>;
   closeVpyProject: () => void;
+  leaveProject: (nextRoot: string) => boolean;
   hasVpyProject: () => boolean;
   getEntryPath: () => string | null;
   getOutputPath: () => string | null;
@@ -132,6 +134,7 @@ export const useProjectStore = create<ProjectState>()(
       
       // Actions
       setProject: (rootPath, files, name) => {
+        if (!get().leaveProject(rootPath)) return;
         const workspaceName = name || rootPath.split(/[/\\]/).pop() || 'Workspace';
         logger.debug('Project', 'Setting project', { rootPath, workspaceName, filesCount: files.length });
         logger.debug('Project', 'Files structure:', files);
@@ -306,6 +309,10 @@ export const useProjectStore = create<ProjectState>()(
             return false;
           }
           
+          // The project open until now closes its tabs first (or keeps everything, if the
+          // user chose to keep unsaved changes).
+          if (!get().leaveProject(result.rootDir)) return false;
+
           const config = result.config as ProjectConfig;
           const isExternal = config.project?.type === 'c-external';
           const loaded: LoadedVpyProject = {
@@ -383,6 +390,30 @@ export const useProjectStore = create<ProjectState>()(
         }
       },
       
+      /** Switching to another project or folder: the tabs of the one open until now are
+       *  remembered (reopening it brings them back) and closed, so its files do not stay open
+       *  in the next one. Unsaved changes ask first; false = the user kept them, and nothing
+       *  changes. Files from outside the project (File > Open) stay open. */
+      leaveProject: (nextRoot: string) => {
+        const { project, vpyProject, saveProjectState } = get();
+        const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '');
+        const oldRoot = project?.rootPath ? norm(project.rootPath) : '';
+        if (!oldRoot || !editorStoreRef || oldRoot === norm(nextRoot)) return true;
+        const { documents, active, closeDocument } = editorStoreRef.getState();
+        const inside = (p: string, root: string) => (norm(p) + '/').startsWith(root + '/');
+        // (a file that is also in the next one, a folder opened as a project inside it, stays)
+        const mine = (documents as any[]).filter(d => d.diskPath && inside(d.diskPath, oldRoot) && !inside(d.diskPath, norm(nextRoot)));
+        const unsaved = mine.filter(d => d.dirty);
+        if (unsaved.length > 0) {
+          const names = unsaved.map(d => norm(d.diskPath).split('/').pop()).join(', ');
+          if (!window.confirm(i18n.t('project.switchUnsaved', { count: unsaved.length, names }))) return false;
+        }
+        if (vpyProject) saveProjectState(vpyProject.projectFile, mine.map(d => d.uri), active);
+        for (const d of mine) closeDocument(d.uri);
+        logger.info('Project', `Closed ${mine.length} file(s) of the previous project`);
+        return true;
+      },
+
       closeVpyProject: () => {
         const { vpyProject, saveProjectState } = get();
         

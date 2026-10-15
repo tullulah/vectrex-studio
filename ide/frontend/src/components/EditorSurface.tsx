@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditorStore } from '../state/editorStore';
 import { useProjectStore } from '../state/projectStore';
@@ -16,6 +16,10 @@ import { VectorMovieEditor } from './VectorMovieEditor';
 import { MeshEditor } from './MeshEditor';
 import { SceneEditor } from './SceneEditor';
 import { Anim3DEditor } from './Anim3DEditor';
+import { FileTreeMenu, type MenuItem } from './panels/FileTreeMenu';
+
+const IS_MAC = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform);
+const IS_WIN = typeof navigator !== 'undefined' && /win/i.test(navigator.platform);
 
 // Basic custom tab bar replacing flexlayout doc:* logic.
 // Phase 1: single group, order = documents array order.
@@ -27,7 +31,65 @@ export const EditorSurface: React.FC = () => {
   const setActive = useEditorStore(s=>s.setActive);
   const closeDocument = useEditorStore(s=>s.closeDocument);
   const hasWorkspace = useProjectStore(s=>s.hasWorkspace());
-  const visibleDocs = documents; // all docs now visible (no hide/pin)
+  const setPinned = useEditorStore(s=>s.setPinned);
+  const projectRoot = useProjectStore(s=>s.project?.rootPath);
+  const visibleDocs = documents; // pinned tabs first: setPinned keeps them at the front
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; uri: string } | null>(null);
+
+  /** Close several tabs: one confirmation for all the unsaved ones among them. If the active
+   *  tab goes, `keep` (the tab the menu was opened on) becomes active, or a neighbour. */
+  const closeMany = useCallback((uris: string[], keep?: string) => {
+    const docs = useEditorStore.getState().documents;
+    const going = docs.filter(d => uris.includes(d.uri));
+    if (!going.length) return;
+    const unsaved = going.filter(d => d.dirty);
+    if (unsaved.length === 1 && going.length === 1) {
+      if (!window.confirm(t('dialog.unsavedChanges', 'File has unsaved changes. Close anyway?'))) return;
+    } else if (unsaved.length > 0) {
+      const names = unsaved.map(d => deriveTitle(d.uri)).join(', ');
+      if (!window.confirm(t('tabs.confirmCloseUnsaved', { count: unsaved.length, names }))) return;
+    }
+    const st = useEditorStore.getState();
+    const wasActive = st.active;
+    const idx = docs.findIndex(d => d.uri === wasActive);
+    for (const d of going) st.closeDocument(d.uri);
+    if (wasActive && uris.includes(wasActive)) {
+      const left = useEditorStore.getState().documents;
+      const next = (keep && left.find(d => d.uri === keep)) || left[Math.min(Math.max(idx, 0), left.length - 1)];
+      if (next) useEditorStore.getState().setActive(next.uri);
+    }
+  }, [t]);
+
+  const tabMenuItems = (uri: string): MenuItem[] => {
+    const docs = useEditorStore.getState().documents;
+    const doc = docs.find(d => d.uri === uri);
+    const i = docs.findIndex(d => d.uri === uri);
+    const unpinned = (list: typeof docs) => list.filter(d => !d.pinned).map(d => d.uri);
+    const others = unpinned(docs.filter(d => d.uri !== uri));
+    const right = unpinned(docs.slice(i + 1));
+    const saved = unpinned(docs.filter(d => !d.dirty));
+    const disk = doc?.diskPath;
+    const root = projectRoot?.replace(/\\/g, '/').replace(/\/+$/, '');
+    const norm = disk?.replace(/\\/g, '/');
+    const rel = norm && root && norm.startsWith(root + '/') ? norm.slice(root.length + 1) : undefined;
+    const copy = (text?: string) => { if (text) navigator.clipboard?.writeText(text).catch(() => {}); };
+    return [
+      { label: t('tabs.close'), onClick: () => closeMany([uri]) },
+      { label: t('tabs.closeOthers'), disabled: !others.length, onClick: () => closeMany(others, uri) },
+      { label: t('tabs.closeRight'), disabled: !right.length, onClick: () => closeMany(right, uri) },
+      { label: t('tabs.closeSaved'), disabled: !saved.length, onClick: () => closeMany(saved, uri) },
+      { label: t('tabs.closeAll'), disabled: !unpinned(docs).length, onClick: () => closeMany(unpinned(docs)) },
+      'separator',
+      { label: t('tabs.copyPath'), disabled: !disk, onClick: () => copy(disk) },
+      { label: t('tabs.copyRelativePath'), disabled: !rel, onClick: () => copy(rel) },
+      { label: IS_MAC ? t('fileTree.revealFinder') : IS_WIN ? t('fileTree.revealExplorer') : t('fileTree.revealFolder'),
+        disabled: !disk, onClick: () => (window as any).files?.reveal?.(disk) },
+      'separator',
+      doc?.pinned
+        ? { label: t('tabs.unpin'), onClick: () => setPinned(uri, false) }
+        : { label: t('tabs.pin'), onClick: () => setPinned(uri, true) },
+    ];
+  };
 
   const onClose = useCallback((e: React.MouseEvent, uri: string) => {
     e.stopPropagation();
@@ -40,7 +102,8 @@ export const EditorSurface: React.FC = () => {
 
   const onTabMouseDown = useCallback((e: React.MouseEvent, uri: string) => {
     // Botón central del ratón (rueda) - cerrar pestaña
-    if (e.button === 1) {
+    // (a pinned tab does not close by accident: its menu or its pin)
+    if (e.button === 1 && !useEditorStore.getState().documents.find(d => d.uri === uri)?.pinned) {
       e.preventDefault();
       e.stopPropagation();
       onClose(e, uri);
@@ -221,17 +284,21 @@ export const EditorSurface: React.FC = () => {
           const icon = isAnim3d ? '🦴' : isScene ? '🏞️' : isMesh ? '🧊' : isVmov ? '📽️' : isVrec ? '📼' : isVsmp ? '🎙️' : isEnemy ? '👾' : isInstr ? '🎹' : isAnim ? '🎬' : isSfx ? '🔊' : isMus ? '🎵' : isVec ? '🎨' : '📄';
           return (
             <div key={doc.uri}
-              className={"vpy-tab" + (doc.uri===active?" active":"") + (doc.dirty?" dirty":"")}
-              title={doc.uri}
+              className={"vpy-tab" + (doc.uri===active?" active":"") + (doc.dirty?" dirty":"") + (doc.pinned?" pinned":"")}
+              title={doc.diskPath ?? doc.uri}
               onClick={()=> setActive(doc.uri)}
-              onMouseDown={(e)=> onTabMouseDown(e, doc.uri)}>
+              onMouseDown={(e)=> onTabMouseDown(e, doc.uri)}
+              onContextMenu={(e)=> { e.preventDefault(); setTabMenu({ x: e.clientX, y: e.clientY, uri: doc.uri }); }}>
               <span className="icon">{icon}</span>
               <span className="title">{title}</span>
-              <button className="close" onClick={(e)=>onClose(e, doc.uri)}>×</button>
+              {doc.pinned
+                ? <button className="close pin" title={t('tabs.unpin')} onClick={(e)=>{ e.stopPropagation(); setPinned(doc.uri, false); }}>📌</button>
+                : <button className="close" onClick={(e)=>onClose(e, doc.uri)}>×</button>}
             </div>
           );
         })}
       </div>
+      {tabMenu && <FileTreeMenu x={tabMenu.x} y={tabMenu.y} items={tabMenuItems(tabMenu.uri)} onClose={() => setTabMenu(null)} />}
       <div className="vpy-editor-body">
         {!active ? (
           <WelcomeView />
@@ -325,5 +392,7 @@ const editorSurfaceStyles = `
 .vpy-tab .icon { font-size:14px; }
 .vpy-tab .close { background:transparent; border:none; color:#888; font-size:12px; cursor:pointer; padding:0 2px; }
 .vpy-tab .close:hover { color:#fff; }
+.vpy-tab .close.pin { font-size:10px; }
+.vpy-tab.pinned { padding-right:8px; }
 .vpy-editor-body { flex:1; position:relative; min-height:0; overflow:hidden; }
 `;
