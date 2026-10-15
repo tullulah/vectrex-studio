@@ -210,6 +210,26 @@ It emulates the wire instead:
 A wrong CLK phase, a mis-encoded command, a ramp that is too short or a frame
 over budget therefore fail here the same way they would on a console.
 
+Where the hardware is analog, the beam follows what a console measures rather
+than vecx's ideal model:
+
+- the PIO stream runs in **bus time**: a DMA queues its words and the state
+  machine takes one per E period while both cores keep running (the DMA reads
+  BUSY while more words wait than the 4-word TX FIFO holds), so CPU time and bus
+  time are one clock, as on the cartridge;
+- every ramp travels `v * (t1 + 2.5)`: the integrators run 2.5 cycles past RAMP
+  (the SDK's `T1_EXTRA_Q8`, measured on a console);
+- the X,Y offset channel (mux 01) is treated as calibrated: the SDK primes it with
+  a per-console value plus a `$FF` touch, and a console whose offset is calibrated
+  does not drift, so the beam measures against a fixed zero;
+- the panel shows the SDK's screen, ±18000 × ±24000 device units (1.26 beam units
+  each at the default `DRAW_SCALE`), and this frame together with the previous
+  one, because a command list can take longer than a frame to draw.
+
+The image's own fps (the SDK HUD: buttons 1+4 held two seconds) matches a
+console's; the emulator itself runs below real time (~17 Vectrex frames a second
+on ROTJ), its cost being the Thumb-2 interpreter.
+
 Frame 0 is consumed entirely by the `/HALT` settle (30000 bus cycles by design),
 frame 1 by VIA initialisation; steady state begins at frame 2.
 
