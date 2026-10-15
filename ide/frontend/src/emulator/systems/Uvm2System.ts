@@ -389,6 +389,9 @@ export class Uvm2System implements ISystem, IBus {
    * falta el ELF: sin simbolos no hay a que direccion atrapar, y el juego pinta su X de
    * "falta el romset" sin que nada explique por que. */
   private sdArchivos: Record<string, Uint8Array> = {};
+  /** Files of the card the host did not send up front (path -> size), and how to fetch one. */
+  private sdDiferidos: Record<string, number> = {};
+  private sdLector: ((ruta: string) => Uint8Array | null) | null = null;
   private sdLeerAddr = 0;
   private sdLeerDesdeAddr = 0;
   private sdAbrirAddr = 0;
@@ -833,9 +836,30 @@ export class Uvm2System implements ISystem, IBus {
   setPsramElf(elf: Uint8Array | null): void { this.psramElf = elf; this.psramElfArmed = false; }
 
   /** Los ficheros de la SD simulada, por ruta relativa en minusculas. */
-  setSdFiles(files: Record<string, Uint8Array>): void {
+  setSdFiles(files: Record<string, Uint8Array>,
+             deferred?: Record<string, number>,
+             read?: (ruta: string) => Uint8Array | null): void {
     this.sdArchivos = files;
-    console.log(`[Uvm2System] SD simulada: ${Object.keys(files).length} ficheros`);
+    this.sdDiferidos = deferred && read ? { ...deferred } : {};
+    this.sdLector = read ?? null;
+    console.log(`[Uvm2System] SD simulada: ${Object.keys(files).length} ficheros` +
+                (Object.keys(this.sdDiferidos).length
+                  ? ` + ${Object.keys(this.sdDiferidos).length} que se leen al abrirlos` : ''));
+  }
+
+  /** A file of the card by its path, fetching a deferred one the first time it is asked for.
+   *  The host only sends the small files up front: ROTJ's music tracks are 2-3 MB each, and
+   *  with them left out the music was silent while the SFX (one 1.7 MB file) played. */
+  private sdFichero(ruta: string): Uint8Array | undefined {
+    const k = ruta.toLowerCase();
+    const f = this.sdArchivos[k];
+    if (f || !(k in this.sdDiferidos) || !this.sdLector) return f;
+    const leido = this.sdLector(k);
+    delete this.sdDiferidos[k];
+    if (!leido) return undefined;
+    this.sdArchivos[k] = leido;
+    console.log(`[Uvm2System] SD: "${k}" leido al abrirlo (${leido.length} bytes)`);
+    return leido;
   }
 
   /** `uvm2_sd_leer(ruta, dst, max)`: copiar el fichero y devolver los bytes. */
@@ -847,7 +871,7 @@ export class Uvm2System implements ISystem, IBus {
       ruta += String.fromCharCode(c);
     }
     const dst = cpu.getReg(1) >>> 0, max = cpu.getReg(2) >>> 0;
-    const f = this.sdArchivos[ruta.toLowerCase()];
+    const f = this.sdFichero(ruta);
     let n = 0;
     if (f) {
       n = Math.min(f.length, max);
@@ -886,7 +910,7 @@ export class Uvm2System implements ISystem, IBus {
     const dst   = cpu.getReg(1) >>> 0;
     const max   = cpu.getReg(2) >>> 0;
     const desde = cpu.getReg(3) >>> 0;
-    const f = this.sdArchivos[ruta.toLowerCase()];
+    const f = this.sdFichero(ruta);
     let n = 0;
     if (f && desde < f.length) {
       n = Math.min(f.length - desde, max);
@@ -924,7 +948,7 @@ export class Uvm2System implements ISystem, IBus {
       if (!c) break;
       ruta += String.fromCharCode(c);
     }
-    const f = this.sdArchivos[ruta.toLowerCase()];
+    const f = this.sdFichero(ruta);
     const st = cpu.getReg(1) >>> 0;
     const put = (off: number, v: number) => {
       for (let i = 0; i < 4; i++) this.write8((st + off + i) >>> 0, (v >>> (i * 8)) & 0xFF);
@@ -1009,14 +1033,14 @@ export class Uvm2System implements ISystem, IBus {
       for (let i = 0; i < 4; i++) this.write8((st + off + i) >>> 0, (v >>> (i * 8)) & 0xFF);
     };
     const vistos = new Map<string, { nombre: string; tam: number; carpeta: boolean }>();
-    for (const ruta of Object.keys(this.sdArchivos)) {
+    for (const ruta of [...Object.keys(this.sdArchivos), ...Object.keys(this.sdDiferidos)]) {
       if (pre && !ruta.startsWith(pre + '/')) continue;
       const resto = pre ? ruta.slice(pre.length + 1) : ruta;
       const corte = resto.indexOf('/');
       const nombre = corte < 0 ? resto : resto.slice(0, corte);
       if (!nombre || nombre.startsWith('.')) continue;
       if (!vistos.has(nombre))
-        vistos.set(nombre, { nombre, tam: corte < 0 ? this.sdArchivos[ruta].length : 0, carpeta: corte >= 0 });
+        vistos.set(nombre, { nombre, tam: corte < 0 ? (this.sdArchivos[ruta]?.length ?? this.sdDiferidos[ruta]) : 0, carpeta: corte >= 0 });
     }
     /* Una carpeta que no existe es un fallo (MISSING), salvo la raiz. */
     const ok = !pre || vistos.size > 0;

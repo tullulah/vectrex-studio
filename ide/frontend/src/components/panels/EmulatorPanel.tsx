@@ -3047,35 +3047,28 @@ export const EmulatorPanel: React.FC = () => {
           if (!elfUvm2)
             console.log('[EmulatorPanel] sin .elf junto al .um2 — sin simbolos no hay SD simulada');
         }
-        /* LA TARJETA SIMULADA, CON CONTENIDOS Y NO CON NOMBRES. sdSimList devuelve
-         * `files: string[]`; Uvm2System.setSdFiles quiere
-         * Record<ruta, Uint8Array>. Pasarle la lista tal cual compila
-         * perfectamente y no sirve para nada: Object.keys de un array da
-         * "0","1","2" y toda busqueda falla. Otro desajuste que no da error.
-         *
-         * Se saltan los .um2 y los .bin: son las imagenes de los OTROS juegos de
-         * la tarjeta, decenas de megas que ningun juego lee nunca. */
+        /* THE SIMULATED CARD, the same one F5 hands over (leerSdSimulada): the small files
+         * with their bytes, the big ones (music tracks) by name and size, read when the game
+         * opens them. sdSimList only lists the .bin games of the menu, by name without
+         * extension, so it never served a single file here. */
         let sdUvm2Files: Record<string, Uint8Array> | undefined;
+        let sdUvm2Deferred: Record<string, number> | undefined;
         try {
-          const lista = await (window as any).electronAPI?.sdSimList?.();
-          if (lista?.dir && Array.isArray(lista.files) && filesApi?.readFileBin) {
+          const tarjeta = await (window as any).electronAPI?.sdSimFiles?.();
+          if (tarjeta?.ok && tarjeta.files) {
             const out: Record<string, Uint8Array> = {};
-            for (const nombre of lista.files as string[]) {
-              if (/\.(um2|bin)$/i.test(nombre)) continue;
-              try {
-                const r = await filesApi.readFileBin(`${lista.dir}/${nombre}`);
-                if (r && !(r as any).error && (r as any).base64)
-                  out[nombre.toLowerCase()] =
-                    Uint8Array.from(atob((r as any).base64), c => c.charCodeAt(0));
-              } catch { /* ese no */ }
+            for (const [k, v] of Object.entries(tarjeta.files as Record<string, string>)) {
+              if (/\.(um2|bin)$/i.test(k)) continue;   // the card's other games: no game reads them
+              out[k] = Uint8Array.from(atob(v), c => c.charCodeAt(0));
             }
             sdUvm2Files = out;
+            sdUvm2Deferred = tarjeta.deferred;
             console.log(`[EmulatorPanel] SD simulada para uvm2: ${Object.keys(out).length} ficheros`);
           }
         } catch { /* sin tarjeta simulada */ }
         const um2 = romData;
         armReloadRef.current = () =>
-          emuCore.loadUvm2!(um2, canvasRef.current ?? undefined, elfUvm2, sdUvm2Files);
+          emuCore.loadUvm2!(um2, canvasRef.current ?? undefined, elfUvm2, sdUvm2Files, undefined, sdUvm2Deferred);
         armReloadRef.current();
         setActiveEngine('uvm2');
         setArmAudioSuspended(!audioEnabled);
@@ -3385,7 +3378,7 @@ export const EmulatorPanel: React.FC = () => {
     const electronAPI: any = (window as any).electronAPI;
     if (!electronAPI?.onCompiledBin) return;
 
-    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null; libvpyAsm?: string | null; sdFiles?: Record<string, string>; psramElfBase64?: string | null }) => {
+    const handleCompiledBin = async (payload: { base64: string; size: number; binPath: string; pdbData?: any; target?: 'm6809' | 'rp2350' | 'pitrex' | 'uvm2'; elfBase64?: string | null; sFileText?: string | null; libvpyAsm?: string | null; sdFiles?: Record<string, string>; sdDeferred?: Record<string, number>; psramElfBase64?: string | null }) => {
     /* LA PRIMERA TRAZA DE LA CADENA. Todo lo que hay de aqui en adelante ya estaba
      * instrumentado —"uvm2: bin=…", "✓ .um2 image loaded", "[loadUvm2] START"— asi que si
      * no sale NINGUNA, el problema no esta en el emulador sino en que este manejador no se
@@ -3541,7 +3534,7 @@ export const EmulatorPanel: React.FC = () => {
               }
               (emuCore as any).setArmDebugElf?.(debugElf);
               armReloadRef.current = () =>
-                emuCore.loadUvm2!(bin, canvasRef.current ?? undefined, elf, sdBytes, psramElf);
+                emuCore.loadUvm2!(bin, canvasRef.current ?? undefined, elf, sdBytes, psramElf, payload.sdDeferred);
               armReloadRef.current();
               console.log('[EmulatorPanel] ✓ .um2 image loaded into Uvm2System');
             } else {

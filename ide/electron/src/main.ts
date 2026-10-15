@@ -6,7 +6,7 @@ import { spawn } from 'child_process';
 // via the existing WASM front-end (renderer) bridge or add a new secure preload API.
 import { createInterface } from 'readline';
 import { join, basename, dirname } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import * as fs from 'fs/promises';
 import { watch } from 'fs';
 import chokidar from 'chokidar';
@@ -1735,8 +1735,10 @@ export async function executeExternalBuild(args: {
        * un juego cabe de sobra en el tope, y mandar la carpeta entera puede ser cientos de
        * megas. */
       let sdFiles: Record<string, string> | undefined;
+      let sdDeferred: Record<string, number> | undefined;
       if (effectiveTarget === 'uvm2') {
-        sdFiles = await leerSdSimulada();
+        sdDeferred = {};
+        sdFiles = await leerSdSimulada(sdDeferred);
         console.log(`[build] SD simulada: ${Object.keys(sdFiles).length} ficheros`);
         for (const decl of emuDecl.emu_card ?? []) {
           const eq = decl.indexOf('=');
@@ -1766,6 +1768,7 @@ export async function executeExternalBuild(args: {
         target: effectiveTarget,
         elfBase64,
         sdFiles,
+        sdDeferred,
         psramElfBase64,
       });
       win?.webContents.send('run://status',
@@ -2624,7 +2627,10 @@ ipcMain.handle('vrec:compile', async (_e, vrecPath: string) => {
  * total existen para que mandar la carpeta no bloquee el IPC: una SD de verdad puede tener
  * gigas y aqui solo hacen falta los romsets. Lo que se pase se anuncia en la terminal, para
  * que "falta el romset" nunca sea una sorpresa muda. */
-async function leerSdSimulada(): Promise<Record<string, string>> {
+/** The files the inline caps leave out (path -> size): `deferred` collects them for a
+ *  consumer that can fetch them on demand with `sd:readSync` (the .um2 emulator: ROTJ's music
+ *  tracks are 2-3 MB each, ~100 MB in all, and only the one playing is ever read). */
+async function leerSdSimulada(deferred?: Record<string, number>): Promise<Record<string, string>> {
   const raiz = join(os.homedir(), 'VectrexStudio', 'sd');
   const MAX_FICHERO = 2 * 1024 * 1024;
   const MAX_TOTAL   = 24 * 1024 * 1024;
@@ -2640,7 +2646,10 @@ async function leerSdSimulada(): Promise<Record<string, string>> {
       if (e.isDirectory()) { await anda(p, r); continue; }
       try {
         const st = await fs.stat(p);
-        if (st.size > MAX_FICHERO || total + st.size > MAX_TOTAL) continue;
+        if (st.size > MAX_FICHERO || total + st.size > MAX_TOTAL) {
+          if (deferred) deferred[r.toLowerCase()] = st.size;
+          continue;
+        }
         out[r.toLowerCase()] = (await fs.readFile(p)).toString('base64');
         total += st.size;
       } catch { /* un fichero ilegible no puede tumbar la lista entera */ }
@@ -2656,9 +2665,30 @@ async function leerSdSimulada(): Promise<Record<string, string>> {
  * paths as the card F5 hands the .um2 emulator (leerSdSimulada). */
 ipcMain.handle('sd:simFiles', async () => {
   try {
-    return { ok: true, dir: join(os.homedir(), 'VectrexStudio', 'sd'), files: await leerSdSimulada() };
+    const deferred: Record<string, number> = {};
+    const files = await leerSdSimulada(deferred);
+    return { ok: true, dir: join(os.homedir(), 'VectrexStudio', 'sd'), files, deferred };
   } catch (e: any) {
     return { ok: false, error: e?.message || 'sd_sim_files_failed' };
+  }
+});
+
+/* One file of the simulated card, SYNCHRONOUSLY: the .um2 emulator traps the game's
+ * uvm2_sd_open inside a frame and has to answer before the next instruction. Only for the
+ * files leerSdSimulada deferred, so a track costs one read when the game opens it. The path
+ * is the card's lower-case relative one; it is matched against the folder's real entries,
+ * so it can never leave the card. */
+ipcMain.on('sd:readSync', (e, rel: unknown) => {
+  try {
+    let dir = join(os.homedir(), 'VectrexStudio', 'sd');
+    for (const parte of String(rel ?? '').split('/')) {
+      const real = readdirSync(dir).find(n => !n.startsWith('.') && n.toLowerCase() === parte);
+      if (!real) { e.returnValue = null; return; }
+      dir = join(dir, real);
+    }
+    e.returnValue = new Uint8Array(readFileSync(dir));
+  } catch {
+    e.returnValue = null;
   }
 });
 

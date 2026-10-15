@@ -32,7 +32,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onEmuLoaded: (cb: (info: { size: number }) => void) => ipcRenderer.on('emu://loaded', (_e: IpcRendererEvent, data) => cb(data)), // kept for backward compatibility (may be unused)
   // Returns the unsubscribe: the Emulator panel remounts with the dock layout, and a
   // listener left behind by an unmounted panel would load (and start) every build again.
-  onCompiledBin: (cb: (payload: { base64: string; size: number; binPath: string; sFileText?: string | null; libvpyAsm?: string | null; elfBase64?: string | null; sdFiles?: Record<string, string> }) => void) => {
+  onCompiledBin: (cb: (payload: { base64: string; size: number; binPath: string; sFileText?: string | null; libvpyAsm?: string | null; elfBase64?: string | null; sdFiles?: Record<string, string>; sdDeferred?: Record<string, number> }) => void) => {
     const handler = (_e: IpcRendererEvent, data: any) => cb(data);
     ipcRenderer.on('emu://compiledBin', handler);
     return () => { ipcRenderer.removeListener('emu://compiledBin', handler); };
@@ -40,7 +40,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // setVectorMode legacy removed
   listSources: (args?: { limit?: number }) => ipcRenderer.invoke('list:sources', args) as Promise<{ ok?:boolean; sources?: Array<{ path:string; kind:'vpy'|'asm'; size:number; mtime:number }> }> ,
   sdSimList: () => ipcRenderer.invoke('sd:simList') as Promise<{ ok?: boolean; dir?: string; files?: string[]; previews?: Record<string, string>; error?: string }>,
-  sdSimFiles: () => ipcRenderer.invoke('sd:simFiles') as Promise<{ ok?: boolean; dir?: string; files?: Record<string, string>; error?: string }>,
+  sdSimFiles: () => ipcRenderer.invoke('sd:simFiles') as Promise<{ ok?: boolean; dir?: string; files?: Record<string, string>; deferred?: Record<string, number>; error?: string }>,
+  // One deferred file of the simulated card, synchronously (null if it is not there).
+  sdReadSync: (rel: string) => ipcRenderer.sendSync('sd:readSync', rel) as Uint8Array | null,
   sdRomZip: (stem: string, binPath?: string) => ipcRenderer.invoke('sd:romZip', stem, binPath) as Promise<{ ok?: boolean; dir?: string; name?: string; size?: number; base64?: string; error?: string; want?: string; have?: string[] }>,
   vrecCompile: (vrecPath: string) => ipcRenderer.invoke('vrec:compile', vrecPath) as Promise<{ ok?: boolean; vrbPath?: string; error?: string }>,
   // Disassemble a ROM snapshot (base64) using buildtools/vpy_disasm

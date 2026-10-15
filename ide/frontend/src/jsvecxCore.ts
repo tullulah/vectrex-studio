@@ -619,7 +619,8 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
    * image carries its own syscall handler, and the simulator runs it.
    */
   loadUvm2(um2: Uint8Array, canvas?: HTMLCanvasElement,
-           elf?: Uint8Array, sdFiles?: Record<string, Uint8Array>, psramElf?: Uint8Array): void {
+           elf?: Uint8Array, sdFiles?: Record<string, Uint8Array>, psramElf?: Uint8Array,
+           sdDeferred?: Record<string, number>): void {
     console.log(`[loadUvm2] START um2=${um2.length}b canvas=${canvas ? `${canvas.width}x${canvas.height}` : 'none'}`);
     if (this._activeTarget === 'rp2350' && this._rp2350System) {
       try { this._rp2350System.stopAudio(); } catch {}
@@ -629,7 +630,11 @@ export class JsVecxEmulatorCore implements IEmulatorCore {
      * arranque, porque el romset se lee en el arranque (uvm2_romzip_cargar). Al reves, el
      * juego pinta su X de "falta el romset" y ya no vuelve a mirar. */
     if (elf) this._uvm2System.setElf(elf);
-    if (sdFiles) this._uvm2System.setSdFiles(sdFiles);
+    if (sdFiles) {
+      const leer = (window as any).electronAPI?.sdReadSync as ((rel: string) => Uint8Array | null) | undefined;
+      this._uvm2System.setSdFiles(sdFiles, sdDeferred,
+        leer ? (rel) => { const b = leer(rel); return b ? new Uint8Array(b) : null; } : undefined);
+    }
     this._uvm2System.setPsramElf(psramElf ?? null);
     this._uvm2System.init(um2);
     if (canvas) this._uvm2System.setCanvas(canvas);
