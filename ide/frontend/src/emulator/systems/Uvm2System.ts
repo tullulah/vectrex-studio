@@ -2179,6 +2179,8 @@ export class Uvm2System implements ISystem, IBus {
                      this.sdHwReadBlockAddr, this.sdHwWriteBlockAddr, this.execAddr, this.frameBeginAddr,
                      this.volcarEn, ROM_LOOKUP]) marca(a);
     for (const a of this.volcarLista) marca(a);
+    // and every breakpoint: a translated block ends before one, so it is checked there
+    for (const a of this.debug.breakpointAddresses()) marca(a);
     if (!this.flash) m.fill(1, 0, (VECTORES_FIN - SRAM_BASE) >>> 1);   // the vector table: a lost pc
     // translated blocks stop before every trap: other traps, other blocks
     if (this.jit !== null) {
@@ -2210,6 +2212,10 @@ export class Uvm2System implements ISystem, IBus {
     // Read once a frame (a getter over four fields, per instruction, was 2.5% of the time):
     // breakpoints set meanwhile apply from the next frame, steps only change between frames
     const depurando = this.debug.armed;
+    // With breakpoints alone the translator keeps running: its blocks end before every
+    // breakpoint (marcarTrampas), and a marked pc runs on the interpreter. Only a step
+    // needs every instruction checked.
+    const pasoAPaso = depurando && this.debug.stepActive;
 
     while (!this.halted && this.busCycle < until && spent < MAX_CPU_CYCLES_PER_FRAME) {
       if ((this.cpu1 ? Math.min(this.relojCore0, this.relojCore1) : this.relojCore0) >= this.relojFinFrame) {
@@ -2305,8 +2311,10 @@ export class Uvm2System implements ISystem, IBus {
       try {
         /* A translated block: the same instructions without this loop around each, while
          * core 0 stays the one the scheduler picks (c0 <= c1) and the frame goes on. Not
-         * while debugging (every instruction is checked) nor inside an IT block. */
-        const blk = this.jit !== null && !depurando && (pc & 1) === 0 && (this.cpu as any).itState === 0
+         * while stepping (every instruction is checked), nor from a breakpoint's address,
+         * nor inside an IT block. */
+        const blk = this.jit !== null && !pasoAPaso && (pc & 1) === 0 && (this.cpu as any).itState === 0
+          && !(depurando && o0 < SRAM_SIZE && this.marcas[o0 >>> 1])
           && (!this.cpu1 || this.relojCore1 + this.quantum - this.relojCore0 >= JIT_MARGEN) ? this.jit.block(0, pc) : null;
         if (blk !== null) {
           this.jitIo = false;

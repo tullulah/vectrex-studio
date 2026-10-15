@@ -43,6 +43,17 @@ export class ArmDebug {
     return this.stepping || this.until !== null || this.breakpoints.size > 0 || this.ideBreakpoints.size > 0;
   }
 
+  /** A step is under way (an instruction or a source step): every instruction must be
+   *  checked. With breakpoints alone, only their addresses need to be. */
+  get stepActive(): boolean {
+    return this.stepping || this.until !== null;
+  }
+
+  /** Every breakpoint address (gdb's and the editor's), bit 0 clear. */
+  breakpointAddresses(): number[] {
+    return [...this.breakpoints, ...this.ideBreakpoints].map(a => (a & ~1) >>> 0);
+  }
+
   shouldStop(pc: number, sp: number): boolean {
     pc = (pc & ~1) >>> 0;
     const first = this.first;
