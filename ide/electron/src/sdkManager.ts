@@ -131,18 +131,54 @@ function installSdk(tag: string, onProgress?: (p: SdkProgress) => void): Promise
   });
 }
 
+/** Download `url` to `file`; with `sha256`, a download that does not match it is refused. */
+export async function downloadFile(
+  url: string, file: string, what: string, sha256?: string,
+  onProgress?: (received: number, total: number | null) => void,
+): Promise<{ received: number; total: number | null }> {
+  const res = await fetch(url, { headers: { 'User-Agent': 'VectrexStudio' } });
+  if (!res.ok || !res.body) {
+    throw new Error(res.status === 404
+      ? `${what} does not exist (${url})`
+      : `Download failed for ${what}: HTTP ${res.status}`);
+  }
+  const total = Number(res.headers.get('content-length')) || null;
+  let received = 0;
+  const out = createWriteStream(file);
+  const hash = createHash('sha256');
+  const reader = res.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    received += value.length;
+    hash.update(value);
+    if (!out.write(value)) await new Promise<void>(r => out.once('drain', () => r()));
+    onProgress?.(received, total);
+  }
+  await new Promise<void>((resolve, reject) => out.end((err?: Error | null) => (err ? reject(err) : resolve())));
+  const got = hash.digest('hex');
+  if (sha256 && got !== sha256.toLowerCase()) {
+    await fs.rm(file, { force: true }).catch(() => {});
+    throw new Error(`${what}: the download does not match its checksum (got ${got}, expected ${sha256})`);
+  }
+  return { received, total };
+}
+
 /**
  * Download a GitHub tag tarball and install it as <root>/<name>, atomically: it is
  * extracted next to the destination, checked, marked complete, then renamed into place.
  * Already installed (marker present) → returns at once.
  */
-async function installTarball(o: {
+export async function installTarball(o: {
   what: string; url: string; root: string; name: string; mustContain: string;
   marker: Record<string, string>; progressTag: string; onProgress?: (p: SdkProgress) => void;
   /** The archive's extension (default tar.gz; tar.xz and zip too: `tar -xf` reads all three). */
   ext?: string;
   /** Expected SHA-256 of the download: a mismatch is refused before anything is extracted. */
   sha256?: string;
+  /** Leading folders to drop (default 1, a GitHub tarball's `<repo>-<tag>/`; 0 for an archive
+   *  with its files at the top). */
+  strip?: number;
 }): Promise<string> {
   const dest = join(o.root, o.name);
   try {
@@ -157,36 +193,15 @@ async function installTarball(o: {
   const tag = o.progressTag;
 
   try {
-    // 1. Download the tag's source tarball (public repo: no token needed).
-    const res = await fetch(o.url, { headers: { 'User-Agent': 'VectrexStudio' } });
-    if (!res.ok || !res.body) {
-      throw new Error(res.status === 404
-        ? `${o.what} does not exist (${o.url})`
-        : `Download failed for ${o.what}: HTTP ${res.status}`);
-    }
-    const total = Number(res.headers.get('content-length')) || null;
-    let received = 0;
-    const out = createWriteStream(tarball);
-    const hash = createHash('sha256');
-    const reader = res.body.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      received += value.length;
-      hash.update(value);
-      if (!out.write(value)) await new Promise<void>(r => out.once('drain', () => r()));
-      o.onProgress?.({ tag, phase: 'download', received, total });
-    }
-    await new Promise<void>((resolve, reject) => out.end((err?: Error | null) => (err ? reject(err) : resolve())));
-    const got = hash.digest('hex');
-    if (o.sha256 && got !== o.sha256.toLowerCase()) {
-      throw new Error(`${o.what}: the download does not match its checksum (got ${got}, expected ${o.sha256})`);
-    }
+    // 1. Download the archive (a tag's source tarball: public repo, no token needed).
+    const { received, total } = await downloadFile(o.url, tarball, o.what, o.sha256, (received, total) =>
+      o.onProgress?.({ tag, phase: 'download', received, total }));
 
     // 2. Extract next to the final folder, so the rename below is atomic.
     o.onProgress?.({ tag, phase: 'extract', received, total });
     await fs.mkdir(staging, { recursive: true });
-    await runTar(['-xf', tarball, '-C', staging, '--strip-components=1']);
+    const strip = o.strip ?? 1;
+    await runTar(['-xf', tarball, '-C', staging, ...(strip > 0 ? [`--strip-components=${strip}`] : [])]);
 
     // 3. Refuse a tarball that isn't what we expected.
     try {
@@ -256,10 +271,15 @@ export function ensurePicoSdk(version: string, onProgress?: (p: SdkProgress) => 
   return p;
 }
 
-/** bsdtar ships with macOS and Windows 10+, GNU tar with Linux; both take these flags. */
+/** bsdtar ships with macOS and Windows 10+, GNU tar with Linux; both take these flags. On
+ *  Windows, System32's own: a GNU tar earlier on PATH (Git's, MSYS2's) reads `D:\...` as a
+ *  remote host and cannot open a zip. */
 function runTar(args: string[]): Promise<void> {
+  const tar = process.platform === 'win32'
+    ? join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')
+    : 'tar';
   return new Promise((resolve, reject) => {
-    const child = spawn('tar', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const child = spawn(tar, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let err = '';
     child.stderr.on('data', (c: Buffer) => { err += c.toString(); });
     child.on('error', reject);
@@ -269,9 +289,17 @@ function runTar(args: string[]): Promise<void> {
 
 // ─── Environment for consumers ─────────────────────────────────────────────
 
+/**
+ * A path as a makefile can use it. On Windows a recipe runs in busybox's sh, which takes
+ * `\` for an escape (`C:\Users\x` becomes `C:Usersx`); every Windows program also takes `/`.
+ */
+export function toolPath(p: string): string {
+  return process.platform === 'win32' ? p.replace(/\\/g, '/') : p;
+}
+
 /** Every variable an SDK consumer reads: vpy_cli, the simulator build, makefiles. */
 export function sdkEnv(dir: string, picoSdkDir?: string): Record<string, string> {
-  return {
+  const env: Record<string, string> = {
     ...(picoSdkDir ? { UVM2_PICO_SDK: picoSdkDir, PICO_SDK_PATH: picoSdkDir } : {}),
     UVMC2_SDK: dir,
     UVM2_SDK_DIR: join(dir, 'uvm2-sdk'),   // vpy_cli
@@ -280,6 +308,8 @@ export function sdkEnv(dir: string, picoSdkDir?: string): Record<string, string>
     PITREX_SIM_SDK: join(dir, 'pitrex-sim'),
     RP2350_SDK: join(dir, 'rp2350-sdk'),
   };
+  for (const k of Object.keys(env)) env[k] = toolPath(env[k]);
+  return env;
 }
 
 // ─── `[sdk] version` in a project file ─────────────────────────────────────
@@ -576,6 +606,8 @@ export function ensureArmToolchain(onProgress?: (p: SdkProgress) => void): Promi
     marker: { version: ARM_TOOLCHAIN_VERSION, file: a.file },
     progressTag: `arm-gnu-toolchain-${ARM_TOOLCHAIN_VERSION}`,
     ext: a.file.endsWith('.zip') ? 'zip' : 'tar.xz',
+    // The Windows zip has bin/ at its top; the tarballs have one folder around everything.
+    strip: a.file.endsWith('.zip') ? 0 : 1,
     sha256: a.sha256,
     onProgress,
   }).finally(() => { armTcInFlight = null; });
@@ -722,7 +754,7 @@ export async function armToolchainEnv(log: (line: string) => void = () => {}): P
     if (v && v !== ARM_GCC_VERSION) log(`[toolchain] UVM2_ARM_TOOLCHAIN is gcc ${v}, not Arm GNU Toolchain ${ARM_TOOLCHAIN_VERSION}: the image may differ from other machines'\n`);
     return {};
   }
-  if (status.found) return { UVM2_ARM_TOOLCHAIN: status.found.dir };
+  if (status.found) return { UVM2_ARM_TOOLCHAIN: toolPath(status.found.dir) };
   log(`[toolchain] No Arm GNU Toolchain ${ARM_TOOLCHAIN_VERSION} on this machine: downloading it into ${armToolchainRootDir()} (about 150 MB, once)...\n`);
   let last = -1;
   try {
@@ -732,7 +764,7 @@ export async function armToolchainEnv(log: (line: string) => void = () => {}): P
       if (pct !== last) { last = pct; log(`[toolchain] ${pct}%\n`); }
     });
     log(`[toolchain] Arm GNU Toolchain ${ARM_TOOLCHAIN_VERSION} installed: ${dir}\n`);
-    return { UVM2_ARM_TOOLCHAIN: dir };
+    return { UVM2_ARM_TOOLCHAIN: toolPath(dir) };
   } catch (e: any) {
     log(`[toolchain] Could not install Arm GNU Toolchain ${ARM_TOOLCHAIN_VERSION}: ${e?.message || e}\n`);
     return {};
@@ -776,6 +808,8 @@ function runTool(cmd: string, args: string[], onLine?: (line: string) => void): 
 
 /** Make sure a uvm2 build will find cargo with the Cortex-M33 target; log what it does. */
 export async function ensureUvm2Rust(log: (line: string) => void): Promise<void> {
+  // Windows: windowsBuildEnv (winBuildTools.ts) sets Rust up, on the gnu host.
+  if (process.platform === 'win32') return;
   const list = await runTool('rustup', ['target', 'list', '--installed']);
   if (list.code === 0 && list.out.split(/\s+/).includes(UVM2_RUST_TARGET)) return;
 
@@ -783,10 +817,6 @@ export async function ensureUvm2Rust(log: (line: string) => void): Promise<void>
     const cargo = await runTool('cargo', ['--version']);
     if (!cargo.missing) {
       log(`[Rust] cargo found but no rustup: make sure the ${UVM2_RUST_TARGET} target is installed for it.`);
-      return;
-    }
-    if (process.platform === 'win32') {
-      log('[Rust] uvm2 builds need Rust: install it from https://rustup.rs, then build again.');
       return;
     }
     // Neither: the official installer, for this user only. It adds the target too.

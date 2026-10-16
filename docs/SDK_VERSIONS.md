@@ -191,6 +191,22 @@ overflowed on another. So uvm2 builds pin both:
 
 Every step shows in the build output.
 
+**Windows: the IDE brings the rest.** A Windows PC has none of the build tools, so the first C or uvm2 build downloads them into `~/VectrexStudio/toolchains/windows/`, each pinned by version and SHA-256 (`ide/electron/src/winBuildTools.ts`):
+
+| Tool | Version | Used for |
+|------|---------|----------|
+| xPack Windows Build Tools | make 4.4.1-3 | `make`; its busybox is the recipes' `sh` (`mkdir -p`, `grep`, `sed`...) |
+| CMake | 4.2.8 | the pico-sdk build, with `CMAKE_GENERATOR=Ninja` |
+| Ninja | 1.13.2 | the generator: the "Unix Makefiles" one refuses a `PATH` with `sh.exe` on it |
+| picotool | 2.2.0-a4 (Raspberry Pi's prebuilt) | `.uf2`/binary info; passed as `PICOTOOL_FETCH_FROM_GIT_PATH`, so the pico-sdk does not build it with a PC compiler |
+| Rust | the SDK's channel, `x86_64-pc-windows-gnu` host | the drawing layer. The gnu host brings its own linker; the msvc one needs Visual Studio's `link.exe`. rustup is installed for the user if missing, and the build gets `RUSTUP_TOOLCHAIN=<channel>-x86_64-pc-windows-gnu` |
+
+- uvm2 on Windows needs **SDK v1.4.4 or later**: in older ones, the Rust build tools link through `windows-sys` 0.61, which needs MinGW's `dlltool` and assembler. The IDE says so in the build output.
+- Paths go to `make` and CMake with `/` (busybox's `sh` takes `\` for an escape). `VPY_CLI` is copied to `~/VectrexStudio/tools/bin/` when the install path has a space.
+- The archives are extracted with Windows' own `tar` (`System32`): a GNU tar from Git for Windows reads `D:\` as a host name.
+- Not on Windows yet: the WASM simulator build (emscripten), and Upload to Cartridge.
+- `.github/workflows/windows-builds.yml` checks it on a clean Windows: a C project (`make uvm2`, `make rp2350`, an asset) and a VPy project for uvm2, every tool downloaded as the IDE does it.
+
 **Linux, the rest of a uvm2 build.** The pico-sdk builds `picotool` from source when it is not installed, so it needs `cmake`, a host C/C++ compiler and libusb. The Vectrex Studio `.deb` depends on all of them, and on `curl`, `git` and `xz-utils` (for the toolchain archive). It recommends `rustup`, which Debian 12 and Ubuntu 22.04 do not package. Elsewhere:
 
 ```sh

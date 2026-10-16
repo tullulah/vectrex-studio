@@ -33,7 +33,7 @@ pub fn uvm2_cargo_remap_env(home: Option<&Path>, user_rustflags: bool) -> Option
     if user_rustflags {
         return None;
     }
-    let home = home?.to_str()?.trim_end_matches('/');
+    let home = home?.to_str()?.trim_end_matches(['/', '\\']);
     if home.is_empty() {
         return None;
     }

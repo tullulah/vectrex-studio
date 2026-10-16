@@ -27,8 +27,9 @@ import { createProjectFromTemplate, ensureDefaultProjectsDir, syncCompileFlags }
 import { registerTerminalHandlers } from './terminal.js';
 import {
   ARM_TOOLCHAIN_DOWNLOAD_URL, armToolchainEnv, detectArmToolchain, ensureUvm2Rust, ensureSdk, isSdkInstalled, isValidSdkTag, latestSdkTag, listInstalledSdks, listRemoteSdkTags,
-  projectSdkVersion, resolveProjectSdk, dropStaleSdkBuilds, sdkEnv, sdkRootDir, writeProjectSdkVersion, type SdkProgress,
+  projectSdkVersion, resolveProjectSdk, dropStaleSdkBuilds, sdkEnv, sdkRootDir, toolPath, writeProjectSdkVersion, type SdkProgress,
 } from './sdkManager.js';
+import { prependPath, windowsBuildEnv } from './winBuildTools.js';
 import { storageGet, storageSet, storageDelete, storageKeys, storageClear, getStoragePath, StorageKeys } from './storage.js';
 import { 
   initPyPilotDb, 
@@ -1100,7 +1101,8 @@ function sendMenuCommand(id: string, ...payload: any[]) {
  * symlink without spaces, ~/VectrexStudio/tools/bin/<name>, and that is what make sees.
  */
 async function makeSafePath(p: string): Promise<string> {
-  if (!/\s/.test(p) || process.platform === 'win32') return p;
+  if (process.platform === 'win32') return toolPath(await windowsSafePath(p));
+  if (!/\s/.test(p)) return p;
   const link = join(os.homedir(), 'VectrexStudio', 'tools', 'bin', basename(p));
   if (/\s/.test(link)) return p;
   try {
@@ -1115,6 +1117,30 @@ async function makeSafePath(p: string): Promise<string> {
   } catch {
     return p;
   }
+}
+
+/**
+ * Windows: a symlink needs administrator rights or Developer Mode, so the program is COPIED
+ * to ~/VectrexStudio/tools/bin (again whenever the IDE's copy changes size or date). With a
+ * space in the home folder too, the path's short 8.3 form, if the volume keeps those.
+ */
+async function windowsSafePath(p: string): Promise<string> {
+  if (!/\s/.test(p)) return p;
+  const copy = join(os.homedir(), 'VectrexStudio', 'tools', 'bin', basename(p));
+  if (!/\s/.test(copy)) {
+    try {
+      const [src, dst] = await Promise.all([fs.stat(p), fs.stat(copy).catch(() => null)]);
+      if (!dst || dst.size !== src.size || dst.mtimeMs < src.mtimeMs) {
+        await fs.mkdir(dirname(copy), { recursive: true });
+        await fs.copyFile(p, copy);
+      }
+      return copy;
+    } catch { /* fall through to the short name */ }
+  }
+  const r = require('child_process').spawnSync('cmd.exe', ['/d', '/s', '/c', `"for %I in ("${p}") do @echo %~sI"`],
+    { encoding: 'utf8', windowsVerbatimArguments: true });
+  const short = String(r.stdout || '').trim();
+  return short && !/\s/.test(short) ? short : p;
 }
 
 function resolveCompilerPath(): string | null {
@@ -1622,11 +1648,15 @@ export async function executeExternalBuild(args: {
   // VPY_CLI: the IDE's compiler, for Makefiles that compile assets/ into headers
   // (`$(VPY_CLI) compile-asset`, docs/ASSETS.md). The project's [env] still wins.
   const vpyCli = resolveCompilerPath();
-  const env: NodeJS.ProcessEnv = { ...process.env, ...(vpyCli ? { VPY_CLI: await makeSafePath(vpyCli) } : {}), ...('error' in sdk ? {} : sdkEnv(sdk.dir, sdk.picoSdkDir)), ...(isUvm2 ? await armToolchainEnv((l) => win?.webContents.send('run://stdout', l)) : {}), ...(manifest.env || {}) };
+  // The Arm compiler: uvm2 always; on Windows the rp2350 rule too (there is none on PATH).
+  const needsArm = isUvm2 || (process.platform === 'win32' && (target || manifest.project.target) === 'rp2350');
+  let env: NodeJS.ProcessEnv = { ...process.env, ...(vpyCli ? { VPY_CLI: await makeSafePath(vpyCli) } : {}), ...('error' in sdk ? {} : sdkEnv(sdk.dir, sdk.picoSdkDir)), ...(needsArm ? await armToolchainEnv((l) => win?.webContents.send('run://stdout', l)) : {}), ...(manifest.env || {}) };
   if (isUvm2) await ensureUvm2Rust((l) => win?.webContents.send('run://stdout', l + '\n'));
-  if (manifest.toolchain?.path) {
-    env.PATH = `${manifest.toolchain.path}${require('path').delimiter}${env.PATH || ''}`;
+  // Windows: make, its shell and, for uvm2, CMake, Ninja, picotool and Rust (downloaded once).
+  if (process.platform === 'win32') {
+    env = await windowsBuildEnv({ base: env, sdkDir: 'error' in sdk ? null : sdk.dir, uvm2: isUvm2, log: (l) => win?.webContents.send('run://stdout', l) });
   }
+  if (manifest.toolchain?.path) prependPath(env, [manifest.toolchain.path]);
   if (debugBuild) env.UVM2_DEBUG_CFLAGS = '-Og';
 
   // Pick the build recipe for the selected hardware target. Default = the
@@ -2193,6 +2223,10 @@ export async function executeCompilation(args: { path: string; saveIfDirty?: { c
         if (target === 'uvm2') {
           Object.assign(envHijo, await armToolchainEnv((l) => mainWindow?.webContents.send('run://stdout', l)));
           await ensureUvm2Rust((l) => mainWindow?.webContents.send('run://stdout', l + '\n'));
+          // Windows: CMake, Ninja, picotool and Rust (downloaded once).
+          if (process.platform === 'win32') {
+            Object.assign(envHijo, await windowsBuildEnv({ base: envHijo, sdkDir: sdk.dir, uvm2: true, log: (l) => mainWindow?.webContents.send('run://stdout', l) }));
+          }
         }
         await dropStaleSdkBuilds(dirname(targetPath), sdk, (l) => mainWindow?.webContents.send('run://stdout', l));
         mainWindow?.webContents.send('run://stdout', `[SDK] ${sdk.version} (${sdk.dir})\n`);

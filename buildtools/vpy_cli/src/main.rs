@@ -2553,7 +2553,7 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         game_srcs.push(fault.canonicalize().unwrap_or(fault));
         println!("  {} libvpy: {}", "✓".green(), vpy_c.join("vpy.c").display());
     }
-    let join_paths = |v: &[PathBuf]| v.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(";");
+    let join_paths = |v: &[PathBuf]| v.iter().map(|p| cmake_path(p)).collect::<Vec<_>>().join(";");
 
     println!("\n{}", "Phase 4: CMake configure (pico-sdk)".bright_cyan().bold());
     // A CACHE FROM ANOTHER SDK DIRECTORY IS NOT REUSABLE. CMake refuses it outright ("does not
@@ -2595,21 +2595,21 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         cfg_cmd.env("UVM2_HEAP", "0");
     }
     let cfg = cfg_cmd
-        .args(["-S", sdk_dir.join("pico").to_str().unwrap(),
-               "-B", cmake_build.to_str().unwrap(),
+        .args(["-S", &cmake_path(&sdk_dir.join("pico")),
+               "-B", &cmake_path(&cmake_build),
                "-DCMAKE_BUILD_TYPE=Release"])
         .arg(format!("-DCMAKE_TOOLCHAIN_FILE={}",
-             pico_sdk.join("cmake/preload/toolchains/pico_arm_cortex_m33_gcc.cmake").display()))
-        .arg(format!("-DPICO_SDK_PATH={}", pico_sdk.display()))
-        .arg(format!("-DPICO_TOOLCHAIN_PATH={}", arm_tc.display()))
-        .arg(format!("-DUVM2_SDK_DIR={}", sdk_dir.display()))
+             cmake_path(&pico_sdk.join("cmake/preload/toolchains/pico_arm_cortex_m33_gcc.cmake"))))
+        .arg(format!("-DPICO_SDK_PATH={}", cmake_path(&pico_sdk)))
+        .arg(format!("-DPICO_TOOLCHAIN_PATH={}", cmake_path(&arm_tc)))
+        .arg(format!("-DUVM2_SDK_DIR={}", cmake_path(&sdk_dir)))
         // uvm2_pico.cmake envuelve el .bin en .um2 llamando a vpy_cli. Somos
         // nosotros: se le pasa nuestro propio directorio en vez de confiar en
         // que este en el PATH, que es como se queda sin empaquetar y solo avisa
         // con un WARNING facil de pasar por alto.
-        .arg(format!("-DVPY_CLI_DIR={}", std::env::current_exe().ok()
+        .arg(format!("-DVPY_CLI_DIR={}", cmake_path(&std::env::current_exe().ok()
              .and_then(|e| e.parent().map(|d| d.to_path_buf()))
-             .unwrap_or_default().display()))
+             .unwrap_or_default())))
         .arg(format!("-DUVM2_NAME={}", project_name))
         .arg(format!("-DUVM2_GAME_SRCS={}", join_paths(&game_srcs)))
         .arg(format!("-DUVM2_GAME_INCS={}", join_paths(&game_incs)))
@@ -2674,7 +2674,7 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
     // Reproducible images: see reproducible::uvm2_cargo_remap_env.
     let user_rustflags = ["CARGO_ENCODED_RUSTFLAGS", "RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS"]
         .iter().any(|k| std::env::var_os(k).is_some());
-    if let Some((key, value)) = reproducible::uvm2_cargo_remap_env(std::env::var_os("HOME").map(PathBuf::from).as_deref(), user_rustflags) {
+    if let Some((key, value)) = reproducible::uvm2_cargo_remap_env(std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).as_deref(), user_rustflags) {
         bld_cmd.env(key, value);
     }
     let bld = bld_cmd
@@ -2710,6 +2710,23 @@ fn cmd_build_uvm2(input: &PathBuf, output: Option<PathBuf>, verbose: bool) -> Re
         um2_len, um2_path.display()).bright_green().bold());
 
     Ok(())
+}
+
+/// A path as CMake should get it: with `/` on Windows too. A `\` in a -D value can turn into
+/// an escape once CMake expands the variable inside a string.
+/// `canonicalize` on Windows gives the verbatim form (`\\?\D:\...`), which Ninja cannot use: the
+/// prefix goes.
+fn cmake_path(p: &Path) -> String {
+    let s = p.display().to_string();
+    if !cfg!(windows) {
+        return s;
+    }
+    let s = if let Some(unc) = s.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{unc}")
+    } else {
+        s.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(s)
+    };
+    s.replace('\\', "/")
 }
 
 /// Build a .um2 file for the Ultimate Vectrex Multicart 2.
