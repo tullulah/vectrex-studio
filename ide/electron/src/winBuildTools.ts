@@ -17,6 +17,8 @@
 //                    proc-macro dependencies, which are compiled and linked FOR THE PC; the
 //                    msvc host links with Visual Studio's link.exe, the gnu host brings its
 //                    own linker. The channel is the SDK's rust-toolchain.toml.
+//                    On ARM64 Windows the x64 busybox crashes as a shell under emulation:
+//                    there make's folder is copied with the ARM64 busybox-w32 build instead
 //   Python           the one emsdk ships for Windows. The pico-sdk's CMake needs a Python 3
 //                    (boot_stage2's checksum script), and Windows has none.
 //
@@ -90,6 +92,48 @@ export function prependPath(env: NodeJS.ProcessEnv, dirs: string[]): void {
 }
 
 const inFlight = new Map<string, Promise<string>>();
+
+/** The same busybox-w32 release xPack's make ships, built for ARM64 (frippery.org). */
+const BUSYBOX_ARM64 = {
+  version: 'FRP-5398-g89ae34445',
+  url: 'https://frippery.org/files/busybox/busybox-w64a-FRP-5398-g89ae34445.exe',
+  sha256: '489f95ae78073cd398a42ebce42469f6bccf55f9a5511a7d57438869f1a71dc8',
+};
+
+let arm64Windows: Promise<boolean> | null = null;
+
+/** Windows on Arm. The IDE is an x64 program there, emulated, so process.arch says x64: the
+ *  machine's own PROCESSOR_ARCHITECTURE is in the registry. */
+export function isArm64Windows(): Promise<boolean> {
+  if (process.platform !== 'win32') return Promise.resolve(false);
+  if (process.arch === 'arm64') return Promise.resolve(true);
+  arm64Windows ??= run('reg', ['query', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment', '/v', 'PROCESSOR_ARCHITECTURE'],
+    process.env, () => {}).then((r) => /ARM64/i.test(r.out));
+  return arm64Windows;
+}
+
+/** make's bin folder for ARM64 Windows: xPack's make.exe with the ARM64 busybox as its sh and
+ *  as the applets xPack ships (echo, mkdir, rm, cp). */
+async function ensureArm64MakeBin(makeDir: string, log: (line: string) => void): Promise<string> {
+  const id = `make-arm64-busybox-${BUSYBOX_ARM64.version}`;
+  const running = inFlight.get(id);
+  if (running) return running;
+  const p = (async () => {
+    const dir = join(winToolsRootDir(), id);
+    const ready = join(dir, '.ready');
+    try { await fs.access(ready); return dir; } catch { /* not yet */ }
+    log(`[tools] ARM64 Windows: busybox ${BUSYBOX_ARM64.version} for ARM64, downloading (once)...\n`);
+    await fs.mkdir(dir, { recursive: true });
+    const exe = join(dir, 'busybox.exe');
+    await downloadFile(BUSYBOX_ARM64.url, exe, `busybox ${BUSYBOX_ARM64.version}`, BUSYBOX_ARM64.sha256);
+    for (const applet of ['sh', 'echo', 'mkdir', 'rm', 'cp']) await fs.copyFile(exe, join(dir, `${applet}.exe`));
+    await fs.copyFile(join(makeDir, 'bin', 'make.exe'), join(dir, 'make.exe'));
+    await fs.writeFile(ready, `${BUSYBOX_ARM64.version}\n`);
+    return dir;
+  })().finally(() => inFlight.delete(id));
+  inFlight.set(id, p);
+  return p;
+}
 
 /** The Python emsdk ships for Windows: CMake's for the pico-sdk, and the one that runs emsdk.py. */
 const WIN_PYTHON = {
@@ -261,6 +305,13 @@ export async function windowsBuildEnv(o: {
   const pathDirs = WIN_TOOLS
     .filter((t) => dirs[t.name] && t.bin !== null && t.name !== 'picotool')
     .map((t) => join(dirs[t.name], t.bin as string));
+  if (dirs.make && await isArm64Windows()) {
+    try {
+      pathDirs[0] = await ensureArm64MakeBin(dirs.make, o.log);
+    } catch (e: any) {
+      o.log(`[tools] Could not install busybox for ARM64: ${e?.message || e}\n`);
+    }
+  }
   // The Arm compiler on PATH too: a project's own rp2350 rule may call arm-none-eabi-gcc bare.
   if (env.UVM2_ARM_TOOLCHAIN) pathDirs.push(join(env.UVM2_ARM_TOOLCHAIN, 'bin'));
   prependPath(env, pathDirs);
@@ -315,6 +366,9 @@ function ensureEmsdk(log: (line: string) => void): Promise<string> {
     const env: NodeJS.ProcessEnv = { ...process.env };
     delete env.PYTHONHOME;
     delete env.PYTHONPATH;
+    delete env.MSYSTEM;   // set by Git Bash: emsdk would then think it runs under MSYS
+    // emsdk publishes no Windows on Arm build: the x64 one runs there under emulation
+    env.EMSDK_ARCH = 'x86_64';
     for (const step of ['install', 'activate']) {
       const r = await new Promise<number | null>((resolve) => {
         const child = spawn(python, [join(dir, 'emsdk.py'), step, EMSDK_VERSION], { cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'] });
