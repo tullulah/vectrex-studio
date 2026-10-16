@@ -195,6 +195,19 @@ of that: a much larger VPy language, debugging on every target, and Windows
   `SFX_PCM_AT` and `LISTENER` arguments; rp2350 q4 beam syscalls.
 - **Emulator**: carries of 16-bit shifts in IT blocks and of logical ops with S
   (Thumb-2).
+- **Debug on Cartridge (UVMC2)**: a game whose ELF links the USB monitor but never starts
+  it (VPy games on uvmc2-sdk before v1.4.5) is refused with that reason, instead of an
+  upload that fell back to BOOTSEL and failed; a session on the cartridge closes, and says
+  so, when another project is opened or the build target changes (it kept the hover and
+  Change Value of the next project on the old game's ELF).
+- **6809 hover and Change Value**: `fleet[i].speed` shows and changes element `i` (a
+  number or a variable of the paused program), not the whole field array.
+- **Project Settings**: the Arm toolchain's description says the IDE downloads it when
+  missing.
+- **Claude Code in the IDE**: the MCP instructions and `get_project_docs` know v0.4 — VPy on
+  uvm2 uses `.vmesh`/`.vscene`, no `global` keyword, modules build as a project, the
+  cartridge tools, PiTrex untested with the new SDK — and three new topics: `language`,
+  `3d`, `debugging`.
 - **IDE**: every engine stops on build (no stuck audio); F5 while paused
   continues instead of rebuilding; View menu checkboxes follow the layout; two
   CMake build trees that broke a Windows checkout are no longer tracked; the
