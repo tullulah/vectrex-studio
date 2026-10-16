@@ -259,12 +259,28 @@ pub fn check_len_calls(module: &Module, target: &str) -> Result<(), String> {
     if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
 }
 
-/// Every `DRAW_VECTOR_ROT(...)` names a `.vec` of the project and has 4 to 6
-/// arguments: `("name", x, y, angle [, mirror [, intensity]])`.
+/// The builtins whose first argument names a `.vec` of the project.
+const VECTOR_ASSET_BUILTINS: [&str; 3] = ["DRAW_VECTOR", "DRAW_VECTOR_EX", "DRAW_VECTOR_3D"];
+
+/// The project's `.vec` names, sorted, for an error message.
+fn vector_names(assets: &[crate::AssetInfo]) -> String {
+    let mut vecs: Vec<&str> = assets
+        .iter()
+        .filter(|a| matches!(a.asset_type, crate::AssetType::Vector))
+        .map(|a| a.name.as_str())
+        .collect();
+    vecs.sort_unstable();
+    if vecs.is_empty() { "none".to_string() } else { vecs.join(", ") }
+}
+
+/// Every `DRAW_VECTOR(...)`, `DRAW_VECTOR_EX(...)`, `DRAW_VECTOR_3D(...)` and
+/// `DRAW_VECTOR_ROT(...)` names a `.vec` of the project; `DRAW_VECTOR_ROT` also has 4
+/// to 6 arguments: `("name", x, y, angle [, mirror [, intensity]])`.
 ///
-/// Checked before code generation on every target, so a misspelled sprite is an
-/// error with its line instead of an undefined symbol at assembly or link time.
-pub fn check_draw_vector_rot_calls(
+/// Checked before code generation on every target, so a misspelled or missing sprite
+/// is an error with its line instead of an undefined symbol (`_NAME_PATH0`) at
+/// assembly or link time.
+pub fn check_vector_asset_calls(
     module: &Module,
     assets: &[crate::AssetInfo],
     target: &str,
@@ -274,6 +290,23 @@ pub fn check_draw_vector_rot_calls(
         let start = errors.len();
         #[allow(clippy::redundant_closure_call)]
         (|| {
+        if let Some(b) = VECTOR_ASSET_BUILTINS.iter().find(|b| call.name.eq_ignore_ascii_case(b)) {
+            // Only a literal name can be checked (each backend reports a non-literal).
+            if let Some(Expr::StringLit(name)) = call.args.first() {
+                let known = assets
+                    .iter()
+                    .any(|a| a.name == *name && matches!(a.asset_type, crate::AssetType::Vector));
+                if !known {
+                    errors.push(format!(
+                        "line {}: {b}(\"{name}\"): no vector asset named '{name}' on {target} \
+                         (a .vec in assets/vectors/; available: {})",
+                        call.source_line,
+                        vector_names(assets)
+                    ));
+                }
+            }
+            return;
+        }
         if !call.name.eq_ignore_ascii_case("DRAW_VECTOR_ROT") {
             return;
         }
@@ -292,16 +325,10 @@ pub fn check_draw_vector_rot_calls(
                     .iter()
                     .any(|a| a.name == *name && matches!(a.asset_type, crate::AssetType::Vector));
                 if !known {
-                    let mut vecs: Vec<&str> = assets
-                        .iter()
-                        .filter(|a| matches!(a.asset_type, crate::AssetType::Vector))
-                        .map(|a| a.name.as_str())
-                        .collect();
-                    vecs.sort_unstable();
                     errors.push(format!(
                         "line {line}: DRAW_VECTOR_ROT(\"{name}\"): no vector asset named '{name}' on {target} \
                          (a .vec in assets/vectors/; available: {})",
-                        if vecs.is_empty() { "none".to_string() } else { vecs.join(", ") }
+                        vector_names(assets)
                     ));
                 }
             }

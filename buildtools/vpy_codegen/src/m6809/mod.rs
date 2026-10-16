@@ -159,7 +159,7 @@ pub fn generate_m6809_asm_with_hints(
     // len() is a compile-time constant on m6809; reject arguments whose length
     // is unknown instead of silently evaluating to 0.
     utilities::validate_len_calls(module)?;
-    crate::validate::check_draw_vector_rot_calls(module, assets, "m6809")?;
+    crate::validate::check_vector_asset_calls(module, assets, "m6809")?;
 
     // FILTER ASSETS: Only embed assets actually used in code (2026-01-20)
     let assets = assets::filter_used_assets(assets, module);

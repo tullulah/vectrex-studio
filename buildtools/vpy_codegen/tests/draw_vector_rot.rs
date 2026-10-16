@@ -80,3 +80,29 @@ fn unknown_asset_and_bad_arity_are_errors_on_every_arm_target() {
         assert!(e.contains("line 5") && e.contains("takes 4 to 6 arguments"), "{target:?}: {e}");
     }
 }
+
+#[test]
+fn a_missing_vec_is_an_error_with_its_line_for_every_vector_builtin_and_target() {
+    // A sprite whose .vec is not in the project used to reach the assembler as an
+    // undefined `_NAME_PATH0` (m6809) or a failed link (ARM), with no line.
+    let calls = [
+        "DRAW_VECTOR(\"text\", 0, -44)",
+        "DRAW_VECTOR_EX(\"text\", 0, 0, 1, 100)",
+        "DRAW_VECTOR_3D(\"text\", 0, 0, 0, 0, 60)",
+    ];
+    for call in calls {
+        let src = format!("def main():\n    pass\n\ndef loop():\n    DRAW_VECTOR(\"ell\", 0, 0)\n    {call}\n");
+        for target in [Target::M6809, Target::Rp2350, Target::Uvm2, Target::PiTrex] {
+            let e = generate(&src, target.clone()).expect_err("missing .vec");
+            assert!(
+                e.contains("line 6") && e.contains("no vector asset named 'text'") && e.contains("available: ell"),
+                "{target:?} {call}: {e}"
+            );
+        }
+    }
+    // The asset that is there still builds.
+    let ok = "def main():\n    pass\n\ndef loop():\n    DRAW_VECTOR(\"ell\", 0, 0)\n";
+    for target in [Target::M6809, Target::Rp2350, Target::Uvm2, Target::PiTrex] {
+        generate(ok, target.clone()).unwrap_or_else(|e| panic!("{target:?}: {e}"));
+    }
+}
