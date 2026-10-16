@@ -244,7 +244,7 @@ const EmulatorOutputInfo: React.FC<{ backend: 'rp2350' | 'uvm2' | null }> = ({ b
         fontSize: '10px',
         textTransform: 'uppercase',
         letterSpacing: '0.5px',
-        fontFamily: 'system-ui'
+        fontFamily: 'var(--vs-ui-font)'
       }}>
         Emulator Output{backend ? ` — ${backend.toUpperCase()}` : ''}
       </div>

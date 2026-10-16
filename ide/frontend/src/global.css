@@ -1,5 +1,17 @@
 /* Global layout + drag styles (Electron / web) */
 html, body, #root { height:100%; margin:0; padding:0; }
+
+/* The UI font is Inter, bundled with the IDE (@fontsource-variable/inter, OFL), not one
+   the system names: on some Linux installs the font fontconfig resolves for the generic
+   sans-serif draws no text in Chromium at all, and every label was blank. A bundled font
+   is read from its file, whatever the system's font setup. */
+:root { --vs-ui-font: 'Inter Variable', system-ui, sans-serif; }
+body { font-family: var(--vs-ui-font); }
+/* Form controls do not inherit the font in Chromium: they took system-ui, and now take
+   the bundled one (a control's own inline fontFamily still wins). */
+button, input, select, textarea, optgroup { font-family: var(--vs-ui-font); }
+/* The dock layout's own font (flexlayout's theme says Roboto, Arial). */
+.flexlayout__layout.flexlayout__layout { --font-family: var(--vs-ui-font); }   /* doubled: beats the theme, loaded later */
 /* Ensure the main layout region is explicitly non-draggable for the OS window */
 .flexlayout__layout { -webkit-app-region: no-drag; }
 /* Make only the app header draggable if desired (optional; can comment out if not using frameless window) */
@@ -194,7 +206,7 @@ header button, header select { -webkit-app-region: no-drag; }
   justify-content: space-between;
   align-items: center;
   font-size: 13px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--vs-ui-font);
 }
 
 .panel-title {

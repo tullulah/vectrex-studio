@@ -602,7 +602,7 @@ export const SFXEditor: React.FC<SFXEditorProps> = ({
       height, 
       backgroundColor: '#16213e',
       color: '#fff',
-      fontFamily: 'system-ui, sans-serif',
+      fontFamily: 'var(--vs-ui-font)',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden',

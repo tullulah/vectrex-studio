@@ -6,6 +6,9 @@ installAudioGraphTracker();
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import './i18n.js';
+// The UI's sans font travels with the IDE (see --vs-ui-font in global.css).
+import '@fontsource-variable/inter/index.css';
+import '@fontsource-variable/inter/wght-italic.css';
 import './global.css';
 import { useTranslation } from 'react-i18next';
 // (import eliminado duplicado) 
@@ -1935,7 +1938,7 @@ def loop():
   const hasNativeMenu = isMacOS && typeof (window as any).electronAPI !== 'undefined';
 
   return (
-    <div style={{display:'flex', flexDirection:'column', height:'100vh', fontFamily:'sans-serif'}}>
+    <div style={{display:'flex', flexDirection:'column', height:'100vh', fontFamily:'var(--vs-ui-font)'}}>
       <header style={{padding:'2px 8px', background:'#222', color:'#eee', display: hasNativeMenu ? 'none' : 'flex', alignItems:'stretch', userSelect:'none'}}
         onMouseLeave={()=>setOpenMenu(null)}>
         <div style={{display:'flex', gap:0}}>

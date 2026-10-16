@@ -1527,7 +1527,7 @@ const rootStyle: React.CSSProperties = {
   width: '100%',
   background: '#13132a',
   color: '#ccc',
-  fontFamily: 'system-ui, sans-serif',
+  fontFamily: 'var(--vs-ui-font)',
   overflow: 'hidden',
 };
 

@@ -1045,7 +1045,7 @@ export const InstrumentEditor: React.FC<InstrumentEditorProps> = ({ resource, on
     <div style={{
       backgroundColor: '#16213e',
       color: '#fff',
-      fontFamily: 'system-ui, sans-serif',
+      fontFamily: 'var(--vs-ui-font)',
       display: 'flex',
       flexDirection: 'column',
       width: '100%',

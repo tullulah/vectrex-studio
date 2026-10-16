@@ -7,7 +7,7 @@
   background: #252526;
   border-bottom: 1px solid #3c3c3c;
   padding: 8px 12px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--vs-ui-font);
   height: 48px;
   box-sizing: border-box;
 }

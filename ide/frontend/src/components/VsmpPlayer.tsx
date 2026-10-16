@@ -204,7 +204,7 @@ export const VsmpPlayer: React.FC<{ resource?: any }> = ({ resource }) => {
 };
 
 const S: Record<string, React.CSSProperties> = {
-  wrap: { background: '#0d0d14', color: '#cde', height: '100%', width: '100%', padding: 18, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, sans-serif' },
+  wrap: { background: '#0d0d14', color: '#cde', height: '100%', width: '100%', padding: 18, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', fontFamily: 'var(--vs-ui-font)' },
   header: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   meta: { color: '#89a', fontSize: 12 },
   canvas: { width: '100%', height: 220, display: 'block', border: '1px solid #223', borderRadius: 6 },
