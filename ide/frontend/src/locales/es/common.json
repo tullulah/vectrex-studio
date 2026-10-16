@@ -278,7 +278,7 @@
   "projectSettings.sdk.setError": "No se pudo cambiar la versión del SDK: {{error}}",
   "projectSettings.sdk.folder": "Carpeta de instalación:",
   "projectSettings.toolchain.title": "Toolchain Arm GNU",
-  "projectSettings.toolchain.description": "El compilador que usan las builds UVM2. El IDE no lo descarga: instálalo una vez desde Arm.",
+  "projectSettings.toolchain.description": "El compilador que usan las builds UVM2 (Arm GNU Toolchain 15.2.rel1). Si ya está instalado se usa; si no, el IDE lo descarga en la primera build UVM2.",
   "projectSettings.toolchain.found": "Encontrada:",
   "projectSettings.toolchain.missingNeeded": "Arm GNU Toolchain 15.2.rel1 aún no está instalada: la primera build UVM2 la descarga.",
   "projectSettings.toolchain.missing": "No se ha encontrado la toolchain Arm GNU. Solo la necesitan las builds UVM2.",

@@ -29,6 +29,8 @@ export interface HoverTarget {
   qualifier: string | null;
   /** `base[i].word`: a field of a struct array's element. */
   fieldOf: string | null;
+  /** What is between the brackets of `base[i].word` (`i`, `2`), when fieldOf is set. */
+  index?: string | null;
   /** The function the line is in (its name and parameters); null at module level. */
   fn: { name: string; params: string[] } | null;
   /** The file's module name (its file name without .vpy). */
@@ -68,12 +70,13 @@ export function hoverTarget(text: string, fileName: string, line: number, word: 
   const after = l.slice(startColumn - 1 + word.length);
   if (/^\s*\(/.test(after) || /\bdef\s+$/.test(before) || /^[0-9]/.test(word)) return null; // a call, a def, a number
   if (/#/.test(before.replace(/"[^"]*"|'[^']*'/g, ''))) return null; // a comment
-  const field = /([A-Za-z_]\w*)\s*\[[^\]]*\]\s*\.\s*$/.exec(before);
+  const field = /([A-Za-z_]\w*)\s*\[([^\]]*)\]\s*\.\s*$/.exec(before);
   const qual = field ? null : /([A-Za-z_]\w*)\s*\.\s*$/.exec(before);
   return {
     word,
     qualifier: qual ? qual[1] : null,
     fieldOf: field ? field[1] : null,
+    index: field ? field[2].trim() : null,
     fn: enclosingFunction(lines, line),
     module: stem(fileName),
   };
@@ -179,6 +182,26 @@ function m6809Var(t: HoverTarget): { key: string; v: any; labels: Record<string,
   return { key, v: vars.get(key), labels };
 }
 
+/** One element of a .pdb array variable: where it is and its size. */
+function m6809Element(v: any, key: string, labels: Record<string, number>, n: number): { addr: number; size: number } | null {
+  const len = labels[`ARRAY_${key.replace(/_data$/, '').toUpperCase()}_LEN`] || 0;
+  const stride = len ? Math.max(1, Math.round(v.size / len)) : 2;
+  if (n < 0 || (len && n >= len) || (n + 1) * stride > v.size) return null;
+  return { addr: parseInt(String(v.address), 16) + n * stride, size: stride };
+}
+
+/** The index of `base[i].word` as a number: a literal, or a variable of the paused program
+ *  (`i`, resolved like any other hover). Null when it is an expression. */
+function m6809Index(t: HoverTarget, read8: (a: number) => number): number | null {
+  const ix = t.index ?? '';
+  if (/^\d+$/.test(ix)) return +ix;
+  if (!/^[A-Za-z_]\w*$/.test(ix)) return null;
+  const found = m6809Var({ ...t, word: ix, qualifier: null, fieldOf: null, index: null });
+  if (!found || typeof found === 'string' || found.v.type === 'array') return null;
+  const size = found.v.size === 1 ? 1 : 2;
+  return readInt(read8, parseInt(String(found.v.address), 16), size, true);
+}
+
 function m6809Value(t: HoverTarget): string | null {
   const vecx = (window as any).vecx;
   if (!vecx?.read8) return null;
@@ -187,6 +210,11 @@ function m6809Value(t: HoverTarget): string | null {
   const { key, v, labels } = found;
   const addr = parseInt(String(v.address), 16);
   const read8 = (a: number) => vecx.read8(a & 0xffff) & 0xff;
+  if (v.type === 'array' && t.fieldOf) {   // fleet[i].speed: element i, as the line reads it
+    const n = m6809Index(t, read8);
+    const el = n === null ? null : m6809Element(v, key, labels, n);
+    if (el) return intText(readInt(read8, el.addr, el.size, true) ?? 0, el.size, el.size === 2);
+  }
   if (v.type === 'array') {
     const len = labels[`ARRAY_${key.replace(/_data$/, '').toUpperCase()}_LEN`] || 0;
     const stride = len ? Math.max(1, Math.round(v.size / len)) : 2;
@@ -310,8 +338,16 @@ function m6809Lvalue(t: HoverTarget): Lvalue | string | null {
   if (!vecx?.read8 || !vecx?.write8) return 'no 6809 program in the emulator';
   const found = m6809Var(t);
   if (found === null || typeof found === 'string') return found;
-  const { v } = found;
+  const { key, v, labels } = found;
   const label = t.qualifier ? `${t.qualifier}.${t.word}` : t.word;
+  if (v.type === 'array' && t.fieldOf) {
+    const read8 = (a: number) => vecx.read8(a & 0xffff) & 0xff;
+    const n = m6809Index(t, read8);
+    const el = n === null ? null : m6809Element(v, key, labels, n);
+    if (!el) return `${t.fieldOf}[${t.index}].${t.word}: its index is not a number or a variable here`;
+    const size = el.size === 1 ? 1 : 2;
+    return { label: `${t.fieldOf}[${n}].${t.word}`, addr: el.addr, size, signed: size === 2, current: intText(readInt(read8, el.addr, size, true) ?? 0, size, size === 2), m6809: true };
+  }
   if (v.type === 'array') return `${label} is an array: change one of its values (not supported yet)`;
   const addr = parseInt(String(v.address), 16);
   const size = v.size === 1 ? 1 : 2;

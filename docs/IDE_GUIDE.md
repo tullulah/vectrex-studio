@@ -79,8 +79,8 @@ Formats and how each asset is used from VPy and C: [ASSETS.md](ASSETS.md).
 
 ### Scene Editor
 
-A `.vscene` arranges `.vmesh` pieces into a 3D set for a C project (vpy3d,
-`vpy3d_draw_scene`). The editor has three columns:
+A `.vscene` arranges `.vmesh` pieces into a 3D set, for a C project (vpy3d,
+`vpy3d_draw_scene`) or a VPy one (`LOAD_SCENE` / `DRAW_SCENE`, uvm2). The editor has three columns:
 
 - **Left:** the items in draw order (add, duplicate, delete, move up/down). Order matters,
   because an item's occluders hide only the items after it, so list the near pieces first.
@@ -194,7 +194,7 @@ It works with the cartridge in either of two states, plugged into the computer b
 | Running a game built with the monitor (`UVM2_USB_MONITOR=1`, which this command sets) | The monitor (`MONITOR.BIN`, loaded off the card into the PSRAM) answers on USB while the game runs. |
 | In the multicart's menu | The menu's firmware is sent to the chip's BOOTSEL mode with `picotool`, and the SD bridge (a RAM-only program; the flash is not touched) is loaded and run. The console shows the upload's progress. |
 
-It needs `picotool`: on macOS `brew install picotool`; on Linux the IDE builds one from the pico-sdk; on Windows it downloads Raspberry Pi's prebuilt one (the bootrom and the menu's reset interface are WinUSB devices, so no driver install). The port is the monitor's serial device: `/dev/cu.*` on macOS, `/dev/ttyACM*` on Linux, a COM port on Windows, held there by a Windows PowerShell child (`System.IO.Ports`) so the IDE never blocks on it (`hwdebug/serialLink.ts`). The Windows side is checked without a cartridge (picotool, the COM port search, opening a port); with one, it has not been run yet. Both programs come with the IDE (`ide/electron/resources/uvmc2/`); their sources are in uvmc2-sdk (`uvm2-sdk/monitor`, `uvm2-sdk/sdbridge`). A game built with the monitor costs about 2 KB of SRAM.
+It needs `picotool`: on macOS `brew install picotool`; on Linux the IDE builds one from the pico-sdk; on Windows it downloads Raspberry Pi's prebuilt one (the bootrom and the menu's reset interface are WinUSB devices, so no driver install). The port is the monitor's serial device: `/dev/cu.*` on macOS, `/dev/ttyACM*` on Linux, a COM port on Windows, held there by a Windows PowerShell child (`System.IO.Ports`) so the IDE never blocks on it (`hwdebug/serialLink.ts`). Upload to Cartridge has been run on Windows with a real cartridge (2026-10-16). Both programs come with the IDE (`ide/electron/resources/uvmc2/`); their sources are in uvmc2-sdk (`uvm2-sdk/monitor`, `uvm2-sdk/sdbridge`). A game built with the monitor costs about 2 KB of SRAM.
 
 ### Compiler
 
@@ -275,13 +275,13 @@ What it does:
 
 1. Builds the project as **Build for SD** does: a RAM image with the `VPy2` header (`build/<name>_sd.bin`) and its ELF.
 2. Resets the cartridge to its menu, attaches a `probe-rs dap-server` to **core 1 only** — the core that runs the program — and writes the image to the PSRAM where the firmware loads games from the card (`0x11000000`).
-3. Writes the launch mailbox in SCRATCH_X (`0x20080004`: magic `0x53574C4E`, size, answer); the menu's next frame launches the game exactly as from the SD card (without a romset or samples, which are found by the card's game index).
+3. Writes the launch mailbox in SCRATCH_X (`0x20080004`: magic `0x53574C4E`, size, answer); the menu's next frame launches the game exactly as from the SD card. The IDE also writes the game's 16-byte card name at `0x20080044`, so the firmware finds its romset (`ROMS/<x>.ZIP`) and samples (`<x>.VSM`) as it would for a game launched from the card.
 
 Core 0 drives the Vectrex bus and keeps redrawing the last picture, so a paused game stays on screen and the beam never stops on one spot. Breakpoints are BKPT instructions written into the game's code (and the original put back): the core has a handful of hardware ones, and a step needs one at every statement of the function it is in. A step takes about a second (each stop reads the registers and the RAM the editor shows through the probe at 1 MHz SWD). Every BKPT is removed when the session ends, and the game keeps running.
 
 The debugger reads the stack, the VPy runtime RAM (`0x2007F000`) and up to 64 KB of the program's data at each stop; a value outside them shows nothing. **Text from the game (RTT).** `vpy_log("x %d\n", x)` and `DEBUG_PRINT_LABELED` in a C game (and `DEBUG_PRINT…` in a VPy program built as C) write to an RTT ring the SDK puts in every cartridge image (`_SEGGER_RTT`, sdk_rp2350.c); the IDE reads it every 200 ms while the session lasts and shows each line in the build output as `[rtt] …`. Writing never waits: with no debugger reading, the text is dropped and the game runs the same.
 
-**Change Value** works on globals and on locals in memory; a local the compiler keeps in a register can be changed on the emulators but not on the cartridge (probe-rs cannot set a core register). Not supported yet: games that need their romset or samples from the card, core 0.
+**Change Value** works on globals and on locals in memory; a local the compiler keeps in a register can be changed on the emulators but not on the cartridge (probe-rs cannot set a core register). Not supported yet: core 0.
 
 ### Debugging on the cartridge (UVMC2, over USB)
 

@@ -161,8 +161,11 @@ releases.
 - **Download:** the IDE fetches it like the SDK, on the first uvm2 build, into
   `~/VectrexStudio/pico-sdk/<version>/` (override the root with
   `VECTREX_STUDIO_PICO_SDK_DIR`), with the same `.vectrex-studio-sdk.json` marker. It
-  is the GitHub tag tarball (~2 MB, ~26 MB installed) **without submodules** —
-  TinyUSB, lwIP, BTstack and mbedTLS, which no uvm2 image enables.
+  is the GitHub tag tarball **with all its submodules** (TinyUSB, lwIP, BTstack, mbedTLS,
+  cyw43, and the nested mbedtls/framework), each at the commit its parent pins — what
+  `git clone --recursive` leaves, about 305 MB installed. The 2.2.0 pins are recorded in
+  the IDE; another version asks the GitHub API for them. An install made before this
+  (its marker has no `submodules`) is downloaded again on the next uvm2 build.
 - **Passed to builds** as `UVM2_PICO_SDK` and `PICO_SDK_PATH`. Only uvm2 builds get it.
 - **vpy_cli** finds it by `UVM2_PICO_SDK`, then `PICO_SDK_PATH`, then
   `~/VectrexStudio/pico-sdk/<version>/`; it never downloads. `uvm2.mk` reads the same

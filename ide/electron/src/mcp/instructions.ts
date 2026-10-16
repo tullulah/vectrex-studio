@@ -32,8 +32,8 @@ GLOSSARY
 - Build targets (settings_set_build_target):
   m6809  - the original Vectrex cartridge; runs in JSVecX, the 6809 emulator. VPy only: a C project cannot build it.
   rp2350 - the RP2350 debug cartridge; runs in the IDE's RP2350 emulator (the real ARM code).
-  uvm2   - the UVMC2 multicart (RP2350-based); runs in the IDE's UVM2 emulator. Needs the Arm GNU Toolchain.
-  pitrex - the PiTrex board (Raspberry Pi). A VPy program runs in the IDE's PiTrex interpreter; a C project has no emulator there: F5 only builds the kernel image.
+  uvm2   - the UVMC2 multicart (RP2350-based); runs in the IDE's UVM2 emulator (the IDE finds or downloads its toolchain). The only target with 3D, the jukebox and debugging on the console.
+  pitrex - the PiTrex board (Raspberry Pi). A VPy program runs in the IDE's PiTrex interpreter; a C project has no emulator there: F5 only builds the kernel image. Untested on hardware with the v0.4 SDK.
 - WASM simulator: a C project compiled with emscripten against the host SDK shim. Fast, runs in the Emulator panel, the same picture whatever target is selected.
 
 BUILD AND RUN = THE IDE'S KEYS (ide_run "mode")
@@ -49,10 +49,13 @@ TYPICAL FLOW ("make a hello world with the SDK and run it in the emulator")
 
 ASSETS
 - JSON files the user opens in the IDE's editors (Vector, Music, SFX, Animation, Enemy, Instrument, Mesh, Scene, 3D Animation; the Playground for levels). asset_create compiles the asset and returns the error if it does not compile: fix and retry. Create what an asset references first: the frame .vec files before a .vanim; the sprite .vec files and .venemy types before the .vplay that places them; the .vmesh files before the .vskel, the .vskel before its .vclip. assets_list lists them all when ide_get_context truncates.
-- VPy names an asset by its file name, as a string literal: DRAW_VECTOR("ship", x, y), PLAY_MUSIC("theme"). C includes the header the Makefile generates: #include "ship.h" then DRAW_VECTOR(SHIP_vec, x, y), PLAY_MUSIC(THEME_music). The exact call for each asset is in ide_get_context "assets" and in asset_create's result. .vmesh (3D meshes) and .vscene (3D sets of meshes), both vpy3d.h, are C-only.
+- VPy names an asset by its file name, as a string literal: DRAW_VECTOR("ship", x, y), PLAY_MUSIC("theme"). C includes the header the Makefile generates: #include "ship.h" then DRAW_VECTOR(SHIP_vec, x, y), PLAY_MUSIC(THEME_music). The exact call for each asset is in ide_get_context "assets" and in asset_create's result. .vmesh/.vscene (3D): C (vpy3d.h) and VPy on uvm2.
 
 WRITING VPY
 - Don't write WAIT_RECAL(), AUDIO_UPDATE()/MUSIC_UPDATE() or button reads: the compiler injects Wait_Recal and Read_Btns at the start of every loop() and the audio update when music/SFX are used.
 - main() and loop() are separate scopes: a variable declared in main() is not visible in loop(); share state through top-level globals.
 - const arrays live in ROM; leave const arrays untyped (u8 const arrays break in complex games).
+- No \`global\` keyword: assign a top-level variable by name. Several modules build only as the project (ide_run).
+- Structs, enums, typed arrays, function refs: get_project_docs "language"; 3D (uvm2): "3d".
+- On the console, only when asked: cartridge_upload, cartridge_debug (then debugger_*; end with cartridge_debug_stop). See "debugging".
 - Background notes by topic: get_project_docs.`;

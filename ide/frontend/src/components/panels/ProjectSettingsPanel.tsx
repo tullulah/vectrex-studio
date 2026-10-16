@@ -71,7 +71,7 @@ const ArmToolchainSection: React.FC<{ needed: boolean }> = ({ needed }) => {
     <div className="settings-section">
       <h3>{t('projectSettings.toolchain.title', 'Arm GNU Toolchain')}</h3>
       <p className="settings-description">
-        {t('projectSettings.toolchain.description', 'The compiler UVM2 builds use. It is not downloaded by the IDE: install it once from Arm.')}
+        {t('projectSettings.toolchain.description', 'The compiler UVM2 builds use (Arm GNU Toolchain 15.2.rel1). An installed copy is found; if there is none, the IDE downloads it on the first UVM2 build.')}
       </p>
 
       {!status && <p className="settings-description">{t('projectSettings.sdk.loading', 'Loading...')}</p>}

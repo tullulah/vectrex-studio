@@ -14,16 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-increment/decrement (,X+, ,-X)
 - `DRAW_TO(x,y)` builtin (parsed but codegen unimplemented)
 - `SET_SCALE()` builtin (missing)
-- `len()` returns hardcoded 0 (stub)
 - `GET_TIME()` placeholder only
 
 ---
 
-## [v0.4.0] — 2026-10-06
+## [v0.4.0] — 2026-10-16
 
 Everything since v0.3.0. The theme of this release is new hardware: the RP2350
 debug cartridge runs on a real console, and the Ultimate Vectrex Multicart 2
-(UVM2) becomes a full target with its own SDK, emulator and calibration.
+(UVM2) becomes a full target with its own SDK, emulator and calibration. On top
+of that: a much larger VPy language, debugging on every target, and Windows
+(x64 and ARM64) and Linux as first-class build platforms.
 
 ### Added — Targets and runtimes
 
@@ -59,8 +60,92 @@ debug cartridge runs on a real console, and the Ultimate Vectrex Multicart 2
   `~/VectrexStudio/sdk/<tag>/`. Unpinned projects are pinned to the latest tag on
   first build. See [SDK_VERSIONS.md](SDK_VERSIONS.md).
 - **pico-sdk on demand** for uvm2 builds: the version the SDK release asks for
-  (2.2.0) is downloaded into `~/VectrexStudio/pico-sdk/<version>/`; the Arm toolchain
-  is found in its standard install locations instead of a fixed version path.
+  (2.2.0) is downloaded into `~/VectrexStudio/pico-sdk/<version>/` **with all its
+  submodules** (TinyUSB, lwIP, BTstack, mbedTLS, cyw43, nested ones included), as
+  `git clone --recursive` would leave it. An install made without them is
+  downloaded again on the next uvm2 build.
+- **Arm GNU Toolchain 15.2.rel1 everywhere**, downloaded by the IDE when missing.
+
+### Added — Language and compiler
+
+- **Types and data**: typed and 32-bit arrays, N-D arrays, structs, enums,
+  shifts, function references; named constants in array literals; a list may end
+  with a comma; bracket line continuation; circular imports.
+- **`len(arr)`** is the compile-time length of a global or const array.
+- **VPy on ARM through C**: VPy uvm2 can build through a C backend on libvpy
+  (`[uvm2] backend = "c"`, ~35% less code, variables kept inside `.vpyram`), and
+  rp2350 VPy programs are built as C too, with the 3D, effects and jukebox
+  builtins. `[uvm2] sdk_opt` sets the optimisation of the SDK's libraries.
+- **3D builtins**: `MESH("name")` slots, `MESH_OCCLUSION`, `XF_TO_MODEL`,
+  `RAY_MESH`, damage marks (`MARKS_CLEAR/ADD/DRAW`), text in the world
+  (`TEXT_BILLBOARD`, `TEXT_3D`), `VEC_3D`, `DRAW_SCENE_AT` (a scene placed by a
+  transform).
+- **Jukebox builtins**: music and effects streamed off the SD card (uvm2).
+- **String tables and `LABEL_NUM`** on ARM; literal pool islands for large
+  functions.
+- **New asset formats**, compiled to constant tables for C and VPy: `.vmesh` v2
+  (scenery lines and occluders), `.vscene` (3D scenes assembled from `.vmesh`
+  pieces), `.vskel` (3D skeletons) and `.vclip` (poses, clips and sets).
+- **Clearer errors, with their line**: a `DRAW_VECTOR` of a missing `.vec` (every
+  target); a definition named like an imported module; a parameter spelled like a
+  module const or global in another case; a const and a variable of one name; a
+  loop variable that is an array or constant; unresolved modules and members.
+- **ARM builds carry `.vpy` line info and unwind data** for the debugger.
+- **uvm2 HardFault dump**: a fault writes its registers and SRAM to the card;
+  `tools/uvm2_fault.py` reads them.
+
+### Added — Debugging
+
+- **m6809**: breakpoints and stepping by file in every module; the call stack,
+  rebuilt from the return addresses on S; Change Value writes a `.pdb` scalar
+  (also variables held in registers).
+- **rp2350 / uvm2 in the emulator** through `arm-none-eabi-gdb`
+  (`target remote :3333`): the editor's breakpoints and steps from the ELF's line
+  table, an ARM call stack, variable values on hover.
+- **On the cartridge**: debug a game on the RP2350 cartridge over SWD, and on the
+  UVMC2 over the game's USB monitor, with the program's data read again behind
+  each stop and the game's text (RTT) in the build output.
+- **Call Stack and BIOS Calls panels**; the Memory panel takes its variables from
+  the `.pdb`.
+- **Editor**: go to definition (Alt+click), clangd quick fixes and hover values
+  in C projects (including locals of inlined functions), `compile_flags.txt` that
+  follows the pinned SDK.
+
+### Added — IDE
+
+- **Upload to Cartridge (UVMC2 over USB)**: the `.um2` goes onto the multicart's
+  card and the game starts when the upload ends; the monitor and SD bridge show
+  their own upload screens.
+- **Integrated terminal** with Claude Code and an IDE-aware MCP server (asset
+  catalogue and tools); paste images and drop files into it.
+- **3D editors**: a `.vmesh` editor and a 3D Animation editor for `.vskel`
+  skeletons and `.vclip` poses, clips and sets; solid view in face colours, free
+  orbit, dissolvable edges.
+- **Simulated SD card** with folders for C games; big files read when the game
+  opens them.
+- **File tree context menu** with the usual file operations; tab context menu
+  with pinning; switching project closes the old one's tabs; View menu with
+  every panel, in alphabetical order.
+- A warning on every build against an installed SDK changed by hand.
+- The UI font (Inter) travels with the IDE; all user-visible text in English.
+
+### Added — UVM2 emulator
+
+- A block translator for the Thumb-2 code in SRAM (falls back to the interpreter
+  where `new Function` is forbidden); real time by default; an optional quantum
+  between the two cores; 1.2–1.7x faster with the same picture.
+- The PIO stream runs in bus time next to the CPU, and the bus is synced only
+  when something can see it.
+- MSPLIM/PSPLIM and VSEL/VRINT (FPv5); programs in the card image and in PSRAM.
+
+### Added — Platforms
+
+- **Windows**: C and uvm2 builds, the WASM simulator, Upload to Cartridge and
+  removable drives; on Windows on Arm, an ARM64 busybox as make's shell and the
+  x64 Arm toolchain and emsdk under emulation; a Python for the pico-sdk's CMake.
+- **Linux**: the `.deb` lists the uvm2 build tools as dependencies and starts
+  under Ubuntu's AppArmor; a udev rule and a picotool with USB built by the IDE
+  for UVMC2 upload; Rust installed by the IDE if missing.
 
 ### Added — Emulator and IDE
 
@@ -80,9 +165,8 @@ debug cartridge runs on a real console, and the Ultimate Vectrex Multicart 2
   installed and GitHub releases, changes the pin and downloads with progress.
 - **Video recorder** captures what is on screen and every live audio context,
   including the jack.
-- **Ports**: Donkey Kong boots in the UVM2 emulator; SnowBros gets platforms from
-  the level `.vec` files, floor scrolling, and music/SFX ripped from its own
-  Z80 + YM3812 ROM; CrazyStones runs on PiTrex/RP2350/WASM unmodified.
+- **Examples**: SnowBros gets platforms from the level `.vec` files and floor
+  scrolling; CrazyStones runs on PiTrex/RP2350/WASM unmodified; jetpac added.
 
 ### Fixed
 
@@ -102,12 +186,40 @@ debug cartridge runs on a real console, and the Ultimate Vectrex Multicart 2
 - **IDE**: stale `.um2`/`.elf` from a previous build no longer load; F5/F7 behave
   the same in every project and depend on the target, not the language; C projects
   for UVM2 reach the emulator; recent-projects list; fps counter.
+- **Compiler**: per-function stack frames and module scopes on ARM; nested
+  expression temporaries; const folding; reproducible builds; measured bank
+  sizes; `.vec` path labels; `DRAW_VECTOR_ROT`; m6809 helpers that were only
+  linked next to a related builtin; a u8 array copy that overran ROM and RAM;
+  `MOVE` with variables; `atan2`; nested `and`/`or` labels; ARM `sqrt`; a global
+  declared twice is one variable; struct arrays as C structs; `XF_POINT`,
+  `SFX_PCM_AT` and `LISTENER` arguments; rp2350 q4 beam syscalls.
+- **Emulator**: carries of 16-bit shifts in IT blocks and of logical ops with S
+  (Thumb-2).
+- **Debug on Cartridge (UVMC2)**: a game whose ELF links the USB monitor but never starts
+  it (VPy games on uvmc2-sdk before v1.4.5) is refused with that reason, instead of an
+  upload that fell back to BOOTSEL and failed; a session on the cartridge closes, and says
+  so, when another project is opened or the build target changes (it kept the hover and
+  Change Value of the next project on the old game's ELF).
+- **6809 hover and Change Value**: `fleet[i].speed` shows and changes element `i` (a
+  number or a variable of the paused program), not the whole field array.
+- **Project Settings**: the Arm toolchain's description says the IDE downloads it when
+  missing.
+- **Claude Code in the IDE**: the MCP instructions and `get_project_docs` know v0.4 — VPy on
+  uvm2 uses `.vmesh`/`.vscene`, no `global` keyword, modules build as a project, the
+  cartridge tools, PiTrex untested with the new SDK — and three new topics: `language`,
+  `3d`, `debugging`.
+- **IDE**: every engine stops on build (no stuck audio); F5 while paused
+  continues instead of rebuilding; View menu checkboxes follow the layout; two
+  CMake build trees that broke a Windows checkout are no longer tracked; the
+  SnowBros and gng examples build again.
 
 ### Changed
 
 - Dual core + PIO + DMA are required for UVM2 builds.
 - Short-stroke trimming and budget-based re-zero were removed (they broke on
   real hardware).
+- Example build outputs that every build remakes (`.pdb`, `.img`, generated
+  `.ld`, `__pycache__`) are no longer versioned; `.asm` and `.bin` still are.
 
 ### Removed
 
