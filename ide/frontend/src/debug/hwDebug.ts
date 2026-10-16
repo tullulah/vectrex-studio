@@ -29,6 +29,7 @@
  */
 import { useDebugStore } from '../state/debugStore';
 import { useProjectStore } from '../state/projectStore';
+import { useSettings } from '../state/settingsStore';
 import { armCallStack, armStep, setHardwareArmSystem, stepStops, type ArmRunControl, type ArmSystem } from './armSourceDebug';
 import type { ArmStopReason } from '../emulator/cpu/armDebug';
 import { symbolAddresses } from './dwarfLines';
@@ -745,6 +746,30 @@ export function cartridgeDebugActive(): boolean {
   return !!current && !current.closed;
 }
 
+// A session belongs to the project and the build target that started it. Left open across a
+// switch it kept the editor on that program: the hover and Change Value of a 6809 project read
+// the UVM2 game's ELF and memory instead (2026-10-17). It is closed, and said so, instead.
+let sessionOwner: { project: string | null; target: string } | null = null;
+
+function ownSession(): void {
+  sessionOwner = { project: useProjectStore.getState().vpyProject?.projectFile ?? null, target: useSettings.getState().buildTarget };
+}
+
+function closeIfNotOurs(): void {
+  if (!current || current.closed || !sessionOwner) return;
+  const project = useProjectStore.getState().vpyProject?.projectFile ?? null;
+  const target = useSettings.getState().buildTarget;
+  if (project === sessionOwner.project && target === sessionOwner.target) return;
+  say(project !== sessionOwner.project
+    ? 'cartridge debugging stopped: another project was opened (the game goes on running)'
+    : `cartridge debugging stopped: the build target is ${target} now (the game goes on running)`);
+  sessionOwner = null;
+  void stopCartridgeDebug();
+}
+
+useProjectStore.subscribe(closeIfNotOurs);
+useSettings.subscribe(closeIfNotOurs);
+
 /** Report a session's progress where the build output goes (BuildOutputPanel). */
 export function say(text: string, error = false): void {
   (error ? console.warn : console.log)('[hwDebug]', text);
@@ -782,6 +807,7 @@ export async function startCartridgeDebug(binPath: string, elfPath: string): Pro
   if ('error' in started) throw new Error(started.error);
   const s = new CartridgeSession(elf, new SwdTransport());
   current = s;
+  ownSession();
   s.attach(hw.onEvent((ev) => { if (current === s) s.handleEvent(ev); }));
   s.attach(hw.onEnded((why) => {
     if (current !== s) return;
@@ -844,11 +870,22 @@ export async function startUvmc2Debug(elfPath: string): Promise<void> {
   const r = await files.readFileBin(elfPath);
   if (!r || r.error || !r.base64) throw new Error(`cannot read ${elfPath}: ${r?.error ?? 'missing'}`);
   const elf = unb64(r.base64);
+  // A game built with the monitor links uvm2_monitor_state; one whose boot path never loads it
+  // (VPy on SDKs before v1.4.5) links that and not uvm2_monitor_load: it runs, but nothing ever
+  // answers on USB, and the only symptom was an upload falling back to BOOTSEL.
+  const syms = symbolAddresses(elf);
+  if (!syms.has('uvm2_monitor_state')) {
+    throw new Error(`${elfPath} has no USB debug monitor: Debug on Cartridge builds with it, so this ELF is from another build`);
+  }
+  if (!syms.has('uvm2_monitor_load')) {
+    throw new Error('this game links the USB debug monitor but its start-up never loads it (VPy on uvmc2-sdk before v1.4.5): it cannot be debugged over USB; pin the project to v1.4.5 or later');
+  }
   say('attaching to the game\'s monitor on USB…');
   const started = await mon.start();
   if ('error' in started) throw new Error(started.error);
   const s = new CartridgeSession(elf, new MonitorTransport());
   current = s;
+  ownSession();
   const why: Record<string, string> = { bp: 'breakpoint', bkpt: 'breakpoint', step: 'step', pause: 'pause' };
   s.attach(mon.onEvent((ev) => { if (current === s) s.handleEvent({ event: 'stopped', body: { reason: why[ev.reason] ?? 'pause' } }); }));
   let rttLine = '';
